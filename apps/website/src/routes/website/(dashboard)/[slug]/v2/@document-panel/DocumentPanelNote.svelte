@@ -127,6 +127,21 @@
     };
   };
 
+  const handleDragCancel = (noteId: string) => {
+    if (dragging?.noteId !== noteId) return;
+
+    const { originalIndex } = dragging;
+    const currentIndex = localNoteOrder.indexOf(noteId);
+    dragging = null;
+
+    if (currentIndex === -1 || originalIndex === -1 || currentIndex === originalIndex) return;
+
+    const restoredOrder = [...localNoteOrder];
+    const [removed] = restoredOrder.splice(currentIndex, 1);
+    restoredOrder.splice(originalIndex, 0, removed);
+    localNoteOrder = restoredOrder;
+  };
+
   const moveDraggingNote = (noteId: string) => {
     if (dragging && dragging.noteId !== noteId) {
       const draggedIndex = localNoteOrder.indexOf(dragging.noteId);
@@ -323,6 +338,7 @@
           note$key={note}
           onAddNote={() => handleAddNote('shortcut')}
           onBeginResolve={() => handleBeginResolve(note.id)}
+          onDragCancel={() => handleDragCancel(note.id)}
           onDragEnd={handleDragEnd}
           onDragEnter={() => moveDraggingNote(note.id)}
           onDragMove={updateDraggingPosition}
@@ -391,6 +407,7 @@
               onBeginResolve={() => {
                 /* noop: resolved notes */
               }}
+              onDragCancel={() => handleDragCancel(note.id)}
               onDragEnd={handleDragEnd}
               onDragEnter={() => moveDraggingNote(note.id)}
               onDragMove={updateDraggingPosition}

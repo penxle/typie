@@ -7,6 +7,7 @@
   import { HorizontalDivider, Icon, Menu, MenuItem, Submenu } from '@typie/ui/components';
   import { Dialog } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
+  import { onDestroy } from 'svelte';
   import CheckIcon from '~icons/lucide/check';
   import CircleIcon from '~icons/lucide/circle';
   import CircleCheckIcon from '~icons/lucide/circle-check';
@@ -24,6 +25,7 @@
     resolving: boolean;
     onAddNote: () => void;
     onBeginResolve: () => void;
+    onDragCancel: () => void;
     onDragEnd: (clientX: number, clientY: number) => void;
     onDragEnter: () => void;
     onDragMove: (clientX: number, clientY: number) => void;
@@ -38,6 +40,7 @@
     resolving,
     onAddNote,
     onBeginResolve,
+    onDragCancel,
     onDragEnd,
     onDragEnter,
     onDragMove,
@@ -94,7 +97,9 @@
   const colorHex = $derived(getNoteColor(note.data.color) ?? token('colors.surface.default'));
 
   const DRAG_THRESHOLD = 5;
-  let dragCleanup: (() => void) | null = null;
+  let cancelDrag: (() => void) | null = null;
+
+  onDestroy(() => cancelDrag?.());
 
   let cancelling = $state(false);
   const displayStatus = $derived(cancelling ? 'OPEN' : resolving ? 'RESOLVED' : note.data.status);
@@ -220,6 +225,7 @@
     e.preventDefault();
     const el = e.currentTarget as HTMLElement;
     const rect = el.getBoundingClientRect();
+    const pointerId = e.pointerId;
 
     const state = {
       startX: e.clientX,
@@ -229,17 +235,27 @@
       started: false,
       ghost: null as HTMLElement | null,
       cursorStyle: null as HTMLStyleElement | null,
+      active: true,
     };
 
-    const cleanup = () => {
+    const cleanup = (cancelled = false) => {
+      if (!state.active) return;
+      const wasStarted = state.started;
+      state.active = false;
       state.ghost?.remove();
       state.cursorStyle?.remove();
       document.removeEventListener('pointermove', handleMove);
       document.removeEventListener('pointerup', handleUp);
-      dragCleanup = null;
+      document.removeEventListener('pointercancel', handleCancel);
+      cancelDrag = null;
+      if (cancelled && wasStarted) {
+        onDragCancel();
+      }
     };
 
     const handleMove = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
+
       const dist = Math.abs(ev.clientX - state.startX) + Math.abs(ev.clientY - state.startY);
 
       if (!state.started && dist > DRAG_THRESHOLD) {
@@ -277,16 +293,25 @@
     };
 
     const handleUp = (ev: PointerEvent) => {
-      if (state.started) {
+      if (ev.pointerId !== pointerId) return;
+
+      const wasStarted = state.started;
+      cleanup();
+      if (wasStarted) {
         onDragEnd(ev.clientX, ev.clientY);
       }
-      cleanup();
     };
 
-    dragCleanup?.();
+    const handleCancel = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
+      cleanup(true);
+    };
+
+    cancelDrag?.();
     document.addEventListener('pointermove', handleMove);
     document.addEventListener('pointerup', handleUp);
-    dragCleanup = cleanup;
+    document.addEventListener('pointercancel', handleCancel);
+    cancelDrag = () => cleanup(true);
   }}
   ontransitionend={(e) => {
     if (e.target === e.currentTarget && e.propertyName === 'opacity' && resolving && !cancelling) {

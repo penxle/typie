@@ -256,6 +256,21 @@
     };
   };
 
+  const handleDragCancel = (noteId: string) => {
+    if (dragging?.noteId !== noteId) return;
+
+    const { originalIndex } = dragging;
+    const currentIndex = localNoteOrder.indexOf(noteId);
+    dragging = null;
+
+    if (currentIndex === -1 || originalIndex === -1 || currentIndex === originalIndex) return;
+
+    const restoredOrder = [...localNoteOrder];
+    const [removed] = restoredOrder.splice(currentIndex, 1);
+    restoredOrder.splice(originalIndex, 0, removed);
+    localNoteOrder = restoredOrder;
+  };
+
   const handleExpand = (noteId: string) => {
     expandedNoteId = noteId;
   };
@@ -557,6 +572,7 @@
               onchangecolor={handleChangeColor}
               oncollapse={handleCollapse}
               ondelete={handleDeleteNote}
+              ondragcancel={() => handleDragCancel(note.id)}
               ondragend={handleDragEnd}
               ondragmove={handleNoteDragEnter}
               ondragstart={() => handleDragStart(note.id)}
@@ -610,6 +626,7 @@
                 onchangecolor={handleChangeColor}
                 oncollapse={handleCollapse}
                 ondelete={handleDeleteNote}
+                ondragcancel={() => handleDragCancel(note.id)}
                 ondragend={handleDragEnd}
                 ondragmove={handleNoteDragEnter}
                 ondragstart={() => handleDragStart(note.id)}
