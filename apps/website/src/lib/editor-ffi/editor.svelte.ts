@@ -6,7 +6,6 @@ import { initWasm, wasm } from '$lib/wasm-ffi.svelte';
 import { IS_MAC } from './constants';
 import { fontDataMissingHandler } from './fonts';
 import { TouchGestureController } from './gesture.svelte';
-import { glContextPool } from './gl-context-pool';
 import { readClipboardRich, writeClipboardPayload } from './handlers/clipboard';
 import { encodeLengthPrefixedBlobs } from './length-prefix';
 import { isMutatingMessage } from './message-gate';
@@ -44,7 +43,6 @@ import type {
   Viewport,
 } from '@typie/editor-ffi/browser';
 import type { ScrollViewport } from '@typie/ui/utils';
-import type { SurfaceBackend } from './gl-context-pool';
 import type { EditorScrollIntoViewOptions, EditorScrollScope } from './scroll.svelte';
 import type {
   ArchivedAsset,
@@ -564,11 +562,6 @@ export class Editor {
     }
 
     this.#focused = focused;
-    if (focused) {
-      glContextPool.setFocus(this);
-    } else {
-      glContextPool.clearFocus(this);
-    }
     this.enqueue({ type: 'system', event: { type: 'set_focused', focused } });
   }
 
@@ -609,7 +602,6 @@ export class Editor {
     const committed = this.#wasm.render_surface(page);
     if (committed) {
       probeRendered(this, page);
-      glContextPool.notePresent(this, page);
       const listeners = this.#presentedListeners.get(page);
       if (listeners && listeners.size > 0) {
         const snapshot = [...listeners];
@@ -1302,19 +1294,6 @@ export class Editor {
     this.#attachedPages.add(page);
   }
 
-  attachSurfaceWithBackend(
-    page: number,
-    canvas: HTMLCanvasElement,
-    width: number,
-    height: number,
-    backend: SurfaceBackend,
-  ): SurfaceBackend {
-    if (this.#destroyed) return 'cpu';
-    const actual = this.#wasm.attach_surface_with_backend(page, canvas, width, height, this.surfaceScaleFactor, backend);
-    this.#attachedPages.add(page);
-    return actual as SurfaceBackend;
-  }
-
   detachSurface(page: number): void {
     if (this.#destroyed) return;
     this.#attachedPages.delete(page);
@@ -1330,26 +1309,6 @@ export class Editor {
   surfaceBackend(page: number): string {
     if (this.#destroyed) return 'none';
     return this.#wasm.surface_backend(page);
-  }
-
-  // Probe-only debug readback. `'texture'` reads the retained GL tiles (source oracle);
-  // `'present'` re-blits and reads the default framebuffer (final present oracle). Empty
-  // array = unreadable (dead/oversized surface, lost context, or clamped-away rect).
-  debugReadSurfacePixels(page: number, x: number, y: number, w: number, h: number, source: 'texture' | 'present'): Uint8Array {
-    if (this.#destroyed) return new Uint8Array();
-    return this.#wasm.debug_read_surface_pixels(page, x, y, w, h, source);
-  }
-
-  // Device y0 of each retained GL tile (CPU/missing → empty). Feeds seam sampling.
-  debugSurfaceTileRanges(page: number): Int32Array {
-    if (this.#destroyed) return new Int32Array();
-    return this.#wasm.debug_surface_tile_ranges(page);
-  }
-
-  // Last committed present's damage rects, flattened as [x0,y0,x1,y1]*n.
-  debugLastDamage(page: number): Int32Array {
-    if (this.#destroyed) return new Int32Array();
-    return this.#wasm.debug_last_damage(page);
   }
 
   onSurfacePresented(page: number, listener: () => void): () => void {
@@ -1906,7 +1865,6 @@ export class Editor {
     this.#destroyed = true;
 
     unregister(this);
-    glContextPool.removeEditor(this);
 
     this.#effectCleanup?.();
     this.#effectCleanup = null;

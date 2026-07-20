@@ -6,7 +6,7 @@ cfg_if! {
         mod cpu_surface;
         pub use cpu_surface::{PlatformHandle, SurfaceHandle};
     } else if #[cfg(feature = "wasm-browser")] {
-        pub(crate) mod gl_surface;
+        pub(crate) mod surface_budget;
         mod wasm_browser;
         pub use wasm_browser::{PlatformHandle, SurfaceHandle};
     } else {
@@ -23,4 +23,4 @@ cfg_if! {
 mod render_buffer;
 
 #[cfg(all(test, not(feature = "wasm-browser")))]
-pub(crate) mod gl_surface;
+mod surface_budget;

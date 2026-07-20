@@ -1,17 +1,5 @@
 <script lang="ts" module>
   import { css } from '@typie/styled-system/css';
-  import { glContextPool, setBackendChangeHandler } from '../gl-context-pool';
-  import type { LeaseToken, SurfaceBackend } from '../gl-context-pool';
-
-  // eslint-disable-next-line svelte/prefer-svelte-reactivity
-  const poolRoutes = new Set<(editorKey: object, page: number, backend: SurfaceBackend, acquireHint?: LeaseToken) => void>();
-  setBackendChangeHandler((editorKey, page, backend, acquireHint) => {
-    for (const route of poolRoutes) route(editorKey, page, backend, acquireHint);
-  });
-
-  // 기본값 = CPU(전 기기에서 검증된 유일한 경로). GL은 'gl' opt-in 시에만 — 컨텍스트 churn·재삽입
-  // 등 플랫폼 리스크가 실측으로 확인되어, present 성능 필요가 측정으로 입증될 때까지 후퇴한다.
-  const glOptIn = typeof localStorage !== 'undefined' && localStorage.getItem('typie:page-surface') === 'gl';
 
   const canvasClass = css({ position: 'absolute', top: '0', left: '0', width: 'full', imageRendering: 'pixelated' });
 </script>
@@ -25,7 +13,7 @@
   import ExternalElement from './ExternalElement.svelte';
   import LinkOverlay from './LinkOverlay.svelte';
   import TableOverlay from './TableOverlay.svelte';
-  import type { ManagerEffects, PoolPort } from '../page-surface-manager';
+  import type { ManagerEffects } from '../page-surface-manager';
 
   type Props = {
     page: number;
@@ -114,17 +102,10 @@
         let dirty = false;
         let needsResize = false;
 
-        const scheduleDeadCheck = () => {
-          requestAnimationFrame(() => {
-            if (editor.surfaceBackend(page) === 'gl-dead') manager.remountFromLoss();
-          });
-        };
-
         const paint = () => {
           if (manager.isAttached()) {
             editor.requestSurfaceRender(page);
             dirty = false;
-            scheduleDeadCheck();
           } else {
             dirty = true;
           }
@@ -144,38 +125,6 @@
           }
         };
 
-        // eslint-disable-next-line @typescript-eslint/no-empty-function -- shared no-op for the default cpu-only stub pool
-        const noop = () => {};
-        const pool: PoolPort = glOptIn
-          ? {
-              updateDemand: (zone) => glContextPool.updatePageDemand(editor, page, zone),
-              acquireLease: (requested) => glContextPool.acquireCanvasLease(editor, page, requested),
-              ackAttached: (token, actual) => glContextPool.ackAttached(token, actual),
-              cancelReservation: (token, reason) => glContextPool.cancelReservation(token, reason),
-              beginRelease: (token) => glContextPool.beginRelease(token),
-              ackReleased: (token) => glContextPool.ackReleased(token),
-              notePresent: (token) => glContextPool.notePresent(editor, page, token),
-              noteGlFailure: (incident) => glContextPool.noteGlFailure(editor, page, incident),
-              noteBudgetFallback: () => glContextPool.noteBudgetFallback(editor, page),
-              backendOf: () => glContextPool.backendOf(editor, page),
-              leave: () => glContextPool.leave(editor, page),
-              forget: () => glContextPool.forget(editor, page),
-            }
-          : {
-              updateDemand: () => 'cpu',
-              acquireLease: () => ({ backend: 'cpu' }),
-              ackAttached: noop,
-              cancelReservation: noop,
-              beginRelease: noop,
-              ackReleased: noop,
-              notePresent: noop,
-              noteGlFailure: noop,
-              noteBudgetFallback: noop,
-              backendOf: () => 'cpu',
-              leave: noop,
-              forget: noop,
-            };
-
         const effects: ManagerEffects<HTMLCanvasElement> = {
           createCanvas: () => {
             const canvas = document.createElement('canvas');
@@ -186,11 +135,10 @@
           styleCanvas: (canvas) => {
             canvas.style.height = `${cssBackingHeight}px`;
           },
-          attach: (canvas, backend) => {
-            const actual = editor.attachSurfaceWithBackend(page, canvas, width, backingHeight, backend);
+          attach: (canvas) => {
+            editor.attachSurface(page, canvas, width, backingHeight);
             probeAttach(editor, page, canvas);
-            const polled = editor.surfaceBackend(page);
-            return polled === 'gl-dead' || polled === 'cpu-oversized' ? polled : actual;
+            return editor.surfaceBackend(page) === 'cpu-oversized' ? 'cpu-oversized' : 'cpu';
           },
           detach: () => {
             probeDetach(editor, page);
@@ -200,15 +148,8 @@
           isSuspended: () => document.visibilityState !== 'visible',
           onPresented: (listener) => editor.onSurfacePresented(page, listener),
           addContextListeners: (canvas, isCurrent) => {
-            const onWebglContextLost = (event: Event) => {
-              event.preventDefault();
-              probeEvent(`webglcontextlost page=${page}`);
-              if (isCurrent()) manager.onContextLost();
-            };
-            const onWebglContextRestored = () => {
-              probeEvent(`webglcontextrestored page=${page}`);
-              if (isCurrent()) manager.onContextRestored();
-            };
+            // 2D 캔버스도 GPU 리셋 시 백킹을 잃고 'contextrestored'를 발화한다 — 복귀 시
+            // present state를 무효화하고 다시 그린다(CPU 유일 경로의 복구).
             const onContextRestored2d = () => {
               probeEvent(`contextrestored page=${page}`);
               if (isCurrent()) {
@@ -216,17 +157,10 @@
                 paint();
               }
             };
-            canvas.addEventListener('webglcontextlost', onWebglContextLost);
-            canvas.addEventListener('webglcontextrestored', onWebglContextRestored);
             canvas.addEventListener('contextrestored', onContextRestored2d);
             return () => {
-              canvas.removeEventListener('webglcontextlost', onWebglContextLost);
-              canvas.removeEventListener('webglcontextrestored', onWebglContextRestored);
               canvas.removeEventListener('contextrestored', onContextRestored2d);
             };
-          },
-          disposeGlContext: (canvas) => {
-            canvas.getContext('webgl2')?.getExtension('WEBGL_lose_context')?.loseContext();
           },
           releaseCpuBacking: (canvas) => {
             canvas.width = 0;
@@ -242,18 +176,9 @@
             const id = setTimeout(fn, ms);
             return () => clearTimeout(id);
           },
-          defer: (fn) => queueMicrotask(fn),
-          pool,
         };
 
         manager = createPageSurfaceManager(effects);
-
-        const route = (editorKey: object, routedPage: number, backend: SurfaceBackend, acquireHint?: LeaseToken): void => {
-          if (editorKey !== editor || routedPage !== page) return;
-          manager.onPoolBackend(backend, acquireHint);
-          flushIfAttached();
-        };
-        poolRoutes.add(route);
 
         // 가시성 복귀 시 resume: 숨김 중 로스로 detach된 표면(failedParked)을 치유하고, 정체된
         // pending은 렌더를 재촉한다. 에디터 레벨 recoverSurfaces는 attached 표면만 갱신하므로
@@ -351,7 +276,6 @@
             editor.requestSurfaceResize(page, width, backingHeight);
             dirty = false;
             needsResize = false;
-            scheduleDeadCheck();
           } else {
             needsResize = true;
             dirty = true;
@@ -359,7 +283,6 @@
         });
 
         return () => {
-          poolRoutes.delete(route);
           document.removeEventListener('visibilitychange', onVisible);
           window.removeEventListener('pageshow', onPageShow);
           offRender();

@@ -102,13 +102,6 @@ struct RenderState {
     // fixed at the page's max height, so when content grows we force-damage the
     // newly revealed strip [prev, current) that no primitive diff would cover.
     last_content_height: HashMap<u32, i32>,
-    // Damage rects of the last committed present per page, recorded only while a
-    // debug probe is armed (`debug_capture_damage`). `debug_last_damage` reads
-    // this so the surface-probe can drive seam checks at real tile/damage edges.
-    last_damage: HashMap<u32, Vec<editor_renderer::damage::IRect>>,
-    // Set the first time any debug readback FFI is called; gates the per-present
-    // `last_damage` bookkeeping so production renders pay nothing.
-    debug_capture_damage: bool,
 }
 
 #[cfg(not(feature = "wasm-server"))]
@@ -117,7 +110,6 @@ impl RenderState {
         self.last_render_sig.remove(&page);
         self.prev_dl.remove(&page);
         self.last_content_height.remove(&page);
-        self.last_damage.remove(&page);
     }
 }
 
@@ -952,9 +944,6 @@ impl Editor {
             }
             let committed = surface.apply_damage(&dl, &damage);
             if committed {
-                if render.debug_capture_damage {
-                    render.last_damage.insert(page, damage);
-                }
                 render.prev_dl.insert(page, dl);
                 render.last_render_sig.insert(page, sig);
                 render.last_content_height.insert(page, page_bounds.y1);
@@ -967,11 +956,11 @@ impl Editor {
     }
 }
 
-// Separate from the block above: `SurfaceHandle` there is generic over whatever platform
-// module is active, but `Cpu`/`Gl` variants only exist under wasm-browser. Gating the whole
-// block (rather than just this method) keeps `editor_macros::ffi_export(uniffi)` — applied to
-// the block above — from ever seeing this method, since a `#[cfg]` on an individual method
-// inside a shared uniffi/wasm block isn't honored by uniffi's own codegen.
+// Separate from the block above: `surface_backend`/`refresh_surface` are browser
+// present-path specific (the `cpu-oversized` report, the visibility-return recovery),
+// so they stay in a wasm-browser-only block rather than the shared uniffi/wasm block
+// above — a `#[cfg]` on an individual method inside a shared uniffi/wasm block isn't
+// honored by uniffi's own codegen.
 #[cfg(feature = "wasm-browser")]
 #[editor_macros::ffi_export(wasm)]
 impl Editor {
@@ -979,141 +968,20 @@ impl Editor {
         self.with_render(|render| {
             Ok(match render.surfaces.get(&page) {
                 None => "none".to_string(),
-                Some(SurfaceHandle::Cpu(surface)) if surface.is_oversized() => {
-                    "cpu-oversized".to_string()
-                }
-                Some(SurfaceHandle::Cpu(_)) => "cpu".to_string(),
-                Some(SurfaceHandle::Gl(surface)) if surface.is_dead() => "gl-dead".to_string(),
-                Some(SurfaceHandle::Gl(_)) => "gl".to_string(),
+                Some(surface) if surface.is_oversized() => "cpu-oversized".to_string(),
+                Some(_) => "cpu".to_string(),
             })
         })
     }
 
-    /// Attaches with an explicit backend choice (the TS pool decides `"gl"` vs `"cpu"`).
-    /// `"gl"` falls back to CPU on failure or when the context budget is exhausted; the
-    /// returned string reports the backend actually attached so the caller's pool
-    /// accounting stays in sync.
-    pub fn attach_surface_with_backend(
-        &self,
-        page: u32,
-        handle: PlatformHandle,
-        width: f64,
-        height: f64,
-        scale_factor: f64,
-        backend: String,
-    ) -> EditorResult<String> {
-        self.with_render(|render| {
-            // Drop the old handle before creating the new one, same as `attach_surface`:
-            // a re-attach that keeps its GL handle alive during `new_with_backend` would
-            // double-count against the GL context budget and spuriously downgrade to CPU.
-            render.surfaces.remove(&page);
-            let surface =
-                SurfaceHandle::new_with_backend(handle, width, height, scale_factor, &backend)?;
-            let actual = match &surface {
-                SurfaceHandle::Gl(_) => "gl",
-                SurfaceHandle::Cpu(_) => "cpu",
-            };
-            render.surfaces.insert(page, surface);
-            // Fresh buffer: drop any stale signature/display-list so the first paint always renders.
-            render.clear_page_present_state(page);
-            Ok(actual.to_string())
-        })
-    }
-
-    /// Visibility-return recovery. GL re-blits retained tiles (pixels only; sig/DL
-    /// stay so the following `render_surface` skips the re-raster), falling back to
-    /// a present-state clear on a failed blit. CPU keeps the invalidate semantics
-    /// (clear → full re-render). A dead GL surface stays dead — `refresh` returns
-    /// false without resurrecting it; the TS manager's dead-check/remount recovers.
+    /// Visibility-return recovery. CPU keeps the invalidate semantics (clear → full
+    /// re-render on the next `render_surface`).
     pub fn refresh_surface(&self, page: u32) -> EditorResult<()> {
         self.with_render(|render| {
-            match render.surfaces.get_mut(&page) {
-                Some(SurfaceHandle::Gl(surface)) => {
-                    if !surface.refresh() {
-                        render.clear_page_present_state(page);
-                    }
-                }
-                Some(SurfaceHandle::Cpu(_)) => render.clear_page_present_state(page),
-                None => {}
+            if render.surfaces.contains_key(&page) {
+                render.clear_page_present_state(page);
             }
             Ok(())
-        })
-    }
-
-    /// Probe-only pixel readback (RGBA premultiplied; empty Vec = unreadable). `source`
-    /// `"texture"` reads the retained tile textures (the internal oracle); `"present"`
-    /// does a fresh `blit_all` then reads the default framebuffer (the final present
-    /// oracle — catches blit Y-flip, an empty backbuffer, or tile-placement bugs).
-    /// Requests are clamped to the surface bounds and capped; `w/h <= 0`, an empty
-    /// intersection, or an oversized request all return an empty Vec.
-    pub fn debug_read_surface_pixels(
-        &self,
-        page: u32,
-        x: i32,
-        y: i32,
-        w: i32,
-        h: i32,
-        source: String,
-    ) -> EditorResult<Vec<u8>> {
-        self.with_render(|render| {
-            render.debug_capture_damage = true;
-            let Some(surface) = render.surfaces.get_mut(&page) else {
-                return Ok(Vec::new());
-            };
-            let bounds = surface.device_bounds();
-            let Some(r) = crate::platform::gl_surface::clamp_read_rect(x, y, w, h, bounds) else {
-                return Ok(Vec::new());
-            };
-            let mut out = vec![0u8; (r.width() as usize) * (r.height() as usize) * 4];
-            let ok = match (surface, source.as_str()) {
-                (SurfaceHandle::Cpu(surface), _) if surface.is_oversized() => false,
-                (SurfaceHandle::Gl(surface), "present") => surface.read_present_pixels(r, &mut out),
-                (SurfaceHandle::Gl(surface), _) => surface.read_texture_pixels(r, &mut out),
-                (SurfaceHandle::Cpu(surface), _) => match surface.cpu_sink() {
-                    Some(sink) => {
-                        sink.read_back_rect(&mut out, (r.width() as usize) * 4, r);
-                        true
-                    }
-                    None => false,
-                },
-            };
-            if !ok {
-                out.clear();
-            }
-            Ok(out)
-        })
-    }
-
-    /// Device `y0` of every retained GL tile (single-tile pages report `[0]`); CPU or
-    /// missing surfaces report an empty list. The surface-probe derives seam sample
-    /// points from these boundaries.
-    pub fn debug_surface_tile_ranges(&self, page: u32) -> EditorResult<Vec<i32>> {
-        self.with_render(|render| {
-            render.debug_capture_damage = true;
-            Ok(match render.surfaces.get(&page) {
-                Some(SurfaceHandle::Gl(surface)) => surface.tile_y0s(),
-                _ => Vec::new(),
-            })
-        })
-    }
-
-    /// Damage rects of the last committed present, flattened as `[x0,y0,x1,y1]*n`.
-    /// Recorded only once a debug readback FFI has armed capture, so the first call
-    /// may return an empty list until the next present lands.
-    pub fn debug_last_damage(&self, page: u32) -> EditorResult<Vec<i32>> {
-        self.with_render(|render| {
-            render.debug_capture_damage = true;
-            let flat = render
-                .last_damage
-                .get(&page)
-                .map(|rects| {
-                    rects
-                        .iter()
-                        .flat_map(|r| [r.x0, r.y0, r.x1, r.y1])
-                        .collect()
-                })
-                .unwrap_or_default();
-            Ok(flat)
         })
     }
 }
@@ -1131,8 +999,6 @@ impl Editor {
                 last_render_sig: HashMap::new(),
                 prev_dl: HashMap::new(),
                 last_content_height: HashMap::new(),
-                last_damage: HashMap::new(),
-                debug_capture_damage: false,
             }),
         }
     }

@@ -3,7 +3,7 @@ use editor_renderer::backend::cpu::{CpuSink, unpremultiply};
 use editor_renderer::damage::IRect;
 use wasm_bindgen::prelude::*;
 
-use super::gl_surface;
+use super::surface_budget;
 use crate::error::FfiError;
 
 pub type PlatformHandle = web_sys::HtmlCanvasElement;
@@ -26,8 +26,8 @@ impl CpuPageSurface {
     ) -> Result<Self, FfiError> {
         let raw_w = (width * scale_factor).round() as u32;
         let raw_h = (height * scale_factor).round() as u32;
-        let pw = gl_surface::clamp_dim_u16(raw_w);
-        let ph = gl_surface::clamp_dim_u16(raw_h);
+        let pw = surface_budget::clamp_dim_u16(raw_w);
+        let ph = surface_budget::clamp_dim_u16(raw_h);
         let w = u32::from(pw);
         let h = u32::from(ph);
         if raw_w != w || raw_h != h {
@@ -66,7 +66,7 @@ impl CpuPageSurface {
 
     // `new`/`resize` 공통: 예산 초과 시 콘솔 경고 후 false를 돌려준다(oversized로 강등).
     fn budget_gate(context: &str, w: u32, h: u32) -> bool {
-        let within = gl_surface::cpu_surface_within_budget(w, h);
+        let within = surface_budget::cpu_surface_within_budget(w, h);
         if !within {
             web_sys::console::warn_1(
                 &format!("[cpu-surface] {context} {w}x{h} exceeds byte budget; surface oversized")
@@ -164,7 +164,8 @@ impl CpuPageSurface {
             return true;
         }
         let max_rows =
-            gl_surface::max_strip_rows(w, gl_surface::CPU_PRESENT_STRIP_BYTE_BUDGET).max(1) as i32;
+            surface_budget::max_strip_rows(w, surface_budget::CPU_PRESENT_STRIP_BYTE_BUDGET).max(1)
+                as i32;
         let mut y = r.y0;
         while y < r.y1 {
             let y1 = y.saturating_add(max_rows).min(r.y1);
@@ -215,8 +216,8 @@ impl CpuPageSurface {
     pub fn resize(&mut self, width: f64, height: f64, scale_factor: f64) -> bool {
         let raw_w = (width * scale_factor).round() as u32;
         let raw_h = (height * scale_factor).round() as u32;
-        let pw = gl_surface::clamp_dim_u16(raw_w);
-        let ph = gl_surface::clamp_dim_u16(raw_h);
+        let pw = surface_budget::clamp_dim_u16(raw_w);
+        let ph = surface_budget::clamp_dim_u16(raw_h);
         let w = u32::from(pw);
         let h = u32::from(ph);
 
@@ -261,99 +262,6 @@ impl CpuPageSurface {
     }
 }
 
-// 스펙 §3.4 예산 장부: 브라우저 한도(≥8) − 프로브/GC 마진 → 8 (구 공유 presenter 제거 완료).
-// TS 풀(GL_POOL_BUDGET)이 1차 결정권자, 이 상수는 Rust측 백스톱.
-const MAX_GL_CONTEXTS: usize = 8;
-
-thread_local! {
-    static GL_CONTEXT_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
-}
-
-pub enum SurfaceHandle {
-    Cpu(CpuPageSurface),
-    Gl(gl_surface::GlPageSurface),
-}
-
-impl SurfaceHandle {
-    pub fn new(
-        handle: PlatformHandle,
-        width: f64,
-        height: f64,
-        scale_factor: f64,
-    ) -> Result<Self, FfiError> {
-        Self::new_with_backend(handle, width, height, scale_factor, "cpu")
-    }
-
-    // Backend selection now lives in the TS pool (Task 2); this stays the single
-    // chokepoint the FFI goes through, with `GL_CONTEXT_COUNT`/`MAX_GL_CONTEXTS` kept
-    // as a defense-in-depth backstop until the pool owns the budget (Plan 4).
-    pub fn new_with_backend(
-        handle: PlatformHandle,
-        width: f64,
-        height: f64,
-        scale_factor: f64,
-        backend: &str,
-    ) -> Result<Self, FfiError> {
-        if backend == "gl"
-            && GL_CONTEXT_COUNT.with(|c| c.get()) < MAX_GL_CONTEXTS
-            && let Some(surface) =
-                gl_surface::GlPageSurface::new(handle.clone(), width, height, scale_factor)
-        {
-            GL_CONTEXT_COUNT.with(|c| c.set(c.get() + 1));
-            return Ok(Self::Gl(surface));
-        }
-        Ok(Self::Cpu(CpuPageSurface::new(
-            handle,
-            width,
-            height,
-            scale_factor,
-        )?))
-    }
-
-    pub fn scale_factor(&self) -> f64 {
-        match self {
-            Self::Cpu(surface) => surface.scale_factor(),
-            Self::Gl(surface) => surface.scale_factor(),
-        }
-    }
-
-    // Full device-pixel bounds of the backing (both variants). The debug readback FFI
-    // clamps probe requests to this before reading texture/present/CPU pixels.
-    pub fn device_bounds(&self) -> IRect {
-        match self {
-            Self::Cpu(surface) => IRect {
-                x0: 0,
-                y0: 0,
-                x1: surface.width as i32,
-                y1: surface.height as i32,
-            },
-            Self::Gl(surface) => surface.device_bounds(),
-        }
-    }
-
-    pub fn apply_damage(
-        &mut self,
-        dl: &editor_renderer::display_list::DisplayList,
-        damage: &[IRect],
-    ) -> bool {
-        match self {
-            Self::Cpu(surface) => surface.apply_damage(dl, damage),
-            Self::Gl(surface) => surface.apply_damage(dl, damage),
-        }
-    }
-
-    pub fn resize(&mut self, width: f64, height: f64, scale_factor: f64) -> bool {
-        match self {
-            Self::Cpu(surface) => surface.resize(width, height, scale_factor),
-            Self::Gl(surface) => surface.resize(width, height, scale_factor),
-        }
-    }
-}
-
-impl Drop for SurfaceHandle {
-    fn drop(&mut self) {
-        if matches!(self, Self::Gl(_)) {
-            GL_CONTEXT_COUNT.with(|c| c.set(c.get().saturating_sub(1)));
-        }
-    }
-}
+// CPU가 유일한 present 백엔드다 — 핸들은 곧 CPU 표면 그 자체다. `new`(scale_factor·apply_damage·
+// resize·is_oversized)는 CpuPageSurface에서 그대로 온다.
+pub type SurfaceHandle = CpuPageSurface;
