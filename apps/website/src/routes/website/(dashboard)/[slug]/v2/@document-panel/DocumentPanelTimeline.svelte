@@ -20,6 +20,7 @@
   import { Editor, getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { graphql } from '$mearie';
   import { getPane, getPaneGroup } from '../../@pane/context.svelte';
+  import { getDocumentPanelFocusReturn } from './focus-return.svelte';
   import type { Action } from 'svelte/action';
   import type { PointerEventHandler } from 'svelte/elements';
   import type { DocumentPanelV2Timeline_document$key } from '$mearie';
@@ -89,6 +90,7 @@
   const theme = getThemeContext();
   const pane = getPane();
   const paneGroup = getPaneGroup();
+  const focusReturn = getDocumentPanelFocusReturn();
 
   const editorContainer = $derived(ctx.editor?.scrollContainerEl);
 
@@ -244,6 +246,7 @@
 
     exitTimeline();
     paneGroup.state.current.panelExpandedByPaneId[pane.id] = false;
+    focusReturn.restore();
     Toast.success(`${dayjs(head.updatedAt).formatAsSmart()} 시점으로 복원되었습니다`);
     mixpanel.track('document_timeline_restore');
   };

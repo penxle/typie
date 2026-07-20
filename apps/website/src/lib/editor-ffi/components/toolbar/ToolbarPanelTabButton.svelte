@@ -6,6 +6,7 @@
   import { getAppContext } from '@typie/ui/context';
   import mixpanel from 'mixpanel-browser';
   import { getPane, getPaneGroup } from '../../../../routes/website/(dashboard)/[slug]/@pane/context.svelte';
+  import { getDocumentPanelFocusReturn } from '../../../../routes/website/(dashboard)/[slug]/v2/@document-panel/focus-return.svelte';
   import type { TooltipParameter } from '@typie/ui/actions';
   import type { Component } from 'svelte';
   import type { PanelTab } from '../../../../routes/website/(dashboard)/[slug]/@pane/context.svelte';
@@ -23,6 +24,7 @@
 
   const paneId = getPane().id;
   const paneGroup = getPaneGroup();
+  const focusReturn = getDocumentPanelFocusReturn();
 
   const isExpanded = $derived(paneGroup.state.current.panelExpandedByPaneId[paneId]);
   const isTab = $derived(paneGroup.state.current.panelTabByPaneId[paneId] === tab);
@@ -52,6 +54,7 @@
           ...paneGroup.state.current.panelExpandedByPaneId,
           [paneId]: false,
         };
+        focusReturn.restore();
         mixpanel.track('toggle_panel_expanded', { expanded: false });
       } else {
         paneGroup.state.current.panelTabByPaneId = {
@@ -76,6 +79,7 @@
       }
     }
   }}
+  onpointerdown={(event) => event.preventDefault()}
   type="button"
   use:tooltip={{
     message: toolbarSize === 'medium' ? label : undefined,

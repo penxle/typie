@@ -13,13 +13,14 @@
   import XIcon from '~icons/lucide/x';
   import { IS_MAC } from '$lib/editor-ffi/constants';
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
+  import { FocusReturnSession } from '$lib/focus-return-session';
   import type { Editor } from '$lib/editor-ffi/editor.svelte';
 
   type Props = {
-    close: () => void;
+    onclose: () => void;
   };
 
-  let { close }: Props = $props();
+  let { onclose }: Props = $props();
 
   const ctx = getEditorContext();
   const app = getAppContext();
@@ -27,6 +28,7 @@
   let findInputEl: HTMLInputElement;
   let findText = $state('');
   let replaceText = $state('');
+  let focusReturnSession: FocusReturnSession | null = null;
 
   let lastSearch:
     | {
@@ -38,6 +40,18 @@
     | undefined;
 
   const toSingleLineText = (text: string) => text.replaceAll(/\r\n?/g, ' ').replaceAll('\n', ' ');
+
+  function handleFocusIn(event: FocusEvent & { currentTarget: HTMLElement }) {
+    if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
+    focusReturnSession ??= FocusReturnSession.capture(event.relatedTarget);
+  }
+
+  export function close() {
+    const session = focusReturnSession;
+    focusReturnSession = null;
+    onclose();
+    session?.restore();
+  }
 
   $effect(() => {
     const editor = ctx.editor;
@@ -79,7 +93,6 @@
       e.preventDefault();
       e.stopPropagation();
       close();
-      ctx.editor?.focus();
     }
   };
 
@@ -115,6 +128,9 @@
     });
 
     return () => {
+      const session = focusReturnSession;
+      focusReturnSession = null;
+      session?.discard();
       lastSearch = undefined;
       ctx.editor?.clearSearch();
     };
@@ -136,6 +152,7 @@
     boxShadow: 'small',
   })}
   aria-label="찾기 및 바꾸기"
+  onfocusin={handleFocusIn}
   onkeydown={handleKeydown}
   role="dialog"
   tabindex="-1"
@@ -298,10 +315,7 @@
           _hover: { backgroundColor: 'surface.muted' },
           _focus: { backgroundColor: 'surface.muted' },
         })}
-        onclick={() => {
-          close();
-          ctx.editor?.focus();
-        }}
+        onclick={close}
         type="button"
         use:tooltip={{ message: '닫기', keys: ['Esc'] }}
       >

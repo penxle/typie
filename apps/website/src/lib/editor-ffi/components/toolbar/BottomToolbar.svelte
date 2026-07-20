@@ -442,5 +442,12 @@
 
   <div class={css({ flexGrow: '1' })}></div>
 
-  <ToolbarButton icon={SearchIcon} keys={['Mod', 'F']} label="찾기, 바꾸기" onclick={() => onSearchClick?.()} size="small" />
+  <ToolbarButton
+    icon={SearchIcon}
+    keys={['Mod', 'F']}
+    label="찾기, 바꾸기"
+    onclick={() => onSearchClick?.()}
+    onpointerdown={(e) => e.preventDefault()}
+    size="small"
+  />
 </div>

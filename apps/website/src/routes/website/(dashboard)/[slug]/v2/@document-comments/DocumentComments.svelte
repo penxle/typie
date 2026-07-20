@@ -6,6 +6,7 @@
   import MessageSquarePlusIcon from '~icons/lucide/message-square-plus';
   import { reconcileComments } from '$lib/editor-ffi/comments';
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
+  import { FocusReturnSession } from '$lib/focus-return-session';
   import { cache } from '$lib/graphql';
   import { graphql } from '$mearie';
   import { setupCommentContext } from './context.svelte';
@@ -34,6 +35,8 @@
   let showResolved = $state(false);
   let composeFrozen: StableSelection | null = null;
   let pendingThread = $state<CommentThread | null>(null);
+  let focusReturnSession: FocusReturnSession | null = null;
+  let focusReturnRegion: HTMLElement | null = null;
   const justCreated = new SvelteSet<string>();
 
   createSubscription(
@@ -149,10 +152,10 @@
     if (pt && threads.some((t) => t.id === pt.id)) pendingThread = null;
   });
 
-  $effect(() => {
+  $effect.pre(() => {
     if (composing) return;
     if (activeThreadId && !justCreated.has(activeThreadId) && threads.every((t) => t.id !== activeThreadId)) {
-      close(false);
+      closeAutomatically();
     }
   });
 
@@ -246,14 +249,46 @@
     ctx.scroll?.scrollIntoView({ target: { type: 'tracked_item', id } });
   }
 
-  function close(refocus = true) {
+  function takeFocusReturnSession(): FocusReturnSession | null {
+    const session = focusReturnSession;
+    focusReturnSession = null;
+    return session;
+  }
+
+  function clearCommentUi() {
     composing = false;
     clearCompose();
     pendingThread = null;
     justCreated.clear();
     activeThreadId = null;
     activeAnchor = null;
-    if (refocus) editor?.focus();
+  }
+
+  function close() {
+    const session = takeFocusReturnSession();
+    clearCommentUi();
+    session?.restore();
+  }
+
+  function closeFromOutside() {
+    const session = takeFocusReturnSession();
+    clearCommentUi();
+    session?.discard();
+  }
+
+  function closeAutomatically() {
+    const session = takeFocusReturnSession();
+    if (focusReturnRegion) session?.restoreIfFocusWithin(focusReturnRegion);
+    else session?.discard();
+    clearCommentUi();
+  }
+
+  function captureFocusReturn(target: EventTarget | null) {
+    focusReturnSession ??= FocusReturnSession.capture(target);
+  }
+
+  function setFocusReturnRegion(region: HTMLElement | null) {
+    focusReturnRegion = region;
   }
 
   const [createThreadMutation] = createMutation(
@@ -448,7 +483,10 @@
     isLocatable,
     openThread,
     openFromPanel,
+    captureFocusReturn,
+    setFocusReturnRegion,
     close,
+    closeFromOutside,
     createThread,
     reply,
     editComment,
@@ -459,6 +497,8 @@
   });
 
   onDestroy(() => {
+    takeFocusReturnSession()?.discard();
+    focusReturnRegion = null;
     editor?.setActiveComment(null);
   });
 </script>

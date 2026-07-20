@@ -62,22 +62,22 @@
     if (!open) return;
     return pushEscapeHandler(() => {
       if (!open) return false;
-      tryClose();
+      tryClose(comments.close);
       return true;
     });
   });
 
-  function tryClose() {
+  function tryClose(finish: () => void) {
     if (hasUnsavedChanges) {
       Dialog.confirm({
         title: '작성 중인 내용 삭제',
         message: '작성 중인 내용이 사라집니다. 닫으시겠어요?',
         action: 'danger',
         actionLabel: '닫기',
-        actionHandler: () => comments.close(),
+        actionHandler: finish,
       });
     } else {
-      comments.close();
+      finish();
     }
   }
 
@@ -119,11 +119,11 @@
 </script>
 
 {#if open && virtualAnchor}
-  <CommentPopoverCard onclickoutside={tryClose} reference={virtualAnchor}>
+  <CommentPopoverCard onclickoutside={() => tryClose(comments.closeFromOutside)} reference={virtualAnchor}>
     {#if comments.composing}
       <CommentComposer
         autofocus
-        oncancel={tryClose}
+        oncancel={() => tryClose(comments.close)}
         ondirty={(d) => (composerDirty = d)}
         onsubmit={(content) => comments.createThread(content)}
       />
@@ -188,7 +188,7 @@
               <Icon icon={CheckIcon} size={12} />
             </button>
           {/if}
-          <button class={css(headerButtonStyle)} onclick={tryClose} type="button">
+          <button class={css(headerButtonStyle)} onclick={() => tryClose(comments.close)} type="button">
             <Icon icon={XIcon} size={12} />
           </button>
         </div>
@@ -227,7 +227,7 @@
 
       <div class={css({ borderTopWidth: '1px', borderColor: 'border.subtle' })}></div>
       <CommentComposer
-        oncancel={tryClose}
+        oncancel={() => tryClose(comments.close)}
         ondirty={(d) => (composerDirty = d)}
         onsubmit={(content) => comments.reply(thread.id, content)}
         placeholder="답글을 입력하세요"

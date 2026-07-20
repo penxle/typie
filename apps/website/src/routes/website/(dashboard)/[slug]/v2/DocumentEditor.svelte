@@ -37,6 +37,7 @@
   import CommentPopover from './@document-comments/CommentPopover.svelte';
   import DocumentComments from './@document-comments/DocumentComments.svelte';
   import DocumentPanel from './@document-panel/DocumentPanel.svelte';
+  import { setupDocumentPanelFocusReturn } from './@document-panel/focus-return.svelte';
   import DocumentFindReplace from './DocumentFindReplace.svelte';
   import DocumentTemplateModal from './DocumentTemplateModal.svelte';
   import FeedbackPopover from './FeedbackPopover.svelte';
@@ -56,6 +57,8 @@
   };
 
   let { query$key, focused, onReady }: Props = $props();
+
+  setupDocumentPanelFocusReturn();
 
   const query = createFragment(
     graphql(`
@@ -616,6 +619,12 @@
 
   let fontUploadModalOpen = $state(false);
   let showFindReplace = $state(false);
+  let findReplaceComponent = $state<DocumentFindReplace>();
+
+  function toggleFindReplace() {
+    if (showFindReplace) findReplaceComponent?.close();
+    else showFindReplace = true;
+  }
 
   setContext('setTotalBlobSizePlanUpgradeModalOpen', () => {
     PlanUpgradeDialog.show({
@@ -1086,7 +1095,7 @@
                     mixpanel.track('open_plan_upgrade_modal', { via: 'font_family_upload' });
                   }
                 }}
-                onSearchClick={() => (showFindReplace = !showFindReplace)}
+                onSearchClick={toggleFindReplace}
               />
 
               <div
@@ -1287,7 +1296,7 @@
                   </EditorComponent>
                 {/key}
                 {#if showFindReplace}
-                  <DocumentFindReplace close={() => (showFindReplace = false)} />
+                  <DocumentFindReplace bind:this={findReplaceComponent} onclose={() => (showFindReplace = false)} />
                 {/if}
               </div>
             </div>

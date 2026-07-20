@@ -5,6 +5,7 @@
   import { Button, FullAccessBadge, Icon } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { clamp } from '@typie/ui/utils';
+  import { onDestroy } from 'svelte';
   import ConstructionIcon from '~icons/lucide/construction';
   import LightbulbIcon from '~icons/lucide/lightbulb';
   import SpellCheckIcon from '~icons/lucide/spell-check';
@@ -19,6 +20,7 @@
   import DocumentPanelSettings from './DocumentPanelSettings.svelte';
   import DocumentPanelSpellcheck from './DocumentPanelSpellcheck.svelte';
   import DocumentPanelTimeline from './DocumentPanelTimeline.svelte';
+  import { getDocumentPanelFocusReturn } from './focus-return.svelte';
   import type { Component } from 'svelte';
   import type { Editor } from '$lib/editor-ffi/editor.svelte';
   import type { DocumentPanelV2_document$key, DocumentPanelV2_user$key } from '$mearie';
@@ -77,6 +79,7 @@
 
   const paneId = getPane().id;
   const paneGroup = getPaneGroup();
+  const focusReturn = getDocumentPanelFocusReturn();
 
   const isExpanded = $derived(
     paneGroup.state.current.panelExpandedByPaneId[paneId] && Object.hasOwn(paneGroup.state.current.panelTabByPaneId, paneId),
@@ -91,6 +94,8 @@
 
   let resizer = $state<Resizer | null>(null);
   let newWidth = $derived(clamp((app.preference.current.panelWidth ?? minWidth) + (resizer?.deltaX ?? 0), minWidth, maxWidth));
+
+  onDestroy(() => focusReturn.discard());
 </script>
 
 {#snippet planUpgradePrompt(featureIcon: Component, featureName: string, description: string)}
@@ -174,6 +179,10 @@
     borderLeftWidth: '1px',
     borderColor: 'border.subtle',
   })}
+  onfocusin={(event) => {
+    if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
+    focusReturn.capture(event.relatedTarget);
+  }}
 >
   <div
     class={css({
