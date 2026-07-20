@@ -1703,18 +1703,14 @@ impl Editor {
 
         self.transact(|tr| {
             tr.batch::<_, EditorError>(|tr| {
-                let existing: Vec<Dot> = tr
+                let existing_count = tr
                     .view()
                     .node(Dot::ROOT)
                     .ok_or_else(|| EditorError::General {
                         msg: "ROOT not found".into(),
                     })?
-                    .child_blocks()
-                    .map(|b| b.id())
-                    .collect();
-                for id in existing {
-                    tr.remove_subtree(id)?;
-                }
+                    .child_count();
+                tr.remove_child_slots(Dot::ROOT, 0, existing_count)?;
                 for (i, st) in subtrees.into_iter().enumerate() {
                     tr.insert_subtree(Dot::ROOT, i, st)?;
                 }
@@ -5584,6 +5580,34 @@ mod tests {
         assert!(
             has_rule,
             "template's Root-direct atom must be inserted, not dropped"
+        );
+    }
+
+    #[test]
+    fn insert_template_fragment_removes_existing_root_direct_atoms() {
+        let (initial, _p1) = state! {
+            doc { root {
+                horizontal_rule
+                p1: paragraph { text("") }
+            } }
+            selection: (p1, 0)
+        };
+        let (template, _p2) = state! {
+            doc { root { p2: paragraph { text("Body") } } }
+            selection: (p2, 0)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor
+            .insert_template_fragment(template.to_plain())
+            .expect("template insert ok");
+
+        let has_rule =
+            editor.state().view().root().unwrap().children().any(
+                |c| matches!(c, ChildView::Leaf(l) if l.node_type() == NodeType::HorizontalRule),
+            );
+        assert!(
+            !has_rule,
+            "existing Root-direct atom must be removed with the replaced document"
         );
     }
 
