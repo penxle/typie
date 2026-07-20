@@ -677,30 +677,38 @@ fn count_closes(chars: &[char]) -> usize {
 // Structural subset of the Key::Backspace / Key::Delete chains in
 // handle/key.rs — keep in sync.
 fn structural_backward(tr: &mut Transaction) -> CommandResult {
-    commands::first!(
+    commands::chain!(
         tr,
-        commands::delete_page_break_backward(),
-        commands::lift_empty_list_item(),
-        commands::merge_list_item_backward(),
-        commands::lift_first_list_item(),
-        commands::join_paragraph_backward_into_prev_list_item(),
-        commands::join_paragraph_backward(),
-        commands::sink_paragraph_backward(),
-        commands::lift_first_paragraph(),
-        commands::delete_empty_paragraph_backward(),
+        commands::optional!(commands::materialize_synthetic_selection_blocks()),
+        |tr| commands::first!(
+            tr,
+            commands::delete_page_break_backward(),
+            commands::lift_empty_list_item(),
+            commands::merge_list_item_backward(),
+            commands::lift_first_list_item(),
+            commands::join_paragraph_backward_into_prev_list_item(),
+            commands::join_paragraph_backward(),
+            commands::sink_paragraph_backward(),
+            commands::lift_first_paragraph(),
+            commands::delete_empty_paragraph_backward(),
+        ),
     )
 }
 
 fn structural_forward(tr: &mut Transaction) -> CommandResult {
-    commands::first!(
+    commands::chain!(
         tr,
-        commands::delete_page_break_forward(),
-        commands::merge_list_item_forward(),
-        commands::join_next_paragraph_forward_into_list_item(),
-        commands::join_paragraph_forward(),
-        commands::lift_last_paragraph(),
-        commands::lift_paragraph_forward(),
-        commands::delete_empty_paragraph_forward(),
+        commands::optional!(commands::materialize_synthetic_selection_blocks()),
+        |tr| commands::first!(
+            tr,
+            commands::delete_page_break_forward(),
+            commands::merge_list_item_forward(),
+            commands::join_next_paragraph_forward_into_list_item(),
+            commands::join_paragraph_forward(),
+            commands::lift_last_paragraph(),
+            commands::lift_paragraph_forward(),
+            commands::delete_empty_paragraph_forward(),
+        ),
     )
 }
 

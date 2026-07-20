@@ -1,58 +1,18 @@
 use editor_crdt::Dot;
 use editor_model::{NodeType, NodeView};
-use editor_state::Selection;
 use editor_transaction::Transaction;
 
-use crate::helpers::{materialize_position_block, materialize_synthetic_direct_children};
+use crate::helpers::{materialize_selection_endpoints, materialize_synthetic_direct_children};
 use crate::{CommandError, CommandResult};
 
 pub fn materialize_synthetic_selection_blocks(tr: &mut Transaction) -> CommandResult {
     let Some(selection) = tr.selection() else {
         return Ok(false);
     };
-    let is_synthetic = |node: Dot| node != Dot::ROOT && node.as_op_dot().is_none();
-    if !is_synthetic(selection.anchor.node) && !is_synthetic(selection.head.node) {
+    let Some(selection) = materialize_selection_endpoints(tr, selection)? else {
         return Ok(false);
-    }
-
-    let (anchor, head) = if selection.anchor.node == selection.head.node {
-        let materialized = materialize_position_block(tr, selection.anchor)?;
-        (
-            materialized,
-            editor_state::Position {
-                node: materialized.node,
-                ..selection.head
-            },
-        )
-    } else if is_synthetic(selection.anchor.node) && is_synthetic(selection.head.node) {
-        let anchor_precedes_head = {
-            let view = tr.view();
-            let resolved = selection.resolve(&view).ok_or_else(|| {
-                CommandError::Corrupted("cannot resolve synthetic selection".into())
-            })?;
-            resolved.anchor() < resolved.head()
-        };
-        if anchor_precedes_head {
-            let anchor = materialize_position_block(tr, selection.anchor)?;
-            let head = materialize_position_block(tr, selection.head)?;
-            (anchor, head)
-        } else {
-            let head = materialize_position_block(tr, selection.head)?;
-            let anchor = materialize_position_block(tr, selection.anchor)?;
-            (anchor, head)
-        }
-    } else if is_synthetic(selection.anchor.node) {
-        (
-            materialize_position_block(tr, selection.anchor)?,
-            selection.head,
-        )
-    } else {
-        (
-            selection.anchor,
-            materialize_position_block(tr, selection.head)?,
-        )
     };
-    tr.set_selection(Some(Selection::new(anchor, head)))?;
+    tr.set_selection(Some(selection))?;
     Ok(true)
 }
 

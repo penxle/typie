@@ -125,6 +125,105 @@ mod tests {
     }
 
     #[test]
+    fn delete_range_into_synthetic_trailing_paragraph_materializes_endpoint() {
+        use editor_model::NodeType;
+        use editor_state::{Affinity, Position, Selection};
+
+        let (mut initial, _r, p1) = state! {
+            doc { r: root { p1: paragraph { text("Hello") } horizontal_rule } }
+            selection: none
+        };
+        let synth = {
+            let view = initial.view();
+            let root = view.root().unwrap();
+            root.child_blocks()
+                .find(|b| b.node_type() == NodeType::Paragraph && b.id().is_synthetic())
+                .map(|b| b.id())
+                .expect("synthetic trailing paragraph")
+        };
+        initial.selection = Some(Selection::new(
+            Position {
+                node: p1,
+                offset: 2,
+                affinity: Affinity::Downstream,
+            },
+            Position {
+                node: synth,
+                offset: 0,
+                affinity: Affinity::Upstream,
+            },
+        ));
+
+        let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("He") } } }
+            selection: (p1, 2)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn delete_range_between_synthetic_fold_scaffolds_materializes_endpoints() {
+        use editor_model::NodeType;
+        use editor_state::{Affinity, Position, Selection};
+
+        let (mut initial, ..) = state! {
+            doc { root { fold } }
+            selection: none
+        };
+        let (title, trailing) = {
+            let view = initial.view();
+            let root = view.root().unwrap();
+            let fold = root
+                .child_blocks()
+                .find(|b| b.node_type() == NodeType::Fold)
+                .unwrap();
+            let title = fold
+                .child_blocks()
+                .find(|b| b.node_type() == NodeType::FoldTitle)
+                .unwrap()
+                .id();
+            let trailing = root
+                .child_blocks()
+                .find(|b| b.node_type() == NodeType::Paragraph)
+                .unwrap()
+                .id();
+            (title, trailing)
+        };
+        assert!(title.is_synthetic() && trailing.is_synthetic());
+        initial.selection = Some(Selection::new(
+            Position {
+                node: title,
+                offset: 0,
+                affinity: Affinity::Downstream,
+            },
+            Position {
+                node: trailing,
+                offset: 0,
+                affinity: Affinity::Upstream,
+            },
+        ));
+
+        let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
+        let title_after = {
+            let view = actual.view();
+            view.root()
+                .unwrap()
+                .child_blocks()
+                .find(|b| b.node_type() == NodeType::Fold)
+                .unwrap()
+                .child_blocks()
+                .find(|b| b.node_type() == NodeType::FoldTitle)
+                .unwrap()
+                .id()
+        };
+        assert!(!title_after.is_synthetic());
+        let selection = actual.selection.unwrap();
+        assert_eq!(selection.anchor, selection.head);
+        assert_eq!(selection.head.node, title_after);
+    }
+
+    #[test]
     fn delete_across_blockquotes_merges_containers() {
         let (initial, ..) = state! {
             doc { root {

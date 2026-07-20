@@ -25,19 +25,23 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
             Ok(())
         }),
         (Key::Enter, _) => editor.transact(|tr| {
-            let applied = commands::first!(
+            let applied = commands::chain!(
                 tr,
-                commands::materialize_gap_paragraph(),
-                commands::insert_paragraph_after_unit_selection(),
-                |tr| commands::chain!(
+                commands::optional!(commands::materialize_synthetic_selection_blocks()),
+                |tr| commands::first!(
                     tr,
-                    commands::optional!(commands::delete_selection()),
-                    |tr| commands::first!(
+                    commands::materialize_gap_paragraph(),
+                    commands::insert_paragraph_after_unit_selection(),
+                    |tr| commands::chain!(
                         tr,
-                        commands::lift_empty_list_item(),
-                        commands::split_list_item(),
-                        commands::lift_last_paragraph(),
-                        commands::split_paragraph(),
+                        commands::optional!(commands::delete_selection()),
+                        |tr| commands::first!(
+                            tr,
+                            commands::lift_empty_list_item(),
+                            commands::split_list_item(),
+                            commands::lift_last_paragraph(),
+                            commands::split_paragraph(),
+                        ),
                     ),
                 ),
             )?;
@@ -60,22 +64,26 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
             let resource = Arc::clone(&editor.resource);
             let resource = resource.lock().unwrap();
             editor.transact(|tr| {
-                commands::first!(
+                commands::chain!(
                     tr,
-                    commands::delete_selection(),
-                    commands::select_unit_across_gap_backward(),
-                    commands::delete_text_backward(&resource),
-                    commands::delete_node_backward(),
-                    commands::select_node_backward(),
-                    commands::delete_page_break_backward(),
-                    commands::lift_empty_list_item(),
-                    commands::merge_list_item_backward(),
-                    commands::lift_first_list_item(),
-                    commands::join_paragraph_backward_into_prev_list_item(),
-                    commands::join_paragraph_backward(),
-                    commands::sink_paragraph_backward(),
-                    commands::lift_first_paragraph(),
-                    commands::delete_empty_paragraph_backward(),
+                    commands::optional!(commands::materialize_synthetic_selection_blocks()),
+                    |tr| commands::first!(
+                        tr,
+                        commands::delete_selection(),
+                        commands::select_unit_across_gap_backward(),
+                        commands::delete_text_backward(&resource),
+                        commands::delete_node_backward(),
+                        commands::select_node_backward(),
+                        commands::delete_page_break_backward(),
+                        commands::lift_empty_list_item(),
+                        commands::merge_list_item_backward(),
+                        commands::lift_first_list_item(),
+                        commands::join_paragraph_backward_into_prev_list_item(),
+                        commands::join_paragraph_backward(),
+                        commands::sink_paragraph_backward(),
+                        commands::lift_first_paragraph(),
+                        commands::delete_empty_paragraph_backward(),
+                    ),
                 )?;
                 Ok(())
             })
@@ -84,29 +92,37 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
             let resource = Arc::clone(&editor.resource);
             let resource = resource.lock().unwrap();
             editor.transact(|tr| {
-                commands::first!(
+                commands::chain!(
                     tr,
-                    commands::delete_selection(),
-                    commands::select_unit_across_gap_forward(),
-                    commands::delete_text_forward(&resource),
-                    commands::delete_node_forward(),
-                    commands::select_node_forward(),
-                    commands::delete_page_break_forward(),
-                    commands::merge_list_item_forward(),
-                    commands::join_next_paragraph_forward_into_list_item(),
-                    commands::join_paragraph_forward(),
-                    commands::lift_paragraph_forward(),
-                    commands::delete_empty_paragraph_forward(),
+                    commands::optional!(commands::materialize_synthetic_selection_blocks()),
+                    |tr| commands::first!(
+                        tr,
+                        commands::delete_selection(),
+                        commands::select_unit_across_gap_forward(),
+                        commands::delete_text_forward(&resource),
+                        commands::delete_node_forward(),
+                        commands::select_node_forward(),
+                        commands::delete_page_break_forward(),
+                        commands::merge_list_item_forward(),
+                        commands::join_next_paragraph_forward_into_list_item(),
+                        commands::join_paragraph_forward(),
+                        commands::lift_paragraph_forward(),
+                        commands::delete_empty_paragraph_forward(),
+                    ),
                 )?;
                 Ok(())
             })
         }
         (Key::Tab, m) if m.shift => editor.transact(|tr| {
-            let applied = commands::first!(
+            let applied = commands::chain!(
                 tr,
-                commands::lift_list_items_in_range(),
-                commands::lift_list_item_at_start(),
-                commands::delete_preceding_tab(),
+                commands::optional!(commands::materialize_synthetic_selection_blocks()),
+                |tr| commands::first!(
+                    tr,
+                    commands::lift_list_items_in_range(),
+                    commands::lift_list_item_at_start(),
+                    commands::delete_preceding_tab(),
+                ),
             )?;
             if applied {
                 tr.clear_pending_format()?;
@@ -114,11 +130,15 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
             Ok(())
         }),
         (Key::Tab, _) => editor.transact(|tr| {
-            let applied = commands::first!(
+            let applied = commands::chain!(
                 tr,
-                commands::sink_list_items_in_range(),
-                commands::sink_list_item_at_start(),
-                commands::insert_tab(),
+                commands::optional!(commands::materialize_synthetic_selection_blocks()),
+                |tr| commands::first!(
+                    tr,
+                    commands::sink_list_items_in_range(),
+                    commands::sink_list_item_at_start(),
+                    commands::insert_tab(),
+                ),
             )?;
             if applied {
                 tr.clear_pending_format()?;
@@ -449,6 +469,100 @@ mod tests {
             selection: (p1, 0)
         };
         assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn backspace_deletes_range_anchored_in_synthetic_fold_title() {
+        use editor_model::NodeType;
+        use editor_state::{Affinity, Position, Selection};
+
+        let (mut state, _r, p1) = state! {
+            doc { r: root { fold p1: paragraph { text("x") } } }
+            selection: none
+        };
+        let title = {
+            let view = state.view();
+            let fold = view
+                .root()
+                .unwrap()
+                .child_blocks()
+                .find(|b| b.node_type() == NodeType::Fold)
+                .unwrap();
+            fold.child_blocks()
+                .find(|b| b.node_type() == NodeType::FoldTitle)
+                .unwrap()
+                .id()
+        };
+        assert!(title.is_synthetic());
+        state.selection = Some(Selection::new(
+            Position {
+                node: title,
+                offset: 0,
+                affinity: Affinity::Downstream,
+            },
+            Position {
+                node: p1,
+                offset: 1,
+                affinity: Affinity::Upstream,
+            },
+        ));
+        let mut editor = Editor::new_test(state);
+
+        editor.apply(key(Key::Backspace));
+
+        let text: String = editor
+            .state()
+            .view()
+            .root()
+            .unwrap()
+            .descendants()
+            .filter_map(|c| match c {
+                editor_model::ChildView::Leaf(l) => l.as_char(),
+                editor_model::ChildView::Block(_) => None,
+            })
+            .collect();
+        assert_eq!(text, "");
+    }
+
+    #[test]
+    fn delete_key_at_collapsed_caret_in_synthetic_list_item_filler() {
+        use editor_model::NodeType;
+        use editor_state::{Affinity, Position, Selection};
+
+        let (mut state, ..) = state! {
+            doc { root {
+                bullet_list { list_item {
+                    bullet_list { list_item { paragraph { text("x") } } }
+                } }
+            } }
+            selection: none
+        };
+        let filler = {
+            let view = state.view();
+            let outer_item = view
+                .root()
+                .unwrap()
+                .child_blocks()
+                .find(|b| b.node_type() == NodeType::BulletList)
+                .unwrap()
+                .child_blocks()
+                .next()
+                .unwrap();
+            outer_item
+                .child_blocks()
+                .find(|b| b.node_type() == NodeType::Paragraph)
+                .unwrap()
+                .id()
+        };
+        assert!(filler.is_synthetic());
+        state.selection = Some(Selection::collapsed(Position {
+            node: filler,
+            offset: 0,
+            affinity: Affinity::Downstream,
+        }));
+        let mut editor = Editor::new_test(state);
+
+        editor.apply(key(Key::Delete));
     }
 
     #[test]

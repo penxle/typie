@@ -33,51 +33,63 @@ pub fn handle_node_op(editor: &mut Editor, op: NodeOp) -> Result<(), EditorError
             Ok(())
         }
         NodeOp::Unwrap { id } => {
+            let id = if id.is_synthetic() {
+                editor_transaction::materialize_repair_target(tr, id)?
+            } else {
+                id
+            };
             commands::unwrap_node(tr, id)?;
             Ok(())
         }
-        NodeOp::Table { id, op } => match op {
-            TableOp::InsertAxis {
-                axis,
-                index,
-                before,
-            } => {
-                commands::insert_table_axis(tr, id, axis, index, before)?;
-                Ok(())
+        NodeOp::Table { id, op } => {
+            let id = if id.is_synthetic() {
+                editor_transaction::materialize_repair_target(tr, id)?
+            } else {
+                id
+            };
+            match op {
+                TableOp::InsertAxis {
+                    axis,
+                    index,
+                    before,
+                } => {
+                    commands::insert_table_axis(tr, id, axis, index, before)?;
+                    Ok(())
+                }
+                TableOp::DeleteAxis { axis, index } => {
+                    commands::delete_table_axis(tr, id, axis, index)?;
+                    Ok(())
+                }
+                TableOp::MoveAxis { axis, from, to } => {
+                    commands::move_table_axis(tr, id, axis, from, to)?;
+                    Ok(())
+                }
+                TableOp::SelectAxis { axis, index } => {
+                    commands::select_table_axis(tr, id, axis, index)?;
+                    Ok(())
+                }
+                TableOp::SetColumnWidths { widths } => {
+                    commands::set_table_column_widths(tr, id, widths)?;
+                    Ok(())
+                }
+                TableOp::SetBorderStyle { border_style } => {
+                    commands::set_table_border_style(tr, id, border_style)?;
+                    Ok(())
+                }
+                TableOp::SetProportion { proportion } => {
+                    commands::set_table_proportion(tr, id, proportion)?;
+                    Ok(())
+                }
+                TableOp::SetAxisBackgroundColor { axis, index, color } => {
+                    commands::set_table_axis_background_color(tr, id, axis, index, color)?;
+                    Ok(())
+                }
+                TableOp::SetCellBackgroundColor { color } => {
+                    commands::set_table_cell_background_color(tr, id, color)?;
+                    Ok(())
+                }
             }
-            TableOp::DeleteAxis { axis, index } => {
-                commands::delete_table_axis(tr, id, axis, index)?;
-                Ok(())
-            }
-            TableOp::MoveAxis { axis, from, to } => {
-                commands::move_table_axis(tr, id, axis, from, to)?;
-                Ok(())
-            }
-            TableOp::SelectAxis { axis, index } => {
-                commands::select_table_axis(tr, id, axis, index)?;
-                Ok(())
-            }
-            TableOp::SetColumnWidths { widths } => {
-                commands::set_table_column_widths(tr, id, widths)?;
-                Ok(())
-            }
-            TableOp::SetBorderStyle { border_style } => {
-                commands::set_table_border_style(tr, id, border_style)?;
-                Ok(())
-            }
-            TableOp::SetProportion { proportion } => {
-                commands::set_table_proportion(tr, id, proportion)?;
-                Ok(())
-            }
-            TableOp::SetAxisBackgroundColor { axis, index, color } => {
-                commands::set_table_axis_background_color(tr, id, axis, index, color)?;
-                Ok(())
-            }
-            TableOp::SetCellBackgroundColor { color } => {
-                commands::set_table_cell_background_color(tr, id, color)?;
-                Ok(())
-            }
-        },
+        }
     })
 }
 

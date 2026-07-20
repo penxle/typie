@@ -21,10 +21,18 @@ pub fn handle_list_op(editor: &mut Editor, op: ListOp) -> Result<(), EditorError
                 )?;
             }
             ListOp::Indent => {
-                commands::sink_list_item(tr)?;
+                commands::chain!(
+                    tr,
+                    commands::optional!(commands::materialize_synthetic_selection_blocks()),
+                    commands::sink_list_item(),
+                )?;
             }
             ListOp::Outdent => {
-                commands::lift_list_item(tr)?;
+                commands::chain!(
+                    tr,
+                    commands::optional!(commands::materialize_synthetic_selection_blocks()),
+                    commands::lift_list_item(),
+                )?;
             }
         }
         Ok(())

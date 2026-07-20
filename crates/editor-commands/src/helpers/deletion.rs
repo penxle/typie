@@ -10,7 +10,8 @@ use editor_transaction::{Step, Transaction, fulfill};
 use super::{
     apply_carry_from_selection, apply_carry_on_emptied, capture_first_charlike_paint,
     cell_first_charlike_block, child_elem_id, find_ancestor_textblock, find_lowest_common_ancestor,
-    is_block_container, merge_element_cross_parent, next_sibling, path_from_ancestor,
+    is_block_container, materialize_selection_endpoints, merge_element_cross_parent, next_sibling,
+    path_from_ancestor,
 };
 use crate::{CommandError, CommandResult};
 
@@ -455,6 +456,13 @@ fn delete_selection_range_carry(
     if selection.anchor == selection.head {
         return Ok(false);
     }
+    // Synthetic scaffold endpoints have no CRDT identity, so the cross-node
+    // plan (merge target, path anchors) would fail with NodeNotFound; every
+    // range producer funnels through here, so this is the common boundary.
+    let selection = match materialize_selection_endpoints(tr, selection)? {
+        Some(materialized) => materialized,
+        None => selection,
+    };
 
     // Resolve the geometry under an immutable borrow, collecting only owned data.
     let plan = {
