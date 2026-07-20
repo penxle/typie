@@ -10,14 +10,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -39,7 +33,6 @@ import co.typie.ui.component.Text
 import co.typie.ui.theme.AppTheme
 import kotlin.math.roundToInt
 
-private const val IMAGE_RESIZE_HAPTIC_STEP = 5
 private val ImageResizeToolbarItemGap = 8.dp
 private val ImageResizeToolbarEndPadding = 12.dp
 
@@ -78,33 +71,15 @@ internal fun ImageResizeSecondaryToolbar(
       range.last.toFloat(),
     )
   val currentPercent = currentProportion.roundToInt()
-  val haptic = LocalHapticFeedback.current
-  var lastHapticStop by remember(nodeId) { mutableStateOf<Int?>(null) }
 
   DisposableEffect(nodeId) { onDispose { imageState.resizeDraftProportions.remove(nodeId) } }
 
-  fun maybeHaptic(value: Float) {
-    val percent = value.roundToInt()
-    val stop =
-      when {
-        percent == range.first || percent == range.last -> percent
-        percent % IMAGE_RESIZE_HAPTIC_STEP == 0 -> percent
-        else -> null
-      }
-    if (stop != null && stop != lastHapticStop) {
-      haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
-      lastHapticStop = stop
-    }
-  }
-
   fun updateDraft(value: Float) {
     val next = value.coerceIn(range.first.toFloat(), range.last.toFloat())
-    maybeHaptic(next)
     imageState.resizeDraftProportions[nodeId] = next
   }
 
   fun startDraft() {
-    lastHapticStop = null
     imageState.resizeDraftProportions[nodeId] = currentProportion
   }
 

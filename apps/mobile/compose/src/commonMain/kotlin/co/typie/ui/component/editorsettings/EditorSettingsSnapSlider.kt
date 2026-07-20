@@ -28,10 +28,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -67,7 +65,6 @@ internal fun EditorSettingsSnapSlider(
 ) {
   val scope = rememberCoroutineScope()
   val focusManager = LocalFocusManager.current
-  val haptic = LocalHapticFeedback.current
   val bringIntoViewRequester = remember { BringIntoViewRequester() }
 
   var isDragging by remember { mutableStateOf(false) }
@@ -107,10 +104,7 @@ internal fun EditorSettingsSnapSlider(
         dragValue = value
         focusManager.clearFocus()
       },
-      onDrag = { next ->
-        haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
-        dragValue = next.roundToInt().coerceIn(range.first, range.last)
-      },
+      onDrag = { next -> dragValue = next.roundToInt().coerceIn(range.first, range.last) },
       onDragEnd = { next ->
         val rounded = next.roundToInt().coerceIn(range.first, range.last)
         dragValue = rounded

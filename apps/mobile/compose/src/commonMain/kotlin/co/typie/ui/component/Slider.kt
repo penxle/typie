@@ -19,10 +19,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.times
@@ -31,6 +33,25 @@ import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.shadow
 import kotlin.math.abs
 import kotlin.math.roundToInt
+
+private const val MAX_REGULAR_HAPTIC_INTERVALS = 8
+
+internal fun sliderHapticFeedbackType(
+  range: ClosedFloatingPointRange<Float>,
+  step: Float?,
+  value: Float,
+): HapticFeedbackType? {
+  val normalizedStep = step?.takeIf { it > 0f }
+  if (normalizedStep == null) {
+    return if (value == range.start || value == range.endInclusive) HapticFeedbackType.GestureEnd
+    else null
+  }
+
+  val intervals =
+    ((range.endInclusive - range.start).coerceAtLeast(0f) / normalizedStep).roundToInt()
+  return if (intervals <= MAX_REGULAR_HAPTIC_INTERVALS) HapticFeedbackType.SegmentTick
+  else HapticFeedbackType.SegmentFrequentTick
+}
 
 internal class SliderGestureSession(
   initialValue: Float,
@@ -88,7 +109,9 @@ internal fun Slider(
   thumbContent: @Composable BoxScope.(Boolean) -> Unit = {},
 ) {
   val density = LocalDensity.current
+  val hapticFeedback = LocalHapticFeedback.current
   val currentValue by rememberUpdatedState(value)
+  val currentHapticFeedback by rememberUpdatedState(hapticFeedback)
   val currentOnDragStart by rememberUpdatedState(onDragStart)
   val currentOnDrag by rememberUpdatedState(onDrag)
   val currentOnDragEnd by rememberUpdatedState(onDragEnd)
@@ -145,7 +168,11 @@ internal fun Slider(
                 initialValue = currentValue,
                 valueFromX = ::valueFromX,
                 onDragStart = { currentOnDragStart() },
-                onDrag = { next -> currentOnDrag(next) },
+                onDrag = { next ->
+                  sliderHapticFeedbackType(range, normalizedStep, next)
+                    ?.let(currentHapticFeedback::performHapticFeedback)
+                  currentOnDrag(next)
+                },
               )
 
             while (true) {

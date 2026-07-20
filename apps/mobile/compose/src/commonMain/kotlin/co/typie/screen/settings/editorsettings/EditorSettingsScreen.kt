@@ -12,8 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import co.typie.domain.settings.SettingControlRow
 import co.typie.domain.settings.SettingSwitch
@@ -33,7 +31,6 @@ import co.typie.ui.theme.AppTheme
 @Composable
 fun EditorSettingsScreen() {
   val scrollState = rememberScrollState()
-  val haptic = LocalHapticFeedback.current
 
   ProvideTopBar(
     center = { Text("에디터", style = AppTheme.typography.title) },
@@ -92,10 +89,7 @@ fun EditorSettingsScreen() {
                 range = 0f..100f,
                 step = 5f,
                 onDragStart = {},
-                onDrag = { next ->
-                  haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
-                  Preference.typewriterPosition = next.toDouble() / 100.0
-                },
+                onDrag = { next -> Preference.typewriterPosition = next.toDouble() / 100.0 },
                 onDragEnd = {},
                 fillColor = AppTheme.colors.textDefault.copy(alpha = 0.75f),
                 modifier = Modifier.weight(1f).height(32.dp),
