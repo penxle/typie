@@ -1374,11 +1374,6 @@ export class Editor {
     this.#emit({ type: 'render_invalidated' });
   }
 
-  refreshSurface(page: number): void {
-    if (this.#destroyed || !this.#attachedPages.has(page)) return;
-    this.#wasm.refresh_surface(page);
-  }
-
   requestSurfaceRender(page: number): void {
     if (this.#destroyed) return;
     if (this.#surfaceWork.get(page)?.type !== 'resize') {

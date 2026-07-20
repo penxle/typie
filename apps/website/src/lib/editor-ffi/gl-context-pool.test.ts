@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { computeGlPoolBudget, GL_POOL_BUDGET, GlContextPool } from './gl-context-pool';
-import type { GlPoolBudgetEnv, LeaseToken, PageZone, SurfaceBackend } from './gl-context-pool';
+import { GL_POOL_BUDGET, GlContextPool } from './gl-context-pool';
+import type { LeaseToken, PageZone, SurfaceBackend } from './gl-context-pool';
 
 type Change = [object, number, SurfaceBackend, LeaseToken | undefined];
 type Timer = { at: number; fn: () => void };
@@ -76,40 +76,7 @@ const failAndRewin = (
 };
 
 describe('GlContextPool', () => {
-  it('GL 풀 예산: 데스크톱 8 / iOS·iPadOS·coarse-pointer 모바일 4 (env 주입으로 순수 검증)', () => {
-    const env = (over: Partial<GlPoolBudgetEnv>): GlPoolBudgetEnv => ({
-      userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
-      platform: 'MacIntel',
-      maxTouchPoints: 0,
-      matchMedia: () => ({ matches: false }),
-      ...over,
-    });
-
-    // 데스크톱(마우스, 터치 없음): 8
-    expect(computeGlPoolBudget(env({}))).toBe(8);
-
-    // iPhone UA: 4
-    expect(
-      computeGlPoolBudget(
-        env({ userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)', platform: 'iPhone', maxTouchPoints: 5 }),
-      ),
-    ).toBe(4);
-
-    // iPadOS는 Mac으로 위장하지만 maxTouchPoints>1로 판별: 4
-    expect(computeGlPoolBudget(env({ maxTouchPoints: 5 }))).toBe(4);
-
-    // coarse-pointer 모바일(안드로이드 등): 4
-    expect(
-      computeGlPoolBudget(
-        env({
-          userAgent: 'Mozilla/5.0 (Linux; Android 14)',
-          platform: 'Linux armv8l',
-          matchMedia: (q) => ({ matches: q === '(pointer: coarse)' }),
-        }),
-      ),
-    ).toBe(4);
-
-    // 실제 싱글턴은 jsdom(데스크톱 상당) 환경에서 8로 고정된다.
+  it('프로덕션 풀 예산은 8이다 (스펙 §3.4, 구 공유 presenter 제거 후)', () => {
     expect(GL_POOL_BUDGET).toBe(8);
   });
 
