@@ -734,6 +734,7 @@
     const entityId = dragging.element.dataset.id!;
 
     if (dragging.eligible) {
+      updateDropTarget(e.clientX, e.clientY);
       on(window, 'click', (e) => e.preventDefault(), { capture: true, once: true });
     }
 

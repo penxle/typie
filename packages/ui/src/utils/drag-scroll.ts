@@ -13,6 +13,11 @@ export type DragScrollOptions = {
   stickyCandidates?: HTMLElement[];
 };
 
+export type DragScroll = {
+  updatePointer(clientX: number, clientY: number): void;
+  destroy(): void;
+};
+
 const isWindowTarget = (target: EventTarget): target is Window => {
   return typeof window !== 'undefined' && target === window;
 };
@@ -111,12 +116,7 @@ const getAdjustedRect = (
   };
 };
 
-// NOTE: 드래그 중 끝에서 자동 스크롤
-export function handleDragScroll(
-  viewport: ScrollViewport | null,
-  isDragging: boolean,
-  options: DragScrollOptions = {},
-): (() => void) | undefined {
+export function createDragScroll(viewport: ScrollViewport, options: DragScrollOptions = {}): DragScroll {
   const {
     scrollZoneSize = 50,
     minScrollSpeed = 1,
@@ -127,10 +127,6 @@ export function handleDragScroll(
     onScrollThrottleMs = 50,
     stickyCandidates: providedStickyCandidates,
   } = options;
-
-  if (!isDragging || !viewport) {
-    return;
-  }
 
   const useHorizontalScroll = axis === 'both';
   const stickyCandidates = providedStickyCandidates ?? collectStickyCandidates(viewport.target);
@@ -150,6 +146,7 @@ export function handleDragScroll(
   let lastPointerY = 0;
   let animationId: number | null = null;
   let lastOnScrollTime = 0;
+  let destroyed = false;
 
   const isNearEdge = (rect: { top: number; bottom: number; left: number; right: number }) => {
     const isNearVertical = lastPointerY < rect.top + scrollZoneSize || lastPointerY > rect.bottom - scrollZoneSize;
@@ -165,6 +162,10 @@ export function handleDragScroll(
   };
 
   const updatePointer = (clientX: number, clientY: number) => {
+    if (destroyed) {
+      return;
+    }
+
     lastPointerX = clientX;
     lastPointerY = clientY;
 
@@ -181,15 +182,12 @@ export function handleDragScroll(
     }
   };
 
-  const handleDragOver = (e: DragEvent) => {
-    updatePointer(e.clientX, e.clientY);
-  };
-
-  const handlePointerMove = (e: PointerEvent) => {
-    updatePointer(e.clientX, e.clientY);
-  };
-
   const scroll = () => {
+    if (destroyed) {
+      animationId = null;
+      return;
+    }
+
     const rawRect = toRect(viewport.getRect());
     const stickyTop = getStableStickyTop(rawRect);
     const rect = getAdjustedRect(rawRect, stickyTop, scrollZoneSize);
@@ -232,25 +230,61 @@ export function handleDragScroll(
     const prevScrollLeft = viewport.getScrollLeft();
     viewport.scrollBy(deltaX, deltaY);
 
-    if (shouldCallOnScroll && (viewport.getScrollTop() !== prevScrollTop || viewport.getScrollLeft() !== prevScrollLeft)) {
+    const didScroll = viewport.getScrollTop() !== prevScrollTop || viewport.getScrollLeft() !== prevScrollLeft;
+    if (shouldCallOnScroll && didScroll) {
       lastOnScrollTime = now;
       onScroll?.(lastPointerX, lastPointerY);
     }
 
-    animationId = requestAnimationFrame(scroll);
+    if (!destroyed) {
+      animationId = requestAnimationFrame(scroll);
+    }
   };
 
-  viewport.target.addEventListener('dragover', handleDragOver as EventListener);
-  viewport.target.addEventListener('pointermove', handlePointerMove as EventListener);
   if (initialPointer) {
     updatePointer(initialPointer.clientX, initialPointer.clientY);
   }
 
+  return {
+    updatePointer,
+    destroy: () => {
+      if (destroyed) {
+        return;
+      }
+
+      destroyed = true;
+      if (animationId !== null) {
+        cancelAnimationFrame(animationId);
+        animationId = null;
+      }
+    },
+  };
+}
+
+// NOTE: 드래그 중 끝에서 자동 스크롤
+export function handleDragScroll(
+  viewport: ScrollViewport | null,
+  isDragging: boolean,
+  options: DragScrollOptions = {},
+): (() => void) | undefined {
+  if (!isDragging || !viewport) {
+    return;
+  }
+
+  const dragScroll = createDragScroll(viewport, options);
+  const handleDragOver = (e: DragEvent) => {
+    dragScroll.updatePointer(e.clientX, e.clientY);
+  };
+  const handlePointerMove = (e: PointerEvent) => {
+    dragScroll.updatePointer(e.clientX, e.clientY);
+  };
+
+  viewport.target.addEventListener('dragover', handleDragOver as EventListener);
+  viewport.target.addEventListener('pointermove', handlePointerMove as EventListener);
+
   return () => {
     viewport.target.removeEventListener('dragover', handleDragOver as EventListener);
     viewport.target.removeEventListener('pointermove', handlePointerMove as EventListener);
-    if (animationId !== null) {
-      cancelAnimationFrame(animationId);
-    }
+    dragScroll.destroy();
   };
 }

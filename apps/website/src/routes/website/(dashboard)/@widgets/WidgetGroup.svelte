@@ -6,8 +6,9 @@
   import { Button, Icon } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { Tip } from '@typie/ui/notification';
-  import { animateFlip, createDndHandler, elementScrollViewport, handleDragScroll } from '@typie/ui/utils';
+  import { animateFlip, createDndHandler, createDragScroll, elementScrollViewport } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
+  import { untrack } from 'svelte';
   import { on } from 'svelte/events';
   import LayoutDashboardIcon from '~icons/lucide/layout-dashboard';
   import MinusIcon from '~icons/lucide/minus';
@@ -21,6 +22,7 @@
   import { setupWidgetContext } from './widget-context.svelte';
   import WidgetPalette from './WidgetPalette.svelte';
   import { WIDGET_COMPONENTS } from './widgets';
+  import type { DragScroll } from '@typie/ui/utils';
   import type { WidgetGroup_query$key } from '$mearie';
   import type { WidgetPosition, WidgetType } from './widget-context.svelte';
 
@@ -178,48 +180,7 @@
   type DraggingState = GroupDragging | FreePositionDragging | PaletteDragging;
 
   let dragging = $state<DraggingState | null>(null);
-
-  const updateDropPosition = (e: PointerEvent) => {
-    if (!dropZoneElement || !widgetListElement || !dragging) {
-      return;
-    }
-
-    dragging.cursorPosition = { x: e.clientX, y: e.clientY };
-
-    const dropZoneRect = dropZoneElement.getBoundingClientRect();
-    const isInsideDropZone =
-      e.clientX >= dropZoneRect.left &&
-      e.clientX <= dropZoneRect.right &&
-      e.clientY >= dropZoneRect.top &&
-      e.clientY <= dropZoneRect.bottom;
-
-    if (!isInsideDropZone) {
-      dragging.dropIndex = null;
-      dragging.isOutsideDropZone = true;
-      return;
-    }
-
-    dragging.isOutsideDropZone = false;
-
-    const widgetElements = [...widgetListElement.querySelectorAll('[data-widget-id]')] as HTMLElement[];
-    let foundIndex: number | null = null;
-
-    for (const [i, element] of widgetElements.entries()) {
-      const rect = element.getBoundingClientRect();
-      const midY = rect.top + rect.height / 2;
-
-      if (e.clientY < midY) {
-        foundIndex = i;
-        break;
-      }
-    }
-
-    if (foundIndex === null) {
-      foundIndex = widgetElements.length;
-    }
-
-    dragging.dropIndex = foundIndex;
-  };
+  let dragScroll: DragScroll | null = null;
 
   const calculateWidgetPosition = (
     cursorX: number,
@@ -261,6 +222,52 @@
       [horizontal]: horizontalValue,
       [vertical]: verticalValue,
     };
+  };
+
+  const updateDraggingPosition = (clientX: number, clientY: number): boolean => {
+    if (!dragging) {
+      return false;
+    }
+
+    dragScroll?.updatePointer(clientX, clientY);
+    dragging.cursorPosition = { x: clientX, y: clientY };
+    dragging.calculatedPosition = calculateWidgetPosition(clientX, clientY, dragging.widgetRect, dragging.offsetX, dragging.offsetY);
+
+    if (!dropZoneElement || !widgetListElement) {
+      return false;
+    }
+
+    const dropZoneRect = dropZoneElement.getBoundingClientRect();
+    const isInsideDropZone =
+      clientX >= dropZoneRect.left && clientX <= dropZoneRect.right && clientY >= dropZoneRect.top && clientY <= dropZoneRect.bottom;
+
+    if (!isInsideDropZone) {
+      dragging.dropIndex = null;
+      dragging.isOutsideDropZone = true;
+      return true;
+    }
+
+    dragging.isOutsideDropZone = false;
+
+    const widgetElements = [...widgetListElement.querySelectorAll('[data-widget-id]')] as HTMLElement[];
+    let foundIndex: number | null = null;
+
+    for (const [i, element] of widgetElements.entries()) {
+      const rect = element.getBoundingClientRect();
+      const midY = rect.top + rect.height / 2;
+
+      if (clientY < midY) {
+        foundIndex = i;
+        break;
+      }
+    }
+
+    if (foundIndex === null) {
+      foundIndex = widgetElements.length;
+    }
+
+    dragging.dropIndex = foundIndex;
+    return true;
   };
 
   const widgetContext = setupWidgetContext();
@@ -566,20 +573,21 @@
         };
       },
       onDragMove: (e) => {
-        updateDropPosition(e);
+        updateDraggingPosition(e.clientX, e.clientY);
       },
       onDragEnd: async (e) => {
-        if (dragging && dragging.source === 'group' && dropZoneElement) {
+        if (dragging && dragging.source === 'group') {
+          const resolved = updateDraggingPosition(e.clientX, e.clientY);
           const currentDragging = dragging;
           currentDragging.dropped = true;
 
           try {
-            if (currentDragging.isOutsideDropZone) {
-              const { widgetId, widgetRect, offsetX, offsetY } = currentDragging;
-              if (query.data.widgets.some((w) => w.id === widgetId)) {
-                const newPosition = calculateWidgetPosition(e.clientX, e.clientY, widgetRect, offsetX, offsetY);
+            if (!resolved) return;
 
-                await widgetContext.moveWidgetToFreePosition?.(widgetId, newPosition);
+            if (currentDragging.isOutsideDropZone) {
+              const { widgetId, calculatedPosition } = currentDragging;
+              if (calculatedPosition && query.data.widgets.some((w) => w.id === widgetId)) {
+                await widgetContext.moveWidgetToFreePosition?.(widgetId, calculatedPosition);
               }
             } else {
               if (currentDragging.dropIndex !== null) {
@@ -614,8 +622,28 @@
   });
 
   $effect(() => {
-    if (!scrollContainerElement) return;
-    return handleDragScroll(scrollContainerElement ? elementScrollViewport(scrollContainerElement) : null, !!dragging);
+    const currentDragging = dragging;
+    if (!scrollContainerElement || !currentDragging || currentDragging.dropped) return;
+
+    const initialPointer = untrack(() => ({
+      clientX: currentDragging.cursorPosition.x,
+      clientY: currentDragging.cursorPosition.y,
+    }));
+    const currentDragScroll = createDragScroll(elementScrollViewport(scrollContainerElement), {
+      initialPointer,
+      onScroll: () => {
+        if (dragging !== currentDragging || currentDragging.dropped) return;
+        updateDraggingPosition(currentDragging.cursorPosition.x, currentDragging.cursorPosition.y);
+      },
+    });
+    dragScroll = currentDragScroll;
+
+    return () => {
+      currentDragScroll.destroy();
+      if (dragScroll === currentDragScroll) {
+        dragScroll = null;
+      }
+    };
   });
 
   $effect(() => {
@@ -660,37 +688,17 @@
         };
       },
       onDragMove: (e) => {
-        if (dragging && dragging.widgetRect && dragging.offsetX !== undefined && dragging.offsetY !== undefined) {
-          dragging.cursorPosition = { x: e.clientX, y: e.clientY };
-
-          if (dropZoneElement) {
-            const dropZoneRect = dropZoneElement.getBoundingClientRect();
-            const isInsideDropZone =
-              e.clientX >= dropZoneRect.left &&
-              e.clientX <= dropZoneRect.right &&
-              e.clientY >= dropZoneRect.top &&
-              e.clientY <= dropZoneRect.bottom;
-
-            if (isInsideDropZone) {
-              dragging.isOutsideDropZone = false;
-              updateDropPosition(e);
-            } else {
-              dragging.isOutsideDropZone = true;
-              dragging.dropIndex = null;
-            }
-          }
-
-          const calculatedPosition = calculateWidgetPosition(e.clientX, e.clientY, dragging.widgetRect, dragging.offsetX, dragging.offsetY);
-
-          dragging.calculatedPosition = calculatedPosition;
-        }
+        updateDraggingPosition(e.clientX, e.clientY);
       },
-      onDragEnd: async () => {
+      onDragEnd: async (e) => {
         if (dragging && dragging.source === 'freePosition') {
+          const resolved = updateDraggingPosition(e.clientX, e.clientY);
           const currentDragging = dragging;
           currentDragging.dropped = true;
 
           try {
+            if (!resolved) return;
+
             const { widgetId, dropIndex } = currentDragging;
 
             if (query.data.widgets.some((w) => w.id === widgetId)) {
@@ -993,12 +1001,15 @@
   onDragCancel={() => {
     dragging = null;
   }}
-  onDragEnd={async () => {
+  onDragEnd={async (e) => {
     if (dragging && dragging.source === 'palette') {
+      const resolved = updateDraggingPosition(e.clientX, e.clientY);
       const currentDragging = dragging;
       currentDragging.dropped = true;
 
       try {
+        if (!resolved) return;
+
         if (!currentDragging.isOutsideDropZone) {
           await widgetContext.createWidget?.(currentDragging.widgetType, 'drag', currentDragging.dropIndex ?? undefined);
         } else if (currentDragging.calculatedPosition) {
@@ -1025,14 +1036,7 @@
     }
   }}
   onDragMove={(e) => {
-    updateDropPosition(e);
-
-    if (dragging && dragging.source === 'palette') {
-      const { widgetRect, offsetX, offsetY } = dragging;
-      dragging.cursorPosition = { x: e.clientX, y: e.clientY };
-
-      dragging.calculatedPosition = calculateWidgetPosition(e.clientX, e.clientY, widgetRect, offsetX, offsetY);
-    }
+    updateDraggingPosition(e.clientX, e.clientY);
   }}
   onDragStart={(e, widgetType, target) => {
     const rect = target.getBoundingClientRect();
