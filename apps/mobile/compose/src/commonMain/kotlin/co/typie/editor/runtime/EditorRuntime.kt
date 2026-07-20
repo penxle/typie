@@ -15,6 +15,8 @@ import kotlinx.coroutines.launch
 
 @Stable
 class EditorRuntime(private val uiScope: CoroutineScope) {
+  private data class Failure(val error: Throwable, val editor: Editor?)
+
   private sealed interface Attachment {
     val editor: Editor
   }
@@ -27,6 +29,7 @@ class EditorRuntime(private val uiScope: CoroutineScope) {
   }
 
   private var attachment by mutableStateOf<Attachment?>(null)
+  private var failure by mutableStateOf<Failure?>(null)
 
   val editor: Editor?
     get() = attachment?.editor
@@ -34,8 +37,13 @@ class EditorRuntime(private val uiScope: CoroutineScope) {
   internal val session: DocumentEditingSession?
     get() = (attachment as? DocumentSession)?.session
 
-  var error by mutableStateOf<Throwable?>(null)
-    private set
+  val error: Throwable?
+    get() = failure?.error
+
+  // The editor is already disposed; retain it only to keep its last committed surfaces composed
+  // until the error is cleared.
+  internal val failedEditor: Editor?
+    get() = failure?.editor
 
   val canCreateEditor: Boolean
     get() = editor == null && error == null
@@ -124,7 +132,7 @@ class EditorRuntime(private val uiScope: CoroutineScope) {
     val detail = error.cause?.let { "$error; cause=$it" } ?: error.toString()
     Logger.e(error) { "Editor failed: $detail" }
     Sentry.captureException(error)
-    this.error = error
+    failure = Failure(error = error, editor = editor)
     clear()
   }
 
@@ -134,7 +142,7 @@ class EditorRuntime(private val uiScope: CoroutineScope) {
   }
 
   fun clearError() {
-    error = null
+    failure = null
   }
 
   fun focus(): Boolean = editor?.focus() == true

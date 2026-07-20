@@ -58,7 +58,8 @@ internal fun EditorPageSurface(
   val displayZoom = zoomController.displayZoom
   val renderZoom = zoomController.renderZoom
   val scaleFactor = density.density.toDouble() * renderZoom.toDouble()
-  val editor = LocalEditorRuntime.current.editor ?: return
+  val runtime = LocalEditorRuntime.current
+  val editor = runtime.editor ?: runtime.failedEditor ?: return
 
   val trigger = remember {
     MutableSharedFlow<Long>(replay = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)

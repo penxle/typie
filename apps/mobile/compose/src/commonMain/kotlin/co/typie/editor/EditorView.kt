@@ -133,56 +133,64 @@ internal fun EditorView(
   }
 
   Box(modifier) {
-    val session = runtime.session ?: return@Box
-    val editor = session.editor
-    val focusManager = LocalFocusManager.current
-    var previousSelection by remember(editor) { mutableStateOf(editor.selection) }
-    LaunchedEffect(editor, themeVariant) {
-      val changed = PlatformModule.editorHost.setThemeVariant(themeVariant)
-      if (changed) {
-        for (registeredEditor in EditorRegistry.snapshot()) {
-          registeredEditor.enqueue(Message.System(SystemEvent.ThemeVariantChanged))
+    val session = runtime.session
+    val editor = session?.editor ?: runtime.failedEditor ?: return@Box
+    val sessionActive = session != null
+
+    if (session != null) {
+      val focusManager = LocalFocusManager.current
+      var previousSelection by remember(editor) { mutableStateOf(editor.selection) }
+      LaunchedEffect(editor, themeVariant) {
+        val changed = PlatformModule.editorHost.setThemeVariant(themeVariant)
+        if (changed) {
+          for (registeredEditor in EditorRegistry.snapshot()) {
+            registeredEditor.enqueue(Message.System(SystemEvent.ThemeVariantChanged))
+          }
         }
       }
-    }
-    val autoSurroundEnabled = Preference.autoSurroundEnabled
-    LaunchedEffect(autoSurroundEnabled) {
-      PlatformModule.editorHost.setAutoSurroundEnabled(autoSurroundEnabled)
-    }
-    LaunchedEffect(editor, editor.selection, uiState.focused) {
-      val currentSelection = editor.selection
-      val selectionCleared = previousSelection != null && currentSelection == null
-      previousSelection = currentSelection
-      if (selectionCleared && uiState.focused) {
-        focusManager.clearFocus()
+      val autoSurroundEnabled = Preference.autoSurroundEnabled
+      LaunchedEffect(autoSurroundEnabled) {
+        PlatformModule.editorHost.setAutoSurroundEnabled(autoSurroundEnabled)
       }
-    }
-    SideEffect { editor.focusManager = focusManager }
-    DisposableEffect(session, uiState) {
-      onDispose {
-        uiState.clear()
-        runtime.clear(session)
+      LaunchedEffect(editor, editor.selection, uiState.focused) {
+        val currentSelection = editor.selection
+        val selectionCleared = previousSelection != null && currentSelection == null
+        previousSelection = currentSelection
+        if (selectionCleared && uiState.focused) {
+          focusManager.clearFocus()
+        }
+      }
+      SideEffect { editor.focusManager = focusManager }
+      DisposableEffect(session, uiState) {
+        onDispose {
+          uiState.clear()
+          runtime.clear(session)
+        }
       }
     }
 
-    Box(
-      Modifier.fillMaxWidth()
-        .focusRequester(editor.focusRequester)
-        .onFocusChanged {
-          uiState.updateFocus(it.isFocused)
-          editor.enqueue(Message.System(SystemEvent.SetFocused(it.isFocused)))
-        }
-        .editorInput(
-          enabled = editorInputEnabled,
-          session = session,
-          uiState = uiState,
-          platform = platform,
-          bringIntoViewRequests = bringIntoViewRequests,
-          suppressSoftwareKeyboard = suppressSoftwareKeyboard,
-          clipboard = PlatformModule.clipboard,
-        )
-        .focusable()
-    ) {
+    val editorInteractionModifier =
+      if (session != null) {
+        Modifier.focusRequester(editor.focusRequester)
+          .onFocusChanged {
+            uiState.updateFocus(it.isFocused)
+            editor.enqueue(Message.System(SystemEvent.SetFocused(it.isFocused)))
+          }
+          .editorInput(
+            enabled = editorInputEnabled,
+            session = session,
+            uiState = uiState,
+            platform = platform,
+            bringIntoViewRequests = bringIntoViewRequests,
+            suppressSoftwareKeyboard = suppressSoftwareKeyboard,
+            clipboard = PlatformModule.clipboard,
+          )
+          .focusable()
+      } else {
+        Modifier
+      }
+
+    Box(Modifier.fillMaxWidth().then(editorInteractionModifier)) {
       val pageSpacing =
         when (layoutSpec) {
           is EditorDocumentLayoutSpec.Continuous -> 0.dp
@@ -196,8 +204,10 @@ internal fun EditorView(
         verticalArrangement = Arrangement.spacedBy(pageSpacing),
       ) {
         editor.pageSizes.forEachIndexed { index, size ->
-          val pageCursor = editor.cursor?.takeIf { it.pageIdx == index }
-          val pageExternalElements = editor.externalElements.filter { it.pageIdx == index }
+          val pageCursor = editor.cursor?.takeIf { sessionActive && it.pageIdx == index }
+          val pageExternalElements =
+            if (sessionActive) editor.externalElements.filter { it.pageIdx == index }
+            else emptyList()
           EditorPageSurface(
             page = index,
             width = size.width,
@@ -210,7 +220,7 @@ internal fun EditorView(
               },
             showDebugOverlay = showDebugSurfaceOverlay,
             backgroundOverlay = {
-              if (layoutSpec is EditorDocumentLayoutSpec.Paginated) {
+              if (sessionActive && layoutSpec is EditorDocumentLayoutSpec.Paginated) {
                 EditorLineHighlightOverlay(
                   cursor = pageCursor,
                   focused = uiState.focused,
@@ -221,24 +231,30 @@ internal fun EditorView(
               }
             },
             foregroundOverlay = {
-              EditorExternalElementOverlay(
-                elements = pageExternalElements,
-                displayZoom = displayZoom,
-              )
-              EditorCursorOverlay(
-                cursor = pageCursor,
-                focused = uiState.focused,
-                displayZoom = displayZoom,
-              )
+              if (sessionActive) {
+                EditorExternalElementOverlay(
+                  elements = pageExternalElements,
+                  displayZoom = displayZoom,
+                )
+                EditorCursorOverlay(
+                  cursor = pageCursor,
+                  focused = uiState.focused,
+                  displayZoom = displayZoom,
+                )
+              }
               // TODO(editor-parity): selection rect, composition rect, 인라인 맞춤법 하이라이트,
               // 인라인 리마크 하이라이트 같은 foreground overlay도 surface-local로 채워 넣어야 한다.
             },
             modifier =
-              Modifier.editorPagePositionTracker(
-                uiState = uiState,
-                page = index,
-                density = density.density,
-              ),
+              if (sessionActive) {
+                Modifier.editorPagePositionTracker(
+                  uiState = uiState,
+                  page = index,
+                  density = density.density,
+                )
+              } else {
+                Modifier
+              },
           )
         }
       }

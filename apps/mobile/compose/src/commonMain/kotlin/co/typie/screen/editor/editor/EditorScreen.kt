@@ -981,10 +981,11 @@ fun EditorScreen(entityId: String) {
     }
   }
 
+  val layoutEditor = editor ?: runtime.failedEditor
   val preloadedLayoutSpec =
     remember(document?.layoutMode) { resolveEditorLoadingLayoutSpec(document?.layoutMode) }
   val layoutSpec: EditorDocumentLayoutSpec =
-    editor?.state?.rootAttrs?.layoutMode?.toEditorDocumentLayoutSpec()
+    layoutEditor?.state?.rootAttrs?.layoutMode?.toEditorDocumentLayoutSpec()
       ?: preloadedLayoutSpec
       ?: EditorDocumentLayoutSpec.Continuous(maxWidth = 600f)
   val background =
@@ -1019,7 +1020,7 @@ fun EditorScreen(entityId: String) {
         hideContextMenu = { uiState.contextMenu.hide() },
         openSheet = { subPaneState.open(EditorSubPane.Comments) },
       )
-    val pageSizes = editorState.pageSizes
+    val layoutPageSizes = layoutEditor?.pageSizes.orEmpty()
     val density = LocalDensity.current.density
     val focusManager = LocalFocusManager.current
     val haptic = LocalHapticFeedback.current
@@ -1279,12 +1280,12 @@ fun EditorScreen(entityId: String) {
         is EditorDocumentLayoutSpec.Continuous -> 0f
       }
     val pagesContentHeight =
-      layoutSpec.resolvePagesContentHeight(pageSizes, displayZoom, density = density)
+      layoutSpec.resolvePagesContentHeight(layoutPageSizes, displayZoom, density = density)
     val bodyGeometry =
       resolveEditorBodyGeometry(
         visibleArea = visibleArea,
         layoutSpec = layoutSpec,
-        pageSizes = pageSizes,
+        pageSizes = layoutPageSizes,
         displayZoom = displayZoom,
       )
     val distanceToPagesBottom =
@@ -1316,14 +1317,14 @@ fun EditorScreen(entityId: String) {
     val headerTrackWidth =
       resolveEditorHeaderTrackWidth(
         layoutSpec = layoutSpec,
-        resolvedPageWidth = resolveEditorPageWidth(pageSizes),
+        resolvedPageWidth = resolveEditorPageWidth(layoutPageSizes),
         visibleBodyWidth = visibleArea.visibleBodySize.width,
         bodyTrackWidth = bodyTrackWidth,
       )
     val editorGeometryValid =
       hasValidEditorGeometry(
         editorAttached = editor != null,
-        pageSizes = pageSizes,
+        pageSizes = editorState.pageSizes,
         trackWidth = bodyTrackWidth,
       )
     val editorReady = !loading && editorGeometryValid && editorSessionAttached
@@ -1400,7 +1401,7 @@ fun EditorScreen(entityId: String) {
             zoomController = zoomController,
             viewportState = screenState.viewportState,
             uiState = uiState,
-            pageSizes = pageSizes,
+            pageSizes = layoutPageSizes,
             viewportWidth = visibleArea.visibleBodySize.width,
             density = density,
             onZoomSnap = { haptic.performHapticFeedback(HapticFeedbackType.SegmentTick) },
@@ -1531,11 +1532,11 @@ fun EditorScreen(entityId: String) {
               viewportState = screenState.viewportState,
               visibleArea = visibleArea,
               layoutSpec = layoutSpec,
-              pageSizes = pageSizes,
+              pageSizes = layoutPageSizes,
               displayZoom = displayZoom,
               modifier = Modifier.fillMaxSize(),
             )
-          } else {
+          } else if (runtime.error == null) {
             EditorLoadingSkeleton(
               layoutSpec = layoutSpec,
               topInset = topInset,
@@ -1619,7 +1620,7 @@ fun EditorScreen(entityId: String) {
                     placeholder = editorState.placeholder,
                     geometry = bodyGeometry,
                     layoutSpec = layoutSpec,
-                    pageSizes = pageSizes,
+                    pageSizes = layoutPageSizes,
                     displayZoom = displayZoom,
                     modifier = Modifier.fillMaxSize(),
                     onLoadTemplate = ::openTemplateSheet,

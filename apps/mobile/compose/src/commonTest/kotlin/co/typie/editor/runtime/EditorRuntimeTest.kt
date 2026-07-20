@@ -107,4 +107,26 @@ class EditorRuntimeTest {
     assertSame(second, runtime.session)
     assertNull(runtime.error)
   }
+
+  @Test
+  fun fatalErrorRetainsEditorWithoutKeepingItActive() = runTest {
+    val editor = Editor(FakeFfiEditor(), this, StandardTestDispatcher(testScheduler))
+    val session = createSession(editor)
+    val runtime = EditorRuntime(uiScope = this)
+    val failure = IllegalStateException("fatal editor failure")
+
+    runtime.attach(session)
+    runtime.reportError(session, failure)
+    runCurrent()
+
+    assertSame(failure, runtime.error)
+    assertNull(runtime.editor)
+    assertNull(runtime.session)
+    assertSame(editor, runtime.failedEditor)
+
+    runtime.clearError()
+
+    assertNull(runtime.error)
+    assertNull(runtime.failedEditor)
+  }
 }
