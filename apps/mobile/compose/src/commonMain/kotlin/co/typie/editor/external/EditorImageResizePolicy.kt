@@ -28,12 +28,6 @@ internal fun clampImageResizeWidth(width: Float, boundsWidth: Float, originalWid
 internal fun imageResizeProportionForWidth(width: Float, boundsWidth: Float): Int =
   ((width / boundsWidth) * 100).roundToInt().coerceIn(IMAGE_MIN_PROPORTION, IMAGE_MAX_PROPORTION)
 
-internal fun imageResizeDraftProportionForWidth(width: Float, boundsWidth: Float): Float =
-  ((width / boundsWidth) * 100).coerceIn(
-    IMAGE_MIN_PROPORTION.toFloat(),
-    IMAGE_MAX_PROPORTION.toFloat(),
-  )
-
 internal fun imageResizeWidthForProportion(
   proportion: Float,
   boundsWidth: Float,

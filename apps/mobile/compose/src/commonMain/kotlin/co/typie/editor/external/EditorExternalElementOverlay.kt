@@ -97,7 +97,6 @@ private fun EditorExternalElement(element: ExternalElement, displayZoom: Float) 
             data = data,
             nodeId = element.node,
             boundsWidth = element.bounds.width,
-            selected = element.isSelected,
           )
         is ExternalElementData.File -> EditorFileExternalElement(data = data, nodeId = element.node)
         is ExternalElementData.Embed ->
