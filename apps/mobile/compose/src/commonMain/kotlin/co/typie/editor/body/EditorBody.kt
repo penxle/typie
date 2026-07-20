@@ -25,7 +25,7 @@ import androidx.compose.ui.unit.dp
 import co.typie.editor.EditorView
 import co.typie.editor.ext.unclippedBoundsInRoot
 import co.typie.editor.interaction.LocalEditorInteractionScope
-import co.typie.editor.overlay.EditorExtensionAreaLineHighlightOverlay
+import co.typie.editor.overlay.editorExtensionAreaLineHighlight
 import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.editor.runtime.LocalEditorUiState
@@ -35,6 +35,7 @@ import co.typie.screen.editor.editor.overlay.EditorSelectionHandleOverlay
 import co.typie.screen.editor.editor.overlay.EditorTableCellSelectionOverlay
 import co.typie.screen.editor.editor.overlay.EditorTableColumnResizeOverlay
 import co.typie.storage.Preference
+import co.typie.ui.theme.AppTheme
 
 private val DebugTopPaddingColor = Color(0x22FF5ACD)
 private val DebugBottomPaddingColor = Color(0x22FF8A00)
@@ -68,19 +69,23 @@ internal fun EditorBody(
   val interactionSurfaceModifier =
     Modifier.fillMaxWidth()
       .trackEditorInteractionSurfaceBounds(uiState = uiState, density = density.density)
+      .run {
+        if (layoutSpec is EditorDocumentLayoutSpec.Continuous) {
+          editorExtensionAreaLineHighlight(
+            cursor = { editor?.cursor },
+            focused = { uiState.focused },
+            editorBounds = { uiState.editorBoundsInContainer },
+            viewportTransform = { uiState.resolveViewportTransform(editor?.pageSizes.orEmpty()) },
+            enabled = { Preference.lineHighlightEnabled },
+            color = AppTheme.colors.surfaceInset.copy(alpha = 0.55f),
+          )
+        } else {
+          this
+        }
+      }
 
   Box(modifier = modifier.fillMaxWidth()) {
     Box(modifier = interactionSurfaceModifier) {
-      if (layoutSpec is EditorDocumentLayoutSpec.Continuous) {
-        EditorExtensionAreaLineHighlightOverlay(
-          cursor = editor?.cursor,
-          focused = uiState.focused,
-          editorBounds = { uiState.editorBoundsInContainer },
-          viewportTransform = { uiState.resolveViewportTransform(editor?.pageSizes.orEmpty()) },
-          enabled = Preference.lineHighlightEnabled,
-          modifier = Modifier.matchParentSize(),
-        )
-      }
       Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
         Column(
           modifier =

@@ -44,7 +44,7 @@ import co.typie.editor.ffi.TableOverlayRow
 import co.typie.editor.interaction.EditorEdgeAutoScrollViewport
 import co.typie.editor.interaction.EditorInteractionGeometry
 import co.typie.editor.interaction.semantics.EditorTableColumnResizePresentation
-import co.typie.editor.overlay.EditorExtensionAreaLineHighlightOverlay
+import co.typie.editor.overlay.editorExtensionAreaLineHighlight
 import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.surface.editorPagePositionTracker
 import co.typie.ui.theme.LightAppShadows
@@ -226,15 +226,15 @@ class EditorOverlayLayoutSynchronizationDesktopTest {
             .background(Color.White)
             .testTag(RootTag)
             .trackEditorInteractionSurfaceBounds(uiState = uiState, density = 1f)
+            .editorExtensionAreaLineHighlight(
+              cursor = { cursor },
+              focused = { true },
+              editorBounds = { uiState.editorBoundsInContainer },
+              viewportTransform = { uiState.resolveViewportTransform() },
+              enabled = { true },
+              color = LightColors.surfaceInset.copy(alpha = 0.55f),
+            )
         ) {
-          EditorExtensionAreaLineHighlightOverlay(
-            cursor = cursor,
-            focused = true,
-            editorBounds = { uiState.editorBoundsInContainer },
-            viewportTransform = { uiState.resolveViewportTransform() },
-            enabled = true,
-            modifier = Modifier.matchParentSize(),
-          )
           Column(
             Modifier.offset { IntOffset(0, ContinuousEditorTop.roundToInt()) }
               .fillMaxWidth()

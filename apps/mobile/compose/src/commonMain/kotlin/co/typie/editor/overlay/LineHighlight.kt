@@ -1,12 +1,13 @@
 package co.typie.editor.overlay
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import co.typie.editor.EditorViewportTransform
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.Rect
@@ -64,30 +65,25 @@ internal fun EditorLineHighlightOverlay(
   Box(Modifier.editorOverlayRect(rect).background(AppTheme.colors.surfaceInset.copy(alpha = 0.55f)))
 }
 
-@Composable
-internal fun EditorExtensionAreaLineHighlightOverlay(
-  cursor: CursorMetrics?,
-  focused: Boolean,
+internal fun Modifier.editorExtensionAreaLineHighlight(
+  cursor: () -> CursorMetrics?,
+  focused: () -> Boolean,
   editorBounds: () -> EditorBoundsInContainer,
   viewportTransform: () -> EditorViewportTransform,
-  enabled: Boolean,
-  modifier: Modifier = Modifier,
-) {
-  if (!enabled || !focused) return
-  val currentCursor = cursor ?: return
-  val color = AppTheme.colors.surfaceInset.copy(alpha = 0.55f)
-
-  Canvas(modifier) {
-    val band =
-      resolveEditorExtensionAreaLineHighlightBand(
-        cursor = currentCursor,
-        editorBounds = editorBounds(),
-        viewportTransform = viewportTransform(),
-      ) ?: return@Canvas
-    drawRect(
-      color = color,
-      topLeft = Offset(x = 0f, y = band.top * density),
-      size = Size(width = size.width, height = band.height * density),
-    )
-  }
+  enabled: () -> Boolean,
+  color: Color,
+): Modifier = drawBehind {
+  if (!enabled() || !focused()) return@drawBehind
+  val currentCursor = cursor() ?: return@drawBehind
+  val band =
+    resolveEditorExtensionAreaLineHighlightBand(
+      cursor = currentCursor,
+      editorBounds = editorBounds(),
+      viewportTransform = viewportTransform(),
+    ) ?: return@drawBehind
+  drawRect(
+    color = color,
+    topLeft = Offset(x = 0f, y = band.top * density),
+    size = Size(width = size.width, height = band.height * density),
+  )
 }

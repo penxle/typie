@@ -3,6 +3,7 @@ package co.typie.screen.editor.editor
 import co.typie.editor.Editor
 import co.typie.editor.FakeFfiEditor
 import co.typie.editor.ffi.Affinity
+import co.typie.editor.ffi.ChainSegment
 import co.typie.editor.ffi.Position
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.StablePosition
@@ -170,7 +171,7 @@ class EditorFocusReturnSessionTest {
         scope = this,
         freezeSelection = { _, _ -> stableSelection("captured") },
         applySelection = { _, stable ->
-          events += "apply:${stable.anchor.chain.single()}"
+          events += "apply:${(stable.anchor.chain.single() as ChainSegment.Real).dot}"
           editor.setSelection(selection("restored"))
         },
         focusEditor = { events += "focus" },
@@ -392,6 +393,11 @@ private fun selection(node: String): Selection {
 }
 
 private fun stableSelection(node: String): StableSelection {
-  val position = StablePosition(chain = listOf(node), child = null, affinity = Affinity.Downstream)
-  return StableSelection(anchor = position, head = position)
+  val position =
+    StablePosition(
+      chain = listOf(ChainSegment.Real(node)),
+      child = null,
+      affinity = Affinity.Downstream,
+    )
+  return StableSelection(version = 2, anchor = position, head = position)
 }
