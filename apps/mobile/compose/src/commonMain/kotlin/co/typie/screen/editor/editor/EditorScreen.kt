@@ -114,6 +114,7 @@ import co.typie.ext.ime
 import co.typie.graphql.QueryState
 import co.typie.navigation.Nav
 import co.typie.navigation.NavigationResult
+import co.typie.navigation.PlatformBackHandler
 import co.typie.navigation.RouteRemovalDecision
 import co.typie.platform.PlatformModule
 import co.typie.platform.connectivityService
@@ -231,6 +232,7 @@ fun EditorScreen(entityId: String) {
   val toast = LocalToast.current
   val model = viewModel { EditorViewModel(entityId) }
   val scope = rememberCoroutineScope()
+  val focusReturnSession = remember(entityId) { EditorFocusReturnSession(scope = scope) }
   val runtime = remember(entityId) { EditorRuntime(uiScope = scope) }
   val interactionScope = remember(entityId) { EditorInteractionScope(coroutineScope = scope) }
   val uiState = remember(entityId) { EditorUiState() }
@@ -255,6 +257,8 @@ fun EditorScreen(entityId: String) {
   var loaderFailedCode by remember(entityId) { mutableStateOf<String?>(null) }
   var reloadRequest by remember(entityId) { mutableStateOf<EditorReloadRequest?>(null) }
   var routeRemovalOwnsPriority by remember(entityId) { mutableStateOf(false) }
+
+  DisposableEffect(focusReturnSession) { onDispose { focusReturnSession.invalidate() } }
 
   LaunchedEffect(Unit) { SubscriptionService.refresh() }
 
@@ -323,6 +327,14 @@ fun EditorScreen(entityId: String) {
     }
   }
   val editorState = editor?.state ?: EditorState.Initial
+  SideEffect {
+    focusReturnSession.observeEditorContext(
+      editor = editor,
+      focused = uiState.focused,
+      selection = editorState.selection,
+      contextActive = screenState.sceneInForeground && !editorReadOnly,
+    )
+  }
   val externalAssetIds =
     remember(editorState.externalElements) {
       editorState.externalElements
@@ -368,9 +380,14 @@ fun EditorScreen(entityId: String) {
       requestEditorFocus()
     }
   }
-  fun closeFindReplaceFromShortcut() {
-    findReplace.close()
-    requestEditorFocusIfSelectionActive()
+  val focusStealingSurfaceActive =
+    findReplace.active ||
+      subPaneState.active == EditorSubPane.RelatedNotes ||
+      subPaneState.active == EditorSubPane.Comments
+  LaunchedEffect(focusStealingSurfaceActive) {
+    if (!focusStealingSurfaceActive) {
+      focusReturnSession.restore()
+    }
   }
   suspend fun ensureSpellcheckSubscription(): Boolean {
     return SubscriptionService.gate(sheet = sheet, action = GatedAction.Spellcheck)
@@ -419,6 +436,21 @@ fun EditorScreen(entityId: String) {
       ensureSubscription = ::ensureAiFeedbackSubscription,
       ensureAiOptIn = ::ensureAiOptIn,
     )
+  fun closeSpellcheckAndRestoreEditorFocus() {
+    spellcheck.close()
+    requestEditorFocusIfSelectionActive()
+  }
+  fun closeAiFeedbackAndRestoreEditorFocus() {
+    aiFeedback.close()
+    requestEditorFocusIfSelectionActive()
+  }
+  PlatformBackHandler(enabled = findReplace.active || spellcheck.active || aiFeedback.active) {
+    when {
+      findReplace.active -> findReplace.close()
+      spellcheck.active -> closeSpellcheckAndRestoreEditorFocus()
+      aiFeedback.active -> closeAiFeedbackAndRestoreEditorFocus()
+    }
+  }
 
   when {
     findReplace.active -> {
@@ -426,7 +458,10 @@ fun EditorScreen(entityId: String) {
         leading = { FindReplaceTopBarLeading(session = findReplace) },
         leadingKey = FindReplaceTopBarLeadingKey,
         center = {
-          FindReplaceTopBarCenter(session = findReplace, onEscape = ::closeFindReplaceFromShortcut)
+          FindReplaceTopBarCenter(
+            session = findReplace,
+            onInputFocused = focusReturnSession::onAuxiliaryInputFocused,
+          )
         },
         centerKey = FindReplaceTopBarCenterKey,
         trailing = { FindReplaceTopBarTrailing(session = findReplace) },
@@ -1058,20 +1093,12 @@ fun EditorScreen(entityId: String) {
         spellcheckActive = spellcheck.active,
         aiFeedbackActive = aiFeedback.active,
       )
-    fun closeSpellcheckFromShortcut() {
-      spellcheck.close()
-      requestEditorFocusIfSelectionActive()
-    }
-    fun closeAiFeedbackFromShortcut() {
-      aiFeedback.close()
-      requestEditorFocusIfSelectionActive()
-    }
     val screenShortcutActions =
       EditorScreenShortcutActions(
         openFindReplace = ::openFindReplace,
-        closeFindReplace = ::closeFindReplaceFromShortcut,
-        closeSpellcheck = ::closeSpellcheckFromShortcut,
-        closeAiFeedback = ::closeAiFeedbackFromShortcut,
+        closeFindReplace = findReplace.close,
+        closeSpellcheck = ::closeSpellcheckAndRestoreEditorFocus,
+        closeAiFeedback = ::closeAiFeedbackAndRestoreEditorFocus,
       )
     suspend fun openTemplateSheet() {
       val activeEditor = runtime.editor ?: return
@@ -1620,7 +1647,7 @@ fun EditorScreen(entityId: String) {
             visibleState = findReplaceToolbarTransition,
             bottomInset = findReplaceToolbarBottomInset,
             modifier = Modifier,
-            onEscape = ::closeFindReplaceFromShortcut,
+            onInputFocused = focusReturnSession::onAuxiliaryInputFocused,
           )
           EditorToolbarHost(
             editorState = editorState,
@@ -1717,6 +1744,7 @@ fun EditorScreen(entityId: String) {
             maxTopInset = topInset,
             safeBottomInset = bottomSafeInset,
             trustedImeBottomInset = trustedImeBottom,
+            onAuxiliaryInputFocused = focusReturnSession::onAuxiliaryInputFocused,
             modifier = Modifier.fillMaxSize(),
           )
         },

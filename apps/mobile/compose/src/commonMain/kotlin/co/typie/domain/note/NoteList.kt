@@ -73,6 +73,7 @@ internal class NoteListActions(
   val onDelete: (NoteCard_note) -> Unit,
   val onMoveNote:
     suspend (noteId: String, lowerOrder: String?, upperOrder: String?) -> Result<Unit, Nothing>,
+  val onInputFocused: () -> Unit = {},
 )
 
 @Composable
@@ -236,6 +237,7 @@ internal fun NoteList(
                   }
                 },
                 onBlur = { if (interactive && !isLoading) actions.onBlur(note.id) },
+                onInputFocused = actions.onInputFocused,
                 onToggleStatus = { if (interactive && !isLoading) actions.onToggleStatus(note) },
                 onColorChange = { nextColor ->
                   if (interactive && !isLoading) {

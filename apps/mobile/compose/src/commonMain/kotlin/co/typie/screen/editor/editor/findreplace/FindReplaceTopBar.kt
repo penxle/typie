@@ -59,7 +59,10 @@ internal fun FindReplaceTopBarLeading(session: EditorFindReplaceSession) {
 }
 
 @Composable
-internal fun FindReplaceTopBarCenter(session: EditorFindReplaceSession, onEscape: () -> Unit = {}) {
+internal fun FindReplaceTopBarCenter(
+  session: EditorFindReplaceSession,
+  onInputFocused: () -> Unit,
+) {
   val inputState =
     rememberTextInputState(
       value = session.findText,
@@ -101,9 +104,9 @@ internal fun FindReplaceTopBarCenter(session: EditorFindReplaceSession, onEscape
       keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
       keyboardActions = KeyboardActions(onSearch = { session.findNext() }),
       modifier =
-        Modifier.weight(1f).textInputFocusable(inputState).onPreviewKeyEvent { event ->
-          handleFindInputShortcut(event, session, onEscape)
-        },
+        Modifier.weight(1f)
+          .textInputFocusable(inputState) { state -> if (state.isFocused) onInputFocused() }
+          .onPreviewKeyEvent { event -> handleFindInputShortcut(event, session) },
       decorationBox = { innerTextField ->
         Box(contentAlignment = Alignment.CenterStart) {
           if (session.findText.isEmpty()) {
@@ -124,14 +127,10 @@ internal fun FindReplaceTopBarCenter(session: EditorFindReplaceSession, onEscape
   }
 }
 
-private fun handleFindInputShortcut(
-  event: KeyEvent,
-  session: EditorFindReplaceSession,
-  onEscape: () -> Unit,
-): Boolean =
+private fun handleFindInputShortcut(event: KeyEvent, session: EditorFindReplaceSession): Boolean =
   when {
     matchesEditorShortcut(event = event, platform = PlatformModule.platform, key = Key.Escape) -> {
-      onEscape()
+      session.close()
       true
     }
     matchesEditorShortcut(

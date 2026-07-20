@@ -64,8 +64,8 @@ internal fun FindReplaceToolbar(
   session: EditorFindReplaceSession,
   visibleState: MutableTransitionState<Boolean>,
   bottomInset: Dp,
+  onInputFocused: () -> Unit,
   modifier: Modifier = Modifier,
-  onEscape: () -> Unit = {},
 ) {
   AnimatedVisibility(
     visibleState = visibleState,
@@ -104,7 +104,11 @@ internal fun FindReplaceToolbar(
               ),
           verticalAlignment = Alignment.CenterVertically,
         ) {
-          ReplaceTextField(session = session, modifier = Modifier.weight(1f), onEscape = onEscape)
+          ReplaceTextField(
+            session = session,
+            modifier = Modifier.weight(1f),
+            onInputFocused = onInputFocused,
+          )
           Spacer(Modifier.width(ToolbarItemGap))
           EditorToolbarButton(
             icon = Lucide.Replace,
@@ -143,7 +147,7 @@ internal fun FindReplaceToolbar(
 private fun ReplaceTextField(
   session: EditorFindReplaceSession,
   modifier: Modifier = Modifier,
-  onEscape: () -> Unit = {},
+  onInputFocused: () -> Unit,
 ) {
   val inputState =
     rememberTextInputState(
@@ -167,8 +171,8 @@ private fun ReplaceTextField(
         .clip(shape)
         .background(AppTheme.colors.surfaceInset, shape)
         .padding(horizontal = 10.dp)
-        .textInputFocusable(inputState)
-        .onPreviewKeyEvent { event -> handleReplaceInputShortcut(event, session, onEscape) },
+        .textInputFocusable(inputState) { state -> if (state.isFocused) onInputFocused() }
+        .onPreviewKeyEvent { event -> handleReplaceInputShortcut(event, session) },
     decorationBox = { innerTextField ->
       Box(contentAlignment = Alignment.CenterStart) {
         if (session.replaceText.isEmpty()) {
@@ -189,11 +193,10 @@ private fun ReplaceTextField(
 private fun handleReplaceInputShortcut(
   event: KeyEvent,
   session: EditorFindReplaceSession,
-  onEscape: () -> Unit,
 ): Boolean =
   when {
     matchesEditorShortcut(event = event, platform = PlatformModule.platform, key = Key.Escape) -> {
-      onEscape()
+      session.close()
       true
     }
     matchesEditorShortcut(

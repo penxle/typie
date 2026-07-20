@@ -128,6 +128,7 @@ internal fun NoteCard(
   onCollapse: () -> Unit,
   onContentChange: (String) -> Unit,
   onBlur: () -> Unit,
+  onInputFocused: () -> Unit = {},
   onToggleStatus: () -> Unit,
   onColorChange: (String) -> Unit,
   onAddEntity: () -> Unit,
@@ -215,6 +216,7 @@ internal fun NoteCard(
           onCollapse = onCollapse,
           onContentChange = onContentChange,
           onBlur = onBlur,
+          onInputFocused = onInputFocused,
           onToggleStatus = onToggleStatus,
           onColorChange = onColorChange,
           onAddEntity = onAddEntity,
@@ -247,6 +249,7 @@ private fun NoteExpandedContent(
   onCollapse: () -> Unit,
   onContentChange: (String) -> Unit,
   onBlur: () -> Unit,
+  onInputFocused: () -> Unit,
   onToggleStatus: () -> Unit,
   onColorChange: (String) -> Unit,
   onAddEntity: () -> Unit,
@@ -276,6 +279,7 @@ private fun NoteExpandedContent(
             content = content,
             onValueChange = onContentChange,
             onBlur = onBlur,
+            onInputFocused = onInputFocused,
             readOnly = !contentEditable,
           )
         }
@@ -674,16 +678,16 @@ private fun NoteCollapsedMetaRow(note: NoteCard_note) {
 
     val trailingWidth =
       buildList {
-        overflowPlaceable?.let { add(it.width) }
-        separatorPlaceable?.let { add(it.width) }
-        add(timePlaceable.width)
-      }
+          overflowPlaceable?.let { add(it.width) }
+          separatorPlaceable?.let { add(it.width) }
+          add(timePlaceable.width)
+        }
         .sum() +
         spacingPx *
           (buildList {
-            overflowPlaceable?.let { add(Unit) }
-            separatorPlaceable?.let { add(Unit) }
-          }
+              overflowPlaceable?.let { add(Unit) }
+              separatorPlaceable?.let { add(Unit) }
+            }
             .size)
 
     val chipMaxWidth =
@@ -790,6 +794,7 @@ private fun NoteContentEditor(
   content: String,
   onValueChange: (String) -> Unit,
   onBlur: () -> Unit,
+  onInputFocused: () -> Unit,
   readOnly: Boolean,
 ) {
   val focusManager = LocalFocusManager.current
@@ -808,6 +813,7 @@ private fun NoteContentEditor(
         Modifier.fillMaxWidth().defaultMinSize(minHeight = 90.dp).textInputFocusable(
           textInputState
         ) { state ->
+          if (state.isFocused) onInputFocused()
           if (!state.isFocused) {
             onBlur()
           }
