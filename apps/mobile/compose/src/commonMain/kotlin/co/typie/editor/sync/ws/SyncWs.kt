@@ -128,8 +128,9 @@ object SyncWs {
     }
 
   fun retryDocument(documentId: String) {
-    channels.remove(documentId)
     connection.resetTerminal()
+    // 활성 consumer가 남아 있으면 channel identity를 바꾸지 않는다. WS detach는 document-scoped다.
+    channels[documentId]?.retryFresh()
   }
 
   /** 재구독 전환 시 연결 terminal + 열린 채널의 permanent 실패를 방어적으로 리셋·재attach 한다. */

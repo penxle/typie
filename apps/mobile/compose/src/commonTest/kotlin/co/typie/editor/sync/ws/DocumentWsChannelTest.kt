@@ -363,10 +363,7 @@ class DocumentWsChannelTest {
     socket0.serverSend(snapshotEnd("6-0"))
     socket0.serverSend(changesets("7-0", emptyList()))
     runCurrent()
-    assertEquals(
-      listOf(endS("6-0"), changesetsS("7-0", emptyList())),
-      events.snapshots(),
-    )
+    assertEquals(listOf(endS("6-0"), changesetsS("7-0", emptyList())), events.snapshots())
 
     socket0.serverClose(1006)
     advanceTimeBy(1_000)
@@ -392,6 +389,44 @@ class DocumentWsChannelTest {
 
     assertEquals(1, socket.sent.count { it is WsClientMessage.Attach })
     assertTrue(socket.sent.none { it is WsClientMessage.Detach })
+  }
+
+  @Test
+  fun retryFreshRestartsOneGenerationForAllActiveSubscribers() = runTest {
+    val (_, channel, sockets) = harness()
+    val firstEvents = mutableListOf<AttachEvent>()
+    val secondEvents = mutableListOf<AttachEvent>()
+    val firstJob = collectJob(channel.freshSubscribe(), firstEvents)
+    collectJob(channel.events, secondEvents)
+    runCurrent()
+    val socket = sockets[0]
+    handshake(socket)
+    socket.serverSend(WsServerMessage.AttachAck(documentId = DOC_ID))
+    socket.serverSend(snapshotEnd("1-0"))
+    runCurrent()
+    firstEvents.clear()
+    secondEvents.clear()
+
+    channel.retryFresh()
+    runCurrent()
+
+    assertEquals(listOf(EventSnapshot.Restart), firstEvents.snapshots())
+    assertEquals(listOf(EventSnapshot.Restart), secondEvents.snapshots())
+    assertEquals(1, socket.sent.count { it is WsClientMessage.Detach })
+    assertEquals(2, socket.sent.count { it is WsClientMessage.Attach })
+
+    socket.serverSend(WsServerMessage.AttachAck(documentId = DOC_ID))
+    socket.serverSend(chunk("B2", 2, 0, byteArrayOf(2)))
+    socket.serverSend(snapshotEnd("2-0"))
+    runCurrent()
+
+    val replacement = listOf(EventSnapshot.Restart, chunkS("B2", 2, 0, byteArrayOf(2)), endS("2-0"))
+    assertEquals(replacement, firstEvents.snapshots())
+    assertEquals(replacement, secondEvents.snapshots())
+
+    firstJob.cancel()
+    runCurrent()
+    assertEquals(1, socket.sent.count { it is WsClientMessage.Detach })
   }
 
   @Test

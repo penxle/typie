@@ -44,6 +44,76 @@ class SyncEngineTest {
     )
 
   @Test
+  fun confirmedHeadAdvanceWakesProtectionWaiter() = runTest {
+    val engine =
+      engine(FakeSyncEditor(), FakeDeltaStore()) { PushResult(heads = enc(), durableHeads = enc()) }
+    val observed = engine.protectionGeneration
+    val waiter = async { engine.awaitProtectionAfter(observed) }
+
+    engine.setConfirmedHeads(enc(1))
+
+    assertTrue(waiter.await())
+    engine.stop()
+  }
+
+  @Test
+  fun identicalConfirmedHeadsDoNotAdvanceProtectionGeneration() = runTest {
+    val engine =
+      engine(FakeSyncEditor(), FakeDeltaStore()) { PushResult(heads = enc(), durableHeads = enc()) }
+    engine.setConfirmedHeads(enc(1))
+    val observed = engine.protectionGeneration
+
+    engine.setConfirmedHeads(enc(1))
+
+    assertEquals(observed, engine.protectionGeneration)
+    engine.stop()
+  }
+
+  @Test
+  fun localCaptureWakesProtectionWaiter() = runTest {
+    val syncEditor = FakeSyncEditor()
+    val engine =
+      engine(syncEditor, FakeDeltaStore()) { PushResult(heads = enc(), durableHeads = enc()) }
+    runCurrent()
+    syncEditor.known.add(1)
+    val observed = engine.protectionGeneration
+    val waiter = async { engine.awaitProtectionAfter(observed) }
+
+    engine.captureNow()
+
+    assertTrue(waiter.await())
+    engine.stop()
+  }
+
+  @Test
+  fun durableHeadAdvanceDoesNotWakeProtectionWaiter() = runTest {
+    val engine =
+      engine(FakeSyncEditor(), FakeDeltaStore()) { PushResult(heads = enc(), durableHeads = enc()) }
+    val observed = engine.protectionGeneration
+    val waiter = async { engine.awaitProtectionAfter(observed) }
+
+    engine.setDurableHeads(enc(1))
+    runCurrent()
+
+    assertFalse(waiter.isCompleted)
+    waiter.cancel()
+    engine.stop()
+  }
+
+  @Test
+  fun stopTerminatesProtectionWaiterWithoutAdvancingProof() = runTest {
+    val engine =
+      engine(FakeSyncEditor(), FakeDeltaStore()) { PushResult(heads = enc(), durableHeads = enc()) }
+    val observed = engine.protectionGeneration
+    val waiter = async { engine.awaitProtectionAfter(observed) }
+
+    engine.stop()
+
+    assertFalse(waiter.await())
+    assertEquals(observed, engine.protectionGeneration)
+  }
+
+  @Test
   fun checkpointReturnsFailureWhenFrontierInspectionFails() = runTest {
     val failure = IllegalStateException("editor unavailable")
     val baseEditor = FakeSyncEditor()

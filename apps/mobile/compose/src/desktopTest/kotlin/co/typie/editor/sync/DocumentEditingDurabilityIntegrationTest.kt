@@ -50,7 +50,7 @@ class DocumentEditingDurabilityIntegrationTest {
       }
       assertNotNull(edit)
 
-      assertEquals(EditingCheckpointResult.Protected, session.beginClose().awaitCheckpoint())
+      assertEquals(EditingCheckpointResult.Protected, session.beginStop().awaitCheckpoint())
       assertEquals(listOf("1"), store.load("doc").map { it.id })
       session.stop()
       ActiveDocumentEditingSessions.unregister(session)

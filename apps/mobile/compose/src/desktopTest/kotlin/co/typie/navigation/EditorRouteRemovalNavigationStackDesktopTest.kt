@@ -9,7 +9,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.unit.dp
-import co.typie.editor.DocumentEditingClose
+import co.typie.editor.DocumentEditingStop
 import co.typie.editor.EditingCheckpointResult
 import co.typie.editor.EditorLocalEditCoordinator
 import co.typie.route.Route
@@ -40,9 +40,9 @@ class EditorRouteRemovalNavigationStackDesktopTest {
       EditorRouteLeaveInterceptor(
         finalizeInput = {},
         restoreInput = {},
-        beginClose = {
+        beginStop = {
           val quiescence = localEdits.quiesce()
-          object : DocumentEditingClose {
+          object : DocumentEditingStop {
             override suspend fun awaitCheckpoint(): EditingCheckpointResult {
               barrierStarted.complete(Unit)
               val editResult = quiescence.await()
@@ -53,6 +53,8 @@ class EditorRouteRemovalNavigationStackDesktopTest {
                 onFailure = { EditingCheckpointResult.EditFailed(it) },
               )
             }
+
+            override suspend fun retryCheckpoint(): EditingCheckpointResult = awaitCheckpoint()
 
             override fun cancel() {
               quiescence.resume()

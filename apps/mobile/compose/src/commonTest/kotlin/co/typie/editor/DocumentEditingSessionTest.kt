@@ -25,6 +25,7 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
@@ -114,7 +115,7 @@ class DocumentEditingSessionTest {
     runCurrent()
     syncEditor.known.add(1)
 
-    val result = session.beginClose().awaitCheckpoint()
+    val result = session.beginStop().awaitCheckpoint()
 
     assertEquals(EditingCheckpointResult.Protected, result)
   }
@@ -135,7 +136,7 @@ class DocumentEditingSessionTest {
     syncEditor.known.add(1)
     session.submit { _, _ -> CompletableDeferred<Unit>().apply { completeExceptionally(failure) } }
 
-    val result = session.beginClose().awaitCheckpoint()
+    val result = session.beginStop().awaitCheckpoint()
 
     assertTrue(result is EditingCheckpointResult.EditFailed)
     assertEquals(failure, result.cause)
@@ -193,7 +194,7 @@ class DocumentEditingSessionTest {
     assertNotNull(accepted)
     assertFalse(started)
 
-    val close = session.beginClose()
+    val close = session.beginStop()
     val result = async(start = CoroutineStart.UNDISPATCHED) { close.awaitCheckpoint() }
 
     assertNull(session.submit { _, context -> async(context) {} })
@@ -233,7 +234,7 @@ class DocumentEditingSessionTest {
     }
     assertNotNull(accepted)
 
-    val close = session.beginClose()
+    val close = session.beginStop()
     val result = async(start = CoroutineStart.UNDISPATCHED) { close.awaitCheckpoint() }
     runCurrent()
     assertFalse(result.isCompleted)
@@ -248,9 +249,9 @@ class DocumentEditingSessionTest {
   @Test
   fun staleCloseCannotReopenANewerClose() = runTest {
     val (_, session) = harness()
-    val first = session.beginClose()
+    val first = session.beginStop()
     first.cancel()
-    val second = session.beginClose()
+    val second = session.beginStop()
 
     first.cancel()
 
@@ -270,7 +271,7 @@ class DocumentEditingSessionTest {
         sessionEditor.await { enqueue(Message.System(SystemEvent.Initialize)) }
       }
     }
-    val close = session.beginClose()
+    val close = session.beginStop()
     val result = async(start = CoroutineStart.UNDISPATCHED) { close.awaitCheckpoint() }
 
     session.stop()
@@ -285,7 +286,7 @@ class DocumentEditingSessionTest {
   }
 
   @Test
-  fun cancelledCloseKeepsCompletedCheckpointResult() = runTest {
+  fun cancelledStopCannotReuseCompletedCheckpointResult() = runTest {
     var puts = 0
     val store = FakeDeltaStore()
     val syncEditor = FakeSyncEditor()
@@ -296,12 +297,14 @@ class DocumentEditingSessionTest {
       puts += 1
       throw IllegalStateException("disk unavailable")
     }
-    val close = session.beginClose()
+    val close = session.beginStop()
     val failure = close.awaitCheckpoint()
     close.cancel()
 
-    assertEquals(failure, close.awaitCheckpoint())
     assertTrue(failure is EditingCheckpointResult.ProtectionFailed)
+    assertEquals(EditingCheckpointResult.StopCancelled, close.awaitCheckpoint())
+    assertEquals(EditingCheckpointResult.StopCancelled, close.retryCheckpoint())
+    advanceUntilIdle()
     assertEquals(2, puts)
     assertNotNull(session.submit { _, context -> async(context) {} })
   }
@@ -317,7 +320,7 @@ class DocumentEditingSessionTest {
 
     session.submit { _, _ -> CompletableDeferred<Unit>().apply { completeExceptionally(failure) } }
 
-    val result = session.beginClose().awaitCheckpoint()
+    val result = session.beginStop().awaitCheckpoint()
 
     assertTrue(result is EditingCheckpointResult.EditFailed)
     assertEquals(failure, result.cause)
@@ -333,7 +336,7 @@ class DocumentEditingSessionTest {
     runCurrent()
     syncEditor.known.add(1)
     store.onPut = { puts += 1 }
-    val close = session.beginClose()
+    val close = session.beginStop()
 
     val first = async { close.awaitCheckpoint() }
     val second = async { close.awaitCheckpoint() }
@@ -356,7 +359,7 @@ class DocumentEditingSessionTest {
       captureGate.await()
       emptyList()
     }
-    val close = session.beginClose()
+    val close = session.beginStop()
     val first = async { close.awaitCheckpoint() }
 
     testScheduler.runCurrent()
@@ -370,5 +373,109 @@ class DocumentEditingSessionTest {
     advanceUntilIdle()
 
     assertEquals(EditingCheckpointResult.Protected, close.awaitCheckpoint())
+  }
+
+  @Test
+  fun cancellingOneOfTwoStopHandlesKeepsAdmissionClosed() = runTest {
+    val (_, session) = harness()
+    val first = session.beginStop()
+    val second = session.beginStop()
+
+    first.cancel()
+    assertNull(session.submit { _, _ -> CompletableDeferred(Unit) })
+
+    second.cancel()
+    assertNotNull(session.submit { _, _ -> CompletableDeferred(Unit) })
+  }
+
+  @Test
+  fun cancelledStopHandleCannotObserveSharedProtectedResult() = runTest {
+    val (_, session) = harness()
+    val editGate = CompletableDeferred<Unit>()
+    assertNotNull(session.submit { _, context -> async(context) { editGate.await() } })
+    val cancelled = session.beginStop()
+    val remaining = session.beginStop()
+    val cancelledResult = async { cancelled.awaitCheckpoint() }
+
+    cancelled.cancel()
+
+    assertEquals(EditingCheckpointResult.StopCancelled, cancelledResult.await())
+    editGate.complete(Unit)
+    advanceUntilIdle()
+    assertEquals(EditingCheckpointResult.Protected, remaining.awaitCheckpoint())
+    remaining.cancel()
+  }
+
+  @Test
+  fun concurrentRetriesShareOneAttemptAndKeepTheSameFrontier() = runTest {
+    var loads = 0
+    val store = FakeDeltaStore()
+    store.onLoad = {
+      loads += 1
+      emptyList()
+    }
+    store.onPut = { throw IllegalStateException("disk unavailable") }
+    val syncEditor = FakeSyncEditor()
+    val (_, session) =
+      harness(
+        store = store,
+        syncEditor = syncEditor,
+        pushFn = { throw IllegalStateException("network unavailable") },
+      )
+    runCurrent()
+    syncEditor.known.add(1)
+    val stop = session.beginStop()
+    assertTrue(stop.awaitCheckpoint() is EditingCheckpointResult.ProtectionFailed)
+    val loadsBeforeRetry = loads
+    val retryGate = CompletableDeferred<Unit>()
+    store.onLoad = {
+      loads += 1
+      retryGate.await()
+      emptyList()
+    }
+
+    val first = async { stop.retryCheckpoint() }
+    runCurrent()
+    val second = async { stop.retryCheckpoint() }
+    runCurrent()
+
+    assertEquals(loadsBeforeRetry + 1, loads)
+    assertNull(session.submit { _, _ -> CompletableDeferred(Unit) })
+
+    retryGate.complete(Unit)
+    advanceUntilIdle()
+
+    assertTrue(first.await() is EditingCheckpointResult.ProtectionFailed)
+    assertTrue(second.await() is EditingCheckpointResult.ProtectionFailed)
+    assertEquals(loadsBeforeRetry + 2, loads)
+    stop.cancel()
+  }
+
+  @Test
+  fun finalReleaseCannotReopenAdmissionBehindANewerStop() = runTest {
+    val (editor, session) = harness()
+
+    repeat(100) {
+      val first = session.beginStop()
+      val raceGate = CompletableDeferred<Unit>()
+      val release =
+        async(Dispatchers.Default) {
+          raceGate.await()
+          first.cancel()
+        }
+      val next =
+        async(Dispatchers.Default) {
+          raceGate.await()
+          session.beginStop()
+        }
+
+      raceGate.complete(Unit)
+      val second = next.await()
+      release.await()
+
+      assertNull(editor.trackLocalEdit { CompletableDeferred(Unit) })
+      second.cancel()
+      assertNotNull(session.submit { _, _ -> CompletableDeferred(Unit) })
+    }
   }
 }

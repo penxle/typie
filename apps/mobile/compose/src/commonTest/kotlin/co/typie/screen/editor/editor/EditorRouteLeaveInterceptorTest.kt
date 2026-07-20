@@ -1,6 +1,6 @@
 package co.typie.screen.editor.editor
 
-import co.typie.editor.DocumentEditingClose
+import co.typie.editor.DocumentEditingStop
 import co.typie.editor.EditingCheckpointResult
 import co.typie.navigation.RouteRemovalDecision
 import co.typie.navigation.RouteRemovalPreparation
@@ -8,10 +8,13 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runCurrent
@@ -45,7 +48,7 @@ class EditorRouteLeaveInterceptorTest {
       EditorRouteLeaveInterceptor(
         finalizeInput = {},
         restoreInput = { restored++ },
-        beginClose = { throw failure },
+        beginStop = { throw failure },
         resolveDecision = { RouteRemovalDecision.CancelRemoval },
       )
 
@@ -68,9 +71,11 @@ class EditorRouteLeaveInterceptorTest {
       EditorRouteLeaveInterceptor(
         finalizeInput = {},
         restoreInput = {},
-        beginClose = {
-          object : DocumentEditingClose {
+        beginStop = {
+          object : DocumentEditingStop {
             override suspend fun awaitCheckpoint(): EditingCheckpointResult = awaitCancellation()
+
+            override suspend fun retryCheckpoint(): EditingCheckpointResult = awaitCancellation()
 
             override fun cancel() = Unit
           }
@@ -191,6 +196,221 @@ class EditorRouteLeaveInterceptorTest {
 
     assertEquals(RouteRemovalPreparation.NeedsDecision, interceptor.prepare())
   }
+
+  @Test
+  fun routeAcquiresItsStopBeforeSuspendingReload() = runTest {
+    var routeOwnsStop = false
+    val interceptor =
+      EditorRouteLeaveInterceptor(
+        finalizeInput = {},
+        restoreInput = {},
+        beginStop = {
+          routeOwnsStop = true
+          object : DocumentEditingStop {
+            override suspend fun awaitCheckpoint() = EditingCheckpointResult.Protected
+
+            override suspend fun retryCheckpoint() = EditingCheckpointResult.Protected
+
+            override fun cancel() {
+              routeOwnsStop = false
+            }
+          }
+        },
+        onPreparationStarted = { assertTrue(routeOwnsStop) },
+        resolveDecision = { RouteRemovalDecision.CancelRemoval },
+      )
+
+    assertEquals(RouteRemovalPreparation.Ready, interceptor.prepare())
+    assertTrue(routeOwnsStop)
+  }
+
+  @Test
+  fun rollbackRestartsPendingReloadBeforeReleasingRouteStop() = runTest {
+    var routeOwnsStop = false
+    var reloadOwnsStop = false
+    var restored = 0
+    val interceptor =
+      EditorRouteLeaveInterceptor(
+        finalizeInput = {},
+        restoreInput = { restored += 1 },
+        beginStop = {
+          routeOwnsStop = true
+          object : DocumentEditingStop {
+            override suspend fun awaitCheckpoint() =
+              EditingCheckpointResult.ProtectionFailed(IllegalStateException("unprotected"))
+
+            override suspend fun retryCheckpoint() = awaitCheckpoint()
+
+            override fun cancel() {
+              assertTrue(reloadOwnsStop)
+              routeOwnsStop = false
+            }
+          }
+        },
+        resumeReloadBeforeRollback = {
+          assertTrue(routeOwnsStop)
+          reloadOwnsStop = true
+          true
+        },
+        resolveDecision = { RouteRemovalDecision.CancelRemoval },
+      )
+    assertEquals(RouteRemovalPreparation.NeedsDecision, interceptor.prepare())
+
+    interceptor.rollback()
+
+    assertFalse(routeOwnsStop)
+    assertTrue(reloadOwnsStop)
+    assertEquals(0, restored)
+  }
+
+  @Test
+  fun rollbackRestoresInputOnceWhenThereIsNoPendingReload() = runTest {
+    var restored = 0
+    val interceptor =
+      interceptor(
+        awaitResult = {
+          EditingCheckpointResult.ProtectionFailed(IllegalStateException("unprotected"))
+        },
+        restoreInput = { restored += 1 },
+        resumeReloadBeforeRollback = { false },
+      )
+    assertEquals(RouteRemovalPreparation.NeedsDecision, interceptor.prepare())
+
+    interceptor.rollback()
+    interceptor.rollback()
+
+    assertEquals(1, restored)
+  }
+
+  @Test
+  fun failedReloadResumeCleansUpRouteOwnershipBeforePropagating() = runTest {
+    val checkpoint = CompletableDeferred<EditingCheckpointResult>()
+    val failure = IllegalStateException("reload launch failed")
+    var cancelled = false
+    var hidden = false
+    var restored = false
+    val interceptor =
+      interceptor(
+        awaitResult = { checkpoint.await() },
+        onCancel = {
+          cancelled = true
+          checkpoint.complete(EditingCheckpointResult.StopCancelled)
+        },
+        restoreInput = { restored = true },
+        delayedFeedbackMillis = 10,
+        checkpointWatchdogMillis = 30,
+        showDelayedFeedback = {},
+        hideDelayedFeedback = { hidden = true },
+        resumeReloadBeforeRollback = { throw failure },
+      )
+    val preparation = async { interceptor.prepare(onDelayed = {}) }
+    advanceTimeBy(10)
+    runCurrent()
+
+    assertEquals(failure, assertFailsWith<IllegalStateException> { interceptor.rollback() })
+
+    assertTrue(cancelled)
+    assertTrue(hidden)
+    assertTrue(restored)
+    assertEquals(RouteRemovalPreparation.NeedsDecision, preparation.await())
+  }
+
+  @Test
+  fun cancelledReloadLaunchReturnsFalseAndRestoresInput() = runTest {
+    val reloadAcquired = CompletableDeferred<Boolean>()
+    var restored = 0
+    val interceptor =
+      interceptor(
+        awaitResult = {
+          EditingCheckpointResult.ProtectionFailed(IllegalStateException("unprotected"))
+        },
+        restoreInput = { restored += 1 },
+        resumeReloadBeforeRollback = { reloadAcquired.await() },
+      )
+    assertEquals(RouteRemovalPreparation.NeedsDecision, interceptor.prepare())
+    val rollback = async { interceptor.rollback() }
+    runCurrent()
+    assertFalse(rollback.isCompleted)
+
+    reloadAcquired.complete(false)
+    rollback.await()
+
+    assertEquals(1, restored)
+  }
+
+  @Test
+  fun cancelledPreparationRestartsPendingReloadBeforeReleasingRouteStop() = runTest {
+    var routeOwnsStop = false
+    var reloadOwnsStop = false
+    var restored = 0
+    val interceptor =
+      EditorRouteLeaveInterceptor(
+        finalizeInput = {},
+        restoreInput = { restored += 1 },
+        beginStop = {
+          routeOwnsStop = true
+          object : DocumentEditingStop {
+            override suspend fun awaitCheckpoint(): EditingCheckpointResult = awaitCancellation()
+
+            override suspend fun retryCheckpoint(): EditingCheckpointResult = awaitCancellation()
+
+            override fun cancel() {
+              assertTrue(reloadOwnsStop)
+              routeOwnsStop = false
+            }
+          }
+        },
+        onPreparationStarted = {},
+        resumeReloadBeforeRollback = {
+          assertTrue(routeOwnsStop)
+          reloadOwnsStop = true
+          true
+        },
+        resolveDecision = { RouteRemovalDecision.CancelRemoval },
+      )
+    val preparation = async(start = CoroutineStart.UNDISPATCHED) { interceptor.prepare() }
+
+    preparation.cancelAndJoin()
+
+    assertFalse(routeOwnsStop)
+    assertTrue(reloadOwnsStop)
+    assertEquals(0, restored)
+  }
+
+  @Test
+  fun cancellationDuringReloadHandoffFinishesHandoffBeforeReleasingRouteStop() = runTest {
+    val handoffCanFinish = CompletableDeferred<Unit>()
+    val ownershipEvents = mutableListOf<String>()
+    val interceptor =
+      EditorRouteLeaveInterceptor(
+        finalizeInput = {},
+        restoreInput = { ownershipEvents += "input restored" },
+        beginStop = {
+          object : DocumentEditingStop {
+            override suspend fun awaitCheckpoint(): EditingCheckpointResult = awaitCancellation()
+
+            override suspend fun retryCheckpoint(): EditingCheckpointResult = awaitCancellation()
+
+            override fun cancel() {
+              ownershipEvents += "route released"
+            }
+          }
+        },
+        onPreparationStarted = { handoffCanFinish.await() },
+        resumeReloadBeforeRollback = {
+          ownershipEvents += "reload resumed"
+          true
+        },
+        resolveDecision = { RouteRemovalDecision.CancelRemoval },
+      )
+    val preparation = async(start = CoroutineStart.UNDISPATCHED) { interceptor.prepare() }
+
+    preparation.cancel()
+    handoffCanFinish.complete(Unit)
+    preparation.join()
+
+    assertEquals(listOf("reload resumed", "route released"), ownershipEvents)
+  }
 }
 
 private fun interceptor(
@@ -201,13 +421,16 @@ private fun interceptor(
   checkpointWatchdogMillis: Long = 3_000,
   showDelayedFeedback: () -> Unit = {},
   hideDelayedFeedback: () -> Unit = {},
+  resumeReloadBeforeRollback: suspend () -> Boolean = { false },
 ): EditorRouteLeaveInterceptor =
   EditorRouteLeaveInterceptor(
     finalizeInput = {},
     restoreInput = restoreInput,
-    beginClose = {
-      object : DocumentEditingClose {
+    beginStop = {
+      object : DocumentEditingStop {
         override suspend fun awaitCheckpoint(): EditingCheckpointResult = awaitResult()
+
+        override suspend fun retryCheckpoint(): EditingCheckpointResult = awaitResult()
 
         override fun cancel() {
           onCancel()
@@ -219,4 +442,5 @@ private fun interceptor(
     checkpointWatchdogMillis = checkpointWatchdogMillis,
     showDelayedFeedback = showDelayedFeedback,
     hideDelayedFeedback = hideDelayedFeedback,
+    resumeReloadBeforeRollback = resumeReloadBeforeRollback,
   )

@@ -9,10 +9,13 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class EditorRuntimeTest {
   private fun TestScope.createSession(editor: Editor): DocumentEditingSession =
     createTestDocumentEditingSession(editor, CoroutineScope(coroutineContext))
@@ -87,5 +90,21 @@ class EditorRuntimeTest {
     runtime.clear(second)
     assertNull(runtime.editor)
     assertNull(runtime.session)
+  }
+
+  @Test
+  fun staleSessionErrorCannotClearReplacement() = runTest {
+    val first = createSession(Editor(FakeFfiEditor(), this, StandardTestDispatcher(testScheduler)))
+    val second = createSession(Editor(FakeFfiEditor(), this, StandardTestDispatcher(testScheduler)))
+    val runtime = EditorRuntime(uiScope = this)
+
+    runtime.attach(first)
+    runtime.reportError(first, IllegalStateException("stale reload failure"))
+    runtime.attach(second)
+    runCurrent()
+
+    assertSame(second.editor, runtime.editor)
+    assertSame(second, runtime.session)
+    assertNull(runtime.error)
   }
 }

@@ -40,6 +40,14 @@ sealed interface AttachEvent {
   data class PermanentErrorEvent(val code: String) : AttachEvent
 }
 
+internal fun AttachEvent.replacementSnapshotInFlight(): Boolean? =
+  when (this) {
+    AttachEvent.SnapshotRestart,
+    AttachEvent.ReloadEvent -> true
+    is AttachEvent.PermanentErrorEvent -> false
+    else -> null
+  }
+
 class DocumentWsChannel(
   private val connection: SyncWsConnection,
   private val documentId: String,
@@ -100,9 +108,7 @@ class DocumentWsChannel(
   }
 
   fun freshSubscribe(): Flow<AttachEvent> = channelFlow {
-    launch(start = CoroutineStart.UNDISPATCHED) {
-      events.collect { send(it) }
-    }
+    launch(start = CoroutineStart.UNDISPATCHED) { events.collect { send(it) } }
     scope.launch {
       if (cursor != null || snapshotDone) {
         restartGeneration()
@@ -250,6 +256,25 @@ class DocumentWsChannel(
     permanentlyFailed = false
     retryAttempts = 0
     if (_events.subscriptionCount.value > 0) reattach()
+  }
+
+  /** document-scoped attach ownership을 유지한 채 모든 subscriber를 새 snapshot으로 전환한다. */
+  fun retryFresh() {
+    permanentlyFailed = false
+    retryAttempts = 0
+    retryJob?.cancel()
+    retryJob = null
+    if (_events.subscriptionCount.value > 0) {
+      restartGeneration()
+    } else {
+      cursor = null
+      probe = null
+      snapshotDone = false
+      liveSeq = null
+      awaitingAck = false
+      attachWatchdogJob?.cancel()
+      attachWatchdogJob = null
+    }
   }
 
   private fun reattach() {

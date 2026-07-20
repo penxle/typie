@@ -46,6 +46,8 @@ import co.typie.domain.subscription.editorIsReadOnly
 import co.typie.domain.subscription.gate
 import co.typie.domain.subscription.shouldAttemptPush
 import co.typie.editor.DocumentEditingSession
+import co.typie.editor.DocumentProtectedReloadResult
+import co.typie.editor.DocumentReloadFailureDecision
 import co.typie.editor.Editor
 import co.typie.editor.EditorLocalChangesetBus
 import co.typie.editor.EditorState
@@ -76,6 +78,7 @@ import co.typie.editor.interaction.LocalEditorInteractionScope
 import co.typie.editor.interaction.allowsViewportScrollReconcile
 import co.typie.editor.interaction.semantics.EditorViewportZoomSemanticConfig
 import co.typie.editor.rememberEditorZoomController
+import co.typie.editor.runProtectedDocumentReload
 import co.typie.editor.runtime.EditorRuntime
 import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.runtime.LocalEditorRuntime
@@ -94,7 +97,6 @@ import co.typie.editor.sync.DocumentEditorLoad
 import co.typie.editor.sync.RemoteChangesetPipeline
 import co.typie.editor.sync.SyncEngine
 import co.typie.editor.sync.asSyncEditor
-import co.typie.editor.sync.catchingNonCancellation
 import co.typie.editor.sync.isPermanentSyncError
 import co.typie.editor.sync.isSubscriptionRequiredSyncError
 import co.typie.editor.sync.orphanSweeper
@@ -105,6 +107,7 @@ import co.typie.editor.sync.ws.DocumentGraphLoaderEvent
 import co.typie.editor.sync.ws.SyncWs
 import co.typie.editor.sync.ws.SyncWsException
 import co.typie.editor.sync.ws.WsSyncTransport
+import co.typie.editor.sync.ws.replacementSnapshotInFlight
 import co.typie.editor.viewport.consumeEditorViewportTouchPan
 import co.typie.ext.LocalScrollGestureLockState
 import co.typie.ext.ime
@@ -195,15 +198,29 @@ import co.typie.ui.theme.LocalHazeState
 import dev.chrisbanes.haze.HazeState
 import kotlin.time.Clock
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.decodeFromJsonElement
+
+private class EditorReloadRequest(
+  val session: DocumentEditingSession,
+  val load: DocumentEditorLoad,
+  snapshotInFlight: Boolean,
+) {
+  val completion = CompletableDeferred<Unit>()
+  var policyJob: Job? = null
+  var snapshotInFlight = snapshotInFlight
+}
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -236,7 +253,8 @@ fun EditorScreen(entityId: String) {
   var syncActiveLoadState by remember(entityId) { mutableStateOf<DocumentEditorLoad?>(null) }
   val pendingChangesets = remember(entityId) { mutableListOf<AttachEvent.ChangesetsEvent>() }
   var loaderFailedCode by remember(entityId) { mutableStateOf<String?>(null) }
-  var loaderRetryGeneration by remember(entityId) { mutableStateOf(0) }
+  var reloadRequest by remember(entityId) { mutableStateOf<EditorReloadRequest?>(null) }
+  var routeRemovalOwnsPriority by remember(entityId) { mutableStateOf(false) }
 
   LaunchedEffect(Unit) { SubscriptionService.refresh() }
 
@@ -281,10 +299,7 @@ fun EditorScreen(entityId: String) {
       if (syncActiveLoadState === failedLoad) syncActiveLoadState = null
       pendingChangesets.clear()
       failedLoad?.close()
-      documentId?.let {
-        SyncWs.retryDocument(it)
-        loaderRetryGeneration += 1
-      }
+      documentId?.let(SyncWs::retryDocument)
     }
   }
   val legacyDocument = !loading && document != null && document.state == null
@@ -508,6 +523,133 @@ fun EditorScreen(entityId: String) {
     if (toast.state?.id == id) toast.dismiss()
   }
 
+  fun finishReloadRequest(request: EditorReloadRequest) {
+    if (reloadRequest !== request) return
+    reloadRequest = null
+    request.policyJob = null
+    request.completion.complete(Unit)
+  }
+
+  fun claimReloadReplacement(request: EditorReloadRequest): Boolean {
+    if (
+      reloadRequest !== request ||
+        runtime.session !== request.session ||
+        editorLoadState !== request.load ||
+        syncActiveLoadState !== request.load
+    ) {
+      return false
+    }
+
+    val needsSnapshot = !request.snapshotInFlight
+    runtime.clear(request.session)
+    editorLoadState = null
+    syncActiveLoadState = null
+    pendingChangesets.clear()
+    request.load.close()
+    finishReloadRequest(request)
+    if (needsSnapshot) documentId?.let(SyncWs::retryDocument)
+    return true
+  }
+
+  fun launchReloadPolicy(request: EditorReloadRequest): CompletableDeferred<Boolean> {
+    val acquired = CompletableDeferred<Boolean>()
+    if (
+      routeRemovalOwnsPriority ||
+        reloadRequest !== request ||
+        runtime.session !== request.session ||
+        editorLoadState !== request.load ||
+        request.policyJob != null
+    ) {
+      acquired.complete(false)
+      return acquired
+    }
+
+    val job =
+      scope.launch(start = CoroutineStart.UNDISPATCHED) {
+        try {
+          val result =
+            runProtectedDocumentReload(
+              session = request.session,
+              finalizeInput = {
+                runtime.blur()
+                uiState.updateFocus(false)
+                request.session.editor.sync {
+                  enqueue(Message.System(SystemEvent.SetFocused(false)))
+                }
+                runtime.deactivateScene()
+              },
+              onStopAcquired = { acquired.complete(true) },
+              showDelayedFeedback = {
+                toast.show(ToastType.Loading, "저장 중…")
+                savingToastId = toast.state?.id
+              },
+              hideDelayedFeedback = { dismissSavingToast() },
+              resolveFailure = {
+                val result =
+                  dialog.confirm(
+                    title = "최신 버전을 불러올 수 없어요",
+                    message = "최근 변경사항을 안전하게 저장하지 못했어요.",
+                    confirmText = "변경사항 버리고 불러오기",
+                    cancelText = "다시 시도",
+                    confirmIsDestructive = true,
+                  )
+                if (result is DialogResult.Resolved) {
+                  DocumentReloadFailureDecision.Discard
+                } else {
+                  DocumentReloadFailureDecision.Retry
+                }
+              },
+              replaceIfCurrent = { claimReloadReplacement(request) },
+            )
+          when (result) {
+            DocumentProtectedReloadResult.Replaced -> {
+              try {
+                model.refetchDocumentAfterReload()
+              } finally {
+                model.bumpReloadGeneration()
+              }
+            }
+            DocumentProtectedReloadResult.NotCurrent,
+            DocumentProtectedReloadResult.SessionStopped -> finishReloadRequest(request)
+          }
+        } catch (e: CancellationException) {
+          throw e
+        } catch (e: Throwable) {
+          if (reloadRequest === request && runtime.session === request.session) {
+            finishReloadRequest(request)
+            runtime.reportError(request.session, e)
+          }
+        }
+      }
+    request.policyJob = job
+    job.invokeOnCompletion {
+      acquired.complete(false)
+      if (request.policyJob === job) request.policyJob = null
+    }
+    return acquired
+  }
+
+  suspend fun requestReload(
+    session: DocumentEditingSession,
+    load: DocumentEditorLoad,
+    snapshotInFlight: Boolean,
+  ) {
+    val current = reloadRequest
+    val request =
+      if (current?.session === session && current.load === load) {
+        current.also { it.snapshotInFlight = it.snapshotInFlight || snapshotInFlight }
+      } else {
+        current?.policyJob?.cancel()
+        current?.let { finishReloadRequest(it) }
+        EditorReloadRequest(session = session, load = load, snapshotInFlight = snapshotInFlight)
+          .also { reloadRequest = it }
+      }
+    if (!routeRemovalOwnsPriority && request.policyJob == null) {
+      launchReloadPolicy(request)
+    }
+    request.completion.await()
+  }
+
   val leaveInterceptor =
     remember(activeEditor, editingSession, dialog, toast) {
       activeEditor?.let { editor ->
@@ -532,7 +674,34 @@ fun EditorScreen(entityId: String) {
               runtime.focus()
             }
           },
-          beginClose = session::beginClose,
+          beginStop = session::beginStop,
+          onPreparationStarted = {
+            routeRemovalOwnsPriority = true
+            try {
+              val request = reloadRequest?.takeIf {
+                it.session === session && it.load === editorLoadState
+              }
+              request?.policyJob?.cancelAndJoin()
+            } catch (throwable: Throwable) {
+              routeRemovalOwnsPriority = false
+              throw throwable
+            }
+          },
+          resumeReloadBeforeRollback = {
+            routeRemovalOwnsPriority = false
+            val request = reloadRequest?.takeIf {
+              it.session === session && runtime.session === session && it.load === editorLoadState
+            }
+            if (request == null) {
+              false
+            } else {
+              val stopAcquired = launchReloadPolicy(request).await()
+              val reloadOwnsStop =
+                stopAcquired && (request.policyJob?.isActive == true || runtime.session !== session)
+              if (!reloadOwnsStop) finishReloadRequest(request)
+              reloadOwnsStop
+            }
+          },
           showDelayedFeedback = {
             toast.show(ToastType.Loading, "저장 중…")
             savingToastId = toast.state?.id
@@ -566,7 +735,7 @@ fun EditorScreen(entityId: String) {
     }
   }
 
-  LaunchedEffect(documentId, loaderRetryGeneration) {
+  LaunchedEffect(documentId) {
     val currentDocumentId = documentId ?: return@LaunchedEffect
     loaderFailedCode = null
     val channel = SyncWs.channel(currentDocumentId)
@@ -582,8 +751,26 @@ fun EditorScreen(entityId: String) {
         ) {
           pendingChangesets += event
         }
-        when (val outcome = loader.handle(event)) {
+        val outcome = loader.handle(event)
+        val replacementSnapshotInFlight = event.replacementSnapshotInFlight()
+        if (replacementSnapshotInFlight != null) {
+          val session = runtime.session
+          val activeLoad = editorLoadState
+          if (session != null && activeLoad != null && syncActiveLoadState === activeLoad) {
+            requestReload(
+              session = session,
+              load = activeLoad,
+              snapshotInFlight = replacementSnapshotInFlight,
+            )
+            return@collect
+          }
+        }
+        when (outcome) {
           is DocumentGraphLoaderEvent.Loaded -> {
+            if (currentLoad != null && syncActiveLoadState === currentLoad) {
+              runCatching { outcome.handle.abort() }
+              return@collect
+            }
             var nextLoad: DocumentEditorLoad? = null
             var installed = false
             try {
@@ -600,6 +787,9 @@ fun EditorScreen(entityId: String) {
                 )
 
               val previousLoad = editorLoadState
+              if (previousLoad != null && syncActiveLoadState === previousLoad) {
+                return@collect
+              }
               runtime.clear()
               editorLoadState = null
               if (syncActiveLoadState === previousLoad) syncActiveLoadState = null
@@ -643,7 +833,6 @@ fun EditorScreen(entityId: String) {
     dialog.error(nav) {
       documentId?.let { SyncWs.retryDocument(it) }
       loaderFailedCode = null
-      loaderRetryGeneration += 1
     }
   }
 
@@ -681,26 +870,18 @@ fun EditorScreen(entityId: String) {
 
       lateinit var createdEngine: SyncEngine
       lateinit var createdSession: DocumentEditingSession
-      val handleNeedsReload: suspend () -> Unit = {
-        catchingNonCancellation { createdEngine.captureNow() }
-        createdSession.stop()
-        model.refetchDocument()
-        model.bumpReloadGeneration()
-        runtime.clear(createdSession)
-        if (editorLoadState === readyLoad) {
-          editorLoadState = null
-          if (syncActiveLoadState === readyLoad) syncActiveLoadState = null
-          pendingChangesets.clear()
-          readyLoad.close()
-          loaderRetryGeneration += 1
-        }
+      val handleStreamReload: suspend () -> Unit = {
+        requestReload(createdSession, readyLoad, snapshotInFlight = true)
+      }
+      val handlePullReload: suspend () -> Unit = {
+        requestReload(createdSession, readyLoad, snapshotInFlight = false)
       }
       val transport =
         WsSyncTransport(
           channel = SyncWs.channel(currentDocumentId),
           connection = SyncWs.connection,
           documentId = currentDocumentId,
-          onReload = handleNeedsReload,
+          onReload = handleStreamReload,
           scope = engineScope,
         )
       createdEngine =
@@ -728,7 +909,7 @@ fun EditorScreen(entityId: String) {
           transport = transport,
           initialSeq = effectiveBaseline.seq,
           scope = engineScope,
-          onNeedsReload = handleNeedsReload,
+          onNeedsReload = handlePullReload,
         )
       createdSession =
         DocumentEditingSession(
@@ -750,6 +931,11 @@ fun EditorScreen(entityId: String) {
     } finally {
       if (syncActiveLoadState === readyLoad) syncActiveLoadState = null
       val closingSession = session
+      val closingRequest = reloadRequest?.takeIf {
+        it.session === closingSession && it.load === readyLoad
+      }
+      closingRequest?.policyJob?.cancel()
+      closingRequest?.let { finishReloadRequest(it) }
       closingSession?.let {
         runtime.clear(it)
         it.stop()

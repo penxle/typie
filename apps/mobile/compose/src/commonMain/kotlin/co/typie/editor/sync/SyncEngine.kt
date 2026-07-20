@@ -12,6 +12,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.selects.select
 
@@ -54,6 +56,8 @@ class SyncEngine(
   private val onPermanentError: (Throwable) -> Unit = {},
   private val now: () -> Long,
 ) : SyncHeadsSink {
+  private data class ProtectionState(val generation: Long = 0, val stopped: Boolean = false)
+
   private companion object {
     const val IDLE_MS = 500L
     const val MAX_WAIT_MS = 3000L
@@ -85,6 +89,10 @@ class SyncEngine(
   val retryAttempt: StateFlow<Int> = retryAttemptFlow
   private val captureFailuresFlow = MutableStateFlow(0)
   val captureFailures: StateFlow<Int> = captureFailuresFlow
+  private val protectionStateFlow = MutableStateFlow(ProtectionState())
+
+  internal val protectionGeneration: Long
+    get() = protectionStateFlow.value.generation
 
   init {
     scope.launch(start = CoroutineStart.UNDISPATCHED) { firePush() }
@@ -141,7 +149,10 @@ class SyncEngine(
           if (missing.withheld > 0) {
             onEvent(SyncEvent.PersistWithheld(missing.withheld))
           } else {
-            capturedHeads = heads
+            if (!protectionStateFlow.value.stopped && !capturedHeads.contentEquals(heads)) {
+              capturedHeads = heads
+              publishProtectionAdvance()
+            }
           }
         }
       }
@@ -338,7 +349,9 @@ class SyncEngine(
   }
 
   override fun setConfirmedHeads(heads: ByteArray) {
+    if (protectionStateFlow.value.stopped || confirmedHeads.contentEquals(heads)) return
     confirmedHeads = heads
+    publishProtectionAdvance()
   }
 
   override fun setDurableHeads(heads: ByteArray) {
@@ -357,6 +370,9 @@ class SyncEngine(
   suspend fun captureNow() {
     capture()
   }
+
+  internal suspend fun awaitProtectionAfter(observedGeneration: Long): Boolean =
+    !protectionStateFlow.first { it.stopped || it.generation > observedGeneration }.stopped
 
   suspend fun checkpointCurrentFrontier(): Result<Unit> =
     try {
@@ -429,6 +445,13 @@ class SyncEngine(
 
   fun stop() {
     stopped = true
+    protectionStateFlow.update { it.copy(stopped = true) }
     clearTimers()
+  }
+
+  private fun publishProtectionAdvance() {
+    protectionStateFlow.update { state ->
+      if (state.stopped) state else state.copy(generation = state.generation + 1)
+    }
   }
 }

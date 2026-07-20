@@ -104,6 +104,18 @@ class EditorRuntime(private val uiScope: CoroutineScope) {
     }
   }
 
+  internal fun reportError(session: DocumentEditingSession, error: Throwable) {
+    if (error is CancellationException) {
+      throw error
+    }
+    uiScope.launch {
+      if (this@EditorRuntime.session !== session) {
+        return@launch
+      }
+      fail(error)
+    }
+  }
+
   private fun fail(error: Throwable) {
     if (this.error != null) {
       return

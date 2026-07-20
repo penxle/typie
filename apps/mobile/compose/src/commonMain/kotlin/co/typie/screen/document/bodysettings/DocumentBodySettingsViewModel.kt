@@ -9,7 +9,6 @@ import co.typie.editor.EditorLocalChangesetBus
 import co.typie.editor.EditorLocalChangesetTracker
 import co.typie.editor.EditorScope
 import co.typie.editor.FontLoader
-import co.typie.editor.sync.ws.SyncWs
 import co.typie.graphql.Apollo
 import co.typie.graphql.DocumentBodySettingsScreen_Query
 import co.typie.graphql.PlaceholderResolver
@@ -27,8 +26,9 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 internal class DocumentBodySettingsViewModel(private val entityId: String) : ViewModel() {
-  private val saveMutex = Mutex()
-  private val changesetTracker = EditorLocalChangesetTracker()
+  private val relayMutex = Mutex()
+  private var changesetTracker = EditorLocalChangesetTracker()
+  private var trackedEditor: Editor? = null
 
   val query =
     Apollo.watchQuery(scope = viewModelScope, placeholderData = placeholderData()) {
@@ -63,19 +63,20 @@ internal class DocumentBodySettingsViewModel(private val entityId: String) : Vie
     }
   }
 
-  internal suspend fun updateBodySettings(
+  internal suspend fun applyAndRelayBodySettings(
     editor: Editor,
-    documentId: String,
     block: EditorScope.() -> Unit,
-  ): Result<ByteArray?, Nothing> = result {
-    saveMutex.withLock {
+  ): Result<Unit, Nothing> = result {
+    relayMutex.withLock {
+      if (trackedEditor !== editor) {
+        changesetTracker = EditorLocalChangesetTracker()
+        trackedEditor = editor
+      }
       val changesets = changesetTracker.collect(editor = editor, block = block)
-      if (changesets.isEmpty()) return@withLock null
+      if (changesets.isEmpty()) return@withLock
 
-      val response = SyncWs.connection.push(documentId, changesets)
-      changesetTracker.markSynced(response.heads)
+      changesetTracker.markSynced(editor)
       EditorLocalChangesetBus.publish(entityId = entityId, changesets = changesets)
-      changesets
     }
   }
 }

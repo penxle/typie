@@ -48,6 +48,7 @@ import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlin.math.roundToInt
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 
 @Composable
@@ -174,7 +175,9 @@ private fun ValueBadge(
       val clamped = parsed.coerceIn(fullRange)
       val rounded =
         ((clamped.toFloat() - fullRange.first) / step).roundToInt() * step + fullRange.first
-      scope.launch { onValueChange(rounded.coerceIn(fullRange)) }
+      scope.launch(start = CoroutineStart.UNDISPATCHED) {
+        onValueChange(rounded.coerceIn(fullRange))
+      }
     }
   }
 

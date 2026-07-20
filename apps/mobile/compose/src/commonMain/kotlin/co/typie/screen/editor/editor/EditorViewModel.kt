@@ -157,11 +157,20 @@ class EditorViewModel(val entityId: String) : ViewModel() {
     flushDrafts()
   }
 
-  suspend fun refetchDocument() {
-    Apollo.query(EditorScreen_Query(entityId = entityId))
-      .fetchPolicy(FetchPolicy.NetworkOnly)
-      .execute()
-    query.refetch()
+  internal suspend fun refetchDocumentAfterReload() {
+    try {
+      Apollo.query(EditorScreen_Query(entityId = entityId))
+        .fetchPolicy(FetchPolicy.NetworkOnly)
+        .execute()
+      query.refetch()
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      Logger.w(e) { "EditorViewModel: document metadata refetch after reload failed" }
+      if (!e.isRecoverableNetworkError()) {
+        runCatching { Sentry.captureException(e) }
+      }
+    }
   }
 
   internal suspend fun resolveExternalAssets(ids: List<String>): List<EditorExternalAsset> {

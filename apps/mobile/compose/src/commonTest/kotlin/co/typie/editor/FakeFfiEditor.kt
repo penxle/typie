@@ -58,6 +58,8 @@ internal class FakeFfiEditor(
   var tableOverlaysProvider: () -> List<TableOverlay> = { emptyList() },
   var imeProvider: (Int, Int) -> Ime? = { _, _ -> EmptyIme },
   var lastHistoryTagProvider: () -> HistoryTag? = { null },
+  var currentHeadsProvider: () -> ByteArray = { ByteArray(0) },
+  var localChangesetsSinceProvider: (ByteArray) -> ByteArray = { ByteArray(0) },
   var selectionHitProvider: (Int, Float, Float) -> Boolean = { _, _, _ -> false },
   var cursorHitProvider: (Int, Float, Float) -> Boolean = { _, _, _ -> false },
   var interactiveHitProvider: (Int, Float, Float) -> InteractiveHit? = { _, _, _ -> null },
@@ -67,6 +69,7 @@ internal class FakeFfiEditor(
     { _, _ ->
       emptyList()
     },
+  var receiveRemoteChangesetProvider: (ByteArray) -> Unit = {},
   var detachSurfaceProvider: (Int) -> Unit = {},
   var renderSurfaceProvider: (Int) -> Boolean = { true },
 ) : co.typie.editor.ffi.Editor {
@@ -193,9 +196,12 @@ internal class FakeFfiEditor(
 
   override fun inspectStateAsMacro(): String = ""
 
-  override fun receiveRemoteChangeset(payload: ByteArray) = Unit
+  override fun receiveRemoteChangeset(payload: ByteArray) {
+    receiveRemoteChangesetProvider(payload)
+  }
 
-  override fun localChangesetsSince(remoteHeadsPayload: ByteArray): ByteArray = ByteArray(0)
+  override fun localChangesetsSince(remoteHeadsPayload: ByteArray): ByteArray =
+    localChangesetsSinceProvider(remoteHeadsPayload)
 
   override fun changesetIds(): List<String> = emptyList()
 
@@ -207,7 +213,7 @@ internal class FakeFfiEditor(
 
   override fun splitChangesets(payload: ByteArray): List<ChangesetEntry> = emptyList()
 
-  override fun currentHeads(): ByteArray = ByteArray(0)
+  override fun currentHeads(): ByteArray = currentHeadsProvider()
 
   override fun setDoc(plain: PlainDoc) = Unit
 
