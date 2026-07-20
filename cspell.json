@@ -35,6 +35,7 @@
     "*.xcodeproj",
     "*.xcworkspace",
     "gradle*",
+    "**/static/**",
     "CODEOWNERS",
     "Package.resolved",
     "drizzle",

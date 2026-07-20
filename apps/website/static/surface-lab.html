@@ -1,0 +1,1321 @@
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Surface Lab</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --panel2: #1e222b;
+    --line: #2a2f3a;
+    --fg: #e6e9ef;
+    --muted: #9aa3b2;
+    --accent: #4c8dff;
+    --ok: #37c26b;
+    --warn: #f0a020;
+    --err: #ff5d5d;
+  }
+  * {
+    box-sizing: border-box;
+  }
+  html,
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', Roboto, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    padding: 14px;
+    max-width: 900px;
+    margin: 0 auto;
+    -webkit-text-size-adjust: 100%;
+  }
+  h1 {
+    font-size: 20px;
+    margin: 0 0 4px;
+  }
+  h2 {
+    font-size: 15px;
+    margin: 18px 0 8px;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .env {
+    color: var(--muted);
+    font-size: 12px;
+    word-break: break-all;
+    margin-bottom: 12px;
+  }
+  .banner {
+    display: none;
+    background: var(--panel2);
+    border: 1px solid var(--warn);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    font-size: 13px;
+  }
+  .banner .x {
+    float: right;
+    cursor: pointer;
+    color: var(--muted);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 0 8px;
+    background: transparent;
+  }
+  .gl-notice {
+    border-color: var(--err);
+  }
+  button {
+    font: inherit;
+    color: var(--fg);
+    background: var(--panel2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 12px;
+    cursor: pointer;
+  }
+  button:active {
+    transform: translateY(1px);
+  }
+  button:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+  .primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    font-weight: 700;
+    padding: 12px 18px;
+    font-size: 15px;
+    width: 100%;
+  }
+  .progress {
+    color: var(--muted);
+    font-size: 13px;
+    min-height: 20px;
+    margin: 8px 2px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12.5px;
+  }
+  th,
+  td {
+    text-align: left;
+    padding: 7px 8px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  th {
+    color: var(--muted);
+    font-weight: 600;
+    background: var(--panel);
+    position: sticky;
+    top: 0;
+  }
+  td.tid {
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    white-space: nowrap;
+    color: var(--accent);
+  }
+  tr.err td {
+    color: var(--err);
+  }
+  .table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+  .strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 4px;
+    margin-bottom: 10px;
+  }
+  .vgroup-label {
+    font-size: 12px;
+    color: var(--muted);
+    margin: 10px 0 4px;
+    font-weight: 600;
+  }
+  .vslot {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px;
+    width: 196px;
+  }
+  .vlabel {
+    font-size: 11.5px;
+    color: var(--muted);
+    margin-bottom: 6px;
+    min-height: 46px;
+  }
+  .vholder {
+    width: 180px;
+    height: 120px;
+    background: repeating-conic-gradient(#20242d 0% 25%, #262b35 0% 50%) 50% / 20px 20px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .vholder.quad {
+    display: flex;
+  }
+  .vcanvas {
+    display: block;
+    width: 180px;
+    height: 120px;
+  }
+  .quadcell {
+    width: 45px;
+    height: 120px;
+  }
+  .vobs {
+    margin-top: 6px;
+    display: flex;
+    gap: 6px;
+  }
+  .vobs button {
+    padding: 4px 10px;
+    font-size: 12px;
+    flex: 1;
+  }
+  .vobs button.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  #stage {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    min-height: 84px;
+    padding: 6px;
+    border: 1px dashed var(--line);
+    border-radius: 8px;
+    margin-top: 4px;
+    overflow: hidden;
+  }
+  #stage .cap {
+    color: var(--muted);
+    font-size: 11px;
+  }
+  .thumb {
+    width: 56px;
+    height: 80px;
+    border: 1px solid var(--line);
+    image-rendering: pixelated;
+    background: #000;
+  }
+  textarea {
+    width: 100%;
+    height: 220px;
+    margin-top: 8px;
+    background: #0b0d11;
+    color: #cde;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+    resize: vertical;
+  }
+  .row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-top: 8px;
+  }
+  .usage {
+    color: var(--muted);
+    font-size: 12.5px;
+    margin-top: 18px;
+    border-top: 1px solid var(--line);
+    padding-top: 12px;
+  }
+  .usage code {
+    background: var(--panel2);
+    padding: 1px 5px;
+    border-radius: 4px;
+    color: #cde;
+  }
+  .usage ol {
+    padding-left: 18px;
+    margin: 6px 0;
+  }
+</style>
+
+<div id="crashBanner" class="banner">
+  <button class="x" id="crashBannerX">닫기</button>
+  <span id="crashBannerText">직전 실행 결과(크래시로 중단됐을 수 있음)</span>
+</div>
+<div id="glNotice" class="banner gl-notice">
+  <span>이 브라우저에서 WebGL2를 사용할 수 없습니다. CPU 계측(A1, A2)만 실행됩니다.</span>
+</div>
+
+<h1>Surface Lab</h1>
+<div class="env" id="env">환경 정보 로딩 중…</div>
+
+<button class="primary" id="runBtn">전체 계측 실행</button>
+<div class="progress" id="progress">대기 중</div>
+
+<h2>계측 결과</h2>
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>항목</th>
+        <th>결과</th>
+        <th>판정</th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+</div>
+
+<h2>컴포지터 육안 검사 (판정 V1~V4, V5 · 대조군 V1p~V4p)</h2>
+
+<div class="vgroup-label">판정 기준 — preserveDrawingBuffer:false (프로덕션 gl_surface.rs 동일 조건)</div>
+<div class="strip">
+  <div class="vslot">
+    <div class="vlabel">V1 신규 삽입 (preserve:false) — 파란색이면 정상 (detached 상태로 GL clear 후 삽입)</div>
+    <div class="vholder" id="vh-v1"></div>
+    <div class="vobs" data-v="v1">
+      <button data-v="v1" data-obs="true">보임</button>
+      <button data-v="v1" data-obs="false">안보임</button>
+    </div>
+  </div>
+  <div class="vslot">
+    <div class="vlabel">V2 재삽입(동일 크기, preserve:false) — 주황색이면 재삽입 정상, 비어 보이면 재삽입 버그 재현</div>
+    <div class="vholder" id="vh-v2"></div>
+    <div class="vobs" data-v="v2">
+      <button data-v="v2" data-obs="true">보임</button>
+      <button data-v="v2" data-obs="false">안보임</button>
+    </div>
+  </div>
+  <div class="vslot">
+    <div class="vlabel">V3 재삽입+삽입후 재present (preserve:false) — 보라색이면 삽입후 재present가 복구</div>
+    <div class="vholder" id="vh-v3"></div>
+    <div class="vobs" data-v="v3">
+      <button data-v="v3" data-obs="true">보임</button>
+      <button data-v="v3" data-obs="false">안보임</button>
+    </div>
+  </div>
+  <div class="vslot">
+    <div class="vlabel">V4 재삽입+크기 리셋 (preserve:false) — 청록색이면 버퍼 세대 리셋으로 복구(컨텍스트 유지)</div>
+    <div class="vholder" id="vh-v4"></div>
+    <div class="vobs" data-v="v4">
+      <button data-v="v4" data-obs="true">보임</button>
+      <button data-v="v4" data-obs="false">안보임</button>
+    </div>
+  </div>
+</div>
+
+<div class="vgroup-label">대조군 — preserveDrawingBuffer:true (판정행에서 비어 보이고 여기서 색이 보이면 버퍼 수명 문제로 특정)</div>
+<div class="strip">
+  <div class="vslot">
+    <div class="vlabel">V1p 신규 삽입 (preserve:true, 대조군) — 파란색</div>
+    <div class="vholder" id="vh-v1p"></div>
+    <div class="vobs" data-v="v1p">
+      <button data-v="v1p" data-obs="true">보임</button>
+      <button data-v="v1p" data-obs="false">안보임</button>
+    </div>
+  </div>
+  <div class="vslot">
+    <div class="vlabel">V2p 재삽입 (preserve:true, 대조군) — 주황색</div>
+    <div class="vholder" id="vh-v2p"></div>
+    <div class="vobs" data-v="v2p">
+      <button data-v="v2p" data-obs="true">보임</button>
+      <button data-v="v2p" data-obs="false">안보임</button>
+    </div>
+  </div>
+  <div class="vslot">
+    <div class="vlabel">V3p 재삽입+재present (preserve:true, 대조군) — 보라색</div>
+    <div class="vholder" id="vh-v3p"></div>
+    <div class="vobs" data-v="v3p">
+      <button data-v="v3p" data-obs="true">보임</button>
+      <button data-v="v3p" data-obs="false">안보임</button>
+    </div>
+  </div>
+  <div class="vslot">
+    <div class="vlabel">V4p 재삽입+크기 리셋 (preserve:true, 대조군) — 청록색</div>
+    <div class="vholder" id="vh-v4p"></div>
+    <div class="vobs" data-v="v4p">
+      <button data-v="v4p" data-obs="true">보임</button>
+      <button data-v="v4p" data-obs="false">안보임</button>
+    </div>
+  </div>
+</div>
+
+<div class="vgroup-label">다중 라이브 — preserveDrawingBuffer:false</div>
+<div class="strip">
+  <div class="vslot">
+    <div class="vlabel">V5 다중 라이브 (preserve:false) — 4개 모두 색이 보이면 다중 라이브 정상</div>
+    <div class="vholder quad" id="vh-v5"></div>
+    <div class="vobs" data-v="v5">
+      <button data-v="v5" data-obs="true">보임</button>
+      <button data-v="v5" data-obs="false">안보임</button>
+    </div>
+  </div>
+</div>
+
+<h2>작업 캔버스 (계측용 축소 표시)</h2>
+<div id="stage"><span class="cap">계측 중 여기 표시</span></div>
+
+<h2>결과 JSON</h2>
+<textarea id="json" readonly></textarea>
+<div class="row">
+  <button id="copyBtn">결과 복사</button>
+  <button id="cleanupBtn">정리(스트립 해제)</button>
+</div>
+
+<div class="usage">
+  <strong>사용법</strong>
+  <ol>
+    <li>
+      접속: 배포 도메인 뒤에
+      <code>/surface-lab.html</code>
+      (예:
+      <code>https://…/surface-lab.html</code>
+      ).
+      <code>file://</code>
+      로 직접 열어도 동작합니다.
+    </li>
+    <li>
+      절차:
+      <b>전체 계측 실행</b>
+      을 누르고 끝날 때까지 대기 → 위 스트립 5칸의 색을 육안으로 확인(각 칸에
+      <b>보임/안보임</b>
+      기록 가능) →
+      <b>결과 복사</b>
+      로 JSON을 복사해 전달.
+    </li>
+    <li>크래시로 중단되면 다시 열었을 때 상단에 직전 결과 배너가 뜹니다. 그 JSON도 함께 전달해 주세요.</li>
+  </ol>
+</div>
+
+<script>
+  (function () {
+    'use strict';
+
+    var LS_KEY = 'typie:surface-lab:last';
+    var DPR = window.devicePixelRatio || 1;
+
+    function el(id) {
+      return document.getElementById(id);
+    }
+    function esc(s) {
+      return String(s).replace(/[&<>]/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c];
+      });
+    }
+    function frame() {
+      return new Promise(function (r) {
+        requestAnimationFrame(function () {
+          r();
+        });
+      });
+    }
+    async function frames(n) {
+      for (var i = 0; i < n; i++) {
+        await frame();
+      }
+    }
+
+    function round2(x) {
+      if (x === undefined || x === null || (typeof x === 'number' && isNaN(x))) return 'n/a';
+      return Math.round(x * 100) / 100;
+    }
+    function median(arr) {
+      var s = arr.slice().sort(function (a, b) {
+        return a - b;
+      });
+      var m = Math.floor(s.length / 2);
+      return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+    }
+    function p95(arr) {
+      var s = arr.slice().sort(function (a, b) {
+        return a - b;
+      });
+      var idx = Math.min(s.length - 1, Math.ceil(0.95 * s.length) - 1);
+      return s[idx];
+    }
+    function pageSize() {
+      var cssW = Math.min(window.innerWidth - 32, 800);
+      var cssH = Math.round(cssW * 1.414);
+      return { cssW: cssW, cssH: cssH, deviceW: Math.round(cssW * DPR), deviceH: Math.round(cssH * DPR) };
+    }
+    function fillNoise(typedArr) {
+      var CH = 65536;
+      for (var off = 0; off < typedArr.length; off += CH) {
+        var end = Math.min(off + CH, typedArr.length);
+        crypto.getRandomValues(typedArr.subarray(off, end));
+      }
+    }
+    function loseGL(gl) {
+      try {
+        if (gl && !gl.isContextLost()) {
+          var l = gl.getExtension('WEBGL_lose_context');
+          if (l) l.loseContext();
+        }
+      } catch (e) {}
+    }
+    function disposeGL(gl, canvas) {
+      loseGL(gl);
+      try {
+        if (canvas && canvas.parentNode) canvas.remove();
+      } catch (e) {}
+    }
+    function webgl2Available() {
+      try {
+        var c = document.createElement('canvas');
+        return !!c.getContext('webgl2');
+      } catch (e) {
+        return false;
+      }
+    }
+
+    // production-identical WebGL2 attributes (matches gl_surface.rs)
+    var GL_ATTRS = { alpha: true, premultipliedAlpha: true, antialias: false, depth: false, stencil: false, preserveDrawingBuffer: false };
+    function getGL(canvas, overrides) {
+      var attrs = overrides ? Object.assign({}, GL_ATTRS, overrides) : GL_ATTRS;
+      return canvas.getContext('webgl2', attrs);
+    }
+
+    var VKEYS = ['v1', 'v2', 'v3', 'v4', 'v1p', 'v2p', 'v3p', 'v4p', 'v5'];
+    var VISUAL_EXPECTED = {
+      v1: 'expect-blue',
+      v2: 'expect-orange',
+      v3: 'expect-purple',
+      v4: 'expect-teal',
+      v1p: 'expect-blue',
+      v2p: 'expect-orange',
+      v3p: 'expect-purple',
+      v4p: 'expect-teal',
+      v5: 'expect-4colors',
+    };
+    function emptyObs() {
+      var o = {};
+      VKEYS.forEach(function (k) {
+        o[k] = null;
+      });
+      return o;
+    }
+
+    var state = {
+      startedAt: null,
+      finishedAt: null,
+      env: {},
+      results: {},
+      observations: emptyObs(),
+    };
+
+    var stripResources = []; // { gl, canvas } — kept alive for inspection
+    var b2Contexts = []; // shared between B2 and B3
+
+    // ---------- persistence ----------
+    function buildOutput() {
+      return {
+        startedAt: state.startedAt,
+        finishedAt: state.finishedAt,
+        env: state.env,
+        results: state.results,
+        visualExpected: VISUAL_EXPECTED,
+        observations: state.observations,
+      };
+    }
+    function updateJSON() {
+      el('json').value = JSON.stringify(buildOutput(), null, 2);
+    }
+    function persistAll() {
+      try {
+        localStorage.setItem(LS_KEY, JSON.stringify(buildOutput()));
+      } catch (e) {}
+    }
+
+    // ---------- A: benches ----------
+    function attach(canvas) {
+      canvas.className = 'thumb';
+      var stage = el('stage');
+      var cap = stage.querySelector('.cap');
+      if (cap) cap.remove();
+      stage.appendChild(canvas);
+    }
+
+    async function testA1() {
+      var p = pageSize(),
+        W = p.deviceW,
+        H = p.deviceH;
+      var canvas = document.createElement('canvas');
+      canvas.width = W;
+      canvas.height = H;
+      attach(canvas);
+      try {
+        var ctx = canvas.getContext('2d');
+        var full = ctx.createImageData(W, H);
+        fillNoise(full.data);
+        for (var w = 0; w < 3; w++) ctx.putImageData(full, 0, 0);
+        var times = [];
+        for (var i = 0; i < 21; i++) {
+          var t0 = performance.now();
+          ctx.putImageData(full, 0, 0);
+          times.push(performance.now() - t0);
+        }
+        return { median: median(times), p95: p95(times), device: W + 'x' + H };
+      } finally {
+        canvas.remove();
+      }
+    }
+
+    async function testA2() {
+      var p = pageSize(),
+        W = p.deviceW,
+        H = p.deviceH;
+      var rectH = Math.max(1, Math.round(120 * DPR));
+      var canvas = document.createElement('canvas');
+      canvas.width = W;
+      canvas.height = H;
+      attach(canvas);
+      try {
+        var ctx = canvas.getContext('2d');
+        var rect = ctx.createImageData(W, rectH);
+        fillNoise(rect.data);
+        var maxDy = Math.max(0, H - rectH);
+        for (var w = 0; w < 3; w++) ctx.putImageData(rect, 0, 0);
+        var times = [];
+        for (var i = 0; i < 21; i++) {
+          var dy = Math.min(maxDy, (i % 10) * rectH);
+          var t0 = performance.now();
+          ctx.putImageData(rect, 0, dy);
+          times.push(performance.now() - t0);
+        }
+        return { median: median(times), p95: p95(times), rect: W + 'x' + rectH };
+      } finally {
+        canvas.remove();
+      }
+    }
+
+    function glSetupBench(W, H) {
+      var canvas = document.createElement('canvas');
+      canvas.width = W;
+      canvas.height = H;
+      attach(canvas);
+      var gl = getGL(canvas);
+      if (!gl) {
+        canvas.remove();
+        throw new Error('webgl2 컨텍스트 생성 실패');
+      }
+      var tex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, W, H);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      var fbo = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+      return { canvas: canvas, gl: gl, tex: tex, fbo: fbo };
+    }
+    function blitFull(gl, fbo, W, H) {
+      gl.bindFramebuffer(gl.READ_FRAMEBUFFER, fbo);
+      gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+      gl.blitFramebuffer(0, 0, W, H, 0, 0, W, H, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+    }
+
+    async function testA3() {
+      var p = pageSize(),
+        W = p.deviceW,
+        H = p.deviceH;
+      var s = glSetupBench(W, H);
+      var gl = s.gl;
+      try {
+        var data = new Uint8Array(W * H * 4);
+        fillNoise(data);
+        var upload = function () {
+          gl.bindTexture(gl.TEXTURE_2D, s.tex);
+          gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, data);
+          blitFull(gl, s.fbo, W, H);
+          gl.flush();
+        };
+        for (var w = 0; w < 3; w++) upload();
+        var times = [];
+        for (var i = 0; i < 21; i++) {
+          var t0 = performance.now();
+          upload();
+          times.push(performance.now() - t0);
+        }
+        var tf = performance.now();
+        upload();
+        gl.finish();
+        var finishMs = performance.now() - tf;
+        return { median: median(times), p95: p95(times), finishMs: finishMs, device: W + 'x' + H };
+      } finally {
+        gl.deleteTexture(s.tex);
+        gl.deleteFramebuffer(s.fbo);
+        disposeGL(gl, s.canvas);
+      }
+    }
+
+    async function testA4() {
+      var p = pageSize(),
+        W = p.deviceW,
+        H = p.deviceH;
+      var rectH = Math.max(1, Math.round(120 * DPR));
+      var s = glSetupBench(W, H);
+      var gl = s.gl;
+      try {
+        var rectData = new Uint8Array(W * rectH * 4);
+        fillNoise(rectData);
+        var maxY = Math.max(0, H - rectH);
+        var upload = function (yoff) {
+          gl.bindTexture(gl.TEXTURE_2D, s.tex);
+          gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, yoff, W, rectH, gl.RGBA, gl.UNSIGNED_BYTE, rectData);
+          blitFull(gl, s.fbo, W, H);
+          gl.flush();
+        };
+        for (var w = 0; w < 3; w++) upload(0);
+        var times = [];
+        for (var i = 0; i < 21; i++) {
+          var yoff = Math.min(maxY, (i % 10) * rectH);
+          var t0 = performance.now();
+          upload(yoff);
+          times.push(performance.now() - t0);
+        }
+        return { median: median(times), p95: p95(times), rect: W + 'x' + rectH };
+      } finally {
+        gl.deleteTexture(s.tex);
+        gl.deleteFramebuffer(s.fbo);
+        disposeGL(gl, s.canvas);
+      }
+    }
+
+    async function testA5() {
+      var p = pageSize(),
+        W = p.deviceW,
+        H = p.deviceH;
+      var s = glSetupBench(W, H);
+      var gl = s.gl;
+      try {
+        var seed = new Uint8Array(W * H * 4);
+        fillNoise(seed);
+        gl.bindTexture(gl.TEXTURE_2D, s.tex);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, seed);
+        var blit = function () {
+          blitFull(gl, s.fbo, W, H);
+          gl.flush();
+        };
+        for (var w = 0; w < 3; w++) blit();
+        var times = [];
+        for (var i = 0; i < 21; i++) {
+          var t0 = performance.now();
+          blit();
+          times.push(performance.now() - t0);
+        }
+        var tf = performance.now();
+        blit();
+        gl.finish();
+        var finishMs = performance.now() - tf;
+        return { median: median(times), p95: p95(times), finishMs: finishMs, device: W + 'x' + H };
+      } finally {
+        gl.deleteTexture(s.tex);
+        gl.deleteFramebuffer(s.fbo);
+        disposeGL(gl, s.canvas);
+      }
+    }
+
+    function runAVerdict() {
+      var a2 = state.results.A2 || {},
+        a4 = state.results.A4 || {},
+        a5 = state.results.A5 || {};
+      return { cpuRectP95: a2.p95, glRectP95: a4.p95, reblitP95: a5.p95 };
+    }
+
+    // ---------- B: platform primitives ----------
+    function readRGBA(gl) {
+      var px = new Uint8Array(4);
+      gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+      return px;
+    }
+    function isRed(px) {
+      return px[0] > 200 && px[1] < 60 && px[2] < 60 && px[3] > 200;
+    }
+
+    async function testB1() {
+      var canvas = document.createElement('canvas');
+      canvas.width = 64;
+      canvas.height = 64;
+      var gl = getGL(canvas);
+      if (!gl) throw new Error('webgl2 컨텍스트 생성 실패');
+      try {
+        gl.viewport(0, 0, 64, 64);
+        gl.clearColor(1, 0, 0, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        var px1 = readRGBA(gl);
+        var initialRed = isRed(px1);
+
+        canvas.width = canvas.width; // same-size reassignment
+        var px2 = readRGBA(gl);
+        var stillRed = px2[0] > 200 && px2[1] < 60 && px2[2] < 60;
+        var reshaped = !stillRed;
+
+        canvas.width = 128;
+        canvas.height = 128;
+        gl.viewport(0, 0, 128, 128);
+        gl.clearColor(0, 1, 0, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        var px3 = readRGBA(gl);
+        var green = px3[1] > 200 && px3[0] < 60;
+
+        return {
+          initialRed: initialRed,
+          afterSameSizeReshape: reshaped ? 'reshape함(버퍼 소실)' : 'reshape 안 함(버퍼 유지)',
+          pxAfterReset: Array.prototype.slice.call(px2),
+          resizeSanityGreen: green,
+          pxAfterResize: Array.prototype.slice.call(px3),
+        };
+      } finally {
+        disposeGL(gl, canvas);
+      }
+    }
+
+    async function testB2() {
+      var contexts = [];
+      var firstLossAt = 'none',
+        nullAt = 'none';
+      var lostFired = -1;
+      for (var i = 0; i < 32; i++) {
+        var c = document.createElement('canvas');
+        c.width = 1;
+        c.height = 1;
+        var gl = getGL(c);
+        if (!gl) {
+          nullAt = i;
+          break;
+        }
+        (function (idx, cv) {
+          cv.addEventListener('webglcontextlost', function () {
+            if (lostFired < 0) lostFired = idx;
+          });
+        })(i, c);
+        contexts.push({ gl: gl, canvas: c, idx: i });
+        await frame();
+        if (lostFired >= 0) {
+          firstLossAt = lostFired;
+          break;
+        }
+        for (var k = 0; k < contexts.length; k++) {
+          if (contexts[k].gl.isContextLost()) {
+            if (firstLossAt === 'none') firstLossAt = contexts[k].idx;
+          }
+        }
+        if (firstLossAt !== 'none') break;
+      }
+      b2Contexts = contexts;
+      return { created: contexts.length, firstLossAt: firstLossAt, nullAt: nullAt };
+    }
+
+    async function testB3() {
+      for (var i = 0; i < b2Contexts.length; i++) loseGL(b2Contexts[i].gl);
+      await frames(3);
+      var fresh = [];
+      var created = 0,
+        succeeded = 0;
+      for (var j = 0; j < 4; j++) {
+        var c = document.createElement('canvas');
+        c.width = 1;
+        c.height = 1;
+        var gl = getGL(c);
+        if (gl) {
+          created++;
+          if (!gl.isContextLost()) {
+            succeeded++;
+            fresh.push({ gl: gl, canvas: c });
+          }
+        }
+      }
+      await frame();
+      var stillGood = 0;
+      for (var m = 0; m < fresh.length; m++) {
+        if (!fresh[m].gl.isContextLost()) stillGood++;
+      }
+      for (var n = 0; n < fresh.length; n++) loseGL(fresh[n].gl);
+      b2Contexts = [];
+      return { freshCreated: created, freshSucceeded: succeeded, freshStillGoodAfterFrame: stillGood };
+    }
+
+    // ---------- V: compositor (visual) ----------
+    function mkVCanvas(w, h, cls) {
+      var c = document.createElement('canvas');
+      c.width = w;
+      c.height = h;
+      c.className = cls || 'vcanvas';
+      return c;
+    }
+    function vClear(gl, r, g, b) {
+      gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
+      gl.clearColor(r, g, b, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.flush();
+    }
+
+    var DW = 360,
+      DH = 240;
+    function vGetGL(canvas, preserve) {
+      return getGL(canvas, preserve ? { preserveDrawingBuffer: true } : null);
+    }
+
+    async function vFresh(holderId, preserve) {
+      // detached GL clear BLUE, then insert
+      var c = mkVCanvas(DW, DH);
+      var g = vGetGL(c, preserve);
+      if (!g) throw new Error('no webgl2');
+      vClear(g, 0.12, 0.4, 0.95);
+      el(holderId).appendChild(c);
+      stripResources.push({ gl: g, canvas: c });
+    }
+    async function vReinsert(holderId, preserve) {
+      // green -> detached ORANGE -> reinsert
+      var c = mkVCanvas(DW, DH);
+      var g = vGetGL(c, preserve);
+      if (!g) throw new Error('no webgl2');
+      el(holderId).appendChild(c);
+      vClear(g, 0.2, 0.75, 0.35);
+      await frames(2);
+      c.remove();
+      vClear(g, 0.98, 0.55, 0.12);
+      await frames(2);
+      el(holderId).appendChild(c);
+      stripResources.push({ gl: g, canvas: c });
+    }
+    async function vReinsertRedraw(holderId, preserve) {
+      // reinsert then redraw PURPLE
+      var c = mkVCanvas(DW, DH);
+      var g = vGetGL(c, preserve);
+      if (!g) throw new Error('no webgl2');
+      el(holderId).appendChild(c);
+      vClear(g, 0.2, 0.75, 0.35);
+      await frames(2);
+      c.remove();
+      vClear(g, 0.6, 0.25, 0.85);
+      await frames(2);
+      el(holderId).appendChild(c);
+      await frames(2);
+      vClear(g, 0.6, 0.25, 0.85); // redraw after insert
+      stripResources.push({ gl: g, canvas: c });
+    }
+    async function vReinsertResize(holderId, preserve) {
+      // reinsert + size reset TEAL (context stays valid)
+      var c = mkVCanvas(DW, DH);
+      var g = vGetGL(c, preserve);
+      if (!g) throw new Error('no webgl2');
+      el(holderId).appendChild(c);
+      vClear(g, 0.2, 0.75, 0.35);
+      await frames(2);
+      c.remove();
+      vClear(g, 0.1, 0.7, 0.68);
+      await frames(2);
+      el(holderId).appendChild(c);
+      c.width = 0;
+      c.width = DW;
+      c.height = DH; // buffer-generation reset, same context object
+      vClear(g, 0.1, 0.7, 0.68);
+      stripResources.push({ gl: g, canvas: c });
+    }
+    async function vFourLive(holderId) {
+      // 4 live production-attr contexts side by side
+      var holder = el(holderId);
+      var cols = [
+        [0.9, 0.2, 0.2],
+        [0.2, 0.75, 0.35],
+        [0.12, 0.4, 0.95],
+        [0.95, 0.85, 0.15],
+      ];
+      for (var i = 0; i < 4; i++) {
+        var c = mkVCanvas(90, 240, 'vcanvas quadcell');
+        var g = vGetGL(c, false);
+        if (!g) throw new Error('no webgl2 @' + i);
+        holder.appendChild(c);
+        vClear(g, cols[i][0], cols[i][1], cols[i][2]);
+        stripResources.push({ gl: g, canvas: c });
+      }
+    }
+
+    async function testVisual() {
+      var errors = {};
+      async function safe(key, fn) {
+        try {
+          await fn();
+        } catch (e) {
+          errors[key] = String((e && e.message) || e);
+        }
+      }
+      // row 1 — 판정 기준: preserveDrawingBuffer:false (프로덕션 gl_surface.rs 동일)
+      await safe('v1', function () {
+        return vFresh('vh-v1', false);
+      });
+      await safe('v2', function () {
+        return vReinsert('vh-v2', false);
+      });
+      await safe('v3', function () {
+        return vReinsertRedraw('vh-v3', false);
+      });
+      await safe('v4', function () {
+        return vReinsertResize('vh-v4', false);
+      });
+      // row 2 — 대조군: preserveDrawingBuffer:true
+      await safe('v1p', function () {
+        return vFresh('vh-v1p', true);
+      });
+      await safe('v2p', function () {
+        return vReinsert('vh-v2p', true);
+      });
+      await safe('v3p', function () {
+        return vReinsertRedraw('vh-v3p', true);
+      });
+      await safe('v4p', function () {
+        return vReinsertResize('vh-v4p', true);
+      });
+      // V5 — production attrs only
+      await safe('v5', function () {
+        return vFourLive('vh-v5');
+      });
+
+      var out = { note: '육안 판정 — 판정행(preserve:false) vs 대조군(preserve:true), 아래 스트립 확인', expected: VISUAL_EXPECTED };
+      if (Object.keys(errors).length) out.errors = errors;
+      return out;
+    }
+
+    // ---------- C: churn stress (destructive) ----------
+    async function testC() {
+      persistAll(); // snapshot before destructive loop
+      var p = pageSize(),
+        W = p.deviceW,
+        H = p.deviceH;
+      var monCanvas = document.createElement('canvas');
+      monCanvas.width = 1;
+      monCanvas.height = 1;
+      var monGl = getGL(monCanvas);
+      var monitorLost = 0;
+      if (monGl)
+        monCanvas.addEventListener('webglcontextlost', function () {
+          monitorLost++;
+        });
+
+      var createFailed = 0;
+      var t0 = performance.now();
+      for (var i = 0; i < 150; i++) {
+        var c = document.createElement('canvas');
+        c.width = W;
+        c.height = H;
+        attach(c);
+        var gl = getGL(c);
+        if (!gl) {
+          createFailed++;
+          c.remove();
+          if (i % 10 === 9)
+            await new Promise(function (r) {
+              setTimeout(r);
+            });
+          continue;
+        }
+        gl.clearColor(Math.random(), Math.random(), Math.random(), 1);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        gl.flush();
+        loseGL(gl);
+        c.remove();
+        if (i % 10 === 9)
+          await new Promise(function (r) {
+            setTimeout(r);
+          });
+      }
+      var elapsed = performance.now() - t0;
+      await frames(3);
+      if (monGl && monGl.isContextLost() && monitorLost === 0) monitorLost = 1;
+      loseGL(monGl);
+      var verdict = monitorLost > 0 || createFailed > 0 ? '강제 로스/상한 재현' : '이 기기에서 churn 무증상';
+      return { created: 150, createFailed: createFailed, monitorLost: monitorLost, elapsedMs: Math.round(elapsed), verdict: verdict };
+    }
+
+    // ---------- formatters ----------
+    function benchFmt(d) {
+      if (d.error) return { result: '실패: ' + d.error, verdict: '오류' };
+      var extra = d.finishMs !== undefined ? ' · finish ' + round2(d.finishMs) + 'ms' : '';
+      var dev = d.device ? ' · ' + d.device : d.rect ? ' · ' + d.rect : '';
+      return { result: 'median ' + round2(d.median) + 'ms · p95 ' + round2(d.p95) + 'ms' + extra + dev, verdict: '수치 비교용' };
+    }
+    function verdictFmt(d) {
+      if (d.error) return { result: '실패: ' + d.error, verdict: '오류' };
+      return {
+        result:
+          'CPU rect p95 ' +
+          round2(d.cpuRectP95) +
+          'ms / GL rect p95 ' +
+          round2(d.glRectP95) +
+          'ms / reblit p95 ' +
+          round2(d.reblitP95) +
+          'ms',
+        verdict: '수치 비교용',
+      };
+    }
+    function b1Fmt(d) {
+      if (d.error) return { result: '실패: ' + d.error, verdict: '오류' };
+      return {
+        result:
+          '초기 red=' +
+          d.initialRed +
+          ' · 동일크기 재설정: ' +
+          d.afterSameSizeReshape +
+          ' (px ' +
+          d.pxAfterReset +
+          ') · 리사이즈 green=' +
+          d.resizeSanityGreen,
+        verdict: d.afterSameSizeReshape,
+      };
+    }
+    function b2Fmt(d) {
+      if (d.error) return { result: '실패: ' + d.error, verdict: '오류' };
+      var hit = d.firstLossAt !== 'none' || d.nullAt !== 'none';
+      return {
+        result: '생성 ' + d.created + '개 · 첫 로스 @' + d.firstLossAt + ' · null @' + d.nullAt,
+        verdict: hit ? '상한 도달' : '상한 미도달(≤32)',
+      };
+    }
+    function b3Fmt(d) {
+      if (d.error) return { result: '실패: ' + d.error, verdict: '오류' };
+      return {
+        result: '재생성 성공 ' + d.freshSucceeded + '/' + d.freshCreated + ' · 프레임 후 정상 ' + d.freshStillGoodAfterFrame,
+        verdict: d.freshStillGoodAfterFrame > 0 ? '슬롯 회수됨' : '회수 실패',
+      };
+    }
+    function vFmt(d) {
+      if (d.error) return { result: '실패: ' + d.error, verdict: '오류' };
+      var errNote = d.errors ? ' (일부 오류: ' + JSON.stringify(d.errors) + ')' : '';
+      return {
+        result: '육안 판정 — 판정행 V1~V4(preserve:false) · 대조군 V1p~V4p(preserve:true) · 다중 V5, 아래 스트립 확인' + errNote,
+        verdict: '육안',
+      };
+    }
+    function cFmt(d) {
+      if (d.error) return { result: '실패: ' + d.error, verdict: '오류' };
+      return {
+        result: 'churn 150회 · 생성실패 ' + d.createFailed + ' · monitor 로스 ' + d.monitorLost + ' · ' + d.elapsedMs + 'ms',
+        verdict: d.verdict,
+      };
+    }
+
+    // ---------- test registry ----------
+    var TESTS = [
+      { id: 'A1', label: 'CPU 전체 putImageData', run: testA1, fmt: benchFmt, needsGL: false },
+      { id: 'A2', label: 'CPU 줄영역 putImageData', run: testA2, fmt: benchFmt, needsGL: false },
+      { id: 'A3', label: 'GL 전체 업로드+blit', run: testA3, fmt: benchFmt, needsGL: true },
+      { id: 'A4', label: 'GL 줄영역 업로드+blit', run: testA4, fmt: benchFmt, needsGL: true },
+      { id: 'A5', label: 'GL blit만(텍스처 재사용)', run: testA5, fmt: benchFmt, needsGL: true },
+      {
+        id: 'A-verdict',
+        label: 'A 종합(rect/reblit p95)',
+        run: function () {
+          return Promise.resolve(runAVerdict());
+        },
+        fmt: verdictFmt,
+        needsGL: true,
+      },
+      { id: 'B1', label: '동일크기 재설정 reshape 여부', run: testB1, fmt: b1Fmt, needsGL: true },
+      { id: 'B2', label: 'WebGL 컨텍스트 상한', run: testB2, fmt: b2Fmt, needsGL: true },
+      { id: 'B3', label: 'loseContext 후 슬롯 회수', run: testB3, fmt: b3Fmt, needsGL: true },
+      { id: 'V', label: '컴포지터 육안 검사(V1~V5)', run: testVisual, fmt: vFmt, needsGL: true },
+      { id: 'C', label: '컨텍스트 churn 스트레스(파괴적)', run: testC, fmt: cFmt, needsGL: true },
+    ];
+
+    // ---------- rendering ----------
+    function renderRow(test, data) {
+      var f = test.fmt(data);
+      var tr = document.createElement('tr');
+      if (data && data.error) tr.className = 'err';
+      tr.innerHTML =
+        '<td class="tid">' +
+        esc(test.id) +
+        '</td><td>' +
+        esc(test.label) +
+        '</td><td>' +
+        esc(f.result) +
+        '</td><td>' +
+        esc(f.verdict) +
+        '</td>';
+      el('tbody').appendChild(tr);
+    }
+
+    function clearStripUI() {
+      VKEYS.forEach(function (k) {
+        var h = el('vh-' + k);
+        if (h) h.innerHTML = '';
+      });
+      var stage = el('stage');
+      stage.innerHTML = '<span class="cap">계측 중 여기 표시</span>';
+    }
+    function disposeStrip() {
+      for (var i = 0; i < stripResources.length; i++) disposeGL(stripResources[i].gl, stripResources[i].canvas);
+      stripResources = [];
+      clearStripUI();
+      setProgress('스트립 정리 완료');
+    }
+
+    function setProgress(t) {
+      el('progress').textContent = t;
+    }
+
+    // ---------- runner ----------
+    async function runAll() {
+      el('runBtn').disabled = true;
+      disposeStrip();
+      b2Contexts = [];
+      el('tbody').innerHTML = '';
+      el('crashBanner').style.display = 'none';
+
+      state.startedAt = new Date().toISOString();
+      state.finishedAt = null;
+      state.results = {};
+      state.observations = emptyObs();
+      document.querySelectorAll('.vobs button').forEach(function (b) {
+        b.classList.remove('active');
+      });
+      updateJSON();
+      persistAll(); // overwrite at run start with { startedAt, results:{} , ... }
+
+      var glOK = webgl2Available();
+      var tests = TESTS.filter(function (t) {
+        return glOK ? true : !t.needsGL;
+      });
+
+      for (var i = 0; i < tests.length; i++) {
+        var t = tests[i];
+        setProgress(i + 1 + '/' + tests.length + ' 실행 중: ' + t.id + ' ' + t.label);
+        await frame();
+        try {
+          state.results[t.id] = await t.run();
+        } catch (e) {
+          state.results[t.id] = { error: String((e && e.message) || e) };
+        }
+        renderRow(t, state.results[t.id]);
+        updateJSON();
+        persistAll(); // merge each completed test immediately
+        await frame();
+      }
+
+      state.finishedAt = new Date().toISOString();
+      updateJSON();
+      persistAll();
+      setProgress('완료 — 스트립 5칸 육안 확인 후 결과 복사');
+      el('runBtn').disabled = false;
+    }
+
+    // ---------- clipboard ----------
+    async function copyResults() {
+      var ta = el('json');
+      var text = ta.value;
+      var done = function (msg) {
+        var b = el('copyBtn'),
+          old = b.textContent;
+        b.textContent = msg;
+        setTimeout(function () {
+          b.textContent = old;
+        }, 1200);
+      };
+      try {
+        await navigator.clipboard.writeText(text);
+        done('복사됨');
+      } catch (e) {
+        try {
+          ta.focus();
+          ta.select();
+          var ok = document.execCommand('copy');
+          done(ok ? '복사됨' : '복사 실패');
+        } catch (e2) {
+          done('복사 실패');
+        }
+      }
+    }
+
+    // ---------- crash forensics on load ----------
+    function checkCrashBanner() {
+      var raw;
+      try {
+        raw = localStorage.getItem(LS_KEY);
+      } catch (e) {
+        raw = null;
+      }
+      if (!raw) return;
+      try {
+        var prev = JSON.parse(raw);
+        el('json').value = JSON.stringify(prev, null, 2);
+        el('crashBanner').style.display = 'block';
+      } catch (e) {}
+    }
+
+    // ---------- init ----------
+    function initEnv() {
+      state.env = {
+        ua: navigator.userAgent,
+        dpr: window.devicePixelRatio || 1,
+        innerWidth: window.innerWidth,
+        innerHeight: window.innerHeight,
+        hardwareConcurrency: navigator.hardwareConcurrency || null,
+      };
+      el('env').textContent =
+        'UA: ' +
+        state.env.ua +
+        ' · DPR: ' +
+        state.env.dpr +
+        ' · 뷰포트: ' +
+        state.env.innerWidth +
+        '×' +
+        state.env.innerHeight +
+        ' · 코어: ' +
+        (state.env.hardwareConcurrency == null ? '미상' : state.env.hardwareConcurrency);
+    }
+
+    function wire() {
+      el('runBtn').addEventListener('click', function () {
+        runAll();
+      });
+      el('copyBtn').addEventListener('click', function () {
+        copyResults();
+      });
+      el('cleanupBtn').addEventListener('click', function () {
+        disposeStrip();
+      });
+      el('crashBannerX').addEventListener('click', function () {
+        el('crashBanner').style.display = 'none';
+      });
+      document.querySelectorAll('.vobs button').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var v = btn.getAttribute('data-v');
+          var obs = btn.getAttribute('data-obs') === 'true';
+          state.observations[v] = obs;
+          var parent = btn.parentNode;
+          parent.querySelectorAll('button').forEach(function (b) {
+            b.classList.remove('active');
+          });
+          btn.classList.add('active');
+          updateJSON();
+          persistAll();
+        });
+      });
+      if (!webgl2Available()) el('glNotice').style.display = 'block';
+    }
+
+    initEnv();
+    wire();
+    updateJSON();
+    checkCrashBanner();
+  })();
+</script>
