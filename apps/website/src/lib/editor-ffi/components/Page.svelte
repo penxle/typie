@@ -335,12 +335,17 @@
             // GL 캔버스의 present(finishSwap 커밋)는 DOM 삽입 전에 일어난다. iOS WebKit은 삽입 후
             // 새 present가 없으면 compositor가 잡을 프레임이 없어 빈 화면이 될 수 있다(특히 재삽입
             // 캔버스). 삽입 뒤 레이어가 생성될 시간을 두고 re-blit 1회로 표시를 보장한다.
+            // 이중화: 레이어 생성 시점 모델이 어긋나는 기기 대비 — rAF#2(첫 커밋 직후 최소 지점)와
+            // 100ms 타임아웃(rAF 정지·프레임 지연 폴백) 양쪽에서 쏜다. refreshSurface는 픽셀만
+            // 다시 그리는 멱등 호출이라 중복 실행 무해.
             if (glLiveCanvases.has(next)) {
+              const refresh = () => {
+                if (next.isConnected) editor.refreshSurface(page);
+              };
               requestAnimationFrame(() => {
-                requestAnimationFrame(() => {
-                  if (next.isConnected) editor.refreshSurface(page);
-                });
+                requestAnimationFrame(refresh);
               });
+              setTimeout(refresh, 100);
             }
           },
           removeNode: (canvas) => {
