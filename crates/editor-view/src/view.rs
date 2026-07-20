@@ -385,6 +385,26 @@ impl View {
         crate::query::interactive::interactive_hit_test(layout_index, &state.view(), page_idx, x, y)
     }
 
+    pub fn interactive_regions(
+        &self,
+        state: &State,
+    ) -> Vec<crate::query::interactive::InteractiveRegion> {
+        let Some(result) = self.layout.as_ref() else {
+            return Vec::new();
+        };
+        crate::query::interactive::interactive_regions(&result.layout_index, &state.view())
+    }
+
+    pub fn cursor_hit_rects(&self, state: &State) -> Vec<crate::page::PageRect> {
+        let Some(result) = self.layout.as_ref() else {
+            return Vec::new();
+        };
+        let Some(selection) = state.selection else {
+            return Vec::new();
+        };
+        crate::query::hit_test::cursor_hit_rects(&result.layout_index, &state.view(), &selection)
+    }
+
     pub fn page_link_rects(&self, page_idx: usize) -> Vec<crate::query::link::LinkRect> {
         let Some(result) = self.layout.as_ref() else {
             return Vec::new();
@@ -548,6 +568,13 @@ impl View {
             return false;
         };
         crate::query::selection::selection_hit_test(&result.layout_index, selection, page_idx, x, y)
+    }
+
+    pub fn selection_hit_rects(&self, selection: &ResolvedSelection) -> Vec<crate::page::PageRect> {
+        let Some(result) = self.layout.as_ref() else {
+            return Vec::new();
+        };
+        crate::query::selection::selection_hit_rects(&result.layout_index, selection)
     }
 
     pub fn node_box_rects(&self, ids: &[Dot]) -> Vec<crate::query::selection::SelectionRect> {

@@ -5,8 +5,10 @@ import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.ExternalElement
 import co.typie.editor.ffi.HistoryTag
 import co.typie.editor.ffi.Ime
+import co.typie.editor.ffi.InteractiveRegion
 import co.typie.editor.ffi.Modifier as EditorModifier
 import co.typie.editor.ffi.ModifierState
+import co.typie.editor.ffi.PageRect
 import co.typie.editor.ffi.PlaceholderMetrics
 import co.typie.editor.ffi.PlainRootNode
 import co.typie.editor.ffi.Selection
@@ -36,6 +38,9 @@ data class EditorState(
   val lastHistoryTag: HistoryTag? = null,
   val trackedRanges: List<TrackedRange> = emptyList(),
   val trackedRangesContainingSelectionHead: List<TrackedRangeEndpoints> = emptyList(),
+  val selectionHitRects: List<PageRect> = emptyList(),
+  val cursorHitRects: List<PageRect> = emptyList(),
+  val interactiveRegions: List<InteractiveRegion> = emptyList(),
 ) {
   companion object {
     val Initial: EditorState =

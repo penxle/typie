@@ -35,6 +35,100 @@ pub(crate) fn interactive_hit_test(
     interactive_hit_for_entry(layout_index, view, point, entry)
 }
 
+// Ordered by owning entry area ascending, mirroring exact_entry's smallest-wins
+// rule: consumers must take the first region whose entry_rect contains the
+// point, then answer from effective_rect alone without falling through.
+#[ffi]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct InteractiveRegion {
+    pub page_idx: usize,
+    pub entry_rect: Rect,
+    pub effective_rect: Rect,
+    pub hit: InteractiveHit,
+}
+
+pub(crate) fn interactive_regions(
+    layout_index: &LayoutIndex,
+    view: &DocView,
+) -> Vec<InteractiveRegion> {
+    let pages = layout_index.pages();
+    let mut scored: Vec<(f32, InteractiveRegion)> = Vec::new();
+    for entry in layout_index.entries() {
+        let Some(LayoutContent::Box(b)) = entry.content(layout_index) else {
+            continue;
+        };
+        let Some(node_ref) = view.node(b.node) else {
+            continue;
+        };
+        let area = entry.rect.width * entry.rect.height;
+        let to_local = |rect: &Rect, y_start: f32| {
+            Rect::from_xywh(rect.x, rect.y - y_start, rect.width, rect.height)
+        };
+        match node_ref.node() {
+            Node::Callout(callout) => {
+                // A callout without its icon decoration still owns its entry area in
+                // exact_entry and answers None, so it must block rather than vanish.
+                let icon = match b.style.decorations.iter().find(|d| d.id == 0) {
+                    Some(dec) => Rect::from_xywh(
+                        entry.rect.x + dec.rect.x,
+                        entry.rect.y + dec.rect.y,
+                        dec.rect.width,
+                        dec.rect.height,
+                    ),
+                    None => Rect::from_xywh(0.0, 0.0, -1.0, -1.0),
+                };
+                for (page_idx, page) in pages.iter().enumerate() {
+                    if entry.rect.y >= page.y_end || entry.rect.bottom() <= page.y_start {
+                        continue;
+                    }
+                    scored.push((
+                        area,
+                        InteractiveRegion {
+                            page_idx,
+                            entry_rect: to_local(&entry.rect, page.y_start),
+                            effective_rect: to_local(&icon, page.y_start),
+                            hit: InteractiveHit::CalloutIcon {
+                                id: b.node,
+                                next_variant: callout.variant.get().next(),
+                            },
+                        },
+                    ));
+                }
+            }
+            Node::FoldTitle(_) => {
+                let Some(parent) = node_ref.parent() else {
+                    continue;
+                };
+                for (page_idx, page) in pages.iter().enumerate() {
+                    if entry.rect.y >= page.y_end || entry.rect.bottom() <= page.y_start {
+                        continue;
+                    }
+                    let local_entry = to_local(&entry.rect, page.y_start);
+                    scored.push((
+                        area,
+                        InteractiveRegion {
+                            page_idx,
+                            entry_rect: local_entry,
+                            effective_rect: local_entry,
+                            hit: InteractiveHit::FoldTitle {
+                                id: parent.id(),
+                                text_rect: navigable_union_in(layout_index, page_idx, &entry.rect)
+                                    .map(|r| {
+                                        Rect::from_xywh(r.x, r.y - page.y_start, r.width, r.height)
+                                    }),
+                            },
+                        },
+                    ));
+                }
+            }
+            _ => {}
+        }
+    }
+    scored.sort_by(|a, b| a.0.total_cmp(&b.0));
+    scored.into_iter().map(|(_, region)| region).collect()
+}
+
 fn is_interactive_entry(_entry: &LayoutEntry, node: &LayoutNode, view: &DocView) -> bool {
     let LayoutContent::Box(b) = &node.content else {
         return false;
@@ -73,7 +167,7 @@ fn interactive_hit_for_entry(
         }
         Node::FoldTitle(_) => Some(InteractiveHit::FoldTitle {
             id: node_ref.parent()?.id(),
-            text_rect: navigable_union_in(layout_index, point, &entry.rect)
+            text_rect: navigable_union_in(layout_index, point.page_idx, &entry.rect)
                 .map(|r| Rect::from_xywh(r.x, r.y - point.page_y_start, r.width, r.height)),
         }),
         _ => None,
@@ -82,11 +176,11 @@ fn interactive_hit_for_entry(
 
 fn navigable_union_in(
     layout_index: &LayoutIndex,
-    point: LayoutPoint,
+    page_idx: usize,
     container: &Rect,
 ) -> Option<Rect> {
     layout_index
-        .entries_on_page(point.page_idx)
+        .entries_on_page(page_idx)
         .into_iter()
         .filter(|entry| {
             entry.content(layout_index).is_some_and(|content| {
@@ -275,6 +369,147 @@ mod tests {
                 );
             }
             other => panic!("expected FoldTitle, got {other:?}"),
+        }
+    }
+
+    fn region_lookup(
+        regions: &[InteractiveRegion],
+        page_idx: usize,
+        x: f32,
+        y: f32,
+    ) -> Option<InteractiveHit> {
+        let region = regions
+            .iter()
+            .find(|r| r.page_idx == page_idx && r.entry_rect.contains(x, y))?;
+        region
+            .effective_rect
+            .contains(x, y)
+            .then(|| region.hit.clone())
+    }
+
+    proptest::proptest! {
+        #![proptest_config(proptest::prelude::ProptestConfig {
+            cases: 24,
+            ..Default::default()
+        })]
+        #[test]
+        fn interactive_regions_agree_with_hit_test(
+            width in 200.0f32..500.0,
+            title_text in proptest::collection::vec(
+                proptest::sample::select(vec!['t', '한', ' ', 'q']),
+                1..8,
+            ),
+            body_text in proptest::collection::vec(
+                proptest::sample::select(vec!['b', '글', ' ', 'z']),
+                0..12,
+            ),
+            include_callout in proptest::prelude::any::<bool>(),
+            include_fold in proptest::prelude::any::<bool>(),
+        ) {
+            let root = Dot::ROOT;
+            let mut items = Vec::new();
+            if include_callout {
+                let callout = Dot::new(1, 1);
+                let para = Dot::new(1, 2);
+                items.push((
+                    callout,
+                    SeqItem::Block {
+                        node_type: NodeType::Callout,
+                        parents: vec![root],
+                        attrs: vec![],
+                    },
+                ));
+                items.push((
+                    para,
+                    SeqItem::Block {
+                        node_type: NodeType::Paragraph,
+                        parents: vec![root, callout],
+                        attrs: vec![],
+                    },
+                ));
+                for (j, ch) in body_text.iter().enumerate() {
+                    items.push((Dot::new(1, 3 + j as u64), SeqItem::Char(*ch)));
+                }
+            }
+            if include_fold {
+                let fold = Dot::new(2, 1);
+                let ft = Dot::new(2, 2);
+                items.push((
+                    fold,
+                    SeqItem::Block {
+                        node_type: NodeType::Fold,
+                        parents: vec![root],
+                        attrs: vec![],
+                    },
+                ));
+                items.push((
+                    ft,
+                    SeqItem::Block {
+                        node_type: NodeType::FoldTitle,
+                        parents: vec![root, fold],
+                        attrs: vec![],
+                    },
+                ));
+                for (j, ch) in title_text.iter().enumerate() {
+                    items.push((Dot::new(2, 3 + j as u64), SeqItem::Char(*ch)));
+                }
+            }
+            let plain = Dot::new(3, 1);
+            items.push((
+                plain,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                    attrs: vec![],
+                },
+            ));
+            for (j, ch) in body_text.iter().enumerate() {
+                items.push((Dot::new(3, 2 + j as u64), SeqItem::Char(*ch)));
+            }
+
+            let doc = logs(&items);
+            let pd = project_document(&doc).unwrap();
+            let view = DocView::new(&pd);
+            let index = build_index(&doc, width);
+            let regions = interactive_regions(&index, &view);
+
+            let mut bbox: Option<Rect> = None;
+            for entry in index.entries() {
+                let rect = entry.rect;
+                bbox = Some(match bbox {
+                    None => rect,
+                    Some(prev) => {
+                        let x0 = prev.x.min(rect.x);
+                        let y0 = prev.y.min(rect.y);
+                        Rect::from_xywh(
+                            x0,
+                            y0,
+                            prev.right().max(rect.right()) - x0,
+                            prev.bottom().max(rect.bottom()) - y0,
+                        )
+                    }
+                });
+            }
+            let Some(bbox) = bbox else { return Ok(()) };
+
+            let steps = 20;
+            for iy in 0..=steps {
+                for ix in 0..=steps {
+                    let x = bbox.x - 15.0
+                        + (bbox.width + 30.0) * (ix as f32 + 0.37) / (steps as f32 + 1.0);
+                    let y = bbox.y - 15.0
+                        + (bbox.height + 30.0) * (iy as f32 + 0.41) / (steps as f32 + 1.0);
+                    let from_regions = region_lookup(&regions, 0, x, y);
+                    let from_hit_test = interactive_hit_test(&index, &view, 0, x, y);
+                    proptest::prop_assert_eq!(
+                        &from_regions,
+                        &from_hit_test,
+                        "divergence at ({}, {})",
+                        x,
+                        y
+                    );
+                }
+            }
         }
     }
 

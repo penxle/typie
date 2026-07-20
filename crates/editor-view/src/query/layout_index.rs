@@ -355,6 +355,16 @@ impl LayoutIndex {
         self.entries.iter()
     }
 
+    pub(crate) fn entries_for_node<'a>(
+        &'a self,
+        node: &Dot,
+    ) -> impl Iterator<Item = &'a LayoutEntry> + 'a {
+        self.entries_by_node
+            .get(node)
+            .into_iter()
+            .flat_map(|ids| ids.iter().map(|&id| &self.entries[id]))
+    }
+
     pub(crate) fn direct_child_entries<'a>(
         &'a self,
         node: &'a Dot,

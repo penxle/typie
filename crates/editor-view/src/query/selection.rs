@@ -351,56 +351,73 @@ pub(crate) fn selection_hit_test(
     x: f32,
     y: f32,
 ) -> bool {
-    if selection.is_collapsed() {
-        return false;
-    }
-
-    if selected_external_atom_hit_test(layout_index, selection, page_idx, x, y) {
-        return true;
-    }
-
-    let rects: Vec<Rect> = selection_rects(layout_index, selection)
-        .into_iter()
-        .filter(|r| r.page_idx == page_idx)
-        .map(|r| r.rect)
-        .collect();
-    if rects.is_empty() {
-        return false;
-    }
-
-    let rows = selection_hit_rows(rects);
-
-    let min_x = rows.iter().map(|r| r.x).fold(f32::INFINITY, f32::min);
-    let max_x = rows
+    selection_hit_rects(layout_index, selection)
         .iter()
-        .map(|r| r.x + r.width)
-        .fold(f32::NEG_INFINITY, f32::max);
-    let last_idx = rows.len() - 1;
+        .any(|pr| pr.page_idx == page_idx && pr.rect.contains(x, y))
+}
 
-    for (i, rect) in rows.iter().enumerate() {
-        let (x_lo, x_hi) = if last_idx == 0 {
-            (rect.x, rect.x + rect.width)
-        } else if i == 0 {
-            (rect.x, max_x)
-        } else if i == last_idx {
-            (min_x, rect.x + rect.width)
-        } else {
-            (min_x, max_x)
-        };
-        if x >= x_lo && x <= x_hi && y >= rect.y && y <= rect.y + rect.height {
-            return true;
+pub(crate) fn selection_hit_rects(
+    layout_index: &LayoutIndex,
+    selection: &ResolvedSelection<'_>,
+) -> Vec<PageRect> {
+    if selection.is_collapsed() {
+        return Vec::new();
+    }
+
+    let mut out = selected_external_atom_rects(layout_index, selection);
+
+    let all = selection_rects(layout_index, selection);
+    let mut pages: Vec<usize> = all.iter().map(|r| r.page_idx).collect();
+    pages.dedup();
+
+    for page_idx in pages {
+        let rects: Vec<Rect> = all
+            .iter()
+            .filter(|r| r.page_idx == page_idx)
+            .map(|r| r.rect)
+            .collect();
+        if rects.is_empty() {
+            continue;
+        }
+
+        let rows = selection_hit_rows(rects);
+
+        let min_x = rows.iter().map(|r| r.x).fold(f32::INFINITY, f32::min);
+        let max_x = rows
+            .iter()
+            .map(|r| r.x + r.width)
+            .fold(f32::NEG_INFINITY, f32::max);
+        let last_idx = rows.len() - 1;
+
+        for (i, rect) in rows.iter().enumerate() {
+            let (x_lo, x_hi) = if last_idx == 0 {
+                (rect.x, rect.x + rect.width)
+            } else if i == 0 {
+                (rect.x, max_x)
+            } else if i == last_idx {
+                (min_x, rect.x + rect.width)
+            } else {
+                (min_x, max_x)
+            };
+            out.push(PageRect::new(
+                page_idx,
+                Rect::from_xywh(x_lo, rect.y, x_hi - x_lo, rect.height),
+            ));
+        }
+
+        for pair in rows.windows(2) {
+            let gap_top = pair[0].y + pair[0].height;
+            let gap_bottom = pair[1].y;
+            if gap_top < gap_bottom {
+                out.push(PageRect::new(
+                    page_idx,
+                    Rect::from_xywh(min_x, gap_top, max_x - min_x, gap_bottom - gap_top),
+                ));
+            }
         }
     }
 
-    for pair in rows.windows(2) {
-        let gap_top = pair[0].y + pair[0].height;
-        let gap_bottom = pair[1].y;
-        if gap_top < gap_bottom && x >= min_x && x <= max_x && y >= gap_top && y <= gap_bottom {
-            return true;
-        }
-    }
-
-    false
+    out
 }
 
 fn selection_hit_rows(rects: Vec<Rect>) -> Vec<Rect> {
@@ -422,38 +439,38 @@ fn selection_hit_rows(rects: Vec<Rect>) -> Vec<Rect> {
     rows
 }
 
-fn selected_external_atom_hit_test(
+fn selected_external_atom_rects(
     layout_index: &LayoutIndex,
     selection: &ResolvedSelection<'_>,
-    page_idx: usize,
-    x: f32,
-    y: f32,
-) -> bool {
-    let Some(page) = layout_index.page(page_idx) else {
-        return false;
-    };
-    layout_index
-        .entries_on_page(page_idx)
-        .into_iter()
-        .any(|entry| {
-            let Some(LayoutContent::Atom(atom)) = entry.content(layout_index) else {
-                return false;
-            };
-            let view = selection.view();
-            if !atom_is_external(view, atom) || !selection.contains_range(atom_slot(atom)) {
-                return false;
+) -> Vec<PageRect> {
+    let view = selection.view();
+    let pages = layout_index.pages();
+    let mut out = Vec::new();
+    for entry in layout_index.entries() {
+        let Some(LayoutContent::Atom(atom)) = entry.content(layout_index) else {
+            continue;
+        };
+        if !atom_is_external(view, atom) || !selection.contains_range(atom_slot(atom)) {
+            continue;
+        }
+        for (page_idx, page) in pages.iter().enumerate() {
+            if entry.rect.y >= page.y_end || entry.rect.bottom() <= page.y_start {
+                continue;
             }
-
             let top = entry.rect.y.max(page.y_start);
             let bottom = entry.rect.bottom().min(page.y_end);
-            Rect::from_xywh(
-                entry.rect.x,
-                top - page.y_start,
-                entry.rect.width,
-                bottom - top,
-            )
-            .contains(x, y)
-        })
+            out.push(PageRect::new(
+                page_idx,
+                Rect::from_xywh(
+                    entry.rect.x,
+                    top - page.y_start,
+                    entry.rect.width,
+                    bottom - top,
+                ),
+            ));
+        }
+    }
+    out
 }
 
 fn atom_selection_rect(pages: &[LayoutPage], rect: Rect) -> Option<SelectionRect> {

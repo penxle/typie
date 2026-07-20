@@ -8,6 +8,7 @@ import co.typie.editor.ffi.Affinity
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.InputModifiers
 import co.typie.editor.ffi.Message
+import co.typie.editor.ffi.PageRect
 import co.typie.editor.ffi.Position
 import co.typie.editor.ffi.Rect
 import co.typie.editor.ffi.Selection
@@ -50,12 +51,22 @@ class EditorCursorMoveSemanticTest {
   fun `primary click semantic does not own selection hit admission`() =
     runTest(StandardTestDispatcher()) {
       val semantic = EditorCursorMoveSemantic(effects = UnusedEffects)
+      val rangeSelection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 5, Affinity.Downstream),
+        )
       val fake =
         FakeFfiEditor(
           cursorProvider = { cursorAt(x = 20f) },
-          selectionHitProvider = { page, x, y -> page == 0 && x == 10f && y == 20f },
+          selectionProvider = { rangeSelection },
+          selectionHitRectsProvider = {
+            listOf(PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 0f, height = 0f)))
+          },
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      fake.enqueued.clear()
 
       assertTrue(
         semantic.dispatchPrimaryClick(
@@ -112,12 +123,20 @@ class EditorCursorMoveSemanticTest {
   @Test
   fun `double tap is not suppressed by selection hit guard`() =
     runTest(StandardTestDispatcher()) {
+      val rangeSelection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 5, Affinity.Downstream),
+        )
       val fake =
         FakeFfiEditor(
           cursorProvider = { cursorAt(x = 20f) },
-          selectionHitProvider = { _, _, _ -> true },
+          selectionProvider = { rangeSelection },
+          selectionHitRectsProvider = { FakeFfiEditor.coveringHitRects(0) },
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      fake.enqueued.clear()
       val semantic = EditorCursorMoveSemantic(effects = UnusedEffects)
 
       assertTrue(

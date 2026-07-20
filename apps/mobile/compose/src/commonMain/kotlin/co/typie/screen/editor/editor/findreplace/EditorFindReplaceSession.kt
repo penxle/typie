@@ -372,7 +372,7 @@ private fun String.toSingleLineText(): String = replace('\r', ' ').replace('\n',
 
 private fun String.containsLineBreak(): Boolean = any { it == '\r' || it == '\n' }
 
-private fun Editor.findReplaceInitialFindTextFromSelection(): String? {
+private suspend fun Editor.findReplaceInitialFindTextFromSelection(): String? {
   if (selection.isCollapsed()) return null
   return copySelection()?.text?.toSingleLineText()
 }

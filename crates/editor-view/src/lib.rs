@@ -26,7 +26,7 @@ pub use page_fragment::{
     PageFragmentLine, PageFragmentNode, PageFragmentTree,
 };
 pub use paginate::types::ChildAttachment;
-pub use query::interactive::InteractiveHit;
+pub use query::interactive::{InteractiveHit, InteractiveRegion};
 pub use query::link::LinkRect;
 pub use query::selection::SelectionEndpoints;
 pub use query::*;

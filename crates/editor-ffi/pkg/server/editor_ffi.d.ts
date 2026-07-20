@@ -258,6 +258,13 @@ export interface InspectStateOptions {
     show_node_ids: boolean;
 }
 
+export interface InteractiveRegion {
+    page_idx: number;
+    entry_rect: Rect;
+    effective_rect: Rect;
+    hit: InteractiveHit;
+}
+
 export interface KeyEvent {
     key: Key;
     modifiers?: InputModifiers;
@@ -746,6 +753,7 @@ declare class Editor {
     copy_selection(): ClipboardPayload | undefined;
     current_heads(): Uint8Array;
     cursor(): CursorMetrics | undefined;
+    cursor_hit_rects(): PageRect[];
     cursor_hit_test(page: number, x: number, y: number): boolean;
     enqueue(message: Message): void;
     export_page_vector(page: number, scale_factor: number): Uint8Array;
@@ -757,6 +765,7 @@ declare class Editor {
     inspect_state(options?: InspectStateOptions | null): string;
     inspect_state_as_macro(): string;
     interactive_hit_test(page: number, x: number, y: number): InteractiveHit | undefined;
+    interactive_regions(): InteractiveRegion[];
     last_history_tag(): HistoryTag | undefined;
     link_hit_test(page: number, x: number, y: number): LinkRect | undefined;
     link_rects(): LinkRect[];
@@ -785,6 +794,7 @@ declare class Editor {
     root_modifiers(): Modifier[];
     selection(): Selection | undefined;
     selection_endpoints(): SelectionEndpoints | undefined;
+    selection_hit_rects(): PageRect[];
     selection_hit_test(page: number, x: number, y: number): boolean;
     set_doc(plain: PlainDoc): void;
     split_changesets(payload: Uint8Array): ChangesetEntry[];

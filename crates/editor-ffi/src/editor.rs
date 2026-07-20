@@ -393,8 +393,22 @@ impl Editor {
         self.with_inner(|inner| Ok(inner.editor.selection_hit_test(page as usize, x, y)))
     }
 
+    pub fn selection_hit_rects(&self) -> EditorResult<Vec<Complex<editor_view::PageRect>>> {
+        self.with_inner(|inner| Ok(inner.editor.selection_hit_rects().into_ffi()?))
+    }
+
     pub fn cursor_hit_test(&self, page: u32, x: f32, y: f32) -> EditorResult<bool> {
         self.with_inner(|inner| Ok(inner.editor.cursor_hit_test(page as usize, x, y)))
+    }
+
+    pub fn cursor_hit_rects(&self) -> EditorResult<Vec<Complex<editor_view::PageRect>>> {
+        self.with_inner(|inner| Ok(inner.editor.cursor_hit_rects().into_ffi()?))
+    }
+
+    pub fn interactive_regions(
+        &self,
+    ) -> EditorResult<Vec<Complex<editor_view::InteractiveRegion>>> {
+        self.with_inner(|inner| Ok(inner.editor.interactive_regions().into_ffi()?))
     }
 
     pub fn pointer_style(

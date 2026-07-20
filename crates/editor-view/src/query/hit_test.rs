@@ -287,6 +287,152 @@ fn select_unit(attachment: &ChildAttachment) -> Selection {
     )
 }
 
+// Points that resolve to the caret through the exact-entry path only: the
+// closest-entry margin catchment is intentionally excluded, so containment in
+// these rects implies `hit_test == caret` but not the converse.
+pub(crate) fn cursor_hit_rects(
+    layout_index: &LayoutIndex,
+    view: &DocView,
+    selection: &editor_state::Selection,
+) -> Vec<crate::page::PageRect> {
+    if !selection.is_collapsed() {
+        return Vec::new();
+    }
+    let Some(caret) = selection.head.resolve(view) else {
+        return Vec::new();
+    };
+
+    let mut out = Vec::new();
+    for entry in layout_index.entries_for_node(&selection.head.node) {
+        let Some(LayoutContent::Line(line)) = entry.content(layout_index) else {
+            continue;
+        };
+        let Some(page_rect) = layout_index.page_rect(entry.rect) else {
+            continue;
+        };
+
+        let base = entry.rect.x;
+        let mut xs: Vec<f32> = vec![entry.rect.x, entry.rect.right(), base + line.empty_caret_x];
+        for gap in &line.tab_gaps {
+            xs.push(base + gap.x);
+            xs.push(base + gap.x + gap.width / 2.0);
+            xs.push(base + gap.x + gap.width);
+        }
+        for run in &line.glyph_runs {
+            xs.push(base + run.x);
+            xs.push(base + run.x + run.width);
+            let mut acc = run.x;
+            for g in &run.graphemes {
+                xs.push(base + acc + g.advance / 2.0);
+                acc += g.advance;
+                xs.push(base + acc);
+            }
+        }
+        xs.retain(|x| x.is_finite());
+        for x in &mut xs {
+            *x = x.clamp(entry.rect.x, entry.rect.right());
+        }
+        xs.sort_by(f32::total_cmp);
+        xs.dedup();
+
+        let mut intervals: Vec<(f32, f32)> = Vec::new();
+        for pair in xs.windows(2) {
+            let (a, b) = (pair[0], pair[1]);
+            if b <= a {
+                continue;
+            }
+            let sample = a + (b - a) / 2.0;
+            let position = position_in_line(line, &entry.rect, sample);
+            if position.resolve(view).is_some_and(|hit| hit == caret) {
+                match intervals.last_mut() {
+                    Some(last) if last.1 == a => last.1 = b,
+                    _ => intervals.push((a, b)),
+                }
+            }
+        }
+        if intervals.is_empty() {
+            continue;
+        }
+
+        let entry_area = entry.rect.width * entry.rect.height;
+        let occluders: Vec<editor_common::Rect> = layout_index
+            .entries_on_page(page_rect.page_idx)
+            .into_iter()
+            .filter(|other| !std::ptr::eq(*other, entry))
+            .filter(|other| {
+                other.rect.y < entry.rect.bottom() && other.rect.bottom() > entry.rect.y
+            })
+            .filter(|other| other.rect.width * other.rect.height <= entry_area)
+            .filter(|other| {
+                other
+                    .node(layout_index)
+                    .is_some_and(|node| is_text_or_atom_hit_entry(other, node))
+            })
+            .map(|other| other.rect)
+            .collect();
+
+        let band_top = entry.rect.y;
+        let band_bottom = entry.rect.bottom();
+        let mut y_cuts = vec![band_top, band_bottom];
+        for occluder in &occluders {
+            y_cuts.push(occluder.y.clamp(band_top, band_bottom));
+            y_cuts.push(occluder.bottom().clamp(band_top, band_bottom));
+        }
+        y_cuts.sort_by(f32::total_cmp);
+        y_cuts.dedup();
+
+        for band in y_cuts.windows(2) {
+            let (y0, y1) = (band[0], band[1]);
+            if y1 <= y0 {
+                continue;
+            }
+            let cuts: Vec<(f32, f32)> = occluders
+                .iter()
+                .filter(|occluder| occluder.y < y1 && occluder.bottom() > y0)
+                .map(|occluder| (occluder.x, occluder.right()))
+                .collect();
+            for (lo, hi) in subtract_intervals(intervals.clone(), &cuts) {
+                if hi > lo {
+                    out.push(crate::page::PageRect::new(
+                        page_rect.page_idx,
+                        editor_common::Rect::from_xywh(
+                            lo,
+                            page_rect.rect.y + (y0 - entry.rect.y),
+                            hi - lo,
+                            y1 - y0,
+                        ),
+                    ));
+                }
+            }
+        }
+    }
+    out
+}
+
+fn subtract_intervals(intervals: Vec<(f32, f32)>, cuts: &[(f32, f32)]) -> Vec<(f32, f32)> {
+    let mut result = intervals;
+    for &(cut_lo, cut_hi) in cuts {
+        if cut_hi <= cut_lo {
+            continue;
+        }
+        let mut next = Vec::with_capacity(result.len() + 1);
+        for (lo, hi) in result {
+            if cut_hi <= lo || cut_lo >= hi {
+                next.push((lo, hi));
+                continue;
+            }
+            if cut_lo > lo {
+                next.push((lo, cut_lo));
+            }
+            if cut_hi < hi {
+                next.push((cut_hi, hi));
+            }
+        }
+        result = next;
+    }
+    result
+}
+
 fn compare_distance_key(a: (f32, f32), b: (f32, f32)) -> std::cmp::Ordering {
     match a.0.total_cmp(&b.0) {
         std::cmp::Ordering::Equal => a.1.total_cmp(&b.1),
@@ -906,5 +1052,139 @@ mod tests {
             ),
             "tie-break must produce different selections for before-anchor vs after-anchor"
         );
+    }
+
+    fn oracle_cursor_hit(
+        index: &LayoutIndex,
+        view: &DocView,
+        selection: &editor_state::Selection,
+        page_idx: usize,
+        x: f32,
+        y: f32,
+    ) -> bool {
+        if !selection.is_collapsed() {
+            return false;
+        }
+        let Some(hit) = hit_test(index, page_idx, x, y) else {
+            return false;
+        };
+        if !hit.is_collapsed() {
+            return false;
+        }
+        let (Some(current), Some(hit_head)) =
+            (selection.head.resolve(view), hit.head.resolve(view))
+        else {
+            return false;
+        };
+        current == hit_head
+    }
+
+    proptest::proptest! {
+        #![proptest_config(proptest::prelude::ProptestConfig {
+            cases: 24,
+            ..Default::default()
+        })]
+        #[test]
+        fn cursor_hit_rects_agree_with_hit_test(
+            width in 150.0f32..500.0,
+            texts in proptest::collection::vec(
+                proptest::collection::vec(
+                    proptest::sample::select(vec!['a', 'w', '한', '글', ' ', '\t', 'i']),
+                    0..24,
+                ),
+                1..4,
+            ),
+            caret_seed in 0usize..1000,
+        ) {
+            let root = Dot::ROOT;
+            let mut items = Vec::new();
+            let mut paras: Vec<(Dot, usize)> = Vec::new();
+            for (i, text) in texts.iter().enumerate() {
+                let para = Dot::new(10 + i as u64, 1);
+                items.push((
+                    para,
+                    SeqItem::Block {
+                        node_type: NodeType::Paragraph,
+                        parents: vec![root],
+                        attrs: vec![],
+                    },
+                ));
+                for (j, ch) in text.iter().enumerate() {
+                    items.push((Dot::new(10 + i as u64, 2 + j as u64), SeqItem::Char(*ch)));
+                }
+                paras.push((para, text.len()));
+            }
+            let doc = logs(&items);
+            let pd = editor_model::project_document(&doc).unwrap();
+            let view = DocView::new(&pd);
+            let root_node = view.root().unwrap();
+            let mut res = Resource::new_test();
+            let measured = measure_node(
+                &mut crate::measure::Measurer::new(),
+                &root_node,
+                width,
+                &MeasureContext::default(),
+                &mut res,
+            );
+            let layout = Paginator::continuous(width, 100_000.0, EdgeInsets::all(0.0))
+                .paginate(MeasuredTree { root: measured });
+            let index = LayoutIndex::new(layout.tree, &layout.pages);
+
+            let (para, len) = paras[caret_seed % paras.len()];
+            let offset = if len == 0 { 0 } else { caret_seed % (len + 1) };
+            let selection = editor_state::Selection::collapsed(Position::new(para, offset));
+            let rects = cursor_hit_rects(&index, &view, &selection);
+
+            let mut bbox: Option<editor_common::Rect> = None;
+            for entry in index.entries() {
+                let rect = entry.rect;
+                bbox = Some(match bbox {
+                    None => rect,
+                    Some(prev) => {
+                        let x0 = prev.x.min(rect.x);
+                        let y0 = prev.y.min(rect.y);
+                        editor_common::Rect::from_xywh(
+                            x0,
+                            y0,
+                            prev.right().max(rect.right()) - x0,
+                            prev.bottom().max(rect.bottom()) - y0,
+                        )
+                    }
+                });
+            }
+            let Some(bbox) = bbox else { return Ok(()) };
+
+            let steps = 20;
+            for iy in 0..=steps {
+                for ix in 0..=steps {
+                    let x = bbox.x - 15.0 + (bbox.width + 30.0) * (ix as f32 + 0.37) / (steps as f32 + 1.0);
+                    let y = bbox.y - 15.0 + (bbox.height + 30.0) * (iy as f32 + 0.41) / (steps as f32 + 1.0);
+                    let in_rects = rects
+                        .iter()
+                        .any(|pr| pr.page_idx == 0 && pr.rect.contains(x, y));
+                    let hit = oracle_cursor_hit(&index, &view, &selection, 0, x, y);
+                    proptest::prop_assert!(
+                        !in_rects || hit,
+                        "unsound at ({x}, {y}): in cursor_hit_rects but hit_test disagrees"
+                    );
+                    let line_band_count = index
+                        .entries()
+                        .filter(|entry| {
+                            matches!(
+                                entry.content(&index),
+                                Some(LayoutContent::Line(_))
+                            ) && y >= entry.rect.y
+                                && y < entry.rect.bottom()
+                                && x >= entry.rect.x
+                                && x <= entry.rect.right()
+                        })
+                        .count();
+                    proptest::prop_assert!(
+                        !(hit && line_band_count == 1) || in_rects,
+                        "incomplete at ({x}, {y}): hit_test says caret inside a sole line band but rects miss it"
+                    );
+                }
+            }
+        }
     }
 }

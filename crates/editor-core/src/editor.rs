@@ -428,6 +428,22 @@ impl Editor {
         self.view.selection_hit_test(&resolved, page_idx, x, y)
     }
 
+    pub fn selection_hit_rects(&self) -> Vec<editor_view::PageRect> {
+        let doc = self.state.view();
+        let Some(resolved) = self.state.selection.as_ref().and_then(|s| s.resolve(&doc)) else {
+            return Vec::new();
+        };
+        self.view.selection_hit_rects(&resolved)
+    }
+
+    pub fn cursor_hit_rects(&self) -> Vec<editor_view::PageRect> {
+        self.view.cursor_hit_rects(&self.state)
+    }
+
+    pub fn interactive_regions(&self) -> Vec<editor_view::InteractiveRegion> {
+        self.view.interactive_regions(&self.state)
+    }
+
     pub fn tracked_ranges_at(
         &self,
         page_idx: usize,

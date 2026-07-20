@@ -13,6 +13,7 @@ import co.typie.editor.ffi.Ime
 import co.typie.editor.ffi.ImeRange
 import co.typie.editor.ffi.InspectStateOptions
 import co.typie.editor.ffi.InteractiveHit
+import co.typie.editor.ffi.InteractiveRegion
 import co.typie.editor.ffi.LayoutMode
 import co.typie.editor.ffi.LinkRect
 import co.typie.editor.ffi.Message
@@ -20,6 +21,7 @@ import co.typie.editor.ffi.MissingChangesets
 import co.typie.editor.ffi.Modifier as EditorModifier
 import co.typie.editor.ffi.ModifierState
 import co.typie.editor.ffi.ModifierType
+import co.typie.editor.ffi.PageRect
 import co.typie.editor.ffi.PartitionedChangesets
 import co.typie.editor.ffi.PlaceholderMetrics
 import co.typie.editor.ffi.PlainDoc
@@ -63,6 +65,10 @@ internal class FakeFfiEditor(
   var selectionHitProvider: (Int, Float, Float) -> Boolean = { _, _, _ -> false },
   var cursorHitProvider: (Int, Float, Float) -> Boolean = { _, _, _ -> false },
   var interactiveHitProvider: (Int, Float, Float) -> InteractiveHit? = { _, _, _ -> null },
+  var selectionHitRectsProvider: () -> List<PageRect> = { emptyList() },
+  var cursorHitRectsProvider: () -> List<PageRect> = { emptyList() },
+  var interactiveRegionsProvider: () -> List<InteractiveRegion> = { emptyList() },
+  var copySelectionProvider: () -> ClipboardPayload? = { null },
   var selectionEndpointsProvider: () -> SelectionEndpoints? = { null },
   var trackedRangesProvider: (String?) -> List<TrackedRange> = { emptyList() },
   var trackedRangesContainingPositionProvider: (Position, String?) -> List<TrackedRangeEndpoints> =
@@ -126,7 +132,7 @@ internal class FakeFfiEditor(
 
   override fun characterCounts(): CharacterCounts = characterCountsProvider()
 
-  override fun copySelection(): ClipboardPayload? = null
+  override fun copySelection(): ClipboardPayload? = copySelectionProvider()
 
   override fun interactiveHitTest(page: Int, x: Float, y: Float): InteractiveHit? =
     interactiveHitProvider(page, x, y)
@@ -142,7 +148,13 @@ internal class FakeFfiEditor(
   override fun selectionHitTest(page: Int, x: Float, y: Float): Boolean =
     selectionHitProvider(page, x, y)
 
+  override fun selectionHitRects(): List<PageRect> = selectionHitRectsProvider()
+
   override fun cursorHitTest(page: Int, x: Float, y: Float): Boolean = cursorHitProvider(page, x, y)
+
+  override fun cursorHitRects(): List<PageRect> = cursorHitRectsProvider()
+
+  override fun interactiveRegions(): List<InteractiveRegion> = interactiveRegionsProvider()
 
   override fun pointerStyle(page: Int, x: Float, y: Float, readOnly: Boolean): PointerStyle =
     PointerStyle.Default
@@ -256,8 +268,22 @@ internal class FakeFfiEditor(
 
   override fun proseToSelection(start: Int, end: Int): Selection? = null
 
-  private companion object {
-    val EmptyPosition = Position(node = "", offset = 0, affinity = Affinity.Downstream)
+  companion object {
+    val CoverAllRect = co.typie.editor.ffi.Rect(x = -1e6f, y = -1e6f, width = 2e6f, height = 2e6f)
+
+    fun coveringHitRects(vararg pages: Int): List<PageRect> = pages.map {
+      PageRect(pageIdx = it, rect = CoverAllRect)
+    }
+
+    fun coveringRegion(hit: InteractiveHit, page: Int = 0): InteractiveRegion =
+      InteractiveRegion(
+        pageIdx = page,
+        entryRect = CoverAllRect,
+        effectiveRect = CoverAllRect,
+        hit = hit,
+      )
+
+    private val EmptyPosition = Position(node = "", offset = 0, affinity = Affinity.Downstream)
     val EmptyStablePosition =
       StablePosition(chain = emptyList(), child = null, affinity = Affinity.Downstream)
     val EmptySelection = Selection(anchor = EmptyPosition, head = EmptyPosition)

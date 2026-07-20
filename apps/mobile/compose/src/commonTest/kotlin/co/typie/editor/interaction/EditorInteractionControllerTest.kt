@@ -220,8 +220,18 @@ class EditorInteractionControllerTest {
   @Test
   fun `tap timer selection hit guard does not dispatch primary click`() =
     runTest(StandardTestDispatcher()) {
-      val fake = FakeFfiEditor(selectionHitProvider = { _, _, _ -> true })
+      val rangeSelection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 5, Affinity.Downstream),
+        )
+      val fake =
+        FakeFfiEditor(
+          selectionProvider = { rangeSelection },
+          selectionHitRectsProvider = { FakeFfiEditor.coveringHitRects(0) },
+        )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -253,7 +263,7 @@ class EditorInteractionControllerTest {
       val fake =
         FakeFfiEditor(
           selectionProvider = { rangeSelection },
-          selectionHitProvider = { _, _, _ -> true },
+          selectionHitRectsProvider = { FakeFfiEditor.coveringHitRects(0) },
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
       editor.sync {}
@@ -289,7 +299,7 @@ class EditorInteractionControllerTest {
       val fake =
         FakeFfiEditor(
           selectionProvider = { rangeSelection },
-          selectionHitProvider = { _, _, _ -> true },
+          selectionHitRectsProvider = { FakeFfiEditor.coveringHitRects(0) },
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
       editor.sync {}
@@ -343,7 +353,7 @@ class EditorInteractionControllerTest {
       val fake =
         FakeFfiEditor(
           selectionProvider = { rangeSelection },
-          selectionHitProvider = { _, _, _ -> true },
+          selectionHitRectsProvider = { FakeFfiEditor.coveringHitRects(0) },
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
       editor.sync {}
@@ -587,7 +597,7 @@ class EditorInteractionControllerTest {
       val fake =
         FakeFfiEditor(
           selectionProvider = { currentSelection },
-          selectionHitProvider = { _, _, _ -> true },
+          selectionHitRectsProvider = { FakeFfiEditor.coveringHitRects(0) },
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
       editor.sync {}
@@ -653,10 +663,14 @@ class EditorInteractionControllerTest {
     runTest(StandardTestDispatcher()) {
       val fake =
         FakeFfiEditor(
-          interactiveHitProvider = { _, _, _ ->
-            InteractiveHit.FoldTitle(
-              id = "fold",
-              textRect = Rect(x = 20f, y = 20f, width = 100f, height = 20f),
+          interactiveRegionsProvider = {
+            listOf(
+              FakeFfiEditor.coveringRegion(
+                InteractiveHit.FoldTitle(
+                  id = "fold",
+                  textRect = Rect(x = 20f, y = 20f, width = 100f, height = 20f),
+                )
+              )
             )
           }
         )
@@ -686,10 +700,14 @@ class EditorInteractionControllerTest {
     runTest(StandardTestDispatcher()) {
       val fake =
         FakeFfiEditor(
-          interactiveHitProvider = { _, _, _ ->
-            InteractiveHit.FoldTitle(
-              id = "fold",
-              textRect = Rect(x = 0f, y = 0f, width = 100f, height = 40f),
+          interactiveRegionsProvider = {
+            listOf(
+              FakeFfiEditor.coveringRegion(
+                InteractiveHit.FoldTitle(
+                  id = "fold",
+                  textRect = Rect(x = 0f, y = 0f, width = 100f, height = 40f),
+                )
+              )
             )
           }
         )
@@ -721,10 +739,14 @@ class EditorInteractionControllerTest {
     runTest(StandardTestDispatcher()) {
       val fake =
         FakeFfiEditor(
-          interactiveHitProvider = { _, _, _ ->
-            InteractiveHit.FoldTitle(
-              id = "fold",
-              textRect = Rect(x = 0f, y = 0f, width = 20f, height = 40f),
+          interactiveRegionsProvider = {
+            listOf(
+              FakeFfiEditor.coveringRegion(
+                InteractiveHit.FoldTitle(
+                  id = "fold",
+                  textRect = Rect(x = 0f, y = 0f, width = 20f, height = 40f),
+                )
+              )
             )
           }
         )
@@ -762,8 +784,12 @@ class EditorInteractionControllerTest {
     runTest(StandardTestDispatcher()) {
       val fake =
         FakeFfiEditor(
-          interactiveHitProvider = { _, _, _ ->
-            InteractiveHit.CalloutIcon(id = "callout", nextVariant = CalloutVariant.Warning)
+          interactiveRegionsProvider = {
+            listOf(
+              FakeFfiEditor.coveringRegion(
+                InteractiveHit.CalloutIcon(id = "callout", nextVariant = CalloutVariant.Warning)
+              )
+            )
           }
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
@@ -1581,7 +1607,6 @@ class EditorInteractionControllerTest {
         FakeFfiEditor(
           selectionProvider = { selection },
           selectionEndpointsProvider = { selectionEndpoints() },
-          selectionHitProvider = { _, _, _ -> false },
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
       editor.sync {}
@@ -1619,7 +1644,7 @@ class EditorInteractionControllerTest {
         FakeFfiEditor(
           selectionProvider = { selection },
           selectionEndpointsProvider = { selectionEndpoints() },
-          selectionHitProvider = { _, _, _ -> true },
+          selectionHitRectsProvider = { FakeFfiEditor.coveringHitRects(0) },
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
       editor.sync {}
@@ -3008,11 +3033,7 @@ class EditorInteractionControllerTest {
   @Test
   fun `android long press uses engine cursor hit result for cursor mode admission`() =
     runTest(StandardTestDispatcher()) {
-      val fake =
-        FakeFfiEditor(
-          cursorProvider = { cursorAt(x = 10f) },
-          cursorHitProvider = { _, _, _ -> false },
-        )
+      val fake = FakeFfiEditor(cursorProvider = { cursorAt(x = 10f) })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
       editor.sync {}
       val host = TestHost(this)
@@ -3186,7 +3207,7 @@ class EditorInteractionControllerTest {
         FakeFfiEditor(
           cursorProvider = { cursorAt(x = 10f) },
           selectionProvider = { rangeSelection },
-          selectionHitProvider = { _, _, _ -> true },
+          selectionHitRectsProvider = { FakeFfiEditor.coveringHitRects(0) },
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
       editor.sync {}

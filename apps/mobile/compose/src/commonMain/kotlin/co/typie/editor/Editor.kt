@@ -24,6 +24,7 @@ import co.typie.editor.ffi.PlainDoc
 import co.typie.editor.ffi.PlainRootNode
 import co.typie.editor.ffi.ProseRangeInstallOutcome
 import co.typie.editor.ffi.ProseTrackedRangeRegistration
+import co.typie.editor.ffi.Rect
 import co.typie.editor.ffi.SearchOptions
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.SelectionEndpoints
@@ -488,12 +489,25 @@ internal constructor(
 
   fun inspectStateAsMacro(): String = inner.inspectStateAsMacro()
 
-  fun selectionHitTest(page: Int, x: Float, y: Float): Boolean = inner.selectionHitTest(page, x, y)
+  // Snapshot-based on purpose: these run synchronously inside touch dispatch on the
+  // main thread, where a direct FFI call would contend on the Rust editor mutex and
+  // stall input for as long as a background tick holds it (APP2-7P).
+  fun selectionHitTest(page: Int, x: Float, y: Float): Boolean =
+    tickSnapshot.selectionHitRects.any { it.pageIdx == page && it.rect.containsPoint(x, y) }
 
-  fun cursorHitTest(page: Int, x: Float, y: Float): Boolean = inner.cursorHitTest(page, x, y)
+  fun cursorHitTest(page: Int, x: Float, y: Float): Boolean =
+    tickSnapshot.cursorHitRects.any { it.pageIdx == page && it.rect.containsPoint(x, y) }
 
-  fun interactiveHitTest(page: Int, x: Float, y: Float): InteractiveHit? =
-    inner.interactiveHitTest(page, x, y)
+  fun interactiveHitTest(page: Int, x: Float, y: Float): InteractiveHit? {
+    val region =
+      tickSnapshot.interactiveRegions.firstOrNull {
+        it.pageIdx == page && it.entryRect.containsPoint(x, y)
+      } ?: return null
+    return if (region.effectiveRect.containsPoint(x, y)) region.hit else null
+  }
+
+  private fun Rect.containsPoint(px: Float, py: Float): Boolean =
+    px >= x && px <= x + width && py >= y && py <= y + height
 
   suspend fun characterCounts(): CharacterCounts? =
     withSuspendFailureNotification(defaultValue = { null }) {
@@ -508,7 +522,18 @@ internal constructor(
       }
     }
 
-  fun copySelection(): ClipboardPayload? = inner.copySelection()
+  suspend fun copySelection(): ClipboardPayload? =
+    withSuspendFailureNotification(defaultValue = { null }) {
+      withContext(dispatcher) {
+        mutex.withLock {
+          if (disposed.load()) {
+            null
+          } else {
+            inner.copySelection()
+          }
+        }
+      }
+    }
 
   internal suspend fun collectLocalChangesets(
     baseHeads: ByteArray?,
@@ -644,6 +669,32 @@ internal constructor(
     val trackedRangesChanged = events.hasStateChangedField(StateField.TrackedRanges)
     val tableOverlaysChanged = events.hasStateChangedField(StateField.TableOverlays)
     val lastHistoryTagChanged = events.hasStateChangedField(StateField.LastHistoryTag)
+    val renderInvalidated = events.any { it is EditorEvent.RenderInvalidated }
+    // Hit rects carry over from tickSnapshot, not state: state lags render settlement,
+    // and a settle-delayed commit would resurrect pre-refresh geometry.
+    val hitGeometryStale =
+      tickSnapshot.selection != selection ||
+        documentChanged ||
+        renderInvalidated ||
+        tickSnapshot.version == 0L
+    val selectionHitRects =
+      when {
+        selection == null || selection.anchor == selection.head -> emptyList()
+        hitGeometryStale -> inner.selectionHitRects()
+        else -> tickSnapshot.selectionHitRects
+      }
+    val cursorHitRects =
+      when {
+        selection == null || selection.anchor != selection.head -> emptyList()
+        hitGeometryStale -> inner.cursorHitRects()
+        else -> tickSnapshot.cursorHitRects
+      }
+    val interactiveRegions =
+      if (documentChanged || renderInvalidated || tickSnapshot.version == 0L) {
+        inner.interactiveRegions()
+      } else {
+        tickSnapshot.interactiveRegions
+      }
     val placeholder =
       if (placeholderChanged || state.version == 0L) {
         inner.placeholder()
@@ -696,6 +747,9 @@ internal constructor(
           } else {
             emptyList()
           },
+        selectionHitRects = selectionHitRects,
+        cursorHitRects = cursorHitRects,
+        interactiveRegions = interactiveRegions,
       )
     tickSnapshot = snapshot
     return snapshot
