@@ -62,6 +62,7 @@ internal fun Modifier.editorInteractions(
   density: Float,
   enabled: Boolean = true,
   onEditorPointerInput: () -> Unit = {},
+  onViewportIndirectInput: () -> Unit = {},
   onNestedScrollCancel: () -> Unit = {},
 ): Modifier =
   this then
@@ -79,6 +80,7 @@ internal fun Modifier.editorInteractions(
       density = density,
       enabled = enabled,
       onEditorPointerInput = onEditorPointerInput,
+      onViewportIndirectInput = onViewportIndirectInput,
       onNestedScrollCancel = onNestedScrollCancel,
     )
 
@@ -96,6 +98,7 @@ private data class EditorInteractionsElement(
   private val density: Float,
   private val enabled: Boolean,
   private val onEditorPointerInput: () -> Unit,
+  private val onViewportIndirectInput: () -> Unit,
   private val onNestedScrollCancel: () -> Unit,
 ) : ModifierNodeElement<EditorInteractionsNode>() {
   override fun create(): EditorInteractionsNode =
@@ -113,6 +116,7 @@ private data class EditorInteractionsElement(
       density = density,
       enabled = enabled,
       onEditorPointerInput = onEditorPointerInput,
+      onViewportIndirectInput = onViewportIndirectInput,
       onNestedScrollCancel = onNestedScrollCancel,
     )
 
@@ -131,6 +135,7 @@ private data class EditorInteractionsElement(
       density = density,
       enabled = enabled,
       onEditorPointerInput = onEditorPointerInput,
+      onViewportIndirectInput = onViewportIndirectInput,
       onNestedScrollCancel = onNestedScrollCancel,
     )
   }
@@ -150,6 +155,7 @@ private class EditorInteractionsNode(
   var density: Float,
   var enabled: Boolean,
   var onEditorPointerInput: () -> Unit,
+  var onViewportIndirectInput: () -> Unit,
   var onNestedScrollCancel: () -> Unit,
 ) :
   Modifier.Node(),
@@ -197,6 +203,7 @@ private class EditorInteractionsNode(
     density: Float,
     enabled: Boolean,
     onEditorPointerInput: () -> Unit,
+    onViewportIndirectInput: () -> Unit,
     onNestedScrollCancel: () -> Unit,
   ) {
     val inputOwnerChanged =
@@ -232,6 +239,7 @@ private class EditorInteractionsNode(
     this.density = density
     this.enabled = enabled
     this.onEditorPointerInput = onEditorPointerInput
+    this.onViewportIndirectInput = onViewportIndirectInput
     this.onNestedScrollCancel = onNestedScrollCancel
   }
 
@@ -665,6 +673,7 @@ private class EditorInteractionsNode(
       finishWheelZoom()
       if (scrollDriver.launchPointerSignalScroll(scrollDelta = scrollDelta, density = density)) {
         onEditorPointerInput()
+        onViewportIndirectInput()
         pointerEvent.changes.forEach(PointerInputChange::consume)
       }
       return
@@ -704,6 +713,7 @@ private class EditorInteractionsNode(
     }
     keepWheelZoomAlive()
     onEditorPointerInput()
+    onViewportIndirectInput()
     pointerEvent.changes.forEach(PointerInputChange::consume)
   }
 
@@ -740,6 +750,7 @@ private class EditorInteractionsNode(
         }
       if (panOffset != null && scrollDriver.launchTrackpadPan(panOffset)) {
         onEditorPointerInput()
+        onViewportIndirectInput()
       }
     }
     pointerEvent.changes.forEach(PointerInputChange::consume)
@@ -813,6 +824,7 @@ private class EditorInteractionsNode(
       return false
     }
     onEditorPointerInput()
+    onViewportIndirectInput()
     return true
   }
 

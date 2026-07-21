@@ -1467,10 +1467,8 @@ fun EditorScreen(entityId: String) {
         platformIndirectScaleEnabled = platformIndirectScaleEnabled,
         viewportContentWidth = bodyTrackWidth,
         viewportScrollReconcileMode = viewportScrollReconcileMode,
-        onEditorPointerInput = {
-          uiState.contextMenu.hide()
-          toolbarPagerState.dismissIndicator()
-        },
+        onEditorPointerInput = { toolbarPagerState.dismissIndicator() },
+        onViewportIndirectInput = { uiState.contextMenu.hide() },
         onMeasuredViewportSizeChange = { viewport ->
           val editor = runtime.editor
           if (editor != null && viewport.width > 0f && viewport.height > 0f) {

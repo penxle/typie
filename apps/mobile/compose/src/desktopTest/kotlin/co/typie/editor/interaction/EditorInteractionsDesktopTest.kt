@@ -217,7 +217,11 @@ class EditorInteractionsDesktopTest {
   @Test
   fun `desktop ctrl pointer scroll remains viewport scroll`() = runComposeUiTest {
     val fixture = Fixture()
-    setEditorContent(fixture)
+    var viewportIndirectInputCount = 0
+    setEditorContent(
+      fixture = fixture,
+      onViewportIndirectInput = { viewportIndirectInputCount += 1 },
+    )
     val editor = onNodeWithTag(EditorTag)
     val initialZoom = fixture.zoomController.displayZoom
 
@@ -229,12 +233,18 @@ class EditorInteractionsDesktopTest {
 
     assertEquals(initialZoom, fixture.zoomController.displayZoom, 0.0001f)
     assertTrue(fixture.touchPanDeltas.isNotEmpty())
+    assertEquals(1, viewportIndirectInputCount)
   }
 
   @Test
   fun `modified pointer scroll reaches editor before a child consumes it`() = runComposeUiTest {
     val fixture = Fixture()
-    setEditorContent(fixture, consumeIndirectInputAtChild = true)
+    var viewportIndirectInputCount = 0
+    setEditorContent(
+      fixture = fixture,
+      consumeIndirectInputAtChild = true,
+      onViewportIndirectInput = { viewportIndirectInputCount += 1 },
+    )
     val editor = onNodeWithTag(EditorTag)
     val initialZoom = fixture.zoomController.displayZoom
 
@@ -245,6 +255,7 @@ class EditorInteractionsDesktopTest {
     waitForIdle()
 
     assertTrue(fixture.zoomController.displayZoom > initialZoom)
+    assertEquals(1, viewportIndirectInputCount)
   }
 
   @Test
@@ -367,10 +378,15 @@ class EditorInteractionsDesktopTest {
   }
 
   @Test
-  fun `platform indirect scale reports editor pointer input`() = runComposeUiTest {
+  fun `platform indirect scale reports editor and viewport indirect input`() = runComposeUiTest {
     val fixture = Fixture()
     var pointerInputCount = 0
-    setEditorContent(fixture = fixture, onEditorPointerInput = { pointerInputCount += 1 })
+    var viewportIndirectInputCount = 0
+    setEditorContent(
+      fixture = fixture,
+      onEditorPointerInput = { pointerInputCount += 1 },
+      onViewportIndirectInput = { viewportIndirectInputCount += 1 },
+    )
 
     runOnIdle {
       assertTrue(fixture.platformIndirectScaleBridge.begin())
@@ -384,21 +400,29 @@ class EditorInteractionsDesktopTest {
     }
 
     assertEquals(1, pointerInputCount)
+    assertEquals(1, viewportIndirectInputCount)
   }
 
   @Test
-  fun `direct pointer down reports editor input once`() = runComposeUiTest {
-    val fixture = Fixture()
-    var pointerInputCount = 0
-    setEditorContent(fixture = fixture, onEditorPointerInput = { pointerInputCount += 1 })
+  fun `direct pointer down reports editor input without viewport indirect input`() =
+    runComposeUiTest {
+      val fixture = Fixture()
+      var pointerInputCount = 0
+      var viewportIndirectInputCount = 0
+      setEditorContent(
+        fixture = fixture,
+        onEditorPointerInput = { pointerInputCount += 1 },
+        onViewportIndirectInput = { viewportIndirectInputCount += 1 },
+      )
 
-    onNodeWithTag(EditorTag).performTouchInput { down(center) }
-    waitForIdle()
+      onNodeWithTag(EditorTag).performTouchInput { down(center) }
+      waitForIdle()
 
-    assertEquals(1, pointerInputCount)
+      assertEquals(1, pointerInputCount)
+      assertEquals(0, viewportIndirectInputCount)
 
-    onNodeWithTag(EditorTag).performTouchInput { up() }
-  }
+      onNodeWithTag(EditorTag).performTouchInput { up() }
+    }
 
   @Test
   fun `platform indirect scale takes over a pending physical pan candidate`() = runComposeUiTest {
@@ -567,7 +591,12 @@ class EditorInteractionsDesktopTest {
   fun `common trackpad pan event scrolls without moving navigation`() = runComposeUiTest {
     val fixture = Fixture(scrollConsumer = { Offset.Zero })
     val navigator = Navigator(Route.Home)
-    setNavigationEditorContent(fixture = fixture, navigator = navigator)
+    var viewportIndirectInputCount = 0
+    setNavigationEditorContent(
+      fixture = fixture,
+      navigator = navigator,
+      onViewportIndirectInput = { viewportIndirectInputCount += 1 },
+    )
 
     onNodeWithTag(NavigationEditorTag).performTrackpadInput {
       updatePointerTo(Offset(x = 180f, y = 160f))
@@ -576,6 +605,7 @@ class EditorInteractionsDesktopTest {
     waitForIdle()
 
     assertTrue(fixture.touchPanDeltas.isNotEmpty())
+    assertEquals(1, viewportIndirectInputCount)
     assertEquals(NavigationEditorRoute, navigator.current)
     assertEquals(
       expected = 0f,
@@ -1657,6 +1687,7 @@ class EditorInteractionsDesktopTest {
     editorWidth: androidx.compose.ui.unit.Dp = 400.dp,
     consumeIndirectInputAtChild: Boolean = false,
     onEditorPointerInput: () -> Unit = {},
+    onViewportIndirectInput: () -> Unit = {},
     onCoroutineScope: (CoroutineScope) -> Unit = {},
   ) {
     setContent {
@@ -1687,6 +1718,7 @@ class EditorInteractionsDesktopTest {
                   touchSlop = 8f,
                   density = 1f,
                   onEditorPointerInput = onEditorPointerInput,
+                  onViewportIndirectInput = onViewportIndirectInput,
                 )
               } else {
                 Modifier
@@ -1728,6 +1760,7 @@ class EditorInteractionsDesktopTest {
     navigator: Navigator,
     interactionEnabled: () -> Boolean = { true },
     usePlatformTouchSlop: Boolean = false,
+    onViewportIndirectInput: () -> Unit = {},
   ): Float {
     var effectiveTouchSlop = 0f
     setContent {
@@ -1760,6 +1793,7 @@ class EditorInteractionsDesktopTest {
                   touchSlop = effectiveTouchSlop,
                   density = 1f,
                   enabled = interactionEnabled(),
+                  onViewportIndirectInput = onViewportIndirectInput,
                   onNestedScrollCancel = { navigationPopNestedScroll?.cancel() },
                 )
             )

@@ -146,6 +146,7 @@ internal fun EditorScreenLayout(
   platformIndirectScaleEnabled: Boolean = editorInteractionEnabled,
   viewportScrollReconcileMode: EditorViewportScrollReconcileMode,
   onEditorPointerInput: () -> Unit = {},
+  onViewportIndirectInput: () -> Unit = {},
   onMeasuredViewportSizeChange: (Size) -> Unit,
   header: @Composable () -> Unit,
   body: @Composable () -> Unit,
@@ -234,6 +235,7 @@ internal fun EditorScreenLayout(
           density = density.density,
           enabled = editorInteractionEnabled,
           onEditorPointerInput = onEditorPointerInput,
+          onViewportIndirectInput = onViewportIndirectInput,
           onNestedScrollCancel = { navigationPopNestedScroll?.cancel() },
         )
         .editorPlatformIndirectScale(
