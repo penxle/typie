@@ -67,7 +67,8 @@
       return true;
     },
     move: (_, event) => updateValue(event),
-    end: () => {
+    end: (_, event) => {
+      updateValue(event);
       isDragging = false;
       onchange?.();
     },

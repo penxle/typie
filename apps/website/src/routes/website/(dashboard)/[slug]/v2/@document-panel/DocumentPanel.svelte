@@ -95,6 +95,10 @@
   let previewWidth = $state<number | null>(null);
   let newWidth = $derived(previewWidth ?? storedWidth);
 
+  const updateResize = (session: ResizeSession, event: PointerEvent) => {
+    previewWidth = clamp(session.startWidth + Math.round(session.startX - event.clientX), minWidth, maxWidth);
+  };
+
   onDestroy(() => focusReturn.discard());
 </script>
 
@@ -211,10 +215,9 @@
         previewWidth = session.startWidth;
         return session;
       },
-      move: (session, event) => {
-        previewWidth = clamp(session.startWidth + Math.round(session.startX - event.clientX), minWidth, maxWidth);
-      },
-      end: () => {
+      move: updateResize,
+      end: (session, event) => {
+        updateResize(session, event);
         if (previewWidth !== null) app.preference.current.panelWidth = previewWidth;
         previewWidth = null;
       },

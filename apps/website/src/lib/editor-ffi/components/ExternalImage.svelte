@@ -218,7 +218,8 @@
     proportion = (newWidth / boundsWidth) * 100;
   };
 
-  const handleResizeEnd = () => {
+  const handleResizeEnd = (session: ResizeSession, event: PointerEvent) => {
+    handleResize(session, event);
     const finalProportion = Math.round(proportion);
     isResizing = false;
     ctx.editor?.enqueue({

@@ -27,8 +27,8 @@ export const throttle = <TArgs extends readonly unknown[]>(
     },
     {
       reducer: (_, ...args: TArgs) => args,
-      minQuietPeriodMs: delay,
-      triggerAt: 'start',
+      minGapMs: delay,
+      triggerAt: 'both',
     },
   );
   return { call, cancel };

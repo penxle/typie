@@ -21,7 +21,6 @@
   import { getPane, getPaneGroup } from '../../@pane/context.svelte';
   import { getDocumentPanelFocusReturn } from './focus-return.svelte';
   import type { PointerCaptureCancelReason } from '@typie/ui/actions';
-  import type { PointerEventHandler } from 'svelte/elements';
   import type { DocumentPanelV2Timeline_document$key } from '$mearie';
 
   type Props = {
@@ -149,13 +148,6 @@
     };
   });
 
-  $effect(() => {
-    if (query.data && selectedHeadId === null && headsAsc.length > 0) {
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      selectedHeadId = headsAsc.at(-1)!.id;
-    }
-  });
-
   const scrollToHead = debounce((headId: string) => {
     const element = globalThis.document.querySelector(`[data-panel-timeline-head="${headId}"]`) as HTMLElement;
     element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -209,32 +201,39 @@
   };
   const updateView = throttle(applyHead, 32);
 
-  let prevSelectedId: string | null = null;
-  $effect(() => {
-    const currentId = selectedHeadId;
-    if (!currentId || !query.data) return;
-    if (currentId === prevSelectedId) return;
-    prevSelectedId = currentId;
-    scrollToHead.call(currentId);
-    if (isDraggingSlider) {
-      updateView.call(currentId);
+  const selectHead = (headId: string, timing: 'throttled' | 'immediate') => {
+    const changed = selectedHeadId !== headId;
+    if (changed) {
+      selectedHeadId = headId;
+      scrollToHead.call(headId);
+    }
+
+    if (timing === 'throttled') {
+      if (changed) updateView.call(headId);
     } else {
       updateView.cancel();
-      void applyHead(currentId);
+      void applyHead(headId);
+    }
+  };
+
+  $effect(() => {
+    if (query.data && selectedHeadId === null && headsAsc.length > 0) {
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      selectHead(headsAsc.at(-1)!.id, 'immediate');
     }
   });
 
-  const handleSlide: PointerEventHandler<HTMLElement> = (e) => {
-    if (!e.currentTarget.parentElement || headsAsc.length === 0) return;
-    const { left: parentLeft, width: parentWidth } = e.currentTarget.parentElement.getBoundingClientRect();
-    const ratio = clamp((e.clientX - parentLeft) / parentWidth, 0, 1);
+  const handleSlide = (event: PointerEvent & { currentTarget: HTMLElement }, timing: 'throttled' | 'immediate') => {
+    if (!event.currentTarget.parentElement || headsAsc.length === 0) return;
+    const { left: parentLeft, width: parentWidth } = event.currentTarget.parentElement.getBoundingClientRect();
+    const ratio = clamp((event.clientX - parentLeft) / parentWidth, 0, 1);
     const index = Math.round(ratio * max);
-    if (Object.hasOwn(headsAsc, index)) selectedHeadId = headsAsc[index].id;
+    if (Object.hasOwn(headsAsc, index)) selectHead(headsAsc[index].id, timing);
   };
 
   const handleSlideStart = (event: PointerEvent): true | null => {
     if (showTooltip || isDraggingSlider || !event.isPrimary || event.button !== 0) return null;
-    handleSlide(event as PointerEvent & { currentTarget: HTMLElement });
+    handleSlide(event as PointerEvent & { currentTarget: HTMLElement }, 'throttled');
     showTooltip = true;
     return true;
   };
@@ -242,24 +241,22 @@
   const handleSlideMove = (_: true, event: PointerEvent) => {
     event.preventDefault();
     isDraggingSlider = true;
-    handleSlide(event as PointerEvent & { currentTarget: HTMLElement });
+    handleSlide(event as PointerEvent & { currentTarget: HTMLElement }, 'throttled');
   };
 
-  const handleSlideEnd = () => {
+  const handleSlideEnd = (_: true, event: PointerEvent) => {
+    handleSlide(event as PointerEvent & { currentTarget: HTMLElement }, 'immediate');
     showTooltip = false;
     isDraggingSlider = false;
-    if (selectedHeadId) {
-      updateView.cancel();
-      void applyHead(selectedHeadId);
-    }
   };
 
   const handleSlideCancel = (_: true, reason: PointerCaptureCancelReason) => {
     showTooltip = false;
     isDraggingSlider = false;
-    updateView.cancel();
     if (reason !== 'destroy' && selectedHeadId) {
-      void applyHead(selectedHeadId);
+      selectHead(selectedHeadId, 'immediate');
+    } else {
+      updateView.cancel();
     }
   };
 
@@ -361,9 +358,7 @@
                   _hover: { backgroundColor: isSelected ? 'surface.muted' : 'surface.subtle' },
                 })}
                 data-panel-timeline-head={head.id}
-                onclick={() => {
-                  selectedHeadId = head.id;
-                }}
+                onclick={() => selectHead(head.id, 'immediate')}
                 type="button"
               >
                 <Icon
