@@ -30,7 +30,7 @@ import {
 } from '#/utils/changeset.ts';
 import { calculateBlobSizeFromAssetIds, extractAssetIdsFromPlainDoc } from '#/utils/entity.ts';
 import { SYSTEM_USER_ID } from '#/utils/system-actor.ts';
-import { wasm } from '#/utils/wasm-ffi.ts';
+import { wasmThread } from '#/utils/wasm-thread.ts';
 import { clearSweepDue, scheduleSweepDue, sweepDocument, sweepDueKey } from '#/utils/zombie-sweep.ts';
 import { enqueueJob } from '../index.ts';
 import { defineCron, defineJob } from '../types.ts';
@@ -58,7 +58,7 @@ const concatPayloads = (payloads: Uint8Array[]): Uint8Array => {
 };
 
 export const DocumentChangesetsCollectJob = defineJob('document:changesets:collect', async (documentId: string) => {
-  const lock = new Lock(`document:changesets:${documentId}`);
+  const lock = new Lock(`document:changesets:${documentId}`, { ttlSeconds: 120 });
 
   const acquired = await lock.tryAcquire();
   if (!acquired) {
@@ -91,7 +91,19 @@ export const DocumentChangesetsCollectJob = defineJob('document:changesets:colle
     // counts — replaces the per-entry `from_changesets` rebuild that made collect
     // `O(tail × build)`.
     const packed = packLengthPrefixed(entries.map((e) => e.changeset));
-    const fold = await wasm.use((host) => host.collect_fold(existing, packed));
+    const foldStartedAt = performance.now();
+    const { result: fold, execMs: foldExecMs } = await wasmThread.collectFold(existing, packed);
+    const foldTotalMs = performance.now() - foldStartedAt;
+    if (foldTotalMs > 1000) {
+      log.warn('collect_fold slow {*}', {
+        documentId,
+        totalMs: Math.round(foldTotalMs),
+        execMs: Math.round(foldExecMs),
+        existingBytes: existing.length,
+        entryCount: entries.length,
+        duplicateBundleCount: fold.statuses.filter((s) => s === 'duplicate').length,
+      });
+    }
     totalityViolations = fold.totality_violations;
 
     let mergedChanged = false;
@@ -354,9 +366,11 @@ export const DocumentChangesetsCollectJob = defineJob('document:changesets:colle
 });
 
 export const DocumentChangesetsConsolidateJob = defineJob('document:changesets:consolidate', async (documentId: string) => {
-  const lock = new Lock(`document:changesets:${documentId}`);
+  const lock = new Lock(`document:changesets:${documentId}`, { ttlSeconds: 120 });
   const acquired = await lock.tryAcquire();
   if (!acquired) return;
+
+  let consolidated = false;
 
   try {
     const rows = await db
@@ -364,7 +378,7 @@ export const DocumentChangesetsConsolidateJob = defineJob('document:changesets:c
       .from(DocumentBundles)
       .where(eq(DocumentBundles.documentId, documentId))
       .orderBy(asc(DocumentBundles.seq));
-    if (rows.length < 2) return;
+    if (rows.length === 0) return;
 
     if (rows.some((r, i) => i > 0 && r.kind === DocumentBundleKind.CONSOLIDATED)) {
       Sentry.captureMessage(`document_bundles invariant violation: non-prefix consolidated row documentId=${documentId}`);
@@ -372,8 +386,8 @@ export const DocumentChangesetsConsolidateJob = defineJob('document:changesets:c
     }
 
     const stream = concatPayloads(rows.map((r) => r.payload));
-    const result = await wasm.use((host) => host.consolidate(stream));
-    if (!result.payload || result.consumed < 2) return;
+    const { result } = await wasmThread.consolidate(stream);
+    if (!result.payload || result.consumed < 1) return;
     const consolidatedPayload = result.payload;
 
     let acc = 0;
@@ -419,6 +433,14 @@ export const DocumentChangesetsConsolidateJob = defineJob('document:changesets:c
       });
     });
 
+    consolidated = true;
+    log.info('consolidate {*}', {
+      documentId,
+      rowsMerged: lastMergedIdx + 1,
+      inputPrefixBytes: result.consumed_bytes,
+      outputBytes: consolidatedPayload.length,
+    });
+
     await scheduleSweepDue(documentId);
   } catch (err) {
     if (err instanceof StaleConsolidationError) return;
@@ -426,6 +448,13 @@ export const DocumentChangesetsConsolidateJob = defineJob('document:changesets:c
     throw err;
   } finally {
     await lock.release();
+    if (consolidated) {
+      const collected = await redis.get(collectedKey(documentId));
+      const remaining = await readStreamBatch(documentId, collected, 1);
+      if (remaining.length > 0) {
+        await enqueueJob('document:changesets:collect', documentId);
+      }
+    }
   }
 });
 

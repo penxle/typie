@@ -89,6 +89,12 @@ pub struct Op<P> {
     pub payload: P,
 }
 
+/// Index container for the O(1) idempotency probe. `DotMap` chosen by
+/// measurement on the production fixture: packed lanes pad 1.3x (~2MB at 197k
+/// changesets) vs ~19MB HAMT-per-changeset; the crossover (~12 ops/changeset
+/// between first dots) is far above real keystroke-sized changesets.
+type CsByFirst = DotMap<u32>;
+
 /// Op-DAG storage. Immutable, structural-sharing append-only.
 #[derive(Clone, Debug)]
 pub struct OpGraph<P> {
@@ -120,6 +126,16 @@ pub struct OpGraph<P> {
     /// (`debug_remove`); `add` and `receive_changeset` keep
     /// parents-before-children invariants so they always preserve the set.
     self_contained: DotMap<()>,
+    /// First-dot → ordinal in `changesets`. Derived index for the O(1)
+    /// idempotency probe; every stored dot belongs to exactly one sealed
+    /// changeset, so the first dot uniquely identifies its owner. `DotMap`
+    /// keeps the packed-lane footprint (a HAMT entry per changeset would
+    /// bloat 200k-changeset browser graphs) and its lane map is imbl-backed,
+    /// preserving `receive_changeset`'s O(1) `self.clone()`.
+    cs_by_first: CsByFirst,
+    /// Set by test-only `debug_remove` recovery flows that can seat two
+    /// descriptors under one first dot; degrades the probe to the full scan.
+    index_degraded: bool,
 }
 
 impl<P: Clone + PartialEq> OpGraph<P> {
@@ -168,6 +184,8 @@ impl<P: Clone> OpGraph<P> {
             heads: FastSet::new(),
             children: DotMap::new(),
             self_contained: DotMap::new(),
+            cs_by_first: CsByFirst::new(),
+            index_degraded: false,
         }
     }
 
@@ -306,6 +324,7 @@ impl<P: Clone> OpGraph<P> {
         P: Clone,
     {
         let mut next = self.clone();
+        next.index_degraded = true;
         if let Some(op) = next.ops.remove(dot) {
             for parent in &op.parents {
                 if let Some(set) = next.children.get_mut(parent) {
@@ -336,6 +355,11 @@ impl<P: Clone> OpGraph<P> {
             }
         }
         next
+    }
+
+    #[cfg(test)]
+    pub(crate) fn debug_force_index_degraded(&mut self) {
+        self.index_degraded = true;
     }
 }
 
@@ -432,7 +456,11 @@ impl<P: Clone> OpGraph<P> {
     pub fn commit_mut(&mut self) {
         if !self.pending.is_empty() {
             let ops = std::mem::take(&mut self.pending);
-            self.changesets.push_back(ChangesetRef::from_ops(&ops));
+            let cref = ChangesetRef::from_ops(&ops);
+            if let Some(first) = cref.dots().next() {
+                self.cs_by_first.insert(first, self.changesets.len() as u32);
+            }
+            self.changesets.push_back(cref);
         }
     }
 
@@ -705,7 +733,16 @@ impl<P: Clone + Eq> OpGraph<P> {
             // cs verbatim (parents + payload), so idempotency only needs a
             // stored changeset with the exact same dot sequence.
             let all_known = already_dots.len() == cs.ops.len();
-            if all_known && self.changesets.iter().any(|r| r.matches_ops(&cs.ops)) {
+            let verbatim = all_known
+                && if self.index_degraded {
+                    self.changesets.iter().any(|r| r.matches_ops(&cs.ops))
+                } else {
+                    self.cs_by_first
+                        .get(&cs.ops[0].id)
+                        .and_then(|&ix| self.changesets.get(ix as usize))
+                        .is_some_and(|r| r.matches_ops(&cs.ops))
+                };
+            if verbatim {
                 return Ok(());
             }
             return Err(CrdtError::PartialDuplicate {
@@ -734,6 +771,9 @@ impl<P: Clone + Eq> OpGraph<P> {
         }
         for d in cref.dots() {
             self.try_promote_self_contained_mut(d, &mut scratch.promote_queue);
+        }
+        if let Some(first) = cref.dots().next() {
+            self.cs_by_first.insert(first, self.changesets.len() as u32);
         }
         self.changesets.push_back(cref);
         Ok(())
@@ -2638,5 +2678,177 @@ mod proptests {
         }
         on_path.remove(&node);
         true
+    }
+
+    fn last_sealed_changeset(g: &OpGraph<u32>) -> crate::Changeset<u32> {
+        let r = g.changesets().last().expect("a sealed changeset exists");
+        g.materialize_changeset(r)
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum Outcome {
+        Ok,
+        PartialDuplicate,
+        DotConflict,
+        Other,
+    }
+
+    fn classify(r: Result<(), CrdtError>) -> Outcome {
+        match r {
+            Ok(()) => Outcome::Ok,
+            Err(CrdtError::PartialDuplicate { .. }) => Outcome::PartialDuplicate,
+            Err(CrdtError::DotConflict { .. }) => Outcome::DotConflict,
+            Err(_) => Outcome::Other,
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    enum Action {
+        Fresh { actor_pick: usize, op_count: usize },
+        RedeliverSealed { pick: usize },
+        RedeliverMutatedPayload { pick: usize },
+        RedeliverMergedPair { pick: usize },
+        LocalCommit { op_count: usize },
+    }
+
+    fn action_strategy() -> impl Strategy<Value = Action> {
+        prop_oneof![
+            (0usize..3, 1usize..4).prop_map(|(actor_pick, op_count)| Action::Fresh {
+                actor_pick,
+                op_count
+            }),
+            proptest::num::usize::ANY.prop_map(|pick| Action::RedeliverSealed { pick }),
+            proptest::num::usize::ANY.prop_map(|pick| Action::RedeliverMutatedPayload { pick }),
+            proptest::num::usize::ANY.prop_map(|pick| Action::RedeliverMergedPair { pick }),
+            (1usize..4).prop_map(|op_count| Action::LocalCommit { op_count }),
+        ]
+    }
+
+    fn build_candidate(
+        action: &Action,
+        sealed: &[crate::Changeset<u32>],
+        clocks: &mut [u64; 3],
+        payload: &mut u32,
+    ) -> Option<crate::Changeset<u32>> {
+        match action {
+            Action::Fresh {
+                actor_pick,
+                op_count,
+            } => {
+                let actor = 10 + *actor_pick as u64;
+                let base = clocks[*actor_pick];
+                let mut prev = sealed.last().and_then(|cs| cs.ops.last()).map(|op| op.id);
+                let mut ops = Vec::with_capacity(*op_count);
+                for i in 0..*op_count {
+                    let id = Dot::new(actor, base + i as u64);
+                    *payload += 1;
+                    let parents = prev.map(|p| vec![p]).unwrap_or_default();
+                    ops.push(Op {
+                        id,
+                        parents,
+                        payload: *payload,
+                    });
+                    prev = Some(id);
+                }
+                clocks[*actor_pick] = base + *op_count as u64;
+                Some(crate::Changeset { ops })
+            }
+            Action::RedeliverSealed { pick } => {
+                if sealed.is_empty() {
+                    return None;
+                }
+                Some(sealed[pick % sealed.len()].clone())
+            }
+            Action::RedeliverMutatedPayload { pick } => {
+                if sealed.is_empty() {
+                    return None;
+                }
+                let mut cs = sealed[pick % sealed.len()].clone();
+                cs.ops[0].payload = cs.ops[0].payload.wrapping_add(1);
+                Some(cs)
+            }
+            Action::RedeliverMergedPair { pick } => {
+                if sealed.len() < 2 {
+                    return None;
+                }
+                let i = pick % (sealed.len() - 1);
+                let mut ops = sealed[i].ops.clone();
+                ops.extend(sealed[i + 1].ops.iter().cloned());
+                Some(crate::Changeset { ops })
+            }
+            Action::LocalCommit { .. } => None,
+        }
+    }
+
+    proptest! {
+        /// The degraded full-scan idempotency probe is the reference: apply an
+        /// arbitrary action sequence to two clones — one forced onto the scan
+        /// fallback, one on the O(1) index — and require identical per-action
+        /// classification and graph equality at every step.
+        #[test]
+        fn index_probe_matches_scan_fallback(
+            actions in proptest::collection::vec(action_strategy(), 1..80),
+        ) {
+            let mut scan_g: OpGraph<u32> = OpGraph::with_actor(9);
+            scan_g.debug_force_index_degraded();
+            let mut idx_g: OpGraph<u32> = OpGraph::with_actor(9);
+            let mut sealed: Vec<crate::Changeset<u32>> = Vec::new();
+            let mut clocks = [0u64; 3];
+            let mut payload = 0u32;
+            for action in &actions {
+                if let Action::LocalCommit { op_count } = action {
+                    for _ in 0..*op_count {
+                        payload += 1;
+                        scan_g.add_mut(payload).unwrap();
+                        idx_g.add_mut(payload).unwrap();
+                    }
+                    scan_g.commit_mut();
+                    idx_g.commit_mut();
+                    let a = last_sealed_changeset(&scan_g);
+                    let b = last_sealed_changeset(&idx_g);
+                    prop_assert_eq!(&a, &b);
+                    sealed.push(a);
+                    prop_assert!(scan_g == idx_g);
+                    continue;
+                }
+                let cs = match build_candidate(action, &sealed, &mut clocks, &mut payload) {
+                    Some(cs) => cs,
+                    None => continue,
+                };
+                let a = classify(scan_g.receive_changeset_mut(cs.clone()));
+                let b = classify(idx_g.receive_changeset_mut(cs.clone()));
+                prop_assert_eq!(a, b);
+                if matches!(action, Action::Fresh { .. }) && a == Outcome::Ok {
+                    sealed.push(cs);
+                }
+                prop_assert!(scan_g == idx_g);
+            }
+        }
+    }
+
+    #[test]
+    fn degraded_boundary_redelivery_stays_idempotent() {
+        let mut g: OpGraph<u32> = OpGraph::with_actor(7);
+        g.add_mut(1u32).unwrap();
+        g.add_mut(2u32).unwrap();
+        g.commit_mut();
+        let sealed = last_sealed_changeset(&g);
+        let first = sealed.ops[0].id;
+        let mut g = g.debug_remove(&first);
+        let singleton = crate::Changeset {
+            ops: vec![sealed.ops[0].clone()],
+        };
+        g.receive_changeset_mut(singleton).unwrap();
+        assert!(matches!(g.receive_changeset_mut(sealed), Ok(())));
+    }
+
+    #[test]
+    fn locally_committed_changeset_redelivery_is_idempotent() {
+        let mut g: OpGraph<u32> = OpGraph::with_actor(7);
+        g.add_mut(1u32).unwrap();
+        g.add_mut(2u32).unwrap();
+        g.commit_mut();
+        let cs = last_sealed_changeset(&g);
+        assert!(matches!(g.receive_changeset_mut(cs), Ok(())));
     }
 }

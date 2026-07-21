@@ -96,6 +96,9 @@ pub enum Corruption {
 
     #[error("alias run violates creation-boundary/domain invariants")]
     InvalidAliasOp,
+
+    #[error("changesets share first dot {dot} but differ")]
+    DivergentDuplicate { dot: editor_crdt::Dot },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]

@@ -49,6 +49,7 @@ export const worker = new Worker(
 
     autorun: false,
     concurrency: 10,
+    lockDuration: 120_000,
   },
 );
 

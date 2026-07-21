@@ -1,7 +1,12 @@
+use std::collections::HashMap;
+use std::collections::hash_map::Entry;
+
+use editor_crdt::Dot;
+
 use crate::bundle::decode_bundle_from_envelope;
 use crate::convert::{ReencodableChangesets, changesets_from_ctx_and_bundles, encode_changesets};
 use crate::envelope::unwrap_one;
-use crate::error::{CodecError, CodecResult};
+use crate::error::{CodecError, CodecResult, Corruption};
 
 pub struct Consolidation {
     pub payload: Vec<u8>,
@@ -38,11 +43,46 @@ pub fn consolidate_stream(bytes: &[u8]) -> CodecResult<Option<Consolidation>> {
         consumed_bytes += taken;
     }
 
-    if consumed < 2 {
+    if consumed == 0 {
         return Ok(None);
     }
 
-    let payload = encode_changesets(ReencodableChangesets::concat(parts))?;
+    let mut merged = ReencodableChangesets::concat(parts);
+    let slice = merged.as_slice();
+    let mut first_seen: HashMap<Dot, usize> = HashMap::with_capacity(slice.len());
+    let mut keep = vec![true; slice.len()];
+    let mut removed = 0usize;
+    for (i, cs) in slice.iter().enumerate() {
+        let Some(first) = cs.ops.first() else {
+            continue;
+        };
+        match first_seen.entry(first.id) {
+            Entry::Vacant(e) => {
+                e.insert(i);
+            }
+            Entry::Occupied(e) => {
+                if &slice[*e.get()] == cs {
+                    keep[i] = false;
+                    removed += 1;
+                } else {
+                    return Err(Corruption::DivergentDuplicate { dot: first.id }.into());
+                }
+            }
+        }
+    }
+    if removed > 0 {
+        let mut i = 0usize;
+        merged.retain(|_| {
+            let k = keep[i];
+            i += 1;
+            k
+        });
+    }
+    if consumed < 2 && removed == 0 {
+        return Ok(None);
+    }
+
+    let payload = encode_changesets(merged)?;
     Ok(Some(Consolidation {
         payload,
         consumed,

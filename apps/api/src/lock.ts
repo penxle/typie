@@ -8,15 +8,19 @@ export class Lock {
   #lockKey: string;
   #waitKey: string;
 
+  #ttlSeconds: number;
+
   #acquired = false;
   #timer?: NodeJS.Timeout;
   #controller: AbortController;
 
-  constructor(key: string) {
+  constructor(key: string, options: { ttlSeconds?: number } = {}) {
     this.#id = nanoid();
 
     this.#lockKey = `lock:${key}`;
     this.#waitKey = `lock:wait:${key}`;
+
+    this.#ttlSeconds = options.ttlSeconds ?? 30;
 
     this.#controller = new AbortController();
   }
@@ -62,7 +66,7 @@ export class Lock {
       end
     `;
 
-    const result = await redis.eval(script, 1, this.#lockKey, this.#id, 30);
+    const result = await redis.eval(script, 1, this.#lockKey, this.#id, this.#ttlSeconds);
     return result === 1;
   }
 
@@ -74,7 +78,7 @@ export class Lock {
     const deadline = Date.now() + 30_000;
 
     while (Date.now() < deadline) {
-      const acquired = await redis.set(this.#lockKey, this.#id, 'EX', 30, 'NX');
+      const acquired = await redis.set(this.#lockKey, this.#id, 'EX', this.#ttlSeconds, 'NX');
       if (acquired === 'OK') {
         this.#acquired = true;
         this.#start();
@@ -91,7 +95,7 @@ export class Lock {
   }
 
   async tryAcquire() {
-    const acquired = await redis.set(this.#lockKey, this.#id, 'EX', 30, 'NX');
+    const acquired = await redis.set(this.#lockKey, this.#id, 'EX', this.#ttlSeconds, 'NX');
     if (acquired === 'OK') {
       this.#acquired = true;
       this.#start();
