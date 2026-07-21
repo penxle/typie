@@ -96,6 +96,7 @@
   let creatingTimeline = false;
   let pendingHeadId: string | null = null;
   let destroyed = false;
+  let restoring = $state(false);
 
   let selectedHeadId = $state<string | null>(null);
   let shownHeadId = $state<string | null>(null);
@@ -262,13 +263,16 @@
 
   const restore = async () => {
     const head = shownHead;
-    if (!head) return;
+    if (!head || restoring) return;
 
+    restoring = true;
     try {
       await revertDocument({ input: { documentId: document.data.id, headId: head.id } });
     } catch {
       Toast.error('복원에 실패했어요. 잠시 후 다시 시도해 주세요.');
       return;
+    } finally {
+      restoring = false;
     }
 
     exitTimeline();
@@ -604,12 +608,19 @@
             transitionDuration: '150ms',
             _hover: { backgroundColor: 'accent.brand.hover', transform: 'translateY(-1px)' },
             _active: { backgroundColor: 'accent.brand.active', transform: 'translateY(0)' },
+            _disabled: { cursor: 'default', backgroundColor: 'accent.brand.default', transform: 'none' },
           })}
+          aria-busy={restoring}
+          disabled={restoring}
           onclick={restore}
           type="button"
           use:tooltip={{ message: '이 시점으로 문서를 복원하고 타임라인에 새로 추가합니다', placement: 'top' }}
         >
-          <Icon style={css.raw({ size: '14px' })} icon={IconClockFading} />
+          {#if restoring}
+            <RingSpinner style={css.raw({ size: '14px', color: 'text.bright' })} />
+          {:else}
+            <Icon style={css.raw({ size: '14px' })} icon={IconClockFading} />
+          {/if}
           복원
         </button>
       {/if}
