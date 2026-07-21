@@ -5401,9 +5401,9 @@ mod tests {
         }
     }
 
-    // can_apply_drop이 fold → after-paragraph 이동에 대해 TRUE 반환하는지 검증
+    // fold → after-paragraph 이동의 드롭 유효성 프로브가 TRUE를 반환하는지 검증
     #[test]
-    fn fold_dnd_can_apply_drop_at_root_2_returns_true() {
+    fn fold_dnd_probe_apply_drop_at_root_2_returns_true() {
         let (initial, _root, _fold_node, _p1) = state! {
             doc {
                 root: root {
@@ -5424,7 +5424,7 @@ mod tests {
             op: DndOp::StartInternalSelection,
         });
 
-        // probe can_apply_drop at (root, 2)
+        // probe apply_drop at (root, 2)
         let target_pos = Position::new(Dot::ROOT, 2);
         let result = editor.probe(|editor| {
             let dnd = editor.dnd.clone();

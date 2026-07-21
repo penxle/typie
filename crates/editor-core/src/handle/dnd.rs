@@ -5,6 +5,7 @@ use crate::message::{DndDropPayload, DndOp, ExternalDndPayloadKind, InputModifie
 use editor_clipboard::{PayloadSource, Slice};
 use editor_commands::{self as commands};
 use editor_model::{DocView, Fragment, Node, PlainFileNode, PlainImageNode, PlainNode};
+use editor_resource::Resource;
 use editor_state::{Position, Selection, StableResolveCtx, StableSelection, State};
 use editor_view::DropTarget;
 
@@ -65,29 +66,29 @@ pub fn handle_dnd_op(editor: &mut Editor, op: DndOp) -> Result<(), EditorError> 
                     let live_position = resolve_drop_position(&target, &editor.state);
                     live_position.and_then(|live_position| {
                         internal_source.as_ref().and_then(|source| {
-                            let inside = {
-                                let view = editor.state.view();
-                                position_inside_selection(&view, live_position, source)
-                            };
-                            (!inside
-                                && can_apply_drop(
-                                    editor,
+                            let view = editor.state.view();
+                            let allowed = !position_inside_selection(&view, live_position, source)
+                                && judge_apply_drop(
+                                    &editor.state,
+                                    &editor.resource.lock().unwrap(),
                                     live_position,
-                                    DndDropPayload::InternalSelection,
+                                    &DndDropPayload::InternalSelection,
                                     modifiers,
-                                    Some(*source),
-                                ))
-                            .then_some(target)
+                                    Some(source),
+                                );
+                            allowed.then_some(target)
                         })
                     })
                 }
                 (DndState::ExternalDnd { payload, .. }, Some(target)) => {
                     let live_position = resolve_drop_position(&target, &editor.state);
                     live_position.and_then(|live_position| {
-                        can_apply_drop(
-                            editor,
+                        let repr = representative_external_payload(payload);
+                        judge_apply_drop(
+                            &editor.state,
+                            &editor.resource.lock().unwrap(),
                             live_position,
-                            representative_external_payload(payload),
+                            &repr,
                             modifiers,
                             None,
                         )
@@ -126,32 +127,46 @@ pub fn handle_dnd_op(editor: &mut Editor, op: DndOp) -> Result<(), EditorError> 
                     (DndDropPayload::InternalSelection, Some(source)) => {
                         editor.dnd.drop_target().cloned().and_then(|target| {
                             let position = resolve_drop_position(&target, &editor.state)?;
-                            let inside = {
-                                let view = editor.state.view();
-                                position_inside_selection(&view, position, source)
-                            };
-                            (!inside
-                                && can_apply_drop(
-                                    editor,
+                            let view = editor.state.view();
+                            let allowed = !position_inside_selection(&view, position, source)
+                                && judge_apply_drop(
+                                    &editor.state,
+                                    &editor.resource.lock().unwrap(),
                                     position,
-                                    DndDropPayload::InternalSelection,
+                                    &DndDropPayload::InternalSelection,
                                     modifiers,
-                                    Some(*source),
-                                ))
-                            .then_some(position)
+                                    Some(source),
+                                );
+                            allowed.then_some(position)
                         })
                     }
                     _ => editor.dnd.drop_target().cloned().and_then(|target| {
                         let position = resolve_drop_position(&target, &editor.state)?;
-                        can_apply_drop(editor, position, payload.clone(), modifiers, None)
-                            .then_some(position)
+                        judge_apply_drop(
+                            &editor.state,
+                            &editor.resource.lock().unwrap(),
+                            position,
+                            &payload,
+                            modifiers,
+                            None,
+                        )
+                        .then_some(position)
                     }),
                 }
             } else {
                 None
             };
             let result = if let Some(position) = target {
-                apply_drop(editor, position, payload, modifiers, internal_source)
+                // TODO(TR-412): 한시 가교 — 구 can_apply_drop 프로브가 삼키던 실행
+                // 오류(예: insert_blocks_at_block_boundary의 synthetic 스캐폴드 앵커
+                // NodeNotFound)를 판정 전환 후에도 구 UX(조용한 no-op)로 유지한다.
+                // TR-412의 근본 수정이 랜딩되면 이 강등을 제거하고 오류를 다시
+                // 전파할 것 — dnd_judgment_parity.rs의 박제 테스트들이 그 시점에
+                // red가 되어 제거를 강제한다.
+                match apply_drop(editor, position, payload, modifiers, internal_source) {
+                    Ok(()) => Ok(()),
+                    Err(_) => Ok(()),
+                }
             } else {
                 Ok(())
             };
@@ -187,7 +202,11 @@ fn resolve_drop_position(target: &DropTarget, state: &State) -> Option<Position>
     target.position.resolve(&ctx)
 }
 
-fn position_inside_selection(view: &DocView, position: Position, selection: &Selection) -> bool {
+pub(crate) fn position_inside_selection(
+    view: &DocView,
+    position: Position,
+    selection: &Selection,
+) -> bool {
     let Some(resolved_selection) = selection.resolve(view) else {
         return false;
     };
@@ -205,16 +224,56 @@ fn position_inside_selection(view: &DocView, position: Position, selection: &Sel
     *resolved_selection.from() < resolved_position && resolved_position < *resolved_selection.to()
 }
 
-fn can_apply_drop(
-    editor: &mut Editor,
+// Dropping at the source selection's own from/to boundary is a structural no-op:
+// the block would be deleted and re-inserted at the same position (with new Dots).
+// Detect and skip early so probe mode doesn't report a false "state changed".
+fn drop_position_at_source_boundary(
+    view: &DocView,
     position: Position,
-    payload: DndDropPayload,
-    modifiers: InputModifiers,
-    source: Option<Selection>,
+    source: &Selection,
 ) -> bool {
-    editor
-        .probe(|editor| apply_drop(editor, position, payload, modifiers, source))
-        .unwrap_or(false)
+    source.resolve(view).is_some_and(|resolved| {
+        position == Position::from(resolved.from()) || position == Position::from(resolved.to())
+    })
+}
+
+pub(crate) fn judge_apply_drop(
+    state: &State,
+    resource: &Resource,
+    position: Position,
+    payload: &DndDropPayload,
+    modifiers: InputModifiers,
+    source: Option<&Selection>,
+) -> bool {
+    match payload {
+        DndDropPayload::Text { text, html } => {
+            let (slice, _) = Slice::from_payload(html.as_deref(), text, resource);
+            commands::resolve_slice_insertion(&state.view(), position, slice).is_some()
+        }
+        DndDropPayload::Files {
+            image_count,
+            file_count,
+        } => commands::resolve_slice_insertion(
+            &state.view(),
+            position,
+            files_slice(*image_count, *file_count),
+        )
+        .is_some(),
+        DndDropPayload::InternalSelection => {
+            let Some(source) = source else {
+                return false;
+            };
+            if !modifiers.alt && drop_position_at_source_boundary(&state.view(), position, source) {
+                return false;
+            }
+            let mut extract_state = state.clone();
+            extract_state.selection = Some(*source);
+            let Some(slice) = Slice::extract(&extract_state) else {
+                return false;
+            };
+            commands::resolve_slice_insertion(&state.view(), position, slice).is_some()
+        }
+    }
 }
 
 fn representative_external_payload(payload: ExternalDndPayloadKind) -> DndDropPayload {
@@ -327,17 +386,10 @@ fn drop_internal_selection_at(
         return Ok(());
     };
 
-    // Dropping at the source selection's own from/to boundary is a structural no-op:
-    // the block would be deleted and re-inserted at the same position (with new Dots).
-    // Detect and skip early so probe mode doesn't report a false "state changed".
     if !copy {
         let view = editor.state.view();
-        if let Some(resolved) = source.resolve(&view) {
-            let from = Position::from(resolved.from());
-            let to = Position::from(resolved.to());
-            if position == from || position == to {
-                return Ok(());
-            }
+        if drop_position_at_source_boundary(&view, position, &source) {
+            return Ok(());
         }
     }
 

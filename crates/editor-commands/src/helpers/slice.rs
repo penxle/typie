@@ -10,19 +10,17 @@ use editor_transaction::{Transaction, fulfill};
 use super::{
     apply_inline_modifiers, child_node_type, consume_pending_modifiers, find_ancestor_textblock,
     insert_hard_break_at_caret, insert_tab_at_caret, insert_text_at_caret,
-    materialize_position_block, resolve_effective_modifiers,
+    resolve_effective_modifiers,
 };
 use crate::types::SliceProvenance;
 use crate::{CommandError, CommandResult};
 
 mod page_break;
 
-use page_break::{
-    insert_terminal_page_break_from_edge, paragraph_ends_with_page_break,
-    prepare_page_breaks_for_position,
-};
+pub(crate) use page_break::prepare_page_breaks_for_position;
+use page_break::{insert_terminal_page_break_from_edge, paragraph_ends_with_page_break};
 
-enum InlineMode {
+pub(crate) enum InlineMode {
     Formatted,
     Plain(Vec<Modifier>),
 }
@@ -51,7 +49,7 @@ fn carry_from_paint(paint: &[Modifier]) -> Vec<Modifier> {
         .collect()
 }
 
-fn build_inline_mode(
+pub(crate) fn build_inline_mode(
     tr: &mut Transaction,
     position: &Position,
     provenance: SliceProvenance,
@@ -101,103 +99,24 @@ pub(crate) fn paint_block_uniformly(
     Ok(())
 }
 
-pub(crate) fn insert_slice_at_position(
-    tr: &mut Transaction,
-    position: Position,
-    slice: Slice,
-    provenance: SliceProvenance,
-) -> Result<Option<Selection>, CommandError> {
-    if slice.is_empty() {
-        return Ok(None);
-    }
-    let mut slice = prepare_page_breaks_for_position(tr, &position, slice);
-    if slice.is_empty() {
-        return Ok(None);
-    }
-    repair_slice_fragments(&mut slice.content);
-
-    let in_textblock = position_in_textblock(tr, &position);
-    if in_textblock {
-        let top_level = top_level_fragments(&slice);
-        let direct_inline = {
-            let view = tr.state().view();
-            find_ancestor_textblock(&view, position.node)
-                .and_then(|id| view.node(id))
-                .is_some_and(|textblock| {
-                    fragments_are_inline(&top_level)
-                        && fragments_fit_parent(textblock.node_type(), &top_level)
-                })
-        };
-        if direct_inline {
-            let fragments: Vec<Fragment> = top_level.into_iter().cloned().collect();
-            if !fragments.iter().any(is_insertable_inline_fragment) {
-                return Ok(None);
-            }
-            let position = materialize_position_block(tr, position)?;
-            let mode = build_inline_mode(tr, &position, provenance)?;
-            return insert_content_as_inline_at_position(tr, position, fragments, &mode);
-        }
-
-        let parent_fitted = fit_slice_for_textblock_parent(tr, &position, &slice);
-        if let Some(candidate) = parent_fitted.as_ref()
-            && can_splice_textblock(tr, &position, candidate)
-        {
-            let mut inserted = None;
-            tr.batch::<_, CommandError>(|tr| {
-                let position = materialize_position_block(tr, position)?;
-                let mode = build_inline_mode(tr, &position, provenance)?;
-                inserted = insert_blocks_in_textblock_at_position(tr, position, candidate, &mode)?;
-                Ok(())
-            })?;
-            return Ok(inserted);
-        }
-
-        let candidate = parent_fitted.as_ref().unwrap_or(&slice);
-        if let Some(fragments) = open_inline_content_for_textblock_insert(tr, &position, candidate)
-        {
-            let fragments: Vec<Fragment> = fragments.into_iter().cloned().collect();
-            if !fragments.iter().any(is_insertable_inline_fragment) {
-                return Ok(None);
-            }
-            let position = materialize_position_block(tr, position)?;
-            let mode = build_inline_mode(tr, &position, provenance)?;
-            return insert_content_as_inline_at_position(tr, position, fragments, &mode);
-        }
-        Ok(None)
-    } else {
-        let container_type = tr
-            .state()
-            .view()
-            .node(position.node)
-            .ok_or(CommandError::NodeNotFound(position.node))?
-            .node_type();
-        let Some(blocks) = block_boundary_fragments(&slice, container_type) else {
-            return Ok(None);
-        };
-        let position = materialize_position_block(tr, position)?;
-        insert_blocks_at_block_boundary(tr, position, blocks)
-    }
-}
-
-fn position_in_textblock(tr: &Transaction, position: &Position) -> bool {
-    let view = tr.state().view();
+pub(crate) fn position_in_textblock(view: &DocView, position: &Position) -> bool {
     position
-        .resolve(&view)
+        .resolve(view)
         .is_some_and(|resolved| resolved.is_inline_position())
 }
 
-fn top_level_fragments(slice: &Slice) -> Vec<&Fragment> {
+pub(crate) fn top_level_fragments(slice: &Slice) -> Vec<&Fragment> {
     slice.content.iter().collect()
 }
 
-fn fragments_fit_parent(parent_type: NodeType, fragments: &[&Fragment]) -> bool {
+pub(crate) fn fragments_fit_parent(parent_type: NodeType, fragments: &[&Fragment]) -> bool {
     let content = &Schema::node_spec(parent_type).content;
     fragments
         .iter()
         .all(|fragment| content.matches(fragment.node.as_type()))
 }
 
-fn fragments_are_inline(fragments: &[&Fragment]) -> bool {
+pub(crate) fn fragments_are_inline(fragments: &[&Fragment]) -> bool {
     !fragments.is_empty()
         && fragments
             .iter()
@@ -220,13 +139,12 @@ fn can_split_textblock_for_structural_insert(view: &DocView, textblock_id: Dot) 
     parent.spec().content.matches_sequence(&child_types)
 }
 
-fn fit_slice_for_textblock_parent(
-    tr: &Transaction,
+pub(crate) fn fit_slice_for_textblock_parent(
+    view: &DocView,
     position: &Position,
     slice: &Slice,
 ) -> Option<Slice> {
-    let view = tr.state().view();
-    let textblock_id = find_ancestor_textblock(&view, position.node)?;
+    let textblock_id = find_ancestor_textblock(view, position.node)?;
     let parent_type = view.node(textblock_id)?.parent()?.node_type();
     let (content, open_start, open_end) = open_fragments_for_parent(
         top_level_fragments(slice),
@@ -241,13 +159,12 @@ fn fit_slice_for_textblock_parent(
     ))
 }
 
-fn open_inline_content_for_textblock_insert<'a>(
-    tr: &Transaction,
+pub(crate) fn open_inline_content_for_textblock_insert<'a>(
+    view: &DocView,
     position: &Position,
     slice: &'a Slice,
 ) -> Option<Vec<&'a Fragment>> {
-    let view = tr.state().view();
-    let textblock_id = find_ancestor_textblock(&view, position.node)?;
+    let textblock_id = find_ancestor_textblock(view, position.node)?;
     let textblock = view.node(textblock_id)?;
     let textblock_type = textblock.node_type();
 
@@ -268,7 +185,7 @@ fn open_inline_content_for_textblock_insert<'a>(
     fragments_fit_parent(textblock_type, &open_content).then_some(open_content)
 }
 
-fn insert_content_as_inline_at_position(
+pub(crate) fn insert_content_as_inline_at_position(
     tr: &mut Transaction,
     position: Position,
     fragments: Vec<Fragment>,
@@ -296,7 +213,7 @@ fn insert_content_as_inline_at_position(
     Ok(Some(Selection::new(start, end)))
 }
 
-fn insert_blocks_in_textblock_at_position(
+pub(crate) fn insert_blocks_in_textblock_at_position(
     tr: &mut Transaction,
     position: Position,
     slice: &Slice,
@@ -332,7 +249,7 @@ fn insert_inline_fragments(
     Ok(any_change)
 }
 
-fn is_insertable_inline_fragment(fragment: &Fragment) -> bool {
+pub(crate) fn is_insertable_inline_fragment(fragment: &Fragment) -> bool {
     match &fragment.node {
         PlainNode::Text(t) => !t.text.is_empty(),
         PlainNode::HardBreak(_) | PlainNode::Tab(_) => true,
@@ -442,9 +359,8 @@ fn textblock_edge_joins(textblock: &NodeView, offset: usize, slice: &Slice) -> (
     (join_start, join_end)
 }
 
-fn can_splice_textblock(tr: &Transaction, position: &Position, slice: &Slice) -> bool {
-    let view = tr.state().view();
-    let Some(textblock_id) = find_ancestor_textblock(&view, position.node) else {
+pub(crate) fn can_splice_textblock(view: &DocView, position: &Position, slice: &Slice) -> bool {
+    let Some(textblock_id) = find_ancestor_textblock(view, position.node) else {
         return false;
     };
     let Some(textblock) = view.node(textblock_id) else {
@@ -479,7 +395,7 @@ fn can_splice_textblock(tr: &Transaction, position: &Position, slice: &Slice) ->
 
     let has_left = position.offset > 0;
     let has_right = position.offset < child_count;
-    if has_left && has_right && !can_split_textblock_for_structural_insert(&view, textblock_id) {
+    if has_left && has_right && !can_split_textblock_for_structural_insert(view, textblock_id) {
         return false;
     }
 
@@ -756,7 +672,7 @@ fn position_at_start_of_block(tr: &Transaction, block_id: Dot) -> Result<Positio
     })
 }
 
-fn insert_blocks_at_block_boundary(
+pub(crate) fn insert_blocks_at_block_boundary(
     tr: &mut Transaction,
     position: Position,
     blocks: Vec<Fragment>,
@@ -802,7 +718,10 @@ fn insert_blocks_at_block_boundary(
     )))
 }
 
-fn block_boundary_fragments(slice: &Slice, container_type: NodeType) -> Option<Vec<Fragment>> {
+pub(crate) fn block_boundary_fragments(
+    slice: &Slice,
+    container_type: NodeType,
+) -> Option<Vec<Fragment>> {
     let top_level = top_level_fragments(slice);
     if fragments_are_inline(&top_level)
         && Schema::node_spec(container_type)

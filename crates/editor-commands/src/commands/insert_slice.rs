@@ -3,7 +3,7 @@ use editor_state::is_unit_node_selection;
 use editor_transaction::Transaction;
 
 use crate::CommandResult;
-use crate::helpers::insert_slice_at_position;
+use crate::judgments::insert_slice_at_position;
 use crate::types::SliceProvenance;
 
 pub fn insert_slice(

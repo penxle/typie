@@ -22,6 +22,10 @@ pub use deletion::handle_deletion_op;
 #[cfg(test)]
 pub(crate) use dnd::apply_drop_for_test;
 pub use dnd::handle_dnd_op;
+#[cfg(test)]
+pub(crate) use dnd::judge_apply_drop;
+#[cfg(test)]
+pub(crate) use dnd::position_inside_selection;
 pub use history::handle_history_op;
 pub use insertion::handle_insertion_op;
 pub use key::handle_key_event;

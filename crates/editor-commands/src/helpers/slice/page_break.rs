@@ -1,6 +1,6 @@
 use editor_clipboard::Slice;
 use editor_crdt::Dot;
-use editor_model::{Fragment, NodeType, PlainNode, PlainParagraphNode};
+use editor_model::{DocView, Fragment, NodeType, PlainNode, PlainParagraphNode};
 use editor_state::Position;
 use editor_transaction::Transaction;
 
@@ -8,8 +8,8 @@ use super::{fragments_are_inline, position_in_textblock, top_level_fragments};
 use crate::CommandResult;
 use crate::helpers::{find_ancestor_textblock, insert_terminal_page_break_into_root_paragraph};
 
-pub(super) fn prepare_page_breaks_for_position(
-    tr: &Transaction,
+pub(crate) fn prepare_page_breaks_for_position(
+    view: &DocView,
     position: &Position,
     slice: Slice,
 ) -> Slice {
@@ -17,8 +17,8 @@ pub(super) fn prepare_page_breaks_for_position(
         return slice;
     }
 
-    let in_textblock = position_in_textblock(tr, position);
-    let root_textblock = in_textblock && position_is_in_root_paragraph(tr, position);
+    let in_textblock = position_in_textblock(view, position);
+    let root_textblock = in_textblock && position_is_in_root_paragraph(view, position);
     let root_boundary = !in_textblock && position.node == Dot::ROOT;
     let inserts_root_paragraph = root_textblock || root_boundary;
     let top_level_inline = fragments_are_inline(&top_level_fragments(&slice));
@@ -186,9 +186,8 @@ fn paragraph_with_children(children: Vec<Fragment>) -> Fragment {
     }
 }
 
-fn position_is_in_root_paragraph(tr: &Transaction, position: &Position) -> bool {
-    let view = tr.state().view();
-    find_ancestor_textblock(&view, position.node).is_some_and(|id| {
+fn position_is_in_root_paragraph(view: &DocView, position: &Position) -> bool {
+    find_ancestor_textblock(view, position.node).is_some_and(|id| {
         view.node(id).is_some_and(|node| {
             node.node_type() == NodeType::Paragraph
                 && node.parent().is_some_and(|parent| parent.id() == Dot::ROOT)
