@@ -24,13 +24,13 @@ import kotlinx.coroutines.test.runTest
 @OptIn(ExperimentalCoroutinesApi::class)
 class EditorFocusReturnSessionTest {
   @Test
-  fun capturesOnlyWhenFocusedEditorSelectionHandsFocusToAuxiliaryInput() = runTest {
+  fun capturesWhenFocusedEditorSelectionBlursWhileAuxiliaryOwnerIsActive() = runTest {
     val editor = testEditor(selection("eligible"))
     val frozenSelections = mutableListOf<Selection>()
     val session = session(frozenSelections = frozenSelections)
 
-    observe(session, editor, focused = true)
-    session.onAuxiliaryInputFocused()
+    observe(session, editor, focused = true, auxiliaryOwnerActive = true)
+    observe(session, editor, focused = false, auxiliaryOwnerActive = true)
     runCurrent()
 
     assertEquals(listOf(selection("eligible")), frozenSelections)
@@ -42,70 +42,65 @@ class EditorFocusReturnSessionTest {
     val frozenSelections = mutableListOf<Selection>()
     val session = session(frozenSelections = frozenSelections)
 
-    observe(session, editor, focused = false)
-    session.onAuxiliaryInputFocused()
+    observe(session, editor, focused = false, auxiliaryOwnerActive = true)
     editor.setSelection(null)
-    observe(session, editor, focused = true)
-    session.onAuxiliaryInputFocused()
+    observe(session, editor, focused = true, auxiliaryOwnerActive = true)
+    observe(session, editor, focused = false, auxiliaryOwnerActive = true)
     runCurrent()
 
     assertTrue(frozenSelections.isEmpty())
   }
 
   @Test
-  fun auxiliaryFocusFreezesTheTransferTimeSelection() = runTest {
+  fun editorBlurFreezesTheTransferTimeSelection() = runTest {
     val editor = testEditor(selection("eligible"))
     val frozenSelections = mutableListOf<Selection>()
     val session = session(frozenSelections = frozenSelections)
 
-    observe(session, editor, focused = true)
+    observe(session, editor, focused = true, auxiliaryOwnerActive = true)
     editor.setSelection(selection("transfer"))
-    session.onAuxiliaryInputFocused()
+    observe(session, editor, focused = true, auxiliaryOwnerActive = true)
+    observe(session, editor, focused = false, auxiliaryOwnerActive = true)
     runCurrent()
 
     assertEquals(listOf(selection("transfer")), frozenSelections)
   }
 
   @Test
-  fun editorBlurCanBeClaimedWithinTheFocusBoundary() = runTest {
+  fun openingAuxiliarySurfaceWithoutEditorBlurDoesNotCapture() = runTest {
     val editor = testEditor(selection("eligible"))
-    val boundary = CompletableDeferred<Unit>()
     val frozenSelections = mutableListOf<Selection>()
-    val session = session(frozenSelections = frozenSelections, awaitFocusBoundary = boundary::await)
+    val session = session(frozenSelections = frozenSelections)
 
-    observe(session, editor, focused = true)
-    observe(session, editor, focused = false)
-    session.onAuxiliaryInputFocused()
-    runCurrent()
-
-    assertEquals(listOf(selection("eligible")), frozenSelections)
-  }
-
-  @Test
-  fun expiredEditorBlurBoundaryCannotBeClaimed() = runTest {
-    val editor = testEditor(selection("eligible"))
-    val boundary = CompletableDeferred<Unit>()
-    val frozenSelections = mutableListOf<Selection>()
-    val session = session(frozenSelections = frozenSelections, awaitFocusBoundary = boundary::await)
-
-    observe(session, editor, focused = true)
-    observe(session, editor, focused = false)
-    boundary.complete(Unit)
-    runCurrent()
-    session.onAuxiliaryInputFocused()
+    observe(session, editor, focused = true, auxiliaryOwnerActive = false)
+    observe(session, editor, focused = true, auxiliaryOwnerActive = true)
     runCurrent()
 
     assertTrue(frozenSelections.isEmpty())
   }
 
   @Test
-  fun additionalAuxiliaryInputFocusKeepsTheOriginalCapture() = runTest {
+  fun editorBlurWithoutAuxiliaryOwnerDoesNotCapture() = runTest {
+    val editor = testEditor(selection("eligible"))
+    val frozenSelections = mutableListOf<Selection>()
+    val session = session(frozenSelections = frozenSelections)
+
+    observe(session, editor, focused = true, auxiliaryOwnerActive = false)
+    observe(session, editor, focused = false, auxiliaryOwnerActive = false)
+    runCurrent()
+
+    assertTrue(frozenSelections.isEmpty())
+  }
+
+  @Test
+  fun auxiliaryTransitionKeepsTheOriginalCapture() = runTest {
     val editor = testEditor(selection("eligible"))
     val frozenSelections = mutableListOf<Selection>()
     val session = session(frozenSelections = frozenSelections)
 
     capture(session, editor)
-    session.onAuxiliaryInputFocused()
+    observe(session, editor, focused = false, auxiliaryOwnerActive = false)
+    observe(session, editor, focused = false, auxiliaryOwnerActive = true)
     runCurrent()
 
     assertEquals(listOf(selection("eligible")), frozenSelections)
@@ -315,6 +310,7 @@ class EditorFocusReturnSessionTest {
       focused = false,
       selection = null,
       contextActive = true,
+      auxiliaryOwnerActive = false,
     )
     session.restore()
 
@@ -364,18 +360,20 @@ class EditorFocusReturnSessionTest {
     editor: TestEditor,
     focused: Boolean,
     contextActive: Boolean = true,
+    auxiliaryOwnerActive: Boolean = false,
   ) {
     session.observeEditorContext(
       editor = editor.editor,
       focused = focused,
       selection = editor.editor.state.selection,
       contextActive = contextActive,
+      auxiliaryOwnerActive = auxiliaryOwnerActive,
     )
   }
 
   private fun TestScope.capture(session: EditorFocusReturnSession, editor: TestEditor) {
-    observe(session, editor, focused = true)
-    session.onAuxiliaryInputFocused()
+    observe(session, editor, focused = true, auxiliaryOwnerActive = true)
+    observe(session, editor, focused = false, auxiliaryOwnerActive = true)
     runCurrent()
   }
 }

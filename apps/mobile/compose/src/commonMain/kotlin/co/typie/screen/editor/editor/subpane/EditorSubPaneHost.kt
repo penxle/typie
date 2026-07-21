@@ -25,7 +25,6 @@ internal fun EditorSubPaneHost(
   maxTopInset: Dp,
   safeBottomInset: Dp,
   trustedImeBottomInset: Dp,
-  onAuxiliaryInputFocused: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
   val editor = LocalEditorRuntime.current.editor
@@ -44,7 +43,6 @@ internal fun EditorSubPaneHost(
         maxTopInset = maxTopInset,
         safeBottomInset = safeBottomInset,
         trustedImeBottomInset = trustedImeBottomInset,
-        onInputFocused = onAuxiliaryInputFocused,
         onDismissStarted = state::beginDismiss,
         onDismiss = state::dismiss,
         onLayoutInfoChanged = state::updateLayoutInfo,
@@ -64,10 +62,7 @@ internal fun EditorSubPaneHost(
           composeLocation = comments.session.composeLocation,
           createEnabled = comments.session.topBarCreateEnabled,
           onFreezeCurrentSelection = comments.session.freezeCurrentSelection,
-          onInputFocusChanged = { focused ->
-            comments.session.onInputFocusChanged(focused)
-            if (focused) onAuxiliaryInputFocused()
-          },
+          onInputFocusChanged = comments.session.onInputFocusChanged,
           maxTopInset = maxTopInset,
           safeBottomInset = safeBottomInset,
           trustedImeBottomInset = trustedImeBottomInset,

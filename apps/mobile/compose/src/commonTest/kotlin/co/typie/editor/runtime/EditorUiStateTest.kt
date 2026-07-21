@@ -10,6 +10,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class EditorUiStateTest {
   @Test
@@ -70,6 +71,23 @@ class EditorUiStateTest {
     assertFalse(state.focused)
     assertNull(state.resolveViewportTransform().localToGlobal(page = 0, x = 0f, y = 0f))
     assertFalse(state.editorBoundsInContainer.isValid)
+  }
+
+  @Test
+  fun `stale input session release does not clear current ownership`() {
+    val state = EditorUiState()
+    val previousSession = Any()
+    val currentSession = Any()
+
+    state.acquireInputSession(previousSession)
+    state.acquireInputSession(currentSession)
+    state.releaseInputSession(previousSession)
+
+    assertTrue(state.editorInputSessionActive)
+
+    state.releaseInputSession(currentSession)
+
+    assertFalse(state.editorInputSessionActive)
   }
 
   @Test

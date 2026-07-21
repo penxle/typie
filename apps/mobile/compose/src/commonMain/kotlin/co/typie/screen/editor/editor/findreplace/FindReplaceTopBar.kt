@@ -59,10 +59,7 @@ internal fun FindReplaceTopBarLeading(session: EditorFindReplaceSession) {
 }
 
 @Composable
-internal fun FindReplaceTopBarCenter(
-  session: EditorFindReplaceSession,
-  onInputFocused: () -> Unit,
-) {
+internal fun FindReplaceTopBarCenter(session: EditorFindReplaceSession) {
   val inputState =
     rememberTextInputState(
       value = session.findText,
@@ -104,9 +101,9 @@ internal fun FindReplaceTopBarCenter(
       keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
       keyboardActions = KeyboardActions(onSearch = { session.findNext() }),
       modifier =
-        Modifier.weight(1f)
-          .textInputFocusable(inputState) { state -> if (state.isFocused) onInputFocused() }
-          .onPreviewKeyEvent { event -> handleFindInputShortcut(event, session) },
+        Modifier.weight(1f).textInputFocusable(inputState).onPreviewKeyEvent { event ->
+          handleFindInputShortcut(event, session)
+        },
       decorationBox = { innerTextField ->
         Box(contentAlignment = Alignment.CenterStart) {
           if (session.findText.isEmpty()) {

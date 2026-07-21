@@ -17,6 +17,11 @@ class EditorUiState {
   var focused by mutableStateOf(false)
     private set
 
+  private var inputSessionOwner by mutableStateOf<Any?>(null)
+
+  internal val editorInputSessionActive: Boolean
+    get() = inputSessionOwner != null
+
   internal val contextMenu = EditorContextMenuState()
 
   var displayZoom by mutableStateOf(1f)
@@ -36,8 +41,19 @@ class EditorUiState {
     this.focused = focused
   }
 
+  internal fun acquireInputSession(owner: Any) {
+    inputSessionOwner = owner
+  }
+
+  internal fun releaseInputSession(owner: Any) {
+    if (inputSessionOwner === owner) {
+      inputSessionOwner = null
+    }
+  }
+
   fun clear() {
     focused = false
+    inputSessionOwner = null
     contextMenu.reset()
     displayZoom = 1f
     pageOffsets.clear()

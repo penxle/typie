@@ -84,7 +84,6 @@ internal fun RelatedNotesSheet(
   maxTopInset: Dp,
   safeBottomInset: Dp,
   trustedImeBottomInset: Dp,
-  onInputFocused: () -> Unit,
   onDismissStarted: () -> Unit,
   onDismiss: () -> Unit,
   onLayoutInfoChanged: (EditorSubPaneLayoutInfo) -> Unit,
@@ -182,7 +181,6 @@ internal fun RelatedNotesSheet(
       saveNoteContent = ::saveNoteContent,
       saveNoteColor = ::saveNoteColor,
       collapseExpandedNote = ::collapseExpandedNote,
-      onInputFocused = onInputFocused,
     )
   }
 }
@@ -199,7 +197,6 @@ private fun RelatedNotesSheetContent(
   saveNoteContent: suspend (noteId: String, content: String) -> Boolean,
   saveNoteColor: suspend (noteId: String, color: String) -> Boolean,
   collapseExpandedNote: suspend () -> Boolean,
-  onInputFocused: () -> Unit,
 ) {
   val nav = Nav.current
   val dialog = LocalDialog.current
@@ -486,7 +483,6 @@ private fun RelatedNotesSheetContent(
           onMoveNote = { noteId, lowerOrder, upperOrder ->
             model.moveNote(noteId = noteId, lowerOrder = lowerOrder, upperOrder = upperOrder)
           },
-          onInputFocused = onInputFocused,
         )
       val reorderState = rememberNoteListReorderState(items = listItems, scrollState = scrollState)
 

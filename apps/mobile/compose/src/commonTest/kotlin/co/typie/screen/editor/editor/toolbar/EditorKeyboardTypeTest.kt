@@ -70,6 +70,26 @@ class EditorKeyboardTypeTest {
   }
 
   @Test
+  fun ime_hide_ownership_is_preserved_until_the_keyboard_is_visible_again() {
+    val tracker = EditorImeHideOwnershipTracker()
+
+    assertNull(tracker.observe(visible = true, editorInputSessionActive = false))
+    assertEquals(
+      EditorImeInputOwner.Other,
+      tracker.observe(visible = false, editorInputSessionActive = false),
+    )
+    assertEquals(
+      EditorImeInputOwner.Other,
+      tracker.observe(visible = false, editorInputSessionActive = true),
+    )
+    assertNull(tracker.observe(visible = true, editorInputSessionActive = true))
+    assertEquals(
+      EditorImeInputOwner.Editor,
+      tracker.observe(visible = false, editorInputSessionActive = true),
+    )
+  }
+
+  @Test
   fun shown_keyboard_presentation_exposes_settled_ime_bottom() {
     val keyboardState =
       EditorKeyboardState(

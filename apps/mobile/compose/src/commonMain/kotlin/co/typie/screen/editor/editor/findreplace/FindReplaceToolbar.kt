@@ -64,7 +64,6 @@ internal fun FindReplaceToolbar(
   session: EditorFindReplaceSession,
   visibleState: MutableTransitionState<Boolean>,
   bottomInset: Dp,
-  onInputFocused: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
   AnimatedVisibility(
@@ -104,11 +103,7 @@ internal fun FindReplaceToolbar(
               ),
           verticalAlignment = Alignment.CenterVertically,
         ) {
-          ReplaceTextField(
-            session = session,
-            modifier = Modifier.weight(1f),
-            onInputFocused = onInputFocused,
-          )
+          ReplaceTextField(session = session, modifier = Modifier.weight(1f))
           Spacer(Modifier.width(ToolbarItemGap))
           EditorToolbarButton(
             icon = Lucide.Replace,
@@ -144,11 +139,7 @@ internal fun FindReplaceToolbar(
 }
 
 @Composable
-private fun ReplaceTextField(
-  session: EditorFindReplaceSession,
-  modifier: Modifier = Modifier,
-  onInputFocused: () -> Unit,
-) {
+private fun ReplaceTextField(session: EditorFindReplaceSession, modifier: Modifier = Modifier) {
   val inputState =
     rememberTextInputState(
       value = session.replaceText,
@@ -171,7 +162,7 @@ private fun ReplaceTextField(
         .clip(shape)
         .background(AppTheme.colors.surfaceInset, shape)
         .padding(horizontal = 10.dp)
-        .textInputFocusable(inputState) { state -> if (state.isFocused) onInputFocused() }
+        .textInputFocusable(inputState)
         .onPreviewKeyEvent { event -> handleReplaceInputShortcut(event, session) },
     decorationBox = { innerTextField ->
       Box(contentAlignment = Alignment.CenterStart) {

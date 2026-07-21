@@ -327,14 +327,6 @@ fun EditorScreen(entityId: String) {
     }
   }
   val editorState = editor?.state ?: EditorState.Initial
-  SideEffect {
-    focusReturnSession.observeEditorContext(
-      editor = editor,
-      focused = uiState.focused,
-      selection = editorState.selection,
-      contextActive = screenState.sceneInForeground && !editorReadOnly,
-    )
-  }
   val externalAssetIds =
     remember(editorState.externalElements) {
       editorState.externalElements
@@ -380,12 +372,22 @@ fun EditorScreen(entityId: String) {
       requestEditorFocus()
     }
   }
-  val focusStealingSurfaceActive =
+  val focusReturnOwnerActive =
     findReplace.active ||
-      subPaneState.active == EditorSubPane.RelatedNotes ||
-      subPaneState.active == EditorSubPane.Comments
-  LaunchedEffect(focusStealingSurfaceActive) {
-    if (!focusStealingSurfaceActive) {
+      (subPaneState.editorInputBlocked &&
+        (subPaneState.active == EditorSubPane.RelatedNotes ||
+          subPaneState.active == EditorSubPane.Comments))
+  SideEffect {
+    focusReturnSession.observeEditorContext(
+      editor = editor,
+      focused = uiState.focused,
+      selection = editorState.selection,
+      contextActive = screenState.sceneInForeground && !editorReadOnly,
+      auxiliaryOwnerActive = focusReturnOwnerActive,
+    )
+  }
+  LaunchedEffect(focusReturnOwnerActive) {
+    if (!focusReturnOwnerActive) {
       focusReturnSession.restore()
     }
   }
@@ -457,12 +459,7 @@ fun EditorScreen(entityId: String) {
       ProvideTopBar(
         leading = { FindReplaceTopBarLeading(session = findReplace) },
         leadingKey = FindReplaceTopBarLeadingKey,
-        center = {
-          FindReplaceTopBarCenter(
-            session = findReplace,
-            onInputFocused = focusReturnSession::onAuxiliaryInputFocused,
-          )
-        },
+        center = { FindReplaceTopBarCenter(session = findReplace) },
         centerKey = FindReplaceTopBarCenterKey,
         trailing = { FindReplaceTopBarTrailing(session = findReplace) },
         trailingKey = FindReplaceTopBarTrailingKey,
@@ -1033,7 +1030,8 @@ fun EditorScreen(entityId: String) {
     val bottomSafeInset = contentPadding.calculateBottomPadding()
     val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
     val toolbarInputState = rememberEditorToolbarInputState()
-    val keyboardState = rememberEditorKeyboardState()
+    val keyboardState =
+      rememberEditorKeyboardState(isEditorInputSessionActive = { uiState.editorInputSessionActive })
     val toolbarPagerState = rememberToolbarPagerState(key = entityId)
     val toolbarSessionState = rememberEditorToolbarSessionState(key = entityId)
     val toolbarPanel = toolbarInputState.panel
@@ -1648,7 +1646,6 @@ fun EditorScreen(entityId: String) {
             visibleState = findReplaceToolbarTransition,
             bottomInset = findReplaceToolbarBottomInset,
             modifier = Modifier,
-            onInputFocused = focusReturnSession::onAuxiliaryInputFocused,
           )
           EditorToolbarHost(
             editorState = editorState,
@@ -1745,7 +1742,6 @@ fun EditorScreen(entityId: String) {
             maxTopInset = topInset,
             safeBottomInset = bottomSafeInset,
             trustedImeBottomInset = trustedImeBottom,
-            onAuxiliaryInputFocused = focusReturnSession::onAuxiliaryInputFocused,
             modifier = Modifier.fillMaxSize(),
           )
         },

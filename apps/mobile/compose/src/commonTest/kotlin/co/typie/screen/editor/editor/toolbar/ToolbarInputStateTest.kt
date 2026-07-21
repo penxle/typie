@@ -207,7 +207,17 @@ class ToolbarInputStateTest {
     val keyboardVisible = toolbarInputEnvironment(imeBottom = 320.dp)
 
     state.onEnvironmentChanged(keyboardVisible)
-    val effects = state.onEnvironmentChanged(toolbarInputEnvironment(imeBottom = 0.dp))
+    val effects =
+      state.onEnvironmentChanged(
+        toolbarInputEnvironment(
+          imeBottom = 0.dp,
+          keyboardState =
+            EditorKeyboardState(
+              type = EditorKeyboardType.Software,
+              imeHideEventOwner = EditorImeInputOwner.Editor,
+            ),
+        )
+      )
 
     assertEquals(listOf(EditorInputEffect.ClearFocus), effects)
     assertEquals(null, state.keyboardRestoreInset)
@@ -218,6 +228,29 @@ class ToolbarInputStateTest {
       state.onEnvironmentChanged(toolbarInputEnvironment(focused = false, imeBottom = 0.dp))
 
     assertEquals(emptyList(), focusCleared)
+  }
+
+  @Test
+  fun auxiliary_ime_hide_after_editor_focus_restore_keeps_focus() {
+    val state = EditorToolbarInputState()
+    val auxiliaryKeyboardVisible = toolbarInputEnvironment(focused = false, imeBottom = 320.dp)
+
+    state.onEnvironmentChanged(auxiliaryKeyboardVisible)
+    state.onEnvironmentChanged(auxiliaryKeyboardVisible.copy(focused = true))
+    val effects =
+      state.onEnvironmentChanged(
+        toolbarInputEnvironment(
+          focused = true,
+          imeBottom = 0.dp,
+          keyboardState =
+            EditorKeyboardState(
+              type = EditorKeyboardType.Software,
+              imeHideEventOwner = EditorImeInputOwner.Other,
+            ),
+        )
+      )
+
+    assertEquals(emptyList(), effects)
   }
 
   @Test
@@ -280,10 +313,7 @@ class ToolbarInputStateTest {
         toolbarInputEnvironment(
           imeBottom = 0.dp,
           keyboardState =
-            EditorKeyboardState(
-              type = EditorKeyboardType.Software,
-              hardwareKeyboardAttached = true,
-            ),
+            EditorKeyboardState(type = EditorKeyboardType.Software, hardwareKeyboardAttached = true),
         )
       )
 
@@ -298,7 +328,15 @@ class ToolbarInputStateTest {
     state.onEnvironmentChanged(keyboardVisible)
     state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanel.Insert), keyboardVisible)
 
-    val keyboardHidden = toolbarInputEnvironment(imeBottom = 0.dp)
+    val keyboardHidden =
+      toolbarInputEnvironment(
+        imeBottom = 0.dp,
+        keyboardState =
+          EditorKeyboardState(
+            type = EditorKeyboardType.Software,
+            imeHideEventOwner = EditorImeInputOwner.Editor,
+          ),
+      )
     state.onEnvironmentChanged(keyboardHidden)
     state.dispatch(ToolbarIntent.RestoreEditorInput, keyboardHidden)
     state.onEnvironmentChanged(toolbarInputEnvironment(imeBottom = 95.dp))

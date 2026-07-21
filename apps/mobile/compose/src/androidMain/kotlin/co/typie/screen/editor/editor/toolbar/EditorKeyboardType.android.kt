@@ -23,7 +23,9 @@ import androidx.compose.ui.platform.LocalDensity
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal actual fun rememberEditorKeyboardState(): EditorKeyboardState {
+internal actual fun rememberEditorKeyboardState(
+  isEditorInputSessionActive: () -> Boolean
+): EditorKeyboardState {
   val configuration = LocalConfiguration.current
   val context = LocalContext.current
   val density = LocalDensity.current
@@ -38,6 +40,14 @@ internal actual fun rememberEditorKeyboardState(): EditorKeyboardState {
       imeBottom = imeBottomDp,
       animationSourceBottom = imeAnimationSourceBottomDp,
       animationTargetBottom = imeAnimationTargetBottomDp,
+    )
+  val imeHideOwnershipTracker = remember { EditorImeHideOwnershipTracker() }
+  val imeHideEventOwner =
+    imeHideOwnershipTracker.observe(
+      visible =
+        presentation == EditorKeyboardPresentation.Showing ||
+          presentation is EditorKeyboardPresentation.Shown,
+      editorInputSessionActive = isEditorInputSessionActive(),
     )
   val hardwareKeyboardVisible =
     configuration.keyboard != Configuration.KEYBOARD_NOKEYS &&
@@ -73,6 +83,7 @@ internal actual fun rememberEditorKeyboardState(): EditorKeyboardState {
         EditorKeyboardType.Software
       },
     imeFrameVisible = imeBottom > 0 || imeAnimationTargetBottom > 0,
+    imeHideEventOwner = imeHideEventOwner,
     presentation = presentation,
     hardwareKeyboardAttached = hardwareKeyboardVisible || externalKeyboardAttached,
   )

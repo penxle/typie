@@ -8,6 +8,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.dp
 import platform.Foundation.NSNotificationCenter
@@ -22,10 +23,14 @@ import platform.UIKit.UIKeyboardWillHideNotification
 import swiftPMImport.co.typie.compose.EditorKeyboardBridge
 
 @Composable
-internal actual fun rememberEditorKeyboardState(): EditorKeyboardState {
+internal actual fun rememberEditorKeyboardState(
+  isEditorInputSessionActive: () -> Boolean
+): EditorKeyboardState {
+  val currentEditorInputSessionActive by rememberUpdatedState(isEditorInputSessionActive)
   var hardwareKeyboardMode by remember { mutableStateOf(isEditorHardwareKeyboardConnected()) }
   var imeFrameVisible by remember { mutableStateOf(false) }
   var imeHideEventVersion by remember { mutableIntStateOf(0) }
+  var imeHideEventOwner by remember { mutableStateOf<EditorImeInputOwner?>(null) }
   var presentation by remember {
     mutableStateOf<EditorKeyboardPresentation>(EditorKeyboardPresentation.Hidden)
   }
@@ -40,6 +45,19 @@ internal actual fun rememberEditorKeyboardState(): EditorKeyboardState {
   ) {
     val targetBottom =
       notification?.let(EditorKeyboardBridge::imeVisibleHeightWithNotification)?.dp ?: 0.dp
+    if (targetBottom > 0.dp) {
+      imeHideEventOwner = null
+    } else if (
+      presentation != EditorKeyboardPresentation.Hidden &&
+        presentation != EditorKeyboardPresentation.Hiding
+    ) {
+      imeHideEventOwner =
+        if (currentEditorInputSessionActive()) {
+          EditorImeInputOwner.Editor
+        } else {
+          EditorImeInputOwner.Other
+        }
+    }
     if (settlesImeBottom) {
       presentation =
         if (targetBottom > 0.dp) {
@@ -125,6 +143,14 @@ internal actual fun rememberEditorKeyboardState(): EditorKeyboardState {
         `object` = null,
         queue = NSOperationQueue.mainQueue,
       ) {
+        if (presentation != EditorKeyboardPresentation.Hiding) {
+          imeHideEventOwner =
+            if (currentEditorInputSessionActive()) {
+              EditorImeInputOwner.Editor
+            } else {
+              EditorImeInputOwner.Other
+            }
+        }
         presentation = EditorKeyboardPresentation.Hiding
         imeFrameVisible = false
         imeHideEventVersion++
@@ -161,6 +187,7 @@ internal actual fun rememberEditorKeyboardState(): EditorKeyboardState {
       },
     imeFrameVisible = imeFrameVisible,
     imeHideEventVersion = imeHideEventVersion,
+    imeHideEventOwner = imeHideEventOwner,
     presentation = presentation,
   )
 }

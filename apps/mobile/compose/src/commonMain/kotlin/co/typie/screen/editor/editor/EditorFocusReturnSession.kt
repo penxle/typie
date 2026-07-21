@@ -10,11 +10,9 @@ import co.typie.editor.ffi.StableSelection
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.launch
 
 @Stable
 internal class EditorFocusReturnSession(
@@ -31,13 +29,13 @@ internal class EditorFocusReturnSession(
 ) {
   private var currentContext: EditorContext? = null
   private var state: State = State.Idle
-  private var pendingBoundaryJob: Job? = null
 
   fun observeEditorContext(
     editor: Editor?,
     focused: Boolean,
     selection: Selection?,
     contextActive: Boolean,
+    auxiliaryOwnerActive: Boolean,
   ) {
     if (!contextActive || editor == null) {
       if (currentContext != null || state !is State.Idle) {
@@ -55,44 +53,29 @@ internal class EditorFocusReturnSession(
 
     when (val current = state) {
       State.Idle -> {
-        if (focused && selection != null) beginEligible(context)
+        if (focused && selection != null) beginEligible(context, selection)
       }
       is State.Eligible -> {
         when {
+          focused && selection != null -> beginEligible(context, selection)
           focused && selection == null -> clearState(resetContext = false)
-          !focused -> beginPendingBlur(current.context)
-        }
-      }
-      is State.PendingBlur -> {
-        when {
-          focused && selection != null -> beginEligible(context)
-          focused -> clearState(resetContext = false)
+          auxiliaryOwnerActive -> capture(current)
+          else -> clearState(resetContext = false)
         }
       }
       is State.Captured -> Unit
     }
   }
 
-  fun onAuxiliaryInputFocused() {
-    val context =
-      when (val current = state) {
-        is State.Eligible -> current.context
-        is State.PendingBlur -> current.context
-        State.Idle,
-        is State.Captured -> return
-      }
-    if (!isRestorable(context)) return
-
-    val selection = context.editor.state.selection ?: return
-    pendingBoundaryJob?.cancel()
-    pendingBoundaryJob = null
+  private fun capture(eligible: State.Eligible) {
+    if (!isRestorable(eligible.context)) return
     state =
       State.Captured(
-        context = context,
+        context = eligible.context,
         stableSelection =
           scope.async {
             try {
-              freezeSelection(context.editor, selection)
+              freezeSelection(eligible.context.editor, eligible.selection)
             } catch (error: CancellationException) {
               throw error
             } catch (_: Throwable) {
@@ -135,33 +118,11 @@ internal class EditorFocusReturnSession(
     clearState(resetContext = true)
   }
 
-  private fun beginEligible(context: EditorContext) {
-    clearState(resetContext = false)
-    state = State.Eligible(context)
-  }
-
-  private fun beginPendingBlur(context: EditorContext) {
-    val pending = State.PendingBlur(context)
-    state = pending
-    pendingBoundaryJob?.cancel()
-    pendingBoundaryJob = scope.launch {
-      try {
-        awaitFocusBoundary()
-      } catch (error: CancellationException) {
-        throw error
-      } catch (_: Throwable) {
-        // A failed boundary still expires eligibility.
-      }
-      if (state === pending && isRestorable(context)) {
-        state = State.Idle
-        pendingBoundaryJob = null
-      }
-    }
+  private fun beginEligible(context: EditorContext, selection: Selection) {
+    state = State.Eligible(context, selection)
   }
 
   private fun clearState(resetContext: Boolean) {
-    pendingBoundaryJob?.cancel()
-    pendingBoundaryJob = null
     (state as? State.Captured)?.stableSelection?.cancel()
     state = State.Idle
     if (resetContext) {
@@ -203,9 +164,7 @@ internal class EditorFocusReturnSession(
   private sealed interface State {
     data object Idle : State
 
-    data class Eligible(val context: EditorContext) : State
-
-    data class PendingBlur(val context: EditorContext) : State
+    data class Eligible(val context: EditorContext, val selection: Selection) : State
 
     data class Captured(
       val context: EditorContext,

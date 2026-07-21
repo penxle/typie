@@ -191,6 +191,7 @@ internal class EditorToolbarInputState {
         panel == null &&
         environment.focused &&
         environment.keyboardType == EditorKeyboardType.Software &&
+        environment.keyboardState.imeHideEventOwner == EditorImeInputOwner.Editor &&
         !environment.keyboardState.hardwareKeyboardAttached &&
         !environment.panelTransitionRunning
     ) {

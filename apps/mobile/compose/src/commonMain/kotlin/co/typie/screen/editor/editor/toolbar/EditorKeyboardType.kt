@@ -9,6 +9,11 @@ internal enum class EditorKeyboardType {
   Hardware,
 }
 
+internal enum class EditorImeInputOwner {
+  Editor,
+  Other,
+}
+
 internal sealed interface EditorKeyboardPresentation {
   data object Hidden : EditorKeyboardPresentation
 
@@ -23,6 +28,7 @@ internal data class EditorKeyboardState(
   val type: EditorKeyboardType,
   val imeFrameVisible: Boolean = false,
   val imeHideEventVersion: Int = 0,
+  val imeHideEventOwner: EditorImeInputOwner? = null,
   val presentation: EditorKeyboardPresentation = EditorKeyboardPresentation.Hidden,
   val hardwareKeyboardAttached: Boolean = type == EditorKeyboardType.Hardware,
 ) {
@@ -39,7 +45,30 @@ internal data class EditorKeyboardState(
       }
 }
 
-@Composable internal expect fun rememberEditorKeyboardState(): EditorKeyboardState
+internal class EditorImeHideOwnershipTracker {
+  private var previouslyVisible = false
+  private var hideEventOwner: EditorImeInputOwner? = null
+
+  fun observe(visible: Boolean, editorInputSessionActive: Boolean): EditorImeInputOwner? {
+    if (visible) {
+      hideEventOwner = null
+    } else if (previouslyVisible) {
+      hideEventOwner =
+        if (editorInputSessionActive) {
+          EditorImeInputOwner.Editor
+        } else {
+          EditorImeInputOwner.Other
+        }
+    }
+    previouslyVisible = visible
+    return hideEventOwner
+  }
+}
+
+@Composable
+internal expect fun rememberEditorKeyboardState(
+  isEditorInputSessionActive: () -> Boolean
+): EditorKeyboardState
 
 internal fun isImeVisible(imeBottom: Dp, safeBottomInset: Dp): Boolean = imeBottom > safeBottomInset
 

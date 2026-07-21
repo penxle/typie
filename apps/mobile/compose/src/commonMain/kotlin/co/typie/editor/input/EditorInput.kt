@@ -255,8 +255,7 @@ internal class EditorInputNode(
 
   private fun dispatch(
     messages: List<Message>,
-    bringIntoViewTarget: EditorBringIntoViewTarget? =
-      EditorBringIntoViewTarget.CurrentSelectionHead,
+    bringIntoViewTarget: EditorBringIntoViewTarget? = EditorBringIntoViewTarget.CurrentSelectionHead,
   ) {
     if (messages.isEmpty()) return
     submit { sessionEditor, context ->
@@ -308,8 +307,7 @@ internal class EditorInputNode(
 
   private fun dispatchSync(
     messages: List<Message>,
-    bringIntoViewTarget: EditorBringIntoViewTarget? =
-      EditorBringIntoViewTarget.CurrentSelectionHead,
+    bringIntoViewTarget: EditorBringIntoViewTarget? = EditorBringIntoViewTarget.CurrentSelectionHead,
   ): EditorState? {
     if (messages.isEmpty()) return null
     return editor.syncWithBringIntoView(bringIntoViewRequests) {
@@ -569,6 +567,9 @@ internal class EditorInputNode(
               viewportTransform = { uiState.resolveViewportTransform(editor.pageSizes) },
               dispatch = { messages -> dispatch(messages) },
             )
+          val inputSessionUiState = uiState
+          val inputSessionOwner = Any()
+          inputSessionUiState.acquireInputSession(inputSessionOwner)
           try {
             // The ime window is only materialized while a session is active, so
             // the session must not start against a pre-activation snapshot.
@@ -624,13 +625,13 @@ internal class EditorInputNode(
                 // extracted-text monitors never go stale. drop(1): the initial
                 // emission is already handled above.
                 snapshotFlow {
-                  EditorImeNotifyKey(
-                    selection = editor.selection,
-                    cursor = editor.cursor,
-                    ime = editor.tickIme,
-                    paused = editor.imeNotificationsPaused,
-                  )
-                }
+                    EditorImeNotifyKey(
+                      selection = editor.selection,
+                      cursor = editor.cursor,
+                      ime = editor.tickIme,
+                      paused = editor.imeNotificationsPaused,
+                    )
+                  }
                   .imeNotificationEvents()
                   .collect { notifyImeStateChanged(editor) }
               }
@@ -638,7 +639,11 @@ internal class EditorInputNode(
               startInputMethod(request)
             }
           } finally {
-            uninstallPlatformSessionEffects()
+            try {
+              uninstallPlatformSessionEffects()
+            } finally {
+              inputSessionUiState.releaseInputSession(inputSessionOwner)
+            }
           }
         }
       } else {
