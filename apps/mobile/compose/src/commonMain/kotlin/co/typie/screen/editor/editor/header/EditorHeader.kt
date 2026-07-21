@@ -46,11 +46,41 @@ import co.typie.ui.skeleton.LocalSkeleton
 import co.typie.ui.skeleton.SkeletonTextBone
 import co.typie.ui.theme.AppTheme
 
-private val TitleHorizontalPadding = 20.dp
+private val ContinuousTitleHorizontalPadding = 20.dp
 private val TitleTopPadding = 12.dp
 private val TitleBlockSpacing = 40.dp
 private val TitleBetweenSpacing = 8.dp
 private val SubtitleDividerWidth = 120.dp
+private const val PaginatedHeaderMinContentWidth = 320f
+private const val PaginatedHeaderMinScale = 0.75f
+
+internal fun resolveEditorHeaderTrackWidth(
+  layoutSpec: EditorDocumentLayoutSpec,
+  resolvedPageWidth: Float?,
+  visibleBodyWidth: Float,
+  bodyTrackWidth: Float,
+): Float =
+  when (layoutSpec) {
+    is EditorDocumentLayoutSpec.Continuous ->
+      if (resolvedPageWidth != null && resolvedPageWidth.isFinite() && resolvedPageWidth > 0f) {
+        bodyTrackWidth
+      } else {
+        0f
+      }
+    is EditorDocumentLayoutSpec.Paginated -> {
+      val displayZoom = layoutSpec.resolveDisplayZoom(bodyTrackWidth)
+      val horizontalInset = (layoutSpec.pageMarginLeft + layoutSpec.pageMarginRight) * displayZoom
+      val minimumContentWidth =
+        maxOf(
+          PaginatedHeaderMinContentWidth * displayZoom,
+          PaginatedHeaderMinContentWidth * PaginatedHeaderMinScale,
+        )
+      val maximumContentWidth = (visibleBodyWidth - horizontalInset).coerceAtLeast(0f)
+      val targetWidth = horizontalInset + minOf(minimumContentWidth, maximumContentWidth)
+
+      maxOf(bodyTrackWidth, targetWidth)
+    }
+  }.coerceAtLeast(0f)
 
 @Composable
 internal fun EditorHeader(
@@ -58,6 +88,7 @@ internal fun EditorHeader(
   subtitle: String,
   layoutSpec: EditorDocumentLayoutSpec,
   trackWidth: Float,
+  pageTrackWidth: Float = trackWidth,
   loading: Boolean,
   enabled: Boolean = true,
   topInset: Dp,
@@ -92,6 +123,7 @@ internal fun EditorHeader(
     }
   }
   val resolveHeight: (Int) -> Float = remember(density) { { height -> height / density.density } }
+  val titleHorizontalPadding = resolveTitleHorizontalPadding(layoutSpec, pageTrackWidth)
 
   Box(
     modifier =
@@ -109,8 +141,8 @@ internal fun EditorHeader(
       modifier =
         contentModifier.padding(
           top = topInset + TitleTopPadding,
-          start = TitleHorizontalPadding,
-          end = TitleHorizontalPadding,
+          start = titleHorizontalPadding.start,
+          end = titleHorizontalPadding.end,
         )
     ) {
       Spacer(Modifier.height(TitleBlockSpacing))
@@ -186,6 +218,35 @@ internal fun EditorHeader(
     }
   }
 }
+
+private data class TitleHorizontalPadding(val start: Dp, val end: Dp)
+
+private fun resolveTitleHorizontalPadding(
+  layoutSpec: EditorDocumentLayoutSpec,
+  pageTrackWidth: Float,
+): TitleHorizontalPadding =
+  when (layoutSpec) {
+    is EditorDocumentLayoutSpec.Continuous ->
+      TitleHorizontalPadding(
+        start = ContinuousTitleHorizontalPadding,
+        end = ContinuousTitleHorizontalPadding,
+      )
+    is EditorDocumentLayoutSpec.Paginated -> {
+      val displayZoom = layoutSpec.resolveDisplayZoom(pageTrackWidth)
+
+      TitleHorizontalPadding(
+        start = (layoutSpec.pageMarginLeft * displayZoom).dp,
+        end = (layoutSpec.pageMarginRight * displayZoom).dp,
+      )
+    }
+  }
+
+private fun EditorDocumentLayoutSpec.Paginated.resolveDisplayZoom(pageTrackWidth: Float): Float =
+  if (pageWidth.isFinite() && pageWidth > 0f && pageTrackWidth.isFinite() && pageTrackWidth > 0f) {
+    pageTrackWidth / pageWidth
+  } else {
+    1f
+  }
 
 @Composable
 private fun EditorHeaderField(

@@ -1,6 +1,7 @@
 package co.typie.screen.editor.editor
 
 import co.typie.editor.body.EditorDocumentLayoutSpec
+import co.typie.screen.editor.editor.header.resolveEditorHeaderTrackWidth
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -45,7 +46,7 @@ class EditorHeaderTrackWidthTest {
   }
 
   @Test
-  fun `paginated header keeps using the visible body width`() {
+  fun `paginated header follows the body page track when the viewport is wider`() {
     val width =
       resolveEditorHeaderTrackWidth(
         layoutSpec =
@@ -62,6 +63,27 @@ class EditorHeaderTrackWidthTest {
         bodyTrackWidth = 720f,
       )
 
-    assertEquals(960f, width)
+    assertEquals(720f, width)
+  }
+
+  @Test
+  fun `paginated header preserves the web minimum content width when zoomed out`() {
+    val width =
+      resolveEditorHeaderTrackWidth(
+        layoutSpec =
+          EditorDocumentLayoutSpec.Paginated(
+            pageWidth = 720f,
+            pageHeight = 960f,
+            pageMarginTop = 72f,
+            pageMarginBottom = 72f,
+            pageMarginLeft = 64f,
+            pageMarginRight = 64f,
+          ),
+        resolvedPageWidth = null,
+        visibleBodyWidth = 320f,
+        bodyTrackWidth = 180f,
+      )
+
+    assertEquals(272f, width)
   }
 }

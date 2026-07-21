@@ -133,6 +133,7 @@ import co.typie.screen.editor.editor.findreplace.FindReplaceTopBarLeading
 import co.typie.screen.editor.editor.findreplace.FindReplaceTopBarTrailing
 import co.typie.screen.editor.editor.findreplace.rememberEditorFindReplaceSession
 import co.typie.screen.editor.editor.header.EditorHeader
+import co.typie.screen.editor.editor.header.resolveEditorHeaderTrackWidth
 import co.typie.screen.editor.editor.layout.EditorScreenLayout
 import co.typie.screen.editor.editor.layout.EditorViewportScrollReconcileMode
 import co.typie.screen.editor.editor.overlay.EditorCharacterCountOverlay
@@ -1493,6 +1494,7 @@ fun EditorScreen(entityId: String) {
             subtitle = model.subtitleDraft,
             layoutSpec = layoutSpec,
             trackWidth = headerTrackWidth,
+            pageTrackWidth = bodyTrackWidth,
             loading = false,
             enabled = editorReady && !editorReadOnly,
             topInset = topInset,
@@ -1760,22 +1762,6 @@ fun EditorScreen(entityId: String) {
     }
   }
 }
-
-internal fun resolveEditorHeaderTrackWidth(
-  layoutSpec: EditorDocumentLayoutSpec,
-  resolvedPageWidth: Float?,
-  visibleBodyWidth: Float,
-  bodyTrackWidth: Float,
-): Float =
-  when (layoutSpec) {
-    is EditorDocumentLayoutSpec.Continuous ->
-      if (resolvedPageWidth != null && resolvedPageWidth.isFinite() && resolvedPageWidth > 0f) {
-        bodyTrackWidth
-      } else {
-        0f
-      }
-    is EditorDocumentLayoutSpec.Paginated -> visibleBodyWidth
-  }.coerceAtLeast(0f)
 
 internal fun enterDocumentStartFromHeader(
   editor: Editor?,

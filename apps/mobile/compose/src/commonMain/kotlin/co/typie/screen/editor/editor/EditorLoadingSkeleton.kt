@@ -19,6 +19,7 @@ import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.computeInitialPaginatedZoom
 import co.typie.editor.ffi.Size
 import co.typie.screen.editor.editor.header.EditorHeader
+import co.typie.screen.editor.editor.header.resolveEditorHeaderTrackWidth
 import co.typie.ui.component.Text
 import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.theme.AppTheme
@@ -89,16 +90,19 @@ internal fun EditorLoadingSkeleton(
               )
         }
       val headerTrackWidth =
-        when (layoutSpec) {
-          is EditorDocumentLayoutSpec.Continuous -> bodyTrackWidth
-          is EditorDocumentLayoutSpec.Paginated -> availableWidth
-        }
+        resolveEditorHeaderTrackWidth(
+          layoutSpec = layoutSpec,
+          resolvedPageWidth = bodyTrackWidth,
+          visibleBodyWidth = availableWidth,
+          bodyTrackWidth = bodyTrackWidth,
+        )
       Column {
         EditorHeader(
           title = "",
           subtitle = "",
           layoutSpec = layoutSpec,
           trackWidth = headerTrackWidth,
+          pageTrackWidth = bodyTrackWidth,
           loading = true,
           enabled = false,
           topInset = topInset,
