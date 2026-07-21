@@ -7,7 +7,7 @@
   import { Toast } from '@typie/ui/notification';
   import { createDragScroll, elementScrollViewport } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
-  import { onDestroy, tick } from 'svelte';
+  import { onDestroy, tick, untrack } from 'svelte';
   import { on } from 'svelte/events';
   import { SvelteMap } from 'svelte/reactivity';
   import { fade } from 'svelte/transition';
@@ -647,9 +647,10 @@
     const scrollContainer = tree.parentElement;
     if (!scrollContainer) return;
 
+    const initialPointer = untrack(() => ({ clientX: lastPointerX, clientY: lastPointerY }));
     const current = createDragScroll(elementScrollViewport(scrollContainer), {
-      initialPointer: { clientX: lastPointerX, clientY: lastPointerY },
-      onScroll: () => updateDropTarget(lastPointerX, lastPointerY),
+      initialPointer,
+      onScroll: (clientX, clientY) => updateDropTarget(clientX, clientY),
     });
     dragScroll = current;
     return () => {
