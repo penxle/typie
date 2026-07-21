@@ -11,8 +11,6 @@ import co.typie.editor.ffi.Position
 import co.typie.editor.ffi.ProseRangeInstallOutcome
 import co.typie.editor.ffi.ProseTrackedRangeRegistration
 import co.typie.editor.ffi.Rect
-import co.typie.editor.ffi.SelectionExpansionUnit
-import co.typie.editor.ffi.SelectionOp
 import co.typie.editor.ffi.Size
 import co.typie.editor.ffi.StateField
 import co.typie.editor.ffi.SystemEvent
@@ -591,24 +589,6 @@ class EditorAwaitTest {
       } finally {
         quiescence.resume()
       }
-    }
-
-  @Test
-  fun can_probes_inner_editor_on_demand() =
-    runTest(dispatcher) {
-      val message: Message = Message.Selection(SelectionOp.Expand(SelectionExpansionUnit.Word))
-      val probed = mutableListOf<Message>()
-      val fake =
-        FakeFfiEditor(
-          canProvider = { message ->
-            probed += message
-            true
-          }
-        )
-      val editor = Editor(fake, this, dispatcher)
-
-      assertTrue(editor.can(message))
-      assertEquals(listOf(message), probed)
     }
 
   @Test

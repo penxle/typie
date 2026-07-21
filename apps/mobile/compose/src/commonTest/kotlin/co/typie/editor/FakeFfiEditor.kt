@@ -7,6 +7,7 @@ import co.typie.editor.ffi.CharacterCounts
 import co.typie.editor.ffi.ClipboardPayload
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.EditorEvent
+import co.typie.editor.ffi.ExpansionAffordances
 import co.typie.editor.ffi.ExternalElement
 import co.typie.editor.ffi.HistoryTag
 import co.typie.editor.ffi.Ime
@@ -64,6 +65,8 @@ internal class FakeFfiEditor(
           indent = false,
           outdent = false,
         ),
+      expansion =
+        ExpansionAffordances(word = false, sentence = false, paragraph = false, all = false),
     )
   },
   var characterCountsProvider: () -> CharacterCounts = { EmptyCharacterCounts },

@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -20,10 +19,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import co.typie.editor.Editor
 import co.typie.editor.ext.unclippedBoundsInRoot
-import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.SelectionExpansionUnit
-import co.typie.editor.ffi.SelectionOp
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.editor.runtime.LocalEditorUiState
 import co.typie.editor.scroll.EditorAutoScrollMode
@@ -145,15 +142,15 @@ internal fun EditorScreenOverlayHost(
 
 @Composable
 private fun rememberAvailableExpansionUnits(editor: Editor): Set<SelectionExpansionUnit>? {
-  var units by
-    remember(editor, editor.state.selection) { mutableStateOf<Set<SelectionExpansionUnit>?>(null) }
-  LaunchedEffect(editor, editor.state.version) {
-    units =
-      SelectionExpansionUnit.entries
-        .filter { unit -> editor.can(Message.Selection(SelectionOp.Expand(unit))) }
-        .toSet()
+  val expansion = editor.state.blockState?.expansion ?: return null
+  return remember(expansion) {
+    buildSet {
+      if (expansion.word) add(SelectionExpansionUnit.Word)
+      if (expansion.sentence) add(SelectionExpansionUnit.Sentence)
+      if (expansion.paragraph) add(SelectionExpansionUnit.Paragraph)
+      if (expansion.all) add(SelectionExpansionUnit.All)
+    }
   }
-  return units
 }
 
 @Composable

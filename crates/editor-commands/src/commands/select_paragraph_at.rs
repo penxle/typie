@@ -1,16 +1,23 @@
 use editor_state::Selection;
-use editor_state::resolve_paragraph_selection_expansion;
 use editor_transaction::Transaction;
 
 use crate::CommandResult;
-use crate::helpers::set_selection_if_changed;
+use crate::judgments::judge_expand_paragraph;
+use crate::types::Verdict;
 
 pub fn select_paragraph_at(tr: &mut Transaction, selection: Selection) -> CommandResult {
-    let resolved = {
+    let verdict = {
         let view = tr.view();
-        resolve_paragraph_selection_expansion(&selection, &view)
+        judge_expand_paragraph(&view, Some(selection))
     };
-    set_selection_if_changed(tr, resolved)
+    match verdict {
+        Verdict::NotApplicable => Ok(false),
+        Verdict::AbsorbOnly => Ok(true),
+        Verdict::Change(resolved) => {
+            tr.set_selection(Some(resolved))?;
+            Ok(true)
+        }
+    }
 }
 
 #[cfg(test)]

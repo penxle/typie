@@ -9,7 +9,7 @@ use crate::helpers::{
     find_enclosing_list_item_id, is_block_container, is_list_type, list_item_parent_list_id,
     retain_topmost_list_items,
 };
-use crate::types::{LiftOfKindPlan, ListVerdict};
+use crate::types::{LiftOfKindPlan, Verdict};
 
 /// `Change` ⇒ `set_list_kind` 실행이 kind 교체 또는 리스트 wrap을 방출.
 /// range의 wrap run은 사전 상태 기준이다 — kind 교체(1상)가 문단 run을 만들거나
@@ -18,9 +18,9 @@ pub(crate) fn judge_set_list_kind(
     view: &DocView,
     selection: &Selection,
     target_list_type: NodeType,
-) -> ListVerdict<()> {
+) -> Verdict<()> {
     if !is_list_type(target_list_type) {
-        return ListVerdict::NotApplicable;
+        return Verdict::NotApplicable;
     }
     if selection.anchor == selection.head {
         if let Some(list_id) = find_enclosing_list_id(view, selection.head.node) {
@@ -28,40 +28,36 @@ pub(crate) fn judge_set_list_kind(
                 .node(list_id)
                 .is_some_and(|list| list.node_type() != target_list_type);
             return if differs {
-                ListVerdict::Change(())
+                Verdict::Change(())
             } else {
-                ListVerdict::NotApplicable
+                Verdict::NotApplicable
             };
         }
         return judge_collapsed_wrap(view, selection.head.node, target_list_type);
     }
 
     let Some(rs) = selection.resolve(view) else {
-        return ListVerdict::NotApplicable;
+        return Verdict::NotApplicable;
     };
     let kind_changes = collect_existing_lists_in_range(&rs).into_iter().any(|id| {
         view.node(id)
             .is_some_and(|list| list.node_type() != target_list_type)
     });
     if kind_changes {
-        return ListVerdict::Change(());
+        return Verdict::Change(());
     }
     if collect_listable_wrap_runs(&rs, target_list_type).is_empty() {
-        ListVerdict::NotApplicable
+        Verdict::NotApplicable
     } else {
-        ListVerdict::Change(())
+        Verdict::Change(())
     }
 }
 
-fn judge_collapsed_wrap(
-    view: &DocView,
-    cursor: Dot,
-    target_list_type: NodeType,
-) -> ListVerdict<()> {
+fn judge_collapsed_wrap(view: &DocView, cursor: Dot, target_list_type: NodeType) -> Verdict<()> {
     let mut node = view.node(cursor);
     let paragraph = loop {
         let Some(n) = node else {
-            return ListVerdict::NotApplicable;
+            return Verdict::NotApplicable;
         };
         if n.node_type() == NodeType::Paragraph {
             break n;
@@ -69,13 +65,13 @@ fn judge_collapsed_wrap(
         node = n.parent();
     };
     let Some(parent) = paragraph.parent() else {
-        return ListVerdict::NotApplicable;
+        return Verdict::NotApplicable;
     };
     if parent.node_type() == NodeType::ListItem || !parent.spec().content.matches(target_list_type)
     {
-        return ListVerdict::NotApplicable;
+        return Verdict::NotApplicable;
     }
-    ListVerdict::Change(())
+    Verdict::Change(())
 }
 
 /// `Change(plan)` ⇒ 선택 전체가 target kind 리스트 항목이라 lift가 관측 가능한
@@ -85,9 +81,9 @@ pub(crate) fn judge_lift_list_items_of_kind(
     view: &DocView,
     selection: &Selection,
     target_list_type: NodeType,
-) -> ListVerdict<LiftOfKindPlan> {
+) -> Verdict<LiftOfKindPlan> {
     if !is_list_type(target_list_type) {
-        return ListVerdict::NotApplicable;
+        return Verdict::NotApplicable;
     }
     if selection.anchor == selection.head {
         let is_target = find_enclosing_list_item_id(view, selection.head.node)
@@ -95,17 +91,17 @@ pub(crate) fn judge_lift_list_items_of_kind(
             .and_then(|list| view.node(list))
             .is_some_and(|list| list.node_type() == target_list_type);
         if !is_target {
-            return ListVerdict::NotApplicable;
+            return Verdict::NotApplicable;
         }
         return match judge_outdent_list(view, selection) {
-            ListVerdict::Change(plan) => ListVerdict::Change(LiftOfKindPlan { items: plan.items }),
-            ListVerdict::AbsorbOnly => ListVerdict::AbsorbOnly,
-            ListVerdict::NotApplicable => ListVerdict::NotApplicable,
+            Verdict::Change(plan) => Verdict::Change(LiftOfKindPlan { items: plan.items }),
+            Verdict::AbsorbOnly => Verdict::AbsorbOnly,
+            Verdict::NotApplicable => Verdict::NotApplicable,
         };
     }
 
     let Some(rs) = selection.resolve(view) else {
-        return ListVerdict::NotApplicable;
+        return Verdict::NotApplicable;
     };
     let mut items = collect_list_items_for_kind_toggle(&rs, view);
     let all_target = !items.is_empty()
@@ -116,13 +112,13 @@ pub(crate) fn judge_lift_list_items_of_kind(
                 .is_some_and(|list| list.node_type() == target_list_type)
         });
     if !all_target {
-        return ListVerdict::NotApplicable;
+        return Verdict::NotApplicable;
     }
     retain_topmost_list_items(view, &mut items);
     if items.is_empty() {
-        return ListVerdict::NotApplicable;
+        return Verdict::NotApplicable;
     }
-    ListVerdict::Change(LiftOfKindPlan { items })
+    Verdict::Change(LiftOfKindPlan { items })
 }
 
 /// handler의 first!(lift, set) 순서와 gap materialize 프렐류드를 미러링한다.
@@ -132,7 +128,7 @@ pub fn judge_toggle_list_kind(
     view: &DocView,
     selection: &Selection,
     target_list_type: NodeType,
-) -> ListVerdict<()> {
+) -> Verdict<()> {
     if let Some(rs) = selection.resolve(view)
         && let Some(gap) = as_gap_cursor(&rs)
     {
@@ -145,29 +141,29 @@ pub fn judge_toggle_list_kind(
         }
     }
     match judge_lift_list_items_of_kind(view, selection, target_list_type) {
-        ListVerdict::NotApplicable => judge_set_list_kind(view, selection, target_list_type),
-        ListVerdict::Change(_) => ListVerdict::Change(()),
-        ListVerdict::AbsorbOnly => ListVerdict::AbsorbOnly,
+        Verdict::NotApplicable => judge_set_list_kind(view, selection, target_list_type),
+        Verdict::Change(_) => Verdict::Change(()),
+        Verdict::AbsorbOnly => Verdict::AbsorbOnly,
     }
 }
 
-fn judge_gap_toggle_list_kind(parent: &NodeView, target_list_type: NodeType) -> ListVerdict<()> {
+fn judge_gap_toggle_list_kind(parent: &NodeView, target_list_type: NodeType) -> Verdict<()> {
     for ancestor in parent.ancestors() {
         if ancestor.node_type() == NodeType::ListItem {
             return if ancestor
                 .parent()
                 .is_some_and(|list| is_list_type(list.node_type()))
             {
-                ListVerdict::Change(())
+                Verdict::Change(())
             } else {
-                ListVerdict::NotApplicable
+                Verdict::NotApplicable
             };
         }
     }
     if parent.spec().content.matches(target_list_type) {
-        ListVerdict::Change(())
+        Verdict::Change(())
     } else {
-        ListVerdict::NotApplicable
+        Verdict::NotApplicable
     }
 }
 
@@ -220,7 +216,7 @@ mod tests {
         let view = state.view();
         assert!(matches!(
             judge_set_list_kind(&view, &selection, NodeType::BulletList),
-            crate::ListVerdict::NotApplicable
+            crate::Verdict::NotApplicable
         ));
     }
 

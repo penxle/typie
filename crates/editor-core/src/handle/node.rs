@@ -220,7 +220,10 @@ mod tests {
             other => panic!("expected horizontal rule, got {other:?}"),
         };
         assert_eq!(variant, HorizontalRuleVariant::Zigzag);
-        let block_state = crate::block_state::resolve_block_state(editor.state()).unwrap();
+        let block_state = {
+            let resource = editor.resource().lock().unwrap();
+            crate::block_state::resolve_block_state(editor.state(), &resource).unwrap()
+        };
         let block_state_variant = block_state
             .nodes
             .iter()

@@ -114,6 +114,7 @@ export interface BlockState {
     nodes: Block[];
     intersecting_nodes: Block[];
     list: ListAffordances;
+    expansion: ExpansionAffordances;
 }
 
 export interface BuiltFont {
@@ -178,6 +179,13 @@ export interface DecorationStyle {
     background_radius?: number | undefined;
     background_inset?: number | undefined;
     underline: Underline | undefined;
+}
+
+export interface ExpansionAffordances {
+    word: boolean;
+    sentence: boolean;
+    paragraph: boolean;
+    all: boolean;
 }
 
 export interface ExternalElement {

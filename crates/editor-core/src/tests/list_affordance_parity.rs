@@ -62,6 +62,30 @@ fn fixtures() -> Vec<State> {
         };
         out.push(s);
     }
+    {
+        let (s, ..) = state! {
+            doc { root {
+                p1: paragraph { text("Hello world. Second sentence here. Third one!") }
+                paragraph { text("다른 문단의 텍스트") }
+            } }
+            selection: (p1, 3)
+        };
+        out.push(s);
+    }
+    {
+        let (s, ..) = state! {
+            doc { root { p1: paragraph {} } }
+            selection: (p1, 0)
+        };
+        out.push(s);
+    }
+    {
+        let (s, ..) = state! {
+            doc { r: root { image image } }
+            selection: (r, 0, <)
+        };
+        out.push(s);
+    }
     out
 }
 
@@ -115,10 +139,48 @@ fn assert_parity(editor: &mut Editor) {
     }
 }
 
+fn assert_expand_parity(editor: &mut Editor) {
+    let selection = editor.state().selection;
+    for msg_unit in [
+        SelectionExpansionUnit::Word,
+        SelectionExpansionUnit::Sentence,
+        SelectionExpansionUnit::Paragraph,
+        SelectionExpansionUnit::All,
+    ] {
+        let judged = {
+            let resource = editor.resource().lock().unwrap();
+            let view = editor.state().view();
+            match msg_unit {
+                SelectionExpansionUnit::Word => {
+                    commands::judge_expand_word(&view, selection, &resource).changes()
+                }
+                SelectionExpansionUnit::Sentence => {
+                    commands::judge_expand_sentence(&view, selection, &resource).changes()
+                }
+                SelectionExpansionUnit::Paragraph => {
+                    commands::judge_expand_paragraph(&view, selection).changes()
+                }
+                SelectionExpansionUnit::All => {
+                    commands::judge_expand_all(&view, selection).changes()
+                }
+            }
+        };
+        let probed = editor
+            .can(Message::Selection {
+                op: SelectionOp::Expand { unit: msg_unit },
+            })
+            .expect("probe must succeed");
+        assert_eq!(
+            judged, probed,
+            "expand judgment must match probe for {msg_unit:?}"
+        );
+    }
+}
+
 proptest::proptest! {
     #![proptest_config(proptest::prelude::ProptestConfig { cases: 256, ..proptest::prelude::ProptestConfig::default() })]
     #[test]
-    fn judgment_matches_probe(fixture_idx in 0usize..4, start in 0usize..64, end in 0usize..64) {
+    fn judgment_matches_probe(fixture_idx in 0usize..7, start in 0usize..64, end in 0usize..64) {
         let state = fixtures().swap_remove(fixture_idx);
         let size = flat_size(&state.view());
         let start = start.min(size);
@@ -126,6 +188,7 @@ proptest::proptest! {
         let mut editor = Editor::new_test(state);
         editor.apply(Message::Selection { op: SelectionOp::SetFlat { start, end } });
         assert_parity(&mut editor);
+        assert_expand_parity(&mut editor);
     }
 }
 
@@ -137,6 +200,7 @@ fn judgment_matches_probe_for_gap_cursor() {
     };
     let mut editor = Editor::new_test(state);
     assert_parity(&mut editor);
+    assert_expand_parity(&mut editor);
 }
 
 #[test]
@@ -150,6 +214,7 @@ fn judgment_matches_probe_for_unit_selection() {
     };
     let mut editor = Editor::new_test(state);
     assert_parity(&mut editor);
+    assert_expand_parity(&mut editor);
 }
 
 #[test]
@@ -183,6 +248,7 @@ fn judgment_matches_probe_for_synthetic_selection() {
     ));
     let mut editor = Editor::new_test(state);
     assert_parity(&mut editor);
+    assert_expand_parity(&mut editor);
 }
 
 #[test]
@@ -196,6 +262,7 @@ fn judgment_matches_probe_for_synthetic_endpoint_absorb_only() {
         op: SelectionOp::SetFlat { start, end },
     });
     assert_parity(&mut editor);
+    assert_expand_parity(&mut editor);
 }
 
 #[test]
@@ -209,4 +276,5 @@ fn judgment_matches_probe_for_root_endpoint_absorb_only() {
         op: SelectionOp::SetFlat { start, end },
     });
     assert_parity(&mut editor);
+    assert_expand_parity(&mut editor);
 }

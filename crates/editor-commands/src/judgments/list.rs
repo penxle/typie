@@ -7,40 +7,40 @@ use crate::helpers::{
     is_materializable_synthetic, lift_list_item_inner, lift_list_items_planned,
     list_item_parent_list_id, retain_topmost_list_items, sink_list_item_inner,
 };
-use crate::types::{IndentPlan, ListVerdict, OutdentPlan};
+use crate::types::{IndentPlan, OutdentPlan, Verdict};
 use crate::{CommandError, CommandResult};
 
 /// `Change` ⇒ `lift_selected_list_items` 실행 시 관측 가능한 구조 변화 보장.
 /// `AbsorbOnly` ⇒ 실행이 handled(true)를 반환하지만 관측 변화는 없음.
-pub fn judge_outdent_list(view: &DocView, selection: &Selection) -> ListVerdict<OutdentPlan> {
+pub fn judge_outdent_list(view: &DocView, selection: &Selection) -> Verdict<OutdentPlan> {
     if selection.anchor == selection.head {
         let Some(item) = find_enclosing_list_item_id(view, selection.head.node) else {
-            return ListVerdict::NotApplicable;
+            return Verdict::NotApplicable;
         };
         if list_item_parent_list_id(view, item).is_none() {
-            return ListVerdict::NotApplicable;
+            return Verdict::NotApplicable;
         }
-        return ListVerdict::Change(OutdentPlan { items: vec![item] });
+        return Verdict::Change(OutdentPlan { items: vec![item] });
     }
 
     let Some(rs) = selection.resolve(view) else {
-        return ListVerdict::NotApplicable;
+        return Verdict::NotApplicable;
     };
     let mut items = collect_list_items_in_selection(&rs);
     if items.is_empty() {
-        return ListVerdict::NotApplicable;
+        return Verdict::NotApplicable;
     }
     retain_topmost_list_items(view, &mut items);
     if items.is_empty() {
-        return ListVerdict::NotApplicable;
+        return Verdict::NotApplicable;
     }
     if !items
         .iter()
         .any(|item| list_item_parent_list_id(view, *item).is_some())
     {
-        return ListVerdict::AbsorbOnly;
+        return Verdict::AbsorbOnly;
     }
-    ListVerdict::Change(OutdentPlan { items })
+    Verdict::Change(OutdentPlan { items })
 }
 
 pub(crate) fn lift_selected_list_items(tr: &mut Transaction) -> CommandResult {
@@ -55,9 +55,9 @@ pub(crate) fn lift_selected_list_items(tr: &mut Transaction) -> CommandResult {
         judge_outdent_list(&view, &selection)
     };
     match verdict {
-        crate::types::ListVerdict::NotApplicable => Ok(false),
-        crate::types::ListVerdict::AbsorbOnly => Ok(true),
-        crate::types::ListVerdict::Change(plan) => {
+        crate::types::Verdict::NotApplicable => Ok(false),
+        crate::types::Verdict::AbsorbOnly => Ok(true),
+        crate::types::Verdict::Change(plan) => {
             if selection.anchor == selection.head {
                 lift_list_item_inner(tr, plan.items[0])
             } else {
@@ -73,13 +73,13 @@ pub(crate) fn lift_selected_list_items(tr: &mut Transaction) -> CommandResult {
 /// `AbsorbOnly` ⇒ range 선택이 리스트 항목을 포함하지만 sink 가능한 그룹이 없고
 /// endpoint도 모두 real dot — 실행은 handled(true)로 Tab 폴스루를 흡수하고 관측
 /// 변화는 없음.
-pub fn judge_indent_list(view: &DocView, selection: &Selection) -> ListVerdict<IndentPlan> {
+pub fn judge_indent_list(view: &DocView, selection: &Selection) -> Verdict<IndentPlan> {
     let Some(rs) = selection.resolve(view) else {
-        return ListVerdict::NotApplicable;
+        return Verdict::NotApplicable;
     };
     let items = collect_list_items_in_selection(&rs);
     if items.is_empty() {
-        return ListVerdict::NotApplicable;
+        return Verdict::NotApplicable;
     }
     let any_sinkable = group_list_items_by_parent(view, &items)
         .iter()
@@ -90,15 +90,15 @@ pub fn judge_indent_list(view: &DocView, selection: &Selection) -> ListVerdict<I
                 .unwrap_or(false)
         });
     if any_sinkable {
-        ListVerdict::Change(IndentPlan { items })
+        Verdict::Change(IndentPlan { items })
     } else if selection.is_collapsed() {
-        ListVerdict::NotApplicable
+        Verdict::NotApplicable
     } else if is_materializable_synthetic(selection.anchor.node)
         || is_materializable_synthetic(selection.head.node)
     {
-        ListVerdict::Change(IndentPlan { items })
+        Verdict::Change(IndentPlan { items })
     } else {
-        ListVerdict::AbsorbOnly
+        Verdict::AbsorbOnly
     }
 }
 
@@ -112,9 +112,9 @@ pub(crate) fn sink_selected_list_items(tr: &mut Transaction) -> CommandResult {
             return Err(CommandError::Corrupted("cannot resolve selection".into()));
         }
         match judge_indent_list(&view, &selection) {
-            crate::types::ListVerdict::NotApplicable => return Ok(false),
-            crate::types::ListVerdict::AbsorbOnly => return Ok(true),
-            crate::types::ListVerdict::Change(plan) => plan,
+            crate::types::Verdict::NotApplicable => return Ok(false),
+            crate::types::Verdict::AbsorbOnly => return Ok(true),
+            crate::types::Verdict::Change(plan) => plan,
         }
     };
     let items = plan.items;
@@ -193,7 +193,7 @@ mod tests {
         let selection = state.selection.unwrap();
         let view = state.view();
         let verdict = judge_outdent_list(&view, &selection);
-        assert!(matches!(verdict, crate::ListVerdict::Change(_)));
+        assert!(matches!(verdict, crate::Verdict::Change(_)));
     }
 
     #[test]
@@ -205,7 +205,7 @@ mod tests {
         let selection = state.selection.unwrap();
         let view = state.view();
         let verdict = judge_outdent_list(&view, &selection);
-        assert!(matches!(verdict, crate::ListVerdict::NotApplicable));
+        assert!(matches!(verdict, crate::Verdict::NotApplicable));
     }
 
     #[test]
@@ -227,7 +227,7 @@ mod tests {
         let selection = state.selection.unwrap();
         let view = state.view();
         match judge_outdent_list(&view, &selection) {
-            crate::ListVerdict::Change(plan) => assert_eq!(plan.items.len(), 1),
+            crate::Verdict::Change(plan) => assert_eq!(plan.items.len(), 1),
             _ => panic!("expected Change"),
         }
     }
@@ -250,7 +250,7 @@ mod tests {
         let view = state.view();
         assert!(matches!(
             judge_indent_list(&view, &selection),
-            crate::ListVerdict::Change(_)
+            crate::Verdict::Change(_)
         ));
     }
 
@@ -269,7 +269,7 @@ mod tests {
         let view = state.view();
         assert!(matches!(
             judge_indent_list(&view, &selection),
-            crate::ListVerdict::NotApplicable
+            crate::Verdict::NotApplicable
         ));
     }
 
@@ -288,7 +288,7 @@ mod tests {
         let view = state.view();
         assert!(matches!(
             judge_indent_list(&view, &selection),
-            crate::ListVerdict::AbsorbOnly
+            crate::Verdict::AbsorbOnly
         ));
     }
 
@@ -302,7 +302,7 @@ mod tests {
         let view = state.view();
         assert!(matches!(
             judge_indent_list(&view, &selection),
-            crate::ListVerdict::NotApplicable
+            crate::Verdict::NotApplicable
         ));
     }
 }

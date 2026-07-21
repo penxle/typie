@@ -1,22 +1,22 @@
-use editor_state::document_content_selection;
 use editor_transaction::Transaction;
 
 use crate::CommandResult;
+use crate::judgments::judge_expand_all;
+use crate::types::Verdict;
 
 pub fn select_all(tr: &mut Transaction) -> CommandResult {
-    let selection = {
+    let verdict = {
         let view = tr.view();
-        document_content_selection(&view)
-            .and_then(|selection| selection.normalize(&view))
-            .expect("root must have a canonical document selection")
+        judge_expand_all(&view, tr.selection())
     };
-
-    if tr.selection() == Some(selection) {
-        return Ok(false);
+    match verdict {
+        Verdict::NotApplicable => Ok(false),
+        Verdict::AbsorbOnly => Ok(false),
+        Verdict::Change(resolved) => {
+            tr.set_selection(Some(resolved))?;
+            Ok(true)
+        }
     }
-
-    tr.set_selection(Some(selection))?;
-    Ok(true)
 }
 
 #[cfg(test)]

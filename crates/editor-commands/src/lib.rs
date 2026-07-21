@@ -16,5 +16,8 @@ mod tests;
 pub use commands::*;
 pub use compose::*;
 pub use error::*;
-pub use judgments::{judge_indent_list, judge_outdent_list, judge_toggle_list_kind};
-pub use types::ListVerdict;
+pub use judgments::{
+    judge_expand_all, judge_expand_paragraph, judge_expand_sentence, judge_expand_word,
+    judge_indent_list, judge_outdent_list, judge_toggle_list_kind,
+};
+pub use types::Verdict;

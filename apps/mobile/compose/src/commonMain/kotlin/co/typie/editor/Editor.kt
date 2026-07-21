@@ -370,19 +370,6 @@ internal constructor(
     }
   }
 
-  suspend fun can(message: Message): Boolean =
-    withSuspendFailureNotification(defaultValue = { false }) {
-      withContext(dispatcher) {
-        mutex.withLock {
-          if (disposed.load()) {
-            false
-          } else {
-            inner.can(message)
-          }
-        }
-      }
-    }
-
   suspend fun freezeSelection(selection: Selection): StableSelection? =
     readInner(defaultValue = { null }) { it.freezeSelection(selection) }
 

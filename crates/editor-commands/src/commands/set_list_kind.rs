@@ -8,7 +8,7 @@ use crate::helpers::{
     find_enclosing_list_id, is_list_type, resolve_selected_block_run,
 };
 use crate::judgments::judge_set_list_kind;
-use crate::types::ListVerdict;
+use crate::types::Verdict;
 use crate::{CommandError, CommandResult};
 
 pub fn set_list_kind(tr: &mut Transaction, target_list_type: NodeType) -> CommandResult {
@@ -21,9 +21,9 @@ pub fn set_list_kind(tr: &mut Transaction, target_list_type: NodeType) -> Comman
             return Err(CommandError::Corrupted("cannot resolve selection".into()));
         }
         match judge_set_list_kind(&view, &selection, target_list_type) {
-            ListVerdict::NotApplicable => return Ok(false),
-            ListVerdict::AbsorbOnly => return Ok(true),
-            ListVerdict::Change(()) => {}
+            Verdict::NotApplicable => return Ok(false),
+            Verdict::AbsorbOnly => return Ok(true),
+            Verdict::Change(()) => {}
         }
     }
     if selection.is_collapsed() {

@@ -1,21 +1,28 @@
 use editor_resource::Resource;
 use editor_state::Selection;
-use editor_state::resolve_word_selection_expansion;
 use editor_transaction::Transaction;
 
 use crate::CommandResult;
-use crate::helpers::set_selection_if_changed;
+use crate::judgments::judge_expand_word;
+use crate::types::Verdict;
 
 pub fn select_word_at(
     tr: &mut Transaction,
     selection: Selection,
     resource: &Resource,
 ) -> CommandResult {
-    let resolved = {
+    let verdict = {
         let view = tr.view();
-        resolve_word_selection_expansion(&selection, &view, resource)
+        judge_expand_word(&view, Some(selection), resource)
     };
-    set_selection_if_changed(tr, resolved)
+    match verdict {
+        Verdict::NotApplicable => Ok(false),
+        Verdict::AbsorbOnly => Ok(true),
+        Verdict::Change(resolved) => {
+            tr.set_selection(Some(resolved))?;
+            Ok(true)
+        }
+    }
 }
 
 #[cfg(test)]

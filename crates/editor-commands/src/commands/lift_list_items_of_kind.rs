@@ -3,7 +3,7 @@ use editor_transaction::Transaction;
 
 use crate::helpers::{lift_list_item_inner, lift_list_items_planned};
 use crate::judgments::judge_lift_list_items_of_kind;
-use crate::types::ListVerdict;
+use crate::types::Verdict;
 use crate::{CommandError, CommandResult};
 
 pub fn lift_list_items_of_kind(tr: &mut Transaction, target_list_type: NodeType) -> CommandResult {
@@ -18,9 +18,9 @@ pub fn lift_list_items_of_kind(tr: &mut Transaction, target_list_type: NodeType)
             ));
         }
         match judge_lift_list_items_of_kind(&view, &selection, target_list_type) {
-            ListVerdict::NotApplicable => return Ok(false),
-            ListVerdict::AbsorbOnly => return Ok(true),
-            ListVerdict::Change(plan) => plan,
+            Verdict::NotApplicable => return Ok(false),
+            Verdict::AbsorbOnly => return Ok(true),
+            Verdict::Change(plan) => plan,
         }
     };
     if selection.anchor == selection.head {

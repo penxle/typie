@@ -2,6 +2,7 @@ use editor_commands as commands;
 use editor_crdt::Dot;
 use editor_macros::ffi;
 use editor_model::{ChildView, DocView, NodeType, NodeView, PlainNode, Schema};
+use editor_resource::Resource;
 use editor_state::{ResolvedSelection, Selection, State};
 use serde::{Deserialize, Serialize};
 
@@ -23,24 +24,51 @@ pub struct ListAffordances {
 
 #[ffi]
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
+pub struct ExpansionAffordances {
+    pub word: bool,
+    pub sentence: bool,
+    pub paragraph: bool,
+    pub all: bool,
+}
+
+#[ffi]
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
 pub struct BlockState {
     pub ancestors: Vec<Block>,
     pub nodes: Vec<Block>,
     pub intersecting_nodes: Vec<Block>,
     pub list: ListAffordances,
+    pub expansion: ExpansionAffordances,
 }
 
-pub fn resolve_block_state(state: &State) -> Option<BlockState> {
+pub fn resolve_block_state(state: &State, resource: &Resource) -> Option<BlockState> {
     let selection = state.selection.as_ref()?;
     let ancestors = resolve_ancestors(state, selection);
     let (nodes, intersecting_nodes) = resolve_range_nodes(state, selection);
     let list = resolve_list_affordances(state, selection);
+    let expansion = resolve_expansion_affordances(state, selection, resource);
     Some(BlockState {
         ancestors,
         nodes,
         intersecting_nodes,
         list,
+        expansion,
     })
+}
+
+fn resolve_expansion_affordances(
+    state: &State,
+    selection: &Selection,
+    resource: &Resource,
+) -> ExpansionAffordances {
+    let view = state.view();
+    let selection = Some(*selection);
+    ExpansionAffordances {
+        word: commands::judge_expand_word(&view, selection, resource).changes(),
+        sentence: commands::judge_expand_sentence(&view, selection, resource).changes(),
+        paragraph: commands::judge_expand_paragraph(&view, selection).changes(),
+        all: commands::judge_expand_all(&view, selection).changes(),
+    }
 }
 
 fn resolve_list_affordances(state: &State, selection: &Selection) -> ListAffordances {
@@ -182,7 +210,8 @@ mod tests {
             doc { root { p1: paragraph { text("Hi") } } }
             selection: (p1, 1)
         };
-        let bs = resolve_block_state(&state).unwrap();
+        let resource = editor_resource::Resource::new_test();
+        let bs = resolve_block_state(&state, &resource).unwrap();
         assert_eq!(bs.ancestors.len(), 2);
         assert!(matches!(bs.ancestors[0].node, PlainNode::Paragraph(_)));
         assert!(matches!(bs.ancestors[1].node, PlainNode::Root(_)));
@@ -197,7 +226,8 @@ mod tests {
             } }
             selection: (p1, 0) -> (p2, 2)
         };
-        let bs = resolve_block_state(&state).unwrap();
+        let resource = editor_resource::Resource::new_test();
+        let bs = resolve_block_state(&state, &resource).unwrap();
         assert_eq!(bs.ancestors.len(), 1);
         assert!(matches!(bs.ancestors[0].node, PlainNode::Root(_)));
     }
@@ -208,7 +238,8 @@ mod tests {
             doc { root { p1: paragraph { text("Hi") } } }
             selection: (p1, 1)
         };
-        let bs = resolve_block_state(&state).unwrap();
+        let resource = editor_resource::Resource::new_test();
+        let bs = resolve_block_state(&state, &resource).unwrap();
         assert!(bs.nodes.is_empty());
         assert!(bs.intersecting_nodes.is_empty());
     }
@@ -223,7 +254,8 @@ mod tests {
             } }
             selection: (p1, 0) -> (p2, 2)
         };
-        let bs = resolve_block_state(&state).unwrap();
+        let resource = editor_resource::Resource::new_test();
+        let bs = resolve_block_state(&state, &resource).unwrap();
         assert!(
             bs.nodes
                 .iter()
@@ -245,7 +277,8 @@ mod tests {
             } }
             selection: (p1, 2) -> (p2, 2)
         };
-        let bs = resolve_block_state(&state).unwrap();
+        let resource = editor_resource::Resource::new_test();
+        let bs = resolve_block_state(&state, &resource).unwrap();
 
         assert!(bs.intersecting_nodes.iter().any(|block| matches!(
             block.node,
@@ -266,7 +299,8 @@ mod tests {
             } }
             selection: (p1, 1) -> (p2, 2)
         };
-        let bs = resolve_block_state(&state).unwrap();
+        let resource = editor_resource::Resource::new_test();
+        let bs = resolve_block_state(&state, &resource).unwrap();
 
         assert_eq!(
             bs.intersecting_nodes
@@ -295,7 +329,8 @@ mod tests {
             } }
             selection: (root, 0, >) -> (root, 1, <)
         };
-        let bs = resolve_block_state(&state).unwrap();
+        let resource = editor_resource::Resource::new_test();
+        let bs = resolve_block_state(&state, &resource).unwrap();
         assert!(
             bs.nodes
                 .iter()
@@ -315,7 +350,8 @@ mod tests {
             } }
             selection: (p1, 0)
         };
-        let bs = resolve_block_state(&state).unwrap();
+        let resource = editor_resource::Resource::new_test();
+        let bs = resolve_block_state(&state, &resource).unwrap();
         assert!(bs.list.toggle_bullet);
         assert!(bs.list.toggle_ordered);
         assert!(bs.list.indent);
@@ -328,7 +364,8 @@ mod tests {
             doc { root { p1: paragraph { text("Hi") } } }
             selection: (p1, 1)
         };
-        let bs = resolve_block_state(&state).unwrap();
+        let resource = editor_resource::Resource::new_test();
+        let bs = resolve_block_state(&state, &resource).unwrap();
         assert!(bs.list.toggle_bullet);
         assert!(bs.list.toggle_ordered);
         assert!(!bs.list.indent);
@@ -344,7 +381,8 @@ mod tests {
             } }
             selection: (p1, 0)
         };
-        let bs = resolve_block_state(&state).unwrap();
+        let resource = editor_resource::Resource::new_test();
+        let bs = resolve_block_state(&state, &resource).unwrap();
         assert!(!bs.list.indent);
         assert!(bs.list.outdent);
     }
@@ -364,7 +402,8 @@ mod tests {
             } }
             selection: (r, 0) -> (p_after, 5)
         };
-        let bs = resolve_block_state(&state).unwrap();
+        let resource = editor_resource::Resource::new_test();
+        let bs = resolve_block_state(&state, &resource).unwrap();
         let has_blockquote = bs
             .nodes
             .iter()
@@ -379,5 +418,40 @@ mod tests {
             inner_paragraph_count >= 1,
             "inner paragraph must be in nodes (recursion descends into wholly contained blockquote)"
         );
+    }
+
+    #[test]
+    fn expansion_affordances_for_text_caret() {
+        let resource = editor_resource::Resource::new_test();
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("Hello world. Second sentence.") } } }
+            selection: (p1, 2)
+        };
+        let bs = resolve_block_state(&state, &resource).unwrap();
+        assert!(bs.expansion.word);
+        assert!(bs.expansion.sentence);
+        assert!(bs.expansion.paragraph);
+        assert!(bs.expansion.all);
+    }
+
+    #[test]
+    fn expansion_affordances_when_all_selected() {
+        let resource = editor_resource::Resource::new_test();
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("hi") } } }
+            selection: (p1, 0)
+        };
+        let mut state = state;
+        state.selection = Some(editor_state::Selection::new(
+            editor_state::Position::new(p1, 0),
+            editor_state::Position {
+                node: p1,
+                offset: 2,
+                affinity: editor_state::Affinity::Upstream,
+            },
+        ));
+        let bs = resolve_block_state(&state, &resource).unwrap();
+        assert!(!bs.expansion.all);
+        assert!(!bs.expansion.paragraph);
     }
 }

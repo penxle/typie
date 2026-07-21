@@ -13,15 +13,15 @@ impl SliceProvenance {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ListVerdict<P> {
+pub enum Verdict<P> {
     Change(P),
     AbsorbOnly,
     NotApplicable,
 }
 
-impl<P> ListVerdict<P> {
+impl<P> Verdict<P> {
     pub fn changes(&self) -> bool {
-        matches!(self, ListVerdict::Change(_))
+        matches!(self, Verdict::Change(_))
     }
 }
 

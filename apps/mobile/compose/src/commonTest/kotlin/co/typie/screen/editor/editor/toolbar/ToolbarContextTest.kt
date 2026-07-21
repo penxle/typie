@@ -6,6 +6,7 @@ import co.typie.editor.ffi.Alignment
 import co.typie.editor.ffi.BackgroundColorValue
 import co.typie.editor.ffi.Block
 import co.typie.editor.ffi.BlockState
+import co.typie.editor.ffi.ExpansionAffordances
 import co.typie.editor.ffi.FontSizeValue
 import co.typie.editor.ffi.LayoutMode
 import co.typie.editor.ffi.ListAffordances
@@ -667,6 +668,8 @@ class ToolbarContextTest {
           indent = false,
           outdent = false,
         ),
+      expansion =
+        ExpansionAffordances(word = false, sentence = false, paragraph = false, all = false),
     )
 
   private fun block(id: String, node: PlainNode): Block = Block(id = id, node = node)

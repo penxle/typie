@@ -381,7 +381,8 @@ impl Editor {
     }
 
     pub fn block_state(&self) -> Option<BlockState> {
-        crate::block_state::resolve_block_state(&self.state)
+        let resource = self.resource.lock().unwrap();
+        crate::block_state::resolve_block_state(&self.state, &resource)
     }
 
     pub fn character_counts(&self) -> (CharacterCount, CharacterCount) {
