@@ -2,7 +2,7 @@
   import { flip, hide } from '@floating-ui/dom';
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
-  import { createFloatingActions } from '@typie/ui/actions';
+  import { createFloatingActions, pointerCapture } from '@typie/ui/actions';
   import { Icon, Img, RingSpinner } from '@typie/ui/components';
   import { Toast } from '@typie/ui/notification';
   import DownloadIcon from '~icons/lucide/download';
@@ -31,13 +31,20 @@
     element: ExternalElement;
   };
 
+  type ResizeSession = {
+    x: number;
+    width: number;
+    proportion: number;
+    reverse: boolean;
+    boundsWidth: number;
+  };
+
   let { element }: Props = $props();
 
   const ctx = getEditorContext();
 
   let proportion = $state(100);
   let isResizing = $state(false);
-  let initialResizeData: { x: number; width: number; proportion: number; reverse: boolean; boundsWidth: number } | null = null;
   let enlarged = $state(false);
   let containerEl = $state<HTMLDivElement>();
   let pickerOpened = $state(false);
@@ -186,14 +193,14 @@
     return Math.max(minWidth, Math.min(maxWidth, width));
   };
 
-  const handleResizeStart = (event: PointerEvent, reverse: boolean) => {
-    const target = event.currentTarget as HTMLElement;
-    target.setPointerCapture(event.pointerId);
+  const handleResizeStart = (event: PointerEvent, reverse: boolean): ResizeSession | null => {
+    if (isResizing || !event.isPrimary || event.button !== 0) return null;
+
     event.preventDefault();
     event.stopPropagation();
 
     isResizing = true;
-    initialResizeData = {
+    return {
       x: event.clientX,
       width: liveWidth,
       proportion,
@@ -202,28 +209,18 @@
     };
   };
 
-  const handleResize = (event: PointerEvent) => {
-    const target = event.currentTarget as HTMLElement;
-    if (!target.hasPointerCapture(event.pointerId) || !initialResizeData) return;
-
-    const { boundsWidth } = initialResizeData;
+  const handleResize = (session: ResizeSession, event: PointerEvent) => {
+    const { boundsWidth } = session;
     if (boundsWidth <= 0) return;
 
-    const dx =
-      (ctx.editor?.clientDeltaToLocalDelta(event.clientX - initialResizeData.x) ?? event.clientX - initialResizeData.x) *
-      (initialResizeData.reverse ? -1 : 1);
-    const newWidth = clampWidth(initialResizeData.width + dx * 2, boundsWidth);
+    const dx = (ctx.editor?.clientDeltaToLocalDelta(event.clientX - session.x) ?? event.clientX - session.x) * (session.reverse ? -1 : 1);
+    const newWidth = clampWidth(session.width + dx * 2, boundsWidth);
     proportion = (newWidth / boundsWidth) * 100;
   };
 
-  const handleResizeEnd = (event: PointerEvent) => {
-    const target = event.currentTarget as HTMLElement;
-    if (target.hasPointerCapture(event.pointerId)) {
-      target.releasePointerCapture(event.pointerId);
-    }
-
+  const handleResizeEnd = () => {
+    const finalProportion = Math.round(proportion);
     isResizing = false;
-    initialResizeData = null;
     ctx.editor?.enqueue({
       type: 'node',
       op: {
@@ -231,11 +228,16 @@
         id: element.node,
         attr: {
           type: 'image',
-          attr: { type: 'proportion', value: Math.round(proportion) },
+          attr: { type: 'proportion', value: finalProportion },
         },
       },
     });
     ctx.editor?.focus();
+  };
+
+  const handleResizeCancel = (session: ResizeSession) => {
+    proportion = session.proportion;
+    isResizing = false;
   };
 
   const handleOpenInNewTab = () => {
@@ -392,10 +394,13 @@
               _groupHover: { opacity: '100' },
             })}
             aria-label="이미지 크기 조절"
-            onpointerdown={(event) => handleResizeStart(event, true)}
-            onpointermove={handleResize}
-            onpointerup={handleResizeEnd}
             type="button"
+            use:pointerCapture={{
+              start: (event) => handleResizeStart(event, true),
+              move: handleResize,
+              end: handleResizeEnd,
+              cancel: handleResizeCancel,
+            }}
           ></button>
         </div>
 
@@ -417,10 +422,13 @@
               _groupHover: { opacity: '100' },
             })}
             aria-label="이미지 크기 조절"
-            onpointerdown={(event) => handleResizeStart(event, false)}
-            onpointermove={handleResize}
-            onpointerup={handleResizeEnd}
             type="button"
+            use:pointerCapture={{
+              start: (event) => handleResizeStart(event, false),
+              move: handleResize,
+              end: handleResizeEnd,
+              cancel: handleResizeCancel,
+            }}
           ></button>
         </div>
       {/if}

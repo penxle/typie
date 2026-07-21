@@ -2,7 +2,7 @@
   import { createFragment, createMutation, createQuery } from '@mearie/svelte';
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex, wrap } from '@typie/styled-system/patterns';
-  import { createFloatingActions, portal, tooltip } from '@typie/ui/actions';
+  import { createFloatingActions, pointerCapture, portal, tooltip } from '@typie/ui/actions';
   import { Icon, RingSpinner } from '@typie/ui/components';
   import { getThemeContext } from '@typie/ui/context';
   import { Toast } from '@typie/ui/notification';
@@ -10,7 +10,6 @@
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
   import { onMount } from 'svelte';
-  import { on } from 'svelte/events';
   import { fly } from 'svelte/transition';
   import ClockRewindIcon from '~icons/lucide/clock-arrow-up';
   import IconClockFading from '~icons/lucide/clock-fading';
@@ -21,7 +20,7 @@
   import { graphql } from '$mearie';
   import { getPane, getPaneGroup } from '../../@pane/context.svelte';
   import { getDocumentPanelFocusReturn } from './focus-return.svelte';
-  import type { Action } from 'svelte/action';
+  import type { PointerCaptureCancelReason } from '@typie/ui/actions';
   import type { PointerEventHandler } from 'svelte/elements';
   import type { DocumentPanelV2Timeline_document$key } from '$mearie';
 
@@ -233,6 +232,37 @@
     if (Object.hasOwn(headsAsc, index)) selectedHeadId = headsAsc[index].id;
   };
 
+  const handleSlideStart = (event: PointerEvent): true | null => {
+    if (showTooltip || isDraggingSlider || !event.isPrimary || event.button !== 0) return null;
+    handleSlide(event as PointerEvent & { currentTarget: HTMLElement });
+    showTooltip = true;
+    return true;
+  };
+
+  const handleSlideMove = (_: true, event: PointerEvent) => {
+    event.preventDefault();
+    isDraggingSlider = true;
+    handleSlide(event as PointerEvent & { currentTarget: HTMLElement });
+  };
+
+  const handleSlideEnd = () => {
+    showTooltip = false;
+    isDraggingSlider = false;
+    if (selectedHeadId) {
+      updateView.cancel();
+      void applyHead(selectedHeadId);
+    }
+  };
+
+  const handleSlideCancel = (_: true, reason: PointerCaptureCancelReason) => {
+    showTooltip = false;
+    isDraggingSlider = false;
+    updateView.cancel();
+    if (reason !== 'destroy' && selectedHeadId) {
+      void applyHead(selectedHeadId);
+    }
+  };
+
   const restore = async () => {
     const head = shownHead;
     if (!head) return;
@@ -249,38 +279,6 @@
     focusReturn.restore();
     Toast.success(`${dayjs(head.updatedAt).formatAsSmart()} 시점으로 복원되었습니다`);
     mixpanel.track('document_timeline_restore');
-  };
-
-  const slider: Action<HTMLElement> = (element) => {
-    $effect(() => {
-      const dragstart = on(element, 'dragstart', (e) => e.preventDefault());
-      const pointerdown = on(element, 'pointerdown', (e) => {
-        handleSlide(e as PointerEvent & { currentTarget: HTMLElement });
-        showTooltip = true;
-        (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-      });
-      const pointermove = on(element, 'pointermove', (e) => {
-        e.preventDefault();
-        if ((e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) {
-          isDraggingSlider = true;
-          handleSlide(e as PointerEvent & { currentTarget: HTMLElement });
-        }
-      });
-      const pointerup = on(element, 'pointerup', () => {
-        showTooltip = false;
-        isDraggingSlider = false;
-        if (selectedHeadId) {
-          updateView.cancel();
-          void applyHead(selectedHeadId);
-        }
-      });
-      return () => {
-        dragstart();
-        pointerdown();
-        pointermove();
-        pointerup();
-      };
-    });
   };
 </script>
 
@@ -465,7 +463,12 @@
           class={cx('group', css({ position: 'relative', width: 'full', height: '16px', overflow: 'hidden', cursor: 'pointer' }))}
           aria-label="Timeline slider"
           type="button"
-          use:slider
+          use:pointerCapture={{
+            start: handleSlideStart,
+            move: handleSlideMove,
+            end: handleSlideEnd,
+            cancel: handleSlideCancel,
+          }}
         >
           <div
             class={css({
@@ -524,7 +527,12 @@
               _active: { scale: '[1.1]' },
             })}
             use:anchor
-            use:slider
+            use:pointerCapture={{
+              start: handleSlideStart,
+              move: handleSlideMove,
+              end: handleSlideEnd,
+              cancel: handleSlideCancel,
+            }}
           ></div>
         </div>
       </div>

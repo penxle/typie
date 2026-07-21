@@ -1,6 +1,6 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
-  import { tooltip } from '../actions';
+  import { pointerCapture, tooltip } from '../actions';
 
   type Props = {
     min?: number;
@@ -27,28 +27,6 @@
 
   const percentage = $derived(((value - min) / (max - min)) * 100);
   const tooltipMessage = $derived(tooltipFormatter(value));
-
-  const handlePointerDown = (event: PointerEvent) => {
-    if (disabled) return;
-
-    const target = event.currentTarget as HTMLElement;
-    target.setPointerCapture(event.pointerId);
-
-    isDragging = true;
-    updateValue(event);
-  };
-
-  const handlePointerMove = (event: PointerEvent) => {
-    if (!isDragging) return;
-    updateValue(event);
-  };
-
-  const handlePointerUp = (event: PointerEvent) => {
-    const target = event.currentTarget as HTMLElement;
-    target.releasePointerCapture(event.pointerId);
-    isDragging = false;
-    onchange?.();
-  };
 
   const updateValue = (event: PointerEvent) => {
     if (!trackEl || disabled) return;
@@ -79,11 +57,25 @@
   aria-valuemin={min}
   aria-valuenow={value}
   ondragstart={(e) => e.preventDefault()}
-  onpointerdown={handlePointerDown}
-  onpointermove={handlePointerMove}
-  onpointerup={handlePointerUp}
   role="slider"
   tabindex={disabled ? -1 : 0}
+  use:pointerCapture={{
+    start: (event) => {
+      if (disabled || !event.isPrimary || event.button !== 0) return null;
+      isDragging = true;
+      updateValue(event);
+      return true;
+    },
+    move: (_, event) => updateValue(event),
+    end: () => {
+      isDragging = false;
+      onchange?.();
+    },
+    cancel: (_, reason) => {
+      isDragging = false;
+      if (reason !== 'destroy') onchange?.();
+    },
+  }}
 >
   <div
     style:width="{percentage}%"

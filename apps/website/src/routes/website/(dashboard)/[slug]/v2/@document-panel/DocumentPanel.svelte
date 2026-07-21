@@ -2,6 +2,7 @@
   import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
+  import { pointerCapture } from '@typie/ui/actions';
   import { Button, FullAccessBadge, Icon } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { clamp } from '@typie/ui/utils';
@@ -85,15 +86,14 @@
     paneGroup.state.current.panelExpandedByPaneId[paneId] && Object.hasOwn(paneGroup.state.current.panelTabByPaneId, paneId),
   );
 
-  type Resizer = {
-    deltaX: number;
-    eligible: boolean;
-    event: PointerEvent;
-    element: HTMLElement;
+  type ResizeSession = {
+    startX: number;
+    startWidth: number;
   };
 
-  let resizer = $state<Resizer | null>(null);
-  let newWidth = $derived(clamp((app.preference.current.panelWidth ?? minWidth) + (resizer?.deltaX ?? 0), minWidth, maxWidth));
+  const storedWidth = $derived(clamp(app.preference.current.panelWidth ?? minWidth, minWidth, maxWidth));
+  let previewWidth = $state<number | null>(null);
+  let newWidth = $derived(previewWidth ?? storedWidth);
 
   onDestroy(() => focusReturn.discard());
 </script>
@@ -203,34 +203,24 @@
         opacity: '50',
       },
     })}
-    onpointerdowncapture={(e) => {
-      resizer = {
-        element: e.currentTarget,
-        event: e,
-        deltaX: 0,
-        eligible: false,
-      };
-    }}
-    onpointermovecapture={(e) => {
-      if (!resizer) return;
-
-      if (!resizer.eligible) {
-        resizer.eligible = true;
-        resizer.element.setPointerCapture(e.pointerId);
-      }
-
-      resizer.deltaX = Math.round(resizer.event.clientX - e.clientX);
-    }}
-    onpointerupcapture={() => {
-      if (!resizer) return;
-
-      if (resizer.eligible && resizer.element.hasPointerCapture(resizer.event.pointerId)) {
-        resizer.element.releasePointerCapture(resizer.event.pointerId);
-      }
-
-      app.preference.current.panelWidth = newWidth;
-
-      resizer = null;
+    use:pointerCapture={{
+      start: (event): ResizeSession | null => {
+        if (!event.isPrimary || event.button !== 0) return null;
+        event.preventDefault();
+        const session = { startX: event.clientX, startWidth: storedWidth };
+        previewWidth = session.startWidth;
+        return session;
+      },
+      move: (session, event) => {
+        previewWidth = clamp(session.startWidth + Math.round(session.startX - event.clientX), minWidth, maxWidth);
+      },
+      end: () => {
+        if (previewWidth !== null) app.preference.current.panelWidth = previewWidth;
+        previewWidth = null;
+      },
+      cancel: () => {
+        previewWidth = null;
+      },
     }}
   ></div>
 
