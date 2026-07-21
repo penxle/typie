@@ -761,7 +761,11 @@ export class Editor {
             return;
           }
 
-          this.#setFocused(false);
+          // DOM 제거 중 blur가 Svelte 렌더 안에서 $state를 갱신하지 않도록 다음 microtask로 미룬다.
+          queueMicrotask(() => {
+            if (this.#destroyed) return;
+            this.#setFocused(document.activeElement === this.inputEl);
+          });
         };
 
         el.addEventListener('focus', onFocus);
