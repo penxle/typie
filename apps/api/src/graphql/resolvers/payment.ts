@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import * as Sentry from '@sentry/node';
 import { defaultPlanRules, TRIAL_DURATION_DAYS } from '@typie/lib/const';
 import {
   CreditCodeState,
@@ -8,11 +9,12 @@ import {
   PlanAvailability,
   PlanInterval,
   SubscriptionState,
+  UserState,
 } from '@typie/lib/enums';
 import { NotFoundError, TypieError } from '@typie/lib/errors';
 import { cardSchema, redeemCodeSchema } from '@typie/lib/validation';
 import dayjs from 'dayjs';
-import { and, eq, gt, inArray, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, ne, or, sql } from 'drizzle-orm';
 import {
   CreditCodes,
   db,
@@ -31,6 +33,7 @@ import {
   UserBillingKeys,
   UserInAppPurchases,
   UserRevenues,
+  Users,
   UserTrials,
   validateDbId,
 } from '#/db/index.ts';
@@ -40,6 +43,8 @@ import * as portone from '#/external/portone.ts';
 import { getSubscriptionExpiresAt, hasBillableUsageDuring, payAmountWithBillingKey, payInvoiceWithBillingKey } from '#/utils/index.ts';
 import { createTrialSubscription } from '#/utils/plan.ts';
 import { delay } from '#/utils/promise.ts';
+import { resolveEnrollAction } from '#/utils/subscription-enroll.ts';
+import { lockUserSubscriptionState } from '#/utils/subscription-lock.ts';
 import { getUserUuid } from '#/utils/user.ts';
 import { builder } from '../builder.ts';
 import {
@@ -183,30 +188,32 @@ builder.mutationFields((t) => ({
   subscribePlanWithTrial: t.withAuth({ session: true }).field({
     type: Subscription,
     resolve: async (_, __, ctx) => {
-      const subscriptionHistory = await db
-        .select({ id: Subscriptions.id })
-        .from(Subscriptions)
-        .where(eq(Subscriptions.userId, ctx.session.userId))
-        .then(first);
-
-      if (subscriptionHistory) {
-        throw new TypieError({ code: 'subscription_history_exists' });
-      }
-
-      const existingTrial = await db
-        .select({ id: UserTrials.id })
-        .from(UserTrials)
-        .where(eq(UserTrials.userId, ctx.session.userId))
-        .then(first);
-
-      if (existingTrial) {
-        throw new TypieError({ code: 'trial_already_used' });
-      }
-
       const startsAt = dayjs();
       const expiresAt = startsAt.add(TRIAL_DURATION_DAYS, 'days');
 
       return await db.transaction(async (tx) => {
+        await lockUserSubscriptionState(tx, ctx.session.userId);
+
+        const subscriptionHistory = await tx
+          .select({ id: Subscriptions.id })
+          .from(Subscriptions)
+          .where(eq(Subscriptions.userId, ctx.session.userId))
+          .then(first);
+
+        if (subscriptionHistory) {
+          throw new TypieError({ code: 'subscription_history_exists' });
+        }
+
+        const existingTrial = await tx
+          .select({ id: UserTrials.id })
+          .from(UserTrials)
+          .where(eq(UserTrials.userId, ctx.session.userId))
+          .then(first);
+
+        if (existingTrial) {
+          throw new TypieError({ code: 'trial_already_used' });
+        }
+
         return await createTrialSubscription(tx, { userId: ctx.session.userId, startsAt, expiresAt });
       });
     },
@@ -238,57 +245,82 @@ builder.mutationFields((t) => ({
         throw new TypieError({ code: 'billing_key_issue_failed' });
       }
 
-      return await db.transaction(async (tx) => {
-        const existingBillingKey = await tx
-          .delete(UserBillingKeys)
-          .where(eq(UserBillingKeys.userId, ctx.session.userId))
-          .returning({ billingKey: UserBillingKeys.billingKey })
-          .then(first);
+      try {
+        return await db.transaction(async (tx) => {
+          await lockUserSubscriptionState(tx, ctx.session.userId);
 
-        if (existingBillingKey) {
-          await portone.deleteBillingKey({ billingKey: existingBillingKey.billingKey });
+          // 발급 대기 중 탈퇴가 완료됐으면 키를 재삽입하지 않는다.
+          await tx
+            .select({ id: Users.id })
+            .from(Users)
+            .where(and(eq(Users.id, ctx.session.userId), eq(Users.state, UserState.ACTIVE)))
+            .then(firstOrThrow);
+
+          const existingBillingKey = await tx
+            .delete(UserBillingKeys)
+            .where(eq(UserBillingKeys.userId, ctx.session.userId))
+            .returning({ billingKey: UserBillingKeys.billingKey })
+            .then(first);
+
+          if (existingBillingKey) {
+            await portone.deleteBillingKey({ billingKey: existingBillingKey.billingKey });
+          }
+
+          return await tx
+            .insert(UserBillingKeys)
+            .values({
+              userId: ctx.session.userId,
+              name: `${result.cardName} ${input.cardNumber.slice(-4)}`,
+              billingKey: result.billingKey,
+              cardNumberHash: createHash('sha256').update(input.cardNumber).digest('hex'),
+            })
+            .returning()
+            .then(firstOrThrow);
+        });
+      } catch (err) {
+        // 저장 실패(탈퇴 경합 등) 시 방금 발급한 외부 키가 로컬 참조 없는 고아로 남지 않게 회수한다.
+        // deleteBillingKey 는 throw 하지 않고 상태를 반환하므로, 결과를 검사해야 회수 실패가 무음으로 사라지지 않는다.
+        const deletion = await portone.deleteBillingKey({ billingKey: result.billingKey });
+        if (deletion.status === 'failed') {
+          Sentry.captureMessage('billing key compensation cleanup failed', {
+            level: 'warning',
+            extra: { userId: ctx.session.userId, billingKey: result.billingKey, code: deletion.code, message: deletion.message },
+          });
         }
-
-        return await tx
-          .insert(UserBillingKeys)
-          .values({
-            userId: ctx.session.userId,
-            name: `${result.cardName} ${input.cardNumber.slice(-4)}`,
-            billingKey: result.billingKey,
-            cardNumberHash: createHash('sha256').update(input.cardNumber).digest('hex'),
-          })
-          .returning()
-          .then(firstOrThrow);
-      });
+        throw err;
+      }
     },
   }),
 
   deleteBillingKey: t.withAuth({ session: true }).field({
     type: 'Boolean',
     resolve: async (_, __, ctx) => {
-      const activeSubscription = await db
-        .select({ id: Subscriptions.id })
-        .from(Subscriptions)
-        .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
-        .where(
-          and(
-            eq(Subscriptions.userId, ctx.session.userId),
-            inArray(Subscriptions.state, [
-              SubscriptionState.ACTIVE,
-              SubscriptionState.WILL_EXPIRE,
-              SubscriptionState.IN_GRACE_PERIOD,
-              SubscriptionState.WILL_ACTIVATE,
-            ]),
-            eq(Plans.availability, PlanAvailability.BILLING_KEY),
-          ),
-        )
-        .then(first);
-
-      if (activeSubscription) {
-        throw new TypieError({ code: 'active_subscription_exists' });
-      }
-
       const billingKey = await db.transaction(async (tx) => {
+        await lockUserSubscriptionState(tx, ctx.session.userId);
+
+        // 가드와 삭제가 같은 트랜잭션이어야 예약 생성과의 경합(빌링키 없는 예약 잔존)을 막는다.
+        const activeSubscription = await tx
+          .select({ id: Subscriptions.id })
+          .from(Subscriptions)
+          .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
+          .where(
+            and(
+              eq(Subscriptions.userId, ctx.session.userId),
+              inArray(Subscriptions.state, [
+                SubscriptionState.ACTIVE,
+                SubscriptionState.WILL_EXPIRE,
+                SubscriptionState.IN_GRACE_PERIOD,
+                SubscriptionState.WILL_ACTIVATE,
+              ]),
+              eq(Plans.availability, PlanAvailability.BILLING_KEY),
+            ),
+          )
+          .then(first);
+
+        if (activeSubscription) {
+          throw new TypieError({ code: 'active_subscription_exists' });
+        }
+
         return await tx
           .delete(UserBillingKeys)
           .where(eq(UserBillingKeys.userId, ctx.session.userId))
@@ -308,33 +340,72 @@ builder.mutationFields((t) => ({
     type: Subscription,
     input: { planId: t.input.id({ validate: validateDbId(TableCode.PLANS) }) },
     resolve: async (_, { input }, ctx) => {
-      const existingSubscription = await db
-        .select({ id: Subscriptions.id, planAvailability: Plans.availability, state: Subscriptions.state })
-        .from(Subscriptions)
-        .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
-        .where(and(eq(Subscriptions.userId, ctx.session.userId), ne(Subscriptions.state, SubscriptionState.EXPIRED)))
-        .then(first);
-
-      if (existingSubscription && existingSubscription.planAvailability !== PlanAvailability.TRIAL) {
-        throw new TypieError({ code: 'subscription_already_exists' });
-      }
-
       const plan = await db
         .select({ id: Plans.id, name: Plans.name, fee: Plans.fee, interval: Plans.interval })
         .from(Plans)
         .where(and(eq(Plans.id, input.planId), eq(Plans.availability, PlanAvailability.BILLING_KEY)))
         .then(firstOrThrow);
 
-      const startsAt = dayjs();
-      const expiresAt = getSubscriptionExpiresAt(startsAt, plan.interval);
-
       return await db.transaction(async (tx) => {
-        if (existingSubscription) {
-          await tx
-            .update(Subscriptions)
-            .set({ state: SubscriptionState.EXPIRED, expiresAt: sql`LEAST(${Subscriptions.expiresAt}, NOW())` })
-            .where(eq(Subscriptions.id, existingSubscription.id));
+        await lockUserSubscriptionState(tx, ctx.session.userId);
+
+        const subscriptionRows = await tx
+          .select({ state: Subscriptions.state, planAvailability: Plans.availability, expiresAt: Subscriptions.expiresAt })
+          .from(Subscriptions)
+          .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
+          .where(and(eq(Subscriptions.userId, ctx.session.userId), ne(Subscriptions.state, SubscriptionState.EXPIRED)));
+
+        const action = resolveEnrollAction(subscriptionRows, dayjs());
+        if (action.kind === 'reject') {
+          throw new TypieError({ code: 'subscription_already_exists' });
         }
+
+        if (action.kind === 'schedule') {
+          const startsAt = action.startsAt;
+          const expiresAt = getSubscriptionExpiresAt(startsAt, plan.interval);
+          const hadReservation = subscriptionRows.some((row) => row.state === SubscriptionState.WILL_ACTIVATE);
+
+          const billingKey = await tx
+            .select({ id: UserBillingKeys.id })
+            .from(UserBillingKeys)
+            .where(eq(UserBillingKeys.userId, ctx.session.userId))
+            .then(first);
+
+          if (!billingKey) {
+            throw new TypieError({ code: 'billing_key_required' });
+          }
+
+          const replaced = await tx
+            .delete(Subscriptions)
+            .where(and(eq(Subscriptions.userId, ctx.session.userId), eq(Subscriptions.state, SubscriptionState.WILL_ACTIVATE)))
+            .returning({ id: Subscriptions.id });
+
+          // 봤던 예약이 사라졌다면 전환 잡이 그 사이 결제·활성화한 것 — 새 예약을 얹으면 안 된다.
+          if (hadReservation && replaced.length === 0) {
+            throw new TypieError({ code: 'subscription_already_exists' });
+          }
+
+          return await tx
+            .insert(Subscriptions)
+            .values({
+              userId: ctx.session.userId,
+              planId: plan.id,
+              startsAt,
+              expiresAt,
+              renewedAt: startsAt,
+              state: SubscriptionState.WILL_ACTIVATE,
+            })
+            .returning()
+            .then(firstOrThrow);
+        }
+
+        const startsAt = dayjs();
+        const expiresAt = getSubscriptionExpiresAt(startsAt, plan.interval);
+
+        // 유령 예약이 새 ACTIVE 와 공존하면 전환 잡이 결제를 시도한다 — 신규 구독 의사가 예약을 대체한다.
+        await tx
+          .delete(Subscriptions)
+          .where(and(eq(Subscriptions.userId, ctx.session.userId), eq(Subscriptions.state, SubscriptionState.WILL_ACTIVATE)));
 
         const subscription = await tx
           .insert(Subscriptions)
@@ -375,38 +446,34 @@ builder.mutationFields((t) => ({
     type: Subscription,
     input: { planId: t.input.id({ validate: validateDbId(TableCode.PLANS) }) },
     resolve: async (_, { input }, ctx) => {
-      const activeSubscription = await db
-        .select({ id: Subscriptions.id, expiresAt: Subscriptions.expiresAt })
-        .from(Subscriptions)
-        .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
-        .where(
-          and(
-            eq(Subscriptions.userId, ctx.session.userId),
-            eq(Subscriptions.state, SubscriptionState.ACTIVE),
-            eq(Plans.availability, PlanAvailability.BILLING_KEY),
-          ),
-        )
-        .then(firstOrThrow);
-
       const plan = await db
         .select({ id: Plans.id, fee: Plans.fee, interval: Plans.interval })
         .from(Plans)
         .where(and(eq(Plans.id, input.planId), eq(Plans.availability, PlanAvailability.BILLING_KEY)))
         .then(firstOrThrow);
 
-      const startsAt = activeSubscription.expiresAt;
-      const expiresAt = getSubscriptionExpiresAt(startsAt, plan.interval);
-
       return await db.transaction(async (tx) => {
-        const existingWillActivate = await tx
-          .select({ id: Subscriptions.id })
-          .from(Subscriptions)
-          .where(and(eq(Subscriptions.userId, ctx.session.userId), eq(Subscriptions.state, SubscriptionState.WILL_ACTIVATE)))
-          .then(first);
+        await lockUserSubscriptionState(tx, ctx.session.userId);
 
-        if (existingWillActivate) {
-          await tx.delete(Subscriptions).where(eq(Subscriptions.id, existingWillActivate.id));
-        }
+        const activeSubscription = await tx
+          .select({ id: Subscriptions.id, expiresAt: Subscriptions.expiresAt })
+          .from(Subscriptions)
+          .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
+          .where(
+            and(
+              eq(Subscriptions.userId, ctx.session.userId),
+              eq(Subscriptions.state, SubscriptionState.ACTIVE),
+              eq(Plans.availability, PlanAvailability.BILLING_KEY),
+            ),
+          )
+          .then(firstOrThrow);
+
+        const startsAt = activeSubscription.expiresAt;
+        const expiresAt = getSubscriptionExpiresAt(startsAt, plan.interval);
+
+        await tx
+          .delete(Subscriptions)
+          .where(and(eq(Subscriptions.userId, ctx.session.userId), eq(Subscriptions.state, SubscriptionState.WILL_ACTIVATE)));
 
         await tx.update(Subscriptions).set({ state: SubscriptionState.WILL_EXPIRE }).where(eq(Subscriptions.id, activeSubscription.id));
 
@@ -429,33 +496,75 @@ builder.mutationFields((t) => ({
   cancelPlanChange: t.withAuth({ session: true }).field({
     type: Subscription,
     resolve: async (_, __, ctx) => {
-      const willExpireSubscription = await db
-        .select({ id: Subscriptions.id })
-        .from(Subscriptions)
-        .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
-        .where(
-          and(
-            eq(Subscriptions.userId, ctx.session.userId),
-            eq(Subscriptions.state, SubscriptionState.WILL_EXPIRE),
-            eq(Plans.availability, PlanAvailability.BILLING_KEY),
-          ),
-        )
-        .then(firstOrThrow);
-
-      const willActivateSubscription = await db
-        .select({ id: Subscriptions.id })
-        .from(Subscriptions)
-        .where(and(eq(Subscriptions.userId, ctx.session.userId), eq(Subscriptions.state, SubscriptionState.WILL_ACTIVATE)))
-        .then(firstOrThrow);
-
       return await db.transaction(async (tx) => {
-        await tx.delete(Subscriptions).where(eq(Subscriptions.id, willActivateSubscription.id));
+        await lockUserSubscriptionState(tx, ctx.session.userId);
 
+        // 전환 잡이 이미 결제·활성화했거나 IAP 가 대체했으면 0건 — id 로만 지우면 ACTIVE 행 삭제 시도가 인보이스 FK 에 걸린다.
+        const deleted = await tx
+          .delete(Subscriptions)
+          .where(and(eq(Subscriptions.userId, ctx.session.userId), eq(Subscriptions.state, SubscriptionState.WILL_ACTIVATE)))
+          .returning({ id: Subscriptions.id });
+
+        if (deleted.length === 0) {
+          throw new TypieError({ code: 'plan_change_already_processed', status: 409 });
+        }
+
+        const trialSubscription = await tx
+          .select({ id: Subscriptions.id })
+          .from(Subscriptions)
+          .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
+          .where(
+            and(
+              eq(Subscriptions.userId, ctx.session.userId),
+              eq(Subscriptions.state, SubscriptionState.WILL_EXPIRE),
+              eq(Plans.availability, PlanAvailability.TRIAL),
+            ),
+          )
+          .then(first);
+
+        if (trialSubscription) {
+          return await tx.select().from(Subscriptions).where(eq(Subscriptions.id, trialSubscription.id)).then(firstOrThrow);
+        }
+
+        // 해지 확정 잡이 그 사이 EXPIRED 로 만든 행을 무조건 UPDATE 로 부활시키지 않도록 상태를 CAS 하고,
+        // 전환 공존 창에서 후보가 둘이면 전부 ACTIVE 를 시도하다 유니크 충돌로 예약 삭제까지 롤백되므로
+        // 만료 전 최신 한 건만 대상으로 한다.
+        const restoreCandidate = await tx
+          .select({ id: Subscriptions.id })
+          .from(Subscriptions)
+          .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
+          .where(
+            and(
+              eq(Subscriptions.userId, ctx.session.userId),
+              eq(Subscriptions.state, SubscriptionState.WILL_EXPIRE),
+              gt(Subscriptions.expiresAt, dayjs()),
+              eq(Plans.availability, PlanAvailability.BILLING_KEY),
+            ),
+          )
+          .orderBy(desc(Subscriptions.createdAt))
+          .limit(1)
+          .then(first);
+
+        const restored = restoreCandidate
+          ? await tx
+              .update(Subscriptions)
+              .set({ state: SubscriptionState.ACTIVE })
+              .where(and(eq(Subscriptions.id, restoreCandidate.id), eq(Subscriptions.state, SubscriptionState.WILL_EXPIRE)))
+              .returning()
+              .then(first)
+          : null;
+
+        if (restored) {
+          return restored;
+        }
+
+        // 이전 구독이 이미 만료 확정된 뒤의 취소 — 예약 삭제(취소 의사)는 유지하고 최신 구독 행을 반환한다.
         return await tx
-          .update(Subscriptions)
-          .set({ state: SubscriptionState.ACTIVE })
-          .where(eq(Subscriptions.id, willExpireSubscription.id))
-          .returning()
+          .select()
+          .from(Subscriptions)
+          .where(eq(Subscriptions.userId, ctx.session.userId))
+          .orderBy(desc(Subscriptions.createdAt))
+          .limit(1)
           .then(firstOrThrow);
       });
     },
@@ -468,37 +577,6 @@ builder.mutationFields((t) => ({
       data: t.input.string(),
     },
     resolve: async (_, { input }, ctx) => {
-      const existingSubscription = await db
-        .select({ id: Subscriptions.id })
-        .from(Subscriptions)
-        .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
-        .where(
-          and(
-            eq(Subscriptions.userId, ctx.session.userId),
-            ne(Subscriptions.state, SubscriptionState.EXPIRED),
-            ne(Plans.availability, PlanAvailability.IN_APP_PURCHASE),
-            ne(Plans.availability, PlanAvailability.TRIAL),
-          ),
-        )
-        .then(first);
-
-      if (existingSubscription) {
-        throw new TypieError({ code: 'subscription_already_exists' });
-      }
-
-      const trialSubscription = await db
-        .select({ id: Subscriptions.id })
-        .from(Subscriptions)
-        .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
-        .where(
-          and(
-            eq(Subscriptions.userId, ctx.session.userId),
-            ne(Subscriptions.state, SubscriptionState.EXPIRED),
-            eq(Plans.availability, PlanAvailability.TRIAL),
-          ),
-        )
-        .then(first);
-
       let identifier: string;
       let planId: string;
       let startsAt: dayjs.Dayjs;
@@ -571,6 +649,55 @@ builder.mutationFields((t) => ({
         .then(firstOrThrow);
 
       return await db.transaction(async (tx) => {
+        await lockUserSubscriptionState(tx, ctx.session.userId);
+
+        // 스토어 서명·소유권 검증은 락 밖 결과를 쓰되, 계정·구독 상태는 락 후 재판정한다(탈퇴·동시 구독 경합).
+        await tx
+          .select({ id: Users.id })
+          .from(Users)
+          .where(and(eq(Users.id, ctx.session.userId), eq(Users.state, UserState.ACTIVE)))
+          .then(firstOrThrow);
+
+        // 시간상 만료된 WILL_EXPIRE 는 차단하지 않는다 — resolveEnrollAction 과 동일한 liveness 기준.
+        // 해지 확정 잡 지연(~1분)이 이미 스토어 결제를 마친 등록을 거부하면 안 된다.
+        const existingSubscription = await tx
+          .select({ id: Subscriptions.id })
+          .from(Subscriptions)
+          .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
+          .where(
+            and(
+              eq(Subscriptions.userId, ctx.session.userId),
+              ne(Subscriptions.state, SubscriptionState.EXPIRED),
+              ne(Subscriptions.state, SubscriptionState.WILL_ACTIVATE),
+              or(ne(Subscriptions.state, SubscriptionState.WILL_EXPIRE), gt(Subscriptions.expiresAt, dayjs())),
+              ne(Plans.availability, PlanAvailability.IN_APP_PURCHASE),
+              ne(Plans.availability, PlanAvailability.TRIAL),
+            ),
+          )
+          .then(first);
+
+        if (existingSubscription) {
+          throw new TypieError({ code: 'subscription_already_exists' });
+        }
+
+        const trialSubscription = await tx
+          .select({ id: Subscriptions.id })
+          .from(Subscriptions)
+          .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
+          .where(
+            and(
+              eq(Subscriptions.userId, ctx.session.userId),
+              ne(Subscriptions.state, SubscriptionState.EXPIRED),
+              eq(Plans.availability, PlanAvailability.TRIAL),
+            ),
+          )
+          .then(first);
+
+        // 스토어 구매가 웹 예약을 대체한다(오너 결정). 예약이 남으면 전환 잡이 카드 결제까지 시도한다.
+        await tx
+          .delete(Subscriptions)
+          .where(and(eq(Subscriptions.userId, ctx.session.userId), eq(Subscriptions.state, SubscriptionState.WILL_ACTIVATE)));
+
         // 이전 purchaseToken 을 보유한 "다른" 타이피 계정이 있으면(같은 스토어 계정에서 플랜 변경/재구독으로 토큰이 바뀐 경우),
         // 그 구독을 만료시키고 바인딩을 제거한다. 하나의 스토어 구독이 여러 타이피 계정에 동시에 활성화되는 것을 막는다.
         // (같은 계정의 토큰 변경은 아래 userId 기준 upsert 가 바인딩을 이동시키므로 여기서 건드리지 않는다)
@@ -679,31 +806,27 @@ builder.mutationFields((t) => ({
   scheduleSubscriptionCancellation: t.withAuth({ session: true }).field({
     type: Subscription,
     resolve: async (_, __, ctx) => {
-      const activeSubscription = await db
-        .select({ id: Subscriptions.id, state: Subscriptions.state })
-        .from(Subscriptions)
-        .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
-        .where(
-          and(
-            eq(Subscriptions.userId, ctx.session.userId),
-            inArray(Subscriptions.state, [SubscriptionState.ACTIVE, SubscriptionState.IN_GRACE_PERIOD]),
-            eq(Plans.availability, PlanAvailability.BILLING_KEY),
-          ),
-        )
-        .then(firstOrThrow);
-
-      const willActivateSubscription = await db
-        .select({ id: Subscriptions.id })
-        .from(Subscriptions)
-        .where(and(eq(Subscriptions.userId, ctx.session.userId), eq(Subscriptions.state, SubscriptionState.WILL_ACTIVATE)))
-        .then(first);
-
       return await db.transaction(async (tx) => {
+        await lockUserSubscriptionState(tx, ctx.session.userId);
+
+        const activeSubscription = await tx
+          .select({ id: Subscriptions.id, state: Subscriptions.state })
+          .from(Subscriptions)
+          .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
+          .where(
+            and(
+              eq(Subscriptions.userId, ctx.session.userId),
+              inArray(Subscriptions.state, [SubscriptionState.ACTIVE, SubscriptionState.IN_GRACE_PERIOD]),
+              eq(Plans.availability, PlanAvailability.BILLING_KEY),
+            ),
+          )
+          .then(firstOrThrow);
+
         // 교착 방지 전역 락 순서: WILL_ACTIVATE 구독 → 주 구독 → 인보이스.
         // 환불·갱신 재시도가 구독을 잠근 채 인보이스를 갱신하므로, 여기서 인보이스를 구독보다 먼저 잠그면 역순 교착이 된다.
-        if (willActivateSubscription) {
-          await tx.delete(Subscriptions).where(eq(Subscriptions.id, willActivateSubscription.id));
-        }
+        await tx
+          .delete(Subscriptions)
+          .where(and(eq(Subscriptions.userId, ctx.session.userId), eq(Subscriptions.state, SubscriptionState.WILL_ACTIVATE)));
 
         const subscription = await tx
           .update(Subscriptions)
@@ -731,36 +854,54 @@ builder.mutationFields((t) => ({
   cancelSubscriptionCancellation: t.withAuth({ session: true }).field({
     type: Subscription,
     resolve: async (_, __, ctx) => {
-      const willExpireSubscription = await db
-        .select({ id: Subscriptions.id })
-        .from(Subscriptions)
-        .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
-        .where(
-          and(
-            eq(Subscriptions.userId, ctx.session.userId),
-            eq(Subscriptions.state, SubscriptionState.WILL_EXPIRE),
-            eq(Plans.availability, PlanAvailability.BILLING_KEY),
-          ),
-        )
-        .then(firstOrThrow);
-
-      const willActivateSubscription = await db
-        .select({ id: Subscriptions.id })
-        .from(Subscriptions)
-        .where(and(eq(Subscriptions.userId, ctx.session.userId), eq(Subscriptions.state, SubscriptionState.WILL_ACTIVATE)))
-        .then(first);
-
-      if (willActivateSubscription) {
-        throw new TypieError({ code: 'plan_change_scheduled' });
-      }
-
       return await db.transaction(async (tx) => {
-        return await tx
+        await lockUserSubscriptionState(tx, ctx.session.userId);
+
+        // 전환 공존 창의 옛 행을 고르지 않도록 만료 전 행만, 최신 우선으로 선택한다.
+        const willExpireSubscription = await tx
+          .select({ id: Subscriptions.id })
+          .from(Subscriptions)
+          .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
+          .where(
+            and(
+              eq(Subscriptions.userId, ctx.session.userId),
+              eq(Subscriptions.state, SubscriptionState.WILL_EXPIRE),
+              gt(Subscriptions.expiresAt, dayjs()),
+              eq(Plans.availability, PlanAvailability.BILLING_KEY),
+            ),
+          )
+          .orderBy(desc(Subscriptions.createdAt))
+          .limit(1)
+          .then(first);
+
+        // 해지 확정 잡이 먼저 만료시켰으면 재개할 대상이 없다 — 일반 500 이 아니라 명시적 conflict 로 응답한다.
+        if (!willExpireSubscription) {
+          throw new TypieError({ code: 'subscription_already_expired', status: 409 });
+        }
+
+        const willActivateSubscription = await tx
+          .select({ id: Subscriptions.id })
+          .from(Subscriptions)
+          .where(and(eq(Subscriptions.userId, ctx.session.userId), eq(Subscriptions.state, SubscriptionState.WILL_ACTIVATE)))
+          .then(first);
+
+        if (willActivateSubscription) {
+          throw new TypieError({ code: 'plan_change_scheduled' });
+        }
+
+        // 해지 확정 잡이 그 사이 EXPIRED 로 만든 행을 부활시키지 않는다.
+        const restored = await tx
           .update(Subscriptions)
           .set({ state: SubscriptionState.ACTIVE })
-          .where(eq(Subscriptions.id, willExpireSubscription.id))
+          .where(and(eq(Subscriptions.id, willExpireSubscription.id), eq(Subscriptions.state, SubscriptionState.WILL_EXPIRE)))
           .returning()
-          .then(firstOrThrow);
+          .then(first);
+
+        if (!restored) {
+          throw new TypieError({ code: 'subscription_already_expired', status: 409 });
+        }
+
+        return restored;
       });
     },
   }),

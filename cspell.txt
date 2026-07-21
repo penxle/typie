@@ -224,6 +224,7 @@ unresolve
 unsplittable
 unstub
 unsubscriber
+upserted
 usize
 vcpu
 vermuda

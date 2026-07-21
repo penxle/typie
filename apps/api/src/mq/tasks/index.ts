@@ -27,6 +27,7 @@ import {
   SubscriptionRenewalInitialJob,
   SubscriptionRenewalPlanChangeJob,
   SubscriptionRenewalRetryJob,
+  SubscriptionTransitionCron,
 } from './subscription.ts';
 
 export const jobs = [
@@ -55,6 +56,7 @@ export const crons = [
   DocumentSyncScanCron,
   DocumentGCScanCron,
   SubscriptionRenewalCron,
+  SubscriptionTransitionCron,
   SubscriptionReconcileInAppPurchaseCron,
 ];
 

@@ -978,6 +978,15 @@ export const Subscriptions = pgTable(
     uniqueIndex()
       .on(t.userId)
       .where(eq(t.state, sql`'ACTIVE'`)),
+    uniqueIndex('subscriptions_will_activate_user_id_index')
+      .on(t.userId)
+      .where(eq(t.state, sql`'WILL_ACTIVATE'`)),
+    index('subscriptions_will_activate_starts_at_index')
+      .on(t.startsAt)
+      .where(eq(t.state, sql`'WILL_ACTIVATE'`)),
+    index('subscriptions_will_expire_expires_at_index')
+      .on(t.expiresAt)
+      .where(eq(t.state, sql`'WILL_EXPIRE'`)),
   ],
 );
 

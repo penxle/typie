@@ -10,6 +10,7 @@ import { production } from '#/env.ts';
 import * as appstore from '#/external/appstore.ts';
 import * as googleplay from '#/external/googleplay.ts';
 import * as slack from '#/external/slack.ts';
+import { lockUserSubscriptionState } from '#/utils/subscription-lock.ts';
 import type { ResponseBodyV2 } from '@apple/app-store-server-library';
 import type { Env } from '#/context.ts';
 import type { DeveloperNotification } from '#/external/googleplay.ts';
@@ -108,30 +109,60 @@ iap.post('/appstore', async (c) => {
           return;
         }
 
-        await db
-          .insert(Subscriptions)
-          .values({
-            userId: inAppPurchase.userId,
-            planId: plan.id,
-            startsAt: purchaseDate,
-            expiresAt: expiresDate,
-            renewedAt: purchaseDate,
-            state: SubscriptionState.ACTIVE,
-          })
-          .onConflictDoUpdate({
-            target: [Subscriptions.userId],
-            targetWhere: eq(Subscriptions.state, SubscriptionState.ACTIVE),
-            set: { planId: plan.id, startsAt: purchaseDate, expiresAt: expiresDate, renewedAt: purchaseDate },
-            // 충돌하는 ACTIVE 행이 IAP 이고 만료일이 역행하지 않을 때만 갱신한다.
-            // 다른 채널(빌링키 등)의 ACTIVE 구독을 덮어쓰지 않고, stale 재전송이 최신 갱신을 되돌리지 못하게 한다.
-            setWhere: and(
-              inArray(
-                Subscriptions.planId,
-                db.select({ id: Plans.id }).from(Plans).where(eq(Plans.availability, PlanAvailability.IN_APP_PURCHASE)),
+        await db.transaction(async (tx) => {
+          await lockUserSubscriptionState(tx, inAppPurchase.userId);
+
+          // 락 대기 중 바인딩이 삭제·이전(재등록/탈퇴 — 탈퇴는 바인딩을 지운다)됐으면 stale userId 로 만들지 않는다.
+          const freshBinding = await tx
+            .select({ userId: UserInAppPurchases.userId })
+            .from(UserInAppPurchases)
+            .where(
+              and(
+                eq(UserInAppPurchases.userId, inAppPurchase.userId),
+                eq(UserInAppPurchases.store, InAppPurchaseStore.APP_STORE),
+                eq(UserInAppPurchases.identifier, originalTransactionId),
               ),
-              lte(Subscriptions.expiresAt, expiresDate),
-            ),
-          });
+            )
+            .then(first);
+
+          if (!freshBinding) {
+            return;
+          }
+
+          const upserted = await tx
+            .insert(Subscriptions)
+            .values({
+              userId: inAppPurchase.userId,
+              planId: plan.id,
+              startsAt: purchaseDate,
+              expiresAt: expiresDate,
+              renewedAt: purchaseDate,
+              state: SubscriptionState.ACTIVE,
+            })
+            .onConflictDoUpdate({
+              target: [Subscriptions.userId],
+              targetWhere: eq(Subscriptions.state, SubscriptionState.ACTIVE),
+              set: { planId: plan.id, startsAt: purchaseDate, expiresAt: expiresDate, renewedAt: purchaseDate },
+              // 충돌하는 ACTIVE 행이 IAP 이고 만료일이 역행하지 않을 때만 갱신한다.
+              // 다른 채널(빌링키 등)의 ACTIVE 구독을 덮어쓰지 않고, stale 재전송이 최신 갱신을 되돌리지 못하게 한다.
+              setWhere: and(
+                inArray(
+                  Subscriptions.planId,
+                  tx.select({ id: Plans.id }).from(Plans).where(eq(Plans.availability, PlanAvailability.IN_APP_PURCHASE)),
+                ),
+                lte(Subscriptions.expiresAt, expiresDate),
+              ),
+            })
+            .returning({ id: Subscriptions.id });
+
+          if (upserted.length === 0) {
+            // 스토어는 이미 과금했는데 비IAP ACTIVE 와 충돌해 조용히 사라지는 구매 — 운영이 인지해야 수동 환불이 가능하다.
+            Sentry.captureMessage('iap webhook upsert skipped by conflicting non-iap active subscription', {
+              level: 'warning',
+              extra: { userId: inAppPurchase.userId, store: 'APP_STORE', identifier: originalTransactionId },
+            });
+          }
+        });
       }
     })
     .with('EXPIRED', 'GRACE_PERIOD_EXPIRED', async () => {
@@ -318,8 +349,10 @@ iap.post('/googleplay', async (c) => {
   const notification = await c.req.json<DeveloperNotification>();
 
   if (notification.subscriptionNotification) {
+    const purchaseToken = notification.subscriptionNotification.purchaseToken;
+
     // 조회 실패(일시적 오류 포함)는 throw 하여 5xx 로 응답 → Pub/Sub 가 재전송한다. 200 으로 삼키면 알림이 영구 유실된다.
-    const googlePlaySubscription = await googleplay.getSubscription(notification.subscriptionNotification.purchaseToken);
+    const googlePlaySubscription = await googleplay.getSubscription(purchaseToken);
 
     const item = googlePlaySubscription.lineItems?.[0];
     const planId = item?.offerDetails?.basePlanId?.toUpperCase();
@@ -387,30 +420,64 @@ iap.post('/googleplay', async (c) => {
           }
         } else if (expiresAt.isAfter(dayjs())) {
           const startsAt = dayjs(googlePlaySubscription.startTime);
-          await db
-            .insert(Subscriptions)
-            .values({
-              userId: inAppPurchase.userId,
-              planId,
-              startsAt,
-              expiresAt,
-              renewedAt: startsAt,
-              state: SubscriptionState.ACTIVE,
-            })
-            .onConflictDoUpdate({
-              target: [Subscriptions.userId],
-              targetWhere: eq(Subscriptions.state, SubscriptionState.ACTIVE),
-              set: { planId, startsAt, expiresAt, renewedAt: startsAt },
-              // 충돌하는 ACTIVE 행이 IAP 이고 만료일이 역행하지 않을 때만 갱신한다.
-              // 다른 채널(빌링키 등)의 ACTIVE 구독을 덮어쓰지 않고, stale 재전송이 최신 갱신을 되돌리지 못하게 한다.
-              setWhere: and(
-                inArray(
-                  Subscriptions.planId,
-                  db.select({ id: Plans.id }).from(Plans).where(eq(Plans.availability, PlanAvailability.IN_APP_PURCHASE)),
+          await db.transaction(async (tx) => {
+            await lockUserSubscriptionState(tx, inAppPurchase.userId);
+
+            // 락 대기 중 바인딩이 삭제·이전(재등록/탈퇴 — 탈퇴는 바인딩을 지운다)됐으면 stale userId 로 만들지 않는다.
+            const freshBinding = await tx
+              .select({ userId: UserInAppPurchases.userId })
+              .from(UserInAppPurchases)
+              .where(
+                and(
+                  eq(UserInAppPurchases.userId, inAppPurchase.userId),
+                  eq(UserInAppPurchases.store, InAppPurchaseStore.GOOGLE_PLAY),
+                  eq(UserInAppPurchases.identifier, purchaseToken),
                 ),
-                lte(Subscriptions.expiresAt, expiresAt),
-              ),
-            });
+              )
+              .then(first);
+
+            if (!freshBinding) {
+              return;
+            }
+
+            const upserted = await tx
+              .insert(Subscriptions)
+              .values({
+                userId: inAppPurchase.userId,
+                planId,
+                startsAt,
+                expiresAt,
+                renewedAt: startsAt,
+                state: SubscriptionState.ACTIVE,
+              })
+              .onConflictDoUpdate({
+                target: [Subscriptions.userId],
+                targetWhere: eq(Subscriptions.state, SubscriptionState.ACTIVE),
+                set: { planId, startsAt, expiresAt, renewedAt: startsAt },
+                // 충돌하는 ACTIVE 행이 IAP 이고 만료일이 역행하지 않을 때만 갱신한다.
+                // 다른 채널(빌링키 등)의 ACTIVE 구독을 덮어쓰지 않고, stale 재전송이 최신 갱신을 되돌리지 못하게 한다.
+                setWhere: and(
+                  inArray(
+                    Subscriptions.planId,
+                    tx.select({ id: Plans.id }).from(Plans).where(eq(Plans.availability, PlanAvailability.IN_APP_PURCHASE)),
+                  ),
+                  lte(Subscriptions.expiresAt, expiresAt),
+                ),
+              })
+              .returning({ id: Subscriptions.id });
+
+            if (upserted.length === 0) {
+              // 스토어는 이미 과금했는데 비IAP ACTIVE 와 충돌해 조용히 사라지는 구매 — 운영이 인지해야 수동 환불이 가능하다.
+              Sentry.captureMessage('iap webhook upsert skipped by conflicting non-iap active subscription', {
+                level: 'warning',
+                extra: {
+                  userId: inAppPurchase.userId,
+                  store: 'GOOGLE_PLAY',
+                  identifier: purchaseToken,
+                },
+              });
+            }
+          });
         }
       })
       .with('SUBSCRIPTION_STATE_EXPIRED', async () => {

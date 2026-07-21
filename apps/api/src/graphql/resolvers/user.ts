@@ -66,6 +66,7 @@ import { evaluateCouponCondition } from '#/utils/coupon.ts';
 import { getDocumentFontFamilies } from '#/utils/document.ts';
 import { assertActiveSubscription } from '#/utils/plan.ts';
 import { delay } from '#/utils/promise.ts';
+import { lockUserSubscriptionState } from '#/utils/subscription-lock.ts';
 import { getUserUsage, getUserUuid } from '#/utils/user.ts';
 import { builder } from '../builder.ts';
 import {
@@ -687,16 +688,19 @@ builder.mutationFields((t) => ({
   deleteUser: t.withAuth({ session: true }).field({
     type: 'Boolean',
     resolve: async (_, __, ctx) => {
-      const overdueInvoices = await db
-        .select({ id: PaymentInvoices.id })
-        .from(PaymentInvoices)
-        .where(and(eq(PaymentInvoices.userId, ctx.session.userId), eq(PaymentInvoices.state, PaymentInvoiceState.OVERDUE)));
-
-      if (overdueInvoices.length > 0) {
-        throw new TypieError({ code: 'overdue_invoices_exist' });
-      }
-
       const billingKey = await db.transaction(async (tx) => {
+        await lockUserSubscriptionState(tx, ctx.session.userId);
+
+        // 가드가 락 밖이면 조회 직후 갱신 잡이 청구를 커밋해 탈퇴 시점 과금이 남는다.
+        const overdueInvoices = await tx
+          .select({ id: PaymentInvoices.id })
+          .from(PaymentInvoices)
+          .where(and(eq(PaymentInvoices.userId, ctx.session.userId), eq(PaymentInvoices.state, PaymentInvoiceState.OVERDUE)));
+
+        if (overdueInvoices.length > 0) {
+          throw new TypieError({ code: 'overdue_invoices_exist' });
+        }
+
         await tx
           .update(Entities)
           .set({ state: EntityState.PURGED, purgedAt: dayjs() })

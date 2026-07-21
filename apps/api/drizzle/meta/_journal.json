@@ -645,6 +645,13 @@
       "when": 1784378775000,
       "tag": "0091_ancient_brood",
       "breakpoints": false
+    },
+    {
+      "idx": 92,
+      "version": "7",
+      "when": 1784663007845,
+      "tag": "0092_subscription-transition-indexes",
+      "breakpoints": false
     }
   ]
 }

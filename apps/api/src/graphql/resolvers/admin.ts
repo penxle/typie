@@ -22,6 +22,7 @@ import {
 } from '#/db/index.ts';
 import * as portone from '#/external/portone.ts';
 import { assertAdminPermission } from '#/utils/permission.ts';
+import { lockUserSubscriptionState } from '#/utils/subscription-lock.ts';
 import { SYSTEM_USER_ID } from '#/utils/system-actor.ts';
 import { builder } from '../builder.ts';
 import { Document, User } from '../objects.ts';
@@ -281,10 +282,17 @@ builder.mutationFields((t) => ({
         // 교착 방지: 모든 갱신·환불 경로는 구독 → 인보이스 순으로 잠근다. subscriptionId 는 불변 컬럼이라
         // 무락 조회가 안전하고, 인보이스 상태(PAID)는 아래 잠금 조회에서 재검증한다.
         const invoiceRef = await tx
-          .select({ subscriptionId: PaymentInvoices.subscriptionId })
+          .select({ subscriptionId: PaymentInvoices.subscriptionId, userId: PaymentInvoices.userId })
           .from(PaymentInvoices)
           .where(eq(PaymentInvoices.id, input.invoiceId))
           .then(firstOrThrow);
+
+        await lockUserSubscriptionState(tx, invoiceRef.userId);
+
+        // 환불은 미래 예약도 함께 취소한다 — 예약이 남으면 환불 직후 전환 크론이 재과금한다.
+        await tx
+          .delete(Subscriptions)
+          .where(and(eq(Subscriptions.userId, invoiceRef.userId), eq(Subscriptions.state, SubscriptionState.WILL_ACTIVATE)));
 
         await tx
           .select({ id: Subscriptions.id })

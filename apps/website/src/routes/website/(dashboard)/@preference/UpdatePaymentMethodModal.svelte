@@ -1,7 +1,7 @@
 <script lang="ts">
   import { createFragment, createMutation } from '@mearie/svelte';
   import { PlanId } from '@typie/lib/const';
-  import { PlanInterval } from '@typie/lib/enums';
+  import { PlanAvailability, PlanInterval, SubscriptionState } from '@typie/lib/enums';
   import { TypieError } from '@typie/lib/errors';
   import { cardSchema } from '@typie/lib/validation';
   import { css } from '@typie/styled-system/css';
@@ -10,6 +10,7 @@
   import { createForm, FormError } from '@typie/ui/form';
   import { Toast } from '@typie/ui/notification';
   import { comma } from '@typie/ui/utils';
+  import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
   import { untrack } from 'svelte';
   import { z } from 'zod';
@@ -40,6 +41,7 @@
 
         subscription {
           id
+          expiresAt
 
           plan {
             id
@@ -72,6 +74,7 @@
       ) {
         subscribePlanWithBillingKey(input: $input) {
           id
+          state
 
           user {
             id
@@ -88,6 +91,9 @@
   let submitError = $state<string | null>(null);
   let celebrationModalOpen = $state(false);
   let isEditingCard = $state(false);
+
+  const isTrial = $derived(user.data.subscription?.plan.availability === PlanAvailability.TRIAL);
+  let scheduledCelebration = $state(false);
 
   const form = createForm({
     schema: z.object({
@@ -141,16 +147,19 @@
         Toast.success(user.data.billingKey ? '카드 정보가 변경되었어요.' : '카드가 등록되었어요.');
         open = false;
       } else {
-        if (interval === PlanInterval.MONTHLY) {
-          await subscribePlanWithBillingKey({ input: { planId: PlanId.FULL_ACCESS_1MONTH_WITH_BILLING_KEY } });
-          mixpanel.track('enroll_plan', { planId: PlanId.FULL_ACCESS_1MONTH_WITH_BILLING_KEY });
-          fb.track('Subscribe', { value: '2900.00', currency: 'KRW', predicted_ltv: '2900.00' });
-        } else if (interval === PlanInterval.YEARLY) {
-          await subscribePlanWithBillingKey({ input: { planId: PlanId.FULL_ACCESS_1YEAR_WITH_BILLING_KEY } });
-          mixpanel.track('enroll_plan', { planId: PlanId.FULL_ACCESS_1YEAR_WITH_BILLING_KEY });
-          fb.track('Subscribe', { value: '29000.00', currency: 'KRW', predicted_ltv: '29000.00' });
+        const planId =
+          interval === PlanInterval.YEARLY ? PlanId.FULL_ACCESS_1YEAR_WITH_BILLING_KEY : PlanId.FULL_ACCESS_1MONTH_WITH_BILLING_KEY;
+        const result = await subscribePlanWithBillingKey({ input: { planId } });
+        // 사후 메시지·전환 이벤트는 사전 추정(isTrial)이 아니라 실제 처리 결과로 분기한다 — 롤링 배포·만료 직후 등록에서도 정합.
+        const scheduled = result.subscribePlanWithBillingKey.state === SubscriptionState.WILL_ACTIVATE;
+
+        mixpanel.track('enroll_plan', { planId, scheduled });
+        if (!scheduled) {
+          const value = interval === PlanInterval.YEARLY ? '29000.00' : '2900.00';
+          fb.track('Subscribe', { value, currency: 'KRW', predicted_ltv: value });
         }
 
+        scheduledCelebration = scheduled;
         open = false;
         celebrationModalOpen = true;
       }
@@ -158,6 +167,7 @@
     onError: (error) => {
       const errorMessages: Record<string, string> = {
         billing_key_issue_failed: '결제 키 발급에 실패했어요. 카드 정보를 확인해주세요.',
+        billing_key_required: '결제 카드를 먼저 등록해 주세요.',
         plan_already_enrolled: '이미 구독 중이에요.',
         unpaid_invoice_exists: '미결제 내역이 있어요. 고객센터에 문의해주세요.',
         payment_failed: '결제에 실패했어요. 카드 정보를 확인해주세요.',
@@ -446,10 +456,16 @@
             })}
           >
             <div class={flex({ justify: 'space-between', fontSize: '14px', fontWeight: 'semibold' })}>
-              <span class={css({ color: 'text.default' })}>최종 금액</span>
+              <span class={css({ color: 'text.default' })}>{isTrial ? '예상 결제 금액' : '최종 금액'}</span>
               <span class={css({ color: 'text.default' })}>{comma(finalAmount)}원</span>
             </div>
           </div>
+          {#if isTrial && user.data.subscription}
+            <div class={css({ marginTop: '8px', fontSize: '12px', color: 'text.subtle' })}>
+              무료 체험이 끝나는 {dayjs(user.data.subscription.expiresAt).formatAsDate()}에 결제돼요. 크레딧은 결제 시점 잔액 기준으로
+              차감돼요.
+            </div>
+          {/if}
         </div>
       </div>
     {/if}
@@ -513,6 +529,8 @@
     <Button style={css.raw({ width: 'full' })} loading={form.state.isLoading} type="submit">
       {#if mode === 'register'}
         {user.data.billingKey ? '변경하기' : '등록하기'}
+      {:else if isTrial}
+        {finalAmount === 0 ? '구독 예약하기' : `${comma(finalAmount)}원 결제 예약하기`}
       {:else if finalAmount === 0}
         구독 시작하기
       {:else}
@@ -523,7 +541,7 @@
 </Modal>
 
 <SubscriptionCelebrationModal
-  message="타이피의 모든 기능을 자유롭게 이용해보세요."
-  title="구독이 시작됐어요!"
+  message={scheduledCelebration ? '무료 체험이 끝나면 자동으로 결제되고 플랜이 시작돼요.' : '타이피의 모든 기능을 자유롭게 이용해보세요.'}
+  title={scheduledCelebration ? '구독이 예약됐어요!' : '구독이 시작됐어요!'}
   bind:open={celebrationModalOpen}
 />

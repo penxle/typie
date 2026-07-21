@@ -1,7 +1,8 @@
 <script lang="ts">
   import { createFragment, createMutation } from '@mearie/svelte';
-  import { PlanPair } from '@typie/lib/const';
+  import { PlanPair, SUBSCRIPTION_GRACE_DAYS } from '@typie/lib/const';
   import { PlanAvailability, PlanInterval, SubscriptionState } from '@typie/lib/enums';
+  import { TypieError } from '@typie/lib/errors';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Button } from '@typie/ui/components';
@@ -127,6 +128,25 @@
     `),
   );
 
+  const [subscribePlanWithBillingKey] = createMutation(
+    graphql(`
+      mutation DashboardLayout_PreferenceModal_BillingTab_SubscribePlanWithBillingKey_Mutation($input: SubscribePlanWithBillingKeyInput!) {
+        subscribePlanWithBillingKey(input: $input) {
+          id
+          state
+          startsAt
+          expiresAt
+
+          plan {
+            id
+            name
+            fee
+          }
+        }
+      }
+    `),
+  );
+
   const [recordSurvey] = createMutation(
     graphql(`
       mutation DashboardLayout_PreferenceModal_BillingTab_RecordSurvey_Mutation($input: RecordSurveyInput!) {
@@ -208,7 +228,11 @@
           {#snippet description()}
             {#if isTrial}
               <span>
-                무료 체험이 {dayjs(subscription.expiresAt).formatAsDate()}에 종료돼요.
+                {#if user.data.nextSubscription}
+                  무료 체험이 {dayjs(subscription.expiresAt).formatAsDate()}에 종료되고 {user.data.nextSubscription.plan.name} 플랜이 시작돼요.
+                {:else}
+                  무료 체험이 {dayjs(subscription.expiresAt).formatAsDate()}에 종료돼요.
+                {/if}
               </span>
             {:else if subscription.state === SubscriptionState.ACTIVE}
               <span>
@@ -216,7 +240,8 @@
               </span>
             {:else if subscription.state === SubscriptionState.IN_GRACE_PERIOD}
               <span class={css({ color: 'text.danger' })}>
-                결제에 실패했어요. {dayjs(subscription.expiresAt).formatAsDate()}까지 결제 수단을 확인해 주세요.
+                결제에 실패했어요. {dayjs(subscription.expiresAt).add(SUBSCRIPTION_GRACE_DAYS, 'day').formatAsDate()}까지 결제 수단을 확인해
+                주세요.
               </span>
             {:else if subscription.state === SubscriptionState.WILL_EXPIRE && user.data.nextSubscription}
               <span>
@@ -316,9 +341,19 @@
                       message: '구독이 계속 유지되며, 다음 결제일에 자동으로 결제돼요.',
                       actionLabel: '해지 취소',
                       actionHandler: async () => {
-                        await cancelSubscriptionCancellation();
-                        mixpanel.track('resume_subscription');
-                        Toast.success('구독 해지가 취소되었어요');
+                        try {
+                          await cancelSubscriptionCancellation();
+                          mixpanel.track('resume_subscription');
+                          Toast.success('구독 해지가 취소되었어요');
+                        } catch (err) {
+                          if (err instanceof TypieError && err.code === 'subscription_already_expired') {
+                            Toast.error('구독이 이미 만료되었어요. 새로 구독해 주세요.');
+                          } else {
+                            throw err;
+                          }
+                        } finally {
+                          cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'subscription' });
+                        }
                       },
                     });
                   }}
@@ -349,29 +384,83 @@
                 {nextSubscription.plan.name} 플랜
               {/snippet}
               {#snippet description()}
-                {dayjs(nextSubscription.startsAt).formatAsDate()}부터 시작
+                {dayjs(nextSubscription.startsAt).formatAsDate()}에 {comma(nextSubscription.plan.fee)}원이 결제될 예정이에요. 크레딧이
+                있으면 차감된 금액으로 결제돼요.
               {/snippet}
               {#snippet value()}
-                <Button
-                  onclick={() => {
-                    Dialog.confirm({
-                      title: '플랜 전환을 취소하시겠어요?',
-                      message: '현재 플랜이 계속 유지돼요.',
-                      actionLabel: '전환 취소',
-                      actionHandler: async () => {
-                        await cancelPlanChange();
-                        cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'subscription' });
-                        cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'nextSubscription' });
-                        mixpanel.track('cancel_plan_change');
-                        Toast.success('플랜 전환이 취소되었어요');
-                      },
-                    });
-                  }}
-                  size="sm"
-                  variant="secondary"
-                >
-                  전환 취소
-                </Button>
+                <div class={flex({ gap: '8px' })}>
+                  {#if isTrial && PlanPair[nextSubscription.plan.id as keyof typeof PlanPair]}
+                    {@const targetPlanId = PlanPair[nextSubscription.plan.id as keyof typeof PlanPair]}
+                    {@const isMonthly = nextSubscription.plan.interval === PlanInterval.MONTHLY}
+                    <Button
+                      onclick={() => {
+                        Dialog.confirm({
+                          title: isMonthly ? '연간 플랜으로 변경하시겠어요?' : '월간 플랜으로 변경하시겠어요?',
+                          message: isMonthly
+                            ? '무료 체험이 끝나면 연간 플랜(29,000원/년)으로 시작해요.'
+                            : '무료 체험이 끝나면 월간 플랜(2,900원/월)으로 시작해요.',
+                          actionLabel: '변경하기',
+                          actionHandler: async () => {
+                            try {
+                              const result = await subscribePlanWithBillingKey({ input: { planId: targetPlanId } });
+                              const scheduled = result.subscribePlanWithBillingKey.state === SubscriptionState.WILL_ACTIVATE;
+                              mixpanel.track('enroll_plan', { planId: targetPlanId, scheduled });
+                              Toast.success(
+                                scheduled
+                                  ? isMonthly
+                                    ? '연간 플랜으로 변경되었어요'
+                                    : '월간 플랜으로 변경되었어요'
+                                  : '플랜이 시작되었어요',
+                              );
+                            } catch (err) {
+                              if (err instanceof TypieError && err.code === 'subscription_already_exists') {
+                                Toast.error('이미 처리된 예약이에요. 새로고침 후 확인해 주세요.');
+                              } else {
+                                throw err;
+                              }
+                            } finally {
+                              cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'subscription' });
+                              cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'nextSubscription' });
+                            }
+                          },
+                        });
+                      }}
+                      size="sm"
+                      variant="secondary"
+                    >
+                      {isMonthly ? '연간 플랜으로 변경' : '월간 플랜으로 변경'}
+                    </Button>
+                  {/if}
+                  <Button
+                    onclick={() => {
+                      Dialog.confirm({
+                        title: isTrial ? '플랜 예약을 취소하시겠어요?' : '플랜 전환을 취소하시겠어요?',
+                        message: isTrial ? '무료 체험은 그대로 유지되고, 종료 후 결제되지 않아요.' : '현재 플랜이 계속 유지돼요.',
+                        actionLabel: isTrial ? '예약 취소' : '전환 취소',
+                        actionHandler: async () => {
+                          try {
+                            await cancelPlanChange();
+                            mixpanel.track('cancel_plan_change');
+                            Toast.success(isTrial ? '플랜 예약이 취소되었어요' : '플랜 전환이 취소되었어요');
+                          } catch (err) {
+                            if (err instanceof TypieError && err.code === 'plan_change_already_processed') {
+                              Toast.error('이미 처리된 예약이에요. 새로고침 후 확인해 주세요.');
+                            } else {
+                              throw err;
+                            }
+                          } finally {
+                            cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'subscription' });
+                            cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'nextSubscription' });
+                          }
+                        },
+                      });
+                    }}
+                    size="sm"
+                    variant="secondary"
+                  >
+                    {isTrial ? '예약 취소' : '전환 취소'}
+                  </Button>
+                </div>
               {/snippet}
             </SettingsRow>
           </SettingsCard>
@@ -408,7 +497,7 @@
             >
               {user.data.billingKey ? '변경' : '카드 등록'}
             </Button>
-            {#if user.data.billingKey && (!user.data.subscription || isTrial)}
+            {#if user.data.billingKey && (!user.data.subscription || isTrial) && !user.data.nextSubscription}
               <Button
                 onclick={() => {
                   Dialog.confirm({

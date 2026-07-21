@@ -1,17 +1,21 @@
 import * as Sentry from '@sentry/node';
+import { logger } from '@typie/lib';
 import { SUBSCRIPTION_GRACE_DAYS } from '@typie/lib/const';
 import { InAppPurchaseStore, PaymentInvoiceState, PlanAvailability, SubscriptionState } from '@typie/lib/enums';
 import dayjs from 'dayjs';
-import { and, desc, eq, inArray, lte, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, lte, ne, or, sql } from 'drizzle-orm';
 import { db, first, firstOrThrow, PaymentInvoices, Plans, Subscriptions, UserBillingKeys, UserInAppPurchases } from '#/db/index.ts';
 import * as appstore from '#/external/appstore.ts';
 import * as googleplay from '#/external/googleplay.ts';
 import * as portone from '#/external/portone.ts';
 import { getSubscriptionExpiresAt, hasBillableUsageDuring, payInvoiceWithBillingKey } from '#/utils/index.ts';
+import { lockUserSubscriptionState } from '#/utils/subscription-lock.ts';
 import { enqueueJob } from '../index.ts';
 import { defineCron, defineJob } from '../types.ts';
 import { resolveReconcileAction } from './subscription-reconcile.ts';
 import type { ReconcileStoreState } from './subscription-reconcile.ts';
+
+const log = logger.getChild('subscription');
 
 export const SubscriptionRenewalCron = defineCron('subscription:renewal', '0 10 * * *', async () => {
   const now = dayjs();
@@ -49,7 +53,7 @@ export const SubscriptionRenewalCron = defineCron('subscription:renewal', '0 10 
         .where(and(eq(Subscriptions.state, SubscriptionState.WILL_ACTIVATE), lte(Subscriptions.startsAt, now)));
 
       for (const subscription of planChangeSubscriptions) {
-        await enqueueJob('subscription:renewal:plan-change', subscription.id);
+        await enqueueJob('subscription:renewal:plan-change', subscription.id, { jobId: `plan-change-${subscription.id}` });
       }
 
       // IAP 는 스토어 웹훅/재조정 크론이 만료를 담당한다. 여기서 처리하면 스토어가 갱신·재개한 구독을
@@ -67,15 +71,62 @@ export const SubscriptionRenewalCron = defineCron('subscription:renewal', '0 10 
         );
 
       for (const subscription of cancelSubscriptions) {
-        await enqueueJob('subscription:renewal:cancel', subscription.id);
+        await enqueueJob('subscription:renewal:cancel', subscription.id, { jobId: `renewal-cancel-${subscription.id}` });
       }
     },
     { isolationLevel: 'repeatable read' },
   );
 });
 
+// 일일 크론은 백스톱으로 남긴다. 결제 재시도(OVERDUE)·정기 갱신은 하루 1회가 정책이므로 여기에 넣지 않는다.
+// 트랜잭션 없이 조회한다 — 잡이 상태를 재검증하므로 스냅샷이 불필요하고, Redis enqueue 를 DB 트랜잭션
+// 안에서 하면 지연 시 커넥션을 붙든다.
+export const SubscriptionTransitionCron = defineCron('subscription:transition', '* * * * *', async () => {
+  const now = dayjs();
+
+  const planChangeSubscriptions = await db
+    .select({ id: Subscriptions.id })
+    .from(Subscriptions)
+    .where(and(eq(Subscriptions.state, SubscriptionState.WILL_ACTIVATE), lte(Subscriptions.startsAt, now)));
+
+  for (const subscription of planChangeSubscriptions) {
+    await enqueueJob('subscription:renewal:plan-change', subscription.id, { jobId: `plan-change-${subscription.id}` });
+  }
+
+  // IAP 는 스토어 웹훅/재조정 크론이 만료를 담당한다. 여기서 처리하면 스토어가 갱신·재개한 구독을
+  // 잘못 만료시킬 수 있으므로 제외한다(빌링키·트라이얼만 처리).
+  const cancelSubscriptions = await db
+    .select({ id: Subscriptions.id })
+    .from(Subscriptions)
+    .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
+    .where(
+      and(
+        eq(Subscriptions.state, SubscriptionState.WILL_EXPIRE),
+        lte(Subscriptions.expiresAt, now),
+        ne(Plans.availability, PlanAvailability.IN_APP_PURCHASE),
+      ),
+    );
+
+  for (const subscription of cancelSubscriptions) {
+    await enqueueJob('subscription:renewal:cancel', subscription.id, { jobId: `renewal-cancel-${subscription.id}` });
+  }
+});
+
 export const SubscriptionRenewalInitialJob = defineJob('subscription:renewal:initial', async (subscriptionId: string) => {
   await db.transaction(async (tx) => {
+    // userId 는 불변 컬럼이라 무락 조회가 안전하다 — advisory 를 행 잠금보다 먼저 잡기 위한 사전 조회.
+    const subscriptionRef = await tx
+      .select({ userId: Subscriptions.userId })
+      .from(Subscriptions)
+      .where(eq(Subscriptions.id, subscriptionId))
+      .then(first);
+
+    if (!subscriptionRef) {
+      return;
+    }
+
+    await lockUserSubscriptionState(tx, subscriptionRef.userId);
+
     const subscription = await tx
       .select({
         id: Subscriptions.id,
@@ -89,9 +140,9 @@ export const SubscriptionRenewalInitialJob = defineJob('subscription:renewal:ini
       .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
       .where(eq(Subscriptions.id, subscriptionId))
       .for('no key update', { of: Subscriptions })
-      .then(firstOrThrow);
+      .then(first);
 
-    if (subscription.state !== SubscriptionState.ACTIVE || dayjs(subscription.expiresAt).isAfter(dayjs())) {
+    if (!subscription || subscription.state !== SubscriptionState.ACTIVE || dayjs(subscription.expiresAt).isAfter(dayjs())) {
       return;
     }
 
@@ -166,19 +217,30 @@ export const SubscriptionRenewalInitialJob = defineJob('subscription:renewal:ini
 export const SubscriptionRenewalRetryJob = defineJob('subscription:renewal:retry', async (invoiceId: string) => {
   await db.transaction(async (tx) => {
     // 교착 방지: 모든 갱신·환불 경로는 구독 → 인보이스 순으로 잠근다(환불은 구독을 잠근 채 인보이스를 갱신한다).
-    // subscriptionId 는 불변 컬럼이라 무락 조회가 안전하고, 인보이스 상태는 아래 잠금 조회에서 재검증한다.
+    // subscriptionId/userId 는 불변 컬럼이라 무락 조회가 안전하고, 상태는 아래 잠금 조회에서 재검증한다.
     const invoiceRef = await tx
-      .select({ subscriptionId: PaymentInvoices.subscriptionId })
+      .select({ subscriptionId: PaymentInvoices.subscriptionId, userId: PaymentInvoices.userId })
       .from(PaymentInvoices)
       .where(eq(PaymentInvoices.id, invoiceId))
-      .then(firstOrThrow);
+      .then(first);
 
-    await tx
+    if (!invoiceRef) {
+      return;
+    }
+
+    await lockUserSubscriptionState(tx, invoiceRef.userId);
+
+    // 락 대기 중 대상이 사라졌으면 조용한 no-op — throw 는 불필요한 큐 재시도·Sentry 노이즈다.
+    const lockedSubscription = await tx
       .select({ id: Subscriptions.id })
       .from(Subscriptions)
       .where(eq(Subscriptions.id, invoiceRef.subscriptionId))
       .for('no key update')
-      .then(firstOrThrow);
+      .then(first);
+
+    if (!lockedSubscription) {
+      return;
+    }
 
     const invoice = await tx
       .select({
@@ -197,21 +259,66 @@ export const SubscriptionRenewalRetryJob = defineJob('subscription:renewal:retry
       .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
       .where(eq(PaymentInvoices.id, invoiceId))
       .for('no key update', { of: PaymentInvoices })
-      .then(firstOrThrow);
+      .then(first);
 
-    if (invoice.state !== PaymentInvoiceState.OVERDUE || invoice.subscription.state !== SubscriptionState.IN_GRACE_PERIOD) {
+    if (!invoice || invoice.state !== PaymentInvoiceState.OVERDUE || invoice.subscription.state !== SubscriptionState.IN_GRACE_PERIOD) {
       return;
     }
 
-    const success = await payInvoiceWithBillingKey(tx, invoice.id);
+    // 유예 중 다른 채널(IAP 등)로 유효 구독이 생겼으면 이 구독·인보이스는 낡은 청구다 — 결제 없이 거둔다.
+    // 슬롯 선점이 매번 유니크 충돌로 abort 되어 유예 종료 판정에 영원히 못 가는 정지 상태도 이 분기가 푼다.
+    const conflicting = await tx
+      .select({ id: Subscriptions.id })
+      .from(Subscriptions)
+      .where(
+        and(
+          eq(Subscriptions.userId, invoice.subscription.userId),
+          ne(Subscriptions.id, invoice.subscription.id),
+          or(
+            inArray(Subscriptions.state, [SubscriptionState.ACTIVE, SubscriptionState.IN_GRACE_PERIOD]),
+            and(eq(Subscriptions.state, SubscriptionState.WILL_EXPIRE), gt(Subscriptions.expiresAt, dayjs())),
+          ),
+        ),
+      )
+      .then(first);
+
+    if (conflicting) {
+      log.info('renewal retry superseded by another live subscription {*}', {
+        subscriptionId: invoice.subscription.id,
+        userId: invoice.subscription.userId,
+        conflictingSubscriptionId: conflicting.id,
+      });
+      await tx
+        .update(Subscriptions)
+        .set({ state: SubscriptionState.EXPIRED, expiresAt: sql`LEAST(${Subscriptions.expiresAt}, NOW())` })
+        .where(eq(Subscriptions.id, invoice.subscription.id));
+      await tx.update(PaymentInvoices).set({ state: PaymentInvoiceState.CANCELED }).where(eq(PaymentInvoices.id, invoice.id));
+      return;
+    }
+
+    const billingKey = await tx
+      .select({ id: UserBillingKeys.id })
+      .from(UserBillingKeys)
+      .where(eq(UserBillingKeys.userId, invoice.subscription.userId))
+      .then(first);
+
+    // 슬롯 선점: ACTIVE 전이를 결제보다 먼저 둔다 — 동시 다른 채널의 ACTIVE 와의 유니크 충돌이
+    // PG 호출 전에 발생해, 승인 후 롤백(재과금) 경로가 구조적으로 사라진다. 실패 시 아래에서 되돌린다.
+    await tx.update(Subscriptions).set({ state: SubscriptionState.ACTIVE }).where(eq(Subscriptions.id, invoice.subscription.id));
+
+    // 빌링키 부재를 payInvoiceWithBillingKey 에 넘기면 try 밖 firstOrThrow 가 throw → 롤백 → 유예 종료 판정에
+    // 영원히 도달하지 못해 무기한 무료 유예가 된다. 결제 시도 없이 실패로 진행해 종료 판정을 반드시 태운다.
+    const success = billingKey ? await payInvoiceWithBillingKey(tx, invoice.id) : false;
     if (success) {
       const newExpiresAt = getSubscriptionExpiresAt(invoice.subscription.expiresAt, invoice.plan.interval);
       await tx
         .update(Subscriptions)
-        .set({ expiresAt: newExpiresAt, renewedAt: invoice.subscription.expiresAt, state: SubscriptionState.ACTIVE })
+        .set({ expiresAt: newExpiresAt, renewedAt: invoice.subscription.expiresAt })
         .where(eq(Subscriptions.id, invoice.subscription.id));
       await tx.update(PaymentInvoices).set({ state: PaymentInvoiceState.PAID }).where(eq(PaymentInvoices.id, invoice.id));
     } else {
+      await tx.update(Subscriptions).set({ state: SubscriptionState.IN_GRACE_PERIOD }).where(eq(Subscriptions.id, invoice.subscription.id));
+
       const gracePeriodEndsAt = invoice.subscription.expiresAt.add(SUBSCRIPTION_GRACE_DAYS, 'days').kst();
 
       if (gracePeriodEndsAt.subtract(1, 'day').isSame(dayjs.kst(), 'day')) {
@@ -233,6 +340,20 @@ export const SubscriptionRenewalRetryJob = defineJob('subscription:renewal:retry
 
 export const SubscriptionRenewalPlanChangeJob = defineJob('subscription:renewal:plan-change', async (subscriptionId: string) => {
   await db.transaction(async (tx) => {
+    // userId 는 불변 컬럼이라 무락 조회가 안전하다 — advisory 를 행 잠금보다 먼저 잡기 위한 사전 조회.
+    const subscriptionRef = await tx
+      .select({ userId: Subscriptions.userId })
+      .from(Subscriptions)
+      .where(eq(Subscriptions.id, subscriptionId))
+      .then(first);
+
+    if (!subscriptionRef) {
+      return;
+    }
+
+    await lockUserSubscriptionState(tx, subscriptionRef.userId);
+
+    // 락 대기 중 취소가 예약을 지웠으면 조용한 no-op — throw 는 불필요한 큐 재시도·Sentry 노이즈다.
     const subscription = await tx
       .select({
         id: Subscriptions.id,
@@ -245,11 +366,47 @@ export const SubscriptionRenewalPlanChangeJob = defineJob('subscription:renewal:
       .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
       .where(eq(Subscriptions.id, subscriptionId))
       .for('no key update', { of: Subscriptions })
-      .then(firstOrThrow);
+      .then(first);
 
-    if (subscription.state !== SubscriptionState.WILL_ACTIVATE || dayjs(subscription.startsAt).isAfter(dayjs())) {
+    if (!subscription || subscription.state !== SubscriptionState.WILL_ACTIVATE || dayjs(subscription.startsAt).isAfter(dayjs())) {
       return;
     }
+
+    // 예약 뒤 다른 채널(IAP 등)로 유효 구독이 생겼으면 예약은 낡은 의사다 — 결제 없이 거둔다.
+    const conflicting = await tx
+      .select({ id: Subscriptions.id })
+      .from(Subscriptions)
+      .where(
+        and(
+          eq(Subscriptions.userId, subscription.userId),
+          ne(Subscriptions.id, subscriptionId),
+          or(
+            inArray(Subscriptions.state, [SubscriptionState.ACTIVE, SubscriptionState.IN_GRACE_PERIOD]),
+            and(eq(Subscriptions.state, SubscriptionState.WILL_EXPIRE), gt(Subscriptions.expiresAt, dayjs())),
+          ),
+        ),
+      )
+      .then(first);
+
+    if (conflicting) {
+      log.info('plan-change superseded by another live subscription {*}', {
+        subscriptionId,
+        userId: subscription.userId,
+        conflictingSubscriptionId: conflicting.id,
+      });
+      await tx.delete(Subscriptions).where(eq(Subscriptions.id, subscriptionId));
+      return;
+    }
+
+    const billingKey = await tx
+      .select({ id: UserBillingKeys.id })
+      .from(UserBillingKeys)
+      .where(eq(UserBillingKeys.userId, subscription.userId))
+      .then(first);
+
+    // 슬롯 선점: ACTIVE 전이를 결제보다 먼저 둔다 — 동시 다른 채널의 ACTIVE 와의 유니크 충돌이
+    // PG 호출 전에 발생해, 승인 후 롤백(재과금) 경로가 구조적으로 사라진다. 실패 시 아래에서 유예로 전이한다.
+    await tx.update(Subscriptions).set({ state: SubscriptionState.ACTIVE }).where(eq(Subscriptions.id, subscriptionId));
 
     const invoice = await tx
       .insert(PaymentInvoices)
@@ -263,12 +420,10 @@ export const SubscriptionRenewalPlanChangeJob = defineJob('subscription:renewal:
       .returning({ id: PaymentInvoices.id })
       .then(firstOrThrow);
 
-    const success = await payInvoiceWithBillingKey(tx, invoice.id);
+    // 빌링키 부재를 payInvoiceWithBillingKey 에 넘기면 try 밖 firstOrThrow 가 throw → 롤백 → 매 분 재실행 루프가 된다.
+    const success = billingKey ? await payInvoiceWithBillingKey(tx, invoice.id) : false;
     if (success) {
-      await tx
-        .update(Subscriptions)
-        .set({ state: SubscriptionState.ACTIVE, renewedAt: subscription.startsAt })
-        .where(eq(Subscriptions.id, subscriptionId));
+      await tx.update(Subscriptions).set({ renewedAt: subscription.startsAt }).where(eq(Subscriptions.id, subscriptionId));
       await tx.update(PaymentInvoices).set({ state: PaymentInvoiceState.PAID }).where(eq(PaymentInvoices.id, invoice.id));
     } else {
       await tx
@@ -284,6 +439,18 @@ export const SubscriptionRenewalPlanChangeJob = defineJob('subscription:renewal:
 
 export const SubscriptionRenewalCancelJob = defineJob('subscription:renewal:cancel', async (subscriptionId: string) => {
   const billingKey = await db.transaction(async (tx) => {
+    const subscriptionRef = await tx
+      .select({ userId: Subscriptions.userId })
+      .from(Subscriptions)
+      .where(eq(Subscriptions.id, subscriptionId))
+      .then(first);
+
+    if (!subscriptionRef) {
+      return null;
+    }
+
+    await lockUserSubscriptionState(tx, subscriptionRef.userId);
+
     const subscription = await tx
       .select({
         userId: Subscriptions.userId,
@@ -295,7 +462,11 @@ export const SubscriptionRenewalCancelJob = defineJob('subscription:renewal:canc
       .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
       .where(eq(Subscriptions.id, subscriptionId))
       .for('no key update', { of: Subscriptions })
-      .then(firstOrThrow);
+      .then(first);
+
+    if (!subscription) {
+      return null;
+    }
 
     // IAP 배제를 상태 변경보다 먼저 한다 — 구버전이 큐에 넣었거나 롤백된 워커가 만든 IAP 잡이 배포 중 재시도돼도
     // IAP 구독을 EXPIRED(재조정으로 복구 불가)로 만들지 않도록 한다. IAP 만료는 스토어 웹훅/재조정이 담당한다.
@@ -461,6 +632,8 @@ export const SubscriptionReconcileInAppPurchaseJob = defineJob('subscription:rec
 
   // 스토어 조회 이후 웹훅이 상태를 바꿨을 수 있으므로, 트랜잭션 안에서 행을 잠그고 재조회한 뒤 판정한다.
   await db.transaction(async (tx) => {
+    await lockUserSubscriptionState(tx, subscription.userId);
+
     // 조회 이후 바인딩이 다른 구매로 교체됐다면(재구독 등) 이 스토어 결과는 stale 이므로 중단한다.
     const freshBinding = await tx
       .select({ store: UserInAppPurchases.store, identifier: UserInAppPurchases.identifier })
