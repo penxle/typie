@@ -27,6 +27,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import co.typie.domain.subscription.PurchaseFailure
 import co.typie.domain.subscription.SubscriptionCelebrationSheet
 import co.typie.domain.subscription.SubscriptionFeatureList
 import co.typie.domain.subscription.SubscriptionPurchaseService
@@ -81,6 +82,20 @@ fun EnrollPlanScreen() {
     SubscriptionPurchaseService.completions.collect {
       sheet.present {
         SubscriptionCelebrationSheet(title = "구독이 시작됐어요!", message = "타이피의 모든 기능을 자유롭게 이용해보세요.")
+      }
+    }
+  }
+
+  LaunchedEffect(Unit) {
+    SubscriptionPurchaseService.failures.collect {
+      when (it) {
+        PurchaseFailure.ConflictBeforePurchase ->
+          toast.error("이미 이용 중인 구독이 있어 스토어 결제를 시작할 수 없어요. 웹사이트에서 기존 구독을 확인해주세요.")
+        PurchaseFailure.ConflictAfterPurchase ->
+          toast.error("이미 이용 중인 구독이 있어 스토어 결제를 등록하지 못했어요. 기존 구독이 정리되면 자동으로 다시 등록을 시도해요.")
+        PurchaseFailure.AccountMismatch ->
+          toast.error("이 스토어 결제는 다른 타이피 계정에 연결돼 있어요. 구매할 때 사용한 계정으로 로그인해주세요.")
+        PurchaseFailure.PreflightFailed -> toast.error("일시적인 오류가 발생했어요. 잠시 후 다시 시도해주세요.")
       }
     }
   }

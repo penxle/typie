@@ -154,6 +154,7 @@ import StoreKit
     private func handleTransactionUpdate(_ result: VerificationResult<Transaction>) {
         switch result {
         case .verified(let transaction):
+            pendingTransactions[transaction.originalID] = transaction
             let payload = PurchaseEventPayload(
                 type: "restored",
                 productId: transaction.productID,
@@ -161,7 +162,6 @@ import StoreKit
                 transactionId: String(transaction.id),
             )
             purchaseObserver?(payload)
-            Task { await transaction.finish() }
         case .unverified:
             break
         }

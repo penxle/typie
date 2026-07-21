@@ -2,6 +2,16 @@ query SubscriptionPurchaseService_Query {
   me {
     id
     uuid
+
+    subscription {
+      id
+      state
+
+      plan {
+        id
+        availability
+      }
+    }
   }
 }
 

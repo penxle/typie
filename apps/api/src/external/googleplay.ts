@@ -19,6 +19,13 @@ export const getSubscription = async (purchaseToken: string) => {
   return response.data;
 };
 
+// 만료 60일 경과 등으로 스토어가 purchase token 제공을 영구 중단한 경우(404/410). 재시도해도 복구되지 않는다.
+export const isPurchaseTokenGoneError = (error: unknown): boolean => {
+  const err = error as { status?: unknown; response?: { status?: unknown } } | null | undefined;
+  const status = err?.response?.status ?? err?.status;
+  return status === 404 || status === 410;
+};
+
 export type OneTimeProductNotificationType = 1 | 2; // 1: ONE_TIME_PRODUCT_PURCHASED, 2: ONE_TIME_PRODUCT_CANCELED
 export type VoidedProductType = 1 | 2; // 1: PRODUCT_TYPE_SUBSCRIPTION, 2: PRODUCT_TYPE_ONE_TIME
 export type RefundType = 1 | 2; // 1: REFUND_TYPE_FULL_REFUND, 2: REFUND_TYPE_QUANTITY_BASED_PARTIAL_REFUND

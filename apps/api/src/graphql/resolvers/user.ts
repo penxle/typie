@@ -23,7 +23,6 @@ import dayjs from 'dayjs';
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, lt, ne, sql, sum } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import qs from 'query-string';
-import * as uuid from 'uuid';
 import { redis } from '#/cache.ts';
 import {
   CouponRedemptions,
@@ -67,7 +66,7 @@ import { evaluateCouponCondition } from '#/utils/coupon.ts';
 import { getDocumentFontFamilies } from '#/utils/document.ts';
 import { assertActiveSubscription } from '#/utils/plan.ts';
 import { delay } from '#/utils/promise.ts';
-import { getUserUsage } from '#/utils/user.ts';
+import { getUserUsage, getUserUuid } from '#/utils/user.ts';
 import { builder } from '../builder.ts';
 import {
   CharacterCountChange,
@@ -131,8 +130,7 @@ User.implement({
     }),
 
     uuid: t.string({
-      // just a randomly-picked uuid for namespace
-      resolve: (self) => uuid.v5(self.id, '1d394eb5-c61c-4c49-944e-05c9f9435adf'),
+      resolve: (self) => getUserUuid(self.id),
     }),
 
     hasPassword: t.boolean({ resolve: (user) => !!user.password }),

@@ -1,9 +1,9 @@
 import { PlanId } from '@typie/lib/const';
 import { SubscriptionState } from '@typie/lib/enums';
 import { TypieError } from '@typie/lib/errors';
-import { and, eq, inArray } from 'drizzle-orm';
+import dayjs from 'dayjs';
+import { and, eq, gt, inArray, or } from 'drizzle-orm';
 import { db, first, firstOrThrow, Subscriptions, UserTrials } from '#/db/index.ts';
-import type dayjs from 'dayjs';
 import type { Transaction } from '#/db/index.ts';
 
 export const ACTIVE_SUBSCRIPTION_STATES = [SubscriptionState.ACTIVE, SubscriptionState.WILL_EXPIRE, SubscriptionState.IN_GRACE_PERIOD];
@@ -13,10 +13,19 @@ type AssertActiveSubscriptionParams = {
 };
 
 export const hasActiveSubscription = async ({ userId }: { userId: string }) => {
+  // WILL_EXPIRE 는 만료일이 지나면(해지 확정·일시중지·보류 등) 권한이 없어야 한다. ACTIVE/IN_GRACE_PERIOD 는 상태만으로 판정한다.
   const subscription = await db
     .select({ id: Subscriptions.id })
     .from(Subscriptions)
-    .where(and(eq(Subscriptions.userId, userId), inArray(Subscriptions.state, ACTIVE_SUBSCRIPTION_STATES)))
+    .where(
+      and(
+        eq(Subscriptions.userId, userId),
+        or(
+          inArray(Subscriptions.state, [SubscriptionState.ACTIVE, SubscriptionState.IN_GRACE_PERIOD]),
+          and(eq(Subscriptions.state, SubscriptionState.WILL_EXPIRE), gt(Subscriptions.expiresAt, dayjs())),
+        ),
+      ),
+    )
     .then(first);
 
   return !!subscription;

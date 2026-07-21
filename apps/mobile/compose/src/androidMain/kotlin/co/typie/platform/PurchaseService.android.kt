@@ -12,6 +12,7 @@ import com.android.billingclient.api.PendingPurchasesParams
 import com.android.billingclient.api.ProductDetails
 import com.android.billingclient.api.Purchase
 import com.android.billingclient.api.QueryProductDetailsParams
+import com.android.billingclient.api.QueryPurchasesParams
 import kotlin.collections.mapNotNull
 import kotlin.collections.orEmpty
 import kotlin.coroutines.resume
@@ -57,10 +58,31 @@ internal class AndroidPurchaseService(private val context: Context) : PurchaseSe
   override suspend fun launch() {
     try {
       ensureConnected()
+      recoverPurchases()
     } catch (e: CancellationException) {
       throw e
     } catch (_: Exception) {
       // best effort
+    }
+  }
+
+  private suspend fun recoverPurchases() {
+    val params = QueryPurchasesParams.newBuilder().setProductType(ProductType.SUBS).build()
+
+    val purchases = suspendCancellableCoroutine { continuation ->
+      billingClient.queryPurchasesAsync(params) { billingResult, purchases ->
+        if (billingResult.responseCode == BillingResponseCode.OK) {
+          continuation.resume(purchases)
+        } else {
+          continuation.resume(emptyList())
+        }
+      }
+    }
+
+    for (purchase in purchases) {
+      if (!purchase.isAcknowledged) {
+        handlePurchase(purchase)
+      }
     }
   }
 

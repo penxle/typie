@@ -84,16 +84,18 @@ object SubscriptionService {
     }
 
     scope.launch {
-      snapshotFlow { subscription?.expiresAt }
+      // 만료일이 아닌 유효 판정 마감(유예 중이면 유예 상한)에 예약한다 — 만료일 틱만으로는
+      // 유예 상한 도달 시 재평가가 없어 오프라인 유예 권한이 무기한 유지된다.
+      snapshotFlow { subscription?.let(::entitlementDeadline) }
         .distinctUntilChanged()
-        .collectLatest { expiresAt ->
-          if (expiresAt == null) return@collectLatest
+        .collectLatest { deadline ->
+          if (deadline == null) return@collectLatest
           while (true) {
-            val remaining = expiresAt - Clock.System.now()
+            val remaining = deadline - Clock.System.now()
             if (!remaining.isPositive()) break
             delay(remaining)
           }
-          // 만료 시각 도달: 서버 판정 우선(갱신 결제가 반영됐으면 새 expiresAt으로 이 collect가 재시작됨),
+          // 판정 마감 도달: 서버 판정 우선(갱신 결제가 반영됐으면 새 마감으로 이 collect가 재시작됨),
           // 확인 불가(오프라인)면 clockTick 재평가로 비관 강등된다.
           query.refetch()
           clockTick += 1

@@ -20,6 +20,8 @@ import {
 } from './email.ts';
 import { DocumentIndexJob, FolderIndexJob } from './search.ts';
 import {
+  SubscriptionReconcileInAppPurchaseCron,
+  SubscriptionReconcileInAppPurchaseJob,
   SubscriptionRenewalCancelJob,
   SubscriptionRenewalCron,
   SubscriptionRenewalInitialJob,
@@ -40,6 +42,7 @@ export const jobs = [
   SubscriptionRenewalRetryJob,
   SubscriptionRenewalPlanChangeJob,
   SubscriptionRenewalCancelJob,
+  SubscriptionReconcileInAppPurchaseJob,
   SendSubscriptionGracePeriodEmailJob,
   SendSubscriptionExpiringEmailJob,
   SendSubscriptionExpiredEmailJob,
@@ -52,6 +55,7 @@ export const crons = [
   DocumentSyncScanCron,
   DocumentGCScanCron,
   SubscriptionRenewalCron,
+  SubscriptionReconcileInAppPurchaseCron,
 ];
 
 export type Jobs = typeof jobs;

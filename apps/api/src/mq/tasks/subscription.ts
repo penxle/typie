@@ -1,13 +1,17 @@
 import * as Sentry from '@sentry/node';
 import { SUBSCRIPTION_GRACE_DAYS } from '@typie/lib/const';
-import { PaymentInvoiceState, PlanAvailability, SubscriptionState } from '@typie/lib/enums';
+import { InAppPurchaseStore, PaymentInvoiceState, PlanAvailability, SubscriptionState } from '@typie/lib/enums';
 import dayjs from 'dayjs';
-import { and, desc, eq, lte, ne, sql } from 'drizzle-orm';
-import { db, first, firstOrThrow, PaymentInvoices, Plans, Subscriptions, UserBillingKeys } from '#/db/index.ts';
+import { and, desc, eq, inArray, lte, ne, sql } from 'drizzle-orm';
+import { db, first, firstOrThrow, PaymentInvoices, Plans, Subscriptions, UserBillingKeys, UserInAppPurchases } from '#/db/index.ts';
+import * as appstore from '#/external/appstore.ts';
+import * as googleplay from '#/external/googleplay.ts';
 import * as portone from '#/external/portone.ts';
 import { getSubscriptionExpiresAt, hasBillableUsageDuring, payInvoiceWithBillingKey } from '#/utils/index.ts';
 import { enqueueJob } from '../index.ts';
 import { defineCron, defineJob } from '../types.ts';
+import { resolveReconcileAction } from './subscription-reconcile.ts';
+import type { ReconcileStoreState } from './subscription-reconcile.ts';
 
 export const SubscriptionRenewalCron = defineCron('subscription:renewal', '0 10 * * *', async () => {
   const now = dayjs();
@@ -48,10 +52,19 @@ export const SubscriptionRenewalCron = defineCron('subscription:renewal', '0 10 
         await enqueueJob('subscription:renewal:plan-change', subscription.id);
       }
 
+      // IAP 는 스토어 웹훅/재조정 크론이 만료를 담당한다. 여기서 처리하면 스토어가 갱신·재개한 구독을
+      // 잘못 만료시킬 수 있으므로 제외한다(빌링키·트라이얼만 처리).
       const cancelSubscriptions = await tx
         .select({ id: Subscriptions.id })
         .from(Subscriptions)
-        .where(and(eq(Subscriptions.state, SubscriptionState.WILL_EXPIRE), lte(Subscriptions.expiresAt, now)));
+        .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
+        .where(
+          and(
+            eq(Subscriptions.state, SubscriptionState.WILL_EXPIRE),
+            lte(Subscriptions.expiresAt, now),
+            ne(Plans.availability, PlanAvailability.IN_APP_PURCHASE),
+          ),
+        );
 
       for (const subscription of cancelSubscriptions) {
         await enqueueJob('subscription:renewal:cancel', subscription.id);
@@ -67,6 +80,7 @@ export const SubscriptionRenewalInitialJob = defineJob('subscription:renewal:ini
       .select({
         id: Subscriptions.id,
         userId: Subscriptions.userId,
+        state: Subscriptions.state,
         renewedAt: Subscriptions.renewedAt,
         expiresAt: Subscriptions.expiresAt,
         plan: { fee: Plans.fee, interval: Plans.interval },
@@ -74,7 +88,12 @@ export const SubscriptionRenewalInitialJob = defineJob('subscription:renewal:ini
       .from(Subscriptions)
       .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
       .where(eq(Subscriptions.id, subscriptionId))
+      .for('no key update', { of: Subscriptions })
       .then(firstOrThrow);
+
+    if (subscription.state !== SubscriptionState.ACTIVE || dayjs(subscription.expiresAt).isAfter(dayjs())) {
+      return;
+    }
 
     const hasUsage = await hasBillableUsageDuring(tx, subscription.userId, subscription.renewedAt, subscription.expiresAt);
 
@@ -146,17 +165,43 @@ export const SubscriptionRenewalInitialJob = defineJob('subscription:renewal:ini
 
 export const SubscriptionRenewalRetryJob = defineJob('subscription:renewal:retry', async (invoiceId: string) => {
   await db.transaction(async (tx) => {
+    // 교착 방지: 모든 갱신·환불 경로는 구독 → 인보이스 순으로 잠근다(환불은 구독을 잠근 채 인보이스를 갱신한다).
+    // subscriptionId 는 불변 컬럼이라 무락 조회가 안전하고, 인보이스 상태는 아래 잠금 조회에서 재검증한다.
+    const invoiceRef = await tx
+      .select({ subscriptionId: PaymentInvoices.subscriptionId })
+      .from(PaymentInvoices)
+      .where(eq(PaymentInvoices.id, invoiceId))
+      .then(firstOrThrow);
+
+    await tx
+      .select({ id: Subscriptions.id })
+      .from(Subscriptions)
+      .where(eq(Subscriptions.id, invoiceRef.subscriptionId))
+      .for('no key update')
+      .then(firstOrThrow);
+
     const invoice = await tx
       .select({
         id: PaymentInvoices.id,
-        subscription: { id: Subscriptions.id, userId: Subscriptions.userId, expiresAt: Subscriptions.expiresAt },
+        state: PaymentInvoices.state,
+        subscription: {
+          id: Subscriptions.id,
+          userId: Subscriptions.userId,
+          state: Subscriptions.state,
+          expiresAt: Subscriptions.expiresAt,
+        },
         plan: { interval: Plans.interval },
       })
       .from(PaymentInvoices)
       .innerJoin(Subscriptions, eq(PaymentInvoices.subscriptionId, Subscriptions.id))
       .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
       .where(eq(PaymentInvoices.id, invoiceId))
+      .for('no key update', { of: PaymentInvoices })
       .then(firstOrThrow);
+
+    if (invoice.state !== PaymentInvoiceState.OVERDUE || invoice.subscription.state !== SubscriptionState.IN_GRACE_PERIOD) {
+      return;
+    }
 
     const success = await payInvoiceWithBillingKey(tx, invoice.id);
     if (success) {
@@ -189,11 +234,22 @@ export const SubscriptionRenewalRetryJob = defineJob('subscription:renewal:retry
 export const SubscriptionRenewalPlanChangeJob = defineJob('subscription:renewal:plan-change', async (subscriptionId: string) => {
   await db.transaction(async (tx) => {
     const subscription = await tx
-      .select({ id: Subscriptions.id, userId: Subscriptions.userId, startsAt: Subscriptions.startsAt, plan: { fee: Plans.fee } })
+      .select({
+        id: Subscriptions.id,
+        userId: Subscriptions.userId,
+        state: Subscriptions.state,
+        startsAt: Subscriptions.startsAt,
+        plan: { fee: Plans.fee },
+      })
       .from(Subscriptions)
       .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
       .where(eq(Subscriptions.id, subscriptionId))
+      .for('no key update', { of: Subscriptions })
       .then(firstOrThrow);
+
+    if (subscription.state !== SubscriptionState.WILL_ACTIVATE || dayjs(subscription.startsAt).isAfter(dayjs())) {
+      return;
+    }
 
     const invoice = await tx
       .insert(PaymentInvoices)
@@ -229,15 +285,61 @@ export const SubscriptionRenewalPlanChangeJob = defineJob('subscription:renewal:
 export const SubscriptionRenewalCancelJob = defineJob('subscription:renewal:cancel', async (subscriptionId: string) => {
   const billingKey = await db.transaction(async (tx) => {
     const subscription = await tx
-      .select({ userId: Subscriptions.userId })
+      .select({
+        userId: Subscriptions.userId,
+        state: Subscriptions.state,
+        expiresAt: Subscriptions.expiresAt,
+        availability: Plans.availability,
+      })
       .from(Subscriptions)
+      .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
       .where(eq(Subscriptions.id, subscriptionId))
+      .for('no key update', { of: Subscriptions })
       .then(firstOrThrow);
 
+    // IAP 배제를 상태 변경보다 먼저 한다 — 구버전이 큐에 넣었거나 롤백된 워커가 만든 IAP 잡이 배포 중 재시도돼도
+    // IAP 구독을 EXPIRED(재조정으로 복구 불가)로 만들지 않도록 한다. IAP 만료는 스토어 웹훅/재조정이 담당한다.
+    if (
+      subscription.availability === PlanAvailability.IN_APP_PURCHASE ||
+      subscription.state !== SubscriptionState.WILL_EXPIRE ||
+      dayjs(subscription.expiresAt).isAfter(dayjs())
+    ) {
+      return null;
+    }
+
+    // 빌링키 취소 확정 또는 트라이얼 만료 — 둘 다 EXPIRED 로 전이한다.
     await tx
       .update(Subscriptions)
       .set({ state: SubscriptionState.EXPIRED, expiresAt: sql`LEAST(${Subscriptions.expiresAt}, NOW())` })
       .where(eq(Subscriptions.id, subscriptionId));
+
+    // 빌링키 정리는 BILLING_KEY 플랜에만 해당한다(트라이얼은 빌링키가 없음).
+    if (subscription.availability !== PlanAvailability.BILLING_KEY) {
+      return null;
+    }
+
+    const remainingBillingKeySubscription = await tx
+      .select({ id: Subscriptions.id })
+      .from(Subscriptions)
+      .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
+      .where(
+        and(
+          eq(Subscriptions.userId, subscription.userId),
+          ne(Subscriptions.id, subscriptionId),
+          inArray(Subscriptions.state, [
+            SubscriptionState.ACTIVE,
+            SubscriptionState.WILL_ACTIVATE,
+            SubscriptionState.WILL_EXPIRE,
+            SubscriptionState.IN_GRACE_PERIOD,
+          ]),
+          eq(Plans.availability, PlanAvailability.BILLING_KEY),
+        ),
+      )
+      .then(first);
+
+    if (remainingBillingKeySubscription) {
+      return null;
+    }
 
     const billingKey = await tx
       .delete(UserBillingKeys)
@@ -255,4 +357,171 @@ export const SubscriptionRenewalCancelJob = defineJob('subscription:renewal:canc
       Sentry.captureException(err);
     }
   }
+});
+
+export const SubscriptionReconcileInAppPurchaseCron = defineCron('subscription:reconcile-iap', '0 4 * * *', async () => {
+  const subscriptions = await db
+    .select({ id: Subscriptions.id })
+    .from(Subscriptions)
+    .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
+    .where(
+      and(
+        eq(Plans.availability, PlanAvailability.IN_APP_PURCHASE),
+        inArray(Subscriptions.state, [SubscriptionState.ACTIVE, SubscriptionState.WILL_EXPIRE, SubscriptionState.IN_GRACE_PERIOD]),
+      ),
+    );
+
+  for (const subscription of subscriptions) {
+    await enqueueJob('subscription:reconcile-iap:sync', subscription.id);
+  }
+});
+
+export const SubscriptionReconcileInAppPurchaseJob = defineJob('subscription:reconcile-iap:sync', async (subscriptionId: string) => {
+  const subscription = await db
+    .select({ id: Subscriptions.id, userId: Subscriptions.userId, state: Subscriptions.state, expiresAt: Subscriptions.expiresAt })
+    .from(Subscriptions)
+    .where(eq(Subscriptions.id, subscriptionId))
+    .then(first);
+
+  if (!subscription) {
+    return;
+  }
+
+  const binding = await db
+    .select({ store: UserInAppPurchases.store, identifier: UserInAppPurchases.identifier })
+    .from(UserInAppPurchases)
+    .where(eq(UserInAppPurchases.userId, subscription.userId))
+    .then(first);
+
+  if (!binding) {
+    return;
+  }
+
+  // 스토어가 명시적으로 상태를 확인해 준 경우에만 판정한다.
+  // 조회 실패(네트워크·타임아웃·5xx)나 모호 상태는 unknown 으로 두어, 실결제 구독을 잘못 만료시키지 않는다.
+  // suspended = 보류·재청구·일시중지(권한 없음이나 복구 가능), expired = 일반 만료(하루 여유 후), revoked = 환불·철회(즉시).
+  let storeState: ReconcileStoreState = 'unknown';
+  let storeExpiresAt: dayjs.Dayjs | null = null;
+  let storePlanId: string | null = null;
+
+  if (binding.store === InAppPurchaseStore.APP_STORE) {
+    const status = await appstore.getSubscriptionStatus(binding.identifier);
+    if (status.kind === 'error') {
+      // 전 환경 조회 실패. 조용히 스킵하면 재시도·알림이 없으므로 던져서 큐 재시도와 Sentry 캡처를 발동시킨다.
+      throw new Error('appstore reconcile status lookup failed');
+    }
+
+    if (status.kind === 'active' || status.kind === 'grace') {
+      storeState = status.kind;
+      storeExpiresAt = status.expiresDate ? dayjs(status.expiresDate) : null;
+      if (status.kind === 'active') {
+        storePlanId = status.productId?.toUpperCase() ?? null;
+      }
+    } else if (status.kind === 'suspended' || status.kind === 'expired' || status.kind === 'revoked') {
+      storeState = status.kind;
+    }
+    // status.kind === 'unknown' 은 storeState = 'unknown' 유지(안전 스킵)
+  } else if (binding.store === InAppPurchaseStore.GOOGLE_PLAY) {
+    // getSubscription 은 조회 실패 시 throw 한다. 삼키지 않고 전파해 큐 재시도·Sentry 를 발동시킨다.
+    // 단 404/410(만료 60일 경과 등으로 토큰 제공 영구 중단)은 재시도가 무의미한 확정 응답이므로,
+    // 로컬 만료가 이미 지난 행에 한해 스토어 확인 만료로 취급한다 — 영구 재시도 루프로 stale ACTIVE 가 방치되는 것을 막는다.
+    const googlePlaySubscription = await googleplay.getSubscription(binding.identifier).catch((err: unknown) => {
+      if (googleplay.isPurchaseTokenGoneError(err) && dayjs(subscription.expiresAt).isBefore(dayjs())) {
+        return null;
+      }
+      throw err;
+    });
+
+    if (googlePlaySubscription === null) {
+      storeState = 'expired';
+    } else {
+      const expiryTime = googlePlaySubscription.lineItems?.[0]?.expiryTime;
+      const googlePlayState = googlePlaySubscription.subscriptionState;
+      if (googlePlayState === 'SUBSCRIPTION_STATE_ACTIVE') {
+        storeState = 'active';
+        storeExpiresAt = expiryTime ? dayjs(expiryTime) : null;
+        storePlanId = googlePlaySubscription.lineItems?.[0]?.offerDetails?.basePlanId?.toUpperCase() ?? null;
+      } else if (googlePlayState === 'SUBSCRIPTION_STATE_IN_GRACE_PERIOD') {
+        storeState = 'grace';
+        storeExpiresAt = expiryTime ? dayjs(expiryTime) : null;
+      } else if (googlePlayState === 'SUBSCRIPTION_STATE_ON_HOLD' || googlePlayState === 'SUBSCRIPTION_STATE_PAUSED') {
+        storeState = 'suspended';
+      } else if (googlePlayState === 'SUBSCRIPTION_STATE_EXPIRED') {
+        storeState = 'expired';
+      }
+      // 그 외(CANCELED/PENDING 등) 는 storeState = 'unknown' 유지(안전 스킵)
+    }
+  }
+
+  if (storeState === 'unknown') {
+    return;
+  }
+
+  const now = dayjs();
+
+  // 스토어 조회 이후 웹훅이 상태를 바꿨을 수 있으므로, 트랜잭션 안에서 행을 잠그고 재조회한 뒤 판정한다.
+  await db.transaction(async (tx) => {
+    // 조회 이후 바인딩이 다른 구매로 교체됐다면(재구독 등) 이 스토어 결과는 stale 이므로 중단한다.
+    const freshBinding = await tx
+      .select({ store: UserInAppPurchases.store, identifier: UserInAppPurchases.identifier })
+      .from(UserInAppPurchases)
+      .where(eq(UserInAppPurchases.userId, subscription.userId))
+      .for('no key update')
+      .then(first);
+
+    if (!freshBinding || freshBinding.store !== binding.store || freshBinding.identifier !== binding.identifier) {
+      return;
+    }
+
+    const fresh = await tx
+      .select({ state: Subscriptions.state, expiresAt: Subscriptions.expiresAt })
+      .from(Subscriptions)
+      .where(eq(Subscriptions.id, subscription.id))
+      .for('no key update', { of: Subscriptions })
+      .then(firstOrThrow);
+
+    // 스토어 조회 시점 이후 웹훅이 상태/만료일을 바꿨다면(예: 갱신이 사이에 도착) 스토어 응답이 이미 stale 이다.
+    // 이 경우 판정하지 않고 중단한다 — 다음 재조정이 갱신된 상태에 맞춰 스토어를 다시 조회한다.
+    if (fresh.state !== subscription.state || !dayjs(fresh.expiresAt).isSame(dayjs(subscription.expiresAt))) {
+      return;
+    }
+
+    const action = resolveReconcileAction({
+      storeState,
+      storeExpiresAt,
+      currentState: fresh.state,
+      currentExpiresAt: dayjs(fresh.expiresAt),
+      now,
+    });
+
+    if (action.type === 'recover') {
+      // 유실된 웹훅에 플랜 변경이 포함됐을 수 있으므로, 스토어가 알려준 플랜이 유효한 IAP 플랜이면 함께 동기화한다.
+      const storePlan = storePlanId
+        ? await tx
+            .select({ id: Plans.id })
+            .from(Plans)
+            .where(and(eq(Plans.id, storePlanId), eq(Plans.availability, PlanAvailability.IN_APP_PURCHASE)))
+            .then(first)
+        : null;
+
+      await tx
+        .update(Subscriptions)
+        .set({
+          state: SubscriptionState.ACTIVE,
+          renewedAt: fresh.expiresAt,
+          expiresAt: action.expiresAt,
+          ...(storePlan && { planId: storePlan.id }),
+        })
+        .where(eq(Subscriptions.id, subscription.id));
+    } else if (action.type === 'grace') {
+      await tx.update(Subscriptions).set({ state: SubscriptionState.IN_GRACE_PERIOD }).where(eq(Subscriptions.id, subscription.id));
+    } else if (action.type === 'suspend') {
+      await tx.update(Subscriptions).set({ state: SubscriptionState.WILL_EXPIRE }).where(eq(Subscriptions.id, subscription.id));
+    } else if (action.type === 'expire') {
+      await tx
+        .update(Subscriptions)
+        .set({ state: SubscriptionState.EXPIRED, expiresAt: sql`LEAST(${Subscriptions.expiresAt}, NOW())` })
+        .where(eq(Subscriptions.id, subscription.id));
+    }
+  });
 });

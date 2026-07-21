@@ -40,6 +40,7 @@ import * as portone from '#/external/portone.ts';
 import { getSubscriptionExpiresAt, hasBillableUsageDuring, payAmountWithBillingKey, payInvoiceWithBillingKey } from '#/utils/index.ts';
 import { createTrialSubscription } from '#/utils/plan.ts';
 import { delay } from '#/utils/promise.ts';
+import { getUserUuid } from '#/utils/user.ts';
 import { builder } from '../builder.ts';
 import {
   CreditCode,
@@ -377,7 +378,14 @@ builder.mutationFields((t) => ({
       const activeSubscription = await db
         .select({ id: Subscriptions.id, expiresAt: Subscriptions.expiresAt })
         .from(Subscriptions)
-        .where(and(eq(Subscriptions.userId, ctx.session.userId), eq(Subscriptions.state, SubscriptionState.ACTIVE)))
+        .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
+        .where(
+          and(
+            eq(Subscriptions.userId, ctx.session.userId),
+            eq(Subscriptions.state, SubscriptionState.ACTIVE),
+            eq(Plans.availability, PlanAvailability.BILLING_KEY),
+          ),
+        )
         .then(firstOrThrow);
 
       const plan = await db
@@ -424,7 +432,14 @@ builder.mutationFields((t) => ({
       const willExpireSubscription = await db
         .select({ id: Subscriptions.id })
         .from(Subscriptions)
-        .where(and(eq(Subscriptions.userId, ctx.session.userId), eq(Subscriptions.state, SubscriptionState.WILL_EXPIRE)))
+        .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
+        .where(
+          and(
+            eq(Subscriptions.userId, ctx.session.userId),
+            eq(Subscriptions.state, SubscriptionState.WILL_EXPIRE),
+            eq(Plans.availability, PlanAvailability.BILLING_KEY),
+          ),
+        )
         .then(firstOrThrow);
 
       const willActivateSubscription = await db
@@ -488,12 +503,23 @@ builder.mutationFields((t) => ({
       let planId: string;
       let startsAt: dayjs.Dayjs;
       let expiresAt: dayjs.Dayjs;
+      // Google 은 purchaseToken 이 바뀔 때 이전 토큰을 알려준다: 비만료 재가입/플랜 변경은 linkedPurchaseToken 으로,
+      // 만료 후 Play 구독 센터 재구독(out-of-app)은 outOfAppPurchaseContext.expiredPurchaseToken 으로(acknowledge 후 소멸).
+      let previousPurchaseTokens: string[] = [];
+      // 스토어 응답의 계정 식별자로 현재 세션 소유가 증명됐는지. 증명 없이 이전 토큰이 타 계정에 바인딩돼 있으면 배정을 거부한다.
+      let ownershipVerified = false;
 
       if (input.store === InAppPurchaseStore.APP_STORE) {
         const subscription = await appstore.getSubscription(input.data);
 
         if (!subscription.productId || !subscription.originalTransactionId || !subscription.purchaseDate || !subscription.expiresDate) {
           throw new Error('required fields are missing');
+        }
+
+        // 소유권 검증: 다른 유저의 구매(예: 복구 경로가 잘못 흘려보낸 구매)가 현재 세션에 바인딩되는 것을 막는다.
+        // appAccountToken 이 없는 레거시 구매는 통과시킨다.
+        if (subscription.appAccountToken && subscription.appAccountToken !== getUserUuid(ctx.session.userId)) {
+          throw new TypieError({ code: 'in_app_purchase_account_mismatch' });
         }
 
         identifier = subscription.originalTransactionId;
@@ -512,10 +538,24 @@ builder.mutationFields((t) => ({
           throw new Error('required fields are missing');
         }
 
+        // 소유권 검증: 다른 유저의 구매가 현재 세션에 바인딩되는 것을 막는다.
+        // 만료 후 재구독(out-of-app)은 externalAccountIdentifiers 없이 이전 구매의 식별자를
+        // outOfAppPurchaseContext 로만 노출하므로 그쪽도 함께 본다. 둘 다 없는 레거시 구매는 통과.
+        const obfuscatedAccountId =
+          subscription.externalAccountIdentifiers?.obfuscatedExternalAccountId ??
+          subscription.outOfAppPurchaseContext?.expiredExternalAccountIdentifiers?.obfuscatedExternalAccountId;
+        if (obfuscatedAccountId && obfuscatedAccountId !== getUserUuid(ctx.session.userId)) {
+          throw new TypieError({ code: 'in_app_purchase_account_mismatch' });
+        }
+
         identifier = input.data;
         planId = item.offerDetails.basePlanId.toUpperCase();
         startsAt = dayjs(subscription.startTime);
         expiresAt = dayjs(item.expiryTime);
+        previousPurchaseTokens = [subscription.linkedPurchaseToken, subscription.outOfAppPurchaseContext?.expiredPurchaseToken].filter(
+          (token): token is string => !!token,
+        );
+        ownershipVerified = !!obfuscatedAccountId;
       } else {
         throw new Error('Invalid store');
       }
@@ -531,6 +571,55 @@ builder.mutationFields((t) => ({
         .then(firstOrThrow);
 
       return await db.transaction(async (tx) => {
+        // 이전 purchaseToken 을 보유한 "다른" 타이피 계정이 있으면(같은 스토어 계정에서 플랜 변경/재구독으로 토큰이 바뀐 경우),
+        // 그 구독을 만료시키고 바인딩을 제거한다. 하나의 스토어 구독이 여러 타이피 계정에 동시에 활성화되는 것을 막는다.
+        // (같은 계정의 토큰 변경은 아래 userId 기준 upsert 가 바인딩을 이동시키므로 여기서 건드리지 않는다)
+        for (const previousPurchaseToken of previousPurchaseTokens) {
+          const previousBinding = await tx
+            .select({ userId: UserInAppPurchases.userId })
+            .from(UserInAppPurchases)
+            .where(
+              and(
+                eq(UserInAppPurchases.store, InAppPurchaseStore.GOOGLE_PLAY),
+                eq(UserInAppPurchases.identifier, previousPurchaseToken),
+                ne(UserInAppPurchases.userId, ctx.session.userId),
+              ),
+            )
+            .then(first);
+
+          if (previousBinding) {
+            // 계정 증빙 없는 구매(레거시·out-of-app)의 이전 토큰이 다른 계정 소유 — 정당한 주인이 따로 있다는 뜻이므로
+            // 현재 세션에 임의 배정하지 않고 거부한다. 주인 계정으로 로그인하면 복구 경로가 다시 등록한다.
+            if (!ownershipVerified) {
+              throw new TypieError({ code: 'in_app_purchase_account_mismatch' });
+            }
+
+            await tx
+              .update(Subscriptions)
+              .set({ state: SubscriptionState.EXPIRED, expiresAt: sql`LEAST(${Subscriptions.expiresAt}, NOW())` })
+              .where(
+                and(
+                  eq(Subscriptions.userId, previousBinding.userId),
+                  inArray(Subscriptions.state, [
+                    SubscriptionState.ACTIVE,
+                    SubscriptionState.WILL_EXPIRE,
+                    SubscriptionState.IN_GRACE_PERIOD,
+                  ]),
+                  inArray(
+                    Subscriptions.planId,
+                    tx.select({ id: Plans.id }).from(Plans).where(eq(Plans.availability, PlanAvailability.IN_APP_PURCHASE)),
+                  ),
+                ),
+              );
+
+            await tx
+              .delete(UserInAppPurchases)
+              .where(
+                and(eq(UserInAppPurchases.store, InAppPurchaseStore.GOOGLE_PLAY), eq(UserInAppPurchases.identifier, previousPurchaseToken)),
+              );
+          }
+        }
+
         if (trialSubscription) {
           await tx
             .update(Subscriptions)
@@ -574,6 +663,12 @@ builder.mutationFields((t) => ({
             target: [Subscriptions.userId],
             targetWhere: eq(Subscriptions.state, SubscriptionState.ACTIVE),
             set: { planId, startsAt, expiresAt, renewedAt: startsAt },
+            // 상단 eligibility 검사 이후 동시에 커밋된 다른 채널(빌링키 등) ACTIVE 구독을 IAP 값으로 덮어쓰지 않는다.
+            // 충돌 행이 IAP 가 아니면 no-op → returning 이 비어 firstOrThrow 로 트랜잭션 전체가 롤백된다(오염 대신 실패).
+            setWhere: inArray(
+              Subscriptions.planId,
+              tx.select({ id: Plans.id }).from(Plans).where(eq(Plans.availability, PlanAvailability.IN_APP_PURCHASE)),
+            ),
           })
           .returning()
           .then(firstOrThrow);
@@ -604,18 +699,13 @@ builder.mutationFields((t) => ({
         .then(first);
 
       return await db.transaction(async (tx) => {
+        // 교착 방지 전역 락 순서: WILL_ACTIVATE 구독 → 주 구독 → 인보이스.
+        // 환불·갱신 재시도가 구독을 잠근 채 인보이스를 갱신하므로, 여기서 인보이스를 구독보다 먼저 잠그면 역순 교착이 된다.
         if (willActivateSubscription) {
           await tx.delete(Subscriptions).where(eq(Subscriptions.id, willActivateSubscription.id));
         }
 
-        if (activeSubscription.state === SubscriptionState.IN_GRACE_PERIOD) {
-          await tx
-            .update(PaymentInvoices)
-            .set({ state: PaymentInvoiceState.CANCELED })
-            .where(and(eq(PaymentInvoices.subscriptionId, activeSubscription.id), eq(PaymentInvoices.state, PaymentInvoiceState.OVERDUE)));
-        }
-
-        return await tx
+        const subscription = await tx
           .update(Subscriptions)
           .set(
             activeSubscription.state === SubscriptionState.ACTIVE
@@ -625,6 +715,15 @@ builder.mutationFields((t) => ({
           .where(eq(Subscriptions.id, activeSubscription.id))
           .returning()
           .then(firstOrThrow);
+
+        if (activeSubscription.state === SubscriptionState.IN_GRACE_PERIOD) {
+          await tx
+            .update(PaymentInvoices)
+            .set({ state: PaymentInvoiceState.CANCELED })
+            .where(and(eq(PaymentInvoices.subscriptionId, activeSubscription.id), eq(PaymentInvoices.state, PaymentInvoiceState.OVERDUE)));
+        }
+
+        return subscription;
       });
     },
   }),
@@ -635,8 +734,25 @@ builder.mutationFields((t) => ({
       const willExpireSubscription = await db
         .select({ id: Subscriptions.id })
         .from(Subscriptions)
-        .where(and(eq(Subscriptions.userId, ctx.session.userId), eq(Subscriptions.state, SubscriptionState.WILL_EXPIRE)))
+        .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
+        .where(
+          and(
+            eq(Subscriptions.userId, ctx.session.userId),
+            eq(Subscriptions.state, SubscriptionState.WILL_EXPIRE),
+            eq(Plans.availability, PlanAvailability.BILLING_KEY),
+          ),
+        )
         .then(firstOrThrow);
+
+      const willActivateSubscription = await db
+        .select({ id: Subscriptions.id })
+        .from(Subscriptions)
+        .where(and(eq(Subscriptions.userId, ctx.session.userId), eq(Subscriptions.state, SubscriptionState.WILL_ACTIVATE)))
+        .then(first);
+
+      if (willActivateSubscription) {
+        throw new TypieError({ code: 'plan_change_scheduled' });
+      }
 
       return await db.transaction(async (tx) => {
         return await tx

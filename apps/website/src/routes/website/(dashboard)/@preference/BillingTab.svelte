@@ -70,6 +70,8 @@
   );
 
   const isTrial = $derived(user.data.subscription?.plan.availability === PlanAvailability.TRIAL);
+  const isBillingKey = $derived(user.data.subscription?.plan.availability === PlanAvailability.BILLING_KEY);
+  const isInAppPurchase = $derived(user.data.subscription?.plan.availability === PlanAvailability.IN_APP_PURCHASE);
 
   const [scheduleSubscriptionCancellation] = createMutation(
     graphql(`
@@ -212,6 +214,14 @@
               <span>
                 {dayjs(subscription.expiresAt).formatAsDate()}에 {comma(subscription.plan.fee)}원 결제 예정
               </span>
+            {:else if subscription.state === SubscriptionState.IN_GRACE_PERIOD}
+              <span class={css({ color: 'text.danger' })}>
+                결제에 실패했어요. {dayjs(subscription.expiresAt).formatAsDate()}까지 결제 수단을 확인해 주세요.
+              </span>
+            {:else if subscription.state === SubscriptionState.WILL_EXPIRE && user.data.nextSubscription}
+              <span>
+                {dayjs(subscription.expiresAt).formatAsDate()}에 다음 플랜으로 전환 예정
+              </span>
             {:else if subscription.state === SubscriptionState.WILL_EXPIRE}
               <span class={css({ color: 'text.danger' })}>
                 {dayjs(subscription.expiresAt).formatAsDate()} 해지 예정
@@ -223,7 +233,7 @@
           {/snippet}
         </SettingsRow>
 
-        {#if subscription.state === SubscriptionState.ACTIVE && !user.data.nextSubscription && PlanPair[subscription.plan.id as keyof typeof PlanPair]}
+        {#if subscription.state === SubscriptionState.ACTIVE && isBillingKey && !user.data.nextSubscription && PlanPair[subscription.plan.id as keyof typeof PlanPair]}
           <SettingsDivider />
 
           <SettingsRow>
@@ -266,7 +276,7 @@
           </SettingsRow>
         {/if}
 
-        {#if subscription.state === SubscriptionState.WILL_EXPIRE && !user.data.nextSubscription}
+        {#if subscription.state === SubscriptionState.WILL_EXPIRE && !user.data.nextSubscription && (isTrial || isBillingKey)}
           <SettingsDivider />
 
           {#if isTrial}
@@ -322,6 +332,12 @@
           {/if}
         {/if}
       </SettingsCard>
+
+      {#if isInAppPurchase}
+        <p class={css({ marginTop: '12px', fontSize: '13px', color: 'text.faint' })}>
+          이 구독은 앱에서 결제되었어요. 플랜 변경 및 해지는 App Store 또는 Google Play에서 관리할 수 있어요.
+        </p>
+      {/if}
 
       {#if user.data.nextSubscription}
         {@const nextSubscription = user.data.nextSubscription}
@@ -450,7 +466,7 @@
     </div>
   </div>
 
-  {#if user.data.subscription?.state === SubscriptionState.ACTIVE || user.data.subscription?.state === SubscriptionState.IN_GRACE_PERIOD}
+  {#if isBillingKey && (user.data.subscription?.state === SubscriptionState.ACTIVE || user.data.subscription?.state === SubscriptionState.IN_GRACE_PERIOD)}
     <!-- Subscription Cancellation Section -->
     <div>
       <h2 class={css({ fontSize: '16px', fontWeight: 'semibold', color: 'text.default', marginBottom: '24px' })}>구독 해지</h2>

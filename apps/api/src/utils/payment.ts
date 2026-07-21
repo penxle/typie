@@ -143,6 +143,13 @@ export const payAmountWithBillingKey = async (
         creditAmount,
         data: {},
       };
+    } else if (params.amount === 0) {
+      return {
+        status: 'succeeded',
+        billingAmount: 0,
+        creditAmount: 0,
+        data: {},
+      };
     }
 
     throw new Error('Invalid billing amount');
@@ -244,6 +251,16 @@ export const payInvoiceWithBillingKey = async (tx: Transaction, invoiceId: strin
         .update(UserPaymentCredits)
         .set({ amount: paymentCredit.amount - creditAmount })
         .where(eq(UserPaymentCredits.id, paymentCredit.id));
+
+      return true;
+    } else if (invoice.amount === 0) {
+      await tx.insert(PaymentRecords).values({
+        invoiceId: invoice.id,
+        outcome: PaymentOutcome.SUCCESS,
+        billingAmount: 0,
+        creditAmount: 0,
+        data: {},
+      });
 
       return true;
     }

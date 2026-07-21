@@ -1,8 +1,7 @@
 import { DocumentType, EntityState, PaymentInvoiceState, PaymentOutcome, SubscriptionState, UserRole, UserState } from '@typie/lib/enums';
 import { TypieError } from '@typie/lib/errors';
 import { bootstrapSchema } from '@typie/lib/validation';
-import dayjs from 'dayjs';
-import { and, count, desc, eq, getTableColumns, ilike, ne, or, sql } from 'drizzle-orm';
+import { and, count, desc, eq, getTableColumns, ilike, inArray, ne, or, sql } from 'drizzle-orm';
 import { fetchBootstrap, putBootstrap } from '#/bootstrap.ts';
 import { redis } from '#/cache.ts';
 import {
@@ -277,6 +276,23 @@ builder.mutationFields((t) => ({
       await assertAdminPermission({ sessionId: ctx.session.id });
 
       return await db.transaction(async (tx) => {
+        // 갱신 잡과 직렬화한다. 갱신 잡도 구독 행을 잠그므로, 여기서 먼저 잠그면 환불 처리(외부 호출 포함) 중에
+        // 갱신 잡이 새 인보이스를 청구·커밋해 만료된 구독에 결제가 남는 경합을 막는다.
+        // 교착 방지: 모든 갱신·환불 경로는 구독 → 인보이스 순으로 잠근다. subscriptionId 는 불변 컬럼이라
+        // 무락 조회가 안전하고, 인보이스 상태(PAID)는 아래 잠금 조회에서 재검증한다.
+        const invoiceRef = await tx
+          .select({ subscriptionId: PaymentInvoices.subscriptionId })
+          .from(PaymentInvoices)
+          .where(eq(PaymentInvoices.id, input.invoiceId))
+          .then(firstOrThrow);
+
+        await tx
+          .select({ id: Subscriptions.id })
+          .from(Subscriptions)
+          .where(eq(Subscriptions.id, invoiceRef.subscriptionId))
+          .for('no key update')
+          .then(firstOrThrow);
+
         const invoice = await tx
           .select()
           .from(PaymentInvoices)
@@ -303,8 +319,18 @@ builder.mutationFields((t) => ({
         await tx.update(PaymentInvoices).set({ state: PaymentInvoiceState.CANCELED }).where(eq(PaymentInvoices.id, invoice.id));
 
         await tx
+          .update(PaymentInvoices)
+          .set({ state: PaymentInvoiceState.CANCELED })
+          .where(
+            and(
+              eq(PaymentInvoices.subscriptionId, invoice.subscriptionId),
+              inArray(PaymentInvoices.state, [PaymentInvoiceState.OVERDUE, PaymentInvoiceState.UPCOMING]),
+            ),
+          );
+
+        await tx
           .update(Subscriptions)
-          .set({ state: SubscriptionState.EXPIRED, expiresAt: dayjs() })
+          .set({ state: SubscriptionState.EXPIRED, expiresAt: sql`LEAST(${Subscriptions.expiresAt}, NOW())` })
           .where(eq(Subscriptions.id, invoice.subscriptionId));
 
         return true;
