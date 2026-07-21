@@ -35,6 +35,8 @@ export const tryHandleInteractiveHit = (editor: Editor, hit: InteractiveHit, loc
 };
 
 export const handlePointerDown: EditorEventHandler<HTMLElement, PointerEvent> = (editor, e) => {
+  if (!e.isPrimary) return;
+
   const selectionHandleType = selectionHandleKindFromTarget(e.target);
   const isReadOnlyTouch = editor.readOnly && e.pointerType === 'touch';
   if (selectionHandleType && !isReadOnlyTouch) {
@@ -150,8 +152,8 @@ export const handlePointerUp: EditorEventHandler<HTMLElement, PointerEvent> = (e
     return;
   }
 
-  state.releasePointer(e.currentTarget, e.pointerId);
   state.finishPointerUp(editor, e.pointerId, { clientX: e.clientX, clientY: e.clientY });
+  state.releasePointer(e.currentTarget, e.pointerId);
   editor.flush();
   editor.resumeToolbarSync();
   editor.endNativeDragAdmission({ restoreFocus: true });
@@ -181,8 +183,27 @@ export const handlePointerCancel: EditorEventHandler<HTMLElement, PointerEvent> 
     return;
   }
 
-  state.releasePointer(e.currentTarget, e.pointerId);
   state.cancelPointer(e.pointerId);
+  state.releasePointer(e.currentTarget, e.pointerId);
+  editor.flush();
+  editor.resumeToolbarSync();
+  editor.endNativeDragAdmission({ restoreFocus: false });
+};
+
+export const handlePointerCaptureLost: EditorEventHandler<HTMLElement, PointerEvent> = (editor, e) => {
+  const state = PointerState.of(editor);
+  if (!state.hasActivePointer(e.pointerId)) return;
+
+  state.cancelPointer(e.pointerId);
+  editor.flush();
+  editor.resumeToolbarSync();
+  editor.endNativeDragAdmission({ restoreFocus: false });
+};
+
+export const cancelPointerInteraction = (editor: Editor): void => {
+  const state = PointerState.of(editor);
+  if (!state.cancelActivePointer()) return;
+
   editor.flush();
   editor.resumeToolbarSync();
   editor.endNativeDragAdmission({ restoreFocus: false });
@@ -333,7 +354,7 @@ class PointerState {
   }
 
   releasePointer(target: HTMLElement, pointerId: number): void {
-    if (this.#session?.captured && this.#session.pointerId === pointerId && target.hasPointerCapture(pointerId)) {
+    if (target.hasPointerCapture(pointerId)) {
       target.releasePointerCapture(pointerId);
     }
   }
@@ -362,6 +383,13 @@ class PointerState {
     this.#dragPending = null;
     this.#edgeAutoScroll.stop();
     this.#session = null;
+  }
+
+  cancelActivePointer(): boolean {
+    const pointerId = this.#session?.pointerId;
+    if (pointerId === undefined) return false;
+    this.cancelPointer(pointerId);
+    return true;
   }
 
   markNativeDragStarted(): void {

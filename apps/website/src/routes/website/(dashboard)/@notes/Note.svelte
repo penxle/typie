@@ -161,7 +161,7 @@
     }
   }}
   onpointerdown={(e) => {
-    if (expanded) return;
+    if (expanded || !e.isPrimary || e.button !== 0) return;
     const target = e.target as HTMLElement;
     if (target.closest('button, textarea, a')) return;
 

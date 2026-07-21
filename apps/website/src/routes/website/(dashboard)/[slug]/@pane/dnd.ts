@@ -1,3 +1,4 @@
+import { pointerCapture } from '@typie/ui/actions';
 import mixpanel from 'mixpanel-browser';
 import { findMemberById } from './tree';
 import type { Action } from 'svelte/action';
@@ -117,13 +118,16 @@ type DragPaneOptions = {
   paneId: string;
 };
 
+type DragPaneSession = {
+  startX: number;
+  startY: number;
+};
+
 export const dragPane: Action<HTMLElement, DragPaneOptions> = (node, options) => {
   let isDragging = false;
   let holdActivated = false;
   let holdTimer: ReturnType<typeof setTimeout> | null = null;
-  let activePointerId = -1;
-  let startX = 0;
-  let startY = 0;
+  let activeSession: DragPaneSession | null = null;
   const HOLD_DURATION = 300;
   const IMMEDIATE_DRAG_THRESHOLD = 8;
   const POST_HOLD_DRAG_THRESHOLD = 5;
@@ -144,41 +148,42 @@ export const dragPane: Action<HTMLElement, DragPaneOptions> = (node, options) =>
     clearHold();
     isDragging = false;
     holdActivated = false;
-    activePointerId = -1;
+    activeSession = null;
     options.paneGroup.draggingPaneId = null;
     node.style.cursor = 'grab';
     document.body.style.cursor = '';
   };
 
-  const handlePointerDown = (e: PointerEvent) => {
+  const handlePointerDown = (e: PointerEvent): DragPaneSession | null => {
+    if (e.button !== 0 || !e.isPrimary) return null;
+
     const target = e.target as HTMLElement;
     if (target.closest('button, [role="button"], [role="menu"], a[href], input, textarea, select')) {
-      return;
+      return null;
     }
 
     e.preventDefault();
     clearHold();
 
-    startX = e.clientX;
-    startY = e.clientY;
-    activePointerId = e.pointerId;
-    node.setPointerCapture(e.pointerId);
+    const session = { startX: e.clientX, startY: e.clientY };
+    activeSession = session;
 
     holdActivated = false;
     holdTimer = setTimeout(() => {
       holdTimer = null;
-      if (!node.hasPointerCapture(activePointerId)) return;
+      if (activeSession !== session) return;
       holdActivated = true;
       options.paneGroup.draggingPaneId = options.paneId;
       node.style.cursor = 'grabbing';
       document.body.style.cursor = 'grabbing';
     }, HOLD_DURATION);
+    return session;
   };
 
-  const handlePointerMove = (e: PointerEvent) => {
-    if (!node.hasPointerCapture(e.pointerId)) return;
+  const handlePointerMove = (session: DragPaneSession, e: PointerEvent) => {
+    if (activeSession !== session) return;
 
-    const dist = Math.abs(e.clientX - startX) + Math.abs(e.clientY - startY);
+    const dist = Math.abs(e.clientX - session.startX) + Math.abs(e.clientY - session.startY);
 
     if (!holdActivated) {
       if (dist > IMMEDIATE_DRAG_THRESHOLD) {
@@ -206,47 +211,33 @@ export const dragPane: Action<HTMLElement, DragPaneOptions> = (node, options) =>
     options.paneGroup.updateActiveZone(e.clientX, e.clientY);
   };
 
-  const handlePointerUp = (e: PointerEvent) => {
+  const handlePointerUp = () => {
     if (isDragging) {
       const dragItem: DragPane = { type: 'pane', paneId: options.paneId };
       options.paneGroup.executeDrop(dragItem);
     }
 
     resetState();
-    if (node.hasPointerCapture(e.pointerId)) {
-      node.releasePointerCapture(e.pointerId);
-    }
   };
 
-  const handlePointerCancel = (e: PointerEvent) => {
-    resetState();
-    options.paneGroup.cancelDrag();
-    if (node.hasPointerCapture(e.pointerId)) {
-      node.releasePointerCapture(e.pointerId);
-    }
-  };
-
-  const handleLostPointerCapture = () => {
+  const handlePointerCancel = () => {
     resetState();
     options.paneGroup.cancelDrag();
   };
+
+  const capture = pointerCapture(node, {
+    start: handlePointerDown,
+    move: handlePointerMove,
+    end: handlePointerUp,
+    cancel: handlePointerCancel,
+  });
 
   const handleKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'Escape' && (holdActivated || holdTimer)) {
-      options.paneGroup.cancelDrag();
-      const capturedPointerId = activePointerId;
-      resetState();
-      if (capturedPointerId !== -1 && node.hasPointerCapture(capturedPointerId)) {
-        node.releasePointerCapture(capturedPointerId);
-      }
+      capture.cancel();
     }
   };
 
-  node.addEventListener('pointerdown', handlePointerDown);
-  node.addEventListener('pointermove', handlePointerMove);
-  node.addEventListener('pointerup', handlePointerUp);
-  node.addEventListener('pointercancel', handlePointerCancel);
-  node.addEventListener('lostpointercapture', handleLostPointerCapture);
   document.addEventListener('keydown', handleKeyDown);
 
   return {
@@ -254,12 +245,7 @@ export const dragPane: Action<HTMLElement, DragPaneOptions> = (node, options) =>
       options = newOptions;
     },
     destroy() {
-      clearHold();
-      node.removeEventListener('pointerdown', handlePointerDown);
-      node.removeEventListener('pointermove', handlePointerMove);
-      node.removeEventListener('pointerup', handlePointerUp);
-      node.removeEventListener('pointercancel', handlePointerCancel);
-      node.removeEventListener('lostpointercapture', handleLostPointerCapture);
+      capture.destroy();
       document.removeEventListener('keydown', handleKeyDown);
     },
   };

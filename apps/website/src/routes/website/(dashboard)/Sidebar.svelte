@@ -2,7 +2,7 @@
   import { createFragment, createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
-  import { tooltip } from '@typie/ui/actions';
+  import { pointerCapture, tooltip } from '@typie/ui/actions';
   import { Icon } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { clamp } from '@typie/ui/utils';
@@ -208,8 +208,8 @@
 
   type Resizer = {
     deltaX: number;
-    event: PointerEvent;
-    element: HTMLElement;
+    startWidth: number;
+    startX: number;
   };
 
   let treeScrollEl = $state<HTMLDivElement>();
@@ -231,7 +231,7 @@
   });
 
   let resizer = $state<Resizer | null>(null);
-  let newWidth = $derived(clamp((app.preference.current.sidebarWidth ?? 240) + (resizer?.deltaX ?? 0), 240, 480));
+  let newWidth = $derived(clamp((resizer?.startWidth ?? app.preference.current.sidebarWidth ?? 240) + (resizer?.deltaX ?? 0), 240, 480));
 
   const finishResizer = (commit: boolean) => {
     if (!resizer) return;
@@ -241,6 +241,27 @@
     }
 
     resizer = null;
+  };
+
+  const startResizer = (event: PointerEvent): Resizer | null => {
+    if (resizer || !event.isPrimary || event.button !== 0) return null;
+
+    resizer = {
+      deltaX: 0,
+      startWidth: app.preference.current.sidebarWidth ?? 240,
+      startX: event.clientX,
+    };
+    return resizer;
+  };
+
+  const moveResizer = (session: Resizer, event: PointerEvent) => {
+    if (!resizer) return;
+    resizer.deltaX = Math.round(event.clientX - session.startX);
+  };
+
+  const endResizer = (session: Resizer, event: PointerEvent) => {
+    moveResizer(session, event);
+    finishResizer(true);
   };
 
   let spaceMenuOpen = $state(false);
@@ -766,34 +787,6 @@
         opacity: '50',
       },
     })}
-    onlostpointercapture={(e) => {
-      if (!resizer || resizer.event.pointerId !== e.pointerId) return;
-      finishResizer(true);
-    }}
-    onpointercancelcapture={(e) => {
-      if (!resizer || resizer.event.pointerId !== e.pointerId) return;
-      finishResizer(false);
-    }}
-    onpointerdowncapture={(e) => {
-      if (e.button !== 0) return;
-
-      const element = e.currentTarget;
-      element.setPointerCapture(e.pointerId);
-
-      resizer = {
-        element,
-        event: e,
-        deltaX: 0,
-      };
-    }}
-    onpointermovecapture={(e) => {
-      if (!resizer || resizer.event.pointerId !== e.pointerId) return;
-
-      resizer.deltaX = Math.round(e.clientX - resizer.event.clientX);
-    }}
-    onpointerupcapture={(e) => {
-      if (!resizer || resizer.event.pointerId !== e.pointerId) return;
-      finishResizer(true);
-    }}
+    use:pointerCapture={{ start: startResizer, move: moveResizer, end: endResizer, cancel: () => finishResizer(false) }}
   ></div>
 </div>

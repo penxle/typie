@@ -5,9 +5,9 @@
   import { contextMenu, portal } from '@typie/ui/actions';
   import { Icon } from '@typie/ui/components';
   import { Toast } from '@typie/ui/notification';
-  import { elementScrollViewport, handleDragScroll } from '@typie/ui/utils';
+  import { createDragScroll, elementScrollViewport } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
-  import { tick } from 'svelte';
+  import { onDestroy, tick } from 'svelte';
   import { on } from 'svelte/events';
   import { SvelteMap } from 'svelte/reactivity';
   import { fade } from 'svelte/transition';
@@ -238,6 +238,7 @@
   let pendingTouchDrag = $state<PendingTouchDrag | null>(null);
   let pointerType = $state<PointerEvent['pointerType']>('mouse');
   let dragTimeout = $state<NodeJS.Timeout | null>(null);
+  let dragScroll: ReturnType<typeof createDragScroll> | null = null;
   let folderHoverTimeout = $state<NodeJS.Timeout | null>(null);
   let hoveredFolderId = $state<string | null>(null);
 
@@ -348,10 +349,7 @@
   };
 
   const handlePointerDown: PointerEventHandler<HTMLDivElement> = (e) => {
-    // NOTE: 우클릭 무시
-    if (e.button === 2) {
-      return;
-    }
+    if (!e.isPrimary || e.button !== 0 || dragging || pendingTouchDrag) return;
 
     const target = e.target as HTMLElement;
 
@@ -400,7 +398,12 @@
         };
 
         if (!pendingTouchDrag.element.hasPointerCapture(e.pointerId)) {
-          pendingTouchDrag.element.setPointerCapture(e.pointerId);
+          try {
+            pendingTouchDrag.element.setPointerCapture(e.pointerId);
+          } catch {
+            endDragging(true);
+            return;
+          }
         }
 
         lastPointerX = pendingTouchDrag.event.clientX;
@@ -644,9 +647,15 @@
     const scrollContainer = tree.parentElement;
     if (!scrollContainer) return;
 
-    return handleDragScroll(elementScrollViewport(scrollContainer), true, {
+    const current = createDragScroll(elementScrollViewport(scrollContainer), {
+      initialPointer: { clientX: lastPointerX, clientY: lastPointerY },
       onScroll: () => updateDropTarget(lastPointerX, lastPointerY),
     });
+    dragScroll = current;
+    return () => {
+      current.destroy();
+      if (dragScroll === current) dragScroll = null;
+    };
   });
 
   const handlePointerMove: PointerEventHandler<HTMLDivElement> = (e) => {
@@ -683,6 +692,7 @@
 
     lastPointerX = e.clientX;
     lastPointerY = e.clientY;
+    dragScroll?.updatePointer(e.clientX, e.clientY);
 
     if (dragging.eligible) {
       if (dragging.event.pointerType === 'touch' && e.cancelable) {
@@ -690,7 +700,12 @@
       }
 
       if (!dragging.element.hasPointerCapture(e.pointerId)) {
-        dragging.element.setPointerCapture(e.pointerId);
+        try {
+          dragging.element.setPointerCapture(e.pointerId);
+        } catch {
+          endDragging(true);
+          return;
+        }
       }
 
       dragging.ghost = {
@@ -703,7 +718,12 @@
       updateDropTarget(e.clientX, e.clientY);
     } else if (Math.abs(dragging.event.clientX - e.clientX) + Math.abs(dragging.event.clientY - e.clientY) > TOUCH_MOVE_THRESHOLD) {
       dragging.eligible = true;
-      dragging.element.setPointerCapture(e.pointerId);
+      try {
+        dragging.element.setPointerCapture(e.pointerId);
+      } catch {
+        endDragging(true);
+        return;
+      }
 
       const rect = dragging.element.getBoundingClientRect();
       dragging.ghost = {
@@ -793,13 +813,20 @@
     endDragging(true);
   };
 
-  const handlePointerCancel: PointerEventHandler<HTMLDivElement> = () => {
+  const handlePointerCancel: PointerEventHandler<HTMLDivElement> = (e) => {
     if (dragging) {
+      if (dragging.event.pointerId !== e.pointerId) return;
       endDragging(true);
       return;
     }
 
+    if (pendingTouchDrag?.event.pointerId !== e.pointerId) return;
     clearPendingTouchDrag();
+  };
+
+  const handleLostPointerCapture: PointerEventHandler<HTMLDivElement> = (e) => {
+    if (dragging?.event.pointerId !== e.pointerId) return;
+    endDragging(true);
   };
 
   const handleContextMenuCapture: MouseEventHandler<HTMLDivElement> = (e) => {
@@ -812,25 +839,27 @@
   };
 
   const endDragging = (canceled = false) => {
-    if (!dragging) {
+    const current = dragging;
+    if (!current) {
       clearPendingTouchDrag();
       return;
     }
 
+    dragging = null;
     clearPendingTouchDrag();
 
     clearFolderHoverTimeout();
-
-    if (dragging.eligible && dragging.element.hasPointerCapture(dragging.event.pointerId)) {
-      dragging.element.releasePointerCapture(dragging.event.pointerId);
-    }
 
     if (canceled) {
       paneGroup.cancelDrag();
     }
 
-    dragging = null;
+    if (current.eligible && current.element.hasPointerCapture(current.event.pointerId)) {
+      current.element.releasePointerCapture(current.event.pointerId);
+    }
   };
+
+  onDestroy(() => endDragging(true));
 
   const draggingEntityCount = $derived.by(() => {
     return countSelectedEntitiesForDragGhost(treeState.selectedEntityIds);
@@ -910,6 +939,7 @@
   })}
   onclick={handleClick}
   oncontextmenucapture={handleContextMenuCapture}
+  onlostpointercapture={handleLostPointerCapture}
   onpointercancelcapture={handlePointerCancel}
   onpointerdowncapture={handlePointerDown}
   onpointermovecapture={handlePointerMove}

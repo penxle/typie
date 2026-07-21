@@ -155,6 +155,24 @@ describe('pointerCapture', () => {
     expect(start).toHaveBeenCalledOnce();
   });
 
+  it('supports programmatic cancellation without destroying the action', () => {
+    const element = createElement();
+    installPointerCapture(element);
+    const session = { id: 'owner' };
+    const start = vi.fn(() => session);
+    const cancel = vi.fn();
+    const action = pointerCapture(element, { start, cancel }) as ReturnType<typeof pointerCapture> & { cancel?: () => void };
+
+    element.dispatchEvent(pointerEvent('pointerdown'));
+    action.cancel?.();
+
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(cancel).toHaveBeenCalledWith(session, 'programmatic', undefined);
+    element.dispatchEvent(pointerEvent('pointerdown'));
+    expect(start).toHaveBeenCalledTimes(2);
+    action.destroy?.();
+  });
+
   it('cancels state changed by start when capture acquisition fails', () => {
     const element = createElement();
     installPointerCapture(element);

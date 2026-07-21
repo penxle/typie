@@ -3,7 +3,7 @@
   import { css } from '@typie/styled-system/css';
   import { getThemeContext } from '@typie/ui/context';
   import { elementScrollViewport, windowScrollViewport } from '@typie/ui/utils';
-  import { untrack } from 'svelte';
+  import { onDestroy, untrack } from 'svelte';
   import { graphql } from '$mearie';
   import {
     CONTINUOUS_MIN_WIDTH,
@@ -17,7 +17,15 @@
   import { handle } from '../handlers';
   import { handleContextMenu } from '../handlers/contextmenu';
   import { handleDragEnd, handleDragEnter, handleDragLeave, handleDragOver, handleDragStart, handleDrop } from '../handlers/dnd';
-  import { handleClick, handlePointerCancel, handlePointerDown, handlePointerMove, handlePointerUp } from '../handlers/pointer';
+  import {
+    cancelPointerInteraction,
+    handleClick,
+    handlePointerCancel,
+    handlePointerCaptureLost,
+    handlePointerDown,
+    handlePointerMove,
+    handlePointerUp,
+  } from '../handlers/pointer';
   import { setupEditorScroll } from '../scroll.svelte';
   import { touchPanLock } from '../touch-pan-lock';
   import Caret from './Caret.svelte';
@@ -53,6 +61,9 @@
   const ctx = getEditorContext();
   const theme = getThemeContext();
   setupEditorScroll(ctx);
+  onDestroy(() => {
+    if (ctx.editor) cancelPointerInteraction(ctx.editor);
+  });
 
   const document = createFragment(
     graphql(`
@@ -293,6 +304,7 @@
             if (event.relatedTarget === ctx.editor?.inputEl) return;
             ctx.editor?.blur();
           }}
+          onlostpointercapture={handle(ctx.editor, handlePointerCaptureLost)}
           onpointercancel={handle(ctx.editor, handlePointerCancel)}
           onpointerdown={handle(ctx.editor, handlePointerDown)}
           onpointerleave={() => ctx.editor?.clearLinkHover()}

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
+  import { pointerCapture } from '@typie/ui/actions';
   import { getEditorContext } from '../editor.svelte';
   import type { Size } from '@typie/editor-ffi/browser';
 
@@ -21,6 +22,13 @@
     trackSize: number;
     thumbSize: number;
     thumbPos: number;
+  };
+  type ScrollDragSession = {
+    axis: 'x' | 'y';
+    startPointer: number;
+    startScroll: number;
+    maxScroll: number;
+    trackMinusThumb: number;
   };
 
   function axisGeometry(m: AxisMetric): AxisGeometry {
@@ -196,47 +204,47 @@
     };
   });
 
-  function startDrag(axis: 'x' | 'y', e: PointerEvent) {
-    if (!scrollContainer) return;
+  function startDrag(axis: 'x' | 'y', e: PointerEvent): ScrollDragSession | null {
+    if (!scrollContainer || dragAxis !== null || !e.isPrimary || e.button !== 0) return null;
     e.preventDefault();
     e.stopPropagation();
-
-    const target = e.currentTarget as HTMLElement;
-    target.setPointerCapture(e.pointerId);
 
     dragAxis = axis;
     markUserScroll();
     show('user');
 
     const geometryetry = axis === 'y' ? y : x;
-    const startPointer = axis === 'y' ? e.clientY : e.clientX;
-    const startScroll = axis === 'y' ? scrollContainer.scrollTop : scrollContainer.scrollLeft;
-    const maxScroll = geometryetry.maxScroll;
-    const trackMinusThumb = geometryetry.trackSize - geometryetry.thumbSize;
-
-    const onMove = (ev: PointerEvent) => {
-      if (!scrollContainer) return;
-      markUserScroll();
-      const delta = (((axis === 'y' ? ev.clientY : ev.clientX) - startPointer) / trackMinusThumb) * maxScroll;
-      if (axis === 'y') scrollContainer.scrollTop = startScroll + delta;
-      else scrollContainer.scrollLeft = startScroll + delta;
+    return {
+      axis,
+      startPointer: axis === 'y' ? e.clientY : e.clientX,
+      startScroll: axis === 'y' ? scrollContainer.scrollTop : scrollContainer.scrollLeft,
+      maxScroll: geometryetry.maxScroll,
+      trackMinusThumb: geometryetry.trackSize - geometryetry.thumbSize,
     };
+  }
 
-    const end = () => {
-      dragAxis = null;
-      target.removeEventListener('pointermove', onMove);
-      target.removeEventListener('pointerup', end);
-      target.removeEventListener('lostpointercapture', end);
-      show('user');
-    };
+  function moveDrag(session: ScrollDragSession, e: PointerEvent) {
+    if (!scrollContainer || dragAxis !== session.axis) return;
+    markUserScroll();
+    const position = session.axis === 'y' ? e.clientY : e.clientX;
+    const delta = ((position - session.startPointer) / session.trackMinusThumb) * session.maxScroll;
+    if (session.axis === 'y') scrollContainer.scrollTop = session.startScroll + delta;
+    else scrollContainer.scrollLeft = session.startScroll + delta;
+  }
 
-    target.addEventListener('pointermove', onMove);
-    target.addEventListener('pointerup', end);
-    target.addEventListener('lostpointercapture', end);
+  function finishDrag(session: ScrollDragSession) {
+    if (dragAxis !== session.axis) return;
+    dragAxis = null;
+    show('user');
+  }
+
+  function endDrag(session: ScrollDragSession, event: PointerEvent) {
+    moveDrag(session, event);
+    finishDrag(session);
   }
 
   function jumpTo(axis: 'x' | 'y', e: PointerEvent) {
-    if (!scrollContainer || e.target !== e.currentTarget) return;
+    if (!scrollContainer || e.target !== e.currentTarget || !e.isPrimary || e.button !== 0) return;
     e.preventDefault();
     e.stopPropagation();
     markUserScroll();
@@ -313,9 +321,14 @@
       aria-valuemax={geometry.maxScroll}
       aria-valuemin={0}
       aria-valuenow={isVertical ? metrics.scrollTop : metrics.scrollLeft}
-      onpointerdown={(e) => startDrag(axis, e)}
       role="slider"
       tabindex="-1"
+      use:pointerCapture={{
+        start: (event) => startDrag(axis, event),
+        move: moveDrag,
+        end: endDrag,
+        cancel: finishDrag,
+      }}
     ></div>
   </div>
 {/snippet}

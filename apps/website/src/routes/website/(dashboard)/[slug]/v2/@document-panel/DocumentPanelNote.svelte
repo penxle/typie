@@ -5,9 +5,9 @@
   import { tooltip } from '@typie/ui/actions';
   import { Button, Icon } from '@typie/ui/components';
   import { Toast } from '@typie/ui/notification';
-  import { animateFlip, elementScrollViewport, handleDragScroll } from '@typie/ui/utils';
+  import { animateFlip, createDragScroll, elementScrollViewport } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
-  import { tick } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import PlusIcon from '~icons/lucide/plus';
@@ -68,9 +68,11 @@
   let dragging = $state<{
     noteId: string;
     originalIndex: number;
+    pointer: { clientX: number; clientY: number } | null;
   } | null>(null);
   let localNoteOrder = $state<string[]>([]);
   let scrollContainer = $state<HTMLElement | null>(null);
+  let dragScroll: ReturnType<typeof createDragScroll> | null = null;
 
   const sortedNotes = $derived.by(() => {
     if (localNoteOrder.length === 0) {
@@ -124,6 +126,7 @@
     dragging = {
       noteId,
       originalIndex: localNoteOrder.indexOf(noteId),
+      pointer: null,
     };
   };
 
@@ -156,7 +159,7 @@
     }
   };
 
-  const updateDraggingPosition = (clientX: number, clientY: number) => {
+  const resolveDraggingPosition = (clientX: number, clientY: number) => {
     if (!dragging || !scrollContainer) return;
 
     const element = document.elementFromPoint(clientX, clientY);
@@ -165,6 +168,13 @@
 
     const noteId = noteElement.dataset.relatedNoteId;
     if (noteId) moveDraggingNote(noteId);
+  };
+
+  const updateDraggingPosition = (clientX: number, clientY: number) => {
+    if (!dragging) return;
+    dragging.pointer = { clientX, clientY };
+    dragScroll?.updatePointer(clientX, clientY);
+    resolveDraggingPosition(clientX, clientY);
   };
 
   const handleDragEnd = async (clientX: number, clientY: number) => {
@@ -223,9 +233,21 @@
   });
 
   $effect(() => {
-    return handleDragScroll(scrollContainer ? elementScrollViewport(scrollContainer) : null, !!dragging, {
-      onScroll: updateDraggingPosition,
+    const current = dragging;
+    if (!scrollContainer || !current) return;
+
+    const initialPointer = untrack(() => current.pointer ?? undefined);
+    const activeDragScroll = createDragScroll(elementScrollViewport(scrollContainer), {
+      initialPointer,
+      onScroll: (clientX, clientY) => {
+        if (dragging === current) resolveDraggingPosition(clientX, clientY);
+      },
     });
+    dragScroll = activeDragScroll;
+    return () => {
+      activeDragScroll.destroy();
+      if (dragScroll === activeDragScroll) dragScroll = null;
+    };
   });
 
   $effect.pre(() => {

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { center } from '@typie/styled-system/patterns';
+  import { pointerCapture } from '@typie/ui/actions';
   import { HorizontalDivider, Icon, Menu, MenuItem, Submenu } from '@typie/ui/components';
   import { getThemeContext } from '@typie/ui/context';
   import { clamp } from '@typie/ui/utils';
@@ -373,6 +374,50 @@
     resizing = { ...current, deltaX: currentTableX - current.startTableX };
   }
 
+  function startResize(event: PointerEvent, colIndex: number): TableResizeState | null {
+    if (!event.isPrimary || event.button !== 0 || resizing) return null;
+
+    const root = tableOverlayRoot;
+    if (!root || !editor) return null;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const state = {
+      pointerId: event.pointerId,
+      colIndex,
+      initialWidths: overlay.columns.map((column) => column.width_as_px),
+      startTableX: (event.clientX - root.getBoundingClientRect().left) / safeDisplayZoom,
+      deltaX: 0,
+    };
+    resizing = state;
+    resizeEdgeAutoScroll.update(editor, event, (clientX) => updateResize(state.pointerId, clientX));
+    return state;
+  }
+
+  function moveResize(state: TableResizeState, event: PointerEvent) {
+    if (!editor) return;
+    updateResize(state.pointerId, event.clientX);
+    resizeEdgeAutoScroll.update(editor, event, (clientX) => updateResize(state.pointerId, clientX));
+  }
+
+  function finishResize(state: TableResizeState, event: PointerEvent) {
+    updateResize(state.pointerId, event.clientX);
+    const finalState = resizing;
+    if (!finalState || finalState.pointerId !== state.pointerId) return;
+
+    resizing = null;
+    resizeEdgeAutoScroll.stop();
+    commitResize(finalState);
+    editor?.focus();
+  }
+
+  function cancelResize(state: TableResizeState) {
+    if (resizing?.pointerId !== state.pointerId) return;
+    resizing = null;
+    resizeEdgeAutoScroll.stop();
+  }
+
   function setBorderStyle(style: 'solid' | 'dashed' | 'dotted' | 'none') {
     enqueueTableOp({
       type: 'node',
@@ -717,84 +762,13 @@
           _hover: { opacity: '100', backgroundColor: 'accent.brand.default' },
         })}
         aria-label={isLastCol ? '테이블 너비 조절' : '열 너비 조절'}
-        onpointerdown={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          if (resizing) return;
-
-          const target = e.currentTarget as HTMLElement;
-          const root = tableOverlayRoot;
-          if (!root || !editor) return;
-
-          const pointerId = e.pointerId;
-          const initialWidths = overlay.columns.map((column) => column.width_as_px);
-          const startTableX = (e.clientX - root.getBoundingClientRect().left) / safeDisplayZoom;
-          target.setPointerCapture(pointerId);
-          resizing = { pointerId, colIndex, initialWidths, startTableX, deltaX: 0 };
-
-          const removeListeners = () => {
-            target.removeEventListener('pointermove', onMove);
-            target.removeEventListener('pointerup', onUp);
-            target.removeEventListener('pointercancel', onCancel);
-            target.removeEventListener('lostpointercapture', onLostPointerCapture);
-          };
-
-          const onMove = (me: PointerEvent) => {
-            if (resizing?.pointerId !== me.pointerId) return;
-            if (!target.hasPointerCapture(me.pointerId)) return;
-            updateResize(me.pointerId, me.clientX);
-            resizeEdgeAutoScroll.update(editor, { clientX: me.clientX, clientY: me.clientY }, (clientX) => {
-              updateResize(me.pointerId, clientX);
-            });
-          };
-
-          const onUp = (ue: PointerEvent) => {
-            if (resizing?.pointerId !== ue.pointerId) return;
-            updateResize(ue.pointerId, ue.clientX);
-            const finalState = resizing;
-            if (!finalState || finalState.pointerId !== ue.pointerId) return;
-
-            resizing = null;
-            resizeEdgeAutoScroll.stop();
-            commitResize(finalState);
-            editor.focus();
-            removeListeners();
-            if (target.hasPointerCapture(ue.pointerId)) {
-              target.releasePointerCapture(ue.pointerId);
-            }
-          };
-
-          const onCancel = (ce: PointerEvent) => {
-            const finalState = resizing;
-            if (!finalState || finalState.pointerId !== ce.pointerId) return;
-
-            resizing = null;
-            resizeEdgeAutoScroll.stop();
-            commitResize(finalState);
-            editor.focus();
-            removeListeners();
-            if (target.hasPointerCapture(ce.pointerId)) {
-              target.releasePointerCapture(ce.pointerId);
-            }
-          };
-
-          const onLostPointerCapture = (le: PointerEvent) => {
-            if (resizing?.pointerId !== le.pointerId) return;
-
-            resizing = null;
-            resizeEdgeAutoScroll.stop();
-            removeListeners();
-          };
-
-          target.addEventListener('pointermove', onMove);
-          target.addEventListener('pointerup', onUp);
-          target.addEventListener('pointercancel', onCancel);
-          target.addEventListener('lostpointercapture', onLostPointerCapture);
-          resizeEdgeAutoScroll.update(editor, { clientX: e.clientX, clientY: e.clientY }, (clientX) => {
-            updateResize(pointerId, clientX);
-          });
-        }}
         type="button"
+        use:pointerCapture={{
+          start: (event) => startResize(event, colIndex),
+          move: moveResize,
+          end: finishResize,
+          cancel: cancelResize,
+        }}
       ></button>
     {/each}
   </div>

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
+  import { pointerCapture } from '@typie/ui/actions';
   import { getPaneGroup } from './context.svelte';
   import { getMinSizeForMember } from './geometry';
   import { findMemberById } from './tree';
@@ -13,9 +14,12 @@
 
   const context = getPaneGroup();
   let isDragging = $state(false);
-  let startPosition = $state(0);
   let rafId: number | null = null;
-  let initialFlexes: number[] = [];
+
+  type ResizeSession = {
+    startPosition: number;
+    initialFlexes: number[];
+  };
 
   const getAxis = () => {
     if (!context.state.current.root) return null;
@@ -23,27 +27,29 @@
     return found?.type === 'axis' ? found : null;
   };
 
-  const handlePointerDown = (e: PointerEvent) => {
+  const handlePointerDown = (e: PointerEvent): ResizeSession | null => {
+    if (!e.isPrimary || e.button !== 0) return null;
+
     const axis = getAxis();
-    if (!axis) return;
+    if (!axis) return null;
 
     e.preventDefault();
     e.stopPropagation();
     isDragging = true;
     context.resizing = true;
 
-    const isHorizontal = resizer.direction === 'horizontal';
-    startPosition = isHorizontal ? e.clientX : e.clientY;
-    initialFlexes = [...axis.flexes];
-
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    return {
+      startPosition: resizer.direction === 'horizontal' ? e.clientX : e.clientY,
+      initialFlexes: [...axis.flexes],
+    };
   };
 
-  const updateSizes = (currentPosition: number) => {
+  const updateSizes = (session: ResizeSession, currentPosition: number) => {
     const axis = getAxis();
     if (!isDragging || !axis) return;
 
-    const deltaPixels = currentPosition - startPosition;
+    const { initialFlexes } = session;
+    const deltaPixels = currentPosition - session.startPosition;
     const totalSize = resizer.axisSize;
     if (totalSize <= 0) return;
 
@@ -113,7 +119,7 @@
     }
   };
 
-  const handlePointerMove = (e: PointerEvent) => {
+  const handlePointerMove = (session: ResizeSession, e: PointerEvent) => {
     if (!isDragging) return;
 
     if (rafId !== null) {
@@ -123,16 +129,12 @@
     rafId = requestAnimationFrame(() => {
       const isHorizontal = resizer.direction === 'horizontal';
       const currentPosition = isHorizontal ? e.clientX : e.clientY;
-      updateSizes(currentPosition);
+      updateSizes(session, currentPosition);
       rafId = null;
     });
   };
 
-  const handlePointerUp = (e: PointerEvent) => {
-    cleanupDrag(e);
-  };
-
-  const cleanupDrag = (e: PointerEvent) => {
+  const cleanupDrag = () => {
     if (rafId !== null) {
       cancelAnimationFrame(rafId);
       rafId = null;
@@ -140,8 +142,16 @@
 
     isDragging = false;
     context.resizing = false;
-    initialFlexes = [];
-    (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+  };
+
+  const finishDrag = (session: ResizeSession, e: PointerEvent) => {
+    if (rafId !== null) {
+      cancelAnimationFrame(rafId);
+      rafId = null;
+    }
+    const currentPosition = resizer.direction === 'horizontal' ? e.clientX : e.clientY;
+    updateSizes(session, currentPosition);
+    cleanupDrag();
   };
 </script>
 
@@ -162,12 +172,8 @@
     },
   })}
   aria-label="크기 조절"
-  onlostpointercapture={cleanupDrag}
-  onpointercancel={cleanupDrag}
-  onpointerdown={handlePointerDown}
-  onpointermovecapture={handlePointerMove}
-  onpointerup={handlePointerUp}
   type="button"
+  use:pointerCapture={{ start: handlePointerDown, move: handlePointerMove, end: finishDrag, cancel: cleanupDrag }}
 >
   <div
     style={resizer.direction === 'horizontal' ? 'left: -3px; right: -3px;' : 'top: -3px; bottom: -3px;'}

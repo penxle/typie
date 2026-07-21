@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import { handlePointerDown, handlePointerMove, handlePointerUp, markNativeSelectionDragStarted } from './pointer';
+import {
+  cancelPointerInteraction,
+  handlePointerCaptureLost,
+  handlePointerDown,
+  handlePointerMove,
+  handlePointerUp,
+  markNativeSelectionDragStarted,
+} from './pointer';
 import type { Editor } from '../editor.svelte';
 
 const collapsedSelection = {
@@ -42,6 +49,7 @@ const createPointerEvent = ({
   clientX = 110,
   clientY = 220,
   shiftKey = false,
+  isPrimary = true,
 }: {
   pointerId?: number;
   button?: number;
@@ -50,12 +58,14 @@ const createPointerEvent = ({
   clientX?: number;
   clientY?: number;
   shiftKey?: boolean;
+  isPrimary?: boolean;
 } = {}) => {
   return {
     pointerId,
     pointerType: 'mouse',
     button,
     buttons: button === 0 ? 1 : 0,
+    isPrimary,
     clientX,
     clientY,
     shiftKey,
@@ -186,6 +196,22 @@ describe('pointer native drag admission', () => {
     expect(editor.scrollIntoView).toHaveBeenCalledWith({ target: { type: 'current_selection_head' }, mode: 'nearest' });
   });
 
+  it('ignores a non-primary pointer without replacing the active selection interaction', () => {
+    const editor = createEditor();
+    const target = createPointerTarget({ captured: true });
+
+    handlePointerDown(editor, createPointerEvent({ target, pointerId: 1 }));
+    editor.enqueue.mockClear();
+    handlePointerDown(editor, createPointerEvent({ target, pointerId: 2, isPrimary: false }));
+    handlePointerUp(editor, createPointerEvent({ target, pointerId: 1 }));
+
+    expect(target.setPointerCapture).toHaveBeenCalledTimes(1);
+    expect(editor.enqueue).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'selection', op: expect.objectContaining({ type: 'set_at' }) }),
+    );
+    expect(editor.resumeToolbarSync).toHaveBeenCalledOnce();
+  });
+
   it('ignores non-touch pointer down on a selection handle marker', () => {
     const editor = createEditor();
     const target = createPointerTarget();
@@ -208,6 +234,34 @@ describe('pointer native drag admission', () => {
 
     handlePointerUp(editor, createPointerEvent({ target }));
     expect(editor.resumeToolbarSync).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancels the active selection interaction when pointer capture is lost', () => {
+    const editor = createEditor();
+    const target = createPointerTarget({ captured: false });
+
+    handlePointerDown(editor, createPointerEvent({ target }));
+    handlePointerCaptureLost(editor, createPointerEvent({ target }));
+
+    expect(target.releasePointerCapture).not.toHaveBeenCalled();
+    expect(editor.resumeToolbarSync).toHaveBeenCalledOnce();
+    expect(editor.endNativeDragAdmission).toHaveBeenCalledWith({ restoreFocus: false });
+    handlePointerUp(editor, createPointerEvent({ target }));
+    expect(editor.resumeToolbarSync).toHaveBeenCalledOnce();
+  });
+
+  it('cancels the active selection interaction when its view is destroyed', () => {
+    const editor = createEditor();
+    const target = createPointerTarget({ captured: true });
+
+    handlePointerDown(editor, createPointerEvent({ target }));
+    cancelPointerInteraction(editor);
+
+    expect(target.releasePointerCapture).not.toHaveBeenCalled();
+    expect(editor.resumeToolbarSync).toHaveBeenCalledOnce();
+    expect(editor.endNativeDragAdmission).toHaveBeenCalledWith({ restoreFocus: false });
+    handlePointerUp(editor, createPointerEvent({ target }));
+    expect(editor.resumeToolbarSync).toHaveBeenCalledOnce();
   });
 
   it('does not suspend toolbar sync when admitting a native text-move drag', () => {

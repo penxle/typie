@@ -1,6 +1,6 @@
 import type { ActionReturn } from 'svelte/action';
 
-export type PointerCaptureCancelReason = 'pointercancel' | 'lostpointercapture' | 'capture-failed' | 'destroy';
+export type PointerCaptureCancelReason = 'pointercancel' | 'lostpointercapture' | 'capture-failed' | 'programmatic' | 'destroy';
 
 export type PointerCaptureParameters<Session> = {
   start: (event: PointerEvent) => Session | null;
@@ -14,10 +14,15 @@ type ActiveSession<Session> = {
   value: Session;
 };
 
+export type PointerCaptureHandle<Session> = ActionReturn<PointerCaptureParameters<Session>> & {
+  cancel: () => void;
+  destroy: () => void;
+};
+
 export const pointerCapture = <Session>(
   element: HTMLElement,
   initialParameters: PointerCaptureParameters<Session>,
-): ActionReturn<PointerCaptureParameters<Session>> => {
+): PointerCaptureHandle<Session> => {
   let parameters = initialParameters;
   let active: ActiveSession<Session> | null = null;
 
@@ -77,6 +82,9 @@ export const pointerCapture = <Session>(
   element.addEventListener('lostpointercapture', handleLostPointerCapture);
 
   return {
+    cancel() {
+      cancel('programmatic');
+    },
     update(nextParameters) {
       parameters = nextParameters;
     },

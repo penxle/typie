@@ -1,4 +1,5 @@
 import { token } from '@typie/styled-system/tokens';
+import { pointerCapture } from '../actions/pointer-capture.svelte';
 
 export type Ghost = {
   element: HTMLElement;
@@ -89,7 +90,6 @@ export const createDndHandler = (node: HTMLElement, options: DndHandlerOptions) 
   let dragStartEvent: PointerEvent | null = null;
   let dragTarget: HTMLElement | null = null;
   let ghost: Ghost | null = null;
-  let capturedPointerId: number | null = null;
   let animationFrameId: number | null = null;
   let hoveredTarget: HTMLElement | null = null;
 
@@ -121,11 +121,7 @@ export const createDndHandler = (node: HTMLElement, options: DndHandlerOptions) 
       removeGhost(ghost);
       ghost = null;
     }
-    if (capturedPointerId !== null) {
-      node.releasePointerCapture(capturedPointerId);
-      capturedPointerId = null;
-    }
-    if (animationFrameId) {
+    if (animationFrameId !== null) {
       cancelAnimationFrame(animationFrameId);
       animationFrameId = null;
     }
@@ -137,59 +133,47 @@ export const createDndHandler = (node: HTMLElement, options: DndHandlerOptions) 
     }
     dragging = false;
     isDragActive = false;
+    dragStartEvent = null;
     dragTarget = null;
     updateCursor(null);
   };
 
-  const handlePointerCancel = () => {
-    if (!dragging) {
-      return;
-    }
-
+  const cancelDrag = () => {
     cleanup();
     onDragCancel?.();
   };
 
-  const handlePointerDown = (e: PointerEvent) => {
-    if (e.button !== 0 || !e.isPrimary) return;
+  const handlePointerDown = (e: PointerEvent): true | null => {
+    if (e.button !== 0 || !e.isPrimary) return null;
 
     const target = e.target as HTMLElement;
 
     if (dragHandleSelector && !target.closest(dragHandleSelector)) {
-      return;
+      return null;
     }
 
     if (excludeSelectors.some((selector) => target.closest(selector))) {
-      return;
+      return null;
     }
 
     const extractedTarget = getDragTarget ? getDragTarget(e) : node;
-    if (!extractedTarget) return;
+    if (!extractedTarget) return null;
 
     if (canStartDrag && !canStartDrag(e, extractedTarget)) {
-      return;
+      return null;
     }
 
     dragging = true;
     dragStartEvent = e;
     dragTarget = extractedTarget;
-
-    node.setPointerCapture(e.pointerId);
-    capturedPointerId = e.pointerId;
-
     updateCursor(e);
+    return true;
   };
 
   const handlePointerMove = (e: PointerEvent) => {
-    if (animationFrameId) cancelAnimationFrame(animationFrameId);
+    if (animationFrameId !== null) cancelAnimationFrame(animationFrameId);
 
     animationFrameId = requestAnimationFrame(() => {
-      if (!dragging) {
-        updateCursor(e);
-        animationFrameId = null;
-        return;
-      }
-
       if (!dragStartEvent || !dragTarget) return;
 
       const distance = Math.sqrt(Math.pow(e.clientX - dragStartEvent.clientX, 2) + Math.pow(e.clientY - dragStartEvent.clientY, 2));
@@ -215,28 +199,34 @@ export const createDndHandler = (node: HTMLElement, options: DndHandlerOptions) 
   };
 
   const handlePointerUp = (e: PointerEvent) => {
-    if (dragging) {
-      const wasDragActive = isDragActive;
-      cleanup();
-      if (wasDragActive) {
-        onDragEnd?.(e);
-      }
+    const wasDragActive = isDragActive;
+    cleanup();
+    if (wasDragActive) {
+      onDragEnd?.(e);
     }
   };
+
+  const handlePointerHoverMove = (e: PointerEvent) => {
+    if (dragging) return;
+    updateCursor(e);
+  };
+
+  const capture = pointerCapture(node, {
+    start: handlePointerDown,
+    move: (_, e) => handlePointerMove(e),
+    end: (_, e) => handlePointerUp(e),
+    cancel: cancelDrag,
+  });
 
   const handleKeyDown = (e: KeyboardEvent) => {
     if (!(e.key === 'Escape' && dragging)) {
       return;
     }
 
-    cleanup();
-    onDragCancel?.();
+    capture.cancel();
   };
 
-  node.addEventListener('pointercancel', handlePointerCancel);
-  node.addEventListener('pointerdown', handlePointerDown);
-  node.addEventListener('pointermove', handlePointerMove);
-  node.addEventListener('pointerup', handlePointerUp);
+  node.addEventListener('pointermove', handlePointerHoverMove);
   window.addEventListener('keydown', handleKeyDown);
 
   updateCursor(null);
@@ -247,11 +237,8 @@ export const createDndHandler = (node: HTMLElement, options: DndHandlerOptions) 
       ghost,
     }),
     destroy: () => {
-      cleanup();
-      node.removeEventListener('pointercancel', handlePointerCancel);
-      node.removeEventListener('pointerdown', handlePointerDown);
-      node.removeEventListener('pointermove', handlePointerMove);
-      node.removeEventListener('pointerup', handlePointerUp);
+      capture.destroy();
+      node.removeEventListener('pointermove', handlePointerHoverMove);
       window.removeEventListener('keydown', handleKeyDown);
     },
   };
