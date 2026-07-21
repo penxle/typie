@@ -38,7 +38,7 @@ export function convertTableV2(t: TableV2<FileChild[]>): Table {
         children: row.cells.map(
           (cell) =>
             new TableCell({
-              children: toBlockChildren(cell.children),
+              children: toBlockChildren(cell.children.flat()),
               width: cell.colWidth ? { size: cell.colWidth, type: WidthType.DXA } : undefined,
               shading: cell.backgroundColorHex ? { fill: cell.backgroundColorHex, type: ShadingType.CLEAR } : undefined,
               margins: { top: 40, bottom: 40, left: 80, right: 80 },

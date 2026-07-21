@@ -139,13 +139,13 @@ const docxVisitorV2: NodeVisitorV2<ConvertContextV2, FileChild[]> = {
   // eslint-disable-next-line unicorn/no-magic-array-flat-depth
   orderedList: (items) => items.flat(2),
 
-  blockquote: (variant, children) => buildBlockquoteV2(variant, children),
+  blockquote: (variant, children) => buildBlockquoteV2(variant, children.flat()),
 
-  callout: (variant, children) => [buildCalloutV2(variant, children)],
+  callout: (variant, children) => [buildCalloutV2(variant, children.flat())],
 
   fold: (title, content, ctx) => {
     const titleChildren = title.map((run) => new TextRun({ ...buildRunOptionsV2(run.style, ctx.textCtx), text: run.text }));
-    return [buildFoldV2(titleChildren, content)];
+    return [buildFoldV2(titleChildren, content.flat())];
   },
 
   onEnterList: (type, depth, ctx) => {
