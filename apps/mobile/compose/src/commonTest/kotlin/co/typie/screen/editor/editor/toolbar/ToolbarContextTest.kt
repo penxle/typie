@@ -8,6 +8,7 @@ import co.typie.editor.ffi.Block
 import co.typie.editor.ffi.BlockState
 import co.typie.editor.ffi.FontSizeValue
 import co.typie.editor.ffi.LayoutMode
+import co.typie.editor.ffi.ListAffordances
 import co.typie.editor.ffi.ModifierState
 import co.typie.editor.ffi.PlainNode
 import co.typie.editor.ffi.Position
@@ -655,7 +656,18 @@ class ToolbarContextTest {
     nodes: List<Block> = emptyList(),
     intersectingNodes: List<Block> = emptyList(),
   ): BlockState =
-    BlockState(ancestors = ancestors, nodes = nodes, intersectingNodes = intersectingNodes)
+    BlockState(
+      ancestors = ancestors,
+      nodes = nodes,
+      intersectingNodes = intersectingNodes,
+      list =
+        ListAffordances(
+          toggleBullet = false,
+          toggleOrdered = false,
+          indent = false,
+          outdent = false,
+        ),
+    )
 
   private fun block(id: String, node: PlainNode): Block = Block(id = id, node = node)
 

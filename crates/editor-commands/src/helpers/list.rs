@@ -323,7 +323,7 @@ fn item_order(items: &[Dot], item: Dot) -> usize {
         .unwrap_or(usize::MAX)
 }
 
-fn retain_topmost_list_items(view: &DocView, items: &mut Vec<Dot>) {
+pub(crate) fn retain_topmost_list_items(view: &DocView, items: &mut Vec<Dot>) {
     let selected: HashSet<Dot> = items.iter().copied().collect();
     items.retain(|item_id| {
         let Some(item) = view.node(*item_id) else {
@@ -361,47 +361,10 @@ pub(crate) fn first_list_item_paragraph_id(view: &DocView, item_id: Dot) -> Opti
         .map(|paragraph| paragraph.id())
 }
 
-pub(crate) fn lift_selected_list_items(tr: &mut Transaction) -> CommandResult {
+pub(crate) fn lift_list_items_planned(tr: &mut Transaction, mut items: Vec<Dot>) -> CommandResult {
     let Some(selection) = tr.selection() else {
         return Ok(false);
     };
-
-    if selection.anchor == selection.head {
-        let list_item_id = {
-            let view = tr.view();
-            find_enclosing_list_item_id(&view, selection.head.node)
-        };
-        let Some(list_item_id) = list_item_id else {
-            return Ok(false);
-        };
-        return lift_list_item_inner(tr, list_item_id);
-    }
-
-    let items = {
-        let view = tr.view();
-        let resolved = selection
-            .resolve(&view)
-            .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
-        collect_list_items_in_selection(&resolved)
-    };
-    lift_list_items(tr, items)
-}
-
-pub(crate) fn lift_list_items(tr: &mut Transaction, mut items: Vec<Dot>) -> CommandResult {
-    let Some(selection) = tr.selection() else {
-        return Ok(false);
-    };
-
-    if items.is_empty() {
-        return Ok(false);
-    }
-    {
-        let view = tr.view();
-        retain_topmost_list_items(&view, &mut items);
-    }
-    if items.is_empty() {
-        return Ok(false);
-    }
     let stable_selection = StableSelection::capture(&selection, &tr.view());
     {
         let view = tr.view();
@@ -430,83 +393,13 @@ pub(crate) fn lift_list_items(tr: &mut Transaction, mut items: Vec<Dot>) -> Comm
     Ok(true)
 }
 
-pub(crate) fn sink_selected_list_items(tr: &mut Transaction) -> CommandResult {
-    let Some(selection) = tr.selection() else {
-        return Ok(false);
-    };
-
-    let items = {
-        let view = tr.view();
-        let resolved = selection
-            .resolve(&view)
-            .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
-        collect_list_items_in_selection(&resolved)
-    };
-    if items.is_empty() {
-        return Ok(false);
-    }
-
-    let stable_selection = StableSelection::capture(&selection, &tr.view());
-    let mut groups = {
-        let view = tr.view();
-        group_list_items_by_parent(&view, &items)
-    };
-    groups.sort_by(|a, b| {
-        b.depth
-            .cmp(&a.depth)
-            .then_with(|| a.first_index.cmp(&b.first_index))
-    });
-
-    let mut any_sunk = false;
-    for group in groups {
-        let first_has_prev = {
-            let view = tr.view();
-            view.node(group.items[0])
-                .and_then(|item| item.index())
-                .map(|index| index > 0)
-                .unwrap_or(false)
-        };
-
-        if !first_has_prev {
-            continue;
-        }
-
-        for item_id in group.items {
-            let exists = {
-                let view = tr.view();
-                view.node(item_id).is_some()
-            };
-            if !exists {
-                continue;
-            }
-            let new_id = sink_list_item_inner(tr, item_id)?;
-            if new_id.is_some() {
-                any_sunk = true;
-            }
-        }
-    }
-    if !any_sunk {
-        return Ok(!selection.is_collapsed());
-    }
-
-    let sel = {
-        let view = tr.view();
-        let ctx = StableResolveCtx::from_live(&view, tr.state().projected.seq_checkout());
-        stable_selection.resolve(&ctx)
-    }
-    .ok_or_else(|| CommandError::Corrupted("cannot restore list selection".into()))?;
-    tr.set_selection(Some(sel))?;
-
-    Ok(true)
+pub(crate) struct ListItemGroup {
+    pub(crate) depth: usize,
+    pub(crate) first_index: usize,
+    pub(crate) items: Vec<Dot>,
 }
 
-struct ListItemGroup {
-    depth: usize,
-    first_index: usize,
-    items: Vec<Dot>,
-}
-
-fn group_list_items_by_parent(view: &DocView, items: &[Dot]) -> Vec<ListItemGroup> {
+pub(crate) fn group_list_items_by_parent(view: &DocView, items: &[Dot]) -> Vec<ListItemGroup> {
     let mut groups: Vec<(Dot, ListItemGroup)> = Vec::new();
     for (item_index, item_id) in items.iter().copied().enumerate() {
         let Some(parent_id) = list_item_parent_list_id(view, item_id) else {

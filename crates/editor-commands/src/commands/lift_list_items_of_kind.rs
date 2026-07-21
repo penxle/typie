@@ -1,141 +1,32 @@
-use hashbrown::HashSet;
-
-use editor_crdt::Dot;
-use editor_model::{DocView, NodeType, NodeView};
-use editor_state::ResolvedSelection;
+use editor_model::NodeType;
 use editor_transaction::Transaction;
 
-use crate::helpers::{
-    find_enclosing_list_item_id, is_list_type, lift_list_items, lift_selected_list_items,
-    list_item_own_paragraph_intersects, list_item_parent_list_id,
-};
+use crate::helpers::{lift_list_item_inner, lift_list_items_planned};
+use crate::judgments::judge_lift_list_items_of_kind;
+use crate::types::ListVerdict;
 use crate::{CommandError, CommandResult};
 
 pub fn lift_list_items_of_kind(tr: &mut Transaction, target_list_type: NodeType) -> CommandResult {
-    if !is_list_type(target_list_type) {
-        return Ok(false);
-    }
     let Some(selection) = tr.selection() else {
         return Ok(false);
     };
-
-    if selection.is_collapsed() {
-        let is_target = {
-            let view = tr.view();
-            find_enclosing_list_item_id(&view, selection.head.node)
-                .and_then(|item| list_item_parent_list_id(&view, item))
-                .and_then(|list| view.node(list))
-                .is_some_and(|list| list.node_type() == target_list_type)
-        };
-        if !is_target {
-            return Ok(false);
-        }
-        return lift_selected_list_items(tr);
-    }
-
-    let all_target = {
+    let plan = {
         let view = tr.view();
-        let resolved = selection
-            .resolve(&view)
-            .ok_or_else(|| CommandError::Corrupted("cannot resolve list selection".into()))?;
-        let items = collect_list_items_for_kind_toggle(&resolved, &view);
-        !items.is_empty()
-            && !contains_selected_plain_paragraph(&resolved, &view)
-            && items.iter().all(|item| {
-                list_item_parent_list_id(&view, *item)
-                    .and_then(|list| view.node(list))
-                    .is_some_and(|list| list.node_type() == target_list_type)
-            })
-    };
-    if !all_target {
-        return Ok(false);
-    }
-    let items = {
-        let view = tr.view();
-        let resolved = selection
-            .resolve(&view)
-            .ok_or_else(|| CommandError::Corrupted("cannot resolve list selection".into()))?;
-        collect_list_items_for_kind_toggle(&resolved, &view)
-    };
-    lift_list_items(tr, items)
-}
-
-fn collect_list_items_for_kind_toggle(
-    selection: &ResolvedSelection<'_>,
-    view: &DocView,
-) -> Vec<Dot> {
-    let mut items = Vec::new();
-    let mut seen = HashSet::new();
-    if let Some(root) = view.root() {
-        collect_list_items_for_kind_toggle_in(selection, &root, &mut items, &mut seen);
-    }
-    items
-}
-
-fn collect_list_items_for_kind_toggle_in(
-    selection: &ResolvedSelection<'_>,
-    node: &NodeView<'_>,
-    out: &mut Vec<Dot>,
-    seen: &mut HashSet<Dot>,
-) {
-    if !selection.intersects_subtree(node) {
-        return;
-    }
-    if selection.contains_subtree(node) && is_unsupported_whole_container(node.node_type()) {
-        return;
-    }
-
-    if node.node_type() == NodeType::ListItem
-        && list_item_own_paragraph_intersects(selection, node)
-        && seen.insert(node.id())
-    {
-        out.push(node.id());
-    }
-
-    for child in node.child_blocks() {
-        collect_list_items_for_kind_toggle_in(selection, &child, out, seen);
-    }
-}
-
-fn is_unsupported_whole_container(node_type: NodeType) -> bool {
-    !matches!(
-        node_type,
-        NodeType::Root
-            | NodeType::Paragraph
-            | NodeType::ListItem
-            | NodeType::BulletList
-            | NodeType::OrderedList
-    )
-}
-
-fn contains_selected_plain_paragraph(
-    selection: &editor_state::ResolvedSelection<'_>,
-    view: &DocView,
-) -> bool {
-    view.root()
-        .is_some_and(|root| contains_plain_paragraph_in(selection, &root))
-}
-
-fn contains_plain_paragraph_in(
-    selection: &editor_state::ResolvedSelection<'_>,
-    node: &NodeView<'_>,
-) -> bool {
-    if !selection.intersects_subtree(node) {
-        return false;
-    }
-    if node.node_type() == NodeType::Paragraph {
-        return !node
-            .ancestors()
-            .skip(1)
-            .any(|ancestor| ancestor.node_type() == NodeType::ListItem);
-    }
-
-    node.child_blocks().any(|child| {
-        if selection.contains_subtree(&child) && is_unsupported_whole_container(child.node_type()) {
-            return false;
+        if selection.anchor != selection.head && selection.resolve(&view).is_none() {
+            return Err(CommandError::Corrupted(
+                "cannot resolve list selection".into(),
+            ));
         }
-        contains_plain_paragraph_in(selection, &child)
-    })
+        match judge_lift_list_items_of_kind(&view, &selection, target_list_type) {
+            ListVerdict::NotApplicable => return Ok(false),
+            ListVerdict::AbsorbOnly => return Ok(true),
+            ListVerdict::Change(plan) => plan,
+        }
+    };
+    if selection.anchor == selection.head {
+        return lift_list_item_inner(tr, plan.items[0]);
+    }
+    lift_list_items_planned(tr, plan.items)
 }
 
 #[cfg(test)]

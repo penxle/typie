@@ -16,6 +16,7 @@ import co.typie.editor.ffi.InteractiveHit
 import co.typie.editor.ffi.InteractiveRegion
 import co.typie.editor.ffi.LayoutMode
 import co.typie.editor.ffi.LinkRect
+import co.typie.editor.ffi.ListAffordances
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.MissingChangesets
 import co.typie.editor.ffi.Modifier as EditorModifier
@@ -52,7 +53,18 @@ internal class FakeFfiEditor(
   var rootModifiersProvider: () -> List<EditorModifier> = { emptyList() },
   var modifierStateProvider: () -> ModifierState = { EmptyModifierState },
   var blockStateProvider: () -> BlockState = {
-    BlockState(ancestors = emptyList(), nodes = emptyList(), intersectingNodes = emptyList())
+    BlockState(
+      ancestors = emptyList(),
+      nodes = emptyList(),
+      intersectingNodes = emptyList(),
+      list =
+        ListAffordances(
+          toggleBullet = false,
+          toggleOrdered = false,
+          indent = false,
+          outdent = false,
+        ),
+    )
   },
   var characterCountsProvider: () -> CharacterCounts = { EmptyCharacterCounts },
   var pageSizesProvider: () -> List<Size> = { emptyList() },

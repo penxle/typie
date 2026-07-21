@@ -1,7 +1,7 @@
 use editor_transaction::Transaction;
 
 use crate::CommandResult;
-use crate::helpers::lift_selected_list_items;
+use crate::judgments::lift_selected_list_items;
 
 pub fn lift_list_items_in_range(tr: &mut Transaction) -> CommandResult {
     if tr

@@ -1,7 +1,7 @@
 use editor_transaction::Transaction;
 
 use crate::CommandResult;
-use crate::helpers::sink_selected_list_items;
+use crate::judgments::sink_selected_list_items;
 
 pub fn sink_list_item(tr: &mut Transaction) -> CommandResult {
     sink_selected_list_items(tr)

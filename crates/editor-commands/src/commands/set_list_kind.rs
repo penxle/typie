@@ -1,25 +1,34 @@
 use editor_crdt::Dot;
-use editor_model::{ChildView, DocView, NodeType, NodeView, Subtree};
-use editor_state::{ResolvedSelection, Selection, StableResolveCtx, StableSelection};
+use editor_model::{ChildView, DocView, NodeType, Subtree};
+use editor_state::{Selection, StableResolveCtx, StableSelection};
 use editor_transaction::Transaction;
 
 use crate::helpers::{
-    is_list_type, list_item_own_paragraph_intersects, resolve_selected_block_run,
+    ListableRunChild, ListableWrapRun, collect_existing_lists_in_range, collect_listable_wrap_runs,
+    find_enclosing_list_id, is_list_type, resolve_selected_block_run,
 };
+use crate::judgments::judge_set_list_kind;
+use crate::types::ListVerdict;
 use crate::{CommandError, CommandResult};
 
 pub fn set_list_kind(tr: &mut Transaction, target_list_type: NodeType) -> CommandResult {
-    if !is_list_type(target_list_type) {
-        return Ok(false);
-    }
-
     let Some(selection) = tr.selection() else {
         return Ok(false);
     };
+    {
+        let view = tr.view();
+        if selection.anchor != selection.head && selection.resolve(&view).is_none() {
+            return Err(CommandError::Corrupted("cannot resolve selection".into()));
+        }
+        match judge_set_list_kind(&view, &selection, target_list_type) {
+            ListVerdict::NotApplicable => return Ok(false),
+            ListVerdict::AbsorbOnly => return Ok(true),
+            ListVerdict::Change(()) => {}
+        }
+    }
     if selection.is_collapsed() {
         return set_collapsed_list_kind(tr, target_list_type, selection.head.node);
     }
-
     set_range_list_kind(tr, target_list_type, selection)
 }
 
@@ -103,16 +112,6 @@ fn set_range_list_kind(
     Ok(changed)
 }
 
-fn find_enclosing_list_id(view: &DocView, node: Dot) -> Option<Dot> {
-    let mut current = view.node(node)?;
-    loop {
-        if is_list_type(current.node_type()) {
-            return Some(current.id());
-        }
-        current = current.parent()?;
-    }
-}
-
 fn set_existing_list_kind(
     tr: &mut Transaction,
     list_id: Dot,
@@ -130,173 +129,6 @@ fn set_existing_list_kind(
     }
 
     replace_list_with_kind(tr, list_id, target_list_type)
-}
-
-fn collect_existing_lists_in_range(rs: &ResolvedSelection<'_>) -> Vec<Dot> {
-    let mut ids = Vec::new();
-    if let Some(root) = rs.view().root() {
-        collect_existing_lists_in_block(rs, &root, &mut ids);
-    }
-    ids.sort_by_key(|id| std::cmp::Reverse(list_depth(rs.view(), *id)));
-    ids
-}
-
-fn collect_existing_lists_in_block(
-    rs: &ResolvedSelection<'_>,
-    node: &NodeView<'_>,
-    out: &mut Vec<Dot>,
-) {
-    if !rs.intersects_subtree(node) {
-        return;
-    }
-
-    if is_list_type(node.node_type()) && list_has_selected_direct_item(rs, node) {
-        out.push(node.id());
-    }
-
-    for child in node.child_blocks() {
-        if should_descend_into_child(rs, &child) {
-            collect_existing_lists_in_block(rs, &child, out);
-        }
-    }
-}
-
-fn list_has_selected_direct_item(rs: &ResolvedSelection<'_>, list: &NodeView<'_>) -> bool {
-    list.child_blocks().any(|item| {
-        item.node_type() == NodeType::ListItem && list_item_own_paragraph_intersects(rs, &item)
-    })
-}
-
-fn list_depth(view: &DocView, list_id: Dot) -> usize {
-    view.node(list_id)
-        .map(|list| {
-            list.ancestors()
-                .filter(|ancestor| is_list_type(ancestor.node_type()))
-                .count()
-        })
-        .unwrap_or_default()
-}
-
-#[derive(Clone)]
-struct ListableWrapRun {
-    parent_id: Dot,
-    first_child_id: Dot,
-    children: Vec<ListableRunChild>,
-}
-
-#[derive(Clone)]
-struct ListableRunChild {
-    id: Dot,
-    node_type: NodeType,
-}
-
-fn collect_listable_wrap_runs(
-    rs: &ResolvedSelection<'_>,
-    target_list_type: NodeType,
-) -> Vec<ListableWrapRun> {
-    let mut runs = Vec::new();
-    if let Some(root) = rs.view().root() {
-        collect_listable_wrap_runs_in_block(rs, &root, target_list_type, &mut runs);
-    }
-    runs
-}
-
-fn collect_listable_wrap_runs_in_block(
-    rs: &ResolvedSelection<'_>,
-    parent: &NodeView<'_>,
-    target_list_type: NodeType,
-    out: &mut Vec<ListableWrapRun>,
-) {
-    if !rs.intersects_subtree(parent) {
-        return;
-    }
-
-    if parent.node_type() != NodeType::ListItem && parent.spec().content.matches(target_list_type) {
-        collect_direct_child_runs(rs, parent, out);
-    }
-
-    for child in parent.child_blocks() {
-        if should_descend_into_child(rs, &child) {
-            collect_listable_wrap_runs_in_block(rs, &child, target_list_type, out);
-        }
-    }
-}
-
-fn collect_direct_child_runs(
-    rs: &ResolvedSelection<'_>,
-    parent: &NodeView<'_>,
-    out: &mut Vec<ListableWrapRun>,
-) {
-    let mut current = Vec::new();
-
-    for (slot, child) in parent.children().enumerate() {
-        let selected = child_intersects_selection(rs, parent, slot, &child);
-        if !selected {
-            flush_run(parent.id(), &mut current, out);
-            continue;
-        }
-
-        match child {
-            ChildView::Block(block) if is_run_child_type(block.node_type()) => {
-                current.push(ListableRunChild {
-                    id: block.id(),
-                    node_type: block.node_type(),
-                });
-            }
-            _ => flush_run(parent.id(), &mut current, out),
-        }
-    }
-
-    flush_run(parent.id(), &mut current, out);
-}
-
-fn child_intersects_selection(
-    rs: &ResolvedSelection<'_>,
-    parent: &NodeView<'_>,
-    slot: usize,
-    child: &ChildView<'_>,
-) -> bool {
-    match child {
-        ChildView::Block(block) if is_list_type(block.node_type()) => {
-            list_has_selected_direct_item(rs, block)
-        }
-        ChildView::Block(block) => rs.intersects_subtree(block),
-        ChildView::Leaf(_) => rs.contains_leaf_slot(parent, slot),
-    }
-}
-
-fn should_descend_into_child(rs: &ResolvedSelection<'_>, child: &NodeView<'_>) -> bool {
-    if !rs.intersects_subtree(child) {
-        return false;
-    }
-    child.node_type() == NodeType::ListItem
-        || !(rs.contains_subtree(child) && !is_run_child_type(child.node_type()))
-}
-
-fn flush_run(parent_id: Dot, current: &mut Vec<ListableRunChild>, out: &mut Vec<ListableWrapRun>) {
-    if should_wrap_run(current) {
-        out.push(ListableWrapRun {
-            parent_id,
-            first_child_id: current[0].id,
-            children: std::mem::take(current),
-        });
-    } else {
-        current.clear();
-    }
-}
-
-fn should_wrap_run(children: &[ListableRunChild]) -> bool {
-    if children.is_empty() {
-        return false;
-    }
-    children.len() > 1
-        || children
-            .iter()
-            .any(|child| child.node_type == NodeType::Paragraph)
-}
-
-fn is_run_child_type(node_type: NodeType) -> bool {
-    node_type == NodeType::Paragraph || is_list_type(node_type)
 }
 
 fn run_still_exists(view: &DocView, run: &ListableWrapRun) -> bool {

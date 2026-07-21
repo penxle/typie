@@ -1,7 +1,7 @@
 use editor_transaction::Transaction;
 
 use crate::CommandResult;
-use crate::helpers::lift_selected_list_items;
+use crate::judgments::lift_selected_list_items;
 
 pub fn lift_list_item(tr: &mut Transaction) -> CommandResult {
     lift_selected_list_items(tr)
@@ -592,5 +592,21 @@ mod tests {
             b_para.leaf_own_modifiers_at(0).contains(&Modifier::Bold),
             "bold survives the sink+lift round-trip"
         );
+    }
+
+    #[test]
+    fn unresolvable_range_selection_propagates_corrupted() {
+        let (foreign, ..) = state! {
+            doc { root { f1: paragraph { text("zz") } } }
+            selection: (f1, 0) -> (f1, 2)
+        };
+        let foreign_selection = foreign.selection.unwrap();
+        let (mut state, ..) = state! {
+            doc { root { p1: paragraph { text("A") } } }
+            selection: (p1, 0)
+        };
+        state.selection = Some(foreign_selection);
+        let err = transact_err!(state, |tr| lift_list_item(&mut tr));
+        assert!(matches!(err, crate::CommandError::Corrupted(_)));
     }
 }

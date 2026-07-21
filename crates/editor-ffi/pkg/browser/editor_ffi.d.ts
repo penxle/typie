@@ -109,6 +109,7 @@ export interface BlockState {
     ancestors: Block[];
     nodes: Block[];
     intersecting_nodes: Block[];
+    list: ListAffordances;
 }
 
 export interface ChangesetEntry {
@@ -232,6 +233,13 @@ export interface LinkRect {
 
 export interface LinkValue {
     href: string;
+}
+
+export interface ListAffordances {
+    toggle_bullet: boolean;
+    toggle_ordered: boolean;
+    indent: boolean;
+    outdent: boolean;
 }
 
 export interface MissingChangesets {

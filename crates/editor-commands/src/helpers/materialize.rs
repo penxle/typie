@@ -5,6 +5,13 @@ use editor_transaction::Transaction;
 use super::materialize_position_block;
 use crate::CommandError;
 
+/// `true` for a scaffold dot that `materialize_position_block` can turn into a
+/// real op dot. Excludes [`Dot::ROOT`]: it is synthetic too, but it is a
+/// permanent implicit anchor, never a materializable scaffold.
+pub(crate) fn is_materializable_synthetic(node: Dot) -> bool {
+    node != Dot::ROOT && node.as_op_dot().is_none()
+}
+
 /// Materialize any synthetic scaffold block holding a selection endpoint so
 /// every downstream step targets real dots. Returns the remapped selection, or
 /// `None` when both endpoints are already real. Endpoints are materialized in
@@ -14,7 +21,7 @@ pub(crate) fn materialize_selection_endpoints(
     tr: &mut Transaction,
     selection: Selection,
 ) -> Result<Option<Selection>, CommandError> {
-    let is_synthetic = |node: Dot| node != Dot::ROOT && node.as_op_dot().is_none();
+    let is_synthetic = is_materializable_synthetic;
     if !is_synthetic(selection.anchor.node) && !is_synthetic(selection.head.node) {
         return Ok(None);
     }

@@ -1,3 +1,4 @@
+use editor_commands as commands;
 use editor_crdt::Dot;
 use editor_macros::ffi;
 use editor_model::{ChildView, DocView, NodeType, NodeView, PlainNode, Schema};
@@ -13,21 +14,45 @@ pub struct Block {
 
 #[ffi]
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
+pub struct ListAffordances {
+    pub toggle_bullet: bool,
+    pub toggle_ordered: bool,
+    pub indent: bool,
+    pub outdent: bool,
+}
+
+#[ffi]
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
 pub struct BlockState {
     pub ancestors: Vec<Block>,
     pub nodes: Vec<Block>,
     pub intersecting_nodes: Vec<Block>,
+    pub list: ListAffordances,
 }
 
 pub fn resolve_block_state(state: &State) -> Option<BlockState> {
     let selection = state.selection.as_ref()?;
     let ancestors = resolve_ancestors(state, selection);
     let (nodes, intersecting_nodes) = resolve_range_nodes(state, selection);
+    let list = resolve_list_affordances(state, selection);
     Some(BlockState {
         ancestors,
         nodes,
         intersecting_nodes,
+        list,
     })
+}
+
+fn resolve_list_affordances(state: &State, selection: &Selection) -> ListAffordances {
+    let view = state.view();
+    ListAffordances {
+        toggle_bullet: commands::judge_toggle_list_kind(&view, selection, NodeType::BulletList)
+            .changes(),
+        toggle_ordered: commands::judge_toggle_list_kind(&view, selection, NodeType::OrderedList)
+            .changes(),
+        indent: commands::judge_indent_list(&view, selection).changes(),
+        outdent: commands::judge_outdent_list(&view, selection).changes(),
+    }
 }
 
 fn resolve_ancestors(state: &State, selection: &Selection) -> Vec<Block> {
@@ -276,6 +301,52 @@ mod tests {
                 .iter()
                 .any(|b| matches!(b.node, PlainNode::Image(_)))
         );
+    }
+
+    #[test]
+    fn list_affordances_inside_bullet_list() {
+        let (state, ..) = state! {
+            doc { root {
+                bullet_list {
+                    list_item { paragraph { text("A") } }
+                    list_item { p1: paragraph { text("B") } }
+                }
+                paragraph {}
+            } }
+            selection: (p1, 0)
+        };
+        let bs = resolve_block_state(&state).unwrap();
+        assert!(bs.list.toggle_bullet);
+        assert!(bs.list.toggle_ordered);
+        assert!(bs.list.indent);
+        assert!(bs.list.outdent);
+    }
+
+    #[test]
+    fn list_affordances_plain_paragraph() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("Hi") } } }
+            selection: (p1, 1)
+        };
+        let bs = resolve_block_state(&state).unwrap();
+        assert!(bs.list.toggle_bullet);
+        assert!(bs.list.toggle_ordered);
+        assert!(!bs.list.indent);
+        assert!(!bs.list.outdent);
+    }
+
+    #[test]
+    fn list_affordances_first_item_cannot_indent() {
+        let (state, ..) = state! {
+            doc { root {
+                bullet_list { list_item { p1: paragraph { text("A") } } }
+                paragraph {}
+            } }
+            selection: (p1, 0)
+        };
+        let bs = resolve_block_state(&state).unwrap();
+        assert!(!bs.list.indent);
+        assert!(bs.list.outdent);
     }
 
     #[test]
