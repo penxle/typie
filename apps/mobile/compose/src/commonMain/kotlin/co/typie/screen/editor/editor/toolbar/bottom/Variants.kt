@@ -18,7 +18,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -75,7 +77,10 @@ internal fun BottomToolbarHorizontalRuleVariants(
   onEditorInputRequest: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  VariantList(modifier = modifier) {
+  VariantList(
+    selectedIndex = HorizontalRuleVariantItems.indexOfFirst { it == target.currentVariant },
+    modifier = modifier,
+  ) {
     items(HorizontalRuleVariantItems, key = { it.name }) { variant ->
       VariantRow(
         label = variant.label,
@@ -97,7 +102,10 @@ internal fun BottomToolbarBlockquoteVariants(
   onEditorInputRequest: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  VariantList(modifier = modifier) {
+  VariantList(
+    selectedIndex = BlockquoteVariantItems.indexOfFirst { it == target.currentVariant },
+    modifier = modifier,
+  ) {
     items(BlockquoteVariantItems, key = { it.name }) { variant ->
       VariantRow(
         label = variant.label,
@@ -119,7 +127,10 @@ internal fun BottomToolbarTableBorderStyles(
   onEditorInputRequest: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  VariantList(modifier = modifier) {
+  VariantList(
+    selectedIndex = TableBorderStyleItems.indexOf(target.currentStyle),
+    modifier = modifier,
+  ) {
     items(TableBorderStyleItems, key = { it.name }) { style ->
       VariantRow(
         label = style.label,
@@ -137,11 +148,22 @@ internal fun BottomToolbarTableBorderStyles(
 
 @Composable
 private fun VariantList(
+  selectedIndex: Int,
   modifier: Modifier,
   content: androidx.compose.foundation.lazy.LazyListScope.() -> Unit,
 ) {
   val fogInsets = remember { PaddingValues(vertical = VariantPanelPadding) }
+  val listState =
+    rememberLazyListState(initialFirstVisibleItemIndex = selectedIndex.coerceAtLeast(0))
+
+  LaunchedEffect(selectedIndex) {
+    if (selectedIndex >= 0) {
+      listState.scrollToItem(selectedIndex)
+    }
+  }
+
   LazyColumn(
+    state = listState,
     modifier =
       modifier.fillMaxSize().scrollFog(padding = fogInsets, color = AppTheme.colors.surfaceCanvas),
     contentPadding =
