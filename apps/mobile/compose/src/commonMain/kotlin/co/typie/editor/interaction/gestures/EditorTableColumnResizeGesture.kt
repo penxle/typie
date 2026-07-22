@@ -51,6 +51,8 @@ internal class EditorTableColumnResizeGesture {
     downPosition = position
     currentPosition = position
     dragging = false
+    context.effects.cancelTapDispatch()
+    context.effects.cancelLongPressDispatch()
     context.semantics.tableColumnResize.press(editor = context.editor, placement = placement)
     context.uiState.contextMenu.hide()
     return true

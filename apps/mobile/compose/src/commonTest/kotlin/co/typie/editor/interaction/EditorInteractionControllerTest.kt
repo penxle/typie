@@ -2501,6 +2501,47 @@ class EditorInteractionControllerTest {
     }
 
   @Test
+  fun `column resize handle tap waits for pointer up`() =
+    runTest(StandardTestDispatcher()) {
+      val selection =
+        Selection(
+          anchor = Position("cell-text", 0, Affinity.Downstream),
+          head = Position("cell-text", 0, Affinity.Downstream),
+        )
+      val fake =
+        FakeFfiEditor(
+          selectionProvider = { selection },
+          tableOverlaysProvider = {
+            listOf(tableOverlay(isFocused = true, focusedRowIndex = 0, focusedColIndex = 0))
+          },
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+        )
+      val down = Offset(60f, 90f)
+
+      assertTrue(controller.onPointerDown(pointerId = 1L, position = down, nowMillis = 0L))
+      assertNull(host.scheduledTapDispatchAtMillis)
+      assertNull(host.scheduledLongPressDispatchAtMillis)
+      assertEquals(emptyList(), fake.enqueued.filterIsInstance<Message.Selection>())
+
+      assertTrue(controller.onPointerUp(pointerId = 1L, position = down, nowMillis = 300L))
+      runCurrent()
+
+      assertEquals(
+        listOf(Message.Selection(SelectionOp.SetAt(page = 0, x = 60f, y = 90f))),
+        fake.enqueued.filterIsInstance<Message.Selection>(),
+      )
+    }
+
+  @Test
   fun `column resize drag locks scroll only while active`() =
     runTest(StandardTestDispatcher()) {
       val selection =
