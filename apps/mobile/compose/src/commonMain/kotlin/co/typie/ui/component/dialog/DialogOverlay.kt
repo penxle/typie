@@ -14,9 +14,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import co.typie.ext.clickable
 import co.typie.navigation.PlatformBackHandler
@@ -26,10 +28,12 @@ import co.typie.ui.theme.AppTheme
 fun DialogOverlay(state: Dialog) {
   val entry = state.current ?: return
   val density = LocalDensity.current
+  val focusManager = LocalFocusManager.current
   val offsetPx = with(density) { 20.dp.toPx() }
 
   var pendingResult by remember(entry) { mutableStateOf<DialogResult<Any?>?>(null) }
   var visible by remember(entry) { mutableStateOf(false) }
+  var dialogHasFocus by remember(entry) { mutableStateOf(false) }
   LaunchedEffect(entry) { visible = true }
 
   val progress by
@@ -43,24 +47,35 @@ fun DialogOverlay(state: Dialog) {
       },
     )
 
-  val scope =
-    remember(entry) {
-      object : DialogScope<Any?> {
-        override fun resolve(result: Any?) {
-          pendingResult = DialogResult.Resolved(result)
-          visible = false
-        }
-
-        override fun dismiss() {
-          pendingResult = DialogResult.Dismissed
+  val requestDismissal =
+    remember(entry, state, focusManager) {
+      { result: DialogResult<Any?> ->
+        if (entry.acceptsInput) {
+          if (dialogHasFocus) {
+            focusManager.clearFocus()
+          }
+          pendingResult = result
+          state.stopEntryAcceptingInput(entry)
           visible = false
         }
       }
     }
 
-  PlatformBackHandler(enabled = entry.dismissible) {
-    pendingResult = DialogResult.Dismissed
-    visible = false
+  val scope =
+    remember(entry, requestDismissal) {
+      object : DialogScope<Any?> {
+        override fun resolve(result: Any?) {
+          requestDismissal(DialogResult.Resolved(result))
+        }
+
+        override fun dismiss() {
+          requestDismissal(DialogResult.Dismissed)
+        }
+      }
+    }
+
+  PlatformBackHandler(enabled = entry.dismissible && entry.acceptsInput) {
+    requestDismissal(DialogResult.Dismissed)
   }
 
   Box(Modifier.fillMaxSize()) {
@@ -69,11 +84,7 @@ fun DialogOverlay(state: Dialog) {
         .graphicsLayer { alpha = progress }
         .background(AppTheme.colors.scrim)
         .then(
-          if (entry.dismissible)
-            Modifier.clickable {
-              pendingResult = DialogResult.Dismissed
-              visible = false
-            }
+          if (entry.dismissible) Modifier.clickable { requestDismissal(DialogResult.Dismissed) }
           else Modifier.pointerInput(Unit) {}
         )
     )
@@ -82,6 +93,7 @@ fun DialogOverlay(state: Dialog) {
       modifier =
         Modifier.align(Alignment.Center)
           .width(280.dp)
+          .onFocusChanged { dialogHasFocus = it.hasFocus }
           .pointerInput(Unit) {}
           .graphicsLayer {
             alpha = progress

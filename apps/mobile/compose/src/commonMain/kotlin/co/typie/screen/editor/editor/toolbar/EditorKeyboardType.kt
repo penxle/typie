@@ -46,23 +46,39 @@ internal data class EditorKeyboardState(
 }
 
 internal class EditorImeHideOwnershipTracker {
-  private var previouslyVisible = false
+  private var visibleOwner: EditorImeInputOwner? = null
   private var hideEventOwner: EditorImeInputOwner? = null
 
-  fun observe(visible: Boolean, editorInputSessionActive: Boolean): EditorImeInputOwner? {
-    if (visible) {
-      hideEventOwner = null
-    } else if (previouslyVisible) {
-      hideEventOwner =
-        if (editorInputSessionActive) {
-          EditorImeInputOwner.Editor
-        } else {
-          EditorImeInputOwner.Other
-        }
+  fun observeVisibleOwner(editorInputSessionActive: Boolean) {
+    visibleOwner =
+      if (editorInputSessionActive) {
+        EditorImeInputOwner.Editor
+      } else {
+        EditorImeInputOwner.Other
+      }
+    hideEventOwner = null
+  }
+
+  fun beginHide(): EditorImeInputOwner? {
+    if (hideEventOwner == null) {
+      hideEventOwner = visibleOwner
     }
-    previouslyVisible = visible
     return hideEventOwner
   }
+
+  fun observe(
+    presentation: EditorKeyboardPresentation,
+    editorInputSessionActive: Boolean,
+  ): EditorImeInputOwner? =
+    when (presentation) {
+      EditorKeyboardPresentation.Showing,
+      is EditorKeyboardPresentation.Shown -> {
+        observeVisibleOwner(editorInputSessionActive)
+        null
+      }
+      EditorKeyboardPresentation.Hiding,
+      EditorKeyboardPresentation.Hidden -> beginHide()
+    }
 }
 
 @Composable

@@ -25,11 +25,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -69,6 +71,7 @@ internal fun AnchoredSheetSurface(
   modifier: Modifier = Modifier,
   onDismissed: () -> Unit,
   onDismissStarted: () -> Unit = {},
+  onDismissCancelled: () -> Unit = {},
   onGeometryChanged: (AnchoredSheetGeometry) -> Unit = {},
   onSettledStopChanged: (Int?) -> Unit = {},
   scrim: @Composable AnchoredSheetSurfaceScope.(alpha: Float) -> Unit = {},
@@ -87,7 +90,9 @@ internal fun AnchoredSheetSurface(
     var hasSettledVisible by remember { mutableStateOf(false) }
     var dismissing by remember { mutableStateOf(false) }
     var dismissed by remember { mutableStateOf(false) }
+    var sheetHasFocus by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
+    val focusManager = LocalFocusManager.current
     val dragOverscrollEffect = remember { SheetTopHysteresisOverscrollEffect() }
 
     val baseVisibleAnchors =
@@ -187,6 +192,7 @@ internal fun AnchoredSheetSurface(
     val hapticFeedbackState = rememberUpdatedState(hapticFeedback)
     val onDismissedState = rememberUpdatedState(onDismissed)
     val onDismissStartedState = rememberUpdatedState(onDismissStarted)
+    val onDismissCancelledState = rememberUpdatedState(onDismissCancelled)
     val onGeometryChangedState = rememberUpdatedState(onGeometryChanged)
     val onSettledStopChangedState = rememberUpdatedState(onSettledStopChanged)
 
@@ -205,7 +211,19 @@ internal fun AnchoredSheetSurface(
       }
 
       dismissing = true
+      if (sheetHasFocus) {
+        focusManager.clearFocus()
+      }
       onDismissStartedState.value()
+    }
+
+    fun cancelDismiss() {
+      if (!dismissing || dismissed) {
+        return
+      }
+
+      dismissing = false
+      onDismissCancelledState.value()
     }
 
     fun requestDismiss() {
@@ -220,16 +238,28 @@ internal fun AnchoredSheetSurface(
           finishDismiss()
         } catch (e: CancellationException) {
           if (!isActive) throw e
-          dismissing = false
+          if (anchoredState.targetValue != AnchorHidden) {
+            cancelDismiss()
+          }
         }
+      }
+    }
+
+    LaunchedEffect(dismissing, sheetHasFocus) {
+      if (dismissing && sheetHasFocus) {
+        focusManager.clearFocus()
       }
     }
 
     LaunchedEffect(anchoredState) {
       snapshotFlow { anchoredState.targetValue }
         .collect { targetValue ->
-          if (targetValue == AnchorHidden && hasSettledVisible) {
+          if (!hasSettledVisible) return@collect
+
+          if (targetValue == AnchorHidden) {
             beginDismiss()
+          } else {
+            cancelDismiss()
           }
         }
     }
@@ -333,11 +363,13 @@ internal fun AnchoredSheetSurface(
 
     Column(
       modifier =
-        sheetModifier.anchoredDraggable(
-          state = anchoredState,
-          orientation = Orientation.Vertical,
-          overscrollEffect = dragOverscrollEffect,
-        )
+        sheetModifier
+          .anchoredDraggable(
+            state = anchoredState,
+            orientation = Orientation.Vertical,
+            overscrollEffect = dragOverscrollEffect,
+          )
+          .onFocusChanged { sheetHasFocus = it.hasFocus }
     ) {
       scope.content()
     }

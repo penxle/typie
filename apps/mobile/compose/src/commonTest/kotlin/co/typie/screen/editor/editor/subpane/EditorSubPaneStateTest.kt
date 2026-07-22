@@ -119,6 +119,34 @@ class EditorSubPaneStateTest {
   }
 
   @Test
+  fun `cancelling user dismissal blocks editor input again`() {
+    val state = EditorSubPaneState()
+    val pane = tableAxisPane(tableId = "table", index = 1)
+    state.open(pane)
+    state.beginDismiss()
+
+    state.cancelDismiss()
+
+    assertEquals(pane, state.active)
+    assertTrue(state.editorInputBlocked)
+    assertEquals(0, state.dismissRequestVersion)
+  }
+
+  @Test
+  fun `cancelling requested dismissal keeps input released and requests dismissal again`() {
+    val state = EditorSubPaneState()
+    val pane = tableAxisPane(tableId = "table", index = 1)
+    state.open(pane)
+    state.requestDismiss()
+
+    state.cancelDismiss()
+
+    assertEquals(pane, state.active)
+    assertFalse(state.editorInputBlocked)
+    assertEquals(2, state.dismissRequestVersion)
+  }
+
+  @Test
   fun `opening pane after dismissal starts blocks editor input again`() {
     val state = EditorSubPaneState()
     state.open(tableAxisPane(tableId = "table", index = 0))

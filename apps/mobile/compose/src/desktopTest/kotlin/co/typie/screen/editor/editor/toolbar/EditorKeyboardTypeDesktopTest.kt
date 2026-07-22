@@ -25,4 +25,22 @@ class EditorKeyboardTypeDesktopTest {
     assertEquals(false, state.imeFrameVisible)
     assertEquals(EditorKeyboardPresentation.Hidden, state.presentation)
   }
+
+  @Test
+  fun desktop_feed_reuses_visible_auxiliary_owner_when_editor_refocuses_at_hide() {
+    val tracker = EditorImeHideOwnershipTracker()
+    val visible =
+      resolveDesktopEditorKeyboardState(hardwareKeyboardConnected = false, imeBottom = 320.dp)
+    val hidden =
+      resolveDesktopEditorKeyboardState(hardwareKeyboardConnected = false, imeBottom = 0.dp)
+
+    assertEquals(
+      null,
+      tracker.observe(presentation = visible.presentation, editorInputSessionActive = false),
+    )
+    assertEquals(
+      EditorImeInputOwner.Other,
+      tracker.observe(presentation = hidden.presentation, editorInputSessionActive = true),
+    )
+  }
 }

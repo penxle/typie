@@ -80,10 +80,6 @@ internal fun EditorToolbarHost(
       try {
         block()
       } finally {
-        val environment = latestEnvironment.value
-        if (environment.visible) {
-          onInputEffects(inputState.dispatch(ToolbarIntent.RestoreEditorInput, environment))
-        }
         sessionState.modalActive = false
       }
     }

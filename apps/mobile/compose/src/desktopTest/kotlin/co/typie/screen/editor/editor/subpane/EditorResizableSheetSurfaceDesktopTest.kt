@@ -2,17 +2,23 @@ package co.typie.screen.editor.editor.subpane
 
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -28,6 +34,54 @@ import kotlin.test.assertTrue
 
 @OptIn(ExperimentalTestApi::class)
 class EditorResizableSheetSurfaceDesktopTest {
+  @Test
+  fun closingSheetReleasesFocusAndCannotRegainIt() = runComposeUiTest {
+    val sheetFocusRequester = FocusRequester()
+
+    setContent {
+      ScrollGestureLockScope {
+        Box(Modifier.size(width = 400.dp, height = 800.dp)) {
+          EditorResizableSheetSurface(
+            initialHeight = 360.dp,
+            minHeight = 240.dp,
+            dismissThreshold = 128.dp,
+            maxTopInset = 0.dp,
+            keyboardOcclusion = 0.dp,
+            minKeyboardVisibleHeight = 0.dp,
+            onDismissed = {},
+            onGeometryChanged = {},
+          ) {
+            Column(Modifier.fillMaxSize()) {
+              Box(
+                Modifier.testTag(SheetFocusTag)
+                  .size(48.dp)
+                  .focusRequester(sheetFocusRequester)
+                  .focusable()
+              )
+              Box(Modifier.testTag(DismissButtonTag).size(48.dp).clickable { dismiss() })
+            }
+            LaunchedEffect(Unit) { sheetFocusRequester.requestFocus() }
+          }
+        }
+      }
+    }
+    waitForIdle()
+    onNodeWithTag(SheetFocusTag).assertIsFocused()
+
+    mainClock.autoAdvance = false
+    onNodeWithTag(DismissButtonTag).performTouchInput {
+      down(center)
+      up()
+    }
+    waitForIdle()
+
+    onNodeWithTag(SheetFocusTag).assertIsNotFocused()
+    runOnIdle { sheetFocusRequester.requestFocus() }
+    mainClock.advanceTimeByFrame()
+    waitForIdle()
+    onNodeWithTag(SheetFocusTag).assertIsNotFocused()
+  }
+
   @Test
   fun dismissReportsStartBeforeDismissed() = runComposeUiTest {
     val events = mutableListOf<String>()
@@ -182,5 +236,6 @@ class EditorResizableSheetSurfaceDesktopTest {
     const val IncrementalDragHandleTag = "incremental-drag-handle"
     const val SheetDragHandleTag = "sheet-drag-handle"
     const val SheetSurfaceTag = "sheet-surface"
+    const val SheetFocusTag = "sheet-focus"
   }
 }

@@ -4,6 +4,7 @@ package co.typie.screen.editor.editor.toolbar
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -26,7 +27,9 @@ import swiftPMImport.co.typie.compose.EditorKeyboardBridge
 internal actual fun rememberEditorKeyboardState(
   isEditorInputSessionActive: () -> Boolean
 ): EditorKeyboardState {
-  val currentEditorInputSessionActive by rememberUpdatedState(isEditorInputSessionActive)
+  val editorInputSessionActive = isEditorInputSessionActive()
+  val currentEditorInputSessionActive by rememberUpdatedState(editorInputSessionActive)
+  val imeHideOwnershipTracker = remember { EditorImeHideOwnershipTracker() }
   var hardwareKeyboardMode by remember { mutableStateOf(isEditorHardwareKeyboardConnected()) }
   var imeFrameVisible by remember { mutableStateOf(false) }
   var imeHideEventVersion by remember { mutableIntStateOf(0) }
@@ -46,17 +49,13 @@ internal actual fun rememberEditorKeyboardState(
     val targetBottom =
       notification?.let(EditorKeyboardBridge::imeVisibleHeightWithNotification)?.dp ?: 0.dp
     if (targetBottom > 0.dp) {
+      imeHideOwnershipTracker.observeVisibleOwner(currentEditorInputSessionActive)
       imeHideEventOwner = null
     } else if (
       presentation != EditorKeyboardPresentation.Hidden &&
         presentation != EditorKeyboardPresentation.Hiding
     ) {
-      imeHideEventOwner =
-        if (currentEditorInputSessionActive()) {
-          EditorImeInputOwner.Editor
-        } else {
-          EditorImeInputOwner.Other
-        }
+      imeHideEventOwner = imeHideOwnershipTracker.beginHide()
     }
     if (settlesImeBottom) {
       presentation =
@@ -85,6 +84,18 @@ internal actual fun rememberEditorKeyboardState(
     }
     imeFrameVisible = targetBottom > 0.dp
     syncKeyboardState()
+  }
+
+  SideEffect {
+    if (
+      presentation == EditorKeyboardPresentation.Showing ||
+        presentation is EditorKeyboardPresentation.Shown
+    ) {
+      imeHideOwnershipTracker.observeVisibleOwner(editorInputSessionActive)
+      if (imeHideEventOwner != null) {
+        imeHideEventOwner = null
+      }
+    }
   }
 
   DisposableEffect(Unit) {
@@ -144,12 +155,7 @@ internal actual fun rememberEditorKeyboardState(
         queue = NSOperationQueue.mainQueue,
       ) {
         if (presentation != EditorKeyboardPresentation.Hiding) {
-          imeHideEventOwner =
-            if (currentEditorInputSessionActive()) {
-              EditorImeInputOwner.Editor
-            } else {
-              EditorImeInputOwner.Other
-            }
+          imeHideEventOwner = imeHideOwnershipTracker.beginHide()
         }
         presentation = EditorKeyboardPresentation.Hiding
         imeFrameVisible = false

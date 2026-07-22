@@ -24,14 +24,12 @@ import co.typie.ui.theme.AppTheme
 @Composable
 fun SheetOverlay(state: Sheet) {
   for (entry in state.entries) {
-    key(entry) {
-      SheetEntryOverlay(entry = entry, onResolve = { result -> state.resolveEntry(entry, result) })
-    }
+    key(entry) { SheetEntryOverlay(state = state, entry = entry) }
   }
 }
 
 @Composable
-private fun SheetEntryOverlay(entry: SheetEntry<*>, onResolve: (Any?) -> Unit) {
+private fun SheetEntryOverlay(state: Sheet, entry: SheetEntry<*>) {
   @Suppress("UNCHECKED_CAST") val typedEntry = entry as SheetEntry<Any?>
 
   val viewModelStore = remember { ViewModelStore() }
@@ -51,13 +49,15 @@ private fun SheetEntryOverlay(entry: SheetEntry<*>, onResolve: (Any?) -> Unit) {
   val handleDismissed: () -> Unit = {
     if (!dismissed) {
       dismissed = true
-      onResolve(if (resolved) pendingResult else null)
+      state.resolveEntry(entry, if (resolved) pendingResult else null)
     }
   }
 
   AnchoredSheetSurface(
     stops = entry.stops,
     stopPolicy = entry.stopPolicy,
+    onDismissStarted = { state.stopEntryAcceptingInput(entry) },
+    onDismissCancelled = { state.startEntryAcceptingInput(entry) },
     onDismissed = handleDismissed,
     onSettledStopChanged = { stop ->
       if (stop != null && resolved && !dismissed) {

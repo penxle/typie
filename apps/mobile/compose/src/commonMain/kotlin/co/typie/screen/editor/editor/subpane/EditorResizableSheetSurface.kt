@@ -25,8 +25,10 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -91,6 +93,7 @@ internal fun EditorResizableSheetSurface(
 ) {
   BoxWithConstraints(modifier.fillMaxSize()) {
     val density = LocalDensity.current
+    val focusManager = LocalFocusManager.current
     val coroutineScope = rememberCoroutineScope()
     val scrollGestureLockState = LocalScrollGestureLockState.current
     val canDismissState = rememberUpdatedState(canDismiss)
@@ -101,6 +104,7 @@ internal fun EditorResizableSheetSurface(
     val heightAnimation = remember { Animatable(0f) }
     var dismissRequestInProgress by remember { mutableStateOf(false) }
     var dismissing by remember { mutableStateOf(false) }
+    var sheetHasFocus by remember { mutableStateOf(false) }
     var sheetDragScrollLock by remember { mutableStateOf<ScrollGestureLockHandle?>(null) }
 
     fun releaseSheetDragScrollLock() {
@@ -199,6 +203,9 @@ internal fun EditorResizableSheetSurface(
           }
 
           dismissing = true
+          if (sheetHasFocus) {
+            focusManager.clearFocus()
+          }
           onDismissStartedState.value()
           heightAnimation.stop()
           presentationProgress.animateTo(1f, SheetAnimationSpec)
@@ -206,6 +213,12 @@ internal fun EditorResizableSheetSurface(
         } finally {
           dismissRequestInProgress = false
         }
+      }
+    }
+
+    LaunchedEffect(dismissing, sheetHasFocus) {
+      if (dismissing && sheetHasFocus) {
+        focusManager.clearFocus()
       }
     }
 
@@ -256,6 +269,7 @@ internal fun EditorResizableSheetSurface(
           .align(Alignment.BottomCenter)
           .offset { IntOffset(x = 0, y = hiddenOffsetPx.roundToInt()) }
           .clip(RoundedCornerShape(topStart = AppShapes.xl, topEnd = AppShapes.xl))
+          .onFocusChanged { sheetHasFocus = it.hasFocus }
           .blockPointerInputBehind()
     ) {
       scope.content()

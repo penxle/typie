@@ -23,6 +23,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.AwaitPointerEventScope
@@ -84,13 +85,26 @@ fun Popover(
   var isOverlayVisible by remember { mutableStateOf(false) }
   var anchorBounds by remember { mutableStateOf(IntRect.Zero) }
   var reverseAnimationCompleted by remember { mutableStateOf(false) }
+  var paneHasFocus by remember { mutableStateOf(false) }
   val progress = remember { Animatable(0f) }
   val scrollGestureLockState = LocalScrollGestureLockState.current
-  val scope = remember { PopoverScope(onClose = { isExpanded = false }) }
+  val scope =
+    remember(overlayState, overlayOwner, focusManager) {
+      PopoverScope(
+        onClose = {
+          if (overlayState.isOwnedBy(overlayOwner)) {
+            if (paneHasFocus) {
+              focusManager.clearFocus()
+            }
+            overlayState.stopAcceptingInput(overlayOwner)
+          }
+          isExpanded = false
+        }
+      )
+    }
   val dismissPopoverFromOutsideGesture by rememberUpdatedState { scope.close() }
   val ownsOverlay = overlayState.isOwnedBy(overlayOwner)
   val latestIsOverlayVisible by rememberUpdatedState(isOverlayVisible)
-  val latestOwnsOverlay by rememberUpdatedState(ownsOverlay)
   val overlayEntry =
     PopoverOverlayEntry(
       owner = overlayOwner,
@@ -99,16 +113,30 @@ fun Popover(
       collapsedCornerRadius = collapsedCornerRadius,
       maxWidth = maxWidth,
       minWidth = minWidth,
-      pane = { PopoverPaneSelectionHost(scope = scope, pane = pane) },
+      pane = {
+        val focusObserver =
+          if (LocalPopoverPaneRenderPhase.current == PopoverPaneRenderPhase.Interactive) {
+            Modifier.onFocusChanged { paneHasFocus = it.hasFocus }
+          } else {
+            Modifier
+          }
+        Box(focusObserver) { PopoverPaneSelectionHost(scope = scope, pane = pane) }
+      },
       anchor = { anchor() },
     )
-
-  LaunchedEffect(isExpanded) {
-    if (isExpanded) {
+  val openPopover = rememberUpdatedState {
+    if (!isOverlayVisible) {
       reverseAnimationCompleted = false
       scope.acceptsInput = true
       isOverlayVisible = true
       overlayState.show(owner = overlayOwner, entry = overlayEntry, anchorBounds = anchorBounds)
+      focusManager.clearFocus()
+      isExpanded = true
+    }
+  }
+
+  LaunchedEffect(isExpanded) {
+    if (isExpanded) {
       progress.stop()
       progress.snapTo(0f)
       progress.animateTo(1f, tween(PopoverDefaults.ForwardDuration, easing = LinearEasing))
@@ -141,9 +169,15 @@ fun Popover(
     }
   }
 
-  DisposableEffect(overlayState, overlayOwner) {
+  DisposableEffect(overlayState, overlayOwner, focusManager) {
     onDispose {
-      if (latestIsOverlayVisible && latestOwnsOverlay) {
+      if (latestIsOverlayVisible && overlayState.isOwnedBy(overlayOwner)) {
+        if (scope.acceptsInput) {
+          if (paneHasFocus) {
+            focusManager.clearFocus()
+          }
+          overlayState.stopAcceptingInput(overlayOwner)
+        }
         overlayState.detach(overlayOwner)
       } else {
         overlayState.clear(overlayOwner)
@@ -175,7 +209,9 @@ fun Popover(
     }
   }
 
-  PlatformBackHandler(enabled = isOverlayVisible && ownsOverlay) { isExpanded = false }
+  PlatformBackHandler(enabled = isOverlayVisible && ownsOverlay && scope.acceptsInput) {
+    scope.close()
+  }
 
   val easedProgress =
     if (isOverlayVisible && ownsOverlay) {
@@ -228,9 +264,8 @@ fun Popover(
             }
             is PopoverOpenTrigger.Tap -> {
               anchorInteractionSource.tryEmit(PressInteraction.Release(pressInteraction))
-              focusManager.clearFocus()
+              openPopover.value()
               openTrigger.upChange.consume()
-              isExpanded = true
               return@awaitEachGesture
             }
             PopoverOpenTrigger.Pressed -> {}
@@ -241,8 +276,7 @@ fun Popover(
 
           try {
             scrollLockHandle = scrollGestureLockState.acquire()
-            focusManager.clearFocus()
-            isExpanded = true
+            openPopover.value()
             released =
               trackPressGestureSession(
                 pointerId = press.id,

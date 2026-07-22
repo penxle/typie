@@ -14,6 +14,10 @@ class PopoverScope internal constructor(private val onClose: () -> Unit) {
     internal set
 
   fun close() {
+    if (!acceptsInput) {
+      return
+    }
+
     acceptsInput = false
     onClose()
   }

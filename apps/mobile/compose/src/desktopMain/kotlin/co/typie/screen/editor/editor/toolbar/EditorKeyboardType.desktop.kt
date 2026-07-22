@@ -16,17 +16,18 @@ internal actual fun rememberEditorKeyboardState(
   val density = LocalDensity.current
   val imeBottom = with(density) { WindowInsets.ime.getBottom(this).toDp() }
   val imeHideOwnershipTracker = remember { EditorImeHideOwnershipTracker() }
-  return resolveDesktopEditorKeyboardState(
+  val state =
+    resolveDesktopEditorKeyboardState(
       hardwareKeyboardConnected = DesktopDebugKeyboard.hardwareKeyboardConnected,
       imeBottom = imeBottom,
     )
-    .copy(
-      imeHideEventOwner =
-        imeHideOwnershipTracker.observe(
-          visible = imeBottom > 0.dp,
-          editorInputSessionActive = isEditorInputSessionActive(),
-        )
-    )
+  return state.copy(
+    imeHideEventOwner =
+      imeHideOwnershipTracker.observe(
+        presentation = state.presentation,
+        editorInputSessionActive = isEditorInputSessionActive(),
+      )
+  )
 }
 
 internal fun resolveDesktopEditorKeyboardState(

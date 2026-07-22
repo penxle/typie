@@ -126,8 +126,43 @@ class AnchoredSheetSurfaceDesktopTest {
     assertEquals(listOf("start", "dismissed"), events)
   }
 
+  @Test
+  fun reversingDismissDragReportsCancellation() = runComposeUiTest {
+    val events = mutableListOf<String>()
+
+    setContent {
+      Box(Modifier.size(width = 400.dp, height = 800.dp)) {
+        AnchoredSheetSurface(
+          stops = emptyList(),
+          stopPolicy = SheetStop.Policy.KeepAll,
+          onDismissStarted = { events += "start" },
+          onDismissCancelled = { events += "cancelled" },
+          onDismissed = { events += "dismissed" },
+        ) {
+          Box(Modifier.testTag(SheetTag).fillMaxWidth().height(160.dp))
+        }
+      }
+    }
+    waitForIdle()
+
+    onNodeWithTag(SheetTag).performTouchInput {
+      down(center)
+      moveBy(Offset(0f, 140f), delayMillis = 500)
+    }
+    waitUntil { "start" in events }
+
+    onNodeWithTag(SheetTag).performTouchInput { moveBy(Offset(0f, -140f), delayMillis = 500) }
+    waitUntil { "cancelled" in events }
+
+    onNodeWithTag(SheetTag).performTouchInput { up() }
+    waitForIdle()
+
+    assertEquals(listOf("start", "cancelled"), events)
+  }
+
   private companion object {
     const val ViewportTag = "viewport"
     const val DismissTag = "dismiss"
+    const val SheetTag = "sheet"
   }
 }

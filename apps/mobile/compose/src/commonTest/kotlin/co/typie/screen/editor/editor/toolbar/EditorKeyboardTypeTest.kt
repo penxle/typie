@@ -70,23 +70,34 @@ class EditorKeyboardTypeTest {
   }
 
   @Test
+  fun auxiliary_visible_ime_keeps_other_ownership_when_editor_refocuses_at_hide() {
+    val tracker = EditorImeHideOwnershipTracker()
+
+    tracker.observeVisibleOwner(editorInputSessionActive = false)
+
+    assertEquals(EditorImeInputOwner.Other, tracker.beginHide())
+  }
+
+  @Test
+  fun visible_ime_transfers_to_editor_before_a_later_hide() {
+    val tracker = EditorImeHideOwnershipTracker()
+
+    tracker.observeVisibleOwner(editorInputSessionActive = false)
+    tracker.observeVisibleOwner(editorInputSessionActive = true)
+
+    assertEquals(EditorImeInputOwner.Editor, tracker.beginHide())
+  }
+
+  @Test
   fun ime_hide_ownership_is_preserved_until_the_keyboard_is_visible_again() {
     val tracker = EditorImeHideOwnershipTracker()
 
-    assertNull(tracker.observe(visible = true, editorInputSessionActive = false))
-    assertEquals(
-      EditorImeInputOwner.Other,
-      tracker.observe(visible = false, editorInputSessionActive = false),
-    )
-    assertEquals(
-      EditorImeInputOwner.Other,
-      tracker.observe(visible = false, editorInputSessionActive = true),
-    )
-    assertNull(tracker.observe(visible = true, editorInputSessionActive = true))
-    assertEquals(
-      EditorImeInputOwner.Editor,
-      tracker.observe(visible = false, editorInputSessionActive = true),
-    )
+    tracker.observeVisibleOwner(editorInputSessionActive = false)
+    assertEquals(EditorImeInputOwner.Other, tracker.beginHide())
+    assertEquals(EditorImeInputOwner.Other, tracker.beginHide())
+
+    tracker.observeVisibleOwner(editorInputSessionActive = true)
+    assertEquals(EditorImeInputOwner.Editor, tracker.beginHide())
   }
 
   @Test

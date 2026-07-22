@@ -5,10 +5,44 @@ import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.dp
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertSame
+import kotlin.test.assertTrue
 
 class PopoverOverlayStateTest {
+
+  @Test
+  fun acceptsInputOnlyWhileTheCurrentOwnerIsInteractive() {
+    val state = PopoverOverlayState()
+    val owner = Any()
+    val entry = createEntry(owner)
+
+    assertFalse(state.acceptsInput)
+
+    state.show(owner, entry, IntRect.Zero)
+    assertTrue(state.acceptsInput)
+
+    state.stopAcceptingInput(owner)
+    assertFalse(state.acceptsInput)
+    assertSame(entry, state.entry)
+
+    state.clear(owner)
+    assertFalse(state.acceptsInput)
+  }
+
+  @Test
+  fun stopAcceptingInputIgnoresPreviousOwner() {
+    val state = PopoverOverlayState()
+    val firstOwner = Any()
+    val secondOwner = Any()
+
+    state.show(firstOwner, createEntry(firstOwner), IntRect.Zero)
+    state.show(secondOwner, createEntry(secondOwner), IntRect.Zero)
+    state.stopAcceptingInput(firstOwner)
+
+    assertTrue(state.acceptsInput)
+  }
 
   @Test
   fun clearIgnoresRequestsFromPreviousOwner() {

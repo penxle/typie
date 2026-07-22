@@ -23,6 +23,9 @@ class PopoverOverlayState {
   internal var entry: PopoverOverlayEntry? by mutableStateOf(null)
     private set
 
+  val acceptsInput: Boolean
+    get() = owner != null && entry != null && interactive
+
   var anchorBounds: IntRect by mutableStateOf(IntRect.Zero)
     private set
 
@@ -81,6 +84,15 @@ class PopoverOverlayState {
     }
 
     this.paneBoundsInWindow = paneBoundsInWindow
+  }
+
+  internal fun stopAcceptingInput(owner: Any) {
+    if (this.owner !== owner) {
+      return
+    }
+
+    onOutsideDismiss = null
+    interactive = false
   }
 
   internal fun isOwnedBy(owner: Any): Boolean = this.owner === owner

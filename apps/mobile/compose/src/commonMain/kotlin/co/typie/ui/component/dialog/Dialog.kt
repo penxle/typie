@@ -2,7 +2,10 @@ package co.typie.ui.component.dialog
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import kotlin.coroutines.resume
 import kotlinx.coroutines.suspendCancellableCoroutine
 
@@ -14,9 +17,15 @@ class Dialog {
   val current: DialogEntry<*>?
     get() = queue.firstOrNull()
 
+  val acceptsInput: Boolean
+    get() = queue.any { it.acceptsInput }
+
   suspend fun <R> present(
     dismissible: Boolean = true,
-    content: @Composable context(DialogScope<R>) () -> Unit,
+    content:
+      @Composable
+      context(DialogScope<R>)
+      () -> Unit,
   ): DialogResult<R> = suspendCancellableCoroutine { continuation ->
     val entry =
       DialogEntry(
@@ -33,10 +42,20 @@ class Dialog {
     queue.removeAt(0)
     @Suppress("UNCHECKED_CAST") (entry as DialogEntry<Any?>).onResult(result)
   }
+
+  internal fun stopEntryAcceptingInput(entry: DialogEntry<*>) {
+    entry.acceptsInput = false
+  }
 }
 
 class DialogEntry<R>(
   val dismissible: Boolean,
-  val content: @Composable context(DialogScope<R>) () -> Unit,
+  val content:
+    @Composable
+    context(DialogScope<R>)
+    () -> Unit,
   val onResult: (DialogResult<R>) -> Unit,
-)
+) {
+  var acceptsInput by mutableStateOf(true)
+    internal set
+}

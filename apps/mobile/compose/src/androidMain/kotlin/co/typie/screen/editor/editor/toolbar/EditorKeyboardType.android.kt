@@ -44,9 +44,7 @@ internal actual fun rememberEditorKeyboardState(
   val imeHideOwnershipTracker = remember { EditorImeHideOwnershipTracker() }
   val imeHideEventOwner =
     imeHideOwnershipTracker.observe(
-      visible =
-        presentation == EditorKeyboardPresentation.Showing ||
-          presentation is EditorKeyboardPresentation.Shown,
+      presentation = presentation,
       editorInputSessionActive = isEditorInputSessionActive(),
     )
   val hardwareKeyboardVisible =

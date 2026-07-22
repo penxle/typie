@@ -235,6 +235,7 @@ fun EditorScreen(entityId: String) {
   val nav = Nav.current
   val dialog = LocalDialog.current
   val sheet = LocalSheet.current
+  val popoverOverlayState = LocalPopoverOverlayState.current
   val toast = LocalToast.current
   val model = viewModel { EditorViewModel(entityId) }
   val scope = rememberCoroutineScope()
@@ -401,7 +402,10 @@ fun EditorScreen(entityId: String) {
     findReplace.active ||
       (subPaneState.editorInputBlocked &&
         (subPaneState.active == EditorSubPane.RelatedNotes ||
-          subPaneState.active == EditorSubPane.Comments))
+          subPaneState.active == EditorSubPane.Comments)) ||
+      dialog.acceptsInput ||
+      sheet.acceptsInput ||
+      popoverOverlayState.acceptsInput
   SideEffect {
     focusReturnSession.observeEditorContext(
       editor = editor,

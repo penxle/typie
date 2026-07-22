@@ -45,6 +45,7 @@ internal fun EditorTableAxisActionsPane(
   dismissRequestVersion: Int,
   onAction: (Message) -> Unit,
   onDismissStarted: () -> Unit,
+  onDismissCancelled: () -> Unit,
   onDismiss: () -> Unit,
   onLayoutInfoChanged: (EditorSubPaneLayoutInfo) -> Unit,
   onLayoutInfoCleared: (EditorSubPane) -> Unit,
@@ -58,6 +59,7 @@ internal fun EditorTableAxisActionsPane(
     stopPolicy = SheetStop.Policy.KeepAll,
     onDismissed = onDismiss,
     onDismissStarted = onDismissStarted,
+    onDismissCancelled = onDismissCancelled,
     onGeometryChanged = { geometry ->
       onLayoutInfoChanged(
         EditorSubPaneLayoutInfo(

@@ -83,6 +83,7 @@ internal fun EditorSubPaneHost(
           editor?.focus()
         },
         onDismissStarted = state::beginDismiss,
+        onDismissCancelled = state::cancelDismiss,
         onDismiss = state::dismiss,
         onLayoutInfoChanged = state::updateLayoutInfo,
         onLayoutInfoCleared = state::clearLayoutInfo,

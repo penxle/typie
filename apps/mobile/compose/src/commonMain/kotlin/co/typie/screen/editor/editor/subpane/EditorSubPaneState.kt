@@ -95,6 +95,18 @@ internal class EditorSubPaneState {
     }
   }
 
+  fun cancelDismiss() {
+    if (active == null) {
+      return
+    }
+
+    if (dismissRequestVersion == 0) {
+      dismissalInProgress = false
+    } else {
+      dismissRequestVersion += 1
+    }
+  }
+
   fun requestDismiss() {
     if (active != null) {
       beginDismiss()

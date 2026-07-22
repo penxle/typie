@@ -115,8 +115,11 @@ fun PopoverMenu(
                     PopoverListItem(
                       content = entry.content,
                       onSelected = {
-                        close()
-                        entry.onClick()
+                        try {
+                          entry.onClick()
+                        } finally {
+                          close()
+                        }
                       },
                     )
                   }
