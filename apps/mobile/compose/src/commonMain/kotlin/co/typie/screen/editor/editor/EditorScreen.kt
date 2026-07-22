@@ -1454,8 +1454,6 @@ fun EditorScreen(entityId: String) {
         },
       )
       interactionScope.onEditorStateChanged(editorState)
-      uiState.contextMenu.onEditorStateChanged(editorState)
-      uiState.contextMenu.showAfterSelectionCommitIfRequested(editorState)
     }
     LaunchedEffect(screenState.viewportState, viewportScrollableState) {
       snapshotFlow { viewportScrollableState.isScrollInProgress }

@@ -111,7 +111,6 @@ class EditorInteractionsDesktopTest {
 
       assertEquals(EditorInteractionMode.Idle, fixture.controller.interactionMode)
       assertTrue(fixture.touchPanDeltas.isEmpty())
-      assertEquals(1, fixture.host.pointerCancelEnqueueCount)
       assertEquals(1, fixture.host.longPressDispatchCancelCount)
     } finally {
       editor.performTouchInput { up(pointerId = 0) }
@@ -133,7 +132,6 @@ class EditorInteractionsDesktopTest {
     assertTrue(fixture.touchPanDeltas.isNotEmpty())
     assertEquals(0, fixture.host.tapDispatchScheduleCount)
     assertEquals(0, fixture.host.longPressDispatchScheduleCount)
-    assertEquals(0, fixture.host.pointerCancelEnqueueCount)
     assertEquals(EditorInteractionMode.Idle, fixture.controller.interactionMode)
     assertFalse(fixture.controller.tableColumnResizePresentation.pressed)
     assertEquals(null, fixture.controller.tableColumnResizePresentation.draft)
@@ -1895,21 +1893,22 @@ class EditorInteractionsDesktopTest {
     val host = TestHost(tapEligible = tapEligible, documentDownEligible = documentDownEligible)
     private val editor = Editor(FakeFfiEditor(), CoroutineScope(Job()), Dispatchers.Unconfined)
     private val semantics =
-      EditorInteractionSemantics(effects = host).apply {
-        zoomController.syncLayout(layoutSpec = layoutSpec, viewportWidth = 400f)
-        viewportZoom.configure(
-          EditorViewportZoomSemanticConfig(
-            layoutSpec = layoutSpec,
-            zoomController = zoomController,
-            viewportState = viewportState,
-            uiState = uiState,
-            pageSizes = pageSizes,
-            viewportWidth = 400f,
-            density = 1f,
-            onZoomSnap = {},
+      EditorInteractionSemantics(effects = host, contextMenuStateProvider = { uiState.contextMenu })
+        .apply {
+          zoomController.syncLayout(layoutSpec = layoutSpec, viewportWidth = 400f)
+          viewportZoom.configure(
+            EditorViewportZoomSemanticConfig(
+              layoutSpec = layoutSpec,
+              zoomController = zoomController,
+              viewportState = viewportState,
+              uiState = uiState,
+              pageSizes = pageSizes,
+              viewportWidth = 400f,
+              density = 1f,
+              onZoomSnap = {},
+            )
           )
-        )
-      }
+        }
     val controller =
       EditorInteractionController(
         editorProvider = { editor },
@@ -1923,7 +1922,6 @@ class EditorInteractionsDesktopTest {
   private class TestHost(private val tapEligible: Boolean, val documentDownEligible: Boolean) :
     EditorInteractionEffects, EditorInteractionGeometry {
     var interactionMappingAvailable = tapEligible
-    var pointerCancelEnqueueCount = 0
     var pointerStreamCancelCount = 0
     var tapDispatchScheduleCount = 0
     var longPressDispatchScheduleCount = 0
@@ -1974,10 +1972,6 @@ class EditorInteractionsDesktopTest {
     override fun requestFocus(editor: Editor): Boolean = false
 
     override fun requestSoftwareKeyboard() = Unit
-
-    override fun enqueuePointerCancel() {
-      pointerCancelEnqueueCount += 1
-    }
 
     override fun setScrollGestureLocked(locked: Boolean) = Unit
 

@@ -85,10 +85,9 @@ internal class EditorEdgeAutoScrollSemantic {
       dispatchPosition = dispatchPosition,
       context = context,
       dispatch = { scrolled ->
-        context.semantics.cursorMove.enqueuePrimaryClick(
+        context.semantics.pointSelection.enqueueCursorMove(
           editor = context.editor,
           point = scrolled.point,
-          clickCount = 1,
         )
       },
     )

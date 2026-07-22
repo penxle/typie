@@ -15,11 +15,11 @@ import co.typie.editor.interaction.gestures.EditorTableColumnResizeGesture
 import co.typie.editor.interaction.gestures.EditorTableHandleDragUpdate
 import co.typie.editor.interaction.gestures.EditorTableHandleGesture
 import co.typie.editor.interaction.gestures.EditorTapGesture
+import co.typie.editor.interaction.gestures.captureSemanticIntentAtPointerDown
 import co.typie.editor.interaction.gestures.finish
 import co.typie.editor.interaction.gestures.handlePointerDown
 import co.typie.editor.interaction.gestures.handlePointerUp
 import co.typie.editor.interaction.gestures.handleTapTimer
-import co.typie.editor.interaction.gestures.primeModeAtPointerDown
 import co.typie.editor.interaction.gestures.start
 import co.typie.editor.interaction.gestures.trackPointerMove
 import co.typie.editor.interaction.gestures.update
@@ -72,7 +72,6 @@ internal class EditorInteractionGestures(
       resetPointerOwnedState(context = context)
       context.effects.cancelTapDispatch()
       context.effects.cancelLongPressDispatch()
-      context.effects.enqueuePointerCancel()
       return false
     }
 
@@ -106,7 +105,7 @@ internal class EditorInteractionGestures(
     if (
       tapEnabled && columnResizePlacement == null && !tableHandleHit && selectionHandleType == null
     ) {
-      longPress.primeModeAtPointerDown(position = position, context = context)
+      longPress.captureSemanticIntentAtPointerDown(position = position, context = context)
     }
 
     val consumed =
@@ -483,9 +482,7 @@ internal class EditorInteractionGestures(
   fun cancelActivePointerStream(context: EditorGestureContext) {
     context.effects.cancelTapDispatch()
     context.effects.cancelLongPressDispatch()
-    if (tap.cancelActivePointerStream()) {
-      context.effects.enqueuePointerCancel()
-    }
+    tap.cancelActivePointerStream()
   }
 
   private fun cancelTapAndLongPress(context: EditorGestureContext) {
@@ -493,9 +490,7 @@ internal class EditorInteractionGestures(
     context.effects.cancelLongPressDispatch()
     longPress.reset()
     doubleTapDrag.resetPointerOwnedState(context = context)
-    if (tap.cancelActivePointerStream()) {
-      context.effects.enqueuePointerCancel()
-    }
+    tap.cancelActivePointerStream()
   }
 
   private fun trackTapPointerMove(

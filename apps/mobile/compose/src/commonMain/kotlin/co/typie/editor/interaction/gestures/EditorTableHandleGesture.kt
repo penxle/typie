@@ -69,7 +69,7 @@ internal class EditorTableHandleGesture(
     }
     context.effects.cancelTapDispatch()
     context.effects.cancelLongPressDispatch()
-    context.uiState.contextMenu.hide()
+    context.semantics.contextMenu.hide()
     return true
   }
 
@@ -110,7 +110,7 @@ internal class EditorTableHandleGesture(
       return false
     }
 
-    context.uiState.contextMenu.hide()
+    context.semantics.contextMenu.hide()
     context.semantics.magnifier.hide()
     context.effects.cancelTapDispatch()
     context.effects.cancelLongPressDispatch()
@@ -148,7 +148,7 @@ internal class EditorTableHandleGesture(
       return false
     }
 
-    context.uiState.contextMenu.hide()
+    context.semantics.contextMenu.hide()
     context.semantics.magnifier.hide()
     context.effects.setScrollGestureLocked(true)
     context.reduceMode(EditorInteractionEvent.TableHandleDragStart)

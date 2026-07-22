@@ -5,12 +5,7 @@ import co.typie.editor.EditorState
 import co.typie.editor.ext.isCollapsed
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.InputModifiers
-import co.typie.editor.ffi.InteractiveHit
-import co.typie.editor.ffi.Message
-import co.typie.editor.ffi.NodeOp
-import co.typie.editor.ffi.PlainNode
-import co.typie.editor.ffi.Rect
-import co.typie.editor.ffi.ViewOp
+import co.typie.editor.ffi.SelectionPointUnit
 import co.typie.editor.interaction.EditorGestureContext
 import co.typie.editor.interaction.isViewportZooming
 import co.typie.editor.interaction.sessions.EditorDoubleTapDragSession
@@ -183,8 +178,8 @@ internal fun EditorTapGesture.handlePointerDown(
   }
 
   startActivePointer(pointerId = pointerId, position = position, inputModifiers = inputModifiers)
-  captureContextMenuStateAtPointerDown(context.uiState.contextMenu.visible)
-  context.uiState.contextMenu.hide()
+  captureContextMenuStateAtPointerDown(context.semantics.contextMenu.visible)
+  context.semantics.contextMenu.hide()
   if (nextTapCount(position = position, nowMillis = nowMillis) == 2) {
     markTapDispatched()
     context.effects.cancelTapDispatch()
@@ -271,7 +266,7 @@ internal fun EditorTapGesture.handleTapTimer(
   if (clickCount == 1 && context.platform != Platform.Android && hitSelection) {
     markTapDispatched()
     if (shouldOpenContextMenuForCurrentTap()) {
-      context.uiState.contextMenu.show(context.editor.state)
+      context.semantics.contextMenu.show(context.editor.state)
     }
     return
   }
@@ -304,69 +299,88 @@ private fun EditorTapGesture.dispatchTap(
     return false
   }
   val editor = context.editor
-  if (
-    tryHandleInteractiveHit(
-      context = context,
-      pointPage = point.page,
-      pointX = point.x,
-      pointY = point.y,
-    )
-  ) {
+  if (context.semantics.interactiveHit.handleTap(editor = editor, point = point)) {
     return true
   }
   recordTap(nowMillis = nowMillis, position = position, clickCount = clickCount)
-  val wasFocused = context.uiState.focused
-  context.semantics.cursorMove.requestFocus(editor)
+  val wasFocused = context.isFocused
+  context.effects.requestFocus(editor)
   if (wasFocused) {
-    context.semantics.cursorMove.requestSoftwareKeyboard()
+    context.effects.requestSoftwareKeyboard()
   }
   val hitExistingSelectionAtTap =
     editor.selectionHitTest(page = point.page, x = point.x, y = point.y)
   if (clickCount == 1 && context.platform != Platform.Android && hitExistingSelectionAtTap) {
     if (shouldOpenContextMenuForCurrentTap()) {
-      context.uiState.contextMenu.show(editor.state)
+      context.semantics.contextMenu.show(editor.state)
     }
     return false
   }
   val previousCursor = editor.cursor
   beforeLaunch()
   val tap = this
-  context.semantics.cursorMove.launchPrimaryClick(
-    editor = editor,
-    point = point,
-    clickCount = clickCount,
-    inputModifiers = inputModifiers,
-    beforeCommit = { snapshot ->
-      if (clickCount == 1) {
-        when {
-          !snapshot.selection.isCollapsed() -> {
-            if (!hitExistingSelectionAtTap) {
-              context.uiState.contextMenu.show(snapshot)
-              context.semantics.cursorMove.requestCurrentSelectionHead(version = snapshot.version)
-            } else {
-              context.uiState.contextMenu.hide()
-            }
+  val beforeCommit: (EditorState) -> Unit = { snapshot ->
+    if (clickCount == 1) {
+      when {
+        !snapshot.selection.isCollapsed() -> {
+          if (!hitExistingSelectionAtTap) {
+            context.semantics.contextMenu.show(snapshot)
+            context.effects.requestCurrentSelectionHead(version = snapshot.version)
+          } else {
+            context.semantics.contextMenu.hide()
           }
-          isSameCursorTap(previousCursor, snapshot) -> {
-            if (wasFocused && shouldOpenContextMenuForCurrentTap()) {
-              context.uiState.contextMenu.show(snapshot)
-            }
+        }
+        isSameCursorTap(previousCursor, snapshot) -> {
+          if (wasFocused && shouldOpenContextMenuForCurrentTap()) {
+            context.semantics.contextMenu.show(snapshot)
           }
-          else -> {
-            context.uiState.contextMenu.hide()
-            if (snapshot.cursor != null) {
-              context.semantics.cursorMove.requestCurrentSelectionHead(version = snapshot.version)
-            }
+        }
+        else -> {
+          context.semantics.contextMenu.hide()
+          if (snapshot.cursor != null) {
+            context.effects.requestCurrentSelectionHead(version = snapshot.version)
           }
         }
       }
-    },
-    afterDispatch = { dispatched ->
-      if (dispatched && clickCount == 2) {
-        doubleTapDrag.onWordSelectionCommitted(tap = tap, context = context)
-      }
-    },
-  )
+    }
+  }
+  val afterDispatch: (Boolean) -> Unit = { dispatched ->
+    if (dispatched && clickCount == 2) {
+      doubleTapDrag.onWordSelectionCommitted(tap = tap, context = context)
+    }
+  }
+  when {
+    clickCount <= 1 && inputModifiers.shift ->
+      context.semantics.pointSelection.launchSelectionExtension(
+        editor = editor,
+        point = point,
+        beforeCommit = beforeCommit,
+        afterDispatch = afterDispatch,
+      )
+    clickCount <= 1 ->
+      context.semantics.pointSelection.launchCursorMove(
+        editor = editor,
+        point = point,
+        beforeCommit = beforeCommit,
+        afterDispatch = afterDispatch,
+      )
+    clickCount == 2 ->
+      context.semantics.pointSelection.launchUnitSelection(
+        editor = editor,
+        point = point,
+        unit = SelectionPointUnit.Word,
+        beforeCommit = beforeCommit,
+        afterDispatch = afterDispatch,
+      )
+    else ->
+      context.semantics.pointSelection.launchUnitSelection(
+        editor = editor,
+        point = point,
+        unit = SelectionPointUnit.Paragraph,
+        beforeCommit = beforeCommit,
+        afterDispatch = afterDispatch,
+      )
+  }
   return true
 }
 
@@ -387,36 +401,3 @@ private fun CursorMetrics.isSamePosition(other: CursorMetrics): Boolean =
     caret.x == other.caret.x &&
     caret.y == other.caret.y &&
     line.y == other.line.y
-
-private fun tryHandleInteractiveHit(
-  context: EditorGestureContext,
-  pointPage: Int,
-  pointX: Float,
-  pointY: Float,
-): Boolean {
-  return when (
-    val hit = context.editor.interactiveHitTest(page = pointPage, x = pointX, y = pointY)
-  ) {
-    is InteractiveHit.FoldTitle -> {
-      val onText = hit.textRect?.contains(pointX, pointY) == true
-      if (onText) {
-        false
-      } else {
-        context.editor.enqueue(Message.View(ViewOp.ToggleFold(id = hit.id)))
-        true
-      }
-    }
-    is InteractiveHit.CalloutIcon -> {
-      context.editor.enqueue(
-        Message.Node(
-          NodeOp.SetAttrs(id = hit.id, attrs = PlainNode.Callout(variant = hit.nextVariant))
-        )
-      )
-      true
-    }
-    else -> false
-  }
-}
-
-private fun Rect.contains(x: Float, y: Float): Boolean =
-  x >= this.x && x <= this.x + width && y >= this.y && y <= this.y + height

@@ -39,7 +39,7 @@ internal class EditorDoubleTapDragSession {
     tap.markTapDispatched()
     context.semantics.selectionExpansion.reset()
     context.semantics.selectionExpansion.awaitWordSelectionCommit()
-    context.uiState.contextMenu.hide()
+    context.semantics.contextMenu.hide()
     context.effects.setScrollGestureLocked(true)
     startPosition = position
     startThresholdPx = EditorDoubleTapDragStartThresholdDp * context.geometry.density
@@ -81,11 +81,11 @@ internal class EditorDoubleTapDragSession {
         context.reduceMode(EditorInteractionEvent.DoubleTapDragEnd)
       }
       if (!context.editor.selection.isCollapsed()) {
-        context.uiState.contextMenu.show(context.editor.state)
+        context.semantics.contextMenu.show(context.editor.state)
       }
     } else if (wasPending) {
       if (!context.editor.selection.isCollapsed()) {
-        context.uiState.contextMenu.show(context.editor.state)
+        context.semantics.contextMenu.show(context.editor.state)
       }
     }
     context.semantics.magnifier.hide()
@@ -97,7 +97,7 @@ internal class EditorDoubleTapDragSession {
     flushPendingSelectionExtension(context = context)
     if (!tap.hasActivePointer && !active) {
       if (!context.editor.selection.isCollapsed()) {
-        context.uiState.contextMenu.show(context.editor.state)
+        context.semantics.contextMenu.show(context.editor.state)
       }
       resetSelectionExtensionState(context = context)
     }

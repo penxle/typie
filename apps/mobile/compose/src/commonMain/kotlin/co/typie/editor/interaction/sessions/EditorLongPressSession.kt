@@ -3,19 +3,15 @@ package co.typie.editor.interaction.sessions
 import androidx.compose.ui.geometry.Offset
 import co.typie.editor.PagePoint
 import co.typie.editor.ext.isCollapsed
+import co.typie.editor.ffi.SelectionPointUnit
 import co.typie.editor.interaction.EditorGestureContext
 import co.typie.editor.interaction.EditorInteractionEvent
 import co.typie.editor.interaction.EditorInteractionMode
 import co.typie.editor.interaction.canApply
 import co.typie.editor.interaction.isLongPressing
 import co.typie.editor.interaction.isViewportZooming
+import co.typie.editor.interaction.semantics.EditorLongPressSemanticIntent
 import co.typie.editor.interaction.semantics.dispatchSelectionExtension
-import co.typie.editor.interaction.semantics.enqueuePrimaryClick
-
-internal enum class EditorLongPressSemanticIntent {
-  CursorMove,
-  WordSelection,
-}
 
 internal class EditorLongPressSession {
   private var activePointerId: Long? = null
@@ -59,7 +55,7 @@ internal class EditorLongPressSession {
     }
     context.effects.setScrollGestureLocked(true)
 
-    context.uiState.contextMenu.hide()
+    context.semantics.contextMenu.hide()
     context.semantics.magnifier.show(position)
     if (semanticIntent == EditorLongPressSemanticIntent.WordSelection) {
       context.semantics.selectionExpansion.awaitWordSelectionCommit(
@@ -111,10 +107,9 @@ internal class EditorLongPressSession {
       return context.editor.dispatchSelectionExtension(point = point, context = selectionContext)
     }
 
-    return context.semantics.cursorMove.enqueuePrimaryClick(
+    return context.semantics.pointSelection.enqueueCursorMove(
       editor = context.editor,
       point = point,
-      clickCount = 1,
     )
   }
 
@@ -136,9 +131,9 @@ internal class EditorLongPressSession {
 
     val endedWord = isWordSelection
     if (endedWord && !context.editor.selection.isCollapsed()) {
-      context.uiState.contextMenu.show(context.editor.state)
+      context.semantics.contextMenu.show(context.editor.state)
     } else if (endedWord) {
-      context.uiState.contextMenu.requestShowAfterSelectionCommit()
+      context.semantics.contextMenu.requestShowAfterSelectionCommit()
     }
     context.reduceMode(event)
     end()
@@ -168,13 +163,13 @@ internal class EditorLongPressSession {
   }
 
   private fun dispatchWordSelectionAt(point: PagePoint, context: EditorGestureContext) {
-    context.semantics.cursorMove.launchPrimaryClick(
+    context.semantics.pointSelection.launchUnitSelection(
       editor = context.editor,
       point = point,
-      clickCount = 2,
+      unit = SelectionPointUnit.Word,
       afterDispatch = {
         context.semantics.selectionExpansion.markWordSelectionCommitted()
-        context.uiState.contextMenu.showAfterSelectionCommitIfRequested(context.editor.state)
+        context.semantics.contextMenu.showAfterSelectionCommitIfRequested(context.editor.state)
       },
     )
   }

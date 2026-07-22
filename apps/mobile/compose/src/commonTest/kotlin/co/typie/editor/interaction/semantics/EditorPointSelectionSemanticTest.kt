@@ -6,7 +6,6 @@ import co.typie.editor.FakeFfiEditor
 import co.typie.editor.PagePoint
 import co.typie.editor.ffi.Affinity
 import co.typie.editor.ffi.CursorMetrics
-import co.typie.editor.ffi.InputModifiers
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.PageRect
 import co.typie.editor.ffi.Position
@@ -23,20 +22,19 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class EditorCursorMoveSemanticTest {
+class EditorPointSelectionSemanticTest {
   @Test
-  fun `primary click dispatch sends set at and runs before commit hook`() =
+  fun `cursor move sends set at and runs before commit hook`() =
     runTest(StandardTestDispatcher()) {
       val fake = FakeFfiEditor(cursorProvider = { cursorAt(x = 20f) })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      val semantic = EditorCursorMoveSemantic(effects = UnusedEffects)
+      val semantic = EditorPointSelectionSemantic(effects = UnusedEffects)
       var beforeCommitCalled = false
 
       assertTrue(
-        semantic.dispatchPrimaryClick(
+        semantic.dispatchCursorMove(
           editor = editor,
           point = PagePoint(page = 0, x = 10f, y = 20f),
-          clickCount = 1,
           beforeCommit = { beforeCommitCalled = true },
         )
       )
@@ -48,9 +46,9 @@ class EditorCursorMoveSemanticTest {
     }
 
   @Test
-  fun `primary click semantic does not own selection hit admission`() =
+  fun `cursor move semantic does not own selection hit admission`() =
     runTest(StandardTestDispatcher()) {
-      val semantic = EditorCursorMoveSemantic(effects = UnusedEffects)
+      val semantic = EditorPointSelectionSemantic(effects = UnusedEffects)
       val rangeSelection =
         Selection(
           anchor = Position("text", 0, Affinity.Downstream),
@@ -69,11 +67,7 @@ class EditorCursorMoveSemanticTest {
       fake.enqueued.clear()
 
       assertTrue(
-        semantic.dispatchPrimaryClick(
-          editor = editor,
-          point = PagePoint(page = 0, x = 10f, y = 20f),
-          clickCount = 1,
-        )
+        semantic.dispatchCursorMove(editor = editor, point = PagePoint(page = 0, x = 10f, y = 20f))
       )
 
       val expectedMessages: List<Message> =
@@ -82,7 +76,7 @@ class EditorCursorMoveSemanticTest {
     }
 
   @Test
-  fun `shift primary click extends from the current selection anchor`() =
+  fun `selection extension uses the current selection anchor`() =
     runTest(StandardTestDispatcher()) {
       val selection =
         Selection(
@@ -93,14 +87,12 @@ class EditorCursorMoveSemanticTest {
         FakeFfiEditor(cursorProvider = { cursorAt(x = 20f) }, selectionProvider = { selection })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
       editor.sync {}
-      val semantic = EditorCursorMoveSemantic(effects = UnusedEffects)
+      val semantic = EditorPointSelectionSemantic(effects = UnusedEffects)
 
       assertTrue(
-        semantic.dispatchPrimaryClick(
+        semantic.dispatchSelectionExtension(
           editor = editor,
           point = PagePoint(page = 0, x = 10f, y = 20f),
-          clickCount = 1,
-          inputModifiers = InputModifiers(shift = true),
         )
       )
 
@@ -121,7 +113,7 @@ class EditorCursorMoveSemanticTest {
     }
 
   @Test
-  fun `double tap is not suppressed by selection hit guard`() =
+  fun `unit selection is not suppressed by selection hit guard`() =
     runTest(StandardTestDispatcher()) {
       val rangeSelection =
         Selection(
@@ -137,13 +129,13 @@ class EditorCursorMoveSemanticTest {
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
       editor.sync {}
       fake.enqueued.clear()
-      val semantic = EditorCursorMoveSemantic(effects = UnusedEffects)
+      val semantic = EditorPointSelectionSemantic(effects = UnusedEffects)
 
       assertTrue(
-        semantic.dispatchPrimaryClick(
+        semantic.dispatchUnitSelection(
           editor = editor,
           point = PagePoint(page = 0, x = 10f, y = 20f),
-          clickCount = 2,
+          unit = SelectionPointUnit.Word,
         )
       )
 
@@ -189,8 +181,6 @@ class EditorCursorMoveSemanticTest {
 
     override fun requestSoftwareKeyboard() =
       error("Unused in direct cursor semantic dispatch tests")
-
-    override fun enqueuePointerCancel() = error("Unused in direct cursor semantic dispatch tests")
 
     override fun setScrollGestureLocked(locked: Boolean) =
       error("Unused in direct cursor semantic dispatch tests")

@@ -2,17 +2,27 @@ package co.typie.editor.interaction
 
 import co.typie.editor.Editor
 import co.typie.editor.EditorState
-import co.typie.editor.interaction.semantics.EditorCursorMoveSemantic
+import co.typie.editor.interaction.semantics.EditorContextMenuSemantic
 import co.typie.editor.interaction.semantics.EditorEdgeAutoScrollSemantic
+import co.typie.editor.interaction.semantics.EditorInteractiveHitSemantic
+import co.typie.editor.interaction.semantics.EditorLongPressSemantic
 import co.typie.editor.interaction.semantics.EditorMagnifierSemantic
+import co.typie.editor.interaction.semantics.EditorPointSelectionSemantic
 import co.typie.editor.interaction.semantics.EditorSelectionExpansionSemantic
 import co.typie.editor.interaction.semantics.EditorSelectionHapticSemantic
 import co.typie.editor.interaction.semantics.EditorTableColumnResizeSemantic
 import co.typie.editor.interaction.semantics.EditorViewportZoomSemantic
+import co.typie.editor.runtime.EditorContextMenuState
 
 internal class EditorInteractionSemantics(
   effects: EditorInteractionEffects,
-  val cursorMove: EditorCursorMoveSemantic = EditorCursorMoveSemantic(effects = effects),
+  contextMenuStateProvider: () -> EditorContextMenuState,
+  val pointSelection: EditorPointSelectionSemantic =
+    EditorPointSelectionSemantic(effects = effects),
+  val contextMenu: EditorContextMenuSemantic =
+    EditorContextMenuSemantic(stateProvider = contextMenuStateProvider),
+  val interactiveHit: EditorInteractiveHitSemantic = EditorInteractiveHitSemantic(),
+  val longPress: EditorLongPressSemantic = EditorLongPressSemantic(),
   val selectionExpansion: EditorSelectionExpansionSemantic = EditorSelectionExpansionSemantic(),
   val viewportZoom: EditorViewportZoomSemantic = EditorViewportZoomSemantic(),
   val magnifier: EditorMagnifierSemantic = EditorMagnifierSemantic(),
@@ -22,11 +32,11 @@ internal class EditorInteractionSemantics(
     EditorSelectionHapticSemantic(effects = effects),
 ) {
   fun onEditorStateChanged(editor: Editor, state: EditorState, mode: EditorInteractionMode) {
+    contextMenu.onEditorStateChanged(state)
     selectionHaptic.onEditorStateChanged(editor = editor, state = state, mode = mode)
   }
 
   fun reset() {
-    cursorMove.reset()
     selectionExpansion.reset()
     viewportZoom.reset()
     magnifier.reset()

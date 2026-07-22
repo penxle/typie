@@ -44,7 +44,13 @@ internal class EditorInteractionScope(
   private var longPressDispatchJob: Job? = null
   private var scrollGestureLockState: ScrollGestureLockState? = null
   private var scrollGestureLockHandle: ScrollGestureLockHandle? = null
-  private val semantics = EditorInteractionSemantics(effects = this)
+  private val semantics =
+    EditorInteractionSemantics(
+      effects = this,
+      contextMenuStateProvider = {
+        checkNotNull(uiState) { "Editor interaction scope has no UI state" }.contextMenu
+      },
+    )
 
   val controller: EditorInteractionController =
     EditorInteractionController(
@@ -243,8 +249,6 @@ internal class EditorInteractionScope(
   override fun requestSoftwareKeyboard() {
     onRequestSoftwareKeyboard?.invoke()
   }
-
-  override fun enqueuePointerCancel() = Unit
 
   override fun setScrollGestureLocked(locked: Boolean) {
     if (locked) {

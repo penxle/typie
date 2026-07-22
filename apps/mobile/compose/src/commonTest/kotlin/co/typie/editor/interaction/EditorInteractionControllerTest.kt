@@ -40,6 +40,7 @@ import co.typie.editor.ffi.TableOverlayRow
 import co.typie.editor.ffi.ViewOp
 import co.typie.editor.interaction.gestures.EditorPanGestureDriver
 import co.typie.editor.interaction.semantics.EditorViewportZoomSemanticConfig
+import co.typie.editor.runtime.EditorContextMenuState
 import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.viewport.EditorViewportState
 import co.typie.platform.Platform
@@ -159,7 +160,6 @@ class EditorInteractionControllerTest {
 
       assertEquals(EditorInteractionMode.ViewportZooming, controller.interactionMode)
       assertEquals(1, host.cancelTapDispatchCount)
-      assertEquals(1, host.pointerCancelCount)
       assertNull(controller.magnifierPosition)
     }
 
@@ -174,7 +174,11 @@ class EditorInteractionControllerTest {
           effects = host,
           geometry = host,
           uiStateProvider = { host.uiState },
-          semantics = viewportZoomEnabledSemantics(effects = host),
+          semantics =
+            viewportZoomEnabledSemantics(
+              effects = host,
+              contextMenuStateProvider = { host.uiState.contextMenu },
+            ),
         )
       controller.updateTapSlop(8f)
       controller.onPointerDown(pointerId = 1L, position = Offset(10f, 20f), nowMillis = 0L)
@@ -185,8 +189,6 @@ class EditorInteractionControllerTest {
         )
       )
       assertEquals(EditorInteractionMode.ViewportZooming, controller.interactionMode)
-      assertEquals(1, host.pointerCancelCount)
-
       assertTrue(
         controller.onPinchSample(
           EditorPinchSample(focalInRootPx = Offset(70f, 25f), distancePx = 120f)
@@ -238,7 +240,11 @@ class EditorInteractionControllerTest {
           effects = host,
           geometry = host,
           uiStateProvider = { host.uiState },
-          semantics = viewportZoomEnabledSemantics(effects = host),
+          semantics =
+            viewportZoomEnabledSemantics(
+              effects = host,
+              contextMenuStateProvider = { host.uiState.contextMenu },
+            ),
         )
       controller.updateTapSlop(8f)
       val start = Offset(10f, 20f)
@@ -696,9 +702,9 @@ class EditorInteractionControllerTest {
 
       assertFalse(host.uiState.contextMenu.isVisibleFor(editor.state))
 
-      host.uiState.contextMenu.onEditorStateChanged(editor.state)
-      host.uiState.contextMenu.showAfterSelectionCommitIfRequested(editor.state)
+      controller.onEditorStateChanged(editor.state)
 
+      assertFalse(host.uiState.contextMenu.visible)
       assertFalse(host.uiState.contextMenu.isVisibleFor(editor.state))
     }
 
@@ -958,7 +964,11 @@ class EditorInteractionControllerTest {
           effects = host,
           geometry = host,
           uiStateProvider = { host.uiState },
-          semantics = viewportZoomEnabledSemantics(effects = host),
+          semantics =
+            viewportZoomEnabledSemantics(
+              effects = host,
+              contextMenuStateProvider = { host.uiState.contextMenu },
+            ),
         )
       controller.updateTapSlop(8f)
       val start = Offset(10f, 20f)
@@ -977,7 +987,6 @@ class EditorInteractionControllerTest {
       assertEquals(EditorInteractionMode.ViewportZooming, controller.interactionMode)
       controller.onPinchEnd()
 
-      assertEquals(1, host.pointerCancelCount)
       assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
       assertFalse(
         controller.onPointerMove(
@@ -1003,7 +1012,11 @@ class EditorInteractionControllerTest {
           effects = host,
           geometry = host,
           uiStateProvider = { host.uiState },
-          semantics = viewportZoomEnabledSemantics(effects = host),
+          semantics =
+            viewportZoomEnabledSemantics(
+              effects = host,
+              contextMenuStateProvider = { host.uiState.contextMenu },
+            ),
         )
       controller.updateTapSlop(8f)
 
@@ -1438,8 +1451,7 @@ class EditorInteractionControllerTest {
 
       selection = committedSelection
       editor.sync {}
-      host.uiState.contextMenu.onEditorStateChanged(editor.state)
-      host.uiState.contextMenu.showAfterSelectionCommitIfRequested(editor.state)
+      controller.onEditorStateChanged(editor.state)
 
       assertTrue(host.uiState.contextMenu.isVisibleFor(editor.state))
     }
@@ -1549,7 +1561,11 @@ class EditorInteractionControllerTest {
           edgeAutoScrollViewport = testEdgeAutoScrollViewport(ComposeRect(0f, 0f, 100f, 100f))
           edgeAutoScrollConsumedDelta = Offset(2f, 3f)
         }
-      val semantics = EditorInteractionSemantics(effects = host)
+      val semantics =
+        EditorInteractionSemantics(
+          effects = host,
+          contextMenuStateProvider = { host.uiState.contextMenu },
+        )
       val context =
         object : EditorGestureContext {
           override val editor = testEditor
@@ -1557,7 +1573,7 @@ class EditorInteractionControllerTest {
           override val effects = host
           override val geometry = host
           override val mode = EditorInteractionMode.Idle
-          override val uiState = host.uiState
+          override val isFocused = host.uiState.focused
           override val readOnly = false
           override val platform = Platform.Desktop
 
@@ -3227,6 +3243,45 @@ class EditorInteractionControllerTest {
     }
 
   @Test
+  fun `android long press keeps pointer down cursor hit decision when timer fires`() =
+    runTest(StandardTestDispatcher()) {
+      var cursorHit = false
+      val fake =
+        FakeFfiEditor(
+          cursorProvider = { cursorAt(x = 10f) },
+          cursorHitProvider = { _, _, _ -> cursorHit },
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+          platformProvider = { Platform.Android },
+        )
+      controller.updateTapSlop(8f)
+      val start = Offset(10f, 20f)
+
+      controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
+      cursorHit = true
+      assertTrue(controller.onLongPressTimer(pointerId = 1L, position = start, nowMillis = 500L))
+      advanceUntilIdle()
+
+      assertEquals(EditorInteractionMode.LongPressWordSelecting, controller.interactionMode)
+      assertEquals(
+        listOf<Message>(
+          Message.Selection(
+            SelectionOp.SelectUnitAt(page = 0, x = 10f, y = 20f, unit = SelectionPointUnit.Word)
+          )
+        ),
+        fake.enqueued,
+      )
+    }
+
+  @Test
   fun `ios long press keeps cursor move mode instead of word selection`() =
     runTest(StandardTestDispatcher()) {
       val fake = FakeFfiEditor()
@@ -3509,8 +3564,7 @@ class EditorInteractionControllerTest {
 
       assertTrue(host.uiState.contextMenu.isVisibleFor(editor.state))
 
-      host.uiState.contextMenu.onEditorStateChanged(editor.state)
-      host.uiState.contextMenu.showAfterSelectionCommitIfRequested(editor.state)
+      controller.onEditorStateChanged(editor.state)
 
       assertTrue(host.uiState.contextMenu.isVisibleFor(editor.state))
     }
@@ -3544,7 +3598,6 @@ class EditorInteractionControllerTest {
         )
       )
 
-      assertEquals(1, host.pointerCancelCount)
       assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
       assertFalse(
         controller.onPointerMove(
@@ -3588,7 +3641,6 @@ class EditorInteractionControllerTest {
       assertFalse(controller.onPointerDown(pointerId = 3L, position = start, nowMillis = 150L))
       advanceUntilIdle()
 
-      assertEquals(1, host.pointerCancelCount)
       assertEquals(
         emptyList<SelectionOp.ExtendTo>(),
         fake.enqueued
@@ -3647,7 +3699,6 @@ class EditorInteractionControllerTest {
     var scheduledTapDispatchAtMillis: Long? = null
     var scheduledLongPressDispatchAtMillis: Long? = null
     var cancelTapDispatchCount = 0
-    var pointerCancelCount = 0
     var launchInteractionCount = 0
     var focused = false
     var softwareKeyboardRequestCount = 0
@@ -3745,10 +3796,6 @@ class EditorInteractionControllerTest {
       softwareKeyboardRequestCount += 1
     }
 
-    override fun enqueuePointerCancel() {
-      pointerCancelCount += 1
-    }
-
     override fun setScrollGestureLocked(locked: Boolean) {
       scrollGestureLockActive = locked
     }
@@ -3764,7 +3811,8 @@ class EditorInteractionControllerTest {
     const val SelectionHandleTestPointerId = 1L
 
     fun viewportZoomEnabledSemantics(
-      effects: EditorInteractionEffects
+      effects: EditorInteractionEffects,
+      contextMenuStateProvider: () -> EditorContextMenuState,
     ): EditorInteractionSemantics {
       val layoutSpec =
         EditorDocumentLayoutSpec.Paginated(
@@ -3795,20 +3843,24 @@ class EditorInteractionControllerTest {
         }
       zoomController.syncLayout(layoutSpec = layoutSpec, viewportWidth = 720f)
 
-      return EditorInteractionSemantics(effects = effects).apply {
-        viewportZoom.configure(
-          EditorViewportZoomSemanticConfig(
-            layoutSpec = layoutSpec,
-            zoomController = zoomController,
-            viewportState = viewportState,
-            uiState = uiState,
-            pageSizes = pageSizes,
-            viewportWidth = 720f,
-            density = 1f,
-            onZoomSnap = {},
-          )
+      return EditorInteractionSemantics(
+          effects = effects,
+          contextMenuStateProvider = contextMenuStateProvider,
         )
-      }
+        .apply {
+          viewportZoom.configure(
+            EditorViewportZoomSemanticConfig(
+              layoutSpec = layoutSpec,
+              zoomController = zoomController,
+              viewportState = viewportState,
+              uiState = uiState,
+              pageSizes = pageSizes,
+              viewportWidth = 720f,
+              density = 1f,
+              onZoomSnap = {},
+            )
+          )
+        }
     }
 
     fun cursorAt(x: Float): CursorMetrics =

@@ -15,50 +15,34 @@ import co.typie.platform.Platform
 
 internal class EditorInteractionController(
   private val editorProvider: () -> Editor,
-  private val effects: EditorInteractionEffects,
-  private val geometry: EditorInteractionGeometry,
-  private val semantics: EditorInteractionSemantics = EditorInteractionSemantics(effects = effects),
-  private val platformProvider: () -> Platform = { Platform.Desktop },
+  override val effects: EditorInteractionEffects,
+  override val geometry: EditorInteractionGeometry,
   private val uiStateProvider: () -> EditorUiState,
+  override val semantics: EditorInteractionSemantics =
+    EditorInteractionSemantics(
+      effects = effects,
+      contextMenuStateProvider = { uiStateProvider().contextMenu },
+    ),
+  private val platformProvider: () -> Platform = { Platform.Desktop },
   private val pointerInputEnabledProvider: () -> Boolean = { true },
   private val readOnlyProvider: () -> Boolean = { false },
-) {
-  private var mode by mutableStateOf(EditorInteractionMode.Idle)
-  private val gestureContext =
-    object : EditorGestureContext {
-      override val editor: Editor
-        get() = editorProvider()
+) : EditorGestureContext {
+  override val editor: Editor
+    get() = editorProvider()
 
-      override val semantics: EditorInteractionSemantics
-        get() = this@EditorInteractionController.semantics
+  override var mode by mutableStateOf(EditorInteractionMode.Idle)
+    private set
 
-      override val effects: EditorInteractionEffects
-        get() = this@EditorInteractionController.effects
+  override val isFocused: Boolean
+    get() = uiStateProvider().focused
 
-      override val geometry: EditorInteractionGeometry
-        get() = this@EditorInteractionController.geometry
+  override val readOnly: Boolean
+    get() = readOnlyProvider()
 
-      override val mode: EditorInteractionMode
-        get() = this@EditorInteractionController.mode
+  override val platform: Platform
+    get() = platformProvider()
 
-      override val uiState: EditorUiState
-        get() = uiStateProvider()
-
-      override val readOnly: Boolean
-        get() = readOnlyProvider()
-
-      override val platform: Platform
-        get() = platformProvider()
-
-      override fun applyModeEvent(event: EditorInteractionEvent) {
-        this@EditorInteractionController.applyModeEvent(event)
-      }
-
-      override fun reduceMode(event: EditorInteractionEvent) {
-        this@EditorInteractionController.reduceMode(event)
-      }
-    }
-  private val gestures = EditorInteractionGestures(contextProvider = { gestureContext })
+  private val gestures = EditorInteractionGestures(contextProvider = { this })
 
   val interactionMode: EditorInteractionMode
     get() = mode
@@ -95,7 +79,7 @@ internal class EditorInteractionController(
         tapEnabled = tapEnabled && position != null,
         inputModifiers = inputModifiers,
         touchPanDriver = touchPanDriver,
-        context = gestureContext,
+        context = this,
       )
     } else {
       false
@@ -111,7 +95,7 @@ internal class EditorInteractionController(
         change = change,
         positionInEditor = position,
         positionInRoot = positionInRoot,
-        context = gestureContext,
+        context = this,
       )
     } else {
       false
@@ -127,7 +111,7 @@ internal class EditorInteractionController(
         change = change,
         positionInEditor = position,
         positionInRoot = positionInRoot,
-        context = gestureContext,
+        context = this,
       )
     } else {
       false
@@ -135,12 +119,12 @@ internal class EditorInteractionController(
 
   fun onPinchSample(sample: EditorPinchSample): Boolean =
     if (ensurePointerInputEnabled()) {
-      gestures.handlePinchSample(sample = sample, context = gestureContext)
+      gestures.handlePinchSample(sample = sample, context = this)
     } else {
       false
     }
 
-  fun onPinchEnd(): Boolean = gestures.endPinch(context = gestureContext)
+  fun onPinchEnd(): Boolean = gestures.endPinch(context = this)
 
   fun endPinchAndResumeViewportPan(
     change: PointerInputChange,
@@ -154,26 +138,26 @@ internal class EditorInteractionController(
       change = change,
       position = position,
       driver = driver,
-      context = gestureContext,
+      context = this,
     )
   }
 
   fun beginIndirectZoom(): Boolean =
     if (ensurePointerInputEnabled()) {
-      gestures.beginIndirectZoom(context = gestureContext)
+      gestures.beginIndirectZoom(context = this)
     } else {
       false
     }
 
   fun cancelPendingPointerForIndirectInput(): Boolean =
-    gestures.cancelPendingPointerForIndirectInput(context = gestureContext)
+    gestures.cancelPendingPointerForIndirectInput(context = this)
 
   fun updateIndirectScrollZoom(focalInRootPx: Offset, normalizedDelta: Float): Boolean =
     if (ensurePointerInputEnabled()) {
       gestures.updateIndirectScrollZoom(
         focalInRootPx = focalInRootPx,
         normalizedDelta = normalizedDelta,
-        context = gestureContext,
+        context = this,
       )
     } else {
       false
@@ -184,14 +168,14 @@ internal class EditorInteractionController(
       gestures.updateIndirectScaleZoom(
         focalInRootPx = focalInRootPx,
         scaleFactor = scaleFactor,
-        context = gestureContext,
+        context = this,
       )
     } else {
       false
     }
 
   fun endIndirectZoom() {
-    gestures.endIndirectZoom(context = gestureContext)
+    gestures.endIndirectZoom(context = this)
   }
 
   fun onLongPressTimer(pointerId: Long, position: Offset, nowMillis: Long): Boolean =
@@ -200,7 +184,7 @@ internal class EditorInteractionController(
         pointerId = pointerId,
         position = position,
         nowMillis = nowMillis,
-        context = gestureContext,
+        context = this,
       )
     } else {
       false
@@ -210,14 +194,14 @@ internal class EditorInteractionController(
     if (!ensurePointerInputEnabled()) {
       return
     }
-    gestures.handleTapTimer(nowMillis = nowMillis, context = gestureContext)
+    gestures.handleTapTimer(nowMillis = nowMillis, context = this)
   }
 
   fun onEditorStateChanged(state: EditorState) {
     semantics.onEditorStateChanged(editor = editorProvider(), state = state, mode = mode)
   }
 
-  fun applyModeEvent(event: EditorInteractionEvent) {
+  override fun applyModeEvent(event: EditorInteractionEvent) {
     if (!mode.canApply(event)) {
       return
     }
@@ -227,13 +211,13 @@ internal class EditorInteractionController(
       event = event,
       previousMode = previousMode,
       currentMode = mode,
-      context = gestureContext,
+      context = this,
     )
   }
 
   fun cancel() {
     reduceMode(EditorInteractionEvent.PointerCancel)
-    gestures.cancel(context = gestureContext)
+    gestures.cancel(context = this)
   }
 
   fun reset() {
@@ -243,7 +227,7 @@ internal class EditorInteractionController(
     semantics.reset()
   }
 
-  private fun reduceMode(event: EditorInteractionEvent) {
+  override fun reduceMode(event: EditorInteractionEvent) {
     mode = mode.reduce(event)
   }
 

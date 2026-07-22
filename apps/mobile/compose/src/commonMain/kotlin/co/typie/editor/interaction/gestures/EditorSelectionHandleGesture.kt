@@ -185,7 +185,7 @@ internal class EditorSelectionHandleGesture(
     }
     context.effects.cancelLongPressDispatch()
     context.effects.setScrollGestureLocked(true)
-    context.uiState.contextMenu.hide()
+    context.semantics.contextMenu.hide()
     return true
   }
 
@@ -200,7 +200,7 @@ internal class EditorSelectionHandleGesture(
       return false
     }
 
-    context.uiState.contextMenu.hide()
+    context.semantics.contextMenu.hide()
     context.semantics.magnifier.hide()
     context.reduceMode(EditorInteractionEvent.SelectionHandleDragStart)
     if (context.mode != EditorInteractionMode.SelectionHandleDragging) {
@@ -237,7 +237,7 @@ internal class EditorSelectionHandleGesture(
       return false
     }
 
-    context.uiState.contextMenu.hide()
+    context.semantics.contextMenu.hide()
     context.semantics.magnifier.hide()
     context.effects.setScrollGestureLocked(true)
     context.reduceMode(EditorInteractionEvent.SelectionHandleDragStart)
@@ -302,8 +302,8 @@ internal class EditorSelectionHandleGesture(
       context.reduceMode(EditorInteractionEvent.SelectionHandleDragEnd)
     }
     if (wasDragging && !context.editor.selection.isCollapsed()) {
-      context.uiState.contextMenu.show(context.editor.state)
-      context.uiState.contextMenu.requestShowAfterSelectionCommit()
+      context.semantics.contextMenu.show(context.editor.state)
+      context.semantics.contextMenu.requestShowAfterSelectionCommit()
     }
     return wasActive
   }

@@ -1,7 +1,6 @@
 package co.typie.editor.interaction
 
 import co.typie.editor.Editor
-import co.typie.editor.runtime.EditorUiState
 import co.typie.platform.Platform
 
 internal interface EditorGestureContext {
@@ -10,7 +9,7 @@ internal interface EditorGestureContext {
   val effects: EditorInteractionEffects
   val geometry: EditorInteractionGeometry
   val mode: EditorInteractionMode
-  val uiState: EditorUiState
+  val isFocused: Boolean
   val readOnly: Boolean
 
   val platform: Platform

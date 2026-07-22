@@ -20,8 +20,6 @@ internal interface EditorInteractionEffects {
 
   fun requestSoftwareKeyboard()
 
-  fun enqueuePointerCancel()
-
   fun setScrollGestureLocked(locked: Boolean)
 
   fun performSelectionHaptic()

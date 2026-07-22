@@ -4,7 +4,7 @@ import androidx.compose.ui.geometry.Offset
 import co.typie.editor.PagePoint
 import co.typie.editor.ext.isCollapsed
 import co.typie.editor.interaction.EditorGestureContext
-import co.typie.editor.interaction.sessions.EditorLongPressSemanticIntent
+import co.typie.editor.interaction.semantics.EditorLongPressSemanticIntent
 import co.typie.editor.interaction.sessions.EditorLongPressSession
 import co.typie.platform.Platform
 
@@ -14,8 +14,10 @@ internal class EditorLongPressGesture {
   private val session = EditorLongPressSession()
   private var pendingPointerId: Long? = null
 
-  var androidUseCursorModeAtPointerDown: Boolean? = null
-    private set
+  private var semanticIntentAtPointerDown: EditorLongPressSemanticIntent? = null
+
+  val capturedSemanticIntent: EditorLongPressSemanticIntent?
+    get() = semanticIntentAtPointerDown
 
   val active: Boolean
     get() = session.active
@@ -27,8 +29,8 @@ internal class EditorLongPressGesture {
     pendingPointerId = pointerId
   }
 
-  fun primeAndroidSemanticAtPointerDown(useCursorMode: Boolean) {
-    androidUseCursorModeAtPointerDown = useCursorMode
+  fun captureSemanticIntentAtPointerDown(intent: EditorLongPressSemanticIntent) {
+    semanticIntentAtPointerDown = intent
   }
 
   fun canStart(pointerId: Long): Boolean = pendingPointerId == pointerId && !session.active
@@ -38,7 +40,7 @@ internal class EditorLongPressGesture {
   fun cancelPending(pointerId: Long? = null): Boolean {
     if (pointerId == null || pendingPointerId == pointerId) {
       pendingPointerId = null
-      androidUseCursorModeAtPointerDown = null
+      semanticIntentAtPointerDown = null
       return true
     }
     return false
@@ -47,7 +49,7 @@ internal class EditorLongPressGesture {
   fun end() {
     pendingPointerId = null
     session.end()
-    androidUseCursorModeAtPointerDown = null
+    semanticIntentAtPointerDown = null
   }
 
   fun reset() {
@@ -62,7 +64,7 @@ internal class EditorLongPressGesture {
     context: EditorGestureContext,
   ): Boolean {
     pendingPointerId = null
-    androidUseCursorModeAtPointerDown = null
+    semanticIntentAtPointerDown = null
     return session.start(
       pointerId = pointerId,
       position = position,
@@ -78,15 +80,18 @@ internal class EditorLongPressGesture {
   fun finishSession(context: EditorGestureContext): Boolean = session.finish(context = context)
 }
 
-internal fun EditorLongPressGesture.primeModeAtPointerDown(
+internal fun EditorLongPressGesture.captureSemanticIntentAtPointerDown(
   position: Offset,
   context: EditorGestureContext,
 ) {
-  if (context.platform != Platform.Android) {
-    return
-  }
   val point = context.geometry.resolvePoint(positionInNode = position) ?: return
-  primeAndroidSemanticAtPointerDown(useCursorMode = shouldUseAndroidCursorMode(point, context))
+  captureSemanticIntentAtPointerDown(
+    context.semantics.longPress.resolveIntent(
+      editor = context.editor,
+      point = point,
+      platform = context.platform,
+    )
+  )
 }
 
 internal fun EditorLongPressGesture.start(
@@ -98,7 +103,13 @@ internal fun EditorLongPressGesture.start(
     return false
   }
   val point = resolveAdmission(position = position, context = context) ?: return false
-  val semanticIntent = resolveSemanticIntent(point = point, context = context)
+  val semanticIntent =
+    capturedSemanticIntent
+      ?: context.semantics.longPress.resolveIntent(
+        editor = context.editor,
+        point = point,
+        platform = context.platform,
+      )
   return startSession(
     pointerId = pointerId,
     position = position,
@@ -134,28 +145,4 @@ private fun EditorLongPressGesture.resolveAdmission(
     }
   }
   return point
-}
-
-private fun EditorLongPressGesture.resolveSemanticIntent(
-  point: PagePoint,
-  context: EditorGestureContext,
-): EditorLongPressSemanticIntent {
-  if (context.platform != Platform.Android) {
-    return EditorLongPressSemanticIntent.CursorMove
-  }
-  val useCursorMode =
-    androidUseCursorModeAtPointerDown ?: shouldUseAndroidCursorMode(point, context)
-  return if (useCursorMode) {
-    EditorLongPressSemanticIntent.CursorMove
-  } else {
-    EditorLongPressSemanticIntent.WordSelection
-  }
-}
-
-private fun shouldUseAndroidCursorMode(point: PagePoint, context: EditorGestureContext): Boolean {
-  val editor = context.editor
-  if (!editor.selection.isCollapsed()) {
-    return false
-  }
-  return editor.cursorHitTest(page = point.page, x = point.x, y = point.y)
 }
