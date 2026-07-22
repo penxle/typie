@@ -42,6 +42,19 @@ impl Position {
         if self.offset > node.child_count() {
             return None;
         }
+        #[cfg(feature = "resolve-stats")]
+        let mut chain: Vec<usize> = {
+            let fanout_sum: u64 = node
+                .ancestors()
+                .filter_map(|n| n.parent().map(|p| p.child_count() as u64))
+                .sum();
+            let t = std::time::Instant::now();
+            let chain: Vec<usize> = node.ancestors().filter_map(|n| n.index()).collect();
+            let elapsed = t.elapsed();
+            crate::resolve_stats::record(crate::resolve_stats::ANCESTOR_INDEX, elapsed, fanout_sum);
+            chain
+        };
+        #[cfg(not(feature = "resolve-stats"))]
         let mut chain: Vec<usize> = node.ancestors().filter_map(|n| n.index()).collect();
         chain.reverse();
         chain.push(self.offset);

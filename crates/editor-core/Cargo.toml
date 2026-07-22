@@ -7,6 +7,7 @@ edition.workspace = true
 doctest = false
 
 [features]
+resolve-stats = ["editor-state/resolve-stats"]
 test-utils = ["editor-view/test-utils", "editor-resource/test-utils"]
 uniffi = [
   "dep:uniffi",

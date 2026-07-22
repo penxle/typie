@@ -289,6 +289,27 @@ fn find_by_offset<T, S: SumSize>(link: &Link<T, S>, offset: S) -> Option<(usize,
         .map(|(i, within)| (count(&node.left) + 1 + i, within))
 }
 
+/// `find_by_offset` on one projected `u64` dimension of a compound size.
+/// `project` must be linear over `S`'s addition (a component read).
+fn find_by_projected_offset<T, S: SumSize>(
+    link: &Link<T, S>,
+    offset: u64,
+    project: &impl Fn(&S) -> u64,
+) -> Option<(usize, u64)> {
+    let node = link.as_ref()?;
+    let left = project(&subtree_size(&node.left));
+    if offset < left {
+        return find_by_projected_offset(&node.left, offset, project);
+    }
+    let here = offset - left;
+    let own = project(&node.size);
+    if here < own {
+        return Some((count(&node.left), here));
+    }
+    find_by_projected_offset(&node.right, here - own, project)
+        .map(|(i, within)| (count(&node.left) + 1 + i, within))
+}
+
 fn for_each<T, S: Copy>(link: &Link<T, S>, f: &mut impl FnMut(&T, S)) {
     if let Some(node) = link {
         for_each(&node.left, f);
@@ -448,6 +469,18 @@ impl<T: Clone, S: SumSize> SumTree<T, S> {
     /// or `None` if `offset >= total_size`. A boundary belongs to the later item.
     pub fn find_by_offset(&self, offset: S) -> Option<(usize, S)> {
         find_by_offset(&self.root, offset)
+    }
+
+    /// `find_by_offset` on one projected `u64` dimension of a compound size —
+    /// for a multi-component `S` (e.g. leaf count + flat width) where each
+    /// dimension needs an independent descent. `S`'s own `PartialOrd` (if
+    /// derived, lexicographic) is never used here.
+    pub fn find_by_projected_offset(
+        &self,
+        offset: u64,
+        project: impl Fn(&S) -> u64,
+    ) -> Option<(usize, u64)> {
+        find_by_projected_offset(&self.root, offset, &project)
     }
 
     /// In-order iteration, yielding `(item, size)`.
@@ -634,6 +667,45 @@ mod tests {
         assert!(tree.set_size(0, 100.0));
         assert_eq!(tree.total_size(), 125.0);
         assert_eq!(tree.offset_before(1), 100.0);
+    }
+
+    #[derive(Clone, Copy, Debug, Default, PartialEq, PartialOrd)]
+    struct Pair {
+        a: u64,
+        b: u64,
+    }
+
+    impl std::ops::Add for Pair {
+        type Output = Self;
+        fn add(self, o: Self) -> Self {
+            Self {
+                a: self.a + o.a,
+                b: self.b + o.b,
+            }
+        }
+    }
+    impl std::ops::Sub for Pair {
+        type Output = Self;
+        fn sub(self, o: Self) -> Self {
+            Self {
+                a: self.a - o.a,
+                b: self.b - o.b,
+            }
+        }
+    }
+
+    #[test]
+    fn find_by_projected_offset_disagrees_with_lexicographic_find_by_offset() {
+        let items: Vec<(u32, Pair)> = vec![
+            (0, Pair { a: 1, b: 5 }),
+            (1, Pair { a: 0, b: 3 }),
+            (2, Pair { a: 2, b: 0 }),
+        ];
+        let tree: SumTree<u32, Pair> = SumTree::from_items(items);
+        // A lexicographic `find_by_offset` on the raw pair would descend by `a`
+        // first, then `b` — neither single-dimension answer below.
+        assert_eq!(tree.find_by_projected_offset(1, |s| s.a), Some((2, 0)));
+        assert_eq!(tree.find_by_projected_offset(6, |s| s.b), Some((1, 1)));
     }
 
     #[test]

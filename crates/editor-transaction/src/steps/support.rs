@@ -198,6 +198,15 @@ pub(crate) fn self_inclusive_parents(ps: &ProjectedState, block: Dot) -> Option<
         .then(|| ps.ancestor_real_dots(block, true))
 }
 
+/// The node type of a `parents` chain's innermost entry (the tree-parent an
+/// `emit_subtree` call is about to insert beneath), or `None` when `parents`
+/// is empty (inserting directly under the synthetic root, which has no
+/// content-type check). Read once by the caller, ahead of any mutation, and
+/// threaded through — `emit_subtree` itself performs no projected reads.
+pub(crate) fn parent_host_type(ps: &ProjectedState, parents: &[Dot]) -> Option<NodeType> {
+    parents.last().and_then(|&p| ps.block_node_type(p))
+}
+
 pub(crate) fn seq_insert_pos(ps: &ProjectedState, block: Dot, offset: usize) -> Option<usize> {
     let block_dot = block.as_op_dot();
     if block_dot.is_none() && block != Dot::ROOT {
@@ -728,10 +737,19 @@ pub(crate) fn compress_alias_pairs(pairs: &[(Dot, Dot)]) -> Vec<AliasRun> {
 /// call mints is paired with the `source_dots` entry it replaces (if any) by
 /// pushing onto `pairs` — recursive calls for nested children must be passed
 /// the same `pairs` accumulator, or their pairs are lost.
+///
+/// Performs no projected reads of its own: `host` (the type of `parents`'
+/// innermost entry, for the shape check below) is supplied by the caller —
+/// [`parent_host_type`] for the top-level call, and the just-computed
+/// `node_type` of the enclosing block for a recursive child call, since that
+/// is exactly the type the newly-minted parent dot carries. This lets a
+/// caller batch every projected read ahead of the first emitted op, which a
+/// warm-defer batch requires.
 pub(crate) fn emit_subtree(
     batched: &mut BatchedState,
     subtree: &Subtree,
     parents: &[Dot],
+    host: Option<NodeType>,
     seq_pos: &mut usize,
     pairs: &mut Vec<(Dot, Dot)>,
 ) -> Result<Option<Dot>, StepError> {
@@ -742,10 +760,7 @@ pub(crate) fn emit_subtree(
     // reject an illegal nesting before emitting anything. Each marker's tree
     // parents are woven from the tree structure here, so the parents-chain
     // criterion holds by construction and needs no per-marker chain check.
-    if let Some(host) = parents
-        .last()
-        .and_then(|&p| batched.projected.block_node_type(p))
-    {
+    if let Some(host) = host {
         validate_subtree_shape(subtree, host)?;
     }
     let node_type = subtree.node.as_type();
@@ -783,7 +798,14 @@ pub(crate) fn emit_subtree(
             let mut child_parents = parents.to_vec();
             child_parents.push(dot);
             for child in &subtree.children {
-                emit_subtree(batched, child, &child_parents, seq_pos, pairs)?;
+                emit_subtree(
+                    batched,
+                    child,
+                    &child_parents,
+                    Some(node_type),
+                    seq_pos,
+                    pairs,
+                )?;
             }
             Ok(Some(dot))
         }
@@ -1120,12 +1142,14 @@ mod tests {
         assert_eq!(subtree.source_dots, vec![image_dot]);
 
         let parents = self_inclusive_parents(ps, root).unwrap();
+        let host = parent_host_type(ps, &parents);
         let mut seq_pos = child_seq_insert_pos(ps, root, 2, NodeType::Image).unwrap();
         let mut pairs: Vec<(Dot, Dot)> = Vec::new();
         let mut new_dot = None;
         state
             .batch::<_, StepError>(|batched| {
-                new_dot = emit_subtree(batched, &subtree, &parents, &mut seq_pos, &mut pairs)?;
+                new_dot =
+                    emit_subtree(batched, &subtree, &parents, host, &mut seq_pos, &mut pairs)?;
                 Ok(())
             })
             .unwrap();
@@ -1276,6 +1300,7 @@ mod tests {
                     offset,
                     Subtree::leaf(NodeType::Paragraph.into_node().to_plain()),
                 )
+                .map(|_| ())
             };
             match result {
                 Ok(()) => {

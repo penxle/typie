@@ -29,9 +29,10 @@ pub(crate) fn apply_to(
         support::child_seq_insert_pos(&batched.projected, parent, index, subtree.node.as_type())?;
     let parents = support::self_inclusive_parents(&batched.projected, parent)
         .ok_or(StepError::NodeNotFound(parent))?;
+    let host = support::parent_host_type(&batched.projected, &parents);
     let mut seq_pos = pos;
     let mut pairs: Vec<(Dot, Dot)> = Vec::new();
-    support::emit_subtree(batched, subtree, &parents, &mut seq_pos, &mut pairs)?;
+    support::emit_subtree(batched, subtree, &parents, host, &mut seq_pos, &mut pairs)?;
     if !pairs.is_empty() {
         batched.apply(EditOp::Alias(AliasOp {
             pairs: support::compress_alias_pairs(&pairs),

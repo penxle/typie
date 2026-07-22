@@ -545,6 +545,15 @@ impl SeqCheckout {
         resolve_boundary_in(&self.ctx.tree, &self.lv_of, id, bias)
     }
 
+    pub fn resolve_boundary_checked(&self, id: Dot, bias: Bias) -> Option<Boundary> {
+        resolve_boundary_checked_in(&self.ctx.tree, &self.lv_of, id, bias)
+    }
+
+    pub fn doc_index_of(&self, dot: Dot) -> Option<usize> {
+        let lv = *self.lv_of.get(&dot)?;
+        self.ctx.tree.doc_index_of_lv_checked(lv)
+    }
+
     pub fn del_target_positions(&self, del: Dot) -> Vec<usize> {
         del_target_positions_in(&self.ctx.tree, &self.lv_of, &self.ctx.del_targets, del)
     }
@@ -654,6 +663,27 @@ fn resolve_boundary_in(
     Some(Boundary { position, visible })
 }
 
+/// `resolve_boundary`, but total: `None` (never a panic or a garbage index) when
+/// `id` is not a sequence *element* — a `Del`/`Undel` op's own dot is in `lv_of`
+/// but occupies no content run, and an unknown dot is in neither.
+fn resolve_boundary_checked_in(
+    tree: &ContentTree<Run>,
+    lv_of: &crate::DotMap<usize>,
+    id: Dot,
+    bias: Bias,
+) -> Option<Boundary> {
+    let lv = *lv_of.get(&id)?;
+    let doc_idx = tree.doc_index_of_lv_checked(lv)?;
+    let (run, _off) = tree.get(doc_idx);
+    let visible = run.end == 0;
+    let r = tree.end_rank_at_doc_index(doc_idx);
+    let position = match bias {
+        Bias::Before => r,
+        Bias::After => r + usize::from(visible),
+    };
+    Some(Boundary { position, visible })
+}
+
 fn del_target_positions_in(
     tree: &ContentTree<Run>,
     lv_of: &crate::DotMap<usize>,
@@ -697,6 +727,10 @@ pub struct BoundaryResolver {
 impl BoundaryResolver {
     pub fn resolve_boundary(&self, id: Dot, bias: Bias) -> Option<Boundary> {
         resolve_boundary_in(&self.index.tree, &self.index.lv_of, id, bias)
+    }
+
+    pub fn resolve_boundary_checked(&self, id: Dot, bias: Bias) -> Option<Boundary> {
+        resolve_boundary_checked_in(&self.index.tree, &self.index.lv_of, id, bias)
     }
 
     /// Descending current visible positions of `del`'s still-visible targets,
@@ -1214,6 +1248,160 @@ mod tests {
             assert_eq!(sc.dot_at_visible(&log, i), Some(*d), "pos {i}");
         }
         assert_eq!(sc.dot_at_visible(&log, snap.len()), None);
+    }
+
+    #[test]
+    fn doc_index_order_is_stable_under_insert_and_delete() {
+        let a = Dot::new(1, 1);
+        let b = Dot::new(1, 2);
+        let c = Dot::new(1, 3);
+        let mut ev = vec![
+            InputEvent {
+                id: a,
+                parents: vec![],
+                op: ListOp::Ins { pos: 0, item: 'a' },
+            },
+            InputEvent {
+                id: b,
+                parents: vec![a],
+                op: ListOp::Ins { pos: 1, item: 'b' },
+            },
+            InputEvent {
+                id: c,
+                parents: vec![b],
+                op: ListOp::Ins { pos: 2, item: 'c' },
+            },
+        ];
+        let log = build_oplog(&ev);
+        let mut co = SeqCheckout::new();
+        co.apply_tail(&log);
+
+        let ia = co.doc_index_of(a).unwrap();
+        let ib = co.doc_index_of(b).unwrap();
+        let ic = co.doc_index_of(c).unwrap();
+        assert!(ia < ib && ib < ic);
+        assert_eq!(co.doc_index_of(Dot::new(9, 9)), None);
+
+        let mid = Dot::new(1, 4);
+        ev.push(InputEvent {
+            id: mid,
+            parents: vec![c],
+            op: ListOp::Ins { pos: 1, item: 'x' },
+        });
+        let del = Dot::new(1, 5);
+        ev.push(InputEvent {
+            id: del,
+            parents: vec![mid],
+            op: ListOp::Del { pos: 2, len: 1 },
+        });
+        let undel = Dot::new(1, 6);
+        ev.push(InputEvent {
+            id: undel,
+            parents: vec![del],
+            op: ListOp::Undel { del },
+        });
+        let log = build_oplog(&ev);
+        let mut co = SeqCheckout::new();
+        co.apply_tail(&log);
+
+        let (ia2, im, ib2, ic2) = (
+            co.doc_index_of(a).unwrap(),
+            co.doc_index_of(mid).unwrap(),
+            co.doc_index_of(b).unwrap(),
+            co.doc_index_of(c).unwrap(),
+        );
+        assert!(
+            ia2 < im && im < ib2 && ib2 < ic2,
+            "insert shifts values, never order"
+        );
+        assert!(
+            co.resolve_boundary(b, Bias::Before)
+                .is_some_and(|r| r.visible),
+            "b is visible again after the undelete"
+        );
+        assert_eq!(
+            co.doc_index_of(del),
+            None,
+            "a Del op dot is in lv_of but is not a sequence element"
+        );
+        assert_eq!(
+            co.doc_index_of(undel),
+            None,
+            "an Undel op dot is in lv_of but is not a sequence element"
+        );
+    }
+
+    #[test]
+    fn resolve_boundary_checked_is_total_over_all_dot_classes() {
+        let a = Dot::new(1, 0);
+        let b = Dot::new(1, 1);
+        let c = Dot::new(1, 2);
+        let del_b = Dot::new(1, 3);
+        let del_c = Dot::new(1, 4);
+        let undel_b = Dot::new(1, 5);
+        let unknown = Dot::new(999, 999);
+        let ev = vec![
+            ins(1, 0, &[], 0, 'a'),
+            ins(1, 1, &[a], 1, 'b'),
+            ins(1, 2, &[b], 2, 'c'),
+            del_at(1, 3, &[c], 1),
+            del_at(1, 4, &[del_b], 1),
+            undel(1, 5, &[del_c], del_b),
+        ];
+        let log = build_oplog(&ev);
+        assert_eq!(doc(&ev), "ab");
+
+        let mut co = SeqCheckout::new();
+        co.apply_tail(&log);
+        assert!(
+            co.resolve_boundary_checked(a, Bias::Before)
+                .unwrap()
+                .visible
+        );
+        assert!(
+            co.resolve_boundary_checked(b, Bias::Before)
+                .unwrap()
+                .visible
+        );
+        assert!(
+            !co.resolve_boundary_checked(c, Bias::Before)
+                .unwrap()
+                .visible
+        );
+        assert_eq!(co.resolve_boundary_checked(del_b, Bias::Before), None);
+        assert_eq!(co.resolve_boundary_checked(del_c, Bias::Before), None);
+        assert_eq!(co.resolve_boundary_checked(undel_b, Bias::Before), None);
+        assert_eq!(co.resolve_boundary_checked(unknown, Bias::Before), None);
+
+        let (_elems, resolver) = checkout_with_resolver(&log);
+        assert!(
+            resolver
+                .resolve_boundary_checked(a, Bias::Before)
+                .unwrap()
+                .visible
+        );
+        assert!(
+            resolver
+                .resolve_boundary_checked(b, Bias::Before)
+                .unwrap()
+                .visible
+        );
+        assert!(
+            !resolver
+                .resolve_boundary_checked(c, Bias::Before)
+                .unwrap()
+                .visible
+        );
+        assert_eq!(resolver.resolve_boundary_checked(del_b, Bias::Before), None);
+        assert_eq!(resolver.resolve_boundary_checked(del_c, Bias::Before), None);
+        assert_eq!(
+            resolver.resolve_boundary_checked(undel_b, Bias::Before),
+            None
+        );
+        assert_eq!(
+            resolver.resolve_boundary_checked(unknown, Bias::Before),
+            None
+        );
     }
 
     use hashbrown::HashSet;

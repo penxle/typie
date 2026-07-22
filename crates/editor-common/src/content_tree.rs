@@ -57,6 +57,12 @@ struct Node<L> {
     sum: Sum,
 }
 
+/// Elements are never physically removed: deletion increments an element's
+/// visibility counters (its derived cur/end width becomes zero) but keeps
+/// it in `count` space, so the doc index of an element only ever shifts by
+/// insertions before it — relative order between existing elements is
+/// immutable. External order-keyed indexes (span anchors) depend on this;
+/// introducing physical compaction requires rebuilding them.
 #[derive(Clone, Debug)]
 pub struct ContentTree<L> {
     nodes: imbl::Vector<Node<L>>,
@@ -523,6 +529,10 @@ impl<L: Leaf + Clone> ContentTree<L> {
         for it in &self.leaf_items(leaf)[..run] {
             rank += it.run_len();
         }
+        self.rank_through_ancestors(leaf, rank)
+    }
+
+    fn rank_through_ancestors(&self, leaf: usize, mut rank: usize) -> usize {
         let mut id = leaf;
         while let Some(p) = self.nodes[id].parent {
             for &c in self.children(p) {
@@ -534,6 +544,18 @@ impl<L: Leaf + Clone> ContentTree<L> {
             id = p;
         }
         rank
+    }
+
+    pub fn doc_index_of_lv_checked(&self, lv: usize) -> Option<usize> {
+        let (_, &leaf) = self.lv_leaf.range(..=lv).next_back()?;
+        let mut rank = 0usize;
+        for it in self.leaf_items(leaf) {
+            if it.contains_lv(lv) {
+                return Some(self.rank_through_ancestors(leaf, rank + it.offset_of_lv(lv)));
+            }
+            rank += it.run_len();
+        }
+        None
     }
 
     pub fn end_rank_at_doc_index(&self, i: usize) -> usize {

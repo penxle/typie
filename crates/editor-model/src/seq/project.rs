@@ -45,10 +45,18 @@ pub fn anchor_dot(id: Dot) -> Option<Dot> {
 /// persistent `FastMap` and `ChildList` a persistent `SumTree`, so cloning a
 /// whole tree is `O(1)` (structural sharing) — cloning a projection per
 /// transaction stays cheap.
+///
+/// Both fields are private: every mutation goes through the sized API below, so
+/// a block's `flat_widths` side-map entry can never drift from its `ChildList`.
 #[derive(Clone, Debug)]
 pub struct BlockTree {
-    pub nodes: FastMap<Dot, BlockNode>,
-    pub root: Dot,
+    nodes: FastMap<Dot, BlockNode>,
+    root: Dot,
+    /// Non-root block subtree flat widths (`2 + Σ children`), the cache the flat
+    /// index reads instead of recursing. The root is deliberately absent — its
+    /// total is the root `ChildList`'s `.flat` sum (a root has no sentinels).
+    /// A cache, not document identity: excluded from `PartialEq`.
+    flat_widths: FastMap<Dot, u64>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -71,15 +79,61 @@ impl PartialEq for BlockTree {
     }
 }
 
+/// Recursive build shared by `BlockTree::from_raw` and
+/// `BlockTree::insert_block_subtree`: inserts `raw`'s whole subtree into `tree`
+/// via the sized API, returning `raw`'s own flat width (`2 + Σ children`).
+fn add(raw: &RawNode, tree: &mut BlockTree) -> u64 {
+    let mut items: Vec<(Child, u64)> = Vec::with_capacity(raw.children.len());
+    for c in &raw.children {
+        match c {
+            RawChild::Leaf { id, item } => items.push((
+                Child::Leaf {
+                    id: *id,
+                    item: item.clone(),
+                },
+                1,
+            )),
+            RawChild::Block(b) => {
+                let w = add(b, tree);
+                items.push((Child::Block(b.id), w));
+            }
+        }
+    }
+    let children = ChildList::from_sized_iter(items);
+    let w = 2 + children.flat_total();
+    tree.insert_block_sized(
+        BlockNode {
+            id: raw.id,
+            node_type: raw.node_type,
+            attrs: raw.attrs.clone(),
+            children,
+        },
+        w,
+    );
+    w
+}
+
 impl BlockTree {
     pub fn get(&self, id: Dot) -> Option<&BlockNode> {
         self.nodes.get(&id)
     }
-    pub fn get_mut(&mut self, id: Dot) -> Option<&mut BlockNode> {
-        self.nodes.get_mut(&id)
-    }
     pub fn root_node(&self) -> Option<&BlockNode> {
         self.nodes.get(&self.root)
+    }
+    pub fn root_id(&self) -> Dot {
+        self.root
+    }
+    /// The cached flat width of block `id` (`2 + Σ children`, `O(1)`) — `None`
+    /// for a dangling reference. The root has no sentinels, so its width is its
+    /// `ChildList`'s `.flat` sum rather than a side-map lookup.
+    pub fn flat_width_of(&self, id: Dot) -> Option<u64> {
+        if id == self.root {
+            return self.nodes.get(&id).map(|n| n.children.flat_total());
+        }
+        self.flat_widths.get(&id).copied()
+    }
+    pub fn iter_blocks(&self) -> impl Iterator<Item = &BlockNode> {
+        self.nodes.values()
     }
     /// The `BlockNode` a `Child::Block` refers to (`None` for a leaf or a dangling
     /// reference).
@@ -108,77 +162,30 @@ impl BlockTree {
     /// Build the flat tree from a freshly projected/normalized nested scratch tree.
     /// `O(N)`.
     pub fn from_raw(raw: &RawTree) -> Self {
-        fn add(raw: &RawNode, nodes: &mut FastMap<Dot, BlockNode>) {
-            let children: ChildList = raw
-                .children
-                .iter()
-                .map(|c| match c {
-                    RawChild::Leaf { id, item } => Child::Leaf {
-                        id: *id,
-                        item: item.clone(),
-                    },
-                    RawChild::Block(b) => {
-                        add(b, nodes);
-                        Child::Block(b.id)
-                    }
-                })
-                .collect();
-            nodes.insert(
-                raw.id,
-                BlockNode {
-                    id: raw.id,
-                    node_type: raw.node_type,
-                    attrs: raw.attrs.clone(),
-                    children,
-                },
-            );
-        }
-        let mut nodes = FastMap::new();
-        let root = raw.roots.first().map(|r| r.id).unwrap_or(Dot::ROOT);
+        let mut tree = BlockTree {
+            nodes: FastMap::new(),
+            root: raw.roots.first().map(|r| r.id).unwrap_or(Dot::ROOT),
+            flat_widths: FastMap::new(),
+        };
         // Only the canonical (first) root is reachable; `normalize` guarantees a
         // single `Root`, so this never orphans real content.
         if let Some(r) = raw.roots.first() {
-            add(r, &mut nodes);
+            add(r, &mut tree);
         }
-        BlockTree { nodes, root }
+        tree
     }
 
-    /// Insert a nested scratch block (and its whole subtree) into `nodes`, returning
-    /// its id. Used to graft a freshly re-projected window subtree into the live tree.
-    pub fn insert_block_subtree(&mut self, raw: &RawNode) -> Dot {
-        fn add(raw: &RawNode, nodes: &mut FastMap<Dot, BlockNode>) {
-            let children: ChildList = raw
-                .children
-                .iter()
-                .map(|c| match c {
-                    RawChild::Leaf { id, item } => Child::Leaf {
-                        id: *id,
-                        item: item.clone(),
-                    },
-                    RawChild::Block(b) => {
-                        add(b, nodes);
-                        Child::Block(b.id)
-                    }
-                })
-                .collect();
-            nodes.insert(
-                raw.id,
-                BlockNode {
-                    id: raw.id,
-                    node_type: raw.node_type,
-                    attrs: raw.attrs.clone(),
-                    children,
-                },
-            );
-        }
-        add(raw, &mut self.nodes);
-        raw.id
+    /// Insert a nested scratch block (and its whole subtree) into the tree,
+    /// returning its flat width (`2 + Σ children`). Used to graft a freshly
+    /// re-projected window subtree into the live tree.
+    pub fn insert_block_subtree(&mut self, raw: &RawNode) -> u64 {
+        add(raw, self)
     }
 
-    /// Remove `block` and its whole block subtree from `nodes`. Leaf children are
-    /// stored inline so they need no separate removal.
+    /// Remove `block` and its whole block subtree. Leaf children are stored
+    /// inline so they need no separate removal.
     pub fn remove_block_subtree(&mut self, block: Dot) {
-        let Some(node) = self.nodes.remove(&block) else {
+        let Some(node) = self.remove_block(block) else {
             return;
         };
         for c in &node.children {
@@ -188,16 +195,153 @@ impl BlockTree {
         }
     }
 
-    /// Run `f` on `block`'s children if it exists, returning whether it did.
-    /// `O(log N)` (a single map lookup, copy-on-write).
-    pub fn with_block_children(&mut self, block: Dot, f: impl FnOnce(&mut ChildList)) -> bool {
-        match self.nodes.get_mut(&block) {
-            Some(node) => {
-                f(&mut node.children);
-                true
-            }
-            None => false,
+    /// Insert a single (already sized) block node; `flat_width` = 2 + its
+    /// children's `.flat` total. The caller owns parent-list membership. The
+    /// root is kept out of the side map here, not by caller convention.
+    pub fn insert_block_sized(&mut self, node: BlockNode, flat_width: u64) {
+        if node.id == self.root {
+            self.flat_widths.remove(&node.id);
+        } else {
+            self.flat_widths.insert(node.id, flat_width);
         }
+        self.nodes.insert(node.id, node);
+    }
+    pub fn remove_block(&mut self, id: Dot) -> Option<BlockNode> {
+        self.flat_widths.remove(&id);
+        self.nodes.remove(&id)
+    }
+    /// Swap `block`'s children wholesale, returning the block's (old, new) flat
+    /// width for ancestor propagation (`None` if absent). Root returns widths as
+    /// its sentinel-free totals.
+    pub fn replace_children_sized(
+        &mut self,
+        block: Dot,
+        children: ChildList,
+    ) -> Option<(u64, u64)> {
+        let is_root = block == self.root;
+        let node = self.nodes.get_mut(&block)?;
+        let sentinels = if is_root { 0 } else { 2 };
+        let old = sentinels + node.children.flat_total();
+        let new = sentinels + children.flat_total();
+        node.children = children;
+        if !is_root {
+            self.flat_widths.insert(block, new);
+        }
+        Some((old, new))
+    }
+    pub fn splice_children_sized(
+        &mut self,
+        block: Dot,
+        range: std::ops::RangeInclusive<usize>,
+        replacement: Vec<(Child, u64)>,
+    ) -> Option<(u64, u64)> {
+        let is_root = block == self.root;
+        let node = self.nodes.get_mut(&block)?;
+        let sentinels = if is_root { 0 } else { 2 };
+        let old = sentinels + node.children.flat_total();
+        node.children.splice_sized(range, replacement);
+        let new = sentinels + node.children.flat_total();
+        if !is_root {
+            self.flat_widths.insert(block, new);
+        }
+        Some((old, new))
+    }
+    pub fn insert_child_sized(
+        &mut self,
+        block: Dot,
+        slot: usize,
+        child: Child,
+        flat_width: u64,
+    ) -> Option<(u64, u64)> {
+        let is_root = block == self.root;
+        let node = self.nodes.get_mut(&block)?;
+        let sentinels = if is_root { 0 } else { 2 };
+        let old = sentinels + node.children.flat_total();
+        node.children.insert_sized(slot, child, flat_width);
+        let new = sentinels + node.children.flat_total();
+        if !is_root {
+            self.flat_widths.insert(block, new);
+        }
+        Some((old, new))
+    }
+    /// Insert a leaf at leaf-offset `leaf_offset` (the `leaf_slot` mapping, kept
+    /// here so the mutation and its width bookkeeping stay atomic).
+    pub fn insert_leaf_child(
+        &mut self,
+        block: Dot,
+        leaf_offset: usize,
+        id: Dot,
+        item: SeqItem,
+    ) -> Option<(u64, u64)> {
+        let is_root = block == self.root;
+        let node = self.nodes.get_mut(&block)?;
+        let sentinels = if is_root { 0 } else { 2 };
+        let old = sentinels + node.children.flat_total();
+        let slot = node.children.leaf_slot(leaf_offset);
+        node.children.insert(slot, Child::Leaf { id, item });
+        let new = old + 1;
+        if !is_root {
+            self.flat_widths.insert(block, new);
+        }
+        Some((old, new))
+    }
+    pub fn remove_child(&mut self, block: Dot, slot: usize) -> Option<(Child, (u64, u64))> {
+        let is_root = block == self.root;
+        let node = self.nodes.get_mut(&block)?;
+        let sentinels = if is_root { 0 } else { 2 };
+        let old = sentinels + node.children.flat_total();
+        let c = node.children.remove(slot)?;
+        let new = sentinels + node.children.flat_total();
+        if !is_root {
+            self.flat_widths.insert(block, new);
+        }
+        Some((c, (old, new)))
+    }
+    /// Update the size of the block child at `slot` (verified to be
+    /// `Child::Block(child)`; on mismatch, re-finds it linearly — the id check is
+    /// the correctness anchor, the slot only an accelerator). Returns the parent's
+    /// (old, new) width.
+    pub fn set_child_flat_size(
+        &mut self,
+        parent: Dot,
+        child: Dot,
+        slot_hint: Option<usize>,
+        child_width: u64,
+    ) -> Option<(u64, u64)> {
+        let is_root = parent == self.root;
+        let node = self.nodes.get_mut(&parent)?;
+        let slot = match slot_hint {
+            Some(s) if matches!(node.children.get(s), Some(Child::Block(b)) if *b == child) => s,
+            _ => node
+                .children
+                .iter()
+                .position(|c| matches!(c, Child::Block(b) if *b == child))?,
+        };
+        let sentinels = if is_root { 0 } else { 2 };
+        let old = sentinels + node.children.flat_total();
+        node.children.set_flat_width(slot, child_width);
+        let new = sentinels + node.children.flat_total();
+        if !is_root {
+            self.flat_widths.insert(parent, new);
+        }
+        Some((old, new))
+    }
+    /// A detached scratch tree for window-local analysis: `self` cloned with
+    /// `node` grafted as the new root, the root's side-map exclusion atomically
+    /// re-established. Flat queries are still undefined on a scratch tree (ancestor
+    /// widths are not re-rooted) — it exists for structural walks only.
+    pub fn with_scratch_root(&self, node: BlockNode) -> BlockTree {
+        let mut t = self.clone();
+        let id = node.id;
+        t.nodes.insert(id, node);
+        t.root = id;
+        t.flat_widths.remove(&id);
+        t
+    }
+
+    #[cfg(any(test, feature = "test-utils"))]
+    pub fn side_map_contains_root(&self) -> bool {
+        self.flat_widths.contains_key(&self.root)
     }
 }
 
@@ -249,22 +393,58 @@ impl RawChild {
     }
 }
 
-/// A block's ordered children, backed by a persistent order-statistics tree
-/// (`SumTree`) summed by direct-leaf count. This makes positional edits
-/// (`insert`/`remove` at a slot, and `leaf_slot` mapping a leaf offset to a child
-/// slot) `O(log K)` instead of the `Vec`'s `O(K)`, and — being persistent — keeps
-/// `clone` `O(1)`. The API mirrors `Vec<Child>` (iter/len/get/push/insert/remove/
-/// index) so call sites that only read or append are unaffected.
-#[derive(Clone, Debug, Default)]
-pub struct ChildList {
-    tree: editor_common::SumTree<Child, u64>,
+/// `ChildList`'s compound size: direct-leaf count (`leaves`) and flat width
+/// (`flat` — leaf=1, block=2+Σ, the `child_flat_size` rule cached). The derived
+/// `PartialOrd` is lexicographic and meaningless for offset descent — all
+/// queries go through single-dimension projections, never the pair.
+#[derive(Clone, Copy, Debug, Default, PartialEq, PartialOrd)]
+pub struct FlatLeafSize {
+    pub leaves: u64,
+    pub flat: u64,
 }
 
-fn child_leaf_size(c: &Child) -> u64 {
-    match c {
-        Child::Leaf { .. } => 1,
-        Child::Block(_) => 0,
+impl std::ops::Add for FlatLeafSize {
+    type Output = Self;
+    fn add(self, o: Self) -> Self {
+        Self {
+            leaves: self.leaves + o.leaves,
+            flat: self.flat + o.flat,
+        }
     }
+}
+impl std::ops::Sub for FlatLeafSize {
+    type Output = Self;
+    fn sub(self, o: Self) -> Self {
+        Self {
+            leaves: self.leaves - o.leaves,
+            flat: self.flat - o.flat,
+        }
+    }
+}
+
+const LEAF_SIZE: FlatLeafSize = FlatLeafSize { leaves: 1, flat: 1 };
+
+fn sized(c: &Child, flat_width: u64) -> FlatLeafSize {
+    match c {
+        Child::Leaf { .. } => LEAF_SIZE,
+        Child::Block(_) => FlatLeafSize {
+            leaves: 0,
+            flat: flat_width,
+        },
+    }
+}
+
+/// A block's ordered children, backed by a persistent order-statistics tree
+/// (`SumTree`) summed by `FlatLeafSize` (direct-leaf count and flat width). This
+/// makes positional edits (`insert`/`remove` at a slot, and `leaf_slot`/
+/// `find_by_flat` mapping an offset to a child slot) `O(log K)` instead of the
+/// `Vec`'s `O(K)`, and — being persistent — keeps `clone` `O(1)`. Block children
+/// carry a real flat width so an ancestor's flat total never needs to recurse
+/// into them; leaves cannot (`push`/`insert`/`set` are leaf-only — a block child
+/// must go through the sized API alongside its width).
+#[derive(Clone, Debug, Default)]
+pub struct ChildList {
+    tree: editor_common::SumTree<Child, FlatLeafSize>,
 }
 
 impl ChildList {
@@ -277,7 +457,7 @@ impl ChildList {
     pub fn is_empty(&self) -> bool {
         self.tree.is_empty()
     }
-    pub fn iter(&self) -> editor_common::Iter<'_, Child, u64> {
+    pub fn iter(&self) -> editor_common::Iter<'_, Child, FlatLeafSize> {
         self.tree.iter()
     }
     pub fn get(&self, i: usize) -> Option<&Child> {
@@ -289,14 +469,24 @@ impl ChildList {
     pub fn last(&self) -> Option<&Child> {
         self.len().checked_sub(1).and_then(|i| self.tree.get(i))
     }
+    /// Append a *leaf* child. Block children must go through the sized API
+    /// (`push_sized`) — asserted even in release, since a silently-wrong flat
+    /// width would corrupt the flat index.
     pub fn push(&mut self, c: Child) {
-        let s = child_leaf_size(&c);
-        self.tree.push(c, s);
+        assert!(
+            matches!(c, Child::Leaf { .. }),
+            "block children must go through the sized API"
+        );
+        self.tree.push(c, LEAF_SIZE);
     }
-    /// Insert at a child *slot* index (counting blocks and leaves alike).
+    /// Insert a *leaf* child at a child *slot* index (counting blocks and leaves
+    /// alike). See `push` for the leaf-only contract.
     pub fn insert(&mut self, slot: usize, c: Child) {
-        let s = child_leaf_size(&c);
-        self.tree.insert(slot, c, s);
+        assert!(
+            matches!(c, Child::Leaf { .. }),
+            "block children must go through the sized API"
+        );
+        self.tree.insert(slot, c, LEAF_SIZE);
     }
     /// Remove the child at a slot index, returning it if in range.
     pub fn remove(&mut self, slot: usize) -> Option<Child> {
@@ -307,68 +497,146 @@ impl ChildList {
     /// that leaf offset belongs. `O(log K)`.
     pub fn leaf_slot(&self, leaf_offset: usize) -> usize {
         self.tree
-            .find_by_offset(leaf_offset as u64)
+            .find_by_projected_offset(leaf_offset as u64, |s| s.leaves)
             .map(|(slot, _)| slot)
             .unwrap_or_else(|| self.len())
     }
     /// Number of direct leaf children — `O(1)`.
     pub fn leaf_count(&self) -> usize {
-        self.tree.total_size() as usize
+        self.tree.total_size().leaves as usize
     }
     /// Number of direct leaf children in slots `[0, slot)` — the leaf ordinal a
     /// leaf at `slot` has inside the block's segment tree. `O(log K)`.
     pub fn leaf_ordinal_at(&self, slot: usize) -> usize {
-        self.tree.offset_before(slot) as usize
+        self.tree.offset_before(slot).leaves as usize
     }
-    /// Replace the child at `slot`. `O(log K)`.
+    /// Replace the *leaf* child at `slot`. `O(log K)`. See `push` for the
+    /// leaf-only contract.
     pub fn set(&mut self, slot: usize, c: Child) {
-        let s = child_leaf_size(&c);
-        self.tree.set(slot, c, s);
+        assert!(
+            matches!(c, Child::Leaf { .. }),
+            "block children must go through the sized API"
+        );
+        self.tree.set(slot, c, LEAF_SIZE);
     }
     pub fn to_vec(&self) -> Vec<Child> {
         self.iter().cloned().collect()
     }
+    /// Append *leaf* children. See `push` for the leaf-only contract.
     pub fn extend(&mut self, iter: impl IntoIterator<Item = Child>) {
         for c in iter {
             self.push(c);
         }
     }
     pub fn retain(&mut self, mut keep: impl FnMut(&Child) -> bool) {
-        let kept: Vec<Child> = self.iter().filter(|c| keep(c)).cloned().collect();
-        *self = ChildList::from_iter(kept);
+        let mut kept: Vec<(Child, FlatLeafSize)> = Vec::new();
+        self.tree.for_each(|c, s| {
+            if keep(c) {
+                kept.push((c.clone(), s));
+            }
+        });
+        self.tree = editor_common::SumTree::from_items(kept);
     }
-    /// Replace the children in the inclusive slot range with `replacement`, like
-    /// `Vec::splice` (but returns nothing). `O((removed + inserted) · log K)`.
-    pub fn splice(
+    /// Split off children at `[at, len)`, leaving `[0, at)` in `self` — pairing
+    /// each child with its size, so a block child in the tail keeps its real
+    /// flat width (the tail's `flat_total` stays accurate for the caller).
+    pub fn split_off(&mut self, at: usize) -> ChildList {
+        let mut pairs: Vec<(Child, FlatLeafSize)> = Vec::new();
+        self.tree.for_each(|c, s| pairs.push((c.clone(), s)));
+        let at = at.min(pairs.len());
+        let tail = pairs.split_off(at);
+        self.tree = editor_common::SumTree::from_items(pairs);
+        ChildList {
+            tree: editor_common::SumTree::from_items(tail),
+        }
+    }
+    /// Build from an already-sized `(Child, flat_width)` sequence — the flat
+    /// width is only meaningful for a `Child::Block` (a leaf's is always
+    /// `LEAF_SIZE`). `O(n)` balanced build.
+    pub fn from_sized_iter(items: impl IntoIterator<Item = (Child, u64)>) -> Self {
+        let items: Vec<(Child, FlatLeafSize)> = items
+            .into_iter()
+            .map(|(c, w)| {
+                let s = sized(&c, w);
+                (c, s)
+            })
+            .collect();
+        Self {
+            tree: editor_common::SumTree::from_items(items),
+        }
+    }
+    pub fn push_sized(&mut self, c: Child, flat_width: u64) {
+        let slot = self.len();
+        self.insert_sized(slot, c, flat_width);
+    }
+    pub fn insert_sized(&mut self, slot: usize, c: Child, flat_width: u64) {
+        let s = sized(&c, flat_width);
+        self.tree.insert(slot, c, s);
+    }
+    pub fn set_sized(&mut self, slot: usize, c: Child, flat_width: u64) {
+        let s = sized(&c, flat_width);
+        self.tree.set(slot, c, s);
+    }
+    /// Replace the children in the inclusive slot range with `replacement`
+    /// (already sized), like `Vec::splice` (but returns nothing).
+    /// `O((removed + inserted) · log K)`.
+    pub fn splice_sized(
         &mut self,
         range: std::ops::RangeInclusive<usize>,
-        replacement: impl IntoIterator<Item = Child>,
+        replacement: impl IntoIterator<Item = (Child, u64)>,
     ) {
         let start = *range.start();
         let count = (*range.end() + 1).saturating_sub(start);
         for _ in 0..count {
             if start < self.len() {
-                self.remove(start);
+                self.tree.remove(start);
             } else {
                 break;
             }
         }
-        for (at, c) in (start..).zip(replacement) {
-            self.insert(at, c);
+        for (at, (c, w)) in (start..).zip(replacement) {
+            self.insert_sized(at, c, w);
         }
     }
-    /// Split off children at `[at, len)`, leaving `[0, at)` in `self`.
-    pub fn split_off(&mut self, at: usize) -> ChildList {
-        let all = self.to_vec();
-        let tail = all[at.min(all.len())..].to_vec();
-        *self = ChildList::from_iter(all[..at.min(all.len())].iter().cloned());
-        ChildList::from_iter(tail)
+    /// Update a `Child::Block` slot's flat width, keeping the `Child` item as-is
+    /// — `false` (no-op) if the slot holds a `Child::Leaf` or is out of range.
+    pub fn set_flat_width(&mut self, slot: usize, flat_width: u64) -> bool {
+        if !matches!(self.tree.get(slot), Some(Child::Block(_))) {
+            return false;
+        }
+        self.tree.set_size(
+            slot,
+            FlatLeafSize {
+                leaves: 0,
+                flat: flat_width,
+            },
+        )
     }
-}
-
-impl From<Vec<Child>> for ChildList {
-    fn from(v: Vec<Child>) -> Self {
-        ChildList::from_iter(v)
+    /// Cumulative flat width of children `[0, slot)` — `O(log K)`.
+    pub fn flat_before(&self, slot: usize) -> u64 {
+        self.tree.offset_before(slot).flat
+    }
+    /// Total flat width across all children — `O(1)`.
+    pub fn flat_total(&self) -> u64 {
+        self.tree.total_size().flat
+    }
+    /// The child *slot* spanning flat-width cumulative `offset`, and the
+    /// remainder within it — the flat-dimension analogue of `leaf_slot`.
+    /// `O(log K)`.
+    pub fn find_by_flat(&self, offset: u64) -> Option<(usize, u64)> {
+        self.tree.find_by_projected_offset(offset, |s| s.flat)
+    }
+    /// The raw compound size accumulated over children `[0, slot)` —
+    /// consistency-oracle only; production code always projects a single
+    /// dimension (`flat_before`/`leaf_ordinal_at`).
+    #[cfg(any(test, feature = "test-utils"))]
+    pub fn offset_before(&self, slot: usize) -> FlatLeafSize {
+        self.tree.offset_before(slot)
+    }
+    /// The raw compound total size — consistency-oracle only; see `offset_before`.
+    #[cfg(any(test, feature = "test-utils"))]
+    pub fn total_size(&self) -> FlatLeafSize {
+        self.tree.total_size()
     }
 }
 
@@ -380,7 +648,7 @@ impl PartialEq for ChildList {
 
 impl<'a> IntoIterator for &'a ChildList {
     type Item = &'a Child;
-    type IntoIter = editor_common::Iter<'a, Child, u64>;
+    type IntoIter = editor_common::Iter<'a, Child, FlatLeafSize>;
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
     }
@@ -391,23 +659,6 @@ impl IntoIterator for ChildList {
     type IntoIter = std::vec::IntoIter<Child>;
     fn into_iter(self) -> Self::IntoIter {
         self.tree.iter().cloned().collect::<Vec<_>>().into_iter()
-    }
-}
-
-impl FromIterator<Child> for ChildList {
-    fn from_iter<I: IntoIterator<Item = Child>>(iter: I) -> Self {
-        // `O(n)` balanced build, so converting a `Vec<Child>` (normalize's rebuild
-        // passes) costs the same as the `Vec` did — not `O(n log n)` of push-each.
-        let items: Vec<(Child, u64)> = iter
-            .into_iter()
-            .map(|c| {
-                let s = child_leaf_size(&c);
-                (c, s)
-            })
-            .collect();
-        Self {
-            tree: editor_common::SumTree::from_items(items),
-        }
     }
 }
 
@@ -543,6 +794,108 @@ pub fn project_blocks_with_stats(
 
     let root = assemble(&mut nodes, 0);
     Ok(RawTree { roots: vec![root] })
+}
+
+pub fn project_blocks_seeded(
+    items: &[(Dot, SeqItem)],
+    seed_chain: &[(Dot, NodeType)],
+    stats: &mut crate::RepairStats,
+) -> Result<(RawTree, Option<Dot>), ProjectError> {
+    assert!(!seed_chain.is_empty());
+    let mut nodes: Vec<BuildNode> = seed_chain
+        .iter()
+        .map(|(id, nt)| BuildNode {
+            id: *id,
+            node_type: *nt,
+            attrs: vec![],
+            children: Vec::new(),
+        })
+        .collect();
+    let mut stack: Vec<(Dot, usize)> = seed_chain
+        .iter()
+        .enumerate()
+        .map(|(i, (id, _))| (*id, i))
+        .collect();
+    let container_idx = seed_chain.len() - 1;
+
+    for (id, item) in items {
+        match item {
+            SeqItem::Block {
+                node_type,
+                parents,
+                attrs,
+            } => {
+                let keep = attach_depth(&stack, parents);
+                if attach_is_revival(&stack, parents, keep) {
+                    stats.repairs += 1;
+                }
+                stack.truncate(keep);
+                let idx = nodes.len();
+                nodes.push(BuildNode {
+                    id: *id,
+                    node_type: *node_type,
+                    attrs: attrs.clone(),
+                    children: Vec::new(),
+                });
+                let parent_idx = stack.last().expect("root is always present").1;
+                nodes[parent_idx].children.push(ChildRef::Block(idx));
+                stack.push((*id, idx));
+            }
+            SeqItem::Char(_) | SeqItem::Unknown { .. } => {
+                let parent_idx = stack.last().expect("root is always present").1;
+                nodes[parent_idx].children.push(ChildRef::Leaf {
+                    id: *id,
+                    item: item.clone(),
+                });
+            }
+            SeqItem::Atom(leaf) => {
+                if leaf.is_block_level() {
+                    return Err(ProjectError::AtomClassMismatch {
+                        id: *id,
+                        leaf_type: leaf.node_type(),
+                    });
+                }
+                let parent_idx = stack.last().expect("root is always present").1;
+                nodes[parent_idx].children.push(ChildRef::Leaf {
+                    id: *id,
+                    item: item.clone(),
+                });
+            }
+            SeqItem::BlockAtom { leaf, parents } => {
+                if !leaf.is_block_level() {
+                    return Err(ProjectError::AtomClassMismatch {
+                        id: *id,
+                        leaf_type: leaf.node_type(),
+                    });
+                }
+                if parents.is_empty() {
+                    return Err(ProjectError::OrphanLeaf { id: *id });
+                }
+                let keep = attach_depth(&stack, parents);
+                if attach_is_revival(&stack, parents, keep) {
+                    stats.repairs += 1;
+                }
+                stack.truncate(keep);
+                let parent_idx = stack.last().expect("root is always present").1;
+                nodes[parent_idx].children.push(ChildRef::Leaf {
+                    id: *id,
+                    item: SeqItem::Atom(leaf.clone()),
+                });
+            }
+        }
+    }
+
+    let escaped = nodes[..container_idx]
+        .iter()
+        .position(|n| !n.children.is_empty())
+        .map(|i| seed_chain[i].0);
+    let container = assemble(&mut nodes, container_idx);
+    Ok((
+        RawTree {
+            roots: vec![container],
+        },
+        escaped,
+    ))
 }
 
 fn assemble(nodes: &mut [BuildNode], idx: usize) -> RawNode {
@@ -685,6 +1038,49 @@ fn check_context(t: NodeType, path: &[NodeType]) -> Result<(), SchemaError> {
     }
 }
 
+/// Consistency oracle for the flat index: every block's `ChildList` entry sizes
+/// and summary agree with the `child_flat_size` rule, every non-root block's
+/// side-map width equals its own `2 + children.flat_total()`, and the root is
+/// absent from the side map. `O(document)` — test/debug use, not a hot path.
+#[cfg(any(test, feature = "test-utils"))]
+pub fn assert_flat_index_consistent(tree: &BlockTree) {
+    for node in tree.iter_blocks() {
+        let mut expect = FlatLeafSize::default();
+        for (slot, c) in node.children.iter().enumerate() {
+            let s = match c {
+                Child::Leaf { .. } => LEAF_SIZE,
+                Child::Block(b) => FlatLeafSize {
+                    leaves: 0,
+                    flat: tree
+                        .flat_width_of(*b)
+                        .unwrap_or_else(|| panic!("missing width for {b:?}")),
+                },
+            };
+            let got = node.children.offset_before(slot + 1) - node.children.offset_before(slot);
+            assert_eq!(got, s, "entry size mismatch at {:?} slot {slot}", node.id);
+            expect = expect + s;
+        }
+        assert_eq!(
+            node.children.total_size(),
+            expect,
+            "summary mismatch at {:?}",
+            node.id
+        );
+        if node.id != tree.root_id() {
+            assert_eq!(
+                tree.flat_width_of(node.id),
+                Some(2 + node.children.flat_total()),
+                "side-map width mismatch at {:?}",
+                node.id
+            );
+        }
+    }
+    assert!(
+        !tree.side_map_contains_root(),
+        "root must be absent from the side map"
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -699,18 +1095,59 @@ mod tests {
             id: Dot::new(1, 0),
             item: SeqItem::Char(c),
         };
-        let children: ChildList = vec![
-            leaf('a'),
-            Child::Block(Dot::new(1, 1)),
-            leaf('b'),
-            leaf('c'),
-        ]
-        .into_iter()
-        .collect();
+        let children = ChildList::from_sized_iter([
+            (leaf('a'), 1),
+            (Child::Block(Dot::new(1, 1)), 2),
+            (leaf('b'), 1),
+            (leaf('c'), 1),
+        ]);
         let got: Vec<usize> = (0..=children.len())
             .map(|slot| children.leaf_ordinal_at(slot))
             .collect();
         assert_eq!(got, vec![0, 1, 1, 2, 3]);
+    }
+
+    #[test]
+    fn leaf_slot_descends_by_leaf_projection_through_wide_blocks() {
+        // [Leaf, Block(flat=9), Leaf, Block(flat=9), Leaf]
+        let b1 = Dot::new(7, 1);
+        let b2 = Dot::new(7, 2);
+        let list = ChildList::from_sized_iter([
+            (
+                Child::Leaf {
+                    id: Dot::new(7, 10),
+                    item: SeqItem::Char('a'),
+                },
+                1,
+            ),
+            (Child::Block(b1), 9),
+            (
+                Child::Leaf {
+                    id: Dot::new(7, 11),
+                    item: SeqItem::Char('b'),
+                },
+                1,
+            ),
+            (Child::Block(b2), 9),
+            (
+                Child::Leaf {
+                    id: Dot::new(7, 12),
+                    item: SeqItem::Char('c'),
+                },
+                1,
+            ),
+        ]);
+        assert_eq!(list.leaf_slot(0), 0);
+        assert_eq!(list.leaf_slot(1), 2);
+        assert_eq!(list.leaf_slot(2), 4);
+        assert_eq!(list.leaf_slot(3), 5);
+        assert_eq!(list.leaf_count(), 3);
+        assert_eq!(list.leaf_ordinal_at(4), 2);
+        assert_eq!(list.flat_total(), 21);
+        assert_eq!(list.flat_before(3), 11);
+        assert_eq!(list.find_by_flat(11), Some((3, 0)));
+        assert_eq!(list.find_by_flat(20), Some((4, 0)));
+        assert_eq!(list.find_by_flat(21), None);
     }
 
     fn find_raw(tree: &RawTree, id: Dot) -> Option<&RawNode> {
@@ -1642,6 +2079,99 @@ mod tests {
         assert!(
             matches!(&p.children[1], RawChild::Leaf { id, item: SeqItem::Char('a') } if *id == ch)
         );
+    }
+
+    #[test]
+    fn project_blocks_seeded_root_equivalent_normal_sequence() {
+        let items = sample_sequence();
+        let mut stats_a = crate::RepairStats::default();
+        let tree_a = project_blocks_with_stats(&items, &mut stats_a).expect("well-formed");
+        let mut stats_b = crate::RepairStats::default();
+        let (tree_b, escaped) =
+            project_blocks_seeded(&items, &[(Dot::ROOT, NodeType::Root)], &mut stats_b)
+                .expect("well-formed");
+        assert_eq!(tree_a, tree_b);
+        assert_eq!(stats_a, stats_b);
+        assert_eq!(escaped, None);
+    }
+
+    #[test]
+    fn project_blocks_seeded_root_equivalent_revival_sequence() {
+        let d = |a, c| Dot::new(a, c);
+        let root = Dot::ROOT;
+        let ghost = d(9, 9);
+        let items = vec![
+            (
+                d(1, 1),
+                SeqItem::Block {
+                    node_type: NodeType::BulletList,
+                    parents: vec![root],
+                    attrs: vec![],
+                },
+            ),
+            (
+                d(1, 2),
+                SeqItem::Block {
+                    node_type: NodeType::ListItem,
+                    parents: vec![root, d(1, 1)],
+                    attrs: vec![],
+                },
+            ),
+            (
+                d(1, 3),
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, d(1, 1), d(1, 2)],
+                    attrs: vec![],
+                },
+            ),
+            (d(1, 4), SeqItem::Char('a')),
+            (
+                d(1, 10),
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, d(1, 1), d(1, 2), ghost],
+                    attrs: vec![],
+                },
+            ),
+            (d(1, 11), SeqItem::Char('z')),
+        ];
+        let mut stats_a = crate::RepairStats::default();
+        let tree_a = project_blocks_with_stats(&items, &mut stats_a).expect("well-formed");
+        let mut stats_b = crate::RepairStats::default();
+        let (tree_b, escaped) =
+            project_blocks_seeded(&items, &[(Dot::ROOT, NodeType::Root)], &mut stats_b)
+                .expect("well-formed");
+        assert_eq!(tree_a, tree_b);
+        assert_eq!(stats_a, stats_b);
+        assert!(stats_b.repairs >= 1);
+        assert_eq!(escaped, None);
+    }
+
+    #[test]
+    fn project_blocks_seeded_reports_escape_to_root_seed() {
+        let container_id = Dot::new(1, 1);
+        let escaped_marker = Dot::new(1, 5);
+        let seed_chain = [
+            (Dot::ROOT, NodeType::Root),
+            (container_id, NodeType::Blockquote),
+        ];
+        let items = vec![
+            (
+                escaped_marker,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![Dot::ROOT],
+                    attrs: vec![],
+                },
+            ),
+            (Dot::new(1, 6), SeqItem::Char('z')),
+        ];
+        let mut stats = crate::RepairStats::default();
+        let (tree, escaped) =
+            project_blocks_seeded(&items, &seed_chain, &mut stats).expect("well-formed");
+        assert_eq!(escaped, Some(Dot::ROOT));
+        assert!(tree.roots[0].children.is_empty());
     }
 
     mod proptests {

@@ -9,6 +9,8 @@ mod cell_selection;
 mod classify;
 mod composition;
 mod continuation;
+#[cfg(any(test, feature = "test-utils"))]
+pub mod corpus;
 mod edit_commands;
 mod error;
 mod flat;
@@ -56,6 +58,8 @@ pub use flat::{
     FLAT_CLOSE, FLAT_OPEN, FlatSegment, ResolvedPositionFlatExt, flat_chars, flat_segments,
     flat_segments_in_range, flat_segments_in_range_with_pos, flat_size, flat_text,
 };
+#[cfg(any(test, feature = "test-utils"))]
+pub use flat::{flat_size_walk_probe, from_flat_walk_probe, to_flat_walk_probe};
 pub use gap_cursor::{GapCursor, as_gap_cursor, gap_cursor_at};
 pub use layout_dirty::LayoutDirty;
 pub use load_builder::BuildError;
@@ -76,6 +80,8 @@ pub use selection_expansion::{
     resolve_paragraph_selection_expansion, resolve_sentence_selection_expansion,
     resolve_word_selection_expansion,
 };
+#[cfg(feature = "resolve-stats")]
+pub use stable_position::resolve_stats;
 pub use stable_position::{
     ChainSegment, StablePosition, StablePositionChild, StablePositionV1, StableResolveCtx,
     StableSelectionV1, resolve_v1_selection,

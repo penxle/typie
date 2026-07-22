@@ -100,6 +100,15 @@ fn nearest_insertable_flat(doc: &editor_model::DocView, total: usize, offset: us
     offset
 }
 
+#[cfg(any(test, feature = "test-utils"))]
+pub(crate) fn nearest_insertable_flat_probe(
+    doc: &editor_model::DocView,
+    total: usize,
+    offset: usize,
+) -> usize {
+    nearest_insertable_flat(doc, total, offset)
+}
+
 /// Snapshot of the transient (non-document) editor state recorded with each undo
 /// entry so undo/redo restore the caret.
 ///

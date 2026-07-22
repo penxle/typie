@@ -7,9 +7,6 @@ pub use effective::{
     resolve_effective,
 };
 
-mod anchor;
-pub use anchor::*;
-
 mod coverage;
 pub use coverage::*;
 
@@ -18,6 +15,9 @@ pub use covering::*;
 
 mod segs;
 pub use segs::*;
+
+mod interval_index;
+pub use interval_index::{AnchorIntervalIndex, AnchorOrder};
 
 use editor_crdt::{CrdtError, Dot, FastMap};
 use serde::{Deserialize, Serialize};
@@ -110,6 +110,13 @@ impl SpanLog {
     pub fn get(&self, dot: Dot) -> Option<&SpanOp> {
         self.ops.get(&dot)
     }
+}
+
+pub fn span_intervals(spans: &SpanLog) -> impl Iterator<Item = (Anchor, Anchor, Dot)> + '_ {
+    spans.iter().map(|(d, op)| {
+        let (s, e) = op.anchors();
+        (s, e, *d)
+    })
 }
 
 #[cfg(test)]

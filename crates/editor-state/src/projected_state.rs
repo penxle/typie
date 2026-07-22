@@ -1,15 +1,20 @@
 use editor_crdt::sequence::{Bias, SeqCheckout};
 use editor_crdt::{Changeset, CrdtError, Dot, InputEvent, ListOp, Op, OpGraph, OpLog};
 use editor_model::{
-    Anchor, AtomLeaf, BlockNode, BlockPaths, BlockTree, Child, ChildList, DocLogs, DocView, EditOp,
-    Modifier, ModifierAttrLog, ModifierType, Node, NodeAttrLog, NodeType, ProjectedDoc,
-    ProjectionError, ProjectionIndexes, RawChild, RawNode, RepairStats, SeqItem, SpanAnchorIndex,
-    SpanLog, SpanOp, SplitError, anchor_dot, block_effective_one, block_init_of,
+    Anchor, AtomLeaf, BlockNode, BlockPaths, BlockTree, Child, ChildList, ContentExpr, DocLogs,
+    DocView, EditOp, FlatWidthDelta, Modifier, ModifierAttrLog, ModifierType, Node, NodeAttrLog,
+    NodeType, ProjectedDoc, ProjectionError, ProjectionIndexes, RawChild, RawNode, RepairStats,
+    SeqItem, SpanLog, SpanOp, SplitError, anchor_dot, block_effective_one, block_init_of,
     normalize_content_shallow_with_stats, normalize_window_forest_with_stats, project_blocks,
     project_from, project_from_tree, project_with_overlay, seq_parents, split_block_insert,
     split_logs,
 };
 use hashbrown::{HashMap, HashSet};
+
+/// A remote batch counts as bulk when `novel × this > visible_len` — the
+/// incremental path's fixed per-op cost overtakes one whole-document
+/// reprojection past that fraction.
+pub(crate) const BULK_NOVEL_FACTOR: usize = 9;
 
 #[derive(Debug)]
 pub enum SpineError {
@@ -66,15 +71,112 @@ fn canonical_covering_of(dots: &[Dot], spans: &SpanLog) -> Option<editor_model::
 
 /// Where [`ProjectedState::resync_block_segs`] sources each leaf's segment covering.
 enum CoveringSource<'a> {
-    /// Resolve from the span log by visible position — structural rebuilds (window
-    /// reproject, block split, undelete) where new/moved leaves have no prior segment
-    /// to copy from. `O(leaves · spans)`, matching cold projection; the resolve is
-    /// built once per operation and stabbed per position.
-    Resolved(&'a editor_model::ResolvedSpans),
+    /// Read from a [`WindowSpanSweep`] shared across every block one structural op
+    /// resyncs — new/moved leaves have no prior segment to copy from, so their
+    /// covering comes from a sweep cursor instead. The expensive part (one
+    /// `intersecting` + one resolve per overlapping span) is paid once per op by the
+    /// caller, not once per block.
+    Sweep(&'a WindowSpanSweep),
     /// Reuse each leaf's covering from its existing segment — a node/style/modifier op
     /// re-derives `(eff, own)` but never moves a leaf across a span anchor, so the
     /// covering is unchanged and re-resolving the log would be wasted work.
     Existing,
+}
+
+enum WindowOutcome {
+    Done,
+    Escalate(Dot),
+}
+
+/// Once-per-structural-op span sweep: one `intersecting` over the op's overall
+/// range, one resolve per overlapping span, sorted by start position. Shared by
+/// every block/leaf-run that op resyncs via [`WindowSpanSweep::block_cursor`] — the
+/// expensive `intersecting`+resolve work is paid once per op rather than once per
+/// block (a per-block sweep still regressed span-dense whole-window rebuilds,
+/// since one op can resync hundreds of small blocks).
+struct WindowSpanSweep {
+    /// `(start, end, dot)`, sorted by `start`.
+    resolved: Vec<(usize, usize, Dot)>,
+}
+
+impl WindowSpanSweep {
+    fn build(
+        idx: &editor_model::AnchorIntervalIndex,
+        seq: &SeqCheckout,
+        spans: &SpanLog,
+        lo: usize,
+        hi: usize,
+    ) -> Self {
+        let mut resolved = Vec::new();
+        for d in idx.intersecting(seq, lo, hi) {
+            let Some(op) = spans.get(d) else {
+                continue;
+            };
+            let (sa, ea) = op.anchors();
+            let (Some(s), Some(e)) = (
+                seq.resolve_boundary(sa.id, sa.bias.into())
+                    .map(|b| b.position),
+                seq.resolve_boundary(ea.id, ea.bias.into())
+                    .map(|b| b.position),
+            ) else {
+                continue;
+            };
+            if s < e {
+                resolved.push((s, e, d));
+            }
+        }
+        resolved.sort_unstable_by_key(|&(s, _, _)| s);
+        Self { resolved }
+    }
+
+    /// A sweep with nothing to resolve — for a resync target known upfront to have
+    /// no leaves, skipping the `intersecting` call entirely.
+    fn empty() -> Self {
+        Self {
+            resolved: Vec::new(),
+        }
+    }
+
+    /// A fresh forward-only cursor over the shared resolved list. Callers create one
+    /// per block resync (or per position-ordered leaf-run) — cheap, since it holds no
+    /// state beyond a cursor index and the small set of locally-active spans.
+    fn block_cursor(&self) -> BlockSweepCursor<'_> {
+        BlockSweepCursor {
+            resolved: &self.resolved,
+            next: 0,
+            active: Default::default(),
+            ends: Default::default(),
+        }
+    }
+}
+
+struct BlockSweepCursor<'a> {
+    resolved: &'a [(usize, usize, Dot)],
+    next: usize,
+    active: std::collections::BTreeSet<Dot>,
+    ends: std::collections::BinaryHeap<std::cmp::Reverse<(usize, Dot)>>,
+}
+
+impl BlockSweepCursor<'_> {
+    /// Callers must query positions in non-decreasing order — guaranteed within one
+    /// block's own leaves (or one position-sorted leaf-restore run), which is why a
+    /// fresh cursor is created per block/run: it never needs to rewind.
+    fn active_at(&mut self, p: usize) -> Vec<Dot> {
+        while self.next < self.resolved.len() && self.resolved[self.next].0 <= p {
+            let (_, e, d) = self.resolved[self.next];
+            self.active.insert(d);
+            self.ends.push(std::cmp::Reverse((e, d)));
+            self.next += 1;
+        }
+        while let Some(&std::cmp::Reverse((e, d))) = self.ends.peek() {
+            if e > p {
+                break;
+            }
+            self.ends.pop();
+            self.active.remove(&d);
+        }
+        self.active.iter().copied().collect()
+    }
 }
 
 fn collect_subtree_nodes(tree: &BlockTree, node: &BlockNode, out: &mut Vec<Dot>) {
@@ -96,35 +198,45 @@ fn collect_subtree_nodes(tree: &BlockTree, node: &BlockNode, out: &mut Vec<Dot>)
 /// the scaffold references it by id rather than clobbering it with the empty
 /// shallow proxy (which would orphan the real block's real descendants). Preserved
 /// real ids are collected so the caller keeps them out of its drop set. Newly
-/// synthesized scaffold nodes are inserted whole.
-fn graft_shallow_scaffold(tree: &mut BlockTree, raw: &RawNode, reparented: &mut HashSet<Dot>) {
+/// synthesized scaffold nodes are inserted whole. Returns the subtree's flat
+/// width (a reparented node's already-known width, or the freshly built one).
+fn graft_shallow_scaffold(
+    tree: &mut BlockTree,
+    raw: &RawNode,
+    reparented: &mut HashSet<Dot>,
+) -> u64 {
     if tree.get(raw.id).is_some() {
         reparented.insert(raw.id);
-        return;
+        return tree.flat_width_of(raw.id).unwrap_or(0);
     }
-    let children: ChildList = raw
-        .children
-        .iter()
-        .map(|c| match c {
-            RawChild::Leaf { id, item } => Child::Leaf {
-                id: *id,
-                item: item.clone(),
-            },
+    let mut items: Vec<(Child, u64)> = Vec::with_capacity(raw.children.len());
+    for c in &raw.children {
+        match c {
+            RawChild::Leaf { id, item } => items.push((
+                Child::Leaf {
+                    id: *id,
+                    item: item.clone(),
+                },
+                1,
+            )),
             RawChild::Block(b) => {
-                graft_shallow_scaffold(tree, b, reparented);
-                Child::Block(b.id)
+                let w = graft_shallow_scaffold(tree, b, reparented);
+                items.push((Child::Block(b.id), w));
             }
-        })
-        .collect();
-    tree.nodes.insert(
-        raw.id,
+        }
+    }
+    let children = ChildList::from_sized_iter(items);
+    let w = 2 + children.flat_total();
+    tree.insert_block_sized(
         BlockNode {
             id: raw.id,
             node_type: raw.node_type,
             attrs: raw.attrs.clone(),
             children,
         },
+        w,
     );
+    w
 }
 
 fn last_known_child_for_shallow_root_repair(
@@ -212,6 +324,42 @@ pub struct ProjectedState {
     /// damaged state; `drops`/`totality_violations`/`projection_degraded` record
     /// actual content loss or degradation.
     repair_stats: RepairStats,
+    /// Whether the live projection may still carry unrepaired (budget-capped)
+    /// content. Full projections ASSIGN (a full rebuild is fresh truth); window
+    /// projections OR. While set, `try_insert_block` refuses the splice so the
+    /// next structural op re-derives (and heals) its scope through the window
+    /// path.
+    projection_degraded_latch: bool,
+    /// Whether a warm-defer batch is currently accumulating ops without projecting
+    /// them. See [`begin_defer`](Self::begin_defer)/[`end_defer`](Self::end_defer).
+    defer_active: bool,
+    /// Count of ops applied via [`apply_deferred`](Self::apply_deferred) since the
+    /// last [`flush_deferred`](Self::flush_deferred). Every projection-derived
+    /// public accessor asserts this is `0` — a nonzero value means the tree/indexes
+    /// are stale relative to the oplog/seq.
+    deferred_ops: usize,
+    /// Set at construction from an overlay (`from_graph_with_overlay`) and carried
+    /// unchanged by `Clone`. An overlay-backed projection is an ephemeral,
+    /// non-authoritative view (an overlay dot is spliced out of the tree, not
+    /// logged), so [`begin_defer`](Self::begin_defer) refuses to activate on it.
+    has_overlay: bool,
+    #[cfg(any(test, feature = "test-utils"))]
+    pub(crate) incremental_leaf_inserts: usize,
+    #[cfg(any(test, feature = "test-utils"))]
+    pub(crate) full_reprojects: usize,
+    #[cfg(any(test, feature = "test-utils"))]
+    pub(crate) delete_carry_reprojects: usize,
+    #[cfg(any(test, feature = "test-utils"))]
+    pub(crate) incremental_block_inserts: usize,
+    #[cfg(any(test, feature = "test-utils"))]
+    pub(crate) window_escalations: usize,
+    /// Count of successful projection passes (`reproject`, a `reproject_window`
+    /// that resolves without falling back to `reproject`, `reproject_from_tree`,
+    /// `reproject_after_delete`). A `reproject_window` escalation that falls back
+    /// to `reproject` is counted by that `reproject` call, not by the window call
+    /// that dispatched it — each completed pass counts exactly once.
+    #[cfg(any(test, feature = "test-utils"))]
+    pub(crate) projection_passes: u64,
 }
 
 impl ProjectedState {
@@ -222,7 +370,7 @@ impl ProjectedState {
         let mut seq = SeqCheckout::new();
         seq.apply_tail(&logs.seq);
         let projected = project_from(&logs, &seq)?;
-        let indexes = ProjectionIndexes::rebuild_from(&projected, &logs.spans);
+        let indexes = ProjectionIndexes::rebuild_from(&projected, &logs.spans, &seq);
         Ok((logs, seq, projected, indexes))
     }
 
@@ -234,19 +382,24 @@ impl ProjectedState {
         let mut seq = SeqCheckout::new();
         seq.apply_tail(&logs.seq);
         let projected = project_with_overlay(&logs, &seq, overlay)?;
-        let indexes = ProjectionIndexes::rebuild_from(&projected, &logs.spans);
+        let indexes = ProjectionIndexes::rebuild_from(&projected, &logs.spans, &seq);
         Ok((logs, seq, projected, indexes))
     }
 
     fn rebuild_from_graph(&mut self) -> Result<(), SpineError> {
         let (logs, seq, projected, indexes) = Self::build_warm(&self.graph)?;
         self.repair_stats.accumulate(&projected.repair_stats);
+        self.projection_degraded_latch = projected.repair_stats.projection_degraded;
         self.logs = logs;
         self.seq = seq;
         self.projected = projected;
         self.indexes = indexes;
         self.leaf_cursor = None;
         self.mark_dirty_full();
+        #[cfg(any(test, feature = "test-utils"))]
+        {
+            self.full_reprojects += 1;
+        }
         Ok(())
     }
 
@@ -325,6 +478,7 @@ impl ProjectedState {
     ) -> Result<Self, SpineError> {
         let (logs, seq, projected, indexes) = Self::build_warm_with_overlay(&graph, overlay)?;
         let repair_stats = projected.repair_stats;
+        let projection_degraded_latch = repair_stats.projection_degraded;
         Ok(Self {
             graph,
             logs,
@@ -334,6 +488,22 @@ impl ProjectedState {
             leaf_cursor: None,
             layout_dirty: crate::LayoutDirty::Full,
             repair_stats,
+            projection_degraded_latch,
+            defer_active: false,
+            deferred_ops: 0,
+            has_overlay: !overlay.is_empty(),
+            #[cfg(any(test, feature = "test-utils"))]
+            incremental_leaf_inserts: 0,
+            #[cfg(any(test, feature = "test-utils"))]
+            full_reprojects: 0,
+            #[cfg(any(test, feature = "test-utils"))]
+            delete_carry_reprojects: 0,
+            #[cfg(any(test, feature = "test-utils"))]
+            incremental_block_inserts: 0,
+            #[cfg(any(test, feature = "test-utils"))]
+            window_escalations: 0,
+            #[cfg(any(test, feature = "test-utils"))]
+            projection_passes: 0,
         })
     }
 
@@ -365,18 +535,23 @@ impl ProjectedState {
     }
 
     pub fn take_layout_dirty(&mut self) -> crate::LayoutDirty {
+        debug_assert!(self.deferred_ops == 0, "projection read during deferral");
         std::mem::replace(&mut self.layout_dirty, crate::LayoutDirty::empty())
     }
 
     fn reproject(&mut self) -> Result<(), SpineError> {
         let projected = project_from(&self.logs, &self.seq)?;
-        let paths = BlockPaths::from_tree(&projected.tree);
-        let spans = SpanAnchorIndex::build(&self.logs.spans);
         self.repair_stats.accumulate(&projected.repair_stats);
+        self.projection_degraded_latch = projected.repair_stats.projection_degraded;
+        self.indexes = ProjectionIndexes::rebuild_from(&projected, &self.logs.spans, &self.seq);
         self.projected = projected;
-        self.indexes = ProjectionIndexes { paths, spans };
         self.leaf_cursor = None;
         self.mark_dirty_full();
+        #[cfg(any(test, feature = "test-utils"))]
+        {
+            self.full_reprojects += 1;
+            self.projection_passes += 1;
+        }
         Ok(())
     }
 
@@ -393,12 +568,18 @@ impl ProjectedState {
     pub fn reproject_after_delete(&mut self) -> Result<(), SpineError> {
         let projected = project_from(&self.logs, &self.seq)?;
         let paths = BlockPaths::from_tree(&projected.tree);
-        let spans = self.indexes.spans.clone();
+        let span_index = self.indexes.span_index.clone();
         self.repair_stats.accumulate(&projected.repair_stats);
+        self.projection_degraded_latch = projected.repair_stats.projection_degraded;
         self.projected = projected;
-        self.indexes = ProjectionIndexes { paths, spans };
+        self.indexes = ProjectionIndexes { paths, span_index };
         self.leaf_cursor = None;
         self.mark_dirty_full();
+        #[cfg(any(test, feature = "test-utils"))]
+        {
+            self.delete_carry_reprojects += 1;
+            self.projection_passes += 1;
+        }
         Ok(())
     }
 
@@ -406,222 +587,540 @@ impl ProjectedState {
         let ok = self.try_incremental(op);
         if !ok {
             match &op.payload {
-                EditOp::Seq(_) => {
-                    let ar = self.affected_range(op);
-                    match ar {
-                        Some((i, j)) => {
-                            // An insert/undelete can introduce a block BEFORE the
-                            // affected block's marker (lifting a paragraph to the front,
-                            // restoring a leading list), so extend the window's left
-                            // edge down to the earliest affected sequence position.
-                            let floor = match &op.payload {
-                                EditOp::Seq(ListOp::Ins { .. }) => self
-                                    .seq
-                                    .resolve_boundary(op.id, Bias::Before)
-                                    .map(|b| b.position),
-                                EditOp::Seq(ListOp::Undel { del }) => self
-                                    .seq
-                                    .del_target_dots(&self.logs.seq, *del)
-                                    .iter()
-                                    .filter_map(|t| {
-                                        self.seq
-                                            .resolve_boundary(*t, Bias::Before)
-                                            .map(|b| b.position)
-                                    })
-                                    .min(),
-                                _ => None,
-                            };
-                            self.reproject_window(i, j, floor)?;
+                EditOp::Seq(_) => match self.affected_scope(op) {
+                    Some((mut scope, mut lo, mut hi)) => {
+                        // An insert/undelete can introduce a block BEFORE the
+                        // affected block's marker (lifting a paragraph to the front,
+                        // restoring a leading list), so extend the window's left
+                        // edge down to the earliest affected sequence position. This
+                        // is an absolute sequence position, so it is reused unchanged
+                        // across every retry regardless of which scope is current.
+                        let floor = match &op.payload {
+                            EditOp::Seq(ListOp::Ins { .. }) => self
+                                .seq
+                                .resolve_boundary(op.id, Bias::Before)
+                                .map(|b| b.position),
+                            EditOp::Seq(ListOp::Undel { del }) => self
+                                .seq
+                                .del_target_dots(&self.logs.seq, *del)
+                                .iter()
+                                .filter_map(|t| {
+                                    self.seq
+                                        .resolve_boundary(*t, Bias::Before)
+                                        .map(|b| b.position)
+                                })
+                                .min(),
+                            _ => None,
+                        };
+                        loop {
+                            match self.reproject_window(scope, lo, hi, floor)? {
+                                WindowOutcome::Done => break,
+                                WindowOutcome::Escalate(target) => {
+                                    #[cfg(any(test, feature = "test-utils"))]
+                                    {
+                                        self.window_escalations += 1;
+                                    }
+                                    let ascends = target == Dot::ROOT
+                                        || self.is_strict_ancestor(target, scope);
+                                    debug_assert!(
+                                        ascends,
+                                        "escalation target must strictly ascend"
+                                    );
+                                    let slots = if ascends {
+                                        self.scope_slots_covering(target, scope)
+                                    } else {
+                                        None
+                                    };
+                                    match slots {
+                                        Some((nl, nh)) => {
+                                            scope = target;
+                                            lo = nl;
+                                            hi = nh;
+                                        }
+                                        None => {
+                                            self.reproject()?;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
                         }
-                        None => self.reproject()?,
                     }
-                }
+                    None => self.reproject()?,
+                },
                 _ => self.reproject_from_tree()?,
+            }
+        }
+        // A fresh insertion can resolve quarantined span anchors. Promote them
+        // AFTER the op's own projection so every covered leaf (the new one
+        // included) is already in the tree, then re-apply each promoted span's
+        // covering — segments derived while the span was unresolvable would
+        // otherwise stay stale on the pre-existing leaves.
+        if let EditOp::Seq(ListOp::Ins { .. }) = &op.payload
+            && self.indexes.span_index.pending_len() > 0
+        {
+            for span_dot in self.indexes.span_index.flush_pending_for(&self.seq, op.id) {
+                if let Some(span_op) = self.logs.spans.get(span_dot).cloned() {
+                    let _ = self.apply_span_segments(span_dot, &span_op);
+                }
             }
         }
         Ok(())
     }
 
-    fn top_child_of(&self, dot: Dot) -> Option<Dot> {
-        if !self.indexes.paths.contains(dot) {
+    /// The container whose child list `d`'s change affects: the parent of `d`'s
+    /// enclosing block (leaves lift to their block first). `None` when `d` is
+    /// absent from the projection (ghost) — the caller must represent it by
+    /// position instead of dropping it.
+    fn required_container_of(&self, d: Dot) -> Option<Dot> {
+        let lifted = match self.indexes.paths.block_of(d) {
+            Some(b) => b,
+            None if self.indexes.paths.node_type_of(d).is_some() => d,
+            None => return None,
+        };
+        Some(self.indexes.paths.parent_of(lifted).unwrap_or(Dot::ROOT))
+    }
+
+    /// Deepest common ancestor of the given REQUIRED containers, normalized to a
+    /// window-eligible scope. Root when they share nothing deeper.
+    fn common_scope_of(&self, containers: &[Dot]) -> Option<Dot> {
+        let chain_of = |c: Dot| -> Option<Vec<Dot>> {
+            if c == Dot::ROOT {
+                return Some(vec![Dot::ROOT]);
+            }
+            self.indexes.paths.node_type_of(c)?;
+            let mut chain = vec![c];
+            let mut cur = c;
+            while let Some(p) = self.indexes.paths.parent_of(cur) {
+                chain.push(p);
+                cur = p;
+            }
+            chain.push(Dot::ROOT);
+            chain.dedup();
+            chain.reverse();
+            Some(chain)
+        };
+        let mut common: Option<Vec<Dot>> = None;
+        for &c in containers {
+            let Some(chain) = chain_of(c) else { continue };
+            common = Some(match common {
+                None => chain,
+                Some(prev) => prev
+                    .iter()
+                    .zip(chain.iter())
+                    .take_while(|(a, b)| a == b)
+                    .map(|(a, _)| *a)
+                    .collect(),
+            });
+        }
+        Some(self.normalize_window_scope(*common?.last()?))
+    }
+
+    /// Grid-coupled (Table/TableRow — one row's cell count changes every row's
+    /// width), synthetic, and marker-unresolvable blocks cannot host a window;
+    /// ascend to the nearest eligible ancestor.
+    fn normalize_window_scope(&self, mut scope: Dot) -> Dot {
+        loop {
+            if scope == Dot::ROOT {
+                return scope;
+            }
+            let coupled = matches!(
+                self.indexes.paths.node_type_of(scope),
+                Some(NodeType::Table | NodeType::TableRow) | None
+            );
+            let unresolvable =
+                scope.is_synthetic() || self.seq.resolve_boundary(scope, Bias::Before).is_none();
+            if !coupled && !unresolvable {
+                return scope;
+            }
+            scope = self.indexes.paths.parent_of(scope).unwrap_or(Dot::ROOT);
+        }
+    }
+
+    /// Whether a strict child-slot subrange is a sound window at `scope`:
+    /// only repetition-closed content (position-independent misfit judgment).
+    /// Positional content (Fold, ListItem — `Seq`-shaped) needs the full range.
+    fn scope_subrange_safe(&self, scope: Dot) -> bool {
+        if scope == Dot::ROOT {
+            return true;
+        }
+        let Some(t) = self.indexes.paths.node_type_of(scope) else {
+            return false;
+        };
+        matches!(
+            &t.spec().content,
+            ContentExpr::OneOrMore(_) | ContentExpr::ZeroOrMore(_) | ContentExpr::Any
+        )
+    }
+
+    fn child_of_scope(&self, scope: Dot, d: Dot) -> Option<Dot> {
+        let mut cur = match self.indexes.paths.block_of(d) {
+            Some(b) => b,
+            None if self.indexes.paths.node_type_of(d).is_some() => d,
+            None => return None,
+        };
+        if cur == scope {
+            return Some(d);
+        }
+        loop {
+            match self.indexes.paths.parent_of(cur) {
+                Some(p) if p == scope => return Some(cur),
+                Some(p) => cur = p,
+                None => return None,
+            }
+        }
+    }
+
+    /// Inclusive ±1 slot range of `scope`'s children covering every
+    /// representative. Amortized: lift each representative to a direct child
+    /// (O(depth) each), then ONE pass over the child list — never a per-target
+    /// linear scan.
+    fn scope_slots(
+        &self,
+        scope: Dot,
+        slot_dots: &[Dot],
+        containers: &[Dot],
+    ) -> Option<(usize, usize)> {
+        let node = if scope == Dot::ROOT {
+            self.projected.tree.root_node()?
+        } else {
+            self.projected.tree.get(scope)?
+        };
+        let n = node.children.len();
+        if n == 0 {
             return None;
         }
-        let mut cur = match self.indexes.paths.block_of(dot) {
-            Some(Dot::ROOT) => return Some(dot),
-            Some(block) => block,
-            None => dot,
+        if !self.scope_subrange_safe(scope) {
+            return Some((0, n - 1));
+        }
+        let mut direct: HashSet<Dot> = HashSet::new();
+        for d in slot_dots {
+            if let Some(c) = self.child_of_scope(scope, *d) {
+                direct.insert(c);
+            }
+        }
+        for c in containers {
+            if *c != scope
+                && let Some(cc) = self.child_of_scope(scope, *c)
+            {
+                direct.insert(cc);
+            }
+        }
+        if direct.is_empty() {
+            return None;
+        }
+        let mut lo = usize::MAX;
+        let mut hi = 0usize;
+        for (idx, c) in node.children.iter().enumerate() {
+            let id = match c {
+                Child::Block(b) => *b,
+                Child::Leaf { id, .. } => *id,
+            };
+            if direct.contains(&id) {
+                lo = lo.min(idx);
+                hi = hi.max(idx);
+            }
+        }
+        if lo == usize::MAX {
+            return None;
+        }
+        Some((lo.saturating_sub(1), (hi + 1).min(n - 1)))
+    }
+
+    /// The ±1 child-slot range of `target` covering the inner scope being
+    /// escalated from (full range at positional-content targets).
+    fn scope_slots_covering(&self, target: Dot, inner: Dot) -> Option<(usize, usize)> {
+        let node = if target == Dot::ROOT {
+            self.projected.tree.root_node()?
+        } else {
+            self.projected.tree.get(target)?
         };
+        let n = node.children.len();
+        if n == 0 {
+            return None;
+        }
+        if !self.scope_subrange_safe(target) {
+            return Some((0, n - 1));
+        }
+        let child = self.child_of_scope(target, inner)?;
+        let idx = node.children.iter().position(|c| match c {
+            Child::Block(b) => *b == child,
+            Child::Leaf { id, .. } => *id == child,
+        })?;
+        Some((idx.saturating_sub(1), (idx + 1).min(n - 1)))
+    }
+
+    fn deepest_live_parent(&self, parents: &[Dot]) -> Option<Dot> {
+        for p in parents.iter().rev() {
+            if *p == Dot::ROOT || self.indexes.paths.node_type_of(*p).is_some() {
+                return Some(*p);
+            }
+        }
+        None
+    }
+
+    /// The deepest LIVE ancestor a block/block-atom Ins op intends to attach
+    /// under, from its payload parents chain. `None` for leaf inserts.
+    fn op_intended_parent(&self, op: &Op<EditOp>) -> Option<Dot> {
+        let parents = match &op.payload {
+            EditOp::Seq(ListOp::Ins {
+                item: SeqItem::Block { parents, .. },
+                ..
+            }) => parents,
+            EditOp::Seq(ListOp::Ins {
+                item: SeqItem::BlockAtom { parents, .. },
+                ..
+            }) => parents,
+            _ => return None,
+        };
+        self.deepest_live_parent(parents)
+    }
+
+    /// As [`op_intended_parent`] for an already-inserted sequence element: its
+    /// original Ins item is looked up in the log (blocks/block atoms only).
+    /// O(1) map + indexed-entry reads — no clone, no scan (dot_map.rs:58,
+    /// oplog.rs:40).
+    fn intended_parent_of(&self, d: Dot) -> Option<Dot> {
+        let lv = *self.logs.seq.lv_of.get(&d)?;
+        let ListOp::Ins { item, .. } = &self.logs.seq.entries[lv].op else {
+            return None;
+        };
+        let parents = match item {
+            SeqItem::Block { parents, .. } => parents,
+            SeqItem::BlockAtom { parents, .. } => parents,
+            _ => return None,
+        };
+        self.deepest_live_parent(parents)
+    }
+
+    fn is_strict_ancestor(&self, anc: Dot, node: Dot) -> bool {
+        if anc == node {
+            return false;
+        }
+        if anc == Dot::ROOT {
+            return true;
+        }
+        let mut cur = node;
         while let Some(p) = self.indexes.paths.parent_of(cur) {
-            if p == Dot::ROOT {
-                return Some(cur);
+            if p == anc {
+                return true;
             }
             cur = p;
         }
-        Some(cur)
+        false
     }
 
-    fn top_child_index(&self, dot: Dot) -> Option<usize> {
-        let top = self.top_child_of(dot)?;
-        self.projected
-            .tree
-            .root_node()?
-            .children
-            .iter()
-            .position(|child| match child {
-                Child::Block(block) => *block == top,
-                Child::Leaf { id, .. } => *id == top,
-            })
-    }
-
-    fn top_child_near_pos(&self, pos: usize) -> Option<usize> {
-        for cand in [pos.checked_sub(1), Some(pos), pos.checked_add(1)]
-            .into_iter()
-            .flatten()
-        {
-            if let Some(d) = self.seq.dot_at_visible(&self.logs.seq, cand)
-                && let Some(idx) = self.top_child_index(d)
-            {
-                return Some(idx);
-            }
-        }
-        // The ±1 neighbours are all ghosts (visible in the sequence but dropped from
-        // the tree, e.g. content trailing a mid-text PageBreak). Fall back to the
-        // enclosing top-level child so the op localizes to a window instead of a
-        // whole-document reprojection. This branch is reached only when the cheap ±1
-        // probe fails, so the common path is untouched.
-        self.enclosing_top_child(pos)
-    }
-
-    /// The top-level child whose sequence range contains `pos`: the real child with the
-    /// greatest marker/atom position `≤ pos`. Synthetic/scaffolded blocks (no resolvable
-    /// position, e.g. a normalizer-inserted trailing paragraph) are skipped.
-    fn enclosing_top_child(&self, pos: usize) -> Option<usize> {
-        let mut best: Option<(usize, usize)> = None; // (marker_pos, child_index)
-        let root = self.projected.tree.root_node()?;
-        for (idx, c) in root.children.iter().enumerate() {
-            let id = match c {
-                Child::Block(block) => *block,
-                Child::Leaf { id, .. } => *id,
-            };
-            if let Some(m) = self
-                .seq
-                .resolve_boundary(id, Bias::Before)
-                .map(|x| x.position)
-                && m <= pos
-                && best.is_none_or(|(bm, _)| m >= bm)
-            {
-                best = Some((m, idx));
-            }
-        }
-        best.map(|(_, idx)| idx)
-    }
-
-    /// The inclusive range of top-level child indices a structural op affects.
-    /// Over-approximated (±1 sibling) so block merges/splits stay inside the
-    /// window. `None` ⇒ caller can't localize (rare edge / Undel) → full path.
-    fn affected_range(&self, op: &Op<EditOp>) -> Option<(usize, usize)> {
-        let mut idxs: Vec<usize> = Vec::new();
+    /// The deepest common REQUIRED container of the op's effects, plus the
+    /// inclusive child-slot range there (±1 over-approximation; full range at
+    /// positional-content scopes). Every target — live or ghost — is
+    /// represented. `None` ⇒ the caller cannot localize → full path.
+    fn affected_scope(&self, op: &Op<EditOp>) -> Option<(Dot, usize, usize)> {
+        let mut containers: Vec<Dot> = Vec::new();
+        let mut slot_dots: Vec<Dot> = Vec::new();
+        let mut ghost_positions: Vec<usize> = Vec::new();
         match &op.payload {
             EditOp::Seq(ListOp::Ins { .. }) => {
                 let p = self
                     .seq
                     .resolve_boundary(op.id, Bias::Before)
                     .map(|b| b.position)?;
-                idxs.push(self.top_child_near_pos(p)?);
+                for cand in [p.checked_sub(1), Some(p), p.checked_add(1)]
+                    .into_iter()
+                    .flatten()
+                {
+                    if let Some(d) = self.seq.dot_at_visible(&self.logs.seq, cand)
+                        && let Some(c) = self.required_container_of(d)
+                    {
+                        containers.push(c);
+                        slot_dots.push(d);
+                    }
+                }
+                if let Some(intended) = self.op_intended_parent(op) {
+                    containers.push(intended);
+                }
+                if containers.is_empty() {
+                    ghost_positions.push(p);
+                }
             }
             EditOp::Seq(ListOp::Del { .. }) => {
-                let targets = self.seq.del_target_dots(&self.logs.seq, op.id);
-                // Collect the distinct top-level children via the O(depth) parent walk,
-                // then resolve every child index in ONE pass over the root's children —
-                // per-target `top_child_index` is an O(#children) scan, which makes a
-                // multi-child delete `O(#targets · #children)`. Positions can't localize
-                // a Del the way the Undel arm below does: the op is already applied, so
-                // its targets are tombstoned and their boundary positions all collapse
-                // onto the same surviving neighbour.
-                let mut top_children: HashSet<Dot> = HashSet::new();
-                for t in &targets {
-                    if let Some(top_child) = self.top_child_of(*t) {
-                        top_children.insert(top_child);
-                    }
-                }
-                if !top_children.is_empty()
-                    && let Some(root) = self.projected.tree.root_node()
-                {
-                    for (idx, c) in root.children.iter().enumerate() {
-                        let id = match c {
-                            Child::Block(block) => block,
-                            Child::Leaf { id, .. } => id,
-                        };
-                        if top_children.contains(id) {
-                            idxs.push(idx);
+                for t in self.seq.del_target_dots(&self.logs.seq, op.id) {
+                    match self.required_container_of(t) {
+                        Some(c) => {
+                            containers.push(c);
+                            slot_dots.push(t);
                         }
-                    }
-                }
-                // Every target was a ghost (already absent from the tree). Localize to
-                // the top-level child around where the deleted content lived — via the
-                // in-tree neighbours of its position, then the enclosing child — rather
-                // than reprojecting the whole document. `top_child_near_pos` falls back
-                // through both, so even a ghost whose own child marker was already
-                // deleted still localizes through a surviving sibling.
-                if idxs.is_empty() {
-                    for t in &targets {
-                        if let Some(p) = self
-                            .seq
-                            .resolve_boundary(*t, Bias::Before)
-                            .map(|b| b.position)
-                            && let Some(idx) = self.top_child_near_pos(p)
-                        {
-                            idxs.push(idx);
-                            break;
+                        None => {
+                            if let Some(p) = self
+                                .seq
+                                .resolve_boundary(t, Bias::Before)
+                                .map(|b| b.position)
+                            {
+                                ghost_positions.push(p);
+                            }
                         }
                     }
                 }
             }
             EditOp::Seq(ListOp::Undel { del }) => {
-                // Restored elements aren't in the (pre-op) tree; each is located by the
-                // position it reappears at, via its in-tree neighbour. The window only
-                // needs to span the restored range, so localize just its min/max
-                // positions — not every restored element. Localizing all of them is
-                // `O(#targets · #children)` (each `top_child_near_pos` scans the root's
-                // children), which makes undoing a large delete quadratic. Resolving
-                // positions is the cheap part; the block scan is what must stay bounded.
-                let mut min_pos = usize::MAX;
-                let mut max_pos = 0usize;
+                // Per-target ghost positions, like the `Del` arm — collapsing to the
+                // cluster's min/max undersizes the window: an extreme's neighbours can
+                // all be fellow targets of this same undelete (visible in `seq`, absent
+                // from the stale `paths` index), hiding already-live blocks in between.
                 for t in self.seq.del_target_dots(&self.logs.seq, *del) {
                     if let Some(p) = self
                         .seq
                         .resolve_boundary(t, Bias::Before)
                         .map(|b| b.position)
                     {
-                        min_pos = min_pos.min(p);
-                        max_pos = max_pos.max(p);
+                        ghost_positions.push(p);
+                    }
+                    if let Some(intended) = self.intended_parent_of(t) {
+                        containers.push(intended);
                     }
                 }
-                if min_pos != usize::MAX {
-                    for p in [min_pos, max_pos] {
-                        if let Some(idx) = self.top_child_near_pos(p) {
-                            idxs.push(idx);
-                        }
-                    }
+                if ghost_positions.is_empty() {
+                    return None;
                 }
             }
             _ => return None,
         }
-        if idxs.is_empty() {
+        for p in &ghost_positions {
+            for cand in [p.checked_sub(1), Some(*p), p.checked_add(1)]
+                .into_iter()
+                .flatten()
+            {
+                if let Some(d) = self.seq.dot_at_visible(&self.logs.seq, cand)
+                    && let Some(c) = self.required_container_of(d)
+                {
+                    containers.push(c);
+                    slot_dots.push(d);
+                    break;
+                }
+            }
+        }
+        if containers.is_empty() {
             return None;
         }
-        let n = self
-            .projected
-            .tree
-            .root_node()
-            .map(|r| r.children.len())
-            .unwrap_or(0);
-        if n == 0 {
-            return None;
+        let scope = self.common_scope_of(&containers)?;
+        let (lo, hi) = self.scope_slots(scope, &slot_dots, &containers)?;
+        Some((scope, lo, hi))
+    }
+
+    /// The scope's real ancestor chain as (dot, type), Root first, scope last —
+    /// the seed chain `project_blocks_seeded` expects; drop the last element for
+    /// the ancestor-types chain `normalize_window_forest_for` expects.
+    fn scope_chain(&self, scope: Dot) -> Vec<(Dot, NodeType)> {
+        let mut chain: Vec<(Dot, NodeType)> = Vec::new();
+        let mut cur = scope;
+        while cur != Dot::ROOT {
+            let Some(t) = self.indexes.paths.node_type_of(cur) else {
+                break;
+            };
+            chain.push((cur, t));
+            match self.indexes.paths.parent_of(cur) {
+                Some(p) => cur = p,
+                None => break,
+            }
         }
-        let lo = idxs.iter().copied().min()?.saturating_sub(1);
-        let hi = (idxs.iter().copied().max()? + 1).min(n - 1);
-        Some((lo, hi))
+        chain.push((Dot::ROOT, NodeType::Root));
+        chain.reverse();
+        chain
+    }
+
+    /// The escalation destination for `scope`: the hint when it is a valid
+    /// strict ancestor (normalized to a window-eligible scope — normalization
+    /// only ascends, so strictness is preserved), the parent otherwise.
+    fn escalation_target(&self, scope: Dot, hint: Option<Dot>) -> Dot {
+        let parent =
+            self.normalize_window_scope(self.indexes.paths.parent_of(scope).unwrap_or(Dot::ROOT));
+        match hint {
+            Some(h) if h == Dot::ROOT || self.is_strict_ancestor(h, scope) => {
+                self.normalize_window_scope(h)
+            }
+            _ => parent,
+        }
+    }
+
+    /// The first resolvable boundary position AFTER `scope`'s subtree, walking
+    /// following siblings up the ancestor chain. `None` ⇒ nothing follows —
+    /// the extent runs to the end of the document.
+    fn next_boundary_outside(&self, scope: Dot) -> Option<usize> {
+        let mut cur = scope;
+        loop {
+            let parent = self.indexes.paths.parent_of(cur)?;
+            let node = if parent == Dot::ROOT {
+                self.projected.tree.root_node()?
+            } else {
+                self.projected.tree.get(parent)?
+            };
+            let mut seen = false;
+            for c in node.children.iter() {
+                let id = match c {
+                    Child::Block(b) => *b,
+                    Child::Leaf { id, .. } => *id,
+                };
+                if seen && let Some(b) = self.seq.resolve_boundary(id, Bias::Before) {
+                    return Some(b.position);
+                }
+                if id == cur {
+                    seen = true;
+                }
+            }
+            cur = parent;
+        }
+    }
+
+    /// The container's sequence extent: (one past its marker, the first
+    /// boundary outside its subtree). Newly applied ops inside the container —
+    /// including at its very end — always fall inside this range, because the
+    /// ceiling comes from the next TREE sibling, not from the pre-op descendant
+    /// maximum. `None` when the scope's own marker cannot resolve.
+    fn scope_seq_extent(&self, scope: Dot) -> Option<(usize, usize)> {
+        let lo = self
+            .seq
+            .resolve_boundary(scope, Bias::Before)
+            .map(|b| b.position)?;
+        let hi = self
+            .next_boundary_outside(scope)
+            .unwrap_or(self.seq.visible_len());
+        Some(((lo + 1).min(hi), hi))
+    }
+
+    /// Where a totality deficit sends the window: the deepest common ancestor
+    /// of the scope and every missing element's deepest LIVE intended parent
+    /// (from its payload parents chain). Guaranteed a strict ancestor — when
+    /// the candidates all sit inside the scope's lineage the parent is the
+    /// floor.
+    fn totality_escalation_target(
+        &self,
+        scope: Dot,
+        missing: &[Dot],
+        elements: &[(Dot, SeqItem)],
+    ) -> Dot {
+        let parent =
+            self.normalize_window_scope(self.indexes.paths.parent_of(scope).unwrap_or(Dot::ROOT));
+        let missing_set: HashSet<Dot> = missing.iter().copied().collect();
+        let mut containers: Vec<Dot> = vec![scope];
+        for (d, item) in elements {
+            if !missing_set.contains(d) {
+                continue;
+            }
+            let parents = match item {
+                SeqItem::Block { parents, .. } => parents,
+                SeqItem::BlockAtom { parents, .. } => parents,
+                _ => continue,
+            };
+            for p in parents.iter().rev() {
+                if *p == Dot::ROOT || self.indexes.paths.node_type_of(*p).is_some() {
+                    containers.push(*p);
+                    break;
+                }
+            }
+        }
+        match self.common_scope_of(&containers) {
+            Some(t) if t != scope && self.is_strict_ancestor(t, scope) => t,
+            _ => parent,
+        }
     }
 
     /// Re-project only top-level children `[i, j]` from the live sequence and splice
@@ -630,19 +1129,33 @@ impl ProjectedState {
     /// normalization) at O(window), never the whole document.
     fn reproject_window(
         &mut self,
+        scope: Dot,
         i: usize,
         j: usize,
         floor: Option<usize>,
-    ) -> Result<(), SpineError> {
-        let root_id = self.projected.tree.root;
-        // Read-only snapshot of the root's children (O(1) persistent clone) for window
-        // computation; the tree is mutated only after the window is fully planned.
-        let Some(root_children) = self.projected.tree.root_node().map(|r| r.children.clone())
-        else {
-            return self.reproject();
+    ) -> Result<WindowOutcome, SpineError> {
+        let scope_type = if scope == Dot::ROOT {
+            NodeType::Root
+        } else {
+            self.indexes
+                .paths
+                .node_type_of(scope)
+                .expect("live scope typed")
         };
-        if i > j || j >= root_children.len() {
-            return self.reproject();
+        // Read-only snapshot of the scope's children (O(1) persistent clone) for window
+        // computation; the tree is mutated only after the window is fully planned.
+        let scope_node_children = if scope == Dot::ROOT {
+            self.projected.tree.root_node().map(|r| r.children.clone())
+        } else {
+            self.projected.tree.get(scope).map(|n| n.children.clone())
+        };
+        let Some(scope_children) = scope_node_children else {
+            self.reproject()?;
+            return Ok(WindowOutcome::Done);
+        };
+        if i > j || j >= scope_children.len() {
+            self.reproject()?;
+            return Ok(WindowOutcome::Done);
         }
         let child_id = |c: &Child| match c {
             Child::Block(block) => *block,
@@ -655,12 +1168,18 @@ impl ProjectedState {
         // so it must be reprojected together or a cold rebuild diverges.
         let mut i = i;
         let mut j = j;
+        // Position-independent misfit judgment is unsound over a strict subrange for
+        // positional (Fold, ListItem) content — widen to the scope's full child range.
+        if scope != Dot::ROOT && !self.scope_subrange_safe(scope) {
+            i = 0;
+            j = scope_children.len() - 1;
+        }
         let mut window_owned: HashSet<Dot> = HashSet::new();
         // Ancestors any window child's marker still nests under — drives left extension
         // to a preceding sibling a window element reparents onto.
         let mut referenced: HashSet<Dot> = HashSet::new();
         for slot in i..=j {
-            if let Some(c) = root_children.get(slot) {
+            if let Some(c) = scope_children.get(slot) {
                 let id = child_id(c);
                 window_owned.extend(self.subtree_real_dots(id));
                 referenced.extend(self.marker_parents(id));
@@ -679,11 +1198,11 @@ impl ProjectedState {
         // (A following sibling can never nest under a *right*-pulled block — ancestors
         // precede descendants in the sequence — so left-then-right needs no re-pass.)
         while i > 0 {
-            let head_synthetic = root_children
+            let head_synthetic = scope_children
                 .get(i)
                 .map(&child_id)
                 .is_some_and(|d| d.is_synthetic());
-            let Some(prev) = root_children.get(i - 1).map(&child_id) else {
+            let Some(prev) = scope_children.get(i - 1).map(&child_id) else {
                 break;
             };
             if !head_synthetic && !referenced.contains(&prev) {
@@ -696,14 +1215,72 @@ impl ProjectedState {
         // Right extension: subsume trailing synthetic scaffolds (own real dots, no
         // resolvable marker — e.g. a normalizer trailing paragraph) and following real
         // siblings that reparent into the window (including onto a block the left pass
-        // just pulled in). Stop at the first genuine window-external child, whose marker
-        // begins the excluded tail (`window_end`); once a non-descendant closes the run
-        // the order invariant forbids any later sibling from reopening the window. If
+        // just pulled in). The break arm closes the run at the first window-external
+        // child, whose marker begins the excluded tail (`window_end`).
+        //
+        // The order invariant — once a non-descendant closes the run, no later sibling
+        // can reopen the window — holds only for REAL siblings: a real sibling owns a
+        // sequence marker and markers preserve sequence order, so a real sibling past the
+        // closing child sequence-belongs after the window. A marker-LESS synthetic
+        // scaffold owns no marker; it is a pure normalization artifact of the real
+        // content around it, so it can sequence-belong ANYWHERE. So before honoring a
+        // break at a window-external real child (position `p`), scan the trailing root
+        // children for a STRANDED synthetic — one that does NOT have surviving visible
+        // content at/after `p`. Its owned real dots are either all tombstoned / absent
+        // (its content was deleted, or it is an empty tail artifact — cases a cold rebuild
+        // never re-emits once its justification is gone) or minimally positioned `< p`
+        // (its content sequence-belongs inside the window). If one trails, do NOT break —
+        // pull the closing child in so the scaffold and any intervening reals get
+        // swallowed and re-derived from the sequence (re-emitted with the same
+        // deterministic synthetic id if still justified, else forgotten by the
+        // `old_nodes` / shallow-repair sweep). A synthetic whose visible content lies
+        // entirely at/after `p` genuinely sequence-belongs after the window and must NOT
+        // trigger the pull, or such a window would needlessly extend to a full tail. If
         // only scaffolds trail, the window runs to the sequence end — never a full
         // reproject.
-        let mut window_end = self.seq.visible_len();
+        let (scope_floor, scope_ceil) = if scope == Dot::ROOT {
+            (0, self.seq.visible_len())
+        } else {
+            match self.scope_seq_extent(scope) {
+                Some(r) => r,
+                None => {
+                    return Ok(WindowOutcome::Escalate(self.escalation_target(scope, None)));
+                }
+            }
+        };
+        // Hoisted above the right-extension loop (depends only on the left-extended
+        // `i`, which that loop never touches) because absorption needs it: a
+        // following sibling can reparent onto a currently-dead ancestor (a container
+        // this op resurrects) absent from `window_owned` — by the order invariant
+        // (ancestors precede descendants) an ancestor resolving inside
+        // `[window_start, p)` is rebuilt by this same window and counts as in-window.
+        // First child's marker, or a head synthetic's min real dot; a synthetic
+        // filler owning no real dots falls back to full reproject.
+        let Some(first) = scope_children.get(i).map(&child_id) else {
+            self.reproject()?;
+            return Ok(WindowOutcome::Done);
+        };
+        let Some(mut window_start) = self.seq_flat_pos(first).or_else(|| {
+            self.subtree_real_dots(first)
+                .iter()
+                .filter_map(|&d| self.seq_flat_pos(d))
+                .min()
+        }) else {
+            self.reproject()?;
+            return Ok(WindowOutcome::Done);
+        };
+        if let Some(f) = floor {
+            window_start = window_start.min(f);
+        }
+        if scope != Dot::ROOT {
+            window_start = window_start.max(scope_floor);
+        }
+        let mut window_end = scope_ceil;
         let mut k = j + 1;
-        while let Some(c) = root_children.get(k) {
+        // Furthest trailing stranded synthetic we are currently pulling toward; cached
+        // across break candidates so the look-ahead reruns only once `k` passes it.
+        let mut pull_target: Option<usize> = None;
+        while let Some(c) = scope_children.get(k) {
             let id = child_id(c);
             let parents = self.marker_parents(id);
             let resolved = self
@@ -711,9 +1288,41 @@ impl ProjectedState {
                 .resolve_boundary(id, Bias::Before)
                 .map(|b| b.position);
             match resolved {
-                Some(p) if !parents.iter().any(|d| window_owned.contains(d)) => {
-                    window_end = p;
-                    break;
+                Some(p)
+                    if !parents.iter().any(|d| {
+                        window_owned.contains(d)
+                            || self
+                                .seq_flat_pos(*d)
+                                .is_some_and(|dp| dp >= window_start && dp < p)
+                    }) =>
+                {
+                    if pull_target.is_none_or(|t| k >= t) {
+                        pull_target = None;
+                        let mut s = k + 1;
+                        while let Some(sc) = scope_children.get(s) {
+                            let sid = child_id(sc);
+                            if sid.is_synthetic() {
+                                let min_vis = self
+                                    .subtree_real_dots(sid)
+                                    .iter()
+                                    .filter_map(|&d| self.seq_flat_pos(d))
+                                    .min();
+                                if min_vis.is_none_or(|m| m < p) {
+                                    pull_target = Some(s);
+                                }
+                            }
+                            s += 1;
+                        }
+                    }
+                    if pull_target.is_some_and(|t| t > k) {
+                        window_owned.extend(self.subtree_real_dots(id));
+                        referenced.extend(parents);
+                        j = k;
+                        k += 1;
+                    } else {
+                        window_end = p;
+                        break;
+                    }
                 }
                 _ => {
                     window_owned.extend(self.subtree_real_dots(id));
@@ -723,26 +1332,22 @@ impl ProjectedState {
                 }
             }
         }
-        let Some(first) = root_children.get(i).map(&child_id) else {
-            return self.reproject();
-        };
-        // Window start: the first child's own marker, or — for a synthetic scaffold at
-        // the head — the min position among the real dots it owns. Only a synthetic
-        // filler owning no real dots (nothing to localize) falls back to full reproject.
-        let Some(mut window_start) = self.seq_flat_pos(first).or_else(|| {
-            self.subtree_real_dots(first)
+        if scope != Dot::ROOT {
+            let head_synthetic_at_zero = i == 0
+                && scope_children
+                    .first()
+                    .map(&child_id)
+                    .is_some_and(|d| d.is_synthetic());
+            let outside_lineage = referenced
                 .iter()
-                .filter_map(|&d| self.seq_flat_pos(d))
-                .min()
-        }) else {
-            return self.reproject();
-        };
-        if let Some(f) = floor {
-            window_start = window_start.min(f);
+                .any(|d| *d != scope && !self.is_strict_ancestor(*d, scope));
+            if head_synthetic_at_zero || outside_lineage {
+                return Ok(WindowOutcome::Escalate(self.escalation_target(scope, None)));
+            }
         }
         let mut old_nodes: Vec<Dot> = Vec::new();
         for slot in i..=j {
-            match root_children.get(slot) {
+            match scope_children.get(slot) {
                 Some(Child::Block(block)) => {
                     if let Some(node) = self.projected.tree.get(*block) {
                         collect_subtree_nodes(&self.projected.tree, node, &mut old_nodes);
@@ -770,8 +1375,54 @@ impl ProjectedState {
                 }
             }
         }
+        // A block/block-atom in the window's sequence range can currently live
+        // under a SIBLING the window never touches (e.g. a positionally-scattered
+        // child a prior pass parked in a scaffold elsewhere under a shared
+        // ancestor) — `project_blocks_seeded` will correctly reclaim it into this
+        // window, but nothing here would ever revisit that sibling to drop its
+        // now-stale scaffold, since `old_nodes` only reaches the CHOSEN scope's own
+        // [i..=j] subtree. Escalate to the common ancestor of `scope` and the
+        // element's current parent so that sibling comes into the reprojected
+        // range too. Root is exempt: a top-level window already reaches every
+        // sibling at once, so a reclaim source is always already inside its own
+        // `old_nodes`.
+        if scope != Dot::ROOT {
+            let old_nodes_set: HashSet<Dot> = old_nodes.iter().copied().collect();
+            for (d, item) in &elements {
+                if !matches!(item, SeqItem::Block { .. } | SeqItem::BlockAtom { .. }) {
+                    continue;
+                }
+                let Some(prev_parent) = self.indexes.paths.parent_of(*d) else {
+                    continue;
+                };
+                if prev_parent != scope && !old_nodes_set.contains(&prev_parent) {
+                    let target = self
+                        .common_scope_of(&[scope, prev_parent])
+                        .unwrap_or(Dot::ROOT);
+                    return Ok(WindowOutcome::Escalate(
+                        self.escalation_target(scope, Some(target)),
+                    ));
+                }
+            }
+        }
         let mut window_stats = RepairStats::default();
-        let raw = project_blocks(&elements).map_err(ProjectionError::Project)?;
+        let (raw, seed_escape) = if scope == Dot::ROOT {
+            (
+                project_blocks(&elements).map_err(ProjectionError::Project)?,
+                None,
+            )
+        } else {
+            let chain = self.scope_chain(scope);
+            let (t, escaped) =
+                editor_model::project_blocks_seeded(&elements, &chain, &mut window_stats)
+                    .map_err(ProjectionError::Project)?;
+            (t, escaped)
+        };
+        if let Some(hint) = seed_escape {
+            return Ok(WindowOutcome::Escalate(
+                self.escalation_target(scope, Some(hint)),
+            ));
+        }
         let raw_children = raw
             .roots
             .into_iter()
@@ -785,13 +1436,32 @@ impl ProjectedState {
         // groups it (per-block `normalize_subtree` under `[Root]` hoisted it one level
         // too high, to Root). The Root *completion* rules stay document-global, applied
         // by `repair_root_content_shallow` below — never re-run per window.
-        let forest = normalize_window_forest_with_stats(raw_children, &mut window_stats);
+        let (forest, hoist) = if scope == Dot::ROOT {
+            (
+                normalize_window_forest_with_stats(raw_children, &mut window_stats),
+                Vec::new(),
+            )
+        } else {
+            let chain = self.scope_chain(scope);
+            let ancestors: Vec<NodeType> =
+                chain[..chain.len() - 1].iter().map(|(_, t)| *t).collect();
+            editor_model::normalize_window_forest_for(
+                scope,
+                scope_type,
+                &ancestors,
+                raw_children,
+                &mut window_stats,
+            )
+        };
+        if !hoist.is_empty() {
+            return Ok(WindowOutcome::Escalate(self.escalation_target(scope, None)));
+        }
         // Plan each block's index entries and graft its subtree into the live `nodes`
         // map, building the flat child-reference list to splice.
         let mut plan_blocks: Vec<(Dot, Dot, NodeType)> = Vec::new();
         let mut plan_block_leaves: BlockLeafPlan = Vec::new();
         let mut new_nodes: HashSet<Dot> = HashSet::new();
-        let mut new_children: Vec<Child> = Vec::new();
+        let mut new_children_sized: Vec<(Child, u64)> = Vec::new();
         // Block-level atoms (image / horizontal rule) project as a `Leaf` directly under
         // Root; they are leaves of Root, not of any window block, so they need their own
         // index/derivation maintenance (`plan_subtree` only covers block subtrees).
@@ -801,31 +1471,38 @@ impl ProjectedState {
                 RawChild::Block(b) => {
                     plan_subtree(
                         &b,
-                        Dot::ROOT,
+                        scope,
                         &mut plan_blocks,
                         &mut plan_block_leaves,
                         &mut new_nodes,
                     );
-                    let id = self.projected.tree.insert_block_subtree(&b);
-                    new_children.push(Child::Block(id));
+                    let w = self.projected.tree.insert_block_subtree(&b);
+                    new_children_sized.push((Child::Block(b.id), w));
                 }
                 RawChild::Leaf { id, item } => {
                     new_nodes.insert(id);
                     root_leaves.push((id, item.as_child_type()));
-                    new_children.push(Child::Leaf { id, item });
+                    new_children_sized.push((Child::Leaf { id, item }, 1));
                 }
             }
         }
 
         // Snapshot the window's re-projected children before the splice consumes them;
         // the totality tripwire below walks them against the *post-repair* tree.
-        let window_children: Vec<Child> = new_children.clone();
+        let window_children_sized: Vec<(Child, u64)> = new_children_sized.clone();
 
-        self.projected
-            .tree
-            .with_block_children(root_id, |children| {
-                children.splice(i..=j, new_children);
+        if let Some((old, new)) =
+            self.projected
+                .tree
+                .splice_children_sized(scope, i..=j, new_children_sized)
+            && scope != self.projected.tree.root_id()
+        {
+            self.propagate_flat_width(FlatWidthDelta {
+                block: scope,
+                old,
+                new,
             });
+        }
 
         for &n in &old_nodes {
             if !new_nodes.contains(&n) {
@@ -861,28 +1538,31 @@ impl ProjectedState {
             }
         }
 
-        // Root-level block atoms: index them under Root.
+        // Scope-level block atoms: index them under the scope.
         for (leaf, _lt) in &root_leaves {
-            self.indexes.paths.set_block_of_leaf(*leaf, Dot::ROOT);
+            self.indexes.paths.set_block_of_leaf(*leaf, scope);
         }
 
-        // Re-establish the Root node's OWN schema content rule (whatever it is —
+        // Re-establish the scope's OWN schema content rule (whatever it is —
         // e.g. a required trailing paragraph) by deferring to the normalizer, not
         // by hardcoding the rule here. Window blocks are already normalized, so
-        // only the Root's direct content is repaired; returns any freshly scaffolded
+        // only the scope's direct content is repaired; returns any freshly scaffolded
         // blocks to index.
-        let scaffolded = self.repair_root_content_shallow(&mut window_stats);
+        let scaffolded = if scope == Dot::ROOT {
+            self.repair_root_content_shallow(&mut window_stats)
+        } else {
+            match self.repair_block_content_shallow(scope, &mut window_stats) {
+                Some(s) => s,
+                None => {
+                    return Ok(WindowOutcome::Escalate(self.escalation_target(scope, None)));
+                }
+            }
+        };
         let mut s_blocks: Vec<(Dot, Dot, NodeType)> = Vec::new();
         let mut s_block_leaves: BlockLeafPlan = Vec::new();
         let mut s_nodes: HashSet<Dot> = HashSet::new();
         for b in &scaffolded {
-            plan_subtree(
-                b,
-                Dot::ROOT,
-                &mut s_blocks,
-                &mut s_block_leaves,
-                &mut s_nodes,
-            );
+            plan_subtree(b, scope, &mut s_blocks, &mut s_block_leaves, &mut s_nodes);
         }
         for (block, parent, nt) in &s_blocks {
             self.indexes.paths.add_block(*block, *parent, *nt);
@@ -899,47 +1579,100 @@ impl ProjectedState {
         }
 
         // Window-local totality tripwire: run the same predicate the full path uses,
-        // but on a scratch Root over the window's re-projected children walked against
-        // the *post-splice, post-shallow-repair* tree — so the check covers the Root
+        // but on a scratch scope node over the window's re-projected children walked
+        // against the *post-splice, post-shallow-repair* tree — so the check covers the
         // shallow reconcile (a rule-dropped window block leaves its id dangling and its
         // elements unreachable) while the DFS stays O(window), not O(document).
         {
-            let mut window_tree = self.projected.tree.clone();
-            let window_root = editor_model::synthetic_id(root_id, i, NodeType::Root);
-            window_tree.nodes.insert(
-                window_root,
-                BlockNode {
-                    id: window_root,
-                    node_type: NodeType::Root,
-                    attrs: Vec::new(),
-                    children: ChildList::from_iter(window_children),
-                },
-            );
-            window_tree.root = window_root;
-            editor_model::totality_check(&elements, &window_tree, &mut window_stats);
+            let window_root = editor_model::synthetic_id(scope, i, scope_type);
+            let window_tree = self.projected.tree.with_scratch_root(BlockNode {
+                id: window_root,
+                node_type: scope_type,
+                attrs: Vec::new(),
+                children: ChildList::from_sized_iter(window_children_sized),
+            });
+            if scope == Dot::ROOT {
+                editor_model::totality_check(&elements, &window_tree, &mut window_stats);
+            } else {
+                let missing = editor_model::totality_deficit(&elements, &window_tree);
+                if !missing.is_empty() {
+                    return Ok(WindowOutcome::Escalate(
+                        self.totality_escalation_target(scope, &missing, &elements),
+                    ));
+                }
+            }
         }
 
         // Rebuild segments for every block the window rewrote — the window
-        // subtrees, any scaffolded blocks, and Root itself (its block-atom leaves were
-        // re-indexed above). Each leaf's covering is resolved from the span log once here.
-        let resolved = editor_model::ResolvedSpans::build(&self.logs.spans, &self.seq);
-        let source = CoveringSource::Resolved(&resolved);
+        // subtrees, any scaffolded blocks, and the scope itself (its block-atom leaves
+        // were re-indexed above). One sweep over the window's sequence range is built
+        // here and shared by every block below — a window reproject's window is usually
+        // most of the document anyway, so this is the same amortization the old full-log
+        // build had, just without paying for a full log rebuild.
+        let idx = self.indexes.span_index.clone();
+        let (sweep_lo, sweep_hi) = if scope == Dot::ROOT {
+            (0, self.seq.visible_len())
+        } else {
+            (scope_floor, scope_ceil)
+        };
+        let sweep = WindowSpanSweep::build(&idx, &self.seq, &self.logs.spans, sweep_lo, sweep_hi);
+        let source = CoveringSource::Sweep(&sweep);
         for (block, _, _) in &plan_blocks {
             self.resync_block_segs(*block, &source);
         }
         for (block, _, _) in &s_blocks {
             self.resync_block_segs(*block, &source);
         }
-        self.resync_block_segs(Dot::ROOT, &source);
+        self.resync_block_segs(scope, &source);
         for (block, _, _) in &plan_blocks {
             self.mark_dirty_block(*block);
         }
         for (block, _, _) in &s_blocks {
             self.mark_dirty_block(*block);
         }
-        self.mark_dirty_structural(Dot::ROOT);
+        self.mark_dirty_structural(scope);
         self.repair_stats.accumulate(&window_stats);
-        Ok(())
+        self.projection_degraded_latch |= window_stats.projection_degraded;
+        #[cfg(any(test, feature = "test-utils"))]
+        {
+            self.projection_passes += 1;
+        }
+        Ok(WindowOutcome::Done)
+    }
+
+    /// Sole owner of flat-width ancestor propagation: applies `delta` at
+    /// `delta.block`'s parent chain up to (and including) the root's child entry.
+    /// Slot location is `slot_of_child`-accelerated with a linear fallback inside
+    /// `set_child_flat_size`; the per-level id re-check anchors correctness.
+    fn propagate_flat_width(&mut self, delta: FlatWidthDelta) {
+        if delta.old == delta.new {
+            return;
+        }
+        let mut child = delta.block;
+        let mut width = delta.new;
+        loop {
+            let Some(parent) = self.indexes.paths.parent_of(child) else {
+                return;
+            };
+            let hint = {
+                let view =
+                    DocView::with_paths_ordered(&self.projected, &self.indexes.paths, &self.seq);
+                view.node(parent)
+                    .and_then(|p| p.slot_of_child(child, &self.seq))
+            };
+            let Some((old, new)) = self
+                .projected
+                .tree
+                .set_child_flat_size(parent, child, hint, width)
+            else {
+                return;
+            };
+            if parent == self.projected.tree.root_id() || old == new {
+                return;
+            }
+            child = parent;
+            width = new;
+        }
     }
 
     /// Drop every projected derivation, index entry, and tree node for `n` (a block
@@ -953,7 +1686,9 @@ impl ProjectedState {
         self.projected.seg_index.remove_block(n);
         self.indexes.paths.remove_block(n);
         self.indexes.paths.remove_leaf(n);
-        self.projected.tree.nodes.remove(&n);
+        // The window splice already rewrote the parent's list; a plain removal
+        // here creates no delta to propagate.
+        self.projected.tree.remove_block(n);
     }
 
     /// Re-establish the Root's own schema content rule on the flat tree by running the
@@ -964,7 +1699,7 @@ impl ProjectedState {
     /// Root-level completion can distinguish a terminal PageBreak from an editable
     /// trailing Paragraph without cloning the Paragraph's full content.
     fn repair_root_content_shallow(&mut self, stats: &mut RepairStats) -> Vec<RawNode> {
-        let root_id = self.projected.tree.root;
+        let root_id = self.projected.tree.root_id();
         let Some(root) = self.projected.tree.get(root_id) else {
             return Vec::new();
         };
@@ -1027,7 +1762,7 @@ impl ProjectedState {
         let hoist = normalize_content_shallow_with_stats(&mut shallow, &[], stats);
         shallow.children.extend(hoist);
 
-        let mut new_children: Vec<Child> = Vec::new();
+        let mut new_children_sized: Vec<(Child, u64)> = Vec::new();
         let mut after: HashSet<Dot> = HashSet::new();
         let mut scaffolded: Vec<RawNode> = Vec::new();
         // Real blocks that a WRAP scaffold reparented (its proxy is an empty
@@ -1036,14 +1771,18 @@ impl ProjectedState {
         let mut reparented: HashSet<Dot> = HashSet::new();
         for c in shallow.children {
             match c {
-                RawChild::Leaf { id, item } => new_children.push(Child::Leaf { id, item }),
+                RawChild::Leaf { id, item } => {
+                    new_children_sized.push((Child::Leaf { id, item }, 1));
+                }
                 RawChild::Block(b) => {
                     after.insert(b.id);
                     if self.projected.tree.get(b.id).is_some() {
-                        new_children.push(Child::Block(b.id));
+                        let w = self.projected.tree.flat_width_of(b.id).unwrap_or(0);
+                        new_children_sized.push((Child::Block(b.id), w));
                     } else {
-                        graft_shallow_scaffold(&mut self.projected.tree, &b, &mut reparented);
-                        new_children.push(Child::Block(b.id));
+                        let w =
+                            graft_shallow_scaffold(&mut self.projected.tree, &b, &mut reparented);
+                        new_children_sized.push((Child::Block(b.id), w));
                         scaffolded.push(b);
                     }
                 }
@@ -1065,27 +1804,193 @@ impl ProjectedState {
                 self.forget_node(n);
             }
         }
+        // The root is excluded from the flat-width side map, so a replacement
+        // here never needs propagation past `root_id` itself.
         self.projected
             .tree
-            .with_block_children(root_id, |children| {
-                *children = ChildList::from_iter(new_children);
-            });
+            .replace_children_sized(root_id, ChildList::from_sized_iter(new_children_sized));
         scaffolded
+    }
+
+    /// Container-generalized analogue of [`repair_root_content_shallow`]: the
+    /// same nested `normalize_content_shallow_with_stats` reconciliation over a
+    /// shallow proxy of `container` — existing blocks keep their real flat
+    /// subtree, newly scaffolded blocks are grafted in (and returned for
+    /// indexing), and rule-dropped blocks are forgotten.
+    ///
+    /// The hoist contract differs from the Root path: Root accepts every block
+    /// type through WRAP, so nothing can ever hoist above it, and
+    /// [`repair_root_content_shallow`] reattaches any escapee as a Root child
+    /// (total, like `normalize_capped`). A non-Root `container` has no such
+    /// totality — a non-empty hoist is content that belongs to `container`'s
+    /// PARENT, not to `container` itself. The shallow proxy is built read-only up
+    /// to that check (graft/forget/splice all happen only after it), so on a
+    /// non-empty hoist this leaves the tree completely untouched and returns
+    /// `None`, signaling the caller to re-run this repair one scope level up;
+    /// re-deriving from the sequence is idempotent, since the sequence — not the
+    /// tree — is ground truth. `Some(scaffolded)` means the repair applied and
+    /// `scaffolded` lists the newly-grafted blocks for the caller to index.
+    ///
+    /// Depends on `complete_root_trailing_editable_paragraph` (invoked inside
+    /// `normalize_content_shallow_with_stats`) type-gating to a no-op for any
+    /// non-Root `node_type`, so the Root-only trailing-editable-paragraph
+    /// completion shared with the Root path never fires here.
+    ///
+    /// `container` must not be `Table`/`TableRow` — they cannot be a normalize
+    /// window scope (see [`Self::normalize_window_scope`]) — so this has no
+    /// Table-grid special case.
+    fn repair_block_content_shallow(
+        &mut self,
+        container: Dot,
+        stats: &mut RepairStats,
+    ) -> Option<Vec<RawNode>> {
+        let Some(node) = self.projected.tree.get(container) else {
+            return Some(Vec::new());
+        };
+        let mut shallow = RawNode {
+            id: container,
+            node_type: node.node_type,
+            attrs: node.attrs.clone(),
+            children: Vec::new(),
+        };
+        let last_block = last_known_child_for_shallow_root_repair(&self.projected.tree, node)
+            .and_then(|child| match child {
+                RawChild::Block(block) => Some(block.id),
+                RawChild::Leaf { .. } => None,
+            });
+        for c in &node.children {
+            match c {
+                Child::Leaf { id, item } => shallow.children.push(RawChild::Leaf {
+                    id: *id,
+                    item: item.clone(),
+                }),
+                Child::Block(id) => {
+                    let block = self.projected.tree.get(*id);
+                    let (nt, attrs) = block
+                        .map(|b| (b.node_type, b.attrs.clone()))
+                        .unwrap_or((NodeType::Paragraph, Vec::new()));
+                    let children = if Some(*id) == last_block && nt == NodeType::Paragraph {
+                        block
+                            .and_then(|block| {
+                                last_known_child_for_shallow_root_repair(
+                                    &self.projected.tree,
+                                    block,
+                                )
+                            })
+                            .into_iter()
+                            .collect()
+                    } else {
+                        Vec::new()
+                    };
+                    shallow.children.push(RawChild::Block(RawNode {
+                        id: *id,
+                        node_type: nt,
+                        attrs,
+                        children,
+                    }));
+                }
+            }
+        }
+        let before: HashSet<Dot> = shallow
+            .children
+            .iter()
+            .filter_map(|c| match c {
+                RawChild::Block(b) => Some(b.id),
+                _ => None,
+            })
+            .collect();
+
+        let mut ancestors: Vec<NodeType> = Vec::new();
+        let mut cur = container;
+        while let Some(p) = self.indexes.paths.parent_of(cur) {
+            if let Some(nt) = self.indexes.paths.node_type_of(p) {
+                ancestors.push(nt);
+            }
+            cur = p;
+        }
+        ancestors.reverse();
+
+        let hoist = normalize_content_shallow_with_stats(&mut shallow, &ancestors, stats);
+        if !hoist.is_empty() {
+            return None;
+        }
+
+        let mut new_children_sized: Vec<(Child, u64)> = Vec::new();
+        let mut after: HashSet<Dot> = HashSet::new();
+        let mut scaffolded: Vec<RawNode> = Vec::new();
+        // Real blocks that a WRAP scaffold reparented (its proxy is an empty
+        // placeholder): they moved, they were not dropped — preserved and kept out of
+        // the forget set below.
+        let mut reparented: HashSet<Dot> = HashSet::new();
+        for c in shallow.children {
+            match c {
+                RawChild::Leaf { id, item } => {
+                    new_children_sized.push((Child::Leaf { id, item }, 1));
+                }
+                RawChild::Block(b) => {
+                    after.insert(b.id);
+                    if self.projected.tree.get(b.id).is_some() {
+                        let w = self.projected.tree.flat_width_of(b.id).unwrap_or(0);
+                        new_children_sized.push((Child::Block(b.id), w));
+                    } else {
+                        let w =
+                            graft_shallow_scaffold(&mut self.projected.tree, &b, &mut reparented);
+                        new_children_sized.push((Child::Block(b.id), w));
+                        scaffolded.push(b);
+                    }
+                }
+            }
+        }
+        // Forget any direct block the rule dropped (and its whole subtree). The
+        // shallow proxy carries no descendants, so the normalize sink can't see this
+        // loss; count the dropped subtree's real dots directly from the live tree. A
+        // block a scaffold reparented is preserved, not dropped.
+        after.extend(reparented.iter().copied());
+        let dropped: Vec<Dot> = before.difference(&after).copied().collect();
+        for d in dropped {
+            stats.drops += self.subtree_real_dots(d).len() as u64;
+            let mut sub = Vec::new();
+            if let Some(b) = self.projected.tree.get(d) {
+                collect_subtree_nodes(&self.projected.tree, b, &mut sub);
+            }
+            for n in sub {
+                self.forget_node(n);
+            }
+        }
+        if let Some((old, new)) = self
+            .projected
+            .tree
+            .replace_children_sized(container, ChildList::from_sized_iter(new_children_sized))
+            && container != self.projected.tree.root_id()
+        {
+            self.propagate_flat_width(FlatWidthDelta {
+                block: container,
+                old,
+                new,
+            });
+        }
+        Some(scaffolded)
     }
 
     fn reproject_from_tree(&mut self) -> Result<(), SpineError> {
         let elements = self.seq.snapshot(&self.logs.seq);
         let tree = self.projected.tree.clone();
         self.projected = project_from_tree(&elements, tree, &self.seq, &self.logs);
-        self.indexes = ProjectionIndexes::rebuild_from(&self.projected, &self.logs.spans);
+        self.indexes =
+            ProjectionIndexes::rebuild_from(&self.projected, &self.logs.spans, &self.seq);
         self.mark_dirty_full();
+        #[cfg(any(test, feature = "test-utils"))]
+        {
+            self.full_reprojects += 1;
+            self.projection_passes += 1;
+        }
         Ok(())
     }
 
     fn try_incremental(&mut self, op: &Op<EditOp>) -> bool {
         match &op.payload {
             EditOp::Seq(ListOp::Ins { item, .. }) if is_inline_leaf_item(item) => {
-                self.try_insert_leaf(op.id, item)
+                self.try_insert_leaf(op.id, item, None)
             }
             EditOp::Seq(ListOp::Ins {
                 item:
@@ -1144,13 +2049,37 @@ impl ProjectedState {
         None
     }
 
+    /// The document-position range `[lo, hi)` spanned by `block`'s own direct leaf
+    /// children, from the first and last leaf's boundaries — `None` if it has no
+    /// leaves (or either boundary is unresolved). Used to build a tight
+    /// [`WindowSpanSweep`] range for a resync scoped to one or two specific blocks.
+    fn block_leaf_range(&self, block: Dot) -> Option<(usize, usize)> {
+        let node = self.projected.tree.get(block)?;
+        let mut first = None;
+        let mut last = None;
+        for c in node.children.iter() {
+            if let Child::Leaf { id, .. } = c {
+                if first.is_none() {
+                    first = Some(*id);
+                }
+                last = Some(*id);
+            }
+        }
+        let (f, l) = first.zip(last)?;
+        let lo = self.seq.resolve_boundary(f, Bias::Before)?.position;
+        let hi = self.seq.resolve_boundary(l, Bias::Before)?.position + 1;
+        Some((lo, hi))
+    }
+
     /// Rebuild `block`'s segment index from its current leaf children, deriving
     /// `(eff, own)` self-sufficiently via `derive_seg_state` from each leaf's covering
     /// key (from `source`) plus its node style/attrs. Segments coalesce exactly as cold
     /// `segment_block` does (same `(leaf_type, style, covering)` key, singleton criterion,
     /// and LRU-1 derive memo). `O(K)` in the block's leaf count (plus, under
-    /// [`CoveringSource::Resolved`], `O(spans)` per leaf to stab the resolve). Used by the
-    /// structural rebuild paths (window reproject, subtree recompute, block split, undelete).
+    /// [`CoveringSource::Sweep`], one cheap forward-only cursor over the caller's shared
+    /// sweep — the `intersecting`+resolve cost is already paid once per op, not here).
+    /// Used by the structural rebuild paths (window reproject, subtree recompute, block
+    /// split, undelete).
     fn resync_block_segs(&mut self, block: Dot, source: &CoveringSource) {
         struct Memo {
             leaf_type: NodeType,
@@ -1163,6 +2092,10 @@ impl ProjectedState {
                 self.projected.seg_index.remove_block(block);
                 return;
             };
+            let mut cursor = match source {
+                CoveringSource::Sweep(sweep) => Some(sweep.block_cursor()),
+                CoveringSource::Existing => None,
+            };
             let mut segs: Vec<editor_model::Seg> = Vec::new();
             let mut memo: Option<Memo> = None;
             let mut leaf_ord = 0usize;
@@ -1173,11 +2106,15 @@ impl ProjectedState {
                 let dot = *id;
                 let leaf_type = item.as_child_type().unwrap_or(NodeType::Unknown);
                 let covering = match source {
-                    CoveringSource::Resolved(rs) => self
+                    CoveringSource::Sweep(_) => self
                         .seq
                         .resolve_boundary(dot, Bias::Before)
                         .map(|b| b.position)
-                        .and_then(|p| canonical_covering_of(&rs.covering(p), &self.logs.spans)),
+                        .and_then(|p| {
+                            cursor.as_mut().and_then(|c| {
+                                canonical_covering_of(&c.active_at(p), &self.logs.spans)
+                            })
+                        }),
                     // The covering is unchanged by this op, so reuse the leaf's current
                     // segment covering (all leaves of a coalesced segment share it).
                     CoveringSource::Existing => self
@@ -1348,131 +2285,34 @@ impl ProjectedState {
         }
     }
 
-    fn span_covers(&self, span_dot: Dot, pos: usize) -> bool {
-        let Some(op) = self.logs.spans.get(span_dot) else {
-            return false;
-        };
-        let (sa, ea) = op.anchors();
-        let (Some(s), Some(e)) = (
-            self.seq
-                .resolve_boundary(sa.id, sa.bias.into())
-                .map(|b| b.position),
-            self.seq
-                .resolve_boundary(ea.id, ea.bias.into())
-                .map(|b| b.position),
-        ) else {
-            return false;
-        };
-        s < e && s <= pos && pos < e
-    }
-
-    /// The segment covering (per-type LWW winners) for a leaf newly inserted at visible
-    /// position `pos`, whose left neighbor is `neighbor`. Seeds from a nearby leaf's
-    /// SEGMENT covering — for a mid-block insert that is `neighbor`'s own segment, passed
-    /// in as `neighbor_seg_cov` so the hot path stays `O(neighbor covering + adjacent
-    /// spans)` with no `O(K)` ordinal walk. Equals the seed except for spans anchored
-    /// adjacent to the insertion gap: those covering `pos` are folded in; a seed winner
-    /// EXCLUDED at `pos` forces a full resolve for that position, since winners-only
-    /// seeding can't reveal a runner-up the excluded winner was hiding.
-    fn covering_for_inserted(
-        &self,
-        neighbor: Dot,
-        pos: usize,
-        neighbor_seg_cov: Option<editor_model::SegCovering>,
-    ) -> Option<editor_model::SegCovering> {
-        if self.indexes.spans.is_empty() {
+    /// The segment covering (per-type LWW winners) for a leaf newly inserted at
+    /// visible position `pos`: canonicalize the winners of every span the
+    /// interval index stabs there. The index is exact at any position —
+    /// tombstone-adjacent gaps included — so no neighbour seeding or boundary
+    /// re-testing is needed.
+    fn covering_for_inserted(&self, pos: usize) -> Option<editor_model::SegCovering> {
+        if self.indexes.span_index.is_empty() {
             return None;
         }
-        let after = self.seq.dot_at_visible(&self.logs.seq, pos + 1);
-        // Seed from a nearby leaf's segment covering: the left neighbour for a mid-block
-        // insert, the right neighbour for a block-start insert into a non-empty block,
-        // else the nearest leaf a bounded walk to the left (an empty block). A span
-        // without an anchor at any element between the seed and `pos` covers the seed iff
-        // it covers `pos` — every span boundary between them must be anchored to one of
-        // the passed-over elements or gap tombstones (the new leaf cannot anchor
-        // pre-existing spans), and those are collected into `near` and re-tested below.
-        // Only when no seed is reachable does the whole-span-log resolve remain.
-        let mut near = vec![neighbor];
-        if let Some(m) = after {
-            near.push(m);
-        }
-        let seed_cov = if self.indexes.paths.block_of(neighbor).is_some() {
-            neighbor_seg_cov
-        } else if let Some(a) = after.filter(|a| self.indexes.paths.block_of(*a).is_some()) {
-            // Right-neighbour seed: a local insert lands before any tombstones at
-            // its boundary, so ghosts pile up between the new leaf and `after`.
-            near.extend(self.seq.invisible_dots_after_visible(pos));
-            self.seg_covering_of_leaf(a)
-        } else {
-            match self.left_seed_across_markers(pos, &mut near) {
-                Some(s) => self.seg_covering_of_leaf(s),
-                None => return self.full_covering_at(pos),
-            }
-        };
-        let boundary = self.indexes.spans.spans_near(near);
-        if boundary.is_empty() {
-            return seed_cov;
-        }
-        let mut cov = seed_cov.clone();
-        for &s in &boundary {
-            let Some(op) = self.logs.spans.get(s) else {
-                continue;
-            };
-            let ty = editor_model::covering_of_op(op);
-            if self.span_covers(s, pos) {
-                if let Some(next) = editor_model::covering_absorb(cov.as_ref(), ty, s) {
-                    cov = Some(next);
-                }
-            } else if seed_cov.as_ref().and_then(|c| c.get(&ty)) == Some(&s) {
-                // The seed's winner for `ty` is excluded at `pos`. The winners-only seed
-                // dropped any runner-up of `ty`, and a runner-up covering the seed with no
-                // anchor between it and `pos` still covers `pos` — only a full resolve can
-                // recover it. Rare (a boundary span must be a seed winner AND miss `pos`).
-                return self.full_covering_at(pos);
-            }
-        }
-        cov
-    }
-
-    /// The segment covering of a leaf, read from its block's segment index. `O(K)` in the
-    /// block leaf count (the ordinal walk) — used only for non-neighbour insert seeds
-    /// (block-start / empty-block), never the mid-block typing hot path.
-    fn seg_covering_of_leaf(&self, leaf: Dot) -> Option<editor_model::SegCovering> {
-        let block = self.indexes.paths.block_of(leaf)?;
-        let ord = self.leaf_ordinal_of(block, leaf)?;
-        self.projected
-            .seg_index
-            .seg_at(block, ord)
-            .and_then(|(s, _)| s.covering.clone())
-    }
-
-    /// The authoritative segment covering at visible position `pos`: canonicalize the
-    /// winners of every span stabbing `pos`. `O(spans · log)` — the fallback when a
-    /// nearby seed can't be trusted.
-    fn full_covering_at(&self, pos: usize) -> Option<editor_model::SegCovering> {
         canonical_covering_of(
-            &editor_model::spans_covering(pos, &self.logs.spans, &self.seq),
+            &self.indexes.span_index.stab(&self.seq, pos),
             &self.logs.spans,
         )
     }
 
-    fn left_seed_across_markers(&self, pos: usize, near: &mut Vec<Dot>) -> Option<Dot> {
-        const MAX_WALK: usize = 32;
-        let mut p = pos.checked_sub(1)?;
-        for _ in 0..MAX_WALK {
-            p = p.checked_sub(1)?;
-            near.extend(self.seq.invisible_dots_after_visible(p));
-            let d = self.seq.dot_at_visible(&self.logs.seq, p)?;
-            near.push(d);
-            if self.indexes.paths.block_of(d).is_some() {
-                return Some(d);
-            }
-        }
-        None
+    fn try_apply_span(&mut self, op_dot: Dot, span_op: &SpanOp) -> bool {
+        let (sa, ea) = span_op.anchors();
+        let inserted = self.indexes.span_index.insert(&self.seq, sa, ea, op_dot);
+        debug_assert!(inserted, "span op double-inserted into interval index");
+        self.apply_span_segments(op_dot, span_op)
     }
 
-    fn try_apply_span(&mut self, op_dot: Dot, span_op: &SpanOp) -> bool {
-        self.indexes.spans.add(op_dot, span_op);
+    /// Applies one span op's covering to the segments of the leaves it covers.
+    /// Split out of `try_apply_span` so pending promotion (the `project_op`
+    /// tail) can re-run the segment application once anchors become resolvable
+    /// — the covered leaves' segments were derived while the span was
+    /// unresolvable and would otherwise stay stale.
+    fn apply_span_segments(&mut self, op_dot: Dot, span_op: &SpanOp) -> bool {
         let (sa, ea) = span_op.anchors();
         let (Some(start), Some(end)) = (
             self.seq
@@ -1600,7 +2440,16 @@ impl ProjectedState {
         })
     }
 
-    fn try_insert_leaf(&mut self, leaf: Dot, item: &SeqItem) -> bool {
+    /// Insert one leaf incrementally. `cursor` sources the new leaf's covering from a
+    /// caller-shared [`WindowSpanSweep`] (a position-ordered multi-leaf restore, e.g.
+    /// [`try_undelete`](Self::try_undelete)) — `None` keeps the single-leaf hot path
+    /// (ordinary typing) on the existing single-stab [`covering_for_inserted`](Self::covering_for_inserted).
+    fn try_insert_leaf(
+        &mut self,
+        leaf: Dot,
+        item: &SeqItem,
+        cursor: Option<&mut BlockSweepCursor>,
+    ) -> bool {
         let Some(pos) = self
             .seq
             .resolve_boundary(leaf, Bias::Before)
@@ -1654,32 +2503,27 @@ impl ProjectedState {
         // children. A sequential run hits the cursor (O(log K) identity check, no
         // `resolve_boundary`); anything else falls back to the binary search.
         let offset = self.leaf_insert_offset_cursored(block, neighbor, neighbor_is_leaf, pos);
-        // The left neighbor's segment (the authoritative store): its effective map, whether
-        // its own map is empty, and its covering — seed for `covering_for_inserted`. The
-        // neighbor is the last leaf before `offset`, so its ordinal is
-        // `leaf_ordinal_at(offset) - 1` — `O(log K)`, no full scan.
-        let neighbor_seg: Option<(
-            editor_model::LeafEff,
-            bool,
-            Option<editor_model::SegCovering>,
-        )> = if neighbor_is_leaf {
+        // The left neighbor's segment (the authoritative store): its effective map
+        // and whether its own map is empty — the plain-run fast path below reuses
+        // the neighbour's shared maps when the new leaf derives identically.
+        let neighbor_seg: Option<(editor_model::LeafEff, bool)> = if neighbor_is_leaf {
             self.projected
                 .tree
                 .get(block)
                 .map(|n| n.children.leaf_ordinal_at(offset))
                 .and_then(|o| o.checked_sub(1))
                 .and_then(|o| self.projected.seg_index.seg_at(block, o))
-                .map(|(s, _)| (s.eff.clone(), s.own.is_empty(), s.covering.clone()))
+                .map(|(s, _)| (s.eff.clone(), s.own.is_empty()))
         } else {
             None
         };
         let neighbor_plain = neighbor_seg
             .as_ref()
-            .is_some_and(|(_, own_empty, _)| *own_empty);
-        let neighbor_cov = neighbor_seg.as_ref().and_then(|(_, _, c)| c.clone());
-        // Segment key inputs mirror cold `segment_block`: covering seeded from the
-        // neighbour's segment, singleton per node_attrs/non-inline.
-        let covering = self.covering_for_inserted(neighbor, pos, neighbor_cov);
+            .is_some_and(|(_, own_empty)| *own_empty);
+        let covering = match cursor {
+            Some(c) => canonical_covering_of(&c.active_at(pos), &self.logs.spans),
+            None => self.covering_for_inserted(pos),
+        };
         let attrs_singleton =
             self.projected.node_attrs.contains_key(&leaf) || !leaf_type.spec().inline;
         let (eff, own) = if covering.is_none() && neighbor_plain && !attrs_singleton {
@@ -1687,7 +2531,7 @@ impl ProjectedState {
             // identical pure-inheritance effective and no own modifiers. Reusing the
             // neighbor's handle keeps the whole run on one shared map.
             (
-                neighbor_seg.map(|(e, _, _)| e).unwrap_or_default(),
+                neighbor_seg.map(|(e, _)| e).unwrap_or_default(),
                 editor_model::LeafOwn::default(),
             )
         } else {
@@ -1701,8 +2545,12 @@ impl ProjectedState {
                 attrs_singleton.then_some(leaf),
             )
         };
-        self.projected
-            .splice_char(block, offset, leaf, item.clone());
+        if let Some(delta) = self
+            .projected
+            .splice_char(block, offset, leaf, item.clone())
+        {
+            self.propagate_flat_width(delta);
+        }
         self.indexes.paths.set_block_of_leaf(leaf, block);
         // Splice the leaf's segment into `block` at its leaf ordinal, joining an
         // adjacent same-key segment.
@@ -1731,6 +2579,10 @@ impl ProjectedState {
             offset,
         });
         self.mark_dirty_block(block);
+        #[cfg(any(test, feature = "test-utils"))]
+        {
+            self.incremental_leaf_inserts += 1;
+        }
         true
     }
 
@@ -1800,12 +2652,18 @@ impl ProjectedState {
     }
 
     // Incremental block insert for the common, normalization-free case: a new
-    // top-level leaf-bearing block (e.g. pressing Enter to split a paragraph).
+    // leaf-bearing block splicing in beside its split sibling under the SAME
+    // parent (e.g. pressing Enter to split a paragraph, nested or at the root).
     // The split block and the new block must be the same simple inline-only block
-    // type with no required content, so every prefix/suffix split stays valid.
-    // Anything else (nested blocks, type changes, required content) falls back.
+    // type with no required content, and the new sibling must fit the parent's
+    // content model — see the parent-fitness gate below. Anything else (a
+    // different parent, type changes, required content, a parent that rejects the
+    // repeat) falls back.
     fn try_insert_block(&mut self, block_dot: Dot, node_type: NodeType, parents: &[Dot]) -> bool {
-        if parents != [Dot::ROOT] {
+        let Some(&intended_parent) = parents.last() else {
+            return false;
+        };
+        if self.projection_degraded_latch {
             return false;
         }
         let Some(pos) = self
@@ -1826,7 +2684,12 @@ impl ProjectedState {
             None if self.indexes.paths.node_type_of(left).is_some() => (left, None),
             None => return false,
         };
-        if self.indexes.paths.parent_of(p_block) != Some(Dot::ROOT) {
+        // A synthetic block is a repair-scaffold whose shape a cold rebuild can
+        // regroup once a real marker lands here — never splice off one.
+        if p_block.is_synthetic() {
+            return false;
+        }
+        if self.indexes.paths.parent_of(p_block) != Some(intended_parent) {
             return false;
         }
         let Some(p_type) = self.indexes.paths.node_type_of(p_block) else {
@@ -1840,9 +2703,64 @@ impl ProjectedState {
         if !simple {
             return false;
         }
-        let Some(moved) = split_block_insert(
+        // `simple` only looks at the split block's own content; whether the PARENT
+        // tolerates a second sibling of that type is separate — e.g. a ListItem
+        // (`Paragraph, (BulletList|OrderedList)?`) rejects a second Paragraph (cold
+        // SPLIT-HOISTs it out), and Fold's FoldTitle (`Text*`, so `simple` passes)
+        // is the same shape one level up. Two static bypasses below make the common
+        // cases O(1) so a windowless Enter stays sublinear in document size: (1) a
+        // legal Paragraph beside Root's `(…)*, Paragraph` is always fit — the `*`
+        // absorbs any count; (2) inside a repetition-closed expr, every existing
+        // sibling already passed this parent's normalization, so one more
+        // `inner`-fit type preserves fitness. Anything else pays an O(children) scan
+        // of the parent's current content to confirm the augmented sequence still
+        // validates.
+        let parent_type = if intended_parent == Dot::ROOT {
+            NodeType::Root
+        } else {
+            match self.indexes.paths.node_type_of(intended_parent) {
+                Some(t) => t,
+                None => return false,
+            }
+        };
+        let root_paragraph = intended_parent == Dot::ROOT && node_type == NodeType::Paragraph;
+        let repetition_closed = match &parent_type.spec().content {
+            ContentExpr::Any => true,
+            ContentExpr::OneOrMore(inner) | ContentExpr::ZeroOrMore(inner) => {
+                inner.matches(node_type)
+            }
+            _ => false,
+        };
+        if !root_paragraph && !repetition_closed {
+            let Some(parent_node) = self.projected.tree.get(intended_parent) else {
+                return false;
+            };
+            let mut types: Vec<NodeType> = Vec::with_capacity(parent_node.children.len() + 1);
+            let mut inserted = false;
+            for c in parent_node.children.iter() {
+                let (id, t) = match c {
+                    Child::Block(b) => match self.indexes.paths.node_type_of(*b) {
+                        Some(t) => (*b, t),
+                        None => return false,
+                    },
+                    Child::Leaf { id, item } => match item.as_child_type() {
+                        Some(t) => (*id, t),
+                        None => return false,
+                    },
+                };
+                types.push(t);
+                if id == p_block {
+                    types.push(node_type);
+                    inserted = true;
+                }
+            }
+            if !inserted || !parent_type.spec().content.matches_sequence(&types) {
+                return false;
+            }
+        }
+        let Some((moved, delta)) = split_block_insert(
             &mut self.projected.tree,
-            Dot::ROOT,
+            intended_parent,
             p_block,
             split_after,
             block_dot,
@@ -1850,9 +2768,10 @@ impl ProjectedState {
         ) else {
             return false;
         };
+        self.propagate_flat_width(delta);
         self.indexes
             .paths
-            .add_block(block_dot, Dot::ROOT, node_type);
+            .add_block(block_dot, intended_parent, node_type);
         for &leaf in &moved {
             self.indexes.paths.set_block_of_leaf(leaf, block_dot);
         }
@@ -1861,16 +2780,41 @@ impl ProjectedState {
         // both blocks' segments from their current leaves. p_block only needs a rebuild
         // when leaves actually moved out; the paste / Enter-at-end case (`moved` empty)
         // leaves its incrementally-built segments already correct. The moved leaves have no
-        // segment in the new block yet, so their covering is resolved from the span log.
-        let resolved = editor_model::ResolvedSpans::build(&self.logs.spans, &self.seq);
-        let source = CoveringSource::Resolved(&resolved);
+        // segment in the new block yet, so their covering comes from a sweep. Scope the
+        // sweep tightly to just the (up to two) blocks resynced below — not the whole
+        // document — so the common Enter-at-end case (both empty) skips `intersecting`
+        // entirely and the Enter hot path stays cheap.
+        let mut range: Option<(usize, usize)> = None;
+        if !moved.is_empty()
+            && let Some(r) = self.block_leaf_range(p_block)
+        {
+            range = Some(r);
+        }
+        if let Some((lo, hi)) = self.block_leaf_range(block_dot) {
+            range = Some(match range {
+                Some((rlo, rhi)) => (rlo.min(lo), rhi.max(hi)),
+                None => (lo, hi),
+            });
+        }
+        let sweep = match range {
+            Some((lo, hi)) => {
+                let idx = self.indexes.span_index.clone();
+                WindowSpanSweep::build(&idx, &self.seq, &self.logs.spans, lo, hi)
+            }
+            None => WindowSpanSweep::empty(),
+        };
+        let source = CoveringSource::Sweep(&sweep);
         if !moved.is_empty() {
             self.resync_block_segs(p_block, &source);
         }
         self.resync_block_segs(block_dot, &source);
         self.mark_dirty_block(p_block);
         self.mark_dirty_block(block_dot);
-        self.mark_dirty_structural(Dot::ROOT);
+        self.mark_dirty_structural(intended_parent);
+        #[cfg(any(test, feature = "test-utils"))]
+        {
+            self.incremental_block_inserts += 1;
+        }
         true
     }
 
@@ -1930,9 +2874,10 @@ impl ProjectedState {
             // Bridge: capture the leaf's ordinal before the splice removes it, then
             // drop that segment position after — keeping tree and segments in step.
             let ordinal = self.leaf_ordinal_of(block, t);
-            if !self.projected.splice_delete_leaf(block, t) {
+            let Some(delta) = self.projected.splice_delete_leaf(block, t) else {
                 return false;
-            }
+            };
+            self.propagate_flat_width(delta);
             self.indexes.paths.remove_leaf(t);
             if let Some(o) = ordinal {
                 self.projected.seg_index.remove_leaf(block, o);
@@ -1978,27 +2923,19 @@ impl ProjectedState {
             return false;
         }
         ordered.sort_by_key(|(p, _, _)| *p);
+        // One sweep tightly scoped to the restored positions' own min/max (already in
+        // `ordered`, no re-resolve needed), shared across every restored leaf below via
+        // one cursor — the positions are already ascending, so a single cursor threaded
+        // through the whole restore batch stays valid without per-leaf resets.
+        let lo = ordered[0].0;
+        let hi = ordered[ordered.len() - 1].0 + 1;
+        let idx = self.indexes.span_index.clone();
+        let sweep = WindowSpanSweep::build(&idx, &self.seq, &self.logs.spans, lo, hi);
+        let mut cursor = sweep.block_cursor();
         for (_, t, item) in &ordered {
-            if !self.try_insert_leaf(*t, item) {
+            if !self.try_insert_leaf(*t, item, Some(&mut cursor)) {
                 return false;
             }
-        }
-        // The incremental insert seeds each restored leaf's covering from its neighbour,
-        // which misses spans anchored to the restored leaf itself. Once all are back (final
-        // positions), rebuild each affected block's segments from a single span resolve —
-        // sourcing every leaf's covering authoritatively, fixing the self-anchored spans.
-        let resolved = editor_model::ResolvedSpans::build(&self.logs.spans, &self.seq);
-        let source = CoveringSource::Resolved(&resolved);
-        let mut blocks: Vec<Dot> = Vec::new();
-        for (_, t, _) in &ordered {
-            if let Some(b) = self.indexes.paths.block_of(*t)
-                && !blocks.contains(&b)
-            {
-                blocks.push(b);
-            }
-        }
-        for b in blocks {
-            self.resync_block_segs(b, &source);
         }
         true
     }
@@ -2027,6 +2964,81 @@ impl ProjectedState {
         self.reproject()
     }
 
+    /// Whether `payload` is safe to apply via [`apply_deferred`](Self::apply_deferred):
+    /// its warm application never reads the projected tree, so it never needs a
+    /// projection pass to stay correct. `Seq`/`Alias`/`BlockModifier`/`NodeCarry`
+    /// qualify; `NodeAttr` and `Span` read the projected tree / segment coverage
+    /// (see `capture_prior`) and must flush any pending defer first.
+    pub(crate) fn is_defer_safe(p: &EditOp) -> bool {
+        matches!(
+            p,
+            EditOp::Seq(_) | EditOp::Alias(_) | EditOp::BlockModifier(_) | EditOp::NodeCarry(_)
+        )
+    }
+
+    /// Starts a warm-defer batch: subsequent [`apply_deferred`](Self::apply_deferred)
+    /// calls skip projection until [`flush_deferred`](Self::flush_deferred) or
+    /// [`end_defer`](Self::end_defer) runs it once for the whole batch. A no-op on an
+    /// overlay-backed state (`has_overlay`) — an overlay projection is not
+    /// authoritative and must not accumulate stale-tree reads.
+    pub fn begin_defer(&mut self) {
+        debug_assert!(!self.defer_active, "begin_defer while already deferring");
+        if self.has_overlay {
+            return;
+        }
+        self.defer_active = true;
+    }
+
+    /// Applies `payload` warm-only and counts it as pending. Callers must only pass
+    /// [`is_defer_safe`](Self::is_defer_safe) payloads — the accessor assert grid
+    /// exists to catch a stale read if this contract is violated.
+    pub fn apply_deferred(&mut self, payload: EditOp) -> Result<Op<EditOp>, SpineError> {
+        let op = self.apply_op_warm(payload)?;
+        self.deferred_ops += 1;
+        Ok(op)
+    }
+
+    /// Runs one projection pass over every op accumulated since the last flush. On
+    /// failure, restores `deferred_ops` to its pre-flush count instead of leaving it
+    /// at `0` — a `0` would let a caller mistake a failed flush for a clean state.
+    pub fn flush_deferred(&mut self) -> Result<(), SpineError> {
+        let n = self.deferred_ops;
+        if n == 0 {
+            return Ok(());
+        }
+        self.deferred_ops = 0;
+        if let Err(e) = self.reproject() {
+            self.deferred_ops = n;
+            return Err(e);
+        }
+        Ok(())
+    }
+
+    /// Ends a warm-defer batch, flushing any pending ops first. Idempotent —
+    /// calling this when no batch is active (`defer_active` already `false`, e.g. a
+    /// nested bulk-delete guard already flushed and cleared it) is a safe no-op.
+    pub fn end_defer(&mut self) -> Result<(), SpineError> {
+        if !self.defer_active {
+            return Ok(());
+        }
+        self.flush_deferred()?;
+        self.defer_active = false;
+        Ok(())
+    }
+
+    pub fn defer_active(&self) -> bool {
+        self.defer_active
+    }
+
+    pub fn deferred_ops(&self) -> usize {
+        self.deferred_ops
+    }
+
+    #[cfg(any(test, feature = "test-utils"))]
+    pub fn projection_passes(&self) -> u64 {
+        self.projection_passes
+    }
+
     pub fn apply_batch(&mut self, payloads: Vec<EditOp>) -> Result<Vec<Op<EditOp>>, SpineError> {
         let mut ops = Vec::with_capacity(payloads.len());
         for payload in payloads {
@@ -2045,6 +3057,10 @@ impl ProjectedState {
     }
 
     pub fn commit(&mut self) {
+        debug_assert!(
+            self.deferred_ops == 0,
+            "commit with a pending warm-defer batch — flush_deferred/end_defer was skipped"
+        );
         self.graph.commit_mut();
     }
 
@@ -2091,7 +3107,7 @@ impl ProjectedState {
         // incremental path pays a fixed per-op cost, so `O(novel)` of it overtakes a
         // single `O(document)` reprojection once `novel` is more than a small fraction of
         // the doc. Small deltas (ordinary remote typing) stay incremental and localized.
-        let bulk = all_novel.len().saturating_mul(9) > next.seq.visible_len();
+        let bulk = all_novel.len().saturating_mul(BULK_NOVEL_FACTOR) > next.seq.visible_len();
         for op in &applied {
             next.ingest_op_warm(op)?;
             if !bulk {
@@ -2105,17 +3121,20 @@ impl ProjectedState {
     }
 
     pub fn view(&self) -> DocView<'_> {
+        debug_assert!(self.deferred_ops == 0, "projection read during deferral");
         // O(1): reuse the already-maintained `BlockPaths` index instead of rebuilding
         // a structural index on every view read.
-        DocView::with_paths(&self.projected, &self.indexes.paths)
+        DocView::with_paths_ordered(&self.projected, &self.indexes.paths, &self.seq)
     }
 
     pub fn projected(&self) -> &ProjectedDoc {
+        debug_assert!(self.deferred_ops == 0, "projection read during deferral");
         &self.projected
     }
 
     /// Repair stats accumulated since the last call, resetting the running total.
     pub fn take_repair_stats(&mut self) -> RepairStats {
+        debug_assert!(self.deferred_ops == 0, "projection read during deferral");
         std::mem::take(&mut self.repair_stats)
     }
 
@@ -2124,6 +3143,7 @@ impl ProjectedState {
     /// projected state is shared (e.g. `View`'s layout-cache snapshot); callers on a
     /// hot, usually-empty path should check this first and skip the mutable call.
     pub fn repair_stats(&self) -> RepairStats {
+        debug_assert!(self.deferred_ops == 0, "projection read during deferral");
         self.repair_stats
     }
 
@@ -2159,6 +3179,7 @@ impl ProjectedState {
         &self,
         block: Dot,
     ) -> std::collections::BTreeMap<ModifierType, editor_model::Modifier> {
+        debug_assert!(self.deferred_ops == 0, "projection read during deferral");
         self.projected.carry_modifiers(block)
     }
 
@@ -2170,8 +3191,10 @@ impl ProjectedState {
     /// `[first, last]`. When none does, a whole-range cancel of that type is a
     /// provable no-op the command layer can skip emitting — sparing the
     /// O(covered leaves) projection walk the op would cost. Conservative: an
-    /// unresolvable range reports `true` so the caller keeps the cancel.
+    /// unresolvable range reports `true` so the caller keeps the cancel. A
+    /// reversed span (start ≥ end) covers nothing and never reports overlap.
     pub fn span_of_type_overlaps(&self, first: Dot, last: Dot, ty: ModifierType) -> bool {
+        debug_assert!(self.deferred_ops == 0, "projection read during deferral");
         let (Some(s), Some(e)) = (
             self.seq
                 .resolve_boundary(first, Bias::Before)
@@ -2185,27 +3208,16 @@ impl ProjectedState {
         if s >= e {
             return false;
         }
-        self.logs.spans.iter().any(|(_, op)| {
-            let op_ty = match op {
-                SpanOp::AddSpan { modifier, .. } => modifier.as_type(),
-                SpanOp::RemoveSpan { modifier_type, .. } => *modifier_type,
-            };
-            if op_ty != ty {
-                return false;
-            }
-            let (sa, ea) = op.anchors();
-            let (Some(os), Some(oe)) = (
-                self.seq
-                    .resolve_boundary(sa.id, sa.bias.into())
-                    .map(|b| b.position),
-                self.seq
-                    .resolve_boundary(ea.id, ea.bias.into())
-                    .map(|b| b.position),
-            ) else {
-                return false;
-            };
-            os < e && s < oe
-        })
+        self.indexes
+            .span_index
+            .intersecting(&self.seq, s, e)
+            .into_iter()
+            .any(|d| {
+                self.logs.spans.get(d).is_some_and(|op| match op {
+                    SpanOp::AddSpan { modifier, .. } => modifier.as_type() == ty,
+                    SpanOp::RemoveSpan { modifier_type, .. } => *modifier_type == ty,
+                })
+            })
     }
 
     pub fn span_covered_own(
@@ -2214,6 +3226,7 @@ impl ProjectedState {
         end: Anchor,
         ty: ModifierType,
     ) -> Vec<(Dot, Option<Modifier>)> {
+        debug_assert!(self.deferred_ops == 0, "projection read during deferral");
         let (Some(s), Some(e)) = (
             self.seq
                 .resolve_boundary(start.id, start.bias.into())
@@ -2292,22 +3305,26 @@ impl ProjectedState {
 
     /// The block's node type, or `None` if it isn't a live block.
     pub fn block_node_type(&self, block: Dot) -> Option<NodeType> {
+        debug_assert!(self.deferred_ops == 0, "projection read during deferral");
         self.projected.tree.get(block).map(|n| n.node_type)
     }
 
     /// Number of direct children (blocks + leaves) of `block`.
     pub fn child_count(&self, block: Dot) -> Option<usize> {
+        debug_assert!(self.deferred_ops == 0, "projection read during deferral");
         self.projected.tree.get(block).map(|n| n.children.len())
     }
 
     /// Whether `block` is a live block node (not a leaf / absent).
     pub fn is_block(&self, block: Dot) -> bool {
+        debug_assert!(self.deferred_ops == 0, "projection read during deferral");
         self.projected.tree.get(block).is_some()
     }
 
     /// Ordered child dots of `block` — leaves by id, child blocks by id (synthetic
     /// blocks included), matching the command layer's full child-slot addressing.
     pub fn child_elem_dots(&self, block: Dot) -> Vec<Dot> {
+        debug_assert!(self.deferred_ops == 0, "projection read during deferral");
         match self.projected.tree.get(block) {
             Some(n) => n
                 .children
@@ -2323,6 +3340,7 @@ impl ProjectedState {
 
     /// Ordered child *block* dots of `block` (blocks only).
     pub fn child_block_dots(&self, block: Dot) -> Vec<Dot> {
+        debug_assert!(self.deferred_ops == 0, "projection read during deferral");
         match self.projected.tree.get(block) {
             Some(n) => n
                 .children
@@ -2338,6 +3356,7 @@ impl ProjectedState {
 
     /// The dot of `block`'s `index`-th child (leaf id or block id).
     pub fn child_dot_at(&self, block: Dot, index: usize) -> Option<Dot> {
+        debug_assert!(self.deferred_ops == 0, "projection read during deferral");
         match self.projected.tree.get(block)?.children.get(index)? {
             Child::Leaf { id, .. } => Some(*id),
             Child::Block(d) => Some(*d),
@@ -2352,6 +3371,7 @@ impl ProjectedState {
     /// single `resolve_boundary`, versus resolving every dot in the subtree. Falls
     /// back to the exhaustive `O(subtree)` max if the rightmost path can't resolve.
     pub fn subtree_max_seq_pos(&self, block: Dot) -> Option<usize> {
+        debug_assert!(self.deferred_ops == 0, "projection read during deferral");
         let mut node = block;
         while let Some(n) = self.projected.tree.get(node) {
             match n.children.last() {
@@ -2378,6 +3398,7 @@ impl ProjectedState {
     /// children index per call and turns a per-block caller (deleting N blocks) into
     /// O(N · document). O(subtree).
     pub fn subtree_real_dots(&self, block: Dot) -> Vec<Dot> {
+        debug_assert!(self.deferred_ops == 0, "projection read during deferral");
         let mut out = Vec::new();
         if anchor_dot(block).is_some() {
             out.push(block);
@@ -2408,6 +3429,7 @@ impl ProjectedState {
     /// `block`'s ancestor chain, root-first, real op dots only. Includes `block`
     /// itself when `inclusive`. O(depth).
     pub fn ancestor_real_dots(&self, block: Dot, inclusive: bool) -> Vec<Dot> {
+        debug_assert!(self.deferred_ops == 0, "projection read during deferral");
         let mut chain = self.indexes.paths.path_of(block); // self → root
         if !inclusive && !chain.is_empty() {
             chain.remove(0);
@@ -2421,6 +3443,7 @@ impl ProjectedState {
 
     /// The projected node value of `block` (its overlaid attrs, or the type default).
     pub fn block_node(&self, block: Dot) -> Option<Node> {
+        debug_assert!(self.deferred_ops == 0, "projection read during deferral");
         let n = self.projected.tree.get(block)?;
         Some(
             anchor_dot(block)
@@ -2431,6 +3454,7 @@ impl ProjectedState {
     }
 
     pub fn atom_leaf_node(&self, leaf: Dot) -> Option<Node> {
+        debug_assert!(self.deferred_ops == 0, "projection read during deferral");
         let base = self.atom_leaf(leaf)?.clone().into_node();
         Some(self.logs.node_attrs.attrs_of(leaf, base))
     }
@@ -2453,11 +3477,13 @@ impl ProjectedState {
 
     /// A clone of `block`'s direct children (leaves carry their item inline). O(children).
     pub fn block_children(&self, block: Dot) -> Option<Vec<Child>> {
+        debug_assert!(self.deferred_ops == 0, "projection read during deferral");
         self.projected.tree.get(block).map(|n| n.children.to_vec())
     }
 
     /// The parent block of `node` (a block or leaf), or `None` for the root / absent.
     pub fn parent_of(&self, node: Dot) -> Option<Dot> {
+        debug_assert!(self.deferred_ops == 0, "projection read during deferral");
         self.indexes
             .paths
             .parent_of(node)
@@ -2485,7 +3511,7 @@ impl ProjectedState {
 /// Storage-independent (log-derived) truth for a single leaf: the segment key and
 /// derived state computed straight from the span log + node state, with NO read of
 /// the old per-leaf `effective`/`own_modifiers` maps.
-#[cfg(test)]
+#[cfg(any(test, feature = "test-utils"))]
 #[derive(Clone)]
 pub(crate) struct LeafTruth {
     pub leaf_type: NodeType,
@@ -2494,7 +3520,7 @@ pub(crate) struct LeafTruth {
     pub own: editor_model::LeafOwn,
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-utils"))]
 impl ProjectedState {
     /// Derive one leaf's truth from the logs: canonicalize the winners of the span
     /// ops stabbing its visible position, then run `derive_seg_state` with that
@@ -2532,6 +3558,7 @@ impl ProjectedState {
     }
 
     /// A log-derived truth for every block leaf in the document, keyed by leaf dot.
+    #[allow(dead_code)]
     pub(crate) fn log_derived_leaf_map(&self) -> HashMap<Dot, LeafTruth> {
         let rs = editor_model::ResolvedSpans::build(&self.logs.spans, &self.seq);
         let mut out: HashMap<Dot, LeafTruth> = HashMap::new();
@@ -2614,6 +3641,93 @@ impl ProjectedState {
             }
         }
     }
+
+    /// The embedded interval index must hold exactly one interval per span op,
+    /// answer EVERY visible position's stab exactly as the span log resolves
+    /// (marker-only short intervals included — nowhere to hide), and agree with
+    /// the log on range intersection. Divergence means a maintenance hook was
+    /// missed (an unindexed span op, a stale pending anchor) or the order
+    /// contract broke. Cost discipline: each span resolves ONCE per assertion
+    /// (an event sweep derives all per-position expectations) — never per
+    /// position, so the full sweep stays O(S·log + V·cover) per boundary.
+    pub(crate) fn assert_anchor_index_matches_logs(&self) {
+        let total = self.logs.spans.iter().count();
+        let expected_pending = self
+            .logs
+            .spans
+            .iter()
+            .filter(|(_, op)| {
+                let (sa, ea) = op.anchors();
+                self.seq.doc_index_of(sa.id).is_none() || self.seq.doc_index_of(ea.id).is_none()
+            })
+            .count();
+        assert_eq!(
+            self.indexes.span_index.pending_len(),
+            expected_pending,
+            "quarantine must hold exactly the unresolvable-anchor spans"
+        );
+        assert_eq!(
+            self.indexes.span_index.resolved_len(),
+            total - expected_pending,
+            "tree must hold exactly the resolvable spans (a resolvable entry stuck \
+             in pending would hide here if only total cardinality were checked)"
+        );
+        let visible = self.seq.visible_len();
+        let mut resolved: Vec<(usize, usize, Dot)> = Vec::new();
+        for (d, op) in self.logs.spans.iter() {
+            let (sa, ea) = op.anchors();
+            let (Some(s), Some(e)) = (
+                self.seq
+                    .resolve_boundary(sa.id, sa.bias.into())
+                    .map(|b| b.position),
+                self.seq
+                    .resolve_boundary(ea.id, ea.bias.into())
+                    .map(|b| b.position),
+            ) else {
+                continue;
+            };
+            if s < e {
+                resolved.push((s, e, *d));
+            }
+        }
+        let mut starts: Vec<Vec<Dot>> = vec![Vec::new(); visible + 1];
+        let mut ends: Vec<Vec<Dot>> = vec![Vec::new(); visible + 1];
+        for &(s, e, d) in &resolved {
+            starts[s].push(d);
+            ends[e.min(visible)].push(d);
+        }
+        let mut active: std::collections::BTreeSet<Dot> = Default::default();
+        for p in 0..=visible {
+            for d in &ends[p] {
+                active.remove(d);
+            }
+            for d in &starts[p] {
+                active.insert(*d);
+            }
+            let want: Vec<Dot> = active.iter().copied().collect();
+            let got = self.indexes.span_index.stab(&self.seq, p);
+            assert_eq!(got, want, "embedded index/naive diverge at pos {p}");
+        }
+        for (lo, hi) in [
+            (0, visible.max(1)),
+            (visible / 3, (2 * visible) / 3 + 1),
+            (
+                visible / 2,
+                (visible / 2 + 4).min(visible.max(1)).max(visible / 2 + 1),
+            ),
+        ] {
+            let got = self.indexes.span_index.intersecting(&self.seq, lo, hi);
+            let mut want: Vec<Dot> = resolved
+                .iter()
+                .filter_map(|&(s, e, d)| (s < hi && e > lo).then_some(d))
+                .collect();
+            want.sort();
+            assert_eq!(
+                got, want,
+                "embedded intersecting/naive diverge on [{lo}, {hi})"
+            );
+        }
+    }
 }
 
 #[cfg(test)]
@@ -2644,13 +3758,456 @@ mod tests {
         })
     }
 
+    #[test]
+    fn nested_paragraph_split_takes_incremental_path() {
+        let mut s = ProjectedState::empty();
+        let mut pos = 1;
+        let fold = s
+            .apply(seq_block(pos, NodeType::Fold, vec![Dot::ROOT]))
+            .unwrap()
+            .id;
+        pos += 1;
+        s.apply(seq_block(pos, NodeType::FoldTitle, vec![Dot::ROOT, fold]))
+            .unwrap();
+        pos += 1;
+        let content = s
+            .apply(seq_block(pos, NodeType::FoldContent, vec![Dot::ROOT, fold]))
+            .unwrap()
+            .id;
+        pos += 1;
+        s.apply(seq_block(
+            pos,
+            NodeType::Paragraph,
+            vec![Dot::ROOT, fold, content],
+        ))
+        .unwrap();
+        pos += 1;
+        for i in 0..4 {
+            s.apply(seq_char(pos, char::from(b'a' + i as u8))).unwrap();
+            pos += 1;
+        }
+        let before = s.incremental_block_inserts;
+        s.apply(seq_block(
+            pos,
+            NodeType::Paragraph,
+            vec![Dot::ROOT, fold, content],
+        ))
+        .unwrap();
+        assert_eq!(
+            s.incremental_block_inserts,
+            before + 1,
+            "a nested same-type paragraph split must take the incremental splice"
+        );
+        crate::corpus::assert_matches_cold_rebuild(&s);
+    }
+
+    #[test]
+    fn list_item_second_paragraph_split_falls_back() {
+        let mut s = ProjectedState::empty();
+        let mut pos = 1;
+        let list = s
+            .apply(seq_block(pos, NodeType::BulletList, vec![Dot::ROOT]))
+            .unwrap()
+            .id;
+        pos += 1;
+        let item = s
+            .apply(seq_block(pos, NodeType::ListItem, vec![Dot::ROOT, list]))
+            .unwrap()
+            .id;
+        pos += 1;
+        s.apply(seq_block(
+            pos,
+            NodeType::Paragraph,
+            vec![Dot::ROOT, list, item],
+        ))
+        .unwrap();
+        pos += 1;
+        for i in 0..2 {
+            s.apply(seq_char(pos, char::from(b'a' + i as u8))).unwrap();
+            pos += 1;
+        }
+        let before = s.incremental_block_inserts;
+        s.apply(seq_block(
+            pos - 1,
+            NodeType::Paragraph,
+            vec![Dot::ROOT, list, item],
+        ))
+        .unwrap();
+        assert_eq!(
+            s.incremental_block_inserts, before,
+            "a second paragraph does not fit ListItem content; must fall back"
+        );
+        crate::corpus::assert_matches_cold_rebuild(&s);
+    }
+
+    #[test]
+    fn fold_title_split_falls_back() {
+        let mut s = ProjectedState::empty();
+        let mut pos = 1;
+        let fold = s
+            .apply(seq_block(pos, NodeType::Fold, vec![Dot::ROOT]))
+            .unwrap()
+            .id;
+        pos += 1;
+        s.apply(seq_block(pos, NodeType::FoldTitle, vec![Dot::ROOT, fold]))
+            .unwrap();
+        pos += 1;
+        for i in 0..2 {
+            s.apply(seq_char(pos, char::from(b'a' + i as u8))).unwrap();
+            pos += 1;
+        }
+        let before = s.incremental_block_inserts;
+        s.apply(seq_block(
+            pos - 1,
+            NodeType::FoldTitle,
+            vec![Dot::ROOT, fold],
+        ))
+        .unwrap();
+        assert_eq!(
+            s.incremental_block_inserts, before,
+            "a second FoldTitle does not fit Fold content; must fall back"
+        );
+        crate::corpus::assert_matches_cold_rebuild(&s);
+    }
+
+    #[test]
+    fn degraded_projection_split_heals_through_window() {
+        let mut seed = ProjectedState::empty();
+        let mut pos = 1;
+        let callout = seed
+            .apply(seq_block(pos, NodeType::Callout, vec![Dot::ROOT]))
+            .unwrap()
+            .id;
+        pos += 1;
+        seed.apply(seq_block(
+            pos,
+            NodeType::Paragraph,
+            vec![Dot::ROOT, callout],
+        ))
+        .unwrap();
+        pos += 1;
+        seed.apply(seq_char(pos, 'a')).unwrap();
+        pos += 1;
+        let split_pos = pos;
+        for _ in 0..2 {
+            let img_node = match NodeType::Image.into_node() {
+                Node::Image(n) => n,
+                _ => unreachable!(),
+            };
+            seed.apply(EditOp::Seq(ListOp::Ins {
+                pos,
+                item: SeqItem::BlockAtom {
+                    leaf: AtomLeaf::Image { node: img_node },
+                    parents: vec![Dot::ROOT, callout],
+                },
+            }))
+            .unwrap();
+            pos += 1;
+        }
+
+        let graph = seed.graph().clone();
+        let full = ProjectedState::from_graph(graph.clone()).expect("fixture projects");
+        assert!(
+            full.projected().repair_stats.repairs >= 2,
+            "fixture must need multiple repairs to exercise the cap: {:?}",
+            full.projected().repair_stats
+        );
+        assert!(!full.projected().repair_stats.projection_degraded);
+
+        let mut s = {
+            let _guard = editor_model::override_repair_budget(1);
+            ProjectedState::from_graph(graph).expect("projects even when degraded")
+        };
+        assert!(
+            s.projected().repair_stats.projection_degraded,
+            "the fixture must actually hit the repair cap"
+        );
+        assert!(
+            s.projection_degraded_latch,
+            "the latch must be set while the projection is degraded"
+        );
+
+        let before = s.incremental_block_inserts;
+        s.apply(seq_block(
+            split_pos,
+            NodeType::Paragraph,
+            vec![Dot::ROOT, callout],
+        ))
+        .unwrap();
+        assert_eq!(
+            s.incremental_block_inserts, before,
+            "a degraded projection must refuse the splice and heal through the window path"
+        );
+        crate::corpus::assert_matches_cold_rebuild(&s);
+    }
+
+    #[test]
+    fn span_with_future_anchor_resolves_after_its_ins_arrives() {
+        let mut s = ProjectedState::empty();
+        let c1 = s.apply(seq_char(1, 'a')).unwrap().id;
+        let c2 = s.apply(seq_char(2, 'b')).unwrap().id;
+        let future = Dot::new(1, 5);
+        s.apply(EditOp::Span(SpanOp::AddSpan {
+            start: Anchor {
+                id: c1,
+                bias: Bias::Before,
+            },
+            end: Anchor {
+                id: future,
+                bias: Bias::After,
+            },
+            modifier: Modifier::Bold,
+        }))
+        .unwrap();
+        s.apply(EditOp::Span(SpanOp::AddSpan {
+            start: Anchor {
+                id: c2,
+                bias: Bias::Before,
+            },
+            end: Anchor {
+                id: future,
+                bias: Bias::After,
+            },
+            modifier: Modifier::Italic,
+        }))
+        .unwrap();
+        assert_eq!(s.indexes.span_index.pending_len(), 2);
+        let c3 = s.apply(seq_char(3, 'c')).unwrap().id;
+        assert_eq!(c3, future, "clock prediction drifted — adjust `future`");
+        assert_eq!(
+            s.indexes.span_index.pending_len(),
+            0,
+            "one Ins must promote every span naming it"
+        );
+        crate::corpus::assert_matches_cold_rebuild(&s);
+    }
+
+    #[test]
+    fn reversed_span_does_not_report_type_overlap() {
+        let mut s = ProjectedState::empty();
+        let mut chars = Vec::new();
+        for i in 0..6 {
+            chars.push(
+                s.apply(seq_char(1 + i, char::from(b'a' + i as u8)))
+                    .unwrap()
+                    .id,
+            );
+        }
+        s.apply(EditOp::Span(SpanOp::AddSpan {
+            start: Anchor {
+                id: chars[4],
+                bias: Bias::After,
+            },
+            end: Anchor {
+                id: chars[1],
+                bias: Bias::Before,
+            },
+            modifier: Modifier::Bold,
+        }))
+        .unwrap();
+        assert!(
+            !s.span_of_type_overlaps(chars[0], chars[5], ModifierType::Bold),
+            "a reversed span covers nothing and must not report overlap"
+        );
+    }
+
+    #[test]
+    fn pending_promotion_composes_with_window_reproject() {
+        let mut s = ProjectedState::empty();
+        let mut pos = 1;
+        let fold = s
+            .apply(seq_block(pos, NodeType::Fold, vec![Dot::ROOT]))
+            .unwrap()
+            .id;
+        pos += 1;
+        s.apply(seq_block(pos, NodeType::FoldTitle, vec![Dot::ROOT, fold]))
+            .unwrap();
+        pos += 1;
+        let t1 = s.apply(seq_char(pos, 't')).unwrap().id;
+        pos += 1;
+        let content = s
+            .apply(seq_block(pos, NodeType::FoldContent, vec![Dot::ROOT, fold]))
+            .unwrap()
+            .id;
+        pos += 1;
+        let future = Dot::new(1, 6);
+        s.apply(EditOp::Span(SpanOp::AddSpan {
+            start: Anchor {
+                id: t1,
+                bias: Bias::Before,
+            },
+            end: Anchor {
+                id: future,
+                bias: Bias::After,
+            },
+            modifier: Modifier::Bold,
+        }))
+        .unwrap();
+        assert_eq!(s.indexes.span_index.pending_len(), 1);
+        let reprojects_before = s.full_reprojects;
+        let para = s
+            .apply(seq_block(
+                pos,
+                NodeType::Paragraph,
+                vec![Dot::ROOT, fold, content],
+            ))
+            .unwrap()
+            .id;
+        assert_eq!(para, future, "clock prediction drifted — adjust `future`");
+        assert_eq!(s.indexes.span_index.pending_len(), 0);
+        assert_eq!(
+            s.full_reprojects, reprojects_before,
+            "a nested block insert must window-reproject, not full-reproject"
+        );
+        crate::corpus::assert_matches_cold_rebuild(&s);
+    }
+
+    #[test]
+    fn window_resync_sweep_handles_gapped_leaf_runs() {
+        let mut s = ProjectedState::empty();
+        let mut pos = 1;
+        let fold = s
+            .apply(seq_block(pos, NodeType::Fold, vec![Dot::ROOT]))
+            .unwrap()
+            .id;
+        pos += 1;
+        s.apply(seq_block(pos, NodeType::FoldTitle, vec![Dot::ROOT, fold]))
+            .unwrap();
+        pos += 1;
+        let t1 = s.apply(seq_char(pos, 'a')).unwrap().id;
+        pos += 1;
+        let content = s
+            .apply(seq_block(pos, NodeType::FoldContent, vec![Dot::ROOT, fold]))
+            .unwrap()
+            .id;
+        pos += 1;
+        s.apply(seq_block(
+            pos,
+            NodeType::Paragraph,
+            vec![Dot::ROOT, fold, content],
+        ))
+        .unwrap();
+        pos += 1;
+        let c1 = s.apply(seq_char(pos, 'b')).unwrap().id;
+        pos += 1;
+        let c2 = s.apply(seq_char(pos, 'c')).unwrap().id;
+        pos += 1;
+        s.apply(EditOp::Span(SpanOp::AddSpan {
+            start: Anchor {
+                id: t1,
+                bias: Bias::Before,
+            },
+            end: Anchor {
+                id: c1,
+                bias: Bias::After,
+            },
+            modifier: Modifier::Bold,
+        }))
+        .unwrap();
+        s.apply(EditOp::Span(SpanOp::AddSpan {
+            start: Anchor {
+                id: c2,
+                bias: Bias::Before,
+            },
+            end: Anchor {
+                id: c2,
+                bias: Bias::After,
+            },
+            modifier: Modifier::Italic,
+        }))
+        .unwrap();
+        s.apply(seq_block(
+            pos,
+            NodeType::Paragraph,
+            vec![Dot::ROOT, fold, content],
+        ))
+        .unwrap();
+        crate::corpus::assert_matches_cold_rebuild(&s);
+    }
+
+    #[test]
+    fn bulk_delete_carries_span_index_forward() {
+        let mut s = ProjectedState::empty();
+        let mut chars = Vec::new();
+        for i in 0..2200 {
+            chars.push(
+                s.apply(seq_char(1 + i, char::from(b'a' + (i % 26) as u8)))
+                    .unwrap()
+                    .id,
+            );
+        }
+        for k in 0..40 {
+            let a = (k * 53) % 2100;
+            s.apply(EditOp::Span(SpanOp::AddSpan {
+                start: Anchor {
+                    id: chars[a],
+                    bias: Bias::Before,
+                },
+                end: Anchor {
+                    id: chars[a + 60],
+                    bias: Bias::After,
+                },
+                modifier: if k % 2 == 0 {
+                    Modifier::Bold
+                } else {
+                    Modifier::Italic
+                },
+            }))
+            .unwrap();
+        }
+        let reprojects_before = s.full_reprojects;
+        let carries_before = s.delete_carry_reprojects;
+        s.apply(EditOp::Seq(ListOp::Del { pos: 1, len: 2100 }))
+            .unwrap();
+        assert_eq!(
+            s.delete_carry_reprojects,
+            carries_before + 1,
+            "the bulk delete must go through reproject_after_delete"
+        );
+        assert_eq!(
+            s.full_reprojects, reprojects_before,
+            "a delete-only bulk must carry the index forward, not reproject"
+        );
+        crate::corpus::assert_matches_cold_rebuild(&s);
+    }
+
+    #[test]
+    fn failed_admission_rebuild_restores_clobbered_index() {
+        let mut s = ProjectedState::empty();
+        let c1 = s.apply(seq_char(1, 'a')).unwrap().id;
+        let c2 = s.apply(seq_char(2, 'b')).unwrap().id;
+        s.apply(EditOp::Span(SpanOp::AddSpan {
+            start: Anchor {
+                id: c1,
+                bias: Bias::Before,
+            },
+            end: Anchor {
+                id: c2,
+                bias: Bias::After,
+            },
+            modifier: Modifier::Bold,
+        }))
+        .unwrap();
+        s.indexes.span_index = editor_model::AnchorIntervalIndex::new();
+        let invalid = EditOp::Alias(editor_model::AliasOp {
+            pairs: vec![editor_model::AliasRun {
+                old_start: Dot::new(9, 0),
+                len: 0,
+                new_start: Dot::new(9, 1),
+            }],
+        });
+        let err = s.apply_batch(vec![seq_char(3, 'c'), invalid]);
+        assert!(err.is_err(), "zero-length alias run must fail admission");
+        crate::corpus::assert_matches_cold_rebuild(&s);
+    }
+
     /// Real (non-synthetic) dots reachable from Root by walking the projected tree's
     /// child references — the structural truth a totality check enforces. A block whose
     /// id is only referenced but whose node is absent (a dangling reference) is not
     /// counted, so an orphaned leaf under it is likewise absent here.
     fn reachable_real_dots(doc: &ProjectedDoc) -> HashSet<Dot> {
         let mut out = HashSet::new();
-        let mut stack: Vec<Dot> = vec![doc.tree.root];
+        let mut stack: Vec<Dot> = vec![doc.tree.root_id()];
         while let Some(id) = stack.pop() {
             let Some(node) = doc.tree.get(id) else {
                 continue;
@@ -2785,6 +4342,36 @@ mod tests {
                 .id()
                 .is_synthetic()
         );
+    }
+
+    #[test]
+    fn container_shallow_repair_scaffolds_required_child() {
+        let mut s = ProjectedState::empty();
+        let mut pos = 1;
+        let callout = s
+            .apply(seq_block(pos, NodeType::Callout, vec![Dot::ROOT]))
+            .unwrap()
+            .id;
+        pos += 1;
+        s.apply(seq_block(
+            pos,
+            NodeType::Paragraph,
+            vec![Dot::ROOT, callout],
+        ))
+        .unwrap();
+        pos += 1;
+        s.apply(seq_char(pos, 'x')).unwrap();
+        let marker_pos = s
+            .seq_checkout()
+            .resolve_boundary(callout, editor_crdt::sequence::Bias::Before)
+            .unwrap()
+            .position;
+        s.apply(EditOp::Seq(ListOp::Del {
+            pos: marker_pos + 1,
+            len: 2,
+        }))
+        .unwrap();
+        crate::corpus::assert_matches_cold_rebuild(&s);
     }
 
     #[test]
@@ -3126,6 +4713,43 @@ mod tests {
         let _ = a;
         state.apply(EditOp::Seq(ListOp::Undel { del })).unwrap();
         assert_eq!(state.view().node(para).unwrap().inline_text(), "ab");
+    }
+
+    #[test]
+    fn undelete_restores_self_anchored_span_covering() {
+        let mut s = ProjectedState::empty();
+        let mut chars = Vec::new();
+        for i in 0..6 {
+            chars.push(
+                s.apply(seq_char(1 + i, char::from(b'a' + i as u8)))
+                    .unwrap()
+                    .id,
+            );
+        }
+        s.apply(EditOp::Span(SpanOp::AddSpan {
+            start: Anchor {
+                id: chars[2],
+                bias: Bias::Before,
+            },
+            end: Anchor {
+                id: chars[3],
+                bias: Bias::After,
+            },
+            modifier: Modifier::Bold,
+        }))
+        .unwrap();
+        let del = s
+            .apply(EditOp::Seq(ListOp::Del { pos: 3, len: 2 }))
+            .unwrap()
+            .id;
+        let probe_before = s.incremental_leaf_inserts;
+        s.apply(EditOp::Seq(ListOp::Undel { del })).unwrap();
+        assert_eq!(
+            s.incremental_leaf_inserts,
+            probe_before + 2,
+            "undelete must restore both leaves via the incremental insert path"
+        );
+        crate::corpus::assert_matches_cold_rebuild(&s);
     }
 
     #[test]
@@ -3533,6 +5157,77 @@ mod tests {
             proptest::prop_assert_eq!(warm.projected(), cold.projected());
             warm.assert_seg_index_matches_logs();
         }
+    }
+
+    // A remote insert's CRDT origin can be a tombstone: the origin char was live
+    // when A authored the insert, but got deleted on B (along with a span anchor
+    // it carried) before B received it, so the new leaf lands to the right of
+    // ghosts B already knows about. `covering_for_inserted`'s mid-block seed only
+    // collected `[neighbor, after]` into `near`, missing those interleaved ghosts,
+    // so a span anchored on one of them was silently dropped from the
+    // incrementally-projected covering.
+    #[test]
+    fn remote_insert_after_tombstoned_span_anchor_matches_cold() {
+        let mut a = ProjectedState::empty();
+        let mut chars: Vec<Dot> = Vec::new();
+        for i in 0..12 {
+            chars.push(
+                a.apply(seq_char(1 + i, char::from(b'a' + i as u8)))
+                    .unwrap()
+                    .id,
+            );
+        }
+        let c2 = chars[1];
+        let c12 = chars[11];
+        a.apply(EditOp::Span(SpanOp::AddSpan {
+            start: Anchor {
+                id: c2,
+                bias: Bias::Before,
+            },
+            end: Anchor {
+                id: c12,
+                bias: Bias::After,
+            },
+            modifier: Modifier::Bold,
+        }))
+        .unwrap();
+        a.commit();
+
+        let mut b =
+            ProjectedState::from_graph(OpGraph::with_actor(2)).expect("empty graph projects");
+        let heads: HashSet<Dot> = b.graph().current_heads().copied().collect();
+        for cs in a.graph().missing_changesets_tolerant(&heads) {
+            let (next, _) = b.receive_changesets(vec![cs]).unwrap();
+            b = next;
+        }
+
+        // B tombstones c2 and c3 — the span's start anchor is now invisible on B,
+        // and the gap holds two ghosts by the time the remote insert below lands.
+        b.apply(EditOp::Seq(ListOp::Del { pos: 2, len: 2 }))
+            .unwrap();
+        b.commit();
+
+        // A hasn't seen B's delete; it types right after c2, so the new char's
+        // CRDT origin is c2 — tombstoned on B. This delivers as a single novel op
+        // against B's 10 remaining visible chars, well under the bulk-reprojection
+        // threshold, so B projects it through the incremental splice path.
+        a.apply(seq_char(3, 'x')).unwrap();
+        a.commit();
+
+        let heads: HashSet<Dot> = b.graph().current_heads().copied().collect();
+        let probe_before = b.incremental_leaf_inserts;
+        for cs in a.graph().missing_changesets_tolerant(&heads) {
+            let (next, _) = b.receive_changesets(vec![cs]).unwrap();
+            b = next;
+        }
+        assert_eq!(
+            b.incremental_leaf_inserts,
+            probe_before + 1,
+            "the delivery must land via the incremental leaf-insert path"
+        );
+
+        let cold = ProjectedState::from_graph(b.graph().clone()).expect("cold rebuild projects");
+        assert_eq!(b.projected(), cold.projected());
     }
 
     // Whole-range span ops over a document mixing styled leaves, an inline atom,
@@ -5588,7 +7283,7 @@ mod tests {
             }
         }
         let mut out = Vec::new();
-        walk(&doc.tree, doc.tree.root, &mut out);
+        walk(&doc.tree, doc.tree.root_id(), &mut out);
         out
     }
 
@@ -5955,5 +7650,256 @@ mod tests {
             uniq.len(),
             "a real dot is reached more than once: {preorder:?}"
         );
+    }
+
+    #[test]
+    fn affected_scope_covers_all_op_categories_at_root() {
+        let steps = crate::corpus::mandatory_prefix();
+        let run = crate::corpus::run_corpus(&steps, &mut |_, _, _| {});
+        let mut ins = 0usize;
+        let mut del = 0usize;
+        let mut undel = 0usize;
+        for state in [&run.a, &run.b] {
+            for op in state.graph().iter_all() {
+                let Some((c, _, _)) = state.affected_scope(op) else {
+                    continue;
+                };
+                if c != Dot::ROOT {
+                    continue;
+                }
+                match &op.payload {
+                    EditOp::Seq(ListOp::Ins { .. }) => ins += 1,
+                    EditOp::Seq(ListOp::Del { .. }) => del += 1,
+                    EditOp::Seq(ListOp::Undel { .. }) => undel += 1,
+                    _ => {}
+                }
+            }
+        }
+        assert!(
+            ins >= 1 && del >= 1 && undel >= 1,
+            "ins={ins} del={del} undel={undel}"
+        );
+    }
+
+    #[test]
+    fn nested_overflow_paragraph_matches_cold_without_full_reproject() {
+        let mut s = ProjectedState::empty();
+        let mut pos = 1;
+        let list = s
+            .apply(seq_block(pos, NodeType::BulletList, vec![Dot::ROOT]))
+            .unwrap()
+            .id;
+        pos += 1;
+        let item = s
+            .apply(seq_block(pos, NodeType::ListItem, vec![Dot::ROOT, list]))
+            .unwrap()
+            .id;
+        pos += 1;
+        s.apply(seq_block(
+            pos,
+            NodeType::Paragraph,
+            vec![Dot::ROOT, list, item],
+        ))
+        .unwrap();
+        pos += 1;
+        s.apply(seq_char(pos, 'a')).unwrap();
+        pos += 1;
+        let full_before = s.full_reprojects;
+        s.apply(seq_block(
+            pos,
+            NodeType::Paragraph,
+            vec![Dot::ROOT, list, item],
+        ))
+        .unwrap();
+        assert_eq!(
+            s.full_reprojects, full_before,
+            "the window ladder must absorb the overflow without a blind full reprojection"
+        );
+        crate::corpus::assert_matches_cold_rebuild(&s);
+    }
+
+    #[test]
+    fn escalation_fires_on_harvested_seeds() {
+        let seeds = crate::corpus::harvested_escalation_seeds();
+        assert!(seeds.len() >= 2, "at least two harvested escalation seeds");
+        for steps in seeds {
+            let run = crate::corpus::run_corpus(&steps, &mut |a, b, _| {
+                crate::corpus::assert_matches_cold_rebuild(a);
+                crate::corpus::assert_matches_cold_rebuild(b);
+            });
+            assert!(
+                run.a.window_escalations + run.b.window_escalations >= 1,
+                "a harvested seed must exercise escalation"
+            );
+        }
+    }
+
+    #[test]
+    fn escalation_stays_bounded_at_every_boundary() {
+        let mut steps = crate::corpus::mandatory_prefix();
+        steps.push((12, 2, 0, 0, 9));
+        steps.push((13, 200, 0, 0, 0));
+        steps.push((13, 201, 0, 0, 0));
+        let mut prev_esc_a = 0usize;
+        let mut prev_esc_b = 0usize;
+        let mut prev_ops_a = 0usize;
+        let mut prev_ops_b = 0usize;
+        let depth_bound = 8usize;
+        crate::corpus::run_corpus(&steps, &mut |a, b, _| {
+            let ops_a = a.graph().len();
+            let ops_b = b.graph().len();
+            assert!(a.window_escalations - prev_esc_a <= (ops_a - prev_ops_a) * depth_bound);
+            assert!(b.window_escalations - prev_esc_b <= (ops_b - prev_ops_b) * depth_bound);
+            prev_esc_a = a.window_escalations;
+            prev_esc_b = b.window_escalations;
+            prev_ops_a = ops_a;
+            prev_ops_b = ops_b;
+            crate::corpus::assert_matches_cold_rebuild(a);
+            crate::corpus::assert_matches_cold_rebuild(b);
+        });
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic(expected = "pending warm-defer batch")]
+    fn commit_panics_on_a_pending_deferred_batch() {
+        let mut state = ProjectedState::empty();
+        state.begin_defer();
+        state.apply_deferred(seq_char(1, 'a')).unwrap();
+        state.commit();
+    }
+
+    #[test]
+    fn overlay_flag_survives_clone_and_disables_forward_defer() {
+        let mut ps = ProjectedState::empty();
+        let a = ps.apply(seq_char(1, 'a')).unwrap().id;
+        ps.commit();
+        let graph = ps.graph().clone();
+
+        let plain = ProjectedState::from_graph_with_overlay(graph.clone(), &[]).unwrap();
+        assert!(!plain.has_overlay);
+        let mut plain_clone = plain.clone();
+        plain_clone.begin_defer();
+        assert!(
+            plain_clone.defer_active(),
+            "a non-overlay projection defers normally"
+        );
+
+        let overlaid = ProjectedState::from_graph_with_overlay(graph, &[a]).unwrap();
+        assert!(overlaid.has_overlay);
+        let mut overlaid_clone = overlaid.clone();
+        assert!(overlaid_clone.has_overlay, "has_overlay must survive Clone");
+        overlaid_clone.begin_defer();
+        assert!(
+            !overlaid_clone.defer_active(),
+            "begin_defer is a no-op on an overlay-backed projection"
+        );
+    }
+
+    type DeferSafeStep = (u8, u8, u8, u8);
+
+    /// Interprets one abstract step into a defer-safe `EditOp` (block/char `Ins`,
+    /// `Del`, `Undel`, `Alias`), given the sequence length and live/tombstoned dots
+    /// accumulated so far. Mirrors `corpus`'s bounded-arm generation style, kept
+    /// independent of it per the differential's own generator requirement.
+    fn defer_safe_payload(
+        visible: usize,
+        live: &[Dot],
+        dels: &mut Vec<Dot>,
+        step: DeferSafeStep,
+    ) -> Option<EditOp> {
+        let (op, x, y, ch) = step;
+        match op % 5 {
+            0 if visible > 0 => Some(seq_char(
+                1 + (x as usize) % visible,
+                char::from(b'a' + (ch % 26)),
+            )),
+            1 if visible > 0 => Some(seq_block(
+                1 + (x as usize) % visible,
+                NodeType::Paragraph,
+                vec![Dot::ROOT],
+            )),
+            2 if visible > 2 => {
+                let pos = 1 + (x as usize) % (visible - 1);
+                let len = 1 + (y as usize) % (visible - pos).max(1);
+                Some(EditOp::Seq(ListOp::Del { pos, len }))
+            }
+            3 if !dels.is_empty() => Some(EditOp::Seq(ListOp::Undel {
+                del: dels.swap_remove((x as usize) % dels.len()),
+            })),
+            4 if live.len() >= 2 => {
+                let ia = (x as usize) % live.len();
+                let ib = (y as usize) % live.len();
+                if ia == ib {
+                    return None;
+                }
+                Some(EditOp::Alias(AliasOp {
+                    pairs: vec![AliasRun {
+                        old_start: live[ia],
+                        len: 1,
+                        new_start: live[ib],
+                    }],
+                }))
+            }
+            _ => None,
+        }
+    }
+
+    /// Applies the same defer-safe op sequence to two independent states — one
+    /// per-op via `apply`, one accumulated via `begin_defer`/`apply_deferred` and
+    /// flushed by `end_defer` — so the caller can assert the two projections agree.
+    fn run_defer_safe_sequence(steps: &[DeferSafeStep]) -> (ProjectedState, ProjectedState) {
+        let mut warm = ProjectedState::empty();
+        let mut deferred = ProjectedState::empty();
+        deferred.begin_defer();
+        let mut live: Vec<Dot> = Vec::new();
+        let mut dels: Vec<Dot> = Vec::new();
+        for &step in steps {
+            let visible = warm.seq_checkout().visible_len();
+            let Some(payload) = defer_safe_payload(visible, &live, &mut dels, step) else {
+                continue;
+            };
+            let applied = warm
+                .apply(payload.clone())
+                .expect("defer-safe op applies on the immediate arm");
+            deferred
+                .apply_deferred(payload)
+                .expect("the identical op applies deferred");
+            if matches!(
+                applied.payload,
+                EditOp::Seq(ListOp::Ins {
+                    item: SeqItem::Char(_),
+                    ..
+                })
+            ) {
+                live.push(applied.id);
+            }
+            if matches!(applied.payload, EditOp::Seq(ListOp::Del { .. })) {
+                dels.push(applied.id);
+            }
+        }
+        deferred
+            .end_defer()
+            .expect("the deferred arm flushes cleanly at the end of the batch");
+        (warm, deferred)
+    }
+
+    proptest::proptest! {
+        #![proptest_config(proptest::prelude::ProptestConfig {
+            cases: std::env::var("PROPTEST_CASES")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(256),
+            ..proptest::prelude::ProptestConfig::default()
+        })]
+        #[test]
+        fn defer_safe_sequence_projects_identically_deferred_and_immediate(
+            steps in proptest::collection::vec(proptest::prelude::any::<DeferSafeStep>(), 0..64),
+        ) {
+            let (warm, deferred) = run_defer_safe_sequence(&steps);
+            proptest::prop_assert_eq!(warm.projected(), deferred.projected());
+            editor_model::assert_flat_index_consistent(&warm.projected().tree);
+            editor_model::assert_flat_index_consistent(&deferred.projected().tree);
+        }
     }
 }

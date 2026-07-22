@@ -76,9 +76,9 @@ fn position_path(view: &DocView, pos: &Position) -> Option<(Vec<usize>, editor_s
     Some((rp.path().to_vec(), rp.affinity()))
 }
 
-type PathWithAffinity = (Vec<usize>, editor_state::Affinity);
+pub(crate) type PathWithAffinity = (Vec<usize>, editor_state::Affinity);
 
-fn selection_shape(state: &State) -> Option<(PathWithAffinity, PathWithAffinity)> {
+pub(crate) fn selection_shape(state: &State) -> Option<(PathWithAffinity, PathWithAffinity)> {
     let view = state.view();
     let sel = state.selection.as_ref()?;
     let anchor = position_path(&view, &sel.anchor)?;

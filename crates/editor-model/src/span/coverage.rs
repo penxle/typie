@@ -33,6 +33,10 @@ fn resolve_spans<R: SeqResolve>(spans: &SpanLog, resolver: &R) -> Vec<ResolvedSp
 }
 
 /// The set of span ids whose resolved `[start,end]` cover visible position `pos`.
+///
+/// Naive reference resolve — the oracle baseline the interval index is verified
+/// against. Not called on any warm production path; keep it independent of the
+/// index so differential tests stay meaningful.
 pub fn spans_covering<R: SeqResolve>(pos: usize, spans: &SpanLog, resolver: &R) -> Vec<Dot> {
     let mut out: Vec<Dot> = resolve_spans(spans, resolver)
         .into_iter()

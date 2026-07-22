@@ -41,11 +41,12 @@ fn classify(c: &ChildView) -> ChildClass {
     }
 }
 
+/// Walk-recursive flat width oracle — superseded by [`NodeView::flat_width`]'s
+/// `O(1)` maintained index. Kept only as the O3 consistency oracle for the two
+/// production subtree-skip sites (`flat_chars`/`flat_segments_in_range`, which
+/// call `flat_width` instead) and for probes/tests.
+#[cfg(any(test, feature = "test-utils"))]
 fn block_flat_size(b: &NodeView) -> usize {
-    // A block contributes its two boundary sentinels plus one flat unit per direct
-    // leaf; nested blocks recurse. The overwhelmingly common block (a paragraph with
-    // only inline leaves) is `O(1)` via the leaf-count summary — no child walk — which
-    // keeps `to_flat`/`from_flat` off the per-character path.
     let total = b.child_count();
     let leaves = b.leaf_child_count();
     if leaves == total {
@@ -54,6 +55,7 @@ fn block_flat_size(b: &NodeView) -> usize {
     2 + b.children().map(|c| child_flat_size(&c)).sum::<usize>()
 }
 
+#[cfg(any(test, feature = "test-utils"))]
 fn child_flat_size(c: &ChildView) -> usize {
     match c {
         ChildView::Leaf(_) => 1,
@@ -61,7 +63,16 @@ fn child_flat_size(c: &ChildView) -> usize {
     }
 }
 
+/// The document's total flat width. Reads the maintained flat index — `O(1)`.
 pub fn flat_size(view: &DocView) -> usize {
+    view.root_flat_total() as usize
+}
+
+/// Walk-recursive `flat_size` oracle, independent of the maintained flat index
+/// — an O3 total-length cross-check (`flat_chars(0..n)` cannot serve this role:
+/// it truncates at `range.end`, so it can't detect an inflated total).
+#[cfg(any(test, feature = "test-utils"))]
+pub fn flat_size_walk_probe(view: &DocView) -> usize {
     match view.root() {
         Some(root) => root.children().map(|c| child_flat_size(&c)).sum(),
         None => 0,
@@ -76,31 +87,70 @@ pub trait ResolvedPositionFlatExt<'a>: Sized {
 impl<'a> ResolvedPositionFlatExt<'a> for ResolvedPosition<'a> {
     fn to_flat(&self) -> usize {
         let view = self.view();
-        let Some(root) = view.root() else {
+        let Some(mut container) = view.root() else {
             return 0;
         };
-        let target = self.node();
-        // Ancestor chain of the target block (inclusive). The walk descends only into
-        // blocks on this chain and skips every other subtree via the `O(1)`
-        // `block_flat_size`, so `to_flat` is `O(blocks traversed)` — no per-character
-        // DFS through sibling subtrees. Depth is shallow, so a `Vec` membership test is
-        // cheaper than hashing.
-        let mut ancestors: Vec<Dot> = Vec::new();
-        let mut cur = view.node(target);
-        while let Some(n) = cur {
-            ancestors.push(n.id());
-            cur = n.parent();
+        let path = self.path();
+        let mut acc = 0u64;
+        for (i, &slot) in path.iter().enumerate() {
+            acc += container.flat_offset_before(slot);
+            if i + 1 == path.len() {
+                break;
+            }
+            let Some(ChildView::Block(b)) = container.child_at(slot) else {
+                return acc as usize;
+            };
+            acc += 1;
+            container = b;
         }
-        to_flat_walk(&root, target, self.offset(), &ancestors).unwrap_or(0)
+        acc as usize
     }
 
     fn from_flat(view: &'a DocView<'a>, flat: usize) -> Option<Self> {
-        let root = view.root()?;
-        let pos = from_flat_walk(&root, 0, flat)?;
-        pos.resolve(view)
+        from_flat_index(view, flat)?.resolve(view)
     }
 }
 
+/// `from_flat`'s index descent, open/close-equivalent to the walk oracle:
+/// `within == 0` is the child's open boundary; `within == width - 1` descends
+/// to `target == content_total`, the child's own end.
+fn from_flat_index(view: &DocView, flat: usize) -> Option<Position> {
+    let mut container = view.root()?;
+    let mut target = flat as u64;
+    loop {
+        if target == container.flat_content_total() {
+            return Some(Position::new(container.id(), container.child_count()));
+        }
+        let (slot, within) = container.child_at_flat_offset(target)?;
+        match container.child_at(slot)? {
+            ChildView::Leaf(_) => return Some(Position::new(container.id(), slot)),
+            ChildView::Block(b) => {
+                if within == 0 {
+                    return Some(Position::new(container.id(), slot));
+                }
+                container = b;
+                target = within - 1;
+            }
+        }
+    }
+}
+
+/// Walk-recursive `to_flat` oracle, independent of the maintained flat index —
+/// the O3 index-vs-walk cross-check. Superseded in production by
+/// [`ResolvedPositionFlatExt::to_flat`]'s path-prefix summation.
+#[cfg(any(test, feature = "test-utils"))]
+pub fn to_flat_walk_probe(view: &DocView, target: Dot, target_offset: usize) -> Option<usize> {
+    let root = view.root()?;
+    let mut ancestors: Vec<Dot> = Vec::new();
+    let mut cur = view.node(target);
+    while let Some(n) = cur {
+        ancestors.push(n.id());
+        cur = n.parent();
+    }
+    to_flat_walk(&root, target, target_offset, &ancestors)
+}
+
+#[cfg(any(test, feature = "test-utils"))]
 fn to_flat_walk(
     current: &NodeView,
     target: Dot,
@@ -138,6 +188,13 @@ fn to_flat_walk(
     None
 }
 
+#[cfg(any(test, feature = "test-utils"))]
+pub fn from_flat_walk_probe(view: &DocView, flat: usize) -> Option<Position> {
+    let root = view.root()?;
+    from_flat_walk(&root, 0, flat)
+}
+
+#[cfg(any(test, feature = "test-utils"))]
 fn from_flat_walk(container: &NodeView, start_flat: usize, target: usize) -> Option<Position> {
     let mut acc = start_flat;
     for (i, c) in container.children().enumerate() {
@@ -236,7 +293,7 @@ fn collect_chars(block: &NodeView, idx: &mut usize, range: &Range<usize>, out: &
             ChildView::Block(b) => {
                 // Skip whole subtrees before the window via their O(1) flat size,
                 // so a small window never walks the rest of the document.
-                let size = block_flat_size(&b);
+                let size = b.flat_width() as usize;
                 if *idx + size <= range.start {
                     *idx += size;
                     continue;
@@ -346,7 +403,7 @@ fn collect_segments_in_range(
                         let ChildView::Block(b) = c else {
                             unreachable!()
                         };
-                        let size = block_flat_size(&b);
+                        let size = b.flat_width() as usize;
                         if *idx + size <= range.start {
                             *idx += size;
                             continue;
@@ -606,6 +663,31 @@ mod tests {
         let r = ResolvedPosition::from_flat(&view, 0).unwrap();
         assert_eq!(r.node(), root_id);
         assert_eq!(r.offset(), 0);
+    }
+
+    #[test]
+    fn offset_zero_flat_is_one_for_root_level_paragraph() {
+        let (pd, p) = para_doc(&[SeqItem::Char('a')]);
+        let view = DocView::new(&pd);
+        let rp = Position::new(p, 0).resolve(&view).unwrap();
+        assert_eq!(
+            rp.to_flat(),
+            1,
+            "a root-direct paragraph's own open sentinel is the sole flat unit before offset 0"
+        );
+    }
+
+    #[test]
+    fn offset_zero_flat_equals_nesting_depth() {
+        let (pd, blocks) = build_specced(&[BlockSpec::Quote(vec![1])]);
+        let view = DocView::new(&pd);
+        let para = blocks[1];
+        let rp = Position::new(para, 0).resolve(&view).unwrap();
+        assert_eq!(
+            rp.to_flat(),
+            2,
+            "two open sentinels (blockquote, paragraph) precede the first leaf two levels deep"
+        );
     }
 
     fn mixed_doc() -> (ProjectedDoc, Dot, Dot, Dot, Dot) {
@@ -929,5 +1011,139 @@ mod tests {
             }
             items
         })
+    }
+
+    fn assert_flat_contract(state: &crate::State) {
+        let view = state.view();
+        let n = flat_size(&view);
+        assert_eq!(
+            flat_chars(&view, 0..n).len(),
+            n,
+            "independent walk (flat_chars) must agree with flat_size"
+        );
+        for f in 0..=n {
+            let Some(rp) = ResolvedPosition::from_flat(&view, f) else {
+                panic!("from_flat must resolve every 0..=flat_size, failed at {f}/{n}");
+            };
+            assert_eq!(rp.to_flat(), f, "to_flat(from_flat({f})) roundtrip");
+        }
+    }
+
+    /// `from_flat`/`to_flat`/`flat_size` at a single flat offset must agree
+    /// between the maintained index and the independent walk oracle.
+    fn assert_flat_index_matches_walk_at(view: &DocView, f: usize) {
+        let via_index = ResolvedPosition::from_flat(view, f).map(|r| r.position());
+        let via_walk = from_flat_walk_probe(view, f);
+        assert_eq!(via_index, via_walk, "from_flat index vs walk at {f}");
+        if let Some(rp) = ResolvedPosition::from_flat(view, f) {
+            let back = to_flat_walk_probe(view, rp.node(), rp.offset());
+            assert_eq!(Some(rp.to_flat()), back, "to_flat index vs walk at {f}");
+        }
+    }
+
+    /// Full-sweep index-vs-walk cross-check, `0..=flat_size` inclusive.
+    fn assert_flat_index_matches_walk(state: &crate::State) {
+        let view = state.view();
+        let n = flat_size(&view);
+        assert_eq!(n, flat_size_walk_probe(&view), "flat_size index vs walk");
+        for f in 0..=n {
+            assert_flat_index_matches_walk_at(&view, f);
+        }
+    }
+
+    #[test]
+    fn flat_contract_holds_on_named_scenarios() {
+        for ps in [
+            crate::corpus::bold_label_fold_list(),
+            crate::corpus::tombstone_cluster_anchors(),
+            crate::corpus::concurrent_delete_remote_span(),
+            crate::corpus::mixed_atoms(),
+        ] {
+            let state = crate::State::new(ps, None);
+            assert_flat_contract(&state);
+            assert_flat_index_matches_walk(&state);
+        }
+    }
+
+    proptest::proptest! {
+        #![proptest_config(proptest::prelude::ProptestConfig { cases: 64, ..proptest::prelude::ProptestConfig::default() })]
+        #[test]
+        fn flat_contract_holds_on_corpus_final_states(
+            suffix in proptest::collection::vec(proptest::prelude::any::<crate::corpus::CorpusStep>(), 0..40),
+        ) {
+            let mut steps = crate::corpus::mandatory_prefix();
+            steps.extend(suffix);
+            let run = crate::corpus::run_corpus(&steps, &mut |_, _, _| {});
+            for ps in [run.a, run.b] {
+                let state = crate::State::new(ps, None);
+                assert_flat_contract(&state);
+                assert_flat_index_matches_walk(&state);
+            }
+        }
+    }
+
+    /// Up to 8 boundary-sample flat offsets: the two endpoints, evenly-strided
+    /// interior points, and (when the replica's most recent span resolves to a
+    /// live leaf) the offset adjacent to that mutation.
+    fn boundary_flat_offsets(n: usize, mutation_adjacent: Option<usize>) -> Vec<usize> {
+        let mut offsets: Vec<usize> = vec![0, n];
+        if n > 0 {
+            for k in 1..=4usize {
+                offsets.push(n * k / 5);
+            }
+        }
+        if let Some(m) = mutation_adjacent {
+            offsets.push(m.min(n));
+        }
+        offsets.sort_unstable();
+        offsets.dedup();
+        offsets.truncate(8);
+        offsets
+    }
+
+    /// The flat offset adjacent to the replica's most recently applied span, if
+    /// its start anchor still resolves to a live leaf under a live parent.
+    fn mutation_adjacent_flat(view: &DocView, spans: &[(Anchor, Anchor, Dot)]) -> Option<usize> {
+        let (start, ..) = spans.last()?;
+        let leaf = view.leaf(start.id)?;
+        let parent = leaf.parent()?;
+        let slot = parent
+            .children()
+            .position(|c| matches!(&c, ChildView::Leaf(l) if l.dot() == start.id))?;
+        let offset = slot + usize::from(matches!(start.bias, Bias::After));
+        Position::new(parent.id(), offset)
+            .resolve(view)
+            .map(|rp| rp.to_flat())
+    }
+
+    proptest::proptest! {
+        #![proptest_config(proptest::prelude::ProptestConfig {
+            cases: std::env::var("PROPTEST_CASES")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(64),
+            ..proptest::prelude::ProptestConfig::default()
+        })]
+        #[test]
+        fn flat_index_consistent_at_corpus_boundaries(
+            suffix in proptest::collection::vec(proptest::prelude::any::<crate::corpus::CorpusStep>(), 0..40),
+        ) {
+            let mut steps = crate::corpus::mandatory_prefix();
+            steps.extend(suffix);
+            crate::corpus::run_corpus(&steps, &mut |a, b, spans| {
+                for (s, replica_spans) in [(a, &spans.a), (b, &spans.b)] {
+                    let tree = &s.projected().tree;
+                    editor_model::assert_flat_index_consistent(tree);
+                    let view = s.view();
+                    let indexed = flat_size(&view) as u64;
+                    let walked = flat_size_walk_probe(&view) as u64;
+                    assert_eq!(indexed, walked, "root flat total: index vs walk");
+                    let adjacent = mutation_adjacent_flat(&view, replica_spans);
+                    for f in boundary_flat_offsets(indexed as usize, adjacent) {
+                        assert_flat_index_matches_walk_at(&view, f);
+                    }
+                }
+            });
+        }
     }
 }

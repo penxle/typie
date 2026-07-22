@@ -776,6 +776,7 @@ dependencies = [
  "editor-macros",
  "imbl",
  "log",
+ "proptest",
  "serde",
  "serde_json",
  "tsify",

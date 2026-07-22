@@ -30,7 +30,14 @@ pub(crate) fn apply_to(
         return Err(StepError::UnknownBearingReplace { block });
     }
 
-    let (parent, index, subtree, dots) = {
+    // Every read this step needs — including the re-insert slot, since a
+    // type-replace re-inserts at the SAME (parent, index) it just vacated —
+    // happens here, before the first emitted op. `child_seq_insert_pos`'s
+    // `pos` for that unchanged slot always lands exactly at the deleted
+    // subtree's own start (index N still means "right after child N-1",
+    // unaffected by deleting child N itself), so no post-delete position
+    // correction is needed the way a cross-parent move requires one.
+    let (subtree, del_ops, pos, parents, host) = {
         let ps = &batched.projected;
         let old_type = ps
             .block_node_type(block)
@@ -62,19 +69,22 @@ pub(crate) fn apply_to(
             support::capture_subtree(ps, block).ok_or(StepError::NodeNotFound(block))?;
         subtree.node = new_type.into_node().to_plain();
         let dots = support::subtree_dots(ps, block).ok_or(StepError::NodeNotFound(block))?;
-        (parent, index, subtree, dots)
+        let del_ops = support::delete_dots_ops(ps, &dots);
+
+        let pos = support::child_seq_insert_pos(ps, parent, index, new_type)?;
+        let parents =
+            support::self_inclusive_parents(ps, parent).ok_or(StepError::NodeNotFound(parent))?;
+        let host = support::parent_host_type(ps, &parents);
+        (subtree, del_ops, pos, parents, host)
     };
 
-    for op in support::delete_dots_ops(&batched.projected, &dots) {
+    for op in del_ops {
         batched.apply(op)?;
     }
 
-    let pos = support::child_seq_insert_pos(&batched.projected, parent, index, new_type)?;
-    let parents = support::self_inclusive_parents(&batched.projected, parent)
-        .ok_or(StepError::NodeNotFound(parent))?;
     let mut seq_pos = pos;
     let mut pairs = Vec::new();
-    support::emit_subtree(batched, &subtree, &parents, &mut seq_pos, &mut pairs)?;
+    support::emit_subtree(batched, &subtree, &parents, host, &mut seq_pos, &mut pairs)?;
     if !pairs.is_empty() {
         batched.apply(EditOp::Alias(AliasOp {
             pairs: support::compress_alias_pairs(&pairs),

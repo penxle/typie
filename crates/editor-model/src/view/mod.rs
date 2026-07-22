@@ -7,7 +7,7 @@ use editor_crdt::Dot;
 use crate::projection::{BlockPaths, ProjectedDoc};
 use crate::schema::Schema;
 use crate::seq::{BlockNode, Child, anchor_dot};
-use crate::{AtomLeaf, Modifier, ModifierType, Node, NodeType, OwnModifier, SeqItem};
+use crate::{AtomLeaf, Modifier, ModifierType, Node, NodeType, OwnModifier, SeqItem, SeqOrder};
 
 /// A read-only view over a `ProjectedDoc`. The flat tree gives O(1) node access by
 /// `Dot` (node type, children, leaf items read straight from it), and the
@@ -16,6 +16,7 @@ use crate::{AtomLeaf, Modifier, ModifierType, Node, NodeType, OwnModifier, SeqIt
 pub struct DocView<'a> {
     doc: &'a ProjectedDoc,
     paths: std::borrow::Cow<'a, BlockPaths>,
+    order: Option<&'a dyn crate::SeqOrder>,
 }
 
 impl<'a> DocView<'a> {
@@ -26,6 +27,7 @@ impl<'a> DocView<'a> {
         Self {
             doc,
             paths: std::borrow::Cow::Owned(BlockPaths::from_tree(&doc.tree)),
+            order: None,
         }
     }
 
@@ -35,6 +37,22 @@ impl<'a> DocView<'a> {
         Self {
             doc,
             paths: std::borrow::Cow::Borrowed(paths),
+            order: None,
+        }
+    }
+
+    /// `with_paths` plus a sequence-order oracle, enabling the `O(log)` dot-keyed
+    /// child lookups in `leaf` and `NodeView::index`. `order` must be the same
+    /// checkout the projection was derived from.
+    pub fn with_paths_ordered(
+        doc: &'a ProjectedDoc,
+        paths: &'a BlockPaths,
+        order: &'a dyn crate::SeqOrder,
+    ) -> Self {
+        Self {
+            doc,
+            paths: std::borrow::Cow::Borrowed(paths),
+            order: Some(order),
         }
     }
 
@@ -48,6 +66,15 @@ impl<'a> DocView<'a> {
 
     pub fn parent_of(&self, block: Dot) -> Option<Dot> {
         self.paths.parent_of(block)
+    }
+    /// The document's total flat width, sentinel-free (the root has no
+    /// boundary sentinels of its own) — `O(1)` via the maintained flat index.
+    pub fn root_flat_total(&self) -> u64 {
+        self.doc
+            .tree
+            .root_node()
+            .map(|r| r.children.flat_total())
+            .unwrap_or(0)
     }
 }
 
@@ -93,6 +120,13 @@ impl<'a> DocView<'a> {
     }
     pub fn leaf(&'a self, id: Dot) -> Option<LeafView<'a>> {
         let block = self.paths.block_of(id)?;
+        if let Some(order) = self.order
+            && let Some(host) = self.node(block)
+            && let Some(slot) = host.slot_of_child(id, order)
+            && let Some(ChildView::Leaf(l)) = host.child_at(slot)
+        {
+            return Some(l);
+        }
         let item = self
             .doc
             .tree
@@ -145,6 +179,27 @@ impl<'a> NodeView<'a> {
     /// `ChildList` order-statistics summary.
     pub fn leaf_child_count(&self) -> usize {
         self.tree_node().map_or(0, |n| n.children.leaf_count())
+    }
+    /// Flat width of this block including its two boundary sentinels (the root
+    /// reports its sentinel-free total via [`DocView::root_flat_total`]). Reads
+    /// the maintained flat index — `O(1)`.
+    pub fn flat_width(&self) -> u64 {
+        self.view.doc.tree.flat_width_of(self.id).unwrap_or(2)
+    }
+    /// Cumulative flat width of children `[0, slot)` — `O(log K)`.
+    pub fn flat_offset_before(&self, slot: usize) -> u64 {
+        self.tree_node().map_or(0, |n| n.children.flat_before(slot))
+    }
+    /// Total flat width across all direct children — `O(1)`.
+    pub fn flat_content_total(&self) -> u64 {
+        self.tree_node().map_or(0, |n| n.children.flat_total())
+    }
+    /// The child slot spanning flat `offset` within this block's content, and
+    /// the offset remaining inside that child. `None` at `offset ==
+    /// flat_content_total()` (the container's own end is the caller's case) or
+    /// beyond. `O(log K)`.
+    pub fn child_at_flat_offset(&self, offset: u64) -> Option<(usize, u64)> {
+        self.tree_node()?.children.find_by_flat(offset)
     }
     pub fn dot(&self) -> Option<Dot> {
         anchor_dot(self.id)
@@ -250,10 +305,125 @@ impl<'a> NodeView<'a> {
     }
     pub fn index(&self) -> Option<usize> {
         let parent = self.parent()?;
+        if let Some(order) = self.view.order
+            && let Some(slot) = parent.slot_of_child(self.id, order)
+        {
+            return Some(slot);
+        }
         parent.children().position(|c| match c {
             ChildView::Block(b) => b.id == self.id,
             ChildView::Leaf(_) => false,
         })
+    }
+}
+
+impl ChildView<'_> {
+    /// The child's identity dot: a leaf's own dot, or a block's id (synthetic
+    /// ids included — distinct from `NodeView::dot`, which is `None` for a
+    /// scaffold).
+    pub fn id(&self) -> Dot {
+        match self {
+            ChildView::Leaf(l) => l.dot(),
+            ChildView::Block(b) => b.id(),
+        }
+    }
+}
+
+impl<'a> NodeView<'a> {
+    /// The child's effective sequence rank: its own dot's rank for a leaf or a
+    /// real block, or — for a synthetic scaffold, which owns no sequence
+    /// position — the rank of its first real descendant in preorder (an empty
+    /// leading scaffold sibling is skipped, not a dead end). Heap-allocation
+    /// free; recursion depth is the scaffold nesting depth. `None` when the
+    /// subtree holds no real dot at all (the caller skip-scans or falls back to
+    /// a linear scan).
+    fn effective_rank(&self, c: &ChildView<'a>, order: &dyn SeqOrder) -> Option<usize> {
+        fn first_real_rank(node: &NodeView<'_>, order: &dyn SeqOrder) -> Option<usize> {
+            for slot in 0..node.child_count() {
+                match node.child_at(slot)? {
+                    ChildView::Leaf(l) => {
+                        if let Some(r) = order.visible_rank(l.dot()) {
+                            return Some(r);
+                        }
+                    }
+                    ChildView::Block(b) => match b.dot() {
+                        Some(d) => {
+                            if let Some(r) = order.visible_rank(d) {
+                                return Some(r);
+                            }
+                        }
+                        None => {
+                            if let Some(r) = first_real_rank(&b, order) {
+                                return Some(r);
+                            }
+                        }
+                    },
+                }
+            }
+            None
+        }
+        match c {
+            ChildView::Leaf(l) => order.visible_rank(l.dot()),
+            ChildView::Block(b) => match b.dot() {
+                Some(d) => order.visible_rank(d),
+                None => first_real_rank(b, order),
+            },
+        }
+    }
+
+    /// The nearest slot in `[lo, hi)` around `mid` whose child has an effective
+    /// rank, searched forward then backward. `None` when every slot in range is
+    /// a rankless scaffold.
+    fn rank_near(
+        &self,
+        mid: usize,
+        lo: usize,
+        hi: usize,
+        order: &dyn SeqOrder,
+    ) -> Option<(usize, usize)> {
+        for slot in (mid..hi).chain((lo..mid).rev()) {
+            let child = self.child_at(slot)?;
+            if let Some(r) = self.effective_rank(&child, order) {
+                return Some((slot, r));
+            }
+        }
+        None
+    }
+
+    /// The slot of the direct child keyed by `dot` — a leaf's own dot, a real
+    /// block's anchor dot, or a synthetic block's id — in `O(log K · log N)`
+    /// plus the effective-rank descents, via binary search over the children's
+    /// sequence ranks (projected children preserve sequence preorder). A rank
+    /// match alone cannot tell a dead target from a live neighbor at the same
+    /// rank, so the id re-check is a correctness requirement; any mismatch or
+    /// inconclusive probe returns `None` and the caller falls back to a linear
+    /// scan.
+    pub fn slot_of_child(&self, dot: Dot, order: &dyn SeqOrder) -> Option<usize> {
+        let target_rank = match order.visible_rank(dot) {
+            Some(r) => r,
+            None => {
+                let target = self.view.node(dot)?;
+                if self.view.parent_of(dot) != Some(self.id) {
+                    return None;
+                }
+                self.effective_rank(&ChildView::Block(target), order)?
+            }
+        };
+        let n = self.child_count();
+        let mut lo = 0usize;
+        let mut hi = n;
+        while lo < hi {
+            let mid = lo + (hi - lo) / 2;
+            let (slot, rank) = self.rank_near(mid, lo, hi, order)?;
+            if rank < target_rank {
+                lo = slot + 1;
+            } else if rank == target_rank {
+                return (self.child_at(slot)?.id() == dot).then_some(slot);
+            } else {
+                hi = slot;
+            }
+        }
+        None
     }
 }
 
@@ -1233,5 +1403,98 @@ mod tests {
 
         let cell_b = view.node(cell_without_bg).unwrap();
         assert_eq!(cell_b.block_modifier(ModifierType::BackgroundColor), None,);
+    }
+
+    #[test]
+    fn slot_of_child_matches_linear_on_nested_doc() {
+        let para = Dot::new(1, 1);
+        let bq = Dot::new(1, 4);
+        let bq_para = Dot::new(1, 5);
+        let elems = vec![
+            (
+                para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![Dot::ROOT],
+                    attrs: vec![],
+                },
+            ),
+            (Dot::new(1, 2), SeqItem::Char('H')),
+            (Dot::new(1, 3), SeqItem::Char('i')),
+            (
+                bq,
+                SeqItem::Block {
+                    node_type: NodeType::Blockquote,
+                    parents: vec![Dot::ROOT],
+                    attrs: vec![],
+                },
+            ),
+            (
+                bq_para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![Dot::ROOT, bq],
+                    attrs: vec![],
+                },
+            ),
+            (Dot::new(1, 6), SeqItem::Char('y')),
+        ];
+        let logs = logs_of(&elems);
+        let pd = project_document(&logs).unwrap();
+        let view = DocView::new(&pd);
+        let (_elems, resolver) = editor_crdt::sequence::checkout_with_resolver(&logs.seq);
+        let root = view.root().unwrap();
+        let mut hits = 0usize;
+        for (slot, c) in root.children().enumerate() {
+            let id = c.id();
+            match root.slot_of_child(id, &resolver) {
+                Some(got) => {
+                    assert_eq!(got, slot);
+                    hits += 1;
+                }
+                None => {
+                    assert!(
+                        matches!(&c, ChildView::Block(b) if b.dot().is_none() && b.descendants().next().is_none()),
+                        "slot_of_child must only miss on a content-empty synthetic scaffold"
+                    );
+                }
+            }
+        }
+        assert!(hits > 0, "the fast path must hit at least one root child");
+        assert_eq!(root.slot_of_child(Dot::new(9, 9), &resolver), None);
+    }
+
+    #[test]
+    fn slot_of_child_resolves_synthetic_scaffold_by_effective_rank() {
+        let cell = Dot::new(1, 1);
+        let a = Dot::new(1, 2);
+        let elems = vec![
+            (
+                cell,
+                SeqItem::Block {
+                    node_type: NodeType::TableCell,
+                    parents: vec![Dot::ROOT],
+                    attrs: vec![],
+                },
+            ),
+            (a, SeqItem::Char('a')),
+        ];
+        let logs = logs_of(&elems);
+        let pd = project_document(&logs).unwrap();
+        let view = DocView::new(&pd);
+        let (_elems, resolver) = editor_crdt::sequence::checkout_with_resolver(&logs.seq);
+        let root = view.root().unwrap();
+        let synthetic_table = root
+            .child_blocks()
+            .find(|b| b.dot().is_none())
+            .expect("normalize wraps a bare TableCell in a synthetic Table scaffold");
+        let expected_slot = root
+            .children()
+            .position(|c| c.id() == synthetic_table.id())
+            .unwrap();
+        assert_eq!(
+            root.slot_of_child(synthetic_table.id(), &resolver),
+            Some(expected_slot)
+        );
     }
 }

@@ -24,5 +24,7 @@ pub use meta::*;
 pub use prune::prune;
 pub use revert::*;
 pub use step::*;
+pub use steps::move_node::MovedNode;
+pub use steps::move_nodes_into::{MoveDest, MovedItem};
 pub use steps::support::{capture_subtree, delete_dots_ops};
 pub use transaction::*;

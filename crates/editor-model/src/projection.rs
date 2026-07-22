@@ -6,8 +6,8 @@ use editor_crdt::sequence::{Bias, Boundary, SeqCheckout, SeqResolve, checkout_wi
 use editor_crdt::{Dot, FastMap};
 
 use crate::{
-    AliasClasses, AliasLog, BlockNode, BlockTree, Child, ChildList, Modifier, ModifierAttrLog,
-    ModifierType, NodeType, OwnModifier, ProjectError, SchemaError, anchor_dot,
+    AliasClasses, AliasLog, BlockNode, BlockTree, Child, Modifier, ModifierAttrLog, ModifierType,
+    NodeType, OwnModifier, ProjectError, SchemaError, anchor_dot,
 };
 use crate::{
     Node, NodeAttrLog, RepairStats, SeqItem, SpanLog, normalize_with_stats,
@@ -40,6 +40,15 @@ pub type LeafEff = std::sync::Arc<BTreeMap<ModifierType, Modifier>>;
 /// A leaf's own-modifier map, shared like [`LeafEff`].
 pub type LeafOwn = std::sync::Arc<BTreeMap<ModifierType, OwnModifier>>;
 
+/// A block's flat-width change from a single mutation, for ancestor
+/// propagation by the caller.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FlatWidthDelta {
+    pub block: Dot,
+    pub old: u64,
+    pub new: u64,
+}
+
 #[derive(Clone, Debug)]
 pub struct ProjectedDoc {
     pub tree: BlockTree,
@@ -62,18 +71,26 @@ pub struct ProjectedDoc {
 
 impl ProjectedDoc {
     /// Insert `leaf` into `block` at leaf `offset`. Only the tree is updated here;
-    /// the segment index is maintained by the caller (editor-state).
-    pub fn splice_char(&mut self, block: Dot, offset: usize, leaf: Dot, item: SeqItem) {
-        insert_leaf_at(&mut self.tree, block, offset, leaf, &item);
+    /// the segment index is maintained by the caller (editor-state). Returns
+    /// `block`'s flat-width delta for the caller to propagate, `None` if `block`
+    /// doesn't exist.
+    pub fn splice_char(
+        &mut self,
+        block: Dot,
+        offset: usize,
+        leaf: Dot,
+        item: SeqItem,
+    ) -> Option<FlatWidthDelta> {
+        insert_leaf_at(&mut self.tree, block, offset, leaf, &item)
     }
 
-    pub fn splice_delete_leaf(&mut self, block: Dot, leaf: Dot) -> bool {
-        if remove_leaf_from_block(&mut self.tree, block, leaf).is_none() {
-            return false;
-        }
+    /// Remove `leaf` from `block`. Returns `block`'s flat-width delta for the
+    /// caller to propagate, `None` if `leaf` wasn't found in `block`.
+    pub fn splice_delete_leaf(&mut self, block: Dot, leaf: Dot) -> Option<FlatWidthDelta> {
+        let (_offset, delta) = remove_leaf_from_block(&mut self.tree, block, leaf)?;
         self.node_attrs.remove(&leaf);
         self.node_carries.remove(&leaf);
-        true
+        Some(delta)
     }
 
     /// Carry modifiers of `block` a caret/insert/aggregate consumer may read:
@@ -393,14 +410,21 @@ impl BlockPaths {
 #[derive(Clone, Debug, Default)]
 pub struct ProjectionIndexes {
     pub paths: BlockPaths,
-    pub spans: crate::span::SpanAnchorIndex,
+    pub span_index: crate::span::AnchorIntervalIndex,
 }
 
 impl ProjectionIndexes {
-    pub fn rebuild_from(projected: &ProjectedDoc, spans: &SpanLog) -> Self {
+    pub fn rebuild_from(
+        projected: &ProjectedDoc,
+        spans: &SpanLog,
+        seq: &editor_crdt::sequence::SeqCheckout,
+    ) -> Self {
         Self {
             paths: BlockPaths::from_tree(&projected.tree),
-            spans: crate::span::SpanAnchorIndex::build(spans),
+            span_index: crate::span::AnchorIntervalIndex::build(
+                seq,
+                crate::span::span_intervals(spans),
+            ),
         }
     }
 }
@@ -591,17 +615,12 @@ pub fn block_effective_one(
     crate::span::resolve_effective(ancestors, self_dot, self_type, false, &src)
 }
 
-/// Find `block` and run `f` on its children, returning whether it was found.
-/// `O(log N)` — a single `Dot`-keyed lookup, no descent.
-fn with_block_children(tree: &mut BlockTree, block: Dot, f: impl FnOnce(&mut ChildList)) -> bool {
-    tree.with_block_children(block, f)
-}
-
 /// Split a leaf-only block `p_block` (a child of `parent`) at the point just
 /// after `split_after` (or at its start when `None`), moving the tail leaves
 /// into a fresh `new_block` of `new_type` inserted right after `p_block`.
-/// Returns the moved leaf dots, or `None` if the shape isn't a simple leaf-only
-/// split (caller must then fall back). O(block size).
+/// Returns the moved leaf dots plus `parent`'s flat-width delta (composed from
+/// the new-block insertion and `p_block`'s shrink), or `None` if the shape
+/// isn't a simple leaf-only split (caller must then fall back). O(block size).
 pub fn split_block_insert(
     tree: &mut BlockTree,
     parent: Dot,
@@ -609,7 +628,7 @@ pub fn split_block_insert(
     split_after: Option<Dot>,
     new_block: Dot,
     new_type: NodeType,
-) -> Option<Vec<Dot>> {
+) -> Option<(Vec<Dot>, FlatWidthDelta)> {
     // Validate everything (block shapes, split point, that `p_block` is a child of
     // `parent`) BEFORE mutating, so any bail-out leaves the tree untouched — `p_block`
     // and `new_block` are addressed directly in `nodes`, no descent.
@@ -643,20 +662,30 @@ pub fn split_block_insert(
             _ => None,
         })
         .collect();
-    tree.nodes.insert(p_block, p);
-    tree.nodes.insert(
-        new_block,
+    let w_p = 2 + p.children.flat_total();
+    let w_new = 2 + tail.flat_total();
+    tree.insert_block_sized(p, w_p);
+    tree.insert_block_sized(
         BlockNode {
             id: new_block,
             node_type: new_type,
             attrs: vec![],
             children: tail,
         },
+        w_new,
     );
-    tree.with_block_children(parent, |children| {
-        children.insert(p_idx + 1, Child::Block(new_block));
-    });
-    Some(moved)
+    // Two parent mutations compose into one delta: the first call's `old` (the
+    // parent's width before either), the second's `new` (its width after both).
+    let (old, _) = tree.insert_child_sized(parent, p_idx + 1, Child::Block(new_block), w_new)?;
+    let (_, new) = tree.set_child_flat_size(parent, p_block, Some(p_idx), w_p)?;
+    Some((
+        moved,
+        FlatWidthDelta {
+            block: parent,
+            old,
+            new,
+        },
+    ))
 }
 
 fn insert_leaf_at(
@@ -665,45 +694,37 @@ fn insert_leaf_at(
     offset: usize,
     leaf: Dot,
     item: &SeqItem,
-) -> bool {
+) -> Option<FlatWidthDelta> {
     // Leaf-bearing blocks never interleave block children, so the `offset`-th leaf
     // is the `offset`-th child; `leaf_slot` finds it in `O(log K)` via the children
-    // tree's leaf-count sum.
-    with_block_children(tree, block, |children| {
-        let slot = children.leaf_slot(offset);
-        children.insert(
-            slot,
-            Child::Leaf {
-                id: leaf,
-                item: item.clone(),
-            },
-        );
-    })
+    // tree's leaf-count sum (the mapping now lives inside `insert_leaf_child`).
+    let (old, new) = tree.insert_leaf_child(block, offset, leaf, item.clone())?;
+    Some(FlatWidthDelta { block, old, new })
 }
 
-fn remove_leaf_from_block(tree: &mut BlockTree, block: Dot, leaf: Dot) -> Option<usize> {
-    let mut result: Option<usize> = None;
-    with_block_children(tree, block, |children| {
-        let mut seen = 0usize;
-        let mut found = None;
-        for (i, c) in children.iter().enumerate() {
-            match c {
-                Child::Leaf { id, .. } => {
-                    if *id == leaf {
-                        found = Some((i, seen));
-                        break;
-                    }
-                    seen += 1;
+fn remove_leaf_from_block(
+    tree: &mut BlockTree,
+    block: Dot,
+    leaf: Dot,
+) -> Option<(usize, FlatWidthDelta)> {
+    let node = tree.get(block)?;
+    let mut seen = 0usize;
+    let mut found = None;
+    for (i, c) in node.children.iter().enumerate() {
+        match c {
+            Child::Leaf { id, .. } => {
+                if *id == leaf {
+                    found = Some((i, seen));
+                    break;
                 }
-                Child::Block(_) => {}
+                seen += 1;
             }
+            Child::Block(_) => {}
         }
-        if let Some((idx, offset)) = found {
-            children.remove(idx);
-            result = Some(offset);
-        }
-    });
-    result
+    }
+    let (idx, offset) = found?;
+    let (_, (old, new)) = tree.remove_child(block, idx)?;
+    Some((offset, FlatWidthDelta { block, old, new }))
 }
 
 pub fn project_document(logs: &DocLogs) -> Result<ProjectedDoc, ProjectionError> {
@@ -868,6 +889,38 @@ pub fn totality_check(visible: &[(Dot, SeqItem)], tree: &BlockTree, stats: &mut 
             "totality tripwire: {deficit} visible sequence element(s) unreachable from Root"
         );
     }
+}
+
+/// Non-panicking [`totality_check`]: the visible sequence elements unreachable
+/// from the tree root, returned for the caller to act on (window escalation)
+/// instead of tripping the debug assertion.
+pub fn totality_deficit(visible: &[(Dot, SeqItem)], tree: &BlockTree) -> Vec<Dot> {
+    let mut reachable: HashSet<Dot> = HashSet::new();
+    if let Some(root) = tree.root_node() {
+        let mut stack: Vec<&BlockNode> = vec![root];
+        while let Some(node) = stack.pop() {
+            for c in &node.children {
+                match c {
+                    Child::Leaf { id, .. } => {
+                        reachable.insert(*id);
+                    }
+                    Child::Block(id) => {
+                        if !id.is_synthetic() {
+                            reachable.insert(*id);
+                        }
+                        if let Some(b) = tree.get(*id) {
+                            stack.push(b);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    visible
+        .iter()
+        .filter(|(d, _)| !reachable.contains(d))
+        .map(|(d, _)| *d)
+        .collect()
 }
 
 pub fn project_from_tree<R: SeqResolve>(
@@ -1035,7 +1088,11 @@ mod tests {
             alias_classes: AliasClasses::default(),
             repair_stats: RepairStats::default(),
         };
-        let idx = ProjectionIndexes::rebuild_from(&projected, &SpanLog::new());
+        let idx = ProjectionIndexes::rebuild_from(
+            &projected,
+            &SpanLog::new(),
+            &editor_crdt::sequence::SeqCheckout::new(),
+        );
         assert_eq!(idx.paths, BlockPaths::from_tree(&tree));
     }
 
@@ -2113,12 +2170,21 @@ mod tests {
             let mut projected = project_document(&logs_of(&base)).unwrap();
             for (i, ch) in s.chars().enumerate() {
                 let leaf = Dot::new(1, 2 + i as u64);
-                projected.splice_char(para, i, leaf, SeqItem::Char(ch));
+                if let Some(delta) = projected.splice_char(para, i, leaf, SeqItem::Char(ch)) {
+                    projected
+                        .tree
+                        .set_child_flat_size(projected.tree.root_id(), para, None, delta.new);
+                }
             }
 
             // `splice_char` maintains only the tree; segment maintenance is the caller's
             // job (editor-state). So the incremental tree must match the cold projection.
+            // `ChildList::PartialEq` compares items only (not cached sizes), so the tree
+            // equality below can't by itself catch a stale flat-width summary — assert
+            // index consistency on both sides explicitly.
             let full_pd = project_document(&logs_of(&full)).unwrap();
+            crate::assert_flat_index_consistent(&projected.tree);
+            crate::assert_flat_index_consistent(&full_pd.tree);
             prop_assert_eq!(&projected.tree, &full_pd.tree);
         }
     }
@@ -2215,7 +2281,10 @@ mod tests {
         );
     }
 
+    /// The tripwire is a `debug_assert!`, compiled out of release builds — the
+    /// expected panic can only fire under `debug_assertions`.
     #[test]
+    #[cfg(debug_assertions)]
     #[should_panic(expected = "totality tripwire: 1")]
     fn totality_check_reports_visible_dot_absent_from_tree() {
         // Test-only corruption: a visible sequence dot with no home in the tree. The
@@ -2242,6 +2311,43 @@ mod tests {
         let visible = vec![(a, SeqItem::Char('a')), (orphan, SeqItem::Char('b'))];
         let mut stats = RepairStats::default();
         totality_check(&visible, &tree, &mut stats);
+    }
+
+    fn single_paragraph_tree(leaf: Dot) -> BlockTree {
+        let raw = crate::RawTree {
+            roots: vec![crate::RawNode {
+                id: Dot::ROOT,
+                node_type: NodeType::Root,
+                attrs: vec![],
+                children: vec![crate::RawChild::Block(crate::RawNode {
+                    id: Dot::new(1, 0),
+                    node_type: NodeType::Paragraph,
+                    attrs: vec![],
+                    children: vec![crate::RawChild::Leaf {
+                        id: leaf,
+                        item: SeqItem::Char('a'),
+                    }],
+                })],
+            }],
+        };
+        BlockTree::from_raw(&raw)
+    }
+
+    #[test]
+    fn totality_deficit_is_empty_when_every_visible_dot_is_reachable() {
+        let a = Dot::new(1, 1);
+        let tree = single_paragraph_tree(a);
+        let visible = vec![(a, SeqItem::Char('a'))];
+        assert!(totality_deficit(&visible, &tree).is_empty());
+    }
+
+    #[test]
+    fn totality_deficit_reports_dot_missing_from_tree() {
+        let a = Dot::new(1, 1);
+        let orphan = Dot::new(1, 2);
+        let tree = single_paragraph_tree(a);
+        let visible = vec![(a, SeqItem::Char('a')), (orphan, SeqItem::Char('b'))];
+        assert_eq!(totality_deficit(&visible, &tree), vec![orphan]);
     }
 }
 

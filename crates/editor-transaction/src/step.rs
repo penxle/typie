@@ -5,6 +5,7 @@ use editor_state::{BatchedState, Composition, PendingModifiers, State};
 use serde::{Deserialize, Serialize};
 use strum::{EnumDiscriminants, IntoStaticStr};
 
+use crate::steps::move_nodes_into::{MoveDest, MovedItem};
 use crate::{StepError, steps};
 
 pub struct StepOutput {
@@ -79,6 +80,24 @@ pub enum Step {
         old_index: usize,
         new_parent: Dot,
         new_index: usize,
+    },
+    /// Moves every one of `items` into `dest` (an already-live parent's
+    /// consecutive slots, or a fresh container's children) in one composite
+    /// unit — the batch-projection-friendly alternative to N individual
+    /// `MoveNode`s, whose forward apply IS the composite lowering itself (see
+    /// `steps::move_nodes_into::apply_forward`), so a replay never needs to
+    /// bind a fresh container's dot ahead of time.
+    MoveNodesInto {
+        dest: MoveDest,
+        items: Vec<MovedItem>,
+    },
+    /// Inverse of `MoveNodesInto`: same `{dest, items}` payload, applied by
+    /// removing `dest`'s moved-in content by POSITION (never by a dot minted
+    /// during the forward apply) and restoring each item at its captured
+    /// `(old_parent, old_index)`.
+    MoveNodesBack {
+        dest: MoveDest,
+        items: Vec<MovedItem>,
     },
     SplitNode {
         block: Dot,
@@ -188,7 +207,7 @@ impl Step {
                 parent,
                 index,
                 subtree,
-            } => steps::insert_subtree::apply_to(batched, *parent, *index, subtree),
+            } => steps::insert_subtree::apply_to(batched, *parent, *index, subtree).map(|_| ()),
             Step::RemoveSubtree {
                 parent,
                 index,
@@ -214,7 +233,14 @@ impl Step {
                 *old_index,
                 *new_parent,
                 *new_index,
-            ),
+            )
+            .map(|_| ()),
+            Step::MoveNodesInto { dest, items } => {
+                steps::move_nodes_into::apply_forward(batched, dest, items).map(|_| ())
+            }
+            Step::MoveNodesBack { dest, items } => {
+                steps::move_nodes_into::apply_backward(batched, dest, items)
+            }
             Step::SplitNode { block, offset } => {
                 steps::split_node::apply_to(batched, *block, *offset)
             }
@@ -299,6 +325,14 @@ impl Step {
             } => {
                 steps::move_node::inverse(*block, *old_parent, *old_index, *new_parent, *new_index)
             }
+            Step::MoveNodesInto { dest, items } => Step::MoveNodesBack {
+                dest: dest.clone(),
+                items: items.clone(),
+            },
+            Step::MoveNodesBack { dest, items } => Step::MoveNodesInto {
+                dest: dest.clone(),
+                items: items.clone(),
+            },
             Step::SplitNode { block, offset } => steps::split_node::inverse(*block, *offset),
             Step::MergeNode { block, offset } => steps::merge_node::inverse(*block, *offset),
             Step::SetNode {

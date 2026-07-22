@@ -6,6 +6,7 @@ mod ffi;
 mod geometry;
 mod history;
 mod movement;
+pub mod order_interval_tree;
 mod str;
 mod style;
 mod sum_tree;

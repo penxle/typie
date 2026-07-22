@@ -760,6 +760,13 @@ pub fn normalize_window_forest_with_stats(
             Vec::new()
         };
         if !child_hoist.is_empty() {
+            let husk_emptied =
+                matches!(&root.children[i], RawChild::Block(b) if first_real_dot_node(b).is_none());
+            if husk_emptied {
+                root.children.splice(i..i + 1, child_hoist);
+                residue = content_residue_index(&root);
+                continue;
+            }
             root.children.splice(i + 1..i + 1, child_hoist);
             residue = content_residue_index(&root);
         }
@@ -769,6 +776,66 @@ pub fn normalize_window_forest_with_stats(
         ctx.stats.projection_degraded = true;
     }
     root.children
+}
+
+pub fn normalize_window_forest_for(
+    container_id: Dot,
+    container_type: NodeType,
+    ancestors: &[NodeType],
+    children: Vec<RawChild>,
+    stats: &mut RepairStats,
+) -> (Vec<RawChild>, Vec<RawChild>) {
+    let mut root = RawNode {
+        id: container_id,
+        node_type: container_type,
+        attrs: Vec::new(),
+        children,
+    };
+    let mut ctx = RepairCtx::new(stats, effective_repair_budget());
+    let mut path = ancestors.to_vec();
+    path.push(container_type);
+    let mut hoisted: Vec<RawChild> = Vec::new();
+    let mut residue = content_residue_index(&root);
+    let mut i = 0;
+    while i < root.children.len() {
+        if ctx.capped {
+            break;
+        }
+        if is_misfit_at(&root, i, &path, residue) {
+            match wrap_plan(&root, i, &path, &ctx) {
+                Some(chain) => {
+                    wrap_child(&mut root, i, &chain, &path, &mut ctx);
+                    residue = content_residue_index(&root);
+                    continue;
+                }
+                None => {
+                    hoisted = split_out(&mut root, i, &path, &mut ctx);
+                    break;
+                }
+            }
+        }
+        let child_hoist = if let RawChild::Block(b) = &mut root.children[i] {
+            normalize_node(b, &mut path, &mut ctx)
+        } else {
+            Vec::new()
+        };
+        if !child_hoist.is_empty() {
+            let husk_emptied =
+                matches!(&root.children[i], RawChild::Block(b) if first_real_dot_node(b).is_none());
+            if husk_emptied {
+                root.children.splice(i..i + 1, child_hoist);
+                residue = content_residue_index(&root);
+                continue;
+            }
+            root.children.splice(i + 1..i + 1, child_hoist);
+            residue = content_residue_index(&root);
+        }
+        i += 1;
+    }
+    if ctx.capped {
+        ctx.stats.projection_degraded = true;
+    }
+    (root.children, hoisted)
 }
 
 /// Normalize a single block's subtree in place under the given ancestor types,
@@ -876,6 +943,13 @@ fn process_children(
             RawChild::Leaf { .. } => Vec::new(),
         };
         if !child_hoist.is_empty() {
+            let husk_emptied =
+                matches!(&node.children[i], RawChild::Block(b) if first_real_dot_node(b).is_none());
+            if husk_emptied {
+                node.children.splice(i..i + 1, child_hoist);
+                residue = content_residue_index(node);
+                continue;
+            }
             node.children.splice(i + 1..i + 1, child_hoist);
             residue = content_residue_index(node);
         }
@@ -2293,6 +2367,72 @@ mod tests {
             &p.children[0],
             crate::seq::Child::Leaf { id, item: super::super::SeqItem::Unknown { tag: 999, .. } } if *id == unknown
         ));
+    }
+
+    #[test]
+    fn normalize_window_forest_for_root_equivalent_normal_paragraphs() {
+        let children = vec![
+            raw_block_child(1, NodeType::Paragraph, vec![raw_char(2, 'a')]),
+            raw_block_child(3, NodeType::Paragraph, vec![raw_char(4, 'b')]),
+        ];
+        let mut stats_root = RepairStats::default();
+        let forest_root = normalize_window_forest_with_stats(children.clone(), &mut stats_root);
+        let mut stats_container = RepairStats::default();
+        let (forest_container, hoisted) = normalize_window_forest_for(
+            Dot::ROOT,
+            NodeType::Root,
+            &[],
+            children,
+            &mut stats_container,
+        );
+        assert_eq!(forest_root, forest_container);
+        assert!(hoisted.is_empty());
+        assert_eq!(stats_root, stats_container);
+    }
+
+    #[test]
+    fn normalize_window_forest_for_root_equivalent_bare_list_item() {
+        let children = vec![raw_block_child(
+            1,
+            NodeType::ListItem,
+            vec![raw_block_child(2, NodeType::Paragraph, vec![])],
+        )];
+        let mut stats_root = RepairStats::default();
+        let forest_root = normalize_window_forest_with_stats(children.clone(), &mut stats_root);
+        let mut stats_container = RepairStats::default();
+        let (forest_container, hoisted) = normalize_window_forest_for(
+            Dot::ROOT,
+            NodeType::Root,
+            &[],
+            children,
+            &mut stats_container,
+        );
+        assert_eq!(forest_root, forest_container);
+        assert!(hoisted.is_empty());
+        assert_eq!(stats_root, stats_container);
+    }
+
+    #[test]
+    fn normalize_window_forest_for_container_terminal_split_hoists_and_forest_truncates() {
+        let container_id = Dot::new(1, 2);
+        let first_para = Dot::new(1, 3);
+        let second_para = Dot::new(1, 5);
+        let children = vec![
+            raw_block_child(3, NodeType::Paragraph, vec![raw_char(4, 'a')]),
+            raw_block_child(5, NodeType::Paragraph, vec![raw_char(6, 'b')]),
+        ];
+        let mut stats = RepairStats::default();
+        let (forest, hoisted) = normalize_window_forest_for(
+            container_id,
+            NodeType::ListItem,
+            &[NodeType::Root, NodeType::BulletList],
+            children,
+            &mut stats,
+        );
+        assert_eq!(forest.len(), 1);
+        assert!(matches!(&forest[0], RawChild::Block(b) if b.id == first_para));
+        assert_eq!(hoisted.len(), 1);
+        assert!(matches!(&hoisted[0], RawChild::Block(b) if b.id == second_para));
     }
 
     mod proptests {

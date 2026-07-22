@@ -10,6 +10,9 @@
 //! producer ever emits the shape, the corresponding test fails instead of
 //! the selection being silently misclassified.
 
+mod lift_differential;
+mod lift_golden;
+
 use editor_macros::state;
 use editor_state::{Position, Selection};
 

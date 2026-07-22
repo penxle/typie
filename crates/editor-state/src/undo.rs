@@ -28,12 +28,14 @@ pub struct TransientState {
     pub selection: Option<StableSelection>,
 }
 
+#[derive(Debug, PartialEq)]
 pub struct SpanRun {
     pub start: Anchor,
     pub end: Anchor,
     pub modifier: Modifier,
 }
 
+#[derive(Debug, PartialEq)]
 pub enum PriorValue {
     BlockModifier(Option<Modifier>),
     NodeAttr(NodeAttr),
@@ -44,6 +46,7 @@ pub enum PriorValue {
     },
 }
 
+#[derive(Debug, PartialEq)]
 pub struct RecordedOp {
     pub op: Op<EditOp>,
     pub prior: Option<PriorValue>,
@@ -1982,6 +1985,108 @@ mod tests {
         assert!(capture_prior(&state, &payload).is_none());
         let ro = record_op(&mut state, payload);
         assert!(invert(&state, &ro).is_empty());
+    }
+
+    fn para_dot(state: &ProjectedState) -> Dot {
+        state
+            .view()
+            .root()
+            .unwrap()
+            .child_blocks()
+            .next()
+            .unwrap()
+            .dot()
+            .unwrap()
+    }
+
+    #[test]
+    fn seq_ins_capture_prior_is_defer_safe_and_matches_flushed() {
+        let mut state = ProjectedState::empty();
+        state.begin_defer();
+        state.apply_deferred(seq_char(1, 'a')).unwrap();
+        let payload = seq_char(2, 'b');
+        let prior_mid_defer = capture_prior(&state, &payload);
+        state.end_defer().unwrap();
+        let prior_flushed = capture_prior(&state, &payload);
+        assert_eq!(prior_mid_defer, prior_flushed);
+        assert!(prior_mid_defer.is_none());
+    }
+
+    #[test]
+    fn alias_capture_prior_is_defer_safe_and_matches_flushed() {
+        let mut state = ProjectedState::empty();
+        let a = state.apply(seq_char(1, 'a')).unwrap().id;
+        let b = state.apply(seq_char(2, 'b')).unwrap().id;
+        state.begin_defer();
+        state.apply_deferred(seq_char(3, 'c')).unwrap();
+        let payload = EditOp::Alias(editor_model::AliasOp {
+            pairs: vec![editor_model::AliasRun {
+                old_start: a,
+                len: 1,
+                new_start: b,
+            }],
+        });
+        let prior_mid_defer = capture_prior(&state, &payload);
+        state.end_defer().unwrap();
+        let prior_flushed = capture_prior(&state, &payload);
+        assert_eq!(prior_mid_defer, prior_flushed);
+        assert!(prior_mid_defer.is_none());
+    }
+
+    #[test]
+    fn block_modifier_capture_prior_is_defer_safe_and_matches_flushed() {
+        let mut state = ProjectedState::empty();
+        let para = para_dot(&state);
+        state
+            .apply(EditOp::BlockModifier(ModifierAttrOp::SetModifier {
+                target: para,
+                modifier: Modifier::FontSize { value: 1400 },
+            }))
+            .unwrap();
+        state.begin_defer();
+        state.apply_deferred(seq_char(1, 'x')).unwrap();
+        let payload = EditOp::BlockModifier(ModifierAttrOp::SetModifier {
+            target: para,
+            modifier: Modifier::FontSize { value: 1600 },
+        });
+        let prior_mid_defer = capture_prior(&state, &payload);
+        state.end_defer().unwrap();
+        let prior_flushed = capture_prior(&state, &payload);
+        assert_eq!(prior_mid_defer, prior_flushed);
+        assert_eq!(
+            prior_mid_defer,
+            Some(PriorValue::BlockModifier(Some(Modifier::FontSize {
+                value: 1400
+            })))
+        );
+    }
+
+    #[test]
+    fn node_carry_capture_prior_is_defer_safe_and_matches_flushed() {
+        let mut state = ProjectedState::empty();
+        let para = para_dot(&state);
+        state
+            .apply(EditOp::NodeCarry(ModifierAttrOp::SetModifier {
+                target: para,
+                modifier: Modifier::FontSize { value: 1400 },
+            }))
+            .unwrap();
+        state.begin_defer();
+        state.apply_deferred(seq_char(1, 'x')).unwrap();
+        let payload = EditOp::NodeCarry(ModifierAttrOp::SetModifier {
+            target: para,
+            modifier: Modifier::FontSize { value: 1600 },
+        });
+        let prior_mid_defer = capture_prior(&state, &payload);
+        state.end_defer().unwrap();
+        let prior_flushed = capture_prior(&state, &payload);
+        assert_eq!(prior_mid_defer, prior_flushed);
+        assert_eq!(
+            prior_mid_defer,
+            Some(PriorValue::NodeCarry(Some(Modifier::FontSize {
+                value: 1400
+            })))
+        );
     }
 }
 

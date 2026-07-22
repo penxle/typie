@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
 use editor_crdt::{Changeset, CrdtError, Dot, ListOp, Op};
-use editor_model::EditOp;
+use editor_model::{DocView, EditOp};
 use hashbrown::HashSet;
 
 use crate::Selection;
 use crate::undo::{RecordedOp, capture_prior};
-use crate::{Composition, PendingModifiers, State, StateError};
+use crate::{Composition, PendingModifiers, ProjectedState, State, StateError};
 
 pub struct BatchedState<'a> {
     inner: &'a mut State,
@@ -23,12 +23,21 @@ impl<'a> std::ops::Deref for BatchedState<'a> {
 }
 
 impl<'a> BatchedState<'a> {
+    /// Applies `payload`, deferring its projection when a warm-defer batch is
+    /// active and `payload` is defer-safe. A pending batch flushes first when
+    /// `payload` isn't defer-safe — `capture_prior` (`NodeAttr`/`Span`) and the
+    /// op's own projection both need the tree current, not stale.
     pub fn apply(&mut self, payload: EditOp) -> Result<Op<EditOp>, StateError> {
+        if self.inner.projected.defer_active() && !ProjectedState::is_defer_safe(&payload) {
+            self.inner.projected_mut().flush_deferred()?;
+        }
         // Capture the prior value (for op-level undo) against the pre-op state,
         // then apply. Seq ops carry no prior, so this is a cheap match.
         let prior = capture_prior(&self.inner.projected, &payload);
         let pm = self.inner.projected_mut();
-        let op = if self.defer_deletes && matches!(payload, EditOp::Seq(ListOp::Del { .. })) {
+        let op = if pm.defer_active() && ProjectedState::is_defer_safe(&payload) {
+            pm.apply_deferred(payload)?
+        } else if self.defer_deletes && matches!(payload, EditOp::Seq(ListOp::Del { .. })) {
             self.deferred += 1;
             pm.apply_warm_only(payload)?
         } else {
@@ -45,6 +54,23 @@ impl<'a> BatchedState<'a> {
             prior,
         });
         Ok(op)
+    }
+
+    /// A clean (non-stale) projection: flushes a pending warm-defer batch first.
+    /// The forward-defer and bulk-delete-defer mechanisms only skip projection
+    /// inside [`apply`](Self::apply) — every other reader must go through this (or
+    /// [`view_clean`](Self::view_clean)) instead of `State::projected`/`view()`
+    /// directly, or it risks observing the stale tree.
+    pub fn projected_clean(&mut self) -> Result<&ProjectedState, StateError> {
+        self.inner.projected_mut().flush_deferred()?;
+        Ok(&self.inner.projected)
+    }
+
+    /// [`DocView`] built from a clean (non-stale) projection. See
+    /// [`projected_clean`](Self::projected_clean).
+    pub fn view_clean(&mut self) -> Result<DocView<'_>, StateError> {
+        self.inner.projected_mut().flush_deferred()?;
+        Ok(self.inner.projected.view())
     }
 
     /// Defer the projection of subsequent sequence-delete ops: each applies

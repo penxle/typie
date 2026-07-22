@@ -609,4 +609,145 @@ mod tests {
         let err = transact_err!(state, |tr| lift_list_item(&mut tr));
         assert!(matches!(err, crate::CommandError::Corrupted(_)));
     }
+
+    #[test]
+    fn lift_range_nested_and_separate_list_combined() {
+        // Selection spans a nested list_item (with sublist) and a separate
+        // top-level list in one batch.
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item {
+                            paragraph { text("outer1") }
+                            bullet_list {
+                                list_item {
+                                    p1: paragraph { text("B1") }
+                                    bullet_list { list_item { paragraph { text("b1_sub") } } }
+                                }
+                                list_item { paragraph { text("C1") } }
+                            }
+                        }
+                    }
+                    bullet_list {
+                        list_item { p2: paragraph { text("B2") } }
+                        list_item { paragraph { text("C2") } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0) -> (p2, 1)
+        };
+        let (actual, ..) = transact!(initial, |tr| lift_list_item(&mut tr));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { paragraph { text("outer1") } }
+                        list_item {
+                            p1: paragraph { text("B1") }
+                            bullet_list { list_item { paragraph { text("b1_sub") } } }
+                        }
+                        list_item { paragraph { text("C1") } }
+                    }
+                    p2: paragraph { text("B2") }
+                    bullet_list { list_item { paragraph { text("C2") } } }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0) -> (p2, 1)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn lift_top_level_single_item_undo_redo_roundtrips_to_plain() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { p1: paragraph { text("A") } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        let mut tr = Transaction::new(&initial);
+        assert!(lift_list_item(&mut tr).unwrap());
+        let (after, _steps, recorded, ..) = tr.commit();
+
+        let mut undone = after.clone();
+        let undo_ops = invert_recorded_ops(&mut undone, &recorded);
+        assert_eq!(undone.to_plain(), initial.to_plain());
+
+        invert_recorded_ops(&mut undone, &undo_ops);
+        assert_eq!(undone.to_plain(), after.to_plain());
+    }
+
+    #[test]
+    fn lift_range_nested_and_separate_list_combined_undo_redo_roundtrips_to_plain() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item {
+                            paragraph { text("outer1") }
+                            bullet_list {
+                                list_item {
+                                    p1: paragraph { text("B1") }
+                                    bullet_list { list_item { paragraph { text("b1_sub") } } }
+                                }
+                                list_item { paragraph { text("C1") } }
+                            }
+                        }
+                    }
+                    bullet_list {
+                        list_item { p2: paragraph { text("B2") } }
+                        list_item { paragraph { text("C2") } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0) -> (p2, 1)
+        };
+        let mut tr = Transaction::new(&initial);
+        assert!(lift_list_item(&mut tr).unwrap());
+        let (after, _steps, recorded, ..) = tr.commit();
+
+        let mut undone = after.clone();
+        let undo_ops = invert_recorded_ops(&mut undone, &recorded);
+        assert_eq!(undone.to_plain(), initial.to_plain());
+
+        invert_recorded_ops(&mut undone, &undo_ops);
+        assert_eq!(undone.to_plain(), after.to_plain());
+    }
+
+    /// Applies the op-level (CRDT dot-based, `Undel`-restoring) inverse of
+    /// `ops` to `state`, in reverse order — the same primitive `UndoHistory`
+    /// undo/redo builds on (`editor_state::undo::invert`/`capture_prior`).
+    /// Returns the resulting ops as fresh `RecordedOp`s, so calling this a
+    /// second time on its own output redoes what the first call undid — the
+    /// dot-based counterpart to the `Step`-level `inverse()`/`apply()` round
+    /// trip, which cannot survive a lift's re-minted dots (a moved subtree's
+    /// old dots are tombstoned; a `Step`-level `RemoveSubtree`/`InsertSubtree`
+    /// pair never restores the exact old dot a sibling `MoveNodesBack` step
+    /// still references, since a move tombstones the old dot and mints a
+    /// fresh one).
+    fn invert_recorded_ops(
+        state: &mut editor_state::State,
+        ops: &[editor_state::undo::RecordedOp],
+    ) -> Vec<editor_state::undo::RecordedOp> {
+        use editor_state::undo::{RecordedOp, capture_prior, invert};
+
+        let mut out = Vec::new();
+        for ro in ops.iter().rev() {
+            for payload in invert(&state.projected, ro) {
+                let prior = capture_prior(&state.projected, &payload);
+                let op = state.projected_mut().apply(payload).unwrap();
+                out.push(RecordedOp { op, prior });
+            }
+        }
+        out
+    }
 }

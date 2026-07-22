@@ -81,6 +81,18 @@ pub enum StepError {
         new_type: NodeType,
     },
 
+    #[error("move item {item:?} is duplicated in the batch")]
+    DuplicateMoveItem { item: Dot },
+
+    #[error("move item {ancestor:?} is an ancestor of {descendant:?} in the same batch")]
+    NonAntichainMoveItems { ancestor: Dot, descendant: Dot },
+
+    #[error("move destination {dest:?} lies inside the forest being moved (item {item:?})")]
+    MoveDestinationInsideForest { item: Dot, dest: Dot },
+
+    #[error("a fresh move container root must be a block or atom, found: {node_type:?}")]
+    InvalidMoveContainer { node_type: NodeType },
+
     #[error(transparent)]
     State(#[from] StateError),
 }

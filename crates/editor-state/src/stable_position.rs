@@ -13,6 +13,84 @@ use crate::selection::Selection;
 use crate::stable_selection::StableSelection;
 use crate::state::State;
 
+#[cfg(feature = "resolve-stats")]
+pub mod resolve_stats {
+    use std::cell::Cell;
+    use std::time::Duration;
+
+    #[derive(Clone, Copy, Default)]
+    pub struct SiteStats {
+        pub calls: u64,
+        pub elapsed: Duration,
+        pub fanout_sum: u64,
+        pub fast_calls: u64,
+    }
+
+    thread_local! {
+        pub static SITES: [Cell<SiteStats>; 6] = std::array::from_fn(|_| Cell::new(SiteStats::default()));
+    }
+
+    pub const INLINE_INDEX_OF: usize = 0;
+    pub const IN_HOST_INDEX_OF: usize = 1;
+    pub const CONTAINING_INDEX_OF: usize = 2;
+    pub const NEXT_CHAIN_OFFSET_WITHIN: usize = 3;
+    pub const DEAD_CHILD_OFFSET_WITHIN: usize = 4;
+    pub const ANCESTOR_INDEX: usize = 5;
+
+    pub fn record(site: usize, elapsed: Duration, fanout: u64) {
+        SITES.with(|cells| {
+            let mut s = cells[site].get();
+            s.calls += 1;
+            s.elapsed += elapsed;
+            s.fanout_sum += fanout;
+            cells[site].set(s);
+        });
+    }
+
+    pub fn record_fast(site: usize) {
+        SITES.with(|cells| {
+            let mut s = cells[site].get();
+            s.fast_calls += 1;
+            cells[site].set(s);
+        });
+    }
+
+    pub fn reset() {
+        SITES.with(|cells| {
+            for c in cells.iter() {
+                c.set(SiteStats::default());
+            }
+        });
+    }
+
+    pub fn snapshot() -> [SiteStats; 6] {
+        SITES.with(|cells| std::array::from_fn(|i| cells[i].get()))
+    }
+}
+
+#[cfg(feature = "resolve-stats")]
+fn index_of_instrumented(site: usize, host: &NodeView, dot: Dot) -> Option<usize> {
+    let fanout = host.child_count() as u64;
+    let t = std::time::Instant::now();
+    let r = index_of(host, dot);
+    resolve_stats::record(site, t.elapsed(), fanout);
+    r
+}
+
+#[cfg(feature = "resolve-stats")]
+fn offset_within_instrumented(
+    site: usize,
+    c: &NodeView,
+    target: Dot,
+    ctx: &StableResolveCtx,
+) -> usize {
+    let fanout = c.child_count() as u64;
+    let t = std::time::Instant::now();
+    let r = offset_within(c, target, ctx);
+    resolve_stats::record(site, t.elapsed(), fanout);
+    r
+}
+
 #[ffi]
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
@@ -51,10 +129,7 @@ pub struct StablePosition {
 }
 
 fn child_elem_id(child: &ChildView) -> Dot {
-    match child {
-        ChildView::Leaf(l) => l.dot(),
-        ChildView::Block(b) => b.id(),
-    }
+    child.id()
 }
 
 /// The chain step for `node` at `depth`. Root and authored ancestors keep their
@@ -190,6 +265,15 @@ impl StableResolver<'_> {
     }
 }
 
+impl editor_model::SeqOrder for StableResolver<'_> {
+    fn visible_rank(&self, d: Dot) -> Option<usize> {
+        match self {
+            StableResolver::Owned(r) => editor_model::SeqOrder::visible_rank(&**r, d),
+            StableResolver::Live(c) => editor_model::SeqOrder::visible_rank(*c, d),
+        }
+    }
+}
+
 pub struct StableResolveCtx<'a> {
     view: &'a DocView<'a>,
     resolver: StableResolver<'a>,
@@ -220,8 +304,22 @@ impl<'a> StableResolveCtx<'a> {
     }
 }
 
-fn index_of(host: &NodeView, dot: Dot) -> Option<usize> {
+fn index_of_linear(host: &NodeView, dot: Dot) -> Option<usize> {
     host.children().position(|c| child_elem_id(&c) == dot)
+}
+
+fn index_of(host: &NodeView, dot: Dot) -> Option<usize> {
+    index_of_linear(host, dot)
+}
+
+/// `index_of`'s `O(log K)` counterpart — delegates to `NodeView::slot_of_child`,
+/// which binary-searches `host`'s children by RGA sequence rank (see its
+/// rustdoc for the correctness argument: a rank match alone cannot tell a dead
+/// target from a live neighbor, so the id re-check there is load-bearing).
+/// Falls back to `None` on any mismatch or inconclusive probe so the caller
+/// retries with `index_of_linear`.
+fn index_of_fast(host: &NodeView, dot: Dot, ctx: &StableResolveCtx) -> Option<usize> {
+    host.slot_of_child(dot, &ctx.resolver)
 }
 
 fn direct_child_containing(host: &NodeView, target: Dot, ctx: &StableResolveCtx) -> Option<usize> {
@@ -235,7 +333,20 @@ fn direct_child_containing(host: &NodeView, target: Dot, ctx: &StableResolveCtx)
     while let Some(id) = cursor {
         let parent = ctx.view.parent_of(id)?;
         if parent == host_id {
-            return index_of(host, id);
+            #[cfg(feature = "resolve-stats")]
+            {
+                return match index_of_fast(host, id, ctx) {
+                    Some(v) => {
+                        resolve_stats::record_fast(resolve_stats::CONTAINING_INDEX_OF);
+                        Some(v)
+                    }
+                    None => index_of_instrumented(resolve_stats::CONTAINING_INDEX_OF, host, id),
+                };
+            }
+            #[cfg(not(feature = "resolve-stats"))]
+            {
+                return index_of_fast(host, id, ctx).or_else(|| index_of(host, id));
+            }
         }
         cursor = Some(parent);
     }
@@ -360,7 +471,17 @@ impl StablePosition {
             ctx.view.block_of(dot)
         };
         let host = ctx.view.node(host_dot?)?;
-        let offset = index_of(&host, dot)? + usize::from(bind == Bind::Right);
+        #[cfg(feature = "resolve-stats")]
+        let idx = match index_of_fast(&host, dot, ctx) {
+            Some(v) => {
+                resolve_stats::record_fast(resolve_stats::INLINE_INDEX_OF);
+                Some(v)
+            }
+            None => index_of_instrumented(resolve_stats::INLINE_INDEX_OF, &host, dot),
+        };
+        #[cfg(not(feature = "resolve-stats"))]
+        let idx = index_of_fast(&host, dot, ctx).or_else(|| index_of(&host, dot));
+        let offset = idx? + usize::from(bind == Bind::Right);
         Some(Position {
             node: host.id(),
             offset,
@@ -399,19 +520,64 @@ impl StablePosition {
         next_child: Option<Dot>,
     ) -> Position {
         let offset = if let Some(next_child) = next_child {
-            offset_within(&host, next_child, ctx)
+            #[cfg(feature = "resolve-stats")]
+            {
+                offset_within_instrumented(
+                    resolve_stats::NEXT_CHAIN_OFFSET_WITHIN,
+                    &host,
+                    next_child,
+                    ctx,
+                )
+            }
+            #[cfg(not(feature = "resolve-stats"))]
+            {
+                offset_within(&host, next_child, ctx)
+            }
         } else {
             match &self.child {
                 None => 0,
                 Some(StablePositionChild { dot, bind }) => {
                     let aliased = ctx.alias(*dot);
-                    match index_of(&host, aliased).or_else(|| {
+                    #[cfg(feature = "resolve-stats")]
+                    let found = match index_of_fast(&host, aliased, ctx) {
+                        Some(v) => {
+                            resolve_stats::record_fast(resolve_stats::IN_HOST_INDEX_OF);
+                            Some(v)
+                        }
+                        None => {
+                            index_of_instrumented(resolve_stats::IN_HOST_INDEX_OF, &host, aliased)
+                        }
+                    }
+                    .or_else(|| {
                         (!resolves_via_child_parent(&host, aliased, ctx))
                             .then(|| direct_child_containing(&host, aliased, ctx))
                             .flatten()
-                    }) {
+                    });
+                    #[cfg(not(feature = "resolve-stats"))]
+                    let found = index_of_fast(&host, aliased, ctx)
+                        .or_else(|| index_of(&host, aliased))
+                        .or_else(|| {
+                            (!resolves_via_child_parent(&host, aliased, ctx))
+                                .then(|| direct_child_containing(&host, aliased, ctx))
+                                .flatten()
+                        });
+                    match found {
                         Some(j) => j + usize::from(*bind == Bind::Right),
-                        None => offset_within(&host, aliased, ctx),
+                        None => {
+                            #[cfg(feature = "resolve-stats")]
+                            {
+                                offset_within_instrumented(
+                                    resolve_stats::DEAD_CHILD_OFFSET_WITHIN,
+                                    &host,
+                                    aliased,
+                                    ctx,
+                                )
+                            }
+                            #[cfg(not(feature = "resolve-stats"))]
+                            {
+                                offset_within(&host, aliased, ctx)
+                            }
+                        }
                     }
                 }
             }
@@ -1653,6 +1819,103 @@ mod tests {
         (State::from_changesets(css, None).unwrap(), cell, a)
     }
 
+    /// Root children `[Paragraph; before] ++ [synthetic Table wrapping a bare
+    /// TableCell] ++ [Paragraph; after]` — real Root-level paragraphs flanking a
+    /// single synthesized scaffold, so the scaffold sits leading (`before == 0`),
+    /// trailing (`after == 0`), or between two real siblings. Returns the state
+    /// and the real paragraphs' own dots in Root order.
+    fn root_around_wrapped_cell(before: usize, after: usize) -> (State, Vec<Dot>) {
+        use editor_crdt::{Changeset, Op};
+        use editor_model::EditOp;
+
+        fn push_para(
+            ops: &mut Vec<Op<EditOp>>,
+            pos: &mut usize,
+            prev: &mut Option<Dot>,
+            clock: &mut u64,
+            paras: &mut Vec<Dot>,
+        ) {
+            let id = Dot::new(1, *clock);
+            *clock += 1;
+            ops.push(Op {
+                id,
+                parents: (*prev).into_iter().collect(),
+                payload: EditOp::Seq(ListOp::Ins {
+                    pos: *pos,
+                    item: SeqItem::Block {
+                        node_type: NodeType::Paragraph,
+                        parents: vec![Dot::ROOT],
+                        attrs: vec![],
+                    },
+                }),
+            });
+            *pos += 1;
+            *prev = Some(id);
+            paras.push(id);
+        }
+
+        let mut ops: Vec<Op<EditOp>> = Vec::new();
+        let mut pos = 0usize;
+        let mut prev: Option<Dot> = None;
+        let mut clock = 1u64;
+        let mut paras = Vec::new();
+        for _ in 0..before {
+            push_para(&mut ops, &mut pos, &mut prev, &mut clock, &mut paras);
+        }
+        let cell = Dot::new(1, clock);
+        clock += 1;
+        ops.push(Op {
+            id: cell,
+            parents: prev.into_iter().collect(),
+            payload: EditOp::Seq(ListOp::Ins {
+                pos,
+                item: SeqItem::Block {
+                    node_type: NodeType::TableCell,
+                    parents: vec![Dot::ROOT],
+                    attrs: vec![],
+                },
+            }),
+        });
+        pos += 1;
+        let cell_char = Dot::new(1, clock);
+        clock += 1;
+        ops.push(Op {
+            id: cell_char,
+            parents: vec![cell],
+            payload: EditOp::Seq(ListOp::Ins {
+                pos,
+                item: SeqItem::Char('z'),
+            }),
+        });
+        pos += 1;
+        prev = Some(cell_char);
+        for _ in 0..after {
+            push_para(&mut ops, &mut pos, &mut prev, &mut clock, &mut paras);
+        }
+        let css = vec![Changeset { ops }];
+        (State::from_changesets(css, None).unwrap(), paras)
+    }
+
+    fn assert_root_children_are(view: &DocView, expected_real: &[Dot], synthetic_at: &[usize]) {
+        let root = view.root().unwrap();
+        let children: Vec<ChildView> = root.children().collect();
+        assert_eq!(
+            children.len(),
+            expected_real.len() + synthetic_at.len(),
+            "unexpected Root child count"
+        );
+        let mut real_iter = expected_real.iter();
+        for (i, c) in children.iter().enumerate() {
+            let id = child_elem_id(c);
+            if synthetic_at.contains(&i) {
+                assert!(id.is_synthetic(), "slot {i} expected synthetic, got {id:?}");
+            } else {
+                let want = real_iter.next().expect("expected_real exhausted");
+                assert_eq!(id, *want, "slot {i} real child mismatch");
+            }
+        }
+    }
+
     #[test]
     fn capture_stores_synthetic_scaffolds_by_the_real_content_they_own() {
         let (state, _cell, a) = bare_table_cell_state();
@@ -1837,5 +2100,343 @@ mod tests {
                 }
             }
         }
+    }
+
+    // ── Step 1: index_of characterization (synthetic placement, tombstone,
+    // non-child) — fixed ahead of the fast path so both `index_of_linear` and
+    // `index_of_fast` are checked against the same decisions.
+
+    #[test]
+    fn index_of_finds_targets_after_a_leading_synthetic_scaffold() {
+        let (state, paras) = root_around_wrapped_cell(0, 2);
+        let view = state.view();
+        assert_root_children_are(&view, &paras, &[0]);
+        let root = view.root().unwrap();
+        assert_eq!(index_of_linear(&root, paras[0]), Some(1));
+        assert_eq!(index_of_linear(&root, paras[1]), Some(2));
+        let ctx = StableResolveCtx::from_live(&view, state.projected.seq_checkout());
+        assert_eq!(index_of_fast(&root, paras[0], &ctx), Some(1));
+        assert_eq!(index_of_fast(&root, paras[1], &ctx), Some(2));
+    }
+
+    #[test]
+    fn index_of_finds_targets_before_a_trailing_synthetic_scaffold() {
+        let (state, paras) = root_around_wrapped_cell(2, 0);
+        let view = state.view();
+        assert_root_children_are(&view, &paras, &[2, 3]);
+        let root = view.root().unwrap();
+        assert_eq!(index_of_linear(&root, paras[0]), Some(0));
+        assert_eq!(index_of_linear(&root, paras[1]), Some(1));
+        let ctx = StableResolveCtx::from_live(&view, state.projected.seq_checkout());
+        assert_eq!(index_of_fast(&root, paras[0], &ctx), Some(0));
+        assert_eq!(index_of_fast(&root, paras[1], &ctx), Some(1));
+    }
+
+    #[test]
+    fn index_of_finds_targets_flanking_a_between_synthetic_scaffold() {
+        let (state, paras) = root_around_wrapped_cell(1, 1);
+        let view = state.view();
+        assert_root_children_are(&view, &paras, &[1]);
+        let root = view.root().unwrap();
+        assert_eq!(index_of_linear(&root, paras[0]), Some(0));
+        assert_eq!(index_of_linear(&root, paras[1]), Some(2));
+        let ctx = StableResolveCtx::from_live(&view, state.projected.seq_checkout());
+        assert_eq!(index_of_fast(&root, paras[0], &ctx), Some(0));
+        assert_eq!(index_of_fast(&root, paras[1], &ctx), Some(2));
+    }
+
+    #[test]
+    fn index_of_fast_falls_back_on_tombstone_position_collision() {
+        let (_pre, post, post_logs, para) = pre_post_delete_b();
+        let post_view = DocView::new(&post);
+        let ctx = StableResolveCtx::new(&post_view, &post_logs.seq);
+        let host = post_view.node(para).unwrap();
+        let b = Dot::new(1, 3);
+        let c = Dot::new(1, 4);
+        assert_eq!(
+            ctx.resolver.position(b),
+            ctx.resolver.position(c),
+            "tombstone b and live c must resolve to the same rank — the precondition \
+             the id-recheck guard exists for"
+        );
+        assert_eq!(index_of_linear(&host, b), None);
+        assert_eq!(index_of_fast(&host, b, &ctx), None);
+    }
+
+    #[test]
+    fn index_of_is_none_for_a_dot_from_another_container() {
+        let (pd, logs) = root_two_paras();
+        let view = DocView::new(&pd);
+        let ctx = StableResolveCtx::new(&view, &logs.seq);
+        let root = view.root().unwrap();
+        let para0 = root.child_at(0).unwrap();
+        let ChildView::Block(para0) = para0 else {
+            panic!("root's first child is a block")
+        };
+        let other_para_char = Dot::new(1, 4); // lives under the second paragraph
+        assert_eq!(index_of_linear(&para0, other_para_char), None);
+        assert_eq!(index_of_fast(&para0, other_para_char, &ctx), None);
+    }
+
+    // ── Step 3: differential proptest + named fast-hit assertion ───────────────
+
+    fn all_block_nodes<'a>(view: &'a DocView<'a>) -> Vec<NodeView<'a>> {
+        let mut out = Vec::new();
+        if let Some(root) = view.root() {
+            let mut stack = vec![root];
+            while let Some(n) = stack.pop() {
+                out.push(n);
+                stack.extend(n.child_blocks());
+            }
+        }
+        out
+    }
+
+    /// For every block container in `state`'s projection, checks `index_of_fast`
+    /// against `index_of_linear` on every live child dot plus a sample of dots
+    /// drawn from the whole oplog (tombstones and dots belonging to other
+    /// containers) — over both the `Live` resolver (a projected state's
+    /// already-materialized checkout) and the `Owned` resolver (a fresh
+    /// `checkout_with_resolver` rebuild), since `index_of_fast` now delegates to
+    /// `NodeView::slot_of_child` for either path. A `Some` from `index_of_fast`
+    /// must agree with `index_of_linear`; `live_hits`/`owned_hits`/`fallbacks`
+    /// tally which happened per path, so the caller can assert the fast path
+    /// actually fired on each (not vacuously all fallback on one path).
+    fn check_index_of_fast_matches_linear(
+        state: &crate::projected_state::ProjectedState,
+        live_hits: &mut usize,
+        owned_hits: &mut usize,
+        fallbacks: &mut usize,
+    ) {
+        let view = state.view();
+        let live = StableResolveCtx::from_live(&view, state.seq_checkout());
+        let owned = StableResolveCtx::new(&view, state.seq());
+        // Only `Ins`-derived dots are ever sequence elements; the checked rank
+        // path returns `None` for a `Del`/`Undel` op's own dot, so the filter
+        // keeps the differential sample on dots both paths can rank.
+        let all_dots: Vec<Dot> = state
+            .seq()
+            .entries
+            .iter()
+            .filter(|e| matches!(e.op, ListOp::Ins { .. }))
+            .map(|e| e.dot)
+            .collect();
+        let stride = (all_dots.len() / 8).max(1);
+        for host in all_block_nodes(&view) {
+            let mut targets: Vec<Dot> = host.children().map(|c| child_elem_id(&c)).collect();
+            targets.extend(all_dots.iter().step_by(stride).copied());
+            for (ctx, hits) in [(&live, &mut *live_hits), (&owned, &mut *owned_hits)] {
+                for &dot in &targets {
+                    let linear = index_of_linear(&host, dot);
+                    match index_of_fast(&host, dot, ctx) {
+                        Some(fast) => {
+                            assert_eq!(
+                                Some(fast),
+                                linear,
+                                "index_of_fast/index_of_linear diverge: host {:?} dot {:?}",
+                                host.id(),
+                                dot
+                            );
+                            *hits += 1;
+                        }
+                        None => *fallbacks += 1,
+                    }
+                }
+            }
+        }
+    }
+
+    proptest::proptest! {
+        #![proptest_config(proptest::prelude::ProptestConfig {
+            cases: std::env::var("PROPTEST_CASES")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(64),
+            ..proptest::prelude::ProptestConfig::default()
+        })]
+        #[test]
+        fn index_of_fast_matches_linear(
+            suffix in proptest::collection::vec(proptest::prelude::any::<crate::corpus::CorpusStep>(), 0..24),
+        ) {
+            let mut steps = crate::corpus::mandatory_prefix();
+            steps.extend(suffix);
+            let mut live_hits = 0usize;
+            let mut owned_hits = 0usize;
+            let mut fallbacks = 0usize;
+            crate::corpus::run_corpus(&steps, &mut |a, b, _spans| {
+                check_index_of_fast_matches_linear(a, &mut live_hits, &mut owned_hits, &mut fallbacks);
+                check_index_of_fast_matches_linear(b, &mut live_hits, &mut owned_hits, &mut fallbacks);
+            });
+            let _ = fallbacks;
+            proptest::prop_assert!(
+                live_hits > 0,
+                "the fast path must actually hit at least once on the Live resolver across the run"
+            );
+            proptest::prop_assert!(
+                owned_hits > 0,
+                "the fast path must actually hit at least once on the Owned resolver across the run"
+            );
+        }
+    }
+
+    // ── Step 5/6: DocView order plumbing — differential + totality oracles ────
+
+    fn check_ordered_view_matches_unordered(
+        state: &crate::ProjectedState,
+        leaf_fast_hits: &mut usize,
+        index_fast_hits: &mut usize,
+    ) {
+        use editor_model::SeqOrder;
+        let ordered = state.view();
+        let unordered = editor_model::DocView::new(state.projected());
+        let order: &dyn SeqOrder = state.seq_checkout();
+        let all_dots: Vec<Dot> = state
+            .seq()
+            .entries
+            .iter()
+            .filter(|e| matches!(e.op, ListOp::Ins { .. }))
+            .map(|e| e.dot)
+            .collect();
+        for dot in &all_dots {
+            let a = ordered
+                .leaf(*dot)
+                .map(|l| (l.dot(), l.parent().map(|p| p.id())));
+            let b = unordered
+                .leaf(*dot)
+                .map(|l| (l.dot(), l.parent().map(|p| p.id())));
+            assert_eq!(a, b, "ordered/unordered leaf() diverge on {dot:?}");
+            if a.is_some()
+                && let Some(host) = ordered.block_of(*dot).and_then(|h| ordered.node(h))
+                && host.slot_of_child(*dot, order).is_some()
+            {
+                *leaf_fast_hits += 1;
+            }
+        }
+        for host in all_block_nodes(&ordered) {
+            for c in host.children() {
+                if let ChildView::Block(b) = c {
+                    let a = b.index();
+                    let lin = unordered.node(b.id()).and_then(|n| n.index());
+                    assert_eq!(a, lin, "ordered/unordered index() diverge on {:?}", b.id());
+                    if host.slot_of_child(b.id(), order).is_some() {
+                        *index_fast_hits += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    proptest::proptest! {
+        #![proptest_config(proptest::prelude::ProptestConfig {
+            cases: std::env::var("PROPTEST_CASES")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(64),
+            ..proptest::prelude::ProptestConfig::default()
+        })]
+        #[test]
+        fn ordered_view_matches_unordered(
+            suffix in proptest::collection::vec(proptest::prelude::any::<crate::corpus::CorpusStep>(), 0..24),
+        ) {
+            let mut steps = crate::corpus::mandatory_prefix();
+            steps.extend(suffix);
+            let mut leaf_fast_hits = 0usize;
+            let mut index_fast_hits = 0usize;
+            crate::corpus::run_corpus(&steps, &mut |a, b, _spans| {
+                check_ordered_view_matches_unordered(a, &mut leaf_fast_hits, &mut index_fast_hits);
+                check_ordered_view_matches_unordered(b, &mut leaf_fast_hits, &mut index_fast_hits);
+            });
+            proptest::prop_assert!(leaf_fast_hits > 0, "the leaf fast path must hit at least once");
+            proptest::prop_assert!(index_fast_hits > 0, "the index fast path must hit at least once");
+        }
+    }
+
+    /// Builds a `ProjectedState` exercising four of the five `visible_rank` dot
+    /// classes: a visible `Ins`, a tombstoned `Ins`, a `Del` op dot, and an
+    /// `Undel` op dot (the fifth, an unknown dot, needs no fixture support).
+    /// Two disjoint deletes followed by an undelete of only the first keeps a
+    /// genuine tombstone (`f`/`g`) alongside a restored run (`b`/`c`), unlike
+    /// `tombstone_cluster_anchors` (which has no `Undel`).
+    fn five_dot_classes_fixture() -> crate::ProjectedState {
+        use editor_model::EditOp;
+        let mut s = crate::ProjectedState::empty();
+        for (i, c) in "abcdefgh".chars().enumerate() {
+            s.apply(EditOp::Seq(ListOp::Ins {
+                pos: 1 + i,
+                item: SeqItem::Char(c),
+            }))
+            .unwrap();
+        }
+        let del1 = s
+            .apply(EditOp::Seq(ListOp::Del { pos: 2, len: 2 }))
+            .unwrap()
+            .id;
+        s.apply(EditOp::Seq(ListOp::Del { pos: 4, len: 2 }))
+            .unwrap();
+        s.apply(EditOp::Seq(ListOp::Undel { del: del1 })).unwrap();
+        s
+    }
+
+    #[test]
+    fn visible_rank_is_total_over_all_dot_classes() {
+        use editor_model::SeqOrder;
+        let ps = five_dot_classes_fixture();
+        let live = ps.seq_checkout();
+        let (_e, owned) = editor_crdt::sequence::checkout_with_resolver(ps.seq());
+        let mut visible_ins = None;
+        let mut tombstone_ins = None;
+        let mut del_op = None;
+        let mut undel_op = None;
+        for e in ps.seq().entries.iter() {
+            match &e.op {
+                ListOp::Ins { .. } => {
+                    match live.resolve_boundary(e.dot, Bias::Before) {
+                        Some(b) if b.visible => visible_ins.get_or_insert(e.dot),
+                        Some(_) => tombstone_ins.get_or_insert(e.dot),
+                        None => continue,
+                    };
+                }
+                ListOp::Del { .. } => {
+                    del_op.get_or_insert(e.dot);
+                }
+                ListOp::Undel { .. } => {
+                    undel_op.get_or_insert(e.dot);
+                }
+            }
+        }
+        let visible_ins = visible_ins.expect("fixture has a visible element");
+        let tombstone_ins = tombstone_ins.expect("fixture has a tombstone element");
+        let del_op = del_op.expect("fixture has a Del op");
+        let undel_op = undel_op.expect("fixture has an Undel op");
+        for order in [live as &dyn SeqOrder, &owned as &dyn SeqOrder] {
+            assert!(order.visible_rank(visible_ins).is_some());
+            assert!(order.visible_rank(tombstone_ins).is_some());
+            assert_eq!(order.visible_rank(del_op), None);
+            assert_eq!(order.visible_rank(undel_op), None);
+            assert_eq!(order.visible_rank(Dot::new(999, 999)), None);
+        }
+    }
+
+    #[test]
+    fn index_of_fast_hits_on_plain_children() {
+        let items = [
+            (Dot::new(1, 1), block(NodeType::Paragraph, vec![Dot::ROOT])),
+            (Dot::new(1, 2), SeqItem::Char('a')),
+            (Dot::new(1, 3), SeqItem::Char('b')),
+            (Dot::new(1, 4), SeqItem::Char('c')),
+            (Dot::new(1, 5), SeqItem::Char('d')),
+            (Dot::new(1, 6), SeqItem::Char('e')),
+        ];
+        let logs = doclogs(&ins_only(&items));
+        let pd = project_document(&logs).unwrap();
+        let view = DocView::new(&pd);
+        let ctx = StableResolveCtx::new(&view, &logs.seq);
+        let host = view.node(items[0].0).unwrap();
+        let middle = items[3].0; // 'c', slot 2 of 5
+        assert_eq!(
+            index_of_fast(&host, middle, &ctx),
+            Some(2),
+            "a plain middle child must hit the fast path directly, not fall back"
+        );
     }
 }

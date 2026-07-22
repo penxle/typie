@@ -4,11 +4,15 @@ use editor_crdt::Dot;
 use editor_model::{DocView, Modifier, ModifierType, NodeAttr, NodeType, PlainNode, Subtree};
 use editor_state::Selection;
 use editor_state::undo::RecordedOp;
-use editor_state::{BatchedState, Composition, PendingModifiers, State};
+use editor_state::{
+    BatchedState, Composition, PendingModifiers, ProjectedState, State, StateError,
+};
 use strum::IntoEnumIterator;
 
+use crate::steps::move_node::MovedNode;
+use crate::steps::move_nodes_into::MoveDest;
 use crate::steps::support;
-use crate::{Effect, Step, StepEffect, StepError, StepRecord, TransactionMeta};
+use crate::{Effect, Step, StepEffect, StepError, StepRecord, TransactionMeta, steps};
 
 pub struct Transaction {
     state: State,
@@ -63,6 +67,22 @@ impl Transaction {
 
     pub fn view(&self) -> DocView<'_> {
         self.state.view()
+    }
+
+    /// A clean (non-stale) projection: flushes a pending warm-defer batch first.
+    /// `view`/`state` cannot do this themselves (`&self`, not `&mut self`) — a
+    /// batch-closure caller that needs to read the projection mid-batch must go
+    /// through this (or [`view_clean`](Self::view_clean)) instead.
+    pub fn projected_clean(&mut self) -> Result<&ProjectedState, StateError> {
+        self.state.projected_mut().flush_deferred()?;
+        Ok(&self.state.projected)
+    }
+
+    /// [`DocView`] built from a clean (non-stale) projection. See
+    /// [`projected_clean`](Self::projected_clean).
+    pub fn view_clean(&mut self) -> Result<DocView<'_>, StateError> {
+        self.state.projected_mut().flush_deferred()?;
+        Ok(self.state.view())
     }
 
     pub fn selection(&self) -> Option<Selection> {
@@ -128,6 +148,36 @@ impl Transaction {
         Ok(())
     }
 
+    /// Like [`apply_step`](Self::apply_step), for a step whose `apply_to`
+    /// produces a value the caller needs (the moved/inserted dot identity):
+    /// `run` performs the mutation directly — given the constructed `step`, so
+    /// it can read back its own recorded payload — instead of going through
+    /// `Step::apply_to_with_effect`'s uniform `Result<(), StepError>`
+    /// dispatch. Updates the same three sinks exactly once, in the same order.
+    fn apply_step_with<T>(
+        &mut self,
+        step: Step,
+        run: impl FnOnce(&mut BatchedState, &Step) -> Result<T, StepError>,
+    ) -> Result<T, StepError> {
+        let mut final_step = step.clone();
+        let mut out: Option<T> = None;
+        let recorded = self
+            .state
+            .batch_with_recorded_mut::<_, StepError>(|batched| {
+                let before = batched.emitted_len();
+                out = Some(run(batched, &step)?);
+                final_step = finalize_step(&step, batched, before);
+                Ok(())
+            })?;
+        self.recorded.extend(recorded);
+        self.step_records.push(StepRecord {
+            step: final_step.clone(),
+            effect: StepEffect,
+        });
+        self.steps.push(final_step);
+        Ok(out.expect("run populates `out` on every Ok return"))
+    }
+
     pub fn savepoint(&self) -> Savepoint {
         Savepoint {
             state: self.state.clone(),
@@ -179,17 +229,28 @@ impl Transaction {
         Ok(())
     }
 
+    /// Inserts `subtree` and returns the dot of its root — see
+    /// `steps::insert_subtree::apply_to` for the `None` case (a top-level
+    /// `Text` subtree).
     pub fn insert_subtree(
         &mut self,
         parent: Dot,
         index: usize,
         subtree: Subtree,
-    ) -> Result<(), StepError> {
-        self.apply_step(Step::InsertSubtree {
-            parent,
-            index,
-            subtree,
-        })
+    ) -> Result<Option<Dot>, StepError> {
+        self.apply_step_with(
+            Step::InsertSubtree {
+                parent,
+                index,
+                subtree,
+            },
+            |batched, step| {
+                let Step::InsertSubtree { subtree, .. } = step else {
+                    unreachable!("insert_subtree always records Step::InsertSubtree")
+                };
+                steps::insert_subtree::apply_to(batched, parent, index, subtree)
+            },
+        )
     }
 
     pub fn reissue_subtree(
@@ -228,12 +289,14 @@ impl Transaction {
     /// Moves a block node or atom leaf to `new_parent` at `new_index`, counted
     /// in the same full child-slot index domain as `insert_subtree` and
     /// `remove_subtree`. Character leaves are handled by text operations.
+    /// Returns the re-published root dot and every old→new dot pairing the
+    /// move produced — see `steps::move_node::MovedNode`.
     pub fn move_node(
         &mut self,
         block: Dot,
         new_parent: Dot,
         new_index: usize,
-    ) -> Result<(), StepError> {
+    ) -> Result<MovedNode, StepError> {
         let (old_parent, old_index) = {
             let ps = &self.state.projected;
             let parent = ps.parent_of(block).ok_or(StepError::NodeNotFound(block))?;
@@ -244,13 +307,129 @@ impl Transaction {
                 .ok_or(StepError::NodeNotFound(block))?;
             (parent, index)
         };
-        self.apply_step(Step::MoveNode {
-            block,
-            old_parent,
-            old_index,
+        self.apply_step_with(
+            Step::MoveNode {
+                block,
+                old_parent,
+                old_index,
+                new_parent,
+                new_index,
+            },
+            |batched, _step| {
+                steps::move_node::apply_to(
+                    batched, block, old_parent, old_index, new_parent, new_index,
+                )
+            },
+        )
+    }
+
+    /// Moves every one of `items` (live dots, pairwise distinct and mutually
+    /// non-ancestral) into consecutive slots `base_index..base_index+items.len()`
+    /// of `new_parent`, as one composite unit — the batch-projection-friendly
+    /// alternative to calling [`move_node`](Self::move_node) `items.len()`
+    /// times in a row (which a warm-defer batch can't support past the first
+    /// call: each `move_node` reads the projected tree, and a prior call's
+    /// still-deferred ops would make that read observe a stale/incomplete
+    /// tree). Rejects (no mutation) when `new_parent` lies inside any item's
+    /// own subtree — a forest can't be moved into one of its own members.
+    pub fn move_nodes_consecutive(
+        &mut self,
+        items: &[Dot],
+        new_parent: Dot,
+        base_index: usize,
+    ) -> Result<Vec<MovedNode>, StepError> {
+        steps::move_nodes_into::validate_items_antichain(&self.state.projected, items)?;
+        steps::move_nodes_into::validate_dest_outside_forest(
+            &self.state.projected,
+            items,
             new_parent,
-            new_index,
-        })
+        )?;
+        if items.is_empty() {
+            return Ok(Vec::new());
+        }
+        let payload = steps::move_nodes_into::capture_items(&self.state.projected, items)?;
+        // A same-parent reposition can't use the fast path's precomputed
+        // position (see `steps::move_node::apply_to`'s doc comment) — fall
+        // back to the single-item step per item instead, still recorded as
+        // ONE composite step.
+        let all_cross_parent = payload.iter().all(|it| it.old_parent != new_parent);
+        let step = Step::MoveNodesInto {
+            dest: MoveDest::Existing {
+                parent: new_parent,
+                base_index,
+            },
+            items: payload,
+        };
+        if all_cross_parent {
+            self.apply_step_with(step, |batched, step| {
+                let Step::MoveNodesInto { dest, items } = step else {
+                    unreachable!("move_nodes_consecutive always records MoveNodesInto")
+                };
+                steps::move_nodes_into::apply_forward(batched, dest, items).map(|(_, moved)| moved)
+            })
+        } else {
+            self.apply_step_with(step, |batched, step| {
+                let Step::MoveNodesInto {
+                    dest,
+                    items: payload,
+                } = step
+                else {
+                    unreachable!("move_nodes_consecutive always records MoveNodesInto")
+                };
+                let MoveDest::Existing { parent, base_index } = dest else {
+                    unreachable!("move_nodes_consecutive always records an Existing dest")
+                };
+                let mut moved = Vec::with_capacity(payload.len());
+                for (i, (&block, it)) in items.iter().zip(payload.iter()).enumerate() {
+                    moved.push(steps::move_node::apply_to(
+                        batched,
+                        block,
+                        it.old_parent,
+                        it.old_index,
+                        *parent,
+                        *base_index + i,
+                    )?);
+                }
+                Ok(moved)
+            })
+        }
+    }
+
+    /// Inserts a brand-new `container` subtree at `(parent, index)` and grafts
+    /// every one of `items` (live dots, pairwise distinct and mutually
+    /// non-ancestral, all outside `parent`'s own forest) beneath it as one
+    /// composite unit — container and moved items share a single clean read,
+    /// a single global delete, and a single connected emission, so no
+    /// intermediate "insert empty container, then move into it" step ever
+    /// observes a stale/partial tree. Returns the container's fresh root dot
+    /// alongside each item's [`MovedNode`].
+    pub fn insert_subtree_with_moved(
+        &mut self,
+        parent: Dot,
+        index: usize,
+        container: Subtree,
+        items: &[Dot],
+    ) -> Result<(Dot, Vec<MovedNode>), StepError> {
+        steps::move_nodes_into::validate_container_shape(&container)?;
+        steps::move_nodes_into::validate_items_antichain(&self.state.projected, items)?;
+        steps::move_nodes_into::validate_dest_outside_forest(&self.state.projected, items, parent)?;
+        let payload = steps::move_nodes_into::capture_items(&self.state.projected, items)?;
+        let step = Step::MoveNodesInto {
+            dest: MoveDest::Fresh {
+                parent,
+                index,
+                container,
+            },
+            items: payload,
+        };
+        let (root, moved) = self.apply_step_with(step, |batched, step| {
+            let Step::MoveNodesInto { dest, items } = step else {
+                unreachable!("insert_subtree_with_moved always records MoveNodesInto")
+            };
+            steps::move_nodes_into::apply_forward(batched, dest, items)
+        })?;
+        let root = root.ok_or(StepError::NodeNotFound(parent))?;
+        Ok((root, moved))
     }
 
     pub fn set_node(&mut self, block: Dot, new_node: PlainNode) -> Result<(), StepError> {
@@ -449,6 +628,35 @@ impl Transaction {
         }
     }
 
+    /// Runs `f` inside a warm-defer batch: every defer-safe op `f` applies
+    /// accumulates instead of projecting immediately, and the batch flushes to a
+    /// single projection pass when `f` returns. `f`'s own error wins over a flush
+    /// failure — the batch still ends the defer (best-effort) before propagating
+    /// it, so a caller inspecting `self` afterward never sees a stale projection.
+    pub fn batched_projection<T, E>(
+        &mut self,
+        f: impl FnOnce(&mut Self) -> Result<T, E>,
+    ) -> Result<T, E>
+    where
+        E: From<StepError>,
+    {
+        self.state.projected_mut().begin_defer();
+        match f(self) {
+            Ok(value) => {
+                self.state
+                    .projected_mut()
+                    .end_defer()
+                    .map_err(StateError::from)
+                    .map_err(StepError::from)?;
+                Ok(value)
+            }
+            Err(e) => {
+                let _ = self.state.projected_mut().end_defer();
+                Err(e)
+            }
+        }
+    }
+
     pub fn apply_steps(&mut self, steps: Vec<Step>) -> Result<Vec<StepRecord>, StepError> {
         let mut finals: Vec<Step> = Vec::with_capacity(steps.len());
         let recorded = self
@@ -475,6 +683,29 @@ impl Transaction {
         Ok(records)
     }
 
+    /// Like [`apply_steps`](Self::apply_steps), but pauses any active
+    /// forward-defer batch around the run (same guard as
+    /// [`apply_steps_bulk_delete`](Self::apply_steps_bulk_delete)): each step
+    /// applies against a clean, un-deferred projection instead of the batch
+    /// accumulating across steps with no flush between them.
+    pub fn apply_steps_flushed(&mut self, steps: Vec<Step>) -> Result<Vec<StepRecord>, StepError> {
+        if steps.is_empty() {
+            return Ok(Vec::new());
+        }
+        let resume_defer = self.state.projected.defer_active();
+        if resume_defer {
+            self.state
+                .projected_mut()
+                .end_defer()
+                .map_err(StateError::from)?;
+        }
+        let records = self.apply_steps(steps)?;
+        if resume_defer {
+            self.state.projected_mut().begin_defer();
+        }
+        Ok(records)
+    }
+
     /// Like [`apply_steps`](Self::apply_steps), for a run of steps that lower purely
     /// to sequence deletions (`RemoveText` / `RemoveSubtree`). Their ops apply
     /// warm-only, leaving the projection stale across the run — safe because every
@@ -483,12 +714,26 @@ impl Transaction {
     /// the end, instead of one window reprojection per step (the `O(steps · window)`
     /// cost of deleting many blocks). A step that emits a non-delete op flushes the
     /// deferral before that op projects, so misuse degrades to `apply_steps` cost.
+    ///
+    /// A forward-defer batch straddling this call is paused (flushed and
+    /// deactivated) before the run and resumed after —
+    /// [`ProjectedState::reproject_after_delete`] assumes every op since the last
+    /// projection was a deletion, which a deferred `Ins`/`Alias` in the batch would
+    /// violate. An early `?` return leaves the batch un-resumed; accepted, since
+    /// that path discards the transaction without a commit.
     pub fn apply_steps_bulk_delete(
         &mut self,
         steps: Vec<Step>,
     ) -> Result<Vec<StepRecord>, StepError> {
         if steps.is_empty() {
             return Ok(Vec::new());
+        }
+        let resume_defer = self.state.projected.defer_active();
+        if resume_defer {
+            self.state
+                .projected_mut()
+                .end_defer()
+                .map_err(StateError::from)?;
         }
         let mut deferred = 0usize;
         let mut finals: Vec<Step> = Vec::with_capacity(steps.len());
@@ -509,6 +754,9 @@ impl Transaction {
                 .projected_mut()
                 .reproject_after_delete()
                 .map_err(editor_state::StateError::from)?;
+        }
+        if resume_defer {
+            self.state.projected_mut().begin_defer();
         }
         self.recorded.extend(recorded);
         let records: Vec<StepRecord> = finals
@@ -858,6 +1106,119 @@ mod tests {
         });
         assert!(result.is_err());
         assert_eq!(block_text(tr.state(), &p1), "hello");
+    }
+
+    #[test]
+    fn batch_around_failing_batched_projection_restores_defer_inactive() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
+        };
+        let mut tr = Transaction::new(&state);
+        assert!(!tr.state().projected.defer_active());
+
+        let result = tr.batch::<_, StepError>(|tr| {
+            tr.batched_projection::<(), StepError>(|tr| {
+                tr.add_modifier(p1, Modifier::Bold)?;
+                assert!(tr.state().projected.defer_active());
+                Err(StepError::NodeNotFound(Dot::new(99, 99)))
+            })
+        });
+
+        assert!(result.is_err());
+        assert!(
+            !tr.state().projected.defer_active(),
+            "the outer batch's rollback restores the pre-batch (non-deferring) state"
+        );
+        assert!(
+            tr.state()
+                .projected
+                .block_modifiers()
+                .modifiers_of(p1)
+                .get(&ModifierType::Bold)
+                .is_none(),
+            "the rolled-back batch's op never survives"
+        );
+    }
+
+    #[test]
+    fn batched_projection_around_failing_inner_batch_still_flushes_surviving_ops() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
+        };
+        let mut tr = Transaction::new(&state);
+
+        let result = tr.batched_projection::<(), StepError>(|tr| {
+            tr.add_modifier(p1, Modifier::Bold)?;
+            assert_eq!(tr.state().projected.deferred_ops(), 1);
+
+            let inner = tr.batch::<_, StepError>(|tr| {
+                tr.add_modifier(p1, Modifier::Italic)?;
+                Err(StepError::NodeNotFound(Dot::new(99, 99)))
+            });
+            assert!(inner.is_err());
+            assert!(
+                tr.state().projected.defer_active(),
+                "the inner batch's rollback restores the savepoint's active defer"
+            );
+            assert_eq!(
+                tr.state().projected.deferred_ops(),
+                1,
+                "the inner rollback restores deferred_ops to its savepoint value — the \
+                 surviving Bold op is not lost, and the rolled-back Italic op does not linger"
+            );
+            Ok(())
+        });
+
+        assert!(result.is_ok());
+        assert!(
+            !tr.state().projected.defer_active(),
+            "the outer batched_projection's end_defer ran on the successful path"
+        );
+        assert_eq!(
+            tr.state().projected.deferred_ops(),
+            0,
+            "the outer end_defer flushed the surviving deferred op"
+        );
+        let modifiers = tr.state().projected.block_modifiers().modifiers_of(p1);
+        assert_eq!(modifiers.get(&ModifierType::Bold), Some(&Modifier::Bold));
+        assert!(modifiers.get(&ModifierType::Italic).is_none());
+    }
+
+    #[test]
+    fn apply_steps_flushed_handles_multiple_inserts_under_active_defer() {
+        let (state, root, p1) = state! {
+            doc { root: root { p1: paragraph { text("hi") } } }
+            selection: (p1, 0)
+        };
+        let mut tr = Transaction::new(&state);
+
+        let result = tr.batched_projection::<_, StepError>(|tr| {
+            assert!(tr.state().projected.defer_active());
+            let step_a = Step::InsertSubtree {
+                parent: root,
+                index: 1,
+                subtree: Subtree::leaf(NodeType::Paragraph.into_node().to_plain()),
+            };
+            let step_b = Step::InsertSubtree {
+                parent: root,
+                index: 2,
+                subtree: Subtree::leaf(NodeType::Paragraph.into_node().to_plain()),
+            };
+            tr.apply_steps_flushed(vec![step_a, step_b])?;
+            assert!(
+                tr.state().projected.defer_active(),
+                "resumes the paused outer batch"
+            );
+            Ok(())
+        });
+
+        assert!(result.is_ok());
+        let view = tr.view();
+        let children: Vec<_> = view.node(root).unwrap().child_blocks().collect();
+        assert_eq!(children.len(), 3, "both inserts land, in order, past p1");
+        assert_eq!(children[0].id(), p1);
     }
 
     #[test]
@@ -1427,5 +1788,368 @@ mod tests {
         ));
         assert_eq!(block_text(tr.state(), &p1), "ab");
         assert_eq!(alias_ops_in(&tr.ops_for_test()).len(), 1);
+    }
+
+    /// Dot-irrelevant tree shape: (depth, node type, inline text) per block,
+    /// preorder. Used by the composite-move round-trip tests, where every
+    /// replay re-mints fresh dots and only the resulting shape is comparable.
+    fn shape(state: &State) -> Vec<(usize, NodeType, String)> {
+        fn walk(
+            nv: &editor_model::NodeView,
+            depth: usize,
+            out: &mut Vec<(usize, NodeType, String)>,
+        ) {
+            out.push((depth, nv.node_type(), nv.inline_text()));
+            for b in nv.child_blocks() {
+                walk(&b, depth + 1, out);
+            }
+        }
+        let view = state.view();
+        let mut out = Vec::new();
+        if let Some(root) = view.root() {
+            walk(&root, 0, &mut out);
+        }
+        out
+    }
+
+    #[test]
+    fn move_node_fast_path_defers_every_op_under_a_batch() {
+        let (state, root, bq, p1) = state! {
+            doc { root: root {
+                bq: blockquote { p1: paragraph { text("ab") } }
+                paragraph { text("") }
+            } }
+            selection: (p1, 0)
+        };
+        let _ = bq;
+        let passes_before = state.projected.projection_passes();
+        let mut tr = Transaction::new(&state);
+        let moved = tr
+            .batched_projection::<_, StepError>(|tr| {
+                let moved = tr.move_node(p1, root, 1)?;
+                assert!(
+                    tr.state().projected.deferred_ops() > 0,
+                    "the fast path defers its ops instead of flushing mid-move"
+                );
+                Ok(moved)
+            })
+            .unwrap();
+        assert!(!tr.state().projected.defer_active());
+        assert_eq!(tr.state().projected.deferred_ops(), 0);
+        assert_eq!(
+            tr.state().projected.projection_passes(),
+            passes_before + 1,
+            "exactly one flush for the whole batch"
+        );
+        assert_ne!(moved.root, p1, "re-published under a fresh dot");
+    }
+
+    #[test]
+    fn insert_subtree_nested_emission_runs_flush_free_under_defer() {
+        let (state, root) = state! {
+            doc { root: root { paragraph { text("z") } } }
+            selection: (root, 0)
+        };
+        let nested =
+            Subtree::leaf(NodeType::Blockquote.into_node().to_plain()).with_children(vec![
+                Subtree::leaf(NodeType::Paragraph.into_node().to_plain()),
+            ]);
+        let passes_before = state.projected.projection_passes();
+        let mut tr = Transaction::new(&state);
+        let root_dot = tr
+            .batched_projection::<_, StepError>(|tr| {
+                let dot = tr.insert_subtree(root, 0, nested)?;
+                assert!(
+                    tr.state().projected.deferred_ops() > 0,
+                    "the recursive emission defers every op instead of re-reading mid-walk"
+                );
+                Ok(dot)
+            })
+            .unwrap();
+        assert_eq!(tr.state().projected.projection_passes(), passes_before + 1);
+        assert!(root_dot.is_some());
+    }
+
+    fn blockquote_move_fixture() -> (State, Dot, Dot, Dot, Dot, Dot) {
+        let (state, src, a, b, dst, z) = state! {
+            doc { root {
+                src: blockquote { a: paragraph { text("a") } b: paragraph { text("b") } }
+                dst: blockquote { z: paragraph { text("z") } }
+            } }
+            selection: (a, 0)
+        };
+        (state, src, dst, a, b, z)
+    }
+
+    #[test]
+    fn move_nodes_consecutive_moves_items_in_order_after_existing_child() {
+        let (state, src, dst, a, b, _z) = blockquote_move_fixture();
+        let mut tr = Transaction::new(&state);
+        let step_records_before = tr.step_records_len();
+        let moved = tr.move_nodes_consecutive(&[a, b], dst, 1).unwrap();
+        assert_eq!(moved.len(), 2);
+        assert_ne!(moved[0].root, a);
+        assert_ne!(moved[1].root, b);
+        assert!(tr.doc_changed());
+        let records = tr.step_records_since(step_records_before);
+        assert_eq!(
+            records.len(),
+            1,
+            "one StepRecord for the whole composite move"
+        );
+        assert!(matches!(&records[0].step, Step::MoveNodesInto { .. }));
+        assert!(!tr.ops_for_test().is_empty());
+
+        let children = tr.state().projected.child_elem_dots(dst);
+        assert_eq!(children.len(), 3);
+        assert_eq!(block_text(tr.state(), &children[0]), "z");
+        assert_eq!(block_text(tr.state(), &children[1]), "a");
+        assert_eq!(block_text(tr.state(), &children[2]), "b");
+        // `src` is now empty of real content — same auto-repair caveat as
+        // `insert_subtree_with_moved_grafts_items_under_a_fresh_container`.
+        assert!(
+            tr.state()
+                .projected
+                .child_elem_dots(src)
+                .iter()
+                .all(|d| d.is_synthetic()),
+            "src has no real content left"
+        );
+    }
+
+    #[test]
+    fn move_nodes_consecutive_runs_flush_free_under_defer() {
+        let (state, _src, dst, a, b, _z) = blockquote_move_fixture();
+        let passes_before = state.projected.projection_passes();
+        let mut tr = Transaction::new(&state);
+        let moved = tr
+            .batched_projection::<_, StepError>(|tr| {
+                let moved = tr.move_nodes_consecutive(&[a, b], dst, 1)?;
+                assert!(
+                    tr.state().projected.deferred_ops() > 0,
+                    "the composite fast path defers every item's ops in one batch"
+                );
+                Ok(moved)
+            })
+            .unwrap();
+        assert_eq!(moved.len(), 2);
+        assert_eq!(tr.state().projected.projection_passes(), passes_before + 1);
+    }
+
+    #[test]
+    fn move_nodes_consecutive_rejects_duplicate_items() {
+        let (state, _src, dst, a, _b, _z) = blockquote_move_fixture();
+        let mut tr = Transaction::new(&state);
+        let before = Arc::clone(&tr.state().projected);
+        let err = tr.move_nodes_consecutive(&[a, a], dst, 0).unwrap_err();
+        assert!(matches!(err, StepError::DuplicateMoveItem { item } if item == a));
+        assert!(
+            Arc::ptr_eq(&before, &tr.state().projected),
+            "no mutation on a rejected precondition"
+        );
+    }
+
+    #[test]
+    fn move_nodes_consecutive_rejects_ancestor_descendant_pair() {
+        let (state, src, dst, a, _b, _z) = blockquote_move_fixture();
+        let mut tr = Transaction::new(&state);
+        let err = tr.move_nodes_consecutive(&[src, a], dst, 0).unwrap_err();
+        assert!(matches!(
+            err,
+            StepError::NonAntichainMoveItems { ancestor, descendant } if ancestor == src && descendant == a
+        ));
+    }
+
+    #[test]
+    fn move_nodes_consecutive_rejects_destination_inside_forest() {
+        let (state, _src, _dst, a, b, _z) = blockquote_move_fixture();
+        let mut tr = Transaction::new(&state);
+        // `a` is itself one of the moved items — moving `[a, b]` into `a` would
+        // move the forest into one of its own members.
+        let err = tr.move_nodes_consecutive(&[a, b], a, 0).unwrap_err();
+        assert!(matches!(err, StepError::MoveDestinationInsideForest { .. }));
+    }
+
+    fn blockquote_fresh_container_fixture() -> (State, Dot, Dot, Dot, Dot) {
+        let (state, src, a, b, tail) = state! {
+            doc { root {
+                src: blockquote { a: paragraph { text("a") } b: paragraph { text("b") } }
+                tail: paragraph { text("z") }
+            } }
+            selection: (a, 0)
+        };
+        (state, src, a, b, tail)
+    }
+
+    #[test]
+    fn insert_subtree_with_moved_grafts_items_under_a_fresh_container() {
+        let (state, src, a, b, _tail) = blockquote_fresh_container_fixture();
+        let root = state.view().root().unwrap().id();
+        let container = Subtree::leaf(NodeType::Blockquote.into_node().to_plain());
+
+        let mut tr = Transaction::new(&state);
+        let step_records_before = tr.step_records_len();
+        let (new_container, moved) = tr
+            .insert_subtree_with_moved(root, 1, container, &[a, b])
+            .unwrap();
+        assert_eq!(moved.len(), 2);
+        assert!(tr.doc_changed());
+        let records = tr.step_records_since(step_records_before);
+        assert_eq!(records.len(), 1);
+        assert!(matches!(&records[0].step, Step::MoveNodesInto { .. }));
+
+        let children = tr.state().projected.child_elem_dots(new_container);
+        assert_eq!(children.len(), 2);
+        assert_eq!(block_text(tr.state(), &children[0]), "a");
+        assert_eq!(block_text(tr.state(), &children[1]), "b");
+        // `src` is now empty of real content — Blockquote's own `Paragraph+`
+        // schema auto-repairs the resulting gap with a synthetic scaffold
+        // child (unrelated to this composite move), so assert on realness
+        // rather than an exact count.
+        assert!(
+            tr.state()
+                .projected
+                .child_elem_dots(src)
+                .iter()
+                .all(|d| d.is_synthetic()),
+            "src has no real content left"
+        );
+    }
+
+    #[test]
+    fn insert_subtree_with_moved_runs_flush_free_under_defer() {
+        let (state, _src, a, b, _tail) = blockquote_fresh_container_fixture();
+        let root = state.view().root().unwrap().id();
+        let container = Subtree::leaf(NodeType::Blockquote.into_node().to_plain());
+        let passes_before = state.projected.projection_passes();
+
+        let mut tr = Transaction::new(&state);
+        let (new_container, moved) = tr
+            .batched_projection::<_, StepError>(|tr| {
+                let out = tr.insert_subtree_with_moved(root, 1, container, &[a, b])?;
+                assert!(tr.state().projected.deferred_ops() > 0);
+                Ok(out)
+            })
+            .unwrap();
+        assert_eq!(moved.len(), 2);
+        assert!(tr.state().projected.is_block(new_container));
+        assert_eq!(tr.state().projected.projection_passes(), passes_before + 1);
+    }
+
+    #[test]
+    fn insert_subtree_with_moved_rejects_non_block_container() {
+        let (state, _src, a, b, _tail) = blockquote_fresh_container_fixture();
+        let root = state.view().root().unwrap().id();
+        let container = Subtree::leaf(PlainNode::Text(editor_model::PlainTextNode {
+            text: "x".into(),
+        }));
+
+        let mut tr = Transaction::new(&state);
+        let err = tr
+            .insert_subtree_with_moved(root, 1, container, &[a, b])
+            .unwrap_err();
+        assert!(matches!(err, StepError::InvalidMoveContainer { .. }));
+    }
+
+    #[test]
+    fn move_nodes_into_existing_dest_forward_replay_and_back_round_trip() {
+        let (state, _src, dst, a, b, _z) = blockquote_move_fixture();
+        let mut tr = Transaction::new(&state);
+        tr.move_nodes_consecutive(&[a, b], dst, 1).unwrap();
+        let (after, records, ..) = tr.commit();
+        let forward_shape = shape(&after);
+
+        let into_step = records
+            .iter()
+            .find_map(|r| match &r.step {
+                s @ Step::MoveNodesInto { .. } => Some(s.clone()),
+                _ => None,
+            })
+            .expect("composite move records exactly one MoveNodesInto");
+
+        let replayed = into_step.apply(&state).unwrap().state;
+        assert_eq!(
+            shape(&replayed),
+            forward_shape,
+            "forward replay reproduces the shape"
+        );
+
+        let back_step = into_step.inverse();
+        assert!(matches!(back_step, Step::MoveNodesBack { .. }));
+        let undone = back_step.apply(&replayed).unwrap().state;
+        assert_eq!(
+            shape(&undone),
+            shape(&state),
+            "back restores the original shape"
+        );
+
+        // `back_step.inverse()` is structurally `into_step` again (asserted
+        // below) — applying it to the SAME pristine baseline `state` must
+        // behave identically to the original forward apply. Chaining through
+        // `undone` instead is not meaningful here: a move always tombstones
+        // its source dots and mints fresh ones at the destination (the same
+        // established alias-pairing mechanism `move_node` itself uses), so
+        // `into_step`'s captured items reference dots `undone` no longer has
+        // live — replaying against `undone` isn't a scenario this composite
+        // step (or a plain `MoveNode`, for the same reason) is designed for.
+        let reforwarded = back_step.inverse().apply(&state).unwrap().state;
+        assert_eq!(
+            shape(&reforwarded),
+            forward_shape,
+            "back.inverse() reproduces the same forward shape from the original baseline"
+        );
+
+        assert_eq!(
+            back_step.inverse().inverse(),
+            back_step,
+            "inverse() is involutive"
+        );
+    }
+
+    #[test]
+    fn move_nodes_into_fresh_dest_forward_replay_and_back_round_trip() {
+        let (state, _src, a, b, _tail) = blockquote_fresh_container_fixture();
+        let root = state.view().root().unwrap().id();
+        let container = Subtree::leaf(NodeType::Blockquote.into_node().to_plain());
+
+        let mut tr = Transaction::new(&state);
+        tr.insert_subtree_with_moved(root, 1, container, &[a, b])
+            .unwrap();
+        let (after, records, ..) = tr.commit();
+        let forward_shape = shape(&after);
+
+        let into_step = records
+            .iter()
+            .find_map(|r| match &r.step {
+                s @ Step::MoveNodesInto { .. } => Some(s.clone()),
+                _ => None,
+            })
+            .expect("composite move records exactly one MoveNodesInto");
+
+        let replayed = into_step.apply(&state).unwrap().state;
+        assert_eq!(
+            shape(&replayed),
+            forward_shape,
+            "forward replay reproduces the shape"
+        );
+
+        let back_step = into_step.inverse();
+        let undone = back_step.apply(&replayed).unwrap().state;
+        assert_eq!(
+            shape(&undone),
+            shape(&state),
+            "back restores the original shape"
+        );
+
+        // See the sibling existing-dest test for why this replays against the
+        // pristine `state` rather than chaining through `undone`.
+        let reforwarded = back_step.inverse().apply(&state).unwrap().state;
+        assert_eq!(shape(&reforwarded), forward_shape);
+
+        assert_eq!(
+            into_step.inverse().inverse(),
+            into_step,
+            "inverse() is involutive"
+        );
     }
 }

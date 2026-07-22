@@ -131,46 +131,35 @@ mod tests {
     #[test]
     fn fulfill_skips_unknown_children_and_remaps_insertion_index() {
         use editor_crdt::Dot;
-        use editor_model::{BlockNode, BlockTree, Child, ChildList, DocView, ProjectedDoc};
+        use editor_model::{BlockTree, DocView, ProjectedDoc, RawChild, RawNode, RawTree};
 
         let fold_id = Dot::new(1, 0);
         let unknown_id = Dot::new(1, 1);
         let title_id = Dot::new(1, 2);
 
-        let mut nodes = FastMap::new();
-        nodes.insert(
-            fold_id,
-            BlockNode {
-                id: fold_id,
-                node_type: NodeType::Fold,
-                attrs: vec![],
-                children: ChildList::from(vec![Child::Block(unknown_id), Child::Block(title_id)]),
-            },
-        );
-        nodes.insert(
-            unknown_id,
-            BlockNode {
-                id: unknown_id,
-                node_type: NodeType::Unknown,
-                attrs: vec![],
-                children: ChildList::new(),
-            },
-        );
-        nodes.insert(
-            title_id,
-            BlockNode {
-                id: title_id,
-                node_type: NodeType::FoldTitle,
-                attrs: vec![],
-                children: ChildList::new(),
-            },
-        );
+        let fold = RawNode {
+            id: fold_id,
+            node_type: NodeType::Fold,
+            attrs: vec![],
+            children: vec![
+                RawChild::Block(RawNode {
+                    id: unknown_id,
+                    node_type: NodeType::Unknown,
+                    attrs: vec![],
+                    children: vec![],
+                }),
+                RawChild::Block(RawNode {
+                    id: title_id,
+                    node_type: NodeType::FoldTitle,
+                    attrs: vec![],
+                    children: vec![],
+                }),
+            ],
+        };
+        let tree = BlockTree::from_raw(&RawTree { roots: vec![fold] });
 
         let doc = ProjectedDoc {
-            tree: BlockTree {
-                nodes,
-                root: fold_id,
-            },
+            tree,
             block_effective: FastMap::new(),
             seg_index: editor_model::BlockSegs::default(),
             block_modifiers: FastMap::new(),
@@ -203,45 +192,35 @@ mod tests {
     #[test]
     fn fulfill_remaps_insertion_index_via_real_indices_hit_before_unknown() {
         use editor_crdt::Dot;
-        use editor_model::{BlockNode, BlockTree, Child, ChildList, DocView, ProjectedDoc};
+        use editor_model::{BlockTree, DocView, ProjectedDoc, RawChild, RawNode, RawTree};
 
         let fold_id = Dot::new(1, 0);
         let content_id = Dot::new(1, 1);
         let unknown_id = Dot::new(1, 2);
 
-        let mut nodes = FastMap::new();
-        nodes.insert(
-            fold_id,
-            BlockNode {
-                id: fold_id,
-                node_type: NodeType::Fold,
-                attrs: vec![],
-                children: ChildList::from(vec![Child::Block(content_id), Child::Block(unknown_id)]),
-            },
-        );
-        nodes.insert(
-            content_id,
-            BlockNode {
-                id: content_id,
-                node_type: NodeType::FoldContent,
-                attrs: vec![],
-                children: ChildList::new(),
-            },
-        );
-        nodes.insert(
-            unknown_id,
-            BlockNode {
-                id: unknown_id,
-                node_type: NodeType::Unknown,
-                attrs: vec![],
-                children: ChildList::new(),
-            },
-        );
+        let fold = RawNode {
+            id: fold_id,
+            node_type: NodeType::Fold,
+            attrs: vec![],
+            children: vec![
+                RawChild::Block(RawNode {
+                    id: content_id,
+                    node_type: NodeType::FoldContent,
+                    attrs: vec![],
+                    children: vec![],
+                }),
+                RawChild::Block(RawNode {
+                    id: unknown_id,
+                    node_type: NodeType::Unknown,
+                    attrs: vec![],
+                    children: vec![],
+                }),
+            ],
+        };
+        let tree = BlockTree::from_raw(&RawTree { roots: vec![fold] });
+
         let doc = ProjectedDoc {
-            tree: BlockTree {
-                nodes,
-                root: fold_id,
-            },
+            tree,
             block_effective: FastMap::new(),
             seg_index: editor_model::BlockSegs::default(),
             block_modifiers: FastMap::new(),
@@ -276,45 +255,35 @@ mod tests {
     #[test]
     fn fulfill_remaps_insertion_index_when_real_and_filtered_indices_diverge() {
         use editor_crdt::Dot;
-        use editor_model::{BlockNode, BlockTree, Child, ChildList, DocView, ProjectedDoc};
+        use editor_model::{BlockTree, DocView, ProjectedDoc, RawChild, RawNode, RawTree};
 
         let fold_id = Dot::new(1, 0);
         let unknown_id = Dot::new(1, 1);
         let content_id = Dot::new(1, 2);
 
-        let mut nodes = FastMap::new();
-        nodes.insert(
-            fold_id,
-            BlockNode {
-                id: fold_id,
-                node_type: NodeType::Fold,
-                attrs: vec![],
-                children: ChildList::from(vec![Child::Block(unknown_id), Child::Block(content_id)]),
-            },
-        );
-        nodes.insert(
-            unknown_id,
-            BlockNode {
-                id: unknown_id,
-                node_type: NodeType::Unknown,
-                attrs: vec![],
-                children: ChildList::new(),
-            },
-        );
-        nodes.insert(
-            content_id,
-            BlockNode {
-                id: content_id,
-                node_type: NodeType::FoldContent,
-                attrs: vec![],
-                children: ChildList::new(),
-            },
-        );
+        let fold = RawNode {
+            id: fold_id,
+            node_type: NodeType::Fold,
+            attrs: vec![],
+            children: vec![
+                RawChild::Block(RawNode {
+                    id: unknown_id,
+                    node_type: NodeType::Unknown,
+                    attrs: vec![],
+                    children: vec![],
+                }),
+                RawChild::Block(RawNode {
+                    id: content_id,
+                    node_type: NodeType::FoldContent,
+                    attrs: vec![],
+                    children: vec![],
+                }),
+            ],
+        };
+        let tree = BlockTree::from_raw(&RawTree { roots: vec![fold] });
+
         let doc = ProjectedDoc {
-            tree: BlockTree {
-                nodes,
-                root: fold_id,
-            },
+            tree,
             block_effective: FastMap::new(),
             seg_index: editor_model::BlockSegs::default(),
             block_modifiers: FastMap::new(),
