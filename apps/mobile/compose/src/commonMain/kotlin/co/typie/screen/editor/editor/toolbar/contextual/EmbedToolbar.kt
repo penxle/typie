@@ -1,21 +1,14 @@
 package co.typie.screen.editor.editor.toolbar.contextual
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -48,13 +41,13 @@ import co.typie.ui.component.TextField
 import co.typie.ui.component.dialog.Dialog
 import co.typie.ui.component.dialog.DialogActionButton
 import co.typie.ui.component.dialog.DialogActionDivider
+import co.typie.ui.component.dialog.DialogLayout
 import co.typie.ui.component.dialog.DialogResult
 import co.typie.ui.component.dialog.DialogScope
 import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.dialog.dismiss
 import co.typie.ui.component.dialog.resolve
 import co.typie.ui.component.toast.LocalToast
-import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -180,37 +173,38 @@ private fun EmbedUrlDialog() {
     }
   }
 
-  Column(
-    modifier =
-      Modifier.widthIn(max = 340.dp)
-        .clip(AppShapes.rounded(AppShapes.lg))
-        .background(AppTheme.colors.surfaceDefault)
-  ) {
-    Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 20.dp)) {
-      Text("임베드 삽입", style = AppTheme.typography.title)
-      Spacer(Modifier.height(16.dp))
-      TextField(
-        value = url,
-        onValueChange = { url = it },
-        label = "URL",
-        placeholder = "https://...",
-        labelPosition = LabelPosition.None,
-        autoFocus = true,
-        keyboardType = KeyboardType.Uri,
-        imeAction = ImeAction.Done,
-        onImeAction = ::submit,
-        modifier = Modifier.fillMaxWidth(),
+  DialogLayout(
+    header = {
+      Text(
+        "임베드 삽입",
+        modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 24.dp),
+        style = AppTheme.typography.title,
       )
-    }
-
-    Box(Modifier.fillMaxWidth().height(1.dp).background(AppTheme.colors.borderHairline))
-
-    Row(Modifier.fillMaxWidth()) {
+    },
+    body = {
+      Column(
+        Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 20.dp)
+      ) {
+        TextField(
+          value = url,
+          onValueChange = { url = it },
+          label = "URL",
+          placeholder = "https://...",
+          labelPosition = LabelPosition.None,
+          autoFocus = true,
+          keyboardType = KeyboardType.Uri,
+          imeAction = ImeAction.Done,
+          onImeAction = ::submit,
+          modifier = Modifier.fillMaxWidth(),
+        )
+      }
+    },
+    actions = {
       DialogActionButton(text = "취소") { dismiss() }
       DialogActionDivider()
       DialogActionButton(text = "삽입") { submit() }
-    }
-  }
+    },
+  )
 }
 
 private fun normalizedEmbedUrl(input: String): String {

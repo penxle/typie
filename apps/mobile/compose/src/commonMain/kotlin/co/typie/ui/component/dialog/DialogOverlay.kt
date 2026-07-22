@@ -4,8 +4,12 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.add
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -21,7 +25,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import co.typie.ext.clickable
-import co.typie.ext.imePadding
+import co.typie.ext.ime
+import co.typie.ext.safeDrawing
 import co.typie.navigation.PlatformBackHandler
 import co.typie.ui.theme.AppTheme
 
@@ -31,6 +36,8 @@ fun DialogOverlay(state: Dialog) {
   val density = LocalDensity.current
   val focusManager = LocalFocusManager.current
   val offsetPx = with(density) { 20.dp.toPx() }
+  val dialogViewportInsets =
+    WindowInsets.safeDrawing.union(WindowInsets.ime.add(WindowInsets(bottom = DialogImeGap)))
 
   var pendingResult by remember(entry) { mutableStateOf<DialogResult<Any?>?>(null) }
   var visible by remember(entry) { mutableStateOf(false) }
@@ -90,7 +97,7 @@ fun DialogOverlay(state: Dialog) {
         )
     )
 
-    Box(Modifier.fillMaxSize().imePadding()) {
+    Box(Modifier.fillMaxSize().windowInsetsPadding(dialogViewportInsets)) {
       Box(
         modifier =
           Modifier.align(Alignment.Center)
@@ -108,3 +115,5 @@ fun DialogOverlay(state: Dialog) {
     }
   }
 }
+
+private val DialogImeGap = 16.dp

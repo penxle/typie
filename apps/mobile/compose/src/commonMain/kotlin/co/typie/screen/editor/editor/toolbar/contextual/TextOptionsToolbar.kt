@@ -16,12 +16,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
@@ -81,12 +79,12 @@ import co.typie.ui.component.Text
 import co.typie.ui.component.TextField
 import co.typie.ui.component.dialog.DialogActionButton
 import co.typie.ui.component.dialog.DialogActionDivider
+import co.typie.ui.component.dialog.DialogLayout
 import co.typie.ui.component.dialog.DialogResult
 import co.typie.ui.component.dialog.DialogScope
 import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.dialog.dismiss
 import co.typie.ui.component.dialog.resolve
-import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlin.math.roundToInt
 
@@ -509,43 +507,44 @@ private fun FontSizeInputDialog(initialValue: Int) {
     parsedValue?.let { resolve(it) }
   }
 
-  Column(
-    modifier =
-      Modifier.widthIn(max = 340.dp)
-        .clip(AppShapes.rounded(AppShapes.lg))
-        .background(AppTheme.colors.surfaceDefault)
-  ) {
-    Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 20.dp)) {
-      Text("폰트 크기", style = AppTheme.typography.title)
-      Spacer(Modifier.height(16.dp))
-      TextField(
-        value = value,
-        onValueChange = { value = it },
-        label = "크기",
-        labelPosition = LabelPosition.None,
-        autoFocus = true,
-        placeholder =
-          "${formatToolbarPointValue(EditorValues.minFontSize)}-" +
-            formatToolbarPointValue(EditorValues.maxFontSize),
-        keyboardType = KeyboardType.Decimal,
-        imeAction = ImeAction.Done,
-        onImeAction = ::submit,
-        error = if (hasError) "1-200 사이 숫자를 입력하세요" else null,
-        suffix = {
-          Text("pt", style = AppTheme.typography.caption, color = AppTheme.colors.textMuted)
-        },
-        modifier = Modifier.fillMaxWidth(),
+  DialogLayout(
+    header = {
+      Text(
+        "폰트 크기",
+        modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 24.dp),
+        style = AppTheme.typography.title,
       )
-    }
-
-    Box(Modifier.fillMaxWidth().height(1.dp).background(AppTheme.colors.borderHairline))
-
-    Row(Modifier.fillMaxWidth()) {
+    },
+    body = {
+      Column(
+        Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 20.dp)
+      ) {
+        TextField(
+          value = value,
+          onValueChange = { value = it },
+          label = "크기",
+          labelPosition = LabelPosition.None,
+          autoFocus = true,
+          placeholder =
+            "${formatToolbarPointValue(EditorValues.minFontSize)}-" +
+              formatToolbarPointValue(EditorValues.maxFontSize),
+          keyboardType = KeyboardType.Decimal,
+          imeAction = ImeAction.Done,
+          onImeAction = ::submit,
+          error = if (hasError) "1-200 사이 숫자를 입력하세요" else null,
+          suffix = {
+            Text("pt", style = AppTheme.typography.caption, color = AppTheme.colors.textMuted)
+          },
+          modifier = Modifier.fillMaxWidth(),
+        )
+      }
+    },
+    actions = {
       DialogActionButton(text = "취소") { dismiss() }
       DialogActionDivider()
       DialogActionButton(text = "확인") { submit() }
-    }
-  }
+    },
+  )
 }
 
 private fun sendSet(sendMessages: (List<Message>) -> Unit, modifier: EditorModifier) {

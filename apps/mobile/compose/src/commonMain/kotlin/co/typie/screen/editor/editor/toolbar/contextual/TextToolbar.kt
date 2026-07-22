@@ -1,15 +1,9 @@
 package co.typie.screen.editor.editor.toolbar.contextual
 
 import androidx.compose.foundation.ScrollState
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -18,7 +12,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -51,12 +44,12 @@ import co.typie.ui.component.TextField
 import co.typie.ui.component.dialog.Dialog
 import co.typie.ui.component.dialog.DialogActionButton
 import co.typie.ui.component.dialog.DialogActionDivider
+import co.typie.ui.component.dialog.DialogLayout
 import co.typie.ui.component.dialog.DialogResult
 import co.typie.ui.component.dialog.DialogScope
 import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.dialog.dismiss
 import co.typie.ui.component.dialog.resolve
-import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 
 @Composable
@@ -342,32 +335,33 @@ private fun LinkInputDialog(existingHref: String?) {
     }
   }
 
-  Column(
-    modifier =
-      Modifier.widthIn(max = 340.dp)
-        .clip(AppShapes.rounded(AppShapes.lg))
-        .background(AppTheme.colors.surfaceDefault)
-  ) {
-    Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 20.dp)) {
-      Text("링크", style = AppTheme.typography.title)
-      Spacer(Modifier.height(16.dp))
-      TextField(
-        value = value,
-        onValueChange = { value = it },
-        label = "URL",
-        labelPosition = LabelPosition.None,
-        autoFocus = true,
-        placeholder = "https://...",
-        keyboardType = KeyboardType.Uri,
-        imeAction = ImeAction.Done,
-        onImeAction = ::submit,
-        modifier = Modifier.fillMaxWidth(),
+  DialogLayout(
+    header = {
+      Text(
+        "링크",
+        modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 24.dp),
+        style = AppTheme.typography.title,
       )
-    }
-
-    Box(Modifier.fillMaxWidth().height(1.dp).background(AppTheme.colors.borderHairline))
-
-    Row(Modifier.fillMaxWidth()) {
+    },
+    body = {
+      Column(
+        Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 20.dp)
+      ) {
+        TextField(
+          value = value,
+          onValueChange = { value = it },
+          label = "URL",
+          labelPosition = LabelPosition.None,
+          autoFocus = true,
+          placeholder = "https://...",
+          keyboardType = KeyboardType.Uri,
+          imeAction = ImeAction.Done,
+          onImeAction = ::submit,
+          modifier = Modifier.fillMaxWidth(),
+        )
+      }
+    },
+    actions = {
       DialogActionButton(text = "취소") { dismiss() }
       if (existingHref != null) {
         DialogActionDivider()
@@ -375,8 +369,8 @@ private fun LinkInputDialog(existingHref: String?) {
       }
       DialogActionDivider()
       DialogActionButton(text = if (existingHref != null) "수정" else "삽입") { submit() }
-    }
-  }
+    },
+  )
 }
 
 @Composable
@@ -390,32 +384,33 @@ private fun RubyInputDialog(existingText: String?) {
     }
   }
 
-  Column(
-    modifier =
-      Modifier.widthIn(max = 340.dp)
-        .clip(AppShapes.rounded(AppShapes.lg))
-        .background(AppTheme.colors.surfaceDefault)
-  ) {
-    Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 20.dp)) {
-      Text("루비", style = AppTheme.typography.title)
-      Spacer(Modifier.height(16.dp))
-      TextField(
-        value = value,
-        onValueChange = { value = it },
-        label = "루비",
-        labelPosition = LabelPosition.None,
-        autoFocus = true,
-        placeholder = "텍스트 위에 들어갈 문구",
-        keyboardType = KeyboardType.Text,
-        imeAction = ImeAction.Done,
-        onImeAction = ::submit,
-        modifier = Modifier.fillMaxWidth(),
+  DialogLayout(
+    header = {
+      Text(
+        "루비",
+        modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 24.dp),
+        style = AppTheme.typography.title,
       )
-    }
-
-    Box(Modifier.fillMaxWidth().height(1.dp).background(AppTheme.colors.borderHairline))
-
-    Row(Modifier.fillMaxWidth()) {
+    },
+    body = {
+      Column(
+        Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 20.dp)
+      ) {
+        TextField(
+          value = value,
+          onValueChange = { value = it },
+          label = "루비",
+          labelPosition = LabelPosition.None,
+          autoFocus = true,
+          placeholder = "텍스트 위에 들어갈 문구",
+          keyboardType = KeyboardType.Text,
+          imeAction = ImeAction.Done,
+          onImeAction = ::submit,
+          modifier = Modifier.fillMaxWidth(),
+        )
+      }
+    },
+    actions = {
       DialogActionButton(text = "취소") { dismiss() }
       if (existingText != null) {
         DialogActionDivider()
@@ -423,8 +418,8 @@ private fun RubyInputDialog(existingText: String?) {
       }
       DialogActionDivider()
       DialogActionButton(text = if (existingText != null) "수정" else "삽입") { submit() }
-    }
-  }
+    },
+  )
 }
 
 private fun ResolvedEditorTheme.colorFor(options: List<EditorColorOption>, value: String?) =

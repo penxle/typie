@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import co.typie.dev.DesktopDebugKeyboard
 import co.typie.ext.clickable
 import co.typie.ext.ime
+import co.typie.ext.safeDrawing
 import co.typie.ui.theme.LightAppShadows
 import co.typie.ui.theme.LightColors
 import co.typie.ui.theme.LocalAppColors
@@ -42,18 +43,27 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalTestApi::class)
 class DialogOverlayDesktopTest {
   @Test
-  fun contentIsCenteredInAreaAboveIme() = runComposeUiTest {
+  fun contentIsCenteredInSafeAreaWithImeGap() = runComposeUiTest {
     val dialog = Dialog()
     val keyboardOwner = Any()
     val wasHardwareKeyboardConnected = DesktopDebugKeyboard.hardwareKeyboardConnected
+    var safeTopPx = 0f
+    var safeBottomPx = 0f
     var imeBottomPx = 0f
+    var imeGapPx = 0f
 
     try {
       setContent {
         DialogTestTheme {
           val density = LocalDensity.current
+          val safeDrawingInsets = WindowInsets.safeDrawing
           val imeInsets = WindowInsets.ime
-          SideEffect { imeBottomPx = imeInsets.getBottom(density).toFloat() }
+          SideEffect {
+            safeTopPx = safeDrawingInsets.getTop(density).toFloat()
+            safeBottomPx = safeDrawingInsets.getBottom(density).toFloat()
+            imeBottomPx = imeInsets.getBottom(density).toFloat()
+            imeGapPx = with(density) { ImeGap.toPx() }
+          }
 
           Box(Modifier.testTag(RootTag).size(width = 400.dp, height = 700.dp)) {
             LaunchedEffect(Unit) {
@@ -76,17 +86,22 @@ class DialogOverlayDesktopTest {
       val rootBounds = onNodeWithTag(RootTag).fetchSemanticsNode().boundsInRoot
       val initialContentBounds = onNodeWithTag(DialogContentTag).fetchSemanticsNode().boundsInRoot
       assertEquals(0f, imeBottomPx, absoluteTolerance = 0.5f)
-      assertEquals(rootBounds.center.y, initialContentBounds.center.y, absoluteTolerance = 0.5f)
+      assertTrue(safeTopPx > 0f)
+      assertTrue(safeBottomPx > 0f)
+      val safeAreaCenterY = (rootBounds.top + safeTopPx + rootBounds.bottom - safeBottomPx) / 2f
+      assertEquals(safeAreaCenterY, initialContentBounds.center.y, absoluteTolerance = 0.5f)
 
       runOnIdle { DesktopDebugKeyboard.notifyFocusChanged(keyboardOwner, isFocused = true) }
       mainClock.advanceTimeBy(300)
       waitForIdle()
 
       val contentBounds = onNodeWithTag(DialogContentTag).fetchSemanticsNode().boundsInRoot
-      val visibleBottom = rootBounds.bottom - imeBottomPx
-      val visibleAreaCenterY = (rootBounds.top + visibleBottom) / 2f
+      val visibleTop = rootBounds.top + safeTopPx
+      val visibleBottom = rootBounds.bottom - maxOf(safeBottomPx, imeBottomPx + imeGapPx)
+      val visibleAreaCenterY = (visibleTop + visibleBottom) / 2f
       assertTrue(imeBottomPx > 0f)
       assertEquals(visibleAreaCenterY, contentBounds.center.y, absoluteTolerance = 0.5f)
+      assertTrue(contentBounds.top >= visibleTop - 0.5f)
       assertTrue(contentBounds.bottom <= visibleBottom + 0.5f)
     } finally {
       runOnIdle {
@@ -203,6 +218,7 @@ class DialogOverlayDesktopTest {
   }
 
   private companion object {
+    val ImeGap = 16.dp
     const val RootTag = "root"
     const val DialogContentTag = "dialog-content"
     const val OutsideFocusTag = "outside-focus"
