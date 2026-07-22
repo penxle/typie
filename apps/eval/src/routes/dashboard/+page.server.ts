@@ -19,7 +19,7 @@ import type { PageServerLoad } from './$types';
 
 const labelByKey = new Map(FEEDBACK_LABELS.map((label) => [label.key, label]));
 
-// 기준선 variant 라벨 — 'V0'은 테스트 라운드 시절 라벨, '현행'은 라운드 1부터의 라벨.
+// 레거시 폴백 — baselineLabel이 config에 없는 구 라운드(테스트 라운드 세대)용.
 const BASELINE_LABELS = new Set(['V0', '현행']);
 
 export const load: PageServerLoad = async ({ platform }) => {
@@ -46,7 +46,8 @@ export const load: PageServerLoad = async ({ platform }) => {
     const feedbacks = allSetIds.length > 0 ? await db.select().from(Feedbacks).where(inArray(Feedbacks.setId, allSetIds)) : [];
     const feedbackSetId = new Map(feedbacks.map((f) => [f.id, f.setId]));
 
-    const v0 = variants.find((v) => BASELINE_LABELS.has(v.label));
+    const configBaseline = (round.config as { baselineLabel?: string } | null)?.baselineLabel;
+    const v0 = configBaseline ? variants.find((v) => v.label === configBaseline) : variants.find((v) => BASELINE_LABELS.has(v.label));
 
     const rankingEntries = [];
     const overlapPairs: [PairVerdict, PairVerdict][] = [];

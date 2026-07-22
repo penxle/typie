@@ -67,6 +67,9 @@ export const POST: RequestHandler = async ({ request, platform }) => {
   let roundConfig: Record<string, unknown>;
 
   if (payload.stage === 'screening') {
+    if (!payload.variantLabels.includes(payload.baselineLabel)) {
+      error(400, 'baselineLabel must be one of variantLabels');
+    }
     const labelSets = await Promise.all(payload.variantLabels.map((label) => requireLabelSets(db, label, payload.corpusVersion)));
     const corpusDocs = await db.select({ id: Documents.id }).from(Documents).where(eq(Documents.corpusVersion, payload.corpusVersion));
 
@@ -85,6 +88,7 @@ export const POST: RequestHandler = async ({ request, platform }) => {
     roundConfig = {
       overlapRatio: payload.overlapRatio,
       sanityRatio: payload.sanityRatio,
+      baselineLabel: payload.baselineLabel,
       ...(payload.expectedEvaluators && { expectedEvaluators: payload.expectedEvaluators }),
     };
   } else {
@@ -106,7 +110,7 @@ export const POST: RequestHandler = async ({ request, platform }) => {
     }
 
     newTasks = generateConfirmationTasks(documents, { rng: Math.random });
-    roundConfig = {};
+    roundConfig = { baselineLabel: payload.v0Label };
   }
 
   const roundInsert = db.insert(Rounds).values({ id: payload.roundId, stage: payload.stage, config: roundConfig });

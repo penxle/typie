@@ -19,6 +19,7 @@
   // 초깃값은 최초 로드 시점만 참조하고, 이후 invalidateAll()로 data가 갱신되어도 사용자가 고른 값을 유지한다.
   let corpusVersion = $state(untrack(() => data.corpusVersions[0] ?? ''));
   let selectedLabels = $state<string[]>([]);
+  let baselineLabel = $state('');
   let v0Label = $state('');
   let candidateLabel = $state('');
   let expectedEvaluators = $state('');
@@ -40,11 +41,17 @@
       }
       if (v0Label && !labels.includes(v0Label)) v0Label = '';
       if (candidateLabel && !labels.includes(candidateLabel)) candidateLabel = '';
+      if (!selectedLabels.includes(baselineLabel)) {
+        baselineLabel = selectedLabels.includes('현행') ? '현행' : (selectedLabels[0] ?? '');
+      }
     });
   });
 
   const toggleLabel = (label: string) => {
     selectedLabels = selectedLabels.includes(label) ? selectedLabels.filter((l) => l !== label) : [...selectedLabels, label];
+    if (!selectedLabels.includes(baselineLabel)) {
+      baselineLabel = selectedLabels.includes('현행') ? '현행' : (selectedLabels[0] ?? '');
+    }
   };
 
   let creating = $state(false);
@@ -61,6 +68,10 @@
     }
     if (stage === 'screening' && selectedLabels.length < 2) {
       createError = '대상 후보를 2개 이상 선택하세요.';
+      return;
+    }
+    if (stage === 'screening' && !selectedLabels.includes(baselineLabel)) {
+      createError = '기준선은 선택된 후보 중 하나여야 합니다.';
       return;
     }
     if (stage === 'confirmation' && (!v0Label || !candidateLabel)) {
@@ -80,6 +91,7 @@
             stage: 'screening' as const,
             corpusVersion,
             variantLabels: selectedLabels,
+            baselineLabel,
             ...(parsedEvaluators >= 1 && { expectedEvaluators: parsedEvaluators }),
           }
         : { roundId, stage: 'confirmation' as const, corpusVersion, v0Label, candidateLabel };
@@ -269,6 +281,16 @@
             </label>
           {/each}
         </div>
+        {#if selectedLabels.length >= 2}
+          <div class={css({ marginTop: '12px' })}>
+            <label class={labelClass} for="round-baseline-label">기준선 (비교 기준이 되는 변형)</label>
+            <select id="round-baseline-label" class={inputClass} bind:value={baselineLabel}>
+              {#each selectedLabels as label (label)}
+                <option value={label}>{label}</option>
+              {/each}
+            </select>
+          </div>
+        {/if}
       </div>
     {:else}
       <div class={grid({ columns: 2, gap: '16px', marginBottom: '4px' })}>
