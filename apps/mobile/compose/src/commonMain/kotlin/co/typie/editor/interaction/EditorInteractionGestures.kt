@@ -1,6 +1,7 @@
 package co.typie.editor.interaction
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.PointerInputChange
 import co.typie.editor.ffi.InputModifiers
 import co.typie.editor.interaction.gestures.EditorDndGesture
 import co.typie.editor.interaction.gestures.EditorLongPressDispatchDelayMillis
@@ -54,15 +55,16 @@ internal class EditorInteractionGestures(
   }
 
   fun handlePointerDown(
-    pointerId: Long,
+    change: PointerInputChange,
     positionInEditor: Offset?,
     positionInRoot: Offset,
-    nowMillis: Long,
     tapEnabled: Boolean,
     inputModifiers: InputModifiers,
     touchPanDriver: EditorPanGestureDriver? = null,
     context: EditorGestureContext,
   ): Boolean {
+    val pointerId = change.id.value
+    val nowMillis = change.uptimeMillis
     if (tap.hasActivePointer) {
       tap.cancelActivePointerStream()
       context.reduceMode(EditorInteractionEvent.PointerCancel)
@@ -76,24 +78,14 @@ internal class EditorInteractionGestures(
 
     if (
       touchPanDriver != null &&
-        pan.prepareScrollCatch(
-          pointerId = pointerId,
-          position = positionInRoot,
-          nowMillis = nowMillis,
-          driver = touchPanDriver,
-        )
+        pan.prepareScrollCatch(change = change, position = positionInRoot, driver = touchPanDriver)
     ) {
       return true
     }
 
     if (positionInEditor == null) {
       if (touchPanDriver != null) {
-        pan.prepareFresh(
-          pointerId = pointerId,
-          position = positionInRoot,
-          nowMillis = nowMillis,
-          driver = touchPanDriver,
-        )
+        pan.prepareFresh(change = change, position = positionInRoot, driver = touchPanDriver)
       }
       return false
     }
@@ -149,12 +141,7 @@ internal class EditorInteractionGestures(
         !tableHandleHit &&
         selectionHandleType == null &&
         touchPanDriver != null ->
-        pan.prepareFresh(
-          pointerId = pointerId,
-          position = positionInRoot,
-          nowMillis = nowMillis,
-          driver = touchPanDriver,
-        )
+        pan.prepareFresh(change = change, position = positionInRoot, driver = touchPanDriver)
     }
     if (
       tapEnabled &&
@@ -174,29 +161,19 @@ internal class EditorInteractionGestures(
   }
 
   fun handlePointerMove(
-    pointerId: Long,
+    change: PointerInputChange,
     positionInEditor: Offset?,
     positionInRoot: Offset,
-    nowMillis: Long,
-    pressed: Boolean = true,
-    consumed: Boolean = false,
     context: EditorGestureContext,
   ): Boolean {
+    val pointerId = change.id.value
     if (doubleTapDrag.active) {
       val position = positionInEditor ?: return true
       trackTapPointerMove(pointerId = pointerId, position = position, context = context)
       return doubleTapDrag.handlePointerMove(position = position, tap = tap, context = context)
     }
     if (positionInEditor == null) {
-      val panConsumed =
-        pan.update(
-          pointerId = pointerId,
-          position = positionInRoot,
-          nowMillis = nowMillis,
-          pressed = pressed,
-          consumed = consumed,
-          context = context,
-        )
+      val panConsumed = pan.update(change = change, position = positionInRoot, context = context)
       if (panConsumed) {
         cancelTapAndLongPress(context = context)
       }
@@ -250,15 +227,7 @@ internal class EditorInteractionGestures(
       }
       return true
     }
-    val panConsumed =
-      pan.update(
-        pointerId = pointerId,
-        position = positionInRoot,
-        nowMillis = nowMillis,
-        pressed = pressed,
-        consumed = consumed,
-        context = context,
-      )
+    val panConsumed = pan.update(change = change, position = positionInRoot, context = context)
     if (panConsumed) {
       cancelTapAndLongPress(context = context)
       return true
@@ -267,22 +236,15 @@ internal class EditorInteractionGestures(
   }
 
   fun handlePointerUp(
-    pointerId: Long,
+    change: PointerInputChange,
     positionInEditor: Offset?,
     positionInRoot: Offset,
-    nowMillis: Long,
     context: EditorGestureContext,
   ): Boolean {
+    val pointerId = change.id.value
+    val nowMillis = change.uptimeMillis
     if (positionInEditor == null) {
-      val panConsumed =
-        pan.update(
-          pointerId = pointerId,
-          position = positionInRoot,
-          nowMillis = nowMillis,
-          pressed = false,
-          consumed = false,
-          context = context,
-        )
+      val panConsumed = pan.update(change = change, position = positionInRoot, context = context)
       if (panConsumed || tap.hasActivePointer) {
         cancelTapAndLongPress(context = context)
       }
@@ -334,16 +296,7 @@ internal class EditorInteractionGestures(
       return selectionHandle.handleDragEnd(type = type)
     }
 
-    if (
-      pan.update(
-        pointerId = pointerId,
-        position = positionInRoot,
-        nowMillis = nowMillis,
-        pressed = false,
-        consumed = false,
-        context = context,
-      )
-    ) {
+    if (pan.update(change = change, position = positionInRoot, context = context)) {
       cancelTapAndLongPress(context = context)
       return true
     }
@@ -400,9 +353,8 @@ internal class EditorInteractionGestures(
   }
 
   fun endPinchAndResumeViewportPan(
-    pointerId: Long,
+    change: PointerInputChange,
     position: Offset,
-    nowMillis: Long,
     driver: EditorPanGestureDriver,
     context: EditorGestureContext,
   ): Boolean {
@@ -410,7 +362,7 @@ internal class EditorInteractionGestures(
       return false
     }
     endPinch(context = context)
-    pan.resume(pointerId = pointerId, position = position, nowMillis = nowMillis, driver = driver)
+    pan.resume(change = change, position = position, driver = driver)
     return true
   }
 

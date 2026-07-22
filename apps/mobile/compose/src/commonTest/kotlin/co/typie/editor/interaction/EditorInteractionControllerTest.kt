@@ -4,6 +4,8 @@ import androidx.compose.runtime.BroadcastFrameClock
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect as ComposeRect
 import androidx.compose.ui.geometry.Size as ComposeSize
+import androidx.compose.ui.input.pointer.PointerId
+import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.unit.Velocity
 import co.typie.editor.Editor
 import co.typie.editor.EditorZoomController
@@ -53,6 +55,77 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+
+private fun EditorInteractionController.onPointerDown(
+  pointerId: Long,
+  position: Offset?,
+  nowMillis: Long,
+  tapEnabled: Boolean = true,
+  inputModifiers: InputModifiers = InputModifiers(),
+  positionInRoot: Offset = requireNotNull(position),
+  touchPanDriver: EditorPanGestureDriver? = null,
+): Boolean =
+  onPointerDown(
+    change = testPointerInputChange(pointerId, nowMillis, pressed = true, previousPressed = false),
+    position = position,
+    tapEnabled = tapEnabled,
+    inputModifiers = inputModifiers,
+    positionInRoot = positionInRoot,
+    touchPanDriver = touchPanDriver,
+  )
+
+private fun EditorInteractionController.onPointerMove(
+  pointerId: Long,
+  position: Offset?,
+  nowMillis: Long,
+  positionInRoot: Offset = requireNotNull(position),
+  pressed: Boolean = true,
+  consumed: Boolean = false,
+): Boolean =
+  onPointerMove(
+    change =
+      testPointerInputChange(
+        pointerId = pointerId,
+        nowMillis = nowMillis,
+        pressed = pressed,
+        previousPressed = true,
+        consumed = consumed,
+      ),
+    position = position,
+    positionInRoot = positionInRoot,
+  )
+
+private fun EditorInteractionController.onPointerUp(
+  pointerId: Long,
+  position: Offset?,
+  nowMillis: Long,
+  positionInRoot: Offset = requireNotNull(position),
+): Boolean =
+  onPointerUp(
+    change = testPointerInputChange(pointerId, nowMillis, pressed = false, previousPressed = true),
+    position = position,
+    positionInRoot = positionInRoot,
+  )
+
+private fun testPointerInputChange(
+  pointerId: Long,
+  nowMillis: Long,
+  pressed: Boolean,
+  previousPressed: Boolean,
+  consumed: Boolean = false,
+): PointerInputChange =
+  // The public test constructor does not expose originalEventPosition. Keeping its local position
+  // at the origin lets the production root-space offset carry the synthetic test position.
+  PointerInputChange(
+    id = PointerId(pointerId),
+    uptimeMillis = nowMillis,
+    position = Offset.Zero,
+    pressed = pressed,
+    previousUptimeMillis = nowMillis,
+    previousPosition = Offset.Zero,
+    previousPressed = previousPressed,
+    isInitiallyConsumed = consumed,
+  )
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class EditorInteractionControllerTest {
@@ -1891,51 +1964,6 @@ class EditorInteractionControllerTest {
       val velocity = driver.endVelocities.single()
       assertTrue(velocity.x > 1_500f, "Expected recent pan velocity, got $velocity")
       assertTrue(velocity.y in -0.01f..0.01f, "Expected horizontal pan velocity, got $velocity")
-    }
-
-  @Test
-  fun `pan release after pointer stops has no velocity`() =
-    runTest(StandardTestDispatcher()) {
-      val editor = Editor(FakeFfiEditor(), this, StandardTestDispatcher(testScheduler))
-      val host = TestHost(this)
-      val controller =
-        EditorInteractionController(
-          editorProvider = { editor },
-          effects = host,
-          geometry = host,
-          uiStateProvider = { host.uiState },
-        )
-      val driver = TestPanGestureDriver(shouldCatchTouch = false)
-      controller.updateTapSlop(8f)
-      val start = Offset(10f, 20f)
-
-      controller.onPointerDown(
-        pointerId = 1L,
-        position = start,
-        positionInRoot = start,
-        nowMillis = 0L,
-        touchPanDriver = driver,
-      )
-      controller.onPointerMove(
-        pointerId = 1L,
-        position = start + Offset(20f, 0f),
-        positionInRoot = start + Offset(20f, 0f),
-        nowMillis = 10L,
-      )
-      controller.onPointerMove(
-        pointerId = 1L,
-        position = start + Offset(40f, 0f),
-        positionInRoot = start + Offset(40f, 0f),
-        nowMillis = 20L,
-      )
-      controller.onPointerUp(
-        pointerId = 1L,
-        position = start + Offset(40f, 0f),
-        positionInRoot = start + Offset(40f, 0f),
-        nowMillis = 61L,
-      )
-
-      assertEquals(Velocity.Zero, driver.endVelocities.single())
     }
 
   @Test

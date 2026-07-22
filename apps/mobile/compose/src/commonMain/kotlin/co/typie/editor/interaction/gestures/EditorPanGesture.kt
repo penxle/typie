@@ -1,13 +1,13 @@
 package co.typie.editor.interaction.gestures
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.input.pointer.util.addPointerInputChange
 import androidx.compose.ui.unit.Velocity
 import co.typie.editor.interaction.EditorGestureContext
 import co.typie.editor.interaction.EditorInteractionEvent
 import co.typie.editor.interaction.canApply
-
-private const val PointerMoveStoppedTimeoutMillis = 40L
 
 internal interface EditorPanGestureDriver {
   val shouldCatchTouch: Boolean
@@ -34,37 +34,24 @@ internal class EditorPanGesture {
   val hasPendingPointer: Boolean
     get() = session != null && !active
 
-  fun prepareFresh(
-    pointerId: Long,
-    position: Offset,
-    nowMillis: Long,
-    driver: EditorPanGestureDriver,
-  ) {
+  fun prepareFresh(change: PointerInputChange, position: Offset, driver: EditorPanGestureDriver) {
     if (session != null) {
       return
     }
-    prepare(
-      pointerId = pointerId,
-      position = position,
-      nowMillis = nowMillis,
-      startKind = StartKind.Fresh,
-      driver = driver,
-    )
+    prepare(change = change, position = position, startKind = StartKind.Fresh, driver = driver)
   }
 
   fun prepareScrollCatch(
-    pointerId: Long,
+    change: PointerInputChange,
     position: Offset,
-    nowMillis: Long,
     driver: EditorPanGestureDriver,
   ): Boolean {
     if (session != null || !driver.shouldCatchTouch) {
       return false
     }
     prepare(
-      pointerId = pointerId,
+      change = change,
       position = position,
-      nowMillis = nowMillis,
       startKind = StartKind.ScrollCatch,
       driver = driver,
     )
@@ -76,44 +63,29 @@ internal class EditorPanGesture {
     return true
   }
 
-  fun resume(pointerId: Long, position: Offset, nowMillis: Long, driver: EditorPanGestureDriver) {
+  fun resume(change: PointerInputChange, position: Offset, driver: EditorPanGestureDriver) {
     reset()
-    prepare(
-      pointerId = pointerId,
-      position = position,
-      nowMillis = nowMillis,
-      startKind = StartKind.Resumed,
-      driver = driver,
-    )
+    prepare(change = change, position = position, startKind = StartKind.Resumed, driver = driver)
   }
 
-  fun update(
-    pointerId: Long,
-    position: Offset,
-    nowMillis: Long,
-    pressed: Boolean,
-    consumed: Boolean,
-    context: EditorGestureContext,
-  ): Boolean {
-    val current = session?.takeIf { it.pointerId == pointerId } ?: return false
+  fun update(change: PointerInputChange, position: Offset, context: EditorGestureContext): Boolean {
+    val current = session?.takeIf { it.pointerId == change.id.value } ?: return false
+    val pressed = change.pressed
     val delta = position - current.lastPosition
 
     if (active) {
       if (delta != Offset.Zero) {
         current.driver.update(delta)
       }
-      if (pressed) {
-        velocityTracker.addPosition(nowMillis, position)
-        current.lastVelocitySampleAtMillis = nowMillis
-      }
+      trackVelocity(position = position, change = change)
       current.lastPosition = position
       if (!pressed) {
-        finish(nowMillis = nowMillis, context = context)
+        finish(context = context)
       }
       return true
     }
 
-    if (!pressed || consumed) {
+    if (!pressed || change.isConsumed) {
       val caughtScroll = current.startKind == StartKind.ScrollCatch
       if (current.driverStarted) {
         current.driver.cancel()
@@ -133,15 +105,13 @@ internal class EditorPanGesture {
         clear()
         return false
       }
-      velocityTracker.addPosition(nowMillis, position)
-      current.lastVelocitySampleAtMillis = nowMillis
+      trackVelocity(position = position, change = change)
       current.driver.update(delta)
       current.lastPosition = position
       return true
     }
 
-    velocityTracker.addPosition(nowMillis, position)
-    current.lastVelocitySampleAtMillis = nowMillis
+    trackVelocity(position = position, change = change)
     val fromStart = position - current.startPosition
     val distance = fromStart.getDistance()
     val touchSlop = current.driver.touchSlop.coerceAtLeast(0f)
@@ -183,23 +153,21 @@ internal class EditorPanGesture {
   }
 
   private fun prepare(
-    pointerId: Long,
+    change: PointerInputChange,
     position: Offset,
-    nowMillis: Long,
     startKind: StartKind,
     driver: EditorPanGestureDriver,
   ) {
     session =
       Session(
-        pointerId = pointerId,
+        pointerId = change.id.value,
         startPosition = position,
         lastPosition = position,
-        lastVelocitySampleAtMillis = nowMillis,
         startKind = startKind,
         driver = driver,
       )
     velocityTracker.resetTracking()
-    velocityTracker.addPosition(nowMillis, position)
+    trackVelocity(position = position, change = change)
   }
 
   private fun start(context: EditorGestureContext): Boolean {
@@ -219,16 +187,11 @@ internal class EditorPanGesture {
     return true
   }
 
-  private fun finish(nowMillis: Long, context: EditorGestureContext) {
+  private fun finish(context: EditorGestureContext) {
     val current = session ?: return
     val maximum =
       current.driver.maximumFlingVelocity.takeIf { it.isFinite() && it > 0f } ?: Float.MAX_VALUE
-    val velocity =
-      if (nowMillis - current.lastVelocitySampleAtMillis > PointerMoveStoppedTimeoutMillis) {
-        Velocity.Zero
-      } else {
-        velocityTracker.calculateVelocity(Velocity(maximum, maximum))
-      }
+    val velocity = velocityTracker.calculateVelocity(Velocity(maximum, maximum))
     current.driver.end(velocity)
     context.applyModeEvent(EditorInteractionEvent.PanEnd)
     clear()
@@ -240,11 +203,14 @@ internal class EditorPanGesture {
     velocityTracker.resetTracking()
   }
 
+  private fun trackVelocity(position: Offset, change: PointerInputChange) {
+    velocityTracker.addPointerInputChange(event = change, offset = position - change.position)
+  }
+
   private data class Session(
     val pointerId: Long,
     val startPosition: Offset,
     var lastPosition: Offset,
-    var lastVelocitySampleAtMillis: Long,
     val startKind: StartKind,
     val driver: EditorPanGestureDriver,
     var driverStarted: Boolean = false,

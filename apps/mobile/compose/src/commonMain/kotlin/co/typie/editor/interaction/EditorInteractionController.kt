@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.PointerInputChange
 import co.typie.editor.Editor
 import co.typie.editor.EditorState
 import co.typie.editor.ffi.InputModifiers
@@ -79,9 +80,8 @@ internal class EditorInteractionController(
   fun canApplyModeEvent(event: EditorInteractionEvent): Boolean = mode.canApply(event)
 
   fun onPointerDown(
-    pointerId: Long,
+    change: PointerInputChange,
     position: Offset?,
-    nowMillis: Long,
     tapEnabled: Boolean = true,
     inputModifiers: InputModifiers = InputModifiers(),
     positionInRoot: Offset = requireNotNull(position),
@@ -89,10 +89,9 @@ internal class EditorInteractionController(
   ): Boolean =
     if (ensurePointerInputEnabled()) {
       gestures.handlePointerDown(
-        pointerId = pointerId,
+        change = change,
         positionInEditor = position,
         positionInRoot = positionInRoot,
-        nowMillis = nowMillis,
         tapEnabled = tapEnabled && position != null,
         inputModifiers = inputModifiers,
         touchPanDriver = touchPanDriver,
@@ -103,21 +102,15 @@ internal class EditorInteractionController(
     }
 
   fun onPointerMove(
-    pointerId: Long,
+    change: PointerInputChange,
     position: Offset?,
-    nowMillis: Long,
     positionInRoot: Offset = requireNotNull(position),
-    pressed: Boolean = true,
-    consumed: Boolean = false,
   ): Boolean =
     if (ensurePointerInputEnabled()) {
       gestures.handlePointerMove(
-        pointerId = pointerId,
+        change = change,
         positionInEditor = position,
         positionInRoot = positionInRoot,
-        nowMillis = nowMillis,
-        pressed = pressed,
-        consumed = consumed,
         context = gestureContext,
       )
     } else {
@@ -125,17 +118,15 @@ internal class EditorInteractionController(
     }
 
   fun onPointerUp(
-    pointerId: Long,
+    change: PointerInputChange,
     position: Offset?,
-    nowMillis: Long,
     positionInRoot: Offset = requireNotNull(position),
   ): Boolean =
     if (ensurePointerInputEnabled()) {
       gestures.handlePointerUp(
-        pointerId = pointerId,
+        change = change,
         positionInEditor = position,
         positionInRoot = positionInRoot,
-        nowMillis = nowMillis,
         context = gestureContext,
       )
     } else {
@@ -152,18 +143,16 @@ internal class EditorInteractionController(
   fun onPinchEnd(): Boolean = gestures.endPinch(context = gestureContext)
 
   fun endPinchAndResumeViewportPan(
-    pointerId: Long,
+    change: PointerInputChange,
     position: Offset,
-    nowMillis: Long,
     driver: EditorPanGestureDriver,
   ): Boolean {
     if (!ensurePointerInputEnabled()) {
       return false
     }
     return gestures.endPinchAndResumeViewportPan(
-      pointerId = pointerId,
+      change = change,
       position = position,
-      nowMillis = nowMillis,
       driver = driver,
       context = gestureContext,
     )

@@ -310,9 +310,8 @@ private class EditorInteractionsNode(
       val rootPosition = positionInRoot(survivor.position)
       if (
         interactionController.endPinchAndResumeViewportPan(
-          pointerId = survivor.id.value,
+          change = survivor,
           position = rootPosition,
-          nowMillis = survivor.uptimeMillis,
           driver = scrollDriver,
         )
       ) {
@@ -485,9 +484,8 @@ private class EditorInteractionsNode(
         singlePointerStreams += change.id.value
         if (
           interactionController.onPointerDown(
-            pointerId = change.id.value,
+            change = change,
             position = editorPosition,
-            nowMillis = change.uptimeMillis,
             tapEnabled = tapEnabled,
             inputModifiers = pointerEvent.inputModifiers(),
             positionInRoot = rootPosition,
@@ -513,11 +511,9 @@ private class EditorInteractionsNode(
         }
         if (
           interactionController.onPointerMove(
-            pointerId = change.id.value,
+            change = change,
             position = editorPosition,
             positionInRoot = rootPosition,
-            nowMillis = change.uptimeMillis,
-            consumed = change.isConsumed,
           )
         ) {
           change.consume()
@@ -539,10 +535,9 @@ private class EditorInteractionsNode(
         }
         if (
           interactionController.onPointerUp(
-            pointerId = change.id.value,
+            change = change,
             position = editorPosition,
             positionInRoot = rootPosition,
-            nowMillis = change.uptimeMillis,
           )
         ) {
           change.consume()
