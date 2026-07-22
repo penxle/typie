@@ -10,8 +10,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -561,6 +566,19 @@ private fun EditorFontFamilySheet(
   selectedFamilyName: String,
   onSelect: suspend (String) -> Unit,
 ) {
+  val selectedFamilyBringIntoViewRequester = remember { BringIntoViewRequester() }
+  val selectedFamilyExists = families.any {
+    it.familyName == selectedFamilyName && it.representativeFont != null
+  }
+
+  LaunchedEffect(selectedFamilyName, selectedFamilyExists) {
+    if (selectedFamilyExists) {
+      // Wait until SheetLayout establishes its constrained scroll viewport.
+      withFrameNanos {}
+      selectedFamilyBringIntoViewRequester.bringIntoView()
+    }
+  }
+
   SheetLayout(
     header = {
       SheetBar(
@@ -579,8 +597,16 @@ private fun EditorFontFamilySheet(
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
       SheetOptionList(items = families) { family ->
         val representativeFont = family.representativeFont ?: return@SheetOptionList
+        val selected = selectedFamilyName == family.familyName
+
         SheetOptionRow(
-          selected = selectedFamilyName == family.familyName,
+          selected = selected,
+          modifier =
+            if (selected) {
+              Modifier.bringIntoViewRequester(selectedFamilyBringIntoViewRequester)
+            } else {
+              Modifier
+            },
           onClick = {
             onSelect(family.familyName)
             dismiss()
