@@ -150,18 +150,10 @@ internal class IOSClipboard : Clipboard {
           loaders =
             snapshot.items.mapIndexed { index, item ->
               suspend {
-                val provider = snapshot.providers.getOrNull(index)
-                if (provider == null) {
-                  readPasteboardAttachment(item)
-                } else {
-                  try {
-                    provider.loadPasteboardAttachment() ?: readPasteboardAttachment(item)
-                  } catch (error: CancellationException) {
-                    throw error
-                  } catch (error: Throwable) {
-                    runCatching { readPasteboardAttachment(item) }.getOrNull() ?: throw error
-                  }
-                }
+                readPasteboardAttachment(
+                  item = item,
+                  provider = snapshot.providers.getOrNull(index),
+                )
               }
             },
           loaderContext = Dispatchers.Default,
@@ -187,39 +179,9 @@ private data class IOSPasteboardSnapshot(
   val providers: List<NSItemProvider>,
 )
 
-private suspend fun NSItemProvider.loadPasteboardAttachment(): IncomingContentItem? {
-  val representation =
-    registeredTypeIdentifiers
-      .filterIsInstance<String>()
-      .mapNotNull { identifier ->
-        val type = UTType.typeWithIdentifier(identifier) ?: return@mapNotNull null
-        when {
-          type.conformsToType(UTTypeImage) ->
-            PasteboardProviderRepresentation(
-              identifier = identifier,
-              type = type,
-              kind = IncomingContentItem.Kind.Image,
-            )
-          identifier == UTI_FILE_URL || identifier == UTI_URL || type.conformsToType(UTTypeText) ->
-            null
-          type.conformsToType(UTTypeData) ->
-            PasteboardProviderRepresentation(
-              identifier = identifier,
-              type = type,
-              kind = IncomingContentItem.Kind.File,
-            )
-          else -> null
-        }
-      }
-      .minByOrNull { if (it.kind == IncomingContentItem.Kind.Image) 0 else 1 } ?: return null
-  val mimeType = representation.type.preferredMIMEType
-  val filename =
-    providerFilename(
-      suggestedName = suggestedName,
-      preferredExtension = representation.type.preferredFilenameExtension,
-      mimeType = mimeType,
-    )
-
+private suspend fun NSItemProvider.loadPasteboardAttachment(
+  representation: PasteboardProviderRepresentation
+): IncomingContentItem {
   return suspendCancellableCoroutine { continuation ->
     var progress: NSProgress? = null
     continuation.invokeOnCancellation { progress?.cancel() }
@@ -232,15 +194,20 @@ private suspend fun NSItemProvider.loadPasteboardAttachment(): IncomingContentIt
                   providerError?.localizedDescription
                     ?: "Clipboard file representation is unavailable"
                 )
-            val ownedURL = copyToTemporaryFile(sourceURL, filename)
+            val ownedURL = copyToTemporaryFile(sourceURL, representation.filename)
             try {
               IncomingContentItem(
                 kind = representation.kind,
                 file =
                   when (representation.kind) {
-                    IncomingContentItem.Kind.Image -> ownedURL.toPickedImage(filename, mimeType)
+                    IncomingContentItem.Kind.Image ->
+                      ownedURL.toPickedImage(representation.filename, representation.mimeType)
                     IncomingContentItem.Kind.File ->
-                      ownedURL.toPickedFile(filename = filename, mimeType = mimeType, owned = true)
+                      ownedURL.toPickedFile(
+                        filename = representation.filename,
+                        mimeType = representation.mimeType,
+                        owned = true,
+                      )
                   },
               )
             } catch (error: Throwable) {
@@ -257,32 +224,115 @@ private suspend fun NSItemProvider.loadPasteboardAttachment(): IncomingContentIt
   }
 }
 
-private data class PasteboardProviderRepresentation(
+private suspend fun readPasteboardAttachment(
+  item: Map<*, *>,
+  provider: NSItemProvider?,
+): IncomingContentItem? {
+  if (provider == null) return readDirectPasteboardAttachment(item)
+  val representation =
+    provider.selectPasteboardProviderRepresentation() ?: return readDirectPasteboardAttachment(item)
+
+  return try {
+    provider.loadPasteboardAttachment(representation)
+  } catch (error: CancellationException) {
+    throw error
+  } catch (error: Throwable) {
+    val fallback = runCatching { readDirectPasteboardAttachment(item) }.getOrNull()
+    if (representation.mimeType == SVG_MIME_TYPE && fallback?.file?.mimeType != SVG_MIME_TYPE) {
+      fallback?.file?.close()
+      throw error
+    }
+    fallback ?: throw error
+  }
+}
+
+internal data class PasteboardProviderRepresentation(
   val identifier: String,
-  val type: UTType,
   val kind: IncomingContentItem.Kind,
+  val filename: String,
+  val mimeType: String?,
 )
 
-private fun readPasteboardAttachment(item: Map<*, *>): IncomingContentItem? {
+private fun pasteboardProviderRepresentation(
+  identifier: String,
+  suggestedName: String?,
+): PasteboardProviderRepresentation? {
+  val type = UTType.typeWithIdentifier(identifier) ?: return null
+  if (identifier == UTI_FILE_URL || identifier == UTI_URL) return null
+  val providerMimeType = type.preferredMIMEType
+  val filename =
+    providerFilename(
+      suggestedName = suggestedName,
+      preferredExtension = type.preferredFilenameExtension,
+      mimeType = providerMimeType,
+    )
+  val svgMimeType = svgMimeTypeOrNull(filename, providerMimeType)
+  val kind =
+    when {
+      svgMimeType != null || type.conformsToType(UTTypeImage) -> IncomingContentItem.Kind.Image
+      type.conformsToType(UTTypeText) -> return null
+      type.conformsToType(UTTypeData) -> IncomingContentItem.Kind.File
+      else -> return null
+    }
+  return PasteboardProviderRepresentation(
+    identifier = identifier,
+    kind = kind,
+    filename = filename,
+    mimeType = svgMimeType ?: providerMimeType,
+  )
+}
+
+private fun NSItemProvider.selectPasteboardProviderRepresentation():
+  PasteboardProviderRepresentation? =
+  selectPasteboardProviderRepresentation(
+    registeredTypeIdentifiers.filterIsInstance<String>().mapNotNull { identifier ->
+      pasteboardProviderRepresentation(identifier, suggestedName)
+    }
+  )
+
+internal fun selectPasteboardProviderRepresentation(
+  representations: List<PasteboardProviderRepresentation>
+): PasteboardProviderRepresentation? =
+  representations.firstOrNull { it.mimeType == SVG_MIME_TYPE }
+    ?: representations.firstOrNull { it.kind == IncomingContentItem.Kind.Image }
+    ?: representations.firstOrNull()
+
+internal fun readDirectPasteboardAttachment(item: Map<*, *>): IncomingContentItem? {
+  val rawSvg =
+    item.entries.firstNotNullOfOrNull { (rawType, value) ->
+      if (value !is NSData) return@firstNotNullOfOrNull null
+      val identifier = rawType as? String ?: return@firstNotNullOfOrNull null
+      val representation =
+        pasteboardProviderRepresentation(identifier, suggestedName = null)
+          ?: return@firstNotNullOfOrNull null
+      Pair(representation, value).takeIf { representation.mimeType == SVG_MIME_TYPE }
+    }
+  if (rawSvg != null) {
+    val (representation, data) = rawSvg
+    return IncomingContentItem(
+      kind = IncomingContentItem.Kind.Image,
+      file = data.toClipboardPickedImage(representation.filename, representation.mimeType),
+    )
+  }
+
   val fileURL = item[UTI_FILE_URL].asPasteboardFileURL()?.takeIf { it.scheme == "file" }
   if (fileURL != null) {
     val inferredType =
       fileURL.pathExtension?.takeIf(String::isNotBlank)?.let(UTType::typeWithFilenameExtension)
-    val filename = pickedFilename(fileURL.lastPathComponent, inferredType?.preferredMIMEType)
+    val providerMimeType = inferredType?.preferredMIMEType
+    val filename = pickedFilename(fileURL.lastPathComponent, providerMimeType)
+    val svgMimeType = svgMimeTypeOrNull(filename, providerMimeType)
+    val mimeType = svgMimeType ?: providerMimeType
     val ownedURL = copyToTemporaryFile(fileURL, filename)
     return try {
-      val isImage = inferredType?.conformsToType(UTTypeImage) == true
+      val isImage = svgMimeType != null || inferredType?.conformsToType(UTTypeImage) == true
       IncomingContentItem(
         kind = if (isImage) IncomingContentItem.Kind.Image else IncomingContentItem.Kind.File,
         file =
           if (isImage) {
-            ownedURL.toPickedImage(filename, inferredType.preferredMIMEType)
+            ownedURL.toPickedImage(filename, mimeType)
           } else {
-            ownedURL.toPickedFile(
-              filename = filename,
-              mimeType = inferredType?.preferredMIMEType,
-              owned = true,
-            )
+            ownedURL.toPickedFile(filename = filename, mimeType = mimeType, owned = true)
           },
       )
     } catch (error: Throwable) {
@@ -291,21 +341,24 @@ private fun readPasteboardAttachment(item: Map<*, *>): IncomingContentItem? {
     }
   }
 
-  val imageValue =
+  val imageEntry =
     item.entries.firstNotNullOfOrNull { (rawType, value) ->
-      val type = rawType as? String ?: return@firstNotNullOfOrNull null
-      val uniformType = UTType.typeWithIdentifier(type) ?: return@firstNotNullOfOrNull null
-      value.takeIf { uniformType.conformsToType(UTTypeImage) }
+      val identifier = rawType as? String ?: return@firstNotNullOfOrNull null
+      val representation =
+        pasteboardProviderRepresentation(identifier, suggestedName = null)
+          ?: return@firstNotNullOfOrNull null
+      Pair(representation, value).takeIf { representation.kind == IncomingContentItem.Kind.Image }
     } ?: return null
-  val image =
-    when (imageValue) {
-      is UIImage -> imageValue
-      is NSData -> UIImage(data = imageValue)
-      else -> null
-    } ?: error("Clipboard image representation is unreadable")
+  val (representation, imageValue) = imageEntry
   return IncomingContentItem(
     kind = IncomingContentItem.Kind.Image,
-    file = image.toClipboardPickedFile(),
+    file =
+      when (imageValue) {
+        is UIImage -> imageValue.toClipboardPickedFile()
+        is NSData ->
+          imageValue.toClipboardPickedImage(representation.filename, representation.mimeType)
+        else -> error("Clipboard image representation is unreadable")
+      },
   )
 }
 
@@ -331,6 +384,24 @@ private fun UIImage.toClipboardPickedFile(): PickedFile {
   val url = NSURL.fileURLWithPath(path)
   return try {
     url.toPickedImage(filename = "image.png", mimeType = "image/png")
+  } catch (error: Throwable) {
+    removeOwnedFile(url)
+    throw error
+  }
+}
+
+private fun NSData.toClipboardPickedImage(filename: String, mimeType: String?): PickedFile {
+  if (mimeType != SVG_MIME_TYPE) {
+    return UIImage(data = this).toClipboardPickedFile()
+  }
+
+  val safeFilename = filename.replace('/', '_').replace('\\', '_')
+  val url = NSURL.fileURLWithPath("${NSTemporaryDirectory()}${NSUUID().UUIDString}-$safeFilename")
+  return try {
+    check(writeToFile(requireNotNull(url.path), atomically = true)) {
+      "Unable to copy clipboard image"
+    }
+    url.toPickedImage(filename = filename, mimeType = mimeType)
   } catch (error: Throwable) {
     removeOwnedFile(url)
     throw error

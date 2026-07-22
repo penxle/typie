@@ -2,6 +2,7 @@ package co.typie.platform
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import java.awt.FileDialog
 import java.awt.Frame
@@ -9,6 +10,9 @@ import java.awt.image.BufferedImage
 import java.io.File
 import java.nio.file.Files
 import javax.imageio.ImageIO
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.io.asSource
 import kotlinx.io.buffered
 
@@ -17,9 +21,10 @@ actual fun rememberFilePicker(
   selectionMode: FilePickerSelectionMode,
   onResult: (FilePickerResult) -> Unit,
 ): (mimeType: String) -> Unit {
+  val scope = rememberCoroutineScope()
   val currentOnResult = rememberUpdatedState(onResult)
 
-  return remember(selectionMode) {
+  return remember(selectionMode, scope) {
     { mimeType: String ->
       val contentType = mimeType.substringBefore('/')
       val title =
@@ -37,7 +42,8 @@ actual fun rememberFilePicker(
                   lower.endsWith(".jpg") ||
                   lower.endsWith(".jpeg") ||
                   lower.endsWith(".webp") ||
-                  lower.endsWith(".heic")
+                  lower.endsWith(".heic") ||
+                  lower.endsWith(".svg")
               }
             }
           }
@@ -45,32 +51,40 @@ actual fun rememberFilePicker(
           isVisible = true
         }
       val selectedFiles = dialog.files
-      currentOnResult.value(
-        if (selectedFiles.isEmpty()) {
-          FilePickerResult.Cancelled
-        } else {
-          aggregateSelectedFiles(
-            selectedFiles.map { file ->
-              runCatching {
-                val image =
-                  when (contentType) {
-                    "image" -> file.decodeImageOrNull()
-                    else -> null
+      if (selectedFiles.isEmpty()) {
+        currentOnResult.value(FilePickerResult.Cancelled)
+      } else {
+        scope.launch {
+          val result =
+            withContext(Dispatchers.IO) {
+              aggregateSelectedFiles(
+                selectedFiles.map { file ->
+                  runCatching {
+                    val providerMimeType = file.probeContentType()
+                    val svgMimeType = svgMimeTypeOrNull(file.name, providerMimeType)
+                    val imageSize =
+                      when {
+                        svgMimeType != null -> decodeSvgImageSize(file.readBytes())
+                        contentType == "image" ->
+                          file.decodeImageOrNull()?.let { it.width to it.height }
+                        else -> null
+                      }
+                    PickedFile(
+                      filename = file.name,
+                      mimeType = svgMimeType ?: providerMimeType,
+                      size = file.length(),
+                      previewModel = file,
+                      imageWidth = imageSize?.first,
+                      imageHeight = imageSize?.second,
+                      openSource = { file.inputStream().asSource().buffered() },
+                    )
                   }
-                PickedFile(
-                  filename = file.name,
-                  mimeType = file.probeContentType(),
-                  size = file.length(),
-                  previewModel = file,
-                  imageWidth = image?.width,
-                  imageHeight = image?.height,
-                  openSource = { file.inputStream().asSource().buffered() },
-                )
-              }
+                }
+              )
             }
-          )
+          currentOnResult.value(result)
         }
-      )
+      }
     }
   }
 }

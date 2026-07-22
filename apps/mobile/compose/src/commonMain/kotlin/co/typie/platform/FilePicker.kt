@@ -2,7 +2,14 @@ package co.typie.platform
 
 import androidx.compose.runtime.Composable
 import co.touchlab.kermit.Logger
+import com.hashsequence.coilresvg.SvgRenderer
+import com.hashsequence.coilresvg.use
+import kotlin.math.roundToInt
 import kotlinx.io.Source
+
+internal const val SVG_MIME_TYPE = "image/svg+xml"
+private val SVG_EXTENSION_FALLBACK_MIME_TYPES =
+  setOf("application/octet-stream", "image/*", "text/xml", "application/xml")
 
 class PickedFile
 internal constructor(
@@ -87,6 +94,29 @@ internal fun pickedFilename(originalFilename: String?, mimeType: String?): Strin
     "image/webp" -> "image.webp"
     "image/heic" -> "image.heic"
     "image/heif" -> "image.heif"
+    SVG_MIME_TYPE -> "image.svg"
     else -> "file"
   }
+}
+
+internal fun svgMimeTypeOrNull(filename: String?, mimeType: String?): String? {
+  val normalizedMimeType =
+    mimeType?.substringBefore(';')?.trim()?.lowercase()?.takeIf(String::isNotEmpty)
+  if (normalizedMimeType == SVG_MIME_TYPE) return SVG_MIME_TYPE
+  if (filename?.trim()?.endsWith(".svg", ignoreCase = true) != true) return null
+  return SVG_MIME_TYPE.takeIf {
+    normalizedMimeType == null || normalizedMimeType in SVG_EXTENSION_FALLBACK_MIME_TYPES
+  }
+}
+
+internal fun decodeSvgImageSize(bytes: ByteArray): Pair<Int, Int> {
+  val size = SvgRenderer.fromData(bytes).use { renderer -> renderer.getSize() }
+  return size.width.toImageDimension() to size.height.toImageDimension()
+}
+
+private fun Float.toImageDimension(): Int {
+  require(isFinite() && this > 0f && toDouble() <= Int.MAX_VALUE.toDouble()) {
+    "SVG image dimension is not a positive Int: $this"
+  }
+  return roundToInt().coerceAtLeast(1)
 }

@@ -27,6 +27,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.io.buffered
 import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
+import kotlinx.io.readByteArray
 import platform.Foundation.NSError
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSFileSize
@@ -245,6 +246,18 @@ private suspend fun NSItemProvider.loadSelectedImage(): Result<PickedFile> {
 
 internal fun NSURL.toPickedImage(filename: String, mimeType: String?): PickedFile {
   val path = requireNotNull(path) { "Selected image path is unavailable" }
+  if (mimeType == SVG_MIME_TYPE) {
+    val bytes = SystemFileSystem.source(Path(path)).buffered().use { it.readByteArray() }
+    val (width, height) = decodeSvgImageSize(bytes)
+    return toPickedFile(
+      filename = filename,
+      mimeType = mimeType,
+      imageWidth = width,
+      imageHeight = height,
+      owned = true,
+    )
+  }
+
   val image = UIImage.imageWithContentsOfFile(path) ?: error("Unable to decode the selected image")
   return toPickedFile(
     filename = filename,

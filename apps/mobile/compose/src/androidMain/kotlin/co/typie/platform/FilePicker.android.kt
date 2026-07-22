@@ -8,9 +8,13 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.platform.LocalContext
 import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.io.asSource
 import kotlinx.io.buffered
 
@@ -20,27 +24,24 @@ actual fun rememberFilePicker(
   onResult: (FilePickerResult) -> Unit,
 ): (mimeType: String) -> Unit {
   val context = LocalContext.current
+  val scope = rememberCoroutineScope()
   val currentOnResult = rememberUpdatedState(onResult)
   val singleLauncher =
     rememberLauncherForActivityResult(contract = ActivityResultContracts.GetContent()) { uri ->
-      currentOnResult.value(
-        if (uri == null) {
-          FilePickerResult.Cancelled
-        } else {
-          aggregateSelectedFiles(listOf(runCatching { context.readPlatformFile(uri) }))
-        }
-      )
+      if (uri == null) {
+        currentOnResult.value(FilePickerResult.Cancelled)
+      } else {
+        scope.launch { currentOnResult.value(context.readSelectedFiles(listOf(uri))) }
+      }
     }
   val multipleLauncher =
     rememberLauncherForActivityResult(contract = ActivityResultContracts.GetMultipleContents()) {
       uris ->
-      currentOnResult.value(
-        if (uris.isEmpty()) {
-          FilePickerResult.Cancelled
-        } else {
-          aggregateSelectedFiles(uris.map { uri -> runCatching { context.readPlatformFile(uri) } })
-        }
-      )
+      if (uris.isEmpty()) {
+        currentOnResult.value(FilePickerResult.Cancelled)
+      } else {
+        scope.launch { currentOnResult.value(context.readSelectedFiles(uris)) }
+      }
     }
 
   return remember(singleLauncher, multipleLauncher, selectionMode) {
@@ -53,14 +54,29 @@ actual fun rememberFilePicker(
   }
 }
 
+private suspend fun Context.readSelectedFiles(uris: List<Uri>): FilePickerResult =
+  withContext(Dispatchers.IO) {
+    aggregateSelectedFiles(uris.map { uri -> runCatching { readPlatformFile(uri) } })
+  }
+
 internal fun Context.readPlatformFile(
   uri: Uri,
   fallbackMimeType: String? = null,
   release: () -> Unit = {},
 ): PickedFile {
-  val mimeType = contentResolver.getType(uri) ?: fallbackMimeType
   val metadata = queryMetadata(uri)
-  val imageSize = decodeImageSizeIfNeeded(uri, mimeType)
+  val providerMimeType = contentResolver.getType(uri) ?: fallbackMimeType
+  val svgMimeType = svgMimeTypeOrNull(metadata.filename, providerMimeType)
+  val mimeType = svgMimeType ?: providerMimeType
+  val imageSize =
+    if (svgMimeType != null) {
+      val bytes =
+        contentResolver.openInputStream(uri)?.use { it.readBytes() }
+          ?: error("Unable to open selected image")
+      decodeSvgImageSize(bytes)
+    } else {
+      decodeImageSizeIfNeeded(uri, mimeType)
+    }
 
   if (mimeType?.substringBefore('/') != "image") {
     contentResolver.openInputStream(uri)?.close() ?: error("Unable to open selected file")
@@ -81,36 +97,54 @@ internal fun Context.readPlatformFile(
   )
 }
 
-internal fun Context.copyClipboardFile(uri: Uri, fallbackMimeType: String? = null): PickedFile {
-  val mimeType = contentResolver.getType(uri) ?: fallbackMimeType
+internal fun Context.copyIncomingContentItem(
+  uri: Uri,
+  fallbackMimeType: String? = null,
+): IncomingContentItem {
   val metadata = queryMetadata(uri)
-  val directory = File(cacheDir, "incoming-clipboard").apply { mkdirs() }
-  val ownedFile = File.createTempFile("clipboard-", ".tmp", directory)
+  val providerMimeType = contentResolver.getType(uri) ?: fallbackMimeType
+  val svgMimeType = svgMimeTypeOrNull(metadata.filename, providerMimeType)
+  val mimeType = svgMimeType ?: providerMimeType
+  val directory = File(cacheDir, "incoming-content").apply { mkdirs() }
+  val ownedFile = File.createTempFile("incoming-", ".tmp", directory)
 
   try {
     contentResolver.openInputStream(uri)?.use { input ->
       ownedFile.outputStream().use { output -> input.copyTo(output) }
-    } ?: error("Unable to open clipboard file")
+    } ?: error("Unable to open incoming file")
     val imageSize =
-      if (mimeType?.substringBefore('/') == "image") {
-        val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeFile(ownedFile.path, options)
-        options.outWidth
-          .takeIf { it > 0 }
-          ?.let { width -> options.outHeight.takeIf { it > 0 }?.let { height -> width to height } }
-      } else {
-        null
+      when {
+        svgMimeType != null -> decodeSvgImageSize(ownedFile.readBytes())
+        mimeType?.substringBefore('/') == "image" -> {
+          val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+          BitmapFactory.decodeFile(ownedFile.path, options)
+          options.outWidth
+            .takeIf { it > 0 }
+            ?.let { width ->
+              options.outHeight.takeIf { it > 0 }?.let { height -> width to height }
+            }
+        }
+        else -> null
       }
 
-    return PickedFile(
-      filename = pickedFilename(metadata.filename, mimeType),
-      mimeType = mimeType,
-      size = metadata.size ?: ownedFile.length(),
-      previewModel = ownedFile,
-      imageWidth = imageSize?.first,
-      imageHeight = imageSize?.second,
-      openSource = { ownedFile.inputStream().asSource().buffered() },
-      release = { ownedFile.delete() },
+    return IncomingContentItem(
+      kind =
+        if (mimeType?.substringBefore('/') == "image") {
+          IncomingContentItem.Kind.Image
+        } else {
+          IncomingContentItem.Kind.File
+        },
+      file =
+        PickedFile(
+          filename = pickedFilename(metadata.filename, mimeType),
+          mimeType = mimeType,
+          size = metadata.size ?: ownedFile.length(),
+          previewModel = ownedFile,
+          imageWidth = imageSize?.first,
+          imageHeight = imageSize?.second,
+          openSource = { ownedFile.inputStream().asSource().buffered() },
+          release = { ownedFile.delete() },
+        ),
     )
   } catch (error: Throwable) {
     ownedFile.delete()

@@ -7,10 +7,12 @@ import java.io.File
 import java.nio.file.Files
 import javax.imageio.ImageIO
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.test.runTest
+import kotlinx.io.readByteArray
 
 class DesktopIncomingContentTest {
   @Test
@@ -62,6 +64,40 @@ class DesktopIncomingContentTest {
       assertEquals(listOf("first.png", "second.txt"), items.map { it.file.filename })
       assertEquals(2, items.first().file.imageWidth)
       assertEquals(3, items.first().file.imageHeight)
+      items.forEach { it.file.close() }
+    } finally {
+      directory.deleteRecursively()
+    }
+  }
+
+  @Test
+  fun orderedFileListMaterializesSvgAsOriginalImageWithoutDuplicateImageFlavor() {
+    val directory = Files.createTempDirectory("typie-svg-clipboard-").toFile()
+    try {
+      val svgBytes =
+        """<svg xmlns="http://www.w3.org/2000/svg" width="12" height="8"></svg>"""
+          .encodeToByteArray()
+      val imageFile = File(directory, "first.svg").apply { writeBytes(svgBytes) }
+      val textFile = File(directory, "second.txt").apply { writeText("file") }
+      val transferable =
+        FakeTransferable(
+          linkedMapOf(
+            DataFlavor.javaFileListFlavor to listOf(imageFile, textFile),
+            DataFlavor.imageFlavor to BufferedImage(9, 9, BufferedImage.TYPE_INT_ARGB),
+          )
+        )
+
+      val items = transferable.readAttachmentItems().items
+
+      assertEquals(
+        listOf(IncomingContentItem.Kind.Image, IncomingContentItem.Kind.File),
+        items.map(IncomingContentItem::kind),
+      )
+      assertEquals(listOf("first.svg", "second.txt"), items.map { it.file.filename })
+      assertEquals("image/svg+xml", items.first().file.mimeType)
+      assertEquals(12, items.first().file.imageWidth)
+      assertEquals(8, items.first().file.imageHeight)
+      assertContentEquals(svgBytes, items.first().file.openSource().use { it.readByteArray() })
       items.forEach { it.file.close() }
     } finally {
       directory.deleteRecursively()

@@ -114,12 +114,16 @@ internal fun Transferable.readAttachmentItems(): LoadedIncomingContentItems {
       val outcomes = files.map { file ->
         runCatching {
           check(file.isFile && file.canRead()) { "Clipboard file is unreadable" }
-          val mimeType = file.probeContentType()
-          val image =
-            if (mimeType?.substringBefore('/') == "image") {
-              checkNotNull(file.decodeImageOrNull()) { "Clipboard image is unreadable" }
-            } else {
-              null
+          val providerMimeType = file.probeContentType()
+          val svgMimeType = svgMimeTypeOrNull(file.name, providerMimeType)
+          val mimeType = svgMimeType ?: providerMimeType
+          val imageSize =
+            when {
+              svgMimeType != null -> decodeSvgImageSize(file.readBytes())
+              mimeType?.substringBefore('/') == "image" ->
+                checkNotNull(file.decodeImageOrNull()) { "Clipboard image is unreadable" }
+                  .let { it.width to it.height }
+              else -> null
             }
           IncomingContentItem(
             kind =
@@ -134,8 +138,8 @@ internal fun Transferable.readAttachmentItems(): LoadedIncomingContentItems {
                 mimeType = mimeType,
                 size = file.length(),
                 previewModel = file,
-                imageWidth = image?.width,
-                imageHeight = image?.height,
+                imageWidth = imageSize?.first,
+                imageHeight = imageSize?.second,
                 openSource = { file.inputStream().asSource().buffered() },
               ),
           )

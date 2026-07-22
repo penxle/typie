@@ -50,6 +50,7 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
       EditorInputConnection(
         editor = editor,
         view = androidView,
+        inputSessionScope = this,
         bringIntoViewRequests = bringIntoViewRequests,
         extractMonitor = extractMonitor,
         isSessionCurrent = isSessionCurrent,

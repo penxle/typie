@@ -92,16 +92,7 @@ internal class AndroidClipboard(private val context: Context) : Clipboard {
             if (uri == null) {
               null
             } else {
-              val file = context.copyClipboardFile(uri)
-              IncomingContentItem(
-                kind =
-                  if (file.mimeType?.substringBefore('/') == "image") {
-                    IncomingContentItem.Kind.Image
-                  } else {
-                    IncomingContentItem.Kind.File
-                  },
-                file = file,
-              )
+              context.copyIncomingContentItem(uri)
             }
           },
         )

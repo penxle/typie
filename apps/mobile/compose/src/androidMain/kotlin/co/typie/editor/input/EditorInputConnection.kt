@@ -25,10 +25,15 @@ import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.editor.scroll.syncWithBringIntoView
 import co.typie.platform.IncomingContentCandidates
-import co.typie.platform.IncomingContentItem
-import co.typie.platform.readPlatformFile
+import co.typie.platform.copyIncomingContentItem
+import co.typie.platform.loadOwnedIncomingContentCandidates
 import java.util.concurrent.Executor
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.function.IntConsumer
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 // Reads are bounded by the ime window itself, and keyboards derive absolute
 // positions from read lengths (e.g. getTextBeforeCursor(Int.MAX_VALUE)), so
@@ -65,9 +70,10 @@ private val ImeExtract.isSelecting: Boolean
 internal class EditorInputConnection(
   private val editor: Editor,
   private val view: View,
+  private val inputSessionScope: CoroutineScope,
   private val bringIntoViewRequests: EditorBringIntoViewRequests,
   private val extractMonitor: ImeExtractMonitor,
-  isSessionCurrent: () -> Boolean,
+  private val isSessionCurrent: () -> Boolean,
   private val onIncomingContent: (IncomingContentCandidates) -> Boolean,
 ) : InputConnection {
   private val batch =
@@ -303,58 +309,58 @@ internal class EditorInputConnection(
     flags: Int,
     opts: Bundle?,
   ): Boolean {
+    if (!isSessionCurrent()) return false
+
     val permissionRequested = flags and InputConnection.INPUT_CONTENT_GRANT_READ_URI_PERMISSION != 0
-    var permissionOwned = false
-    return try {
+    val permissionOwned = AtomicBoolean(false)
+    fun releasePermission() {
+      if (permissionOwned.compareAndSet(true, false)) {
+        runCatching(inputContentInfo::releasePermission)
+      }
+    }
+
+    try {
       if (permissionRequested) {
         inputContentInfo.requestPermission()
-        permissionOwned = true
+        permissionOwned.set(true)
       }
-      val fallbackMimeType =
-        inputContentInfo.description.let { description ->
-          (0 until description.mimeTypeCount).firstNotNullOfOrNull { index ->
-            description.getMimeType(index)?.takeIf { it != "*/*" }
-          }
+    } catch (_: Throwable) {
+      releasePermission()
+      return false
+    }
+
+    val fallbackMimeType =
+      inputContentInfo.description.let { description ->
+        (0 until description.mimeTypeCount).firstNotNullOfOrNull { index ->
+          description.getMimeType(index)?.takeIf { it != "*/*" }
         }
-      val file =
-        view.context.readPlatformFile(
-          uri = inputContentInfo.contentUri,
-          fallbackMimeType = fallbackMimeType,
-          release = {
-            if (permissionOwned) {
-              permissionOwned = false
-              runCatching(inputContentInfo::releasePermission)
-            }
-          },
-        )
+      }
+    val job = inputSessionScope.launch {
       val candidates =
-        IncomingContentCandidates(
-          items =
-            listOf(
-              IncomingContentItem(
-                kind =
-                  if (file.mimeType?.substringBefore('/') == "image") {
-                    IncomingContentItem.Kind.Image
-                  } else {
-                    IncomingContentItem.Kind.File
-                  },
-                file = file,
+        try {
+          loadOwnedIncomingContentCandidates(Dispatchers.IO) {
+            val item =
+              view.context.copyIncomingContentItem(
+                uri = inputContentInfo.contentUri,
+                fallbackMimeType = fallbackMimeType,
               )
-            )
-        )
+            IncomingContentCandidates(items = listOf(item))
+          } ?: return@launch
+        } catch (error: CancellationException) {
+          throw error
+        } catch (_: Throwable) {
+          IncomingContentCandidates(unreadableItemCount = 1)
+        }
+
       try {
-        onIncomingContent(candidates).also { accepted -> if (!accepted) candidates.close() }
+        if (!onIncomingContent(candidates)) candidates.close()
       } catch (error: Throwable) {
         candidates.close()
         throw error
       }
-    } catch (_: Throwable) {
-      if (permissionOwned) {
-        permissionOwned = false
-        runCatching(inputContentInfo::releasePermission)
-      }
-      false
     }
+    job.invokeOnCompletion { releasePermission() }
+    return !job.isCancelled
   }
 
   override fun commitCompletion(text: CompletionInfo?): Boolean = false
