@@ -25,9 +25,9 @@ import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.NodeAttr
 import co.typie.editor.ffi.NodeOp
 import co.typie.editor.runtime.LocalEditorRuntime
-import co.typie.screen.editor.editor.toolbar.ToolbarFixedActionWidth
 import co.typie.screen.editor.editor.toolbar.ToolbarLabelTextStyle
 import co.typie.screen.editor.editor.toolbar.ToolbarPageVerticalPadding
+import co.typie.screen.editor.editor.toolbar.ToolbarSecondaryContentStartInset
 import co.typie.ui.component.Slider
 import co.typie.ui.component.Text
 import co.typie.ui.theme.AppTheme
@@ -141,7 +141,7 @@ private fun ImageResizeSecondaryToolbarSurface(
       modifier =
         Modifier.fillMaxSize()
           .padding(
-            start = ToolbarFixedActionWidth + ImageResizeToolbarItemGap,
+            start = ToolbarSecondaryContentStartInset + ImageResizeToolbarItemGap,
             top = ToolbarPageVerticalPadding,
             end = ImageResizeToolbarEndPadding,
             bottom = ToolbarPageVerticalPadding,

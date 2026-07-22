@@ -16,10 +16,10 @@ import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.NodeOp
 import co.typie.editor.ffi.TableOp
 import co.typie.screen.editor.editor.toolbar.EditorToolbarTableTarget
-import co.typie.screen.editor.editor.toolbar.ToolbarFixedActionWidth
 import co.typie.screen.editor.editor.toolbar.ToolbarItemGap
 import co.typie.screen.editor.editor.toolbar.ToolbarPageEndPadding
 import co.typie.screen.editor.editor.toolbar.ToolbarPageVerticalPadding
+import co.typie.screen.editor.editor.toolbar.ToolbarSecondaryContentStartInset
 
 @Composable
 internal fun TableCellBackgroundSecondaryToolbar(
@@ -42,7 +42,7 @@ internal fun TableCellBackgroundSecondaryToolbar(
         Modifier.fillMaxSize()
           .horizontalScroll(scrollState)
           .padding(
-            start = ToolbarFixedActionWidth,
+            start = ToolbarSecondaryContentStartInset,
             top = ToolbarPageVerticalPadding,
             end = ToolbarPageEndPadding,
             bottom = ToolbarPageVerticalPadding,

@@ -66,12 +66,12 @@ import co.typie.icons.Lucide
 import co.typie.screen.editor.editor.toolbar.EditorToolbarLabelButton
 import co.typie.screen.editor.editor.toolbar.ToolbarButtonShape
 import co.typie.screen.editor.editor.toolbar.ToolbarButtonSize
-import co.typie.screen.editor.editor.toolbar.ToolbarFixedActionWidth
 import co.typie.screen.editor.editor.toolbar.ToolbarItemGap
 import co.typie.screen.editor.editor.toolbar.ToolbarLabelHorizontalPadding
 import co.typie.screen.editor.editor.toolbar.ToolbarLabelTextStyle
 import co.typie.screen.editor.editor.toolbar.ToolbarPageEndPadding
 import co.typie.screen.editor.editor.toolbar.ToolbarPageVerticalPadding
+import co.typie.screen.editor.editor.toolbar.ToolbarSecondaryContentStartInset
 import co.typie.screen.editor.editor.toolbar.ToolbarTextOptionsSwitchMillis
 import co.typie.ui.component.FontSpecimen
 import co.typie.ui.component.LabelPosition
@@ -211,7 +211,7 @@ private fun TextOptionsToolbarSurface(
   content: @Composable () -> Unit,
 ) {
   val scrollState = rememberScrollState()
-  val scrollStartPadding = ToolbarFixedActionWidth
+  val scrollStartPadding = ToolbarSecondaryContentStartInset
 
   ToolbarSecondarySurface(
     onClose = onClose,

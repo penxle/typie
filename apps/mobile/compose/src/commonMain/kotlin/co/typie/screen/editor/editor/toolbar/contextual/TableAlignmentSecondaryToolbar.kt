@@ -13,10 +13,10 @@ import co.typie.editor.ffi.Modifier as EditorModifier
 import co.typie.editor.ffi.ModifierOp
 import co.typie.screen.editor.editor.toolbar.EditorToolbarLabelButton
 import co.typie.screen.editor.editor.toolbar.EditorToolbarTableTarget
-import co.typie.screen.editor.editor.toolbar.ToolbarFixedActionWidth
 import co.typie.screen.editor.editor.toolbar.ToolbarItemGap
 import co.typie.screen.editor.editor.toolbar.ToolbarPageEndPadding
 import co.typie.screen.editor.editor.toolbar.ToolbarPageVerticalPadding
+import co.typie.screen.editor.editor.toolbar.ToolbarSecondaryContentStartInset
 
 @Composable
 internal fun TableAlignmentSecondaryToolbar(
@@ -34,7 +34,7 @@ internal fun TableAlignmentSecondaryToolbar(
       modifier =
         Modifier.fillMaxSize()
           .padding(
-            start = ToolbarFixedActionWidth,
+            start = ToolbarSecondaryContentStartInset,
             top = ToolbarPageVerticalPadding,
             end = ToolbarPageEndPadding,
             bottom = ToolbarPageVerticalPadding,
