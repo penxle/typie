@@ -131,10 +131,13 @@ fn assert_parity(editor: &mut Editor) {
         ),
     ];
     for (msg, judged) in cases {
-        let probed = editor.can(msg.clone()).expect("probe must succeed");
+        let executed = {
+            let mut scratch = Editor::new_test(editor.state().clone());
+            crate::test_utils::apply_and_report_change(&mut scratch, msg.clone())
+        };
         assert_eq!(
-            judged, probed,
-            "judgment must match execute-probe for {msg:?}"
+            judged, executed,
+            "judgment must match execution for {msg:?}"
         );
     }
 }
@@ -165,14 +168,16 @@ fn assert_expand_parity(editor: &mut Editor) {
                 }
             }
         };
-        let probed = editor
-            .can(Message::Selection {
-                op: SelectionOp::Expand { unit: msg_unit },
-            })
-            .expect("probe must succeed");
+        let expand_msg = Message::Selection {
+            op: SelectionOp::Expand { unit: msg_unit },
+        };
+        let executed = {
+            let mut scratch = Editor::new_test(editor.state().clone());
+            crate::test_utils::apply_and_report_change(&mut scratch, expand_msg.clone())
+        };
         assert_eq!(
-            judged, probed,
-            "expand judgment must match probe for {msg_unit:?}"
+            judged, executed,
+            "expand judgment must match execution for {msg_unit:?}"
         );
     }
 }
@@ -180,7 +185,7 @@ fn assert_expand_parity(editor: &mut Editor) {
 proptest::proptest! {
     #![proptest_config(proptest::prelude::ProptestConfig { cases: 256, ..proptest::prelude::ProptestConfig::default() })]
     #[test]
-    fn judgment_matches_probe(fixture_idx in 0usize..7, start in 0usize..64, end in 0usize..64) {
+    fn judgment_matches_execution(fixture_idx in 0usize..7, start in 0usize..64, end in 0usize..64) {
         let state = fixtures().swap_remove(fixture_idx);
         let size = flat_size(&state.view());
         let start = start.min(size);
@@ -193,7 +198,7 @@ proptest::proptest! {
 }
 
 #[test]
-fn judgment_matches_probe_for_gap_cursor() {
+fn judgment_matches_execution_for_gap_cursor() {
     let (state, ..) = state! {
         doc { r: root { image paragraph { text("b") } } }
         selection: (r, 0, <)
@@ -204,7 +209,7 @@ fn judgment_matches_probe_for_gap_cursor() {
 }
 
 #[test]
-fn judgment_matches_probe_for_unit_selection() {
+fn judgment_matches_execution_for_unit_selection() {
     let (state, ..) = state! {
         doc { r: root {
             img: image
@@ -218,7 +223,7 @@ fn judgment_matches_probe_for_unit_selection() {
 }
 
 #[test]
-fn judgment_matches_probe_for_synthetic_selection() {
+fn judgment_matches_execution_for_synthetic_selection() {
     let (mut state, ..) = state! {
         doc { root { fold paragraph {} } }
         selection: none
@@ -252,7 +257,7 @@ fn judgment_matches_probe_for_synthetic_selection() {
 }
 
 #[test]
-fn judgment_matches_probe_for_synthetic_endpoint_absorb_only() {
+fn judgment_matches_execution_for_synthetic_endpoint_absorb_only() {
     let state = fixtures().swap_remove(1);
     let size = flat_size(&state.view());
     let start = 28usize.min(size);
@@ -266,7 +271,7 @@ fn judgment_matches_probe_for_synthetic_endpoint_absorb_only() {
 }
 
 #[test]
-fn judgment_matches_probe_for_root_endpoint_absorb_only() {
+fn judgment_matches_execution_for_root_endpoint_absorb_only() {
     let state = fixtures().swap_remove(0);
     let size = flat_size(&state.view());
     let start = 53usize.min(size);

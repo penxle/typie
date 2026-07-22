@@ -802,40 +802,6 @@ impl View {
         &self.view_state
     }
 
-    pub fn would_resize(&self, viewport: Viewport, _state: &State) -> bool {
-        self.viewport != viewport
-    }
-
-    pub fn would_set_external_height(&self, state: &State, node: Dot, height: f32) -> bool {
-        if !height.is_finite()
-            || height <= 0.0
-            || (state.view().node(node).is_none() && state.view().leaf(node).is_none())
-        {
-            return false;
-        }
-        self.view_state.external_height(node) != Some(height)
-    }
-
-    pub fn would_toggle_fold(&self, state: &State, id: Dot) -> bool {
-        state
-            .view()
-            .node(id)
-            .is_some_and(|n| matches!(n.node(), Node::Fold(_)))
-    }
-
-    pub fn would_clear_preferred_x(&self) -> bool {
-        self.view_state.preferred_x.is_some()
-    }
-
-    pub fn would_ensure_preferred_x_at(&self, pos: &Position) -> bool {
-        if self.view_state.preferred_x.is_some() {
-            return false;
-        }
-        self.layout.as_ref().is_some_and(|result| {
-            crate::query::navigation::compute_preferred_x_at(&result.layout_index, pos).is_some()
-        })
-    }
-
     pub fn would_resolve_movement(
         &self,
         pos: &Position,

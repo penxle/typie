@@ -195,9 +195,9 @@ fn perf_modifier_state_level() {
     timed(
         "state_observably_changed (transact_observable gate)",
         || {
-            let mut probe = editor_transaction::Transaction::new(&editor.state);
-            editor_commands::toggle_modifier(&mut probe, ModifierType::Italic).unwrap();
-            editor_state::state_observably_changed(&editor.state, probe.state())
+            let mut scratch = editor_transaction::Transaction::new(&editor.state);
+            editor_commands::toggle_modifier(&mut scratch, ModifierType::Italic).unwrap();
+            editor_state::state_observably_changed(&editor.state, scratch.state())
         },
     );
 

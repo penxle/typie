@@ -46,7 +46,6 @@ import co.typie.editor.ffi.Tri
 
 internal class FakeFfiEditor(
   var onTick: () -> List<EditorEvent> = { emptyList() },
-  var canProvider: (Message) -> Boolean = { false },
   var cursorProvider: () -> CursorMetrics? = { null },
   var placeholderProvider: () -> PlaceholderMetrics? = { null },
   var selectionProvider: () -> Selection? = { EmptySelection },
@@ -116,8 +115,6 @@ internal class FakeFfiEditor(
   override fun enqueue(message: Message) {
     enqueued += message
   }
-
-  override fun can(message: Message): Boolean = canProvider(message)
 
   override fun lastHistoryTag(): HistoryTag? = lastHistoryTagProvider()
 

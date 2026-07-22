@@ -7,6 +7,7 @@ use editor_commands::{self as commands};
 use editor_model::{DocView, Fragment, Node, PlainFileNode, PlainImageNode, PlainNode};
 use editor_resource::Resource;
 use editor_state::{Position, Selection, StableResolveCtx, StableSelection, State};
+use editor_transaction::Transaction;
 use editor_view::DropTarget;
 
 #[derive(Debug, Clone, Copy)]
@@ -226,7 +227,7 @@ pub(crate) fn position_inside_selection(
 
 // Dropping at the source selection's own from/to boundary is a structural no-op:
 // the block would be deleted and re-inserted at the same position (with new Dots).
-// Detect and skip early so probe mode doesn't report a false "state changed".
+// Detect and skip early so the would-change judgment doesn't report a false positive.
 fn drop_position_at_source_boundary(
     view: &DocView,
     position: Position,
@@ -271,9 +272,46 @@ pub(crate) fn judge_apply_drop(
             let Some(slice) = Slice::extract(&extract_state) else {
                 return false;
             };
-            commands::resolve_slice_insertion(&state.view(), position, slice).is_some()
+            if modifiers.alt {
+                // copy: 소스를 삭제하지 않으므로 드롭 전 원시 위치가 곧 실제 삽입 지점이다.
+                return commands::resolve_slice_insertion(&state.view(), position, slice).is_some();
+            }
+            move_insertion_fits_after_delete(state, position, *source, slice)
         }
     }
+}
+
+/// move 판정의 유일한 권위 경로. move 실행은 원시 위치에 삽입하는 법이 없고 항상 소스
+/// 삭제 → stable 재앵커 → 삽입 순으로 진행하므로, 삭제-전 원시 위치 평가는 어느
+/// 방향으로도(과소·과대) 권위가 없다. 대신 그 실행 시퀀스(set_selection →
+/// delete_selection → 재앵커)를 insert 직전까지 scratch 트랜잭션으로 미러하며,
+/// 커밋하지 않으므로 관측 부작용이 없다. 재앵커 실패는 실행의 rollback no-op과 정확히
+/// 합치해 false를 돌린다.
+///
+/// 마지막 삽입 가능성은 `resolve_slice_insertion`으로 판정한다 — 그 계약("Some(plan) ⇒
+/// 관측 가능한 삽입 op 방출")이 `insert_slice_at`과 정확히 대응하므로(빈 슬라이스가 splice
+/// edge join으로 소진돼 no-op이 되는 경우까지 `splice_emits_change`로 흡수됨) 이 근사는
+/// 실행과 합치한다.
+fn move_insertion_fits_after_delete(
+    state: &State,
+    position: Position,
+    source: Selection,
+    slice: Slice,
+) -> bool {
+    let stable_target = StableSelection::capture(&Selection::collapsed(position), &state.view());
+    let mut tr = Transaction::new(state);
+    if commands::set_selection(&mut tr, source).is_err() {
+        return false;
+    }
+    if commands::delete_selection(&mut tr).is_err() {
+        return false;
+    }
+    let view = tr.view();
+    let ctx = StableResolveCtx::from_live(&view, tr.state().projected.seq_checkout());
+    let Some(target) = stable_target.resolve(&ctx).map(|sel| sel.head) else {
+        return false;
+    };
+    commands::resolve_slice_insertion(&view, target, slice).is_some()
 }
 
 fn representative_external_payload(payload: ExternalDndPayloadKind) -> DndDropPayload {

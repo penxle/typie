@@ -191,10 +191,9 @@ pub fn handle_modifier_op(editor: &mut Editor, op: ModifierOp) -> Result<(), Edi
         ModifierOp::Toggle { modifier_type } => {
             // toggle_modifier records a span op even when the selected range has
             // no applicable target (e.g. a fold title that suppresses the
-            // modifier). That op produces no observable change but still pushes a
-            // history entry, which would make editor.can (observable-state based)
-            // disagree with apply. Discard the transaction when there is nothing
-            // to observe.
+            // modifier). That op produces no observable change but would still
+            // push a history entry, polluting undo with a no-op. Discard the
+            // transaction when there is nothing to observe.
             editor.transact_observable(|tr| {
                 commands::toggle_modifier(tr, modifier_type)?;
                 Ok(())
@@ -243,7 +242,9 @@ mod tests {
     use super::*;
     use crate::event::EditorEvent;
     use crate::state_field::StateField;
-    use crate::test_utils::assert_probe_predicts_apply;
+    use crate::test_utils::{
+        apply_and_report_change, assert_apply_changes_state, assert_apply_preserves_state,
+    };
 
     fn make_resource(families: impl IntoIterator<Item = (&'static str, Vec<u16>)>) -> Resource {
         let mut resource = Resource::new_test();
@@ -267,12 +268,12 @@ mod tests {
     }
 
     #[test]
-    fn probe_toggle_bold_with_textblock() {
+    fn toggle_bold_with_textblock_changes_state() {
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("hello") } } }
             selection: (p1, 1)
         };
-        assert_probe_predicts_apply(
+        assert_apply_changes_state(
             state,
             Message::Modifier {
                 op: ModifierOp::Toggle {
@@ -284,8 +285,7 @@ mod tests {
 
     // The Toggle path must not record a history entry (nor undoable state) when
     // the command produces no observable change — e.g. a selection entirely
-    // inside a fold title, which suppresses inline modifiers. `editor.can`
-    // (observable-state probe) must keep agreeing with apply.
+    // inside a fold title, which suppresses inline modifiers.
     #[test]
     fn toggle_with_no_applicable_target_records_no_history() {
         let (state, ..) = state! {
@@ -306,12 +306,12 @@ mod tests {
     }
 
     #[test]
-    fn probe_toggle_italic_with_no_applicable_target() {
+    fn toggle_italic_with_no_applicable_target_preserves_state() {
         let (state, ..) = state! {
             doc { root { fold { ft1: fold_title { text("title") } fold_content { paragraph { text("body") } } } } }
             selection: (ft1, 0) -> (ft1, 5)
         };
-        assert_probe_predicts_apply(
+        assert_apply_preserves_state(
             state,
             Message::Modifier {
                 op: ModifierOp::Toggle {
@@ -322,12 +322,12 @@ mod tests {
     }
 
     #[test]
-    fn probe_set_modifier_same_value_noop() {
+    fn set_modifier_same_value_preserves_state() {
         let (state, ..) = state! {
             doc { root [font_size(1600)] { p1: paragraph { text("hi") } } }
             selection: (p1, 0)
         };
-        assert_probe_predicts_apply(
+        assert_apply_preserves_state(
             state,
             Message::Modifier {
                 op: ModifierOp::Set {
@@ -338,12 +338,12 @@ mod tests {
     }
 
     #[test]
-    fn probe_clear_all_empty_pending() {
+    fn clear_all_empty_pending_preserves_state() {
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("hello") } } }
             selection: (p1, 2)
         };
-        assert_probe_predicts_apply(
+        assert_apply_preserves_state(
             state,
             Message::Modifier {
                 op: ModifierOp::ClearAll,
@@ -694,14 +694,19 @@ mod tests {
             }],
         });
 
-        let can = editor
-            .can(Message::Modifier {
-                op: ModifierOp::Toggle {
-                    modifier_type: ModifierType::Bold,
-                },
-            })
-            .unwrap();
-        assert!(can, "empty-composition format command is enabled via can()");
+        let mut scratch =
+            Editor::new_test_with_resource(editor.state().clone(), editor.resource().clone());
+        assert!(
+            apply_and_report_change(
+                &mut scratch,
+                Message::Modifier {
+                    op: ModifierOp::Toggle {
+                        modifier_type: ModifierType::Bold,
+                    },
+                }
+            ),
+            "empty-composition format command must observably change state"
+        );
 
         let events = editor.apply(Message::Modifier {
             op: ModifierOp::Toggle {

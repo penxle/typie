@@ -53,21 +53,19 @@ pub fn handle_system_event(editor: &mut Editor, event: SystemEvent) -> Result<()
 
         SystemEvent::FontsChanged => {
             editor.reresolve_fonts()?;
-            if !editor.is_probing() {
-                editor.view.clear_measure_cache();
-                let changed = editor.view.invalidate(&editor.state);
-                if changed {
-                    editor.push_event(EditorEvent::StateChanged {
-                        fields: vec![
-                            StateField::Cursor,
-                            StateField::PageSizes,
-                            StateField::ExternalElements,
-                            StateField::TableOverlays,
-                            StateField::Placeholder,
-                        ],
-                    });
-                    editor.invalidate_render();
-                }
+            editor.view.clear_measure_cache();
+            let changed = editor.view.invalidate(&editor.state);
+            if changed {
+                editor.push_event(EditorEvent::StateChanged {
+                    fields: vec![
+                        StateField::Cursor,
+                        StateField::PageSizes,
+                        StateField::ExternalElements,
+                        StateField::TableOverlays,
+                        StateField::Placeholder,
+                    ],
+                });
+                editor.invalidate_render();
             }
             Ok(())
         }
@@ -79,6 +77,7 @@ mod tests {
     use super::*;
     use crate::event::{EditorEvent, FontData};
     use crate::state_field::StateField;
+    use crate::test_utils::apply_and_report_change;
     use editor_macros::state;
 
     fn test_config_single_chunk(
@@ -1489,7 +1488,7 @@ mod tests {
     }
 
     #[test]
-    fn probe_resize_same_viewport_noop() {
+    fn resize_same_viewport_preserves_state() {
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("hi") } } }
             selection: (p1, 0)
@@ -1502,20 +1501,20 @@ mod tests {
                 scale_factor: 1.0,
             },
         });
-        let probed = editor
-            .can(Message::System {
+        assert!(!apply_and_report_change(
+            &mut editor,
+            Message::System {
                 event: SystemEvent::Resize {
                     width: 800.0,
                     height: 600.0,
                     scale_factor: 1.0,
                 },
-            })
-            .unwrap();
-        assert!(!probed);
+            }
+        ));
     }
 
     #[test]
-    fn probe_resize_different_viewport() {
+    fn resize_different_viewport_changes_state() {
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("hi") } } }
             selection: (p1, 0)
@@ -1528,50 +1527,50 @@ mod tests {
                 scale_factor: 1.0,
             },
         });
-        let probed = editor
-            .can(Message::System {
+        assert!(apply_and_report_change(
+            &mut editor,
+            Message::System {
                 event: SystemEvent::Resize {
                     width: 1024.0,
                     height: 600.0,
                     scale_factor: 1.0,
                 },
-            })
-            .unwrap();
-        assert!(probed);
+            }
+        ));
     }
 
     #[test]
-    fn probe_set_focused_same_value() {
+    fn set_focused_same_value_preserves_state() {
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("hi") } } }
             selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
-        let probed = editor
-            .can(Message::System {
+        assert!(!apply_and_report_change(
+            &mut editor,
+            Message::System {
                 event: SystemEvent::SetFocused { focused: false },
-            })
-            .unwrap();
-        assert!(!probed);
+            }
+        ));
     }
 
     #[test]
-    fn probe_set_focused_different() {
+    fn set_focused_different_changes_state() {
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("hi") } } }
             selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
-        let probed = editor
-            .can(Message::System {
+        assert!(apply_and_report_change(
+            &mut editor,
+            Message::System {
                 event: SystemEvent::SetFocused { focused: true },
-            })
-            .unwrap();
-        assert!(probed);
+            }
+        ));
     }
 
     #[test]
-    fn probe_set_external_height_same_value() {
+    fn set_external_height_same_value_preserves_state() {
         let (state, img, _) = state! {
             doc { root { img: image p1: paragraph { text("x") } } }
             selection: (p1, 0)
@@ -1586,19 +1585,19 @@ mod tests {
                 height: 72.0,
             },
         });
-        let probed = editor
-            .can(Message::System {
+        assert!(!apply_and_report_change(
+            &mut editor,
+            Message::System {
                 event: SystemEvent::SetExternalHeight {
                     node_id: img,
                     height: 72.0,
                 },
-            })
-            .unwrap();
-        assert!(!probed);
+            }
+        ));
     }
 
     #[test]
-    fn probe_set_external_height_different_value() {
+    fn set_external_height_different_value_changes_state() {
         let (state, img, _) = state! {
             doc { root { img: image p1: paragraph { text("x") } } }
             selection: (p1, 0)
@@ -1607,19 +1606,19 @@ mod tests {
         editor.apply(Message::System {
             event: SystemEvent::Initialize,
         });
-        let probed = editor
-            .can(Message::System {
+        assert!(apply_and_report_change(
+            &mut editor,
+            Message::System {
                 event: SystemEvent::SetExternalHeight {
                     node_id: img,
                     height: 72.0,
                 },
-            })
-            .unwrap();
-        assert!(probed);
+            }
+        ));
     }
 
     #[test]
-    fn probe_set_external_height_zero_is_noop() {
+    fn set_external_height_zero_preserves_state() {
         let (state, img, _) = state! {
             doc { root { img: image p1: paragraph { text("x") } } }
             selection: (p1, 0)
@@ -1628,19 +1627,19 @@ mod tests {
         editor.apply(Message::System {
             event: SystemEvent::Initialize,
         });
-        let probed = editor
-            .can(Message::System {
+        assert!(!apply_and_report_change(
+            &mut editor,
+            Message::System {
                 event: SystemEvent::SetExternalHeight {
                     node_id: img,
                     height: 0.0,
                 },
-            })
-            .unwrap();
-        assert!(!probed);
+            }
+        ));
     }
 
     #[test]
-    fn probe_initialize_after_initialize_is_false() {
+    fn initialize_after_initialize_preserves_state() {
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("hi") } } }
             selection: (p1, 0)
@@ -1649,16 +1648,16 @@ mod tests {
         editor.apply(Message::System {
             event: SystemEvent::Initialize,
         });
-        let probed = editor
-            .can(Message::System {
+        assert!(!apply_and_report_change(
+            &mut editor,
+            Message::System {
                 event: SystemEvent::Initialize,
-            })
-            .unwrap();
-        assert!(!probed);
+            }
+        ));
     }
 
     #[test]
-    fn probe_fonts_changed_is_false_with_no_pending() {
+    fn fonts_changed_with_no_pending_preserves_state() {
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("hi") } } }
             selection: (p1, 0)
@@ -1667,16 +1666,16 @@ mod tests {
         editor.apply(Message::System {
             event: SystemEvent::Initialize,
         });
-        let probed = editor
-            .can(Message::System {
+        assert!(!apply_and_report_change(
+            &mut editor,
+            Message::System {
                 event: SystemEvent::FontsChanged,
-            })
-            .unwrap();
-        assert!(!probed);
+            }
+        ));
     }
 
     #[test]
-    fn probe_font_base_loaded_for_unknown_family_is_false() {
+    fn font_base_loaded_for_unknown_family_preserves_state() {
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("hi") } } }
             selection: (p1, 0)
@@ -1685,19 +1684,19 @@ mod tests {
         editor.apply(Message::System {
             event: SystemEvent::Initialize,
         });
-        let probed = editor
-            .can(Message::System {
+        assert!(!apply_and_report_change(
+            &mut editor,
+            Message::System {
                 event: SystemEvent::FontBaseLoaded {
                     family: "UnknownFont".into(),
                     weight: 400,
                 },
-            })
-            .unwrap();
-        assert!(!probed);
+            }
+        ));
     }
 
     #[test]
-    fn probe_font_chunk_loaded_for_unknown_family_is_false() {
+    fn font_chunk_loaded_for_unknown_family_preserves_state() {
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("hi") } } }
             selection: (p1, 0)
@@ -1706,20 +1705,20 @@ mod tests {
         editor.apply(Message::System {
             event: SystemEvent::Initialize,
         });
-        let probed = editor
-            .can(Message::System {
+        assert!(!apply_and_report_change(
+            &mut editor,
+            Message::System {
                 event: SystemEvent::FontChunkLoaded {
                     family: "UnknownFont".into(),
                     weight: 400,
                     chunk_id: 0,
                 },
-            })
-            .unwrap();
-        assert!(!probed);
+            }
+        ));
     }
 
     #[test]
-    fn probe_font_manifest_loaded_for_unknown_family_is_false() {
+    fn font_manifest_loaded_for_unknown_family_preserves_state() {
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("hi") } } }
             selection: (p1, 0)
@@ -1728,15 +1727,15 @@ mod tests {
         editor.apply(Message::System {
             event: SystemEvent::Initialize,
         });
-        let probed = editor
-            .can(Message::System {
+        assert!(!apply_and_report_change(
+            &mut editor,
+            Message::System {
                 event: SystemEvent::FontManifestLoaded {
                     family: "UnknownFont".into(),
                     weight: 400,
                 },
-            })
-            .unwrap();
-        assert!(!probed);
+            }
+        ));
     }
 
     #[test]

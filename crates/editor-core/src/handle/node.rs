@@ -105,10 +105,10 @@ mod tests {
     use editor_state::{Affinity, Position, Selection, State, assert_state_eq};
 
     use super::*;
-    use crate::test_utils::assert_probe_predicts_apply;
+    use crate::test_utils::assert_apply_changes_state;
 
     #[test]
-    fn probe_delete_node() {
+    fn delete_node_changes_state() {
         let (state, _r, img) = state! {
             doc { r: root {
                 paragraph { text("a") }
@@ -116,7 +116,7 @@ mod tests {
             } }
             selection: (r, 1, >) -> (r, 1, <)
         };
-        assert_probe_predicts_apply(
+        assert_apply_changes_state(
             state,
             Message::Node {
                 op: NodeOp::Delete { id: img },

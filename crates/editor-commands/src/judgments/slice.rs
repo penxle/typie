@@ -10,7 +10,8 @@ use crate::helpers::{
     insert_blocks_at_block_boundary, insert_blocks_in_textblock_at_position,
     insert_content_as_inline_at_position, is_insertable_inline_fragment,
     materialize_position_block, open_inline_content_for_textblock_insert, position_in_textblock,
-    prepare_page_breaks_for_position, repair_slice_fragments, top_level_fragments,
+    prepare_page_breaks_for_position, repair_slice_fragments, splice_emits_change,
+    top_level_fragments,
 };
 use crate::types::SliceProvenance;
 
@@ -65,6 +66,7 @@ pub(crate) fn resolve_slice_insertion_outcome(
         let parent_fitted = fit_slice_for_textblock_parent(view, &position, &slice);
         if let Some(candidate) = parent_fitted.as_ref()
             && can_splice_textblock(view, &position, candidate)
+            && splice_emits_change(view, &position, candidate)
         {
             return SliceInsertionOutcome::Plan(SliceInsertionPlan::SpliceBlocks {
                 candidate: candidate.clone(),

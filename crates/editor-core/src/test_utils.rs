@@ -51,36 +51,25 @@ impl EditorSnapshot {
     }
 }
 
-pub fn assert_probe_predicts_apply(state: editor_state::State, msg: crate::message::Message) {
-    assert_probe_predicts_apply_with_setup(|| Editor::new_test(state.clone()), msg);
+pub fn apply_and_report_change(editor: &mut Editor, msg: crate::message::Message) -> bool {
+    let _ = editor.tick();
+    let before = EditorSnapshot::capture(editor);
+    editor.apply(msg);
+    EditorSnapshot::capture(editor) != before
 }
 
-pub fn assert_probe_predicts_apply_with_setup<F>(mut build_editor: F, msg: crate::message::Message)
-where
-    F: FnMut() -> Editor,
-{
-    let mut probed = build_editor();
-    let before = EditorSnapshot::capture(&probed);
-    let predicted = probed.can(msg.clone()).expect("probe must succeed");
-    let after = EditorSnapshot::capture(&probed);
-    assert_eq!(before, after, "probe must not mutate observable state");
-
-    let mut applied = build_editor();
-    let before_applied = EditorSnapshot::capture(&applied);
-    applied.apply(msg);
-    let after_applied = EditorSnapshot::capture(&applied);
-    let actually_changed = before_applied != after_applied;
-
-    assert_eq!(
-        predicted, actually_changed,
-        "probe must predict whether apply changes observable state"
+pub fn assert_apply_changes_state(state: editor_state::State, msg: crate::message::Message) {
+    let mut editor = Editor::new_test(state);
+    assert!(
+        apply_and_report_change(&mut editor, msg),
+        "apply must observably change state"
     );
 }
 
-pub fn assert_probe_is_safe(state: editor_state::State, msg: crate::message::Message) {
+pub fn assert_apply_preserves_state(state: editor_state::State, msg: crate::message::Message) {
     let mut editor = Editor::new_test(state);
-    let before = EditorSnapshot::capture(&editor);
-    let _ = editor.can(msg);
-    let after = EditorSnapshot::capture(&editor);
-    assert_eq!(before, after, "probe must not mutate observable state");
+    assert!(
+        !apply_and_report_change(&mut editor, msg),
+        "apply must not observably change state"
+    );
 }

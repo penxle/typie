@@ -174,7 +174,7 @@ mod tests {
     };
 
     use super::*;
-    use crate::test_utils::assert_probe_predicts_apply;
+    use crate::test_utils::{assert_apply_changes_state, assert_apply_preserves_state};
 
     fn set_pending_format(editor: &mut Editor) {
         editor
@@ -195,12 +195,12 @@ mod tests {
     }
 
     #[test]
-    fn probe_backspace_at_boundary() {
+    fn backspace_at_boundary_preserves_state() {
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("hello") } } }
             selection: (p1, 0)
         };
-        assert_probe_predicts_apply(
+        assert_apply_preserves_state(
             state,
             Message::Key {
                 event: KeyEvent {
@@ -1322,7 +1322,7 @@ mod tests {
             }
             selection: (p1, 0)
         };
-        assert_probe_predicts_apply(state.clone(), key(Key::Delete));
+        assert_apply_changes_state(state.clone(), key(Key::Delete));
         let mut editor = Editor::new_test(state);
         editor.apply(key(Key::Delete));
         let (expected, ..) = state! {
@@ -1352,7 +1352,7 @@ mod tests {
             }
             selection: (p2, 0)
         };
-        assert_probe_predicts_apply(state.clone(), key(Key::Backspace));
+        assert_apply_changes_state(state.clone(), key(Key::Backspace));
         let mut editor = Editor::new_test(state);
         editor.apply(key(Key::Backspace));
         let (expected, ..) = state! {
@@ -1384,7 +1384,7 @@ mod tests {
             }
             selection: (p2, 0)
         };
-        assert_probe_predicts_apply(state.clone(), key(Key::Backspace));
+        assert_apply_changes_state(state.clone(), key(Key::Backspace));
         let mut editor = Editor::new_test(state);
         editor.apply(key(Key::Backspace));
         let (expected, ..) = state! {

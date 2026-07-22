@@ -621,15 +621,15 @@ mod tests {
 
     use crate::editor::Editor;
     use crate::message::*;
-    use crate::test_utils::assert_probe_predicts_apply;
+    use crate::test_utils::{assert_apply_changes_state, assert_apply_preserves_state};
 
     #[test]
-    fn probe_move_forward_in_middle() {
+    fn move_forward_in_middle_changes_state() {
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("hello") } } }
             selection: (p1, 2)
         };
-        assert_probe_predicts_apply(
+        assert_apply_changes_state(
             state,
             Message::Navigation {
                 op: NavigationOp::Move {
@@ -643,12 +643,12 @@ mod tests {
     }
 
     #[test]
-    fn probe_move_forward_at_end() {
+    fn move_forward_at_end_preserves_state() {
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("hello") } } }
             selection: (p1, 5)
         };
-        assert_probe_predicts_apply(
+        assert_apply_preserves_state(
             state,
             Message::Navigation {
                 op: NavigationOp::Move {
@@ -3554,7 +3554,7 @@ mod tests {
     }
 
     #[test]
-    fn probe_predicts_partial_cell_rect_boundary_exit() {
+    fn partial_cell_rect_boundary_exit_changes_state() {
         let fixture = table_navigation_fixture();
         let mut state = fixture.state;
         state.selection = {
@@ -3562,7 +3562,7 @@ mod tests {
             cell_rect_selection(fixture.c00, fixture.c10, &view)
         };
 
-        assert_probe_predicts_apply(
+        assert_apply_changes_state(
             state,
             Message::Navigation {
                 op: NavigationOp::Move {

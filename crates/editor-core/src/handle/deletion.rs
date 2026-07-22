@@ -217,15 +217,15 @@ mod tests {
 
     use super::*;
     use crate::editor::Editor;
-    use crate::test_utils::assert_probe_predicts_apply;
+    use crate::test_utils::{assert_apply_changes_state, assert_apply_preserves_state};
 
     #[test]
-    fn probe_delete_selection_collapsed_at_start() {
+    fn delete_selection_collapsed_at_start_preserves_state() {
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("hello") } } }
             selection: (p1, 0)
         };
-        assert_probe_predicts_apply(
+        assert_apply_preserves_state(
             state,
             Message::Deletion {
                 op: DeletionOp::Selection,
@@ -234,12 +234,12 @@ mod tests {
     }
 
     #[test]
-    fn probe_delete_selection_range() {
+    fn delete_selection_range_changes_state() {
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("hello") } } }
             selection: (p1, 1) -> (p1, 4)
         };
-        assert_probe_predicts_apply(
+        assert_apply_changes_state(
             state,
             Message::Deletion {
                 op: DeletionOp::Selection,

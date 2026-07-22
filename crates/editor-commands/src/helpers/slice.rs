@@ -435,6 +435,72 @@ pub(crate) fn can_splice_textblock(view: &DocView, position: &Position, slice: &
         .is_some()
 }
 
+/// `can_splice_textblock`이 통과시킨 splice가 실제로 관측 가능한 op를 방출하는지 —
+/// `insert_blocks_in_textblock`이 `Ok(Some)`을 돌리는 조건의 정확한 미러. 구조 유효성만
+/// 보는 `can_splice_textblock`은 콘텐츠 없는 슬라이스(예: 빈 문단)가 edge join으로 소진돼
+/// 아무 op도 내지 않는(`Ok(None)`) 경우를 통과시키므로, resolve가 그런 슬라이스에
+/// SpliceBlocks Plan을 내지 않도록 이 술어로 걸러 `resolve_slice_insertion`의 계약
+/// (`Some(plan)` ⇒ 삽입 op 방출)을 유지한다. 모든 입력은 (view, position, slice)의 순수
+/// 함수다.
+pub(crate) fn splice_emits_change(view: &DocView, position: &Position, slice: &Slice) -> bool {
+    let Some(textblock_id) = find_ancestor_textblock(view, position.node) else {
+        return false;
+    };
+    let Some(textblock) = view.node(textblock_id) else {
+        return false;
+    };
+    let offset = position.offset;
+    let child_count = textblock.children().count();
+    let has_left = offset > 0;
+    let has_right = offset < child_count;
+
+    let blocks: Vec<&Fragment> = slice.content.iter().collect();
+    if blocks.is_empty() {
+        return false;
+    }
+    let (join_start, join_end) = textblock_edge_joins(&textblock, offset, slice);
+    let merge_destinations = join_start && join_end && blocks.len() == 1;
+    let unjoined_start = usize::from(join_start);
+    let unjoined_end = if join_end {
+        blocks.len().saturating_sub(1)
+    } else {
+        blocks.len()
+    };
+
+    // 소진되지 않은 블록은 그대로 insert_subtree 된다. 빈 텍스트블록 제거 케이스도 포함:
+    // !has_left && !has_right ⇒ join 불가 ⇒ unjoined_count == blocks.len() > 0.
+    if unjoined_end > unjoined_start {
+        return true;
+    }
+    // 인접 위치의 미병합 split은 두 반쪽을 남긴다(구조 변경).
+    if has_left && has_right && !merge_destinations {
+        return true;
+    }
+    // start join: blocks[0]의 인라인 병합, 또는 말미 페이지브레이크 삽입.
+    // 페이지브레이크 절은 실행의 into_root_paragraph 성공 여부를 직접 보지 않는다 —
+    // 상류 prepare_page_breaks_for_position이 비-root 문맥의 말미 페이지브레이크를
+    // 이미 제거하므로, 여기 도달한 말미 PageBreak는 root-terminal 허용 문맥이 보장된다.
+    if join_start
+        && (blocks[0].children.iter().any(is_insertable_inline_fragment)
+            || blocks[0]
+                .children
+                .last()
+                .is_some_and(|child| child.node.as_type() == NodeType::PageBreak))
+    {
+        return true;
+    }
+    // end join: blocks.last()의 인라인 병합.
+    let merge_end = join_end && !merge_destinations;
+    if merge_end
+        && blocks
+            .last()
+            .is_some_and(|block| block.children.iter().any(is_insertable_inline_fragment))
+    {
+        return true;
+    }
+    false
+}
+
 fn insert_blocks_in_textblock(
     tr: &mut Transaction,
     slice: &Slice,

@@ -592,24 +592,6 @@ class EditorAwaitTest {
     }
 
   @Test
-  fun sync_does_not_probe_can_availability() =
-    runTest(dispatcher) {
-      var canCalls = 0
-      val fake =
-        FakeFfiEditor(
-          canProvider = {
-            canCalls += 1
-            true
-          }
-        )
-      val editor = Editor(fake, this, dispatcher)
-
-      editor.sync { enqueue(sampleMessage) }
-
-      assertEquals(0, canCalls)
-    }
-
-  @Test
   fun sync_reports_tick_exception_without_committing() =
     runTest(dispatcher) {
       val boom = IllegalStateException("boom")

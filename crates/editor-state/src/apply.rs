@@ -116,21 +116,6 @@ impl State {
         Ok((next, applied))
     }
 
-    pub fn would_receive_remote_changeset(
-        &self,
-        changeset: &Changeset<EditOp>,
-    ) -> Result<bool, StateError> {
-        if changeset
-            .ops
-            .iter()
-            .all(|op| self.projected.graph().contains(&op.id))
-        {
-            return Ok(false);
-        }
-        let (_next, ops) = self.receive_remote_changeset(changeset.clone())?;
-        Ok(!ops.is_empty())
-    }
-
     pub fn local_changesets_since(
         &self,
         remote_heads: &HashSet<Dot>,
@@ -305,20 +290,5 @@ mod tests {
         let (merged, dropped) = base.receive_changesets_ordered(pending);
         assert!(dropped.is_empty(), "all pending applies onto matching base");
         assert_eq!(merged.view().node(para).unwrap().inline_text(), "hi");
-    }
-
-    #[test]
-    fn would_receive_is_false_for_already_contained_ops() {
-        let mut authored = State::empty();
-        authored.projected_mut().apply(seq_char(1, 'z')).unwrap();
-        authored.projected_mut().commit();
-        let css = authored.local_changesets_since(&HashSet::new()).unwrap();
-        assert!(!css.is_empty());
-        for cs in css {
-            assert!(
-                !authored.would_receive_remote_changeset(&cs).unwrap(),
-                "authored already contains every op in its own changesets"
-            );
-        }
     }
 }

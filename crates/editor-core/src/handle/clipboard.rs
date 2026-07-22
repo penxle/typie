@@ -70,9 +70,7 @@ pub fn handle_clipboard_op(editor: &mut Editor, op: ClipboardOp) -> Result<(), E
                 )?;
                 Ok(())
             })?;
-            if !editor.is_probing()
-                && let (Some(start), Some(pre), Some(plain_text)) =
-                    (start_flat, pre_block, plain_text)
+            if let (Some(start), Some(pre), Some(plain_text)) = (start_flat, pre_block, plain_text)
                 && matches!(
                     editor.last_history_tag(),
                     Some(HistoryTag::PasteHtml { .. })
@@ -137,31 +135,29 @@ pub fn handle_clipboard_op(editor: &mut Editor, op: ClipboardOp) -> Result<(), E
                     )?;
                     Ok(())
                 })?;
-                if !editor.is_probing() {
-                    let mut changed = false;
-                    for (id, a, b) in reanchors {
-                        let stable = {
-                            let view = editor.state().view();
-                            match (
-                                ResolvedPosition::from_flat(&view, a),
-                                ResolvedPosition::from_flat(&view, b),
-                            ) {
-                                (Some(anchor), Some(head)) => Some(StableSelection::capture(
-                                    &Selection::new((&anchor).into(), (&head).into()),
-                                    &view,
-                                )),
-                                _ => None,
-                            }
-                        };
-                        if let Some(stable) = stable {
-                            changed |= editor.tracked_ranges_mut().set_selection(&id, stable);
+                let mut changed = false;
+                for (id, a, b) in reanchors {
+                    let stable = {
+                        let view = editor.state().view();
+                        match (
+                            ResolvedPosition::from_flat(&view, a),
+                            ResolvedPosition::from_flat(&view, b),
+                        ) {
+                            (Some(anchor), Some(head)) => Some(StableSelection::capture(
+                                &Selection::new((&anchor).into(), (&head).into()),
+                                &view,
+                            )),
+                            _ => None,
                         }
+                    };
+                    if let Some(stable) = stable {
+                        changed |= editor.tracked_ranges_mut().set_selection(&id, stable);
                     }
-                    if changed {
-                        editor.push_event(EditorEvent::StateChanged {
-                            fields: vec![StateField::TrackedRanges],
-                        });
-                    }
+                }
+                if changed {
+                    editor.push_event(EditorEvent::StateChanged {
+                        fields: vec![StateField::TrackedRanges],
+                    });
                 }
                 return Ok(());
             }
@@ -227,7 +223,7 @@ mod tests {
     use editor_state::{ResolvedPositionFlatExt, Selection, assert_doc_eq, assert_state_eq};
 
     use super::*;
-    use crate::test_utils::assert_probe_predicts_apply;
+    use crate::test_utils::assert_apply_preserves_state;
 
     fn has_state_field(events: &[EditorEvent], field: StateField) -> bool {
         events.iter().any(|event| {
@@ -236,12 +232,12 @@ mod tests {
     }
 
     #[test]
-    fn probe_cut_with_collapsed_selection() {
+    fn cut_with_collapsed_selection_preserves_state() {
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("hello") } } }
             selection: (p1, 2)
         };
-        assert_probe_predicts_apply(
+        assert_apply_preserves_state(
             state,
             Message::Clipboard {
                 op: ClipboardOp::Cut,
@@ -250,12 +246,12 @@ mod tests {
     }
 
     #[test]
-    fn probe_paste_empty() {
+    fn paste_empty_preserves_state() {
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("hello") } } }
             selection: (p1, 2)
         };
-        assert_probe_predicts_apply(
+        assert_apply_preserves_state(
             state,
             Message::Clipboard {
                 op: ClipboardOp::Paste {

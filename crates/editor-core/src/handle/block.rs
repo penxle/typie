@@ -85,7 +85,9 @@ mod tests {
     use editor_state::assert_state_eq;
 
     use super::*;
-    use crate::test_utils::assert_probe_predicts_apply;
+    use crate::test_utils::{
+        apply_and_report_change, assert_apply_changes_state, assert_apply_preserves_state,
+    };
 
     fn block_message(op: BlockOp) -> Message {
         Message::Block { op }
@@ -401,12 +403,12 @@ mod tests {
     }
 
     #[test]
-    fn probe_predicts_valid_and_invalid_fold_messages() {
+    fn wrap_fold_changes_state_only_when_valid() {
         let (valid, ..) = state! {
             doc { root { p1: paragraph { text("A") } paragraph {} } }
             selection: (p1, 0)
         };
-        assert_probe_predicts_apply(valid, block_message(BlockOp::WrapFold));
+        assert_apply_changes_state(valid, block_message(BlockOp::WrapFold));
 
         let (invalid, ..) = state! {
             doc {
@@ -421,7 +423,10 @@ mod tests {
             selection: (title, 0)
         };
         let mut editor = Editor::new_test(invalid.clone());
-        assert!(!editor.can(block_message(BlockOp::WrapFold)).unwrap());
-        assert_probe_predicts_apply(invalid, block_message(BlockOp::WrapFold));
+        assert!(!apply_and_report_change(
+            &mut editor,
+            block_message(BlockOp::WrapFold)
+        ));
+        assert_apply_preserves_state(invalid, block_message(BlockOp::WrapFold));
     }
 }

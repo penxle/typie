@@ -1,5 +1,4 @@
 use crate::CommandResult;
-use editor_state::State;
 use editor_transaction::Transaction;
 
 pub fn first(
@@ -28,11 +27,6 @@ pub fn chain(
         }
     }
     Ok(true)
-}
-
-pub fn can(state: &State, cmd: &dyn Fn(&mut Transaction) -> CommandResult) -> CommandResult {
-    let mut tr = Transaction::new(state);
-    cmd(&mut tr)
 }
 
 pub fn optional(

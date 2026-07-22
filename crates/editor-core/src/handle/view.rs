@@ -77,7 +77,7 @@ mod tests {
     use super::*;
     use crate::event::EditorEvent;
     use crate::state_field::StateField;
-    use crate::test_utils::assert_probe_predicts_apply;
+    use crate::test_utils::assert_apply_changes_state;
 
     fn set_pending_format(editor: &mut Editor) {
         editor
@@ -117,7 +117,7 @@ mod tests {
     }
 
     #[test]
-    fn probe_toggle_fold_existing() {
+    fn toggle_fold_existing_changes_state() {
         let (state, f1, ..) = state! {
             doc { root {
                 f1: fold {
@@ -127,7 +127,7 @@ mod tests {
             } }
             selection: (ft1, 0)
         };
-        assert_probe_predicts_apply(
+        assert_apply_changes_state(
             state,
             Message::View {
                 op: ViewOp::ToggleFold { id: f1 },

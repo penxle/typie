@@ -30,12 +30,6 @@ use crate::tracked_range::TrackedRangeRegistry;
 use editor_common::time::Instant;
 use editor_state::undo::{RecordMerge, TransientState, UndoEntry, UndoHistory};
 
-#[derive(Clone, Copy, Debug)]
-enum Mode {
-    Apply,
-    Probe { changed: bool },
-}
-
 fn normalize_pending_overlay(state: &State) -> Option<PendingOverlay> {
     let modifiers = state.pending_modifiers.clone();
 
@@ -203,7 +197,6 @@ pub struct Editor {
     // mismatch), so the window must not re-center around the selection on
     // every pull; see `ime()`.
     ime_window_anchor: Option<ImeWindowAnchor>,
-    mode: Mode,
     // Selection mark rects for the current (selection, render_epoch), shared by
     // the per-page render signatures and the selection mark. Interaction
     // geometry stays separate because external elements are host-painted but
@@ -215,46 +208,6 @@ pub struct Editor {
 struct ImeWindowAnchor {
     start: usize,
     last_sel_start: usize,
-}
-
-struct ProbeGuard<'e> {
-    editor: &'e mut Editor,
-    prev: Mode,
-    dnd: DndState,
-    finished: bool,
-}
-
-impl<'e> ProbeGuard<'e> {
-    fn enter(editor: &'e mut Editor) -> Self {
-        let dnd = editor.dnd.clone();
-        let prev = std::mem::replace(&mut editor.mode, Mode::Probe { changed: false });
-        Self {
-            editor,
-            prev,
-            dnd,
-            finished: false,
-        }
-    }
-
-    fn finish(mut self) -> bool {
-        let restored = std::mem::replace(&mut self.editor.mode, self.prev);
-        self.editor.dnd = self.dnd.clone();
-        self.finished = true;
-        let Mode::Probe { changed } = restored else {
-            unreachable!("ProbeGuard installed Probe at enter; only finish replaces it")
-        };
-        changed
-    }
-}
-
-impl Drop for ProbeGuard<'_> {
-    fn drop(&mut self) {
-        // panic 등 비정상 경로에서 mode를 안전하게 복원.
-        if !self.finished {
-            self.editor.mode = self.prev;
-            self.editor.dnd = self.dnd.clone();
-        }
-    }
 }
 
 impl Editor {
@@ -282,7 +235,6 @@ impl Editor {
             composition_paint: None,
             ime_delete_paint: None,
             ime_window_anchor: None,
-            mode: Mode::Apply,
             selection_mark_rects_cache: Mutex::new(None),
         }
     }
@@ -305,16 +257,6 @@ impl Editor {
 
     pub fn find_matches(&self, query: &str, options: &SearchOptions) -> Vec<Selection> {
         crate::search::find_matches(&self.state.view(), query, options)
-    }
-
-    pub(crate) fn is_probing(&self) -> bool {
-        matches!(self.mode, Mode::Probe { .. })
-    }
-
-    pub(crate) fn mark_probed_change(&mut self, would_change: bool) {
-        if let Mode::Probe { ref mut changed } = self.mode {
-            *changed |= would_change;
-        }
     }
 
     pub fn receive_remote_changeset(&mut self, changeset: Changeset<EditOp>) {
@@ -1173,10 +1115,9 @@ impl Editor {
 
     /// Like [`Editor::transact`], but discards the transaction when it produced
     /// no observable state change. For commands that can legitimately no-op
-    /// (e.g. an inline toggle over a range with no applicable target): committing
-    /// their recorded ops would push a history entry `editor.can` disagrees
-    /// with, and probing with a separate throwaway transaction would run the
-    /// whole command twice.
+    /// (e.g. an inline toggle over a range with no applicable target),
+    /// committing their recorded ops would otherwise push a spurious history
+    /// entry.
     pub(crate) fn transact_observable(
         &mut self,
         f: impl FnOnce(&mut Transaction) -> Result<(), EditorError>,
@@ -1200,12 +1141,6 @@ impl Editor {
         }
 
         let composition_paint_signal = tr.meta().composition_paint.is_some();
-
-        if let Mode::Probe { ref mut changed } = self.mode {
-            *changed |= composition_paint_signal
-                || editor_state::state_observably_changed(&self.state, tr.state());
-            return Ok(());
-        }
 
         if only_if_observable
             && !composition_paint_signal
@@ -1266,9 +1201,6 @@ impl Editor {
     }
 
     pub(crate) fn push_event(&mut self, event: EditorEvent) {
-        if matches!(self.mode, Mode::Probe { .. }) {
-            return;
-        }
         let event = match event {
             EditorEvent::StateChanged { mut fields } => {
                 fields.sort_unstable();
@@ -1287,9 +1219,6 @@ impl Editor {
     /// non-selection invalidations; a bare selection move uses `push_event` directly
     /// so unaffected pages keep a stable signature and can be skipped.
     pub(crate) fn invalidate_render(&mut self) {
-        if matches!(self.mode, Mode::Probe { .. }) {
-            return;
-        }
         self.render_epoch = self.render_epoch.wrapping_add(1);
         self.push_event(EditorEvent::RenderInvalidated);
     }
@@ -1381,26 +1310,8 @@ impl Editor {
         }
     }
 
-    pub fn can(&mut self, msg: Message) -> Result<bool, EditorError> {
-        self.probe(|editor| editor.process_message(msg))
-    }
-
-    pub(crate) fn probe(
-        &mut self,
-        f: impl FnOnce(&mut Self) -> Result<(), EditorError>,
-    ) -> Result<bool, EditorError> {
-        let guard = ProbeGuard::enter(self);
-        let result = f(guard.editor);
-        let changed = guard.finish();
-        result.map(|()| changed)
-    }
-
     pub(crate) fn set_focused(&mut self, focused: bool) {
         let would_change = self.focused != focused;
-        if let Mode::Probe { ref mut changed } = self.mode {
-            *changed |= would_change;
-            return;
-        }
         if would_change {
             self.focused = focused;
             self.invalidate_render();
@@ -1408,11 +1319,6 @@ impl Editor {
     }
 
     pub(crate) fn resize_view(&mut self, viewport: Viewport) -> bool {
-        let would_change = self.view.would_resize(viewport, &self.state);
-        if let Mode::Probe { ref mut changed } = self.mode {
-            *changed |= would_change;
-            return would_change;
-        }
         let did_change = self.view.resize(viewport, &self.state);
         if did_change {
             self.push_event(EditorEvent::StateChanged {
@@ -1431,13 +1337,6 @@ impl Editor {
     }
 
     pub(crate) fn set_external_height(&mut self, node_id: Dot, height: f32) -> bool {
-        let would_change = self
-            .view
-            .would_set_external_height(&self.state, node_id, height);
-        if let Mode::Probe { ref mut changed } = self.mode {
-            *changed |= would_change;
-            return would_change;
-        }
         let did_change = self.view.set_external_height(&self.state, node_id, height);
         if did_change {
             self.push_event(EditorEvent::StateChanged {
@@ -1453,11 +1352,6 @@ impl Editor {
     }
 
     pub(crate) fn toggle_fold(&mut self, id: Dot) -> bool {
-        let would_change = self.view.would_toggle_fold(&self.state, id);
-        if let Mode::Probe { ref mut changed } = self.mode {
-            *changed |= would_change;
-            return would_change;
-        }
         let did_change = self.view.toggle_fold(&self.state, id);
         if did_change {
             self.push_event(EditorEvent::StateChanged {
@@ -1484,20 +1378,10 @@ impl Editor {
     }
 
     pub(crate) fn clear_preferred_x(&mut self) {
-        let would_change = self.view.would_clear_preferred_x();
-        if let Mode::Probe { ref mut changed } = self.mode {
-            *changed |= would_change;
-            return;
-        }
         self.view.clear_preferred_x();
     }
 
     pub(crate) fn ensure_preferred_x_at(&mut self, pos: &Position) {
-        let would_change = self.view.would_ensure_preferred_x_at(pos);
-        if let Mode::Probe { ref mut changed } = self.mode {
-            *changed |= would_change;
-            return;
-        }
         self.view.ensure_preferred_x_at(pos);
     }
 
@@ -1506,25 +1390,6 @@ impl Editor {
         pos: &Position,
         movement: &Movement,
     ) -> Option<Selection> {
-        let probe = matches!(self.mode, Mode::Probe { .. });
-        if probe {
-            let current_sel = self.state.selection;
-            let current_px = self.view.view_state().preferred_x;
-            let probe_result = {
-                let resource = self.resource.lock().unwrap();
-                self.view.would_resolve_movement(pos, movement, &resource)
-            };
-            let (target, px_changed) = match probe_result {
-                Some((sel, would_px)) => (sel, would_px != current_px),
-                None => (None, false),
-            };
-            let sel = target;
-            if let Mode::Probe { ref mut changed } = self.mode {
-                *changed |= sel.is_some() && sel != current_sel || px_changed;
-            };
-            return sel;
-        }
-
         {
             let resource = self.resource.lock().unwrap();
             self.view.resolve_movement(pos, movement, &resource)
@@ -1613,20 +1478,12 @@ impl Editor {
     }
 
     pub(crate) fn try_undo(&mut self) -> bool {
-        if let Mode::Probe { ref mut changed } = self.mode {
-            *changed |= self.undo_history.can_undo();
-            return false;
-        }
         let current = capture_transient(&self.state);
         let result = self.undo_history.undo(self.state.projected_mut(), current);
         self.apply_undo_result(result)
     }
 
     pub(crate) fn try_redo(&mut self) -> bool {
-        if let Mode::Probe { ref mut changed } = self.mode {
-            *changed |= self.undo_history.can_redo();
-            return false;
-        }
         let current = capture_transient(&self.state);
         let result = self.undo_history.redo(self.state.projected_mut(), current);
         self.apply_undo_result(result)
@@ -1658,16 +1515,6 @@ impl Editor {
         changesets: Vec<Changeset<EditOp>>,
     ) -> Result<(), EditorError> {
         if changesets.is_empty() {
-            return Ok(());
-        }
-        if let Mode::Probe { ref mut changed } = self.mode {
-            for cs in &changesets {
-                let would_change = self
-                    .state
-                    .would_receive_remote_changeset(cs)
-                    .map_err(|e| EditorError::Step(StepError::State(e)))?;
-                *changed |= would_change;
-            }
             return Ok(());
         }
 
@@ -1794,9 +1641,6 @@ impl Editor {
     }
 
     pub(crate) fn run_initialize(&mut self) -> Result<(), EditorError> {
-        if matches!(self.mode, Mode::Probe { .. }) {
-            return Ok(());
-        }
         crate::font::reresolve_fonts(self)?;
         self.view.layout(&self.state);
         self.push_event(EditorEvent::StateChanged {
@@ -1811,9 +1655,6 @@ impl Editor {
         weight: u16,
         kind: crate::font::FontLoadKind,
     ) {
-        if matches!(self.mode, Mode::Probe { .. }) {
-            return;
-        }
         self.pending_font_loads.push(crate::font::FontLoadNotice {
             family,
             weight,
@@ -1826,9 +1667,6 @@ impl Editor {
     }
 
     pub(crate) fn manifest_loaded(&mut self, family: &str, weight: u16) {
-        if matches!(self.mode, Mode::Probe { .. }) {
-            return;
-        }
         // A new manifest can reroute pending resolutions, so the awaited-target
         // index must be rebuilt.
         self.pending_font_index = None;
@@ -1845,9 +1683,6 @@ impl Editor {
     }
 
     pub(crate) fn reresolve_fonts(&mut self) -> Result<(), EditorError> {
-        if matches!(self.mode, Mode::Probe { .. }) {
-            return Ok(());
-        }
         crate::font::reresolve_fonts(self)
     }
 
@@ -1976,11 +1811,6 @@ impl Editor {
     }
 }
 
-#[cfg(test)]
-pub(crate) fn probe_guard_for_test(editor: &mut Editor) -> impl Drop + '_ {
-    ProbeGuard::enter(editor)
-}
-
 #[cfg(any(test, feature = "test-utils"))]
 impl Editor {
     pub fn new_test(state: State) -> Self {
@@ -2012,7 +1842,6 @@ impl Editor {
             composition_paint: None,
             ime_delete_paint: None,
             ime_window_anchor: None,
-            mode: Mode::Apply,
             selection_mark_rects_cache: Mutex::new(None),
         };
         // Lay out the view once so the first `tick()` reconciles clean (matches the
@@ -2068,6 +1897,7 @@ mod tests {
     use std::collections::BTreeMap;
 
     use super::*;
+    use crate::test_utils::{EditorSnapshot, apply_and_report_change};
 
     // A frame's worth of IME composition traffic arrives as several consecutive
     // `TextInput` messages; `tick` coalesces them into batched reduces. The
@@ -5039,10 +4869,12 @@ mod tests {
             selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
-        let probed = editor.can(Message::Insertion {
-            op: InsertionOp::Text { text: "x".into() },
-        });
-        assert!(probed.unwrap());
+        assert!(apply_and_report_change(
+            &mut editor,
+            Message::Insertion {
+                op: InsertionOp::Text { text: "x".into() },
+            }
+        ));
     }
 
     #[test]
@@ -5052,10 +4884,12 @@ mod tests {
             selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
-        let probed = editor.can(Message::History {
-            op: HistoryOp::Undo,
-        });
-        assert!(!probed.unwrap());
+        assert!(!apply_and_report_change(
+            &mut editor,
+            Message::History {
+                op: HistoryOp::Undo,
+            }
+        ));
     }
 
     #[test]
@@ -5066,10 +4900,12 @@ mod tests {
         };
         let mut editor = Editor::new_test(state);
         let same = editor_state::Selection::collapsed(editor_state::Position::new(p1, 2));
-        let probed = editor.can(Message::Selection {
-            op: SelectionOp::Set { selection: same },
-        });
-        assert!(!probed.unwrap());
+        assert!(!apply_and_report_change(
+            &mut editor,
+            Message::Selection {
+                op: SelectionOp::Set { selection: same },
+            }
+        ));
     }
 
     #[test]
@@ -5078,12 +4914,9 @@ mod tests {
             doc { root { p1: paragraph { text("hi") } } }
             selection: (p1, 0)
         };
-        let mut editor = Editor::new_test(state);
+        let editor = Editor::new_test(state);
         let before_state = editor.state().clone();
         let before_sel = editor.state().selection;
-        let _ = editor.can(Message::Insertion {
-            op: InsertionOp::Text { text: "x".into() },
-        });
         editor_state::assert_doc_eq!(editor.state(), &before_state);
         assert_eq!(editor.state().selection, before_sel);
     }
@@ -5401,9 +5234,9 @@ mod tests {
         }
     }
 
-    // fold → after-paragraph 이동의 드롭 유효성 프로브가 TRUE를 반환하는지 검증
+    // fold → after-paragraph 이동의 드롭이 상태를 관찰 가능하게 변경하는지 검증
     #[test]
-    fn fold_dnd_probe_apply_drop_at_root_2_returns_true() {
+    fn fold_dnd_drop_at_root_2_observably_changes() {
         let (initial, _root, _fold_node, _p1) = state! {
             doc {
                 root: root {
@@ -5424,37 +5257,36 @@ mod tests {
             op: DndOp::StartInternalSelection,
         });
 
-        // probe apply_drop at (root, 2)
+        // apply_drop at (root, 2)
         let target_pos = Position::new(Dot::ROOT, 2);
-        let result = editor.probe(|editor| {
-            let dnd = editor.dnd.clone();
-            let DndState::InternalDnd { source, .. } = dnd else {
-                panic!("expected InternalDnd state");
-            };
-            let sel = {
-                let view = editor.state.view();
-                let ctx = StableResolveCtx::from_live(&view, editor.state.projected.seq_checkout());
-                source.resolve(&ctx).expect("source restores")
-            };
-            assert!(
-                !sel.is_collapsed(),
-                "source selection must not be collapsed"
-            );
-            crate::handle::apply_drop_for_test(
-                editor,
-                target_pos,
-                DndDropPayload::InternalSelection,
-                InputModifiers::default(),
-                Some(sel),
-            )
-        });
-        match result {
-            Ok(true) => {}
-            Ok(false) => {
-                panic!("apply_drop at (root, 2) returned Ok(false) — state did not change")
-            }
-            Err(e) => panic!("apply_drop at (root, 2) returned Err: {:?}", e),
-        }
+        let dnd = editor.dnd.clone();
+        let DndState::InternalDnd { source, .. } = dnd else {
+            panic!("expected InternalDnd state");
+        };
+        let sel = {
+            let view = editor.state.view();
+            let ctx = StableResolveCtx::from_live(&view, editor.state.projected.seq_checkout());
+            source.resolve(&ctx).expect("source restores")
+        };
+        assert!(
+            !sel.is_collapsed(),
+            "source selection must not be collapsed"
+        );
+
+        let before = EditorSnapshot::capture(&editor);
+        let result = crate::handle::apply_drop_for_test(
+            &mut editor,
+            target_pos,
+            DndDropPayload::InternalSelection,
+            InputModifiers::default(),
+            Some(sel),
+        );
+        result.unwrap_or_else(|e| panic!("apply_drop at (root, 2) returned Err: {:?}", e));
+        let after = EditorSnapshot::capture(&editor);
+        assert!(
+            before != after,
+            "apply_drop at (root, 2) must observably change state"
+        );
     }
 
     // fold 선택 드래그 중 fold 아래 paragraph 하단에 hover → indicator가 나타나야 한다
@@ -5795,7 +5627,7 @@ mod tests {
 
         // First hover targets a position the schema guard rejects (a page-break
         // source dropping into a nested inline slot), decided by a side-effect-free
-        // probe rather than a committed transaction.
+        // judgment rather than a committed transaction.
         let events = editor.apply(Message::Dnd {
             op: DndOp::Over {
                 page: 0,
@@ -5805,7 +5637,7 @@ mod tests {
             },
         });
 
-        // The guard rejected and the probe left no trace: no drop indicator, no
+        // The guard rejected and the judgment left no trace: no drop indicator, no
         // repair telemetry, no queued ops/effects, no render invalidation.
         assert!(editor.drop_indicator_for_test().is_none());
         assert_eq!(

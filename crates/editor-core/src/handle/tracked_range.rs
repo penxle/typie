@@ -32,7 +32,7 @@ pub fn handle_tracked_range_op(editor: &mut Editor, op: TrackedRangeOp) -> Resul
                 .get(&id)
                 .map(|existing| existing != &new_range)
                 .unwrap_or(true);
-            commit_or_probe(editor, would_change, |reg| {
+            commit_if_changed(editor, would_change, |reg| {
                 reg.add(new_range);
             });
         }
@@ -49,13 +49,13 @@ pub fn handle_tracked_range_op(editor: &mut Editor, op: TrackedRangeOp) -> Resul
                 .get(&id)
                 .map(|existing| existing != &new_range)
                 .unwrap_or(true);
-            commit_or_probe(editor, would_change, |reg| {
+            commit_if_changed(editor, would_change, |reg| {
                 reg.add(new_range);
             });
         }
         TrackedRangeOp::Remove { id } => {
             let would_change = editor.tracked_ranges().contains(&id);
-            commit_or_probe(editor, would_change, |reg| {
+            commit_if_changed(editor, would_change, |reg| {
                 reg.remove(&id);
             });
         }
@@ -72,7 +72,7 @@ pub fn handle_tracked_range_op(editor: &mut Editor, op: TrackedRangeOp) -> Resul
             let would_change = editor.tracked_ranges().get(&id).is_some_and(|range| {
                 range.group != group || recaptured.as_ref().is_some_and(|s| s != &range.selection)
             });
-            commit_or_probe(editor, would_change, |reg| {
+            commit_if_changed(editor, would_change, |reg| {
                 if let Some(selection) = recaptured {
                     reg.set_selection(&id, selection);
                 }
@@ -81,7 +81,7 @@ pub fn handle_tracked_range_op(editor: &mut Editor, op: TrackedRangeOp) -> Resul
         }
         TrackedRangeOp::ClearGroup { group } => {
             let would_change = editor.tracked_ranges().group_size(&group) > 0;
-            commit_or_probe(editor, would_change, |reg| {
+            commit_if_changed(editor, would_change, |reg| {
                 reg.clear_group(&group);
             });
         }
@@ -91,16 +91,14 @@ pub fn handle_tracked_range_op(editor: &mut Editor, op: TrackedRangeOp) -> Resul
             ranges,
         } => {
             let outcome = handle_replace_groups_from_prose(editor, expected_text, groups, ranges);
-            if !editor.is_probing() {
-                editor.push_event(EditorEvent::ProseRangeInstallResult { outcome });
-            }
+            editor.push_event(EditorEvent::ProseRangeInstallResult { outcome });
         }
         TrackedRangeOp::Invalidate { id } => {
             let would_change = editor
                 .tracked_ranges()
                 .get(&id)
                 .is_some_and(|r| !r.explicitly_invalid);
-            commit_or_probe(editor, would_change, |reg| {
+            commit_if_changed(editor, would_change, |reg| {
                 reg.invalidate(&id);
             });
         }
@@ -116,13 +114,13 @@ pub fn handle_tracked_range_op(editor: &mut Editor, op: TrackedRangeOp) -> Resul
                 z_index,
             };
             let would_change = editor.view.would_set_group_decoration(&group, &decoration);
-            commit_view_or_probe(editor, would_change, |editor| {
+            commit_view_if_changed(editor, would_change, |editor| {
                 editor.view.set_group_decoration(group, decoration);
             });
         }
         TrackedRangeOp::RemoveGroupDecoration { group } => {
             let would_change = editor.view.would_remove_group_decoration(&group);
-            commit_view_or_probe(editor, would_change, |editor| {
+            commit_view_if_changed(editor, would_change, |editor| {
                 editor.view.remove_group_decoration(&group);
             });
         }
@@ -210,7 +208,7 @@ fn handle_replace_groups_from_prose(
         next.add(range);
     }
     let would_change = editor.tracked_ranges() != &next;
-    commit_or_probe(editor, would_change, move |registry| *registry = next);
+    commit_if_changed(editor, would_change, move |registry| *registry = next);
     ProseRangeInstallOutcome::Applied
 }
 
@@ -221,11 +219,6 @@ fn handle_replace_text(
     replacement: String,
 ) -> Result<(), EditorError> {
     let classification = classify_replace_text(editor, &id, expected_text.as_deref(), &replacement);
-
-    if editor.is_probing() {
-        editor.mark_probed_change(classification.selection.is_some());
-        return Ok(());
-    }
 
     if let Some(selection) = classification.selection {
         editor.transact(|tr| {
@@ -293,14 +286,10 @@ fn classify_replace_text(
     }
 }
 
-fn commit_view_or_probe<F>(editor: &mut Editor, would_change: bool, apply: F)
+fn commit_view_if_changed<F>(editor: &mut Editor, would_change: bool, apply: F)
 where
     F: FnOnce(&mut Editor),
 {
-    if editor.is_probing() {
-        editor.mark_probed_change(would_change);
-        return;
-    }
     if would_change {
         apply(editor);
         editor.push_event(EditorEvent::StateChanged {
@@ -310,14 +299,10 @@ where
     }
 }
 
-fn commit_or_probe<F>(editor: &mut Editor, would_change: bool, apply: F)
+fn commit_if_changed<F>(editor: &mut Editor, would_change: bool, apply: F)
 where
     F: FnOnce(&mut crate::tracked_range::TrackedRangeRegistry),
 {
-    if editor.is_probing() {
-        editor.mark_probed_change(would_change);
-        return;
-    }
     if would_change {
         apply(editor.tracked_ranges_mut());
         editor.push_event(EditorEvent::StateChanged {
@@ -332,7 +317,9 @@ mod tests {
     use super::*;
     use editor_macros::state;
 
-    use crate::test_utils::assert_probe_predicts_apply;
+    use crate::test_utils::{
+        apply_and_report_change, assert_apply_changes_state, assert_apply_preserves_state,
+    };
 
     fn add_frozen_op(id: &str, stable: editor_state::StableSelection) -> Message {
         Message::TrackedRange {
@@ -688,22 +675,22 @@ mod tests {
     }
 
     #[test]
-    fn probe_add_predicts_change() {
+    fn add_changes_state() {
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("hello") } } }
             selection: (p1, 1) -> (p1, 4)
         };
         let sel = state.selection.unwrap();
-        assert_probe_predicts_apply(state, add_op("a", sel));
+        assert_apply_changes_state(state, add_op("a", sel));
     }
 
     #[test]
-    fn probe_remove_nonexistent_predicts_no_change() {
+    fn remove_nonexistent_preserves_state() {
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("hello") } } }
             selection: (p1, 1) -> (p1, 4)
         };
-        assert_probe_predicts_apply(
+        assert_apply_preserves_state(
             state,
             Message::TrackedRange {
                 op: TrackedRangeOp::Remove { id: "x".into() },
@@ -712,12 +699,12 @@ mod tests {
     }
 
     #[test]
-    fn probe_clear_empty_group_predicts_no_change() {
+    fn clear_empty_group_preserves_state() {
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("hello") } } }
             selection: (p1, 1) -> (p1, 4)
         };
-        assert_probe_predicts_apply(
+        assert_apply_preserves_state(
             state,
             Message::TrackedRange {
                 op: TrackedRangeOp::ClearGroup {
@@ -728,7 +715,7 @@ mod tests {
     }
 
     #[test]
-    fn probe_invalidate_already_invalid_predicts_no_change() {
+    fn invalidate_already_invalid_preserves_state() {
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("hello") } } }
             selection: (p1, 1) -> (p1, 4)
@@ -739,12 +726,12 @@ mod tests {
         editor.apply(Message::TrackedRange {
             op: TrackedRangeOp::Invalidate { id: "a".into() },
         });
-        let probed = editor
-            .can(Message::TrackedRange {
+        assert!(!apply_and_report_change(
+            &mut editor,
+            Message::TrackedRange {
                 op: TrackedRangeOp::Invalidate { id: "a".into() },
-            })
-            .unwrap();
-        assert!(!probed);
+            }
+        ));
     }
 
     #[test]
@@ -806,18 +793,18 @@ mod tests {
     }
 
     #[test]
-    fn probe_add_frozen_predicts_change() {
+    fn add_frozen_changes_state() {
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("hello") } } }
             selection: (p1, 1) -> (p1, 4)
         };
         let sel = state.selection.unwrap();
         let stable = editor_state::StableSelection::capture(&sel, &state.view());
-        assert_probe_predicts_apply(state, add_frozen_op("a", stable));
+        assert_apply_changes_state(state, add_frozen_op("a", stable));
     }
 
     #[test]
-    fn probe_add_frozen_same_id_same_content_predicts_no_change() {
+    fn add_frozen_same_id_same_content_preserves_state() {
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("hello") } } }
             selection: (p1, 1) -> (p1, 4)
@@ -828,9 +815,8 @@ mod tests {
         let mut editor = Editor::new_test(state);
         editor.apply(add_frozen_op("a", stable.clone()));
 
-        let probed = editor.can(add_frozen_op("a", stable)).unwrap();
         assert!(
-            !probed,
+            !apply_and_report_change(&mut editor, add_frozen_op("a", stable)),
             "AddFrozen with same id + same content must predict no change"
         );
     }
@@ -940,21 +926,21 @@ mod tests {
     }
 
     #[test]
-    fn probe_set_group_decoration_predicts_change() {
+    fn set_group_decoration_changes_state() {
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("hi") } } }
             selection: (p1, 0)
         };
-        assert_probe_predicts_apply(state, set_group_op("g1", sample_style(), true));
+        assert_apply_changes_state(state, set_group_op("g1", sample_style(), true));
     }
 
     #[test]
-    fn probe_remove_unknown_group_decoration_predicts_no_change() {
+    fn remove_unknown_group_decoration_preserves_state() {
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("hi") } } }
             selection: (p1, 0)
         };
-        assert_probe_predicts_apply(
+        assert_apply_preserves_state(
             state,
             Message::TrackedRange {
                 op: TrackedRangeOp::RemoveGroupDecoration {

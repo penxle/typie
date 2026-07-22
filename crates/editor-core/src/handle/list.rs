@@ -53,7 +53,7 @@ mod tests {
     use editor_state::{Affinity, Position, Selection, assert_state_eq};
 
     use super::*;
-    use crate::test_utils::assert_probe_predicts_apply;
+    use crate::test_utils::{apply_and_report_change, assert_apply_changes_state};
 
     fn list_message(op: ListOp) -> Message {
         Message::List { op }
@@ -160,7 +160,7 @@ mod tests {
     }
 
     #[test]
-    fn probe_predicts_toggle_kind_apply() {
+    fn toggle_kind_changes_state() {
         let (state, ..) = state! {
             doc {
                 root {
@@ -170,7 +170,7 @@ mod tests {
             }
             selection: (p1, 0)
         };
-        assert_probe_predicts_apply(
+        assert_apply_changes_state(
             state,
             list_message(ListOp::ToggleKind {
                 kind: ListKind::Bullet,
@@ -204,13 +204,12 @@ mod tests {
         ));
         let mut editor = Editor::new_test(state);
 
-        assert!(
-            editor
-                .can(list_message(ListOp::ToggleKind {
-                    kind: ListKind::Bullet,
-                }))
-                .unwrap()
-        );
+        assert!(apply_and_report_change(
+            &mut editor,
+            list_message(ListOp::ToggleKind {
+                kind: ListKind::Bullet,
+            })
+        ));
     }
 
     #[test]
@@ -226,13 +225,12 @@ mod tests {
         };
         let mut editor = Editor::new_test(state);
 
-        assert!(
-            editor
-                .can(list_message(ListOp::ToggleKind {
-                    kind: ListKind::Bullet,
-                }))
-                .unwrap()
-        );
+        assert!(apply_and_report_change(
+            &mut editor,
+            list_message(ListOp::ToggleKind {
+                kind: ListKind::Bullet,
+            })
+        ));
     }
 
     #[test]

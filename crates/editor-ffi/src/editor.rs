@@ -246,10 +246,6 @@ impl Editor {
         })
     }
 
-    pub fn can(&self, message: Complex<editor_core::Message>) -> EditorResult<bool> {
-        self.with_inner(|inner| Ok(inner.editor.can(message.from_ffi()?)?))
-    }
-
     pub fn last_history_tag(&self) -> EditorResult<Option<Complex<editor_common::HistoryTag>>> {
         self.with_inner(|inner| Ok(inner.editor.last_history_tag().into_ffi()?))
     }
@@ -2521,20 +2517,6 @@ mod tests {
     }
 
     #[test]
-    fn ffi_can_returns_true_for_insertion_with_selection() {
-        let (initial, ..) = state! {
-            doc { root { p1: paragraph { text("") } } }
-            selection: (p1, 0)
-        };
-        let editor = make_ffi_editor(initial);
-        let msg = editor_core::Message::Insertion {
-            op: editor_core::InsertionOp::Text { text: "x".into() },
-        };
-        let probed = editor.can(msg.into_ffi().unwrap()).unwrap();
-        assert!(probed);
-    }
-
-    #[test]
     fn ffi_enter_in_synthetic_trailing_paragraph_after_image() {
         let (initial, ..) = state! {
             doc {
@@ -2582,56 +2564,6 @@ mod tests {
         };
         editor.enqueue(msg.into_ffi().unwrap()).unwrap();
         editor.tick().unwrap();
-    }
-
-    #[test]
-    fn ffi_can_returns_false_for_undo_empty_history() {
-        let (initial, ..) = state! {
-            doc { root { p1: paragraph { text("hi") } } }
-            selection: (p1, 0)
-        };
-        let editor = make_ffi_editor(initial);
-        let msg = editor_core::Message::History {
-            op: editor_core::HistoryOp::Undo,
-        };
-        let probed = editor.can(msg.into_ffi().unwrap()).unwrap();
-        assert!(!probed);
-    }
-
-    #[test]
-    fn ffi_can_returns_false_for_same_selection_set() {
-        let (initial, p1) = state! {
-            doc { root { p1: paragraph { text("hello") } } }
-            selection: (p1, 2)
-        };
-        let editor = make_ffi_editor(initial);
-        let same = editor_state::Selection::collapsed(editor_state::Position::new(p1, 2));
-        let msg = editor_core::Message::Selection {
-            op: editor_core::SelectionOp::Set { selection: same },
-        };
-        let probed = editor.can(msg.into_ffi().unwrap()).unwrap();
-        assert!(!probed);
-    }
-
-    #[test]
-    fn ffi_can_does_not_mutate_observable_state() {
-        let (initial, ..) = state! {
-            doc { root { p1: paragraph { text("hi") } } }
-            selection: (p1, 0)
-        };
-        let editor = make_ffi_editor(initial);
-
-        let inspect_before = editor.inspect_state_as_macro().unwrap();
-        let msg = editor_core::Message::Insertion {
-            op: editor_core::InsertionOp::Text { text: "x".into() },
-        };
-        let _ = editor.can(msg.into_ffi().unwrap()).unwrap();
-        let inspect_after = editor.inspect_state_as_macro().unwrap();
-
-        assert_eq!(
-            inspect_before, inspect_after,
-            "can() must not mutate observable state visible through inspect_state_as_macro",
-        );
     }
 
     #[test]

@@ -828,11 +828,7 @@ fn flat_ime_ops_form_plain_backspace(editor: &Editor, ops: &[FlatImeOp]) -> bool
 }
 
 pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(), EditorError> {
-    let mut delete_paint = if editor.is_probing() {
-        editor.ime_delete_paint.clone()
-    } else {
-        editor.ime_delete_paint.take()
-    };
+    let mut delete_paint = editor.ime_delete_paint.take();
     let commit_as_is = ops.iter().any(|op| matches!(op, FlatImeOp::CommitAsIs));
 
     if matches!(editor.last_history_tag(), Some(HistoryTag::AutoReplacement))
@@ -1183,9 +1179,7 @@ pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(
             })?;
         }
 
-        if !editor.is_probing() {
-            editor.ime_delete_paint = next_delete_paint;
-        }
+        editor.ime_delete_paint = next_delete_paint;
 
         Ok(!text_change.insert.is_empty() && result.comp.is_none())
     })()?;
@@ -1208,7 +1202,7 @@ mod tests {
     use editor_state::assert_state_eq;
 
     use super::*;
-    use crate::test_utils::assert_probe_predicts_apply;
+    use crate::test_utils::{assert_apply_changes_state, assert_apply_preserves_state};
 
     fn leading_gap_state() -> editor_state::State {
         let (state, ..) = state! {
@@ -1231,12 +1225,12 @@ mod tests {
     }
 
     #[test]
-    fn probe_composition_commit_empty() {
+    fn composition_commit_empty_preserves_state() {
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("hello") } } }
             selection: (p1, 3)
         };
-        assert_probe_predicts_apply(
+        assert_apply_preserves_state(
             state,
             Message::TextInput {
                 ops: vec![FlatImeOp::CommitAsIs],
@@ -1245,12 +1239,12 @@ mod tests {
     }
 
     #[test]
-    fn probe_composition_clear_no_composition() {
+    fn composition_clear_no_composition_preserves_state() {
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("hello") } } }
             selection: (p1, 3)
         };
-        assert_probe_predicts_apply(
+        assert_apply_preserves_state(
             state,
             Message::TextInput {
                 ops: vec![FlatImeOp::ClearComposition],
@@ -3462,12 +3456,12 @@ mod tests {
     }
 
     #[test]
-    fn probe_flat_ime_auto_surround() {
+    fn flat_ime_auto_surround_changes_state() {
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("안녕하세요") } } }
             selection: (p1, 0) -> (p1, 5)
         };
-        assert_probe_predicts_apply(
+        assert_apply_changes_state(
             state,
             Message::TextInput {
                 ops: vec![

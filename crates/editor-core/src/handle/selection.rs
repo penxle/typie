@@ -326,7 +326,7 @@ mod tests {
     };
 
     use super::*;
-    use crate::test_utils::assert_probe_predicts_apply;
+    use crate::test_utils::{assert_apply_changes_state, assert_apply_preserves_state};
 
     fn assert_table_selection_visible(editor: &Editor, table: Dot) {
         let view = editor.state().view();
@@ -351,13 +351,13 @@ mod tests {
     }
 
     #[test]
-    fn probe_set_same_selection_noop() {
+    fn set_same_selection_preserves_state() {
         let (state, p1) = state! {
             doc { root { p1: paragraph { text("hello") } } }
             selection: (p1, 2)
         };
         let sel = Selection::collapsed(Position::new(p1, 2));
-        assert_probe_predicts_apply(
+        assert_apply_preserves_state(
             state,
             Message::Selection {
                 op: SelectionOp::Set { selection: sel },
@@ -366,13 +366,13 @@ mod tests {
     }
 
     #[test]
-    fn probe_set_different_selection_changes() {
+    fn set_different_selection_changes_state() {
         let (state, p1) = state! {
             doc { root { p1: paragraph { text("hello") } } }
             selection: (p1, 2)
         };
         let sel = Selection::collapsed(Position::new(p1, 4));
-        assert_probe_predicts_apply(
+        assert_apply_changes_state(
             state,
             Message::Selection {
                 op: SelectionOp::Set { selection: sel },
@@ -381,12 +381,12 @@ mod tests {
     }
 
     #[test]
-    fn probe_unset_with_active_selection() {
+    fn unset_with_active_selection_changes_state() {
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("hello") } } }
             selection: (p1, 2)
         };
-        assert_probe_predicts_apply(
+        assert_apply_changes_state(
             state,
             Message::Selection {
                 op: SelectionOp::Unset,
@@ -395,12 +395,12 @@ mod tests {
     }
 
     #[test]
-    fn probe_select_all() {
+    fn select_all_changes_state() {
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("hello") } } }
             selection: (p1, 2)
         };
-        assert_probe_predicts_apply(
+        assert_apply_changes_state(
             state,
             Message::Selection {
                 op: SelectionOp::Expand {
@@ -411,12 +411,12 @@ mod tests {
     }
 
     #[test]
-    fn probe_unset_already_unset() {
+    fn unset_already_unset_preserves_state() {
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("hi") } } }
             selection: none
         };
-        assert_probe_predicts_apply(
+        assert_apply_preserves_state(
             state,
             Message::Selection {
                 op: SelectionOp::Unset,

@@ -127,9 +127,9 @@ mod tests {
     }
 
     #[test]
-    fn probe_remote_changeset_new_op_predicts_true_and_is_safe() {
+    fn novel_remote_changeset_observably_changes_state() {
         use crate::message::Message;
-        use crate::test_utils::EditorSnapshot;
+        use crate::test_utils::apply_and_report_change;
 
         let (replica_a, _p1) = state! {
             doc { root { p1: paragraph { text("ab") } } }
@@ -147,11 +147,10 @@ mod tests {
         );
 
         let mut editor = Editor::new_test(replica_b);
-        let before = EditorSnapshot::capture(&editor);
-        let probed = editor.can(Message::Remote { changeset: cs }).unwrap();
-        let after = EditorSnapshot::capture(&editor);
-        assert!(probed, "new remote op must predict true");
-        assert_eq!(before, after, "probe must not mutate");
+        assert!(
+            apply_and_report_change(&mut editor, Message::Remote { changeset: cs }),
+            "applying a novel remote changeset must observably change state"
+        );
     }
 
     /// The tick loop coalesces a consecutive run of remote messages into one batched
@@ -281,8 +280,9 @@ mod tests {
     }
 
     #[test]
-    fn probe_remote_changeset_already_applied_predicts_false() {
+    fn remote_changeset_already_applied_preserves_state() {
         use crate::message::Message;
+        use crate::test_utils::apply_and_report_change;
 
         let (replica_a, _p1) = state! {
             doc { root { p1: paragraph { text("ab") } } }
@@ -303,8 +303,10 @@ mod tests {
         editor.apply(Message::Remote {
             changeset: cs.clone(),
         });
-        let probed = editor.can(Message::Remote { changeset: cs }).unwrap();
-        assert!(!probed);
+        assert!(!apply_and_report_change(
+            &mut editor,
+            Message::Remote { changeset: cs }
+        ));
     }
 
     #[test]
