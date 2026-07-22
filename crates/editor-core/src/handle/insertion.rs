@@ -351,9 +351,9 @@ mod tests {
             .root()
             .expect("root")
             .children()
-            .filter_map(|child| match child {
-                ChildView::Block(block) => Some((block.id(), block.node_type())),
-                ChildView::Leaf(leaf) => Some((leaf.dot(), leaf.node_type())),
+            .map(|child| match child {
+                ChildView::Block(block) => (block.id(), block.node_type()),
+                ChildView::Leaf(leaf) => (leaf.dot(), leaf.node_type()),
             })
             .filter(|(_, kind)| matches!(kind, NodeType::Image | NodeType::File))
             .collect::<Vec<_>>();
@@ -519,9 +519,9 @@ mod tests {
             .node(content)
             .expect("fold content")
             .children()
-            .filter_map(|child| match child {
-                ChildView::Block(block) => Some((block.id(), block.node_type())),
-                ChildView::Leaf(leaf) => Some((leaf.dot(), leaf.node_type())),
+            .map(|child| match child {
+                ChildView::Block(block) => (block.id(), block.node_type()),
+                ChildView::Leaf(leaf) => (leaf.dot(), leaf.node_type()),
             })
             .filter(|(node_id, node_type)| {
                 *node_id != existing_image

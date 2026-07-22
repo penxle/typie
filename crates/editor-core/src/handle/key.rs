@@ -238,7 +238,7 @@ mod tests {
                 .any(|b| b.node_type() == NodeType::BulletList),
             "emptying delete must remove the list container"
         );
-        let selection = editor.state().selection.clone().expect("selection");
+        let selection = editor.state().selection.expect("selection");
         assert!(selection.is_collapsed());
         assert_eq!(selection.head.node, p2);
         assert_eq!(selection.head.offset, 0);

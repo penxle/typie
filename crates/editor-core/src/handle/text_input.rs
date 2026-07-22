@@ -4661,7 +4661,7 @@ mod tests {
 
     #[test]
     fn ime_ios_korean_full_log_replay_keeps_pending_paint() {
-        let (state, p1) = state! {
+        let (state, _p1) = state! {
             doc { root { p1: paragraph {} } }
             selection: (p1, 0)
         };
@@ -4758,7 +4758,7 @@ mod tests {
 
     #[test]
     fn ime_rewrite_deleting_composing_char_then_retype_keeps_paint() {
-        let (state, p1) = state! {
+        let (state, _p1) = state! {
             doc { root { p1: paragraph { text("안녕") } } }
             selection: (p1, 2)
             pending_modifiers: [bold]
@@ -4786,7 +4786,7 @@ mod tests {
 
     #[test]
     fn ime_rewrite_with_common_prefix_extending_syllable_keeps_paint() {
-        let (state, p1) = state! {
+        let (state, _p1) = state! {
             doc { root { p1: paragraph { text("안녕") text("핫") [bold] } } }
             selection: (p1, 3)
         };

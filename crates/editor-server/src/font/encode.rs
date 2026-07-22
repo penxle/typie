@@ -915,10 +915,12 @@ mod tests {
             ]),
             2,
         );
-        let mut head = Head::default();
-        head.index_to_loc_format = match loca_format {
-            LocaFormat::Short => 0,
-            LocaFormat::Long => 1,
+        let head = Head {
+            index_to_loc_format: match loca_format {
+                LocaFormat::Short => 0,
+                LocaFormat::Long => 1,
+            },
+            ..Head::default()
         };
 
         let mut fb = write_fonts::FontBuilder::new();

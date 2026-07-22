@@ -249,6 +249,8 @@ pub(crate) struct FontLoadNotice {
     pub(crate) kind: FontLoadKind,
 }
 
+type PendingFontEntriesByChunk = HashMap<u16, Vec<(usize, Dot, u32)>>;
+
 /// Reverse index over `pending_fonts`, keyed by the awaited resolution target.
 /// A chunk/base arrival then touches only the codepoints waiting on that exact
 /// (family, weight[, chunk]) instead of re-resolving every pending codepoint.
@@ -258,7 +260,7 @@ pub(crate) struct FontLoadNotice {
 #[derive(Default)]
 pub(crate) struct PendingFontIndex {
     keys: Vec<(String, u16)>,
-    by_target: HashMap<(u16, u16), HashMap<u16, Vec<(usize, Dot, u32)>>>,
+    by_target: HashMap<(u16, u16), PendingFontEntriesByChunk>,
 }
 
 impl PendingFontIndex {

@@ -154,7 +154,8 @@ fn should_descend_into_child(rs: &ResolvedSelection<'_>, child: &NodeView<'_>) -
         return false;
     }
     child.node_type() == NodeType::ListItem
-        || !(rs.contains_subtree(child) && !is_run_child_type(child.node_type()))
+        || !rs.contains_subtree(child)
+        || is_run_child_type(child.node_type())
 }
 
 fn flush_run(parent_id: Dot, current: &mut Vec<ListableRunChild>, out: &mut Vec<ListableWrapRun>) {

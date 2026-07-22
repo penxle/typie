@@ -275,7 +275,7 @@ fn judgment_matches_execution_for_root_endpoint_absorb_only() {
     let state = fixtures().swap_remove(0);
     let size = flat_size(&state.view());
     let start = 53usize.min(size);
-    let end = 0usize.min(size);
+    let end = 0usize;
     let mut editor = Editor::new_test(state);
     editor.apply(Message::Selection {
         op: SelectionOp::SetFlat { start, end },

@@ -858,12 +858,12 @@ pub(crate) fn block_boundary_fragments(
         .map(|(fragments, _, _)| fragments.into_iter().cloned().collect())
 }
 
-fn open_fragments_for_parent<'a>(
-    mut candidates: Vec<&'a Fragment>,
+fn open_fragments_for_parent(
+    mut candidates: Vec<&Fragment>,
     mut open_start: u32,
     mut open_end: u32,
     parent_type: NodeType,
-) -> Option<(Vec<&'a Fragment>, u32, u32)> {
+) -> Option<(Vec<&Fragment>, u32, u32)> {
     let content = &Schema::node_spec(parent_type).content;
     loop {
         if candidates.is_empty() {

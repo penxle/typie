@@ -13,11 +13,8 @@ pub struct GraphIngest {
 impl GraphIngest {
     fn take_buffer(&self) -> EditorResult<Vec<u8>> {
         let mut guard = self.buffer.lock().map_err(|_| FfiError::LockPoisoned)?;
-        guard.take().ok_or_else(|| {
-            EditorError::General {
-                msg: "graph ingest already finished".to_string(),
-            }
-            .into()
+        guard.take().ok_or_else(|| EditorError::General {
+            msg: "graph ingest already finished".to_string(),
         })
     }
 
@@ -43,8 +40,7 @@ impl GraphIngest {
             }
             None => Err(EditorError::General {
                 msg: "graph ingest already finished".to_string(),
-            }
-            .into()),
+            }),
         }
     }
 
@@ -54,8 +50,7 @@ impl GraphIngest {
             Some(buffer) => Ok(buffer.len() as i64),
             None => Err(EditorError::General {
                 msg: "graph ingest already finished".to_string(),
-            }
-            .into()),
+            }),
         }
     }
 

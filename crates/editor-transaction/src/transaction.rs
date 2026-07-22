@@ -1131,12 +1131,11 @@ mod tests {
             "the outer batch's rollback restores the pre-batch (non-deferring) state"
         );
         assert!(
-            tr.state()
+            !tr.state()
                 .projected
                 .block_modifiers()
                 .modifiers_of(p1)
-                .get(&ModifierType::Bold)
-                .is_none(),
+                .contains_key(&ModifierType::Bold),
             "the rolled-back batch's op never survives"
         );
     }
@@ -1183,7 +1182,7 @@ mod tests {
         );
         let modifiers = tr.state().projected.block_modifiers().modifiers_of(p1);
         assert_eq!(modifiers.get(&ModifierType::Bold), Some(&Modifier::Bold));
-        assert!(modifiers.get(&ModifierType::Italic).is_none());
+        assert!(!modifiers.contains_key(&ModifierType::Italic));
     }
 
     #[test]

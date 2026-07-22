@@ -332,4 +332,3 @@ fn perf_boundary_typing() {
         );
     }
 }
-

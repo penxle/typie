@@ -100,7 +100,7 @@ fn nearest_insertable_flat(doc: &editor_model::DocView, total: usize, offset: us
     offset
 }
 
-#[cfg(any(test, feature = "test-utils"))]
+#[cfg(test)]
 pub(crate) fn nearest_insertable_flat_probe(
     doc: &editor_model::DocView,
     total: usize,
@@ -2924,12 +2924,12 @@ mod tests {
         assert_eq!(after.window_start, 4);
         let cursor = before.selection.start - before.window_start;
         let mut predicted = before.text.clone();
-        predicted.insert_str(
+        predicted.insert(
             predicted
                 .char_indices()
                 .nth(cursor)
                 .map_or(predicted.len(), |(i, _)| i),
-            "X",
+            'X',
         );
         // Window end extends past the new cursor by the after-limit, pulling in
         // one more trailing char than the previous window exposed.

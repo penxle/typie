@@ -1,6 +1,6 @@
 use editor_crdt::{Dot, ListOp, OpGraph};
 use editor_model::{
-    Anchor, AtomLeaf, Bias, Child, EditOp, Modifier, ModifierType, Node, NodeType, SeqItem, SpanOp,
+    Anchor, AtomLeaf, Bias, EditOp, Modifier, ModifierType, Node, NodeType, SeqItem, SpanOp,
 };
 use hashbrown::HashSet;
 
@@ -338,7 +338,7 @@ fn apply_wrap_template(
     let p = active.seq_checkout().visible_len();
     match y % 4 {
         0 | 1 => {
-            let list_ty = if y % 4 == 0 {
+            let list_ty = if y.is_multiple_of(4) {
                 NodeType::BulletList
             } else {
                 NodeType::OrderedList
@@ -577,7 +577,7 @@ fn container_kill_step(
         let Some(last) = active.subtree_max_seq_pos(host) else {
             return false;
         };
-        if last + 1 <= start {
+        if last < start {
             return false;
         }
         EditOp::Seq(ListOp::Del {
@@ -1104,7 +1104,6 @@ pub fn bold_label_fold_list() -> ProjectedState {
         .unwrap()
         .id;
     pos += 1;
-    let mut label_chars: Vec<Dot> = Vec::new();
     for i in 0..8 {
         let item = s
             .apply(seq_block(
@@ -1132,7 +1131,7 @@ pub fn bold_label_fold_list() -> ProjectedState {
             chars.push(d);
         }
         if i % 2 == 0 {
-            label_chars = chars;
+            let label_chars = chars;
             s.apply(EditOp::Span(SpanOp::AddSpan {
                 start: Anchor {
                     id: label_chars[0],
@@ -1314,7 +1313,7 @@ pub fn mixed_atoms() -> ProjectedState {
 
 #[cfg(test)]
 mod tests {
-    use editor_model::{AnchorIntervalIndex, spans_covering};
+    use editor_model::{AnchorIntervalIndex, Child, spans_covering};
 
     use super::*;
 

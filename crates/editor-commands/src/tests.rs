@@ -79,7 +79,7 @@ fn select_node_backward_inside_a_cell_is_not_a_cell_rect() {
 
 #[test]
 fn cell_rect_contains_subtree_covers_rect_cells_only() {
-    let (state, tr1, c00, p00, c01, tr2) = state! {
+    let (state, tr1, c00, p00, c01, _tr2) = state! {
         doc { root { table {
             tr1: table_row {
                 c00: table_cell { p00: paragraph { text("1") } }
@@ -116,7 +116,7 @@ fn cell_rect_contains_subtree_covers_rect_cells_only() {
 
 #[test]
 fn cell_rect_intersects_subtree_follows_rect_not_flat_range() {
-    let (state, table, tr1, c01, tr2) = state! {
+    let (state, table, tr1, c01, _tr2) = state! {
         doc { root { table: table {
             tr1: table_row {
                 table_cell { paragraph { text("1") } }
@@ -149,7 +149,7 @@ fn cell_rect_intersects_subtree_follows_rect_not_flat_range() {
 
 #[test]
 fn cell_rect_contains_leaf_slot_follows_rect_not_flat_range() {
-    let (state, tr1, p00, p01, tr2) = state! {
+    let (state, _tr1, p00, p01, _tr2) = state! {
         doc { root { table {
             tr1: table_row {
                 table_cell { p00: paragraph { text("1") } }

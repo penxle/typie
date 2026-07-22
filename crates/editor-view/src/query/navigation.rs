@@ -330,10 +330,10 @@ fn move_line_vertical_forward(
             pos,
             true,
         );
-        if is_empty_line_stuck(layout_index, t, &s, pos) {
-            if let Some(next) = vertical_target::below(layout_index, t, x) {
-                s = navigate_to_entry(layout_index, next, x);
-            }
+        if is_empty_line_stuck(layout_index, t, &s, pos)
+            && let Some(next) = vertical_target::below(layout_index, t, x)
+        {
+            s = navigate_to_entry(layout_index, next, x);
         }
         Some(s)
     } else {
@@ -360,10 +360,10 @@ fn move_line_vertical_backward(
             pos,
             false,
         );
-        if is_empty_line_stuck(layout_index, t, &s, pos) {
-            if let Some(next) = vertical_target::above(layout_index, t, x) {
-                s = navigate_to_entry(layout_index, next, x);
-            }
+        if is_empty_line_stuck(layout_index, t, &s, pos)
+            && let Some(next) = vertical_target::above(layout_index, t, x)
+        {
+            s = navigate_to_entry(layout_index, next, x);
         }
         Some(s)
     } else {
@@ -706,12 +706,12 @@ pub(crate) fn navigable_above_at_x(
     navigable_above_at_x_filtered(layout_index, y_threshold, x, |_| true)
 }
 
-fn navigable_below_at_x_filtered<'a>(
-    layout_index: &'a LayoutIndex,
+fn navigable_below_at_x_filtered(
+    layout_index: &LayoutIndex,
     y_threshold: f32,
     x: f32,
     mut include: impl FnMut(&LayoutEntry) -> bool,
-) -> Option<&'a LayoutEntry> {
+) -> Option<&LayoutEntry> {
     let candidates: Vec<&LayoutEntry> = layout_index
         .entries()
         .filter(|entry| {
@@ -731,12 +731,12 @@ fn navigable_below_at_x_filtered<'a>(
         .min_by(|a, b| compare_navigation_band_entry(a, b, x, true))
 }
 
-fn navigable_above_at_x_filtered<'a>(
-    layout_index: &'a LayoutIndex,
+fn navigable_above_at_x_filtered(
+    layout_index: &LayoutIndex,
     y_threshold: f32,
     x: f32,
     mut include: impl FnMut(&LayoutEntry) -> bool,
-) -> Option<&'a LayoutEntry> {
+) -> Option<&LayoutEntry> {
     let candidates: Vec<&LayoutEntry> = layout_index
         .entries()
         .filter(|entry| {
