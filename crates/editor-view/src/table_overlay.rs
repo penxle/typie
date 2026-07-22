@@ -5,7 +5,10 @@ use editor_model::{Alignment, DocView, Modifier, ModifierType, Node, NodeType, T
 use editor_state::ResolvedSelection;
 use serde::{Deserialize, Serialize};
 
+use crate::page::LayoutPage;
 use crate::page_fragment::{PageFragmentBox, PageFragmentNode, PageFragmentTree};
+use crate::paginate::types::{LayoutBox, LayoutContent, LayoutNode};
+use crate::query::layout_index::LayoutIndex;
 
 const TABLE_BORDER_WIDTH: f32 = 1.0;
 const MIN_CELL_WIDTH: f32 = 40.0;
@@ -111,9 +114,11 @@ fn collect_table_overlays(
         Some(Node::Table(table_node)) => {
             if let Some(overlay) = build_table_overlay(
                 node.rect,
-                fragment_box,
+                fragment_box.node,
                 &table_node,
+                visible_rows(fragment_box, view),
                 page_idx,
+                0.0,
                 view,
                 selection,
                 content_width,
@@ -131,16 +136,16 @@ fn collect_table_overlays(
 
 fn build_table_overlay(
     table_rect: Rect,
-    table_box: &PageFragmentBox,
+    table_id: Dot,
     table_node: &editor_model::TableNode,
+    mut rows: Vec<OverlayRow>,
     page_idx: usize,
+    page_y_start: f32,
     view: &DocView,
     selection: Option<&ResolvedSelection<'_>>,
     content_width: f32,
 ) -> Option<TableOverlay> {
-    let table_id = table_box.node;
     let doc_node = view.node(table_id)?;
-    let mut rows = visible_rows(table_box, view);
     rows.sort_by_key(|row| row.index);
     for row in &mut rows {
         row.cells.sort_by_key(|cell| cell.index);
@@ -158,7 +163,7 @@ fn build_table_overlay(
 
     let bounds = Rect::from_xywh(
         table_rect.x,
-        fragment_top,
+        fragment_top - page_y_start,
         table_rect.width,
         fragment_bottom - fragment_top,
     );
@@ -315,6 +320,98 @@ fn build_table_overlay(
     })
 }
 
+pub(crate) fn continuous_table_overlays(
+    layout_index: &LayoutIndex,
+    view: &DocView,
+    selection: Option<&ResolvedSelection<'_>>,
+    content_width: f32,
+) -> Vec<TableOverlay> {
+    let mut overlays = Vec::new();
+    let mut page_cursor = 0;
+    collect_continuous_table_overlays(
+        &layout_index.tree().root,
+        layout_index,
+        view,
+        selection,
+        content_width,
+        &mut page_cursor,
+        &mut overlays,
+    );
+    overlays
+}
+
+fn continuous_page_anchor(
+    pages: &[LayoutPage],
+    page_cursor: &mut usize,
+    y: f32,
+) -> Option<(usize, f32)> {
+    while let Some(page) = pages.get(*page_cursor) {
+        if y < page.y_start {
+            return None;
+        }
+        if y <= page.y_end {
+            return Some((*page_cursor, page.y_start));
+        }
+        *page_cursor += 1;
+    }
+    None
+}
+
+fn collect_continuous_table_overlays(
+    node: &LayoutNode,
+    layout_index: &LayoutIndex,
+    view: &DocView,
+    selection: Option<&ResolvedSelection<'_>>,
+    content_width: f32,
+    page_cursor: &mut usize,
+    overlays: &mut Vec<TableOverlay>,
+) {
+    let LayoutContent::Box(layout_box) = &node.content else {
+        return;
+    };
+
+    let node_view = view.node(layout_box.node);
+    match node_view.map(|node_view| node_view.node()) {
+        Some(Node::Table(table_node)) => {
+            let rows = layout_rows(layout_box, view);
+            let Some(fragment_top) = rows.first().map(|row| row.rect.y) else {
+                return;
+            };
+            let Some((page_idx, page_y_start)) =
+                continuous_page_anchor(layout_index.pages(), page_cursor, fragment_top)
+            else {
+                return;
+            };
+            if let Some(overlay) = build_table_overlay(
+                node.rect,
+                layout_box.node,
+                &table_node,
+                rows,
+                page_idx,
+                page_y_start,
+                view,
+                selection,
+                content_width,
+            ) {
+                overlays.push(overlay);
+            }
+        }
+        _ => {
+            for child in &layout_box.children {
+                collect_continuous_table_overlays(
+                    child,
+                    layout_index,
+                    view,
+                    selection,
+                    content_width,
+                    page_cursor,
+                    overlays,
+                );
+            }
+        }
+    }
+}
+
 fn min_table_width(col_count: usize) -> f32 {
     if col_count == 0 {
         return TABLE_BORDER_WIDTH;
@@ -338,6 +435,43 @@ fn visible_rows(table_box: &PageFragmentBox, view: &DocView) -> Vec<OverlayRow> 
                 .iter()
                 .filter_map(|cell_node| {
                     let cell_box = cell_node.as_box()?;
+                    let cell_view = view.node(cell_box.node)?;
+                    (cell_view.node_type() == NodeType::TableCell).then(|| OverlayCell {
+                        index: cell_view.index().unwrap_or(0),
+                        rect: cell_node.rect,
+                    })
+                })
+                .collect();
+
+            Some(OverlayRow {
+                index: row_view.index().unwrap_or(0),
+                rect: row_node.rect,
+                cells,
+            })
+        })
+        .collect()
+}
+
+fn layout_rows(table_box: &LayoutBox, view: &DocView) -> Vec<OverlayRow> {
+    table_box
+        .children
+        .iter()
+        .filter_map(|row_node| {
+            let LayoutContent::Box(row_box) = &row_node.content else {
+                return None;
+            };
+            let row_view = view.node(row_box.node)?;
+            if row_view.node_type() != NodeType::TableRow {
+                return None;
+            }
+
+            let cells = row_box
+                .children
+                .iter()
+                .filter_map(|cell_node| {
+                    let LayoutContent::Box(cell_box) = &cell_node.content else {
+                        return None;
+                    };
                     let cell_view = view.node(cell_box.node)?;
                     (cell_view.node_type() == NodeType::TableCell).then(|| OverlayCell {
                         index: cell_view.index().unwrap_or(0),
@@ -412,6 +546,7 @@ mod tests {
     use crate::page::LayoutPage;
     use crate::page_fragment::build_page_fragment_tree;
     use crate::paginate::types::{LayoutBox, LayoutContent, LayoutLine, LayoutNode, LayoutTree};
+    use crate::query::layout_index::LayoutIndex;
     use crate::style::{Alignment as StyleAlignment, BorderMode, BoxStyle, Direction};
 
     use super::*;
@@ -658,6 +793,117 @@ mod tests {
         (pd, root, table, row0, cell00, cell01, row1, cell10, cell11)
     }
 
+    fn two_table_doc() -> (ProjectedDoc, Dot, Dot, Dot, Dot, Dot, Dot, Dot) {
+        let root = Dot::ROOT;
+        let table0 = elem(3, 1);
+        let row0 = elem(3, 2);
+        let cell0 = elem(3, 3);
+        let para0 = elem(3, 4);
+        let table1 = elem(3, 5);
+        let row1 = elem(3, 6);
+        let cell1 = elem(3, 7);
+        let para1 = elem(3, 8);
+        let items = vec![
+            (
+                table0,
+                SeqItem::Block {
+                    node_type: NodeType::Table,
+                    parents: vec![root],
+                    attrs: vec![],
+                },
+            ),
+            (
+                row0,
+                SeqItem::Block {
+                    node_type: NodeType::TableRow,
+                    parents: vec![root, table0],
+                    attrs: vec![],
+                },
+            ),
+            (
+                cell0,
+                SeqItem::Block {
+                    node_type: NodeType::TableCell,
+                    parents: vec![root, table0, row0],
+                    attrs: vec![],
+                },
+            ),
+            (
+                para0,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, table0, row0, cell0],
+                    attrs: vec![],
+                },
+            ),
+            (
+                table1,
+                SeqItem::Block {
+                    node_type: NodeType::Table,
+                    parents: vec![root],
+                    attrs: vec![],
+                },
+            ),
+            (
+                row1,
+                SeqItem::Block {
+                    node_type: NodeType::TableRow,
+                    parents: vec![root, table1],
+                    attrs: vec![],
+                },
+            ),
+            (
+                cell1,
+                SeqItem::Block {
+                    node_type: NodeType::TableCell,
+                    parents: vec![root, table1, row1],
+                    attrs: vec![],
+                },
+            ),
+            (
+                para1,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, table1, row1, cell1],
+                    attrs: vec![],
+                },
+            ),
+        ];
+        let mut logs = doc_logs(&items);
+        logs.node_attrs = NodeAttrLog::new()
+            .apply(
+                Dot::ROOT,
+                NodeAttrOp {
+                    target: table0,
+                    attr: NodeAttr::Table {
+                        attr: TableNodeAttr::Proportion(100),
+                    },
+                },
+            )
+            .unwrap()
+            .apply(
+                elem(4, 1),
+                NodeAttrOp {
+                    target: table1,
+                    attr: NodeAttr::Table {
+                        attr: TableNodeAttr::Proportion(100),
+                    },
+                },
+            )
+            .unwrap();
+
+        (
+            project_document(&logs).unwrap(),
+            table0,
+            row0,
+            cell0,
+            para0,
+            table1,
+            row1,
+            cell1,
+        )
+    }
+
     fn resolved_sel<'a>(
         view: &'a DocView<'a>,
         anchor_node: Dot,
@@ -796,6 +1042,222 @@ mod tests {
 
         assert!(!ov.is_focused);
         assert_eq!(ov.cell_selection, None);
+    }
+
+    #[test]
+    fn paginated_table_overlay_keeps_page_fragments() {
+        let (pd, root, table, row0, cell00, cell01, row1, cell10, cell11) = two_by_two_table_doc();
+        let view = DocView::new(&pd);
+        let tree = table_layout_tree(
+            table,
+            row0,
+            cell00,
+            cell01,
+            row1,
+            cell10,
+            cell11,
+            elem(1, 8),
+            elem(1, 9),
+            elem(1, 10),
+            elem(1, 11),
+            root,
+        );
+
+        let pages = [page(0.0, 40.0), page(40.0, 40.0)];
+        let overlays = pages
+            .iter()
+            .enumerate()
+            .flat_map(|(page_idx, page)| {
+                let fragment = build_page_fragment_tree(&tree, page_idx, page);
+                page_table_overlays(&fragment, &view, None, 600.0)
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(overlays.len(), 2);
+        assert_eq!(overlays[0].page_idx, 0);
+        assert_eq!(
+            overlays[0]
+                .rows
+                .iter()
+                .map(|row| row.index)
+                .collect::<Vec<_>>(),
+            [0]
+        );
+        assert!(!overlays[0].is_last_row_fragment);
+        assert_eq!(overlays[1].page_idx, 1);
+        assert_eq!(
+            overlays[1]
+                .rows
+                .iter()
+                .map(|row| row.index)
+                .collect::<Vec<_>>(),
+            [1]
+        );
+        assert!(overlays[1].is_last_row_fragment);
+    }
+
+    #[test]
+    fn continuous_page_cursor_never_rescans_previous_pages() {
+        let pages = [page(0.0, 40.0), page(40.0, 40.0), page(80.0, 40.0)];
+        let mut page_cursor = 0;
+
+        assert_eq!(
+            continuous_page_anchor(&pages, &mut page_cursor, 5.0),
+            Some((0, 0.0))
+        );
+        assert_eq!(
+            continuous_page_anchor(&pages, &mut page_cursor, 45.0),
+            Some((1, 40.0))
+        );
+        assert_eq!(
+            continuous_page_anchor(&pages, &mut page_cursor, 85.0),
+            Some((2, 80.0))
+        );
+        assert_eq!(page_cursor, 2);
+        assert_eq!(continuous_page_anchor(&pages, &mut page_cursor, 5.0), None);
+        assert_eq!(page_cursor, 2);
+    }
+
+    #[test]
+    fn continuous_table_overlay_spanning_pages_is_single_complete_overlay() {
+        let (pd, root, table, row0, cell00, cell01, row1, cell10, cell11) = two_by_two_table_doc();
+        let view = DocView::new(&pd);
+        let tree = table_layout_tree(
+            table,
+            row0,
+            cell00,
+            cell01,
+            row1,
+            cell10,
+            cell11,
+            elem(1, 8),
+            elem(1, 9),
+            elem(1, 10),
+            elem(1, 11),
+            root,
+        );
+        let index = LayoutIndex::new(tree, &[page(0.0, 40.0), page(40.0, 40.0)]);
+
+        let overlays = continuous_table_overlays(&index, &view, None, 600.0);
+
+        assert_eq!(overlays.len(), 1);
+        let overlay = &overlays[0];
+        assert_eq!(overlay.table_id, table);
+        assert_eq!(overlay.page_idx, 0);
+        assert_eq!(
+            overlay.rows.iter().map(|row| row.index).collect::<Vec<_>>(),
+            [0, 1]
+        );
+        assert_eq!(overlay.bounds.height, 80.0);
+        assert!(overlay.is_last_row_fragment);
+    }
+
+    #[test]
+    fn continuous_table_overlay_preserves_later_row_focus_and_cross_row_selection() {
+        let (pd, root, table, row0, cell00, cell01, row1, cell10, cell11) = two_by_two_table_doc();
+        let view = DocView::new(&pd);
+        let para00 = elem(1, 8);
+        let para01 = elem(1, 9);
+        let para10 = elem(1, 10);
+        let para11 = elem(1, 11);
+        let tree = table_layout_tree(
+            table, row0, cell00, cell01, row1, cell10, cell11, para00, para01, para10, para11, root,
+        );
+        let index = LayoutIndex::new(tree, &[page(0.0, 40.0), page(40.0, 40.0)]);
+        let later_cell_focus = resolved_sel(&view, para11, 0, para11, 0);
+
+        let overlays = continuous_table_overlays(&index, &view, Some(&later_cell_focus), 600.0);
+
+        assert_eq!(overlays.len(), 1);
+        let overlay = &overlays[0];
+        assert!(overlay.is_focused);
+        assert_eq!(overlay.focused_row_index, Some(1));
+        assert_eq!(overlay.focused_col_index, Some(1));
+
+        let cross_row_selection = resolved_sel(&view, row1, 2, row0, 0);
+        let overlays = continuous_table_overlays(&index, &view, Some(&cross_row_selection), 600.0);
+
+        assert_eq!(overlays.len(), 1);
+        assert_eq!(
+            overlays[0].cell_selection,
+            Some(TableOverlayCellSelection {
+                anchor_row: 1,
+                anchor_col: 1,
+                head_row: 0,
+                head_col: 0,
+            })
+        );
+    }
+
+    #[test]
+    fn continuous_table_overlays_follow_document_order_without_duplicates() {
+        let (pd, table0, row0, cell0, para0, table1, row1, cell1) = two_table_doc();
+        let view = DocView::new(&pd);
+        let table0_node = box_node(
+            table0,
+            0.0,
+            0.0,
+            600.0,
+            40.0,
+            vec![box_node(
+                row0,
+                0.0,
+                0.0,
+                600.0,
+                40.0,
+                vec![box_node(
+                    cell0,
+                    0.0,
+                    0.0,
+                    600.0,
+                    40.0,
+                    vec![line_node(para0, 0.0, 0.0, 600.0, 40.0)],
+                )],
+            )],
+        );
+        let table1_node = box_node(
+            table1,
+            0.0,
+            40.0,
+            600.0,
+            40.0,
+            vec![box_node(
+                row1,
+                0.0,
+                40.0,
+                600.0,
+                40.0,
+                vec![box_node(
+                    cell1,
+                    0.0,
+                    40.0,
+                    600.0,
+                    40.0,
+                    vec![line_node(elem(3, 8), 0.0, 40.0, 600.0, 40.0)],
+                )],
+            )],
+        );
+        let tree = LayoutTree {
+            root: box_node(
+                Dot::ROOT,
+                0.0,
+                0.0,
+                600.0,
+                80.0,
+                vec![table0_node, table1_node],
+            ),
+        };
+        let index = LayoutIndex::new(tree, &[page(0.0, 40.0), page(40.0, 40.0)]);
+
+        let overlays = continuous_table_overlays(&index, &view, None, 600.0);
+
+        assert_eq!(
+            overlays
+                .iter()
+                .map(|overlay| overlay.table_id)
+                .collect::<Vec<_>>(),
+            [table0, table1]
+        );
     }
 
     #[test]

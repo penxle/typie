@@ -2,7 +2,10 @@ package co.typie.editor.interaction
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect as ComposeRect
+import co.typie.editor.DefaultRootPaginatedLayout
+import co.typie.editor.PagePoint
 import co.typie.editor.ffi.Alignment
+import co.typie.editor.ffi.LayoutMode
 import co.typie.editor.ffi.Rect
 import co.typie.editor.ffi.TableBorderStyle
 import co.typie.editor.ffi.TableOverlay
@@ -11,9 +14,56 @@ import co.typie.editor.ffi.TableOverlayColumn
 import co.typie.editor.ffi.TableOverlayRow
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class EditorTableCellSelectionGeometryTest {
+  @Test
+  fun `table containment projects complete continuous overlay across pages`() {
+    val overlay = tableOverlay()
+    val pageOffsets = mapOf(0 to Offset.Zero, 1 to Offset(x = 0f, y = 80f))
+    val project: (Int, Float, Float) -> Offset? = { page, x, y ->
+      pageOffsets[page]?.plus(Offset(x = x, y = y))
+    }
+
+    assertTrue(
+      overlay.contains(
+        point = PagePoint(page = 1, x = 20f, y = 10f),
+        layoutMode = LayoutMode.Continuous(maxWidth = 600),
+        project = project,
+      )
+    )
+    assertFalse(
+      overlay.contains(
+        point = PagePoint(page = 1, x = 20f, y = 30f),
+        layoutMode = LayoutMode.Continuous(maxWidth = 600),
+        project = project,
+      )
+    )
+    assertFalse(
+      overlay.contains(
+        point = PagePoint(page = 2, x = 20f, y = 10f),
+        layoutMode = LayoutMode.Continuous(maxWidth = 600),
+        project = project,
+      )
+    )
+    assertFalse(
+      overlay.contains(
+        point = PagePoint(page = 1, x = 20f, y = 10f),
+        layoutMode = DefaultRootPaginatedLayout,
+        project = project,
+      )
+    )
+    assertTrue(
+      overlay.contains(
+        point = PagePoint(page = 0, x = 20f, y = 30f),
+        layoutMode = DefaultRootPaginatedLayout,
+        project = project,
+      )
+    )
+  }
+
   @Test
   fun `collapsed focused cell resolves single-cell range and handle`() {
     val overlay = tableOverlay(isFocused = true, focusedRowIndex = 1, focusedColIndex = 0)
@@ -79,6 +129,32 @@ class EditorTableCellSelectionGeometryTest {
   }
 
   @Test
+  fun `complete continuous cell selection spans all rows with one head handle`() {
+    val overlay =
+      tableOverlay(
+        isFocused = true,
+        rows =
+          listOf(
+            TableOverlayRow(index = 0, height = 40f, position = 40f),
+            TableOverlayRow(index = 1, height = 40f, position = 80f),
+            TableOverlayRow(index = 2, height = 40f, position = 120f),
+          ),
+        rowCount = 3,
+        cellSelection = cellSelection(anchorRow = 0, anchorCol = 0, headRow = 2, headCol = 1),
+      )
+
+    val range = resolveTableCellSelectionRange(overlay = overlay, selectionCollapsed = false)
+
+    assertEquals(
+      EditorTableCellSelectionGeometry(
+        outline = ComposeRect(left = 10f, top = 20f, right = 110f, bottom = 140f),
+        handleCenter = Offset(x = 110f, y = 140f),
+      ),
+      resolveTableCellSelectionGeometry(overlay = overlay, range = range!!),
+    )
+  }
+
+  @Test
   fun `non-focused table boundary selection does not keep table handle active`() {
     val overlay =
       tableOverlay(
@@ -99,11 +175,12 @@ class EditorTableCellSelectionGeometryTest {
         TableOverlayRow(index = 0, height = 40f, position = 40f),
         TableOverlayRow(index = 1, height = 40f, position = 80f),
       ),
+    rowCount: Int = 2,
   ): TableOverlay =
     TableOverlay(
       tableId = "table",
       pageIdx = 0,
-      bounds = Rect(x = 10f, y = 20f, width = 100f, height = 80f),
+      bounds = Rect(x = 10f, y = 20f, width = 100f, height = rows.lastOrNull()?.position ?: 0f),
       borderStyle = TableBorderStyle.Solid,
       align = Alignment.Left,
       proportion = 1f,
@@ -116,7 +193,7 @@ class EditorTableCellSelectionGeometryTest {
           TableOverlayColumn(index = 0, widthAsPx = 50f, position = 50f),
           TableOverlayColumn(index = 1, widthAsPx = 50f, position = 100f),
         ),
-      rowCount = 2,
+      rowCount = rowCount,
       isLastRowFragment = true,
       isFocused = isFocused,
       focusedRowIndex = focusedRowIndex,

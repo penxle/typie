@@ -30,6 +30,7 @@
   import { touchPanLock } from '../touch-pan-lock';
   import Caret from './Caret.svelte';
   import ContextMenu from './ContextMenu.svelte';
+  import DocumentOverlayLayer from './DocumentOverlayLayer.svelte';
   import Input from './Input.svelte';
   import LineHighlight from './LineHighlight.svelte';
   import LinkTooltip from './LinkTooltip.svelte';
@@ -317,6 +318,8 @@
           {#each ctx.editor.pageSizes as { width, height }, i (i)}
             <Page backingHeight={ctx.editor.pageBackingSizes[i]?.height ?? height} {height} page={i} {width} />
           {/each}
+
+          <DocumentOverlayLayer />
 
           <Caret />
 

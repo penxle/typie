@@ -258,7 +258,12 @@ internal class EditorTableHandleGesture(
 
     if (
       !context.editor.tableOverlays.any { overlay ->
-        overlay.tableId == drag.tableId && overlay.contains(point)
+        overlay.tableId == drag.tableId &&
+          overlay.contains(
+            point = point,
+            layoutMode = context.editor.rootAttrs?.layoutMode,
+            project = context.geometry::resolvePagePosition,
+          )
       }
     ) {
       return EditorTableHandleDragUpdate.HandoffToSelectionHandle(

@@ -2139,7 +2139,7 @@ class EditorInteractionControllerTest {
     }
 
   @Test
-  fun `table cell handle drag hands off to selection handle after leaving table`() =
+  fun `table cell handle drag stays active across continuous canvas boundary and hands off outside table`() =
     runTest(StandardTestDispatcher()) {
       val selection =
         Selection(
@@ -2155,7 +2155,8 @@ class EditorInteractionControllerTest {
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
       editor.sync {}
-      val host = TestHost(this)
+      val host =
+        TestHost(this).apply { pageOffsets = mapOf(0 to Offset.Zero, 1 to Offset(x = 0f, y = 80f)) }
       val controller =
         EditorInteractionController(
           editorProvider = { editor },
@@ -2167,31 +2168,46 @@ class EditorInteractionControllerTest {
       val down = Offset(70f, 70f)
 
       assertTrue(controller.onPointerDown(pointerId = 1L, position = down, nowMillis = 0L))
+      host.point = PagePoint(page = 1, x = 0f, y = 0f)
       assertTrue(
-        controller.onPointerMove(pointerId = 1L, position = Offset(130f, 120f), nowMillis = 20L)
+        controller.onPointerMove(pointerId = 1L, position = Offset(40f, 100f), nowMillis = 20L)
       )
 
-      val extends =
-        fake.enqueued.filterIsInstance<Message.Selection>().map { it.op as SelectionOp.ExtendTo }
-      assertEquals(1, extends.size)
-      assertTrue(extends.all { extend -> extend.baseSelection == selection })
-      assertTrue(extends.all { extend -> !extend.allowCollapse })
-      assertEquals(selection.anchor, extends.single().anchor)
-      assertEquals(120f, extends.single().headX)
-      assertEquals(110f, extends.single().headY)
-      assertEquals(EditorInteractionMode.SelectionHandleDragging, controller.interactionMode)
-      assertEquals(Offset(120f, 110f), controller.magnifierPosition)
+      val crossCanvasExtend =
+        (fake.enqueued.single() as Message.Selection).op as SelectionOp.ExtendTo
+      assertEquals(selection.anchor, crossCanvasExtend.anchor)
+      assertEquals(1, crossCanvasExtend.headPage)
+      assertEquals(30f, crossCanvasExtend.headX)
+      assertEquals(10f, crossCanvasExtend.headY)
+      assertEquals(selection, crossCanvasExtend.baseSelection)
+      assertFalse(crossCanvasExtend.allowCollapse)
+      assertEquals(EditorInteractionMode.TableCellHandleDragging, controller.interactionMode)
 
       fake.enqueued.clear()
       assertTrue(
-        controller.onPointerMove(pointerId = 1L, position = Offset(131f, 121f), nowMillis = 40L)
+        controller.onPointerMove(pointerId = 1L, position = Offset(40f, 120f), nowMillis = 40L)
+      )
+
+      val outsideExtend = (fake.enqueued.single() as Message.Selection).op as SelectionOp.ExtendTo
+      assertEquals(selection.anchor, outsideExtend.anchor)
+      assertEquals(1, outsideExtend.headPage)
+      assertEquals(30f, outsideExtend.headX)
+      assertEquals(30f, outsideExtend.headY)
+      assertEquals(selection, outsideExtend.baseSelection)
+      assertFalse(outsideExtend.allowCollapse)
+      assertEquals(EditorInteractionMode.SelectionHandleDragging, controller.interactionMode)
+      assertEquals(Offset(30f, 110f), controller.magnifierPosition)
+
+      fake.enqueued.clear()
+      assertTrue(
+        controller.onPointerMove(pointerId = 1L, position = Offset(41f, 121f), nowMillis = 60L)
       )
       val continuedExtend = (fake.enqueued.single() as Message.Selection).op as SelectionOp.ExtendTo
-      assertEquals(121f, continuedExtend.headX)
-      assertEquals(111f, continuedExtend.headY)
+      assertEquals(31f, continuedExtend.headX)
+      assertEquals(31f, continuedExtend.headY)
 
       assertTrue(
-        controller.onPointerUp(pointerId = 1L, position = Offset(131f, 121f), nowMillis = 60L)
+        controller.onPointerUp(pointerId = 1L, position = Offset(41f, 121f), nowMillis = 80L)
       )
       assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
       assertFalse(host.scrollGestureLockActive)
@@ -2290,7 +2306,7 @@ class EditorInteractionControllerTest {
     }
 
   @Test
-  fun `selection handle drag hands off to table cell handle after cell selection appears`() =
+  fun `selection handle drag hands off to table cell handle on later continuous canvas`() =
     runTest(StandardTestDispatcher()) {
       val endpoints =
         SelectionEndpoints(
@@ -2310,7 +2326,8 @@ class EditorInteractionControllerTest {
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
       editor.sync {}
-      val host = TestHost(this)
+      val host =
+        TestHost(this).apply { pageOffsets = mapOf(0 to Offset.Zero, 1 to Offset(x = 0f, y = 80f)) }
       val controller =
         EditorInteractionController(
           editorProvider = { editor },
@@ -2337,29 +2354,32 @@ class EditorInteractionControllerTest {
         )
       editor.sync {}
       fake.enqueued.clear()
+      host.point = PagePoint(page = 1, x = 0f, y = 0f)
 
       assertTrue(
-        controller.onPointerMove(pointerId = 1L, position = Offset(64f, 60f), nowMillis = 40L)
+        controller.onPointerMove(pointerId = 1L, position = Offset(64f, 96f), nowMillis = 40L)
       )
       val handoffExtend = (fake.enqueued.single() as Message.Selection).op as SelectionOp.ExtendTo
       assertEquals(selection.anchor, handoffExtend.anchor)
       assertEquals(selection, handoffExtend.baseSelection)
+      assertEquals(1, handoffExtend.headPage)
       assertEquals(62f, handoffExtend.headX)
-      assertEquals(54f, handoffExtend.headY)
+      assertEquals(10f, handoffExtend.headY)
       assertEquals(EditorInteractionMode.TableCellHandleDragging, controller.interactionMode)
 
       fake.enqueued.clear()
       assertTrue(
-        controller.onPointerMove(pointerId = 1L, position = Offset(72f, 70f), nowMillis = 60L)
+        controller.onPointerMove(pointerId = 1L, position = Offset(72f, 106f), nowMillis = 60L)
       )
       val tableExtend = (fake.enqueued.single() as Message.Selection).op as SelectionOp.ExtendTo
       assertEquals(selection, tableExtend.baseSelection)
+      assertEquals(1, tableExtend.headPage)
       assertEquals(70f, tableExtend.headX)
-      assertEquals(64f, tableExtend.headY)
+      assertEquals(20f, tableExtend.headY)
       assertEquals(EditorInteractionMode.TableCellHandleDragging, controller.interactionMode)
 
       assertTrue(
-        controller.onPointerUp(pointerId = 1L, position = Offset(72f, 70f), nowMillis = 80L)
+        controller.onPointerUp(pointerId = 1L, position = Offset(72f, 106f), nowMillis = 80L)
       )
       assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
     }
@@ -3593,6 +3613,7 @@ class EditorInteractionControllerTest {
     val uiState = EditorUiState()
     var scrollGestureLockActive = false
     var point: PagePoint? = PagePoint(page = 0, x = 10f, y = 20f)
+    var pageOffsets: Map<Int, Offset>? = null
     var edgeAutoScrollViewport: EditorEdgeAutoScrollViewport? = null
     var edgeAutoScrollConsumedDelta = Offset.Zero
     var edgeAutoScrollDispatchCount = 0
@@ -3609,14 +3630,26 @@ class EditorInteractionControllerTest {
       if (density <= 0f) {
         return null
       }
-      return point?.copy(x = positionInNode.x / density, y = positionInNode.y / density)
+      val currentPoint = point ?: return null
+      val configuredPageOffsets = pageOffsets
+      val pageOffset =
+        if (configuredPageOffsets == null) Offset.Zero
+        else configuredPageOffsets[currentPoint.page] ?: return null
+      return currentPoint.copy(
+        x = (positionInNode.x - pageOffset.x) / density,
+        y = (positionInNode.y - pageOffset.y) / density,
+      )
     }
 
     override fun resolvePagePosition(page: Int, x: Float, y: Float): Offset? {
       if (density <= 0f) {
         return null
       }
-      return Offset(x = x * density, y = y * density)
+      val configuredPageOffsets = pageOffsets
+      val pageOffset =
+        if (configuredPageOffsets == null) Offset.Zero
+        else configuredPageOffsets[page] ?: return null
+      return pageOffset + Offset(x = x * density, y = y * density)
     }
 
     override fun resolveEdgeAutoScrollViewport(): EditorEdgeAutoScrollViewport? =

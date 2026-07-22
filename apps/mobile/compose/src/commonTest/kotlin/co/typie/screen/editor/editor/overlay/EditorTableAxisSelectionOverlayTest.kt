@@ -83,6 +83,35 @@ class EditorTableAxisSelectionOverlayTest {
   }
 
   @Test
+  fun `later row in complete continuous overlay resolves one row and one column selector`() {
+    val overlay =
+      tableOverlay(
+        isFocused = true,
+        focusedRowIndex = 2,
+        focusedColIndex = 0,
+        rows =
+          listOf(
+            TableOverlayRow(index = 0, height = 40f, position = 40f),
+            TableOverlayRow(index = 1, height = 40f, position = 80f),
+            TableOverlayRow(index = 2, height = 40f, position = 120f),
+          ),
+        rowCount = 3,
+      )
+
+    val selectors = resolveTableAxisSelectors(overlay = overlay, selectionCollapsed = true)
+
+    assertEquals(
+      listOf(Axis.Horizontal to 2, Axis.Vertical to 0),
+      selectors.map { it.axis to it.index },
+    )
+    assertEquals(listOf(3, 2), selectors.map { it.count })
+    assertEquals(
+      listOf(Offset(x = 10f, y = 120f), Offset(x = 35f, y = 20f)),
+      selectors.map { it.center },
+    )
+  }
+
+  @Test
   fun `column selector overlaps table top edge like legacy handle`() {
     val rect =
       resolveSelectorButtonRect(
@@ -124,11 +153,12 @@ class EditorTableAxisSelectionOverlayTest {
         TableOverlayRow(index = 0, height = 40f, position = 40f),
         TableOverlayRow(index = 1, height = 40f, position = 80f),
       ),
+    rowCount: Int = 2,
   ): TableOverlay =
     TableOverlay(
       tableId = "table",
       pageIdx = 0,
-      bounds = FfiRect(x = 10f, y = 20f, width = 100f, height = 80f),
+      bounds = FfiRect(x = 10f, y = 20f, width = 100f, height = rows.lastOrNull()?.position ?: 0f),
       borderStyle = TableBorderStyle.Solid,
       align = Alignment.Left,
       proportion = 1f,
@@ -141,7 +171,7 @@ class EditorTableAxisSelectionOverlayTest {
           TableOverlayColumn(index = 0, widthAsPx = 50f, position = 50f),
           TableOverlayColumn(index = 1, widthAsPx = 50f, position = 100f),
         ),
-      rowCount = 2,
+      rowCount = rowCount,
       isLastRowFragment = true,
       isFocused = isFocused,
       focusedRowIndex = focusedRowIndex,

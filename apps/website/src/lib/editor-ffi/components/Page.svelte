@@ -55,7 +55,7 @@
   });
   const tableOverlays = $derived.by(() => {
     void ctx.editor?.tickRevision;
-    return overlaysVisible && ctx.editor ? ctx.editor.pageTableOverlays(page) : [];
+    return isPaginated && overlaysVisible && ctx.editor ? ctx.editor.pageTableOverlays(page) : [];
   });
   const linkRects = $derived.by(() => {
     void ctx.editor?.tickRevision;

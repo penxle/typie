@@ -135,7 +135,13 @@ internal class EditorSelectionHandleDragSession {
     ) {
       return null
     }
-    if (!activeSelection.overlay.contains(point)) {
+    if (
+      !activeSelection.overlay.contains(
+        point = point,
+        layoutMode = context.editor.rootAttrs?.layoutMode,
+        project = context.geometry::resolvePagePosition,
+      )
+    ) {
       return null
     }
     val baseSelection = drag.baseSelection ?: context.editor.selection ?: return null

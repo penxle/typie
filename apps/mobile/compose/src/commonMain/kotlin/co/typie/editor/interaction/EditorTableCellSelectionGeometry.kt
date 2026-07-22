@@ -5,6 +5,7 @@ import androidx.compose.ui.geometry.Rect
 import co.typie.editor.Editor
 import co.typie.editor.PagePoint
 import co.typie.editor.ext.isCollapsed
+import co.typie.editor.ffi.LayoutMode
 import co.typie.editor.ffi.TableOverlay
 import kotlin.math.max
 import kotlin.math.min
@@ -53,14 +54,27 @@ internal fun resolveActiveTableCellSelection(editor: Editor): EditorTableCellSel
 internal fun hasActiveTableCellSelection(editor: Editor): Boolean =
   resolveTableCellSelections(editor).isNotEmpty()
 
-internal fun TableOverlay.contains(point: PagePoint): Boolean {
-  if (pageIdx != point.page) {
-    return false
+internal fun TableOverlay.contains(
+  point: PagePoint,
+  layoutMode: LayoutMode?,
+  project: (page: Int, x: Float, y: Float) -> Offset?,
+): Boolean {
+  if (layoutMode !is LayoutMode.Continuous) {
+    return pageIdx == point.page &&
+      point.x >= bounds.x &&
+      point.x <= bounds.x + bounds.width &&
+      point.y >= bounds.y &&
+      point.y <= bounds.y + bounds.height
   }
-  return point.x >= bounds.x &&
-    point.x <= bounds.x + bounds.width &&
-    point.y >= bounds.y &&
-    point.y <= bounds.y + bounds.height
+
+  val topLeft = project(pageIdx, bounds.x, bounds.y) ?: return false
+  val bottomRight =
+    project(pageIdx, bounds.x + bounds.width, bounds.y + bounds.height) ?: return false
+  val candidate = project(point.page, point.x, point.y) ?: return false
+  return candidate.x >= topLeft.x &&
+    candidate.x <= bottomRight.x &&
+    candidate.y >= topLeft.y &&
+    candidate.y <= bottomRight.y
 }
 
 internal fun resolveTableCellSelectionRange(

@@ -690,12 +690,25 @@ impl View {
         state: &State,
         selection: Option<&ResolvedSelection>,
     ) -> Vec<crate::table_overlay::TableOverlay> {
-        let page_count = self.layout.as_ref().map(|r| r.pages.len()).unwrap_or(0);
-        let mut overlays = Vec::new();
-        for page_idx in 0..page_count {
-            overlays.extend(self.page_table_overlays(state, page_idx, selection));
+        let Some(result) = self.layout.as_ref() else {
+            return Vec::new();
+        };
+
+        match Self::doc_layout_mode(state) {
+            LayoutMode::Continuous { .. } => crate::table_overlay::continuous_table_overlays(
+                &result.layout_index,
+                &state.view(),
+                selection,
+                result.content_width,
+            ),
+            LayoutMode::Paginated { .. } => {
+                let mut overlays = Vec::new();
+                for page_idx in 0..result.pages.len() {
+                    overlays.extend(self.page_table_overlays(state, page_idx, selection));
+                }
+                overlays
+            }
         }
-        overlays
     }
 
     pub fn viewport(&self) -> &Viewport {
