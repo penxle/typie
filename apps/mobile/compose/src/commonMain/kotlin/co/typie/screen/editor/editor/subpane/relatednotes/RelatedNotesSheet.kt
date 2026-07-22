@@ -451,8 +451,11 @@ private fun RelatedNotesSheetContent(
       )
     },
   ) {
-    Crossfade(targetState = model.filterStatus, animationSpec = tween(durationMillis = 200)) {
-      status ->
+    Crossfade(
+      targetState = model.filterStatus,
+      modifier = Modifier.fillMaxSize().padding(bottom = safeBottomInset + keyboardOcclusion),
+      animationSpec = tween(durationMillis = 200),
+    ) { status ->
       val listState = model.listState(status)
       val renderedNotes = listState.merge(model.notes(status)).map(noteEditState::overlay)
       val listItems = renderedNotes.map { note ->
@@ -486,14 +489,7 @@ private fun RelatedNotesSheetContent(
         )
       val reorderState = rememberNoteListReorderState(items = listItems, scrollState = scrollState)
 
-      Box(
-        modifier =
-          Modifier.fillMaxSize()
-            .reorderableViewport(
-              state = reorderState,
-              viewportBottomInset = safeBottomInset + keyboardOcclusion,
-            )
-      ) {
+      Box(modifier = Modifier.fillMaxSize().reorderableViewport(state = reorderState)) {
         Column(
           modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(horizontal = 16.dp),
           verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -512,11 +508,7 @@ private fun RelatedNotesSheetContent(
             actions = listActions,
           )
 
-          Spacer(
-            Modifier.height(
-              safeBottomInset + keyboardOcclusion + RelatedNotesListBottomContentPadding
-            )
-          )
+          Spacer(Modifier.height(RelatedNotesListBottomContentPadding))
         }
       }
     }

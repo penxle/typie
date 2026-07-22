@@ -432,7 +432,11 @@ private fun CommentsSheetContent(
       )
     },
   ) {
-    Crossfade(targetState = state.filter, animationSpec = tween(durationMillis = 200)) { filter ->
+    Crossfade(
+      targetState = state.filter,
+      modifier = Modifier.fillMaxSize().padding(bottom = safeBottomInset + keyboardOcclusion),
+      animationSpec = tween(durationMillis = 200),
+    ) { filter ->
       val threads = model.threads(filter)
       Column(
         modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(horizontal = 16.dp),
@@ -510,9 +514,7 @@ private fun CommentsSheetContent(
           }
         }
 
-        Spacer(
-          Modifier.height(safeBottomInset + keyboardOcclusion + CommentsListBottomContentPadding)
-        )
+        Spacer(Modifier.height(CommentsListBottomContentPadding))
       }
     }
   }
