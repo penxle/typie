@@ -162,11 +162,20 @@ export const load: PageServerLoad = async ({ platform }) => {
       })
       .toSorted((a, b) => Number(b.isBaseline) - Number(a.isBaseline));
 
+    // 평가자별 기여 건수(내림차순) — 이메일은 평가자 화면에 노출하지 않고 익명 순번으로만 보여준다.
+    const byEvaluator = new Map<string, number>();
+    for (const judgment of confirmed) {
+      byEvaluator.set(judgment.evaluatorEmail, (byEvaluator.get(judgment.evaluatorEmail) ?? 0) + 1);
+    }
+    const contributions = [...byEvaluator.values()].toSorted((a, b) => b - a);
+
     summaries.push({
       roundId: round.id,
       stage: round.stage,
       taskCount: tasks.length,
+      requiredTotal: tasks.reduce((sum, t) => sum + (t.requiredJudgments ?? 1), 0),
       confirmedCount: confirmed.length,
+      contributions,
       categoryCompliance,
       variants: variantRows,
       kappa: cohenKappa(overlapPairs),

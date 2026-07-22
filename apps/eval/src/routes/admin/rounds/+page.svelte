@@ -21,6 +21,7 @@
   let selectedLabels = $state<string[]>([]);
   let v0Label = $state('');
   let candidateLabel = $state('');
+  let expectedEvaluators = $state('');
 
   // roundId는 제출마다 새로 만들지 않고 폼이 준비된 시점에 한 번만 발급한다 — 네트워크 오류 등으로 사용자가
   // 같은 입력으로 재시도해도 동일 roundId가 재사용되어 admin/api의 멱등 처리(이미 존재하면 created:false)가
@@ -71,9 +72,16 @@
       return;
     }
 
+    const parsedEvaluators = Math.floor(Number(expectedEvaluators));
     const payload =
       stage === 'screening'
-        ? { roundId, stage: 'screening' as const, corpusVersion, variantLabels: selectedLabels }
+        ? {
+            roundId,
+            stage: 'screening' as const,
+            corpusVersion,
+            variantLabels: selectedLabels,
+            ...(parsedEvaluators >= 1 && { expectedEvaluators: parsedEvaluators }),
+          }
         : { roundId, stage: 'confirmation' as const, corpusVersion, v0Label, candidateLabel };
 
     creating = true;
@@ -214,6 +222,20 @@
         </select>
       {/if}
     </div>
+
+    {#if stage === 'screening'}
+      <div class={css({ marginBottom: '16px' })}>
+        <label class={labelClass} for="round-expected-evaluators">예상 평가자 수 (선택)</label>
+        <input
+          id="round-expected-evaluators"
+          class={inputClass}
+          min="1"
+          placeholder="설정하면 평가자당 균등 몫 + 1건까지만 새 태스크가 배정됩니다"
+          type="number"
+          bind:value={expectedEvaluators}
+        />
+      </div>
+    {/if}
 
     {#if availableLabels.length === 0}
       <p class={css({ fontSize: '13px', color: 'text.faint', marginBottom: '4px' })}>

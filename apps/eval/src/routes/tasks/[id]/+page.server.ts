@@ -40,7 +40,11 @@ export const load: PageServerLoad = async ({ params, platform, locals }) => {
     feedbacks: feedbacks.filter((f) => f.setId === setId),
   }));
 
-  const [taskTotal] = await db.select({ n: sql<number>`count(*)` }).from(Tasks);
+  const [roundRequired] = await db.select({ n: sql<number>`coalesce(sum(coalesce(${Tasks.requiredJudgments}, 1)), 0)` }).from(Tasks);
+  const [roundDone] = await db
+    .select({ n: sql<number>`count(*)` })
+    .from(Judgments)
+    .where(eq(Judgments.draft, false));
   const [myDone] = await db
     .select({ n: sql<number>`count(*)` })
     .from(Judgments)
@@ -52,10 +56,13 @@ export const load: PageServerLoad = async ({ params, platform, locals }) => {
     sets: orderedSets,
     draft: draft ?? null,
     setCount: sets.length,
-    progress: { done: myDone?.n ?? 0, total: taskTotal?.n ?? 0 },
+    progress: { done: myDone?.n ?? 0, roundDone: roundDone?.n ?? 0, roundRequired: roundRequired?.n ?? 0 },
   };
 };
 
+// 원자적 upsert — select-후-insert는 제출 연타 시 동시 요청이 겹쳐 UNIQUE 위반 500을 낸다.
+// save(draft)는 이미 확정된 판정을 되돌리지 못한다: 느린 임시 저장 응답이 제출보다 늦게
+// 도착해도 확정을 draft로 강등하지 않는다(setWhere).
 const upsertJudgment = async (
   db: ReturnType<typeof createDb>,
   input: {
@@ -68,25 +75,9 @@ const upsertJudgment = async (
     draft: boolean;
   },
 ) => {
-  const [existing] = await db
-    .select({ id: Judgments.id })
-    .from(Judgments)
-    .where(and(eq(Judgments.taskId, input.taskId), eq(Judgments.evaluatorEmail, input.email)));
-
-  if (existing) {
-    await db
-      .update(Judgments)
-      .set({
-        result: input.result ?? undefined,
-        falsePositiveFeedbackIds: input.falsePositiveFeedbackIds,
-        comment: input.comment,
-        elapsedSeconds: input.elapsedSeconds,
-        draft: input.draft,
-        updatedAt: new Date(),
-      })
-      .where(eq(Judgments.id, existing.id));
-  } else {
-    await db.insert(Judgments).values({
+  await db
+    .insert(Judgments)
+    .values({
       id: nanoid(),
       taskId: input.taskId,
       evaluatorEmail: input.email,
@@ -95,8 +86,19 @@ const upsertJudgment = async (
       comment: input.comment,
       elapsedSeconds: input.elapsedSeconds,
       draft: input.draft,
+    })
+    .onConflictDoUpdate({
+      target: [Judgments.taskId, Judgments.evaluatorEmail],
+      set: {
+        ...(input.result && { result: input.result }),
+        falsePositiveFeedbackIds: input.falsePositiveFeedbackIds,
+        comment: input.comment,
+        elapsedSeconds: input.elapsedSeconds,
+        draft: input.draft,
+        updatedAt: new Date(),
+      },
+      setWhere: input.draft ? sql`${Judgments.draft} = 1` : undefined,
     });
-  }
 };
 
 const parseForm = async (request: Request) => {
@@ -109,6 +111,39 @@ const parseForm = async (request: Request) => {
   };
 };
 
+// 클라이언트가 보낸 판정에서 이 태스크에 속하지 않는 setId·피드백 id를 걷어낸다 — 폼 상태가
+// 태스크 간에 새는 클라이언트 버그가 재발해도 다른 태스크의 항목이 저장되지 않게 하는 방어선.
+const sanitizeForTask = async (db: ReturnType<typeof createDb>, taskId: string, input: Awaited<ReturnType<typeof parseForm>>) => {
+  const [task] = await db.select({ setIds: Tasks.setIds }).from(Tasks).where(eq(Tasks.id, taskId));
+  if (!task) {
+    error(404, 'task not found');
+  }
+
+  const feedbackRows = await db.select({ id: Feedbacks.id }).from(Feedbacks).where(inArray(Feedbacks.setId, task.setIds));
+  const validFeedbackIds = new Set(feedbackRows.map((f) => f.id));
+
+  let result = input.result;
+  if (result?.kind === 'ranking') {
+    result = { kind: 'ranking', ranks: result.ranks.filter((r) => task.setIds.includes(r.setId)) };
+  }
+
+  return {
+    input: {
+      ...input,
+      result,
+      falsePositiveFeedbackIds: input.falsePositiveFeedbackIds.filter((id) => validFeedbackIds.has(id)),
+    },
+    taskSetIds: task.setIds,
+  };
+};
+
+const isComplete = (result: JudgmentResult | null, taskSetIds: string[]): boolean => {
+  if (!result) return false;
+  if (result.kind === 'pair') return true;
+  const ranked = new Map(result.ranks.map((r) => [r.setId, r.rank]));
+  return taskSetIds.every((setId) => (ranked.get(setId) ?? 0) > 0);
+};
+
 export const actions: Actions = {
   save: async ({ params, request, platform, locals }) => {
     if (!platform) {
@@ -116,7 +151,7 @@ export const actions: Actions = {
     }
 
     const db = createDb(platform.env.DB);
-    const input = await parseForm(request);
+    const { input } = await sanitizeForTask(db, params.id, await parseForm(request));
     await upsertJudgment(db, { taskId: params.id, email: locals.email, ...input, draft: true });
     return { saved: true };
   },
@@ -126,8 +161,8 @@ export const actions: Actions = {
     }
 
     const db = createDb(platform.env.DB);
-    const input = await parseForm(request);
-    if (!input.result) {
+    const { input, taskSetIds } = await sanitizeForTask(db, params.id, await parseForm(request));
+    if (!isComplete(input.result, taskSetIds)) {
       error(400, 'result required');
     }
     await upsertJudgment(db, { taskId: params.id, email: locals.email, ...input, draft: false });

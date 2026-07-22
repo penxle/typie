@@ -82,7 +82,11 @@ export const POST: RequestHandler = async ({ request, platform }) => {
       sanityRatio: payload.sanityRatio,
       rng: Math.random,
     });
-    roundConfig = { overlapRatio: payload.overlapRatio, sanityRatio: payload.sanityRatio };
+    roundConfig = {
+      overlapRatio: payload.overlapRatio,
+      sanityRatio: payload.sanityRatio,
+      ...(payload.expectedEvaluators && { expectedEvaluators: payload.expectedEvaluators }),
+    };
   } else {
     const [v0Sets, candidateSets] = await Promise.all([
       requireLabelSets(db, payload.v0Label, payload.corpusVersion),

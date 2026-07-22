@@ -11,7 +11,7 @@
   let claiming = $state(false);
 
   const finished = $derived(page.url.searchParams.has('finished'));
-  const progressPct = $derived(data.total === 0 ? 0 : Math.round((data.doneCount / data.total) * 100));
+  const progressPct = $derived(data.round.required === 0 ? 0 : Math.round((data.round.done / data.round.required) * 100));
 
   const claim = async () => {
     claiming = true;
@@ -54,7 +54,7 @@
       </a>
     </header>
 
-    {#if finished && data.remaining === 0}
+    {#if finished && data.remaining === 0 && data.drafts.length === 0}
       <section
         class={css({
           backgroundColor: 'accent.success.subtle',
@@ -81,14 +81,21 @@
     >
       <div class={flex({ align: 'baseline', gap: '8px' })}>
         <span class={css({ fontSize: '32px', fontWeight: 'bold' })}>{data.doneCount}</span>
-        <span class={css({ fontSize: '14px', color: 'text.subtle' })}>/ {data.total} 판정 완료</span>
-        {#if data.remaining > 0}
-          <span class={css({ marginLeft: 'auto', fontSize: '13px', color: 'text.faint' })}>내가 할 수 있는 태스크 {data.remaining}개</span>
-        {/if}
+        <span class={css({ fontSize: '14px', color: 'text.subtle' })}>건 판정 완료</span>
+        <span class={css({ marginLeft: 'auto', fontSize: '13px', color: 'text.faint' })}>
+          {#if data.remaining > 0}
+            새로 시작할 수 있는 태스크 {data.remaining}개
+          {:else if data.drafts.length > 0}
+            작성 중인 평가 {data.drafts.length}건
+          {/if}
+        </span>
       </div>
       <div class={css({ marginTop: '12px', height: '6px', borderRadius: 'full', backgroundColor: 'surface.muted', overflow: 'hidden' })}>
         <div style:width={`${progressPct}%`} class={css({ height: 'full', backgroundColor: 'accent.brand.default' })}></div>
       </div>
+      <p class={css({ marginTop: '6px', fontSize: '12px', color: 'text.faint' })}>
+        라운드 전체 진행 {data.round.done} / {data.round.required} — 모든 평가자의 판정을 합친 수치입니다.
+      </p>
 
       <button
         class={css({
@@ -109,10 +116,16 @@
         onclick={claim}
         type="button"
       >
-        {data.remaining === 0 ? '남은 태스크가 없습니다' : claiming ? '배정 중…' : '다음 평가 시작'}
+        {data.remaining === 0 ? '시작할 새 태스크가 없습니다' : claiming ? '배정 중…' : '다음 평가 시작'}
       </button>
       <p class={css({ marginTop: '10px', fontSize: '12px', color: 'text.faint', textAlign: 'center' })}>
-        원문을 읽고 피드백 세트를 비교해 순위를 매기는 작업입니다. 한 편에 10–20분쯤 걸립니다.
+        {#if data.remaining > 0}
+          원문을 읽고 피드백 세트를 비교해 순위를 매기는 작업입니다. 한 편에 10–20분쯤 걸립니다.
+        {:else if data.drafts.length > 0}
+          새로 배정받을 태스크는 없습니다. 아래 작성 중인 평가를 마무리해 주세요.
+        {:else}
+          내 몫의 평가를 모두 마쳤습니다. 남은 태스크는 다른 평가자에게 배정되어 있으며, 새 태스크가 열리면 여기에 다시 표시됩니다.
+        {/if}
       </p>
     </section>
 
