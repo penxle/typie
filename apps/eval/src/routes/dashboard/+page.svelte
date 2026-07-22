@@ -1,6 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
+  import { FEEDBACK_LABELS } from '$lib/domain/feedback-labels.ts';
   import type { PageData } from './$types';
 
   type Props = { data: PageData };
@@ -22,6 +23,16 @@
 
   const candidatesOf = (summary: Summary) => summary.variants.filter((v) => !v.isBaseline);
   const baselineOf = (summary: Summary) => summary.variants.find((v) => v.isBaseline);
+
+  const negativeLabels = FEEDBACK_LABELS.filter((label) => label.kind === 'negative');
+  const labelCount = (summary: Summary, variantLabel: string, labelKey: string): number => summary.labelDist[variantLabel]?.[labelKey] ?? 0;
+
+  const topNegativeLabels = (summary: Summary, variantLabel: string): { name: string; count: number }[] =>
+    negativeLabels
+      .map((label) => ({ name: label.name, count: labelCount(summary, variantLabel, label.key) }))
+      .filter((label) => label.count > 0)
+      .toSorted((a, b) => b.count - a.count)
+      .slice(0, 2);
 
   const judged = (v: VariantRow) => v.win + v.tie + v.loss;
   const winRate = (v: VariantRow) => (judged(v) === 0 ? NaN : v.win / judged(v));
@@ -211,11 +222,18 @@
             {@const total = judged(candidate)}
             {@const chip = candidateVerdict(candidate)}
             {@const issues = guardrailIssues(candidate)}
+            {@const topLabels = topNegativeLabels(summary, candidate.label)}
+            {@const avgScore = summary.avgScore[candidate.label]}
             <div class={css({ borderWidth: '1px', borderColor: 'border.subtle', borderRadius: '10px', padding: '14px' })}>
               <div class={flex({ align: 'center', gap: '10px' })}>
                 <span class={css({ fontSize: '14px', fontWeight: 'bold' })}>{candidate.label}</span>
                 <span class={`${chipClass} ${toneText[chip.tone]}`}>{chip.label}</span>
-                <span class={css({ marginLeft: 'auto', fontSize: '20px', fontWeight: 'bold' })}>{percent(winRate(candidate))}</span>
+                <div class={flex({ direction: 'column', align: 'flex-end', marginLeft: 'auto' })}>
+                  <span class={css({ fontSize: '20px', fontWeight: 'bold' })}>{percent(winRate(candidate))}</span>
+                  {#if avgScore !== undefined}
+                    <span class={css({ fontSize: '11px', color: 'text.faint' })}>평균 {avgScore.toFixed(1)}점</span>
+                  {/if}
+                </div>
               </div>
 
               {#if total > 0}
@@ -249,13 +267,25 @@
               {:else if total > 0}
                 <p class={css({ marginTop: '8px', fontSize: '12px', color: 'text.success' })}>가드레일 이상 없음</p>
               {/if}
+
+              {#if topLabels.length > 0}
+                <div class={flex({ wrap: 'wrap', gap: '6px', marginTop: '8px' })}>
+                  {#each topLabels as label (label.name)}
+                    <span class={`${chipClass} ${toneText.warn}`}>{label.name} {label.count}</span>
+                  {/each}
+                </div>
+              {/if}
             </div>
           {/each}
         </div>
 
         {#if baseline}
+          {@const baselineAvgScore = summary.avgScore[baseline.label]}
           <p class={css({ marginTop: '12px', fontSize: '12px', color: 'text.faint' })}>
             기준선 {baseline.label} · 앵커 매칭 {percent(baseline.anchorMatch)} · 오탐율 {percent(baseline.falsePositive)}
+            {#if baselineAvgScore !== undefined}
+              · 평균 {baselineAvgScore.toFixed(1)}점
+            {/if}
           </p>
         {/if}
 
@@ -316,6 +346,63 @@
                 {/each}
               </tbody>
             </table>
+          </div>
+
+          <div class={css({ marginTop: '16px', overflowX: 'auto' })}>
+            <table class={css({ width: 'full', fontSize: '13px', '& td, & th': { paddingX: '10px', paddingY: '8px', textAlign: 'left' } })}>
+              <thead>
+                <tr
+                  class={css({
+                    '& th': { color: 'text.faint', fontWeight: 'medium', borderBottomWidth: '1px', borderColor: 'border.default' },
+                  })}
+                >
+                  <th>라벨</th>
+                  {#each summary.variants as variant (variant.label)}
+                    <th>{variant.label}</th>
+                  {/each}
+                </tr>
+              </thead>
+              <tbody>
+                {#each FEEDBACK_LABELS as label (label.key)}
+                  <tr class={css({ '& td': { borderBottomWidth: '1px', borderColor: 'border.subtle' } })}>
+                    <td>{label.name}</td>
+                    {#each summary.variants as variant (variant.label)}
+                      {@const count = labelCount(summary, variant.label, label.key)}
+                      <td>{count === 0 ? '—' : count}</td>
+                    {/each}
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+
+          <div class={flex({ direction: 'column', gap: '8px', marginTop: '16px' })}>
+            {#each summary.variants as variant (variant.label)}
+              {@const comments = summary.labelComments[variant.label] ?? []}
+              {#if comments.length > 0}
+                <details>
+                  <summary
+                    class={css({
+                      fontSize: '13px',
+                      color: 'text.subtle',
+                      cursor: 'pointer',
+                      transition: '[color 0.15s ease]',
+                      _hover: { color: 'text.default' },
+                    })}
+                  >
+                    {variant.label} 코멘트 ({comments.length})
+                  </summary>
+                  <ul class={flex({ direction: 'column', gap: '6px', marginTop: '8px', paddingLeft: '18px' })}>
+                    {#each comments as entry, index (index)}
+                      <li class={css({ fontSize: '13px' })}>
+                        <span class={css({ color: 'text.faint' })}>[{entry.labelNames.join(', ')}]</span>
+                        {entry.comment}
+                      </li>
+                    {/each}
+                  </ul>
+                </details>
+              {/if}
+            {/each}
           </div>
         </details>
       </section>

@@ -1,8 +1,10 @@
 import { error, redirect } from '@sveltejs/kit';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
+import { deriveFalsePositiveIds, FEEDBACK_LABEL_KEYS } from '$lib/domain/feedback-labels.ts';
 import { claimNextTask } from '$lib/server/claim.ts';
 import { createDb, Documents, Feedbacks, FeedbackSets, Judgments, Tasks } from '$lib/server/db/index.ts';
+import type { FeedbackLabelMap } from '$lib/domain/feedback-labels.ts';
 import type { JudgmentResult } from '$lib/domain/types.ts';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -70,6 +72,7 @@ const upsertJudgment = async (
     email: string;
     result: JudgmentResult | null;
     falsePositiveFeedbackIds: string[];
+    feedbackLabels: FeedbackLabelMap;
     comment: string;
     elapsedSeconds: number;
     draft: boolean;
@@ -83,6 +86,7 @@ const upsertJudgment = async (
       evaluatorEmail: input.email,
       result: input.result,
       falsePositiveFeedbackIds: input.falsePositiveFeedbackIds,
+      feedbackLabels: input.feedbackLabels,
       comment: input.comment,
       elapsedSeconds: input.elapsedSeconds,
       draft: input.draft,
@@ -92,6 +96,7 @@ const upsertJudgment = async (
       set: {
         ...(input.result && { result: input.result }),
         falsePositiveFeedbackIds: input.falsePositiveFeedbackIds,
+        feedbackLabels: input.feedbackLabels,
         comment: input.comment,
         elapsedSeconds: input.elapsedSeconds,
         draft: input.draft,
@@ -105,7 +110,7 @@ const parseForm = async (request: Request) => {
   const form = await request.formData();
   return {
     result: form.get('result') ? (JSON.parse(form.get('result') as string) as JudgmentResult) : null,
-    falsePositiveFeedbackIds: JSON.parse((form.get('falsePositiveFeedbackIds') as string) || '[]') as string[],
+    feedbackLabels: JSON.parse((form.get('feedbackLabels') as string) || '{}') as FeedbackLabelMap,
     comment: (form.get('comment') as string) || '',
     elapsedSeconds: Number(form.get('elapsedSeconds') ?? 0),
   };
@@ -126,12 +131,30 @@ const sanitizeForTask = async (db: ReturnType<typeof createDb>, taskId: string, 
   if (result?.kind === 'ranking') {
     result = { kind: 'ranking', ranks: result.ranks.filter((r) => task.setIds.includes(r.setId)) };
   }
+  if (result?.kind === 'scores') {
+    result = {
+      kind: 'scores',
+      scores: result.scores
+        .filter((s) => task.setIds.includes(s.setId) && Number.isSafeInteger(s.score) && s.score >= 1 && s.score <= 5)
+        .map((s) => ({ setId: s.setId, score: s.score })),
+    };
+  }
+
+  const sanitizedLabels: FeedbackLabelMap = {};
+  for (const [feedbackId, entry] of Object.entries(input.feedbackLabels)) {
+    if (!validFeedbackIds.has(feedbackId)) continue;
+    const labels = [...new Set(entry.labels)].filter((key) => FEEDBACK_LABEL_KEYS.has(key));
+    const comment = typeof entry.comment === 'string' ? entry.comment.slice(0, 1000) : undefined;
+    if (labels.length === 0 && !comment) continue;
+    sanitizedLabels[feedbackId] = { labels, ...(comment && { comment }) };
+  }
 
   return {
     input: {
       ...input,
       result,
-      falsePositiveFeedbackIds: input.falsePositiveFeedbackIds.filter((id) => validFeedbackIds.has(id)),
+      feedbackLabels: sanitizedLabels,
+      falsePositiveFeedbackIds: deriveFalsePositiveIds(sanitizedLabels),
     },
     taskSetIds: task.setIds,
   };
@@ -140,6 +163,10 @@ const sanitizeForTask = async (db: ReturnType<typeof createDb>, taskId: string, 
 const isComplete = (result: JudgmentResult | null, taskSetIds: string[]): boolean => {
   if (!result) return false;
   if (result.kind === 'pair') return true;
+  if (result.kind === 'scores') {
+    const scored = new Map(result.scores.map((s) => [s.setId, s.score]));
+    return taskSetIds.every((setId) => scored.has(setId));
+  }
   const ranked = new Map(result.ranks.map((r) => [r.setId, r.rank]));
   return taskSetIds.every((setId) => (ranked.get(setId) ?? 0) > 0);
 };
@@ -168,5 +195,16 @@ export const actions: Actions = {
     await upsertJudgment(db, { taskId: params.id, email: locals.email, ...input, draft: false });
     const nextTaskId = await claimNextTask(db, locals.email);
     redirect(302, nextTaskId ? `/tasks/${nextTaskId}` : '/?finished=1');
+  },
+  release: async ({ params, platform, locals }) => {
+    if (!platform) {
+      error(500, 'platform unavailable');
+    }
+
+    const db = createDb(platform.env.DB);
+    await db
+      .delete(Judgments)
+      .where(and(eq(Judgments.taskId, params.id), eq(Judgments.evaluatorEmail, locals.email), eq(Judgments.draft, true)));
+    redirect(303, '/');
   },
 };

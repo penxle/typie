@@ -69,7 +69,7 @@ pub use paragraph_break::{
 pub use pending_modifier::*;
 pub use position::{Position, ResolvedPosition, inline_leaf_dots_in_range};
 pub use projected_state::*;
-pub use prose::{ProseText, prose};
+pub use prose::{ProseText, prose, prose_annotated};
 pub use replacement::replacement_paint;
 pub use selection::{ResolvedSelection, Selection};
 pub use selection_expansion::{

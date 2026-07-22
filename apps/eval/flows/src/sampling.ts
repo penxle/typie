@@ -3,12 +3,12 @@ import { eq, sql } from 'drizzle-orm';
 import { createDb, Documents, PipelineRuns, readStageCache, StageCache } from './db.ts';
 import { createInternalApi } from './internal-api.ts';
 import { classifyLiterary, createOpenAI } from './llm.ts';
-import { corpusConflict, pickLiterary, selectSuccessfulExtracts, shuffle } from './sampling-select.ts';
+import { corpusConflict, fillQuotas, pickLiteraryDocs, selectSuccessfulExtracts, stratifySelection } from './sampling-select.ts';
 import type { WorkflowEvent, WorkflowStep } from 'cloudflare:workers';
 import type { RunPhase } from '../../src/lib/domain/admin-types.ts';
 import type { Db } from './db.ts';
 import type { FlowEnv, SamplingParams } from './index.ts';
-import type { Classified, SelectedDocument } from './sampling-select.ts';
+import type { Classified, LiteraryDoc, SelectedDocument } from './sampling-select.ts';
 
 const CLASSIFY_MODEL = 'google-vertex-ai/google/gemini-3.5-flash-lite';
 const CLASSIFY_BATCH = 8;
@@ -54,7 +54,7 @@ export class SamplingWorkflow extends WorkflowEntrypoint<FlowEnv, SamplingParams
         return candidates.map((c) => c.documentId);
       });
 
-      const literaryIds: string[] = [];
+      const literaryDocs: LiteraryDoc[] = [];
       await step.do('phase-classify', () => setPhase(db, runId, 'classify'));
       for (let b = 0; b < candidateIds.length; b += CLASSIFY_BATCH) {
         const batchIds = candidateIds.slice(b, b + CLASSIFY_BATCH);
@@ -65,39 +65,49 @@ export class SamplingWorkflow extends WorkflowEntrypoint<FlowEnv, SamplingParams
               const text = cached?.text ?? '';
               try {
                 const result = await classifyLiterary(openai, CLASSIFY_MODEL, text);
-                return { candidate: { documentId, text: '', characterCount: 0 }, literary: result.literary, kind: result.kind };
+                return {
+                  candidate: { documentId, text: '', characterCount: 0 },
+                  literary: result.literary,
+                  kind: result.kind,
+                  genre: result.genre,
+                };
               } catch {
-                return { candidate: { documentId, text: '', characterCount: 0 }, literary: false, kind: 'error' };
+                return { candidate: { documentId, text: '', characterCount: 0 }, literary: false, kind: 'error', genre: 'etc' };
               }
             }),
           );
-          return pickLiterary(classified).map((c) => c.documentId);
+          return pickLiteraryDocs(classified);
         });
-        literaryIds.push(...found);
+        literaryDocs.push(...found);
         await step.do(`classify-progress-${b}`, () => addDoneDocs(db, runId, batchIds.length));
       }
 
+      const { genreDist, allocation, picks } = await step.do('select-strata', () => Promise.resolve(stratifySelection(literaryDocs, size)));
+
       await step.do('phase-extract', async () => {
         await setPhase(db, runId, 'extract');
-        await db.update(PipelineRuns).set({ totalDocs: size, doneDocs: 0 }).where(eq(PipelineRuns.id, runId));
+        await db.update(PipelineRuns).set({ totalDocs: picks.length, doneDocs: 0 }).where(eq(PipelineRuns.id, runId));
       });
-      const ordered = await step.do('select-order', () => Promise.resolve(shuffle(literaryIds)));
 
-      const selected: SelectedDocument[] = [];
-      let cursor = 0;
+      const genreByRef = new Map(picks.map((p) => [p.documentId, p.genre]));
+      const extracted: SelectedDocument[] = [];
       let batchNo = 0;
-      while (selected.length < size && cursor < ordered.length) {
-        const take = Math.min(EXTRACT_BATCH, size - selected.length, ordered.length - cursor);
-        const batchIds = ordered.slice(cursor, cursor + take);
-        cursor += take;
+      for (let cursor = 0; cursor < picks.length; cursor += EXTRACT_BATCH) {
+        const batchIds = picks.slice(cursor, cursor + EXTRACT_BATCH).map((p) => p.documentId);
         batchNo += 1;
         const good = await step.do(`extract-${batchNo}`, LLM_STEP, async () => {
           const results = await api.extract(batchIds);
           return selectSuccessfulExtracts(results, () => crypto.randomUUID());
         });
-        selected.push(...good);
-        await step.do(`extract-progress-${batchNo}`, () => addDoneDocs(db, runId, good.length));
+        extracted.push(...good);
+        await step.do(`extract-progress-${batchNo}`, () => addDoneDocs(db, runId, batchIds.length));
       }
+
+      const selected = fillQuotas(
+        extracted.map((d) => ({ ...d, genre: genreByRef.get(d.refId) ?? 'etc' })),
+        allocation,
+        size,
+      );
 
       if (selected.length < size) {
         throw new Error(`insufficient documents after extraction: ${selected.length}/${size}`);
@@ -119,11 +129,20 @@ export class SamplingWorkflow extends WorkflowEntrypoint<FlowEnv, SamplingParams
         await setPhase(db, runId, 'freeze');
         await db
           .insert(Documents)
-          .values(selected.map((d) => ({ id: d.id, refId: d.refId, content: d.content, characterCount: d.characterCount, corpusVersion })))
+          .values(
+            selected.map((d) => ({
+              id: d.id,
+              refId: d.refId,
+              content: d.content,
+              characterCount: d.characterCount,
+              corpusVersion,
+              genre: d.genre,
+            })),
+          )
           .onConflictDoNothing();
         await db
           .update(PipelineRuns)
-          .set({ status: 'succeeded', doneDocs: selected.length, totalDocs: selected.length, finishedAt: new Date() })
+          .set({ status: 'succeeded', doneDocs: selected.length, totalDocs: selected.length, finishedAt: new Date(), meta: { genreDist } })
           .where(eq(PipelineRuns.id, runId));
       });
 

@@ -9,6 +9,7 @@ import type {
   VariantContent,
   VariantStatus,
 } from '../../domain/admin-types.ts';
+import type { FeedbackLabelMap } from '../../domain/feedback-labels.ts';
 import type { JudgmentResult, RoundStage, TaskKind } from '../../domain/types.ts';
 
 const createdAt = () =>
@@ -22,6 +23,7 @@ export const Documents = sqliteTable('documents', {
   content: text('content').notNull(),
   characterCount: integer('character_count').notNull(),
   corpusVersion: text('corpus_version').notNull(),
+  genre: text('genre'),
   createdAt: createdAt(),
 });
 
@@ -90,6 +92,7 @@ export const Judgments = sqliteTable(
     evaluatorEmail: text('evaluator_email').notNull(),
     result: text('result', { mode: 'json' }).$type<JudgmentResult>(),
     falsePositiveFeedbackIds: text('false_positive_feedback_ids', { mode: 'json' }).notNull().$type<string[]>().default([]),
+    feedbackLabels: text('feedback_labels', { mode: 'json' }).$type<FeedbackLabelMap>(),
     comment: text('comment'),
     draft: integer('draft', { mode: 'boolean' }).notNull().default(true),
     elapsedSeconds: integer('elapsed_seconds'),
@@ -144,6 +147,7 @@ export const PipelineRuns = sqliteTable('pipeline_runs', {
   promptTokens: integer('prompt_tokens').notNull().default(0),
   completionTokens: integer('completion_tokens').notNull().default(0),
   error: text('error'),
+  meta: text('meta', { mode: 'json' }).$type<Record<string, unknown>>(),
   createdAt: createdAt(),
   finishedAt: integer('finished_at', { mode: 'timestamp' }),
 });

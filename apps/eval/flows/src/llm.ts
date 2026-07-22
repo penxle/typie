@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import { GENRES, normalizeGenre } from './genres.ts';
 import { dedupCharacterCandidates, extractJsonObjects, renderMetaBlock, renderSummaryForMeta } from './text.ts';
 import type { StagePrompt } from '../../src/lib/domain/admin-types.ts';
 import type { Feedback, MetaStructured, SummaryStructured, ToolDescriptions } from './text.ts';
@@ -173,6 +174,7 @@ const SYSTEM_PROMPT = [
   '제공된 텍스트가 문학적 창작물(소설, 시, 수필, 희곡, 시나리오 등 서사와 정서 표현이 중심인 글)인지 판별하세요.',
   '메모, 일기, 할 일 목록, 정보 전달 글, 설정 노트, 강의 자료, 리뷰, 기사, 공지문은 문학적 창작물이 아닙니다.',
   '세계관 설정이나 인물 소개만 나열된 글도 문학적 창작물이 아닙니다. 실제 서사가 전개되어야 합니다.',
+  `문학적 창작물이면 다음 8종 중 가장 가까운 장르를 하나 선택하세요: ${GENRES.map((g) => `${g.key}(${g.name})`).join(', ')}. 문학적 창작물이 아니거나 장르를 특정하기 어려우면 'etc'를 선택하세요.`,
   'classify 도구를 정확히 한 번 호출하세요. 도구 호출 외의 텍스트 응답은 불필요합니다.',
 ].join('\n');
 
@@ -186,13 +188,18 @@ const classifyTool: OpenAI.Chat.Completions.ChatCompletionFunctionTool = {
       properties: {
         literary: { type: 'boolean', description: '문학적 창작물이면 true' },
         kind: { type: 'string', description: "글의 종류. 예: '소설', '수필', '시', '일기', '메모', '정보글'" },
+        genre: { type: 'string', enum: GENRES.map((g) => g.key), description: '장르. 8종 중 하나' },
       },
-      required: ['literary', 'kind'],
+      required: ['literary', 'kind', 'genre'],
     },
   },
 };
 
-export const classifyLiterary = async (openai: OpenAI, model: string, text: string): Promise<{ literary: boolean; kind: string }> => {
+export const classifyLiterary = async (
+  openai: OpenAI,
+  model: string,
+  text: string,
+): Promise<{ literary: boolean; kind: string; genre: string }> => {
   const response = await openai.chat.completions.create({
     model,
     messages: [
@@ -206,5 +213,6 @@ export const classifyLiterary = async (openai: OpenAI, model: string, text: stri
   if (!call || call.type !== 'function' || call.function.name !== 'classify') {
     throw new Error('classify tool call missing');
   }
-  return JSON.parse(call.function.arguments) as { literary: boolean; kind: string };
+  const parsed = JSON.parse(call.function.arguments) as { literary: boolean; kind: string; genre: string };
+  return { ...parsed, genre: normalizeGenre(parsed.genre) };
 };

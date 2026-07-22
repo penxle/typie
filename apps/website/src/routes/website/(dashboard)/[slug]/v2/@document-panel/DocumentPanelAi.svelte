@@ -84,7 +84,7 @@
       skip: !analysisText,
       onData: (data) => {
         if (!editor || !analysisText || !inflight) return;
-        if (editor.proseText() !== analysisText) {
+        if (editor.proseTextAnnotated() !== analysisText) {
           cancelAnalysisForDocumentEdit();
           return;
         }
@@ -92,7 +92,7 @@
         const payload = data.literaryAnalysisDocumentStreamV2;
         if (payload.type === 'feedback' && payload.feedback) {
           const fb = payload.feedback;
-          const selection = editor.proseToSelection(fb.start, fb.end);
+          const selection = editor.proseToSelectionAnnotated(fb.start, fb.end);
           if (!selection) return;
           editor.addAiFeedback({
             id: fb.id,
@@ -144,7 +144,7 @@
     editor.clearAiFeedbacks();
     editor.installAiFeedbackDecorations();
 
-    const text = editor.proseText();
+    const text = editor.proseTextAnnotated();
     if (!text.trim()) {
       inflight = false;
       analysisText = null;

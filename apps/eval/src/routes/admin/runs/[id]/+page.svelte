@@ -2,7 +2,6 @@
   import { css } from '@typie/styled-system/css';
   import { flex, grid } from '@typie/styled-system/patterns';
   import { untrack } from 'svelte';
-  import { SvelteSet } from 'svelte/reactivity';
   import { invalidateAll } from '$app/navigation';
   import FeedbackSetPanel from '../../../tasks/[id]/FeedbackSetPanel.svelte';
   import { usePolling } from '../../lib/poll.svelte.ts';
@@ -19,6 +18,7 @@
   import RunStatusBadge from '../RunStatusBadge.svelte';
   import ConfirmCancelDialog from './ConfirmCancelDialog.svelte';
   import type { RunDocStatus } from '$lib/domain/admin-types.ts';
+  import type { FeedbackLabelEntry, FeedbackLabelMap } from '$lib/domain/feedback-labels.ts';
   import type { PageData } from './$types';
 
   type Props = { data: PageData };
@@ -41,12 +41,15 @@
   // 세션(페이지 진입) 시작 시점 샘플 — 처리율·ETA를 이 시점 대비 실측한다.
   const sessionStart = untrack(() => ({ at: Date.now(), done: primaryMetric(data.run) }));
 
-  // 프리뷰 피드백의 "오탐" 체크박스는 이 화면에서 저장되지 않는 로컬 표시일 뿐이다(FeedbackSetPanel 재사용).
-  // feedback id는 전역 유일(nanoid)하므로 프리뷰 문서 전체에 걸쳐 하나의 집합만 있어도 안전하다.
-  const previewFlagged = untrack(() => new SvelteSet<string>());
-  const togglePreviewFlag = (feedbackId: string) => {
-    if (previewFlagged.has(feedbackId)) previewFlagged.delete(feedbackId);
-    else previewFlagged.add(feedbackId);
+  // 프리뷰 피드백의 라벨 편집은 이 화면에서 저장되지 않는 로컬 표시일 뿐이다(FeedbackSetPanel 재사용).
+  // feedback id는 전역 유일(nanoid)하므로 프리뷰 문서 전체에 걸쳐 하나의 맵만 있어도 안전하다.
+  let previewLabelMap = $state<FeedbackLabelMap>({});
+  const updatePreviewLabels = (feedbackId: string, entry: FeedbackLabelEntry | null) => {
+    if (entry) {
+      previewLabelMap = { ...previewLabelMap, [feedbackId]: entry };
+      return;
+    }
+    previewLabelMap = Object.fromEntries(Object.entries(previewLabelMap).filter(([id]) => id !== feedbackId));
   };
   // eslint-disable-next-line @typescript-eslint/no-empty-function -- 프리뷰는 원문 하이라이트가 없어 hover/select가 할 일이 없다
   const previewNoop = () => {};
@@ -343,10 +346,10 @@
               <p class={css({ fontSize: '13px', fontWeight: 'bold', marginBottom: '8px' })}>{doc.refId}</p>
               <FeedbackSetPanel
                 feedbacks={doc.feedbacks}
-                flagged={previewFlagged}
+                labelMap={previewLabelMap}
                 onHover={previewNoop}
                 onSelect={previewNoop}
-                onToggleFlag={togglePreviewFlag}
+                onUpdateLabels={updatePreviewLabels}
               />
             </div>
           {/each}

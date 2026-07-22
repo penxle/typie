@@ -109,7 +109,7 @@ internal fun rememberEditorAiFeedbackSession(
 
     analysisJob?.cancel()
     analysisJob = scope.launch {
-      val sourceText = activeEditor.proseText()
+      val sourceText = activeEditor.proseTextAnnotated()
       val analysisRunId = activeModel.prepareAnalysis(sourceText)
       activeEditor.installAiFeedbackDecorations()
       activeEditor.clearAiFeedbackRanges()
@@ -128,7 +128,7 @@ internal fun rememberEditorAiFeedbackSession(
           .toFlow()
           .collect { response ->
             if (!activeModel.isCurrentAnalysisRun(analysisRunId)) return@collect
-            if (activeModel.isPendingAnalysisStale(sourceText, activeEditor.proseText())) {
+            if (activeModel.isPendingAnalysisStale(sourceText, activeEditor.proseTextAnnotated())) {
               cancelAnalysisState(clearRanges = true)
               if (activeModel.active) {
                 toast.show(ToastType.Success, "내용이 수정되어 분석이 취소됐어요.")
@@ -141,7 +141,8 @@ internal fun rememberEditorAiFeedbackSession(
               "feedback" -> {
                 val raw = payload.feedback?.toRawAiFeedbackResult() ?: return@collect
                 if (activeModel.results.any { it.id == raw.id }) return@collect
-                val selection = activeEditor.proseToSelection(raw.start, raw.end) ?: return@collect
+                val selection =
+                  activeEditor.proseToSelectionAnnotated(raw.start, raw.end) ?: return@collect
                 val wasEmpty = activeModel.results.isEmpty()
                 activeEditor.addAiFeedbackRange(
                   AiFeedbackRangeRegistration(id = raw.id, selection = selection)
@@ -239,7 +240,7 @@ internal fun rememberEditorAiFeedbackSession(
     val expectedText = activeModel.pendingAnalysisText ?: return@LaunchedEffect
     val activeEditor = editor ?: return@LaunchedEffect
     if (!active || !activeModel.loading) return@LaunchedEffect
-    if (activeEditor.proseText() == expectedText) return@LaunchedEffect
+    if (activeEditor.proseTextAnnotated() == expectedText) return@LaunchedEffect
 
     cancelAnalysisState(clearRanges = true)
     toast.show(ToastType.Success, "내용이 수정되어 분석이 취소됐어요.")

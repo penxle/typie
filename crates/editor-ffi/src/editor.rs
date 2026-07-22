@@ -835,6 +835,27 @@ impl Editor {
                 .into_ffi()?)
         })
     }
+
+    pub fn prose_text_annotated(&self) -> EditorResult<String> {
+        self.with_inner(|inner| {
+            let view = inner.editor.state().view();
+            Ok(editor_state::prose_annotated(&view).text().to_string())
+        })
+    }
+
+    pub fn prose_to_selection_annotated(
+        &self,
+        start: u32,
+        end: u32,
+    ) -> EditorResult<Option<Complex<editor_state::Selection>>> {
+        self.with_inner(|inner| {
+            let view = inner.editor.state().view();
+            let prose = editor_state::prose_annotated(&view);
+            Ok(prose
+                .to_selection(&view, (start as usize)..(end as usize))
+                .into_ffi()?)
+        })
+    }
 }
 
 #[cfg(not(feature = "wasm-server"))]
@@ -3093,6 +3114,39 @@ mod tests {
             9,
             "expected 9 codepoints, got: {text:?}"
         );
+    }
+
+    #[test]
+    fn ffi_prose_text_annotated_includes_divider_marker() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    p1: paragraph { text("가나") }
+                    hr: horizontal_rule
+                    p2: paragraph { text("다라") }
+                }
+            }
+            selection: (p1, 0)
+        };
+        let editor = make_ffi_editor(initial);
+
+        let text = editor
+            .prose_text_annotated()
+            .expect("prose_text_annotated ok");
+        assert!(
+            text.contains("\n\n***\n\n"),
+            "divider marker missing: {text:?}"
+        );
+        assert!(
+            !editor.prose_text().expect("prose_text ok").contains("***"),
+            "plain prose_text must be unaffected"
+        );
+
+        let sel = editor
+            .prose_to_selection_annotated(0, 2)
+            .expect("ok")
+            .expect("some");
+        let _ = sel;
     }
 
     fn op_count(bytes: &[u8]) -> u32 {

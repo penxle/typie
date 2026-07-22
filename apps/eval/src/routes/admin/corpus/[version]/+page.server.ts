@@ -1,7 +1,17 @@
 import { error } from '@sveltejs/kit';
-import { eq } from 'drizzle-orm';
-import { createDb, Documents } from '$lib/server/db/index.ts';
+import { and, desc, eq, sql } from 'drizzle-orm';
+import { createDb, Documents, PipelineRuns } from '$lib/server/db/index.ts';
 import type { PageServerLoad } from './$types';
+
+const UNCLASSIFIED_GENRE = 'unclassified';
+
+const readGenreDist = (meta: Record<string, unknown> | null): Record<string, number> | null => {
+  const raw = meta?.genreDist;
+  if (!raw || typeof raw !== 'object') return null;
+
+  const entries = Object.entries(raw as Record<string, unknown>).filter((entry): entry is [string, number] => typeof entry[1] === 'number');
+  return entries.length > 0 ? Object.fromEntries(entries) : null;
+};
 
 export const load: PageServerLoad = async ({ params, platform }) => {
   if (!platform) {
@@ -29,5 +39,25 @@ export const load: PageServerLoad = async ({ params, platform }) => {
     lineBreakCount: (row.content.match(/\n/g) ?? []).length,
   }));
 
-  return { corpusVersion: params.version, documents };
+  const genreRows = await db
+    .select({ genre: Documents.genre, count: sql<number>`count(*)` })
+    .from(Documents)
+    .where(eq(Documents.corpusVersion, params.version))
+    .groupBy(Documents.genre);
+
+  const frozen: Record<string, number> = {};
+  for (const row of genreRows) {
+    frozen[row.genre ?? UNCLASSIFIED_GENRE] = row.count;
+  }
+
+  const [samplingRun] = await db
+    .select({ meta: PipelineRuns.meta })
+    .from(PipelineRuns)
+    .where(and(eq(PipelineRuns.corpusVersion, params.version), eq(PipelineRuns.kind, 'sampling'), eq(PipelineRuns.status, 'succeeded')))
+    .orderBy(desc(PipelineRuns.createdAt))
+    .limit(1);
+
+  const pool = readGenreDist(samplingRun?.meta ?? null);
+
+  return { corpusVersion: params.version, documents, pool, frozen };
 };

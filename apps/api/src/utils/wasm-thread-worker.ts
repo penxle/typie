@@ -31,7 +31,7 @@ const extractProse = (editorHost: EditorHost, graph: Uint8Array): string | null 
     throw err;
   }
   try {
-    return editor.prose_text();
+    return editor.prose_text_annotated();
   } finally {
     editor.free();
   }

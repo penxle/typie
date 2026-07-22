@@ -88,7 +88,18 @@ const allowedRounds = async (db: Db, email: string, roundIds: string[]): Promise
   return allowed;
 };
 
+const hasOpenDraft = async (db: Db, email: string): Promise<boolean> => {
+  const [openDraft] = await db
+    .select({ id: Judgments.id })
+    .from(Judgments)
+    .where(and(eq(Judgments.evaluatorEmail, email), eq(Judgments.draft, true)))
+    .limit(1);
+  return !!openDraft;
+};
+
 export const claimNextTask = async (db: Db, email: string): Promise<string | null> => {
+  if (await hasOpenDraft(db, email)) return null;
+
   const candidates = await claimableQuery(db, email);
   if (candidates.length === 0) return null;
 
@@ -97,6 +108,8 @@ export const claimNextTask = async (db: Db, email: string): Promise<string | nul
 };
 
 export const countClaimable = async (db: Db, email: string): Promise<number> => {
+  if (await hasOpenDraft(db, email)) return 0;
+
   const candidates = await claimableQuery(db, email);
   if (candidates.length === 0) return 0;
 

@@ -10,7 +10,7 @@ type AuthInput = {
 type AuthResult = { kind: 'runner' } | { kind: 'evaluator'; email: string } | { kind: 'denied'; status: 401 | 403 };
 
 const runnerPaths = ['/api/ingest/', '/api/rounds'];
-const adminPathPrefix = '/admin';
+const adminPathPrefixes = ['/admin', '/dashboard'];
 
 export const resolveAuth = (input: AuthInput): AuthResult => {
   if (runnerPaths.some((p) => input.pathname.startsWith(p))) {
@@ -25,7 +25,7 @@ export const resolveAuth = (input: AuthInput): AuthResult => {
     return { kind: 'denied', status: 403 };
   }
 
-  if (input.pathname.startsWith(adminPathPrefix)) {
+  if (adminPathPrefixes.some((p) => input.pathname.startsWith(p))) {
     const allowed = (input.adminEmails ?? '')
       .split(',')
       .map((e) => e.trim())

@@ -741,7 +741,9 @@ declare class Editor {
     placeholder(): PlaceholderMetrics | undefined;
     pointer_style(page: number, x: number, y: number, read_only: boolean): PointerStyle;
     prose_text(): string;
+    prose_text_annotated(): string;
     prose_to_selection(start: number, end: number): Selection | undefined;
+    prose_to_selection_annotated(start: number, end: number): Selection | undefined;
     receive_remote_changeset(payload: Uint8Array): void;
     /**
      * Visibility-return recovery. CPU keeps the invalidate semantics (clear → full

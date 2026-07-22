@@ -1,0 +1,1 @@
+ALTER TABLE `judgments` ADD `feedback_labels` text;

@@ -1,17 +1,83 @@
 import { describe, expect, it } from 'vitest';
-import { corpusConflict, pickLiterary, selectSuccessfulExtracts, shuffle } from './sampling-select.ts';
+import { corpusConflict, fillQuotas, pickLiteraryDocs, selectSuccessfulExtracts, shuffle, stratifySelection } from './sampling-select.ts';
 import type { Candidate } from './internal-api.ts';
+import type { LiteraryDoc } from './sampling-select.ts';
 
 const candidate = (documentId: string): Candidate => ({ documentId, text: `본문 ${documentId}`, characterCount: 100 });
 
-describe('pickLiterary', () => {
-  it('literary=true 후보만 남긴다', () => {
-    const result = pickLiterary([
-      { candidate: candidate('a'), literary: true, kind: '소설' },
-      { candidate: candidate('b'), literary: false, kind: '메모' },
-      { candidate: candidate('c'), literary: true, kind: '수필' },
+const seededRng = (seq: number[]): (() => number) => {
+  let i = 0;
+  return () => seq[i++ % seq.length] ?? 0;
+};
+
+describe('pickLiteraryDocs', () => {
+  it('literary=true 후보만 장르와 함께 남긴다', () => {
+    const result = pickLiteraryDocs([
+      { candidate: candidate('a'), literary: true, kind: '소설', genre: 'romance' },
+      { candidate: candidate('b'), literary: false, kind: '메모', genre: 'etc' },
+      { candidate: candidate('c'), literary: true, kind: '수필', genre: 'literary-fiction' },
     ]);
-    expect(result.map((c) => c.documentId)).toEqual(['a', 'c']);
+    expect(result).toEqual([
+      { documentId: 'a', genre: 'romance' },
+      { documentId: 'c', genre: 'literary-fiction' },
+    ]);
+  });
+});
+
+describe('stratifySelection', () => {
+  const doc = (documentId: string, genre: string): LiteraryDoc => ({ documentId, genre });
+
+  it('genreDist를 GENRES 순서로 만들고 배분+여유 2편을 층 크기로 제한한다', () => {
+    const docs = [
+      ...Array.from({ length: 6 }, (_, i) => doc(`r${i}`, 'romance')),
+      ...Array.from({ length: 4 }, (_, i) => doc(`f${i}`, 'fantasy')),
+      doc('s0', 'sf'),
+    ];
+    const { genreDist, allocation, picks } = stratifySelection(docs, 5, () => 0);
+    expect(Object.keys(genreDist)).toEqual(['romance', 'fantasy', 'sf']);
+    expect(genreDist).toEqual({ romance: 6, fantasy: 4, sf: 1 });
+    expect(Object.values(allocation).reduce((s, n) => s + n, 0)).toBe(5);
+    const perGenre = new Map<string, number>();
+    for (const p of picks) perGenre.set(p.genre, (perGenre.get(p.genre) ?? 0) + 1);
+    expect(perGenre.get('romance')).toBe(Math.min((allocation.romance ?? 0) + 2, 6));
+    expect(perGenre.get('sf')).toBe(1);
+    expect(picks.length).toBeGreaterThanOrEqual(5);
+  });
+
+  it('동일 rng로 결정적이다', () => {
+    const docs = Array.from({ length: 10 }, (_, i) => doc(`r${i}`, 'romance'));
+    const a = stratifySelection(docs, 3, seededRng([0.1, 0.7, 0.3, 0.9]));
+    const b = stratifySelection(docs, 3, seededRng([0.1, 0.7, 0.3, 0.9]));
+    expect(a).toEqual(b);
+  });
+});
+
+describe('fillQuotas', () => {
+  const ext = (id: string, genre: string) => ({ id, genre });
+
+  it('층별 배분량만큼 채운다', () => {
+    const chosen = fillQuotas(
+      [ext('r0', 'romance'), ext('r1', 'romance'), ext('f0', 'fantasy'), ext('s0', 'sf')],
+      { romance: 1, fantasy: 1, sf: 1 },
+      3,
+    );
+    expect(chosen.map((c) => c.id).toSorted((a, b) => a.localeCompare(b))).toEqual(['f0', 'r0', 's0']);
+  });
+
+  it('부족분은 성공분 전체에서 최대 잔여법으로 재배분한다', () => {
+    const chosen = fillQuotas(
+      [ext('r0', 'romance'), ext('r1', 'romance'), ext('r2', 'romance'), ext('f0', 'fantasy')],
+      { romance: 1, sf: 2 },
+      3,
+    );
+    expect(chosen.length).toBe(3);
+    const ids = new Set(chosen.map((c) => c.id));
+    expect(ids.has('r0')).toBe(true);
+  });
+
+  it('성공분이 부족하면 가능한 만큼만 반환한다', () => {
+    const chosen = fillQuotas([ext('r0', 'romance'), ext('f0', 'fantasy')], { romance: 5, fantasy: 5 }, 5);
+    expect(chosen.length).toBe(2);
   });
 });
 

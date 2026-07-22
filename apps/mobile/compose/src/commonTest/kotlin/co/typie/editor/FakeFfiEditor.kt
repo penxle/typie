@@ -280,6 +280,10 @@ internal class FakeFfiEditor(
 
   override fun proseToSelection(start: Int, end: Int): Selection? = null
 
+  override fun proseTextAnnotated(): String = ""
+
+  override fun proseToSelectionAnnotated(start: Int, end: Int): Selection? = null
+
   companion object {
     val CoverAllRect = co.typie.editor.ffi.Rect(x = -1e6f, y = -1e6f, width = 2e6f, height = 2e6f)
 

@@ -1,10 +1,29 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
-  import { flex } from '@typie/styled-system/patterns';
+  import { flex, grid } from '@typie/styled-system/patterns';
+  import { GENRES } from '../../../../../flows/src/genres.ts';
   import type { PageData } from './$types';
 
   type Props = { data: PageData };
   const { data }: Props = $props();
+
+  const GENRE_NAMES = new Map<string, string>(GENRES.map((genre) => [genre.key, genre.name]));
+
+  const genreLabel = (key: string): string => (key === 'unclassified' ? '장르 정보 없음' : (GENRE_NAMES.get(key) ?? key));
+
+  const orderedEntries = (dist: Record<string, number>): [string, number][] => {
+    const distKeys = new Set(Object.keys(dist));
+    const known = GENRES.map((genre) => genre.key).filter((key) => distKeys.has(key));
+    const rest = [...distKeys].filter((key) => !GENRE_NAMES.has(key));
+    return [...known, ...rest].map((key) => [key, dist[key]]);
+  };
+
+  const percentage = (count: number, total: number): number => (total > 0 ? Math.round((count / total) * 100) : 0);
+
+  const frozenEntries = $derived(orderedEntries(data.frozen));
+  const frozenTotal = $derived(frozenEntries.reduce((sum, [, count]) => sum + count, 0));
+  const poolEntries = $derived(data.pool ? orderedEntries(data.pool) : null);
+  const poolTotal = $derived(poolEntries?.reduce((sum, [, count]) => sum + count, 0) ?? 0);
 </script>
 
 <div class={css({ maxWidth: '880px', marginX: 'auto', paddingY: '40px', paddingX: '32px' })}>
@@ -14,6 +33,60 @@
     <h1 class={css({ fontSize: '22px', fontWeight: 'bold' })}>{data.corpusVersion}</h1>
     <span class={css({ fontSize: '13px', color: 'text.faint' })}>문서 {data.documents.length.toLocaleString()}건</span>
   </header>
+
+  <section class={grid({ columns: 2, gap: '16px', marginBottom: '24px' })}>
+    <div
+      class={css({
+        backgroundColor: 'surface.default',
+        borderWidth: '1px',
+        borderColor: 'border.default',
+        borderRadius: '12px',
+        boxShadow: 'small',
+        padding: '16px',
+      })}
+    >
+      <h2 class={css({ fontSize: '13px', fontWeight: 'bold', marginBottom: '10px' })}>후보 풀 분포</h2>
+      {#if poolEntries}
+        <div class={flex({ direction: 'column', gap: '4px' })}>
+          {#each poolEntries as [key, count] (key)}
+            <div class={flex({ justify: 'space-between', fontSize: '13px' })}>
+              <span>{genreLabel(key)}</span>
+              <span class={css({ color: 'text.subtle' })}>{count.toLocaleString()}건 ({percentage(count, poolTotal)}%)</span>
+            </div>
+          {/each}
+        </div>
+      {:else}
+        <p class={css({ fontSize: '13px', color: 'text.faint' })}>후보 분포 정보 없음</p>
+      {/if}
+    </div>
+
+    <div
+      class={css({
+        backgroundColor: 'surface.default',
+        borderWidth: '1px',
+        borderColor: 'border.default',
+        borderRadius: '12px',
+        boxShadow: 'small',
+        padding: '16px',
+      })}
+    >
+      <h2 class={css({ fontSize: '13px', fontWeight: 'bold', marginBottom: '10px' })}>동결 분포</h2>
+      <div class={flex({ direction: 'column', gap: '4px' })}>
+        {#each frozenEntries as [key, count] (key)}
+          <div
+            class={flex({
+              justify: 'space-between',
+              fontSize: '13px',
+              color: key === 'unclassified' ? 'text.faint' : 'text.default',
+            })}
+          >
+            <span>{genreLabel(key)}</span>
+            <span class={css({ color: 'text.subtle' })}>{count.toLocaleString()}건 ({percentage(count, frozenTotal)}%)</span>
+          </div>
+        {/each}
+      </div>
+    </div>
+  </section>
 
   <section
     class={css({

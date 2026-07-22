@@ -1,17 +1,63 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
-  import type { SvelteSet } from 'svelte/reactivity';
+  import { SvelteSet } from 'svelte/reactivity';
+  import { FEEDBACK_LABELS } from '$lib/domain/feedback-labels.ts';
+  import type { FeedbackLabelEntry, FeedbackLabelMap } from '$lib/domain/feedback-labels.ts';
 
   type Feedback = { id: string; category: string | null; body: string; matchStart: number | null };
   type Props = {
     feedbacks: Feedback[];
-    flagged: SvelteSet<string>;
-    onToggleFlag: (feedbackId: string) => void;
+    labelMap: FeedbackLabelMap;
+    highlightedId?: string | null;
+    onUpdateLabels: (feedbackId: string, entry: FeedbackLabelEntry | null) => void;
     onHover: (feedbackId: string | null) => void;
     onSelect: (feedbackId: string) => void;
   };
-  const { feedbacks, flagged, onToggleFlag, onHover, onSelect }: Props = $props();
+  const { feedbacks, labelMap, highlightedId = null, onUpdateLabels, onHover, onSelect }: Props = $props();
+
+  const negativeLabels = FEEDBACK_LABELS.filter((label) => label.kind === 'negative');
+  const positiveLabels = FEEDBACK_LABELS.filter((label) => label.kind === 'positive');
+  const labelByKey = new Map(FEEDBACK_LABELS.map((label) => [label.key, label]));
+
+  const expandedIds = new SvelteSet<string>();
+
+  const toggleExpanded = (feedbackId: string) => {
+    if (expandedIds.has(feedbackId)) expandedIds.delete(feedbackId);
+    else expandedIds.add(feedbackId);
+  };
+
+  const commit = (feedbackId: string, entryLabels: string[], comment: string) => {
+    if (entryLabels.length === 0 && !comment) {
+      onUpdateLabels(feedbackId, null);
+      return;
+    }
+    onUpdateLabels(feedbackId, comment ? { labels: entryLabels, comment } : { labels: entryLabels });
+  };
+
+  const toggleLabel = (feedbackId: string, key: string) => {
+    const current = labelMap[feedbackId]?.labels ?? [];
+    const next = current.includes(key) ? current.filter((k) => k !== key) : [...current, key];
+    commit(feedbackId, next, labelMap[feedbackId]?.comment ?? '');
+  };
+
+  const updateComment = (feedbackId: string, comment: string) => {
+    commit(feedbackId, labelMap[feedbackId]?.labels ?? [], comment);
+  };
+
+  const chipStyle = (selected: boolean) =>
+    css({
+      paddingX: '8px',
+      paddingY: '4px',
+      borderRadius: 'full',
+      borderWidth: '1px',
+      borderColor: selected ? 'border.strong' : 'border.default',
+      backgroundColor: selected ? 'surface.dark' : 'surface.default',
+      color: selected ? 'text.bright' : 'text.subtle',
+      fontSize: '12px',
+      cursor: 'pointer',
+      transition: '[background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease]',
+    });
 </script>
 
 <div class={flex({ direction: 'column', gap: '10px' })}>
@@ -20,18 +66,20 @@
   {/if}
 
   {#each feedbacks as feedback, i (feedback.id)}
+    {@const entry = labelMap[feedback.id]}
+    {@const expanded = expandedIds.has(feedback.id)}
     <article
       class={css({
         borderWidth: '1px',
-        borderColor: flagged.has(feedback.id) ? 'border.danger' : 'border.default',
+        borderColor: highlightedId === feedback.id ? 'border.strong' : 'border.default',
         borderRadius: '10px',
         padding: '14px',
-        backgroundColor: 'surface.default',
+        backgroundColor: highlightedId === feedback.id ? 'surface.subtle' : 'surface.default',
         cursor: feedback.matchStart === null ? 'default' : 'pointer',
-        opacity: flagged.has(feedback.id) ? '55' : '100',
-        transition: '[border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease]',
+        transition: '[border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease]',
         _hover: { borderColor: 'border.strong', boxShadow: 'small' },
       })}
+      data-feedback-card={feedback.id}
       onmouseenter={() => onHover(feedback.id)}
       onmouseleave={() => onHover(null)}
     >
@@ -76,38 +124,115 @@
             <span class={css({ fontSize: '12px', color: 'text.faint' })}>본문 위치 없음</span>
           {/if}
           <span class={css({ marginLeft: 'auto' })}>
-            <label
-              class={flex({
-                align: 'center',
-                gap: '4px',
+            <button
+              class={css({
+                paddingX: '8px',
+                paddingY: '3px',
+                borderWidth: '1px',
+                borderColor: entry ? 'border.strong' : 'border.default',
+                borderRadius: '6px',
+                backgroundColor: expanded ? 'surface.muted' : 'surface.default',
+                color: entry ? 'text.default' : 'text.subtle',
                 fontSize: '12px',
-                color: flagged.has(feedback.id) ? 'text.danger' : 'text.subtle',
                 cursor: 'pointer',
+                transition: '[background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease]',
               })}
+              onclick={(e) => {
+                e.stopPropagation();
+                toggleExpanded(feedback.id);
+              }}
+              type="button"
             >
-              <input
-                class={css({
-                  appearance: 'none',
-                  width: '16px',
-                  height: '16px',
-                  borderWidth: '1px',
-                  borderColor: 'border.strong',
-                  borderRadius: '4px',
-                  backgroundColor: 'surface.default',
-                  cursor: 'pointer',
-                  transition: '[background-color 0.15s ease, border-color 0.15s ease]',
-                  _checked: { backgroundColor: 'accent.danger.default', borderColor: 'border.danger' },
-                })}
-                checked={flagged.has(feedback.id)}
-                onchange={() => onToggleFlag(feedback.id)}
-                onclick={(e) => e.stopPropagation()}
-                type="checkbox"
-              />
-              오탐
-            </label>
+              이 피드백 평가
+            </button>
           </span>
         </div>
         <p class={css({ fontSize: '14px', lineHeight: '[1.7]', color: 'text.default' })}>{feedback.body}</p>
+
+        {#if entry && entry.labels.length > 0}
+          <div class={flex({ wrap: 'wrap', gap: '4px', marginTop: '8px' })}>
+            {#each entry.labels as key (key)}
+              {@const label = labelByKey.get(key)}
+              {#if label}
+                <span
+                  class={css({
+                    paddingX: '6px',
+                    paddingY: '2px',
+                    borderRadius: 'full',
+                    fontSize: '11px',
+                    backgroundColor: label.kind === 'negative' ? 'accent.danger.subtle' : 'accent.success.subtle',
+                    color: label.kind === 'negative' ? 'text.danger' : 'text.success',
+                  })}
+                >
+                  {label.name}
+                </span>
+              {/if}
+            {/each}
+          </div>
+        {/if}
+
+        {#if expanded}
+          <div
+            class={flex({
+              direction: 'column',
+              gap: '8px',
+              marginTop: '10px',
+              paddingTop: '10px',
+              borderTopWidth: '1px',
+              borderColor: 'border.subtle',
+            })}
+            onclick={(e) => e.stopPropagation()}
+            onkeydown={(e) => e.stopPropagation()}
+            role="presentation"
+          >
+            <div class={flex({ direction: 'column', gap: '4px' })}>
+              <span class={css({ fontSize: '11px', color: 'text.faint' })}>부정</span>
+              <div class={flex({ wrap: 'wrap', gap: '6px' })}>
+                {#each negativeLabels as label (label.key)}
+                  <button
+                    class={chipStyle((entry?.labels ?? []).includes(label.key))}
+                    onclick={() => toggleLabel(feedback.id, label.key)}
+                    type="button"
+                  >
+                    {label.name}
+                  </button>
+                {/each}
+              </div>
+            </div>
+            <div class={flex({ direction: 'column', gap: '4px' })}>
+              <span class={css({ fontSize: '11px', color: 'text.faint' })}>긍정</span>
+              <div class={flex({ wrap: 'wrap', gap: '6px' })}>
+                {#each positiveLabels as label (label.key)}
+                  <button
+                    class={chipStyle((entry?.labels ?? []).includes(label.key))}
+                    onclick={() => toggleLabel(feedback.id, label.key)}
+                    type="button"
+                  >
+                    {label.name}
+                  </button>
+                {/each}
+              </div>
+            </div>
+            <div class={css({ borderTopWidth: '1px', borderColor: 'border.subtle', paddingTop: '10px' })}>
+              <input
+                class={css({
+                  width: 'full',
+                  borderWidth: '1px',
+                  borderColor: 'border.default',
+                  borderRadius: '6px',
+                  paddingX: '8px',
+                  paddingY: '6px',
+                  fontSize: '12px',
+                  backgroundColor: 'surface.default',
+                })}
+                oninput={(e) => updateComment(feedback.id, e.currentTarget.value)}
+                placeholder={(entry?.labels ?? []).includes('etc') ? '어떤 문제인지 적어주세요' : '코멘트 (선택)'}
+                type="text"
+                value={entry?.comment ?? ''}
+              />
+            </div>
+          </div>
+        {/if}
       </div>
     </article>
   {/each}

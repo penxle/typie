@@ -82,6 +82,21 @@ export const feedbackCountDistribution = (
   return dist;
 };
 
+// score는 1-5 척도이며, rank는 6 - score로 변환해 기존 순위 기반 비교 경로를 그대로 재사용한다.
+export const ranksFromScores = (scores: { setId: string; score: number }[]): { setId: string; rank: number }[] =>
+  scores.map((s) => ({ setId: s.setId, rank: 6 - s.score }));
+
+export const averageScores = (entries: { variantId: string; score: number }[]): Map<string, number> => {
+  const sums = new Map<string, { total: number; count: number }>();
+  for (const { variantId, score } of entries) {
+    const acc = sums.get(variantId) ?? { total: 0, count: 0 };
+    acc.total += score;
+    acc.count += 1;
+    sums.set(variantId, acc);
+  }
+  return new Map([...sums].map(([variantId, { total, count }]) => [variantId, total / count]));
+};
+
 export const categoryComplianceRate = (categories: (string | null)[]): number => {
   if (categories.length === 0) return NaN;
   const compliant = categories.filter((c) => c !== null && c.length >= 2 && c.length <= 10 && !/[a-z]/i.test(c)).length;

@@ -1494,6 +1494,16 @@ export class Editor {
     return this.#wasm.prose_to_selection(start, end) ?? undefined;
   }
 
+  proseTextAnnotated(): string {
+    this.flush();
+    return this.#wasm.prose_text_annotated();
+  }
+
+  proseToSelectionAnnotated(start: number, end: number): Selection | undefined {
+    this.flush();
+    return this.#wasm.prose_to_selection_annotated(start, end) ?? undefined;
+  }
+
   updateCharacterCounts(): void {
     if (this.#characterCountsDebounceTimer) {
       clearTimeout(this.#characterCountsDebounceTimer);

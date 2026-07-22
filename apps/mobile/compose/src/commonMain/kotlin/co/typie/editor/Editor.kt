@@ -386,6 +386,12 @@ internal constructor(
   suspend fun proseToSelection(start: Int, end: Int): Selection? =
     readInner(defaultValue = { null }) { it.proseToSelection(start, end) }
 
+  suspend fun proseTextAnnotated(): String =
+    readInner(defaultValue = { "" }) { it.proseTextAnnotated() }
+
+  suspend fun proseToSelectionAnnotated(start: Int, end: Int): Selection? =
+    readInner(defaultValue = { null }) { it.proseToSelectionAnnotated(start, end) }
+
   internal suspend fun replaceTrackedRangeGroupsFromProse(
     expectedText: String,
     groups: List<String>,

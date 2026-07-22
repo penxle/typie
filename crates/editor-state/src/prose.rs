@@ -1,7 +1,7 @@
 use std::ops::Range;
 
 use editor_crdt::Dot;
-use editor_model::DocView;
+use editor_model::{DocView, NodeType};
 
 use crate::{
     Affinity, FlatSegment, Position, ResolvedPosition, ResolvedPositionFlatExt, Selection,
@@ -108,7 +108,18 @@ impl ProseText {
 }
 
 pub fn prose(view: &DocView) -> ProseText {
-    let mut state = EmitState::default();
+    build(view, false)
+}
+
+pub fn prose_annotated(view: &DocView) -> ProseText {
+    build(view, true)
+}
+
+fn build(view: &DocView, annotated: bool) -> ProseText {
+    let mut state = EmitState {
+        annotated,
+        ..Default::default()
+    };
     let mut flat_offset = 0usize;
     for segment in flat_segments(view) {
         let size = match &segment {
@@ -129,6 +140,8 @@ struct EmitState {
     pending_boundary: bool,
     block_emitted_stack: Vec<bool>,
     last_text_end_flat: usize,
+    annotated: bool,
+    pending_empty_blocks: usize,
 }
 
 impl EmitState {
@@ -142,7 +155,14 @@ impl EmitState {
                 self.emit_text(flat_offset, &text);
             }
             FlatSegment::Break { .. } => self.emit_break(flat_offset),
-            FlatSegment::Atom { .. } => {}
+            FlatSegment::Atom { leaf } => {
+                if self.annotated
+                    && let Some(lv) = view.leaf(leaf)
+                    && lv.node_type() == NodeType::HorizontalRule
+                {
+                    self.emit_divider(flat_offset);
+                }
+            }
             FlatSegment::Open { block } => self.handle_open(view, block),
             FlatSegment::Close { block } => self.handle_close(view, block),
         }
@@ -160,9 +180,12 @@ impl EmitState {
         if let Some(nv) = view.node(block)
             && nv.spec().is_textblock()
             && let Some(emitted) = self.block_emitted_stack.pop()
-            && emitted
         {
-            self.pending_boundary = true;
+            if emitted {
+                self.pending_boundary = true;
+            } else if self.annotated {
+                self.pending_empty_blocks += 1;
+            }
         }
     }
 
@@ -172,6 +195,7 @@ impl EmitState {
             return;
         }
         self.flush_pending_boundary(flat_offset);
+        self.flush_pending_empties(flat_offset);
         let p = self.plain_len;
         self.runs.push(ProseRun {
             plain_range: p..p + n,
@@ -185,6 +209,7 @@ impl EmitState {
 
     fn emit_break(&mut self, flat_offset: usize) {
         self.flush_pending_boundary(flat_offset);
+        self.flush_pending_empties(flat_offset);
         let p = self.plain_len;
         self.runs.push(ProseRun {
             plain_range: p..p + 1,
@@ -213,6 +238,47 @@ impl EmitState {
         self.text.push_str("\n\n");
         self.plain_len += 2;
         self.pending_boundary = false;
+    }
+
+    fn push_synthetic(&mut self, ch: char, current_flat: usize) {
+        if ch == '\n' {
+            if self.text.is_empty() {
+                return; // 문서 시작의 선행 개행 억제
+            }
+            let trailing = self.text.chars().rev().take_while(|&c| c == '\n').count();
+            if trailing >= 4 {
+                return; // 클램프: 연속 개행 최대 4 (= 빈 줄 3)
+            }
+        }
+        let p = self.plain_len;
+        let flat = if self.text.ends_with('\n') {
+            current_flat.saturating_sub(1)
+        } else {
+            self.last_text_end_flat
+        };
+        self.runs.push(ProseRun {
+            plain_range: p..p + 1,
+            flat_start: flat,
+        });
+        self.text.push(ch);
+        self.plain_len += 1;
+    }
+
+    fn flush_pending_empties(&mut self, current_flat: usize) {
+        for _ in 0..self.pending_empty_blocks {
+            self.push_synthetic('\n', current_flat);
+        }
+        self.pending_empty_blocks = 0;
+    }
+
+    fn emit_divider(&mut self, flat_offset: usize) {
+        self.flush_pending_boundary(flat_offset);
+        self.flush_pending_empties(flat_offset);
+        for ch in "***".chars() {
+            self.push_synthetic(ch, flat_offset);
+        }
+        self.pending_boundary = true;
+        self.last_text_end_flat = flat_offset + 1;
     }
 
     fn mark_block_emitted(&mut self) {
@@ -250,5 +316,86 @@ mod tests {
         let flat = resolved.from().to_flat()..resolved.to().to_flat();
 
         assert_eq!(crate::flat_text(&view, flat), "한😀");
+    }
+
+    #[test]
+    fn annotated_emits_divider_marker_between_paragraphs() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("가나") } hr: horizontal_rule p2: paragraph { text("다라") } } }
+            selection: (p1, 0)
+        };
+        let view = state.view();
+        assert_eq!(prose_annotated(&view).text(), "가나\n\n***\n\n다라");
+        assert_eq!(prose(&view).text(), "가나\n\n다라");
+    }
+
+    #[test]
+    fn annotated_preserves_empty_paragraphs_with_clamp() {
+        // 빈 문단 1개 → 빈 줄 2개(개행 3), 2개 → 빈 줄 3개(개행 4), 3개 이상 → 클램프(개행 4 유지)
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("가") } e1: paragraph p2: paragraph { text("나") } } }
+            selection: (p1, 0)
+        };
+        let view = state.view();
+        assert_eq!(prose_annotated(&view).text(), "가\n\n\n나");
+        assert_eq!(prose(&view).text(), "가\n\n나");
+    }
+
+    #[test]
+    fn annotated_clamps_consecutive_blank_lines() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("가") } e1: paragraph e2: paragraph e3: paragraph e4: paragraph p2: paragraph { text("나") } } }
+            selection: (p1, 0)
+        };
+        let view = state.view();
+        assert_eq!(prose_annotated(&view).text(), "가\n\n\n\n나");
+    }
+
+    #[test]
+    fn annotated_divider_at_document_start_has_no_leading_newlines() {
+        let (state, ..) = state! {
+            doc { root { hr: horizontal_rule p1: paragraph { text("가") } } }
+            selection: (p1, 0)
+        };
+        let view = state.view();
+        assert_eq!(prose_annotated(&view).text(), "***\n\n가");
+    }
+
+    #[test]
+    fn annotated_range_over_marker_clamps_to_adjacent_text() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("가나") } hr: horizontal_rule p2: paragraph { text("다라") } } }
+            selection: (p1, 0)
+        };
+        let view = state.view();
+        let prose = prose_annotated(&view);
+        // "가나\n\n***\n\n다라"에서 "나"~"다"를 걸치는 range(1..10)가 유효 선택으로 클램프되는지
+        let selection = prose.to_selection(&view, 1..10).expect("mapped selection");
+        let resolved = selection.resolve(&view).expect("resolved");
+        assert!(resolved.from().to_flat() < resolved.to().to_flat());
+    }
+
+    proptest::proptest! {
+        #[test]
+        fn annotated_ranges_never_panic_and_plain_is_subsequence(
+            start in 0usize..64, len in 0usize..64,
+        ) {
+            let (state, ..) = state! {
+                doc { root { p1: paragraph { text("가나다") } hr: horizontal_rule e1: paragraph p2: paragraph { text("라마바") } } }
+                selection: (p1, 0)
+            };
+            let view = state.view();
+            let annotated = prose_annotated(&view);
+            let plain = prose(&view);
+
+            // ① 임의 range에서 panic 없이 Some(유효 flat) 또는 None
+            let end = (start + len).min(annotated.text().chars().count());
+            let s = start.min(end);
+            let _ = annotated.to_flat_range(s..end);
+
+            // ② plain 텍스트는 annotated 텍스트의 부분수열
+            let mut it = annotated.text().chars();
+            proptest::prop_assert!(plain.text().chars().all(|c| it.any(|a| a == c)));
+        }
     }
 }
