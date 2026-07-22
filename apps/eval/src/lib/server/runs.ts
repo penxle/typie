@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { createChunks } from '../../../flows/src/text.ts';
 import { createDb, Documents, PipelineRunDocs, PipelineRuns, PromptVariants, Variants } from './db/index.ts';
@@ -228,14 +228,16 @@ export const retryFailedDocs = async (db: Db, env: Env, runId: string): Promise<
     return { error: 'variant not resolved' };
   }
 
-  const failedDocs = await db
+  // 취소된 문서도 재시도 대상 — 취소된 run을 새 run 없이 재개해 완료 문서의 analyze 재지불을 피한다.
+  // done 문서는 여기서 애초에 스폰되지 않는 것이 스킵의 본체다(pipeline resolve의 done 가드는 방어선).
+  const retryableDocs = await db
     .select({ documentId: PipelineRunDocs.documentId })
     .from(PipelineRunDocs)
-    .where(and(eq(PipelineRunDocs.runId, runId), eq(PipelineRunDocs.status, 'failed')));
+    .where(and(eq(PipelineRunDocs.runId, runId), inArray(PipelineRunDocs.status, ['failed', 'cancelled'])));
 
   let retriedCount = 0;
 
-  for (const doc of failedDocs) {
+  for (const doc of retryableDocs) {
     await db
       .update(PipelineRunDocs)
       .set({ status: 'pending', error: null, workflowInstanceId: null })

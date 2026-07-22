@@ -74,7 +74,7 @@
   const eta = $derived(run.status === 'running' ? etaSeconds(sessionStart, current, primaryTotal(run)) : null);
   const rateUnit = $derived(run.kind === 'pipeline' ? '청크' : '문서');
 
-  const failedCount = $derived(docs.filter((d) => d.status === 'failed').length);
+  const retryableCount = $derived(docs.filter((d) => d.status === 'failed' || d.status === 'cancelled').length);
   const selectedFailedDoc = $derived(docs.find((d) => d.id === selectedFailedDocId && d.status === 'failed') ?? null);
 
   const STATUS_LABEL: Record<RunDocStatus, string> = {
@@ -231,9 +231,9 @@
       {#if run.status === 'running'}
         <button class={outlineButtonClass} onclick={openCancelDialog} type="button">실행 취소</button>
       {/if}
-      {#if run.kind === 'pipeline' && failedCount > 0}
+      {#if run.kind === 'pipeline' && retryableCount > 0}
         <button class={outlineButtonClass} disabled={retrying} onclick={retryFailed} type="button">
-          {retrying ? '재실행하는 중…' : `실패 문서만 재실행 (${failedCount})`}
+          {retrying ? '재실행하는 중…' : `미완료 문서만 재실행 (${retryableCount})`}
         </button>
       {/if}
     </div>

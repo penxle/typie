@@ -29,9 +29,29 @@
 
 <main class={css({ minHeight: '[100dvh]', backgroundColor: 'surface.subtle' })}>
   <div class={css({ maxWidth: '560px', marginX: 'auto', paddingY: '64px', paddingX: '20px' })}>
-    <header class={css({ marginBottom: '24px' })}>
-      <h1 class={css({ fontSize: '22px', fontWeight: 'bold' })}>문학 피드백 평가</h1>
-      <p class={css({ marginTop: '4px', fontSize: '14px', color: 'text.subtle' })}>{data.email}</p>
+    <header class={flex({ align: 'flex-start', justify: 'space-between', gap: '16px', marginBottom: '24px' })}>
+      <div>
+        <h1 class={css({ fontSize: '22px', fontWeight: 'bold' })}>문학 피드백 평가</h1>
+        <p class={css({ marginTop: '4px', fontSize: '14px', color: 'text.subtle' })}>{data.email}</p>
+      </div>
+      <a
+        class={css({
+          flexShrink: '0',
+          paddingX: '10px',
+          paddingY: '6px',
+          borderWidth: '1px',
+          borderColor: 'border.default',
+          borderRadius: '6px',
+          fontSize: '13px',
+          color: 'text.faint',
+          transition: '[background-color 0.15s ease, color 0.15s ease]',
+          _hover: { backgroundColor: 'surface.default', color: 'text.default' },
+        })}
+        data-sveltekit-reload
+        href="/cdn-cgi/access/logout"
+      >
+        로그아웃
+      </a>
     </header>
 
     {#if finished && data.remaining === 0}
