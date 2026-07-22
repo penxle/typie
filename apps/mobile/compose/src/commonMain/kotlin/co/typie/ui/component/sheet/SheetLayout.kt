@@ -8,12 +8,13 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Alignment
@@ -63,9 +64,12 @@ fun SheetLayout(
   body: @Composable ColumnScope.() -> Unit,
 ) {
   val scrollState = rememberScrollState()
-  val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
-  val navigationBarsBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-  val bottomInset = maxOf(if (includeImeBottomInset) imeBottom else 0.dp, navigationBarsBottom)
+  val bottomInsets =
+    if (includeImeBottomInset) {
+      WindowInsets.navigationBars.union(WindowInsets.ime)
+    } else {
+      WindowInsets.navigationBars
+    }
 
   Column(modifier = modifier.fillMaxWidth().thenIf(fillHeight) { fillMaxHeight() }) {
     if (handle) SheetHandle(modifier = handleModifier.background(headerBackgroundColor))
@@ -95,8 +99,8 @@ fun SheetLayout(
         ) {
           body()
 
-          if (footer == null && bottomInset > 0.dp) {
-            Spacer(modifier = Modifier.height(bottomInset))
+          if (footer == null) {
+            Spacer(modifier = Modifier.windowInsetsBottomHeight(bottomInsets))
           }
         }
       }
@@ -110,7 +114,7 @@ fun SheetLayout(
           content = footer,
         )
 
-        Spacer(Modifier.height(bottomInset))
+        Spacer(Modifier.windowInsetsBottomHeight(bottomInsets))
       }
     }
   }
