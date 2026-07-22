@@ -194,76 +194,79 @@ internal constructor(
 
   internal fun quiesceLocalEdits(): LocalEditQuiescence = localEdits.quiesce()
 
-  suspend fun await(beforeCommit: ((EditorState) -> Unit)? = null, block: EditorScope.() -> Unit) {
-    try {
-      awaitOrThrow(beforeCommit = beforeCommit, mapEvents = { Unit }, block = block)
-    } catch (e: CancellationException) {
-      throw e
-    } catch (e: Throwable) {
-      notifyFailure(e)
-      throw e
-    }
-  }
+  suspend fun await(
+    beforeCommit: ((EditorState) -> Unit)? = null,
+    admit: () -> Boolean = { true },
+    block: EditorScope.() -> Unit,
+  ): Boolean =
+    await(beforeCommit = beforeCommit, admit = admit, mapEvents = { Unit }, block = block) != null
 
-  private suspend fun <T : Any> awaitOrThrow(
+  internal suspend fun <T : Any> await(
     beforeCommit: ((EditorState) -> Unit)? = null,
     admit: () -> Boolean = { true },
     mapEvents: (List<EditorEvent>) -> T,
     block: EditorScope.() -> Unit,
   ): T? {
-    val messages = mutableListOf<Message>()
-    val collector =
-      object : EditorScope {
-        override fun enqueue(message: Message) {
-          messages += message
-        }
-      }
-    block(collector)
-    if (messages.isEmpty()) return mapEvents(emptyList())
-
-    return localEdits.run {
-      val tick: EditorAwaitTick<T>? =
-        withContext(NonCancellable + dispatcher) {
-          mutex.withLock {
-            if (disposed.load()) throw CancellationException("Editor disposed")
-            if (!admit()) return@withLock null
-            for (m in messages) inner.enqueue(m)
-            val e = inner.tick()
-            val version = versionCounter.addAndFetch(1L)
-            val s = readSnapshot(version = version, events = e)
-            EditorAwaitTick(events = e, snapshot = s, value = mapEvents(e))
+    try {
+      val messages = mutableListOf<Message>()
+      val collector =
+        object : EditorScope {
+          override fun enqueue(message: Message) {
+            messages += message
           }
         }
-      if (tick == null) return@run null
-      val (events, snapshot, value) = tick
+      block(collector)
+      if (messages.isEmpty()) return mapEvents(emptyList())
 
-      val pending: PendingSettle? =
-        if (events.any { it is EditorEvent.RenderInvalidated }) {
-          val initial = attachedPages.load()
-          if (initial.isEmpty()) null
-          else
-            PendingSettle(initial, requiredVersion = snapshot.version).also {
-              pendingSettles.updatePersistent { list -> list.add(it) }
+      return localEdits.run {
+        val tick: EditorAwaitTick<T>? =
+          withContext(NonCancellable + dispatcher) {
+            mutex.withLock {
+              if (disposed.load()) throw CancellationException("Editor disposed")
+              if (!admit()) return@withLock null
+              for (m in messages) inner.enqueue(m)
+              val e = inner.tick()
+              val version = versionCounter.addAndFetch(1L)
+              val s = readSnapshot(version = version, events = e)
+              EditorAwaitTick(events = e, snapshot = s, value = mapEvents(e))
             }
-        } else null
+          }
+        if (tick == null) return@run null
+        val (events, snapshot, value) = tick
 
-      try {
-        emit(events)
-        pending?.await()
-      } finally {
-        if (pending != null) {
-          pendingSettles.updatePersistent { it.remove(pending) }
-        }
-        withContext(NonCancellable) {
-          mutex.withLock {
-            if (!disposed.load()) {
-              beforeCommit?.invoke(snapshot)
-              commit(snapshot)
+        val pending: PendingSettle? =
+          if (events.any { it is EditorEvent.RenderInvalidated }) {
+            val initial = attachedPages.load()
+            if (initial.isEmpty()) null
+            else
+              PendingSettle(initial, requiredVersion = snapshot.version).also {
+                pendingSettles.updatePersistent { list -> list.add(it) }
+              }
+          } else null
+
+        try {
+          emit(events)
+          pending?.await()
+        } finally {
+          if (pending != null) {
+            pendingSettles.updatePersistent { it.remove(pending) }
+          }
+          withContext(NonCancellable) {
+            mutex.withLock {
+              if (!disposed.load()) {
+                beforeCommit?.invoke(snapshot)
+                commit(snapshot)
+              }
             }
           }
         }
+        value
       }
-      value
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Throwable) {
+      notifyFailure(e)
+      throw e
     }
   }
 
@@ -389,56 +392,39 @@ internal constructor(
     ranges: List<ProseTrackedRangeRegistration>,
     isCurrent: () -> Boolean,
   ): ProseRangeInstallOutcome? {
-    try {
-      val outcome =
-        awaitOrThrow(
-          admit = isCurrent,
-          mapEvents = { events ->
-            val matches = events.filterIsInstance<EditorEvent.ProseRangeInstallResult>()
-            check(matches.size == 1) {
-              "Expected exactly one prose range install result, got ${matches.size}"
-            }
-            matches.single().outcome
-          },
-        ) {
-          enqueue(
-            Message.TrackedRange(
-              TrackedRangeOp.ReplaceGroupsFromProse(
-                expectedText = expectedText,
-                groups = groups,
-                ranges = ranges,
-              )
+    val outcome =
+      await(
+        admit = isCurrent,
+        mapEvents = { events ->
+          val matches = events.filterIsInstance<EditorEvent.ProseRangeInstallResult>()
+          check(matches.size == 1) {
+            "Expected exactly one prose range install result, got ${matches.size}"
+          }
+          matches.single().outcome
+        },
+      ) {
+        enqueue(
+          Message.TrackedRange(
+            TrackedRangeOp.ReplaceGroupsFromProse(
+              expectedText = expectedText,
+              groups = groups,
+              ranges = ranges,
             )
           )
-        }
-      return outcome?.takeIf { isCurrent() }
-    } catch (e: CancellationException) {
-      throw e
-    } catch (e: Throwable) {
-      notifyFailure(e)
-      throw e
-    }
+        )
+      }
+    return outcome?.takeIf { isCurrent() }
   }
 
   internal suspend fun clearTrackedRangeGroups(
     groups: List<String>,
     admit: () -> Boolean = { true },
-  ): Boolean {
-    try {
-      val result =
-        awaitOrThrow(admit = admit, mapEvents = { Unit }) {
-          groups.forEach { group ->
-            enqueue(Message.TrackedRange(TrackedRangeOp.ClearGroup(group = group)))
-          }
-        }
-      return result != null
-    } catch (e: CancellationException) {
-      throw e
-    } catch (e: Throwable) {
-      notifyFailure(e)
-      throw e
-    }
-  }
+  ): Boolean =
+    await(admit = admit, mapEvents = { Unit }) {
+      groups.forEach { group ->
+        enqueue(Message.TrackedRange(TrackedRangeOp.ClearGroup(group = group)))
+      }
+    } != null
 
   private fun scheduleTick() {
     if (!queued.compareAndSet(expectedValue = false, newValue = true)) return
@@ -953,7 +939,7 @@ internal constructor(
             EditorRegistry.register(editor)
             try {
               PlatformModule.editorHost.setThemeVariant(themeVariant)
-              editor.awaitOrThrow(mapEvents = { Unit }) {
+              editor.await(mapEvents = { Unit }) {
                 enqueue(Message.System(SystemEvent.ThemeVariantChanged))
                 enqueue(Message.System(SystemEvent.Initialize))
               }

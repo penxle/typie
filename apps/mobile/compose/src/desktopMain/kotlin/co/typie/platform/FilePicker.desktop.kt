@@ -75,9 +75,9 @@ actual fun rememberFilePicker(
   }
 }
 
-private fun File.probeContentType(): String? {
+internal fun File.probeContentType(): String? {
   return runCatching { Files.probeContentType(toPath()) }.getOrNull()
 }
 
-private fun File.decodeImageOrNull(): BufferedImage? =
+internal fun File.decodeImageOrNull(): BufferedImage? =
   runCatching { ImageIO.read(this) }.getOrNull()

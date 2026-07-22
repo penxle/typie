@@ -19,7 +19,6 @@ import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 import swiftPMImport.co.typie.compose.EditorFloatingCursorBridge
 import swiftPMImport.co.typie.compose.EditorTextInputTraitsBridge
@@ -37,10 +36,8 @@ internal actual class EditorPlatformInputBridge actual constructor() {
 
   actual fun onPreKeyEvent(
     event: KeyEvent,
-    editorState: () -> EditorState,
     inputCoroutineScope: CoroutineScope,
-    bindingMessages: suspend () -> List<Message>,
-    commit: suspend (List<Message>) -> EditorState?,
+    onAccepted: () -> Unit,
   ): Boolean {
     val stroke = event.toPhysicalKeyStroke()
     if (!physicalKeyGate.accept(stroke)) {
@@ -51,26 +48,29 @@ internal actual class EditorPlatformInputBridge actual constructor() {
       physicalKeyGate.clear(stroke)
     }
 
-    val preState = editorState()
-    inputCoroutineScope.launch(start = CoroutineStart.UNDISPATCHED) {
-      val messages = bindingMessages()
-      if (messages.isEmpty()) {
-        selectionIntentTracker.reset()
-        return@launch
-      }
-      val dispatchToken =
-        selectionIntentTracker.recordAppOwnedDispatch(
-          messages = messages,
-          preState = preState,
-          nowMillis = nowMillis(),
-        )
-      val postState =
-        commit(messages)
-          ?: run {
-            dispatchToken?.let(selectionIntentTracker::cancelAppOwnedDispatch)
-            return@launch
-          }
-      if (dispatchToken != null) {
+    onAccepted()
+
+    return true
+  }
+
+  actual suspend fun dispatchAppOwnedKeyMessages(
+    messages: List<Message>,
+    preState: EditorState,
+    dispatch: suspend () -> EditorState?,
+  ) {
+    val dispatchToken =
+      selectionIntentTracker.recordAppOwnedDispatch(
+        messages = messages,
+        preState = preState,
+        nowMillis = nowMillis(),
+      )
+    if (messages.isEmpty()) return
+
+    try {
+      val postState = dispatch()
+      if (postState == null) {
+        dispatchToken?.let(selectionIntentTracker::cancelAppOwnedDispatch)
+      } else if (dispatchToken != null) {
         selectionIntentTracker.recordAppOwnedCommit(
           token = dispatchToken,
           messages = messages,
@@ -79,9 +79,10 @@ internal actual class EditorPlatformInputBridge actual constructor() {
           nowMillis = nowMillis(),
         )
       }
+    } catch (error: Throwable) {
+      dispatchToken?.let(selectionIntentTracker::cancelAppOwnedDispatch)
+      throw error
     }
-
-    return true
   }
 
   actual fun shouldConsumeKeyEvent(event: KeyEvent): Boolean = true

@@ -101,10 +101,23 @@ pub enum Break {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum InsertionOp {
-    Text { text: String },
-    Break { kind: Break },
-    Fragment { fragment: Fragment },
-    Table { rows: usize, cols: usize },
+    Text {
+        text: String,
+    },
+    Break {
+        kind: Break,
+    },
+    Fragment {
+        fragment: Fragment,
+    },
+    Table {
+        rows: usize,
+        cols: usize,
+    },
+    AttachmentPlaceholders {
+        request_id: String,
+        kinds: Vec<AttachmentPlaceholderKind>,
+    },
 }
 
 #[ffi]
@@ -290,6 +303,14 @@ pub enum ClipboardOp {
     Paste { html: Option<String>, text: String },
     RepasteAsText,
     Cut,
+}
+
+#[ffi]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AttachmentPlaceholderKind {
+    Image,
+    File,
 }
 
 #[ffi]

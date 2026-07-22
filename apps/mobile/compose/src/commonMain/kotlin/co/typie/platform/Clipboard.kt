@@ -7,7 +7,5 @@ interface Clipboard {
 
   suspend fun copyRichText(html: String, text: String): Boolean
 
-  suspend fun paste(): ClipboardReadPayload?
+  suspend fun paste(): IncomingContentCandidates?
 }
-
-data class ClipboardReadPayload(val html: String?, val text: String)

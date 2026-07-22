@@ -24,6 +24,9 @@ import co.typie.editor.ffi.Message
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.editor.scroll.syncWithBringIntoView
+import co.typie.platform.IncomingContentCandidates
+import co.typie.platform.IncomingContentItem
+import co.typie.platform.readPlatformFile
 import java.util.concurrent.Executor
 import java.util.function.IntConsumer
 
@@ -65,6 +68,7 @@ internal class EditorInputConnection(
   private val bringIntoViewRequests: EditorBringIntoViewRequests,
   private val extractMonitor: ImeExtractMonitor,
   isSessionCurrent: () -> Boolean,
+  private val onIncomingContent: (IncomingContentCandidates) -> Boolean,
 ) : InputConnection {
   private val batch =
     ImeEditBatch(isSessionCurrent) { messages ->
@@ -298,7 +302,60 @@ internal class EditorInputConnection(
     inputContentInfo: InputContentInfo,
     flags: Int,
     opts: Bundle?,
-  ): Boolean = false
+  ): Boolean {
+    val permissionRequested = flags and InputConnection.INPUT_CONTENT_GRANT_READ_URI_PERMISSION != 0
+    var permissionOwned = false
+    return try {
+      if (permissionRequested) {
+        inputContentInfo.requestPermission()
+        permissionOwned = true
+      }
+      val fallbackMimeType =
+        inputContentInfo.description.let { description ->
+          (0 until description.mimeTypeCount).firstNotNullOfOrNull { index ->
+            description.getMimeType(index)?.takeIf { it != "*/*" }
+          }
+        }
+      val file =
+        view.context.readPlatformFile(
+          uri = inputContentInfo.contentUri,
+          fallbackMimeType = fallbackMimeType,
+          release = {
+            if (permissionOwned) {
+              permissionOwned = false
+              runCatching(inputContentInfo::releasePermission)
+            }
+          },
+        )
+      val candidates =
+        IncomingContentCandidates(
+          items =
+            listOf(
+              IncomingContentItem(
+                kind =
+                  if (file.mimeType?.substringBefore('/') == "image") {
+                    IncomingContentItem.Kind.Image
+                  } else {
+                    IncomingContentItem.Kind.File
+                  },
+                file = file,
+              )
+            )
+        )
+      try {
+        onIncomingContent(candidates).also { accepted -> if (!accepted) candidates.close() }
+      } catch (error: Throwable) {
+        candidates.close()
+        throw error
+      }
+    } catch (_: Throwable) {
+      if (permissionOwned) {
+        permissionOwned = false
+        runCatching(inputContentInfo::releasePermission)
+      }
+      false
+    }
+  }
 
   override fun commitCompletion(text: CompletionInfo?): Boolean = false
 

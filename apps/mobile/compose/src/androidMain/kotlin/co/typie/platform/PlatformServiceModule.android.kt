@@ -10,6 +10,7 @@ import android.os.Environment
 import android.provider.MediaStore
 import androidx.core.content.FileProvider
 import java.io.File
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -74,19 +75,84 @@ internal class AndroidClipboard(private val context: Context) : Clipboard {
         .getOrDefault(false)
     }
 
-  override suspend fun paste(): ClipboardReadPayload? =
-    withContext(Dispatchers.IO) {
-      runCatching {
+  override suspend fun paste(): IncomingContentCandidates? =
+    loadOwnedIncomingContentCandidates(Dispatchers.IO) {
+      try {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val clip = clipboard.primaryClip ?: return@runCatching null
-        if (clip.itemCount == 0) return@runCatching null
-        val item = clip.getItemAt(0)
-        val html = item.htmlText
-        val text = item.coerceToText(context).toString()
-        ClipboardReadPayload(html = html, text = text)
+        val clip = clipboard.primaryClip ?: return@loadOwnedIncomingContentCandidates null
+        if (clip.itemCount == 0) return@loadOwnedIncomingContentCandidates null
+        val clipItems = List(clip.itemCount, clip::getItemAt)
+        readAndroidIncomingContent(
+          clipItems = clipItems,
+          html = { item -> item.htmlText },
+          rawText = { item -> item.text },
+          coerceText = { item -> item.coerceToText(context) },
+          materialize = { item ->
+            val uri = item.uri ?: item.intent?.data
+            if (uri == null) {
+              null
+            } else {
+              val file = context.copyClipboardFile(uri)
+              IncomingContentItem(
+                kind =
+                  if (file.mimeType?.substringBefore('/') == "image") {
+                    IncomingContentItem.Kind.Image
+                  } else {
+                    IncomingContentItem.Kind.File
+                  },
+                file = file,
+              )
+            }
+          },
+        )
+      } catch (error: CancellationException) {
+        throw error
+      } catch (_: Throwable) {
+        null
       }
-        .getOrNull()
     }
+}
+
+internal suspend fun <T> readAndroidIncomingContent(
+  clipItems: List<T>,
+  html: (T) -> String?,
+  rawText: (T) -> CharSequence?,
+  coerceText: (T) -> CharSequence?,
+  materialize: suspend (T) -> IncomingContentItem?,
+): IncomingContentCandidates? {
+  val richHtml = clipItems.firstNotNullOfOrNull { item -> html(item)?.takeIf(String::isNotEmpty) }
+  val directText = clipItems.firstNotNullOfOrNull { item ->
+    rawText(item)?.toString()?.takeIf(String::isNotEmpty)
+  }
+  val text =
+    directText
+      ?: if (richHtml == null) {
+        clipItems.firstNotNullOfOrNull { item ->
+          coerceText(item)?.toString()?.takeIf(String::isNotEmpty)
+        }
+      } else {
+        null
+      }
+
+  return materializeIncomingContentCandidates(html = richHtml, text = text) {
+    val loaded = mutableListOf<IncomingContentItem>()
+    var unreadableItemCount = 0
+    try {
+      for (item in clipItems) {
+        try {
+          materialize(item)?.let(loaded::add)
+        } catch (error: CancellationException) {
+          throw error
+        } catch (_: Throwable) {
+          unreadableItemCount += 1
+        }
+      }
+      LoadedIncomingContentItems(loaded, unreadableItemCount)
+    } catch (error: Throwable) {
+      loaded.forEach { it.file.close() }
+      throw error
+    }
+  }
 }
 
 internal class AndroidFileSystem(private val context: Context) : FileSystem {

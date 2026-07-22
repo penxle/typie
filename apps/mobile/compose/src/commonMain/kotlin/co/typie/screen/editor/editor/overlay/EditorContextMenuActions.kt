@@ -8,11 +8,14 @@ import co.typie.editor.ffi.ClipboardOp
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.SelectionExpansionUnit
 import co.typie.editor.ffi.SelectionOp
+import co.typie.editor.input.LocalEditorIncomingContentHandler
 import co.typie.editor.runtime.EditorContextMenuState
+import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.editor.scroll.awaitWithBringIntoView
 import co.typie.platform.Clipboard
+import co.typie.platform.IncomingContentMode
 import co.typie.platform.PlatformModule
 import kotlinx.coroutines.launch
 
@@ -38,6 +41,8 @@ internal fun rememberEditorContextMenuActions(
   clipboard: Clipboard = PlatformModule.clipboard,
 ): EditorContextMenuActions {
   val selection = editor.selection
+  val runtime = LocalEditorRuntime.current
+  val incomingContentHandler = LocalEditorIncomingContentHandler.current
   return remember(
     editor,
     selection,
@@ -45,6 +50,8 @@ internal fun rememberEditorContextMenuActions(
     bringIntoViewRequests,
     contextMenu,
     clipboard,
+    runtime,
+    incomingContentHandler,
   ) {
     val expandSelection =
       { unit: SelectionExpansionUnit, bringIntoViewTarget: EditorBringIntoViewTarget? ->
@@ -81,11 +88,10 @@ internal fun rememberEditorContextMenuActions(
         }
       },
       onPaste = {
-        editor.scope.launch {
-          val read = clipboard.paste() ?: return@launch
-          editor.awaitWithBringIntoView(bringIntoViewRequests) {
-            enqueue(Message.Clipboard(ClipboardOp.Paste(html = read.html, text = read.text)))
-            beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
+        val session = runtime.session?.takeIf { it.editor === editor }
+        if (session != null) {
+          editor.scope.launch {
+            incomingContentHandler.handleClipboard(session, clipboard, IncomingContentMode.Rich)
           }
         }
       },

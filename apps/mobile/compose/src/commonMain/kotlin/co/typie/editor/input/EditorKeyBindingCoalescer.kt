@@ -1,5 +1,6 @@
 package co.typie.editor.input
 
+import co.typie.editor.EditorKeyBindingAction
 import co.typie.editor.KeyBinding
 import co.typie.editor.ffi.Message
 import co.typie.editor.scroll.EditorBringIntoViewTarget
@@ -22,30 +23,40 @@ import kotlinx.coroutines.withContext
 // batched action would otherwise run before the preceding messages commit.
 internal class EditorKeyBindingCoalescer(
   private val scope: CoroutineScope,
-  private val resolveMessages: suspend (KeyBinding, Clipboard) -> List<Message>,
+  private val resolveMessages:
+    suspend (EditorKeyBindingAction.Messages, Clipboard) -> List<Message>,
   private val dispatch: suspend (List<Message>, EditorBringIntoViewTarget?) -> Unit,
 ) {
-  private data class Submission(
+  private sealed interface Submission {
+    val completion: CompletableDeferred<Unit>
+  }
+
+  private data class BindingSubmission(
     val binding: KeyBinding,
     val clipboard: Clipboard,
     val localEditContext: CoroutineContext?,
-    val completion: CompletableDeferred<Unit>,
-  ) {
-    fun complete() {
-      completion.complete(Unit)
-    }
+    override val completion: CompletableDeferred<Unit>,
+  ) : Submission
 
-    fun fail(error: Throwable) {
-      completion.completeExceptionally(error)
-    }
+  private data class OrderedActionSubmission(
+    val action: suspend () -> Unit,
+    override val completion: CompletableDeferred<Unit>,
+  ) : Submission
+
+  private fun Submission.complete() {
+    completion.complete(Unit)
+  }
+
+  private fun Submission.fail(error: Throwable) {
+    completion.completeExceptionally(error)
   }
 
   private inner class PendingBatch {
-    private val submissions = mutableListOf<Submission>()
+    private val submissions = mutableListOf<BindingSubmission>()
     private val messages = mutableListOf<Message>()
     private var target: EditorBringIntoViewTarget? = null
 
-    fun add(submission: Submission, resolvedMessages: List<Message>) {
+    fun add(submission: BindingSubmission, resolvedMessages: List<Message>) {
       submissions += submission
       messages += resolvedMessages
       submission.binding.bringIntoViewTarget?.let { target = it }
@@ -61,7 +72,7 @@ internal class EditorKeyBindingCoalescer(
           withContext(context) { dispatch(messages.toList(), target) }
         }
       }
-      submissions.forEach(Submission::complete)
+      submissions.forEach { it.complete() }
       submissions.clear()
       messages.clear()
       target = null
@@ -92,11 +103,22 @@ internal class EditorKeyBindingCoalescer(
     clipboard: Clipboard,
     localEditContext: CoroutineContext? = null,
   ): Deferred<Unit> {
-    val submission = Submission(binding, clipboard, localEditContext, CompletableDeferred())
+    val submission = BindingSubmission(binding, clipboard, localEditContext, CompletableDeferred())
     val result = submissions.trySend(submission)
     if (result.isClosed) {
       // Callers sit outside any coroutine (hardware key handlers), so a stopped
       // worker must surface as a failed completion, never a synchronous throw.
+      submission.fail(
+        result.exceptionOrNull() ?: CancellationException("Editor key binding coalescer stopped")
+      )
+    }
+    return submission.completion
+  }
+
+  fun submitOrdered(action: suspend () -> Unit): Deferred<Unit> {
+    val submission = OrderedActionSubmission(action, CompletableDeferred())
+    val result = submissions.trySend(submission)
+    if (result.isClosed) {
       submission.fail(
         result.exceptionOrNull() ?: CancellationException("Editor key binding coalescer stopped")
       )
@@ -111,20 +133,32 @@ internal class EditorKeyBindingCoalescer(
     try {
       while (current != null) {
         claimed += current
-        val binding = current.binding
-        if (binding.coalescible) {
-          batch.add(current, resolveMessages(binding, current.clipboard))
-        } else {
-          batch.flush()
-          val messages = resolveMessages(binding, current.clipboard)
-          if (current.localEditContext == null) {
-            dispatch(messages, binding.bringIntoViewTarget)
-          } else {
-            withContext(current.localEditContext) {
-              dispatch(messages, binding.bringIntoViewTarget)
+        when (val submission = current) {
+          is BindingSubmission -> {
+            val binding = submission.binding
+            val action =
+              binding.action as? EditorKeyBindingAction.Messages
+                ?: error("Only message key bindings may be submitted to the coalescer")
+            if (action.coalescible) {
+              batch.add(submission, resolveMessages(action, submission.clipboard))
+            } else {
+              batch.flush()
+              val messages = resolveMessages(action, submission.clipboard)
+              if (submission.localEditContext == null) {
+                dispatch(messages, binding.bringIntoViewTarget)
+              } else {
+                withContext(submission.localEditContext) {
+                  dispatch(messages, binding.bringIntoViewTarget)
+                }
+              }
+              submission.complete()
             }
           }
-          current.complete()
+          is OrderedActionSubmission -> {
+            batch.flush()
+            submission.action()
+            submission.complete()
+          }
         }
         current = submissions.tryReceive().getOrNull()
       }

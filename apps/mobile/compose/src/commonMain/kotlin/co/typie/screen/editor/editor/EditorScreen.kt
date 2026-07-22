@@ -26,6 +26,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -71,6 +72,7 @@ import co.typie.editor.ffi.Movement
 import co.typie.editor.ffi.NavigationOp
 import co.typie.editor.ffi.SystemEvent
 import co.typie.editor.input.EditorInputRecorder
+import co.typie.editor.input.LocalEditorIncomingContentHandler
 import co.typie.editor.input.buildInputLogPayload
 import co.typie.editor.input.sendInputLog
 import co.typie.editor.interaction.EditorInteractionScope
@@ -126,6 +128,9 @@ import co.typie.screen.editor.editor.aifeedback.AiFeedbackTopBarCenter
 import co.typie.screen.editor.editor.aifeedback.AiFeedbackTopBarLeading
 import co.typie.screen.editor.editor.aifeedback.AiFeedbackTopBarTrailing
 import co.typie.screen.editor.editor.aifeedback.rememberEditorAiFeedbackSession
+import co.typie.screen.editor.editor.attachment.DefaultEditorAttachmentImporter
+import co.typie.screen.editor.editor.attachment.LocalEditorAttachmentImporter
+import co.typie.screen.editor.editor.attachment.SessionEditorIncomingContentHandler
 import co.typie.screen.editor.editor.entry.rememberEditorEntryStateSession
 import co.typie.screen.editor.editor.findreplace.FindReplaceToolbar
 import co.typie.screen.editor.editor.findreplace.FindReplaceTopBarCenter
@@ -354,6 +359,25 @@ fun EditorScreen(entityId: String) {
     subPaneState.dismissTableAxisActionsIfSelectionChanged(editorState.selection)
   }
   val bringIntoViewRequests = rememberEditorBringIntoViewRequests()
+  val currentEditorReadOnly by rememberUpdatedState(editorReadOnly)
+  val attachmentImporter =
+    remember(runtime, externalElementState, bringIntoViewRequests) {
+      DefaultEditorAttachmentImporter(
+        externalElementState = externalElementState,
+        bringIntoViewRequests = bringIntoViewRequests,
+        isSessionCurrent = { session -> runtime.session === session && !currentEditorReadOnly },
+        backgroundScope = scope,
+      )
+    }
+  val incomingContentHandler =
+    remember(runtime, attachmentImporter, bringIntoViewRequests, toast) {
+      SessionEditorIncomingContentHandler(
+        importer = attachmentImporter,
+        bringIntoViewRequests = bringIntoViewRequests,
+        isSessionCurrent = { session -> runtime.session === session && !currentEditorReadOnly },
+        onAttachmentError = { message -> toast.error(message) },
+      )
+    }
   val entryState =
     rememberEditorEntryStateSession(
       documentId = document?.id,
@@ -1454,6 +1478,8 @@ fun EditorScreen(entityId: String) {
       LocalEditorExternalElementState provides externalElementState,
       LocalEditorZoomController provides zoomController,
       LocalEditorBringIntoViewRequests provides bringIntoViewRequests,
+      LocalEditorAttachmentImporter provides attachmentImporter,
+      LocalEditorIncomingContentHandler provides incomingContentHandler,
       LocalEditorInteractionScope provides interactionScope,
       LocalHazeState provides toolbarBackdropHazeState,
     ) {

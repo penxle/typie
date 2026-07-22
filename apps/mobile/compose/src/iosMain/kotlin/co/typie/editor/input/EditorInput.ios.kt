@@ -20,6 +20,7 @@ import androidx.compose.ui.text.input.TextEditorState
 import androidx.compose.ui.text.input.TextFieldValue
 import co.typie.editor.Editor
 import co.typie.editor.scroll.EditorBringIntoViewRequests
+import co.typie.platform.IncomingContentCandidates
 import kotlinx.cinterop.ExperimentalForeignApi
 import platform.CoreGraphics.CGRectMake
 import platform.UIKit.UIView
@@ -33,6 +34,7 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
   textClippingRectInRoot: () -> Rect?,
   suppressSoftwareKeyboard: Boolean,
   isSessionCurrent: () -> Boolean,
+  onIncomingContent: (IncomingContentCandidates) -> Boolean,
 ): PlatformTextInputMethodRequest {
   return object : PlatformTextInputMethodRequest {
     private var lastPulledValue: TextFieldValue? = null

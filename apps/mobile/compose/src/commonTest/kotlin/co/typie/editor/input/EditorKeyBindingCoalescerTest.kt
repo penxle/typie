@@ -1,6 +1,7 @@
 package co.typie.editor.input
 
 import androidx.compose.ui.input.key.Key as ComposeKey
+import co.typie.editor.EditorKeyBindingAction
 import co.typie.editor.EditorLocalEditCoordinator
 import co.typie.editor.KeyBinding
 import co.typie.editor.ffi.Direction
@@ -9,7 +10,7 @@ import co.typie.editor.ffi.Movement
 import co.typie.editor.ffi.NavigationOp
 import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.platform.Clipboard
-import co.typie.platform.ClipboardReadPayload
+import co.typie.platform.IncomingContentCandidates
 import kotlin.coroutines.CoroutineContext
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -34,7 +35,7 @@ class EditorKeyBindingCoalescerTest {
 
     override suspend fun copyRichText(html: String, text: String): Boolean = false
 
-    override suspend fun paste(): ClipboardReadPayload? = null
+    override suspend fun paste(): IncomingContentCandidates? = null
   }
 
   private data class Dispatched(val messages: List<Message>, val target: EditorBringIntoViewTarget?)
@@ -47,11 +48,11 @@ class EditorKeyBindingCoalescerTest {
     var dispatchGate: CompletableDeferred<Unit>? = null
     var dispatchFailure: Throwable? = null
     private val clipboard = FakeClipboard()
-    private val messagesByBinding = mutableMapOf<KeyBinding, List<Message>>()
+    private val messagesByAction = mutableMapOf<EditorKeyBindingAction.Messages, List<Message>>()
     private val coalescer =
       EditorKeyBindingCoalescer(
         scope = scope,
-        resolveMessages = { binding, _ -> messagesByBinding.getValue(binding) },
+        resolveMessages = { action, _ -> messagesByAction.getValue(action) },
         dispatch = { messages, target ->
           onDispatch()
           dispatched += Dispatched(messages, target)
@@ -86,9 +87,11 @@ class EditorKeyBindingCoalescerTest {
           coalescible = coalescible,
           action = { emptyList() },
         )
-      messagesByBinding[binding] = messages
+      messagesByAction[binding.action as EditorKeyBindingAction.Messages] = messages
       return coalescer.submit(binding, clipboard, localEditContext)
     }
+
+    fun submitOrdered(action: suspend () -> Unit): Deferred<Unit> = coalescer.submitOrdered(action)
 
     fun cancel() {
       scope.cancel()
@@ -111,6 +114,42 @@ class EditorKeyBindingCoalescerTest {
       workerScope.cancel()
     }
   }
+
+  @Test
+  fun `ordered actions wait in FIFO before a later binding dispatches`() =
+    runCoalescerTest { harness ->
+      val firstPasteRead = CompletableDeferred<Unit>()
+      val commandOrder = mutableListOf<String>()
+
+      val firstPaste = harness.submitOrdered {
+        firstPasteRead.await()
+        commandOrder += "paste-a"
+      }
+      val secondPaste = harness.submitOrdered { commandOrder += "paste-b" }
+      val backspace = harness.submit(moveMessage(1), coalescible = false)
+
+      testScheduler.runCurrent()
+
+      assertEquals(emptyList(), commandOrder)
+      assertEquals(emptyList(), harness.dispatched)
+
+      firstPasteRead.complete(Unit)
+      testScheduler.advanceUntilIdle()
+
+      assertEquals(listOf("paste-a", "paste-b"), commandOrder)
+      assertEquals(
+        listOf(
+          Dispatched(
+            messages = listOf(moveMessage(1)),
+            target = EditorBringIntoViewTarget.CurrentSelectionHead,
+          )
+        ),
+        harness.dispatched,
+      )
+      assertTrue(firstPaste.isCompleted)
+      assertTrue(secondPaste.isCompleted)
+      assertTrue(backspace.isCompleted)
+    }
 
   @Test
   fun `queued coalescible bindings drain into a single dispatch`() = runCoalescerTest { harness ->

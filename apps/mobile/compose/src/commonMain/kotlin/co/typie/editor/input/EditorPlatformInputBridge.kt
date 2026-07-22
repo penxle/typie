@@ -13,11 +13,15 @@ internal expect class EditorPlatformInputBridge() {
 
   fun onPreKeyEvent(
     event: KeyEvent,
-    editorState: () -> EditorState,
     inputCoroutineScope: CoroutineScope,
-    bindingMessages: suspend () -> List<Message>,
-    commit: suspend (List<Message>) -> EditorState?,
+    onAccepted: () -> Unit,
   ): Boolean
+
+  suspend fun dispatchAppOwnedKeyMessages(
+    messages: List<Message>,
+    preState: EditorState,
+    dispatch: suspend () -> EditorState?,
+  )
 
   fun shouldConsumeKeyEvent(event: KeyEvent): Boolean
 

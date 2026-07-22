@@ -108,8 +108,8 @@ internal fun EditorToolbarHost(
       commentEnabled = commentEnabled,
       onCommentRequest = onCommentRequest,
     )
-  val pickImage = rememberEditorImagePicker(commandScope)
-  val pickFile = rememberEditorFilePicker(commandScope)
+  val pickImage = rememberEditorImagePicker()
+  val pickFile = rememberEditorFilePicker()
   val pages =
     rememberEditorToolbarPages(
       toolbarContext = toolbarContext,

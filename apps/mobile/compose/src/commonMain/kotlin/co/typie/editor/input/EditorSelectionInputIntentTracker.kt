@@ -33,7 +33,9 @@ internal class EditorSelectionInputIntentTracker(private val staleTimeoutMillis:
     expireStale(nowMillis)
     val move = messages.singleNavigationMoveOrNull()
     if (move == null) {
-      reset()
+      // A stateful key action may resolve after a later navigation was accepted. Its result must
+      // not clear that newer in-flight intent.
+      if (lifecycle !is SelectionInputLifecycle.InFlight) reset()
       return null
     }
 

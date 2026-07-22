@@ -1,11 +1,15 @@
+use editor_clipboard::Slice;
 use editor_commands::{self as commands};
+use editor_crdt::Dot;
 use editor_model::{
-    Fragment, PlainNode, PlainParagraphNode, PlainTableCellNode, PlainTableNode, PlainTableRowNode,
-    TableBorderStyle,
+    ChildView, DocView, Fragment, NodeType, NodeView, PlainFileNode, PlainImageNode, PlainNode,
+    PlainParagraphNode, PlainTableCellNode, PlainTableNode, PlainTableRowNode, TableBorderStyle,
 };
+use editor_state::{ResolvedSelection, Selection, is_unit_node_selection};
 
 use crate::editor::Editor;
 use crate::error::EditorError;
+use crate::event::EditorEvent;
 use crate::message::*;
 
 pub fn handle_insertion_op(editor: &mut Editor, op: InsertionOp) -> Result<(), EditorError> {
@@ -26,6 +30,7 @@ pub fn handle_insertion_op(editor: &mut Editor, op: InsertionOp) -> Result<(), E
         }
     }
 
+    let mut placeholder_node_ids = None;
     editor.transact(|tr| {
         match &op {
             InsertionOp::Text { text } => {
@@ -135,11 +140,72 @@ pub fn handle_insertion_op(editor: &mut Editor, op: InsertionOp) -> Result<(), E
                     commands::insert_fragment(table_fragment(*rows, *cols)),
                 )?;
             }
+            InsertionOp::AttachmentPlaceholders { kinds, .. } => {
+                if kinds.is_empty() {
+                    return Ok(());
+                }
+                let sp = tr.savepoint();
+                let slice = placeholder_slice(kinds);
+                let prepared = commands::first!(
+                    tr,
+                    commands::materialize_gap_paragraph(),
+                    commands::insert_paragraph_after_unit_selection(),
+                    |tr| commands::chain!(
+                        tr,
+                        commands::optional!(commands::ensure_paragraph()),
+                        commands::optional!(commands::delete_selection()),
+                    ),
+                )?;
+                if !prepared {
+                    return Ok(());
+                }
+                let Some(selection) = tr.selection().filter(Selection::is_collapsed) else {
+                    tr.rollback(sp);
+                    return Ok(());
+                };
+                let Some(inserted) = commands::insert_slice_at(
+                    tr,
+                    selection.head,
+                    slice,
+                    commands::types::SliceProvenance::Formatted,
+                )?
+                else {
+                    tr.rollback(sp);
+                    return Ok(());
+                };
+
+                let view = tr.view();
+                let Some(inserted_nodes) = placeholder_nodes_in_selection(&view, inserted) else {
+                    return Err(commands::CommandError::Corrupted(
+                        "placeholder insertion returned an unresolvable selection".into(),
+                    )
+                    .into());
+                };
+                let inserted_kinds = inserted_nodes
+                    .iter()
+                    .map(|(_, kind)| *kind)
+                    .collect::<Vec<_>>();
+                if inserted_kinds != *kinds {
+                    return Err(commands::CommandError::Corrupted(format!(
+                        "placeholder insertion mismatch: requested {kinds:?}, inserted {inserted_kinds:?}"
+                    ))
+                    .into());
+                }
+                if is_unit_node_selection(&inserted, &view) {
+                    tr.set_selection(Some(inserted))?;
+                }
+                placeholder_node_ids = Some(
+                    inserted_nodes
+                        .into_iter()
+                        .map(|(node_id, _)| node_id)
+                        .collect(),
+                );
+            }
         }
         Ok(())
     })?;
 
-    if matches!(op, InsertionOp::Text { .. }) {
+    if matches!(&op, InsertionOp::Text { .. }) {
         let resource = std::sync::Arc::clone(&editor.resource);
         let resource = resource.lock().unwrap();
         editor.transact(|tr| {
@@ -147,7 +213,71 @@ pub fn handle_insertion_op(editor: &mut Editor, op: InsertionOp) -> Result<(), E
             Ok(())
         })?;
     }
+
+    if let InsertionOp::AttachmentPlaceholders { request_id, .. } = op
+        && let Some(node_ids) = placeholder_node_ids
+    {
+        editor.push_event(EditorEvent::AttachmentPlaceholdersInserted {
+            request_id,
+            node_ids,
+        });
+    }
     Ok(())
+}
+
+fn placeholder_slice(kinds: &[AttachmentPlaceholderKind]) -> Slice {
+    Slice::new(
+        kinds
+            .iter()
+            .map(|kind| match kind {
+                AttachmentPlaceholderKind::Image => {
+                    Fragment::leaf(PlainNode::Image(PlainImageNode::default()))
+                }
+                AttachmentPlaceholderKind::File => {
+                    Fragment::leaf(PlainNode::File(PlainFileNode { id: None }))
+                }
+            })
+            .collect(),
+        0,
+        0,
+    )
+}
+
+fn placeholder_nodes_in_selection(
+    view: &DocView,
+    selection: Selection,
+) -> Option<Vec<(Dot, AttachmentPlaceholderKind)>> {
+    let (Some(root), Some(resolved)) = (view.root(), selection.resolve(view)) else {
+        return None;
+    };
+    let mut placeholders = Vec::new();
+    collect_placeholder_nodes(&root, &resolved, &mut placeholders);
+    Some(placeholders)
+}
+
+fn collect_placeholder_nodes(
+    node: &NodeView,
+    selection: &ResolvedSelection,
+    placeholders: &mut Vec<(Dot, AttachmentPlaceholderKind)>,
+) {
+    if !selection.intersects_subtree(node) {
+        return;
+    }
+
+    for (index, child) in node.children().enumerate() {
+        match child {
+            ChildView::Block(block) => collect_placeholder_nodes(&block, selection, placeholders),
+            ChildView::Leaf(leaf) if selection.contains_leaf_slot(node, index) => {
+                let kind = match leaf.node_type() {
+                    NodeType::Image => AttachmentPlaceholderKind::Image,
+                    NodeType::File => AttachmentPlaceholderKind::File,
+                    _ => continue,
+                };
+                placeholders.push((leaf.dot(), kind));
+            }
+            ChildView::Leaf(_) => {}
+        }
+    }
 }
 
 fn table_fragment(rows: usize, cols: usize) -> Fragment {
@@ -185,6 +315,223 @@ mod tests {
 
     use super::*;
     use crate::test_utils::assert_apply_changes_state;
+
+    #[test]
+    fn placeholder_batch_inserts_mixed_kinds_and_returns_ordered_node_ids() {
+        let (state, _p) = state! {
+            doc { root { p: paragraph } }
+            selection: (p, 0)
+        };
+        let mut editor = Editor::new_test(state);
+
+        let events = editor.apply(Message::Insertion {
+            op: InsertionOp::AttachmentPlaceholders {
+                request_id: "request-1".into(),
+                kinds: vec![
+                    AttachmentPlaceholderKind::Image,
+                    AttachmentPlaceholderKind::File,
+                    AttachmentPlaceholderKind::Image,
+                ],
+            },
+        });
+
+        let node_ids = events
+            .iter()
+            .find_map(|event| match event {
+                EditorEvent::AttachmentPlaceholdersInserted {
+                    request_id,
+                    node_ids,
+                } if request_id == "request-1" => Some(node_ids),
+                _ => None,
+            })
+            .expect("matching placeholder result");
+
+        let view = editor.state().view();
+        let inserted = view
+            .root()
+            .expect("root")
+            .children()
+            .filter_map(|child| match child {
+                ChildView::Block(block) => Some((block.id(), block.node_type())),
+                ChildView::Leaf(leaf) => Some((leaf.dot(), leaf.node_type())),
+            })
+            .filter(|(_, kind)| matches!(kind, NodeType::Image | NodeType::File))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            inserted.iter().map(|(_, kind)| *kind).collect::<Vec<_>>(),
+            vec![NodeType::Image, NodeType::File, NodeType::Image]
+        );
+        assert_eq!(
+            node_ids,
+            &inserted
+                .iter()
+                .map(|(node_id, _)| *node_id)
+                .collect::<Vec<_>>()
+        );
+
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+        assert!(
+            editor
+                .state()
+                .view()
+                .root()
+                .expect("root")
+                .children()
+                .all(|child| match child {
+                    ChildView::Block(block) => {
+                        !matches!(block.node_type(), NodeType::Image | NodeType::File)
+                    }
+                    ChildView::Leaf(leaf) => {
+                        !matches!(leaf.node_type(), NodeType::Image | NodeType::File)
+                    }
+                })
+        );
+    }
+
+    #[test]
+    fn placeholder_batch_inserts_after_selected_existing_placeholder() {
+        let (state, root, existing_image) = state! {
+            doc { root: root {
+                existing_image: image
+            } }
+            selection: (root, 0, >) -> (root, 1, <)
+        };
+        let mut editor = Editor::new_test(state);
+
+        let events = editor.apply(Message::Insertion {
+            op: InsertionOp::AttachmentPlaceholders {
+                request_id: "after-existing".into(),
+                kinds: vec![AttachmentPlaceholderKind::Image],
+            },
+        });
+
+        let node_ids = events
+            .iter()
+            .find_map(|event| match event {
+                EditorEvent::AttachmentPlaceholdersInserted {
+                    request_id,
+                    node_ids,
+                } if request_id == "after-existing" => Some(node_ids),
+                _ => None,
+            })
+            .expect("matching placeholder result");
+        let children = editor
+            .state()
+            .view()
+            .node(root)
+            .expect("root")
+            .children()
+            .map(|child| match child {
+                ChildView::Block(block) => (block.id(), block.node_type()),
+                ChildView::Leaf(leaf) => (leaf.dot(), leaf.node_type()),
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(children.len(), 3);
+        assert_eq!(children[0], (existing_image, NodeType::Image));
+        assert_eq!(children[1].1, NodeType::Image);
+        assert_eq!(children[2].1, NodeType::Paragraph);
+        assert_eq!(node_ids, &vec![children[1].0]);
+    }
+
+    #[test]
+    fn empty_or_rejected_placeholder_batch_emits_no_success_result() {
+        let (mut state, _p) = state! {
+            doc { root { p: paragraph } }
+            selection: (p, 0)
+        };
+        state.selection = None;
+        let mut editor = Editor::new_test(state);
+
+        let empty = editor.apply(Message::Insertion {
+            op: InsertionOp::AttachmentPlaceholders {
+                request_id: "empty".into(),
+                kinds: vec![],
+            },
+        });
+        let rejected = editor.apply(Message::Insertion {
+            op: InsertionOp::AttachmentPlaceholders {
+                request_id: "rejected".into(),
+                kinds: vec![AttachmentPlaceholderKind::Image],
+            },
+        });
+
+        assert!(
+            !empty
+                .iter()
+                .any(|event| matches!(event, EditorEvent::AttachmentPlaceholdersInserted { .. }))
+        );
+        assert!(
+            !rejected
+                .iter()
+                .any(|event| matches!(event, EditorEvent::AttachmentPlaceholdersInserted { .. }))
+        );
+    }
+
+    #[test]
+    fn placeholder_batch_result_excludes_existing_nodes_in_nested_container() {
+        let (state, content, existing_image, existing_file, _p) = state! {
+            doc { root {
+                fold {
+                    fold_title { text("Title") }
+                    content: fold_content {
+                        existing_image: image
+                        existing_file: file
+                        p: paragraph
+                    }
+                }
+                paragraph
+            } }
+            selection: (p, 0)
+        };
+        let mut editor = Editor::new_test(state);
+
+        let events = editor.apply(Message::Insertion {
+            op: InsertionOp::AttachmentPlaceholders {
+                request_id: "request-with-existing".into(),
+                kinds: vec![
+                    AttachmentPlaceholderKind::File,
+                    AttachmentPlaceholderKind::Image,
+                ],
+            },
+        });
+
+        let node_ids = events
+            .iter()
+            .find_map(|event| match event {
+                EditorEvent::AttachmentPlaceholdersInserted {
+                    request_id,
+                    node_ids,
+                } if request_id == "request-with-existing" => Some(node_ids),
+                _ => None,
+            })
+            .expect("matching placeholder result");
+        assert!(
+            node_ids
+                .iter()
+                .all(|node_id| *node_id != existing_image && *node_id != existing_file)
+        );
+
+        let view = editor.state().view();
+        let inserted_node_ids = view
+            .node(content)
+            .expect("fold content")
+            .children()
+            .filter_map(|child| match child {
+                ChildView::Block(block) => Some((block.id(), block.node_type())),
+                ChildView::Leaf(leaf) => Some((leaf.dot(), leaf.node_type())),
+            })
+            .filter(|(node_id, node_type)| {
+                *node_id != existing_image
+                    && *node_id != existing_file
+                    && matches!(node_type, NodeType::Image | NodeType::File)
+            })
+            .map(|(node_id, _)| node_id)
+            .collect::<Vec<_>>();
+        assert_eq!(node_ids, &inserted_node_ids);
+    }
 
     #[test]
     fn insert_text_into_paragraph_changes_state() {

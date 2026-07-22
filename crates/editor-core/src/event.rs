@@ -1,3 +1,4 @@
+use editor_crdt::Dot;
 use editor_macros::ffi;
 use serde::{Deserialize, Serialize};
 
@@ -55,5 +56,9 @@ pub enum EditorEvent {
     },
     ProseRangeInstallResult {
         outcome: ProseRangeInstallOutcome,
+    },
+    AttachmentPlaceholdersInserted {
+        request_id: String,
+        node_ids: Vec<Dot>,
     },
 }

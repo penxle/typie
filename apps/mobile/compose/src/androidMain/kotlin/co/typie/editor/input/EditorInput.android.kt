@@ -13,6 +13,7 @@ import androidx.compose.ui.platform.PlatformTextInputSessionScope
 import androidx.compose.ui.text.input.EditCommand
 import co.typie.editor.Editor
 import co.typie.editor.scroll.EditorBringIntoViewRequests
+import co.typie.platform.IncomingContentCandidates
 import java.util.WeakHashMap
 
 // Keyed per editor so notifyImeStateChanged can forward extracted-text
@@ -30,6 +31,7 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
   textClippingRectInRoot: () -> Rect?,
   suppressSoftwareKeyboard: Boolean,
   isSessionCurrent: () -> Boolean,
+  onIncomingContent: (IncomingContentCandidates) -> Boolean,
 ): PlatformTextInputMethodRequest {
   val androidView = view
   val extractMonitor = ImeExtractMonitor()
@@ -40,6 +42,7 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
         InputType.TYPE_TEXT_FLAG_MULTI_LINE or
         InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
     outAttrs.imeOptions = EditorInfo.IME_ACTION_NONE or EditorInfo.IME_FLAG_NO_EXTRACT_UI
+    outAttrs.contentMimeTypes = arrayOf("*/*")
     val ctx = editor.tickIme
     outAttrs.initialSelStart = ctx?.let { it.windowUtf16Offset(it.selection.start) } ?: -1
     outAttrs.initialSelEnd = ctx?.let { it.windowUtf16Offset(it.selection.end) } ?: -1
@@ -50,6 +53,7 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
         bringIntoViewRequests = bringIntoViewRequests,
         extractMonitor = extractMonitor,
         isSessionCurrent = isSessionCurrent,
+        onIncomingContent = onIncomingContent,
       )
     if (suppressSoftwareKeyboard) {
       androidView.post { hideEditorSoftwareKeyboard(androidView) }

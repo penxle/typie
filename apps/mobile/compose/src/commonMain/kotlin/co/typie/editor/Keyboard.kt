@@ -26,6 +26,7 @@ import co.typie.editor.ffi.SelectionExpansionUnit
 import co.typie.editor.ffi.SelectionOp
 import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.platform.Clipboard
+import co.typie.platform.IncomingContentMode
 import co.typie.platform.Platform
 
 internal enum class KeyModifier {
@@ -35,17 +36,41 @@ internal enum class KeyModifier {
   Alt,
 }
 
+internal sealed interface EditorKeyBindingAction {
+  data class Messages(
+    // Only actions that emit constant messages without reading editor or clipboard state may
+    // coalesce with neighboring key events.
+    val coalescible: Boolean,
+    val messages: suspend Editor.(Clipboard) -> List<Message>,
+  ) : EditorKeyBindingAction
+
+  data class Paste(val mode: IncomingContentMode) : EditorKeyBindingAction
+}
+
 internal data class KeyBinding(
   val key: ComposeKey,
   val modifiers: Set<KeyModifier> = emptySet(),
   val predicate: (() -> Boolean)? = null,
   val bringIntoViewTarget: EditorBringIntoViewTarget? =
     EditorBringIntoViewTarget.CurrentSelectionHead,
-  // Only bindings whose action emits constant messages without reading editor or
-  // clipboard state may coalesce with neighboring key events.
-  val coalescible: Boolean = true,
-  val action: suspend Editor.(Clipboard) -> List<Message>,
-)
+  val action: EditorKeyBindingAction,
+) {
+  constructor(
+    key: ComposeKey,
+    modifiers: Set<KeyModifier> = emptySet(),
+    predicate: (() -> Boolean)? = null,
+    bringIntoViewTarget: EditorBringIntoViewTarget? =
+      EditorBringIntoViewTarget.CurrentSelectionHead,
+    coalescible: Boolean = true,
+    action: suspend Editor.(Clipboard) -> List<Message>,
+  ) : this(
+    key = key,
+    modifiers = modifiers,
+    predicate = predicate,
+    bringIntoViewTarget = bringIntoViewTarget,
+    action = EditorKeyBindingAction.Messages(coalescible = coalescible, messages = action),
+  )
+}
 
 private fun move(movement: Movement, extend: Boolean): Message =
   Message.Navigation(NavigationOp.Move(movement, extend))
@@ -372,20 +397,12 @@ internal fun createBindings(platform: Platform): List<KeyBinding> {
     KeyBinding(
       ComposeKey.V,
       setOf(KeyModifier.Mod),
-      coalescible = false,
-      action = { clipboard ->
-        val read = clipboard.paste() ?: return@KeyBinding emptyList()
-        listOf(Message.Clipboard(ClipboardOp.Paste(html = read.html, text = read.text)))
-      },
+      action = EditorKeyBindingAction.Paste(IncomingContentMode.Rich),
     ),
     KeyBinding(
       ComposeKey.V,
       setOf(KeyModifier.Mod, KeyModifier.Shift),
-      coalescible = false,
-      action = { clipboard ->
-        val read = clipboard.paste() ?: return@KeyBinding emptyList()
-        listOf(Message.Clipboard(ClipboardOp.Paste(html = null, text = read.text)))
-      },
+      action = EditorKeyBindingAction.Paste(IncomingContentMode.PlainTextOnly),
     ),
     KeyBinding(
       ComposeKey.A,

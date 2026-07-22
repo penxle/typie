@@ -28,6 +28,7 @@ import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.SystemEvent
 import co.typie.editor.ffi.ThemeVariant
 import co.typie.editor.ffi.Viewport
+import co.typie.editor.input.LocalEditorIncomingContentHandler
 import co.typie.editor.input.editorInput
 import co.typie.editor.overlay.EditorCursorOverlay
 import co.typie.editor.overlay.EditorLineHighlightOverlay
@@ -57,6 +58,7 @@ internal fun EditorView(
   val runtime = LocalEditorRuntime.current
   val uiState = LocalEditorUiState.current
   val bringIntoViewRequests = LocalEditorBringIntoViewRequests.current
+  val incomingContentHandler = LocalEditorIncomingContentHandler.current
   val zoomController = LocalEditorZoomController.current
   val displayZoom = zoomController.displayZoom
   val themeVariant = currentEditorThemeVariant()
@@ -184,6 +186,7 @@ internal fun EditorView(
             bringIntoViewRequests = bringIntoViewRequests,
             suppressSoftwareKeyboard = suppressSoftwareKeyboard,
             clipboard = PlatformModule.clipboard,
+            incomingContentHandler = incomingContentHandler,
           )
           .focusable()
       } else {

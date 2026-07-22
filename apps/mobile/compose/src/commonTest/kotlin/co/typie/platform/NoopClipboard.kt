@@ -7,5 +7,5 @@ internal object NoopClipboard : Clipboard {
 
   override suspend fun copyRichText(html: String, text: String): Boolean = false
 
-  override suspend fun paste(): ClipboardReadPayload? = null
+  override suspend fun paste(): IncomingContentCandidates? = null
 }

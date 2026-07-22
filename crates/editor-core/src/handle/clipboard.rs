@@ -1141,6 +1141,28 @@ mod tests {
     }
 
     #[test]
+    fn paste_mixed_external_html_preserves_text_and_omits_image() {
+        let (state, ..) = state! {
+            doc { root { p: paragraph {} } }
+            selection: (p, 0)
+        };
+        let mut editor = Editor::new_test(state);
+
+        editor.apply(Message::Clipboard {
+            op: ClipboardOp::Paste {
+                html: Some(r#"<p>before<img src="https://example.com/image.png">after</p>"#.into()),
+                text: "before after".into(),
+            },
+        });
+
+        let (expected, ..) = state! {
+            doc { root { p: paragraph { text("beforeafter") } } }
+            selection: (p, 11)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
     fn repaste_as_text_replaces_paste_region_with_plain() {
         let (s_source, ..) = state! {
             doc { root { p1: paragraph { text("hello") [bold] } } }

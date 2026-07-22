@@ -11,10 +11,12 @@ import co.typie.editor.ffi.Movement
 import co.typie.editor.ffi.NavigationOp
 import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.platform.Clipboard
-import co.typie.platform.ClipboardReadPayload
+import co.typie.platform.IncomingContentCandidates
+import co.typie.platform.IncomingContentMode
 import co.typie.platform.Platform
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.TestScope
@@ -93,9 +95,9 @@ class KeyboardTest {
   fun navigationBindingsRevealCurrentSelectionHead() = runTest {
     val editor = Editor(FakeFfiEditor(), this, Dispatchers.Unconfined)
     val navigationBindings =
-      createBindings(Platform.Desktop).filter { binding ->
-        with(binding) { editor.action(NoopClipboard) }.singleOrNull() is Message.Navigation
-      }
+      createBindings(Platform.Desktop)
+        .filter { binding -> binding.action is EditorKeyBindingAction.Messages }
+        .filter { binding -> binding.resolveMessages(editor).singleOrNull() is Message.Navigation }
 
     assertTrue(navigationBindings.isNotEmpty())
     navigationBindings.forEach { binding ->
@@ -115,7 +117,7 @@ class KeyboardTest {
       }
     val editor = Editor(FakeFfiEditor(), this, Dispatchers.Unconfined)
 
-    val messages = with(binding) { editor.action(NoopClipboard) }
+    val messages = binding.resolveMessages(editor)
 
     assertEquals(
       listOf(Message.Key(FfiKeyEvent(FfiKey.Enter, InputModifiers(shift = true)))),
@@ -129,10 +131,7 @@ class KeyboardTest {
       createBindings(Platform.Desktop).single { it.key == ComposeKey.Tab && it.modifiers.isEmpty() }
     val editor = Editor(FakeFfiEditor(), this, Dispatchers.Unconfined)
 
-    assertEquals(
-      listOf(Message.Key(FfiKeyEvent(FfiKey.Tab))),
-      with(binding) { editor.action(NoopClipboard) },
-    )
+    assertEquals(listOf(Message.Key(FfiKeyEvent(FfiKey.Tab))), binding.resolveMessages(editor))
   }
 
   @Test
@@ -145,7 +144,21 @@ class KeyboardTest {
 
     assertEquals(
       listOf(Message.Key(FfiKeyEvent(FfiKey.Tab, InputModifiers(shift = true)))),
-      with(binding) { editor.action(NoopClipboard) },
+      binding.resolveMessages(editor),
+    )
+  }
+
+  @Test
+  fun pasteBindingsDeclarePasteActions() {
+    val pasteBindings = createBindings(Platform.Desktop).filter { it.key == ComposeKey.V }
+
+    assertEquals(
+      EditorKeyBindingAction.Paste(IncomingContentMode.Rich),
+      pasteBindings.single { it.modifiers == setOf(KeyModifier.Mod) }.action,
+    )
+    assertEquals(
+      EditorKeyBindingAction.Paste(IncomingContentMode.PlainTextOnly),
+      pasteBindings.single { it.modifiers == setOf(KeyModifier.Mod, KeyModifier.Shift) }.action,
     )
   }
 
@@ -158,9 +171,14 @@ class KeyboardTest {
       createBindings(Platform.Desktop).single { it.key == key && it.modifiers == modifiers }
     val editor = Editor(FakeFfiEditor(), this, Dispatchers.Unconfined)
 
-    val messages = with(binding) { editor.action(NoopClipboard) }
+    val messages = binding.resolveMessages(editor)
 
     assertEquals(listOf(Message.Navigation(NavigationOp.Move(expected, extend = true))), messages)
+  }
+
+  private suspend fun KeyBinding.resolveMessages(editor: Editor): List<Message> {
+    val action = assertIs<EditorKeyBindingAction.Messages>(action)
+    return action.messages(editor, NoopClipboard)
   }
 
   private object NoopClipboard : Clipboard {
@@ -170,6 +188,6 @@ class KeyboardTest {
 
     override suspend fun copyRichText(html: String, text: String): Boolean = true
 
-    override suspend fun paste(): ClipboardReadPayload? = null
+    override suspend fun paste(): IncomingContentCandidates? = null
   }
 }

@@ -22,6 +22,7 @@ import androidx.compose.ui.text.input.EditCommand
 import co.typie.editor.DocumentEditingSession
 import co.typie.editor.Editor
 import co.typie.editor.EditorEventListener
+import co.typie.editor.EditorKeyBindingAction
 import co.typie.editor.EditorState
 import co.typie.editor.KeyBinding
 import co.typie.editor.createBindings
@@ -45,8 +46,10 @@ import co.typie.ext.TextInputKey
 import co.typie.ext.notifyTextInputFocusChanged
 import co.typie.ext.registerTextInputClient
 import co.typie.platform.Clipboard
+import co.typie.platform.IncomingContentCandidates
 import co.typie.platform.Platform
 import kotlin.coroutines.CoroutineContext
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -62,6 +65,7 @@ internal fun Modifier.editorInput(
   enabled: Boolean = true,
   suppressSoftwareKeyboard: Boolean,
   clipboard: Clipboard,
+  incomingContentHandler: EditorIncomingContentHandler = NoopEditorIncomingContentHandler,
 ): Modifier =
   this then
     EditorInputElement(
@@ -72,6 +76,7 @@ internal fun Modifier.editorInput(
       enabled = enabled,
       suppressSoftwareKeyboard = suppressSoftwareKeyboard,
       clipboard = clipboard,
+      incomingContentHandler = incomingContentHandler,
     )
 
 @OptIn(ExperimentalComposeUiApi::class)
@@ -84,6 +89,7 @@ internal expect suspend fun PlatformTextInputSessionScope.createEditorInputReque
   textClippingRectInRoot: () -> Rect?,
   suppressSoftwareKeyboard: Boolean,
   isSessionCurrent: () -> Boolean,
+  onIncomingContent: (IncomingContentCandidates) -> Boolean,
 ): PlatformTextInputMethodRequest
 
 internal expect fun requiresEditorInputSessionRestartForSoftwareKeyboardSuppression(): Boolean
@@ -164,6 +170,7 @@ private data class EditorInputElement(
   private val enabled: Boolean,
   private val suppressSoftwareKeyboard: Boolean,
   private val clipboard: Clipboard,
+  private val incomingContentHandler: EditorIncomingContentHandler,
 ) : ModifierNodeElement<EditorInputNode>() {
   override fun create(): EditorInputNode =
     EditorInputNode(
@@ -174,6 +181,7 @@ private data class EditorInputElement(
       enabled = enabled,
       suppressSoftwareKeyboard = suppressSoftwareKeyboard,
       clipboard = clipboard,
+      incomingContentHandler = incomingContentHandler,
     )
 
   override fun update(node: EditorInputNode) {
@@ -183,6 +191,7 @@ private data class EditorInputElement(
     node.updatePlatform(platform)
     node.bringIntoViewRequests = bringIntoViewRequests
     node.clipboard = clipboard
+    node.incomingContentHandler = incomingContentHandler
     node.updateInputPolicy(enabled = enabled, suppressSoftwareKeyboard = suppressSoftwareKeyboard)
     if (node.session.editor !== previousEditor) {
       node.bindImeResync()
@@ -199,6 +208,7 @@ internal class EditorInputNode(
   enabled: Boolean,
   suppressSoftwareKeyboard: Boolean,
   var clipboard: Clipboard,
+  var incomingContentHandler: EditorIncomingContentHandler,
 ) : Modifier.Node(), FocusEventModifierNode, PlatformTextInputModifierNode, KeyInputModifierNode {
   private var focusedJob: Job? = null
   private var focused = false
@@ -277,7 +287,7 @@ internal class EditorInputNode(
     bindingCoalescer =
       EditorKeyBindingCoalescer(
         scope = coroutineScope,
-        resolveMessages = { binding, clipboard -> with(binding) { editor.action(clipboard) } },
+        resolveMessages = { action, clipboard -> action.messages(editor, clipboard) },
         dispatch = { messages, bringIntoViewTarget ->
           dispatchBindingMessages(messages = messages, bringIntoViewTarget = bringIntoViewTarget)
         },
@@ -287,10 +297,64 @@ internal class EditorInputNode(
 
   private fun dispatchBinding(binding: KeyBinding, clipboard: Clipboard) {
     val coalescer = bindingCoalescer ?: return
-    if (binding.coalescible) {
-      submit { _, localEdit -> coalescer.submit(binding, clipboard, localEdit) }
-    } else {
-      coroutineScope.launch { coalescer.submit(binding, clipboard).await() }
+    when (val action = binding.action) {
+      is EditorKeyBindingAction.Paste -> {
+        val capturedSession = session
+        val completion = coalescer.submitOrdered {
+          incomingContentHandler.handleClipboard(capturedSession, clipboard, action.mode)
+        }
+        coroutineScope.launch { completion.await() }
+      }
+      is EditorKeyBindingAction.Messages -> {
+        if (action.coalescible) {
+          submit { _, localEdit -> coalescer.submit(binding, clipboard, localEdit) }
+        } else {
+          val completion = coalescer.submit(binding, clipboard)
+          coroutineScope.launch { completion.await() }
+        }
+      }
+    }
+  }
+
+  private fun dispatchPreKeyBinding(binding: KeyBinding, clipboard: Clipboard) {
+    val coalescer = bindingCoalescer ?: return
+    when (val action = binding.action) {
+      is EditorKeyBindingAction.Paste -> dispatchBinding(binding, clipboard)
+      is EditorKeyBindingAction.Messages -> {
+        val preState = editor.state
+        // iOS can echo a native selection before this key's queued commit. Constant message
+        // actions are safe to resolve and register immediately; stateful or clipboard actions
+        // resolve inside the ordered queue so their side effects cannot overtake paste.
+        if (action.coalescible) {
+          coroutineScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            val messages = action.messages(editor, clipboard)
+            platformInputBridge.dispatchAppOwnedKeyMessages(messages, preState) {
+              var postState: EditorState? = null
+              coalescer
+                .submitOrdered {
+                  postState =
+                    dispatchBindingMessages(
+                      messages = messages,
+                      bringIntoViewTarget = binding.bringIntoViewTarget,
+                    )
+                }
+                .await()
+              postState
+            }
+          }
+        } else {
+          val completion = coalescer.submitOrdered {
+            val messages = action.messages(editor, clipboard)
+            platformInputBridge.dispatchAppOwnedKeyMessages(messages, preState) {
+              dispatchBindingMessages(
+                messages = messages,
+                bringIntoViewTarget = binding.bringIntoViewTarget,
+              )
+            }
+          }
+          coroutineScope.launch { completion.await() }
+        }
+      }
     }
   }
 
@@ -512,15 +576,8 @@ internal class EditorInputNode(
     val consumed =
       platformInputBridge.onPreKeyEvent(
         event = event,
-        editorState = { editor.state },
         inputCoroutineScope = coroutineScope,
-        bindingMessages = { with(binding) { editor.action(clipboard) } },
-        commit = { messages ->
-          dispatchBindingMessages(
-            messages = messages,
-            bringIntoViewTarget = binding.bringIntoViewTarget,
-          )
-        },
+        onAccepted = { dispatchPreKeyBinding(binding, clipboard) },
       )
     recordHardwareKey(
       event = event,
@@ -617,6 +674,20 @@ internal class EditorInputNode(
                   textClippingRectInRoot = uiState::textClippingRectInRoot,
                   suppressSoftwareKeyboard = suppressSoftwareKeyboard,
                   isSessionCurrent = { imeSessionGeneration == generationAtStart },
+                  onIncomingContent = { candidates ->
+                    if (imeSessionGeneration != generationAtStart || !focused || !enabled) {
+                      candidates.close()
+                      false
+                    } else {
+                      val commandStartSession = session
+                      coroutineScope
+                        .launch {
+                          incomingContentHandler.handleCandidates(commandStartSession, candidates)
+                        }
+                        .invokeOnCompletion { candidates.close() }
+                      true
+                    }
+                  },
                 )
               launch {
                 notifyImeStateChanged(editor)

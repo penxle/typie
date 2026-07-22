@@ -23,6 +23,7 @@ import co.typie.editor.ffi.Message
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.editor.scroll.syncWithBringIntoView
+import co.typie.platform.IncomingContentCandidates
 
 @OptIn(ExperimentalComposeUiApi::class)
 internal actual suspend fun PlatformTextInputSessionScope.createEditorInputRequest(
@@ -34,6 +35,7 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
   textClippingRectInRoot: () -> Rect?,
   suppressSoftwareKeyboard: Boolean,
   isSessionCurrent: () -> Boolean,
+  onIncomingContent: (IncomingContentCandidates) -> Boolean,
 ): PlatformTextInputMethodRequest {
   return object : PlatformTextInputMethodRequest {
     override val value: () -> TextFieldValue = {

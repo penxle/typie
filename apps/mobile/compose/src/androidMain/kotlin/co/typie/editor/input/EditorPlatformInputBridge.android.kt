@@ -13,11 +13,17 @@ internal actual class EditorPlatformInputBridge actual constructor() {
 
   actual fun onPreKeyEvent(
     event: KeyEvent,
-    editorState: () -> EditorState,
     inputCoroutineScope: CoroutineScope,
-    bindingMessages: suspend () -> List<Message>,
-    commit: suspend (List<Message>) -> EditorState?,
+    onAccepted: () -> Unit,
   ): Boolean = false
+
+  actual suspend fun dispatchAppOwnedKeyMessages(
+    messages: List<Message>,
+    preState: EditorState,
+    dispatch: suspend () -> EditorState?,
+  ) {
+    dispatch()
+  }
 
   actual fun shouldConsumeKeyEvent(event: KeyEvent): Boolean = false
 

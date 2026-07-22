@@ -5,11 +5,15 @@ import java.awt.Toolkit
 import java.awt.datatransfer.DataFlavor
 import java.awt.datatransfer.StringSelection
 import java.awt.datatransfer.Transferable
+import java.awt.image.BufferedImage
 import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.io.File
 import javax.imageio.ImageIO
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.io.asSource
+import kotlinx.io.buffered
 
 internal class DesktopDeviceInfo : DeviceInfo {
   override fun retrieve(): DeviceInfoData {
@@ -62,31 +66,132 @@ internal class DesktopClipboard : Clipboard {
         .getOrDefault(false)
     }
 
-  override suspend fun paste(): ClipboardReadPayload? =
+  override suspend fun paste(): IncomingContentCandidates? =
     withContext(Dispatchers.IO) {
       runCatching {
-        val contents = Toolkit.getDefaultToolkit().systemClipboard.getContents(null)
-        val text =
-          if (contents.isDataFlavorSupported(DataFlavor.stringFlavor)) {
-            contents.getTransferData(DataFlavor.stringFlavor) as? String
-          } else {
-            null
-          } ?: return@runCatching null
-
-        val html =
-          if (contents.isDataFlavorSupported(DataFlavor.allHtmlFlavor)) {
-            when (val data = contents.getTransferData(DataFlavor.allHtmlFlavor)) {
-              is String -> data
-              is java.io.Reader -> data.readText()
-              else -> null
-            }
-          } else {
-            null
-          }
-        ClipboardReadPayload(html = html, text = text)
-      }
+          val contents =
+            Toolkit.getDefaultToolkit().systemClipboard.getContents(null) ?: return@runCatching null
+          contents.readIncomingContentCandidates()
+        }
         .getOrNull()
     }
+}
+
+internal fun Transferable.readString(flavor: DataFlavor): String? {
+  if (!isDataFlavorSupported(flavor)) return null
+  return runCatching {
+      when (val data = getTransferData(flavor)) {
+        is String -> data
+        is java.io.Reader -> data.use(java.io.Reader::readText)
+        else -> null
+      }
+    }
+    .getOrNull()
+}
+
+internal fun Transferable.readHtml(): String? =
+  listOf(DataFlavor.allHtmlFlavor, DataFlavor.fragmentHtmlFlavor, DataFlavor.selectionHtmlFlavor)
+    .firstNotNullOfOrNull { flavor -> readString(flavor)?.takeIf(String::isNotEmpty) }
+
+internal suspend fun Transferable.readIncomingContentCandidates(): IncomingContentCandidates? =
+  materializeIncomingContentCandidates(
+    html = readHtml(),
+    text = readString(DataFlavor.stringFlavor),
+    loadItems = ::readAttachmentItems,
+  )
+
+internal fun Transferable.readAttachmentItems(): LoadedIncomingContentItems {
+  if (isDataFlavorSupported(DataFlavor.javaFileListFlavor)) {
+    val transferred = runCatching { getTransferData(DataFlavor.javaFileListFlavor) as? List<*> }
+    if (transferred.isFailure) {
+      return LoadedIncomingContentItems(emptyList(), unreadableItemCount = 1)
+    }
+    val transferredFiles =
+      transferred.getOrNull()
+        ?: return LoadedIncomingContentItems(emptyList(), unreadableItemCount = 1)
+    val files = transferredFiles.filterIsInstance<File>()
+    if (transferredFiles.isNotEmpty()) {
+      val outcomes = files.map { file ->
+        runCatching {
+          check(file.isFile && file.canRead()) { "Clipboard file is unreadable" }
+          val mimeType = file.probeContentType()
+          val image =
+            if (mimeType?.substringBefore('/') == "image") {
+              checkNotNull(file.decodeImageOrNull()) { "Clipboard image is unreadable" }
+            } else {
+              null
+            }
+          IncomingContentItem(
+            kind =
+              if (mimeType?.substringBefore('/') == "image") {
+                IncomingContentItem.Kind.Image
+              } else {
+                IncomingContentItem.Kind.File
+              },
+            file =
+              PickedFile(
+                filename = file.name,
+                mimeType = mimeType,
+                size = file.length(),
+                previewModel = file,
+                imageWidth = image?.width,
+                imageHeight = image?.height,
+                openSource = { file.inputStream().asSource().buffered() },
+              ),
+          )
+        }
+      }
+      return LoadedIncomingContentItems(
+        items = outcomes.mapNotNull(Result<IncomingContentItem>::getOrNull),
+        unreadableItemCount =
+          transferredFiles.size - files.size +
+            outcomes.count(Result<IncomingContentItem>::isFailure),
+      )
+    }
+  }
+
+  if (!isDataFlavorSupported(DataFlavor.imageFlavor)) return LoadedIncomingContentItems(emptyList())
+  return runCatching {
+      val image = checkNotNull(getTransferData(DataFlavor.imageFlavor) as? Image)
+      val buffered = checkNotNull(image.toBufferedImageOrNull())
+      val bytes =
+        ByteArrayOutputStream().use { output ->
+          check(ImageIO.write(buffered, "png", output))
+          output.toByteArray()
+        }
+      IncomingContentItem(
+        kind = IncomingContentItem.Kind.Image,
+        file =
+          PickedFile(
+            filename = "image.png",
+            mimeType = "image/png",
+            size = bytes.size.toLong(),
+            previewModel = buffered,
+            imageWidth = buffered.width,
+            imageHeight = buffered.height,
+            openSource = { ByteArrayInputStream(bytes).asSource().buffered() },
+          ),
+      )
+    }
+    .fold(
+      onSuccess = { item -> LoadedIncomingContentItems(listOf(item)) },
+      onFailure = { LoadedIncomingContentItems(emptyList(), unreadableItemCount = 1) },
+    )
+}
+
+private fun Image.toBufferedImageOrNull(): BufferedImage? {
+  if (this is BufferedImage) return this
+  val width = getWidth(null)
+  val height = getHeight(null)
+  if (width <= 0 || height <= 0) return null
+  return BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB).also { buffered ->
+    val graphics = buffered.createGraphics()
+    try {
+      graphics.drawImage(this, 0, 0, null)
+    } finally {
+      graphics.dispose()
+    }
+  }
 }
 
 internal class ImageTransferable(private val image: Image) : Transferable {
@@ -124,17 +229,17 @@ internal class DesktopFileSystem : FileSystem {
   ): FileSystemSaveResult =
     withContext(Dispatchers.IO) {
       runCatching {
-        val directory =
-          when (location) {
-            FileSystemSaveLocation.Gallery -> File(System.getProperty("user.home"), "Pictures")
-            FileSystemSaveLocation.Files -> File(System.getProperty("user.home"), "Downloads")
-          }
-        directory.mkdirs()
+          val directory =
+            when (location) {
+              FileSystemSaveLocation.Gallery -> File(System.getProperty("user.home"), "Pictures")
+              FileSystemSaveLocation.Files -> File(System.getProperty("user.home"), "Downloads")
+            }
+          directory.mkdirs()
 
-        val file = uniqueFile(directory, name)
-        file.writeBytes(bytes)
-        FileSystemSaveResult.Success
-      }
+          val file = uniqueFile(directory, name)
+          file.writeBytes(bytes)
+          FileSystemSaveResult.Success
+        }
         .getOrElse { FileSystemSaveResult.Error }
     }
 }

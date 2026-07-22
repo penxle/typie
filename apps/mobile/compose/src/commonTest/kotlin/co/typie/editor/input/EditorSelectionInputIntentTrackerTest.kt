@@ -308,6 +308,44 @@ class EditorSelectionInputIntentTrackerTest {
     )
   }
 
+  @Test
+  fun `late non navigation dispatch cannot clear newer in flight intent`() {
+    val tracker = EditorSelectionInputIntentTracker(staleTimeoutMillis = 1_000L)
+    val messages = listOf(move(direction = Direction.Forward, extend = false))
+    val preState = state(version = 1L, selection = ImeRange(18, 18))
+
+    val token =
+      tracker.recordAppOwnedDispatch(messages = messages, preState = preState, nowMillis = 0L)
+        ?: error("expected selection dispatch token")
+    tracker.recordAppOwnedDispatch(messages = emptyList(), preState = preState, nowMillis = 1L)
+
+    assertEquals(
+      EditorSelectionInputDecision.DropNativeSelectionCommand,
+      tracker.classifyNativeSelectionCommands(
+        commands = listOf(SetSelectionCommand(19, 19)),
+        state = preState,
+        nowMillis = 2L,
+      ),
+    )
+
+    tracker.recordAppOwnedCommit(
+      token = token,
+      messages = messages,
+      preState = preState,
+      postState = state(version = 2L, selection = ImeRange(19, 19)),
+      nowMillis = 3L,
+    )
+
+    assertEquals(
+      EditorSelectionInputDecision.DropNativeSelectionCommand,
+      tracker.classifyNativeSelectionCommands(
+        commands = listOf(SetSelectionCommand(19, 19)),
+        state = state(version = 2L, selection = ImeRange(19, 19)),
+        nowMillis = 4L,
+      ),
+    )
+  }
+
   private fun move(direction: Direction, extend: Boolean): Message =
     Message.Navigation(NavigationOp.Move(Movement.Grapheme(direction), extend))
 

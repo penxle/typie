@@ -601,6 +601,8 @@ export type Alignment = "left" | "center" | "right" | "justify";
 
 export type ArchivedNodeAttr = { type: "id"; value: string | undefined };
 
+export type AttachmentPlaceholderKind = "image" | "file";
+
 export type Axis = "horizontal" | "vertical";
 
 export type BlockOp = { type: "toggle_blockquote"; variant: BlockquoteVariant } | { type: "toggle_callout" } | { type: "wrap_fold" };
@@ -631,7 +633,7 @@ export type DndOp = { type: "start_internal_selection" } | { type: "enter_extern
 
 export type Dot = string;
 
-export type EditorEvent = { type: "state_changed"; fields: StateField[] } | { type: "render_invalidated" } | { type: "font_data_missing"; family: string; weight: number; required: FontData[]; prefetch: FontData[] } | { type: "cursor_exited_document_start" } | { type: "ime_resync_required" } | { type: "tracked_range_replace_result"; id: string; outcome: TrackedRangeReplaceOutcome } | { type: "prose_range_install_result"; outcome: ProseRangeInstallOutcome };
+export type EditorEvent = { type: "state_changed"; fields: StateField[] } | { type: "render_invalidated" } | { type: "font_data_missing"; family: string; weight: number; required: FontData[]; prefetch: FontData[] } | { type: "cursor_exited_document_start" } | { type: "ime_resync_required" } | { type: "tracked_range_replace_result"; id: string; outcome: TrackedRangeReplaceOutcome } | { type: "prose_range_install_result"; outcome: ProseRangeInstallOutcome } | { type: "attachment_placeholders_inserted"; request_id: string; node_ids: Dot[] };
 
 export type Effect = { load_font: { family: string; weight: number; codepoints: number[] } };
 
@@ -669,7 +671,7 @@ export type HorizontalRuleVariant = "line" | "dashed_line" | "circle_line" | "di
 
 export type ImageNodeAttr = { type: "id"; value: string | undefined } | { type: "proportion"; value: number };
 
-export type InsertionOp = { type: "text"; text: string } | { type: "break"; kind: Break } | { type: "fragment"; fragment: Fragment } | { type: "table"; rows: number; cols: number };
+export type InsertionOp = { type: "text"; text: string } | { type: "break"; kind: Break } | { type: "fragment"; fragment: Fragment } | { type: "table"; rows: number; cols: number } | { type: "attachment_placeholders"; request_id: string; kinds: AttachmentPlaceholderKind[] };
 
 export type InteractiveHit = { type: "fold_title"; id: Dot; text_rect: Rect | undefined } | { type: "callout_icon"; id: Dot; next_variant: CalloutVariant };
 

@@ -208,7 +208,7 @@ private suspend fun NSItemProvider.loadSelectedImage(): Result<PickedFile> {
       )
   val type = UTType.typeWithIdentifier(typeIdentifier)
   val mimeType = type?.preferredMIMEType
-  val filename = imageFilename(suggestedName, type?.preferredFilenameExtension, mimeType)
+  val filename = providerFilename(suggestedName, type?.preferredFilenameExtension, mimeType)
 
   return suspendCancellableCoroutine { continuation ->
     var progress: NSProgress? = null
@@ -243,7 +243,7 @@ private suspend fun NSItemProvider.loadSelectedImage(): Result<PickedFile> {
   }
 }
 
-private fun NSURL.toPickedImage(filename: String, mimeType: String?): PickedFile {
+internal fun NSURL.toPickedImage(filename: String, mimeType: String?): PickedFile {
   val path = requireNotNull(path) { "Selected image path is unavailable" }
   val image = UIImage.imageWithContentsOfFile(path) ?: error("Unable to decode the selected image")
   return toPickedFile(
@@ -255,7 +255,7 @@ private fun NSURL.toPickedImage(filename: String, mimeType: String?): PickedFile
   )
 }
 
-private fun NSURL.toPickedFile(owned: Boolean): PickedFile {
+internal fun NSURL.toPickedFile(owned: Boolean): PickedFile {
   val inferredType =
     pathExtension?.takeIf(String::isNotBlank)?.let(UTType::typeWithFilenameExtension)
   return toPickedFile(
@@ -265,7 +265,7 @@ private fun NSURL.toPickedFile(owned: Boolean): PickedFile {
   )
 }
 
-private fun NSURL.toPickedFile(
+internal fun NSURL.toPickedFile(
   filename: String,
   mimeType: String?,
   imageWidth: Int? = null,
@@ -286,7 +286,7 @@ private fun NSURL.toPickedFile(
   )
 }
 
-private fun imageFilename(
+internal fun providerFilename(
   suggestedName: String?,
   preferredExtension: String?,
   mimeType: String?,
@@ -302,7 +302,7 @@ private fun imageFilename(
   return pickedFilename(withExtension, mimeType)
 }
 
-private fun copyToTemporaryFile(sourceURL: NSURL, filename: String): NSURL {
+internal fun copyToTemporaryFile(sourceURL: NSURL, filename: String): NSURL {
   val safeFilename = filename.replace('/', '_').replace('\\', '_')
   val destinationPath = "${NSTemporaryDirectory()}${NSUUID().UUIDString}-$safeFilename"
   val destinationURL = NSURL.fileURLWithPath(destinationPath)
@@ -322,7 +322,7 @@ private fun fileSize(path: String): Long? =
       as? NSNumber)
     ?.longLongValue
 
-private fun removeOwnedFile(url: NSURL) {
+internal fun removeOwnedFile(url: NSURL) {
   NSFileManager.defaultManager.removeItemAtURL(url, error = null)
 }
 

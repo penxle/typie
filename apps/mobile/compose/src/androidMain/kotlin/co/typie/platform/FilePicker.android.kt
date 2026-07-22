@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.platform.LocalContext
+import java.io.File
 import kotlinx.io.asSource
 import kotlinx.io.buffered
 
@@ -52,8 +53,12 @@ actual fun rememberFilePicker(
   }
 }
 
-private fun Context.readPlatformFile(uri: Uri): PickedFile {
-  val mimeType = contentResolver.getType(uri)
+internal fun Context.readPlatformFile(
+  uri: Uri,
+  fallbackMimeType: String? = null,
+  release: () -> Unit = {},
+): PickedFile {
+  val mimeType = contentResolver.getType(uri) ?: fallbackMimeType
   val metadata = queryMetadata(uri)
   val imageSize = decodeImageSizeIfNeeded(uri, mimeType)
 
@@ -72,7 +77,45 @@ private fun Context.readPlatformFile(uri: Uri): PickedFile {
       contentResolver.openInputStream(uri)?.asSource()?.buffered()
         ?: error("Unable to open selected file")
     },
+    release = release,
   )
+}
+
+internal fun Context.copyClipboardFile(uri: Uri, fallbackMimeType: String? = null): PickedFile {
+  val mimeType = contentResolver.getType(uri) ?: fallbackMimeType
+  val metadata = queryMetadata(uri)
+  val directory = File(cacheDir, "incoming-clipboard").apply { mkdirs() }
+  val ownedFile = File.createTempFile("clipboard-", ".tmp", directory)
+
+  try {
+    contentResolver.openInputStream(uri)?.use { input ->
+      ownedFile.outputStream().use { output -> input.copyTo(output) }
+    } ?: error("Unable to open clipboard file")
+    val imageSize =
+      if (mimeType?.substringBefore('/') == "image") {
+        val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(ownedFile.path, options)
+        options.outWidth
+          .takeIf { it > 0 }
+          ?.let { width -> options.outHeight.takeIf { it > 0 }?.let { height -> width to height } }
+      } else {
+        null
+      }
+
+    return PickedFile(
+      filename = pickedFilename(metadata.filename, mimeType),
+      mimeType = mimeType,
+      size = metadata.size ?: ownedFile.length(),
+      previewModel = ownedFile,
+      imageWidth = imageSize?.first,
+      imageHeight = imageSize?.second,
+      openSource = { ownedFile.inputStream().asSource().buffered() },
+      release = { ownedFile.delete() },
+    )
+  } catch (error: Throwable) {
+    ownedFile.delete()
+    throw error
+  }
 }
 
 private data class FileMetadata(val filename: String?, val size: Long?)
