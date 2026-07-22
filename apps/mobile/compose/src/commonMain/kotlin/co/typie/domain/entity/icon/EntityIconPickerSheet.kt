@@ -7,8 +7,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -33,7 +31,6 @@ import androidx.compose.ui.unit.dp
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
-import co.typie.ext.safeDrawing
 import co.typie.form.FormState
 import co.typie.icons.Lucide
 import co.typie.result.Result
@@ -210,8 +207,6 @@ internal fun EntityIconPickerSheet(
             .weight(1f)
             .scrollFog(padding = gridFogInsets, color = AppTheme.colors.surfaceCanvas)
       ) {
-        val safeBottom = WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding()
-
         LazyVerticalGrid(
           columns = GridCells.Fixed(7),
           state = iconGridState,
@@ -219,7 +214,7 @@ internal fun EntityIconPickerSheet(
           contentPadding =
             PaddingValues(
               top = gridFogInsets.calculateTopPadding(),
-              bottom = EntityIconPickerGridBottomInset + safeBottom,
+              bottom = EntityIconPickerGridBottomInset,
             ),
           horizontalArrangement = Arrangement.spacedBy(EntityIconPickerCellSpacing),
           verticalArrangement = Arrangement.spacedBy(EntityIconPickerCellSpacing),

@@ -342,7 +342,6 @@ internal fun CreateSpaceSheet(model: MainDrawerViewModel) {
   val toast = LocalToast.current
 
   SheetLayout(
-    bodyScroll = false,
     header = {
       SheetBar(
         center = {
@@ -355,7 +354,7 @@ internal fun CreateSpaceSheet(model: MainDrawerViewModel) {
           )
         }
       )
-    },
+    }
   ) {
     Text(
       text = "스페이스는 독립된 글쓰기 공간이에요.\n주제나 목적에 따라 글을 나누어 관리해보세요.",

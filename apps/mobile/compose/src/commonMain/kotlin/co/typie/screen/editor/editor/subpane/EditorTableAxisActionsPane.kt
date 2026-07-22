@@ -102,7 +102,6 @@ private fun EditorTableAxisActionsSheet(
 
   SheetLayout(
     bodyScroll = false,
-    includeImeBottomInset = false,
     padding = SheetPadding.None,
     verticalSpacing = 0.dp,
     header = {

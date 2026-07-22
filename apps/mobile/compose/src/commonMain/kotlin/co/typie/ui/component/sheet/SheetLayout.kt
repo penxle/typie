@@ -54,7 +54,7 @@ fun SheetLayout(
   bodyScroll: Boolean = true,
   handle: Boolean = true,
   handleModifier: Modifier = Modifier,
-  includeImeBottomInset: Boolean = true,
+  includeBottomInset: Boolean = true,
   padding: SheetPadding = SheetPadding(),
   verticalSpacing: Dp = 12.dp,
   backgroundColor: Color = AppTheme.colors.surfaceCanvas,
@@ -65,11 +65,7 @@ fun SheetLayout(
 ) {
   val scrollState = rememberScrollState()
   val bottomInsets =
-    if (includeImeBottomInset) {
-      WindowInsets.navigationBars.union(WindowInsets.ime)
-    } else {
-      WindowInsets.navigationBars
-    }
+    if (includeBottomInset) WindowInsets.navigationBars.union(WindowInsets.ime) else null
 
   Column(modifier = modifier.fillMaxWidth().thenIf(fillHeight) { fillMaxHeight() }) {
     if (handle) SheetHandle(modifier = handleModifier.background(headerBackgroundColor))
@@ -98,23 +94,23 @@ fun SheetLayout(
           verticalArrangement = Arrangement.spacedBy(verticalSpacing),
         ) {
           body()
-
-          if (footer == null) {
-            Spacer(modifier = Modifier.windowInsetsBottomHeight(bottomInsets))
-          }
         }
       }
 
-      if (footer != null) {
+      if (footer != null || bottomInsets != null) {
         Spacer(Modifier.height(verticalSpacing))
 
-        Column(
-          modifier = Modifier.fillMaxWidth().padding(padding.footer),
-          verticalArrangement = Arrangement.spacedBy(verticalSpacing),
-          content = footer,
-        )
+        if (footer != null) {
+          Column(
+            modifier = Modifier.fillMaxWidth().padding(padding.footer),
+            verticalArrangement = Arrangement.spacedBy(verticalSpacing),
+            content = footer,
+          )
+        }
 
-        Spacer(Modifier.windowInsetsBottomHeight(bottomInsets))
+        if (bottomInsets != null) {
+          Spacer(Modifier.windowInsetsBottomHeight(bottomInsets))
+        }
       }
     }
   }

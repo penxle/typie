@@ -418,7 +418,7 @@ private fun CommentsSheetContent(
     fillHeight = true,
     bodyScroll = false,
     handleModifier = sheetDragHandleModifier,
-    includeImeBottomInset = false,
+    includeBottomInset = false,
     padding = SheetPadding(header = PaddingValues(horizontal = 16.dp), body = PaddingValues(0.dp)),
     header = {
       CommentsSheetBar(
