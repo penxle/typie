@@ -35,6 +35,37 @@ fn bias_rank(b: Bias) -> u8 {
     }
 }
 
+/// Sound only against a checkout that does not change for the wrapper's
+/// lifetime: order indexes are absolute ranks, and any sequence insertion
+/// shifts them, so the memo must never outlive a single frozen build pass.
+struct FrozenOrder<'a, R: AnchorOrder> {
+    inner: &'a R,
+    order: std::cell::RefCell<editor_crdt::FastMap<Dot, Option<usize>>>,
+}
+
+impl<'a, R: AnchorOrder> FrozenOrder<'a, R> {
+    fn new(inner: &'a R) -> Self {
+        FrozenOrder {
+            inner,
+            order: std::cell::RefCell::new(editor_crdt::FastMap::default()),
+        }
+    }
+}
+
+impl<R: AnchorOrder> AnchorOrder for FrozenOrder<'_, R> {
+    fn order_index(&self, dot: Dot) -> Option<usize> {
+        *self
+            .order
+            .borrow_mut()
+            .entry(dot)
+            .or_insert_with(|| self.inner.order_index(dot))
+    }
+
+    fn anchor_pos(&self, a: &Anchor) -> Option<usize> {
+        self.inner.anchor_pos(a)
+    }
+}
+
 struct Ctx<'a, R: AnchorOrder>(&'a R);
 
 impl<'a, R: AnchorOrder> KeyResolve<Anchor> for Ctx<'a, R> {
@@ -93,15 +124,50 @@ impl<P: Clone + Ord> AnchorIntervalIndex<P> {
 
     /// Full rebuild from an authoritative interval source (e.g. the span log
     /// after a load-grade event); unresolved anchors park in pending.
+    ///
+    /// Equivalent to inserting every interval in order, but resolves each
+    /// anchor once against the frozen checkout, sorts, and bulk-builds the
+    /// balanced tree — per-insert traversal re-resolution made cold loads on
+    /// history-heavy span logs quadratic-grade in practice.
     pub fn build<R: AnchorOrder>(
         ctx: &R,
         intervals: impl IntoIterator<Item = (Anchor, Anchor, P)>,
     ) -> Self {
-        let mut idx = Self::new();
+        let frozen = FrozenOrder::new(ctx);
+        let mut pending = imbl::Vector::new();
+        let mut parked: std::collections::BTreeSet<(Anchor, P)> = std::collections::BTreeSet::new();
+        let mut treed: std::collections::BTreeSet<(Anchor, P)> = std::collections::BTreeSet::new();
+        let mut entries: Vec<(usize, Anchor, Anchor, P)> = Vec::new();
         for (s, e, p) in intervals {
-            let _ = idx.insert(ctx, s, e, p);
+            let key = (s, p.clone());
+            if parked.contains(&key) {
+                continue;
+            }
+            let start_idx = frozen.order_index(s.id);
+            if start_idx.is_some() && treed.contains(&key) {
+                continue;
+            }
+            match start_idx {
+                Some(si) if frozen.order_index(e.id).is_some() => {
+                    treed.insert(key);
+                    entries.push((si, s, e, p));
+                }
+                _ => {
+                    parked.insert(key);
+                    pending.push_back((s, e, p));
+                }
+            }
         }
-        idx
+        entries.sort_unstable_by(|a, b| {
+            a.0.cmp(&b.0)
+                .then(bias_rank(a.1.bias).cmp(&bias_rank(b.1.bias)))
+                .then(a.3.cmp(&b.3))
+        });
+        let tree = OrderedIntervalTree::build_from_sorted(
+            &Ctx(&frozen),
+            entries.into_iter().map(|(_, s, e, p)| (s, e, p)).collect(),
+        );
+        AnchorIntervalIndex { tree, pending }
     }
 
     #[must_use]
@@ -418,5 +484,47 @@ mod tests {
         assert_eq!(idx.flush_pending_for(&co2, late_b), vec![Dot::new(7, 2)]);
         assert_eq!(idx.pending_len(), 0);
         assert_eq!(idx.resolved_len(), 3);
+    }
+
+    proptest::proptest! {
+        #![proptest_config(proptest::prelude::ProptestConfig { cases: 512, ..proptest::prelude::ProptestConfig::default() })]
+        #[test]
+        fn build_matches_insert_loop(
+            specs in proptest::collection::vec(
+                (0usize..14, proptest::bool::ANY, 0usize..14, proptest::bool::ANY, 0u64..6),
+                0..48,
+            ),
+        ) {
+            let dots: Vec<Dot> = (1..=10).map(|c| Dot::new(1, c)).collect();
+            let co = checkout_of(&dots.iter().map(|d| (*d, 'x')).collect::<Vec<_>>());
+            let pick = |sel: usize| {
+                if sel < 10 { dots[sel] } else { Dot::new(9, 90 + sel as u64) }
+            };
+            let bias = |b: bool| if b { Bias::After } else { Bias::Before };
+            let intervals: Vec<(Anchor, Anchor, Dot)> = specs
+                .into_iter()
+                .map(|(ss, sb, es, eb, pc)| {
+                    (anchor(pick(ss), bias(sb)), anchor(pick(es), bias(eb)), Dot::new(7, pc))
+                })
+                .collect();
+
+            let mut reference = AnchorIntervalIndex::new();
+            for (s, e, p) in intervals.clone() {
+                let _ = reference.insert(&co, s, e, p);
+            }
+            let built = AnchorIntervalIndex::build(&co, intervals);
+
+            proptest::prop_assert_eq!(built.resolved_len(), reference.resolved_len());
+            proptest::prop_assert_eq!(built.pending_len(), reference.pending_len());
+            for p in 0..=10usize {
+                proptest::prop_assert_eq!(built.stab(&co, p), reference.stab(&co, p), "stab p={}", p);
+            }
+            for (lo, hi) in [(0usize, 10usize), (2, 5), (4, 4), (7, 9)] {
+                proptest::prop_assert_eq!(
+                    built.intersecting(&co, lo, hi),
+                    reference.intersecting(&co, lo, hi)
+                );
+            }
+        }
     }
 }

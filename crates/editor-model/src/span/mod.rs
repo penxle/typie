@@ -24,14 +24,16 @@ use serde::{Deserialize, Serialize};
 
 use crate::{Modifier, ModifierType};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Bias {
     Before,
     After,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+/// `Ord` is the structural `(id, bias)` order for set membership only —
+/// document order is checkout-dependent and lives in [`AnchorOrder`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct Anchor {
     pub id: Dot,
     pub bias: Bias,

@@ -225,6 +225,46 @@ impl<K: Clone, P: Clone + Ord> OrderedIntervalTree<K, P> {
         inserted
     }
 
+    /// Bulk balanced construction from entries already strictly ascending in
+    /// the `(start, payload)` composite order `insert` maintains, with no
+    /// duplicate composites; O(n) comparisons total, all through `ctx`.
+    pub fn build_from_sorted<R: KeyResolve<K>>(ctx: &R, entries: Vec<(K, K, P)>) -> Self {
+        let mut tree = Self::new();
+        let len = entries.len();
+        if len == 0 {
+            return tree;
+        }
+        let mut slots: Vec<Option<(K, K, P)>> = entries.into_iter().map(Some).collect();
+        let root = tree.build_range(ctx, &mut slots, 0, len);
+        tree.root = Some(root);
+        tree.len = len;
+        tree
+    }
+
+    fn build_range<R: KeyResolve<K>>(
+        &mut self,
+        ctx: &R,
+        slots: &mut [Option<(K, K, P)>],
+        lo: usize,
+        hi: usize,
+    ) -> usize {
+        let mid = lo + (hi - lo) / 2;
+        let left = (lo < mid).then(|| self.build_range(ctx, slots, lo, mid));
+        let right = (mid + 1 < hi).then(|| self.build_range(ctx, slots, mid + 1, hi));
+        let (start, end, payload) = slots[mid].take().expect("one take per slot");
+        let height = 1 + self.height(left).max(self.height(right));
+        let max_end = self.max_end_of(ctx, &end, left, right);
+        self.alloc(Node {
+            start,
+            end,
+            payload,
+            left,
+            right,
+            height,
+            max_end,
+        })
+    }
+
     pub fn stab<R: KeyResolve<K>>(&self, ctx: &R, p: usize, out: &mut Vec<P>) {
         self.stab_rec(ctx, self.root, p, out);
     }
@@ -554,6 +594,34 @@ mod tests {
             model.sort();
             proptest::prop_assert_eq!(t.in_order(), model);
             t.assert_invariants(&ctx);
+        }
+
+        #[test]
+        fn bulk_build_matches_incremental(
+            items in proptest::collection::vec((0usize..64, 0usize..64), 0..80),
+        ) {
+            let ctx = UsizeCtx;
+            let mut incr: OrderedIntervalTree<usize, u32> = OrderedIntervalTree::new();
+            let mut entries: Vec<(usize, usize, u32)> = Vec::new();
+            for (i, (s, e)) in items.into_iter().enumerate() {
+                let p = i as u32;
+                assert!(incr.insert(&ctx, s, e, p));
+                entries.push((s, e, p));
+            }
+            entries.sort_unstable_by(|a, b| a.0.cmp(&b.0).then(a.2.cmp(&b.2)));
+            let bulk = OrderedIntervalTree::build_from_sorted(&ctx, entries);
+            proptest::prop_assert_eq!(bulk.len(), incr.len());
+            proptest::prop_assert_eq!(bulk.in_order(), incr.in_order());
+            bulk.assert_invariants(&ctx);
+            for p in 0..70 {
+                let mut a = Vec::new();
+                let mut b = Vec::new();
+                bulk.stab(&ctx, p, &mut a);
+                incr.stab(&ctx, p, &mut b);
+                a.sort();
+                b.sort();
+                proptest::prop_assert_eq!(a, b, "stab p={}", p);
+            }
         }
     }
 
