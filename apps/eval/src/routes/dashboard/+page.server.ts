@@ -1,5 +1,5 @@
 import { error } from '@sveltejs/kit';
-import { eq, inArray } from 'drizzle-orm';
+import { asc, eq, inArray } from 'drizzle-orm';
 import {
   anchorMatchRate,
   averageScores,
@@ -37,7 +37,11 @@ export const load: PageServerLoad = async ({ platform }) => {
   for (const round of rounds) {
     const tasks = await db.select().from(Tasks).where(eq(Tasks.roundId, round.id));
     const taskIds = tasks.map((t) => t.id);
-    const judgments = await selectInChunks(taskIds, (chunk) => db.select().from(Judgments).where(inArray(Judgments.taskId, chunk)));
+    // createdAt 정렬 필수 — 무정렬 시 D1이 (task_id, evaluator_email) 인덱스 순서로 반환해
+    // "첫 판정"이 이메일 알파벳순이 되는 사고가 있었다(κ의 첫 두 판정 선택에 영향).
+    const judgments = await selectInChunks(taskIds, (chunk) =>
+      db.select().from(Judgments).where(inArray(Judgments.taskId, chunk)).orderBy(asc(Judgments.createdAt)),
+    );
     const confirmed = judgments.filter((j) => !j.draft && j.result);
 
     const allSetIds = [...new Set(tasks.flatMap((t) => t.setIds))];
@@ -58,12 +62,15 @@ export const load: PageServerLoad = async ({ platform }) => {
     const labelDist = new Map<string, Map<string, number>>();
     const labelComments = new Map<string, { labelNames: string[]; comment: string }[]>();
 
+    // 유효 판정 = 태스크별 min(판정 수, 필요 수) 합 — 초과 배정 잉여를 진행률에서 뺀다.
+    let effectiveCount = 0;
+
     for (const task of tasks) {
       const taskJudgments = confirmed.filter((j) => j.taskId === task.id);
+      effectiveCount += Math.min(taskJudgments.length, task.requiredJudgments ?? 1);
 
-      for (const [judgmentIndex, judgment] of taskJudgments.entries()) {
+      for (const judgment of taskJudgments) {
         const result = judgment.result as JudgmentResult;
-        const normalized = result.kind === 'scores' ? { kind: 'ranking' as const, ranks: ranksFromScores(result.scores) } : result;
 
         if (task.kind !== 'sanity') {
           for (const setId of task.setIds) {
@@ -110,13 +117,6 @@ export const load: PageServerLoad = async ({ platform }) => {
 
         if (task.kind === 'sanity' && result.kind === 'pair') {
           sanityVerdicts.push(result.verdict);
-        } else if (task.kind === 'ranking' && normalized.kind === 'ranking' && v0 && judgmentIndex === 0) {
-          const v0SetId = task.setIds.find((s) => setVariant.get(s) === v0.id);
-          if (!v0SetId) continue;
-          const candidateSetIds = new Map(
-            task.setIds.filter((s) => s !== v0SetId).map((s) => [setVariant.get(s) ?? 'unknown', s] as const),
-          );
-          rankingEntries.push({ ranks: normalized.ranks, v0SetId, candidateSetIds });
         } else if (task.kind === 'pair' && result.kind === 'pair' && v0) {
           const [aSetId, bSetId] = task.setIds;
           const aVariant = setVariant.get(aSetId);
@@ -128,6 +128,32 @@ export const load: PageServerLoad = async ({ platform }) => {
           else if ((result.verdict === 'a') === candidateIsA) tally.win++;
           else tally.loss++;
           pairTallies.set(candidateVariant, tally);
+        }
+      }
+
+      // 승/무/패는 태스크당 전 판정의 세트 평균 점수로 1건을 낸다 — 초과 배정으로 판정이 여러 개일 때
+      // "첫 판정" 선택에 결과가 좌우되는 것을 막고, 잉여 판정도 버리지 않는다.
+      if (task.kind === 'ranking' && v0 && taskJudgments.length > 0) {
+        const v0SetId = task.setIds.find((s) => setVariant.get(s) === v0.id);
+        if (v0SetId) {
+          const acc = new Map<string, { sum: number; n: number }>();
+          for (const judgment of taskJudgments) {
+            const result = judgment.result as JudgmentResult;
+            if (result.kind !== 'scores') continue;
+            for (const { setId, score } of result.scores) {
+              const cell = acc.get(setId) ?? { sum: 0, n: 0 };
+              cell.sum += score;
+              cell.n += 1;
+              acc.set(setId, cell);
+            }
+          }
+          if (acc.size > 0) {
+            const ranks = [...acc].map(([setId, cell]) => ({ setId, rank: 6 - cell.sum / cell.n }));
+            const candidateSetIds = new Map(
+              task.setIds.filter((s) => s !== v0SetId).map((s) => [setVariant.get(s) ?? 'unknown', s] as const),
+            );
+            rankingEntries.push({ ranks, v0SetId, candidateSetIds });
+          }
         }
       }
 
@@ -243,6 +269,7 @@ export const load: PageServerLoad = async ({ platform }) => {
       taskCount: tasks.length,
       requiredTotal: tasks.reduce((sum, t) => sum + (t.requiredJudgments ?? 1), 0),
       confirmedCount: confirmed.length,
+      effectiveCount,
       contributions,
       categoryCompliance,
       variants: variantRows,

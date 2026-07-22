@@ -27,6 +27,19 @@
       claiming = false;
     }
   };
+
+  const headerLinkClass = css({
+    flexShrink: '0',
+    paddingX: '10px',
+    paddingY: '6px',
+    borderWidth: '1px',
+    borderColor: 'border.default',
+    borderRadius: '6px',
+    fontSize: '13px',
+    color: 'text.faint',
+    transition: '[background-color 0.15s ease, color 0.15s ease]',
+    _hover: { backgroundColor: 'surface.default', color: 'text.default' },
+  });
 </script>
 
 <Helmet title="평가 큐" trailing="타이피 평가" />
@@ -40,24 +53,11 @@
       </div>
       <div class={flex({ align: 'center', gap: '8px', flexShrink: '0' })}>
         <ThemeToggle />
-        <a
-          class={css({
-            flexShrink: '0',
-            paddingX: '10px',
-            paddingY: '6px',
-            borderWidth: '1px',
-            borderColor: 'border.default',
-            borderRadius: '6px',
-            fontSize: '13px',
-            color: 'text.faint',
-            transition: '[background-color 0.15s ease, color 0.15s ease]',
-            _hover: { backgroundColor: 'surface.default', color: 'text.default' },
-          })}
-          data-sveltekit-reload
-          href="/cdn-cgi/access/logout"
-        >
-          로그아웃
-        </a>
+        {#if data.isAdmin}
+          <a class={headerLinkClass} href="/dashboard">대시보드</a>
+          <a class={headerLinkClass} href="/admin">어드민</a>
+        {/if}
+        <a class={headerLinkClass} data-sveltekit-reload href="/cdn-cgi/access/logout">로그아웃</a>
       </div>
     </header>
 
@@ -101,7 +101,7 @@
         <div style:width={`${progressPct}%`} class={css({ height: 'full', backgroundColor: 'accent.brand.default' })}></div>
       </div>
       <p class={css({ marginTop: '6px', fontSize: '12px', color: 'text.faint' })}>
-        라운드 전체 진행 {data.round.done} / {data.round.required} — 모든 평가자의 판정을 합친 수치입니다.
+        라운드 전체 진행 {data.round.done} / {data.round.required} — 라운드에 필요한 판정 중 채워진 수입니다.
       </p>
       {#if data.quota}
         <p class={css({ marginTop: '2px', fontSize: '12px', color: 'text.faint' })}>

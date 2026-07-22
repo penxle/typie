@@ -1,7 +1,8 @@
 import { error } from '@sveltejs/kit';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { claimableSummary } from '$lib/server/claim.ts';
 import { createDb, Judgments, Tasks } from '$lib/server/db/index.ts';
+import { effectiveProgress } from '$lib/server/progress.ts';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ platform, locals }) => {
@@ -24,18 +25,20 @@ export const load: PageServerLoad = async ({ platform, locals }) => {
 
   // "내 진행"과 "라운드 전체 진행"을 분리한다 — 태스크는 평가자들이 나눠 가지므로 전체 태스크
   // 수는 개인 목표가 아니다. 개인에게는 판정 건수·이어할 것·새로 받을 수 있는 것만 보여준다.
-  const [roundDone] = await db
-    .select({ n: sql<number>`count(*)` })
-    .from(Judgments)
-    .where(eq(Judgments.draft, false));
-  const [roundRequired] = await db.select({ n: sql<number>`coalesce(sum(coalesce(${Tasks.requiredJudgments}, 1)), 0)` }).from(Tasks);
+  const round = await effectiveProgress(db);
   const { remaining, quota } = await claimableSummary(db, locals.email);
+
+  const isAdmin = (platform.env.ADMIN_EMAILS ?? '')
+    .split(',')
+    .map((e) => e.trim())
+    .includes(locals.email);
 
   return {
     email: locals.email,
+    isAdmin,
     drafts,
     doneCount: done.length,
-    round: { done: roundDone?.n ?? 0, required: roundRequired?.n ?? 0 },
+    round,
     remaining,
     quota,
   };

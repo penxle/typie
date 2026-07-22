@@ -4,6 +4,7 @@ import { nanoid } from 'nanoid';
 import { deriveFalsePositiveIds, FEEDBACK_LABEL_KEYS } from '$lib/domain/feedback-labels.ts';
 import { claimNextTask } from '$lib/server/claim.ts';
 import { createDb, Documents, Feedbacks, FeedbackSets, Judgments, ReleasedTasks, Tasks } from '$lib/server/db/index.ts';
+import { effectiveProgress } from '$lib/server/progress.ts';
 import type { FeedbackLabelMap } from '$lib/domain/feedback-labels.ts';
 import type { JudgmentResult } from '$lib/domain/types.ts';
 import type { Actions, PageServerLoad } from './$types';
@@ -42,11 +43,7 @@ export const load: PageServerLoad = async ({ params, platform, locals }) => {
     feedbacks: feedbacks.filter((f) => f.setId === setId),
   }));
 
-  const [roundRequired] = await db.select({ n: sql<number>`coalesce(sum(coalesce(${Tasks.requiredJudgments}, 1)), 0)` }).from(Tasks);
-  const [roundDone] = await db
-    .select({ n: sql<number>`count(*)` })
-    .from(Judgments)
-    .where(eq(Judgments.draft, false));
+  const round = await effectiveProgress(db);
   const [myDone] = await db
     .select({ n: sql<number>`count(*)` })
     .from(Judgments)
@@ -58,7 +55,7 @@ export const load: PageServerLoad = async ({ params, platform, locals }) => {
     sets: orderedSets,
     draft: draft ?? null,
     setCount: sets.length,
-    progress: { done: myDone?.n ?? 0, roundDone: roundDone?.n ?? 0, roundRequired: roundRequired?.n ?? 0 },
+    progress: { done: myDone?.n ?? 0, roundDone: round.done, roundRequired: round.required },
   };
 };
 

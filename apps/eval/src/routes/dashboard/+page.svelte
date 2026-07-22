@@ -96,7 +96,7 @@
     }
 
     const leader = withJudgments.toSorted((a, b) => b.win - b.loss - (a.win - a.loss))[0];
-    const collecting = summary.confirmedCount < summary.requiredTotal;
+    const collecting = summary.effectiveCount < summary.requiredTotal;
 
     if (!leader || leader.win <= leader.loss) {
       const head = collecting ? '수집 중 — 기준선을 앞서는 후보 없음' : '기준선을 앞서는 후보 없음';
@@ -268,7 +268,7 @@
           <h2 class={css({ fontSize: '15px', fontWeight: 'bold' })}>{summary.roundId}</h2>
           <span class={chipClass}>{summary.stage === 'screening' ? '스크리닝' : '확정'}</span>
           <span class={css({ marginLeft: 'auto', fontSize: '13px', color: 'text.faint', fontVariantNumeric: 'tabular-nums' })}>
-            판정 {summary.confirmedCount} / {summary.requiredTotal}
+            유효 판정 {summary.effectiveCount} / {summary.requiredTotal} · 확정 {summary.confirmedCount}건
           </span>
         </div>
 
@@ -410,8 +410,8 @@
         </div>
 
         <p class={css({ marginTop: '10px', fontSize: '11px', color: 'text.faint' })}>
-          오탐 = 사실 오인·장면전환 오탐 라벨이 붙은 피드백 비율. 부정 라벨 = 부정 계열 라벨 전체 비율. 라벨링은 선택 사항이라 두 수치 모두
-          실제 비율의 하한입니다.
+          승/무/패는 문서(태스크)별 전 판정 평균 점수 비교입니다. 오탐 = 사실 오인·장면전환 오탐 라벨이 붙은 피드백 비율. 부정 라벨 = 부정
+          계열 라벨 전체 비율. 라벨링은 선택 사항이라 두 수치 모두 실제 비율의 하한입니다.
         </p>
 
         <details class={css({ marginTop: '16px' })}>

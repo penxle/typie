@@ -74,13 +74,13 @@
         <h2 class={css({ fontSize: '15px', fontWeight: 'bold' })}>{summary.roundId}</h2>
         <span class={chipClass}>{STAGE_LABELS[summary.stage] ?? summary.stage}</span>
         <span class={css({ marginLeft: 'auto', fontSize: '13px', color: 'text.faint', fontVariantNumeric: 'tabular-nums' })}>
-          전체 판정 {summary.confirmedTotal} / {summary.requiredTotal}
+          유효 판정 {summary.effectiveTotal} / {summary.requiredTotal} · 확정 {summary.confirmedTotal}건
         </span>
       </div>
       {#if summary.cap !== null}
         <p class={css({ marginTop: '4px', fontSize: '12px', color: 'text.faint', fontVariantNumeric: 'tabular-nums' })}>
-          1인당 배정 한도 {summary.cap}건 (예상 평가자 {summary.expected}명 기준) — 남은 몫은 한도 기준이며, 라운드 잔여 태스크에 따라 실제
-          배정 가능 수는 더 적을 수 있습니다.
+          1인당 배정 한도 {summary.cap}건 (예상 평가자 {summary.expected}명 기준) — 한도는 잉여 판정으로 소모된 용량만큼 자동 확대됩니다.
+          남은 몫은 한도 기준이며, 라운드 잔여 태스크에 따라 실제 배정 가능 수는 더 적을 수 있습니다.
         </p>
       {/if}
 
@@ -144,6 +144,8 @@
                     <span class={chipClass}>작성 중</span>
                   {:else if evaluator.confirmed === 0}
                     <span class={attentionChipClass}>미참여</span>
+                  {:else if evaluator.confirmed > evaluator.effective}
+                    <span class={chipClass}>잉여 {evaluator.confirmed - evaluator.effective}건</span>
                   {:else}
                     —
                   {/if}
