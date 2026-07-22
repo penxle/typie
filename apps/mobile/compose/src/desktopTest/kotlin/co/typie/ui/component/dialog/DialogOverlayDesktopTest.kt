@@ -3,6 +3,7 @@ package co.typie.ui.component.dialog
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -12,6 +13,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsFocused
@@ -20,7 +22,9 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.dp
+import co.typie.dev.DesktopDebugKeyboard
 import co.typie.ext.clickable
+import co.typie.ext.ime
 import co.typie.ui.theme.LightAppShadows
 import co.typie.ui.theme.LightColors
 import co.typie.ui.theme.LocalAppColors
@@ -30,11 +34,69 @@ import co.typie.ui.theme.ResolvedThemeMode
 import dev.chrisbanes.haze.blur.HazeBlurStyle
 import dev.chrisbanes.haze.blur.LocalHazeBlurStyle
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 @OptIn(ExperimentalTestApi::class)
 class DialogOverlayDesktopTest {
+  @Test
+  fun contentIsCenteredInAreaAboveIme() = runComposeUiTest {
+    val dialog = Dialog()
+    val keyboardOwner = Any()
+    val wasHardwareKeyboardConnected = DesktopDebugKeyboard.hardwareKeyboardConnected
+    var imeBottomPx = 0f
+
+    try {
+      setContent {
+        DialogTestTheme {
+          val density = LocalDensity.current
+          val imeInsets = WindowInsets.ime
+          SideEffect { imeBottomPx = imeInsets.getBottom(density).toFloat() }
+
+          Box(Modifier.testTag(RootTag).size(width = 400.dp, height = 700.dp)) {
+            LaunchedEffect(Unit) {
+              dialog.present<Unit> { Box(Modifier.testTag(DialogContentTag).size(80.dp)) }
+            }
+
+            DialogOverlay(dialog)
+          }
+        }
+      }
+
+      waitUntil(timeoutMillis = 5_000) { dialog.current != null }
+      runOnIdle {
+        DesktopDebugKeyboard.updateHardwareKeyboardConnected(false)
+        DesktopDebugKeyboard.hideKeyboardSurface()
+      }
+      mainClock.advanceTimeBy(300)
+      waitForIdle()
+
+      val rootBounds = onNodeWithTag(RootTag).fetchSemanticsNode().boundsInRoot
+      val initialContentBounds = onNodeWithTag(DialogContentTag).fetchSemanticsNode().boundsInRoot
+      assertEquals(0f, imeBottomPx, absoluteTolerance = 0.5f)
+      assertEquals(rootBounds.center.y, initialContentBounds.center.y, absoluteTolerance = 0.5f)
+
+      runOnIdle { DesktopDebugKeyboard.notifyFocusChanged(keyboardOwner, isFocused = true) }
+      mainClock.advanceTimeBy(300)
+      waitForIdle()
+
+      val contentBounds = onNodeWithTag(DialogContentTag).fetchSemanticsNode().boundsInRoot
+      val visibleBottom = rootBounds.bottom - imeBottomPx
+      val visibleAreaCenterY = (rootBounds.top + visibleBottom) / 2f
+      assertTrue(imeBottomPx > 0f)
+      assertEquals(visibleAreaCenterY, contentBounds.center.y, absoluteTolerance = 0.5f)
+      assertTrue(contentBounds.bottom <= visibleBottom + 0.5f)
+    } finally {
+      runOnIdle {
+        DesktopDebugKeyboard.notifyFocusChanged(keyboardOwner, isFocused = false)
+        DesktopDebugKeyboard.updateHardwareKeyboardConnected(wasHardwareKeyboardConnected)
+        DesktopDebugKeyboard.hideKeyboardSurface()
+      }
+    }
+  }
+
   @Test
   fun dismissalDoesNotClearFocusOutsideDialog() = runComposeUiTest {
     val dialog = Dialog()
@@ -141,6 +203,8 @@ class DialogOverlayDesktopTest {
   }
 
   private companion object {
+    const val RootTag = "root"
+    const val DialogContentTag = "dialog-content"
     const val OutsideFocusTag = "outside-focus"
     const val DialogFocusTag = "dialog-focus"
     const val DismissTag = "dialog-dismiss"

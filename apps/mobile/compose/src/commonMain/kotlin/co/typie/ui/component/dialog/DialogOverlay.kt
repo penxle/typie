@@ -21,6 +21,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import co.typie.ext.clickable
+import co.typie.ext.imePadding
 import co.typie.navigation.PlatformBackHandler
 import co.typie.ui.theme.AppTheme
 
@@ -89,19 +90,21 @@ fun DialogOverlay(state: Dialog) {
         )
     )
 
-    Box(
-      modifier =
-        Modifier.align(Alignment.Center)
-          .width(280.dp)
-          .onFocusChanged { dialogHasFocus = it.hasFocus }
-          .pointerInput(Unit) {}
-          .graphicsLayer {
-            alpha = progress
-            translationY = (1f - progress) * offsetPx
-          }
-    ) {
-      @Suppress("UNCHECKED_CAST") val typedEntry = entry as DialogEntry<Any?>
-      context(scope) { typedEntry.content() }
+    Box(Modifier.fillMaxSize().imePadding()) {
+      Box(
+        modifier =
+          Modifier.align(Alignment.Center)
+            .width(280.dp)
+            .onFocusChanged { dialogHasFocus = it.hasFocus }
+            .pointerInput(Unit) {}
+            .graphicsLayer {
+              alpha = progress
+              translationY = (1f - progress) * offsetPx
+            }
+      ) {
+        @Suppress("UNCHECKED_CAST") val typedEntry = entry as DialogEntry<Any?>
+        context(scope) { typedEntry.content() }
+      }
     }
   }
 }
