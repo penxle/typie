@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1784656600505,
+      "tag": "0000_friendly_true_believers",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1784675914744,
+      "tag": "0001_abnormal_hawkeye",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1784677316923,
+      "tag": "0002_rich_salo",
+      "breakpoints": true
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+name = "typie-eval-flows"
+main = "src/index.ts"
+compatibility_date = "2026-07-01"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = false
+
+[vars]
+INTERNAL_API_BASE = "https://api.typie.co"
+CLOUDFLARE_AIGATEWAY_URL = "https://gateway.ai.cloudflare.com/v1/ada355841e173023d4ac3b5a9ba71669/aigateway/compat"
+
+[[workflows]]
+binding = "SAMPLING"
+name = "eval-sampling"
+class_name = "SamplingWorkflow"
+
+[[workflows]]
+binding = "PIPELINE"
+name = "eval-pipeline"
+class_name = "PipelineWorkflow"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "typie-eval"
+database_id = "b747f2cb-559e-4e62-b789-9475a83221e1"

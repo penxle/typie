@@ -1,0 +1,33 @@
+name = "typie-eval"
+main = ".svelte-kit/cloudflare/_worker.js"
+compatibility_date = "2026-07-01"
+compatibility_flags = ["nodejs_als"]
+workers_dev = false
+
+routes = [{ pattern = "eval.penxle.io", custom_domain = true }]
+
+[assets]
+binding = "ASSETS"
+directory = ".svelte-kit/cloudflare"
+
+[observability.logs]
+enabled = true
+invocation_logs = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "typie-eval"
+database_id = "b747f2cb-559e-4e62-b789-9475a83221e1"
+migrations_dir = "migrations"
+
+[[workflows]]
+binding = "SAMPLING"
+name = "eval-sampling"
+class_name = "SamplingWorkflow"
+script_name = "typie-eval-flows"
+
+[[workflows]]
+binding = "PIPELINE"
+name = "eval-pipeline"
+class_name = "PipelineWorkflow"
+script_name = "typie-eval-flows"

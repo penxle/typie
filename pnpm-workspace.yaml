@@ -1,5 +1,6 @@
 packages:
   - apps/*
+  - apps/eval/flows
   - crates/*
   - packages/*
   - legacy/*
@@ -19,3 +20,6 @@ allowBuilds:
   ttf2woff2: true
   unrs-resolver: false
   wasm-pack: false
+  workerd: true
+minimumReleaseAgeExclude:
+  - '@cloudflare/workers-types@5.20260721.1'

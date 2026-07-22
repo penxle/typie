@@ -24,6 +24,7 @@ const schema = z.object({
   GOOGLE_PLAY_PACKAGE_NAME: z.string(),
   GOOGLE_SERVICE_ACCOUNT: z.string(),
   IFRAMELY_API_KEY: z.string(),
+  INTERNAL_API_KEY: z.string(),
   KAKAO_CLIENT_ID: z.string(),
   KAKAO_CLIENT_SECRET: z.string(),
   LINEAR_API_KEY: z.string(),

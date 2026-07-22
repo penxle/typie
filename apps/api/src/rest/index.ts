@@ -5,6 +5,7 @@ import { entity } from './entity.ts';
 import { font } from './font.ts';
 import { healthz } from './healthz.ts';
 import { iap } from './iap.ts';
+import { internal } from './internal.ts';
 import { og } from './og.tsx.js';
 import type { Env } from '#/context.ts';
 
@@ -16,4 +17,5 @@ rest.route('/entity', entity);
 rest.route('/font', font);
 rest.route('/healthz', healthz);
 rest.route('/iap', iap);
+rest.route('/internal', internal);
 rest.route('/og', og);

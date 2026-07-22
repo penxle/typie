@@ -1,0 +1,5 @@
+# Local dev: copy to `.dev.vars` (gitignored). Production: set each via `wrangler secret put <NAME>` — never in wrangler.toml [vars].
+INTERNAL_API_BASE=https://api.typie.co
+INTERNAL_API_KEY=replace-with-internal-api-key
+CLOUDFLARE_AIGATEWAY_URL=replace-with-ai-gateway-openai-compatible-url
+CLOUDFLARE_API_KEY=replace-with-cloudflare-api-key
