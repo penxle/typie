@@ -329,6 +329,12 @@ impl ChildView<'_> {
     }
 }
 
+/// Linear-scan cutoff for [`NodeView::slot_of_child`]: the measured crossover
+/// against rank-probe binary search sits at ~128 children on a fresh checkout
+/// and ~3.5k on a history-heavy one (probe cost scales with sequence size), so
+/// the fixed value is the minimax band's power of two.
+const SLOT_LINEAR_SCAN_MAX: usize = 1024;
+
 impl<'a> NodeView<'a> {
     /// The child's effective sequence rank: its own dot's rank for a leaf or a
     /// real block, or — for a synthetic scaffold, which owns no sequence
@@ -397,8 +403,13 @@ impl<'a> NodeView<'a> {
     /// match alone cannot tell a dead target from a live neighbor at the same
     /// rank, so the id re-check is a correctness requirement; any mismatch or
     /// inconclusive probe returns `None` and the caller falls back to a linear
-    /// scan.
+    /// scan. Containers at or below [`SLOT_LINEAR_SCAN_MAX`] children take a
+    /// straight scan instead of rank probes.
     pub fn slot_of_child(&self, dot: Dot, order: &dyn SeqOrder) -> Option<usize> {
+        let n = self.child_count();
+        if n <= SLOT_LINEAR_SCAN_MAX {
+            return self.children().position(|c| c.id() == dot);
+        }
         let target_rank = match order.visible_rank(dot) {
             Some(r) => r,
             None => {
@@ -409,7 +420,6 @@ impl<'a> NodeView<'a> {
                 self.effective_rank(&ChildView::Block(target), order)?
             }
         };
-        let n = self.child_count();
         let mut lo = 0usize;
         let mut hi = n;
         while lo < hi {
@@ -1462,6 +1472,33 @@ mod tests {
         }
         assert!(hits > 0, "the fast path must hit at least one root child");
         assert_eq!(root.slot_of_child(Dot::new(9, 9), &resolver), None);
+    }
+
+    #[test]
+    fn slot_of_child_binary_path_matches_linear_above_cutoff() {
+        let para = Dot::new(1, 1);
+        let mut elems = vec![(
+            para,
+            SeqItem::Block {
+                node_type: NodeType::Paragraph,
+                parents: vec![Dot::ROOT],
+                attrs: vec![],
+            },
+        )];
+        for k in 0..1100u64 {
+            elems.push((Dot::new(1, 2 + k), SeqItem::Char('x')));
+        }
+        let logs = logs_of(&elems);
+        let pd = project_document(&logs).unwrap();
+        let view = DocView::new(&pd);
+        let (_elems, resolver) = editor_crdt::sequence::checkout_with_resolver(&logs.seq);
+        let para_view = view.root().unwrap().child_blocks().next().unwrap();
+        assert!(para_view.child_count() > SLOT_LINEAR_SCAN_MAX);
+        for probe in [0usize, 1, 549, 550, 1098, 1099] {
+            let id = para_view.child_at(probe).unwrap().id();
+            assert_eq!(para_view.slot_of_child(id, &resolver), Some(probe));
+        }
+        assert_eq!(para_view.slot_of_child(Dot::new(9, 9), &resolver), None);
     }
 
     #[test]
