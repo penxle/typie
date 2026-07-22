@@ -88,6 +88,12 @@ pub(crate) fn resolve_slice_insertion_outcome(
         let Some(container) = view.node(position.node) else {
             return SliceInsertionOutcome::NoFit;
         };
+        // A fixed-arity container (e.g. Fold) can never absorb an extra child:
+        // the inserted blocks would stay permanent, projection-suppressed
+        // misfits, so the insertion can't produce an observable change.
+        if !container.spec().content.admits_additional_child() {
+            return SliceInsertionOutcome::NoFit;
+        }
         let Some(blocks) = block_boundary_fragments(&slice, container.node_type()) else {
             return SliceInsertionOutcome::NoFit;
         };

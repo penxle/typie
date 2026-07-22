@@ -36,6 +36,20 @@ pub fn fulfill(node: &NodeView) -> Vec<Step> {
         .collect()
 }
 
+/// First child type `content` accepts, or `None` when the expression admits no
+/// typed child (`Empty`/`Any`).
+pub fn first_child_type(content: &ContentExpr) -> Option<NodeType> {
+    match content {
+        ContentExpr::Empty | ContentExpr::Any => None,
+        _ => Some(first_type(content)),
+    }
+}
+
+/// Minimum valid subtree for `node_type`, recursively filling required children.
+pub fn minimal_subtree(node_type: NodeType) -> Subtree {
+    scaffold(node_type)
+}
+
 fn known_child_types(node: &NodeView) -> (Vec<NodeType>, Vec<usize>) {
     let mut types = Vec::new();
     let mut real_indices = Vec::new();

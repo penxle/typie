@@ -183,6 +183,19 @@ impl ContentExpr {
         }
     }
 
+    /// Whether the model can ever absorb a child beyond a sequence it already
+    /// matches — false for fixed-arity models (every slot single and required,
+    /// e.g. Fold's `FoldTitle, FoldContent`), where any extra child is a
+    /// permanent misfit the projection will never render.
+    pub fn admits_additional_child(&self) -> bool {
+        match self {
+            Self::Empty | Self::Single(_) => false,
+            Self::Any | Self::ZeroOrMore(_) | Self::OneOrMore(_) | Self::Optional(_) => true,
+            Self::Choice(choices) => choices.iter().any(Self::admits_additional_child),
+            Self::Seq(exprs) => exprs.iter().any(Self::admits_additional_child),
+        }
+    }
+
     pub fn min_required(&self) -> usize {
         match self {
             Self::Empty | Self::Any => 0,
@@ -371,6 +384,21 @@ impl ContentExpr {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn admits_additional_child_is_false_only_for_fixed_arity_models() {
+        assert!(!NodeType::Fold.spec().content.admits_additional_child());
+        assert!(NodeType::Root.spec().content.admits_additional_child());
+        assert!(
+            NodeType::BulletList
+                .spec()
+                .content
+                .admits_additional_child()
+        );
+        assert!(NodeType::ListItem.spec().content.admits_additional_child());
+        assert!(NodeType::TableRow.spec().content.admits_additional_child());
+        assert!(NodeType::Table.spec().content.admits_additional_child());
+    }
 
     #[test]
     fn completion_insertions_returns_empty_for_valid_sequence() {

@@ -211,6 +211,39 @@ mod tests {
         );
     }
 
+    #[test]
+    fn backspace_on_list_child_range_selection_removes_emptied_list() {
+        use editor_model::NodeType;
+
+        let (state, _bl, p2) = state! {
+            doc { root {
+                bl: bullet_list {
+                    list_item { paragraph { text("a") } }
+                    list_item { paragraph { text("b") } }
+                }
+                p2: paragraph { text("After") }
+            } }
+            selection: (bl, 0) -> (bl, 2)
+        };
+        let mut editor = Editor::new_test(state);
+
+        editor.apply(key(Key::Backspace));
+
+        let view = editor.state().view();
+        assert!(
+            !view
+                .root()
+                .unwrap()
+                .child_blocks()
+                .any(|b| b.node_type() == NodeType::BulletList),
+            "emptying delete must remove the list container"
+        );
+        let selection = editor.state().selection.clone().expect("selection");
+        assert!(selection.is_collapsed());
+        assert_eq!(selection.head.node, p2);
+        assert_eq!(selection.head.offset, 0);
+    }
+
     fn key(k: Key) -> Message {
         Message::Key {
             event: KeyEvent {

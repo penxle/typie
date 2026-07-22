@@ -1,103 +1,10 @@
-use std::cell::Cell;
+use editor_state::{Position, Selection, State, flat_size};
 
-use editor_state::{Position, Selection, StablePosition, StableSelection, State, flat_size};
-use editor_view::{DropIndicator, DropTarget};
-
-use crate::dnd::DndState;
 use crate::editor::Editor;
-use crate::error::EditorError;
 use crate::handle::{apply_drop_for_test, judge_apply_drop, position_inside_selection};
 use crate::message::*;
-use crate::test_utils::EditorSnapshot;
 
 use editor_macros::state;
-
-// The `StepError` variants `is_pinned_execution_defect` allowlists, broken out
-// so `assert_drop_parity` can tally which variant an erroring execution hit.
-#[derive(Clone, Copy)]
-enum PinnedDefectVariant {
-    NodeNotFound,
-    IndexOutOfBounds,
-    IllegalInsertSlot,
-}
-
-/// Allowlist of `StepError` variants `assert_drop_parity` treats as pinned latent
-/// execution-layer defects — an erroring execution under judge=true that is
-/// skipped rather than gated. Contract: this allowlist is 1:1 with the
-/// deterministic pin tests in this module
-/// (`copy_whole_list_into_its_own_item_execution_hits_synthetic_scaffold_anchor`,
-/// `copy_drop_at_list_item_source_boundary_is_uncovered_by_interior_filter`,
-/// `copy_into_fold_past_fixed_slots_execution_hits_index_out_of_bounds`,
-/// `move_bullet_list_items_outside_source_execution_hits_illegal_insert_slot`) —
-/// adding a variant here without a matching pin test lets this gate silently
-/// swallow a new latent bug.
-fn pinned_defect_variant(err: &EditorError) -> Option<PinnedDefectVariant> {
-    let EditorError::Command(editor_commands::CommandError::Step(step)) = err else {
-        return None;
-    };
-    match step {
-        editor_transaction::StepError::NodeNotFound(_) => Some(PinnedDefectVariant::NodeNotFound),
-        editor_transaction::StepError::IndexOutOfBounds { .. } => {
-            Some(PinnedDefectVariant::IndexOutOfBounds)
-        }
-        editor_transaction::StepError::IllegalInsertSlot { .. } => {
-            Some(PinnedDefectVariant::IllegalInsertSlot)
-        }
-        _ => None,
-    }
-}
-
-fn is_pinned_execution_defect(err: &EditorError) -> bool {
-    pinned_defect_variant(err).is_some()
-}
-
-// Counts execution errors that fall into the known insert-error bucket (see the
-// match in `assert_drop_parity` below), broken out per pinned `StepError`
-// variant. Each `#[test]` (including each `proptest!`-generated test) runs on
-// its own freshly spawned thread, so this thread-local is naturally scoped to
-// a single test; its `Drop` impl prints the final tally exactly once, right
-// after that test's cases finish running — including the `proptest!` case
-// loop, which has no code path of its own to run after the last case.
-struct KnownInsertErrorBucket {
-    node_not_found: Cell<usize>,
-    index_out_of_bounds: Cell<usize>,
-    illegal_insert_slot: Cell<usize>,
-}
-
-impl KnownInsertErrorBucket {
-    fn record(&self, variant: PinnedDefectVariant) {
-        let cell = match variant {
-            PinnedDefectVariant::NodeNotFound => &self.node_not_found,
-            PinnedDefectVariant::IndexOutOfBounds => &self.index_out_of_bounds,
-            PinnedDefectVariant::IllegalInsertSlot => &self.illegal_insert_slot,
-        };
-        cell.set(cell.get() + 1);
-    }
-
-    fn count(&self) -> usize {
-        self.node_not_found.get() + self.index_out_of_bounds.get() + self.illegal_insert_slot.get()
-    }
-}
-
-impl Drop for KnownInsertErrorBucket {
-    fn drop(&mut self) {
-        println!(
-            "known_insert_error_bucket: {} (node_not_found={}, index_out_of_bounds={}, illegal_insert_slot={})",
-            self.count(),
-            self.node_not_found.get(),
-            self.index_out_of_bounds.get(),
-            self.illegal_insert_slot.get()
-        );
-    }
-}
-
-thread_local! {
-    static KNOWN_INSERT_ERROR_BUCKET: KnownInsertErrorBucket = KnownInsertErrorBucket {
-        node_not_found: Cell::new(0),
-        index_out_of_bounds: Cell::new(0),
-        illegal_insert_slot: Cell::new(0),
-    };
-}
 
 fn fixtures() -> Vec<State> {
     let mut out = Vec::new();
@@ -214,12 +121,6 @@ fn assert_drop_parity(
     modifiers: InputModifiers,
     source: Option<Selection>,
 ) {
-    // Touch the thread-local unconditionally (even when this call never hits
-    // the Err branch below) so its `Drop`-driven println always fires when
-    // this test's thread exits, not only on runs that happen to bucket an
-    // error.
-    KNOWN_INSERT_ERROR_BUCKET.with(|_| {});
-
     // Align the gate domain with the production-reachable input space: for an
     // internal-selection payload the Over/Drop handlers refuse a drop whose
     // position lands inside the moved/copied selection (dnd.rs). Judging or
@@ -258,39 +159,14 @@ fn assert_drop_parity(
 
     let executed = match run_result {
         Ok(()) => run_changed,
-        // An erroring execution is a distinct failure mode from the
-        // judge-vs-execution state-change parity contract this gate enforces.
-        // judge is a shallow schema-shape feasibility oracle
-        // (`resolve_slice_insertion`): it cannot foresee transactional
-        // StepErrors that the multi-step block-boundary execution raises —
-        // e.g. anchoring a follow-up insert against a projection-synthesized
-        // scaffold (NodeNotFound), inserting past a fixed-slot container's
-        // children (IndexOutOfBounds), or a delete-time cursor-repair filler
-        // that doesn't fit its container's schema (IllegalInsertSlot).
-        // `is_pinned_execution_defect` allowlists exactly those variants; each
-        // is pinned by its own deterministic test (see that function's doc
-        // comment for the 1:1 mapping). (Under judge=true a real plan exists,
-        // so a clean execution is never `Ok(false)`; erroring executions are
-        // the only residual, and skipping them cannot mask an
-        // under-prediction, which needs a clean `Ok(true)`.) Any Err outside
-        // the allowlist is a distinct, potentially new latent execution bug
-        // and must not be silently swallowed by this gate.
         Err(err) => {
-            if is_pinned_execution_defect(&err) {
-                let variant = pinned_defect_variant(&err).expect(
-                    "is_pinned_execution_defect(err) implies pinned_defect_variant(err).is_some()",
-                );
-                KNOWN_INSERT_ERROR_BUCKET.with(|b| b.record(variant));
-                assert!(
-                    !run_changed,
-                    "pinned execution defect must not mutate state"
-                );
-                return;
-            }
+            assert!(
+                !run_changed,
+                "an erroring drop execution must not mutate state (transact atomicity): {err}"
+            );
             panic!(
-                "drop execution returned an Err outside the known insert-error bucket \
-                 (new latent execution bug?): position={position:?} payload={payload:?} \
-                 error={err}"
+                "drop execution returned an Err (latent execution bug): \
+                 position={position:?} payload={payload:?} error={err}"
             );
         }
     };
@@ -547,19 +423,14 @@ fn move_drop_inside_own_fold_is_domain_excluded_yet_execution_reanchors() {
     );
 }
 
-// Reconstructs a latent execution bug that schema-shape judging previously
-// masked (also outside the production-reachable domain per
-// `position_inside_selection`): copying the whole bullet list into a block
-// position inside its own first list item. judge predicts a valid insertion
-// from schema-shape feasibility, but executing the block-boundary plan inserts
-// the nested BulletList first — which forces the projection to synthesize a
-// leading Paragraph scaffold to keep the ListItem valid — and the following
-// Paragraph insert then resolves its sequence anchor against that synthetic
-// child, which has no CRDT identity, surfacing StepError::NodeNotFound. When
-// the execution path stops over-predicting (or the insert is made robust to
-// the intermediate scaffold), this test must be updated.
+// Copying the whole bullet list into a block position inside its own first
+// list item. The sequential block-boundary insert used to anchor its follow-up
+// insert on a normalization-synthesized scaffold with no CRDT identity
+// (StepError::NodeNotFound); `insert_blocks_at_block_boundary` now re-derives
+// each slot from the sibling it just inserted, so the judgment and the
+// execution agree on a successful, observable drop.
 #[test]
-fn copy_whole_list_into_its_own_item_execution_hits_synthetic_scaffold_anchor() {
+fn copy_whole_list_into_its_own_item_succeeds_observably() {
     let state = fixtures().swap_remove(3);
     let mut editor = Editor::new_test(state);
     let source = source_range(&mut editor, 0, 20).expect("document-spanning source");
@@ -594,7 +465,7 @@ fn copy_whole_list_into_its_own_item_execution_hits_synthetic_scaffold_anchor() 
         "judge predicts a valid insertion from schema-shape feasibility alone"
     );
 
-    let (run_result, _run_changed) = {
+    let (run_result, run_changed) = {
         let mut scratch = Editor::new_test(editor.state().clone());
         let before = crate::test_utils::EditorSnapshot::capture(&scratch);
         let result = apply_drop_for_test(
@@ -608,25 +479,23 @@ fn copy_whole_list_into_its_own_item_execution_hits_synthetic_scaffold_anchor() 
         (result, before != after)
     };
     assert!(
-        matches!(
-            run_result,
-            Err(EditorError::Command(editor_commands::CommandError::Step(
-                editor_transaction::StepError::NodeNotFound(_)
-            )))
-        ),
-        "drop execution anchors the follow-up insert against a synthetic scaffold with no CRDT identity: {run_result:?}"
+        run_result.is_ok(),
+        "copying the list into its own item must execute cleanly: {run_result:?}"
+    );
+    assert!(
+        run_changed,
+        "a judged-true copy must observably change state"
     );
 }
 
 // The interior filter (`position_inside_selection`) uses a strict interval, so a
 // copy whose drop position sits ON the source's `from` boundary is not excluded —
-// and copy, unlike move, has no boundary no-op. This reaches the same latent
-// synthetic-scaffold execution bug as the interior case, from a source that only
-// touches (not contains) the position, which the gate would otherwise flag as an
-// over-prediction. Pinned so the residual stays visible until the execution path
-// stops over-predicting.
+// and copy, unlike move, has no boundary no-op. This used to reach the same
+// synthetic-scaffold anchor bug as the interior case; with the anchor-relative
+// re-derivation it now lands cleanly, keeping judgment and execution in
+// agreement from a source that only touches (not contains) the position.
 #[test]
-fn copy_drop_at_list_item_source_boundary_is_uncovered_by_interior_filter() {
+fn copy_drop_at_list_item_source_boundary_succeeds_observably() {
     let state = fixtures().swap_remove(3);
     let mut editor = Editor::new_test(state);
     let source = source_range(&mut editor, 2, 20).expect("boundary-touching source");
@@ -658,7 +527,7 @@ fn copy_drop_at_list_item_source_boundary_is_uncovered_by_interior_filter() {
     };
     assert!(judged, "judge predicts a valid insertion");
 
-    let (run_result, _run_changed) = {
+    let (run_result, run_changed) = {
         let mut scratch = Editor::new_test(editor.state().clone());
         let before = crate::test_utils::EditorSnapshot::capture(&scratch);
         let result = apply_drop_for_test(
@@ -672,24 +541,24 @@ fn copy_drop_at_list_item_source_boundary_is_uncovered_by_interior_filter() {
         (result, before != after)
     };
     assert!(
-        matches!(
-            run_result,
-            Err(EditorError::Command(editor_commands::CommandError::Step(
-                editor_transaction::StepError::NodeNotFound(_)
-            )))
-        ),
-        "drop execution hits the same synthetic-scaffold anchor from a boundary-touching source: {run_result:?}"
+        run_result.is_ok(),
+        "the boundary-touching copy must execute cleanly: {run_result:?}"
+    );
+    assert!(
+        run_changed,
+        "a judged-true copy must observably change state"
     );
 }
 
-// A second variant of the same over-prediction class, through a different code
-// path and error: copying a fold-spanning selection into a block position past a
-// fold's fixed slots (title, content). judge predicts a valid block-boundary
-// insertion, but executing it inserts past the fold's two children, so the step
-// layer raises IndexOutOfBounds. Pinned so this residual — which the gate skips as
-// an erroring execution — stays visible and forces an update when the path is fixed.
+// Copying a fold-spanning selection into the gap past the fold's fixed slots
+// (title, content). A fixed-arity container can never absorb an extra child —
+// the fragments would stay projection-suppressed misfits — so
+// `resolve_slice_insertion` refuses (NoFit) and the execution, consuming the
+// same resolve, is a clean no-op: judgment and execution agree at `false`.
+// (This used to over-predict and then die on IndexOutOfBounds once mid-batch
+// normalization suppressed the first inserted child.)
 #[test]
-fn copy_into_fold_past_fixed_slots_execution_hits_index_out_of_bounds() {
+fn copy_into_fold_past_fixed_slots_is_judged_no_fit() {
     let state = fixtures().swap_remove(1);
     let mut editor = Editor::new_test(state);
     let source = source_range(&mut editor, 0, 9).expect("fold-spanning source");
@@ -711,9 +580,12 @@ fn copy_into_fold_past_fixed_slots_execution_hits_index_out_of_bounds() {
             Some(&source),
         )
     };
-    assert!(judged, "judge predicts a valid block-boundary insertion");
+    assert!(
+        !judged,
+        "a fixed-arity container admits no extra child, so the judge refuses"
+    );
 
-    let (run_result, _run_changed) = {
+    let (run_result, run_changed) = {
         let mut scratch = Editor::new_test(editor.state().clone());
         let before = crate::test_utils::EditorSnapshot::capture(&scratch);
         let result = apply_drop_for_test(
@@ -727,36 +599,60 @@ fn copy_into_fold_past_fixed_slots_execution_hits_index_out_of_bounds() {
         (result, before != after)
     };
     assert!(
-        matches!(
-            run_result,
-            Err(EditorError::Command(editor_commands::CommandError::Step(
-                editor_transaction::StepError::IndexOutOfBounds { .. }
-            )))
-        ),
-        "drop execution inserts past the fold's fixed slots: {run_result:?}"
+        run_result.is_ok(),
+        "the refused drop must degrade to a clean no-op, not an error: {run_result:?}"
+    );
+    assert!(
+        !run_changed,
+        "a judged-false drop must not observably change state"
+    );
+}
+
+// Pins the input the re-expanded gate (all execution errors fatal) surfaced
+// after the erroring-execution allowlist was removed (fixture 3, move,
+// pos_off=21/src=3..20): moving a document-spanning selection to the root's
+// trailing gap leaves the root with only a normalization-synthesized trailing
+// paragraph scaffold after the delete half, so the re-anchored block-boundary
+// insert's FIRST slot anchored on a synthetic sibling with no CRDT identity
+// (StepError::NodeNotFound). `child_seq_insert_pos` now retreats to the
+// nearest real left sibling (container start when none precedes), so the move
+// lands cleanly and judgment matches execution.
+#[test]
+fn move_document_spanning_selection_to_root_end_gap_succeeds() {
+    let state = fixtures().swap_remove(3);
+    let size = flat_size(&state.view());
+    let mut editor = Editor::new_test(state);
+    let source =
+        source_range(&mut editor, 3.min(size), 20.min(size)).expect("document-spanning source");
+    let position =
+        position_at_flat(&mut editor, 21.min(size)).expect("position at the root's trailing gap");
+    editor.apply(Message::Selection {
+        op: SelectionOp::SetFlat {
+            start: 3.min(size),
+            end: 20.min(size),
+        },
+    });
+    assert_drop_parity(
+        &mut editor,
+        position,
+        &DndDropPayload::InternalSelection,
+        InputModifiers::default(),
+        Some(source),
     );
 }
 
 // Reconstructs discrepancy #4 from the 4096-case exploration: a move (alt=false)
 // of the bullet list's full two-item child range to a root-level position past
 // the list's end — outside the source (18 < 19), so the strict interior filter
-// does not cover it. The delete half of move's delete-then-insert
-// (`delete_selection`, well before `insert_slice_at` ever runs) empties the
-// bullet_list to zero children, and the cursor-repair fallback in
+// does not cover it. The delete half of move's delete-then-insert empties the
+// bullet_list; the cursor-repair path in
 // `ensure_selection_after_child_range_delete`
-// (crates/editor-commands/src/helpers/deletion.rs) unconditionally inserts a
-// bare Paragraph filler into the emptied container — schema-illegal for a
-// BulletList, whose content model only accepts ListItem — surfacing
-// StepError::IllegalInsertSlot. Because the judge now routes every move through
-// the same delete-then-remap simulation, its own `delete_selection` hits this
-// same error; `move_insertion_fits_after_delete` swallows the delete error and
-// returns `false`, so judge correctly REFUSES (no over-prediction) while the
-// execution still errors. The gate skips the erroring execution via the pinned
-// `IllegalInsertSlot` allowlist. Pinned so this latent execution defect stays
-// visible until the repair fallback accounts for list-type (as opposed to
-// textblock-hosting) block containers.
+// (crates/editor-commands/src/helpers/deletion.rs) now prunes the emptied
+// list container instead of inserting a schema-illegal bare Paragraph filler
+// (formerly pinned as StepError::IllegalInsertSlot), so the judgment and the
+// execution agree on a successful, observable drop.
 #[test]
-fn move_bullet_list_items_outside_source_execution_hits_illegal_insert_slot() {
+fn move_bullet_list_items_outside_source_succeeds_observably() {
     let state = fixtures().swap_remove(3);
     let mut editor = Editor::new_test(state);
     let source = source_range(&mut editor, 1, 18).expect("bullet-list child-range source");
@@ -784,11 +680,12 @@ fn move_bullet_list_items_outside_source_execution_hits_illegal_insert_slot() {
         )
     };
     assert!(
-        !judged,
-        "the move simulation's own delete_selection hits the same error, so judge refuses"
+        judged,
+        "the move simulation's delete half now succeeds (emptied list pruned), \
+         and the re-anchored insertion resolves"
     );
 
-    let (run_result, _run_changed) = {
+    let (run_result, run_changed) = {
         let mut scratch = Editor::new_test(editor.state().clone());
         let before = crate::test_utils::EditorSnapshot::capture(&scratch);
         let result = apply_drop_for_test(
@@ -802,14 +699,12 @@ fn move_bullet_list_items_outside_source_execution_hits_illegal_insert_slot() {
         (result, before != after)
     };
     assert!(
-        matches!(
-            run_result,
-            Err(EditorError::Command(editor_commands::CommandError::Step(
-                editor_transaction::StepError::IllegalInsertSlot { .. }
-            )))
-        ),
-        "move's delete half empties the bullet_list, and the cursor-repair \
-         fallback's bare-Paragraph filler is schema-illegal for a list container: {run_result:?}"
+        run_result.is_ok(),
+        "moving the whole child range out of a bullet list must execute cleanly: {run_result:?}"
+    );
+    assert!(
+        run_changed,
+        "a judged-true move must observably change state"
     );
 }
 
@@ -840,65 +735,4 @@ fn drop_judgment_matches_execution_at_block_boundaries() {
             assert_drop_parity(&mut editor, position, &payload, modifiers, None);
         }
     }
-    KNOWN_INSERT_ERROR_BUCKET.with(|b| println!("known_insert_error_bucket: {}", b.count()));
-}
-
-// Reconstructs the same judged=true/execution=Err(NodeNotFound) input as
-// `copy_drop_at_list_item_source_boundary_is_uncovered_by_interior_filter` (the
-// boundary-touching variant, not the strictly-interior one — `position_inside_selection`
-// would otherwise gate the drop before the handler ever reaches `apply_drop`, making
-// the interior variant unreachable through this path). This test drives the input
-// through the full handler Drop path (`handle_dnd_op`, via
-// `Message::Dnd { op: DndOp::Drop { .. } }`) instead of calling `apply_drop_for_test`
-// directly. `handle::dnd::handle_dnd_op` carries a bridge (see the TODO above its
-// `apply_drop` match) that downgrades this known insertion error to a silent no-op
-// so the handler never surfaces it. If the underlying execution bug is ever fixed
-// and this exact input starts succeeding instead of erroring, the
-// document/selection-unchanged assertion below will go red, forcing the bridge to
-// be reconsidered and removed.
-#[test]
-fn internal_copy_drop_with_known_insert_error_degrades_to_silent_noop() {
-    let state = fixtures().swap_remove(3);
-    let mut editor = Editor::new_test(state);
-    let source = source_range(&mut editor, 2, 20).expect("boundary-touching source");
-    let position = position_at_flat(&mut editor, 2).expect("position at the source from-boundary");
-    let modifiers = InputModifiers {
-        alt: true,
-        ..InputModifiers::default()
-    };
-
-    // Reconstruct the Drop precondition directly on `editor.dnd`, matching what
-    // `DndOp::StartInternalSelection` + `DndOp::Over` would have produced for this
-    // source/position pair (both judge as an allowed drop, per the pinned test
-    // referenced above).
-    let view = editor.state.view();
-    editor.dnd = DndState::InternalDnd {
-        source: StableSelection::capture(&source, &view),
-        drop_target: Some(DropTarget {
-            position: StablePosition::capture(&position, &view),
-            indicator: DropIndicator::Block {
-                page_idx: 0,
-                x: 0.0,
-                y: 0.0,
-                width: 0.0,
-            },
-        }),
-    };
-
-    let before = EditorSnapshot::capture(&editor);
-    editor.apply(Message::Dnd {
-        op: DndOp::Drop {
-            page: 0,
-            x: 0.0,
-            y: 0.0,
-            payload: DndDropPayload::InternalSelection,
-            modifiers,
-        },
-    });
-    let after = EditorSnapshot::capture(&editor);
-
-    assert_eq!(
-        before, after,
-        "the bridge must degrade the known insertion error to a silent no-op: document/selection must stay unchanged"
-    );
 }

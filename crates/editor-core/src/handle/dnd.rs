@@ -158,16 +158,7 @@ pub fn handle_dnd_op(editor: &mut Editor, op: DndOp) -> Result<(), EditorError> 
                 None
             };
             let result = if let Some(position) = target {
-                // TODO(TR-412): 한시 가교 — 구 can_apply_drop 프로브가 삼키던 실행
-                // 오류(예: insert_blocks_at_block_boundary의 synthetic 스캐폴드 앵커
-                // NodeNotFound)를 판정 전환 후에도 구 UX(조용한 no-op)로 유지한다.
-                // TR-412의 근본 수정이 랜딩되면 이 강등을 제거하고 오류를 다시
-                // 전파할 것 — dnd_judgment_parity.rs의 박제 테스트들이 그 시점에
-                // red가 되어 제거를 강제한다.
-                match apply_drop(editor, position, payload, modifiers, internal_source) {
-                    Ok(()) => Ok(()),
-                    Err(_) => Ok(()),
-                }
+                apply_drop(editor, position, payload, modifiers, internal_source)
             } else {
                 Ok(())
             };

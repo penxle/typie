@@ -18,7 +18,7 @@ mod test_utils;
 pub use dissolve::dissolve;
 pub use effect::*;
 pub use error::*;
-pub use fulfill::fulfill;
+pub use fulfill::{first_child_type, fulfill, minimal_subtree};
 pub use materialize::{can_materialize_repair_target, materialize_repair_target};
 pub use meta::*;
 pub use prune::prune;

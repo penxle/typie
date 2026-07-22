@@ -5,7 +5,7 @@ use editor_model::{
 };
 use editor_state::paragraph_break_at_end;
 use editor_state::{Affinity, Position, ProjectedState, Selection};
-use editor_transaction::{Step, Transaction, fulfill};
+use editor_transaction::{Step, Transaction, first_child_type, fulfill, minimal_subtree};
 
 use super::{
     apply_carry_from_selection, apply_carry_on_emptied, capture_first_charlike_paint,
@@ -751,6 +751,43 @@ fn ensure_selection_after_child_range_delete(
             }
             _ => {}
         }
+    }
+
+    // Containers whose slots reject a paragraph filler (bullet/ordered list,
+    // table row, …) cannot take the shipped fallback below: emptied ones are
+    // pruned like the cross-node path does, surviving ones get their schema's
+    // minimal child instead.
+    let non_paragraph_child = {
+        let view = tr.state().view();
+        view.node(container_id)
+            .and_then(|nv| first_child_type(&nv.spec().content))
+            .filter(|t| *t != NodeType::Paragraph)
+    };
+    if let Some(child_type) = non_paragraph_child {
+        let parent_slot = {
+            let view = tr.state().view();
+            view.node(container_id).and_then(|nv| {
+                is_structurally_empty(&nv)
+                    .then(|| nv.parent().map(|p| (p.id(), nv.index().unwrap_or(0))))
+                    .flatten()
+            })
+        };
+        if let Some((parent_id, container_index)) = parent_slot {
+            prune_empty_full(tr, container_id)?;
+            let view = tr.state().view();
+            if view.node(container_id).is_none() {
+                return Ok(resolve_selection_at(&view, parent_id, container_index));
+            }
+        }
+        tr.insert_subtree(container_id, offset, minimal_subtree(child_type))?;
+        let view = tr.state().view();
+        return Ok(match slot_kind(&view, container_id, offset) {
+            Some(SlotKind::Block(child_id)) => {
+                selection_at_child(&view, container_id, offset, child_id)
+                    .unwrap_or_else(|| resolve_selection_at(&view, container_id, offset))
+            }
+            _ => resolve_selection_at(&view, container_id, offset),
+        });
     }
 
     tr.insert_subtree(

@@ -47,22 +47,25 @@ pub(crate) fn child_seq_insert_pos(
     let pos = if index == 0 {
         seq_insert_pos(ps, parent, 0).ok_or(StepError::NodeNotFound(parent))?
     } else {
-        let prev = children[index - 1];
         // Insert right after the previous sibling's last sequence element. For a
         // block sibling that's its subtree's exact max position — a rightmost-path
         // walk under-reports it across a reversed fixed-slot (Fold), landing the
-        // insert inside the container.
-        let max = if ps.is_block(prev) {
-            subtree_seq_max_exact(ps, prev).ok_or(StepError::NodeNotFound(prev))?
-        } else {
-            match prev.as_op_dot() {
-                Some(d) => ps
-                    .seq_flat_pos(d.dot())
-                    .ok_or(StepError::NodeNotFound(prev))?,
-                None => return Err(StepError::NodeNotFound(prev)),
+        // insert inside the container. A synthetic scaffold sibling has no CRDT
+        // identity (no sequence position of its own), so fall back to the nearest
+        // real sibling on its left — real order is what the sequence encodes;
+        // scaffolds are projection artifacts placed by normalization — and to the
+        // container start when no real sibling precedes the slot.
+        let max = children[..index].iter().rev().find_map(|&prev| {
+            if ps.is_block(prev) {
+                subtree_seq_max_exact(ps, prev)
+            } else {
+                prev.as_op_dot().and_then(|d| ps.seq_flat_pos(d.dot()))
             }
-        };
-        max + 1
+        });
+        match max {
+            Some(max) => max + 1,
+            None => seq_insert_pos(ps, parent, 0).ok_or(StepError::NodeNotFound(parent))?,
+        }
     };
     validate_ins_slot(ps, parent, pos, index, t, None)?;
     Ok(pos)

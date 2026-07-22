@@ -412,6 +412,57 @@ mod tests {
     }
 
     #[test]
+    fn deleting_all_list_items_removes_the_emptied_list() {
+        let (initial, ..) = state! {
+            doc { r: root {
+                p1: paragraph { text("Before") }
+                bl: bullet_list {
+                    list_item { paragraph { text("a") } }
+                    list_item { paragraph { text("b") } }
+                }
+                p2: paragraph { text("After") }
+            } }
+            selection: (bl, 0) -> (bl, 2)
+        };
+        let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
+        let (expected, ..) = state! {
+            doc { root {
+                p1: paragraph { text("Before") }
+                p2: paragraph { text("After") }
+            } }
+            selection: (p2, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn deleting_tail_list_items_materializes_schema_valid_item() {
+        let (initial, ..) = state! {
+            doc { root {
+                bl: bullet_list {
+                    list_item { paragraph { text("a") } }
+                    list_item { paragraph { text("b") } }
+                    list_item { paragraph { text("c") } }
+                }
+                paragraph { text("After") }
+            } }
+            selection: (bl, 1) -> (bl, 3)
+        };
+        let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
+        let (expected, ..) = state! {
+            doc { root {
+                bullet_list {
+                    list_item { paragraph { text("a") } }
+                    list_item { np: paragraph {} }
+                }
+                paragraph { text("After") }
+            } }
+            selection: (np, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
     fn fulfill_empty_container_after_deletion() {
         let (initial, ..) = state! {
             doc { r: root {

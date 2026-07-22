@@ -747,10 +747,37 @@ pub(crate) fn insert_blocks_at_block_boundary(
     let base_index = position.offset;
     let block_count = blocks.len();
     let terminal_page_break = blocks.last().is_some_and(paragraph_ends_with_page_break);
+    let mut inserted: Vec<Dot> = Vec::with_capacity(block_count);
     tr.batch(|tr| {
-        for (offset, block) in blocks.iter().enumerate() {
+        // Normalization between the sequential inserts can synthesize scaffold
+        // children that shift projected indices, so each follow-up insert
+        // re-derives its slot from the sibling inserted just before it instead
+        // of trusting `base_index + offset` arithmetic — that arithmetic is
+        // what used to anchor an insert on a synthetic scaffold (no CRDT
+        // identity) and fail with NodeNotFound.
+        let mut known = {
+            let view = tr.state().view();
+            real_child_ids(&view, container_id)
+        };
+        for block in blocks.iter() {
             let subtree = block.clone().into_subtree();
-            tr.insert_subtree(container_id, base_index + offset, subtree)?;
+            let index = {
+                let view = tr.state().view();
+                match inserted.last().and_then(|prev| view.node(*prev)) {
+                    Some(prev) => prev.index().map(|i| i + 1),
+                    None => None,
+                }
+                .unwrap_or(base_index)
+            };
+            tr.insert_subtree(container_id, index, subtree)?;
+            let view = tr.state().view();
+            if let Some(new_id) = real_child_ids(&view, container_id)
+                .into_iter()
+                .find(|id| !known.contains(id))
+            {
+                known.push(new_id);
+                inserted.push(new_id);
+            }
         }
         let steps = {
             let view = tr.state().view();
@@ -762,26 +789,51 @@ pub(crate) fn insert_blocks_at_block_boundary(
         Ok::<(), CommandError>(())
     })?;
 
+    let last_inserted_index = inserted.last().copied().and_then(|id| {
+        let view = tr.state().view();
+        view.node(id).and_then(|n| n.index())
+    });
     let trailing_synthetic = terminal_page_break
-        .then(|| block_child_id(tr, container_id, base_index + block_count))
+        .then(|| block_child_id(tr, container_id, last_inserted_index? + 1))
         .flatten()
         .filter(|id| id.is_synthetic());
     let final_position = trailing_synthetic
         .and_then(|id| position_at_start_of_block(tr, id).ok())
         .or_else(|| {
-            block_child_id(tr, container_id, base_index + block_count - 1)
-                .and_then(|id| position_at_end_of_block(tr, id).ok())
+            inserted
+                .last()
+                .and_then(|id| position_at_end_of_block(tr, *id).ok())
         });
     if let Some(mut final_pos) = final_position {
         final_pos.affinity = Affinity::Downstream;
         tr.set_selection(Some(Selection::collapsed(final_pos)))?;
     }
 
+    let first_inserted_index = inserted.first().copied().and_then(|id| {
+        let view = tr.state().view();
+        view.node(id).and_then(|n| n.index())
+    });
+    let (start_index, span) = match (first_inserted_index, last_inserted_index) {
+        (Some(first), Some(last)) => (first, last - first + 1),
+        _ => (base_index, block_count),
+    };
     Ok(Some(selection_over_inserted_blocks(
         container_id,
-        base_index,
-        block_count,
+        start_index,
+        span,
     )))
+}
+
+fn real_child_ids(view: &DocView, container_id: Dot) -> Vec<Dot> {
+    view.node(container_id)
+        .map(|container| {
+            container
+                .child_blocks()
+                .map(|b| b.id())
+                .filter(|id| id.as_op_dot().is_some())
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 pub(crate) fn block_boundary_fragments(
