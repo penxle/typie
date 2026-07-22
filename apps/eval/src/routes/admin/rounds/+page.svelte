@@ -29,11 +29,17 @@
 
   const availableLabels = $derived(data.labelsByCorpusVersion[corpusVersion] ?? []);
 
-  // 코퍼스 버전이 바뀌면 더 이상 유효하지 않은 선택을 정리한다.
+  // 코퍼스 버전이 바뀌면 더 이상 유효하지 않은 선택을 정리한다. availableLabels만 추적하고 정리 대상
+  // 상태는 untrack으로 읽는다 — 추적 상태를 같은 effect에서 읽고 쓰면 무한 재실행된다.
   $effect(() => {
-    selectedLabels = selectedLabels.filter((label) => availableLabels.includes(label));
-    if (v0Label && !availableLabels.includes(v0Label)) v0Label = '';
-    if (candidateLabel && !availableLabels.includes(candidateLabel)) candidateLabel = '';
+    const labels = availableLabels;
+    untrack(() => {
+      if (selectedLabels.some((label) => !labels.includes(label))) {
+        selectedLabels = selectedLabels.filter((label) => labels.includes(label));
+      }
+      if (v0Label && !labels.includes(v0Label)) v0Label = '';
+      if (candidateLabel && !labels.includes(candidateLabel)) candidateLabel = '';
+    });
   });
 
   const toggleLabel = (label: string) => {

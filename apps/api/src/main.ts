@@ -17,7 +17,7 @@ import { attachSyncServer } from '#/sync/index.ts';
 const log = logger.getChild('main');
 
 app.use('*', async (c, next) => {
-  if (c.req.path.startsWith('/healthz') || c.req.path.startsWith('/bmo/')) {
+  if (c.req.path.startsWith('/healthz') || c.req.path.startsWith('/bmo/') || c.req.path.startsWith('/internal/')) {
     return next();
   }
 
