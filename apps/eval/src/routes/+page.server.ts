@@ -1,6 +1,6 @@
 import { error } from '@sveltejs/kit';
 import { and, eq, sql } from 'drizzle-orm';
-import { countClaimable } from '$lib/server/claim.ts';
+import { claimableSummary } from '$lib/server/claim.ts';
 import { createDb, Judgments, Tasks } from '$lib/server/db/index.ts';
 import type { PageServerLoad } from './$types';
 
@@ -29,7 +29,7 @@ export const load: PageServerLoad = async ({ platform, locals }) => {
     .from(Judgments)
     .where(eq(Judgments.draft, false));
   const [roundRequired] = await db.select({ n: sql<number>`coalesce(sum(coalesce(${Tasks.requiredJudgments}, 1)), 0)` }).from(Tasks);
-  const remaining = await countClaimable(db, locals.email);
+  const { remaining, quota } = await claimableSummary(db, locals.email);
 
   return {
     email: locals.email,
@@ -37,5 +37,6 @@ export const load: PageServerLoad = async ({ platform, locals }) => {
     doneCount: done.length,
     round: { done: roundDone?.n ?? 0, required: roundRequired?.n ?? 0 },
     remaining,
+    quota,
   };
 };

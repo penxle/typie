@@ -1,8 +1,27 @@
 <!doctype html>
-<html lang="ko">
+<html lang="ko" data-theme="light" data-variant-light="white" data-variant-dark="black">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" type="image/svg+xml" href="/icons/favicon.svg" />
+    <link rel="icon" type="image/png" href="/icons/favicon.png" sizes="32x32" />
+    <script>
+      (function () {
+        var mq = window.matchMedia('(prefers-color-scheme: dark)');
+        var apply = function () {
+          var stored = null;
+          try {
+            stored = localStorage.getItem('theme');
+          } catch (_) {
+            // localStorage 접근이 차단된 환경에서는 시스템 설정만 따른다.
+          }
+          document.documentElement.dataset.theme = stored === 'light' || stored === 'dark' ? stored : mq.matches ? 'dark' : 'light';
+        };
+        apply();
+        mq.addEventListener('change', apply);
+      })();
+    </script>
     %sveltekit.head%
   </head>
   <body>

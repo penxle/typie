@@ -1,7 +1,12 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
+  import { Icon } from '@typie/ui/components';
   import { SvelteSet } from 'svelte/reactivity';
+  import IconCheck from '~icons/lucide/check';
+  import IconChevronDown from '~icons/lucide/chevron-down';
+  import IconChevronUp from '~icons/lucide/chevron-up';
+  import IconMapPinOff from '~icons/lucide/map-pin-off';
   import { FEEDBACK_LABELS } from '$lib/domain/feedback-labels.ts';
   import type { FeedbackLabelEntry, FeedbackLabelMap } from '$lib/domain/feedback-labels.ts';
 
@@ -121,11 +126,17 @@
             </span>
           {/if}
           {#if feedback.matchStart === null}
-            <span class={css({ fontSize: '12px', color: 'text.faint' })}>본문 위치 없음</span>
+            <span class={flex({ align: 'center', gap: '3px', fontSize: '12px', color: 'text.faint' })}>
+              <Icon icon={IconMapPinOff} size={12} />
+              본문 위치 없음
+            </span>
           {/if}
           <span class={css({ marginLeft: 'auto' })}>
             <button
               class={css({
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
                 paddingX: '8px',
                 paddingY: '3px',
                 borderWidth: '1px',
@@ -143,7 +154,11 @@
               }}
               type="button"
             >
+              {#if entry}
+                <Icon style={css.raw({ color: 'text.success' })} icon={IconCheck} size={12} />
+              {/if}
               이 피드백 평가
+              <Icon icon={expanded ? IconChevronUp : IconChevronDown} size={12} />
             </button>
           </span>
         </div>

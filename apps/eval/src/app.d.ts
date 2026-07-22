@@ -1,5 +1,6 @@
-/* eslint-disable @typescript-eslint/consistent-type-definitions */
+import 'unplugin-icons/types/svelte';
 
+/* eslint-disable @typescript-eslint/consistent-type-definitions */
 import type { D1Database, Workflow } from '@cloudflare/workers-types';
 
 declare global {
@@ -21,5 +22,3 @@ declare global {
     }
   }
 }
-
-export {};

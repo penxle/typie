@@ -1,9 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { corpusConflict, fillQuotas, pickLiteraryDocs, selectSuccessfulExtracts, shuffle, stratifySelection } from './sampling-select.ts';
+import {
+  candidateLimitFor,
+  corpusConflict,
+  fillQuotas,
+  MAX_CANDIDATES,
+  pickLiteraryDocs,
+  selectSuccessfulExtracts,
+  shuffle,
+  stratifySelection,
+} from './sampling-select.ts';
 import type { Candidate } from './internal-api.ts';
 import type { LiteraryDoc } from './sampling-select.ts';
 
-const candidate = (documentId: string): Candidate => ({ documentId, text: `본문 ${documentId}`, characterCount: 100 });
+const candidate = (documentId: string): Candidate => ({ documentId, characterCount: 100 });
 
 const seededRng = (seq: number[]): (() => number) => {
   let i = 0;
@@ -78,6 +87,20 @@ describe('fillQuotas', () => {
   it('성공분이 부족하면 가능한 만큼만 반환한다', () => {
     const chosen = fillQuotas([ext('r0', 'romance'), ext('f0', 'fantasy')], { romance: 5, fantasy: 5 }, 5);
     expect(chosen.length).toBe(2);
+  });
+});
+
+describe('candidateLimitFor', () => {
+  it('코퍼스 크기의 20배수를 요청한다', () => {
+    expect(candidateLimitFor(30)).toBe(600);
+  });
+
+  it('소형 코퍼스는 하한 100을 지킨다', () => {
+    expect(candidateLimitFor(3)).toBe(100);
+  });
+
+  it('대형 코퍼스는 api 스키마 상한에서 잘린다', () => {
+    expect(candidateLimitFor(500)).toBe(MAX_CANDIDATES);
   });
 });
 

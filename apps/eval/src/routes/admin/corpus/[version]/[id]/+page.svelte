@@ -1,11 +1,14 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
+  import { Helmet } from '@typie/ui/components';
   import type { PageData } from './$types';
 
   type Props = { data: PageData };
   const { data }: Props = $props();
 </script>
+
+<Helmet title="코퍼스 문서" trailing="타이피 평가" />
 
 <div class={css({ maxWidth: '840px', marginX: 'auto', paddingY: '40px', paddingX: '32px' })}>
   <a

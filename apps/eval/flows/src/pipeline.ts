@@ -38,13 +38,17 @@ type FeedbackRow = {
 
 const emptyUsage = (): Usage => ({ promptTokens: 0, completionTokens: 0 });
 
+const finiteTokens = (n: number): number => (Number.isFinite(n) ? Math.round(n) : 0);
+
 const addRunUsage = async (db: Db, runId: string, usage: Usage): Promise<void> => {
-  if (usage.promptTokens === 0 && usage.completionTokens === 0) return;
+  const prompt = finiteTokens(usage.promptTokens);
+  const completion = finiteTokens(usage.completionTokens);
+  if (prompt === 0 && completion === 0) return;
   await db
     .update(PipelineRuns)
     .set({
-      promptTokens: sql`${PipelineRuns.promptTokens} + ${usage.promptTokens}`,
-      completionTokens: sql`${PipelineRuns.completionTokens} + ${usage.completionTokens}`,
+      promptTokens: sql`${PipelineRuns.promptTokens} + ${prompt}`,
+      completionTokens: sql`${PipelineRuns.completionTokens} + ${completion}`,
     })
     .where(eq(PipelineRuns.id, runId));
 };

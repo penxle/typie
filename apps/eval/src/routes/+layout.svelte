@@ -1,6 +1,7 @@
 <script lang="ts">
   import '../app.css';
 
+  import { NotificationProvider } from '@typie/ui/notification';
   import type { Snippet } from 'svelte';
 
   type Props = { children: Snippet };
@@ -8,3 +9,5 @@
 </script>
 
 {@render children()}
+
+<NotificationProvider />

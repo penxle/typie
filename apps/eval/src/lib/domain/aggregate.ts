@@ -46,7 +46,7 @@ export const sanityPassRate = (verdicts: PairVerdict[]): number => {
   return verdicts.filter((v) => v === 'tie').length / verdicts.length;
 };
 
-export const falsePositiveRate = (entries: { variantId: string; feedbackCount: number; flaggedCount: number }[]): Map<string, number> => {
+export const flaggedRate = (entries: { variantId: string; feedbackCount: number; flaggedCount: number }[]): Map<string, number> => {
   const totals = new Map<string, { feedbacks: number; flagged: number }>();
   for (const entry of entries) {
     const total = totals.get(entry.variantId) ?? { feedbacks: 0, flagged: 0 };
@@ -70,12 +70,11 @@ export const anchorMatchRate = (entries: { variantId: string; matchedCount: numb
 
 export const feedbackCountDistribution = (
   entries: { variantId: string; feedbackCount: number }[],
-): Map<string, { zero: number; over10: number; total: number }> => {
-  const dist = new Map<string, { zero: number; over10: number; total: number }>();
+): Map<string, { zero: number; total: number }> => {
+  const dist = new Map<string, { zero: number; total: number }>();
   for (const entry of entries) {
-    const d = dist.get(entry.variantId) ?? { zero: 0, over10: 0, total: 0 };
+    const d = dist.get(entry.variantId) ?? { zero: 0, total: 0 };
     if (entry.feedbackCount === 0) d.zero++;
-    if (entry.feedbackCount > 10) d.over10++;
     d.total++;
     dist.set(entry.variantId, d);
   }

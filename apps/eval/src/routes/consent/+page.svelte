@@ -1,6 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
+  import { Helmet } from '@typie/ui/components';
   import { enhance } from '$app/forms';
   import type { PageData } from './$types';
 
@@ -10,6 +11,8 @@
   let agreed = $state(false);
   let submitting = $state(false);
 </script>
+
+<Helmet title="참여 동의" trailing="타이피 평가" />
 
 <main class={css({ minHeight: '[100dvh]', backgroundColor: 'surface.subtle' })}>
   <div class={css({ maxWidth: '640px', marginX: 'auto', paddingY: '64px', paddingX: '20px' })}>

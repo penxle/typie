@@ -56,7 +56,7 @@ export const load: PageServerLoad = async ({ params, platform, locals, fetch }) 
 
   let summary: {
     anchorMatchRate: number;
-    feedbackDistribution: { zero: number; over10: number; total: number };
+    feedbackDistribution: { zero: number; total: number };
     categoryCompliance: number;
   } | null = null;
   let preview: {
@@ -92,7 +92,7 @@ export const load: PageServerLoad = async ({ params, platform, locals, fetch }) 
 
     summary = {
       anchorMatchRate: anchorMatchRate(anchorEntries).get(groupKey) ?? NaN,
-      feedbackDistribution: feedbackCountDistribution(countEntries).get(groupKey) ?? { zero: 0, over10: 0, total: 0 },
+      feedbackDistribution: feedbackCountDistribution(countEntries).get(groupKey) ?? { zero: 0, total: 0 },
       categoryCompliance: categoryComplianceRate(categories),
     };
 

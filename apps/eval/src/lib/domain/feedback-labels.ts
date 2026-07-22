@@ -16,6 +16,9 @@ export const FEEDBACK_LABELS: FeedbackLabel[] = [
 export const FEEDBACK_LABEL_KEYS = new Set(FEEDBACK_LABELS.map((l) => l.key));
 export const NEGATIVE_LABEL_KEYS = new Set(FEEDBACK_LABELS.filter((l) => l.kind === 'negative').map((l) => l.key));
 
+// "오탐"은 피드백 자체가 틀렸다는 라벨로 한정한다 — 나머지 부정 라벨은 품질 지적이지 오탐이 아니다.
+export const STRICT_FALSE_POSITIVE_KEYS = new Set(['fact-error', 'scene-break-fp']);
+
 export type FeedbackLabelEntry = { labels: string[]; comment?: string };
 export type FeedbackLabelMap = Record<string, FeedbackLabelEntry>;
 

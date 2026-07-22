@@ -1,6 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
+  import { Helmet } from '@typie/ui/components';
   import { invalidateAll } from '$app/navigation';
   import VariantStatusBadge from '../VariantStatusBadge.svelte';
   import ApplyPanel from './ApplyPanel.svelte';
@@ -63,6 +64,8 @@
   const rollbackDisabledReason = (row: HistoryRow) =>
     row.rollbackBlockedReason ?? (data.currentPrompts ? null : '현재 프롬프트를 불러오지 못해 롤백 diff를 계산할 수 없습니다.');
 </script>
+
+<Helmet title="적용" trailing="타이피 평가" />
 
 <div class={css({ maxWidth: '960px', marginX: 'auto', paddingY: '40px', paddingX: '32px' })}>
   <header class={css({ marginBottom: '20px' })}>

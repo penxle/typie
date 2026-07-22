@@ -1,8 +1,19 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex, grid } from '@typie/styled-system/patterns';
+  import { Icon } from '@typie/ui/components';
+  import { Dialog } from '@typie/ui/notification';
   import { untrack } from 'svelte';
-  import { enhance } from '$app/forms';
+  import IconArrowRight from '~icons/lucide/arrow-right';
+  import IconCheck from '~icons/lucide/check';
+  import IconChevronLeft from '~icons/lucide/chevron-left';
+  import IconCircleCheck from '~icons/lucide/circle-check';
+  import IconCornerUpLeft from '~icons/lucide/corner-up-left';
+  import IconInfo from '~icons/lucide/info';
+  import IconSave from '~icons/lucide/save';
+  import { deserialize, enhance } from '$app/forms';
+  import { goto } from '$app/navigation';
+  import ThemeToggle from '$lib/components/ThemeToggle.svelte';
   import { FEEDBACK_LABEL_KEYS } from '$lib/domain/feedback-labels.ts';
   import { computeSegments } from '$lib/domain/highlight.ts';
   import FeedbackSetPanel from './FeedbackSetPanel.svelte';
@@ -48,11 +59,14 @@
   let savedAt = $state<string | null>(null);
   let saving = $state(false);
   let submitting = $state(false);
-  let confirmingRelease = $state(false);
   const busy = $derived(saving || submitting);
   let focusTimer: ReturnType<typeof setTimeout> | undefined;
 
   const outlineButtonClass = css({
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '6px',
     paddingX: '14px',
     paddingY: '9px',
     borderWidth: '1px',
@@ -110,6 +124,37 @@
     return seen;
   });
 
+  let submitButtonEl: HTMLButtonElement | undefined;
+
+  const requestSubmit = () => {
+    Dialog.confirm({
+      title: '평가를 제출할까요?',
+      message: '제출한 뒤에는 수정할 수 없고, 다음 평가로 이동합니다.',
+      actionLabel: '제출',
+      actionHandler: () => {
+        submitButtonEl?.click();
+      },
+    });
+  };
+
+  const requestRelease = () => {
+    Dialog.confirm({
+      title: '이 글을 반납할까요?',
+      message: '입력한 내용은 사라지고, 이 글은 다시 배정되지 않습니다. 다른 평가자에게는 정상적으로 배정됩니다.',
+      action: 'danger',
+      actionLabel: '반납',
+      actionHandler: async () => {
+        const response = await fetch('?/release', { method: 'POST', body: new FormData() });
+        const result = deserialize(await response.text());
+        if (result.type === 'redirect') {
+          await goto(result.location);
+          return;
+        }
+        Dialog.alert({ title: '반납 실패', message: '잠시 후 다시 시도해주세요.' });
+      },
+    });
+  };
+
   const updateLabels = (feedbackId: string, entry: FeedbackLabelEntry | null) => {
     if (entry) {
       labelMap = { ...labelMap, [feedbackId]: entry };
@@ -149,6 +194,7 @@
   };
 
   const readingMinutes = $derived(Math.max(1, Math.round(data.document.characterCount / 500)));
+  const scoredCount = $derived(data.task.setIds.filter((setId) => (scores[setId] ?? 0) > 0).length);
 </script>
 
 <svelte:window onkeydown={onKeydown} />
@@ -166,10 +212,13 @@
       flexShrink: '0',
     })}
   >
-    <a class={css({ fontSize: '13px', color: 'text.subtle', _hover: { color: 'text.default' } })} href="/">← 평가 큐</a>
+    <a class={flex({ align: 'center', gap: '2px', fontSize: '13px', color: 'text.subtle', _hover: { color: 'text.default' } })} href="/">
+      <Icon icon={IconChevronLeft} size={14} />
+      평가 큐
+    </a>
     <div class={flex({ align: 'center', gap: '8px' })}>
-      <span class={css({ fontSize: '13px', color: 'text.subtle' })}>
-        내 판정 {data.progress.done}건 · 라운드 {data.progress.roundDone} / {data.progress.roundRequired}
+      <span class={css({ fontSize: '13px', color: 'text.subtle', fontVariantNumeric: 'tabular-nums' })}>
+        내 판정 {data.progress.done}건 · 라운드 전체 {data.progress.roundDone} / {data.progress.roundRequired}
       </span>
       <div class={css({ width: '120px', height: '4px', borderRadius: 'full', backgroundColor: 'surface.muted', overflow: 'hidden' })}>
         <div
@@ -178,14 +227,24 @@
         ></div>
       </div>
     </div>
-    <span class={css({ marginLeft: 'auto', fontSize: '13px', color: 'text.faint' })}>
+    <span
+      class={flex({
+        align: 'center',
+        gap: '4px',
+        marginLeft: 'auto',
+        fontSize: '13px',
+        color: 'text.faint',
+        fontVariantNumeric: 'tabular-nums',
+      })}
+    >
       {data.document.characterCount.toLocaleString()}자 · 약 {readingMinutes}분
       {#if saving}
         · 저장 중…
       {:else if savedAt}
-        · 임시 저장됨 {savedAt}
+        · <Icon icon={IconCheck} size={12} /> 임시 저장됨 {savedAt}
       {/if}
     </span>
+    <ThemeToggle />
   </header>
 
   <div class={grid({ columns: 2, gap: '0', gridTemplateColumns: '[minmax(0, 1fr) 480px]', flex: '1', minHeight: '0' })}>
@@ -215,6 +274,10 @@
                 backgroundColor: active ? 'amber.300' : 'amber.100',
                 borderBottomWidth: '2px',
                 borderColor: 'amber.400',
+                _dark: {
+                  backgroundColor: active ? '[#6e5f16]' : '[#4a4012]',
+                  borderColor: '[#93801c]',
+                },
                 borderRadius: '2px',
                 color: '[inherit]',
                 cursor: 'pointer',
@@ -290,10 +353,14 @@
       })}
     >
       <nav class={css({ padding: '16px', borderBottomWidth: '1px', borderColor: 'border.subtle', flexShrink: '0' })}>
-        <div class={grid({ columns: 4, gap: '6px' })}>
+        <div style:grid-template-columns={`repeat(${data.sets.length}, 1fr)`} class={css({ display: 'grid', gap: '6px' })}>
           {#each data.sets as set, i (`${i}-${set.setId}`)}
             <button
               class={css({
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '4px',
                 paddingY: '8px',
                 borderRadius: '8px',
                 borderWidth: '1px',
@@ -302,7 +369,6 @@
                 color: activeSetIndex === i ? 'text.bright' : 'text.default',
                 fontSize: '14px',
                 fontWeight: activeSetIndex === i ? 'bold' : 'normal',
-                textAlign: 'center',
                 cursor: 'pointer',
                 transition: '[background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease]',
               })}
@@ -311,6 +377,9 @@
             >
               {labels[i]}
               <span class={css({ fontSize: '11px', fontWeight: 'normal', opacity: '70' })}>{set.feedbacks.length}건</span>
+              {#if isRanking && (scores[set.setId] ?? 0) > 0}
+                <Icon style={css.raw({ color: activeSetIndex === i ? 'text.bright' : 'text.success' })} icon={IconCheck} size={12} />
+              {/if}
             </button>
           {/each}
         </div>
@@ -353,6 +422,9 @@
             <legend class={css({ fontSize: '13px', fontWeight: 'bold', marginBottom: '6px' })}>
               점수
               <span class={css({ fontWeight: 'normal', color: 'text.faint' })}>(같은 평가 허용)</span>
+              <span class={css({ fontWeight: 'normal', color: 'text.faint', fontVariantNumeric: 'tabular-nums' })}>
+                · {scoredCount} / {data.task.setIds.length} 세트 완료
+              </span>
             </legend>
             {#each data.task.setIds as setId, i (setId)}
               <div
@@ -445,11 +517,16 @@
 
         <div class={flex({ wrap: 'wrap', gap: '8px', marginTop: '10px', align: 'center' })}>
           <button class={outlineButtonClass} disabled={busy} formaction="?/save" type="submit">
+            <Icon icon={IconSave} size={14} />
             {saving ? '저장 중…' : '임시 저장'}
           </button>
           <button
             class={css({
               flex: '1',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
               paddingY: '9px',
               borderRadius: '8px',
               backgroundColor: 'accent.brand.default',
@@ -462,25 +539,24 @@
               ['&:hover:not(:disabled)']: { backgroundColor: 'accent.brand.hover' },
             })}
             disabled={!result || busy}
-            formaction="?/submit"
-            type="submit"
+            onclick={requestSubmit}
+            type="button"
           >
             {submitting ? '제출 중…' : '제출하고 다음으로'}
+            <Icon icon={IconArrowRight} size={14} />
           </button>
-          {#if data.draft}
-            {#if confirmingRelease}
-              <span class={css({ fontSize: '12px', color: 'text.faint', whiteSpace: 'nowrap' })}>입력한 내용이 사라집니다</span>
-              <button class={outlineButtonClass} disabled={busy} formaction="?/release" type="submit">반납</button>
-              <button class={outlineButtonClass} disabled={busy} onclick={() => (confirmingRelease = false)} type="button">취소</button>
-            {:else}
-              <button class={outlineButtonClass} disabled={busy} onclick={() => (confirmingRelease = true)} type="button">반납</button>
-            {/if}
-          {/if}
+          <button bind:this={submitButtonEl} aria-hidden="true" formaction="?/submit" hidden tabindex="-1" type="submit"></button>
+          <button class={outlineButtonClass} disabled={busy} onclick={requestRelease} type="button">
+            <Icon icon={IconCornerUpLeft} size={14} />
+            반납
+          </button>
         </div>
-        <p class={css({ marginTop: '6px', height: '16px', fontSize: '12px', color: result ? 'text.success' : 'text.faint' })}>
+        <p class={flex({ align: 'center', gap: '4px', marginTop: '6px', height: '16px', fontSize: '12px', color: 'text.faint' })}>
           {#if result}
+            <Icon style={css.raw({ color: 'text.success' })} icon={IconCircleCheck} size={12} />
             제출하면 다음 평가로 바로 이동합니다.
           {:else}
+            <Icon icon={IconInfo} size={12} />
             {isRanking
               ? '모든 세트에 점수를 매기면 제출할 수 있습니다. 개별 피드백 평가는 선택입니다.'
               : '판정을 선택하면 제출할 수 있습니다.'}

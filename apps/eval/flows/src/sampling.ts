@@ -3,7 +3,14 @@ import { eq, sql } from 'drizzle-orm';
 import { createDb, Documents, PipelineRuns, readStageCache, StageCache } from './db.ts';
 import { createInternalApi } from './internal-api.ts';
 import { classifyLiterary, createOpenAI } from './llm.ts';
-import { corpusConflict, fillQuotas, pickLiteraryDocs, selectSuccessfulExtracts, stratifySelection } from './sampling-select.ts';
+import {
+  candidateLimitFor,
+  corpusConflict,
+  fillQuotas,
+  pickLiteraryDocs,
+  selectSuccessfulExtracts,
+  stratifySelection,
+} from './sampling-select.ts';
 import type { WorkflowEvent, WorkflowStep } from 'cloudflare:workers';
 import type { RunPhase } from '../../src/lib/domain/admin-types.ts';
 import type { Db } from './db.ts';
@@ -13,7 +20,8 @@ import type { Classified, LiteraryDoc, SelectedDocument } from './sampling-selec
 const CLASSIFY_MODEL = 'google-vertex-ai/google/gemini-3.5-flash-lite';
 const CLASSIFY_BATCH = 8;
 const EXTRACT_BATCH = 5;
-const CANDIDATE_INSERT_BATCH = 20;
+// api 응답 크기(문서당 최대 30KB)와 D1 바인딩 파라미터(행당 2개, 100 제한) 양쪽에 여유.
+const TEXTS_BATCH = 20;
 const LLM_STEP = { retries: { limit: 2, delay: '10 seconds' as const, backoff: 'exponential' as const }, timeout: '5 minutes' as const };
 
 const candidateKey = (runId: string, documentId: string): string => `sample/${runId}/candidate/${documentId}`;
@@ -39,20 +47,22 @@ export class SamplingWorkflow extends WorkflowEntrypoint<FlowEnv, SamplingParams
     try {
       const candidateIds = await step.do('candidates', async () => {
         await setPhase(db, runId, 'candidates');
-        const candidates = await api.candidates({ limit: 400 });
-        for (let i = 0; i < candidates.length; i += CANDIDATE_INSERT_BATCH) {
-          await db
-            .insert(StageCache)
-            .values(
-              candidates
-                .slice(i, i + CANDIDATE_INSERT_BATCH)
-                .map((c) => ({ key: candidateKey(runId, c.documentId), value: { text: c.text } })),
-            )
-            .onConflictDoNothing();
-        }
+        const candidates = await api.candidates({ limit: candidateLimitFor(size) });
         await db.update(PipelineRuns).set({ totalDocs: candidates.length, doneDocs: 0 }).where(eq(PipelineRuns.id, runId));
         return candidates.map((c) => c.documentId);
       });
+
+      for (let t = 0; t < candidateIds.length; t += TEXTS_BATCH) {
+        const batchIds = candidateIds.slice(t, t + TEXTS_BATCH);
+        await step.do(`texts-${t}`, LLM_STEP, async () => {
+          const texts = await api.texts(batchIds);
+          if (texts.length === 0) return;
+          await db
+            .insert(StageCache)
+            .values(texts.map((row) => ({ key: candidateKey(runId, row.documentId), value: { text: row.text } })))
+            .onConflictDoNothing();
+        });
+      }
 
       const literaryDocs: LiteraryDoc[] = [];
       await step.do('phase-classify', () => setPhase(db, runId, 'classify'));
@@ -66,13 +76,13 @@ export class SamplingWorkflow extends WorkflowEntrypoint<FlowEnv, SamplingParams
               try {
                 const result = await classifyLiterary(openai, CLASSIFY_MODEL, text);
                 return {
-                  candidate: { documentId, text: '', characterCount: 0 },
+                  candidate: { documentId, characterCount: 0 },
                   literary: result.literary,
                   kind: result.kind,
                   genre: result.genre,
                 };
               } catch {
-                return { candidate: { documentId, text: '', characterCount: 0 }, literary: false, kind: 'error', genre: 'etc' };
+                return { candidate: { documentId, characterCount: 0 }, literary: false, kind: 'error', genre: 'etc' };
               }
             }),
           );
@@ -127,19 +137,21 @@ export class SamplingWorkflow extends WorkflowEntrypoint<FlowEnv, SamplingParams
 
       await step.do('freeze', async () => {
         await setPhase(db, runId, 'freeze');
-        await db
-          .insert(Documents)
-          .values(
-            selected.map((d) => ({
-              id: d.id,
-              refId: d.refId,
-              content: d.content,
-              characterCount: d.characterCount,
-              corpusVersion,
-              genre: d.genre,
-            })),
-          )
-          .onConflictDoNothing();
+        const rows = selected.map((d) => ({
+          id: d.id,
+          refId: d.refId,
+          content: d.content,
+          characterCount: d.characterCount,
+          corpusVersion,
+          genre: d.genre,
+        }));
+        // D1은 문장당 바인딩 파라미터 100개 제한 — 7컬럼 × 14행 = 98이 상한이라 10행씩 나눈다.
+        for (let i = 0; i < rows.length; i += 10) {
+          await db
+            .insert(Documents)
+            .values(rows.slice(i, i + 10))
+            .onConflictDoNothing();
+        }
         await db
           .update(PipelineRuns)
           .set({ status: 'succeeded', doneDocs: selected.length, totalDocs: selected.length, finishedAt: new Date(), meta: { genreDist } })

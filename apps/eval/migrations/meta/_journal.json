@@ -36,6 +36,13 @@
       "when": 1784716022050,
       "tag": "0004_stale_reavers",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1784723159546,
+      "tag": "0005_workable_doctor_faustus",
+      "breakpoints": true
     }
   ]
 }

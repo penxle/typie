@@ -1,6 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex, grid } from '@typie/styled-system/patterns';
+  import { Helmet } from '@typie/ui/components';
   import { GENRES } from '../../../../../flows/src/genres.ts';
   import type { PageData } from './$types';
 
@@ -25,6 +26,8 @@
   const poolEntries = $derived(data.pool ? orderedEntries(data.pool) : null);
   const poolTotal = $derived(poolEntries?.reduce((sum, [, count]) => sum + count, 0) ?? 0);
 </script>
+
+<Helmet title={`코퍼스 ${data.corpusVersion}`} trailing="타이피 평가" />
 
 <div class={css({ maxWidth: '880px', marginX: 'auto', paddingY: '40px', paddingX: '32px' })}>
   <a class={css({ fontSize: '13px', color: 'text.subtle', _hover: { color: 'text.default' } })} href="/admin/corpus">← 코퍼스</a>

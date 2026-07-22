@@ -1,6 +1,8 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex, grid } from '@typie/styled-system/patterns';
+  import { Helmet } from '@typie/ui/components';
+  import { Dialog, Toast } from '@typie/ui/notification';
   import { untrack } from 'svelte';
   import { invalidateAll } from '$app/navigation';
   import FeedbackSetPanel from '../../../tasks/[id]/FeedbackSetPanel.svelte';
@@ -16,7 +18,6 @@
     throughputPerMinute,
   } from '../progress.ts';
   import RunStatusBadge from '../RunStatusBadge.svelte';
-  import ConfirmCancelDialog from './ConfirmCancelDialog.svelte';
   import type { RunDocStatus } from '$lib/domain/admin-types.ts';
   import type { FeedbackLabelEntry, FeedbackLabelMap } from '$lib/domain/feedback-labels.ts';
   import type { PageData } from './$types';
@@ -31,9 +32,6 @@
   let run = $state(untrack(() => data.run));
   let docs = $state(untrack(() => data.docs));
 
-  let showCancelDialog = $state(false);
-  let cancelling = $state(false);
-  let cancelError = $state<string | null>(null);
   let retrying = $state(false);
   let retryError = $state<string | null>(null);
   let selectedFailedDocId = $state<string | null>(null);
@@ -88,25 +86,22 @@
     cancelled: '취소됨',
   };
 
-  const openCancelDialog = () => {
-    cancelError = null;
-    showCancelDialog = true;
-  };
-
-  const confirmCancel = async () => {
-    cancelling = true;
-    cancelError = null;
-    try {
-      const response = await fetch(`/admin/api/runs/${run.id}/cancel`, { method: 'POST' });
-      if (!response.ok) {
-        cancelError = `취소에 실패했습니다 (${response.status}).`;
-        return;
-      }
-      showCancelDialog = false;
-      await pollRun();
-    } finally {
-      cancelling = false;
-    }
+  const requestCancel = () => {
+    Dialog.confirm({
+      title: '실행을 취소할까요?',
+      message: '진행 중인 문서는 중단되고 완료된 문서의 결과는 보존됩니다. 재실행하면 완료된 문서는 건너뜁니다.',
+      action: 'danger',
+      actionLabel: '실행 취소',
+      cancelLabel: '되돌아가기',
+      actionHandler: async () => {
+        const response = await fetch(`/admin/api/runs/${run.id}/cancel`, { method: 'POST' });
+        if (!response.ok) {
+          Toast.error(`취소에 실패했습니다 (${response.status}).`);
+          return false;
+        }
+        await pollRun();
+      },
+    });
   };
 
   const retryFailed = async () => {
@@ -151,6 +146,8 @@
     ['&:hover:not(:disabled)']: { backgroundColor: 'surface.muted' },
   });
 </script>
+
+<Helmet title="실행 상세" trailing="타이피 평가" />
 
 <div class={css({ maxWidth: '960px', marginX: 'auto', paddingY: '40px', paddingX: '32px' })}>
   <a class={css({ fontSize: '13px', color: 'text.subtle', _hover: { color: 'text.default' } })} href="/admin/runs">← 실행 목록</a>
@@ -232,7 +229,7 @@
 
     <div class={flex({ gap: '8px', marginTop: '16px', align: 'center' })}>
       {#if run.status === 'running'}
-        <button class={outlineButtonClass} onclick={openCancelDialog} type="button">실행 취소</button>
+        <button class={outlineButtonClass} onclick={requestCancel} type="button">실행 취소</button>
       {/if}
       {#if run.kind === 'pipeline' && retryableCount > 0}
         <button class={outlineButtonClass} disabled={retrying} onclick={retryFailed} type="button">
@@ -240,7 +237,7 @@
         </button>
       {/if}
     </div>
-    <p class={css({ marginTop: '8px', height: '16px', fontSize: '12px', color: 'text.danger' })}>{cancelError ?? retryError ?? ''}</p>
+    <p class={css({ marginTop: '8px', height: '16px', fontSize: '12px', color: 'text.danger' })}>{retryError ?? ''}</p>
   </section>
 
   {#if run.kind === 'pipeline'}
@@ -313,9 +310,9 @@
           <p class={css({ marginTop: '2px', fontSize: '18px', fontWeight: 'bold' })}>{percent(data.summary.anchorMatchRate)}</p>
         </div>
         <div class={statCardClass}>
-          <p class={css({ fontSize: '12px', color: 'text.faint' })}>건수 분포 (0건 / 10건 초과)</p>
+          <p class={css({ fontSize: '12px', color: 'text.faint' })}>피드백 0건 문서</p>
           <p class={css({ marginTop: '2px', fontSize: '18px', fontWeight: 'bold' })}>
-            {data.summary.feedbackDistribution.zero} / {data.summary.feedbackDistribution.over10}
+            {data.summary.feedbackDistribution.zero}
             <span class={css({ fontSize: '12px', fontWeight: 'normal', color: 'text.faint' })}>
               (총 {data.summary.feedbackDistribution.total})
             </span>
@@ -358,7 +355,3 @@
     {/if}
   {/if}
 </div>
-
-{#if showCancelDialog}
-  <ConfirmCancelDialog error={cancelError} onCancel={() => (showCancelDialog = false)} onConfirm={confirmCancel} pending={cancelling} />
-{/if}

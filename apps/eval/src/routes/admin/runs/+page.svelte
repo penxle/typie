@@ -1,5 +1,6 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
+  import { Helmet } from '@typie/ui/components';
   import { untrack } from 'svelte';
   import { usePolling } from '../lib/poll.svelte.ts';
   import { formatProgressSummary, KIND_LABELS } from './progress.ts';
@@ -24,6 +25,8 @@
 
   usePolling(refresh, 3000);
 </script>
+
+<Helmet title="실행" trailing="타이피 평가" />
 
 <div class={css({ maxWidth: '1080px', marginX: 'auto', paddingY: '40px', paddingX: '32px' })}>
   <header class={css({ marginBottom: '20px' })}>

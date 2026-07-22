@@ -6,14 +6,14 @@ import {
   categoryComplianceRate,
   cohenKappa,
   deriveWinRates,
-  falsePositiveRate,
   feedbackCountDistribution,
+  flaggedRate,
   pairwiseFromRanking,
   ranksFromScores,
   sanityPassRate,
 } from '$lib/domain/aggregate.ts';
-import { FEEDBACK_LABELS } from '$lib/domain/feedback-labels.ts';
-import { createDb, Feedbacks, FeedbackSets, Judgments, Rounds, Runs, Tasks, Variants } from '$lib/server/db/index.ts';
+import { FEEDBACK_LABELS, STRICT_FALSE_POSITIVE_KEYS } from '$lib/domain/feedback-labels.ts';
+import { createDb, Feedbacks, FeedbackSets, Judgments, Rounds, Runs, selectInChunks, Tasks, Variants } from '$lib/server/db/index.ts';
 import type { JudgmentResult, PairVerdict } from '$lib/domain/types.ts';
 import type { PageServerLoad } from './$types';
 
@@ -37,13 +37,13 @@ export const load: PageServerLoad = async ({ platform }) => {
   for (const round of rounds) {
     const tasks = await db.select().from(Tasks).where(eq(Tasks.roundId, round.id));
     const taskIds = tasks.map((t) => t.id);
-    const judgments = taskIds.length > 0 ? await db.select().from(Judgments).where(inArray(Judgments.taskId, taskIds)) : [];
+    const judgments = await selectInChunks(taskIds, (chunk) => db.select().from(Judgments).where(inArray(Judgments.taskId, chunk)));
     const confirmed = judgments.filter((j) => !j.draft && j.result);
 
     const allSetIds = [...new Set(tasks.flatMap((t) => t.setIds))];
-    const sets = allSetIds.length > 0 ? await db.select().from(FeedbackSets).where(inArray(FeedbackSets.id, allSetIds)) : [];
+    const sets = await selectInChunks(allSetIds, (chunk) => db.select().from(FeedbackSets).where(inArray(FeedbackSets.id, chunk)));
     const setVariant = new Map(sets.map((s) => [s.id, s.variantId]));
-    const feedbacks = allSetIds.length > 0 ? await db.select().from(Feedbacks).where(inArray(Feedbacks.setId, allSetIds)) : [];
+    const feedbacks = await selectInChunks(allSetIds, (chunk) => db.select().from(Feedbacks).where(inArray(Feedbacks.setId, chunk)));
     const feedbackSetId = new Map(feedbacks.map((f) => [f.id, f.setId]));
 
     const configBaseline = (round.config as { baselineLabel?: string } | null)?.baselineLabel;
@@ -53,7 +53,7 @@ export const load: PageServerLoad = async ({ platform }) => {
     const overlapPairs: [PairVerdict, PairVerdict][] = [];
     const sanityVerdicts: PairVerdict[] = [];
     const pairTallies = new Map<string, { win: number; tie: number; loss: number }>();
-    const fpEntries = [];
+    const flagEntries: { variantId: string; feedbackCount: number; negativeCount: number; strictCount: number }[] = [];
     const scoreEntries: { variantId: string; score: number }[] = [];
     const labelDist = new Map<string, Map<string, number>>();
     const labelComments = new Map<string, { labelNames: string[]; comment: string }[]>();
@@ -70,10 +70,13 @@ export const load: PageServerLoad = async ({ platform }) => {
             const variantId = setVariant.get(setId);
             if (!variantId) continue;
             const setFeedbacks = feedbacks.filter((f) => f.setId === setId);
-            fpEntries.push({
+            flagEntries.push({
               variantId,
               feedbackCount: setFeedbacks.length,
-              flaggedCount: setFeedbacks.filter((f) => judgment.falsePositiveFeedbackIds.includes(f.id)).length,
+              negativeCount: setFeedbacks.filter((f) => judgment.falsePositiveFeedbackIds.includes(f.id)).length,
+              strictCount: setFeedbacks.filter((f) =>
+                ((judgment.feedbackLabels ?? {})[f.id]?.labels ?? []).some((key) => STRICT_FALSE_POSITIVE_KEYS.has(key)),
+              ).length,
             });
           }
 
@@ -188,7 +191,12 @@ export const load: PageServerLoad = async ({ platform }) => {
       tokensByVariant.set(run.variantId, (tokensByVariant.get(run.variantId) ?? 0) + tokens);
     }
 
-    const fpRates = falsePositiveRate(fpEntries);
+    const negativeRates = flaggedRate(
+      flagEntries.map((e) => ({ variantId: e.variantId, feedbackCount: e.feedbackCount, flaggedCount: e.negativeCount })),
+    );
+    const strictFpRates = flaggedRate(
+      flagEntries.map((e) => ({ variantId: e.variantId, feedbackCount: e.feedbackCount, flaggedCount: e.strictCount })),
+    );
     const variantRows = [...new Set(sets.map((s) => s.variantId))]
       .map((variantId) => {
         const tally = winRates.get(variantId) ?? { win: 0, tie: 0, loss: 0 };
@@ -198,10 +206,10 @@ export const load: PageServerLoad = async ({ platform }) => {
           win: tally.win,
           tie: tally.tie,
           loss: tally.loss,
-          falsePositive: fpRates.get(variantId) ?? NaN,
+          negativeRate: negativeRates.get(variantId) ?? NaN,
+          strictFpRate: strictFpRates.get(variantId) ?? NaN,
           anchorMatch: anchorRates.get(variantId) ?? NaN,
           zeroCount: countDist.get(variantId)?.zero ?? 0,
-          over10Count: countDist.get(variantId)?.over10 ?? 0,
           tokens: tokensByVariant.get(variantId) ?? 0,
         };
       })
@@ -239,6 +247,7 @@ export const load: PageServerLoad = async ({ platform }) => {
       categoryCompliance,
       variants: variantRows,
       kappa: cohenKappa(overlapPairs),
+      kappaPairs: overlapPairs.length,
       sanityPass: sanityPassRate(sanityVerdicts),
       labelDist: labelDistByLabel,
       labelComments: labelCommentsByLabel,

@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 
-// C1/C2/C3 후보 프롬프트(러너 로컬 파일) + variants.json의 note/계보를 읽어
-// prompt_variants INSERT SQL을 산출한다. 산출물은 이 레포가 아니라 러너의 sql/ 디렉토리에 쓴다.
+// 러너 variants.json에서 지정한 라벨들의 프롬프트(러너 로컬 파일)를 읽어
+// prompt_variants 시드 SQL을 산출한다. 산출물은 이 레포가 아니라 러너의 sql/ 디렉토리에 쓴다.
 //
-// 사용법: node scripts/seed-variants.ts <runner-path> [out-file]
-//   기본 out-file: <runner-path>/sql/seed-variants.sql
+// 사용법: node scripts/seed-variants.ts <runner-path> --labels 현행,독자,코치,강점 [--out <file>]
+//   첫 라벨이 계보의 루트(base)가 된다. 기본 out: <runner-path>/sql/seed-variants.sql
+//   산출 SQL은 같은 시드 id를 먼저 DELETE하는 멱등 형태.
 // 적용: wrangler d1 execute typie-eval --remote --file=<out-file>  (apps/eval에서)
 
 import fs from 'node:fs';
@@ -33,33 +34,37 @@ const readStagePrompt = (runnerPath: string, relDir: string): StagePrompt => {
   return { system, tools, model: config.model, effort: config.effort ?? null };
 };
 
-const { positionals } = parseArgs({ allowPositionals: true });
+const { positionals, values } = parseArgs({
+  allowPositionals: true,
+  options: { labels: { type: 'string' }, out: { type: 'string' } },
+});
 const runnerArg = positionals[0];
 
-if (!runnerArg) {
-  console.error('Usage: node scripts/seed-variants.ts <runner-path> [out-file]');
+if (!runnerArg || !values.labels) {
+  console.error('Usage: node scripts/seed-variants.ts <runner-path> --labels 라벨1,라벨2,... [--out <file>]');
   process.exit(1);
 }
 
 const runnerPath = path.resolve(expandHome(runnerArg));
-const outPath = positionals[1] ? path.resolve(expandHome(positionals[1])) : path.join(runnerPath, 'sql', 'seed-variants.sql');
+const outPath = values.out ? path.resolve(expandHome(values.out)) : path.join(runnerPath, 'sql', 'seed-variants.sql');
 
 const manifestPath = path.join(runnerPath, 'variants.json');
 const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as VariantManifest;
 
-// cspell:disable-next-line
-// V0(현행 기준선)은 시드 대상이 아니다 — cand-* 디렉토리를 가리키는 항목만 후보로 취급한다.
-// cspell:disable-next-line
-const candidateEntries = Object.entries(manifest).filter(([, entry]) => entry.analyze.includes('cand-'));
-
-if (candidateEntries.length === 0) {
-  // cspell:disable-next-line
-  console.error(`no candidate entries found in ${manifestPath} (expected analyze path containing 'cand-')`);
+const requestedLabels = values.labels
+  .split(',')
+  .map((label) => label.trim())
+  .filter(Boolean);
+const missing = requestedLabels.filter((label) => !Object.hasOwn(manifest, label));
+if (missing.length > 0) {
+  console.error(`labels not in ${manifestPath}: ${missing.join(', ')}`);
   process.exit(1);
 }
+const candidateEntries = requestedLabels.map((label) => [label, manifest[label]] as const);
 
-const rootKey = candidateEntries.some(([key]) => key === 'C1') ? 'C1' : candidateEntries[0][0];
-const rootId = `seed-${rootKey.toLowerCase()}`;
+const seedId = (key: string, index: number) => `seed-r1-${String(index + 1).padStart(2, '0')}-${key}`;
+const rootKey = requestedLabels[0];
+const rootId = seedId(rootKey, 0);
 
 const now = Math.floor(Date.now() / 1000);
 
@@ -71,7 +76,7 @@ const rows = candidateEntries.map(([key, entry], index) => {
   };
 
   return {
-    id: `seed-${key.toLowerCase()}`,
+    id: seedId(key, index),
     label: key,
     note: entry.note ?? null,
     baseVariantId: key === rootKey ? null : rootId,
@@ -79,6 +84,8 @@ const rows = candidateEntries.map(([key, entry], index) => {
     createdAt: now + index,
   };
 });
+
+const deleteStatement = `DELETE FROM prompt_variants WHERE id IN (${rows.map((row) => sqlString(row.id)).join(', ')});`;
 
 const statements = rows.map(
   (row) =>
@@ -94,7 +101,7 @@ const header = [
 ].join('\n');
 
 fs.mkdirSync(path.dirname(outPath), { recursive: true });
-fs.writeFileSync(outPath, `${header}\n\n${statements.join('\n\n')}\n`);
+fs.writeFileSync(outPath, `${header}\n\n${deleteStatement}\n\n${statements.join('\n\n')}\n`);
 
 for (const row of rows) {
   console.log(`✓ ${row.label} → ${row.id} (base=${row.baseVariantId ?? 'none'})`);

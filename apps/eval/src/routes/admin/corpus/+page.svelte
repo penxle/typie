@@ -1,6 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { grid } from '@typie/styled-system/patterns';
+  import { Helmet } from '@typie/ui/components';
   import { goto } from '$app/navigation';
   import type { PageData } from './$types';
 
@@ -42,6 +43,8 @@
     }
   };
 </script>
+
+<Helmet title="코퍼스" trailing="타이피 평가" />
 
 <div class={css({ maxWidth: '960px', marginX: 'auto', paddingY: '40px', paddingX: '32px' })}>
   <header class={css({ marginBottom: '20px' })}>

@@ -90,11 +90,10 @@ export const actions: Actions = {
       return fail(400, { error: '무효화할 태스크가 없습니다.' });
     }
 
-    const taskIds = tasks.map((t) => t.id);
     const [judgmentCount] = await db
       .select({ count: sql<number>`count(*)` })
       .from(Judgments)
-      .where(inArray(Judgments.taskId, taskIds));
+      .where(inArray(Judgments.taskId, db.select({ id: Tasks.id }).from(Tasks).where(eq(Tasks.roundId, roundId))));
     if ((judgmentCount?.count ?? 0) > 0) {
       return fail(409, { error: '판정이 존재하는 라운드는 무효화할 수 없습니다.' });
     }

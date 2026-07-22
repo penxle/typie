@@ -1,4 +1,4 @@
-import { integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import type {
   RunDocStatus,
   RunKind,
@@ -102,6 +102,16 @@ export const Judgments = sqliteTable(
       .$defaultFn(() => new Date()),
   },
   (t) => [uniqueIndex('judgments_task_id_evaluator_email').on(t.taskId, t.evaluatorEmail)],
+);
+
+export const ReleasedTasks = sqliteTable(
+  'released_tasks',
+  {
+    taskId: text('task_id').notNull(),
+    evaluatorEmail: text('evaluator_email').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.taskId, t.evaluatorEmail] })],
 );
 
 export const Settings = sqliteTable('settings', {

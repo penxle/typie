@@ -61,8 +61,8 @@ export const runTool = async <T>(
   }
   const response = await openai.chat.completions.create(params);
   if (response.usage) {
-    usage.promptTokens += response.usage.prompt_tokens;
-    usage.completionTokens += response.usage.completion_tokens;
+    usage.promptTokens += response.usage.prompt_tokens ?? 0;
+    usage.completionTokens += response.usage.completion_tokens ?? 0;
   }
 
   const toolCall = response.choices[0]?.message?.tool_calls?.[0];
@@ -136,8 +136,8 @@ export const analyzeChunkWithContext = async (
 
   for await (const chunk of stream) {
     if (chunk.usage) {
-      usage.promptTokens += chunk.usage.prompt_tokens;
-      usage.completionTokens += chunk.usage.completion_tokens;
+      usage.promptTokens += chunk.usage.prompt_tokens ?? 0;
+      usage.completionTokens += chunk.usage.completion_tokens ?? 0;
     }
 
     const choice = chunk.choices[0];

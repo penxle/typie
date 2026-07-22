@@ -3,7 +3,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { deriveFalsePositiveIds, FEEDBACK_LABEL_KEYS } from '$lib/domain/feedback-labels.ts';
 import { claimNextTask } from '$lib/server/claim.ts';
-import { createDb, Documents, Feedbacks, FeedbackSets, Judgments, Tasks } from '$lib/server/db/index.ts';
+import { createDb, Documents, Feedbacks, FeedbackSets, Judgments, ReleasedTasks, Tasks } from '$lib/server/db/index.ts';
 import type { FeedbackLabelMap } from '$lib/domain/feedback-labels.ts';
 import type { JudgmentResult } from '$lib/domain/types.ts';
 import type { Actions, PageServerLoad } from './$types';
@@ -202,6 +202,8 @@ export const actions: Actions = {
     }
 
     const db = createDb(platform.env.DB);
+    // 반납 기록 — 이 평가자에게는 같은 태스크를 다시 배정하지 않는다(타 평가자 배정은 정상).
+    await db.insert(ReleasedTasks).values({ taskId: params.id, evaluatorEmail: locals.email }).onConflictDoNothing();
     await db
       .delete(Judgments)
       .where(and(eq(Judgments.taskId, params.id), eq(Judgments.evaluatorEmail, locals.email), eq(Judgments.draft, true)));

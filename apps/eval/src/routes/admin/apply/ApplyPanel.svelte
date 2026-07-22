@@ -1,9 +1,9 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
+  import { Dialog } from '@typie/ui/notification';
   import { invalidateAll } from '$app/navigation';
   import { diffLines } from '$lib/domain/line-diff.ts';
-  import ConfirmApplyDialog from './ConfirmApplyDialog.svelte';
   import LineDiff from './LineDiff.svelte';
   import type { StageKey, StagePrompt, VariantContent } from '$lib/domain/admin-types.ts';
 
@@ -34,9 +34,17 @@
 
   const selectedCount = $derived(STAGES.filter((s) => selected[s]).length);
 
-  let showConfirm = $state(false);
   let applying = $state(false);
   let applyResults = $state<{ stage: StageKey; ok: boolean; error?: string }[] | null>(null);
+
+  const requestApply = () => {
+    Dialog.confirm({
+      title: `${selectedCount}개 단계를 프로덕션에 적용할까요?`,
+      message: '선택한 단계의 프롬프트가 즉시 프로덕션에 반영됩니다. 적용 이력이 기록되며 롤백할 수 있습니다.',
+      actionLabel: '적용',
+      actionHandler: () => runApply(),
+    });
+  };
 
   const runApply = async () => {
     applying = true;
@@ -63,7 +71,6 @@
 
     applyResults = results;
     applying = false;
-    showConfirm = false;
     await invalidateAll();
   };
 
@@ -102,7 +109,7 @@
         ['&:hover:not(:disabled)']: { backgroundColor: 'accent.brand.hover' },
       })}
       disabled={selectedCount === 0 || applying}
-      onclick={() => (showConfirm = true)}
+      onclick={requestApply}
       type="button"
     >
       {selectedCount}개 단계 적용
@@ -172,13 +179,3 @@
     </div>
   {/if}
 </section>
-
-{#if showConfirm}
-  <ConfirmApplyDialog
-    error={null}
-    message={`${selectedCount}개 단계를 프로덕션에 적용합니다`}
-    onCancel={() => (showConfirm = false)}
-    onConfirm={runApply}
-    pending={applying}
-  />
-{/if}

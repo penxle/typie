@@ -1,8 +1,10 @@
-export type Candidate = { documentId: string; text: string; characterCount: number };
+export type Candidate = { documentId: string; characterCount: number };
+export type CandidateText = { documentId: string; text: string };
 export type ExtractResult = { documentId: string; prose: string | null };
 
 export type InternalApi = {
   candidates: (opts?: { limit?: number; minLength?: number; maxLength?: number }) => Promise<Candidate[]>;
+  texts: (documentIds: string[]) => Promise<CandidateText[]>;
   extract: (documentIds: string[]) => Promise<ExtractResult[]>;
 };
 
@@ -23,6 +25,10 @@ export const createInternalApi = (base: string, key: string): InternalApi => {
     candidates: async (opts = {}) => {
       const { candidates } = await post<{ candidates: Candidate[] }>('/internal/corpus/candidates', opts);
       return candidates;
+    },
+    texts: async (documentIds) => {
+      const { texts } = await post<{ texts: CandidateText[] }>('/internal/corpus/texts', { documentIds });
+      return texts;
     },
     extract: async (documentIds) => {
       const { results } = await post<{ results: ExtractResult[] }>('/internal/corpus/extract', { documentIds });

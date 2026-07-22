@@ -1,11 +1,12 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex, grid } from '@typie/styled-system/patterns';
+  import { Helmet } from '@typie/ui/components';
+  import { Dialog, Toast } from '@typie/ui/notification';
   import { nanoid } from 'nanoid';
   import { untrack } from 'svelte';
   import { deserialize } from '$app/forms';
   import { invalidateAll } from '$app/navigation';
-  import ConfirmInvalidateDialog from './ConfirmInvalidateDialog.svelte';
   import type { RoundStage } from '$lib/domain/types.ts';
   import type { PageData } from './$types';
 
@@ -23,6 +24,8 @@
   let v0Label = $state('');
   let candidateLabel = $state('');
   let expectedEvaluators = $state('');
+  let overlapRatio = $state('0.3');
+  let sanityRatio = $state('0.05');
 
   // roundId는 제출마다 새로 만들지 않고 폼이 준비된 시점에 한 번만 발급한다 — 네트워크 오류 등으로 사용자가
   // 같은 입력으로 재시도해도 동일 roundId가 재사용되어 admin/api의 멱등 처리(이미 존재하면 created:false)가
@@ -83,6 +86,17 @@
       return;
     }
 
+    const parsedOverlap = Number(overlapRatio);
+    const parsedSanity = Number(sanityRatio);
+    if (stage === 'screening' && (!Number.isFinite(parsedOverlap) || parsedOverlap < 0 || parsedOverlap > 1)) {
+      createError = '중복 비율은 0과 1 사이여야 합니다.';
+      return;
+    }
+    if (stage === 'screening' && (!Number.isFinite(parsedSanity) || parsedSanity < 0 || parsedSanity > 1)) {
+      createError = 'sanity 비율은 0과 1 사이여야 합니다.';
+      return;
+    }
+
     const parsedEvaluators = Math.floor(Number(expectedEvaluators));
     const payload =
       stage === 'screening'
@@ -92,6 +106,8 @@
             corpusVersion,
             variantLabels: selectedLabels,
             baselineLabel,
+            overlapRatio: parsedOverlap,
+            sanityRatio: parsedSanity,
             ...(parsedEvaluators >= 1 && { expectedEvaluators: parsedEvaluators }),
           }
         : { roundId, stage: 'confirmation' as const, corpusVersion, v0Label, candidateLabel };
@@ -121,39 +137,31 @@
     }
   };
 
-  let pendingInvalidateId = $state<string | null>(null);
-  let invalidating = $state(false);
-  let invalidateError = $state<string | null>(null);
+  const requestInvalidate = (invalidateRoundId: string) => {
+    Dialog.confirm({
+      title: '라운드를 무효화할까요?',
+      message: '이 라운드의 태스크가 모두 삭제됩니다. 아직 판정이 없는 라운드만 무효화할 수 있습니다.',
+      action: 'danger',
+      actionLabel: '무효화',
+      cancelLabel: '되돌아가기',
+      actionHandler: async () => {
+        const formData = new FormData();
+        formData.set('roundId', invalidateRoundId);
+        const response = await fetch('?/invalidate', { method: 'POST', body: formData });
+        const result = deserialize(await response.text());
 
-  const requestInvalidate = (roundId: string) => {
-    invalidateError = null;
-    pendingInvalidateId = roundId;
-  };
+        if (result.type === 'failure') {
+          Toast.error((result.data as { error?: string } | undefined)?.error ?? '무효화에 실패했습니다.');
+          return false;
+        }
+        if (result.type === 'error') {
+          Toast.error(result.error instanceof Error ? result.error.message : '무효화에 실패했습니다.');
+          return false;
+        }
 
-  const confirmInvalidate = async () => {
-    if (!pendingInvalidateId) return;
-    invalidating = true;
-    invalidateError = null;
-    try {
-      const formData = new FormData();
-      formData.set('roundId', pendingInvalidateId);
-      const response = await fetch('?/invalidate', { method: 'POST', body: formData });
-      const result = deserialize(await response.text());
-
-      if (result.type === 'failure') {
-        invalidateError = (result.data as { error?: string } | undefined)?.error ?? '무효화에 실패했습니다.';
-        return;
-      }
-      if (result.type === 'error') {
-        invalidateError = result.error instanceof Error ? result.error.message : '무효화에 실패했습니다.';
-        return;
-      }
-
-      pendingInvalidateId = null;
-      await invalidateAll();
-    } finally {
-      invalidating = false;
-    }
+        await invalidateAll();
+      },
+    });
   };
 
   const formatConfig = (round: PageData['rounds'][number]) => {
@@ -179,6 +187,8 @@
 
   const labelClass = css({ display: 'block', fontSize: '12px', color: 'text.faint', marginBottom: '4px' });
 </script>
+
+<Helmet title="라운드" trailing="타이피 평가" />
 
 <div class={css({ maxWidth: '960px', marginX: 'auto', paddingY: '40px', paddingX: '32px' })}>
   <header class={css({ marginBottom: '20px' })}>
@@ -236,6 +246,16 @@
     </div>
 
     {#if stage === 'screening'}
+      <div class={grid({ columns: 2, gap: '16px', marginBottom: '16px' })}>
+        <div>
+          <label class={labelClass} for="round-overlap-ratio">중복 비율 (0~1)</label>
+          <input id="round-overlap-ratio" class={inputClass} max="1" min="0" step="0.05" type="number" bind:value={overlapRatio} />
+        </div>
+        <div>
+          <label class={labelClass} for="round-sanity-ratio">sanity 비율 (0~1)</label>
+          <input id="round-sanity-ratio" class={inputClass} max="1" min="0" step="0.05" type="number" bind:value={sanityRatio} />
+        </div>
+      </div>
       <div class={css({ marginBottom: '16px' })}>
         <label class={labelClass} for="round-expected-evaluators">예상 평가자 수 (선택)</label>
         <input
@@ -407,12 +427,3 @@
     {/if}
   </section>
 </div>
-
-{#if pendingInvalidateId}
-  <ConfirmInvalidateDialog
-    error={invalidateError}
-    onCancel={() => (pendingInvalidateId = null)}
-    onConfirm={confirmInvalidate}
-    pending={invalidating}
-  />
-{/if}

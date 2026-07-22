@@ -4,8 +4,8 @@ import {
   categoryComplianceRate,
   cohenKappa,
   deriveWinRates,
-  falsePositiveRate,
   feedbackCountDistribution,
+  flaggedRate,
   pairwiseFromRanking,
   sanityPassRate,
 } from './aggregate.ts';
@@ -97,14 +97,14 @@ describe('sanityPassRate', () => {
   });
 });
 
-describe('falsePositiveRate', () => {
+describe('flaggedRate', () => {
   it('variant별 flagged/feedback 비율을 합산한다', () => {
     const entries = [
       { variantId: 'V0', feedbackCount: 10, flaggedCount: 2 },
       { variantId: 'V0', feedbackCount: 10, flaggedCount: 0 },
       { variantId: 'C1', feedbackCount: 5, flaggedCount: 1 },
     ];
-    const rates = falsePositiveRate(entries);
+    const rates = flaggedRate(entries);
     expect(rates.get('V0')).toBeCloseTo(0.1, 5);
     expect(rates.get('C1')).toBeCloseTo(0.2, 5);
   });
@@ -129,7 +129,7 @@ describe('anchorMatchRate', () => {
 });
 
 describe('feedbackCountDistribution', () => {
-  it('variant별 0건·10건 초과·총 세트를 집계한다', () => {
+  it('variant별 0건·총 세트를 집계한다', () => {
     const entries = [
       { variantId: 'V0', feedbackCount: 0 },
       { variantId: 'V0', feedbackCount: 11 },
@@ -137,13 +137,8 @@ describe('feedbackCountDistribution', () => {
       { variantId: 'C1', feedbackCount: 20 },
     ];
     const dist = feedbackCountDistribution(entries);
-    expect(dist.get('V0')).toEqual({ zero: 1, over10: 1, total: 3 });
-    expect(dist.get('C1')).toEqual({ zero: 0, over10: 1, total: 1 });
-  });
-
-  it('경계값 10은 초과에 포함되지 않는다', () => {
-    const dist = feedbackCountDistribution([{ variantId: 'V0', feedbackCount: 10 }]);
-    expect(dist.get('V0')).toEqual({ zero: 0, over10: 0, total: 1 });
+    expect(dist.get('V0')).toEqual({ zero: 1, total: 3 });
+    expect(dist.get('C1')).toEqual({ zero: 0, total: 1 });
   });
 });
 

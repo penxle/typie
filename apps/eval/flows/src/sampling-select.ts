@@ -12,6 +12,14 @@ export type StratifiedSelection = {
 
 const SPARES_PER_STRATUM = 2;
 
+// 후보 수는 코퍼스 크기에 비례한다 — 실측 깔때기(라운드 1)의 최소 필요치는 13배
+// (문학성 생존 ~50% × 장르 비례·추출 실패 여유 ~6.5배)이고, 20배는 다양성 여유를 얹은 값.
+// 하한 100은 소형 코퍼스에서도 장르 배분이 성립하게, 상한은 api candidatesSchema와 동일
+// (후보 텍스트가 한 응답으로 오므로 응답 크기가 실질 상한이다 — 2000편 ≈ 최대 60MB).
+export const CANDIDATES_PER_DOC = 20;
+export const MAX_CANDIDATES = 2000;
+export const candidateLimitFor = (size: number): number => Math.min(MAX_CANDIDATES, Math.max(100, size * CANDIDATES_PER_DOC));
+
 export const pickLiteraryDocs = (classified: Classified[]): LiteraryDoc[] =>
   classified.filter((c) => c.literary).map((c) => ({ documentId: c.candidate.documentId, genre: c.genre }));
 

@@ -1,8 +1,10 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
+  import { Helmet } from '@typie/ui/components';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
+  import ThemeToggle from '$lib/components/ThemeToggle.svelte';
   import type { PageData } from './$types';
 
   type Props = { data: PageData };
@@ -27,6 +29,8 @@
   };
 </script>
 
+<Helmet title="평가 큐" trailing="타이피 평가" />
+
 <main class={css({ minHeight: '[100dvh]', backgroundColor: 'surface.subtle' })}>
   <div class={css({ maxWidth: '560px', marginX: 'auto', paddingY: '64px', paddingX: '20px' })}>
     <header class={flex({ align: 'flex-start', justify: 'space-between', gap: '16px', marginBottom: '24px' })}>
@@ -34,24 +38,27 @@
         <h1 class={css({ fontSize: '22px', fontWeight: 'bold' })}>문학 피드백 평가</h1>
         <p class={css({ marginTop: '4px', fontSize: '14px', color: 'text.subtle' })}>{data.email}</p>
       </div>
-      <a
-        class={css({
-          flexShrink: '0',
-          paddingX: '10px',
-          paddingY: '6px',
-          borderWidth: '1px',
-          borderColor: 'border.default',
-          borderRadius: '6px',
-          fontSize: '13px',
-          color: 'text.faint',
-          transition: '[background-color 0.15s ease, color 0.15s ease]',
-          _hover: { backgroundColor: 'surface.default', color: 'text.default' },
-        })}
-        data-sveltekit-reload
-        href="/cdn-cgi/access/logout"
-      >
-        로그아웃
-      </a>
+      <div class={flex({ align: 'center', gap: '8px', flexShrink: '0' })}>
+        <ThemeToggle />
+        <a
+          class={css({
+            flexShrink: '0',
+            paddingX: '10px',
+            paddingY: '6px',
+            borderWidth: '1px',
+            borderColor: 'border.default',
+            borderRadius: '6px',
+            fontSize: '13px',
+            color: 'text.faint',
+            transition: '[background-color 0.15s ease, color 0.15s ease]',
+            _hover: { backgroundColor: 'surface.default', color: 'text.default' },
+          })}
+          data-sveltekit-reload
+          href="/cdn-cgi/access/logout"
+        >
+          로그아웃
+        </a>
+      </div>
     </header>
 
     {#if finished && data.remaining === 0 && data.drafts.length === 0}
@@ -96,6 +103,12 @@
       <p class={css({ marginTop: '6px', fontSize: '12px', color: 'text.faint' })}>
         라운드 전체 진행 {data.round.done} / {data.round.required} — 모든 평가자의 판정을 합친 수치입니다.
       </p>
+      {#if data.quota}
+        <p class={css({ marginTop: '2px', fontSize: '12px', color: 'text.faint' })}>
+          작업이 한 사람에게 몰리지 않도록 1인당 최대 {data.quota.limit}건까지 배정됩니다 — 내 배정 {data.quota.used} / {data.quota
+            .limit}건.
+        </p>
+      {/if}
 
       <button
         class={css({
@@ -120,7 +133,7 @@
       </button>
       <p class={css({ marginTop: '10px', fontSize: '12px', color: 'text.faint', textAlign: 'center' })}>
         {#if data.remaining > 0}
-          원문을 읽고 피드백 세트를 비교해 순위를 매기는 작업입니다. 한 편에 10–20분쯤 걸립니다.
+          원문을 읽고 피드백 세트를 비교해 점수를 매기는 작업입니다. 한 편에 10–20분쯤 걸립니다.
         {:else if data.drafts.length > 0}
           새로 배정받을 태스크는 없습니다. 아래 작성 중인 평가를 마무리해 주세요.
         {:else}

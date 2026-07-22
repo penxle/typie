@@ -1,6 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex, grid } from '@typie/styled-system/patterns';
+  import { Helmet } from '@typie/ui/components';
   import VariantStatusBadge from './VariantStatusBadge.svelte';
   import type { PageData } from './$types';
 
@@ -20,6 +21,8 @@
 
   const cardTitleClass = css({ fontSize: '13px', fontWeight: 'bold', color: 'text.subtle', marginBottom: '12px' });
 </script>
+
+<Helmet title="관리자 홈" trailing="타이피 평가" />
 
 <div class={css({ maxWidth: '1080px', marginX: 'auto', paddingY: '40px', paddingX: '32px' })}>
   <header class={css({ marginBottom: '24px' })}>

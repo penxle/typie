@@ -1,12 +1,15 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
+  import { Helmet } from '@typie/ui/components';
   import VariantStatusBadge from '../VariantStatusBadge.svelte';
   import type { PageData } from './$types';
 
   type Props = { data: PageData };
   const { data }: Props = $props();
 </script>
+
+<Helmet title="후보" trailing="타이피 평가" />
 
 <div class={css({ maxWidth: '880px', marginX: 'auto', paddingY: '40px', paddingX: '32px' })}>
   <header class={flex({ align: 'center', justify: 'space-between', marginBottom: '20px' })}>
