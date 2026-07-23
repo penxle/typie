@@ -7,7 +7,7 @@
   import IconChevronDown from '~icons/lucide/chevron-down';
   import IconChevronUp from '~icons/lucide/chevron-up';
   import IconMapPinOff from '~icons/lucide/map-pin-off';
-  import { FEEDBACK_LABELS } from '$lib/domain/feedback-labels.ts';
+  import { ALL_FEEDBACK_LABELS, FEEDBACK_LABELS } from '$lib/domain/feedback-labels.ts';
   import type { FeedbackLabelEntry, FeedbackLabelMap } from '$lib/domain/feedback-labels.ts';
 
   type Feedback = { id: string; category: string | null; body: string; matchStart: number | null };
@@ -21,9 +21,11 @@
   };
   const { feedbacks, labelMap, highlightedId = null, onUpdateLabels, onHover, onSelect }: Props = $props();
 
-  const negativeLabels = FEEDBACK_LABELS.filter((label) => label.kind === 'negative');
-  const positiveLabels = FEEDBACK_LABELS.filter((label) => label.kind === 'positive');
-  const labelByKey = new Map(FEEDBACK_LABELS.map((label) => [label.key, label]));
+  const labelGroups = [...new Set(FEEDBACK_LABELS.map((label) => label.group))].map((group) => ({
+    group,
+    labels: FEEDBACK_LABELS.filter((label) => label.group === group),
+  }));
+  const labelByKey = new Map(ALL_FEEDBACK_LABELS.map((label) => [label.key, label]));
 
   const expandedIds = new SvelteSet<string>();
 
@@ -175,8 +177,13 @@
                     paddingY: '2px',
                     borderRadius: 'full',
                     fontSize: '11px',
-                    backgroundColor: label.kind === 'negative' ? 'accent.danger.subtle' : 'accent.success.subtle',
-                    color: label.kind === 'negative' ? 'text.danger' : 'text.success',
+                    backgroundColor:
+                      label.kind === 'negative'
+                        ? 'accent.danger.subtle'
+                        : label.kind === 'system'
+                          ? 'accent.warning.subtle'
+                          : 'accent.success.subtle',
+                    color: label.kind === 'negative' ? 'text.danger' : label.kind === 'system' ? 'accent.warning.default' : 'text.success',
                   })}
                 >
                   {label.name}
@@ -200,34 +207,22 @@
             onkeydown={(e) => e.stopPropagation()}
             role="presentation"
           >
-            <div class={flex({ direction: 'column', gap: '4px' })}>
-              <span class={css({ fontSize: '11px', color: 'text.faint' })}>부정</span>
-              <div class={flex({ wrap: 'wrap', gap: '6px' })}>
-                {#each negativeLabels as label (label.key)}
-                  <button
-                    class={chipStyle((entry?.labels ?? []).includes(label.key))}
-                    onclick={() => toggleLabel(feedback.id, label.key)}
-                    type="button"
-                  >
-                    {label.name}
-                  </button>
-                {/each}
+            {#each labelGroups as { group, labels } (group)}
+              <div class={flex({ direction: 'column', gap: '4px' })}>
+                <span class={css({ fontSize: '11px', color: 'text.faint' })}>{group}</span>
+                <div class={flex({ wrap: 'wrap', gap: '6px' })}>
+                  {#each labels as label (label.key)}
+                    <button
+                      class={chipStyle((entry?.labels ?? []).includes(label.key))}
+                      onclick={() => toggleLabel(feedback.id, label.key)}
+                      type="button"
+                    >
+                      {label.name}
+                    </button>
+                  {/each}
+                </div>
               </div>
-            </div>
-            <div class={flex({ direction: 'column', gap: '4px' })}>
-              <span class={css({ fontSize: '11px', color: 'text.faint' })}>긍정</span>
-              <div class={flex({ wrap: 'wrap', gap: '6px' })}>
-                {#each positiveLabels as label (label.key)}
-                  <button
-                    class={chipStyle((entry?.labels ?? []).includes(label.key))}
-                    onclick={() => toggleLabel(feedback.id, label.key)}
-                    type="button"
-                  >
-                    {label.name}
-                  </button>
-                {/each}
-              </div>
-            </div>
+            {/each}
             <div class={css({ borderTopWidth: '1px', borderColor: 'border.subtle', paddingTop: '10px' })}>
               <input
                 class={css({

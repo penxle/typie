@@ -306,9 +306,9 @@
               </div>
 
               <p class={css({ marginTop: '8px', fontSize: '12px', color: 'text.faint', fontVariantNumeric: 'tabular-nums' })}>
-                오탐 {percent(baseline.strictFpRate)} · 부정 라벨 {percent(baseline.negativeRate)} · 앵커 매칭 {percent(
-                  baseline.anchorMatch,
-                )}
+                오탐 {percent(baseline.strictFpRate)} · 판단 오류 {percent(baseline.judgmentErrorRate)} · 부정 라벨 {percent(
+                  baseline.negativeRate,
+                )} · 앵커 매칭 {percent(baseline.anchorMatch)}
               </p>
 
               {#if baselineIssues.length > 0}
@@ -370,8 +370,8 @@
                   {/if}
                 </div>
                 <p class={css({ marginTop: '6px', fontSize: '12px', color: 'text.faint', fontVariantNumeric: 'tabular-nums' })}>
-                  기준선 상대 {candidate.win}승 {candidate.tie}무 {candidate.loss}패 · 오탐 {percent(candidate.strictFpRate)} · 부정 라벨
-                  {percent(candidate.negativeRate)}
+                  기준선 상대 {candidate.win}승 {candidate.tie}무 {candidate.loss}패 · 오탐 {percent(candidate.strictFpRate)} · 판단 오류
+                  {percent(candidate.judgmentErrorRate)} · 부정 라벨 {percent(candidate.negativeRate)}
                 </p>
               {:else}
                 <p class={css({ marginTop: '8px', fontSize: '12px', color: 'text.faint' })}>이 후보에 대한 판정이 아직 없습니다.</p>
@@ -397,8 +397,9 @@
         </div>
 
         <p class={css({ marginTop: '10px', fontSize: '11px', color: 'text.faint' })}>
-          승/무/패는 문서(태스크)별 전 판정 평균 점수 비교입니다. 오탐 = 사실 오인·장면전환 오탐 라벨이 붙은 피드백 비율. 부정 라벨 = 부정
-          계열 라벨 전체 비율. 라벨링은 선택 사항이라 두 수치 모두 실제 비율의 하한입니다.
+          승/무/패는 문서(태스크)별 전 판정 평균 점수 비교입니다. 오탐 = 본문 오독·맥락 놓침(라운드 1 데이터는 사실 오인·장면전환 오탐) —
+          진단 자체가 틀린 피드백 비율. 판단 오류 = 의도·관례 무시, 스타일 강요, 과민 지적 — 진단은 맞으나 평가가 부당한 비율. 부정 라벨 =
+          부정 계열 전체. 위치 오류(시스템)는 세 수치 모두에서 제외됩니다. 라벨링은 선택 사항이라 모든 수치는 실제 비율의 하한입니다.
         </p>
 
         <details class={css({ marginTop: '16px' })}>
@@ -416,7 +417,9 @@
                   <th>무</th>
                   <th>패</th>
                   <th>오탐</th>
+                  <th>판단 오류</th>
                   <th>부정 라벨</th>
+                  <th>위치 오류</th>
                   <th>앵커 매칭률</th>
                   <th>0건</th>
                   <th>토큰</th>
@@ -440,7 +443,9 @@
                     <td>{variant.isBaseline ? '—' : variant.tie}</td>
                     <td>{variant.isBaseline ? '—' : variant.loss}</td>
                     <td>{percent(variant.strictFpRate)}</td>
+                    <td>{percent(variant.judgmentErrorRate)}</td>
                     <td>{percent(variant.negativeRate)}</td>
+                    <td>{percent(variant.anchorIssueRate)}</td>
                     <td>{percent(variant.anchorMatch)}</td>
                     <td>{variant.zeroCount}</td>
                     <td>{variant.tokens.toLocaleString()}</td>

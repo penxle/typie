@@ -11,12 +11,12 @@ import {
   pairwiseFromRanking,
   ranksFromScores,
 } from '$lib/domain/aggregate.ts';
-import { FEEDBACK_LABELS, STRICT_FALSE_POSITIVE_KEYS } from '$lib/domain/feedback-labels.ts';
+import { ALL_FEEDBACK_LABELS, JUDGMENT_ERROR_KEYS, STRICT_FALSE_POSITIVE_KEYS, SYSTEM_LABEL_KEYS } from '$lib/domain/feedback-labels.ts';
 import { createDb, Feedbacks, FeedbackSets, Judgments, Rounds, Runs, selectInChunks, Tasks, Variants } from '$lib/server/db/index.ts';
 import type { JudgmentResult, PairVerdict } from '$lib/domain/types.ts';
 import type { PageServerLoad } from './$types';
 
-const labelByKey = new Map(FEEDBACK_LABELS.map((label) => [label.key, label]));
+const labelByKey = new Map(ALL_FEEDBACK_LABELS.map((label) => [label.key, label]));
 
 // 레거시 폴백 — baselineLabel이 config에 없는 구 라운드(테스트 라운드 세대)용.
 const BASELINE_LABELS = new Set(['V0', '현행']);
@@ -55,7 +55,14 @@ export const load: PageServerLoad = async ({ platform }) => {
     const rankingEntries = [];
     const overlapPairs: [PairVerdict, PairVerdict][] = [];
     const pairTallies = new Map<string, { win: number; tie: number; loss: number }>();
-    const flagEntries: { variantId: string; feedbackCount: number; negativeCount: number; strictCount: number }[] = [];
+    const flagEntries: {
+      variantId: string;
+      feedbackCount: number;
+      negativeCount: number;
+      strictCount: number;
+      judgmentCount: number;
+      anchorIssueCount: number;
+    }[] = [];
     const scoreEntries: { variantId: string; score: number }[] = [];
     const labelDist = new Map<string, Map<string, number>>();
     const labelComments = new Map<string, { labelNames: string[]; comment: string }[]>();
@@ -74,13 +81,14 @@ export const load: PageServerLoad = async ({ platform }) => {
           const variantId = setVariant.get(setId);
           if (!variantId) continue;
           const setFeedbacks = feedbacks.filter((f) => f.setId === setId);
+          const labelsOf = (feedbackId: string) => (judgment.feedbackLabels ?? {})[feedbackId]?.labels ?? [];
           flagEntries.push({
             variantId,
             feedbackCount: setFeedbacks.length,
             negativeCount: setFeedbacks.filter((f) => judgment.falsePositiveFeedbackIds.includes(f.id)).length,
-            strictCount: setFeedbacks.filter((f) =>
-              ((judgment.feedbackLabels ?? {})[f.id]?.labels ?? []).some((key) => STRICT_FALSE_POSITIVE_KEYS.has(key)),
-            ).length,
+            strictCount: setFeedbacks.filter((f) => labelsOf(f.id).some((key) => STRICT_FALSE_POSITIVE_KEYS.has(key))).length,
+            judgmentCount: setFeedbacks.filter((f) => labelsOf(f.id).some((key) => JUDGMENT_ERROR_KEYS.has(key))).length,
+            anchorIssueCount: setFeedbacks.filter((f) => labelsOf(f.id).some((key) => SYSTEM_LABEL_KEYS.has(key))).length,
           });
         }
 
@@ -217,6 +225,12 @@ export const load: PageServerLoad = async ({ platform }) => {
     const strictFpRates = flaggedRate(
       flagEntries.map((e) => ({ variantId: e.variantId, feedbackCount: e.feedbackCount, flaggedCount: e.strictCount })),
     );
+    const judgmentErrorRates = flaggedRate(
+      flagEntries.map((e) => ({ variantId: e.variantId, feedbackCount: e.feedbackCount, flaggedCount: e.judgmentCount })),
+    );
+    const anchorIssueRates = flaggedRate(
+      flagEntries.map((e) => ({ variantId: e.variantId, feedbackCount: e.feedbackCount, flaggedCount: e.anchorIssueCount })),
+    );
     const variantRows = [...new Set(sets.map((s) => s.variantId))]
       .map((variantId) => {
         const tally = winRates.get(variantId) ?? { win: 0, tie: 0, loss: 0 };
@@ -228,6 +242,8 @@ export const load: PageServerLoad = async ({ platform }) => {
           loss: tally.loss,
           negativeRate: negativeRates.get(variantId) ?? NaN,
           strictFpRate: strictFpRates.get(variantId) ?? NaN,
+          judgmentErrorRate: judgmentErrorRates.get(variantId) ?? NaN,
+          anchorIssueRate: anchorIssueRates.get(variantId) ?? NaN,
           anchorMatch: anchorRates.get(variantId) ?? NaN,
           zeroCount: countDist.get(variantId)?.zero ?? 0,
           tokens: tokensByVariant.get(variantId) ?? 0,
