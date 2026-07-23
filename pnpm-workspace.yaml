@@ -23,3 +23,16 @@ allowBuilds:
   workerd: true
 minimumReleaseAgeExclude:
   - '@cloudflare/workers-types@5.20260721.1'
+  - '@mearie/cli@0.1.8'
+  - '@mearie/codegen@0.2.0'
+  - '@mearie/core@0.7.0'
+  - '@mearie/native-darwin-arm64@0.5.0'
+  - '@mearie/native-darwin-x64@0.5.0'
+  - '@mearie/native-linux-arm64-gnu@0.5.0'
+  - '@mearie/native-linux-x64-gnu@0.5.0'
+  - '@mearie/native-win32-x64-msvc@0.5.0'
+  - '@mearie/native@0.5.0'
+  - '@mearie/shared@0.5.0'
+  - '@mearie/svelte@0.4.8'
+  - '@mearie/vite@0.1.8'
+  - mearie@0.1.8

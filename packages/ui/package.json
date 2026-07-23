@@ -24,7 +24,7 @@
   "dependencies": {
     "@floating-ui/dom": "^1.7.6",
     "@iconify-json/lucide": "^1.2.116",
-    "@mearie/svelte": "^0.4.7",
+    "@mearie/svelte": "^0.4.8",
     "@sveltejs/kit": "^2.69.1",
     "@sveltejs/vite-plugin-svelte": "^7.1.4",
     "@types/node": "^26.1.0",
