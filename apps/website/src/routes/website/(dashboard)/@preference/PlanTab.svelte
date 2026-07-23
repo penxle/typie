@@ -34,6 +34,10 @@
         nextSubscription {
           id
         }
+
+        billingKey {
+          id
+        }
       }
     `),
     () => user$key,
@@ -148,7 +152,7 @@
               size="sm"
               variant="primary"
             >
-              결제 수단 등록하기
+              {user.data.billingKey ? '구독 예약하기' : '결제 수단 등록하기'}
             </Button>
           {/if}
         {:else if hasActiveSubscription}

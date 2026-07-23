@@ -28,6 +28,10 @@
         id
         hadSubscription
 
+        billingKey {
+          id
+        }
+
         subscription {
           id
           startsAt
@@ -190,10 +194,12 @@
           <p class={css({ fontSize: '12px', color: 'text.muted', lineHeight: '[1.6]' })}>
             기간이 끝나도 이어 쓸 수 있도록,
             <br />
-            결제 수단을 미리 등록해 보세요.
+            {user.data.billingKey ? '구독을 미리 예약해 보세요.' : '결제 수단을 미리 등록해 보세요.'}
           </p>
 
-          <Button style={css.raw({ width: 'full' })} onclick={handleClick} size="sm">결제 수단 등록하기</Button>
+          <Button style={css.raw({ width: 'full' })} onclick={handleClick} size="sm">
+            {user.data.billingKey ? '구독 예약하기' : '결제 수단 등록하기'}
+          </Button>
         </div>
       {/if}
     </div>

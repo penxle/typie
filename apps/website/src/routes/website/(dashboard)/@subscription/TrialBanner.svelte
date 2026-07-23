@@ -23,6 +23,10 @@
         id
         hadSubscription
 
+        billingKey {
+          id
+        }
+
         subscription {
           id
           startsAt
@@ -90,12 +94,14 @@
         <p class={css({ fontSize: '12px', color: 'text.muted' })}>쓰던 글을 이어가려면 구독을 시작해 주세요.</p>
       {:else}
         <p class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.default' })}>{trialStatusLabel(daysLeft, legacy)}</p>
-        <p class={css({ fontSize: '12px', color: 'text.muted' })}>기간이 끝나도 이어 쓸 수 있도록, 결제 수단을 미리 등록해 보세요.</p>
+        <p class={css({ fontSize: '12px', color: 'text.muted' })}>
+          기간이 끝나도 이어 쓸 수 있도록, {user.data.billingKey ? '구독을 미리 예약해 보세요.' : '결제 수단을 미리 등록해 보세요.'}
+        </p>
       {/if}
     </div>
 
     <Button style={css.raw({ flexShrink: '0' })} onclick={handleClick} size="sm">
-      {expired ? '타이피 계속 쓰기' : '결제 수단 등록하기'}
+      {expired ? '타이피 계속 쓰기' : user.data.billingKey ? '구독 예약하기' : '결제 수단 등록하기'}
     </Button>
   </div>
 {/if}
