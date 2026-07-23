@@ -34,6 +34,7 @@ internal actual fun RenderCanvas(
   onDetach: (releaseBuffer: () -> Unit) -> Unit,
   onResize: () -> Unit,
   onFrame: (bitmap: ImageBitmap, pixelSize: IntSize, version: Long) -> Unit,
+  onFrameSkipped: (version: Long) -> Unit,
 ) {
   var bufferHandle by remember { mutableStateOf(0L) }
 
@@ -41,6 +42,7 @@ internal actual fun RenderCanvas(
   val currentOnDetach by rememberUpdatedState(onDetach)
   val currentOnResize by rememberUpdatedState(onResize)
   val currentOnFrame by rememberUpdatedState(onFrame)
+  val currentOnFrameSkipped by rememberUpdatedState(onFrameSkipped)
 
   LaunchedEffect(desiredPixelSize, configuration) {
     if (desiredPixelSize.width <= 0 || desiredPixelSize.height <= 0) return@LaunchedEffect
@@ -78,12 +80,19 @@ internal actual fun RenderCanvas(
     var readerLastVersion = 0L
 
     trigger.conflate().collect { version ->
-      if (!RenderBuffer.beginRead(handle)) return@collect
+      if (!RenderBuffer.beginRead(handle)) {
+        // An earlier read already consumed the commit behind this present — its pixels
+        // were in the slot that read pinned — so no frame will arrive for this version.
+        // It must still settle, or a publish parked on it would sit until the watchdog.
+        currentOnFrameSkipped(version)
+        return@collect
+      }
 
       val w = RenderBuffer.getPixelWidth(handle)
       val h = RenderBuffer.getPixelHeight(handle)
       if (w <= 0 || h <= 0) {
         RenderBuffer.endRead(handle)
+        currentOnFrameSkipped(version)
         return@collect
       }
 
@@ -97,12 +106,14 @@ internal actual fun RenderCanvas(
             if (!fresh.allocPixels(ImageInfo(w, h, ColorType.RGBA_8888, ColorAlphaType.PREMUL))) {
               fresh.close()
               RenderBuffer.endRead(handle)
+              currentOnFrameSkipped(version)
               return@collect
             }
             val addr = fresh.peekPixels()?.use { it.addr.toLong() } ?: 0L
             if (addr == 0L) {
               fresh.close()
               RenderBuffer.endRead(handle)
+              currentOnFrameSkipped(version)
               return@collect
             }
             cachedSkBitmap = fresh
@@ -141,7 +152,10 @@ internal actual fun RenderCanvas(
       val ok =
         RenderBuffer.readPinnedInto(handle, cachedPixelsAddr, w.toLong() * h * 4, rowFrom, rowTo)
       RenderBuffer.endRead(handle)
-      if (!ok) return@collect
+      if (!ok) {
+        currentOnFrameSkipped(version)
+        return@collect
+      }
 
       skBitmap.notifyPixelsChanged()
       // asComposeImageBitmap() is zero-copy, so Compose may still draw this Bitmap after

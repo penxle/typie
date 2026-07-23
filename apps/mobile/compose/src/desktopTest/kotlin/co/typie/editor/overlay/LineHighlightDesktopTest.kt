@@ -41,11 +41,11 @@ class LineHighlightDesktopTest {
                 Modifier.fillMaxWidth()
                   .trackEditorInteractionSurfaceBounds(uiState = uiState, density = 1f)
                   .editorExtensionAreaLineHighlight(
-                    cursor = { cursor },
-                    focused = { true },
+                    cursor = cursor,
+                    focused = true,
                     editorBounds = { uiState.editorBoundsInContainer },
                     viewportTransform = { uiState.resolveViewportTransform() },
-                    enabled = { true },
+                    enabled = true,
                     color = Color.Black,
                   )
             ) {

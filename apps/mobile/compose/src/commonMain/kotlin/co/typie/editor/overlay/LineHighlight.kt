@@ -65,16 +65,22 @@ internal fun EditorLineHighlightOverlay(
   Box(Modifier.editorOverlayRect(rect).background(AppTheme.colors.surfaceInset.copy(alpha = 0.55f)))
 }
 
+// Mixed read timing on purpose. The cursor is a composition-captured value so the
+// highlight moves in the same recomposition wave as the page frames and overlays — a
+// draw-phase read would observe a background-thread publish one frame ahead of them and
+// flash one line off. The bounds and the viewport transform stay draw-phase reads: they
+// come from post-layout position trackers, and capturing them in composition would lag
+// layout-driven movement (zoom, relayout) by a frame.
 internal fun Modifier.editorExtensionAreaLineHighlight(
-  cursor: () -> CursorMetrics?,
-  focused: () -> Boolean,
+  cursor: CursorMetrics?,
+  focused: Boolean,
   editorBounds: () -> EditorBoundsInContainer,
   viewportTransform: () -> EditorViewportTransform,
-  enabled: () -> Boolean,
+  enabled: Boolean,
   color: Color,
 ): Modifier = drawBehind {
-  if (!enabled() || !focused()) return@drawBehind
-  val currentCursor = cursor() ?: return@drawBehind
+  if (!enabled || !focused) return@drawBehind
+  val currentCursor = cursor ?: return@drawBehind
   val band =
     resolveEditorExtensionAreaLineHighlightBand(
       cursor = currentCursor,

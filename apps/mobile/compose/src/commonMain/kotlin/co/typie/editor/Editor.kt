@@ -44,6 +44,7 @@ import co.typie.editor.sync.SplitChangeset
 import co.typie.editor.sync.encodeLengthPrefixedBlobs
 import co.typie.editor.sync.toChangesetBytes
 import co.typie.platform.PlatformModule
+import io.sentry.kotlin.multiplatform.Sentry
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.AtomicLong
 import kotlin.concurrent.atomics.AtomicReference
@@ -62,6 +63,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -70,6 +72,8 @@ import kotlinx.coroutines.withContext
 // state; consumers resolve absolute offsets through Ime.windowStart, so a bounded
 // window only limits how much surrounding text the IME can observe.
 private const val IME_SNAPSHOT_WINDOW = 4096
+
+private const val PARKED_PUBLISH_WATCHDOG_MS = 1000L
 
 private data class EditorAwaitTick<T>(
   val events: List<EditorEvent>,
@@ -104,6 +108,7 @@ internal constructor(
   val placeholder: PlaceholderMetrics? by derivedStateOf { state.placeholder }
   val selection: Selection? by derivedStateOf { state.selection }
   val tickIme: Ime? by derivedStateOf { tickSnapshot.ime }
+  val tickSelection: Selection? by derivedStateOf { tickSnapshot.selection }
   val tickSelectionEndpoints: SelectionEndpoints? by derivedStateOf {
     tickSnapshot.selectionEndpoints
   }
@@ -119,6 +124,7 @@ internal constructor(
 
   private val mutex = PriorityMutex()
   private val versionCounter: AtomicLong = AtomicLong(0L)
+  private val tickStateRef: AtomicReference<EditorState> = AtomicReference(EditorState.Initial)
   private val disposed: AtomicBoolean = AtomicBoolean(false)
   private val imeSessionActive: AtomicBoolean = AtomicBoolean(false)
   private val syncInProgress: AtomicBoolean = AtomicBoolean(false)
@@ -135,7 +141,7 @@ internal constructor(
       inner = inner,
       scope = scope,
       dispatcher = dispatcher,
-      versionCounter = versionCounter,
+      tickState = { tickStateRef.load() },
       disposed = disposed,
       markPageAttached = { page -> attachedPages.updatePersistent { it.adding(page) } },
       markPageDetached = { page -> markSurfacePageDetached(page) },
@@ -329,31 +335,53 @@ internal constructor(
       return
     }
     if (events.any { it is EditorEvent.RenderInvalidated }) {
-      pendingSettles.updatePersistent { list ->
-        list.add(PendingSettle(pages, requiredVersion = snapshot.version, snapshot = snapshot))
-      }
+      parkPublish(PendingSettle(pages, requiredVersion = snapshot.version, snapshot = snapshot))
       return
     }
-    val outstanding = pendingSettles.load().maxOfOrNull { it.requiredVersion }
-    if (outstanding == null) {
+    val ridden = pendingSettles.load().maxByOrNull { it.requiredVersion }
+    if (ridden == null) {
       commit(snapshot)
       return
     }
-    val piggyback = PendingSettle(pages, requiredVersion = outstanding, snapshot = snapshot)
-    pendingSettles.updatePersistent { it.add(piggyback) }
-    val owed = pendingSettles.load().any { it !== piggyback && it.requiredVersion <= outstanding }
-    if (!owed) {
-      // The settle being ridden completed between the read and the add; reclaim and
-      // publish inline. If the settle did catch the piggyback, commit is a stale no-op.
-      var reclaimed = false
-      pendingSettles.updatePersistent { list ->
-        val next = list.remove(piggyback)
-        reclaimed = next !== list
-        next
+    // Attached to the ridden pending instead of parked as its own: a no-render tick has
+    // no frame to wait for, and requiring pages again would orphan it whenever a page
+    // already settled at this version and never renders again.
+    ridden.attachPiggyback(snapshot)
+    if (pendingSettles.load().none { it === ridden }) {
+      // The ridden settle completed between the read and the attach; its release may
+      // have missed the piggyback. Publishing inline is safe — commit is monotonic.
+      commit(snapshot)
+    }
+  }
+
+  // Parks an awaiter-less snapshot on the settle, with a liveness fallback: a settle
+  // can be lost (a frame copy that never lands, a dropped present), and a parked
+  // publish has no owner to notice — without a watchdog the published state would be
+  // locked behind the missing settle forever.
+  private fun parkPublish(pending: PendingSettle) {
+    pendingSettles.updatePersistent { it.add(pending) }
+    scope.launch(dispatcher) {
+      delay(PARKED_PUBLISH_WATCHDOG_MS)
+      if (pendingSettles.load().none { it === pending }) return@launch
+      // Telemetry only — the force publish below recovers the editor, so this must not
+      // go through notifyFailure, which fails the runtime and tears the session down.
+      val error =
+        IllegalStateException(
+          "parked publish watchdog: settle for version ${pending.requiredVersion} never arrived"
+        )
+      Logger.e(error) {
+        "parked publish watchdog v=${pending.requiredVersion}" +
+          " remaining=${pending.remainingPages()}" +
+          " counter=${versionCounter.load()} state=${state.version}" +
+          " attached=${attachedPages.load()}" +
+          " pendings=${
+            pendingSettles.load().map {
+              "${it.requiredVersion}:${it.remainingPages()}:effective=${it.effectiveVersion()}"
+            }
+          }"
       }
-      if (reclaimed) {
-        commit(snapshot)
-      }
+      Sentry.captureException(error)
+      releaseCompletedSettles(listOf(pending))
     }
   }
 
@@ -581,15 +609,17 @@ internal constructor(
   private fun releaseCompletedSettles(completed: List<PendingSettle>) {
     if (completed.isEmpty()) return
     pendingSettles.updatePersistent { list -> list.removeAll(completed) }
-    // Piggybacked snapshots share a requiredVersion with the settle they ride, so the
-    // newest is decided by the snapshot version they would publish.
-    val newest = completed.maxBy { it.snapshot?.version ?: it.requiredVersion }
+    // The newest is decided by the snapshot each settle would publish, which includes
+    // any piggybacked no-render snapshot riding it.
+    val newest = completed.maxBy { it.effectiveVersion() }
     completed.forEach { pending ->
       pending.supersededByNewerSettle = pending !== newest
       pending.release()
     }
-    // Awaiter-less pendings (deferred sync publishes) have no coroutine to commit them.
-    val deferred = newest.snapshot ?: return
+    // Awaiter-less snapshots (deferred sync publishes and piggybacks) have no coroutine
+    // to commit them. An awaiter pending still commits its own snapshot on resume;
+    // commit is monotonic, so the pair cannot regress the published state.
+    val deferred = newest.effectiveSnapshot() ?: return
     scope.launch(dispatcher) {
       mutex.withLock {
         if (!disposed.load()) {
@@ -879,6 +909,10 @@ internal constructor(
         interactiveRegions = interactiveRegions,
       )
     tickSnapshot = snapshot
+    // Plain atomic mirror for non-composition readers: the surface scheduler runs on its
+    // own thread, where a Compose snapshot-state read is not a sound publication
+    // primitive (visibility rides the global snapshot's apply cadence).
+    tickStateRef.store(snapshot)
     return snapshot
   }
 

@@ -87,7 +87,9 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
     override val editText: (block: TextEditingScope.() -> Unit) -> Unit = { block ->
       editor.syncWithBringIntoView(bringIntoViewRequests) {
         val batch =
-          EditorDesktopTextEditingBatch(initialHasActiveComposition = editor.ime?.composing != null)
+          EditorDesktopTextEditingBatch(
+            initialHasActiveComposition = editor.tickIme?.composing != null
+          )
         batch.block()
         for (message in batch.drainMessages()) {
           enqueue(message)

@@ -71,12 +71,13 @@ internal fun EditorBody(
       .trackEditorInteractionSurfaceBounds(uiState = uiState, density = density.density)
       .run {
         if (layoutSpec is EditorDocumentLayoutSpec.Continuous) {
+          val pageSizes = editor?.pageSizes.orEmpty()
           editorExtensionAreaLineHighlight(
-            cursor = { editor?.cursor },
-            focused = { uiState.focused },
+            cursor = editor?.cursor,
+            focused = uiState.focused,
             editorBounds = { uiState.editorBoundsInContainer },
-            viewportTransform = { uiState.resolveViewportTransform(editor?.pageSizes.orEmpty()) },
-            enabled = { Preference.lineHighlightEnabled },
+            viewportTransform = { uiState.resolveViewportTransform(pageSizes) },
+            enabled = Preference.lineHighlightEnabled,
             color = AppTheme.colors.surfaceInset.copy(alpha = 0.55f),
           )
         } else {

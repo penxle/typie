@@ -984,7 +984,7 @@ class EditorAwaitTest {
       editor.attachSurface(page = 0, handle = 0L, width = 0.0, height = 0.0, scaleFactor = 1.0)
 
       editor.sync { enqueue(sampleMessage) }
-      dispatcher.scheduler.advanceUntilIdle()
+      dispatcher.scheduler.runCurrent()
       assertEquals(0L, editor.state.version)
 
       editor.onPageSettled(page = 0, version = 1L)
@@ -1001,7 +1001,7 @@ class EditorAwaitTest {
 
       editor.sync { enqueue(sampleMessage) }
       val job = launch(dispatcher) { editor.await { enqueue(sampleMessage) } }
-      dispatcher.scheduler.advanceUntilIdle()
+      dispatcher.scheduler.runCurrent()
       assertEquals(0L, editor.state.version)
 
       editor.onPageSettled(page = 0, version = 2L)
@@ -1018,7 +1018,7 @@ class EditorAwaitTest {
       editor.attachSurface(page = 0, handle = 0L, width = 0.0, height = 0.0, scaleFactor = 1.0)
 
       editor.enqueue(sampleMessage)
-      dispatcher.scheduler.advanceUntilIdle()
+      dispatcher.scheduler.runCurrent()
       assertEquals(1, fake.tickCount)
       assertEquals(0L, editor.state.version)
 
@@ -1058,13 +1058,62 @@ class EditorAwaitTest {
 
       editor.sync { enqueue(sampleMessage) }
       editor.sync { enqueue(sampleMessage) }
-      dispatcher.scheduler.advanceUntilIdle()
+      dispatcher.scheduler.runCurrent()
       assertEquals(0L, editor.state.version)
 
       // The settle owed for version 1 also publishes the ridden version 2 snapshot.
       editor.onPageSettled(page = 0, version = 1L)
       dispatcher.scheduler.advanceUntilIdle()
       assertEquals(2L, editor.state.version)
+    }
+
+  @Test
+  fun no_render_tick_rides_a_partially_settled_outstanding_settle() =
+    runTest(dispatcher) {
+      val events =
+        ArrayDeque(
+          listOf(
+            listOf(renderInvalidated()),
+            listOf(EditorEvent.StateChanged(listOf(StateField.Cursor))),
+          )
+        )
+      val fake = FakeFfiEditor(onTick = { events.removeFirst() })
+      val editor = Editor(fake, this, dispatcher)
+      editor.attachSurface(page = 0, handle = 0L, width = 0.0, height = 0.0, scaleFactor = 1.0)
+      editor.attachSurface(page = 1, handle = 1L, width = 0.0, height = 0.0, scaleFactor = 1.0)
+
+      editor.sync { enqueue(sampleMessage) }
+      // Page 0 settles before the no-render tick arrives; it will never settle again.
+      editor.onPageSettled(page = 0, version = 1L)
+      dispatcher.scheduler.runCurrent()
+      editor.sync { enqueue(sampleMessage) }
+      dispatcher.scheduler.runCurrent()
+      assertEquals(0L, editor.state.version)
+
+      // Completing the ridden settle must publish the piggybacked snapshot without
+      // demanding another settle from page 0 (and without the watchdog).
+      editor.onPageSettled(page = 1, version = 1L)
+      dispatcher.scheduler.runCurrent()
+      assertEquals(2L, editor.state.version)
+    }
+
+  @Test
+  fun parked_publish_watchdog_force_publishes_when_settle_is_lost() =
+    runTest(dispatcher) {
+      val fake = FakeFfiEditor(onTick = { listOf(renderInvalidated()) })
+      val reported = mutableListOf<Throwable>()
+      val editor = Editor(fake, this, dispatcher, onError = { _, error -> reported += error })
+      editor.attachSurface(page = 0, handle = 0L, width = 0.0, height = 0.0, scaleFactor = 1.0)
+
+      editor.sync { enqueue(sampleMessage) }
+      dispatcher.scheduler.runCurrent()
+      assertEquals(0L, editor.state.version)
+
+      // No settle ever arrives; the watchdog must force the parked publish without
+      // failing the editor (telemetry only, no onError).
+      dispatcher.scheduler.advanceUntilIdle()
+      assertEquals(1L, editor.state.version)
+      assertEquals(emptyList(), reported)
     }
 
   @Test
@@ -1185,7 +1234,7 @@ class EditorAwaitTest {
 
       // The settle for version 1 publishes the awaited snapshot only.
       editor.onPageSettled(0, version = 1L)
-      dispatcher.scheduler.advanceUntilIdle()
+      dispatcher.scheduler.runCurrent()
       assertEquals(cursorA, editor.cursor)
       assertEquals(1L, editor.state.version)
 

@@ -16,8 +16,37 @@ internal class PendingSettle(
     AtomicReference(pages.toPersistentSet())
   private val signal: CompletableDeferred<Unit> = CompletableDeferred()
 
+  // A newer snapshot from a tick that did not invalidate rendering, riding this settle
+  // instead of demanding its own: such a tick has no frame of its own to wait for, and
+  // requiring pages again would orphan it whenever a page already settled at this
+  // version and never renders again.
+  private val piggyback: AtomicReference<EditorState?> = AtomicReference(null)
+
   // Must be assigned before release(); read by the awaiter only after await() resumes.
   var supersededByNewerSettle: Boolean = false
+
+  fun remainingPages(): Set<Int> = remaining.load()
+
+  fun attachPiggyback(snapshot: EditorState) {
+    while (true) {
+      val current = piggyback.load()
+      if (current != null && current.version >= snapshot.version) return
+      if (piggyback.compareAndSet(current, snapshot)) return
+    }
+  }
+
+  fun effectiveSnapshot(): EditorState? {
+    val ridden = piggyback.load()
+    val own = snapshot
+    return when {
+      ridden == null -> own
+      own == null -> ridden
+      ridden.version >= own.version -> ridden
+      else -> own
+    }
+  }
+
+  fun effectiveVersion(): Long = effectiveSnapshot()?.version ?: requiredVersion
 
   fun markCommitted(page: Int, version: Long): Boolean {
     if (version < requiredVersion) return false

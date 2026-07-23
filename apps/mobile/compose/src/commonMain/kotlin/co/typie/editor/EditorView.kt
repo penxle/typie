@@ -206,6 +206,7 @@ internal fun EditorView(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(pageSpacing),
       ) {
+        val publishedVersion = editor.state.version
         editor.pageSizes.forEachIndexed { index, size ->
           val pageCursor = editor.cursor?.takeIf { sessionActive && it.pageIdx == index }
           val pageExternalElements =
@@ -215,6 +216,7 @@ internal fun EditorView(
             page = index,
             width = size.width,
             height = size.height,
+            publishedVersion = publishedVersion,
             showChrome = showPageChrome,
             debugBottomMarginHeight =
               when (layoutSpec) {

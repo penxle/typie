@@ -18,6 +18,7 @@ internal expect fun RenderCanvas(
   onDetach: (releaseBuffer: () -> Unit) -> Unit,
   onResize: () -> Unit,
   onFrame: (bitmap: ImageBitmap, pixelSize: IntSize, version: Long) -> Unit,
+  onFrameSkipped: (version: Long) -> Unit,
 )
 
 internal expect fun readNativeInts(srcAddr: Long, count: Int): IntArray

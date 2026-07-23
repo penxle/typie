@@ -14,6 +14,7 @@ class EditorImeNotificationFlowTest {
     val position = Position(node = "n", offset = offset, affinity = Affinity.Downstream)
     return EditorImeNotifyKey(
       selection = Selection(anchor = position, head = position),
+      tickSelection = Selection(anchor = position, head = position),
       cursor = null,
       ime = null,
       paused = paused,

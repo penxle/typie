@@ -232,7 +232,7 @@ internal class EditorInputConnection(
 
   override fun finishComposingText(): Boolean {
     recordCall("finishComposingText", "")
-    batch.finishComposingText(hasActiveComposition = editor.ime?.composing != null)
+    batch.finishComposingText(hasActiveComposition = editor.tickIme?.composing != null)
     return true
   }
 
@@ -301,7 +301,7 @@ internal class EditorInputConnection(
   override fun closeConnection() {
     recordCall("closeConnection", "")
     extractMonitor.token = null
-    batch.closeConnection(hasActiveComposition = editor.ime?.composing != null)
+    batch.closeConnection(hasActiveComposition = editor.tickIme?.composing != null)
   }
 
   override fun commitContent(

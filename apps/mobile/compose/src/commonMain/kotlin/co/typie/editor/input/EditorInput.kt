@@ -385,7 +385,7 @@ internal class EditorInputNode(
   private val textInputClient =
     object : TextInputClient {
       override val hasActiveComposition: Boolean
-        get() = editor.ime?.composing != null
+        get() = editor.tickIme?.composing != null
 
       override fun requestFocus() {
         editor.focus()
@@ -393,7 +393,7 @@ internal class EditorInputNode(
 
       override fun insertText(text: String): Boolean {
         recordToolbarInput("insertText", text)
-        dispatch(toolbarInsertTextMessages(text, editor.ime?.composing != null))
+        dispatch(toolbarInsertTextMessages(text, editor.tickIme?.composing != null))
         return true
       }
 
@@ -464,7 +464,7 @@ internal class EditorInputNode(
     if (!enabled || event.type != KeyEventType.KeyDown) return false
     val binding = bindings.find { matchesKeyBinding(it, platform, event) }
     if (binding != null) {
-      val composing = editor.ime?.composing != null
+      val composing = editor.tickIme?.composing != null
       if (composing && !commitsCompositionBeforeKeyBinding(platform, event.key)) {
         recordHardwareKey(
           event = event,
@@ -513,7 +513,7 @@ internal class EditorInputNode(
             (((cp - 0x10000) and 0x3FF) + 0xDC00).toChar(),
           )
           .concatToString()
-      if (editor.ime?.composing != null) {
+      if (editor.tickIme?.composing != null) {
         recordHardwareKey(
           event = event,
           stage = "onKeyEvent",
@@ -539,7 +539,7 @@ internal class EditorInputNode(
     val ch = cp.toChar()
     if (!ch.isDefined() || ch.isISOControl() || ch.isSurrogate()) return false
 
-    if (editor.ime?.composing != null) {
+    if (editor.tickIme?.composing != null) {
       recordHardwareKey(
         event = event,
         stage = "onKeyEvent",
@@ -565,7 +565,9 @@ internal class EditorInputNode(
   override fun onPreKeyEvent(event: KeyEvent): Boolean {
     if (!enabled || event.type != KeyEventType.KeyDown) return false
     val binding = bindings.find { matchesKeyBinding(it, platform, event) } ?: return false
-    if (editor.ime?.composing != null && !commitsCompositionBeforeKeyBinding(platform, event.key)) {
+    if (
+      editor.tickIme?.composing != null && !commitsCompositionBeforeKeyBinding(platform, event.key)
+    ) {
       recordHardwareKey(
         event = event,
         stage = "onPreKeyEvent",
@@ -699,7 +701,13 @@ internal class EditorInputNode(
                 // emission is already handled above.
                 snapshotFlow {
                   EditorImeNotifyKey(
+                    // Both selection views on purpose: tickSelection fires the
+                    // notification the moment a tick moves the selection (push-based
+                    // IMEs must see the latest state regardless of the render cycle),
+                    // while the published selection re-fires after a parked publish
+                    // lands so pull-based sessions re-read the committed state.
                     selection = editor.selection,
+                    tickSelection = editor.tickSelection,
                     cursor = editor.cursor,
                     ime = editor.tickIme,
                     paused = editor.imeNotificationsPaused,
@@ -740,6 +748,7 @@ internal class EditorInputNode(
 
 internal data class EditorImeNotifyKey(
   val selection: Selection?,
+  val tickSelection: Selection?,
   val cursor: CursorMetrics?,
   val ime: Ime?,
   val paused: Boolean,

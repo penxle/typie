@@ -32,6 +32,7 @@ internal actual fun RenderCanvas(
   onDetach: (releaseBuffer: () -> Unit) -> Unit,
   onResize: () -> Unit,
   onFrame: (bitmap: ImageBitmap, pixelSize: IntSize, version: Long) -> Unit,
+  onFrameSkipped: (version: Long) -> Unit,
 ) {
   var bufferHandle by remember { mutableLongStateOf(0L) }
 
@@ -39,6 +40,7 @@ internal actual fun RenderCanvas(
   val currentOnDetach by rememberUpdatedState(onDetach)
   val currentOnResize by rememberUpdatedState(onResize)
   val currentOnFrame by rememberUpdatedState(onFrame)
+  val currentOnFrameSkipped by rememberUpdatedState(onFrameSkipped)
 
   LaunchedEffect(desiredPixelSize, configuration) {
     if (desiredPixelSize.width <= 0 || desiredPixelSize.height <= 0) return@LaunchedEffect
@@ -71,16 +73,29 @@ internal actual fun RenderCanvas(
 
     var cachedWidth = 0
     var cachedHeight = 0
-    var cachedAndroidBitmap: Bitmap? = null
+    // Ping-pong across three backings: a delivered frame's pixels must stay immutable
+    // for as long as the presentation gate can still show it (the pending store keeps
+    // up to two frames per size, plus the currently applied one). Reusing a single
+    // bitmap would overwrite on-screen pixels in place, moving content ahead of the
+    // publish invisibly to the gate.
+    val cachedBitmaps = arrayOfNulls<Bitmap>(3)
+    var cachedIndex = 0
 
     trigger.conflate().collect { version ->
-      if (!RenderBuffer.beginRead(handle)) return@collect
+      if (!RenderBuffer.beginRead(handle)) {
+        // An earlier read already consumed the commit behind this present — its pixels
+        // were in the slot that read pinned — so no frame will arrive for this version.
+        // It must still settle, or a publish parked on it would sit until the watchdog.
+        currentOnFrameSkipped(version)
+        return@collect
+      }
 
       val w = RenderBuffer.getPixelWidth(handle)
       val h = RenderBuffer.getPixelHeight(handle)
       val dataAddr = RenderBuffer.getDataPointer(handle)
       if (w <= 0 || h <= 0 || dataAddr == 0L) {
         RenderBuffer.endRead(handle)
+        currentOnFrameSkipped(version)
         return@collect
       }
 
@@ -88,16 +103,19 @@ internal actual fun RenderCanvas(
       // premultiplied by default. This matches CpuSink::read_back_rect_absolute's
       // premultiplied RGBA8 output, so copyPixelsFromBuffer is a direct memcpy with
       // no channel swap or un-premultiplication.
+      if (cachedWidth != w || cachedHeight != h) {
+        cachedBitmaps.fill(null)
+        cachedIndex = 0
+        cachedWidth = w
+        cachedHeight = h
+      }
       val androidBitmap =
-        cachedAndroidBitmap?.takeIf { cachedWidth == w && cachedHeight == h }
-          ?: createBitmap(w, h).also {
-            cachedAndroidBitmap = it
-            cachedWidth = w
-            cachedHeight = h
-          }
+        cachedBitmaps[cachedIndex] ?: createBitmap(w, h).also { cachedBitmaps[cachedIndex] = it }
+      cachedIndex = (cachedIndex + 1) % cachedBitmaps.size
       val byteCount = androidBitmap.byteCount.toLong()
       if (byteCount != w.toLong() * h * 4) {
         RenderBuffer.endRead(handle)
+        currentOnFrameSkipped(version)
         return@collect
       }
       androidBitmap.copyPixelsFromBuffer(Pointer(dataAddr).getByteBuffer(0, byteCount))

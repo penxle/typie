@@ -90,7 +90,7 @@ internal class EditorSurfaceScheduler(
   private val inner: FfiEditor,
   private val scope: CoroutineScope,
   private val dispatcher: CoroutineDispatcher,
-  private val versionCounter: AtomicLong,
+  private val tickState: () -> EditorState,
   private val disposed: AtomicBoolean,
   private val markPageAttached: (Int) -> Unit,
   private val markPageDetached: (Int) -> Unit,
@@ -360,7 +360,13 @@ internal class EditorSurfaceScheduler(
     // Logical page geometry is owned by the engine and can advance ahead of any requested
     // configuration; the surface must match it before a frame is produced, or a presented
     // frame would be laid out for a different target size. The UI only owns scaleFactor.
-    val pageSize = inner.pageSizes().getOrNull(command.page)
+    // The stamp and the geometry come from the tick snapshot — a single immutable object
+    // published atomically per tick — because reading the counter and the live geometry
+    // separately can never agree under concurrent ticks (the engine state advances before
+    // the counter does).
+    val tick = tickState()
+    val version = tick.version
+    val pageSize = tick.pageSizes.getOrNull(command.page)
     val target =
       if (pageSize == null) {
         requested
@@ -378,9 +384,9 @@ internal class EditorSurfaceScheduler(
       }
     }
 
-    // Reading the version before rendering under-reports what the frame may contain,
-    // which only delays a settle until the follow-up render command.
-    val version = versionCounter.load()
+    // The stamp was read together with the geometry above. The render below may contain
+    // a newer tick than the stamp — under-reporting only delays a settle until the
+    // follow-up render command, while the frame stays sized for the stamped version.
     val presented = inner.renderSurface(command.page)
 
     if (!isActive(command.page, command.sessionId)) return
@@ -433,7 +439,7 @@ internal class EditorSurfaceScheduler(
           markPageDetached(command.page)
         }
       }
-      is SurfaceRenderCommand -> onPageSettled(command.page, versionCounter.load())
+      is SurfaceRenderCommand -> onPageSettled(command.page, tickState().version)
       is SurfaceDetachCommand -> Unit
     }
   }

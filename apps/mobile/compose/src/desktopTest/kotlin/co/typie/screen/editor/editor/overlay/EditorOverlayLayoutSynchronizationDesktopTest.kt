@@ -227,11 +227,11 @@ class EditorOverlayLayoutSynchronizationDesktopTest {
             .testTag(RootTag)
             .trackEditorInteractionSurfaceBounds(uiState = uiState, density = 1f)
             .editorExtensionAreaLineHighlight(
-              cursor = { cursor },
-              focused = { true },
+              cursor = cursor,
+              focused = true,
               editorBounds = { uiState.editorBoundsInContainer },
               viewportTransform = { uiState.resolveViewportTransform() },
-              enabled = { true },
+              enabled = true,
               color = LightColors.surfaceInset.copy(alpha = 0.55f),
             )
         ) {

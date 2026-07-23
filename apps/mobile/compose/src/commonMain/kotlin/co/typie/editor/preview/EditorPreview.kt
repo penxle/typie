@@ -308,11 +308,13 @@ private fun EditorPreviewContent(
     pageSpacing = pageSpacing,
     modifier = Modifier.fillMaxSize().clipToBounds().background(pageBackground),
   ) {
+    val publishedVersion = editor?.state?.version ?: 0L
     pageSizes.forEachIndexed { index, size ->
       EditorPageSurface(
         page = index,
         width = size.width,
         height = size.height,
+        publishedVersion = publishedVersion,
         showChrome = layoutSpec is EditorDocumentLayoutSpec.Paginated,
         debugBottomMarginHeight =
           when (layoutSpec) {
