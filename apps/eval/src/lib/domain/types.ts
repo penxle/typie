@@ -1,4 +1,4 @@
-export type TaskKind = 'ranking' | 'pair' | 'sanity';
+export type TaskKind = 'ranking' | 'pair';
 export type RoundStage = 'screening' | 'confirmation';
 export type PairVerdict = 'a' | 'b' | 'tie';
 

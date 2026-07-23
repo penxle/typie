@@ -26,7 +26,7 @@ export const load: PageServerLoad = async ({ platform, locals }) => {
   // "내 진행"과 "라운드 전체 진행"을 분리한다 — 태스크는 평가자들이 나눠 가지므로 전체 태스크
   // 수는 개인 목표가 아니다. 개인에게는 판정 건수·이어할 것·새로 받을 수 있는 것만 보여준다.
   const round = await effectiveProgress(db);
-  const { remaining, quota } = await claimableSummary(db, locals.email);
+  const { remaining, potential, quota } = await claimableSummary(db, locals.email, platform.env.ADMIN_EMAILS ?? '');
 
   const isAdmin = (platform.env.ADMIN_EMAILS ?? '')
     .split(',')
@@ -38,6 +38,8 @@ export const load: PageServerLoad = async ({ platform, locals }) => {
     isAdmin,
     drafts,
     doneCount: done.length,
+    // 개인 진행 분모 — 지금 기준 내가 하게 될 총량. 남이 태스크를 가져가면 줄어드는 동적 값이다.
+    myTotal: done.length + drafts.length + potential,
     round,
     remaining,
     quota,

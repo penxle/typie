@@ -21,10 +21,12 @@ describe('effectiveContributions', () => {
       judgment('j3', 't1', 'c@x', 3),
       judgment('j4', 't2', 'b@x', 1),
       judgment('j5', 't2', 'c@x', 2),
+      judgment('j6', 't2', 'a@x', 3),
     ];
+    // t1(필요 1): a만 유효. t2(필요 2): b·c 유효, a의 3번째 판정은 잉여.
     const counts = effectiveContributions(tasks, judgments);
     expect(counts.get('a@x')).toBe(1);
-    expect(counts.get('b@x')).toBe(2);
+    expect(counts.get('b@x')).toBe(1);
     expect(counts.get('c@x')).toBe(1);
   });
 

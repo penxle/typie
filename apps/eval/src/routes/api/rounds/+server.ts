@@ -28,7 +28,6 @@ export const POST: RequestHandler = async ({ request, platform }) => {
     payload.stage === 'screening'
       ? generateScreeningTasks(payload.documents, {
           overlapRatio: payload.overlapRatio,
-          sanityRatio: payload.sanityRatio,
           rng: Math.random,
         })
       : generateConfirmationTasks(payload.documents, { rng: Math.random });
@@ -36,7 +35,7 @@ export const POST: RequestHandler = async ({ request, platform }) => {
   await db.insert(Rounds).values({
     id: payload.roundId,
     stage: payload.stage,
-    config: payload.stage === 'screening' ? { overlapRatio: payload.overlapRatio, sanityRatio: payload.sanityRatio } : {},
+    config: payload.stage === 'screening' ? { overlapRatio: payload.overlapRatio } : {},
   });
 
   for (const task of newTasks) {

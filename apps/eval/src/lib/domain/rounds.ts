@@ -21,31 +21,15 @@ const shuffle = <T>(items: T[], rng: () => number): T[] => {
 
 export const generateScreeningTasks = (
   docs: { documentId: string; setIds: string[] }[],
-  opts: { overlapRatio: number; sanityRatio: number; rng: () => number },
-): NewTask[] => {
-  const tasks: NewTask[] = docs.map((doc) => ({
+  opts: { overlapRatio: number; rng: () => number },
+): NewTask[] =>
+  docs.map((doc) => ({
     kind: 'ranking',
     documentId: doc.documentId,
     setIds: shuffle(doc.setIds, opts.rng),
     requiredJudgments: opts.rng() < opts.overlapRatio ? 2 : 1,
     golden: false,
   }));
-
-  const sanityCount = Math.round(docs.length * opts.sanityRatio);
-  const sanityDocs = shuffle(docs, opts.rng).slice(0, sanityCount);
-  for (const doc of sanityDocs) {
-    const setId = doc.setIds[Math.floor(opts.rng() * doc.setIds.length)];
-    tasks.push({
-      kind: 'sanity',
-      documentId: doc.documentId,
-      setIds: [setId, setId],
-      requiredJudgments: 1,
-      golden: false,
-    });
-  }
-
-  return tasks;
-};
 
 export const generateConfirmationTasks = (
   docs: { documentId: string; v0SetId: string; candidateSetId: string }[],

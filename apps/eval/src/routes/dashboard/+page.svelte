@@ -30,12 +30,6 @@
     return { value, note: `${summary.kappaPairs}쌍 · 낮음`, tone: 'attention' };
   };
 
-  const sanityStat = (summary: Summary): { value: string; note: string; tone: Tone } => {
-    if (Number.isNaN(summary.sanityPass)) return { value: '—', note: '대기', tone: 'neutral' };
-    if (summary.sanityPass < 1) return { value: percent(summary.sanityPass), note: '미통과 있음', tone: 'attention' };
-    return { value: percent(summary.sanityPass), note: '통과', tone: 'neutral' };
-  };
-
   const complianceStat = (summary: Summary): { value: string; note: string; tone: Tone } => {
     if (Number.isNaN(summary.categoryCompliance)) return { value: '—', note: '', tone: 'neutral' };
     if (summary.categoryCompliance < 0.98) return { value: percent(summary.categoryCompliance), note: '기대 98% 이상', tone: 'alert' };
@@ -110,12 +104,6 @@
       return {
         tone: 'attention',
         text: `${leader.label} 우세 — 평가자 일치도 낮음 (κ ${fixed(summary.kappa)}, ${summary.kappaPairs}쌍)`,
-      };
-    }
-    if (summary.sanityPass < 1 && !Number.isNaN(summary.sanityPass)) {
-      return {
-        tone: 'attention',
-        text: `${leader.label} 우세 — sanity 통과율 ${percent(summary.sanityPass)}`,
       };
     }
     if (isConcentrated(summary)) {
@@ -249,7 +237,6 @@
       {@const baseline = baselineOf(summary)}
       {@const stats = [
         { label: '평가자 일치도', ...kappaStat(summary) },
-        { label: 'sanity', ...sanityStat(summary) },
         { label: '카테고리 준수', ...complianceStat(summary) },
         { label: '평가자 기여', ...contributionStat(summary) },
       ]}
@@ -281,7 +268,7 @@
           <span class={css({ fontSize: '17px', fontWeight: 'bold', lineHeight: '[1.5]' })}>{verdict.text}</span>
         </p>
 
-        <div class={grid({ columns: { base: 2, md: 4 }, gap: '8px', marginTop: '16px' })}>
+        <div class={grid({ columns: { base: 2, md: 3 }, gap: '8px', marginTop: '16px' })}>
           {#each stats as stat (stat.label)}
             <div class={`${statCellClass} ${statCellTone[stat.tone]}`}>
               <p class={statLabelClass}>{stat.label}</p>

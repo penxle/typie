@@ -7,7 +7,6 @@ import {
   feedbackCountDistribution,
   flaggedRate,
   pairwiseFromRanking,
-  sanityPassRate,
 } from './aggregate.ts';
 import type { PairVerdict } from './types.ts';
 
@@ -84,16 +83,6 @@ describe('cohenKappa', () => {
 
   it('표본 없으면 NaN', () => {
     expect(cohenKappa([])).toBeNaN();
-  });
-});
-
-describe('sanityPassRate', () => {
-  it('tie 비율을 반환한다', () => {
-    expect(sanityPassRate(['tie', 'a', 'tie', 'tie'])).toBe(0.75);
-  });
-
-  it('표본 없으면 NaN', () => {
-    expect(sanityPassRate([])).toBeNaN();
   });
 });
 

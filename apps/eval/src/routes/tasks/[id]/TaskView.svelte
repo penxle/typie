@@ -218,7 +218,7 @@
     </a>
     <div class={flex({ align: 'center', gap: '8px' })}>
       <span class={css({ fontSize: '13px', color: 'text.subtle', fontVariantNumeric: 'tabular-nums' })}>
-        내 판정 {data.progress.done}건 · 라운드 전체 {data.progress.roundDone} / {data.progress.roundRequired}
+        내 판정 {data.progress.done} / {data.progress.myTotal} · 라운드 전체 {data.progress.roundDone} / {data.progress.roundRequired}
       </span>
       <div class={css({ width: '120px', height: '4px', borderRadius: 'full', backgroundColor: 'surface.muted', overflow: 'hidden' })}>
         <div
@@ -469,7 +469,12 @@
           </fieldset>
         {:else}
           <fieldset>
-            <legend class={css({ fontSize: '13px', fontWeight: 'bold', marginBottom: '6px' })}>어느 세트의 피드백이 더 나은가요?</legend>
+            <legend class={css({ fontSize: '13px', fontWeight: 'bold', marginBottom: '6px' })}>
+              어느 세트의 피드백이 더 나은가요?
+              <span class={css({ fontWeight: 'normal', color: 'text.faint' })}>
+                — 두 세트가 비슷하거나 동일해 보여도 오류가 아닙니다. 보이는 그대로 판정해 주세요.
+              </span>
+            </legend>
             <div class={grid({ columns: 3, gap: '6px' })}>
               {#each [{ value: 'a', label: 'A 우세' }, { value: 'tie', label: '무승부' }, { value: 'b', label: 'B 우세' }] as option (option.value)}
                 <button

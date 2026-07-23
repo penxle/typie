@@ -12,7 +12,15 @@ export const load: PageServerLoad = async ({ platform }) => {
 
   const db = createDb(platform.env.DB);
 
-  const consents = await db.select({ email: EvaluatorConsents.email }).from(EvaluatorConsents);
+  // 어드민은 평가 인력이 아니므로 명단에서 제외한다 — 최소 몫·미참여 판정을 오염시키지 않게.
+  const adminSet = new Set(
+    (platform.env.ADMIN_EMAILS ?? '')
+      .split(',')
+      .map((e) => e.trim())
+      .filter((e) => e.length > 0),
+  );
+  const allConsents = await db.select({ email: EvaluatorConsents.email }).from(EvaluatorConsents);
+  const consents = allConsents.filter((c) => !adminSet.has(c.email));
   const rounds = await db.select().from(Rounds).orderBy(desc(Rounds.createdAt));
 
   const summaries = [];

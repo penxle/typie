@@ -6,7 +6,6 @@ export const roundPayloadSchema = z.discriminatedUnion('stage', [
     stage: z.literal('screening'),
     documents: z.array(z.object({ documentId: z.string().min(1), setIds: z.array(z.string().min(1)).min(2) })).min(1),
     overlapRatio: z.number().min(0).max(1).default(0.2),
-    sanityRatio: z.number().min(0).max(1).default(0.05),
   }),
   z.object({
     roundId: z.string().min(1),

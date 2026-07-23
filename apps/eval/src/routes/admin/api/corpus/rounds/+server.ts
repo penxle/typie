@@ -82,12 +82,10 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 
     newTasks = generateScreeningTasks(documents, {
       overlapRatio: payload.overlapRatio,
-      sanityRatio: payload.sanityRatio,
       rng: Math.random,
     });
     roundConfig = {
       overlapRatio: payload.overlapRatio,
-      sanityRatio: payload.sanityRatio,
       baselineLabel: payload.baselineLabel,
       ...(payload.expectedEvaluators && { expectedEvaluators: payload.expectedEvaluators }),
     };

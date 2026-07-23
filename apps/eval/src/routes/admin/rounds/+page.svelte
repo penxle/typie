@@ -25,7 +25,6 @@
   let candidateLabel = $state('');
   let expectedEvaluators = $state('');
   let overlapRatio = $state('0.3');
-  let sanityRatio = $state('0.05');
 
   // roundId는 제출마다 새로 만들지 않고 폼이 준비된 시점에 한 번만 발급한다 — 네트워크 오류 등으로 사용자가
   // 같은 입력으로 재시도해도 동일 roundId가 재사용되어 admin/api의 멱등 처리(이미 존재하면 created:false)가
@@ -87,13 +86,8 @@
     }
 
     const parsedOverlap = Number(overlapRatio);
-    const parsedSanity = Number(sanityRatio);
     if (stage === 'screening' && (!Number.isFinite(parsedOverlap) || parsedOverlap < 0 || parsedOverlap > 1)) {
       createError = '중복 비율은 0과 1 사이여야 합니다.';
-      return;
-    }
-    if (stage === 'screening' && (!Number.isFinite(parsedSanity) || parsedSanity < 0 || parsedSanity > 1)) {
-      createError = 'sanity 비율은 0과 1 사이여야 합니다.';
       return;
     }
 
@@ -107,7 +101,6 @@
             variantLabels: selectedLabels,
             baselineLabel,
             overlapRatio: parsedOverlap,
-            sanityRatio: parsedSanity,
             ...(parsedEvaluators >= 1 && { expectedEvaluators: parsedEvaluators }),
           }
         : { roundId, stage: 'confirmation' as const, corpusVersion, v0Label, candidateLabel };
@@ -166,9 +159,9 @@
 
   const formatConfig = (round: PageData['rounds'][number]) => {
     if (round.stage !== 'screening') return '—';
-    const config = round.config as { overlapRatio?: number; sanityRatio?: number } | null;
+    const config = round.config as { overlapRatio?: number } | null;
     if (!config) return '—';
-    return `중복 ${((config.overlapRatio ?? 0) * 100).toFixed(0)}% · 샌티 ${((config.sanityRatio ?? 0) * 100).toFixed(0)}%`;
+    return `중복 ${((config.overlapRatio ?? 0) * 100).toFixed(0)}%`;
   };
 
   const inputClass = css({
@@ -246,15 +239,9 @@
     </div>
 
     {#if stage === 'screening'}
-      <div class={grid({ columns: 2, gap: '16px', marginBottom: '16px' })}>
-        <div>
-          <label class={labelClass} for="round-overlap-ratio">중복 비율 (0~1)</label>
-          <input id="round-overlap-ratio" class={inputClass} max="1" min="0" step="0.05" type="number" bind:value={overlapRatio} />
-        </div>
-        <div>
-          <label class={labelClass} for="round-sanity-ratio">sanity 비율 (0~1)</label>
-          <input id="round-sanity-ratio" class={inputClass} max="1" min="0" step="0.05" type="number" bind:value={sanityRatio} />
-        </div>
+      <div class={css({ marginBottom: '16px' })}>
+        <label class={labelClass} for="round-overlap-ratio">중복 비율 (0~1)</label>
+        <input id="round-overlap-ratio" class={inputClass} max="1" min="0" step="0.05" type="number" bind:value={overlapRatio} />
       </div>
       <div class={css({ marginBottom: '16px' })}>
         <label class={labelClass} for="round-expected-evaluators">예상 평가자 수 (선택)</label>

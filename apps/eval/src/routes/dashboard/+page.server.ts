@@ -10,7 +10,6 @@ import {
   flaggedRate,
   pairwiseFromRanking,
   ranksFromScores,
-  sanityPassRate,
 } from '$lib/domain/aggregate.ts';
 import { FEEDBACK_LABELS, STRICT_FALSE_POSITIVE_KEYS } from '$lib/domain/feedback-labels.ts';
 import { createDb, Feedbacks, FeedbackSets, Judgments, Rounds, Runs, selectInChunks, Tasks, Variants } from '$lib/server/db/index.ts';
@@ -55,7 +54,6 @@ export const load: PageServerLoad = async ({ platform }) => {
 
     const rankingEntries = [];
     const overlapPairs: [PairVerdict, PairVerdict][] = [];
-    const sanityVerdicts: PairVerdict[] = [];
     const pairTallies = new Map<string, { win: number; tie: number; loss: number }>();
     const flagEntries: { variantId: string; feedbackCount: number; negativeCount: number; strictCount: number }[] = [];
     const scoreEntries: { variantId: string; score: number }[] = [];
@@ -72,52 +70,48 @@ export const load: PageServerLoad = async ({ platform }) => {
       for (const judgment of taskJudgments) {
         const result = judgment.result as JudgmentResult;
 
-        if (task.kind !== 'sanity') {
-          for (const setId of task.setIds) {
+        for (const setId of task.setIds) {
+          const variantId = setVariant.get(setId);
+          if (!variantId) continue;
+          const setFeedbacks = feedbacks.filter((f) => f.setId === setId);
+          flagEntries.push({
+            variantId,
+            feedbackCount: setFeedbacks.length,
+            negativeCount: setFeedbacks.filter((f) => judgment.falsePositiveFeedbackIds.includes(f.id)).length,
+            strictCount: setFeedbacks.filter((f) =>
+              ((judgment.feedbackLabels ?? {})[f.id]?.labels ?? []).some((key) => STRICT_FALSE_POSITIVE_KEYS.has(key)),
+            ).length,
+          });
+        }
+
+        if (result.kind === 'scores') {
+          for (const { setId, score } of result.scores) {
             const variantId = setVariant.get(setId);
             if (!variantId) continue;
-            const setFeedbacks = feedbacks.filter((f) => f.setId === setId);
-            flagEntries.push({
-              variantId,
-              feedbackCount: setFeedbacks.length,
-              negativeCount: setFeedbacks.filter((f) => judgment.falsePositiveFeedbackIds.includes(f.id)).length,
-              strictCount: setFeedbacks.filter((f) =>
-                ((judgment.feedbackLabels ?? {})[f.id]?.labels ?? []).some((key) => STRICT_FALSE_POSITIVE_KEYS.has(key)),
-              ).length,
-            });
-          }
-
-          if (result.kind === 'scores') {
-            for (const { setId, score } of result.scores) {
-              const variantId = setVariant.get(setId);
-              if (!variantId) continue;
-              scoreEntries.push({ variantId, score });
-            }
-          }
-
-          for (const [feedbackId, entry] of Object.entries(judgment.feedbackLabels ?? {})) {
-            const setId = feedbackSetId.get(feedbackId);
-            const variantId = setId ? setVariant.get(setId) : undefined;
-            if (!variantId) continue;
-
-            const dist = labelDist.get(variantId) ?? new Map<string, number>();
-            for (const labelKey of entry.labels) {
-              dist.set(labelKey, (dist.get(labelKey) ?? 0) + 1);
-            }
-            labelDist.set(variantId, dist);
-
-            if (entry.comment) {
-              const labelNames = entry.labels.map((key) => labelByKey.get(key)?.name ?? key);
-              const comments = labelComments.get(variantId) ?? [];
-              comments.push({ labelNames, comment: entry.comment });
-              labelComments.set(variantId, comments);
-            }
+            scoreEntries.push({ variantId, score });
           }
         }
 
-        if (task.kind === 'sanity' && result.kind === 'pair') {
-          sanityVerdicts.push(result.verdict);
-        } else if (task.kind === 'pair' && result.kind === 'pair' && v0) {
+        for (const [feedbackId, entry] of Object.entries(judgment.feedbackLabels ?? {})) {
+          const setId = feedbackSetId.get(feedbackId);
+          const variantId = setId ? setVariant.get(setId) : undefined;
+          if (!variantId) continue;
+
+          const dist = labelDist.get(variantId) ?? new Map<string, number>();
+          for (const labelKey of entry.labels) {
+            dist.set(labelKey, (dist.get(labelKey) ?? 0) + 1);
+          }
+          labelDist.set(variantId, dist);
+
+          if (entry.comment) {
+            const labelNames = entry.labels.map((key) => labelByKey.get(key)?.name ?? key);
+            const comments = labelComments.get(variantId) ?? [];
+            comments.push({ labelNames, comment: entry.comment });
+            labelComments.set(variantId, comments);
+          }
+        }
+
+        if (task.kind === 'pair' && result.kind === 'pair' && v0) {
           const [aSetId, bSetId] = task.setIds;
           const aVariant = setVariant.get(aSetId);
           const candidateVariant = aVariant === v0.id ? setVariant.get(bSetId) : aVariant;
@@ -188,11 +182,11 @@ export const load: PageServerLoad = async ({ platform }) => {
       });
     }
 
-    const nonSanitySetIds = [...new Set(tasks.filter((t) => t.kind !== 'sanity').flatMap((t) => t.setIds))];
+    const roundSetIds = [...new Set(tasks.flatMap((t) => t.setIds))];
     const anchorEntries = [];
     const countEntries = [];
     const roundCategories: (string | null)[] = [];
-    for (const setId of nonSanitySetIds) {
+    for (const setId of roundSetIds) {
       const variantId = setVariant.get(setId);
       if (!variantId) continue;
       const setFeedbacks = feedbacks.filter((f) => f.setId === setId);
@@ -275,7 +269,6 @@ export const load: PageServerLoad = async ({ platform }) => {
       variants: variantRows,
       kappa: cohenKappa(overlapPairs),
       kappaPairs: overlapPairs.length,
-      sanityPass: sanityPassRate(sanityVerdicts),
       labelDist: labelDistByLabel,
       labelComments: labelCommentsByLabel,
       avgScore: avgScoreByLabel,

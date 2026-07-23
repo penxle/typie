@@ -2,7 +2,7 @@ import { error, redirect } from '@sveltejs/kit';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { deriveFalsePositiveIds, FEEDBACK_LABEL_KEYS } from '$lib/domain/feedback-labels.ts';
-import { claimNextTask } from '$lib/server/claim.ts';
+import { claimableSummary, claimNextTask } from '$lib/server/claim.ts';
 import { createDb, Documents, Feedbacks, FeedbackSets, Judgments, ReleasedTasks, Tasks } from '$lib/server/db/index.ts';
 import { effectiveProgress } from '$lib/server/progress.ts';
 import type { FeedbackLabelMap } from '$lib/domain/feedback-labels.ts';
@@ -48,6 +48,11 @@ export const load: PageServerLoad = async ({ params, platform, locals }) => {
     .select({ n: sql<number>`count(*)` })
     .from(Judgments)
     .where(and(eq(Judgments.evaluatorEmail, locals.email), eq(Judgments.draft, false)));
+  const [myDrafts] = await db
+    .select({ n: sql<number>`count(*)` })
+    .from(Judgments)
+    .where(and(eq(Judgments.evaluatorEmail, locals.email), eq(Judgments.draft, true)));
+  const { potential } = await claimableSummary(db, locals.email, platform.env.ADMIN_EMAILS ?? '');
 
   return {
     task: { id: task.id, kind: task.kind, setIds: task.setIds },
@@ -55,7 +60,12 @@ export const load: PageServerLoad = async ({ params, platform, locals }) => {
     sets: orderedSets,
     draft: draft ?? null,
     setCount: sets.length,
-    progress: { done: myDone?.n ?? 0, roundDone: round.done, roundRequired: round.required },
+    progress: {
+      done: myDone?.n ?? 0,
+      myTotal: (myDone?.n ?? 0) + (myDrafts?.n ?? 0) + potential,
+      roundDone: round.done,
+      roundRequired: round.required,
+    },
   };
 };
 
@@ -190,7 +200,7 @@ export const actions: Actions = {
       error(400, 'result required');
     }
     await upsertJudgment(db, { taskId: params.id, email: locals.email, ...input, draft: false });
-    const nextTaskId = await claimNextTask(db, locals.email);
+    const nextTaskId = await claimNextTask(db, locals.email, platform.env.ADMIN_EMAILS ?? '');
     redirect(302, nextTaskId ? `/tasks/${nextTaskId}` : '/?finished=1');
   },
   release: async ({ params, platform, locals }) => {

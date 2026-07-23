@@ -41,11 +41,6 @@ export const cohenKappa = (pairs: [PairVerdict, PairVerdict][]): number => {
   return (observed - expected) / (1 - expected);
 };
 
-export const sanityPassRate = (verdicts: PairVerdict[]): number => {
-  if (verdicts.length === 0) return NaN;
-  return verdicts.filter((v) => v === 'tie').length / verdicts.length;
-};
-
 export const flaggedRate = (entries: { variantId: string; feedbackCount: number; flaggedCount: number }[]): Map<string, number> => {
   const totals = new Map<string, { feedbacks: number; flagged: number }>();
   for (const entry of entries) {

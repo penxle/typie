@@ -87,13 +87,18 @@
       })}
     >
       <div class={flex({ align: 'baseline', gap: '8px' })}>
-        <span class={css({ fontSize: '32px', fontWeight: 'bold' })}>{data.doneCount}</span>
+        <span class={css({ fontSize: '32px', fontWeight: 'bold', fontVariantNumeric: 'tabular-nums' })}>
+          {data.doneCount}
+          <span class={css({ fontSize: '18px', fontWeight: 'medium', color: 'text.subtle' })}>/ {data.myTotal}</span>
+        </span>
         <span class={css({ fontSize: '14px', color: 'text.subtle' })}>건 판정 완료</span>
-        <span class={css({ marginLeft: 'auto', fontSize: '13px', color: 'text.faint' })}>
+        <span class={css({ marginLeft: 'auto', fontSize: '13px', color: 'text.faint', fontVariantNumeric: 'tabular-nums' })}>
           {#if data.remaining > 0}
             새로 시작할 수 있는 태스크 {data.remaining}개
           {:else if data.drafts.length > 0}
             작성 중인 평가 {data.drafts.length}건
+          {:else}
+            새로 받을 태스크 없음
           {/if}
         </span>
       </div>
@@ -105,8 +110,8 @@
       </p>
       {#if data.quota}
         <p class={css({ marginTop: '2px', fontSize: '12px', color: 'text.faint' })}>
-          작업이 한 사람에게 몰리지 않도록 1인당 최대 {data.quota.limit}건까지 배정됩니다 — 내 배정 {data.quota.used} / {data.quota
-            .limit}건.
+          작업이 한 사람에게 몰리지 않도록 1인당 최대 {data.quota.limit}건까지만 배정됩니다 — 채워야 하는 목표가 아니며, 남은 태스크가
+          없으면 그 전에 끝납니다.
         </p>
       {/if}
 
