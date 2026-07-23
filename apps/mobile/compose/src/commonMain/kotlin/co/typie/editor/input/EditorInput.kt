@@ -265,7 +265,8 @@ internal class EditorInputNode(
 
   private fun dispatch(
     messages: List<Message>,
-    bringIntoViewTarget: EditorBringIntoViewTarget? = EditorBringIntoViewTarget.CurrentSelectionHead,
+    bringIntoViewTarget: EditorBringIntoViewTarget? =
+      EditorBringIntoViewTarget.CurrentSelectionHead,
   ) {
     if (messages.isEmpty()) return
     submit { sessionEditor, context ->
@@ -371,7 +372,8 @@ internal class EditorInputNode(
 
   private fun dispatchSync(
     messages: List<Message>,
-    bringIntoViewTarget: EditorBringIntoViewTarget? = EditorBringIntoViewTarget.CurrentSelectionHead,
+    bringIntoViewTarget: EditorBringIntoViewTarget? =
+      EditorBringIntoViewTarget.CurrentSelectionHead,
   ): EditorState? {
     if (messages.isEmpty()) return null
     return editor.syncWithBringIntoView(bringIntoViewRequests) {
@@ -696,13 +698,13 @@ internal class EditorInputNode(
                 // extracted-text monitors never go stale. drop(1): the initial
                 // emission is already handled above.
                 snapshotFlow {
-                    EditorImeNotifyKey(
-                      selection = editor.selection,
-                      cursor = editor.cursor,
-                      ime = editor.tickIme,
-                      paused = editor.imeNotificationsPaused,
-                    )
-                  }
+                  EditorImeNotifyKey(
+                    selection = editor.selection,
+                    cursor = editor.cursor,
+                    ime = editor.tickIme,
+                    paused = editor.imeNotificationsPaused,
+                  )
+                }
                   .imeNotificationEvents()
                   .collect { notifyImeStateChanged(editor) }
               }

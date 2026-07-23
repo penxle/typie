@@ -25,11 +25,12 @@ class PendingSettleTest {
       dispatcher.scheduler.advanceUntilIdle()
       assertFalse(resumed)
 
-      pending.markCommitted(0, 5L)
+      assertFalse(pending.markCommitted(0, 5L))
       dispatcher.scheduler.advanceUntilIdle()
       assertFalse(resumed)
 
-      pending.markCommitted(1, 6L)
+      assertTrue(pending.markCommitted(1, 6L))
+      pending.release()
       dispatcher.scheduler.advanceUntilIdle()
       assertTrue(resumed)
       job.join()
@@ -45,11 +46,12 @@ class PendingSettleTest {
           pending.await()
           resumed = true
         }
-      pending.markCommitted(0, 4L) // stale
+      assertFalse(pending.markCommitted(0, 4L)) // stale
       dispatcher.scheduler.advanceUntilIdle()
       assertFalse(resumed)
 
-      pending.markCommitted(0, 5L)
+      assertTrue(pending.markCommitted(0, 5L))
+      pending.release()
       dispatcher.scheduler.advanceUntilIdle()
       assertTrue(resumed)
       job.join()
@@ -65,11 +67,21 @@ class PendingSettleTest {
           pending.await()
           resumed = true
         }
-      pending.markCommitted(0, 3L)
-      pending.markDetached(1)
+      assertFalse(pending.markCommitted(0, 3L))
+      assertTrue(pending.markDetached(1))
+      pending.release()
       dispatcher.scheduler.advanceUntilIdle()
       assertTrue(resumed)
       job.join()
+    }
+
+  @Test
+  fun completion_transition_reports_exactly_once() =
+    runTest(dispatcher) {
+      val pending = PendingSettle(setOf(0), requiredVersion = 1L)
+      assertTrue(pending.markCommitted(0, 1L))
+      assertFalse(pending.markCommitted(0, 2L))
+      assertFalse(pending.markDetached(0))
     }
 
   @Test

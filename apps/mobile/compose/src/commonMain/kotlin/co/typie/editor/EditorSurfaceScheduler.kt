@@ -232,43 +232,40 @@ internal class EditorSurfaceScheduler(
     command: SurfaceRenderOnlyCommand
   ): PersistentList<SurfaceCommand> {
     var replaced = false
-    val next =
-      map { queued ->
-          when {
-            queued is SurfaceResizeAndRenderCommand && queued.sessionId == command.sessionId -> {
-              replaced = true
-              queued.copy(onPresented = command.onPresented)
-            }
-            queued is SurfaceRenderOnlyCommand && queued.sessionId == command.sessionId -> {
-              replaced = true
-              command
-            }
-            else -> queued
-          }
+    val next = map { queued ->
+      when {
+        queued is SurfaceResizeAndRenderCommand && queued.sessionId == command.sessionId -> {
+          replaced = true
+          queued.copy(onPresented = command.onPresented)
         }
-        .toPersistentList()
+        queued is SurfaceRenderOnlyCommand && queued.sessionId == command.sessionId -> {
+          replaced = true
+          command
+        }
+        else -> queued
+      }
+    }
+      .toPersistentList()
     return if (replaced) next else next.adding(command)
   }
 
   private fun PersistentList<SurfaceCommand>.coalesceResize(
     command: SurfaceResizeAndRenderCommand
-  ): PersistentList<SurfaceCommand> =
-    filterNot {
-        it.sessionId == command.sessionId &&
-          (it is SurfaceRenderOnlyCommand || it is SurfaceResizeAndRenderCommand)
-      }
-      .toPersistentList()
-      .adding(command)
+  ): PersistentList<SurfaceCommand> = filterNot {
+    it.sessionId == command.sessionId &&
+      (it is SurfaceRenderOnlyCommand || it is SurfaceResizeAndRenderCommand)
+  }
+    .toPersistentList()
+    .adding(command)
 
   private fun PersistentList<SurfaceCommand>.coalesceDetach(
     command: SurfaceDetachCommand
-  ): PersistentList<SurfaceCommand> =
-    filterNot {
-        it.sessionId == command.sessionId &&
-          (it is SurfaceRenderOnlyCommand || it is SurfaceResizeAndRenderCommand)
-      }
-      .toPersistentList()
-      .adding(command)
+  ): PersistentList<SurfaceCommand> = filterNot {
+    it.sessionId == command.sessionId &&
+      (it is SurfaceRenderOnlyCommand || it is SurfaceResizeAndRenderCommand)
+  }
+    .toPersistentList()
+    .adding(command)
 
   private fun schedule() {
     if (!scheduled.compareAndSet(expectedValue = false, newValue = true)) return
@@ -352,46 +349,35 @@ internal class EditorSurfaceScheduler(
   private suspend fun flushRender(command: SurfaceRenderCommand) {
     if (disposed.load() || !isActive(command.page, command.sessionId)) return
 
-    val applied =
-      when (command) {
-        is SurfaceResizeAndRenderCommand -> {
-          val configuration = command.configuration
-          inner.resizeSurface(
-            command.page,
-            configuration.width,
-            configuration.height,
-            configuration.scaleFactor,
-          )
-          attachedSessions.updatePersistent { sessions ->
-            if (sessions[command.page]?.id == command.sessionId) {
-              sessions.putting(
-                command.page,
-                AttachedSurfaceSession(command.sessionId, configuration),
-              )
-            } else {
-              sessions
-            }
-          }
-          configuration
-        }
+    val attached = attachedSessions.load()[command.page]
+    if (attached?.id != command.sessionId) return
 
-        is SurfaceRenderOnlyCommand -> {
-          val attached = attachedSessions.load()[command.page]
-          if (attached?.id != command.sessionId) return
-          attached.configuration
+    val requested =
+      when (command) {
+        is SurfaceResizeAndRenderCommand -> command.configuration
+        is SurfaceRenderOnlyCommand -> attached.configuration
+      }
+    // Logical page geometry is owned by the engine and can advance ahead of any requested
+    // configuration; the surface must match it before a frame is produced, or a presented
+    // frame would be laid out for a different target size. The UI only owns scaleFactor.
+    val pageSize = inner.pageSizes().getOrNull(command.page)
+    val target =
+      if (pageSize == null) {
+        requested
+      } else {
+        requested.copy(width = pageSize.width.toDouble(), height = pageSize.height.toDouble())
+      }
+    if (target != attached.configuration) {
+      inner.resizeSurface(command.page, target.width, target.height, target.scaleFactor)
+      attachedSessions.updatePersistent { sessions ->
+        if (sessions[command.page]?.id == command.sessionId) {
+          sessions.putting(command.page, AttachedSurfaceSession(command.sessionId, target))
+        } else {
+          sessions
         }
       }
-    val pageSize = inner.pageSizes().getOrNull(command.page)
-    if (
-      pageSize != null &&
-        (pageSize.width.toDouble() != applied.width || pageSize.height.toDouble() != applied.height)
-    ) {
-      // A tick changed logical page geometry before the matching surface resize was applied.
-      // Rendering here would put the new layout into an old target. Settle this attempt;
-      // the published state will request the matching resize-and-render.
-      onPageSettled(command.page, versionCounter.load())
-      return
     }
+
     // Reading the version before rendering under-reports what the frame may contain,
     // which only delays a settle until the follow-up render command.
     val version = versionCounter.load()

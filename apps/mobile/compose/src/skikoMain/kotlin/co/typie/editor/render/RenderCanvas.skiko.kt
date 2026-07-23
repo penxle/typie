@@ -28,19 +28,19 @@ internal actual fun RenderCanvas(
   modifier: Modifier,
   desiredPixelSize: IntSize,
   configuration: SurfaceConfiguration,
+  frame: ImageBitmap?,
   trigger: SharedFlow<Long>,
   onAttach: (handle: Long) -> Unit,
   onDetach: (releaseBuffer: () -> Unit) -> Unit,
   onResize: () -> Unit,
-  onBitmapCommitted: (pixelSize: IntSize, version: Long) -> Unit,
+  onFrame: (bitmap: ImageBitmap, pixelSize: IntSize, version: Long) -> Unit,
 ) {
   var bufferHandle by remember { mutableStateOf(0L) }
-  var bitmap by remember { mutableStateOf<ImageBitmap?>(null) }
 
   val currentOnAttach by rememberUpdatedState(onAttach)
   val currentOnDetach by rememberUpdatedState(onDetach)
   val currentOnResize by rememberUpdatedState(onResize)
-  val currentOnBitmapCommitted by rememberUpdatedState(onBitmapCommitted)
+  val currentOnFrame by rememberUpdatedState(onFrame)
 
   LaunchedEffect(desiredPixelSize, configuration) {
     if (desiredPixelSize.width <= 0 || desiredPixelSize.height <= 0) return@LaunchedEffect
@@ -56,7 +56,7 @@ internal actual fun RenderCanvas(
   }
 
   Canvas(modifier = modifier) {
-    bitmap?.let {
+    frame?.let {
       drawImage(
         image = it,
         srcOffset = IntOffset.Zero,
@@ -146,8 +146,7 @@ internal actual fun RenderCanvas(
       skBitmap.notifyPixelsChanged()
       // asComposeImageBitmap() is zero-copy, so Compose may still draw this Bitmap after
       // it leaves the cache. Let Skiko's managed cleanup reclaim published bitmaps.
-      bitmap = skBitmap.asComposeImageBitmap()
-      currentOnBitmapCommitted(IntSize(w, h), version)
+      currentOnFrame(skBitmap.asComposeImageBitmap(), IntSize(w, h), version)
       readerLastVersion = pinnedVersion
     }
   }

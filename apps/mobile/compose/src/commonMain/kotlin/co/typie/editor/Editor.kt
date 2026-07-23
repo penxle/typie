@@ -255,7 +255,9 @@ internal constructor(
             mutex.withLock {
               if (!disposed.load()) {
                 beforeCommit?.invoke(snapshot)
-                commit(snapshot)
+                if (pending?.supersededByNewerSettle != true) {
+                  commit(snapshot)
+                }
               }
             }
           }
@@ -270,7 +272,11 @@ internal constructor(
     }
   }
 
-  fun sync(beforeCommit: ((EditorState) -> Unit)? = null, block: EditorScope.() -> Unit) {
+  fun sync(
+    beforeCommit: ((EditorState) -> Unit)? = null,
+    publishBeforeSettle: Boolean = false,
+    block: EditorScope.() -> Unit,
+  ) {
     val localEdit = localEdits.register() ?: return
     if (!syncInProgress.compareAndSet(expectedValue = false, newValue = true)) {
       val error = IllegalStateException("nested sync is not supported")
@@ -293,7 +299,11 @@ internal constructor(
           val version = versionCounter.addAndFetch(1L)
           val snapshot = readSnapshot(version = version, events = e)
           beforeCommit?.invoke(snapshot)
-          commit(snapshot)
+          if (publishBeforeSettle) {
+            commit(snapshot)
+          } else {
+            commitOrPark(snapshot, e)
+          }
           e
         }
         emit(events)
@@ -304,6 +314,46 @@ internal constructor(
       notifyFailure(e)
     } finally {
       syncInProgress.store(false)
+    }
+  }
+
+  // Runs under the editor mutex. A tick that invalidated rendering must not publish
+  // ahead of the frame that will present it, so its snapshot parks on the settle. A
+  // tick that did not invalidate rendering can still carry geometry a parked snapshot
+  // introduced, so while a settle is outstanding it rides that settle instead of
+  // overtaking it.
+  private fun commitOrPark(snapshot: EditorState, events: List<EditorEvent>) {
+    val pages = attachedPages.load()
+    if (pages.isEmpty()) {
+      commit(snapshot)
+      return
+    }
+    if (events.any { it is EditorEvent.RenderInvalidated }) {
+      pendingSettles.updatePersistent { list ->
+        list.add(PendingSettle(pages, requiredVersion = snapshot.version, snapshot = snapshot))
+      }
+      return
+    }
+    val outstanding = pendingSettles.load().maxOfOrNull { it.requiredVersion }
+    if (outstanding == null) {
+      commit(snapshot)
+      return
+    }
+    val piggyback = PendingSettle(pages, requiredVersion = outstanding, snapshot = snapshot)
+    pendingSettles.updatePersistent { it.add(piggyback) }
+    val owed = pendingSettles.load().any { it !== piggyback && it.requiredVersion <= outstanding }
+    if (!owed) {
+      // The settle being ridden completed between the read and the add; reclaim and
+      // publish inline. If the settle did catch the piggyback, commit is a stale no-op.
+      var reclaimed = false
+      pendingSettles.updatePersistent { list ->
+        val next = list.remove(piggyback)
+        reclaimed = next !== list
+        next
+      }
+      if (reclaimed) {
+        commit(snapshot)
+      }
     }
   }
 
@@ -351,6 +401,8 @@ internal constructor(
             }
             val e = inner.tick()
             val version = versionCounter.addAndFetch(1L)
+            // Deliberately not parked: the session must not start against a committed
+            // state whose ime lags the latest tick, even while a settle is outstanding.
             commit(readSnapshot(version = version, events = e))
             e
           }
@@ -445,7 +497,7 @@ internal constructor(
               if (disposed.load()) return@withLock emptyList()
               val e = inner.tick()
               val version = versionCounter.addAndFetch(1L)
-              commit(readSnapshot(version = version, events = e))
+              commitOrPark(readSnapshot(version = version, events = e), e)
               e
             }
           }
@@ -516,11 +568,35 @@ internal constructor(
 
   private fun markSurfacePageDetached(page: Int) {
     attachedPages.updatePersistent { it.removing(page) }
-    pendingSettles.load().forEach { it.markDetached(page) }
+    releaseCompletedSettles(pendingSettles.load().filter { it.markDetached(page) })
   }
 
   fun onPageSettled(page: Int, version: Long) {
-    pendingSettles.load().forEach { it.markCommitted(page, version) }
+    releaseCompletedSettles(pendingSettles.load().filter { it.markCommitted(page, version) })
+  }
+
+  // One settle can cover several awaited ticks when their renders coalesced into a single
+  // frame. Only the newest of them may publish: an intermediate snapshot would resize the
+  // published layout to a geometry no presented frame ever had.
+  private fun releaseCompletedSettles(completed: List<PendingSettle>) {
+    if (completed.isEmpty()) return
+    pendingSettles.updatePersistent { list -> list.removeAll(completed) }
+    // Piggybacked snapshots share a requiredVersion with the settle they ride, so the
+    // newest is decided by the snapshot version they would publish.
+    val newest = completed.maxBy { it.snapshot?.version ?: it.requiredVersion }
+    completed.forEach { pending ->
+      pending.supersededByNewerSettle = pending !== newest
+      pending.release()
+    }
+    // Awaiter-less pendings (deferred sync publishes) have no coroutine to commit them.
+    val deferred = newest.snapshot ?: return
+    scope.launch(dispatcher) {
+      mutex.withLock {
+        if (!disposed.load()) {
+          commit(deferred)
+        }
+      }
+    }
   }
 
   fun inspectState(options: InspectStateOptions? = null): String = inner.inspectState(options)
@@ -636,7 +712,7 @@ internal constructor(
             inner.receiveRemoteChangeset(payload)
             val e = inner.tick()
             val version = versionCounter.addAndFetch(1L)
-            commit(readSnapshot(version = version, events = e))
+            commitOrPark(readSnapshot(version = version, events = e), e)
             e
           }
         }
@@ -654,7 +730,7 @@ internal constructor(
               inner.insertTemplateFragment(changesets)
               val e = inner.tick()
               val version = versionCounter.addAndFetch(1L)
-              commit(readSnapshot(version = version, events = e))
+              commitOrPark(readSnapshot(version = version, events = e), e)
               e
             }
           }

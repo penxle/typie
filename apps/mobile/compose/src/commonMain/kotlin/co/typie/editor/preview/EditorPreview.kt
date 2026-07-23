@@ -126,7 +126,9 @@ internal fun EditorPreview(
       currentModifiers[type] != modifier
     }
 
-    editor.sync {
+    // The settings preview is layout-first on purpose: the frame resizes immediately
+    // and the previous text stays visible scaled until the re-render lands.
+    editor.sync(publishBeforeSettle = true) {
       if (editor.rootAttrs?.layoutMode != layoutMode) {
         enqueueRootLayoutMode(layoutMode)
       }
@@ -276,7 +278,7 @@ private fun EditorPreviewContent(
           e.enqueue(Message.System(SystemEvent.ThemeVariantChanged))
         }
       }
-      activeEditor.sync {
+      activeEditor.sync(publishBeforeSettle = true) {
         enqueue(
           Message.System(
             SystemEvent.Resize(
@@ -390,7 +392,10 @@ private fun PlainDoc.withPreviewRootModifiers(modifiers: List<EditorModifier>): 
 }
 
 private fun List<EditorModifier>.toPreviewRootModifierMap(): Map<ModifierType, EditorModifier> =
-  mapNotNull { modifier -> modifier.previewRootModifierType()?.let { it to modifier } }.toMap()
+  mapNotNull { modifier ->
+    modifier.previewRootModifierType()?.let { it to modifier }
+  }
+  .toMap()
 
 private fun EditorModifier.previewRootModifierType(): ModifierType? =
   when (this) {

@@ -7,7 +7,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -27,19 +26,19 @@ internal actual fun RenderCanvas(
   modifier: Modifier,
   desiredPixelSize: IntSize,
   configuration: SurfaceConfiguration,
+  frame: ImageBitmap?,
   trigger: SharedFlow<Long>,
   onAttach: (handle: Long) -> Unit,
   onDetach: (releaseBuffer: () -> Unit) -> Unit,
   onResize: () -> Unit,
-  onBitmapCommitted: (pixelSize: IntSize, version: Long) -> Unit,
+  onFrame: (bitmap: ImageBitmap, pixelSize: IntSize, version: Long) -> Unit,
 ) {
   var bufferHandle by remember { mutableLongStateOf(0L) }
-  var imageBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
 
   val currentOnAttach by rememberUpdatedState(onAttach)
   val currentOnDetach by rememberUpdatedState(onDetach)
   val currentOnResize by rememberUpdatedState(onResize)
-  val currentOnBitmapCommitted by rememberUpdatedState(onBitmapCommitted)
+  val currentOnFrame by rememberUpdatedState(onFrame)
 
   LaunchedEffect(desiredPixelSize, configuration) {
     if (desiredPixelSize.width <= 0 || desiredPixelSize.height <= 0) return@LaunchedEffect
@@ -55,7 +54,7 @@ internal actual fun RenderCanvas(
   }
 
   Canvas(modifier = modifier) {
-    imageBitmap?.let {
+    frame?.let {
       drawImage(
         image = it,
         srcOffset = IntOffset.Zero,
@@ -104,8 +103,7 @@ internal actual fun RenderCanvas(
       androidBitmap.copyPixelsFromBuffer(Pointer(dataAddr).getByteBuffer(0, byteCount))
       RenderBuffer.endRead(handle)
 
-      imageBitmap = androidBitmap.asImageBitmap()
-      currentOnBitmapCommitted(IntSize(w, h), version)
+      currentOnFrame(androidBitmap.asImageBitmap(), IntSize(w, h), version)
     }
   }
 

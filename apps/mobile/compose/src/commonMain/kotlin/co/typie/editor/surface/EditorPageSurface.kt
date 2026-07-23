@@ -7,8 +7,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -19,6 +19,7 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset as ComposeOffset
 import androidx.compose.ui.geometry.Size as ComposeSize
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
@@ -39,7 +40,23 @@ import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 
 private val DebugRustSurfaceTint = Color(0x220096FF)
+private val DebugRustSurfaceTintAlternate = Color(0x2234C759)
 private val DebugPageBottomMarginTint = Color(0x22FFD600)
+private val DebugPageBoundaryTint = Color(0xE6FF3B30)
+private val DebugPageBoundaryThickness = 2.dp
+private val DebugFrameSizeMismatchTint = Color(0x99FF9500)
+private val DebugMissingFrameTint = Color(0x990066FF)
+
+private data class PresentedFrame(
+  val bitmap: ImageBitmap,
+  val pixelSize: IntSize,
+  val renderZoom: Float,
+  val version: Long,
+)
+
+private class AppliedFrameHolder {
+  var frame: PresentedFrame? = null
+}
 
 @Composable
 internal fun EditorPageSurface(
@@ -82,8 +99,21 @@ internal fun EditorPageSurface(
       width = round(configuration.width * configuration.scaleFactor).toInt().coerceAtLeast(1),
       height = round(configuration.height * configuration.scaleFactor).toInt().coerceAtLeast(1),
     )
-  var committedPixelSize by remember { mutableStateOf(desiredPixelSize) }
-  var committedRenderZoom by remember { mutableFloatStateOf(renderZoom) }
+  val pendingFrameState = remember(editor, page) { mutableStateOf<PresentedFrame?>(null) }
+  val appliedFrameHolder = remember(editor, page) { AppliedFrameHolder() }
+  // A committed frame becomes visible only once the editor state containing its tick has
+  // been published, so the page box, overlays, and pixels always change in the same
+  // composition. Until then the previously applied frame keeps being shown.
+  val frame =
+    remember(editor, page) {
+        derivedStateOf {
+          pendingFrameState.value?.takeIf { it.version <= editor.state.version }
+        }
+      }
+      .value ?: appliedFrameHolder.frame
+  appliedFrameHolder.frame = frame
+  val committedPixelSize = frame?.pixelSize ?: desiredPixelSize
+  val committedRenderZoom = frame?.renderZoom ?: renderZoom
   val currentRenderZoom by rememberUpdatedState(renderZoom)
   val render =
     remember(editor, page, onPresented) { { surfaceSession?.requestRender(onPresented) } }
@@ -118,7 +148,7 @@ internal fun EditorPageSurface(
     if (showDebugOverlay) {
       Modifier.drawWithContent {
         drawContent()
-        drawRect(DebugRustSurfaceTint)
+        drawRect(if (page % 2 == 0) DebugRustSurfaceTint else DebugRustSurfaceTintAlternate)
         if (displayBottomMarginPx > 0) {
           drawRect(
             color = DebugPageBottomMarginTint,
@@ -126,6 +156,26 @@ internal fun EditorPageSurface(
             size = ComposeSize(width = size.width, height = displayBottomMarginPx.toFloat()),
           )
         }
+        // Composition-consistency probes: a frame where the shown pixels do not match the
+        // published page geometry flashes orange; a frame with no pixels at all flashes
+        // magenta. If the user-visible flicker happens with neither, the composition is
+        // consistent and the presented pixel content itself is wrong.
+        if (frame == null) {
+          drawRect(DebugMissingFrameTint)
+        } else if (frame.pixelSize != desiredPixelSize) {
+          drawRect(DebugFrameSizeMismatchTint)
+        }
+        val boundaryPx = DebugPageBoundaryThickness.toPx()
+        drawRect(
+          color = DebugPageBoundaryTint,
+          topLeft = ComposeOffset.Zero,
+          size = ComposeSize(width = size.width, height = boundaryPx),
+        )
+        drawRect(
+          color = DebugPageBoundaryTint,
+          topLeft = ComposeOffset(x = 0f, y = size.height - boundaryPx),
+          size = ComposeSize(width = size.width, height = boundaryPx),
+        )
       }
     } else {
       Modifier
@@ -154,6 +204,7 @@ internal fun EditorPageSurface(
               ),
             desiredPixelSize = desiredPixelSize,
             configuration = configuration,
+            frame = frame?.bitmap,
             trigger = trigger,
             onAttach = { handle ->
               surfaceSession =
@@ -164,9 +215,14 @@ internal fun EditorPageSurface(
               surfaceSession = null
             },
             onResize = { surfaceSession?.requestResize(configuration, onPresented) },
-            onBitmapCommitted = { size, version ->
-              committedPixelSize = size
-              committedRenderZoom = currentRenderZoom
+            onFrame = { bitmap, size, version ->
+              pendingFrameState.value =
+                PresentedFrame(
+                  bitmap = bitmap,
+                  pixelSize = size,
+                  renderZoom = currentRenderZoom,
+                  version = version,
+                )
               editor.onPageSettled(page, version)
             },
           )

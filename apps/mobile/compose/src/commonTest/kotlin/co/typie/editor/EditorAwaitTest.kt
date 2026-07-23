@@ -818,7 +818,7 @@ class EditorAwaitTest {
     }
 
   @Test
-  fun render_settles_without_rendering_when_engine_page_size_differs_from_surface() =
+  fun render_reconciles_surface_to_live_page_size_before_rendering() =
     runTest(dispatcher) {
       var pageSize = Size(width = 1f, height = 2f)
       val fake =
@@ -845,12 +845,18 @@ class EditorAwaitTest {
       dispatcher.scheduler.advanceUntilIdle()
 
       assertTrue(returned)
-      assertEquals(0, fake.renderCount)
+      assertEquals(
+        listOf(
+          FakeFfiEditor.SurfaceResizeCall(page = 0, width = 3.0, height = 4.0, scaleFactor = 1.0)
+        ),
+        fake.resizeCalls,
+      )
+      assertEquals(1, fake.renderCount)
       job.join()
     }
 
   @Test
-  fun stale_surface_resize_settles_without_rendering() =
+  fun stale_surface_resize_reconciles_to_live_page_size_and_renders() =
     runTest(dispatcher) {
       var pageSize = Size(width = 1f, height = 2f)
       val fake =
@@ -882,12 +888,30 @@ class EditorAwaitTest {
       assertTrue(returned)
       assertEquals(
         listOf(
-          FakeFfiEditor.SurfaceResizeCall(page = 0, width = 1.0, height = 2.0, scaleFactor = 1.0)
+          FakeFfiEditor.SurfaceResizeCall(page = 0, width = 3.0, height = 4.0, scaleFactor = 1.0)
         ),
         fake.resizeCalls,
       )
-      assertEquals(0, fake.renderCount)
+      assertEquals(1, fake.renderCount)
       job.join()
+    }
+
+  @Test
+  fun render_with_matching_page_size_does_not_resize() =
+    runTest(dispatcher) {
+      val fake = FakeFfiEditor(pageSizesProvider = { listOf(Size(width = 1f, height = 2f)) })
+      val editor = Editor(fake, this, dispatcher)
+      val presentedVersions = mutableListOf<Long>()
+      val surface =
+        editor.attachSurface(page = 0, handle = 1L, width = 1.0, height = 2.0, scaleFactor = 1.0)
+      dispatcher.scheduler.advanceUntilIdle()
+
+      surface.requestRender { presentedVersions += it }
+      dispatcher.scheduler.advanceUntilIdle()
+
+      assertEquals(emptyList(), fake.resizeCalls)
+      assertEquals(1, fake.renderCount)
+      assertEquals(listOf(0L), presentedVersions)
     }
 
   @Test
@@ -920,6 +944,139 @@ class EditorAwaitTest {
       editor.await { enqueue(sampleMessage) }
 
       assertEquals(fakeCursor, editor.cursor)
+    }
+
+  @Test
+  fun coalesced_settle_publishes_only_the_newest_awaited_snapshot() =
+    runTest(dispatcher) {
+      val fake = FakeFfiEditor(onTick = { listOf(renderInvalidated()) })
+      val editor = Editor(fake, this, dispatcher)
+      editor.attachSurface(page = 0, handle = 0L, width = 0.0, height = 0.0, scaleFactor = 1.0)
+
+      val versionsSeenBeforeNewestCommit = mutableListOf<Long>()
+      val first = launch(dispatcher) { editor.await { enqueue(sampleMessage) } }
+      dispatcher.scheduler.advanceUntilIdle()
+      val second =
+        launch(dispatcher) {
+          editor.await(beforeCommit = { versionsSeenBeforeNewestCommit += editor.state.version }) {
+            enqueue(sampleMessage)
+          }
+        }
+      dispatcher.scheduler.advanceUntilIdle()
+      assertEquals(0L, editor.state.version)
+
+      // One presented frame settles both awaited ticks at once, as when their renders
+      // coalesced. The intermediate version 1 must never be published.
+      editor.onPageSettled(page = 0, version = 2L)
+      dispatcher.scheduler.advanceUntilIdle()
+
+      assertEquals(2L, editor.state.version)
+      assertEquals(listOf(0L), versionsSeenBeforeNewestCommit)
+      first.join()
+      second.join()
+    }
+
+  @Test
+  fun sync_with_render_invalidation_defers_publish_until_settle() =
+    runTest(dispatcher) {
+      val fake = FakeFfiEditor(onTick = { listOf(renderInvalidated()) })
+      val editor = Editor(fake, this, dispatcher)
+      editor.attachSurface(page = 0, handle = 0L, width = 0.0, height = 0.0, scaleFactor = 1.0)
+
+      editor.sync { enqueue(sampleMessage) }
+      dispatcher.scheduler.advanceUntilIdle()
+      assertEquals(0L, editor.state.version)
+
+      editor.onPageSettled(page = 0, version = 1L)
+      dispatcher.scheduler.advanceUntilIdle()
+      assertEquals(1L, editor.state.version)
+    }
+
+  @Test
+  fun parked_sync_publish_is_dropped_when_a_newer_settle_wins() =
+    runTest(dispatcher) {
+      val fake = FakeFfiEditor(onTick = { listOf(renderInvalidated()) })
+      val editor = Editor(fake, this, dispatcher)
+      editor.attachSurface(page = 0, handle = 0L, width = 0.0, height = 0.0, scaleFactor = 1.0)
+
+      editor.sync { enqueue(sampleMessage) }
+      val job = launch(dispatcher) { editor.await { enqueue(sampleMessage) } }
+      dispatcher.scheduler.advanceUntilIdle()
+      assertEquals(0L, editor.state.version)
+
+      editor.onPageSettled(page = 0, version = 2L)
+      dispatcher.scheduler.advanceUntilIdle()
+      assertEquals(2L, editor.state.version)
+      job.join()
+    }
+
+  @Test
+  fun enqueue_with_render_invalidation_defers_publish_until_settle() =
+    runTest(dispatcher) {
+      val fake = FakeFfiEditor(onTick = { listOf(renderInvalidated()) })
+      val editor = Editor(fake, this, dispatcher)
+      editor.attachSurface(page = 0, handle = 0L, width = 0.0, height = 0.0, scaleFactor = 1.0)
+
+      editor.enqueue(sampleMessage)
+      dispatcher.scheduler.advanceUntilIdle()
+      assertEquals(1, fake.tickCount)
+      assertEquals(0L, editor.state.version)
+
+      editor.onPageSettled(page = 0, version = 1L)
+      dispatcher.scheduler.advanceUntilIdle()
+      assertEquals(1L, editor.state.version)
+    }
+
+  @Test
+  fun remote_changeset_with_render_invalidation_defers_publish_until_settle() =
+    runTest(dispatcher) {
+      val fake = FakeFfiEditor(onTick = { listOf(renderInvalidated()) })
+      val editor = Editor(fake, this, dispatcher)
+      editor.attachSurface(page = 0, handle = 0L, width = 0.0, height = 0.0, scaleFactor = 1.0)
+
+      editor.receiveRemoteChangeset(ByteArray(1))
+      assertEquals(0L, editor.state.version)
+
+      editor.onPageSettled(page = 0, version = 1L)
+      dispatcher.scheduler.advanceUntilIdle()
+      assertEquals(1L, editor.state.version)
+    }
+
+  @Test
+  fun no_render_tick_rides_an_outstanding_settle() =
+    runTest(dispatcher) {
+      val events =
+        ArrayDeque(
+          listOf(
+            listOf(renderInvalidated()),
+            listOf(EditorEvent.StateChanged(listOf(StateField.Cursor))),
+          )
+        )
+      val fake = FakeFfiEditor(onTick = { events.removeFirst() })
+      val editor = Editor(fake, this, dispatcher)
+      editor.attachSurface(page = 0, handle = 0L, width = 0.0, height = 0.0, scaleFactor = 1.0)
+
+      editor.sync { enqueue(sampleMessage) }
+      editor.sync { enqueue(sampleMessage) }
+      dispatcher.scheduler.advanceUntilIdle()
+      assertEquals(0L, editor.state.version)
+
+      // The settle owed for version 1 also publishes the ridden version 2 snapshot.
+      editor.onPageSettled(page = 0, version = 1L)
+      dispatcher.scheduler.advanceUntilIdle()
+      assertEquals(2L, editor.state.version)
+    }
+
+  @Test
+  fun no_render_tick_publishes_inline_without_outstanding_settles() =
+    runTest(dispatcher) {
+      val fake =
+        FakeFfiEditor(onTick = { listOf(EditorEvent.StateChanged(listOf(StateField.Cursor))) })
+      val editor = Editor(fake, this, dispatcher)
+      editor.attachSurface(page = 0, handle = 0L, width = 0.0, height = 0.0, scaleFactor = 1.0)
+
+      editor.sync { enqueue(sampleMessage) }
+      assertEquals(1L, editor.state.version)
     }
 
   @Test
@@ -1020,14 +1177,20 @@ class EditorAwaitTest {
       dispatcher.scheduler.advanceUntilIdle()
       // await is waiting for settle (version=1 snapshot pending).
 
-      // sync bumps version to 2 with cursorB — commits immediately.
+      // sync bumps version to 2 with cursorB — it invalidates rendering, so its
+      // publish parks on its own settle as well.
       fake.cursorProvider = { cursorB }
       editor.sync { enqueue(sampleMessage) }
-      assertEquals(cursorB, editor.cursor)
-      assertEquals(2L, editor.state.version)
+      assertEquals(0L, editor.state.version)
 
-      // Settle arrives for await's version=1 — commit should skip because state is at 2.
+      // The settle for version 1 publishes the awaited snapshot only.
       editor.onPageSettled(0, version = 1L)
+      dispatcher.scheduler.advanceUntilIdle()
+      assertEquals(cursorA, editor.cursor)
+      assertEquals(1L, editor.state.version)
+
+      // The settle for version 2 publishes the parked sync snapshot.
+      editor.onPageSettled(0, version = 2L)
       dispatcher.scheduler.advanceUntilIdle()
       assertEquals(cursorB, editor.cursor)
       assertEquals(2L, editor.state.version)
