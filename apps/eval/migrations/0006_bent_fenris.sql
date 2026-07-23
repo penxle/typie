@@ -1,0 +1,1 @@
+ALTER TABLE `feedbacks` ADD `polarity` text;

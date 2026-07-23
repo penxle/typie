@@ -36,12 +36,14 @@ const readStagePrompt = (runnerPath: string, relDir: string): StagePrompt => {
 
 const { positionals, values } = parseArgs({
   allowPositionals: true,
-  options: { labels: { type: 'string' }, out: { type: 'string' } },
+  options: { labels: { type: 'string' }, out: { type: 'string' }, prefix: { type: 'string' }, base: { type: 'string' } },
 });
 const runnerArg = positionals[0];
 
 if (!runnerArg || !values.labels) {
-  console.error('Usage: node scripts/seed-variants.ts <runner-path> --labels 라벨1,라벨2,... [--out <file>]');
+  console.error(
+    'Usage: node scripts/seed-variants.ts <runner-path> --labels 라벨1,라벨2,... [--out <file>] [--prefix seed-r2] [--base <기존 variant id>]',
+  );
   process.exit(1);
 }
 
@@ -62,9 +64,10 @@ if (missing.length > 0) {
 }
 const candidateEntries = requestedLabels.map((label) => [label, manifest[label]] as const);
 
-const seedId = (key: string, index: number) => `seed-r1-${String(index + 1).padStart(2, '0')}-${key}`;
-const rootKey = requestedLabels[0];
-const rootId = seedId(rootKey, 0);
+const seedPrefix = values.prefix ?? 'seed-r1';
+const seedId = (key: string, index: number) => `${seedPrefix}-${String(index + 1).padStart(2, '0')}-${key}`;
+const rootKey = values.base ? null : requestedLabels[0];
+const rootId = values.base ?? seedId(requestedLabels[0], 0);
 
 const now = Math.floor(Date.now() / 1000);
 

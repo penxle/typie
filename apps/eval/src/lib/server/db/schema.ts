@@ -63,6 +63,7 @@ export const Feedbacks = sqliteTable('feedbacks', {
   matchStart: integer('match_start'),
   matchEnd: integer('match_end'),
   category: text('category'),
+  polarity: text('polarity'),
   body: text('body').notNull(),
 });
 

@@ -59,6 +59,7 @@ export type Feedback = {
   end: string;
   feedback: string;
   category?: string;
+  polarity?: string;
 };
 
 export type SummaryStructured = {
@@ -68,13 +69,18 @@ export type SummaryStructured = {
   tense: string;
   location: string;
   tone: string;
+  // 장면 전환·회상 진입/복귀 등 구조 정보 — 구형 저장분에는 없다.
+  transitions?: string;
 };
+
+// 별칭은 사용 조건이 있는 구조형과 구형 문자열이 공존한다 — 기존 저장분(stage_cache 등) 호환.
+export type CharacterAlias = string | { alias: string; usage?: string };
 
 export type MetaStructured = {
   narrator: { pov: string; reliability: string };
   setting: string;
   themes: string[];
-  characters: { name: string; aliases: string[]; role: string; arc: string }[];
+  characters: { name: string; aliases: CharacterAlias[]; role: string; arc: string }[];
   structure: { label: string; summary: string; tone: string }[];
   style: string;
 };
@@ -107,6 +113,7 @@ export const renderSummaryForMeta = (summary: SummaryStructured): string => {
   const meta2: string[] = [];
   if (summary.location) meta2.push(`장소: ${summary.location}`);
   if (summary.tone) meta2.push(`분위기: ${summary.tone}`);
+  if (summary.transitions) meta2.push(`장면·시간 구조: ${summary.transitions}`);
 
   const lines: string[] = [];
   if (summary.narrative) lines.push(summary.narrative);
@@ -116,9 +123,16 @@ export const renderSummaryForMeta = (summary: SummaryStructured): string => {
   return lines.join('\n');
 };
 
+// 인접 구간 컨텍스트 — META 입력과 동일한 렌더링을 쓴다. 요약의 구조 필드(시점·시제·장소·
+// 장면·시간 구조)가 분석 단계의 경계 판정(전환 신호·회상)에 그대로 쓰이도록.
+export const renderAdjacentSummary = (summary: SummaryStructured | undefined): string => {
+  if (!summary) return '';
+  return renderSummaryForMeta(summary);
+};
+
 export const renderMetaBlock = (meta: MetaStructured): string => {
   const characterLines = (meta.characters ?? []).map((c) => {
-    const aliases = c.aliases ?? [];
+    const aliases = (c.aliases ?? []).map((a) => (typeof a === 'string' ? a : a.usage ? `${a.alias}: ${a.usage}` : a.alias));
     const aliasPart = aliases.length > 0 ? ` (${aliases.join('/')})` : '';
     return `- ${c.name ?? ''}${aliasPart}: ${c.role ?? ''}. ${c.arc ?? ''}`;
   });
@@ -155,23 +169,62 @@ export const fuzzyFindMatch = (haystack: string, needle: string, fromIndex: numb
   return { index: subStart + match.index, length: match[0].length };
 };
 
+// 모델이 자주 일으키는 인용 변형(따옴표 날조·스타일 변경, 공백 소실)을 흡수하는 최후 폴백용 정규화.
+const isMatchIgnored = (ch: string) => ch === '"' || ch === '“' || ch === '”' || ch === "'" || ch === '‘' || ch === '’' || /\s/.test(ch);
+
+const buildNormalizedIndex = (text: string) => {
+  const kept: string[] = [];
+  const map: number[] = [];
+  let i = 0;
+  while (i < text.length) {
+    if (!isMatchIgnored(text[i])) {
+      kept.push(text[i]);
+      map.push(i);
+    }
+    i++;
+  }
+  return { normalized: kept.join(''), map };
+};
+
+const normalizeForMatch = (s: string) => {
+  let out = '';
+  for (const ch of s) {
+    if (!isMatchIgnored(ch)) out += ch;
+  }
+  return out;
+};
+
 export const createFindRange = (text: string) => {
+  const { normalized, map } = buildNormalizedIndex(text);
+
   return (startText: string, endText: string, searchStart: number) => {
     const exactFind = (needle: string, from: number): Match | null => {
       const idx = text.indexOf(needle, from);
       return idx === -1 ? null : { index: idx, length: needle.length };
     };
 
+    const normalizedFind = (needle: string, from: number): Match | null => {
+      const n = normalizeForMatch(needle.trim());
+      if (!n) return null;
+      let lo = 0;
+      while (lo < map.length && map[lo] < from) lo++;
+      const idx = normalized.indexOf(n, lo);
+      if (idx === -1) return null;
+      const first = map[idx];
+      const last = map[idx + n.length - 1];
+      return { index: first, length: last + 1 - first };
+    };
+
     const tryFinders = (find: (needle: string, from: number) => Match | null) => {
       const start = find(startText, searchStart);
       if (!start) return null;
-      const endFrom = startText === endText ? start.index : start.index + start.length;
-      const end = find(endText, endFrom);
+      // end가 start 인용 범위 안의 문장이어도 유효한 앵커다 — 겹침을 허용한다.
+      const end = find(endText, start.index);
       if (!end) return null;
-      return { rangeStart: start.index, rangeEnd: end.index + end.length };
+      return { rangeStart: start.index, rangeEnd: Math.max(start.index + start.length, end.index + end.length) };
     };
 
-    const range = tryFinders(exactFind) ?? tryFinders((n, from) => fuzzyFindMatch(text, n, from));
+    const range = tryFinders(exactFind) ?? tryFinders((n, from) => fuzzyFindMatch(text, n, from)) ?? tryFinders(normalizedFind);
     if (!range) {
       return null;
     }
@@ -227,8 +280,9 @@ export const buildFeedbackTool = (d: ToolDescriptions): OpenAI.Chat.Completions.
         end: { type: 'string', description: d.end },
         feedback: { type: 'string', description: d.feedback },
         category: { type: 'string', description: d.category },
+        polarity: { type: 'string', enum: ['issue', 'highlight'], description: d.polarity },
       },
-      required: ['start', 'end', 'feedback'],
+      required: ['start', 'end', 'feedback', 'category', 'polarity'],
     },
   },
 });
@@ -247,6 +301,7 @@ export const buildSummaryTool = (d: ToolDescriptions): OpenAI.Chat.Completions.C
         tense: { type: 'string', description: d.tense },
         location: { type: 'string', description: d.location },
         tone: { type: 'string', description: d.tone },
+        transitions: { type: 'string', description: d.transitions },
       },
     },
   },
@@ -277,7 +332,21 @@ export const buildMetaTool = (d: ToolDescriptions): OpenAI.Chat.Completions.Chat
             type: 'object',
             properties: {
               name: { type: 'string', description: d.characters.name },
-              aliases: { type: 'array', items: { type: 'string' }, description: d.characters.aliases },
+              aliases: {
+                type: 'array',
+                description: d.characters.aliases,
+                items: {
+                  type: 'object',
+                  properties: {
+                    alias: { type: 'string', description: d.characters.alias },
+                    usage: {
+                      type: 'string',
+                      description: d.characters.aliasUsage,
+                    },
+                  },
+                  required: ['alias'],
+                },
+              },
               role: { type: 'string', description: d.characters.role },
               arc: { type: 'string', description: d.characters.arc },
             },

@@ -5,6 +5,7 @@ import {
   dedupCharacterCandidates,
   extractJsonObjects,
   fuzzyFindMatch,
+  renderAdjacentSummary,
   renderMetaBlock,
   renderSummaryForMeta,
 } from './text.ts';
@@ -69,6 +70,40 @@ describe('createFindRange', () => {
   it('못 찾으면 null', () => {
     expect(findRange('없는문장', '없는문장', 0)).toBeNull();
   });
+
+  it('end가 start 인용의 뒷문장이면(겹침) 범위를 찾는다', () => {
+    const range = findRange('둘째 문장이다. 셋째 문장이다.', '셋째 문장이다.', 0);
+    expect(range).toEqual({ rangeStart: 8, rangeEnd: 25 });
+  });
+
+  it('end가 start를 포함해도(같은 시작) 범위를 찾는다', () => {
+    const range = findRange('둘째 문장이다.', '둘째 문장이다. 셋째 문장이다.', 0);
+    expect(range).toEqual({ rangeStart: 8, rangeEnd: 25 });
+  });
+
+  it('지문에 따옴표를 날조한 앵커를 정규화로 구제한다', () => {
+    const doc = '고양이가 창밖을 본다. 오늘은 나가야겠다.\n그는 문을 열었다.';
+    const range = createFindRange(doc)('"오늘은 나가야겠다."', '"오늘은 나가야겠다."', 0);
+    expect(range).toEqual({ rangeStart: 13, rangeEnd: 23 });
+  });
+
+  it('둥근 따옴표를 곧은 따옴표로 바꾼 앵커를 구제한다', () => {
+    const doc = '그가 물었다.\n\n“같이 갈래?”\n\n“좋아.”';
+    const range = createFindRange(doc)('"같이 갈래?"', '"좋아."', 0);
+    expect(range).toEqual({ rangeStart: 10, rangeEnd: 23 });
+  });
+
+  it('공백이 소실된 앵커를 구제한다', () => {
+    const doc = '나는 어제 민수 형이 했던 말을 떠올렸다. 다음 문장.';
+    const range = createFindRange(doc)('민수 형이했던 말을 떠올렸다.', '민수 형이했던 말을 떠올렸다.', 0);
+    expect(range).toEqual({ rangeStart: 6, rangeEnd: 23 });
+  });
+
+  it('정규화 폴백도 searchStart 이전은 매칭하지 않는다', () => {
+    const doc = '반복 문장. 반복 문장.';
+    const range = createFindRange(doc)('"반복 문장."', '"반복 문장."', 7);
+    expect(range).toEqual({ rangeStart: 7, rangeEnd: 13 });
+  });
 });
 
 describe('extractJsonObjects', () => {
@@ -121,5 +156,34 @@ describe('renderMetaBlock', () => {
     expect(block).toContain('- 철수 (철): 주인공. 성장');
     expect(block).toContain('- 발단: 시작 [차분]');
     expect(block).toContain('</작품 전체>');
+  });
+});
+
+describe('renderMetaBlock 별칭 구조형', () => {
+  it('usage가 있으면 병기하고, 구형 문자열 별칭과 공존한다', () => {
+    const meta = {
+      narrator: { pov: '3인칭 제한', reliability: '신뢰 가능' },
+      setting: '현대',
+      themes: [],
+      characters: [{ name: '하민', aliases: [{ alias: '산호', usage: '마린이 하민을 부르는 애칭' }, '하민씨'], role: '주인공', arc: '' }],
+      structure: [],
+      style: '',
+    };
+    const block = renderMetaBlock(meta);
+    expect(block).toContain('하민 (산호: 마린이 하민을 부르는 애칭/하민씨)');
+  });
+});
+
+describe('renderAdjacentSummary', () => {
+  const base = { narrative: '두 사람이 카페에서 만난다.', characters: [], pov: '', tense: '', location: '', tone: '' };
+
+  it('구조 필드들이 META 입력과 동일한 형식으로 덧붙는다', () => {
+    const rendered = renderAdjacentSummary({ ...base, pov: '3인칭 제한', location: '카페', transitions: '중반부터 회상, 복귀 없음' });
+    expect(rendered).toBe('두 사람이 카페에서 만난다.\n[시점: 3인칭 제한]\n[장소: 카페] [장면·시간 구조: 중반부터 회상, 복귀 없음]');
+  });
+
+  it('구조 필드가 없으면(구형 저장분) narrative만 반환한다', () => {
+    expect(renderAdjacentSummary(base)).toBe('두 사람이 카페에서 만난다.');
+    expect(renderAdjacentSummary(undefined)).toBe('');
   });
 });

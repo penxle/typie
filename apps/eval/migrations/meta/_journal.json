@@ -43,6 +43,13 @@
       "when": 1784723159546,
       "tag": "0005_workable_doctor_faustus",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1784817875160,
+      "tag": "0006_bent_fenris",
+      "breakpoints": true
     }
   ]
 }

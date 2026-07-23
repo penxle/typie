@@ -16,7 +16,7 @@ import {
   writeStageCache,
 } from './db.ts';
 import { analyzeChunkWithContext, analyzeGlobal, createOpenAI, resolveStagePrompt, runTool } from './llm.ts';
-import { buildFeedbackTool, buildMetaTool, buildSummaryTool, createChunks, createFindRange } from './text.ts';
+import { buildFeedbackTool, buildMetaTool, buildSummaryTool, createChunks, createFindRange, renderAdjacentSummary } from './text.ts';
 import type { WorkflowEvent, WorkflowStep } from 'cloudflare:workers';
 import type { Db } from './db.ts';
 import type { FlowEnv, PipelineParams } from './index.ts';
@@ -33,6 +33,7 @@ type FeedbackRow = {
   matchStart: number | null;
   matchEnd: number | null;
   category: string | null;
+  polarity: string | null;
   body: string;
 };
 
@@ -184,8 +185,8 @@ export class PipelineWorkflow extends WorkflowEntrypoint<FlowEnv, PipelineParams
                 buildFeedbackTool(analyze.toolDescriptions),
                 {
                   meta: meta.meta,
-                  precedingNarrative: index > 0 ? (summaries[index - 1]?.narrative ?? '') : '',
-                  followingNarrative: index < chunks.length - 1 ? (summaries[index + 1]?.narrative ?? '') : '',
+                  precedingNarrative: index > 0 ? renderAdjacentSummary(summaries[index - 1]) : '',
+                  followingNarrative: index < chunks.length - 1 ? renderAdjacentSummary(summaries[index + 1]) : '',
                   currentText: text,
                 },
                 (feedback) => {
@@ -196,6 +197,7 @@ export class PipelineWorkflow extends WorkflowEntrypoint<FlowEnv, PipelineParams
                     matchStart: range?.rangeStart ?? null,
                     matchEnd: range?.rangeEnd ?? null,
                     category: feedback.category ?? null,
+                    polarity: feedback.polarity ?? null,
                     body: feedback.feedback,
                   });
                 },
