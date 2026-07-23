@@ -101,6 +101,7 @@
         let isVisible = false;
         let dirty = false;
         let needsResize = false;
+        let syncSeeded = false;
 
         const paint = () => {
           if (manager.isAttached()) {
@@ -115,7 +116,7 @@
         const flushIfAttached = () => {
           if (!manager.isAttached()) return;
           if (needsResize) {
-            editor.requestSurfaceResize(page, width, backingHeight);
+            editor.resizeSurfaceNow(page, width, backingHeight);
             needsResize = false;
             dirty = false;
           }
@@ -245,6 +246,26 @@
           };
 
           build();
+          // A freshly created page must not wait for the first IntersectionObserver
+          // delivery (it lands after a paint): seed visibility synchronously once so a
+          // page born under the caret presents in its first frame.
+          if (!syncSeeded) {
+            syncSeeded = true;
+            const rect = wrapper.getBoundingClientRect();
+            const rootRect = root === null ? { top: 0, bottom: window.innerHeight } : root.getBoundingClientRect();
+            const viewportHeight = rootRect.bottom - rootRect.top;
+            const inAcquire = rect.bottom > rootRect.top - viewportHeight && rect.top < rootRect.bottom + viewportHeight;
+            if (inAcquire) {
+              state.inAcquire = true;
+              state.inRelease = true;
+              state.isVisible = rect.bottom > rootRect.top && rect.top < rootRect.bottom;
+              isVisible = state.isVisible;
+              overlaysVisible = state.isVisible;
+              manager.reconcile({ ...state });
+              flushIfAttached();
+              editor.flush();
+            }
+          }
           let resize: ResizeObserver | null = null;
           if (root !== null) {
             resize = new ResizeObserver(() => build());
@@ -273,7 +294,7 @@
           void backingHeight;
           manager.restyle();
           if (manager.isAttached()) {
-            editor.requestSurfaceResize(page, width, backingHeight);
+            editor.resizeSurfaceNow(page, width, backingHeight);
             dirty = false;
             needsResize = false;
           } else {

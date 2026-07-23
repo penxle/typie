@@ -1,6 +1,6 @@
 import { debounce } from '@typie/ui/utils';
 import { createContext, tick, untrack } from 'svelte';
-import { SvelteMap } from 'svelte/reactivity';
+import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { match } from 'ts-pattern';
 import { initWasm, wasm } from '$lib/wasm-ffi.svelte';
 import { IS_MAC } from './constants';
@@ -76,8 +76,6 @@ export type TrackedRangePosition = Pick<TrackedRange, 'anchor' | 'head'>;
 
 let wasmInitPromise: Promise<void> | null = null;
 const VIEWPORT_RESIZE_DEBOUNCE_MS = 50;
-
-type SurfaceRenderWork = { type: 'render' } | { type: 'resize'; width: number; height: number };
 
 /**
  * 검색 결과의 active(현재) 매치에 적용할 selection을 결정한다.
@@ -285,7 +283,7 @@ export class Editor {
 
   #frameId: number | null = null;
   #wasmQueued = false;
-  #surfaceWork = new SvelteMap<number, SurfaceRenderWork>();
+  #surfaceWork = new SvelteSet<number>();
 
   #viewport = $state<Viewport>({ width: 0, height: 0, scale_factor: 1 });
   #appliedViewport: Viewport = { width: 0, height: 0, scale_factor: 1 };
@@ -585,14 +583,11 @@ export class Editor {
   }
 
   #flushSurfaceWork(): void {
-    const work = [...this.#surfaceWork].toSorted(([a], [b]) => a - b);
+    const work = [...this.#surfaceWork].toSorted((a, b) => a - b);
     this.#surfaceWork.clear();
 
-    for (const [page, surfaceWork] of work) {
+    for (const page of work) {
       if (this.#destroyed) return;
-      if (surfaceWork.type === 'resize') {
-        this.#resizeSurface(page, surfaceWork.width, surfaceWork.height);
-      }
       this.#renderSurface(page);
     }
   }
@@ -1339,16 +1334,19 @@ export class Editor {
 
   requestSurfaceRender(page: number): void {
     if (this.#destroyed) return;
-    if (this.#surfaceWork.get(page)?.type !== 'resize') {
-      this.#surfaceWork.set(page, { type: 'render' });
-    }
+    this.#surfaceWork.add(page);
     this.#requestFrame();
   }
 
-  requestSurfaceResize(page: number, width: number, height: number): void {
+  // Synchronous on purpose: callers react to a published geometry change inside the same
+  // task (effect flush) that will restyle the DOM, so resizing and repainting here keeps
+  // the canvas pixels and the layout in the same frame. Deferring to the next animation
+  // frame would paint one frame of the old backing stretched or clipped to the new box.
+  resizeSurfaceNow(page: number, width: number, height: number): void {
     if (this.#destroyed) return;
-    this.#surfaceWork.set(page, { type: 'resize', width, height });
-    this.#requestFrame();
+    this.#surfaceWork.delete(page);
+    this.#resizeSurface(page, width, height);
+    this.#renderSurface(page);
   }
 
   setExternalElementHeight(nodeId: string, height: number): void {
