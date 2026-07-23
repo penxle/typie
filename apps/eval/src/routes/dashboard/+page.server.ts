@@ -1,5 +1,5 @@
 import { error } from '@sveltejs/kit';
-import { asc, eq, inArray } from 'drizzle-orm';
+import { asc, desc, eq, inArray } from 'drizzle-orm';
 import {
   anchorMatchRate,
   averageScores,
@@ -28,7 +28,7 @@ export const load: PageServerLoad = async ({ platform }) => {
 
   const db = createDb(platform.env.DB);
 
-  const rounds = await db.select().from(Rounds);
+  const rounds = await db.select().from(Rounds).orderBy(desc(Rounds.createdAt));
   const variants = await db.select().from(Variants);
   const variantLabels = new Map(variants.map((v) => [v.id, v.label]));
 

@@ -21,8 +21,8 @@
   import type { JudgmentResult, PairVerdict } from '$lib/domain/types.ts';
   import type { PageData } from './$types';
 
-  type Props = { data: PageData };
-  const { data }: Props = $props();
+  type Props = { data: PageData; preview?: boolean };
+  const { data, preview = false }: Props = $props();
 
   const startedAt = Date.now();
   const labels = ['A', 'B', 'C', 'D'];
@@ -124,7 +124,7 @@
     return seen;
   });
 
-  let submitButtonEl: HTMLButtonElement | undefined;
+  let submitButtonEl = $state<HTMLButtonElement | undefined>();
 
   const requestSubmit = () => {
     Dialog.confirm({
@@ -212,21 +212,40 @@
       flexShrink: '0',
     })}
   >
-    <a class={flex({ align: 'center', gap: '2px', fontSize: '13px', color: 'text.subtle', _hover: { color: 'text.default' } })} href="/">
+    <a
+      class={flex({ align: 'center', gap: '2px', fontSize: '13px', color: 'text.subtle', _hover: { color: 'text.default' } })}
+      href={preview ? '/admin/tasks' : '/'}
+    >
       <Icon icon={IconChevronLeft} size={14} />
-      평가 큐
+      {preview ? '태스크 목록' : '평가 큐'}
     </a>
-    <div class={flex({ align: 'center', gap: '8px' })}>
-      <span class={css({ fontSize: '13px', color: 'text.subtle', fontVariantNumeric: 'tabular-nums' })}>
-        내 판정 {data.progress.done} / {data.progress.myTotal} · 라운드 전체 {data.progress.roundDone} / {data.progress.roundRequired}
+    {#if preview}
+      <span
+        class={css({
+          paddingX: '8px',
+          paddingY: '2px',
+          borderRadius: 'full',
+          fontSize: '12px',
+          fontWeight: 'medium',
+          backgroundColor: 'accent.warning.subtle',
+          color: 'accent.warning.default',
+        })}
+      >
+        관리자 미리보기 — 입력은 저장되지 않습니다
       </span>
-      <div class={css({ width: '120px', height: '4px', borderRadius: 'full', backgroundColor: 'surface.muted', overflow: 'hidden' })}>
-        <div
-          style:width={`${data.progress.roundRequired === 0 ? 0 : Math.round((data.progress.roundDone / data.progress.roundRequired) * 100)}%`}
-          class={css({ height: 'full', backgroundColor: 'accent.brand.default' })}
-        ></div>
+    {:else}
+      <div class={flex({ align: 'center', gap: '8px' })}>
+        <span class={css({ fontSize: '13px', color: 'text.subtle', fontVariantNumeric: 'tabular-nums' })}>
+          내 판정 {data.progress.done} / {data.progress.myTotal} · 라운드 전체 {data.progress.roundDone} / {data.progress.roundRequired}
+        </span>
+        <div class={css({ width: '120px', height: '4px', borderRadius: 'full', backgroundColor: 'surface.muted', overflow: 'hidden' })}>
+          <div
+            style:width={`${data.progress.roundRequired === 0 ? 0 : Math.round((data.progress.roundDone / data.progress.roundRequired) * 100)}%`}
+            class={css({ height: 'full', backgroundColor: 'accent.brand.default' })}
+          ></div>
+        </div>
       </div>
-    </div>
+    {/if}
     <span
       class={flex({
         align: 'center',
@@ -520,53 +539,60 @@
         <input name="feedbackLabels" type="hidden" value={JSON.stringify(labelMap)} />
         <input name="elapsedSeconds" type="hidden" value={Math.round((Date.now() - startedAt) / 1000)} />
 
-        <div class={flex({ wrap: 'wrap', gap: '8px', marginTop: '10px', align: 'center' })}>
-          <button class={outlineButtonClass} disabled={busy} formaction="?/save" type="submit">
-            <Icon icon={IconSave} size={14} />
-            {saving ? '저장 중…' : '임시 저장'}
-          </button>
-          <button
-            class={css({
-              flex: '1',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '6px',
-              paddingY: '9px',
-              borderRadius: '8px',
-              backgroundColor: 'accent.brand.default',
-              color: 'text.bright',
-              fontSize: '13px',
-              fontWeight: 'bold',
-              cursor: 'pointer',
-              transition: '[background-color 0.15s ease]',
-              _disabled: { backgroundColor: 'interactive.disabled', cursor: 'not-allowed' },
-              ['&:hover:not(:disabled)']: { backgroundColor: 'accent.brand.hover' },
-            })}
-            disabled={!result || busy}
-            onclick={requestSubmit}
-            type="button"
-          >
-            {submitting ? '제출 중…' : '제출하고 다음으로'}
-            <Icon icon={IconArrowRight} size={14} />
-          </button>
-          <button bind:this={submitButtonEl} aria-hidden="true" formaction="?/submit" hidden tabindex="-1" type="submit"></button>
-          <button class={outlineButtonClass} disabled={busy} onclick={requestRelease} type="button">
-            <Icon icon={IconCornerUpLeft} size={14} />
-            반납
-          </button>
-        </div>
-        <p class={flex({ align: 'center', gap: '4px', marginTop: '6px', height: '16px', fontSize: '12px', color: 'text.faint' })}>
-          {#if result}
-            <Icon style={css.raw({ color: 'text.success' })} icon={IconCircleCheck} size={12} />
-            제출하면 다음 평가로 바로 이동합니다.
-          {:else}
+        {#if preview}
+          <p class={flex({ align: 'center', gap: '4px', marginTop: '10px', fontSize: '12px', color: 'text.faint' })}>
             <Icon icon={IconInfo} size={12} />
-            {isRanking
-              ? '모든 세트에 점수를 매기면 제출할 수 있습니다. 개별 피드백 평가는 선택입니다.'
-              : '판정을 선택하면 제출할 수 있습니다.'}
-          {/if}
-        </p>
+            미리보기 모드입니다 — 점수·라벨·코멘트를 조작해볼 수 있지만 저장·제출되지 않습니다.
+          </p>
+        {:else}
+          <div class={flex({ wrap: 'wrap', gap: '8px', marginTop: '10px', align: 'center' })}>
+            <button class={outlineButtonClass} disabled={busy} formaction="?/save" type="submit">
+              <Icon icon={IconSave} size={14} />
+              {saving ? '저장 중…' : '임시 저장'}
+            </button>
+            <button
+              class={css({
+                flex: '1',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px',
+                paddingY: '9px',
+                borderRadius: '8px',
+                backgroundColor: 'accent.brand.default',
+                color: 'text.bright',
+                fontSize: '13px',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                transition: '[background-color 0.15s ease]',
+                _disabled: { backgroundColor: 'interactive.disabled', cursor: 'not-allowed' },
+                ['&:hover:not(:disabled)']: { backgroundColor: 'accent.brand.hover' },
+              })}
+              disabled={!result || busy}
+              onclick={requestSubmit}
+              type="button"
+            >
+              {submitting ? '제출 중…' : '제출하고 다음으로'}
+              <Icon icon={IconArrowRight} size={14} />
+            </button>
+            <button bind:this={submitButtonEl} aria-hidden="true" formaction="?/submit" hidden tabindex="-1" type="submit"></button>
+            <button class={outlineButtonClass} disabled={busy} onclick={requestRelease} type="button">
+              <Icon icon={IconCornerUpLeft} size={14} />
+              반납
+            </button>
+          </div>
+          <p class={flex({ align: 'center', gap: '4px', marginTop: '6px', height: '16px', fontSize: '12px', color: 'text.faint' })}>
+            {#if result}
+              <Icon style={css.raw({ color: 'text.success' })} icon={IconCircleCheck} size={12} />
+              제출하면 다음 평가로 바로 이동합니다.
+            {:else}
+              <Icon icon={IconInfo} size={12} />
+              {isRanking
+                ? '모든 세트에 점수를 매기면 제출할 수 있습니다. 개별 피드백 평가는 선택입니다.'
+                : '판정을 선택하면 제출할 수 있습니다.'}
+            {/if}
+          </p>
+        {/if}
       </form>
     </aside>
   </div>
