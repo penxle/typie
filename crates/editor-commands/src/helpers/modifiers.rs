@@ -335,7 +335,35 @@ pub(crate) fn weight_and_bold_after_family_change(
     (matched, false)
 }
 
-type GroupOp = (Dot, Dot, bool, u16, u16, bool);
+/// Merge consecutive leaf groups that share a host and identical emission
+/// decisions into one (first, last) range, so a fragmented block emits one op
+/// per decision run instead of one per segment. Restricted to hosts whose
+/// children are all leaves: there the covered leaves are contiguous, so the
+/// merged range covers exactly the merged groups' leaves. A host with block
+/// children keeps per-group ranges — a merged range would also span the nested
+/// blocks' leaves, whose own groups may legitimately emit nothing and must not
+/// be overridden.
+fn coalesce_group_runs<K: PartialEq>(runs: Vec<(Dot, bool, Dot, Dot, K)>) -> Vec<(Dot, Dot, K)> {
+    let mut merged: Vec<(Dot, bool, Dot, Dot, K)> = Vec::with_capacity(runs.len());
+    for run in runs {
+        if let Some(prev) = merged.last_mut()
+            && prev.0 == run.0
+            && run.1
+            && prev.4 == run.4
+        {
+            prev.3 = run.3;
+            continue;
+        }
+        merged.push(run);
+    }
+    merged
+        .into_iter()
+        .map(|(_, _, first, last, key)| (first, last, key))
+        .collect()
+}
+
+type FamKey = (bool, u16, u16, bool);
+type GroupOp = (Dot, Dot, FamKey);
 type EndTouchedFam = (Dot, bool, BTreeMap<ModifierType, Modifier>, u16);
 
 pub(crate) fn set_font_family_range(
@@ -358,21 +386,25 @@ pub(crate) fn set_font_family_range(
                 .as_ref()
                 == Some(&family)
         };
-        let groups = leaf_groups_in_range(&rs)
-            .into_iter()
-            .map(|g| {
-                (
-                    g.first,
-                    g.last,
-                    family_eq(g.host),
-                    font_weight(g.effective),
-                    view.node(g.host)
-                        .map(|node| font_weight(node.effective()))
-                        .unwrap_or(DEFAULT_FONT_WEIGHT),
-                    has_bold(g.effective),
-                )
-            })
-            .collect();
+        let groups = coalesce_group_runs(
+            leaf_groups_in_range(&rs)
+                .into_iter()
+                .map(|g| {
+                    let all_leaf = view
+                        .node(g.host)
+                        .is_some_and(|n| n.leaf_child_count() == n.child_count());
+                    let key: FamKey = (
+                        family_eq(g.host),
+                        font_weight(g.effective),
+                        view.node(g.host)
+                            .map(|node| font_weight(node.effective()))
+                            .unwrap_or(DEFAULT_FONT_WEIGHT),
+                        has_bold(g.effective),
+                    );
+                    (g.host, all_leaf, g.first, g.last, key)
+                })
+                .collect(),
+        );
         let end_touched = end_touched_textblocks(&view, &rs)
             .into_iter()
             .filter(|&b| block_accepts_carry_kind(&view, b, ModifierType::FontFamily))
@@ -388,7 +420,7 @@ pub(crate) fn set_font_family_range(
         (groups, end_touched)
     };
 
-    for (g_first, g_last, fam_eq, old_weight, inherited_weight, old_bold) in &groups {
+    for (g_first, g_last, (fam_eq, old_weight, inherited_weight, old_bold)) in &groups {
         if *fam_eq {
             tr.remove_span_modifier(*g_first, *g_last, family.clone())?;
         } else {
@@ -488,10 +520,17 @@ pub(crate) fn set_modifier_range_text(
                 .as_ref()
                 == Some(modifier)
         };
-        let groups: Vec<(Dot, Dot, bool)> = leaf_groups_in_range(&rs)
-            .iter()
-            .map(|g| (g.first, g.last, inherited_eq(g.host)))
-            .collect();
+        let groups: Vec<(Dot, Dot, bool)> = coalesce_group_runs(
+            leaf_groups_in_range(&rs)
+                .iter()
+                .map(|g| {
+                    let all_leaf = view
+                        .node(g.host)
+                        .is_some_and(|n| n.leaf_child_count() == n.child_count());
+                    (g.host, all_leaf, g.first, g.last, inherited_eq(g.host))
+                })
+                .collect(),
+        );
         let end_touched: Vec<(Dot, bool)> = end_touched_textblocks(&view, &rs)
             .into_iter()
             .filter(|&b| block_accepts_carry_kind(&view, b, modifier_type))

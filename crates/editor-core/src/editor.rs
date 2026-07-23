@@ -53,10 +53,21 @@ fn normalize_pending_overlay(state: &State) -> Option<PendingOverlay> {
 }
 
 fn normalize_gap_phantom(state: &State) -> Option<GapPhantom> {
-    use editor_state::{GapCursor, as_gap_cursor};
+    use editor_state::{GapCursor, as_gap_cursor, gap_cursor_at};
     let view = state.view();
-    let rs = state.selection.as_ref()?.resolve(&view)?;
-    match as_gap_cursor(&rs)? {
+    let sel = state.selection.as_ref()?;
+    // A raw-collapsed selection needs no resolved path: `gap_cursor_at` reads
+    // only the host node and its children, and rejects a dead node or
+    // out-of-range offset itself, matching what `resolve` would have filtered.
+    // Resolving here costs an `O(parent fan-out)` ancestor index scan on every
+    // tick.
+    let gc = if sel.anchor == sel.head {
+        gap_cursor_at(&sel.head, &view)?
+    } else {
+        let rs = sel.resolve(&view)?;
+        as_gap_cursor(&rs)?
+    };
+    match gc {
         GapCursor::BetweenMonolithic { parent, index, .. } => Some(GapPhantom {
             parent: parent.id(),
             index,
@@ -123,9 +134,17 @@ pub(crate) fn nearest_insertable_flat_probe(
 /// `undoable` comparison, which uses [`transient_fields_changed`] instead.
 fn capture_transient(state: &State) -> TransientState {
     let view = state.view();
+    // `Position::resolve` returns `Some` exactly when the node is live and the
+    // offset is within its child count; mirror that check shallowly instead of
+    // building the resolved path, whose ancestor index chain costs an
+    // `O(parent fan-out)` scan on the per-keystroke undo-capture path.
+    let resolvable = |pos: &Position| {
+        view.node(pos.node)
+            .is_some_and(|n| pos.offset <= n.child_count())
+    };
     let selection = state
         .selection
-        .filter(|s| s.resolve(&view).is_some())
+        .filter(|s| resolvable(&s.anchor) && resolvable(&s.head))
         .map(|s| StableSelection::capture(&s, &view));
     TransientState { selection }
 }

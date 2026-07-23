@@ -121,6 +121,30 @@ impl LayoutIndex {
         node_geometry_eq(old, new)
     }
 
+    /// The tree path of `block`'s box entry, if indexed.
+    pub(crate) fn box_path(&self, block: &Dot) -> Option<&[usize]> {
+        self.boxes_by_node_id
+            .get(block)
+            .map(|&entry_id| self.entries[entry_id].path.as_slice())
+    }
+
+    pub(crate) fn node_at(&self, path: &[usize]) -> Option<&LayoutNode> {
+        node_at_path(&self.tree.root, path)
+    }
+
+    /// Replace the subtree at `path` with a geometry-identical rebuild. Every
+    /// derived structure (entries, node maps, per-page lists, R-tree) is a
+    /// pure function of geometry, ids and traversal structure, so it stays
+    /// valid; only line content may differ. The caller must have verified
+    /// [`node_geometry_eq`] between the old and new subtree.
+    pub(crate) fn splice_subtree(&mut self, path: &[usize], new_node: LayoutNode) -> bool {
+        let Some(slot) = node_at_path_mut(&mut self.tree.root, path) else {
+            return false;
+        };
+        *slot = new_node;
+        true
+    }
+
     pub(crate) fn pages(&self) -> &[LayoutPage] {
         &self.pages
     }
@@ -545,7 +569,7 @@ impl RTreeObject for SpatialEntry {
     }
 }
 
-fn node_geometry_eq(a: &LayoutNode, b: &LayoutNode) -> bool {
+pub(crate) fn node_geometry_eq(a: &LayoutNode, b: &LayoutNode) -> bool {
     if a.rect != b.rect {
         return false;
     }
@@ -577,6 +601,19 @@ fn node_at_path<'a>(mut node: &'a LayoutNode, path: &[usize]) -> Option<&'a Layo
             return None;
         };
         node = b.children.get(idx)?;
+    }
+    Some(node)
+}
+
+fn node_at_path_mut<'a>(
+    mut node: &'a mut LayoutNode,
+    path: &[usize],
+) -> Option<&'a mut LayoutNode> {
+    for &idx in path {
+        let LayoutContent::Box(b) = &mut node.content else {
+            return None;
+        };
+        node = b.children.get_mut(idx)?;
     }
     Some(node)
 }

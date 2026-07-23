@@ -12,9 +12,11 @@ use crate::measure::types::MeasuredTree;
 use crate::page::LayoutPage;
 use crate::page_fragment::{PageFragmentTree, build_page_fragment_tree};
 use crate::paginate::paginator::Paginator;
+use crate::paginate::types::LayoutContent;
 use crate::query::cursor::CursorMetrics;
 use crate::query::hit_test::ExtendingHit;
 use crate::query::layout_index::LayoutIndex;
+use crate::style::{BorderMode, Direction};
 use crate::view_state::{GapPhantom, GroupDecoration, PendingOverlay, ViewState};
 use crate::viewport::Viewport;
 
@@ -150,6 +152,20 @@ impl View {
             }
         }
 
+        // Content-only edit: rebuild just the dirty subtrees and splice them
+        // into the retained layout when their geometry is unchanged, instead
+        // of re-paginating the whole document per keystroke.
+        if let Some(targets) = content_targets.as_deref()
+            && !targets.is_empty()
+            && self.try_splice_content(state, targets)
+        {
+            self.layout_state = Some(state.clone());
+            if pending_changed {
+                self.view_state.preferred_x = None;
+            }
+            return pending_changed || gap_changed;
+        }
+
         self.compute_inner(state, content_targets.as_deref());
         self.layout_state = Some(state.clone());
 
@@ -158,6 +174,166 @@ impl View {
         }
 
         pending_changed || gap_changed || self.fingerprint != old_fingerprint
+    }
+
+    /// The content-splice fast path: re-measure each dirty target subtree,
+    /// re-place it with a paginator seeded from the retained layout's
+    /// context at that subtree, and splice the rebuild in when its geometry
+    /// is bit-identical to the old subtree. Correctness never rests on the
+    /// seeding being right — any geometry difference, non-vertical ancestor,
+    /// or unresolvable context returns `false` and the caller runs the full
+    /// pipeline.
+    fn try_splice_content(&mut self, state: &State, targets: &[Dot]) -> bool {
+        let (_, _, new_fingerprint) = self.build_pipeline(state);
+        if self.fingerprint.as_ref() != Some(&new_fingerprint) {
+            return false;
+        }
+        let continuous = matches!(Self::doc_layout_mode(state), LayoutMode::Continuous { .. });
+        let view = state.view();
+        let ctx = measure_context(&self.view_state);
+
+        struct SpliceSeed {
+            dot: Dot,
+            path: Vec<usize>,
+            parent: Dot,
+            child_index: usize,
+            width: f32,
+            y: f32,
+            x: f32,
+            content_width: f32,
+            page_top: f32,
+            page_bottom: f32,
+        }
+
+        let mut seeds: Vec<SpliceSeed> = Vec::new();
+        {
+            let Some(layout) = self.layout.as_ref() else {
+                return false;
+            };
+            let index = &layout.layout_index;
+            for dot in targets {
+                if seeds.iter().any(|s| s.dot == *dot) {
+                    continue;
+                }
+                let Some(path) = index.box_path(dot) else {
+                    return false;
+                };
+                // Rebuild the paginator's (current_x, current_width) context by
+                // replaying each vertical ancestor's content-box computation
+                // from its retained rect and style.
+                let mut cur = index.node_at(&[]).expect("layout tree has a root");
+                let mut x = 0.0f32;
+                let mut w = 0.0f32;
+                for &idx in path {
+                    let LayoutContent::Box(b) = &cur.content else {
+                        return false;
+                    };
+                    if b.style.direction != Direction::Vertical {
+                        return false;
+                    }
+                    let lead_left = if b.style.border_mode == BorderMode::Collapse {
+                        0.0
+                    } else {
+                        b.style.border.left
+                    };
+                    x = cur.rect.x + lead_left + b.style.padding.left;
+                    w = cur.rect.width
+                        - b.style.padding.left
+                        - b.style.padding.right
+                        - b.style.border.left
+                        - b.style.border.right;
+                    let Some(child) = b.children.get(idx) else {
+                        return false;
+                    };
+                    cur = child;
+                }
+                let LayoutContent::Box(old_box) = &cur.content else {
+                    return false;
+                };
+                let Some(att) = old_box.attachment.as_ref() else {
+                    return false;
+                };
+                let y = cur.rect.y;
+                let pages = index.pages();
+                let pi = pages.partition_point(|p| p.y_end <= y);
+                let Some(page) = pages.get(pi) else {
+                    return false;
+                };
+                if !(y >= page.y_start && y < page.y_end) {
+                    return false;
+                }
+                let (page_top, page_bottom) = if continuous {
+                    let top = if pi == 0 {
+                        page.y_start + CONTINUOUS_MARGIN_X
+                    } else {
+                        page.y_start
+                    };
+                    (top, top + CONTINUOUS_CONTENT_CAP)
+                } else {
+                    (page.content_y_start, page.content_y_end)
+                };
+                seeds.push(SpliceSeed {
+                    dot: *dot,
+                    path: path.to_vec(),
+                    parent: att.parent,
+                    child_index: att.index,
+                    width: cur.rect.width,
+                    y,
+                    x,
+                    content_width: w,
+                    page_top,
+                    page_bottom,
+                });
+            }
+        }
+        if seeds.is_empty() {
+            return false;
+        }
+
+        let mut splices: Vec<(Vec<usize>, crate::paginate::types::LayoutNode)> = Vec::new();
+        for seed in seeds {
+            let Some(node_view) = view.node(seed.dot) else {
+                return false;
+            };
+            let measured = {
+                let mut resource = self.resource.lock().unwrap();
+                self.measurer
+                    .measure(&node_view, seed.width, &ctx, &mut resource)
+            };
+            let (paginator, _, _) = self.build_pipeline(state);
+            let new_node = paginator.place_subtree(
+                &measured,
+                seed.parent,
+                seed.child_index,
+                seed.y,
+                seed.x,
+                seed.content_width,
+                seed.page_top,
+                seed.page_bottom,
+            );
+            let Some(old) = self
+                .layout
+                .as_ref()
+                .and_then(|l| l.layout_index.node_at(&seed.path))
+            else {
+                return false;
+            };
+            if !crate::query::layout_index::node_geometry_eq(old, &new_node) {
+                return false;
+            }
+            splices.push((seed.path, new_node));
+        }
+
+        let Some(layout) = self.layout.as_mut() else {
+            return false;
+        };
+        for (path, node) in splices {
+            if !layout.layout_index.splice_subtree(&path, node) {
+                return false;
+            }
+        }
+        layout.page_fragments = (0..layout.pages.len()).map(|_| OnceLock::new()).collect();
+        true
     }
 
     pub fn invalidate(&mut self, state: &State) -> bool {

@@ -60,6 +60,34 @@ impl Paginator {
         }
     }
 
+    /// Re-place a single subtree in isolation, seeded with the pagination
+    /// context the full walk had when it reached the subtree: `accumulated_y`
+    /// is the subtree's document-space top, `current_x`/`current_width` the
+    /// parent box's content origin/width, and the page window that of the page
+    /// containing the top. Page advances past the seeded window evolve exactly
+    /// as in the full walk (they depend only on the window and the page
+    /// stride), so a subtree whose geometry is unchanged reproduces its old
+    /// placement bit-for-bit; the caller verifies that and falls back to a
+    /// full paginate on any mismatch.
+    pub fn place_subtree(
+        mut self,
+        node: &MeasuredNode,
+        parent: Dot,
+        child_index: usize,
+        accumulated_y: f32,
+        current_x: f32,
+        current_width: f32,
+        page_content_top: f32,
+        page_content_bottom: f32,
+    ) -> LayoutNode {
+        self.accumulated_y = accumulated_y;
+        self.current_x = current_x;
+        self.current_width = current_width;
+        self.page_content_top = page_content_top;
+        self.page_content_bottom = page_content_bottom;
+        self.place_node(node, parent, child_index, 0.0)
+    }
+
     pub fn paginate(mut self, tree: MeasuredTree) -> PaginatedLayout {
         let root_id = match &tree.root.content {
             MeasuredContent::Box(b) => b.node,

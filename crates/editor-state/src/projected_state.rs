@@ -317,6 +317,13 @@ pub struct ProjectedState {
     projected: ProjectedDoc,
     indexes: ProjectionIndexes,
     leaf_cursor: Option<LeafCursor>,
+    /// Identity-validated `(parent, child) → slot` memo for the flat-width
+    /// propagation chain. Typing hits the same ancestor chain on every
+    /// keystroke, and re-deriving each slot via `slot_of_child` costs an
+    /// `O(children)` scan per level under wide containers; a hit is validated
+    /// against the live tree before use, so a stale entry can only miss,
+    /// never mislead.
+    flat_slot_cache: Vec<(Dot, Dot, usize)>,
     layout_dirty: crate::LayoutDirty,
     /// Running total of per-pass repair stats across every projection (full and
     /// incremental) since the last [`take_repair_stats`](Self::take_repair_stats).
@@ -486,6 +493,7 @@ impl ProjectedState {
             projected,
             indexes,
             leaf_cursor: None,
+            flat_slot_cache: Vec::new(),
             layout_dirty: crate::LayoutDirty::Full,
             repair_stats,
             projection_degraded_latch,
@@ -1640,6 +1648,38 @@ impl ProjectedState {
         Ok(WindowOutcome::Done)
     }
 
+    /// The memoized slot of `child` under `parent`, validated against the live
+    /// tree; a miss re-derives it via `slot_of_child` and refreshes the memo.
+    fn flat_slot_hint(&mut self, parent: Dot, child: Dot) -> Option<usize> {
+        if let Some(i) = self
+            .flat_slot_cache
+            .iter()
+            .position(|(p, c, _)| *p == parent && *c == child)
+        {
+            let slot = self.flat_slot_cache[i].2;
+            let valid = self
+                .projected
+                .tree
+                .get(parent)
+                .and_then(|n| n.children.get(slot))
+                .is_some_and(|c| matches!(c, Child::Block(b) if *b == child));
+            if valid {
+                return Some(slot);
+            }
+            self.flat_slot_cache.remove(i);
+        }
+        let slot = {
+            let view = DocView::with_paths_ordered(&self.projected, &self.indexes.paths, &self.seq);
+            view.node(parent)
+                .and_then(|p| p.slot_of_child(child, &self.seq))
+        }?;
+        if self.flat_slot_cache.len() >= 16 {
+            self.flat_slot_cache.remove(0);
+        }
+        self.flat_slot_cache.push((parent, child, slot));
+        Some(slot)
+    }
+
     /// Sole owner of flat-width ancestor propagation: applies `delta` at
     /// `delta.block`'s parent chain up to (and including) the root's child entry.
     /// Slot location is `slot_of_child`-accelerated with a linear fallback inside
@@ -1654,12 +1694,7 @@ impl ProjectedState {
             let Some(parent) = self.indexes.paths.parent_of(child) else {
                 return;
             };
-            let hint = {
-                let view =
-                    DocView::with_paths_ordered(&self.projected, &self.indexes.paths, &self.seq);
-                view.node(parent)
-                    .and_then(|p| p.slot_of_child(child, &self.seq))
-            };
+            let hint = self.flat_slot_hint(parent, child);
             let Some((old, new)) = self
                 .projected
                 .tree

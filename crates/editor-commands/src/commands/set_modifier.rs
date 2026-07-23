@@ -1146,4 +1146,41 @@ mod tests {
             );
         }
     }
+
+    // A paragraph fragmented into many own-modifier segments must not multiply
+    // the emitted span ops: same-branch adjacent groups coalesce into one op.
+    #[test]
+    fn fragmented_range_emits_one_span_op_per_branch() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    p1: paragraph {
+                        text("ab") [font_size(1600)]
+                        text("cd") [font_size(1700)]
+                        text("ef") [font_size(1600)]
+                    }
+                }
+            }
+            selection: (p1, 0) -> (p1, 6)
+        };
+        let mut tr = Transaction::new(&initial);
+        assert!(
+            set_modifier(
+                &mut tr,
+                Modifier::TextColor {
+                    value: "#ff0000".to_string()
+                }
+            )
+            .unwrap()
+        );
+        let (_state, _steps, recorded, ..) = tr.commit();
+        let span_ops = recorded
+            .iter()
+            .filter(|r| matches!(r.op.payload, editor_model::EditOp::Span(_)))
+            .count();
+        assert_eq!(
+            span_ops, 1,
+            "uniform-branch fragmented range must emit a single coalesced AddSpan"
+        );
+    }
 }

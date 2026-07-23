@@ -1,7 +1,7 @@
 use editor_crdt::Dot;
 use editor_model::{ChildView, NodeType, PlainNode, PlainParagraphNode, Subtree};
 use editor_state::{Affinity, Position, Selection};
-use editor_state::{GapCursor, as_gap_cursor};
+use editor_state::{GapCursor, as_gap_cursor, gap_cursor_at};
 use editor_transaction::Transaction;
 
 use crate::helpers::is_block_container;
@@ -23,10 +23,20 @@ pub fn materialize_gap_paragraph(tr: &mut Transaction) -> CommandResult {
 
     let (parent_id, index): (Dot, usize) = {
         let view = tr.state().view();
-        let Some(rs) = selection.resolve(&view) else {
-            return Ok(false);
+        // A raw-collapsed selection needs no resolved path: `gap_cursor_at`
+        // reads only the host node and its children, and rejects a dead node
+        // or out-of-range offset itself, matching what `resolve` would have
+        // filtered. Resolving here costs an `O(parent fan-out)` ancestor
+        // index scan on every keystroke.
+        let gc = if selection.anchor == selection.head {
+            gap_cursor_at(&selection.head, &view)
+        } else {
+            let Some(rs) = selection.resolve(&view) else {
+                return Ok(false);
+            };
+            as_gap_cursor(&rs)
         };
-        let (parent, index) = match as_gap_cursor(&rs) {
+        let (parent, index) = match gc {
             None => return Ok(false),
             // Between-monolithic gap: the slot is at `index` under
             // `parent`, between the two adjacent monolithic siblings.

@@ -365,4 +365,35 @@ mod tests {
         assert!(!changed);
         assert_state_eq!(tr.state(), &initial);
     }
+
+    // A paragraph fragmented into many own-modifier segments (the production
+    // typing pattern) must not multiply the family ops: groups with identical
+    // emission decisions coalesce into one op per branch.
+    #[test]
+    fn fragmented_range_coalesces_family_span_ops() {
+        let resource = make_resource([("Pretendard", vec![400]), ("Other", vec![400])]);
+        let (initial, ..) = state! {
+            doc {
+                root [font_family("Pretendard".to_string()), font_weight(400)] {
+                    p1: paragraph {
+                        text("ab") [font_size(1600)]
+                        text("cd") [font_size(1700)]
+                        text("ef") [font_size(1600)]
+                    }
+                }
+            }
+            selection: (p1, 0) -> (p1, 6)
+        };
+        let mut tr = Transaction::new(&initial);
+        assert!(set_font_family(&mut tr, "Other".to_string(), &resource).unwrap());
+        let (_state, _steps, recorded, ..) = tr.commit();
+        let span_ops = recorded
+            .iter()
+            .filter(|r| matches!(r.op.payload, editor_model::EditOp::Span(_)))
+            .count();
+        assert_eq!(
+            span_ops, 1,
+            "fragmented uniform range must emit a single coalesced AddSpan(FontFamily)"
+        );
+    }
 }

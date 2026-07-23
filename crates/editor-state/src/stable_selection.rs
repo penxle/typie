@@ -28,10 +28,17 @@ impl StableSelection {
     pub fn capture(sel: &Selection, view: &DocView) -> StableSelection {
         // A non-collapsed range binds its boundaries exclusively so text typed
         // at either edge stays outside. A collapsed caret keeps each endpoint's
-        // own affinity so it never splits on a boundary insertion.
-        let anchor_is_start = match sel.resolve(view) {
-            Some(rs) if !rs.is_collapsed() => Some(rs.anchor() <= rs.head()),
-            _ => None,
+        // own affinity so it never splits on a boundary insertion. A raw-equal
+        // pair is collapsed by construction — resolving it to learn that costs
+        // an `O(parent fan-out)` ancestor index scan on the per-keystroke
+        // undo-capture path.
+        let anchor_is_start = if sel.anchor == sel.head {
+            None
+        } else {
+            match sel.resolve(view) {
+                Some(rs) if !rs.is_collapsed() => Some(rs.anchor() <= rs.head()),
+                _ => None,
+            }
         };
         let (anchor, head) = match anchor_is_start {
             Some(true) => (

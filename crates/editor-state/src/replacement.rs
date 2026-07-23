@@ -9,6 +9,12 @@ pub fn replacement_paint(
     from: Position,
     to: Position,
 ) -> Option<Vec<Modifier>> {
+    // An identical pair covers no leaf either way (the same-node slot range
+    // below is empty); skip the resolve, whose ancestor index chain costs
+    // `O(parent fan-out)` on the per-keystroke path.
+    if from == to {
+        return None;
+    }
     let view = state.view();
     let resolved = Selection::new(from, to).resolve(&view)?;
     let lo = resolved.from().position();
