@@ -4,8 +4,8 @@
   import { flex, grid } from '@typie/styled-system/patterns';
   import { Button, Icon } from '@typie/ui/components';
   import { PLAN_FEATURES } from '@typie/ui/constants';
-  import { replaceState } from '$app/navigation';
   import { graphql } from '$mearie';
+  import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
   import type { DashboardLayout_PreferenceModal_PlanTab_user$key } from '$mearie';
 
   type Props = {
@@ -30,6 +30,10 @@
             availability
           }
         }
+
+        nextSubscription {
+          id
+        }
       }
     `),
     () => user$key,
@@ -42,6 +46,7 @@
   );
 
   const isOnTrial = $derived(user.data.subscription?.plan.availability === 'TRIAL');
+  const hasScheduled = $derived(Boolean(user.data.nextSubscription));
 </script>
 
 <div class={flex({ direction: 'column', gap: '40px', maxWidth: '640px' })}>
@@ -117,16 +122,35 @@
           >
             무료 체험 중
           </div>
-          <Button
-            style={css.raw({ width: 'full', marginBottom: '20px' })}
-            onclick={() => {
-              replaceState('', { shallowRoute: '/preference/billing' });
-            }}
-            size="sm"
-            variant="primary"
-          >
-            지금 업그레이드
-          </Button>
+          {#if hasScheduled}
+            <div
+              class={css({
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '32px',
+                fontSize: '13px',
+                fontWeight: 'semibold',
+                color: 'text.disabled',
+                backgroundColor: 'surface.muted',
+                borderWidth: '1px',
+                borderColor: 'border.subtle',
+                borderRadius: '6px',
+                marginBottom: '20px',
+              })}
+            >
+              구독 예약됨
+            </div>
+          {:else}
+            <Button
+              style={css.raw({ width: 'full', marginBottom: '20px' })}
+              onclick={() => SubscribeModal.show('plan_tab')}
+              size="sm"
+              variant="primary"
+            >
+              결제 수단 등록하기
+            </Button>
+          {/if}
         {:else if hasActiveSubscription}
           <div
             class={css({
@@ -149,9 +173,7 @@
         {:else}
           <Button
             style={css.raw({ width: 'full', marginBottom: '20px' })}
-            onclick={() => {
-              replaceState('', { shallowRoute: '/preference/billing' });
-            }}
+            onclick={() => SubscribeModal.show('plan_tab')}
             size="sm"
             variant="primary"
           >

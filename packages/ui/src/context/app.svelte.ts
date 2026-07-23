@@ -33,11 +33,14 @@ export type AppPreference = {
 
   referralWelcomeModalShown: boolean;
 
+  planChangeNoticeShown: boolean;
+
   initialPage: 'blank' | 'last';
 
   widgetHidden: boolean;
 
   currentSiteId?: string;
+  trialReminderLastShownDate?: string;
 };
 
 type AppState = {
@@ -51,7 +54,6 @@ type AppState = {
   exportOpen: string | null;
   statsOpen: boolean;
   shortcutsOpen: boolean;
-  upgradeOpen: boolean;
 
   subscribed: boolean;
 
@@ -102,7 +104,6 @@ export const setupAppContext = (userId: string) => {
     exportOpen: null,
     statsOpen: false,
     shortcutsOpen: false,
-    upgradeOpen: false,
 
     subscribed: false,
 
@@ -112,8 +113,8 @@ export const setupAppContext = (userId: string) => {
         totalBlobSize: '0',
       },
       limit: {
-        totalCharacterCount: 0,
-        totalBlobSize: '0',
+        totalCharacterCount: -1,
+        totalBlobSize: '-1',
       },
     },
 
@@ -151,6 +152,8 @@ export const setupAppContext = (userId: string) => {
       exportFormat: 'PDF',
 
       referralWelcomeModalShown: false,
+
+      planChangeNoticeShown: false,
 
       initialPage: 'last',
 

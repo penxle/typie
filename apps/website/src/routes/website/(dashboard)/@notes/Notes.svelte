@@ -16,6 +16,7 @@
   import { beforeNavigate } from '$app/navigation';
   import { cache } from '$lib/graphql';
   import { graphql } from '$mearie';
+  import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
   import { noteColors } from './colors';
   import NoteComponent from './Note.svelte';
   import NoteEntitySearchModal from './NoteEntitySearchModal.svelte';
@@ -190,6 +191,11 @@
     const currentIndex = localNoteOrder.indexOf(dragging.noteId);
 
     if (currentIndex !== -1 && dragging.originalIndex !== -1 && currentIndex !== dragging.originalIndex && sortedNotes.length > 1) {
+      if (!SubscribeModal.gate('notes_move')) {
+        dragging = null;
+        return;
+      }
+
       const notes = sortedNotes;
       let lowerNote, upperNote;
 
@@ -300,6 +306,10 @@
   const handleAddNote = async (via: string) => {
     if (!inputValue.trim()) return;
 
+    if (!SubscribeModal.gate('notes_create')) {
+      return;
+    }
+
     await createNote({
       input: {
         siteId: app.preference.current.currentSiteId,
@@ -333,6 +343,10 @@
     if (!note) return;
 
     if (cancellingNoteIds.has(noteId)) return;
+
+    if (!SubscribeModal.gate('notes_update')) {
+      return;
+    }
 
     // Cancel resolving animation
     if (resolvingNoteIds.has(noteId)) {
@@ -380,11 +394,19 @@
   };
 
   const handleUpdateContent = async (noteId: string, content: string) => {
+    if (!SubscribeModal.gate('notes_update')) {
+      return;
+    }
+
     await updateNote({ input: { noteId, content } });
     cache.invalidate({ __typename: 'Query', $field: 'notes' });
   };
 
   const handleChangeColor = async (noteId: string, color: string) => {
+    if (!SubscribeModal.gate('notes_update')) {
+      return;
+    }
+
     await updateNote({ input: { noteId, color } });
     cache.invalidate({ __typename: 'Query', $field: 'notes' });
     mixpanel.track('change_note_color', { color });
@@ -395,6 +417,10 @@
   };
 
   const handleRemoveEntity = async (noteId: string, entityId: string) => {
+    if (!SubscribeModal.gate('notes_remove_entity')) {
+      return;
+    }
+
     await removeNoteEntity({ input: { noteId, entityId } });
     cache.invalidate({ __typename: 'Query', $field: 'notes' });
     cache.invalidate({ __typename: 'Entity', id: entityId, $field: 'notes' });

@@ -6,7 +6,7 @@
   import { Icon, Img, Menu, MenuItem, RingSpinner } from '@typie/ui/components';
   import { Toast } from '@typie/ui/notification';
   import { nanoid } from 'nanoid';
-  import { getContext, untrack } from 'svelte';
+  import { untrack } from 'svelte';
   import DownloadIcon from '~icons/lucide/download';
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import ExternalLinkIcon from '~icons/lucide/external-link';
@@ -27,7 +27,6 @@
   let { el }: Props = $props();
 
   const { editor } = getEditorContext();
-  const setTotalBlobSizePlanUpgradeModalOpen = getContext<(() => void) | undefined>('setTotalBlobSizePlanUpgradeModalOpen');
 
   let pickerOpened = $state(false);
   let proportion = $state(0);
@@ -177,11 +176,6 @@
   };
 
   const handleUpload = async () => {
-    if (editor.restrictedBlob) {
-      setTotalBlobSizePlanUpgradeModalOpen?.();
-      return;
-    }
-
     const picker = document.createElement('input');
     picker.type = 'file';
     picker.accept = 'image/*';

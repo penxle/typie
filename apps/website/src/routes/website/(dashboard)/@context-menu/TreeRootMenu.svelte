@@ -9,7 +9,7 @@
   import { goto } from '$app/navigation';
   import { cache } from '$lib/graphql';
   import { graphql } from '$mearie';
-  import { PlanUpgradeDialog } from '../plan-upgrade-dialog.svelte';
+  import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
   import { showPasteToast } from './paste-toast';
 
   let { siteId, lastRootEntityOrder }: { siteId: string; lastRootEntityOrder: string | null } = $props();
@@ -198,6 +198,10 @@
     const clipboard = app.state.clipboard;
     if (!clipboard) return;
 
+    if (!SubscribeModal.gate('entity_paste')) {
+      return;
+    }
+
     const count = clipboard.entityIds.length;
 
     const promise = (async () => {
@@ -238,9 +242,7 @@
 <MenuItem
   icon={SquarePenIcon}
   onclick={async () => {
-    if (!app.state.subscribed) {
-      PlanUpgradeDialog.show({ message: '지금은 읽기 전용 상태예요.\nFULL ACCESS로 업그레이드하면 새 글을 만들 수 있어요.' });
-      mixpanel.track('open_plan_upgrade_modal', { via: 'tree_root_menu_create_document' });
+    if (!SubscribeModal.gate('tree_root_menu_create_document')) {
       return;
     }
 
@@ -255,9 +257,7 @@
 <MenuItem
   icon={FolderPlusIcon}
   onclick={async () => {
-    if (!app.state.subscribed) {
-      PlanUpgradeDialog.show({ message: '지금은 읽기 전용 상태예요.\nFULL ACCESS로 업그레이드하면 새 폴더를 만들 수 있어요.' });
-      mixpanel.track('open_plan_upgrade_modal', { via: 'tree_root_menu_create_folder' });
+    if (!SubscribeModal.gate('tree_root_menu_create_folder')) {
       return;
     }
 

@@ -23,7 +23,7 @@
   import { createPaginatedLayout, getMaxMargin, mmToPx, pxToMm } from '$lib/editor/utils';
   import { values } from '$lib/editor/values';
   import { graphql } from '$mearie';
-  import { PlanUpgradeDialog } from '../plan-upgrade-dialog.svelte';
+  import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
   import type { LayoutMode } from '@typie/editor';
   import type { PageLayout, PageLayoutPreset } from '$lib/editor/utils';
   import type { DashboardLayout_DocumentExportModal_user$key } from '$mearie';
@@ -200,11 +200,7 @@
           <Select
             items={formatItems}
             onselect={(value: string) => {
-              if (value !== 'PDF' && !user.data.subscription) {
-                PlanUpgradeDialog.show({
-                  message: `${value as Format} 내보내기는 FULL ACCESS 플랜에서 사용할 수 있어요.`,
-                });
-                mixpanel.track('open_plan_upgrade_modal', { via: 'document_export', format: value });
+              if (value !== 'PDF' && !SubscribeModal.gate('document_export')) {
                 return false;
               }
               app.preference.current.exportFormat = value as Format;

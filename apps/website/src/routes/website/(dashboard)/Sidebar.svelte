@@ -22,9 +22,9 @@
   import { goto } from '$app/navigation';
   import { graphql } from '$mearie';
   import { getPaneGroup } from './[slug]/@pane/context.svelte';
+  import { SubscribeModal } from './@subscription/subscribe-modal.svelte';
+  import TrialWidget from './@subscription/TrialWidget.svelte';
   import EntityTree from './@tree/EntityTree.svelte';
-  import { PlanUpgradeDialog } from './plan-upgrade-dialog.svelte';
-  import PlanUsageWidget from './PlanUsageWidget.svelte';
   import Profile from './Profile.svelte';
   import SpaceMenu from './SpaceMenu.svelte';
   import type { DashboardLayout_Sidebar_user$key } from '$mearie';
@@ -69,7 +69,7 @@
 
         ...DashboardLayout_SpaceMenu_user
         ...DashboardLayout_Profile_user
-        ...DashboardLayout_PlanUsageWidget_user
+        ...DashboardLayout_TrialWidget_user
       }
     `),
     () => user$key,
@@ -613,9 +613,7 @@
             _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
           })}
           onclick={async () => {
-            if (!app.state.subscribed) {
-              PlanUpgradeDialog.show({ message: '지금은 읽기 전용 상태예요.\nFULL ACCESS로 업그레이드하면 새 폴더를 만들 수 있어요.' });
-              mixpanel.track('open_plan_upgrade_modal', { via: 'sidebar_create_folder' });
+            if (!SubscribeModal.gate('sidebar_create_folder')) {
               return;
             }
 
@@ -649,9 +647,7 @@
             _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
           })}
           onclick={async () => {
-            if (!app.state.subscribed) {
-              PlanUpgradeDialog.show({ message: '지금은 읽기 전용 상태예요.\nFULL ACCESS로 업그레이드하면 새 글을 만들 수 있어요.' });
-              mixpanel.track('open_plan_upgrade_modal', { via: 'sidebar_create_document' });
+            if (!SubscribeModal.gate('sidebar_create_document')) {
               return;
             }
 
@@ -693,7 +689,7 @@
       <EntityTree site$key={site} />
     </div>
 
-    <PlanUsageWidget user$key={user.data} />
+    <TrialWidget user$key={user.data} />
 
     <!-- 프로필 -->
     <Profile user$key={user.data} bind:open={profileOpen} />

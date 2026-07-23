@@ -31,6 +31,7 @@
   import { values } from '$lib/editor/values';
   import { activeFontsByWeight, fontWeightItemsForFonts, fontWeightValueLabel, resolveFontWeightForFamily } from '$lib/font-weight';
   import { graphql } from '$mearie';
+  import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
   import type { PageLayoutPreset } from '$lib/editor/utils';
   import type { DashboardLayout_PreferenceModal_PresetTab_user$key } from '$mearie';
 
@@ -131,6 +132,10 @@
   const blockGap = $derived(template.blockGap ?? defaultValues.blockGap);
 
   const updateTemplate = async (updates: Partial<PresetPreference>) => {
+    if (!SubscribeModal.gate('preferences_preset')) {
+      return;
+    }
+
     const newTemplate = { ...template, ...updates };
     await updatePreferences(
       { input: { value: { template: newTemplate } } },
@@ -154,6 +159,10 @@
   };
 
   const resetTemplate = async () => {
+    if (!SubscribeModal.gate('preferences_preset')) {
+      return;
+    }
+
     await updatePreferences({ input: { value: { template: {} } } });
 
     mixpanel.track('reset_document_template');

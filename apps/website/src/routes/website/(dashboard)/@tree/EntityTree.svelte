@@ -18,6 +18,7 @@
   import { getPaneGroup } from '../[slug]/@pane/context.svelte';
   import { entityIconMap } from '../@context-menu/entity-icons';
   import TreeRootMenu from '../@context-menu/TreeRootMenu.svelte';
+  import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
   import SelectedEntitiesBar from './@selection/SelectedEntitiesBar.svelte';
   import Entity from './Entity.svelte';
   import { setupTreeContext } from './state.svelte';
@@ -787,6 +788,11 @@
         const { parentId, lowerOrder, upperOrder } = dragging.drop;
 
         endDragging();
+
+        if (!SubscribeModal.gate('entity_move')) {
+          return;
+        }
+
         await moveEntities({
           input: {
             entityIds: selectedIds,

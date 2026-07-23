@@ -1612,6 +1612,7 @@ type User implements IUser {
   documentFontFamilies(sources: [FontFamilySource!]! = [DEFAULT, USER]): [DocumentFontFamily!]!
   email: String!
   fontFamilies: [FontFamily!]!
+  hadSubscription: Boolean!
   hasPassword: Boolean!
   id: ID!
   marketingConsent: Boolean!

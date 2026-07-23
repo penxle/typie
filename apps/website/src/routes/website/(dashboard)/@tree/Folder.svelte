@@ -14,6 +14,7 @@
   import { graphql } from '$mearie';
   import EntityIcon from '../@context-menu/EntityIcon.svelte';
   import FolderMenu from '../@context-menu/FolderMenu.svelte';
+  import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
   import EntitySelectionIndicator from './@selection/EntitySelectionIndicator.svelte';
   import MultiEntitiesMenu from './@selection/MultiEntitiesMenu.svelte';
   import Entity from './Entity.svelte';
@@ -244,6 +245,10 @@
         class={css({ display: 'contents' })}
         onsubmit={async (e) => {
           e.preventDefault();
+
+          if (!SubscribeModal.gate('entity_rename')) {
+            return;
+          }
 
           const formData = new FormData(e.currentTarget);
 

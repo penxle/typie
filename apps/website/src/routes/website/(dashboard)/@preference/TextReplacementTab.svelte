@@ -14,6 +14,7 @@
   import { cache } from '$lib/graphql';
   import { initWasm } from '$lib/wasm.svelte';
   import { graphql } from '$mearie';
+  import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
   import type { DashboardLayout_PreferenceModal_TextReplacementTab_user$key } from '$mearie';
 
   type Props = {
@@ -190,12 +191,20 @@
   };
 
   const toggleState = async (item: NormalizedItem) => {
+    if (!SubscribeModal.gate('text_replacement')) {
+      return;
+    }
+
     const newState = item.state === 'ACTIVE' ? 'DISABLED' : 'ACTIVE';
     await updateTextReplacement({ input: { textReplacementId: item.textReplacementId, state: newState } });
     invalidateCache();
   };
 
   const toggleSmartQuotes = async () => {
+    if (!SubscribeModal.gate('text_replacement')) {
+      return;
+    }
+
     const newState = smartQuoteAllActive ? 'DISABLED' : 'ACTIVE';
     await Promise.all(
       smartQuoteItems.map((item) => updateTextReplacement({ input: { textReplacementId: item.textReplacementId, state: newState } })),
@@ -269,6 +278,10 @@
   const handleSave = async () => {
     if (!(await validateForm())) return;
 
+    if (!SubscribeModal.gate('text_replacement')) {
+      return;
+    }
+
     if (creatingNew) {
       const lastOrder = customItems.at(-1)?.order ?? undefined;
       await createTextReplacement({
@@ -303,6 +316,10 @@
       action: 'danger',
       actionLabel: '삭제',
       actionHandler: async () => {
+        if (!SubscribeModal.gate('text_replacement')) {
+          return;
+        }
+
         await deleteTextReplacement({ input: { textReplacementId: item.textReplacementId } });
         invalidateCache();
       },
@@ -358,6 +375,12 @@
       },
       onDragEnd: async () => {
         if (!draggingItemId || dropIndex === null) {
+          draggingItemId = null;
+          dropIndex = null;
+          return;
+        }
+
+        if (!SubscribeModal.gate('text_replacement')) {
           draggingItemId = null;
           dropIndex = null;
           return;

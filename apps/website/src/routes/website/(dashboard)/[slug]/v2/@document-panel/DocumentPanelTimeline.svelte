@@ -18,6 +18,7 @@
   import { Img } from '$lib/components';
   import { Editor, getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { graphql } from '$mearie';
+  import { SubscribeModal } from '../../../@subscription/subscribe-modal.svelte';
   import { getPane, getPaneGroup } from '../../@pane/context.svelte';
   import { getDocumentPanelFocusReturn } from './focus-return.svelte';
   import type { PointerCaptureCancelReason } from '@typie/ui/actions';
@@ -264,6 +265,10 @@
   const restore = async () => {
     const head = shownHead;
     if (!head || restoring) return;
+
+    if (!SubscribeModal.gate('document_revert')) {
+      return;
+    }
 
     restoring = true;
     try {

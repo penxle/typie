@@ -11,9 +11,9 @@
   import KeyIcon from '~icons/lucide/key';
   import StarIcon from '~icons/lucide/star';
   import TagIcon from '~icons/lucide/tag';
-  import { pushState } from '$app/navigation';
   import { cache } from '$lib/graphql';
   import { graphql } from '$mearie';
+  import { SubscribeModal } from './@subscription/subscribe-modal.svelte';
   import type { DashboardLayout_TrialExpiredModal_user$key } from '$mearie';
 
   type Props = {
@@ -60,9 +60,8 @@
 
   async function handleUpgrade() {
     await markAsShown();
-    mixpanel.track('click_upgrade_from_trial_expired');
     open = false;
-    pushState('', { shallowRoute: '/preference/billing' });
+    SubscribeModal.show('trial_expired_modal');
   }
 
   $effect(() => {

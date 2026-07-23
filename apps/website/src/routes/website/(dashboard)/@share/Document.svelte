@@ -28,6 +28,7 @@
   import { Img } from '$lib/components';
   import { uploadBlobAsImage } from '$lib/utils';
   import { graphql } from '$mearie';
+  import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
   import type { DashboardLayout_Share_Document_document$key } from '$mearie';
 
   type Props = {
@@ -67,6 +68,25 @@
 
   const isSingleDocument = $derived(documents.data.length === 1);
   const documentIds = $derived(documents.data.map((d) => d.id));
+
+  type UpdateDocumentsOptionInput = {
+    availability?: EntityAvailability | null;
+    visibility?: EntityVisibility | null;
+    password?: string | null;
+    thumbnailId?: string | null;
+    contentRating?: DocumentContentRating | null;
+    allowReaction?: boolean | null;
+    protectContent?: boolean | null;
+  };
+
+  const isPrivateVisibilityOnlyInput = (input: UpdateDocumentsOptionInput): boolean =>
+    input.visibility === EntityVisibility.PRIVATE &&
+    input.availability == null &&
+    input.password == null &&
+    input.thumbnailId == null &&
+    input.contentRating == null &&
+    input.allowReaction == null &&
+    input.protectContent == null;
 
   const [updateDocumentsOption] = createMutation(
     graphql(`
@@ -143,6 +163,10 @@
       if ('hasPassword' in dirtyFields || 'password' in dirtyFields) updateData.password = data.hasPassword ? data.password : null;
 
       if (Object.keys(updateData).length > 1) {
+        if (!isPrivateVisibilityOnlyInput(updateData) && !SubscribeModal.gate('share_document')) {
+          return;
+        }
+
         await updateDocumentsOption({ input: updateData });
 
         mixpanel.track('update_document_option', {
@@ -220,6 +244,10 @@
       const file = input.files?.[0];
       if (!file) return;
 
+      if (!SubscribeModal.gate('share_document')) {
+        return;
+      }
+
       thumbnailUploading = true;
       try {
         const image = await uploadBlobAsImage(file);
@@ -234,6 +262,10 @@
   };
 
   const handleThumbnailRemove = async () => {
+    if (!isPrivateVisibilityOnlyInput({ thumbnailId: null }) && !SubscribeModal.gate('share_document')) {
+      return;
+    }
+
     await updateDocumentsOption({ input: { documentIds, thumbnailId: null } });
     mixpanel.track('remove_document_thumbnail', { count: documents.data.length });
   };

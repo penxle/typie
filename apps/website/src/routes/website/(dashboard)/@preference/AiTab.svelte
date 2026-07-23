@@ -7,6 +7,7 @@
   import mixpanel from 'mixpanel-browser';
   import { SettingsCard, SettingsRow } from '$lib/components';
   import { graphql } from '$mearie';
+  import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
   import type { DashboardLayout_PreferenceModal_AiTab_user$key } from '$mearie';
 
   type Props = {
@@ -40,6 +41,10 @@
 
   const handleToggle = () => {
     if (aiOptIn) {
+      if (!SubscribeModal.gate('preferences_ai')) {
+        return;
+      }
+
       updatePreferences({ input: { value: { aiOptIn: false } } });
       mixpanel.track('ai_opt_in', { enabled: false });
     } else {
@@ -50,6 +55,10 @@
         action: 'primary',
         actionLabel: '활성화',
         actionHandler: async () => {
+          if (!SubscribeModal.gate('preferences_ai')) {
+            return;
+          }
+
           await updatePreferences({ input: { value: { aiOptIn: true } } });
           mixpanel.track('ai_opt_in', { enabled: true });
         },

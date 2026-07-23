@@ -1,20 +1,19 @@
 <script lang="ts">
   import { createSubscription } from '@mearie/svelte';
-  import { defaultPlanRules } from '@typie/lib/const';
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { token } from '@typie/styled-system/tokens';
-  import { Button, HorizontalDivider, Icon } from '@typie/ui/components';
+  import { Button, HorizontalDivider } from '@typie/ui/components';
   import { setupAppContext } from '@typie/ui/context';
   import { Updater } from '@typie/ui/notification';
   import { isMobileDevice } from '@typie/ui/utils';
+  import dayjs from 'dayjs';
   import stringify from 'fast-json-stable-stringify';
   import mixpanel from 'mixpanel-browser';
   import qs from 'query-string';
   import { onMount, untrack } from 'svelte';
-  import CrownIcon from '~icons/lucide/crown';
   import { browser } from '$app/environment';
-  import { goto, pushState } from '$app/navigation';
+  import { goto } from '$app/navigation';
   import { updated } from '$app/state';
   import Logo from '$assets/logos/logo.svg?component';
   import { env } from '$env/dynamic/public';
@@ -23,6 +22,7 @@
   import { AdminImpersonateBanner } from '$lib/components/admin';
   import { preloadEditorWasm } from '$lib/editor/editor.svelte';
   import { hydrateQuery } from '$lib/graphql';
+  import { isLegacyTrial, shouldShowOnboarding } from '$lib/subscription-logic';
   import { initWasm } from '$lib/wasm.svelte';
   import { initWasm as initWasmFfi } from '$lib/wasm-ffi.svelte';
   import { graphql } from '$mearie';
@@ -34,10 +34,13 @@
   import ShareModal from './@share/ShareModal.svelte';
   import SiteSettingsModal from './@site-settings/SiteSettingsModal.svelte';
   import StatsModal from './@stats/StatsModal.svelte';
+  import OnboardingModal from './@subscription/OnboardingModal.svelte';
+  import PlanChangeNoticeModal from './@subscription/PlanChangeNoticeModal.svelte';
+  import { SubscribeModal as SubscribeModalState } from './@subscription/subscribe-modal.svelte';
+  import SubscribeModal from './@subscription/SubscribeModal.svelte';
   import TrashModal from './@trash/TrashModal.svelte';
   import CommandPalette from './CommandPalette.svelte';
   import MarketingConsentModal from './MarketingConsentModal.svelte';
-  import PlanUpgradeModal from './PlanUpgradeModal.svelte';
   import ReferralWelcomeModal from './ReferralWelcomeModal.svelte';
   import Shortcuts from './Shortcuts.svelte';
   import ShortcutsModal from './ShortcutsModal.svelte';
@@ -54,6 +57,15 @@
   const query = $derived(hydrateQuery(() => data.query));
 
   const app = setupAppContext(query.data.me.id);
+
+  const legacyTrial = $derived(
+    query.data.me.subscription
+      ? isLegacyTrial({
+          availability: query.data.me.subscription.plan.availability,
+          startsAt: query.data.me.subscription.startsAt,
+        })
+      : false,
+  );
 
   let currentSite = $derived(query.data.me.sites.find((s) => s.id === app.preference.current.currentSiteId) ?? query.data.me.sites[0]);
   let siteId = $derived(currentSite.id);
@@ -105,22 +117,6 @@
     () => ({ siteId }),
   );
 
-  createSubscription(
-    graphql(`
-      subscription DashboardLayout_UserUsageUpdateStream($userId: ID!) {
-        userUsageUpdateStream(userId: $userId) {
-          id
-
-          usage {
-            totalCharacterCount
-            totalBlobSize
-          }
-        }
-      }
-    `),
-    () => ({ userId }),
-  );
-
   const paneGroup = setupPaneGroup(siteId, {
     userId,
     navigate: (path, opts) => goto(path, opts),
@@ -161,20 +157,15 @@
   });
 
   $effect(() => {
-    app.state.usage.current.totalCharacterCount = query.data.me.usage.totalCharacterCount;
-    app.state.usage.current.totalBlobSize = query.data.me.usage.totalBlobSize;
-
-    app.state.usage.limit.totalCharacterCount =
-      query.data.me.subscription?.plan.rule.maxTotalCharacterCount ?? defaultPlanRules.maxTotalCharacterCount;
-    app.state.usage.limit.totalBlobSize = String(
-      query.data.me.subscription?.plan.rule.maxTotalBlobSize ?? defaultPlanRules.maxTotalBlobSize,
-    );
+    SubscribeModalState.sync(!!query.data.me.subscription);
   });
 
+  let onboardingModalOpen = $state(false);
   let referralWelcomeModalOpen = $state(false);
   let marketingConsentModalOpen = $state(false);
   let userSurveyModalOpen = $state(false);
   let trialExpiredModalOpen = $state(false);
+  let planChangeNoticeModalOpen = $state(false);
 
   const textReplacementRulesJson = $derived.by(() =>
     stringify(
@@ -245,7 +236,12 @@
   onMount(pollBootstrapAssertion);
 
   onMount(() => {
-    if (query.data.me.referral && !app.preference.current.referralWelcomeModalShown) {
+    if (shouldShowOnboarding({ createdAt: query.data.me.createdAt, preferences: query.data.me.preferences, now: dayjs() })) {
+      onboardingModalOpen = true;
+    } else if (legacyTrial && !app.preference.current.planChangeNoticeShown) {
+      app.preference.current.planChangeNoticeShown = true;
+      planChangeNoticeModalOpen = true;
+    } else if (query.data.me.referral && !app.preference.current.referralWelcomeModalShown) {
       referralWelcomeModalOpen = true;
       app.preference.current.referralWelcomeModalShown = true;
     } else if (query.data.me.surveys.includes('trial_expired_modal')) {
@@ -257,7 +253,14 @@
     const skipUntil = localStorage.getItem('surveySkipUntil');
     const shouldShowSurvey = query.data.me.surveys.includes('202509_ir') && (!skipUntil || new Date(skipUntil) < new Date());
 
-    if (shouldShowSurvey && !marketingConsentModalOpen && !trialExpiredModalOpen) {
+    if (
+      shouldShowSurvey &&
+      !onboardingModalOpen &&
+      !referralWelcomeModalOpen &&
+      !marketingConsentModalOpen &&
+      !trialExpiredModalOpen &&
+      !planChangeNoticeModalOpen
+    ) {
       userSurveyModalOpen = true;
     }
 
@@ -367,10 +370,7 @@
           color: 'text.brand',
         })}
       >
-        <div class={flex({ alignItems: 'center', gap: '10px' })}>
-          <Icon icon={CrownIcon} size={16} />
-          <span class={css({ fontWeight: 'semibold' })}>지금은 읽기 전용 상태예요. 글 열람과 공유는 계속 가능해요.</span>
-        </div>
+        <span class={css({ fontWeight: 'semibold' })}>지금은 읽기 전용 상태예요. 글 열람과 공유는 계속 가능해요.</span>
 
         <button
           class={flex({
@@ -388,13 +388,10 @@
             transition: 'common',
             _hover: { backgroundColor: 'accent.brand.hover' },
           })}
-          onclick={() => {
-            mixpanel.track('open_plan_upgrade_modal', { via: 'readonly_banner' });
-            pushState('', { shallowRoute: '/preference/billing' });
-          }}
+          onclick={() => SubscribeModalState.show('readonly_banner')}
           type="button"
         >
-          FULL ACCESS 시작하기
+          타이피 계속 쓰기
         </button>
       </div>
     {/if}
@@ -435,12 +432,14 @@
 <Shortcuts query$key={query.data} />
 <ShortcutsModal />
 
-<PlanUpgradeModal />
+<SubscribeModal user$key={query.data.me} />
 
+<OnboardingModal bind:open={onboardingModalOpen} />
 <ReferralWelcomeModal bind:open={referralWelcomeModalOpen} />
 <MarketingConsentModal bind:open={marketingConsentModalOpen} />
 <TrialExpiredModal user$key={query.data.me} bind:open={trialExpiredModalOpen} />
 <UserSurveyModal bind:open={userSurveyModalOpen} />
+<PlanChangeNoticeModal bind:open={planChangeNoticeModalOpen} />
 
 <div
   class={cx(

@@ -21,6 +21,7 @@ export const load: LayoutLoad = async (event) => {
           name
           email
           preferences
+          createdAt
 
           avatar {
             id
@@ -48,14 +49,11 @@ export const load: LayoutLoad = async (event) => {
 
           subscription {
             id
+            startsAt
 
             plan {
               id
-
-              rule {
-                maxTotalCharacterCount
-                maxTotalBlobSize
-              }
+              availability
             }
           }
 
@@ -99,6 +97,7 @@ export const load: LayoutLoad = async (event) => {
           ...DashboardLayout_PreferenceModal_user
           ...DashboardLayout_Sidebar_user
           ...DashboardLayout_SiteSettingsModal_user
+          ...DashboardLayout_SubscribeModal_user
           ...DashboardLayout_TrialExpiredModal_user
         }
 

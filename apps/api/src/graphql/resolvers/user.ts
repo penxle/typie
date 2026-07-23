@@ -130,6 +130,19 @@ User.implement({
       resolve: () => false,
     }),
 
+    hadSubscription: t.boolean({
+      resolve: async (self) => {
+        const subscription = await db
+          .select({ id: Subscriptions.id })
+          .from(Subscriptions)
+          .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
+          .where(and(eq(Subscriptions.userId, self.id), ne(Plans.availability, PlanAvailability.TRIAL)))
+          .then(first);
+
+        return !!subscription;
+      },
+    }),
+
     uuid: t.string({
       resolve: (self) => getUserUuid(self.id),
     }),

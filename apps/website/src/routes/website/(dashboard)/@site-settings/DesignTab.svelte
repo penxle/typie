@@ -6,6 +6,7 @@
   import { Toast } from '@typie/ui/notification';
   import { SettingsCard, SettingsRow } from '$lib/components';
   import { graphql } from '$mearie';
+  import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
   import type { DashboardLayout_SiteSettingsModal_DesignTab_site$key } from '$mearie';
 
   type Props = {
@@ -54,6 +55,10 @@
             { label: '미표시', value: SiteDateDisplay.NONE },
           ]}
           onselect={async (value) => {
+            if (!SubscribeModal.gate('site_settings')) {
+              return;
+            }
+
             await updateSite({ input: { siteId: site.data.id, dateDisplay: value } });
             Toast.success('날짜 표시 설정이 변경됐어요.');
           }}

@@ -48,7 +48,7 @@
     use:floating={{ appendTo: document.querySelector('.tooltip-container') as Element | null }}
     in:scale|global={{ start: 0.9, duration: 200 }}
   >
-    <span>{message}</span>
+    <span class={css({ whiteSpace: 'pre-line' })}>{message}</span>
 
     {#if trailingIcon}
       <Icon style={css.raw({ color: 'text.bright', opacity: '70' })} icon={trailingIcon} size={12} />

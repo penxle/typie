@@ -13,6 +13,7 @@
   import Undo2Icon from '~icons/lucide/undo-2';
   import { graphql } from '$mearie';
   import EntityIcon from '../@context-menu/EntityIcon.svelte';
+  import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
   import TrashEntity from './TrashEntity.svelte';
   import type { DashboardLayout_TrashTree_TrashFolder_folder$key } from '$mearie';
 
@@ -226,6 +227,10 @@
           _hover: { backgroundColor: 'interactive.hover' },
         })}
         onclick={async () => {
+          if (!SubscribeModal.gate('entity_recover')) {
+            return;
+          }
+
           try {
             const resp = await recoverEntity({ input: { entityId: folder.data.entity.id } });
             const currentName =

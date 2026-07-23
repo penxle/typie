@@ -28,8 +28,8 @@
   import { cache } from '$lib/graphql';
   import { graphql } from '$mearie';
   import { getPaneGroup } from '../[slug]/@pane/context.svelte';
+  import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
   import { maxDepth } from '../@tree/utils';
-  import { PlanUpgradeDialog } from '../plan-upgrade-dialog.svelte';
   import EntityIconPicker from './EntityIconPicker.svelte';
   import { showPasteToast } from './paste-toast';
 
@@ -382,12 +382,20 @@
   icon={entity.icon}
   iconColor={entity.iconColor}
   onColorSelect={async (color) => {
+    if (!SubscribeModal.gate('entity_update_icon')) {
+      return;
+    }
+
     await updateEntityIcon(
       { input: { entityId: entity.id, icon: entity.icon, iconColor: color } },
       { metadata: { cache: { optimisticResponse: { updateEntityIcon: { id: entity.id, icon: entity.icon, iconColor: color } } } } },
     );
   }}
   onIconSelect={async (name) => {
+    if (!SubscribeModal.gate('entity_update_icon')) {
+      return;
+    }
+
     await updateEntityIcon(
       { input: { entityId: entity.id, icon: name, iconColor: entity.iconColor } },
       { metadata: { cache: { optimisticResponse: { updateEntityIcon: { id: entity.id, icon: name, iconColor: entity.iconColor } } } } },
@@ -444,6 +452,10 @@
       const clipboard = app.state.clipboard;
       if (!clipboard) return;
 
+      if (!SubscribeModal.gate('entity_paste')) {
+        return;
+      }
+
       const lowerOrder = entity.lastChild?.order ?? null;
       const count = clipboard.entityIds.length;
 
@@ -488,9 +500,7 @@
 <MenuItem
   icon={SquarePenIcon}
   onclick={async () => {
-    if (!app.state.subscribed) {
-      PlanUpgradeDialog.show({ message: '지금은 읽기 전용 상태예요.\nFULL ACCESS로 업그레이드하면 새 글을 만들 수 있어요.' });
-      mixpanel.track('open_plan_upgrade_modal', { via: 'folder_menu_create_document' });
+    if (!SubscribeModal.gate('folder_menu_create_document')) {
       return;
     }
 
@@ -514,9 +524,7 @@
   <MenuItem
     icon={FolderPlusIcon}
     onclick={async () => {
-      if (!app.state.subscribed) {
-        PlanUpgradeDialog.show({ message: '지금은 읽기 전용 상태예요.\nFULL ACCESS로 업그레이드하면 새 폴더를 만들 수 있어요.' });
-        mixpanel.track('open_plan_upgrade_modal', { via: 'folder_menu_create_folder' });
+      if (!SubscribeModal.gate('folder_menu_create_folder')) {
         return;
       }
 

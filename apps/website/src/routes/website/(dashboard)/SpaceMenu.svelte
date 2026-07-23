@@ -20,8 +20,8 @@
   import { Img } from '$lib/components';
   import { graphql } from '$mearie';
   import { getPaneGroup } from './[slug]/@pane/context.svelte';
+  import { SubscribeModal } from './@subscription/subscribe-modal.svelte';
   import CreateSiteModal from './CreateSiteModal.svelte';
-  import { PlanUpgradeDialog } from './plan-upgrade-dialog.svelte';
   import type { DashboardLayout_SpaceMenu_user$key } from '$mearie';
 
   type Props = {
@@ -460,15 +460,12 @@
         _hover: { backgroundColor: 'surface.muted' },
       })}
       onclick={() => {
-        if (!user.data.subscription) {
-          close();
-          PlanUpgradeDialog.show({
-            message: 'FULL ACCESS로 업그레이드하면\n여러 스페이스를 만들어 관리할 수 있어요.',
-          });
+        close();
+
+        if (!SubscribeModal.gate('space_menu_create_site')) {
           return;
         }
 
-        close();
         createSiteModalOpen = true;
       }}
       type="button"

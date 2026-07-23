@@ -9,7 +9,7 @@
   import LightbulbIcon from '~icons/lucide/lightbulb';
   import SpellCheckIcon from '~icons/lucide/spell-check';
   import { graphql } from '$mearie';
-  import { PlanUpgradeDialog } from '../../plan-upgrade-dialog.svelte';
+  import { SubscribeModal } from '../../@subscription/subscribe-modal.svelte';
   import { getPane, getPaneGroup } from '../@pane/context.svelte';
   import DocumentPanelAi from './DocumentPanelAi.svelte';
   import DocumentPanelInfo from './DocumentPanelInfo.svelte';
@@ -134,16 +134,7 @@
         {description}
       </p>
 
-      <Button
-        onclick={() => {
-          PlanUpgradeDialog.show({
-            message: `${featureName} 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.`,
-          });
-        }}
-        size="sm"
-      >
-        지금 업그레이드하기
-      </Button>
+      <Button onclick={() => SubscribeModal.show('document_panel_feature')} size="sm">지금 업그레이드하기</Button>
     </div>
   </div>
 {/snippet}

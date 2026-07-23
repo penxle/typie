@@ -27,6 +27,7 @@
   import { cache, unwrapError } from '$lib/graphql';
   import { graphql } from '$mearie';
   import { getPane, getPaneGroup } from '../[slug]/@pane/context.svelte';
+  import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
   import EntityIconPicker from './EntityIconPicker.svelte';
   import { showPasteToast } from './paste-toast';
   import type { Snippet } from 'svelte';
@@ -326,6 +327,10 @@
   };
 
   const handleDuplicate = async () => {
+    if (!SubscribeModal.gate('entity_duplicate')) {
+      return;
+    }
+
     try {
       const resp = await duplicateDocument({ input: { documentId: document.id } });
       mixpanel.track('duplicate_document', { via });
@@ -394,6 +399,10 @@
         : '이 템플릿을 다시 일반 문서로 전환하시겠어요?',
       actionLabel: '전환',
       actionHandler: async () => {
+        if (!SubscribeModal.gate('entity_update_type')) {
+          return;
+        }
+
         await updateDocumentType({ input: { documentId: document.id, type: newType } });
       },
     });
@@ -431,12 +440,20 @@
   icon={entity.icon}
   iconColor={entity.iconColor}
   onColorSelect={async (color) => {
+    if (!SubscribeModal.gate('entity_update_icon')) {
+      return;
+    }
+
     await updateEntityIcon(
       { input: { entityId: entity.id, icon: entity.icon, iconColor: color } },
       { metadata: { cache: { optimisticResponse: { updateEntityIcon: { id: entity.id, icon: entity.icon, iconColor: color } } } } },
     );
   }}
   onIconSelect={async (name) => {
+    if (!SubscribeModal.gate('entity_update_icon')) {
+      return;
+    }
+
     await updateEntityIcon(
       { input: { entityId: entity.id, icon: name, iconColor: entity.iconColor } },
       { metadata: { cache: { optimisticResponse: { updateEntityIcon: { id: entity.id, icon: name, iconColor: entity.iconColor } } } } },
@@ -508,6 +525,10 @@
         if (!clipboard) return;
         const currentSiteId = app.preference.current.currentSiteId;
         if (!currentSiteId) return;
+
+        if (!SubscribeModal.gate('entity_paste')) {
+          return;
+        }
 
         const upperOrder = getUpperOrder() ?? null;
         const count = clipboard.entityIds.length;

@@ -13,6 +13,7 @@
   import { cache } from '$lib/graphql';
   import { graphql } from '$mearie';
   import EntityIcon from '../@context-menu/EntityIcon.svelte';
+  import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
   import type { EntityIcon_entity$key } from '$mearie';
 
   type Props = {
@@ -182,6 +183,11 @@
 
   const handleSelect = async (item: ResultItem) => {
     if (item.isLinked) return;
+
+    if (!SubscribeModal.gate('notes_add_entity')) {
+      return;
+    }
+
     await addNoteEntity({ input: { noteId, entityId: item.entityId } });
     cache.invalidate({ __typename: 'Query', $field: 'notes' });
     cache.invalidate({ __typename: 'Entity', id: item.entityId, $field: 'notes' });

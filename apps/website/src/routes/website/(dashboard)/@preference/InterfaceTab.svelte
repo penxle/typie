@@ -7,6 +7,7 @@
   import mixpanel from 'mixpanel-browser';
   import { SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
   import { graphql } from '$mearie';
+  import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
   import type { DashboardLayout_PreferenceModal_InterfaceTab_user$key } from '$mearie';
 
   type Props = {
@@ -62,6 +63,10 @@
               { value: 'last', label: '마지막으로 본 항목', description: '이전에 보던 페이지를 자동으로 열어요.' },
             ]}
             onselect={async (value) => {
+              if (!SubscribeModal.gate('preferences_interface')) {
+                return;
+              }
+
               mixpanel.track('change_initial_page', {
                 page: value,
               });
@@ -89,6 +94,10 @@
               { value: 'classic', label: '클래식', description: '아이콘과 텍스트를 함께 보여주는 스타일이에요.' },
             ]}
             onselect={async (value) => {
+              if (!SubscribeModal.gate('preferences_interface')) {
+                return;
+              }
+
               mixpanel.track('change_toolbar_style', {
                 style: value,
               });
@@ -117,6 +126,10 @@
               { value: 'click', label: '클릭', description: '왼쪽 가장자리의 힌트를 클릭해 표시해요.' },
             ]}
             onselect={async (value) => {
+              if (!SubscribeModal.gate('preferences_interface')) {
+                return;
+              }
+
               mixpanel.track('change_sidebar_trigger', {
                 trigger: value,
               });

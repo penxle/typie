@@ -19,7 +19,8 @@
   import Logo from '$assets/logos/logo.svg?component';
   import { graphql } from '$mearie';
   import ActivityGrid from '../../@stats/ActivityGrid.svelte';
-  import { PlanUpgradeDialog } from '../../plan-upgrade-dialog.svelte';
+  import { SubscribeModal } from '../../@subscription/subscribe-modal.svelte';
+  import TrialBanner from '../../@subscription/TrialBanner.svelte';
   import CloseButton from './CloseButton.svelte';
   import { getPaneGroup, setupPane } from './context.svelte';
   import PaneSkeleton from './PaneSkeleton.svelte';
@@ -41,6 +42,7 @@
           name
 
           ...DashboardLayout_Stats_ActivityGrid_user
+          ...HomePane_TrialBanner_user
 
           sites {
             id
@@ -241,6 +243,8 @@
           {/if}
         </div>
 
+        <TrialBanner user$key={query.data.me} />
+
         {#if currentSite?.firstEntity}
           {#if query.data.me.recentlyViewedEntities.length > 0}
             <div class={flex({ flexDirection: 'column', gap: '16px', width: '800px', maxWidth: 'full' })}>
@@ -306,9 +310,7 @@
               onclick={async () => {
                 if (!query.data || !currentSite) return;
 
-                if (!app.state.subscribed) {
-                  PlanUpgradeDialog.show({ message: '지금은 읽기 전용 상태예요.\nFULL ACCESS로 업그레이드하면 새 글을 만들 수 있어요.' });
-                  mixpanel.track('open_plan_upgrade_modal', { via: 'home_create_document' });
+                if (!SubscribeModal.gate('home_create_document')) {
                   return;
                 }
 

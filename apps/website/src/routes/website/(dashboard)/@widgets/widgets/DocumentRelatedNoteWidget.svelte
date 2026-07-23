@@ -17,6 +17,7 @@
   import StickyNoteIcon from '~icons/lucide/sticky-note';
   import { cache } from '$lib/graphql';
   import { graphql } from '$mearie';
+  import { SubscribeModal } from '../../@subscription/subscribe-modal.svelte';
   import Widget from '../Widget.svelte';
   import { getWidgetContext } from '../widget-context.svelte';
   import DocumentRelatedNoteWidgetItem from './DocumentRelatedNoteWidgetItem.svelte';
@@ -133,6 +134,10 @@
   const handleAddNote = async (via: string) => {
     if (!relatedDocument.data?.entity.id) return;
 
+    if (!SubscribeModal.gate('notes_create')) {
+      return;
+    }
+
     const result = await createNote({
       input: {
         content: '',
@@ -222,6 +227,10 @@
       currentIndex !== currentDragging.originalIndex &&
       sortedNotes.length > 1
     ) {
+      if (!SubscribeModal.gate('notes_move')) {
+        return;
+      }
+
       const lowerNote = sortedNotes[currentIndex - 1] ?? null;
       const upperNote = sortedNotes[currentIndex + 1] ?? null;
 

@@ -18,7 +18,7 @@
   import { cache } from '$lib/graphql';
   import { uploadBlobAsImage } from '$lib/utils';
   import { graphql } from '$mearie';
-  import { PlanUpgradeDialog } from '../plan-upgrade-dialog.svelte';
+  import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
   import type {
     DashboardLayout_SiteSettingsModal_GeneralTab_site$key,
     DashboardLayout_SiteSettingsModal_GeneralTab_user$key,
@@ -124,6 +124,10 @@
       logoId: z.string(),
     }),
     onSubmit: async (data) => {
+      if (!SubscribeModal.gate('site_settings')) {
+        return;
+      }
+
       await updateSite({ input: { siteId: site.data.id, name: data.name, logoId: data.logoId } });
       mixpanel.track('update_site');
       Toast.success('스페이스 설정이 업데이트됐어요.');
@@ -200,6 +204,10 @@
                 const file = event.currentTarget.files?.[0];
                 event.currentTarget.value = '';
                 if (!file) return;
+
+                if (!SubscribeModal.gate('site_settings')) {
+                  return;
+                }
 
                 const resp = await uploadBlobAsImage(file, {
                   resize: { width: 512, height: 512, fit: 'cover', withoutEnlargement: true },
@@ -283,12 +291,7 @@
                   border: 'none',
                 })}
                 aria-label="스페이스 주소 기능 업그레이드"
-                onclick={() => {
-                  PlanUpgradeDialog.show({
-                    message: '스페이스 주소 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.',
-                  });
-                  mixpanel.track('open_plan_upgrade_modal', { via: 'site_address' });
-                }}
+                onclick={() => SubscribeModal.show('site_address')}
                 type="button"
               ></button>
             {/if}

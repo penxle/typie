@@ -6,7 +6,6 @@
   import { Icon, Menu, MenuItem, RingSpinner } from '@typie/ui/components';
   import { Toast } from '@typie/ui/notification';
   import { nanoid } from 'nanoid';
-  import { getContext } from 'svelte';
   import DownloadIcon from '~icons/lucide/download';
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import FileIcon from '~icons/lucide/file';
@@ -26,7 +25,6 @@
   let { el }: Props = $props();
 
   const { editor } = getEditorContext();
-  const setTotalBlobSizePlanUpgradeModalOpen = getContext<(() => void) | undefined>('setTotalBlobSizePlanUpgradeModalOpen');
 
   let pickerOpened = $state(false);
   let processedUploadId = $state<string>();
@@ -120,11 +118,6 @@
   };
 
   const handleUpload = async () => {
-    if (editor.restrictedBlob) {
-      setTotalBlobSizePlanUpgradeModalOpen?.();
-      return;
-    }
-
     const picker = document.createElement('input');
     picker.type = 'file';
     picker.multiple = true;

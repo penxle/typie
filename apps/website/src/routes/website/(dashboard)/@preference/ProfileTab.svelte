@@ -17,6 +17,7 @@
   import { unwrapError } from '$lib/graphql';
   import { uploadBlobAsImage } from '$lib/utils';
   import { graphql } from '$mearie';
+  import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
   import UpdateEmailModal from './UpdateEmailModal.svelte';
   import type { DashboardLayout_PreferenceModal_ProfileTab_user$key } from '$mearie';
 
@@ -191,6 +192,10 @@
                   const file = event.currentTarget.files?.[0];
                   event.currentTarget.value = '';
                   if (!file) return;
+
+                  if (!SubscribeModal.gate('preferences_profile')) {
+                    return;
+                  }
 
                   const resp = await uploadBlobAsImage(file, {
                     resize: { width: 512, height: 512, fit: 'cover', withoutEnlargement: true },

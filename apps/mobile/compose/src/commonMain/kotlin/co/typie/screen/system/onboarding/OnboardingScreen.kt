@@ -116,6 +116,7 @@ fun OnboardingPreviewScreen() {
 @Composable
 fun OnboardingScreen(onComplete: () -> Unit) {
   val nav = Nav.current
+  val scope = rememberCoroutineScope()
   val pagerState = rememberPagerState { pages.size }
   val isLast = pagerState.currentPage == pages.lastIndex
 
@@ -133,7 +134,10 @@ fun OnboardingScreen(onComplete: () -> Unit) {
             text = "건너뛰기",
             style = AppTheme.typography.action,
             color = AppTheme.colors.textMuted,
-            modifier = Modifier.clickable { onComplete() },
+            modifier =
+              Modifier.clickable {
+                scope.launch { pagerState.animateScrollToPage(pages.lastIndex) }
+              },
           )
         }
       } else {

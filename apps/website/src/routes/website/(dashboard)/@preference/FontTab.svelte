@@ -11,8 +11,8 @@
   import { values } from '$lib/editor/values';
   import { cache } from '$lib/graphql';
   import { graphql } from '$mearie';
+  import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
   import FontUploadModal from '../FontUploadModal.svelte';
-  import { PlanUpgradeDialog } from '../plan-upgrade-dialog.svelte';
   import type { DashboardLayout_PreferenceModal_FontTab_user$key } from '$mearie';
 
   type Props = {
@@ -115,12 +115,8 @@
         _hover: { backgroundColor: 'surface.muted' },
       })}
       onclick={() => {
-        if (user.data?.subscription) {
+        if (SubscribeModal.gate('font_tab_upload')) {
           uploadModalOpen = true;
-        } else {
-          PlanUpgradeDialog.show({
-            message: '폰트 업로드 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.',
-          });
         }
       }}
       type="button"

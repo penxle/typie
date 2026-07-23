@@ -19,6 +19,7 @@
   import { getPaneGroup } from '../[slug]/@pane/context.svelte';
   import { getEditorRegistry } from '../[slug]/@pane/editor-registry.svelte';
   import { findMemberById } from '../[slug]/@pane/tree';
+  import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
   import { setupWidgetContext } from './widget-context.svelte';
   import WidgetPalette from './WidgetPalette.svelte';
   import { WIDGET_COMPONENTS } from './widgets';
@@ -273,6 +274,10 @@
   const widgetContext = setupWidgetContext();
 
   widgetContext.createWidget = async (type: WidgetType, via: string, index?: number) => {
+    if (!SubscribeModal.gate('widget_create')) {
+      return;
+    }
+
     const widgets = query.data.widgets;
     let lowerOrder: string | undefined;
     let upperOrder: string | undefined;
@@ -326,6 +331,10 @@
   };
 
   widgetContext.updateWidget = async (widgetId: string, data: Record<string, unknown>) => {
+    if (!SubscribeModal.gate('widget_update')) {
+      return;
+    }
+
     try {
       // await updateWidgetMutation({ input: { widgetId, data } }, { optimistic: { id: widgetId, data } });
       await updateWidgetMutation({ input: { widgetId, data } });
@@ -338,6 +347,10 @@
     const widgets = query.data.widgets;
     const widget = widgets.find((w) => w.id === widgetId);
     if (!widget) return;
+
+    if (!SubscribeModal.gate('widget_move')) {
+      return;
+    }
 
     const wasAttaching = !!widget.data.position;
 
@@ -399,6 +412,10 @@
     const widgets = query.data.widgets;
     const widget = widgets.find((w) => w.id === widgetId);
     if (!widget) return;
+
+    if (!SubscribeModal.gate('widget_move')) {
+      return;
+    }
 
     const wasDetaching = !widget.data.position;
 
@@ -1013,6 +1030,10 @@
         if (!currentDragging.isOutsideDropZone) {
           await widgetContext.createWidget?.(currentDragging.widgetType, 'drag', currentDragging.dropIndex ?? undefined);
         } else if (currentDragging.calculatedPosition) {
+          if (!SubscribeModal.gate('widget_create')) {
+            return;
+          }
+
           await createWidgetMutation({
             input: {
               name: currentDragging.widgetType,

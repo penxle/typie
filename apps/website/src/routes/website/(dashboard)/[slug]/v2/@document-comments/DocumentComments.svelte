@@ -9,6 +9,7 @@
   import { FocusReturnSession } from '$lib/focus-return-session';
   import { cache } from '$lib/graphql';
   import { graphql } from '$mearie';
+  import { SubscribeModal } from '../../../@subscription/subscribe-modal.svelte';
   import { setupCommentContext } from './context.svelte';
   import type { PageRect, StableSelection } from '@typie/editor-ffi/browser';
   import type { Snippet } from 'svelte';
@@ -382,6 +383,7 @@
 
   async function createThread(content: string) {
     if (!editor || !composeFrozen) return;
+    if (!SubscribeModal.gate('document_comments')) return;
     const frozen = composeFrozen;
     try {
       const res = await createThreadMutation({ input: { documentId, selection: frozen, content, clientId } });
@@ -397,6 +399,7 @@
     }
   }
   async function reply(threadId: string, content: string) {
+    if (!SubscribeModal.gate('document_comments')) return;
     try {
       await createCommentMutation({ input: { threadId, content, clientId } });
     } catch (err) {
@@ -405,6 +408,7 @@
     }
   }
   async function editComment(commentId: string, content: string) {
+    if (!SubscribeModal.gate('document_comments')) return;
     try {
       await updateCommentMutation({ input: { commentId, content, clientId } });
     } catch (err) {
@@ -429,6 +433,7 @@
     }
   }
   async function resolveThread(threadId: string) {
+    if (!SubscribeModal.gate('document_comments')) return;
     try {
       await resolveThreadMutation({ input: { threadId, clientId } });
       invalidateMembership();
@@ -438,6 +443,7 @@
     }
   }
   async function unresolveThread(threadId: string) {
+    if (!SubscribeModal.gate('document_comments')) return;
     try {
       await unresolveThreadMutation({ input: { threadId, clientId } });
       invalidateMembership();

@@ -1,4 +1,5 @@
 import { uploadBlobAsFile, uploadBlobAsImage } from '$lib/utils/blob.svelte';
+import { SubscribeModal } from '../../../routes/website/(dashboard)/@subscription/subscribe-modal.svelte';
 import type { FileAsset, ImageAsset } from '../types';
 
 export const getImageDimensions = (src: string): Promise<{ width: number; height: number }> => {
@@ -11,6 +12,10 @@ export const getImageDimensions = (src: string): Promise<{ width: number; height
 };
 
 export const uploadFileAsFile = async (file: File): Promise<FileAsset> => {
+  if (!SubscribeModal.gate('editor_upload')) {
+    throw new Error('subscription_required');
+  }
+
   const uploaded = await uploadBlobAsFile(file);
   return {
     id: uploaded.id,
@@ -21,6 +26,10 @@ export const uploadFileAsFile = async (file: File): Promise<FileAsset> => {
 };
 
 export const uploadImageFile = async (file: File): Promise<ImageAsset> => {
+  if (!SubscribeModal.gate('editor_upload')) {
+    throw new Error('subscription_required');
+  }
+
   const uploaded = await uploadBlobAsImage(file);
   return {
     id: uploaded.id,

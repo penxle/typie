@@ -19,6 +19,7 @@
   import { Img } from '$lib/components';
   import { uploadBlobAsImage } from '$lib/utils';
   import { graphql } from '$mearie';
+  import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
   import type { DashboardLayout_Share_Folder_folder$key } from '$mearie';
 
   type Props = {
@@ -101,6 +102,10 @@
     onSubmit: async (data) => {
       if (folders.data.length === 0) return;
 
+      if (!SubscribeModal.gate('share_folder')) {
+        return;
+      }
+
       const dirtyFields = form.getDirtyFields();
       const updateData: {
         folderIds: string[];
@@ -164,6 +169,10 @@
       const file = input.files?.[0];
       if (!file) return;
 
+      if (!SubscribeModal.gate('share_folder')) {
+        return;
+      }
+
       thumbnailUploading = true;
       try {
         const image = await uploadBlobAsImage(file);
@@ -178,6 +187,10 @@
   };
 
   const handleThumbnailRemove = async () => {
+    if (!SubscribeModal.gate('share_folder')) {
+      return;
+    }
+
     await updateFoldersOption({ input: { folderIds, thumbnailId: null } });
     mixpanel.track('remove_folder_thumbnail', { count: folders.data.length });
   };
@@ -266,6 +279,10 @@
 
         if (recursiveTimer) {
           clearTimeout(recursiveTimer);
+        }
+
+        if (!SubscribeModal.gate('share_folder')) {
+          return;
         }
 
         recursiveState = 'inflight';

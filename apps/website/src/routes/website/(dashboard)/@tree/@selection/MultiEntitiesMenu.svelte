@@ -17,6 +17,7 @@
   import { cache } from '$lib/graphql';
   import { graphql } from '$mearie';
   import EntityIconPicker from '../../@context-menu/EntityIconPicker.svelte';
+  import { SubscribeModal } from '../../@subscription/subscribe-modal.svelte';
   import { getTreeContext } from '../state.svelte';
   import type { TreeEntity } from './types';
 
@@ -163,6 +164,10 @@
   icon={allSameIcon}
   iconColor={allSameIconColor}
   onColorSelect={async (color) => {
+    if (!SubscribeModal.gate('entity_update_icon')) {
+      return;
+    }
+
     const entityIds = [...tree.selectedEntityIds];
     await updateEntitiesIcon(
       { input: { entityIds, icon: allSameIcon, iconColor: color } },
@@ -182,6 +187,10 @@
     );
   }}
   onIconSelect={async (name) => {
+    if (!SubscribeModal.gate('entity_update_icon')) {
+      return;
+    }
+
     const entityIds = [...tree.selectedEntityIds];
     await updateEntitiesIcon(
       { input: { entityIds, icon: name, iconColor: allSameIconColor } },

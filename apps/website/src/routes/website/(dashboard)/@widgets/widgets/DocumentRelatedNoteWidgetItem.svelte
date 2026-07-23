@@ -16,6 +16,7 @@
   import { cache } from '$lib/graphql';
   import { graphql } from '$mearie';
   import { getNoteColor, noteColors } from '../../@notes/colors';
+  import { SubscribeModal } from '../../@subscription/subscribe-modal.svelte';
   import type { DocumentRelatedNoteWidgetItem_note$key } from '$mearie';
 
   type Props = {
@@ -130,17 +131,30 @@
 
   function handleContentChanged() {
     dirty = true;
+
+    if (!SubscribeModal.gate('notes_update')) {
+      return;
+    }
+
     if (contentUpdateTimeout) clearTimeout(contentUpdateTimeout);
     contentUpdateTimeout = setTimeout(flushContentUpdate, 300);
   }
 
   const handleChangeColor = async (color: string) => {
+    if (!SubscribeModal.gate('notes_update')) {
+      return;
+    }
+
     await updateNote({ input: { noteId: note.data.id, color } });
     mixpanel.track('change_related_note_color', { color });
   };
 
   const handleToggleStatus = async () => {
     if (cancelling) return;
+
+    if (!SubscribeModal.gate('notes_update')) {
+      return;
+    }
 
     if (resolving) {
       cancelling = true;

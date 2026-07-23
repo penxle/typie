@@ -490,6 +490,9 @@ importers:
       cbor-x:
         specifier: ^1.6.4
         version: 1.6.4
+      lottie-web:
+        specifier: ^5.13.0
+        version: 5.13.0
     devDependencies:
       '@floating-ui/dom':
         specifier: ^1.7.6
@@ -6894,6 +6897,9 @@ packages:
 
   loro-crdt@1.13.6:
     resolution: {integrity: sha512-OsnKW64J+1XdCMafAqR+aASn/wQEgDzwcDwu6dDOVSxxbLPFgnU6LX8ja+hd5PnEcT+kuz9eXSagvlYXsRbQIw==}
+
+  lottie-web@5.13.0:
+    resolution: {integrity: sha512-+gfBXl6sxXMPe8tKQm7qzLnUy5DUPJPKIyRHwtpCpyUEYjHYRJC/5gjUvdkuO2c3JllrPtHXH5UJJK8LRYl5yQ==}
 
   lru-cache@10.4.3:
     resolution: {integrity: sha512-JNAzZcXrCt42VGLuYz0zfAzDfAvJWW6AfYlDBQyDV5DClI2m5sAmK+OIO7s59XfsRsWHp02jAJrRadPRGTt6SQ==}
@@ -15270,6 +15276,8 @@ snapshots:
   look-it-up@2.1.0: {}
 
   loro-crdt@1.13.6: {}
+
+  lottie-web@5.13.0: {}
 
   lru-cache@10.4.3: {}
 

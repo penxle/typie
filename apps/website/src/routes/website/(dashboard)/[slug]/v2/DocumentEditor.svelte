@@ -9,7 +9,7 @@
   import { LocalStore } from '@typie/ui/state';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
-  import { onDestroy, setContext, tick, untrack } from 'svelte';
+  import { onDestroy, tick, untrack } from 'svelte';
   import { fly } from 'svelte/transition';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import CrownIcon from '~icons/lucide/crown';
@@ -28,8 +28,8 @@
   import { getDocumentChannels, getSyncConnection } from '$lib/sync';
   import { graphql } from '$mearie';
   import DocumentMenu from '../../@context-menu/DocumentMenu.svelte';
+  import { SubscribeModal } from '../../@subscription/subscribe-modal.svelte';
   import FontUploadModal from '../../FontUploadModal.svelte';
-  import { PlanUpgradeDialog } from '../../plan-upgrade-dialog.svelte';
   import CloseButton from '../@pane/CloseButton.svelte';
   import { getPane, getPaneGroup } from '../@pane/context.svelte';
   import { dragPane } from '../@pane/dnd';
@@ -626,12 +626,6 @@
     else showFindReplace = true;
   }
 
-  setContext('setTotalBlobSizePlanUpgradeModalOpen', () => {
-    PlanUpgradeDialog.show({
-      message: '현재 플랜의 최대 업로드 가능 용량을 초과했어요.\nFULL ACCESS로 업그레이드하고 이어서 업로드하세요.',
-    });
-  });
-
   const selectionsStore = new LocalStore<
     Record<
       string,
@@ -695,6 +689,7 @@
   function handleTitleChanged() {
     if (!documentId) return;
     titleDirty = true;
+    if (!SubscribeModal.gate('document_update')) return;
     if (titleUpdateTimeout) clearTimeout(titleUpdateTimeout);
     titleUpdateTimeout = setTimeout(flushTitleUpdate, 300);
   }
@@ -702,6 +697,7 @@
   function handleSubtitleChanged() {
     if (!documentId) return;
     subtitleDirty = true;
+    if (!SubscribeModal.gate('document_update')) return;
     if (subtitleUpdateTimeout) clearTimeout(subtitleUpdateTimeout);
     subtitleUpdateTimeout = setTimeout(flushSubtitleUpdate, 300);
   }
@@ -731,7 +727,11 @@
     if (!editor) return;
 
     editor.editBlockedHandler = () => {
-      if (!document?.locked || showEditLockedToast) return;
+      if (!document?.locked) {
+        SubscribeModal.gate('editor_readonly');
+        return;
+      }
+      if (showEditLockedToast) return;
       showEditLockedToast = true;
       lockedToastTimer = setTimeout(() => {
         showEditLockedToast = false;
@@ -744,7 +744,7 @@
   });
 
   function toggleEditLock() {
-    if (!query.data.me.subscription) return;
+    if (!SubscribeModal.gate('document_lock')) return;
 
     const newValue = !(ctx.editor?.readOnly ?? false);
 
@@ -976,12 +976,7 @@
                 transition: 'common',
                 _hover: { backgroundColor: 'accent.brand.subtle' },
               })}
-              onclick={() => {
-                PlanUpgradeDialog.show({
-                  message: 'FULL ACCESS로 업그레이드하면\n모든 프리미엄 기능을 무제한으로 사용할 수 있어요.',
-                });
-                mixpanel.track('open_plan_upgrade_modal', { via: 'document_header' });
-              }}
+              onclick={() => SubscribeModal.show('document_header')}
               type="button"
             >
               <Icon icon={CrownIcon} size={12} />
@@ -1089,10 +1084,7 @@
                   if (entity.user.subscription) {
                     fontUploadModalOpen = true;
                   } else {
-                    PlanUpgradeDialog.show({
-                      message: '폰트 업로드 기능은 FULL ACCESS에서 사용할 수 있어요.',
-                    });
-                    mixpanel.track('open_plan_upgrade_modal', { via: 'font_family_upload' });
+                    SubscribeModal.show('font_family_upload');
                   }
                 }}
                 onSearchClick={toggleFindReplace}
@@ -1335,12 +1327,7 @@
                 transition: 'common',
                 _hover: { backgroundColor: 'accent.brand.subtle' },
               })}
-              onclick={() => {
-                PlanUpgradeDialog.show({
-                  message: 'FULL ACCESS로 업그레이드하면\n모든 프리미엄 기능을 무제한으로 사용할 수 있어요.',
-                });
-                mixpanel.track('open_plan_upgrade_modal', { via: 'document_zen_mode' });
-              }}
+              onclick={() => SubscribeModal.show('document_zen_mode')}
               type="button"
             >
               <Icon icon={CrownIcon} size={12} />
