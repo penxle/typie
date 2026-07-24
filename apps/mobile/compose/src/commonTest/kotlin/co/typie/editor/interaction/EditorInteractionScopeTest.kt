@@ -100,4 +100,61 @@ class EditorInteractionScopeTest {
       assertEquals(Offset(x = 40f, y = -100f), headerMapped)
       assertTrue(headerMapped.y < 0f, "mapping above the body must stay valid and negative")
     }
+
+  @Test
+  fun `outside-page tap eligibility follows document layout mode`() =
+    runTest(StandardTestDispatcher()) {
+      val uiState =
+        EditorUiState().apply {
+          updateInteractionSurfaceBounds(
+            boundsInRoot = Rect(left = 0f, top = 120f, right = 400f, bottom = 920f),
+            density = 1f,
+          )
+          updateEditorBounds(
+            boundsInRoot = Rect(left = 40f, top = 200f, right = 360f, bottom = 680f),
+            density = 1f,
+          )
+        }
+      val editor = Editor(FakeFfiEditor(), this, StandardTestDispatcher(testScheduler))
+      val scope = EditorInteractionScope(coroutineScope = this)
+      val outsidePagePosition = Offset(x = 80f, y = 800f)
+
+      scope.update(
+        editor = editor,
+        bringIntoViewRequests = EditorBringIntoViewRequests(),
+        uiState = uiState,
+        density = 1f,
+        visibleArea = EditorVisibleArea(),
+        viewportState = EditorViewportState(),
+        scrollGestureLockState = ScrollGestureLockState(),
+        viewportZoomConfig = null,
+        layoutSpec = EditorDocumentLayoutSpec.Continuous(maxWidth = 320f),
+        onSelectionHaptic = {},
+        onRequestSoftwareKeyboard = {},
+      )
+      assertTrue(scope.isTapEligible(outsidePagePosition))
+
+      scope.update(
+        editor = editor,
+        bringIntoViewRequests = EditorBringIntoViewRequests(),
+        uiState = uiState,
+        density = 1f,
+        visibleArea = EditorVisibleArea(),
+        viewportState = EditorViewportState(),
+        scrollGestureLockState = ScrollGestureLockState(),
+        viewportZoomConfig = null,
+        layoutSpec =
+          EditorDocumentLayoutSpec.Paginated(
+            pageWidth = 320f,
+            pageHeight = 480f,
+            pageMarginTop = 20f,
+            pageMarginBottom = 20f,
+            pageMarginLeft = 20f,
+            pageMarginRight = 20f,
+          ),
+        onSelectionHaptic = {},
+        onRequestSoftwareKeyboard = {},
+      )
+      assertFalse(scope.isTapEligible(outsidePagePosition))
+    }
 }
