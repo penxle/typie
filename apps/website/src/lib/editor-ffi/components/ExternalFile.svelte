@@ -11,9 +11,6 @@
   import Trash2Icon from '~icons/lucide/trash-2';
   import { formatFileSize } from '$lib/utils/format';
   import { getEditorContext } from '../editor.svelte';
-  import { isAcceptedFilePlaceholderDrag } from '../handlers/dnd';
-  import { createDeleteNodeMessage, deriveFileStage, processFileUpload } from '../handlers/file-flow';
-  import { uploadFileAsFile } from '../handlers/upload';
   import ExternalElementWrapper from './ExternalElementWrapper.svelte';
   import type { ExternalElement } from '@typie/editor-ffi/browser';
 
@@ -29,7 +26,12 @@
   const fileId = $derived(fileData?.id || undefined);
   const asset = $derived(fileId ? ctx.fileAssets.get(fileId) : undefined);
   const inflight = $derived(ctx.editor?.inflightFiles.get(element.node));
-  const stage = $derived(deriveFileStage({ fileId, inflight, asset }));
+  const stage = $derived.by(() => {
+    if (asset) return 'ready';
+    if (inflight) return 'uploading';
+    if (fileId) return 'resolving';
+    return 'empty';
+  });
 
   const canEdit = $derived(!ctx.editor?.readOnly);
   const hasFile = $derived(!!asset || stage === 'uploading');
@@ -39,6 +41,7 @@
   const isOnlySelectedElement = $derived(
     element.is_selected && selectedBlockNodes.length === 1 && selectedBlockNodes[0]?.id === element.node,
   );
+  const isAttachmentDropTarget = $derived(stage === 'empty' && ctx.attachmentDropTargetNodeId === element.node);
 
   let pickerOpened = $state(false);
 
@@ -56,75 +59,40 @@
     const editor = ctx.editor;
     if (!editor) return;
 
-    editor.inflightFiles.delete(element.node);
-    editor.enqueue(createDeleteNodeMessage(element.node));
+    ctx.attachmentImporter.cancelNode(editor, element.node);
+    editor.enqueue({
+      type: 'node',
+      op: { type: 'delete', id: element.node },
+    });
     editor.focus();
   };
 
   const handleUpload = () => {
-    if (!canEdit) return;
+    const editor = ctx.editor;
+    if (!editor || editor.readOnly) return;
+    const nodeId = element.node;
 
     const picker = document.createElement('input');
     picker.type = 'file';
     picker.multiple = true;
 
     picker.addEventListener('change', () => {
-      const files = [...(picker.files ?? [])];
-      if (files.length === 0) return;
-
-      void processFile(files[0]);
-
-      for (const file of files.slice(1)) {
-        ctx.pendingFileDrops.push(file);
-        ctx.editor?.enqueue({
-          type: 'insertion',
-          op: { type: 'fragment', fragment: { node: { type: 'file', id: undefined } } },
-        });
+      if (ctx.editor !== editor || editor.destroyed || editor.readOnly) return;
+      const items = [...(picker.files ?? [])].map((file) => ({ file, kind: 'file' as const }));
+      if (
+        ctx.attachmentImporter.importAtSelection(items, {
+          existingNodeId: nodeId,
+          onFailure: ({ file }) => {
+            Toast.error(`${file.name} 파일 업로드에 실패했습니다.`);
+          },
+        })
+      ) {
+        editor.focus();
       }
     });
 
     picker.click();
   };
-
-  const processFile = async (file: File) => {
-    const editor = ctx.editor;
-    if (!editor) return;
-    const uploadId = crypto.randomUUID();
-    const isCurrent = () =>
-      ctx.editor === editor &&
-      !editor.destroyed &&
-      !editor.readOnly &&
-      editor.inflightFiles.get(element.node)?.uploadId === uploadId &&
-      editor.externalElements.some((external) => external.node === element.node && external.data.type === 'file' && !external.data.id);
-
-    const result = await processFileUpload({
-      file,
-      nodeId: element.node,
-      setInflightFile: (nodeId, data) => editor.inflightFiles.set(nodeId, { ...data, uploadId }),
-      deleteInflightFile: (nodeId) => {
-        if (editor.inflightFiles.get(nodeId)?.uploadId === uploadId) editor.inflightFiles.delete(nodeId);
-      },
-      setFileAsset: (a) => ctx.fileAssets.set(a.id, a),
-      isCurrent,
-      commit: (message) => {
-        if (!isCurrent()) throw new Error('File upload is no longer current');
-        editor.enqueue(message);
-        editor.flush();
-      },
-      focus: () => editor.focus(),
-      uploadFileAsFile,
-    });
-
-    if (result === 'failed') {
-      Toast.error(`${file.name} 파일 업로드에 실패했습니다.`);
-    }
-  };
-
-  $effect(() => {
-    if (stage !== 'empty') return;
-    const file = ctx.pendingFileDrops.shift();
-    if (file) void processFile(file);
-  });
 
   const handleDownload = () => {
     if (!asset) return;
@@ -132,37 +100,6 @@
     a.href = asset.url;
     a.download = asset.name;
     a.click();
-  };
-
-  const handleDragOver = (event: DragEvent) => {
-    if (!canEdit || stage !== 'empty' || !isAcceptedFilePlaceholderDrag(event.dataTransfer)) return;
-
-    event.preventDefault();
-    event.stopPropagation();
-
-    if (event.dataTransfer) {
-      event.dataTransfer.dropEffect = 'copy';
-    }
-  };
-
-  const handleDrop = (event: DragEvent) => {
-    if (!canEdit || stage !== 'empty' || !isAcceptedFilePlaceholderDrag(event.dataTransfer)) return;
-
-    const files = [...(event.dataTransfer?.files ?? [])];
-    const [file, ...rest] = files;
-    if (!file) return;
-
-    event.preventDefault();
-    event.stopPropagation();
-    void processFile(file);
-
-    for (const next of rest) {
-      ctx.pendingFileDrops.push(next);
-      ctx.editor?.enqueue({
-        type: 'insertion',
-        op: { type: 'fragment', fragment: { node: { type: 'file', id: undefined } } },
-      });
-    }
   };
 </script>
 
@@ -265,21 +202,29 @@
           width: 'full',
           height: '48px',
         }),
+        isAttachmentDropTarget && css({ boxShadow: '[inset 0 0 0 1px token(colors.palette.blue)]' }),
       )}
-      ondragovercapture={handleDragOver}
-      ondropcapture={handleDrop}
       use:anchor
     >
-      <div class={flex({ align: 'center', gap: '12px', paddingX: '14px', paddingY: '12px', fontSize: '14px', color: 'text.disabled' })}>
+      <div
+        class={flex({
+          align: 'center',
+          gap: '12px',
+          paddingX: '14px',
+          paddingY: '12px',
+          fontSize: '14px',
+          color: isAttachmentDropTarget ? 'palette.blue' : 'text.disabled',
+        })}
+      >
         <Icon icon={FileIcon} size={20} />
-        {stage === 'resolving' ? '파일을 불러오는 중...' : '파일'}
+        {stage === 'resolving' ? '파일을 불러오는 중...' : isAttachmentDropTarget ? '놓아서 업로드하기' : '파일'}
       </div>
 
       {#if stage === 'resolving'}
         <div class={css({ marginRight: '14px' })}>
           <RingSpinner style={css.raw({ size: '16px', color: 'text.disabled' })} />
         </div>
-      {:else if canEdit}
+      {:else if canEdit && !isAttachmentDropTarget}
         <div
           onpointerdown={(e) => {
             e.stopPropagation();

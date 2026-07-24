@@ -1,3 +1,5 @@
+import type { AttachmentImportFailureHandler, AttachmentImportItem } from '../attachment-importer';
+import type { Editor, EditorContext } from '../editor.svelte';
 import type { ImeTextInput } from '../input/ime-context';
 import type { EditorEventHandler } from '../types';
 
@@ -46,17 +48,127 @@ export const handleCut: EditorEventHandler<ImeTextInput, ClipboardEvent> = (edit
   editor.scrollIntoView({ target: { type: 'current_selection_head' }, mode: 'nearest' });
 };
 
-export const handlePaste: EditorEventHandler<ImeTextInput, ClipboardEvent> = (editor, e) => {
-  const text = e.clipboardData?.getData('text/plain') ?? '';
-  const html = e.clipboardData?.getData('text/html') || undefined;
+const toImportItem = (file: File): AttachmentImportItem => ({
+  file,
+  kind: file.type.startsWith('image/') ? 'image' : 'file',
+});
 
-  if (!text && !html) {
+const filesFromTransfer = (data: DataTransfer): File[] => {
+  const fileItems = [...data.items].filter((item) => item.kind === 'file');
+  const files = fileItems.map((item) => item.getAsFile());
+  return fileItems.length > 0 && files.every((file): file is File => file !== null) ? files : [...data.files];
+};
+
+const readClipboardText = async (items: readonly ClipboardItem[]): Promise<{ html: string | undefined; text: string }> => {
+  let html: string | undefined;
+  let text = '';
+  for (const item of items) {
+    if (!html?.trim() && item.types.includes('text/html')) {
+      const blob = await item.getType('text/html');
+      html = await blob.text();
+    }
+    if (text === '' && item.types.includes('text/plain')) {
+      const blob = await item.getType('text/plain');
+      text = await blob.text();
+    }
+  }
+  return { html, text };
+};
+
+const paste = (
+  ctx: EditorContext,
+  {
+    html,
+    text,
+    files,
+  }: {
+    html: string | undefined;
+    text: string;
+    files: readonly File[];
+  },
+  onFailure: AttachmentImportFailureHandler,
+): boolean => {
+  const editor = ctx.editor;
+  if (!editor || editor.readOnly) return false;
+
+  if (html?.trim()) {
+    editor.enqueue({ type: 'clipboard', op: { type: 'paste', html, text } });
+    return true;
+  }
+  if (files.length > 0) {
+    return ctx.attachmentImporter.importAtSelection(files.map(toImportItem), { onFailure });
+  }
+  if (text === '') return false;
+
+  editor.enqueue({ type: 'clipboard', op: { type: 'paste', html: undefined, text } });
+  return true;
+};
+
+const scrollAfterPaste = (editor: Editor): void => {
+  editor.scrollIntoView({ target: { type: 'current_selection_head' }, mode: 'typewriter' });
+};
+
+export const handlePaste = (
+  ctx: EditorContext,
+  e: ClipboardEvent & { currentTarget: ImeTextInput },
+  onFailure: AttachmentImportFailureHandler,
+): void => {
+  const data = e.clipboardData;
+  if (!data) return;
+
+  const html = data.getData('text/html') || undefined;
+  const text = data.getData('text/plain');
+  const files = html?.trim() ? [] : filesFromTransfer(data);
+  if (!html?.trim() && files.length === 0 && text === '') return;
+
+  e.preventDefault();
+  const editor = ctx.editor;
+  if (paste(ctx, { html, text, files }, onFailure) && editor) {
+    scrollAfterPaste(editor);
+  }
+};
+
+export const requestPaste = async (ctx: EditorContext, onFailure: AttachmentImportFailureHandler): Promise<void> => {
+  const currentEditor = ctx.editor;
+  if (!currentEditor) return;
+  if (currentEditor.readOnly) {
+    currentEditor.editBlockedHandler?.();
     return;
   }
 
-  e.preventDefault();
-  editor.enqueue({ type: 'clipboard', op: { type: 'paste', text, html } });
-  editor.scrollIntoView({ target: { type: 'current_selection_head' }, mode: 'typewriter' });
+  let html: string | undefined;
+  let text: string;
+  const files: File[] = [];
+
+  try {
+    const items = await navigator.clipboard.read();
+    ({ html, text } = await readClipboardText(items));
+
+    if (!html?.trim()) {
+      for (const item of items) {
+        const type = item.types.find((candidate) => !candidate.startsWith('text/'));
+        if (type) {
+          const blob = await item.getType(type);
+          const mimeType = blob.type || type;
+          const name = mimeType.startsWith('image/') ? 'clipboard-image' : 'clipboard-file';
+          files.push(new File([blob], name, { type: mimeType }));
+        }
+      }
+    }
+  } catch {
+    html = undefined;
+    files.length = 0;
+    try {
+      text = await navigator.clipboard.readText();
+    } catch {
+      return;
+    }
+  }
+
+  if (ctx.editor !== currentEditor || currentEditor.destroyed || currentEditor.readOnly) return;
+  if (paste(ctx, { html, text, files }, onFailure)) {
+    scrollAfterPaste(currentEditor);
+  }
 };
 
 export const writeClipboardPayload = async (html: string, text: string): Promise<void> => {
@@ -79,19 +191,7 @@ export const writeClipboardPayload = async (html: string, text: string): Promise
 export const readClipboardRich = async (): Promise<{ html: string | undefined; text: string } | undefined> => {
   try {
     const items = await navigator.clipboard.read();
-    let html: string | undefined;
-    let text = '';
-    for (const item of items) {
-      if (item.types.includes('text/html')) {
-        const blob = await item.getType('text/html');
-        html = await blob.text();
-      }
-      if (item.types.includes('text/plain')) {
-        const blob = await item.getType('text/plain');
-        text = await blob.text();
-      }
-    }
-    return { html, text };
+    return await readClipboardText(items);
   } catch {
     try {
       const text = await navigator.clipboard.readText();

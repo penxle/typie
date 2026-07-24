@@ -1,6 +1,7 @@
 import { EditorEdgeAutoScroll } from '../edge-auto-scroll';
 import { markNativeSelectionDragStarted } from './pointer';
 import type { DndDropPayload, ExternalDndPayloadKind, InputModifiers } from '@typie/editor-ffi/browser';
+import type { AttachmentImportFailureHandler, AttachmentImportItem } from '../attachment-importer';
 import type { EditorContext } from '../editor.svelte';
 
 const INTERNAL_SELECTION_MIME = 'application/x-typie-internal-selection';
@@ -44,6 +45,8 @@ const modifiersFromEvent = (event: DragEvent): InputModifiers => ({
 });
 
 const filesFromTransfer = (dataTransfer: DataTransfer): File[] => [...dataTransfer.files];
+
+const attachmentKind = (type: string): AttachmentImportItem['kind'] => (type.startsWith('image/') ? 'image' : 'file');
 
 const hasInternalSelection = (dataTransfer: DataTransfer): boolean => {
   return [...dataTransfer.types].includes(INTERNAL_SELECTION_MIME);
@@ -96,11 +99,98 @@ const setDropEffect = (dataTransfer: DataTransfer | null, effect: BrowserDropEff
   }
 };
 
-const dispatchDndOverAtClient = (editor: EditorInstance, clientX: number, clientY: number, modifiers: InputModifiers): boolean => {
+const setAttachmentDropTarget = (ctx: EditorContext, nodeId: string | null): void => {
+  if (ctx.attachmentDropTargetNodeId !== nodeId) {
+    ctx.attachmentDropTargetNodeId = nodeId;
+  }
+};
+
+const externalNodeAtPoint = (editor: EditorInstance, root: EventTarget | null, clientX: number, clientY: number): string | undefined => {
+  if (!(root instanceof HTMLElement) || root !== editor.extensionAreaEl) return undefined;
+  const element = document.elementFromPoint(clientX, clientY)?.closest<HTMLElement>('[data-external-element][data-node-id]');
+  if (!element || !root.contains(element)) return undefined;
+  return element.dataset.nodeId;
+};
+
+const hoverAttachmentKinds = (dataTransfer: DataTransfer): AttachmentImportItem['kind'][] | undefined => {
+  const fileItems = [...dataTransfer.items].filter((item) => item.kind === 'file');
+  if (fileItems.length > 0) {
+    if (fileItems.some((item) => item.type === '')) return undefined;
+    return fileItems.map((item) => attachmentKind(item.type));
+  }
+
+  const files = filesFromTransfer(dataTransfer);
+  if (files.some((file) => file.type === '')) return undefined;
+  return files.length > 0 ? files.map((file) => attachmentKind(file.type)) : undefined;
+};
+
+const reusableAttachmentNode = (
+  ctx: EditorContext,
+  editor: EditorInstance,
+  root: EventTarget | null,
+  clientX: number,
+  clientY: number,
+  kinds: readonly AttachmentImportItem['kind'][],
+): { nodeId: string; kind: AttachmentImportItem['kind'] } | undefined => {
+  const nodeId = externalNodeAtPoint(editor, root, clientX, clientY);
+  if (!nodeId || kinds.length === 0) return undefined;
+  if (kinds.every((kind) => kind === 'image') && ctx.attachmentImporter.canReusePlaceholder(nodeId, 'image')) {
+    return { nodeId, kind: 'image' };
+  }
+  return ctx.attachmentImporter.canReusePlaceholder(nodeId, 'file') ? { nodeId, kind: 'file' } : undefined;
+};
+
+const updateAttachmentDropTarget = (
+  ctx: EditorContext,
+  editor: EditorInstance,
+  root: EventTarget | null,
+  clientX: number,
+  clientY: number,
+  dataTransfer: DataTransfer,
+): string | null => {
+  if (hasInternalSelectionDrag(editor, dataTransfer)) {
+    setAttachmentDropTarget(ctx, null);
+    return null;
+  }
+  const kinds = hoverAttachmentKinds(dataTransfer);
+  const nodeId = kinds ? (reusableAttachmentNode(ctx, editor, root, clientX, clientY, kinds)?.nodeId ?? null) : null;
+  setAttachmentDropTarget(ctx, nodeId);
+  return nodeId;
+};
+
+const attachmentDropIntent = (
+  ctx: EditorContext,
+  editor: EditorInstance,
+  root: EventTarget | null,
+  clientX: number,
+  clientY: number,
+  files: readonly File[],
+): { items: AttachmentImportItem[]; reuseNodeId?: string } => {
+  const kinds = files.map((file) => attachmentKind(file.type));
+  const reuse = reusableAttachmentNode(ctx, editor, root, clientX, clientY, kinds);
+  return {
+    items: files.map((file) => ({ file, kind: reuse?.kind === 'file' ? 'file' : attachmentKind(file.type) })),
+    reuseNodeId: reuse?.nodeId,
+  };
+};
+
+const dispatchDndOverAtClient = (
+  ctx: EditorContext,
+  editor: EditorInstance,
+  root: EventTarget | null,
+  dataTransfer: DataTransfer,
+  clientX: number,
+  clientY: number,
+  modifiers: InputModifiers,
+): boolean => {
   const local = editor.clientToLocal(clientX, clientY);
   if (!local) return false;
 
-  editor.enqueue({ type: 'dnd', op: { type: 'over', page: local.page, x: local.x, y: local.y, modifiers } });
+  const reuseNodeId = updateAttachmentDropTarget(ctx, editor, root, clientX, clientY, dataTransfer);
+  editor.enqueue({
+    type: 'dnd',
+    op: { type: 'over', page: local.page, x: local.x, y: local.y, reuse_node_id: reuseNodeId ?? undefined, modifiers },
+  });
   editor.flush();
   return true;
 };
@@ -114,6 +204,7 @@ const dropEffectFromTransfer = (editor: EditorInstance, dataTransfer: DataTransf
 };
 
 export const handleDragStart = (ctx: EditorContext, event: DragEvent) => {
+  setAttachmentDropTarget(ctx, null);
   const editor = ctx.editor;
   const dataTransfer = event.dataTransfer;
   if (!editor || !dataTransfer || editor.isSelectionCollapsed) {
@@ -181,10 +272,16 @@ export const handleDragStart = (ctx: EditorContext, event: DragEvent) => {
 export const handleDragEnter = (ctx: EditorContext, event: DragEvent) => {
   const editor = ctx.editor;
   const dataTransfer = event.dataTransfer;
-  if (!editor || editor.readOnly || !dataTransfer || hasInternalSelectionDrag(editor, dataTransfer)) return;
+  if (!editor || editor.readOnly || !dataTransfer || hasInternalSelectionDrag(editor, dataTransfer)) {
+    setAttachmentDropTarget(ctx, null);
+    return;
+  }
 
   const payload = externalPayloadKindFromTransfer(dataTransfer);
-  if (!payload) return;
+  if (!payload) {
+    setAttachmentDropTarget(ctx, null);
+    return;
+  }
 
   editor.enqueue({ type: 'dnd', op: { type: 'enter_external', payload } });
   editor.flush();
@@ -193,33 +290,54 @@ export const handleDragEnter = (ctx: EditorContext, event: DragEvent) => {
 export const handleDragOver = (ctx: EditorContext, event: DragEvent) => {
   const editor = ctx.editor;
   const dataTransfer = event.dataTransfer;
-  if (!editor || editor.readOnly || !dataTransfer) return;
+  const root = event.currentTarget;
+  if (!editor || editor.readOnly || !dataTransfer) {
+    setAttachmentDropTarget(ctx, null);
+    if (editor) stopDndEdgeAutoScroll(editor);
+    return;
+  }
 
   const local = editor.clientToLocal(event.clientX, event.clientY);
   if (!hasTransferablePayload(editor, dataTransfer) || !local) {
     setDropEffect(dataTransfer, 'none');
+    setAttachmentDropTarget(ctx, null);
     stopDndEdgeAutoScroll(editor);
     return;
   }
 
   const modifiers = modifiersFromEvent(event);
-  editor.enqueue({ type: 'dnd', op: { type: 'over', page: local.page, x: local.x, y: local.y, modifiers } });
+  const reuseNodeId = updateAttachmentDropTarget(ctx, editor, root, event.clientX, event.clientY, dataTransfer);
+  editor.enqueue({
+    type: 'dnd',
+    op: { type: 'over', page: local.page, x: local.x, y: local.y, reuse_node_id: reuseNodeId ?? undefined, modifiers },
+  });
   editor.flush();
+  if (ctx.editor !== editor || editor.destroyed || editor.readOnly) {
+    setAttachmentDropTarget(ctx, null);
+    stopDndEdgeAutoScroll(editor);
+    return;
+  }
   event.preventDefault();
   setDropEffect(dataTransfer, dropEffectFromTransfer(editor, dataTransfer, modifiers));
   edgeAutoScrollFor(editor).update(editor, { clientX: event.clientX, clientY: event.clientY }, (clientX, clientY) => {
-    if (editor.destroyed) {
+    if (ctx.editor !== editor || editor.destroyed || editor.readOnly) {
+      setAttachmentDropTarget(ctx, null);
       stopDndEdgeAutoScroll(editor);
       return;
     }
 
-    dispatchDndOverAtClient(editor, clientX, clientY, modifiers);
+    if (!dispatchDndOverAtClient(ctx, editor, root, dataTransfer, clientX, clientY, modifiers)) {
+      setAttachmentDropTarget(ctx, null);
+    }
   });
 };
 
 export const handleDragLeave = (ctx: EditorContext, event: DragEvent) => {
   const editor = ctx.editor;
-  if (!editor || editor.readOnly) return;
+  if (!editor || editor.readOnly) {
+    setAttachmentDropTarget(ctx, null);
+    return;
+  }
 
   const current = event.currentTarget;
   const related = event.relatedTarget;
@@ -227,28 +345,73 @@ export const handleDragLeave = (ctx: EditorContext, event: DragEvent) => {
     return;
   }
 
+  setAttachmentDropTarget(ctx, null);
   editor.enqueue({ type: 'dnd', op: { type: 'leave' } });
   editor.flush();
   stopDndEdgeAutoScroll(editor);
 };
 
-export const handleDrop = (ctx: EditorContext, event: DragEvent) => {
+export const handleDrop = (ctx: EditorContext, event: DragEvent, onFailure: AttachmentImportFailureHandler) => {
   const editor = ctx.editor;
   const dataTransfer = event.dataTransfer;
-  if (!editor) return;
+  if (!editor) {
+    setAttachmentDropTarget(ctx, null);
+    return;
+  }
   stopDndEdgeAutoScroll(editor);
-  if (editor.readOnly || !dataTransfer) return;
+  if (editor.readOnly || !dataTransfer) {
+    setAttachmentDropTarget(ctx, null);
+    return;
+  }
 
   const local = editor.clientToLocal(event.clientX, event.clientY);
   if (!local || !hasTransferablePayload(editor, dataTransfer)) {
+    setAttachmentDropTarget(ctx, null);
     return;
   }
 
   const modifiers = modifiersFromEvent(event);
-  editor.enqueue({ type: 'dnd', op: { type: 'over', page: local.page, x: local.x, y: local.y, modifiers } });
+  const files = hasInternalSelectionDrag(editor, dataTransfer) ? [] : filesFromTransfer(dataTransfer);
+  const attachmentIntent =
+    files.length > 0 ? attachmentDropIntent(ctx, editor, event.currentTarget, event.clientX, event.clientY, files) : undefined;
+  editor.enqueue({
+    type: 'dnd',
+    op: {
+      type: 'over',
+      page: local.page,
+      x: local.x,
+      y: local.y,
+      reuse_node_id: attachmentIntent?.reuseNodeId,
+      modifiers,
+    },
+  });
   editor.flush();
-  const payload = dropPayloadFromTransfer(ctx, editor, dataTransfer);
+  if (ctx.editor !== editor || editor.destroyed || editor.readOnly) {
+    setAttachmentDropTarget(ctx, null);
+    return;
+  }
+  if (attachmentIntent) {
+    const { items, reuseNodeId } = attachmentIntent;
+    setAttachmentDropTarget(ctx, null);
+    event.preventDefault();
+    setDropEffect(dataTransfer, dropEffectFromTransfer(editor, dataTransfer, modifiers));
+    ctx.attachmentImporter.importAtDrop(items, {
+      page: local.page,
+      x: local.x,
+      y: local.y,
+      modifiers,
+      reuseNodeId,
+      onFailure,
+    });
+    editor.endNativeDragAdmission({ restoreFocus: true });
+    editor.focus();
+    internalDndEditors.delete(editor);
+    return;
+  }
+
+  const payload = dropPayloadFromTransfer(editor, dataTransfer);
   if (!payload) {
+    setAttachmentDropTarget(ctx, null);
     setDropEffect(dataTransfer, 'none');
     editor.enqueue({ type: 'dnd', op: { type: 'leave' } });
     editor.flush();
@@ -256,6 +419,7 @@ export const handleDrop = (ctx: EditorContext, event: DragEvent) => {
     return;
   }
 
+  setAttachmentDropTarget(ctx, null);
   event.preventDefault();
   setDropEffect(dataTransfer, dropEffectFromTransfer(editor, dataTransfer, modifiers));
   editor.enqueue({
@@ -276,6 +440,7 @@ export const handleDrop = (ctx: EditorContext, event: DragEvent) => {
 };
 
 export const handleDragEnd = (ctx: EditorContext) => {
+  setAttachmentDropTarget(ctx, null);
   const editor = ctx.editor;
   if (!editor) return;
   internalDndEditors.delete(editor);
@@ -286,22 +451,9 @@ export const handleDragEnd = (ctx: EditorContext) => {
   editor.flush();
 };
 
-const dropPayloadFromTransfer = (ctx: EditorContext, editor: EditorInstance, dataTransfer: DataTransfer): DndDropPayload | null => {
+const dropPayloadFromTransfer = (editor: EditorInstance, dataTransfer: DataTransfer): DndDropPayload | null => {
   if (hasInternalSelectionDrag(editor, dataTransfer)) {
     return { type: 'internal_selection' };
-  }
-
-  const files = filesFromTransfer(dataTransfer);
-  if (files.length > 0) {
-    const imageFiles = files.filter((file) => file.type.startsWith('image/'));
-    const otherFiles = files.filter((file) => !file.type.startsWith('image/'));
-    ctx.pendingImageDrops.push(...imageFiles);
-    ctx.pendingFileDrops.push(...otherFiles);
-    return {
-      type: 'files',
-      image_count: imageFiles.length,
-      file_count: otherFiles.length,
-    };
   }
 
   if (hasText(dataTransfer)) {
@@ -311,26 +463,4 @@ const dropPayloadFromTransfer = (ctx: EditorContext, editor: EditorInstance, dat
   }
 
   return null;
-};
-
-export const isAcceptedImagePlaceholderDrag = (dataTransfer: DataTransfer | null): boolean => {
-  if (!dataTransfer) return false;
-  const fileItems = [...dataTransfer.items].filter((item) => item.kind === 'file');
-  if (fileItems.length > 0) {
-    return fileItems.every((item) => item.type.startsWith('image/'));
-  }
-
-  const files = filesFromTransfer(dataTransfer);
-  return files.length > 0 && files.every((file) => file.type.startsWith('image/'));
-};
-
-export const isAcceptedFilePlaceholderDrag = (dataTransfer: DataTransfer | null): boolean => {
-  if (!dataTransfer) return false;
-  const fileItems = [...dataTransfer.items].filter((item) => item.kind === 'file');
-  if (fileItems.length > 0) {
-    return true;
-  }
-
-  const files = filesFromTransfer(dataTransfer);
-  return files.length > 0;
 };

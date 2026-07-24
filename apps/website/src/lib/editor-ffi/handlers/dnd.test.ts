@@ -1,14 +1,23 @@
-import { describe, expect, it, vi } from 'vitest';
-import {
-  handleDragEnter,
-  handleDragLeave,
-  handleDragOver,
-  handleDragStart,
-  handleDrop,
-  isAcceptedFilePlaceholderDrag,
-  isAcceptedImagePlaceholderDrag,
-} from './dnd';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { handleDragEnd, handleDragEnter, handleDragLeave, handleDragOver, handleDragStart, handleDrop } from './dnd';
 import type { Message } from '@typie/editor-ffi/browser';
+import type { AttachmentImportItem } from '../attachment-importer';
+
+const edgeAutoScroll = vi.hoisted(() => ({
+  onScroll: null as ((clientX: number, clientY: number) => void) | null,
+}));
+
+vi.mock('../edge-auto-scroll', () => ({
+  EditorEdgeAutoScroll: class {
+    update(...args: [unknown, unknown, (clientX: number, clientY: number) => void]) {
+      edgeAutoScroll.onScroll = args[2];
+    }
+
+    stop() {
+      edgeAutoScroll.onScroll = null;
+    }
+  },
+}));
 
 const createFile = (name: string, type: string) => new File(['content'], name, { type });
 
@@ -40,7 +49,7 @@ const createDataTransfer = ({
   } as unknown as DataTransfer;
 };
 
-const createDragEvent = (dataTransfer: DataTransfer | null = createDataTransfer()) => {
+const createDragEvent = (dataTransfer: DataTransfer | null = createDataTransfer(), currentTarget?: HTMLElement) => {
   return {
     clientX: 110,
     clientY: 220,
@@ -49,6 +58,7 @@ const createDragEvent = (dataTransfer: DataTransfer | null = createDataTransfer(
     metaKey: false,
     shiftKey: false,
     dataTransfer,
+    currentTarget,
     preventDefault: vi.fn(),
     stopPropagation: vi.fn(),
   } as unknown as DragEvent;
@@ -60,8 +70,21 @@ const createCtx = ({ readOnly = false, protectContent = false } = {}) => {
     messages.push(message);
   });
   const flush = vi.fn();
-  const pendingImageDrops: File[] = [];
-  const pendingFileDrops: File[] = [];
+  const extensionAreaEl = document.createElement('div');
+  const canReusePlaceholder = vi.fn<(nodeId: string, kind: 'image' | 'file') => boolean>(() => false);
+  const importAtDrop = vi.fn<
+    (
+      items: readonly AttachmentImportItem[],
+      options: {
+        page: number;
+        x: number;
+        y: number;
+        modifiers: { alt: boolean; ctrl: boolean; meta: boolean; shift: boolean };
+        reuseNodeId?: string;
+        onFailure: (item: AttachmentImportItem) => void;
+      },
+    ) => boolean
+  >(() => true);
   const editor = {
     readOnly,
     protectContent,
@@ -73,6 +96,7 @@ const createCtx = ({ readOnly = false, protectContent = false } = {}) => {
     enqueue,
     flush,
     focus: vi.fn(),
+    extensionAreaEl,
     gesture: {
       isDoubleTapSelectionDragActive: false,
       gestureActive: false,
@@ -82,21 +106,49 @@ const createCtx = ({ readOnly = false, protectContent = false } = {}) => {
       handleNativeDragEnd: vi.fn(),
     },
   };
+  const attachmentState = {
+    editor,
+    attachmentDropTargetNodeId: null as string | null,
+    attachmentImporter: {
+      canReusePlaceholder,
+      importAtDrop,
+    },
+  };
 
   return {
-    ctx: {
-      editor,
-      pendingImageDrops,
-      pendingFileDrops,
-    } as never,
+    ctx: attachmentState as never,
+    attachmentState,
     editor,
     messages,
     enqueue,
     flush,
-    pendingImageDrops,
-    pendingFileDrops,
+    extensionAreaEl,
+    canReusePlaceholder,
+    importAtDrop,
   };
 };
+
+const targetAtPoint = (root: HTMLElement, nodeId: string): HTMLElement => {
+  const wrapper = document.createElement('div');
+  wrapper.dataset.externalElement = '';
+  wrapper.dataset.nodeId = nodeId;
+  const child = document.createElement('span');
+  wrapper.append(child);
+  root.append(wrapper);
+  Object.defineProperty(document, 'elementFromPoint', {
+    configurable: true,
+    value: vi.fn(() => child),
+  });
+  return wrapper;
+};
+
+beforeEach(() => {
+  edgeAutoScroll.onScroll = null;
+  Object.defineProperty(document, 'elementFromPoint', {
+    configurable: true,
+    value: vi.fn(() => null),
+  });
+});
 
 describe('handleDragStart', () => {
   it('starts internal selection drag and exposes html/plain data for external drops', () => {
@@ -238,6 +290,7 @@ describe('handleDragOver', () => {
           x: 10,
           y: 20,
           modifiers: { alt: false, ctrl: false, meta: false, shift: false },
+          reuse_node_id: undefined,
         },
       },
     ]);
@@ -262,6 +315,7 @@ describe('handleDragOver', () => {
           x: 10,
           y: 20,
           modifiers: { alt: false, ctrl: false, meta: false, shift: false },
+          reuse_node_id: undefined,
         },
       },
     ]);
@@ -291,6 +345,7 @@ describe('handleDragOver', () => {
           x: 10,
           y: 20,
           modifiers: { alt: false, ctrl: false, meta: false, shift: false },
+          reuse_node_id: undefined,
         },
       },
     ]);
@@ -310,6 +365,40 @@ describe('handleDragOver', () => {
     expect(flush).not.toHaveBeenCalled();
     expect(event.preventDefault).not.toHaveBeenCalled();
     expect(dataTransfer.dropEffect).toBe('none');
+  });
+
+  it('re-hit-tests the attachment candidate at the coordinates reported by edge auto-scroll', () => {
+    const { ctx, attachmentState, editor, extensionAreaEl, canReusePlaceholder, messages } = createCtx();
+    const first = document.createElement('div');
+    first.dataset.externalElement = '';
+    first.dataset.nodeId = 'first-node';
+    const firstChild = document.createElement('span');
+    first.append(firstChild);
+    const second = document.createElement('div');
+    second.dataset.externalElement = '';
+    second.dataset.nodeId = 'second-node';
+    const secondChild = document.createElement('span');
+    second.append(secondChild);
+    extensionAreaEl.append(first, second);
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: vi.fn((clientX: number) => (clientX === 150 ? secondChild : firstChild)),
+    });
+    canReusePlaceholder.mockImplementation((...args) => args[1] === 'image');
+    const event = createDragEvent(createDataTransfer({ files: [createFile('image.png', 'image/png')] }), extensionAreaEl);
+
+    handleDragOver(ctx, event);
+    expect(attachmentState.attachmentDropTargetNodeId).toBe('first-node');
+
+    edgeAutoScroll.onScroll?.(150, 230);
+
+    expect(editor.clientToLocal).toHaveBeenLastCalledWith(150, 230);
+    expect(document.elementFromPoint).toHaveBeenLastCalledWith(150, 230);
+    expect(attachmentState.attachmentDropTargetNodeId).toBe('second-node');
+    expect(messages.filter((message) => message.type === 'dnd' && message.op.type === 'over')).toEqual([
+      expect.objectContaining({ op: expect.objectContaining({ reuse_node_id: 'first-node' }) }),
+      expect.objectContaining({ op: expect.objectContaining({ reuse_node_id: 'second-node' }) }),
+    ]);
   });
 });
 
@@ -339,43 +428,17 @@ describe('handleDragLeave', () => {
   });
 });
 
-describe('placeholder direct drop admission', () => {
-  it('accepts only external image files for image placeholders', () => {
-    expect(isAcceptedImagePlaceholderDrag(createDataTransfer({ files: [createFile('image.png', 'image/png')] }))).toBe(true);
-    expect(
-      isAcceptedImagePlaceholderDrag(createDataTransfer({ files: [createFile('a.png', 'image/png'), createFile('b.jpg', 'image/jpeg')] })),
-    ).toBe(true);
-    expect(isAcceptedImagePlaceholderDrag(createDataTransfer({ files: [createFile('doc.pdf', 'application/pdf')] }))).toBe(false);
-    expect(
-      isAcceptedImagePlaceholderDrag(
-        createDataTransfer({ files: [createFile('image.png', 'image/png'), createFile('doc.pdf', 'application/pdf')] }),
-      ),
-    ).toBe(false);
-  });
-
-  it('accepts external files for file placeholders, including multiple images', () => {
-    expect(isAcceptedFilePlaceholderDrag(createDataTransfer({ files: [createFile('doc.pdf', 'application/pdf')] }))).toBe(true);
-    expect(isAcceptedFilePlaceholderDrag(createDataTransfer({ files: [createFile('image.png', 'image/png')] }))).toBe(true);
-    expect(
-      isAcceptedFilePlaceholderDrag(
-        createDataTransfer({ files: [createFile('image.png', 'image/png'), createFile('doc.pdf', 'application/pdf')] }),
-      ),
-    ).toBe(true);
-  });
-});
-
-describe('handleDrop', () => {
-  it('routes dropped files through DndOp::Drop and queues bytes without direct fragment insertion', () => {
-    const { ctx, messages, flush, pendingImageDrops, pendingFileDrops } = createCtx();
+describe('external attachment target', () => {
+  it('highlights and reuses an empty image placeholder only for image-only input', () => {
+    const { ctx, attachmentState, extensionAreaEl, canReusePlaceholder, importAtDrop, messages } = createCtx();
+    targetAtPoint(extensionAreaEl, 'image-node');
+    canReusePlaceholder.mockImplementation((nodeId, kind) => nodeId === 'image-node' && kind === 'image');
     const png = createFile('image.png', 'image/png');
-    const pdf = createFile('doc.pdf', 'application/pdf');
-    const event = createDragEvent(createDataTransfer({ files: [png, pdf] }));
+    const dataTransfer = createDataTransfer({ files: [png] });
 
-    handleDrop(ctx, event);
+    handleDragOver(ctx, createDragEvent(dataTransfer, extensionAreaEl));
 
-    expect(event.preventDefault).toHaveBeenCalled();
-    expect(pendingImageDrops).toEqual([png]);
-    expect(pendingFileDrops).toEqual([pdf]);
+    expect(attachmentState.attachmentDropTargetNodeId).toBe('image-node');
     expect(messages).toEqual([
       {
         type: 'dnd',
@@ -385,21 +448,149 @@ describe('handleDrop', () => {
           x: 10,
           y: 20,
           modifiers: { alt: false, ctrl: false, meta: false, shift: false },
-        },
-      },
-      {
-        type: 'dnd',
-        op: {
-          type: 'drop',
-          page: 0,
-          x: 10,
-          y: 20,
-          payload: { type: 'files', image_count: 1, file_count: 1 },
-          modifiers: { alt: false, ctrl: false, meta: false, shift: false },
+          reuse_node_id: 'image-node',
         },
       },
     ]);
-    expect(flush).toHaveBeenCalledTimes(2);
+
+    handleDrop(ctx, createDragEvent(dataTransfer, extensionAreaEl), vi.fn());
+
+    expect(importAtDrop).toHaveBeenCalledWith([{ file: png, kind: 'image' }], expect.objectContaining({ reuseNodeId: 'image-node' }));
+    expect(attachmentState.attachmentDropTargetNodeId).toBeNull();
+  });
+
+  it('treats every item as File when reusing an empty file placeholder', () => {
+    const { ctx, extensionAreaEl, canReusePlaceholder, importAtDrop } = createCtx();
+    targetAtPoint(extensionAreaEl, 'file-node');
+    canReusePlaceholder.mockImplementation((nodeId, kind) => nodeId === 'file-node' && kind === 'file');
+    const png = createFile('image.png', 'image/png');
+    const pdf = createFile('document.pdf', 'application/pdf');
+    const dataTransfer = createDataTransfer({ files: [png, pdf] });
+
+    handleDragOver(ctx, createDragEvent(dataTransfer, extensionAreaEl));
+    handleDrop(ctx, createDragEvent(dataTransfer, extensionAreaEl), vi.fn());
+
+    expect(importAtDrop).toHaveBeenCalledWith(
+      [
+        { file: png, kind: 'file' },
+        { file: pdf, kind: 'file' },
+      ],
+      expect.objectContaining({ reuseNodeId: 'file-node' }),
+    );
+  });
+
+  it('falls back to generic ordered kinds for mixed input over an image placeholder', () => {
+    const { ctx, attachmentState, extensionAreaEl, canReusePlaceholder, importAtDrop, messages } = createCtx();
+    targetAtPoint(extensionAreaEl, 'image-node');
+    canReusePlaceholder.mockImplementation((nodeId, kind) => nodeId === 'image-node' && kind === 'image');
+    const png = createFile('image.png', 'image/png');
+    const pdf = createFile('document.pdf', 'application/pdf');
+    const dataTransfer = createDataTransfer({ files: [png, pdf] });
+
+    handleDragOver(ctx, createDragEvent(dataTransfer, extensionAreaEl));
+
+    expect(attachmentState.attachmentDropTargetNodeId).toBeNull();
+    expect(messages.at(-1)).toEqual({
+      type: 'dnd',
+      op: {
+        type: 'over',
+        page: 0,
+        x: 10,
+        y: 20,
+        modifiers: { alt: false, ctrl: false, meta: false, shift: false },
+        reuse_node_id: undefined,
+      },
+    });
+
+    handleDrop(ctx, createDragEvent(dataTransfer, extensionAreaEl), vi.fn());
+
+    expect(importAtDrop).toHaveBeenCalledWith(
+      [
+        { file: png, kind: 'image' },
+        { file: pdf, kind: 'file' },
+      ],
+      expect.objectContaining({ reuseNodeId: undefined }),
+    );
+  });
+
+  it('does not propose a candidate outside the current editor root', () => {
+    const { ctx, attachmentState, extensionAreaEl, canReusePlaceholder } = createCtx();
+    const otherRoot = document.createElement('div');
+    targetAtPoint(otherRoot, 'foreign-node');
+    canReusePlaceholder.mockReturnValue(true);
+
+    handleDragOver(ctx, createDragEvent(createDataTransfer({ files: [createFile('image.png', 'image/png')] }), extensionAreaEl));
+
+    expect(attachmentState.attachmentDropTargetNodeId).toBeNull();
+    expect(canReusePlaceholder).not.toHaveBeenCalled();
+  });
+
+  it('clears the affordance on unsupported over, outer leave, drop, and drag end', () => {
+    const { ctx, attachmentState, extensionAreaEl } = createCtx();
+
+    attachmentState.attachmentDropTargetNodeId = 'node';
+    handleDragOver(ctx, createDragEvent(createDataTransfer(), extensionAreaEl));
+    expect(attachmentState.attachmentDropTargetNodeId).toBeNull();
+
+    attachmentState.attachmentDropTargetNodeId = 'node';
+    handleDragLeave(ctx, {
+      ...createDragEvent(createDataTransfer(), extensionAreaEl),
+      relatedTarget: null,
+    } as unknown as DragEvent);
+    expect(attachmentState.attachmentDropTargetNodeId).toBeNull();
+
+    attachmentState.attachmentDropTargetNodeId = 'node';
+    handleDrop(ctx, createDragEvent(createDataTransfer({ files: [createFile('image.png', 'image/png')] }), extensionAreaEl), vi.fn());
+    expect(attachmentState.attachmentDropTargetNodeId).toBeNull();
+
+    attachmentState.attachmentDropTargetNodeId = 'node';
+    handleDragEnd(ctx);
+    expect(attachmentState.attachmentDropTargetNodeId).toBeNull();
+  });
+});
+
+describe('handleDrop', () => {
+  it('preserves ordered files and dispatches only after the final Over flush', () => {
+    const { ctx, messages, flush, importAtDrop } = createCtx();
+    const png = createFile('image.png', 'image/png');
+    const jpeg = createFile('photo.jpg', 'image/jpeg');
+    const pdf = createFile('doc.pdf', 'application/pdf');
+    const onFailure = vi.fn();
+    const event = createDragEvent(createDataTransfer({ files: [png, pdf, jpeg] }));
+
+    handleDrop(ctx, event, onFailure);
+
+    expect(event.preventDefault).toHaveBeenCalled();
+    expect(messages).toEqual([
+      {
+        type: 'dnd',
+        op: {
+          type: 'over',
+          page: 0,
+          x: 10,
+          y: 20,
+          modifiers: { alt: false, ctrl: false, meta: false, shift: false },
+          reuse_node_id: undefined,
+        },
+      },
+    ]);
+    expect(flush).toHaveBeenCalledTimes(1);
+    expect(importAtDrop).toHaveBeenCalledWith(
+      [
+        { file: png, kind: 'image' },
+        { file: pdf, kind: 'file' },
+        { file: jpeg, kind: 'image' },
+      ],
+      {
+        page: 0,
+        x: 10,
+        y: 20,
+        modifiers: { alt: false, ctrl: false, meta: false, shift: false },
+        reuseNodeId: undefined,
+        onFailure,
+      },
+    );
+    expect(flush.mock.invocationCallOrder[0]).toBeLessThan(importAtDrop.mock.invocationCallOrder[0] ?? 0);
   });
 
   it('routes text/html payload through DndOp::Drop', () => {
@@ -411,7 +602,7 @@ describe('handleDrop', () => {
       }),
     );
 
-    handleDrop(ctx, event);
+    handleDrop(ctx, event, vi.fn());
 
     expect(messages).toEqual([
       {
@@ -422,6 +613,7 @@ describe('handleDrop', () => {
           x: 10,
           y: 20,
           modifiers: { alt: false, ctrl: false, meta: false, shift: false },
+          reuse_node_id: undefined,
         },
       },
       {
@@ -442,7 +634,7 @@ describe('handleDrop', () => {
     const { ctx, messages } = createCtx();
     handleDragStart(ctx, createDragEvent(createDataTransfer()));
 
-    handleDrop(ctx, createDragEvent(createDataTransfer()));
+    handleDrop(ctx, createDragEvent(createDataTransfer()), vi.fn());
 
     expect(messages).toEqual([
       {
@@ -457,6 +649,7 @@ describe('handleDrop', () => {
           x: 10,
           y: 20,
           modifiers: { alt: false, ctrl: false, meta: false, shift: false },
+          reuse_node_id: undefined,
         },
       },
       {

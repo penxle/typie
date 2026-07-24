@@ -80,15 +80,20 @@ fn payloads() -> Vec<(DndDropPayload, InputModifiers)> {
         ),
         (
             DndDropPayload::Files {
-                image_count: 1,
-                file_count: 0,
+                request_id: "parity-image".into(),
+                kinds: vec![AttachmentPlaceholderKind::Image],
+                reuse_node_id: None,
             },
             plain,
         ),
         (
             DndDropPayload::Files {
-                image_count: 1,
-                file_count: 1,
+                request_id: "parity-mixed".into(),
+                kinds: vec![
+                    AttachmentPlaceholderKind::Image,
+                    AttachmentPlaceholderKind::File,
+                ],
+                reuse_node_id: None,
             },
             plain,
         ),

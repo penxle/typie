@@ -21,9 +21,9 @@ mod tests {
     use editor_crdt::Dot;
     use editor_macros::state;
     use editor_model::{
-        ChildView, DocView, Fragment, NodeType, PlainBulletListNode, PlainHorizontalRuleNode,
-        PlainImageNode, PlainListItemNode, PlainNode, PlainPageBreakNode, PlainParagraphNode,
-        PlainTextNode,
+        ChildView, DocView, Fragment, NodeType, PlainBulletListNode, PlainFileNode,
+        PlainHorizontalRuleNode, PlainImageNode, PlainListItemNode, PlainNode, PlainPageBreakNode,
+        PlainParagraphNode, PlainTextNode,
     };
     use editor_state::{Affinity, Position, Selection};
     use editor_transaction::Transaction;
@@ -261,6 +261,63 @@ mod tests {
                 Position {
                     node: root,
                     offset: 2,
+                    affinity: Affinity::Upstream,
+                },
+            )
+        );
+    }
+
+    #[test]
+    fn insert_slice_at_block_position_after_atom_preserves_multiple_atom_order() {
+        let (initial, root, ..) = state! {
+            doc { root: root {
+                paragraph { text("before") }
+                image
+                paragraph { text("after") }
+            } }
+            selection: none
+        };
+        let slice = Slice::new(
+            vec![
+                Fragment::leaf(PlainNode::File(PlainFileNode { id: None })),
+                Fragment::leaf(PlainNode::Image(PlainImageNode::default())),
+            ],
+            0,
+            0,
+        );
+
+        let mut tr = Transaction::new(&initial);
+        let inserted = insert_slice_at(
+            &mut tr,
+            Position::new(root, 2),
+            slice,
+            SliceProvenance::Formatted,
+        )
+        .expect("insert succeeds")
+        .expect("slice inserted");
+        let (actual, ..) = tr.commit();
+
+        assert_eq!(
+            kinds(&actual.view(), root),
+            vec![
+                NodeType::Paragraph,
+                NodeType::Image,
+                NodeType::File,
+                NodeType::Image,
+                NodeType::Paragraph,
+            ]
+        );
+        assert_eq!(
+            inserted,
+            Selection::new(
+                Position {
+                    node: root,
+                    offset: 2,
+                    affinity: Affinity::Downstream,
+                },
+                Position {
+                    node: root,
+                    offset: 4,
                     affinity: Affinity::Upstream,
                 },
             )
