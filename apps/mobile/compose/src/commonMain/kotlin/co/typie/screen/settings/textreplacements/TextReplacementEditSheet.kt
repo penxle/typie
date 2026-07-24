@@ -47,14 +47,11 @@ import co.typie.ui.theme.AppTheme
 
 @Composable
 context(_: SheetScope<Unit>)
-internal fun TextReplacementEditSheet(
-  model: TextReplacementsViewModel,
-  editing: CustomTextReplacement?,
-) {
+internal fun TextReplacementEditSheet(model: TextReplacementsViewModel, editing: TextReplacement?) {
   val scope = rememberCoroutineScope()
   val toast = LocalToast.current
   val dialog = LocalDialog.current
-  val form = remember(editing?.id) { TextReplacementForm(scope, editing) }
+  val form = remember(editing?.textReplacementId) { TextReplacementForm(scope, editing) }
   var isSaving by remember { mutableStateOf(false) }
   var isDeleting by remember { mutableStateOf(false) }
 
@@ -75,7 +72,7 @@ internal fun TextReplacementEditSheet(
     } else {
       model
         .updateTextReplacement(
-          id = editing.id,
+          id = editing.textReplacementId,
           match = form.match.value,
           substitute = form.substitute.value,
           regex = form.regex.value,
@@ -162,9 +159,10 @@ internal fun TextReplacementEditSheet(
               )
             if (result is DialogResult.Resolved) {
               isDeleting = true
-              model.deleteTextReplacement(editing.id).withDefaultExceptionHandler(toast).onOk {
-                complete(Unit)
-              }
+              model
+                .deleteTextReplacement(editing.textReplacementId)
+                .withDefaultExceptionHandler(toast)
+                .onOk { complete(Unit) }
               isDeleting = false
             }
           },

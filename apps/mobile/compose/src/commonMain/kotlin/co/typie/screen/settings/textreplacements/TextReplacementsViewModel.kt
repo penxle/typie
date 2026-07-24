@@ -28,8 +28,8 @@ import co.typie.result.result
 import com.apollographql.apollo.api.Optional
 import kotlinx.coroutines.CoroutineScope
 
-class TextReplacementForm(scope: CoroutineScope, textReplacement: CustomTextReplacement?) :
-  FormState(scope) {
+class TextReplacementForm(scope: CoroutineScope, textReplacement: TextReplacement?) :
+  FormState(scope, autoFocusFirstField = textReplacement == null) {
   val match = field(textReplacement?.match.orEmpty()) { required("찾을 텍스트를 입력해주세요.") }
   val substitute = field(textReplacement?.substitute.orEmpty()) { required("삽입할 텍스트를 입력해주세요.") }
   val note = field(textReplacement?.note.orEmpty())

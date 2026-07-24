@@ -216,9 +216,7 @@ private fun CustomSection(
                 reorderEnabled = reorderEnabled,
                 onEdit = {
                   if (SubscriptionService.gate(sheet, GatedAction.TextReplacement)) {
-                    sheet.present {
-                      TextReplacementEditSheet(model = model, editing = entry.onTextReplacement)
-                    }
+                    sheet.present { TextReplacementEditSheet(model = model, editing = entry) }
                   }
                 },
                 onToggle = {

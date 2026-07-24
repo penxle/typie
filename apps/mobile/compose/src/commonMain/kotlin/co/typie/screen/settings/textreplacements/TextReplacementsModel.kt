@@ -7,8 +7,6 @@ import co.typie.graphql.type.TextReplacementState
 
 internal typealias TextReplacement = TextReplacementsScreen_Query.TextReplacement
 
-internal typealias CustomTextReplacement = TextReplacementsScreen_Query.OnTextReplacement
-
 internal val SMART_QUOTE_IDS =
   listOf("TXR0SQUOTEOPEN", "TXR0SQUOTECLOSE", "TXR0DQUOTEOPEN", "TXR0DQUOTECLOSE")
 
