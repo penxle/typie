@@ -44,6 +44,13 @@ internal data class EdgeAutoScrollPlan(
   }
 }
 
+internal const val EdgeAutoScrollThresholdDp = 30f
+internal const val EdgeAutoScrollMaximumFrameDeltaNanos = 100_000_000L
+private const val EdgeAutoScrollMinimumSpeedDpPerSecond = 240f
+private const val EdgeAutoScrollEdgeSpeedDpPerSecond = 960f
+private const val EdgeAutoScrollOutsideSpeedGainPerSecond = 30f
+private const val EdgeAutoScrollMaximumSpeedDpPerSecond = 1800f
+
 internal fun insetEdgeAutoScrollViewportRect(
   viewport: Rect,
   topInsetPx: Float = 0f,
@@ -57,27 +64,34 @@ internal fun insetEdgeAutoScrollViewportRect(
 internal fun computeEdgeAutoScrollPlan(
   pointer: Offset,
   insetViewport: Rect,
-  edgeThresholdPx: Float,
-  minSpeedPxPerSec: Float,
-  maxSpeedPxPerSec: Float,
+  density: Float,
 ): EdgeAutoScrollPlan {
   if (insetViewport.width <= 0f || insetViewport.height <= 0f) return EdgeAutoScrollPlan.NoOp
+
+  val edgeThresholdPx = EdgeAutoScrollThresholdDp * density
+  val minimumSpeedPxPerSecond = EdgeAutoScrollMinimumSpeedDpPerSecond * density
+  val edgeSpeedPxPerSecond = EdgeAutoScrollEdgeSpeedDpPerSecond * density
+  val maximumSpeedPxPerSecond = EdgeAutoScrollMaximumSpeedDpPerSecond * density
 
   val (verticalDirection, verticalSpeed) =
     axisPlan(
       pointerLocal = pointer.y - insetViewport.top,
       axisLength = insetViewport.height,
       thresholdPx = edgeThresholdPx,
-      minSpeedPxPerSec = minSpeedPxPerSec,
-      maxSpeedPxPerSec = maxSpeedPxPerSec,
+      minimumSpeedPxPerSecond = minimumSpeedPxPerSecond,
+      edgeSpeedPxPerSecond = edgeSpeedPxPerSecond,
+      outsideSpeedGainPerSecond = EdgeAutoScrollOutsideSpeedGainPerSecond,
+      maximumSpeedPxPerSecond = maximumSpeedPxPerSecond,
     )
   val (horizontalDirection, horizontalSpeed) =
     axisPlan(
       pointerLocal = pointer.x - insetViewport.left,
       axisLength = insetViewport.width,
       thresholdPx = edgeThresholdPx,
-      minSpeedPxPerSec = minSpeedPxPerSec,
-      maxSpeedPxPerSec = maxSpeedPxPerSec,
+      minimumSpeedPxPerSecond = minimumSpeedPxPerSecond,
+      edgeSpeedPxPerSecond = edgeSpeedPxPerSecond,
+      outsideSpeedGainPerSecond = EdgeAutoScrollOutsideSpeedGainPerSecond,
+      maximumSpeedPxPerSecond = maximumSpeedPxPerSecond,
     )
   return EdgeAutoScrollPlan(
     verticalDirection = verticalDirection,
@@ -91,31 +105,32 @@ private fun axisPlan(
   pointerLocal: Float,
   axisLength: Float,
   thresholdPx: Float,
-  minSpeedPxPerSec: Float,
-  maxSpeedPxPerSec: Float,
+  minimumSpeedPxPerSecond: Float,
+  edgeSpeedPxPerSecond: Float,
+  outsideSpeedGainPerSecond: Float,
+  maximumSpeedPxPerSecond: Float,
 ): Pair<Float, Float> {
   val nearMinEdge = pointerLocal < thresholdPx
   val nearMaxEdge = pointerLocal > axisLength - thresholdPx
 
   if (!nearMinEdge && !nearMaxEdge) return 0f to 0f
 
-  val (direction, edgeDistance) =
+  val (direction, distanceToEdgePx) =
     if (nearMinEdge) {
-      -1f to pointerLocal.coerceAtLeast(0f)
+      -1f to pointerLocal
     } else {
-      1f to (axisLength - pointerLocal).coerceAtLeast(0f)
+      1f to (axisLength - pointerLocal)
     }
-  val clampedDistance = edgeDistance.coerceAtMost(thresholdPx)
-  val proximity = 1f - (clampedDistance / thresholdPx)
-  val speed = minSpeedPxPerSec + proximity * (maxSpeedPxPerSec - minSpeedPxPerSec)
+  val insideProgress = ((thresholdPx - distanceToEdgePx) / thresholdPx).coerceIn(0f, 1f)
+  val outsideDistancePx = (-distanceToEdgePx).coerceAtLeast(0f)
+  val insideSpeedPxPerSecond =
+    minimumSpeedPxPerSecond + insideProgress * (edgeSpeedPxPerSecond - minimumSpeedPxPerSecond)
+  val speed =
+    (insideSpeedPxPerSecond + outsideDistancePx * outsideSpeedGainPerSecond).coerceAtMost(
+      maximumSpeedPxPerSecond
+    )
   return direction to speed
 }
-
-private val EdgeThreshold = 30.dp
-// Speeds below express dp-per-second; multiplied by each frame's delta time to yield pixels per
-// frame.
-private val MinScrollSpeed = 240.dp
-private val MaxScrollSpeed = 960.dp
 
 @Stable
 class EdgeAutoScrollController
@@ -159,13 +174,11 @@ fun Modifier.edgeAutoScroll(
   val density = LocalDensity.current
   val topInsetPx = with(density) { viewportTopInset.toPx() }
   val bottomInsetPx = with(density) { viewportBottomInset.toPx() }
-  val edgeThresholdPx = with(density) { EdgeThreshold.toPx() }
-  val minSpeedPx = with(density) { MinScrollSpeed.toPx() }
-  val maxSpeedPx = with(density) { MaxScrollSpeed.toPx() }
+  val densityValue = density.density
 
   SideEffect { controller.enabled = enabled }
 
-  LaunchedEffect(controller, topInsetPx, bottomInsetPx, edgeThresholdPx, minSpeedPx, maxSpeedPx) {
+  LaunchedEffect(controller, topInsetPx, bottomInsetPx, densityValue) {
     // Gate the loop on a coarse boolean so pointer movement within the edge zone does not
     // cancel and re-seed the coroutine every frame. The loop itself re-samples pointer and
     // viewport each tick to react to fresh positions.
@@ -176,9 +189,7 @@ fun Modifier.edgeAutoScroll(
         !computeEdgeAutoScrollPlan(
             pointer = pointer,
             insetViewport = insetEdgeAutoScrollViewportRect(viewport, topInsetPx, bottomInsetPx),
-            edgeThresholdPx = edgeThresholdPx,
-            minSpeedPxPerSec = minSpeedPx,
-            maxSpeedPxPerSec = maxSpeedPx,
+            density = densityValue,
           )
           .isNoOp
       }
@@ -188,8 +199,10 @@ fun Modifier.edgeAutoScroll(
         var lastFrameNanos = withFrameNanos { it }
         while (isActive) {
           val nowNanos = withFrameNanos { it }
-          val dtSeconds = (nowNanos - lastFrameNanos) / 1_000_000_000f
+          val frameDeltaNanos = nowNanos - lastFrameNanos
           lastFrameNanos = nowNanos
+          if (frameDeltaNanos > EdgeAutoScrollMaximumFrameDeltaNanos) continue
+          val dtSeconds = frameDeltaNanos / 1_000_000_000f
 
           val viewport = controller.viewport ?: break
           val pointer = controller.pointer ?: break
@@ -197,9 +210,7 @@ fun Modifier.edgeAutoScroll(
             computeEdgeAutoScrollPlan(
               pointer = pointer,
               insetViewport = insetEdgeAutoScrollViewportRect(viewport, topInsetPx, bottomInsetPx),
-              edgeThresholdPx = edgeThresholdPx,
-              minSpeedPxPerSec = minSpeedPx,
-              maxSpeedPxPerSec = maxSpeedPx,
+              density = densityValue,
             )
           if (plan.isNoOp) break
 

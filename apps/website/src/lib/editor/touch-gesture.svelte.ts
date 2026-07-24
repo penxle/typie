@@ -3,9 +3,6 @@ import {
   TOUCH_DOUBLE_TAP_DISTANCE_PX,
   TOUCH_DOUBLE_TAP_INTERVAL_MS,
   TOUCH_DRAG_START_DISTANCE_PX,
-  TOUCH_EDGE_MAX_SCROLL_SPEED,
-  TOUCH_EDGE_MIN_SCROLL_SPEED,
-  TOUCH_EDGE_SCROLL_THRESHOLD_PX,
   TOUCH_LONG_PRESS_CANCEL_DISTANCE_PX,
   TOUCH_LONG_PRESS_MS,
 } from './constants';
@@ -362,9 +359,6 @@ export class TouchGestureController {
     const pointer = this.#lastClientPoint;
     this.#autoScrollCleanup =
       handleDragScroll(this.#editor.scrollViewport, true, {
-        scrollZoneSize: TOUCH_EDGE_SCROLL_THRESHOLD_PX,
-        minScrollSpeed: TOUCH_EDGE_MIN_SCROLL_SPEED,
-        maxScrollSpeed: TOUCH_EDGE_MAX_SCROLL_SPEED,
         axis: 'both',
         initialPointer: { clientX: pointer.x, clientY: pointer.y },
         onScrollThrottleMs: 16,

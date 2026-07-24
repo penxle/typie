@@ -7,13 +7,11 @@ import co.typie.editor.ffi.Position
 import co.typie.editor.ffi.Selection
 import co.typie.editor.interaction.EditorEdgeAutoScrollViewport
 import co.typie.editor.interaction.EditorGestureContext
+import co.typie.ext.EdgeAutoScrollMaximumFrameDeltaNanos
+import co.typie.ext.EdgeAutoScrollThresholdDp
 import co.typie.ext.computeEdgeAutoScrollPlan
 import kotlin.math.abs
 import kotlin.math.sign
-
-private const val EditorEdgeAutoScrollThresholdDp = 30f
-private const val EditorEdgeAutoScrollMinSpeedDpPerSecond = 100f
-private const val EditorEdgeAutoScrollMaxSpeedDpPerSecond = 400f
 
 internal class EditorEdgeAutoScrollSemantic {
   private var activeRequest: EditorEdgeAutoScrollRequest? = null
@@ -146,8 +144,10 @@ internal class EditorEdgeAutoScrollSemantic {
         var lastFrameNanos = withFrameNanos { it }
         while (true) {
           val nowNanos = withFrameNanos { it }
-          val dtSeconds = (nowNanos - lastFrameNanos) / 1_000_000_000f
+          val frameDeltaNanos = nowNanos - lastFrameNanos
           lastFrameNanos = nowNanos
+          if (frameDeltaNanos > EdgeAutoScrollMaximumFrameDeltaNanos) continue
+          val dtSeconds = frameDeltaNanos / 1_000_000_000f
 
           val request = activeRequest ?: break
           val viewport = context.geometry.resolveEdgeAutoScrollViewport() ?: break
@@ -246,9 +246,7 @@ internal class EditorEdgeAutoScrollSemantic {
     computeEdgeAutoScrollPlan(
       pointer = edgePosition,
       insetViewport = viewport.rect,
-      edgeThresholdPx = viewport.edgeThresholdPx,
-      minSpeedPxPerSec = viewport.minSpeedPxPerSecond,
-      maxSpeedPxPerSec = viewport.maxSpeedPxPerSecond,
+      density = viewport.density,
     )
 
   fun stop() {
@@ -283,10 +281,4 @@ internal data class EditorEdgeAutoScrollDispatch(
 )
 
 private val EditorEdgeAutoScrollViewport.edgeThresholdPx: Float
-  get() = EditorEdgeAutoScrollThresholdDp * density
-
-private val EditorEdgeAutoScrollViewport.minSpeedPxPerSecond: Float
-  get() = EditorEdgeAutoScrollMinSpeedDpPerSecond * density
-
-private val EditorEdgeAutoScrollViewport.maxSpeedPxPerSecond: Float
-  get() = EditorEdgeAutoScrollMaxSpeedDpPerSecond * density
+  get() = EdgeAutoScrollThresholdDp * density

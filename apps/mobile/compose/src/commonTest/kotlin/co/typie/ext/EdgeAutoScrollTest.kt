@@ -49,91 +49,80 @@ class EdgeAutoScrollTest {
     assertEquals(0f, result.bottom)
   }
 
-  private val viewport = Rect(left = 0f, top = 0f, right = 500f, bottom = 1000f)
-  private val thresholdPx = 50f
-  private val minSpeedPxPerSec = 100f
-  private val maxSpeedPxPerSec = 500f
-
-  private fun plan(pointer: Offset): EdgeAutoScrollPlan =
+  private fun plan(
+    pointerX: Float = 150f,
+    pointerY: Float,
+    density: Float = 1f,
+  ): EdgeAutoScrollPlan =
     computeEdgeAutoScrollPlan(
-      pointer = pointer,
-      insetViewport = viewport,
-      edgeThresholdPx = thresholdPx,
-      minSpeedPxPerSec = minSpeedPxPerSec,
-      maxSpeedPxPerSec = maxSpeedPxPerSec,
+      pointer = Offset(pointerX * density, pointerY * density),
+      insetViewport = Rect(0f, 0f, 300f * density, 600f * density),
+      density = density,
     )
 
   @Test
   fun `computeEdgeAutoScrollPlan at viewport center returns no-op`() {
-    val result = plan(Offset(x = 250f, y = 500f))
+    val result = plan(pointerY = 300f)
     assertTrue(result.isNoOp)
   }
 
   @Test
-  fun `computeEdgeAutoScrollPlan in top edge zone scrolls up`() {
-    val result = plan(Offset(x = 250f, y = 25f))
-    assertEquals(-1f, result.verticalDirection)
+  fun `computeEdgeAutoScrollPlan does not scroll at or beyond zone entry`() {
+    assertTrue(plan(pointerY = 30f).isNoOp)
+    assertTrue(plan(pointerY = 31f).isNoOp)
+  }
+
+  @Test
+  fun `computeEdgeAutoScrollPlan follows shared speed curve inside top zone`() {
+    val justInside = plan(pointerY = 29.999f)
+    val halfway = plan(pointerY = 15f)
+    val atEdge = plan(pointerY = 0f)
+
+    assertEquals(-1f, justInside.verticalDirection)
+    assertEquals(240f, justInside.verticalSpeedPxPerSec, absoluteTolerance = 0.1f)
+    assertEquals(600f, halfway.verticalSpeedPxPerSec)
+    assertEquals(960f, atEdge.verticalSpeedPxPerSec)
+  }
+
+  @Test
+  fun `computeEdgeAutoScrollPlan accelerates outside top edge and caps speed`() {
+    val tenOutside = plan(pointerY = -10f)
+    val twentyOutside = plan(pointerY = -20f)
+    val capEntry = plan(pointerY = -28f)
+    val farOutside = plan(pointerY = -100f)
+
+    assertEquals(-1f, tenOutside.verticalDirection)
+    assertEquals(1260f, tenOutside.verticalSpeedPxPerSec)
+    assertEquals(1560f, twentyOutside.verticalSpeedPxPerSec)
+    assertEquals(1800f, capEntry.verticalSpeedPxPerSec)
+    assertEquals(1800f, farOutside.verticalSpeedPxPerSec)
+  }
+
+  @Test
+  fun `computeEdgeAutoScrollPlan applies outside curve symmetrically at bottom edge`() {
+    val result = plan(pointerY = 620f)
+
+    assertEquals(1f, result.verticalDirection)
+    assertEquals(1560f, result.verticalSpeedPxPerSec)
     assertEquals(0f, result.horizontalDirection)
   }
 
   @Test
-  fun `computeEdgeAutoScrollPlan in bottom edge zone scrolls down`() {
-    val result = plan(Offset(x = 250f, y = 975f))
-    assertEquals(1f, result.verticalDirection)
-    assertEquals(0f, result.horizontalDirection)
-  }
+  fun `computeEdgeAutoScrollPlan computes horizontal and vertical axes independently`() {
+    val result = plan(pointerX = -20f, pointerY = -10f)
 
-  @Test
-  fun `computeEdgeAutoScrollPlan in left edge zone scrolls left`() {
-    val result = plan(Offset(x = 25f, y = 500f))
-    assertEquals(0f, result.verticalDirection)
     assertEquals(-1f, result.horizontalDirection)
-  }
-
-  @Test
-  fun `computeEdgeAutoScrollPlan in right edge zone scrolls right`() {
-    val result = plan(Offset(x = 475f, y = 500f))
-    assertEquals(0f, result.verticalDirection)
-    assertEquals(1f, result.horizontalDirection)
-  }
-
-  @Test
-  fun `computeEdgeAutoScrollPlan in top-left corner scrolls both axes`() {
-    val result = plan(Offset(x = 25f, y = 25f))
+    assertEquals(1560f, result.horizontalSpeedPxPerSec)
     assertEquals(-1f, result.verticalDirection)
-    assertEquals(-1f, result.horizontalDirection)
+    assertEquals(1260f, result.verticalSpeedPxPerSec)
   }
 
   @Test
-  fun `computeEdgeAutoScrollPlan at exact top edge returns maxSpeed`() {
-    val result = plan(Offset(x = 250f, y = 0f))
-    assertEquals(maxSpeedPxPerSec, result.verticalSpeedPxPerSec)
-  }
+  fun `computeEdgeAutoScrollPlan preserves logical curve across densities`() {
+    val densityOne = plan(pointerY = -10f, density = 1f)
+    val densityTwo = plan(pointerY = -10f, density = 2f)
 
-  @Test
-  fun `computeEdgeAutoScrollPlan at threshold boundary is outside edge zone`() {
-    val result = plan(Offset(x = 250f, y = thresholdPx))
-    assertTrue(result.isNoOp)
-  }
-
-  @Test
-  fun `computeEdgeAutoScrollPlan speed scales linearly between min and max`() {
-    val result = plan(Offset(x = 250f, y = thresholdPx / 2f))
-    val expected = minSpeedPxPerSec + 0.5f * (maxSpeedPxPerSec - minSpeedPxPerSec)
-    assertEquals(expected, result.verticalSpeedPxPerSec, absoluteTolerance = 1f)
-  }
-
-  @Test
-  fun `computeEdgeAutoScrollPlan above viewport treats as at edge with maxSpeed`() {
-    val result = plan(Offset(x = 250f, y = -50f))
-    assertEquals(-1f, result.verticalDirection)
-    assertEquals(maxSpeedPxPerSec, result.verticalSpeedPxPerSec)
-  }
-
-  @Test
-  fun `computeEdgeAutoScrollPlan below viewport treats as at edge with maxSpeed`() {
-    val result = plan(Offset(x = 250f, y = 1100f))
-    assertEquals(1f, result.verticalDirection)
-    assertEquals(maxSpeedPxPerSec, result.verticalSpeedPxPerSec)
+    assertEquals(1260f, densityOne.verticalSpeedPxPerSec)
+    assertEquals(2520f, densityTwo.verticalSpeedPxPerSec)
   }
 }

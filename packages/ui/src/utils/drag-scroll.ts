@@ -3,9 +3,6 @@ import type { ScrollViewport } from './scroll-viewport';
 export type DragScrollAxis = 'vertical' | 'both';
 
 export type DragScrollOptions = {
-  scrollZoneSize?: number;
-  minScrollSpeed?: number;
-  maxScrollSpeed?: number;
   axis?: DragScrollAxis;
   initialPointer?: { clientX: number; clientY: number };
   onScroll?: (clientX: number, clientY: number) => void;
@@ -17,6 +14,13 @@ export type DragScroll = {
   updatePointer(clientX: number, clientY: number): void;
   destroy(): void;
 };
+
+const SCROLL_ZONE_SIZE_PX = 60;
+const MINIMUM_SCROLL_SPEED_PX_PER_SECOND = 240;
+const EDGE_SCROLL_SPEED_PX_PER_SECOND = 960;
+const OUTSIDE_SCROLL_SPEED_GAIN_PER_SECOND = 30;
+const MAXIMUM_SCROLL_SPEED_PX_PER_SECOND = 1800;
+const MAX_FRAME_DELTA_MS = 100;
 
 const isWindowTarget = (target: EventTarget): target is Window => {
   return typeof window !== 'undefined' && target === window;
@@ -104,9 +108,8 @@ const getStickyTopBoundary = (
 const getAdjustedRect = (
   rect: { top: number; bottom: number; left: number; right: number },
   stickyTop: number,
-  scrollZoneSize: number,
 ): { top: number; bottom: number; left: number; right: number } => {
-  const maxTopForBidirectionalScroll = rect.bottom - scrollZoneSize * 2;
+  const maxTopForBidirectionalScroll = rect.bottom - SCROLL_ZONE_SIZE_PX * 2;
 
   return {
     left: rect.left,
@@ -117,20 +120,11 @@ const getAdjustedRect = (
 };
 
 export function createDragScroll(viewport: ScrollViewport, options: DragScrollOptions = {}): DragScroll {
-  const {
-    scrollZoneSize = 50,
-    minScrollSpeed = 1,
-    maxScrollSpeed = 15,
-    axis = 'vertical',
-    initialPointer,
-    onScroll,
-    onScrollThrottleMs = 50,
-    stickyCandidates: providedStickyCandidates,
-  } = options;
+  const { axis = 'vertical', initialPointer, onScroll, onScrollThrottleMs = 50, stickyCandidates: providedStickyCandidates } = options;
 
   const useHorizontalScroll = axis === 'both';
   const stickyCandidates = providedStickyCandidates ?? collectStickyCandidates(viewport.target);
-  const topAnchorThresholdPx = Math.max(scrollZoneSize * 2, 96);
+  const topAnchorThresholdPx = Math.max(SCROLL_ZONE_SIZE_PX * 2, 96);
   const toRect = (rect: { top: number; bottom: number; left: number; right: number }) => ({
     top: rect.top,
     bottom: rect.bottom,
@@ -145,20 +139,47 @@ export function createDragScroll(viewport: ScrollViewport, options: DragScrollOp
   let lastPointerX = 0;
   let lastPointerY = 0;
   let animationId: number | null = null;
+  let lastFrameTime: number | null = null;
   let lastOnScrollTime = 0;
   let destroyed = false;
 
   const isNearEdge = (rect: { top: number; bottom: number; left: number; right: number }) => {
-    const isNearVertical = lastPointerY < rect.top + scrollZoneSize || lastPointerY > rect.bottom - scrollZoneSize;
+    const isNearVertical = lastPointerY < rect.top + SCROLL_ZONE_SIZE_PX || lastPointerY > rect.bottom - SCROLL_ZONE_SIZE_PX;
     if (useHorizontalScroll) {
-      const isNearHorizontal = lastPointerX < rect.left + scrollZoneSize || lastPointerX > rect.right - scrollZoneSize;
+      const isNearHorizontal = lastPointerX < rect.left + SCROLL_ZONE_SIZE_PX || lastPointerX > rect.right - SCROLL_ZONE_SIZE_PX;
       return isNearVertical || isNearHorizontal;
     }
     return isNearVertical;
   };
 
-  const getScrollSpeed = (distance: number) => {
-    return Math.min(maxScrollSpeed, Math.max(minScrollSpeed, distance / 3));
+  const getScrollSpeed = (distanceToEdge: number) => {
+    const insideProgress = Math.max(0, Math.min(1, (SCROLL_ZONE_SIZE_PX - distanceToEdge) / SCROLL_ZONE_SIZE_PX));
+    const outsideDistance = Math.max(-distanceToEdge, 0);
+    const insideSpeed =
+      MINIMUM_SCROLL_SPEED_PX_PER_SECOND + insideProgress * (EDGE_SCROLL_SPEED_PX_PER_SECOND - MINIMUM_SCROLL_SPEED_PX_PER_SECOND);
+
+    return Math.min(MAXIMUM_SCROLL_SPEED_PX_PER_SECOND, insideSpeed + outsideDistance * OUTSIDE_SCROLL_SPEED_GAIN_PER_SECOND);
+  };
+
+  const getScrollVelocity = (rect: { top: number; bottom: number; left: number; right: number }) => {
+    let velocityX = 0;
+    let velocityY = 0;
+
+    if (lastPointerY < rect.top + SCROLL_ZONE_SIZE_PX) {
+      velocityY = -getScrollSpeed(lastPointerY - rect.top);
+    } else if (lastPointerY > rect.bottom - SCROLL_ZONE_SIZE_PX) {
+      velocityY = getScrollSpeed(rect.bottom - lastPointerY);
+    }
+
+    if (useHorizontalScroll) {
+      if (lastPointerX < rect.left + SCROLL_ZONE_SIZE_PX) {
+        velocityX = -getScrollSpeed(lastPointerX - rect.left);
+      } else if (lastPointerX > rect.right - SCROLL_ZONE_SIZE_PX) {
+        velocityX = getScrollSpeed(rect.right - lastPointerX);
+      }
+    }
+
+    return { velocityX, velocityY };
   };
 
   const updatePointer = (clientX: number, clientY: number) => {
@@ -171,7 +192,7 @@ export function createDragScroll(viewport: ScrollViewport, options: DragScrollOp
 
     const rawRect = toRect(viewport.getRect());
     const stickyTop = getStableStickyTop(rawRect);
-    const rect = getAdjustedRect(rawRect, stickyTop, scrollZoneSize);
+    const rect = getAdjustedRect(rawRect, stickyTop);
 
     if (!useHorizontalScroll && (lastPointerX < rect.left || lastPointerX > rect.right)) {
       return;
@@ -182,57 +203,54 @@ export function createDragScroll(viewport: ScrollViewport, options: DragScrollOp
     }
   };
 
-  const scroll = () => {
+  const scroll = (frameTime: number) => {
     if (destroyed) {
       animationId = null;
+      lastFrameTime = null;
       return;
     }
 
     const rawRect = toRect(viewport.getRect());
     const stickyTop = getStableStickyTop(rawRect);
-    const rect = getAdjustedRect(rawRect, stickyTop, scrollZoneSize);
+    const rect = getAdjustedRect(rawRect, stickyTop);
 
     if (!useHorizontalScroll && (lastPointerX < rect.left || lastPointerX > rect.right)) {
       animationId = null;
+      lastFrameTime = null;
       return;
     }
 
-    const now = performance.now();
-    const shouldCallOnScroll = now - lastOnScrollTime >= onScrollThrottleMs;
+    const { velocityX, velocityY } = getScrollVelocity(rect);
 
-    let deltaX = 0;
-    let deltaY = 0;
-
-    if (lastPointerY < rect.top + scrollZoneSize) {
-      const distance = rect.top + scrollZoneSize - lastPointerY;
-      deltaY = -getScrollSpeed(distance);
-    } else if (lastPointerY > rect.bottom - scrollZoneSize) {
-      const distance = lastPointerY - (rect.bottom - scrollZoneSize);
-      deltaY = getScrollSpeed(distance);
-    }
-
-    if (useHorizontalScroll) {
-      if (lastPointerX < rect.left + scrollZoneSize) {
-        const distance = rect.left + scrollZoneSize - lastPointerX;
-        deltaX = -getScrollSpeed(distance);
-      } else if (lastPointerX > rect.right - scrollZoneSize) {
-        const distance = lastPointerX - (rect.right - scrollZoneSize);
-        deltaX = getScrollSpeed(distance);
-      }
-    }
-
-    if (deltaX === 0 && deltaY === 0) {
+    if (velocityX === 0 && velocityY === 0) {
       animationId = null;
+      lastFrameTime = null;
       return;
     }
+
+    if (lastFrameTime === null) {
+      lastFrameTime = frameTime;
+      animationId = requestAnimationFrame(scroll);
+      return;
+    }
+
+    const frameDeltaMs = frameTime - lastFrameTime;
+    lastFrameTime = frameTime;
+    if (frameDeltaMs > MAX_FRAME_DELTA_MS) {
+      animationId = requestAnimationFrame(scroll);
+      return;
+    }
+
+    const elapsedSeconds = frameDeltaMs / 1000;
+    const shouldCallOnScroll = frameTime - lastOnScrollTime >= onScrollThrottleMs;
 
     const prevScrollTop = viewport.getScrollTop();
     const prevScrollLeft = viewport.getScrollLeft();
-    viewport.scrollBy(deltaX, deltaY);
+    viewport.scrollBy(velocityX * elapsedSeconds, velocityY * elapsedSeconds);
 
     const didScroll = viewport.getScrollTop() !== prevScrollTop || viewport.getScrollLeft() !== prevScrollLeft;
     if (shouldCallOnScroll && didScroll) {
-      lastOnScrollTime = now;
+      lastOnScrollTime = frameTime;
       onScroll?.(lastPointerX, lastPointerY);
     }
 
@@ -257,6 +275,7 @@ export function createDragScroll(viewport: ScrollViewport, options: DragScrollOp
         cancelAnimationFrame(animationId);
         animationId = null;
       }
+      lastFrameTime = null;
     },
   };
 }

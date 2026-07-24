@@ -1,10 +1,6 @@
 import { createDragScroll } from '@typie/ui/utils';
-import {
-  EDGE_AUTO_SCROLL_MAX_SPEED,
-  EDGE_AUTO_SCROLL_MIN_SPEED,
-  EDGE_AUTO_SCROLL_THRESHOLD_PX,
-  EDGE_AUTO_SCROLL_THROTTLE_MS,
-} from './constants';
+import { EDGE_AUTO_SCROLL_THROTTLE_MS } from './constants';
+import type { ScrollViewport } from '@typie/ui/utils';
 import type { Editor } from './editor.svelte';
 
 type ClientPoint = {
@@ -14,6 +10,7 @@ type ClientPoint = {
 
 export class EditorEdgeAutoScroll {
   #dragScroll: ReturnType<typeof createDragScroll> | null = null;
+  #viewport: ScrollViewport | null = null;
   #onScroll: ((clientX: number, clientY: number) => void) | null = null;
 
   update(editor: Editor, pointer: ClientPoint, onScroll: (clientX: number, clientY: number) => void): void {
@@ -23,14 +20,18 @@ export class EditorEdgeAutoScroll {
       return;
     }
 
+    if (this.#dragScroll && this.#viewport === viewport) {
+      this.#onScroll = onScroll;
+      this.#dragScroll.updatePointer(pointer.clientX, pointer.clientY);
+      return;
+    }
+
     this.stop();
+    this.#viewport = viewport;
     this.#onScroll = onScroll;
     this.#dragScroll = createDragScroll(viewport, {
       axis: 'both',
       initialPointer: pointer,
-      scrollZoneSize: EDGE_AUTO_SCROLL_THRESHOLD_PX,
-      minScrollSpeed: EDGE_AUTO_SCROLL_MIN_SPEED,
-      maxScrollSpeed: EDGE_AUTO_SCROLL_MAX_SPEED,
       onScrollThrottleMs: EDGE_AUTO_SCROLL_THROTTLE_MS,
       onScroll: (clientX, clientY) => this.#onScroll?.(clientX, clientY),
     });
@@ -39,6 +40,7 @@ export class EditorEdgeAutoScroll {
   stop(): void {
     this.#dragScroll?.destroy();
     this.#dragScroll = null;
+    this.#viewport = null;
     this.#onScroll = null;
   }
 }
