@@ -66,7 +66,9 @@ pub use load_builder::BuildError;
 pub use modifier_resolution::resolve_effective_modifiers_at;
 pub use modifier_span::resolve_modifier_span_selection;
 pub use modifier_state::{resolve_modifier_state, resolve_modifier_state_in_range};
-pub use normalize::{doc_start_selection, farther_endpoint, is_unit_node_selection};
+pub use normalize::{
+    doc_start_selection, expand_unit_at, farther_endpoint, is_unit_node_selection,
+};
 pub use paragraph_break::{
     before_or_same, closest_empty_paragraph_break_end_between, paragraph_break_at_end,
 };

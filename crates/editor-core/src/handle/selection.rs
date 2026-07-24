@@ -3,7 +3,7 @@ use editor_crdt::Dot;
 use editor_model::DocView;
 use editor_state::{
     Position, ResolvedPosition, ResolvedPositionFlatExt, Selection, StableResolveCtx,
-    cell_rect_selection, enclosing_table, enclosing_table_cell, remap_selection,
+    cell_rect_selection, enclosing_table, enclosing_table_cell, expand_unit_at, remap_selection,
     resolve_paragraph_selection_expansion, resolve_sentence_selection_expansion,
     resolve_word_selection_expansion, table_cell_ids,
 };
@@ -259,6 +259,7 @@ fn resolve_extend_to_selection(
             .view
             .hit_test_extending(&input_state, &anchor, head_page, head_x, head_y)?;
 
+    let base_selection = base_selection.or_else(|| expand_unit_at(&anchor, &view));
     let selection = if let Some(base_selection) = base_selection {
         extend_base_selection(&view, base_selection, head_hit.selection)?
     } else {
@@ -550,6 +551,288 @@ mod tests {
             "selection should extend beyond the initially selected word, got {:?}",
             sel
         );
+        assert!(!editor.undo_history.can_undo());
+    }
+
+    #[test]
+    fn extend_to_from_third_image_includes_anchor_image() {
+        let (state, root, image1, image2, image3) = state! {
+            doc {
+                root: root {
+                    image1: image
+                    image2: image
+                    image3: image
+                    paragraph {}
+                }
+            }
+            selection: (root, 2) -> (root, 3)
+        };
+        let mut editor = Editor::new_test(state);
+        for image in [image1, image2, image3] {
+            assert!(editor.view.set_external_height(&editor.state, image, 100.0));
+        }
+        editor.view.layout(&editor.state);
+        let (head_page, head_x, head_y) = {
+            let view = editor.state().view();
+            let target = Selection::new(
+                Position::new(root, 0),
+                Position {
+                    node: root,
+                    offset: 1,
+                    affinity: Affinity::Upstream,
+                },
+            );
+            let target = target.resolve(&view).expect("image selection resolves");
+            let rects = editor.view.selection_rects(&target);
+            let rect = &rects[0];
+            (
+                rect.page_idx,
+                rect.rect.x + rect.rect.width / 2.0,
+                rect.rect.y + rect.rect.height / 2.0,
+            )
+        };
+
+        editor.apply(Message::Selection {
+            op: SelectionOp::ExtendTo {
+                anchor: Position::new(root, 2),
+                head_page,
+                head_x,
+                head_y,
+                base_selection: None,
+                allow_collapse: true,
+            },
+        });
+
+        let sel = editor.state().selection.expect("selection exists in test");
+        let view = editor.state().view();
+        let resolved = sel.resolve(&view).expect("selection resolves in test");
+        assert_eq!(resolved.from().node(), root);
+        assert_eq!(resolved.from().offset(), 0);
+        assert_eq!(resolved.to().node(), root);
+        assert_eq!(resolved.to().offset(), 3);
+        assert!(!editor.undo_history.can_undo());
+    }
+
+    #[test]
+    fn extend_to_from_image_into_preceding_paragraph_keeps_image() {
+        let (state, root, p1, _image) = state! {
+            doc {
+                root: root {
+                    p1: paragraph { text("hello") }
+                    image: image
+                }
+            }
+            selection: (root, 1) -> (root, 2)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state);
+        let target = Position::new(p1, 2);
+        let target_metrics = editor
+            .view
+            .cursor_metrics(&editor.state, &target)
+            .expect("target cursor has metrics");
+
+        editor.apply(Message::Selection {
+            op: SelectionOp::ExtendTo {
+                anchor: Position::new(root, 1),
+                head_page: target_metrics.page_idx,
+                head_x: target_metrics.caret.x,
+                head_y: target_metrics.line.y + target_metrics.line.height / 2.0,
+                base_selection: None,
+                allow_collapse: true,
+            },
+        });
+
+        let sel = editor.state().selection.expect("selection exists in test");
+        let view = editor.state().view();
+        let resolved = sel.resolve(&view).expect("selection resolves in test");
+        assert!(!sel.is_collapsed());
+        assert_eq!(resolved.from().node(), p1);
+        assert_eq!(resolved.from().offset(), target.offset);
+        assert_eq!(resolved.to().node(), root);
+        assert_eq!(resolved.to().offset(), 2);
+        assert!(!editor.undo_history.can_undo());
+    }
+
+    #[test]
+    fn extend_to_toward_text_anchor_does_not_reuse_previous_head() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 2) -> (p1, 5)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state);
+        let text_rect = {
+            let view = editor.state().view();
+            let hit_range = Selection::new(Position::new(p1, 0), Position::new(p1, 1));
+            let resolved = hit_range.resolve(&view).expect("text range resolves");
+            editor.view.selection_rects(&resolved)[0].rect
+        };
+
+        editor.apply(Message::Selection {
+            op: SelectionOp::ExtendTo {
+                anchor: Position::new(p1, 2),
+                head_page: 0,
+                head_x: text_rect.x + 1.0,
+                head_y: text_rect.y + text_rect.height / 2.0,
+                base_selection: None,
+                allow_collapse: true,
+            },
+        });
+
+        let sel = editor.state().selection.expect("selection exists in test");
+        assert_eq!(sel.anchor, Position::new(p1, 2));
+        assert_eq!(sel.head.node, p1);
+        assert!(sel.head.offset < 2);
+        assert_ne!(sel.anchor, Position::new(p1, 5));
+        assert!(!editor.undo_history.can_undo());
+    }
+
+    #[test]
+    fn extend_to_from_monolithic_gap_includes_affinity_unit() {
+        let (state, root, callout1) = state! {
+            doc {
+                root: root {
+                    callout1: callout { paragraph { text("one") } }
+                    callout { paragraph { text("two") } }
+                }
+            }
+            selection: (root, 1)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state);
+        let rect = editor.view.node_box_rects(&[callout1])[0].rect;
+
+        editor.apply(Message::Selection {
+            op: SelectionOp::ExtendTo {
+                anchor: Position {
+                    node: root,
+                    offset: 1,
+                    affinity: Affinity::Downstream,
+                },
+                head_page: 0,
+                head_x: rect.x + rect.width / 2.0,
+                head_y: rect.y + 4.0,
+                base_selection: None,
+                allow_collapse: true,
+            },
+        });
+
+        let sel = editor.state().selection.expect("selection exists in test");
+        let view = editor.state().view();
+        let resolved = sel.resolve(&view).expect("selection resolves in test");
+        assert_eq!(resolved.from().node(), root);
+        assert_eq!(resolved.from().offset(), 0);
+        assert_eq!(resolved.to().node(), root);
+        assert_eq!(resolved.to().offset(), 2);
+        assert!(!editor.undo_history.can_undo());
+    }
+
+    #[test]
+    fn extend_to_from_upstream_unit_anchor_includes_preceding_unit() {
+        let (state, root, image1, image2) = state! {
+            doc {
+                root: root {
+                    image1: image
+                    image2: image
+                    paragraph {}
+                }
+            }
+            selection: (root, 1)
+        };
+        let mut editor = Editor::new_test(state);
+        for image in [image1, image2] {
+            assert!(editor.view.set_external_height(&editor.state, image, 100.0));
+        }
+        editor.view.layout(&editor.state);
+        let (head_page, head_x, head_y) = {
+            let view = editor.state().view();
+            let target = Selection::new(
+                Position::new(root, 1),
+                Position {
+                    node: root,
+                    offset: 2,
+                    affinity: Affinity::Upstream,
+                },
+            );
+            let target = target.resolve(&view).expect("image selection resolves");
+            let rects = editor.view.selection_rects(&target);
+            let rect = &rects[0];
+            (
+                rect.page_idx,
+                rect.rect.x + rect.rect.width / 2.0,
+                rect.rect.y + rect.rect.height / 2.0,
+            )
+        };
+
+        editor.apply(Message::Selection {
+            op: SelectionOp::ExtendTo {
+                anchor: Position {
+                    node: root,
+                    offset: 1,
+                    affinity: Affinity::Upstream,
+                },
+                head_page,
+                head_x,
+                head_y,
+                base_selection: None,
+                allow_collapse: true,
+            },
+        });
+
+        let sel = editor.state().selection.expect("selection exists in test");
+        let view = editor.state().view();
+        let resolved = sel.resolve(&view).expect("selection resolves in test");
+        assert_eq!(resolved.from().node(), root);
+        assert_eq!(resolved.from().offset(), 0);
+        assert_eq!(resolved.to().node(), root);
+        assert_eq!(resolved.to().offset(), 2);
+        assert!(!editor.undo_history.can_undo());
+    }
+
+    #[test]
+    fn extend_to_explicit_base_selection_precedes_anchor_unit() {
+        let (state, root, p1) = state! {
+            doc {
+                root: root {
+                    image
+                    p1: paragraph { text("hello") }
+                }
+            }
+            selection: (p1, 0) -> (p1, 2)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state);
+        let initial = editor.state().selection.expect("selection exists in test");
+        let text_rect = {
+            let view = editor.state().view();
+            let hit_range = Selection::new(Position::new(p1, 4), Position::new(p1, 5));
+            let resolved = hit_range.resolve(&view).expect("text range resolves");
+            editor.view.selection_rects(&resolved)[0].rect
+        };
+
+        editor.apply(Message::Selection {
+            op: SelectionOp::ExtendTo {
+                anchor: Position {
+                    node: root,
+                    offset: 1,
+                    affinity: Affinity::Upstream,
+                },
+                head_page: 0,
+                head_x: text_rect.right() - 1.0,
+                head_y: text_rect.y + text_rect.height / 2.0,
+                base_selection: Some(initial),
+                allow_collapse: true,
+            },
+        });
+
+        let sel = editor.state().selection.expect("selection exists in test");
+        let view = editor.state().view();
+        let resolved = sel.resolve(&view).expect("selection resolves in test");
+        assert_eq!(resolved.from().node(), p1);
+        assert_eq!(resolved.from().offset(), 0);
+        assert_eq!(resolved.to().node(), p1);
+        assert!(resolved.to().offset() > 2);
         assert!(!editor.undo_history.can_undo());
     }
 

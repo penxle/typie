@@ -123,7 +123,7 @@ fn collapsed_or_unit<'a>(pos: &Position, view: &'a DocView<'a>) -> Selection {
 
 // ── helpers (d-2-4-1-b) ───────────────────────────────────────────────────────
 
-fn expand_unit_at<'a>(pos: &Position, view: &'a DocView<'a>) -> Option<Selection> {
+pub fn expand_unit_at<'a>(pos: &Position, view: &'a DocView<'a>) -> Option<Selection> {
     let host = view.node(pos.node)?;
     match pos.affinity {
         Affinity::Downstream => {
