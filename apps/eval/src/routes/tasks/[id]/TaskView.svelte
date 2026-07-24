@@ -24,7 +24,26 @@
   type Props = { data: PageData; preview?: boolean };
   const { data, preview = false }: Props = $props();
 
-  const startedAt = Date.now();
+  // elapsed_seconds = 이 태스크에 쓰인 총 활성 시간. 저장된 누적값에서 이어서 세고,
+  // 입력 없이 IDLE_LIMIT_MS를 넘긴 구간과 창 이탈~복귀 구간은 세지 않는다.
+  const IDLE_LIMIT_MS = 5 * 60 * 1000;
+  let activeMs = untrack(() => (data.draft?.elapsedSeconds ?? 0) * 1000);
+  let lastActivityAt = Date.now();
+  let inactive = false;
+  const recordActivity = () => {
+    const now = Date.now();
+    if (!inactive) {
+      const gap = now - lastActivityAt;
+      if (gap < IDLE_LIMIT_MS) activeMs += gap;
+    }
+    inactive = false;
+    lastActivityAt = now;
+  };
+  const suspendActivity = () => {
+    recordActivity();
+    inactive = true;
+  };
+
   const labels = ['A', 'B', 'C', 'D'];
   const SCORE_ANCHORS = [
     { score: 1, anchor: '매우 부실' },
@@ -197,7 +216,16 @@
   const scoredCount = $derived(data.task.setIds.filter((setId) => (scores[setId] ?? 0) > 0).length);
 </script>
 
-<svelte:window onkeydown={onKeydown} />
+<svelte:window onblur={suspendActivity} onfocus={recordActivity} onkeydown={onKeydown} />
+<svelte:document
+  onkeydown={recordActivity}
+  onpointerdown={recordActivity}
+  onpointermove={recordActivity}
+  onscrollcapture={recordActivity}
+  ontouchstart={recordActivity}
+  onvisibilitychange={() => (document.visibilityState === 'hidden' ? suspendActivity() : recordActivity())}
+  onwheel={recordActivity}
+/>
 
 <div class={css({ height: '[100dvh]', display: 'flex', flexDirection: 'column', backgroundColor: 'surface.subtle' })}>
   <header
@@ -421,11 +449,13 @@
       <form
         class={css({ padding: '16px', borderTopWidth: '1px', borderColor: 'border.default', flexShrink: '0' })}
         method="post"
-        use:enhance={({ action, cancel }) => {
+        use:enhance={({ action, formData, cancel }) => {
           if (busy) {
             cancel();
             return;
           }
+          recordActivity();
+          formData.set('elapsedSeconds', String(Math.round(activeMs / 1000)));
           if (action.search.includes('save')) saving = true;
           else submitting = true;
           return async ({ update }) => {
@@ -537,7 +567,6 @@
 
         <input name="result" type="hidden" value={result ? JSON.stringify(result) : ''} />
         <input name="feedbackLabels" type="hidden" value={JSON.stringify(labelMap)} />
-        <input name="elapsedSeconds" type="hidden" value={Math.round((Date.now() - startedAt) / 1000)} />
 
         {#if preview}
           <p class={flex({ align: 'center', gap: '4px', marginTop: '10px', fontSize: '12px', color: 'text.faint' })}>
