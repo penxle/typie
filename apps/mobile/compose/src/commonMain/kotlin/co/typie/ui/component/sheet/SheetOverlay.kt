@@ -67,7 +67,7 @@ private fun SheetEntryOverlay(state: Sheet, entry: SheetEntry<*>) {
     scrim = { scrimAlpha ->
       Box(
         Modifier.fillMaxSize()
-          .graphicsLayer { alpha = scrimAlpha }
+          .graphicsLayer { alpha = scrimAlpha() }
           .background(AppTheme.colors.scrim)
           .clickable { dismiss() }
       )
