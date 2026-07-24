@@ -197,7 +197,6 @@ impl View {
             path: Vec<usize>,
             parent: Dot,
             child_index: usize,
-            width: f32,
             y: f32,
             x: f32,
             content_width: f32,
@@ -277,7 +276,6 @@ impl View {
                     path: path.to_vec(),
                     parent: att.parent,
                     child_index: att.index,
-                    width: cur.rect.width,
                     y,
                     x,
                     content_width: w,
@@ -298,7 +296,7 @@ impl View {
             let measured = {
                 let mut resource = self.resource.lock().unwrap();
                 self.measurer
-                    .measure(&node_view, seed.width, &ctx, &mut resource)
+                    .measure(&node_view, seed.content_width, &ctx, &mut resource)
             };
             let (paginator, _, _) = self.build_pipeline(state);
             let new_node = paginator.place_subtree(
@@ -1409,7 +1407,9 @@ mod incremental_tests {
     use std::sync::{Arc, Mutex};
 
     use editor_crdt::{Dot, ListOp, OpGraph};
-    use editor_model::{AtomLeaf, ChildView, EditOp, Node, NodeType, SeqItem};
+    use editor_model::{
+        AtomLeaf, ChildView, EditOp, Node, NodeAttr, NodeAttrOp, NodeType, SeqItem, TableNodeAttr,
+    };
     use editor_resource::Resource;
     use editor_state::{ProjectedState, State};
 
@@ -1524,6 +1524,67 @@ mod incremental_tests {
         assert!(!ids.is_empty());
         assert_eq!(view.node_box_rects(&ids), fresh.node_box_rects(&ids));
         assert_eq!(page_sig(&view), page_sig(&fresh));
+    }
+
+    #[test]
+    fn reconcile_table_proportion_to_full_width_matches_full_layout() {
+        let mut projected = ProjectedState::empty();
+        let root = Dot::ROOT;
+        let table = projected
+            .apply(seq_block(1, NodeType::Table, vec![root]))
+            .unwrap()
+            .id;
+        let row = projected
+            .apply(seq_block(2, NodeType::TableRow, vec![root, table]))
+            .unwrap()
+            .id;
+        let cell = projected
+            .apply(seq_block(3, NodeType::TableCell, vec![root, table, row]))
+            .unwrap()
+            .id;
+        projected
+            .apply(seq_block(
+                4,
+                NodeType::Paragraph,
+                vec![root, table, row, cell],
+            ))
+            .unwrap();
+        projected.apply(seq_char(5, 'A')).unwrap();
+        projected
+            .apply(EditOp::NodeAttr(NodeAttrOp {
+                target: table,
+                attr: NodeAttr::Table {
+                    attr: TableNodeAttr::Proportion(50),
+                },
+            }))
+            .unwrap();
+        projected.commit();
+
+        let pre = State::new(projected.clone(), None);
+        let mut view = make_view(800.0);
+        view.layout(&pre);
+
+        let mut edited = projected;
+        let _ = edited.take_layout_dirty();
+        edited
+            .apply(EditOp::NodeAttr(NodeAttrOp {
+                target: table,
+                attr: NodeAttr::Table {
+                    attr: TableNodeAttr::Proportion(100),
+                },
+            }))
+            .unwrap();
+        let dirty = edited.take_layout_dirty();
+        let post = State::new(edited, None);
+
+        view.reconcile(&post, dirty, None, None);
+
+        let mut fresh = make_view(800.0);
+        fresh.layout(&post);
+        assert_eq!(
+            view.node_box_rects(&[table]),
+            fresh.node_box_rects(&[table])
+        );
     }
 
     #[test]
