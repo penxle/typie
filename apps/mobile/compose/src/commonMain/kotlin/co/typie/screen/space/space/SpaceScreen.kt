@@ -95,7 +95,6 @@ import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastAnchor
 import co.typie.ui.component.toast.ToastType
 import co.typie.ui.component.topbar.ProvideTopBar
-import co.typie.ui.component.topbar.TopBarDefaults
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
 import kotlin.time.Duration
@@ -389,13 +388,7 @@ fun SpaceScreen() {
       )
     },
   ) { contentPadding ->
-    val reorderViewportTopInset =
-      maxOf(
-        0.dp,
-        contentPadding.calculateTopPadding() -
-          TopBarDefaults.BlurFadeHeight -
-          TopBarDefaults.ContentTopSpacing,
-      )
+    val reorderViewportTopInset = contentPadding.calculateTopPadding()
     val reorderViewportBottomInset =
       WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding() + overlayBaseBottomInset
 
