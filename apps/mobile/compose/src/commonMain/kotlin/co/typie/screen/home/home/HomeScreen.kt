@@ -203,12 +203,12 @@ fun HomeScreen() {
           }
         }
       },
-  ) { contentPadding ->
+  ) { innerPadding ->
     if (recentDocs.isEmpty()) {
       EmptyHome(
         modifier =
           Modifier.fillMaxSize()
-            .padding(contentPadding)
+            .padding(innerPadding)
             .padding(bottom = BottomBarDefaults.BarAreaHeight),
         userName = model.query.data.me.name,
         onCreate = createDocument,
@@ -220,7 +220,7 @@ fun HomeScreen() {
         recentDocs = recentDocs,
         siteName = model.query.data.site.name,
         contentPadding =
-          contentPadding +
+          innerPadding +
             PaddingValues(
               bottom =
                 if (continueWritingDoc != null) ContinueWritingPinHeight + ContinueWritingPinGap
@@ -339,11 +339,7 @@ private fun EmptyHome(
 
         Spacer(Modifier.width(8.dp))
 
-        Text(
-          "새 문서 쓰기",
-          style = AppTheme.typography.action,
-          color = AppTheme.colors.surfaceDefault,
-        )
+        Text("새 문서 쓰기", style = AppTheme.typography.action, color = AppTheme.colors.surfaceDefault)
       }
     }
   }

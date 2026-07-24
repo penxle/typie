@@ -67,13 +67,13 @@ fun UpdatePasswordScreen() {
         Spacer(Modifier.height(12.dp))
       }
     },
-  ) { contentPadding ->
+  ) { innerPadding ->
     Column(
       modifier =
         Modifier.fillMaxSize()
           .verticalScroll(scrollState)
           .imePadding()
-          .padding(contentPadding)
+          .padding(innerPadding)
           .padding(AppTheme.spacings.scrollBottomPadding),
       verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {

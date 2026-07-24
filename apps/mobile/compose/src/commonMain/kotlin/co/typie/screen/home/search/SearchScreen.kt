@@ -66,12 +66,12 @@ fun SearchScreen() {
 
   ProvideTopBar()
 
-  Screen(contentPadding = PaddingValues.Zero) { contentPadding ->
+  Screen(contentPadding = PaddingValues.Zero) { innerPadding ->
     Column(
       modifier =
         Modifier.fillMaxSize()
           .imePadding()
-          .padding(contentPadding.excludeBottom())
+          .padding(innerPadding.excludeBottom())
           .padding(horizontal = 16.dp)
     ) {
       SearchInputField(
@@ -95,7 +95,7 @@ fun SearchScreen() {
             Modifier.fillMaxSize()
               .verticalScroll(scrollState)
               .padding(FogInsets)
-              .padding(bottom = contentPadding.calculateBottomPadding())
+              .padding(bottom = innerPadding.calculateBottomPadding())
               .padding(AppTheme.spacings.scrollBottomPadding)
         ) {
           if (model.inputKeyword.isBlank()) {

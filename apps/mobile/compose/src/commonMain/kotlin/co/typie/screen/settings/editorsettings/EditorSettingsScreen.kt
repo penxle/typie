@@ -37,12 +37,12 @@ fun EditorSettingsScreen() {
     scrollOffset = scrollState.topBarScrollOffset(),
   )
 
-  Screen { contentPadding ->
+  Screen { innerPadding ->
     Column(
       modifier =
         Modifier.fillMaxSize()
           .verticalScroll(scrollState)
-          .padding(contentPadding)
+          .padding(innerPadding)
           .padding(AppTheme.spacings.scrollBottomPadding),
       verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {

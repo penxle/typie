@@ -387,7 +387,7 @@ fun SpaceScreen() {
         onMetricsChanged = overlayState::onMetricsChanged,
       )
     },
-  ) { contentPadding ->
+  ) { innerPadding ->
     val reorderViewportBottomInset =
       WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding() + overlayBaseBottomInset
 
@@ -408,7 +408,7 @@ fun SpaceScreen() {
         selectionState = selectionState,
         dimmedItemIds = cutDimmedItemIds,
         bottomSpacerHeight = overlayState.reservedBottomSpacerHeight,
-        modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding),
+        modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(innerPadding),
         header = {
           SpaceHeader(
             title = site?.name.orEmpty(),

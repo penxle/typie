@@ -50,12 +50,12 @@ fun CancelPlanScreen() {
     scrollOffset = scrollState.topBarScrollOffset(),
   )
 
-  Screen(loadable = model.query) { contentPadding ->
+  Screen(loadable = model.query) { innerPadding ->
     Column(
       modifier =
         Modifier.fillMaxSize()
           .verticalScroll(scrollState)
-          .padding(contentPadding)
+          .padding(innerPadding)
           .padding(AppTheme.spacings.scrollBottomPadding),
       verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {

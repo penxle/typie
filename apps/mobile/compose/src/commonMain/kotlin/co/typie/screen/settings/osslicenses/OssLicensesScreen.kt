@@ -51,12 +51,12 @@ fun OssLicensesScreen() {
     scrollOffset = scrollState.topBarScrollOffset(),
   )
 
-  Screen(loadable = model) { contentPadding ->
+  Screen(loadable = model) { innerPadding ->
     Column(
       modifier =
         Modifier.fillMaxSize()
           .verticalScroll(scrollState)
-          .padding(contentPadding)
+          .padding(innerPadding)
           .padding(AppTheme.spacings.scrollBottomPadding),
       verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {

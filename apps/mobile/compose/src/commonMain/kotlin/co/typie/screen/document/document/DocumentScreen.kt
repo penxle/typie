@@ -220,7 +220,7 @@ fun DocumentScreen(entityId: String) {
     scrollOffset = scrollState.topBarScrollOffset(),
   )
 
-  Screen(loadable = model.query, background = AppTheme.colors.surfaceCanvas) { contentPadding ->
+  Screen(loadable = model.query, background = AppTheme.colors.surfaceCanvas) { innerPadding ->
     val document = document ?: return@Screen
     val subtitle = document.subtitle?.takeIf(String::isNotBlank)
     val createdAt =
@@ -377,7 +377,7 @@ fun DocumentScreen(entityId: String) {
       modifier =
         Modifier.fillMaxSize()
           .verticalScroll(scrollState)
-          .padding(contentPadding)
+          .padding(innerPadding)
           .padding(horizontal = 16.dp)
           .padding(bottom = 12.dp)
     ) {

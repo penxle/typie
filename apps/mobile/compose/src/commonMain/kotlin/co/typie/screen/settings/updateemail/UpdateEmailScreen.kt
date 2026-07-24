@@ -56,14 +56,14 @@ fun UpdateEmailScreen() {
 
   ProvideTopBar(center = { Text("이메일 변경", style = AppTheme.typography.title) })
 
-  Screen(loadable = model.query) { contentPadding ->
-    Column(modifier = Modifier.fillMaxSize().imePadding().padding(contentPadding.excludeTop())) {
+  Screen(loadable = model.query) { innerPadding ->
+    Column(modifier = Modifier.fillMaxSize().imePadding().padding(innerPadding.excludeTop())) {
       Box(modifier = Modifier.weight(1f)) {
         Column(
           modifier =
             Modifier.fillMaxSize()
               .verticalScroll(scrollState)
-              .padding(contentPadding.onlyTop())
+              .padding(innerPadding.onlyTop())
               .padding(AppTheme.spacings.scrollBottomPadding)
         ) {
           Text("현재 이메일 주소", style = AppTheme.typography.caption, color = AppTheme.colors.textMuted)

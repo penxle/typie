@@ -422,7 +422,7 @@ fun FolderScreen(entityId: String) {
         onMetricsChanged = overlayState::onMetricsChanged,
       )
     },
-  ) { contentPadding ->
+  ) { innerPadding ->
     val reorderViewportBottomInset =
       WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding() + overlayBaseBottomInset
 
@@ -443,7 +443,7 @@ fun FolderScreen(entityId: String) {
         selectionState = selectionState,
         dimmedItemIds = cutDimmedItemIds,
         bottomSpacerHeight = overlayState.reservedBottomSpacerHeight,
-        modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding),
+        modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(innerPadding),
         header = {},
         onDocumentClick = { childEntityId -> nav.navigate(Route.Editor(childEntityId)) },
         onDocumentLongPress = onDocumentLongPress@{ entity ->

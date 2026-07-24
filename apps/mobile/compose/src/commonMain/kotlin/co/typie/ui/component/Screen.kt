@@ -65,7 +65,7 @@ fun Screen(
   topBarContentPadding: Dp = TopBarDefaults.BlurFadeHeight + TopBarDefaults.ContentTopSpacing,
   dismissFocusOnTapOutsideInput: Boolean = true,
   overlay: (@Composable BoxScope.() -> Unit)? = null,
-  content: @Composable ScreenScope.(contentPadding: PaddingValues) -> Unit,
+  content: @Composable ScreenScope.(innerPadding: PaddingValues) -> Unit,
 ) {
   PublishNavigationTopBarBackdropStyle(background)
 
@@ -86,7 +86,7 @@ fun Screen(
     } else {
       0.dp
     }
-  val contentPadding =
+  val innerPadding =
     if (hasTopBar) {
       PaddingValues(top = topBarOcclusion + topBarContentPadding) +
         contentPadding +
@@ -126,7 +126,7 @@ fun Screen(
     ) {
       Skeleton(enabled = loadable != null && loadable.state !is LoadableState.Success) {
         Box(modifier = Modifier.fillMaxSize()) {
-          content.invoke(ScreenScopeImpl(this, topBarOcclusion), contentPadding)
+          content.invoke(ScreenScopeImpl(this, topBarOcclusion), innerPadding)
         }
       }
     }

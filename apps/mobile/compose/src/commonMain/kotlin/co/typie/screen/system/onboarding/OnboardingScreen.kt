@@ -145,8 +145,8 @@ fun OnboardingScreen(onComplete: () -> Unit) {
       },
   )
 
-  Screen(background = AppTheme.colors.surfaceDefault) { contentPadding ->
-    Column(modifier = Modifier.fillMaxSize().padding(contentPadding)) {
+  Screen(background = AppTheme.colors.surfaceDefault) { innerPadding ->
+    Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
       HorizontalPager(
         state = pagerState,
         beyondViewportPageCount = pages.size - 1,

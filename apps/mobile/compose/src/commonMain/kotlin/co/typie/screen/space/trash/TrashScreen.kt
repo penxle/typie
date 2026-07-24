@@ -310,13 +310,12 @@ fun TrashScreen(entityId: String? = null) {
     scrollOffset = scrollState.topBarScrollOffset(),
   )
 
-  Screen(loadable = if (entityId == null) model.siteQuery else model.entityQuery) { contentPadding
-    ->
+  Screen(loadable = if (entityId == null) model.siteQuery else model.entityQuery) { innerPadding ->
     Column(
       modifier =
         Modifier.fillMaxSize()
           .verticalScroll(scrollState)
-          .padding(contentPadding)
+          .padding(innerPadding)
           .padding(bottom = 16.dp)
           .padding(AppTheme.spacings.scrollBottomPadding),
       verticalArrangement = Arrangement.spacedBy(16.dp),

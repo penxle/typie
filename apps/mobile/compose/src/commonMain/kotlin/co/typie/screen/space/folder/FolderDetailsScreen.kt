@@ -180,7 +180,7 @@ fun FolderDetailsScreen(entityId: String) {
     scrollOffset = scrollState.topBarScrollOffset(),
   )
 
-  Screen(loadable = model.query, background = AppTheme.colors.surfaceCanvas) { contentPadding ->
+  Screen(loadable = model.query, background = AppTheme.colors.surfaceCanvas) { innerPadding ->
     val resolvedFolder = folder ?: return@Screen
     val characterCount = folderDetails?.characterCount ?: 0
 
@@ -280,7 +280,7 @@ fun FolderDetailsScreen(entityId: String) {
       modifier =
         Modifier.fillMaxSize()
           .verticalScroll(scrollState)
-          .padding(contentPadding)
+          .padding(innerPadding)
           .padding(horizontal = 16.dp)
           .padding(bottom = 12.dp)
     ) {

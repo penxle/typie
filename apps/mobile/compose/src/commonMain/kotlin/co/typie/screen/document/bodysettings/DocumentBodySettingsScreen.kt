@@ -126,7 +126,7 @@ fun DocumentBodySettingsScreen(entityId: String) {
     loadable = model.query,
     background = AppTheme.colors.surfaceInset,
     contentPadding = PaddingValues.Zero,
-  ) { contentPadding ->
+  ) { innerPadding ->
     val data = (model.query.state as? QueryState.Success)?.data ?: return@Screen
     val document = data.entity.node.onDocument ?: return@Screen
     val settingsRuntime = remember(document.id) { EditorRuntime(uiScope = scope) }
@@ -142,7 +142,7 @@ fun DocumentBodySettingsScreen(entityId: String) {
 
     val colors = AppTheme.colors
     val layoutDirection = LocalLayoutDirection.current
-    val topBarClearance = contentPadding.calculateTopPadding()
+    val topBarClearance = innerPadding.calculateTopPadding()
     val previewHeight = 200.dp
     val previewContainerHeight = topBarClearance + previewHeight
     val previewShape = RoundedCornerShape(bottomStart = AppShapes.xl, bottomEnd = AppShapes.xl)
@@ -633,8 +633,8 @@ fun DocumentBodySettingsScreen(entityId: String) {
         Modifier.fillMaxSize()
           .imePadding()
           .padding(
-            start = contentPadding.calculateStartPadding(layoutDirection),
-            end = contentPadding.calculateEndPadding(layoutDirection),
+            start = innerPadding.calculateStartPadding(layoutDirection),
+            end = innerPadding.calculateEndPadding(layoutDirection),
           )
     ) {
       Skeleton(enabled = !controlsEnabled, modifier = Modifier.matchParentSize()) {
@@ -645,7 +645,7 @@ fun DocumentBodySettingsScreen(entityId: String) {
               .background(colors.surfaceDefault)
               .padding(
                 top = previewContainerHeight + 12.dp,
-                bottom = contentPadding.calculateBottomPadding(),
+                bottom = innerPadding.calculateBottomPadding(),
               )
               .padding(AppTheme.spacings.scrollBottomPadding)
         ) {

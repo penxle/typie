@@ -78,7 +78,7 @@ fun TextReplacementsScreen() {
     scrollOffset = scrollState.topBarScrollOffset(),
   )
 
-  Screen(loadable = model.query) { contentPadding ->
+  Screen(loadable = model.query) { innerPadding ->
     val displayed = model.customs
     val keys = displayed.map { it.textReplacementId }
     val reorderState =
@@ -93,7 +93,7 @@ fun TextReplacementsScreen() {
         modifier =
           Modifier.fillMaxSize()
             .verticalScroll(scrollState)
-            .padding(contentPadding)
+            .padding(innerPadding)
             .padding(AppTheme.spacings.scrollBottomPadding),
         verticalArrangement = Arrangement.spacedBy(16.dp),
       ) {

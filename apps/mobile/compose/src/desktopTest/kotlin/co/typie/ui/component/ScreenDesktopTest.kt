@@ -82,8 +82,8 @@ class ScreenDesktopTest {
         LocalDialog provides Dialog(),
         LocalTopBarState provides topBarState,
       ) {
-        Screen { contentPadding ->
-          actualTopPadding = contentPadding.calculateTopPadding()
+        Screen { innerPadding ->
+          actualTopPadding = innerPadding.calculateTopPadding()
           Box(Modifier.fillMaxSize().testTag(ContentTag))
         }
       }
@@ -109,8 +109,8 @@ class ScreenDesktopTest {
         LocalDialog provides Dialog(),
         LocalTopBarState provides topBarState,
       ) {
-        Screen(topBarContentPadding = 0.dp) { contentPadding ->
-          actualTopPadding = contentPadding.calculateTopPadding()
+        Screen(topBarContentPadding = 0.dp) { innerPadding ->
+          actualTopPadding = innerPadding.calculateTopPadding()
           Box(Modifier.fillMaxSize().testTag(ContentTag))
         }
       }

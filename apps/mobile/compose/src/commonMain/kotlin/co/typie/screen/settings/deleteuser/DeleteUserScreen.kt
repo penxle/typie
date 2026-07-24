@@ -55,14 +55,14 @@ fun DeleteUserScreen() {
 
   ProvideTopBar(center = { Text("회원 탈퇴", style = AppTheme.typography.title) })
 
-  Screen { contentPadding ->
-    Column(modifier = Modifier.fillMaxSize().padding(contentPadding.excludeTop())) {
+  Screen { innerPadding ->
+    Column(modifier = Modifier.fillMaxSize().padding(innerPadding.excludeTop())) {
       Box(modifier = Modifier.weight(1f)) {
         Column(
           modifier =
             Modifier.fillMaxSize()
               .verticalScroll(scrollState)
-              .padding(contentPadding.onlyTop())
+              .padding(innerPadding.onlyTop())
               .padding(AppTheme.spacings.scrollBottomPadding),
           verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {

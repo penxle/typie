@@ -372,7 +372,7 @@ fun NotesScreen() {
       ),
   )
 
-  Screen(loadable = model.query, background = AppTheme.colors.surfaceCanvas) { contentPadding ->
+  Screen(loadable = model.query, background = AppTheme.colors.surfaceCanvas) { innerPadding ->
     Crossfade(
       targetState = model.filterStatus,
       modifier = Modifier,
@@ -424,7 +424,7 @@ fun NotesScreen() {
             .imePadding()
       ) {
         Column(
-          modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding),
+          modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(innerPadding),
           verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
           Skeleton.Keep { Text(text = "노트", style = AppTheme.typography.display) }

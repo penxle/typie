@@ -156,7 +156,7 @@ fun SpaceSettingsScreen() {
         Spacer(Modifier.height(12.dp))
       }
     },
-  ) { contentPadding ->
+  ) { innerPadding ->
     Column(
       modifier =
         Modifier.fillMaxSize()
@@ -174,7 +174,7 @@ fun SpaceSettingsScreen() {
             }
           }
         },
-        topInset = contentPadding.calculateTopPadding(),
+        topInset = innerPadding.calculateTopPadding(),
       )
 
       PaperPane(modifier = Modifier.offset(y = (-28).dp)) {
@@ -349,7 +349,9 @@ private fun DeleteSiteSheet(
   documentCount: Int,
   folderCount: Int,
   isDeleting: Boolean,
-  onDelete: suspend context(SheetScope<Unit>) () -> Unit,
+  onDelete:
+    suspend context(SheetScope<Unit>)
+    () -> Unit,
 ) {
   var inputValue by remember { mutableStateOf("") }
 

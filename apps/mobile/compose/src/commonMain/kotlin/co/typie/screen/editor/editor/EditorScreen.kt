@@ -1032,7 +1032,7 @@ fun EditorScreen(entityId: String) {
         backdropColor = background,
       )
     },
-  ) { contentPadding ->
+  ) { innerPadding ->
     val comments =
       rememberEditorCommentsSession(
         entityId = entityId,
@@ -1052,10 +1052,10 @@ fun EditorScreen(entityId: String) {
     val keyboardController = LocalSoftwareKeyboardController.current
     val scrollGestureLockState = LocalScrollGestureLockState.current
     val layoutDirection = LocalLayoutDirection.current
-    val topInset = contentPadding.calculateTopPadding()
-    val startInset = contentPadding.calculateStartPadding(layoutDirection)
-    val endInset = contentPadding.calculateEndPadding(layoutDirection)
-    val bottomSafeInset = contentPadding.calculateBottomPadding()
+    val topInset = innerPadding.calculateTopPadding()
+    val startInset = innerPadding.calculateStartPadding(layoutDirection)
+    val endInset = innerPadding.calculateEndPadding(layoutDirection)
+    val bottomSafeInset = innerPadding.calculateBottomPadding()
     val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
     val toolbarInputState = rememberEditorToolbarInputState()
     val keyboardState =

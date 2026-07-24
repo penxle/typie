@@ -67,8 +67,8 @@ fun LoginScreen() {
 
   ProvideTopBar(enabled = false)
 
-  Screen { contentPadding ->
-    Column(modifier = Modifier.fillMaxSize().padding(contentPadding)) {
+  Screen { innerPadding ->
+    Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
       Column(
         modifier = Modifier.weight(1f).fillMaxWidth(),
         verticalArrangement = Arrangement.Center,

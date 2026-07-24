@@ -44,8 +44,8 @@ fun UpdateRequiredScreen() {
 
   ProvideTopBar(enabled = false)
 
-  Screen(background = AppTheme.colors.surfaceDefault) { contentPadding ->
-    Column(modifier = Modifier.fillMaxSize().padding(contentPadding)) {
+  Screen(background = AppTheme.colors.surfaceDefault) { innerPadding ->
+    Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
       Column(
         modifier = Modifier.weight(1f).fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,

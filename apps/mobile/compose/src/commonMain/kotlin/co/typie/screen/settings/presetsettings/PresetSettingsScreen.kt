@@ -101,10 +101,10 @@ fun PresetSettingsScreen() {
     loadable = model.query,
     background = screenBackground,
     contentPadding = PaddingValues.Zero,
-  ) { contentPadding ->
+  ) { innerPadding ->
     val colors = AppTheme.colors
     val layoutDirection = LocalLayoutDirection.current
-    val topBarClearance = contentPadding.calculateTopPadding()
+    val topBarClearance = innerPadding.calculateTopPadding()
     val previewHeight = 200.dp
     val previewContainerHeight = topBarClearance + previewHeight
     val previewShape = RoundedCornerShape(bottomStart = AppShapes.xl, bottomEnd = AppShapes.xl)
@@ -116,8 +116,8 @@ fun PresetSettingsScreen() {
         Modifier.fillMaxSize()
           .imePadding()
           .padding(
-            start = contentPadding.calculateStartPadding(layoutDirection),
-            end = contentPadding.calculateEndPadding(layoutDirection),
+            start = innerPadding.calculateStartPadding(layoutDirection),
+            end = innerPadding.calculateEndPadding(layoutDirection),
           )
     ) {
       Column(
@@ -127,7 +127,7 @@ fun PresetSettingsScreen() {
             .background(colors.surfaceDefault)
             .padding(
               top = previewContainerHeight + 12.dp,
-              bottom = contentPadding.calculateBottomPadding(),
+              bottom = innerPadding.calculateBottomPadding(),
             )
             .padding(AppTheme.spacings.scrollBottomPadding)
       ) {
