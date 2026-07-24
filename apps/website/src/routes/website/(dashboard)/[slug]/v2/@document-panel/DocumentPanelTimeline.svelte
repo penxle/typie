@@ -91,7 +91,7 @@
   const paneGroup = getPaneGroup();
   const focusReturn = getDocumentPanelFocusReturn();
 
-  const editorContainer = $derived(ctx.editor?.scrollContainerEl);
+  const editorViewport = $derived(ctx.editor?.scrollContainerEl?.parentElement);
 
   let timelineEditor: Editor | undefined;
   let creatingTimeline = false;
@@ -434,10 +434,10 @@
   </div>
 </div>
 
-{#if editorContainer && !isLoading && headsAsc.length > 0}
+{#if editorViewport && !isLoading && headsAsc.length > 0}
   <div
     class={center({ position: 'absolute', left: '0', right: '0', bottom: '32px', pointerEvents: 'none' })}
-    use:portal={editorContainer}
+    use:portal={editorViewport}
     in:fly={{ y: 32, duration: 300 }}
   >
     <div
