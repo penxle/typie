@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import co.typie.editor.external.IMAGE_MAX_PROPORTION
 import co.typie.editor.external.IMAGE_MIN_PROPORTION
 import co.typie.editor.external.LocalEditorExternalElementState
+import co.typie.editor.external.imageResizeDisplayPercent
 import co.typie.editor.external.imageResizeProportionRange
 import co.typie.editor.ffi.ExternalElementData
 import co.typie.editor.ffi.ImageNodeAttr
@@ -62,25 +63,21 @@ internal fun ImageResizeSecondaryToolbar(
     return
   }
 
-  val range =
-    imageResizeProportionRange(boundsWidth = boundsWidth, originalWidth = asset.width.toFloat())
+  val originalWidth = asset.width.toFloat()
+  val range = imageResizeProportionRange(boundsWidth = boundsWidth, originalWidth = originalWidth)
   val nodeProportion = image.proportion.coerceIn(IMAGE_MIN_PROPORTION, IMAGE_MAX_PROPORTION)
   val currentProportion =
     (imageState.resizeDraftProportions[nodeId] ?: nodeProportion.toFloat()).coerceIn(
       range.first.toFloat(),
       range.last.toFloat(),
     )
-  val currentPercent = currentProportion.roundToInt()
+  val currentPercent = imageResizeDisplayPercent(currentProportion, boundsWidth, originalWidth)
 
   DisposableEffect(nodeId) { onDispose { imageState.resizeDraftProportions.remove(nodeId) } }
 
   fun updateDraft(value: Float) {
     val next = value.coerceIn(range.first.toFloat(), range.last.toFloat())
     imageState.resizeDraftProportions[nodeId] = next
-  }
-
-  fun startDraft() {
-    imageState.resizeDraftProportions[nodeId] = currentProportion
   }
 
   fun commit(value: Float) {
@@ -105,7 +102,7 @@ internal fun ImageResizeSecondaryToolbar(
     Slider(
       value = currentProportion,
       range = range.first.toFloat()..range.last.toFloat(),
-      onDragStart = ::startDraft,
+      onDragStart = ::updateDraft,
       onDrag = ::updateDraft,
       onDragEnd = ::commit,
       onDragCancel = ::cancelDraft,
