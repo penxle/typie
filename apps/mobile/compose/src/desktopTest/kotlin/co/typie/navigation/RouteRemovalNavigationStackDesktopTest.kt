@@ -1,8 +1,6 @@
 package co.typie.navigation
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.rememberScrollable2DState
-import androidx.compose.foundation.gestures.scrollable2D
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
@@ -179,12 +177,9 @@ class RouteRemovalNavigationStackDesktopTest {
         topBarState = remember { TopBarState() },
         modifier = Modifier.size(width = 320.dp, height = 640.dp),
       ) { route ->
-        val scrollableState = rememberScrollable2DState { Offset.Zero }
         Box(
           Modifier.fillMaxSize()
             .testTag(if (route == guardedRoute) GuardedRouteTag else HomeRouteTag)
-            .navigationPopNestedScroll()
-            .scrollable2D(scrollableState)
         )
       }
       LaunchedEffect(Unit) { navigator.navigate(guardedRoute) }

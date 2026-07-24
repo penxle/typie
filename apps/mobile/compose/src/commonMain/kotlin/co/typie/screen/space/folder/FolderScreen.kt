@@ -423,13 +423,7 @@ fun FolderScreen(entityId: String) {
       )
     },
   ) { contentPadding ->
-    val reorderViewportTopInset =
-      maxOf(
-        0.dp,
-        contentPadding.calculateTopPadding() -
-          TopBarDefaults.BlurFadeHeight -
-          TopBarDefaults.ContentTopSpacing,
-      )
+    val reorderViewportTopInset = contentPadding.calculateTopPadding()
     val reorderViewportBottomInset =
       WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding() + overlayBaseBottomInset
 
