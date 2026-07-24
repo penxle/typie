@@ -428,6 +428,7 @@ impl MarkData {
 
 pub type MarkRect = PageRect<()>;
 
+#[derive(Clone)]
 pub struct Mark {
     pub data: MarkData,
     pub rects: Vec<MarkRect>,

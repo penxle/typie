@@ -261,3 +261,50 @@ fn stale_range_no_longer_produces_decoration_marks() {
         "stale removal must drop the range's decoration in the same tick"
     );
 }
+
+#[test]
+fn decoration_marks_cache_follows_reflow() {
+    let (mut editor, p1) = hello_world_editor();
+    editor.apply(Message::TrackedRange {
+        op: TrackedRangeOp::SetGroupDecoration {
+            group: "spellcheck".into(),
+            style: editor_common::DecorationStyle {
+                background: Some("selection".into()),
+                underline: None,
+                ..Default::default()
+            },
+            enabled: true,
+            z_index: 0,
+        },
+    });
+
+    let first_x = |editor: &Editor| -> f32 {
+        let marks = editor.tracked_decoration_marks_for_test();
+        marks
+            .first()
+            .and_then(|m| m.rects.first())
+            .map(|r| r.rect.x)
+            .expect("decoration mark rect")
+    };
+
+    let before = first_x(&editor);
+    assert_eq!(
+        before,
+        first_x(&editor),
+        "repeated reads within one render epoch return identical marks"
+    );
+
+    set_cursor(&mut editor, p1, 0);
+    editor.apply(Message::Insertion {
+        op: InsertionOp::Text { text: "YY".into() },
+    });
+
+    assert!(
+        editor.tracked_ranges().contains("r1"),
+        "typing before the range keeps it"
+    );
+    assert!(
+        first_x(&editor) > before,
+        "a doc edit that shifts the range must refresh the cached decoration marks"
+    );
+}

@@ -183,6 +183,7 @@ fn typing_run(kind: MergeKind, before: &State, after: &State) -> RecordMerge {
 }
 
 type SelectionMarkRectsCache = Mutex<Option<(Selection, u64, Arc<Vec<PageRect>>)>>;
+type TrackedDecorationMarksCache = Mutex<Option<(u64, Arc<Vec<Mark>>)>>;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ManifestRequestClass {
@@ -230,6 +231,10 @@ pub struct Editor {
     // geometry stays separate because external elements are host-painted but
     // still selectable.
     selection_mark_rects_cache: SelectionMarkRectsCache,
+    // Tracked decoration marks for the current render_epoch, shared by every
+    // page rendered in the same epoch so a multi-page repaint resolves the
+    // registry once instead of once per page.
+    tracked_decoration_marks_cache: TrackedDecorationMarksCache,
 }
 
 #[derive(Clone, Copy)]
@@ -264,6 +269,7 @@ impl Editor {
             ime_delete_paint: None,
             ime_window_anchor: None,
             selection_mark_rects_cache: Mutex::new(None),
+            tracked_decoration_marks_cache: Mutex::new(None),
         }
     }
 
@@ -295,19 +301,25 @@ impl Editor {
         if !self.tracked_ranges.has_text_sensitive() {
             return false;
         }
-        let candidates = match dirty {
-            LayoutDirty::Full => self.tracked_ranges.text_sensitive_ids(),
+        // Content-only dirt cannot re-home leaves across blocks, so the block
+        // index stays valid and re-indexing is skipped on the typing hot path;
+        // structural and full passes must refresh it.
+        let (candidates, reindex_pass) = match dirty {
+            LayoutDirty::Full => (self.tracked_ranges.text_sensitive_ids(), true),
             LayoutDirty::Incremental {
                 content,
                 structural,
             } => {
                 if !structural.is_empty() {
-                    self.tracked_ranges.text_sensitive_ids()
+                    (self.tracked_ranges.text_sensitive_ids(), true)
                 } else if content.is_empty() {
                     return false;
                 } else {
-                    self.tracked_ranges
-                        .text_sensitive_ids_in_blocks(content.iter())
+                    (
+                        self.tracked_ranges
+                            .text_sensitive_ids_in_blocks(content.iter()),
+                        false,
+                    )
                 }
             }
         };
@@ -331,7 +343,7 @@ impl Editor {
                     Some(resolved) => {
                         if resolved.collect_text() != captured {
                             stale.push(id.clone());
-                        } else {
+                        } else if reindex_pass {
                             let blocks: Vec<Dot> = editor_state::blocks_in_range(&resolved)
                                 .iter()
                                 .map(|b| b.id())
@@ -971,8 +983,20 @@ impl Editor {
 
     #[cfg(test)]
     pub(crate) fn tracked_decoration_marks_for_test(&self) -> Vec<Mark> {
+        self.cached_tracked_decoration_marks().as_ref().clone()
+    }
+
+    fn cached_tracked_decoration_marks(&self) -> Arc<Vec<Mark>> {
+        if let Some((epoch, marks)) = self.tracked_decoration_marks_cache.lock().unwrap().as_ref()
+            && *epoch == self.render_epoch
+        {
+            return Arc::clone(marks);
+        }
         let mut marks = Vec::new();
         self.collect_tracked_decoration_marks(&mut marks);
+        let marks = Arc::new(marks);
+        *self.tracked_decoration_marks_cache.lock().unwrap() =
+            Some((self.render_epoch, Arc::clone(&marks)));
         marks
     }
 
@@ -1100,7 +1124,7 @@ impl Editor {
         let mut marks: Vec<Mark> = Vec::new();
 
         // Push before selection so selection draws on top within BelowContent.
-        self.collect_tracked_decoration_marks(&mut marks);
+        marks.extend(self.cached_tracked_decoration_marks().iter().cloned());
 
         if let Some(rects) = self.selection_mark_rects() {
             marks.push(Mark {
@@ -1951,6 +1975,7 @@ impl Editor {
             ime_delete_paint: None,
             ime_window_anchor: None,
             selection_mark_rects_cache: Mutex::new(None),
+            tracked_decoration_marks_cache: Mutex::new(None),
         };
         // Lay out the view once so the first `tick()` reconciles clean (matches the
         // production `run_initialize` path); otherwise every test's first tick would
