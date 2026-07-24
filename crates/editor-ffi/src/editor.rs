@@ -2809,6 +2809,7 @@ mod tests {
                     page: 0,
                     x: cursor.caret.x,
                     y: cursor.line.y + cursor.line.height * 0.5,
+                    reuse_node_id: None,
                     modifiers: InputModifiers::default(),
                 },
             })

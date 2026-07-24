@@ -1052,7 +1052,9 @@ impl Editor {
             });
         }
 
-        if let Some(target) = self.dnd.drop_target() {
+        if self.dnd.reuse_node_id().is_none()
+            && let Some(target) = self.dnd.drop_target()
+        {
             marks.push(Mark {
                 data: MarkData::DropIndicator,
                 rects: vec![target.indicator.rect()],
@@ -1898,6 +1900,9 @@ impl Editor {
 
     #[cfg(test)]
     pub(crate) fn drop_indicator_for_test(&self) -> Option<editor_view::DropIndicator> {
+        if self.dnd.reuse_node_id().is_some() {
+            return None;
+        }
         self.dnd.drop_target().map(|target| target.indicator)
     }
 
@@ -3762,6 +3767,7 @@ mod tests {
                 page: 0,
                 x: caret.x,
                 y: caret.y + caret.height * 0.5,
+                reuse_node_id: None,
                 modifiers: InputModifiers::default(),
             },
         });
@@ -3795,6 +3801,7 @@ mod tests {
                 page: 0,
                 x: caret.x,
                 y: caret.y + caret.height * 0.5,
+                reuse_node_id: None,
                 modifiers: InputModifiers::default(),
             },
         });
@@ -3832,6 +3839,7 @@ mod tests {
                 page: 0,
                 x: caret.x,
                 y: caret.y + caret.height * 0.5,
+                reuse_node_id: None,
                 modifiers: InputModifiers::default(),
             },
         });
@@ -3869,6 +3877,7 @@ mod tests {
                 page: 0,
                 x: caret.x,
                 y: caret.y + caret.height * 0.5,
+                reuse_node_id: None,
                 modifiers: InputModifiers::default(),
             },
         });
@@ -3909,6 +3918,7 @@ mod tests {
                 page: 0,
                 x: caret.x,
                 y: caret.y + caret.height * 0.5,
+                reuse_node_id: None,
                 modifiers: InputModifiers::default(),
             },
         });
@@ -3944,6 +3954,7 @@ mod tests {
                 page: 0,
                 x: caret.x,
                 y: caret.y + caret.height * 0.5,
+                reuse_node_id: None,
                 modifiers: InputModifiers::default(),
             },
         });
@@ -3979,6 +3990,7 @@ mod tests {
                 page: 0,
                 x: caret.x,
                 y: caret.y + caret.height * 0.5,
+                reuse_node_id: None,
                 modifiers: InputModifiers::default(),
             },
         });
@@ -4014,6 +4026,7 @@ mod tests {
                 page: 0,
                 x: caret.x,
                 y: caret.y + caret.height * 0.5,
+                reuse_node_id: None,
                 modifiers: InputModifiers::default(),
             },
         });
@@ -4047,6 +4060,7 @@ mod tests {
                 page: 0,
                 x: caret.x,
                 y: caret.y + caret.height * 0.5,
+                reuse_node_id: None,
                 modifiers: InputModifiers::default(),
             },
         });
@@ -4165,6 +4179,7 @@ mod tests {
                 page: 0,
                 x: caret.x,
                 y: caret.y + caret.height * 0.5,
+                reuse_node_id: None,
                 modifiers: InputModifiers::default(),
             },
         });
@@ -4189,68 +4204,6 @@ mod tests {
     }
 
     #[test]
-    fn drop_files_inserts_placeholders_at_drop_target_not_current_selection() {
-        let (initial, p1) = state! {
-            doc { root { p1: paragraph { text("hello") } } }
-            selection: (p1, 0)
-        };
-        let mut editor = Editor::new_test(initial);
-        editor.apply(Message::System {
-            event: crate::message::SystemEvent::Initialize,
-        });
-        let caret = editor
-            .view()
-            .cursor_metrics(&editor.state, &Position::new(p1, 5))
-            .expect("cursor metrics")
-            .caret;
-
-        editor.apply(Message::Dnd {
-            op: DndOp::EnterExternal {
-                payload: ExternalDndPayloadKind::MixedFiles,
-            },
-        });
-        editor.apply(Message::Dnd {
-            op: DndOp::Over {
-                page: 0,
-                x: caret.x,
-                y: caret.y + caret.height * 0.5,
-                modifiers: InputModifiers::default(),
-            },
-        });
-        editor.apply(Message::Dnd {
-            op: DndOp::Drop {
-                page: 0,
-                x: caret.x,
-                y: caret.y + caret.height * 0.5,
-                payload: DndDropPayload::Files {
-                    image_count: 1,
-                    file_count: 1,
-                },
-                modifiers: InputModifiers::default(),
-            },
-        });
-
-        let view = editor.state().view();
-        let root = view.node(Dot::ROOT).unwrap();
-        let kinds: Vec<NodeType> = root
-            .children()
-            .map(|c| match c {
-                ChildView::Block(b) => b.node_type(),
-                ChildView::Leaf(l) => l.node_type(),
-            })
-            .collect();
-        assert!(matches!(kinds.first(), Some(NodeType::Paragraph)));
-        assert!(matches!(kinds.get(1), Some(NodeType::Image)));
-        assert!(matches!(kinds.get(2), Some(NodeType::File)));
-        assert!(
-            matches!(kinds.last(), Some(NodeType::Paragraph)),
-            "root schema should keep a trailing paragraph after inserted file blocks",
-        );
-        let first_text = root.child_blocks().next().map(|p| p.inline_text());
-        assert_eq!(first_text.as_deref(), Some("hello"));
-    }
-
-    #[test]
     fn drop_internal_selection_without_start_is_noop() {
         let (initial, p1) = state! {
             doc { root { p1: paragraph { text("hello world") } } }
@@ -4271,6 +4224,7 @@ mod tests {
                 page: 0,
                 x: caret.x,
                 y: caret.y + caret.height * 0.5,
+                reuse_node_id: None,
                 modifiers: InputModifiers::default(),
             },
         });
@@ -4384,6 +4338,7 @@ mod tests {
                     width: 1.0,
                 },
             }),
+            reuse_node_id: None,
         };
 
         editor.apply(Message::Dnd {
@@ -4446,6 +4401,7 @@ mod tests {
                     width: 1.0,
                 },
             }),
+            reuse_node_id: None,
         };
 
         editor.apply(Message::Dnd {
@@ -4507,6 +4463,7 @@ mod tests {
                 page: 0,
                 x: caret.x,
                 y: caret.y + caret.height * 0.5,
+                reuse_node_id: None,
                 modifiers: InputModifiers::default(),
             },
         });
@@ -4551,6 +4508,7 @@ mod tests {
                 page: 0,
                 x: caret.x,
                 y: caret.y + caret.height * 0.5,
+                reuse_node_id: None,
                 modifiers: InputModifiers {
                     alt: true,
                     ..InputModifiers::default()
@@ -5351,6 +5309,7 @@ mod tests {
                 page: 0,
                 x: caret.x,
                 y: page_bottom - 1.0,
+                reuse_node_id: None,
                 modifiers: InputModifiers::default(),
             },
         });
@@ -5395,6 +5354,7 @@ mod tests {
                 page: 0,
                 x: caret.x,
                 y: page_bottom - 1.0,
+                reuse_node_id: None,
                 modifiers: InputModifiers::default(),
             },
         });
@@ -5455,6 +5415,7 @@ mod tests {
                 page: 0,
                 x: 50.0,
                 y: page_top_y,
+                reuse_node_id: None,
                 modifiers: InputModifiers::default(),
             },
         });
@@ -5661,6 +5622,7 @@ mod tests {
                 page: 0,
                 x: caret.x,
                 y: caret.y + caret.height * 0.5,
+                reuse_node_id: None,
                 modifiers: InputModifiers::default(),
             },
         });

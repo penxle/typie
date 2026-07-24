@@ -11,18 +11,7 @@
   import Maximize2Icon from '~icons/lucide/maximize-2';
   import Trash2Icon from '~icons/lucide/trash-2';
   import { getEditorContext } from '../editor.svelte';
-  import { isAcceptedImagePlaceholderDrag } from '../handlers/dnd';
-  import {
-    calculateImageContainerSize,
-    calculateImageWidth,
-    deleteNodeMessage,
-    deriveImageStage,
-    openImagePicker,
-    processImageUpload,
-    queuePendingImages,
-    resolveImageSrc,
-  } from '../handlers/image-flow';
-  import { getImageDimensions, uploadImageFile } from '../handlers/upload';
+  import { calculateImageContainerSize, calculateImageWidth } from '../handlers/image';
   import ExternalElementWrapper from './ExternalElementWrapper.svelte';
   import ExternalImageEnlarge from './ExternalImageEnlarge.svelte';
   import type { ExternalElement } from '@typie/editor-ffi/browser';
@@ -53,9 +42,14 @@
   const imageId = $derived(imageData?.id || undefined);
   const asset = $derived(imageId ? ctx.editor?.imageAssets.get(imageId) : undefined);
   const inflight = $derived(ctx.editor?.inflightImages.get(element.node));
-  const stage = $derived(deriveImageStage({ imageId, inflight, asset }));
+  const stage = $derived.by(() => {
+    if (asset) return 'ready';
+    if (inflight) return 'uploading';
+    if (imageId) return 'resolving';
+    return 'empty';
+  });
 
-  const imageSrc = $derived(resolveImageSrc(asset, inflight));
+  const imageSrc = $derived(asset?.url ?? inflight?.url);
   const originalWidth = $derived(asset?.width ?? inflight?.width ?? 0);
   const originalHeight = $derived(asset?.height ?? inflight?.height ?? 0);
   const liveWidth = $derived(calculateImageWidth(element.bounds.width, proportion, originalWidth));
@@ -72,6 +66,7 @@
   const isOnlySelectedElement = $derived(
     element.is_selected && selectedBlockNodes.length === 1 && selectedBlockNodes[0]?.id === element.node,
   );
+  const isAttachmentDropTarget = $derived(stage === 'empty' && ctx.attachmentDropTargetNodeId === element.node);
 
   const { anchor, floating } = createFloatingActions({
     placement: 'bottom',
@@ -90,12 +85,6 @@
   });
 
   $effect(() => {
-    if (stage !== 'empty') return;
-    const file = ctx.pendingImageDrops.shift();
-    if (file) void processFile(file);
-  });
-
-  $effect(() => {
     if (stage !== 'ready') {
       enlarged = false;
     }
@@ -105,81 +94,38 @@
     const editor = ctx.editor;
     if (!editor) return;
 
-    const pending = editor.inflightImages.get(element.node);
-    if (pending) {
-      editor.inflightImages.delete(element.node);
-      URL.revokeObjectURL(pending.url);
-    }
-    editor.enqueue(deleteNodeMessage(element.node));
+    ctx.attachmentImporter.cancelNode(editor, element.node);
+    editor.enqueue({
+      type: 'node',
+      op: { type: 'delete', id: element.node },
+    });
     editor.focus();
   };
 
-  const processFile = async (file: File) => {
-    const editor = ctx.editor;
-    if (!editor || !imageData) return;
-    const uploadId = crypto.randomUUID();
-    const isCurrent = () =>
-      ctx.editor === editor &&
-      !editor.destroyed &&
-      !editor.readOnly &&
-      editor.inflightImages.get(element.node)?.uploadId === uploadId &&
-      editor.externalElements.some((external) => external.node === element.node && external.data.type === 'image' && !external.data.id);
-
-    const result = await processImageUpload({
-      file,
-      nodeId: element.node,
-      setInflightImage: (nodeId, image) => editor.inflightImages.set(nodeId, { ...image, uploadId }),
-      deleteInflightImage: (nodeId) => {
-        if (editor.inflightImages.get(nodeId)?.uploadId === uploadId) editor.inflightImages.delete(nodeId);
-      },
-      setImageAsset: (asset) => editor.imageAssets.set(asset.id, asset),
-      isCurrent,
-      commit: (message) => {
-        if (!isCurrent()) throw new Error('Image upload is no longer current');
-        editor.enqueue(message);
-        editor.flush();
-      },
-      focus: () => editor.focus(),
-      createObjectUrl: (file) => URL.createObjectURL(file),
-      revokeObjectUrl: (url) => URL.revokeObjectURL(url),
-      readImageDimensions: getImageDimensions,
-      uploadImageFile,
-    });
-
-    if (result === 'failed') {
-      Toast.error(`${file.name} 이미지 업로드에 실패했습니다.`);
-    }
-  };
-
   const handleUpload = () => {
-    if (!canEdit) return;
+    const editor = ctx.editor;
+    if (!editor || editor.readOnly) return;
+    const nodeId = element.node;
 
-    openImagePicker(ctx, (file) => void processFile(file));
-  };
-
-  const handleDragOver = (event: DragEvent) => {
-    if (!canEdit || stage !== 'empty' || !isAcceptedImagePlaceholderDrag(event.dataTransfer)) return;
-
-    event.preventDefault();
-    event.stopPropagation();
-
-    if (event.dataTransfer) {
-      event.dataTransfer.dropEffect = 'copy';
-    }
-  };
-
-  const handleDrop = (event: DragEvent) => {
-    if (!canEdit || stage !== 'empty' || !isAcceptedImagePlaceholderDrag(event.dataTransfer)) return;
-
-    const files = [...(event.dataTransfer?.files ?? [])].filter((file) => file.type.startsWith('image/'));
-    const [file, ...rest] = files;
-    if (!file) return;
-
-    event.preventDefault();
-    event.stopPropagation();
-    void processFile(file);
-
-    queuePendingImages(ctx, rest);
+    const picker = document.createElement('input');
+    picker.type = 'file';
+    picker.accept = 'image/*';
+    picker.multiple = true;
+    picker.addEventListener('change', () => {
+      if (ctx.editor !== editor || editor.destroyed || editor.readOnly) return;
+      const items = [...(picker.files ?? [])].map((file) => ({ file, kind: 'image' as const }));
+      if (
+        ctx.attachmentImporter.importAtSelection(items, {
+          existingNodeId: nodeId,
+          onFailure: ({ file }) => {
+            Toast.error(`${file.name} 이미지 업로드에 실패했습니다.`);
+          },
+        })
+      ) {
+        editor.focus();
+      }
+    });
+    picker.click();
   };
 
   const getWidthBounds = (boundsWidth: number) => {
@@ -294,8 +240,6 @@
     style:width={containerSize.width}
     style:height={containerSize.height}
     class={cx('group', css({ position: 'relative', margin: '[0 auto]' }))}
-    ondragovercapture={handleDragOver}
-    ondropcapture={handleDrop}
     role="group"
   >
     {#if imageSrc}
@@ -435,30 +379,46 @@
       {/if}
     {:else}
       <div
-        class={flex({
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          borderRadius: '4px',
-          backgroundColor: 'surface.muted',
-          width: 'full',
-          height: '48px',
-        })}
+        class={cx(
+          flex({
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            borderRadius: '4px',
+            backgroundColor: 'surface.muted',
+            width: 'full',
+            height: '48px',
+          }),
+          isAttachmentDropTarget && css({ boxShadow: '[inset 0 0 0 1px token(colors.palette.blue)]' }),
+        )}
         use:anchor
       >
-        <div class={flex({ align: 'center', gap: '12px', paddingX: '14px', paddingY: '12px', fontSize: '14px', color: 'text.disabled' })}>
+        <div
+          class={flex({
+            align: 'center',
+            gap: '12px',
+            paddingX: '14px',
+            paddingY: '12px',
+            fontSize: '14px',
+            color: isAttachmentDropTarget ? 'palette.blue' : 'text.disabled',
+          })}
+        >
           <Icon icon={ImageIcon} size={20} />
           {#if stage === 'resolving'}
             이미지를 불러오는 중...
+          {:else if stage === 'uploading'}
+            이미지를 업로드하는 중...
+          {:else if isAttachmentDropTarget}
+            놓아서 업로드하기
           {:else}
             이미지
           {/if}
         </div>
 
-        {#if stage === 'resolving'}
+        {#if stage === 'resolving' || stage === 'uploading'}
           <div class={css({ marginRight: '14px' })}>
             <RingSpinner style={css.raw({ size: '16px', color: 'text.disabled' })} />
           </div>
-        {:else if canEdit}
+        {:else if canEdit && !isAttachmentDropTarget}
           <button
             class={center({
               marginRight: '12px',

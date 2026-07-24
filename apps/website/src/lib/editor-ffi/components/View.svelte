@@ -2,6 +2,7 @@
   import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { getThemeContext } from '@typie/ui/context';
+  import { Toast } from '@typie/ui/notification';
   import { elementScrollViewport, windowScrollViewport } from '@typie/ui/utils';
   import { onDestroy, untrack } from 'svelte';
   import { graphql } from '$mearie';
@@ -64,6 +65,14 @@
   setupEditorScroll(ctx);
   onDestroy(() => {
     if (ctx.editor) cancelPointerInteraction(ctx.editor);
+  });
+
+  $effect(() => {
+    const editor = ctx.editor;
+    return () => {
+      ctx.attachmentDropTargetNodeId = null;
+      if (editor) ctx.attachmentImporter.cancelEditor(editor);
+    };
   });
 
   const document = createFragment(
@@ -298,7 +307,10 @@
           ondragleave={(event) => handleDragLeave(ctx, event)}
           ondragover={(event) => handleDragOver(ctx, event)}
           ondragstart={(event) => handleDragStart(ctx, event)}
-          ondrop={(event) => handleDrop(ctx, event)}
+          ondrop={(event) =>
+            handleDrop(ctx, event, ({ file, kind }) => {
+              Toast.error(`${file.name} ${kind === 'image' ? '이미지' : '파일'} 업로드에 실패했습니다.`);
+            })}
           onfocusin={() => ctx.editor?.focus()}
           onfocusout={(event) => {
             if (!window.document.hasFocus()) return;

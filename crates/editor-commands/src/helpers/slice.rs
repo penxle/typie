@@ -763,11 +763,11 @@ pub(crate) fn insert_blocks_at_block_boundary(
             let subtree = block.clone().into_subtree();
             let index = {
                 let view = tr.state().view();
-                match inserted.last().and_then(|prev| view.node(*prev)) {
-                    Some(prev) => prev.index().map(|i| i + 1),
-                    None => None,
-                }
-                .unwrap_or(base_index)
+                inserted
+                    .last()
+                    .and_then(|prev| block_parent_and_index(&view, *prev))
+                    .and_then(|(parent, index)| (parent == container_id).then_some(index + 1))
+                    .unwrap_or(base_index)
             };
             tr.insert_subtree(container_id, index, subtree)?;
             let view = tr.state().view();
@@ -791,7 +791,8 @@ pub(crate) fn insert_blocks_at_block_boundary(
 
     let last_inserted_index = inserted.last().copied().and_then(|id| {
         let view = tr.state().view();
-        view.node(id).and_then(|n| n.index())
+        let (parent, index) = block_parent_and_index(&view, id)?;
+        (parent == container_id).then_some(index)
     });
     let trailing_synthetic = terminal_page_break
         .then(|| block_child_id(tr, container_id, last_inserted_index? + 1))
@@ -811,7 +812,8 @@ pub(crate) fn insert_blocks_at_block_boundary(
 
     let first_inserted_index = inserted.first().copied().and_then(|id| {
         let view = tr.state().view();
-        view.node(id).and_then(|n| n.index())
+        let (parent, index) = block_parent_and_index(&view, id)?;
+        (parent == container_id).then_some(index)
     });
     let (start_index, span) = match (first_inserted_index, last_inserted_index) {
         (Some(first), Some(last)) => (first, last - first + 1),
@@ -828,8 +830,11 @@ fn real_child_ids(view: &DocView, container_id: Dot) -> Vec<Dot> {
     view.node(container_id)
         .map(|container| {
             container
-                .child_blocks()
-                .map(|b| b.id())
+                .children()
+                .map(|child| match child {
+                    ChildView::Block(block) => block.id(),
+                    ChildView::Leaf(leaf) => leaf.dot(),
+                })
                 .filter(|id| id.as_op_dot().is_some())
                 .collect()
         })

@@ -192,6 +192,7 @@ fn dnd_drop_same_tick_as_remote_structure_uses_visible_atom_boundary() {
             page: external.page_idx,
             x: external.bounds.x + external.bounds.width / 2.0,
             y: external.bounds.y + external.bounds.height / 2.0,
+            reuse_node_id: None,
             modifiers: InputModifiers::default(),
         },
     });
