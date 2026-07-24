@@ -37,6 +37,7 @@ import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.input.pointer.util.addPointerInputChange
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalViewConfiguration
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
@@ -45,7 +46,6 @@ import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import co.touchlab.kermit.Logger
 import co.typie.ext.pointerIgnore
-import co.typie.ext.thenIf
 import co.typie.platform.isTouchDragPointer
 import co.typie.route.Route
 import co.typie.route.RouteTransitionStyle
@@ -62,6 +62,8 @@ import co.typie.ui.component.topbar.NavDirection
 import co.typie.ui.component.topbar.TopBarState
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeSource
 import kotlin.math.abs
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
@@ -79,6 +81,12 @@ private enum class AnimState {
   Dragging,
   PopGestureCommitted,
 }
+
+private class NavigationRouteScene(
+  val owner: ViewModelStoreOwner,
+  val foregroundRegistry: NavigationForegroundRegistry,
+  val content: @Composable (TopBarState?, BottomBarState?) -> Unit,
+)
 
 private const val NavigationPopActivationSlopMultiplier = 3f
 
@@ -203,36 +211,56 @@ fun NavigationStack(
   // 안정적으로 유지된다. (같은 스크린을 두 call site에서 composition하면
   // compound key가 달라져 viewModel/rememberSaveable 키가 꼬인다.)
   val latestContent by rememberUpdatedState(content)
-  val routeContents = remember {
-    mutableMapOf<Route, @Composable (TopBarState?, BottomBarState?) -> Unit>()
-  }
-  val routeContentFor: (Route) -> @Composable (TopBarState?, BottomBarState?) -> Unit = { route ->
-    routeContents.getOrPut(route) {
-      movableContentOf<TopBarState?, BottomBarState?> { topBar, bottomBar ->
-        val owner = remember {
-          object : ViewModelStoreOwner {
-            override val viewModelStore = navigator.viewModelStoreFor(route)
+  val routeScenes = remember { mutableMapOf<Route, NavigationRouteScene>() }
+  val routeSceneFor: (Route) -> NavigationRouteScene = { route ->
+    routeScenes.getOrPut(route) {
+      val owner =
+        object : ViewModelStoreOwner {
+          override val viewModelStore = navigator.viewModelStoreFor(route)
+        }
+      val foregroundRegistry = NavigationForegroundRegistry()
+      val routeContent =
+        movableContentOf<TopBarState?, BottomBarState?> { topBar, bottomBar ->
+          val providers =
+            buildList<ProvidedValue<*>> {
+              add(LocalViewModelStoreOwner provides owner)
+              add(LocalRoute provides route)
+              add(LocalTopBarState provides topBar)
+              if (bottomBar != null) add(LocalBottomBarState provides bottomBar)
+            }
+          CompositionLocalProvider(*providers.toTypedArray()) {
+            ProvideBottomBar(enabled = false)
+            ProvideNavigationForegroundRegistry(foregroundRegistry) { latestContent(route) }
           }
         }
-        val providers =
-          buildList<ProvidedValue<*>> {
-            add(LocalViewModelStoreOwner provides owner)
-            add(LocalRoute provides route)
-            add(LocalTopBarState provides topBar)
-            if (bottomBar != null) add(LocalBottomBarState provides bottomBar)
-          }
-        CompositionLocalProvider(*providers.toTypedArray()) {
-          ProvideBottomBar(enabled = false)
-          latestContent(route)
-        }
-      }
+      NavigationRouteScene(
+        owner = owner,
+        foregroundRegistry = foregroundRegistry,
+        content = routeContent,
+      )
     }
   }
+  val presentRouteSurface: @Composable (Route, TopBarState?, BottomBarState?) -> Unit =
+    { route, topBar, bottomBar ->
+      val scene = routeSceneFor(route)
+      scene.content(topBar, bottomBar)
+    }
+  val presentRouteForeground: @Composable (Route, TopBarState?, BottomBarState?, Modifier) -> Unit =
+    { route, topBar, bottomBar, foregroundModifier ->
+      val scene = routeSceneFor(route)
+      scene.foregroundRegistry.Content(
+        route = route,
+        viewModelStoreOwner = scene.owner,
+        topBarState = topBar,
+        bottomBarState = bottomBar,
+        modifier = foregroundModifier,
+      )
+    }
 
   // 백스택에서 제거된 라우트의 movable 캐시 정리
   LaunchedEffect(Unit) {
     snapshotFlow { navigator.stack.toSet() }
-      .collect { active -> routeContents.keys.retainAll(active) }
+      .collect { active -> routeScenes.keys.retainAll(active) }
   }
 
   val scope = rememberCoroutineScope()
@@ -247,6 +275,7 @@ fun NavigationStack(
   var transitionStyle by remember { mutableStateOf(RouteTransitionStyle.Slide) }
 
   val progress = remember { Animatable(0f) }
+  val topBarBackdropHazeState = remember { HazeState() }
 
   val popNestedScroll = remember { NavigationPopNestedScroll() }
   val navigationPopActivationDistance =
@@ -664,7 +693,8 @@ fun NavigationStack(
                 } else {
                   null
                 }
-              // Compose excludes the UP position from velocity samples, but still uses the event to
+              // Compose excludes the UP position from velocity samples, but still uses the
+              // event to
               // apply its platform-specific pointer-stop timeout.
               val pointerSample = activePointer ?: releasedPointer
               popPointerVelocity.update(pressedDragPointerCount, pointerSample)
@@ -724,12 +754,27 @@ fun NavigationStack(
         navigator.stack.forEach { route ->
           if (route == mainRoute || route == behindRoute) return@forEach
           if (!route.keepAlive) return@forEach
-          Box(Modifier.fillMaxSize()) { routeContentFor(route).invoke(null, null) }
+          Box(Modifier.fillMaxSize()) {
+            presentRouteSurface(route, null, null)
+            presentRouteForeground(route, null, null, Modifier.fillMaxSize())
+          }
         }
       }
 
-      // Behind layer (애니메이션 중 뒤에 깔리는 화면)
-      if (behindRoute != null) {
+      Box(
+        Modifier.fillMaxSize().pointerInput(navigationPopActivationDistance) {
+          detectNavigationPopDrag(
+            activationDistance = navigationPopActivationDistance,
+            pointerVelocity = popPointerVelocity,
+            canStart = ::canStartPopGesture,
+            isSequenceRejected = { popNestedScroll.isCurrentSequenceRejected },
+            onStart = ::startPopDrag,
+            onDrag = ::updatePopDrag,
+            onRelease = popNestedScroll::finishDirectGesture,
+            onCancel = popNestedScroll::cancelDirectGesture,
+          )
+        }
+      ) {
         val behindTopBar =
           when (animState) {
             AnimState.Push -> exitTopBarState
@@ -748,106 +793,193 @@ fun NavigationStack(
           } else {
             bottomBarState
           }
-
-        if (useFadeTransition) {
-          Box(
-            Modifier.fillMaxSize().graphicsLayer {
-              alpha =
-                when (animState) {
-                  AnimState.Push -> 1f - progress.value
-                  AnimState.Pop -> progress.value
-                  AnimState.PopGestureCommitted -> 0f
-                  AnimState.Dragging -> if (navigator.popRequested) progress.value else 0f
-                  AnimState.Idle -> 1f
-                }
+        val mainTopBar =
+          when (animState) {
+            // Pop: 나가는 화면은 exitTopBarState
+            AnimState.Pop,
+            AnimState.PopGestureCommitted -> exitTopBarState
+            AnimState.Dragging -> if (navigator.popRequested) exitTopBarState else topBarState
+            else -> topBarState
+          }
+        val mainBottomBar =
+          if (bottomBarState != null && exitBottomBarState != null) {
+            when (animState) {
+              AnimState.Pop,
+              AnimState.PopGestureCommitted -> exitBottomBarState
+              AnimState.Dragging ->
+                if (navigator.popRequested) exitBottomBarState else bottomBarState
+              else -> bottomBarState
             }
-          ) {
-            routeContentFor(behindRoute!!).invoke(behindTopBar, behindBottomBar)
+          } else {
+            bottomBarState
           }
-          // 전환 중 behind 화면 터치 차단 (fade는 dim overlay가 없으므로 별도 pointerIgnore)
-          Box(Modifier.fillMaxSize().pointerIgnore())
-        } else if (useVerticalTransition) {
-          Box(Modifier.fillMaxSize()) {
-            routeContentFor(behindRoute!!).invoke(behindTopBar, behindBottomBar)
-          }
-          // Dim overlay — 전환 중 behind 화면 터치 차단
-          Box(
-            Modifier.fillMaxSize()
-              .graphicsLayer {
+
+        val p = progress.value
+        val mainPresentation =
+          when {
+            animState == AnimState.Idle -> NavigationRoutePresentation()
+            useFadeTransition ->
+              NavigationRoutePresentation(
                 alpha =
                   when (animState) {
-                    AnimState.Push -> progress.value
-                    AnimState.Pop,
-                    AnimState.PopGestureCommitted -> 1f - progress.value
-                    AnimState.Dragging -> 1f - progress.value
-                    AnimState.Idle -> 0f
+                    AnimState.Push -> p
+                    AnimState.Pop -> 1f - p
+                    AnimState.PopGestureCommitted -> 1f
+                    AnimState.Dragging -> if (navigator.popRequested) 1f - p else 1f
+                    AnimState.Idle -> 1f
                   }
-              }
-              .background(AppTheme.colors.scrim.copy(alpha = 0.5f))
-              .pointerIgnore()
-          )
-        } else {
-          Box(
-            Modifier.fillMaxSize().graphicsLayer {
-              translationX =
-                when (animState) {
-                  // Push: 이전 화면이 왼쪽으로 밀림
-                  AnimState.Push -> -containerWidth / 6f * progress.value
-                  // Pop/Dragging: 돌아갈 화면이 왼쪽에서 복귀
-                  else -> -containerWidth / 6f * (1f - progress.value)
-                }
-            }
-          ) {
-            routeContentFor(behindRoute!!).invoke(behindTopBar, behindBottomBar)
+              )
+            useVerticalTransition ->
+              NavigationRoutePresentation(
+                translationY =
+                  when (animState) {
+                    AnimState.Push -> containerHeight * (1f - p)
+                    AnimState.Pop,
+                    AnimState.PopGestureCommitted,
+                    AnimState.Dragging -> containerHeight * p
+                    AnimState.Idle -> 0f
+                  },
+                clipShape =
+                  AppShapes.rounded(cornerRadius(if (animState == AnimState.Push) p else 1f - p)),
+              )
+            else ->
+              NavigationRoutePresentation(
+                translationX =
+                  when (animState) {
+                    AnimState.Push -> containerWidth * (1f - p)
+                    else -> containerWidth * p
+                  },
+                clipShape =
+                  AppShapes.rounded(cornerRadius(if (animState == AnimState.Push) p else 1f - p)),
+              )
           }
-          // Dim overlay — 전환 중 behind 화면 터치 차단
-          Box(
-            Modifier.fillMaxSize()
-              .graphicsLayer {
-                val p = progress.value
+        val behindPresentation =
+          when {
+            useFadeTransition ->
+              NavigationRoutePresentation(
+                alpha =
+                  when (animState) {
+                    AnimState.Push -> 1f - p
+                    AnimState.Pop -> p
+                    AnimState.PopGestureCommitted -> 0f
+                    AnimState.Dragging -> if (navigator.popRequested) p else 0f
+                    AnimState.Idle -> 1f
+                  }
+              )
+            useVerticalTransition -> NavigationRoutePresentation()
+            else ->
+              NavigationRoutePresentation(
                 translationX =
                   when (animState) {
                     AnimState.Push -> -containerWidth / 6f * p
                     else -> -containerWidth / 6f * (1f - p)
                   }
+              )
+          }
+        val behindDimPresentation =
+          when {
+            useFadeTransition -> null
+            useVerticalTransition ->
+              NavigationRoutePresentation(
                 alpha =
                   when (animState) {
                     AnimState.Push -> p
-                    else -> 1f - p
+                    AnimState.Pop,
+                    AnimState.PopGestureCommitted,
+                    AnimState.Dragging -> 1f - p
+                    AnimState.Idle -> 0f
                   }
-              }
-              .background(AppTheme.colors.scrim.copy(alpha = 0.5f))
-              .pointerIgnore()
+              )
+            else ->
+              NavigationRoutePresentation(
+                translationX = behindPresentation.translationX,
+                alpha = if (animState == AnimState.Push) p else 1f - p,
+              )
+          }
+
+        // Scene surfaces retain the current behind/main route order and are captured as one live
+        // composite for the fixed top bar backdrop.
+        Box(
+          Modifier.fillMaxSize()
+            .testTag(NavigationSceneSurfaceCompositeTestTag)
+            .hazeSource(topBarBackdropHazeState)
+        ) {
+          behindRoute?.let { route ->
+            Box(Modifier.fillMaxSize().navigationRoutePresentation(behindPresentation)) {
+              presentRouteSurface(route, behindTopBar, behindBottomBar)
+            }
+            behindDimPresentation?.let { presentation ->
+              Box(
+                Modifier.fillMaxSize()
+                  .navigationRoutePresentation(presentation)
+                  .background(AppTheme.colors.scrim.copy(alpha = 0.5f))
+                  .pointerIgnore()
+              )
+            }
+          }
+          Box(Modifier.fillMaxSize().navigationRoutePresentation(mainPresentation)) {
+            presentRouteSurface(mainRoute, mainTopBar, mainBottomBar)
+          }
+        }
+
+        val mainBackdropWeight =
+          when {
+            behindRoute == null -> 1f
+            animState == AnimState.Push -> p
+            animState == AnimState.Pop ||
+              animState == AnimState.PopGestureCommitted ||
+              animState == AnimState.Dragging -> 1f - p
+            else -> 1f
+          }
+        val backdropStyle =
+          resolveNavigationTopBarBackdropStyle(
+            behindBackground =
+              behindRoute?.let { route ->
+                routeSceneFor(route).foregroundRegistry.topBarBackdropBackground
+              },
+            behindPresence = if (behindTopBar.hasTopBarBackdrop()) 1f else 0f,
+            mainBackground = routeSceneFor(mainRoute).foregroundRegistry.topBarBackdropBackground,
+            mainPresence = if (mainTopBar.hasTopBarBackdrop()) 1f else 0f,
+            mainWeight = mainBackdropWeight,
+            fallbackBackground = AppTheme.colors.surfaceCanvas,
+          )
+        NavigationTopBarBackdrop(
+          hazeState = topBarBackdropHazeState,
+          style = backdropStyle,
+          modifier = Modifier.align(Alignment.TopCenter),
+        )
+
+        // Scene foregrounds use the matching presentation. Behind foreground is excluded from the
+        // transformed main-route coverage so it cannot leak over an opaque front surface.
+        behindRoute?.let { route ->
+          presentRouteForeground(
+            route,
+            behindTopBar,
+            behindBottomBar,
+            Modifier.fillMaxSize()
+              .excludeNavigationRouteCoverage(mainPresentation)
+              .navigationRoutePresentation(behindPresentation),
           )
         }
-      }
+        presentRouteForeground(
+          mainRoute,
+          mainTopBar,
+          mainBottomBar,
+          Modifier.fillMaxSize().navigationRoutePresentation(mainPresentation),
+        )
 
-      // Main layer (현재 화면 — 항상 같은 composition slot을 유지하여
-      // Push→Idle 전환 시 remember 등 composition 상태가 보존됨)
-      val mainTopBar =
-        when (animState) {
-          // Pop: 나가는 화면은 exitTopBarState
-          AnimState.Pop,
-          AnimState.PopGestureCommitted -> exitTopBarState
-          AnimState.Dragging -> if (navigator.popRequested) exitTopBarState else topBarState
-          else -> topBarState
-        }
-      val mainBottomBar =
-        if (bottomBarState != null && exitBottomBarState != null) {
-          when (animState) {
-            AnimState.Pop,
-            AnimState.PopGestureCommitted -> exitBottomBarState
-            AnimState.Dragging -> if (navigator.popRequested) exitBottomBarState else bottomBarState
-            else -> bottomBarState
-          }
-        } else {
-          bottomBarState
+        // 전환/드래그 중 route foreground까지 포함한 전체 presented scene의 터치를 차단한다.
+        // 이미 시작된 direct drag의 hit path에는 이 노드가 없으므로 제스처 추적은 계속된다.
+        if (animState != AnimState.Idle) {
+          Box(Modifier.fillMaxSize().pointerIgnore())
         }
 
-      Box(
-        Modifier.fillMaxSize()
-          .thenIf(navigator.canPop) {
-            pointerInput(navigationPopActivationDistance) {
+        // 엣지 제스처 감지 영역 (platform touch slop의 3배를 넘긴 dominant-right drag만 claim)
+        if (navigator.canPop && (animState == AnimState.Idle || animState == AnimState.Dragging)) {
+          Box(
+            Modifier.fillMaxHeight().width(20.dp).align(Alignment.CenterStart).pointerInput(
+              navigationPopActivationDistance
+            ) {
               detectNavigationPopDrag(
                 activationDistance = navigationPopActivationDistance,
                 pointerVelocity = popPointerVelocity,
@@ -859,87 +991,8 @@ fun NavigationStack(
                 onCancel = popNestedScroll::cancelDirectGesture,
               )
             }
-          }
-          .graphicsLayer {
-            if (animState != AnimState.Idle) {
-              val p = progress.value
-              if (useFadeTransition) {
-                alpha =
-                  when (animState) {
-                    AnimState.Push -> p
-                    AnimState.Pop -> 1f - p
-                    AnimState.PopGestureCommitted -> 1f
-                    AnimState.Dragging -> if (navigator.popRequested) 1f - p else 1f
-                    AnimState.Idle -> 1f
-                  }
-              } else if (useVerticalTransition) {
-                translationY =
-                  when (animState) {
-                    AnimState.Push -> containerHeight * (1f - p)
-                    AnimState.Pop,
-                    AnimState.PopGestureCommitted -> containerHeight * p
-                    AnimState.Dragging -> containerHeight * p
-                    AnimState.Idle -> 0f
-                  }
-                shape =
-                  AppShapes.rounded(
-                    cornerRadius(
-                      when (animState) {
-                        AnimState.Push -> p
-                        else -> 1f - p
-                      }
-                    )
-                  )
-                clip = true
-              } else {
-                translationX =
-                  when (animState) {
-                    // Push: 오른쪽에서 왼쪽으로 슬라이드 in
-                    AnimState.Push -> containerWidth * (1f - p)
-                    // Pop/Dragging: 오른쪽으로 슬라이드 out
-                    else -> containerWidth * p
-                  }
-                shape =
-                  AppShapes.rounded(
-                    cornerRadius(
-                      when (animState) {
-                        AnimState.Push -> p
-                        else -> 1f - p
-                      }
-                    )
-                  )
-                clip = true
-              }
-            }
-          }
-      ) {
-        routeContentFor(mainRoute).invoke(mainTopBar, mainBottomBar)
-        // 전환/드래그 중 front 화면 내부로 터치가 흘러가지 않도록 consume.
-        // Main pass 기준 overlay가 sibling routeContent보다 나중에 composed → 먼저 처리되어 consume.
-        // Drag 로직은 Main pass에서 positionChangeIgnoreConsumed로 계속 추적하므로 영향받지 않는다.
-        if (animState != AnimState.Idle) {
-          Box(Modifier.fillMaxSize().pointerIgnore())
+          )
         }
-      }
-
-      // 엣지 제스처 감지 영역 (platform touch slop의 3배를 넘긴 dominant-right drag만 claim)
-      if (navigator.canPop && (animState == AnimState.Idle || animState == AnimState.Dragging)) {
-        Box(
-          Modifier.fillMaxHeight().width(20.dp).align(Alignment.CenterStart).pointerInput(
-            navigationPopActivationDistance
-          ) {
-            detectNavigationPopDrag(
-              activationDistance = navigationPopActivationDistance,
-              pointerVelocity = popPointerVelocity,
-              canStart = ::canStartPopGesture,
-              isSequenceRejected = { popNestedScroll.isCurrentSequenceRejected },
-              onStart = ::startPopDrag,
-              onDrag = ::updatePopDrag,
-              onRelease = popNestedScroll::finishDirectGesture,
-              onCancel = popNestedScroll::cancelDirectGesture,
-            )
-          }
-        )
       }
     }
   }
@@ -954,3 +1007,5 @@ private fun cornerRadius(progress: Float): Dp {
     }
   return maxRadius * factor.coerceIn(0f, 1f)
 }
+
+private fun TopBarState?.hasTopBarBackdrop(): Boolean = this != null && enabled

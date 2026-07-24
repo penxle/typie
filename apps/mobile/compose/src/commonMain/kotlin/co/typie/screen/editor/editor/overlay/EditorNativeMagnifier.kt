@@ -14,6 +14,8 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.layer.GraphicsLayer
+import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.unit.dp
 import co.typie.editor.scroll.EditorVisibleArea
 import co.typie.ui.theme.AppTheme
@@ -80,11 +82,15 @@ internal expect val EditorNativeMagnifierAvailable: Boolean
 internal expect fun Modifier.editorNativeMagnifier(placement: EditorMagnifierPlacement?): Modifier
 
 @Composable
-internal fun Modifier.editorMagnifier(placement: EditorMagnifierPlacement?): Modifier =
+internal fun Modifier.editorSoftwareMagnifierLens(
+  sourceLayer: GraphicsLayer,
+  placement: EditorMagnifierPlacement?,
+): Modifier =
   if (EditorNativeMagnifierAvailable) {
-    editorNativeMagnifier(placement)
+    this
   } else {
     editorSoftwareMagnifier(
+      sourceLayer = sourceLayer,
       placement = placement,
       borderColor = AppTheme.colors.borderDefault,
       shadowColor = Color.Black.copy(alpha = EditorSoftwareMagnifierShadowAlpha),
@@ -92,7 +98,21 @@ internal fun Modifier.editorMagnifier(placement: EditorMagnifierPlacement?): Mod
     )
   }
 
+internal fun Modifier.editorSoftwareMagnifierSource(
+  sourceLayer: GraphicsLayer,
+  active: Boolean,
+): Modifier =
+  if (EditorNativeMagnifierAvailable || !active) {
+    this
+  } else {
+    drawWithContent {
+      sourceLayer.record { this@drawWithContent.drawContent() }
+      drawLayer(sourceLayer)
+    }
+  }
+
 private fun Modifier.editorSoftwareMagnifier(
+  sourceLayer: GraphicsLayer,
   placement: EditorMagnifierPlacement?,
   borderColor: Color,
   shadowColor: Color,
@@ -156,7 +176,7 @@ private fun Modifier.editorSoftwareMagnifier(
       scale(scaleX = EditorMagnifierZoom, scaleY = EditorMagnifierZoom, pivot = Offset.Zero)
       translate(left = -placement.sourceCenter.x, top = -placement.sourceCenter.y)
     }) {
-      this@drawWithContent.drawContent()
+      drawLayer(sourceLayer)
     }
   }
   drawRoundRect(

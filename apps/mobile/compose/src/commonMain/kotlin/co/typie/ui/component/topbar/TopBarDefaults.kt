@@ -28,7 +28,6 @@ object TopBarDefaults {
   val BlurRadius: Dp = 6.dp
   val BlurFadeHeight: Dp = 16.dp
   val FadeOpacity: Float = 0.8f
-  val ContentTopSpacing: Dp = 8.dp
   val BlurFadeEasing: Easing = SmootherstepEasing
 
   val RevealAnimationDuration: Int = 200
@@ -61,7 +60,7 @@ object TopBarDefaults {
       horizontalSafeArea.calculateLeftPadding(direction) > 0.dp ||
         horizontalSafeArea.calculateRightPadding(direction) > 0.dp
 
-    return if (statusTop == 0.dp && hasHorizontalSafeArea) LandscapeTopPadding else statusTop
+    return resolveTopBarTopPadding(statusTop, hasHorizontalSafeArea)
   }
 
   @Composable fun topPaddingValues(): PaddingValues = PaddingValues(top = topPadding())
@@ -70,3 +69,10 @@ object TopBarDefaults {
 
   @Composable fun controlBorderColor(): Color = AppTheme.colors.borderEmphasis
 }
+
+internal fun resolveTopBarTopPadding(statusTop: Dp, hasHorizontalSafeArea: Boolean): Dp =
+  if (statusTop == 0.dp && hasHorizontalSafeArea) {
+    TopBarDefaults.LandscapeTopPadding
+  } else {
+    statusTop
+  }

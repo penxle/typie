@@ -46,7 +46,6 @@ import co.typie.ui.component.sheet.LocalSheet
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarButton
-import co.typie.ui.component.topbar.TopBarDefaults
 import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.icon.Icon
 import co.typie.ui.state.rememberScrollState
@@ -90,13 +89,7 @@ fun TextReplacementsScreen() {
         Modifier.fillMaxSize()
           .reorderableViewport(
             state = reorderState,
-            viewportTopInset =
-              maxOf(
-                0.dp,
-                contentPadding.calculateTopPadding() -
-                  TopBarDefaults.BlurFadeHeight -
-                  TopBarDefaults.ContentTopSpacing,
-              ),
+            viewportTopInset = contentPadding.calculateTopPadding(),
           )
     ) {
       Column(

@@ -23,6 +23,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.layer.GraphicsLayer
+import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollDispatcher
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -58,8 +60,12 @@ import co.typie.editor.scroll.resolveEditorScrollIntent
 import co.typie.editor.viewport.EditorViewportState
 import co.typie.ext.LocalScrollGestureLockState
 import co.typie.navigation.LocalNavigationPopNestedScroll
+import co.typie.navigation.NavigationForeground
 import co.typie.navigation.navigationPopNestedScroll
-import co.typie.screen.editor.editor.overlay.editorMagnifier
+import co.typie.screen.editor.editor.overlay.EditorMagnifierPlacement
+import co.typie.screen.editor.editor.overlay.editorNativeMagnifier
+import co.typie.screen.editor.editor.overlay.editorSoftwareMagnifierLens
+import co.typie.screen.editor.editor.overlay.editorSoftwareMagnifierSource
 import co.typie.screen.editor.editor.overlay.resolveEditorMagnifierPlacement
 import co.typie.screen.editor.editor.state.EditorScreenState
 import co.typie.ui.theme.LocalHazeState
@@ -74,6 +80,7 @@ import kotlinx.coroutines.launch
 
 private enum class EditorScreenLayoutSlot {
   ViewportContent,
+  ViewportSurfaceOverlay,
   ViewportOverlay,
   Overlay,
   Toolbar,
@@ -150,6 +157,7 @@ internal fun EditorScreenLayout(
   onMeasuredViewportSizeChange: (Size) -> Unit,
   header: @Composable () -> Unit,
   body: @Composable () -> Unit,
+  viewportSurfaceOverlay: @Composable BoxScope.() -> Unit = {},
   viewportOverlay: @Composable BoxScope.() -> Unit = {},
   overlay: @Composable () -> Unit = {},
   toolbar: @Composable () -> Unit,
@@ -209,213 +217,270 @@ internal fun EditorScreenLayout(
     remember(density) {
       { width, height -> Size(width = width / density.density, height = height / density.density) }
     }
+  val softwareMagnifierSource = rememberGraphicsLayer()
+  val editorInteractionModifier =
+    Modifier.editorInteractions(
+        interactionController = interactionScope.controller,
+        geometry = interactionScope,
+        screenPointerSequence = screenPointerSequence,
+        platformIndirectScaleBridge = platformIndirectScaleBridge,
+        scrollGestureLockState = scrollGestureLockState,
+        scrollableState = viewportScrollableState,
+        nestedScrollDispatcher = viewportNestedScrollDispatcher,
+        flingBehavior = viewportFlingBehavior,
+        touchSlop = viewConfiguration.touchSlop,
+        maximumFlingVelocity = viewConfiguration.maximumFlingVelocity,
+        density = density.density,
+        enabled = editorInteractionEnabled,
+        onEditorPointerInput = onEditorPointerInput,
+        onViewportIndirectInput = onViewportIndirectInput,
+        onNestedScrollCancel = { navigationPopNestedScroll?.cancel() },
+      )
+      .editorPlatformIndirectScale(
+        bridge = platformIndirectScaleBridge,
+        enabled = platformIndirectScaleEnabled,
+        density = density.density,
+      )
 
-  SubcomposeLayout(
+  Box(
     modifier =
       modifier
         .fillMaxSize()
         .observeEditorScreenPointerSequence(screenPointerSequence)
-        .editorMagnifier(magnifierPlacement)
+        .editorNativeMagnifier(magnifierPlacement)
         .onGloballyPositioned { coordinates ->
           layoutBoundsInRoot = coordinates.unclippedBoundsInRoot()
         }
-  ) { constraints ->
-    val editorInteractionModifier =
-      Modifier.editorInteractions(
-          interactionController = interactionScope.controller,
-          geometry = interactionScope,
-          screenPointerSequence = screenPointerSequence,
-          platformIndirectScaleBridge = platformIndirectScaleBridge,
-          scrollGestureLockState = scrollGestureLockState,
-          scrollableState = viewportScrollableState,
-          nestedScrollDispatcher = viewportNestedScrollDispatcher,
-          flingBehavior = viewportFlingBehavior,
-          touchSlop = viewConfiguration.touchSlop,
-          maximumFlingVelocity = viewConfiguration.maximumFlingVelocity,
-          density = density.density,
-          enabled = editorInteractionEnabled,
-          onEditorPointerInput = onEditorPointerInput,
-          onViewportIndirectInput = onViewportIndirectInput,
-          onNestedScrollCancel = { navigationPopNestedScroll?.cancel() },
+  ) {
+    SubcomposeLayout(
+      modifier =
+        Modifier.fillMaxSize()
+          .editorSoftwareMagnifierSource(
+            sourceLayer = softwareMagnifierSource,
+            active = magnifierPlacement != null,
+          )
+    ) { constraints ->
+      val viewportWidth = constraints.maxWidth / density.density
+      val resolvedContentWidth =
+        resolveEditorViewportContentWidth(
+          viewportWidth = viewportWidth,
+          contentTrackWidth = viewportContentWidth,
         )
-        .editorPlatformIndirectScale(
-          bridge = platformIndirectScaleBridge,
-          enabled = platformIndirectScaleEnabled,
-          density = density.density,
+      val viewportHeight = constraints.maxHeight
+      val viewportConstraints =
+        constraints.copy(
+          minWidth = constraints.maxWidth,
+          maxWidth = constraints.maxWidth,
+          minHeight = viewportHeight,
+          maxHeight = viewportHeight,
         )
-    val viewportWidth = constraints.maxWidth / density.density
-    val resolvedContentWidth =
-      resolveEditorViewportContentWidth(
-        viewportWidth = viewportWidth,
-        contentTrackWidth = viewportContentWidth,
-      )
-    val toolbarPlaceables =
-      subcompose(EditorScreenLayoutSlot.Toolbar, toolbar).map {
-        it.measure(constraints.copy(minWidth = 0, minHeight = 0))
-      }
-    val viewportHeight = constraints.maxHeight
-    val viewportConstraints =
-      constraints.copy(
-        minWidth = constraints.maxWidth,
-        maxWidth = constraints.maxWidth,
-        minHeight = viewportHeight,
-        maxHeight = viewportHeight,
-      )
-    val viewportContentPlaceables =
-      subcompose(EditorScreenLayoutSlot.ViewportContent) {
-          Layout(
-            modifier =
-              Modifier.fillMaxSize()
-                .clipToBounds()
-                .hazeSource(toolbarBackdropHazeState)
-                .navigationPopNestedScroll()
-                .nestedScroll(EditorViewportNestedScrollConnection, viewportNestedScrollDispatcher)
-                .then(editorInteractionModifier),
-            content = {
-              Column {
-                Box(modifier = Modifier.width(viewportWidth.dp)) { header() }
-                Box(
-                  modifier =
-                    Modifier.fillMaxWidth().graphicsLayer {
-                      translationX = -state.viewportState.scrollOffset.x * density.density
-                    }
-                ) {
-                  body()
-                }
-              }
-            },
-          ) { measurables, viewportConstraints ->
-            val contentConstraints =
-              resolveEditorViewportContentConstraints(
-                viewportWidthPx = viewportConstraints.maxWidth,
-                contentWidthPx = resolvedContentWidth.dp.roundToPx(),
-              )
-            val placeable = measurables.single().measure(contentConstraints)
-            val measuredViewportSize =
-              resolveSize(viewportConstraints.maxWidth, viewportConstraints.maxHeight)
-            val viewportSizeChanged =
-              state.viewportState.updateMeasuredBounds(
-                viewportSize = measuredViewportSize,
-                contentSize = resolveSize(placeable.width, placeable.height),
-              )
-            if (viewportSizeChanged) {
-              onMeasuredViewportSizeChange(measuredViewportSize)
-            }
-            val scrollFrameVersion = scrollFrame.state.version
-            val bringIntoViewRequest =
-              bringIntoViewRequests.activateForVersion(version = scrollFrameVersion)
-            if (bringIntoViewRequest != null) {
-              val bringIntoViewTarget = bringIntoViewRequest.target
-              if (
-                state.viewportState.isTransforming ||
-                  state.viewportState.isDirectManipulationInProgress
-              ) {
-                bringIntoViewRequests.cancel()
-              } else {
-                when (
-                  val scrollIntentResult =
-                    resolveEditorScrollIntent(
-                      frame = scrollFrame,
-                      target = bringIntoViewTarget,
-                      currentScroll = state.viewportState.scrollOffset.y,
-                    )
-                ) {
-                  EditorScrollIntentResult.Unresolved -> Unit
-                  EditorScrollIntentResult.ConsumedWithoutScroll -> {
-                    bringIntoViewRequests.markApplied(
-                      version = scrollFrameVersion,
-                      request = bringIntoViewRequest,
-                    )
+      val viewportContentPlaceables =
+        subcompose(EditorScreenLayoutSlot.ViewportContent) {
+            Layout(
+              modifier =
+                Modifier.fillMaxSize()
+                  .clipToBounds()
+                  .hazeSource(toolbarBackdropHazeState)
+                  .navigationPopNestedScroll()
+                  .nestedScroll(
+                    EditorViewportNestedScrollConnection,
+                    viewportNestedScrollDispatcher,
+                  )
+                  .then(editorInteractionModifier),
+              content = {
+                Column {
+                  Box(modifier = Modifier.width(viewportWidth.dp)) { header() }
+                  Box(
+                    modifier =
+                      Modifier.fillMaxWidth().graphicsLayer {
+                        translationX = -state.viewportState.scrollOffset.x * density.density
+                      }
+                  ) {
+                    body()
                   }
-                  is EditorScrollIntentResult.ScrollTo -> {
-                    if (
+                }
+              },
+            ) { measurables, viewportConstraints ->
+              val contentConstraints =
+                resolveEditorViewportContentConstraints(
+                  viewportWidthPx = viewportConstraints.maxWidth,
+                  contentWidthPx = resolvedContentWidth.dp.roundToPx(),
+                )
+              val placeable = measurables.single().measure(contentConstraints)
+              val measuredViewportSize =
+                resolveSize(viewportConstraints.maxWidth, viewportConstraints.maxHeight)
+              val viewportSizeChanged =
+                state.viewportState.updateMeasuredBounds(
+                  viewportSize = measuredViewportSize,
+                  contentSize = resolveSize(placeable.width, placeable.height),
+                )
+              if (viewportSizeChanged) {
+                onMeasuredViewportSizeChange(measuredViewportSize)
+              }
+              val scrollFrameVersion = scrollFrame.state.version
+              val bringIntoViewRequest =
+                bringIntoViewRequests.activateForVersion(version = scrollFrameVersion)
+              if (bringIntoViewRequest != null) {
+                val bringIntoViewTarget = bringIntoViewRequest.target
+                if (
+                  state.viewportState.isTransforming ||
+                    state.viewportState.isDirectManipulationInProgress
+                ) {
+                  bringIntoViewRequests.cancel()
+                } else {
+                  when (
+                    val scrollIntentResult =
+                      resolveEditorScrollIntent(
+                        frame = scrollFrame,
+                        target = bringIntoViewTarget,
+                        currentScroll = state.viewportState.scrollOffset.y,
+                      )
+                  ) {
+                    EditorScrollIntentResult.Unresolved -> Unit
+                    EditorScrollIntentResult.ConsumedWithoutScroll -> {
                       bringIntoViewRequests.markApplied(
                         version = scrollFrameVersion,
                         request = bringIntoViewRequest,
                       )
-                    ) {
-                      smoothScrollJob?.cancel()
-                      smoothScrollJob =
-                        when (bringIntoViewRequest.behavior) {
-                          EditorBringIntoViewBehavior.Instant -> {
-                            state.viewportState.scrollToY(
-                              targetY = scrollIntentResult.y,
-                              isAutoScroll = true,
-                            )
-                            null
-                          }
+                    }
+                    is EditorScrollIntentResult.ScrollTo -> {
+                      if (
+                        bringIntoViewRequests.markApplied(
+                          version = scrollFrameVersion,
+                          request = bringIntoViewRequest,
+                        )
+                      ) {
+                        smoothScrollJob?.cancel()
+                        smoothScrollJob =
+                          when (bringIntoViewRequest.behavior) {
+                            EditorBringIntoViewBehavior.Instant -> {
+                              state.viewportState.scrollToY(
+                                targetY = scrollIntentResult.y,
+                                isAutoScroll = true,
+                              )
+                              null
+                            }
 
-                          EditorBringIntoViewBehavior.Smooth ->
-                            coroutineScope.launch {
-                              try {
-                                state.viewportState.animateScrollToY(
-                                  targetY = scrollIntentResult.y,
-                                  isAutoScroll = true,
-                                )
-                              } finally {
-                                if (smoothScrollJob == coroutineContext[Job]) {
-                                  smoothScrollJob = null
+                            EditorBringIntoViewBehavior.Smooth ->
+                              coroutineScope.launch {
+                                try {
+                                  state.viewportState.animateScrollToY(
+                                    targetY = scrollIntentResult.y,
+                                    isAutoScroll = true,
+                                  )
+                                } finally {
+                                  if (smoothScrollJob == coroutineContext[Job]) {
+                                    smoothScrollJob = null
+                                  }
                                 }
                               }
-                            }
-                        }
+                          }
+                      }
                     }
                   }
                 }
+              } else {
+                scrollReconcileState.reconcile(
+                  mode = viewportScrollReconcileMode,
+                  viewportState = state.viewportState,
+                  scrollFrame = scrollFrame,
+                  visibleArea = visibleArea,
+                )
               }
-            } else {
-              scrollReconcileState.reconcile(
-                mode = viewportScrollReconcileMode,
-                viewportState = state.viewportState,
-                scrollFrame = scrollFrame,
-                visibleArea = visibleArea,
-              )
-            }
 
-            layout(width = viewportConstraints.maxWidth, height = viewportConstraints.maxHeight) {
-              val scrollY = (state.viewportState.scrollOffset.y * density.density).roundToInt()
-              placeable.place(x = 0, y = -scrollY)
+              layout(width = viewportConstraints.maxWidth, height = viewportConstraints.maxHeight) {
+                val scrollY = (state.viewportState.scrollOffset.y * density.density).roundToInt()
+                placeable.place(x = 0, y = -scrollY)
+              }
             }
           }
-        }
-        .map { it.measure(viewportConstraints) }
+          .map { it.measure(viewportConstraints) }
+      val viewportSurfaceOverlayPlaceables =
+        subcompose(EditorScreenLayoutSlot.ViewportSurfaceOverlay) {
+            Box(modifier = Modifier.fillMaxSize().clipToBounds(), content = viewportSurfaceOverlay)
+          }
+          .map { it.measure(viewportConstraints) }
+
+      layout(width = constraints.maxWidth, height = constraints.maxHeight) {
+        viewportContentPlaceables.forEach { it.place(x = 0, y = 0) }
+        viewportSurfaceOverlayPlaceables.forEach { it.place(x = 0, y = 0) }
+      }
+    }
+
+    NavigationForeground(sharePointerInputWithSiblings = true) {
+      EditorViewportOverlayLayout(viewportOverlay)
+    }
+    NavigationForeground {
+      EditorScreenForegroundLayout(
+        overlay = overlay,
+        toolbar = toolbar,
+        subPane = subPane,
+        softwareMagnifierSource = softwareMagnifierSource,
+        magnifierPlacement = magnifierPlacement,
+      )
+    }
+  }
+}
+
+@Composable
+private fun EditorViewportOverlayLayout(viewportOverlay: @Composable BoxScope.() -> Unit) {
+  SubcomposeLayout(modifier = Modifier.fillMaxSize().sharePointerInputWithSiblings()) { constraints
+    ->
+    val viewportConstraints =
+      constraints.copy(
+        minWidth = constraints.maxWidth,
+        maxWidth = constraints.maxWidth,
+        minHeight = constraints.maxHeight,
+        maxHeight = constraints.maxHeight,
+      )
     val viewportOverlayPlaceables =
       subcompose(EditorScreenLayoutSlot.ViewportOverlay) {
-          Box(
-            modifier = Modifier.fillMaxSize().clipToBounds().sharePointerInputWithSiblings(),
-            content = viewportOverlay,
-          )
+          Box(modifier = Modifier.fillMaxSize().clipToBounds(), content = viewportOverlay)
         }
         .map { it.measure(viewportConstraints) }
-    val overlayPlaceables =
-      subcompose(EditorScreenLayoutSlot.Overlay, overlay).map {
-        it.measure(
-          constraints.copy(
-            minWidth = constraints.maxWidth,
-            maxWidth = constraints.maxWidth,
-            minHeight = constraints.maxHeight,
-            maxHeight = constraints.maxHeight,
-          )
+
+    layout(width = constraints.maxWidth, height = constraints.maxHeight) {
+      viewportOverlayPlaceables.forEach { it.place(x = 0, y = 0) }
+    }
+  }
+}
+
+@Composable
+private fun EditorScreenForegroundLayout(
+  overlay: @Composable () -> Unit,
+  toolbar: @Composable () -> Unit,
+  subPane: @Composable BoxScope.() -> Unit,
+  softwareMagnifierSource: GraphicsLayer,
+  magnifierPlacement: EditorMagnifierPlacement?,
+) {
+  SubcomposeLayout(
+    modifier =
+      Modifier.fillMaxSize()
+        .editorSoftwareMagnifierLens(
+          sourceLayer = softwareMagnifierSource,
+          placement = magnifierPlacement,
         )
+  ) { constraints ->
+    val fullConstraints =
+      constraints.copy(
+        minWidth = constraints.maxWidth,
+        maxWidth = constraints.maxWidth,
+        minHeight = constraints.maxHeight,
+        maxHeight = constraints.maxHeight,
+      )
+    val overlayPlaceables =
+      subcompose(EditorScreenLayoutSlot.Overlay, overlay).map { it.measure(fullConstraints) }
+    val toolbarPlaceables =
+      subcompose(EditorScreenLayoutSlot.Toolbar, toolbar).map {
+        it.measure(constraints.copy(minWidth = 0, minHeight = 0))
       }
     val subPanePlaceables =
       subcompose(EditorScreenLayoutSlot.SubPane) {
           Box(modifier = Modifier.fillMaxSize(), content = subPane)
         }
-        .map {
-          it.measure(
-            constraints.copy(
-              minWidth = constraints.maxWidth,
-              maxWidth = constraints.maxWidth,
-              minHeight = constraints.maxHeight,
-              maxHeight = constraints.maxHeight,
-            )
-          )
-        }
+        .map { it.measure(fullConstraints) }
 
     layout(width = constraints.maxWidth, height = constraints.maxHeight) {
-      viewportContentPlaceables.forEach { it.place(x = 0, y = 0) }
-      viewportOverlayPlaceables.forEach { it.place(x = 0, y = 0) }
       overlayPlaceables.forEach { it.place(x = 0, y = 0) }
       toolbarPlaceables.forEach { it.place(x = 0, y = constraints.maxHeight - it.height) }
       subPanePlaceables.forEach { it.place(x = 0, y = 0) }

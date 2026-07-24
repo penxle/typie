@@ -69,7 +69,6 @@ import co.typie.ui.component.toast.ToastAnchor
 import co.typie.ui.component.toast.ToastType
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarButton
-import co.typie.ui.component.topbar.TopBarDefaults
 import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.icon.Icon
 import co.typie.ui.skeleton.Skeleton
@@ -411,13 +410,7 @@ fun NotesScreen() {
           },
         )
       val reorderState = rememberNoteListReorderState(items = listItems, scrollState = scrollState)
-      val reorderViewportTopInset =
-        maxOf(
-          0.dp,
-          contentPadding.calculateTopPadding() -
-            TopBarDefaults.BlurFadeHeight -
-            TopBarDefaults.ContentTopSpacing,
-        )
+      val reorderViewportTopInset = contentPadding.calculateTopPadding()
       val reorderViewportBottomInset =
         WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding() + 72.dp
 

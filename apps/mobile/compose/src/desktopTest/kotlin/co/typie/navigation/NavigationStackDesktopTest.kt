@@ -12,12 +12,15 @@ import androidx.compose.foundation.gestures.scrollable2D
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
@@ -33,6 +36,10 @@ import androidx.compose.ui.test.performTrackpadInput
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.dp
 import co.typie.route.Route
+import co.typie.ui.component.bottombar.BottomBarState
+import co.typie.ui.component.bottombar.LocalBottomBarState
+import co.typie.ui.component.topbar.LocalTopBarState
+import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarState
 import kotlin.math.abs
 import kotlin.test.Test
@@ -46,6 +53,271 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalTestApi::class)
 class NavigationStackDesktopTest {
+  @Test
+  fun navigationForegroundCanSharePointerInputWithRouteSurface() = runComposeUiTest {
+    val navigator = Navigator(Route.Home)
+    val editorRoute = Route.Editor("document-id")
+    var surfaceDownCount = 0
+
+    setContent {
+      NavigationStack(
+        navigator = navigator,
+        topBarState = remember { TopBarState() },
+        modifier = Modifier.size(width = 320.dp, height = 640.dp),
+      ) { route ->
+        Box(
+          Modifier.fillMaxSize()
+            .pointerInput(Unit) {
+              awaitEachGesture {
+                awaitFirstDown(requireUnconsumed = false)
+                surfaceDownCount += 1
+              }
+            }
+            .testTag("surface-$route")
+        )
+        NavigationForeground(sharePointerInputWithSiblings = true) {
+          Box(Modifier.fillMaxSize().testTag("foreground-$route"))
+        }
+      }
+      LaunchedEffect(Unit) { navigator.navigate(editorRoute) }
+    }
+    waitUntil { navigator.current == editorRoute && !navigator.isTransitioning }
+
+    onNodeWithTag("foreground-$editorRoute").performTouchInput {
+      down(center)
+      up()
+    }
+    waitForIdle()
+
+    assertEquals(1, surfaceDownCount)
+  }
+
+  @Test
+  fun navigationForegroundRendersLocallyWithoutHost() = runComposeUiTest {
+    setContent { NavigationForeground { Box(Modifier.size(20.dp).testTag(ForegroundFallbackTag)) } }
+
+    onNodeWithTag(ForegroundFallbackTag).assertExists()
+  }
+
+  @Test
+  fun navigationForegroundPreservesRouteIdentityAndDeclarationContext() = runComposeUiTest {
+    val navigator = Navigator(Route.Home)
+    val editorRoute = Route.Editor("document-id")
+    val coveringRoute = Route.Document("covering-document-id")
+    val topBarState = TopBarState()
+    val bottomBarState = BottomBarState()
+    val navigateAway = CompletableDeferred<Unit>()
+    val returnToEditor = CompletableDeferred<Unit>()
+    val foregroundIdentities = mutableMapOf<Route, Any>()
+    val foregroundAttachCounts = mutableMapOf<Route, Int>()
+    val foregroundDisposeCounts = mutableMapOf<Route, Int>()
+    val observedRoutes = mutableMapOf<Route, Route?>()
+    val observedContexts = mutableMapOf<Route, String>()
+    val observedTopBars = mutableMapOf<Route, TopBarState?>()
+    val observedBottomBars = mutableMapOf<Route, BottomBarState?>()
+
+    setContent {
+      NavigationStack(
+        navigator = navigator,
+        topBarState = topBarState,
+        bottomBarState = bottomBarState,
+        modifier = Modifier.size(width = 320.dp, height = 640.dp),
+      ) { route ->
+        CompositionLocalProvider(LocalForegroundTestValue provides "context-$route") {
+          Box(Modifier.fillMaxSize().testTag("surface-$route"))
+          NavigationForeground {
+            val identity = remember { Any() }
+            foregroundIdentities.putIfAbsent(route, identity)
+            observedRoutes[route] = LocalRoute.current
+            observedContexts[route] = LocalForegroundTestValue.current
+            observedTopBars[route] = LocalTopBarState.current
+            observedBottomBars[route] = LocalBottomBarState.current
+            DisposableEffect(identity) {
+              foregroundAttachCounts[route] = foregroundAttachCounts.getOrElse(route) { 0 } + 1
+              onDispose {
+                foregroundDisposeCounts[route] = foregroundDisposeCounts.getOrElse(route) { 0 } + 1
+              }
+            }
+            Box(Modifier.fillMaxSize().testTag("foreground-$route"))
+          }
+        }
+      }
+      LaunchedEffect(Unit) {
+        navigator.navigate(editorRoute)
+        navigateAway.await()
+        navigator.navigate(coveringRoute)
+        returnToEditor.await()
+        navigator.pop()
+      }
+    }
+
+    waitUntil { navigator.current == editorRoute && !navigator.isTransitioning }
+    onAllNodes(hasTestTag("foreground-$editorRoute")).assertCountEquals(1)
+    val editorForegroundIdentity = foregroundIdentities.getValue(editorRoute)
+    assertEquals(editorRoute, observedRoutes[editorRoute])
+    assertEquals("context-$editorRoute", observedContexts[editorRoute])
+    assertTrue(observedTopBars[editorRoute] === topBarState)
+    assertTrue(observedBottomBars[editorRoute] === bottomBarState)
+
+    navigateAway.complete(Unit)
+    waitUntil { navigator.current == coveringRoute && !navigator.isTransitioning }
+    assertEquals(1, foregroundAttachCounts[editorRoute])
+    assertEquals(0, foregroundDisposeCounts[editorRoute] ?: 0)
+    assertEquals(null, observedTopBars[editorRoute])
+    assertEquals(null, observedBottomBars[editorRoute])
+
+    returnToEditor.complete(Unit)
+    waitUntil { navigator.current == editorRoute && !navigator.isTransitioning }
+    onAllNodes(hasTestTag("foreground-$editorRoute")).assertCountEquals(1)
+    assertTrue(foregroundIdentities[editorRoute] === editorForegroundIdentity)
+    assertEquals(1, foregroundAttachCounts[editorRoute])
+    assertEquals(0, foregroundDisposeCounts[editorRoute] ?: 0)
+    assertTrue(observedTopBars[editorRoute] === topBarState)
+    assertTrue(observedBottomBars[editorRoute] === bottomBarState)
+  }
+
+  @Test
+  fun navigationForegroundMatchesSurfaceDuringDirectBackDrag() = runComposeUiTest {
+    val navigator = Navigator(Route.Home)
+    val editorRoute = Route.Editor("document-id")
+    var platformTouchSlop = 0f
+
+    setContent {
+      platformTouchSlop = LocalViewConfiguration.current.touchSlop
+      NavigationStack(
+        navigator = navigator,
+        topBarState = remember { TopBarState() },
+        modifier = Modifier.size(width = 320.dp, height = 640.dp),
+      ) { route ->
+        Box(Modifier.fillMaxSize().testTag("surface-$route"))
+        NavigationForeground { Box(Modifier.fillMaxSize().testTag("foreground-$route")) }
+      }
+      LaunchedEffect(Unit) { navigator.navigate(editorRoute) }
+    }
+    waitUntil { navigator.current == editorRoute && !navigator.isTransitioning }
+
+    val surface = onNodeWithTag("surface-$editorRoute")
+    val foreground = onNodeWithTag("foreground-$editorRoute")
+    foreground.performTouchInput {
+      down(center)
+      moveBy(Offset(x = platformTouchSlop * 4f, y = 0f), delayMillis = 100L)
+    }
+    waitUntil { surface.fetchSemanticsNode().boundsInRoot.left > 1f }
+
+    assertEquals(
+      surface.fetchSemanticsNode().boundsInRoot.left,
+      foreground.fetchSemanticsNode().boundsInRoot.left,
+      absoluteTolerance = 0.5f,
+    )
+
+    foreground.performTouchInput { up() }
+    waitUntil { !navigator.isTransitioning }
+  }
+
+  @Test
+  fun topBarBackdropStaysFixedOverLiveTransitionSurfaceComposite() = runComposeUiTest {
+    val navigator = Navigator(Route.Home)
+    val editorRoute = Route.Editor("document-id")
+    val topBarState = TopBarState().apply { animatedAlpha = 1f }
+    var platformTouchSlop = 0f
+
+    setContent {
+      platformTouchSlop = LocalViewConfiguration.current.touchSlop
+      NavigationStack(
+        navigator = navigator,
+        topBarState = topBarState,
+        modifier = Modifier.size(width = 320.dp, height = 640.dp),
+      ) { route ->
+        PublishNavigationTopBarBackdropStyle(
+          background = if (route == editorRoute) Color.Blue else Color.Red
+        )
+        ProvideTopBar()
+        Box(Modifier.fillMaxSize().testTag("surface-$route"))
+        NavigationForeground { Box(Modifier.fillMaxSize().testTag("foreground-$route")) }
+      }
+      LaunchedEffect(Unit) { navigator.navigate(editorRoute) }
+    }
+    waitUntil { navigator.current == editorRoute && !navigator.isTransitioning }
+
+    val surface = onNodeWithTag("surface-$editorRoute")
+    val foreground = onNodeWithTag("foreground-$editorRoute")
+    foreground.performTouchInput {
+      down(center)
+      moveBy(Offset(x = platformTouchSlop * 4f, y = 0f), delayMillis = 100L)
+    }
+    waitUntil { surface.fetchSemanticsNode().boundsInRoot.left > 1f }
+
+    assertEquals(
+      0f,
+      onNodeWithTag(NavigationTopBarBackdropTestTag).fetchSemanticsNode().boundsInRoot.left,
+      absoluteTolerance = 0.5f,
+    )
+    assertEquals(
+      0f,
+      onNodeWithTag(NavigationSceneSurfaceCompositeTestTag).fetchSemanticsNode().boundsInRoot.left,
+      absoluteTolerance = 0.5f,
+    )
+    onNodeWithTag("surface-${Route.Home}").assertExists()
+    assertEquals(
+      surface.fetchSemanticsNode().boundsInRoot.left,
+      foreground.fetchSemanticsNode().boundsInRoot.left,
+      absoluteTolerance = 0.5f,
+    )
+
+    foreground.performTouchInput { up() }
+    waitUntil { !navigator.isTransitioning }
+  }
+
+  @Test
+  fun foregroundScrollableChildOwnsDragBeforeFullAreaBackSwipe() = runComposeUiTest {
+    val navigator = Navigator(Route.Home)
+    val editorRoute = Route.Editor("document-id")
+    var platformTouchSlop = 0f
+    var childConsumed = 0f
+
+    setContent {
+      platformTouchSlop = LocalViewConfiguration.current.touchSlop
+      NavigationStack(
+        navigator = navigator,
+        topBarState = remember { TopBarState() },
+        modifier = Modifier.size(width = 320.dp, height = 640.dp),
+      ) { route ->
+        Box(Modifier.fillMaxSize().testTag("surface-$route"))
+        NavigationForeground {
+          val scrollableState = rememberScrollableState { delta ->
+            childConsumed += delta
+            delta
+          }
+          Box(
+            Modifier.fillMaxSize()
+              .testTag("foreground-$route")
+              .scrollable(scrollableState, Orientation.Horizontal)
+          )
+        }
+      }
+      LaunchedEffect(Unit) { navigator.navigate(editorRoute) }
+    }
+    waitUntil { navigator.current == editorRoute && !navigator.isTransitioning }
+    val foreground = onNodeWithTag("foreground-$editorRoute")
+
+    foreground.performTouchInput {
+      down(center)
+      moveBy(Offset(x = platformTouchSlop * 4f, y = 0f))
+    }
+    waitForIdle()
+
+    assertTrue(abs(childConsumed) > 0.5f)
+    assertEquals(
+      0f,
+      onNodeWithTag("surface-$editorRoute").fetchSemanticsNode().boundsInRoot.left,
+      absoluteTolerance = 0.5f,
+    )
+
+    foreground.performTouchInput { up() }
+    waitForIdle()
+    assertEquals(editorRoute, navigator.current)
+  }
+
   @Test
   fun mainAreaTrackpadClickDragPopsOnDesktop() = assertTrackpadClickDragPops(startAtEdge = false)
 
@@ -476,6 +748,9 @@ class NavigationStackDesktopTest {
 
   private companion object {
     const val EditorRouteTag = "editor-route"
+    const val ForegroundFallbackTag = "foreground-fallback"
     const val HomeRouteTag = "home-route"
   }
 }
+
+private val LocalForegroundTestValue = staticCompositionLocalOf { "missing" }

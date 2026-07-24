@@ -1523,6 +1523,16 @@ fun EditorScreen(entityId: String) {
             },
           )
         },
+        viewportSurfaceOverlay = {
+          if (!editorReady && runtime.error == null) {
+            EditorLoadingSkeleton(
+              layoutSpec = layoutSpec,
+              topInset = topInset,
+              background = background,
+              modifier = Modifier.fillMaxSize(),
+            )
+          }
+        },
         viewportOverlay = {
           if (editorReady) {
             EditorZoomOverlay(
@@ -1541,13 +1551,6 @@ fun EditorScreen(entityId: String) {
               layoutSpec = layoutSpec,
               pageSizes = layoutPageSizes,
               displayZoom = displayZoom,
-              modifier = Modifier.fillMaxSize(),
-            )
-          } else if (runtime.error == null) {
-            EditorLoadingSkeleton(
-              layoutSpec = layoutSpec,
-              topInset = topInset,
-              background = background,
               modifier = Modifier.fillMaxSize(),
             )
           }
