@@ -196,6 +196,57 @@ describe('pointer native drag admission', () => {
     expect(editor.scrollIntoView).toHaveBeenCalledWith({ target: { type: 'current_selection_head' }, mode: 'nearest' });
   });
 
+  it('promotes a rapid third click inside the selected word to paragraph selection', () => {
+    const editor = createEditor();
+    const target = createPointerTarget({ captured: true });
+
+    handlePointerDown(editor, createPointerEvent({ target, timeStamp: 1000 }));
+    handlePointerUp(editor, createPointerEvent({ target, timeStamp: 1050 }));
+    handlePointerDown(editor, createPointerEvent({ target, timeStamp: 1100 }));
+    expect(editor.enqueue).toHaveBeenCalledWith({
+      type: 'selection',
+      op: { type: 'select_unit_at', page: 0, x: 10, y: 20, unit: 'word' },
+    });
+    handlePointerUp(editor, createPointerEvent({ target, timeStamp: 1150 }));
+
+    Object.assign(editor, { isSelectionCollapsed: false, selection: rangeSelection });
+    editor.selectionHitTest.mockReturnValue(true);
+    editor.enqueue.mockClear();
+
+    handlePointerDown(editor, createPointerEvent({ target, timeStamp: 1200 }));
+
+    expect(editor.enqueue).toHaveBeenCalledWith({
+      type: 'selection',
+      op: { type: 'select_unit_at', page: 0, x: 10, y: 20, unit: 'paragraph' },
+    });
+    expect(editor.beginNativeDragAdmission).not.toHaveBeenCalled();
+
+    editor.enqueue.mockClear();
+    handlePointerUp(editor, createPointerEvent({ target, timeStamp: 1250 }));
+    expect(editor.enqueue).not.toHaveBeenCalled();
+  });
+
+  it('extends a selected range on shift-click instead of admitting a native drag', () => {
+    const editor = createEditor({ selectionHit: true, isSelectionCollapsed: false, selection: rangeSelection });
+    const target = createPointerTarget({ captured: true });
+
+    handlePointerDown(editor, createPointerEvent({ target, shiftKey: true }));
+
+    expect(editor.enqueue).toHaveBeenCalledWith({
+      type: 'selection',
+      op: {
+        type: 'extend_to',
+        anchor: rangeSelection.anchor,
+        head_page: 0,
+        head_x: 10,
+        head_y: 20,
+        base_selection: undefined,
+        allow_collapse: true,
+      },
+    });
+    expect(editor.beginNativeDragAdmission).not.toHaveBeenCalled();
+  });
+
   it('ignores a non-primary pointer without replacing the active selection interaction', () => {
     const editor = createEditor();
     const target = createPointerTarget({ captured: true });

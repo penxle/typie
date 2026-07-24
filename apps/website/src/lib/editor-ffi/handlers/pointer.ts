@@ -69,8 +69,7 @@ export const handlePointerDown: EditorEventHandler<HTMLElement, PointerEvent> = 
   const count = PointerState.of(editor).resolveClickCount(e);
   const modifiers: InputModifiers = { shift: e.shiftKey, ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey };
 
-  const selectionHit = !editor.isSelectionCollapsed && editor.selectionHitTest(page, x, y);
-  const nativeDragCandidate = !editor.isSelectionCollapsed && selectionHit;
+  const nativeDragCandidate = count === 1 && !modifiers.shift && !editor.isSelectionCollapsed && editor.selectionHitTest(page, x, y);
   if (nativeDragCandidate) {
     const target = e.currentTarget;
     editor.beginNativeDragAdmission();
