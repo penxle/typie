@@ -65,6 +65,7 @@ firebase-messaging = { module = "com.google.firebase:firebase-messaging" }
 googleid = { module = "com.google.android.libraries.identity.googleid:googleid", version.ref = "googleid" }
 haze = { module = "dev.chrisbanes.haze:haze", version.ref = "haze" }
 haze-blur = { module = "dev.chrisbanes.haze:haze-blur", version.ref = "haze" }
+haze-utils = { module = "dev.chrisbanes.haze:haze-utils", version.ref = "haze" }
 jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
 kakao-user = { module = "com.kakao.sdk:v2-user", version.ref = "kakao" }
 kermit = { module = "co.touchlab:kermit", version.ref = "kermit" }

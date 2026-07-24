@@ -223,6 +223,7 @@ kotlin {
     implementation(libs.ksafe)
     implementation(libs.haze)
     implementation(libs.haze.blur)
+    implementation(libs.haze.utils)
     implementation(libs.compottie)
 
     testImplementation(libs.kotlin.test)
