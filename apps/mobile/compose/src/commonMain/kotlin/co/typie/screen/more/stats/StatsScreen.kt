@@ -302,7 +302,9 @@ private fun WeekdayCard(activity: ActivityData) {
         for (weekdayActivity in activity.weekdayActivities) {
           val isMostActiveWeekday = weekdayActivity.dayIndex == activity.mostActiveWeekdayIndex
           val barHeight =
-            (weekdayActivity.averageAdditions / maxAverageAdditions) * 32f.coerceAtLeast(2f)
+            (weekdayActivity.averageAdditions.toFloat() / maxAverageAdditions * 32f).coerceAtLeast(
+              2f
+            )
 
           Column(
             modifier = Modifier.weight(1f),

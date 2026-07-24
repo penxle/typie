@@ -23,7 +23,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -63,6 +68,8 @@ fun ActivityGrid(user: ActivityGrid_user, modifier: Modifier = Modifier) {
 
   val themeMode = AppTheme.themeMode
   val colors = remember(themeMode) { activityLevelColors(themeMode) }
+  val selectionBorderColor =
+    if (themeMode == ResolvedThemeMode.Dark) AppColor.dark.gray.s500 else AppColor.light.gray.s600
 
   val endDate = remember { Clock.System.now().toLocalDate() }
   val startDate = remember { endDate.minus(364, DateTimeUnit.DAY) }
@@ -77,12 +84,14 @@ fun ActivityGrid(user: ActivityGrid_user, modifier: Modifier = Modifier) {
   val density = LocalDensity.current
   val layoutDirection = LocalLayoutDirection.current
   val haptic = LocalHapticFeedback.current
-  val cellStridePx = with(density) { (CellSize + CellGap).toPx() }
-  val cellSizePx = with(density) { CellSize.toPx() }
-  val fogLeftPx = with(density) { FogInsets.calculateLeftPadding(layoutDirection).toPx() }
-  val fogRightPx = with(density) { FogInsets.calculateRightPadding(layoutDirection).toPx() }
-  val monthLabelHeightPx = with(density) { MonthLabelHeight.toPx() }
-  val cellGapPx = with(density) { CellGap.toPx() }
+  val cellSizePx = with(density) { CellSize.roundToPx().toFloat() }
+  val cellGapPx = with(density) { CellGap.roundToPx().toFloat() }
+  val cellStridePx = cellSizePx + cellGapPx
+  val fogLeftPx =
+    with(density) { FogInsets.calculateLeftPadding(layoutDirection).roundToPx().toFloat() }
+  val fogRightPx =
+    with(density) { FogInsets.calculateRightPadding(layoutDirection).roundToPx().toFloat() }
+  val monthLabelHeightPx = with(density) { MonthLabelHeight.roundToPx().toFloat() }
   val tooltipOffsetPx = with(density) { TooltipOffset.toPx() }
 
   var viewportWidthPx by remember { mutableStateOf(0) }
@@ -222,12 +231,26 @@ fun ActivityGrid(user: ActivityGrid_user, modifier: Modifier = Modifier) {
             }
           }
 
-          week.forEach { activity ->
+          week.forEachIndexed { dayIndex, activity ->
             if (activity != null) {
+              val selected = activeCell?.weekIndex == weekIndex && activeCell?.dayIndex == dayIndex
               Box(
                 modifier =
                   Modifier.size(CellSize)
                     .background(colors[activity.level], RoundedCornerShape(2.dp))
+                    .drawWithContent {
+                      drawContent()
+                      if (selected) {
+                        val outset = CellSelectionOutset.toPx()
+                        drawRoundRect(
+                          color = selectionBorderColor,
+                          topLeft = Offset(-outset, -outset),
+                          size = Size(size.width + outset * 2, size.height + outset * 2),
+                          cornerRadius = CornerRadius(CellSelectionRadius.toPx()),
+                          style = Stroke(width = CellSelectionStrokeWidth.toPx()),
+                        )
+                      }
+                    }
               )
             } else {
               Spacer(modifier = Modifier.size(CellSize))
@@ -348,6 +371,9 @@ private fun activityLevelColors(themeMode: ResolvedThemeMode): List<Color> {
 
 private val CellSize = 12.dp
 private val CellGap = 3.dp
+private val CellSelectionOutset = 1.5.dp
+private val CellSelectionStrokeWidth = 1.5.dp
+private val CellSelectionRadius = 3.5.dp
 private val MonthLabelHeight = 16.dp
 private val FogInsets = PaddingValues(horizontal = 16.dp)
 private val TooltipOffset = 24.dp

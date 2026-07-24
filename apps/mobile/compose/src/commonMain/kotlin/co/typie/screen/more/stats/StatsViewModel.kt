@@ -17,6 +17,7 @@ import co.typie.graphql.text
 import co.typie.graphql.watchQuery
 import co.typie.result.Result
 import co.typie.result.result
+import kotlin.math.roundToInt
 import kotlin.time.Clock
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.daysUntil
@@ -73,7 +74,7 @@ class StatsViewModel : ViewModel() {
           totalAdditions = totalAdditions,
           averageAdditions =
             if (changes.isNotEmpty()) {
-              totalAdditions / changes.size
+              (totalAdditions.toDouble() / changes.size).roundToInt()
             } else {
               0
             },
