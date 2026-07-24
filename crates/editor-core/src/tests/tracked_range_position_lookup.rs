@@ -11,6 +11,7 @@ fn add_msg(id: &str, group: &str, sel: Selection) -> Message {
             group: group.into(),
             selection: sel,
             metadata: String::new(),
+            invalidate_on_text_change: false,
         },
     }
 }

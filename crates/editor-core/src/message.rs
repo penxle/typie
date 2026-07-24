@@ -404,6 +404,8 @@ pub struct ProseTrackedRangeRegistration {
     pub end: u32,
     #[serde(default)]
     pub metadata: String,
+    #[serde(default)]
+    pub invalidate_on_text_change: bool,
 }
 
 #[ffi]
@@ -416,6 +418,8 @@ pub enum TrackedRangeOp {
         selection: Selection,
         #[serde(default)]
         metadata: String,
+        #[serde(default)]
+        invalidate_on_text_change: bool,
     },
     AddFrozen {
         id: String,

@@ -38,6 +38,7 @@ fn tracked_range_survives_lift() {
         "comment".into(),
         stable,
         String::new(),
+        false,
         &initial,
     );
 
@@ -74,7 +75,7 @@ fn tracked_range_locate_survives_split_precisely() {
     let view_before = state.view();
     let sel_c_to_d = Selection::new(Position::new(p1, 2), Position::new(p1, 4));
     let stable = StableSelection::capture(&sel_c_to_d, &view_before);
-    let range = TrackedRange::new("r".into(), "g".into(), stable, String::new(), &state);
+    let range = TrackedRange::new("r".into(), "g".into(), stable, String::new(), false, &state);
 
     let mut tr = Transaction::new(&state);
     tr.split_node(p1, 2).unwrap();
@@ -99,7 +100,7 @@ fn tracked_range_locate_survives_merge_precisely() {
     let view_before = state.view();
     let sel_in_p2 = Selection::new(Position::new(p2, 0), Position::new(p2, 2));
     let stable = StableSelection::capture(&sel_in_p2, &view_before);
-    let range = TrackedRange::new("r".into(), "g".into(), stable, String::new(), &state);
+    let range = TrackedRange::new("r".into(), "g".into(), stable, String::new(), false, &state);
 
     let mut tr = Transaction::new(&state);
     tr.merge_node(p1).unwrap();
@@ -133,7 +134,7 @@ fn tracked_range_locate_survives_container_start_block_move() {
     assert!(stable.anchor.child.is_none());
     assert!(stable.head.child.is_some());
 
-    let range = TrackedRange::new("r".into(), "g".into(), stable, String::new(), &state);
+    let range = TrackedRange::new("r".into(), "g".into(), stable, String::new(), false, &state);
 
     // Move p1 back into the same slot: `new_index: 0` targets root's post-deletion
     // child list (which is just [p2] once p1 is removed), so p1 lands at index 0

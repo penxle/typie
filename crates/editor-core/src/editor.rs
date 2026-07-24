@@ -283,6 +283,81 @@ impl Editor {
         &mut self.tracked_ranges
     }
 
+    /// Dirty-block-scoped re-verification of text-sensitive tracked ranges.
+    /// Content-only dirt re-checks just the ranges indexed under the dirtied
+    /// blocks; structural or full dirt re-checks every sensitive range, since
+    /// splits, merges, and moves can re-home covered leaves across blocks. A
+    /// range whose covered text diverged from its install-time capture (or
+    /// stopped resolving) is removed and reported via
+    /// [`EditorEvent::TrackedRangesStale`].
+    fn reverify_tracked_text(&mut self, dirty: &editor_state::LayoutDirty) -> bool {
+        use editor_state::LayoutDirty;
+        if !self.tracked_ranges.has_text_sensitive() {
+            return false;
+        }
+        let candidates = match dirty {
+            LayoutDirty::Full => self.tracked_ranges.text_sensitive_ids(),
+            LayoutDirty::Incremental {
+                content,
+                structural,
+            } => {
+                if !structural.is_empty() {
+                    self.tracked_ranges.text_sensitive_ids()
+                } else if content.is_empty() {
+                    return false;
+                } else {
+                    self.tracked_ranges
+                        .text_sensitive_ids_in_blocks(content.iter())
+                }
+            }
+        };
+        if candidates.is_empty() {
+            return false;
+        }
+
+        let mut stale: Vec<String> = Vec::new();
+        let mut moved: Vec<(String, Vec<Dot>)> = Vec::new();
+        {
+            let state = &self.state;
+            let view = state.view();
+            for id in &candidates {
+                let Some(range) = self.tracked_ranges.get(id) else {
+                    continue;
+                };
+                let Some(captured) = range.captured_text.as_deref() else {
+                    continue;
+                };
+                match range.locate(state).and_then(|sel| sel.resolve(&view)) {
+                    Some(resolved) => {
+                        if resolved.collect_text() != captured {
+                            stale.push(id.clone());
+                        } else {
+                            let blocks: Vec<Dot> = editor_state::blocks_in_range(&resolved)
+                                .iter()
+                                .map(|b| b.id())
+                                .collect();
+                            if blocks != range.covered_blocks {
+                                moved.push((id.clone(), blocks));
+                            }
+                        }
+                    }
+                    None => stale.push(id.clone()),
+                }
+            }
+        }
+        for (id, blocks) in moved {
+            self.tracked_ranges.reindex(&id, blocks);
+        }
+        if stale.is_empty() {
+            return false;
+        }
+        for id in &stale {
+            self.tracked_ranges.remove(id);
+        }
+        self.push_event(EditorEvent::TrackedRangesStale { ids: stale });
+        true
+    }
+
     pub fn find_matches(&self, query: &str, options: &SearchOptions) -> Vec<Selection> {
         crate::search::find_matches(&self.state.view(), query, options)
     }
@@ -783,6 +858,8 @@ impl Editor {
             self.augment_font_state_from_ops(&layout_dirty);
         }
 
+        let tracked_ranges_went_stale = self.reverify_tracked_text(&layout_dirty);
+
         let effects = std::mem::take(&mut self.pending_effects);
         if !effects.is_empty() {
             self.process_effects(effects);
@@ -820,9 +897,10 @@ impl Editor {
             fields.insert(StateField::Modifiers);
             fields.insert(StateField::Block);
             fields.insert(StateField::Placeholder);
-            if !self.tracked_ranges.is_empty() {
-                fields.insert(StateField::TrackedRanges);
-            }
+        }
+
+        if tracked_ranges_went_stale {
+            fields.insert(StateField::TrackedRanges);
         }
 
         if ops

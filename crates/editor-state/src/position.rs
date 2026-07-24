@@ -72,9 +72,12 @@ impl From<&ResolvedPosition<'_>> for Position {
     }
 }
 
-/// Inline leaf ids (chars/atoms) fully covered by the range `[from, to]`, in
-/// document order. The projected model has no text nodes, so this returns the
-/// loose leaf ids themselves.
+/// Inline leaf ids (chars/atoms) fully covered by the range `[from, to]`.
+/// Order matches `leaf_groups_in_range`: blocks in pre-order, each block's
+/// direct leaves before its nested blocks' leaves — document order except
+/// that a container's own leaf atoms precede its nested blocks' content. The
+/// projected model has no text nodes, so this returns the loose leaf ids
+/// themselves.
 pub fn inline_leaf_dots_in_range(view: &DocView, from: &Position, to: &Position) -> Vec<Dot> {
     let Some(rs) = Selection::new(*from, *to).resolve(view) else {
         return Vec::new();
@@ -82,26 +85,9 @@ pub fn inline_leaf_dots_in_range(view: &DocView, from: &Position, to: &Position)
     let from = rs.from().path();
     let to = rs.to().path();
 
-    let mut blocks = Vec::new();
-    if let Some(root) = view.root() {
-        blocks.push(root);
-        for d in root.descendants() {
-            if let ChildView::Block(b) = d {
-                blocks.push(b);
-            }
-        }
-    }
-
     let mut out = Vec::new();
-    for block in blocks {
-        let mut base: Vec<usize> = block.ancestors().filter_map(|n| n.index()).collect();
-        base.reverse();
-        for (i, child) in block.children().enumerate() {
-            let ChildView::Leaf(l) = child else { continue };
-            if crate::traversal::leaf_slot_is_covered(i, &base, from, to) {
-                out.push(l.dot());
-            }
-        }
+    if let Some(root) = view.root() {
+        crate::traversal::covered_leaf_dots_into(&root, &[], from, to, &mut out);
     }
     out
 }
@@ -539,5 +525,229 @@ mod tests {
         let view = DocView::new(&pd);
         assert!(Position::new(Dot::new(9, 9), 0).resolve(&view).is_none());
         assert!(Position::new(p1, 99).resolve(&view).is_none());
+    }
+
+    /// Reference oracle: the pre-pruning implementation that scanned every
+    /// block and every leaf of the document with the same coverage predicate.
+    fn inline_leaf_dots_scan_reference(view: &DocView, from: &Position, to: &Position) -> Vec<Dot> {
+        let Some(rs) = Selection::new(*from, *to).resolve(view) else {
+            return Vec::new();
+        };
+        let from = rs.from().path();
+        let to = rs.to().path();
+
+        let mut blocks = Vec::new();
+        if let Some(root) = view.root() {
+            blocks.push(root);
+            for d in root.descendants() {
+                if let ChildView::Block(b) = d {
+                    blocks.push(b);
+                }
+            }
+        }
+
+        let mut out = Vec::new();
+        for block in blocks {
+            let mut base: Vec<usize> = block.ancestors().filter_map(|n| n.index()).collect();
+            base.reverse();
+            for (i, child) in block.children().enumerate() {
+                let ChildView::Leaf(l) = child else { continue };
+                if crate::traversal::leaf_slot_is_covered(i, &base, from, to) {
+                    out.push(l.dot());
+                }
+            }
+        }
+        out
+    }
+
+    fn all_positions(view: &DocView) -> Vec<Position> {
+        let mut blocks = Vec::new();
+        if let Some(root) = view.root() {
+            blocks.push(root);
+            for d in root.descendants() {
+                if let ChildView::Block(b) = d {
+                    blocks.push(b);
+                }
+            }
+        }
+        let mut out = Vec::new();
+        for block in blocks {
+            for offset in 0..=block.child_count() {
+                out.push(Position::new(block.id(), offset));
+                out.push(Position {
+                    node: block.id(),
+                    offset,
+                    affinity: Affinity::Upstream,
+                });
+            }
+        }
+        out
+    }
+
+    fn assert_pruned_matches_reference(pd: &ProjectedDoc, label: &str) {
+        let view = DocView::new(pd);
+        let positions = all_positions(&view);
+        for from in &positions {
+            for to in &positions {
+                let expected = inline_leaf_dots_scan_reference(&view, from, to);
+                let actual = inline_leaf_dots_in_range(&view, from, to);
+                assert_eq!(
+                    actual, expected,
+                    "{label}: coverage diverged for from={from:?} to={to:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn pruned_walk_matches_scan_on_flat_paragraphs() {
+        let root = Dot::ROOT;
+        let mut items = Vec::new();
+        let mut n = 1u64;
+        for _ in 0..3 {
+            let para = Dot::new(1, n);
+            n += 1;
+            items.push((
+                para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                    attrs: vec![],
+                },
+            ));
+            for c in ['a', 'b', 'c'] {
+                items.push((Dot::new(1, n), SeqItem::Char(c)));
+                n += 1;
+            }
+        }
+        let pd = project_document(&logs(&items)).unwrap();
+        assert_pruned_matches_reference(&pd, "flat paragraphs");
+    }
+
+    #[test]
+    fn pruned_walk_matches_scan_on_nested_blocks_with_atoms() {
+        use editor_model::AtomLeaf;
+        let root = Dot::ROOT;
+        let bq = Dot::new(1, 1);
+        let p1 = Dot::new(1, 2);
+        let hr = Dot::new(1, 10);
+        let p2 = Dot::new(1, 11);
+        let empty = Dot::new(1, 20);
+        let items = vec![
+            (
+                bq,
+                SeqItem::Block {
+                    node_type: NodeType::Blockquote,
+                    parents: vec![root],
+                    attrs: vec![],
+                },
+            ),
+            (
+                p1,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, bq],
+                    attrs: vec![],
+                },
+            ),
+            (Dot::new(1, 3), SeqItem::Char('a')),
+            (Dot::new(1, 4), SeqItem::Atom(AtomLeaf::HardBreak)),
+            (Dot::new(1, 5), SeqItem::Char('b')),
+            (
+                hr,
+                SeqItem::BlockAtom {
+                    leaf: AtomLeaf::HorizontalRule {
+                        variant: Default::default(),
+                    },
+                    parents: vec![root],
+                },
+            ),
+            (
+                p2,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                    attrs: vec![],
+                },
+            ),
+            (Dot::new(1, 12), SeqItem::Char('x')),
+            (Dot::new(1, 13), SeqItem::Char('y')),
+            (
+                empty,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                    attrs: vec![],
+                },
+            ),
+        ];
+        let pd = project_document(&logs(&items)).unwrap();
+        assert_pruned_matches_reference(&pd, "nested blocks with atoms");
+    }
+
+    #[test]
+    fn pruned_walk_matches_scan_on_table() {
+        let root = Dot::ROOT;
+        let table = Dot::new(3, 1);
+        let row = Dot::new(3, 2);
+        let cell1 = Dot::new(3, 3);
+        let p1 = Dot::new(3, 4);
+        let cell2 = Dot::new(3, 10);
+        let p2 = Dot::new(3, 11);
+        let items = vec![
+            (
+                table,
+                SeqItem::Block {
+                    node_type: NodeType::Table,
+                    parents: vec![root],
+                    attrs: vec![],
+                },
+            ),
+            (
+                row,
+                SeqItem::Block {
+                    node_type: NodeType::TableRow,
+                    parents: vec![root, table],
+                    attrs: vec![],
+                },
+            ),
+            (
+                cell1,
+                SeqItem::Block {
+                    node_type: NodeType::TableCell,
+                    parents: vec![root, table, row],
+                    attrs: vec![],
+                },
+            ),
+            (
+                p1,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, table, row, cell1],
+                    attrs: vec![],
+                },
+            ),
+            (Dot::new(3, 5), SeqItem::Char('a')),
+            (Dot::new(3, 6), SeqItem::Char('b')),
+            (
+                cell2,
+                SeqItem::Block {
+                    node_type: NodeType::TableCell,
+                    parents: vec![root, table, row],
+                    attrs: vec![],
+                },
+            ),
+            (
+                p2,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, table, row, cell2],
+                    attrs: vec![],
+                },
+            ),
+            (Dot::new(3, 12), SeqItem::Char('c')),
+        ];
+        let pd = project_document(&logs(&items)).unwrap();
+        assert_pruned_matches_reference(&pd, "table");
     }
 }

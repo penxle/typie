@@ -391,6 +391,7 @@ export interface ProseTrackedRangeRegistration {
     start: number;
     end: number;
     metadata?: string;
+    invalidate_on_text_change?: boolean;
 }
 
 export interface RawTextReplacementRule {
@@ -566,7 +567,7 @@ export type DndOp = { type: "start_internal_selection" } | { type: "enter_extern
 
 export type Dot = string;
 
-export type EditorEvent = { type: "state_changed"; fields: StateField[] } | { type: "render_invalidated" } | { type: "font_data_missing"; family: string; weight: number; required: FontData[]; prefetch: FontData[] } | { type: "cursor_exited_document_start" } | { type: "ime_resync_required" } | { type: "tracked_range_replace_result"; id: string; outcome: TrackedRangeReplaceOutcome } | { type: "prose_range_install_result"; outcome: ProseRangeInstallOutcome } | { type: "attachment_placeholders_inserted"; request_id: string; node_ids: Dot[] };
+export type EditorEvent = { type: "state_changed"; fields: StateField[] } | { type: "render_invalidated" } | { type: "font_data_missing"; family: string; weight: number; required: FontData[]; prefetch: FontData[] } | { type: "cursor_exited_document_start" } | { type: "ime_resync_required" } | { type: "tracked_range_replace_result"; id: string; outcome: TrackedRangeReplaceOutcome } | { type: "tracked_ranges_stale"; ids: string[] } | { type: "prose_range_install_result"; outcome: ProseRangeInstallOutcome } | { type: "attachment_placeholders_inserted"; request_id: string; node_ids: Dot[] };
 
 export type Effect = { load_font: { family: string; weight: number; codepoints: number[] } };
 
@@ -676,7 +677,7 @@ export type TextNodeAttr = void;
 
 export type ThemeVariant = "dark-black" | "dark-charcoal" | "dark-espresso" | "dark-graphite" | "dark-midnight" | "dark-navy" | "dark-obsidian" | "dark-storm" | "light-butter" | "light-latte" | "light-lavender" | "light-mint" | "light-peach" | "light-rose" | "light-snow" | "light-white";
 
-export type TrackedRangeOp = { type: "add"; id: string; group: string; selection: Selection; metadata?: string } | { type: "add_frozen"; id: string; group: string; selection: StableSelection; metadata?: string } | { type: "remove"; id: string } | { type: "set_group"; id: string; group: string } | { type: "clear_group"; group: string } | { type: "replace_groups_from_prose"; expected_text: string; groups: string[]; ranges: ProseTrackedRangeRegistration[] } | { type: "invalidate"; id: string } | { type: "set_group_decoration"; group: string; style: DecorationStyle; enabled: boolean; z_index?: number } | { type: "remove_group_decoration"; group: string } | { type: "replace_text"; id: string; expected_text?: string | undefined; replacement: string };
+export type TrackedRangeOp = { type: "add"; id: string; group: string; selection: Selection; metadata?: string; invalidate_on_text_change?: boolean } | { type: "add_frozen"; id: string; group: string; selection: StableSelection; metadata?: string } | { type: "remove"; id: string } | { type: "set_group"; id: string; group: string } | { type: "clear_group"; group: string } | { type: "replace_groups_from_prose"; expected_text: string; groups: string[]; ranges: ProseTrackedRangeRegistration[] } | { type: "invalidate"; id: string } | { type: "set_group_decoration"; group: string; style: DecorationStyle; enabled: boolean; z_index?: number } | { type: "remove_group_decoration"; group: string } | { type: "replace_text"; id: string; expected_text?: string | undefined; replacement: string };
 
 export type TrackedRangeReplaceOutcome = "replaced" | "unknown_id" | "invalid" | "text_mismatch" | "invalid_replacement";
 
@@ -769,6 +770,7 @@ declare class Editor {
     surface_backend(page: number): string;
     table_overlays(): TableOverlay[];
     tick(): EditorEvent[];
+    tracked_range(id: string): TrackedRange | undefined;
     tracked_ranges(group?: string | null): TrackedRange[];
     tracked_ranges_at(page: number, x: number, y: number, group?: string | null): TrackedRangeHit[];
     tracked_ranges_containing_position(position: Position, group?: string | null): TrackedRangeEndpoints[];

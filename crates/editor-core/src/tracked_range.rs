@@ -1,4 +1,5 @@
-use editor_state::{Selection, StableResolveCtx, StableSelection, State};
+use editor_crdt::Dot;
+use editor_state::{Selection, StableResolveCtx, StableSelection, State, blocks_in_range};
 use editor_view::PageRect;
 use hashbrown::{HashMap, HashSet};
 
@@ -11,6 +12,17 @@ pub struct TrackedRange {
     pub selection: StableSelection,
     pub metadata: String,
     pub explicitly_invalid: bool,
+    /// When set, the editor re-verifies this range after document edits and
+    /// removes it (reporting `EditorEvent::TrackedRangesStale`) once the text
+    /// it covers no longer equals `captured_text`.
+    pub invalidate_on_text_change: bool,
+    /// Covered text at install time; `None` when the selection did not
+    /// resolve at install, which opts the range out of text-change checks.
+    pub captured_text: Option<String>,
+    /// Blocks intersecting the range at its last successful resolution — the
+    /// keys under which a text-sensitive range is indexed for dirty-block
+    /// scoped re-verification.
+    pub covered_blocks: Vec<Dot>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -25,6 +37,7 @@ pub struct TrackedRangeHit {
 pub struct TrackedRangeRegistry {
     by_id: HashMap<TrackedRangeId, TrackedRange>,
     by_group: HashMap<String, HashSet<TrackedRangeId>>,
+    sensitive_by_block: HashMap<Dot, HashSet<TrackedRangeId>>,
 }
 
 impl TrackedRangeRegistry {
@@ -32,25 +45,59 @@ impl TrackedRangeRegistry {
         Self::default()
     }
 
+    fn unindex_sensitive(&mut self, id: &str, blocks: &[Dot]) {
+        for block in blocks {
+            if let Some(set) = self.sensitive_by_block.get_mut(block) {
+                set.remove(id);
+                if set.is_empty() {
+                    self.sensitive_by_block.remove(block);
+                }
+            }
+        }
+    }
+
+    fn index_sensitive(&mut self, id: &TrackedRangeId, blocks: &[Dot]) {
+        for block in blocks {
+            self.sensitive_by_block
+                .entry(*block)
+                .or_default()
+                .insert(id.clone());
+        }
+    }
+
+    fn range_is_verifiable(range: &TrackedRange) -> bool {
+        range.invalidate_on_text_change
+            && !range.explicitly_invalid
+            && range.captured_text.is_some()
+    }
+
     pub fn add(&mut self, range: TrackedRange) -> Option<TrackedRange> {
         let id = range.id.clone();
         let new_group = range.group.clone();
+        let sensitive_blocks = Self::range_is_verifiable(&range)
+            .then(|| range.covered_blocks.clone())
+            .unwrap_or_default();
         let prev = self.by_id.insert(id.clone(), range);
-        if let Some(prev_range) = &prev
-            && prev_range.group != new_group
-            && let Some(set) = self.by_group.get_mut(&prev_range.group)
-        {
-            set.remove(&id);
-            if set.is_empty() {
-                self.by_group.remove(&prev_range.group);
+        if let Some(prev_range) = &prev {
+            let prev_blocks = prev_range.covered_blocks.clone();
+            self.unindex_sensitive(&id, &prev_blocks);
+            if prev_range.group != new_group
+                && let Some(set) = self.by_group.get_mut(&prev_range.group)
+            {
+                set.remove(&id);
+                if set.is_empty() {
+                    self.by_group.remove(&prev_range.group);
+                }
             }
         }
+        self.index_sensitive(&id, &sensitive_blocks);
         self.by_group.entry(new_group).or_default().insert(id);
         prev
     }
 
     pub fn remove(&mut self, id: &str) -> Option<TrackedRange> {
         let prev = self.by_id.remove(id)?;
+        self.unindex_sensitive(id, &prev.covered_blocks);
         if let Some(set) = self.by_group.get_mut(&prev.group) {
             set.remove(id);
             if set.is_empty() {
@@ -82,13 +129,40 @@ impl TrackedRangeRegistry {
         true
     }
 
-    pub fn set_selection(&mut self, id: &str, selection: StableSelection) -> bool {
-        match self.by_id.get_mut(id) {
-            Some(range) => {
-                range.selection = selection;
-                true
-            }
-            None => false,
+    pub fn set_selection(
+        &mut self,
+        id: &str,
+        selection: StableSelection,
+        covered_blocks: Vec<Dot>,
+    ) -> bool {
+        let Some(range) = self.by_id.get_mut(id) else {
+            return false;
+        };
+        range.selection = selection;
+        let old_blocks = std::mem::replace(&mut range.covered_blocks, covered_blocks);
+        let verifiable = Self::range_is_verifiable(range);
+        let new_blocks = verifiable.then(|| range.covered_blocks.clone());
+        let id = range.id.clone();
+        self.unindex_sensitive(&id, &old_blocks);
+        if let Some(blocks) = new_blocks {
+            self.index_sensitive(&id, &blocks);
+        }
+        true
+    }
+
+    /// Refreshes the block index of a range whose resolved extent moved while
+    /// its text stayed intact (dirty-scoped re-verification).
+    pub(crate) fn reindex(&mut self, id: &str, covered_blocks: Vec<Dot>) {
+        let Some(range) = self.by_id.get_mut(id) else {
+            return;
+        };
+        let old_blocks = std::mem::replace(&mut range.covered_blocks, covered_blocks);
+        let verifiable = Self::range_is_verifiable(range);
+        let new_blocks = verifiable.then(|| range.covered_blocks.clone());
+        let id = range.id.clone();
+        self.unindex_sensitive(&id, &old_blocks);
+        if let Some(blocks) = new_blocks {
+            self.index_sensitive(&id, &blocks);
         }
     }
 
@@ -96,19 +170,59 @@ impl TrackedRangeRegistry {
         let Some(ids) = self.by_group.remove(group) else {
             return Vec::new();
         };
-        ids.into_iter()
+        let removed: Vec<TrackedRange> = ids
+            .into_iter()
             .filter_map(|id| self.by_id.remove(&id))
-            .collect()
+            .collect();
+        for range in &removed {
+            let id = range.id.clone();
+            let blocks = range.covered_blocks.clone();
+            self.unindex_sensitive(&id, &blocks);
+        }
+        removed
     }
 
     pub fn invalidate(&mut self, id: &str) -> bool {
         match self.by_id.get_mut(id) {
             Some(range) if !range.explicitly_invalid => {
                 range.explicitly_invalid = true;
+                let id = range.id.clone();
+                let blocks = range.covered_blocks.clone();
+                self.unindex_sensitive(&id, &blocks);
                 true
             }
             _ => false,
         }
+    }
+
+    pub fn has_text_sensitive(&self) -> bool {
+        !self.sensitive_by_block.is_empty()
+    }
+
+    pub fn text_sensitive_ids(&self) -> Vec<TrackedRangeId> {
+        let mut ids: Vec<TrackedRangeId> = self
+            .by_id
+            .values()
+            .filter(|r| Self::range_is_verifiable(r))
+            .map(|r| r.id.clone())
+            .collect();
+        ids.sort();
+        ids
+    }
+
+    pub fn text_sensitive_ids_in_blocks<'a>(
+        &self,
+        blocks: impl Iterator<Item = &'a Dot>,
+    ) -> Vec<TrackedRangeId> {
+        let mut seen: HashSet<&TrackedRangeId> = HashSet::new();
+        for block in blocks {
+            if let Some(ids) = self.sensitive_by_block.get(block) {
+                seen.extend(ids.iter());
+            }
+        }
+        let mut ids: Vec<TrackedRangeId> = seen.into_iter().cloned().collect();
+        ids.sort();
+        ids
     }
 
     pub fn get(&self, id: &str) -> Option<&TrackedRange> {
@@ -155,15 +269,25 @@ impl TrackedRange {
         group: String,
         selection: StableSelection,
         metadata: String,
-        _state: &State,
+        invalidate_on_text_change: bool,
+        state: &State,
     ) -> Self {
-        Self {
+        let mut range = Self {
             id,
             group,
             selection,
             metadata,
             explicitly_invalid: false,
+            invalidate_on_text_change,
+            captured_text: None,
+            covered_blocks: Vec::new(),
+        };
+        let view = state.view();
+        if let Some(resolved) = range.locate(state).and_then(|sel| sel.resolve(&view)) {
+            range.captured_text = Some(resolved.collect_text());
+            range.covered_blocks = blocks_in_range(&resolved).iter().map(|b| b.id()).collect();
         }
+        range
     }
 
     pub fn locate(&self, state: &State) -> Option<Selection> {
@@ -195,6 +319,7 @@ mod tests {
             group.into(),
             StableSelection::capture(&sel, &s.view()),
             String::new(),
+            false,
             &s,
         )
     }
@@ -288,6 +413,9 @@ mod tests {
             selection: StableSelection::capture(&sel, &state.view()),
             metadata: String::new(),
             explicitly_invalid: false,
+            invalidate_on_text_change: false,
+            captured_text: None,
+            covered_blocks: Vec::new(),
         };
 
         range.explicitly_invalid = true;
@@ -307,6 +435,9 @@ mod tests {
             selection: StableSelection::capture(state.selection.as_ref().unwrap(), &state.view()),
             metadata: String::new(),
             explicitly_invalid: false,
+            invalidate_on_text_change: false,
+            captured_text: None,
+            covered_blocks: Vec::new(),
         };
 
         let resolved = range.locate(&state).expect("range locates");

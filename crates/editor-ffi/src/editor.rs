@@ -769,6 +769,17 @@ impl Editor {
         })
     }
 
+    pub fn tracked_range(&self, id: String) -> EditorResult<Option<Complex<TrackedRange>>> {
+        self.with_inner(|inner| {
+            let result = inner
+                .editor
+                .tracked_ranges()
+                .get(&id)
+                .and_then(|r| public_tracked_range(&inner.editor, r));
+            Ok(result.into_ffi()?)
+        })
+    }
+
     pub fn tracked_ranges_containing_position(
         &self,
         position: Complex<editor_state::Position>,
@@ -2840,6 +2851,7 @@ mod tests {
                     group: "comment".into(),
                     selection: sel,
                     metadata: String::new(),
+                    invalidate_on_text_change: false,
                 },
             })
             .expect("enqueue tracked-range add");
@@ -2886,6 +2898,7 @@ mod tests {
                     group: "spellcheck".into(),
                     selection: sel,
                     metadata: String::new(),
+                    invalidate_on_text_change: false,
                 },
             })
             .expect("enqueue tracked-range add");

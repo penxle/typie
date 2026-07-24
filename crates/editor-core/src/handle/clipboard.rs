@@ -137,21 +137,33 @@ pub fn handle_clipboard_op(editor: &mut Editor, op: ClipboardOp) -> Result<(), E
                 })?;
                 let mut changed = false;
                 for (id, a, b) in reanchors {
-                    let stable = {
+                    let update = {
                         let view = editor.state().view();
                         match (
                             ResolvedPosition::from_flat(&view, a),
                             ResolvedPosition::from_flat(&view, b),
                         ) {
-                            (Some(anchor), Some(head)) => Some(StableSelection::capture(
-                                &Selection::new((&anchor).into(), (&head).into()),
-                                &view,
-                            )),
+                            (Some(anchor), Some(head)) => {
+                                let sel = Selection::new((&anchor).into(), (&head).into());
+                                let stable = StableSelection::capture(&sel, &view);
+                                let blocks: Vec<editor_crdt::Dot> = sel
+                                    .resolve(&view)
+                                    .map(|rs| {
+                                        editor_state::blocks_in_range(&rs)
+                                            .iter()
+                                            .map(|block| block.id())
+                                            .collect()
+                                    })
+                                    .unwrap_or_default();
+                                Some((stable, blocks))
+                            }
                             _ => None,
                         }
                     };
-                    if let Some(stable) = stable {
-                        changed |= editor.tracked_ranges_mut().set_selection(&id, stable);
+                    if let Some((stable, blocks)) = update {
+                        changed |= editor
+                            .tracked_ranges_mut()
+                            .set_selection(&id, stable, blocks);
                     }
                 }
                 if changed {
@@ -1228,6 +1240,7 @@ mod tests {
                 group: "comment".into(),
                 selection: pasted,
                 metadata: String::new(),
+                invalidate_on_text_change: false,
             },
         });
 

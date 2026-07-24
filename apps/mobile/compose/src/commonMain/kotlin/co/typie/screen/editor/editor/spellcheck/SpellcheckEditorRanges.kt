@@ -57,6 +57,7 @@ internal suspend fun Editor.installSpellcheckRangesFromProse(
       group = if (index == 0) ACTIVE_SPELLCHECK_RANGE_GROUP else SPELLCHECK_RANGE_GROUP,
       start = item.start,
       end = item.end,
+      invalidateOnTextChange = true,
     )
   }
   val outcome =

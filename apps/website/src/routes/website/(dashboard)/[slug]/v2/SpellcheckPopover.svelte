@@ -19,7 +19,12 @@
     editor.activeSpellcheckErrorId ? editor.spellcheckErrors.find((e) => e.id === editor.activeSpellcheckErrorId) : undefined,
   );
 
-  const activeRange = $derived(activeError ? editor.trackedRanges.find((r) => r.id === activeError.id) : undefined);
+  const activeRange = $derived.by(() => {
+    if (!activeError) return null;
+    // 리플로우(원격 편집 포함)를 따라가도록 tick마다 신선한 rects를 조회한다.
+    void editor.tickRevision;
+    return editor.trackedItem(activeError.id);
+  });
 
   const scroller = $derived(editor.scrollContainerEl);
 

@@ -174,7 +174,7 @@
     if (!editor) return;
     setActiveError(errorId);
 
-    const range = editor.trackedRanges.find((r) => r.id === errorId);
+    const range = editor.trackedItem(errorId);
     if (!range) return;
 
     editor.enqueue({

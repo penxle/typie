@@ -17,6 +17,7 @@ pub fn handle_tracked_range_op(editor: &mut Editor, op: TrackedRangeOp) -> Resul
             group,
             selection,
             metadata,
+            invalidate_on_text_change,
         } => {
             let view = editor.state().view();
             if selection.anchor.resolve(&view).is_none() || selection.head.resolve(&view).is_none()
@@ -26,7 +27,14 @@ pub fn handle_tracked_range_op(editor: &mut Editor, op: TrackedRangeOp) -> Resul
                 });
             }
             let stable = StableSelection::capture(&selection, &view);
-            let new_range = TrackedRange::new(id.clone(), group, stable, metadata, editor.state());
+            let new_range = TrackedRange::new(
+                id.clone(),
+                group,
+                stable,
+                metadata,
+                invalidate_on_text_change,
+                editor.state(),
+            );
             let would_change = editor
                 .tracked_ranges()
                 .get(&id)
@@ -42,8 +50,14 @@ pub fn handle_tracked_range_op(editor: &mut Editor, op: TrackedRangeOp) -> Resul
             selection,
             metadata,
         } => {
-            let new_range =
-                TrackedRange::new(id.clone(), group, selection, metadata, editor.state());
+            let new_range = TrackedRange::new(
+                id.clone(),
+                group,
+                selection,
+                metadata,
+                false,
+                editor.state(),
+            );
             let would_change = editor
                 .tracked_ranges()
                 .get(&id)
@@ -67,14 +81,22 @@ pub fn handle_tracked_range_op(editor: &mut Editor, op: TrackedRangeOp) -> Resul
                 let state = editor.state();
                 let located = range.locate(state)?;
                 let view = state.view();
-                Some(StableSelection::capture(&located, &view))
+                let resolved = located.resolve(&view)?;
+                let blocks: Vec<editor_crdt::Dot> = editor_state::blocks_in_range(&resolved)
+                    .iter()
+                    .map(|b| b.id())
+                    .collect();
+                Some((StableSelection::capture(&located, &view), blocks))
             });
             let would_change = editor.tracked_ranges().get(&id).is_some_and(|range| {
-                range.group != group || recaptured.as_ref().is_some_and(|s| s != &range.selection)
+                range.group != group
+                    || recaptured
+                        .as_ref()
+                        .is_some_and(|(s, _)| s != &range.selection)
             });
             commit_if_changed(editor, would_change, |reg| {
-                if let Some(selection) = recaptured {
-                    reg.set_selection(&id, selection);
+                if let Some((selection, blocks)) = recaptured {
+                    reg.set_selection(&id, selection, blocks);
                 }
                 reg.set_group(&id, group);
             });
@@ -189,6 +211,7 @@ fn handle_replace_groups_from_prose(
             registration.group,
             stable,
             registration.metadata,
+            registration.invalidate_on_text_change,
             editor.state(),
         ));
     }
@@ -339,6 +362,7 @@ mod tests {
                 group: "g1".into(),
                 selection: sel,
                 metadata: String::new(),
+                invalidate_on_text_change: false,
             },
         }
     }
@@ -355,6 +379,7 @@ mod tests {
             start,
             end,
             metadata: String::new(),
+            invalidate_on_text_change: false,
         }
     }
 
@@ -493,6 +518,7 @@ mod tests {
                 group: "other".into(),
                 selection,
                 metadata: String::new(),
+                invalidate_on_text_change: false,
             },
         });
 
@@ -578,6 +604,7 @@ mod tests {
                 group: "other".into(),
                 selection,
                 metadata: String::new(),
+                invalidate_on_text_change: false,
             },
         });
         let before = editor.tracked_ranges().clone();

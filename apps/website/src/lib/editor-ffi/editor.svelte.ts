@@ -445,35 +445,21 @@ export class Editor {
     }
 
     if (fields.includes('tracked_ranges')) {
+      // 코어가 실제 레지스트리 변경(설치/제거/stale 자동 제거)에만 이 필드를 발행한다.
+      // 텍스트 stale 판정은 코어의 tracked_ranges_stale 이벤트가 담당하므로 여기서는
+      // 존재 여부 동기화만 남는다.
       this.trackedRanges = this.#wasm.tracked_ranges();
 
       // eslint-disable-next-line svelte/prefer-svelte-reactivity
-      const rangeById = new Map(this.trackedRanges.map((r) => [r.id, r]));
+      const rangeIds = new Set(this.trackedRanges.map((r) => r.id));
 
-      const isStale = (e: SpellcheckError): boolean => {
-        const r = rangeById.get(e.id);
-        if (!r) return true;
-        if (r.text !== e.context) return true;
-        return false;
-      };
-
-      for (const e of this.spellcheckErrors) {
-        const r = rangeById.get(e.id);
-        if (r && r.text !== e.context) {
-          this.enqueue({ type: 'tracked_range', op: { type: 'remove', id: e.id } });
-        }
-      }
-
-      this.spellcheckErrors = this.spellcheckErrors.filter((e) => !isStale(e));
+      this.spellcheckErrors = this.spellcheckErrors.filter((e) => rangeIds.has(e.id));
 
       if (this.activeSpellcheckErrorId !== null && this.spellcheckErrors.every((e) => e.id !== this.activeSpellcheckErrorId)) {
         this.activeSpellcheckErrorId = null;
       }
 
-      this.aiFeedbacks = this.aiFeedbacks.filter((f) => {
-        const r = rangeById.get(f.id);
-        return r !== undefined;
-      });
+      this.aiFeedbacks = this.aiFeedbacks.filter((f) => rangeIds.has(f.id));
 
       if (this.activeAiFeedbackId !== null && this.aiFeedbacks.every((f) => f.id !== this.activeAiFeedbackId)) {
         this.activeAiFeedbackId = null;
@@ -736,6 +722,14 @@ export class Editor {
         this.#handleSearchReplaceResult(id, outcome);
       } else if (this.spellcheckErrors.some((e) => e.id === id)) {
         this.#handleSpellcheckReplaceResult(id);
+      }
+    });
+    this.on('tracked_ranges_stale', (_, { ids }) => {
+      // eslint-disable-next-line svelte/prefer-svelte-reactivity
+      const stale = new Set(ids);
+      this.spellcheckErrors = this.spellcheckErrors.filter((e) => !stale.has(e.id));
+      if (this.activeSpellcheckErrorId !== null && stale.has(this.activeSpellcheckErrorId)) {
+        this.activeSpellcheckErrorId = null;
       }
     });
 
@@ -1110,8 +1104,12 @@ export class Editor {
     return samePosition(selection.head, endpoints.to_position) ? endpoints.to : endpoints.from;
   }
 
+  trackedItem(id: string): TrackedRange | null {
+    return this.#wasm.tracked_range(id) ?? null;
+  }
+
   trackedItemRects(id: string): PageRect[] | null {
-    const range = this.trackedRanges.find((r) => r.id === id);
+    const range = this.trackedItem(id);
     if (!range) return null;
     return range.rects.length > 0 ? range.rects : null;
   }
@@ -1585,6 +1583,7 @@ export class Editor {
           group: 'spellcheck',
           selection: item.selection,
           metadata: '',
+          invalidate_on_text_change: true,
         },
       });
     }

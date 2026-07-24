@@ -11,6 +11,7 @@ fn add_message(id: &str, group: &str, selection: Selection) -> Message {
             group: group.into(),
             selection,
             metadata: String::new(),
+            invalidate_on_text_change: false,
         },
     }
 }

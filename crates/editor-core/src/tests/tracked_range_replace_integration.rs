@@ -12,6 +12,7 @@ fn add_range(editor: &mut Editor, id: &str, selection: Selection) {
             group: "spell".into(),
             selection,
             metadata: String::new(),
+            invalidate_on_text_change: false,
         },
     });
 }

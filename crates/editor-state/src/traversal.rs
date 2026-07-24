@@ -298,6 +298,49 @@ fn last_covered_leaf_dot(block: &NodeView, from: &[usize], to: &[usize]) -> Opti
     None
 }
 
+/// Appends the dots of leaves whose slot interval lies within `[from, to]`,
+/// visiting only the slot window that can intersect the range. Order matches
+/// [`leaf_groups_in_range`]: blocks in pre-order, each block's direct leaves
+/// before its nested blocks' leaves. Inside a non-pruned block every slot
+/// strictly between the window endpoints is fully covered — `from`/`to` can
+/// only cut into the window's first and last slots — so the per-slot
+/// predicate runs on those two slots alone.
+pub(crate) fn covered_leaf_dots_into(
+    block: &NodeView,
+    base: &[usize],
+    from: &[usize],
+    to: &[usize],
+    out: &mut Vec<Dot>,
+) {
+    if !subtree_intersects_range(base, block.child_count(), from, to) {
+        return;
+    }
+    let first = first_child_slot(base, from);
+    let Some(last) = last_child_slot(block, base, to) else {
+        return;
+    };
+    let mut child_blocks = Vec::new();
+    for slot in first..=last {
+        let Some(child) = block.child_at(slot) else {
+            break;
+        };
+        match child {
+            ChildView::Leaf(l) => {
+                let boundary = slot == first || slot == last;
+                if !boundary || leaf_slot_is_covered(slot, base, from, to) {
+                    out.push(l.dot());
+                }
+            }
+            ChildView::Block(b) => child_blocks.push((slot, b)),
+        }
+    }
+    for (slot, b) in child_blocks {
+        let mut child_base = base.to_vec();
+        child_base.push(slot);
+        covered_leaf_dots_into(&b, &child_base, from, to, out);
+    }
+}
+
 /// The (first, last) leaf-dot spans fully covered by the selection, in
 /// document order. A flat range yields at most one span; a cell-rect selection
 /// yields one span per cell so span ops never leak into cells that merely sit

@@ -73,6 +73,7 @@ fn make_tracked_ranges(
             "g".into(),
             stable,
             String::new(),
+            false,
             state,
         ));
     }

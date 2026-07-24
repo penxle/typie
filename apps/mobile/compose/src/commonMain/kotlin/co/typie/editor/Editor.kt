@@ -35,6 +35,7 @@ import co.typie.editor.ffi.StateField
 import co.typie.editor.ffi.SystemEvent
 import co.typie.editor.ffi.TableOverlay
 import co.typie.editor.ffi.ThemeVariant
+import co.typie.editor.ffi.TrackedRange
 import co.typie.editor.ffi.TrackedRangeOp
 import co.typie.editor.ffi.Viewport
 import co.typie.editor.input.EditorInputRecorder
@@ -471,6 +472,9 @@ internal constructor(
 
   suspend fun proseToSelectionAnnotated(start: Int, end: Int): Selection? =
     readInner(defaultValue = { null }) { it.proseToSelectionAnnotated(start, end) }
+
+  suspend fun trackedRange(id: String): TrackedRange? =
+    readInner(defaultValue = { null }) { it.trackedRange(id) }
 
   internal suspend fun replaceTrackedRangeGroupsFromProse(
     expectedText: String,

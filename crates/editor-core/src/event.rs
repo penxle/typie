@@ -54,6 +54,13 @@ pub enum EditorEvent {
         id: String,
         outcome: TrackedRangeReplaceOutcome,
     },
+    /// Text-sensitive tracked ranges the editor removed this tick because the
+    /// text they covered no longer equals their install-time capture (or no
+    /// longer resolves at all). Hosts drop the corresponding UI entries
+    /// instead of re-reading and re-comparing every range's text themselves.
+    TrackedRangesStale {
+        ids: Vec<String>,
+    },
     ProseRangeInstallResult {
         outcome: ProseRangeInstallOutcome,
     },

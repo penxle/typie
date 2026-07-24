@@ -17,7 +17,6 @@ import co.typie.editor.EditorState
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.SelectionOp
-import co.typie.editor.ffi.TrackedRange
 import co.typie.editor.scroll.EditorBringIntoViewBehavior
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.EditorBringIntoViewTarget
@@ -81,12 +80,15 @@ internal fun rememberEditorSpellcheckSession(
 
   fun requestRangeIntoView(id: String?) {
     val activeEditor = editor ?: return
-    val target = activeEditor.state.trackedRanges.spellcheckScrollTarget(id) ?: return
-    bringIntoViewRequests.requestForVersion(
-      target = target,
-      version = activeEditor.state.version,
-      behavior = EditorBringIntoViewBehavior.Smooth,
-    )
+    if (id == null) return
+    activeEditor.scope.launch {
+      val target = activeEditor.trackedRange(id)?.rects?.toPageRectsTarget() ?: return@launch
+      bringIntoViewRequests.requestForVersion(
+        target = target,
+        version = activeEditor.state.version,
+        behavior = EditorBringIntoViewBehavior.Smooth,
+      )
+    }
   }
 
   suspend fun updateActiveRangeDecoration() {
@@ -365,18 +367,16 @@ internal fun rememberEditorSpellcheckSession(
       },
     directEdit = directEdit@{ id ->
         val activeEditor = editor ?: return@directEdit
-        val range =
-          activeEditor.state.trackedRanges.spellcheckRanges().firstOrNull { it.id == id }
-            ?: return@directEdit
-        if (documentLocked) {
-          toast.show(ToastType.Error, "잠긴 문서는 편집할 수 없어요.")
-          return@directEdit
-        }
-
-        model?.activate(null)
-        updateCompactOverlayHeightForRange(null)
-        model?.updateExpanded(false)
         scope.launch {
+          val range = activeEditor.trackedRange(id) ?: return@launch
+          if (documentLocked) {
+            toast.show(ToastType.Error, "잠긴 문서는 편집할 수 없어요.")
+            return@launch
+          }
+
+          model?.activate(null)
+          updateCompactOverlayHeightForRange(null)
+          model?.updateExpanded(false)
           updateActiveRangeDecoration()
           activeEditor.awaitWithBringIntoView(bringIntoViewRequests) {
             enqueue(
@@ -423,8 +423,3 @@ internal fun rememberEditorSpellcheckSession(
 
 private fun RawSpellcheckResult.toSpellcheckResult(): SpellcheckResult =
   SpellcheckResult(id = id, context = context, corrections = corrections, explanation = explanation)
-
-private fun List<TrackedRange>.spellcheckScrollTarget(id: String?): EditorBringIntoViewTarget? {
-  if (id == null) return null
-  return spellcheckRanges().firstOrNull { it.id == id }?.rects?.toPageRectsTarget()
-}

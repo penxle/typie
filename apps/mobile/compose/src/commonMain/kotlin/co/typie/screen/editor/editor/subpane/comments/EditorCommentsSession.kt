@@ -13,10 +13,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.editor.Editor
 import co.typie.editor.EditorState
 import co.typie.editor.ffi.StableSelection
-import co.typie.editor.ffi.TrackedRange
 import co.typie.editor.scroll.EditorBringIntoViewBehavior
 import co.typie.editor.scroll.EditorBringIntoViewRequests
-import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.editor.scroll.toPageRectsTarget
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastType
@@ -142,9 +140,9 @@ internal fun rememberEditorCommentsSession(
   val visibleFilter = model?.threadState?.filter ?: CommentFilter.Open
   val activeThreadId = model?.threadState?.activeThreadId
   var lastRequestedActiveThreadId by remember(editor) { mutableStateOf<String?>(null) }
-  val activeThreadScrollTarget =
+  val activeThreadRangeInstalled =
     remember(activeThreadId, trackedCommentRanges) {
-      trackedCommentRanges.commentThreadScrollTarget(activeThreadId)
+      activeThreadId != null && trackedCommentRanges.any { it.id == activeThreadId }
     }
   val visibleThreads =
     if (sheetActive && visibleFilter == CommentFilter.Open) {
@@ -192,17 +190,19 @@ internal fun rememberEditorCommentsSession(
     )
   }
   LaunchedEffect(editor, composeSelection) { editor?.setCommentComposeRange(composeSelection) }
-  LaunchedEffect(editor, activeThreadId, activeThreadScrollTarget) {
+  LaunchedEffect(editor, activeThreadId, activeThreadRangeInstalled) {
     val threadId = activeThreadId
     if (threadId == null) {
       lastRequestedActiveThreadId = null
       return@LaunchedEffect
     }
-    val target = activeThreadScrollTarget ?: return@LaunchedEffect
+    if (!activeThreadRangeInstalled) return@LaunchedEffect
     if (lastRequestedActiveThreadId == threadId) {
       return@LaunchedEffect
     }
     val activeEditor = editor ?: return@LaunchedEffect
+    val target =
+      activeEditor.trackedRange(threadId)?.rects?.toPageRectsTarget() ?: return@LaunchedEffect
     bringIntoViewRequests.requestForVersion(
       target = target,
       version = activeEditor.state.version,
@@ -276,13 +276,4 @@ internal fun rememberEditorCommentsSession(
     },
     onDiscardVirtualThreadRequested = requestQueue::requestDiscardVirtualThread,
   )
-}
-
-private fun List<TrackedRange>.commentThreadScrollTarget(
-  threadId: String?
-): EditorBringIntoViewTarget? {
-  if (threadId == null) {
-    return null
-  }
-  return commentRanges().firstOrNull { it.id == threadId }?.rects?.toPageRectsTarget()
 }

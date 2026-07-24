@@ -14,10 +14,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.editor.Editor
 import co.typie.editor.EditorState
 import co.typie.editor.ffi.Selection
-import co.typie.editor.ffi.TrackedRange
 import co.typie.editor.scroll.EditorBringIntoViewBehavior
 import co.typie.editor.scroll.EditorBringIntoViewRequests
-import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.editor.scroll.toPageRectsTarget
 import co.typie.graphql.AiFeedback_LiteraryAnalysisDocumentStream_Subscription
 import co.typie.graphql.Apollo
@@ -73,12 +71,15 @@ internal fun rememberEditorAiFeedbackSession(
 
   fun requestRangeIntoView(id: String?) {
     val activeEditor = editor ?: return
-    val target = activeEditor.state.trackedRanges.aiFeedbackScrollTarget(id) ?: return
-    bringIntoViewRequests.requestForVersion(
-      target = target,
-      version = activeEditor.state.version,
-      behavior = EditorBringIntoViewBehavior.Smooth,
-    )
+    if (id == null) return
+    activeEditor.scope.launch {
+      val target = activeEditor.trackedRange(id)?.rects?.toPageRectsTarget() ?: return@launch
+      bringIntoViewRequests.requestForVersion(
+        target = target,
+        version = activeEditor.state.version,
+        behavior = EditorBringIntoViewBehavior.Smooth,
+      )
+    }
   }
 
   suspend fun updateActiveRangeDecoration() {
@@ -395,8 +396,3 @@ private fun RawAiFeedbackResult.toAiFeedbackResult(): AiFeedbackResult =
     feedback = feedback,
     category = category,
   )
-
-private fun List<TrackedRange>.aiFeedbackScrollTarget(id: String?): EditorBringIntoViewTarget? {
-  if (id == null) return null
-  return aiFeedbackRanges().firstOrNull { it.id == id }?.rects?.toPageRectsTarget()
-}

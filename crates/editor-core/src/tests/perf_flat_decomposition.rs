@@ -577,6 +577,7 @@ fn build_live_ranges(
                 "g".into(),
                 stable,
                 String::new(),
+                false,
                 &state,
             ));
             ids.push(id);
@@ -637,6 +638,7 @@ fn build_deleted_marker_ranges(
                 "g".into(),
                 stable,
                 String::new(),
+                false,
                 &state,
             ));
             ids.push(id);
@@ -765,6 +767,7 @@ fn build_wrapper_move_ranges(
                 "g".into(),
                 stable.clone(),
                 String::new(),
+                false,
                 &state,
             ));
             ids.push(id);
