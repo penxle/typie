@@ -75,7 +75,7 @@ fun UpdatePasswordScreen() {
           .imePadding()
           .padding(contentPadding)
           .padding(AppTheme.spacings.scrollBottomPadding),
-      verticalArrangement = Arrangement.spacedBy(4.dp),
+      verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
       if (model.query.data.me.hasPassword) {
         TextField(

@@ -143,7 +143,7 @@ internal fun NoteEntityPickerSheet(
   ) {
     Column(
       modifier = Modifier.fillMaxWidth().weight(1f),
-      verticalArrangement = Arrangement.spacedBy(0.dp),
+      verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
       Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 12.dp)) {
         TextField(

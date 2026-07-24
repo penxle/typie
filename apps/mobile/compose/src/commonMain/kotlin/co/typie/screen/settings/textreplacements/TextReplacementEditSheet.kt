@@ -121,7 +121,7 @@ internal fun TextReplacementEditSheet(
     }
   ) {
     Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
-      Column {
+      Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         TextField(
           field = form.match,
           label = "찾을 텍스트",
