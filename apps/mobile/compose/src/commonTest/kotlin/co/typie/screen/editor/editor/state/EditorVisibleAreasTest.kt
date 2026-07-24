@@ -31,7 +31,7 @@ class EditorVisibleAreasTest {
     assertEquals(50f, areas.editor.visibleViewportTop)
     assertEquals(180f, areas.editor.bottomOcclusion)
 
-    assertEquals(50f, areas.bottomSpacer.visibleViewportTop)
-    assertEquals(260f, areas.bottomSpacer.bottomOcclusion)
+    assertEquals(50f, areas.bottomScrollReserveArea.visibleViewportTop)
+    assertEquals(260f, areas.bottomScrollReserveArea.bottomOcclusion)
   }
 }
