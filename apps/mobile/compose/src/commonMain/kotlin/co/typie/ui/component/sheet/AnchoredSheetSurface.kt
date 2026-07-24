@@ -74,7 +74,7 @@ internal fun AnchoredSheetSurface(
   onDismissCancelled: () -> Unit = {},
   onGeometryChanged: (AnchoredSheetGeometry) -> Unit = {},
   onSettledStopChanged: (Int?) -> Unit = {},
-  scrim: @Composable AnchoredSheetSurfaceScope.(alpha: Float) -> Unit = {},
+  scrim: @Composable AnchoredSheetSurfaceScope.(alpha: () -> Float) -> Unit = {},
   content: @Composable AnchoredSheetSurfaceScope.() -> Unit,
 ) {
   BoxWithConstraints(modifier.fillMaxSize()) {
@@ -307,15 +307,12 @@ internal fun AnchoredSheetSurface(
         animationSpec = SheetAnimationSpec,
       )
 
-    val stateOffset = if (anchoredState.offset.isNaN()) containerHeightPx else anchoredState.offset
-    val offset = if (isIntrinsic) stateOffset else stateOffset + offsetCorrection.value
-    val visibleHeight =
-      resolveAnchoredSheetVisibleHeight(
-        containerHeightPx = containerHeightPx,
-        sheetOffsetPx = offset,
-        density = density.density,
-      )
-    val animatedOffsetPx = offset.roundToInt().coerceAtLeast(0)
+    fun currentOffsetPx(): Float {
+      val stateOffset =
+        if (anchoredState.offset.isNaN()) containerHeightPx else anchoredState.offset
+      return if (isIntrinsic) stateOffset else stateOffset + offsetCorrection.value
+    }
+
     val intrinsicTopLimit = intrinsicTopLimitPx.roundToInt()
     val minStopHeightPx =
       (containerHeightPx -
@@ -323,18 +320,37 @@ internal fun AnchoredSheetSurface(
         .roundToInt()
         .coerceAtLeast(0)
     val minVisibleOffset = topVisibleOffset
-    val scrimAlpha =
+
+    LaunchedEffect(
+      anchoredState,
+      offsetCorrection,
+      isIntrinsic,
+      containerHeightPx,
+      density.density,
+    ) {
+      snapshotFlow { currentOffsetPx() }
+        .collect { offset ->
+          onGeometryChangedState.value(
+            AnchoredSheetGeometry(
+              visibleHeight =
+                resolveAnchoredSheetVisibleHeight(
+                  containerHeightPx = containerHeightPx,
+                  sheetOffsetPx = offset,
+                  density = density.density,
+                )
+            )
+          )
+        }
+    }
+
+    scope.scrim {
       if (containerHeightPx > minVisibleOffset) {
-        (1f - (offset - minVisibleOffset) / (containerHeightPx - minVisibleOffset)).coerceIn(0f, 1f)
+        (1f - (currentOffsetPx() - minVisibleOffset) / (containerHeightPx - minVisibleOffset))
+          .coerceIn(0f, 1f)
       } else {
         0f
       }
-
-    LaunchedEffect(visibleHeight) {
-      onGeometryChangedState.value(AnchoredSheetGeometry(visibleHeight = visibleHeight))
     }
-
-    scope.scrim(scrimAlpha)
 
     val sheetModifier =
       Modifier.fillMaxWidth()
@@ -344,12 +360,13 @@ internal fun AnchoredSheetSurface(
             if (isIntrinsic) {
               (constraints.maxHeight - intrinsicTopLimit).coerceAtLeast(0)
             } else {
+              val animatedOffsetPx = currentOffsetPx().roundToInt().coerceAtLeast(0)
               maxOf((constraints.maxHeight - animatedOffsetPx).coerceAtLeast(0), minStopHeightPx)
             }
           val placeable = measurable.measure(constraints.copy(maxHeight = maxH))
           layout(placeable.width, placeable.height) { placeable.place(0, 0) }
         }
-        .offset { IntOffset(x = 0, y = animatedOffsetPx) }
+        .offset { IntOffset(x = 0, y = currentOffsetPx().roundToInt().coerceAtLeast(0)) }
         .thenIf(isIntrinsic) {
           onSizeChanged {
             val measuredHeightPx = it.height.toFloat()
