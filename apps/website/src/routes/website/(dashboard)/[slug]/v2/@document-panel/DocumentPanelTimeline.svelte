@@ -9,7 +9,7 @@
   import { clamp, debounce, throttle } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { fly } from 'svelte/transition';
   import ClockRewindIcon from '~icons/lucide/clock-arrow-up';
   import IconClockFading from '~icons/lucide/clock-fading';
@@ -129,14 +129,13 @@
   const shownHead = $derived(headsAsc.find((h) => h.id === shownHeadId) ?? null);
 
   const exitTimeline = (): void => {
+    const exitingEditor = timelineEditor;
+    timelineEditor = undefined;
     ctx.editor = ctx.liveEditor;
     creatingTimeline = false;
     pendingHeadId = null;
-    try {
-      timelineEditor?.destroy();
-    } finally {
-      timelineEditor = undefined;
-    }
+    // The keyed editor subtree still references the previous editor until the next render.
+    void tick().then(() => exitingEditor?.destroy());
   };
 
   onMount(() => {
