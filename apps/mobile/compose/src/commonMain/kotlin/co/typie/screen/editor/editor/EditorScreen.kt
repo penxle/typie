@@ -1301,7 +1301,7 @@ fun EditorScreen(entityId: String) {
       )
     }
     SideEffect { uiState.updateDisplayZoom(displayZoom) }
-    val pageBottomRevealSpacerHeight =
+    val pageBottomRevealPadding =
       when (layoutSpec) {
         is EditorDocumentLayoutSpec.Paginated -> visibleArea.bottomOcclusion
         is EditorDocumentLayoutSpec.Continuous -> 0f
@@ -1332,10 +1332,10 @@ fun EditorScreen(entityId: String) {
     val autoScrollPolicy =
       resolveEditorAutoScrollPolicy(
         visibleArea = visibleArea,
-        bottomSpacerVisibleArea = visibleAreas.bottomSpacer,
+        bottomScrollReserveArea = visibleAreas.bottomScrollReserveArea,
         baseBottomSpace = layoutSpec.resolveBaseBottomSpace(displayZoom),
         distanceToPagesBottom = distanceToPagesBottom,
-        pageBottomRevealSpacerHeight = pageBottomRevealSpacerHeight,
+        pageBottomRevealPadding = pageBottomRevealPadding,
         typewriterEnabled = typewriterEnabled,
         typewriterPosition = typewriterPosition,
         targetLineHeight = typewriterTargetLineHeight,

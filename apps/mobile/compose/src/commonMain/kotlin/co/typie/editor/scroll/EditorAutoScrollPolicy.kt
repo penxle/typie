@@ -2,7 +2,6 @@ package co.typie.editor.scroll
 
 import co.typie.editor.VerticalSpan
 import kotlin.math.abs
-import kotlin.math.max
 
 internal const val CursorVisibleMargin = 60f
 private const val TypewriterMinBottomPadding = 48f
@@ -18,7 +17,7 @@ internal data class EditorAutoScrollPolicy(
   val keepVisibleRange: VerticalSpan,
   val targetTop: Float?,
   val targetLineHeight: Float,
-  val bottomSpacerHeight: Float,
+  val bottomPadding: Float,
 ) {
   val targetBottom: Float?
     get() = targetTop?.plus(targetLineHeight)
@@ -26,10 +25,10 @@ internal data class EditorAutoScrollPolicy(
 
 internal fun resolveEditorAutoScrollPolicy(
   visibleArea: EditorVisibleArea,
-  bottomSpacerVisibleArea: EditorVisibleArea = visibleArea,
+  bottomScrollReserveArea: EditorVisibleArea = visibleArea,
   baseBottomSpace: Float = 0f,
   distanceToPagesBottom: Float? = null,
-  pageBottomRevealSpacerHeight: Float = 0f,
+  pageBottomRevealPadding: Float = 0f,
   typewriterEnabled: Boolean = false,
   typewriterPosition: Float = 0.5f,
   targetLineHeight: Float = 0f,
@@ -43,22 +42,22 @@ internal fun resolveEditorAutoScrollPolicy(
       position = resolvedTypewriterPosition,
       targetHeight = resolvedTargetLineHeight,
     )
-  val keepVisibleBottomSpacerHeight =
-    resolveKeepVisibleBottomSpacerHeight(
-      visibleArea = bottomSpacerVisibleArea,
+  val keepVisibleBottomPadding =
+    resolveKeepVisibleBottomPadding(
+      visibleArea = bottomScrollReserveArea,
       baseBottomSpace = baseBottomSpace,
     )
-  val autoScrollPolicyBottomSpacerHeight =
+  val modeBottomPadding =
     if (typewriterEnabled) {
-      resolveTypewriterBottomSpacerHeight(
-        visibleArea = bottomSpacerVisibleArea,
+      resolveTypewriterBottomPadding(
+        visibleArea = bottomScrollReserveArea,
         baseBottomSpace = baseBottomSpace,
         distanceToPagesBottom = distanceToPagesBottom,
         position = resolvedTypewriterPosition,
         targetLineHeight = resolvedTargetLineHeight,
       )
     } else {
-      keepVisibleBottomSpacerHeight
+      keepVisibleBottomPadding
     }
 
   return EditorAutoScrollPolicy(
@@ -69,8 +68,8 @@ internal fun resolveEditorAutoScrollPolicy(
     keepVisibleRange = keepVisibleRange,
     targetTop = targetTop,
     targetLineHeight = resolvedTargetLineHeight,
-    bottomSpacerHeight =
-      max(autoScrollPolicyBottomSpacerHeight, pageBottomRevealSpacerHeight.coerceAtLeast(0f)),
+    bottomPadding =
+      maxOf(keepVisibleBottomPadding, modeBottomPadding, pageBottomRevealPadding.coerceAtLeast(0f)),
   )
 }
 
@@ -178,7 +177,7 @@ private fun resolveKeepVisibleRange(visibleArea: EditorVisibleArea): VerticalSpa
   }
 }
 
-private fun resolveKeepVisibleBottomSpacerHeight(
+private fun resolveKeepVisibleBottomPadding(
   visibleArea: EditorVisibleArea,
   baseBottomSpace: Float,
 ): Float {
@@ -201,7 +200,7 @@ internal fun resolveScrollTargetTop(
   return visibleArea.visibleViewportTop + availableRange * clampedPosition
 }
 
-private fun resolveTypewriterBottomSpacerHeight(
+private fun resolveTypewriterBottomPadding(
   visibleArea: EditorVisibleArea,
   baseBottomSpace: Float,
   distanceToPagesBottom: Float?,

@@ -17,7 +17,7 @@ internal data class EditorVisibleAreas(
   val editor: EditorVisibleArea,
   // 문서 끝까지 스크롤할 때 필요한 하단 여유 공간 계산에 사용하는 영역입니다.
   // 화면에 보이는 오버레이 높이와 스크롤 여유로 확보해야 하는 높이가 다를 수 있습니다.
-  val bottomSpacer: EditorVisibleArea,
+  val bottomScrollReserveArea: EditorVisibleArea,
 )
 
 internal fun EditorScreenState.resolveEditorVisibleAreas(
@@ -41,7 +41,7 @@ internal fun EditorScreenState.resolveEditorVisibleAreas(
       rawEditorInputBottomInset = rawEditorInputBottomInset + overlayOcclusion.bottom,
       rawSubPaneBottomInset = rawSubPaneBottomInset,
     )
-  val bottomSpacer =
+  val bottomScrollReserveArea =
     resolveVisibleArea(
       topInset = topInset + overlayOcclusion.top,
       rawBottomSafeInset = rawBottomSafeInset,
@@ -49,5 +49,9 @@ internal fun EditorScreenState.resolveEditorVisibleAreas(
       rawSubPaneBottomInset = rawSubPaneBottomInset,
     )
 
-  return EditorVisibleAreas(base = base, editor = editor, bottomSpacer = bottomSpacer)
+  return EditorVisibleAreas(
+    base = base,
+    editor = editor,
+    bottomScrollReserveArea = bottomScrollReserveArea,
+  )
 }
