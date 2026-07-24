@@ -39,6 +39,21 @@ internal fun imageResizeWidthForProportion(
     originalWidth = originalWidth,
   )
 
+internal fun imageResizeDisplayPercent(
+  proportion: Float,
+  boundsWidth: Float,
+  originalWidth: Float,
+): Int {
+  val maxWidth = imageResizeWidthBounds(boundsWidth, originalWidth).max
+  if (maxWidth <= 0f) {
+    return IMAGE_MAX_PROPORTION
+  }
+  val width = imageResizeWidthForProportion(proportion, boundsWidth, originalWidth)
+  return ((width / maxWidth) * 100)
+    .roundToInt()
+    .coerceIn(IMAGE_MIN_PROPORTION, IMAGE_MAX_PROPORTION)
+}
+
 internal fun imageResizeProportionRange(boundsWidth: Float, originalWidth: Float): IntRange {
   val bounds = imageResizeWidthBounds(boundsWidth = boundsWidth, originalWidth = originalWidth)
   return imageResizeProportionForWidth(bounds.min, boundsWidth)..imageResizeProportionForWidth(

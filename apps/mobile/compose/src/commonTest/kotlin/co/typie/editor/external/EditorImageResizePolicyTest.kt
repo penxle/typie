@@ -40,4 +40,20 @@ class EditorImageResizePolicyTest {
   fun proportion_for_width_rounds_to_nearest_percent() {
     assertEquals(38, imageResizeProportionForWidth(width = 300.8f, boundsWidth = 800f))
   }
+
+  @Test
+  fun display_percent_treats_original_width_as_hundred_percent() {
+    assertEquals(
+      100,
+      imageResizeDisplayPercent(proportion = 40f, boundsWidth = 800f, originalWidth = 320f),
+    )
+  }
+
+  @Test
+  fun display_percent_matches_bounds_proportion_when_original_is_larger() {
+    assertEquals(
+      50,
+      imageResizeDisplayPercent(proportion = 50f, boundsWidth = 800f, originalWidth = 1200f),
+    )
+  }
 }
