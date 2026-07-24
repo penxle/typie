@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use editor_common::EdgeInsets;
-use editor_model::{ChildView, NodeType, NodeView};
+use editor_model::{BlockquoteVariant, ChildView, Node, NodeType, NodeView};
 use editor_resource::Resource;
 
 use crate::measure::PageBreakPolicy;
@@ -18,6 +18,27 @@ use crate::measure::Measurer;
 use crate::measure::container::layout_padded;
 use crate::measure::context::MeasureContext;
 use crate::measure::types::{MeasuredContent, MeasuredNode};
+
+/// Returns the subtree root that must be rebuilt as one unit for a content
+/// edit. Tables own their row and cell layout, while message blockquotes
+/// derive their width from descendant content.
+pub(crate) fn content_remeasurement_target<'a>(node: NodeView<'a>) -> NodeView<'a> {
+    let table = node
+        .ancestors()
+        .find(|candidate| candidate.node_type() == NodeType::Table);
+    let message_blockquote = node.ancestors().find(|candidate| {
+        matches!(
+            candidate.node(),
+            Node::Blockquote(blockquote)
+                if matches!(
+                    *blockquote.variant.get(),
+                    BlockquoteVariant::MessageSent | BlockquoteVariant::MessageReceived
+                )
+        )
+    });
+
+    table.or(message_blockquote).unwrap_or(node)
+}
 
 pub(crate) fn measure_node(
     measurer: &mut Measurer,

@@ -2,12 +2,13 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use editor_common::{EdgeInsets, Movement};
 use editor_crdt::Dot;
-use editor_model::{LayoutMode, Node, NodeType, NodeView};
+use editor_model::{LayoutMode, Node, NodeView};
 use editor_resource::Resource;
 use editor_state::{LayoutDirty, Position, ResolvedSelection, Selection, StablePosition, State};
 
 use crate::measure::Measurer;
 use crate::measure::context::measure_context;
+use crate::measure::nodes::dispatch::content_remeasurement_target;
 use crate::measure::types::MeasuredTree;
 use crate::page::LayoutPage;
 use crate::page_fragment::{PageFragmentTree, build_page_fragment_tree};
@@ -136,15 +137,12 @@ impl View {
                     else {
                         continue;
                     };
-                    let table = if node.node_type() == NodeType::Table {
-                        Some(node)
-                    } else {
-                        node.ancestors().find(|a| a.node_type() == NodeType::Table)
-                    };
-                    let target = table.as_ref().unwrap_or(&node);
-                    self.measurer.invalidate_subtree(target);
-                    self.measurer.invalidate_with_ancestors(target);
-                    if let Some(t) = targets.as_mut() {
+                    let target = content_remeasurement_target(node);
+                    self.measurer.invalidate_subtree(&node);
+                    self.measurer.invalidate_with_ancestors(&node);
+                    if let Some(t) = targets.as_mut()
+                        && !t.contains(&target.id())
+                    {
                         t.push(target.id());
                     }
                 }
@@ -1408,7 +1406,8 @@ mod incremental_tests {
 
     use editor_crdt::{Dot, ListOp, OpGraph};
     use editor_model::{
-        AtomLeaf, ChildView, EditOp, Node, NodeAttr, NodeAttrOp, NodeType, SeqItem, TableNodeAttr,
+        AtomLeaf, BlockquoteNodeAttr, BlockquoteVariant, ChildView, EditOp, Node, NodeAttr,
+        NodeAttrOp, NodeType, SeqItem, TableNodeAttr,
     };
     use editor_resource::Resource;
     use editor_state::{ProjectedState, State};
@@ -1458,13 +1457,18 @@ mod incremental_tests {
     }
 
     fn cached_arc(view: &mut View, state: &State, node: Dot) -> Arc<MeasuredNode> {
-        let (_, content_width, _) = view.build_pipeline(state);
+        let width = view
+            .node_box_rects(&[node])
+            .into_iter()
+            .next()
+            .expect("laid-out block node")
+            .rect
+            .width;
         let dv = state.view();
         let nv = dv.node(node).expect("block node present");
         let ctx = measure_context(&view.view_state);
         let mut resource = view.resource.lock().unwrap();
-        view.measurer
-            .measure(&nv, content_width, &ctx, &mut resource)
+        view.measurer.measure(&nv, width, &ctx, &mut resource)
     }
 
     fn all_block_dots(state: &State) -> Vec<Dot> {
@@ -1584,6 +1588,114 @@ mod incremental_tests {
         assert_eq!(
             view.node_box_rects(&[table]),
             fresh.node_box_rects(&[table])
+        );
+    }
+
+    #[test]
+    fn reconcile_table_cell_edit_preserves_unaffected_cell_content_measure() {
+        let mut projected = ProjectedState::empty();
+        let root = Dot::ROOT;
+        let table = projected
+            .apply(seq_block(1, NodeType::Table, vec![root]))
+            .unwrap()
+            .id;
+        let row = projected
+            .apply(seq_block(2, NodeType::TableRow, vec![root, table]))
+            .unwrap()
+            .id;
+        let first_cell = projected
+            .apply(seq_block(3, NodeType::TableCell, vec![root, table, row]))
+            .unwrap()
+            .id;
+        projected
+            .apply(seq_block(
+                4,
+                NodeType::Paragraph,
+                vec![root, table, row, first_cell],
+            ))
+            .unwrap();
+        projected.apply(seq_char(5, 'A')).unwrap();
+        let second_cell = projected
+            .apply(seq_block(6, NodeType::TableCell, vec![root, table, row]))
+            .unwrap()
+            .id;
+        let second_paragraph = projected
+            .apply(seq_block(
+                7,
+                NodeType::Paragraph,
+                vec![root, table, row, second_cell],
+            ))
+            .unwrap()
+            .id;
+        projected.apply(seq_char(8, 'B')).unwrap();
+        projected.commit();
+
+        let pre = State::new(projected.clone(), None);
+        let mut view = make_view(800.0);
+        view.layout(&pre);
+        let before = cached_arc(&mut view, &pre, second_paragraph);
+
+        let mut edited = projected;
+        let _ = edited.take_layout_dirty();
+        edited
+            .apply(EditOp::Seq(ListOp::Del { pos: 5, len: 1 }))
+            .unwrap();
+        let dirty = edited.take_layout_dirty();
+        let post = State::new(edited, None);
+
+        view.reconcile(&post, dirty, None, None);
+        let after = cached_arc(&mut view, &post, second_paragraph);
+
+        assert!(
+            Arc::ptr_eq(&before, &after),
+            "editing one table cell must preserve an unaffected cell's content measurement"
+        );
+    }
+
+    #[test]
+    fn reconcile_message_blockquote_content_shrink_matches_full_layout() {
+        let mut graph = OpGraph::<EditOp>::with_actor(1);
+        let root = Dot::ROOT;
+        let blockquote = graph
+            .add_mut(seq_block(0, NodeType::Blockquote, vec![root]))
+            .unwrap()
+            .id;
+        graph
+            .add_mut(seq_block(1, NodeType::Paragraph, vec![root, blockquote]))
+            .unwrap();
+        for (offset, ch) in "Hello".chars().enumerate() {
+            graph.add_mut(seq_char(2 + offset, ch)).unwrap();
+        }
+        graph
+            .add_mut(EditOp::NodeAttr(NodeAttrOp {
+                target: blockquote,
+                attr: NodeAttr::Blockquote {
+                    attr: BlockquoteNodeAttr::Variant(BlockquoteVariant::MessageSent),
+                },
+            }))
+            .unwrap();
+        graph.commit_mut();
+        let projected = ProjectedState::from_graph(graph).unwrap();
+
+        let pre = State::new(projected.clone(), None);
+        let mut view = make_view(800.0);
+        view.layout(&pre);
+
+        let mut edited = projected;
+        let _ = edited.take_layout_dirty();
+        edited
+            .apply(EditOp::Seq(ListOp::Del { pos: 6, len: 1 }))
+            .unwrap();
+        let dirty = edited.take_layout_dirty();
+        let post = State::new(edited, None);
+
+        view.reconcile(&post, dirty, None, None);
+
+        let mut fresh = make_view(800.0);
+        fresh.layout(&post);
+        assert_eq!(
+            view.node_box_rects(&[blockquote]),
+            fresh.node_box_rects(&[blockquote])
         );
     }
 
