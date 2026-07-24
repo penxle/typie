@@ -57,7 +57,6 @@ import co.typie.editor.body.EditorBody
 import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.body.resolveBaseBottomSpace
 import co.typie.editor.body.resolveEditorBodyGeometry
-import co.typie.editor.body.resolveEditorPageWidth
 import co.typie.editor.body.toEditorDocumentLayoutSpec
 import co.typie.editor.external.EditorExternalElementState
 import co.typie.editor.external.LocalEditorExternalElementState
@@ -136,7 +135,8 @@ import co.typie.screen.editor.editor.findreplace.FindReplaceTopBarLeading
 import co.typie.screen.editor.editor.findreplace.FindReplaceTopBarTrailing
 import co.typie.screen.editor.editor.findreplace.rememberEditorFindReplaceSession
 import co.typie.screen.editor.editor.header.EditorHeader
-import co.typie.screen.editor.editor.header.resolveEditorHeaderTrackWidth
+import co.typie.screen.editor.editor.header.EditorHeaderFrame
+import co.typie.screen.editor.editor.header.resolveEditorHeaderGeometry
 import co.typie.screen.editor.editor.layout.EditorScreenLayout
 import co.typie.screen.editor.editor.layout.EditorViewportScrollReconcileMode
 import co.typie.screen.editor.editor.overlay.EditorCharacterCountOverlay
@@ -1323,12 +1323,12 @@ fun EditorScreen(entityId: String) {
         targetLineHeight = typewriterTargetLineHeight,
       )
     val bodyTrackWidth = bodyGeometry.pageColumnWidth.coerceAtLeast(0f)
-    val headerTrackWidth =
-      resolveEditorHeaderTrackWidth(
+    val headerGeometry =
+      resolveEditorHeaderGeometry(
         layoutSpec = layoutSpec,
-        resolvedPageWidth = resolveEditorPageWidth(layoutPageSizes),
-        visibleBodyWidth = visibleArea.visibleBodySize.width,
+        viewportWidth = visibleArea.visibleBodySize.width,
         bodyTrackWidth = bodyTrackWidth,
+        displayZoom = if (layoutSpec is EditorDocumentLayoutSpec.Paginated) displayZoom else 1f,
       )
     val editorGeometryValid =
       hasValidEditorGeometry(
@@ -1499,30 +1499,33 @@ fun EditorScreen(entityId: String) {
           }
         },
         header = {
-          EditorHeader(
-            title = model.titleDraft,
-            subtitle = model.subtitleDraft,
-            layoutSpec = layoutSpec,
-            trackWidth = headerTrackWidth,
-            pageTrackWidth = bodyTrackWidth,
-            loading = false,
-            enabled = editorReady && !editorReadOnly,
-            topInset = topInset,
-            subtitleFocusRequestVersion = subtitleFocusRequestVersion.value,
-            onTitleChange = model::updateTitleDraft,
-            onSubtitleChange = model::updateSubtitleDraft,
-            onTitleFocused = entryState::markTitleFocused,
-            onSubtitleFocused = entryState::markSubtitleFocused,
-            onHeightChanged = screenState::updateHeaderHeight,
-            onEnterDocument = {
-              model.flushDraftsAsync()
-              enterDocumentStartFromHeader(
-                editor = runtime.editor,
-                scope = scope,
-                requestEditorFocus = ::requestEditorFocus,
-              )
-            },
-          )
+          EditorHeaderFrame(
+            geometry = headerGeometry,
+            horizontalScrollOffset = { screenState.viewportState.scrollOffset.x },
+          ) {
+            EditorHeader(
+              title = model.titleDraft,
+              subtitle = model.subtitleDraft,
+              loading = false,
+              enabled = editorReady && !editorReadOnly,
+              showBottomDivider = layoutSpec is EditorDocumentLayoutSpec.Continuous,
+              topInset = topInset,
+              subtitleFocusRequestVersion = subtitleFocusRequestVersion.value,
+              onTitleChange = model::updateTitleDraft,
+              onSubtitleChange = model::updateSubtitleDraft,
+              onTitleFocused = entryState::markTitleFocused,
+              onSubtitleFocused = entryState::markSubtitleFocused,
+              onHeightChanged = screenState::updateHeaderHeight,
+              onEnterDocument = {
+                model.flushDraftsAsync()
+                enterDocumentStartFromHeader(
+                  editor = runtime.editor,
+                  scope = scope,
+                  requestEditorFocus = ::requestEditorFocus,
+                )
+              },
+            )
+          }
         },
         viewportSurfaceOverlay = {
           if (!editorReady && runtime.error == null) {

@@ -270,20 +270,6 @@
     ctx.paneFocused = focused;
   });
 
-  const paginatedHeaderPaddingLeft = $derived.by(() => {
-    const editor = ctx.editor;
-    const layoutMode = editor?.rootAttrs?.layout_mode;
-    if (!editor || layoutMode?.type !== 'paginated') return '0';
-    return `${layoutMode.page_margin_left * editor.safeDisplayZoom()}px`;
-  });
-
-  const paginatedHeaderPaddingRight = $derived.by(() => {
-    const editor = ctx.editor;
-    const layoutMode = editor?.rootAttrs?.layout_mode;
-    if (!editor || layoutMode?.type !== 'paginated') return '0';
-    return `${layoutMode.page_margin_right * editor.safeDisplayZoom()}px`;
-  });
-
   const document = $derived(entity?.node.__typename === 'Document' ? entity.node : null);
   const documentId = $derived(document?.id ?? null);
   const isOwner = $derived(query.data.me.id === entity?.user.id || query.data.me.role === 'ADMIN');
@@ -1183,15 +1169,7 @@
                           ...(ctx.editor?.rootAttrs?.layout_mode.type === 'paginated' && { paddingBottom: '20px' }),
                         })}
                       >
-                        <div
-                          style:padding-left={paginatedHeaderPaddingLeft}
-                          style:padding-right={paginatedHeaderPaddingRight}
-                          class={flex({
-                            flexDirection: 'column',
-                            flexShrink: '0',
-                            width: 'full',
-                          })}
-                        >
+                        <div class={flex({ flexDirection: 'column', flexShrink: '0', width: 'full' })}>
                           <textarea
                             bind:this={titleEl}
                             class={css({ width: 'full', fontSize: '28px', fontWeight: 'bold', resize: 'none' })}

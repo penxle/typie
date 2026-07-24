@@ -42,8 +42,6 @@ class EditorHeaderDesktopTest {
           EditorHeader(
             title = LtrWrappedText,
             subtitle = SubtitleWrappedText,
-            layoutSpec = EditorDocumentLayoutSpec.Continuous(maxWidth = 120f),
-            trackWidth = 160f,
             loading = false,
             topInset = 0.dp,
             onTitleChange = {},
@@ -131,20 +129,30 @@ class EditorHeaderDesktopTest {
         LocalThemeMode provides ResolvedThemeMode.Light,
       ) {
         Box(Modifier.width(720.dp)) {
-          EditorHeader(
-            title = Title,
-            subtitle = "",
-            layoutSpec = EditorDocumentLayoutSpec.Continuous(maxWidth = 600f),
-            trackWidth = 640f,
-            loading = false,
-            topInset = 0.dp,
-            onTitleChange = {},
-            onSubtitleChange = {},
-            onTitleFocused = {},
-            onSubtitleFocused = {},
-            onHeightChanged = {},
-            onEnterDocument = {},
-          )
+          EditorHeaderFrame(
+            geometry =
+              checkNotNull(
+                resolveEditorHeaderGeometry(
+                  layoutSpec = EditorDocumentLayoutSpec.Continuous(maxWidth = 600f),
+                  viewportWidth = 720f,
+                  bodyTrackWidth = 640f,
+                  displayZoom = 1f,
+                )
+              )
+          ) {
+            EditorHeader(
+              title = Title,
+              subtitle = "",
+              loading = false,
+              topInset = 0.dp,
+              onTitleChange = {},
+              onSubtitleChange = {},
+              onTitleFocused = {},
+              onSubtitleFocused = {},
+              onHeightChanged = {},
+              onEnterDocument = {},
+            )
+          }
         }
       }
     }
@@ -160,50 +168,6 @@ class EditorHeaderDesktopTest {
   }
 
   @Test
-  fun paginatedHeaderAlignsTitleFieldToScaledPageMargins() = runComposeUiTest {
-    setContent {
-      CompositionLocalProvider(
-        LocalDensity provides Density(1f),
-        LocalThemeMode provides ResolvedThemeMode.Light,
-      ) {
-        Box(Modifier.width(720.dp)) {
-          EditorHeader(
-            title = Title,
-            subtitle = "",
-            layoutSpec =
-              EditorDocumentLayoutSpec.Paginated(
-                pageWidth = 720f,
-                pageHeight = 960f,
-                pageMarginTop = 72f,
-                pageMarginBottom = 72f,
-                pageMarginLeft = 64f,
-                pageMarginRight = 64f,
-              ),
-            trackWidth = 360f,
-            loading = false,
-            topInset = 0.dp,
-            onTitleChange = {},
-            onSubtitleChange = {},
-            onTitleFocused = {},
-            onSubtitleFocused = {},
-            onHeightChanged = {},
-            onEnterDocument = {},
-          )
-        }
-      }
-    }
-    waitForIdle()
-
-    val titleWidth =
-      onNode(hasText(Title) and hasSetTextAction(), useUnmergedTree = true)
-        .fetchSemanticsNode()
-        .boundsInRoot
-        .width
-
-    assertEquals(296f, titleWidth, absoluteTolerance = 0.01f)
-  }
-
-  @Test
   fun disabledHeaderExposesNoTextEditingAction() = runComposeUiTest {
     setContent {
       CompositionLocalProvider(
@@ -213,8 +177,6 @@ class EditorHeaderDesktopTest {
         EditorHeader(
           title = Title,
           subtitle = "",
-          layoutSpec = EditorDocumentLayoutSpec.Continuous(maxWidth = 600f),
-          trackWidth = 640f,
           loading = false,
           enabled = false,
           topInset = 0.dp,

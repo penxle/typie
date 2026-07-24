@@ -6,13 +6,7 @@
   import { elementScrollViewport, windowScrollViewport } from '@typie/ui/utils';
   import { onDestroy, untrack } from 'svelte';
   import { graphql } from '$mearie';
-  import {
-    CONTINUOUS_MIN_WIDTH,
-    CONTINUOUS_VIEW_PADDING,
-    PAGE_GAP,
-    PAGINATED_HEADER_FOOTER_MIN_SCALE,
-    PAGINATED_HEADER_FOOTER_MIN_WIDTH,
-  } from '../constants';
+  import { CONTINUOUS_MIN_WIDTH, CONTINUOUS_VIEW_PADDING, PAGE_GAP } from '../constants';
   import { browserScaleFactor, getEditorContext } from '../editor.svelte';
   import { loadFonts } from '../fonts';
   import { handle } from '../handlers';
@@ -32,6 +26,7 @@
   import Caret from './Caret.svelte';
   import ContextMenu from './ContextMenu.svelte';
   import DocumentOverlayLayer from './DocumentOverlayLayer.svelte';
+  import { resolveHeaderGeometry } from './header-geometry';
   import Input from './Input.svelte';
   import LineHighlight from './LineHighlight.svelte';
   import LinkTooltip from './LinkTooltip.svelte';
@@ -137,26 +132,27 @@
   const pageWidth = $derived(ctx.editor?.pageSizes[0]?.width ?? 0);
   const displayZoom = $derived(isPaginated ? (ctx.editor?.displayZoom ?? 1) : 1);
   const pageGap = $derived(PAGE_GAP * displayZoom);
-  const framePadding = $derived(isPaginated ? 0 : CONTINUOUS_VIEW_PADDING);
   const editorMinWidth = $derived(isPaginated ? 'max-content' : `${CONTINUOUS_MIN_WIDTH}px`);
   const continuousMaxFrameWidth = $derived(
     layoutMode?.type === 'continuous' ? `${layoutMode.max_width + CONTINUOUS_VIEW_PADDING * 2}px` : undefined,
   );
-  const paginatedContentWidth = $derived(pageWidth * displayZoom + framePadding * 2);
-  const paginatedHeaderFooterMinContentWidth = $derived(
-    Math.max(PAGINATED_HEADER_FOOTER_MIN_WIDTH * displayZoom, PAGINATED_HEADER_FOOTER_MIN_WIDTH * PAGINATED_HEADER_FOOTER_MIN_SCALE),
-  );
-  const paginatedHeaderFooterHorizontalInset = $derived(
-    layoutMode?.type === 'paginated' ? (layoutMode.page_margin_left + layoutMode.page_margin_right) * displayZoom + framePadding * 2 : 0,
-  );
-  const paginatedHeaderFooterMaxContentWidth = $derived(Math.max(0, (clientWidth ?? 0) - paginatedHeaderFooterHorizontalInset));
-  const paginatedHeaderFooterTargetWidth = $derived(
-    paginatedHeaderFooterHorizontalInset + Math.min(paginatedHeaderFooterMinContentWidth, paginatedHeaderFooterMaxContentWidth),
-  );
-  const paginatedHeaderFooterWidth = $derived(
-    layoutMode?.type === 'paginated' ? Math.max(paginatedContentWidth, paginatedHeaderFooterTargetWidth) : 0,
-  );
-  const headerFooterMinWidth = $derived(isPaginated && !(ctx.editor?.readOnly ?? false) ? 'max-content' : editorMinWidth);
+  const bodyTrackWidth = $derived(pageWidth * displayZoom);
+  const headerGeometry = $derived.by(() => {
+    if (!layoutMode) return;
+
+    const [contentInsetLeft, contentInsetRight] =
+      layoutMode.type === 'paginated'
+        ? [layoutMode.page_margin_left, layoutMode.page_margin_right]
+        : [CONTINUOUS_VIEW_PADDING, CONTINUOUS_VIEW_PADDING];
+
+    return resolveHeaderGeometry({
+      viewportWidth: clientWidth ?? 0,
+      displayZoom,
+      bodyTrackWidth,
+      contentInsetLeft,
+      contentInsetRight,
+    });
+  });
 
   const cursor = $derived.by(() => {
     const editor = ctx.editor;
@@ -263,13 +259,24 @@
   >
     {#if ctx.editor && header}
       <div
-        style:width={layoutMode?.type === 'paginated' ? `${paginatedHeaderFooterWidth}px` : '100%'}
-        style:min-width={headerFooterMinWidth}
-        style:max-width={continuousMaxFrameWidth}
-        style:padding-inline={`${framePadding}px`}
+        style:width={headerGeometry ? `${headerGeometry.trackWidth}px` : '100%'}
+        style:min-width={headerGeometry ? undefined : editorMinWidth}
+        style:max-width={headerGeometry ? undefined : continuousMaxFrameWidth}
+        style:padding-inline={headerGeometry ? undefined : `${CONTINUOUS_VIEW_PADDING}px`}
         class={css({ flexShrink: '0', marginX: 'auto' })}
       >
-        {@render header()}
+        <div
+          style:margin-left={headerGeometry ? `${headerGeometry.contentInsetLeft}px` : undefined}
+          style:margin-right={headerGeometry ? `${headerGeometry.contentInsetRight}px` : undefined}
+        >
+          <div
+            style:width={headerGeometry ? `${headerGeometry.fieldWidth}px` : '100%'}
+            style:left={headerGeometry ? `${headerGeometry.stickyLeft}px` : undefined}
+            class={css({ position: 'sticky' })}
+          >
+            {@render header()}
+          </div>
+        </div>
       </div>
     {/if}
 
@@ -362,10 +369,10 @@
 
     {#if ctx.editor && footer}
       <div
-        style:width={layoutMode?.type === 'paginated' ? `${paginatedHeaderFooterWidth}px` : '100%'}
-        style:min-width={headerFooterMinWidth}
+        style:width={isPaginated && headerGeometry ? `${headerGeometry.trackWidth}px` : '100%'}
+        style:min-width={isPaginated ? undefined : editorMinWidth}
         style:max-width={continuousMaxFrameWidth}
-        style:padding-inline={`${framePadding}px`}
+        style:padding-inline={isPaginated ? undefined : `${CONTINUOUS_VIEW_PADDING}px`}
         class={css({ flexShrink: '0', marginX: 'auto' })}
       >
         {@render footer()}

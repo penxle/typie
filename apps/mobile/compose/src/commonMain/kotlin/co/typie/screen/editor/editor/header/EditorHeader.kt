@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -20,6 +19,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isShiftPressed
@@ -40,57 +40,125 @@ import co.typie.ext.TextInputState
 import co.typie.ext.rememberTextInputState
 import co.typie.ext.textInputFocusable
 import co.typie.ui.component.Divider
-import co.typie.ui.component.ResponsiveContainerDefaults
 import co.typie.ui.component.Text
 import co.typie.ui.skeleton.LocalSkeleton
 import co.typie.ui.skeleton.SkeletonTextBone
 import co.typie.ui.theme.AppTheme
 
-private val ContinuousTitleHorizontalPadding = 20.dp
 private val TitleTopPadding = 12.dp
 private val TitleBlockSpacing = 40.dp
 private val TitleBetweenSpacing = 8.dp
 private val SubtitleDividerWidth = 120.dp
-private const val PaginatedHeaderMinContentWidth = 320f
-private const val PaginatedHeaderMinScale = 0.75f
+private const val EditorHeaderContentInset = 20f
+private const val EditorHeaderMinContentWidth = 320f
+private const val EditorHeaderMinScale = 0.75f
+private const val EditorHeaderViewportGap = 20f
 
-internal fun resolveEditorHeaderTrackWidth(
+internal data class EditorHeaderGeometry(
+  val contentLeft: Float,
+  val contentRight: Float,
+  val fieldWidth: Float,
+  val maxScrollOffset: Float,
+) {
+  fun resolveFieldScreenLeft(scrollOffsetX: Float): Float {
+    val resolvedScroll =
+      (scrollOffsetX.takeIf { it.isFinite() } ?: 0f).coerceIn(0f, maxScrollOffset)
+    val fieldLeft =
+      (resolvedScroll + EditorHeaderViewportGap).coerceIn(
+        contentLeft,
+        maxOf(contentLeft, contentRight - fieldWidth),
+      )
+    return fieldLeft - resolvedScroll
+  }
+}
+
+internal fun resolveEditorHeaderGeometry(
   layoutSpec: EditorDocumentLayoutSpec,
-  resolvedPageWidth: Float?,
-  visibleBodyWidth: Float,
+  viewportWidth: Float,
   bodyTrackWidth: Float,
-): Float =
-  when (layoutSpec) {
-    is EditorDocumentLayoutSpec.Continuous ->
-      if (resolvedPageWidth != null && resolvedPageWidth.isFinite() && resolvedPageWidth > 0f) {
-        bodyTrackWidth
-      } else {
-        0f
-      }
-    is EditorDocumentLayoutSpec.Paginated -> {
-      val displayZoom = layoutSpec.resolveDisplayZoom(bodyTrackWidth)
-      val horizontalInset = (layoutSpec.pageMarginLeft + layoutSpec.pageMarginRight) * displayZoom
-      val minimumContentWidth =
-        maxOf(
-          PaginatedHeaderMinContentWidth * displayZoom,
-          PaginatedHeaderMinContentWidth * PaginatedHeaderMinScale,
-        )
-      val maximumContentWidth = (visibleBodyWidth - horizontalInset).coerceAtLeast(0f)
-      val targetWidth = horizontalInset + minOf(minimumContentWidth, maximumContentWidth)
+  displayZoom: Float,
+): EditorHeaderGeometry? {
+  if (
+    !viewportWidth.isFinite() ||
+      viewportWidth <= 0f ||
+      !bodyTrackWidth.isFinite() ||
+      bodyTrackWidth <= 0f ||
+      !displayZoom.isFinite() ||
+      displayZoom <= 0f
+  ) {
+    return null
+  }
 
-      maxOf(bodyTrackWidth, targetWidth)
+  val (contentInsetLeft, contentInsetRight) =
+    when (layoutSpec) {
+      is EditorDocumentLayoutSpec.Continuous -> EditorHeaderContentInset to EditorHeaderContentInset
+      is EditorDocumentLayoutSpec.Paginated ->
+        layoutSpec.pageMarginLeft to layoutSpec.pageMarginRight
     }
-  }.coerceAtLeast(0f)
+
+  fun scaledInset(value: Float): Float =
+    (value * displayZoom).takeIf { it.isFinite() }?.coerceAtLeast(0f) ?: 0f
+
+  val leftInset = scaledInset(contentInsetLeft)
+  val rightInset = scaledInset(contentInsetRight)
+  val readableMin =
+    maxOf(
+      EditorHeaderMinContentWidth * displayZoom,
+      EditorHeaderMinContentWidth * EditorHeaderMinScale,
+    )
+  val visibleCapacity = (viewportWidth - leftInset - rightInset).coerceAtLeast(0f)
+  val trackWidth =
+    maxOf(bodyTrackWidth, leftInset + rightInset + minOf(readableMin, visibleCapacity))
+  val contentWidth = maxOf(viewportWidth, trackWidth)
+  val trackLeft = (contentWidth - trackWidth) / 2f
+  val contentLeft = trackLeft + leftInset
+  val contentRight = maxOf(contentLeft, trackLeft + trackWidth - rightInset)
+  val fieldWidth =
+    minOf(
+      contentRight - contentLeft,
+      (viewportWidth - EditorHeaderViewportGap * 2f).coerceAtLeast(0f),
+    )
+
+  return EditorHeaderGeometry(
+    contentLeft = contentLeft,
+    contentRight = contentRight,
+    fieldWidth = fieldWidth,
+    maxScrollOffset = (contentWidth - viewportWidth).coerceAtLeast(0f),
+  )
+}
+
+@Composable
+internal fun EditorHeaderFrame(
+  geometry: EditorHeaderGeometry?,
+  horizontalScrollOffset: () -> Float = { 0f },
+  modifier: Modifier = Modifier,
+  content: @Composable () -> Unit,
+) {
+  val density = LocalDensity.current.density
+
+  Box(modifier = modifier.fillMaxWidth(), contentAlignment = Alignment.TopStart) {
+    Box(
+      modifier =
+        if (geometry == null) {
+          Modifier.fillMaxWidth().padding(horizontal = EditorHeaderContentInset.dp)
+        } else {
+          Modifier.width(geometry.fieldWidth.dp).graphicsLayer {
+            translationX = geometry.resolveFieldScreenLeft(horizontalScrollOffset()) * density
+          }
+        }
+    ) {
+      content()
+    }
+  }
+}
 
 @Composable
 internal fun EditorHeader(
   title: String,
   subtitle: String,
-  layoutSpec: EditorDocumentLayoutSpec,
-  trackWidth: Float,
-  pageTrackWidth: Float = trackWidth,
   loading: Boolean,
   enabled: Boolean = true,
+  showBottomDivider: Boolean = true,
   topInset: Dp,
   subtitleFocusRequestVersion: Int = 0,
   modifier: Modifier = Modifier,
@@ -123,28 +191,13 @@ internal fun EditorHeader(
     }
   }
   val resolveHeight: (Int) -> Float = remember(density) { { height -> height / density.density } }
-  val titleHorizontalPadding = resolveTitleHorizontalPadding(layoutSpec, pageTrackWidth)
 
   Box(
     modifier =
       modifier.fillMaxWidth().onSizeChanged { size -> onHeightChanged(resolveHeight(size.height)) },
-    contentAlignment = Alignment.TopCenter,
+    contentAlignment = Alignment.TopStart,
   ) {
-    val contentModifier = Modifier.run {
-      when {
-        trackWidth > 0f -> width(trackWidth.dp)
-        else -> widthIn(max = ResponsiveContainerDefaults.MaxWidth).fillMaxWidth()
-      }
-    }
-
-    Column(
-      modifier =
-        contentModifier.padding(
-          top = topInset + TitleTopPadding,
-          start = titleHorizontalPadding.start,
-          end = titleHorizontalPadding.end,
-        )
-    ) {
+    Column(modifier = Modifier.fillMaxWidth().padding(top = topInset + TitleTopPadding)) {
       Spacer(Modifier.height(TitleBlockSpacing))
 
       EditorHeaderField(
@@ -210,7 +263,7 @@ internal fun EditorHeader(
 
       Spacer(Modifier.height(TitleBlockSpacing))
 
-      if (layoutSpec !is EditorDocumentLayoutSpec.Paginated) {
+      if (showBottomDivider) {
         Box(modifier = Modifier.width(SubtitleDividerWidth)) {
           Divider(color = AppTheme.colors.borderDefault)
         }
@@ -218,35 +271,6 @@ internal fun EditorHeader(
     }
   }
 }
-
-private data class TitleHorizontalPadding(val start: Dp, val end: Dp)
-
-private fun resolveTitleHorizontalPadding(
-  layoutSpec: EditorDocumentLayoutSpec,
-  pageTrackWidth: Float,
-): TitleHorizontalPadding =
-  when (layoutSpec) {
-    is EditorDocumentLayoutSpec.Continuous ->
-      TitleHorizontalPadding(
-        start = ContinuousTitleHorizontalPadding,
-        end = ContinuousTitleHorizontalPadding,
-      )
-    is EditorDocumentLayoutSpec.Paginated -> {
-      val displayZoom = layoutSpec.resolveDisplayZoom(pageTrackWidth)
-
-      TitleHorizontalPadding(
-        start = (layoutSpec.pageMarginLeft * displayZoom).dp,
-        end = (layoutSpec.pageMarginRight * displayZoom).dp,
-      )
-    }
-  }
-
-private fun EditorDocumentLayoutSpec.Paginated.resolveDisplayZoom(pageTrackWidth: Float): Float =
-  if (pageWidth.isFinite() && pageWidth > 0f && pageTrackWidth.isFinite() && pageTrackWidth > 0f) {
-    pageTrackWidth / pageWidth
-  } else {
-    1f
-  }
 
 @Composable
 private fun EditorHeaderField(

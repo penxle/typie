@@ -289,7 +289,7 @@ internal fun EditorScreenLayout(
                   .then(editorInteractionModifier),
               content = {
                 Column {
-                  Box(modifier = Modifier.width(viewportWidth.dp)) { header() }
+                  Box(modifier = Modifier.fillMaxWidth()) { header() }
                   Box(
                     modifier =
                       Modifier.fillMaxWidth().graphicsLayer {

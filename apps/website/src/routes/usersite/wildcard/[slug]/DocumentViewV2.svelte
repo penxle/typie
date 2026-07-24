@@ -344,20 +344,6 @@
     }
   });
 
-  const paginatedHeaderPaddingLeft = $derived.by(() => {
-    const editor = ctx.editor;
-    const layoutMode = editor?.rootAttrs?.layout_mode;
-    if (!editor || layoutMode?.type !== 'paginated') return '0';
-    return `${layoutMode.page_margin_left * editor.safeDisplayZoom()}px`;
-  });
-
-  const paginatedHeaderPaddingRight = $derived.by(() => {
-    const editor = ctx.editor;
-    const layoutMode = editor?.rootAttrs?.layout_mode;
-    if (!editor || layoutMode?.type !== 'paginated') return '0';
-    return `${layoutMode.page_margin_right * editor.safeDisplayZoom()}px`;
-  });
-
   const isPaginated = $derived(ctx.editor?.rootAttrs?.layout_mode.type === 'paginated');
 
   const authorizeUrl = $derived(
@@ -434,11 +420,7 @@
 
       {#snippet documentHeader()}
         <div class={css({ paddingTop: { base: '48px', md: '80px' } })}>
-          <div
-            style:padding-left={paginatedHeaderPaddingLeft}
-            style:padding-right={paginatedHeaderPaddingRight}
-            class={flex({ direction: 'column', width: 'full' })}
-          >
+          <div class={flex({ direction: 'column', width: 'full' })}>
             <nav class={flex({ alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: '20px' })}>
               <a class={flex({ alignItems: 'center', gap: '6px' })} href={entityView.data.site.url}>
                 {#if entityView.data.site.logo}

@@ -19,7 +19,8 @@ import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.computeInitialPaginatedZoom
 import co.typie.editor.ffi.Size
 import co.typie.screen.editor.editor.header.EditorHeader
-import co.typie.screen.editor.editor.header.resolveEditorHeaderTrackWidth
+import co.typie.screen.editor.editor.header.EditorHeaderFrame
+import co.typie.screen.editor.editor.header.resolveEditorHeaderGeometry
 import co.typie.ui.component.Text
 import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.theme.AppTheme
@@ -78,41 +79,45 @@ internal fun EditorLoadingSkeleton(
   Skeleton(enabled = true, modifier = modifier.fillMaxSize().background(background)) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
       val availableWidth = maxWidth.value
+      val displayZoom =
+        when (layoutSpec) {
+          is EditorDocumentLayoutSpec.Continuous -> 1f
+          is EditorDocumentLayoutSpec.Paginated ->
+            computeInitialPaginatedZoom(
+              pageWidth = layoutSpec.pageWidth,
+              viewportWidth = availableWidth,
+            )
+        }
       val bodyTrackWidth =
         when (layoutSpec) {
           is EditorDocumentLayoutSpec.Continuous ->
             minOf(availableWidth, layoutSpec.maxWidth + ContinuousPageHorizontalPadding * 2f)
-          is EditorDocumentLayoutSpec.Paginated ->
-            layoutSpec.pageWidth *
-              computeInitialPaginatedZoom(
-                pageWidth = layoutSpec.pageWidth,
-                viewportWidth = availableWidth,
-              )
+          is EditorDocumentLayoutSpec.Paginated -> layoutSpec.pageWidth * displayZoom
         }
-      val headerTrackWidth =
-        resolveEditorHeaderTrackWidth(
+      val headerGeometry =
+        resolveEditorHeaderGeometry(
           layoutSpec = layoutSpec,
-          resolvedPageWidth = bodyTrackWidth,
-          visibleBodyWidth = availableWidth,
+          viewportWidth = availableWidth,
           bodyTrackWidth = bodyTrackWidth,
+          displayZoom = displayZoom,
         )
       Column {
-        EditorHeader(
-          title = "",
-          subtitle = "",
-          layoutSpec = layoutSpec,
-          trackWidth = headerTrackWidth,
-          pageTrackWidth = bodyTrackWidth,
-          loading = true,
-          enabled = false,
-          topInset = topInset,
-          onTitleChange = {},
-          onSubtitleChange = {},
-          onTitleFocused = {},
-          onSubtitleFocused = {},
-          onHeightChanged = {},
-          onEnterDocument = {},
-        )
+        EditorHeaderFrame(geometry = headerGeometry) {
+          EditorHeader(
+            title = "",
+            subtitle = "",
+            loading = true,
+            enabled = false,
+            showBottomDivider = layoutSpec is EditorDocumentLayoutSpec.Continuous,
+            topInset = topInset,
+            onTitleChange = {},
+            onSubtitleChange = {},
+            onTitleFocused = {},
+            onSubtitleFocused = {},
+            onHeightChanged = {},
+            onEnterDocument = {},
+          )
+        }
         EditorBodyLoadingSkeleton(
           layoutSpec = layoutSpec,
           trackWidth = bodyTrackWidth,

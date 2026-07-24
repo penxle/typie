@@ -48,6 +48,7 @@ import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.pan
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.performTouchInput
@@ -82,6 +83,8 @@ import co.typie.editor.viewport.EditorViewportState
 import co.typie.ext.ScrollGestureLockState
 import co.typie.navigation.LocalNavigationPopNestedScroll
 import co.typie.navigation.NavigationPopNestedScroll
+import co.typie.screen.editor.editor.header.EditorHeaderFrame
+import co.typie.screen.editor.editor.header.resolveEditorHeaderGeometry
 import co.typie.screen.editor.editor.overlay.EditorScrollbars
 import co.typie.screen.editor.editor.state.EditorScreenState
 import co.typie.ui.theme.LightColors
@@ -418,7 +421,7 @@ class EditorScreenLayoutDesktopTest {
   }
 
   @Test
-  fun scrollSemanticsOwnerStaysFixedWhileHeaderAndBodyShareOnlyVerticalTranslation() =
+  fun paginatedHeaderFollowsHorizontalViewportWithinPageBoundsWithoutMovingScrollOwner() =
     runComposeUiTest {
       val fixture = HeaderInputFixture()
       try {
@@ -434,8 +437,24 @@ class EditorScreenLayoutDesktopTest {
         val bodyBefore = checkNotNull(fixture.bodyPositionInRoot)
 
         assertEquals(layoutBounds, ownerBefore)
+        assertEquals(64f, headerBefore.x, absoluteTolerance = 0.01f)
 
-        runOnIdle { fixture.viewportState.scrollTo(Offset(x = 40f, y = 60f)) }
+        runOnIdle { fixture.viewportState.scrollTo(Offset(x = 100f, y = 60f)) }
+        waitForIdle()
+
+        val headerInMiddle = checkNotNull(fixture.headerPositionInRoot)
+        val bodyInMiddle = checkNotNull(fixture.bodyPositionInRoot)
+
+        assertEquals(headerBefore.y - 60f, headerInMiddle.y)
+        assertEquals(bodyBefore.y - 60f, bodyInMiddle.y)
+        assertEquals(20f, headerInMiddle.x, absoluteTolerance = 0.01f)
+        assertEquals(bodyBefore.x - 100f, bodyInMiddle.x)
+
+        onNodeWithTag(HeaderFieldTag).performClick()
+        waitForIdle()
+        onNodeWithTag(HeaderFieldTag).assertIsFocused()
+
+        runOnIdle { fixture.viewportState.scrollTo(Offset(x = 320f, y = 60f)) }
         waitForIdle()
 
         val ownerAfter =
@@ -443,14 +462,10 @@ class EditorScreenLayoutDesktopTest {
             .fetchSemanticsNodes()
             .single { node -> node.boundsInRoot.width >= TestViewportSize.width }
             .boundsInRoot
-        val headerAfter = checkNotNull(fixture.headerPositionInRoot)
-        val bodyAfter = checkNotNull(fixture.bodyPositionInRoot)
+        val headerAtRight = checkNotNull(fixture.headerPositionInRoot)
 
-        assertEquals(layoutBounds, ownerAfter)
-        assertEquals(headerBefore.y - 60f, headerAfter.y)
-        assertEquals(bodyBefore.y - 60f, bodyAfter.y)
-        assertEquals(headerBefore.x, headerAfter.x)
-        assertEquals(bodyBefore.x - 40f, bodyAfter.x)
+        assertEquals(ownerBefore, ownerAfter)
+        assertEquals(-24f, headerAtRight.x, absoluteTolerance = 0.01f)
       } finally {
         fixture.close()
       }
@@ -1065,22 +1080,27 @@ class EditorScreenLayoutDesktopTest {
           onEditorPointerInput = { fixture.editorPointerInputCount += 1 },
           onMeasuredViewportSizeChange = {},
           header = {
-            Box(
-              Modifier.width(TestViewportSize.width.dp)
-                .height(HeaderHeightPx.dp)
-                .testTag(HeaderTag)
-                .onGloballyPositioned { coordinates ->
-                  fixture.headerPositionInRoot = coordinates.positionInRoot()
-                }
+            EditorHeaderFrame(
+              geometry = fixture.headerGeometry,
+              horizontalScrollOffset = { fixture.viewportState.scrollOffset.x },
             ) {
-              BasicTextField(
-                value = fixture.fieldValue,
-                onValueChange = { fixture.fieldValue = it },
-                modifier =
-                  Modifier.width(240.dp).height(64.dp).testTag(HeaderFieldTag).onFocusChanged {
-                    fixture.headerFocused = it.isFocused
-                  },
-              )
+              Box(
+                Modifier.fillMaxWidth()
+                  .height(HeaderHeightPx.dp)
+                  .testTag(HeaderTag)
+                  .onGloballyPositioned { coordinates ->
+                    fixture.headerPositionInRoot = coordinates.positionInRoot()
+                  }
+              ) {
+                BasicTextField(
+                  value = fixture.fieldValue,
+                  onValueChange = { fixture.fieldValue = it },
+                  modifier =
+                    Modifier.fillMaxWidth().height(64.dp).testTag(HeaderFieldTag).onFocusChanged {
+                      fixture.headerFocused = it.isFocused
+                    },
+                )
+              }
             }
           },
           body = {
@@ -1264,6 +1284,15 @@ class EditorScreenLayoutDesktopTest {
     val editor = Editor(fake, coroutineScope)
     val viewportState = EditorViewportState()
     val visibleArea = EditorVisibleArea(viewport = TestViewportSize)
+    val headerGeometry =
+      checkNotNull(
+        resolveEditorHeaderGeometry(
+          layoutSpec = HeaderFixtureLayoutSpec.copy(pageMarginLeft = 64f, pageMarginRight = 64f),
+          viewportWidth = TestViewportSize.width,
+          bodyTrackWidth = HeaderFixtureContentWidth,
+          displayZoom = 1f,
+        )
+      )
     val scrollDeltas = mutableListOf<Offset>()
     val zoomController =
       EditorZoomController().apply {
