@@ -79,12 +79,14 @@ internal fun BottomToolbarTableSizeSelector(
   DisposableEffect(Unit) { onDispose { holdResampleJob?.cancel() } }
 
   BoxWithConstraints(modifier = modifier.fillMaxSize()) {
-    val viewportWidthPx = with(density) { maxWidth.toPx() }
-    val viewportHeightPx = with(density) { maxHeight.toPx() }
-    val gridCellSizePx = with(density) { TableSizeGridCellSize.toPx() }
-    val gridGapPx = with(density) { TableSizeGridGap.toPx() }
+    val viewportWidthPx = with(density) { maxWidth.roundToPx().toFloat() }
+    val viewportHeightPx = with(density) { maxHeight.roundToPx().toFloat() }
+    val gridCellSizePx = with(density) { TableSizeGridCellSize.roundToPx().toFloat() }
+    val gridGapPx = with(density) { TableSizeGridGap.roundToPx().toFloat() }
     val gridStartPaddingPx =
-      with(density) { (TableSizePanelPadding + TableSizeGridOuterPadding).toPx() }
+      with(density) {
+        (TableSizePanelPadding.roundToPx() + TableSizeGridOuterPadding.roundToPx()).toFloat()
+      }
 
     fun centerToCell(
       rowIndex: Int,

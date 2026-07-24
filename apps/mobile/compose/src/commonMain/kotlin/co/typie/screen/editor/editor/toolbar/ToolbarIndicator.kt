@@ -169,9 +169,9 @@ internal fun Modifier.toolbarIndicatorGestures(
     if (pageCount <= 1) return@pointerInput
 
     fun progressForX(x: Float): Float {
-      val paddingPx = ToolbarIndicatorPadding.toPx()
-      val itemPx = ToolbarIndicatorItemSize.toPx()
-      val gapPx = ToolbarIndicatorItemGap.toPx()
+      val paddingPx = ToolbarIndicatorPadding.roundToPx().toFloat()
+      val itemPx = ToolbarIndicatorItemSize.roundToPx().toFloat()
+      val gapPx = ToolbarIndicatorItemGap.roundToPx().toFloat()
       val firstCenter = paddingPx + itemPx / 2f
       val lastCenter = firstCenter + (itemPx + gapPx) * (pageCount - 1)
       return ((x.coerceIn(firstCenter, lastCenter) - firstCenter) / (lastCenter - firstCenter) *

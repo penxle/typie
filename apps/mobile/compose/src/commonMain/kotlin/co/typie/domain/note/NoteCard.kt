@@ -568,7 +568,7 @@ private fun NoteColorPalette(
   val selectedColorState = rememberUpdatedState(selectedColor)
   val onColorChangeState = rememberUpdatedState(onColorChange)
   val hapticState = rememberUpdatedState(haptic)
-  val optionWidthPx = with(density) { NoteColorDotHitTargetWidth.toPx() }
+  val optionWidthPx = with(density) { NoteColorDotHitTargetWidth.roundToPx().toFloat() }
 
   Row(
     modifier =
