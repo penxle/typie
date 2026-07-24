@@ -9,8 +9,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -29,6 +31,39 @@ import kotlin.test.assertTrue
 
 @OptIn(ExperimentalTestApi::class)
 class AnchoredSheetSurfaceDesktopTest {
+  @Test
+  fun dragMotionDoesNotRecomposeStableScrimContent() = runComposeUiTest {
+    var scrimCompositions = 0
+
+    setContent {
+      Box(Modifier.size(width = 400.dp, height = 800.dp)) {
+        AnchoredSheetSurface(
+          stops = listOf(SheetStop.Bottom(240.dp)),
+          stopPolicy = SheetStop.Policy.KeepAll,
+          onDismissed = {},
+          scrim = { alpha ->
+            SideEffect { scrimCompositions += 1 }
+            Box(Modifier.fillMaxSize().graphicsLayer { this.alpha = alpha() })
+          },
+        ) {
+          Box(Modifier.testTag(SheetTag).fillMaxWidth().height(240.dp))
+        }
+      }
+    }
+    waitForIdle()
+    val settledScrimCompositions = scrimCompositions
+
+    onNodeWithTag(SheetTag).performTouchInput {
+      down(center)
+      repeat(5) { moveBy(Offset(0f, 4f), delayMillis = 16) }
+    }
+    waitForIdle()
+
+    assertEquals(settledScrimCompositions, scrimCompositions)
+
+    onNodeWithTag(SheetTag).performTouchInput { up() }
+  }
+
   @Test
   fun intrinsicSheetWithoutScrimAllowsViewportTouchScrollAboveSheet() = runComposeUiTest {
     var viewportScroll = 0f
