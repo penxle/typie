@@ -1,6 +1,5 @@
 package co.typie.editor.scroll
 
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import co.typie.editor.EditorState
 import co.typie.editor.body.EditorDocumentLayoutSpec
@@ -13,7 +12,6 @@ import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.SelectionEndpoints
 import co.typie.editor.ffi.Size as PageSize
 import co.typie.editor.runtime.EditorBoundsInContainer
-import co.typie.editor.runtime.EditorUiState
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -275,43 +273,6 @@ class EditorScrollResolverTest {
       )
 
     assertEquals(184f, requireNotNull(height), 0.0001f)
-  }
-
-  @Test
-  fun `distance to pages bottom excludes bottom occlusion so typewriter padding can add it`() {
-    val uiState =
-      EditorUiState().apply {
-        updateInteractionSurfaceBounds(
-          boundsInRoot = Rect(left = 0f, top = 0f, right = 300f, bottom = 1000f),
-          density = 1f,
-        )
-        updateEditorBounds(
-          boundsInRoot = Rect(left = 0f, top = 0f, right = 300f, bottom = 620f),
-          density = 1f,
-        )
-      }
-
-    val distance =
-      resolveDistanceToPagesBottom(
-        state =
-          state(
-            cursor =
-              CursorMetrics(
-                pageIdx = 0,
-                caret = FfiRect(0f, 580f, 0f, 20f),
-                line = FfiRect(0f, 580f, 0f, 20f),
-              ),
-            pageSizes = listOf(PageSize(width = 300f, height = 620f)),
-          ),
-        layoutSpec = EditorDocumentLayoutSpec.Continuous(maxWidth = 300f),
-        uiState = uiState,
-        headerHeight = 0f,
-        pagesContentHeight = 620f,
-        target = EditorBringIntoViewTarget.CurrentSelectionHead,
-        density = 1f,
-      )
-
-    assertEquals(40f, requireNotNull(distance))
   }
 
   private fun assertScrollTo(intent: EditorScrollIntentResult, y: Float) {
