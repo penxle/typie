@@ -130,11 +130,11 @@ internal fun EditorBody(
               )
             }
 
-            if (autoScrollPolicy.bottomSpacerHeight > 0f) {
+            if (autoScrollPolicy.bottomPadding > 0f) {
               Spacer(
                 modifier =
                   Modifier.fillMaxWidth()
-                    .height(autoScrollPolicy.bottomSpacerHeight.dp)
+                    .height(autoScrollPolicy.bottomPadding.dp)
                     .debugBackground(
                       enabled = showDebugBodyOverlay,
                       color = DebugBottomPaddingColor,

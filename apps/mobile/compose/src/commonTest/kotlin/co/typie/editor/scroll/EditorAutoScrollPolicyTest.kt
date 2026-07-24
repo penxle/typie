@@ -99,7 +99,7 @@ class EditorAutoScrollPolicyTest {
     assertEquals(VerticalSpan(top = 180f, bottom = 740f), policy.keepVisibleRange)
     assertEquals(450f, requireNotNull(policy.targetTop), FloatTolerance)
     assertEquals(470f, requireNotNull(policy.targetBottom), FloatTolerance)
-    assertEquals(140f, policy.bottomSpacerHeight, FloatTolerance)
+    assertEquals(140f, policy.bottomPadding, FloatTolerance)
   }
 
   @Test
@@ -131,7 +131,7 @@ class EditorAutoScrollPolicyTest {
     assertEquals(0.25f, policy.typewriterPosition, FloatTolerance)
     assertEquals(252f, requireNotNull(policy.targetTop), FloatTolerance)
     assertEquals(284f, requireNotNull(policy.targetBottom), FloatTolerance)
-    assertEquals(596f, policy.bottomSpacerHeight, FloatTolerance)
+    assertEquals(596f, policy.bottomPadding, FloatTolerance)
   }
 
   @Test
@@ -140,14 +140,35 @@ class EditorAutoScrollPolicyTest {
       resolveEditorAutoScrollPolicy(
         visibleArea = testVisibleArea(),
         baseBottomSpace = 20f,
-        distanceToPagesBottom = 520f,
+        distanceToPagesBottom = 500f,
         typewriterEnabled = true,
         typewriterPosition = 0.25f,
         targetLineHeight = 32f,
       )
 
     assertEquals(EditorAutoScrollMode.Typewriter, policy.mode)
-    assertEquals(128f, policy.bottomSpacerHeight, FloatTolerance)
+    assertEquals(148f, policy.bottomPadding, FloatTolerance)
+  }
+
+  @Test
+  fun `typewriter bottom padding preserves keep-visible floor above bottom occlusion`() {
+    val policy =
+      resolveEditorAutoScrollPolicy(
+        visibleArea =
+          EditorVisibleArea(
+            viewport = Size(width = 720f, height = 900f),
+            topInset = 80f,
+            bottomOcclusionInset = 400f,
+          ),
+        baseBottomSpace = 20f,
+        distanceToPagesBottom = 1000f,
+        typewriterEnabled = true,
+        typewriterPosition = 0.5f,
+        targetLineHeight = 32f,
+      )
+
+    assertEquals(EditorAutoScrollMode.Typewriter, policy.mode)
+    assertEquals(440f, policy.bottomPadding, FloatTolerance)
   }
 
   @Test
@@ -160,7 +181,7 @@ class EditorAutoScrollPolicyTest {
       )
 
     assertEquals(EditorAutoScrollMode.KeepCursorVisible, policy.mode)
-    assertEquals(20f, policy.bottomSpacerHeight, FloatTolerance)
+    assertEquals(20f, policy.bottomPadding, FloatTolerance)
   }
 
   @Test
@@ -169,15 +190,15 @@ class EditorAutoScrollPolicyTest {
       resolveEditorAutoScrollPolicy(
         visibleArea = testVisibleArea(),
         baseBottomSpace = 180f,
-        pageBottomRevealSpacerHeight = 100f,
+        pageBottomRevealPadding = 100f,
       )
 
     assertEquals(EditorAutoScrollMode.KeepCursorVisible, policy.mode)
-    assertEquals(100f, policy.bottomSpacerHeight, FloatTolerance)
+    assertEquals(100f, policy.bottomPadding, FloatTolerance)
   }
 
   @Test
-  fun `bottom spacer can reserve more space than the currently visible editor area`() {
+  fun `bottom scroll reserve can increase padding beyond the editor visible area`() {
     val policy =
       resolveEditorAutoScrollPolicy(
         visibleArea =
@@ -186,7 +207,7 @@ class EditorAutoScrollPolicyTest {
             topInset = 80f,
             bottomOcclusionInset = 180f,
           ),
-        bottomSpacerVisibleArea =
+        bottomScrollReserveArea =
           EditorVisibleArea(
             viewport = Size(width = 720f, height = 900f),
             topInset = 80f,
@@ -196,7 +217,7 @@ class EditorAutoScrollPolicyTest {
       )
 
     assertEquals(VerticalSpan(top = 140f, bottom = 660f), policy.keepVisibleRange)
-    assertEquals(300f, policy.bottomSpacerHeight, FloatTolerance)
+    assertEquals(300f, policy.bottomPadding, FloatTolerance)
   }
 
   private fun testVisibleArea(): EditorVisibleArea =
