@@ -63,7 +63,38 @@ class ScreenDesktopTest {
   }
 
   @Test
-  fun topContentPaddingEndsAtPhysicalTopBarBoundary() = runComposeUiTest {
+  fun topContentPaddingIncludesBackdropFadeAndSpacing() = runComposeUiTest {
+    val topBarState =
+      TopBarState().apply {
+        enabled = true
+        visible = true
+      }
+    var actualTopPadding = Dp.Unspecified
+    var expectedTopPadding = Dp.Unspecified
+
+    setContent {
+      expectedTopPadding =
+        TopBarDefaults.topPadding() +
+          TopBarDefaults.Height +
+          TopBarDefaults.BlurFadeHeight +
+          TopBarDefaults.ContentTopSpacing
+      CompositionLocalProvider(
+        LocalDialog provides Dialog(),
+        LocalTopBarState provides topBarState,
+      ) {
+        Screen { contentPadding ->
+          actualTopPadding = contentPadding.calculateTopPadding()
+          Box(Modifier.fillMaxSize().testTag(ContentTag))
+        }
+      }
+    }
+    waitForIdle()
+
+    assertEquals(expectedTopPadding, actualTopPadding)
+  }
+
+  @Test
+  fun topContentPaddingCanEndAtPhysicalTopBarBoundary() = runComposeUiTest {
     val topBarState =
       TopBarState().apply {
         enabled = true
@@ -78,7 +109,7 @@ class ScreenDesktopTest {
         LocalDialog provides Dialog(),
         LocalTopBarState provides topBarState,
       ) {
-        Screen { contentPadding ->
+        Screen(topBarContentPadding = 0.dp) { contentPadding ->
           actualTopPadding = contentPadding.calculateTopPadding()
           Box(Modifier.fillMaxSize().testTag(ContentTag))
         }
@@ -87,6 +118,38 @@ class ScreenDesktopTest {
     waitForIdle()
 
     assertEquals(expectedTopPadding, actualTopPadding)
+  }
+
+  @Test
+  fun screenScopeTopBarOcclusionTracksPhysicalTopBarVisibility() = runComposeUiTest {
+    val topBarState =
+      TopBarState().apply {
+        enabled = true
+        visible = true
+      }
+    var actualTopBarOcclusion = Dp.Unspecified
+    var expectedTopBarOcclusion = Dp.Unspecified
+
+    setContent {
+      expectedTopBarOcclusion = TopBarDefaults.topPadding() + TopBarDefaults.Height
+      CompositionLocalProvider(
+        LocalDialog provides Dialog(),
+        LocalTopBarState provides topBarState,
+      ) {
+        Screen {
+          actualTopBarOcclusion = topBarOcclusion
+          Box(Modifier.fillMaxSize().testTag(ContentTag))
+        }
+      }
+    }
+    waitForIdle()
+
+    assertEquals(expectedTopBarOcclusion, actualTopBarOcclusion)
+
+    runOnUiThread { topBarState.visible = false }
+    waitForIdle()
+
+    assertEquals(0.dp, actualTopBarOcclusion)
   }
 
   @Test

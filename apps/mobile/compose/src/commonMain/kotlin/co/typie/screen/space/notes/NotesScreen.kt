@@ -410,7 +410,6 @@ fun NotesScreen() {
           },
         )
       val reorderState = rememberNoteListReorderState(items = listItems, scrollState = scrollState)
-      val reorderViewportTopInset = contentPadding.calculateTopPadding()
       val reorderViewportBottomInset =
         WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding() + 72.dp
 
@@ -419,7 +418,7 @@ fun NotesScreen() {
           Modifier.fillMaxSize()
             .reorderableViewport(
               state = reorderState,
-              viewportTopInset = reorderViewportTopInset,
+              viewportTopInset = topBarOcclusion,
               viewportBottomInset = reorderViewportBottomInset,
             )
             .imePadding()

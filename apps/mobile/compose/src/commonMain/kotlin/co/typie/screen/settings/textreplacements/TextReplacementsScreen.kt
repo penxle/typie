@@ -87,10 +87,7 @@ fun TextReplacementsScreen() {
     Box(
       modifier =
         Modifier.fillMaxSize()
-          .reorderableViewport(
-            state = reorderState,
-            viewportTopInset = contentPadding.calculateTopPadding(),
-          )
+          .reorderableViewport(state = reorderState, viewportTopInset = topBarOcclusion)
     ) {
       Column(
         modifier =

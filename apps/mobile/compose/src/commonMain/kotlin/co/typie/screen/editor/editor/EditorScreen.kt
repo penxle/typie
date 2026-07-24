@@ -1024,6 +1024,7 @@ fun EditorScreen(entityId: String) {
     loadable = model.query,
     background = background,
     contentPadding = PaddingValues(),
+    topBarContentPadding = 0.dp,
     overlay = {
       EditorSubscriptionBanner(
         documentId = documentId,

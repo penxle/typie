@@ -388,7 +388,6 @@ fun SpaceScreen() {
       )
     },
   ) { contentPadding ->
-    val reorderViewportTopInset = contentPadding.calculateTopPadding()
     val reorderViewportBottomInset =
       WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding() + overlayBaseBottomInset
 
@@ -397,7 +396,7 @@ fun SpaceScreen() {
         Modifier.fillMaxSize()
           .reorderableViewport(
             state = reorderState,
-            viewportTopInset = reorderViewportTopInset,
+            viewportTopInset = topBarOcclusion,
             viewportBottomInset = reorderViewportBottomInset,
           )
     ) {

@@ -28,6 +28,7 @@ object TopBarDefaults {
   val BlurRadius: Dp = 6.dp
   val BlurFadeHeight: Dp = 16.dp
   val FadeOpacity: Float = 0.8f
+  val ContentTopSpacing: Dp = 8.dp
   val BlurFadeEasing: Easing = SmootherstepEasing
 
   val RevealAnimationDuration: Int = 200

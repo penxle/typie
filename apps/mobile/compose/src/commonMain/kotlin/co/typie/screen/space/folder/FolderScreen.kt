@@ -423,7 +423,6 @@ fun FolderScreen(entityId: String) {
       )
     },
   ) { contentPadding ->
-    val reorderViewportTopInset = contentPadding.calculateTopPadding()
     val reorderViewportBottomInset =
       WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding() + overlayBaseBottomInset
 
@@ -432,7 +431,7 @@ fun FolderScreen(entityId: String) {
         Modifier.fillMaxSize()
           .reorderableViewport(
             state = reorderState,
-            viewportTopInset = reorderViewportTopInset,
+            viewportTopInset = topBarOcclusion,
             viewportBottomInset = reorderViewportBottomInset,
           )
     ) {

@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import co.typie.contract.Loadable
 import co.typie.contract.LoadableState
@@ -48,15 +49,23 @@ import co.typie.ui.theme.AppTheme
 private val MaxContentWidth = 600.dp
 private const val OverlayFadeSamples = 48
 
+interface ScreenScope : BoxScope {
+  val topBarOcclusion: Dp
+}
+
+private class ScreenScopeImpl(boxScope: BoxScope, override val topBarOcclusion: Dp) :
+  ScreenScope, BoxScope by boxScope
+
 @Composable
 fun Screen(
   loadable: Loadable<*>? = null,
   refetchOnMount: Boolean = true,
   background: Color = AppTheme.colors.surfaceCanvas,
   contentPadding: PaddingValues = PaddingValues(horizontal = 16.dp),
+  topBarContentPadding: Dp = TopBarDefaults.BlurFadeHeight + TopBarDefaults.ContentTopSpacing,
   dismissFocusOnTapOutsideInput: Boolean = true,
   overlay: (@Composable BoxScope.() -> Unit)? = null,
-  content: @Composable BoxScope.(contentPadding: PaddingValues) -> Unit,
+  content: @Composable ScreenScope.(contentPadding: PaddingValues) -> Unit,
 ) {
   PublishNavigationTopBarBackdropStyle(background)
 
@@ -71,11 +80,16 @@ fun Screen(
   val horizontalSafePadding = WindowInsets.safeDrawingHorizontal.asPaddingValues()
   val navigationBarPadding =
     PaddingValues(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())
+  val topBarOcclusion =
+    if (hasTopBar) {
+      topBarPadding.calculateTopPadding() + TopBarDefaults.Height
+    } else {
+      0.dp
+    }
   val contentPadding =
     if (hasTopBar) {
-      PaddingValues(top = TopBarDefaults.Height) +
+      PaddingValues(top = topBarOcclusion + topBarContentPadding) +
         contentPadding +
-        topBarPadding +
         horizontalSafePadding +
         navigationBarPadding
     } else {
@@ -111,7 +125,9 @@ fun Screen(
       contentAlignment = Alignment.TopCenter,
     ) {
       Skeleton(enabled = loadable != null && loadable.state !is LoadableState.Success) {
-        Box(modifier = Modifier.fillMaxSize()) { content(contentPadding) }
+        Box(modifier = Modifier.fillMaxSize()) {
+          content.invoke(ScreenScopeImpl(this, topBarOcclusion), contentPadding)
+        }
       }
     }
 
