@@ -5,7 +5,8 @@ use editor_model::{
     ChildView, DocView, Fragment, NodeType, NodeView, PlainFileNode, PlainImageNode, PlainNode,
     PlainParagraphNode, PlainTableCellNode, PlainTableNode, PlainTableRowNode, TableBorderStyle,
 };
-use editor_state::{ResolvedSelection, Selection, is_unit_node_selection};
+use editor_state::{Position, ResolvedSelection, Selection};
+use editor_transaction::Transaction;
 
 use crate::editor::Editor;
 use crate::error::EditorError;
@@ -145,7 +146,6 @@ pub fn handle_insertion_op(editor: &mut Editor, op: InsertionOp) -> Result<(), E
                     return Ok(());
                 }
                 let sp = tr.savepoint();
-                let slice = placeholder_slice(kinds);
                 let prepared = commands::first!(
                     tr,
                     commands::materialize_gap_paragraph(),
@@ -163,43 +163,14 @@ pub fn handle_insertion_op(editor: &mut Editor, op: InsertionOp) -> Result<(), E
                     tr.rollback(sp);
                     return Ok(());
                 };
-                let Some(inserted) = commands::insert_slice_at(
-                    tr,
-                    selection.head,
-                    slice,
-                    commands::types::SliceProvenance::Formatted,
-                )?
+                let Some((inserted, node_ids)) =
+                    insert_attachment_placeholders_at(tr, selection.head, kinds)?
                 else {
                     tr.rollback(sp);
                     return Ok(());
                 };
-
-                let view = tr.view();
-                let Some(inserted_nodes) = placeholder_nodes_in_selection(&view, inserted) else {
-                    return Err(commands::CommandError::Corrupted(
-                        "placeholder insertion returned an unresolvable selection".into(),
-                    )
-                    .into());
-                };
-                let inserted_kinds = inserted_nodes
-                    .iter()
-                    .map(|(_, kind)| *kind)
-                    .collect::<Vec<_>>();
-                if inserted_kinds != *kinds {
-                    return Err(commands::CommandError::Corrupted(format!(
-                        "placeholder insertion mismatch: requested {kinds:?}, inserted {inserted_kinds:?}"
-                    ))
-                    .into());
-                }
-                if is_unit_node_selection(&inserted, &view) {
-                    tr.set_selection(Some(inserted))?;
-                }
-                placeholder_node_ids = Some(
-                    inserted_nodes
-                        .into_iter()
-                        .map(|(node_id, _)| node_id)
-                        .collect(),
-                );
+                select_inserted_end(tr, inserted)?;
+                placeholder_node_ids = Some(node_ids);
             }
         }
         Ok(())
@@ -225,7 +196,68 @@ pub fn handle_insertion_op(editor: &mut Editor, op: InsertionOp) -> Result<(), E
     Ok(())
 }
 
-fn placeholder_slice(kinds: &[AttachmentPlaceholderKind]) -> Slice {
+pub(super) fn insert_attachment_placeholders_at(
+    tr: &mut Transaction,
+    position: Position,
+    kinds: &[AttachmentPlaceholderKind],
+) -> Result<Option<(Selection, Vec<Dot>)>, EditorError> {
+    if kinds.is_empty() {
+        return Ok(None);
+    }
+    let Some(inserted) = commands::insert_slice_at(
+        tr,
+        position,
+        placeholder_slice(kinds),
+        commands::types::SliceProvenance::Formatted,
+    )?
+    else {
+        return Ok(None);
+    };
+
+    let view = tr.view();
+    let Some(inserted_nodes) = placeholder_nodes_in_selection(&view, inserted) else {
+        return Err(commands::CommandError::Corrupted(
+            "placeholder insertion returned an unresolvable selection".into(),
+        )
+        .into());
+    };
+    let inserted_kinds = inserted_nodes
+        .iter()
+        .map(|(_, kind)| *kind)
+        .collect::<Vec<_>>();
+    if inserted_kinds != kinds {
+        return Err(commands::CommandError::Corrupted(format!(
+            "placeholder insertion mismatch: requested {kinds:?}, inserted {inserted_kinds:?}"
+        ))
+        .into());
+    }
+    let node_ids = inserted_nodes
+        .into_iter()
+        .map(|(node_id, _)| node_id)
+        .collect();
+    Ok(Some((inserted, node_ids)))
+}
+
+pub(super) fn select_inserted_end(
+    tr: &mut Transaction,
+    inserted: Selection,
+) -> Result<(), EditorError> {
+    let selection = {
+        let view = tr.view();
+        let end = inserted
+            .resolve(&view)
+            .map(|resolved| resolved.to().position())
+            .ok_or_else(|| {
+                commands::CommandError::Corrupted("inserted selection became unresolvable".into())
+            })?;
+        let collapsed = Selection::collapsed(end);
+        collapsed.normalize(&view).unwrap_or(collapsed)
+    };
+    tr.set_selection(Some(selection))?;
+    Ok(())
+}
+
+pub(super) fn placeholder_slice(kinds: &[AttachmentPlaceholderKind]) -> Slice {
     Slice::new(
         kinds
             .iter()
@@ -311,7 +343,7 @@ fn table_fragment(rows: usize, cols: usize) -> Fragment {
 #[cfg(test)]
 mod tests {
     use editor_macros::state;
-    use editor_state::assert_state_eq;
+    use editor_state::{assert_state_eq, is_unit_node_selection};
 
     use super::*;
     use crate::test_utils::assert_apply_changes_state;
@@ -403,7 +435,10 @@ mod tests {
         let events = editor.apply(Message::Insertion {
             op: InsertionOp::AttachmentPlaceholders {
                 request_id: "after-existing".into(),
-                kinds: vec![AttachmentPlaceholderKind::Image],
+                kinds: vec![
+                    AttachmentPlaceholderKind::Image,
+                    AttachmentPlaceholderKind::File,
+                ],
             },
         });
 
@@ -429,11 +464,21 @@ mod tests {
             })
             .collect::<Vec<_>>();
 
-        assert_eq!(children.len(), 3);
+        assert_eq!(children.len(), 4);
         assert_eq!(children[0], (existing_image, NodeType::Image));
         assert_eq!(children[1].1, NodeType::Image);
-        assert_eq!(children[2].1, NodeType::Paragraph);
-        assert_eq!(node_ids, &vec![children[1].0]);
+        assert_eq!(children[2].1, NodeType::File);
+        assert_eq!(children[3].1, NodeType::Paragraph);
+        assert_eq!(node_ids, &vec![children[1].0, children[2].0]);
+
+        let selection = editor.state().selection.expect("selection remains");
+        assert!(is_unit_node_selection(&selection, &editor.state().view()));
+        assert_eq!(selection.anchor.node, root);
+        assert_eq!(selection.head.node, root);
+        assert_eq!(
+            children[selection.anchor.offset.min(selection.head.offset)].0,
+            children[2].0
+        );
     }
 
     #[test]

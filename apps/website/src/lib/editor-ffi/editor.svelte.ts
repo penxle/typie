@@ -3,6 +3,7 @@ import { createContext, tick, untrack } from 'svelte';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { match } from 'ts-pattern';
 import { initWasm, wasm } from '$lib/wasm-ffi.svelte';
+import { EditorAttachmentImporter } from './attachment-importer';
 import { IS_MAC } from './constants';
 import { fontDataMissingHandler } from './fonts';
 import { TouchGestureController } from './gesture.svelte';
@@ -112,6 +113,7 @@ function samePosition(a: Position, b: Position): boolean {
 }
 
 export class EditorContext {
+  readonly attachmentImporter = new EditorAttachmentImporter(this);
   editor = $state<Editor>();
   scroll = $state<EditorScrollScope>();
   liveEditor = $state<Editor>();
@@ -124,8 +126,7 @@ export class EditorContext {
   serverVersion = $state<string | null>(null);
   serverGeneration = $state<number>(0);
   resetKey = $state<number>(0);
-  pendingImageDrops: File[] = [];
-  pendingFileDrops: File[] = [];
+  attachmentDropTargetNodeId = $state<string | null>(null);
   findReplaceOpen = $state(false);
   linkEditorOpen = $state(false);
 }
@@ -504,7 +505,7 @@ export class Editor {
   editBlockedHandler: (() => void) | null = null;
 
   imageAssets = $state(new SvelteMap<string, ImageAsset>());
-  inflightImages = $state(new SvelteMap<string, { uploadId: string; url: string; width: number; height: number }>());
+  inflightImages = $state(new SvelteMap<string, { uploadId: string; url?: string; width: number; height: number }>());
 
   contextMenu = $state({
     isOpen: false,
@@ -1022,19 +1023,6 @@ export class Editor {
     if (!payload) return;
     await writeClipboardPayload(payload.html, payload.text);
     this.enqueue({ type: 'clipboard', op: { type: 'cut' } });
-  }
-
-  async requestPaste(): Promise<void> {
-    if (this.readOnly) {
-      this.editBlockedHandler?.();
-      return;
-    }
-    const result = await readClipboardRich();
-    if (!result) return;
-    // HTML-only clipboard is intentionally accepted here (the WASM Paste op handles text: '' with non-empty html); diverges from handlePaste which gates on text being present.
-    const hasContent = result.html !== undefined || result.text !== '';
-    if (!hasContent) return;
-    this.enqueue({ type: 'clipboard', op: { type: 'paste', html: result.html, text: result.text } });
   }
 
   async requestPasteTextOnly(): Promise<void> {

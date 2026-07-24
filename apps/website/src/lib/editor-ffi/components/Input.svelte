@@ -1,5 +1,6 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
+  import { Toast } from '@typie/ui/notification';
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { pageRectToClientRect } from '../geometry';
   import { handle } from '../handlers';
@@ -12,7 +13,8 @@
   import type { Message } from '@typie/editor-ffi/browser';
   import type { ImeContext, ImeTextInput } from '../input/ime-context';
 
-  const { editor } = getEditorContext();
+  const ctx = getEditorContext();
+  const { editor } = ctx;
   const viewportOverlay = getViewportOverlayContext();
 
   let adapterEnqueued = false;
@@ -145,7 +147,9 @@
         editor.editBlockedHandler?.();
         return;
       }
-      handlePaste(editor, e);
+      handlePaste(ctx, e, ({ file, kind }) => {
+        Toast.error(`${file.name} ${kind === 'image' ? '이미지' : '파일'} 업로드에 실패했습니다.`);
+      });
     }}
     readonly={editor.readOnly}
     spellcheck={false}></textarea>

@@ -2,9 +2,11 @@
   import { flip, shift } from '@floating-ui/dom';
   import { css } from '@typie/styled-system/css';
   import { createFloatingActions } from '@typie/ui/actions';
+  import { Toast } from '@typie/ui/notification';
   import { scale } from 'svelte/transition';
   import { TAP_FEEDBACK_MIN_MS, TOUCH_MENU_GAP, TOUCH_MENU_VIEWPORT_PADDING } from '$lib/editor-ffi/constants';
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
+  import { requestPaste } from '../handlers/clipboard';
   import { getContextMenuCapabilityState } from './context-menu-state';
 
   const ctx = getEditorContext();
@@ -170,7 +172,9 @@
       onclick={(e) => {
         e.stopPropagation();
         void runTouchMenuAction('paste', async () => {
-          await ctx.editor?.requestPaste();
+          await requestPaste(ctx, ({ file, kind }) => {
+            Toast.error(`${file.name} ${kind === 'image' ? '이미지' : '파일'} 업로드에 실패했습니다.`);
+          });
         });
       }}
       onpointercancel={clearPressedAction}

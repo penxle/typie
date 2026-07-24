@@ -57,8 +57,15 @@ pub enum ExternalDndPayloadKind {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum DndDropPayload {
     InternalSelection,
-    Text { text: String, html: Option<String> },
-    Files { image_count: u32, file_count: u32 },
+    Text {
+        text: String,
+        html: Option<String>,
+    },
+    Files {
+        request_id: String,
+        kinds: Vec<AttachmentPlaceholderKind>,
+        reuse_node_id: Option<Dot>,
+    },
 }
 
 #[ffi]
@@ -73,6 +80,8 @@ pub enum DndOp {
         page: usize,
         x: f32,
         y: f32,
+        #[serde(default)]
+        reuse_node_id: Option<Dot>,
         #[serde(default)]
         modifiers: InputModifiers,
     },

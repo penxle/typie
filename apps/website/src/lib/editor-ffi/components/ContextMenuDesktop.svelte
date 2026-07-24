@@ -2,6 +2,7 @@
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { HorizontalDivider, Menu, MenuItem } from '@typie/ui/components';
+  import { Toast } from '@typie/ui/notification';
   import ClipboardPasteIcon from '~icons/lucide/clipboard-paste';
   import ClipboardTypeIcon from '~icons/lucide/clipboard-type';
   import CopyIcon from '~icons/lucide/copy';
@@ -9,6 +10,7 @@
   import SquareDashedIcon from '~icons/lucide/square-dashed';
   import { IS_MAC } from '$lib/editor-ffi/constants';
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
+  import { requestPaste } from '../handlers/clipboard';
   import { getContextMenuCapabilityState } from './context-menu-state';
 
   const ctx = getEditorContext();
@@ -90,7 +92,9 @@
         disabled={capabilityState.pasteDisabled}
         icon={ClipboardPasteIcon}
         onclick={() => {
-          void ctx.editor?.requestPaste();
+          void requestPaste(ctx, ({ file, kind }) => {
+            Toast.error(`${file.name} ${kind === 'image' ? '이미지' : '파일'} 업로드에 실패했습니다.`);
+          });
           close();
         }}
       >
