@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -27,12 +28,18 @@ data class SkeletonColors(val bone: Color, val highlight: Color)
 
 private const val SkeletonAnimationFractionEpsilon = 0.001f
 
-class SkeletonState(val enabled: Boolean, val fraction: State<Float>, val boneColor: State<Color>) {
+class SkeletonState(
+  val enabled: Boolean,
+  animatedFraction: State<Float>,
+  val boneColor: State<Color>,
+) {
+  val fraction: State<Float> = derivedStateOf { if (enabled) 1f else animatedFraction.value }
+
   companion object {
     val Disabled: SkeletonState =
       SkeletonState(
         enabled = false,
-        fraction = mutableStateOf(0f),
+        animatedFraction = mutableStateOf(0f),
         boneColor = mutableStateOf(Color.Transparent),
       )
   }
@@ -85,7 +92,7 @@ private fun rememberSkeletonState(enabled: Boolean, colors: SkeletonColors): Ske
     } else {
       rememberUpdatedState(colors.bone)
     }
-  return SkeletonState(enabled = enabled, fraction = fraction, boneColor = boneColor)
+  return SkeletonState(enabled = enabled, animatedFraction = fraction, boneColor = boneColor)
 }
 
 object Skeleton {
