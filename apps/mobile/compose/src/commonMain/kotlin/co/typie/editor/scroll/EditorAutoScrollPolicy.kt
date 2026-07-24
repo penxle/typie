@@ -27,7 +27,6 @@ internal fun resolveEditorAutoScrollPolicy(
   visibleArea: EditorVisibleArea,
   bottomScrollReserveArea: EditorVisibleArea = visibleArea,
   baseBottomSpace: Float = 0f,
-  distanceToPagesBottom: Float? = null,
   pageBottomRevealPadding: Float = 0f,
   typewriterEnabled: Boolean = false,
   typewriterPosition: Float = 0.5f,
@@ -52,7 +51,6 @@ internal fun resolveEditorAutoScrollPolicy(
       resolveTypewriterBottomPadding(
         visibleArea = bottomScrollReserveArea,
         baseBottomSpace = baseBottomSpace,
-        distanceToPagesBottom = distanceToPagesBottom,
         position = resolvedTypewriterPosition,
         targetLineHeight = resolvedTargetLineHeight,
       )
@@ -203,7 +201,6 @@ internal fun resolveScrollTargetTop(
 private fun resolveTypewriterBottomPadding(
   visibleArea: EditorVisibleArea,
   baseBottomSpace: Float,
-  distanceToPagesBottom: Float?,
   position: Float,
   targetLineHeight: Float,
 ): Float {
@@ -213,8 +210,7 @@ private fun resolveTypewriterBottomPadding(
   val availableRange = (usableViewportHeight - clampedTargetLineHeight).coerceAtLeast(0f)
   val spaceNeededBelowTargetTop =
     visibleArea.bottomOcclusion + (1f - position) * availableRange + clampedTargetLineHeight
-  val resolvedDistanceToPagesBottom =
-    distanceToPagesBottom?.coerceAtLeast(0f) ?: (baseBottomSpace + clampedTargetLineHeight)
-  val requiredPadding = spaceNeededBelowTargetTop - resolvedDistanceToPagesBottom
+  val intrinsicSpaceBelowTargetTop = baseBottomSpace + clampedTargetLineHeight
+  val requiredPadding = spaceNeededBelowTargetTop - intrinsicSpaceBelowTargetTop
   return requiredPadding.coerceAtLeast(TypewriterMinBottomPadding)
 }

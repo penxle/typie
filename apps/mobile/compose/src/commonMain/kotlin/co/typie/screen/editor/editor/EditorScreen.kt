@@ -58,7 +58,6 @@ import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.body.resolveBaseBottomSpace
 import co.typie.editor.body.resolveEditorBodyGeometry
 import co.typie.editor.body.resolveEditorPageWidth
-import co.typie.editor.body.resolvePagesContentHeight
 import co.typie.editor.body.toEditorDocumentLayoutSpec
 import co.typie.editor.external.EditorExternalElementState
 import co.typie.editor.external.LocalEditorExternalElementState
@@ -91,7 +90,6 @@ import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
 import co.typie.editor.scroll.awaitWithBringIntoView
 import co.typie.editor.scroll.rememberEditorBringIntoViewRequests
 import co.typie.editor.scroll.resolveBringIntoViewTargetHeight
-import co.typie.editor.scroll.resolveDistanceToPagesBottom
 import co.typie.editor.scroll.resolveEditorAutoScrollPolicy
 import co.typie.editor.sync.ActiveDocumentEditingSessions
 import co.typie.editor.sync.ChangesetDeltaStore
@@ -1306,8 +1304,6 @@ fun EditorScreen(entityId: String) {
         is EditorDocumentLayoutSpec.Paginated -> visibleArea.bottomOcclusion
         is EditorDocumentLayoutSpec.Continuous -> 0f
       }
-    val pagesContentHeight =
-      layoutSpec.resolvePagesContentHeight(layoutPageSizes, displayZoom, density = density)
     val bodyGeometry =
       resolveEditorBodyGeometry(
         visibleArea = visibleArea,
@@ -1315,26 +1311,11 @@ fun EditorScreen(entityId: String) {
         pageSizes = layoutPageSizes,
         displayZoom = displayZoom,
       )
-    val distanceToPagesBottom =
-      if (typewriterEnabled && editor != null) {
-        resolveDistanceToPagesBottom(
-          state = editorState,
-          layoutSpec = layoutSpec,
-          uiState = uiState,
-          headerHeight = screenState.headerHeight,
-          pagesContentHeight = pagesContentHeight,
-          target = EditorBringIntoViewTarget.CurrentSelectionHead,
-          density = density,
-        )
-      } else {
-        null
-      }
     val autoScrollPolicy =
       resolveEditorAutoScrollPolicy(
         visibleArea = visibleArea,
         bottomScrollReserveArea = visibleAreas.bottomScrollReserveArea,
         baseBottomSpace = layoutSpec.resolveBaseBottomSpace(displayZoom),
-        distanceToPagesBottom = distanceToPagesBottom,
         pageBottomRevealPadding = pageBottomRevealPadding,
         typewriterEnabled = typewriterEnabled,
         typewriterPosition = typewriterPosition,

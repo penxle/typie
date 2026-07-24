@@ -135,19 +135,18 @@ class EditorAutoScrollPolicyTest {
   }
 
   @Test
-  fun `typewriter bottom padding can use actual space available below the target line top`() {
+  fun `typewriter bottom padding uses intrinsic layout bottom space`() {
     val policy =
       resolveEditorAutoScrollPolicy(
         visibleArea = testVisibleArea(),
         baseBottomSpace = 20f,
-        distanceToPagesBottom = 500f,
         typewriterEnabled = true,
         typewriterPosition = 0.25f,
         targetLineHeight = 32f,
       )
 
     assertEquals(EditorAutoScrollMode.Typewriter, policy.mode)
-    assertEquals(148f, policy.bottomPadding, FloatTolerance)
+    assertEquals(596f, policy.bottomPadding, FloatTolerance)
   }
 
   @Test
@@ -161,14 +160,28 @@ class EditorAutoScrollPolicyTest {
             bottomOcclusionInset = 400f,
           ),
         baseBottomSpace = 20f,
-        distanceToPagesBottom = 1000f,
         typewriterEnabled = true,
-        typewriterPosition = 0.5f,
+        typewriterPosition = 0.9f,
         targetLineHeight = 32f,
       )
 
     assertEquals(EditorAutoScrollMode.Typewriter, policy.mode)
     assertEquals(440f, policy.bottomPadding, FloatTolerance)
+  }
+
+  @Test
+  fun `typewriter bottom padding keeps minimum when intrinsic space is sufficient`() {
+    val policy =
+      resolveEditorAutoScrollPolicy(
+        visibleArea = testVisibleArea(),
+        baseBottomSpace = 1000f,
+        typewriterEnabled = true,
+        typewriterPosition = 1f,
+        targetLineHeight = 32f,
+      )
+
+    assertEquals(EditorAutoScrollMode.Typewriter, policy.mode)
+    assertEquals(48f, policy.bottomPadding, FloatTolerance)
   }
 
   @Test

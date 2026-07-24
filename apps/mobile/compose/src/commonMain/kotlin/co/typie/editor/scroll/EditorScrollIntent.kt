@@ -6,7 +6,6 @@ import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.ffi.PageRect
 import co.typie.editor.pageRectsToContentRect
 import co.typie.editor.runtime.EditorBoundsInContainer
-import co.typie.editor.runtime.EditorUiState
 
 internal data class EditorScrollFrame(
   val state: EditorState,
@@ -70,33 +69,6 @@ internal fun resolveEditorScrollIntent(
   }
 
   return EditorScrollIntentResult.ScrollTo(targetScroll.coerceAtLeast(0f))
-}
-
-internal fun resolveDistanceToPagesBottom(
-  state: EditorState,
-  layoutSpec: EditorDocumentLayoutSpec,
-  uiState: EditorUiState,
-  headerHeight: Float,
-  pagesContentHeight: Float,
-  target: EditorBringIntoViewTarget,
-  density: Float = 0f,
-): Float? {
-  val editorBounds = uiState.editorBoundsInContainer
-  if (!editorBounds.isValid) {
-    return null
-  }
-  val rect =
-    resolveBringIntoViewTargetRect(
-      state = state,
-      layoutSpec = layoutSpec,
-      headerHeight = headerHeight,
-      editorTopInContainer = editorBounds.y,
-      displayZoom = uiState.displayZoom,
-      density = density,
-      target = target,
-    ) ?: return null
-  val contentBottomInContent = headerHeight + editorBounds.y + pagesContentHeight
-  return (contentBottomInContent - rect.top).coerceAtLeast(0f)
 }
 
 internal fun isEditorScrollTargetVisible(
