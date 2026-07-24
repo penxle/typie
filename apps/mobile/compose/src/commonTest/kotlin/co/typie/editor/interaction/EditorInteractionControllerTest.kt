@@ -3681,6 +3681,45 @@ class EditorInteractionControllerTest {
     }
 
   @Test
+  fun `delayed same cursor tap keeps its pointer down context menu policy`() =
+    runTest(StandardTestDispatcher()) {
+      val collapsedSelection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 0, Affinity.Downstream),
+        )
+      val fake =
+        FakeFfiEditor(
+          cursorProvider = { cursorAt(x = 10f) },
+          selectionProvider = { collapsedSelection },
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      host.uiState.updateFocus(true)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+        )
+      controller.updateTapSlop(8f)
+      val start = Offset(10f, 20f)
+
+      controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
+      controller.onTapTimer(nowMillis = 250L)
+      controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 300L)
+
+      host.uiState.contextMenu.show(editor.state)
+      controller.onPointerDown(pointerId = 2L, position = start, nowMillis = 700L)
+      assertFalse(host.uiState.contextMenu.isVisibleFor(editor.state))
+      runCurrent()
+
+      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.state))
+    }
+
+  @Test
   fun `same cursor tap that restores focus does not open context menu`() =
     runTest(StandardTestDispatcher()) {
       val fake =

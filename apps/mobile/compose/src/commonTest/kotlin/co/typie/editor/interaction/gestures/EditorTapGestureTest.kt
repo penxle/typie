@@ -158,7 +158,6 @@ class EditorTapGestureTest {
     nowMillis: Long = 0L,
   ) {
     startActivePointer(pointerId = pointerId, position = position, nowMillis = nowMillis)
-    markTapPending()
   }
 
   private fun createTapGesture(): EditorTapGesture =

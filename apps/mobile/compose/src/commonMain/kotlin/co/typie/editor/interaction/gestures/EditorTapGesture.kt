@@ -24,32 +24,23 @@ internal class EditorTapGesture(
   private val densityProvider: () -> Float,
   private val consecutiveTapMaxIntervalMillis: Long = ConsecutiveTapMaxIntervalMillis,
 ) {
-  private var activePointerId: Long? = null
-  private var downPosition = Offset.Zero
-  private var movedPastTapSlop = false
-  private var tapDispatched = false
-  private var activeTapCount = 1
-  private var activeTapRecorded = false
-  private var activeInputModifiers = InputModifiers()
-  private var lastTapTimeMillis: Long? = null
-  private var lastTapPosition: Offset? = null
-  private var lastTapCount = 0
-  private var contextMenuVisibleAtPointerDown = false
+  private var activeTap: ActiveTap? = null
+  private var tapHistory: TapHistory? = null
 
   val hasActivePointer: Boolean
-    get() = activePointerId != null
+    get() = activeTap != null
 
   val activePosition: Offset?
-    get() = if (activePointerId == null) null else downPosition
+    get() = activeTap?.downPosition
 
   val inputModifiersForActivePointer: InputModifiers
-    get() = activeInputModifiers
+    get() = activeTap?.inputModifiers ?: InputModifiers()
 
   val tapCountForActivePointer: Int?
-    get() = if (activePointerId == null) null else activeTapCount
+    get() = activeTap?.count
 
   val canDispatchTapTimer: Boolean
-    get() = activePointerId != null && !movedPastTapSlop && !tapDispatched
+    get() = activeTap?.phase == ActiveTapPhase.Pending
 
   fun updateTapSlop(tapSlopPx: Float) {
     this.tapSlopPx = tapSlopPx
@@ -60,37 +51,42 @@ internal class EditorTapGesture(
     position: Offset,
     nowMillis: Long,
     inputModifiers: InputModifiers = InputModifiers(),
+    contextMenuWasVisibleAtPointerDown: Boolean = false,
   ) {
-    activePointerId = pointerId
-    downPosition = position
-    activeInputModifiers = inputModifiers
-    movedPastTapSlop = false
-    tapDispatched = false
-    activeTapCount = nextTapCount(position = position, nowMillis = nowMillis)
-    activeTapRecorded = false
+    activeTap =
+      ActiveTap(
+        pointerId = pointerId,
+        downPosition = position,
+        inputModifiers = inputModifiers,
+        count = nextTapCount(position = position, nowMillis = nowMillis),
+        contextMenuWasVisibleAtPointerDown = contextMenuWasVisibleAtPointerDown,
+      )
   }
 
   fun onPointerMove(pointerId: Long, position: Offset): Boolean {
-    if (activePointerId != pointerId) {
+    val tap = activeTap
+    if (tap == null || tap.pointerId != pointerId) {
       return false
     }
-    if ((position - downPosition).getDistance() > tapSlopPx) {
-      movedPastTapSlop = true
+    if ((position - tap.downPosition).getDistance() > tapSlopPx) {
+      tap.phase = ActiveTapPhase.Moved
       return true
     }
     return false
   }
 
   fun markTapDispatched() {
-    tapDispatched = true
+    activeTap?.let { tap ->
+      if (tap.phase == ActiveTapPhase.Pending) {
+        tap.phase = ActiveTapPhase.Dispatched
+      }
+    }
   }
 
-  fun markTapPending() {
-    tapDispatched = false
+  fun shouldConsumePointerUp(pointerId: Long, canFinish: Boolean): Boolean {
+    val tap = activeTap ?: return false
+    return canFinish && tap.pointerId == pointerId && tap.phase != ActiveTapPhase.Moved
   }
-
-  fun shouldConsumePointerUp(pointerId: Long, canFinish: Boolean): Boolean =
-    canFinish && activePointerId == pointerId && !movedPastTapSlop
 
   fun onPointerUp(
     pointerId: Long,
@@ -98,7 +94,8 @@ internal class EditorTapGesture(
     nowMillis: Long,
     canFinish: Boolean = true,
   ): Int? {
-    if (activePointerId != pointerId) {
+    val tap = activeTap
+    if (tap == null || tap.pointerId != pointerId) {
       return null
     }
     if (!canFinish) {
@@ -106,17 +103,16 @@ internal class EditorTapGesture(
       return null
     }
 
-    val completedTap = !movedPastTapSlop
-    val clickCount = if (completedTap && !tapDispatched) activeTapCount else null
-    if (completedTap && tapDispatched && activeTapRecorded) {
-      recordTap(nowMillis = nowMillis, position = position, clickCount = activeTapCount)
+    val clickCount = if (tap.phase == ActiveTapPhase.Pending) tap.count else null
+    if (tap.phase == ActiveTapPhase.Recorded) {
+      recordTap(nowMillis = nowMillis, position = position, clickCount = tap.count)
     }
     clearActivePointer()
     return clickCount
   }
 
   fun cancelActivePointerStream(): Boolean {
-    val hadActivePointer = activePointerId != null
+    val hadActivePointer = activeTap != null
     clearActivePointer()
     return hadActivePointer
   }
@@ -124,57 +120,64 @@ internal class EditorTapGesture(
   fun reset() {
     clearActivePointer()
     clearTapHistory()
-    contextMenuVisibleAtPointerDown = false
   }
 
   private fun clearActivePointer() {
-    activePointerId = null
-    downPosition = Offset.Zero
-    activeInputModifiers = InputModifiers()
-    movedPastTapSlop = false
-    tapDispatched = false
-    activeTapCount = 1
-    activeTapRecorded = false
+    activeTap = null
   }
 
   fun recordTap(nowMillis: Long, position: Offset, clickCount: Int) {
-    if (activePointerId != null && clickCount == activeTapCount) {
-      activeTapRecorded = true
+    activeTap?.let { tap ->
+      if (clickCount == tap.count && tap.phase != ActiveTapPhase.Moved) {
+        tap.phase = ActiveTapPhase.Recorded
+      }
     }
     if (clickCount >= 3) {
       clearTapHistory()
       return
     }
-    lastTapTimeMillis = nowMillis
-    lastTapPosition = position
-    lastTapCount = clickCount
+    tapHistory = TapHistory(completedAtMillis = nowMillis, position = position, count = clickCount)
   }
 
   fun clearTapHistory() {
-    lastTapTimeMillis = null
-    lastTapPosition = null
-    lastTapCount = 0
+    tapHistory = null
   }
 
-  fun captureContextMenuStateAtPointerDown(visible: Boolean) {
-    contextMenuVisibleAtPointerDown = visible
+  fun shouldOpenContextMenuForCurrentTap(): Boolean {
+    val tap = activeTap ?: return false
+    return !tap.contextMenuWasVisibleAtPointerDown
   }
 
-  fun shouldOpenContextMenuForCurrentTap(): Boolean = !contextMenuVisibleAtPointerDown
-
-  fun nextTapCount(position: Offset, nowMillis: Long): Int =
-    if (isConsecutiveTap(position = position, nowMillis = nowMillis)) {
-      lastTapCount + 1
+  fun nextTapCount(position: Offset, nowMillis: Long): Int {
+    val previousTap = tapHistory ?: return 1
+    return if (
+      nowMillis - previousTap.completedAtMillis < consecutiveTapMaxIntervalMillis &&
+        (position - previousTap.position).getDistance() <
+          ConsecutiveTapMaxDistanceDp * densityProvider()
+    ) {
+      previousTap.count + 1
     } else {
       1
     }
-
-  private fun isConsecutiveTap(position: Offset, nowMillis: Long): Boolean {
-    val previousTime = lastTapTimeMillis ?: return false
-    val previousPosition = lastTapPosition ?: return false
-    return nowMillis - previousTime < consecutiveTapMaxIntervalMillis &&
-      (position - previousPosition).getDistance() < ConsecutiveTapMaxDistanceDp * densityProvider()
   }
+
+  private class ActiveTap(
+    val pointerId: Long,
+    val downPosition: Offset,
+    val inputModifiers: InputModifiers,
+    val count: Int,
+    val contextMenuWasVisibleAtPointerDown: Boolean,
+    var phase: ActiveTapPhase = ActiveTapPhase.Pending,
+  )
+
+  private enum class ActiveTapPhase {
+    Pending,
+    Dispatched,
+    Recorded,
+    Moved,
+  }
+
+  private data class TapHistory(val completedAtMillis: Long, val position: Offset, val count: Int)
 }
 
 internal fun EditorTapGesture.handlePointerDown(
@@ -195,8 +198,8 @@ internal fun EditorTapGesture.handlePointerDown(
     position = position,
     nowMillis = nowMillis,
     inputModifiers = inputModifiers,
+    contextMenuWasVisibleAtPointerDown = context.semantics.contextMenu.visible,
   )
-  captureContextMenuStateAtPointerDown(context.semantics.contextMenu.visible)
   context.semantics.contextMenu.hide()
   if (tapCountForActivePointer == 2) {
     markTapDispatched()
@@ -206,6 +209,7 @@ internal fun EditorTapGesture.handlePointerDown(
       nowMillis = nowMillis,
       clickCount = 2,
       inputModifiers = inputModifiers,
+      shouldOpenContextMenu = shouldOpenContextMenuForCurrentTap(),
       doubleTapDrag = doubleTapDrag,
       context = context,
     ) {
@@ -214,7 +218,6 @@ internal fun EditorTapGesture.handlePointerDown(
     return true
   }
 
-  markTapPending()
   context.effects.scheduleTapDispatch(dispatchAtMillis = nowMillis + EditorTapDispatchDelayMillis)
   return false
 }
@@ -241,6 +244,7 @@ internal fun EditorTapGesture.handlePointerUp(
   val canFinishTap = !context.mode.isViewportZooming && !doubleTapDrag.dragging
   val shouldConsumeTap = shouldConsumePointerUp(pointerId = pointerId, canFinish = canFinishTap)
   val inputModifiers = inputModifiersForActivePointer
+  val shouldOpenContextMenu = shouldOpenContextMenuForCurrentTap()
   val clickCount =
     onPointerUp(
       pointerId = pointerId,
@@ -257,6 +261,7 @@ internal fun EditorTapGesture.handlePointerUp(
       nowMillis = nowMillis,
       clickCount = it,
       inputModifiers = inputModifiers,
+      shouldOpenContextMenu = shouldOpenContextMenu,
       doubleTapDrag = doubleTapDrag,
       context = context,
       beforeLaunch = {},
@@ -297,6 +302,7 @@ internal fun EditorTapGesture.handleTapTimer(
     nowMillis = nowMillis,
     clickCount = clickCount,
     inputModifiers = inputModifiers,
+    shouldOpenContextMenu = shouldOpenContextMenuForCurrentTap(),
     doubleTapDrag = doubleTapDrag,
     context = context,
     beforeLaunch = {},
@@ -308,6 +314,7 @@ private fun EditorTapGesture.dispatchTap(
   nowMillis: Long,
   clickCount: Int,
   inputModifiers: InputModifiers,
+  shouldOpenContextMenu: Boolean,
   doubleTapDrag: EditorDoubleTapDragSession,
   context: EditorGestureContext,
   beforeLaunch: () -> Unit,
@@ -329,7 +336,7 @@ private fun EditorTapGesture.dispatchTap(
   val hitExistingSelectionAtTap =
     editor.selectionHitTest(page = point.page, x = point.x, y = point.y)
   if (clickCount == 1 && context.platform != Platform.Android && hitExistingSelectionAtTap) {
-    if (shouldOpenContextMenuForCurrentTap()) {
+    if (shouldOpenContextMenu) {
       context.semantics.contextMenu.show(editor.state)
     }
     return false
@@ -349,7 +356,7 @@ private fun EditorTapGesture.dispatchTap(
           }
         }
         isSameCursorTap(previousCursor, snapshot) -> {
-          if (wasFocused && shouldOpenContextMenuForCurrentTap()) {
+          if (wasFocused && shouldOpenContextMenu) {
             context.semantics.contextMenu.show(snapshot)
           }
         }

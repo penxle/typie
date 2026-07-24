@@ -254,6 +254,8 @@ internal class FakeFfiEditor(
 
   override fun findMatches(query: String, options: SearchOptions?): List<Selection> = emptyList()
 
+  override fun trackedRange(id: String): TrackedRange? = null
+
   override fun trackedRanges(group: String?): List<TrackedRange> {
     trackedRangesCallCount += 1
     return trackedRangesProvider(group)
