@@ -21,6 +21,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.changedToUp
+import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalDensity
@@ -56,7 +57,7 @@ internal fun sliderHapticFeedbackType(
 internal class SliderGestureSession(
   initialValue: Float,
   private val valueFromX: (Float) -> Float,
-  private val onDragStart: () -> Unit,
+  private val onDragStart: (Float) -> Unit,
   private val onDrag: (Float) -> Unit,
 ) {
   private var current = initialValue
@@ -67,7 +68,7 @@ internal class SliderGestureSession(
       return
     }
     started = true
-    onDragStart()
+    onDragStart(current)
   }
 
   fun updateAt(x: Float) {
@@ -96,7 +97,7 @@ internal class SliderGestureSession(
 internal fun Slider(
   value: Float,
   range: ClosedFloatingPointRange<Float>,
-  onDragStart: () -> Unit,
+  onDragStart: (Float) -> Unit,
   onDrag: (Float) -> Unit,
   onDragEnd: (Float) -> Unit,
   modifier: Modifier = Modifier,
@@ -167,7 +168,7 @@ internal fun Slider(
               SliderGestureSession(
                 initialValue = currentValue,
                 valueFromX = ::valueFromX,
-                onDragStart = { currentOnDragStart() },
+                onDragStart = { initialValue -> currentOnDragStart(initialValue) },
                 onDrag = { next ->
                   sliderHapticFeedbackType(range, normalizedStep, next)
                     ?.let(currentHapticFeedback::performHapticFeedback)
@@ -179,7 +180,7 @@ internal fun Slider(
               val event = awaitPointerEvent()
               val change = event.changes.firstOrNull { it.id == down.id } ?: break
 
-              if (change.changedToUp()) {
+              if (change.changedToUp() || (dragging && change.changedToUpIgnoreConsumed())) {
                 if (!dragging) {
                   gesture.start()
                 }
