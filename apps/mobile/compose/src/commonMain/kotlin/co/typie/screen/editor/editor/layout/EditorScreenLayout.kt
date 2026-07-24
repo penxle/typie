@@ -30,11 +30,15 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollDispatcher
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.PointerEvent
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerType
+import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.node.CompositionLocalConsumerModifierNode
 import androidx.compose.ui.node.ModifierNodeElement
 import androidx.compose.ui.node.PointerInputModifierNode
+import androidx.compose.ui.node.currentValueOf
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.unit.Constraints
@@ -59,9 +63,11 @@ import co.typie.editor.scroll.isEditorScrollTargetVisible
 import co.typie.editor.scroll.resolveEditorScrollIntent
 import co.typie.editor.viewport.EditorViewportState
 import co.typie.ext.LocalScrollGestureLockState
+import co.typie.ext.ScrollGestureLockHandle
 import co.typie.navigation.LocalNavigationPopNestedScroll
 import co.typie.navigation.NavigationForeground
 import co.typie.navigation.navigationPopNestedScroll
+import co.typie.platform.isTouchDragPointer
 import co.typie.screen.editor.editor.overlay.EditorMagnifierPlacement
 import co.typie.screen.editor.editor.overlay.editorNativeMagnifier
 import co.typie.screen.editor.editor.overlay.editorSoftwareMagnifierLens
@@ -114,19 +120,43 @@ private data object ViewportDirectControlElement :
   override fun update(node: ViewportDirectControlNode) = Unit
 }
 
-private class ViewportDirectControlNode : Modifier.Node(), PointerInputModifierNode {
+private class ViewportDirectControlNode :
+  Modifier.Node(), PointerInputModifierNode, CompositionLocalConsumerModifierNode {
+  private var scrollGestureLockHandle: ScrollGestureLockHandle? = null
+
   override fun onPointerEvent(pointerEvent: PointerEvent, pass: PointerEventPass, bounds: IntSize) {
     if (pass != PointerEventPass.Initial) {
       return
     }
     pointerEvent.changes.forEach { change ->
       if (change.isDirectDown(pointerEvent)) {
+        if (
+          scrollGestureLockHandle == null &&
+            change.type == PointerType.Mouse &&
+            change.type.isTouchDragPointer()
+        ) {
+          scrollGestureLockHandle = currentValueOf(LocalScrollGestureLockState).acquire()
+        }
         change.consume()
+      } else if (change.changedToUpIgnoreConsumed()) {
+        releaseScrollGestureLock()
       }
     }
   }
 
-  override fun onCancelPointerInput() = Unit
+  override fun onCancelPointerInput() {
+    releaseScrollGestureLock()
+  }
+
+  override fun onDetach() {
+    releaseScrollGestureLock()
+    super.onDetach()
+  }
+
+  private fun releaseScrollGestureLock() {
+    scrollGestureLockHandle?.release()
+    scrollGestureLockHandle = null
+  }
 }
 
 private fun Modifier.sharePointerInputWithSiblings(): Modifier =
