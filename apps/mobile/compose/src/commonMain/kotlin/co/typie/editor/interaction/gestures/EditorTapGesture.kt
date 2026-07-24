@@ -28,9 +28,12 @@ internal class EditorTapGesture(
   private var downPosition = Offset.Zero
   private var movedPastTapSlop = false
   private var tapDispatched = false
+  private var activeTapCount = 1
+  private var activeTapRecorded = false
   private var activeInputModifiers = InputModifiers()
   private var lastTapTimeMillis: Long? = null
   private var lastTapPosition: Offset? = null
+  private var lastTapCount = 0
   private var contextMenuVisibleAtPointerDown = false
 
   val hasActivePointer: Boolean
@@ -42,6 +45,9 @@ internal class EditorTapGesture(
   val inputModifiersForActivePointer: InputModifiers
     get() = activeInputModifiers
 
+  val tapCountForActivePointer: Int?
+    get() = if (activePointerId == null) null else activeTapCount
+
   val canDispatchTapTimer: Boolean
     get() = activePointerId != null && !movedPastTapSlop && !tapDispatched
 
@@ -52,6 +58,7 @@ internal class EditorTapGesture(
   fun startActivePointer(
     pointerId: Long,
     position: Offset,
+    nowMillis: Long,
     inputModifiers: InputModifiers = InputModifiers(),
   ) {
     activePointerId = pointerId
@@ -59,6 +66,8 @@ internal class EditorTapGesture(
     activeInputModifiers = inputModifiers
     movedPastTapSlop = false
     tapDispatched = false
+    activeTapCount = nextTapCount(position = position, nowMillis = nowMillis)
+    activeTapRecorded = false
   }
 
   fun onPointerMove(pointerId: Long, position: Offset): Boolean {
@@ -97,12 +106,11 @@ internal class EditorTapGesture(
       return null
     }
 
-    val clickCount =
-      if (!movedPastTapSlop && !tapDispatched) {
-        nextTapCount(position = position, nowMillis = nowMillis)
-      } else {
-        null
-      }
+    val completedTap = !movedPastTapSlop
+    val clickCount = if (completedTap && !tapDispatched) activeTapCount else null
+    if (completedTap && tapDispatched && activeTapRecorded) {
+      recordTap(nowMillis = nowMillis, position = position, clickCount = activeTapCount)
+    }
     clearActivePointer()
     return clickCount
   }
@@ -115,8 +123,7 @@ internal class EditorTapGesture(
 
   fun reset() {
     clearActivePointer()
-    lastTapTimeMillis = null
-    lastTapPosition = null
+    clearTapHistory()
     contextMenuVisibleAtPointerDown = false
   }
 
@@ -126,21 +133,27 @@ internal class EditorTapGesture(
     activeInputModifiers = InputModifiers()
     movedPastTapSlop = false
     tapDispatched = false
+    activeTapCount = 1
+    activeTapRecorded = false
   }
 
   fun recordTap(nowMillis: Long, position: Offset, clickCount: Int) {
-    if (clickCount == 2) {
-      lastTapTimeMillis = null
-      lastTapPosition = null
-    } else {
-      lastTapTimeMillis = nowMillis
-      lastTapPosition = position
+    if (activePointerId != null && clickCount == activeTapCount) {
+      activeTapRecorded = true
     }
+    if (clickCount >= 3) {
+      clearTapHistory()
+      return
+    }
+    lastTapTimeMillis = nowMillis
+    lastTapPosition = position
+    lastTapCount = clickCount
   }
 
   fun clearTapHistory() {
     lastTapTimeMillis = null
     lastTapPosition = null
+    lastTapCount = 0
   }
 
   fun captureContextMenuStateAtPointerDown(visible: Boolean) {
@@ -151,7 +164,7 @@ internal class EditorTapGesture(
 
   fun nextTapCount(position: Offset, nowMillis: Long): Int =
     if (isConsecutiveTap(position = position, nowMillis = nowMillis)) {
-      2
+      lastTapCount + 1
     } else {
       1
     }
@@ -177,10 +190,15 @@ internal fun EditorTapGesture.handlePointerDown(
     return false
   }
 
-  startActivePointer(pointerId = pointerId, position = position, inputModifiers = inputModifiers)
+  startActivePointer(
+    pointerId = pointerId,
+    position = position,
+    nowMillis = nowMillis,
+    inputModifiers = inputModifiers,
+  )
   captureContextMenuStateAtPointerDown(context.semantics.contextMenu.visible)
   context.semantics.contextMenu.hide()
-  if (nextTapCount(position = position, nowMillis = nowMillis) == 2) {
+  if (tapCountForActivePointer == 2) {
     markTapDispatched()
     context.effects.cancelTapDispatch()
     dispatchTap(
@@ -257,7 +275,7 @@ internal fun EditorTapGesture.handleTapTimer(
   if (!canDispatchTapTimer) {
     return
   }
-  val clickCount = nextTapCount(position = position, nowMillis = nowMillis)
+  val clickCount = tapCountForActivePointer ?: return
   val point = context.geometry.resolvePoint(positionInNode = position)
   val hitSelection =
     point != null &&
@@ -345,8 +363,15 @@ private fun EditorTapGesture.dispatchTap(
     }
   }
   val afterDispatch: (Boolean) -> Unit = { dispatched ->
-    if (dispatched && clickCount == 2) {
-      doubleTapDrag.onWordSelectionCommitted(tap = tap, context = context)
+    if (dispatched) {
+      when (clickCount) {
+        2 -> doubleTapDrag.onWordSelectionCommitted(tap = tap, context = context)
+        3 -> {
+          if (!editor.selection.isCollapsed()) {
+            context.semantics.contextMenu.show(editor.state)
+          }
+        }
+      }
     }
   }
   when {

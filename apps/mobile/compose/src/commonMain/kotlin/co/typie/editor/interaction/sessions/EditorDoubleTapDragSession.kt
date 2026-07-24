@@ -141,6 +141,7 @@ internal class EditorDoubleTapDragSession {
       context.effects.setScrollGestureLocked(false)
       return false
     }
+    tap.clearTapHistory()
     return true
   }
 

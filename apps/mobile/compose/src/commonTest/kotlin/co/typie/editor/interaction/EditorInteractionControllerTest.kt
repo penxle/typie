@@ -1059,6 +1059,194 @@ class EditorInteractionControllerTest {
     }
 
   @Test
+  fun `three taps separated within the platform timeout select a paragraph`() =
+    runTest(StandardTestDispatcher()) {
+      val selection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 5, Affinity.Downstream),
+        )
+      val fake = FakeFfiEditor(selectionProvider = { selection })
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+        )
+      controller.updateTapSlop(8f)
+      val start = Offset(10f, 20f)
+
+      controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
+      controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 40L)
+      advanceUntilIdle()
+      controller.onPointerDown(pointerId = 2L, position = start, nowMillis = 280L)
+      controller.onPointerUp(pointerId = 2L, position = start, nowMillis = 360L)
+      advanceUntilIdle()
+      controller.onPointerDown(pointerId = 3L, position = start, nowMillis = 600L)
+      controller.onPointerUp(pointerId = 3L, position = start, nowMillis = 680L)
+      advanceUntilIdle()
+
+      assertEquals(
+        listOf(
+          SelectionOp.SetAt(page = 0, x = 10f, y = 20f),
+          SelectionOp.SelectUnitAt(page = 0, x = 10f, y = 20f, unit = SelectionPointUnit.Word),
+          SelectionOp.SelectUnitAt(page = 0, x = 10f, y = 20f, unit = SelectionPointUnit.Paragraph),
+        ),
+        fake.enqueued.filterIsInstance<Message.Selection>().map { it.op },
+      )
+      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.state))
+    }
+
+  @Test
+  fun `triple tap over a narrow word selection handle selects the paragraph`() =
+    runTest(StandardTestDispatcher()) {
+      val selection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 5, Affinity.Downstream),
+        )
+      var endpoints: SelectionEndpoints? = null
+      val fake =
+        FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+        )
+      controller.updateTapSlop(8f)
+      val start = Offset(10f, 20f)
+
+      controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
+      controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 40L)
+      advanceUntilIdle()
+      controller.onPointerDown(pointerId = 2L, position = start, nowMillis = 120L)
+      controller.onPointerUp(pointerId = 2L, position = start, nowMillis = 160L)
+      advanceUntilIdle()
+
+      endpoints = selectionEndpoints()
+      editor.sync {}
+
+      controller.onPointerDown(pointerId = 3L, position = start, nowMillis = 200L)
+      controller.onPointerUp(pointerId = 3L, position = start, nowMillis = 240L)
+      advanceUntilIdle()
+
+      assertEquals(
+        SelectionOp.SelectUnitAt(page = 0, x = 10f, y = 20f, unit = SelectionPointUnit.Paragraph),
+        fake.enqueued.filterIsInstance<Message.Selection>().last().op,
+      )
+      assertFalse(host.scrollGestureLockActive)
+      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.state))
+    }
+
+  @Test
+  fun `selection handle drag from a triple tap candidate clears the tap sequence`() =
+    runTest(StandardTestDispatcher()) {
+      val selection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 5, Affinity.Downstream),
+        )
+      var endpoints: SelectionEndpoints? = null
+      val fake =
+        FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+        )
+      controller.updateTapSlop(8f)
+      val start = Offset(10f, 20f)
+
+      controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
+      controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 40L)
+      advanceUntilIdle()
+      controller.onPointerDown(pointerId = 2L, position = start, nowMillis = 120L)
+      controller.onPointerUp(pointerId = 2L, position = start, nowMillis = 160L)
+      advanceUntilIdle()
+
+      endpoints = selectionEndpoints()
+      editor.sync {}
+
+      controller.onPointerDown(pointerId = 3L, position = start, nowMillis = 200L)
+      controller.onPointerMove(
+        pointerId = 3L,
+        position = start + Offset(12f, 12f),
+        nowMillis = 220L,
+      )
+      controller.onPointerUp(pointerId = 3L, position = start + Offset(12f, 12f), nowMillis = 240L)
+      advanceUntilIdle()
+
+      endpoints = null
+      editor.sync {}
+      fake.enqueued.clear()
+
+      controller.onPointerDown(pointerId = 4L, position = start, nowMillis = 280L)
+      controller.onPointerUp(pointerId = 4L, position = start, nowMillis = 320L)
+      advanceUntilIdle()
+
+      assertEquals(
+        listOf<Message>(Message.Selection(SelectionOp.SetAt(page = 0, x = 10f, y = 20f))),
+        fake.enqueued,
+      )
+    }
+
+  @Test
+  fun `double tap drag clears tap sequence before the next tap`() =
+    runTest(StandardTestDispatcher()) {
+      val selection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 5, Affinity.Downstream),
+        )
+      val fake = FakeFfiEditor(selectionProvider = { selection })
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.sync {}
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+        )
+      controller.updateTapSlop(8f)
+      val start = Offset(10f, 20f)
+
+      controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
+      controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 40L)
+      advanceUntilIdle()
+      controller.onPointerDown(pointerId = 2L, position = start, nowMillis = 120L)
+      advanceUntilIdle()
+      controller.onPointerMove(pointerId = 2L, position = start + Offset(8f, 0f), nowMillis = 140L)
+      controller.onPointerUp(pointerId = 2L, position = start + Offset(8f, 0f), nowMillis = 160L)
+      advanceUntilIdle()
+
+      fake.enqueued.clear()
+      controller.onPointerDown(pointerId = 3L, position = start, nowMillis = 200L)
+      controller.onPointerUp(pointerId = 3L, position = start, nowMillis = 240L)
+      advanceUntilIdle()
+
+      assertEquals(
+        listOf<Message>(Message.Selection(SelectionOp.SetAt(page = 0, x = 10f, y = 20f))),
+        fake.enqueued,
+      )
+    }
+
+  @Test
   fun `double tap drag threshold scales with density`() =
     runTest(StandardTestDispatcher()) {
       val editor = Editor(FakeFfiEditor(), this, StandardTestDispatcher(testScheduler))

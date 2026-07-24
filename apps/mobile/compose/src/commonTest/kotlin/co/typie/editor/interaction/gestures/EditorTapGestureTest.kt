@@ -63,29 +63,29 @@ class EditorTapGestureTest {
   }
 
   @Test
-  fun `double tap clears tap history so third tap dispatches count one`() {
+  fun `consecutive third tap dispatches count three`() {
     val gesture = createTapGesture()
 
     gesture.recordTap(nowMillis = 40L, position = Offset(10f, 20f), clickCount = 1)
     gesture.recordTap(nowMillis = 240L, position = Offset(18f, 26f), clickCount = 2)
 
-    gesture.startPendingTap(pointerId = 3L, position = Offset(20f, 28f))
+    gesture.startPendingTap(pointerId = 3L, position = Offset(20f, 28f), nowMillis = 390L)
 
     assertEquals(
-      1,
-      gesture.onPointerUp(pointerId = 3L, position = Offset(20f, 28f), nowMillis = 390L),
+      3,
+      gesture.onPointerUp(pointerId = 3L, position = Offset(20f, 28f), nowMillis = 430L),
     )
   }
 
   @Test
-  fun `consecutive taps after double tap can form a new double tap`() {
+  fun `committed triple tap resets the next tap to count one`() {
     val gesture = createTapGesture()
 
     gesture.recordTap(nowMillis = 40L, position = Offset(10f, 20f), clickCount = 1)
     gesture.recordTap(nowMillis = 240L, position = Offset(18f, 26f), clickCount = 2)
-    gesture.recordTap(nowMillis = 390L, position = Offset(20f, 28f), clickCount = 1)
+    gesture.recordTap(nowMillis = 390L, position = Offset(20f, 28f), clickCount = 3)
 
-    assertEquals(2, gesture.nextTapCount(position = Offset(22f, 30f), nowMillis = 520L))
+    assertEquals(1, gesture.nextTapCount(position = Offset(22f, 30f), nowMillis = 520L))
   }
 
   @Test
@@ -94,11 +94,11 @@ class EditorTapGestureTest {
 
     gesture.recordTap(nowMillis = 40L, position = Offset(10f, 20f), clickCount = 1)
 
-    gesture.startPendingTap(pointerId = 2L, position = Offset(10f, 20f))
+    gesture.startPendingTap(pointerId = 2L, position = Offset(10f, 20f), nowMillis = 430L)
 
     assertEquals(
       1,
-      gesture.onPointerUp(pointerId = 2L, position = Offset(10f, 20f), nowMillis = 430L),
+      gesture.onPointerUp(pointerId = 2L, position = Offset(10f, 20f), nowMillis = 470L),
     )
   }
 
@@ -131,12 +131,12 @@ class EditorTapGestureTest {
     val gesture = createTapGesture()
 
     gesture.recordTap(nowMillis = 100L, position = Offset.Zero, clickCount = 1)
-    gesture.startPendingTap(pointerId = 2L, position = Offset.Zero)
+    gesture.startPendingTap(pointerId = 2L, position = Offset.Zero, nowMillis = 200L)
 
     assertTrue(gesture.onPointerMove(pointerId = 2L, position = Offset(9f, 0f)))
 
     gesture.onPointerUp(pointerId = 2L, position = Offset(9f, 0f), nowMillis = 560L)
-    gesture.startPendingTap(pointerId = 3L, position = Offset.Zero)
+    gesture.startPendingTap(pointerId = 3L, position = Offset.Zero, nowMillis = 660L)
 
     assertEquals(1, gesture.onPointerUp(pointerId = 3L, position = Offset.Zero, nowMillis = 700L))
   }
@@ -152,8 +152,12 @@ class EditorTapGestureTest {
     assertFalse(gesture.cancelActivePointerStream())
   }
 
-  private fun EditorTapGesture.startPendingTap(pointerId: Long, position: Offset) {
-    startActivePointer(pointerId = pointerId, position = position)
+  private fun EditorTapGesture.startPendingTap(
+    pointerId: Long,
+    position: Offset,
+    nowMillis: Long = 0L,
+  ) {
+    startActivePointer(pointerId = pointerId, position = position, nowMillis = nowMillis)
     markTapPending()
   }
 

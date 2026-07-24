@@ -98,7 +98,15 @@ internal class EditorInteractionGestures(
       } else {
         null
       }
-    if (columnResizePlacement != null || tableHandleHit || selectionHandleType != null) {
+    val tripleTapOnSelectionHandle =
+      tapEnabled &&
+        selectionHandleType != null &&
+        tap.nextTapCount(position = position, nowMillis = nowMillis) == 3
+    if (
+      columnResizePlacement != null ||
+        tableHandleHit ||
+        (selectionHandleType != null && !tripleTapOnSelectionHandle)
+    ) {
       tap.clearTapHistory()
     }
 
@@ -219,7 +227,9 @@ internal class EditorInteractionGestures(
         selectionHandle.shouldStartDrag(type = type, position = position) &&
           !selectionHandle.activeDrag
       ) {
-        selectionHandle.handleDragStart(type = type, position = position)
+        if (selectionHandle.handleDragStart(type = type, position = position)) {
+          tap.clearTapHistory()
+        }
       }
       if (selectionHandle.activeDrag) {
         selectionHandle.handleDragUpdate(type = type, position = position)
