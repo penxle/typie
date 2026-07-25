@@ -12,6 +12,7 @@
   import SpellCheckIcon from '~icons/lucide/spell-check';
   import XIcon from '~icons/lucide/x';
   import { graphql } from '$mearie';
+  import { SubscribeModal } from '../../../@subscription/subscribe-modal.svelte';
   import type { Editor } from '$lib/editor-ffi/editor.svelte';
   import type { DocumentPanelV2_Spellcheck_document$key, DocumentPanelV2_Spellcheck_user$key } from '$mearie';
 
@@ -72,6 +73,7 @@
 
   const runSpellcheck = async () => {
     if (!editor || inflight) return;
+    if (!SubscribeModal.gate('document_spellcheck')) return;
 
     abortController?.abort();
     const controller = new AbortController();

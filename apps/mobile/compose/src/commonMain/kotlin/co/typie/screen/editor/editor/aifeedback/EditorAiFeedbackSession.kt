@@ -342,9 +342,13 @@ internal fun rememberEditorAiFeedbackSession(
     close = ::close,
     rerun = rerun@{
         val activeModel = model ?: return@rerun
-        if (!activeModel.active) return@rerun
-        activeModel.updateExpanded(false)
-        runAnalysis()
+        if (!activeModel.active || activeModel.loading) return@rerun
+        scope.launch {
+          if (!ensureSubscription()) return@launch
+          if (!activeModel.active || activeModel.loading) return@launch
+          activeModel.updateExpanded(false)
+          runAnalysis()
+        }
       },
     activateResult = { id ->
       model?.activate(id)

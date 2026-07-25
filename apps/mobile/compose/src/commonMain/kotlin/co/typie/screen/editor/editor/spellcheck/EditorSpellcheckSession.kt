@@ -330,8 +330,12 @@ internal fun rememberEditorSpellcheckSession(
     rerun = rerun@{
         val activeModel = model ?: return@rerun
         if (!activeModel.active || activeModel.loading) return@rerun
-        activeModel.updateExpanded(false)
-        runCheck()
+        scope.launch {
+          if (!ensureSubscription()) return@launch
+          if (!activeModel.active || activeModel.loading) return@launch
+          activeModel.updateExpanded(false)
+          runCheck()
+        }
       },
     activateResult = { id ->
       model?.activate(id)

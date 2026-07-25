@@ -13,6 +13,7 @@
   import XIcon from '~icons/lucide/x';
   import { pushState } from '$app/navigation';
   import { graphql } from '$mearie';
+  import { SubscribeModal } from '../../../@subscription/subscribe-modal.svelte';
   import type { Editor } from '$lib/editor-ffi/editor.svelte';
   import type { DocumentPanelV2_Ai_document$key, DocumentPanelV2_Ai_user$key } from '$mearie';
 
@@ -39,10 +40,6 @@
       fragment DocumentPanelV2_Ai_user on User {
         id
         preferences
-
-        subscription {
-          id
-        }
       }
     `),
     () => user$key,
@@ -135,6 +132,7 @@
 
   const runAnalysis = async () => {
     if (!editor || inflight) return;
+    if (!SubscribeModal.gate('document_ai_feedback')) return;
 
     inflight = true;
     hasChecked = true;
@@ -373,7 +371,7 @@
 
       <Button onclick={runAnalysis} size="sm" variant="secondary">분석 시작</Button>
     </div>
-  {:else if (hasChecked && checkFailed) || !user.data.subscription}
+  {:else if hasChecked && checkFailed}
     <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '8px', paddingY: '40px' })}>
       <Icon style={css.raw({ color: 'text.faint' })} icon={CircleAlertIcon} size={32} />
       <div class={css({ fontSize: '16px', color: 'text.faint' })}>분석에 실패했습니다</div>
