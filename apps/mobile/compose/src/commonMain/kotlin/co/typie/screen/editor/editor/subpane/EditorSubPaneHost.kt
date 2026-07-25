@@ -29,6 +29,9 @@ internal fun EditorSubPaneHost(
 ) {
   val editor = LocalEditorRuntime.current.editor
   val active = state.active
+  val selection = editor?.tickSelection
+
+  LaunchedEffect(active, selection) { state.dismissTableAxisActionsIfSelectionChanged(selection) }
 
   LaunchedEffect(active, comments.session.model) {
     if (active == EditorSubPane.Comments && comments.session.model == null) {

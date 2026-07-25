@@ -19,6 +19,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
@@ -31,11 +32,13 @@ import co.typie.editor.body.trackEditorInteractionSurfaceBounds
 import co.typie.editor.ffi.Affinity
 import co.typie.editor.ffi.Alignment
 import co.typie.editor.ffi.CursorMetrics
+import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.PageRect
 import co.typie.editor.ffi.Position
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.SelectionEndpoints
 import co.typie.editor.ffi.Size
+import co.typie.editor.ffi.StateField
 import co.typie.editor.ffi.TableBorderStyle
 import co.typie.editor.ffi.TableOverlay
 import co.typie.editor.ffi.TableOverlayCellSelection
@@ -64,6 +67,85 @@ import kotlinx.coroutines.cancel
 
 @OptIn(ExperimentalTestApi::class)
 class EditorOverlayLayoutSynchronizationDesktopTest {
+  @Test
+  fun tableAxisActionRequestUsesPostTickSelectionWhilePublishedStateAwaitsSettle() =
+    runComposeUiTest {
+      val initialPosition = Position("cell-text", 0, Affinity.Downstream)
+      val initialSelection = Selection(anchor = initialPosition, head = initialPosition)
+      val selectedAxis =
+        Selection(
+          anchor = Position("first-cell", 0, Affinity.Downstream),
+          head = Position("last-cell", 1, Affinity.Upstream),
+        )
+      var selection = initialSelection
+      var selectAxisOnNextTick = false
+      val uiState = focusedUiState()
+      val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+      val fake =
+        FakeFfiEditor(
+          onTick = {
+            if (selectAxisOnNextTick) {
+              selectAxisOnNextTick = false
+              selection = selectedAxis
+              listOf(
+                EditorEvent.StateChanged(fields = listOf(StateField.Selection)),
+                EditorEvent.RenderInvalidated,
+              )
+            } else {
+              emptyList()
+            }
+          },
+          selectionProvider = { selection },
+          pageSizesProvider = {
+            listOf(Size(width = 100f, height = 100f), Size(width = 100f, height = 100f))
+          },
+          tableOverlaysProvider = { listOf(tableOverlay()) },
+        )
+      val editor = Editor(fake, scope)
+      editor.sync {}
+      editor.attachSurface(page = 1, handle = 1L, width = 100.0, height = 100.0, scaleFactor = 1.0)
+      var openedSelection: Selection? = null
+
+      try {
+        setContent {
+          CompositionLocalProvider(
+            LocalDensity provides Density(1f),
+            LocalAppColors provides LightColors,
+            LocalAppShadows provides LightAppShadows,
+            LocalThemeMode provides ResolvedThemeMode.Light,
+          ) {
+            Box(Modifier.size(RootSize.dp)) {
+              Box(
+                Modifier.offset {
+                    IntOffset(PageOffsetAtZoomOne.toInt(), PageOffsetAtZoomOne.toInt())
+                  }
+                  .size(PageSizeAtZoomOne.dp)
+                  .editorPagePositionTracker(uiState = uiState, page = 1, density = 1f)
+              )
+              EditorTableAxisSelectionOverlay(
+                editor = editor,
+                uiState = uiState,
+                editorRectInOverlay = { Rect(0f, 0f, RootSize, RootSize) },
+                density = 1f,
+                onTableAxisActionsRequest = { _, selection -> openedSelection = selection },
+              )
+            }
+          }
+        }
+
+        selectAxisOnNextTick = true
+        onNodeWithContentDescription(ColumnMenuDescription).performClick()
+        waitForIdle()
+
+        assertEquals(2, fake.tickCount)
+        assertEquals(initialSelection, editor.selection)
+        assertEquals(selectedAxis, editor.tickSelection)
+        assertEquals(selectedAxis, openedSelection)
+      } finally {
+        scope.cancel()
+      }
+    }
+
   @Test
   fun firstZoomedTableAxisPlacementUsesTheNewPagePosition() = runComposeUiTest {
     val zoom = mutableStateOf(1f)

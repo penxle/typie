@@ -86,7 +86,7 @@ internal fun EditorTableAxisSelectionOverlay(
               selector = selector,
               op = TableOp.SelectAxis(axis = selector.axis, index = selector.index),
             )
-            onTableAxisActionsRequest(selector.toActionsTarget(), editor.selection)
+            onTableAxisActionsRequest(selector.toActionsTarget(), editor.tickSelection)
           },
         )
       }

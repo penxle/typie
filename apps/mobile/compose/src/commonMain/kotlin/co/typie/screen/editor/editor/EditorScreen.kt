@@ -354,9 +354,6 @@ fun EditorScreen(entityId: String) {
   LaunchedEffect(assetHydrator, assetQueryGeneration, externalAssetIds) {
     assetHydrator.resolve(externalAssetIds)
   }
-  LaunchedEffect(subPaneState.active, editorState.selection) {
-    subPaneState.dismissTableAxisActionsIfSelectionChanged(editorState.selection)
-  }
   val bringIntoViewRequests = rememberEditorBringIntoViewRequests()
   val currentEditorReadOnly by rememberUpdatedState(editorReadOnly)
   val attachmentImporter =
