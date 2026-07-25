@@ -11,6 +11,8 @@ internal interface EditorGestureContext {
   val mode: EditorInteractionMode
   val isFocused: Boolean
   val readOnly: Boolean
+  val editing: Boolean
+  val doubleTapToEditEnabled: Boolean
 
   val platform: Platform
 

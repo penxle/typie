@@ -30,6 +30,7 @@ object Preference {
   var typewriterEnabled by prefs("typewriter_enabled", false)
   var typewriterPosition by prefs("typewriter_position", 0.5)
   var lineHighlightEnabled by prefs("line_highlight_enabled", true)
+  var doubleTapToEditEnabled by prefs("double_tap_to_edit_enabled", true)
   var autoSurroundEnabled by prefs("auto_surround_enabled", true)
   var searchMatchWholeWord by prefs("search_match_whole_word", false)
   var characterCountFloatingEnabled by prefs("character_count_floating_enabled", false)

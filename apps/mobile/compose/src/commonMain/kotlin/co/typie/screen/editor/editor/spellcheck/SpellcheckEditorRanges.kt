@@ -131,8 +131,9 @@ internal suspend fun Editor.replaceSpellcheckRangeText(
   id: String,
   expectedText: String,
   replacement: String,
-) {
-  await {
+  admit: () -> Boolean = { true },
+): Boolean =
+  await(admit = admit) {
     enqueue(
       Message.TrackedRange(
         TrackedRangeOp.ReplaceText(id = id, expectedText = expectedText, replacement = replacement)
@@ -140,7 +141,6 @@ internal suspend fun Editor.replaceSpellcheckRangeText(
     )
     enqueue(Message.TrackedRange(TrackedRangeOp.Remove(id = id)))
   }
-}
 
 internal val TrackedRangeEndpoints.isSpellcheckRange: Boolean
   get() = group == SPELLCHECK_RANGE_GROUP || group == ACTIVE_SPELLCHECK_RANGE_GROUP

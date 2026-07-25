@@ -41,6 +41,9 @@ import androidx.compose.ui.node.PointerInputModifierNode
 import androidx.compose.ui.node.currentValueOf
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalViewConfiguration
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -184,6 +187,7 @@ internal fun EditorScreenLayout(
   viewportScrollReconcileMode: EditorViewportScrollReconcileMode,
   onEditorPointerInput: () -> Unit = {},
   onViewportIndirectInput: () -> Unit = {},
+  onRequestEditing: (() -> Boolean)? = null,
   onMeasuredViewportSizeChange: (Size) -> Unit,
   header: @Composable () -> Unit,
   body: @Composable () -> Unit,
@@ -271,6 +275,14 @@ internal fun EditorScreenLayout(
         enabled = platformIndirectScaleEnabled,
         density = density.density,
       )
+  val readingEditSemanticsModifier =
+    if (onRequestEditing == null) {
+      Modifier
+    } else {
+      Modifier.semantics {
+        customActions = listOf(CustomAccessibilityAction(label = "편집") { onRequestEditing() })
+      }
+    }
 
   Box(
     modifier =
@@ -316,6 +328,7 @@ internal fun EditorScreenLayout(
                     EditorViewportNestedScrollConnection,
                     viewportNestedScrollDispatcher,
                   )
+                  .then(readingEditSemanticsModifier)
                   .then(editorInteractionModifier),
               content = {
                 Column {

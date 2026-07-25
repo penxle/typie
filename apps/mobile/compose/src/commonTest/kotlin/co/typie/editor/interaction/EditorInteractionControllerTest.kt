@@ -38,6 +38,7 @@ import co.typie.editor.ffi.TableOverlayCellSelection
 import co.typie.editor.ffi.TableOverlayColumn
 import co.typie.editor.ffi.TableOverlayRow
 import co.typie.editor.ffi.ViewOp
+import co.typie.editor.interaction.gestures.EditorConsecutiveTapMaxIntervalMillis
 import co.typie.editor.interaction.gestures.EditorPanGestureDriver
 import co.typie.editor.interaction.semantics.EditorViewportZoomSemanticConfig
 import co.typie.editor.runtime.EditorContextMenuState
@@ -50,9 +51,12 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -297,7 +301,7 @@ class EditorInteractionControllerTest {
     }
 
   @Test
-  fun `tap timer selection hit guard does not dispatch primary click`() =
+  fun `tap timer selection hit waits for pointer up and tap confirmation before showing menu`() =
     runTest(StandardTestDispatcher()) {
       val rangeSelection =
         Selection(
@@ -324,10 +328,20 @@ class EditorInteractionControllerTest {
 
       controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
       controller.onTapTimer(nowMillis = 250L)
+      runCurrent()
+
+      assertFalse(host.uiState.contextMenu.isVisibleFor(editor.state))
+
       controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 300L)
-      advanceUntilIdle()
+      runCurrent()
+
+      assertFalse(host.uiState.contextMenu.isVisibleFor(editor.state))
+
+      advanceTimeBy(EditorConsecutiveTapMaxIntervalMillis)
+      runCurrent()
 
       assertEquals(emptyList(), fake.enqueued)
+      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.state))
       assertEquals(emptyList(), host.requestedBringIntoViewVersions)
     }
 
@@ -368,7 +382,7 @@ class EditorInteractionControllerTest {
     }
 
   @Test
-  fun `single tap on range selection hit toggles context menu without moving cursor`() =
+  fun `confirmed tap on range selection toggles context menu without moving cursor`() =
     runTest(StandardTestDispatcher()) {
       val rangeSelection =
         Selection(
@@ -395,7 +409,12 @@ class EditorInteractionControllerTest {
 
       controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
       controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 40L)
-      advanceUntilIdle()
+      runCurrent()
+
+      assertFalse(host.uiState.contextMenu.isVisibleFor(editor.state))
+
+      advanceTimeBy(EditorConsecutiveTapMaxIntervalMillis)
+      runCurrent()
 
       assertTrue(host.uiState.contextMenu.isVisibleFor(editor.state))
       assertTrue(host.focused)
@@ -1059,7 +1078,7 @@ class EditorInteractionControllerTest {
     }
 
   @Test
-  fun `three taps separated within the platform timeout select a paragraph`() =
+  fun `single and double tap menus stay hidden while a triple tap remains possible`() =
     runTest(StandardTestDispatcher()) {
       val selection =
         Selection(
@@ -1082,12 +1101,18 @@ class EditorInteractionControllerTest {
 
       controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
       controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 40L)
-      advanceUntilIdle()
-      controller.onPointerDown(pointerId = 2L, position = start, nowMillis = 280L)
-      controller.onPointerUp(pointerId = 2L, position = start, nowMillis = 360L)
-      advanceUntilIdle()
-      controller.onPointerDown(pointerId = 3L, position = start, nowMillis = 600L)
-      controller.onPointerUp(pointerId = 3L, position = start, nowMillis = 680L)
+      runCurrent()
+      assertFalse(host.uiState.contextMenu.isVisibleFor(editor.state))
+
+      advanceTimeBy(100L)
+      controller.onPointerDown(pointerId = 2L, position = start, nowMillis = 140L)
+      controller.onPointerUp(pointerId = 2L, position = start, nowMillis = 180L)
+      runCurrent()
+      assertFalse(host.uiState.contextMenu.isVisibleFor(editor.state))
+
+      advanceTimeBy(100L)
+      controller.onPointerDown(pointerId = 3L, position = start, nowMillis = 280L)
+      controller.onPointerUp(pointerId = 3L, position = start, nowMillis = 320L)
       advanceUntilIdle()
 
       assertEquals(
@@ -1763,6 +1788,8 @@ class EditorInteractionControllerTest {
           override val mode = EditorInteractionMode.Idle
           override val isFocused = host.uiState.focused
           override val readOnly = false
+          override val editing = true
+          override val doubleTapToEditEnabled = true
           override val platform = Platform.Desktop
 
           override fun applyModeEvent(event: EditorInteractionEvent) = Unit
@@ -3638,7 +3665,7 @@ class EditorInteractionControllerTest {
     }
 
   @Test
-  fun `same cursor single tap toggles context menu state`() =
+  fun `same cursor tap closes an existing context menu`() =
     runTest(StandardTestDispatcher()) {
       var cursor = cursorAt(x = 10f)
       val fake =
@@ -3673,6 +3700,7 @@ class EditorInteractionControllerTest {
       assertTrue(host.uiState.contextMenu.isVisibleFor(editor.state))
 
       controller.onPointerDown(pointerId = 2L, position = start, nowMillis = 700L)
+      assertFalse(host.uiState.contextMenu.isVisibleFor(editor.state))
       controller.onTapTimer(nowMillis = 950L)
       controller.onPointerUp(pointerId = 2L, position = start, nowMillis = 1000L)
       advanceUntilIdle()
@@ -3681,7 +3709,7 @@ class EditorInteractionControllerTest {
     }
 
   @Test
-  fun `delayed same cursor tap keeps its pointer down context menu policy`() =
+  fun `later pointer down cancels the older pending same cursor menu`() =
     runTest(StandardTestDispatcher()) {
       val collapsedSelection =
         Selection(
@@ -3716,7 +3744,13 @@ class EditorInteractionControllerTest {
       assertFalse(host.uiState.contextMenu.isVisibleFor(editor.state))
       runCurrent()
 
-      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.state))
+      assertFalse(host.uiState.contextMenu.isVisibleFor(editor.state))
+
+      controller.onTapTimer(nowMillis = 950L)
+      controller.onPointerUp(pointerId = 2L, position = start, nowMillis = 1000L)
+      advanceUntilIdle()
+
+      assertFalse(host.uiState.contextMenu.isVisibleFor(editor.state))
     }
 
   @Test
@@ -3916,6 +3950,7 @@ class EditorInteractionControllerTest {
     EditorInteractionEffects, EditorInteractionGeometry {
     val frameClock = BroadcastFrameClock()
     private var frameTimeNanos = 0L
+    private var tapSequenceConfirmationJob: Job? = null
 
     fun sendFrame() {
       frameTimeNanos += 16_000_000L
@@ -3926,6 +3961,7 @@ class EditorInteractionControllerTest {
     var scheduledTapDispatchAtMillis: Long? = null
     var scheduledLongPressDispatchAtMillis: Long? = null
     var cancelTapDispatchCount = 0
+    var cancelTapSequenceConfirmationCount = 0
     var launchInteractionCount = 0
     var focused = false
     var softwareKeyboardRequestCount = 0
@@ -3996,6 +4032,20 @@ class EditorInteractionControllerTest {
       scheduledTapDispatchAtMillis = null
     }
 
+    override fun scheduleTapSequenceConfirmation(onConfirmed: () -> Unit) {
+      tapSequenceConfirmationJob?.cancel()
+      tapSequenceConfirmationJob = scope.launch {
+        delay(EditorConsecutiveTapMaxIntervalMillis)
+        onConfirmed()
+      }
+    }
+
+    override fun cancelTapSequenceConfirmation() {
+      cancelTapSequenceConfirmationCount += 1
+      tapSequenceConfirmationJob?.cancel()
+      tapSequenceConfirmationJob = null
+    }
+
     override fun scheduleLongPressDispatch(
       pointerId: Long,
       position: Offset,
@@ -4012,6 +4062,10 @@ class EditorInteractionControllerTest {
       launchInteractionCount += 1
       scope.launch(frameClock) { block() }
     }
+
+    override fun requestEditing(editor: Editor): Boolean = false
+
+    override fun showReadingEditHint() = Unit
 
     override fun requestFocus(editor: Editor): Boolean {
       focused = true

@@ -52,6 +52,7 @@ import co.typie.editor.DocumentReloadFailureDecision
 import co.typie.editor.Editor
 import co.typie.editor.EditorLocalChangesetBus
 import co.typie.editor.EditorState
+import co.typie.editor.EditorTapHintOverlay
 import co.typie.editor.LocalEditorZoomController
 import co.typie.editor.body.EditorBody
 import co.typie.editor.body.EditorDocumentLayoutSpec
@@ -64,6 +65,7 @@ import co.typie.editor.ffi.ClipboardOp
 import co.typie.editor.ffi.Direction
 import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.ExternalElementData
+import co.typie.editor.ffi.FlatImeOp
 import co.typie.editor.ffi.HistoryTag
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.Movement
@@ -184,6 +186,7 @@ import co.typie.screen.editor.editor.toolbar.suppressSoftwareKeyboard
 import co.typie.screen.editor.editor.toolbar.textInputSessionEnabledForBottomPanel
 import co.typie.screen.editor.editor.toolbar.trustedImeBottomInset
 import co.typie.screen.editor.editor.topbar.EditorDocumentButton
+import co.typie.screen.editor.editor.topbar.EditorScreenTopBar
 import co.typie.screen.settings.aisettings.AiPreferences
 import co.typie.serialization.json
 import co.typie.storage.Preference
@@ -212,6 +215,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
@@ -240,6 +244,7 @@ fun EditorScreen(entityId: String) {
   val focusReturnSession = remember(entityId) { EditorFocusReturnSession(scope = scope) }
   val runtime = remember(entityId) { EditorRuntime(uiScope = scope) }
   val interactionScope = remember(entityId) { EditorInteractionScope(coroutineScope = scope) }
+  val readingHintEvents = remember(entityId) { MutableSharedFlow<Unit>(extraBufferCapacity = 1) }
   val uiState = remember(entityId) { EditorUiState() }
   val externalElementState = remember(entityId) { EditorExternalElementState() }
   val assetHydrator =
@@ -255,6 +260,12 @@ fun EditorScreen(entityId: String) {
   val document = entity.node.onDocument
   val documentLocked = document?.locked == true
   val editorReadOnly = editorIsReadOnly(documentLocked, SubscriptionService.entitlement)
+  val editingState = rememberEditorScreenEditingState(entityId)
+  val isEditing = editingState.editing
+  var readingModeCleanupRequest by remember(entityId) { mutableStateOf(0) }
+  val directEditingEnabled = editingState.directEditingEnabled(readOnly = editorReadOnly)
+  val currentEditorReadOnly by rememberUpdatedState(editorReadOnly)
+  val currentDirectEditingEnabled by rememberUpdatedState(directEditingEnabled)
   val documentId = model.documentId
   var editorLoadState by remember(entityId) { mutableStateOf<DocumentEditorLoad?>(null) }
   var syncActiveLoadState by remember(entityId) { mutableStateOf<DocumentEditorLoad?>(null) }
@@ -276,11 +287,15 @@ fun EditorScreen(entityId: String) {
     }
   }
   LaunchedEffect(nav.current, entityId, runtime, screenState) {
+    val isForeground = nav.current == Route.Editor(entityId)
     screenState.updateSceneForeground(
-      isForeground = nav.current == Route.Editor(entityId),
+      isForeground = isForeground,
       runtime = runtime,
       uiState = uiState,
     )
+    if (!isForeground) {
+      interactionScope.controller.cancel()
+    }
   }
   LaunchedEffect(document?.nullableTitle, document?.subtitle, loading) {
     model.syncDocument(
@@ -319,12 +334,34 @@ fun EditorScreen(entityId: String) {
     }
   }
   fun requestEditorFocus() {
-    if (nav.current == Route.Editor(entityId)) {
+    if (
+      editingState.directEditingEnabled(currentEditorReadOnly) &&
+        nav.current == Route.Editor(entityId)
+    ) {
       runtime.focus()
     }
   }
   val editor = runtime.editor
+  fun requestEditing(expectedEditor: Editor): Boolean {
+    if (
+      currentEditorReadOnly ||
+        runtime.editor !== expectedEditor ||
+        nav.current != Route.Editor(entityId) ||
+        !screenState.sceneInForeground
+    ) {
+      return false
+    }
+    editingState.enterEditing()
+    return true
+  }
   val editingSession = runtime.session
+  fun canApplyEditorMutation(expectedSession: DocumentEditingSession): Boolean =
+    editingState.directEditingEnabled(currentEditorReadOnly) &&
+      runtime.session === expectedSession &&
+      model.documentId == expectedSession.documentId &&
+      nav.current == Route.Editor(entityId) &&
+      screenState.sceneInForeground
+
   val editorSessionAttached = editingSession != null
   LaunchedEffect(editor) {
     if (editor != null && editor.inputRecorder == null && Preference.devMode) {
@@ -332,6 +369,7 @@ fun EditorScreen(entityId: String) {
     }
   }
   val editorState = editor?.state ?: EditorState.Initial
+  val doubleTapToEditEnabled = Preference.doubleTapToEditEnabled && editorState.placeholder == null
   val externalAssetIds =
     remember(editorState.externalElements) {
       editorState.externalElements
@@ -355,13 +393,14 @@ fun EditorScreen(entityId: String) {
     assetHydrator.resolve(externalAssetIds)
   }
   val bringIntoViewRequests = rememberEditorBringIntoViewRequests()
-  val currentEditorReadOnly by rememberUpdatedState(editorReadOnly)
   val attachmentImporter =
     remember(runtime, externalElementState, bringIntoViewRequests) {
       DefaultEditorAttachmentImporter(
         externalElementState = externalElementState,
         bringIntoViewRequests = bringIntoViewRequests,
-        isSessionCurrent = { session -> runtime.session === session && !currentEditorReadOnly },
+        isSessionCurrent = { session ->
+          runtime.session === session && currentDirectEditingEnabled
+        },
         backgroundScope = scope,
       )
     }
@@ -370,7 +409,9 @@ fun EditorScreen(entityId: String) {
       SessionEditorIncomingContentHandler(
         importer = attachmentImporter,
         bringIntoViewRequests = bringIntoViewRequests,
-        isSessionCurrent = { session -> runtime.session === session && !currentEditorReadOnly },
+        isSessionCurrent = { session ->
+          runtime.session === session && currentDirectEditingEnabled
+        },
         onAttachmentError = { message -> toast.error(message) },
       )
     }
@@ -387,9 +428,11 @@ fun EditorScreen(entityId: String) {
       editingSession = editingSession,
       editorState = editorState,
       bringIntoViewRequests = bringIntoViewRequests,
+      onEditingIntent = ::requestEditing,
+      admitMutation = ::canApplyEditorMutation,
     )
   fun requestEditorFocusIfSelectionActive() {
-    if (editorState.selection != null) {
+    if (isEditing && editorState.selection != null) {
       requestEditorFocus()
     }
   }
@@ -406,7 +449,7 @@ fun EditorScreen(entityId: String) {
       editor = editor,
       focused = uiState.focused,
       selection = editorState.selection,
-      contextActive = screenState.sceneInForeground && !editorReadOnly,
+      contextActive = screenState.sceneInForeground && directEditingEnabled,
       auxiliaryOwnerActive = focusReturnOwnerActive,
     )
   }
@@ -446,6 +489,8 @@ fun EditorScreen(entityId: String) {
       hideContextMenu = { uiState.contextMenu.hide() },
       closeSubPane = subPaneState::dismiss,
       ensureSubscription = ::ensureSpellcheckSubscription,
+      onEditingIntent = ::requestEditing,
+      admitMutation = ::canApplyEditorMutation,
     )
   val aiFeedback =
     rememberEditorAiFeedbackSession(
@@ -462,6 +507,53 @@ fun EditorScreen(entityId: String) {
       ensureSubscription = ::ensureAiFeedbackSubscription,
       ensureAiOptIn = ::ensureAiOptIn,
     )
+  val comments =
+    rememberEditorCommentsSession(
+      entityId = entityId,
+      documentId = document?.id,
+      documentLocked = editorReadOnly,
+      editor = editor,
+      editorState = editorState,
+      sheetActive = subPaneState.active == EditorSubPane.Comments,
+      bringIntoViewRequests = bringIntoViewRequests,
+      hideContextMenu = { uiState.contextMenu.hide() },
+      openSheet = { subPaneState.open(EditorSubPane.Comments) },
+    )
+  suspend fun enterReadingMode() {
+    val transition = editingState.beginReadingTransition() ?: return
+    val activeEditor = runtime.editor
+    val activeDocumentId = model.documentId
+    try {
+      val transitionCurrent = {
+        editingState.isReadingTransitionCurrent(transition) &&
+          runtime.editor === activeEditor &&
+          model.documentId == activeDocumentId &&
+          nav.current == Route.Editor(entityId) &&
+          screenState.sceneInForeground
+      }
+      val finalized =
+        activeEditor?.await(admit = transitionCurrent) {
+          if (activeEditor.tickIme?.composing != null) {
+            enqueue(Message.TextInput(listOf(FlatImeOp.CommitAsIs)))
+          }
+          enqueue(Message.System(SystemEvent.SetFocused(false)))
+        } ?: true
+      if (!finalized || !transitionCurrent()) return
+      model.flushDrafts()
+
+      if (!transitionCurrent()) return
+
+      subPaneState.dismiss()
+      uiState.contextMenu.hide()
+      popoverOverlayState.dismissFromOutsideGesture()
+      interactionScope.controller.cancel()
+      runtime.blur()
+      readingModeCleanupRequest += 1
+      editingState.completeReadingTransition(transition)
+    } finally {
+      editingState.cancelReadingTransition(transition)
+    }
+  }
   fun closeSpellcheckAndRestoreEditorFocus() {
     spellcheck.close()
     requestEditorFocusIfSelectionActive()
@@ -475,79 +567,6 @@ fun EditorScreen(entityId: String) {
       findReplace.active -> findReplace.close()
       spellcheck.active -> closeSpellcheckAndRestoreEditorFocus()
       aiFeedback.active -> closeAiFeedbackAndRestoreEditorFocus()
-    }
-  }
-
-  when {
-    findReplace.active -> {
-      ProvideTopBar(
-        leading = { FindReplaceTopBarLeading(session = findReplace) },
-        leadingKey = FindReplaceTopBarLeadingKey,
-        center = { FindReplaceTopBarCenter(session = findReplace) },
-        centerKey = FindReplaceTopBarCenterKey,
-        trailing = { FindReplaceTopBarTrailing(session = findReplace) },
-        trailingKey = FindReplaceTopBarTrailingKey,
-        scrollOffset = null,
-      )
-    }
-    spellcheck.active -> {
-      ProvideTopBar(
-        leading = { SpellcheckTopBarLeading(session = spellcheck) },
-        leadingKey = SpellcheckTopBarLeadingKey,
-        center = { SpellcheckTopBarCenter(session = spellcheck) },
-        centerKey = SpellcheckTopBarCenterKey,
-        trailing = { SpellcheckTopBarTrailing(session = spellcheck) },
-        trailingKey = SpellcheckTopBarTrailingKey,
-        scrollOffset = null,
-      )
-    }
-    aiFeedback.active -> {
-      ProvideTopBar(
-        leading = { AiFeedbackTopBarLeading(session = aiFeedback) },
-        leadingKey = AiFeedbackTopBarLeadingKey,
-        center = { AiFeedbackTopBarCenter(session = aiFeedback) },
-        centerKey = AiFeedbackTopBarCenterKey,
-        trailing = { AiFeedbackTopBarTrailing(session = aiFeedback) },
-        trailingKey = AiFeedbackTopBarTrailingKey,
-        scrollOffset = null,
-      )
-    }
-    else -> {
-      ProvideTopBar(
-        center = {
-          document?.let {
-            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-              EditorDocumentButton(
-                entityIcon = entity.entityIcon_entity,
-                title = model.headingTitle,
-                subtitle = model.headingSubtitle,
-                loading = loading,
-                onClick = {
-                  val activeEditor = runtime.editor
-                  val target = Route.Document(entityId)
-                  var delivered = false
-                  try {
-                    DocumentCharacterCountSnapshots.put(entityId, activeEditor?.characterCounts())
-                    screenState.prepareToLeaveEditorScene(
-                      runtime = runtime,
-                      uiState = uiState,
-                      flushDrafts = { model.flush() },
-                    )
-                    delivered = nav.navigate(target) is NavigationResult.ReachedTarget
-                  } finally {
-                    if (!delivered) {
-                      DocumentCharacterCountSnapshots.remove(entityId)
-                    }
-                  }
-                },
-                modifier =
-                  Modifier.fillMaxWidth().widthIn(max = ResponsiveContainerDefaults.MaxWidth),
-              )
-            }
-          }
-        },
-        scrollOffset = null,
-      )
     }
   }
 
@@ -1030,18 +1049,6 @@ fun EditorScreen(entityId: String) {
       )
     },
   ) { innerPadding ->
-    val comments =
-      rememberEditorCommentsSession(
-        entityId = entityId,
-        documentId = document?.id,
-        documentLocked = editorReadOnly,
-        editor = editor,
-        editorState = editorState,
-        sheetActive = subPaneState.active == EditorSubPane.Comments,
-        bringIntoViewRequests = bringIntoViewRequests,
-        hideContextMenu = { uiState.contextMenu.hide() },
-        openSheet = { subPaneState.open(EditorSubPane.Comments) },
-      )
     val layoutPageSizes = layoutEditor?.pageSizes.orEmpty()
     val density = LocalDensity.current.density
     val focusManager = LocalFocusManager.current
@@ -1072,7 +1079,7 @@ fun EditorScreen(entityId: String) {
         screenState.sceneInForeground &&
         !subPaneBlocksEditorInput &&
         !findReplace.active &&
-        !editorReadOnly
+        directEditingEnabled
     val findReplaceToolbarVisible =
       screenState.sceneInForeground && !subPaneBlocksEditorInput && findReplace.active
     val findReplaceToolbarTransition = remember {
@@ -1091,21 +1098,169 @@ fun EditorScreen(entityId: String) {
         panelTransitionRunning = panelTransitionRunning,
       )
     fun performInputEffects(effects: List<EditorInputEffect>) {
-      effects.forEach { effect ->
-        when (effect) {
-          EditorInputEffect.ShowKeyboard -> keyboardController?.show()
-          EditorInputEffect.HideKeyboard -> keyboardController?.hide()
-          EditorInputEffect.RequestFocus -> requestEditorFocus()
-          EditorInputEffect.ClearFocus -> focusManager.clearFocus(force = true)
-        }
-      }
+      performEditorInputEffects(
+        effects = effects,
+        showKeyboard = { keyboardController?.show() },
+        hideKeyboard = { keyboardController?.hide() },
+        requestFocus = ::requestEditorFocus,
+        clearFocus = { focusManager.clearFocus(force = true) },
+        enterReadingMode = { scope.launch { enterReadingMode() } },
+      )
     }
-    fun openFindReplace() {
+    fun openFindReplace(resetEditorInput: Boolean = true) {
       aiFeedback.close()
       spellcheck.close()
       uiState.contextMenu.hide()
-      performInputEffects(toolbarInputState.dispatch(ToolbarIntent.Reset, toolbarInputEnvironment))
+      if (resetEditorInput) {
+        performInputEffects(
+          toolbarInputState.dispatch(ToolbarIntent.Reset, toolbarInputEnvironment)
+        )
+      }
       findReplace.open()
+    }
+    val devMode = Preference.devMode
+    val debugOverlays =
+      if (devMode) {
+        EditorToolbarDebugOverlays(
+          viewportVisible = model.debugViewportOverlayVisible,
+          bodyVisible = model.debugBodyOverlayVisible,
+          surfaceVisible = model.debugSurfaceOverlayVisible,
+          inputLogAvailable = editor?.inputRecorder != null,
+        )
+      } else {
+        null
+      }
+    fun performToolAction(action: EditorToolbarToolAction, restoreEditorInput: Boolean) {
+      when (action) {
+        EditorToolbarToolAction.Search -> openFindReplace(resetEditorInput = restoreEditorInput)
+        EditorToolbarToolAction.RelatedNotes -> {
+          findReplace.close()
+          aiFeedback.close()
+          spellcheck.close()
+          uiState.contextMenu.hide()
+          subPaneState.open(EditorSubPane.RelatedNotes)
+        }
+        EditorToolbarToolAction.Comment -> {
+          findReplace.close()
+          aiFeedback.close()
+          spellcheck.close()
+          comments.openFromToolPanel()
+        }
+        EditorToolbarToolAction.Spellcheck -> {
+          findReplace.close()
+          aiFeedback.close()
+          spellcheck.openFromToolPanel()
+          if (restoreEditorInput) {
+            performInputEffects(
+              toolbarInputState.dispatch(ToolbarIntent.RestoreEditorInput, toolbarInputEnvironment)
+            )
+          }
+        }
+        EditorToolbarToolAction.AiFeedback -> {
+          aiFeedback.openFromToolPanel()
+        }
+        EditorToolbarToolAction.Timeline -> {
+          toast.show(ToastType.Notification, "타임라인 기능은 아직 준비 중이에요.")
+        }
+        EditorToolbarToolAction.DebugViewportOverlay -> model.toggleDebugViewportOverlay()
+        EditorToolbarToolAction.DebugBodyOverlay -> model.toggleDebugBodyOverlay()
+        EditorToolbarToolAction.DebugSurfaceOverlay -> model.toggleDebugSurfaceOverlay()
+        EditorToolbarToolAction.SendInputLog -> {
+          val recorder = editor?.inputRecorder
+          if (recorder != null) {
+            scope.launch {
+              val name = sheet.present<String> { InputLogSendSheet() } ?: return@launch
+              val payload = buildInputLogPayload(name = name, entries = recorder.snapshot())
+              try {
+                sendInputLog(payload)
+                toast.show(ToastType.Success, "입력 로그를 보냈어요.")
+              } catch (e: CancellationException) {
+                throw e
+              } catch (_: Exception) {
+                toast.show(ToastType.Error, "입력 로그 전송에 실패했어요.")
+              }
+            }
+          }
+        }
+      }
+    }
+
+    when {
+      findReplace.active -> {
+        ProvideTopBar(
+          leading = { FindReplaceTopBarLeading(session = findReplace) },
+          leadingKey = FindReplaceTopBarLeadingKey,
+          center = { FindReplaceTopBarCenter(session = findReplace) },
+          centerKey = FindReplaceTopBarCenterKey,
+          trailing = { FindReplaceTopBarTrailing(session = findReplace) },
+          trailingKey = FindReplaceTopBarTrailingKey,
+          scrollOffset = null,
+        )
+      }
+      spellcheck.active -> {
+        ProvideTopBar(
+          leading = { SpellcheckTopBarLeading(session = spellcheck) },
+          leadingKey = SpellcheckTopBarLeadingKey,
+          center = { SpellcheckTopBarCenter(session = spellcheck) },
+          centerKey = SpellcheckTopBarCenterKey,
+          trailing = { SpellcheckTopBarTrailing(session = spellcheck) },
+          trailingKey = SpellcheckTopBarTrailingKey,
+          scrollOffset = null,
+        )
+      }
+      aiFeedback.active -> {
+        ProvideTopBar(
+          leading = { AiFeedbackTopBarLeading(session = aiFeedback) },
+          leadingKey = AiFeedbackTopBarLeadingKey,
+          center = { AiFeedbackTopBarCenter(session = aiFeedback) },
+          centerKey = AiFeedbackTopBarCenterKey,
+          trailing = { AiFeedbackTopBarTrailing(session = aiFeedback) },
+          trailingKey = AiFeedbackTopBarTrailingKey,
+          scrollOffset = null,
+        )
+      }
+      else -> {
+        EditorScreenTopBar(
+          editing = isEditing,
+          debugOverlays = debugOverlays,
+          documentButton = { modifier ->
+            document?.let {
+              Box(modifier = modifier, contentAlignment = Alignment.Center) {
+                EditorDocumentButton(
+                  entityIcon = entity.entityIcon_entity,
+                  title = model.headingTitle,
+                  subtitle = model.headingSubtitle,
+                  loading = loading,
+                  onClick = {
+                    val activeEditor = runtime.editor
+                    val target = Route.Document(entityId)
+                    var delivered = false
+                    try {
+                      DocumentCharacterCountSnapshots.put(entityId, activeEditor?.characterCounts())
+                      screenState.prepareToLeaveEditorScene(
+                        runtime = runtime,
+                        uiState = uiState,
+                        flushDrafts = { model.flush() },
+                      )
+                      delivered = nav.navigate(target) is NavigationResult.ReachedTarget
+                    } finally {
+                      if (!delivered) {
+                        DocumentCharacterCountSnapshots.remove(entityId)
+                      }
+                    }
+                  },
+                  modifier =
+                    Modifier.fillMaxWidth().widthIn(max = ResponsiveContainerDefaults.MaxWidth),
+                )
+              }
+            }
+          },
+          onToolAction = { action ->
+            performToolAction(action = action, restoreEditorInput = false)
+          },
+          onEnterReadingMode = ::enterReadingMode,
+        )
+      }
     }
     val screenShortcutContext =
       EditorScreenShortcutContext(
@@ -1119,13 +1274,14 @@ fun EditorScreen(entityId: String) {
       )
     val screenShortcutActions =
       EditorScreenShortcutActions(
-        openFindReplace = ::openFindReplace,
+        openFindReplace = { openFindReplace() },
         closeFindReplace = findReplace.close,
         closeSpellcheck = ::closeSpellcheckAndRestoreEditorFocus,
         closeAiFeedback = ::closeAiFeedbackAndRestoreEditorFocus,
       )
     suspend fun openTemplateSheet() {
       val activeEditor = runtime.editor ?: return
+      if (!requestEditing(activeEditor)) return
       runtime.blur()
       focusManager.clearFocus(force = true)
       uiState.contextMenu.hide()
@@ -1140,8 +1296,8 @@ fun EditorScreen(entityId: String) {
         performInputEffects(listOf(EditorInputEffect.HideKeyboard))
       }
     }
-    LaunchedEffect(aiFeedback.active) {
-      if (aiFeedback.active) {
+    LaunchedEffect(aiFeedback.active, isEditing) {
+      if (aiFeedback.active && isEditing) {
         performInputEffects(
           toolbarInputState.dispatch(ToolbarIntent.RestoreEditorInput, toolbarInputEnvironment)
         )
@@ -1168,7 +1324,6 @@ fun EditorScreen(entityId: String) {
     val imeAppearing = !previousImeVisible.value && imeVisible
     val toolbarRetainedKeyboardInset = toolbarInputState.retainedKeyboardInset()
     val toolbarRestoreInset = toolbarInputState.keyboardRestoreInset
-    val popoverOverlayState = LocalPopoverOverlayState.current
     val toolbarPresented =
       isEditorToolbarPresented(
         environment = toolbarInputEnvironment,
@@ -1233,7 +1388,6 @@ fun EditorScreen(entityId: String) {
       }
     val typewriterEnabled = Preference.typewriterEnabled
     val typewriterPosition = Preference.typewriterPosition.toFloat()
-    val devMode = Preference.devMode
     val displayZoom = zoomController.displayZoom
     val typewriterTargetLineHeight =
       resolveBringIntoViewTargetHeight(
@@ -1252,7 +1406,7 @@ fun EditorScreen(entityId: String) {
         maxOf(toolbarBottomOcclusion.value, findReplaceToolbarOcclusion).value.coerceAtLeast(0f)
       }
     val repasteAsTextVisible =
-      !editorReadOnly &&
+      directEditingEnabled &&
         uiState.focused &&
         editorState.selection != null &&
         editorState.lastHistoryTag is HistoryTag.PasteHtml
@@ -1276,18 +1430,41 @@ fun EditorScreen(entityId: String) {
     val visibleArea = visibleAreas.editor
     LaunchedEffect(editorReadOnly) {
       if (!editorReadOnly) return@LaunchedEffect
-      // 세션 중 강등: 열린 보조 모드를 닫고 포커스·키보드를 안전 복구한다.
+      editingState.enterReading()
+      readingModeCleanupRequest += 1
       findReplace.close()
       spellcheck.close()
       aiFeedback.close()
       subPaneState.dismiss()
       uiState.contextMenu.hide()
-      if (uiState.focused) {
-        runtime.blur()
-        uiState.updateFocus(false)
-        runtime.editor?.sync { enqueue(Message.System(SystemEvent.SetFocused(false))) }
+      popoverOverlayState.dismissFromOutsideGesture()
+    }
+    LaunchedEffect(editor, directEditingEnabled) {
+      if (!editingState.shouldRunReadingCleanup(editorReadOnly)) return@LaunchedEffect
+      val activeEditor = editor ?: return@LaunchedEffect
+      val cleaned =
+        activeEditor.await(
+          admit = {
+            runtime.editor === activeEditor && editingState.shouldRunReadingCleanup(editorReadOnly)
+          }
+        ) {
+          if (activeEditor.tickIme?.composing != null) {
+            enqueue(Message.TextInput(listOf(FlatImeOp.CommitAsIs)))
+          }
+          enqueue(Message.System(SystemEvent.SetFocused(false)))
+        }
+      if (!cleaned) return@LaunchedEffect
+      if (
+        runtime.editor !== activeEditor || !editingState.shouldRunReadingCleanup(editorReadOnly)
+      ) {
+        return@LaunchedEffect
       }
+      interactionScope.controller.cancel()
+      runtime.blur()
+      performInputEffects(toolbarInputState.dispatch(ToolbarIntent.Reset, toolbarInputEnvironment))
+      focusManager.clearFocus(force = true)
       keyboardController?.hide()
+      uiState.updateFocus(false)
     }
     LaunchedEffect(imeVisible, bottomPanelOpen) { previousImeVisible.value = imeVisible }
     LaunchedEffect(layoutSpec, visibleArea.visibleBodySize.width) {
@@ -1425,9 +1602,18 @@ fun EditorScreen(entityId: String) {
         layoutSpec = layoutSpec,
         pointerInputEnabled = { editorInteractionEnabled },
         readOnly = { editorReadOnly },
+        editing = { isEditing },
+        doubleTapToEditEnabled = { doubleTapToEditEnabled },
+        onRequestEditing = ::requestEditing,
+        onShowReadingEditHint = { readingHintEvents.tryEmit(Unit) },
         onSelectionHaptic = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) },
         onRequestSoftwareKeyboard = {
-          if (editorReady && editorInputEnabledByToolbar && !editorSuppressesSoftwareKeyboard) {
+          if (
+            editingState.directEditingEnabled(editorReadOnly) &&
+              editorReady &&
+              editorInputEnabledByToolbar &&
+              !editorSuppressesSoftwareKeyboard
+          ) {
             keyboardController?.show()
           }
         },
@@ -1477,6 +1663,21 @@ fun EditorScreen(entityId: String) {
         viewportScrollReconcileMode = viewportScrollReconcileMode,
         onEditorPointerInput = { toolbarPagerState.dismissIndicator() },
         onViewportIndirectInput = { uiState.contextMenu.hide() },
+        onRequestEditing =
+          if (!isEditing && !editorReadOnly) {
+            {
+              val activeEditor = runtime.editor
+              if (activeEditor != null && requestEditing(activeEditor)) {
+                activeEditor.focus()
+                keyboardController?.show()
+                true
+              } else {
+                false
+              }
+            }
+          } else {
+            null
+          },
         onMeasuredViewportSizeChange = { viewport ->
           val editor = runtime.editor
           if (editor != null && viewport.width > 0f && viewport.height > 0f) {
@@ -1504,7 +1705,11 @@ fun EditorScreen(entityId: String) {
               title = model.titleDraft,
               subtitle = model.subtitleDraft,
               loading = false,
-              enabled = editorReady && !editorReadOnly,
+              enabled = editorReady && !editorReadOnly && screenState.sceneInForeground,
+              editing = isEditing,
+              doubleTapToEditEnabled = doubleTapToEditEnabled,
+              readingTapIdentity = editor,
+              readingModeCleanupRequest = readingModeCleanupRequest,
               showBottomDivider = layoutSpec is EditorDocumentLayoutSpec.Continuous,
               topInset = topInset,
               subtitleFocusRequestVersion = subtitleFocusRequestVersion.value,
@@ -1513,6 +1718,11 @@ fun EditorScreen(entityId: String) {
               onTitleFocused = entryState::markTitleFocused,
               onSubtitleFocused = entryState::markSubtitleFocused,
               onHeightChanged = screenState::updateHeaderHeight,
+              onRequestEditing = {
+                val activeEditor = editor
+                activeEditor != null && requestEditing(activeEditor)
+              },
+              onReadingEditHint = { readingHintEvents.tryEmit(Unit) },
               onEnterDocument = {
                 model.flushDraftsAsync()
                 enterDocumentStartFromHeader(
@@ -1535,6 +1745,16 @@ fun EditorScreen(entityId: String) {
           }
         },
         viewportOverlay = {
+          if (
+            screenState.sceneInForeground && !isEditing && !editorReadOnly && doubleTapToEditEnabled
+          ) {
+            EditorTapHintOverlay(
+              events = readingHintEvents,
+              text = "편집하려면 더블 탭",
+              hazeState = LocalHazeState.current,
+              visibleArea = visibleArea,
+            )
+          }
           if (editorReady) {
             EditorZoomOverlay(
               modifier =
@@ -1563,19 +1783,20 @@ fun EditorScreen(entityId: String) {
                 viewportState = screenState.viewportState,
                 visibleArea = visibleArea,
                 autoScrollPolicy = autoScrollPolicy,
-                onTableAxisActionsRequest = { target, openedSelection ->
-                  findReplace.close()
-                  aiFeedback.close()
-                  spellcheck.close()
-                  uiState.contextMenu.hide()
-                  subPaneState.open(
-                    EditorSubPane.TableAxisActions(
-                      target = target,
-                      openedSelection = openedSelection,
+                onTableAxisActionsRequest = tableAxisActions@{ target, openedSelection ->
+                    if (!directEditingEnabled) return@tableAxisActions
+                    findReplace.close()
+                    aiFeedback.close()
+                    spellcheck.close()
+                    uiState.contextMenu.hide()
+                    subPaneState.open(
+                      EditorSubPane.TableAxisActions(
+                        target = target,
+                        openedSelection = openedSelection,
+                      )
                     )
-                  )
-                },
-                editorReadOnly = editorReadOnly,
+                  },
+                editorMutationEnabled = directEditingEnabled,
                 showDebugOverlay = devMode && model.debugViewportOverlayVisible,
                 modifier = Modifier.fillMaxSize(),
               )
@@ -1593,19 +1814,20 @@ fun EditorScreen(entityId: String) {
               EditorRepasteAsTextOverlay(
                 visibleArea = visibleAreas.base,
                 visible = repasteAsTextVisible,
-                onRepasteAsText = {
-                  activeSession.submit { activeEditor, context ->
-                    activeEditor.scope.launch(context) {
-                      activeEditor.awaitWithBringIntoView(bringIntoViewRequests) {
-                        enqueue(Message.Clipboard(ClipboardOp.RepasteAsText))
-                        beforeCommit {
-                          bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
+                onRepasteAsText = repasteAsText@{
+                    if (!directEditingEnabled) return@repasteAsText
+                    activeSession.submit { activeEditor, context ->
+                      activeEditor.scope.launch(context) {
+                        activeEditor.awaitWithBringIntoView(bringIntoViewRequests) {
+                          enqueue(Message.Clipboard(ClipboardOp.RepasteAsText))
+                          beforeCommit {
+                            bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
+                          }
                         }
                       }
                     }
-                  }
-                  activeSession.editor.focus()
-                },
+                    activeSession.editor.focus()
+                  },
                 modifier = Modifier.fillMaxSize(),
               )
             }
@@ -1620,9 +1842,10 @@ fun EditorScreen(entityId: String) {
               layoutSpec = layoutSpec,
               autoScrollPolicy = autoScrollPolicy,
               modifier = Modifier,
-              editorInputEnabled = editorReady && editorInputEnabledByToolbar && !editorReadOnly,
+              editorInputEnabled =
+                editorReady && editorInputEnabledByToolbar && directEditingEnabled,
               suppressSoftwareKeyboard =
-                !editorReady || editorSuppressesSoftwareKeyboard || editorReadOnly,
+                !editorReady || editorSuppressesSoftwareKeyboard || !directEditingEnabled,
               showDebugBodyOverlay = devMode && model.debugBodyOverlayVisible,
               showDebugSurfaceOverlay = devMode && model.debugSurfaceOverlayVisible,
               overlay = {
@@ -1670,73 +1893,11 @@ fun EditorScreen(entityId: String) {
             fontFamilies = model.toolbarFontFamilies,
             sessionState = toolbarSessionState,
             commentEnabled = comments.toolbarEnabled,
-            debugOverlays =
-              if (devMode) {
-                EditorToolbarDebugOverlays(
-                  viewportVisible = model.debugViewportOverlayVisible,
-                  bodyVisible = model.debugBodyOverlayVisible,
-                  surfaceVisible = model.debugSurfaceOverlayVisible,
-                  inputLogAvailable = editor?.inputRecorder != null,
-                )
-              } else {
-                null
-              },
+            debugOverlays = debugOverlays,
             onCommentRequest = comments.requestFromTextToolbar,
             onInputEffects = ::performInputEffects,
             onToolAction = { action ->
-              when (action) {
-                EditorToolbarToolAction.Search -> openFindReplace()
-                EditorToolbarToolAction.RelatedNotes -> {
-                  findReplace.close()
-                  aiFeedback.close()
-                  spellcheck.close()
-                  uiState.contextMenu.hide()
-                  subPaneState.open(EditorSubPane.RelatedNotes)
-                }
-                EditorToolbarToolAction.Comment -> {
-                  findReplace.close()
-                  aiFeedback.close()
-                  spellcheck.close()
-                  comments.openFromToolPanel()
-                }
-                EditorToolbarToolAction.Spellcheck -> {
-                  findReplace.close()
-                  aiFeedback.close()
-                  spellcheck.openFromToolPanel()
-                  performInputEffects(
-                    toolbarInputState.dispatch(
-                      ToolbarIntent.RestoreEditorInput,
-                      toolbarInputEnvironment,
-                    )
-                  )
-                }
-                EditorToolbarToolAction.AiFeedback -> {
-                  aiFeedback.openFromToolPanel()
-                }
-                EditorToolbarToolAction.Timeline -> {
-                  toast.show(ToastType.Notification, "타임라인 기능은 아직 준비 중이에요.")
-                }
-                EditorToolbarToolAction.DebugViewportOverlay -> model.toggleDebugViewportOverlay()
-                EditorToolbarToolAction.DebugBodyOverlay -> model.toggleDebugBodyOverlay()
-                EditorToolbarToolAction.DebugSurfaceOverlay -> model.toggleDebugSurfaceOverlay()
-                EditorToolbarToolAction.SendInputLog -> {
-                  val recorder = editor?.inputRecorder
-                  if (recorder != null) {
-                    scope.launch {
-                      val name = sheet.present<String> { InputLogSendSheet() } ?: return@launch
-                      val payload = buildInputLogPayload(name = name, entries = recorder.snapshot())
-                      try {
-                        sendInputLog(payload)
-                        toast.show(ToastType.Success, "입력 로그를 보냈어요.")
-                      } catch (e: CancellationException) {
-                        throw e
-                      } catch (_: Exception) {
-                        toast.show(ToastType.Error, "입력 로그 전송에 실패했어요.")
-                      }
-                    }
-                  }
-                }
-              }
+              performToolAction(action = action, restoreEditorInput = true)
             },
             modifier = Modifier,
           )

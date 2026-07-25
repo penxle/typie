@@ -5,4 +5,5 @@ internal enum class EditorInputEffect {
   HideKeyboard,
   RequestFocus,
   ClearFocus,
+  EnterReadingMode,
 }

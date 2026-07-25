@@ -76,14 +76,26 @@ class EditorContextMenuOverlayDesktopTest {
   }
 
   @Test
-  fun readOnlyMenuHidesCutAndPasteButKeepsCopyAndExpansion() = runComposeUiTest {
-    setMenuContent(editorReadOnly = true)
+  fun disabledMutationMenuHidesCutAndPasteButKeepsCopyAndExpansion() = runComposeUiTest {
+    setMenuContent(editorMutationEnabled = false)
 
     waitForIdle()
 
     assertEquals(1, onAllNodesWithText("복사").fetchSemanticsNodes().size)
     assertEquals(0, onAllNodesWithText("잘라내기").fetchSemanticsNodes().size)
     assertEquals(0, onAllNodesWithText("붙여넣기").fetchSemanticsNodes().size)
+    assertEquals(1, onAllNodesWithText("선택 확장").fetchSemanticsNodes().size)
+  }
+
+  @Test
+  fun enabledMutationMenuKeepsCompletePrimaryMenu() = runComposeUiTest {
+    setMenuContent(editorMutationEnabled = true)
+
+    waitForIdle()
+
+    assertEquals(1, onAllNodesWithText("복사").fetchSemanticsNodes().size)
+    assertEquals(1, onAllNodesWithText("잘라내기").fetchSemanticsNodes().size)
+    assertEquals(1, onAllNodesWithText("붙여넣기").fetchSemanticsNodes().size)
     assertEquals(1, onAllNodesWithText("선택 확장").fetchSemanticsNodes().size)
   }
 
@@ -139,7 +151,7 @@ class EditorContextMenuOverlayDesktopTest {
 
   private fun androidx.compose.ui.test.ComposeUiTest.setMenuContent(
     showCopyCutActions: Boolean = true,
-    editorReadOnly: Boolean = false,
+    editorMutationEnabled: Boolean = true,
     onCopy: () -> Unit = {},
     onCut: () -> Unit = {},
     onPaste: () -> Unit = {},
@@ -161,7 +173,7 @@ class EditorContextMenuOverlayDesktopTest {
           overlaySize = Size(width = 400f, height = 700f),
           visibleArea = EditorVisibleArea(viewport = Size(width = 400f, height = 700f)),
           showCopyCutActions = showCopyCutActions,
-          editorReadOnly = editorReadOnly,
+          editorMutationEnabled = editorMutationEnabled,
           availableExpansionUnits = availableExpansionUnits,
           onCopy = onCopy,
           onCut = onCut,

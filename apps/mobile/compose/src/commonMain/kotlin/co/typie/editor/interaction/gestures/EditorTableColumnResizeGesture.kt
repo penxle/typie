@@ -29,7 +29,7 @@ internal class EditorTableColumnResizeGesture {
   }
 
   fun hitTest(position: Offset, context: EditorGestureContext): EditorTableColumnResizePlacement? =
-    if (context.readOnly) {
+    if (context.readOnly || !context.editing) {
       null
     } else {
       resolveTableColumnResizePlacement(editor = context.editor, geometry = context.geometry)
@@ -52,6 +52,7 @@ internal class EditorTableColumnResizeGesture {
     currentPosition = position
     dragging = false
     context.effects.cancelTapDispatch()
+    context.effects.cancelTapSequenceConfirmation()
     context.effects.cancelLongPressDispatch()
     context.semantics.tableColumnResize.press(editor = context.editor, placement = placement)
     context.semantics.contextMenu.hide()

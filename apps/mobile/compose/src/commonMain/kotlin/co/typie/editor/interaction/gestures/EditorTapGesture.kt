@@ -1,13 +1,16 @@
 package co.typie.editor.interaction.gestures
 
 import androidx.compose.ui.geometry.Offset
+import co.typie.editor.Editor
 import co.typie.editor.EditorState
 import co.typie.editor.ext.isCollapsed
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.InputModifiers
+import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.SelectionPointUnit
 import co.typie.editor.interaction.EditorGestureContext
 import co.typie.editor.interaction.isViewportZooming
+import co.typie.editor.interaction.semantics.EditorInteractiveTapResult
 import co.typie.editor.interaction.sessions.EditorDoubleTapDragSession
 import co.typie.platform.Platform
 
@@ -16,16 +19,24 @@ private const val EditorTapTimerDelayMillis = 150L
 internal const val EditorTapDispatchDelayMillis =
   EditorTapDownDelayMillis + EditorTapTimerDelayMillis
 
-private const val ConsecutiveTapMaxIntervalMillis = 300L
+internal const val EditorConsecutiveTapMaxIntervalMillis = 300L
 private const val ConsecutiveTapMaxDistanceDp = 20f
+
+internal data class EditorCompletedTap(
+  val count: Int,
+  val contentAlreadyDispatched: Boolean,
+  val recordInHistory: Boolean,
+)
 
 internal class EditorTapGesture(
   private var tapSlopPx: Float,
   private val densityProvider: () -> Float,
-  private val consecutiveTapMaxIntervalMillis: Long = ConsecutiveTapMaxIntervalMillis,
+  private val consecutiveTapMaxIntervalMillis: Long = EditorConsecutiveTapMaxIntervalMillis,
 ) {
   private var activeTap: ActiveTap? = null
   private var tapHistory: TapHistory? = null
+  private var pendingPresentation: PendingTapPresentation? = null
+  private var nextPresentationGeneration = 0L
 
   val hasActivePointer: Boolean
     get() = activeTap != null
@@ -35,6 +46,9 @@ internal class EditorTapGesture(
 
   val inputModifiersForActivePointer: InputModifiers
     get() = activeTap?.inputModifiers ?: InputModifiers()
+
+  val shouldOpenContextMenuForActivePointer: Boolean
+    get() = activeTap?.contextMenuWasVisibleAtPointerDown == false
 
   val tapCountForActivePointer: Int?
     get() = activeTap?.count
@@ -93,7 +107,7 @@ internal class EditorTapGesture(
     position: Offset,
     nowMillis: Long,
     canFinish: Boolean = true,
-  ): Int? {
+  ): EditorCompletedTap? {
     val tap = activeTap
     if (tap == null || tap.pointerId != pointerId) {
       return null
@@ -103,12 +117,21 @@ internal class EditorTapGesture(
       return null
     }
 
-    val clickCount = if (tap.phase == ActiveTapPhase.Pending) tap.count else null
-    if (tap.phase == ActiveTapPhase.Recorded) {
-      recordTap(nowMillis = nowMillis, position = position, clickCount = tap.count)
+    if (tap.phase == ActiveTapPhase.Moved) {
+      clearActivePointer()
+      return null
+    }
+    val completed =
+      EditorCompletedTap(
+        count = tap.semanticCount,
+        contentAlreadyDispatched = tap.phase == ActiveTapPhase.Dispatched,
+        recordInHistory = tap.recordInHistory,
+      )
+    if (completed.recordInHistory) {
+      recordTap(nowMillis = nowMillis, position = position, clickCount = completed.count)
     }
     clearActivePointer()
-    return clickCount
+    return completed
   }
 
   fun cancelActivePointerStream(): Boolean {
@@ -120,6 +143,7 @@ internal class EditorTapGesture(
   fun reset() {
     clearActivePointer()
     clearTapHistory()
+    pendingPresentation = null
   }
 
   private fun clearActivePointer() {
@@ -127,11 +151,6 @@ internal class EditorTapGesture(
   }
 
   fun recordTap(nowMillis: Long, position: Offset, clickCount: Int) {
-    activeTap?.let { tap ->
-      if (clickCount == tap.count && tap.phase != ActiveTapPhase.Moved) {
-        tap.phase = ActiveTapPhase.Recorded
-      }
-    }
     if (clickCount >= 3) {
       clearTapHistory()
       return
@@ -143,9 +162,112 @@ internal class EditorTapGesture(
     tapHistory = null
   }
 
-  fun shouldOpenContextMenuForCurrentTap(): Boolean {
-    val tap = activeTap ?: return false
-    return !tap.contextMenuWasVisibleAtPointerDown
+  fun prepareActiveTapForEditingPromotion() {
+    activeTap?.let { tap ->
+      tap.semanticCount = 1
+      tap.recordInHistory = false
+      tap.preservePresentationAcrossEditingPromotion = true
+      if (tap.phase == ActiveTapPhase.Pending) {
+        tap.phase = ActiveTapPhase.Dispatched
+      }
+    }
+  }
+
+  fun shouldPreservePresentationAfterEditingPromotion(): Boolean =
+    activeTap?.preservePresentationAcrossEditingPromotion == true
+
+  fun beginPendingPresentation(
+    editor: Editor,
+    expectedEditing: Boolean,
+    tapCount: Int,
+    showReadingHint: Boolean,
+    context: EditorGestureContext,
+  ): Long {
+    cancelPendingPresentation(context = context)
+    val generation = ++nextPresentationGeneration
+    pendingPresentation =
+      PendingTapPresentation(
+        generation = generation,
+        editor = editor,
+        expectedEditing = expectedEditing,
+        tapCount = tapCount,
+        showReadingHint = showReadingHint,
+      )
+    return generation
+  }
+
+  fun markPendingSelectionPublished(
+    generation: Long,
+    snapshot: EditorState,
+    showContextMenu: Boolean,
+    context: EditorGestureContext,
+  ) {
+    val pending = pendingPresentation
+    if (pending == null || pending.generation != generation) {
+      return
+    }
+    if (pending.editor.state.selection != snapshot.selection) {
+      cancelPendingPresentation(context = context)
+      return
+    }
+    pending.selectionPublished = true
+    pending.committedSelection = snapshot.selection
+    pending.showContextMenu = showContextMenu
+    deliverPendingPresentationIfReady(context = context)
+  }
+
+  fun confirmPendingPresentationAfterPointerUp(
+    completedTap: EditorCompletedTap,
+    context: EditorGestureContext,
+  ) {
+    val pending = pendingPresentation ?: return
+    if (pending.tapCount != completedTap.count) {
+      return
+    }
+    val generation = pending.generation
+    if (completedTap.count >= 3) {
+      markPendingSequenceConfirmed(generation = generation, context = context)
+      return
+    }
+    context.effects.scheduleTapSequenceConfirmation {
+      markPendingSequenceConfirmed(generation = generation, context = context)
+    }
+  }
+
+  fun cancelPendingPresentation(context: EditorGestureContext) {
+    pendingPresentation = null
+    context.effects.cancelTapSequenceConfirmation()
+  }
+
+  private fun markPendingSequenceConfirmed(generation: Long, context: EditorGestureContext) {
+    val pending = pendingPresentation
+    if (pending == null || pending.generation != generation) {
+      return
+    }
+    pending.sequenceConfirmed = true
+    deliverPendingPresentationIfReady(context = context)
+  }
+
+  private fun deliverPendingPresentationIfReady(context: EditorGestureContext) {
+    val pending = pendingPresentation ?: return
+    if (!pending.selectionPublished || !pending.sequenceConfirmed) {
+      return
+    }
+    if (
+      context.editor !== pending.editor ||
+        context.editing != pending.expectedEditing ||
+        pending.editor.state.selection != pending.committedSelection
+    ) {
+      cancelPendingPresentation(context = context)
+      return
+    }
+    pendingPresentation = null
+    if (pending.showReadingHint && !context.readOnly) {
+      context.effects.showReadingEditHint()
+    }
+    if (pending.showContextMenu) {
+      context.semantics.contextMenu.show(pending.editor.state)
+    }
   }
 
   fun nextTapCount(position: Offset, nowMillis: Long): Int {
@@ -168,16 +290,30 @@ internal class EditorTapGesture(
     val count: Int,
     val contextMenuWasVisibleAtPointerDown: Boolean,
     var phase: ActiveTapPhase = ActiveTapPhase.Pending,
+    var semanticCount: Int = count,
+    var recordInHistory: Boolean = true,
+    var preservePresentationAcrossEditingPromotion: Boolean = false,
   )
 
   private enum class ActiveTapPhase {
     Pending,
     Dispatched,
-    Recorded,
     Moved,
   }
 
   private data class TapHistory(val completedAtMillis: Long, val position: Offset, val count: Int)
+
+  private data class PendingTapPresentation(
+    val generation: Long,
+    val editor: Editor,
+    val expectedEditing: Boolean,
+    val tapCount: Int,
+    val showReadingHint: Boolean,
+    var selectionPublished: Boolean = false,
+    var committedSelection: Selection? = null,
+    var showContextMenu: Boolean = false,
+    var sequenceConfirmed: Boolean = false,
+  )
 }
 
 internal fun EditorTapGesture.handlePointerDown(
@@ -200,16 +336,33 @@ internal fun EditorTapGesture.handlePointerDown(
     inputModifiers = inputModifiers,
     contextMenuWasVisibleAtPointerDown = context.semantics.contextMenu.visible,
   )
+  cancelPendingPresentation(context = context)
   context.semantics.contextMenu.hide()
+  if (!context.editing) {
+    if (tapCountForActivePointer == 2 && context.doubleTapToEditEnabled) {
+      prepareActiveTapForEditingPromotion()
+      context.effects.cancelTapDispatch()
+      val handled =
+        dispatchReadingActivation(
+          position = position,
+          inputModifiers = inputModifiers,
+          shouldOpenContextMenu = shouldOpenContextMenuForActivePointer,
+          doubleTapDrag = doubleTapDrag,
+          context = context,
+        )
+      clearTapHistory()
+      return handled
+    }
+    return false
+  }
   if (tapCountForActivePointer == 2) {
     markTapDispatched()
     context.effects.cancelTapDispatch()
-    dispatchTap(
+    dispatchEditableTap(
       position = position,
-      nowMillis = nowMillis,
       clickCount = 2,
       inputModifiers = inputModifiers,
-      shouldOpenContextMenu = shouldOpenContextMenuForCurrentTap(),
+      shouldOpenContextMenu = shouldOpenContextMenuForActivePointer,
       doubleTapDrag = doubleTapDrag,
       context = context,
     ) {
@@ -244,8 +397,8 @@ internal fun EditorTapGesture.handlePointerUp(
   val canFinishTap = !context.mode.isViewportZooming && !doubleTapDrag.dragging
   val shouldConsumeTap = shouldConsumePointerUp(pointerId = pointerId, canFinish = canFinishTap)
   val inputModifiers = inputModifiersForActivePointer
-  val shouldOpenContextMenu = shouldOpenContextMenuForCurrentTap()
-  val clickCount =
+  val shouldOpenContextMenu = shouldOpenContextMenuForActivePointer
+  val completedTap =
     onPointerUp(
       pointerId = pointerId,
       position = position,
@@ -255,17 +408,37 @@ internal fun EditorTapGesture.handlePointerUp(
   if (!canFinishTap) {
     context.effects.cancelTapDispatch()
   }
-  clickCount?.let {
-    dispatchTap(
-      position = position,
-      nowMillis = nowMillis,
-      clickCount = it,
-      inputModifiers = inputModifiers,
-      shouldOpenContextMenu = shouldOpenContextMenu,
-      doubleTapDrag = doubleTapDrag,
-      context = context,
-      beforeLaunch = {},
-    )
+  if (!context.editing) {
+    completedTap?.let { completed ->
+      if (completed.contentAlreadyDispatched) {
+        confirmPendingPresentationAfterPointerUp(completedTap = completed, context = context)
+        return@let
+      }
+      dispatchReadingTap(
+        position = position,
+        clickCount = completed.count,
+        inputModifiers = inputModifiers,
+        shouldOpenContextMenu = shouldOpenContextMenu,
+        doubleTapDrag = doubleTapDrag,
+        context = context,
+      )
+      confirmPendingPresentationAfterPointerUp(completedTap = completed, context = context)
+    }
+    return shouldConsumeTap
+  }
+  completedTap?.let { completed ->
+    if (!completed.contentAlreadyDispatched) {
+      dispatchEditableTap(
+        position = position,
+        clickCount = completed.count,
+        inputModifiers = inputModifiers,
+        shouldOpenContextMenu = shouldOpenContextMenu,
+        doubleTapDrag = doubleTapDrag,
+        context = context,
+        beforeLaunch = {},
+      )
+    }
+    confirmPendingPresentationAfterPointerUp(completedTap = completed, context = context)
   }
   return shouldConsumeTap
 }
@@ -275,6 +448,9 @@ internal fun EditorTapGesture.handleTapTimer(
   doubleTapDrag: EditorDoubleTapDragSession,
   context: EditorGestureContext,
 ) {
+  if (!context.editing) {
+    return
+  }
   val position = activePosition ?: return
   val inputModifiers = inputModifiersForActivePointer
   if (!canDispatchTapTimer) {
@@ -288,46 +464,217 @@ internal fun EditorTapGesture.handleTapTimer(
       context.editor.selectionHitTest(page = point.page, x = point.x, y = point.y)
   if (clickCount == 1 && context.platform != Platform.Android && hitSelection) {
     markTapDispatched()
-    if (shouldOpenContextMenuForCurrentTap()) {
-      context.semantics.contextMenu.show(context.editor.state)
-    }
+    val snapshot = context.editor.state
+    val generation =
+      beginPendingPresentation(
+        editor = context.editor,
+        expectedEditing = true,
+        tapCount = clickCount,
+        showReadingHint = false,
+        context = context,
+      )
+    markPendingSelectionPublished(
+      generation = generation,
+      snapshot = snapshot,
+      showContextMenu = shouldOpenContextMenuForActivePointer && !snapshot.selection.isCollapsed(),
+      context = context,
+    )
     return
   }
   if (clickCount == 1 && !context.editor.selection.isCollapsed()) {
     return
   }
   markTapDispatched()
-  dispatchTap(
+  dispatchEditableTap(
     position = position,
-    nowMillis = nowMillis,
     clickCount = clickCount,
     inputModifiers = inputModifiers,
-    shouldOpenContextMenu = shouldOpenContextMenuForCurrentTap(),
+    shouldOpenContextMenu = shouldOpenContextMenuForActivePointer,
     doubleTapDrag = doubleTapDrag,
     context = context,
     beforeLaunch = {},
   )
 }
 
-private fun EditorTapGesture.dispatchTap(
+private fun EditorTapGesture.dispatchReadingTap(
   position: Offset,
-  nowMillis: Long,
   clickCount: Int,
   inputModifiers: InputModifiers,
   shouldOpenContextMenu: Boolean,
   doubleTapDrag: EditorDoubleTapDragSession,
   context: EditorGestureContext,
-  beforeLaunch: () -> Unit,
 ): Boolean {
-  val point = context.geometry.resolvePoint(positionInNode = position) ?: return false
+  val point =
+    context.geometry.resolvePoint(positionInNode = position)
+      ?: run {
+        clearTapHistory()
+        return false
+      }
   if (context.mode.isViewportZooming || point.page < 0) {
+    clearTapHistory()
     return false
   }
   val editor = context.editor
-  if (context.semantics.interactiveHit.handleTap(editor = editor, point = point)) {
-    return true
+  when (
+    context.semantics.interactiveHit.handleTap(
+      editor = editor,
+      point = point,
+      editing = false,
+      readOnly = context.readOnly,
+    )
+  ) {
+    EditorInteractiveTapResult.HandledViewAction,
+    EditorInteractiveTapResult.BlockedMutation -> {
+      clearTapHistory()
+      cancelPendingPresentation(context = context)
+      return true
+    }
+    EditorInteractiveTapResult.None -> Unit
   }
-  recordTap(nowMillis = nowMillis, position = position, clickCount = clickCount)
+  if (clickCount != 1) {
+    clearTapHistory()
+    return false
+  }
+  if (!context.doubleTapToEditEnabled) {
+    return dispatchReadingActivation(
+      position = position,
+      inputModifiers = inputModifiers,
+      shouldOpenContextMenu = shouldOpenContextMenu,
+      doubleTapDrag = doubleTapDrag,
+      context = context,
+    )
+  }
+
+  val generation =
+    beginPendingPresentation(
+      editor = editor,
+      expectedEditing = false,
+      tapCount = clickCount,
+      showReadingHint = true,
+      context = context,
+    )
+  var candidateSnapshot: EditorState? = null
+  context.semantics.pointSelection.launchCursorMove(
+    editor = editor,
+    point = point,
+    beforeCommit = { snapshot -> candidateSnapshot = snapshot },
+    afterDispatch = { dispatched ->
+      val snapshot = candidateSnapshot
+      if (dispatched && snapshot != null) {
+        markPendingSelectionPublished(
+          generation = generation,
+          snapshot = snapshot,
+          showContextMenu = shouldOpenContextMenu && !snapshot.selection.isCollapsed(),
+          context = context,
+        )
+      } else {
+        cancelPendingPresentation(context = context)
+      }
+    },
+  )
+  return true
+}
+
+private fun EditorTapGesture.dispatchReadingActivation(
+  position: Offset,
+  inputModifiers: InputModifiers,
+  shouldOpenContextMenu: Boolean,
+  doubleTapDrag: EditorDoubleTapDragSession,
+  context: EditorGestureContext,
+): Boolean {
+  val point =
+    context.geometry.resolvePoint(positionInNode = position)
+      ?: run {
+        clearTapHistory()
+        return false
+      }
+  if (context.mode.isViewportZooming || point.page < 0) {
+    clearTapHistory()
+    return false
+  }
+  val editor = context.editor
+  when (
+    context.semantics.interactiveHit.handleTap(
+      editor = editor,
+      point = point,
+      editing = false,
+      readOnly = context.readOnly,
+    )
+  ) {
+    EditorInteractiveTapResult.HandledViewAction,
+    EditorInteractiveTapResult.BlockedMutation -> {
+      clearTapHistory()
+      cancelPendingPresentation(context = context)
+      return true
+    }
+    EditorInteractiveTapResult.None -> Unit
+  }
+  if (!context.effects.requestEditing(editor)) {
+    clearTapHistory()
+    return false
+  }
+  val dispatched =
+    dispatchEditableTap(
+      position = position,
+      clickCount = 1,
+      inputModifiers = inputModifiers.copy(shift = false),
+      shouldOpenContextMenu = shouldOpenContextMenu,
+      doubleTapDrag = doubleTapDrag,
+      context = context,
+      preserveExistingSelectionOnSingleTap = false,
+      beforeLaunch = {},
+    )
+  if (dispatched) {
+    context.effects.requestSoftwareKeyboard()
+  }
+  return dispatched
+}
+
+private fun EditorTapGesture.dispatchEditableTap(
+  position: Offset,
+  clickCount: Int,
+  inputModifiers: InputModifiers,
+  shouldOpenContextMenu: Boolean,
+  doubleTapDrag: EditorDoubleTapDragSession,
+  context: EditorGestureContext,
+  preserveExistingSelectionOnSingleTap: Boolean = true,
+  beforeLaunch: () -> Unit,
+): Boolean {
+  val point =
+    context.geometry.resolvePoint(positionInNode = position)
+      ?: run {
+        clearTapHistory()
+        return false
+      }
+  if (context.mode.isViewportZooming || point.page < 0) {
+    clearTapHistory()
+    return false
+  }
+  val editor = context.editor
+  when (
+    context.semantics.interactiveHit.handleTap(
+      editor = editor,
+      point = point,
+      editing = context.editing,
+      readOnly = context.readOnly,
+    )
+  ) {
+    EditorInteractiveTapResult.HandledViewAction,
+    EditorInteractiveTapResult.BlockedMutation -> {
+      clearTapHistory()
+      cancelPendingPresentation(context = context)
+      return true
+    }
+    EditorInteractiveTapResult.None -> Unit
+  }
+  val generation =
+    beginPendingPresentation(
+      editor = editor,
+      expectedEditing = true,
+      tapCount = clickCount,
+      showReadingHint = false,
+      context = context,
+    )
   val wasFocused = context.isFocused
   context.effects.requestFocus(editor)
   if (wasFocused) {
@@ -335,50 +682,62 @@ private fun EditorTapGesture.dispatchTap(
   }
   val hitExistingSelectionAtTap =
     editor.selectionHitTest(page = point.page, x = point.x, y = point.y)
-  if (clickCount == 1 && context.platform != Platform.Android && hitExistingSelectionAtTap) {
-    if (shouldOpenContextMenu) {
-      context.semantics.contextMenu.show(editor.state)
-    }
+  if (
+    clickCount == 1 &&
+      preserveExistingSelectionOnSingleTap &&
+      context.platform != Platform.Android &&
+      hitExistingSelectionAtTap
+  ) {
+    markPendingSelectionPublished(
+      generation = generation,
+      snapshot = editor.state,
+      showContextMenu = shouldOpenContextMenu,
+      context = context,
+    )
     return false
   }
   val previousCursor = editor.cursor
   beforeLaunch()
-  val tap = this
+  var candidateSnapshot: EditorState? = null
+  var candidateShowsContextMenu = false
   val beforeCommit: (EditorState) -> Unit = { snapshot ->
+    candidateSnapshot = snapshot
     if (clickCount == 1) {
       when {
         !snapshot.selection.isCollapsed() -> {
           if (!hitExistingSelectionAtTap) {
-            context.semantics.contextMenu.show(snapshot)
+            candidateShowsContextMenu = true
             context.effects.requestCurrentSelectionHead(version = snapshot.version)
-          } else {
-            context.semantics.contextMenu.hide()
           }
         }
         isSameCursorTap(previousCursor, snapshot) -> {
-          if (wasFocused && shouldOpenContextMenu) {
-            context.semantics.contextMenu.show(snapshot)
-          }
+          candidateShowsContextMenu = wasFocused
         }
         else -> {
-          context.semantics.contextMenu.hide()
           if (snapshot.cursor != null) {
             context.effects.requestCurrentSelectionHead(version = snapshot.version)
           }
         }
       }
+    } else {
+      candidateShowsContextMenu = !snapshot.selection.isCollapsed()
     }
   }
+  val tap = this
   val afterDispatch: (Boolean) -> Unit = { dispatched ->
-    if (dispatched) {
-      when (clickCount) {
-        2 -> doubleTapDrag.onWordSelectionCommitted(tap = tap, context = context)
-        3 -> {
-          if (!editor.selection.isCollapsed()) {
-            context.semantics.contextMenu.show(editor.state)
-          }
-        }
+    val snapshot = candidateSnapshot
+    if (dispatched && snapshot != null) {
+      markPendingSelectionPublished(
+        generation = generation,
+        snapshot = snapshot,
+        showContextMenu = shouldOpenContextMenu && candidateShowsContextMenu,
+        context = context,
+      )
+      if (clickCount == 2) {
+        doubleTapDrag.onWordSelectionCommitted(tap = tap, context = context)
       }
+    } else {
+      cancelPendingPresentation(context = context)
     }
   }
   when {

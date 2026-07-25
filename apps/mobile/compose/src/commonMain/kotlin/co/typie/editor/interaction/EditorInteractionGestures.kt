@@ -71,9 +71,12 @@ internal class EditorInteractionGestures(
       pinch.reset()
       resetPointerOwnedState(context = context)
       context.effects.cancelTapDispatch()
+      tap.cancelPendingPresentation(context = context)
       context.effects.cancelLongPressDispatch()
       return false
     }
+
+    tap.cancelPendingPresentation(context = context)
 
     if (
       touchPanDriver != null &&
@@ -108,6 +111,7 @@ internal class EditorInteractionGestures(
         (selectionHandleType != null && !tripleTapOnSelectionHandle)
     ) {
       tap.clearTapHistory()
+      tap.cancelPendingPresentation(context = context)
     }
 
     if (
@@ -153,6 +157,7 @@ internal class EditorInteractionGestures(
     if (
       tapEnabled &&
         tap.hasActivePointer &&
+        !consumed &&
         !columnResizeConsumed &&
         !selectionHandleConsumed &&
         !tableHandleConsumed
@@ -435,6 +440,7 @@ internal class EditorInteractionGestures(
     val started = longPress.start(pointerId = pointerId, position = position, context = context)
     if (started) {
       pan.cancel(context = context)
+      tap.cancelPendingPresentation(context = context)
       tap.markTapDispatched()
       if (longPress.isWordSelection) {
         tap.clearTapHistory()
@@ -477,6 +483,16 @@ internal class EditorInteractionGestures(
     cancelActivePointerStream(context = context)
   }
 
+  fun consumeActiveTapAfterEditingPromotion(context: EditorGestureContext) {
+    tap.markTapDispatched()
+    longPress.cancelPending()
+    context.effects.cancelTapDispatch()
+    if (!tap.shouldPreservePresentationAfterEditingPromotion()) {
+      tap.cancelPendingPresentation(context = context)
+    }
+    context.effects.cancelLongPressDispatch()
+  }
+
   fun resetPointerOwnedState(context: EditorGestureContext) {
     tableColumnResize.cancel(context = context)
     tableHandle.resetPointerOwnedState(context = context)
@@ -491,12 +507,14 @@ internal class EditorInteractionGestures(
 
   fun cancelActivePointerStream(context: EditorGestureContext) {
     context.effects.cancelTapDispatch()
+    tap.cancelPendingPresentation(context = context)
     context.effects.cancelLongPressDispatch()
     tap.cancelActivePointerStream()
   }
 
   private fun cancelTapAndLongPress(context: EditorGestureContext) {
     context.effects.cancelTapDispatch()
+    tap.cancelPendingPresentation(context = context)
     context.effects.cancelLongPressDispatch()
     longPress.reset()
     doubleTapDrag.resetPointerOwnedState(context = context)
@@ -509,6 +527,7 @@ internal class EditorInteractionGestures(
     context: EditorGestureContext,
   ) {
     if (tap.trackPointerMove(pointerId = pointerId, position = position, context = context)) {
+      tap.cancelPendingPresentation(context = context)
       longPress.cancelPending(pointerId = pointerId)
       context.effects.cancelLongPressDispatch()
     }

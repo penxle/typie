@@ -1,7 +1,5 @@
 package co.typie.editor.preview
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -24,7 +22,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Constraints
@@ -32,6 +29,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import co.typie.editor.Editor
 import co.typie.editor.EditorRegistry
+import co.typie.editor.EditorTapHint
 import co.typie.editor.EditorZoomController
 import co.typie.editor.LocalEditorZoomController
 import co.typie.editor.body.EditorDocumentLayoutSpec
@@ -60,20 +58,11 @@ import co.typie.editor.surface.EditorPageSurface
 import co.typie.editor.surface.editorPagePositionTracker
 import co.typie.ext.clickable
 import co.typie.platform.PlatformModule
-import co.typie.ui.component.Text
-import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.blur.blurEffect
-import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.collectLatest
-
-private const val PreviewHintVisibleMillis = 850
-private const val PreviewHintFadeMillis = 180
 
 @Composable
 internal fun EditorPreview(
@@ -106,18 +95,9 @@ internal fun EditorPreview(
   val zoomController = remember(runtime, sourceKey) { EditorZoomController(scope = scope) }
   val bringIntoViewRequests = remember(runtime, sourceKey) { EditorBringIntoViewRequests() }
   val hintHazeState = remember { HazeState() }
-  val hintShape = AppShapes.rounded(AppShapes.sm)
   val hintEvents = remember { MutableSharedFlow<Unit>(extraBufferCapacity = 1) }
-  val hintAlpha = remember { Animatable(0f) }
 
   DisposableEffect(runtime, sourceKey) { onDispose { runtime.clear() } }
-  LaunchedEffect(hintEvents) {
-    hintEvents.collectLatest {
-      hintAlpha.animateTo(1f, tween(PreviewHintFadeMillis))
-      delay(PreviewHintVisibleMillis.toLong())
-      hintAlpha.animateTo(0f, tween(PreviewHintFadeMillis))
-    }
-  }
   LaunchedEffect(runtime.editor, layoutMode, modifiers) {
     val editor = runtime.editor ?: return@LaunchedEffect
     val currentModifiers = editor.rootModifiers.orEmpty().toPreviewRootModifierMap()
@@ -203,23 +183,7 @@ internal fun EditorPreview(
         modifier = Modifier.weight(1f).fillMaxWidth().clickable { hintEvents.tryEmit(Unit) },
         contentAlignment = Alignment.Center,
       ) {
-        if (hintAlpha.value > 0f) {
-          Box(
-            modifier =
-              Modifier.graphicsLayer { alpha = hintAlpha.value }
-                .clip(hintShape)
-                .hazeEffect(hintHazeState) {
-                  blurEffect {
-                    backgroundColor = colors.surfaceInset
-                    blurRadius = 6.dp
-                  }
-                }
-                .background(colors.surfaceInset.copy(alpha = 0.36f), hintShape)
-                .padding(horizontal = 10.dp, vertical = 5.dp)
-          ) {
-            Text(text = hintText, style = AppTheme.typography.caption, color = colors.textMuted)
-          }
-        }
+        EditorTapHint(events = hintEvents, text = hintText, hazeState = hintHazeState)
       }
     }
   }
@@ -394,10 +358,7 @@ private fun PlainDoc.withPreviewRootModifiers(modifiers: List<EditorModifier>): 
 }
 
 private fun List<EditorModifier>.toPreviewRootModifierMap(): Map<ModifierType, EditorModifier> =
-  mapNotNull { modifier ->
-    modifier.previewRootModifierType()?.let { it to modifier }
-  }
-  .toMap()
+  mapNotNull { modifier -> modifier.previewRootModifierType()?.let { it to modifier } }.toMap()
 
 private fun EditorModifier.previewRootModifierType(): ModifierType? =
   when (this) {

@@ -61,6 +61,8 @@ internal fun rememberEditorSpellcheckSession(
   hideContextMenu: () -> Unit,
   closeSubPane: () -> Unit,
   ensureSubscription: suspend () -> Boolean,
+  onEditingIntent: (Editor) -> Boolean,
+  admitMutation: (DocumentEditingSession) -> Boolean,
 ): EditorSpellcheckSession {
   val scope = rememberCoroutineScope()
   val toast = LocalToast.current
@@ -348,25 +350,34 @@ internal fun rememberEditorSpellcheckSession(
           return@applySuggestion
         }
 
-        activeSession.submit { activeEditor, context ->
-          activeEditor.scope.launch(context) {
-            activeEditor.replaceSpellcheckRangeText(
-              id = id,
-              expectedText = result.context,
-              replacement = replacement,
-            )
-            programmaticSelectionToSkip = activeEditor.state.selection
-            val nextId = model.remove(id, activateReplacement = true)
-            if (nextId != null) {
-              updateCompactOverlayHeightForRange(nextId)
+        scope.launch {
+          if (activeSession.editor.trackedRange(id) == null) return@launch
+          if (!onEditingIntent(activeSession.editor)) return@launch
+          activeSession.submit { activeEditor, context ->
+            activeEditor.scope.launch(context) {
+              val replaced =
+                activeEditor.replaceSpellcheckRangeText(
+                  id = id,
+                  expectedText = result.context,
+                  replacement = replacement,
+                  admit = { admitMutation(activeSession) },
+                )
+              if (replaced) {
+                programmaticSelectionToSkip = activeEditor.state.selection
+                val nextId = model.remove(id, activateReplacement = true)
+                if (nextId != null) {
+                  updateCompactOverlayHeightForRange(nextId)
+                }
+                updateActiveRangeDecoration()
+                requestRangeIntoView(nextId)
+              }
             }
-            updateActiveRangeDecoration()
-            requestRangeIntoView(nextId)
           }
         }
       },
     directEdit = directEdit@{ id ->
-        val activeEditor = editor ?: return@directEdit
+        val activeSession = editingSession ?: return@directEdit
+        val activeEditor = activeSession.editor
         scope.launch {
           val range = activeEditor.trackedRange(id) ?: return@launch
           if (documentLocked) {
@@ -374,19 +385,27 @@ internal fun rememberEditorSpellcheckSession(
             return@launch
           }
 
+          if (!onEditingIntent(activeEditor)) return@launch
+          val selected =
+            activeEditor.awaitWithBringIntoView(
+              bringIntoViewRequests = bringIntoViewRequests,
+              admit = { admitMutation(activeSession) },
+            ) {
+              enqueue(
+                Message.Selection(
+                  SelectionOp.Set(Selection(anchor = range.anchor, head = range.head))
+                )
+              )
+              beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
+            }
+          if (selected == null) return@launch
           model?.activate(null)
           updateCompactOverlayHeightForRange(null)
           model?.updateExpanded(false)
           updateActiveRangeDecoration()
-          activeEditor.awaitWithBringIntoView(bringIntoViewRequests) {
-            enqueue(
-              Message.Selection(
-                SelectionOp.Set(Selection(anchor = range.anchor, head = range.head))
-              )
-            )
-            beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
+          if (admitMutation(activeSession)) {
+            activeEditor.focus()
           }
-          activeEditor.focus()
         }
       },
     ignore = ignore@{ id ->

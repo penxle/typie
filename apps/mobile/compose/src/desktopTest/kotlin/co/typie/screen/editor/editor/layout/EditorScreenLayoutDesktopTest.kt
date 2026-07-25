@@ -615,6 +615,31 @@ class EditorScreenLayoutDesktopTest {
   }
 
   @Test
+  fun readingViewportExposesAnAccessibilityEditAction() = runComposeUiTest {
+    val fixture = ViewportOverlayFixture()
+    var requestCount = 0
+    setViewportOverlayContent(
+      fixture = fixture,
+      onRequestEditing = {
+        requestCount += 1
+        true
+      },
+    )
+
+    val node =
+      onAllNodes(
+          SemanticsMatcher("has an edit custom action") {
+            SemanticsActions.CustomActions in it.config
+          }
+        )
+        .fetchSemanticsNodes()
+        .single()
+    runOnIdle { assertTrue(node.config[SemanticsActions.CustomActions].single().action()) }
+
+    assertEquals(1, requestCount)
+  }
+
+  @Test
   fun viewportOverlayConsumedDownDoesNotStartEditorGesture() = runComposeUiTest {
     val fixture = ViewportOverlayFixture()
     setViewportOverlayContent(fixture = fixture, viewportOverlay = { ViewportOverlayTarget() })
@@ -1128,6 +1153,7 @@ class EditorScreenLayoutDesktopTest {
     fixture: ViewportOverlayFixture,
     viewportOverlay: @Composable BoxScope.() -> Unit = {},
     overlay: @Composable () -> Unit = {},
+    onRequestEditing: (() -> Boolean)? = null,
   ) {
     setContent {
       val coroutineScope = rememberCoroutineScope()
@@ -1150,6 +1176,7 @@ class EditorScreenLayoutDesktopTest {
           viewportContentWidth = TestViewportSize.width,
           viewportScrollReconcileMode = EditorViewportScrollReconcileMode.Disabled,
           onEditorPointerInput = { fixture.editorPointerInputCount += 1 },
+          onRequestEditing = onRequestEditing,
           onMeasuredViewportSizeChange = {},
           header = {},
           body = { Box(Modifier.fillMaxWidth().height(800.dp)) },

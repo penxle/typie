@@ -2,6 +2,7 @@ package co.typie.ext
 
 // cspell:ignore heyo
 
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import kotlin.test.Test
@@ -10,6 +11,68 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class TextInputStateTest {
+  @Test
+  fun update_selection_changes_only_local_selection() {
+    var externalValue = "hello"
+    var externalChangeCount = 0
+    val state =
+      TextInputState(
+        binding = TextInputBinding(focusRequester = FocusRequester(), owner = Any()),
+        initialValue =
+          TextFieldValue(
+            text = externalValue,
+            selection = TextRange(0, 5),
+            composition = TextRange(1, 4),
+          ),
+      )
+    state.update(
+      value = externalValue,
+      onValueChange = {
+        externalValue = it
+        externalChangeCount += 1
+      },
+      onDismiss = {},
+    )
+
+    state.updateSelection(TextRange(1, 4))
+
+    assertEquals(
+      TextFieldValue(text = "hello", selection = TextRange(1, 4), composition = null),
+      state.value,
+    )
+    assertEquals("hello", externalValue)
+    assertEquals(0, externalChangeCount)
+  }
+
+  @Test
+  fun finish_composition_and_collapse_selection_keeps_external_text() {
+    var externalValue = "hello"
+    var externalChangeCount = 0
+    val state =
+      TextInputState(
+        binding = TextInputBinding(focusRequester = FocusRequester(), owner = Any()),
+        initialValue =
+          TextFieldValue(
+            text = externalValue,
+            selection = TextRange(4, 1),
+            composition = TextRange(1, 4),
+          ),
+      )
+    state.update(
+      value = externalValue,
+      onValueChange = {
+        externalValue = it
+        externalChangeCount += 1
+      },
+      onDismiss = {},
+    )
+
+    state.finishCompositionAndCollapseSelection()
+
+    assertEquals(TextFieldValue(text = "hello", selection = TextRange(4)), state.value)
+    assertEquals("hello", externalValue)
+    assertEquals(0, externalChangeCount)
+  }
 
   @Test
   fun resolve_text_input_change_ignores_selection_only_updates() {

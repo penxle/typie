@@ -31,14 +31,15 @@ import androidx.compose.ui.unit.dp
 import co.typie.ext.InteractionScope
 import co.typie.ext.LocalInteractionSource
 import co.typie.ext.pressScale
-import co.typie.icons.Lucide
 import co.typie.screen.editor.editor.toolbar.EditorToolbarDebugOverlays
 import co.typie.screen.editor.editor.toolbar.EditorToolbarToolAction
+import co.typie.screen.editor.editor.toolbar.EditorToolbarToolItem
+import co.typie.screen.editor.editor.toolbar.EditorToolbarToolItems
 import co.typie.screen.editor.editor.toolbar.ToolbarBottomPanelRadius
+import co.typie.screen.editor.editor.toolbar.editorToolbarDebugToolItems
 import co.typie.ui.component.Text
 import co.typie.ui.component.scrollFog
 import co.typie.ui.icon.Icon
-import co.typie.ui.icon.IconData
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 
@@ -60,7 +61,7 @@ internal fun BottomToolbarTools(
     horizontalArrangement = Arrangement.spacedBy(6.dp),
     verticalArrangement = Arrangement.spacedBy(8.dp),
   ) {
-    items(ToolItems, key = { it.key }) { item ->
+    items(EditorToolbarToolItems, key = { it.key }) { item ->
       ToolTile(item = item, modifier = Modifier.fillMaxWidth(), onClick = { onAction(item.action) })
     }
 
@@ -73,7 +74,7 @@ internal fun BottomToolbarTools(
           modifier = Modifier.padding(start = 2.dp, top = 8.dp),
         )
       }
-      items(debugToolItems(debugOverlays), key = { it.key }) { item ->
+      items(editorToolbarDebugToolItems(debugOverlays), key = { it.key }) { item ->
         ToolTile(
           item = item,
           modifier = Modifier.fillMaxWidth(),
@@ -84,49 +85,12 @@ internal fun BottomToolbarTools(
   }
 }
 
-private fun debugToolItems(debugOverlays: EditorToolbarDebugOverlays): List<ToolItem> {
-  return buildList {
-    add(
-      ToolItem(
-        icon = Lucide.PanelTop,
-        label = debugOverlays.viewportVisible.debugToggleLabel("뷰포트 기준선"),
-        action = EditorToolbarToolAction.DebugViewportOverlay,
-        key = "debug-viewport-overlay",
-      )
-    )
-    add(
-      ToolItem(
-        icon = Lucide.PanelBottom,
-        label = debugOverlays.bodyVisible.debugToggleLabel("바디 영역"),
-        action = EditorToolbarToolAction.DebugBodyOverlay,
-        key = "debug-body-overlay",
-      )
-    )
-    add(
-      ToolItem(
-        icon = Lucide.InspectionPanel,
-        label = debugOverlays.surfaceVisible.debugToggleLabel("페이지 표면"),
-        action = EditorToolbarToolAction.DebugSurfaceOverlay,
-        key = "debug-surface-overlay",
-      )
-    )
-    if (debugOverlays.inputLogAvailable) {
-      add(
-        ToolItem(
-          icon = Lucide.Send,
-          label = "입력 로그 보내기",
-          action = EditorToolbarToolAction.SendInputLog,
-          key = "debug-send-input-log",
-        )
-      )
-    }
-  }
-}
-
-private fun Boolean.debugToggleLabel(label: String): String = "$label ${if (this) "끄기" else "켜기"}"
-
 @Composable
-private fun ToolTile(item: ToolItem, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun ToolTile(
+  item: EditorToolbarToolItem,
+  onClick: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
   val shape = ToolTileShape
 
   InteractionScope {
@@ -174,34 +138,6 @@ private fun ToolTile(item: ToolItem, onClick: () -> Unit, modifier: Modifier = M
     }
   }
 }
-
-private data class ToolItem(
-  val icon: IconData,
-  val label: String,
-  val action: EditorToolbarToolAction,
-  val key: String = label,
-)
-
-private val ToolItems =
-  listOf(
-    ToolItem(icon = Lucide.StickyNote, label = "노트", action = EditorToolbarToolAction.RelatedNotes),
-    ToolItem(
-      icon = Lucide.MessageSquareText,
-      label = "코멘트",
-      action = EditorToolbarToolAction.Comment,
-    ),
-    ToolItem(
-      icon = Lucide.SpellCheck,
-      label = "맞춤법 검사",
-      action = EditorToolbarToolAction.Spellcheck,
-    ),
-    ToolItem(
-      icon = Lucide.Lightbulb,
-      label = "AI 피드백",
-      action = EditorToolbarToolAction.AiFeedback,
-    ),
-    ToolItem(icon = Lucide.History, label = "타임라인", action = EditorToolbarToolAction.Timeline),
-  )
 
 private const val DebugSectionTitleKey = "debug-section-title"
 private val ToolPanelPadding = 16.dp

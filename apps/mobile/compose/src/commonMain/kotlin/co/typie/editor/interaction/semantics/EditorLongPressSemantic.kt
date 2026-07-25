@@ -15,7 +15,11 @@ internal class EditorLongPressSemantic {
     editor: Editor,
     point: PagePoint,
     platform: Platform,
+    editing: Boolean,
   ): EditorLongPressSemanticIntent {
+    if (!editing) {
+      return EditorLongPressSemanticIntent.WordSelection
+    }
     if (platform != Platform.Android) {
       return EditorLongPressSemanticIntent.CursorMove
     }

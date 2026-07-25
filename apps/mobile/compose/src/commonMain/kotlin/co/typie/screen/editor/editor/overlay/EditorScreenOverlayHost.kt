@@ -37,7 +37,7 @@ internal fun EditorScreenOverlayHost(
   visibleArea: EditorVisibleArea,
   autoScrollPolicy: EditorAutoScrollPolicy,
   onTableAxisActionsRequest: (EditorTableAxisActionsTarget, Selection?) -> Unit,
-  editorReadOnly: Boolean = false,
+  editorMutationEnabled: Boolean = true,
   showDebugOverlay: Boolean = false,
   modifier: Modifier = Modifier,
 ) {
@@ -89,13 +89,15 @@ internal fun EditorScreenOverlayHost(
     if (overlayBounds != null) {
       val editor = runtime.editor
       if (editor != null) {
-        EditorTableAxisSelectionOverlay(
-          editor = editor,
-          uiState = uiState,
-          editorRectInOverlay = editorRectInViewport,
-          density = density.density,
-          onTableAxisActionsRequest = onTableAxisActionsRequest,
-        )
+        if (editorMutationEnabled) {
+          EditorTableAxisSelectionOverlay(
+            editor = editor,
+            uiState = uiState,
+            editorRectInOverlay = editorRectInViewport,
+            density = density.density,
+            onTableAxisActionsRequest = onTableAxisActionsRequest,
+          )
+        }
 
         if (editorRectInOverlay != null && contextMenu.isVisibleFor(editor.state)) {
           val anchor =
@@ -121,7 +123,7 @@ internal fun EditorScreenOverlayHost(
                 overlaySize = overlayBounds.size,
                 visibleArea = visibleArea,
                 showCopyCutActions = actions.showCopyCutActions,
-                editorReadOnly = editorReadOnly,
+                editorMutationEnabled = editorMutationEnabled,
                 availableExpansionUnits = actions.availableExpansionUnits,
                 onCopy = actions.onCopy,
                 onCut = actions.onCut,

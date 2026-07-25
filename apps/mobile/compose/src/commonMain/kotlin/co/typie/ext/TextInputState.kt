@@ -65,6 +65,17 @@ internal constructor(private val binding: TextInputBinding, initialValue: TextFi
     applyValueChange(value)
   }
 
+  fun updateSelection(selection: TextRange) {
+    value =
+      value.copy(selection = clampTextInputRange(selection, value.text.length), composition = null)
+  }
+
+  fun finishCompositionAndCollapseSelection() {
+    val next = finishTextInputComposition(value)
+    val cursor = next.selection.start.coerceIn(0, next.text.length)
+    value = next.copy(selection = TextRange(cursor), composition = null)
+  }
+
   override val hasActiveComposition: Boolean
     get() = value.composition != null
 

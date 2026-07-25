@@ -115,8 +115,9 @@ internal suspend fun Editor.replaceFindReplaceRangeText(
   id: String,
   expectedText: String,
   replacement: String,
-) {
-  await {
+  admit: () -> Boolean = { true },
+): Boolean =
+  await(admit = admit) {
     enqueue(
       Message.TrackedRange(
         TrackedRangeOp.ReplaceText(id = id, expectedText = expectedText, replacement = replacement)
@@ -124,14 +125,14 @@ internal suspend fun Editor.replaceFindReplaceRangeText(
     )
     enqueue(Message.TrackedRange(TrackedRangeOp.Remove(id = id)))
   }
-}
 
 internal suspend fun Editor.replaceAllFindReplaceRanges(
   matches: List<FindReplaceMatch>,
   expectedText: String,
   replacement: String,
-) {
-  await {
+  admit: () -> Boolean = { true },
+): Boolean =
+  await(admit = admit) {
     matches.forEach { match ->
       enqueue(
         Message.TrackedRange(
@@ -148,7 +149,6 @@ internal suspend fun Editor.replaceAllFindReplaceRanges(
       Message.TrackedRange(TrackedRangeOp.ClearGroup(group = ACTIVE_SEARCH_MATCH_RANGE_GROUP))
     )
   }
-}
 
 internal fun List<TrackedRange>.searchMatchScrollTarget(id: String?): EditorBringIntoViewTarget? {
   if (id == null) return null

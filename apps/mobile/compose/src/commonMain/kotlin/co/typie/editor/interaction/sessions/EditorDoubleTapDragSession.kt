@@ -17,6 +17,7 @@ internal class EditorDoubleTapDragSession {
   private var pendingSelectionExtensionPosition: Offset? = null
   private var startPosition: Offset? = null
   private var startThresholdPx = 0f
+  private var terminalDragAwaitingWordCommit = false
 
   val active: Boolean
     get() = phase != EditorDoubleTapDragPhase.Idle
@@ -37,6 +38,7 @@ internal class EditorDoubleTapDragSession {
     }
     context.effects.cancelTapDispatch()
     tap.markTapDispatched()
+    terminalDragAwaitingWordCommit = false
     context.semantics.selectionExpansion.reset()
     context.semantics.selectionExpansion.awaitWordSelectionCommit()
     context.semantics.contextMenu.hide()
@@ -70,7 +72,6 @@ internal class EditorDoubleTapDragSession {
   fun endDrag(context: EditorGestureContext): Boolean {
     val wasActive = active
     val wasDragging = dragging
-    val wasPending = pending
     if (!stop()) {
       return false
     }
@@ -80,11 +81,9 @@ internal class EditorDoubleTapDragSession {
       if (context.mode.canApply(EditorInteractionEvent.DoubleTapDragEnd)) {
         context.reduceMode(EditorInteractionEvent.DoubleTapDragEnd)
       }
-      if (!context.editor.selection.isCollapsed()) {
-        context.semantics.contextMenu.show(context.editor.state)
-      }
-    } else if (wasPending) {
-      if (!context.editor.selection.isCollapsed()) {
+      if (context.semantics.selectionExpansion.isAwaitingWordSelectionCommit) {
+        terminalDragAwaitingWordCommit = true
+      } else if (!context.editor.selection.isCollapsed()) {
         context.semantics.contextMenu.show(context.editor.state)
       }
     }
@@ -96,9 +95,10 @@ internal class EditorDoubleTapDragSession {
     context.semantics.selectionExpansion.markWordSelectionCommitted()
     flushPendingSelectionExtension(context = context)
     if (!tap.hasActivePointer && !active) {
-      if (!context.editor.selection.isCollapsed()) {
+      if (terminalDragAwaitingWordCommit && !context.editor.selection.isCollapsed()) {
         context.semantics.contextMenu.show(context.editor.state)
       }
+      terminalDragAwaitingWordCommit = false
       resetSelectionExtensionState(context = context)
     }
   }
@@ -113,11 +113,13 @@ internal class EditorDoubleTapDragSession {
     context.effects.setScrollGestureLocked(false)
     context.semantics.edgeAutoScroll.stop()
     resetSelectionExtensionState(context = context)
+    terminalDragAwaitingWordCommit = false
     reset()
   }
 
   fun reset() {
     pendingSelectionExtensionPosition = null
+    terminalDragAwaitingWordCommit = false
     stop()
   }
 
@@ -135,6 +137,7 @@ internal class EditorDoubleTapDragSession {
     if (!begin()) {
       return false
     }
+    tap.cancelPendingPresentation(context = context)
     context.reduceMode(EditorInteractionEvent.DoubleTapDragStart)
     if (context.mode != EditorInteractionMode.DoubleTapSelecting) {
       stop()

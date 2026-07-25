@@ -6,6 +6,7 @@ import co.typie.editor.Editor
 import co.typie.editor.EditorState
 import co.typie.editor.PagePoint
 import co.typie.editor.body.EditorDocumentLayoutSpec
+import co.typie.editor.interaction.gestures.EditorConsecutiveTapMaxIntervalMillis
 import co.typie.editor.interaction.gestures.EditorLongPressDispatchDelayMillis
 import co.typie.editor.interaction.gestures.EditorTapDispatchDelayMillis
 import co.typie.editor.interaction.semantics.EditorViewportZoomSemanticConfig
@@ -40,7 +41,13 @@ internal class EditorInteractionScope(
   private var onRequestSoftwareKeyboard: (() -> Unit)? = null
   private var pointerInputEnabled: () -> Boolean = { true }
   private var readOnly: () -> Boolean = { false }
+  private var editing: () -> Boolean = { true }
+  private var doubleTapToEditEnabled: () -> Boolean = { true }
+  private var editingSnapshot: Boolean? = null
+  private var onRequestEditing: ((Editor) -> Boolean)? = null
+  private var onShowReadingEditHint: (() -> Unit)? = null
   private var tapDispatchJob: Job? = null
+  private var tapSequenceConfirmationJob: Job? = null
   private var longPressDispatchJob: Job? = null
   private var scrollGestureLockState: ScrollGestureLockState? = null
   private var scrollGestureLockHandle: ScrollGestureLockHandle? = null
@@ -62,6 +69,8 @@ internal class EditorInteractionScope(
       uiStateProvider = { checkNotNull(uiState) { "Editor interaction scope has no UI state" } },
       pointerInputEnabledProvider = { pointerInputEnabled() },
       readOnlyProvider = { readOnly() },
+      editingProvider = { editing() },
+      doubleTapToEditEnabledProvider = { doubleTapToEditEnabled() },
     )
 
   fun update(
@@ -76,9 +85,28 @@ internal class EditorInteractionScope(
     layoutSpec: EditorDocumentLayoutSpec? = null,
     pointerInputEnabled: () -> Boolean = { true },
     readOnly: () -> Boolean = { false },
+    editing: () -> Boolean = { true },
+    doubleTapToEditEnabled: () -> Boolean = { true },
+    onRequestEditing: (Editor) -> Boolean = { false },
+    onShowReadingEditHint: () -> Unit = {},
     onSelectionHaptic: () -> Unit,
     onRequestSoftwareKeyboard: () -> Unit,
   ) {
+    val nextEditing = editing()
+    val editorChanged = this.editor != null && this.editor !== editor
+    if (editorChanged) {
+      controller.cancel()
+      controller.reset()
+    } else {
+      when (editingSnapshot) {
+        true -> if (!nextEditing) controller.cancel()
+        false ->
+          if (nextEditing) {
+            controller.consumeActiveTapAfterEditingPromotion()
+          }
+        null -> Unit
+      }
+    }
     this.editor = editor
     this.bringIntoViewRequests = bringIntoViewRequests
     this.uiState = uiState
@@ -90,6 +118,11 @@ internal class EditorInteractionScope(
     this.onRequestSoftwareKeyboard = onRequestSoftwareKeyboard
     this.pointerInputEnabled = pointerInputEnabled
     this.readOnly = readOnly
+    this.editing = editing
+    this.doubleTapToEditEnabled = doubleTapToEditEnabled
+    this.editingSnapshot = nextEditing
+    this.onRequestEditing = onRequestEditing
+    this.onShowReadingEditHint = onShowReadingEditHint
     outsidePageTapEnabled = layoutSpec == null || layoutSpec is EditorDocumentLayoutSpec.Continuous
     semantics.viewportZoom.configure(viewportZoomConfig)
   }
@@ -116,6 +149,11 @@ internal class EditorInteractionScope(
     onRequestSoftwareKeyboard = null
     pointerInputEnabled = { true }
     readOnly = { false }
+    editing = { true }
+    doubleTapToEditEnabled = { true }
+    editingSnapshot = null
+    onRequestEditing = null
+    onShowReadingEditHint = null
     outsidePageTapEnabled = true
     scrollGestureLockState = null
   }
@@ -215,6 +253,25 @@ internal class EditorInteractionScope(
     tapDispatchJob = null
   }
 
+  override fun scheduleTapSequenceConfirmation(onConfirmed: () -> Unit) {
+    tapSequenceConfirmationJob?.cancel()
+    val job = coroutineScope.launch {
+      delay(EditorConsecutiveTapMaxIntervalMillis)
+      onConfirmed()
+    }
+    tapSequenceConfirmationJob = job
+    job.invokeOnCompletion {
+      if (tapSequenceConfirmationJob === job) {
+        tapSequenceConfirmationJob = null
+      }
+    }
+  }
+
+  override fun cancelTapSequenceConfirmation() {
+    tapSequenceConfirmationJob?.cancel()
+    tapSequenceConfirmationJob = null
+  }
+
   override fun scheduleLongPressDispatch(
     pointerId: Long,
     position: Offset,
@@ -242,6 +299,12 @@ internal class EditorInteractionScope(
 
   override fun launchInteraction(block: suspend () -> Unit) {
     coroutineScope.launch { block() }
+  }
+
+  override fun requestEditing(editor: Editor): Boolean = onRequestEditing?.invoke(editor) == true
+
+  override fun showReadingEditHint() {
+    onShowReadingEditHint?.invoke()
   }
 
   override fun requestFocus(editor: Editor): Boolean = editor.focus()

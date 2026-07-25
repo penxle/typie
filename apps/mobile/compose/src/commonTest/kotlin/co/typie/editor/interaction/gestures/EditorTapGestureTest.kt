@@ -9,12 +9,7 @@ import kotlin.test.assertTrue
 
 class EditorTapGestureTest {
   @Test
-  fun `tap dispatch delay includes legacy tap down deadline before tap timer`() {
-    assertEquals(250L, EditorTapDispatchDelayMillis)
-  }
-
-  @Test
-  fun `tap timer can dispatch a primary click once`() {
+  fun `tap timer dispatch still completes the tap on pointer up`() {
     val gesture = createTapGesture()
 
     gesture.startPendingTap(pointerId = 1L, position = Offset(10f, 20f))
@@ -22,21 +17,30 @@ class EditorTapGestureTest {
     assertTrue(gesture.canDispatchTapTimer)
     gesture.markTapDispatched()
     assertFalse(gesture.canDispatchTapTimer)
-    assertNull(gesture.onPointerUp(pointerId = 1L, position = Offset(10f, 20f), nowMillis = 160L))
+    assertEquals(
+      EditorCompletedTap(count = 1, contentAlreadyDispatched = true, recordInHistory = true),
+      gesture.onPointerUp(pointerId = 1L, position = Offset(10f, 20f), nowMillis = 160L),
+    )
   }
 
   @Test
-  fun `tap timer selection hit consumes pending tap without advancing click count`() {
+  fun `tap timer selection hit advances click count only after pointer up`() {
     val gesture = createTapGesture()
 
     gesture.startPendingTap(pointerId = 1L, position = Offset.Zero)
     gesture.markTapDispatched()
 
-    assertNull(gesture.onPointerUp(pointerId = 1L, position = Offset.Zero, nowMillis = 160L))
+    assertEquals(
+      1,
+      gesture.onPointerUp(pointerId = 1L, position = Offset.Zero, nowMillis = 160L)?.count,
+    )
 
     gesture.startPendingTap(pointerId = 2L, position = Offset.Zero)
 
-    assertEquals(1, gesture.onPointerUp(pointerId = 2L, position = Offset.Zero, nowMillis = 240L))
+    assertEquals(
+      2,
+      gesture.onPointerUp(pointerId = 2L, position = Offset.Zero, nowMillis = 240L)?.count,
+    )
   }
 
   @Test
@@ -46,7 +50,10 @@ class EditorTapGestureTest {
     gesture.startPendingTap(pointerId = 1L, position = Offset.Zero)
 
     assertTrue(gesture.canDispatchTapTimer)
-    assertEquals(1, gesture.onPointerUp(pointerId = 1L, position = Offset.Zero, nowMillis = 160L))
+    assertEquals(
+      EditorCompletedTap(count = 1, contentAlreadyDispatched = false, recordInHistory = true),
+      gesture.onPointerUp(pointerId = 1L, position = Offset.Zero, nowMillis = 160L),
+    )
   }
 
   @Test
@@ -56,8 +63,7 @@ class EditorTapGestureTest {
     gesture.startPendingTap(pointerId = 1L, position = Offset(10f, 20f))
     val firstClick =
       gesture.onPointerUp(pointerId = 1L, position = Offset(10f, 20f), nowMillis = 40L)
-    assertEquals(1, firstClick)
-    gesture.recordTap(nowMillis = 40L, position = Offset(10f, 20f), clickCount = firstClick!!)
+    assertEquals(1, firstClick?.count)
 
     assertEquals(2, gesture.nextTapCount(position = Offset(18f, 26f), nowMillis = 240L))
   }
@@ -73,7 +79,7 @@ class EditorTapGestureTest {
 
     assertEquals(
       3,
-      gesture.onPointerUp(pointerId = 3L, position = Offset(20f, 28f), nowMillis = 430L),
+      gesture.onPointerUp(pointerId = 3L, position = Offset(20f, 28f), nowMillis = 430L)?.count,
     )
   }
 
@@ -98,7 +104,7 @@ class EditorTapGestureTest {
 
     assertEquals(
       1,
-      gesture.onPointerUp(pointerId = 2L, position = Offset(10f, 20f), nowMillis = 470L),
+      gesture.onPointerUp(pointerId = 2L, position = Offset(10f, 20f), nowMillis = 470L)?.count,
     )
   }
 
@@ -111,7 +117,7 @@ class EditorTapGestureTest {
     assertFalse(gesture.onPointerMove(pointerId = 1L, position = Offset(4f, 0f)))
     assertEquals(
       1,
-      gesture.onPointerUp(pointerId = 1L, position = Offset(4f, 0f), nowMillis = 160L),
+      gesture.onPointerUp(pointerId = 1L, position = Offset(4f, 0f), nowMillis = 160L)?.count,
     )
   }
 
@@ -138,7 +144,10 @@ class EditorTapGestureTest {
     gesture.onPointerUp(pointerId = 2L, position = Offset(9f, 0f), nowMillis = 560L)
     gesture.startPendingTap(pointerId = 3L, position = Offset.Zero, nowMillis = 660L)
 
-    assertEquals(1, gesture.onPointerUp(pointerId = 3L, position = Offset.Zero, nowMillis = 700L))
+    assertEquals(
+      1,
+      gesture.onPointerUp(pointerId = 3L, position = Offset.Zero, nowMillis = 700L)?.count,
+    )
   }
 
   @Test
@@ -150,6 +159,24 @@ class EditorTapGestureTest {
 
     assertFalse(gesture.canDispatchTapTimer)
     assertFalse(gesture.cancelActivePointerStream())
+  }
+
+  @Test
+  fun `editing promotion completes as a fresh tap without entering tap history`() {
+    val gesture = createTapGesture()
+
+    gesture.recordTap(nowMillis = 40L, position = Offset.Zero, clickCount = 1)
+    gesture.startPendingTap(pointerId = 2L, position = Offset.Zero, nowMillis = 120L)
+    gesture.prepareActiveTapForEditingPromotion()
+
+    assertEquals(
+      EditorCompletedTap(count = 1, contentAlreadyDispatched = true, recordInHistory = false),
+      gesture.onPointerUp(pointerId = 2L, position = Offset.Zero, nowMillis = 160L),
+    )
+    assertEquals(2, gesture.nextTapCount(position = Offset.Zero, nowMillis = 200L))
+
+    gesture.clearTapHistory()
+    assertEquals(1, gesture.nextTapCount(position = Offset.Zero, nowMillis = 200L))
   }
 
   private fun EditorTapGesture.startPendingTap(

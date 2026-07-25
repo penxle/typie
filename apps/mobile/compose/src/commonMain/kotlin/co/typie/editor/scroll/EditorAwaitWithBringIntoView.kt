@@ -57,12 +57,14 @@ internal fun Editor.syncWithBringIntoView(
 
 internal suspend fun Editor.awaitWithBringIntoView(
   bringIntoViewRequests: EditorBringIntoViewRequests,
+  admit: () -> Boolean = { true },
   block: EditorBringIntoViewAwaitScope.() -> Unit,
 ): EditorState? {
   val beforeCommitBlocks = mutableListOf<EditorBringIntoViewCommitScope.() -> Unit>()
   var committedState: EditorState? = null
 
   await(
+    admit = admit,
     beforeCommit = { snapshot ->
       committedState = snapshot
       val commitScope =
@@ -73,7 +75,7 @@ internal suspend fun Editor.awaitWithBringIntoView(
         }
 
       beforeCommitBlocks.forEach { block -> block(commitScope) }
-    }
+    },
   ) {
     val editorScope = this
     val awaitScope =

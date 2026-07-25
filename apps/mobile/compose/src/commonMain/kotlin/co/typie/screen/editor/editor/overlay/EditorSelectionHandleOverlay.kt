@@ -23,7 +23,7 @@ import co.typie.ui.theme.AppTheme
 
 @Composable
 internal fun EditorSelectionHandleOverlay(editor: Editor, uiState: EditorUiState, density: Float) {
-  if (!uiState.focused || editor.selection.isCollapsed() || hasActiveTableCellSelection(editor)) {
+  if (editor.selection.isCollapsed() || hasActiveTableCellSelection(editor)) {
     return
   }
 

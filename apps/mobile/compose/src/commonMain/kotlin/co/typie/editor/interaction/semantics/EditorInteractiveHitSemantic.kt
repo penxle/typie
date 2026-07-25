@@ -9,27 +9,42 @@ import co.typie.editor.ffi.PlainNode
 import co.typie.editor.ffi.Rect
 import co.typie.editor.ffi.ViewOp
 
+internal enum class EditorInteractiveTapResult {
+  None,
+  HandledViewAction,
+  BlockedMutation,
+}
+
 internal class EditorInteractiveHitSemantic {
-  fun handleTap(editor: Editor, point: PagePoint): Boolean =
+  fun handleTap(
+    editor: Editor,
+    point: PagePoint,
+    editing: Boolean,
+    readOnly: Boolean,
+  ): EditorInteractiveTapResult =
     when (val hit = editor.interactiveHitTest(page = point.page, x = point.x, y = point.y)) {
       is InteractiveHit.FoldTitle -> {
         val onText = hit.textRect?.contains(point.x, point.y) == true
         if (onText) {
-          false
+          EditorInteractiveTapResult.None
         } else {
           editor.enqueue(Message.View(ViewOp.ToggleFold(id = hit.id)))
-          true
+          EditorInteractiveTapResult.HandledViewAction
         }
       }
       is InteractiveHit.CalloutIcon -> {
-        editor.enqueue(
-          Message.Node(
-            NodeOp.SetAttrs(id = hit.id, attrs = PlainNode.Callout(variant = hit.nextVariant))
+        if (editing && !readOnly) {
+          editor.enqueue(
+            Message.Node(
+              NodeOp.SetAttrs(id = hit.id, attrs = PlainNode.Callout(variant = hit.nextVariant))
+            )
           )
-        )
-        true
+          EditorInteractiveTapResult.HandledViewAction
+        } else {
+          EditorInteractiveTapResult.BlockedMutation
+        }
       }
-      else -> false
+      else -> EditorInteractiveTapResult.None
     }
 }
 

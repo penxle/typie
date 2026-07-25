@@ -66,7 +66,7 @@ internal fun EditorSelectionContextMenuOverlay(
   overlaySize: Size,
   visibleArea: EditorVisibleArea,
   showCopyCutActions: Boolean,
-  editorReadOnly: Boolean = false,
+  editorMutationEnabled: Boolean = true,
   availableExpansionUnits: Set<SelectionExpansionUnit>,
   onCopy: () -> Unit,
   onCut: () -> Unit,
@@ -154,11 +154,11 @@ internal fun EditorSelectionContextMenuOverlay(
             EditorContextMenuPage.Primary -> {
               if (showCopyCutActions) {
                 EditorContextMenuItem(label = "복사", onClick = onCopy.withDismiss(onDismiss))
-                if (!editorReadOnly) {
+                if (editorMutationEnabled) {
                   EditorContextMenuItem(label = "잘라내기", onClick = onCut.withDismiss(onDismiss))
                 }
               }
-              if (!editorReadOnly) {
+              if (editorMutationEnabled) {
                 EditorContextMenuItem(label = "붙여넣기", onClick = onPaste.withDismiss(onDismiss))
               }
               if (availableExpansionUnits.isNotEmpty()) {

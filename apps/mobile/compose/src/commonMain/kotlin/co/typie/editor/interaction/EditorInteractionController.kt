@@ -26,6 +26,8 @@ internal class EditorInteractionController(
   private val platformProvider: () -> Platform = { Platform.Desktop },
   private val pointerInputEnabledProvider: () -> Boolean = { true },
   private val readOnlyProvider: () -> Boolean = { false },
+  private val editingProvider: () -> Boolean = { true },
+  private val doubleTapToEditEnabledProvider: () -> Boolean = { true },
 ) : EditorGestureContext {
   override val editor: Editor
     get() = editorProvider()
@@ -38,6 +40,12 @@ internal class EditorInteractionController(
 
   override val readOnly: Boolean
     get() = readOnlyProvider()
+
+  override val editing: Boolean
+    get() = editingProvider()
+
+  override val doubleTapToEditEnabled: Boolean
+    get() = doubleTapToEditEnabledProvider()
 
   override val platform: Platform
     get() = platformProvider()
@@ -220,7 +228,12 @@ internal class EditorInteractionController(
     gestures.cancel(context = this)
   }
 
+  fun consumeActiveTapAfterEditingPromotion() {
+    gestures.consumeActiveTapAfterEditingPromotion(context = this)
+  }
+
   fun reset() {
+    effects.cancelTapSequenceConfirmation()
     effects.setScrollGestureLocked(false)
     mode = EditorInteractionMode.Idle
     gestures.reset()

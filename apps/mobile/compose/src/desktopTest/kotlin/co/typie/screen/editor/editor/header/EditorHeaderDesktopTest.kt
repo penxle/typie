@@ -5,17 +5,21 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performTextInputSelection
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.unit.Density
@@ -25,10 +29,263 @@ import co.typie.ui.theme.LocalThemeMode
 import co.typie.ui.theme.ResolvedThemeMode
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
+import kotlin.test.assertTrue
 
 @OptIn(ExperimentalTestApi::class)
 class EditorHeaderDesktopTest {
+  @Test
+  fun readingHeaderKeepsSelectionSemanticsWithoutTextMutation() = runComposeUiTest {
+    setContent {
+      CompositionLocalProvider(
+        LocalDensity provides Density(1f),
+        LocalThemeMode provides ResolvedThemeMode.Light,
+      ) {
+        EditorHeader(
+          title = Title,
+          subtitle = "",
+          loading = false,
+          editing = false,
+          topInset = 0.dp,
+          onTitleChange = {},
+          onSubtitleChange = {},
+          onTitleFocused = {},
+          onSubtitleFocused = {},
+          onHeightChanged = {},
+          onEnterDocument = {},
+        )
+      }
+    }
+    waitForIdle()
+
+    val field =
+      onAllNodes(hasText(Title), useUnmergedTree = true).fetchSemanticsNodes().single {
+        SemanticsProperties.TextSelectionRange in it.config
+      }
+
+    assertTrue(SemanticsActions.SetSelection in field.config)
+    assertFalse(SemanticsActions.SetText in field.config)
+    assertTrue(SemanticsActions.CustomActions in field.config)
+  }
+
+  @Test
+  fun readingTitleAccessibilityEditActionPromotesAndFocusesTheField() = runComposeUiTest {
+    val editing = mutableStateOf(false)
+    var promotionCount = 0
+    setContent {
+      CompositionLocalProvider(
+        LocalDensity provides Density(1f),
+        LocalThemeMode provides ResolvedThemeMode.Light,
+      ) {
+        EditorHeader(
+          title = Title,
+          subtitle = "",
+          loading = false,
+          editing = editing.value,
+          topInset = 0.dp,
+          onTitleChange = {},
+          onSubtitleChange = {},
+          onTitleFocused = {},
+          onSubtitleFocused = {},
+          onHeightChanged = {},
+          onEnterDocument = {},
+          onRequestEditing = {
+            promotionCount += 1
+            editing.value = true
+            true
+          },
+        )
+      }
+    }
+    waitForIdle()
+
+    val readingTitle =
+      onAllNodes(hasText(Title), useUnmergedTree = true).fetchSemanticsNodes().single {
+        SemanticsProperties.TextSelectionRange in it.config
+      }
+    runOnIdle { assertTrue(readingTitle.config[SemanticsActions.CustomActions].single().action()) }
+    waitForIdle()
+
+    assertEquals(1, promotionCount)
+    onNode(hasText(Title) and hasSetTextAction(), useUnmergedTree = true).assertIsFocused()
+  }
+
+  @Test
+  fun readingTitleDoubleTapPromotesOnceAndPlacesCollapsedSelection() = runComposeUiTest {
+    val editing = mutableStateOf(false)
+    var promotionCount = 0
+    setContent {
+      CompositionLocalProvider(
+        LocalDensity provides Density(1f),
+        LocalThemeMode provides ResolvedThemeMode.Light,
+      ) {
+        Box(Modifier.width(240.dp)) {
+          EditorHeader(
+            title = Title,
+            subtitle = "",
+            loading = false,
+            editing = editing.value,
+            topInset = 0.dp,
+            onTitleChange = {},
+            onSubtitleChange = {},
+            onTitleFocused = {},
+            onSubtitleFocused = {},
+            onHeightChanged = {},
+            onEnterDocument = {},
+            onRequestEditing = {
+              promotionCount += 1
+              editing.value = true
+              true
+            },
+          )
+        }
+      }
+    }
+    waitForIdle()
+
+    val readingTitle = onNode(hasText(Title), useUnmergedTree = true)
+    val readingTitleBounds = readingTitle.fetchSemanticsNode().boundsInRoot
+    readingTitle.performTouchInput {
+      val position = Offset(x = readingTitleBounds.width * 0.4f, y = readingTitleBounds.height / 2f)
+      down(position)
+      advanceEventTime(10)
+      up()
+      advanceEventTime(100)
+      down(position)
+      advanceEventTime(10)
+      up()
+    }
+    waitForIdle()
+
+    val editableTitle =
+      onNode(hasText(Title) and hasSetTextAction(), useUnmergedTree = true).assertIsFocused()
+    val selection =
+      editableTitle.fetchSemanticsNode().config[SemanticsProperties.TextSelectionRange]
+    assertEquals(1, promotionCount)
+    assertTrue(selection.collapsed)
+    assertTrue(selection.start in 1 until Title.length)
+  }
+
+  @Test
+  fun readingTitleSingleTapPromotesWhenDoubleTapSettingIsDisabled() = runComposeUiTest {
+    val editing = mutableStateOf(false)
+    var promotionCount = 0
+    setContent {
+      CompositionLocalProvider(
+        LocalDensity provides Density(1f),
+        LocalThemeMode provides ResolvedThemeMode.Light,
+      ) {
+        EditorHeader(
+          title = Title,
+          subtitle = "",
+          loading = false,
+          editing = editing.value,
+          doubleTapToEditEnabled = false,
+          topInset = 0.dp,
+          onTitleChange = {},
+          onSubtitleChange = {},
+          onTitleFocused = {},
+          onSubtitleFocused = {},
+          onHeightChanged = {},
+          onEnterDocument = {},
+          onRequestEditing = {
+            promotionCount += 1
+            editing.value = true
+            true
+          },
+        )
+      }
+    }
+    waitForIdle()
+
+    onNode(hasText(Title), useUnmergedTree = true).performTouchInput { click(center) }
+    waitForIdle()
+
+    assertEquals(1, promotionCount)
+    onNode(hasText(Title) and hasSetTextAction(), useUnmergedTree = true).assertIsFocused()
+  }
+
+  @Test
+  fun editorReplacementClearsThePreviousHeaderReadingTap() = runComposeUiTest {
+    val readingTapIdentity = mutableStateOf<Any>(Any())
+    var promotionCount = 0
+    setContent {
+      CompositionLocalProvider(
+        LocalDensity provides Density(1f),
+        LocalThemeMode provides ResolvedThemeMode.Light,
+      ) {
+        EditorHeader(
+          title = Title,
+          subtitle = "",
+          loading = false,
+          editing = false,
+          readingTapIdentity = readingTapIdentity.value,
+          topInset = 0.dp,
+          onTitleChange = {},
+          onSubtitleChange = {},
+          onTitleFocused = {},
+          onSubtitleFocused = {},
+          onHeightChanged = {},
+          onEnterDocument = {},
+          onRequestEditing = {
+            promotionCount += 1
+            true
+          },
+        )
+      }
+    }
+    waitForIdle()
+
+    onNode(hasText(Title), useUnmergedTree = true).performTouchInput { click(center) }
+    runOnIdle { readingTapIdentity.value = Any() }
+    waitForIdle()
+    onNode(hasText(Title), useUnmergedTree = true).performTouchInput { click(center) }
+    waitForIdle()
+
+    assertEquals(0, promotionCount)
+  }
+
+  @Test
+  fun readingCleanupCollapsesExistingHeaderSelection() = runComposeUiTest {
+    val editing = mutableStateOf(true)
+    val cleanupRequest = mutableStateOf(0)
+    setContent {
+      CompositionLocalProvider(
+        LocalDensity provides Density(1f),
+        LocalThemeMode provides ResolvedThemeMode.Light,
+      ) {
+        EditorHeader(
+          title = Title,
+          subtitle = SubtitleWrappedText,
+          loading = false,
+          editing = editing.value,
+          readingModeCleanupRequest = cleanupRequest.value,
+          topInset = 0.dp,
+          onTitleChange = {},
+          onSubtitleChange = {},
+          onTitleFocused = {},
+          onSubtitleFocused = {},
+          onHeightChanged = {},
+          onEnterDocument = {},
+        )
+      }
+    }
+    waitForIdle()
+
+    onNode(hasText(Title) and hasSetTextAction(), useUnmergedTree = true)
+      .performTextInputSelection(TextRange(1, 5))
+    editing.value = false
+    cleanupRequest.value += 1
+    waitForIdle()
+
+    val field =
+      onAllNodes(hasText(Title), useUnmergedTree = true).fetchSemanticsNodes().single {
+        SemanticsProperties.TextSelectionRange in it.config
+      }
+    assertTrue(field.config[SemanticsProperties.TextSelectionRange].collapsed)
+  }
+
   @Test
   fun verticalArrowsExitOnlyWhenNativeMovementStaysOnVisualLine() = runComposeUiTest {
     val bodyEntries = mutableStateOf(0)

@@ -7,6 +7,24 @@ import kotlin.test.assertEquals
 
 class ToolbarInputStateTest {
   @Test
+  fun keyboard_dismiss_action_enters_reading_mode() {
+    val state = EditorToolbarInputState()
+    val keyboardVisible = toolbarInputEnvironment(imeBottom = 320.dp)
+    state.onEnvironmentChanged(keyboardVisible)
+
+    val effects = state.dispatch(ToolbarIntent.DismissInput, keyboardVisible)
+
+    assertEquals(
+      listOf(
+        EditorInputEffect.HideKeyboard,
+        EditorInputEffect.ClearFocus,
+        EditorInputEffect.EnterReadingMode,
+      ),
+      effects,
+    )
+  }
+
+  @Test
   fun hide_input_closes_panel_and_keyboard_without_restoring_or_clearing_focus() {
     val state = EditorToolbarInputState()
     val keyboardVisible = toolbarInputEnvironment(imeBottom = 320.dp)
@@ -202,7 +220,7 @@ class ToolbarInputStateTest {
   }
 
   @Test
-  fun system_ime_dismiss_while_editor_focused_clears_focus() {
+  fun system_ime_dismiss_while_editor_focused_enters_reading_mode() {
     val state = EditorToolbarInputState()
     val keyboardVisible = toolbarInputEnvironment(imeBottom = 320.dp)
 
@@ -219,15 +237,15 @@ class ToolbarInputStateTest {
         )
       )
 
-    assertEquals(listOf(EditorInputEffect.ClearFocus), effects)
+    assertEquals(listOf(EditorInputEffect.EnterReadingMode), effects)
     assertEquals(null, state.keyboardRestoreInset)
     assertEquals(0.dp, state.rememberedKeyboardInset)
     assertEquals(0.dp, state.retainedKeyboardInset())
 
-    val focusCleared =
+    val focusLost =
       state.onEnvironmentChanged(toolbarInputEnvironment(focused = false, imeBottom = 0.dp))
 
-    assertEquals(emptyList(), focusCleared)
+    assertEquals(emptyList(), focusLost)
   }
 
   @Test
@@ -321,7 +339,7 @@ class ToolbarInputStateTest {
   }
 
   @Test
-  fun system_ime_dismiss_during_keyboard_restore_clears_focus_and_restore() {
+  fun system_ime_dismiss_after_keyboard_restore_enters_reading_mode() {
     val state = EditorToolbarInputState()
     val keyboardVisible = toolbarInputEnvironment(imeBottom = 320.dp)
 
@@ -343,7 +361,7 @@ class ToolbarInputStateTest {
 
     val effects = state.onEnvironmentChanged(keyboardHidden)
 
-    assertEquals(listOf(EditorInputEffect.ClearFocus), effects)
+    assertEquals(listOf(EditorInputEffect.EnterReadingMode), effects)
     assertEquals(null, state.keyboardRestoreInset)
     assertEquals(0.dp, state.rememberedKeyboardInset)
   }

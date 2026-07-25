@@ -10,11 +10,19 @@ internal interface EditorInteractionEffects {
 
   fun cancelTapDispatch()
 
+  fun scheduleTapSequenceConfirmation(onConfirmed: () -> Unit)
+
+  fun cancelTapSequenceConfirmation()
+
   fun scheduleLongPressDispatch(pointerId: Long, position: Offset, dispatchAtMillis: Long)
 
   fun cancelLongPressDispatch()
 
   fun launchInteraction(block: suspend () -> Unit)
+
+  fun requestEditing(editor: Editor): Boolean
+
+  fun showReadingEditHint()
 
   fun requestFocus(editor: Editor): Boolean
 

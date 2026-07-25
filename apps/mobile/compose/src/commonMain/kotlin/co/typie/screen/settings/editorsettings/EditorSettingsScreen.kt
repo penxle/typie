@@ -117,6 +117,20 @@ fun EditorSettingsScreen() {
 
       EditorSettingsSection(title = "편집 설정") {
         SettingControlRow(
+          label = "편집하려면 더블 탭",
+          description = "읽기 모드에서 더블 탭해야 편집을 시작합니다.",
+          onClick = { Preference.doubleTapToEditEnabled = !Preference.doubleTapToEditEnabled },
+          trailing = {
+            SettingSwitch(
+              checked = Preference.doubleTapToEditEnabled,
+              onCheckedChange = { next -> Preference.doubleTapToEditEnabled = next },
+            )
+          },
+        )
+
+        CardDivider(inset = 20.dp)
+
+        SettingControlRow(
           label = "선택 영역 둘러싸기",
           description = "따옴표나 괄호를 입력하면 선택 영역을 둘러쌉니다.",
           onClick = { Preference.autoSurroundEnabled = !Preference.autoSurroundEnabled },

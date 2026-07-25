@@ -1,0 +1,557 @@
+package co.typie.editor.interaction
+
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.PointerId
+import androidx.compose.ui.input.pointer.PointerInputChange
+import co.typie.editor.Editor
+import co.typie.editor.FakeFfiEditor
+import co.typie.editor.PagePoint
+import co.typie.editor.ffi.Affinity
+import co.typie.editor.ffi.CalloutVariant
+import co.typie.editor.ffi.InputModifiers
+import co.typie.editor.ffi.InteractiveHit
+import co.typie.editor.ffi.Message
+import co.typie.editor.ffi.PageRect
+import co.typie.editor.ffi.Position
+import co.typie.editor.ffi.Rect
+import co.typie.editor.ffi.Selection
+import co.typie.editor.ffi.SelectionOp
+import co.typie.editor.interaction.gestures.EditorConsecutiveTapMaxIntervalMillis
+import co.typie.editor.runtime.EditorUiState
+import co.typie.platform.Platform
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class EditorReadingModeInteractionTest {
+  @Test
+  fun `reading single tap waits through the consecutive tap window before hint`() =
+    runTest(StandardTestDispatcher()) {
+      val fixture = fixture()
+      fixture.editor.sync {}
+
+      fixture.controller.down(pointerId = 1L, nowMillis = 0L)
+      fixture.controller.up(pointerId = 1L, nowMillis = 40L)
+
+      advanceTimeBy(EditorConsecutiveTapMaxIntervalMillis - 1)
+      runCurrent()
+      assertEquals(0, fixture.effects.hintCount)
+      assertEquals(0, fixture.effects.focusRequestCount)
+      assertEquals(
+        listOf<Message>(Message.Selection(SelectionOp.SetAt(page = 0, x = 10f, y = 20f))),
+        fixture.fake.enqueued,
+      )
+
+      advanceTimeBy(1)
+      runCurrent()
+      assertEquals(1, fixture.effects.hintCount)
+      assertEquals(0, fixture.effects.editingRequestCount)
+    }
+
+  @Test
+  fun `editable 250 millisecond tap timer cannot present the reading hint`() =
+    runTest(StandardTestDispatcher()) {
+      val fixture = fixture(editing = true)
+      fixture.editor.sync {}
+
+      fixture.controller.down(pointerId = 1L, nowMillis = 0L)
+      fixture.controller.onTapTimer(nowMillis = 250L)
+      advanceUntilIdle()
+
+      assertEquals(0, fixture.effects.hintCount)
+      assertEquals(
+        listOf<Message>(Message.Selection(SelectionOp.SetAt(page = 0, x = 10f, y = 20f))),
+        fixture.fake.enqueued,
+      )
+    }
+
+  @Test
+  fun `reading double tap applies reading selection then one editable cursor move`() =
+    runTest(StandardTestDispatcher()) {
+      val fixture = fixture()
+      fixture.editor.sync {}
+
+      fixture.controller.down(pointerId = 1L, nowMillis = 0L)
+      fixture.controller.up(pointerId = 1L, nowMillis = 40L)
+      advanceTimeBy(100L)
+      fixture.controller.down(pointerId = 2L, nowMillis = 140L)
+      fixture.controller.up(pointerId = 2L, nowMillis = 180L)
+      advanceUntilIdle()
+
+      assertTrue(fixture.editing)
+      assertEquals(1, fixture.effects.editingRequestCount)
+      assertEquals(1, fixture.effects.focusRequestCount)
+      assertEquals(1, fixture.effects.softwareKeyboardRequestCount)
+      assertEquals(0, fixture.effects.hintCount)
+      assertEquals(
+        listOf<Message>(
+          Message.Selection(SelectionOp.SetAt(page = 0, x = 10f, y = 20f)),
+          Message.Selection(SelectionOp.SetAt(page = 0, x = 10f, y = 20f)),
+        ),
+        fixture.fake.enqueued,
+      )
+      assertTrue(
+        fixture.fake.enqueued.none { message ->
+          (message as? Message.Selection)?.op is SelectionOp.SelectUnitAt
+        }
+      )
+    }
+
+  @Test
+  fun `reading activation ignores Shift and places a collapsed cursor`() =
+    runTest(StandardTestDispatcher()) {
+      val fixture = fixture()
+      fixture.editor.sync {}
+
+      fixture.controller.down(
+        pointerId = 1L,
+        nowMillis = 0L,
+        inputModifiers = InputModifiers(shift = true),
+      )
+      fixture.controller.up(pointerId = 1L, nowMillis = 40L)
+      advanceTimeBy(100L)
+      fixture.controller.down(
+        pointerId = 2L,
+        nowMillis = 140L,
+        inputModifiers = InputModifiers(shift = true),
+      )
+      fixture.controller.up(pointerId = 2L, nowMillis = 180L)
+      advanceUntilIdle()
+
+      assertEquals(
+        listOf<Message>(
+          Message.Selection(SelectionOp.SetAt(page = 0, x = 10f, y = 20f)),
+          Message.Selection(SelectionOp.SetAt(page = 0, x = 10f, y = 20f)),
+        ),
+        fixture.fake.enqueued,
+      )
+    }
+
+  @Test
+  fun `single tap opt out promotes and preserves the first tap for editable double tap`() =
+    runTest(StandardTestDispatcher()) {
+      val fixture = fixture(doubleTapToEditEnabled = false)
+      fixture.editor.sync {}
+
+      fixture.controller.down(pointerId = 1L, nowMillis = 0L)
+      fixture.controller.up(pointerId = 1L, nowMillis = 40L)
+      runCurrent()
+
+      assertTrue(fixture.editing)
+      assertEquals(
+        Message.Selection(SelectionOp.SetAt(page = 0, x = 10f, y = 20f)),
+        fixture.fake.enqueued.single(),
+      )
+
+      fixture.controller.down(pointerId = 2L, nowMillis = 120L)
+      fixture.controller.up(pointerId = 2L, nowMillis = 160L)
+      advanceUntilIdle()
+
+      assertTrue(
+        fixture.fake.enqueued.any { message ->
+          (message as? Message.Selection)?.op is SelectionOp.SelectUnitAt
+        }
+      )
+      assertEquals(1, fixture.effects.editingRequestCount)
+      assertEquals(0, fixture.effects.hintCount)
+    }
+
+  @Test
+  fun `single tap opt out collapses an existing iOS reading selection before editing`() =
+    runTest(StandardTestDispatcher()) {
+      val fixture =
+        fixture(
+          doubleTapToEditEnabled = false,
+          expandedSelection = true,
+          tapHitsSelection = true,
+          platform = Platform.iOS,
+        )
+      fixture.editor.sync {}
+
+      fixture.controller.down(pointerId = 1L, nowMillis = 0L)
+      fixture.controller.up(pointerId = 1L, nowMillis = 40L)
+      advanceUntilIdle()
+
+      assertTrue(fixture.editing)
+      assertEquals(
+        listOf<Message>(Message.Selection(SelectionOp.SetAt(page = 0, x = 10f, y = 20f))),
+        fixture.fake.enqueued,
+      )
+      assertEquals(1, fixture.effects.focusRequestCount)
+      assertEquals(1, fixture.effects.softwareKeyboardRequestCount)
+    }
+
+  @Test
+  fun `movement and pointer cancellation discard a pending reading result`() =
+    runTest(StandardTestDispatcher()) {
+      val moved = fixture()
+      moved.editor.sync {}
+      moved.controller.down(pointerId = 1L, nowMillis = 0L)
+      moved.controller.move(pointerId = 1L, position = Offset(19f, 20f), nowMillis = 20L)
+      moved.controller.up(pointerId = 1L, position = Offset(19f, 20f), nowMillis = 40L)
+      advanceUntilIdle()
+      assertEquals(0, moved.effects.hintCount)
+
+      val cancelled = fixture()
+      cancelled.editor.sync {}
+      cancelled.controller.down(pointerId = 2L, nowMillis = 100L)
+      cancelled.controller.up(pointerId = 2L, nowMillis = 140L)
+      cancelled.controller.cancel()
+      advanceUntilIdle()
+      assertEquals(0, cancelled.effects.hintCount)
+    }
+
+  @Test
+  fun `header down cancels pending reading presentation without undoing the selection`() =
+    runTest(StandardTestDispatcher()) {
+      val fixture = fixture()
+      fixture.editor.sync {}
+
+      fixture.controller.down(pointerId = 1L, nowMillis = 0L)
+      fixture.controller.up(pointerId = 1L, nowMillis = 40L)
+      runCurrent()
+
+      fixture.controller.onPointerDown(
+        change =
+          pointerChange(pointerId = 2L, nowMillis = 100L, pressed = true, previousPressed = false),
+        position = null,
+        positionInRoot = Offset(10f, 20f),
+      )
+      advanceUntilIdle()
+
+      assertEquals(0, fixture.effects.hintCount)
+      assertEquals(
+        listOf<Message>(Message.Selection(SelectionOp.SetAt(page = 0, x = 10f, y = 20f))),
+        fixture.fake.enqueued,
+      )
+    }
+
+  @Test
+  fun `reading fold control performs view action without entering editing or showing hint`() =
+    runTest(StandardTestDispatcher()) {
+      val fixture = fixture(interactiveHit = InteractiveHit.FoldTitle(id = "fold", textRect = null))
+      fixture.editor.sync {}
+
+      fixture.controller.down(pointerId = 1L, nowMillis = 0L)
+      fixture.controller.up(pointerId = 1L, nowMillis = 40L)
+      advanceUntilIdle()
+
+      assertEquals(
+        listOf<Message>(Message.View(co.typie.editor.ffi.ViewOp.ToggleFold("fold"))),
+        fixture.fake.enqueued,
+      )
+      assertFalse(fixture.editing)
+      assertEquals(0, fixture.effects.hintCount)
+    }
+
+  @Test
+  fun `reading callout control blocks node mutation without entering editing or showing hint`() =
+    runTest(StandardTestDispatcher()) {
+      val fixture =
+        fixture(
+          interactiveHit =
+            InteractiveHit.CalloutIcon(id = "callout", nextVariant = CalloutVariant.Warning)
+        )
+      fixture.editor.sync {}
+
+      fixture.controller.down(pointerId = 1L, nowMillis = 0L)
+      fixture.controller.up(pointerId = 1L, nowMillis = 40L)
+      advanceUntilIdle()
+
+      assertTrue(fixture.fake.enqueued.isEmpty())
+      assertFalse(fixture.editing)
+      assertEquals(0, fixture.effects.hintCount)
+    }
+
+  @Test
+  fun `dismissing an existing selection menu still applies the reading tap and shows the hint`() =
+    runTest(StandardTestDispatcher()) {
+      val fixture = fixture()
+      fixture.editor.sync {}
+      fixture.effects.uiState.contextMenu.show(fixture.editor.state)
+
+      fixture.controller.down(pointerId = 1L, nowMillis = 0L)
+      fixture.controller.up(pointerId = 1L, nowMillis = 40L)
+      advanceUntilIdle()
+
+      assertFalse(fixture.effects.uiState.contextMenu.visible)
+      assertEquals(
+        listOf<Message>(Message.Selection(SelectionOp.SetAt(page = 0, x = 10f, y = 20f))),
+        fixture.fake.enqueued,
+      )
+      assertEquals(1, fixture.effects.hintCount)
+      assertFalse(fixture.editing)
+    }
+
+  @Test
+  fun `reading tap replaces an existing range and still shows the edit hint`() =
+    runTest(StandardTestDispatcher()) {
+      val fixture = fixture(expandedSelection = true)
+      fixture.editor.sync {}
+
+      fixture.controller.down(pointerId = 1L, nowMillis = 0L)
+      fixture.controller.up(pointerId = 1L, nowMillis = 40L)
+      advanceUntilIdle()
+
+      assertEquals(
+        listOf<Message>(Message.Selection(SelectionOp.SetAt(page = 0, x = 10f, y = 20f))),
+        fixture.fake.enqueued,
+      )
+      assertEquals(1, fixture.effects.hintCount)
+      assertFalse(fixture.effects.uiState.contextMenu.visible)
+      assertFalse(fixture.editing)
+    }
+
+  @Test
+  fun `reading tap that selects a node shows the hint and copy menu after confirmation`() =
+    runTest(StandardTestDispatcher()) {
+      val nodeSelection =
+        Selection(
+          anchor = Position("node", 0, Affinity.Downstream),
+          head = Position("node", 1, Affinity.Downstream),
+        )
+      val fixture = fixture(pointSelectionResult = nodeSelection)
+      fixture.editor.sync {}
+
+      fixture.controller.down(pointerId = 1L, nowMillis = 0L)
+      fixture.controller.up(pointerId = 1L, nowMillis = 40L)
+      runCurrent()
+
+      assertEquals(0, fixture.effects.hintCount)
+      assertFalse(fixture.effects.uiState.contextMenu.visible)
+      assertEquals(0, fixture.effects.focusRequestCount)
+      assertEquals(0, fixture.effects.softwareKeyboardRequestCount)
+
+      advanceTimeBy(EditorConsecutiveTapMaxIntervalMillis)
+      runCurrent()
+
+      assertEquals(1, fixture.effects.hintCount)
+      assertTrue(fixture.effects.uiState.contextMenu.isVisibleFor(fixture.editor.state))
+      assertFalse(fixture.editing)
+    }
+
+  private fun TestScope.fixture(
+    editing: Boolean = false,
+    doubleTapToEditEnabled: Boolean = true,
+    interactiveHit: InteractiveHit? = null,
+    expandedSelection: Boolean = false,
+    tapHitsSelection: Boolean = false,
+    pointSelectionResult: Selection? = null,
+    platform: Platform = Platform.Desktop,
+  ): Fixture {
+    var currentSelection =
+      if (expandedSelection) {
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 4, Affinity.Downstream),
+        )
+      } else {
+        FakeFfiEditor.EmptySelection
+      }
+    lateinit var fake: FakeFfiEditor
+    fake =
+      FakeFfiEditor(
+        selectionProvider = { currentSelection },
+        onTick = {
+          val latestSelection = fake.enqueued.lastOrNull() as? Message.Selection
+          if (latestSelection?.op is SelectionOp.SetAt) {
+            currentSelection = pointSelectionResult ?: FakeFfiEditor.EmptySelection
+          }
+          emptyList()
+        },
+        interactiveRegionsProvider = {
+          interactiveHit?.let { listOf(FakeFfiEditor.coveringRegion(it)) } ?: emptyList()
+        },
+        selectionHitRectsProvider = {
+          if (tapHitsSelection) {
+            listOf(PageRect(pageIdx = 0, rect = Rect(x = 0f, y = 0f, width = 100f, height = 100f)))
+          } else {
+            emptyList()
+          }
+        },
+      )
+    val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+    lateinit var fixture: Fixture
+    val effects =
+      TestEffects(
+        scope = this,
+        onRequestEditing = { requestedEditor ->
+          if (requestedEditor !== editor) {
+            false
+          } else {
+            fixture.editing = true
+            true
+          }
+        },
+      )
+    val controller =
+      EditorInteractionController(
+        editorProvider = { editor },
+        effects = effects,
+        geometry = effects,
+        uiStateProvider = { effects.uiState },
+        platformProvider = { platform },
+        editingProvider = { fixture.editing },
+        doubleTapToEditEnabledProvider = { doubleTapToEditEnabled },
+      )
+    controller.updateTapSlop(8f)
+    fixture =
+      Fixture(
+        fake = fake,
+        editor = editor,
+        effects = effects,
+        controller = controller,
+        editing = editing,
+      )
+    return fixture
+  }
+
+  private class Fixture(
+    val fake: FakeFfiEditor,
+    val editor: Editor,
+    val effects: TestEffects,
+    val controller: EditorInteractionController,
+    var editing: Boolean,
+  )
+
+  private class TestEffects(
+    private val scope: TestScope,
+    private val onRequestEditing: (Editor) -> Boolean,
+  ) : EditorInteractionEffects, EditorInteractionGeometry {
+    override val density: Float = 1f
+    val uiState = EditorUiState()
+    var hintCount = 0
+    var editingRequestCount = 0
+    var focusRequestCount = 0
+    var softwareKeyboardRequestCount = 0
+    private var tapSequenceConfirmationJob: Job? = null
+
+    override fun containsDocumentInteraction(positionInRoot: Offset): Boolean = true
+
+    override fun resolveInteractionPosition(positionInRoot: Offset): Offset = positionInRoot
+
+    override fun isTapEligible(positionInRoot: Offset): Boolean = true
+
+    override fun resolvePoint(positionInNode: Offset): PagePoint =
+      PagePoint(page = 0, x = positionInNode.x, y = positionInNode.y)
+
+    override fun resolvePagePosition(page: Int, x: Float, y: Float): Offset = Offset(x, y)
+
+    override fun resolveEdgeAutoScrollViewport(): EditorEdgeAutoScrollViewport? = null
+
+    override fun dispatchEdgeAutoScroll(delta: Offset): Offset = Offset.Zero
+
+    override fun scheduleTapDispatch(dispatchAtMillis: Long) = Unit
+
+    override fun cancelTapDispatch() = Unit
+
+    override fun scheduleTapSequenceConfirmation(onConfirmed: () -> Unit) {
+      tapSequenceConfirmationJob?.cancel()
+      tapSequenceConfirmationJob = scope.launch {
+        delay(EditorConsecutiveTapMaxIntervalMillis)
+        onConfirmed()
+      }
+    }
+
+    override fun cancelTapSequenceConfirmation() {
+      tapSequenceConfirmationJob?.cancel()
+      tapSequenceConfirmationJob = null
+    }
+
+    override fun scheduleLongPressDispatch(
+      pointerId: Long,
+      position: Offset,
+      dispatchAtMillis: Long,
+    ) = Unit
+
+    override fun cancelLongPressDispatch() = Unit
+
+    override fun launchInteraction(block: suspend () -> Unit) {
+      scope.launch { block() }
+    }
+
+    override fun requestEditing(editor: Editor): Boolean {
+      editingRequestCount += 1
+      return onRequestEditing(editor)
+    }
+
+    override fun showReadingEditHint() {
+      hintCount += 1
+    }
+
+    override fun requestFocus(editor: Editor): Boolean {
+      focusRequestCount += 1
+      uiState.updateFocus(true)
+      return true
+    }
+
+    override fun requestSoftwareKeyboard() {
+      softwareKeyboardRequestCount += 1
+    }
+
+    override fun setScrollGestureLocked(locked: Boolean) = Unit
+
+    override fun performSelectionHaptic() = Unit
+
+    override fun requestCurrentSelectionHead(version: Long) = Unit
+  }
+}
+
+private fun EditorInteractionController.down(
+  pointerId: Long,
+  nowMillis: Long,
+  inputModifiers: InputModifiers = InputModifiers(),
+) {
+  onPointerDown(
+    change = pointerChange(pointerId, nowMillis, pressed = true, previousPressed = false),
+    position = Offset(10f, 20f),
+    inputModifiers = inputModifiers,
+  )
+}
+
+private fun EditorInteractionController.move(pointerId: Long, position: Offset, nowMillis: Long) {
+  onPointerMove(
+    change = pointerChange(pointerId, nowMillis, pressed = true, previousPressed = true),
+    position = position,
+  )
+}
+
+private fun EditorInteractionController.up(
+  pointerId: Long,
+  nowMillis: Long,
+  position: Offset = Offset(10f, 20f),
+) {
+  onPointerUp(
+    change = pointerChange(pointerId, nowMillis, pressed = false, previousPressed = true),
+    position = position,
+  )
+}
+
+private fun pointerChange(
+  pointerId: Long,
+  nowMillis: Long,
+  pressed: Boolean,
+  previousPressed: Boolean,
+): PointerInputChange =
+  PointerInputChange(
+    id = PointerId(pointerId),
+    uptimeMillis = nowMillis,
+    position = Offset.Zero,
+    pressed = pressed,
+    previousUptimeMillis = nowMillis,
+    previousPosition = Offset.Zero,
+    previousPressed = previousPressed,
+    isInitiallyConsumed = false,
+  )

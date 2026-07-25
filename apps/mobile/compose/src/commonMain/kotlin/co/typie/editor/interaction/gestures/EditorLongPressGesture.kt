@@ -90,6 +90,7 @@ internal fun EditorLongPressGesture.captureSemanticIntentAtPointerDown(
       editor = context.editor,
       point = point,
       platform = context.platform,
+      editing = context.editing,
     )
   )
 }
@@ -109,6 +110,7 @@ internal fun EditorLongPressGesture.start(
         editor = context.editor,
         point = point,
         platform = context.platform,
+        editing = context.editing,
       )
   return startSession(
     pointerId = pointerId,

@@ -59,6 +59,8 @@ internal fun rememberEditorFindReplaceSession(
   editingSession: DocumentEditingSession?,
   editorState: EditorState,
   bringIntoViewRequests: EditorBringIntoViewRequests,
+  onEditingIntent: (Editor) -> Boolean,
+  admitMutation: (DocumentEditingSession) -> Boolean,
 ): EditorFindReplaceSession {
   val state = remember { FindReplaceSessionController() }
   val scope = rememberCoroutineScope()
@@ -113,12 +115,16 @@ internal fun rememberEditorFindReplaceSession(
     },
     replace = replace@{
         val activeSession = editingSession ?: return@replace
+        if (documentLocked) {
+          toast.show(ToastType.Error, "잠긴 문서는 편집할 수 없어요.")
+          return@replace
+        }
+        if (!state.canReplaceActive() || !onEditingIntent(activeSession.editor)) return@replace
         activeSession.submit { activeEditor, context ->
           activeEditor.scope.launch(context) {
             state.replaceActive(
               editor = activeEditor,
-              documentLocked = documentLocked,
-              onLocked = { toast.show(ToastType.Error, "잠긴 문서는 편집할 수 없어요.") },
+              admitMutation = { admitMutation(activeSession) },
               bringIntoViewRequests = bringIntoViewRequests,
             )
           }
@@ -126,12 +132,16 @@ internal fun rememberEditorFindReplaceSession(
       },
     replaceAll = replaceAll@{
         val activeSession = editingSession ?: return@replaceAll
+        if (documentLocked) {
+          toast.show(ToastType.Error, "잠긴 문서는 편집할 수 없어요.")
+          return@replaceAll
+        }
+        if (!state.canReplaceAll() || !onEditingIntent(activeSession.editor)) return@replaceAll
         activeSession.submit { activeEditor, context ->
           activeEditor.scope.launch(context) {
             state.replaceAllMatches(
               editor = activeEditor,
-              documentLocked = documentLocked,
-              onLocked = { toast.show(ToastType.Error, "잠긴 문서는 편집할 수 없어요.") },
+              admitMutation = { admitMutation(activeSession) },
               bringIntoViewRequests = bringIntoViewRequests,
             )
           }
@@ -177,6 +187,14 @@ private class FindReplaceSessionController {
   fun updateReplaceText(value: String) {
     replaceText = value.toSingleLineText()
   }
+
+  fun canReplaceActive(): Boolean =
+    findText.isNotEmpty() &&
+      !replaceText.containsLineBreak() &&
+      activeIndex?.let(matches::getOrNull) != null
+
+  fun canReplaceAll(): Boolean =
+    findText.isNotEmpty() && !replaceText.containsLineBreak() && matches.isNotEmpty()
 
   suspend fun runSearch(
     editor: Editor?,
@@ -259,24 +277,24 @@ private class FindReplaceSessionController {
 
   suspend fun replaceActive(
     editor: Editor?,
-    documentLocked: Boolean,
-    onLocked: () -> Unit,
+    admitMutation: () -> Boolean,
     bringIntoViewRequests: EditorBringIntoViewRequests,
   ) = stateLock.withLock {
     val activeEditor = editor ?: return@withLock
     if (findText.isEmpty() || replaceText.containsLineBreak()) return@withLock
-    if (documentLocked) {
-      onLocked()
-      return@withLock
-    }
     val replaceIndex = activeIndex ?: return@withLock
     val match = matches.getOrNull(replaceIndex) ?: return@withLock
 
-    activeEditor.replaceFindReplaceRangeText(
-      id = match.id,
-      expectedText = findText,
-      replacement = replaceText,
-    )
+    if (
+      !activeEditor.replaceFindReplaceRangeText(
+        id = match.id,
+        expectedText = findText,
+        replacement = replaceText,
+        admit = admitMutation,
+      )
+    ) {
+      return@withLock
+    }
     matches = matches.filterIndexed { index, _ -> index != replaceIndex }
     activeIndex =
       when {
@@ -293,22 +311,22 @@ private class FindReplaceSessionController {
 
   suspend fun replaceAllMatches(
     editor: Editor?,
-    documentLocked: Boolean,
-    onLocked: () -> Unit,
+    admitMutation: () -> Boolean,
     bringIntoViewRequests: EditorBringIntoViewRequests,
   ) = stateLock.withLock {
     val activeEditor = editor ?: return@withLock
     if (findText.isEmpty() || replaceText.containsLineBreak() || matches.isEmpty()) return@withLock
-    if (documentLocked) {
-      onLocked()
+
+    if (
+      !activeEditor.replaceAllFindReplaceRanges(
+        matches = matches,
+        expectedText = findText,
+        replacement = replaceText,
+        admit = admitMutation,
+      )
+    ) {
       return@withLock
     }
-
-    activeEditor.replaceAllFindReplaceRanges(
-      matches = matches,
-      expectedText = findText,
-      replacement = replaceText,
-    )
     matches = emptyList()
     activeIndex = null
     runSearchLocked(

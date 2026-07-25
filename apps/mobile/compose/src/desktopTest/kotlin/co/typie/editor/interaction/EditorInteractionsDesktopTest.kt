@@ -1955,6 +1955,10 @@ class EditorInteractionsDesktopTest {
       pointerStreamCancelCount += 1
     }
 
+    override fun scheduleTapSequenceConfirmation(onConfirmed: () -> Unit) = Unit
+
+    override fun cancelTapSequenceConfirmation() = Unit
+
     override fun scheduleLongPressDispatch(
       pointerId: Long,
       position: Offset,
@@ -1968,6 +1972,10 @@ class EditorInteractionsDesktopTest {
     }
 
     override fun launchInteraction(block: suspend () -> Unit) = Unit
+
+    override fun requestEditing(editor: Editor): Boolean = false
+
+    override fun showReadingEditHint() = Unit
 
     override fun requestFocus(editor: Editor): Boolean = false
 

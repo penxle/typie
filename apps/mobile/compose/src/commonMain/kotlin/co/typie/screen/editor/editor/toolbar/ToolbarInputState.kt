@@ -198,7 +198,7 @@ internal class EditorToolbarInputState {
       keyboardRestoreInset = null
       rememberedKeyboardInset = 0.dp
       previousIme = currentIme
-      return listOf(EditorInputEffect.ClearFocus)
+      return listOf(EditorInputEffect.EnterReadingMode)
     }
 
     var currentPanel = panel
@@ -373,6 +373,9 @@ internal class EditorToolbarInputState {
     }
     if (environment.focused) {
       effects += EditorInputEffect.ClearFocus
+    }
+    if (fixedAction == ToolbarFixedAction.DismissInput) {
+      effects += EditorInputEffect.EnterReadingMode
     }
     return effects
   }

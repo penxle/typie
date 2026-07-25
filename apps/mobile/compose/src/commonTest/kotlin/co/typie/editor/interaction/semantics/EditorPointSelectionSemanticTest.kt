@@ -164,6 +164,12 @@ class EditorPointSelectionSemanticTest {
 
     override fun cancelTapDispatch() = error("Unused in direct cursor semantic dispatch tests")
 
+    override fun scheduleTapSequenceConfirmation(onConfirmed: () -> Unit) =
+      error("Unused in direct cursor semantic dispatch tests")
+
+    override fun cancelTapSequenceConfirmation() =
+      error("Unused in direct cursor semantic dispatch tests")
+
     override fun scheduleLongPressDispatch(
       pointerId: Long,
       position: Offset,
@@ -175,6 +181,11 @@ class EditorPointSelectionSemanticTest {
 
     override fun launchInteraction(block: suspend () -> Unit) =
       error("Unused in direct cursor semantic dispatch tests")
+
+    override fun requestEditing(editor: Editor): Boolean =
+      error("Unused in direct cursor semantic dispatch tests")
+
+    override fun showReadingEditHint() = error("Unused in direct cursor semantic dispatch tests")
 
     override fun requestFocus(editor: Editor): Boolean =
       error("Unused in direct cursor semantic dispatch tests")

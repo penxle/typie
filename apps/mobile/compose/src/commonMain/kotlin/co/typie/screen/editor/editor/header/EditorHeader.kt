@@ -13,11 +13,15 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
@@ -28,6 +32,13 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalViewConfiguration
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -158,6 +169,10 @@ internal fun EditorHeader(
   subtitle: String,
   loading: Boolean,
   enabled: Boolean = true,
+  editing: Boolean = true,
+  doubleTapToEditEnabled: Boolean = true,
+  readingTapIdentity: Any? = Unit,
+  readingModeCleanupRequest: Int = 0,
   showBottomDivider: Boolean = true,
   topInset: Dp,
   subtitleFocusRequestVersion: Int = 0,
@@ -168,26 +183,35 @@ internal fun EditorHeader(
   onSubtitleFocused: () -> Unit,
   onHeightChanged: (Float) -> Unit,
   onEnterDocument: () -> Unit,
+  onRequestEditing: () -> Boolean = { false },
+  onReadingEditHint: () -> Unit = {},
 ) {
   val density = LocalDensity.current
   val showSkeleton = LocalSkeleton.current.enabled || loading
+  val inputEnabled = enabled && editing
   val titleInputState =
     rememberTextInputState(
       value = title,
       onValueChange = onTitleChange,
-      enabled = enabled,
+      enabled = inputEnabled,
       onDismiss = onEnterDocument,
     )
   val subtitleInputState =
     rememberTextInputState(
       value = subtitle,
       onValueChange = onSubtitleChange,
-      enabled = enabled,
+      enabled = inputEnabled,
       onDismiss = onEnterDocument,
     )
-  LaunchedEffect(subtitleFocusRequestVersion, enabled) {
-    if (enabled && subtitleFocusRequestVersion > 0) {
+  LaunchedEffect(subtitleFocusRequestVersion, inputEnabled) {
+    if (inputEnabled && subtitleFocusRequestVersion > 0) {
       subtitleInputState.requestFocus()
+    }
+  }
+  LaunchedEffect(editing, readingModeCleanupRequest) {
+    if (!editing) {
+      titleInputState.finishCompositionAndCollapseSelection()
+      subtitleInputState.finishCompositionAndCollapseSelection()
     }
   }
   val resolveHeight: (Int) -> Float = remember(density) { { height -> height / density.density } }
@@ -202,7 +226,13 @@ internal fun EditorHeader(
 
       EditorHeaderField(
         text = titleInputState.value,
-        onValueChange = { titleInputState.onValueChange(sanitizeTitleFieldValue(it)) },
+        onValueChange = {
+          if (editing) {
+            titleInputState.onValueChange(sanitizeTitleFieldValue(it))
+          } else {
+            titleInputState.updateSelection(it.selection)
+          }
+        },
         placeholder = "제목",
         style =
           AppTheme.typography.title.copy(
@@ -218,6 +248,10 @@ internal fun EditorHeader(
           ),
         showSkeleton = showSkeleton,
         enabled = enabled,
+        editing = editing,
+        doubleTapToEditEnabled = doubleTapToEditEnabled,
+        readingTapIdentity = readingTapIdentity,
+        readingModeCleanupRequest = readingModeCleanupRequest,
         imeAction = ImeAction.Next,
         onFocusNext = { subtitleInputState.requestFocus() },
         onEnterDocument = { subtitleInputState.requestFocus() },
@@ -225,13 +259,21 @@ internal fun EditorHeader(
         onFocused = onTitleFocused,
         modifier = Modifier.fillMaxWidth(),
         textInputState = titleInputState,
+        onRequestEditing = onRequestEditing,
+        onReadingEditHint = onReadingEditHint,
       )
 
       Spacer(Modifier.height(TitleBetweenSpacing))
 
       EditorHeaderField(
         text = subtitleInputState.value,
-        onValueChange = { subtitleInputState.onValueChange(sanitizeSubtitleFieldValue(it)) },
+        onValueChange = {
+          if (editing) {
+            subtitleInputState.onValueChange(sanitizeSubtitleFieldValue(it))
+          } else {
+            subtitleInputState.updateSelection(it.selection)
+          }
+        },
         placeholder = "부제목",
         style =
           AppTheme.typography.body.copy(
@@ -247,6 +289,10 @@ internal fun EditorHeader(
           ),
         showSkeleton = showSkeleton,
         enabled = enabled,
+        editing = editing,
+        doubleTapToEditEnabled = doubleTapToEditEnabled,
+        readingTapIdentity = readingTapIdentity,
+        readingModeCleanupRequest = readingModeCleanupRequest,
         imeAction = ImeAction.Done,
         onFocusNext = onEnterDocument,
         onEnterDocument = onEnterDocument,
@@ -259,6 +305,8 @@ internal fun EditorHeader(
         onFocused = onSubtitleFocused,
         modifier = Modifier.fillMaxWidth(),
         textInputState = subtitleInputState,
+        onRequestEditing = onRequestEditing,
+        onReadingEditHint = onReadingEditHint,
       )
 
       Spacer(Modifier.height(TitleBlockSpacing))
@@ -281,6 +329,10 @@ private fun EditorHeaderField(
   placeholderStyle: TextStyle,
   showSkeleton: Boolean,
   enabled: Boolean,
+  editing: Boolean,
+  doubleTapToEditEnabled: Boolean,
+  readingTapIdentity: Any?,
+  readingModeCleanupRequest: Int,
   imeAction: ImeAction,
   onFocusNext: () -> Unit,
   onEnterDocument: () -> Unit,
@@ -289,32 +341,115 @@ private fun EditorHeaderField(
   onFocused: () -> Unit,
   modifier: Modifier = Modifier,
   textInputState: TextInputState,
+  onRequestEditing: () -> Boolean,
+  onReadingEditHint: () -> Unit,
 ) {
   val verticalExitScope = rememberCoroutineScope()
-  val currentEnabled by rememberUpdatedState(enabled)
+  val keyboardController = LocalSoftwareKeyboardController.current
+  val density = LocalDensity.current
+  val viewConfiguration = LocalViewConfiguration.current
+  val inputEnabled = enabled && editing
+  val currentInputEnabled by rememberUpdatedState(inputEnabled)
+  val currentReadingTapEnabled by rememberUpdatedState(enabled && !editing)
+  val currentOnRequestEditing by rememberUpdatedState(onRequestEditing)
+  val currentOnReadingEditHint by rememberUpdatedState(onReadingEditHint)
+  var latestTextLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
+  var pendingActivationOffset by remember { mutableStateOf<Int?>(null) }
+  val readingTapTracker =
+    remember(
+      viewConfiguration.touchSlop,
+      density.density,
+      doubleTapToEditEnabled,
+      readingTapIdentity,
+    ) {
+      EditorHeaderReadingTapTracker(
+        touchSlopPx = viewConfiguration.touchSlop,
+        maxTapDistancePx = with(density) { 20.dp.toPx() },
+        doubleTapToEditEnabled = doubleTapToEditEnabled,
+      )
+    }
   val verticalNavigation =
     remember(verticalExitScope, textInputState) {
       HeaderVerticalNavigationState(
         scope = verticalExitScope,
         currentValue = { textInputState.value },
-        currentEnabled = { currentEnabled },
+        currentEnabled = { currentInputEnabled },
       )
     }
+  LaunchedEffect(inputEnabled, pendingActivationOffset) {
+    val offset = pendingActivationOffset ?: return@LaunchedEffect
+    if (!inputEnabled) return@LaunchedEffect
+    withFrameNanos {}
+    textInputState.updateSelection(TextRange(offset.coerceIn(0, textInputState.value.text.length)))
+    textInputState.requestFocus()
+    keyboardController?.show()
+    pendingActivationOffset = null
+  }
+  LaunchedEffect(readingTapIdentity) {
+    pendingActivationOffset = null
+    readingTapTracker.onModeChanged()
+  }
+  LaunchedEffect(editing, readingModeCleanupRequest) {
+    if (!editing) {
+      pendingActivationOffset = null
+      readingTapTracker.onModeChanged()
+    }
+  }
 
   BasicTextField(
     value = text,
     onValueChange = onValueChange,
     enabled = enabled,
+    readOnly = !editing,
     modifier =
       modifier
-        .textInputFocusable(textInputState, enabled = enabled) {
+        .textInputFocusable(textInputState, enabled = inputEnabled) {
           verticalNavigation.onFocusChanged(it.isFocused)
-          if (it.isFocused) {
+          if (inputEnabled && it.isFocused) {
             onFocused()
           }
         }
         .invalidateHeaderVerticalNavigationOnPointerDown(verticalNavigation)
+        .then(
+          if (enabled && !editing) {
+            Modifier.semantics {
+              customActions =
+                listOf(
+                  CustomAccessibilityAction(label = "편집") {
+                    val offset = textInputState.value.selection.start
+                    if (currentOnRequestEditing()) {
+                      pendingActivationOffset = offset
+                      true
+                    } else {
+                      false
+                    }
+                  }
+                )
+            }
+          } else {
+            Modifier
+          }
+        )
+        .observeEditorHeaderReadingTaps(
+          enabled = { currentReadingTapEnabled },
+          tracker = readingTapTracker,
+          currentSelectionIsExpanded = { !textInputState.value.selection.collapsed },
+          offsetForPosition = { position ->
+            (latestTextLayout?.getOffsetForPosition(position)
+                ?: textInputState.value.selection.start)
+              .coerceIn(0, textInputState.value.text.length)
+          },
+          onActivate = { offset ->
+            if (currentOnRequestEditing()) {
+              pendingActivationOffset = offset
+            }
+          },
+          onShowHint = { currentOnReadingEditHint() },
+        )
         .onPreviewKeyEvent {
+          if (!currentInputEnabled) {
+            return@onPreviewKeyEvent false
+          }
           if (it.type != KeyEventType.KeyDown) {
             return@onPreviewKeyEvent false
           }
@@ -355,10 +490,18 @@ private fun EditorHeaderField(
           }
         },
     textStyle = style.copy(color = AppTheme.colors.textDefault),
-    cursorBrush = SolidColor(AppTheme.colors.textDefault),
+    cursorBrush =
+      if (editing) {
+        SolidColor(AppTheme.colors.textDefault)
+      } else {
+        SolidColor(Color.Transparent)
+      },
     keyboardOptions = KeyboardOptions(imeAction = imeAction),
     keyboardActions = KeyboardActions(onNext = { onFocusNext() }, onDone = { onEnterDocument() }),
-    onTextLayout = verticalNavigation::onTextLayout,
+    onTextLayout = {
+      latestTextLayout = it
+      verticalNavigation.onTextLayout(it)
+    },
     minLines = 1,
     maxLines = Int.MAX_VALUE,
     decorationBox = { innerTextField ->

@@ -23,10 +23,6 @@ internal fun EditorTableCellSelectionOverlay(
   uiState: EditorUiState,
   density: Float,
 ) {
-  if (!uiState.focused) {
-    return
-  }
-
   if (resolveTableCellSelections(editor).isEmpty()) {
     return
   }
