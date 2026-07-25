@@ -13,6 +13,7 @@ import co.typie.graphql.DocumentActions_DuplicateDocument_Mutation
 import co.typie.graphql.DocumentActions_UpdateDocumentType_Mutation
 import co.typie.graphql.DocumentActions_UpdateEntityIcon_Mutation
 import co.typie.graphql.DocumentScreen_Query
+import co.typie.graphql.DocumentScreen_UpdateDocumentLock_Mutation
 import co.typie.graphql.PlaceholderResolver
 import co.typie.graphql.builder.Data
 import co.typie.graphql.builder.buildCharacterCountChange
@@ -27,6 +28,7 @@ import co.typie.graphql.type.DuplicateDocumentInput
 import co.typie.graphql.type.EntityAvailability
 import co.typie.graphql.type.EntityType
 import co.typie.graphql.type.EntityVisibility
+import co.typie.graphql.type.UpdateDocumentInput
 import co.typie.graphql.type.UpdateDocumentTypeInput
 import co.typie.graphql.type.UpdateEntityIconInput
 import co.typie.graphql.watchQuery
@@ -91,6 +93,17 @@ class DocumentViewModel : ViewModel(), EntityIconPickerSheetModel {
           input = UpdateDocumentTypeInput(documentId = documentId, type = type)
         )
       )
+    }
+
+  suspend fun updateDocumentLock(documentId: String, locked: Boolean): Result<Boolean, Nothing> =
+    result {
+      Apollo.executeMutation(
+          DocumentScreen_UpdateDocumentLock_Mutation(
+            input = UpdateDocumentInput.Builder().documentId(documentId).locked(locked).build()
+          )
+        )
+        .updateDocument
+        .locked
     }
 
   suspend fun duplicateDocument(documentId: String): Result<String, Nothing> = result {

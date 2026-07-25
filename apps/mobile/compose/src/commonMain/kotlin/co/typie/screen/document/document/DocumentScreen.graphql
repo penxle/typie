@@ -28,3 +28,10 @@ query DocumentScreen_Query($entityId: ID!) {
     }
   }
 }
+
+mutation DocumentScreen_UpdateDocumentLock_Mutation($input: UpdateDocumentInput!) {
+  updateDocument(input: $input) {
+    id
+    locked
+  }
+}

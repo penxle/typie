@@ -25,6 +25,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -122,6 +123,7 @@ fun DocumentScreen(entityId: String) {
   val document = entity.node.onDocument
   var characterCountExpanded by rememberSaveable(entityId) { mutableStateOf(false) }
   var todayRecordExpanded by rememberSaveable(entityId) { mutableStateOf(false) }
+  var documentLockUpdateInFlight by remember(entityId) { mutableStateOf(false) }
 
   fun showPendingAction(label: String) {
     toast.show(ToastType.Notification, "$label 기능은 아직 준비 중이에요.")
@@ -296,6 +298,27 @@ fun DocumentScreen(entityId: String) {
             if (it.isOk) model.refetch()
           }
         }
+      }
+    }
+    val toggleDocumentLock: suspend () -> Unit = toggleDocumentLock@{
+      if (loading || documentLockUpdateInFlight) return@toggleDocumentLock
+
+      documentLockUpdateInFlight = true
+      try {
+        model
+          .updateDocumentLock(document.id, locked = !document.locked)
+          .withDefaultExceptionHandler(toast)
+          .onOk { locked ->
+            toast.success(
+              if (locked) {
+                "편집 잠금이 설정되었어요. 편집 잠금을 해제하기 전까지 문서를 편집할 수 없어요."
+              } else {
+                "편집 잠금이 해제되었어요. 이제 문서를 편집할 수 있어요."
+              }
+            )
+          }
+      } finally {
+        documentLockUpdateInFlight = false
       }
     }
     val duplicateDocument: suspend () -> Unit = {
@@ -519,7 +542,7 @@ fun DocumentScreen(entityId: String) {
       DocumentActionRow(
         icon = Lucide.LockKeyhole,
         label = if (document.locked) "편집 잠금 해제" else "편집 잠금",
-        onClick = { showPendingAction(if (document.locked) "편집 잠금 해제" else "편집 잠금") },
+        onClick = toggleDocumentLock,
       )
       DocumentActionRow(
         icon = if (document.type == DocumentType.TEMPLATE) Lucide.File else Lucide.LayoutTemplate,
