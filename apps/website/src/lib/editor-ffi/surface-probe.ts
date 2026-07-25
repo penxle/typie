@@ -1,9 +1,11 @@
+import { browser } from '$app/environment';
+
 // 탭 복귀 후 페이지 캔버스 렌더링 깨짐 진단용 계측. localStorage 'typie:surface-probe'='1'로 켜고
 // 새로고침한다.
 // '1' = 픽셀 스냅샷 검증. 페이지 캔버스를 getImageData로 표본 판독(캔버스를 CPU 래스터로 전환시키는
 //       부작용 있음 — 버그를 가리는 것이 실측으로 확인됨)해 baseline과 대조, 렌더 없는 wipe를 감지한다.
 
-const mode = typeof localStorage === 'undefined' ? null : localStorage.getItem('typie:surface-probe');
+const mode = browser ? localStorage.getItem('typie:surface-probe') : null;
 const enabled = mode === '1';
 
 // 프로브가 (editor,page)별 entry를 묶는 opaque 키. Editor 인스턴스가 이를 만족한다.
