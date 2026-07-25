@@ -1,3 +1,8 @@
+input AbandonBlobUploadInput {
+  assetId: ID!
+  nonce: String!
+}
+
 input AddNoteEntityInput {
   entityId: ID!
   noteId: ID!
@@ -52,6 +57,19 @@ scalar Binary
 interface Blob {
   id: ID!
   size: BigInt!
+}
+
+enum BlobUploadKind {
+  FILE
+  IMAGE
+}
+
+type BlobUploadReservation {
+  assetId: ID!
+  nonce: String!
+  path: String!
+  uploadFields: JSON!
+  uploadUrl: String!
 }
 
 type CharacterCountChange {
@@ -610,6 +628,17 @@ type File implements Blob {
   url: String!
 }
 
+input FinalizeBlobUploadAsFileInput {
+  assetId: ID!
+  nonce: String!
+}
+
+input FinalizeBlobUploadAsImageInput {
+  assetId: ID!
+  modification: JSON
+  nonce: String!
+}
+
 type Folder implements IFolder {
   characterCount: Int!
   documentCount: Int!
@@ -824,6 +853,7 @@ input MoveWidgetInput {
 }
 
 type Mutation {
+  abandonBlobUpload(input: AbandonBlobUploadInput!): Boolean!
   addNoteEntity(input: AddNoteEntityInput!): Note!
   adminGiveCredit(input: AdminGiveCreditInput!): Boolean!
   adminImpersonate(input: AdminImpersonateInput!): Boolean!
@@ -863,6 +893,8 @@ type Mutation {
   dumpLocalStorage(input: DumpLocalStorageInput!): User!
   duplicateDocument(input: DuplicateDocumentInput!): Document!
   exportDocument(input: ExportDocumentInput!): ExportDocumentResult!
+  finalizeBlobUploadAsFile(input: FinalizeBlobUploadAsFileInput!): File!
+  finalizeBlobUploadAsImage(input: FinalizeBlobUploadAsImageInput!): Image!
   generateActivityImage: Binary!
   generateRandomName: String!
   generateSingleSignOnAuthorizationUrl(input: GenerateSingleSignOnAuthorizationUrlInput!): String!
@@ -888,6 +920,7 @@ type Mutation {
   removeNoteEntity(input: RemoveNoteEntityInput!): Note!
   renameFolder(input: RenameFolderInput!): Folder!
   reportDocument(input: ReportDocumentInput!): Boolean!
+  reserveBlobUploads(input: ReserveBlobUploadsInput!): [BlobUploadReservation!]!
   resetPassword(input: ResetPasswordInput!): Boolean!
   resetPreferences: User!
   resolveDocumentCommentThread(input: ResolveDocumentCommentThreadInput!): DocumentCommentThread!
@@ -1246,6 +1279,19 @@ input RenameFolderInput {
 input ReportDocumentInput {
   documentId: ID!
   reason: String
+}
+
+input ReserveBlobUploadItemInput {
+  assetId: ID
+  format: String!
+  kind: BlobUploadKind!
+  name: String!
+  size: BigInt!
+}
+
+input ReserveBlobUploadsInput {
+  documentId: ID!
+  items: [ReserveBlobUploadItemInput!]!
 }
 
 input ResetPasswordInput {

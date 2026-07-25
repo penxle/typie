@@ -1,5 +1,6 @@
 package co.typie.screen.editor.editor.attachment
 
+import co.typie.editor.DocumentEditingSession
 import co.typie.editor.Editor
 import co.typie.editor.FakeFfiEditor
 import co.typie.editor.ffi.ClipboardOp
@@ -30,7 +31,7 @@ class SessionEditorIncomingContentHandlerTest {
     val handler =
       SessionEditorIncomingContentHandler(
         importer =
-          EditorAttachmentImporter { _, _, _, _ ->
+          testImporter { _, _, _, _ ->
             importCalls += 1
             true
           },
@@ -78,7 +79,7 @@ class SessionEditorIncomingContentHandlerTest {
         val handler =
           SessionEditorIncomingContentHandler(
             importer =
-              EditorAttachmentImporter { importedSession, items, destination, onCompleted ->
+              testImporter { importedSession, items, destination, onCompleted ->
                 assertTrue(importedSession === session)
                 assertEquals(EditorAttachmentDestination.CurrentSelection, destination)
                 importedItems = items
@@ -188,7 +189,7 @@ class SessionEditorIncomingContentHandlerTest {
     val session = createTestDocumentEditingSession(editor, this)
     val handler =
       SessionEditorIncomingContentHandler(
-        importer = EditorAttachmentImporter { _, _, _, _ -> error("must not import") },
+        importer = testImporter { _, _, _, _ -> error("must not import") },
         bringIntoViewRequests = EditorBringIntoViewRequests(),
         isSessionCurrent = { false },
         onAttachmentError = {},
@@ -211,7 +212,7 @@ class SessionEditorIncomingContentHandlerTest {
     val session = createTestDocumentEditingSession(editor, this)
     val handler =
       SessionEditorIncomingContentHandler(
-        importer = EditorAttachmentImporter { _, _, _, _ -> error("must not import") },
+        importer = testImporter { _, _, _, _ -> error("must not import") },
         bringIntoViewRequests = EditorBringIntoViewRequests(),
         isSessionCurrent = { false },
         onAttachmentError = {},
@@ -244,7 +245,7 @@ class SessionEditorIncomingContentHandlerTest {
     val session = createTestDocumentEditingSession(editor, this)
     val handler =
       SessionEditorIncomingContentHandler(
-        importer = EditorAttachmentImporter { _, _, _, _ -> error("must not import") },
+        importer = testImporter { _, _, _, _ -> error("must not import") },
         bringIntoViewRequests = EditorBringIntoViewRequests(),
         isSessionCurrent = { current && it === session },
         onAttachmentError = {},
@@ -285,7 +286,7 @@ class SessionEditorIncomingContentHandlerTest {
     val handler =
       SessionEditorIncomingContentHandler(
         importer =
-          EditorAttachmentImporter { importedSession, transferredItems, destination, onCompleted ->
+          testImporter { importedSession, transferredItems, destination, onCompleted ->
             assertTrue(importedSession === session)
             assertEquals(EditorAttachmentDestination.CurrentSelection, destination)
             transferredCount = transferredItems.size
@@ -344,3 +345,42 @@ class SessionEditorIncomingContentHandlerTest {
         ),
     )
 }
+
+private fun testImporter(
+  onImport:
+    suspend (
+      DocumentEditingSession,
+      List<IncomingContentItem>,
+      EditorAttachmentDestination,
+      (Int) -> Unit,
+    ) -> Boolean
+): EditorAttachmentImporter =
+  object : EditorAttachmentImporter {
+    override suspend fun import(
+      session: DocumentEditingSession,
+      items: List<IncomingContentItem>,
+      destination: EditorAttachmentDestination,
+      onCompleted: (importedCount: Int) -> Unit,
+    ): Boolean = onImport(session, items, destination, onCompleted)
+
+    override fun retry(assetId: String): Boolean = false
+
+    override fun canRetry(assetId: String): Boolean = false
+
+    override fun reselect(
+      session: DocumentEditingSession,
+      assetId: String,
+      nodeId: String,
+      kind: IncomingContentItem.Kind,
+      file: PickedFile,
+      onFailure: () -> Unit,
+    ): Boolean = false
+
+    override fun retireCompleted(assetIds: Collection<String>) = Unit
+
+    override fun cancelNode(nodeId: String) = Unit
+
+    override fun setForeground(foreground: Boolean) = Unit
+
+    override fun dispose() = Unit
+  }

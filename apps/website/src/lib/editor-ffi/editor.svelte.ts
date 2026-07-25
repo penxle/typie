@@ -8,6 +8,7 @@ import { IS_MAC } from './constants';
 import { fontDataMissingHandler } from './fonts';
 import { TouchGestureController } from './gesture.svelte';
 import { readClipboardRich, writeClipboardPayload } from './handlers/clipboard';
+import { createAttachmentImporterDeps } from './handlers/upload';
 import { encodeLengthPrefixedBlobs } from './length-prefix';
 import { isMutatingMessage } from './message-gate';
 import { register, snapshot, unregister } from './registry';
@@ -44,18 +45,17 @@ import type {
   Viewport,
 } from '@typie/editor-ffi/browser';
 import type { ScrollViewport } from '@typie/ui/utils';
+import type { ReadyAssetPayload } from '$lib/sync/protocol';
 import type { EditorScrollIntoViewOptions, EditorScrollScope } from './scroll.svelte';
 import type {
-  ArchivedAsset,
+  AssetResolution,
   ContextMenuContributor,
   ContextMenuContributorContext,
   ContextMenuItem,
   ContextMenuPlacement,
   ContextMenuSource,
   EditorEventListener,
-  EmbedAsset,
-  FileAsset,
-  ImageAsset,
+  LocalUpload,
 } from './types';
 
 export type SpellcheckError = {
@@ -113,11 +113,12 @@ function samePosition(a: Position, b: Position): boolean {
 }
 
 export class EditorContext {
-  readonly attachmentImporter = new EditorAttachmentImporter(this);
+  readonly attachmentImporter = new EditorAttachmentImporter(this, createAttachmentImporterDeps());
+  // sync 해석기(`asset-sync`)에 즉시 재확인을 요청하는 seam. 문서 편집기가 살아 있는 동안만 설정된다.
+  assetRefresh: ((ids: string[]) => void) | null = null;
   editor = $state<Editor>();
   scroll = $state<EditorScrollScope>();
   liveEditor = $state<Editor>();
-  fileAssets = $state(new SvelteMap<string, FileAsset>());
   // v1 chrome 호환 필드 — v2 sync 환경에선 갱신되지 않음
   user = $state<unknown>();
   paneFocused = $state(false);
@@ -491,8 +492,13 @@ export class Editor {
   protectContent = $state(false);
   editBlockedHandler: (() => void) | null = null;
 
-  imageAssets = $state(new SvelteMap<string, ImageAsset>());
-  inflightImages = $state(new SvelteMap<string, { uploadId: string; url?: string; width: number; height: number }>());
+  // 네 종류(image·file·embed·archived)가 한 sync 경로로 해석되므로 한 맵에 담는다.
+  // 판별자는 서버가 실어 보낸 `type`이다.
+  assets = $state(new SvelteMap<string, ReadyAssetPayload>());
+  // 아직 준비되지 않은 id의 서버 상태. `missing`은 "지금은 해석 불가"일 뿐 부재의 확정이 아니다.
+  resolutions = $state(new SvelteMap<string, AssetResolution>());
+  // 이 클라이언트가 진행 중이거나 실패한 업로드. 서버 권위(위 두 맵)와 섞지 않는다.
+  localUploads = $state(new SvelteMap<string, LocalUpload>());
 
   contextMenu = $state({
     isOpen: false,
@@ -502,8 +508,6 @@ export class Editor {
     placement: 'bottom-start' as ContextMenuPlacement,
     extraItems: [] as ContextMenuItem[],
   });
-
-  inflightFiles = $state(new SvelteMap<string, { uploadId: string; name: string; size: number }>());
 
   spellcheckErrors = $state<SpellcheckError[]>([]);
   trackedRanges = $state<TrackedRange[]>([]);
@@ -516,9 +520,7 @@ export class Editor {
   commentClickHandler: ((id: string) => void) | null = null;
   requestCommentCompose: (() => void) | null = null;
 
-  embedAssets = $state(new SvelteMap<string, EmbedAsset>());
   inflightEmbeds = $state(new SvelteMap<string, { uploadId: string; url: string }>());
-  archivedAssets = $state(new SvelteMap<string, ArchivedAsset>());
 
   characterCounts = $state({
     docWithWhitespace: 0,
@@ -1883,5 +1885,11 @@ export class Editor {
 
     this.#gesture?.destroy();
     this.#wasm?.free();
+  }
+
+  asset<T extends ReadyAssetPayload['type']>(id: string | null | undefined, type: T): Extract<ReadyAssetPayload, { type: T }> | undefined {
+    if (!id) return undefined;
+    const asset = this.assets.get(id);
+    return asset?.type === type ? (asset as Extract<ReadyAssetPayload, { type: T }>) : undefined;
   }
 }

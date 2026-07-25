@@ -27,7 +27,10 @@ export const errorExchange = (): Exchange => {
                 return err;
               }
 
-              if (err.extensions.code === 'validation_error') {
+              // `validation_error`가 언제나 필드 목록을 싣는 것은 아니다(예: blob 예약의 크기·중복 거부).
+              // `extra`가 없을 때 그대로 순회하면 이 exchange가 TypeError를 던져 뮤테이션이 정상적으로
+              // 거부되지 못한다 — 없으면 아래 일반 TypieError로 떨어뜨린다.
+              if (err.extensions.code === 'validation_error' && Array.isArray(err.extensions.extra)) {
                 const extra = err.extensions.extra as { field: string; message: string }[];
                 for (const { field, message } of extra) {
                   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion

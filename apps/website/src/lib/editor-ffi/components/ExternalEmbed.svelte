@@ -25,7 +25,7 @@
 
   const embedData = $derived(element.data.type === 'embed' ? element.data : undefined);
   const embedId = $derived(embedData?.id || undefined);
-  const asset = $derived(embedId ? ctx.editor?.embedAssets.get(embedId) : undefined);
+  const asset = $derived(ctx.editor?.asset(embedId, 'embed'));
   const inflight = $derived(ctx.editor?.inflightEmbeds.get(element.node));
   const canEdit = $derived(!ctx.editor?.readOnly);
 
@@ -92,7 +92,7 @@
           html: result.unfurlEmbed.html ?? null,
         };
       },
-      setEmbedAsset: (value) => editor.embedAssets.set(value.id, value),
+      setEmbedAsset: (value) => editor.assets.set(value.id, { type: 'embed', ...value }),
       commit: (message) => {
         if (!isCurrent()) throw new Error('Embed upload is no longer current');
         editor.enqueue(message);

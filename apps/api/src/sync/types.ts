@@ -1,3 +1,5 @@
+import type { AssetNonceItem, AssetStateEntry } from './protocol.ts';
+
 export type SyncSession = { sessionId: string; userId: string; deviceId: string; bootstrapBypassKeyHash?: string };
 
 export type DocumentAccess = 'ok' | 'forbidden' | 'not_v2';
@@ -10,6 +12,14 @@ export type ChangesetEvent = { target: string; seq: string; changesets: string[]
 
 export type ChangesetSubscription = {
   [Symbol.asyncIterator]: () => AsyncIterator<ChangesetEvent>;
+  return: () => unknown;
+};
+
+// 무효화 전용 — 상태를 싣지 않고 어떤 id가 바뀌었는지만 알린다. 진실은 asset-pull 응답이다.
+export type AssetEvent = { ids: string[] };
+
+export type AssetEventSubscription = {
+  [Symbol.asyncIterator]: () => AsyncIterator<AssetEvent>;
   return: () => unknown;
 };
 
@@ -36,4 +46,9 @@ export type SyncDeps = {
   bootstrapLiveHeads: (documentId: string) => Promise<Uint8Array>;
   publishChangesets: (documentId: string, event: ChangesetEvent) => void;
   enqueueCollect: (documentId: string) => Promise<void>;
+  resolveAssetStates: (ids: string[]) => Promise<AssetStateEntry[]>;
+  extendAssetLeases: (items: AssetNonceItem[], userId: string) => Promise<void>;
+  clearAssetLeases: (items: AssetNonceItem[], userId: string) => Promise<[assetId: string, documentId: string][]>;
+  publishAssetChanged: (documentId: string, ids: string[]) => void;
+  subscribeAssetEvents: (documentId: string) => AssetEventSubscription;
 };

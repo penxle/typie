@@ -12,6 +12,7 @@
   import Trash2Icon from '~icons/lucide/trash-2';
   import { getEditorContext } from '../editor.svelte';
   import { calculateImageContainerSize, calculateImageWidth } from '../handlers/image';
+  import { attachmentStage, isEmptyLikeStage } from './attachment-stage';
   import ExternalElementWrapper from './ExternalElementWrapper.svelte';
   import ExternalImageEnlarge from './ExternalImageEnlarge.svelte';
   import type { ExternalElement } from '@typie/editor-ffi/browser';
@@ -40,18 +41,19 @@
 
   const imageData = $derived(element.data.type === 'image' ? element.data : undefined);
   const imageId = $derived(imageData?.id || undefined);
-  const asset = $derived(imageId ? ctx.editor?.imageAssets.get(imageId) : undefined);
-  const inflight = $derived(ctx.editor?.inflightImages.get(element.node));
-  const stage = $derived.by(() => {
-    if (asset) return 'ready';
-    if (inflight) return 'uploading';
-    if (imageId) return 'resolving';
-    return 'empty';
-  });
+  const asset = $derived(ctx.editor?.asset(imageId, 'image'));
+  const localUpload = $derived(imageId ? ctx.editor?.localUploads.get(imageId) : undefined);
+  const resolution = $derived(imageId ? ctx.editor?.resolutions.get(imageId) : undefined);
+  const serverPending = $derived(resolution?.state === 'pending' ? resolution.meta : undefined);
+  const unresolved = $derived(resolution?.state === 'missing');
+  const stage = $derived(attachmentStage({ hasAsset: !!asset, localPhase: localUpload?.phase, hasId: !!imageId, unresolved }));
+  // 실패 카드는 자체 affordance(재시도·다시 선택·삭제)를 가지므로 빈 카드 취급에서 제외한다.
+  const isEmptyLike = $derived(isEmptyLikeStage(stage));
+  const pendingLabel = $derived(serverPending?.name || '이미지를 불러오는 중...');
 
-  const imageSrc = $derived(asset?.url ?? inflight?.url);
-  const originalWidth = $derived(asset?.width ?? inflight?.width ?? 0);
-  const originalHeight = $derived(asset?.height ?? inflight?.height ?? 0);
+  const imageSrc = $derived(asset?.url ?? (stage === 'localActive' ? localUpload?.previewUrl : undefined));
+  const originalWidth = $derived(asset?.width ?? localUpload?.width ?? 0);
+  const originalHeight = $derived(asset?.height ?? localUpload?.height ?? 0);
   const liveWidth = $derived(calculateImageWidth(element.bounds.width, proportion, originalWidth));
   const containerSize = $derived(
     calculateImageContainerSize({
@@ -66,7 +68,7 @@
   const isOnlySelectedElement = $derived(
     element.is_selected && selectedBlockNodes.length === 1 && selectedBlockNodes[0]?.id === element.node,
   );
-  const isAttachmentDropTarget = $derived(stage === 'empty' && ctx.attachmentDropTargetNodeId === element.node);
+  const isAttachmentDropTarget = $derived(isEmptyLike && ctx.attachmentDropTargetNodeId === element.node);
 
   const { anchor, floating } = createFloatingActions({
     placement: 'bottom',
@@ -81,7 +83,9 @@
   });
 
   $effect(() => {
-    pickerOpened = isOnlySelectedElement && stage === 'empty';
+    // 픽커는 `empty`와 `unresolved`에서 열린다 — 후자는 같은 ID를 재예약해 이어받는다(문서 무변경).
+    // 아직 해석 중인 `serverPending` 위로는 띄우지 않는다(클릭 한 번에 id가 교체된다).
+    pickerOpened = isOnlySelectedElement && isEmptyLike;
   });
 
   $effect(() => {
@@ -102,30 +106,45 @@
     editor.focus();
   };
 
+  const onFailure = ({ file }: { file: File }) => {
+    Toast.error(`${file.name} 이미지 업로드에 실패했습니다.`);
+  };
+
   const handleUpload = () => {
     const editor = ctx.editor;
-    if (!editor || editor.readOnly) return;
+    if (!editor || editor.readOnly || stage === 'serverPending') return;
     const nodeId = element.node;
+    // 실패한 로컬 시도가 남아 있으면 그 시도를 접고 같은 ID를 다시 잡는다(다시 선택).
+    // 미해석 노드는 빈 placeholder와 똑같이 다룬다 — importer가 문서에 적힌 ID를 그대로 재예약한다.
+    const reselectId = localUpload ? imageId : undefined;
 
     const picker = document.createElement('input');
     picker.type = 'file';
     picker.accept = 'image/*';
-    picker.multiple = true;
+    picker.multiple = reselectId === undefined;
     picker.addEventListener('change', () => {
       if (ctx.editor !== editor || editor.destroyed || editor.readOnly) return;
-      const items = [...(picker.files ?? [])].map((file) => ({ file, kind: 'image' as const }));
-      if (
-        ctx.attachmentImporter.importAtSelection(items, {
-          existingNodeId: nodeId,
-          onFailure: ({ file }) => {
-            Toast.error(`${file.name} 이미지 업로드에 실패했습니다.`);
-          },
-        })
-      ) {
+      const files = [...(picker.files ?? [])];
+
+      if (reselectId !== undefined) {
+        const file = files[0];
+        if (!file) return;
+        if (ctx.attachmentImporter.reselect({ assetId: reselectId, nodeId, kind: 'image', file, onFailure })) {
+          editor.focus();
+        }
+        return;
+      }
+
+      const items = files.map((file) => ({ file, kind: 'image' as const }));
+      if (ctx.attachmentImporter.importAtSelection(items, { existingNodeId: nodeId, onFailure })) {
         editor.focus();
       }
     });
     picker.click();
+  };
+
+  const handleRetry = () => {
+    if (imageId) ctx.attachmentImporter.retry(imageId);
   };
 
   const getWidthBounds = (boundsWidth: number) => {
@@ -261,7 +280,7 @@
         onpointerdown={(event) => {
           if (!canEdit) event.stopPropagation();
         }}
-        placeholder={asset?.placeholder}
+        placeholder={asset?.placeholder ?? undefined}
         progressive
         ratio={originalHeight > 0 ? originalWidth / originalHeight : undefined}
         role={canEdit ? undefined : 'button'}
@@ -270,7 +289,7 @@
         url={imageSrc}
       />
 
-      {#if stage === 'uploading'}
+      {#if stage === 'localActive'}
         <div class={center({ position: 'absolute', inset: '0', backgroundColor: 'white/50' })}>
           <RingSpinner style={css.raw({ size: '24px', color: 'text.disabled' })} />
         </div>
@@ -403,10 +422,12 @@
           })}
         >
           <Icon icon={ImageIcon} size={20} />
-          {#if stage === 'resolving'}
-            이미지를 불러오는 중...
-          {:else if stage === 'uploading'}
+          {#if stage === 'serverPending'}
+            {pendingLabel}
+          {:else if stage === 'localActive'}
             이미지를 업로드하는 중...
+          {:else if stage === 'localFailed'}
+            이미지 업로드에 실패했습니다
           {:else if isAttachmentDropTarget}
             놓아서 업로드하기
           {:else}
@@ -414,9 +435,50 @@
           {/if}
         </div>
 
-        {#if stage === 'resolving' || stage === 'uploading'}
+        {#if stage === 'serverPending' || stage === 'localActive'}
           <div class={css({ marginRight: '14px' })}>
             <RingSpinner style={css.raw({ size: '16px', color: 'text.disabled' })} />
+          </div>
+        {:else if stage === 'localFailed' && canEdit}
+          <div class={flex({ alignItems: 'center', gap: '4px', marginRight: '12px' })}>
+            {#each [{ label: '재시도', onclick: handleRetry }, { label: '다시 선택', onclick: handleUpload }] as action (action.label)}
+              <button
+                class={css({
+                  borderRadius: '4px',
+                  paddingX: '8px',
+                  paddingY: '4px',
+                  fontSize: '13px',
+                  color: 'text.muted',
+                  _hover: { backgroundColor: 'interactive.hover', color: 'text.default' },
+                })}
+                onclick={action.onclick}
+                onpointerdown={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
+                type="button"
+              >
+                {action.label}
+              </button>
+            {/each}
+
+            <button
+              class={center({
+                borderRadius: '4px',
+                padding: '4px',
+                color: 'text.disabled',
+                _hover: { backgroundColor: 'interactive.hover', color: 'text.danger' },
+              })}
+              aria-label="이미지 삭제"
+              onclick={deleteNode}
+              onpointerdown={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+              }}
+              type="button"
+            >
+              <Icon icon={Trash2Icon} size={16} />
+            </button>
           </div>
         {:else if canEdit && !isAttachmentDropTarget}
           <button
@@ -472,7 +534,7 @@
 {#if enlarged && stage === 'ready' && imageSrc && containerEl}
   <ExternalImageEnlarge
     onclose={() => (enlarged = false)}
-    placeholder={asset?.placeholder}
+    placeholder={asset?.placeholder ?? undefined}
     ratio={originalHeight > 0 ? originalWidth / originalHeight : undefined}
     referenceEl={containerEl}
     url={imageSrc}

@@ -1,6 +1,16 @@
 import { compareStreamSeq } from './protocol.ts';
-import type { ServerMessage } from './protocol.ts';
-import type { BundleRow, ChangesetEvent, ChangesetSubscription, DocumentAccess, StreamEntry, SyncDeps, SyncSession } from './types.ts';
+import type { AssetNonceItem, AssetStateEntry, ServerMessage } from './protocol.ts';
+import type {
+  AssetEvent,
+  AssetEventSubscription,
+  BundleRow,
+  ChangesetEvent,
+  ChangesetSubscription,
+  DocumentAccess,
+  StreamEntry,
+  SyncDeps,
+  SyncSession,
+} from './types.ts';
 
 export class AsyncEventQueue<T> {
   #queue: T[] = [];
@@ -35,6 +45,7 @@ export class AsyncEventQueue<T> {
 
 export class FakeSyncDeps implements SyncDeps {
   #subscribers = new Map<string, Set<AsyncEventQueue<ChangesetEvent>>>();
+  #assetSubscribers = new Map<string, Set<AsyncEventQueue<AssetEvent>>>();
   #seqCounter = 0;
   bundles = new Map<string, BundleRow[]>();
   stream = new Map<string, StreamEntry[]>();
@@ -53,6 +64,12 @@ export class FakeSyncDeps implements SyncDeps {
   writerActivity: string[] = [];
   presenceMarks: { documentId: string; connectionId: string }[] = [];
   presenceClears: { documentId: string; connectionId: string }[] = [];
+  assetStates = new Map<string, AssetStateEntry>();
+  assetLeaseOwners = new Map<string, { documentId: string; nonce: string; userId: string }>();
+  resolveAssetStatesCalls: string[][] = [];
+  extendAssetLeaseCalls: { items: AssetNonceItem[]; userId: string }[] = [];
+  clearAssetLeaseCalls: { items: AssetNonceItem[]; userId: string }[] = [];
+  assetChangesPublished: { documentId: string; ids: string[] }[] = [];
 
   consumeTicket = async (ticket: string): Promise<SyncSession | null> => {
     const session = this.tickets.get(ticket) ?? null;
@@ -171,6 +188,46 @@ export class FakeSyncDeps implements SyncDeps {
     this.collectJobs.push(documentId);
   };
 
+  resolveAssetStates = async (ids: string[]): Promise<AssetStateEntry[]> => {
+    this.resolveAssetStatesCalls.push(ids);
+    return ids.map((id) => this.assetStates.get(id) ?? { id, state: 'missing' });
+  };
+
+  extendAssetLeases = async (items: AssetNonceItem[], userId: string): Promise<void> => {
+    this.extendAssetLeaseCalls.push({ items, userId });
+  };
+
+  clearAssetLeases = async (items: AssetNonceItem[], userId: string): Promise<[string, string][]> => {
+    this.clearAssetLeaseCalls.push({ items, userId });
+    const cleared: [string, string][] = [];
+    for (const item of items) {
+      const owner = this.assetLeaseOwners.get(item.id);
+      if (!owner || owner.nonce !== item.nonce || owner.userId !== userId) continue;
+      this.assetLeaseOwners.delete(item.id);
+      cleared.push([item.id, owner.documentId]);
+    }
+    return cleared;
+  };
+
+  publishAssetChanged = (documentId: string, ids: string[]): void => {
+    this.assetChangesPublished.push({ documentId, ids });
+    this.emitAssetEvent(documentId, ids);
+  };
+
+  subscribeAssetEvents = (documentId: string): AssetEventSubscription => {
+    const queue = new AsyncEventQueue<AssetEvent>();
+    const set = this.#assetSubscribers.get(documentId) ?? new Set();
+    set.add(queue);
+    this.#assetSubscribers.set(documentId, set);
+    return {
+      [Symbol.asyncIterator]: () => queue[Symbol.asyncIterator](),
+      return: () => {
+        set.delete(queue);
+        queue.end();
+      },
+    };
+  };
+
   seedBundles(documentId: string, rows: BundleRow[]): void {
     this.bundles.set(documentId, rows);
   }
@@ -184,8 +241,16 @@ export class FakeSyncDeps implements SyncDeps {
     for (const queue of this.#subscribers.get(documentId) ?? []) queue.push(event);
   }
 
+  emitAssetEvent(documentId: string, ids: string[]): void {
+    for (const queue of this.#assetSubscribers.get(documentId) ?? []) queue.push({ ids });
+  }
+
   subscriberCount(documentId: string): number {
     return this.#subscribers.get(documentId)?.size ?? 0;
+  }
+
+  assetSubscriberCount(documentId: string): number {
+    return this.#assetSubscribers.get(documentId)?.size ?? 0;
   }
 
   trimTo(documentId: string, seq: string): void {

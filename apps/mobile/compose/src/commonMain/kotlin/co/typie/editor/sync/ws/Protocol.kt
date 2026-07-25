@@ -7,6 +7,10 @@ import kotlinx.serialization.cbor.Cbor
 
 const val SYNC_WS_SUBPROTOCOL = "typie-sync.v1"
 
+// 서버는 0건·상한 초과 asset 메시지를 malformed로 보고 소켓을 끊는다 — 그 소켓에 붙은 모든 문서가
+// 스냅샷을 다시 받아야 한다. 호출측 청킹이 어긋나도 프레임 하나가 잘릴 뿐 연결은 살아 있어야 한다.
+const val SYNC_WS_ASSET_MESSAGE_MAX_ITEMS = 100
+
 class SyncWsException(val code: String, val permanent: Boolean) :
   Exception("sync ws request failed: $code")
 
@@ -19,6 +23,38 @@ fun compareStreamSeq(a: String, b: String): Int {
 }
 
 @Serializable data class WsSnapshotCursor(val rowId: String, val seq: Int, val offset: Int)
+
+@Serializable data class WsAssetItem(val id: String, val nonce: String)
+
+@Serializable data class WsPendingMeta(val kind: String, val name: String, val size: Long)
+
+// 네 종류(image/file/embed/archived)의 payload를 평탄화한 것이라 type별로 존재하는 필드가 다르다.
+// archived는 url조차 없으므로 전부 nullable이어야 디코드가 깨지지 않는다.
+@Serializable
+data class WsReadyAsset(
+  val type: String,
+  val id: String,
+  val url: String? = null,
+  val originalUrl: String? = null,
+  val width: Long? = null,
+  val height: Long? = null,
+  val placeholder: String? = null,
+  val name: String? = null,
+  val size: Long? = null,
+  val title: String? = null,
+  val description: String? = null,
+  val thumbnailUrl: String? = null,
+  val html: String? = null,
+  val content: String? = null,
+)
+
+@Serializable
+data class WsAssetStateEntry(
+  val id: String,
+  val state: String,
+  val asset: WsReadyAsset? = null,
+  val meta: WsPendingMeta? = null,
+)
 
 @OptIn(ExperimentalSerializationApi::class)
 sealed interface WsClientMessage {
@@ -62,6 +98,28 @@ sealed interface WsClientMessage {
     val id: String,
     val documentId: String,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val sinceSeq: String? = null,
+  ) : WsClientMessage
+
+  @Serializable
+  data class AssetPull(
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS) val t: String = "asset-pull",
+    val documentId: String,
+    val requestId: String,
+    val ids: List<String>,
+  ) : WsClientMessage
+
+  @Serializable
+  data class AssetHeartbeat(
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS) val t: String = "asset-heartbeat",
+    val documentId: String,
+    val items: List<WsAssetItem>,
+  ) : WsClientMessage
+
+  @Serializable
+  data class AssetFailed(
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS) val t: String = "asset-failed",
+    val documentId: String,
+    val items: List<WsAssetItem>,
   ) : WsClientMessage
 }
 
@@ -136,6 +194,22 @@ sealed interface WsServerMessage {
     val code: String,
     val permanent: Boolean,
   ) : WsServerMessage
+
+  @Serializable
+  data class AssetState(
+    val t: String = "asset-state",
+    val documentId: String,
+    val requestId: String,
+    val assets: List<WsAssetStateEntry>,
+    val final: Boolean,
+  ) : WsServerMessage
+
+  @Serializable
+  data class AssetChanged(
+    val t: String = "asset-changed",
+    val documentId: String,
+    val ids: List<String>,
+  ) : WsServerMessage
 }
 
 @OptIn(ExperimentalSerializationApi::class)
@@ -160,6 +234,12 @@ fun encodeClientMessage(message: WsClientMessage): ByteArray =
       syncCbor.encodeToByteArray(WsClientMessage.Push.serializer(), message)
     is WsClientMessage.Pull ->
       syncCbor.encodeToByteArray(WsClientMessage.Pull.serializer(), message)
+    is WsClientMessage.AssetPull ->
+      syncCbor.encodeToByteArray(WsClientMessage.AssetPull.serializer(), message)
+    is WsClientMessage.AssetHeartbeat ->
+      syncCbor.encodeToByteArray(WsClientMessage.AssetHeartbeat.serializer(), message)
+    is WsClientMessage.AssetFailed ->
+      syncCbor.encodeToByteArray(WsClientMessage.AssetFailed.serializer(), message)
   }
 
 fun decodeServerMessage(bytes: ByteArray): WsServerMessage? {
@@ -183,6 +263,9 @@ fun decodeServerMessage(bytes: ByteArray): WsServerMessage? {
       "push-ack" -> syncCbor.decodeFromByteArray(WsServerMessage.PushAck.serializer(), bytes)
       "pull-ack" -> syncCbor.decodeFromByteArray(WsServerMessage.PullAck.serializer(), bytes)
       "error" -> syncCbor.decodeFromByteArray(WsServerMessage.WsError.serializer(), bytes)
+      "asset-state" -> syncCbor.decodeFromByteArray(WsServerMessage.AssetState.serializer(), bytes)
+      "asset-changed" ->
+        syncCbor.decodeFromByteArray(WsServerMessage.AssetChanged.serializer(), bytes)
       else -> null
     }
   } catch (_: Exception) {

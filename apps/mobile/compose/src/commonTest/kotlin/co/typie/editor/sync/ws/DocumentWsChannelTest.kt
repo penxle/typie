@@ -92,6 +92,17 @@ private fun changesets(
     durableHeads = durableHeads,
   )
 
+private fun assetState(requestId: String, assets: List<WsAssetStateEntry>, final: Boolean) =
+  WsServerMessage.AssetState(
+    documentId = DOC_ID,
+    requestId = requestId,
+    assets = assets,
+    final = final,
+  )
+
+private fun assetChanged(ids: List<String>) =
+  WsServerMessage.AssetChanged(documentId = DOC_ID, ids = ids)
+
 private fun transientDocumentError(code: String) =
   WsServerMessage.WsError(scope = "document", documentId = DOC_ID, code = code, permanent = false)
 
@@ -925,6 +936,74 @@ class DocumentWsChannelTest {
     socket1.serverSend(snapshotEnd("1-0"))
     runCurrent()
     assertEquals(listOf(chunkS("B1", 1, 0, byteArrayOf(1)), endS("1-0")), events.snapshots())
+  }
+
+  @Test
+  fun assetStateAndAssetChangedReachAssetEventsSubscriberWithRequestIdAndFinalPreserved() =
+    runTest {
+      val (_, channel, sockets) = harness()
+      val events = mutableListOf<AttachEvent>()
+      val assetEvents = mutableListOf<AssetEvent>()
+      collectJob(channel.freshSubscribe(), events)
+      collectJob(channel.assetEvents, assetEvents)
+      runCurrent()
+      val socket = sockets[0]
+      handshake(socket)
+      socket.serverSend(WsServerMessage.AttachAck(documentId = DOC_ID))
+      runCurrent()
+
+      val entries = listOf(WsAssetStateEntry(id = "A1", state = "missing"))
+      socket.serverSend(assetState(requestId = "REQ1", assets = entries, final = false))
+      socket.serverSend(assetState(requestId = "REQ1", assets = entries, final = true))
+      socket.serverSend(assetChanged(listOf("A1", "A2")))
+      runCurrent()
+
+      assertEquals(
+        listOf(
+          AssetEvent.AssetStateEvent(requestId = "REQ1", assets = entries, final = false),
+          AssetEvent.AssetStateEvent(requestId = "REQ1", assets = entries, final = true),
+          AssetEvent.AssetChangedEvent(ids = listOf("A1", "A2")),
+        ),
+        assetEvents,
+      )
+      assertEquals(emptyList<AttachEvent>(), events)
+    }
+
+  @Test
+  fun assetEventsOnlySubscriberKeepsChannelAttached() = runTest {
+    val (_, channel, sockets) = harness()
+    val assetEvents = mutableListOf<AssetEvent>()
+    val job = collectJob(channel.assetEvents, assetEvents)
+    runCurrent()
+    assertEquals(1, sockets.size)
+    val socket = sockets[0]
+    handshake(socket)
+    assertEquals(1, socket.sent.count { it is WsClientMessage.Attach })
+
+    job.cancel()
+    runCurrent()
+    assertEquals(1, socket.sent.count { it is WsClientMessage.Detach })
+  }
+
+  @Test
+  fun assetMessageArrivingBeforeAssetEventsSubscriberIsNotLost() = runTest {
+    val (_, channel, sockets) = harness()
+    val events = mutableListOf<AttachEvent>()
+    collectJob(channel.freshSubscribe(), events)
+    runCurrent()
+    val socket = sockets[0]
+    handshake(socket)
+    socket.serverSend(WsServerMessage.AttachAck(documentId = DOC_ID))
+    runCurrent()
+
+    socket.serverSend(assetChanged(listOf("A1")))
+    runCurrent()
+
+    val assetEvents = mutableListOf<AssetEvent>()
+    collectJob(channel.assetEvents, assetEvents)
+    runCurrent()
+
+    assertEquals(listOf<AssetEvent>(AssetEvent.AssetChangedEvent(ids = listOf("A1"))), assetEvents)
   }
 
   @Test

@@ -38,18 +38,11 @@ internal fun EditorEmbedExternalElement(data: ExternalElementData.Embed, nodeId:
   val embedState = externalElementState.embeds
   val asset = data.id?.let(embedState.assets::get)
   val unfurl = embedState.unfurls[nodeId]
-  val resolution = data.id?.let(externalElementState.resolutions::get)
-  val missingAsset = data.id != null && asset == null && unfurl == null
-  val unavailableAsset =
-    missingAsset &&
-      (resolution == EditorAssetResolution.RetryableFailure ||
-        resolution == EditorAssetResolution.Unavailable)
-  val resolvingAsset = missingAsset && !unavailableAsset
+  val resolvingAsset = data.id != null && asset == null && unfurl == null
 
   when {
     asset != null -> EmbedCard(asset)
     unfurl != null || resolvingAsset -> EmbedLoading()
-    unavailableAsset -> EmbedUnavailable()
     else -> EmbedPlaceholder()
   }
 }
@@ -78,12 +71,6 @@ private fun EmbedLoading() {
       )
     },
   )
-}
-
-@Composable
-context(scope: EditorExternalElementRenderScope)
-private fun EmbedUnavailable() {
-  EditorExternalElementPlaceholder(icon = Lucide.FileUp, text = "링크를 불러올 수 없어요")
 }
 
 @Composable
