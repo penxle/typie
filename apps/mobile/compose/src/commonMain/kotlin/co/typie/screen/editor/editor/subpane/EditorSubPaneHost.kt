@@ -21,6 +21,7 @@ internal data class CommentsSubPaneEnvironment(
 internal fun EditorSubPaneHost(
   state: EditorSubPaneState,
   entityId: String,
+  editorMutationEnabled: Boolean,
   comments: CommentsSubPaneEnvironment,
   maxTopInset: Dp,
   safeBottomInset: Dp,
@@ -32,6 +33,11 @@ internal fun EditorSubPaneHost(
   val selection = editor?.tickSelection
 
   LaunchedEffect(active, selection) { state.dismissTableAxisActionsIfSelectionChanged(selection) }
+  LaunchedEffect(active, editorMutationEnabled) {
+    if (active is EditorSubPane.TableAxisActions && !editorMutationEnabled) {
+      state.dismiss()
+    }
+  }
 
   LaunchedEffect(active, comments.session.model) {
     if (active == EditorSubPane.Comments && comments.session.model == null) {
@@ -65,6 +71,7 @@ internal fun EditorSubPaneHost(
           composeLocation = comments.session.composeLocation,
           createEnabled = comments.session.topBarCreateEnabled,
           onFreezeCurrentSelection = comments.session.freezeCurrentSelection,
+          ensureMutationSubscription = comments.session.ensureMutationSubscription,
           onInputFocusChanged = comments.session.onInputFocusChanged,
           maxTopInset = maxTopInset,
           safeBottomInset = safeBottomInset,
@@ -81,10 +88,11 @@ internal fun EditorSubPaneHost(
         pane = active,
         currentBackgroundColor = editor?.state?.modifierState?.cellBackgroundColor,
         dismissRequestVersion = state.dismissRequestVersion,
-        onAction = { message ->
-          editor?.sync { enqueue(message) }
-          editor?.focus()
-        },
+        onAction = tableAction@{ message ->
+            if (!editorMutationEnabled) return@tableAction
+            editor?.sync { enqueue(message) }
+            editor?.focus()
+          },
         onDismissStarted = state::beginDismiss,
         onDismissCancelled = state::cancelDismiss,
         onDismiss = state::dismiss,

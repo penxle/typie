@@ -30,6 +30,7 @@ internal class EditorCommentsSession(
   val composeLocation: CommentThreadLocation?,
   val virtualThreadGuardVisible: Boolean,
   val freezeCurrentSelection: suspend () -> StableSelection?,
+  val ensureMutationSubscription: suspend () -> Boolean,
   val onInputFocusChanged: (Boolean) -> Unit,
   val requestFromTextToolbar: () -> Unit,
   val openFromToolPanel: () -> Unit,
@@ -83,13 +84,13 @@ private class CommentSheetRequestQueue {
 internal fun rememberEditorCommentsSession(
   entityId: String,
   documentId: String?,
-  documentLocked: Boolean,
   editor: Editor?,
   editorState: EditorState,
   sheetActive: Boolean,
   bringIntoViewRequests: EditorBringIntoViewRequests,
   hideContextMenu: () -> Unit,
   openSheet: () -> Unit,
+  ensureMutationSubscription: suspend () -> Boolean,
 ): EditorCommentsSession {
   val requestQueue = remember(entityId) { CommentSheetRequestQueue() }
   val scope = rememberCoroutineScope()
@@ -106,8 +107,8 @@ internal fun rememberEditorCommentsSession(
   val selection = editorState.selection
   val selectionCollapsed = selection == null || selection.anchor == selection.head
   val collapsedCommentRanges =
-    remember(editorState.trackedRangesContainingSelectionHead, selectionCollapsed, documentLocked) {
-      if (selection != null && selectionCollapsed && !documentLocked) {
+    remember(editorState.trackedRangesContainingSelectionHead, selectionCollapsed) {
+      if (selection != null && selectionCollapsed) {
         editorState.trackedRangesContainingSelectionHead.commentRangeEndpoints()
       } else {
         emptyList()
@@ -115,11 +116,9 @@ internal fun rememberEditorCommentsSession(
     }
   val collapsedCommentRangeIds = collapsedCommentRanges.mapTo(mutableSetOf()) { it.id }
   val collapsedSelectionHead = selection?.takeIf { selectionCollapsed }?.head
-  val topBarCreateEnabled =
-    model != null && !documentLocked && selection != null && !selectionCollapsed
+  val topBarCreateEnabled = model != null && selection != null && !selectionCollapsed
   val toolbarEnabled =
     model != null &&
-      !documentLocked &&
       selection != null &&
       (!selectionCollapsed || collapsedCommentRanges.isNotEmpty())
 
@@ -239,6 +238,7 @@ internal fun rememberEditorCommentsSession(
     freezeCurrentSelection = {
       editorState.selection?.let { currentSelection -> editor?.freezeSelection(currentSelection) }
     },
+    ensureMutationSubscription = ensureMutationSubscription,
     onInputFocusChanged = { focused -> inputFocused = focused },
     requestFromTextToolbar = {
       hideContextMenu()

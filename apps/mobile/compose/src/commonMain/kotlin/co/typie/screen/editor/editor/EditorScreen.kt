@@ -429,12 +429,16 @@ fun EditorScreen(entityId: String) {
     val activeEditor = runtime.editor ?: return
     activeEditor.enqueue(Message.Selection(SelectionOp.Unset))
   }
+  suspend fun ensureEditorMutationSubscription(): Boolean {
+    return SubscriptionService.gate(sheet = sheet, action = GatedAction.Generic)
+  }
   val findReplace =
     rememberEditorFindReplaceSession(
-      documentLocked = editorReadOnly,
+      documentLocked = documentLocked,
       editingSession = editingSession,
       editorState = editorState,
       bringIntoViewRequests = bringIntoViewRequests,
+      ensureSubscription = ::ensureEditorMutationSubscription,
       onEditingIntent = ::requestEditing,
       admitMutation = ::canApplyEditorMutation,
     )
@@ -489,7 +493,7 @@ fun EditorScreen(entityId: String) {
   val spellcheck =
     rememberEditorSpellcheckSession(
       documentId = document?.id,
-      documentLocked = editorReadOnly,
+      documentLocked = documentLocked,
       editingSession = editingSession,
       editorState = editorState,
       bringIntoViewRequests = bringIntoViewRequests,
@@ -514,17 +518,20 @@ fun EditorScreen(entityId: String) {
       ensureSubscription = ::ensureAiFeedbackSubscription,
       ensureAiOptIn = ::ensureAiOptIn,
     )
+  suspend fun ensureCommentMutationSubscription(): Boolean {
+    return SubscriptionService.gate(sheet = sheet, action = GatedAction.Comment)
+  }
   val comments =
     rememberEditorCommentsSession(
       entityId = entityId,
       documentId = document?.id,
-      documentLocked = editorReadOnly,
       editor = editor,
       editorState = editorState,
       sheetActive = subPaneState.active == EditorSubPane.Comments,
       bringIntoViewRequests = bringIntoViewRequests,
       hideContextMenu = { uiState.contextMenu.hide() },
       openSheet = { subPaneState.open(EditorSubPane.Comments) },
+      ensureMutationSubscription = ::ensureCommentMutationSubscription,
     )
   suspend fun enterReadingMode() {
     val transition = editingState.beginReadingTransition() ?: return
@@ -1443,33 +1450,33 @@ fun EditorScreen(entityId: String) {
       if (!editorReadOnly) return@LaunchedEffect
       editingState.enterReading()
       readingModeCleanupRequest += 1
-      findReplace.close()
-      spellcheck.close()
-      aiFeedback.close()
-      subPaneState.dismiss()
       uiState.contextMenu.hide()
-      popoverOverlayState.dismissFromOutsideGesture()
     }
-    LaunchedEffect(editor, directEditingEnabled) {
+    LaunchedEffect(editor, directEditingEnabled, editorReadOnly) {
       if (!editingState.shouldRunReadingCleanup(editorReadOnly)) return@LaunchedEffect
+      if (!uiState.focused && !uiState.editorInputSessionActive) return@LaunchedEffect
       val activeEditor = editor ?: return@LaunchedEffect
+      val activeSession = runtime.session
+      val activeDocumentId = model.documentId
+      val expectedEditorReadOnly = editorReadOnly
+      val cleanupCurrent = {
+        runtime.editor === activeEditor &&
+          runtime.session === activeSession &&
+          model.documentId == activeDocumentId &&
+          nav.current == Route.Editor(entityId) &&
+          screenState.sceneInForeground &&
+          currentEditorReadOnly == expectedEditorReadOnly &&
+          !currentDirectEditingEnabled
+      }
       val cleaned =
-        activeEditor.await(
-          admit = {
-            runtime.editor === activeEditor && editingState.shouldRunReadingCleanup(editorReadOnly)
-          }
-        ) {
+        activeEditor.await(admit = cleanupCurrent) {
           if (activeEditor.tickIme?.composing != null) {
             enqueue(Message.TextInput(listOf(FlatImeOp.CommitAsIs)))
           }
           enqueue(Message.System(SystemEvent.SetFocused(false)))
         }
-      if (!cleaned) return@LaunchedEffect
-      if (
-        runtime.editor !== activeEditor || !editingState.shouldRunReadingCleanup(editorReadOnly)
-      ) {
-        return@LaunchedEffect
-      }
+      if (!cleaned || !cleanupCurrent()) return@LaunchedEffect
+      if (!uiState.focused) return@LaunchedEffect
       interactionScope.controller.cancel()
       runtime.blur()
       performInputEffects(toolbarInputState.dispatch(ToolbarIntent.Reset, toolbarInputEnvironment))
@@ -1932,6 +1939,7 @@ fun EditorScreen(entityId: String) {
           EditorSubPaneHost(
             state = subPaneState,
             entityId = entityId,
+            editorMutationEnabled = directEditingEnabled,
             comments =
               CommentsSubPaneEnvironment(
                 session = comments,

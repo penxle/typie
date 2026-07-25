@@ -352,6 +352,7 @@ internal fun rememberEditorSpellcheckSession(
 
         scope.launch {
           if (activeSession.editor.trackedRange(id) == null) return@launch
+          if (!ensureSubscription()) return@launch
           if (!onEditingIntent(activeSession.editor)) return@launch
           activeSession.submit { activeEditor, context ->
             activeEditor.scope.launch(context) {
@@ -385,6 +386,7 @@ internal fun rememberEditorSpellcheckSession(
             return@launch
           }
 
+          if (!ensureSubscription()) return@launch
           if (!onEditingIntent(activeEditor)) return@launch
           val selected =
             activeEditor.awaitWithBringIntoView(

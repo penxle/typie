@@ -59,6 +59,7 @@ internal fun rememberEditorFindReplaceSession(
   editingSession: DocumentEditingSession?,
   editorState: EditorState,
   bringIntoViewRequests: EditorBringIntoViewRequests,
+  ensureSubscription: suspend () -> Boolean,
   onEditingIntent: (Editor) -> Boolean,
   admitMutation: (DocumentEditingSession) -> Boolean,
 ): EditorFindReplaceSession {
@@ -119,14 +120,18 @@ internal fun rememberEditorFindReplaceSession(
           toast.show(ToastType.Error, "잠긴 문서는 편집할 수 없어요.")
           return@replace
         }
-        if (!state.canReplaceActive() || !onEditingIntent(activeSession.editor)) return@replace
-        activeSession.submit { activeEditor, context ->
-          activeEditor.scope.launch(context) {
-            state.replaceActive(
-              editor = activeEditor,
-              admitMutation = { admitMutation(activeSession) },
-              bringIntoViewRequests = bringIntoViewRequests,
-            )
+        if (!state.canReplaceActive()) return@replace
+        scope.launch {
+          if (!ensureSubscription()) return@launch
+          if (!state.canReplaceActive() || !onEditingIntent(activeSession.editor)) return@launch
+          activeSession.submit { activeEditor, context ->
+            activeEditor.scope.launch(context) {
+              state.replaceActive(
+                editor = activeEditor,
+                admitMutation = { admitMutation(activeSession) },
+                bringIntoViewRequests = bringIntoViewRequests,
+              )
+            }
           }
         }
       },
@@ -136,14 +141,18 @@ internal fun rememberEditorFindReplaceSession(
           toast.show(ToastType.Error, "잠긴 문서는 편집할 수 없어요.")
           return@replaceAll
         }
-        if (!state.canReplaceAll() || !onEditingIntent(activeSession.editor)) return@replaceAll
-        activeSession.submit { activeEditor, context ->
-          activeEditor.scope.launch(context) {
-            state.replaceAllMatches(
-              editor = activeEditor,
-              admitMutation = { admitMutation(activeSession) },
-              bringIntoViewRequests = bringIntoViewRequests,
-            )
+        if (!state.canReplaceAll()) return@replaceAll
+        scope.launch {
+          if (!ensureSubscription()) return@launch
+          if (!state.canReplaceAll() || !onEditingIntent(activeSession.editor)) return@launch
+          activeSession.submit { activeEditor, context ->
+            activeEditor.scope.launch(context) {
+              state.replaceAllMatches(
+                editor = activeEditor,
+                admitMutation = { admitMutation(activeSession) },
+                bringIntoViewRequests = bringIntoViewRequests,
+              )
+            }
           }
         }
       },

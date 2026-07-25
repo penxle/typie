@@ -77,6 +77,7 @@ internal fun CommentsSheet(
   composeLocation: CommentThreadLocation?,
   createEnabled: Boolean,
   onFreezeCurrentSelection: suspend () -> StableSelection?,
+  ensureMutationSubscription: suspend () -> Boolean,
   onInputFocusChanged: (Boolean) -> Unit,
   maxTopInset: Dp,
   safeBottomInset: Dp,
@@ -136,6 +137,7 @@ internal fun CommentsSheet(
       composeLocation = composeLocation,
       createEnabled = createEnabled,
       onFreezeCurrentSelection = onFreezeCurrentSelection,
+      ensureMutationSubscription = ensureMutationSubscription,
       onInputFocusChanged = onInputFocusChanged,
       onDismiss = ::dismiss,
       sheetDragHandleModifier = Modifier.sheetDragHandle(),
@@ -157,6 +159,7 @@ private fun CommentsSheetContent(
   composeLocation: CommentThreadLocation?,
   createEnabled: Boolean,
   onFreezeCurrentSelection: suspend () -> StableSelection?,
+  ensureMutationSubscription: suspend () -> Boolean,
   onInputFocusChanged: (Boolean) -> Unit,
   onDismiss: () -> Unit,
   sheetDragHandleModifier: Modifier,
@@ -182,6 +185,7 @@ private fun CommentsSheetContent(
     }
     commentSubmitInProgress = true
     try {
+      if (!ensureMutationSubscription()) return
       block()
     } finally {
       commentSubmitInProgress = false
@@ -290,6 +294,7 @@ private fun CommentsSheetContent(
 
   suspend fun resolveThread(thread: CommentsSheetThread_thread) {
     afterDiscardingCommentInput {
+      if (!ensureMutationSubscription()) return@afterDiscardingCommentInput
       when (model.resolveThread(thread.id)) {
         is Result.Ok -> toast.show(ToastType.Success, "코멘트를 해결했어요.")
         is Result.Err,
@@ -300,6 +305,7 @@ private fun CommentsSheetContent(
 
   suspend fun unresolveThread(thread: CommentsSheetThread_thread) {
     afterDiscardingCommentInput {
+      if (!ensureMutationSubscription()) return@afterDiscardingCommentInput
       when (val result = model.unresolveThread(thread.id)) {
         is Result.Ok -> {
           pendingReopenedThreadId = result.value.id

@@ -21,6 +21,7 @@ enum class GatedAction {
   TextReplacement,
   PresetSettings,
   AiSettings,
+  Comment,
   Spellcheck,
   AiFeedback,
   Generic,
