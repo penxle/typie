@@ -262,8 +262,8 @@ internal class EditorTapGesture(
       return
     }
     pendingPresentation = null
-    if (pending.showReadingHint && !context.readOnly) {
-      context.effects.showReadingEditHint()
+    if (pending.showReadingHint) {
+      context.effects.showReadingTapHint()
     }
     if (pending.showContextMenu) {
       context.semantics.contextMenu.show(pending.editor.state)
@@ -338,7 +338,24 @@ internal fun EditorTapGesture.handlePointerDown(
   )
   cancelPendingPresentation(context = context)
   context.semantics.contextMenu.hide()
-  if (!context.editing) {
+  val directEditingEnabled = context.editing && !context.readOnly
+  if (tapCountForActivePointer == 2 && (directEditingEnabled || context.readOnly)) {
+    markTapDispatched()
+    context.effects.cancelTapDispatch()
+    dispatchSelectionTap(
+      position = position,
+      clickCount = 2,
+      inputModifiers = inputModifiers,
+      shouldOpenContextMenu = shouldOpenContextMenuForActivePointer,
+      doubleTapDrag = doubleTapDrag,
+      context = context,
+      expectedEditing = directEditingEnabled,
+    ) {
+      doubleTapDrag.prepareForDrag(position = position, tap = this, context = context)
+    }
+    return true
+  }
+  if (!directEditingEnabled) {
     if (tapCountForActivePointer == 2 && context.doubleTapToEditEnabled) {
       prepareActiveTapForEditingPromotion()
       context.effects.cancelTapDispatch()
@@ -354,21 +371,6 @@ internal fun EditorTapGesture.handlePointerDown(
       return handled
     }
     return false
-  }
-  if (tapCountForActivePointer == 2) {
-    markTapDispatched()
-    context.effects.cancelTapDispatch()
-    dispatchEditableTap(
-      position = position,
-      clickCount = 2,
-      inputModifiers = inputModifiers,
-      shouldOpenContextMenu = shouldOpenContextMenuForActivePointer,
-      doubleTapDrag = doubleTapDrag,
-      context = context,
-    ) {
-      doubleTapDrag.prepareForDrag(position = position, tap = this, context = context)
-    }
-    return true
   }
 
   context.effects.scheduleTapDispatch(dispatchAtMillis = nowMillis + EditorTapDispatchDelayMillis)
@@ -408,7 +410,8 @@ internal fun EditorTapGesture.handlePointerUp(
   if (!canFinishTap) {
     context.effects.cancelTapDispatch()
   }
-  if (!context.editing) {
+  val directEditingEnabled = context.editing && !context.readOnly
+  if (!directEditingEnabled) {
     completedTap?.let { completed ->
       if (completed.contentAlreadyDispatched) {
         confirmPendingPresentationAfterPointerUp(completedTap = completed, context = context)
@@ -428,7 +431,7 @@ internal fun EditorTapGesture.handlePointerUp(
   }
   completedTap?.let { completed ->
     if (!completed.contentAlreadyDispatched) {
-      dispatchEditableTap(
+      dispatchSelectionTap(
         position = position,
         clickCount = completed.count,
         inputModifiers = inputModifiers,
@@ -448,7 +451,8 @@ internal fun EditorTapGesture.handleTapTimer(
   doubleTapDrag: EditorDoubleTapDragSession,
   context: EditorGestureContext,
 ) {
-  if (!context.editing) {
+  val directEditingEnabled = context.editing && !context.readOnly
+  if (!directEditingEnabled) {
     return
   }
   val position = activePosition ?: return
@@ -485,7 +489,7 @@ internal fun EditorTapGesture.handleTapTimer(
     return
   }
   markTapDispatched()
-  dispatchEditableTap(
+  dispatchSelectionTap(
     position = position,
     clickCount = clickCount,
     inputModifiers = inputModifiers,
@@ -535,7 +539,7 @@ private fun EditorTapGesture.dispatchReadingTap(
     clearTapHistory()
     return false
   }
-  if (!context.doubleTapToEditEnabled) {
+  if (!context.readOnly && !context.doubleTapToEditEnabled) {
     return dispatchReadingActivation(
       position = position,
       inputModifiers = inputModifiers,
@@ -614,7 +618,7 @@ private fun EditorTapGesture.dispatchReadingActivation(
     return false
   }
   val dispatched =
-    dispatchEditableTap(
+    dispatchSelectionTap(
       position = position,
       clickCount = 1,
       inputModifiers = inputModifiers.copy(shift = false),
@@ -630,13 +634,14 @@ private fun EditorTapGesture.dispatchReadingActivation(
   return dispatched
 }
 
-private fun EditorTapGesture.dispatchEditableTap(
+private fun EditorTapGesture.dispatchSelectionTap(
   position: Offset,
   clickCount: Int,
   inputModifiers: InputModifiers,
   shouldOpenContextMenu: Boolean,
   doubleTapDrag: EditorDoubleTapDragSession,
   context: EditorGestureContext,
+  expectedEditing: Boolean = true,
   preserveExistingSelectionOnSingleTap: Boolean = true,
   beforeLaunch: () -> Unit,
 ): Boolean {
@@ -670,15 +675,17 @@ private fun EditorTapGesture.dispatchEditableTap(
   val generation =
     beginPendingPresentation(
       editor = editor,
-      expectedEditing = true,
+      expectedEditing = expectedEditing,
       tapCount = clickCount,
       showReadingHint = false,
       context = context,
     )
   val wasFocused = context.isFocused
-  context.effects.requestFocus(editor)
-  if (wasFocused) {
-    context.effects.requestSoftwareKeyboard()
+  if (expectedEditing) {
+    context.effects.requestFocus(editor)
+    if (wasFocused) {
+      context.effects.requestSoftwareKeyboard()
+    }
   }
   val hitExistingSelectionAtTap =
     editor.selectionHitTest(page = point.page, x = point.x, y = point.y)

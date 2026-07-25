@@ -16,6 +16,7 @@ import co.typie.editor.ffi.Position
 import co.typie.editor.ffi.Rect
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.SelectionOp
+import co.typie.editor.ffi.SelectionPointUnit
 import co.typie.editor.interaction.gestures.EditorConsecutiveTapMaxIntervalMillis
 import co.typie.editor.runtime.EditorUiState
 import co.typie.platform.Platform
@@ -107,6 +108,95 @@ class EditorReadingModeInteractionTest {
           (message as? Message.Selection)?.op is SelectionOp.SelectUnitAt
         }
       )
+    }
+
+  @Test
+  fun `read only single tap selects without editing regardless of the edit preference`() =
+    runTest(StandardTestDispatcher()) {
+      val fixture = fixture(readOnly = true, doubleTapToEditEnabled = false)
+      fixture.editor.sync {}
+
+      fixture.controller.down(pointerId = 1L, nowMillis = 0L)
+      fixture.controller.up(pointerId = 1L, nowMillis = 40L)
+      runCurrent()
+
+      assertFalse(fixture.editing)
+      assertEquals(0, fixture.effects.editingRequestCount)
+      assertEquals(0, fixture.effects.focusRequestCount)
+      assertEquals(0, fixture.effects.softwareKeyboardRequestCount)
+      assertEquals(
+        listOf<Message>(Message.Selection(SelectionOp.SetAt(page = 0, x = 10f, y = 20f))),
+        fixture.fake.enqueued,
+      )
+
+      advanceTimeBy(EditorConsecutiveTapMaxIntervalMillis)
+      runCurrent()
+      assertEquals(1, fixture.effects.hintCount)
+    }
+
+  @Test
+  fun `read only tap stays selection only while editing cleanup is pending`() =
+    runTest(StandardTestDispatcher()) {
+      val fixture = fixture(editing = true, readOnly = true)
+      fixture.editor.sync {}
+
+      fixture.controller.down(pointerId = 1L, nowMillis = 0L)
+      fixture.controller.up(pointerId = 1L, nowMillis = 40L)
+      runCurrent()
+
+      assertTrue(fixture.editing)
+      assertEquals(0, fixture.effects.editingRequestCount)
+      assertEquals(0, fixture.effects.focusRequestCount)
+      assertEquals(0, fixture.effects.softwareKeyboardRequestCount)
+      assertEquals(
+        listOf<Message>(Message.Selection(SelectionOp.SetAt(page = 0, x = 10f, y = 20f))),
+        fixture.fake.enqueued,
+      )
+    }
+
+  @Test
+  fun `read only double tap selects a word and starts selection drag without editing`() =
+    runTest(StandardTestDispatcher()) {
+      val selectedWord =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 5, Affinity.Downstream),
+        )
+      val fixture = fixture(readOnly = true, unitSelectionResult = selectedWord)
+      fixture.editor.sync {}
+
+      fixture.controller.down(pointerId = 1L, nowMillis = 0L)
+      fixture.controller.up(pointerId = 1L, nowMillis = 40L)
+      runCurrent()
+
+      fixture.controller.down(pointerId = 2L, nowMillis = 140L)
+      runCurrent()
+
+      assertFalse(fixture.editing)
+      assertEquals(0, fixture.effects.editingRequestCount)
+      assertEquals(0, fixture.effects.focusRequestCount)
+      assertEquals(0, fixture.effects.softwareKeyboardRequestCount)
+      assertTrue(
+        fixture.fake.enqueued.any { message ->
+          ((message as? Message.Selection)?.op as? SelectionOp.SelectUnitAt)?.unit ==
+            SelectionPointUnit.Word
+        }
+      )
+
+      fixture.controller.move(pointerId = 2L, position = Offset(20f, 20f), nowMillis = 160L)
+      runCurrent()
+
+      assertEquals(EditorInteractionMode.DoubleTapSelecting, fixture.controller.interactionMode)
+      assertTrue(
+        fixture.fake.enqueued.any { message ->
+          (message as? Message.Selection)?.op is SelectionOp.ExtendTo
+        }
+      )
+
+      fixture.controller.up(pointerId = 2L, nowMillis = 180L, position = Offset(20f, 20f))
+      advanceUntilIdle()
+      assertEquals(EditorInteractionMode.Idle, fixture.controller.interactionMode)
+      assertEquals(0, fixture.effects.hintCount)
     }
 
   @Test
@@ -344,11 +434,13 @@ class EditorReadingModeInteractionTest {
 
   private fun TestScope.fixture(
     editing: Boolean = false,
+    readOnly: Boolean = false,
     doubleTapToEditEnabled: Boolean = true,
     interactiveHit: InteractiveHit? = null,
     expandedSelection: Boolean = false,
     tapHitsSelection: Boolean = false,
     pointSelectionResult: Selection? = null,
+    unitSelectionResult: Selection? = null,
     platform: Platform = Platform.Desktop,
   ): Fixture {
     var currentSelection =
@@ -366,8 +458,14 @@ class EditorReadingModeInteractionTest {
         selectionProvider = { currentSelection },
         onTick = {
           val latestSelection = fake.enqueued.lastOrNull() as? Message.Selection
-          if (latestSelection?.op is SelectionOp.SetAt) {
-            currentSelection = pointSelectionResult ?: FakeFfiEditor.EmptySelection
+          when (latestSelection?.op) {
+            is SelectionOp.SetAt ->
+              currentSelection = pointSelectionResult ?: FakeFfiEditor.EmptySelection
+            is SelectionOp.SelectUnitAt ->
+              if (unitSelectionResult != null) {
+                currentSelection = unitSelectionResult
+              }
+            else -> Unit
           }
           emptyList()
         },
@@ -403,6 +501,7 @@ class EditorReadingModeInteractionTest {
         geometry = effects,
         uiStateProvider = { effects.uiState },
         platformProvider = { platform },
+        readOnlyProvider = { readOnly },
         editingProvider = { fixture.editing },
         doubleTapToEditEnabledProvider = { doubleTapToEditEnabled },
       )
@@ -487,7 +586,7 @@ class EditorReadingModeInteractionTest {
       return onRequestEditing(editor)
     }
 
-    override fun showReadingEditHint() {
+    override fun showReadingTapHint() {
       hintCount += 1
     }
 

@@ -23,6 +23,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -245,7 +246,7 @@ fun EditorScreen(entityId: String) {
   val focusReturnSession = remember(entityId) { EditorFocusReturnSession(scope = scope) }
   val runtime = remember(entityId) { EditorRuntime(uiScope = scope) }
   val interactionScope = remember(entityId) { EditorInteractionScope(coroutineScope = scope) }
-  val readingHintEvents = remember(entityId) { MutableSharedFlow<Unit>(extraBufferCapacity = 1) }
+  val readingTapHintEvents = remember(entityId) { MutableSharedFlow<Unit>(extraBufferCapacity = 1) }
   val uiState = remember(entityId) { EditorUiState() }
   val externalElementState = remember(entityId) { EditorExternalElementState() }
   val assetHydrator =
@@ -371,6 +372,7 @@ fun EditorScreen(entityId: String) {
   }
   val editorState = editor?.state ?: EditorState.Initial
   val doubleTapToEditEnabled = Preference.doubleTapToEditEnabled && editorState.placeholder == null
+  val headerReadingTapIdentity = remember(editor, editorReadOnly, documentLocked) { Any() }
   val externalAssetIds =
     remember(editorState.externalElements) {
       editorState.externalElements
@@ -1433,6 +1435,10 @@ fun EditorScreen(entityId: String) {
           ),
       )
     val visibleArea = visibleAreas.editor
+    LaunchedEffect(editorReadOnly, documentLocked) {
+      if (editor == null) return@LaunchedEffect
+      interactionScope.controller.cancel()
+    }
     LaunchedEffect(editorReadOnly) {
       if (!editorReadOnly) return@LaunchedEffect
       editingState.enterReading()
@@ -1610,7 +1616,7 @@ fun EditorScreen(entityId: String) {
         editing = { isEditing },
         doubleTapToEditEnabled = { doubleTapToEditEnabled },
         onRequestEditing = ::requestEditing,
-        onShowReadingEditHint = { readingHintEvents.tryEmit(Unit) },
+        onShowReadingTapHint = { readingTapHintEvents.tryEmit(Unit) },
         onSelectionHaptic = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) },
         onRequestSoftwareKeyboard = {
           if (
@@ -1710,10 +1716,11 @@ fun EditorScreen(entityId: String) {
               title = model.titleDraft,
               subtitle = model.subtitleDraft,
               loading = false,
-              enabled = editorReady && !editorReadOnly && screenState.sceneInForeground,
-              editing = isEditing,
+              enabled = editorReady && screenState.sceneInForeground,
+              editing = directEditingEnabled,
               doubleTapToEditEnabled = doubleTapToEditEnabled,
-              readingTapIdentity = editor,
+              editingActivationEnabled = !editorReadOnly,
+              readingTapIdentity = headerReadingTapIdentity,
               readingModeCleanupRequest = readingModeCleanupRequest,
               showBottomDivider = layoutSpec is EditorDocumentLayoutSpec.Continuous,
               topInset = topInset,
@@ -1733,7 +1740,7 @@ fun EditorScreen(entityId: String) {
                 val activeEditor = editor
                 activeEditor != null && requestEditing(activeEditor)
               },
-              onReadingEditHint = { readingHintEvents.tryEmit(Unit) },
+              onReadingTapHint = { readingTapHintEvents.tryEmit(Unit) },
               onEnterDocument = {
                 model.flushDraftsAsync()
                 enterDocumentStartFromHeader(
@@ -1756,15 +1763,23 @@ fun EditorScreen(entityId: String) {
           }
         },
         viewportOverlay = {
-          if (
-            screenState.sceneInForeground && !isEditing && !editorReadOnly && doubleTapToEditEnabled
-          ) {
-            EditorTapHintOverlay(
-              events = readingHintEvents,
-              text = "편집하려면 더블 탭",
-              hazeState = LocalHazeState.current,
-              visibleArea = visibleArea,
-            )
+          val tapHintText =
+            when {
+              isEditing -> null
+              documentLocked -> "편집이 잠겨 있어요"
+              editorReadOnly -> null
+              doubleTapToEditEnabled -> "편집하려면 더블 탭"
+              else -> null
+            }
+          if (screenState.sceneInForeground && tapHintText != null) {
+            key(tapHintText) {
+              EditorTapHintOverlay(
+                events = readingTapHintEvents,
+                text = tapHintText,
+                hazeState = LocalHazeState.current,
+                visibleArea = visibleArea,
+              )
+            }
           }
           if (editorReady) {
             EditorZoomOverlay(

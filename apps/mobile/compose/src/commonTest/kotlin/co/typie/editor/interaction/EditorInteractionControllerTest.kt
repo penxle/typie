@@ -4065,7 +4065,7 @@ class EditorInteractionControllerTest {
 
     override fun requestEditing(editor: Editor): Boolean = false
 
-    override fun showReadingEditHint() = Unit
+    override fun showReadingTapHint() = Unit
 
     override fun requestFocus(editor: Editor): Boolean {
       focused = true

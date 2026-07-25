@@ -185,7 +185,7 @@ class EditorPointSelectionSemanticTest {
     override fun requestEditing(editor: Editor): Boolean =
       error("Unused in direct cursor semantic dispatch tests")
 
-    override fun showReadingEditHint() = error("Unused in direct cursor semantic dispatch tests")
+    override fun showReadingTapHint() = error("Unused in direct cursor semantic dispatch tests")
 
     override fun requestFocus(editor: Editor): Boolean =
       error("Unused in direct cursor semantic dispatch tests")

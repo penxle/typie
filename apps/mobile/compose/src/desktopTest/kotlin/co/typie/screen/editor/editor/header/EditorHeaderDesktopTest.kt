@@ -175,6 +175,64 @@ class EditorHeaderDesktopTest {
   }
 
   @Test
+  fun readOnlyTitleDoubleTapKeepsNativeSelectionWithoutEditingActivation() = runComposeUiTest {
+    var promotionCount = 0
+    var hintCount = 0
+    setContent {
+      CompositionLocalProvider(
+        LocalDensity provides Density(1f),
+        LocalThemeMode provides ResolvedThemeMode.Light,
+      ) {
+        Box(Modifier.width(240.dp)) {
+          EditorHeader(
+            title = Title,
+            subtitle = "",
+            loading = false,
+            editing = false,
+            editingActivationEnabled = false,
+            topInset = 0.dp,
+            onTitleChange = {},
+            onSubtitleChange = {},
+            onTitleFocused = {},
+            onSubtitleFocused = {},
+            onHeightChanged = {},
+            onEnterDocument = {},
+            onRequestEditing = {
+              promotionCount += 1
+              true
+            },
+            onReadingTapHint = { hintCount += 1 },
+          )
+        }
+      }
+    }
+    waitForIdle()
+
+    val title = onNode(hasText(Title), useUnmergedTree = true)
+    val bounds = title.fetchSemanticsNode().boundsInRoot
+    title.performTouchInput {
+      val position = Offset(x = bounds.width * 0.4f, y = bounds.height / 2f)
+      down(position)
+      advanceEventTime(10)
+      up()
+      advanceEventTime(100)
+      down(position)
+      advanceEventTime(10)
+      up()
+    }
+    waitForIdle()
+
+    val selection =
+      onAllNodes(hasText(Title), useUnmergedTree = true)
+        .fetchSemanticsNodes()
+        .single { SemanticsProperties.TextSelectionRange in it.config }
+        .config[SemanticsProperties.TextSelectionRange]
+    assertFalse(selection.collapsed)
+    assertEquals(0, promotionCount)
+    assertEquals(0, hintCount)
+  }
+
+  @Test
   fun readingTitleSingleTapPromotesWhenDoubleTapSettingIsDisabled() = runComposeUiTest {
     val editing = mutableStateOf(false)
     var promotionCount = 0

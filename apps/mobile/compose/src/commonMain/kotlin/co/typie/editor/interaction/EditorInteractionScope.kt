@@ -45,7 +45,7 @@ internal class EditorInteractionScope(
   private var doubleTapToEditEnabled: () -> Boolean = { true }
   private var editingSnapshot: Boolean? = null
   private var onRequestEditing: ((Editor) -> Boolean)? = null
-  private var onShowReadingEditHint: (() -> Unit)? = null
+  private var onShowReadingTapHint: (() -> Unit)? = null
   private var tapDispatchJob: Job? = null
   private var tapSequenceConfirmationJob: Job? = null
   private var longPressDispatchJob: Job? = null
@@ -88,7 +88,7 @@ internal class EditorInteractionScope(
     editing: () -> Boolean = { true },
     doubleTapToEditEnabled: () -> Boolean = { true },
     onRequestEditing: (Editor) -> Boolean = { false },
-    onShowReadingEditHint: () -> Unit = {},
+    onShowReadingTapHint: () -> Unit = {},
     onSelectionHaptic: () -> Unit,
     onRequestSoftwareKeyboard: () -> Unit,
   ) {
@@ -122,7 +122,7 @@ internal class EditorInteractionScope(
     this.doubleTapToEditEnabled = doubleTapToEditEnabled
     this.editingSnapshot = nextEditing
     this.onRequestEditing = onRequestEditing
-    this.onShowReadingEditHint = onShowReadingEditHint
+    this.onShowReadingTapHint = onShowReadingTapHint
     outsidePageTapEnabled = layoutSpec == null || layoutSpec is EditorDocumentLayoutSpec.Continuous
     semantics.viewportZoom.configure(viewportZoomConfig)
   }
@@ -153,7 +153,7 @@ internal class EditorInteractionScope(
     doubleTapToEditEnabled = { true }
     editingSnapshot = null
     onRequestEditing = null
-    onShowReadingEditHint = null
+    onShowReadingTapHint = null
     outsidePageTapEnabled = true
     scrollGestureLockState = null
   }
@@ -303,8 +303,8 @@ internal class EditorInteractionScope(
 
   override fun requestEditing(editor: Editor): Boolean = onRequestEditing?.invoke(editor) == true
 
-  override fun showReadingEditHint() {
-    onShowReadingEditHint?.invoke()
+  override fun showReadingTapHint() {
+    onShowReadingTapHint?.invoke()
   }
 
   override fun requestFocus(editor: Editor): Boolean = editor.focus()

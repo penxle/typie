@@ -171,6 +171,7 @@ internal fun EditorHeader(
   enabled: Boolean = true,
   editing: Boolean = true,
   doubleTapToEditEnabled: Boolean = true,
+  editingActivationEnabled: Boolean = true,
   readingTapIdentity: Any? = Unit,
   readingModeCleanupRequest: Int = 0,
   showBottomDivider: Boolean = true,
@@ -184,7 +185,7 @@ internal fun EditorHeader(
   onHeightChanged: (Float) -> Unit,
   onEnterDocument: () -> Unit,
   onRequestEditing: () -> Boolean = { false },
-  onReadingEditHint: () -> Unit = {},
+  onReadingTapHint: () -> Unit = {},
 ) {
   val density = LocalDensity.current
   val showSkeleton = LocalSkeleton.current.enabled || loading
@@ -250,6 +251,7 @@ internal fun EditorHeader(
         enabled = enabled,
         editing = editing,
         doubleTapToEditEnabled = doubleTapToEditEnabled,
+        editingActivationEnabled = editingActivationEnabled,
         readingTapIdentity = readingTapIdentity,
         readingModeCleanupRequest = readingModeCleanupRequest,
         imeAction = ImeAction.Next,
@@ -260,7 +262,7 @@ internal fun EditorHeader(
         modifier = Modifier.fillMaxWidth(),
         textInputState = titleInputState,
         onRequestEditing = onRequestEditing,
-        onReadingEditHint = onReadingEditHint,
+        onReadingTapHint = onReadingTapHint,
       )
 
       Spacer(Modifier.height(TitleBetweenSpacing))
@@ -291,6 +293,7 @@ internal fun EditorHeader(
         enabled = enabled,
         editing = editing,
         doubleTapToEditEnabled = doubleTapToEditEnabled,
+        editingActivationEnabled = editingActivationEnabled,
         readingTapIdentity = readingTapIdentity,
         readingModeCleanupRequest = readingModeCleanupRequest,
         imeAction = ImeAction.Done,
@@ -306,7 +309,7 @@ internal fun EditorHeader(
         modifier = Modifier.fillMaxWidth(),
         textInputState = subtitleInputState,
         onRequestEditing = onRequestEditing,
-        onReadingEditHint = onReadingEditHint,
+        onReadingTapHint = onReadingTapHint,
       )
 
       Spacer(Modifier.height(TitleBlockSpacing))
@@ -331,6 +334,7 @@ private fun EditorHeaderField(
   enabled: Boolean,
   editing: Boolean,
   doubleTapToEditEnabled: Boolean,
+  editingActivationEnabled: Boolean,
   readingTapIdentity: Any?,
   readingModeCleanupRequest: Int,
   imeAction: ImeAction,
@@ -342,7 +346,7 @@ private fun EditorHeaderField(
   modifier: Modifier = Modifier,
   textInputState: TextInputState,
   onRequestEditing: () -> Boolean,
-  onReadingEditHint: () -> Unit,
+  onReadingTapHint: () -> Unit,
 ) {
   val verticalExitScope = rememberCoroutineScope()
   val keyboardController = LocalSoftwareKeyboardController.current
@@ -352,7 +356,7 @@ private fun EditorHeaderField(
   val currentInputEnabled by rememberUpdatedState(inputEnabled)
   val currentReadingTapEnabled by rememberUpdatedState(enabled && !editing)
   val currentOnRequestEditing by rememberUpdatedState(onRequestEditing)
-  val currentOnReadingEditHint by rememberUpdatedState(onReadingEditHint)
+  val currentOnReadingTapHint by rememberUpdatedState(onReadingTapHint)
   var latestTextLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
   var pendingActivationOffset by remember { mutableStateOf<Int?>(null) }
   val readingTapTracker =
@@ -360,12 +364,14 @@ private fun EditorHeaderField(
       viewConfiguration.touchSlop,
       density.density,
       doubleTapToEditEnabled,
+      editingActivationEnabled,
       readingTapIdentity,
     ) {
       EditorHeaderReadingTapTracker(
         touchSlopPx = viewConfiguration.touchSlop,
         maxTapDistancePx = with(density) { 20.dp.toPx() },
         doubleTapToEditEnabled = doubleTapToEditEnabled,
+        editingActivationEnabled = editingActivationEnabled,
       )
     }
   val verticalNavigation =
@@ -411,7 +417,7 @@ private fun EditorHeaderField(
         }
         .invalidateHeaderVerticalNavigationOnPointerDown(verticalNavigation)
         .then(
-          if (enabled && !editing) {
+          if (enabled && !editing && editingActivationEnabled) {
             Modifier.semantics {
               customActions =
                 listOf(
@@ -444,7 +450,7 @@ private fun EditorHeaderField(
               pendingActivationOffset = offset
             }
           },
-          onShowHint = { currentOnReadingEditHint() },
+          onShowHint = { currentOnReadingTapHint() },
         )
         .onPreviewKeyEvent {
           if (!currentInputEnabled) {

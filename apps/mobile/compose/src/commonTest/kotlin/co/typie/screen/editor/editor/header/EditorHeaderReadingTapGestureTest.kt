@@ -89,6 +89,36 @@ class EditorHeaderReadingTapGestureTest {
   }
 
   @Test
+  fun activationDisabledKeepsSingleTapAsSelectionWhenEditPreferenceIsDisabled() {
+    val tracker = tracker(doubleTapToEditEnabled = false, editingActivationEnabled = false)
+    tracker.onDown(position = Offset.Zero, offset = 0, timeMillis = 0)
+
+    assertEquals(
+      EditorHeaderReadingTapResult.None,
+      tracker.onUp(position = Offset.Zero, offset = 3, timeMillis = 10),
+    )
+    assertEquals(EditorHeaderReadingTapResult.ShowHint, tracker.confirm(timeMillis = 310))
+  }
+
+  @Test
+  fun activationDisabledLeavesConsecutiveTapNativeAndSuppressesTheHint() {
+    val tracker = tracker(editingActivationEnabled = false)
+    tracker.onDown(position = Offset.Zero, offset = 0, timeMillis = 0)
+    tracker.onUp(position = Offset.Zero, offset = 0, timeMillis = 10)
+
+    assertEquals(
+      EditorHeaderReadingTapResult.None,
+      tracker.onDown(position = Offset(8f, 0f), offset = 4, timeMillis = 250),
+    )
+    assertEquals(
+      EditorHeaderReadingTapResult.None,
+      tracker.onUp(position = Offset(8f, 0f), offset = 4, timeMillis = 260),
+    )
+    assertEquals(EditorHeaderReadingTapResult.None, tracker.confirm(timeMillis = 560))
+    assertNull(tracker.pendingConfirmationAtMillis)
+  }
+
+  @Test
   fun confirmedSingleTapSkipsHintWhenItHandledExistingSelectionUi() {
     val tracker = tracker()
     tracker.onDown(position = Offset.Zero, offset = 0, timeMillis = 0)
@@ -98,11 +128,15 @@ class EditorHeaderReadingTapGestureTest {
     assertNull(tracker.pendingConfirmationAtMillis)
   }
 
-  private fun tracker(doubleTapToEditEnabled: Boolean = true): EditorHeaderReadingTapTracker =
+  private fun tracker(
+    doubleTapToEditEnabled: Boolean = true,
+    editingActivationEnabled: Boolean = true,
+  ): EditorHeaderReadingTapTracker =
     EditorHeaderReadingTapTracker(
       touchSlopPx = 8f,
       maxTapDistancePx = 20f,
       doubleTapToEditEnabled = doubleTapToEditEnabled,
+      editingActivationEnabled = editingActivationEnabled,
     )
 
   private fun scheduleFirstTap(tracker: EditorHeaderReadingTapTracker, startMillis: Long) {

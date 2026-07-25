@@ -24,6 +24,7 @@ internal class EditorHeaderReadingTapTracker(
   private val touchSlopPx: Float,
   private val maxTapDistancePx: Float,
   private val doubleTapToEditEnabled: Boolean,
+  private val editingActivationEnabled: Boolean = true,
   private val consecutiveTapMaxIntervalMillis: Long = EditorConsecutiveTapMaxIntervalMillis,
 ) {
   private data class ActiveTap(val position: Offset, val suppressHint: Boolean)
@@ -48,17 +49,20 @@ internal class EditorHeaderReadingTapTracker(
   ): EditorHeaderReadingTapResult {
     val pending = pendingTap
     pendingTap = null
-    if (
-      doubleTapToEditEnabled &&
-        pending != null &&
+    val isConsecutiveTap =
+      pending != null &&
         timeMillis <= pending.confirmationAtMillis &&
         (position - pending.position).getDistance() <= maxTapDistancePx
-    ) {
+    if (editingActivationEnabled && doubleTapToEditEnabled && isConsecutiveTap) {
       activeTap = null
       return EditorHeaderReadingTapResult.Activate(offset)
     }
 
-    activeTap = ActiveTap(position = position, suppressHint = suppressHint)
+    activeTap =
+      ActiveTap(
+        position = position,
+        suppressHint = suppressHint || (isConsecutiveTap && !editingActivationEnabled),
+      )
     return EditorHeaderReadingTapResult.None
   }
 
@@ -77,7 +81,7 @@ internal class EditorHeaderReadingTapTracker(
   ): EditorHeaderReadingTapResult {
     val active = activeTap ?: return EditorHeaderReadingTapResult.None
     activeTap = null
-    if (!doubleTapToEditEnabled) {
+    if (editingActivationEnabled && !doubleTapToEditEnabled) {
       pendingTap = null
       return EditorHeaderReadingTapResult.Activate(offset)
     }

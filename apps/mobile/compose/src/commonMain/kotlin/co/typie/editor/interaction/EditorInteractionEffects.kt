@@ -22,7 +22,7 @@ internal interface EditorInteractionEffects {
 
   fun requestEditing(editor: Editor): Boolean
 
-  fun showReadingEditHint()
+  fun showReadingTapHint()
 
   fun requestFocus(editor: Editor): Boolean
 
