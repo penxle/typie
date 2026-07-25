@@ -633,6 +633,13 @@
   let titleDirty = $state(false);
   let subtitleDirty = $state(false);
 
+  function clearBodySelectionForHeaderFocus() {
+    const editor = ctx.editor;
+    if (!editor) return;
+
+    editor.enqueue({ type: 'selection', op: { type: 'unset' } });
+  }
+
   $effect(() => {
     if (document) {
       const serverTitle = document.nullableTitle ?? '';
@@ -1181,6 +1188,7 @@
                               flushTitleUpdate();
                             }}
                             onfocus={() => {
+                              clearBodySelectionForHeaderFocus();
                               titleFocused = true;
                               if (documentId) {
                                 selectionsStore.current = {
@@ -1225,6 +1233,7 @@
                               flushSubtitleUpdate();
                             }}
                             onfocus={() => {
+                              clearBodySelectionForHeaderFocus();
                               subtitleFocused = true;
                               if (documentId) {
                                 selectionsStore.current = {

@@ -37,6 +37,7 @@ import kotlin.test.assertTrue
 class EditorHeaderDesktopTest {
   @Test
   fun readingHeaderKeepsSelectionSemanticsWithoutTextMutation() = runComposeUiTest {
+    var titleFocusCount = 0
     setContent {
       CompositionLocalProvider(
         LocalDensity provides Density(1f),
@@ -50,7 +51,7 @@ class EditorHeaderDesktopTest {
           topInset = 0.dp,
           onTitleChange = {},
           onSubtitleChange = {},
-          onTitleFocused = {},
+          onTitleFocused = { titleFocusCount += 1 },
           onSubtitleFocused = {},
           onHeightChanged = {},
           onEnterDocument = {},
@@ -67,6 +68,12 @@ class EditorHeaderDesktopTest {
     assertTrue(SemanticsActions.SetSelection in field.config)
     assertFalse(SemanticsActions.SetText in field.config)
     assertTrue(SemanticsActions.CustomActions in field.config)
+    assertEquals(0, titleFocusCount)
+
+    onNode(hasText(Title), useUnmergedTree = true).performTouchInput { click(center) }
+    waitForIdle()
+
+    assertEquals(1, titleFocusCount)
   }
 
   @Test
@@ -289,6 +296,8 @@ class EditorHeaderDesktopTest {
   @Test
   fun verticalArrowsExitOnlyWhenNativeMovementStaysOnVisualLine() = runComposeUiTest {
     val bodyEntries = mutableStateOf(0)
+    var titleFocusCount = 0
+    var subtitleFocusCount = 0
 
     setContent {
       CompositionLocalProvider(
@@ -303,8 +312,8 @@ class EditorHeaderDesktopTest {
             topInset = 0.dp,
             onTitleChange = {},
             onSubtitleChange = {},
-            onTitleFocused = {},
-            onSubtitleFocused = {},
+            onTitleFocused = { titleFocusCount += 1 },
+            onSubtitleFocused = { subtitleFocusCount += 1 },
             onHeightChanged = {},
             onEnterDocument = { bodyEntries.value += 1 },
           )
@@ -329,6 +338,8 @@ class EditorHeaderDesktopTest {
     }
 
     title.performClick()
+    waitForIdle()
+    assertEquals(1, titleFocusCount)
     title.performTextInputSelection(TextRange(1))
     val titleBeforeDown = selection(title)
     press(title, Key.DirectionDown)
@@ -338,6 +349,7 @@ class EditorHeaderDesktopTest {
     title.performTextInputSelection(TextRange(LtrWrappedText.length - 1))
     press(title, Key.DirectionDown)
     subtitle.assertIsFocused()
+    assertEquals(1, subtitleFocusCount)
 
     subtitle.performTextInputSelection(TextRange(SubtitleWrappedText.length - 1))
     val subtitleBeforeUp = selection(subtitle)

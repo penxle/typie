@@ -399,6 +399,7 @@ export class Editor {
       // null selection is the unfocused state; release DOM focus so OS caret and IME follow.
       if (this.#selection === undefined) {
         this.inputEl?.blur();
+        this.closeContextMenu(); // TODO: 직접 닫아줄 필요 없음. 컨텍스트 메뉴가 포커스를 소유하게 고쳐야 함, 그럼 거기서 나오기 전까지는 어차피 셀렉션을 못 바꿀 것이므로..
       }
       this.#syncActiveSpellcheckErrorFromSelection();
       this.#syncActiveAiFeedbackFromSelection();

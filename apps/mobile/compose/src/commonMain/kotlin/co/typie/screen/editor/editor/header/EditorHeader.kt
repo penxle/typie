@@ -405,7 +405,7 @@ private fun EditorHeaderField(
       modifier
         .textInputFocusable(textInputState, enabled = inputEnabled) {
           verticalNavigation.onFocusChanged(it.isFocused)
-          if (inputEnabled && it.isFocused) {
+          if (it.isFocused) {
             onFocused()
           }
         }

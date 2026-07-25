@@ -70,6 +70,7 @@ import co.typie.editor.ffi.HistoryTag
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.Movement
 import co.typie.editor.ffi.NavigationOp
+import co.typie.editor.ffi.SelectionOp
 import co.typie.editor.ffi.SystemEvent
 import co.typie.editor.input.EditorInputRecorder
 import co.typie.editor.input.LocalEditorIncomingContentHandler
@@ -422,6 +423,10 @@ fun EditorScreen(entityId: String) {
       editorFocused = uiState.focused,
       bringIntoViewRequests = bringIntoViewRequests,
     )
+  fun clearBodySelectionForHeaderFocus() {
+    val activeEditor = runtime.editor ?: return
+    activeEditor.enqueue(Message.Selection(SelectionOp.Unset))
+  }
   val findReplace =
     rememberEditorFindReplaceSession(
       documentLocked = editorReadOnly,
@@ -1715,8 +1720,14 @@ fun EditorScreen(entityId: String) {
               subtitleFocusRequestVersion = subtitleFocusRequestVersion.value,
               onTitleChange = model::updateTitleDraft,
               onSubtitleChange = model::updateSubtitleDraft,
-              onTitleFocused = entryState::markTitleFocused,
-              onSubtitleFocused = entryState::markSubtitleFocused,
+              onTitleFocused = {
+                clearBodySelectionForHeaderFocus()
+                entryState.markTitleFocused()
+              },
+              onSubtitleFocused = {
+                clearBodySelectionForHeaderFocus()
+                entryState.markSubtitleFocused()
+              },
               onHeightChanged = screenState::updateHeaderHeight,
               onRequestEditing = {
                 val activeEditor = editor
