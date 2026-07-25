@@ -1,6 +1,6 @@
 import { GetParameterCommand, SSMClient } from '@aws-sdk/client-ssm';
 
-type Env = {
+export type Env = {
   CLOUDFLARE_API_KEY: string;
   CLOUDFLARE_AIGATEWAY_URL: string;
   SLACK_BOT_TOKEN: string;

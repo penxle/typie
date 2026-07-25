@@ -54,6 +54,18 @@ export const acquireLock = async (threadKey: string): Promise<boolean> => {
   }
 };
 
+export const refreshLock = async (threadKey: string): Promise<void> => {
+  await client.send(
+    new PutCommand({
+      TableName: TABLE_NAME,
+      Item: {
+        threadKey: `lock#${threadKey}`,
+        ttl: Math.floor(Date.now() / 1000) + LOCK_TTL,
+      },
+    }),
+  );
+};
+
 export const releaseLock = async (threadKey: string): Promise<void> => {
   await client.send(new DeleteCommand({ TableName: TABLE_NAME, Key: { threadKey: `lock#${threadKey}` } }));
 };

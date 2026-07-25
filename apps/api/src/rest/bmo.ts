@@ -1,8 +1,10 @@
 import dedent from 'dedent';
 import { Hono } from 'hono';
-import { pgr } from '#/db/index.ts';
+import { pgb } from '#/db/index.ts';
 import { env } from '#/env.ts';
 import type { Env } from '#/context.ts';
+
+const STATEMENT_TIMEOUT = '60s';
 
 export const bmo = new Hono<Env>();
 
@@ -28,7 +30,8 @@ bmo.post('/query', async (c) => {
       const heartbeat = setInterval(() => controller.enqueue(encoder.encode(' ')), 1000);
 
       try {
-        const result = await pgr.begin('READ ONLY', async (sql) => {
+        const result = await pgb.begin('READ ONLY', async (sql) => {
+          await sql.unsafe(`SET LOCAL statement_timeout = '${STATEMENT_TIMEOUT}'`);
           const rows = await sql.unsafe(query);
           return { success: true as const, count: rows.length, rows: [...rows] };
         });
@@ -167,7 +170,8 @@ bmo.get('/schema', async (c) => {
   }
 
   if (!schema) {
-    await pgr.begin('READ ONLY', async (sql) => {
+    await pgb.begin('READ ONLY', async (sql) => {
+      await sql.unsafe(`SET LOCAL statement_timeout = '${STATEMENT_TIMEOUT}'`);
       const result = await sql.unsafe(getSchemaQuery);
       schema = result[0].schema;
     });

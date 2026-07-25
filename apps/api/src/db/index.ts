@@ -32,6 +32,14 @@ export const dbr = drizzle(pgr, {
   logger: new DrizzleLogger(),
 });
 
+export const pgb = postgres(env.DATABASE_RO_URL ?? env.DATABASE_URL, {
+  max: dev ? 2 : 5,
+  connect_timeout: 5,
+  idle_timeout: 30,
+  prepare: false,
+  ssl: 'prefer',
+});
+
 export type Database = typeof db;
 export type Transaction = Database extends PgDatabase<infer T, infer U, infer V> ? PgTransaction<T, U, V> : never;
 

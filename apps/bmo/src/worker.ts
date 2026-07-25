@@ -1,141 +1,211 @@
 import { mkdirSync, rmSync } from 'node:fs';
 import { createSdkMcpServer, query, tool } from '@anthropic-ai/claude-agent-sdk';
+import { InvokeCommand, LambdaClient } from '@aws-sdk/client-lambda';
 import { WebClient } from '@slack/web-api';
-import dedent from 'dedent';
-import { match } from 'ts-pattern';
 import { z } from 'zod';
+import { getDatabaseSchema, runQuery } from './api.ts';
+import { prepareCodebase } from './codebase.ts';
 import { loadEnv } from './env.ts';
-import { acquireLock, deleteSession, getSession, releaseLock, setSession } from './session.ts';
+import { buildKnowledgeContext, describeKnowledge, downloadKnowledge, KNOWLEDGE_DIR, uploadKnowledge } from './knowledge.ts';
+import { buildSystemPrompt, buildUserPrompt, RECORDING_PROMPT } from './prompt.ts';
+import { acquireLock, deleteSession, getSession, refreshLock, releaseLock, setSession } from './session.ts';
 import { downloadSession, uploadSession } from './session-store.ts';
-import { toSlackMrkdwn } from './slack-mrkdwn.ts';
-import type { Options } from '@anthropic-ai/claude-agent-sdk';
+import { createSlackView } from './slack-view.ts';
+import type { Options, PermissionResult } from '@anthropic-ai/claude-agent-sdk';
+import type { Env } from './env.ts';
+import type { KnowledgeChange } from './knowledge.ts';
 import type { SlackAppMentionEvent } from './slack-types.ts';
+import type { Entry, SlackView } from './slack-view.ts';
 
-let dbSchema: unknown | null = null;
+const BUILT_IN_TOOLS = ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash'];
 
-const executeQuery = async (apiBaseUrl: string, apiSecret: string, sqlQuery: string) => {
-  const res = await fetch(`${apiBaseUrl}/bmo/query`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiSecret}` },
-    body: JSON.stringify({ query: sqlQuery }),
-  });
-  const raw = await res.text();
-  const text = raw.trim();
-  if (!res.ok) {
-    return { success: false as const, error: `API error ${res.status}: ${text}` };
-  }
-  return JSON.parse(text) as { success: boolean; count?: number; rows?: unknown[]; error?: string };
+const MIXPANEL_PREFIX = 'mcp__mixpanel__';
+const MIXPANEL_READ_ACTIONS = ['Get-', 'List-', 'Search-', 'Find-', 'Describe-', 'Display-', 'Explain-', 'Run-Query'];
+const HANDOFF_RESERVE_MS = 120_000;
+const RECORDING_RESERVE_MS = 180_000;
+const MAX_ATTEMPTS = 4;
+
+const lambda = new LambdaClient({});
+
+type WorkerEvent = SlackAppMentionEvent & {
+  continuation?: { attempt: number };
 };
 
-const getDatabaseSchema = async (apiBaseUrl: string, apiSecret: string) => {
-  if (!dbSchema) {
-    const res = await fetch(`${apiBaseUrl}/bmo/schema`, {
-      headers: { Authorization: `Bearer ${apiSecret}` },
-    });
-    if (!res.ok) {
-      throw new Error(`Schema API error ${res.status}: ${await res.text()}`);
+type LambdaContext = {
+  getRemainingTimeInMillis: () => number;
+};
+
+const buildSubprocessEnv = (env: Env) => {
+  const inherited = { ...process.env };
+  delete inherited.AWS_ACCESS_KEY_ID;
+  delete inherited.AWS_SECRET_ACCESS_KEY;
+  delete inherited.AWS_SESSION_TOKEN;
+
+  return {
+    ...inherited,
+    ANTHROPIC_BASE_URL: env.CLOUDFLARE_AIGATEWAY_URL,
+    ANTHROPIC_AUTH_TOKEN: env.CLOUDFLARE_API_KEY,
+    CLAUDE_CODE_STREAM_CLOSE_TIMEOUT: '300',
+  };
+};
+
+const canUseTool = async (toolName: string): Promise<PermissionResult> => {
+  if (toolName.startsWith(MIXPANEL_PREFIX)) {
+    const action = toolName.slice(MIXPANEL_PREFIX.length);
+
+    if (MIXPANEL_READ_ACTIONS.every((prefix) => !action.startsWith(prefix))) {
+      console.error('[bmo] blocked mixpanel write tool:', toolName);
+      return { behavior: 'deny', message: '비모는 조회 전용이라 Mixpanel 데이터를 변경하는 도구는 쓸 수 없어요. 조회 도구로 답하세요.' };
     }
-    dbSchema = await res.json();
   }
-  return dbSchema;
+
+  return { behavior: 'allow' };
 };
 
-const formatCurrentTime = () => {
-  return new Intl.DateTimeFormat('ko-KR', {
-    timeZone: 'Asia/Seoul',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    weekday: 'long',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  }).format(new Date());
+const buildHooks = (view: SlackView): Options['hooks'] => {
+  const seen = new Set<string>();
+
+  return {
+    PostToolUse: [
+      {
+        hooks: [
+          async (input) => {
+            if (input.hook_event_name !== 'PostToolUse' || input.tool_name !== 'Read') return { continue: true };
+
+            const path = (input.tool_input as { file_path?: string } | null)?.file_path;
+            if (!path?.startsWith(`${KNOWLEDGE_DIR}/`)) return { continue: true };
+
+            const relativePath = path.slice(KNOWLEDGE_DIR.length + 1);
+            if (!seen.has(relativePath)) {
+              seen.add(relativePath);
+              view.add({ type: 'reference', text: `\`${relativePath}\`\n  ${describeKnowledge(relativePath)}` });
+            }
+
+            return { continue: true };
+          },
+        ],
+      },
+    ],
+  };
 };
 
-export const handler = async (event: SlackAppMentionEvent) => {
+const runRecordingPass = async (base: Options, sessionId: string) => {
+  const options: Options = { ...base, resume: sessionId };
+  delete options.systemPrompt;
+
+  async function* generateMessages() {
+    yield {
+      type: 'user' as const,
+      session_id: '',
+      parent_tool_use_id: null,
+      message: { role: 'user' as const, content: RECORDING_PROMPT },
+    };
+  }
+
+  for await (const message of query({ prompt: generateMessages(), options })) {
+    if (message.type === 'result') break;
+  }
+};
+
+const formatWritten = (changes: KnowledgeChange[]) =>
+  [
+    '기억했어요',
+    ...changes.map((change) => `• \`${change.path}\` (${change.action === 'created' ? '신규' : '갱신'})\n  ${change.summary}`),
+  ].join('\n');
+
+const resolveRequester = async (slack: WebClient, userId: string) => {
+  try {
+    const result = await slack.users.info({ user: userId });
+    const profile = result.user?.profile;
+    return profile?.display_name || result.user?.real_name || result.user?.name || userId;
+  } catch (err) {
+    console.error('[bmo] users.info error:', err);
+    return userId;
+  }
+};
+
+const resetWorkspace = () => {
+  rmSync('/tmp/.claude', { recursive: true, force: true });
+  mkdirSync('/tmp/.claude/debug', { recursive: true });
+};
+
+const buildMcpServer = (env: Env, view: SlackView) =>
+  createSdkMcpServer({
+    name: 'bmo',
+    tools: [
+      tool(
+        'execute_sql_query',
+        'PostgreSQL 데이터베이스에서 읽기 전용 트랜잭션으로 쿼리를 실행합니다. SELECT, WITH, SHOW, EXPLAIN 등 읽기 작업만 가능합니다.',
+        {
+          description: z.string().describe('쿼리의 목적을 간단히 설명하는 문장'),
+          query: z.string().describe('SQL 쿼리 문자열'),
+        },
+        async (args) => {
+          const entry: Extract<Entry, { type: 'query' }> = { type: 'query', description: args.description, status: 'running' };
+          view.add(entry);
+
+          const outcome = await runQuery(env.API_BASE_URL, env.API_KEY, args.query);
+          entry.status = outcome.success ? 'completed' : 'failed';
+          view.touch();
+
+          return { content: [{ type: 'text' as const, text: outcome.text }] };
+        },
+      ),
+    ],
+  });
+
+const handOff = async (event: WorkerEvent, view: SlackView, attempt: number) => {
+  view.setStatus('⏳ _시간이 길어져 이어서 진행하고 있어요..._');
+  await view.flush();
+
+  const payload: WorkerEvent = {
+    ...event,
+    continuation: { attempt: attempt + 1 },
+  };
+
+  await lambda.send(
+    new InvokeCommand({
+      FunctionName: process.env.AWS_LAMBDA_FUNCTION_NAME,
+      InvocationType: 'Event',
+      Payload: JSON.stringify(payload),
+    }),
+  );
+};
+
+export const handler = async (event: WorkerEvent, context: LambdaContext) => {
   const env = await loadEnv();
   const slack = new WebClient(env.SLACK_BOT_TOKEN);
+  const view = createSlackView(slack, event.channel);
 
-  let messageTs: string | undefined;
-  type Entry =
-    | { type: 'status'; text: string }
-    | { type: 'thinking' }
-    | { type: 'text'; text: string }
-    | { type: 'query'; description: string; status: 'running' | 'completed' | 'failed' }
-    | { type: 'error'; text: string };
-  const entries: Entry[] = [{ type: 'status', text: '⏳ _준비 중..._' }];
-  let latestAssistantText = '';
-  let currentTurnTextEntry: Extract<Entry, { type: 'text' }> | null = null;
+  const continuation = event.continuation;
+  const attempt = continuation?.attempt ?? 0;
+  const threadKey = event.thread_ts || event.ts;
 
-  const buildAttachments = () => {
-    return entries.map((entry) =>
-      match(entry)
-        .with({ type: 'status' }, (e) => ({ color: '#808080', text: e.text, mrkdwn_in: ['text' as const] }))
-        .with({ type: 'thinking' }, () => ({ color: '#808080', text: '💭 _생각 중..._', mrkdwn_in: ['text' as const] }))
-        .with({ type: 'text' }, (e) => ({ color: '#3498db', text: toSlackMrkdwn(e.text), mrkdwn_in: ['text' as const] }))
-        .with({ type: 'query', status: 'completed' }, (e) => ({
-          color: '#2ecc71',
-          text: `✅ ${e.description}`,
-          mrkdwn_in: ['text' as const],
-        }))
-        .with({ type: 'query', status: 'running' }, (e) => ({
-          color: '#f39c12',
-          text: `🔍 _${e.description}..._`,
-          mrkdwn_in: ['text' as const],
-        }))
-        .with({ type: 'query', status: 'failed' }, (e) => ({
-          color: '#e74c3c',
-          text: `❌ ${e.description}`,
-          mrkdwn_in: ['text' as const],
-        }))
-        .with({ type: 'error' }, (e) => ({ color: '#e74c3c', text: `❌ ${e.text}`, mrkdwn_in: ['text' as const] }))
-        .exhaustive(),
-    );
-  };
-
-  const flushSlackMessage = async () => {
-    if (!messageTs) return;
-
-    try {
-      await slack.chat.update({
-        channel: event.channel,
-        ts: messageTs,
-        text: '',
-        attachments: buildAttachments(),
-      });
-    } catch (err) {
-      console.error('[bmo] chat.update error:', err);
-    }
-  };
+  let handedOff = false;
 
   try {
-    const text = event.text.replaceAll(/<@[^>]+>/g, '').trim() || '안녕하세요';
+    await view.open(event.thread_ts || event.ts, !event.thread_ts);
 
-    const initialMessage = await slack.chat.postMessage({
-      channel: event.channel,
-      thread_ts: event.thread_ts || event.ts,
-      text: '',
-      attachments: buildAttachments(),
-      reply_broadcast: !event.thread_ts,
-    });
-
-    messageTs = initialMessage.ts;
-
-    const threadKey = event.thread_ts || event.ts;
-
-    const locked = await acquireLock(threadKey);
-    if (!locked) {
-      entries.length = 0;
-      entries.push({ type: 'status', text: '⏳ _이전 요청을 처리 중이에요. 잠시 후 다시 시도해 주세요._' });
-      await flushSlackMessage();
-      return;
+    if (continuation) {
+      await refreshLock(threadKey);
+    } else {
+      const locked = await acquireLock(threadKey);
+      if (!locked) {
+        view.setStatus('⏳ _이전 요청을 처리 중이에요. 잠시 후 다시 시도해 주세요._');
+        await view.flush();
+        return;
+      }
     }
 
     try {
-      rmSync('/tmp/.claude', { recursive: true, force: true });
-      mkdirSync('/tmp/.claude/debug', { recursive: true });
+      resetWorkspace();
+
+      await Promise.all([
+        prepareCodebase(() => view.setStatus('📚 _최신 코드베이스를 받고 있어요. 조금 걸릴 수 있어요..._')),
+        downloadKnowledge(),
+      ]);
+
+      view.setStatus('🧠 _기억을 불러오는 중..._');
 
       const storedSessionId = await getSession(threadKey);
       const existingSessionId = storedSessionId && (await downloadSession(storedSessionId)) ? storedSessionId : null;
@@ -143,41 +213,21 @@ export const handler = async (event: SlackAppMentionEvent) => {
         await deleteSession(threadKey);
       }
 
-      const bmoServer = createSdkMcpServer({
-        name: 'bmo',
-        tools: [
-          tool(
-            'execute_sql_query',
-            'PostgreSQL 데이터베이스에서 읽기 전용 트랜잭션으로 쿼리를 실행합니다. SELECT, WITH, SHOW, EXPLAIN 등 읽기 작업만 가능합니다.',
-            {
-              description: z.string().describe('쿼리의 목적을 간단히 설명하는 문장'),
-              query: z.string().describe('SQL 쿼리 문자열'),
-            },
-            async (args) => {
-              entries.push({ type: 'query', description: args.description, status: 'running' });
-              await flushSlackMessage();
-
-              const result = await executeQuery(env.API_BASE_URL, env.API_KEY, args.query);
-              for (let i = entries.length - 1; i >= 0; i--) {
-                const entry = entries[i];
-                if (entry.type === 'query' && entry.status === 'running') {
-                  entry.status = result.success ? 'completed' : 'failed';
-                  break;
-                }
-              }
-              await flushSlackMessage();
-
-              return {
-                content: [{ type: 'text' as const, text: JSON.stringify(result) }],
-              };
-            },
-          ),
-        ],
-      });
+      view.setStatus('💭 _분석을 시작하는 중..._');
 
       const queryOptions: Options = {
+        cwd: '/tmp',
+        model: 'claude-opus-5',
+        thinking: { type: 'adaptive' },
+        effort: 'high',
+        tools: BUILT_IN_TOOLS,
+        settingSources: [],
+        permissionMode: 'default',
+        canUseTool,
+        hooks: buildHooks(view),
+        includePartialMessages: true,
         mcpServers: {
-          bmo: bmoServer,
+          bmo: buildMcpServer(env, view),
           mixpanel: {
             type: 'http',
             url: 'https://mcp.mixpanel.com/mcp',
@@ -185,123 +235,61 @@ export const handler = async (event: SlackAppMentionEvent) => {
             alwaysLoad: true,
           },
         },
-        allowedTools: ['mcp__bmo__*', 'mcp__mixpanel__*'],
-        model: 'claude-sonnet-4-6',
-        thinking: { type: 'adaptive' },
-        effort: 'high',
-        includePartialMessages: true,
-        permissionMode: 'dontAsk',
-        env: {
-          ...process.env,
-          ANTHROPIC_BASE_URL: env.CLOUDFLARE_AIGATEWAY_URL,
-          ANTHROPIC_AUTH_TOKEN: env.CLOUDFLARE_API_KEY,
-          CLAUDE_CODE_STREAM_CLOSE_TIMEOUT: '300',
-        },
+        env: buildSubprocessEnv(env),
         stderr: (data) => console.error('[bmo:claude]', data),
-      };
-
-      const buildSystemPrompt = async () => {
-        const schema = await getDatabaseSchema(env.API_BASE_URL, env.API_KEY);
-
-        return dedent`
-          # 시스템 정보
-          현재 시간: ${formatCurrentTime()} (Asia/Seoul)
-
-          # 기본 정보
-          당신은 "비모(BMO)"입니다.
-          - 역할: 타이피 개발팀의 데이터 분석 AI 어시스턴트
-          - 목적: PostgreSQL 데이터베이스 쿼리를 통한 데이터 분석 및 인사이트 제공
-          - 소통 채널: Slack 메시지
-          - 언어: 한국어 (친근하고 전문적인 톤)
-
-          # 핵심 제약사항
-          1. 읽기 전용 데이터베이스 접근 (INSERT, UPDATE, DELETE 불가)
-          2. 분당 최대 10만 토큰 제한
-          3. 모든 쿼리는 Asia/Seoul 타임존 사용
-          4. 요청받지 않은 추가 분석 금지
-
-          # execute_sql_query 도구 사용 규칙
-
-          ## 쿼리 작성 규칙
-
-          ### 1. entities 테이블 필터링
-          - entities 관련 쿼리 시 기본 엔티티 제외 필수
-          - 조건: entities.created_at != sites.created_at
-          - 이유: 사이트 생성 시 자동 생성되는 기본 엔티티 제외
-
-          ### 2. 대용량 텍스트 처리
-          - post_contents.text 같은 긴 텍스트: LEFT(column, 500) 사용
-          - 대량 데이터 조회 시 적절한 LIMIT 설정
-          - 토큰 사용량 최소화
-
-          ### 3. 시간 표현 처리
-          - "오늘", "이번 주", "이번 달": 현재 시간 기준 계산
-          - 부분 날짜 (예: "5월 1일"): 현재 연도 기준
-
-          # Mixpanel 도구 사용 규칙
-          - mcp__mixpanel__* 도구로 제품 분석 데이터(이벤트, 퍼널, 플로우, 리텐션, 세션 리플레이)에 접근할 수 있습니다.
-          - 사용자 행동·전환·이탈 등 이벤트 기반 분석은 Mixpanel을, 정형 데이터(엔티티, 결제, 가입 등)는 execute_sql_query를 사용합니다.
-          - 두 소스를 함께 봐야 정확한 경우 교차 분석합니다.
-
-          # 응답 형식
-
-          ## 데이터 표현
-          - 숫자는 천 단위 구분 (예: 1,234)
-          - 날짜는 읽기 쉬운 형식 (예: 2024년 1월 14일)
-          - 표나 리스트로 구조화
-          - 중요 인사이트는 강조
-
-          # 주요 기능
-          1. 데이터 추출 및 분석
-          2. 비즈니스 인사이트 도출
-          3. 사용자 행동 패턴 분석
-          4. 성장 지표 및 KPI 모니터링
-          5. 데이터 기반 의사결정 지원
-
-          # 데이터베이스 스키마
-          \`\`\`json
-          ${JSON.stringify(schema, null, 2)}
-          \`\`\`
-        `;
       };
 
       if (existingSessionId) {
         queryOptions.resume = existingSessionId;
       } else {
-        queryOptions.systemPrompt = await buildSystemPrompt();
+        queryOptions.systemPrompt = buildSystemPrompt(await getDatabaseSchema(env.API_BASE_URL, env.API_KEY));
       }
 
-      let resolvedSessionId = existingSessionId;
+      const text = event.text.replaceAll(/<@[^>]+>/g, '').trim() || '안녕하세요';
+      const prompt = buildUserPrompt(
+        continuation
+          ? '이전 실행이 시간 제한으로 중단되었습니다. 지금까지 확인한 내용을 이어받아 계속 진행하고, 마무리되면 최종 답변을 작성하세요.'
+          : text,
+        buildKnowledgeContext(),
+        await resolveRequester(slack, event.user),
+      );
 
-      const runQuery = async (options: Options) => {
+      let resolvedSessionId = existingSessionId;
+      let latestAssistantText = '';
+      let currentTurnTextEntry: Extract<Entry, { type: 'text' }> | null = null;
+
+      const runAgent = async (options: Options) => {
         async function* generateMessages() {
           yield {
             type: 'user' as const,
             session_id: '',
             parent_tool_use_id: null,
-            message: {
-              role: 'user' as const,
-              content: text,
-            },
+            message: { role: 'user' as const, content: prompt },
           };
         }
 
-        for await (const message of query({
-          prompt: generateMessages(),
-          options,
-        })) {
+        const agent = query({ prompt: generateMessages(), options });
+        let completed = false;
+
+        for await (const message of agent) {
           if ('session_id' in message && message.session_id) {
             resolvedSessionId = message.session_id as string;
             await setSession(threadKey, resolvedSessionId);
           }
 
-          if (message.type === 'stream_event') {
+          if (message.type === 'system' && message.subtype === 'init') {
+            console.log('[bmo] init', JSON.stringify({ model: message.model, tools: message.tools }));
+
+            const missing = BUILT_IN_TOOLS.filter((name) => !message.tools.includes(name));
+            if (missing.length > 0) {
+              console.error('[bmo] requested tools unavailable:', missing.join(', '));
+            }
+          } else if (message.type === 'stream_event') {
             const evt = message.event;
             if (evt.type === 'content_block_start' && evt.content_block?.type === 'thinking') {
-              entries.push({ type: 'thinking' });
+              view.add({ type: 'thinking' });
               currentTurnTextEntry = null;
               latestAssistantText = '';
-              await flushSlackMessage();
             }
           } else if (message.type === 'assistant') {
             if (message.message?.content) {
@@ -310,15 +298,17 @@ export const handler = async (event: SlackAppMentionEvent) => {
                   latestAssistantText = block.text;
                 }
               }
-              const hasToolUse = message.message.content.some((b) => b.type === 'tool_use');
+
+              const hasToolUse = message.message.content.some((b: { type: string }) => b.type === 'tool_use');
               if (hasToolUse && latestAssistantText) {
                 if (currentTurnTextEntry) {
                   currentTurnTextEntry.text = latestAssistantText;
+                  view.touch();
                 } else {
-                  currentTurnTextEntry = { type: 'text' as const, text: latestAssistantText };
-                  entries.push(currentTurnTextEntry);
+                  const entry: Extract<Entry, { type: 'text' }> = { type: 'text', text: latestAssistantText };
+                  view.add(entry);
+                  currentTurnTextEntry = entry;
                 }
-                await flushSlackMessage();
               }
             }
           } else if (message.type === 'result') {
@@ -326,49 +316,93 @@ export const handler = async (event: SlackAppMentionEvent) => {
               if (currentTurnTextEntry) {
                 currentTurnTextEntry.text = latestAssistantText;
               } else {
-                entries.push({ type: 'text', text: latestAssistantText });
+                view.add({ type: 'text', text: latestAssistantText });
               }
             }
-            if (entries.every((e) => e.type !== 'text')) {
-              entries.push({ type: 'error', text: '응답을 생성할 수 없었어요.' });
+
+            if (view.entries.every((e) => e.type !== 'text')) {
+              view.add({ type: 'error', text: '응답을 생성할 수 없었어요.' });
             }
-            await flushSlackMessage();
+
+            completed = true;
+          }
+
+          if (!completed && context.getRemainingTimeInMillis() < HANDOFF_RESERVE_MS && attempt < MAX_ATTEMPTS) {
+            await agent.interrupt();
+            return true;
           }
         }
+
+        return false;
       };
 
+      let interrupted: boolean;
       try {
-        await runQuery(queryOptions);
+        interrupted = await runAgent(queryOptions);
       } catch (err) {
         if (!existingSessionId) throw err;
 
         console.error('[bmo] resume failed, falling back to fresh start:', err);
         await deleteSession(threadKey);
 
-        entries.length = 0;
-        entries.push({ type: 'status', text: '⏳ _준비 중..._' });
+        view.replace([]);
+        view.setStatus('💭 _다시 시작하는 중..._');
         latestAssistantText = '';
         currentTurnTextEntry = null;
-        await flushSlackMessage();
 
         delete queryOptions.resume;
-        queryOptions.systemPrompt = await buildSystemPrompt();
+        queryOptions.systemPrompt = buildSystemPrompt(await getDatabaseSchema(env.API_BASE_URL, env.API_KEY));
 
-        rmSync('/tmp/.claude', { recursive: true, force: true });
-        mkdirSync('/tmp/.claude/debug', { recursive: true });
+        resetWorkspace();
+        interrupted = await runAgent(queryOptions);
+      }
 
-        await runQuery(queryOptions);
+      if (!interrupted && resolvedSessionId && context.getRemainingTimeInMillis() > RECORDING_RESERVE_MS) {
+        await view.flush();
+        view.setStatus('🧠 _배운 것을 정리하는 중..._');
+
+        try {
+          await runRecordingPass(queryOptions, resolvedSessionId);
+        } catch (err) {
+          console.error('[bmo] recording pass failed:', err);
+        }
       }
 
       if (resolvedSessionId) {
         await uploadSession(resolvedSessionId);
       }
+
+      const changes = await uploadKnowledge();
+      if (changes.written.length > 0) {
+        view.add({ type: 'knowledge', text: formatWritten(changes.written) });
+      }
+      if (changes.deleted.length > 0) {
+        view.add({ type: 'knowledge', text: `잊었어요\n${changes.deleted.map((path) => `• \`${path}\``).join('\n')}` });
+      }
+      if (changes.conflicts.length > 0) {
+        const lines = changes.conflicts.map((c) => `• \`${c.path}\` — ${c.action === 'write' ? '기록' : '삭제'} 실패`);
+        view.add({
+          type: 'error',
+          text: `다른 세션이 같은 파일을 동시에 바꿔서 아래는 반영하지 못했어요. 덮어쓰면 그쪽 내용이 사라지므로 중단했습니다.\n${lines.join('\n')}\n다시 요청해 주세요.`,
+        });
+      }
+
+      view.setStatus(null);
+
+      if (interrupted) {
+        await handOff(event, view, attempt);
+        handedOff = true;
+      } else {
+        await view.flush();
+      }
     } finally {
-      await releaseLock(threadKey);
+      if (!handedOff) {
+        await releaseLock(threadKey);
+      }
     }
   } catch (err) {
     console.error('[bmo] error:', err);
-    entries.push({ type: 'error', text: `오류가 발생했어요.\n\`\`\`${err instanceof Error ? err.message : String(err)}\`\`\`` });
-    await flushSlackMessage();
+    view.add({ type: 'error', text: `오류가 발생했어요.\n\`\`\`${err instanceof Error ? err.message : String(err)}\`\`\`` });
+    await view.flush();
   }
 };
