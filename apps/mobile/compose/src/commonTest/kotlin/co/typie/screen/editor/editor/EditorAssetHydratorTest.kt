@@ -1,348 +1,428 @@
 package co.typie.screen.editor.editor
 
 import co.typie.editor.external.EditorAssetResolution
-import co.typie.editor.external.EditorExternalAsset
 import co.typie.editor.external.EditorExternalElementState
-import co.typie.editor.external.EditorFileAsset
-import co.typie.editor.external.EditorImageAsset
+import co.typie.editor.sync.ws.WsAssetStateEntry
+import co.typie.editor.sync.ws.WsPendingMeta
+import co.typie.editor.sync.ws.WsReadyAsset
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.awaitCancellation
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class EditorAssetHydratorTest {
-  @Test
-  fun seededAssetsDoNotFetch() = runTest {
+  private class Harness(
+    testScope: TestScope,
+    basePollMs: Long = 1_000,
+    maxPollMs: Long = 4_000,
+    debounceMs: Long = 10,
+  ) {
     val state = EditorExternalElementState()
-    val calls = mutableListOf<List<String>>()
-    val hydrator =
-      hydrator(state) { ids ->
-        calls += ids
-        emptyList()
-      }
-    val image = imageAsset("IMG0SEEDED")
-
-    hydrator.seed(listOf(image))
-    hydrator.resolve(listOf(image.id))
-
-    assertEquals(emptyList(), calls)
-    assertEquals(image, state.images.assets[image.id])
-  }
-
-  @Test
-  fun duplicateMixedReferencesBecomeOneCanonicalMissingBatch() = runTest {
-    val state = EditorExternalElementState()
-    val calls = mutableListOf<List<String>>()
-    val seeded = imageAsset("IMG0SEEDED")
-    val file = fileAsset("FILE0MISSING")
-    val image = imageAsset("IMG0MISSING")
-    val assets = mapOf(file.id to file, image.id to image)
-    val hydrator =
-      hydrator(state) { ids ->
-        calls += ids
-        ids.mapNotNull(assets::get)
-      }
-
-    hydrator.seed(listOf(seeded))
-    hydrator.resolve(listOf(file.id, seeded.id, image.id, file.id))
-
-    assertEquals(listOf(listOf(file.id, image.id)), calls)
-    assertEquals(file, state.files.assets[file.id])
-    assertEquals(image, state.images.assets[image.id])
-  }
-
-  @Test
-  fun missingReferencesAreSplitIntoBoundedCanonicalBatches() = runTest {
-    val state = EditorExternalElementState()
-    val calls = mutableListOf<List<String>>()
-    val ids = (0..50).map { index -> "IMG${index.toString().padStart(8, '0')}" }
-    val assets = ids.associateWith(::imageAsset)
-    val hydrator =
-      hydrator(state) { batch ->
-        calls += batch
-        batch.mapNotNull(assets::get)
-      }
-
-    hydrator.resolve(ids.reversed())
-
-    assertEquals(listOf(50, 1), calls.map(List<String>::size))
-    assertEquals(ids, calls.flatten())
-  }
-
-  @Test
-  fun overlappingReferenceUpdatesDoNotDuplicateRequests() = runTest {
-    val state = EditorExternalElementState()
-    val calls = mutableListOf<List<String>>()
-    val releaseFirst = CompletableDeferred<Unit>()
-    val first = imageAsset("IMG0FIRST")
-    val second = fileAsset("FILE0SECOND")
-    val assets = mapOf(first.id to first, second.id to second)
-    val hydrator =
-      hydrator(state) { ids ->
-        calls += ids
-        if (calls.size == 1) releaseFirst.await()
-        ids.mapNotNull(assets::get)
-      }
-
-    val firstJob = launch { hydrator.resolve(listOf(first.id)) }
-    runCurrent()
-    val secondJob = launch { hydrator.resolve(listOf(first.id, second.id)) }
-    runCurrent()
-
-    assertEquals(listOf(listOf(first.id)), calls)
-    releaseFirst.complete(Unit)
-    advanceUntilIdle()
-
-    assertEquals(listOf(listOf(first.id), listOf(second.id)), calls)
-    assertTrue(firstJob.isCompleted)
-    assertTrue(secondJob.isCompleted)
-  }
-
-  @Test
-  fun referenceJoiningDuringBackoffReachesUnavailableWithItsOwnAttemptBudget() = runTest {
-    val state = EditorExternalElementState()
-    val firstId = "IMG0FIRST"
-    val joinedId = "FILE0JOINED"
-    val firstBackoffStarted = CompletableDeferred<Unit>()
-    val releaseFirstBackoff = CompletableDeferred<Unit>()
-    var backoffs = 0
-    val hydrator =
+    val pulls = mutableListOf<Pair<String, List<String>>>()
+    val sync =
       EditorAssetHydrator(
+        scope = testScope.backgroundScope,
         state = state,
-        fetch = { emptyList() },
-        waitBeforeRetry = {
-          backoffs += 1
-          if (backoffs == 1) {
-            firstBackoffStarted.complete(Unit)
-            releaseFirstBackoff.await()
-          }
-        },
+        pull = { requestId, ids -> pulls += requestId to ids },
+        basePollMs = basePollMs,
+        maxPollMs = maxPollMs,
+        debounceMs = debounceMs,
       )
 
-    val firstJob = launch { hydrator.resolve(listOf(firstId)) }
-    runCurrent()
-    assertTrue(firstBackoffStarted.isCompleted)
+    fun idsOf(): List<List<String>> = pulls.map { it.second }
 
-    val joinedJob = launch { hydrator.resolve(listOf(firstId, joinedId)) }
-    runCurrent()
-    releaseFirstBackoff.complete(Unit)
-    advanceUntilIdle()
-
-    assertTrue(firstJob.isCompleted)
-    assertTrue(joinedJob.isCompleted)
-    assertEquals(EditorAssetResolution.Unavailable, state.resolutions[firstId])
-    assertEquals(EditorAssetResolution.Unavailable, state.resolutions[joinedId])
+    fun lastRequestId(): String = pulls.lastOrNull()?.first.orEmpty()
   }
 
-  @Test
-  fun successfulOmissionRetriesExactlyThreeTimesThenBecomesUnavailable() = runTest {
-    val state = EditorExternalElementState()
-    var calls = 0
-    val delayedAttempts = mutableListOf<Int>()
-    val id = "IMG0LATE"
-    val hydrator =
-      EditorAssetHydrator(
-        state = state,
-        fetch = {
-          calls += 1
-          emptyList()
-        },
-        waitBeforeRetry = { attempt ->
-          delayedAttempts += attempt
-          delay(1)
-        },
-      )
-
-    hydrator.resolve(listOf(id))
-
-    assertEquals(3, calls)
-    assertEquals(listOf(1, 2), delayedAttempts)
-    assertEquals(EditorAssetResolution.Unavailable, state.resolutions[id])
-  }
-
-  @Test
-  fun queryFailureIsSuppressedUntilConnectivityRecovery() = runTest {
-    val state = EditorExternalElementState()
-    val id = "IMG0RETRY"
-    var calls = 0
-    var fail = true
-    val asset = imageAsset(id)
-    val hydrator =
-      hydrator(state) {
-        calls += 1
-        if (fail) error("offline")
-        listOf(asset)
-      }
-
-    hydrator.resolve(listOf(id))
-    hydrator.resolve(listOf(id))
-
-    assertEquals(1, calls)
-    assertEquals(EditorAssetResolution.RetryableFailure, state.resolutions[id])
-
-    fail = false
-    hydrator.onConnectivityRestored(generation = 1)
-    hydrator.onConnectivityRestored(generation = 1)
-
-    assertEquals(2, calls)
-    assertEquals(asset, state.images.assets[id])
-    assertNull(state.resolutions[id])
-  }
-
-  @Test
-  fun connectivityRecoveryDuringInFlightFailureRetriesInNewGeneration() = runTest {
-    val state = EditorExternalElementState()
-    val id = "IMG0RECOVERED"
-    val asset = imageAsset(id)
-    val firstFetchStarted = CompletableDeferred<Unit>()
-    val releaseFirstFetch = CompletableDeferred<Unit>()
-    var calls = 0
-    val hydrator =
-      hydrator(state) {
-        calls += 1
-        if (calls == 1) {
-          firstFetchStarted.complete(Unit)
-          releaseFirstFetch.await()
-          error("stale request failed")
-        }
-        listOf(asset)
-      }
-
-    val resolveJob = launch { hydrator.resolve(listOf(id)) }
-    runCurrent()
-    assertTrue(firstFetchStarted.isCompleted)
-
-    val recoveryJob = launch { hydrator.onConnectivityRestored(generation = 1) }
-    runCurrent()
-    releaseFirstFetch.complete(Unit)
-    advanceUntilIdle()
-
-    assertTrue(resolveJob.isCompleted)
-    assertTrue(recoveryJob.isCompleted)
-    assertEquals(2, calls)
-    assertEquals(asset, state.images.assets[id])
-    assertNull(state.resolutions[id])
-  }
-
-  @Test
-  fun connectivityGenerationGivesUnavailableOnlyOneProbeWithoutNewBackoffChain() = runTest {
-    val state = EditorExternalElementState()
-    val id = "IMG0UNAVAILABLE"
-    var calls = 0
-    val delayedAttempts = mutableListOf<Int>()
-    val hydrator =
-      EditorAssetHydrator(
-        state = state,
-        fetch = {
-          calls += 1
-          emptyList()
-        },
-        waitBeforeRetry = { attempt -> delayedAttempts += attempt },
-      )
-
-    hydrator.resolve(listOf(id))
-    hydrator.onConnectivityRestored(generation = 1)
-    hydrator.onConnectivityRestored(generation = 1)
-    hydrator.onConnectivityRestored(generation = 2)
-
-    assertEquals(5, calls)
-    assertEquals(listOf(1, 2), delayedAttempts)
-    assertEquals(EditorAssetResolution.Unavailable, state.resolutions[id])
-  }
-
-  @Test
-  fun queryRefreshGenerationRestoresThreeAttemptBudgetExactlyOnce() = runTest {
-    val state = EditorExternalElementState()
-    val id = "FILE0REFRESH"
-    var calls = 0
-    val hydrator =
-      hydrator(state) {
-        calls += 1
-        emptyList()
-      }
-
-    hydrator.resolve(listOf(id))
-    assertEquals(3, calls)
-
-    hydrator.onQueryRefresh(generation = 1, assets = emptyList())
-    assertEquals(6, calls)
-    hydrator.onQueryRefresh(generation = 1, assets = emptyList())
-    assertEquals(6, calls)
-
-    hydrator.onQueryRefresh(generation = 2, assets = emptyList())
-    assertEquals(9, calls)
-  }
-
-  @Test
-  fun removedReferencesClearTransientStateAndLateResponsesOnlyPopulateCache() = runTest {
-    val state = EditorExternalElementState()
-    val asset = imageAsset("IMG0REMOVED")
-    val release = CompletableDeferred<Unit>()
-    val hydrator =
-      hydrator(state) {
-        release.await()
-        listOf(asset)
-      }
-
-    val resolving = launch { hydrator.resolve(listOf(asset.id)) }
-    runCurrent()
-    assertEquals(EditorAssetResolution.InFlight, state.resolutions[asset.id])
-
-    val removing = launch { hydrator.resolve(emptyList()) }
-    runCurrent()
-    assertNull(state.resolutions[asset.id])
-
-    release.complete(Unit)
-    advanceUntilIdle()
-
-    assertTrue(resolving.isCompleted)
-    assertTrue(removing.isCompleted)
-    assertEquals(asset, state.images.assets[asset.id])
-    assertNull(state.resolutions[asset.id])
-  }
-
-  @Test
-  fun cancellationClearsStaleInFlightState() = runTest {
-    val state = EditorExternalElementState()
-    val id = "IMG0CANCELLED"
-    val hydrator = hydrator(state) { awaitCancellation() }
-
-    val job = launch { hydrator.resolve(listOf(id)) }
-    runCurrent()
-    assertEquals(EditorAssetResolution.InFlight, state.resolutions[id])
-
-    job.cancel()
-    advanceUntilIdle()
-
-    assertFalse(job.isActive)
-    assertNull(state.resolutions[id])
-  }
-
-  private fun hydrator(
-    state: EditorExternalElementState,
-    fetch: suspend (List<String>) -> List<EditorExternalAsset>,
-  ): EditorAssetHydrator = EditorAssetHydrator(state = state, fetch = fetch, waitBeforeRetry = {})
-
-  private fun imageAsset(id: String): EditorImageAsset =
-    EditorImageAsset(
+  private fun ready(id: String): WsAssetStateEntry =
+    WsAssetStateEntry(
       id = id,
-      url = "https://example.com/$id",
-      width = 100,
-      height = 50,
-      ratio = 2.0,
-      placeholder = null,
+      state = "ready",
+      asset =
+        WsReadyAsset(
+          type = "image",
+          id = id,
+          url = "https://cdn/$id",
+          width = 10,
+          height = 20,
+          placeholder = null,
+        ),
     )
 
-  private fun fileAsset(id: String): EditorFileAsset =
-    EditorFileAsset(id = id, name = "$id.txt", url = "https://example.com/$id", size = 10)
+  private fun pending(id: String): WsAssetStateEntry =
+    WsAssetStateEntry(
+      id = id,
+      state = "pending",
+      meta = WsPendingMeta(kind = "image", name = "$id.png", size = 100),
+    )
+
+  private fun missing(id: String): WsAssetStateEntry = WsAssetStateEntry(id = id, state = "missing")
+
+  @Test
+  fun pullsOnlyUnresolvedIdsAndCoalescesBurstIntoOneRequest() = runTest {
+    val h = Harness(this)
+
+    h.sync.update(listOf("a", "b"))
+    h.sync.update(listOf("a", "b", "c"))
+    advanceTimeBy(10)
+    runCurrent()
+
+    assertEquals(listOf(listOf("a", "b", "c")), h.idsOf())
+
+    h.sync.receive(h.lastRequestId(), listOf(ready("a"), pending("b"), missing("c")), true)
+    h.pulls.clear()
+
+    h.sync.update(listOf("a", "b", "c", "d"))
+    advanceTimeBy(10)
+    runCurrent()
+
+    assertEquals(listOf(listOf("d")), h.idsOf())
+  }
+
+  @Test
+  fun doesNotRepullIdWhoseResponseHasNotArrivedYet() = runTest {
+    val h = Harness(this)
+
+    h.sync.update(listOf("a"))
+    advanceTimeBy(10)
+    runCurrent()
+    h.sync.update(listOf("a"))
+    advanceTimeBy(10)
+    runCurrent()
+
+    assertEquals(listOf(listOf("a")), h.idsOf())
+  }
+
+  @Test
+  fun discardsEntriesUnderSupersededRequestId() = runTest {
+    val h = Harness(this)
+
+    h.sync.update(listOf("a"))
+    advanceTimeBy(10)
+    runCurrent()
+    val stale = h.lastRequestId()
+
+    h.sync.invalidate(listOf("a"))
+    advanceTimeBy(10)
+    runCurrent()
+    val fresh = h.lastRequestId()
+
+    assertTrue(fresh != stale)
+
+    h.sync.receive(fresh, listOf(missing("a")), true)
+    h.sync.receive(stale, listOf(pending("a")), true)
+
+    assertEquals(EditorAssetResolution.Missing, h.state.resolutions["a"])
+  }
+
+  @Test
+  fun clearsAwaitingMarkWhenFinalFrameCarriesNoEntryForRequestedId() = runTest {
+    val h = Harness(this)
+
+    h.sync.update(listOf("a"))
+    advanceTimeBy(10)
+    runCurrent()
+    val requestId = h.lastRequestId()
+    h.pulls.clear()
+
+    h.sync.receive(requestId, emptyList(), true)
+
+    h.sync.update(listOf("a"))
+    advanceTimeBy(10)
+    runCurrent()
+
+    assertEquals(listOf(listOf("a")), h.idsOf())
+  }
+
+  @Test
+  fun accumulatesChunkedResponseAcrossFramesSharingOneRequestId() = runTest {
+    val h = Harness(this)
+
+    h.sync.update(listOf("a", "b"))
+    advanceTimeBy(10)
+    runCurrent()
+    val requestId = h.lastRequestId()
+
+    h.sync.receive(requestId, listOf(ready("a")), false)
+    assertEquals("a", h.state.images.assets["a"]?.id)
+    assertNull(h.state.resolutions["b"])
+
+    h.sync.receive(requestId, listOf(pending("b")), true)
+    assertTrue(h.state.resolutions["b"] is EditorAssetResolution.Pending)
+  }
+
+  @Test
+  fun invalidatesOnlyReferencedIds() = runTest {
+    val h = Harness(this)
+
+    h.sync.update(listOf("a"))
+    advanceTimeBy(10)
+    runCurrent()
+    h.pulls.clear()
+
+    h.sync.invalidate(listOf("a", "gone"))
+    advanceTimeBy(10)
+    runCurrent()
+
+    assertEquals(listOf(listOf("a")), h.idsOf())
+
+    h.pulls.clear()
+    h.sync.invalidate(listOf("gone"))
+    advanceTimeBy(10)
+    runCurrent()
+
+    assertTrue(h.pulls.isEmpty())
+  }
+
+  @Test
+  fun dropsQueuedIdsThatLeaveReferenceSetBeforeDebounceFires() = runTest {
+    val h = Harness(this)
+
+    h.sync.update(listOf("a", "b"))
+    advanceTimeBy(10)
+    runCurrent()
+    h.sync.receive(h.lastRequestId(), listOf(missing("a"), missing("b")), true)
+    h.pulls.clear()
+
+    h.sync.invalidate(listOf("a", "b"))
+    h.sync.update(listOf("a"))
+    advanceTimeBy(10)
+    runCurrent()
+
+    assertEquals(listOf(listOf("a")), h.idsOf())
+  }
+
+  @Test
+  fun coalescesInvalidationStormIntoSinglePull() = runTest {
+    val h = Harness(this)
+
+    h.sync.update(listOf("a", "b", "c"))
+    advanceTimeBy(10)
+    runCurrent()
+    h.sync.receive(h.lastRequestId(), listOf(pending("a"), pending("b"), pending("c")), true)
+    h.pulls.clear()
+
+    h.sync.invalidate(listOf("a"))
+    h.sync.invalidate(listOf("b"))
+    h.sync.invalidate(listOf("a", "c"))
+    advanceTimeBy(10)
+    runCurrent()
+
+    assertEquals(listOf(listOf("a", "b", "c")), h.idsOf())
+  }
+
+  @Test
+  fun completedAssetWinsOverLaterPendingOrMissingFrames() = runTest {
+    val h = Harness(this)
+
+    h.sync.update(listOf("a"))
+    advanceTimeBy(10)
+    runCurrent()
+    h.sync.receive(h.lastRequestId(), listOf(pending("a")), true)
+    assertTrue(h.state.resolutions["a"] is EditorAssetResolution.Pending)
+
+    h.sync.invalidate(listOf("a"))
+    advanceTimeBy(10)
+    runCurrent()
+    h.sync.receive(h.lastRequestId(), listOf(ready("a")), true)
+    assertEquals("a", h.state.images.assets["a"]?.id)
+    assertNull(h.state.resolutions["a"])
+
+    h.sync.invalidate(listOf("a"))
+    advanceTimeBy(10)
+    runCurrent()
+    h.sync.receive(h.lastRequestId(), listOf(missing("a")), true)
+
+    assertEquals("a", h.state.images.assets["a"]?.id)
+    assertNull(h.state.resolutions["a"])
+
+    h.pulls.clear()
+    advanceTimeBy(60_000)
+    runCurrent()
+
+    assertTrue(h.pulls.isEmpty())
+  }
+
+  @Test
+  fun rePullsPendingIdAfterPollIntervalAndAppliesSilentExpiry() = runTest {
+    val h = Harness(this)
+
+    h.sync.update(listOf("a"))
+    advanceTimeBy(10)
+    runCurrent()
+    h.sync.receive(h.lastRequestId(), listOf(pending("a")), true)
+    h.pulls.clear()
+
+    advanceTimeBy(1_000)
+    runCurrent()
+
+    assertEquals(listOf(listOf("a")), h.idsOf())
+
+    h.sync.receive(h.lastRequestId(), listOf(missing("a")), true)
+
+    assertEquals(EditorAssetResolution.Missing, h.state.resolutions["a"])
+  }
+
+  @Test
+  fun keepsPollingIdsCachedAsMissingSoDroppedInvalidationStillConverges() = runTest {
+    val h = Harness(this)
+
+    h.sync.update(listOf("a"))
+    advanceTimeBy(10)
+    runCurrent()
+    h.sync.receive(h.lastRequestId(), listOf(missing("a")), true)
+    h.pulls.clear()
+
+    advanceTimeBy(1_000)
+    runCurrent()
+
+    assertEquals(listOf(listOf("a")), h.idsOf())
+
+    h.sync.receive(h.lastRequestId(), listOf(ready("a")), true)
+
+    assertEquals("a", h.state.images.assets["a"]?.id)
+  }
+
+  @Test
+  fun growsPollIntervalUpToCapAndResetsOnStateChange() = runTest {
+    val h = Harness(this)
+
+    h.sync.update(listOf("a"))
+    advanceTimeBy(10)
+    runCurrent()
+    h.sync.receive(h.lastRequestId(), listOf(missing("a")), true)
+    h.pulls.clear()
+
+    advanceTimeBy(1_000)
+    runCurrent()
+    assertEquals(1, h.pulls.size)
+    h.sync.receive(h.lastRequestId(), listOf(missing("a")), true)
+
+    advanceTimeBy(1_000)
+    runCurrent()
+    assertEquals(1, h.pulls.size)
+    advanceTimeBy(1_000)
+    runCurrent()
+    assertEquals(2, h.pulls.size)
+    h.sync.receive(h.lastRequestId(), listOf(missing("a")), true)
+
+    advanceTimeBy(4_000)
+    runCurrent()
+    assertEquals(3, h.pulls.size)
+    h.sync.receive(h.lastRequestId(), listOf(missing("a")), true)
+
+    advanceTimeBy(4_000)
+    runCurrent()
+    assertEquals(4, h.pulls.size)
+
+    h.sync.receive(h.lastRequestId(), listOf(pending("a")), true)
+    advanceTimeBy(1_000)
+    runCurrent()
+    assertEquals(5, h.pulls.size)
+  }
+
+  @Test
+  fun resetsPollIntervalWhenReturningToForeground() = runTest {
+    val h = Harness(this)
+
+    h.sync.update(listOf("a"))
+    advanceTimeBy(10)
+    runCurrent()
+    h.sync.receive(h.lastRequestId(), listOf(missing("a")), true)
+
+    advanceTimeBy(1_000)
+    runCurrent()
+    h.sync.receive(h.lastRequestId(), listOf(missing("a")), true)
+    advanceTimeBy(2_000)
+    runCurrent()
+    h.sync.receive(h.lastRequestId(), listOf(missing("a")), true)
+    h.pulls.clear()
+
+    h.sync.repullReferenced(listOf("a"))
+    runCurrent()
+    assertEquals(1, h.pulls.size)
+
+    advanceTimeBy(1_000)
+    runCurrent()
+    assertEquals(2, h.pulls.size)
+  }
+
+  @Test
+  fun repullsEveryReferencedNonReadyIdAtOnceAndSkipsReadyOnes() = runTest {
+    val h = Harness(this)
+
+    h.sync.update(listOf("a", "b", "c"))
+    advanceTimeBy(10)
+    runCurrent()
+    h.sync.receive(h.lastRequestId(), listOf(ready("a"), pending("b"), missing("c")), true)
+    h.pulls.clear()
+
+    h.sync.repullReferenced(listOf("a", "b", "c"))
+    runCurrent()
+
+    assertEquals(listOf(listOf("b", "c")), h.idsOf())
+  }
+
+  @Test
+  fun dropsIdsThatLeftReferenceSetFromPollingAndFromResponses() = runTest {
+    val h = Harness(this)
+
+    h.sync.update(listOf("a", "b"))
+    advanceTimeBy(10)
+    runCurrent()
+    val requestId = h.lastRequestId()
+    h.sync.update(listOf("a"))
+    h.pulls.clear()
+
+    h.sync.receive(requestId, listOf(missing("a"), ready("b")), true)
+
+    assertEquals(EditorAssetResolution.Missing, h.state.resolutions["a"])
+    assertNull(h.state.images.assets["b"])
+
+    advanceTimeBy(1_000)
+    runCurrent()
+
+    assertEquals(listOf(listOf("a")), h.idsOf())
+  }
+
+  @Test
+  fun splitsPullOverTheWireLimitIntoBoundedRequests() = runTest {
+    val h = Harness(this)
+    val ids = (0 until 250).map { index -> "id-$index" }
+
+    h.sync.update(ids)
+    advanceTimeBy(10)
+    runCurrent()
+
+    assertEquals(listOf(100, 100, 50), h.idsOf().map(List<String>::size))
+    assertEquals(3, h.pulls.map { it.first }.toSet().size)
+    assertEquals(ids, h.idsOf().flatten())
+  }
+
+  @Test
+  fun stopsEveryTimerAndIgnoresFurtherCallsAfterDispose() = runTest {
+    val h = Harness(this)
+
+    h.sync.update(listOf("a"))
+    advanceTimeBy(10)
+    runCurrent()
+    h.sync.receive(h.lastRequestId(), listOf(missing("a")), true)
+    h.pulls.clear()
+
+    h.sync.dispose()
+
+    h.sync.update(listOf("a", "b"))
+    h.sync.invalidate(listOf("a"))
+    h.sync.repullReferenced(listOf("a"))
+    advanceTimeBy(60_000)
+    runCurrent()
+
+    assertTrue(h.pulls.isEmpty())
+  }
 }

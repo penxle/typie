@@ -3,13 +3,14 @@ import { logger } from '@typie/lib';
 import { DocumentChannel } from './channel.ts';
 import { CLOSE_AUTH_FAILED, CLOSE_BACKPRESSURE, CLOSE_PROTOCOL_ERROR, decodeClientMessage, encodeMessage } from './protocol.ts';
 import { handlePull, handlePush } from './requests.ts';
-import type { ClientMessage, ServerMessage, SnapshotCursor } from './protocol.ts';
+import type { AssetNonceItem, AssetStateEntry, ClientMessage, ServerMessage, SnapshotCursor } from './protocol.ts';
 import type { DocumentAccess, SyncDeps, SyncSession } from './types.ts';
 
 export const MAX_BUFFERED_BYTES = 4 * 1024 * 1024;
 export const PUSH_BUCKET_CAPACITY = 300;
 export const PUSH_BUCKET_REFILL_PER_SECOND = 5;
 export const FRAME_WARN_BYTES = 1024 * 1024;
+export const ASSET_STATE_MAX_FRAME_BYTES = 1024 * 1024;
 export const HELLO_TIMEOUT_MS = 15_000;
 export const WRITABLE_TTL_MS = 30_000;
 
@@ -17,6 +18,42 @@ const log = logger.getChild('sync');
 
 // eslint-disable-next-line @typescript-eslint/no-empty-function -- fire-and-forget rejection sink
 const swallow = (): void => {};
+
+// entry 배열이 아니라 asset-state envelope 전체를 인코딩한 바이트로 판단한다. 한 entry만으로 상한을
+// 넘으면 무한 분할 대신 그 entry만 담은 프레임을 그대로 내보내고 경고만 남긴다. 결과가 0건이어도
+// 빈 배열 프레임 하나는 반드시 나가서 클라이언트가 요청을 미결로 남기지 않는다.
+export const chunkByEncodedBytes = (
+  assets: AssetStateEntry[],
+  frame: { documentId: string; requestId: string },
+  limitBytes: number = ASSET_STATE_MAX_FRAME_BYTES,
+): [chunk: AssetStateEntry[], final: boolean][] => {
+  const measure = (chunk: AssetStateEntry[]): number =>
+    encodeMessage({ t: 'asset-state', documentId: frame.documentId, requestId: frame.requestId, assets: chunk, final: true }).length;
+
+  const chunks: AssetStateEntry[][] = [];
+  let current: AssetStateEntry[] = [];
+
+  for (const entry of assets) {
+    if (current.length > 0 && measure([...current, entry]) > limitBytes) {
+      chunks.push(current);
+      current = [];
+    }
+    current.push(entry);
+    if (current.length === 1) {
+      const bytes = measure(current);
+      if (bytes > limitBytes) {
+        log.warn('Oversized asset-state entry {*}', { id: entry.id, bytes });
+        chunks.push(current);
+        current = [];
+      }
+    }
+  }
+
+  if (current.length > 0) chunks.push(current);
+  if (chunks.length === 0) chunks.push([]);
+
+  return chunks.map((chunk, index) => [chunk, index === chunks.length - 1]);
+};
 
 export type SyncSocket = {
   send: (data: Uint8Array) => Promise<void>;
@@ -99,6 +136,18 @@ export class SyncConnection {
       }
       case 'pull': {
         await this.#handlePull(message);
+        return;
+      }
+      case 'asset-pull': {
+        await this.#handleAssetPull(message);
+        return;
+      }
+      case 'asset-heartbeat': {
+        await this.#handleAssetHeartbeat(message);
+        return;
+      }
+      case 'asset-failed': {
+        await this.#handleAssetFailed(message);
         return;
       }
     }
@@ -238,6 +287,42 @@ export class SyncConnection {
     if (this.#destroyed) return;
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- session set before pull
     await handlePull({ deps: this.#deps, session: this.#session!, clientId: this.#clientId }, message, (m) => this.#send(m));
+  }
+
+  async #handleAssetPull(message: { documentId: string; requestId: string; ids: string[] }): Promise<void> {
+    const channel = this.#channels.get(message.documentId);
+    if (!channel || channel.stopped) {
+      log.debug('asset-pull for unattached document ignored {*}', { documentId: message.documentId });
+      return;
+    }
+    const ids = [...new Set(message.ids)];
+    // asset 해석은 문서 동기화의 보조 경로다 — 여기서 던지면 연결이 1011로 끊겨 첨부된 모든 문서가
+    // 스냅샷 재다운로드를 하게 되므로, 실패는 삼키고 요청을 미응답으로 남긴다(미attach 케이스와 동일).
+    // 클라이언트는 무효화·백오프로 재-pull한다.
+    let assets: AssetStateEntry[];
+    try {
+      assets = await this.#deps.resolveAssetStates(ids);
+    } catch (err) {
+      log.error('asset-pull resolve failed {*}', { documentId: message.documentId, requestId: message.requestId, error: err });
+      return;
+    }
+    if (this.#destroyed || channel.stopped) return;
+    for (const [chunk, final] of chunkByEncodedBytes(assets, message)) {
+      await this.#send({ t: 'asset-state', documentId: message.documentId, requestId: message.requestId, assets: chunk, final });
+    }
+  }
+
+  async #handleAssetHeartbeat(message: { items: AssetNonceItem[] }): Promise<void> {
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- session set before asset messages
+    await this.#deps.extendAssetLeases(message.items, this.#session!.userId);
+  }
+
+  async #handleAssetFailed(message: { items: AssetNonceItem[] }): Promise<void> {
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- session set before asset messages
+    const cleared = await this.#deps.clearAssetLeases(message.items, this.#session!.userId);
+    for (const [assetId, documentId] of cleared) {
+      this.#deps.publishAssetChanged(documentId, [assetId]);
+    }
   }
 
   async #send(message: ServerMessage): Promise<void> {

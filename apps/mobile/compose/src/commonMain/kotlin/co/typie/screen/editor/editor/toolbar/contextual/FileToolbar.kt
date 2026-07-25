@@ -6,7 +6,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
-import co.typie.editor.DocumentEditingSession
+import co.typie.editor.external.EditorAssetResolution
 import co.typie.editor.external.LocalEditorExternalElementState
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.NodeOp
@@ -18,6 +18,7 @@ import co.typie.platform.FilePickerSelectionMode
 import co.typie.platform.IncomingContentItem
 import co.typie.platform.rememberFilePicker
 import co.typie.screen.editor.editor.attachment.EditorAttachmentDestination
+import co.typie.screen.editor.editor.attachment.EditorAttachmentPickRequest
 import co.typie.screen.editor.editor.attachment.LocalEditorAttachmentImporter
 import co.typie.screen.editor.editor.toolbar.EditorToolbarButton
 import co.typie.screen.editor.editor.toolbar.EditorToolbarPage
@@ -31,7 +32,7 @@ import kotlinx.coroutines.launch
 internal fun editorFileToolbarPage(
   file: PlainNode.File?,
   nodeId: String?,
-  pickFile: (nodeId: String) -> Unit,
+  pickFile: (nodeId: String, reclaimAssetId: String?) -> Unit,
 ): EditorToolbarPage =
   EditorToolbarPage(
     key = EditorToolbarPageKey.File,
@@ -47,12 +48,12 @@ internal fun editorFileToolbarPage(
 // the IME, which unmounts the toolbar pages, and an ActivityResult launcher registered there
 // would be unregistered before the result arrives.
 @Composable
-internal fun rememberEditorFilePicker(): (nodeId: String) -> Unit {
+internal fun rememberEditorFilePicker(): (nodeId: String, reclaimAssetId: String?) -> Unit {
   val toast = LocalToast.current
   val runtime = LocalEditorRuntime.current
   val importer = LocalEditorAttachmentImporter.current
   val scope = rememberCoroutineScope()
-  val pendingRequest = remember { mutableStateOf<Pair<DocumentEditingSession, String>?>(null) }
+  val pendingRequest = remember { mutableStateOf<EditorAttachmentPickRequest?>(null) }
 
   val picker =
     rememberFilePicker(selectionMode = FilePickerSelectionMode.Multiple) { result ->
@@ -76,7 +77,20 @@ internal fun rememberEditorFilePicker(): (nodeId: String) -> Unit {
         files.forEach { it.close() }
         return@rememberFilePicker
       }
-      val (session, selectedNodeId) = request
+      val (session, selectedNodeId, reclaimAssetId) = request
+      if (reclaimAssetId != null) {
+        val reclaimed = files.first()
+        files.drop(1).forEach { it.close() }
+        importer.reselect(
+          session = session,
+          assetId = reclaimAssetId,
+          nodeId = selectedNodeId,
+          kind = IncomingContentItem.Kind.File,
+          file = reclaimed,
+          onFailure = { toast.error("파일을 삽입하지 못했어요.") },
+        )
+        return@rememberFilePicker
+      }
       val requestedCount = files.size
       val items = files.map { file ->
         IncomingContentItem(kind = IncomingContentItem.Kind.File, file = file)
@@ -115,10 +129,10 @@ internal fun rememberEditorFilePicker(): (nodeId: String) -> Unit {
     }
 
   return remember(picker, runtime) {
-    { nodeId ->
+    { nodeId, reclaimAssetId ->
       val session = runtime.session
       if (session != null) {
-        pendingRequest.value = session to nodeId
+        pendingRequest.value = EditorAttachmentPickRequest(session, nodeId, reclaimAssetId)
         picker("*/*")
       }
     }
@@ -130,23 +144,29 @@ private fun EditorFileToolbar(
   scope: EditorToolbarPageScope,
   file: PlainNode.File?,
   nodeId: String?,
-  pickFile: (nodeId: String) -> Unit,
+  pickFile: (nodeId: String, reclaimAssetId: String?) -> Unit,
   modifier: Modifier = Modifier,
 ) {
   val uriHandler = LocalUriHandler.current
   val externalElementState = LocalEditorExternalElementState.current
   val fileState = externalElementState.files
+  val importer = LocalEditorAttachmentImporter.current
   val fileId = file?.id
   val asset = fileId?.let(fileState.assets::get)
   val uploading = nodeId?.let { fileState.uploads.containsKey(it) } == true
-  val hasFile = fileId != null || uploading
+  // 서버가 missing으로 확정한 노드는 빈 placeholder와 같은 어포던스를 갖는다 — 그 ID를 그대로 재예약해
+  // 이어받으므로 문서는 바뀌지 않는다.
+  val unresolved =
+    fileId != null &&
+      asset == null &&
+      externalElementState.resolutions[fileId] == EditorAssetResolution.Missing
 
   EditorToolbarRow(scope = scope, modifier = modifier) {
-    if (!hasFile) {
+    if (!uploading && (fileId == null || unresolved)) {
       EditorToolbarButton(
         icon = Lucide.Paperclip,
         contentDescription = "파일 첨부",
-        onClick = { nodeId?.let(pickFile) },
+        onClick = { nodeId?.let { pickFile(it, fileId) } },
       )
     }
     if (asset != null) {
@@ -162,7 +182,7 @@ private fun EditorFileToolbar(
       onClick = {
         val selectedNodeId = nodeId
         if (selectedNodeId != null) {
-          fileState.uploads.remove(selectedNodeId)
+          importer.cancelNode(selectedNodeId)
           scope.sendMessage(Message.Node(NodeOp.Delete(id = selectedNodeId)))
         }
       },

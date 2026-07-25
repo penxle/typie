@@ -5,3 +5,37 @@ mutation BlobService_IssueBlobUploadUrl_Mutation($input: IssueBlobUploadUrlInput
     fields
   }
 }
+
+mutation BlobService_ReserveBlobUploads_Mutation($input: ReserveBlobUploadsInput!) {
+  reserveBlobUploads(input: $input) {
+    assetId
+    nonce
+    path
+    uploadUrl
+    uploadFields
+  }
+}
+
+mutation BlobService_FinalizeBlobUploadAsImage_Mutation($input: FinalizeBlobUploadAsImageInput!) {
+  finalizeBlobUploadAsImage(input: $input) {
+    id
+    url
+    width
+    height
+    ratio
+    placeholder
+  }
+}
+
+mutation BlobService_FinalizeBlobUploadAsFile_Mutation($input: FinalizeBlobUploadAsFileInput!) {
+  finalizeBlobUploadAsFile(input: $input) {
+    id
+    name
+    url
+    size
+  }
+}
+
+mutation BlobService_AbandonBlobUpload_Mutation($input: AbandonBlobUploadInput!) {
+  abandonBlobUpload(input: $input)
+}

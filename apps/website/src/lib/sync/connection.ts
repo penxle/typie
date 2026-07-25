@@ -1,5 +1,12 @@
-import { CLOSE_AUTH_FAILED, CLOSE_PROTOCOL_ERROR, decodeServerMessage, encodeClientMessage, SyncRequestError } from './protocol';
-import type { ClientMessage, ServerMessage, SnapshotCursor } from './protocol';
+import {
+  ASSET_MESSAGE_MAX_ITEMS,
+  CLOSE_AUTH_FAILED,
+  CLOSE_PROTOCOL_ERROR,
+  decodeServerMessage,
+  encodeClientMessage,
+  SyncRequestError,
+} from './protocol';
+import type { AssetNonceItem, ClientMessage, ServerMessage, SnapshotCursor } from './protocol';
 
 const RECONNECT_BASE_MS = 1000;
 const RECONNECT_CAP_MS = 30_000;
@@ -34,6 +41,12 @@ type PendingRequest = {
 };
 
 type ChannelCursor = { sinceSeq?: string; snapshotCursor?: SnapshotCursor };
+
+// 서버는 0건·상한 초과 asset 메시지를 malformed로 보고 소켓을 끊는다 — 그 소켓에 붙은 모든 문서가 스냅샷을
+// 다시 받아야 한다. 호출측 청킹이 어긋나도 프레임 하나가 조용히 잘릴 뿐 연결은 살아 있어야 한다.
+function boundAssetItems<T>(items: readonly T[]): T[] {
+  return items.slice(0, ASSET_MESSAGE_MAX_ITEMS);
+}
 
 export class SyncConnection {
   private readonly opts: ConnectionOpts;
@@ -381,6 +394,24 @@ export class SyncConnection {
 
   sendDetach(documentId: string): void {
     this.readySocket?.send(encodeClientMessage({ t: 'detach', documentId }));
+  }
+
+  sendAssetPull(documentId: string, requestId: string, ids: string[]): void {
+    const bounded = boundAssetItems(ids);
+    if (bounded.length === 0) return;
+    this.readySocket?.send(encodeClientMessage({ t: 'asset-pull', documentId, requestId, ids: bounded }));
+  }
+
+  sendAssetHeartbeat(documentId: string, items: AssetNonceItem[]): void {
+    const bounded = boundAssetItems(items);
+    if (bounded.length === 0) return;
+    this.readySocket?.send(encodeClientMessage({ t: 'asset-heartbeat', documentId, items: bounded }));
+  }
+
+  sendAssetFailed(documentId: string, items: AssetNonceItem[]): void {
+    const bounded = boundAssetItems(items);
+    if (bounded.length === 0) return;
+    this.readySocket?.send(encodeClientMessage({ t: 'asset-failed', documentId, items: bounded }));
   }
 
   onReconnected(callback: () => void): () => void {

@@ -3,6 +3,7 @@ import './objects.ts';
 import './resolvers/admin.ts';
 import './resolvers/auth.ts';
 import './resolvers/blob.ts';
+import './resolvers/blob-upload.ts';
 import './resolvers/changeset.ts';
 import './resolvers/document.ts';
 import './resolvers/document-comment.ts';

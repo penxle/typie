@@ -38,21 +38,6 @@
               assets {
                 __typename
 
-                ... on Image {
-                  id
-                  url
-                  width
-                  height
-                  placeholder
-                }
-
-                ... on File {
-                  id
-                  url
-                  name
-                  size
-                }
-
                 ... on Embed {
                   id
                   url

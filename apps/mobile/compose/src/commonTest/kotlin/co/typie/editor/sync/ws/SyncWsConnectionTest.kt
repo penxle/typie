@@ -170,6 +170,34 @@ class SyncWsConnectionTest {
   }
 
   @Test
+  fun registerChannelRoutesAssetStateAndAssetChangedByDocumentId() = runTest {
+    val (connection, sockets) = harness()
+    val received = mutableListOf<WsServerMessage>()
+    connection.registerChannel("D1") { message -> received.add(message) }
+    connection.sendAttach("D1", null, null)
+    runCurrent()
+    val socket = sockets[0]
+    handshake(socket)
+
+    socket.serverSend(
+      WsServerMessage.AssetState(
+        documentId = "D1",
+        requestId = "R1",
+        assets = listOf(WsAssetStateEntry(id = "A1", state = "missing")),
+        final = true,
+      )
+    )
+    socket.serverSend(WsServerMessage.AssetChanged(documentId = "D1", ids = listOf("A1")))
+    socket.serverSend(
+      WsServerMessage.AssetChanged(documentId = "D2", ids = listOf("A9"))
+    ) // different document, must not route here
+    runCurrent()
+
+    assertEquals(listOf("asset-state", "asset-changed"), received.map { serverMessageTypeOf(it) })
+    connection.dispose()
+  }
+
+  @Test
   fun pongDeadlineMissTerminatesSocketAndReconnects() = runTest {
     val (connection, sockets) = harness(pingIntervalMs = 30_000, reconnectBaseMs = 1_000)
     connection.registerChannel("D1") {}
@@ -571,6 +599,101 @@ class SyncWsConnectionTest {
     assertEquals("connection_lost", error.code)
     assertTrue(socket.closed.isCompleted)
     assertEquals(1, sockets.size)
+    connection.dispose()
+  }
+
+  @Test
+  fun assetMethodsDropSilentlyWithoutReadyConnection() = runTest {
+    val (connection, sockets) = harness()
+    connection.sendAssetPull("D1", "R1", listOf("A1"))
+    connection.sendAssetHeartbeat("D1", listOf(WsAssetItem(id = "A1", nonce = "N1")))
+    connection.sendAssetFailed("D1", listOf(WsAssetItem(id = "A1", nonce = "N1")))
+    runCurrent()
+
+    assertTrue(sockets.isEmpty())
+
+    connection.registerChannel("D1") {}
+    connection.sendAttach("D1", null, null)
+    runCurrent()
+    val socket = sockets[0]
+    handshake(socket)
+    runCurrent()
+
+    assertTrue(socket.sent.none { it is WsClientMessage.AssetPull })
+    assertTrue(socket.sent.none { it is WsClientMessage.AssetHeartbeat })
+    assertTrue(socket.sent.none { it is WsClientMessage.AssetFailed })
+    connection.dispose()
+  }
+
+  @Test
+  fun assetMethodsSendOnceConnectionIsReady() = runTest {
+    val (connection, sockets) = harness()
+    connection.registerChannel("D1") {}
+    connection.sendAttach("D1", null, null)
+    runCurrent()
+    val socket = sockets[0]
+    handshake(socket)
+
+    connection.sendAssetPull("D1", "R1", listOf("A1", "A2"))
+    connection.sendAssetHeartbeat("D1", listOf(WsAssetItem(id = "A1", nonce = "N1")))
+    connection.sendAssetFailed("D1", listOf(WsAssetItem(id = "A2", nonce = "N2")))
+    runCurrent()
+
+    val pull = assertIs<WsClientMessage.AssetPull>(socket.lastOf("asset-pull"))
+    assertEquals("D1", pull.documentId)
+    assertEquals("R1", pull.requestId)
+    assertEquals(listOf("A1", "A2"), pull.ids)
+
+    val heartbeat = assertIs<WsClientMessage.AssetHeartbeat>(socket.lastOf("asset-heartbeat"))
+    assertEquals(listOf(WsAssetItem(id = "A1", nonce = "N1")), heartbeat.items)
+
+    val failed = assertIs<WsClientMessage.AssetFailed>(socket.lastOf("asset-failed"))
+    assertEquals(listOf(WsAssetItem(id = "A2", nonce = "N2")), failed.items)
+    connection.dispose()
+  }
+
+  @Test
+  fun assetMethodsDropEmptyListsInsteadOfSendingMalformedFrames() = runTest {
+    val (connection, sockets) = harness()
+    connection.registerChannel("D1") {}
+    connection.sendAttach("D1", null, null)
+    runCurrent()
+    val socket = sockets[0]
+    handshake(socket)
+
+    connection.sendAssetPull("D1", "R1", emptyList())
+    connection.sendAssetHeartbeat("D1", emptyList())
+    connection.sendAssetFailed("D1", emptyList())
+    runCurrent()
+
+    assertTrue(socket.sent.none { it is WsClientMessage.AssetPull })
+    assertTrue(socket.sent.none { it is WsClientMessage.AssetHeartbeat })
+    assertTrue(socket.sent.none { it is WsClientMessage.AssetFailed })
+    connection.dispose()
+  }
+
+  @Test
+  fun assetMethodsTruncateOversizedListsInsteadOfLosingTheConnection() = runTest {
+    val (connection, sockets) = harness()
+    connection.registerChannel("D1") {}
+    connection.sendAttach("D1", null, null)
+    runCurrent()
+    val socket = sockets[0]
+    handshake(socket)
+
+    val ids = List(SYNC_WS_ASSET_MESSAGE_MAX_ITEMS + 1) { index -> "A$index" }
+    connection.sendAssetPull("D1", "R1", ids)
+    connection.sendAssetHeartbeat("D1", ids.map { WsAssetItem(id = it, nonce = "N1") })
+    connection.sendAssetFailed("D1", ids.map { WsAssetItem(id = it, nonce = "N1") })
+    runCurrent()
+
+    val pull = assertIs<WsClientMessage.AssetPull>(socket.lastOf("asset-pull"))
+    assertEquals(SYNC_WS_ASSET_MESSAGE_MAX_ITEMS, pull.ids.size)
+    val heartbeat = assertIs<WsClientMessage.AssetHeartbeat>(socket.lastOf("asset-heartbeat"))
+    assertEquals(SYNC_WS_ASSET_MESSAGE_MAX_ITEMS, heartbeat.items.size)
+    val failed = assertIs<WsClientMessage.AssetFailed>(socket.lastOf("asset-failed"))
+    assertEquals(SYNC_WS_ASSET_MESSAGE_MAX_ITEMS, failed.items.size)
+    assertFalse(socket.closed.isCompleted)
     connection.dispose()
   }
 

@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import co.typie.editor.ffi.ExternalElementData
 import co.typie.icons.Lucide
+import co.typie.platform.IncomingContentItem
 import co.typie.ui.component.Img
 import co.typie.ui.component.Spinner
 import co.typie.ui.theme.AppShapes
@@ -30,19 +31,28 @@ internal fun EditorImageExternalElement(
   val externalElementState = LocalEditorExternalElementState.current
   val imageState = externalElementState.images
   val upload = imageState.uploads[nodeId]
+  if (upload?.failedStage != null) {
+    EditorAttachmentFailureCard(
+      icon = Lucide.Image,
+      text = "이미지를 업로드하지 못했어요",
+      deleteContentDescription = "이미지 삭제",
+      kind = IncomingContentItem.Kind.Image,
+      assetId = data.id,
+      nodeId = nodeId,
+    )
+    return
+  }
   val asset = data.id?.let(imageState.assets::get)
   val hasImage = asset != null || upload != null
   val resolution = data.id?.let(externalElementState.resolutions::get)
+  val pendingMeta = (resolution as? EditorAssetResolution.Pending)?.meta
   val missingAsset = data.id != null && asset == null && upload == null
-  val unavailableAsset =
-    missingAsset &&
-      (resolution == EditorAssetResolution.RetryableFailure ||
-        resolution == EditorAssetResolution.Unavailable)
+  val unavailableAsset = missingAsset && resolution == EditorAssetResolution.Missing
   val resolvingAsset = missingAsset && !unavailableAsset
   val ratio = asset?.ratio ?: upload?.ratio
 
   if (!hasImage) {
-    ImagePlaceholder(resolvingAsset = resolvingAsset, unavailableAsset = unavailableAsset)
+    ImagePlaceholder(resolvingAsset = resolvingAsset, pendingName = pendingMeta?.name)
     return
   }
 
@@ -100,15 +110,11 @@ internal fun EditorImageExternalElement(
 
 @Composable
 context(scope: EditorExternalElementRenderScope)
-private fun ImagePlaceholder(resolvingAsset: Boolean, unavailableAsset: Boolean) {
+private fun ImagePlaceholder(resolvingAsset: Boolean, pendingName: String?) {
   EditorExternalElementPlaceholder(
     icon = Lucide.Image,
-    text =
-      when {
-        unavailableAsset -> "이미지를 불러올 수 없어요"
-        resolvingAsset -> "이미지를 불러오는 중..."
-        else -> "이미지"
-      },
+    // 서버가 missing으로 확정한 노드는 빈 placeholder와 같은 모습이다 — 그 자리에서 이어받는다.
+    text = if (resolvingAsset) pendingName ?: "이미지를 불러오는 중..." else "이미지",
     trailing = {
       if (resolvingAsset) {
         Spinner(

@@ -38,6 +38,7 @@ bytea
 cbor
 cdylib
 cinterop
+cjson
 cnpg
 coalescer
 coalescible
@@ -91,6 +92,7 @@ jaccard
 kakao
 kakaokompassauth
 karpenter
+keepttl
 khtml
 koin
 konfig
@@ -161,6 +163,7 @@ oplog
 oslllo
 osslicenses
 penxle
+pexpire
 pgbouncer
 pilcrow
 plpgsql
@@ -174,6 +177,7 @@ rects
 reengagement
 remeda
 repaste
+repull
 resizer
 resizers
 resvg

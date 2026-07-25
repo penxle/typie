@@ -75,8 +75,8 @@ import kotlinx.coroutines.launch
 internal fun rememberEditorToolbarPages(
   toolbarContext: EditorToolbarContext,
   textToolbarPage: EditorToolbarPage,
-  pickImage: (nodeId: String) -> Unit,
-  pickFile: (nodeId: String) -> Unit,
+  pickImage: (nodeId: String, reclaimAssetId: String?) -> Unit,
+  pickFile: (nodeId: String, reclaimAssetId: String?) -> Unit,
 ): List<EditorToolbarPage> {
   return remember(toolbarContext, textToolbarPage, pickImage, pickFile) {
     toolbarContext.pageKeys.map { key ->
@@ -294,13 +294,12 @@ internal fun EditorToolbarPages(
 
     LaunchedEffect(pages, pageMetrics) {
       snapshotFlow {
-          pages.mapIndexedNotNull { index, page ->
-            val scrollState = page.scrollState ?: return@mapIndexedNotNull null
-            val target =
-              pageMetrics.internalScrollFor(index, pagerState.scrollPosition).roundToInt()
-            scrollState to target.coerceIn(0, scrollState.maxValue)
-          }
+        pages.mapIndexedNotNull { index, page ->
+          val scrollState = page.scrollState ?: return@mapIndexedNotNull null
+          val target = pageMetrics.internalScrollFor(index, pagerState.scrollPosition).roundToInt()
+          scrollState to target.coerceIn(0, scrollState.maxValue)
         }
+      }
         .collect { scrollTargets ->
           scrollTargets.forEach { (scrollState, target) ->
             if (scrollState.value != target) {
@@ -474,10 +473,10 @@ internal fun EditorToolbarPages(
         validAutoTargetKey != null && pagerState.lastAppliedAutoTargetKey != validAutoTargetKey
       }
       snapshotFlow {
-          scrollableState.isScrollInProgress ||
-            pagerState.pointerScrollGestureActive ||
-            pagerState.decayFlingInProgress
-        }
+        scrollableState.isScrollInProgress ||
+          pagerState.pointerScrollGestureActive ||
+          pagerState.decayFlingInProgress
+      }
         .first { inProgress -> !inProgress }
       val targetPageKey =
         pendingAutoTargetPageKey

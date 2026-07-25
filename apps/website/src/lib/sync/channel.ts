@@ -1,6 +1,6 @@
 import { compareStreamSeq } from './protocol';
 import type { SyncConnection } from './connection';
-import type { ServerMessage, SnapshotCursor } from './protocol';
+import type { AssetStateEntry, ServerMessage, SnapshotCursor } from './protocol';
 
 export type ChannelSubscriber = {
   onSnapshot: (graph: Uint8Array, meta: { seq: string; heads: Uint8Array; durableHeads: Uint8Array }) => void;
@@ -8,6 +8,10 @@ export type ChannelSubscriber = {
   // Resync started — a fresh onSnapshot follows; capture and tear down local state.
   onReload: () => void;
   onPermanentError: (code: string) => void;
+  // asset-pull 응답. requestId/final을 그대로 넘겨야 상관·청크 누적이 가능하다.
+  onAssetState: (requestId: string, assets: AssetStateEntry[], final: boolean) => void;
+  // 무효화 push. 상태를 싣지 않는다 — 받은 쪽이 asset-pull로 실제 상태를 재확인해야 한다.
+  onAssetChanged: (ids: string[]) => void;
 };
 
 type SubscriberState = { subscriber: ChannelSubscriber; loading: boolean; lastSeq: string | null };
@@ -200,6 +204,14 @@ export class DocumentChannels {
         this.resync(channel.documentId);
         return;
       }
+      case 'asset-state': {
+        for (const state of channel.subscribers) state.subscriber.onAssetState(message.requestId, message.assets, message.final);
+        return;
+      }
+      case 'asset-changed': {
+        for (const state of channel.subscribers) state.subscriber.onAssetChanged(message.ids);
+        return;
+      }
       case 'error': {
         if (message.scope !== 'document') return;
         this.clearAckWatchdog(channel);
@@ -290,5 +302,9 @@ export const loadDocumentSnapshot = (channels: DocumentChannels, documentId: str
         off();
         reject(new Error(code));
       },
+      // eslint-disable-next-line @typescript-eslint/no-empty-function -- loadDocumentSnapshot is a one-shot fetch; asset state isn't consumed here
+      onAssetState: () => {},
+      // eslint-disable-next-line @typescript-eslint/no-empty-function -- loadDocumentSnapshot is a one-shot fetch; asset state isn't consumed here
+      onAssetChanged: () => {},
     });
   });

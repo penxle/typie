@@ -26,12 +26,37 @@ internal enum class BlobUploadStage {
 internal class BlobUploadException(val stage: BlobUploadStage, cause: Throwable) :
   RuntimeException("Blob upload failed at $stage", cause)
 
+internal const val DEFAULT_BLOB_CONTENT_TYPE = "application/octet-stream"
+internal const val BLOB_CONTENT_TYPE_FIELD = "Content-Type"
+
+internal fun normalizeBlobContentType(mimeType: String?): String =
+  mimeType?.trim()?.takeIf(String::isNotEmpty) ?: DEFAULT_BLOB_CONTENT_TYPE
+
+internal data class BlobUploadForm(
+  val fields: Map<String, String>,
+  val filePartContentType: String,
+  val filename: String,
+)
+
+internal fun blobUploadForm(uploadFields: Map<String, String>, file: PickedFile): BlobUploadForm {
+  val contentType = normalizeBlobContentType(file.mimeType)
+  return BlobUploadForm(
+    fields =
+      if (uploadFields.containsKey(BLOB_CONTENT_TYPE_FIELD)) {
+        uploadFields
+      } else {
+        uploadFields + (BLOB_CONTENT_TYPE_FIELD to contentType)
+      },
+    filePartContentType = contentType,
+    filename = file.filename,
+  )
+}
+
 object BlobService {
   private const val MaxConcurrentUploads = 5
   private val uploadSemaphore = Semaphore(MaxConcurrentUploads)
 
   suspend fun upload(file: PickedFile): String = uploadSemaphore.withPermit {
-    val resolvedMimeType = file.mimeType ?: "application/octet-stream"
     val result =
       withBlobUploadStage(BlobUploadStage.IssueUploadUrl) {
         Apollo.executeMutation(
@@ -41,23 +66,42 @@ object BlobService {
         )
       }
 
+    transfer(
+      uploadUrl = result.issueBlobUploadUrl.url,
+      uploadFields = result.issueBlobUploadUrl.fields.jsonObject.asStringMap(),
+      file = file,
+    )
+
+    return result.issueBlobUploadUrl.path
+  }
+
+  internal suspend fun uploadToReservation(
+    uploadUrl: String,
+    uploadFields: Map<String, String>,
+    file: PickedFile,
+  ) {
+    transfer(uploadUrl = uploadUrl, uploadFields = uploadFields, file = file)
+  }
+
+  private suspend fun transfer(
+    uploadUrl: String,
+    uploadFields: Map<String, String>,
+    file: PickedFile,
+  ) {
+    val form = blobUploadForm(uploadFields, file)
     withBlobUploadStage(BlobUploadStage.TransferBytes) {
       Http.submitFormWithBinaryData(
-        url = result.issueBlobUploadUrl.url,
+        url = uploadUrl,
         formData =
           formData {
-            result.issueBlobUploadUrl.fields.jsonObject.asStringMap().forEach {
-              append(it.key, it.value)
-            }
-
-            append("Content-Type", resolvedMimeType)
+            form.fields.forEach { append(it.key, it.value) }
 
             appendInput(
               key = "file",
               headers =
                 headers {
-                  append(HttpHeaders.ContentType, resolvedMimeType)
-                  append(HttpHeaders.ContentDisposition, "filename=${file.filename.quote()}")
+                  append(HttpHeaders.ContentType, form.filePartContentType)
+                  append(HttpHeaders.ContentDisposition, "filename=${form.filename.quote()}")
                 },
               size = file.size,
               block = file::openSource,
@@ -65,8 +109,6 @@ object BlobService {
           },
       )
     }
-
-    return result.issueBlobUploadUrl.path
   }
 }
 
@@ -79,6 +121,6 @@ private suspend inline fun <T> withBlobUploadStage(stage: BlobUploadStage, block
     throw BlobUploadException(stage = stage, cause = error)
   }
 
-private fun JsonObject.asStringMap(): Map<String, String> {
+internal fun JsonObject.asStringMap(): Map<String, String> {
   return mapValues { it.value.jsonPrimitive.content }
 }

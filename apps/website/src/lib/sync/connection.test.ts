@@ -1,6 +1,7 @@
 /* eslint-disable unicorn/no-return-array-push -- SyncConnection#push collides with Array#push's rule heuristic */
 import { describe, expect, test, vi } from 'vitest';
 import { SyncConnection } from './connection';
+import { ASSET_MESSAGE_MAX_ITEMS } from './protocol';
 import { FakeWebSocket } from './test-fakes';
 
 const setup = () => {
@@ -405,6 +406,68 @@ describe('SyncConnection', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  test('sendAssetPull/sendAssetHeartbeat: ready 소켓에 인코딩된 프레임을 즉시 전송한다', async () => {
+    const { connection, sockets } = setup();
+    connection.sendAttach('D1', {});
+    await vi.waitFor(() => expect(sockets.length).toBe(1));
+    await handshake(sockets[0]);
+
+    connection.sendAssetPull('D1', 'q1', ['IMG01']);
+    connection.sendAssetHeartbeat('D1', [{ id: 'IMG01', nonce: 'n1' }]);
+
+    expect(sockets[0].lastOf('asset-pull')).toMatchObject({ documentId: 'D1', requestId: 'q1', ids: ['IMG01'] });
+    expect(sockets[0].lastOf('asset-heartbeat')).toMatchObject({ documentId: 'D1', items: [{ id: 'IMG01', nonce: 'n1' }] });
+  });
+
+  test('빈 목록은 프레임을 만들지 않는다 (서버가 malformed로 소켓을 끊는다)', async () => {
+    const { connection, sockets } = setup();
+    connection.sendAttach('D1', {});
+    await vi.waitFor(() => expect(sockets.length).toBe(1));
+    await handshake(sockets[0]);
+
+    connection.sendAssetPull('D1', 'q1', []);
+    connection.sendAssetHeartbeat('D1', []);
+    connection.sendAssetFailed('D1', []);
+
+    expect(sockets[0].lastOf('asset-pull')).toBeUndefined();
+    expect(sockets[0].lastOf('asset-heartbeat')).toBeUndefined();
+    expect(sockets[0].lastOf('asset-failed')).toBeUndefined();
+  });
+
+  test('상한을 넘는 목록은 연결을 끊는 대신 프레임 하나로 잘려 나간다', async () => {
+    const { connection, sockets } = setup();
+    connection.sendAttach('D1', {});
+    await vi.waitFor(() => expect(sockets.length).toBe(1));
+    await handshake(sockets[0]);
+
+    const ids = Array.from({ length: ASSET_MESSAGE_MAX_ITEMS + 1 }, (_, index) => `IMG${index}`);
+    connection.sendAssetPull('D1', 'q1', ids);
+    connection.sendAssetHeartbeat(
+      'D1',
+      ids.map((id) => ({ id, nonce: 'n1' })),
+    );
+    connection.sendAssetFailed(
+      'D1',
+      ids.map((id) => ({ id, nonce: 'n1' })),
+    );
+
+    expect(sockets[0].lastOf('asset-pull')?.ids).toHaveLength(ASSET_MESSAGE_MAX_ITEMS);
+    expect(sockets[0].lastOf('asset-heartbeat')?.items).toHaveLength(ASSET_MESSAGE_MAX_ITEMS);
+    expect(sockets[0].lastOf('asset-failed')?.items).toHaveLength(ASSET_MESSAGE_MAX_ITEMS);
+    expect(sockets[0].closed).toBeNull();
+  });
+
+  test('sendAssetFailed: ready 소켓이 없으면 드롭되고, outbox에도 남지 않아 재연결 후에도 재전송되지 않는다', async () => {
+    const { connection, sockets } = setup();
+    connection.sendAssetFailed('D1', [{ id: 'IMG01', nonce: 'n1' }]);
+    expect(sockets.length).toBe(0);
+
+    connection.sendAttach('D1', {});
+    await vi.waitFor(() => expect(sockets.length).toBe(1));
+    await handshake(sockets[0]);
+    expect(sockets[0].lastOf('asset-failed')).toBeUndefined();
   });
 
   test('onForeground: 재연결 백오프 대기를 건너뛰고 즉시 연결한다', async () => {

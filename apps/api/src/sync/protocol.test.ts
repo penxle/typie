@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { compareStreamSeq, decodeClientMessage, decodeRaw, encodeMessage } from './protocol.ts';
+import { ASSET_STRING_MAX_LENGTH, compareStreamSeq, decodeClientMessage, decodeRaw, encodeMessage } from './protocol.ts';
 import type { ClientMessage } from './protocol.ts';
 
 test('클라이언트 메시지 CBOR 왕복', () => {
@@ -126,4 +126,68 @@ test('Kotlin 계약 벡터: kotlinx-serialization-cbor이 인코드한 hello가 
   assert.equal(result.message.ticket, 'TK');
   assert.equal(result.message.clientId, 'C1');
   assert.deepEqual(result.message.capabilities, []);
+});
+
+// apps/mobile/compose의 encodeClientMessage(WsClientMessage.AssetPull(documentId="D1", requestId="R1", ids=["A1","A2"]))가 실제로 낸 바이트.
+const KOTLIN_ASSET_PULL_HEX =
+  'bf61746a61737365742d70756c6c6a646f63756d656e74496462443169726571756573744964625231636964739f624131624132ffff';
+
+test('Kotlin 계약 벡터: kotlinx-serialization-cbor이 인코드한 asset-pull이 디코드된다', () => {
+  const bytes = Uint8Array.from(Buffer.from(KOTLIN_ASSET_PULL_HEX, 'hex'));
+  const result = decodeClientMessage(bytes);
+  assert.ok(result.ok);
+  assert.equal(result.message.t, 'asset-pull');
+  if (result.message.t !== 'asset-pull') return;
+  assert.equal(result.message.documentId, 'D1');
+  assert.equal(result.message.requestId, 'R1');
+  assert.deepEqual(result.message.ids, ['A1', 'A2']);
+});
+
+// encodeClientMessage(WsClientMessage.AssetHeartbeat(documentId="D1", items=[WsAssetItem(id="A1", nonce="N1")]))가 낸 바이트.
+const KOTLIN_ASSET_HEARTBEAT_HEX =
+  'bf61746f61737365742d6865617274626561746a646f63756d656e744964624431656974656d739fbf626964624131656e6f6e6365624e31ffffff';
+
+test('Kotlin 계약 벡터: kotlinx-serialization-cbor이 인코드한 asset-heartbeat이 디코드된다', () => {
+  const bytes = Uint8Array.from(Buffer.from(KOTLIN_ASSET_HEARTBEAT_HEX, 'hex'));
+  const result = decodeClientMessage(bytes);
+  assert.ok(result.ok);
+  assert.equal(result.message.t, 'asset-heartbeat');
+  if (result.message.t !== 'asset-heartbeat') return;
+  assert.equal(result.message.documentId, 'D1');
+  assert.deepEqual(result.message.items, [{ id: 'A1', nonce: 'N1' }]);
+});
+
+// encodeClientMessage(WsClientMessage.AssetFailed(documentId="D1", items=[WsAssetItem(id="A1", nonce="N1")]))가 낸 바이트.
+const KOTLIN_ASSET_FAILED_HEX =
+  'bf61746c61737365742d6661696c65646a646f63756d656e744964624431656974656d739fbf626964624131656e6f6e6365624e31ffffff';
+
+test('Kotlin 계약 벡터: kotlinx-serialization-cbor이 인코드한 asset-failed가 디코드된다', () => {
+  const bytes = Uint8Array.from(Buffer.from(KOTLIN_ASSET_FAILED_HEX, 'hex'));
+  const result = decodeClientMessage(bytes);
+  assert.ok(result.ok);
+  assert.equal(result.message.t, 'asset-failed');
+  if (result.message.t !== 'asset-failed') return;
+  assert.equal(result.message.documentId, 'D1');
+  assert.deepEqual(result.message.items, [{ id: 'A1', nonce: 'N1' }]);
+});
+
+test('asset id·nonce 길이 상한을 넘으면 DB 조회 전에 malformed', () => {
+  const long = 'x'.repeat(ASSET_STRING_MAX_LENGTH + 1);
+  const atLimit = 'x'.repeat(ASSET_STRING_MAX_LENGTH);
+
+  assert.deepEqual(decodeClientMessage(encodeMessage({ t: 'asset-pull', documentId: 'D1', requestId: 'R1', ids: [long] })), {
+    ok: false,
+    reason: 'malformed',
+  });
+  assert.deepEqual(decodeClientMessage(encodeMessage({ t: 'asset-heartbeat', documentId: 'D1', items: [{ id: long, nonce: 'N1' }] })), {
+    ok: false,
+    reason: 'malformed',
+  });
+  assert.deepEqual(decodeClientMessage(encodeMessage({ t: 'asset-failed', documentId: 'D1', items: [{ id: 'A1', nonce: long }] })), {
+    ok: false,
+    reason: 'malformed',
+  });
+
+  assert.ok(decodeClientMessage(encodeMessage({ t: 'asset-pull', documentId: 'D1', requestId: 'R1', ids: [atLimit] })).ok);
+  assert.ok(decodeClientMessage(encodeMessage({ t: 'asset-heartbeat', documentId: 'D1', items: [{ id: atLimit, nonce: atLimit }] })).ok);
 });
