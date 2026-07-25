@@ -145,16 +145,6 @@ fn selection_rect_sets(
     let from_entry = layout_index.entry_for_position(&from);
     let to_entry = layout_index.entry_for_position(&to);
 
-    let break_y_bounds = match (from_entry, to_entry) {
-        (Some(f), Some(t)) => Some((f.rect.y.min(t.rect.y), f.rect.bottom().max(t.rect.bottom()))),
-        _ => None,
-    };
-
-    let hard_breaks =
-        super::hard_break::included_in_selection(layout_index, selection, break_y_bounds);
-    let paragraph_breaks =
-        super::paragraph_break::included_in_selection(layout_index, selection, break_y_bounds);
-
     let from_owner = from_entry.filter(|entry| attached(layout_index, entry, &from));
     let to_owner = to_entry.filter(|entry| attached(layout_index, entry, &to));
 
@@ -171,17 +161,9 @@ fn selection_rect_sets(
         &mut phase,
         &mut rects,
         pages,
-        selection.view(),
+        selection,
     );
 
-    for hard_break in hard_breaks {
-        let rect = hard_break_rect(hard_break.geometry);
-        rects.push_same(rect);
-    }
-    for paragraph_break in paragraph_breaks {
-        let rect = paragraph_break_rect(paragraph_break.geometry);
-        rects.push_same(rect);
-    }
     rects.sort_by_position();
 
     rects
@@ -564,7 +546,7 @@ fn visit_node(
     phase: &mut Phase,
     rects: &mut SelectionRectSets,
     pages: &[LayoutPage],
-    doc: &DocView,
+    selection: &ResolvedSelection<'_>,
 ) {
     match &node.content {
         LayoutContent::Box(b) => visit_box(
@@ -578,7 +560,7 @@ fn visit_node(
             phase,
             rects,
             pages,
-            doc,
+            selection,
         ),
         LayoutContent::Line(l) => visit_line(
             node,
@@ -591,8 +573,11 @@ fn visit_node(
             phase,
             rects,
             pages,
+            selection,
         ),
-        LayoutContent::Atom(a) => visit_atom(node, a, from, to, phase, rects, pages, doc),
+        LayoutContent::Atom(a) => {
+            visit_atom(node, a, from, to, phase, rects, pages, selection.view())
+        }
         LayoutContent::Spacing(_) => {}
     }
 }
@@ -608,9 +593,14 @@ fn visit_line(
     phase: &mut Phase,
     rects: &mut SelectionRectSets,
     pages: &[LayoutPage],
+    selection: &ResolvedSelection<'_>,
 ) {
     let contains_from = from_owner.is_some_and(|entry| entry.is_node(layout_index, node));
     let contains_to = to_owner.is_some_and(|entry| entry.is_node(layout_index, node));
+
+    if *phase == Phase::Inside || (*phase == Phase::Before && contains_from) {
+        push_selected_hard_break_rect(node, line, selection, rects, pages);
+    }
 
     let placeholder_width = node.rect.height * 0.15;
 
@@ -671,6 +661,21 @@ fn visit_line(
     }
 }
 
+fn push_selected_hard_break_rect(
+    node: &LayoutNode,
+    line: &LayoutLine,
+    selection: &ResolvedSelection<'_>,
+    rects: &mut SelectionRectSets,
+    pages: &[LayoutPage],
+) {
+    if let Some(hard_break) =
+        super::hard_break::hard_break_occurrence_for_line(selection.view(), line, node.rect, pages)
+        && selection.contains_range(hard_break.range)
+    {
+        rects.push_same(hard_break_rect(hard_break.geometry));
+    }
+}
+
 fn visit_atom(
     node: &LayoutNode,
     atom: &LayoutAtom,
@@ -713,7 +718,7 @@ fn visit_box(
     phase: &mut Phase,
     rects: &mut SelectionRectSets,
     pages: &[LayoutPage],
-    doc: &DocView,
+    selection: &ResolvedSelection<'_>,
 ) {
     let from_at_box_level = from.node == bx.node && from_owner.is_none();
     let to_at_box_level = to.node == bx.node && to_owner.is_none();
@@ -745,7 +750,7 @@ fn visit_box(
             phase,
             rects,
             pages,
-            doc,
+            selection,
         );
 
         if !is_spacing {
@@ -758,6 +763,17 @@ fn visit_box(
                 *phase = Phase::After;
             }
         }
+    }
+
+    if *phase == Phase::Inside
+        && let Some(paragraph_break) = super::paragraph_break::paragraph_break_occurrence_for_node(
+            layout_index,
+            selection.view(),
+            bx.node,
+        )
+        && selection.contains_range(paragraph_break.range)
+    {
+        rects.push_same(paragraph_break_rect(paragraph_break.geometry));
     }
 
     let fully = has_content_child && entry_phase == Phase::Inside && *phase == Phase::Inside;
@@ -912,6 +928,71 @@ mod tests {
             items.push((Dot::new(12, 2 + i as u64), child));
         }
         (logs(&items), root, para)
+    }
+
+    fn monolithic_table_doc() -> (DocLogs, Dot, Dot, Dot) {
+        let root = Dot::ROOT;
+        let table = Dot::new(30, 1);
+        let row = Dot::new(30, 2);
+        let cell = Dot::new(30, 3);
+        let first_para = Dot::new(30, 4);
+        let second_para = Dot::new(30, 7);
+        let trailing_para = Dot::new(30, 9);
+        let items = vec![
+            (
+                table,
+                SeqItem::Block {
+                    node_type: NodeType::Table,
+                    parents: vec![root],
+                    attrs: vec![],
+                },
+            ),
+            (
+                row,
+                SeqItem::Block {
+                    node_type: NodeType::TableRow,
+                    parents: vec![root, table],
+                    attrs: vec![],
+                },
+            ),
+            (
+                cell,
+                SeqItem::Block {
+                    node_type: NodeType::TableCell,
+                    parents: vec![root, table, row],
+                    attrs: vec![],
+                },
+            ),
+            (
+                first_para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, table, row, cell],
+                    attrs: vec![],
+                },
+            ),
+            (Dot::new(30, 5), SeqItem::Char('A')),
+            (Dot::new(30, 6), SeqItem::Atom(AtomLeaf::HardBreak)),
+            (
+                second_para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, table, row, cell],
+                    attrs: vec![],
+                },
+            ),
+            (Dot::new(30, 8), SeqItem::Char('B')),
+            (
+                trailing_para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                    attrs: vec![],
+                },
+            ),
+            (Dot::new(30, 10), SeqItem::Char('C')),
+        ];
+        (logs(&items), root, first_para, second_para)
     }
 
     fn first_line_for_para<'a>(
@@ -1729,5 +1810,108 @@ mod tests {
             ),
             "point inside rect on wrong page must not hit"
         );
+    }
+
+    #[test]
+    fn fully_selected_monolithic_suppresses_descendant_break_rects() {
+        let (doc, root, _first_para, _second_para) = monolithic_table_doc();
+        let (pd, index) = build_index(&doc, 400.0);
+        let view = DocView::new(&pd);
+        let selection = Selection::new(
+            Position {
+                node: root,
+                offset: 0,
+                affinity: Affinity::Downstream,
+            },
+            Position {
+                node: root,
+                offset: 1,
+                affinity: Affinity::Upstream,
+            },
+        );
+        let resolved = selection
+            .resolve(&view)
+            .expect("must resolve table selection");
+
+        for rects in [
+            selection_rects(&index, &resolved),
+            selection_mark_rects(&index, &resolved),
+            selection_text_rects(&index, &resolved),
+        ] {
+            assert!(!rects.is_empty(), "table selection must produce rects");
+            assert!(
+                rects
+                    .iter()
+                    .all(|rect| rect.meta == SelectionRectKind::Block),
+                "fully selected monolithic table must produce only Block rects, got {rects:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn paragraph_break_inside_partially_selected_monolithic_remains_visible() {
+        let (doc, _root, first_para, second_para) = monolithic_table_doc();
+        let (pd, index) = build_index(&doc, 400.0);
+        let view = DocView::new(&pd);
+        let selection = Selection::new(
+            Position {
+                node: first_para,
+                offset: 2,
+                affinity: Affinity::Downstream,
+            },
+            Position {
+                node: second_para,
+                offset: 0,
+                affinity: Affinity::Upstream,
+            },
+        );
+        let resolved = selection
+            .resolve(&view)
+            .expect("must resolve paragraph-break selection");
+        let rects = selection_rects(&index, &resolved);
+
+        assert!(
+            rects
+                .iter()
+                .any(|rect| rect.meta == SelectionRectKind::ParagraphBreak),
+            "selected paragraph break must remain visible, got {rects:?}"
+        );
+        assert!(
+            rects
+                .iter()
+                .all(|rect| rect.meta != SelectionRectKind::Block),
+            "partially selected table must not be promoted to a Block rect, got {rects:?}"
+        );
+    }
+
+    #[test]
+    fn hard_break_inside_partially_selected_monolithic_remains_visible() {
+        let (doc, _root, first_para, _second_para) = monolithic_table_doc();
+        let (pd, index) = build_index(&doc, 400.0);
+        let view = DocView::new(&pd);
+        let selection = Selection::new(
+            Position {
+                node: first_para,
+                offset: 1,
+                affinity: Affinity::Downstream,
+            },
+            Position {
+                node: first_para,
+                offset: 2,
+                affinity: Affinity::Upstream,
+            },
+        );
+        let resolved = selection
+            .resolve(&view)
+            .expect("must resolve hard-break selection");
+        let rects = selection_rects(&index, &resolved);
+
+        assert_eq!(
+            rects.len(),
+            1,
+            "selected hard break must produce exactly its affordance rect, got {rects:?}"
+        );
+        assert_eq!(rects[0].meta, SelectionRectKind::Text);
+        assert!(rects[0].rect.width > 0.0);
     }
 }

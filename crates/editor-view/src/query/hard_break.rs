@@ -6,7 +6,7 @@ pub(crate) struct HardBreakGeometry {
 use editor_common::Rect;
 use editor_model::{AtomLeaf, ChildView, DocView};
 use editor_state::Affinity;
-use editor_state::{Position, ResolvedSelection, Selection};
+use editor_state::{Position, Selection};
 
 use crate::page::{LayoutPage, PageRect};
 use crate::paginate::types::{LayoutContent, LayoutLine};
@@ -14,36 +14,20 @@ use crate::paginate::types::{LayoutContent, LayoutLine};
 use super::common::page_for_y;
 use super::layout_index::{LayoutEntry, LayoutIndex, LayoutPoint};
 
-pub(crate) struct SelectedHardBreak {
-    pub(crate) selection: Selection,
+pub(crate) struct HardBreakOccurrence {
+    pub(crate) range: Selection,
     pub(crate) geometry: HardBreakGeometry,
 }
 
-pub(crate) fn included_in_selection(
-    layout_index: &LayoutIndex,
-    selection: &ResolvedSelection<'_>,
-    y_bounds: Option<(f32, f32)>,
-) -> Vec<SelectedHardBreak> {
-    let mut hard_breaks = Vec::new();
-    let mut seen = hashbrown::HashSet::new();
-    for entry in layout_index.entries() {
-        if let Some((y_start, y_end)) = y_bounds
-            && !entry.overlaps_y_range(y_start, y_end)
-        {
-            continue;
-        }
-        let Some(hard_break) = hard_break_for_entry(layout_index, selection.view(), entry) else {
-            continue;
-        };
-        if !selection.contains_range(hard_break.selection) {
-            continue;
-        }
-        if !seen.insert(super::common::selection_key(&hard_break.selection)) {
-            continue;
-        }
-        hard_breaks.push(hard_break);
-    }
-    hard_breaks
+pub(crate) fn hard_break_occurrence_for_line(
+    view: &DocView,
+    line: &LayoutLine,
+    line_rect: Rect,
+    pages: &[LayoutPage],
+) -> Option<HardBreakOccurrence> {
+    let range = hard_break_range_for_line(view, line)?;
+    let geometry = geometry_for_line_rect(line_rect, line, range, pages)?;
+    Some(HardBreakOccurrence { range, geometry })
 }
 
 pub(crate) fn drag_selection_for_entry(
@@ -52,7 +36,7 @@ pub(crate) fn drag_selection_for_entry(
     entry: &LayoutEntry,
     point: LayoutPoint,
 ) -> Option<Selection> {
-    let hard_break = hard_break_for_entry(layout_index, view, entry)?;
+    let hard_break = hard_break_occurrence_for_entry(layout_index, view, entry)?;
     let rect = hard_break.geometry.rect.rect;
     let page_y = point.y - point.page_y_start;
     let x_mid = rect.x + rect.width / 2.0;
@@ -62,29 +46,24 @@ pub(crate) fn drag_selection_for_entry(
         && point.x >= x_mid
         && point.x <= hard_break.geometry.line_right
     {
-        Some(hard_break.selection)
+        Some(hard_break.range)
     } else {
         None
     }
 }
 
-fn hard_break_for_entry(
+fn hard_break_occurrence_for_entry(
     layout_index: &LayoutIndex,
     view: &DocView,
     entry: &LayoutEntry,
-) -> Option<SelectedHardBreak> {
+) -> Option<HardBreakOccurrence> {
     let LayoutContent::Line(line) = entry.content(layout_index)? else {
         return None;
     };
-    let selection = hard_break_for_line(view, line)?;
-    let geometry = geometry_for_line_entry(entry, line, selection, layout_index.pages())?;
-    Some(SelectedHardBreak {
-        selection,
-        geometry,
-    })
+    hard_break_occurrence_for_line(view, line, entry.rect, layout_index.pages())
 }
 
-fn hard_break_for_line(view: &DocView, line: &LayoutLine) -> Option<Selection> {
+fn hard_break_range_for_line(view: &DocView, line: &LayoutLine) -> Option<Selection> {
     let range = line.offset_range.as_ref()?;
     let index = range.end;
     let paragraph = view.node(line.node)?;
@@ -107,26 +86,26 @@ fn hard_break_for_line(view: &DocView, line: &LayoutLine) -> Option<Selection> {
     ))
 }
 
-fn geometry_for_line_entry(
-    entry: &LayoutEntry,
+fn geometry_for_line_rect(
+    line_rect: Rect,
     line: &LayoutLine,
-    hard_break: Selection,
+    hard_break_range: Selection,
     pages: &[LayoutPage],
 ) -> Option<HardBreakGeometry> {
-    let page_idx = page_for_y(pages, entry.rect.y)?;
-    let x = entry.rect.x + super::grapheme::x_at_offset(line, &hard_break.anchor);
-    let width = entry.rect.height * 0.15;
+    let page_idx = page_for_y(pages, line_rect.y)?;
+    let x = line_rect.x + super::grapheme::x_at_offset(line, &hard_break_range.anchor);
+    let width = line_rect.height * 0.15;
     Some(HardBreakGeometry {
         rect: PageRect::new(
             page_idx,
             Rect::from_xywh(
                 x,
-                entry.rect.y - pages[page_idx].y_start,
+                line_rect.y - pages[page_idx].y_start,
                 width,
-                entry.rect.height,
+                line_rect.height,
             ),
         ),
-        line_right: entry.rect.right(),
+        line_right: line_rect.right(),
     })
 }
 
@@ -252,14 +231,14 @@ mod tests {
     }
 
     #[test]
-    fn hard_break_for_line_detects_and_rejects() {
+    fn hard_break_range_for_line_detects_and_rejects() {
         let (pd, para_id, index) = para_with_hard_break("Hi", 400.0);
         let view = DocView::new(&pd);
 
         let (entry, line) = first_line_for_para(&index, &para_id)
             .expect("must find line with offset_range for para with hard break");
 
-        let sel = hard_break_for_line(&view, line).expect("must detect trailing hard break");
+        let sel = hard_break_range_for_line(&view, line).expect("must detect trailing hard break");
         assert_eq!(sel.anchor.node, para_id);
         assert_eq!(sel.head.node, para_id);
         let expected_index = line.offset_range.as_ref().unwrap().end;
@@ -272,55 +251,9 @@ mod tests {
         let view2 = DocView::new(&pd2);
         let (_, line2) = first_line_for_para(&index2, &para_id2)
             .expect("must find line for para without hard break");
-        assert!(hard_break_for_line(&view2, line2).is_none());
+        assert!(hard_break_range_for_line(&view2, line2).is_none());
 
         let _ = entry;
-    }
-
-    #[test]
-    fn included_in_selection_covered_and_dedup() {
-        let (pd, para_id, index) = para_with_hard_break("Hi", 400.0);
-        let view = DocView::new(&pd);
-
-        let (_, line) = first_line_for_para(&index, &para_id).expect("must find line");
-        let hb_index = line.offset_range.as_ref().unwrap().end;
-
-        let covering = Selection::new(
-            Position {
-                node: para_id,
-                offset: 0,
-                affinity: Affinity::Downstream,
-            },
-            Position {
-                node: para_id,
-                offset: hb_index + 1,
-                affinity: Affinity::Upstream,
-            },
-        );
-        let rsel = covering
-            .resolve(&view)
-            .expect("must resolve covering selection");
-        let results = included_in_selection(&index, &rsel, None);
-        assert_eq!(results.len(), 1);
-        assert_eq!(results[0].selection.anchor.node, para_id);
-
-        let not_covering = Selection::new(
-            Position {
-                node: para_id,
-                offset: 0,
-                affinity: Affinity::Downstream,
-            },
-            Position {
-                node: para_id,
-                offset: 0,
-                affinity: Affinity::Downstream,
-            },
-        );
-        let rsel2 = not_covering
-            .resolve(&view)
-            .expect("must resolve collapsed selection");
-        let results2 = included_in_selection(&index, &rsel2, None);
-        assert!(results2.is_empty());
     }
 
     #[test]
@@ -344,7 +277,7 @@ mod tests {
             },
         );
 
-        let geom = geometry_for_line_entry(entry, line, sel, index.pages())
+        let geom = geometry_for_line_rect(entry.rect, line, sel, index.pages())
             .expect("must produce geometry");
 
         assert!(
@@ -377,7 +310,7 @@ mod tests {
                 affinity: Affinity::Upstream,
             },
         );
-        let geom = geometry_for_line_entry(entry, line, sel, index.pages())
+        let geom = geometry_for_line_rect(entry.rect, line, sel, index.pages())
             .expect("must produce geometry");
 
         let rect = &geom.rect.rect;

@@ -481,10 +481,6 @@ impl LayoutEntry {
     pub(crate) fn ancestors(&self) -> &[Dot] {
         &self.ancestors
     }
-
-    pub(crate) fn overlaps_y_range(&self, y_start: f32, y_end: f32) -> bool {
-        rect_overlaps_y_range(&self.rect, y_start, y_end)
-    }
 }
 
 impl LayoutIndexBuilder<'_> {

@@ -4,10 +4,11 @@ pub(crate) struct ParagraphBreakGeometry {
 }
 
 use editor_common::Rect;
+use editor_crdt::Dot;
 use editor_model::{ChildView, DocView, NodeType};
 use editor_state::Affinity;
 use editor_state::{
-    Position, ResolvedPosition, ResolvedSelection, Selection, before_or_same, last_cursor_position,
+    Position, ResolvedPosition, Selection, before_or_same, last_cursor_position,
     paragraph_break_at_end,
 };
 
@@ -17,51 +18,36 @@ use crate::paginate::types::{LayoutContent, LayoutLine, SpacingKind};
 use super::common::page_for_y;
 use super::layout_index::{LayoutEntry, LayoutIndex, LayoutPoint};
 
-pub(crate) struct SelectedParagraphBreak {
-    pub(crate) selection: Selection,
+pub(crate) struct ParagraphBreakOccurrence {
+    pub(crate) range: Selection,
     pub(crate) geometry: ParagraphBreakGeometry,
 }
 
-pub(crate) fn included_in_selection(
+pub(crate) fn paragraph_break_occurrence_for_node(
     layout_index: &LayoutIndex,
-    selection: &ResolvedSelection<'_>,
-    y_bounds: Option<(f32, f32)>,
-) -> Vec<SelectedParagraphBreak> {
-    let mut paragraph_breaks = Vec::new();
-    let mut seen = hashbrown::HashSet::new();
-    for entry in layout_index.entries() {
-        if let Some((y_start, y_end)) = y_bounds
-            && !entry.overlaps_y_range(y_start, y_end)
-        {
-            continue;
-        }
-        let Some(paragraph_break) =
-            paragraph_break_for_entry(layout_index, selection.view(), entry)
-        else {
-            continue;
-        };
-        if !selection.contains_range(paragraph_break.selection) {
-            continue;
-        }
-        if !seen.insert(super::common::selection_key(&paragraph_break.selection)) {
-            continue;
-        }
-        paragraph_breaks.push(paragraph_break);
+    view: &DocView,
+    node: Dot,
+) -> Option<ParagraphBreakOccurrence> {
+    let paragraph = view.node(node)?;
+    if paragraph.node_type() != NodeType::Paragraph {
+        return None;
     }
-    paragraph_breaks
+    let range = paragraph_break_at_end(&last_cursor_position(&paragraph)?, view)?;
+    let geometry = geometry(layout_index, range, layout_index.pages())?;
+    Some(ParagraphBreakOccurrence { range, geometry })
 }
 
 fn geometry(
     layout_index: &LayoutIndex,
-    paragraph_break: Selection,
+    paragraph_break_range: Selection,
     pages: &[LayoutPage],
 ) -> Option<ParagraphBreakGeometry> {
-    let pos = paragraph_break.anchor;
+    let pos = paragraph_break_range.anchor;
     let entry = layout_index.entry_for_position(&pos)?;
     let LayoutContent::Line(line) = entry.content(layout_index)? else {
         return None;
     };
-    geometry_for_line_entry(entry, line, paragraph_break, pages)
+    geometry_for_line_entry(entry, line, paragraph_break_range, pages)
 }
 
 pub(crate) fn drag_selection_for_entry(
@@ -71,7 +57,7 @@ pub(crate) fn drag_selection_for_entry(
     entry: &LayoutEntry,
     point: LayoutPoint,
 ) -> Option<Selection> {
-    let paragraph_break = paragraph_break_for_entry(layout_index, view, entry)?;
+    let paragraph_break = paragraph_break_occurrence_for_entry(layout_index, view, entry)?;
     match entry.content(layout_index)? {
         LayoutContent::Line(_) => {
             let rect = paragraph_break.geometry.rect.rect;
@@ -83,50 +69,44 @@ pub(crate) fn drag_selection_for_entry(
                 && point.x >= x_mid
                 && point.x <= paragraph_break.geometry.line_right
             {
-                Some(paragraph_break.selection)
+                Some(paragraph_break.range)
             } else {
                 None
             }
         }
         LayoutContent::Spacing(SpacingKind::Gap { .. }) => {
-            let resolved = paragraph_break.selection.resolve(view)?;
+            let resolved = paragraph_break.range.resolve(view)?;
             if before_or_same(&anchor.position(), &resolved.from().position(), view) {
-                Some(paragraph_break.selection)
+                Some(paragraph_break.range)
             } else {
-                Some(Selection::collapsed(paragraph_break.selection.head))
+                Some(Selection::collapsed(paragraph_break.range.head))
             }
         }
         LayoutContent::Box(_) | LayoutContent::Atom(_) | LayoutContent::Spacing(_) => None,
     }
 }
 
-fn paragraph_break_for_entry(
+fn paragraph_break_occurrence_for_entry(
     layout_index: &LayoutIndex,
     view: &DocView,
     entry: &LayoutEntry,
-) -> Option<SelectedParagraphBreak> {
+) -> Option<ParagraphBreakOccurrence> {
     match entry.content(layout_index)? {
         LayoutContent::Line(line) => {
-            let selection = paragraph_break_for_line(view, line)?;
-            let geometry = geometry_for_line_entry(entry, line, selection, layout_index.pages())?;
-            Some(SelectedParagraphBreak {
-                selection,
-                geometry,
-            })
+            let range = paragraph_break_range_for_line(view, line)?;
+            let geometry = geometry_for_line_entry(entry, line, range, layout_index.pages())?;
+            Some(ParagraphBreakOccurrence { range, geometry })
         }
         LayoutContent::Spacing(SpacingKind::Gap { position }) => {
-            let selection = paragraph_break_before_gap_boundary(view, *position)?;
-            let geometry = geometry(layout_index, selection, layout_index.pages())?;
-            Some(SelectedParagraphBreak {
-                selection,
-                geometry,
-            })
+            let range = paragraph_break_range_before_gap_boundary(view, *position)?;
+            let geometry = geometry(layout_index, range, layout_index.pages())?;
+            Some(ParagraphBreakOccurrence { range, geometry })
         }
         LayoutContent::Box(_) | LayoutContent::Atom(_) | LayoutContent::Spacing(_) => None,
     }
 }
 
-fn paragraph_break_for_line(view: &DocView, line: &LayoutLine) -> Option<Selection> {
+fn paragraph_break_range_for_line(view: &DocView, line: &LayoutLine) -> Option<Selection> {
     if !line_can_host_visual_paragraph_break(line) {
         return None;
     }
@@ -144,7 +124,10 @@ fn line_can_host_visual_paragraph_break(line: &LayoutLine) -> bool {
     !strut_line_represents_inline_child
 }
 
-fn paragraph_break_before_gap_boundary(view: &DocView, position: Position) -> Option<Selection> {
+fn paragraph_break_range_before_gap_boundary(
+    view: &DocView,
+    position: Position,
+) -> Option<Selection> {
     let parent = view.node(position.node)?;
     let previous = position
         .offset
@@ -168,10 +151,10 @@ fn paragraph_break_before_gap_boundary(view: &DocView, position: Position) -> Op
 fn geometry_for_line_entry(
     entry: &LayoutEntry,
     line: &LayoutLine,
-    paragraph_break: Selection,
+    paragraph_break_range: Selection,
     pages: &[LayoutPage],
 ) -> Option<ParagraphBreakGeometry> {
-    let pos = paragraph_break.anchor;
+    let pos = paragraph_break_range.anchor;
     let page_idx = page_for_y(pages, entry.rect.y)?;
     let x = entry.rect.x + super::grapheme::x_at_offset(line, &pos);
     let width = entry.rect.height * 0.15;
@@ -198,7 +181,7 @@ mod tests {
         NodeType, ProjectedDoc, SeqItem, SpanLog, project_document,
     };
     use editor_state::Affinity;
-    use editor_state::{Position, Selection};
+    use editor_state::Position;
 
     use crate::measure::context::MeasureContext;
     use crate::measure::nodes::dispatch::measure_node;
@@ -348,7 +331,7 @@ mod tests {
     }
 
     #[test]
-    fn paragraph_break_for_line_detects_and_rejects() {
+    fn paragraph_break_range_for_line_detects_and_rejects() {
         let doc = two_para_doc();
         let (pd, index) = build_index(&doc, 400.0);
         let view = DocView::new(&pd);
@@ -359,7 +342,7 @@ mod tests {
 
         let (_, line) = first_line_for_para(&index, &para_a_id).expect("must find line for para A");
 
-        let sel = paragraph_break_for_line(&view, line)
+        let sel = paragraph_break_range_for_line(&view, line)
             .expect("must detect paragraph break at end of para A");
         assert_eq!(sel.anchor.node, para_a_id);
 
@@ -377,56 +360,7 @@ mod tests {
         let (_, line2) =
             first_line_for_para(&index2, &para_id2).expect("must find line for single para");
 
-        assert!(paragraph_break_for_line(&view2, line2).is_none());
-    }
-
-    #[test]
-    fn included_in_selection_covered() {
-        let doc = two_para_doc();
-        let (pd, index) = build_index(&doc, 400.0);
-        let view = DocView::new(&pd);
-
-        let root = view.root().unwrap();
-        let mut blocks = root.child_blocks();
-        let para_a_id = blocks.next().expect("first para must exist").id();
-        let para_b_id = blocks.next().expect("second para must exist").id();
-
-        let covering = Selection::new(
-            Position {
-                node: para_a_id,
-                offset: 0,
-                affinity: Affinity::Downstream,
-            },
-            Position {
-                node: para_b_id,
-                offset: 1,
-                affinity: Affinity::Upstream,
-            },
-        );
-        let rsel = covering
-            .resolve(&view)
-            .expect("must resolve covering selection");
-        let results = included_in_selection(&index, &rsel, None);
-        assert_eq!(results.len(), 1);
-        assert_eq!(results[0].selection.anchor.node, para_a_id);
-
-        let not_covering = Selection::new(
-            Position {
-                node: para_a_id,
-                offset: 0,
-                affinity: Affinity::Downstream,
-            },
-            Position {
-                node: para_a_id,
-                offset: 0,
-                affinity: Affinity::Downstream,
-            },
-        );
-        let rsel2 = not_covering
-            .resolve(&view)
-            .expect("must resolve collapsed selection");
-        let results2 = included_in_selection(&index, &rsel2, None);
-        assert!(results2.is_empty());
+        assert!(paragraph_break_range_for_line(&view2, line2).is_none());
     }
 
     #[test]
@@ -450,12 +384,12 @@ mod tests {
             };
             let gap_pos = *position;
 
-            let result = paragraph_break_before_gap_boundary(&view, gap_pos);
+            let result = paragraph_break_range_before_gap_boundary(&view, gap_pos);
             assert!(result.is_some(), "gap after paragraph must produce a break");
 
             let root = view.root().unwrap();
             let root_id = root.id();
-            let none_result = paragraph_break_before_gap_boundary(
+            let none_result = paragraph_break_range_before_gap_boundary(
                 &view,
                 Position {
                     node: root_id,
@@ -483,7 +417,7 @@ mod tests {
         let (entry, line) =
             first_line_for_para(&index, &para_a_id).expect("must find line for para A");
 
-        let sel = paragraph_break_for_line(&view, line).expect("must detect paragraph break");
+        let sel = paragraph_break_range_for_line(&view, line).expect("must detect paragraph break");
 
         let geom = geometry_for_line_entry(entry, line, sel, index.pages())
             .expect("must produce geometry");
@@ -519,7 +453,7 @@ mod tests {
             };
             let gap_pos = *position;
 
-            let pb = paragraph_break_before_gap_boundary(&view, gap_pos);
+            let pb = paragraph_break_range_before_gap_boundary(&view, gap_pos);
             if pb.is_none() {
                 return;
             }

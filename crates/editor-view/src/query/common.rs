@@ -1,6 +1,3 @@
-use editor_crdt::Dot;
-use editor_state::Affinity;
-
 use crate::page::LayoutPage;
 use crate::paginate::types::LayoutLine;
 
@@ -9,13 +6,6 @@ pub enum Phase {
     Before,
     Inside,
     After,
-}
-
-pub type SelectionKey = ((Dot, usize, Affinity), (Dot, usize, Affinity));
-
-pub fn selection_key(selection: &editor_state::Selection) -> SelectionKey {
-    let key = |pos: &editor_state::Position| (pos.node, pos.offset, pos.affinity);
-    (key(&selection.anchor), key(&selection.head))
 }
 
 pub fn page_for_y(pages: &[LayoutPage], y: f32) -> Option<usize> {
