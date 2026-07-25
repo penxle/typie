@@ -11,6 +11,7 @@ import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.gestures.scrollable2D
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -53,6 +54,30 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalTestApi::class)
 class NavigationStackDesktopTest {
+  @Test
+  fun navigationForegroundPreservesDeclarationBounds() = runComposeUiTest {
+    val navigator = Navigator(Route.Home)
+
+    setContent {
+      NavigationStack(
+        navigator = navigator,
+        topBarState = remember { TopBarState() },
+        modifier = Modifier.size(width = 320.dp, height = 640.dp),
+      ) { route ->
+        Box(Modifier.fillMaxSize().padding(horizontal = 12.dp)) {
+          Box(Modifier.fillMaxSize().testTag("surface-$route"))
+          NavigationForeground { Box(Modifier.fillMaxSize().testTag("foreground-$route")) }
+        }
+      }
+    }
+    waitForIdle()
+
+    assertEquals(
+      onNodeWithTag("surface-${Route.Home}").fetchSemanticsNode().boundsInRoot,
+      onNodeWithTag("foreground-${Route.Home}").fetchSemanticsNode().boundsInRoot,
+    )
+  }
+
   @Test
   fun navigationForegroundCanSharePointerInputWithRouteSurface() = runComposeUiTest {
     val navigator = Navigator(Route.Home)
@@ -189,8 +214,10 @@ class NavigationStackDesktopTest {
         topBarState = remember { TopBarState() },
         modifier = Modifier.size(width = 320.dp, height = 640.dp),
       ) { route ->
-        Box(Modifier.fillMaxSize().testTag("surface-$route"))
-        NavigationForeground { Box(Modifier.fillMaxSize().testTag("foreground-$route")) }
+        Box(Modifier.fillMaxSize().padding(horizontal = 12.dp)) {
+          Box(Modifier.fillMaxSize().testTag("surface-$route"))
+          NavigationForeground { Box(Modifier.fillMaxSize().testTag("foreground-$route")) }
+        }
       }
       LaunchedEffect(Unit) { navigator.navigate(editorRoute) }
     }
@@ -198,11 +225,12 @@ class NavigationStackDesktopTest {
 
     val surface = onNodeWithTag("surface-$editorRoute")
     val foreground = onNodeWithTag("foreground-$editorRoute")
+    val initialSurfaceLeft = surface.fetchSemanticsNode().boundsInRoot.left
     foreground.performTouchInput {
       down(center)
       moveBy(Offset(x = platformTouchSlop * 4f, y = 0f), delayMillis = 100L)
     }
-    waitUntil { surface.fetchSemanticsNode().boundsInRoot.left > 1f }
+    waitUntil { surface.fetchSemanticsNode().boundsInRoot.left > initialSurfaceLeft + 1f }
 
     assertEquals(
       surface.fetchSemanticsNode().boundsInRoot.left,

@@ -1,6 +1,7 @@
 package co.typie.navigation
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalContext
 import androidx.compose.runtime.CompositionLocalProvider
@@ -15,11 +16,16 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEvent
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.node.ModifierNodeElement
 import androidx.compose.ui.node.PointerInputModifierNode
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntSize
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
@@ -28,6 +34,7 @@ import co.typie.ui.component.bottombar.BottomBarState
 import co.typie.ui.component.bottombar.LocalBottomBarState
 import co.typie.ui.component.topbar.LocalTopBarState
 import co.typie.ui.component.topbar.TopBarState
+import kotlin.math.roundToInt
 
 internal class NavigationForegroundRegistry {
   private val entries = mutableStateListOf<NavigationForegroundEntry>()
@@ -65,24 +72,57 @@ internal class NavigationForegroundRegistry {
     modifier: Modifier,
   ) {
     entries.forEach { entry ->
-      Box(
+      var hostBoundsInRoot by remember(entry) { mutableStateOf<Rect?>(null) }
+      val sourceBoundsInRoot = entry.sourceBoundsInRoot
+      Layout(
         modifier =
-          modifier.then(
-            if (entry.sharePointerInputWithSiblings) {
-              ShareNavigationForegroundPointerInputElement
-            } else {
-              Modifier
+          modifier
+            .then(
+              if (entry.sharePointerInputWithSiblings) {
+                ShareNavigationForegroundPointerInputElement
+              } else {
+                Modifier
+              }
+            )
+            .onGloballyPositioned { coordinates ->
+              hostBoundsInRoot = coordinates.unclippedBoundsInRoot()
+            },
+        content = {
+          CompositionLocalProvider(entry.context) {
+            CompositionLocalProvider(
+              LocalViewModelStoreOwner provides viewModelStoreOwner,
+              LocalRoute provides route,
+              LocalTopBarState provides topBarState,
+              LocalBottomBarState provides bottomBarState,
+            ) {
+              entry.content()
             }
+          }
+        },
+      ) { measurables, constraints ->
+        val hostBounds = hostBoundsInRoot
+        val contentBounds =
+          if (sourceBoundsInRoot != null && hostBounds != null) {
+            Rect(
+              left = sourceBoundsInRoot.left - hostBounds.left,
+              top = sourceBoundsInRoot.top - hostBounds.top,
+              right = sourceBoundsInRoot.right - hostBounds.left,
+              bottom = sourceBoundsInRoot.bottom - hostBounds.top,
+            )
+          } else {
+            // This can hide the foreground for its first frame, but avoids briefly drawing and
+            // hit-testing it at the host bounds before the declaration bounds are known.
+            Rect.Zero
+          }
+        val contentConstraints =
+          Constraints.fixed(
+            width = contentBounds.width.roundToInt(),
+            height = contentBounds.height.roundToInt(),
           )
-      ) {
-        CompositionLocalProvider(entry.context) {
-          CompositionLocalProvider(
-            LocalViewModelStoreOwner provides viewModelStoreOwner,
-            LocalRoute provides route,
-            LocalTopBarState provides topBarState,
-            LocalBottomBarState provides bottomBarState,
-          ) {
-            entry.content()
+        val placeables = measurables.map { measurable -> measurable.measure(contentConstraints) }
+        layout(width = constraints.maxWidth, height = constraints.maxHeight) {
+          placeables.forEach { placeable ->
+            placeable.place(x = contentBounds.left.roundToInt(), y = contentBounds.top.roundToInt())
           }
         }
       }
@@ -98,6 +138,7 @@ internal class NavigationForegroundEntry(
 ) {
   var context by mutableStateOf(context)
   var sharePointerInputWithSiblings by mutableStateOf(sharePointerInputWithSiblings)
+  var sourceBoundsInRoot by mutableStateOf<Rect?>(null)
 }
 
 internal class NavigationTopBarBackdropEntry(val owner: Any, background: Color) {
@@ -137,6 +178,12 @@ internal fun NavigationForeground(
   registry.register(entry)
 
   DisposableEffect(registry, entry) { onDispose { registry.unregister(entry) } }
+
+  Box(
+    Modifier.fillMaxSize().onGloballyPositioned { coordinates ->
+      entry.sourceBoundsInRoot = coordinates.unclippedBoundsInRoot()
+    }
+  )
 }
 
 @Composable
@@ -174,4 +221,14 @@ private class ShareNavigationForegroundPointerInputNode :
     Unit
 
   override fun onCancelPointerInput() = Unit
+}
+
+private fun androidx.compose.ui.layout.LayoutCoordinates.unclippedBoundsInRoot(): Rect {
+  val position = positionInRoot()
+  return Rect(
+    left = position.x,
+    top = position.y,
+    right = position.x + size.width,
+    bottom = position.y + size.height,
+  )
 }
