@@ -1476,6 +1476,7 @@ impl Editor {
                     StateField::Cursor,
                     StateField::PageSizes,
                     StateField::ExternalElements,
+                    StateField::TableOverlays,
                 ],
             });
             self.invalidate_render();

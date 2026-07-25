@@ -579,6 +579,67 @@ mod tests {
     }
 
     #[test]
+    fn set_external_height_marks_table_overlays_changed() {
+        let (state, img, _table, _cell, _p1) = state! {
+            doc {
+                root {
+                    img: image
+                    table: table {
+                        table_row {
+                            cell: table_cell {
+                                p1: paragraph { text("cell") }
+                            }
+                        }
+                    }
+                }
+            }
+            selection: (p1, 0)
+        };
+
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
+
+        let table_y = |editor: &Editor| {
+            let view = editor.state.view();
+            let resolved = editor
+                .state
+                .selection
+                .as_ref()
+                .and_then(|selection| selection.resolve(&view));
+            editor
+                .view
+                .table_overlays(&editor.state, resolved.as_ref())
+                .into_iter()
+                .next()
+                .expect("table overlay")
+                .bounds
+                .y
+        };
+        let before_y = table_y(&editor);
+
+        let events = editor.apply(Message::System {
+            event: SystemEvent::SetExternalHeight {
+                node_id: img,
+                height: 72.0,
+            },
+        });
+
+        assert!(table_y(&editor) > before_y);
+        assert!(
+            events.iter().any(|event| {
+                matches!(
+                    event,
+                    EditorEvent::StateChanged { fields }
+                        if fields.contains(&StateField::TableOverlays)
+                )
+            }),
+            "external height changes must tell hosts to re-query table overlays"
+        );
+    }
+
+    #[test]
     fn set_external_height_ignores_zero_height() {
         let (state, img, _p1) = state! {
             doc {
