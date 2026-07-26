@@ -885,3 +885,49 @@ fn auto_replacement_undo_restores_matched_text_in_one_step() {
     );
     let _ = p1;
 }
+
+#[test]
+fn lookbehind_sees_text_beyond_the_start_window() {
+    let (s, ..) = state! {
+        doc { root { p1: paragraph { text("") } } }
+        selection: (p1, 0)
+    };
+    let mut editor = Editor::new_test(s);
+    set_rules(
+        &editor,
+        vec![
+            rule("(?<!\u{201C}[^\u{201D}]*)\"", "\u{201C}", true),
+            rule("(?<=\u{201C}[^\u{201D}]*)\"", "\u{201D}", true),
+        ],
+    );
+
+    let body = "가".repeat(100);
+    type_text(&mut editor, "\"");
+    type_text(&mut editor, &body);
+    type_text(&mut editor, "\"");
+
+    let text = flat_text(&editor);
+    assert!(
+        text.contains(&format!("\u{201C}{body}\u{201D}")),
+        "quote longer than the start window must still close, got {text:?}"
+    );
+}
+
+#[test]
+fn linear_rule_matches_longer_than_the_start_window() {
+    let (s, ..) = state! {
+        doc { root { p1: paragraph { text("") } } }
+        selection: (p1, 0)
+    };
+    let mut editor = Editor::new_test(s);
+    set_rules(&editor, vec![rule(REGEX_PATTERN, REGEX_SUBSTITUTE, true)]);
+
+    type_text(&mut editor, &"7".repeat(300));
+    type_text(&mut editor, "#");
+
+    let text = flat_text(&editor);
+    assert!(
+        text.contains(REGEX_SUBSTITUTE) && !text.contains('7'),
+        "the whole match must be replaced, not just its tail, got {text:?}"
+    );
+}
