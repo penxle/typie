@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
-// 개편된 구독 플랜 안내(광고) 푸시를 아래 조건을 모두 만족하는 이용자에게 일괄 발송한다.
+// 무료체험 종료 안내(광고) 푸시를 아래 조건을 모두 만족하는 이용자에게 일괄 발송한다.
 //  - WILL_EXPIRE 트라이얼(FULL_ACCESS_TRIAL)이 KST 7/27(월) 중 종료
-//  - KST 7/13 00:00 이후 접속(기기 활동)·집필 이력 없음
-//  - KST 7/13 00:00 이전 90일 이내(= 2026-04-14 00:00 이후) 집필 이력 있음
+//  - KST 7/13 00:00(유료화) 이후 집필 이력 있음
+//  - 트라이얼 외 살아있는 구독 없음(현재 비구독자 + 전환 예약 WILL_ACTIVATE 제외)
 //  - 푸시 토큰 보유
 //  - 마케팅 수신 동의 완료
 //
@@ -17,31 +17,20 @@
 import { PlanId } from '@typie/lib/const';
 import { SubscriptionState, UserState } from '@typie/lib/enums';
 import dayjs from 'dayjs';
-import { and, eq, exists, gte, lt, notExists } from 'drizzle-orm';
+import { and, eq, exists, gt, gte, inArray, lt, ne, notExists, or } from 'drizzle-orm';
 import { redis } from '#/cache.ts';
-import {
-  db,
-  DocumentCharacterCountChanges,
-  Subscriptions,
-  UserDevices,
-  UserMarketingConsents,
-  UserPushNotificationTokens,
-  Users,
-} from '#/db/index.ts';
+import { db, DocumentCharacterCountChanges, Subscriptions, UserMarketingConsents, UserPushNotificationTokens, Users } from '#/db/index.ts';
 import { sendPushNotification } from '#/external/firebase.ts';
 import { delay } from '#/utils/promise.ts';
 
-const PUSH_TITLE = '(광고) 타이피 구독 플랜이 개편됐어요!';
-const PUSH_BODY = ['월 2,900원으로 가벼워진 타이피를 월요일까지 무료로 이용해 보세요.', '(수신거부: 설정 > 프로필 > 수신 동의 해제)'].join(
-  '\n',
-);
+const PUSH_TITLE = '(광고) 타이피 무료 이용 기간이 내일 끝나요';
+const PUSH_BODY = ['지금 구독하고 월 2,900원으로 쓰던 글을 계속 이어가세요!', '(수신거부: 설정 > 프로필 > 수신 동의 해제)'].join('\n');
 
-const DORMANT_SINCE = dayjs('2026-07-13T00:00:00+09:00');
-const WRITING_SINCE = DORMANT_SINCE.subtract(90, 'day'); // KST 2026-04-14 00:00
+const WRITING_SINCE = dayjs('2026-07-13T00:00:00+09:00');
 const TRIAL_EXPIRES_FROM = dayjs('2026-07-27T00:00:00+09:00');
 const TRIAL_EXPIRES_UNTIL = dayjs('2026-07-28T00:00:00+09:00');
 
-const REDIS_KEY = 'script:plan-reengagement-push:sent';
+const REDIS_KEY = 'script:plan-reengagement-push:trial-conversion:sent';
 const BATCH_SIZE = 20;
 const BATCH_INTERVAL_MS = 500;
 
@@ -91,32 +80,32 @@ const targets = await db
           .from(UserPushNotificationTokens)
           .where(eq(UserPushNotificationTokens.userId, Users.id)),
       ),
-      // KST 7/13 00:00 이후 접속 이력 없음
+      // 트라이얼 외 살아있는 구독 없음 — 이미 유료 전환했거나 전환 예약(WILL_ACTIVATE)한 이용자 제외
       notExists(
         db
-          .select({ id: UserDevices.id })
-          .from(UserDevices)
-          .where(and(eq(UserDevices.userId, Users.id), gte(UserDevices.lastActiveAt, DORMANT_SINCE))),
+          .select({ id: Subscriptions.id })
+          .from(Subscriptions)
+          .where(
+            and(
+              eq(Subscriptions.userId, Users.id),
+              ne(Subscriptions.planId, PlanId.FULL_ACCESS_TRIAL),
+              or(
+                inArray(Subscriptions.state, [
+                  SubscriptionState.ACTIVE,
+                  SubscriptionState.WILL_ACTIVATE,
+                  SubscriptionState.IN_GRACE_PERIOD,
+                ]),
+                and(eq(Subscriptions.state, SubscriptionState.WILL_EXPIRE), gt(Subscriptions.expiresAt, dayjs())),
+              ),
+            ),
+          ),
       ),
-      // KST 7/13 00:00 이후 집필 이력 없음
-      notExists(
-        db
-          .select({ id: DocumentCharacterCountChanges.id })
-          .from(DocumentCharacterCountChanges)
-          .where(and(eq(DocumentCharacterCountChanges.userId, Users.id), gte(DocumentCharacterCountChanges.bucket, DORMANT_SINCE))),
-      ),
-      // KST 7/13 00:00 이전 90일 이내 집필 이력 있음
+      // KST 7/13 00:00(유료화) 이후 집필 이력 있음
       exists(
         db
           .select({ id: DocumentCharacterCountChanges.id })
           .from(DocumentCharacterCountChanges)
-          .where(
-            and(
-              eq(DocumentCharacterCountChanges.userId, Users.id),
-              gte(DocumentCharacterCountChanges.bucket, WRITING_SINCE),
-              lt(DocumentCharacterCountChanges.bucket, DORMANT_SINCE),
-            ),
-          ),
+          .where(and(eq(DocumentCharacterCountChanges.userId, Users.id), gte(DocumentCharacterCountChanges.bucket, WRITING_SINCE))),
       ),
     ),
   );
