@@ -277,14 +277,21 @@
     if (el && documentPaneEl) scrollWithin(documentPaneEl, el);
   };
 
+  // 다른 자리에서 피드백으로 건너뛸 때는 목록과 본문을 함께 옮긴다. 목록만 움직이면 그 지적이
+  // 원고 어디를 가리키는지 직접 찾아야 해서 대조가 끊긴다.
+  //
+  // 본문 하이라이트를 눌러 들어온 경우에는 쓰지 않는다 — 이미 그 자리에 있고, 앵커가 여럿인
+  // 피드백에서 0번으로 튀면 방금 누른 위치를 잃는다.
+  const revealFeedback = (feedbackId: string) => {
+    focusFeedback(feedbackId);
+    focusAnchor(feedbackId, 0);
+  };
+
   // 대시보드에서 "#12를 왜 아니오로 봤나"를 되짚어 올 때, 그 피드백과 본문 위치까지 바로 잡아준다.
-  // 목록을 열어 손으로 찾게 하면 대조가 끊긴다.
   onMount(() => {
     const wanted = page.url.searchParams.get('feedback');
     if (!wanted || !taskFeedbackIds.has(wanted)) return;
-    focusFeedback(wanted);
-    const located = activeSet.feedbacks.find((f) => f.id === wanted)?.anchors.some((a) => a.matchStart !== null);
-    if (located) focusAnchor(wanted, 0);
+    revealFeedback(wanted);
   });
 
   const seekDocument = (fraction: number) => {
@@ -312,6 +319,63 @@
       },
     });
   };
+
+  // 자동 저장 — 평가 한 편이 한 시간 가까이 걸리는데 저장이 수동이면 잃을 것이 너무 크다.
+  // 마지막 입력에서 잠시 멎었을 때만 보내고, 저장된 내용과 같으면 보내지 않는다.
+  const AUTOSAVE_DELAY_MS = 3000;
+  let autosaveTimer: ReturnType<typeof setTimeout> | undefined;
+
+  const snapshot = () => JSON.stringify({ result, labelMap, verdictMap, reviewVerdictMap, comment, elapsed: Math.round(activeMs / 1000) });
+
+  // 불러온 상태를 저장된 것으로 친다 — 이 초깃값이 없으면 화면을 열자마자 손대지도 않은 판정이
+  // 한 번 저장된다.
+  let savedSnapshot = untrack(() => snapshot());
+
+  const formPayload = () => {
+    const body = new FormData();
+    body.set('result', result ? JSON.stringify(result) : '');
+    body.set('feedbackLabels', JSON.stringify(labelMap));
+    body.set('verdicts', JSON.stringify(verdictMap));
+    body.set('reviewVerdicts', JSON.stringify(reviewVerdictMap));
+    body.set('comment', comment);
+    body.set('elapsedSeconds', String(Math.round(activeMs / 1000)));
+    return body;
+  };
+
+  // keepalive는 탭을 닫는 중에도 요청이 끝까지 가게 한다 — 화면을 떠나며 흘리는 입력을 막는다.
+  // 본문은 64KB까지만 허용되지만 판정과 사유를 다 합쳐도 그 절반에 못 미친다.
+  const autosave = async (keepalive = false) => {
+    if (mode !== 'evaluate' || busy) return;
+    const current = snapshot();
+    if (current === savedSnapshot) return;
+
+    saving = true;
+    try {
+      const response = await fetch('?/save', { method: 'POST', body: formPayload(), keepalive });
+      const outcome = deserialize(await response.text());
+      if (outcome.type === 'error' || outcome.type === 'failure') {
+        submitError = outcome.type === 'error' ? (outcome.error?.message ?? '알 수 없는 오류') : '저장하지 못했습니다';
+        return;
+      }
+      savedSnapshot = current;
+      submitError = null;
+      savedAt = new Date().toLocaleTimeString('ko', { hour: '2-digit', minute: '2-digit' });
+    } catch (err) {
+      submitError = String(err);
+    } finally {
+      saving = false;
+    }
+  };
+
+  $effect(() => {
+    if (mode !== 'evaluate') return;
+    // snapshot()이 상태 전부를 읽어 의존성을 건다. 값이 바뀔 때마다 타이머를 다시 건다.
+    const current = snapshot();
+    if (current === savedSnapshot) return;
+    clearTimeout(autosaveTimer);
+    autosaveTimer = setTimeout(() => void autosave(), AUTOSAVE_DELAY_MS);
+    return () => clearTimeout(autosaveTimer);
+  });
 
   const requestRelease = () => {
     Dialog.confirm({
@@ -350,15 +414,13 @@
     const current = list.findIndex((f) => f.id === focusedFeedbackId);
     const next = list[(current + delta + list.length) % list.length];
     if (!next) return;
-    focusFeedback(next.id);
-    focusAnchor(next.id, 0);
+    revealFeedback(next.id);
   };
 
   const jumpToPending = () => {
     const next = activeSet.feedbacks.find((f) => !isFeedbackComplete(verdictMap[f.id]));
     if (!next) return;
-    focusFeedback(next.id);
-    focusAnchor(next.id, 0);
+    revealFeedback(next.id);
   };
 
   const onKeydown = (e: KeyboardEvent) => {
@@ -408,7 +470,14 @@
   onpointermove={recordActivity}
   onscrollcapture={recordActivity}
   ontouchstart={recordActivity}
-  onvisibilitychange={() => (document.visibilityState === 'hidden' ? suspendActivity() : recordActivity())}
+  onvisibilitychange={() => {
+    if (document.visibilityState === 'hidden') {
+      suspendActivity();
+      void autosave(true);
+    } else {
+      recordActivity();
+    }
+  }}
   onwheel={recordActivity}
 />
 
@@ -602,12 +671,7 @@
         </article>
       </section>
       {#if data.isAnalysis && railMarks.length > 0}
-        <FindingRail
-          marks={railMarks}
-          onSeek={seekDocument}
-          onSelect={(id) => (focusFeedback(id), focusAnchor(id, 0))}
-          viewport={documentViewport}
-        />
+        <FindingRail marks={railMarks} onSeek={seekDocument} onSelect={revealFeedback} viewport={documentViewport} />
       {/if}
     </div>
 
@@ -678,7 +742,7 @@
         >
           <WorkReviewPanel
             feedbackLabels={activeSet.feedbacks.map((f) => ({ id: f.id, category: f.category }))}
-            onSelectFeedback={focusFeedback}
+            onSelectFeedback={revealFeedback}
             onUpdate={(next) => (reviewVerdictMap = { ...reviewVerdictMap, [activeSet.setId]: next })}
             {readOnly}
             review={activeReview}
@@ -743,6 +807,8 @@
                 return;
               }
               submitError = null;
+              // 수동 저장으로 이미 보낸 내용을 자동 저장이 다시 보내지 않게 맞춰둔다.
+              savedSnapshot = snapshot();
               await update({ reset: false });
               savedAt = new Date().toLocaleTimeString('ko', { hour: '2-digit', minute: '2-digit' });
             };

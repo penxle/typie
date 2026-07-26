@@ -2,13 +2,16 @@
 
 export type PersonalIntakeInput = {
   requestedIds: string[];
-  // 이미 적재된 id(refId 기준). 같은 글을 두 번 들이면 열람 링크가 갈린다.
+  // 이미 적재된 id(refId 기준).
   existingRefIds: string[];
   extracted: { documentId: string; prose: string | null }[];
 };
 
 export type PersonalIntakeResult = {
   accepted: { refId: string; prose: string; characterCount: number }[];
+  // 이미 있는 글. 문서를 다시 넣지 않고 그대로 쓴다 — 같은 글을 다른 프롬프트 세트로
+  // 다시 돌려 견주는 것이 이 기능의 주된 쓰임이라, 중복을 거절하면 길이 막힌다.
+  reused: string[];
   rejected: { refId: string; reason: string }[];
 };
 
@@ -32,11 +35,12 @@ export const planPersonalIntake = (input: PersonalIntakeInput): PersonalIntakeRe
   const proseById = new Map(input.extracted.map((e) => [e.documentId, e.prose]));
 
   const accepted: PersonalIntakeResult['accepted'] = [];
+  const reused: string[] = [];
   const rejected: PersonalIntakeResult['rejected'] = [];
 
   for (const refId of input.requestedIds) {
     if (existingSet.has(refId)) {
-      rejected.push({ refId, reason: '이미 들여온 글입니다' });
+      reused.push(refId);
       continue;
     }
     const prose = proseById.get(refId);
@@ -52,5 +56,5 @@ export const planPersonalIntake = (input: PersonalIntakeInput): PersonalIntakeRe
     accepted.push({ refId, prose, characterCount });
   }
 
-  return { accepted, rejected };
+  return { accepted, reused, rejected };
 };

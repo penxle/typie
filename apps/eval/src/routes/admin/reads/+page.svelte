@@ -12,6 +12,7 @@
 
   type Outcome = {
     accepted: { id: string; refId: string; characterCount: number }[];
+    reused: { id: string; refId: string; characterCount: number }[];
     rejected: { refId: string; reason: string }[];
     run: { runId: string; spawnedCount: number } | null;
   };
@@ -112,7 +113,8 @@
         placeholder="타이피 문서 ID를 줄바꿈·쉼표·공백으로 구분해 넣으세요"
         bind:value={raw}></textarea>
       <p class={css({ marginTop: '4px', fontSize: '12px', color: 'text.faint' })}>
-        비공개·성인글도 들일 수 있습니다. 들인 글은 어드민이 볼 수 있으니 작성자 본인의 동의를 받고 넣으세요.
+        비공개·성인글도 들일 수 있습니다. 이미 들인 글을 다시 넣으면 다른 프롬프트 세트로 새로 돌립니다. 들인 글은 어드민이 볼 수 있으니
+        작성자 본인의 동의를 받고 넣으세요.
       </p>
     </div>
 
@@ -153,7 +155,9 @@
       <div class={css({ marginTop: '4px', fontSize: '13px' })}>
         {#if outcome.run}
           <p>
-            {outcome.accepted.length}편을 들여 실행을 걸었습니다.
+            {outcome.accepted.length > 0 ? `${outcome.accepted.length}편을 들이고 ` : ''}{outcome.reused.length > 0
+              ? `이미 있던 ${outcome.reused.length}편과 함께 `
+              : ''}실행을 걸었습니다.
             <a class={css({ color: 'text.link', textDecoration: 'underline' })} href={`/admin/runs/${outcome.run.runId}`}>실행 보기 →</a>
           </p>
         {/if}
@@ -195,6 +199,7 @@
             })}
           >
             <th>문서 ID</th>
+            <th>프롬프트</th>
             <th>글자수</th>
             <th>실행</th>
             <th>비용</th>
@@ -206,6 +211,7 @@
           {#each data.reads as read (read.setId)}
             <tr class={css({ '& td': { paddingY: '10px', paddingX: '16px', borderBottomWidth: '1px', borderColor: 'border.subtle' } })}>
               <td class={css({ fontFamily: 'mono' })}>{read.refId}</td>
+              <td class={css({ color: 'text.subtle' })}>{read.promptSet}</td>
               <td>{read.characterCount.toLocaleString()}자</td>
               <td>
                 <a class={css({ color: 'text.link', textDecoration: 'underline' })} href={`/admin/runs/${read.runId}`}>

@@ -43,10 +43,13 @@ describe('planPersonalIntake', () => {
     expect(result.rejected).toEqual([{ refId: 'A1', reason: '본문이 너무 짧습니다 (2자)' }]);
   });
 
-  it('이미 들여온 글은 다시 넣지 않는다', () => {
+  // 같은 글을 다른 프롬프트 세트로 다시 돌려 견주는 것이 이 기능의 주된 쓰임이다 —
+  // 중복을 거절하면 그 길이 막힌다.
+  it('이미 들여온 글은 새로 넣지 않고 재사용으로 넘긴다', () => {
     const result = planPersonalIntake({ ...base, existingRefIds: ['A1'] });
     expect(result.accepted).toEqual([]);
-    expect(result.rejected).toEqual([{ refId: 'A1', reason: '이미 들여온 글입니다' }]);
+    expect(result.reused).toEqual(['A1']);
+    expect(result.rejected).toEqual([]);
   });
 
   // 이모지 150개는 UTF-16 길이로는 300이라 .length로 세면 최소 길이를 통과해 버린다.
