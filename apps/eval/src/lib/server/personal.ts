@@ -25,15 +25,16 @@ export const intakePersonalDocuments = async (
     .from(Documents)
     .where(and(eq(Documents.corpusVersion, PERSONAL_CORPUS_VERSION), inArray(Documents.refId, requestedIds)));
 
-  // 공개 관문을 먼저 통과시킨 id만 추출로 넘긴다. extract는 공개 여부를 보지 않으므로
-  // 순서를 뒤집으면 비공개 글의 본문을 뽑아 놓고 나서야 버리게 된다.
-  const publicRows = await api.publicTexts(requestedIds);
-  const publicIds = publicRows.map((r) => r.documentId);
-  const extracted = publicIds.length > 0 ? await api.extract(publicIds) : [];
+  // 공개 여부를 묻지 않는다 — 비공개·성인글도 들어온다. 이 경로는 작성자 본인이 자기 글의
+  // 피드백을 읽으려고 쓰는 자리이고, 어드민 전용이다.
+  //
+  // 이 동작은 /internal/corpus/extract가 documentId로만 조회한다는 사실에 기대고 있다.
+  // 그 엔드포인트에 가시성 조건이 붙으면 이 경로가 조용히 막히므로, 그때는 이 용도의
+  // 엔드포인트를 따로 두어야 한다. 표집 코퍼스는 여전히 /corpus/texts의 공개 관문을 쓴다.
+  const extracted = await api.extract(requestedIds);
 
   const plan = planPersonalIntake({
     requestedIds,
-    publicIds,
     existingRefIds: existing.map((e) => e.refId),
     extracted,
   });

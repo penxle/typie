@@ -3,6 +3,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import {
   relevantText,
+  renderBackgroundInput,
   renderComposeInput,
   renderComposeReviewInput,
   renderDedupeInput,
@@ -10,7 +11,15 @@ import {
   renderReviewInput,
   renderVerifyInput,
 } from './analysis-render.ts';
-import { COMPOSE_REVIEW_TOOL, COMPOSE_TOOL, DEDUPE_TOOL, REVIEW_TOOL, SURVEY_TOOL, VERIFY_TOOL } from './analysis-tools.ts';
+import {
+  BACKGROUND_TOOL,
+  COMPOSE_REVIEW_TOOL,
+  COMPOSE_TOOL,
+  DEDUPE_TOOL,
+  REVIEW_TOOL,
+  SURVEY_TOOL,
+  VERIFY_TOOL,
+} from './analysis-tools.ts';
 import { mergeAnchors } from './anchors.ts';
 import {
   AnalysisPromptSets,
@@ -25,6 +34,7 @@ import {
   writeStageCache,
 } from './db.ts';
 import { createOpenAI } from './llm.ts';
+import { buildBackgroundQuery, renderSearchHits, searchBackground } from './search.ts';
 import { createFindRange } from './text.ts';
 import { schemaViolations } from './tool-schema.ts';
 import { planWindows } from './windows.ts';
@@ -196,7 +206,40 @@ export class AnalysisWorkflow extends WorkflowEntrypoint<FlowEnv, AnalysisParams
 
       const profile = survey.profile as ResolvedProfile;
       const scenes = survey.scenes;
-      const profileText = renderProfile(profile);
+      // ── BACKGROUND ── 2차 창작이면 원작을 조사해 배경을 만든다.
+      // 프롬프트가 없는 세트(기존 세트)는 이 단계를 통째로 건너뛴다 — 배경 주입만 켠 세트와
+      // 대조하기 위해 기존 경로를 그대로 남겨둔다.
+      const backgroundPrompt = prompts.background;
+      const background =
+        backgroundPrompt && profile.isDerivative
+          ? await step.do('background', LLM_STEP, async () =>
+              cachedStep(db, runId, documentId, 'background', async () => {
+                const query = buildBackgroundQuery({ derivativeSource: profile.derivativeSource, properNouns: profile.properNouns });
+                if (!query || !this.env.EXA_API_KEY) return null;
+                try {
+                  const hits = await searchBackground({ apiKey: this.env.EXA_API_KEY, query });
+                  if (hits.length === 0) return null;
+                  const usage = emptyUsage();
+                  // 검색 결과를 그대로 넣지 않는다. 원문을 읽는 데 필요한 만큼만 추리게 한다.
+                  const { brief } = await callTool<{ brief: string }>(
+                    openai,
+                    backgroundPrompt,
+                    BACKGROUND_TOOL,
+                    renderBackgroundInput(query, renderSearchHits(hits)),
+                    usage,
+                  );
+                  await addUsage(db, runId, usage);
+                  return brief.trim() || null;
+                } catch (err) {
+                  // 배경은 있으면 좋은 것이다. 검색이 막혔다고 분석을 세우지 않는다.
+                  console.error(`background failed: ${String(err)}`);
+                  return null;
+                }
+              }),
+            )
+          : null;
+
+      const profileText = renderProfile(profile, background);
       const windows = planWindows(content, scenes);
 
       // ── REVIEW ── 창 × 3회를 전부 병렬로 띄운다. 창이 하나뿐인 문서는 3회가 한 번에 나간다.

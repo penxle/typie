@@ -18,24 +18,24 @@ describe('parseDocumentIds', () => {
 });
 
 describe('planPersonalIntake', () => {
-  const base = { requestedIds: ['A1'], publicIds: ['A1'], existingRefIds: [], extracted: [{ documentId: 'A1', prose: body }] };
+  const base = { requestedIds: ['A1'], existingRefIds: [], extracted: [{ documentId: 'A1', prose: body }] };
 
-  it('공개·추출 성공·길이 충족이면 받아들인다', () => {
+  // 표집 코퍼스는 공개 글만 받지만 이 경로는 다르다 — 본인이 자기 글을 들이는 자리다.
+  // 판정 기준은 본문을 뽑았는지와 길이뿐이며, 공개 여부는 입력에 아예 없다.
+  it('본문을 뽑았고 길이가 충족되면 받아들인다', () => {
     const result = planPersonalIntake(base);
     expect(result.accepted).toEqual([{ refId: 'A1', prose: body, characterCount: 300 }]);
     expect(result.rejected).toEqual([]);
   });
 
-  // 공개 조건은 표집 경로와 같은 관문이다 — 여기서 새면 비공개 글이 평가 시스템에 들어온다.
-  it('공개 목록에 없으면 거절한다', () => {
-    const result = planPersonalIntake({ ...base, publicIds: [] });
-    expect(result.accepted).toEqual([]);
-    expect(result.rejected).toEqual([{ refId: 'A1', reason: '공개 상태가 아니거나 존재하지 않는 글입니다' }]);
+  it('없는 문서는 추출 실패로 거절한다', () => {
+    const result = planPersonalIntake({ ...base, extracted: [] });
+    expect(result.rejected).toEqual([{ refId: 'A1', reason: '없는 문서이거나 본문을 추출하지 못했습니다' }]);
   });
 
   it('프로즈 추출에 실패하면 거절한다', () => {
     const result = planPersonalIntake({ ...base, extracted: [{ documentId: 'A1', prose: null }] });
-    expect(result.rejected).toEqual([{ refId: 'A1', reason: '본문을 추출하지 못했습니다' }]);
+    expect(result.rejected).toEqual([{ refId: 'A1', reason: '없는 문서이거나 본문을 추출하지 못했습니다' }]);
   });
 
   it('너무 짧으면 자수를 붙여 거절한다', () => {
@@ -62,7 +62,6 @@ describe('planPersonalIntake', () => {
   it('받아들인 것과 거절한 것이 섞여도 각각 모인다', () => {
     const result = planPersonalIntake({
       requestedIds: ['A1', 'A2'],
-      publicIds: ['A1'],
       existingRefIds: [],
       extracted: [{ documentId: 'A1', prose: body }],
     });

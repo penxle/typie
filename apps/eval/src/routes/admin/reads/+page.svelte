@@ -112,7 +112,7 @@
         placeholder="타이피 문서 ID를 줄바꿈·쉼표·공백으로 구분해 넣으세요"
         bind:value={raw}></textarea>
       <p class={css({ marginTop: '4px', fontSize: '12px', color: 'text.faint' })}>
-        공개로 설정된 글만 들일 수 있습니다 — 표집 코퍼스와 같은 관문을 씁니다.
+        비공개·성인글도 들일 수 있습니다. 들인 글은 어드민이 볼 수 있으니 작성자 본인의 동의를 받고 넣으세요.
       </p>
     </div>
 

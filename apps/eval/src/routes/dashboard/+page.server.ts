@@ -11,7 +11,7 @@ import {
   pairwiseFromRanking,
   ranksFromScores,
 } from '$lib/domain/aggregate.ts';
-import { collectRejectionNotes, summarizeAnalysis } from '$lib/domain/analysis-summary.ts';
+import { collectRejections, collectReviewNotes, summarizeAnalysis } from '$lib/domain/analysis-summary.ts';
 import { ALL_FEEDBACK_LABELS, JUDGMENT_ERROR_KEYS, STRICT_FALSE_POSITIVE_KEYS, SYSTEM_LABEL_KEYS } from '$lib/domain/feedback-labels.ts';
 import {
   createDb,
@@ -331,7 +331,8 @@ export const load: PageServerLoad = async ({ platform }) => {
     // 절대평가 라운드는 지표가 통째로 다르다 — 후보 비교·라벨·ranking κ가 성립하지 않는다.
     const isAnalysis = sets.some((s) => s.review !== null);
     let analysis = null;
-    let rejectionNotes: ReturnType<typeof collectRejectionNotes> = [];
+    let rejections: ReturnType<typeof collectRejections> = [];
+    let reviewNotes: ReturnType<typeof collectReviewNotes> = [];
     if (isAnalysis) {
       const judgmentIds = confirmed.map((j) => j.id);
       const verdictRows = await selectInChunks(judgmentIds, (chunk) =>
@@ -359,9 +360,23 @@ export const load: PageServerLoad = async ({ platform }) => {
         feedbacks,
         documentBySet,
       });
-      rejectionNotes = collectRejectionNotes({
-        verdicts: verdictRows.map((v) => ({ ...v, at: judgedAt.get(v.judgmentId) ?? new Date(0) })),
+      const taskBySet = new Map(tasks.flatMap((task) => task.setIds.map((setId) => [setId, task.id] as const)));
+      const evaluatorByJudgment = new Map(confirmed.map((j) => [j.id, j.evaluatorEmail]));
+      rejections = collectRejections({
+        verdicts: verdictRows.map((v) => ({
+          ...v,
+          at: judgedAt.get(v.judgmentId) ?? new Date(0),
+          evaluator: evaluatorByJudgment.get(v.judgmentId) ?? '?',
+        })),
         feedbacks,
+        documentBySet,
+        taskBySet,
+      });
+      reviewNotes = collectReviewNotes({
+        reviewVerdicts: reviewRows,
+        judgments: confirmed.map((j) => ({ id: j.id, evaluator: j.evaluatorEmail, comment: j.comment, at: j.updatedAt })),
+        documentBySet,
+        taskBySet,
       });
     }
 
@@ -372,7 +387,8 @@ export const load: PageServerLoad = async ({ platform }) => {
       // requiredJudgments가 null인 태스크(중복 구간)는 전원이 보는 것이 목표다. 1로 세면 몫이 감춰진다.
       requiredTotal: tasks.reduce((sum, t) => sum + (t.requiredJudgments ?? participants), 0),
       analysis,
-      rejectionNotes,
+      rejections,
+      reviewNotes,
       confirmedCount: confirmed.length,
       effectiveCount,
       contributions,

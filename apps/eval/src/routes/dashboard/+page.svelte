@@ -4,6 +4,8 @@
   import { Helmet } from '@typie/ui/components';
   import ThemeToggle from '$lib/components/ThemeToggle.svelte';
   import { FEEDBACK_LABELS } from '$lib/domain/feedback-labels.ts';
+  import RejectionList from './RejectionList.svelte';
+  import ReviewNoteList from './ReviewNoteList.svelte';
   import type { PageData } from './$types';
 
   type Props = { data: PageData };
@@ -286,103 +288,85 @@
               아직 판정이 없습니다. 필요 판정 {summary.requiredTotal}건이 모이면 지표가 채워집니다.
             </p>
           {:else}
-            {#if summary.confirmedCount < ANALYSIS_MIN_JUDGMENTS}
-              <p class={css({ marginTop: '16px', fontSize: '12px', color: 'accent.warning.default' })}>
-                확정 {summary.confirmedCount}건 — 표본이 적어 아래 비율은 아직 흔들립니다.
-              </p>
-            {/if}
-            <div class={grid({ columns: { base: 2, md: 3 }, gap: '8px', marginTop: '16px' })}>
-              {#each [{ label: '본문을 정확히 읽었나', t: a.axes.correct }, { label: '짚을 만한 내용인가', t: a.axes.needed }, { label: '무엇을 할지 알 수 있나', t: a.axes.useful }] as axis (axis.label)}
-                <div class={statCellClass}>
-                  <p class={statLabelClass}>{axis.label}</p>
-                  <p class={statValueClass}>{axis.t.yes + axis.t.no === 0 ? '—' : percent(axis.t.yes / (axis.t.yes + axis.t.no))}</p>
-                  <p class={statNoteClass}>예 {axis.t.yes} · 아니오 {axis.t.no}</p>
-                </div>
-              {/each}
+            <!-- 사유가 먼저다. 확정이 몇 건뿐인 동안 백분율은 잡음이고, 어디서 헛짚었는지는
+                 첫 한 건부터 읽을 수 있다. 숫자를 위에 두면 없는 정밀도를 읽게 된다. -->
+            <div class={css({ marginTop: '16px' })}>
+              <RejectionList rejections={summary.rejections} />
             </div>
 
-            <div class={grid({ columns: { base: 2, md: 3 }, gap: '8px', marginTop: '8px' })}>
-              {#each [{ label: '작품을 제대로 파악했나', t: a.review.readCorrectly }, { label: '손댈 순서가 납득되나', t: a.review.priorityUseful }] as axis (axis.label)}
-                <div class={statCellClass}>
-                  <p class={statLabelClass}>{axis.label}</p>
-                  <p class={statValueClass}>{axis.t.yes + axis.t.no === 0 ? '—' : percent(axis.t.yes / (axis.t.yes + axis.t.no))}</p>
-                  <p class={statNoteClass}>예 {axis.t.yes} · 아니오 {axis.t.no}</p>
-                </div>
-              {/each}
-              <div class={statCellClass}>
-                <p class={statLabelClass}>도움이 되었을까</p>
-                <p class={statValueClass}>
-                  {a.helpfulness.length === 0 ? '—' : fixed(a.helpfulness.reduce((x, y) => x + y, 0) / a.helpfulness.length)}
-                </p>
-                <p class={statNoteClass}>
-                  {a.helpfulness.length === 0
-                    ? '판정 없음'
-                    : [1, 2, 3, 4, 5].map((n) => a.helpfulness.filter((h) => h === n).length).join(' / ')}
-                </p>
-              </div>
+            <div class={css({ marginTop: '20px' })}>
+              <ReviewNoteList notes={summary.reviewNotes} />
             </div>
 
-            {#if a.agreement.some((x) => x.pairs > 0)}
-              <p class={css({ marginTop: '12px', fontSize: '12px', color: 'text.subtle' })}>
-                평가자 일치도 (중복 구간) —
-                {#each a.agreement.filter((x) => x.pairs > 0) as ag (ag.axis)}
-                  <span class={css({ marginRight: '10px', fontVariantNumeric: 'tabular-nums' })}>
-                    {AXIS_LABEL[ag.axis] ?? ag.axis}
-                    {percent(ag.agreed / ag.pairs)} ({ag.pairs}쌍)
-                  </span>
+            <details class={css({ marginTop: '20px' })}>
+              <summary class={detailsSummaryClass}>집계 지표</summary>
+              {#if summary.confirmedCount < ANALYSIS_MIN_JUDGMENTS}
+                <p class={css({ marginTop: '10px', fontSize: '12px', color: 'accent.warning.default' })}>
+                  확정 {summary.confirmedCount}건 — 표본이 적어 아래 비율은 아직 흔들립니다.
+                </p>
+              {/if}
+              <div class={grid({ columns: { base: 2, md: 3 }, gap: '8px', marginTop: '12px' })}>
+                {#each [{ label: '본문을 정확히 읽었나', t: a.axes.correct }, { label: '짚을 만한 내용인가', t: a.axes.needed }, { label: '무엇을 할지 알 수 있나', t: a.axes.useful }] as axis (axis.label)}
+                  <div class={statCellClass}>
+                    <p class={statLabelClass}>{axis.label}</p>
+                    <p class={statValueClass}>{axis.t.yes + axis.t.no === 0 ? '—' : percent(axis.t.yes / (axis.t.yes + axis.t.no))}</p>
+                    <p class={statNoteClass}>예 {axis.t.yes} · 아니오 {axis.t.no}</p>
+                  </div>
                 {/each}
-              </p>
-            {/if}
+              </div>
 
-            {#if a.documents.some((d) => d.judged > 0)}
-              <div class={css({ marginTop: '16px' })}>
-                <p class={statLabelClass}>판정이 갈린 문서</p>
-                <div class={flex({ direction: 'column', gap: '4px', marginTop: '6px' })}>
-                  {#each a.documents.filter((d) => d.judged > 0).slice(0, 5) as doc (doc.refId)}
-                    <p class={flex({ align: 'baseline', gap: '8px', fontSize: '13px' })}>
-                      <span class={css({ color: 'text.subtle', fontVariantNumeric: 'tabular-nums' })}>{doc.refId}</span>
-                      <span class={css({ color: 'text.faint', fontVariantNumeric: 'tabular-nums' })}>
-                        {doc.characterCount.toLocaleString()}자 · 피드백 {doc.feedbacks}건
-                      </span>
-                      <span class={css({ marginLeft: 'auto', fontWeight: 'bold', fontVariantNumeric: 'tabular-nums' })}>
-                        아니오 {doc.no} / {doc.judged}
-                      </span>
-                    </p>
-                  {/each}
+              <div class={grid({ columns: { base: 2, md: 3 }, gap: '8px', marginTop: '8px' })}>
+                {#each [{ label: '작품을 제대로 파악했나', t: a.review.readCorrectly }, { label: '손댈 순서가 납득되나', t: a.review.priorityUseful }] as axis (axis.label)}
+                  <div class={statCellClass}>
+                    <p class={statLabelClass}>{axis.label}</p>
+                    <p class={statValueClass}>{axis.t.yes + axis.t.no === 0 ? '—' : percent(axis.t.yes / (axis.t.yes + axis.t.no))}</p>
+                    <p class={statNoteClass}>예 {axis.t.yes} · 아니오 {axis.t.no}</p>
+                  </div>
+                {/each}
+                <div class={statCellClass}>
+                  <p class={statLabelClass}>도움이 되었을까</p>
+                  <p class={statValueClass}>
+                    {a.helpfulness.length === 0 ? '—' : fixed(a.helpfulness.reduce((x, y) => x + y, 0) / a.helpfulness.length)}
+                  </p>
+                  <p class={statNoteClass}>
+                    {a.helpfulness.length === 0
+                      ? '판정 없음'
+                      : [1, 2, 3, 4, 5].map((n) => a.helpfulness.filter((h) => h === n).length).join(' / ')}
+                  </p>
                 </div>
               </div>
-            {/if}
 
-            {#if summary.judgmentComments.length > 0}
-              <details class={css({ marginTop: '16px' })}>
-                <summary class={detailsSummaryClass}>총평 코멘트 ({summary.judgmentComments.length}) · 오래된 순</summary>
-                <ul class={flex({ direction: 'column', gap: '12px', marginTop: '8px', paddingLeft: '18px' })}>
-                  {#each summary.judgmentComments as entry, index (index)}
-                    <li class={css({ fontSize: '13px' })}>
-                      <div class={css({ color: 'text.faint', fontSize: '12px', fontVariantNumeric: 'tabular-nums' })}>
-                        {formatAt(entry.at)}
-                      </div>
-                      <div class={css({ marginTop: '2px', whiteSpace: 'pre-wrap' })}>{entry.comment}</div>
-                    </li>
+              {#if a.agreement.some((x) => x.pairs > 0)}
+                <p class={css({ marginTop: '12px', fontSize: '12px', color: 'text.subtle' })}>
+                  평가자 일치도 (중복 구간) —
+                  {#each a.agreement.filter((x) => x.pairs > 0) as ag (ag.axis)}
+                    <span class={css({ marginRight: '10px', fontVariantNumeric: 'tabular-nums' })}>
+                      {AXIS_LABEL[ag.axis] ?? ag.axis}
+                      {percent(ag.agreed / ag.pairs)} ({ag.pairs}쌍)
+                    </span>
                   {/each}
-                </ul>
-              </details>
-            {/if}
+                </p>
+              {/if}
 
-            {#if summary.rejectionNotes.length > 0}
-              <div class={css({ marginTop: '16px' })}>
-                <p class={statLabelClass}>'아니오' 사유 ({summary.rejectionNotes.length})</p>
-                <div class={flex({ direction: 'column', gap: '8px', marginTop: '6px' })}>
-                  {#each summary.rejectionNotes as note, i (i)}
-                    <p class={css({ fontSize: '13px', lineHeight: '[1.7]' })}>
-                      <span class={css({ color: 'text.faint', fontVariantNumeric: 'tabular-nums' })}>{note.number}</span>
-                      <span class={css({ color: 'text.subtle' })}>{note.category ?? '피드백'} · {note.axes.join('·')}</span>
-                      <span class={css({ color: 'text.default' })}>{note.note}</span>
-                    </p>
-                  {/each}
+              {#if a.documents.some((d) => d.judged > 0)}
+                <div class={css({ marginTop: '16px' })}>
+                  <p class={statLabelClass}>판정이 갈린 문서</p>
+                  <div class={flex({ direction: 'column', gap: '4px', marginTop: '6px' })}>
+                    {#each a.documents.filter((d) => d.judged > 0).slice(0, 5) as doc (doc.refId)}
+                      <p class={flex({ align: 'baseline', gap: '8px', fontSize: '13px' })}>
+                        <span class={css({ color: 'text.subtle', fontVariantNumeric: 'tabular-nums' })}>{doc.refId}</span>
+                        <span class={css({ color: 'text.faint', fontVariantNumeric: 'tabular-nums' })}>
+                          {doc.characterCount.toLocaleString()}자 · 피드백 {doc.feedbacks}건
+                        </span>
+                        <span class={css({ marginLeft: 'auto', fontWeight: 'bold', fontVariantNumeric: 'tabular-nums' })}>
+                          아니오 {doc.no} / {doc.judged}
+                        </span>
+                      </p>
+                    {/each}
+                  </div>
                 </div>
-              </div>
-            {/if}
+              {/if}
+            </details>
           {/if}
         {:else}
           <p

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { collectRejectionNotes, rate, summarizeAnalysis } from './analysis-summary.ts';
+import { collectRejections, collectReviewNotes, rate, summarizeAnalysis } from './analysis-summary.ts';
 import type { FeedbackRef, VerdictRow } from './analysis-summary.ts';
 
 const feedback = (id: string, setId: string, ord: number, category = '대화 화자'): FeedbackRef => ({
@@ -19,6 +19,11 @@ const verdict = (judgmentId: string, feedbackId: string, v: Partial<VerdictRow> 
   note: null,
   ...v,
 });
+
+const taskBySet = new Map([
+  ['s1', 'task-1'],
+  ['s2', 'task-2'],
+]);
 
 const documentBySet = new Map([
   ['s1', { refId: 'DOC1', characterCount: 8000 }],
@@ -102,30 +107,155 @@ describe('summarizeAnalysis', () => {
   });
 });
 
-describe('collectRejectionNotes', () => {
-  const feedbacks = [feedback('f1', 's1', 0, '대화 화자'), feedback('f2', 's1', 4, '표현 반복')];
+describe('collectRejections', () => {
+  const detail = (id: string, setId: string, ord: number, body: string, category = '대화 화자') => ({
+    id,
+    setId,
+    ord,
+    category,
+    polarity: 'issue',
+    body,
+  });
+  const feedbacks = [detail('f1', 's1', 0, '화자가 뒤바뀝니다'), detail('f2', 's1', 4, '같은 표현이 반복됩니다')];
+  const at = new Date('2026-07-27T10:00:00Z');
 
-  it("'아니오'에 사유가 달린 것만 모으고 어느 축인지 밝힌다", () => {
-    const notes = collectRejectionNotes({
-      verdicts: [
-        { ...verdict('j1', 'f1', { correct: false, note: '본문에 없는 말입니다' }), at: new Date('2026-07-27T10:00:00Z') },
-        { ...verdict('j1', 'f2', { note: '좋았어요' }), at: new Date('2026-07-27T09:00:00Z') },
-      ],
-      feedbacks,
-    });
-    expect(notes).toHaveLength(1);
-    expect(notes[0]).toMatchObject({ number: 1, category: '대화 화자', axes: ['정확'], note: '본문에 없는 말입니다' });
+  const rejection = (v: Partial<VerdictRow>, feedbackId = 'f1', evaluator = 'a@x') => ({
+    ...verdict('j1', feedbackId, v),
+    at,
+    evaluator,
   });
 
-  it('오래된 것부터 놓는다 — 새 사유가 목록 끝에 붙는다', () => {
-    const notes = collectRejectionNotes({
-      verdicts: [
-        { ...verdict('j1', 'f1', { correct: false, note: '나중' }), at: new Date('2026-07-27T12:00:00Z') },
-        { ...verdict('j1', 'f2', { useful: false, note: '먼저' }), at: new Date('2026-07-27T09:00:00Z') },
-      ],
+  it('판정 대상과 어느 축이 아니오인지를 함께 싣는다', () => {
+    const rows = collectRejections({
+      verdicts: [rejection({ correct: false, note: '본문에 없는 말입니다' })],
       feedbacks,
+      documentBySet,
+      taskBySet,
     });
-    expect(notes.map((n) => n.note)).toEqual(['먼저', '나중']);
-    expect(notes[1].axes).toEqual(['정확']);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      number: 1,
+      category: '대화 화자',
+      body: '화자가 뒤바뀝니다',
+      refId: 'DOC1',
+      evaluator: 'a@x',
+      failed: { correct: true, needed: false, useful: false },
+      note: '본문에 없는 말입니다',
+    });
+  });
+
+  // 사유 없는 '아니오'를 빼면 화면에 보이는 반대가 실제보다 적어 보인다.
+  it('사유가 없어도 아니오면 모은다', () => {
+    const rows = collectRejections({ verdicts: [rejection({ needed: false })], feedbacks, documentBySet, taskBySet });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].note).toBeNull();
+    expect(rows[0].failed).toEqual({ correct: false, needed: true, useful: false });
+  });
+
+  it('공백뿐인 사유는 없는 것으로 본다', () => {
+    const rows = collectRejections({ verdicts: [rejection({ useful: false, note: ' '.repeat(3) })], feedbacks, documentBySet, taskBySet });
+    expect(rows[0].note).toBeNull();
+  });
+
+  it('전부 예면 모으지 않는다', () => {
+    expect(collectRejections({ verdicts: [rejection({})], feedbacks, documentBySet, taskBySet })).toEqual([]);
+  });
+
+  it('축 여러 개가 아니오면 전부 표시한다', () => {
+    const rows = collectRejections({ verdicts: [rejection({ correct: false, useful: false })], feedbacks, documentBySet, taskBySet });
+    expect(rows[0].failed).toEqual({ correct: true, needed: false, useful: true });
+  });
+
+  // 한 문서의 반대를 모아 읽어야 패턴이 보인다 — 시간순으로 흩으면 문서가 뒤섞인다.
+  it('문서별로 묶고 그 안에서는 피드백 번호순으로 놓는다', () => {
+    const rows = collectRejections({
+      verdicts: [
+        rejection({ correct: false }, 'f2'),
+        rejection({ correct: false }, 'f1'),
+        { ...verdict('j2', 'f3', { correct: false }), at, evaluator: 'b@x' },
+      ],
+      feedbacks: [...feedbacks, detail('f3', 's2', 0, '다른 문서')],
+      documentBySet,
+      taskBySet,
+    });
+    expect(rows.map((r) => [r.refId, r.number])).toEqual([
+      ['DOC1', 1],
+      ['DOC1', 5],
+      ['DOC2', 1],
+    ]);
+  });
+
+  it('미판정(null)은 아니오가 아니다', () => {
+    expect(collectRejections({ verdicts: [rejection({ correct: null })], feedbacks, documentBySet, taskBySet })).toEqual([]);
+  });
+});
+
+describe('collectReviewNotes', () => {
+  const at = new Date('2026-07-27T10:00:00Z');
+  const judgments = [{ id: 'j1', evaluator: 'a@x', comment: null, at }];
+  const review = (v: Partial<{ readCorrectly: boolean | null; priorityUseful: boolean | null; note: string | null }> = {}) => ({
+    judgmentId: 'j1',
+    setId: 's1',
+    readCorrectly: true,
+    priorityUseful: true,
+    note: null,
+    ...v,
+  });
+
+  it('아니오 축과 사유를 문서·평가자와 함께 싣는다', () => {
+    const rows = collectReviewNotes({
+      reviewVerdicts: [review({ priorityUseful: false, note: '순서에 동의 못 함' })],
+      judgments,
+      documentBySet,
+      taskBySet,
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      refId: 'DOC1',
+      taskId: 'task-1',
+      evaluator: 'a@x',
+      failed: { readCorrectly: false, priorityUseful: true },
+      note: '순서에 동의 못 함',
+    });
+  });
+
+  // 둘 다 예이고 남긴 말도 없으면 읽을 것이 없다 — 목록에 두면 실제 내용이 묻힌다.
+  it('전부 예이고 아무 말도 없으면 빼놓는다', () => {
+    expect(collectReviewNotes({ reviewVerdicts: [review()], judgments, documentBySet, taskBySet })).toEqual([]);
+  });
+
+  it('판정이 전부 예여도 남긴 말이 있으면 싣는다', () => {
+    const rows = collectReviewNotes({
+      reviewVerdicts: [review()],
+      judgments: [{ id: 'j1', evaluator: 'a@x', comment: '전반적으로 좋았습니다', at }],
+      documentBySet,
+      taskBySet,
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].comment).toBe('전반적으로 좋았습니다');
+  });
+
+  it('공백뿐인 사유·코멘트는 없는 것으로 본다', () => {
+    const rows = collectReviewNotes({
+      reviewVerdicts: [review({ readCorrectly: false, note: ' '.repeat(2) })],
+      judgments: [{ id: 'j1', evaluator: 'a@x', comment: ' '.repeat(2), at }],
+      documentBySet,
+      taskBySet,
+    });
+    expect(rows[0].note).toBeNull();
+    expect(rows[0].comment).toBeNull();
+  });
+
+  it('문서·평가자 순으로 놓는다', () => {
+    const rows = collectReviewNotes({
+      reviewVerdicts: [
+        { ...review({ readCorrectly: false }), judgmentId: 'j2', setId: 's2' },
+        { ...review({ readCorrectly: false }), judgmentId: 'j1', setId: 's1' },
+      ],
+      judgments: [...judgments, { id: 'j2', evaluator: 'b@x', comment: null, at }],
+      documentBySet,
+      taskBySet,
+    });
+    expect(rows.map((r) => r.refId)).toEqual(['DOC1', 'DOC2']);
   });
 });

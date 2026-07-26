@@ -241,3 +241,19 @@ export const COMPOSE_REVIEW_TOOL: OpenAI.Chat.Completions.ChatCompletionFunction
     },
   },
 };
+
+// 원작 배경 요약. 검색 결과를 그대로 흘리지 않고 "독자가 전제하고 읽는 것"만 추리게 한다.
+export const BACKGROUND_TOOL = {
+  type: 'function' as const,
+  function: {
+    name: 'submit_background',
+    description: '원작을 모르는 사람이 이 글을 읽을 때 놓치는 전제를 정리한다.',
+    parameters: {
+      type: 'object',
+      properties: {
+        brief: { type: 'string' },
+      },
+      required: ['brief'],
+    },
+  },
+};

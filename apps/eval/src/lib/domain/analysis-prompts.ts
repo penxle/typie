@@ -11,6 +11,9 @@ export type AnalysisStagePrompt = {
 };
 
 // compose는 피드백 편성과 총평 작성 두 번을 도므로 프롬프트도 둘이다.
+//
+// background는 선택이다 — 이 프롬프트가 없는 세트는 원작 조사 단계를 아예 건너뛴다.
+// 기존 세트를 그대로 두고 배경 주입만 켠 세트를 따로 만들어 대조하기 위해서다.
 export type AnalysisPromptContent = {
   survey: AnalysisStagePrompt;
   review: AnalysisStagePrompt;
@@ -18,6 +21,7 @@ export type AnalysisPromptContent = {
   verify: AnalysisStagePrompt;
   compose: AnalysisStagePrompt;
   composeReview: AnalysisStagePrompt;
+  background?: AnalysisStagePrompt;
 };
 
 export const ANALYSIS_STAGES: (keyof AnalysisPromptContent)[] = ['survey', 'review', 'dedupe', 'verify', 'compose', 'composeReview'];

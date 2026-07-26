@@ -29,6 +29,8 @@ export type FlowEnv = {
   INTERNAL_API_BASE: string;
   CLOUDFLARE_API_KEY: string;
   CLOUDFLARE_AIGATEWAY_URL: string;
+  // 2차 창작 원작 조사용. 없으면 배경 단계를 건너뛴다.
+  EXA_API_KEY?: string;
 };
 
 // 앱(apps/eval)은 cross-script Workflow 바인딩(SAMPLING/PIPELINE)으로만 이 워커를 구동한다 — fetch는

@@ -3,7 +3,7 @@
   import { flex, grid } from '@typie/styled-system/patterns';
   import { Icon } from '@typie/ui/components';
   import { Dialog } from '@typie/ui/notification';
-  import { untrack } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import IconArrowRight from '~icons/lucide/arrow-right';
   import IconCheck from '~icons/lucide/check';
   import IconChevronLeft from '~icons/lucide/chevron-left';
@@ -13,6 +13,7 @@
   import IconSave from '~icons/lucide/save';
   import { deserialize, enhance } from '$app/forms';
   import { goto } from '$app/navigation';
+  import { page } from '$app/state';
   import ThemeToggle from '$lib/components/ThemeToggle.svelte';
   import { FEEDBACK_LABEL_KEYS } from '$lib/domain/feedback-labels.ts';
   import { computeSegments } from '$lib/domain/highlight.ts';
@@ -106,6 +107,7 @@
   let savedAt = $state<string | null>(null);
   let saving = $state(false);
   let submitting = $state(false);
+  let submitError = $state<string | null>(null);
   const busy = $derived(saving || submitting);
 
   let documentPaneEl = $state<HTMLElement | undefined>();
@@ -274,6 +276,16 @@
     const el = document.querySelector<HTMLElement>(`[data-anchor="${key}"]`);
     if (el && documentPaneEl) scrollWithin(documentPaneEl, el);
   };
+
+  // 대시보드에서 "#12를 왜 아니오로 봤나"를 되짚어 올 때, 그 피드백과 본문 위치까지 바로 잡아준다.
+  // 목록을 열어 손으로 찾게 하면 대조가 끊긴다.
+  onMount(() => {
+    const wanted = page.url.searchParams.get('feedback');
+    if (!wanted || !taskFeedbackIds.has(wanted)) return;
+    focusFeedback(wanted);
+    const located = activeSet.feedbacks.find((f) => f.id === wanted)?.anchors.some((a) => a.matchStart !== null);
+    if (located) focusAnchor(wanted, 0);
+  });
 
   const seekDocument = (fraction: number) => {
     const el = documentPaneEl;
@@ -463,6 +475,10 @@
       {data.document.characterCount.toLocaleString()}자 · 약 {readingMinutes}분
       {#if saving}
         · 저장 중…
+      {:else if submitError}
+        <!-- 실패한 뒤에도 마지막 성공 시각이 남아 있으면 저장된 것으로 읽힌다. -->
+        ·
+        <span class={css({ color: 'text.danger', fontWeight: 'medium' })}>저장되지 않음</span>
       {:else if savedAt}
         · <Icon icon={IconCheck} size={12} /> 임시 저장됨 {savedAt}
       {/if}
@@ -714,10 +730,20 @@
             formData.set('elapsedSeconds', String(Math.round(activeMs / 1000)));
             if (action.search.includes('save')) saving = true;
             else submitting = true;
-            return async ({ update }) => {
-              await update({ reset: false });
+            return async ({ result, update }) => {
               saving = false;
               submitting = false;
+              // 실패를 성공으로 칠하지 않는다. update()를 그대로 태우면 오류 화면이 렌더되어
+              // 아직 저장되지 않은 입력까지 통째로 날아가므로, 화면은 그대로 두고 알리기만 한다.
+              if (result.type === 'error' || result.type === 'failure') {
+                submitError =
+                  result.type === 'error'
+                    ? (result.error?.message ?? '알 수 없는 오류')
+                    : ((result.data?.message as string | undefined) ?? '저장하지 못했습니다');
+                return;
+              }
+              submitError = null;
+              await update({ reset: false });
               savedAt = new Date().toLocaleTimeString('ko', { hour: '2-digit', minute: '2-digit' });
             };
           }}
@@ -875,6 +901,29 @@
                 <Icon icon={IconCornerUpLeft} size={14} />
                 반납
               </button>
+            </div>
+          {/if}
+
+          {#if submitError}
+            <!-- 화면은 그대로 두고 알리기만 한다 — 입력이 남아 있어야 다시 눌러 되살릴 수 있다. -->
+            <div
+              class={css({
+                marginTop: '10px',
+                paddingX: '12px',
+                paddingY: '10px',
+                borderWidth: '1px',
+                borderColor: 'border.danger',
+                borderRadius: '8px',
+                backgroundColor: 'accent.danger.subtle',
+                fontSize: '12px',
+                lineHeight: '[1.6]',
+                color: 'text.danger',
+              })}
+              role="alert"
+            >
+              <p class={css({ fontWeight: 'bold' })}>저장되지 않았습니다. 화면을 닫지 마세요.</p>
+              <p class={css({ marginTop: '2px' })}>입력은 그대로 있습니다. 다시 눌러주세요. 계속 실패하면 관리자에게 알려주세요.</p>
+              <p class={css({ marginTop: '4px', color: 'text.faint', wordBreak: 'break-all' })}>{submitError}</p>
             </div>
           {/if}
 

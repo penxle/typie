@@ -1,10 +1,11 @@
 import { error, redirect } from '@sveltejs/kit';
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, notInArray, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { deriveFalsePositiveIds, FEEDBACK_LABEL_KEYS } from '$lib/domain/feedback-labels.ts';
 import { isEmptyFeedbackVerdict, isEmptyReviewVerdict, isFeedbackComplete, isReviewComplete } from '$lib/domain/verdicts.ts';
 import { claimableSummary, claimNextTask } from '$lib/server/claim.ts';
 import {
+  chunkRows,
   createDb,
   Documents,
   FeedbackAnchors,
@@ -17,6 +18,7 @@ import {
   Tasks,
 } from '$lib/server/db/index.ts';
 import { effectiveProgress } from '$lib/server/progress.ts';
+import type { BatchItem } from 'drizzle-orm/batch';
 import type { FeedbackLabelMap } from '$lib/domain/feedback-labels.ts';
 import type { JudgmentResult } from '$lib/domain/types.ts';
 import type { FeedbackVerdictMap, ReviewVerdictMap } from '$lib/domain/verdicts.ts';
@@ -120,12 +122,31 @@ export const load: PageServerLoad = async ({ params, platform, locals }) => {
   };
 };
 
-// 원자적 upsert — select-후-insert는 제출 연타 시 동시 요청이 겹쳐 UNIQUE 위반 500을 낸다.
+// 판정 행만 확보한다(내용도 확정 여부도 건드리지 않는다). 판정 항목이 judgment_id를 참조하므로
+// id가 먼저 있어야 하는데, 이 단계에서 내용을 함께 쓰면 뒤 단계가 실패했을 때 "제출됨"만 남는다.
+// 원자적 insert — select-후-insert는 제출 연타 시 동시 요청이 겹쳐 UNIQUE 위반 500을 낸다.
+const ensureJudgment = async (db: ReturnType<typeof createDb>, taskId: string, email: string): Promise<string> => {
+  await db.insert(Judgments).values({ id: nanoid(), taskId, evaluatorEmail: email }).onConflictDoNothing();
+
+  const [row] = await db
+    .select({ id: Judgments.id })
+    .from(Judgments)
+    .where(and(eq(Judgments.taskId, taskId), eq(Judgments.evaluatorEmail, email)));
+  if (!row) {
+    error(500, 'judgment missing after insert');
+  }
+  return row.id;
+};
+
+// 판정 항목과 확정 여부를 D1 배치 하나로 넘긴다. 배치는 단일 트랜잭션이라 전부 반영되거나
+// 전부 취소된다 — 항목 저장이 실패했는데 "제출됨"만 남는 일이 여기서 막힌다.
+//
 // save(draft)는 이미 확정된 판정을 되돌리지 못한다: 느린 임시 저장 응답이 제출보다 늦게
 // 도착해도 확정을 draft로 강등하지 않는다(setWhere).
-const upsertJudgment = async (
+const commitJudgment = async (
   db: ReturnType<typeof createDb>,
   input: {
+    judgmentId: string;
     taskId: string;
     email: string;
     result: JudgmentResult | null;
@@ -134,56 +155,14 @@ const upsertJudgment = async (
     comment: string;
     elapsedSeconds: number;
     draft: boolean;
+    verdicts: FeedbackVerdictMap;
+    reviewVerdicts: ReviewVerdictMap;
   },
 ) => {
-  await db
-    .insert(Judgments)
-    .values({
-      id: nanoid(),
-      taskId: input.taskId,
-      evaluatorEmail: input.email,
-      result: input.result,
-      falsePositiveFeedbackIds: input.falsePositiveFeedbackIds,
-      feedbackLabels: input.feedbackLabels,
-      comment: input.comment,
-      elapsedSeconds: input.elapsedSeconds,
-      draft: input.draft,
-    })
-    .onConflictDoUpdate({
-      target: [Judgments.taskId, Judgments.evaluatorEmail],
-      set: {
-        ...(input.result && { result: input.result }),
-        falsePositiveFeedbackIds: input.falsePositiveFeedbackIds,
-        feedbackLabels: input.feedbackLabels,
-        comment: input.comment,
-        elapsedSeconds: input.elapsedSeconds,
-        draft: input.draft,
-        updatedAt: new Date(),
-      },
-      setWhere: input.draft ? sql`${Judgments.draft} = 1` : undefined,
-    });
+  const { judgmentId } = input;
+  const statements: BatchItem<'sqlite'>[] = [];
 
-  const [row] = await db
-    .select({ id: Judgments.id })
-    .from(Judgments)
-    .where(and(eq(Judgments.taskId, input.taskId), eq(Judgments.evaluatorEmail, input.email)));
-  if (!row) {
-    error(500, 'judgment missing after upsert');
-  }
-  return row.id;
-};
-
-// 판정은 지우고 다시 넣는다 — 평가자가 껐다 켠 항목이 이전 저장분으로 남지 않게 한다.
-const replaceVerdicts = async (
-  db: ReturnType<typeof createDb>,
-  judgmentId: string,
-  verdicts: FeedbackVerdictMap,
-  reviewVerdicts: ReviewVerdictMap,
-) => {
-  await db.delete(FeedbackVerdicts).where(eq(FeedbackVerdicts.judgmentId, judgmentId));
-  await db.delete(ReviewVerdicts).where(eq(ReviewVerdicts.judgmentId, judgmentId));
-
-  const feedbackRows = Object.entries(verdicts).map(([feedbackId, v]) => ({
+  const feedbackRows = Object.entries(input.verdicts).map(([feedbackId, v]) => ({
     id: nanoid(),
     judgmentId,
     feedbackId,
@@ -192,11 +171,25 @@ const replaceVerdicts = async (
     useful: v.useful,
     note: v.note ?? null,
   }));
-  if (feedbackRows.length > 0) {
-    await db.insert(FeedbackVerdicts).values(feedbackRows);
-  }
+  // D1은 문장당 바인딩 100개 제한 — 판정은 7컬럼이라 14행씩 나눈다(한 문장에 몰면 15행부터 실패).
+  chunkRows(feedbackRows, 7, (chunk) => {
+    statements.push(
+      db
+        .insert(FeedbackVerdicts)
+        .values(chunk)
+        .onConflictDoUpdate({
+          target: [FeedbackVerdicts.judgmentId, FeedbackVerdicts.feedbackId],
+          set: {
+            correct: sql`excluded.correct`,
+            needed: sql`excluded.needed`,
+            useful: sql`excluded.useful`,
+            note: sql`excluded.note`,
+          },
+        }),
+    );
+  });
 
-  const reviewRows = Object.entries(reviewVerdicts).map(([setId, v]) => ({
+  const reviewRows = Object.entries(input.reviewVerdicts).map(([setId, v]) => ({
     id: nanoid(),
     judgmentId,
     setId,
@@ -204,11 +197,57 @@ const replaceVerdicts = async (
     priorityUseful: v.priorityUseful,
     note: v.note ?? null,
   }));
-  if (reviewRows.length > 0) {
-    await db.insert(ReviewVerdicts).values(reviewRows);
-  }
-};
+  chunkRows(reviewRows, 6, (chunk) => {
+    statements.push(
+      db
+        .insert(ReviewVerdicts)
+        .values(chunk)
+        .onConflictDoUpdate({
+          target: [ReviewVerdicts.judgmentId, ReviewVerdicts.setId],
+          set: {
+            readCorrectly: sql`excluded.read_correctly`,
+            priorityUseful: sql`excluded.priority_useful`,
+            note: sql`excluded.note`,
+          },
+        }),
+    );
+  });
 
+  // 이번에 답하지 않은 항목만 걷어낸다 — 평가자가 판정을 되돌린 경우가 여기 해당한다.
+  const feedbackIds = Object.keys(input.verdicts);
+  const setIds = Object.keys(input.reviewVerdicts);
+  statements.push(
+    db
+      .delete(FeedbackVerdicts)
+      .where(
+        feedbackIds.length > 0
+          ? and(eq(FeedbackVerdicts.judgmentId, judgmentId), notInArray(FeedbackVerdicts.feedbackId, feedbackIds))
+          : eq(FeedbackVerdicts.judgmentId, judgmentId),
+      ),
+    db
+      .delete(ReviewVerdicts)
+      .where(
+        setIds.length > 0
+          ? and(eq(ReviewVerdicts.judgmentId, judgmentId), notInArray(ReviewVerdicts.setId, setIds))
+          : eq(ReviewVerdicts.judgmentId, judgmentId),
+      ),
+    // 확정은 마지막이다. 앞의 어느 문장이든 실패하면 배치 전체가 취소되어 draft로 남는다.
+    db
+      .update(Judgments)
+      .set({
+        ...(input.result && { result: input.result }),
+        falsePositiveFeedbackIds: input.falsePositiveFeedbackIds,
+        feedbackLabels: input.feedbackLabels,
+        comment: input.comment,
+        elapsedSeconds: input.elapsedSeconds,
+        draft: input.draft,
+        updatedAt: new Date(),
+      })
+      .where(input.draft ? and(eq(Judgments.id, judgmentId), eq(Judgments.draft, true)) : eq(Judgments.id, judgmentId)),
+  );
+
+  await db.batch(statements as [BatchItem<'sqlite'>, ...BatchItem<'sqlite'>[]]);
+};
 const parseForm = async (request: Request) => {
   const form = await request.formData();
   return {
@@ -350,8 +389,16 @@ export const actions: Actions = {
     const db = createDb(platform.env.DB);
     const { input } = await sanitizeForTask(db, params.id, await parseForm(request));
     const { verdicts, reviewVerdicts, ...judgment } = input;
-    const judgmentId = await upsertJudgment(db, { taskId: params.id, email: locals.email, ...judgment, draft: true });
-    await replaceVerdicts(db, judgmentId, verdicts, reviewVerdicts);
+    const judgmentId = await ensureJudgment(db, params.id, locals.email);
+    await commitJudgment(db, {
+      judgmentId,
+      taskId: params.id,
+      email: locals.email,
+      ...judgment,
+      verdicts,
+      reviewVerdicts,
+      draft: true,
+    });
     return { saved: true };
   },
   submit: async ({ params, request, platform, locals }) => {
@@ -366,8 +413,16 @@ export const actions: Actions = {
     }
     const { verdicts, reviewVerdicts, ...judgment } = input;
     await assertAnalysisComplete(db, taskSetIds, verdicts, reviewVerdicts);
-    const judgmentId = await upsertJudgment(db, { taskId: params.id, email: locals.email, ...judgment, draft: false });
-    await replaceVerdicts(db, judgmentId, verdicts, reviewVerdicts);
+    const judgmentId = await ensureJudgment(db, params.id, locals.email);
+    await commitJudgment(db, {
+      judgmentId,
+      taskId: params.id,
+      email: locals.email,
+      ...judgment,
+      verdicts,
+      reviewVerdicts,
+      draft: false,
+    });
     const nextTaskId = await claimNextTask(db, locals.email, platform.env.ADMIN_EMAILS ?? '');
     redirect(302, nextTaskId ? `/tasks/${nextTaskId}` : '/?finished=1');
   },

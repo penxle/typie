@@ -4,10 +4,14 @@ import type { Finding, Scene, WorkProfile } from './analysis-types.ts';
 
 export type ResolvedProfile = WorkProfile & { derivativeSource?: string };
 
-export const renderProfile = (profile: ResolvedProfile): string =>
+// background는 2차 창작의 원작 배경이다. 원고에는 없지만 독자에게는 전제된 지식이라, 이것이
+// 없으면 원작 지식에 기댄 생략을 결핍으로 읽는다(라운드 3에서 사유 8건이 이 유형이었다).
+// 원고가 아니라 원작을 조사해 얻은 것이므로 본문 근거로는 쓸 수 없다 — 판단을 눌러주는 용도다.
+export const renderProfile = (profile: ResolvedProfile, background?: string | null): string =>
   [
     `형식: ${profile.form}`,
     `2차 창작: ${profile.isDerivative ? `예 — ${profile.derivativeSource ?? '원작 불명'}` : '아니오'}`,
+    background ? `\n[원작 배경 — 조사한 참고 정보]\n${background}\n` : '',
     `시점: ${profile.pov}`,
     `화자 신뢰성: ${profile.reliability}`,
     `시제: ${profile.tense}`,
@@ -154,3 +158,6 @@ export const renderComposeReviewInput = (
     ...feedbacks.map((f, i) => `[${i}] ${f.category}(${f.polarity}) · ${f.anchors.length}곳\n  ${f.body}`),
     '</확정된 피드백>',
   ].join('\n');
+
+export const renderBackgroundInput = (query: string, hits: string): string =>
+  ['<찾은 것>', `질의: ${query}`, '', hits, '</찾은 것>'].join('\n');

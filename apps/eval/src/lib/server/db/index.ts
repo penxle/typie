@@ -13,4 +13,14 @@ export const selectInChunks = async <T>(ids: string[], select: (chunk: string[])
   return rows;
 };
 
+// 같은 제한이 다중 행 INSERT에도 걸린다: 바인딩 수는 컬럼 수 × 행 수다. 한 문장에 몰아넣으면
+// 그 곱이 100을 넘는 순간 문장 전체가 실패한다 — 판정 15건(7컬럼 × 15 = 105)부터 통째로
+// 저장되지 않던 사고가 실제로 있었다.
+export const chunkRows = <T>(rows: T[], columns: number, emit: (chunk: T[]) => void): void => {
+  const size = Math.max(1, Math.floor(100 / columns));
+  for (let i = 0; i < rows.length; i += size) {
+    emit(rows.slice(i, i + size));
+  }
+};
+
 export * from './schema.ts';
