@@ -138,7 +138,7 @@
       </button>
       <p class={css({ marginTop: '10px', fontSize: '12px', color: 'text.faint', textAlign: 'center' })}>
         {#if data.remaining > 0}
-          원문을 읽고 피드백 세트를 비교해 점수를 매기는 작업입니다. 한 편에 10–20분쯤 걸립니다.
+          원문을 읽고 피드백 하나하나를 판정하는 작업입니다. 한 편에 피드백이 30개쯤 있어 40분–1시간 걸립니다.
         {:else if data.drafts.length > 0}
           새로 배정받을 태스크는 없습니다. 아래 작성 중인 평가를 마무리해 주세요.
         {:else}
