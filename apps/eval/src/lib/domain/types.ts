@@ -1,5 +1,5 @@
 export type TaskKind = 'ranking' | 'pair';
-export type RoundStage = 'screening' | 'confirmation';
+export type RoundStage = 'screening' | 'confirmation' | 'absolute';
 export type PairVerdict = 'a' | 'b' | 'tie';
 
 export type JudgmentResult =

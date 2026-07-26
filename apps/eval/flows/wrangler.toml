@@ -18,6 +18,11 @@ binding = "PIPELINE"
 name = "eval-pipeline"
 class_name = "PipelineWorkflow"
 
+[[workflows]]
+binding = "ANALYSIS"
+name = "eval-analysis"
+class_name = "AnalysisWorkflow"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "typie-eval"

@@ -18,7 +18,10 @@ export const GET: RequestHandler = async ({ params, platform }) => {
     error(404, 'run not found');
   }
 
-  const docs = run.kind === 'pipeline' ? await db.select().from(PipelineRunDocs).where(eq(PipelineRunDocs.runId, params.id)) : [];
+  const docs =
+    run.kind === 'pipeline' || run.kind === 'analysis'
+      ? await db.select().from(PipelineRunDocs).where(eq(PipelineRunDocs.runId, params.id))
+      : [];
 
   return json({ run, docs });
 };

@@ -50,6 +50,34 @@
       "when": 1784817875160,
       "tag": "0006_bent_fenris",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1785014444311,
+      "tag": "0007_ancient_switch",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1785018058851,
+      "tag": "0008_fat_jubilee",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1785020406760,
+      "tag": "0009_silent_cable",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1785026681359,
+      "tag": "0010_lively_otto_octavius",
+      "breakpoints": true
     }
   ]
 }

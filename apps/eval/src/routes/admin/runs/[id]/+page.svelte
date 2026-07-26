@@ -1,6 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex, grid } from '@typie/styled-system/patterns';
+  import { tooltip } from '@typie/ui/actions';
   import { Helmet } from '@typie/ui/components';
   import { Dialog, Toast } from '@typie/ui/notification';
   import { untrack } from 'svelte';
@@ -74,6 +75,7 @@
   const rate = $derived(throughputPerMinute(sessionStart, current));
   const eta = $derived(run.status === 'running' ? etaSeconds(sessionStart, current, primaryTotal(run)) : null);
   const rateUnit = $derived(run.kind === 'pipeline' ? '청크' : '문서');
+  const hasDocs = $derived(run.kind === 'pipeline' || run.kind === 'analysis');
 
   const retryableCount = $derived(docs.filter((d) => d.status === 'failed' || d.status === 'cancelled').length);
   const selectedFailedDoc = $derived(docs.find((d) => d.id === selectedFailedDocId && d.status === 'failed') ?? null);
@@ -85,6 +87,32 @@
     failed: '실패',
     cancelled: '취소됨',
   };
+
+  // 재설계 파이프라인의 단계. 구 파이프라인 문서에는 phase가 없다.
+  // 순서가 곧 진행도다 — 셀에서 몇 번째 칸까지 찼는지로 어디까지 왔는지 바로 읽힌다.
+  const PHASES = [
+    { key: 'queued', label: '대기' },
+    { key: 'survey', label: '작품 파악' },
+    { key: 'review', label: '짚을 곳 찾기' },
+    { key: 'dedupe', label: '중복 묶기' },
+    { key: 'verify', label: '근거 확인' },
+    { key: 'compose', label: '피드백 다듬기' },
+    { key: 'done', label: '완료' },
+  ];
+  const PHASE_LABEL: Record<string, string> = Object.fromEntries(PHASES.map((p) => [p.key, p.label]));
+  // 대기는 아직 시작 전이라 칸을 채우지 않는다 — 실제로 지나온 단계는 '작품 파악'부터 여섯이다.
+  const PHASE_STEPS = PHASES.slice(1);
+  const phaseIndex = (phase: string | null) => (phase === null ? -1 : PHASE_STEPS.findIndex((p) => p.key === phase));
+
+  // 서른 편이 어느 단계에 몰려 있는지는 셀을 하나씩 세는 것보다 한 줄 요약이 빠르다.
+  const phaseDistribution = $derived.by(() => {
+    const counts: Record<string, number> = {};
+    for (const doc of docs) {
+      if (!doc.phase) continue;
+      counts[doc.phase] = (counts[doc.phase] ?? 0) + 1;
+    }
+    return PHASES.filter((p) => (counts[p.key] ?? 0) > 0).map((p) => ({ label: p.label, count: counts[p.key] ?? 0 }));
+  });
 
   const requestCancel = () => {
     Dialog.confirm({
@@ -231,7 +259,7 @@
       {#if run.status === 'running'}
         <button class={outlineButtonClass} onclick={requestCancel} type="button">실행 취소</button>
       {/if}
-      {#if run.kind === 'pipeline' && retryableCount > 0}
+      {#if (run.kind === 'pipeline' || run.kind === 'analysis') && retryableCount > 0}
         <button class={outlineButtonClass} disabled={retrying} onclick={retryFailed} type="button">
           {retrying ? '재실행하는 중…' : `미완료 문서만 재실행 (${retryableCount})`}
         </button>
@@ -240,44 +268,105 @@
     <p class={css({ marginTop: '8px', height: '16px', fontSize: '12px', color: 'text.danger' })}>{retryError ?? ''}</p>
   </section>
 
-  {#if run.kind === 'pipeline'}
+  {#if hasDocs}
     <section class={sectionClass}>
       <div class={flex({ align: 'center', justify: 'space-between', marginBottom: '12px' })}>
         <h2 class={css({ fontSize: '13px', fontWeight: 'bold', color: 'text.subtle' })}>문서 상태 ({docs.length})</h2>
         <div class={flex({ gap: '10px', fontSize: '11px', color: 'text.faint' })}>
-          <span>● 대기</span>
-          <span class={css({ color: 'accent.brand.default' })}>● 실행 중</span>
-          <span class={css({ color: 'accent.success.default' })}>● 완료</span>
-          <span class={css({ color: 'accent.danger.default' })}>● 실패</span>
+          <span>칸이 찰수록 뒤 단계 · 실패한 문서는 눌러서 오류를 봅니다</span>
         </div>
       </div>
 
-      <div class={grid({ columns: 10, gap: '6px' })}>
-        {#each docs as doc (doc.id)}
+      {#if phaseDistribution.length > 0}
+        <p class={flex({ wrap: 'wrap', gap: '10px', marginBottom: '10px', fontSize: '12px', color: 'text.subtle' })}>
+          {#each phaseDistribution as entry (entry.label)}
+            <span class={css({ fontVariantNumeric: 'tabular-nums' })}>{entry.label} {entry.count}</span>
+          {/each}
+        </p>
+      {/if}
+
+      <div class={grid({ columns: 5, gap: '6px' })}>
+        {#each docs as doc, i (doc.id)}
+          {@const step = phaseIndex(doc.phase)}
           <button
             class={css({
-              aspectRatio: '[1]',
-              borderWidth: '0',
-              borderRadius: '6px',
-              backgroundColor:
-                doc.status === 'running'
-                  ? 'accent.brand.default'
-                  : doc.status === 'done'
-                    ? 'accent.success.default'
-                    : doc.status === 'failed'
-                      ? 'accent.danger.default'
-                      : 'surface.muted',
-              boxShadow: selectedFailedDocId === doc.id ? 'medium' : '[none]',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '5px',
+              paddingX: '8px',
+              paddingY: '7px',
+              borderWidth: '1px',
+              borderColor: selectedFailedDocId === doc.id ? 'border.strong' : 'border.default',
+              borderRadius: '8px',
+              backgroundColor: doc.status === 'failed' ? 'accent.danger.subtle' : 'surface.default',
+              textAlign: 'left',
               cursor: doc.status === 'failed' ? 'pointer' : 'default',
-              animation: doc.status === 'running' ? 'pulse 1.5s ease-in-out infinite' : 'none',
-              transition: '[opacity 0.15s ease, box-shadow 0.15s ease]',
-              ['&:hover:not(:disabled)']: doc.status === 'failed' ? { opacity: '80' } : {},
+              transition: '[border-color 0.15s ease, background-color 0.15s ease]',
+              ['&:hover:not(:disabled)']: { borderColor: 'border.strong' },
             })}
+            aria-label={`${doc.documentId} · ${STATUS_LABEL[doc.status]}${doc.phase ? ` · ${PHASE_LABEL[doc.phase] ?? doc.phase}` : ''}`}
             disabled={doc.status !== 'failed'}
             onclick={() => (selectedFailedDocId = doc.id)}
-            title={`${doc.documentId} · ${STATUS_LABEL[doc.status]}`}
             type="button"
-          ></button>
+            use:tooltip={{ message: doc.documentId, delay: 200 }}
+          >
+            <span class={flex({ align: 'baseline', gap: '5px' })}>
+              <span class={css({ fontSize: '11px', color: 'text.faint', fontVariantNumeric: 'tabular-nums' })}>{i + 1}</span>
+              <span
+                class={css({
+                  fontSize: '12px',
+                  fontWeight: 'bold',
+                  color:
+                    doc.status === 'failed'
+                      ? 'text.danger'
+                      : doc.status === 'done'
+                        ? 'text.success'
+                        : doc.status === 'running'
+                          ? 'text.default'
+                          : 'text.faint',
+                })}
+              >
+                {doc.phase ? (PHASE_LABEL[doc.phase] ?? doc.phase) : STATUS_LABEL[doc.status]}
+              </span>
+            </span>
+
+            {#if doc.phase}
+              <span class={flex({ gap: '2px' })}>
+                {#each PHASE_STEPS as phase, s (phase.key)}
+                  <span
+                    class={css({
+                      flex: '1',
+                      height: '3px',
+                      borderRadius: 'full',
+                      backgroundColor:
+                        doc.status === 'failed' && s === step
+                          ? 'accent.danger.default'
+                          : s <= step
+                            ? doc.status === 'done'
+                              ? 'accent.success.default'
+                              : 'accent.brand.default'
+                            : 'surface.muted',
+                    })}
+                  ></span>
+                {/each}
+              </span>
+            {:else}
+              <span
+                class={css({
+                  height: '3px',
+                  borderRadius: 'full',
+                  backgroundColor:
+                    doc.status === 'done'
+                      ? 'accent.success.default'
+                      : doc.status === 'running'
+                        ? 'accent.brand.default'
+                        : doc.status === 'failed'
+                          ? 'accent.danger.default'
+                          : 'surface.muted',
+                })}
+              ></span>
+            {/if}
+          </button>
         {/each}
       </div>
 

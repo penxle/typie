@@ -1,6 +1,27 @@
 import type OpenAI from 'openai';
 
 const CHUNK_SIZE = 1000;
+// 경계 탐색 폭. 좁으면(구 버전 200자) 긴 서술 문단에서 문장 중간이 잘리고, 그러면 분석 단계가
+// 그 구간을 "미완성 문장"으로 오독한다 — 실측에서 오독 지적의 상당수가 여기서 나왔다.
+const SEARCH_WINDOW = 400;
+
+// 종결부호 뒤에 닫는 따옴표·괄호가 붙는 한국어 소설 관례를 포함한다("…했다." 뒤의 」, ' 등).
+const SENTENCE_END = /[.!?。！？…][”’"'」』〉》)\]]*\s*/g;
+// 문장 경계가 없을 때의 차선 — 최소한 어절 중간에서는 자르지 않는다.
+const SOFT_BREAK = /[,、·:;)\]}」』]\s|\s/g;
+
+// 캐시 키에 섞어 청킹 규칙이 바뀌면 옛 요약이 재사용되지 않게 한다.
+export const CHUNK_VERSION = 2;
+
+const lastMatchBefore = (text: string, pattern: RegExp, searchStart: number, end: number): number => {
+  pattern.lastIndex = searchStart;
+  let last = -1;
+  let match;
+  while ((match = pattern.exec(text)) && match.index <= end) {
+    last = match.index + match[0].length;
+  }
+  return last;
+};
 
 export const createChunks = (text: string) => {
   const chunks: { text: string; start: number; end: number }[] = [];
@@ -10,7 +31,7 @@ export const createChunks = (text: string) => {
     let end = pos + CHUNK_SIZE;
 
     if (end < text.length) {
-      const searchStart = Math.max(pos, end - 200);
+      const searchStart = Math.max(pos, end - SEARCH_WINDOW);
       let breakPoint = -1;
 
       for (let i = end; i >= searchStart; i--) {
@@ -21,18 +42,11 @@ export const createChunks = (text: string) => {
       }
 
       if (breakPoint === -1) {
-        const sentencePattern = /[.!?。！？]\s*/g;
-        sentencePattern.lastIndex = searchStart;
-        let lastMatch = -1;
-        let match;
+        breakPoint = lastMatchBefore(text, SENTENCE_END, searchStart, end);
+      }
 
-        while ((match = sentencePattern.exec(text)) && match.index <= end) {
-          lastMatch = match.index + match[0].length;
-        }
-
-        if (lastMatch > pos) {
-          breakPoint = lastMatch;
-        }
+      if (breakPoint <= pos) {
+        breakPoint = lastMatchBefore(text, SOFT_BREAK, searchStart, end);
       }
 
       if (breakPoint > pos) {
@@ -194,6 +208,16 @@ const normalizeForMatch = (s: string) => {
   return out;
 };
 
+// 모델이 인용을 옮기다 남기는 잡음을 걷어낸다. 실측된 두 가지를 겨냥한다:
+// ① 개행 직후 첫 한글 음절이 음이 같은 가나로 바뀌어 나온다(에→エ, 하→は, 무→む).
+//    개행이 잦은 원고에서 집중적으로 터진다 — 원문에 가나가 한 글자도 없어도 발생한다.
+// ② 인용 앞뒤에 원문에 없는 문장부호(…, — 등)가 덧붙는다.
+// 정상 경로가 전부 실패한 뒤에만 쓰므로, 원문에 실제로 가나가 있는 인용은 이미 매칭돼 여기 오지 않는다.
+const KANA = /[\u{3040}-\u{30FF}]/gu;
+const EDGE_NOISE = /^[\s…—·.,'"‘’“”]+|[\s…—·,'"‘’“”]+$/gu;
+
+export const repairQuote = (s: string): string => s.replaceAll(KANA, '').replaceAll(EDGE_NOISE, '');
+
 export const createFindRange = (text: string) => {
   const { normalized, map } = buildNormalizedIndex(text);
 
@@ -215,16 +239,33 @@ export const createFindRange = (text: string) => {
       return { index: first, length: last + 1 - first };
     };
 
-    const tryFinders = (find: (needle: string, from: number) => Match | null) => {
-      const start = find(startText, searchStart);
+    const tryFinders = (find: (needle: string, from: number) => Match | null, head: string, tail: string) => {
+      const start = find(head, searchStart);
       if (!start) return null;
       // end가 start 인용 범위 안의 문장이어도 유효한 앵커다 — 겹침을 허용한다.
-      const end = find(endText, start.index);
-      if (!end) return null;
-      return { rangeStart: start.index, rangeEnd: Math.max(start.index + start.length, end.index + end.length) };
+      const end = find(tail, start.index);
+      if (end) {
+        return { rangeStart: start.index, rangeEnd: Math.max(start.index + start.length, end.index + end.length) };
+      }
+      // 모델이 두 인용을 원문 순서와 반대로 준 경우 — 앞쪽에서 다시 찾아 둘을 잇는다.
+      const earlier = find(tail, searchStart);
+      if (!earlier || earlier.index >= start.index) return null;
+      return { rangeStart: earlier.index, rangeEnd: start.index + start.length };
     };
 
-    const range = tryFinders(exactFind) ?? tryFinders((n, from) => fuzzyFindMatch(text, n, from)) ?? tryFinders(normalizedFind);
+    const finders = [exactFind, (n: string, from: number) => fuzzyFindMatch(text, n, from), normalizedFind];
+    const attempt = (head: string, tail: string) => {
+      for (const find of finders) {
+        const range = tryFinders(find, head, tail);
+        if (range) return range;
+      }
+      return null;
+    };
+
+    const repairedStart = repairQuote(startText);
+    const repairedEnd = repairQuote(endText);
+    const range =
+      attempt(startText, endText) ?? (repairedStart === startText && repairedEnd === endText ? null : attempt(repairedStart, repairedEnd));
     if (!range) {
       return null;
     }

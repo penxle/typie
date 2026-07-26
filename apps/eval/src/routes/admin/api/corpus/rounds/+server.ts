@@ -1,7 +1,7 @@
 import { error, json } from '@sveltejs/kit';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
-import { generateConfirmationTasks, generateScreeningTasks } from '$lib/domain/rounds.ts';
+import { generateAbsoluteTasks, generateConfirmationTasks, generateScreeningTasks } from '$lib/domain/rounds.ts';
 import { corpusRoundPayloadSchema } from '$lib/server/corpus-round-schemas.ts';
 import { createDb, Documents, FeedbackSets, PipelineRuns, Rounds, Tasks, Variants } from '$lib/server/db/index.ts';
 import { parseJsonBody } from '$lib/server/http.ts';
@@ -10,7 +10,8 @@ import type { RequestHandler } from './$types';
 
 type Db = ReturnType<typeof createDb>;
 
-// variant 라벨 → variants → 해당 라벨의 가장 최근 succeeded 파이프라인 run → feedback_sets(documentId → setId)
+// variant 라벨 → variants → 해당 라벨의 가장 최근 succeeded 실행 → feedback_sets(documentId → setId).
+// 구 파이프라인과 재설계 파이프라인(analysis)은 실행 종류만 다르고 세트 저장 형태가 같아 함께 본다.
 const resolveLabelSets = async (db: Db, label: string, corpusVersion: string): Promise<Map<string, string> | null> => {
   const [variant] = await db.select({ id: Variants.id }).from(Variants).where(eq(Variants.label, label)).limit(1);
   if (!variant) return null;
@@ -20,7 +21,7 @@ const resolveLabelSets = async (db: Db, label: string, corpusVersion: string): P
     .from(PipelineRuns)
     .where(
       and(
-        eq(PipelineRuns.kind, 'pipeline'),
+        inArray(PipelineRuns.kind, ['pipeline', 'analysis']),
         eq(PipelineRuns.variantId, variant.id),
         eq(PipelineRuns.corpusVersion, corpusVersion),
         eq(PipelineRuns.status, 'succeeded'),
@@ -40,9 +41,55 @@ const resolveLabelSets = async (db: Db, label: string, corpusVersion: string): P
 const requireLabelSets = async (db: Db, label: string, corpusVersion: string): Promise<Map<string, string>> => {
   const sets = await resolveLabelSets(db, label, corpusVersion);
   if (!sets) {
-    error(400, `no succeeded pipeline run for variant label: ${label} (corpus ${corpusVersion})`);
+    error(400, `no succeeded run for variant label: ${label} (corpus ${corpusVersion})`);
   }
   return sets;
+};
+
+// 절대평가는 라벨의 succeeded 실행을 전부 합쳐 문서 목록을 만든다 — 같은 후보를 여러 번 나눠
+// 돌리는 것이 정상이라 "가장 최근 실행" 하나만 보면 앞서 돌린 문서들이 통째로 빠진다.
+// 같은 문서가 두 실행에 있으면 나중 실행의 세트를 쓰고, 총평이 없는 세트(구 파이프라인 산출물)는
+// 제외한다 — 재설계 파이프라인 초기 실행이 kind='pipeline'으로 기록된 것이 있어 kind로는 가릴 수 없다.
+const requireAnalysisSets = async (db: Db, label: string, corpusVersion: string): Promise<Map<string, string>> => {
+  const [variant] = await db.select({ id: Variants.id }).from(Variants).where(eq(Variants.label, label)).limit(1);
+  if (!variant) {
+    error(400, `unknown variant label: ${label}`);
+  }
+
+  const runs = await db
+    .select({ id: PipelineRuns.id })
+    .from(PipelineRuns)
+    .where(and(eq(PipelineRuns.variantId, variant.id), eq(PipelineRuns.corpusVersion, corpusVersion), eq(PipelineRuns.status, 'succeeded')))
+    .orderBy(asc(PipelineRuns.createdAt));
+  if (runs.length === 0) {
+    error(400, `no succeeded run for variant label: ${label} (corpus ${corpusVersion})`);
+  }
+
+  const rank = new Map(runs.map((run, i) => [run.id, i]));
+  const sets = await db
+    .select({ id: FeedbackSets.id, runId: FeedbackSets.runId, documentId: FeedbackSets.documentId, review: FeedbackSets.review })
+    .from(FeedbackSets)
+    .where(
+      inArray(
+        FeedbackSets.runId,
+        runs.map((run) => run.id),
+      ),
+    );
+
+  const latest = new Map<string, { setId: string; rank: number }>();
+  for (const set of sets) {
+    if (set.review === null) continue;
+    const order = rank.get(set.runId) ?? -1;
+    const current = latest.get(set.documentId);
+    if (!current || order > current.rank) {
+      latest.set(set.documentId, { setId: set.id, rank: order });
+    }
+  }
+  if (latest.size === 0) {
+    error(400, `no analysis feedback sets for variant label: ${label} (corpus ${corpusVersion})`);
+  }
+
+  return new Map([...latest].map(([documentId, v]) => [documentId, v.setId]));
 };
 
 export const POST: RequestHandler = async ({ request, platform }) => {
@@ -87,6 +134,31 @@ export const POST: RequestHandler = async ({ request, platform }) => {
     roundConfig = {
       overlapRatio: payload.overlapRatio,
       baselineLabel: payload.baselineLabel,
+      ...(payload.expectedEvaluators && { expectedEvaluators: payload.expectedEvaluators }),
+    };
+  } else if (payload.stage === 'absolute') {
+    const labelSets = await requireAnalysisSets(db, payload.label, payload.corpusVersion);
+    const documentIds = payload.documentIds ?? [...labelSets.keys()];
+
+    const documents = documentIds
+      .map((documentId) => {
+        const setId = labelSets.get(documentId);
+        return setId ? { documentId, setId } : null;
+      })
+      .filter((d): d is { documentId: string; setId: string } => d !== null);
+    if (documents.length === 0) {
+      error(400, 'no documents with a matching feedback set');
+    }
+
+    newTasks = generateAbsoluteTasks(documents, {
+      requiredJudgments: payload.requiredJudgments,
+      overlapRatio: payload.overlapRatio,
+      rng: Math.random,
+    });
+    roundConfig = {
+      label: payload.label,
+      requiredJudgments: payload.requiredJudgments,
+      overlapRatio: payload.overlapRatio,
       ...(payload.expectedEvaluators && { expectedEvaluators: payload.expectedEvaluators }),
     };
   } else {

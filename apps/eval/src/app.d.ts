@@ -18,6 +18,7 @@ declare global {
         INTERNAL_API_BASE: string;
         SAMPLING: Workflow<{ runId: string; corpusVersion: string; size: number }>;
         PIPELINE: Workflow<{ runId: string; promptVariantId: string; variantLabel: string; corpusVersion: string; documentId: string }>;
+        ANALYSIS: Workflow<{ runId: string; promptSetId: string; variantLabel: string; corpusVersion: string; documentId: string }>;
       };
     }
   }

@@ -5,6 +5,7 @@ const stagePromptSchema = z.object({
   tools: z.record(z.string(), z.unknown()),
   model: z.string().min(1),
   effort: z.string().nullable(),
+  temperature: z.number().min(0).max(2).nullable().optional(),
 });
 
 const variantContentSchema = z.object({

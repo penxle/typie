@@ -1,7 +1,7 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { createChunks } from '../../../flows/src/text.ts';
-import { createDb, Documents, PipelineRunDocs, PipelineRuns, PromptVariants, Variants } from './db/index.ts';
+import { AnalysisPromptSets, createDb, Documents, PipelineRunDocs, PipelineRuns, PromptVariants, Variants } from './db/index.ts';
 import type { RunDocStatus } from '../domain/admin-types.ts';
 
 type Db = ReturnType<typeof createDb>;
@@ -12,7 +12,7 @@ const TERMINAL_DOC_STATUSES = new Set<RunDocStatus>(['done', 'failed', 'cancelle
 export const spawnPipelineRun = async (
   db: Db,
   env: Env,
-  input: { promptVariantId: string; corpusVersion: string },
+  input: { promptVariantId: string; corpusVersion: string; documentIds?: string[] },
 ): Promise<{ runId: string; spawnedCount: number; failedCount: number } | { error: string }> => {
   const [promptVariant] = await db
     .select({ label: PromptVariants.label })
@@ -26,9 +26,18 @@ export const spawnPipelineRun = async (
   const docs = await db
     .select({ id: Documents.id, content: Documents.content })
     .from(Documents)
-    .where(eq(Documents.corpusVersion, input.corpusVersion));
+    .where(
+      input.documentIds
+        ? and(eq(Documents.corpusVersion, input.corpusVersion), inArray(Documents.id, input.documentIds))
+        : eq(Documents.corpusVersion, input.corpusVersion),
+    );
   if (docs.length === 0) {
     return { error: 'no documents for corpus version' };
+  }
+  // 지정한 문서가 이 코퍼스에 없으면 조용히 적게 도는 대신 실패시킨다 — 부분집합 실행의 결과를
+  // 전체 실행과 헷갈리게 두지 않는다.
+  if (input.documentIds && docs.length !== input.documentIds.length) {
+    return { error: `documents not found in corpus: ${input.documentIds.filter((id) => docs.every((d) => d.id !== id)).join(', ')}` };
   }
 
   const docsWithChunkCount = docs.map((doc) => ({ id: doc.id, chunkCount: createChunks(doc.content).length }));
@@ -92,6 +101,90 @@ export const spawnPipelineRun = async (
   return { runId, spawnedCount, failedCount };
 };
 
+// 재설계 파이프라인 실행. 문서마다 워크플로 인스턴스를 띄우므로 문서 단위 병렬은 여기서,
+// 창·묶음 단위 병렬은 워크플로 안에서 이뤄진다.
+export const spawnAnalysisRun = async (
+  db: Db,
+  env: Env,
+  input: { promptSetId: string; corpusVersion: string; documentIds?: string[] },
+): Promise<{ runId: string; spawnedCount: number; failedCount: number } | { error: string }> => {
+  const [promptSet] = await db
+    .select({ label: AnalysisPromptSets.label })
+    .from(AnalysisPromptSets)
+    .where(eq(AnalysisPromptSets.id, input.promptSetId))
+    .limit(1);
+  if (!promptSet) {
+    return { error: 'prompt set not found' };
+  }
+
+  const docs = await db
+    .select({ id: Documents.id })
+    .from(Documents)
+    .where(
+      input.documentIds
+        ? and(eq(Documents.corpusVersion, input.corpusVersion), inArray(Documents.id, input.documentIds))
+        : eq(Documents.corpusVersion, input.corpusVersion),
+    );
+  if (docs.length === 0) {
+    return { error: 'no documents for corpus version' };
+  }
+  if (input.documentIds && docs.length !== input.documentIds.length) {
+    return { error: `documents not found in corpus: ${input.documentIds.filter((id) => docs.every((d) => d.id !== id)).join(', ')}` };
+  }
+
+  await db
+    .insert(Variants)
+    .values({ id: nanoid(), label: promptSet.label, round: input.corpusVersion, promptVariantId: null })
+    .onConflictDoUpdate({ target: Variants.label, set: { round: input.corpusVersion } });
+  const [variant] = await db.select({ id: Variants.id }).from(Variants).where(eq(Variants.label, promptSet.label)).limit(1);
+
+  const runId = nanoid();
+  await db.insert(PipelineRuns).values({
+    id: runId,
+    kind: 'analysis',
+    variantId: variant.id,
+    corpusVersion: input.corpusVersion,
+    status: 'running',
+    totalDocs: docs.length,
+    // 재실행하려면 어느 프롬프트 세트로 돌았는지 알아야 한다. 라벨로 되짚을 수도 있지만
+    // 그 사이 세트 라벨이 바뀌면 엉뚱한 세트로 다시 돌게 된다.
+    meta: { promptSetId: input.promptSetId },
+  });
+
+  let spawnedCount = 0;
+  let failedCount = 0;
+
+  for (const doc of docs) {
+    await db.insert(PipelineRunDocs).values({ id: nanoid(), runId, documentId: doc.id, status: 'pending', phase: 'queued' });
+    try {
+      const instance = await env.ANALYSIS.create({
+        params: {
+          runId,
+          promptSetId: input.promptSetId,
+          variantLabel: variant.id,
+          corpusVersion: input.corpusVersion,
+          documentId: doc.id,
+        },
+      });
+      await db
+        .update(PipelineRunDocs)
+        .set({ workflowInstanceId: instance.id })
+        .where(and(eq(PipelineRunDocs.runId, runId), eq(PipelineRunDocs.documentId, doc.id)));
+      spawnedCount += 1;
+    } catch (err) {
+      const message = String(err).slice(0, 1000);
+      console.warn(`analysis spawn failed for document ${doc.id}: ${message}`);
+      await db
+        .update(PipelineRunDocs)
+        .set({ status: 'failed', error: message })
+        .where(and(eq(PipelineRunDocs.runId, runId), eq(PipelineRunDocs.documentId, doc.id)));
+      failedCount += 1;
+    }
+  }
+
+  return { runId, spawnedCount, failedCount };
+};
+
 export const spawnSamplingRun = async (
   db: Db,
   env: Env,
@@ -111,14 +204,15 @@ export const spawnSamplingRun = async (
   }
 };
 
-const refreshPipelineDocs = async (db: Db, env: Env, runId: string): Promise<void> => {
+// 구 파이프라인과 재설계 파이프라인은 문서 단위 워크플로라는 점이 같고 바인딩만 다르다.
+const refreshDocs = async (db: Db, workflow: Env['PIPELINE'] | Env['ANALYSIS'], runId: string): Promise<void> => {
   const docs = await db.select().from(PipelineRunDocs).where(eq(PipelineRunDocs.runId, runId));
 
   for (const doc of docs) {
     if (TERMINAL_DOC_STATUSES.has(doc.status) || !doc.workflowInstanceId) continue;
 
     try {
-      const instance = await env.PIPELINE.get(doc.workflowInstanceId);
+      const instance = await workflow.get(doc.workflowInstanceId);
       const status = await instance.status();
       if (status.status === 'errored') {
         await db
@@ -170,7 +264,9 @@ export const refreshRun = async (db: Db, env: Env, runId: string): Promise<void>
   if (!run || run.status !== 'running') return;
 
   if (run.kind === 'pipeline') {
-    await refreshPipelineDocs(db, env, runId);
+    await refreshDocs(db, env.PIPELINE, runId);
+  } else if (run.kind === 'analysis') {
+    await refreshDocs(db, env.ANALYSIS, runId);
   } else {
     await refreshSamplingInstance(db, env, runId);
   }
@@ -182,14 +278,15 @@ export const cancelRun = async (db: Db, env: Env, runId: string): Promise<{ ok: 
     return { error: 'run not found' };
   }
 
-  if (run.kind === 'pipeline') {
+  if (run.kind === 'pipeline' || run.kind === 'analysis') {
+    const workflow = run.kind === 'pipeline' ? env.PIPELINE : env.ANALYSIS;
     const docs = await db.select().from(PipelineRunDocs).where(eq(PipelineRunDocs.runId, runId));
     for (const doc of docs) {
       if (TERMINAL_DOC_STATUSES.has(doc.status)) continue;
 
       if (doc.workflowInstanceId) {
         try {
-          const instance = await env.PIPELINE.get(doc.workflowInstanceId);
+          const instance = await workflow.get(doc.workflowInstanceId);
           const status = await instance.status();
           if (status.status === 'running' || status.status === 'queued') {
             await instance.terminate();
@@ -219,17 +316,51 @@ export const cancelRun = async (db: Db, env: Env, runId: string): Promise<{ ok: 
 
 export const retryFailedDocs = async (db: Db, env: Env, runId: string): Promise<{ retried: number } | { error: string }> => {
   const [run] = await db.select().from(PipelineRuns).where(eq(PipelineRuns.id, runId)).limit(1);
-  if (!run || run.kind !== 'pipeline' || !run.variantId) {
-    return { error: 'pipeline run not found' };
+  if (!run || (run.kind !== 'pipeline' && run.kind !== 'analysis') || !run.variantId) {
+    return { error: 'run not found' };
   }
 
   const [variant] = await db.select().from(Variants).where(eq(Variants.id, run.variantId)).limit(1);
-  if (!variant?.promptVariantId) {
+  if (!variant) {
     return { error: 'variant not resolved' };
   }
 
-  // 취소된 문서도 재시도 대상 — 취소된 run을 새 run 없이 재개해 완료 문서의 analyze 재지불을 피한다.
-  // done 문서는 여기서 애초에 스폰되지 않는 것이 스킵의 본체다(pipeline resolve의 done 가드는 방어선).
+  // 어느 워크플로를 어떤 인자로 띄울지는 여기서 한 번 정한다 — 반복문 안에서 갈래를 다시 세면
+  // 좁혀둔 타입이 풀리고, 무엇보다 실행 종류마다 다른 인자를 한자리에서 볼 수 있다.
+  let spawnDoc: (documentId: string) => Promise<{ id: string }>;
+
+  if (run.kind === 'analysis') {
+    // 분석 실행은 프롬프트 세트가 있어야 다시 돈다. 옛 실행에는 meta가 없어 라벨로 되짚는다.
+    let promptSetId = ((run.meta as { promptSetId?: unknown } | null)?.promptSetId as string | undefined) ?? null;
+    if (!promptSetId) {
+      const [set] = await db
+        .select({ id: AnalysisPromptSets.id })
+        .from(AnalysisPromptSets)
+        .where(eq(AnalysisPromptSets.label, variant.label))
+        .limit(1);
+      promptSetId = set?.id ?? null;
+    }
+    if (!promptSetId) {
+      return { error: 'prompt set not resolved' };
+    }
+    const resolvedSetId = promptSetId;
+    spawnDoc = (documentId) =>
+      env.ANALYSIS.create({
+        params: { runId, promptSetId: resolvedSetId, variantLabel: variant.id, corpusVersion: run.corpusVersion, documentId },
+      });
+  } else {
+    const promptVariantId = variant.promptVariantId;
+    if (!promptVariantId) {
+      return { error: 'variant not resolved' };
+    }
+    spawnDoc = (documentId) =>
+      env.PIPELINE.create({
+        params: { runId, promptVariantId, variantLabel: variant.label, corpusVersion: run.corpusVersion, documentId },
+      });
+  }
+
+  // 취소된 문서도 재시도 대상 — 취소된 run을 새 run 없이 재개해 완료 문서의 재지불을 피한다.
+  // done 문서는 여기서 애초에 스폰되지 않는 것이 스킵의 본체다.
   const retryableDocs = await db
     .select({ documentId: PipelineRunDocs.documentId })
     .from(PipelineRunDocs)
@@ -240,19 +371,15 @@ export const retryFailedDocs = async (db: Db, env: Env, runId: string): Promise<
   for (const doc of retryableDocs) {
     await db
       .update(PipelineRunDocs)
-      .set({ status: 'pending', error: null, workflowInstanceId: null })
+      .set({ status: 'pending', error: null, workflowInstanceId: null, ...(run.kind === 'analysis' && { phase: 'queued' }) })
       .where(and(eq(PipelineRunDocs.runId, runId), eq(PipelineRunDocs.documentId, doc.documentId)));
 
     try {
-      await env.PIPELINE.create({
-        params: {
-          runId,
-          promptVariantId: variant.promptVariantId,
-          variantLabel: variant.label,
-          corpusVersion: run.corpusVersion,
-          documentId: doc.documentId,
-        },
-      });
+      const instance = await spawnDoc(doc.documentId);
+      await db
+        .update(PipelineRunDocs)
+        .set({ workflowInstanceId: instance.id })
+        .where(and(eq(PipelineRunDocs.runId, runId), eq(PipelineRunDocs.documentId, doc.documentId)));
       retriedCount += 1;
     } catch (err) {
       const message = String(err).slice(0, 1000);

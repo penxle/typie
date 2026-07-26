@@ -1,7 +1,16 @@
+import { isAccepted } from './corpus-filter.ts';
 import { allocateByLargestRemainder, GENRES } from './genres.ts';
 import type { Candidate, ExtractResult } from './internal-api.ts';
 
-export type Classified = { candidate: Candidate; literary: boolean; kind: string; genre: string };
+export type Classified = {
+  candidate: Candidate;
+  kind: string;
+  genre: string;
+  narrative: boolean;
+  singleWork: boolean;
+  selfContained: boolean;
+  original: boolean;
+};
 export type LiteraryDoc = { documentId: string; genre: string };
 export type SelectedDocument = { id: string; refId: string; content: string; characterCount: number };
 export type StratifiedSelection = {
@@ -21,7 +30,7 @@ export const MAX_CANDIDATES = 2000;
 export const candidateLimitFor = (size: number): number => Math.min(MAX_CANDIDATES, Math.max(100, size * CANDIDATES_PER_DOC));
 
 export const pickLiteraryDocs = (classified: Classified[]): LiteraryDoc[] =>
-  classified.filter((c) => c.literary).map((c) => ({ documentId: c.candidate.documentId, genre: c.genre }));
+  classified.filter((c) => isAccepted(c)).map((c) => ({ documentId: c.candidate.documentId, genre: c.genre }));
 
 export const shuffle = <T>(items: T[], random: () => number = Math.random): T[] => {
   const result = [...items];

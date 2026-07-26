@@ -16,10 +16,16 @@
   import ThemeToggle from '$lib/components/ThemeToggle.svelte';
   import { FEEDBACK_LABEL_KEYS } from '$lib/domain/feedback-labels.ts';
   import { computeSegments } from '$lib/domain/highlight.ts';
+  import { EMPTY_REVIEW_VERDICT, hasRejection, isFeedbackComplete, isReviewComplete, parseWorkReview } from '$lib/domain/verdicts.ts';
+  import AnalysisFeedbackPanel from './AnalysisFeedbackPanel.svelte';
   import FeedbackSetPanel from './FeedbackSetPanel.svelte';
+  import FindingRail from './FindingRail.svelte';
+  import WorkReviewPanel from './WorkReviewPanel.svelte';
   import type { FeedbackLabelEntry, FeedbackLabelMap } from '$lib/domain/feedback-labels.ts';
   import type { JudgmentResult, PairVerdict } from '$lib/domain/types.ts';
+  import type { FeedbackVerdict, FeedbackVerdictMap, ReviewVerdictMap } from '$lib/domain/verdicts.ts';
   import type { PageData } from './$types';
+  import type { RailMark } from './FindingRail.svelte';
 
   type Props = { data: PageData; preview?: boolean };
   const { data, preview = false }: Props = $props();
@@ -45,12 +51,21 @@
   };
 
   const labels = ['A', 'B', 'C', 'D'];
-  const SCORE_ANCHORS = [
+  // 스크리닝·확정은 후보끼리 견주는 자리라 질(質) 척도를 쓴다. 절대평가는 견줄 상대가 없어
+  // 같은 척도를 그대로 쓰면 무엇에 견준 '부실'인지가 평가자마다 갈린다 — 도움 여부를 직접 묻는다.
+  const QUALITY_ANCHORS = [
     { score: 1, anchor: '매우 부실' },
     { score: 2, anchor: '부실' },
     { score: 3, anchor: '보통' },
     { score: 4, anchor: '좋음' },
     { score: 5, anchor: '훌륭' },
+  ];
+  const HELPFULNESS_ANCHORS = [
+    { score: 1, anchor: '전혀' },
+    { score: 2, anchor: '별로' },
+    { score: 3, anchor: '보통' },
+    { score: 4, anchor: '도움됨' },
+    { score: 5, anchor: '큰 도움' },
   ];
 
   const draftResult = untrack(() => data.draft?.result as JudgmentResult | null);
@@ -71,15 +86,28 @@
       return filtered;
     }),
   );
+  let verdictMap = $state<FeedbackVerdictMap>(
+    untrack(() => Object.fromEntries(Object.entries(data.verdicts).filter(([feedbackId]) => taskFeedbackIds.has(feedbackId)))),
+  );
+  let reviewVerdictMap = $state<ReviewVerdictMap>(
+    untrack(() => Object.fromEntries(Object.entries(data.reviewVerdicts).filter(([setId]) => data.task.setIds.includes(setId)))),
+  );
   let comment = $state(untrack(() => data.draft?.comment ?? ''));
   let hoveredFeedbackId = $state<string | null>(null);
   let focusedFeedbackId = $state<string | null>(null);
+  let focusedAnchorKey = $state<string | null>(null);
   let activeSetIndex = $state(0);
+  let activeTab = $state<'review' | 'findings'>('review');
   let savedAt = $state<string | null>(null);
   let saving = $state(false);
   let submitting = $state(false);
   const busy = $derived(saving || submitting);
-  let focusTimer: ReturnType<typeof setTimeout> | undefined;
+
+  let documentPaneEl = $state<HTMLElement | undefined>();
+  let reviewPaneEl = $state<HTMLElement | undefined>();
+  let findingsPaneEl = $state<HTMLElement | undefined>();
+  const paneScrollTops: Record<'review' | 'findings', number> = { review: 0, findings: 0 };
+  let documentViewport = $state<{ start: number; end: number } | null>(null);
 
   const outlineButtonClass = css({
     display: 'inline-flex',
@@ -108,6 +136,9 @@
   let verdict = $state<PairVerdict | null>(draftResult?.kind === 'pair' ? draftResult.verdict : null);
 
   const isRanking = $derived(data.task.kind === 'ranking');
+  // 절대평가는 세트가 한 벌이라 세트 비교용 문구(같은 평가 허용 · N/M 세트 완료)가 성립하지 않는다.
+  const multiSet = $derived(data.task.setIds.length > 1);
+  const scoreAnchors = $derived(data.isAnalysis ? HELPFULNESS_ANCHORS : QUALITY_ANCHORS);
 
   const result = $derived.by((): JudgmentResult | null => {
     if (isRanking) {
@@ -118,16 +149,33 @@
   });
 
   const activeSet = $derived(data.sets[activeSetIndex]);
+  const activeReview = $derived(parseWorkReview(activeSet.review));
+
+  // 피드백 1건이 본문 여러 곳에 붙는다. 하이라이트는 위치 단위로 그리되 키에 피드백 id를 남겨,
+  // 카드에 마우스를 올리면 그 피드백의 모든 위치가 함께 켜지도록 한다.
+  const anchorRefs = $derived.by(() => {
+    const refs: { key: string; feedbackId: string; start: number; end: number }[] = [];
+    for (const feedback of activeSet.feedbacks) {
+      const positions =
+        activeReview === null
+          ? [{ matchStart: feedback.matchStart, matchEnd: feedback.matchEnd }]
+          : feedback.anchors.map((a) => ({ matchStart: a.matchStart, matchEnd: a.matchEnd }));
+      let index = 0;
+      for (const { matchStart, matchEnd } of positions) {
+        if (matchStart === null || matchEnd === null) continue;
+        refs.push({ key: `${feedback.id}:${index}`, feedbackId: feedback.id, start: matchStart, end: matchEnd });
+        index++;
+      }
+    }
+    return refs;
+  });
+
+  const feedbackIdByAnchorKey = $derived(new Map(anchorRefs.map((ref) => [ref.key, ref.feedbackId])));
 
   const segments = $derived(
     computeSegments(
       data.document.content,
-      activeSet.feedbacks.reduce<{ start: number; end: number; feedbackId: string }[]>((anchors, f) => {
-        if (f.matchStart !== null && f.matchEnd !== null) {
-          anchors.push({ start: f.matchStart, end: f.matchEnd, feedbackId: f.id });
-        }
-        return anchors;
-      }, []),
+      anchorRefs.map((ref) => ({ start: ref.start, end: ref.end, feedbackId: ref.key })),
     ),
   );
 
@@ -136,14 +184,106 @@
   const firstSegmentOf = $derived.by(() => {
     const seen: Record<string, number> = {};
     for (const [i, segment] of segments.entries()) {
-      for (const fid of segment.feedbackIds) {
-        seen[fid] ??= i;
+      for (const key of segment.feedbackIds) {
+        seen[key] ??= i;
       }
     }
     return seen;
   });
 
+  // 피드백마다 첫 앵커 위치만 남긴다 — 레일은 분포를 보여주는 것이지 모든 앵커를 그리는 자리가 아니다.
+  const firstAnchorStart = $derived.by(() => {
+    const starts: Record<string, number> = {};
+    for (const ref of anchorRefs) {
+      starts[ref.feedbackId] ??= ref.start;
+    }
+    return starts;
+  });
+
+  const railMarks = $derived.by((): RailMark[] => {
+    const firstStart = firstAnchorStart;
+    const length = Math.max(1, data.document.content.length);
+    return activeSet.feedbacks.flatMap((feedback, i) => {
+      const start = firstStart[feedback.id];
+      if (start === undefined) return [];
+      const state = hasRejection(verdictMap[feedback.id]) ? 'fail' : isFeedbackComplete(verdictMap[feedback.id]) ? 'seen' : 'unseen';
+      return [{ feedbackId: feedback.id, number: i + 1, position: Math.min(1, start / length), state }];
+    });
+  });
+
+  // '남음'은 세 항목을 다 채우지 못한 피드백 수다. 하나라도 비면 그 피드백은 집계에 쓸 수 없다.
+  const pendingCount = $derived(activeSet.feedbacks.filter((f) => !isFeedbackComplete(verdictMap[f.id])).length);
+  // 제출 조건 — 배정된 세트마다 피드백 전부와 총평 두 문항이 채워져야 한다.
+  const analysisComplete = $derived.by(() => {
+    if (!data.isAnalysis) return true;
+    return data.sets.every(
+      (set) =>
+        set.feedbacks.every((f) => isFeedbackComplete(verdictMap[f.id])) &&
+        (set.review === null || isReviewComplete(reviewVerdictMap[set.setId])),
+    );
+  });
+
   let submitButtonEl = $state<HTMLButtonElement | undefined>();
+
+  const reducedMotion = () => globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+
+  // scrollIntoView는 조상 컨테이너까지 함께 굴린다. 판정 화면은 본문·패널이 각자 스크롤하므로
+  // 대상이 든 컨테이너 하나만 직접 굴려야 다른 쪽이 제자리를 잃지 않는다.
+  const scrollWithin = (container: HTMLElement, target: HTMLElement) => {
+    const containerRect = container.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    const offset = targetRect.top - containerRect.top - containerRect.height / 2 + targetRect.height / 2;
+    container.scrollTo({ top: container.scrollTop + offset, behavior: reducedMotion() ? 'auto' : 'smooth' });
+  };
+
+  const switchTab = (tab: 'review' | 'findings') => {
+    if (tab === activeTab) return;
+    const current = activeTab === 'review' ? reviewPaneEl : findingsPaneEl;
+    if (current) paneScrollTops[activeTab] = current.scrollTop;
+    activeTab = tab;
+    requestAnimationFrame(() => {
+      const next = tab === 'review' ? reviewPaneEl : findingsPaneEl;
+      if (next) next.scrollTop = paneScrollTops[tab];
+    });
+  };
+
+  // 카드로 이동. 총평 탭에 있었다면 피드백 탭으로 옮기되, 총평의 스크롤 위치는 그대로 남는다.
+  const focusFeedback = (feedbackId: string) => {
+    focusedFeedbackId = feedbackId;
+    if (!data.isAnalysis) {
+      const el = document.querySelector<HTMLElement>(`[data-feedback-card="${feedbackId}"]`);
+      if (el && findingsPaneEl) scrollWithin(findingsPaneEl, el);
+      return;
+    }
+    switchTab('findings');
+    requestAnimationFrame(() => {
+      const el = document.querySelector<HTMLElement>(`[data-feedback-card="${feedbackId}"]`);
+      if (el && findingsPaneEl) scrollWithin(findingsPaneEl, el);
+    });
+  };
+
+  const focusAnchor = (feedbackId: string, anchorIndex = 0) => {
+    const key = `${feedbackId}:${anchorIndex}`;
+    focusedFeedbackId = feedbackId;
+    focusedAnchorKey = key;
+    const el = document.querySelector<HTMLElement>(`[data-anchor="${key}"]`);
+    if (el && documentPaneEl) scrollWithin(documentPaneEl, el);
+  };
+
+  const seekDocument = (fraction: number) => {
+    const el = documentPaneEl;
+    if (!el) return;
+    el.scrollTop = fraction * el.scrollHeight - el.clientHeight / 2;
+  };
+
+  const trackDocumentViewport = () => {
+    const el = documentPaneEl;
+    if (!el || el.scrollHeight <= el.clientHeight) {
+      documentViewport = null;
+      return;
+    }
+    documentViewport = { start: el.scrollTop / el.scrollHeight, end: (el.scrollTop + el.clientHeight) / el.scrollHeight };
+  };
 
   const requestSubmit = () => {
     Dialog.confirm({
@@ -182,38 +322,66 @@
     labelMap = Object.fromEntries(Object.entries(labelMap).filter(([id]) => id !== feedbackId));
   };
 
-  const scrollToPanelCard = (feedbackId: string) => {
-    const el = document.querySelector(`[data-feedback-card="${feedbackId}"]`);
-    if (!el) return;
-    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    el.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'center' });
-    focusedFeedbackId = feedbackId;
-    clearTimeout(focusTimer);
-    focusTimer = setTimeout(() => (focusedFeedbackId = null), 2000);
+  const updateVerdict = (feedbackId: string, verdict: FeedbackVerdict) => {
+    verdictMap = { ...verdictMap, [feedbackId]: verdict };
   };
 
-  const scrollToFeedback = (feedbackId: string) => {
-    const el = document.querySelector(`[data-anchor="${feedbackId}"]`);
-    if (!el) return;
-    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    el.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'center' });
-    focusedFeedbackId = feedbackId;
-    clearTimeout(focusTimer);
-    focusTimer = setTimeout(() => (focusedFeedbackId = null), 2000);
+  // 피드백 사이 이동은 본문과 목록을 함께 옮긴다 — 마흔 건짜리 목록에서 마우스로 짝을 맞추는 일이 없도록.
+  const stepFeedback = (delta: number) => {
+    const list = activeSet.feedbacks;
+    if (list.length === 0) return;
+    const current = list.findIndex((f) => f.id === focusedFeedbackId);
+    const next = list[(current + delta + list.length) % list.length];
+    if (!next) return;
+    focusFeedback(next.id);
+    focusAnchor(next.id, 0);
+  };
+
+  const jumpToPending = () => {
+    const next = activeSet.feedbacks.find((f) => !isFeedbackComplete(verdictMap[f.id]));
+    if (!next) return;
+    focusFeedback(next.id);
+    focusAnchor(next.id, 0);
   };
 
   const onKeydown = (e: KeyboardEvent) => {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     const target = e.target as HTMLElement | null;
     if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
-    const index = Number(e.key) - 1;
-    if (index >= 0 && index < data.sets.length) {
-      activeSetIndex = index;
+
+    if (multiSet) {
+      const index = Number(e.key) - 1;
+      if (index >= 0 && index < data.sets.length) {
+        activeSetIndex = index;
+        return;
+      }
     }
+    if (!data.isAnalysis) return;
+    if (e.key === 'j') stepFeedback(1);
+    else if (e.key === 'k') stepFeedback(-1);
+    else if (e.key === 'u') jumpToPending();
+    else if (e.key === 'r') switchTab(activeTab === 'review' ? 'findings' : 'review');
   };
 
   const readingMinutes = $derived(Math.max(1, Math.round(data.document.characterCount / 500)));
   const scoredCount = $derived(data.task.setIds.filter((setId) => (scores[setId] ?? 0) > 0).length);
+
+  const tabClass = (selected: boolean) =>
+    flex({
+      align: 'center',
+      justify: 'center',
+      gap: '6px',
+      flex: '1',
+      paddingY: '9px',
+      borderBottomWidth: '1px',
+      borderColor: selected ? 'text.default' : '[transparent]',
+      color: selected ? 'text.default' : 'text.faint',
+      fontSize: '13px',
+      fontWeight: selected ? 'bold' : 'normal',
+      cursor: 'pointer',
+      transition: '[color 0.15s ease, border-color 0.15s ease]',
+      _hover: { color: 'text.default' },
+    });
 </script>
 
 <svelte:window onblur={suspendActivity} onfocus={recordActivity} onkeydown={onKeydown} />
@@ -294,100 +462,130 @@
     <ThemeToggle />
   </header>
 
-  <div class={grid({ columns: 2, gap: '0', gridTemplateColumns: '[minmax(0, 1fr) 480px]', flex: '1', minHeight: '0' })}>
-    <section class={css({ overflowY: 'auto', overflowAnchor: 'none', paddingY: '32px', paddingX: '24px' })}>
-      <article
+  <div class={grid({ columns: 2, gap: '0', gridTemplateColumns: '[minmax(0, 1fr) 460px]', flex: '1', minHeight: '0' })}>
+    <div class={flex({ minHeight: '0', paddingRight: '12px' })}>
+      <section
+        bind:this={documentPaneEl}
         class={css({
-          maxWidth: '[720px]',
-          marginX: 'auto',
-          backgroundColor: 'surface.default',
-          borderRadius: '12px',
-          boxShadow: 'small',
-          paddingX: '56px',
-          paddingY: '48px',
-          whiteSpace: 'pre-wrap',
-          fontSize: '17px',
-          lineHeight: '[1.9]',
-          color: 'text.default',
-          wordBreak: 'break-word',
+          flex: '1',
+          minWidth: '0',
+          overflowY: 'auto',
+          overflowAnchor: 'none',
+          paddingY: '32px',
+          paddingX: '20px',
+          // 레일이 스크롤바 역할을 대신한다 — 같은 일을 하는 막대를 둘 두지 않는다.
+          scrollbarWidth: 'none',
+          ['&::-webkit-scrollbar']: { display: 'none' },
         })}
+        onscroll={trackDocumentViewport}
       >
-        {#each segments as segment, i (i)}
-          {#if segment.feedbackIds.length > 0}
-            {@const active = segment.feedbackIds.includes(hoveredFeedbackId ?? '') || segment.feedbackIds.includes(focusedFeedbackId ?? '')}
-            <span
-              class={css({
-                position: 'relative',
-                backgroundColor: active ? 'amber.300' : 'amber.100',
-                borderBottomWidth: '2px',
-                borderColor: 'amber.400',
-                _dark: {
-                  backgroundColor: active ? '[#6e5f16]' : '[#4a4012]',
-                  borderColor: '[#93801c]',
-                },
-                borderRadius: '2px',
-                color: '[inherit]',
-                cursor: 'pointer',
-                transition: '[background-color 0.15s ease]',
-              })}
-              onclick={() => segment.feedbackIds[0] && scrollToPanelCard(segment.feedbackIds[0])}
-              onkeydown={(e) => {
-                if ((e.key === 'Enter' || e.key === ' ') && segment.feedbackIds[0]) {
-                  e.preventDefault();
-                  scrollToPanelCard(segment.feedbackIds[0]);
-                }
-              }}
-              role="button"
-              tabindex="0"
-            >
-              {#each segment.feedbackIds as fid, bi (fid)}
-                {#if firstSegmentOf[fid] === i}
-                  <span
-                    style:left={`${bi * 16}px`}
-                    class={css({
-                      position: 'absolute',
-                      top: '[-10px]',
-                      zIndex: '1',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      width: '14px',
-                      height: '14px',
-                      borderRadius: 'full',
-                      backgroundColor: 'surface.dark',
-                      color: 'text.bright',
-                      fontSize: '9px',
-                      fontWeight: 'bold',
-                      lineHeight: '[1]',
-                      cursor: 'pointer',
-                      userSelect: 'none',
-                    })}
-                    data-anchor={fid}
-                    onclick={(e) => {
-                      e.stopPropagation();
-                      scrollToPanelCard(fid);
-                    }}
-                    onkeydown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
+        <article
+          class={css({
+            maxWidth: '[720px]',
+            marginX: 'auto',
+            backgroundColor: 'surface.default',
+            borderRadius: '12px',
+            boxShadow: 'small',
+            paddingX: '56px',
+            paddingY: '48px',
+            whiteSpace: 'pre-wrap',
+            fontSize: '17px',
+            lineHeight: '[1.9]',
+            color: 'text.default',
+            wordBreak: 'break-word',
+          })}
+        >
+          {#each segments as segment, i (i)}
+            {#if segment.feedbackIds.length > 0}
+              {@const owners = segment.feedbackIds.map((key) => feedbackIdByAnchorKey.get(key))}
+              {@const active = owners.includes(hoveredFeedbackId ?? '') || owners.includes(focusedFeedbackId ?? '')}
+              {@const current = segment.feedbackIds.includes(focusedAnchorKey ?? '')}
+              <span
+                class={css({
+                  position: 'relative',
+                  backgroundColor: current ? 'amber.400' : active ? 'amber.300' : 'amber.100',
+                  borderBottomWidth: '2px',
+                  borderColor: current ? 'amber.600' : 'amber.400',
+                  _dark: {
+                    backgroundColor: current ? '[#8a7619]' : active ? '[#6e5f16]' : '[#4a4012]',
+                    borderColor: current ? '[#c9ad25]' : '[#93801c]',
+                  },
+                  borderRadius: '2px',
+                  color: '[inherit]',
+                  cursor: 'pointer',
+                  transition: '[background-color 0.15s ease]',
+                  scrollMarginBlock: '80px',
+                })}
+                onclick={() => owners[0] && focusFeedback(owners[0])}
+                onkeydown={(e) => {
+                  if ((e.key === 'Enter' || e.key === ' ') && owners[0]) {
+                    e.preventDefault();
+                    focusFeedback(owners[0]);
+                  }
+                }}
+                onmouseenter={() => (hoveredFeedbackId = owners[0] ?? null)}
+                onmouseleave={() => (hoveredFeedbackId = null)}
+                role="button"
+                tabindex="0"
+              >
+                {#each segment.feedbackIds as key, bi (key)}
+                  {@const fid = feedbackIdByAnchorKey.get(key) ?? key}
+                  {#if firstSegmentOf[key] === i}
+                    <span
+                      style:left={`${bi * 16}px`}
+                      class={css({
+                        position: 'absolute',
+                        top: '[-10px]',
+                        zIndex: '1',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: '14px',
+                        height: '14px',
+                        borderRadius: 'full',
+                        backgroundColor: 'surface.dark',
+                        color: 'text.bright',
+                        fontSize: '9px',
+                        fontWeight: 'bold',
+                        lineHeight: '[1]',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                      })}
+                      data-anchor={key}
+                      onclick={(e) => {
                         e.stopPropagation();
-                        scrollToPanelCard(fid);
-                      }
-                    }}
-                    role="button"
-                    tabindex="0"
-                  >
-                    {feedbackNumbers[fid]}
-                  </span>
-                {/if}
-              {/each}{segment.text}
-            </span>
-          {:else}
-            <span>{segment.text}</span>
-          {/if}
-        {/each}
-      </article>
-    </section>
+                        focusFeedback(fid);
+                      }}
+                      onkeydown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          focusFeedback(fid);
+                        }
+                      }}
+                      role="button"
+                      tabindex="0"
+                    >
+                      {feedbackNumbers[fid]}
+                    </span>
+                  {/if}
+                {/each}{segment.text}
+              </span>
+            {:else}
+              <span>{segment.text}</span>
+            {/if}
+          {/each}
+        </article>
+      </section>
+      {#if data.isAnalysis && railMarks.length > 0}
+        <FindingRail
+          marks={railMarks}
+          onSeek={seekDocument}
+          onSelect={(id) => (focusFeedback(id), focusAnchor(id, 0))}
+          viewport={documentViewport}
+        />
+      {/if}
+    </div>
 
     <aside
       class={css({
@@ -399,52 +597,99 @@
         backgroundColor: 'surface.default',
       })}
     >
-      <nav class={css({ padding: '16px', borderBottomWidth: '1px', borderColor: 'border.subtle', flexShrink: '0' })}>
-        <div style:grid-template-columns={`repeat(${data.sets.length}, 1fr)`} class={css({ display: 'grid', gap: '6px' })}>
-          {#each data.sets as set, i (`${i}-${set.setId}`)}
-            <button
-              class={css({
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '4px',
-                paddingY: '8px',
-                borderRadius: '8px',
-                borderWidth: '1px',
-                borderColor: activeSetIndex === i ? 'border.strong' : 'border.default',
-                backgroundColor: activeSetIndex === i ? 'surface.dark' : 'surface.default',
-                color: activeSetIndex === i ? 'text.bright' : 'text.default',
-                fontSize: '14px',
-                fontWeight: activeSetIndex === i ? 'bold' : 'normal',
-                cursor: 'pointer',
-                transition: '[background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease]',
-              })}
-              onclick={() => (activeSetIndex = i)}
-              type="button"
-            >
-              {labels[i]}
-              <span class={css({ fontSize: '11px', fontWeight: 'normal', opacity: '70' })}>{set.feedbacks.length}건</span>
-              {#if isRanking && (scores[set.setId] ?? 0) > 0}
-                <Icon style={css.raw({ color: activeSetIndex === i ? 'text.bright' : 'text.success' })} icon={IconCheck} size={12} />
-              {/if}
-            </button>
-          {/each}
-        </div>
-        <p class={css({ marginTop: '8px', fontSize: '12px', color: 'text.faint' })}>
-          키보드 1–{data.sets.length}로 세트 전환 · 피드백을 누르면 본문 위치로 이동합니다
-        </p>
-      </nav>
+      {#if multiSet}
+        <nav class={css({ paddingX: '16px', paddingTop: '12px', flexShrink: '0' })}>
+          <div style:grid-template-columns={`repeat(${data.sets.length}, 1fr)`} class={css({ display: 'grid', gap: '6px' })}>
+            {#each data.sets as set, i (`${i}-${set.setId}`)}
+              <button
+                class={css({
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '4px',
+                  paddingY: '7px',
+                  borderRadius: '8px',
+                  borderWidth: '1px',
+                  borderColor: activeSetIndex === i ? 'border.strong' : 'border.default',
+                  backgroundColor: activeSetIndex === i ? 'surface.dark' : 'surface.default',
+                  color: activeSetIndex === i ? 'text.bright' : 'text.default',
+                  fontSize: '13px',
+                  fontWeight: activeSetIndex === i ? 'bold' : 'normal',
+                  cursor: 'pointer',
+                  transition: '[background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease]',
+                })}
+                onclick={() => (activeSetIndex = i)}
+                type="button"
+              >
+                세트 {labels[i]}
+                <span class={css({ fontSize: '11px', fontWeight: 'normal', opacity: '70' })}>{set.feedbacks.length}건</span>
+                {#if isRanking && (scores[set.setId] ?? 0) > 0}
+                  <Icon style={css.raw({ color: activeSetIndex === i ? 'text.bright' : 'text.success' })} icon={IconCheck} size={12} />
+                {/if}
+              </button>
+            {/each}
+          </div>
+        </nav>
+      {/if}
 
-      <div class={css({ flex: '1', overflowY: 'auto', padding: '16px', minHeight: '0', backgroundColor: 'surface.subtle' })}>
-        <FeedbackSetPanel
-          feedbacks={activeSet.feedbacks}
-          highlightedId={focusedFeedbackId}
-          {labelMap}
-          onHover={(id) => (hoveredFeedbackId = id)}
-          onSelect={scrollToFeedback}
-          onUpdateLabels={updateLabels}
-        />
-      </div>
+      {#if data.isAnalysis && activeReview}
+        <!-- 총평과 피드백을 한 스크롤에 두면, 총평이 가리키는 피드백으로 뛴 순간 총평을 잃는다.
+             각자 스크롤을 갖게 하고 전환 시 위치를 되돌려 읽던 자리를 지킨다. -->
+        <div class={flex({ paddingX: '16px', borderBottomWidth: '1px', borderColor: 'border.default', flexShrink: '0' })}>
+          <button class={tabClass(activeTab === 'review')} onclick={() => switchTab('review')} type="button">작품 총평</button>
+          <button class={tabClass(activeTab === 'findings')} onclick={() => switchTab('findings')} type="button">
+            피드백 {activeSet.feedbacks.length}건
+            {#if pendingCount > 0}
+              <span class={css({ fontWeight: 'normal', color: 'text.faint', fontVariantNumeric: 'tabular-nums' })}>
+                {pendingCount} 남음
+              </span>
+            {/if}
+          </button>
+        </div>
+
+        <div
+          bind:this={reviewPaneEl}
+          style:display={activeTab === 'review' ? 'block' : 'none'}
+          class={css({ flex: '1', overflowY: 'auto', paddingY: '20px', minHeight: '0' })}
+        >
+          <WorkReviewPanel
+            feedbackLabels={activeSet.feedbacks.map((f) => ({ id: f.id, category: f.category }))}
+            onSelectFeedback={focusFeedback}
+            onUpdate={(next) => (reviewVerdictMap = { ...reviewVerdictMap, [activeSet.setId]: next })}
+            review={activeReview}
+            verdict={reviewVerdictMap[activeSet.setId] ?? EMPTY_REVIEW_VERDICT}
+          />
+        </div>
+
+        <div
+          bind:this={findingsPaneEl}
+          style:display={activeTab === 'findings' ? 'block' : 'none'}
+          class={css({ flex: '1', overflowY: 'auto', paddingY: '4px', minHeight: '0' })}
+        >
+          <AnalysisFeedbackPanel
+            feedbacks={activeSet.feedbacks}
+            focusedId={focusedFeedbackId}
+            onHover={(id) => (hoveredFeedbackId = id)}
+            onSelect={focusAnchor}
+            onUpdate={updateVerdict}
+            verdicts={verdictMap}
+          />
+        </div>
+      {:else}
+        <div
+          bind:this={findingsPaneEl}
+          class={css({ flex: '1', overflowY: 'auto', padding: '16px', minHeight: '0', backgroundColor: 'surface.subtle' })}
+        >
+          <FeedbackSetPanel
+            feedbacks={activeSet.feedbacks}
+            highlightedId={focusedFeedbackId}
+            {labelMap}
+            onHover={(id) => (hoveredFeedbackId = id)}
+            onSelect={focusAnchor}
+            onUpdateLabels={updateLabels}
+          />
+        </div>
+      {/if}
 
       <form
         class={css({ padding: '16px', borderTopWidth: '1px', borderColor: 'border.default', flexShrink: '0' })}
@@ -469,30 +714,38 @@
         {#if isRanking}
           <fieldset class={flex({ direction: 'column', gap: '6px' })}>
             <legend class={css({ fontSize: '13px', fontWeight: 'bold', marginBottom: '6px' })}>
-              점수
-              <span class={css({ fontWeight: 'normal', color: 'text.faint' })}>(같은 평가 허용)</span>
-              <span class={css({ fontWeight: 'normal', color: 'text.faint', fontVariantNumeric: 'tabular-nums' })}>
-                · {scoredCount} / {data.task.setIds.length} 세트 완료
-              </span>
+              {#if data.isAnalysis}
+                이 피드백을 받았다면 도움이 되었을까요?
+              {:else}
+                점수
+                <span class={css({ fontWeight: 'normal', color: 'text.faint' })}>(같은 평가 허용)</span>
+              {/if}
+              {#if multiSet}
+                <span class={css({ fontWeight: 'normal', color: 'text.faint', fontVariantNumeric: 'tabular-nums' })}>
+                  · {scoredCount} / {data.task.setIds.length} 세트 완료
+                </span>
+              {/if}
             </legend>
             {#each data.task.setIds as setId, i (setId)}
               <div
                 class={`${flex({ align: 'center', gap: '8px', paddingX: '6px', paddingY: '4px', borderRadius: '8px', transition: '[background-color 0.15s ease]' })} ${
-                  activeSetIndex === i ? css({ backgroundColor: 'surface.muted' }) : ''
+                  multiSet && activeSetIndex === i ? css({ backgroundColor: 'surface.muted' }) : ''
                 }`}
               >
-                <span
-                  class={css({
-                    width: '44px',
-                    fontSize: '13px',
-                    color: activeSetIndex === i ? 'text.default' : 'text.subtle',
-                    fontWeight: activeSetIndex === i ? 'bold' : 'normal',
-                  })}
-                >
-                  세트 {labels[i]}
-                </span>
+                {#if multiSet}
+                  <span
+                    class={css({
+                      width: '44px',
+                      fontSize: '13px',
+                      color: activeSetIndex === i ? 'text.default' : 'text.subtle',
+                      fontWeight: activeSetIndex === i ? 'bold' : 'normal',
+                    })}
+                  >
+                    세트 {labels[i]}
+                  </span>
+                {/if}
                 <div class={grid({ columns: 5, gap: '4px', flex: '1' })}>
-                  {#each SCORE_ANCHORS as { score, anchor } (score)}
+                  {#each scoreAnchors as { score, anchor } (score)}
                     <button
                       class={css({
                         paddingY: '6px',
@@ -567,11 +820,13 @@
 
         <input name="result" type="hidden" value={result ? JSON.stringify(result) : ''} />
         <input name="feedbackLabels" type="hidden" value={JSON.stringify(labelMap)} />
+        <input name="verdicts" type="hidden" value={JSON.stringify(verdictMap)} />
+        <input name="reviewVerdicts" type="hidden" value={JSON.stringify(reviewVerdictMap)} />
 
         {#if preview}
           <p class={flex({ align: 'center', gap: '4px', marginTop: '10px', fontSize: '12px', color: 'text.faint' })}>
             <Icon icon={IconInfo} size={12} />
-            미리보기 모드입니다 — 점수·라벨·코멘트를 조작해볼 수 있지만 저장·제출되지 않습니다.
+            미리보기 모드입니다 — 판정을 조작해볼 수 있지만 저장·제출되지 않습니다.
           </p>
         {:else}
           <div class={flex({ wrap: 'wrap', gap: '8px', marginTop: '10px', align: 'center' })}>
@@ -597,7 +852,7 @@
                 _disabled: { backgroundColor: 'interactive.disabled', cursor: 'not-allowed' },
                 ['&:hover:not(:disabled)']: { backgroundColor: 'accent.brand.hover' },
               })}
-              disabled={!result || busy}
+              disabled={!result || !analysisComplete || busy}
               onclick={requestSubmit}
               type="button"
             >
@@ -610,18 +865,33 @@
               반납
             </button>
           </div>
-          <p class={flex({ align: 'center', gap: '4px', marginTop: '6px', height: '16px', fontSize: '12px', color: 'text.faint' })}>
-            {#if result}
-              <Icon style={css.raw({ color: 'text.success' })} icon={IconCircleCheck} size={12} />
-              제출하면 다음 평가로 바로 이동합니다.
-            {:else}
-              <Icon icon={IconInfo} size={12} />
-              {isRanking
-                ? '모든 세트에 점수를 매기면 제출할 수 있습니다. 개별 피드백 평가는 선택입니다.'
-                : '판정을 선택하면 제출할 수 있습니다.'}
-            {/if}
-          </p>
         {/if}
+
+        <p class={flex({ align: 'center', gap: '4px', marginTop: '8px', minHeight: '16px', fontSize: '12px', color: 'text.faint' })}>
+          {#if data.isAnalysis && !analysisComplete}
+            <Icon icon={IconInfo} size={12} />
+            배정된 글은 피드백 전부에 세 항목을 답해야 제출됩니다.
+            {#if pendingCount > 0}
+              <kbd class={css({ fontSize: '11px', color: 'text.subtle' })}>U</kbd>
+              로 남은 {pendingCount}건으로 이동합니다.
+            {:else}
+              작품 총평의 두 문항이 남았습니다.
+            {/if}
+          {:else if data.isAnalysis}
+            <kbd class={css({ fontSize: '11px', color: 'text.subtle' })}>J</kbd>
+            /
+            <kbd class={css({ fontSize: '11px', color: 'text.subtle' })}>K</kbd>
+            피드백 이동 ·
+            <kbd class={css({ fontSize: '11px', color: 'text.subtle' })}>R</kbd>
+            총평·피드백 전환
+          {:else if result}
+            <Icon style={css.raw({ color: 'text.success' })} icon={IconCircleCheck} size={12} />
+            제출하면 다음 평가로 바로 이동합니다.
+          {:else}
+            <Icon icon={IconInfo} size={12} />
+            {isRanking ? '모든 세트에 점수를 매기면' : '판정을 선택하면'} 제출할 수 있습니다.
+          {/if}
+        </p>
       </form>
     </aside>
   </div>

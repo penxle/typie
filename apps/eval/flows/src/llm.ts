@@ -1,5 +1,4 @@
 import OpenAI from 'openai';
-import { GENRES, normalizeGenre } from './genres.ts';
 import { dedupCharacterCandidates, extractJsonObjects, renderMetaBlock, renderSummaryForMeta } from './text.ts';
 import type { StagePrompt } from '../../src/lib/domain/admin-types.ts';
 import type { Feedback, MetaStructured, SummaryStructured, ToolDescriptions } from './text.ts';
@@ -9,6 +8,7 @@ export type Usage = { promptTokens: number; completionTokens: number };
 export type ResolvedPrompt = {
   model: string;
   effort: string | null;
+  temperature: number | null;
   systemPrompt: string;
   toolDescriptions: ToolDescriptions;
   hash: string;
@@ -25,8 +25,14 @@ export const createOpenAI = (apiKey: string, baseURL: string): OpenAI => new Ope
 
 const toHex = (buffer: ArrayBuffer): string => [...new Uint8Array(buffer)].map((b) => b.toString(16).padStart(2, '0')).join('');
 
+// temperature는 값이 있을 때만 해시에 들어간다 — 온도를 지정하지 않은 기존 단계의 해시가 그대로여야
+// stage_cache가 계속 히트한다.
 export const hashStagePrompt = async (stage: StagePrompt): Promise<string> => {
-  const encoded = new TextEncoder().encode(JSON.stringify([stage.model, stage.effort, stage.system, stage.tools]));
+  const parts: unknown[] = [stage.model, stage.effort, stage.system, stage.tools];
+  if (stage.temperature !== undefined && stage.temperature !== null) {
+    parts.push(stage.temperature);
+  }
+  const encoded = new TextEncoder().encode(JSON.stringify(parts));
   const digest = await crypto.subtle.digest('SHA-256', encoded);
   return toHex(digest).slice(0, 16);
 };
@@ -34,6 +40,7 @@ export const hashStagePrompt = async (stage: StagePrompt): Promise<string> => {
 export const resolveStagePrompt = async (stage: StagePrompt): Promise<ResolvedPrompt> => ({
   model: stage.model,
   effort: stage.effort,
+  temperature: stage.temperature ?? null,
   systemPrompt: stage.system,
   toolDescriptions: stage.tools as ToolDescriptions,
   hash: await hashStagePrompt(stage),
@@ -58,6 +65,9 @@ export const runTool = async <T>(
   };
   if (prompt.effort) {
     params.reasoning_effort = prompt.effort as never;
+  }
+  if (prompt.temperature !== null) {
+    params.temperature = prompt.temperature;
   }
   const response = await openai.chat.completions.create(params);
   if (response.usage) {
@@ -130,6 +140,9 @@ export const analyzeChunkWithContext = async (
   if (prompt.effort) {
     params.reasoning_effort = prompt.effort as never;
   }
+  if (prompt.temperature !== null) {
+    params.temperature = prompt.temperature;
+  }
   const stream = await openai.chat.completions.create(params);
 
   const accumulators = new Map<number, { name: string; arguments: string }>();
@@ -167,52 +180,4 @@ export const analyzeChunkWithContext = async (
       accumulators.clear();
     }
   }
-};
-
-const SYSTEM_PROMPT = [
-  '당신은 텍스트 분류기입니다.',
-  '제공된 텍스트가 문학적 창작물(소설, 시, 수필, 희곡, 시나리오 등 서사와 정서 표현이 중심인 글)인지 판별하세요.',
-  '메모, 일기, 할 일 목록, 정보 전달 글, 설정 노트, 강의 자료, 리뷰, 기사, 공지문은 문학적 창작물이 아닙니다.',
-  '세계관 설정이나 인물 소개만 나열된 글도 문학적 창작물이 아닙니다. 실제 서사가 전개되어야 합니다.',
-  `문학적 창작물이면 다음 8종 중 가장 가까운 장르를 하나 선택하세요: ${GENRES.map((g) => `${g.key}(${g.name})`).join(', ')}. 문학적 창작물이 아니거나 장르를 특정하기 어려우면 'etc'를 선택하세요.`,
-  'classify 도구를 정확히 한 번 호출하세요. 도구 호출 외의 텍스트 응답은 불필요합니다.',
-].join('\n');
-
-const classifyTool: OpenAI.Chat.Completions.ChatCompletionFunctionTool = {
-  type: 'function',
-  function: {
-    name: 'classify',
-    description: '텍스트의 문학성 판별 결과를 보고합니다.',
-    parameters: {
-      type: 'object',
-      properties: {
-        literary: { type: 'boolean', description: '문학적 창작물이면 true' },
-        kind: { type: 'string', description: "글의 종류. 예: '소설', '수필', '시', '일기', '메모', '정보글'" },
-        genre: { type: 'string', enum: GENRES.map((g) => g.key), description: '장르. 8종 중 하나' },
-      },
-      required: ['literary', 'kind', 'genre'],
-    },
-  },
-};
-
-export const classifyLiterary = async (
-  openai: OpenAI,
-  model: string,
-  text: string,
-): Promise<{ literary: boolean; kind: string; genre: string }> => {
-  const response = await openai.chat.completions.create({
-    model,
-    messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: text.slice(0, 2000) },
-    ],
-    tools: [classifyTool],
-    tool_choice: { type: 'function', function: { name: 'classify' } },
-  });
-  const call = response.choices[0]?.message?.tool_calls?.[0];
-  if (!call || call.type !== 'function' || call.function.name !== 'classify') {
-    throw new Error('classify tool call missing');
-  }
-  const parsed = JSON.parse(call.function.arguments) as { literary: boolean; kind: string; genre: string };
-  return { ...parsed, genre: normalizeGenre(parsed.genre) };
 };

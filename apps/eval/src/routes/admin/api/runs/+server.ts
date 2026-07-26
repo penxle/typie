@@ -3,7 +3,7 @@ import { desc } from 'drizzle-orm';
 import { createDb, PipelineRuns } from '$lib/server/db/index.ts';
 import { parseJsonBody } from '$lib/server/http.ts';
 import { runCreateSchema } from '$lib/server/run-schemas.ts';
-import { refreshRun, spawnPipelineRun, spawnSamplingRun } from '$lib/server/runs.ts';
+import { refreshRun, spawnAnalysisRun, spawnPipelineRun, spawnSamplingRun } from '$lib/server/runs.ts';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ platform }) => {
@@ -38,7 +38,23 @@ export const POST: RequestHandler = async ({ request, platform }) => {
     return json(result);
   }
 
-  const result = await spawnPipelineRun(db, platform.env, { promptVariantId: body.promptVariantId, corpusVersion: body.corpusVersion });
+  if (body.kind === 'analysis') {
+    const result = await spawnAnalysisRun(db, platform.env, {
+      promptSetId: body.promptSetId,
+      corpusVersion: body.corpusVersion,
+      documentIds: body.documentIds,
+    });
+    if ('error' in result) {
+      error(400, result.error);
+    }
+    return json(result);
+  }
+
+  const result = await spawnPipelineRun(db, platform.env, {
+    promptVariantId: body.promptVariantId,
+    corpusVersion: body.corpusVersion,
+    documentIds: body.documentIds,
+  });
   if ('error' in result) {
     error(400, result.error);
   }

@@ -31,6 +31,8 @@ type RunDocRow = {
   status: RunDocStatus;
   doneChunks: number;
   totalChunks: number;
+  // 재설계 파이프라인만 채운다 — 구 파이프라인은 청크 수로 진행률을 낸다.
+  phase: string | null;
   error: string | null;
 };
 
@@ -66,7 +68,7 @@ export const load: PageServerLoad = async ({ params, platform, locals, fetch }) 
   }[] = [];
 
   // 완료된 파이프라인 실행에서만 기계 지표·프리뷰를 계산한다(브리프: "완료 시"). feedbacks/documents는 읽기 전용 select.
-  if (run.status === 'succeeded' && run.kind === 'pipeline') {
+  if (run.status === 'succeeded' && (run.kind === 'pipeline' || run.kind === 'analysis')) {
     const sets = await db.select().from(FeedbackSets).where(eq(FeedbackSets.runId, run.id));
     const setIds = sets.map((s) => s.id);
     const feedbacks = setIds.length > 0 ? await db.select().from(Feedbacks).where(inArray(Feedbacks.setId, setIds)) : [];

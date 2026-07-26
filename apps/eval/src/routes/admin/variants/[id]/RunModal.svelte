@@ -7,7 +7,7 @@
     corpusVersions: string[];
     running: boolean;
     error: string | null;
-    onConfirm: (corpusVersion: string) => void;
+    onConfirm: (corpusVersion: string, documentIds: string[] | undefined) => void;
     onCancel: () => void;
   };
   const { corpusVersions, running, error, onConfirm, onCancel }: Props = $props();
@@ -15,6 +15,13 @@
   // 이 컴포넌트는 {#if showRunModal} 블록 안에서만 렌더링되어 열릴 때마다 새로 마운트되므로
   // corpusVersions의 초깃값만 한 번 캡처해도 안전하다.
   let selected = $state(untrack(() => corpusVersions[0] ?? ''));
+  let documentIdsText = $state('');
+  const documentIds = $derived(
+    documentIdsText
+      .split(/[\s,]+/)
+      .map((id) => id.trim())
+      .filter((id) => id.length > 0),
+  );
 
   // select 등 다이얼로그 내부 엘리먼트에 포커스가 있으면 바깥 div의 onkeydown까지 이벤트가 버블링되지 않아
   // Escape가 죽는다 — 포커스 위치와 무관하게 항상 잡히도록 window 레벨에서 처리한다.
@@ -83,6 +90,32 @@
           <option value={version}>{version}</option>
         {/each}
       </select>
+
+      <label
+        class={css({ display: 'block', fontSize: '12px', color: 'text.faint', marginTop: '12px', marginBottom: '4px' })}
+        for="run-modal-documents"
+      >
+        문서 ID — 비우면 코퍼스 전체
+      </label>
+      <textarea
+        id="run-modal-documents"
+        class={css({
+          width: 'full',
+          minHeight: '64px',
+          paddingX: '10px',
+          paddingY: '8px',
+          borderWidth: '1px',
+          borderColor: 'border.default',
+          borderRadius: '8px',
+          backgroundColor: 'surface.default',
+          fontSize: '12px',
+          fontFamily: 'mono',
+        })}
+        placeholder="쉼표 또는 줄바꿈으로 구분"
+        bind:value={documentIdsText}></textarea>
+      {#if documentIds.length > 0}
+        <p class={css({ marginTop: '4px', fontSize: '12px', color: 'text.subtle' })}>{documentIds.length}편만 실행합니다.</p>
+      {/if}
     {/if}
 
     <p class={css({ marginTop: '10px', height: '16px', fontSize: '12px', color: 'text.danger' })}>{error ?? ''}</p>
@@ -121,7 +154,7 @@
           ['&:hover:not(:disabled)']: { backgroundColor: 'accent.brand.hover' },
         })}
         disabled={running || corpusVersions.length === 0 || !selected}
-        onclick={() => onConfirm(selected)}
+        onclick={() => onConfirm(selected, documentIds.length > 0 ? documentIds : undefined)}
         type="button"
       >
         {running ? '실행 시작 중…' : '실행 시작'}

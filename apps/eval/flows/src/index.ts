@@ -1,9 +1,17 @@
 import type { D1Database, Workflow } from '@cloudflare/workers-types';
 
+export { AnalysisWorkflow } from './analysis.ts';
 export { PipelineWorkflow } from './pipeline.ts';
 export { SamplingWorkflow } from './sampling.ts';
 
 export type SamplingParams = { runId: string; corpusVersion: string; size: number };
+export type AnalysisParams = {
+  runId: string;
+  promptSetId: string;
+  variantLabel: string;
+  corpusVersion: string;
+  documentId: string;
+};
 export type PipelineParams = {
   runId: string;
   promptVariantId: string;
@@ -16,6 +24,7 @@ export type FlowEnv = {
   DB: D1Database;
   SAMPLING: Workflow<SamplingParams>;
   PIPELINE: Workflow<PipelineParams>;
+  ANALYSIS: Workflow<AnalysisParams>;
   INTERNAL_API_KEY: string;
   INTERNAL_API_BASE: string;
   CLOUDFLARE_API_KEY: string;

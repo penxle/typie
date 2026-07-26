@@ -105,7 +105,9 @@ const catchUp = async (db: Db, email: string, participants: string[]): Promise<{
       .from(Judgments)
       .where(inArray(Judgments.taskId, db.select({ id: Tasks.id }).from(Tasks).where(eq(Tasks.roundId, round.id))));
 
-    const requiredTotal = roundTasks.reduce((sum, t) => sum + (t.requiredJudgments ?? 1), 0);
+    // requiredJudgments가 null인 태스크(중복 구간)는 상한 없이 전원이 보는 것이 목표다 — 그 인원이 필요 수다.
+    // 1로 세면 필요 총합이 줄어 최소 몫이 낮게 잡히고, 아직 남은 몫이 있는데도 배정이 끊긴다.
+    const requiredTotal = roundTasks.reduce((sum, t) => sum + (t.requiredJudgments ?? participants.length), 0);
     const minShare = Math.floor(requiredTotal / participants.length);
     const myConfirmed = judgments.filter((j) => j.evaluatorEmail === email && !j.draft).length;
     if (myConfirmed >= minShare) continue;
@@ -161,6 +163,8 @@ const roundAllowances = async (db: Db, email: string, roundIds: string[], partic
 
   const rounds = await db.select().from(Rounds).where(inArray(Rounds.id, roundIds));
   const nowEpochSec = Math.floor(Date.now() / 1000);
+  // requiredJudgments가 null인 태스크(중복 구간)의 필요 수 — 상한 없이 전원이 보는 것이 목표다.
+  const openRequired = Math.max(1, participants.length);
 
   for (const round of rounds) {
     const expected = (round.config as { expectedEvaluators?: unknown } | null)?.expectedEvaluators;
@@ -185,7 +189,7 @@ const roundAllowances = async (db: Db, email: string, roundIds: string[], partic
       .from(Judgments)
       .where(and(eq(Judgments.draft, false), inArray(Judgments.taskId, roundTaskIds)));
 
-    const requiredTotal = roundTasks.reduce((sum, t) => sum + (t.requiredJudgments ?? 1), 0);
+    const requiredTotal = roundTasks.reduce((sum, t) => sum + (t.requiredJudgments ?? openRequired), 0);
     // 개인 캡에는 잉여 포함 모든 확정 판정을 계상한다 — 평가자가 들인 노동은 전부 크레딧이다.
     // 대신 캡 분자에 관측된 잉여를 더해 라운드 총 용량(캡×인원)이 필요 총합 아래로 떨어지지
     // 않게 한다. 잉여를 캡에서 빼는 방식은 "당신 판정은 무효" 메시지가 되어 채택하지 않았다.
@@ -193,7 +197,10 @@ const roundAllowances = async (db: Db, email: string, roundIds: string[], partic
     for (const row of confirmedRows) {
       confirmedByTask.set(row.taskId, (confirmedByTask.get(row.taskId) ?? 0) + 1);
     }
-    const surplusTotal = roundTasks.reduce((sum, t) => sum + Math.max(0, (confirmedByTask.get(t.id) ?? 0) - (t.requiredJudgments ?? 1)), 0);
+    const surplusTotal = roundTasks.reduce(
+      (sum, t) => sum + Math.max(0, (confirmedByTask.get(t.id) ?? 0) - (t.requiredJudgments ?? openRequired)),
+      0,
+    );
     const myConfirmed = confirmedRows.filter((row) => row.evaluatorEmail === email).length;
     const lastOther = confirmedRows
       .filter((row) => row.evaluatorEmail !== email)
@@ -215,7 +222,10 @@ const roundAllowances = async (db: Db, email: string, roundIds: string[], partic
     for (const row of confirmedRows) {
       confirmedByEmail.set(row.evaluatorEmail, (confirmedByEmail.get(row.evaluatorEmail) ?? 0) + 1);
     }
-    const effectiveDone = roundTasks.reduce((sum, t) => sum + Math.min(confirmedByTask.get(t.id) ?? 0, t.requiredJudgments ?? 1), 0);
+    const effectiveDone = roundTasks.reduce(
+      (sum, t) => sum + Math.min(confirmedByTask.get(t.id) ?? 0, t.requiredJudgments ?? openRequired),
+      0,
+    );
     const reserved = reserveAllowance({
       requiredTotal,
       effectiveDone,

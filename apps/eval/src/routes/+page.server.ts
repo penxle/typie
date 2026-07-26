@@ -14,7 +14,7 @@ export const load: PageServerLoad = async ({ platform, locals }) => {
 
   // "내 진행"과 "라운드 전체 진행"을 분리한다 — 태스크는 평가자들이 나눠 가지므로 전체 태스크
   // 수는 개인 목표가 아니다. 개인에게는 판정 건수·이어할 것·새로 받을 수 있는 것만 보여준다.
-  const round = await effectiveProgress(db);
+  const round = await effectiveProgress(db, platform.env.ADMIN_EMAILS ?? '');
   const { remaining, potential, quota } = await claimableSummary(db, locals.email, platform.env.ADMIN_EMAILS ?? '');
 
   // 이어서 하기 목록은 라운드 무관 전부 보여준다(미제출 draft는 새 배정을 막으므로 숨기면 안 된다).

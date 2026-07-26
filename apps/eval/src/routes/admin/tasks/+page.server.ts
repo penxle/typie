@@ -1,6 +1,6 @@
 import { error } from '@sveltejs/kit';
 import { desc, eq, inArray, sql } from 'drizzle-orm';
-import { createDb, Documents, Judgments, Rounds, Tasks } from '$lib/server/db/index.ts';
+import { createDb, Documents, EvaluatorConsents, Judgments, Rounds, Tasks } from '$lib/server/db/index.ts';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ platform }) => {
@@ -41,6 +41,20 @@ export const load: PageServerLoad = async ({ platform }) => {
     .groupBy(Judgments.taskId);
   const confirmedByTask = new Map(confirmedCounts.map((c) => [c.taskId, c.n]));
 
+  // requiredJudgments가 null인 태스크(중복 구간)는 상한 없이 전원이 보는 것이 목표다.
+  // 1로 세면 첫 판정에 완료로 보여 남은 몫이 감춰진다.
+  let participants = 1;
+  if (tasks.some((t) => t.requiredJudgments === null)) {
+    const admins = new Set(
+      (platform.env.ADMIN_EMAILS ?? '')
+        .split(',')
+        .map((e) => e.trim())
+        .filter((e) => e.length > 0),
+    );
+    const consents = await db.select({ email: EvaluatorConsents.email }).from(EvaluatorConsents);
+    participants = Math.max(1, consents.filter((c) => !admins.has(c.email)).length);
+  }
+
   return {
     rounds: rounds.map((round) => ({
       id: round.id,
@@ -54,7 +68,7 @@ export const load: PageServerLoad = async ({ platform }) => {
           kind: t.kind,
           characterCount: docById.get(t.documentId)?.characterCount ?? 0,
           corpusVersion: docById.get(t.documentId)?.corpusVersion ?? '?',
-          required: t.requiredJudgments ?? 1,
+          required: t.requiredJudgments ?? participants,
           confirmed: confirmedByTask.get(t.id) ?? 0,
         })),
     })),

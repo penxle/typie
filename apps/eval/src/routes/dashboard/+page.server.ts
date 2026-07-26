@@ -11,8 +11,23 @@ import {
   pairwiseFromRanking,
   ranksFromScores,
 } from '$lib/domain/aggregate.ts';
+import { collectRejectionNotes, summarizeAnalysis } from '$lib/domain/analysis-summary.ts';
 import { ALL_FEEDBACK_LABELS, JUDGMENT_ERROR_KEYS, STRICT_FALSE_POSITIVE_KEYS, SYSTEM_LABEL_KEYS } from '$lib/domain/feedback-labels.ts';
-import { createDb, Feedbacks, FeedbackSets, Judgments, Rounds, Runs, selectInChunks, Tasks, Variants } from '$lib/server/db/index.ts';
+import {
+  createDb,
+  Documents,
+  EvaluatorConsents,
+  Feedbacks,
+  FeedbackSets,
+  FeedbackVerdicts,
+  Judgments,
+  ReviewVerdicts,
+  Rounds,
+  Runs,
+  selectInChunks,
+  Tasks,
+  Variants,
+} from '$lib/server/db/index.ts';
 import type { JudgmentResult, PairVerdict } from '$lib/domain/types.ts';
 import type { PageServerLoad } from './$types';
 
@@ -32,6 +47,16 @@ export const load: PageServerLoad = async ({ platform }) => {
   const variants = await db.select().from(Variants);
   const variantLabels = new Map(variants.map((v) => [v.id, v.label]));
 
+  // 중복 구간(requiredJudgments=null)은 동의한 평가자 전원이 보는 것이 목표다 — 그 인원이 분모다.
+  const admins = new Set(
+    (platform.env.ADMIN_EMAILS ?? '')
+      .split(',')
+      .map((e) => e.trim())
+      .filter((e) => e.length > 0),
+  );
+  const consents = await db.select({ email: EvaluatorConsents.email }).from(EvaluatorConsents);
+  const participants = Math.max(1, consents.filter((c) => !admins.has(c.email)).length);
+
   const summaries = [];
   for (const round of rounds) {
     const tasks = await db.select().from(Tasks).where(eq(Tasks.roundId, round.id));
@@ -47,6 +72,14 @@ export const load: PageServerLoad = async ({ platform }) => {
     const sets = await selectInChunks(allSetIds, (chunk) => db.select().from(FeedbackSets).where(inArray(FeedbackSets.id, chunk)));
     const setVariant = new Map(sets.map((s) => [s.id, s.variantId]));
     const feedbacks = await selectInChunks(allSetIds, (chunk) => db.select().from(Feedbacks).where(inArray(Feedbacks.setId, chunk)));
+    const documentIds = [...new Set(tasks.map((t) => t.documentId))];
+    const documentRows = await selectInChunks(documentIds, (chunk) =>
+      db
+        .select({ id: Documents.id, refId: Documents.refId, characterCount: Documents.characterCount })
+        .from(Documents)
+        .where(inArray(Documents.id, chunk)),
+    );
+    const docById = new Map(documentRows.map((d) => [d.id, d]));
     const feedbackSetId = new Map(feedbacks.map((f) => [f.id, f.setId]));
 
     const configBaseline = (round.config as { baselineLabel?: string } | null)?.baselineLabel;
@@ -65,17 +98,31 @@ export const load: PageServerLoad = async ({ platform }) => {
     }[] = [];
     const scoreEntries: { variantId: string; score: number }[] = [];
     const labelDist = new Map<string, Map<string, number>>();
-    const labelComments = new Map<string, { labelNames: string[]; comment: string }[]>();
+    const labelComments = new Map<string, { labelNames: string[]; comment: string; at: Date }[]>();
+    // 총평은 태스크 단위(세트 전체에 대한 감상)라 변형별로 묶이지 않는다. 대신 세트 순서 → 변형 매핑을
+    // 함께 실어 보낸다 — "A는 ~, B는 ~" 식 서술은 매핑 없이는 읽을 수 없다.
+    const judgmentComments: { comment: string; at: Date; setLabels: string[] }[] = [];
 
     // 유효 판정 = 태스크별 min(판정 수, 필요 수) 합 — 초과 배정 잉여를 진행률에서 뺀다.
     let effectiveCount = 0;
 
     for (const task of tasks) {
       const taskJudgments = confirmed.filter((j) => j.taskId === task.id);
-      effectiveCount += Math.min(taskJudgments.length, task.requiredJudgments ?? 1);
+      effectiveCount += Math.min(taskJudgments.length, task.requiredJudgments ?? participants);
 
       for (const judgment of taskJudgments) {
         const result = judgment.result as JudgmentResult;
+
+        if (judgment.comment) {
+          judgmentComments.push({
+            comment: judgment.comment,
+            at: judgment.updatedAt,
+            setLabels: task.setIds.map((setId) => {
+              const variantId = setVariant.get(setId);
+              return (variantId ? variantLabels.get(variantId) : undefined) ?? '?';
+            }),
+          });
+        }
 
         for (const setId of task.setIds) {
           const variantId = setVariant.get(setId);
@@ -114,7 +161,7 @@ export const load: PageServerLoad = async ({ platform }) => {
           if (entry.comment) {
             const labelNames = entry.labels.map((key) => labelByKey.get(key)?.name ?? key);
             const comments = labelComments.get(variantId) ?? [];
-            comments.push({ labelNames, comment: entry.comment });
+            comments.push({ labelNames, comment: entry.comment, at: judgment.updatedAt });
             labelComments.set(variantId, comments);
           }
         }
@@ -262,10 +309,18 @@ export const load: PageServerLoad = async ({ platform }) => {
     for (const [variantId, dist] of labelDist) {
       labelDistByLabel[variantLabels.get(variantId) ?? variantId] = Object.fromEntries(dist);
     }
-    const labelCommentsByLabel: Record<string, { labelNames: string[]; comment: string }[]> = {};
+    // 판정 시각순으로 고정한다 — 태스크 순서대로 쌓으면 새 코멘트가 기존 목록 사이에 끼어든다.
+    // 새로 달린 코멘트는 항상 목록 끝에 붙는다.
+    const labelCommentsByLabel: Record<string, { labelNames: string[]; comment: string; at: string }[]> = {};
     for (const [variantId, comments] of labelComments) {
-      labelCommentsByLabel[variantLabels.get(variantId) ?? variantId] = comments;
+      labelCommentsByLabel[variantLabels.get(variantId) ?? variantId] = comments
+        .toSorted((a, b) => a.at.getTime() - b.at.getTime())
+        .map(({ labelNames, comment, at }) => ({ labelNames, comment, at: at.toISOString() }));
     }
+
+    const sortedJudgmentComments = judgmentComments
+      .toSorted((a, b) => a.at.getTime() - b.at.getTime())
+      .map(({ comment, at, setLabels }) => ({ comment, at: at.toISOString(), setLabels }));
 
     const avgScores = averageScores(scoreEntries);
     const avgScoreByLabel: Record<string, number> = {};
@@ -273,11 +328,51 @@ export const load: PageServerLoad = async ({ platform }) => {
       avgScoreByLabel[variantLabels.get(variantId) ?? variantId] = avg;
     }
 
+    // 절대평가 라운드는 지표가 통째로 다르다 — 후보 비교·라벨·ranking κ가 성립하지 않는다.
+    const isAnalysis = sets.some((s) => s.review !== null);
+    let analysis = null;
+    let rejectionNotes: ReturnType<typeof collectRejectionNotes> = [];
+    if (isAnalysis) {
+      const judgmentIds = confirmed.map((j) => j.id);
+      const verdictRows = await selectInChunks(judgmentIds, (chunk) =>
+        db.select().from(FeedbackVerdicts).where(inArray(FeedbackVerdicts.judgmentId, chunk)),
+      );
+      const reviewRows = await selectInChunks(judgmentIds, (chunk) =>
+        db.select().from(ReviewVerdicts).where(inArray(ReviewVerdicts.judgmentId, chunk)),
+      );
+      const judgedAt = new Map(confirmed.map((j) => [j.id, j.updatedAt]));
+      const documentBySet = new Map(
+        sets.flatMap((set) => {
+          const doc = docById.get(set.documentId);
+          return doc ? [[set.id, { refId: doc.refId, characterCount: doc.characterCount }] as const] : [];
+        }),
+      );
+      const helpfulness = confirmed.flatMap((j) => {
+        const result = j.result;
+        return result?.kind === 'scores' ? result.scores.map((s) => s.score) : [];
+      });
+
+      analysis = summarizeAnalysis({
+        verdicts: verdictRows,
+        reviewVerdicts: reviewRows,
+        helpfulness,
+        feedbacks,
+        documentBySet,
+      });
+      rejectionNotes = collectRejectionNotes({
+        verdicts: verdictRows.map((v) => ({ ...v, at: judgedAt.get(v.judgmentId) ?? new Date(0) })),
+        feedbacks,
+      });
+    }
+
     summaries.push({
       roundId: round.id,
       stage: round.stage,
       taskCount: tasks.length,
-      requiredTotal: tasks.reduce((sum, t) => sum + (t.requiredJudgments ?? 1), 0),
+      // requiredJudgments가 null인 태스크(중복 구간)는 전원이 보는 것이 목표다. 1로 세면 몫이 감춰진다.
+      requiredTotal: tasks.reduce((sum, t) => sum + (t.requiredJudgments ?? participants), 0),
+      analysis,
+      rejectionNotes,
       confirmedCount: confirmed.length,
       effectiveCount,
       contributions,
@@ -287,6 +382,7 @@ export const load: PageServerLoad = async ({ platform }) => {
       kappaPairs: overlapPairs.length,
       labelDist: labelDistByLabel,
       labelComments: labelCommentsByLabel,
+      judgmentComments: sortedJudgmentComments,
       avgScore: avgScoreByLabel,
     });
   }

@@ -13,7 +13,7 @@
   type Props = { data: PageData };
   const { data }: Props = $props();
 
-  const STAGE_LABELS: Record<RoundStage, string> = { screening: '스크리닝', confirmation: '확정' };
+  const STAGE_LABELS: Record<RoundStage, string> = { screening: '스크리닝', confirmation: '확정', absolute: '절대평가' };
 
   let stage = $state<RoundStage>('screening');
   // 이 페이지는 목록·폼이 한 화면에 공존하는 단일 페이지라 {#key}로 다시 마운트되지 않는다 — 코퍼스 버전 select의
@@ -23,6 +23,9 @@
   let baselineLabel = $state('');
   let v0Label = $state('');
   let candidateLabel = $state('');
+  let absoluteLabel = $state('');
+  let absoluteRequired = $state('2');
+  let absoluteOverlap = $state('0.1');
   let expectedEvaluators = $state('');
   let overlapRatio = $state('0.3');
 
@@ -43,6 +46,7 @@
       }
       if (v0Label && !labels.includes(v0Label)) v0Label = '';
       if (candidateLabel && !labels.includes(candidateLabel)) candidateLabel = '';
+      if (absoluteLabel && !labels.includes(absoluteLabel)) absoluteLabel = '';
       if (!selectedLabels.includes(baselineLabel)) {
         baselineLabel = selectedLabels.includes('현행') ? '현행' : (selectedLabels[0] ?? '');
       }
@@ -76,6 +80,20 @@
       createError = '기준선은 선택된 후보 중 하나여야 합니다.';
       return;
     }
+    if (stage === 'absolute' && !absoluteLabel) {
+      createError = '대상 후보를 선택하세요.';
+      return;
+    }
+    const parsedRequired = Math.floor(Number(absoluteRequired));
+    const parsedAbsoluteOverlap = Number(absoluteOverlap);
+    if (stage === 'absolute' && parsedRequired < 1) {
+      createError = '문서당 판정 수는 1 이상이어야 합니다.';
+      return;
+    }
+    if (stage === 'absolute' && (!Number.isFinite(parsedAbsoluteOverlap) || parsedAbsoluteOverlap < 0 || parsedAbsoluteOverlap > 1)) {
+      createError = '중복 비율은 0과 1 사이여야 합니다.';
+      return;
+    }
     if (stage === 'confirmation' && (!v0Label || !candidateLabel)) {
       createError = 'v0과 후보 라벨을 모두 선택하세요.';
       return;
@@ -92,18 +110,30 @@
     }
 
     const parsedEvaluators = Math.floor(Number(expectedEvaluators));
-    const payload =
-      stage === 'screening'
-        ? {
-            roundId,
-            stage: 'screening' as const,
-            corpusVersion,
-            variantLabels: selectedLabels,
-            baselineLabel,
-            overlapRatio: parsedOverlap,
-            ...(parsedEvaluators >= 1 && { expectedEvaluators: parsedEvaluators }),
-          }
-        : { roundId, stage: 'confirmation' as const, corpusVersion, v0Label, candidateLabel };
+    let payload;
+    if (stage === 'screening') {
+      payload = {
+        roundId,
+        stage: 'screening' as const,
+        corpusVersion,
+        variantLabels: selectedLabels,
+        baselineLabel,
+        overlapRatio: parsedOverlap,
+        ...(parsedEvaluators >= 1 && { expectedEvaluators: parsedEvaluators }),
+      };
+    } else if (stage === 'absolute') {
+      payload = {
+        roundId,
+        stage: 'absolute' as const,
+        corpusVersion,
+        label: absoluteLabel,
+        requiredJudgments: parsedRequired,
+        overlapRatio: parsedAbsoluteOverlap,
+        ...(parsedEvaluators >= 1 && { expectedEvaluators: parsedEvaluators }),
+      };
+    } else {
+      payload = { roundId, stage: 'confirmation' as const, corpusVersion, v0Label, candidateLabel };
+    }
 
     creating = true;
     try {
@@ -123,6 +153,7 @@
       selectedLabels = [];
       v0Label = '';
       candidateLabel = '';
+      absoluteLabel = '';
       roundId = nanoid();
       await invalidateAll();
     } finally {
@@ -158,9 +189,13 @@
   };
 
   const formatConfig = (round: PageData['rounds'][number]) => {
-    if (round.stage !== 'screening') return '—';
-    const config = round.config as { overlapRatio?: number } | null;
+    const config = round.config as { overlapRatio?: number; label?: string; requiredJudgments?: number } | null;
     if (!config) return '—';
+    if (round.stage === 'absolute') {
+      const overlap = config.overlapRatio ?? 0;
+      return `${config.label ?? '—'} · 판정 ${config.requiredJudgments ?? 1}명${overlap > 0 ? ` · 중복 ${(overlap * 100).toFixed(0)}%` : ''}`;
+    }
+    if (round.stage !== 'screening') return '—';
     return `중복 ${((config.overlapRatio ?? 0) * 100).toFixed(0)}%`;
   };
 
@@ -202,7 +237,7 @@
   >
     <h2 class={css({ fontSize: '14px', fontWeight: 'bold', marginBottom: '12px' })}>새 라운드</h2>
 
-    <div class={grid({ columns: 2, gap: '6px', marginBottom: '16px' })}>
+    <div class={grid({ columns: 3, gap: '6px', marginBottom: '16px' })}>
       {#each Object.entries(STAGE_LABELS) as [value, label] (value)}
         <button
           class={css({
@@ -298,6 +333,43 @@
             </select>
           </div>
         {/if}
+      </div>
+    {:else if stage === 'absolute'}
+      <div class={css({ marginBottom: '4px' })}>
+        <label class={labelClass} for="round-absolute-label">대상 후보</label>
+        <select id="round-absolute-label" class={inputClass} bind:value={absoluteLabel}>
+          <option value="">선택하세요</option>
+          {#each availableLabels as label (label)}
+            <option value={label}>{label}</option>
+          {/each}
+        </select>
+        <p class={css({ marginTop: '6px', fontSize: '12px', color: 'text.faint' })}>
+          이 후보로 돌린 모든 실행의 문서를 합쳐 태스크를 만듭니다.
+        </p>
+      </div>
+      <div class={grid({ columns: 2, gap: '16px', marginTop: '16px' })}>
+        <div>
+          <label class={labelClass} for="round-absolute-required">문서당 판정 수</label>
+          <input id="round-absolute-required" class={inputClass} min="1" type="number" bind:value={absoluteRequired} />
+        </div>
+        <div>
+          <label class={labelClass} for="round-absolute-overlap">중복 비율 (0~1)</label>
+          <input id="round-absolute-overlap" class={inputClass} max="1" min="0" step="0.05" type="number" bind:value={absoluteOverlap} />
+        </div>
+      </div>
+      <p class={css({ marginTop: '6px', fontSize: '12px', color: 'text.faint' })}>
+        중복 비율에 걸린 문서는 배정 상한 없이 열려 동의한 평가자 전원이 봅니다. 판정자 간 일치도를 재는 구간입니다.
+      </p>
+      <div class={css({ marginTop: '16px' })}>
+        <label class={labelClass} for="round-absolute-evaluators">예상 평가자 수 (선택)</label>
+        <input
+          id="round-absolute-evaluators"
+          class={inputClass}
+          min="1"
+          placeholder="설정하면 평가자당 균등 몫 + 1건까지만 새 태스크가 배정됩니다"
+          type="number"
+          bind:value={expectedEvaluators}
+        />
       </div>
     {:else}
       <div class={grid({ columns: 2, gap: '16px', marginBottom: '4px' })}>

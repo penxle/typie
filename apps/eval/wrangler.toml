@@ -31,3 +31,9 @@ binding = "PIPELINE"
 name = "eval-pipeline"
 class_name = "PipelineWorkflow"
 script_name = "typie-eval-flows"
+
+[[workflows]]
+binding = "ANALYSIS"
+name = "eval-analysis"
+class_name = "AnalysisWorkflow"
+script_name = "typie-eval-flows"

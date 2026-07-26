@@ -19,17 +19,28 @@ const seededRng = (seq: number[]): (() => number) => {
   return () => seq[i++ % seq.length] ?? 0;
 };
 
+const pass = { narrative: true, singleWork: true, selfContained: true, original: true };
+
 describe('pickLiteraryDocs', () => {
-  it('literary=true 후보만 장르와 함께 남긴다', () => {
+  it('네 축을 모두 통과한 후보만 장르와 함께 남긴다', () => {
     const result = pickLiteraryDocs([
-      { candidate: candidate('a'), literary: true, kind: '소설', genre: 'romance' },
-      { candidate: candidate('b'), literary: false, kind: '메모', genre: 'etc' },
-      { candidate: candidate('c'), literary: true, kind: '수필', genre: 'literary-fiction' },
+      { candidate: candidate('a'), kind: '단편소설', genre: 'romance', ...pass },
+      { candidate: candidate('b'), kind: '메모', genre: 'etc', ...pass, narrative: false },
+      { candidate: candidate('c'), kind: '단편소설', genre: 'literary-fiction', ...pass },
     ]);
     expect(result).toEqual([
       { documentId: 'a', genre: 'romance' },
       { documentId: 'c', genre: 'literary-fiction' },
     ]);
+  });
+
+  it('한 축이라도 걸리면 떨어뜨린다', () => {
+    const result = pickLiteraryDocs([
+      { candidate: candidate('a'), kind: '조각글 모음', genre: 'romance', ...pass, singleWork: false },
+      { candidate: candidate('b'), kind: '연재분', genre: 'romance', ...pass, selfContained: false },
+      { candidate: candidate('c'), kind: '번역', genre: 'romance', ...pass, original: false },
+    ]);
+    expect(result).toEqual([]);
   });
 });
 

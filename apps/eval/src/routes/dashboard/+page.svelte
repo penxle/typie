@@ -17,6 +17,16 @@
 
   const percent = (value: number) => (Number.isNaN(value) ? '—' : `${(value * 100).toFixed(1)}%`);
   const fixed = (value: number) => (Number.isNaN(value) ? '—' : value.toFixed(2));
+  const formatAt = (iso: string) =>
+    new Date(iso).toLocaleString('ko', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+  // 평가 화면이 세트를 A/B/C/D로 부른다 — 총평의 "A는 ~" 서술을 변형에 이어 붙이려면 같은 문자를 써야 한다.
+  const SET_LETTERS = ['A', 'B', 'C', 'D'];
+
+  const STAGE_LABEL: Record<string, string> = { screening: '스크리닝', confirmation: '확정', absolute: '절대평가' };
+  // 비율은 확정 판정이 몇 건은 쌓여야 읽을 만하다 — 한두 건에서 나온 100%는 아무 뜻이 없다.
+  const ANALYSIS_MIN_JUDGMENTS = 5;
+  const AXIS_LABEL: Record<string, string> = { correct: '정확', needed: '가치', useful: '실행' };
 
   // κ는 표본이 작으면 값 자체가 퇴화한다(쏠린 분포에서 0 고정 등) — 판정은 표본이 모인 뒤에만.
   const KAPPA_MIN_PAIRS = 12;
@@ -253,255 +263,391 @@
       >
         <div class={flex({ align: 'center', gap: '10px' })}>
           <h2 class={css({ fontSize: '15px', fontWeight: 'bold' })}>{summary.roundId}</h2>
-          <span class={chipClass}>{summary.stage === 'screening' ? '스크리닝' : '확정'}</span>
+          <span class={chipClass}>{STAGE_LABEL[summary.stage] ?? summary.stage}</span>
           <span class={css({ marginLeft: 'auto', fontSize: '13px', color: 'text.faint', fontVariantNumeric: 'tabular-nums' })}>
             유효 판정 {summary.effectiveCount} / {summary.requiredTotal} · 확정 {summary.confirmedCount}건
           </span>
         </div>
 
-        <p
-          class={`${flex({ align: 'flex-start', gap: '10px', marginTop: '16px', paddingX: '14px', paddingY: '12px', borderRadius: '8px' })} ${verdictStrip[verdict.tone]}`}
-        >
-          <span class={flex({ align: 'center', height: '[25.5px]', flexShrink: '0' })}>
-            <span class={`${dotClass} ${toneDot[verdict.tone]}`}></span>
-          </span>
-          <span class={css({ fontSize: '17px', fontWeight: 'bold', lineHeight: '[1.5]' })}>{verdict.text}</span>
-        </p>
-
-        <div class={grid({ columns: { base: 2, md: 3 }, gap: '8px', marginTop: '16px' })}>
-          {#each stats as stat (stat.label)}
-            <div class={`${statCellClass} ${statCellTone[stat.tone]}`}>
-              <p class={statLabelClass}>{stat.label}</p>
-              <p class={`${statValueClass} ${statValueTone[stat.tone]}`}>{stat.value}</p>
-              {#if stat.note}
-                <p class={statNoteClass}>{stat.note}</p>
-              {/if}
-            </div>
-          {/each}
-        </div>
-
-        <div class={flex({ direction: 'column', gap: '12px', marginTop: '20px' })}>
-          {#if baseline}
-            {@const baselineIssues = guardrailIssues(baseline)}
-            {@const baselineLabels = topNegativeLabels(summary, baseline.label)}
-            {@const baselineAvg = summary.avgScore[baseline.label]}
-            <div
+        {#if summary.analysis}
+          {@const a = summary.analysis}
+          {#if summary.confirmedCount === 0}
+            <p
               class={css({
-                borderWidth: '1px',
-                borderColor: 'border.subtle',
-                borderRadius: '10px',
-                padding: '14px',
+                marginTop: '16px',
+                paddingX: '14px',
+                paddingY: '12px',
+                borderRadius: '8px',
                 backgroundColor: 'surface.subtle',
+                fontSize: '14px',
+                color: 'text.subtle',
               })}
             >
-              <div class={flex({ align: 'center', gap: '10px' })}>
-                <span class={css({ fontSize: '14px', fontWeight: 'bold' })}>{baseline.label}</span>
-                <span class={chipClass}>기준선</span>
-                <div class={flex({ direction: 'column', align: 'flex-end', marginLeft: 'auto' })}>
-                  <span class={css({ fontSize: '20px', fontWeight: 'bold', fontVariantNumeric: 'tabular-nums' })}>
-                    {baselineAvg === undefined ? '—' : `${baselineAvg.toFixed(1)}점`}
-                  </span>
-                  <span class={css({ fontSize: '11px', color: 'text.faint' })}>평균 점수</span>
-                </div>
-              </div>
-
-              <p class={css({ marginTop: '8px', fontSize: '12px', color: 'text.faint', fontVariantNumeric: 'tabular-nums' })}>
-                오탐 {percent(baseline.strictFpRate)} · 판단 오류 {percent(baseline.judgmentErrorRate)} · 부정 라벨 {percent(
-                  baseline.negativeRate,
-                )} · 앵커 매칭 {percent(baseline.anchorMatch)}
+              아직 판정이 없습니다. 필요 판정 {summary.requiredTotal}건이 모이면 지표가 채워집니다.
+            </p>
+          {:else}
+            {#if summary.confirmedCount < ANALYSIS_MIN_JUDGMENTS}
+              <p class={css({ marginTop: '16px', fontSize: '12px', color: 'accent.warning.default' })}>
+                확정 {summary.confirmedCount}건 — 표본이 적어 아래 비율은 아직 흔들립니다.
               </p>
-
-              {#if baselineIssues.length > 0}
-                <div class={flex({ wrap: 'wrap', gap: '6px', marginTop: '8px' })}>
-                  {#each baselineIssues as issue (issue)}
-                    <span class={alertChipClass}>{issue}</span>
-                  {/each}
+            {/if}
+            <div class={grid({ columns: { base: 2, md: 3 }, gap: '8px', marginTop: '16px' })}>
+              {#each [{ label: '본문을 정확히 읽었나', t: a.axes.correct }, { label: '짚을 만한 내용인가', t: a.axes.needed }, { label: '무엇을 할지 알 수 있나', t: a.axes.useful }] as axis (axis.label)}
+                <div class={statCellClass}>
+                  <p class={statLabelClass}>{axis.label}</p>
+                  <p class={statValueClass}>{axis.t.yes + axis.t.no === 0 ? '—' : percent(axis.t.yes / (axis.t.yes + axis.t.no))}</p>
+                  <p class={statNoteClass}>예 {axis.t.yes} · 아니오 {axis.t.no}</p>
                 </div>
-              {/if}
-
-              {#if baselineLabels.length > 0}
-                <div class={flex({ wrap: 'wrap', gap: '6px', marginTop: '8px' })}>
-                  {#each baselineLabels as label (label.name)}
-                    <span class={chipClass}>{label.name} {label.count}</span>
-                  {/each}
-                </div>
-              {/if}
+              {/each}
             </div>
-          {/if}
-          {#each candidates as candidate (candidate.label)}
-            {@const total = judged(candidate)}
-            {@const chip = candidateVerdict(candidate)}
-            {@const issues = guardrailIssues(candidate)}
-            {@const topLabels = topNegativeLabels(summary, candidate.label)}
-            {@const avgScore = summary.avgScore[candidate.label]}
-            <div class={css({ borderWidth: '1px', borderColor: 'border.subtle', borderRadius: '10px', padding: '14px' })}>
-              <div class={flex({ align: 'center', gap: '10px' })}>
-                <span class={css({ fontSize: '14px', fontWeight: 'bold' })}>{candidate.label}</span>
-                <span class={chip.emphasis ? emphasisChipClass : chipClass}>{chip.label}</span>
-                <div class={flex({ direction: 'column', align: 'flex-end', marginLeft: 'auto' })}>
-                  <span
-                    class={`${css({ fontSize: '20px', fontWeight: 'bold', fontVariantNumeric: 'tabular-nums' })} ${
-                      total > 0 && candidate.win > candidate.loss
-                        ? css({ color: 'text.success' })
-                        : total > 0 && candidate.win < candidate.loss
-                          ? css({ color: 'text.danger' })
-                          : ''
-                    }`}
-                  >
-                    {percent(winRate(candidate))}
+
+            <div class={grid({ columns: { base: 2, md: 3 }, gap: '8px', marginTop: '8px' })}>
+              {#each [{ label: '작품을 제대로 파악했나', t: a.review.readCorrectly }, { label: '손댈 순서가 납득되나', t: a.review.priorityUseful }] as axis (axis.label)}
+                <div class={statCellClass}>
+                  <p class={statLabelClass}>{axis.label}</p>
+                  <p class={statValueClass}>{axis.t.yes + axis.t.no === 0 ? '—' : percent(axis.t.yes / (axis.t.yes + axis.t.no))}</p>
+                  <p class={statNoteClass}>예 {axis.t.yes} · 아니오 {axis.t.no}</p>
+                </div>
+              {/each}
+              <div class={statCellClass}>
+                <p class={statLabelClass}>도움이 되었을까</p>
+                <p class={statValueClass}>
+                  {a.helpfulness.length === 0 ? '—' : fixed(a.helpfulness.reduce((x, y) => x + y, 0) / a.helpfulness.length)}
+                </p>
+                <p class={statNoteClass}>
+                  {a.helpfulness.length === 0
+                    ? '판정 없음'
+                    : [1, 2, 3, 4, 5].map((n) => a.helpfulness.filter((h) => h === n).length).join(' / ')}
+                </p>
+              </div>
+            </div>
+
+            {#if a.agreement.some((x) => x.pairs > 0)}
+              <p class={css({ marginTop: '12px', fontSize: '12px', color: 'text.subtle' })}>
+                평가자 일치도 (중복 구간) —
+                {#each a.agreement.filter((x) => x.pairs > 0) as ag (ag.axis)}
+                  <span class={css({ marginRight: '10px', fontVariantNumeric: 'tabular-nums' })}>
+                    {AXIS_LABEL[ag.axis] ?? ag.axis}
+                    {percent(ag.agreed / ag.pairs)} ({ag.pairs}쌍)
                   </span>
-                  {#if avgScore !== undefined}
-                    <span class={css({ fontSize: '11px', color: 'text.faint' })}>평균 {avgScore.toFixed(1)}점</span>
-                  {/if}
+                {/each}
+              </p>
+            {/if}
+
+            {#if a.documents.some((d) => d.judged > 0)}
+              <div class={css({ marginTop: '16px' })}>
+                <p class={statLabelClass}>판정이 갈린 문서</p>
+                <div class={flex({ direction: 'column', gap: '4px', marginTop: '6px' })}>
+                  {#each a.documents.filter((d) => d.judged > 0).slice(0, 5) as doc (doc.refId)}
+                    <p class={flex({ align: 'baseline', gap: '8px', fontSize: '13px' })}>
+                      <span class={css({ color: 'text.subtle', fontVariantNumeric: 'tabular-nums' })}>{doc.refId}</span>
+                      <span class={css({ color: 'text.faint', fontVariantNumeric: 'tabular-nums' })}>
+                        {doc.characterCount.toLocaleString()}자 · 피드백 {doc.feedbacks}건
+                      </span>
+                      <span class={css({ marginLeft: 'auto', fontWeight: 'bold', fontVariantNumeric: 'tabular-nums' })}>
+                        아니오 {doc.no} / {doc.judged}
+                      </span>
+                    </p>
+                  {/each}
                 </div>
               </div>
+            {/if}
 
-              {#if total > 0}
-                <!-- 기준선 대비 변화량이라 초록/빨강이 정당한 자리 — 단, 채도를 낮춰 상태색과 위계를 구분한다. -->
-                <div class={flex({ gap: '2px', marginTop: '10px', height: '8px', borderRadius: 'full', overflow: 'hidden' })}>
-                  {#if candidate.win > 0}
-                    <div style:flex={candidate.win} class={css({ backgroundColor: 'accent.success.default/75' })}></div>
-                  {/if}
-                  {#if candidate.tie > 0}
-                    <div style:flex={candidate.tie} class={css({ backgroundColor: 'interactive.disabled' })}></div>
-                  {/if}
-                  {#if candidate.loss > 0}
-                    <div style:flex={candidate.loss} class={css({ backgroundColor: 'accent.danger.default/60' })}></div>
-                  {/if}
+            {#if summary.judgmentComments.length > 0}
+              <details class={css({ marginTop: '16px' })}>
+                <summary class={detailsSummaryClass}>총평 코멘트 ({summary.judgmentComments.length}) · 오래된 순</summary>
+                <ul class={flex({ direction: 'column', gap: '12px', marginTop: '8px', paddingLeft: '18px' })}>
+                  {#each summary.judgmentComments as entry, index (index)}
+                    <li class={css({ fontSize: '13px' })}>
+                      <div class={css({ color: 'text.faint', fontSize: '12px', fontVariantNumeric: 'tabular-nums' })}>
+                        {formatAt(entry.at)}
+                      </div>
+                      <div class={css({ marginTop: '2px', whiteSpace: 'pre-wrap' })}>{entry.comment}</div>
+                    </li>
+                  {/each}
+                </ul>
+              </details>
+            {/if}
+
+            {#if summary.rejectionNotes.length > 0}
+              <div class={css({ marginTop: '16px' })}>
+                <p class={statLabelClass}>'아니오' 사유 ({summary.rejectionNotes.length})</p>
+                <div class={flex({ direction: 'column', gap: '8px', marginTop: '6px' })}>
+                  {#each summary.rejectionNotes as note, i (i)}
+                    <p class={css({ fontSize: '13px', lineHeight: '[1.7]' })}>
+                      <span class={css({ color: 'text.faint', fontVariantNumeric: 'tabular-nums' })}>{note.number}</span>
+                      <span class={css({ color: 'text.subtle' })}>{note.category ?? '피드백'} · {note.axes.join('·')}</span>
+                      <span class={css({ color: 'text.default' })}>{note.note}</span>
+                    </p>
+                  {/each}
                 </div>
-                <p class={css({ marginTop: '6px', fontSize: '12px', color: 'text.faint', fontVariantNumeric: 'tabular-nums' })}>
-                  기준선 상대 {candidate.win}승 {candidate.tie}무 {candidate.loss}패 · 오탐 {percent(candidate.strictFpRate)} · 판단 오류
-                  {percent(candidate.judgmentErrorRate)} · 부정 라벨 {percent(candidate.negativeRate)}
+              </div>
+            {/if}
+          {/if}
+        {:else}
+          <p
+            class={`${flex({ align: 'flex-start', gap: '10px', marginTop: '16px', paddingX: '14px', paddingY: '12px', borderRadius: '8px' })} ${verdictStrip[verdict.tone]}`}
+          >
+            <span class={flex({ align: 'center', height: '[25.5px]', flexShrink: '0' })}>
+              <span class={`${dotClass} ${toneDot[verdict.tone]}`}></span>
+            </span>
+            <span class={css({ fontSize: '17px', fontWeight: 'bold', lineHeight: '[1.5]' })}>{verdict.text}</span>
+          </p>
+
+          <div class={grid({ columns: { base: 2, md: 3 }, gap: '8px', marginTop: '16px' })}>
+            {#each stats as stat (stat.label)}
+              <div class={`${statCellClass} ${statCellTone[stat.tone]}`}>
+                <p class={statLabelClass}>{stat.label}</p>
+                <p class={`${statValueClass} ${statValueTone[stat.tone]}`}>{stat.value}</p>
+                {#if stat.note}
+                  <p class={statNoteClass}>{stat.note}</p>
+                {/if}
+              </div>
+            {/each}
+          </div>
+
+          <div class={flex({ direction: 'column', gap: '12px', marginTop: '20px' })}>
+            {#if baseline}
+              {@const baselineIssues = guardrailIssues(baseline)}
+              {@const baselineLabels = topNegativeLabels(summary, baseline.label)}
+              {@const baselineAvg = summary.avgScore[baseline.label]}
+              <div
+                class={css({
+                  borderWidth: '1px',
+                  borderColor: 'border.subtle',
+                  borderRadius: '10px',
+                  padding: '14px',
+                  backgroundColor: 'surface.subtle',
+                })}
+              >
+                <div class={flex({ align: 'center', gap: '10px' })}>
+                  <span class={css({ fontSize: '14px', fontWeight: 'bold' })}>{baseline.label}</span>
+                  <span class={chipClass}>기준선</span>
+                  <div class={flex({ direction: 'column', align: 'flex-end', marginLeft: 'auto' })}>
+                    <span class={css({ fontSize: '20px', fontWeight: 'bold', fontVariantNumeric: 'tabular-nums' })}>
+                      {baselineAvg === undefined ? '—' : `${baselineAvg.toFixed(1)}점`}
+                    </span>
+                    <span class={css({ fontSize: '11px', color: 'text.faint' })}>평균 점수</span>
+                  </div>
+                </div>
+
+                <p class={css({ marginTop: '8px', fontSize: '12px', color: 'text.faint', fontVariantNumeric: 'tabular-nums' })}>
+                  오탐 {percent(baseline.strictFpRate)} · 판단 오류 {percent(baseline.judgmentErrorRate)} · 부정 라벨 {percent(
+                    baseline.negativeRate,
+                  )} · 앵커 매칭 {percent(baseline.anchorMatch)}
                 </p>
-              {:else}
-                <p class={css({ marginTop: '8px', fontSize: '12px', color: 'text.faint' })}>이 후보에 대한 판정이 아직 없습니다.</p>
-              {/if}
 
-              {#if issues.length > 0}
-                <div class={flex({ wrap: 'wrap', gap: '6px', marginTop: '8px' })}>
-                  {#each issues as issue (issue)}
-                    <span class={alertChipClass}>{issue}</span>
-                  {/each}
+                {#if baselineIssues.length > 0}
+                  <div class={flex({ wrap: 'wrap', gap: '6px', marginTop: '8px' })}>
+                    {#each baselineIssues as issue (issue)}
+                      <span class={alertChipClass}>{issue}</span>
+                    {/each}
+                  </div>
+                {/if}
+
+                {#if baselineLabels.length > 0}
+                  <div class={flex({ wrap: 'wrap', gap: '6px', marginTop: '8px' })}>
+                    {#each baselineLabels as label (label.name)}
+                      <span class={chipClass}>{label.name} {label.count}</span>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
+            {/if}
+            {#each candidates as candidate (candidate.label)}
+              {@const total = judged(candidate)}
+              {@const chip = candidateVerdict(candidate)}
+              {@const issues = guardrailIssues(candidate)}
+              {@const topLabels = topNegativeLabels(summary, candidate.label)}
+              {@const avgScore = summary.avgScore[candidate.label]}
+              <div class={css({ borderWidth: '1px', borderColor: 'border.subtle', borderRadius: '10px', padding: '14px' })}>
+                <div class={flex({ align: 'center', gap: '10px' })}>
+                  <span class={css({ fontSize: '14px', fontWeight: 'bold' })}>{candidate.label}</span>
+                  <span class={chip.emphasis ? emphasisChipClass : chipClass}>{chip.label}</span>
+                  <div class={flex({ direction: 'column', align: 'flex-end', marginLeft: 'auto' })}>
+                    <span
+                      class={`${css({ fontSize: '20px', fontWeight: 'bold', fontVariantNumeric: 'tabular-nums' })} ${
+                        total > 0 && candidate.win > candidate.loss
+                          ? css({ color: 'text.success' })
+                          : total > 0 && candidate.win < candidate.loss
+                            ? css({ color: 'text.danger' })
+                            : ''
+                      }`}
+                    >
+                      {percent(winRate(candidate))}
+                    </span>
+                    {#if avgScore !== undefined}
+                      <span class={css({ fontSize: '11px', color: 'text.faint' })}>평균 {avgScore.toFixed(1)}점</span>
+                    {/if}
+                  </div>
                 </div>
-              {/if}
 
-              {#if topLabels.length > 0}
-                <div class={flex({ wrap: 'wrap', gap: '6px', marginTop: '8px' })}>
-                  {#each topLabels as label (label.name)}
-                    <span class={chipClass}>{label.name} {label.count}</span>
-                  {/each}
-                </div>
-              {/if}
-            </div>
-          {/each}
-        </div>
+                {#if total > 0}
+                  <!-- 기준선 대비 변화량이라 초록/빨강이 정당한 자리 — 단, 채도를 낮춰 상태색과 위계를 구분한다. -->
+                  <div class={flex({ gap: '2px', marginTop: '10px', height: '8px', borderRadius: 'full', overflow: 'hidden' })}>
+                    {#if candidate.win > 0}
+                      <div style:flex={candidate.win} class={css({ backgroundColor: 'accent.success.default/75' })}></div>
+                    {/if}
+                    {#if candidate.tie > 0}
+                      <div style:flex={candidate.tie} class={css({ backgroundColor: 'interactive.disabled' })}></div>
+                    {/if}
+                    {#if candidate.loss > 0}
+                      <div style:flex={candidate.loss} class={css({ backgroundColor: 'accent.danger.default/60' })}></div>
+                    {/if}
+                  </div>
+                  <p class={css({ marginTop: '6px', fontSize: '12px', color: 'text.faint', fontVariantNumeric: 'tabular-nums' })}>
+                    기준선 상대 {candidate.win}승 {candidate.tie}무 {candidate.loss}패 · 오탐 {percent(candidate.strictFpRate)} · 판단 오류
+                    {percent(candidate.judgmentErrorRate)} · 부정 라벨 {percent(candidate.negativeRate)}
+                  </p>
+                {:else}
+                  <p class={css({ marginTop: '8px', fontSize: '12px', color: 'text.faint' })}>이 후보에 대한 판정이 아직 없습니다.</p>
+                {/if}
 
-        <p class={css({ marginTop: '10px', fontSize: '11px', color: 'text.faint' })}>
-          승/무/패는 문서(태스크)별 전 판정 평균 점수 비교입니다. 오탐 = 본문 오독·맥락 놓침(라운드 1 데이터는 사실 오인·장면전환 오탐) —
-          진단 자체가 틀린 피드백 비율. 판단 오류 = 의도·관례 무시, 스타일 강요, 과민 지적 — 진단은 맞으나 평가가 부당한 비율. 부정 라벨 =
-          부정 계열 전체. 위치 오류(시스템)는 세 수치 모두에서 제외됩니다. 라벨링은 선택 사항이라 모든 수치는 실제 비율의 하한입니다.
-        </p>
+                {#if issues.length > 0}
+                  <div class={flex({ wrap: 'wrap', gap: '6px', marginTop: '8px' })}>
+                    {#each issues as issue (issue)}
+                      <span class={alertChipClass}>{issue}</span>
+                    {/each}
+                  </div>
+                {/if}
 
-        <details class={css({ marginTop: '16px' })}>
-          <summary class={detailsSummaryClass}>세부 지표 전체 보기</summary>
-          <div class={css({ marginTop: '10px', overflowX: 'auto' })}>
-            <table class={tableClass}>
-              <thead>
-                <tr
-                  class={css({
-                    '& th': { color: 'text.faint', fontWeight: 'medium', borderBottomWidth: '1px', borderColor: 'border.default' },
-                  })}
-                >
-                  <th>variant</th>
-                  <th>승</th>
-                  <th>무</th>
-                  <th>패</th>
-                  <th>오탐</th>
-                  <th>판단 오류</th>
-                  <th>부정 라벨</th>
-                  <th>위치 오류</th>
-                  <th>앵커 매칭률</th>
-                  <th>0건</th>
-                  <th>토큰</th>
-                </tr>
-              </thead>
-              <tbody>
-                {#each summary.variants as variant (variant.label)}
+                {#if topLabels.length > 0}
+                  <div class={flex({ wrap: 'wrap', gap: '6px', marginTop: '8px' })}>
+                    {#each topLabels as label (label.name)}
+                      <span class={chipClass}>{label.name} {label.count}</span>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
+            {/each}
+          </div>
+
+          <p class={css({ marginTop: '10px', fontSize: '11px', color: 'text.faint' })}>
+            승/무/패는 문서(태스크)별 전 판정 평균 점수 비교입니다. 오탐 = 본문 오독·맥락 놓침(라운드 1 데이터는 사실 오인·장면전환 오탐) —
+            진단 자체가 틀린 피드백 비율. 판단 오류 = 의도·관례 무시, 스타일 강요, 과민 지적 — 진단은 맞으나 평가가 부당한 비율. 부정 라벨 =
+            부정 계열 전체. 위치 오류(시스템)는 세 수치 모두에서 제외됩니다. 라벨링은 선택 사항이라 모든 수치는 실제 비율의 하한입니다.
+          </p>
+
+          <details class={css({ marginTop: '16px' })}>
+            <summary class={detailsSummaryClass}>세부 지표 전체 보기</summary>
+            <div class={css({ marginTop: '10px', overflowX: 'auto' })}>
+              <table class={tableClass}>
+                <thead>
                   <tr
                     class={css({
-                      '& td': { borderBottomWidth: '1px', borderColor: 'border.subtle' },
-                      backgroundColor: variant.isBaseline ? 'surface.subtle' : 'surface.default',
+                      '& th': { color: 'text.faint', fontWeight: 'medium', borderBottomWidth: '1px', borderColor: 'border.default' },
                     })}
                   >
-                    <td class={css({ fontWeight: 'bold' })}>
-                      {variant.label}
-                      {#if variant.isBaseline}
-                        <span class={css({ marginLeft: '4px', fontSize: '11px', fontWeight: 'normal', color: 'text.faint' })}>기준선</span>
-                      {/if}
-                    </td>
-                    <td>{variant.isBaseline ? '—' : variant.win}</td>
-                    <td>{variant.isBaseline ? '—' : variant.tie}</td>
-                    <td>{variant.isBaseline ? '—' : variant.loss}</td>
-                    <td>{percent(variant.strictFpRate)}</td>
-                    <td>{percent(variant.judgmentErrorRate)}</td>
-                    <td>{percent(variant.negativeRate)}</td>
-                    <td>{percent(variant.anchorIssueRate)}</td>
-                    <td>{percent(variant.anchorMatch)}</td>
-                    <td>{variant.zeroCount}</td>
-                    <td>{variant.tokens.toLocaleString()}</td>
+                    <th>variant</th>
+                    <th>승</th>
+                    <th>무</th>
+                    <th>패</th>
+                    <th>오탐</th>
+                    <th>판단 오류</th>
+                    <th>부정 라벨</th>
+                    <th>위치 오류</th>
+                    <th>앵커 매칭률</th>
+                    <th>0건</th>
+                    <th>토큰</th>
                   </tr>
-                {/each}
-              </tbody>
-            </table>
-          </div>
-
-          <div class={css({ marginTop: '16px', overflowX: 'auto' })}>
-            <table class={tableClass}>
-              <thead>
-                <tr
-                  class={css({
-                    '& th': { color: 'text.faint', fontWeight: 'medium', borderBottomWidth: '1px', borderColor: 'border.default' },
-                  })}
-                >
-                  <th>라벨</th>
+                </thead>
+                <tbody>
                   {#each summary.variants as variant (variant.label)}
-                    <th>{variant.label}</th>
+                    <tr
+                      class={css({
+                        '& td': { borderBottomWidth: '1px', borderColor: 'border.subtle' },
+                        backgroundColor: variant.isBaseline ? 'surface.subtle' : 'surface.default',
+                      })}
+                    >
+                      <td class={css({ fontWeight: 'bold' })}>
+                        {variant.label}
+                        {#if variant.isBaseline}
+                          <span class={css({ marginLeft: '4px', fontSize: '11px', fontWeight: 'normal', color: 'text.faint' })}>
+                            기준선
+                          </span>
+                        {/if}
+                      </td>
+                      <td>{variant.isBaseline ? '—' : variant.win}</td>
+                      <td>{variant.isBaseline ? '—' : variant.tie}</td>
+                      <td>{variant.isBaseline ? '—' : variant.loss}</td>
+                      <td>{percent(variant.strictFpRate)}</td>
+                      <td>{percent(variant.judgmentErrorRate)}</td>
+                      <td>{percent(variant.negativeRate)}</td>
+                      <td>{percent(variant.anchorIssueRate)}</td>
+                      <td>{percent(variant.anchorMatch)}</td>
+                      <td>{variant.zeroCount}</td>
+                      <td>{variant.tokens.toLocaleString()}</td>
+                    </tr>
                   {/each}
-                </tr>
-              </thead>
-              <tbody>
-                {#each FEEDBACK_LABELS as label (label.key)}
-                  <tr class={css({ '& td': { borderBottomWidth: '1px', borderColor: 'border.subtle' } })}>
-                    <td>{label.name}</td>
+                </tbody>
+              </table>
+            </div>
+
+            <div class={css({ marginTop: '16px', overflowX: 'auto' })}>
+              <table class={tableClass}>
+                <thead>
+                  <tr
+                    class={css({
+                      '& th': { color: 'text.faint', fontWeight: 'medium', borderBottomWidth: '1px', borderColor: 'border.default' },
+                    })}
+                  >
+                    <th>라벨</th>
                     {#each summary.variants as variant (variant.label)}
-                      {@const count = labelCount(summary, variant.label, label.key)}
-                      <td>{count === 0 ? '—' : count}</td>
+                      <th>{variant.label}</th>
                     {/each}
                   </tr>
-                {/each}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {#each FEEDBACK_LABELS as label (label.key)}
+                    <tr class={css({ '& td': { borderBottomWidth: '1px', borderColor: 'border.subtle' } })}>
+                      <td>{label.name}</td>
+                      {#each summary.variants as variant (variant.label)}
+                        {@const count = labelCount(summary, variant.label, label.key)}
+                        <td>{count === 0 ? '—' : count}</td>
+                      {/each}
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
 
-          <div class={flex({ direction: 'column', gap: '8px', marginTop: '16px' })}>
-            {#each summary.variants as variant (variant.label)}
-              {@const comments = summary.labelComments[variant.label] ?? []}
-              {#if comments.length > 0}
+            <div class={flex({ direction: 'column', gap: '8px', marginTop: '16px' })}>
+              {#if summary.judgmentComments.length > 0}
                 <details>
-                  <summary class={detailsSummaryClass}>{variant.label} 코멘트 ({comments.length})</summary>
-                  <ul class={flex({ direction: 'column', gap: '6px', marginTop: '8px', paddingLeft: '18px' })}>
-                    {#each comments as entry, index (index)}
+                  <summary class={detailsSummaryClass}>총평 코멘트 ({summary.judgmentComments.length}) · 오래된 순</summary>
+                  <ul class={flex({ direction: 'column', gap: '12px', marginTop: '8px', paddingLeft: '18px' })}>
+                    {#each summary.judgmentComments as entry, index (index)}
                       <li class={css({ fontSize: '13px' })}>
-                        <span class={css({ color: 'text.faint' })}>[{entry.labelNames.join(', ')}]</span>
-                        {entry.comment}
+                        <div class={css({ color: 'text.faint', fontSize: '12px' })}>
+                          <span class={css({ fontVariantNumeric: 'tabular-nums' })}>{formatAt(entry.at)}</span>
+                          · {entry.setLabels.map((label, i) => `${SET_LETTERS[i]} ${label}`).join(' · ')}
+                        </div>
+                        <div class={css({ marginTop: '2px', whiteSpace: 'pre-wrap' })}>{entry.comment}</div>
                       </li>
                     {/each}
                   </ul>
                 </details>
               {/if}
-            {/each}
-          </div>
-        </details>
+              {#each summary.variants as variant (variant.label)}
+                {@const comments = summary.labelComments[variant.label] ?? []}
+                {#if comments.length > 0}
+                  <details>
+                    <summary class={detailsSummaryClass}>{variant.label} 코멘트 ({comments.length}) · 오래된 순</summary>
+                    <ul class={flex({ direction: 'column', gap: '6px', marginTop: '8px', paddingLeft: '18px' })}>
+                      {#each comments as entry, index (index)}
+                        <li class={css({ fontSize: '13px', whiteSpace: 'pre-wrap' })}>
+                          <span class={css({ color: 'text.faint', fontVariantNumeric: 'tabular-nums' })}>{formatAt(entry.at)}</span>
+                          <span class={css({ color: 'text.faint' })}>[{entry.labelNames.join(', ')}]</span>
+                          {entry.comment}
+                        </li>
+                      {/each}
+                    </ul>
+                  </details>
+                {/if}
+              {/each}
+            </div>
+          </details>
+        {/if}
       </section>
     {/each}
   </div>

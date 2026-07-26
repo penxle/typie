@@ -1,6 +1,6 @@
 import type { RunKind, RunPhase } from '$lib/domain/admin-types.ts';
 
-export const KIND_LABELS: Record<RunKind, string> = { pipeline: '파이프라인', sampling: '샘플링' };
+export const KIND_LABELS: Record<RunKind, string> = { pipeline: '파이프라인', sampling: '샘플링', analysis: '분석' };
 
 export const PHASE_LABELS: Record<RunPhase, string> = {
   candidates: '후보 수집',
@@ -18,10 +18,14 @@ type ProgressRun = {
   totalDocs: number;
 };
 
-// 파이프라인은 청크 단위, 샘플링은 phase 라벨 + phase 안에서의 문서 진행("분류 132/218")으로 표시한다.
+// 파이프라인은 청크 단위, 분석은 문서 단위, 샘플링은 phase 라벨 + phase 안에서의 문서 진행("분류 132/218").
 export const formatProgressSummary = (run: ProgressRun): string => {
   if (run.kind === 'pipeline') {
     return `${run.doneChunks.toLocaleString()}/${run.totalChunks.toLocaleString()} 청크`;
+  }
+
+  if (run.kind === 'analysis') {
+    return `${run.doneDocs.toLocaleString()}/${run.totalDocs.toLocaleString()} 문서`;
   }
 
   const label = run.phase ? PHASE_LABELS[run.phase] : '대기 중';

@@ -21,6 +21,8 @@ export const load: PageServerLoad = async ({ platform }) => {
   );
   const allConsents = await db.select({ email: EvaluatorConsents.email }).from(EvaluatorConsents);
   const consents = allConsents.filter((c) => !adminSet.has(c.email));
+  // requiredJudgments가 null인 태스크(중복 구간)는 상한 없이 전원이 보는 것이 목표다 — 그 인원이 분모다.
+  const participants = Math.max(1, consents.length);
   const rounds = await db.select().from(Rounds).orderBy(desc(Rounds.createdAt));
 
   const summaries = [];
@@ -29,7 +31,7 @@ export const load: PageServerLoad = async ({ platform }) => {
       .select({ id: Tasks.id, requiredJudgments: Tasks.requiredJudgments })
       .from(Tasks)
       .where(eq(Tasks.roundId, round.id));
-    const requiredTotal = tasks.reduce((sum, t) => sum + (t.requiredJudgments ?? 1), 0);
+    const requiredTotal = tasks.reduce((sum, t) => sum + (t.requiredJudgments ?? participants), 0);
 
     const judgments = await db
       .select({
@@ -63,7 +65,7 @@ export const load: PageServerLoad = async ({ platform }) => {
 
     // 유효 판정 = 태스크별 min(확정 수, 필요 수) — 초과 배정 잉여를 뺀 실제 커버리지.
     const confirmedRows = judgments.filter((j) => !j.draft);
-    const effectiveByEmail = effectiveContributions(tasks, confirmedRows);
+    const effectiveByEmail = effectiveContributions(tasks, confirmedRows, participants);
     const effectiveTotal = effectiveByEmail.values().reduce((sum, n) => sum + n, 0);
 
     // 캡은 잉여로 소모된 용량을 반영해 자동 확대된다(claim.ts와 동일 산식). 개인 크레딧은 원시 확정 수.

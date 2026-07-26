@@ -30,6 +30,21 @@ describe('createChunks', () => {
     expect(chunks[0].end).toBe(902);
   });
 
+  it('종결부호 뒤 닫는 따옴표까지 한 청크에 넣는다', () => {
+    const text = `${'가'.repeat(890)}"안녕하세요." ${'나'.repeat(500)}`;
+    const chunks = createChunks(text);
+    expect(chunks[0].text.endsWith('."') || chunks[0].text.endsWith('." ')).toBe(true);
+  });
+
+  it('종결부호가 없어도 어절 중간에서 자르지 않는다', () => {
+    // 쉼표로만 이어지는 긴 서술 문단 — 구 버전은 여기서 문자 중간을 잘랐다.
+    const text = `${'가나다 '.repeat(200)}, ${'라마바 '.repeat(200)}`;
+    const chunks = createChunks(text);
+    for (const chunk of chunks.slice(0, -1)) {
+      expect(/[\s,]$/.test(chunk.text)).toBe(true);
+    }
+  });
+
   it('청크를 이어 붙이면 원문과 같다', () => {
     const text = Array.from({ length: 50 }, (_, i) => `${i}번째 문장입니다.`)
       .join(' ')

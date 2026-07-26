@@ -9,6 +9,7 @@ import type {
   VariantContent,
   VariantStatus,
 } from '../../domain/admin-types.ts';
+import type { AnalysisPromptContent } from '../../domain/analysis-prompts.ts';
 import type { FeedbackLabelMap } from '../../domain/feedback-labels.ts';
 import type { JudgmentResult, RoundStage, TaskKind } from '../../domain/types.ts';
 
@@ -50,6 +51,8 @@ export const FeedbackSets = sqliteTable(
     runId: text('run_id').notNull(),
     documentId: text('document_id').notNull(),
     variantId: text('variant_id').notNull(),
+    // 재설계 파이프라인의 작품 총평. 구 파이프라인 세트에는 없다.
+    review: text('review', { mode: 'json' }).$type<Record<string, unknown>>(),
   },
   (t) => [uniqueIndex('feedback_sets_run_id_document_id').on(t.runId, t.documentId)],
 );
@@ -66,6 +69,24 @@ export const Feedbacks = sqliteTable('feedbacks', {
   polarity: text('polarity'),
   body: text('body').notNull(),
 });
+
+// 피드백 1건이 위치 여러 곳에 대응한다 — 같은 문제가 반복될 때 지적을 묶으면서 발생 위치를
+// 모두 보존하기 위해 앵커를 분리했다. feedbacks의 start_text 등 기존 컬럼은 구 파이프라인이
+// 아직 쓰고 있어 남겨둔다.
+export const FeedbackAnchors = sqliteTable(
+  'feedback_anchors',
+  {
+    id: text('id').primaryKey(),
+    feedbackId: text('feedback_id').notNull(),
+    ord: integer('ord').notNull(),
+    startText: text('start_text').notNull(),
+    endText: text('end_text').notNull(),
+    matchStart: integer('match_start'),
+    matchEnd: integer('match_end'),
+    note: text('note'),
+  },
+  (t) => [uniqueIndex('feedback_anchors_feedback_id_ord').on(t.feedbackId, t.ord)],
+);
 
 export const Rounds = sqliteTable('rounds', {
   id: text('id').primaryKey(),
@@ -105,6 +126,40 @@ export const Judgments = sqliteTable(
   (t) => [uniqueIndex('judgments_task_id_evaluator_email').on(t.taskId, t.evaluatorEmail)],
 );
 
+// 재설계 파이프라인 판정 — 세트 단위 5점 척도 대신 피드백 하나하나에 세 가지를 묻는다.
+// 라운드 1·2의 5점 척도 데이터는 judgments.result에 그대로 남는다.
+// 세 값은 모두 nullable이다: null은 '아직 판정하지 않음'이며, 통과(true)와 구별되어야 한다.
+// 기본값을 통과로 두면 평가자가 보지도 않은 피드백이 전부 합격으로 집계된다.
+export const FeedbackVerdicts = sqliteTable(
+  'feedback_verdicts',
+  {
+    id: text('id').primaryKey(),
+    judgmentId: text('judgment_id').notNull(),
+    feedbackId: text('feedback_id').notNull(),
+    correct: integer('correct', { mode: 'boolean' }),
+    needed: integer('needed', { mode: 'boolean' }),
+    useful: integer('useful', { mode: 'boolean' }),
+    note: text('note'),
+  },
+  (t) => [uniqueIndex('feedback_verdicts_judgment_id_feedback_id').on(t.judgmentId, t.feedbackId)],
+);
+
+// 작품 총평에 대한 판정. 피드백과 성격이 달라 3항 대신 두 가지만 묻는다.
+export const ReviewVerdicts = sqliteTable(
+  'review_verdicts',
+  {
+    id: text('id').primaryKey(),
+    judgmentId: text('judgment_id').notNull(),
+    setId: text('set_id').notNull(),
+    // 이 글을 제대로 읽었는가 (characterization)
+    readCorrectly: integer('read_correctly', { mode: 'boolean' }),
+    // 어디서부터 손댈지 도움이 되는가 (priority)
+    priorityUseful: integer('priority_useful', { mode: 'boolean' }),
+    note: text('note'),
+  },
+  (t) => [uniqueIndex('review_verdicts_judgment_id_set_id').on(t.judgmentId, t.setId)],
+);
+
 export const ReleasedTasks = sqliteTable(
   'released_tasks',
   {
@@ -114,6 +169,16 @@ export const ReleasedTasks = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.taskId, t.evaluatorEmail] })],
 );
+
+// 재설계 파이프라인(SURVEY→REVIEW→DEDUPE→VERIFY→COMPOSE)의 프롬프트 묶음.
+// 기존 prompt_variants는 3단계 구조와 프로덕션 적용 경로에 묶여 있어 별도 테이블로 둔다.
+export const AnalysisPromptSets = sqliteTable('analysis_prompt_sets', {
+  id: text('id').primaryKey(),
+  label: text('label').notNull().unique(),
+  note: text('note'),
+  content: text('content', { mode: 'json' }).notNull().$type<AnalysisPromptContent>(),
+  createdAt: createdAt(),
+});
 
 export const Settings = sqliteTable('settings', {
   key: text('key').primaryKey(),
@@ -173,6 +238,8 @@ export const PipelineRunDocs = sqliteTable(
     status: text('status').notNull().$type<RunDocStatus>(),
     doneChunks: integer('done_chunks').notNull().default(0),
     totalChunks: integer('total_chunks').notNull().default(0),
+    // 재설계 파이프라인의 진행 단계. 구 파이프라인은 청크 수로 진행률을 내므로 비워 둔다.
+    phase: text('phase'),
     error: text('error'),
   },
   (t) => [uniqueIndex('pipeline_run_docs_run_id_document_id').on(t.runId, t.documentId)],

@@ -22,13 +22,14 @@
 
   // effort는 서버 스키마상 임의 문자열(z.string().nullable())이라 low/medium/high로 좁히지 않는다 —
   // 저장된 값이 표준 목록 밖이어도 select가 그 값을 그대로 보여주고, 다시 저장할 때 조용히 바꿔치기하지 않도록 한다.
-  type StageForm = { system: string; toolsText: string; model: string; effort: string };
+  type StageForm = { system: string; toolsText: string; model: string; effort: string; temperature: string };
 
   const toStageForm = (prompt: StagePrompt): StageForm => ({
     system: prompt.system,
     toolsText: JSON.stringify(prompt.tools, null, 2),
     model: prompt.model,
     effort: prompt.effort ?? '',
+    temperature: prompt.temperature === undefined || prompt.temperature === null ? '' : String(prompt.temperature),
   });
 
   const effortOptionsFor = (effort: string): string[] =>
@@ -65,11 +66,16 @@
           throw new Error('객체({}) 형식이어야 합니다.');
         }
         toolsErrors[stage] = null;
+        const temperature = forms[stage].temperature.trim();
+        if (temperature !== '' && Number.isNaN(Number(temperature))) {
+          throw new Error('temperature는 숫자여야 합니다.');
+        }
         content[stage] = {
           system: forms[stage].system,
           tools: parsed as Record<string, unknown>,
           model: forms[stage].model,
           effort: forms[stage].effort === '' ? null : forms[stage].effort,
+          temperature: temperature === '' ? null : Number(temperature),
         };
       } catch (err) {
         toolsErrors[stage] = err instanceof Error ? err.message : String(err);
@@ -110,7 +116,7 @@
     }
   };
 
-  const startRun = async (corpusVersion: string) => {
+  const startRun = async (corpusVersion: string, documentIds: string[] | undefined) => {
     if (!existingVariant) return;
     running = true;
     runError = null;
@@ -118,7 +124,7 @@
       const response = await fetch('/admin/api/runs', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ kind: 'pipeline', promptVariantId: existingVariant.id, corpusVersion }),
+        body: JSON.stringify({ kind: 'pipeline', promptVariantId: existingVariant.id, corpusVersion, documentIds }),
       });
       if (!response.ok) {
         runError = `실행 시작에 실패했습니다 (${response.status}).`;
@@ -351,6 +357,33 @@
                 <option value={option}>{option === '' ? '(미지정)' : option}</option>
               {/each}
             </select>
+          </div>
+          <div>
+            <label
+              class={css({ display: 'block', fontSize: '12px', color: 'text.faint', marginBottom: '4px' })}
+              for={`temperature-${stage}`}
+            >
+              temperature
+            </label>
+            <input
+              id={`temperature-${stage}`}
+              class={css({
+                width: 'full',
+                paddingX: '10px',
+                paddingY: '8px',
+                borderWidth: '1px',
+                borderColor: 'border.default',
+                borderRadius: '8px',
+                fontSize: '14px',
+                fontFamily: 'mono',
+                backgroundColor: 'surface.default',
+                transition: '[border-color 0.15s ease]',
+                _hover: { borderColor: 'border.strong' },
+              })}
+              placeholder="비우면 provider 기본값"
+              type="text"
+              bind:value={forms[stage].temperature}
+            />
           </div>
         </div>
       </div>

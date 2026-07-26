@@ -1,8 +1,9 @@
 import { WorkflowEntrypoint } from 'cloudflare:workers';
 import { eq, sql } from 'drizzle-orm';
+import { classifyCorpusDocument } from './corpus-filter.ts';
 import { createDb, Documents, PipelineRuns, readStageCache, StageCache } from './db.ts';
 import { createInternalApi } from './internal-api.ts';
-import { classifyLiterary, createOpenAI } from './llm.ts';
+import { createOpenAI } from './llm.ts';
 import {
   candidateLimitFor,
   corpusConflict,
@@ -17,7 +18,8 @@ import type { Db } from './db.ts';
 import type { FlowEnv, SamplingParams } from './index.ts';
 import type { Classified, LiteraryDoc, SelectedDocument } from './sampling-select.ts';
 
-const CLASSIFY_MODEL = 'google-vertex-ai/google/gemini-3.5-flash-lite';
+// 심사는 코퍼스 품질의 마지막 관문이다. 여기서 놓친 원고는 오라클 비용과 평가자 시간을 함께 버린다.
+const CLASSIFY_MODEL = 'anthropic/claude-opus-5';
 const CLASSIFY_BATCH = 8;
 const EXTRACT_BATCH = 5;
 // api 응답 크기(문서당 최대 30KB)와 D1 바인딩 파라미터(행당 2개, 100 제한) 양쪽에 여유.
@@ -74,15 +76,19 @@ export class SamplingWorkflow extends WorkflowEntrypoint<FlowEnv, SamplingParams
               const cached = await readStageCache<{ text: string }>(db, candidateKey(runId, documentId));
               const text = cached?.text ?? '';
               try {
-                const result = await classifyLiterary(openai, CLASSIFY_MODEL, text);
+                // 앞부분만 잘라 넘기면 묶음·후기·복수 엔딩을 놓친다 — 전문을 주고 발췌는 심사기가 정한다.
+                const result = await classifyCorpusDocument(openai, CLASSIFY_MODEL, text);
+                return { candidate: { documentId, characterCount: 0 }, ...result };
+              } catch {
                 return {
                   candidate: { documentId, characterCount: 0 },
-                  literary: result.literary,
-                  kind: result.kind,
-                  genre: result.genre,
+                  kind: 'error',
+                  genre: 'etc',
+                  narrative: false,
+                  singleWork: false,
+                  selfContained: false,
+                  original: false,
                 };
-              } catch {
-                return { candidate: { documentId, characterCount: 0 }, literary: false, kind: 'error', genre: 'etc' };
               }
             }),
           );

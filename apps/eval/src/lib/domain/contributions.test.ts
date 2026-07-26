@@ -24,7 +24,7 @@ describe('effectiveContributions', () => {
       judgment('j6', 't2', 'a@x', 3),
     ];
     // t1(필요 1): a만 유효. t2(필요 2): b·c 유효, a의 3번째 판정은 잉여.
-    const counts = effectiveContributions(tasks, judgments);
+    const counts = effectiveContributions(tasks, judgments, 7);
     expect(counts.get('a@x')).toBe(1);
     expect(counts.get('b@x')).toBe(1);
     expect(counts.get('c@x')).toBe(1);
@@ -33,16 +33,25 @@ describe('effectiveContributions', () => {
   it('동시각은 id로 결정적 타이브레이크', () => {
     const tasks = [{ id: 't1', requiredJudgments: 1 }];
     const judgments = [judgment('b', 't1', 'late@x', 1), judgment('a', 't1', 'first@x', 1)];
-    const counts = effectiveContributions(tasks, judgments);
+    const counts = effectiveContributions(tasks, judgments, 7);
     expect(counts.get('first@x')).toBe(1);
     expect(counts.get('late@x')).toBeUndefined();
   });
 
-  it('requiredJudgments가 null이면 1로 취급한다', () => {
+  it('requiredJudgments가 null이면 참여자 전원의 판정이 유효하다', () => {
     const tasks = [{ id: 't1', requiredJudgments: null }];
     const judgments = [judgment('j1', 't1', 'a@x', 1), judgment('j2', 't1', 'b@x', 2)];
-    const counts = effectiveContributions(tasks, judgments);
+    const counts = effectiveContributions(tasks, judgments, 7);
     expect(counts.get('a@x')).toBe(1);
-    expect(counts.get('b@x')).toBeUndefined();
+    expect(counts.get('b@x')).toBe(1);
+  });
+
+  it('참여자 수를 넘는 판정은 null 태스크에서도 잉여다', () => {
+    const tasks = [{ id: 't1', requiredJudgments: null }];
+    const judgments = [judgment('j1', 't1', 'a@x', 1), judgment('j2', 't1', 'b@x', 2), judgment('j3', 't1', 'c@x', 3)];
+    const counts = effectiveContributions(tasks, judgments, 2);
+    expect(counts.get('a@x')).toBe(1);
+    expect(counts.get('b@x')).toBe(1);
+    expect(counts.get('c@x')).toBeUndefined();
   });
 });

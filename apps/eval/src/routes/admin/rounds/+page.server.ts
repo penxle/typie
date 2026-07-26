@@ -17,13 +17,13 @@ export const load: PageServerLoad = async ({ platform }) => {
     .orderBy(sql`max(${Documents.createdAt}) desc`);
   const corpusVersions = corpusVersionRows.map((r) => r.corpusVersion);
 
-  // 대상 variant 자동 제안 = 해당 코퍼스 버전에 succeeded pipeline run이 있는 legacy Variants 라벨.
+  // 대상 variant 자동 제안 = 해당 코퍼스 버전에 succeeded 실행이 있는 legacy Variants 라벨.
   // admin/api/corpus/rounds가 variantLabels/v0Label/candidateLabel을 이 테이블의 label로 조회하므로
   // (resolveLabelSets: eq(Variants.label, label)) 여기서도 동일하게 legacy Variants를 기준으로 삼는다.
   const succeededRuns = await db
     .select({ corpusVersion: PipelineRuns.corpusVersion, variantId: PipelineRuns.variantId })
     .from(PipelineRuns)
-    .where(and(eq(PipelineRuns.kind, 'pipeline'), eq(PipelineRuns.status, 'succeeded')));
+    .where(and(inArray(PipelineRuns.kind, ['pipeline', 'analysis']), eq(PipelineRuns.status, 'succeeded')));
 
   const succeededVariantIds = [...new Set(succeededRuns.map((r) => r.variantId).filter((id): id is string => id !== null))];
   const succeededVariants =
