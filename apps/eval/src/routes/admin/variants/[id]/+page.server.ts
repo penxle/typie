@@ -23,6 +23,8 @@ export const load: PageServerLoad = async ({ params, platform }) => {
   const corpusVersionRows = await db
     .select({ corpusVersion: Documents.corpusVersion })
     .from(Documents)
+    // 개인 열람용 글은 평가 대상이 아니라 실행 후보에서 뺀다(첫 줄이 기본 선택이다).
+    .where(eq(Documents.kind, 'corpus'))
     .groupBy(Documents.corpusVersion)
     .orderBy(sql`max(${Documents.createdAt}) desc`);
   const corpusVersions = corpusVersionRows.map((r) => r.corpusVersion);

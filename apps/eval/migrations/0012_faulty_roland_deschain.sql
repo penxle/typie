@@ -1,0 +1,1 @@
+ALTER TABLE `pipeline_runs` ADD `cached_tokens` integer DEFAULT 0 NOT NULL;

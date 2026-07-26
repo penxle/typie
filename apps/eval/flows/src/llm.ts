@@ -3,7 +3,7 @@ import { dedupCharacterCandidates, extractJsonObjects, renderMetaBlock, renderSu
 import type { StagePrompt } from '../../src/lib/domain/admin-types.ts';
 import type { Feedback, MetaStructured, SummaryStructured, ToolDescriptions } from './text.ts';
 
-export type Usage = { promptTokens: number; completionTokens: number };
+export type Usage = { promptTokens: number; completionTokens: number; cachedTokens: number };
 
 export type ResolvedPrompt = {
   model: string;
@@ -73,6 +73,7 @@ export const runTool = async <T>(
   if (response.usage) {
     usage.promptTokens += response.usage.prompt_tokens ?? 0;
     usage.completionTokens += response.usage.completion_tokens ?? 0;
+    usage.cachedTokens += response.usage.prompt_tokens_details?.cached_tokens ?? 0;
   }
 
   const toolCall = response.choices[0]?.message?.tool_calls?.[0];
@@ -151,6 +152,7 @@ export const analyzeChunkWithContext = async (
     if (chunk.usage) {
       usage.promptTokens += chunk.usage.prompt_tokens ?? 0;
       usage.completionTokens += chunk.usage.completion_tokens ?? 0;
+      usage.cachedTokens += chunk.usage.prompt_tokens_details?.cached_tokens ?? 0;
     }
 
     const choice = chunk.choices[0];

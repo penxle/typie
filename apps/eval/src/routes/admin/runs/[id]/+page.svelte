@@ -7,6 +7,7 @@
   import { untrack } from 'svelte';
   import { invalidateAll } from '$app/navigation';
   import FeedbackSetPanel from '../../../tasks/[id]/FeedbackSetPanel.svelte';
+  import CostCell from '../../lib/CostCell.svelte';
   import { usePolling } from '../../lib/poll.svelte.ts';
   import {
     etaSeconds,
@@ -251,6 +252,27 @@
         <p class={css({ fontSize: '12px', color: 'text.faint' })}>누적 토큰</p>
         <p class={css({ marginTop: '2px', fontSize: '16px', fontWeight: 'bold' })}>
           {(run.promptTokens + run.completionTokens).toLocaleString()}
+        </p>
+        <p class={css({ marginTop: '2px', fontSize: '11px', color: 'text.faint' })}>
+          입력 {run.promptTokens.toLocaleString()} · 출력 {run.completionTokens.toLocaleString()}
+          {#if run.cachedTokens > 0}
+            · 캐시 {run.cachedTokens.toLocaleString()}
+          {/if}
+        </p>
+      </div>
+      <div class={statCardClass}>
+        <p class={css({ fontSize: '12px', color: 'text.faint' })}>비용</p>
+        <p class={css({ marginTop: '2px', fontSize: '16px', fontWeight: 'bold' })}>
+          <CostCell cost={data.cost} tokens={run.promptTokens + run.completionTokens} />
+        </p>
+        <p class={css({ marginTop: '2px', fontSize: '11px', color: 'text.faint' })}>
+          {#if data.krwPerCharacter !== null}
+            자당 {data.krwPerCharacter.toFixed(2)}원 · {data.characters.toLocaleString()}자
+          {:else if data.models.length > 0}
+            {data.models.join(', ')}
+          {:else}
+            모델 정보 없음
+          {/if}
         </p>
       </div>
     </div>

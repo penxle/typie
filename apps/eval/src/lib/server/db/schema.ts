@@ -11,19 +11,23 @@ import type {
 } from '../../domain/admin-types.ts';
 import type { AnalysisPromptContent } from '../../domain/analysis-prompts.ts';
 import type { FeedbackLabelMap } from '../../domain/feedback-labels.ts';
-import type { JudgmentResult, RoundStage, TaskKind } from '../../domain/types.ts';
+import type { DocumentKind, JudgmentResult, RoundStage, TaskKind } from '../../domain/types.ts';
 
 const createdAt = () =>
   integer('created_at', { mode: 'timestamp' })
     .notNull()
     .$defaultFn(() => new Date());
 
+// kind는 이 문서가 평가 대상 코퍼스인지, 열람용으로 따로 들여온 개인 글인지를 가른다.
+// 실행·라운드 화면의 코퍼스 목록은 created_at 역순이고 첫 줄이 기본 선택이라, 개인 글을
+// 같은 목록에 두면 새로 들일 때마다 기본 선택을 가로채 엉뚱한 코퍼스로 실행이 나간다.
 export const Documents = sqliteTable('documents', {
   id: text('id').primaryKey(),
   refId: text('ref_id').notNull(),
   content: text('content').notNull(),
   characterCount: integer('character_count').notNull(),
   corpusVersion: text('corpus_version').notNull(),
+  kind: text('kind').notNull().$type<DocumentKind>().default('corpus'),
   genre: text('genre'),
   createdAt: createdAt(),
 });
@@ -222,6 +226,9 @@ export const PipelineRuns = sqliteTable('pipeline_runs', {
   totalDocs: integer('total_docs').notNull().default(0),
   promptTokens: integer('prompt_tokens').notNull().default(0),
   completionTokens: integer('completion_tokens').notNull().default(0),
+  // prompt_tokens 중 캐시에서 읽힌 몫. 캐시 읽기는 입력 단가의 10%라 이 값을 빼지 않으면
+  // 비용이 부풀고, 0으로 남으면 캐싱이 정말 꺼져 있다는 근거가 된다.
+  cachedTokens: integer('cached_tokens').notNull().default(0),
   error: text('error'),
   meta: text('meta', { mode: 'json' }).$type<Record<string, unknown>>(),
   createdAt: createdAt(),

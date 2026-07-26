@@ -1,5 +1,5 @@
 import { error } from '@sveltejs/kit';
-import { desc, sql } from 'drizzle-orm';
+import { desc, eq, sql } from 'drizzle-orm';
 import { AnalysisPromptSets, createDb, Documents } from '$lib/server/db/index.ts';
 import type { PageServerLoad } from './$types';
 
@@ -14,6 +14,9 @@ export const load: PageServerLoad = async ({ platform }) => {
   const corpusRows = await db
     .select({ version: Documents.corpusVersion, count: sql<number>`count(*)`, characters: sql<number>`sum(${Documents.characterCount})` })
     .from(Documents)
+    // 개인 열람용 글은 평가 대상이 아니다. 첫 줄이 기본 선택이라 목록에 두면 새로 들일 때마다
+    // 기본 선택을 가로채 30편짜리 코퍼스 대신 한 편짜리로 실행이 나간다.
+    .where(eq(Documents.kind, 'corpus'))
     .groupBy(Documents.corpusVersion)
     // 가장 최근에 적재한 코퍼스가 먼저 오게 한다 — 목록 첫 줄이 기본 선택이라 순서가 곧 실수 방지책이다.
     .orderBy(sql`max(${Documents.createdAt}) desc`);

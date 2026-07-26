@@ -16,8 +16,11 @@
     onUpdate: (feedbackId: string, verdict: FeedbackVerdict) => void;
     onHover: (feedbackId: string | null) => void;
     onSelect: (feedbackId: string, anchorIndex: number) => void;
+    // 읽기 전용 열람에서는 판정 문항을 아예 걸지 않는다 — 저장되지 않는 입력을 보여주면
+    // 답하라는 뜻으로 읽힌다.
+    readOnly?: boolean;
   };
-  const { feedbacks, verdicts, focusedId = null, onUpdate, onHover, onSelect }: Props = $props();
+  const { feedbacks, verdicts, focusedId = null, onUpdate, onHover, onSelect, readOnly = false }: Props = $props();
 
   let anchorCursors = $state<Record<string, number>>({});
 
@@ -117,35 +120,37 @@
 
         <p class={css({ fontSize: '14px', lineHeight: '[1.8]', color: 'text.default' })}>{feedback.body}</p>
 
-        <div class={flex({ direction: 'column', gap: '4px', marginTop: '10px' })}>
-          {#each FEEDBACK_VERDICT_AXES as axis (axis.key)}
-            <VerdictSwitch
-              negative={axis.negative}
-              onChange={(value) => onUpdate(feedback.id, { ...verdict, [axis.key]: value })}
-              question={axis.question}
-              value={verdict[axis.key]}
-            />
-          {/each}
+        {#if !readOnly}
+          <div class={flex({ direction: 'column', gap: '4px', marginTop: '10px' })}>
+            {#each FEEDBACK_VERDICT_AXES as axis (axis.key)}
+              <VerdictSwitch
+                negative={axis.negative}
+                onChange={(value) => onUpdate(feedback.id, { ...verdict, [axis.key]: value })}
+                question={axis.question}
+                value={verdict[axis.key]}
+              />
+            {/each}
 
-          {#if hasRejection(verdicts[feedback.id])}
-            <input
-              class={css({
-                width: 'full',
-                marginTop: '4px',
-                borderBottomWidth: '1px',
-                borderColor: 'border.default',
-                paddingY: '4px',
-                fontSize: '12px',
-                backgroundColor: '[transparent]',
-                _focus: { borderColor: 'border.strong' },
-              })}
-              oninput={(e) => onUpdate(feedback.id, { ...verdict, note: e.currentTarget.value })}
-              placeholder="왜 아니라고 보셨나요"
-              type="text"
-              value={verdict.note ?? ''}
-            />
-          {/if}
-        </div>
+            {#if hasRejection(verdicts[feedback.id])}
+              <input
+                class={css({
+                  width: 'full',
+                  marginTop: '4px',
+                  borderBottomWidth: '1px',
+                  borderColor: 'border.default',
+                  paddingY: '4px',
+                  fontSize: '12px',
+                  backgroundColor: '[transparent]',
+                  _focus: { borderColor: 'border.strong' },
+                })}
+                oninput={(e) => onUpdate(feedback.id, { ...verdict, note: e.currentTarget.value })}
+                placeholder="왜 아니라고 보셨나요"
+                type="text"
+                value={verdict.note ?? ''}
+              />
+            {/if}
+          </div>
+        {/if}
       </div>
     </article>
   {/each}

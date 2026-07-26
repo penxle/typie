@@ -15,13 +15,15 @@ export const spawnPipelineRun = async (
   input: { promptVariantId: string; corpusVersion: string; documentIds?: string[] },
 ): Promise<{ runId: string; spawnedCount: number; failedCount: number } | { error: string }> => {
   const [promptVariant] = await db
-    .select({ label: PromptVariants.label })
+    .select({ label: PromptVariants.label, content: PromptVariants.content })
     .from(PromptVariants)
     .where(eq(PromptVariants.id, input.promptVariantId))
     .limit(1);
   if (!promptVariant) {
     return { error: 'prompt variant not found' };
   }
+  // 구 파이프라인은 단계마다 모델이 달라 대개 둘 이상이 담긴다 — 그때는 금액을 내지 않는다.
+  const models = [...new Set(Object.values(promptVariant.content).map((p) => p.model))];
 
   const docs = await db
     .select({ id: Documents.id, content: Documents.content })
@@ -58,6 +60,7 @@ export const spawnPipelineRun = async (
     status: 'running',
     totalChunks,
     totalDocs: docsWithChunkCount.length,
+    meta: { models },
   });
 
   let spawnedCount = 0;
@@ -109,13 +112,15 @@ export const spawnAnalysisRun = async (
   input: { promptSetId: string; corpusVersion: string; documentIds?: string[] },
 ): Promise<{ runId: string; spawnedCount: number; failedCount: number } | { error: string }> => {
   const [promptSet] = await db
-    .select({ label: AnalysisPromptSets.label })
+    .select({ label: AnalysisPromptSets.label, content: AnalysisPromptSets.content })
     .from(AnalysisPromptSets)
     .where(eq(AnalysisPromptSets.id, input.promptSetId))
     .limit(1);
   if (!promptSet) {
     return { error: 'prompt set not found' };
   }
+  // 비용 환산용. 프롬프트는 나중에 고쳐질 수 있어 실행 시각의 모델을 그대로 박아둔다.
+  const models = [...new Set(Object.values(promptSet.content).map((p) => p.model))];
 
   const docs = await db
     .select({ id: Documents.id })
@@ -148,7 +153,7 @@ export const spawnAnalysisRun = async (
     totalDocs: docs.length,
     // 재실행하려면 어느 프롬프트 세트로 돌았는지 알아야 한다. 라벨로 되짚을 수도 있지만
     // 그 사이 세트 라벨이 바뀌면 엉뚱한 세트로 다시 돌게 된다.
-    meta: { promptSetId: input.promptSetId },
+    meta: { promptSetId: input.promptSetId, models },
   });
 
   let spawnedCount = 0;

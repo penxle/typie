@@ -1,6 +1,8 @@
 import { error } from '@sveltejs/kit';
 import { inArray } from 'drizzle-orm';
+import { estimateCost } from '$lib/domain/pricing.ts';
 import { createDb, Variants } from '$lib/server/db/index.ts';
+import { readPriceTable, resolveRunModels } from '$lib/server/pricing.ts';
 import type { RunKind, RunPhase, RunStatus } from '$lib/domain/admin-types.ts';
 import type { PageServerLoad } from './$types';
 
@@ -15,6 +17,8 @@ type RunRow = {
   totalChunks: number;
   doneDocs: number;
   totalDocs: number;
+  promptTokens: number;
+  completionTokens: number;
   createdAt: string;
 };
 
@@ -40,7 +44,20 @@ export const load: PageServerLoad = async ({ platform, locals, fetch }) => {
       : [];
   const labelById = new Map(variants.map((v) => [v.id, v.label]));
 
+  const priceTable = await readPriceTable(db);
+  const modelsByRun = await resolveRunModels(
+    db,
+    runs.map((r) => r.id),
+  );
+
   return {
-    runs: runs.map((run) => ({ ...run, variantLabel: run.variantId ? (labelById.get(run.variantId) ?? run.variantId) : null })),
+    runs: runs.map((run) => ({
+      ...run,
+      variantLabel: run.variantId ? (labelById.get(run.variantId) ?? run.variantId) : null,
+      cost: estimateCost(
+        { promptTokens: run.promptTokens, completionTokens: run.completionTokens, models: modelsByRun.get(run.id) ?? [] },
+        priceTable,
+      ),
+    })),
   };
 };

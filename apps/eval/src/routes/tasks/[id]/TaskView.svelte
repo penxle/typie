@@ -27,8 +27,13 @@
   import type { PageData } from './$types';
   import type { RailMark } from './FindingRail.svelte';
 
-  type Props = { data: PageData; preview?: boolean };
-  const { data, preview = false }: Props = $props();
+  // evaluate = 실제 평가, preview = 어드민 점검(조작은 되지만 저장 안 됨),
+  // read = 열람 전용(판정 문항과 제출을 아예 걸지 않는다).
+  type Props = { data: PageData; mode?: 'evaluate' | 'preview' | 'read' };
+  const { data, mode = 'evaluate' }: Props = $props();
+
+  const preview = $derived(mode === 'preview');
+  const readOnly = $derived(mode === 'read');
 
   // elapsed_seconds = 이 태스크에 쓰인 총 활성 시간. 저장된 누적값에서 이어서 세고,
   // 입력 없이 IDLE_LIMIT_MS를 넘긴 구간과 창 이탈~복귀 구간은 세지 않는다.
@@ -408,14 +413,17 @@
       flexShrink: '0',
     })}
   >
-    <a
-      class={flex({ align: 'center', gap: '2px', fontSize: '13px', color: 'text.subtle', _hover: { color: 'text.default' } })}
-      href={preview ? '/admin/tasks' : '/'}
-    >
-      <Icon icon={IconChevronLeft} size={14} />
-      {preview ? '태스크 목록' : '평가 큐'}
-    </a>
-    {#if preview}
+    <!-- 열람 전용은 직접 받은 링크로 들어온다 — 돌아갈 곳이 없으므로 링크를 걸지 않는다. -->
+    {#if !readOnly}
+      <a
+        class={flex({ align: 'center', gap: '2px', fontSize: '13px', color: 'text.subtle', _hover: { color: 'text.default' } })}
+        href={preview ? '/admin/tasks' : '/'}
+      >
+        <Icon icon={IconChevronLeft} size={14} />
+        {preview ? '태스크 목록' : '평가 큐'}
+      </a>
+    {/if}
+    {#if preview || readOnly}
       <span
         class={css({
           paddingX: '8px',
@@ -427,7 +435,7 @@
           color: 'accent.warning.default',
         })}
       >
-        관리자 미리보기 — 입력은 저장되지 않습니다
+        {preview ? '관리자 미리보기 — 입력은 저장되지 않습니다' : '열람 전용'}
       </span>
     {:else}
       <div class={flex({ align: 'center', gap: '8px' })}>
@@ -639,7 +647,7 @@
           <button class={tabClass(activeTab === 'review')} onclick={() => switchTab('review')} type="button">작품 총평</button>
           <button class={tabClass(activeTab === 'findings')} onclick={() => switchTab('findings')} type="button">
             피드백 {activeSet.feedbacks.length}건
-            {#if pendingCount > 0}
+            {#if pendingCount > 0 && !readOnly}
               <span class={css({ fontWeight: 'normal', color: 'text.faint', fontVariantNumeric: 'tabular-nums' })}>
                 {pendingCount} 남음
               </span>
@@ -656,6 +664,7 @@
             feedbackLabels={activeSet.feedbacks.map((f) => ({ id: f.id, category: f.category }))}
             onSelectFeedback={focusFeedback}
             onUpdate={(next) => (reviewVerdictMap = { ...reviewVerdictMap, [activeSet.setId]: next })}
+            {readOnly}
             review={activeReview}
             verdict={reviewVerdictMap[activeSet.setId] ?? EMPTY_REVIEW_VERDICT}
           />
@@ -672,6 +681,7 @@
             onHover={(id) => (hoveredFeedbackId = id)}
             onSelect={focusAnchor}
             onUpdate={updateVerdict}
+            {readOnly}
             verdicts={verdictMap}
           />
         </div>
@@ -691,208 +701,210 @@
         </div>
       {/if}
 
-      <form
-        class={css({ padding: '16px', borderTopWidth: '1px', borderColor: 'border.default', flexShrink: '0' })}
-        method="post"
-        use:enhance={({ action, formData, cancel }) => {
-          if (busy) {
-            cancel();
-            return;
-          }
-          recordActivity();
-          formData.set('elapsedSeconds', String(Math.round(activeMs / 1000)));
-          if (action.search.includes('save')) saving = true;
-          else submitting = true;
-          return async ({ update }) => {
-            await update({ reset: false });
-            saving = false;
-            submitting = false;
-            savedAt = new Date().toLocaleTimeString('ko', { hour: '2-digit', minute: '2-digit' });
-          };
-        }}
-      >
-        {#if isRanking}
-          <fieldset class={flex({ direction: 'column', gap: '6px' })}>
-            <legend class={css({ fontSize: '13px', fontWeight: 'bold', marginBottom: '6px' })}>
-              {#if data.isAnalysis}
-                이 피드백을 받았다면 도움이 되었을까요?
-              {:else}
-                점수
-                <span class={css({ fontWeight: 'normal', color: 'text.faint' })}>(같은 평가 허용)</span>
-              {/if}
-              {#if multiSet}
-                <span class={css({ fontWeight: 'normal', color: 'text.faint', fontVariantNumeric: 'tabular-nums' })}>
-                  · {scoredCount} / {data.task.setIds.length} 세트 완료
-                </span>
-              {/if}
-            </legend>
-            {#each data.task.setIds as setId, i (setId)}
-              <div
-                class={`${flex({ align: 'center', gap: '8px', paddingX: '6px', paddingY: '4px', borderRadius: '8px', transition: '[background-color 0.15s ease]' })} ${
-                  multiSet && activeSetIndex === i ? css({ backgroundColor: 'surface.muted' }) : ''
-                }`}
-              >
+      {#if !readOnly}
+        <form
+          class={css({ padding: '16px', borderTopWidth: '1px', borderColor: 'border.default', flexShrink: '0' })}
+          method="post"
+          use:enhance={({ action, formData, cancel }) => {
+            if (busy) {
+              cancel();
+              return;
+            }
+            recordActivity();
+            formData.set('elapsedSeconds', String(Math.round(activeMs / 1000)));
+            if (action.search.includes('save')) saving = true;
+            else submitting = true;
+            return async ({ update }) => {
+              await update({ reset: false });
+              saving = false;
+              submitting = false;
+              savedAt = new Date().toLocaleTimeString('ko', { hour: '2-digit', minute: '2-digit' });
+            };
+          }}
+        >
+          {#if isRanking}
+            <fieldset class={flex({ direction: 'column', gap: '6px' })}>
+              <legend class={css({ fontSize: '13px', fontWeight: 'bold', marginBottom: '6px' })}>
+                {#if data.isAnalysis}
+                  이 피드백을 받았다면 도움이 되었을까요?
+                {:else}
+                  점수
+                  <span class={css({ fontWeight: 'normal', color: 'text.faint' })}>(같은 평가 허용)</span>
+                {/if}
                 {#if multiSet}
-                  <span
-                    class={css({
-                      width: '44px',
-                      fontSize: '13px',
-                      color: activeSetIndex === i ? 'text.default' : 'text.subtle',
-                      fontWeight: activeSetIndex === i ? 'bold' : 'normal',
-                    })}
-                  >
-                    세트 {labels[i]}
+                  <span class={css({ fontWeight: 'normal', color: 'text.faint', fontVariantNumeric: 'tabular-nums' })}>
+                    · {scoredCount} / {data.task.setIds.length} 세트 완료
                   </span>
                 {/if}
-                <div class={grid({ columns: 5, gap: '4px', flex: '1' })}>
-                  {#each scoreAnchors as { score, anchor } (score)}
-                    <button
-                      class={css({
-                        paddingY: '6px',
-                        borderRadius: '6px',
-                        borderWidth: '1px',
-                        borderColor: scores[setId] === score ? 'border.strong' : 'border.default',
-                        backgroundColor: scores[setId] === score ? 'surface.dark' : 'surface.default',
-                        color: scores[setId] === score ? 'text.bright' : 'text.subtle',
-                        fontSize: '12px',
-                        fontWeight: scores[setId] === score ? 'bold' : 'normal',
-                        cursor: 'pointer',
-                        transition: '[background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease]',
-                      })}
-                      onclick={() => (scores[setId] = scores[setId] === score ? 0 : score)}
-                      type="button"
-                    >
-                      {anchor}
-                    </button>
-                  {/each}
-                </div>
-              </div>
-            {/each}
-          </fieldset>
-        {:else}
-          <fieldset>
-            <legend class={css({ fontSize: '13px', fontWeight: 'bold', marginBottom: '6px' })}>
-              어느 세트의 피드백이 더 나은가요?
-              <span class={css({ fontWeight: 'normal', color: 'text.faint' })}>
-                — 두 세트가 비슷하거나 동일해 보여도 오류가 아닙니다. 보이는 그대로 판정해 주세요.
-              </span>
-            </legend>
-            <div class={grid({ columns: 3, gap: '6px' })}>
-              {#each [{ value: 'a', label: 'A 우세' }, { value: 'tie', label: '무승부' }, { value: 'b', label: 'B 우세' }] as option (option.value)}
-                <button
-                  class={css({
-                    paddingY: '10px',
-                    borderRadius: '8px',
-                    borderWidth: '1px',
-                    borderColor: verdict === option.value ? 'border.strong' : 'border.default',
-                    backgroundColor: verdict === option.value ? 'surface.dark' : 'surface.default',
-                    color: verdict === option.value ? 'text.bright' : 'text.default',
-                    fontSize: '14px',
-                    fontWeight: verdict === option.value ? 'bold' : 'normal',
-                    cursor: 'pointer',
-                    transition: '[background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease]',
-                  })}
-                  onclick={() => (verdict = option.value as PairVerdict)}
-                  type="button"
+              </legend>
+              {#each data.task.setIds as setId, i (setId)}
+                <div
+                  class={`${flex({ align: 'center', gap: '8px', paddingX: '6px', paddingY: '4px', borderRadius: '8px', transition: '[background-color 0.15s ease]' })} ${
+                    multiSet && activeSetIndex === i ? css({ backgroundColor: 'surface.muted' }) : ''
+                  }`}
                 >
-                  {option.label}
-                </button>
+                  {#if multiSet}
+                    <span
+                      class={css({
+                        width: '44px',
+                        fontSize: '13px',
+                        color: activeSetIndex === i ? 'text.default' : 'text.subtle',
+                        fontWeight: activeSetIndex === i ? 'bold' : 'normal',
+                      })}
+                    >
+                      세트 {labels[i]}
+                    </span>
+                  {/if}
+                  <div class={grid({ columns: 5, gap: '4px', flex: '1' })}>
+                    {#each scoreAnchors as { score, anchor } (score)}
+                      <button
+                        class={css({
+                          paddingY: '6px',
+                          borderRadius: '6px',
+                          borderWidth: '1px',
+                          borderColor: scores[setId] === score ? 'border.strong' : 'border.default',
+                          backgroundColor: scores[setId] === score ? 'surface.dark' : 'surface.default',
+                          color: scores[setId] === score ? 'text.bright' : 'text.subtle',
+                          fontSize: '12px',
+                          fontWeight: scores[setId] === score ? 'bold' : 'normal',
+                          cursor: 'pointer',
+                          transition: '[background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease]',
+                        })}
+                        onclick={() => (scores[setId] = scores[setId] === score ? 0 : score)}
+                        type="button"
+                      >
+                        {anchor}
+                      </button>
+                    {/each}
+                  </div>
+                </div>
               {/each}
-            </div>
-          </fieldset>
-        {/if}
-
-        <textarea
-          name="comment"
-          class={css({
-            width: 'full',
-            marginTop: '10px',
-            borderWidth: '1px',
-            borderColor: 'border.default',
-            borderRadius: '8px',
-            padding: '8px',
-            fontSize: '13px',
-            minHeight: '44px',
-            backgroundColor: 'surface.default',
-          })}
-          placeholder="코멘트 (선택)"
-          bind:value={comment}></textarea>
-
-        <input name="result" type="hidden" value={result ? JSON.stringify(result) : ''} />
-        <input name="feedbackLabels" type="hidden" value={JSON.stringify(labelMap)} />
-        <input name="verdicts" type="hidden" value={JSON.stringify(verdictMap)} />
-        <input name="reviewVerdicts" type="hidden" value={JSON.stringify(reviewVerdictMap)} />
-
-        {#if preview}
-          <p class={flex({ align: 'center', gap: '4px', marginTop: '10px', fontSize: '12px', color: 'text.faint' })}>
-            <Icon icon={IconInfo} size={12} />
-            미리보기 모드입니다 — 판정을 조작해볼 수 있지만 저장·제출되지 않습니다.
-          </p>
-        {:else}
-          <div class={flex({ wrap: 'wrap', gap: '8px', marginTop: '10px', align: 'center' })}>
-            <button class={outlineButtonClass} disabled={busy} formaction="?/save" type="submit">
-              <Icon icon={IconSave} size={14} />
-              {saving ? '저장 중…' : '임시 저장'}
-            </button>
-            <button
-              class={css({
-                flex: '1',
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '6px',
-                paddingY: '9px',
-                borderRadius: '8px',
-                backgroundColor: 'accent.brand.default',
-                color: 'text.bright',
-                fontSize: '13px',
-                fontWeight: 'bold',
-                cursor: 'pointer',
-                transition: '[background-color 0.15s ease]',
-                _disabled: { backgroundColor: 'interactive.disabled', cursor: 'not-allowed' },
-                ['&:hover:not(:disabled)']: { backgroundColor: 'accent.brand.hover' },
-              })}
-              disabled={!result || !analysisComplete || busy}
-              onclick={requestSubmit}
-              type="button"
-            >
-              {submitting ? '제출 중…' : '제출하고 다음으로'}
-              <Icon icon={IconArrowRight} size={14} />
-            </button>
-            <button bind:this={submitButtonEl} aria-hidden="true" formaction="?/submit" hidden tabindex="-1" type="submit"></button>
-            <button class={outlineButtonClass} disabled={busy} onclick={requestRelease} type="button">
-              <Icon icon={IconCornerUpLeft} size={14} />
-              반납
-            </button>
-          </div>
-        {/if}
-
-        <p class={flex({ align: 'center', gap: '4px', marginTop: '8px', minHeight: '16px', fontSize: '12px', color: 'text.faint' })}>
-          {#if data.isAnalysis && !analysisComplete}
-            <Icon icon={IconInfo} size={12} />
-            배정된 글은 피드백 전부에 세 항목을 답해야 제출됩니다.
-            {#if pendingCount > 0}
-              <kbd class={css({ fontSize: '11px', color: 'text.subtle' })}>U</kbd>
-              로 남은 {pendingCount}건으로 이동합니다.
-            {:else}
-              작품 총평의 두 문항이 남았습니다.
-            {/if}
-          {:else if data.isAnalysis}
-            <kbd class={css({ fontSize: '11px', color: 'text.subtle' })}>J</kbd>
-            /
-            <kbd class={css({ fontSize: '11px', color: 'text.subtle' })}>K</kbd>
-            피드백 이동 ·
-            <kbd class={css({ fontSize: '11px', color: 'text.subtle' })}>R</kbd>
-            총평·피드백 전환
-          {:else if result}
-            <Icon style={css.raw({ color: 'text.success' })} icon={IconCircleCheck} size={12} />
-            제출하면 다음 평가로 바로 이동합니다.
+            </fieldset>
           {:else}
-            <Icon icon={IconInfo} size={12} />
-            {isRanking ? '모든 세트에 점수를 매기면' : '판정을 선택하면'} 제출할 수 있습니다.
+            <fieldset>
+              <legend class={css({ fontSize: '13px', fontWeight: 'bold', marginBottom: '6px' })}>
+                어느 세트의 피드백이 더 나은가요?
+                <span class={css({ fontWeight: 'normal', color: 'text.faint' })}>
+                  — 두 세트가 비슷하거나 동일해 보여도 오류가 아닙니다. 보이는 그대로 판정해 주세요.
+                </span>
+              </legend>
+              <div class={grid({ columns: 3, gap: '6px' })}>
+                {#each [{ value: 'a', label: 'A 우세' }, { value: 'tie', label: '무승부' }, { value: 'b', label: 'B 우세' }] as option (option.value)}
+                  <button
+                    class={css({
+                      paddingY: '10px',
+                      borderRadius: '8px',
+                      borderWidth: '1px',
+                      borderColor: verdict === option.value ? 'border.strong' : 'border.default',
+                      backgroundColor: verdict === option.value ? 'surface.dark' : 'surface.default',
+                      color: verdict === option.value ? 'text.bright' : 'text.default',
+                      fontSize: '14px',
+                      fontWeight: verdict === option.value ? 'bold' : 'normal',
+                      cursor: 'pointer',
+                      transition: '[background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease]',
+                    })}
+                    onclick={() => (verdict = option.value as PairVerdict)}
+                    type="button"
+                  >
+                    {option.label}
+                  </button>
+                {/each}
+              </div>
+            </fieldset>
           {/if}
-        </p>
-      </form>
+
+          <textarea
+            name="comment"
+            class={css({
+              width: 'full',
+              marginTop: '10px',
+              borderWidth: '1px',
+              borderColor: 'border.default',
+              borderRadius: '8px',
+              padding: '8px',
+              fontSize: '13px',
+              minHeight: '44px',
+              backgroundColor: 'surface.default',
+            })}
+            placeholder="코멘트 (선택)"
+            bind:value={comment}></textarea>
+
+          <input name="result" type="hidden" value={result ? JSON.stringify(result) : ''} />
+          <input name="feedbackLabels" type="hidden" value={JSON.stringify(labelMap)} />
+          <input name="verdicts" type="hidden" value={JSON.stringify(verdictMap)} />
+          <input name="reviewVerdicts" type="hidden" value={JSON.stringify(reviewVerdictMap)} />
+
+          {#if preview}
+            <p class={flex({ align: 'center', gap: '4px', marginTop: '10px', fontSize: '12px', color: 'text.faint' })}>
+              <Icon icon={IconInfo} size={12} />
+              미리보기 모드입니다 — 판정을 조작해볼 수 있지만 저장·제출되지 않습니다.
+            </p>
+          {:else}
+            <div class={flex({ wrap: 'wrap', gap: '8px', marginTop: '10px', align: 'center' })}>
+              <button class={outlineButtonClass} disabled={busy} formaction="?/save" type="submit">
+                <Icon icon={IconSave} size={14} />
+                {saving ? '저장 중…' : '임시 저장'}
+              </button>
+              <button
+                class={css({
+                  flex: '1',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  paddingY: '9px',
+                  borderRadius: '8px',
+                  backgroundColor: 'accent.brand.default',
+                  color: 'text.bright',
+                  fontSize: '13px',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  transition: '[background-color 0.15s ease]',
+                  _disabled: { backgroundColor: 'interactive.disabled', cursor: 'not-allowed' },
+                  ['&:hover:not(:disabled)']: { backgroundColor: 'accent.brand.hover' },
+                })}
+                disabled={!result || !analysisComplete || busy}
+                onclick={requestSubmit}
+                type="button"
+              >
+                {submitting ? '제출 중…' : '제출하고 다음으로'}
+                <Icon icon={IconArrowRight} size={14} />
+              </button>
+              <button bind:this={submitButtonEl} aria-hidden="true" formaction="?/submit" hidden tabindex="-1" type="submit"></button>
+              <button class={outlineButtonClass} disabled={busy} onclick={requestRelease} type="button">
+                <Icon icon={IconCornerUpLeft} size={14} />
+                반납
+              </button>
+            </div>
+          {/if}
+
+          <p class={flex({ align: 'center', gap: '4px', marginTop: '8px', minHeight: '16px', fontSize: '12px', color: 'text.faint' })}>
+            {#if data.isAnalysis && !analysisComplete}
+              <Icon icon={IconInfo} size={12} />
+              배정된 글은 피드백 전부에 세 항목을 답해야 제출됩니다.
+              {#if pendingCount > 0}
+                <kbd class={css({ fontSize: '11px', color: 'text.subtle' })}>U</kbd>
+                로 남은 {pendingCount}건으로 이동합니다.
+              {:else}
+                작품 총평의 두 문항이 남았습니다.
+              {/if}
+            {:else if data.isAnalysis}
+              <kbd class={css({ fontSize: '11px', color: 'text.subtle' })}>J</kbd>
+              /
+              <kbd class={css({ fontSize: '11px', color: 'text.subtle' })}>K</kbd>
+              피드백 이동 ·
+              <kbd class={css({ fontSize: '11px', color: 'text.subtle' })}>R</kbd>
+              총평·피드백 전환
+            {:else if result}
+              <Icon style={css.raw({ color: 'text.success' })} icon={IconCircleCheck} size={12} />
+              제출하면 다음 평가로 바로 이동합니다.
+            {:else}
+              <Icon icon={IconInfo} size={12} />
+              {isRanking ? '모든 세트에 점수를 매기면' : '판정을 선택하면'} 제출할 수 있습니다.
+            {/if}
+          </p>
+        </form>
+      {/if}
     </aside>
   </div>
 </div>

@@ -37,7 +37,7 @@ type FeedbackRow = {
   body: string;
 };
 
-const emptyUsage = (): Usage => ({ promptTokens: 0, completionTokens: 0 });
+const emptyUsage = (): Usage => ({ promptTokens: 0, completionTokens: 0, cachedTokens: 0 });
 
 const finiteTokens = (n: number): number => (Number.isFinite(n) ? Math.round(n) : 0);
 
@@ -50,6 +50,7 @@ const addRunUsage = async (db: Db, runId: string, usage: Usage): Promise<void> =
     .set({
       promptTokens: sql`${PipelineRuns.promptTokens} + ${prompt}`,
       completionTokens: sql`${PipelineRuns.completionTokens} + ${completion}`,
+      cachedTokens: sql`${PipelineRuns.cachedTokens} + ${finiteTokens(usage.cachedTokens)}`,
     })
     .where(eq(PipelineRuns.id, runId));
 };

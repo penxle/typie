@@ -78,6 +78,20 @@
       "when": 1785026681359,
       "tag": "0010_lively_otto_octavius",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1785059682526,
+      "tag": "0011_wooden_harpoon",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1785061295560,
+      "tag": "0012_faulty_roland_deschain",
+      "breakpoints": true
     }
   ]
 }

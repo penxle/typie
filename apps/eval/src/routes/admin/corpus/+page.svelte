@@ -156,6 +156,7 @@
             })}
           >
             <th>버전</th>
+            <th>종류</th>
             <th>문서 수</th>
             <th>총 글자수</th>
             <th>최초 삽입 시각</th>
@@ -172,6 +173,7 @@
                   {version.corpusVersion}
                 </a>
               </td>
+              <td class={css({ color: 'text.faint' })}>{version.kind === 'personal' ? '개인 열람용' : '평가 대상'}</td>
               <td>{version.docCount.toLocaleString()}</td>
               <td>{version.totalCharacters.toLocaleString()}자</td>
               <td>{new Date(version.firstInsertedAt).toLocaleString('ko')}</td>

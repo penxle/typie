@@ -1,7 +1,9 @@
 import { error } from '@sveltejs/kit';
 import { eq, inArray } from 'drizzle-orm';
 import { anchorMatchRate, categoryComplianceRate, feedbackCountDistribution } from '$lib/domain/aggregate.ts';
-import { createDb, Documents, Feedbacks, FeedbackSets, Variants } from '$lib/server/db/index.ts';
+import { costPerCharacter, estimateCost } from '$lib/domain/pricing.ts';
+import { createDb, Documents, Feedbacks, FeedbackSets, PipelineRunDocs, Variants } from '$lib/server/db/index.ts';
+import { readPriceTable, resolveRunModels } from '$lib/server/pricing.ts';
 import type { RunDocStatus, RunKind, RunPhase, RunStatus } from '$lib/domain/admin-types.ts';
 import type { PageServerLoad } from './$types';
 
@@ -18,6 +20,7 @@ type RunDetail = {
   totalDocs: number;
   promptTokens: number;
   completionTokens: number;
+  cachedTokens: number;
   error: string | null;
   createdAt: string;
   finishedAt: string | null;
@@ -112,5 +115,33 @@ export const load: PageServerLoad = async ({ params, platform, locals, fetch }) 
       }));
   }
 
-  return { run, docs, variantLabel, summary, preview };
+  const priceTable = await readPriceTable(db);
+  const modelsByRun = await resolveRunModels(db, [run.id]);
+  const models = modelsByRun.get(run.id) ?? [];
+  const cost = estimateCost(
+    { promptTokens: run.promptTokens, completionTokens: run.completionTokens, cachedTokens: run.cachedTokens, models },
+    priceTable,
+  );
+
+  // 자당 비용은 이 실행이 실제로 읽은 문서들의 자수로 낸다 — 코퍼스 전체가 아니라 실행 범위다.
+  const runDocIds = await db
+    .select({ documentId: PipelineRunDocs.documentId })
+    .from(PipelineRunDocs)
+    .where(eq(PipelineRunDocs.runId, run.id));
+  const ids = [...new Set(runDocIds.map((d) => d.documentId))];
+  const sizes =
+    ids.length > 0 ? await db.select({ characterCount: Documents.characterCount }).from(Documents).where(inArray(Documents.id, ids)) : [];
+  const characters = sizes.reduce((sum, d) => sum + d.characterCount, 0);
+
+  return {
+    run,
+    docs,
+    variantLabel,
+    summary,
+    preview,
+    cost,
+    models,
+    characters,
+    krwPerCharacter: cost.kind === 'exact' ? costPerCharacter(cost.krw, characters) : null,
+  };
 };

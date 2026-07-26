@@ -12,8 +12,11 @@
     feedbackLabels: { id: string; category: string | null }[];
     onUpdate: (verdict: ReviewVerdict) => void;
     onSelectFeedback: (feedbackId: string) => void;
+    // 읽기 전용 열람에서는 판정 문항을 아예 걸지 않는다 — 저장되지 않는 입력을 보여주면
+    // 답하라는 뜻으로 읽힌다.
+    readOnly?: boolean;
   };
-  const { review, verdict, feedbackLabels, onUpdate, onSelectFeedback }: Props = $props();
+  const { review, verdict, feedbackLabels, onUpdate, onSelectFeedback, readOnly = false }: Props = $props();
 
   const bodyClass = css({ fontSize: '14px', lineHeight: '[1.85]', color: 'text.default', whiteSpace: 'pre-wrap' });
   // 제목은 제목처럼 쓴다. 작은 회색 라벨은 내용을 부속물처럼 보이게 만든다.
@@ -122,36 +125,38 @@
     </section>
   {/if}
 
-  <section class={sectionClass}>
-    <h2 class={headingClass}>총평 판정</h2>
-    <div class={flex({ direction: 'column', gap: '4px' })}>
-      {#each REVIEW_VERDICT_AXES as axis (axis.key)}
-        <VerdictSwitch
-          negative={axis.negative}
-          onChange={(value) => onUpdate({ ...verdict, [axis.key]: value })}
-          question={axis.question}
-          value={verdict[axis.key]}
-        />
-      {/each}
+  {#if !readOnly}
+    <section class={sectionClass}>
+      <h2 class={headingClass}>총평 판정</h2>
+      <div class={flex({ direction: 'column', gap: '4px' })}>
+        {#each REVIEW_VERDICT_AXES as axis (axis.key)}
+          <VerdictSwitch
+            negative={axis.negative}
+            onChange={(value) => onUpdate({ ...verdict, [axis.key]: value })}
+            question={axis.question}
+            value={verdict[axis.key]}
+          />
+        {/each}
 
-      {#if verdict.readCorrectly === false || verdict.priorityUseful === false}
-        <input
-          class={css({
-            width: 'full',
-            marginTop: '4px',
-            borderBottomWidth: '1px',
-            borderColor: 'border.default',
-            paddingY: '4px',
-            fontSize: '12px',
-            backgroundColor: '[transparent]',
-            _focus: { borderColor: 'border.strong' },
-          })}
-          oninput={(e) => onUpdate({ ...verdict, note: e.currentTarget.value })}
-          placeholder="어디가 어떻게 어긋났는지 적어주세요"
-          type="text"
-          value={verdict.note ?? ''}
-        />
-      {/if}
-    </div>
-  </section>
+        {#if verdict.readCorrectly === false || verdict.priorityUseful === false}
+          <input
+            class={css({
+              width: 'full',
+              marginTop: '4px',
+              borderBottomWidth: '1px',
+              borderColor: 'border.default',
+              paddingY: '4px',
+              fontSize: '12px',
+              backgroundColor: '[transparent]',
+              _focus: { borderColor: 'border.strong' },
+            })}
+            oninput={(e) => onUpdate({ ...verdict, note: e.currentTarget.value })}
+            placeholder="어디가 어떻게 어긋났는지 적어주세요"
+            type="text"
+            value={verdict.note ?? ''}
+          />
+        {/if}
+      </div>
+    </section>
+  {/if}
 </div>

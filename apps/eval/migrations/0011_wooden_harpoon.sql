@@ -1,0 +1,1 @@
+ALTER TABLE `documents` ADD `kind` text DEFAULT 'corpus' NOT NULL;

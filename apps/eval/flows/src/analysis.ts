@@ -46,9 +46,11 @@ const REVIEW_RUNS = 3;
 // 15분에서는 긴 문서 3편이 스텝 타임아웃으로 죽었으므로 여유를 두 배로 잡는다.
 const LLM_STEP = { retries: { limit: 2, delay: '10 seconds' as const, backoff: 'exponential' as const }, timeout: '30 minutes' as const };
 
-type Usage = { promptTokens: number; completionTokens: number };
+// cachedTokens는 promptTokens에 포함된 값이다(별도 합이 아니다). 캐시 읽기는 입력 단가의
+// 10%라 비용을 낼 때 이 몫을 따로 떼어야 한다. 0으로 남으면 캐싱이 꺼져 있다는 근거가 된다.
+type Usage = { promptTokens: number; completionTokens: number; cachedTokens: number };
 
-const emptyUsage = (): Usage => ({ promptTokens: 0, completionTokens: 0 });
+const emptyUsage = (): Usage => ({ promptTokens: 0, completionTokens: 0, cachedTokens: 0 });
 
 const addUsage = async (db: Db, runId: string, usage: Usage): Promise<void> => {
   if (usage.promptTokens === 0 && usage.completionTokens === 0) return;
@@ -57,6 +59,7 @@ const addUsage = async (db: Db, runId: string, usage: Usage): Promise<void> => {
     .set({
       promptTokens: sql`${PipelineRuns.promptTokens} + ${Math.round(usage.promptTokens)}`,
       completionTokens: sql`${PipelineRuns.completionTokens} + ${Math.round(usage.completionTokens)}`,
+      cachedTokens: sql`${PipelineRuns.cachedTokens} + ${Math.round(usage.cachedTokens)}`,
     })
     .where(eq(PipelineRuns.id, runId));
 };
@@ -91,6 +94,7 @@ const callTool = async <T>(
     const response = await openai.chat.completions.create({ ...params, messages }, SKIP_CACHE);
     usage.promptTokens += response.usage?.prompt_tokens ?? 0;
     usage.completionTokens += response.usage?.completion_tokens ?? 0;
+    usage.cachedTokens += response.usage?.prompt_tokens_details?.cached_tokens ?? 0;
 
     const call = response.choices[0]?.message?.tool_calls?.[0];
     if (!call || !('function' in call)) throw new Error(`${tool.function.name}: 도구 호출 없음`);

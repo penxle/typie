@@ -2,6 +2,7 @@
   import { css } from '@typie/styled-system/css';
   import { Helmet } from '@typie/ui/components';
   import { untrack } from 'svelte';
+  import CostCell from '../lib/CostCell.svelte';
   import { usePolling } from '../lib/poll.svelte.ts';
   import { formatProgressSummary, KIND_LABELS } from './progress.ts';
   import RunStatusBadge from './RunStatusBadge.svelte';
@@ -59,6 +60,7 @@
             <th>코퍼스</th>
             <th>상태</th>
             <th>진행</th>
+            <th>비용</th>
             <th>생성 시각</th>
             <th></th>
           </tr>
@@ -71,6 +73,7 @@
               <td>{run.corpusVersion}</td>
               <td><RunStatusBadge status={run.status} /></td>
               <td>{formatProgressSummary(run)}</td>
+              <td><CostCell cost={run.cost} tokens={run.promptTokens + run.completionTokens} /></td>
               <td class={css({ color: 'text.faint' })}>{new Date(run.createdAt).toLocaleString('ko')}</td>
               <td>
                 <a
