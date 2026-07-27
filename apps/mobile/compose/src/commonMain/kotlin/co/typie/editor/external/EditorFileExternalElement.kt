@@ -19,6 +19,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import co.typie.editor.ffi.ExternalElementData
 import co.typie.icons.Lucide
+import co.typie.platform.IncomingContentItem
 import co.typie.ui.component.Spinner
 import co.typie.ui.component.Text
 import co.typie.ui.icon.Icon
@@ -32,20 +33,33 @@ internal fun EditorFileExternalElement(data: ExternalElementData.File, nodeId: S
   val externalElementState = LocalEditorExternalElementState.current
   val fileState = externalElementState.files
   val upload = fileState.uploads[nodeId]
+  if (upload?.failedStage != null) {
+    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+      Box(modifier = Modifier.widthIn(max = scope.scaledDp(400f)).fillMaxWidth()) {
+        EditorAttachmentFailureCard(
+          icon = Lucide.File,
+          text = "파일을 업로드하지 못했어요",
+          deleteContentDescription = "파일 삭제",
+          kind = IncomingContentItem.Kind.File,
+          assetId = data.id,
+          nodeId = nodeId,
+        )
+      }
+    }
+    return
+  }
   val asset = data.id?.let(fileState.assets::get)
   val hasFile = asset != null || upload != null
   val resolution = data.id?.let(externalElementState.resolutions::get)
+  val pendingMeta = (resolution as? EditorAssetResolution.Pending)?.meta
   val missingAsset = data.id != null && asset == null && upload == null
-  val unavailableAsset =
-    missingAsset &&
-      (resolution == EditorAssetResolution.RetryableFailure ||
-        resolution == EditorAssetResolution.Unavailable)
+  val unavailableAsset = missingAsset && resolution == EditorAssetResolution.Missing
   val resolvingAsset = missingAsset && !unavailableAsset
   val displayName = asset?.name ?: upload?.name ?: "파일"
   val displaySize = formatFileSize(asset?.size ?: upload?.size)
 
   if (!hasFile) {
-    FilePlaceholder(resolvingAsset = resolvingAsset, unavailableAsset = unavailableAsset)
+    FilePlaceholder(resolvingAsset = resolvingAsset, pendingName = pendingMeta?.name)
     return
   }
 
@@ -105,17 +119,13 @@ internal fun EditorFileExternalElement(data: ExternalElementData.File, nodeId: S
 
 @Composable
 context(scope: EditorExternalElementRenderScope)
-private fun FilePlaceholder(resolvingAsset: Boolean, unavailableAsset: Boolean) {
+private fun FilePlaceholder(resolvingAsset: Boolean, pendingName: String?) {
   Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
     Box(modifier = Modifier.widthIn(max = scope.scaledDp(400f)).fillMaxWidth()) {
       EditorExternalElementPlaceholder(
         icon = Lucide.File,
-        text =
-          when {
-            unavailableAsset -> "파일을 불러올 수 없어요"
-            resolvingAsset -> "파일을 불러오는 중..."
-            else -> "파일"
-          },
+        // 서버가 missing으로 확정한 노드는 빈 placeholder와 같은 모습이다 — 그 자리에서 이어받는다.
+        text = if (resolvingAsset) pendingName ?: "파일을 불러오는 중..." else "파일",
         trailing = {
           if (resolvingAsset) {
             Spinner(

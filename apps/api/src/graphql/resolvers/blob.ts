@@ -89,6 +89,253 @@ function convertToMp4(inputPath: string, outputPath: string): Promise<void> {
   });
 }
 
+type SharpInstance = ReturnType<typeof sharp>;
+
+type ImageModification = {
+  ensureAlpha?: boolean;
+  resize?: Parameters<SharpInstance['resize']>[0];
+  format?: Parameters<SharpInstance['toFormat']>[0];
+};
+
+type PersistImageBufferParams = {
+  buffer: Uint8Array;
+  name: string;
+  outputKey: string;
+  userId: string;
+  originalContentType: string;
+  modification?: unknown;
+  explicitId?: string;
+};
+
+export const persistImageBuffer = async ({
+  buffer,
+  name,
+  outputKey,
+  userId,
+  originalContentType,
+  modification,
+  explicitId,
+}: PersistImageBufferParams): Promise<typeof Images.$inferSelect> => {
+  const contentDisposition = `inline; filename*=UTF-8''${encodeURIComponent(name)}`;
+
+  const tagging = qs.stringify({
+    UserId: userId,
+    Environment: stack,
+  });
+
+  const animatedInfo = detectAnimatedImage(buffer);
+
+  if (animatedInfo) {
+    const tempDir = await fs.mkdtemp(path.join(tmpdir(), 'animated-'));
+
+    try {
+      const inputPath = path.join(tempDir, `input.${animatedInfo.format}`);
+      const outputPath = path.join(tempDir, 'output.mp4');
+
+      await fs.writeFile(inputPath, buffer);
+      await convertToMp4(inputPath, outputPath);
+
+      const videoMeta = await getVideoMetadata(outputPath);
+      const mp4Buffer = await fs.readFile(outputPath);
+
+      const firstFrame = await sharp(buffer, { pages: 1 })
+        .resize({ width: 100, height: 100, fit: 'inside' })
+        .ensureAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+      const placeholder = rgbaToThumbHash(firstFrame.info.width, firstFrame.info.height, firstFrame.data);
+
+      const mp4Path = `${outputKey.replace(/\.[^.]+$/, '')}.mp4`;
+
+      await Promise.all([
+        aws.s3.send(
+          new PutObjectCommand({
+            Bucket: 'typie-usercontents',
+            Key: `videos/${mp4Path}`,
+            Body: mp4Buffer,
+            ContentType: 'video/mp4',
+            ContentDisposition: contentDisposition,
+            Tagging: tagging,
+          }),
+        ),
+        aws.s3.send(
+          new PutObjectCommand({
+            Bucket: 'typie-usercontents',
+            Key: `original-images/${outputKey}`,
+            Body: buffer,
+            ContentType: originalContentType,
+            ContentDisposition: contentDisposition,
+            Tagging: tagging,
+          }),
+        ),
+      ]);
+
+      return await db
+        .insert(Images)
+        .values({
+          id: explicitId,
+          userId,
+          name,
+          size: mp4Buffer.length,
+          format: 'video/mp4',
+          width: videoMeta.width,
+          height: videoMeta.height,
+          path: mp4Path,
+          originalPath: outputKey,
+          placeholder: placeholder.toBase64(),
+        })
+        .returning()
+        .then(firstOrThrow);
+    } finally {
+      // eslint-disable-next-line @typescript-eslint/no-empty-function
+      await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    }
+  }
+
+  let processed = sharp(buffer, { failOn: 'none', limitInputPixels: false }).rotate().keepIccProfile();
+
+  const imageModification = modification as ImageModification | undefined;
+
+  if (imageModification) {
+    if (imageModification.ensureAlpha) {
+      processed = processed.ensureAlpha();
+    }
+
+    if (imageModification.resize) {
+      processed = processed.resize(imageModification.resize);
+    }
+
+    if (imageModification.format) {
+      processed = processed.toFormat(imageModification.format);
+    }
+  }
+
+  const res = await processed.toBuffer({ resolveWithObject: true });
+  const data = res.data;
+  const info = res.info;
+
+  const mimetype = info.format === 'svg' ? 'image/svg+xml' : `image/${info.format}`;
+
+  const raw = await sharp(data, { pages: 1 })
+    .resize({ width: 100, height: 100, fit: 'inside' })
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const placeholder = rgbaToThumbHash(raw.info.width, raw.info.height, raw.data);
+
+  await Promise.all([
+    aws.s3.send(
+      new PutObjectCommand({
+        Bucket: 'typie-usercontents',
+        Key: `images/${outputKey}`,
+        Body: data,
+        ContentType: mimetype,
+        ContentDisposition: contentDisposition,
+        Tagging: tagging,
+      }),
+    ),
+    aws.s3.send(
+      new PutObjectCommand({
+        Bucket: 'typie-usercontents',
+        Key: `original-images/${outputKey}`,
+        Body: buffer,
+        ContentType: originalContentType,
+        ContentDisposition: contentDisposition,
+        Tagging: tagging,
+      }),
+    ),
+  ]);
+
+  /* eslint-disable @typescript-eslint/no-non-null-assertion */
+  return await db
+    .insert(Images)
+    .values({
+      id: explicitId,
+      userId,
+      name,
+      size: data.length,
+      format: mimetype,
+      width: info.width!,
+      height: info.pageHeight || info.height!,
+      path: outputKey,
+      originalPath: outputKey,
+      placeholder: placeholder.toBase64(),
+    })
+    .returning()
+    .then(firstOrThrow);
+  /* eslint-enable @typescript-eslint/no-non-null-assertion */
+};
+
+type PersistFileObjectParams = {
+  sourcePath: string;
+  outputKey: string;
+  name: string;
+  contentType: string;
+  contentLength: number;
+  userId: string;
+  explicitId?: string;
+};
+
+export const persistFileObject = async ({
+  sourcePath,
+  outputKey,
+  name,
+  contentType,
+  contentLength,
+  userId,
+  explicitId,
+}: PersistFileObjectParams): Promise<typeof Files.$inferSelect> => {
+  await aws.s3.send(
+    new CopyObjectCommand({
+      Bucket: 'typie-usercontents',
+      Key: `files/${outputKey}`,
+      CopySource: `typie-uploads/${sourcePath}`,
+      ContentType: contentType,
+      ContentDisposition: `attachment; filename*=UTF-8''${encodeURIComponent(name)}`,
+      MetadataDirective: 'REPLACE',
+      TaggingDirective: 'REPLACE',
+      Tagging: qs.stringify({
+        UserId: userId,
+        Environment: stack,
+      }),
+    }),
+  );
+
+  return await db
+    .insert(Files)
+    .values({
+      id: explicitId,
+      userId,
+      name,
+      size: contentLength,
+      format: contentType,
+      path: outputKey,
+    })
+    .returning()
+    .then(firstOrThrow);
+};
+
+/**
+ * * URL derivation
+ *
+ * GraphQL field resolver와 sync의 resolveAssetStates가 같은 함수를 쓰도록 순수 함수로 분리한다.
+ */
+
+export const buildImageUrl = (image: { format: string; path: string }): string => {
+  const prefix = image.format === 'video/mp4' ? 'videos' : 'images';
+  return `https://typie.net/${prefix}/${image.path}`;
+};
+
+export const buildImageOriginalUrl = (image: { format: string; path: string; originalPath: string | null }): string => {
+  if (image.originalPath) {
+    return `https://typie.net/original-images/${image.originalPath}`;
+  }
+
+  return `${buildImageUrl(image)}?raw`;
+};
+
+export const buildFileUrl = (file: { path: string }): string => `https://typie.net/files/${file.path}`;
+
 /**
  * * Types
  */
@@ -106,7 +353,7 @@ File.implement({
   fields: (t) => ({
     name: t.exposeString('name'),
 
-    url: t.string({ resolve: (blob) => `https://typie.net/files/${blob.path}` }),
+    url: t.string({ resolve: (blob) => buildFileUrl(blob) }),
   }),
 });
 
@@ -119,21 +366,8 @@ Image.implement({
     height: t.exposeInt('height'),
 
     ratio: t.float({ resolve: (image) => image.width / image.height }),
-    url: t.string({
-      resolve: (blob) => {
-        const prefix = blob.format === 'video/mp4' ? 'videos' : 'images';
-        return `https://typie.net/${prefix}/${blob.path}`;
-      },
-    }),
-    originalUrl: t.string({
-      resolve: (blob) => {
-        if (blob.originalPath) {
-          return `https://typie.net/original-images/${blob.originalPath}`;
-        }
-        const prefix = blob.format === 'video/mp4' ? 'videos' : 'images';
-        return `https://typie.net/${prefix}/${blob.path}?raw`;
-      },
-    }),
+    url: t.string({ resolve: (blob) => buildImageUrl(blob) }),
+    originalUrl: t.string({ resolve: (blob) => buildImageOriginalUrl(blob) }),
   }),
 });
 
@@ -204,37 +438,15 @@ builder.mutationFields((t) => ({
         }),
       );
 
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      const fileName = head.Metadata!.name;
-
-      await aws.s3.send(
-        new CopyObjectCommand({
-          Bucket: 'typie-usercontents',
-          Key: `files/${input.path}`,
-          CopySource: `typie-uploads/${input.path}`,
-          ContentType: head.ContentType,
-          ContentDisposition: `attachment; filename*=UTF-8''${fileName}`,
-          MetadataDirective: 'REPLACE',
-          TaggingDirective: 'REPLACE',
-          Tagging: qs.stringify({
-            UserId: ctx.session.userId,
-            Environment: stack,
-          }),
-        }),
-      );
-
       /* eslint-disable @typescript-eslint/no-non-null-assertion */
-      return await db
-        .insert(Files)
-        .values({
-          userId: ctx.session.userId,
-          name: decodeURIComponent(fileName),
-          size: head.ContentLength!,
-          format: head.ContentType ?? 'application/octet-stream',
-          path: input.path,
-        })
-        .returning()
-        .then(firstOrThrow);
+      return await persistFileObject({
+        sourcePath: input.path,
+        outputKey: input.path,
+        name: decodeURIComponent(head.Metadata!.name),
+        contentType: head.ContentType ?? 'application/octet-stream',
+        contentLength: head.ContentLength!,
+        userId: ctx.session.userId,
+      });
       /* eslint-enable @typescript-eslint/no-non-null-assertion */
     },
   }),
@@ -255,163 +467,17 @@ builder.mutationFields((t) => ({
         }),
       );
 
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      const buffer = await object.Body!.transformToByteArray();
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      const fileName = object.Metadata!.name;
-      const contentDisposition = `inline; filename*=UTF-8''${fileName}`;
-
-      const animatedInfo = detectAnimatedImage(buffer);
-
-      if (animatedInfo) {
-        const tempDir = await fs.mkdtemp(path.join(tmpdir(), 'animated-'));
-
-        try {
-          const inputPath = path.join(tempDir, `input.${animatedInfo.format}`);
-          const outputPath = path.join(tempDir, 'output.mp4');
-
-          await fs.writeFile(inputPath, buffer);
-          await convertToMp4(inputPath, outputPath);
-
-          const videoMeta = await getVideoMetadata(outputPath);
-          const mp4Buffer = await fs.readFile(outputPath);
-
-          const firstFrame = await sharp(buffer, { pages: 1 })
-            .resize({ width: 100, height: 100, fit: 'inside' })
-            .ensureAlpha()
-            .raw()
-            .toBuffer({ resolveWithObject: true });
-          const placeholder = rgbaToThumbHash(firstFrame.info.width, firstFrame.info.height, firstFrame.data);
-
-          const basePath = input.path.replace(/\.[^.]+$/, '');
-          const mp4Path = `${basePath}.mp4`;
-
-          const tagging = qs.stringify({
-            UserId: ctx.session.userId,
-            Environment: stack,
-          });
-
-          const originalContentType = object.ContentType ?? 'application/octet-stream';
-
-          await Promise.all([
-            aws.s3.send(
-              new PutObjectCommand({
-                Bucket: 'typie-usercontents',
-                Key: `videos/${mp4Path}`,
-                Body: mp4Buffer,
-                ContentType: 'video/mp4',
-                ContentDisposition: contentDisposition,
-                Tagging: tagging,
-              }),
-            ),
-            aws.s3.send(
-              new PutObjectCommand({
-                Bucket: 'typie-usercontents',
-                Key: `original-images/${input.path}`,
-                Body: buffer,
-                ContentType: originalContentType,
-                ContentDisposition: contentDisposition,
-                Tagging: tagging,
-              }),
-            ),
-          ]);
-
-          /* eslint-disable @typescript-eslint/no-non-null-assertion */
-          return await db
-            .insert(Images)
-            .values({
-              userId: ctx.session.userId,
-              name: decodeURIComponent(object.Metadata!.name),
-              size: mp4Buffer.length,
-              format: 'video/mp4',
-              width: videoMeta.width,
-              height: videoMeta.height,
-              path: mp4Path,
-              originalPath: input.path,
-              placeholder: placeholder.toBase64(),
-            })
-            .returning()
-            .then(firstOrThrow);
-          /* eslint-enable @typescript-eslint/no-non-null-assertion */
-        } finally {
-          // eslint-disable-next-line @typescript-eslint/no-empty-function
-          await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
-        }
-      }
-
-      let processed = sharp(buffer, { failOn: 'none', limitInputPixels: false }).rotate().keepIccProfile();
-
-      if (input.modification) {
-        if (input.modification.ensureAlpha) {
-          processed = processed.ensureAlpha();
-        }
-
-        if (input.modification.resize) {
-          processed = processed.resize(input.modification.resize);
-        }
-
-        if (input.modification.format) {
-          processed = processed.toFormat(input.modification.format);
-        }
-      }
-
-      const res = await processed.toBuffer({ resolveWithObject: true });
-      const data = res.data;
-      const info = res.info;
-
-      const mimetype = info.format === 'svg' ? 'image/svg+xml' : `image/${info.format}`;
-
-      const raw = await sharp(data, { pages: 1 })
-        .resize({ width: 100, height: 100, fit: 'inside' })
-        .ensureAlpha()
-        .raw()
-        .toBuffer({ resolveWithObject: true });
-      const placeholder = rgbaToThumbHash(raw.info.width, raw.info.height, raw.data);
-
-      const tagging = qs.stringify({
-        UserId: ctx.session.userId,
-        Environment: stack,
-      });
-
-      await Promise.all([
-        aws.s3.send(
-          new PutObjectCommand({
-            Bucket: 'typie-usercontents',
-            Key: `images/${input.path}`,
-            Body: data,
-            ContentType: mimetype,
-            ContentDisposition: contentDisposition,
-            Tagging: tagging,
-          }),
-        ),
-        aws.s3.send(
-          new PutObjectCommand({
-            Bucket: 'typie-usercontents',
-            Key: `original-images/${input.path}`,
-            Body: buffer,
-            ContentType: object.ContentType ?? 'application/octet-stream',
-            ContentDisposition: contentDisposition,
-            Tagging: tagging,
-          }),
-        ),
-      ]);
-
       /* eslint-disable @typescript-eslint/no-non-null-assertion */
-      return await db
-        .insert(Images)
-        .values({
-          userId: ctx.session.userId,
-          name: decodeURIComponent(object.Metadata!.name),
-          size: data.length,
-          format: mimetype,
-          width: info.width!,
-          height: info.pageHeight || info.height!,
-          path: input.path,
-          originalPath: input.path,
-          placeholder: placeholder.toBase64(),
-        })
-        .returning()
-        .then(firstOrThrow);
+      const buffer = await object.Body!.transformToByteArray();
+
+      return await persistImageBuffer({
+        buffer,
+        name: decodeURIComponent(object.Metadata!.name),
+        outputKey: input.path,
+        userId: ctx.session.userId,
+        originalContentType: object.ContentType ?? 'application/octet-stream',
+        modification: input.modification,
+      });
       /* eslint-enable @typescript-eslint/no-non-null-assertion */
     },
   }),

@@ -19,6 +19,11 @@ internal class EditorExternalElementState {
     }
   }
 
+  fun putResolved(asset: EditorExternalAsset) {
+    put(asset)
+    resolutions.remove(asset.id)
+  }
+
   fun clear() {
     images.clear()
     files.clear()
@@ -31,14 +36,14 @@ internal class EditorExternalElementState {
 }
 
 internal sealed interface EditorAssetResolution {
-  data object InFlight : EditorAssetResolution
+  data class Ready(val asset: EditorExternalAsset) : EditorAssetResolution
 
-  data object RetryableFailure : EditorAssetResolution
+  data class Pending(val meta: EditorAssetPendingMeta) : EditorAssetResolution
 
-  data class AwaitingMaterialization(val attempt: Int) : EditorAssetResolution
-
-  data object Unavailable : EditorAssetResolution
+  data object Missing : EditorAssetResolution
 }
+
+internal data class EditorAssetPendingMeta(val kind: String, val name: String, val size: Long)
 
 @Stable
 internal class EditorExternalImageElementState {
@@ -110,17 +115,28 @@ internal data class EditorEmbedAsset(
 
 internal class EditorEmbedUnfurl
 
+internal enum class EditorAttachmentFailureStage {
+  Transfer,
+  FinalizeRejected,
+  FinalizeRetryable,
+}
+
 internal class EditorImageUpload(
   val previewModel: Any,
   val name: String,
   val width: Int,
   val height: Int,
+  val failedStage: EditorAttachmentFailureStage? = null,
 ) {
   val ratio: Double
     get() = width.toDouble() / height.toDouble()
 }
 
-internal class EditorFileUpload(val name: String, val size: Long?)
+internal class EditorFileUpload(
+  val name: String,
+  val size: Long?,
+  val failedStage: EditorAttachmentFailureStage? = null,
+)
 
 internal val LocalEditorExternalElementState =
   compositionLocalOf<EditorExternalElementState> { error("No EditorExternalElementState provided") }

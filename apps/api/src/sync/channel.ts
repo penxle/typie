@@ -1,6 +1,14 @@
 import { compareStreamSeq } from './protocol.ts';
 import type { ServerMessage, SnapshotCursor } from './protocol.ts';
-import type { BundleRow, ChangesetEvent, ChangesetSubscription, StreamEntry, SyncDeps } from './types.ts';
+import type {
+  AssetEvent,
+  AssetEventSubscription,
+  BundleRow,
+  ChangesetEvent,
+  ChangesetSubscription,
+  StreamEntry,
+  SyncDeps,
+} from './types.ts';
 
 export const SNAPSHOT_CHUNK_BYTES = 256 * 1024;
 export const TAIL_BATCH_ENTRIES = 64;
@@ -22,6 +30,7 @@ export class DocumentChannel {
   #buffer: ChangesetEvent[] = [];
   #bufferBytes = 0;
   #subscription: ChangesetSubscription | null = null;
+  #assetSubscription: AssetEventSubscription | null = null;
   #onOverload: () => void;
 
   constructor(options: { deps: SyncDeps; send: SendFn; documentId: string; clientId: string; onOverload?: () => void }) {
@@ -54,6 +63,19 @@ export class DocumentChannel {
         }
       }
     }
+  }
+
+  // 무효화 이벤트는 상태를 싣지 않으므로 재-resolve도 순서 처리도 필요 없다 — loading/live 무관하게
+  // 그대로 흘려보내고, 실제 상태는 클라이언트가 asset-pull로 확인한다.
+  async #runAssetPump(subscription: AssetEventSubscription): Promise<void> {
+    for await (const event of subscription) {
+      if (this.#phase === 'stopped') return;
+      await this.#emitAssetEvent(event);
+    }
+  }
+
+  async #emitAssetEvent(event: AssetEvent): Promise<void> {
+    await this.#send({ t: 'asset-changed', documentId: this.#documentId, ids: event.ids });
   }
 
   #accepts(target: string): boolean {
@@ -234,6 +256,9 @@ export class DocumentChannel {
     const subscription = this.#deps.subscribeChangesets(this.#documentId);
     this.#subscription = subscription;
     void this.#runPump(subscription).catch(() => this.stop());
+    const assetSubscription = this.#deps.subscribeAssetEvents(this.#documentId);
+    this.#assetSubscription = assetSubscription;
+    void this.#runAssetPump(assetSubscription).catch(() => this.stop());
     if (cursor.sinceSeq === undefined) {
       await this.#startFromSnapshot(cursor.snapshotCursor);
     } else {
@@ -245,5 +270,6 @@ export class DocumentChannel {
     if (this.#phase === 'stopped') return;
     this.#phase = 'stopped';
     this.#subscription?.return();
+    this.#assetSubscription?.return();
   }
 }

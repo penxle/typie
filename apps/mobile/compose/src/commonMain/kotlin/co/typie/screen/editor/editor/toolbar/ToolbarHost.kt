@@ -41,13 +41,13 @@ import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
 import co.typie.editor.scroll.awaitWithBringIntoView
 import co.typie.graphql.fragment.EditorSettingsFontFamily_family
+import co.typie.platform.IncomingContentItem
+import co.typie.screen.editor.editor.attachment.LocalEditorAttachmentPicker
 import co.typie.screen.editor.editor.state.EditorInputEffect
 import co.typie.screen.editor.editor.toolbar.contextual.ImageResizeSecondaryToolbar
 import co.typie.screen.editor.editor.toolbar.contextual.TableAlignmentSecondaryToolbar
 import co.typie.screen.editor.editor.toolbar.contextual.TableCellBackgroundSecondaryToolbar
 import co.typie.screen.editor.editor.toolbar.contextual.TextOptionsToolbar
-import co.typie.screen.editor.editor.toolbar.contextual.rememberEditorFilePicker
-import co.typie.screen.editor.editor.toolbar.contextual.rememberEditorImagePicker
 import co.typie.screen.editor.editor.toolbar.contextual.rememberTextToolbarPage
 import co.typie.ui.component.ResponsiveContainerDefaults
 import kotlinx.coroutines.launch
@@ -104,8 +104,19 @@ internal fun EditorToolbarHost(
       commentEnabled = commentEnabled,
       onCommentRequest = onCommentRequest,
     )
-  val pickImage = rememberEditorImagePicker()
-  val pickFile = rememberEditorFilePicker()
+  val attachmentPicker = LocalEditorAttachmentPicker.current
+  val pickImage =
+    remember(attachmentPicker) {
+      { nodeId: String, reclaimAssetId: String? ->
+        attachmentPicker.pick(IncomingContentItem.Kind.Image, nodeId, reclaimAssetId)
+      }
+    }
+  val pickFile =
+    remember(attachmentPicker) {
+      { nodeId: String, reclaimAssetId: String? ->
+        attachmentPicker.pick(IncomingContentItem.Kind.File, nodeId, reclaimAssetId)
+      }
+    }
   val pages =
     rememberEditorToolbarPages(
       toolbarContext = toolbarContext,

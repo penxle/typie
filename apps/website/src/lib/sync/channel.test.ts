@@ -40,6 +40,8 @@ const subscriber = () => {
     onChangesets: (event) => events.push(`changesets:${event.seq}`),
     onReload: () => events.push('reload'),
     onPermanentError: (code) => events.push(`error:${code}`),
+    onAssetState: (requestId, assets, final) => events.push(`asset-state:${requestId}:${final}:${assets.map((a) => a.id).join(',')}`),
+    onAssetChanged: (ids) => events.push(`asset-changed:${ids.join(',')}`),
   };
   return { sub, events, snapshot: () => snapshot, snapshotSeq: () => snapshotSeq };
 };
@@ -529,6 +531,33 @@ describe('DocumentChannels', () => {
   test('resync(): 채널이 없는 documentId는 no-op', () => {
     const { channels } = setup();
     expect(() => channels.resync('NOPE')).not.toThrow();
+  });
+
+  test('asset-state·asset-changed가 구독자의 onAssetState/onAssetChanged로 전달된다 (drop 회귀 방지)', async () => {
+    const { channels, sockets } = setup();
+    const s = subscriber();
+    channels.subscribe('D1', s.sub);
+    await vi.waitFor(() => expect(sockets.length).toBe(1));
+    await handshake(sockets[0]);
+    await vi.waitFor(() => expect(sockets[0].lastOf('attach')).toBeDefined());
+
+    sockets[0].serverSend({
+      t: 'asset-state',
+      documentId: 'D1',
+      requestId: 'q1',
+      assets: [{ id: 'IMG01', state: 'missing' }],
+      final: false,
+    });
+    sockets[0].serverSend({
+      t: 'asset-state',
+      documentId: 'D1',
+      requestId: 'q1',
+      assets: [{ id: 'IMG02', state: 'missing' }],
+      final: true,
+    });
+    sockets[0].serverSend({ t: 'asset-changed', documentId: 'D1', ids: ['IMG03'] });
+
+    await vi.waitFor(() => expect(s.events).toEqual(['asset-state:q1:false:IMG01', 'asset-state:q1:true:IMG02', 'asset-changed:IMG03']));
   });
 
   test('loadDocumentSnapshot: 로드 중 reload가 끼어들어도 다음 snapshot으로 resolve한다', async () => {

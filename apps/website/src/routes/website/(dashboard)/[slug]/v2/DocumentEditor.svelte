@@ -19,12 +19,11 @@
   import LockOpenIcon from '~icons/lucide/lock-open';
   import Maximize2Icon from '~icons/lucide/maximize-2';
   import XIcon from '~icons/lucide/x';
+  import { createAssetSync } from '$lib/editor-ffi/asset-sync';
   import { BottomToolbar, Editor as EditorComponent, TopToolbar } from '$lib/editor-ffi/components';
   import { IS_MAC } from '$lib/editor-ffi/constants';
   import { browserScaleFactor, Editor, getEditorContext } from '$lib/editor-ffi/editor.svelte';
-  import { createAssetHydrator } from '$lib/editor-ffi/handlers/asset-hydration';
   import { registerLinkContextMenu } from '$lib/editor-ffi/handlers/link';
-  import { cache, mearieClient } from '$lib/graphql';
   import { getDocumentChannels, getSyncConnection } from '$lib/sync';
   import { graphql } from '$mearie';
   import DocumentMenu from '../../@context-menu/DocumentMenu.svelte';
@@ -48,6 +47,8 @@
   import { Pusher } from './sync/pusher.svelte';
   import { IndexeddbDeltaStore } from './sync/store';
   import type { StableSelection } from '@typie/editor-ffi/browser';
+  import type { AssetSync } from '$lib/editor-ffi/asset-sync';
+  import type { AssetStateEntry } from '$lib/sync/protocol';
   import type { DocumentEditorV2_query$key } from '$mearie';
 
   type Props = {
@@ -132,40 +133,6 @@
               createdAt
               updatedAt
 
-              assets {
-                __typename
-
-                ... on Image {
-                  id
-                  url
-                  originalUrl
-                  width
-                  height
-                  placeholder
-                }
-
-                ... on File {
-                  id
-                  url
-                  name
-                  size
-                }
-
-                ... on Embed {
-                  id
-                  url
-                  title
-                  description
-                  thumbnailUrl
-                  html
-                }
-
-                ... on DocumentArchivedNode {
-                  id
-                  content
-                }
-              }
-
               fontFamilies {
                 id
                 familyName
@@ -208,47 +175,6 @@
     `),
   );
 
-  const assetsByIdsQuery = graphql(`
-    query DocumentEditorV2_AssetsByIds_Query($slug: String!, $ids: [ID!]!) {
-      document(slug: $slug) {
-        id
-        assetsByIds(ids: $ids) {
-          __typename
-
-          ... on Image {
-            id
-            url
-            originalUrl
-            width
-            height
-            placeholder
-          }
-
-          ... on File {
-            id
-            url
-            name
-            size
-          }
-
-          ... on Embed {
-            id
-            url
-            title
-            description
-            thumbnailUrl
-            html
-          }
-
-          ... on DocumentArchivedNode {
-            id
-            content
-          }
-        }
-      }
-    }
-  `);
-
   graphql(`
     fragment EditorContextV2_user on User {
       id
@@ -274,46 +200,26 @@
   const documentId = $derived(document?.id ?? null);
   const isOwner = $derived(query.data.me.id === entity?.user.id || query.data.me.role === 'ADMIN');
   const title = $derived(document?.title ?? '');
-  const assets = $derived(document?.assets);
-
-  type DocumentAsset = NonNullable<typeof assets>[number];
-
-  const putAsset = (editor: Editor, asset: DocumentAsset) => {
-    if (asset.__typename === 'Image') {
-      editor.imageAssets.set(asset.id, {
-        id: asset.id,
-        url: asset.url,
-        originalUrl: asset.originalUrl,
-        width: asset.width,
-        height: asset.height,
-        placeholder: asset.placeholder,
-      });
-    } else if (asset.__typename === 'File') {
-      ctx.fileAssets.set(asset.id, {
-        id: asset.id,
-        url: asset.url,
-        name: asset.name,
-        size: asset.size,
-      });
-    } else if (asset.__typename === 'Embed') {
-      editor.embedAssets.set(asset.id, {
-        id: asset.id,
-        url: asset.url,
-        title: asset.title ?? null,
-        description: asset.description ?? null,
-        thumbnailUrl: asset.thumbnailUrl ?? null,
-        html: asset.html ?? null,
-      });
-    } else if (asset.__typename === 'DocumentArchivedNode') {
-      editor.archivedAssets.set(asset.id, {
-        id: asset.id,
-        content: asset.content,
-      });
+  // sync가 알려준 asset 상태를 편집기 맵에 반영한다. `missing`은 "지금은 해석 불가"일 뿐이므로
+  // 표시만 남기고 문서는 절대 건드리지 않는다(노드 삭제·id 비우기 금지).
+  const applyAssetStates = (editor: Editor, entries: AssetStateEntry[]) => {
+    for (const entry of entries) {
+      if (entry.state === 'ready') {
+        editor.assets.set(entry.id, entry.asset);
+        editor.resolutions.delete(entry.id);
+        // `ready`는 어디서 도착했든 로컬 시도 상태를 은퇴시킨다 — 낡은 실패 카드가 완성 자산을 가리지 않도록.
+        ctx.attachmentImporter.retireCompleted(editor, entry.id);
+      } else if (entry.state === 'pending') {
+        editor.resolutions.set(entry.id, { state: 'pending', meta: entry.meta });
+      } else {
+        editor.resolutions.set(entry.id, { state: 'missing' });
+      }
     }
   };
 
   const fontFamilies = $derived(document?.fontFamilies ?? []);
 
+  let assetSync: AssetSync | null = null;
   let liveEditorCreated = false;
   let destroyed = false;
   let editorStore: IndexeddbDeltaStore | null = null;
@@ -442,18 +348,13 @@
       onPermanentError: (code) => {
         console.error(`document sync permanently failed: ${code}`);
       },
+      onAssetState: (requestId, assets, final) => {
+        assetSync?.receive(requestId, assets, final);
+      },
+      onAssetChanged: (ids) => {
+        assetSync?.invalidate(ids);
+      },
     });
-  });
-
-  $effect(() => {
-    const editor = ctx.editor;
-    if (!editor) return;
-
-    if (assets) {
-      for (const asset of assets) {
-        putAsset(editor, asset);
-      }
-    }
   });
 
   $effect(() => {
@@ -462,42 +363,64 @@
     const currentDocumentId = documentId;
     if (!editor || !slug || !currentDocumentId) return;
 
-    const hydrator = createAssetHydrator<DocumentAsset>({
-      hasAsset: (id) => editor.imageAssets.has(id) || ctx.fileAssets.has(id) || editor.embedAssets.has(id) || editor.archivedAssets.has(id),
-      fetchAssets: async (ids) => {
-        await cache.invalidate({ __typename: 'Document', id: currentDocumentId, $field: 'assetsByIds', $args: { ids } });
-        const result = await mearieClient.query(assetsByIdsQuery, { slug, ids });
-        return result.document.assetsByIds;
-      },
-      putAsset: (asset) => putAsset(editor, asset),
+    const sync = createAssetSync({
+      pull: (requestId, ids) => getSyncConnection().sendAssetPull(currentDocumentId, requestId, ids),
+      apply: (entries) => applyAssetStates(editor, entries),
     });
+    assetSync = sync;
+    // importer가 abandon false를 만났을 때 그 id의 서버 상태를 즉시 확인하는 통로.
+    const refresh = (ids: string[]) => sync.invalidate(ids);
+    ctx.assetRefresh = refresh;
 
-    let hydrationQueued = false;
+    const collectReferences = () => {
+      const ids: string[] = [];
+      for (const { data } of editor.externalElements) {
+        if (data.id) ids.push(data.id);
+      }
+      return ids;
+    };
+
+    let referencesQueued = false;
     let stopped = false;
     const updateReferences = () => {
-      hydrationQueued = false;
+      referencesQueued = false;
       if (stopped) return;
-      void hydrator.update(editor.externalElements.flatMap(({ data }) => (data.id ? [data.id] : [])));
+      sync.update(collectReferences());
     };
-    const scheduleHydration = () => {
-      if (hydrationQueued) return;
-      hydrationQueued = true;
+    const scheduleReferences = () => {
+      if (referencesQueued) return;
+      referencesQueued = true;
       // Editor invalidates the lazy external-elements cache after emitting state_changed.
       queueMicrotask(updateReferences);
     };
 
-    scheduleHydration();
+    scheduleReferences();
     const offStateChanged = editor.on('state_changed', (_, { fields }) => {
-      if (fields.includes('doc')) scheduleHydration();
+      if (fields.includes('doc')) scheduleReferences();
     });
-    const retry = () => void hydrator.retry();
-    window.addEventListener('online', retry);
+
+    // 재연결·온라인 복귀·가시성 복귀는 재-pull 트리거다 — WS 재연결 중 유실된 pull을 만회한다.
+    const retryAll = () => {
+      if (stopped) return;
+      sync.repullReferenced(collectReferences());
+    };
+    const handleVisibilityChange = () => {
+      if (window.document.visibilityState === 'visible') retryAll();
+    };
+
+    window.addEventListener('online', retryAll);
+    window.document.addEventListener('visibilitychange', handleVisibilityChange);
+    const offReconnected = getSyncConnection().onReconnected(retryAll);
 
     return () => {
       stopped = true;
       offStateChanged();
-      window.removeEventListener('online', retry);
-      hydrator.destroy();
+      offReconnected();
+      window.removeEventListener('online', retryAll);
+      window.document.removeEventListener('visibilitychange', handleVisibilityChange);
+      sync.dispose();
+      if (assetSync === sync) assetSync = null;
+      if (ctx.assetRefresh === refresh) ctx.assetRefresh = null;
     };
   });
   let titleUpdateTimeout: ReturnType<typeof setTimeout> | null = null;

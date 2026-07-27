@@ -9,9 +9,7 @@ import androidx.lifecycle.viewModelScope
 import co.touchlab.kermit.Logger
 import co.typie.editor.FontLoader
 import co.typie.editor.TextReplacementLoader
-import co.typie.editor.external.EditorExternalAsset
 import co.typie.graphql.Apollo
-import co.typie.graphql.EditorScreen_AssetsByIds_Query
 import co.typie.graphql.EditorScreen_Query
 import co.typie.graphql.EditorScreen_UpdateDocument_Mutation
 import co.typie.graphql.EditorScreen_ViewEntity_Mutation
@@ -170,21 +168,6 @@ class EditorViewModel(val entityId: String) : ViewModel() {
       if (!e.isRecoverableNetworkError()) {
         runCatching { Sentry.captureException(e) }
       }
-    }
-  }
-
-  internal suspend fun resolveExternalAssets(ids: List<String>): List<EditorExternalAsset> {
-    if (ids.isEmpty()) {
-      return emptyList()
-    }
-
-    val data =
-      Apollo.query(EditorScreen_AssetsByIds_Query(entityId = entityId, ids = ids))
-        .fetchPolicy(FetchPolicy.NetworkOnly)
-        .execute()
-        .dataOrThrow()
-    return data.entity.node.onDocument?.assetsByIds.orEmpty().mapNotNull { asset ->
-      asset.editorExternalAsset_asset.toEditorExternalAsset()
     }
   }
 

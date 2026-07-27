@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 sealed interface AttachEvent {
@@ -40,6 +41,16 @@ sealed interface AttachEvent {
   data class PermanentErrorEvent(val code: String) : AttachEvent
 }
 
+sealed interface AssetEvent {
+  data class AssetStateEvent(
+    val requestId: String,
+    val assets: List<WsAssetStateEntry>,
+    val final: Boolean,
+  ) : AssetEvent
+
+  data class AssetChangedEvent(val ids: List<String>) : AssetEvent
+}
+
 internal fun AttachEvent.replacementSnapshotInFlight(): Boolean? =
   when (this) {
     AttachEvent.SnapshotRestart,
@@ -58,6 +69,7 @@ class DocumentWsChannel(
   private companion object {
     const val RETRY_BASE_MS = 1_000L
     const val RETRY_CAP_MS = 30_000L
+    const val ASSET_EVENT_BACKLOG_CAP = 256
   }
 
   private val _events =
@@ -69,6 +81,17 @@ class DocumentWsChannel(
   val events: SharedFlow<AttachEvent> = _events.asSharedFlow()
 
   private val internalEvents = Channel<AttachEvent>(Channel.UNLIMITED)
+
+  private val _assetEvents =
+    MutableSharedFlow<AssetEvent>(
+      replay = 0,
+      extraBufferCapacity = 256,
+      onBufferOverflow = BufferOverflow.SUSPEND,
+    )
+  val assetEvents: SharedFlow<AssetEvent> = _assetEvents.asSharedFlow()
+
+  private val internalAssetEvents = Channel<AssetEvent>(Channel.UNLIMITED)
+  private val pendingAssetEvents = ArrayDeque<AssetEvent>()
 
   private val channelScope =
     CoroutineScope(scope.coroutineContext + SupervisorJob(scope.coroutineContext[Job]))
@@ -94,18 +117,40 @@ class DocumentWsChannel(
       }
     }
     channelScope.launch {
+      for (event in internalAssetEvents) {
+        _assetEvents.emit(event)
+      }
+    }
+    channelScope.launch {
       var subscribed = false
-      _events.subscriptionCount.collect { count ->
-        if (count > 0 && !subscribed) {
-          subscribed = true
-          onFirstSubscriberAttached()
-        } else if (count == 0 && subscribed) {
-          subscribed = false
-          onLastSubscriberDetached()
+      combine(_events.subscriptionCount, _assetEvents.subscriptionCount) { mainCount, assetCount ->
+          mainCount + assetCount
+        }
+        .collect { count ->
+          if (count > 0 && !subscribed) {
+            subscribed = true
+            onFirstSubscriberAttached()
+          } else if (count == 0 && subscribed) {
+            subscribed = false
+            onLastSubscriberDetached()
+          }
+        }
+    }
+    channelScope.launch {
+      var assetsSubscribed = false
+      _assetEvents.subscriptionCount.collect { count ->
+        if (count > 0 && !assetsSubscribed) {
+          assetsSubscribed = true
+          flushPendingAssetEvents()
+        } else if (count == 0) {
+          assetsSubscribed = false
         }
       }
     }
   }
+
+  private fun hasActiveSubscribers(): Boolean =
+    _events.subscriptionCount.value > 0 || _assetEvents.subscriptionCount.value > 0
 
   fun freshSubscribe(): Flow<AttachEvent> = channelFlow {
     launch(start = CoroutineStart.UNDISPATCHED) { events.collect { send(it) } }
@@ -124,8 +169,24 @@ class DocumentWsChannel(
       is WsServerMessage.Changesets -> handleChangesets(message)
       is WsServerMessage.Reload -> handleReload()
       is WsServerMessage.WsError -> handleError(message)
+      is WsServerMessage.AssetState -> handleAssetState(message)
+      is WsServerMessage.AssetChanged -> handleAssetChanged(message)
       else -> {}
     }
+  }
+
+  private fun handleAssetState(message: WsServerMessage.AssetState) {
+    emitAssetEvent(
+      AssetEvent.AssetStateEvent(
+        requestId = message.requestId,
+        assets = message.assets,
+        final = message.final,
+      )
+    )
+  }
+
+  private fun handleAssetChanged(message: WsServerMessage.AssetChanged) {
+    emitAssetEvent(AssetEvent.AssetChangedEvent(ids = message.ids))
   }
 
   private fun handleAttachAck() {
@@ -241,12 +302,12 @@ class DocumentWsChannel(
     retryJob = scope.launch {
       delay(delayMs)
       retryJob = null
-      if (_events.subscriptionCount.value > 0) reattach()
+      if (hasActiveSubscribers()) reattach()
     }
   }
 
   private fun handleReconnected() {
-    if (_events.subscriptionCount.value == 0) return
+    if (!hasActiveSubscribers()) return
     reattach()
   }
 
@@ -255,7 +316,7 @@ class DocumentWsChannel(
     if (!permanentlyFailed) return
     permanentlyFailed = false
     retryAttempts = 0
-    if (_events.subscriptionCount.value > 0) reattach()
+    if (hasActiveSubscribers()) reattach()
   }
 
   /** document-scoped attach ownership을 유지한 채 모든 subscriber를 새 snapshot으로 전환한다. */
@@ -264,7 +325,7 @@ class DocumentWsChannel(
     retryAttempts = 0
     retryJob?.cancel()
     retryJob = null
-    if (_events.subscriptionCount.value > 0) {
+    if (hasActiveSubscribers()) {
       restartGeneration()
     } else {
       cursor = null
@@ -296,10 +357,10 @@ class DocumentWsChannel(
     attachWatchdogJob = scope.launch {
       delay(attachAckTimeoutMs)
       if (!awaitingAck || permanentlyFailed) return@launch
-      if (_events.subscriptionCount.value == 0) return@launch
+      if (!hasActiveSubscribers()) return@launch
       connection.ensureLive()
       if (!awaitingAck || permanentlyFailed) return@launch
-      if (_events.subscriptionCount.value == 0) return@launch
+      if (!hasActiveSubscribers()) return@launch
       connection.sendDetach(documentId)
       reattach()
     }
@@ -337,6 +398,7 @@ class DocumentWsChannel(
     attachWatchdogJob?.cancel()
     attachWatchdogJob = null
     permanentlyFailed = false
+    pendingAssetEvents.clear()
     unregisterChannelHandler()
     unregisterReconnectedHandler()
     onEvicted()
@@ -345,5 +407,20 @@ class DocumentWsChannel(
 
   private fun emitEvent(event: AttachEvent) {
     internalEvents.trySend(event)
+  }
+
+  private fun emitAssetEvent(event: AssetEvent) {
+    if (_assetEvents.subscriptionCount.value == 0) {
+      if (pendingAssetEvents.size >= ASSET_EVENT_BACKLOG_CAP) pendingAssetEvents.removeFirst()
+      pendingAssetEvents.addLast(event)
+      return
+    }
+    internalAssetEvents.trySend(event)
+  }
+
+  private fun flushPendingAssetEvents() {
+    while (pendingAssetEvents.isNotEmpty()) {
+      internalAssetEvents.trySend(pendingAssetEvents.removeFirst())
+    }
   }
 }

@@ -311,7 +311,8 @@
 
     for (const asset of assets) {
       if (asset.__typename === 'Image') {
-        editor.imageAssets.set(asset.id, {
+        editor.assets.set(asset.id, {
+          type: 'image',
           id: asset.id,
           url: asset.url,
           originalUrl: asset.originalUrl,
@@ -320,14 +321,16 @@
           placeholder: asset.placeholder,
         });
       } else if (asset.__typename === 'File') {
-        ctx.fileAssets.set(asset.id, {
+        editor.assets.set(asset.id, {
+          type: 'file',
           id: asset.id,
           url: asset.url,
           name: asset.name,
-          size: asset.size,
+          size: Number(asset.size),
         });
       } else if (asset.__typename === 'Embed') {
-        editor.embedAssets.set(asset.id, {
+        editor.assets.set(asset.id, {
+          type: 'embed',
           id: asset.id,
           url: asset.url,
           title: asset.title ?? null,
@@ -336,10 +339,7 @@
           html: asset.html ?? null,
         });
       } else if (asset.__typename === 'DocumentArchivedNode') {
-        editor.archivedAssets.set(asset.id, {
-          id: asset.id,
-          content: asset.content,
-        });
+        editor.assets.set(asset.id, { type: 'archived', id: asset.id, content: asset.content });
       }
     }
   });

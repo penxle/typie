@@ -35,60 +35,12 @@ query EditorScreen_Query($entityId: ID!) {
         state {
           updatedAt
         }
-        assets {
-          ...EditorExternalAsset_asset
-        }
         toolbarFontFamilies: fontFamilies(sources: [DEFAULT, USER, FALLBACK]) {
           ...EditorSettingsFontFamily_family
         }
         ...FontLoader_Document
       }
     }
-  }
-}
-
-query EditorScreen_AssetsByIds_Query($entityId: ID!, $ids: [ID!]!) {
-  entity(entityId: $entityId) @catch(to: THROW) {
-    id
-
-    node {
-      ... on Document {
-        id
-
-        assetsByIds(ids: $ids) {
-          ...EditorExternalAsset_asset
-        }
-      }
-    }
-  }
-}
-
-fragment EditorExternalAsset_asset on DocumentAsset {
-  __typename
-
-  ... on Image {
-    id
-    url
-    width
-    height
-    ratio
-    placeholder
-  }
-
-  ... on File {
-    id
-    name
-    size
-    url
-  }
-
-  ... on Embed {
-    id
-    url
-    title
-    description
-    thumbnailUrl
-    html
   }
 }
 
@@ -111,26 +63,6 @@ mutation EditorScreen_UpdateDocument_Mutation($input: UpdateDocumentInput!) {
     id
     nullableTitle
     subtitle
-  }
-}
-
-mutation EditorScreen_PersistBlobAsFile_Mutation($input: PersistBlobAsFileInput!) {
-  persistBlobAsFile(input: $input) {
-    id
-    name
-    size
-    url
-  }
-}
-
-mutation EditorScreen_PersistBlobAsImage_Mutation($input: PersistBlobAsImageInput!) {
-  persistBlobAsImage(input: $input) {
-    id
-    url
-    width
-    height
-    ratio
-    placeholder
   }
 }
 

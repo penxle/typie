@@ -11,6 +11,7 @@ const schema = z.object({
   APPLE_SIGN_IN_PRIVATE_KEY: z.string(),
   APPLE_TEAM_ID: z.string(),
   AUTH_URL: z.string(),
+  BLOB_UPLOAD_TTL_SECONDS: z.coerce.number().int().positive().default(90),
   BMO_API_KEY: z.string(),
   BOOTSTRAP_BYPASS_KEY: z.string().optional(),
   CLOUDFLARE_AIGATEWAY_URL: z.string(),

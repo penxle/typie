@@ -11,6 +11,7 @@ export const pubsub = createPubSub<{
     payload: { target: string; seq: string; changesets: string[]; heads: string; durableHeads: string },
   ];
   'document:comment': [documentId: string, payload: { threadId: string; originClientId: string }];
+  'document:assets': [documentId: string, payload: { ids: string[] }];
   'site:update': [siteId: string, payload: { scope: 'site' } | { scope: 'entity'; entityId: string }];
   'site:usage:update': [siteId: string, payload: null];
   'user:usage:update': [userId: string, payload: null];

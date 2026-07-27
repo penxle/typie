@@ -32,6 +32,12 @@ private fun decodeClientMessageForFake(bytes: ByteArray): WsClientMessage? {
       "detach" -> fakeSyncWsCbor.decodeFromByteArray(WsClientMessage.Detach.serializer(), bytes)
       "push" -> fakeSyncWsCbor.decodeFromByteArray(WsClientMessage.Push.serializer(), bytes)
       "pull" -> fakeSyncWsCbor.decodeFromByteArray(WsClientMessage.Pull.serializer(), bytes)
+      "asset-pull" ->
+        fakeSyncWsCbor.decodeFromByteArray(WsClientMessage.AssetPull.serializer(), bytes)
+      "asset-heartbeat" ->
+        fakeSyncWsCbor.decodeFromByteArray(WsClientMessage.AssetHeartbeat.serializer(), bytes)
+      "asset-failed" ->
+        fakeSyncWsCbor.decodeFromByteArray(WsClientMessage.AssetFailed.serializer(), bytes)
       else -> null
     }
   } catch (_: Exception) {
@@ -61,6 +67,10 @@ private fun encodeServerMessageForFake(message: WsServerMessage): ByteArray =
       fakeSyncWsCbor.encodeToByteArray(WsServerMessage.PullAck.serializer(), message)
     is WsServerMessage.WsError ->
       fakeSyncWsCbor.encodeToByteArray(WsServerMessage.WsError.serializer(), message)
+    is WsServerMessage.AssetState ->
+      fakeSyncWsCbor.encodeToByteArray(WsServerMessage.AssetState.serializer(), message)
+    is WsServerMessage.AssetChanged ->
+      fakeSyncWsCbor.encodeToByteArray(WsServerMessage.AssetChanged.serializer(), message)
   }
 
 internal fun clientMessageTypeOf(message: WsClientMessage): String =
@@ -71,6 +81,9 @@ internal fun clientMessageTypeOf(message: WsClientMessage): String =
     is WsClientMessage.Detach -> "detach"
     is WsClientMessage.Push -> "push"
     is WsClientMessage.Pull -> "pull"
+    is WsClientMessage.AssetPull -> "asset-pull"
+    is WsClientMessage.AssetHeartbeat -> "asset-heartbeat"
+    is WsClientMessage.AssetFailed -> "asset-failed"
   }
 
 internal fun serverMessageTypeOf(message: WsServerMessage): String =
@@ -85,6 +98,8 @@ internal fun serverMessageTypeOf(message: WsServerMessage): String =
     is WsServerMessage.PushAck -> "push-ack"
     is WsServerMessage.PullAck -> "pull-ack"
     is WsServerMessage.WsError -> "error"
+    is WsServerMessage.AssetState -> "asset-state"
+    is WsServerMessage.AssetChanged -> "asset-changed"
   }
 
 internal class FakeSyncWsSocket : SyncWsSocket {

@@ -112,6 +112,7 @@ const createCtx = ({ readOnly = false, protectContent = false } = {}) => {
     attachmentImporter: {
       canReusePlaceholder,
       importAtDrop,
+      awaitingDropReservation: false,
     },
   };
 
@@ -664,5 +665,111 @@ describe('handleDrop', () => {
         },
       },
     ]);
+  });
+});
+
+describe('drop awaiting its reservation', () => {
+  // 엔진의 `DndState`는 슬롯 하나뿐이고 `Drop`은 **처리 시점의** drop_target을 읽는다. 예약 왕복 동안
+  // 새 드래그가 목표를 옮기면 앞 드롭의 파일이 그 위치에 조용히 떨어지므로, 드래그 단계 전체를 막는다.
+  const dropFiles = (harness: ReturnType<typeof createCtx>) => {
+    const dataTransfer = createDataTransfer({ files: [createFile('a.png', 'image/png')], types: ['Files'] });
+    handleDrop(harness.ctx, createDragEvent(dataTransfer, harness.extensionAreaEl), vi.fn());
+    harness.attachmentState.attachmentImporter.awaitingDropReservation = harness.importAtDrop.mock.calls.length > 0;
+  };
+
+  it('sends no dnd op for a new drag while an earlier drop awaits its reservation', () => {
+    const harness = createCtx();
+    dropFiles(harness);
+    expect(harness.importAtDrop).toHaveBeenCalledOnce();
+    const afterFirstDrop = [...harness.messages];
+    expect(afterFirstDrop.at(-1)).toMatchObject({ type: 'dnd', op: { type: 'over', x: 10, y: 20 } });
+
+    const second = createDataTransfer({ files: [createFile('b.png', 'image/png')], types: ['Files'] });
+    handleDragEnter(harness.ctx, createDragEvent(second, harness.extensionAreaEl));
+    const overEvent = createDragEvent(second, harness.extensionAreaEl);
+    handleDragOver(harness.ctx, overEvent);
+    handleDragLeave(harness.ctx, createDragEvent(second, harness.extensionAreaEl));
+    handleDragEnd(harness.ctx);
+    handleDragStart(harness.ctx, createDragEvent(second, harness.extensionAreaEl));
+
+    // enter/over/leave/end/내부 드래그 시작 중 어느 것도 엔진에 닿지 않는다 →
+    // 앞 드롭이 소비할 drop_target은 여전히 **자기 것**이다.
+    expect(harness.messages).toEqual(afterFirstDrop);
+  });
+
+  it('still cancels dragover while suspended so the browser fires drop instead of opening the file', () => {
+    const harness = createCtx();
+    dropFiles(harness);
+    const afterFirstDrop = [...harness.messages];
+
+    const second = createDataTransfer({ files: [createFile('b.png', 'image/png')], types: ['Files'] });
+    const overEvent = createDragEvent(second, harness.extensionAreaEl);
+    handleDragOver(harness.ctx, overEvent);
+
+    // dragover의 기본 동작을 막지 않으면 브라우저는 `drop`을 발생시키지 않고 그 파일로 탭을 이동시킨다
+    // (window/document 레벨 안전망이 이 앱에는 없다) → 열려 있던 문서를 잃는다.
+    expect(overEvent.preventDefault).toHaveBeenCalled();
+    // 대신 "놓을 수 없음"은 dropEffect로만 표현하고, 엔진 상태는 그대로 둔다.
+    expect(second.dropEffect).toBe('none');
+    expect(harness.messages).toEqual(afterFirstDrop);
+  });
+
+  it('cancels dragover and advertises a real drop effect once the reservation settles', () => {
+    const harness = createCtx();
+    dropFiles(harness);
+    harness.attachmentState.attachmentImporter.awaitingDropReservation = false;
+
+    const second = createDataTransfer({ files: [createFile('b.png', 'image/png')], types: ['Files'] });
+    const overEvent = createDragEvent(second, harness.extensionAreaEl);
+    handleDragOver(harness.ctx, overEvent);
+
+    expect(overEvent.preventDefault).toHaveBeenCalled();
+    expect(second.dropEffect).toBe('copy');
+  });
+
+  it('rejects a second file drop without touching the engine and lets the importer report it', () => {
+    const harness = createCtx();
+    dropFiles(harness);
+    const afterFirstDrop = [...harness.messages];
+    harness.importAtDrop.mockReturnValue(false);
+
+    const onFailure = vi.fn();
+    const second = createDataTransfer({ files: [createFile('b.png', 'image/png')], types: ['Files'] });
+    const dropEvent = createDragEvent(second, harness.extensionAreaEl);
+    handleDrop(harness.ctx, dropEvent, onFailure);
+
+    // 파일 드롭은 실제로 도착해야 하고(브라우저가 삼키면 안 된다), 항목별 실패 보고는 importer가 한다.
+    expect(harness.messages).toEqual(afterFirstDrop);
+    expect(dropEvent.preventDefault).toHaveBeenCalled();
+    expect(harness.importAtDrop).toHaveBeenCalledTimes(2);
+    expect(harness.importAtDrop.mock.calls[1]?.[0].map((item) => item.file.name)).toEqual(['b.png']);
+  });
+
+  it('discards a text payload for the round trip instead of consuming the pending drop target', () => {
+    const harness = createCtx();
+    dropFiles(harness);
+    const afterFirstDrop = [...harness.messages];
+
+    const text = createDataTransfer({ types: ['text/plain'], data: { 'text/plain': 'hello' } });
+    const dropEvent = createDragEvent(text, harness.extensionAreaEl);
+    handleDrop(harness.ctx, dropEvent, vi.fn());
+
+    expect(harness.messages).toEqual(afterFirstDrop);
+    expect(dropEvent.preventDefault).toHaveBeenCalled();
+  });
+
+  it('resumes normal drag handling once the reservation settles', () => {
+    const harness = createCtx();
+    dropFiles(harness);
+    harness.attachmentState.attachmentImporter.awaitingDropReservation = false;
+
+    const second = createDataTransfer({ files: [createFile('b.png', 'image/png')], types: ['Files'] });
+    handleDragEnter(harness.ctx, createDragEvent(second, harness.extensionAreaEl));
+    const overEvent = createDragEvent(second, harness.extensionAreaEl);
+    handleDragOver(harness.ctx, overEvent);
+
+    expect(harness.messages.at(-2)).toMatchObject({ type: 'dnd', op: { type: 'enter_external' } });
+    expect(harness.messages.at(-1)).toMatchObject({ type: 'dnd', op: { type: 'over' } });
+    expect(overEvent.preventDefault).toHaveBeenCalled();
   });
 });

@@ -17,7 +17,7 @@
 
   const archivedData = $derived(element.data.type === 'archived' ? element.data : undefined);
   const archivedId = $derived(archivedData?.id || undefined);
-  const asset = $derived(archivedId ? ctx.editor?.archivedAssets.get(archivedId) : undefined);
+  const asset = $derived(ctx.editor?.asset(archivedId, 'archived'));
   const canEdit = $derived(!ctx.editor?.readOnly);
   const hasPreviewButton = $derived(canEdit && !!asset?.content);
 

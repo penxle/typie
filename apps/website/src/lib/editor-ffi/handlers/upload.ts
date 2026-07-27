@@ -1,6 +1,14 @@
-import { uploadBlobAsFile, uploadBlobAsImage } from '$lib/utils/blob.svelte';
+import { unwrapError } from '$lib/graphql';
+import { getSyncConnection } from '$lib/sync';
+import {
+  abandonBlobUpload,
+  finalizeBlobUploadAsFile,
+  finalizeBlobUploadAsImage,
+  reserveBlobUploads,
+  uploadToReservation,
+} from '$lib/utils/blob.svelte';
 import { SubscribeModal } from '../../../routes/website/(dashboard)/@subscription/subscribe-modal.svelte';
-import type { FileAsset, ImageAsset } from '../types';
+import type { AttachmentImporterDeps } from '../attachment-importer';
 
 export const getImageDimensions = (src: string): Promise<{ width: number; height: number }> => {
   return new Promise((resolve, reject) => {
@@ -11,32 +19,66 @@ export const getImageDimensions = (src: string): Promise<{ width: number; height
   });
 };
 
-export const uploadFileAsFile = async (file: File): Promise<FileAsset> => {
-  if (!SubscribeModal.gate('editor_upload')) {
-    throw new Error('subscription_required');
+// mearie는 GraphQL 오류를 aggregate로 감싼다. 호출측은 `code` 문자열로 분기하므로 여기서 한 겹 벗겨 준다.
+async function unwrapped<T>(run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (err) {
+    const inner = unwrapError(err);
+    throw inner instanceof Error ? inner : new Error(String(inner));
   }
+}
 
-  const uploaded = await uploadBlobAsFile(file);
-  return {
-    id: uploaded.id,
-    name: uploaded.name,
-    size: uploaded.size,
-    url: uploaded.url,
-  };
-};
+export const createAttachmentImporterDeps = (): AttachmentImporterDeps => ({
+  getImageDimensions,
 
-export const uploadImageFile = async (file: File): Promise<ImageAsset> => {
-  if (!SubscribeModal.gate('editor_upload')) {
-    throw new Error('subscription_required');
-  }
+  // 구독 게이트는 예약(=문서 기록 이전) 진입점에서만 판정한다.
+  reserveUploads: (documentId, items) =>
+    unwrapped(async () => {
+      if (!SubscribeModal.gate('editor_upload')) {
+        throw new Error('subscription_required');
+      }
+      return await reserveBlobUploads(documentId, items);
+    }),
 
-  const uploaded = await uploadBlobAsImage(file);
-  return {
-    id: uploaded.id,
-    url: uploaded.url,
-    originalUrl: uploaded.originalUrl,
-    width: uploaded.width,
-    height: uploaded.height,
-    placeholder: uploaded.placeholder,
-  };
-};
+  transferToReservation: (reservation, file, signal) => uploadToReservation(reservation, file, signal),
+
+  finalizeImage: (assetId, nonce) =>
+    unwrapped(async () => {
+      const asset = await finalizeBlobUploadAsImage(assetId, nonce);
+      return {
+        id: asset.id,
+        url: asset.url,
+        originalUrl: asset.originalUrl,
+        width: asset.width,
+        height: asset.height,
+        placeholder: asset.placeholder,
+      };
+    }),
+
+  finalizeFile: (assetId, nonce) =>
+    unwrapped(async () => {
+      const asset = await finalizeBlobUploadAsFile(assetId, nonce);
+      return {
+        id: asset.id,
+        name: asset.name,
+        size: asset.size,
+        url: asset.url,
+      };
+    }),
+
+  abandonUpload: (assetId, nonce) => unwrapped(() => abandonBlobUpload(assetId, nonce)),
+
+  sendAssetFailed: (documentId, items) => getSyncConnection().sendAssetFailed(documentId, items),
+  sendAssetHeartbeat: (documentId, items) => getSyncConnection().sendAssetHeartbeat(documentId, items),
+
+  startInterval: (ms, tick) => {
+    const id = setInterval(tick, ms);
+    return () => clearInterval(id);
+  },
+  startTimeout: (ms, tick) => {
+    const id = setTimeout(tick, ms);
+    return () => clearTimeout(id);
+  },
+  delay: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+});

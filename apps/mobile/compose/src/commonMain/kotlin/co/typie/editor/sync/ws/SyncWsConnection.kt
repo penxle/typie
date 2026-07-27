@@ -144,6 +144,33 @@ class SyncWsConnection(
     sendChannel.trySend(WsClientMessage.Detach(documentId = documentId))
   }
 
+  fun sendAssetPull(documentId: String, requestId: String, ids: List<String>) {
+    if (!ready) return
+    val bounded = ids.boundAssetItems() ?: return
+    sendChannel.trySend(
+      WsClientMessage.AssetPull(documentId = documentId, requestId = requestId, ids = bounded)
+    )
+  }
+
+  fun sendAssetHeartbeat(documentId: String, items: List<WsAssetItem>) {
+    if (!ready) return
+    val bounded = items.boundAssetItems() ?: return
+    sendChannel.trySend(WsClientMessage.AssetHeartbeat(documentId = documentId, items = bounded))
+  }
+
+  fun sendAssetFailed(documentId: String, items: List<WsAssetItem>) {
+    if (!ready) return
+    val bounded = items.boundAssetItems() ?: return
+    sendChannel.trySend(WsClientMessage.AssetFailed(documentId = documentId, items = bounded))
+  }
+
+  private fun <T> List<T>.boundAssetItems(): List<T>? =
+    when {
+      isEmpty() -> null
+      size > SYNC_WS_ASSET_MESSAGE_MAX_ITEMS -> take(SYNC_WS_ASSET_MESSAGE_MAX_ITEMS)
+      else -> this
+    }
+
   fun onReconnected(callback: () -> Unit): () -> Unit {
     reconnectedCallbacks.add(callback)
     return { reconnectedCallbacks.remove(callback) }
@@ -280,6 +307,8 @@ class SyncWsConnection(
       is WsServerMessage.SnapshotEnd -> routeToChannel(message.documentId, message)
       is WsServerMessage.Changesets -> routeToChannel(message.documentId, message)
       is WsServerMessage.Reload -> routeToChannel(message.documentId, message)
+      is WsServerMessage.AssetState -> routeToChannel(message.documentId, message)
+      is WsServerMessage.AssetChanged -> routeToChannel(message.documentId, message)
     }
   }
 

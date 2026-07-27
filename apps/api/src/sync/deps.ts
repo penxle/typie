@@ -1,10 +1,23 @@
 import { EntityAvailability } from '@typie/lib/enums';
 import { TypieError } from '@typie/lib/errors';
-import { and, asc, eq, gt } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray } from 'drizzle-orm';
 import { redis } from '#/cache.ts';
-import { db, DocumentBundles, Documents, DocumentStates, Entities, first } from '#/db/index.ts';
+import {
+  db,
+  DocumentArchivedNodes,
+  DocumentBundles,
+  Documents,
+  DocumentStates,
+  Embeds,
+  Entities,
+  Files,
+  first,
+  Images,
+} from '#/db/index.ts';
+import { buildFileUrl, buildImageOriginalUrl, buildImageUrl } from '#/graphql/resolvers/blob.ts';
 import { enqueueJob } from '#/mq/index.ts';
 import { pubsub } from '#/pubsub.ts';
+import { deleteBlobLeases, extendBlobLeases, readBlobLeases } from '#/utils/blob-lease.ts';
 import {
   advanceLiveHeads,
   appendBundle,
@@ -26,6 +39,8 @@ import { assertSitePermission } from '#/utils/permission.ts';
 import { hasActiveSubscription } from '#/utils/plan.ts';
 import { wasm } from '#/utils/wasm-ffi.ts';
 import { scheduleSweepDue } from '#/utils/zombie-sweep.ts';
+import { buildAssetStateEntries, groupAssetIds, toLeaseItems, toLeaseMap } from './assets.ts';
+import type { ReadyAssetPayload } from './protocol.ts';
 import type { SyncDeps } from './types.ts';
 
 export const createProductionDeps = (): SyncDeps => ({
@@ -133,4 +148,93 @@ export const createProductionDeps = (): SyncDeps => ({
   enqueueCollect: async (documentId) => {
     await enqueueJob('document:changesets:collect', documentId);
   },
+
+  // lease를 먼저 읽고 completed row를 마지막에 읽어, 겹치면 completed가 이긴다. 읽는 사이 finalize가
+  // 커밋되는 창은 좁아질 뿐 사라지지 않으므로 최종 수렴은 무효화 push + 클라이언트 재-pull이 담당한다.
+  resolveAssetStates: async (ids) => {
+    const { imageIds, fileIds, embedIds, archivedIds, assetIds } = groupAssetIds(ids);
+
+    const leaseById = toLeaseMap(assetIds, await readBlobLeases(assetIds));
+
+    const [images, files, embeds, archivedNodes] = await Promise.all([
+      imageIds.length === 0
+        ? []
+        : db
+            .select({
+              id: Images.id,
+              format: Images.format,
+              path: Images.path,
+              originalPath: Images.originalPath,
+              width: Images.width,
+              height: Images.height,
+              placeholder: Images.placeholder,
+            })
+            .from(Images)
+            .where(inArray(Images.id, imageIds)),
+      fileIds.length === 0
+        ? []
+        : db.select({ id: Files.id, name: Files.name, size: Files.size, path: Files.path }).from(Files).where(inArray(Files.id, fileIds)),
+      embedIds.length === 0
+        ? []
+        : db
+            .select({
+              id: Embeds.id,
+              url: Embeds.url,
+              title: Embeds.title,
+              description: Embeds.description,
+              thumbnailUrl: Embeds.thumbnailUrl,
+              html: Embeds.html,
+            })
+            .from(Embeds)
+            .where(inArray(Embeds.id, embedIds)),
+      archivedIds.length === 0
+        ? []
+        : db
+            .select({ id: DocumentArchivedNodes.id, content: DocumentArchivedNodes.content })
+            .from(DocumentArchivedNodes)
+            .where(inArray(DocumentArchivedNodes.id, archivedIds)),
+    ]);
+
+    const readyById = new Map<string, ReadyAssetPayload>();
+    for (const row of images) {
+      readyById.set(row.id, {
+        type: 'image',
+        id: row.id,
+        url: buildImageUrl(row),
+        originalUrl: buildImageOriginalUrl(row),
+        width: row.width,
+        height: row.height,
+        placeholder: row.placeholder,
+      });
+    }
+    for (const row of files) {
+      readyById.set(row.id, { type: 'file', id: row.id, url: buildFileUrl(row), name: row.name, size: row.size });
+    }
+    for (const row of embeds) {
+      readyById.set(row.id, {
+        type: 'embed',
+        id: row.id,
+        url: row.url,
+        title: row.title,
+        description: row.description,
+        thumbnailUrl: row.thumbnailUrl,
+        html: row.html,
+      });
+    }
+    for (const row of archivedNodes) {
+      readyById.set(row.id, { type: 'archived', id: row.id, content: row.content });
+    }
+
+    return buildAssetStateEntries(ids, readyById, leaseById);
+  },
+
+  extendAssetLeases: async (items, userId) => {
+    await extendBlobLeases(toLeaseItems(items), userId);
+  },
+
+  clearAssetLeases: async (items, userId) => await deleteBlobLeases(toLeaseItems(items), userId),
+
+  publishAssetChanged: (documentId, ids) => pubsub.publish('document:assets', documentId, { ids }),
+
+  subscribeAssetEvents: (documentId) => pubsub.subscribe('document:assets', documentId),
 });

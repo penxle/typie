@@ -1,268 +1,252 @@
 package co.typie.screen.editor.editor
 
-import co.touchlab.kermit.Logger
+import co.typie.editor.external.EditorAssetPendingMeta
 import co.typie.editor.external.EditorAssetResolution
+import co.typie.editor.external.EditorEmbedAsset
 import co.typie.editor.external.EditorExternalAsset
 import co.typie.editor.external.EditorExternalElementState
-import kotlinx.coroutines.CancellationException
+import co.typie.editor.external.EditorFileAsset
+import co.typie.editor.external.EditorImageAsset
+import co.typie.editor.sync.ws.WsAssetStateEntry
+import co.typie.editor.sync.ws.WsReadyAsset
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.launch
 
 internal class EditorAssetHydrator(
+  private val scope: CoroutineScope,
   private val state: EditorExternalElementState,
-  private val fetch: suspend (List<String>) -> List<EditorExternalAsset>,
-  private val waitBeforeRetry: suspend (attempt: Int) -> Unit = { attempt ->
-    delay(if (attempt == 1) 500 else 1_500)
-  },
+  private val pull: (requestId: String, ids: List<String>) -> Unit,
+  private val basePollMs: Long = 60_000,
+  private val maxPollMs: Long = 300_000,
+  private val debounceMs: Long = 100,
+  private val maxIdsPerPull: Int = MaxIdsPerPull,
 ) {
-  private data class Request(
-    val ids: List<String>,
-    val queryGeneration: Long,
-    val connectivityGeneration: Long,
-    val recoveryIds: Set<String>,
-  )
+  private val instanceId = "s${++instanceSeq}"
+  private var requestSeq = 0
 
-  private data class Retry(val attempts: Map<String, Int>)
+  private var referenced = emptySet<String>()
+  private val latestRequestIds = mutableMapOf<String, String>()
+  private val awaiting = mutableSetOf<String>()
+  private val queued = mutableSetOf<String>()
 
-  private val stateMutex = Mutex()
-  private val resolverMutex = Mutex()
-  private var referencedIds = emptySet<String>()
-  private var queryGeneration = Long.MIN_VALUE
-  private var lastConnectivityGeneration = Long.MIN_VALUE
-  private val materializationAttempts = mutableMapOf<String, Int>()
-  private val recoveryProbeIds = mutableSetOf<String>()
+  private var debounceJob: Job? = null
+  private var pollJob: Job? = null
+  private var pollDelayMs = basePollMs
+  private var disposed = false
 
-  suspend fun seed(assets: Collection<EditorExternalAsset>) {
-    stateMutex.withLock { mergeAssets(assets) }
-  }
-
-  suspend fun resolve(ids: Collection<String>) {
-    updateReferences(ids)
-    drain()
-  }
-
-  suspend fun onQueryRefresh(generation: Long, assets: Collection<EditorExternalAsset>) {
-    val startsNewGeneration = stateMutex.withLock {
-      mergeAssets(assets)
-      if (generation <= queryGeneration) {
-        false
-      } else {
-        queryGeneration = generation
-        for (id in referencedIds) {
-          materializationAttempts.remove(id)
-          recoveryProbeIds.remove(id)
-          state.resolutions.remove(id)
-        }
-        true
+  fun update(referencedIds: Collection<String>) {
+    if (disposed) return
+    setReferenced(referencedIds)
+    enqueue(
+      referenced.filter { id ->
+        !state.containsAsset(id) && state.resolutions[id] == null && id !in awaiting
       }
-    }
-
-    if (startsNewGeneration) {
-      drain()
-    }
-  }
-
-  suspend fun onConnectivityRestored(generation: Long) {
-    val startsNewGeneration = stateMutex.withLock {
-      if (generation <= lastConnectivityGeneration) {
-        false
-      } else {
-        lastConnectivityGeneration = generation
-        for (id in referencedIds) {
-          when (state.resolutions[id]) {
-            EditorAssetResolution.RetryableFailure -> state.resolutions.remove(id)
-            EditorAssetResolution.Unavailable -> recoveryProbeIds.add(id)
-            else -> Unit
-          }
-        }
-        true
-      }
-    }
-
-    if (startsNewGeneration) {
-      drain()
-    }
-  }
-
-  private suspend fun updateReferences(ids: Collection<String>) {
-    val nextIds = ids.toSet()
-    stateMutex.withLock {
-      for (removedId in referencedIds - nextIds) {
-        state.resolutions.remove(removedId)
-        materializationAttempts.remove(removedId)
-        recoveryProbeIds.remove(removedId)
-      }
-      referencedIds = nextIds
-    }
-  }
-
-  private suspend fun drain() {
-    resolverMutex.withLock {
-      while (true) {
-        val request = stateMutex.withLock { nextRequest() } ?: return
-        val assets =
-          try {
-            fetch(request.ids)
-          } catch (error: CancellationException) {
-            clearTransientRequestState(request.ids)
-            throw error
-          } catch (error: Throwable) {
-            val generationChanged = markFetchFailure(request)
-            if (generationChanged) {
-              continue
-            }
-            Logger.w(error) { "Editor asset hydration failed" }
-            return
-          }
-
-        val retry = stateMutex.withLock { mergeResponse(request, assets) }
-        if (retry != null) {
-          try {
-            waitBeforeRetry(retry.attempts.values.max())
-          } catch (error: CancellationException) {
-            clearTransientRequestState(retry.attempts.keys)
-            throw error
-          }
-          stateMutex.withLock {
-            for ((id, attempt) in retry.attempts) {
-              if (state.resolutions[id] == EditorAssetResolution.AwaitingMaterialization(attempt)) {
-                state.resolutions.remove(id)
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-
-  private fun nextRequest(): Request? {
-    val ids =
-      referencedIds
-        .asSequence()
-        .filterNot(state::containsAsset)
-        .filter { id -> recoveryProbeIds.contains(id) || state.resolutions[id] == null }
-        .sorted()
-        .take(MaxBatchSize)
-        .toList()
-    if (ids.isEmpty()) {
-      return null
-    }
-
-    ids.forEach { id -> state.resolutions[id] = EditorAssetResolution.InFlight }
-    return Request(
-      ids = ids,
-      queryGeneration = queryGeneration,
-      connectivityGeneration = lastConnectivityGeneration,
-      recoveryIds = ids.filterTo(mutableSetOf(), recoveryProbeIds::contains),
     )
+    ensurePoll()
   }
 
-  private suspend fun clearTransientRequestState(ids: Collection<String>) {
-    stateMutex.withLock {
-      for (id in ids) {
-        when (state.resolutions[id]) {
-          EditorAssetResolution.InFlight,
-          is EditorAssetResolution.AwaitingMaterialization -> state.resolutions.remove(id)
-          else -> Unit
+  fun invalidate(ids: Collection<String>) {
+    if (disposed) return
+    enqueue(ids)
+    ensurePoll()
+  }
+
+  fun receive(requestId: String, entries: List<WsAssetStateEntry>, final: Boolean) {
+    if (disposed) return
+
+    var appliedAny = false
+    for (entry in entries) {
+      if (latestRequestIds[entry.id] != requestId || entry.id !in referenced) continue
+      awaiting.remove(entry.id)
+
+      val previous = currentDiscriminant(entry.id)
+      if (previous == entry.state || (previous == "ready" && entry.state != "ready")) continue
+
+      val applied =
+        when (entry.state) {
+          "ready" -> {
+            val asset = entry.asset?.toEditorExternalAsset()
+            if (asset == null) {
+              false
+            } else {
+              state.put(asset)
+              state.resolutions.remove(entry.id)
+              true
+            }
+          }
+          "pending" -> {
+            val meta = entry.meta
+            if (meta == null) {
+              false
+            } else {
+              state.resolutions[entry.id] =
+                EditorAssetResolution.Pending(
+                  EditorAssetPendingMeta(kind = meta.kind, name = meta.name, size = meta.size)
+                )
+              true
+            }
+          }
+          "missing" -> {
+            state.resolutions[entry.id] = EditorAssetResolution.Missing
+            true
+          }
+          else -> false
         }
+      if (applied) appliedAny = true
+    }
+
+    if (final) {
+      for ((id, issued) in latestRequestIds) {
+        if (issued == requestId) awaiting.remove(id)
       }
     }
-  }
 
-  private suspend fun markFetchFailure(request: Request): Boolean = stateMutex.withLock {
-    if (request.isObsolete()) {
-      request.ids.forEach { id ->
-        if (state.resolutions[id] == EditorAssetResolution.InFlight) {
-          state.resolutions.remove(id)
-        }
-      }
-      true
+    if (appliedAny) {
+      resetPoll()
     } else {
-      request.ids.forEach { id ->
-        recoveryProbeIds.remove(id)
-        if (id in referencedIds && !state.containsAsset(id)) {
-          state.resolutions[id] = EditorAssetResolution.RetryableFailure
-        } else {
-          state.resolutions.remove(id)
-        }
-      }
-      false
+      ensurePoll()
     }
   }
 
-  private fun mergeResponse(request: Request, assets: Collection<EditorExternalAsset>): Retry? {
-    val requestedIds = request.ids.toSet()
-    val returnedIds = mutableSetOf<String>()
-    for (asset in assets) {
-      if (asset.id !in requestedIds) {
-        continue
-      }
-      returnedIds.add(asset.id)
-      state.put(asset)
-      state.resolutions.remove(asset.id)
-      materializationAttempts.remove(asset.id)
-      recoveryProbeIds.remove(asset.id)
+  fun repullReferenced(referencedIds: Collection<String>) {
+    if (disposed) return
+    setReferenced(referencedIds)
+    clearDebounce()
+    queued.clear()
+    val ids = nonReadyIds()
+    if (ids.isNotEmpty()) dispatch(ids)
+    resetPoll()
+  }
+
+  fun dispose() {
+    disposed = true
+    clearDebounce()
+    clearPoll()
+    referenced = emptySet()
+    latestRequestIds.clear()
+    awaiting.clear()
+    queued.clear()
+  }
+
+  private fun currentDiscriminant(id: String): String? =
+    when {
+      state.containsAsset(id) -> "ready"
+      state.resolutions[id] is EditorAssetResolution.Pending -> "pending"
+      state.resolutions[id] == EditorAssetResolution.Missing -> "missing"
+      else -> null
     }
 
-    if (request.isObsolete()) {
-      request.ids.forEach { id ->
-        if (id !in returnedIds && state.resolutions[id] == EditorAssetResolution.InFlight) {
-          state.resolutions.remove(id)
-        }
-      }
-      return null
-    }
+  private fun nonReadyIds(): List<String> = referenced.filterNot(state::containsAsset)
 
-    val retryAttempts = mutableMapOf<String, Int>()
-    for (id in request.ids) {
-      if (id in returnedIds) {
-        continue
+  private fun dispatch(ids: List<String>) {
+    var index = 0
+    while (index < ids.size) {
+      val chunk = ids.subList(index, minOf(index + maxIdsPerPull, ids.size))
+      val requestId = "$instanceId-${++requestSeq}"
+      for (id in chunk) {
+        latestRequestIds[id] = requestId
+        awaiting.add(id)
       }
-      if (id !in referencedIds) {
-        state.resolutions.remove(id)
-        materializationAttempts.remove(id)
-        recoveryProbeIds.remove(id)
-        continue
-      }
-      if (id in request.recoveryIds) {
-        recoveryProbeIds.remove(id)
-        state.resolutions[id] = EditorAssetResolution.Unavailable
-        continue
-      }
-
-      val attempt = (materializationAttempts[id] ?: 0) + 1
-      materializationAttempts[id] = attempt
-      if (attempt >= MaxMaterializationAttempts) {
-        state.resolutions[id] = EditorAssetResolution.Unavailable
-      } else {
-        state.resolutions[id] = EditorAssetResolution.AwaitingMaterialization(attempt)
-        retryAttempts[id] = attempt
-      }
-    }
-
-    return if (retryAttempts.isEmpty()) {
-      null
-    } else {
-      Retry(attempts = retryAttempts)
+      pull(requestId, chunk)
+      index += maxIdsPerPull
     }
   }
 
-  private fun Request.isObsolete(): Boolean =
-    queryGeneration != this@EditorAssetHydrator.queryGeneration ||
-      connectivityGeneration != lastConnectivityGeneration
+  private fun clearDebounce() {
+    debounceJob?.cancel()
+    debounceJob = null
+  }
 
-  private fun mergeAssets(assets: Collection<EditorExternalAsset>) {
-    for (asset in assets) {
-      state.put(asset)
-      state.resolutions.remove(asset.id)
-      materializationAttempts.remove(asset.id)
-      recoveryProbeIds.remove(asset.id)
+  private fun flush() {
+    debounceJob = null
+    if (disposed) return
+    val ids = queued.filter(referenced::contains)
+    queued.clear()
+    if (ids.isNotEmpty()) dispatch(ids)
+  }
+
+  private fun enqueue(ids: Collection<String>) {
+    queued.addAll(ids)
+    if (queued.isEmpty() || debounceJob != null) return
+    debounceJob = scope.launch {
+      delay(debounceMs)
+      flush()
     }
+  }
+
+  private fun clearPoll() {
+    pollJob?.cancel()
+    pollJob = null
+  }
+
+  private fun ensurePoll() {
+    if (disposed || pollJob != null || nonReadyIds().isEmpty()) return
+    pollJob = scope.launch {
+      delay(pollDelayMs)
+      pollJob = null
+      val ids = nonReadyIds()
+      if (ids.isEmpty()) {
+        pollDelayMs = basePollMs
+        return@launch
+      }
+      dispatch(ids)
+      pollDelayMs = minOf(pollDelayMs * 2, maxPollMs)
+      ensurePoll()
+    }
+  }
+
+  private fun resetPoll() {
+    pollDelayMs = basePollMs
+    clearPoll()
+    ensurePoll()
+  }
+
+  private fun retire(id: String) {
+    state.resolutions.remove(id)
+    latestRequestIds.remove(id)
+    awaiting.remove(id)
+  }
+
+  private fun setReferenced(referencedIds: Collection<String>) {
+    val next = referencedIds.toSet()
+    for (id in referenced) {
+      if (id !in next) retire(id)
+    }
+    referenced = next
   }
 
   private companion object {
-    const val MaxBatchSize = 50
-    const val MaxMaterializationAttempts = 3
+    var instanceSeq = 0
+    const val MaxIdsPerPull = 100
   }
 }
+
+private fun WsReadyAsset.toEditorExternalAsset(): EditorExternalAsset? =
+  when (type) {
+    "image" -> {
+      val w = (width ?: 0L).toInt()
+      val h = (height ?: 0L).toInt()
+      EditorImageAsset(
+        id = id,
+        url = url.orEmpty(),
+        width = w,
+        height = h,
+        ratio = if (h > 0) w.toDouble() / h.toDouble() else 0.0,
+        placeholder = placeholder,
+      )
+    }
+    "file" -> EditorFileAsset(id = id, name = name.orEmpty(), url = url.orEmpty(), size = size)
+    "embed" ->
+      EditorEmbedAsset(
+        id = id,
+        url = url.orEmpty(),
+        title = title,
+        description = description,
+        thumbnailUrl = thumbnailUrl,
+        html = html,
+      )
+    // archived는 이 클라이언트가 원본 콘텐츠를 렌더하지 않으므로 참조 집합에도 넣지 않는다.
+    else -> null
+  }
