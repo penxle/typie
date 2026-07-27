@@ -17,7 +17,10 @@ import kotlinx.coroutines.withContext
 import platform.CoreGraphics.CGRectMake
 import platform.Foundation.NSBundle
 import platform.Foundation.NSData
+import platform.Foundation.NSDate
 import platform.Foundation.NSDocumentDirectory
+import platform.Foundation.NSFileManager
+import platform.Foundation.NSFileModificationDate
 import platform.Foundation.NSItemProvider
 import platform.Foundation.NSProgress
 import platform.Foundation.NSSearchPathForDirectoriesInDomains
@@ -26,6 +29,7 @@ import platform.Foundation.NSURL
 import platform.Foundation.NSUUID
 import platform.Foundation.NSUserDomainMask
 import platform.Foundation.create
+import platform.Foundation.timeIntervalSinceNow
 import platform.Foundation.writeToFile
 import platform.Photos.PHAuthorizationStatusAuthorized
 import platform.Photos.PHAuthorizationStatusDenied
@@ -106,41 +110,40 @@ internal class IOSClipboard : Clipboard {
     val snapshot =
       withContext(Dispatchers.Main) {
         runCatching {
-            val pasteboard = UIPasteboard.generalPasteboard
-            val html =
-              pasteboard
-                .valueForPasteboardType(UTI_HTML)
-                .asPasteboardString()
+          val pasteboard = UIPasteboard.generalPasteboard
+          val html =
+            pasteboard
+              .valueForPasteboardType(UTI_HTML)
+              .asPasteboardString()
+              ?.takeIf(String::isNotEmpty)
+              ?: pasteboard
+                .dataForPasteboardType(UTI_HTML)
+                ?.decodeUtf8()
                 ?.takeIf(String::isNotEmpty)
-                ?: pasteboard
-                  .dataForPasteboardType(UTI_HTML)
-                  ?.decodeUtf8()
-                  ?.takeIf(String::isNotEmpty)
-            if (html != null) {
-              return@runCatching IOSPasteboardSnapshot(
-                html = html,
-                text = pasteboard.string,
-                items = emptyList(),
-                providers = emptyList(),
-              )
-            }
-
-            val pasteboardItems =
-              pasteboard.items.mapNotNull { it as? Map<*, *> }.map { it.toMap() }
-            IOSPasteboardSnapshot(
-              html = null,
-              text =
-                pasteboardItems.firstNotNullOfOrNull { item ->
-                  item[UTI_PLAIN_TEXT].asPasteboardString()
-                } ?: pasteboard.string,
-              items = pasteboardItems,
-              providers =
-                pasteboard.itemProviders
-                  .filterIsInstance<NSItemProvider>()
-                  .takeIf { it.size == pasteboardItems.size }
-                  .orEmpty(),
+          if (html != null) {
+            return@runCatching IOSPasteboardSnapshot(
+              html = html,
+              text = pasteboard.string,
+              items = emptyList(),
+              providers = emptyList(),
             )
           }
+
+          val pasteboardItems = pasteboard.items.mapNotNull { it as? Map<*, *> }.map { it.toMap() }
+          IOSPasteboardSnapshot(
+            html = null,
+            text =
+              pasteboardItems.firstNotNullOfOrNull { item ->
+                item[UTI_PLAIN_TEXT].asPasteboardString()
+              } ?: pasteboard.string,
+            items = pasteboardItems,
+            providers =
+              pasteboard.itemProviders
+                .filterIsInstance<NSItemProvider>()
+                .takeIf { it.size == pasteboardItems.size }
+                .orEmpty(),
+          )
+        }
           .getOrNull()
       } ?: return null
 
@@ -471,15 +474,53 @@ private fun ByteArray.toNSData(): NSData {
 
 private fun NSData.decodeUtf8(): String? = bytes?.readBytes(length.toInt())?.decodeToString()
 
+private const val SHARE_CACHE_EXPIRY_SECONDS = 60.0 * 60.0
+
+private fun sweepShareCache(root: String) {
+  val manager = NSFileManager.defaultManager
+  val entries = manager.contentsOfDirectoryAtPath(root, error = null).orEmpty()
+  for (entry in entries.filterIsInstance<String>()) {
+    val path = root + entry
+    val modifiedAt =
+      manager.attributesOfItemAtPath(path, error = null)?.get(NSFileModificationDate) as? NSDate
+        ?: continue
+    if (-modifiedAt.timeIntervalSinceNow > SHARE_CACHE_EXPIRY_SECONDS) {
+      manager.removeItemAtPath(path, error = null)
+    }
+  }
+}
+
 internal class IOSShare : Share {
-  override suspend fun share(bytes: ByteArray, mimeType: String, anchor: ShareAnchor?): Boolean =
+  override suspend fun share(
+    bytes: ByteArray,
+    filename: String,
+    mimeType: String,
+    anchor: ShareAnchor?,
+  ): Boolean =
     withContext(Dispatchers.Main) {
       runCatching {
           val item: Any =
             if (mimeType.startsWith("image/")) {
               bytes.toUIImage()
             } else {
-              bytes.toNSData()
+              val root = NSTemporaryDirectory() + "share/"
+              val directory = root + NSUUID().UUIDString + "/"
+              val directoryCreated =
+                NSFileManager.defaultManager.createDirectoryAtPath(
+                  path = directory,
+                  withIntermediateDirectories = true,
+                  attributes = null,
+                  error = null,
+                )
+              if (!directoryCreated) return@runCatching false
+
+              sweepShareCache(root)
+
+              val path = directory + sanitizeShareFilename(filename)
+              val written = bytes.toNSData().writeToFile(path, atomically = true)
+              if (!written) return@runCatching false
+
+              NSURL.fileURLWithPath(path)
             }
 
           presentShareSheet(listOf(item), anchor)

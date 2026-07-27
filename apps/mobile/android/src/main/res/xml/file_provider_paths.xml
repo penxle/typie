@@ -3,4 +3,10 @@
   <cache-path
     name="stats_images"
     path="stats-images/" />
+  <cache-path
+    name="share"
+    path="share/" />
+  <cache-path
+    name="clipboard"
+    path="clipboard/" />
 </paths>

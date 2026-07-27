@@ -4,15 +4,19 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.unit.dp
+import co.typie.editor.ffi.LayoutMode
 import co.typie.graphql.fragment.EditorSettingsFontFamily_family
 import co.typie.graphql.type.FontFamilySource
 import co.typie.graphql.type.FontFamilyState
@@ -62,6 +66,44 @@ class EditorSettingsControlsDesktopTest {
 
     onNode(hasText("Family 7") and hasAnyAncestor(hasScrollAction()), useUnmergedTree = true)
       .assertIsDisplayed()
+  }
+
+  @Test
+  fun namedPageSizesOfferMarginChips() = runComposeUiTest {
+    setLayoutSection(LayoutMode.Paginated(794, 1123, 94, 94, 94, 94))
+
+    onNodeWithText("좁게").assertExists()
+    onNodeWithText("보통").assertExists()
+    onNodeWithText("넓게").assertExists()
+  }
+
+  @Test
+  fun customPageSizesOfferNoMarginChips() = runComposeUiTest {
+    setLayoutSection(LayoutMode.Paginated(756, 1058, 94, 94, 94, 94))
+
+    onAllNodesWithText("좁게").assertCountEquals(0)
+    onAllNodesWithText("보통").assertCountEquals(0)
+    onAllNodesWithText("넓게").assertCountEquals(0)
+    onAllNodesWithText("사용자 정의").assertCountEquals(2)
+  }
+
+  private fun ComposeUiTest.setLayoutSection(layout: LayoutMode) {
+    val sheet = Sheet()
+
+    setContent {
+      CompositionLocalProvider(
+        LocalAppColors provides LightColors,
+        LocalAppShadows provides LightAppShadows,
+        LocalThemeMode provides ResolvedThemeMode.Light,
+        LocalHazeBlurStyle provides
+          HazeBlurStyle(blurRadius = 20.dp, noiseFactor = 0f, colorEffects = listOf()),
+      ) {
+        Box(Modifier.size(width = 400.dp, height = 600.dp)) {
+          EditorSettingsLayoutSection(layout = layout, sheet = sheet, onLayoutChange = {})
+          SheetOverlay(sheet)
+        }
+      }
+    }
   }
 
   private fun fontFamily(index: Int) =

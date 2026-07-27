@@ -57,6 +57,7 @@ import co.typie.editor.EditorTapHintOverlay
 import co.typie.editor.LocalEditorZoomController
 import co.typie.editor.body.EditorBody
 import co.typie.editor.body.EditorDocumentLayoutSpec
+import co.typie.editor.body.decodeDocumentLayoutSpec
 import co.typie.editor.body.resolveBaseBottomSpace
 import co.typie.editor.body.resolveEditorBodyGeometry
 import co.typie.editor.body.toEditorDocumentLayoutSpec
@@ -1037,7 +1038,7 @@ fun EditorScreen(entityId: String) {
 
   val layoutEditor = editor ?: runtime.failedEditor
   val preloadedLayoutSpec =
-    remember(document?.layoutMode) { resolveEditorLoadingLayoutSpec(document?.layoutMode) }
+    remember(document?.layoutMode) { decodeDocumentLayoutSpec(document?.layoutMode) }
   val layoutSpec: EditorDocumentLayoutSpec =
     layoutEditor?.state?.rootAttrs?.layoutMode?.toEditorDocumentLayoutSpec()
       ?: preloadedLayoutSpec

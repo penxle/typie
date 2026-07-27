@@ -13,6 +13,7 @@ import com.apollographql.cache.normalized.api.IdCacheResolver
 import com.apollographql.cache.normalized.memory.MemoryCacheFactory
 import com.apollographql.cache.normalized.normalizedCache
 import com.apollographql.ktor.http.KtorHttpEngine
+import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ApolloExperimental::class)
 val Apollo: ApolloClient =
@@ -27,6 +28,7 @@ val Apollo: ApolloClient =
         .wsProtocol(
           GraphQLWsProtocol(connectionPayload = { mapOf("session" to WebSocketSession.create()) })
         )
+        .pingInterval(30.seconds)
         .build()
     )
     .normalizedCache(

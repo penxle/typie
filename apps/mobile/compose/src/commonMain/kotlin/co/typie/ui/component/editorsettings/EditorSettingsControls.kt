@@ -26,9 +26,15 @@ import androidx.compose.ui.unit.sp
 import co.typie.editor.DefaultRootPaginatedLayout
 import co.typie.editor.EditorOption
 import co.typie.editor.EditorValues
+import co.typie.editor.PagePresetCustom
+import co.typie.editor.applyMarginPreset
+import co.typie.editor.applyPageSizePreset
 import co.typie.editor.ffi.LayoutMode
 import co.typie.editor.ffi.Modifier as EditorModifier
 import co.typie.editor.matchWeight
+import co.typie.editor.pageMarginOptionsOf
+import co.typie.editor.pageMarginPresetOf
+import co.typie.editor.pageSizePresetOf
 import co.typie.ext.clickable
 import co.typie.graphql.fragment.EditorSettingsFontFamily_family
 import co.typie.graphql.type.FontFamilySource
@@ -215,25 +221,13 @@ internal fun EditorSettingsLayoutSection(
 
     when (layout) {
       is LayoutMode.Paginated -> {
-        val pageOption =
-          EditorValues.pageLayout.firstOrNull {
-            it.layout.pageWidth == layout.pageWidth && it.layout.pageHeight == layout.pageHeight
-          }
-        val currentPageSize = pageOption?.value ?: "custom"
+        val currentPageSize = pageSizePresetOf(layout)
         val pageSizeOptions =
           EditorValues.pageLayout.map {
             EditorOption(label = it.label.substringBefore(" "), value = it.value)
           }
-        val margins = pageOption?.margins ?: emptyList()
-        val selectedMargin =
-          margins
-            .firstOrNull { margin ->
-              layout.pageMarginTop == margin.top &&
-                layout.pageMarginBottom == margin.bottom &&
-                layout.pageMarginLeft == margin.left &&
-                layout.pageMarginRight == margin.right
-            }
-            ?.value ?: "custom"
+        val margins = pageMarginOptionsOf(layout, fallback = emptyList())
+        val selectedMargin = pageMarginPresetOf(layout, margins)
 
         CardDivider()
 
@@ -241,39 +235,12 @@ internal fun EditorSettingsLayoutSection(
           EditorSettingsChipRow(
             options = pageSizeOptions,
             selected = currentPageSize,
-            onSelect = { value ->
-              val option =
-                EditorValues.pageLayout.firstOrNull { it.value == value }
-                  ?: return@EditorSettingsChipRow
-              val currentMarginName =
-                margins
-                  .firstOrNull { margin ->
-                    layout.pageMarginTop == margin.top &&
-                      layout.pageMarginBottom == margin.bottom &&
-                      layout.pageMarginLeft == margin.left &&
-                      layout.pageMarginRight == margin.right
-                  }
-                  ?.value
-              val newMargin =
-                if (currentMarginName != null) {
-                  option.margins.firstOrNull { it.value == currentMarginName }
-                    ?: option.margins.first { it.value == "normal" }
-                } else {
-                  null
-                }
-              onLayoutChange(
-                LayoutMode.Paginated(
-                  pageWidth = option.layout.pageWidth,
-                  pageHeight = option.layout.pageHeight,
-                  pageMarginTop = newMargin?.top ?: layout.pageMarginTop,
-                  pageMarginBottom = newMargin?.bottom ?: layout.pageMarginBottom,
-                  pageMarginLeft = newMargin?.left ?: layout.pageMarginLeft,
-                  pageMarginRight = newMargin?.right ?: layout.pageMarginRight,
-                )
-              )
-            },
+            onSelect = { value -> onLayoutChange(applyPageSizePreset(layout, value, margins)) },
             trailing = {
-              EditorSettingsTrailingChip(label = "사용자 정의", selected = currentPageSize == "custom") {
+              EditorSettingsTrailingChip(
+                label = "사용자 정의",
+                selected = currentPageSize == PagePresetCustom,
+              ) {
                 sheet.present {
                   EditorPageLayoutSheet(layout = layout) { newLayout ->
                     scope.launch { onLayoutChange(newLayout) }
@@ -290,21 +257,12 @@ internal fun EditorSettingsLayoutSection(
           EditorSettingsChipRow(
             options = margins.map { EditorOption(label = it.label, value = it.value) },
             selected = selectedMargin,
-            onSelect = { value ->
-              val margin = margins.firstOrNull { it.value == value } ?: return@EditorSettingsChipRow
-              onLayoutChange(
-                LayoutMode.Paginated(
-                  pageWidth = layout.pageWidth,
-                  pageHeight = layout.pageHeight,
-                  pageMarginTop = margin.top,
-                  pageMarginBottom = margin.bottom,
-                  pageMarginLeft = margin.left,
-                  pageMarginRight = margin.right,
-                )
-              )
-            },
+            onSelect = { value -> onLayoutChange(applyMarginPreset(layout, value, margins)) },
             trailing = {
-              EditorSettingsTrailingChip(label = "사용자 정의", selected = selectedMargin == "custom") {
+              EditorSettingsTrailingChip(
+                label = "사용자 정의",
+                selected = selectedMargin == PagePresetCustom,
+              ) {
                 sheet.present {
                   EditorPageLayoutSheet(layout = layout) { newLayout ->
                     scope.launch { onLayoutChange(newLayout) }

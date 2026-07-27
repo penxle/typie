@@ -12,6 +12,7 @@ import co.typie.graphql.DocumentActions_DeleteDocument_Mutation
 import co.typie.graphql.DocumentActions_DuplicateDocument_Mutation
 import co.typie.graphql.DocumentActions_UpdateDocumentType_Mutation
 import co.typie.graphql.DocumentActions_UpdateEntityIcon_Mutation
+import co.typie.graphql.DocumentExportSheet_ExportDocument_Mutation
 import co.typie.graphql.DocumentScreen_Query
 import co.typie.graphql.DocumentScreen_UpdateDocumentLock_Mutation
 import co.typie.graphql.PlaceholderResolver
@@ -23,11 +24,14 @@ import co.typie.graphql.builder.buildSite
 import co.typie.graphql.executeMutation
 import co.typie.graphql.text
 import co.typie.graphql.type.DeleteDocumentInput
+import co.typie.graphql.type.DocumentExportFormat
 import co.typie.graphql.type.DocumentType
 import co.typie.graphql.type.DuplicateDocumentInput
 import co.typie.graphql.type.EntityAvailability
 import co.typie.graphql.type.EntityType
 import co.typie.graphql.type.EntityVisibility
+import co.typie.graphql.type.ExportDocumentInput
+import co.typie.graphql.type.ExportDocumentPageLayoutInput
 import co.typie.graphql.type.UpdateDocumentInput
 import co.typie.graphql.type.UpdateDocumentTypeInput
 import co.typie.graphql.type.UpdateEntityIconInput
@@ -122,7 +126,38 @@ class DocumentViewModel : ViewModel(), EntityIconPickerSheetModel {
       DocumentActions_DeleteDocument_Mutation(input = DeleteDocumentInput(documentId = documentId))
     )
   }
+
+  internal suspend fun exportDocument(
+    documentId: String,
+    format: DocumentExportFormat,
+    layout: ExportDocumentPageLayoutInput?,
+  ): Result<DocumentExportFile, Nothing> = result {
+    val response =
+      Apollo.executeMutation(
+        DocumentExportSheet_ExportDocument_Mutation(
+          input =
+            ExportDocumentInput.Builder()
+              .documentId(documentId)
+              .format(format)
+              .layout(layout)
+              .build()
+        ),
+        doNotStore = true,
+      )
+
+    DocumentExportFile(
+      bytes = response.exportDocument.data,
+      filename = response.exportDocument.filename,
+      mimeType = response.exportDocument.mimeType,
+    )
+  }
 }
+
+internal class DocumentExportFile(
+  val bytes: ByteArray,
+  val filename: String,
+  val mimeType: String,
+)
 
 private fun placeholderData() =
   DocumentScreen_Query.Data(PlaceholderResolver) {

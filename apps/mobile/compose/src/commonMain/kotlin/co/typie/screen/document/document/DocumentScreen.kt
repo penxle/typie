@@ -56,6 +56,7 @@ import co.typie.domain.entitytransfer.EntityTransferSource
 import co.typie.domain.subscription.GatedAction
 import co.typie.domain.subscription.SubscriptionService
 import co.typie.domain.subscription.gate
+import co.typie.editor.body.decodeDocumentLayoutSpec
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.comma
@@ -87,7 +88,6 @@ import co.typie.ui.component.dialog.confirm
 import co.typie.ui.component.dialog.error
 import co.typie.ui.component.sheet.LocalSheet
 import co.typie.ui.component.toast.LocalToast
-import co.typie.ui.component.toast.ToastType
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.TopBarDefaults
@@ -124,10 +124,6 @@ fun DocumentScreen(entityId: String) {
   var characterCountExpanded by rememberSaveable(entityId) { mutableStateOf(false) }
   var todayRecordExpanded by rememberSaveable(entityId) { mutableStateOf(false) }
   var documentLockUpdateInFlight by remember(entityId) { mutableStateOf(false) }
-
-  fun showPendingAction(label: String) {
-    toast.show(ToastType.Notification, "$label 기능은 아직 준비 중이에요.")
-  }
 
   fun currentTransferSource(): EntityTransferSource.Document? {
     val resolvedDocument = document ?: return null
@@ -274,6 +270,17 @@ fun DocumentScreen(entityId: String) {
               onMoved = model::refetch,
             )
           }
+        }
+      }
+    }
+    val exportDocument: suspend () -> Unit = {
+      if (!loading && SubscriptionService.gate(sheet, GatedAction.ExportDocument)) {
+        sheet.present {
+          DocumentExportSheet(
+            model = model,
+            documentId = document.id,
+            documentLayout = decodeDocumentLayoutSpec(document.layoutMode),
+          )
         }
       }
     }
@@ -524,7 +531,7 @@ fun DocumentScreen(entityId: String) {
       DocumentActionRow(
         icon = Lucide.FileDown,
         label = "파일로 내보내기",
-        onClick = { showPendingAction("파일로 내보내기") },
+        onClick = exportDocument,
       )
 
       CardDivider(inset = 0.dp, color = AppTheme.colors.borderDefault)

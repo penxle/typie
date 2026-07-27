@@ -3,6 +3,11 @@ package co.typie.editor.body
 import co.typie.editor.ffi.LayoutMode
 import co.typie.editor.ffi.Size as PageSize
 import kotlin.math.round
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.floatOrNull
 
 internal const val PaginatedPageGap = 24f
 
@@ -113,3 +118,26 @@ private fun Float.resolveMeasuredLength(density: Float, minimumPx: Float): Float
   } else {
     this
   }
+
+internal fun decodeDocumentLayoutSpec(encoded: JsonElement?): EditorDocumentLayoutSpec? {
+  val value = encoded as? JsonObject ?: return null
+  return when ((value["type"] as? JsonPrimitive)?.contentOrNull) {
+    "continuous" -> value.positiveFloat("maxWidth")?.let(EditorDocumentLayoutSpec::Continuous)
+    "paginated" ->
+      EditorDocumentLayoutSpec.Paginated(
+        pageWidth = value.positiveFloat("pageWidth") ?: return null,
+        pageHeight = value.positiveFloat("pageHeight") ?: return null,
+        pageMarginTop = value.nonNegativeFloat("pageMarginTop") ?: return null,
+        pageMarginBottom = value.nonNegativeFloat("pageMarginBottom") ?: return null,
+        pageMarginLeft = value.nonNegativeFloat("pageMarginLeft") ?: return null,
+        pageMarginRight = value.nonNegativeFloat("pageMarginRight") ?: return null,
+      )
+    else -> null
+  }
+}
+
+private fun JsonObject.positiveFloat(key: String): Float? =
+  (get(key) as? JsonPrimitive)?.floatOrNull?.takeIf { it.isFinite() && it > 0f }
+
+private fun JsonObject.nonNegativeFloat(key: String): Float? =
+  (get(key) as? JsonPrimitive)?.floatOrNull?.takeIf { it.isFinite() && it >= 0f }

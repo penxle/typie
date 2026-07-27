@@ -10,6 +10,7 @@ import android.os.Environment
 import android.provider.MediaStore
 import androidx.core.content.FileProvider
 import java.io.File
+import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -206,13 +207,24 @@ internal class AndroidFileSystem(private val context: Context) : FileSystem {
     }
 }
 
+private const val SHARE_CACHE_EXPIRY_MILLIS = 60 * 60 * 1000L
+
 internal class AndroidShare(private val context: Context) : Share {
-  override suspend fun share(bytes: ByteArray, mimeType: String, anchor: ShareAnchor?): Boolean =
+  override suspend fun share(
+    bytes: ByteArray,
+    filename: String,
+    mimeType: String,
+    anchor: ShareAnchor?,
+  ): Boolean =
     withContext(Dispatchers.IO) {
       runCatching {
-          val directory = File(context.cacheDir, "share").apply { mkdirs() }
-          val extension = mimeType.substringAfter('/').substringBefore(';')
-          val file = File(directory, "share.$extension")
+          val root = File(context.cacheDir, "share").apply { mkdirs() }
+          val now = System.currentTimeMillis()
+          root.listFiles()?.forEach { entry ->
+            if (now - entry.lastModified() > SHARE_CACHE_EXPIRY_MILLIS) entry.deleteRecursively()
+          }
+          val directory = File(root, UUID.randomUUID().toString()).apply { mkdirs() }
+          val file = File(directory, sanitizeShareFilename(filename))
           file.writeBytes(bytes)
 
           val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)

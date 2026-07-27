@@ -9,6 +9,7 @@ enum class GatedAction {
   RenameEntity,
   ChangeIcon,
   DuplicateDocument,
+  ExportDocument,
   ConvertDocumentType,
   MoveEntity,
   Paste,

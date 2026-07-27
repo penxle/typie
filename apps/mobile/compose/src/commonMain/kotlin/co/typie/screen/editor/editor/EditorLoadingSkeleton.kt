@@ -24,38 +24,8 @@ import co.typie.screen.editor.editor.header.resolveEditorHeaderGeometry
 import co.typie.ui.component.Text
 import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.theme.AppTheme
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.floatOrNull
 
 private const val ContinuousPageHorizontalPadding = 20f
-
-internal fun resolveEditorLoadingLayoutSpec(
-  encodedLayoutMode: JsonElement?
-): EditorDocumentLayoutSpec? {
-  val value = encodedLayoutMode as? JsonObject ?: return null
-  return when ((value["type"] as? JsonPrimitive)?.contentOrNull) {
-    "continuous" -> value.positiveFloat("maxWidth")?.let(EditorDocumentLayoutSpec::Continuous)
-    "paginated" ->
-      EditorDocumentLayoutSpec.Paginated(
-        pageWidth = value.positiveFloat("pageWidth") ?: return null,
-        pageHeight = value.positiveFloat("pageHeight") ?: return null,
-        pageMarginTop = value.nonNegativeFloat("pageMarginTop") ?: return null,
-        pageMarginBottom = value.nonNegativeFloat("pageMarginBottom") ?: return null,
-        pageMarginLeft = value.nonNegativeFloat("pageMarginLeft") ?: return null,
-        pageMarginRight = value.nonNegativeFloat("pageMarginRight") ?: return null,
-      )
-    else -> null
-  }
-}
-
-private fun JsonObject.positiveFloat(key: String): Float? =
-  (get(key) as? JsonPrimitive)?.floatOrNull?.takeIf { it.isFinite() && it > 0f }
-
-private fun JsonObject.nonNegativeFloat(key: String): Float? =
-  (get(key) as? JsonPrimitive)?.floatOrNull?.takeIf { it.isFinite() && it >= 0f }
 
 internal fun hasValidEditorGeometry(
   editorAttached: Boolean,

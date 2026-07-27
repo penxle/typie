@@ -69,10 +69,10 @@ internal class DesktopClipboard : Clipboard {
   override suspend fun paste(): IncomingContentCandidates? =
     withContext(Dispatchers.IO) {
       runCatching {
-          val contents =
-            Toolkit.getDefaultToolkit().systemClipboard.getContents(null) ?: return@runCatching null
-          contents.readIncomingContentCandidates()
-        }
+        val contents =
+          Toolkit.getDefaultToolkit().systemClipboard.getContents(null) ?: return@runCatching null
+        contents.readIncomingContentCandidates()
+      }
         .getOrNull()
     }
 }
@@ -80,12 +80,12 @@ internal class DesktopClipboard : Clipboard {
 internal fun Transferable.readString(flavor: DataFlavor): String? {
   if (!isDataFlavorSupported(flavor)) return null
   return runCatching {
-      when (val data = getTransferData(flavor)) {
-        is String -> data
-        is java.io.Reader -> data.use(java.io.Reader::readText)
-        else -> null
-      }
+    when (val data = getTransferData(flavor)) {
+      is String -> data
+      is java.io.Reader -> data.use(java.io.Reader::readText)
+      else -> null
     }
+  }
     .getOrNull()
 }
 
@@ -233,25 +233,29 @@ internal class DesktopFileSystem : FileSystem {
   ): FileSystemSaveResult =
     withContext(Dispatchers.IO) {
       runCatching {
-          val directory =
-            when (location) {
-              FileSystemSaveLocation.Gallery -> File(System.getProperty("user.home"), "Pictures")
-              FileSystemSaveLocation.Files -> File(System.getProperty("user.home"), "Downloads")
-            }
-          directory.mkdirs()
+        val directory =
+          when (location) {
+            FileSystemSaveLocation.Gallery -> File(System.getProperty("user.home"), "Pictures")
+            FileSystemSaveLocation.Files -> File(System.getProperty("user.home"), "Downloads")
+          }
+        directory.mkdirs()
 
-          val file = uniqueFile(directory, name)
-          file.writeBytes(bytes)
-          FileSystemSaveResult.Success
-        }
+        val file = uniqueFile(directory, name)
+        file.writeBytes(bytes)
+        FileSystemSaveResult.Success
+      }
         .getOrElse { FileSystemSaveResult.Error }
     }
 }
 
 internal class DesktopShare : Share {
   // NOTE: Desktop share flow is not supported yet.
-  override suspend fun share(bytes: ByteArray, mimeType: String, anchor: ShareAnchor?): Boolean =
-    false
+  override suspend fun share(
+    bytes: ByteArray,
+    filename: String,
+    mimeType: String,
+    anchor: ShareAnchor?,
+  ): Boolean = false
 
   override suspend fun share(text: String, anchor: ShareAnchor?): Boolean = false
 }

@@ -3,11 +3,16 @@ package co.typie.graphql
 import com.apollographql.apollo.ApolloClient
 import com.apollographql.apollo.api.Mutation
 import com.apollographql.cache.normalized.FetchPolicy
+import com.apollographql.cache.normalized.doNotStore
 import com.apollographql.cache.normalized.fetchPolicy
 import com.apollographql.cache.normalized.optimisticUpdates
 
-suspend fun <D : Mutation.Data> ApolloClient.executeMutation(mutation: Mutation<D>): D {
-  val response = mutation(mutation).fetchPolicy(FetchPolicy.NetworkOnly).execute()
+suspend fun <D : Mutation.Data> ApolloClient.executeMutation(
+  mutation: Mutation<D>,
+  doNotStore: Boolean = false,
+): D {
+  val response =
+    mutation(mutation).fetchPolicy(FetchPolicy.NetworkOnly).doNotStore(doNotStore).execute()
   val graphError = response.errors?.firstOrNull()
 
   if (response.exception != null) {

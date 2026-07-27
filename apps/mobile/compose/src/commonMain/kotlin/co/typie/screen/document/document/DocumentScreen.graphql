@@ -16,6 +16,7 @@ query DocumentScreen_Query($entityId: ID!) {
         title
         subtitle
         type
+        layoutMode
         locked
         createdAt
         updatedAt
