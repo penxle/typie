@@ -321,6 +321,79 @@ class EditorPublicationHostTest {
     }
 
   @Test
+  fun pageShrinkPreparesPageZeroWhenItRemovesEveryTarget() =
+    runTest(dispatcher) {
+      var pageSizes = listOf(Size(width = 100f, height = 100f), Size(width = 100f, height = 100f))
+      val fake =
+        FakeFfiEditor(
+          onTick = { listOf(EditorEvent.RenderInvalidated) },
+          pageSizesProvider = { pageSizes },
+        )
+      val editor = Editor(fake, this, dispatcher)
+      editor.activateVisualHost(Any())
+      val stale = editor.attachSurface(1, 10L, 100.0, 100.0, 1.0, wakeDelivery = {})
+      advanceUntilIdle()
+      editor.deliverFrame(stale, editorRevision = 0L, frameKey = 1L)
+      advanceUntilIdle()
+      assertEquals(0L, editor.publishedRevision)
+
+      pageSizes = listOf(Size(width = 200f, height = 300f))
+      val update = requireNotNull(editor.update { enqueue(message) })
+      advanceUntilIdle()
+
+      assertEquals(update.revision, editor.appliedRevision)
+      assertEquals(0L, editor.publishedRevision)
+      assertEquals(0, editor.preparingPage)
+
+      var replacementFrameKey: FrameKey? = null
+      val replacement =
+        editor.attachSurface(0, 11L, 100.0, 100.0, 1.0) { frameKey ->
+          replacementFrameKey = frameKey
+        }
+      advanceUntilIdle()
+      assertEquals(FakeFfiEditor.SurfaceAttachCall(0, 200.0, 300.0, 1.0), fake.attachCalls.last())
+      assertEquals(0, editor.preparingPage)
+      editor.deliverFrame(
+        replacement,
+        editorRevision = update.revision,
+        frameKey = requireNotNull(replacementFrameKey).value,
+      )
+      advanceUntilIdle()
+
+      assertEquals(update.revision, editor.publishedRevision)
+      assertNull(editor.preparingPage)
+    }
+
+  @Test
+  fun terminalFailureCancelsPreparationWithoutDroppingThePublishedBundle() =
+    runTest(dispatcher) {
+      var pageSizes = listOf(Size(width = 100f, height = 100f), Size(width = 100f, height = 100f))
+      val fake =
+        FakeFfiEditor(
+          onTick = { listOf(EditorEvent.RenderInvalidated) },
+          pageSizesProvider = { pageSizes },
+        )
+      val editor = Editor(fake, this, dispatcher)
+      editor.activateVisualHost(Any())
+      val stale = editor.attachSurface(1, 10L, 100.0, 100.0, 1.0, wakeDelivery = {})
+      advanceUntilIdle()
+      editor.deliverFrame(stale, editorRevision = 0L, frameKey = 1L)
+      advanceUntilIdle()
+      val publishedBeforeFailure = requireNotNull(editor.publishedBundle)
+
+      pageSizes = listOf(Size(width = 200f, height = 300f))
+      requireNotNull(editor.update { enqueue(message) })
+      advanceUntilIdle()
+      assertEquals(0, editor.preparingPage)
+
+      editor.fail(IllegalStateException("test failure"))
+      advanceUntilIdle()
+
+      assertNull(editor.preparingPage)
+      assertSame(publishedBeforeFailure, editor.publishedBundle)
+    }
+
+  @Test
   fun stalePublishedSizeCallbackDoesNotReplaceLatestAppliedTarget() =
     runTest(dispatcher) {
       var pageHeight = 100f

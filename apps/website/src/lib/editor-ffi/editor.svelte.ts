@@ -12,7 +12,7 @@ import { TouchGestureController } from './gesture.svelte';
 import { readClipboardRich, writeClipboardPayload } from './handlers/clipboard';
 import { encodeLengthPrefixedBlobs } from './length-prefix';
 import { isMutatingMessage } from './message-gate';
-import { canPublish, proofSatisfies } from './publication';
+import { canPublish, preparingPage, proofSatisfies } from './publication';
 import { fanOutResourceUpdate, register, snapshot, unregister } from './registry';
 import { probeEvent, probeRendered } from './surface-probe';
 import { zoomDiffers } from './zoom';
@@ -318,6 +318,7 @@ export class Editor {
   #admission: EditorRequest | undefined;
   #surfaceKey = 0;
   #visualHost: VisualHost | undefined;
+  #preparingPage = $state<number | undefined>(undefined);
   // eslint-disable-next-line svelte/prefer-svelte-reactivity
   #receipts = new Map<number, UpdateReceipt>();
   // eslint-disable-next-line svelte/prefer-svelte-reactivity
@@ -717,6 +718,15 @@ export class Editor {
           }
         }
       }
+      const publishedRevision = this.published?.snapshot.revision;
+      this.#preparingPage ??= preparingPage(
+        this.#visualHost !== undefined,
+        (this.published?.frames.size ?? 0) > 0,
+        this.#applied.revision,
+        publishedRevision,
+        this.#applied.pageSizes.length,
+        this.#visualHost?.targets.size ?? 0,
+      );
       if (
         !canPublish(
           this.#applied.revision,
@@ -743,6 +753,7 @@ export class Editor {
 
       const bundle: PublishedBundle = { snapshot: this.#applied, frames };
       this.published = bundle;
+      this.#preparingPage = undefined;
       this.#pullToolbarStateIfReady();
 
       for (const target of this.#visualHost?.targets.values() ?? []) {
@@ -840,6 +851,7 @@ export class Editor {
     const reason = error ?? new Error('Editor operation failed');
     this.#failure = reason;
     this.#failed = true;
+    this.#preparingPage = undefined;
     this.#stopRuntime();
     unregister(this);
     for (const receipt of this.#receipts.values()) {
@@ -1459,6 +1471,10 @@ export class Editor {
     return this.published?.snapshot.revision;
   }
 
+  get preparingPage(): number | undefined {
+    return this.#preparingPage;
+  }
+
   awaitPublishedRevision(revision: number, options?: { requireFrame?: boolean }): Promise<EditorPublicationResult> {
     return this.#awaitPublished(revision, undefined, options?.requireFrame);
   }
@@ -1722,6 +1738,7 @@ export class Editor {
           }
           this.#removeAppliedPageData(this.#visualHost.targets.keys());
           this.#visualHost = undefined;
+          this.#preparingPage = undefined;
           for (const waiter of this.#publicationWaiters) {
             if (waiter.signal && waiter.onAbort) waiter.signal.removeEventListener('abort', waiter.onAbort);
             waiter.resolve({ type: 'no_host' });
@@ -2421,6 +2438,7 @@ export class Editor {
     }
     this.#publicationWaiters.clear();
     this.#visualHost = undefined;
+    this.#preparingPage = undefined;
     this.#listeners.clear();
     this.#contextMenuContributors.clear();
 

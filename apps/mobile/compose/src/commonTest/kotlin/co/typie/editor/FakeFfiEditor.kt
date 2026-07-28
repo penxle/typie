@@ -106,6 +106,13 @@ internal class FakeFfiEditor(
 ) : co.typie.editor.ffi.Editor {
   data class EnqueuedRequest(val id: RequestId, val messages: List<Message>)
 
+  data class SurfaceAttachCall(
+    val page: Int,
+    val width: Double,
+    val height: Double,
+    val scaleFactor: Double,
+  )
+
   data class SurfaceResizeCall(
     val page: Int,
     val width: Double,
@@ -140,6 +147,7 @@ internal class FakeFfiEditor(
   var tickCount: Int = 0
   var renderCount: Int = 0
   var lastRenderedPage: Int? = null
+  val attachCalls = mutableListOf<SurfaceAttachCall>()
   val resizeCalls = mutableListOf<SurfaceResizeCall>()
   val surfaceEvents = mutableListOf<String>()
   var trackedRangesCallCount: Int = 0
@@ -316,6 +324,7 @@ internal class FakeFfiEditor(
     scaleFactor: Double,
   ) {
     surfaceEvents += "attach:$page:$handle"
+    attachCalls += SurfaceAttachCall(page, width, height, scaleFactor)
     attached += page
   }
 

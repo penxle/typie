@@ -1,7 +1,8 @@
-import { tick } from 'svelte';
+import { mount, tick, unmount } from 'svelte';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Editor } from './editor.svelte';
 import { createTrackedEffect } from './editor-effect-harness.svelte';
+import PageLifecycleTestHost from './page-lifecycle-test-host.svelte';
 import { snapshot } from './registry';
 import type { Size, TickResult, TrackedRange } from '@typie/editor-ffi/browser';
 
@@ -30,6 +31,24 @@ vi.mock('./gesture.svelte', () => ({
 
 vi.mock('./fonts', () => ({
   fontDataMissingHandler: vi.fn(),
+}));
+
+vi.mock('./components/ExternalElement.svelte', () => ({
+  default: () => {
+    // Surface lifecycle coverage does not render external-element content.
+  },
+}));
+
+vi.mock('./components/LinkOverlay.svelte', () => ({
+  default: () => {
+    // Surface lifecycle coverage does not render link content.
+  },
+}));
+
+vi.mock('./components/TableOverlay.svelte', () => ({
+  default: () => {
+    // Surface lifecycle coverage does not render table content.
+  },
 }));
 
 type FakeCore = ReturnType<typeof createCore>;
@@ -96,6 +115,44 @@ async function expectPending(promise: Promise<unknown> | undefined): Promise<voi
   );
   await Promise.resolve();
   expect(settled).toBe(false);
+}
+
+class OffscreenIntersectionObserver {
+  private readonly callback: IntersectionObserverCallback;
+
+  constructor(callback: IntersectionObserverCallback) {
+    this.callback = callback;
+  }
+
+  observe(target: Element): void {
+    this.callback([{ isIntersecting: false, target } as IntersectionObserverEntry], this as never);
+  }
+
+  unobserve(): void {
+    // Each test observer delivers its only entry synchronously.
+  }
+
+  disconnect(): void {
+    // Each test observer delivers its only entry synchronously.
+  }
+
+  takeRecords(): IntersectionObserverEntry[] {
+    return [];
+  }
+}
+
+class PassiveResizeObserver {
+  observe(): void {
+    // Root geometry is fixed for this lifecycle test.
+  }
+
+  unobserve(): void {
+    // Root geometry is fixed for this lifecycle test.
+  }
+
+  disconnect(): void {
+    // Root geometry is fixed for this lifecycle test.
+  }
 }
 
 describe('Editor guarded core invocation', () => {
@@ -860,6 +917,138 @@ describe('Editor guarded core invocation', () => {
 
     releaseHost();
     editor.destroy();
+  });
+
+  it('requests a preparing surface when page shrink removes every active target', async () => {
+    const core = createCore();
+    core.page_sizes.mockReturnValue([
+      { width: 100, height: 100 },
+      { width: 100, height: 100 },
+    ]);
+    core.page_backing_sizes.mockReturnValue([
+      { width: 100, height: 100 },
+      { width: 100, height: 100 },
+    ]);
+    const { editor } = await createEditor(core);
+    const releaseHost = editor.activateVisualHost();
+    editor.attachSurface(1, document.createElement('canvas'), 100, 100);
+    expect(editor.publishedRevision).toBe(1);
+
+    core.page_sizes.mockReturnValue([{ width: 200, height: 300 }]);
+    core.page_backing_sizes.mockReturnValue([{ width: 200, height: 400 }]);
+    core.tick.mockReturnValue({
+      revision: { value: 2 },
+      events: [{ type: 'state_changed', fields: ['page_sizes'] }, { type: 'render_invalidated' }],
+      request_outcomes: [],
+    });
+
+    editor.enqueue({ type: 'history', op: { type: 'undo' } });
+    frames.at(-1)?.(0);
+
+    expect(editor.appliedRevision).toBe(2);
+    expect(editor.publishedRevision).toBe(1);
+    expect(editor.preparingPage).toBe(0);
+
+    editor.attachSurface(0, document.createElement('canvas'), 200, 400);
+
+    expect(editor.publishedRevision).toBe(2);
+    expect(editor.preparingPage).toBeUndefined();
+
+    releaseHost();
+    editor.destroy();
+  });
+
+  it('keeps page preparation latched until proof and cancels it on terminal failure without dropping the published frame', async () => {
+    const core = createCore();
+    core.page_sizes.mockReturnValue([{ width: 100, height: 100 }]);
+    core.page_backing_sizes.mockReturnValue([{ width: 100, height: 100 }]);
+    const { editor } = await createEditor(core);
+    const releaseHost = editor.activateVisualHost();
+    const publishedCanvas = document.createElement('canvas');
+    editor.attachSurface(0, publishedCanvas, 100, 100);
+
+    editor.detachSurface(0);
+    core.page_sizes.mockReturnValue([{ width: 200, height: 300 }]);
+    core.page_backing_sizes.mockReturnValue([{ width: 200, height: 400 }]);
+    core.tick.mockReturnValue({
+      revision: { value: 2 },
+      events: [{ type: 'state_changed', fields: ['page_sizes'] }, { type: 'render_invalidated' }],
+      request_outcomes: [],
+    });
+    editor.enqueue({ type: 'history', op: { type: 'undo' } });
+    frames.at(-1)?.(0);
+    expect(editor.preparingPage).toBe(0);
+
+    core.render_surface.mockReturnValueOnce(undefined);
+    const preparingCanvas = document.createElement('canvas');
+    editor.attachSurface(0, preparingCanvas, 100, 100);
+    expect(core.attach_surface).toHaveBeenLastCalledWith(0, preparingCanvas, 200, 400, 1);
+    expect(editor.preparingPage).toBe(0);
+    expect(editor.publishedSurfaceCanvas(0)).toBe(publishedCanvas);
+
+    editor.surfaceReplacementFailed(0);
+    expect(editor.preparingPage).toBeUndefined();
+    expect(editor.publishedSurfaceCanvas(0)).toBe(publishedCanvas);
+
+    releaseHost();
+    editor.destroy();
+  });
+
+  it('activates an offscreen page while the Host is preparing its replacement surface', async () => {
+    const core = createCore();
+    core.page_sizes.mockReturnValue([{ width: 100, height: 100 }]);
+    core.page_backing_sizes.mockReturnValue([{ width: 100, height: 100 }]);
+    const { editor } = await createEditor(core);
+    const releaseHost = editor.activateVisualHost();
+    const initialCanvas = document.createElement('canvas');
+    editor.attachSurface(0, initialCanvas, 100, 100);
+    editor.detachSurface(0);
+    core.attach_surface.mockClear();
+    core.detach_surface.mockClear();
+    core.render_surface.mockReset().mockReturnValue(undefined);
+
+    vi.stubGlobal('IntersectionObserver', OffscreenIntersectionObserver);
+    vi.stubGlobal('ResizeObserver', PassiveResizeObserver);
+    const rectSpy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      return this.dataset.pageLifecycleScrollRoot === undefined ? new DOMRect(0, 300, 200, 100) : new DOMRect(0, 0, 100, 100);
+    });
+    const target = document.createElement('div');
+    document.body.append(target);
+    const component = mount(PageLifecycleTestHost, { target, props: { editor } });
+
+    try {
+      await tick();
+      expect(core.attach_surface).not.toHaveBeenCalled();
+
+      core.page_sizes.mockReturnValue([{ width: 200, height: 300 }]);
+      core.page_backing_sizes.mockReturnValue([{ width: 200, height: 400 }]);
+      core.tick.mockReturnValue({
+        revision: { value: 2 },
+        events: [{ type: 'state_changed', fields: ['page_sizes'] }, { type: 'render_invalidated' }],
+        request_outcomes: [],
+      });
+      editor.enqueue({ type: 'history', op: { type: 'undo' } });
+      frames.at(-1)?.(0);
+      await tick();
+
+      expect(editor.preparingPage).toBe(0);
+      expect(core.attach_surface).toHaveBeenCalledExactlyOnceWith(0, expect.any(HTMLCanvasElement), 200, 400, 1);
+
+      core.render_surface.mockReturnValue({ value: 2 });
+      editor.invalidateSurface(0);
+      await tick();
+
+      expect(editor.publishedRevision).toBe(2);
+      expect(editor.preparingPage).toBeUndefined();
+      expect(core.detach_surface).toHaveBeenCalledExactlyOnceWith(0);
+    } finally {
+      await unmount(component);
+      target.remove();
+      rectSpy.mockRestore();
+      releaseHost();
+      editor.destroy();
+      vi.unstubAllGlobals();
+    }
   });
 
   it('materializes table and link geometry only for active page targets', async () => {

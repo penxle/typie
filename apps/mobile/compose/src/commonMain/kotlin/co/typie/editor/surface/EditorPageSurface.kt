@@ -119,7 +119,8 @@ internal fun EditorPageSurface(
   val display = resolveFrameDisplay(publishedFrame, desiredPixelSize)
   val frame = display.frame
   val committedPixelSize = display.pixelSize
-  var renderActive by remember(editor, page) { mutableStateOf(false) }
+  var gateActive by remember(editor, page) { mutableStateOf(false) }
+  val renderActive = gateActive || editor.preparingPage == page
 
   val displayedWidthPxInt =
     round(widthDouble * density.density.toDouble() * displayZoom.toDouble())
@@ -203,7 +204,7 @@ internal fun EditorPageSurface(
       modifier
         .width(displayedWidthDp)
         .height(displayedHeightDp)
-        .editorPageRenderGate { renderActive = it }
+        .editorPageRenderGate { gateActive = it }
         .then(chromeModifier)
         .then(debugOverlayModifier)
   ) {

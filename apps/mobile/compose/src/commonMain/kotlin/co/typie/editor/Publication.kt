@@ -47,6 +47,27 @@ internal object Publication {
       proof.surfaceKey == target.key &&
       (requiredRevision == null || proof.editorRevision >= requiredRevision)
 
+  fun preparingPage(
+    hasVisualHost: Boolean,
+    hasPublishedFrames: Boolean,
+    appliedRevision: Long,
+    publishedRevision: Long?,
+    appliedPageCount: Int,
+    targetCount: Int,
+  ): Int? =
+    if (
+      hasVisualHost &&
+        hasPublishedFrames &&
+        publishedRevision != null &&
+        appliedRevision > publishedRevision &&
+        appliedPageCount > 0 &&
+        targetCount == 0
+    ) {
+      0
+    } else {
+      null
+    }
+
   fun canPublish(
     hasVisualHost: Boolean,
     hasPublishedFrames: Boolean,

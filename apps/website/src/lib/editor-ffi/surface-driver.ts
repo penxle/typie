@@ -13,15 +13,13 @@ export type SurfaceDriverEffects<C> = {
   replacementFailed: () => void;
 };
 
-export type VisibilityState = { inAcquire: boolean; inRelease: boolean };
-
 type Slot<C> = {
   canvas: C;
   removeListeners: () => void;
 };
 
-// Owns canvas lifetime, visibility, and delivery only. Editor owns publication facts,
-// requirements, proofs, waiters, and scheduling.
+// Web surface effect boundary: owns canvas activation/lifetime, attach/recovery,
+// and published-canvas promotion. Editor owns publication policy and proof acceptance.
 export function createSurfaceDriver<C>(effects: SurfaceDriverEffects<C>) {
   let target: Slot<C> | undefined;
   let displayed: C | undefined;
@@ -84,10 +82,9 @@ export function createSurfaceDriver<C>(effects: SurfaceDriverEffects<C>) {
   };
 
   return {
-    reconcile(state: VisibilityState): void {
-      const shouldBeLive = target || displayed ? state.inRelease : state.inAcquire;
-      wantsLive = shouldBeLive;
-      if (!shouldBeLive) {
+    setActive(active: boolean): void {
+      wantsLive = active;
+      if (!active) {
         park();
       } else if (!target) {
         mount();
@@ -121,8 +118,26 @@ export function createSurfaceDriver<C>(effects: SurfaceDriverEffects<C>) {
       if (!wantsLive) return;
       mount(true);
     },
+    freeze(): void {
+      // Terminal cleanup must not park the last published canvas. The Host has
+      // already stopped surface work, so only the unpublished target is released.
+      wantsLive = false;
+      replacingUnavailableTarget = false;
+      ownsHostTarget = false;
+      const current = target;
+      if (!current) return;
+      current.removeListeners();
+      target = undefined;
+      if (current.canvas !== displayed) {
+        effects.releaseCpuBacking(current.canvas);
+        effects.removeNode(current.canvas);
+      }
+    },
     isAttached(): boolean {
       return target !== undefined;
+    },
+    hasSurface(): boolean {
+      return target !== undefined || displayed !== undefined;
     },
     destroy(): void {
       wantsLive = false;

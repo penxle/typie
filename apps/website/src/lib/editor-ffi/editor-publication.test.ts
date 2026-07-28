@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canPublish, proofSatisfies } from './publication';
+import { canPublish, preparingPage, proofSatisfies } from './publication';
 import type { PublicationTarget } from './publication';
 
 describe('editor publication', () => {
@@ -59,6 +59,15 @@ describe('editor publication', () => {
   it('keeps a prior framed publication when the active host temporarily has zero targets', () => {
     expect(canPublish(10, 9, { targets: new Map() }, true, true)).toBe(false);
     expect(canPublish(10, undefined, { targets: new Map() }, true, false)).toBe(true);
+  });
+
+  it('requests page zero only when a newer applied layout strands a framed publication without targets', () => {
+    expect(preparingPage(true, true, 10, 9, 1, 0)).toBe(0);
+    expect(preparingPage(true, false, 10, 9, 1, 0)).toBeUndefined();
+    expect(preparingPage(true, true, 9, 9, 1, 0)).toBeUndefined();
+    expect(preparingPage(true, true, 10, 9, 0, 0)).toBeUndefined();
+    expect(preparingPage(true, true, 10, 9, 1, 1)).toBeUndefined();
+    expect(preparingPage(false, true, 10, 9, 1, 0)).toBeUndefined();
   });
 
   it('republishes a replacement target at the same revision but not a no-change reevaluation', () => {

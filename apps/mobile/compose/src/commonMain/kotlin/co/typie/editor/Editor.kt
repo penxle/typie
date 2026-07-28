@@ -117,6 +117,9 @@ internal constructor(
   val publishedRevision: Long?
     get() = published?.snapshot?.version
 
+  internal var preparingPage: Int? by mutableStateOf(null)
+    private set
+
   internal var inputRecorder: EditorInputRecorder? = null
 
   // Selection-handle drags pause per-tick IME notifications: each one ships the
@@ -675,6 +678,7 @@ internal constructor(
       mutex.withPriorityLock(escalationMillis = 0) {
         if (visualHost?.token !== token) return@withPriorityLock
         visualHost = null
+        preparingPage = null
         refreshRetainedFrames()
         publicationWaiters.exchange(persistentListOf()).forEach { it.completion.complete(NoHost) }
       }
@@ -982,6 +986,7 @@ internal constructor(
   private fun publishIfReady() {
     val host = visualHost
     if (host == null) {
+      preparingPage = null
       refreshRetainedFrames()
       return
     }
@@ -996,7 +1001,19 @@ internal constructor(
           available = page.available,
         )
       }
-    val publishedRevision = published?.snapshot?.version ?: 0L
+    val currentPublishedRevision = published?.snapshot?.version
+    if (preparingPage == null) {
+      preparingPage =
+        Publication.preparingPage(
+          hasVisualHost = true,
+          hasPublishedFrames = published?.frames?.isNotEmpty() == true,
+          appliedRevision = appliedState.version,
+          publishedRevision = currentPublishedRevision,
+          appliedPageCount = appliedState.pageSizes.size,
+          targetCount = host.pages.size,
+        )
+    }
+    val publishedRevision = currentPublishedRevision ?: 0L
     if (
       !Publication.canPublish(
         hasVisualHost = true,
@@ -1015,6 +1032,7 @@ internal constructor(
       host.pages.mapNotNull { (page, record) -> record.frame?.let { page to it } }.toMap()
     val bundle = PublishedBundle(snapshot = appliedState, frames = frames)
     published = bundle
+    preparingPage = null
     host.pages.values.forEach {
       it.requiredRevision = null
       it.failedRevision = null
@@ -1213,6 +1231,7 @@ internal constructor(
         waiters = publicationWaiters.exchange(persistentListOf())
         edits = queuedLocalEdits.exchange(persistentListOf())
         visualHost = null
+        preparingPage = null
         retainedFrameBitmaps.store(persistentMapOf())
       }
       receipts.forEach { it.completeExceptionally(error) }
@@ -1375,6 +1394,7 @@ internal constructor(
         receipts = requestReceipts.exchange(persistentMapOf()).values
         waiters = publicationWaiters.exchange(persistentListOf())
         edits = queuedLocalEdits.exchange(persistentListOf())
+        preparingPage = null
       }
       receipts.forEach { it.completeExceptionally(error) }
       waiters.forEach { it.completion.completeExceptionally(error) }

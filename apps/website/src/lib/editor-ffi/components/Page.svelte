@@ -95,7 +95,7 @@
       {@attach (wrapper) => {
         if (!editor) return;
 
-        let manager: ReturnType<typeof createSurfaceDriver<HTMLCanvasElement>>;
+        let driver: ReturnType<typeof createSurfaceDriver<HTMLCanvasElement>>;
         let isVisible = false;
         let syncSeeded = false;
 
@@ -110,7 +110,7 @@
             canvas.style.height = `${cssBackingHeight}px`;
           },
           attach: (canvas) => {
-            const backend = editor.attachSurface(page, canvas, width, backingHeight, () => manager.replace());
+            const backend = editor.attachSurface(page, canvas, width, backingHeight, () => driver.replace());
             probeAttach(editor, page, canvas);
             if (backend === 'cpu') return 'cpu';
             return backend === 'cpu-oversized' ? 'cpu-oversized' : 'none';
@@ -147,19 +147,19 @@
           replacementFailed: () => editor.surfaceReplacementFailed(page),
         };
 
-        manager = createSurfaceDriver(effects);
+        driver = createSurfaceDriver(effects);
         const stopPublishedSync = $effect.root(() => {
           $effect(() => {
-            manager.syncPublished(editor.publishedSurfaceCanvas(page));
+            driver.syncPublished(editor.publishedSurfaceCanvas(page));
           });
         });
 
         // A detached target has no editor-owned requirement. Visibility recovery
         // only recreates the target; attachSurface establishes its fresh requirement.
         const onVisible = () => {
-          if (document.visibilityState === 'visible') manager.resume();
+          if (document.visibilityState === 'visible') driver.resume();
         };
-        const onPageShow = () => manager.resume();
+        const onPageShow = () => driver.resume();
         document.addEventListener('visibilitychange', onVisible);
         window.addEventListener('pageshow', onPageShow);
 
@@ -171,9 +171,39 @@
           let observers: IntersectionObserver[] = [];
           let seeded = 0;
           const state = { inAcquire: false, inRelease: false };
+          const measureVisibility = () => {
+            const rect = wrapper.getBoundingClientRect();
+            const rootRect = root === null ? { top: 0, bottom: window.innerHeight } : root.getBoundingClientRect();
+            const viewportHeight = rootRect.bottom - rootRect.top;
+            state.inAcquire = rect.bottom > rootRect.top - viewportHeight && rect.top < rootRect.bottom + viewportHeight;
+            state.inRelease = rect.bottom > rootRect.top - 1.5 * viewportHeight && rect.top < rootRect.bottom + 1.5 * viewportHeight;
+            return { rect, rootRect };
+          };
+          const updateDriverActive = () => {
+            if (editor.terminal) return;
+            const withinActiveRange = driver.hasSurface() ? state.inRelease : state.inAcquire;
+            driver.setActive(editor.preparingPage === page || withinActiveRange);
+          };
+          const stopHostSync = $effect.root(() => {
+            let wasPreparing = false;
+            $effect(() => {
+              if (editor.terminal) return;
+              const preparing = editor.preparingPage === page;
+              if (preparing === wasPreparing) return;
+              wasPreparing = preparing;
+              if (!preparing) {
+                // Publication and preparation settle in the same Host turn. Promote
+                // the exact published canvas before normal visibility may park it.
+                driver.syncPublished(editor.publishedSurfaceCanvas(page));
+                measureVisibility();
+              }
+              updateDriverActive();
+            });
+          });
 
           let buildEpoch = 0;
           const build = () => {
+            if (disposed) return;
             const epoch = ++buildEpoch;
             for (const observer of observers) observer.disconnect();
             observers = [];
@@ -183,14 +213,14 @@
               let seededSelf = false;
               const observer = new IntersectionObserver(
                 (entries) => {
-                  if (epoch !== buildEpoch) return;
+                  if (disposed || epoch !== buildEpoch) return;
                   apply(entries.at(-1)?.isIntersecting ?? false);
                   if (seed && !seededSelf) {
                     seededSelf = true;
                     seeded += 1;
                   }
                   if (seeded >= 3 && !disposed) {
-                    manager.reconcile({ ...state });
+                    updateDriverActive();
                   }
                 },
                 { root, rootMargin: margin, threshold: 0 },
@@ -219,16 +249,12 @@
           // page born under the caret presents in its first frame.
           if (!syncSeeded) {
             syncSeeded = true;
-            const rect = wrapper.getBoundingClientRect();
-            const rootRect = root === null ? { top: 0, bottom: window.innerHeight } : root.getBoundingClientRect();
-            const viewportHeight = rootRect.bottom - rootRect.top;
-            const inAcquire = rect.bottom > rootRect.top - viewportHeight && rect.top < rootRect.bottom + viewportHeight;
-            if (inAcquire) {
-              state.inAcquire = true;
+            const { rect, rootRect } = measureVisibility();
+            if (state.inAcquire) {
               state.inRelease = true;
               isVisible = rect.bottom > rootRect.top && rect.top < rootRect.bottom;
               overlaysVisible = isVisible;
-              manager.reconcile({ ...state });
+              updateDriverActive();
             }
           }
           let resize: ResizeObserver | null = null;
@@ -244,6 +270,7 @@
 
           return () => {
             disposed = true;
+            stopHostSync();
             resize?.disconnect();
             if (root === null) {
               window.removeEventListener('resize', rebuild);
@@ -254,22 +281,27 @@
         });
 
         $effect.pre(() => {
+          if (editor.terminal) {
+            driver.syncPublished(editor.publishedSurfaceCanvas(page));
+            driver.freeze();
+            return;
+          }
           void editor.surfaceScaleFactor;
           void width;
           void backingHeight;
-          if (!manager.isAttached()) {
-            manager.replace();
+          if (!driver.isAttached()) {
+            driver.replace();
             return;
           }
-          if (editor.surfaceConfigMatches(page, width, backingHeight)) manager.restyle();
-          else manager.replace();
+          if (editor.surfaceConfigMatches(page, width, backingHeight)) driver.restyle();
+          else driver.replace();
         });
 
         return () => {
           document.removeEventListener('visibilitychange', onVisible);
           window.removeEventListener('pageshow', onPageShow);
           stopPublishedSync();
-          manager.destroy();
+          driver.destroy();
         };
       }}
     ></div>

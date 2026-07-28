@@ -2,6 +2,7 @@ package co.typie.editor
 
 import co.typie.editor.ffi.FrameKey
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -70,6 +71,71 @@ class PublicationTest {
         appliedRevision = 2,
         publishedRevision = 1,
         pages = emptyList(),
+      )
+    )
+  }
+
+  @Test
+  fun pageZeroIsPreparedOnlyWhenANewerAppliedLayoutStrandsAFramedPublication() {
+    assertEquals(
+      0,
+      Publication.preparingPage(
+        hasVisualHost = true,
+        hasPublishedFrames = true,
+        appliedRevision = 10,
+        publishedRevision = 9,
+        appliedPageCount = 1,
+        targetCount = 0,
+      ),
+    )
+    assertNull(
+      Publication.preparingPage(
+        hasVisualHost = true,
+        hasPublishedFrames = false,
+        appliedRevision = 10,
+        publishedRevision = 9,
+        appliedPageCount = 1,
+        targetCount = 0,
+      )
+    )
+    assertNull(
+      Publication.preparingPage(
+        hasVisualHost = true,
+        hasPublishedFrames = true,
+        appliedRevision = 9,
+        publishedRevision = 9,
+        appliedPageCount = 1,
+        targetCount = 0,
+      )
+    )
+    assertNull(
+      Publication.preparingPage(
+        hasVisualHost = true,
+        hasPublishedFrames = true,
+        appliedRevision = 10,
+        publishedRevision = 9,
+        appliedPageCount = 0,
+        targetCount = 0,
+      )
+    )
+    assertNull(
+      Publication.preparingPage(
+        hasVisualHost = true,
+        hasPublishedFrames = true,
+        appliedRevision = 10,
+        publishedRevision = 9,
+        appliedPageCount = 1,
+        targetCount = 1,
+      )
+    )
+    assertNull(
+      Publication.preparingPage(
+        hasVisualHost = false,
+        hasPublishedFrames = true,
+        appliedRevision = 10,
+        publishedRevision = 9,
+        appliedPageCount = 1,
+        targetCount = 0,
       )
     )
   }

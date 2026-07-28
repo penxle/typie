@@ -20,6 +20,27 @@ export function proofSatisfies(target: PublicationTarget): boolean {
   return target.proof !== undefined && target.proof.revision >= target.requiredRevision && target.proof.surfaceKey === target.key;
 }
 
+export function preparingPage(
+  hasVisualHost: boolean,
+  hasPublishedFrames: boolean,
+  appliedRevision: number,
+  publishedRevision: number | undefined,
+  appliedPageCount: number,
+  targetCount: number,
+): number | undefined {
+  if (
+    hasVisualHost &&
+    hasPublishedFrames &&
+    publishedRevision !== undefined &&
+    appliedRevision > publishedRevision &&
+    appliedPageCount > 0 &&
+    targetCount === 0
+  ) {
+    return 0;
+  }
+  return undefined;
+}
+
 export function canPublish(
   appliedRevision: number,
   publishedRevision: number | undefined,

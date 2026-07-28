@@ -7,8 +7,8 @@ import { svg } from '@typie/lib/vite';
 import mearie from 'mearie/vite';
 import { FileSystemIconLoader } from 'unplugin-icons/loaders';
 import icons from 'unplugin-icons/vite';
-import { defineConfig } from 'vite';
-import type { Plugin, UserConfig } from 'vite';
+import { defaultClientConditions, defineConfig } from 'vite';
+import type { ConfigEnv, Plugin, UserConfig } from 'vite';
 
 const currentDir = fileURLToPath(new URL('.', import.meta.url));
 const editorPkgDir = path.resolve(currentDir, '../../crates/editor/pkg');
@@ -50,7 +50,7 @@ const wasmReloadPlugin = (): Plugin => {
   };
 };
 
-const config = {
+const config = ({ mode }: ConfigEnv) => ({
   clearScreen: false,
   plugins: [
     svg(),
@@ -68,6 +68,7 @@ const config = {
   optimizeDeps: {
     exclude: ['@typie/editor', '@typie/editor-ffi'],
   },
+  ...(mode === 'test' && { resolve: { conditions: [...defaultClientConditions] } }),
   server: {
     port: 4000,
     strictPort: true,
@@ -78,7 +79,8 @@ const config = {
   test: {
     environment: 'jsdom',
     include: ['src/**/*.test.ts'],
+    setupFiles: ['./src/vitest-setup.ts'],
   },
-};
+});
 
-export default defineConfig(config as UserConfig);
+export default defineConfig((env) => config(env) as UserConfig);

@@ -60,9 +60,9 @@ function harness(attachResult: AttachResult | AttachResult[] = 'cpu') {
       replacementFailureCount += 1;
     },
   };
-  const manager = createSurfaceDriver(effects);
+  const driver = createSurfaceDriver(effects);
   return {
-    manager,
+    driver,
     canvases,
     isAttached: () => attached,
     recoverCount: () => recoverCount,
@@ -74,72 +74,72 @@ function harness(attachResult: AttachResult | AttachResult[] = 'cpu') {
   };
 }
 
-const inView = { inAcquire: true, inRelease: true };
-const outOfView = { inAcquire: false, inRelease: false };
-
 describe('surface-driver', () => {
   it('does not expose a target canvas before Editor publishes its delivered frame', () => {
     const h = harness();
-    h.manager.reconcile(inView);
+    expect(h.driver.hasSurface()).toBe(false);
 
-    expect(h.manager.debug().target).toBe(h.canvases[0]);
-    expect(h.manager.debug().displayed).toBeUndefined();
+    h.driver.setActive(true);
 
-    h.manager.syncPublished(h.canvases[0]);
-    expect(h.manager.debug().displayed).toBe(h.canvases[0]);
+    expect(h.driver.debug().target).toBe(h.canvases[0]);
+    expect(h.driver.debug().displayed).toBeUndefined();
+    expect(h.driver.hasSurface()).toBe(true);
+
+    h.driver.syncPublished(h.canvases[0]);
+    expect(h.driver.debug().displayed).toBe(h.canvases[0]);
   });
 
   it('ignores stale delivery for a canvas that is not the current target', () => {
     const h = harness();
-    h.manager.reconcile(inView);
+    h.driver.setActive(true);
     const stale = { id: 99, pixels: '', disposed: false, removed: false, listeners: 0 };
 
-    h.manager.syncPublished(stale);
+    h.driver.syncPublished(stale);
 
-    expect(h.manager.debug().displayed).toBeUndefined();
+    expect(h.driver.debug().displayed).toBeUndefined();
   });
 
   it('has no timeout or retry scheduler and retries only on a real resume signal', () => {
     const h = harness('cpu-oversized');
-    h.manager.reconcile(inView);
+    h.driver.setActive(true);
     expect(h.canvases).toHaveLength(1);
-    expect(h.manager.debug().target).toBeUndefined();
+    expect(h.driver.debug().target).toBeUndefined();
     expect(h.isAttached()).toBe(false);
     expect(h.detachCount()).toBe(1);
 
-    h.manager.resume();
+    h.driver.resume();
     expect(h.canvases).toHaveLength(2);
     expect(h.replacementFailureCount()).toBe(1);
   });
 
   it('starts a fresh replacement attempt after the surface is parked', () => {
     const h = harness(['cpu-oversized', 'cpu-oversized']);
-    h.manager.reconcile(inView);
+    h.driver.setActive(true);
 
-    h.manager.reconcile(outOfView);
-    h.manager.reconcile(inView);
+    h.driver.setActive(false);
+    h.driver.setActive(true);
 
     expect(h.replacementFailureCount()).toBe(0);
   });
 
   it('allows another replacement after a target publishes successfully', () => {
     const h = harness(['cpu-oversized', 'cpu', 'cpu-oversized', 'cpu-oversized']);
-    h.manager.reconcile(inView);
+    h.driver.setActive(true);
     expect(h.replacementFailureCount()).toBe(0);
 
-    h.manager.resume();
-    h.manager.syncPublished(h.canvases[1]);
-    h.manager.replace();
+    h.driver.resume();
+    h.driver.syncPublished(h.canvases[1]);
+    h.driver.replace();
     expect(h.replacementFailureCount()).toBe(0);
 
-    h.manager.resume();
+    h.driver.resume();
     expect(h.replacementFailureCount()).toBe(1);
   });
 
   it('forwards recovery for the current target without creating another canvas', () => {
     const h = harness();
-    h.manager.reconcile(inView);
-    h.manager.resume();
+    h.driver.setActive(true);
+    h.driver.resume();
 
     expect(h.canvases).toHaveLength(1);
     expect(h.recoverCount()).toBe(1);
@@ -147,11 +147,11 @@ describe('surface-driver', () => {
 
   it('re-promotes the same canvas after an in-place backing replacement publishes', () => {
     const h = harness();
-    h.manager.reconcile(inView);
-    h.manager.syncPublished(h.canvases[0]);
+    h.driver.setActive(true);
+    h.driver.syncPublished(h.canvases[0]);
     h.canvases[0].removed = true;
 
-    h.manager.syncPublished(h.canvases[0]);
+    h.driver.syncPublished(h.canvases[0]);
 
     expect(h.canvases[0].removed).toBe(false);
     expect(h.promoteCount()).toBe(2);
@@ -159,82 +159,82 @@ describe('surface-driver', () => {
 
   it('keeps the published canvas visible until its replacement is published', () => {
     const h = harness();
-    h.manager.reconcile(inView);
+    h.driver.setActive(true);
     h.canvases[0].pixels = 'published pixels';
-    h.manager.syncPublished(h.canvases[0]);
+    h.driver.syncPublished(h.canvases[0]);
 
-    h.manager.replace();
+    h.driver.replace();
 
     expect(h.canvases).toHaveLength(2);
     expect(h.canvases[0]).toMatchObject({ pixels: 'published pixels', disposed: false, removed: false, listeners: 0 });
-    expect(h.manager.debug()).toMatchObject({ target: h.canvases[1], displayed: h.canvases[0] });
+    expect(h.driver.debug()).toMatchObject({ target: h.canvases[1], displayed: h.canvases[0] });
     expect(h.detachCount()).toBe(0);
 
-    h.manager.syncPublished(h.canvases[1]);
+    h.driver.syncPublished(h.canvases[1]);
     expect(h.canvases[0]).toMatchObject({ disposed: true, removed: true });
-    expect(h.manager.debug().displayed).toBe(h.canvases[1]);
+    expect(h.driver.debug().displayed).toBe(h.canvases[1]);
   });
 
   it('keeps repeated missing-target attempts outside replacement-failure escalation', () => {
     const h = harness(['cpu', 'none', 'none']);
-    h.manager.reconcile(inView);
+    h.driver.setActive(true);
     h.canvases[0].pixels = 'published pixels';
-    h.manager.syncPublished(h.canvases[0]);
+    h.driver.syncPublished(h.canvases[0]);
 
-    h.manager.replace();
-    h.manager.resume();
+    h.driver.replace();
+    h.driver.resume();
 
-    expect(h.manager.debug()).toMatchObject({ target: undefined, displayed: h.canvases[0] });
+    expect(h.driver.debug()).toMatchObject({ target: undefined, displayed: h.canvases[0] });
     expect(h.canvases[0]).toMatchObject({ pixels: 'published pixels', disposed: false, removed: false });
     expect(h.canvases[1]).toMatchObject({ pixels: '', disposed: true, removed: true });
     expect(h.canvases[2]).toMatchObject({ pixels: '', disposed: true, removed: true });
     expect(h.isAttached()).toBe(false);
     expect(h.replacementFailureCount()).toBe(0);
 
-    h.manager.destroy();
+    h.driver.destroy();
     expect(h.detachCount()).toBe(0);
   });
 
   it('promotes a proven replacement before releasing the displayed backing', () => {
     const h = harness();
-    h.manager.reconcile(inView);
-    h.manager.syncPublished(h.canvases[0]);
-    h.manager.replace();
+    h.driver.setActive(true);
+    h.driver.syncPublished(h.canvases[0]);
+    h.driver.replace();
     h.lifecycle.length = 0;
 
-    h.manager.syncPublished(h.canvases[1]);
+    h.driver.syncPublished(h.canvases[1]);
 
     expect(h.lifecycle).toEqual(['promote:1:0', 'release:0', 'remove:0']);
   });
 
   it('converges repeated replacement requests to the latest candidate while retaining only the displayed frame', () => {
     const h = harness();
-    h.manager.reconcile(inView);
-    h.manager.syncPublished(h.canvases[0]);
+    h.driver.setActive(true);
+    h.driver.syncPublished(h.canvases[0]);
 
-    h.manager.replace();
-    h.manager.replace();
+    h.driver.replace();
+    h.driver.replace();
 
     expect(h.maxLiveCanvasCount()).toBe(2);
     expect(h.canvases[1]).toMatchObject({ disposed: true, removed: true });
-    expect(h.manager.debug()).toMatchObject({ target: h.canvases[2], displayed: h.canvases[0] });
+    expect(h.driver.debug()).toMatchObject({ target: h.canvases[2], displayed: h.canvases[0] });
 
-    h.manager.syncPublished(h.canvases[1]);
-    expect(h.manager.debug().displayed).toBe(h.canvases[0]);
+    h.driver.syncPublished(h.canvases[1]);
+    expect(h.driver.debug().displayed).toBe(h.canvases[0]);
 
-    h.manager.syncPublished(h.canvases[2]);
-    expect(h.manager.debug().displayed).toBe(h.canvases[2]);
+    h.driver.syncPublished(h.canvases[2]);
+    expect(h.driver.debug().displayed).toBe(h.canvases[2]);
     expect(h.canvases.filter((canvas) => !canvas.disposed)).toEqual([h.canvases[2]]);
   });
 
   it('keeps the published canvas when a replacement is oversized', () => {
     const h = harness(['cpu', 'cpu-oversized']);
-    h.manager.reconcile(inView);
-    h.manager.syncPublished(h.canvases[0]);
+    h.driver.setActive(true);
+    h.driver.syncPublished(h.canvases[0]);
 
-    h.manager.replace();
+    h.driver.replace();
 
-    expect(h.manager.debug()).toMatchObject({ target: undefined, displayed: h.canvases[0] });
+    expect(h.driver.debug()).toMatchObject({ target: undefined, displayed: h.canvases[0] });
     expect(h.canvases[0]).toMatchObject({ disposed: false, removed: false });
     expect(h.canvases[1]).toMatchObject({ disposed: true, removed: true });
     expect(h.isAttached()).toBe(false);
@@ -242,12 +242,27 @@ describe('surface-driver', () => {
 
   it('releases the target, listeners, and displayed canvas when parked', () => {
     const h = harness();
-    h.manager.reconcile(inView);
-    h.manager.syncPublished(h.canvases[0]);
-    h.manager.reconcile(outOfView);
+    h.driver.setActive(true);
+    h.driver.syncPublished(h.canvases[0]);
+    h.driver.setActive(false);
 
     expect(h.isAttached()).toBe(false);
+    expect(h.driver.hasSurface()).toBe(false);
     expect(h.canvases[0]).toMatchObject({ disposed: true, removed: true, listeners: 0 });
-    expect(h.manager.debug()).toMatchObject({ target: undefined, displayed: undefined, wantsLive: false });
+    expect(h.driver.debug()).toMatchObject({ target: undefined, displayed: undefined, wantsLive: false });
+  });
+
+  it('freezes the published canvas on terminal failure and discards only an unpublished replacement', () => {
+    const h = harness();
+    h.driver.setActive(true);
+    h.canvases[0].pixels = 'published pixels';
+    h.driver.syncPublished(h.canvases[0]);
+    h.driver.replace();
+
+    h.driver.freeze();
+
+    expect(h.canvases[0]).toMatchObject({ pixels: 'published pixels', disposed: false, removed: false });
+    expect(h.canvases[1]).toMatchObject({ disposed: true, removed: true, listeners: 0 });
+    expect(h.driver.debug()).toMatchObject({ target: undefined, displayed: h.canvases[0], wantsLive: false });
   });
 });
