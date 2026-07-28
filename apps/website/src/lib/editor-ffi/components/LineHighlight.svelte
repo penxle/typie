@@ -37,8 +37,8 @@
     style:clip-path={isPaginated ? undefined : 'inset(0 -100vmax)'}
     class={css({
       position: 'absolute',
-      color: 'surface.muted',
-      backgroundColor: 'surface.muted',
+      color: { base: 'text.default/4', _dark: 'text.default/10' },
+      backgroundColor: { base: 'text.default/4', _dark: 'text.default/10' },
       insetX: '0',
       zIndex: '[-1]',
       pointerEvents: 'none',

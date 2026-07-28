@@ -13,8 +13,19 @@ import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.Rect
 import co.typie.editor.runtime.EditorBoundsInContainer
 import co.typie.ui.theme.AppTheme
+import co.typie.ui.theme.ResolvedThemeMode
 
 internal data class EditorLineHighlightBand(val top: Float, val height: Float)
+
+@Composable
+internal fun editorLineHighlightColor(): Color =
+  AppTheme.colors.surfaceInverse.copy(
+    alpha =
+      when (AppTheme.themeMode) {
+        ResolvedThemeMode.Light -> 0.04f
+        ResolvedThemeMode.Dark -> 0.10f
+      }
+  )
 
 internal fun resolveEditorExtensionAreaLineHighlightBand(
   cursor: CursorMetrics,
@@ -33,7 +44,7 @@ internal fun resolveEditorExtensionAreaLineHighlightBand(
   )
 }
 
-internal fun resolveEditorLineHighlightOverlayRect(
+internal fun resolveEditorPageLineHighlightRect(
   cursor: CursorMetrics,
   pageWidth: Float,
   displayZoom: Float,
@@ -43,7 +54,7 @@ internal fun resolveEditorLineHighlightOverlayRect(
 }
 
 @Composable
-internal fun EditorLineHighlightOverlay(
+internal fun EditorPageLineHighlightOverlay(
   cursor: CursorMetrics?,
   focused: Boolean,
   displayZoom: Float,
@@ -56,13 +67,13 @@ internal fun EditorLineHighlightOverlay(
 
   val currentCursor = cursor ?: return
   val rect =
-    resolveEditorLineHighlightOverlayRect(
+    resolveEditorPageLineHighlightRect(
       cursor = currentCursor,
       pageWidth = pageWidth,
       displayZoom = displayZoom,
     )
 
-  Box(Modifier.editorOverlayRect(rect).background(AppTheme.colors.surfaceInset))
+  Box(Modifier.editorOverlayRect(rect).background(editorLineHighlightColor()))
 }
 
 // Mixed read timing on purpose. The cursor is a composition-captured value so the

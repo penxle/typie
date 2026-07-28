@@ -27,6 +27,7 @@ import co.typie.editor.EditorView
 import co.typie.editor.ext.unclippedBoundsInRoot
 import co.typie.editor.interaction.LocalEditorInteractionScope
 import co.typie.editor.overlay.editorExtensionAreaLineHighlight
+import co.typie.editor.overlay.editorLineHighlightColor
 import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.editor.runtime.LocalEditorUiState
@@ -36,7 +37,6 @@ import co.typie.screen.editor.editor.overlay.EditorSelectionHandleOverlay
 import co.typie.screen.editor.editor.overlay.EditorTableCellSelectionOverlay
 import co.typie.screen.editor.editor.overlay.EditorTableColumnResizeOverlay
 import co.typie.storage.Preference
-import co.typie.ui.theme.AppTheme
 
 private val DebugTopPaddingColor = Color(0x22FF5ACD)
 private val DebugBottomPaddingColor = Color(0x22FF8A00)
@@ -75,13 +75,16 @@ internal fun EditorBody(
       .trackEditorInteractionSurfaceBounds(uiState = uiState, density = density.density)
       .run {
         if (layoutSpec is EditorDocumentLayoutSpec.Continuous) {
+          // Continuous spans the full extension area and stays as a draw modifier on this surface.
+          // A measured Canvas(matchParentSize()) child exceeded Compose's finite Constraints on
+          // long documents.
           editorExtensionAreaLineHighlight(
             cursor = cursor,
             focused = uiState.focused,
             editorBounds = { uiState.editorBoundsInContainer },
             viewportTransform = { uiState.resolveViewportTransform(pageSizes) },
             enabled = Preference.lineHighlightEnabled,
-            color = AppTheme.colors.surfaceInset,
+            color = editorLineHighlightColor(),
           )
         } else {
           this

@@ -32,7 +32,7 @@ import co.typie.editor.ffi.Viewport
 import co.typie.editor.input.LocalEditorIncomingContentHandler
 import co.typie.editor.input.editorInput
 import co.typie.editor.overlay.EditorCursorOverlay
-import co.typie.editor.overlay.EditorLineHighlightOverlay
+import co.typie.editor.overlay.EditorPageLineHighlightOverlay
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.editor.runtime.LocalEditorUiState
 import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
@@ -233,8 +233,10 @@ internal fun EditorView(
               },
             showDebugOverlay = showDebugSurfaceOverlay,
             backgroundOverlay = {
+              // Paginated line coordinates are page-local, so keep this in the page background
+              // layer below RenderCanvas content.
               if (sessionActive && layoutSpec is EditorDocumentLayoutSpec.Paginated) {
-                EditorLineHighlightOverlay(
+                EditorPageLineHighlightOverlay(
                   cursor = pageCursor,
                   focused = uiState.focused,
                   displayZoom = displayZoom,

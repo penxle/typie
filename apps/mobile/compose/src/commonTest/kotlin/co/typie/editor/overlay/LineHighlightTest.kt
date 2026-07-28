@@ -48,7 +48,7 @@ class LineHighlightTest {
   @Test
   fun `paginated line highlight stays page wide in page display coordinates`() {
     val rect =
-      resolveEditorLineHighlightOverlayRect(cursor = cursor, pageWidth = 360f, displayZoom = 1.5f)
+      resolveEditorPageLineHighlightRect(cursor = cursor, pageWidth = 360f, displayZoom = 1.5f)
 
     assertEquals(0f, rect.x)
     assertEquals(108f, rect.y)
