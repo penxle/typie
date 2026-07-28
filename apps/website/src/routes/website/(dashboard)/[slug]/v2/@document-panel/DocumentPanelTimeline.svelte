@@ -30,6 +30,8 @@
     onPreviewEditorRecovered?: () => void;
   };
 
+  const TIMELINE_SLIDER_BOTTOM_OFFSET = 32;
+
   let { document$key, onPreviewEditorFailed, onPreviewEditorRecovered }: Props = $props();
 
   const document = createFragment(
@@ -105,6 +107,7 @@
     | undefined;
   let previewFailed = $state(false);
   let sliderElement = $state<HTMLButtonElement>();
+  let sliderOverlayHeight = $state<number>();
   let destroyed = false;
   const unusableTimelineEditors = new WeakSet<Editor>();
   let restoring = $state(false);
@@ -314,6 +317,22 @@
   $effect(() => {
     const editor = timelineEditor;
     if (editor?.failure !== undefined) reportTimelineFailure(editor);
+  });
+
+  $effect(() => {
+    const scroll = ctx.scroll;
+    const editor = ctx.editor;
+    const viewport = editor?.scrollViewport;
+    const editorAreaElement = ctx.editorAreaEl;
+    const overlayHeight = sliderOverlayHeight;
+    void editor?.viewport.height;
+    if (!scroll || !viewport || !editorAreaElement || !overlayHeight || isLoading || headsAsc.length === 0) return;
+
+    const viewportRect = viewport.getRect();
+    const overlayTop = editorAreaElement.getBoundingClientRect().bottom - TIMELINE_SLIDER_BOTTOM_OFFSET - overlayHeight;
+    scroll.setBottomInset(clamp(viewportRect.bottom - overlayTop, 0, viewportRect.bottom - viewportRect.top));
+
+    return () => scroll.setBottomInset(0);
   });
 
   const selectHead = (headId: string, timing: 'throttled' | 'immediate') => {
@@ -549,7 +568,9 @@
 
 {#if ctx.editorAreaEl && !isLoading && headsAsc.length > 0}
   <div
-    class={center({ position: 'absolute', left: '0', right: '0', bottom: '32px', pointerEvents: 'none' })}
+    style:bottom={`${TIMELINE_SLIDER_BOTTOM_OFFSET}px`}
+    class={center({ position: 'absolute', left: '0', right: '0', pointerEvents: 'none' })}
+    bind:clientHeight={sliderOverlayHeight}
     use:portal={ctx.editorAreaEl}
     in:fly={{ y: 32, duration: 300 }}
   >

@@ -109,18 +109,18 @@ export class EditorScrollScope {
   bottomPadding = $derived.by(() => {
     void this.#editor.viewport.height;
     const snapshot = this.#editor.published?.snapshot;
-    const keepVisiblePadding = this.#keepVisibleBottomPadding(snapshot);
+    const minimumPadding = Math.max(this.visibleArea.bottomInset, this.#keepVisibleBottomPadding(snapshot));
     const rect = selectionHeadRect(snapshot);
     if (!rect) {
-      return keepVisiblePadding;
+      return minimumPadding;
     }
 
     const prefs = this.#typewriterPreferences();
     if (!prefs.enabled) {
-      return keepVisiblePadding;
+      return minimumPadding;
     }
 
-    return Math.max(keepVisiblePadding, this.#typewriterBottomPaddingForRect(rect));
+    return Math.max(minimumPadding, this.#typewriterBottomPaddingForRect(rect));
   });
 
   constructor(editor: Editor, typewriterPreferences: () => TypewriterPreferences) {
@@ -258,6 +258,15 @@ export class EditorScrollScope {
       return;
     }
     this.visibleArea = next;
+  }
+
+  setBottomInset(bottomInset: number): void {
+    untrack(() => {
+      this.setVisibleArea({
+        topInset: this.visibleArea.topInset,
+        bottomInset,
+      });
+    });
   }
 
   scrollIntoView({ target, mode = 'nearest', behavior }: EditorScrollIntoViewOptions): void {
