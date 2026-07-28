@@ -1,39 +1,37 @@
 import { ADMIN_ITEMS_PER_PAGE } from '@typie/ui/constants';
+import dayjs from 'dayjs';
 import { loadQuery } from '$lib/graphql';
 import { graphql } from '$mearie';
-import type { UserRole, UserState } from '@typie/lib/enums';
+import type { PaymentInvoiceState } from '@typie/lib/enums';
 
 export const load = async (event) => {
   const { url } = event;
   const page = Number(url.searchParams.get('page')) || 1;
-  const search = url.searchParams.get('search') || undefined;
-  const state = (url.searchParams.get('state') as UserState | undefined) || undefined;
-  const role = (url.searchParams.get('role') as UserRole | undefined) || undefined;
+  const state = (url.searchParams.get('state') as PaymentInvoiceState | undefined) || undefined;
+  const from = url.searchParams.get('from') || undefined;
+  const until = url.searchParams.get('until') || undefined;
 
   return {
     query: await loadQuery(
       event,
       graphql(`
-        query AdminUsers_Query($search: String, $state: UserState, $role: UserRole, $offset: Int!, $limit: Int!) {
-          adminUsers(search: $search, state: $state, role: $role, offset: $offset, limit: $limit) {
+        query AdminInvoices_Query($state: PaymentInvoiceState, $from: DateTime, $until: DateTime, $offset: Int!, $limit: Int!) {
+          adminInvoices(state: $state, from: $from, until: $until, offset: $offset, limit: $limit) {
             totalCount
 
-            users {
+            invoices {
               id
-              name
-              email
-              role
               state
+              amount
               createdAt
 
-              avatar {
+              user {
                 id
-                url
+                name
               }
 
               subscription {
                 id
-                state
 
                 plan {
                   id
@@ -45,9 +43,9 @@ export const load = async (event) => {
         }
       `),
       {
-        search,
         state,
-        role,
+        from: from ? dayjs.kst(from).startOf('day').toISOString() : undefined,
+        until: until ? dayjs.kst(until).endOf('day').toISOString() : undefined,
         offset: (page - 1) * ADMIN_ITEMS_PER_PAGE,
         limit: ADMIN_ITEMS_PER_PAGE,
       },

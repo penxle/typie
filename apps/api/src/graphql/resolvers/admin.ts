@@ -1,7 +1,16 @@
-import { DocumentType, EntityState, PaymentInvoiceState, PaymentOutcome, SubscriptionState, UserRole, UserState } from '@typie/lib/enums';
+import {
+  EntityState,
+  EntityType,
+  EntityVisibility,
+  PaymentInvoiceState,
+  PaymentOutcome,
+  SubscriptionState,
+  UserRole,
+  UserState,
+} from '@typie/lib/enums';
 import { TypieError } from '@typie/lib/errors';
 import { bootstrapSchema } from '@typie/lib/validation';
-import { and, count, desc, eq, getTableColumns, ilike, inArray, ne, or, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, exists, getTableColumns, gte, ilike, inArray, lte, ne, or, sql } from 'drizzle-orm';
 import { fetchBootstrap, putBootstrap } from '#/bootstrap.ts';
 import { redis } from '#/cache.ts';
 import {
@@ -10,9 +19,10 @@ import {
   Entities,
   first,
   firstOrThrow,
+  Folders,
   PaymentInvoices,
   PaymentRecords,
-  pgr,
+  Sites,
   Subscriptions,
   TableCode,
   UserPaymentCredits,
@@ -25,7 +35,22 @@ import { assertAdminPermission } from '#/utils/permission.ts';
 import { lockUserSubscriptionState } from '#/utils/subscription-lock.ts';
 import { SYSTEM_USER_ID } from '#/utils/system-actor.ts';
 import { builder } from '../builder.ts';
-import { Document, User } from '../objects.ts';
+import { Entity, PaymentInvoice, Site, Subscription, User } from '../objects.ts';
+import type { SQL } from 'drizzle-orm';
+
+const AdminSearchResult = builder.unionType('AdminSearchResult', {
+  types: [User, Entity, PaymentInvoice, Subscription, Site],
+});
+
+const AdminSearchTableCodes = new Set<string>([
+  TableCode.USERS,
+  TableCode.ENTITIES,
+  TableCode.DOCUMENTS,
+  TableCode.FOLDERS,
+  TableCode.PAYMENT_INVOICES,
+  TableCode.SUBSCRIPTIONS,
+  TableCode.SITES,
+]);
 
 builder.queryFields((t) => ({
   adminUsers: t.withAuth({ session: true }).field({
@@ -83,68 +108,301 @@ builder.queryFields((t) => ({
     },
   }),
 
-  adminDocuments: t.withAuth({ session: true }).field({
-    type: builder.simpleObject('AdminDocumentsResult', {
+  adminEntities: t.withAuth({ session: true }).field({
+    type: builder.simpleObject('AdminEntitiesResult', {
       fields: (t) => ({
-        documents: t.field({ type: [Document] }),
+        entities: t.field({ type: [Entity] }),
         totalCount: t.int(),
       }),
     }),
     args: {
       search: t.arg.string({ required: false }),
-      type: t.arg({ type: DocumentType, required: false }),
+      type: t.arg({ type: EntityType, required: false }),
       state: t.arg({ type: EntityState, required: false }),
+      visibility: t.arg({ type: EntityVisibility, required: false }),
       offset: t.arg.int({ defaultValue: 0 }),
       limit: t.arg.int({ defaultValue: 20 }),
     },
     resolve: async (_, args, ctx) => {
       await assertAdminPermission({ sessionId: ctx.session.id });
 
-      let list$ = db.select(getTableColumns(Documents)).from(Documents).innerJoin(Entities, eq(Documents.entityId, Entities.id)).$dynamic();
-      let count$ = db.select({ totalCount: count() }).from(Documents).innerJoin(Entities, eq(Documents.entityId, Entities.id)).$dynamic();
-
-      const conditions = [];
+      const conditions: (SQL | undefined)[] = [ne(Entities.type, EntityType.POST)];
 
       if (args.type) {
-        conditions.push(eq(Documents.type, args.type));
+        conditions.push(eq(Entities.type, args.type));
       }
 
       if (args.state) {
         conditions.push(eq(Entities.state, args.state));
       }
 
+      if (args.visibility) {
+        conditions.push(eq(Entities.visibility, args.visibility));
+      }
+
       if (args.search) {
         conditions.push(
           or(
-            ilike(Documents.title, `%${args.search}%`),
-            ilike(Documents.subtitle, `%${args.search}%`),
-            eq(Documents.id, args.search),
+            eq(Entities.id, args.search),
             eq(Entities.slug, args.search),
             eq(Entities.permalink, args.search),
+            exists(
+              db
+                .select({ one: sql`1` })
+                .from(Documents)
+                .where(
+                  and(
+                    eq(Documents.entityId, Entities.id),
+                    or(ilike(Documents.title, `%${args.search}%`), ilike(Documents.subtitle, `%${args.search}%`)),
+                  ),
+                ),
+            ),
+            exists(
+              db
+                .select({ one: sql`1` })
+                .from(Folders)
+                .where(and(eq(Folders.entityId, Entities.id), ilike(Folders.name, `%${args.search}%`))),
+            ),
           ),
         );
       }
 
-      if (conditions.length > 0) {
-        list$ = list$.where(and(...conditions));
-        count$ = count$.where(and(...conditions));
-      }
+      const list$ = db
+        .select(getTableColumns(Entities))
+        .from(Entities)
+        .where(and(...conditions))
+        .orderBy(desc(Entities.createdAt))
+        .limit(args.limit)
+        .offset(args.offset);
 
-      list$ = list$.orderBy(desc(Documents.createdAt)).limit(args.limit).offset(args.offset);
+      const count$ = db
+        .select({ totalCount: count() })
+        .from(Entities)
+        .where(and(...conditions));
 
-      const [documents, { totalCount }] = await Promise.all([list$, count$.then(firstOrThrow)]);
+      const [entities, { totalCount }] = await Promise.all([list$, count$.then(firstOrThrow)]);
 
-      return { documents, totalCount };
+      return { entities, totalCount };
     },
   }),
 
-  adminDocument: t.withAuth({ session: true }).field({
-    type: Document,
-    args: { documentId: t.arg.string({ validate: validateDbId(TableCode.DOCUMENTS) }) },
-    resolve: async (_, { documentId }, ctx) => {
+  adminEntity: t.withAuth({ session: true }).field({
+    type: Entity,
+    args: { entityId: t.arg.string({ validate: validateDbId(TableCode.ENTITIES) }) },
+    resolve: async (_, { entityId }, ctx) => {
       await assertAdminPermission({ sessionId: ctx.session.id });
 
-      return documentId;
+      return entityId;
+    },
+  }),
+
+  adminSiteEntities: t.withAuth({ session: true }).field({
+    type: [Entity],
+    args: {
+      siteId: t.arg.string({ validate: validateDbId(TableCode.SITES) }),
+      includeDeleted: t.arg.boolean({ defaultValue: false }),
+    },
+    resolve: async (_, args, ctx) => {
+      await assertAdminPermission({ sessionId: ctx.session.id });
+
+      const conditions = [eq(Entities.siteId, args.siteId), ne(Entities.type, EntityType.POST)];
+
+      if (!args.includeDeleted) {
+        conditions.push(eq(Entities.state, EntityState.ACTIVE));
+      }
+
+      return await db
+        .select()
+        .from(Entities)
+        .where(and(...conditions))
+        .orderBy(asc(Entities.depth), asc(Entities.order));
+    },
+  }),
+
+  adminSubscriptions: t.withAuth({ session: true }).field({
+    type: builder.simpleObject('AdminSubscriptionsResult', {
+      fields: (t) => ({
+        subscriptions: t.field({ type: [Subscription] }),
+        totalCount: t.int(),
+      }),
+    }),
+    args: {
+      state: t.arg({ type: SubscriptionState, required: false }),
+      planId: t.arg.string({ required: false }),
+      offset: t.arg.int({ defaultValue: 0 }),
+      limit: t.arg.int({ defaultValue: 20 }),
+    },
+    resolve: async (_, args, ctx) => {
+      await assertAdminPermission({ sessionId: ctx.session.id });
+
+      const conditions = [];
+
+      if (args.state) {
+        conditions.push(eq(Subscriptions.state, args.state));
+      }
+
+      if (args.planId) {
+        conditions.push(eq(Subscriptions.planId, args.planId));
+      }
+
+      const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+      const [subscriptions, { totalCount }] = await Promise.all([
+        db.select().from(Subscriptions).where(where).orderBy(desc(Subscriptions.createdAt)).limit(args.limit).offset(args.offset),
+        db.select({ totalCount: count() }).from(Subscriptions).where(where).then(firstOrThrow),
+      ]);
+
+      return { subscriptions, totalCount };
+    },
+  }),
+
+  adminInvoices: t.withAuth({ session: true }).field({
+    type: builder.simpleObject('AdminInvoicesResult', {
+      fields: (t) => ({
+        invoices: t.field({ type: [PaymentInvoice] }),
+        totalCount: t.int(),
+      }),
+    }),
+    args: {
+      state: t.arg({ type: PaymentInvoiceState, required: false }),
+      from: t.arg({ type: 'DateTime', required: false }),
+      until: t.arg({ type: 'DateTime', required: false }),
+      offset: t.arg.int({ defaultValue: 0 }),
+      limit: t.arg.int({ defaultValue: 20 }),
+    },
+    resolve: async (_, args, ctx) => {
+      await assertAdminPermission({ sessionId: ctx.session.id });
+
+      const conditions = [];
+
+      if (args.state) {
+        conditions.push(eq(PaymentInvoices.state, args.state));
+      }
+
+      if (args.from) {
+        conditions.push(gte(PaymentInvoices.createdAt, args.from));
+      }
+
+      if (args.until) {
+        conditions.push(lte(PaymentInvoices.createdAt, args.until));
+      }
+
+      const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+      const [invoices, { totalCount }] = await Promise.all([
+        db.select().from(PaymentInvoices).where(where).orderBy(desc(PaymentInvoices.createdAt)).limit(args.limit).offset(args.offset),
+        db.select({ totalCount: count() }).from(PaymentInvoices).where(where).then(firstOrThrow),
+      ]);
+
+      return { invoices, totalCount };
+    },
+  }),
+
+  adminSearch: t.withAuth({ session: true }).field({
+    type: [AdminSearchResult],
+    args: { query: t.arg.string() },
+    resolve: async (_, args, ctx) => {
+      await assertAdminPermission({ sessionId: ctx.session.id });
+
+      const query = args.query.trim();
+      if (query.length === 0) {
+        return [];
+      }
+
+      const tableCode = /^([A-Z]{1,4})0[A-Z0-9]+$/.exec(query)?.[1];
+
+      if (tableCode && AdminSearchTableCodes.has(tableCode)) {
+        if (tableCode === TableCode.USERS) {
+          const user = await db.select().from(Users).where(eq(Users.id, query)).then(first);
+          return user ? [user] : [];
+        }
+
+        if (tableCode === TableCode.ENTITIES) {
+          const entity = await db.select().from(Entities).where(eq(Entities.id, query)).then(first);
+          return entity ? [entity] : [];
+        }
+
+        if (tableCode === TableCode.DOCUMENTS) {
+          const entity = await db
+            .select(getTableColumns(Entities))
+            .from(Entities)
+            .innerJoin(Documents, eq(Documents.entityId, Entities.id))
+            .where(eq(Documents.id, query))
+            .then(first);
+          return entity ? [entity] : [];
+        }
+
+        if (tableCode === TableCode.FOLDERS) {
+          const entity = await db
+            .select(getTableColumns(Entities))
+            .from(Entities)
+            .innerJoin(Folders, eq(Folders.entityId, Entities.id))
+            .where(eq(Folders.id, query))
+            .then(first);
+          return entity ? [entity] : [];
+        }
+
+        if (tableCode === TableCode.PAYMENT_INVOICES) {
+          const invoice = await db.select().from(PaymentInvoices).where(eq(PaymentInvoices.id, query)).then(first);
+          return invoice ? [invoice] : [];
+        }
+
+        if (tableCode === TableCode.SUBSCRIPTIONS) {
+          const subscription = await db.select().from(Subscriptions).where(eq(Subscriptions.id, query)).then(first);
+          return subscription ? [subscription] : [];
+        }
+
+        if (tableCode === TableCode.SITES) {
+          const site = await db.select().from(Sites).where(eq(Sites.id, query)).then(first);
+          return site ? [site] : [];
+        }
+      }
+
+      if (query.includes('@')) {
+        return await db
+          .select()
+          .from(Users)
+          .where(and(ne(Users.id, SYSTEM_USER_ID), ilike(Users.email, `%${query}%`)))
+          .orderBy(desc(Users.createdAt))
+          .limit(10);
+      }
+
+      const [users, entities] = await Promise.all([
+        db
+          .select()
+          .from(Users)
+          .where(and(ne(Users.id, SYSTEM_USER_ID), ilike(Users.name, `%${query}%`)))
+          .orderBy(desc(Users.createdAt))
+          .limit(10),
+        db
+          .select()
+          .from(Entities)
+          .where(
+            and(
+              ne(Entities.type, EntityType.POST),
+              or(
+                exists(
+                  db
+                    .select({ one: sql`1` })
+                    .from(Documents)
+                    .where(and(eq(Documents.entityId, Entities.id), ilike(Documents.title, `%${query}%`))),
+                ),
+                exists(
+                  db
+                    .select({ one: sql`1` })
+                    .from(Folders)
+                    .where(and(eq(Folders.entityId, Entities.id), ilike(Folders.name, `%${query}%`))),
+                ),
+                eq(Entities.slug, query),
+                eq(Entities.permalink, query),
+              ),
+            ),
+          )
+          .orderBy(desc(Entities.createdAt))
+          .limit(10),
+      ]);
+
+      return [...users, ...entities];
     },
   }),
 
@@ -176,23 +434,6 @@ builder.queryFields((t) => ({
         admin: session.userId,
         user: impersonatedUserId,
       };
-    },
-  }),
-
-  adminRawQuery: t.withAuth({ session: true }).field({
-    type: ['JSON'],
-    args: {
-      query: t.arg.string(),
-      params: t.arg({ type: ['JSON'], required: false }),
-    },
-    resolve: async (_, { query, params }, ctx) => {
-      await assertAdminPermission({ sessionId: ctx.session.id });
-
-      const result = await pgr.begin('READ ONLY', async (sql) => {
-        return await sql.unsafe(query, params ?? []);
-      });
-
-      return result;
     },
   }),
 

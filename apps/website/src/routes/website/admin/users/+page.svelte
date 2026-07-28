@@ -1,11 +1,12 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
+  import { Select, TextInput } from '@typie/ui/components';
   import { QueryString, QueryStringNumber } from '@typie/ui/state';
-  import { comma } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import SearchIcon from '~icons/lucide/search';
-  import { AdminIcon, AdminPagination, AdminTable } from '$lib/components/admin';
+  import { subscriptionStateTones, userRoleLabels, userRoleTones, userStateLabels, userStateTones } from '$lib/admin-labels';
+  import { AdminBadge, AdminDataTable, adminFilledControl, AdminFilterBar, AdminPageHeader, AdminPagination } from '$lib/components/admin';
   import { hydrateQuery } from '$lib/graphql';
 
   let { data } = $props();
@@ -13,165 +14,113 @@
   const query = $derived(hydrateQuery(() => data.query));
 
   const searchQuery = new QueryString('search', '', { debounce: 300 });
+  const stateFilter = new QueryString('state', '');
+  const roleFilter = new QueryString('role', '');
   const pageNumber = new QueryStringNumber('page', 1);
 </script>
 
-<div class={flex({ flexDirection: 'column', gap: '24px', color: 'amber.500' })}>
-  <div>
-    <h2 class={css({ fontSize: '18px', color: 'amber.500' })}>USER MANAGEMENT</h2>
-    <p class={css({ marginTop: '8px', fontSize: '13px', color: 'amber.400' })}>
-      TOTAL USERS: {query.data.adminUsers.totalCount}
-    </p>
-  </div>
+<AdminPageHeader description={`총 ${query.data.adminUsers.totalCount}명`} title="유저" />
 
-  <div
-    class={css({
-      borderWidth: '2px',
-      borderColor: 'amber.500',
-      backgroundColor: 'gray.900',
-    })}
-  >
-    <div class={css({ padding: '20px', borderBottomWidth: '2px', borderColor: 'amber.500' })}>
-      <div class={css({ position: 'relative', maxWidth: '480px' })}>
-        <AdminIcon
-          style={css.raw({
-            position: 'absolute',
-            left: '12px',
-            top: '[50%]',
-            transform: 'translateY(-50%)',
-            color: 'amber.500',
-          })}
-          icon={SearchIcon}
-          size={16}
-        />
-        <input
-          class={css({
-            width: 'full',
-            paddingLeft: '36px',
-            paddingRight: '12px',
-            paddingY: '8px',
-            borderWidth: '2px',
-            borderColor: 'amber.500',
-            backgroundColor: 'gray.800',
-            color: 'amber.500',
-            fontSize: '13px',
-            outline: 'none',
-            caretColor: 'amber.500',
-            _placeholder: {
-              color: 'amber.400',
-              opacity: '[0.5]',
-            },
-            _focus: {
-              borderColor: 'amber.400',
-            },
-          })}
-          placeholder="SEARCH ID, NAME OR EMAIL..."
-          type="text"
-          bind:value={
-            () => searchQuery.current,
-            (value) => {
-              searchQuery.current = value;
-              pageNumber.current = 1;
-            }
+<AdminDataTable
+  columns={[
+    { key: '$user', label: '유저', width: '32%' },
+    { key: '$state', label: '상태', width: '12%' },
+    { key: '$role', label: '역할', width: '12%' },
+    { key: '$subscription', label: '구독', width: '20%' },
+    { key: '$createdAt', label: '가입일', width: '24%' },
+  ]}
+  data={[...query.data.adminUsers.users]}
+  dataKey="id"
+  emptyText="조건에 맞는 유저가 없습니다"
+>
+  {#snippet filters()}
+    <AdminFilterBar>
+      <TextInput
+        style={css.raw(adminFilledControl, { maxWidth: '320px' })}
+        leftIcon={SearchIcon}
+        placeholder="이름, 이메일 또는 ID"
+        size="sm"
+        bind:value={
+          () => searchQuery.current,
+          (value) => {
+            searchQuery.current = value;
+            pageNumber.current = 1;
           }
-        />
+        }
+      />
+
+      <Select
+        style={css.raw(adminFilledControl)}
+        items={[
+          { label: '모든 상태', value: '' },
+          { label: '활성', value: 'ACTIVE' },
+          { label: '비활성', value: 'DEACTIVATED' },
+        ]}
+        onselect={() => {
+          pageNumber.current = 1;
+        }}
+        bind:value={stateFilter.current}
+      />
+
+      <Select
+        style={css.raw(adminFilledControl)}
+        items={[
+          { label: '모든 역할', value: '' },
+          { label: '일반', value: 'USER' },
+          { label: '어드민', value: 'ADMIN' },
+        ]}
+        onselect={() => {
+          pageNumber.current = 1;
+        }}
+        bind:value={roleFilter.current}
+      />
+    </AdminFilterBar>
+  {/snippet}
+
+  {#snippet $user(user)}
+    <div class={flex({ alignItems: 'center', gap: '10px' })}>
+      <div class={css({ borderRadius: 'full', size: '28px', backgroundColor: 'surface.muted', overflow: 'hidden', flexShrink: '0' })}>
+        {#if user.avatar?.url}
+          <img alt={user.name} src={user.avatar.url} />
+        {/if}
+      </div>
+      <div class={css({ minWidth: '0' })}>
+        <a class={css({ fontWeight: 'medium', _hover: { textDecoration: 'underline' } })} href="/admin/users/{user.id}">
+          {user.name}
+        </a>
+        <div class={css({ fontSize: '12px', color: 'text.faint', truncate: true })}>{user.email}</div>
       </div>
     </div>
+  {/snippet}
 
-    <AdminTable
-      columns={[
-        { key: '$user', label: 'USER', width: '25%' },
-        { key: '$id', label: 'ID', width: '15%' },
-        { key: '$subscription', label: 'SUBSCRIPTION', width: '15%' },
-        { key: '$activity', label: 'ACTIVITY', width: '15%' },
-        { key: '$state', label: 'STATE', width: '10%' },
-        { key: '$createdAt', label: 'JOINED', width: '20%' },
-      ]}
-      data={[...query.data.adminUsers.users]}
-      dataKey="id"
-    >
-      {#snippet $user(user)}
-        <div class={flex({ alignItems: 'center', gap: '16px' })}>
-          <div
-            class={css({
-              borderRadius: 'full',
-              size: '40px',
-              backgroundColor: 'amber.500',
-              overflow: 'hidden',
-            })}
-          >
-            {#if user.avatar?.url}
-              <img alt={user.name} src={user.avatar.url} />
-            {/if}
-          </div>
-          <div>
-            <a
-              class={css({
-                fontSize: '13px',
-                color: 'amber.500',
-                _hover: { textDecoration: 'underline' },
-              })}
-              href="/admin/users/{user.id}"
-            >
-              {user.name}
-            </a>
-            <div class={css({ fontSize: '11px', color: 'amber.400' })}>
-              {user.email}
-            </div>
-          </div>
-        </div>
-      {/snippet}
+  {#snippet $state(user)}
+    <AdminBadge label={userStateLabels[user.state]} tone={userStateTones[user.state]} />
+  {/snippet}
 
-      {#snippet $id(user)}
-        <span class={css({ fontSize: '12px', color: 'gray.400' })}>
-          {user.id}
-        </span>
-      {/snippet}
+  {#snippet $role(user)}
+    {#if user.role === 'ADMIN'}
+      <AdminBadge label={userRoleLabels[user.role]} tone={userRoleTones[user.role]} />
+    {:else}
+      <span class={css({ color: 'text.faint' })}>{userRoleLabels[user.role]}</span>
+    {/if}
+  {/snippet}
 
-      {#snippet $subscription(user)}
-        {#if user.subscription}
-          <span
-            class={css({
-              fontSize: '12px',
-              color: user.subscription.state === 'ACTIVE' ? 'green.400' : 'amber.400',
-            })}
-          >
-            {user.subscription.plan.name}
-          </span>
-        {:else}
-          <span class={css({ fontSize: '12px', color: 'gray.400' })}>FREE</span>
-        {/if}
-      {/snippet}
+  {#snippet $subscription(user)}
+    {#if user.subscription}
+      <AdminBadge
+        label={user.subscription.plan.name}
+        tone={user.subscription.state === 'ACTIVE' ? 'brand' : subscriptionStateTones[user.subscription.state]}
+      />
+    {:else}
+      <span class={css({ color: 'text.disabled' })}>없음</span>
+    {/if}
+  {/snippet}
 
-      {#snippet $activity(user)}
-        <div class={css({ fontSize: '12px' })}>
-          <div class={css({ color: 'amber.500' })}>
-            {user.documentCount} DOCUMENTS
-          </div>
-          <div class={css({ fontSize: '11px', color: 'amber.400' })}>
-            {comma(user.usage.totalCharacterCount)} CHARS
-          </div>
-        </div>
-      {/snippet}
+  {#snippet $createdAt(user)}
+    <span class={css({ color: 'text.muted' })}>{dayjs(user.createdAt).formatAsDateTime()}</span>
+  {/snippet}
 
-      {#snippet $state(user)}
-        <span
-          class={css({
-            fontSize: '12px',
-            color: user.state === 'ACTIVE' ? 'green.400' : 'red.400',
-          })}
-        >
-          {user.state}
-        </span>
-      {/snippet}
-
-      {#snippet $createdAt(user)}
-        <span class={css({ fontSize: '12px', color: 'amber.400' })}>
-          {dayjs(user.createdAt).formatAsDateTime()}
-        </span>
-      {/snippet}
-    </AdminTable>
-
+  {#snippet footer()}
     <AdminPagination totalCount={query.data.adminUsers.totalCount} bind:pageNumber={pageNumber.current} />
-  </div>
-</div>
+  {/snippet}
+</AdminDataTable>

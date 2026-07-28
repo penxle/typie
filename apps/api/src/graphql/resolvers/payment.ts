@@ -81,6 +81,7 @@ PaymentInvoice.implement({
     amount: t.exposeInt('amount'),
     dueAt: t.expose('dueAt', { type: 'DateTime' }),
     createdAt: t.expose('createdAt', { type: 'DateTime' }),
+    user: t.expose('userId', { type: User }),
     subscription: t.field({
       type: Subscription,
       resolve: (self) => self.subscriptionId,

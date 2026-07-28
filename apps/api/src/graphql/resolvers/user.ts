@@ -7,6 +7,7 @@ import {
   EntityType,
   FontFamilySource,
   FontFamilyState,
+  InAppPurchaseStore,
   PaymentInvoiceState,
   PlanAvailability,
   SingleSignOnProvider,
@@ -64,7 +65,8 @@ import * as aws from '#/external/aws.ts';
 import * as portone from '#/external/portone.ts';
 import { evaluateCouponCondition } from '#/utils/coupon.ts';
 import { getDocumentFontFamilies } from '#/utils/document.ts';
-import { assertActiveSubscription } from '#/utils/plan.ts';
+import { assertAdminPermission } from '#/utils/permission.ts';
+import { assertActiveSubscription, hasActiveSubscription } from '#/utils/plan.ts';
 import { delay } from '#/utils/promise.ts';
 import { lockUserSubscriptionState } from '#/utils/subscription-lock.ts';
 import { getUserUsage, getUserUuid } from '#/utils/user.ts';
@@ -85,6 +87,7 @@ import {
   User,
   UserBillingKey,
   UserDevice,
+  UserInAppPurchase,
   UserPersonalIdentity,
   UserSingleSignOn,
   UserTrial,
@@ -208,9 +211,14 @@ User.implement({
     devices: t.field({
       type: [UserDevice],
       resolve: async (self, _args, ctx) => {
-        if (ctx.session?.userId !== self.id) {
+        if (!ctx.session) {
           throw new TypieError({ code: 'permission_denied' });
         }
+
+        if (ctx.session.userId !== self.id) {
+          await assertAdminPermission({ sessionId: ctx.session.id });
+        }
+
         return db
           .select({
             id: UserDevices.id,
@@ -232,18 +240,30 @@ User.implement({
     subscription: t.field({
       type: Subscription,
       nullable: true,
-      resolve: async (self) => {
-        return await db
-          .select()
-          .from(Subscriptions)
-          .where(
-            and(
-              eq(Subscriptions.userId, self.id),
-              inArray(Subscriptions.state, [SubscriptionState.ACTIVE, SubscriptionState.WILL_EXPIRE, SubscriptionState.IN_GRACE_PERIOD]),
-            ),
-          )
-          .orderBy(desc(eq(Subscriptions.state, SubscriptionState.ACTIVE)), desc(Subscriptions.createdAt))
-          .then(first);
+      resolve: async (self, _, ctx) => {
+        const loader = ctx.loader({
+          name: 'User.subscription',
+          nullable: true,
+          load: async (ids: string[]) => {
+            return await db
+              .select()
+              .from(Subscriptions)
+              .where(
+                and(
+                  inArray(Subscriptions.userId, ids),
+                  inArray(Subscriptions.state, [
+                    SubscriptionState.ACTIVE,
+                    SubscriptionState.WILL_EXPIRE,
+                    SubscriptionState.IN_GRACE_PERIOD,
+                  ]),
+                ),
+              )
+              .orderBy(desc(eq(Subscriptions.state, SubscriptionState.ACTIVE)), desc(Subscriptions.createdAt));
+          },
+          key: (row) => row?.userId,
+        });
+
+        return await loader.load(self.id);
       },
     }),
 
@@ -256,6 +276,27 @@ User.implement({
           .from(Subscriptions)
           .where(and(eq(Subscriptions.userId, self.id), eq(Subscriptions.state, SubscriptionState.WILL_ACTIVATE)))
           .then(first);
+      },
+    }),
+
+    subscriptions: t.field({
+      type: [Subscription],
+      resolve: async (self) => {
+        return await db.select().from(Subscriptions).where(eq(Subscriptions.userId, self.id)).orderBy(desc(Subscriptions.createdAt));
+      },
+    }),
+
+    hasActiveSubscription: t.boolean({
+      resolve: async (self) => {
+        return await hasActiveSubscription({ userId: self.id });
+      },
+    }),
+
+    inAppPurchase: t.field({
+      type: UserInAppPurchase,
+      nullable: true,
+      resolve: async (self) => {
+        return await db.select().from(UserInAppPurchases).where(eq(UserInAppPurchases.userId, self.id)).then(first);
       },
     }),
 
@@ -512,6 +553,16 @@ UserBillingKey.implement({
   fields: (t) => ({
     id: t.exposeID('id'),
     name: t.exposeString('name'),
+    createdAt: t.expose('createdAt', { type: 'DateTime' }),
+  }),
+});
+
+UserInAppPurchase.implement({
+  isTypeOf: isTypeOf(TableCode.USER_IN_APP_PURCHASES),
+  fields: (t) => ({
+    id: t.exposeID('id'),
+    store: t.expose('store', { type: InAppPurchaseStore }),
+    identifier: t.exposeString('identifier'),
     createdAt: t.expose('createdAt', { type: 'DateTime' }),
   }),
 });

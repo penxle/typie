@@ -1,181 +1,89 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
-  import BarChartIcon from '~icons/lucide/bar-chart';
-  import FileTextIcon from '~icons/lucide/file-text';
-  import HomeIcon from '~icons/lucide/home';
-  import SettingsIcon from '~icons/lucide/settings';
-  import UsersIcon from '~icons/lucide/users';
-  import { page } from '$app/state';
   import { EnvironmentBanner } from '$lib/components';
-  import { AdminIcon, AdminImpersonateBanner } from '$lib/components/admin';
+  import { AdminCommandPalette, AdminImpersonateBanner, AdminNav } from '$lib/components/admin';
   import { hydrateQuery } from '$lib/graphql';
 
   let { data, children } = $props();
 
   const query = $derived(hydrateQuery(() => data.query));
 
-  const navItems = [
-    { href: '/admin', label: '홈', icon: HomeIcon },
-    { href: '/admin/users', label: '사용자 관리', icon: UsersIcon },
-    { href: '/admin/documents', label: '문서 관리', icon: FileTextIcon },
-    { href: '/admin/stats', label: '통계', icon: BarChartIcon },
-    { href: '/admin/bootstrap', label: 'Bootstrap', icon: SettingsIcon },
-  ];
-
-  const isActive = (href: string) => {
-    if (href === '/admin') {
-      // @ts-expect-error pathname mismatch
-      return page.url.pathname === '/admin';
-    }
-
-    return page.url.pathname.startsWith(href);
-  };
+  let paletteOpen = $state(false);
 </script>
 
-<div class={flex({ flexDirection: 'column', height: '[100dvh]', backgroundColor: 'gray.900', fontFamily: 'mono' })}>
+<div class={flex({ flexDirection: 'column', height: '[100dvh]', backgroundColor: 'admin.canvas' })}>
   <EnvironmentBanner />
   <AdminImpersonateBanner query$key={query.data} />
+  <AdminCommandPalette bind:open={paletteOpen} />
 
   <div class={flex({ flexGrow: '1', overflow: 'hidden' })}>
-    <aside
-      class={flex({
-        flexDirection: 'column',
-        width: '240px',
-        borderRightWidth: '2px',
-        borderColor: 'amber.500',
-        backgroundColor: 'gray.900',
-      })}
-    >
-      <div class={css({ borderBottomWidth: '2px', borderColor: 'amber.500', padding: '24px', textAlign: 'center' })}>
-        <div
+    <aside class={flex({ flexDirection: 'column', width: '220px', flexShrink: '0' })}>
+      <div class={flex({ alignItems: 'center', gap: '8px', paddingX: '20px', paddingY: '16px' })}>
+        <span class={css({ fontSize: '15px', fontWeight: 'extrabold', color: 'text.default' })}>타이피</span>
+        <span
           class={css({
-            fontSize: '14px',
-            color: 'amber.500',
-            borderWidth: '2px',
-            borderColor: 'amber.500',
-            paddingX: '16px',
-            paddingY: '8px',
-            marginBottom: '8px',
+            borderRadius: 'full',
+            backgroundColor: 'accent.brand.subtle',
+            paddingX: '8px',
+            paddingY: '2px',
+            fontSize: '10px',
+            fontWeight: 'bold',
+            color: 'accent.brand.default',
           })}
         >
-          TYPIE ADMIN
-        </div>
-        <div class={css({ fontSize: '10px', color: 'amber.400' })}>SYSTEM v1.0</div>
+          ADMIN
+        </span>
       </div>
 
-      <nav class={flex({ flexDirection: 'column', gap: '4px', paddingX: '16px', paddingY: '24px' })}>
-        {#each navItems as item (item.href)}
-          <a
-            class={css({
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px',
-              paddingX: '16px',
-              paddingY: '8px',
-              fontSize: '12px',
-              color: isActive(item.href) ? 'gray.900' : 'amber.500',
-              backgroundColor: isActive(item.href) ? 'amber.500' : 'transparent',
-              borderWidth: '1px',
-              borderColor: isActive(item.href) ? 'amber.500' : 'transparent',
-              marginBottom: '2px',
-              textDecoration: 'none',
-              _hover: {
-                backgroundColor: 'amber.500',
-                color: 'gray.900',
-                borderColor: 'amber.500',
-              },
-            })}
-            href={item.href}
-          >
-            <AdminIcon icon={item.icon} size={16} />
-            {item.label.toUpperCase()}
-          </a>
-        {/each}
-      </nav>
+      <AdminNav bind:open={paletteOpen} />
 
       <div class={css({ flexGrow: '1' })}></div>
 
-      <div
-        class={css({
-          borderTopWidth: '2px',
-          borderColor: 'amber.500',
-          borderWidth: '2px',
-          padding: '16px',
-          marginX: '12px',
-          marginBottom: '12px',
-        })}
-      >
-        <div class={css({ fontSize: '10px', color: 'amber.400', marginBottom: '12px' })}>CURRENT USER</div>
-        <div class={flex({ alignItems: 'center', gap: '12px' })}>
-          <div
-            class={css({
-              size: '32px',
-              backgroundColor: 'amber.500',
-              overflow: 'hidden',
-              flexShrink: '0',
-            })}
-          >
+      <div class={css({ padding: '12px' })}>
+        <div
+          class={flex({
+            alignItems: 'center',
+            gap: '8px',
+            borderWidth: '1px',
+            borderColor: 'border.subtle',
+            borderRadius: '10px',
+            backgroundColor: 'admin.card.default',
+            boxShadow: 'adminCard',
+            padding: '10px',
+          })}
+        >
+          <div class={css({ borderRadius: 'full', size: '28px', backgroundColor: 'surface.muted', overflow: 'hidden', flexShrink: '0' })}>
             {#if query.data.me.avatar}
               <img alt={query.data.me.name} src={query.data.me.avatar.url} />
             {/if}
           </div>
           <div class={css({ flex: '1', minWidth: '0' })}>
-            <div class={css({ fontSize: '11px', color: 'amber.500', truncate: true })}>
-              {query.data.me.name.toUpperCase()}
-            </div>
-            <div class={css({ fontSize: '10px', color: 'amber.400', truncate: true })}>
-              {query.data.me.email}
-            </div>
+            <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.default', truncate: true })}>{query.data.me.name}</div>
+            <div class={css({ fontSize: '11px', color: 'text.faint', truncate: true })}>{query.data.me.email}</div>
           </div>
         </div>
-      </div>
-
-      <div class={css({ paddingX: '12px', paddingBottom: '12px' })}>
         <a
           class={css({
             display: 'block',
-            width: 'full',
-            textAlign: 'center',
-            borderWidth: '2px',
-            borderColor: 'red.500',
-            paddingY: '10px',
+            marginTop: '8px',
+            borderRadius: '8px',
+            paddingX: '10px',
+            paddingY: '6px',
             fontSize: '12px',
-            color: 'red.500',
-            textDecoration: 'none',
-            _hover: {
-              backgroundColor: 'red.500',
-              color: 'gray.900',
-            },
+            color: 'text.muted',
+            textAlign: 'center',
+            _hover: { backgroundColor: 'surface.muted' },
           })}
           href="/initial"
         >
-          EXIT SYSTEM
+          서비스로 돌아가기
         </a>
       </div>
     </aside>
 
-    <main class={flex({ flexDirection: 'column', flex: '1', overflow: 'hidden' })}>
-      <header
-        class={flex({
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          borderBottomWidth: '2px',
-          borderColor: 'amber.500',
-          paddingX: '24px',
-          paddingY: '16px',
-          height: '64px',
-          backgroundColor: 'gray.900',
-        })}
-      >
-        <div class={flex({ alignItems: 'center', gap: '8px' })}>
-          <h1 class={css({ fontSize: '14px', color: 'amber.500' })}>System Status: ONLINE</h1>
-        </div>
-      </header>
-
-      <div class={css({ flex: '1', padding: '24px', overflowY: 'auto', backgroundColor: 'gray.900' })}>
-        {@render children()}
-      </div>
+    <main class={css({ flex: '1', overflowY: 'auto', padding: '28px' })}>
+      {@render children()}
     </main>
   </div>
 </div>

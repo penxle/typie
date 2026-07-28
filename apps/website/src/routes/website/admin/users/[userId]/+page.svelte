@@ -1,18 +1,23 @@
 <script lang="ts">
   import { createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
-  import { flex, grid } from '@typie/styled-system/patterns';
-  import { comma } from '@typie/ui/utils';
-  import dayjs from 'dayjs';
-  import ArrowLeftIcon from '~icons/lucide/arrow-left';
-  import { AdminIcon, AdminModal } from '$lib/components/admin';
+  import { flex } from '@typie/styled-system/patterns';
+  import { Button, Modal } from '@typie/ui/components';
+  import { QueryString } from '@typie/ui/state';
+  import { userRoleLabels, userRoleTones, userStateLabels, userStateTones } from '$lib/admin-labels';
+  import { AdminBadge, AdminPageHeader, AdminTabs } from '$lib/components/admin';
   import { hydrateQuery } from '$lib/graphql';
-  import { unwrapError } from '$lib/graphql/error';
   import { graphql } from '$mearie';
+  import BillingTab from './BillingTab.svelte';
+  import ContentsTab from './ContentsTab.svelte';
+  import OverviewTab from './OverviewTab.svelte';
+  import SessionsTab from './SessionsTab.svelte';
 
   let { data } = $props();
 
   const query = $derived(hydrateQuery(() => data.query));
+
+  const currentTab = new QueryString('tab', 'overview');
 
   let impersonateModalOpen = $state(false);
 
@@ -28,695 +33,64 @@
     await adminImpersonate({ input: { userId: query.data.adminUser.id } });
     location.assign('/initial');
   };
-
-  const [adminGiveCredit] = createMutation(
-    graphql(`
-      mutation AdminUserDetail_AdminGiveCredit_Mutation($input: AdminGiveCreditInput!) {
-        adminGiveCredit(input: $input)
-      }
-    `),
-  );
-
-  const [adminRefundPayment] = createMutation(
-    graphql(`
-      mutation AdminUserDetail_AdminRefundPayment_Mutation($input: AdminRefundPaymentInput!) {
-        adminRefundPayment(input: $input)
-      }
-    `),
-  );
-
-  let refundModalOpen = $state(false);
-  let selectedInvoice: (typeof query.data.adminUser.paymentInvoices)[number] | null = $state(null);
-  let refundReason = $state('');
-
-  const handleRefund = async () => {
-    if (!selectedInvoice) return;
-    try {
-      await adminRefundPayment({ input: { invoiceId: selectedInvoice.id, reason: refundReason || undefined } });
-      refundModalOpen = false;
-      refundReason = '';
-      selectedInvoice = null;
-      query.refetch();
-    } catch (err) {
-      const unwrapped = unwrapError(err);
-      alert(unwrapped instanceof Error ? unwrapped.message : 'Refund failed');
-    }
-  };
-
-  const invoiceStateColor = (state: string) => {
-    switch (state) {
-      case 'PAID': {
-        return 'green.400';
-      }
-      case 'CANCELED': {
-        return 'gray.400';
-      }
-      case 'OVERDUE': {
-        return 'red.400';
-      }
-      case 'UPCOMING': {
-        return 'amber.400';
-      }
-      default: {
-        return 'gray.400';
-      }
-    }
-  };
 </script>
 
-<div class={flex({ flexDirection: 'column', gap: '24px', color: 'amber.500' })}>
-  <div class={flex({ alignItems: 'center', gap: '12px' })}>
-    <button
-      class={css({
-        borderWidth: '2px',
-        borderColor: 'amber.500',
-        paddingX: '12px',
-        paddingY: '6px',
-        fontSize: '12px',
-        color: 'amber.500',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-        backgroundColor: 'transparent',
-        _hover: {
-          backgroundColor: 'amber.500',
-          color: 'gray.900',
-        },
-      })}
-      onclick={() => history.back()}
-      type="button"
-    >
-      <AdminIcon icon={ArrowLeftIcon} size={16} />
-      BACK TO LIST
-    </button>
-    <h2 class={css({ fontSize: '18px', color: 'amber.500' })}>USER DETAILS</h2>
-  </div>
+<AdminPageHeader description={query.data.adminUser.email} title={query.data.adminUser.name}>
+  {#snippet badges()}
+    <AdminBadge label={userStateLabels[query.data.adminUser.state]} tone={userStateTones[query.data.adminUser.state]} />
+    <AdminBadge label={userRoleLabels[query.data.adminUser.role]} tone={userRoleTones[query.data.adminUser.role]} />
+    <AdminBadge
+      label={query.data.adminUser.hasActiveSubscription ? '구독 권한 있음' : '구독 권한 없음'}
+      tone={query.data.adminUser.hasActiveSubscription ? 'success' : 'neutral'}
+    />
+  {/snippet}
+  {#snippet actions()}
+    <Button onclick={() => (impersonateModalOpen = true)} size="sm" variant="secondary">이 유저로 접속</Button>
+  {/snippet}
+</AdminPageHeader>
 
-  {#if query.data.adminUser}
-    <div
-      class={grid({
-        gap: '24px',
-        gridTemplateColumns: '2fr 1fr',
-        alignItems: 'start',
-      })}
-    >
-      <!-- 왼쪽 컬럼: 핵심 콘텐츠 -->
-      <div class={flex({ flexDirection: 'column', gap: '24px' })}>
-        <!-- PROFILE -->
-        <div
-          class={css({
-            borderWidth: '2px',
-            borderColor: 'amber.500',
-            padding: '24px',
-            backgroundColor: 'gray.900',
-          })}
-        >
-          <h3 class={css({ fontSize: '16px', color: 'amber.500', marginBottom: '20px' })}>PROFILE</h3>
+<AdminTabs
+  tabs={[
+    { key: 'overview', label: '개요' },
+    { key: 'contents', label: '콘텐츠' },
+    { key: 'billing', label: '결제' },
+    { key: 'sessions', label: '접속' },
+  ]}
+  bind:current={currentTab.current}
+/>
 
-          <div class={flex({ gap: '20px', marginBottom: '24px' })}>
-            <div
-              class={css({
-                size: '80px',
-                backgroundColor: 'amber.500',
-                overflow: 'hidden',
-                flexShrink: '0',
-              })}
-            >
-              {#if query.data.adminUser.avatar?.url}
-                <img alt={query.data.adminUser.name} src={query.data.adminUser.avatar.url} />
-              {/if}
-            </div>
+{#if currentTab.current === 'overview'}
+  <OverviewTab user$key={query.data.adminUser} />
+{:else if currentTab.current === 'contents'}
+  <ContentsTab user$key={query.data.adminUser} />
+{:else if currentTab.current === 'billing'}
+  <BillingTab user$key={query.data.adminUser} />
+{:else if currentTab.current === 'sessions'}
+  <SessionsTab user$key={query.data.adminUser} />
+{/if}
 
-            <div class={flex({ flexDirection: 'column', gap: '8px' })}>
-              <h4 class={css({ fontSize: '20px', fontWeight: 'bold', color: 'amber.500' })}>
-                {query.data.adminUser.name}
-              </h4>
-              <div class={css({ fontSize: '12px', color: 'amber.400' })}>
-                {query.data.adminUser.email}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- ACTIVITY -->
-        <div
-          class={css({
-            borderWidth: '2px',
-            borderColor: 'amber.500',
-            padding: '24px',
-            backgroundColor: 'gray.900',
-          })}
-        >
-          <h3 class={css({ fontSize: '16px', color: 'amber.500', marginBottom: '20px' })}>ACTIVITY</h3>
-
-          <div class={grid({ gridTemplateColumns: 'repeat(2, 1fr)', gap: '24px', marginBottom: '32px' })}>
-            <div>
-              <div class={css({ fontSize: '24px', color: 'amber.500', marginBottom: '4px' })}>
-                {query.data.adminUser.documentCount}
-              </div>
-              <div class={css({ fontSize: '11px', color: 'amber.400' })}>DOCUMENTS</div>
-            </div>
-
-            <div>
-              <div class={css({ fontSize: '24px', color: 'amber.500', marginBottom: '4px' })}>
-                {comma(query.data.adminUser.usage.totalCharacterCount)}
-              </div>
-              <div class={css({ fontSize: '11px', color: 'amber.400' })}>CHARACTERS</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- PAYMENT HISTORY -->
-        <div
-          class={css({
-            borderWidth: '2px',
-            borderColor: 'amber.500',
-            padding: '24px',
-            backgroundColor: 'gray.900',
-          })}
-        >
-          <h3 class={css({ fontSize: '16px', color: 'amber.500', marginBottom: '20px' })}>
-            PAYMENT HISTORY ({query.data.adminUser.paymentInvoices.length})
-          </h3>
-
-          {#if query.data.adminUser.paymentInvoices.length > 0}
-            <div class={flex({ flexDirection: 'column', gap: '12px' })}>
-              {#each query.data.adminUser.paymentInvoices as invoice (invoice.id)}
-                {@const successRecord = invoice.records.find((r: { outcome: string }) => r.outcome === 'SUCCESS')}
-                <div
-                  class={css({
-                    borderWidth: '1px',
-                    borderColor: 'amber.500',
-                    padding: '16px',
-                  })}
-                >
-                  <div class={flex({ alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' })}>
-                    <div class={flex({ alignItems: 'center', gap: '8px' })}>
-                      <span class={css({ fontSize: '12px', color: 'amber.500' })}>
-                        {dayjs(invoice.dueAt).format('YYYY-MM-DD')}
-                      </span>
-                      <span class={css({ fontSize: '12px', color: invoiceStateColor(invoice.state) })}>
-                        [{invoice.state}]
-                      </span>
-                    </div>
-                    <span class={css({ fontSize: '14px', fontWeight: 'bold', color: 'amber.500' })}>
-                      ₩{comma(invoice.amount)}
-                    </span>
-                  </div>
-
-                  <div class={css({ fontSize: '11px', color: 'amber.400', marginBottom: '4px' })}>
-                    {invoice.subscription.plan.name}
-                  </div>
-
-                  {#if successRecord}
-                    <div class={css({ fontSize: '11px', color: 'amber.400' })}>
-                      BILLING: ₩{comma(successRecord.billingAmount)} / CREDIT: ₩{comma(successRecord.creditAmount)}
-                    </div>
-                  {/if}
-
-                  {#if invoice.state === 'PAID' && successRecord}
-                    <button
-                      class={css({
-                        marginTop: '8px',
-                        borderWidth: '1px',
-                        borderColor: 'red.500',
-                        paddingX: '10px',
-                        paddingY: '4px',
-                        fontSize: '11px',
-                        color: 'red.500',
-                        backgroundColor: 'transparent',
-                        cursor: 'pointer',
-                        _hover: {
-                          backgroundColor: 'red.500',
-                          color: 'gray.900',
-                        },
-                      })}
-                      onclick={() => {
-                        selectedInvoice = invoice;
-                        refundReason = '';
-                        refundModalOpen = true;
-                      }}
-                      type="button"
-                    >
-                      REFUND
-                    </button>
-                  {/if}
-                </div>
-              {/each}
-            </div>
-          {:else}
-            <div class={css({ fontSize: '12px', color: 'gray.400' })}>NO PAYMENT HISTORY</div>
-          {/if}
-        </div>
-
-        <!-- SITES -->
-        <div
-          class={css({
-            borderWidth: '2px',
-            borderColor: 'amber.500',
-            padding: '24px',
-            backgroundColor: 'gray.900',
-          })}
-        >
-          <h3 class={css({ fontSize: '16px', color: 'amber.500', marginBottom: '20px' })}>
-            SITES ({query.data.adminUser.sites.length})
-          </h3>
-
-          {#if query.data.adminUser.sites.length > 0}
-            <div class={flex({ flexDirection: 'column', gap: '12px' })}>
-              {#each query.data.adminUser.sites as site (site.id)}
-                <div
-                  class={css({
-                    borderWidth: '1px',
-                    borderColor: 'amber.500',
-                    padding: '16px',
-                  })}
-                >
-                  <a
-                    class={css({
-                      fontSize: '14px',
-                      fontWeight: 'bold',
-                      color: 'amber.500',
-                      _hover: { textDecoration: 'underline' },
-                      display: 'block',
-                      marginBottom: '4px',
-                    })}
-                    href={site.url}
-                    rel="noopener noreferrer"
-                    target="_blank"
-                  >
-                    {site.name}
-                  </a>
-                  <div class={css({ fontSize: '12px', color: 'amber.400' })}>
-                    {site.url}
-                  </div>
-                </div>
-              {/each}
-            </div>
-          {:else}
-            <div class={css({ fontSize: '12px', color: 'gray.400' })}>NO SITES OWNED</div>
-          {/if}
-        </div>
-      </div>
-
-      <!-- 오른쪽 컬럼: 메타데이터 -->
-      <div class={flex({ flexDirection: 'column', gap: '24px' })}>
-        <!-- METADATA -->
-        <div
-          class={css({
-            borderWidth: '2px',
-            borderColor: 'amber.500',
-            padding: '24px',
-            backgroundColor: 'gray.900',
-          })}
-        >
-          <h3 class={css({ fontSize: '16px', color: 'amber.500', marginBottom: '20px' })}>METADATA</h3>
-
-          <div class={flex({ flexDirection: 'column', gap: '16px' })}>
-            <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
-              <span class={css({ fontSize: '11px', color: 'amber.400' })}>USER ID</span>
-              <span class={css({ fontSize: '12px', color: 'amber.500' })}>
-                {query.data.adminUser.id}
-              </span>
-            </div>
-
-            <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
-              <span class={css({ fontSize: '11px', color: 'amber.400' })}>ROLE</span>
-              <span class={css({ fontSize: '12px', color: query.data.adminUser.role === 'ADMIN' ? 'amber.500' : 'gray.400' })}>
-                [{query.data.adminUser.role}]
-              </span>
-            </div>
-
-            <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
-              <span class={css({ fontSize: '11px', color: 'amber.400' })}>STATE</span>
-              <span
-                class={css({
-                  fontSize: '12px',
-                  color: query.data.adminUser.state === 'ACTIVE' ? 'green.400' : 'red.400',
-                })}
-              >
-                [{query.data.adminUser.state}]
-              </span>
-            </div>
-
-            <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
-              <span class={css({ fontSize: '11px', color: 'amber.400' })}>JOINED</span>
-              <span class={css({ fontSize: '12px', color: 'amber.500' })}>
-                {dayjs(query.data.adminUser.createdAt).formatAsDateTime()}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <!-- AUTHENTICATION -->
-        <div
-          class={css({
-            borderWidth: '2px',
-            borderColor: 'amber.500',
-            padding: '24px',
-            backgroundColor: 'gray.900',
-          })}
-        >
-          <h3 class={css({ fontSize: '16px', color: 'amber.500', marginBottom: '20px' })}>AUTHENTICATION</h3>
-
-          <div class={flex({ flexDirection: 'column', gap: '16px' })}>
-            <div>
-              <div class={css({ fontSize: '11px', color: 'amber.400', marginBottom: '8px' })}>LOGIN METHODS</div>
-              {#if query.data.adminUser.singleSignOns.length > 0}
-                <div class={flex({ flexDirection: 'column', gap: '8px' })}>
-                  {#each query.data.adminUser.singleSignOns as sso (sso.id)}
-                    <div class={css({ fontSize: '12px', color: 'amber.500' })}>
-                      [{sso.provider}] {sso.email}
-                    </div>
-                  {/each}
-                </div>
-              {:else}
-                <div class={css({ fontSize: '12px', color: 'amber.500' })}>
-                  [EMAIL] {query.data.adminUser.email}
-                </div>
-              {/if}
-            </div>
-          </div>
-        </div>
-
-        <!-- IDENTITY -->
-        <div
-          class={css({
-            borderWidth: '2px',
-            borderColor: 'amber.500',
-            padding: '24px',
-            backgroundColor: 'gray.900',
-          })}
-        >
-          <h3 class={css({ fontSize: '16px', color: 'amber.500', marginBottom: '20px' })}>IDENTITY</h3>
-
-          {#if query.data.adminUser.personalIdentity}
-            <div class={flex({ flexDirection: 'column', gap: '16px' })}>
-              <div>
-                <div class={css({ fontSize: '11px', color: 'amber.400', marginBottom: '4px' })}>NAME</div>
-                <div class={css({ fontSize: '14px', color: 'amber.500', fontWeight: 'bold' })}>
-                  {query.data.adminUser.personalIdentity.name}
-                </div>
-              </div>
-
-              <div class={grid({ gridTemplateColumns: '1fr 1fr', gap: '16px' })}>
-                <div>
-                  <div class={css({ fontSize: '11px', color: 'amber.400', marginBottom: '4px' })}>BIRTH DATE</div>
-                  <div class={css({ fontSize: '12px', color: 'amber.500' })}>
-                    {dayjs(query.data.adminUser.personalIdentity.birthDate).format('YYYY-MM-DD')}
-                  </div>
-                </div>
-                <div>
-                  <div class={css({ fontSize: '11px', color: 'amber.400', marginBottom: '4px' })}>GENDER</div>
-                  <div class={css({ fontSize: '12px', color: 'amber.500' })}>
-                    [{query.data.adminUser.personalIdentity.gender}]
-                  </div>
-                </div>
-              </div>
-
-              {#if query.data.adminUser.personalIdentity.phoneNumber}
-                <div>
-                  <div class={css({ fontSize: '11px', color: 'amber.400', marginBottom: '4px' })}>PHONE NUMBER</div>
-                  <div class={css({ fontSize: '12px', color: 'amber.500' })}>
-                    {query.data.adminUser.personalIdentity.phoneNumber}
-                  </div>
-                </div>
-              {/if}
-            </div>
-          {:else}
-            <div class={css({ fontSize: '12px', color: 'gray.400', textAlign: 'center', paddingY: '24px' })}>NO IDENTITY VERIFICATION</div>
-          {/if}
-        </div>
-
-        <!-- SUBSCRIPTION -->
-        <div
-          class={css({
-            borderWidth: '2px',
-            borderColor: 'amber.500',
-            padding: '24px',
-            backgroundColor: 'gray.900',
-          })}
-        >
-          <h3 class={css({ fontSize: '16px', color: 'amber.500', marginBottom: '20px' })}>SUBSCRIPTION</h3>
-
-          {#if query.data.adminUser.subscription}
-            <div class={flex({ flexDirection: 'column', gap: '16px' })}>
-              <div>
-                <div class={css({ fontSize: '11px', color: 'amber.400', marginBottom: '4px' })}>PLAN</div>
-                <div class={css({ fontSize: '14px', color: 'amber.500', fontWeight: 'bold' })}>
-                  {query.data.adminUser.subscription.plan.name}
-                </div>
-              </div>
-
-              <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
-                <span class={css({ fontSize: '11px', color: 'amber.400' })}>STATUS</span>
-                <span
-                  class={css({
-                    fontSize: '12px',
-                    color:
-                      query.data.adminUser.subscription.state === 'ACTIVE'
-                        ? 'green.400'
-                        : query.data.adminUser.subscription.state === 'WILL_EXPIRE'
-                          ? 'amber.400'
-                          : query.data.adminUser.subscription.state === 'IN_GRACE_PERIOD'
-                            ? 'red.400'
-                            : 'gray.400',
-                  })}
-                >
-                  [{query.data.adminUser.subscription.state}]
-                </span>
-              </div>
-
-              <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
-                <span class={css({ fontSize: '11px', color: 'amber.400' })}>STARTED</span>
-                <span class={css({ fontSize: '12px', color: 'amber.500' })}>
-                  {dayjs(query.data.adminUser.subscription.startsAt).formatAsDateTime()}
-                </span>
-              </div>
-
-              <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
-                <span class={css({ fontSize: '11px', color: 'amber.400' })}>EXPIRES</span>
-                <span class={css({ fontSize: '12px', color: 'amber.500' })}>
-                  {dayjs(query.data.adminUser.subscription.expiresAt).formatAsDateTime()}
-                </span>
-              </div>
-
-              <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
-                <span class={css({ fontSize: '11px', color: 'amber.400' })}>PAYMENT METHOD</span>
-                <span class={css({ fontSize: '12px', color: 'amber.500' })}>
-                  [{query.data.adminUser.subscription.plan.availability}]
-                </span>
-              </div>
-            </div>
-          {:else}
-            <div class={css({ fontSize: '12px', color: 'gray.400', textAlign: 'center', paddingY: '24px' })}>NO ACTIVE SUBSCRIPTION</div>
-          {/if}
-        </div>
-
-        <!-- PAYMENT -->
-        <div
-          class={css({
-            borderWidth: '2px',
-            borderColor: 'amber.500',
-            padding: '24px',
-            backgroundColor: 'gray.900',
-          })}
-        >
-          <h3 class={css({ fontSize: '16px', color: 'amber.500', marginBottom: '20px' })}>PAYMENT</h3>
-
-          <div class={flex({ flexDirection: 'column', gap: '16px' })}>
-            <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
-              <span class={css({ fontSize: '11px', color: 'amber.400' })}>BILLING KEY</span>
-              {#if query.data.adminUser.billingKey}
-                <span class={css({ fontSize: '12px', color: 'amber.500' })}>
-                  {query.data.adminUser.billingKey.name}
-                </span>
-              {:else}
-                <span class={css({ fontSize: '12px', color: 'gray.400' })}>NONE</span>
-              {/if}
-            </div>
-
-            <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
-              <span class={css({ fontSize: '11px', color: 'amber.400' })}>CREDIT BALANCE</span>
-              <span class={css({ fontSize: '12px', color: query.data.adminUser.credit === 0 ? 'gray.400' : 'amber.500' })}>
-                ₩{comma(query.data.adminUser.credit)}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <!-- PREFERENCES -->
-        <div
-          class={css({
-            borderWidth: '2px',
-            borderColor: 'amber.500',
-            padding: '24px',
-            backgroundColor: 'gray.900',
-          })}
-        >
-          <h3 class={css({ fontSize: '16px', color: 'amber.500', marginBottom: '20px' })}>PREFERENCES</h3>
-
-          <div class={flex({ flexDirection: 'column', gap: '16px' })}>
-            <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
-              <span class={css({ fontSize: '11px', color: 'amber.400' })}>MARKETING</span>
-              <span
-                class={css({
-                  fontSize: '12px',
-                  color: query.data.adminUser.marketingConsent ? 'green.400' : 'gray.400',
-                })}
-              >
-                {query.data.adminUser.marketingConsent ? 'CONSENTED' : 'NOT CONSENTED'}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <!-- ACTIONS -->
-        <div
-          class={css({
-            borderWidth: '2px',
-            borderColor: 'amber.500',
-            padding: '24px',
-            backgroundColor: 'gray.900',
-          })}
-        >
-          <h3 class={css({ fontSize: '16px', color: 'amber.500', marginBottom: '20px' })}>ACTIONS</h3>
-          <button
-            class={css({
-              borderWidth: '1px',
-              borderColor: 'amber.500',
-              paddingX: '12px',
-              paddingY: '8px',
-              marginY: '8px',
-              fontSize: '12px',
-              color: 'amber.500',
-              backgroundColor: 'transparent',
-              width: 'full',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px',
-              _hover: {
-                backgroundColor: 'amber.500',
-                color: 'gray.900',
-              },
-            })}
-            onclick={() => (impersonateModalOpen = true)}
-            type="button"
-          >
-            IMPERSONATE USER
-          </button>
-
-          <button
-            class={css({
-              borderWidth: '1px',
-              borderColor: 'amber.500',
-              paddingX: '12px',
-              paddingY: '8px',
-              marginY: '8px',
-              fontSize: '12px',
-              color: 'amber.500',
-              backgroundColor: 'transparent',
-              width: 'full',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px',
-              _hover: {
-                backgroundColor: 'amber.500',
-                color: 'gray.900',
-              },
-            })}
-            onclick={async () => {
-              const amount = Number.parseInt(prompt('Enter the amount of credit to give: ') || '');
-
-              if (!Number.isNaN(amount)) {
-                await adminGiveCredit({ input: { userId: query.data.adminUser.id, amount } });
-                query.refetch();
-                alert(`${amount} points given to user ${query.data.adminUser.name}`);
-              }
-            }}
-            type="button"
-          >
-            GIVE CREDIT
-          </button>
-        </div>
+<Modal style={css.raw({ padding: '24px', maxWidth: '400px' })} bind:open={impersonateModalOpen}>
+  <div class={flex({ flexDirection: 'column', gap: '24px' })}>
+    <div class={flex({ flexDirection: 'column', gap: '8px' })}>
+      <div class={css({ fontSize: '15px', fontWeight: 'bold', color: 'text.default' })}>이 유저로 접속할까요?</div>
+      <div class={css({ fontSize: '13px', color: 'text.faint', wordBreak: 'keep-all' })}>
+        {query.data.adminUser.name} ({query.data.adminUser.email}) 계정으로 즉시 전환돼요.
       </div>
     </div>
 
-    <AdminModal
-      actions={{
-        cancel: {},
-        confirm: {
-          label: 'CONFIRM IMPERSONATE',
-          onclick: handleImpersonate,
-          variant: 'primary',
-        },
-      }}
-      title="CONFIRM IMPERSONATION"
-      bind:open={impersonateModalOpen}
-    >
-      <div class={css({ marginBottom: '16px' })}>
-        <p class={css({ marginBottom: '8px' })}>ARE YOU SURE YOU WANT TO IMPERSONATE THIS USER?</p>
-        <p class={css({ color: 'amber.400' })}>
-          USER: {query.data.adminUser.name.toUpperCase()} ({query.data.adminUser.email})
-        </p>
-      </div>
-    </AdminModal>
-
-    <AdminModal
-      actions={{
-        cancel: {},
-        confirm: {
-          label: 'CONFIRM REFUND',
-          onclick: handleRefund,
-          variant: 'danger',
-        },
-      }}
-      title="CONFIRM REFUND"
-      bind:open={refundModalOpen}
-    >
-      {#if selectedInvoice}
-        <div class={flex({ flexDirection: 'column', gap: '12px' })}>
-          <div>
-            <div class={css({ fontSize: '11px', color: 'amber.400', marginBottom: '4px' })}>INVOICE</div>
-            <div class={css({ fontSize: '12px', color: 'amber.500' })}>{selectedInvoice.id}</div>
-          </div>
-
-          <div>
-            <div class={css({ fontSize: '11px', color: 'amber.400', marginBottom: '4px' })}>PLAN</div>
-            <div class={css({ fontSize: '12px', color: 'amber.500' })}>{selectedInvoice.subscription.plan.name}</div>
-          </div>
-
-          <div>
-            <div class={css({ fontSize: '11px', color: 'amber.400', marginBottom: '4px' })}>AMOUNT</div>
-            <div class={css({ fontSize: '14px', fontWeight: 'bold', color: 'amber.500' })}>₩{comma(selectedInvoice.amount)}</div>
-          </div>
-
-          <div class={css({ color: 'red.400', fontSize: '11px', padding: '8px', borderWidth: '1px', borderColor: 'red.500' })}>
-            THIS WILL CANCEL THE PAYMENT AND EXPIRE THE SUBSCRIPTION IMMEDIATELY.
-          </div>
-
-          <div>
-            <div class={css({ fontSize: '11px', color: 'amber.400', marginBottom: '4px' })}>REASON</div>
-            <input
-              class={css({
-                width: 'full',
-                padding: '8px',
-                fontSize: '12px',
-                color: 'amber.500',
-                backgroundColor: 'transparent',
-                borderWidth: '1px',
-                borderColor: 'amber.500',
-                outline: 'none',
-                _focus: { borderColor: 'amber.400' },
-              })}
-              placeholder="Enter refund reason..."
-              bind:value={refundReason}
-            />
-          </div>
-        </div>
-      {/if}
-    </AdminModal>
-  {/if}
-</div>
+    <div class={flex({ justifyContent: 'flex-end', gap: '10px' })}>
+      <Button onclick={() => (impersonateModalOpen = false)} size="sm" type="button" variant="secondary">취소</Button>
+      <Button
+        onclick={async () => {
+          impersonateModalOpen = false;
+          await handleImpersonate();
+        }}
+        size="sm"
+        type="button"
+        variant="danger"
+      >
+        접속
+      </Button>
+    </div>
+  </div>
+</Modal>
