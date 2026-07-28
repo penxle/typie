@@ -64,7 +64,7 @@ class EditorSelectionInputIntentTrackerTest {
       ),
     )
 
-    tracker.recordImeMessagesCommitted(
+    tracker.recordImeMessagesApplied(
       messages = expected,
       preState = state(version = 2L, selection = ImeRange(17, 18)),
       postState = state(version = 3L, selection = ImeRange(16, 18)),

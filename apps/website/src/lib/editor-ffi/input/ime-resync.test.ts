@@ -30,10 +30,12 @@ describe('wireImeResyncListener', () => {
     const editor = createFakeEditor();
     const input = document.createElement('textarea');
     const adapter = { resetForResync: vi.fn() };
+    const onResync = vi.fn();
 
-    const cleanup = wireImeResyncListener(editor as unknown as Editor, adapter as unknown as ImeInputAdapter, () => input);
+    const cleanup = wireImeResyncListener(editor as unknown as Editor, adapter as unknown as ImeInputAdapter, () => input, onResync);
 
     editor.emit('ime_resync_required');
+    expect(onResync).toHaveBeenCalledOnce();
     expect(adapter.resetForResync).not.toHaveBeenCalled();
 
     await Promise.resolve();

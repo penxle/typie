@@ -48,6 +48,25 @@ export const handleCut: EditorEventHandler<ImeTextInput, ClipboardEvent> = (edit
   editor.scrollIntoView({ target: { type: 'current_selection_head' }, mode: 'nearest' });
 };
 
+export const deferPasteShortcutDuringComposition = (
+  e: KeyboardEvent,
+  requestPaste: () => void,
+  requestPasteTextOnly: () => void,
+): (() => void) | undefined => {
+  if (!e.isComposing || e.altKey) return;
+
+  const isMac = navigator.platform.toUpperCase().includes('MAC');
+  const hasMod = isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
+  if (!hasMod || (e.code !== 'KeyV' && e.key.toLowerCase() !== 'v' && e.key !== 'ㅍ')) return;
+
+  // Some IMEs consume the first paste shortcut to commit preedit without emitting
+  // a ClipboardEvent. Preserve the native paste-event path outside composition,
+  // and recover only this missing event after the composition commit is applied.
+  e.preventDefault();
+  e.stopPropagation();
+  return e.shiftKey ? requestPasteTextOnly : requestPaste;
+};
+
 const toImportItem = (file: File): AttachmentImportItem => ({
   file,
   kind: file.type.startsWith('image/') ? 'image' : 'file',

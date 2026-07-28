@@ -61,11 +61,15 @@ class EditorInputCompositionKeyDesktopTest {
   }
 
   @Test
-  fun `desktop navigation key during composition stays blocked`() {
+  fun `desktop navigation key during composition commits preedit then moves`() {
     runCompositionKeyTest(
       platform = Platform.Desktop,
       key = Key.DirectionRight,
-      expectEnqueued = null,
+      expectEnqueued =
+        listOf(
+          Message.TextInput(listOf(FlatImeOp.CommitAsIs)),
+          Message.Navigation(NavigationOp.Move(Movement.Grapheme(Direction.Forward), false)),
+        ),
     )
   }
 

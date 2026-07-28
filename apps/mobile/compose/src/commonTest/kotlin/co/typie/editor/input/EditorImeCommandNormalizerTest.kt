@@ -1,6 +1,7 @@
 package co.typie.editor.input
 
 import androidx.compose.ui.text.input.CommitTextCommand
+import androidx.compose.ui.text.input.DeleteSurroundingTextInCodePointsCommand
 import androidx.compose.ui.text.input.FinishComposingTextCommand
 import androidx.compose.ui.text.input.SetComposingRegionCommand
 import androidx.compose.ui.text.input.SetComposingTextCommand
@@ -162,6 +163,20 @@ class EditorImeCommandNormalizerTest {
   }
 
   @Test
+  fun `delete and composing commands stay in one ordered text input batch`() {
+    val messages =
+      EditorImeCommandNormalizer.normalize(
+        listOf(DeleteSurroundingTextInCodePointsCommand(1, 0), SetComposingTextCommand("하", 1)),
+        ime = null,
+      )
+
+    assertEquals(
+      listOf(Message.TextInput(listOf(FlatImeOp.DeleteSurrounding(1, 0), FlatImeOp.Compose("하")))),
+      messages,
+    )
+  }
+
+  @Test
   fun `collapsed selection command normalizes to navigation delta`() {
     val ime = Ime(text = "hello", windowStart = 10, selection = ImeRange(12, 12), composing = null)
 
@@ -191,12 +206,7 @@ class EditorImeCommandNormalizerTest {
   @Test
   fun `mixed selection and commit batch projects window-relative offsets to absolute`() {
     val ime =
-      Ime(
-        text = "텐데. ㅎㅇ",
-        windowStart = 4559,
-        selection = ImeRange(4565, 4565),
-        composing = null,
-      )
+      Ime(text = "텐데. ㅎㅇ", windowStart = 4559, selection = ImeRange(4565, 4565), composing = null)
 
     val messages =
       EditorImeCommandNormalizer.normalize(
@@ -229,13 +239,7 @@ class EditorImeCommandNormalizerTest {
 
   @Test
   fun `mixed batch selection offsets convert utf16 indices to code point offsets`() {
-    val ime =
-      Ime(
-        text = "a😀b",
-        windowStart = 10,
-        selection = ImeRange(13, 13),
-        composing = null,
-      )
+    val ime = Ime(text = "a😀b", windowStart = 10, selection = ImeRange(13, 13), composing = null)
 
     val messages =
       EditorImeCommandNormalizer.normalize(
@@ -256,12 +260,7 @@ class EditorImeCommandNormalizerTest {
   @Test
   fun `mixed batch composing region projects window-relative offsets to absolute`() {
     val ime =
-      Ime(
-        text = "텐데. ㅎㅇ",
-        windowStart = 4559,
-        selection = ImeRange(4565, 4565),
-        composing = null,
-      )
+      Ime(text = "텐데. ㅎㅇ", windowStart = 4559, selection = ImeRange(4565, 4565), composing = null)
 
     val messages =
       EditorImeCommandNormalizer.normalize(

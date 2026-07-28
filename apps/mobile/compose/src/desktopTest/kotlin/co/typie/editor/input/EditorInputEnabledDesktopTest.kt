@@ -17,9 +17,19 @@ import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.unit.dp
 import co.typie.editor.Editor
 import co.typie.editor.FakeFfiEditor
+import co.typie.editor.ffi.Break
+import co.typie.editor.ffi.Direction
+import co.typie.editor.ffi.FlatImeOp
+import co.typie.editor.ffi.Ime
+import co.typie.editor.ffi.ImeRange
+import co.typie.editor.ffi.InsertionOp
 import co.typie.editor.ffi.Key as FfiKey
 import co.typie.editor.ffi.KeyEvent as FfiKeyEvent
 import co.typie.editor.ffi.Message
+import co.typie.editor.ffi.ModifierOp
+import co.typie.editor.ffi.ModifierType
+import co.typie.editor.ffi.Movement
+import co.typie.editor.ffi.NavigationOp
 import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
 import co.typie.editor.scroll.rememberEditorBringIntoViewRequests
@@ -30,6 +40,7 @@ import co.typie.platform.IncomingContentMode
 import co.typie.platform.NoopClipboard
 import co.typie.platform.Platform
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CompletableDeferred
@@ -40,6 +51,96 @@ import kotlinx.coroutines.cancel
 
 @OptIn(ExperimentalTestApi::class)
 class EditorInputEnabledDesktopTest {
+  @Test
+  fun navigationAndShortcutsCommitCompositionBeforeDispatch() = runComposeUiTest {
+    val composingIme =
+      Ime(text = "한", windowStart = 0, selection = ImeRange(1, 1), composing = ImeRange(0, 1))
+    val fake = FakeFfiEditor(imeProvider = { _, _ -> composingIme })
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val editor = Editor(fake, scope)
+    val session = createTestDocumentEditingSession(editor, scope)
+
+    try {
+      editor.setImeSessionActive(true)
+      editor.refreshImeSnapshot()
+
+      setContent {
+        val focusRequester = remember { FocusRequester() }
+        val bringIntoViewRequests = rememberEditorBringIntoViewRequests()
+        Box(
+          Modifier.size(200.dp)
+            .testTag(InputTag)
+            .focusRequester(focusRequester)
+            .editorInput(
+              session = session,
+              uiState = EditorUiState(),
+              platform = Platform.Desktop,
+              bringIntoViewRequests = bringIntoViewRequests,
+              enabled = true,
+              suppressSoftwareKeyboard = true,
+              clipboard = NoopClipboard,
+            )
+            .focusable()
+        )
+        LaunchedEffect(Unit) { focusRequester.requestFocus() }
+      }
+      waitForIdle()
+      fake.enqueued.clear()
+
+      onNodeWithTag(InputTag).performKeyInput {
+        keyDown(Key.MetaLeft)
+        keyDown(Key.Enter)
+        keyUp(Key.Enter)
+        keyUp(Key.MetaLeft)
+      }
+      waitUntil(timeoutMillis = 5_000) {
+        fake.enqueued.any { it == Message.Insertion(InsertionOp.Break(Break.Page)) }
+      }
+
+      assertEquals(
+        listOf(
+          Message.TextInput(listOf(FlatImeOp.CommitAsIs)),
+          Message.Insertion(InsertionOp.Break(Break.Page)),
+        ),
+        fake.enqueued.filter {
+          it is Message.TextInput || it == Message.Insertion(InsertionOp.Break(Break.Page))
+        },
+      )
+
+      editor.refreshImeSnapshot()
+      fake.enqueued.clear()
+      onNodeWithTag(InputTag).performKeyInput {
+        keyDown(Key.DirectionLeft)
+        keyUp(Key.DirectionLeft)
+      }
+      val moveLeft =
+        Message.Navigation(NavigationOp.Move(Movement.Grapheme(Direction.Backward), extend = false))
+      waitUntil(timeoutMillis = 5_000) { fake.enqueued.any { it == moveLeft } }
+      assertEquals(
+        listOf(Message.TextInput(listOf(FlatImeOp.CommitAsIs)), moveLeft),
+        fake.enqueued.filter { it is Message.TextInput || it == moveLeft },
+      )
+
+      editor.refreshImeSnapshot()
+      fake.enqueued.clear()
+      onNodeWithTag(InputTag).performKeyInput {
+        keyDown(Key.MetaLeft)
+        keyDown(Key.B)
+        keyUp(Key.B)
+        keyUp(Key.MetaLeft)
+      }
+      val toggleBold = Message.Modifier(ModifierOp.Toggle(ModifierType.Bold))
+      waitUntil(timeoutMillis = 5_000) { fake.enqueued.any { it == toggleBold } }
+      assertEquals(
+        listOf(Message.TextInput(listOf(FlatImeOp.CommitAsIs)), toggleBold),
+        fake.enqueued.filter { it is Message.TextInput || it == toggleBold },
+      )
+    } finally {
+      session.stop()
+      scope.cancel()
+    }
+  }
+
   @Test
   fun laterKeyWaitsForPasteReadQueuedFromTheSameInputCallback() = runComposeUiTest {
     val fake = FakeFfiEditor()

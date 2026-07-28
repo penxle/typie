@@ -160,7 +160,7 @@ internal class EditorSelectionInputIntentTracker(private val staleTimeoutMillis:
     )
   }
 
-  fun recordImeMessagesCommitted(
+  fun recordImeMessagesApplied(
     messages: List<Message>,
     preState: EditorState,
     postState: EditorState,

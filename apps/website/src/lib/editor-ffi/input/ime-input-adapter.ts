@@ -447,9 +447,9 @@ export class ImeInputAdapter {
     this.#pendingCompositionText = e.data;
   }
 
-  handleCompositionEnd(): void {
+  handleCompositionEnd(): boolean {
     if (this.#resyncInProgress) {
-      return;
+      return false;
     }
 
     this.#compositionActive = false;
@@ -467,7 +467,8 @@ export class ImeInputAdapter {
       const messages: Message[] = [{ type: 'text_input', ops: [{ type: 'commit_as_is' }] }];
       this.#deps.enqueue(messages);
       this.#setCommitPending(committedText);
-      return;
+      return true;
     }
+    return false;
   }
 }

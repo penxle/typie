@@ -574,7 +574,7 @@ describe('ImeInputAdapter', () => {
     adapter.handleInput(inputEvent(input));
     expect(input.value).toBe('かな');
 
-    adapter.handleCompositionEnd();
+    expect(adapter.handleCompositionEnd()).toBe(true);
 
     expect(messages).toEqual([
       {
@@ -1284,7 +1284,7 @@ describe('ImeInputAdapter', () => {
       input.value = 'garbage';
       input.setSelectionRange(7, 7);
       adapter.handleInput(inputEvent(input));
-      adapter.handleCompositionEnd();
+      expect(adapter.handleCompositionEnd()).toBe(false);
     });
 
     messages.length = 0;

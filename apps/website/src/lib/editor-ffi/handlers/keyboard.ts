@@ -3,7 +3,6 @@ import type { Message, Movement } from '@typie/editor-ffi/browser';
 import type { Editor } from '../editor.svelte';
 import type { ImeTextInput } from '../input/ime-context';
 import type { EditorScrollIntoViewOptions } from '../scroll.svelte';
-import type { EditorEventHandler } from '../types';
 
 type KeyBindingModifier = 'shift' | 'mod' | 'ctrl' | 'alt';
 
@@ -11,6 +10,8 @@ type KeyBinding = {
   key: string | string[];
   modifiers?: KeyBindingModifier[];
   predicate?: (e: KeyboardEvent) => boolean;
+  commitCompositionBeforeDispatch?: boolean;
+  consumeKeyDownDuringComposition?: boolean;
   reveal?: () => EditorScrollIntoViewOptions;
   action: (editor: Editor, e: KeyboardEvent) => void;
 };
@@ -29,10 +30,20 @@ const currentSelectionHeadTypewriterReveal = (): EditorScrollIntoViewOptions => 
 const withCurrentSelectionHeadReveal = (bindings: KeyBinding[]): KeyBinding[] =>
   bindings.map((binding) => ({ ...binding, reveal: currentSelectionHeadTypewriterReveal }));
 
+const withCompositionCommitBeforeDispatch = (bindings: KeyBinding[], consumeKeyDownDuringComposition = false): KeyBinding[] =>
+  bindings.map((binding) => ({
+    ...binding,
+    commitCompositionBeforeDispatch: true,
+    consumeKeyDownDuringComposition,
+  }));
+
 // NOTE: Plain Backspace, Delete, and Enter also arrive through beforeinput in Input.svelte
 // as deleteContentBackward, deleteContentForward, insertParagraph, or insertLineBreak.
 // These bindings own the hardware-key path; beforeinput remains the browser input fallback.
 const bindings: KeyBinding[] = [
+  // Browsers may finish a simple-conversion IME and then dispatch a non-composing
+  // keydown for the same navigation key. Replaying the composing keydown here
+  // would move twice, so navigation stays owned by that native follow-up event.
   ...withCurrentSelectionHeadReveal([
     { key: 'ArrowLeft', action: (ed) => ed.enqueue(move({ type: 'grapheme', direction: 'backward' }, false)) },
     { key: 'ArrowLeft', modifiers: ['shift'], action: (ed) => ed.enqueue(move({ type: 'grapheme', direction: 'backward' }, true)) },
@@ -149,7 +160,9 @@ const bindings: KeyBinding[] = [
 
     { key: 'PageDown', action: (ed) => ed.enqueue(move({ type: 'page', direction: 'forward' }, false)) },
     { key: 'PageDown', modifiers: ['shift'], action: (ed) => ed.enqueue(move({ type: 'page', direction: 'forward' }, true)) },
+  ]),
 
+  ...withCurrentSelectionHeadReveal([
     { key: 'Enter', action: (ed) => ed.enqueue({ type: 'key', event: { key: 'enter' } }) },
     {
       key: 'Enter',
@@ -159,6 +172,8 @@ const bindings: KeyBinding[] = [
     {
       key: 'Enter',
       modifiers: ['mod'],
+      commitCompositionBeforeDispatch: true,
+      consumeKeyDownDuringComposition: true,
       action: (ed) => ed.enqueue({ type: 'insertion', op: { type: 'break', kind: 'page' } }),
     },
 
@@ -192,55 +207,60 @@ const bindings: KeyBinding[] = [
     },
   ]),
 
-  {
-    key: 'a',
-    modifiers: ['mod'],
-    action: (ed) => ed.enqueue({ type: 'selection', op: { type: 'expand', unit: 'all' } }),
-  },
+  ...withCompositionCommitBeforeDispatch(
+    [
+      {
+        key: 'a',
+        modifiers: ['mod'],
+        action: (ed) => ed.enqueue({ type: 'selection', op: { type: 'expand', unit: 'all' } }),
+      },
 
-  {
-    key: 'b',
-    modifiers: ['mod'],
-    action: (ed) => ed.enqueue({ type: 'modifier', op: { type: 'toggle', modifier_type: 'bold' } }),
-  },
-  {
-    key: 'i',
-    modifiers: ['mod'],
-    action: (ed) => ed.enqueue({ type: 'modifier', op: { type: 'toggle', modifier_type: 'italic' } }),
-  },
-  {
-    key: 's',
-    modifiers: ['mod', 'shift'],
-    action: (ed) => ed.enqueue({ type: 'modifier', op: { type: 'toggle', modifier_type: 'strikethrough' } }),
-  },
-  {
-    key: 'u',
-    modifiers: ['mod'],
-    action: (ed) => ed.enqueue({ type: 'modifier', op: { type: 'toggle', modifier_type: 'underline' } }),
-  },
-  {
-    key: '\\',
-    modifiers: ['mod'],
-    action: (ed) => ed.enqueue({ type: 'modifier', op: { type: 'clear_all' } }),
-  },
+      {
+        key: 'b',
+        modifiers: ['mod'],
+        action: (ed) => ed.enqueue({ type: 'modifier', op: { type: 'toggle', modifier_type: 'bold' } }),
+      },
+      {
+        key: 'i',
+        modifiers: ['mod'],
+        action: (ed) => ed.enqueue({ type: 'modifier', op: { type: 'toggle', modifier_type: 'italic' } }),
+      },
+      {
+        key: 's',
+        modifiers: ['mod', 'shift'],
+        action: (ed) => ed.enqueue({ type: 'modifier', op: { type: 'toggle', modifier_type: 'strikethrough' } }),
+      },
+      {
+        key: 'u',
+        modifiers: ['mod'],
+        action: (ed) => ed.enqueue({ type: 'modifier', op: { type: 'toggle', modifier_type: 'underline' } }),
+      },
+      {
+        key: '\\',
+        modifiers: ['mod'],
+        action: (ed) => ed.enqueue({ type: 'modifier', op: { type: 'clear_all' } }),
+      },
 
-  { key: 'z', modifiers: ['mod'], action: (ed) => ed.enqueue({ type: 'history', op: { type: 'undo' } }) },
-  { key: 'z', modifiers: ['mod', 'shift'], action: (ed) => ed.enqueue({ type: 'history', op: { type: 'redo' } }) },
-  {
-    key: 'y',
-    modifiers: ['mod'],
-    predicate: () => !isMac,
-    action: (ed) => ed.enqueue({ type: 'history', op: { type: 'redo' } }),
-  },
+      { key: 'z', modifiers: ['mod'], action: (ed) => ed.enqueue({ type: 'history', op: { type: 'undo' } }) },
+      { key: 'z', modifiers: ['mod', 'shift'], action: (ed) => ed.enqueue({ type: 'history', op: { type: 'redo' } }) },
+      {
+        key: 'y',
+        modifiers: ['mod'],
+        predicate: () => !isMac,
+        action: (ed) => ed.enqueue({ type: 'history', op: { type: 'redo' } }),
+      },
 
-  { key: ['q', 'ㅂ'], modifiers: ['ctrl'], predicate: macOnly, action: (ed) => ed.inspect('state') },
-  { key: ['w', 'ㅈ'], modifiers: ['ctrl'], predicate: macOnly, action: (ed) => ed.inspect('state-as-macro') },
-  {
-    key: ['s', 'ㄴ'],
-    modifiers: ['ctrl'],
-    predicate: macOnly,
-    action: (ed) => ed.inspect('selection-as-slice-macro'),
-  },
+      { key: ['q', 'ㅂ'], modifiers: ['ctrl'], predicate: macOnly, action: (ed) => ed.inspect('state') },
+      { key: ['w', 'ㅈ'], modifiers: ['ctrl'], predicate: macOnly, action: (ed) => ed.inspect('state-as-macro') },
+      {
+        key: ['s', 'ㄴ'],
+        modifiers: ['ctrl'],
+        predicate: macOnly,
+        action: (ed) => ed.inspect('selection-as-slice-macro'),
+      },
+    ],
+    true,
+  ),
 ];
 
 const move = (movement: Movement, extend: boolean): Message => ({
@@ -276,8 +296,25 @@ const matchBinding = (binding: KeyBinding, e: KeyboardEvent): boolean => {
   return true;
 };
 
-export const handleKeyDown: EditorEventHandler<ImeTextInput, KeyboardEvent> = (editor, e) => {
-  if (e.isComposing) return;
+const runBinding = (editor: Editor, binding: KeyBinding, e: KeyboardEvent): void => {
+  binding.action(editor, e);
+  const reveal = binding.reveal?.();
+  if (reveal) editor.scrollIntoView(reveal);
+};
+
+export const handleKeyDown = (editor: Editor, e: KeyboardEvent & { currentTarget: ImeTextInput }): (() => void) | undefined => {
+  const binding = bindings.find((candidate) => matchBinding(candidate, e));
+  if (e.isComposing) {
+    // Unmarked bindings, notably Tab and Escape, stay owned by native text input.
+    // Replaying them could steal an IME command or duplicate work the platform already handled.
+    if (!binding?.commitCompositionBeforeDispatch) return;
+
+    if (binding.consumeKeyDownDuringComposition) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    return () => runBinding(editor, binding, e);
+  }
 
   if (e.key === 'Escape' && runEscapeStack()) {
     e.preventDefault();
@@ -285,12 +322,9 @@ export const handleKeyDown: EditorEventHandler<ImeTextInput, KeyboardEvent> = (e
     return;
   }
 
-  const binding = bindings.find((b) => matchBinding(b, e));
   if (binding) {
     e.preventDefault();
     e.stopPropagation();
-    binding.action(editor, e);
-    const reveal = binding.reveal?.();
-    if (reveal) editor.scrollIntoView(reveal);
+    runBinding(editor, binding, e);
   }
 };

@@ -5,8 +5,10 @@ export const wireImeResyncListener = (
   editor: Editor,
   adapter: ImeInputAdapter,
   getInput: () => HTMLTextAreaElement | null,
+  onResync?: () => void,
 ): (() => void) => {
   return editor.on('ime_resync_required', () => {
+    onResync?.();
     queueMicrotask(() => {
       adapter.resetForResync(getInput());
     });

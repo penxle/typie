@@ -10,9 +10,11 @@ import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
+import androidx.compose.ui.platform.PlatformTextInputSessionScope
 import androidx.compose.ui.text.input.EditCommand
 import co.typie.editor.EditorState
 import co.typie.editor.EditorViewportTransform
+import co.typie.editor.KeyModifier
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.Message
 import kotlin.time.Clock
@@ -33,6 +35,12 @@ internal actual class EditorPlatformInputBridge actual constructor() {
     selectionIntentTracker.reset()
     floatingCursorSession.end()
   }
+
+  actual fun setInputSessionActive(active: Boolean) = Unit
+
+  actual fun bindInputSession(session: PlatformTextInputSessionScope) = Unit
+
+  actual fun resetPlatformInputBeforeBindingDispatch() = Unit
 
   actual fun onPreKeyEvent(
     event: KeyEvent,
@@ -105,12 +113,12 @@ internal actual class EditorPlatformInputBridge actual constructor() {
     }
   }
 
-  actual fun onImeMessagesCommitted(
+  actual fun onImeMessagesApplied(
     messages: List<Message>,
     preState: EditorState,
     postState: EditorState,
   ) {
-    selectionIntentTracker.recordImeMessagesCommitted(
+    selectionIntentTracker.recordImeMessagesApplied(
       messages = messages,
       preState = preState,
       postState = postState,
@@ -122,6 +130,7 @@ internal actual class EditorPlatformInputBridge actual constructor() {
     cursor: () -> CursorMetrics?,
     viewportTransform: () -> EditorViewportTransform,
     dispatch: (List<Message>) -> Unit,
+    dispatchBindingOnUnmatchedKeyUp: (Key, Set<KeyModifier>) -> Boolean,
   ): () -> Unit {
     val traitsGeneration = EditorTextInputTraitsBridge.install()
     val uninstall =

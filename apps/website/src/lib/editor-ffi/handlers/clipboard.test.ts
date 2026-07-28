@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { handlePaste, requestPaste } from './clipboard';
+import { deferPasteShortcutDuringComposition, handlePaste, requestPaste } from './clipboard';
 import type { Message } from '@typie/editor-ffi/browser';
 import type { AttachmentImportFailureHandler, AttachmentImportItem } from '../attachment-importer';
 
@@ -184,6 +184,68 @@ describe('native paste arbitration', () => {
     expect(editor.enqueue).not.toHaveBeenCalled();
     expect(event.preventDefault).toHaveBeenCalledOnce();
     expect(editor.scrollIntoView).not.toHaveBeenCalled();
+  });
+});
+
+describe('composition paste fallback', () => {
+  it('defers a composing Mod+V while leaving ordinary paste to the native event', () => {
+    const isMac = navigator.platform.toUpperCase().includes('MAC');
+    const requestPaste = vi.fn();
+    const composing = {
+      key: 'v',
+      code: 'KeyV',
+      isComposing: true,
+      shiftKey: false,
+      altKey: false,
+      ctrlKey: !isMac,
+      metaKey: isMac,
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn(),
+    } as unknown as KeyboardEvent;
+
+    const deferred = deferPasteShortcutDuringComposition(composing, requestPaste, vi.fn());
+
+    expect(deferred).toBeTypeOf('function');
+    expect(requestPaste).not.toHaveBeenCalled();
+    expect(composing.preventDefault).toHaveBeenCalledOnce();
+    expect(composing.stopPropagation).toHaveBeenCalledOnce();
+
+    deferred?.();
+
+    expect(requestPaste).toHaveBeenCalledOnce();
+
+    const ordinary = { ...composing, isComposing: false } as unknown as KeyboardEvent;
+    expect(deferPasteShortcutDuringComposition(ordinary, requestPaste, vi.fn())).toBeUndefined();
+  });
+
+  it('defers a composing Mod+Shift+V as text-only paste', () => {
+    const isMac = navigator.platform.toUpperCase().includes('MAC');
+    const requestPaste = vi.fn();
+    const requestPasteTextOnly = vi.fn();
+    const composing = {
+      key: 'V',
+      code: 'KeyV',
+      isComposing: true,
+      shiftKey: true,
+      altKey: false,
+      ctrlKey: !isMac,
+      metaKey: isMac,
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn(),
+    } as unknown as KeyboardEvent;
+
+    const deferred = deferPasteShortcutDuringComposition(composing, requestPaste, requestPasteTextOnly);
+
+    expect(deferred).toBeTypeOf('function');
+    expect(requestPaste).not.toHaveBeenCalled();
+    expect(requestPasteTextOnly).not.toHaveBeenCalled();
+    expect(composing.preventDefault).toHaveBeenCalledOnce();
+    expect(composing.stopPropagation).toHaveBeenCalledOnce();
+
+    deferred?.();
+
+    expect(requestPaste).not.toHaveBeenCalled();
+    expect(requestPasteTextOnly).toHaveBeenCalledOnce();
   });
 });
 

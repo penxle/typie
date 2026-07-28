@@ -7,22 +7,20 @@ import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.platform.PlatformTextInputSessionScope
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.CommitTextCommand
+import androidx.compose.ui.text.input.DeleteSurroundingTextInCodePointsCommand
 import androidx.compose.ui.text.input.EditCommand
+import androidx.compose.ui.text.input.FinishComposingTextCommand
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.ImeOptions
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.SetComposingTextCommand
 import androidx.compose.ui.text.input.TextEditingScope
 import androidx.compose.ui.text.input.TextEditorState
 import androidx.compose.ui.text.input.TextFieldValue
 import co.typie.editor.Editor
-import co.typie.editor.ffi.FlatImeOp
-import co.typie.editor.ffi.Key
-import co.typie.editor.ffi.KeyEvent
-import co.typie.editor.ffi.Message
 import co.typie.editor.scroll.EditorBringIntoViewRequests
-import co.typie.editor.scroll.EditorBringIntoViewTarget
-import co.typie.editor.scroll.updateNowWithBringIntoView
 import co.typie.platform.IncomingContentCandidates
 
 @OptIn(ExperimentalComposeUiApi::class)
@@ -84,20 +82,13 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
           value().text.subSequence(startIndex, endIndex)
       }
 
-    override val editText: (block: TextEditingScope.() -> Unit) -> Unit = { block ->
-      editor.runInputCallback {
-        editor.updateNowWithBringIntoView(bringIntoViewRequests) {
-          val batch =
-            EditorDesktopTextEditingBatch(
-              initialHasActiveComposition = editor.appliedState.ime?.composing != null
-            )
-          batch.block()
-          for (message in batch.drainMessages()) {
-            enqueue(message)
-          }
-          afterApplied { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
-        }
-      }
+    // Desktop's AWT IME callback edits through TextEditingScope rather than onEditCommand.
+    // Adapt it to the common onEditCommand normalization and apply pipeline.
+    override val editText: (block: TextEditingScope.() -> Unit) -> Unit = editText@{ block ->
+      val batch = EditorDesktopTextEditingBatch()
+      batch.block()
+      val commands = batch.drainCommands()
+      if (commands.isNotEmpty()) onEditCommand(commands)
     }
   }
 }
@@ -111,52 +102,28 @@ internal actual fun PlatformTextInputSessionScope.notifyImeStateChanged(editor: 
 }
 
 @OptIn(ExperimentalComposeUiApi::class)
-internal class EditorDesktopTextEditingBatch(initialHasActiveComposition: Boolean = false) :
-  TextEditingScope {
-  private val messages = mutableListOf<Message>()
-  private val ops = mutableListOf<FlatImeOp>()
-  private var hasActiveComposition = initialHasActiveComposition
+internal class EditorDesktopTextEditingBatch : TextEditingScope {
+  private val commands = mutableListOf<EditCommand>()
 
   override fun commitText(text: CharSequence, newCursorPosition: Int) {
-    if (text.toString() == "\n") {
-      flushOps()
-      messages += Message.Key(KeyEvent(Key.Enter))
-    } else {
-      ops += FlatImeOp.Compose(text.toString())
-      ops += FlatImeOp.CommitAsIs
-      hasActiveComposition = false
-    }
+    commands += CommitTextCommand(text.toString(), newCursorPosition)
   }
 
   override fun setComposingText(text: CharSequence, newCursorPosition: Int) {
-    ops += FlatImeOp.Compose(text.toString())
-    hasActiveComposition = true
+    commands += SetComposingTextCommand(text.toString(), newCursorPosition)
   }
 
   override fun finishComposingText() {
-    ops +=
-      if (hasActiveComposition) {
-        FlatImeOp.CommitAsIs
-      } else {
-        FlatImeOp.ClearComposition
-      }
-    hasActiveComposition = false
+    commands += FinishComposingTextCommand()
   }
 
   override fun deleteSurroundingTextInCodePoints(lengthBeforeCursor: Int, lengthAfterCursor: Int) {
-    ops += FlatImeOp.DeleteSurrounding(lengthBeforeCursor, lengthAfterCursor)
+    commands += DeleteSurroundingTextInCodePointsCommand(lengthBeforeCursor, lengthAfterCursor)
   }
 
-  fun drainMessages(): List<Message> {
-    flushOps()
-    val drained = messages.toList()
-    messages.clear()
+  fun drainCommands(): List<EditCommand> {
+    val drained = commands.toList()
+    commands.clear()
     return drained
-  }
-
-  private fun flushOps() {
-    if (ops.isEmpty()) return
-    messages += Message.TextInput(ops.toList())
-    ops.clear()
   }
 }

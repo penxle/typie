@@ -2,6 +2,8 @@ package co.typie.editor.input
 
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.input.key.Key
+import co.typie.editor.KeyModifier
+import co.typie.editor.createBindings
 import co.typie.editor.ffi.FlatImeOp
 import co.typie.editor.ffi.InsertionOp
 import co.typie.editor.ffi.Message
@@ -32,41 +34,78 @@ class EditorInputKeyHandlingTest {
   }
 
   @Test
-  fun `Android navigation keys commit composition before running their binding`() {
-    val navigationKeys =
+  fun `navigation bindings commit composition on every platform`() {
+    val navigationBindings =
       listOf(
-        Key.DirectionLeft,
-        Key.DirectionRight,
-        Key.DirectionUp,
-        Key.DirectionDown,
-        Key.MoveHome,
-        Key.MoveEnd,
-        Key.PageUp,
-        Key.PageDown,
+        Key.DirectionLeft to emptySet(),
+        Key.DirectionLeft to setOf(KeyModifier.Shift),
+        Key.DirectionLeft to setOf(KeyModifier.Alt),
+        Key.DirectionLeft to setOf(KeyModifier.Mod),
+        Key.DirectionDown to setOf(KeyModifier.Mod, KeyModifier.Shift),
+        Key.MoveHome to emptySet(),
+        Key.MoveEnd to setOf(KeyModifier.Ctrl),
+        Key.PageUp to setOf(KeyModifier.Shift),
+        Key.PageDown to emptySet(),
       )
 
-    for (key in navigationKeys) {
-      assertTrue(commitsCompositionBeforeKeyBinding(platform = Platform.Android, key = key))
+    for (platform in Platform.entries) {
+      for ((key, modifiers) in navigationBindings) {
+        assertTrue(
+          binding(platform, key, modifiers).commitCompositionBeforeDispatch,
+          "$platform $key $modifiers",
+        )
+      }
     }
   }
 
   @Test
-  fun `Android editing keys stay blocked during composition`() {
-    val blockedKeys = listOf(Key.Backspace, Key.Delete, Key.Enter, Key.Tab, Key.Escape, Key.A)
+  fun `editor shortcuts commit composition on every platform`() {
+    val shortcutBindings =
+      listOf(
+        Key.Enter to setOf(KeyModifier.Mod),
+        Key.A to setOf(KeyModifier.Mod),
+        Key.B to setOf(KeyModifier.Mod),
+        Key.Z to setOf(KeyModifier.Mod),
+        Key.C to setOf(KeyModifier.Mod),
+        Key.V to setOf(KeyModifier.Mod),
+      )
 
-    for (key in blockedKeys) {
-      assertFalse(commitsCompositionBeforeKeyBinding(platform = Platform.Android, key = key))
+    for (platform in Platform.entries) {
+      for ((key, modifiers) in shortcutBindings) {
+        assertTrue(
+          binding(platform, key, modifiers).commitCompositionBeforeDispatch,
+          "$platform $key $modifiers",
+        )
+      }
     }
   }
 
   @Test
-  fun `non-Android platforms keep navigation keys blocked during composition`() {
-    assertFalse(
-      commitsCompositionBeforeKeyBinding(platform = Platform.Desktop, key = Key.DirectionLeft)
-    )
-    assertFalse(
-      commitsCompositionBeforeKeyBinding(platform = Platform.iOS, key = Key.DirectionLeft)
-    )
+  fun `native text input bindings stay blocked during composition`() {
+    val nativeBindings =
+      listOf(
+        Key.Enter to emptySet(),
+        Key.Enter to setOf(KeyModifier.Shift),
+        Key.Backspace to emptySet(),
+        Key.Backspace to setOf(KeyModifier.Alt),
+        Key.Backspace to setOf(KeyModifier.Ctrl),
+        Key.Backspace to setOf(KeyModifier.Mod),
+        Key.Delete to emptySet(),
+        Key.Delete to setOf(KeyModifier.Alt),
+        Key.Delete to setOf(KeyModifier.Ctrl),
+        Key.Tab to emptySet(),
+        Key.Tab to setOf(KeyModifier.Shift),
+        Key.Escape to emptySet(),
+      )
+
+    for (platform in Platform.entries) {
+      for ((key, modifiers) in nativeBindings) {
+        assertFalse(
+          binding(platform, key, modifiers).commitCompositionBeforeDispatch,
+          "$platform $key $modifiers",
+        )
+      }
+    }
   }
 
   @Test
@@ -144,4 +183,7 @@ class EditorInputKeyHandlingTest {
       )
     )
   }
+
+  private fun binding(platform: Platform, key: Key, modifiers: Set<KeyModifier>) =
+    createBindings(platform).first { it.key == key && it.modifiers == modifiers }
 }

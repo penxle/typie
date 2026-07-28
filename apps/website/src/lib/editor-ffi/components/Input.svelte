@@ -4,7 +4,7 @@
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { pageRectToClientRect } from '../geometry';
   import { handle } from '../handlers';
-  import { handleCopy, handleCut, handlePaste } from '../handlers/clipboard';
+  import { deferPasteShortcutDuringComposition, handleCopy, handleCut, handlePaste, requestPaste } from '../handlers/clipboard';
   import { handleKeyDown } from '../handlers/keyboard';
   import { IME_CONTEXT_AFTER_LIMIT, IME_CONTEXT_BEFORE_LIMIT, normalizeImeContext } from '../input/ime-context';
   import { ImeInputAdapter } from '../input/ime-input-adapter';
@@ -41,6 +41,10 @@
     readContext: readEditorImeContext,
     enqueue: enqueueMessages,
   });
+  let pendingCompositionDispatch: (() => void) | undefined;
+  const handlePasteFailure = ({ file, kind }: { file: File; kind: 'image' | 'file' }) => {
+    Toast.error(`${file.name} ${kind === 'image' ? '이미지' : '파일'} 업로드에 실패했습니다.`);
+  };
 
   const syncInput = () => {
     if (!editor?.inputEl || editor.terminal) return;
@@ -76,7 +80,20 @@
   $effect(() => {
     if (!editor || editor.terminal) return;
 
-    return wireImeResyncListener(editor, inputAdapter, () => editor.inputEl ?? null);
+    return wireImeResyncListener(
+      editor,
+      inputAdapter,
+      () => editor.inputEl ?? null,
+      () => {
+        pendingCompositionDispatch = undefined;
+      },
+    );
+  });
+
+  $effect(() => {
+    if (editor?.readOnly) {
+      pendingCompositionDispatch = undefined;
+    }
   });
 </script>
 
@@ -101,12 +118,24 @@
       if (editor.readOnly) return;
       editor.updateNow(() => inputAdapter.handleBeforeInput(e as InputEvent & { currentTarget: ImeTextInput }));
     }}
+    onblur={() => {
+      pendingCompositionDispatch = undefined;
+    }}
     oncompositionend={() => {
-      if (editor.readOnly) return;
-      inputAdapter.handleCompositionEnd();
+      if (editor.readOnly) {
+        pendingCompositionDispatch = undefined;
+        return;
+      }
+      const committed = inputAdapter.handleCompositionEnd();
+      const action = pendingCompositionDispatch;
+      pendingCompositionDispatch = undefined;
+      if (committed) {
+        action?.();
+      }
     }}
     oncompositionstart={(e) => {
       if (editor.readOnly) return;
+      pendingCompositionDispatch = undefined;
       inputAdapter.handleCompositionStart(e as CompositionEvent & { currentTarget: ImeTextInput });
     }}
     oncompositionupdate={(e) => {
@@ -130,16 +159,25 @@
       if (editor.readOnly && e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
         editor.editBlockedHandler?.();
       }
-      editor.updateNow(() => handleKeyDown(editor, e));
+      editor.updateNow(() => {
+        pendingCompositionDispatch =
+          deferPasteShortcutDuringComposition(
+            e,
+            () => {
+              void requestPaste(ctx, handlePasteFailure);
+            },
+            () => {
+              void editor.requestPasteTextOnly();
+            },
+          ) ?? handleKeyDown(editor, e);
+      });
     }}
     onpaste={(e) => {
       if (editor.readOnly) {
         editor.editBlockedHandler?.();
         return;
       }
-      handlePaste(ctx, e, ({ file, kind }) => {
-        Toast.error(`${file.name} ${kind === 'image' ? '이미지' : '파일'} 업로드에 실패했습니다.`);
-      });
+      handlePaste(ctx, e, handlePasteFailure);
     }}
     readonly={editor.readOnly}
     spellcheck={false}></textarea>

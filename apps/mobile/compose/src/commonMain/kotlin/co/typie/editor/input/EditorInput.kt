@@ -25,6 +25,7 @@ import co.typie.editor.EditorEventListener
 import co.typie.editor.EditorKeyBindingAction
 import co.typie.editor.EditorState
 import co.typie.editor.KeyBinding
+import co.typie.editor.KeyModifier
 import co.typie.editor.createBindings
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.EditorEvent
@@ -137,25 +138,6 @@ internal fun toolbarInsertTextMessages(text: String, composing: Boolean): List<M
   } else {
     listOf(Message.Insertion(InsertionOp.Text(text)))
   }
-
-private val COMPOSITION_COMMITTING_NAVIGATION_KEYS =
-  setOf(
-    ComposeKey.DirectionLeft,
-    ComposeKey.DirectionRight,
-    ComposeKey.DirectionUp,
-    ComposeKey.DirectionDown,
-    ComposeKey.MoveHome,
-    ComposeKey.MoveEnd,
-    ComposeKey.PageUp,
-    ComposeKey.PageDown,
-  )
-
-// Android delivers hardware keys to the view only after the IME has declined them, so a
-// blocked navigation key would leave the composition (and every following arrow) stuck.
-// Other platforms deliver raw key events even while the IME is still consuming them
-// (e.g. candidate navigation), so bindings stay blocked during composition there.
-internal fun commitsCompositionBeforeKeyBinding(platform: Platform, key: ComposeKey): Boolean =
-  platform == Platform.Android && key in COMPOSITION_COMMITTING_NAVIGATION_KEYS
 
 internal fun fixedLocalCaretTextFieldRectInRoot(
   focusedRectInRoot: Rect?,
@@ -325,6 +307,24 @@ internal class EditorInputNode(
     }
   }
 
+  private fun dispatchBindingOnUnmatchedKeyUp(
+    key: ComposeKey,
+    modifiers: Set<KeyModifier>,
+  ): Boolean {
+    if (!focused || !enabled || bindingCoalescer == null) return false
+    val binding =
+      bindings.find {
+        it.key == key &&
+          it.modifiers == modifiers &&
+          it.commitCompositionBeforeDispatch &&
+          (it.predicate == null || it.predicate.invoke())
+      } ?: return false
+
+    commitCompositionBeforeBindingDispatch(binding.resetPlatformInputBeforeDispatch)
+    dispatchBinding(binding, clipboard)
+    return true
+  }
+
   private fun dispatchPreKeyBinding(binding: KeyBinding, clipboard: Clipboard) {
     val coalescer = bindingCoalescer ?: return
     when (val action = binding.action) {
@@ -388,6 +388,20 @@ internal class EditorInputNode(
         messages.forEach(::enqueue)
         afterApplied { bringIntoViewTarget?.let { target -> bringIntoView(target) } }
       }
+    }
+  }
+
+  private fun commitCompositionBeforeBindingDispatch(resetPlatformInput: Boolean) {
+    if (editor.appliedState.ime?.composing != null) {
+      dispatchSync(
+        listOf(Message.TextInput(listOf(FlatImeOp.CommitAsIs))),
+        bringIntoViewTarget = null,
+      )
+      if (editor.appliedState.ime?.composing != null) return
+    }
+
+    if (resetPlatformInput) {
+      platformInputBridge.resetPlatformInputBeforeBindingDispatch()
     }
   }
 
@@ -474,7 +488,7 @@ internal class EditorInputNode(
     val binding = bindings.find { matchesKeyBinding(it, platform, event) }
     if (binding != null) {
       val composing = editor.appliedState.ime?.composing != null
-      if (composing && !commitsCompositionBeforeKeyBinding(platform, event.key)) {
+      if (composing && !binding.commitCompositionBeforeDispatch) {
         recordHardwareKey(
           event = event,
           stage = "onKeyEvent",
@@ -484,11 +498,8 @@ internal class EditorInputNode(
         )
         return true
       }
-      if (composing) {
-        dispatchSync(
-          listOf(Message.TextInput(listOf(FlatImeOp.CommitAsIs))),
-          bringIntoViewTarget = null,
-        )
+      if (binding.commitCompositionBeforeDispatch) {
+        commitCompositionBeforeBindingDispatch(binding.resetPlatformInputBeforeDispatch)
       }
       if (platformInputBridge.shouldConsumeKeyEvent(event)) {
         recordHardwareKey(
@@ -574,10 +585,7 @@ internal class EditorInputNode(
   override fun onPreKeyEvent(event: KeyEvent): Boolean {
     if (!enabled || event.type != KeyEventType.KeyDown) return false
     val binding = bindings.find { matchesKeyBinding(it, platform, event) } ?: return false
-    if (
-      editor.appliedState.ime?.composing != null &&
-        !commitsCompositionBeforeKeyBinding(platform, event.key)
-    ) {
+    if (editor.appliedState.ime?.composing != null && !binding.commitCompositionBeforeDispatch) {
       recordHardwareKey(
         event = event,
         stage = "onPreKeyEvent",
@@ -591,7 +599,12 @@ internal class EditorInputNode(
       platformInputBridge.onPreKeyEvent(
         event = event,
         inputCoroutineScope = coroutineScope,
-        onAccepted = { dispatchPreKeyBinding(binding, clipboard) },
+        onAccepted = {
+          if (binding.commitCompositionBeforeDispatch) {
+            commitCompositionBeforeBindingDispatch(binding.resetPlatformInputBeforeDispatch)
+          }
+          dispatchPreKeyBinding(binding, clipboard)
+        },
       )
     recordHardwareKey(
       event = event,
@@ -625,6 +638,7 @@ internal class EditorInputNode(
     } else {
       editor.deactivateImeSession()
     }
+    platformInputBridge.setInputSessionActive(sessionEnabled)
     focusedJob?.cancel()
     focusedJob = null
     platformInputBridge.reset()
@@ -640,6 +654,10 @@ internal class EditorInputNode(
                 uiState.resolveViewportTransform(editor.publishedState.pageSizes)
               },
               dispatch = { messages -> dispatch(messages) },
+              dispatchBindingOnUnmatchedKeyUp = { key, modifiers ->
+                imeSessionGeneration == generationAtStart &&
+                  dispatchBindingOnUnmatchedKeyUp(key, modifiers)
+              },
             )
           val inputSessionUiState = uiState
           val inputSessionOwner = Any()
@@ -649,6 +667,7 @@ internal class EditorInputNode(
             // the session must not start against a pre-activation snapshot.
             editor.refreshImeSnapshot()
             establishTextInputSession {
+              platformInputBridge.bindInputSession(this)
               val request =
                 createEditorInputRequest(
                   editor = editor,
@@ -668,7 +687,7 @@ internal class EditorInputNode(
                         )
                     val postState = dispatchSync(messages)
                     if (postState != null) {
-                      platformInputBridge.onImeMessagesCommitted(
+                      platformInputBridge.onImeMessagesApplied(
                         messages = messages,
                         preState = preState,
                         postState = postState,
@@ -751,6 +770,7 @@ internal class EditorInputNode(
     unsubscribeImeResync = null
     bindingCoalescer = null
     focused = false
+    platformInputBridge.setInputSessionActive(false)
     editor.setImeSessionActive(false)
     platformInputBridge.reset()
     notifyTextInputFocusChanged(this, false)
