@@ -102,7 +102,7 @@ pub fn handle_insertion_op(editor: &mut Editor, op: InsertionOp) -> Result<(), E
                             commands::optional!(commands::delete_selection()),
                         ),
                     ),
-                    commands::split_paragraph(),
+                    commands::split_root_paragraph(),
                     commands::insert_page_break_into_prev_paragraph(),
                 )?;
                 if applied {
@@ -349,6 +349,7 @@ mod tests {
     use editor_state::{assert_state_eq, is_unit_node_selection};
 
     use super::*;
+    use crate::CommandOutcome;
     use crate::test_utils::assert_apply_changes_state;
 
     #[test]
@@ -789,6 +790,39 @@ mod tests {
             selection: (p2, 0)
         };
         assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn insert_break_page_in_list_is_an_applied_noop() {
+        let (state, ..) = state! {
+            doc { root {
+                bullet_list {
+                    list_item { p1: paragraph { text("item") } }
+                }
+                paragraph {}
+            } }
+            selection: (p1, 2)
+        };
+        let mut editor = Editor::new_test(state.clone());
+        let request = editor
+            .enqueue_request(vec![Message::Insertion {
+                op: InsertionOp::Break { kind: Break::Page },
+            }])
+            .unwrap();
+
+        let result = editor.tick_through(request).unwrap();
+
+        assert_eq!(
+            result.request_outcomes[0].command_outcomes,
+            vec![CommandOutcome::Applied]
+        );
+        assert!(
+            !result
+                .events
+                .iter()
+                .any(|event| matches!(event, EditorEvent::ImeResyncRequired))
+        );
+        assert_state_eq!(editor.state(), &state);
     }
 
     #[test]
