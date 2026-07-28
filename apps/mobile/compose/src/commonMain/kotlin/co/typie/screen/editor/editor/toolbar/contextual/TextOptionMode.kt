@@ -141,7 +141,7 @@ internal fun TextToolbarSwatchButton(
   modifier: Modifier = Modifier,
   selected: Boolean = false,
   swatchShape: Shape = ToolbarButtonShape,
-  showSlash: Boolean = false,
+  markIcon: IconData? = null,
 ) {
   val interactionSource = remember { MutableInteractionSource() }
   val bringIntoViewRequester = remember { BringIntoViewRequester() }
@@ -181,9 +181,9 @@ internal fun TextToolbarSwatchButton(
             .border(ToolbarBorderWidth, AppTheme.colors.borderDefault, swatchShape),
         contentAlignment = Alignment.Center,
       ) {
-        if (showSlash) {
+        markIcon?.let {
           Icon(
-            icon = Lucide.Slash,
+            icon = it,
             contentDescription = null,
             modifier = Modifier.size(14.dp),
             tint = AppTheme.colors.textMuted,

@@ -1,15 +1,17 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
-  import { DropdownMenu, DropdownMenuItem, VerticalDivider } from '@typie/ui/components';
+  import { DropdownMenu, DropdownMenuItem, Icon, VerticalDivider } from '@typie/ui/components';
   import { getAppContext, getThemeContext } from '@typie/ui/context';
   import BoldIcon from '~icons/lucide/bold';
   import ItalicIcon from '~icons/lucide/italic';
   import LinkIcon from '~icons/lucide/link';
   import MessageSquarePlusIcon from '~icons/lucide/message-square-plus';
+  import MinusIcon from '~icons/lucide/minus';
   import RedoIcon from '~icons/lucide/redo';
   import RemoveFormattingIcon from '~icons/lucide/remove-formatting';
   import SearchIcon from '~icons/lucide/search';
+  import SlashIcon from '~icons/lucide/slash';
   import StrikethroughIcon from '~icons/lucide/strikethrough';
   import UnderlineIcon from '~icons/lucide/underline';
   import UndoIcon from '~icons/lucide/undo';
@@ -75,6 +77,7 @@
         ? 'black'
         : undefined,
   );
+  const isTextColorMixed = $derived(ctx.editor?.modifierState?.text_color?.type === 'mixed');
 
   const currentTextBackgroundColor = $derived(
     ctx.editor?.modifierState?.background_color?.type === 'uniform'
@@ -83,6 +86,7 @@
         ? 'none'
         : undefined,
   );
+  const isTextBackgroundColorMixed = $derived(ctx.editor?.modifierState?.background_color?.type === 'mixed');
 
   const currentLineHeight = $derived(
     ctx.editor?.modifierState?.line_height?.type === 'uniform' ? ctx.editor.modifierState.line_height.value.value : undefined,
@@ -182,13 +186,34 @@
 
   <VerticalDivider style={css.raw({ height: '12px' })} />
   <div class={flex({ alignItems: 'center', gap: '4px' })}>
-    <ToolbarDropdownButton chevron label="글씨 색" onEscape={() => ctx.editor?.focus()} placement="bottom-start" size="small">
+    <ToolbarDropdownButton
+      chevron
+      label={isTextColorMixed ? '글씨 색: 여러 색' : '글씨 색'}
+      onEscape={() => ctx.editor?.focus()}
+      placement="bottom-start"
+      size="small"
+    >
       {#snippet anchor()}
         <div class={center({ size: '20px' })}>
-          <div
-            style:background-color={textColors.find(({ value }) => value === currentTextColor)?.color}
-            class={css({ borderWidth: '1px', borderRadius: 'full', size: '16px' })}
-          ></div>
+          {#if isTextColorMixed}
+            <div
+              class={css({
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderWidth: '1px',
+                borderRadius: 'full',
+                size: '16px',
+              })}
+            >
+              <Icon style={css.raw({ color: 'text.subtle' })} icon={MinusIcon} size={14} />
+            </div>
+          {:else}
+            <div
+              style:background-color={textColors.find(({ value }) => value === currentTextColor)?.color}
+              class={css({ borderWidth: '1px', borderRadius: 'full', size: '16px' })}
+            ></div>
+          {/if}
         </div>
       {/snippet}
 
@@ -206,7 +231,13 @@
       {/snippet}
     </ToolbarDropdownButton>
 
-    <ToolbarDropdownButton chevron label="배경색" onEscape={() => ctx.editor?.focus()} placement="bottom-start" size="small">
+    <ToolbarDropdownButton
+      chevron
+      label={isTextBackgroundColorMixed ? '배경색: 여러 색' : '배경색'}
+      onEscape={() => ctx.editor?.focus()}
+      placement="bottom-start"
+      size="small"
+    >
       {#snippet anchor()}
         {@const selectedValue = currentTextBackgroundColor}
         {@const selectedItem = textBackgroundColors.find(({ value }) => value === selectedValue)}
@@ -218,20 +249,15 @@
               borderRadius: '4px',
               size: '16px',
               position: 'relative',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
             })}
           >
-            {#if selectedValue === 'none'}
-              <div
-                class={css({
-                  position: 'absolute',
-                  inset: '0',
-                  margin: 'auto',
-                  width: '1px',
-                  height: '12px',
-                  backgroundColor: 'text.disabled',
-                  transform: 'rotate(45deg)',
-                })}
-              ></div>
+            {#if isTextBackgroundColorMixed}
+              <Icon style={css.raw({ color: 'text.subtle' })} icon={MinusIcon} size={14} />
+            {:else if selectedValue === 'none'}
+              <Icon style={css.raw({ color: 'text.disabled' })} icon={SlashIcon} size={10} />
             {/if}
           </div>
         </div>

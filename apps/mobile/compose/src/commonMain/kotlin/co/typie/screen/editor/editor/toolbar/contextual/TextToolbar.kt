@@ -113,6 +113,8 @@ private fun EditorTextToolbar(
   val editorTheme = remember(variant) { EditorTheme.resolve(variant) }
   val textColor = modifierState?.textColor.textColorCurrentValue()
   val backgroundColor = modifierState?.backgroundColor.backgroundColorCurrentValue()
+  val textColorMixed = modifierState?.textColor is Tri.Mixed
+  val backgroundColorMixed = modifierState?.backgroundColor is Tri.Mixed
   val fontFamily = modifierState?.fontFamily.uniformValue { it.value }
   val fontWeight = modifierState?.fontWeight.uniformValue { it.value }
   val fontSize = modifierState?.fontSize.uniformValue { it.value }
@@ -162,17 +164,23 @@ private fun EditorTextToolbar(
   EditorToolbarRow(scope = scope, modifier = modifier, scrollState = scrollState) {
     TextToolbarSwatchButton(
       color = editorTheme.colorFor(EditorValues.textColor, textColor),
-      contentDescription = "글자색",
+      contentDescription = if (textColorMixed) "글자색: 여러 색" else "글자색",
       onClick = { toggleMode(TextOptionMode.TextColor) },
       selected = activeTextOptionMode == TextOptionMode.TextColor,
+      markIcon = if (textColorMixed) Lucide.Minus else null,
     )
     TextToolbarSwatchButton(
       color = editorTheme.colorFor(EditorValues.textBackgroundColor, backgroundColor),
-      contentDescription = "배경색",
+      contentDescription = if (backgroundColorMixed) "배경색: 여러 색" else "배경색",
       onClick = { toggleMode(TextOptionMode.BackgroundColor) },
       selected = activeTextOptionMode == TextOptionMode.BackgroundColor,
       swatchShape = TextBackgroundSwatchShape,
-      showSlash = backgroundColor == "none",
+      markIcon =
+        when {
+          backgroundColorMixed -> Lucide.Minus
+          backgroundColor == "none" -> Lucide.Slash
+          else -> null
+        },
     )
     EditorToolbarLabelButton(
       text = fontFamilyLabel(fontFamily, fontFamilies),

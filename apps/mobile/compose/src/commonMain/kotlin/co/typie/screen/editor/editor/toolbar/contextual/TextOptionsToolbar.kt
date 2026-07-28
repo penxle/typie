@@ -268,7 +268,7 @@ private fun ColorOptions(
       onClick = { onSelect(option.value) },
       selected = currentValue == option.value,
       swatchShape = swatchShape,
-      showSlash = showSlashForNullTheme && option.themeKey == null,
+      markIcon = if (showSlashForNullTheme && option.themeKey == null) Lucide.Slash else null,
     )
   }
 }

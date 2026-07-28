@@ -124,9 +124,9 @@
         outlineOffset: '1px',
         size: '20px',
         position: 'relative',
-        _focus: {
-          outlineWidth: '2px',
-        },
+        // Keyboard focus outlines are intentionally omitted for now because
+        // reusing the selection outline makes the first auto-focused swatch look
+        // selected. Restore them with a consistent toolbar-wide focus treatment.
       })}
       aria-label={label}
       data-active={currentValue === value}
