@@ -15,9 +15,34 @@ export type VisualHostFacts = {
   targets: ReadonlyMap<number, PublicationTarget>;
 };
 
+type PublishedFrameFacts = {
+  surfaceKey: number;
+};
+
+function matchesTargets(frames: ReadonlyMap<number, PublishedFrameFacts>, targets: ReadonlyMap<number, PublicationTarget>): boolean {
+  if (frames.size !== targets.size) return false;
+  for (const [page, target] of targets) {
+    if (!target.available || frames.get(page)?.surfaceKey !== target.key) return false;
+  }
+  return true;
+}
+
 export function proofSatisfies(target: PublicationTarget): boolean {
   if (!target.available || target.requiredRevision === undefined) return false;
   return target.proof !== undefined && target.proof.revision >= target.requiredRevision && target.proof.surfaceKey === target.key;
+}
+
+export function satisfiesWaiter(
+  requestedRevision: number,
+  publishedRevision: number | undefined,
+  frames: ReadonlyMap<number, PublishedFrameFacts>,
+  host: VisualHostFacts | undefined,
+  requireFrame = false,
+): boolean {
+  if (!host || publishedRevision === undefined || publishedRevision < requestedRevision) return false;
+  if (requireFrame && frames.size === 0) return false;
+
+  return matchesTargets(frames, host.targets) || (!requireFrame && host.targets.size === 0 && frames.size > 0);
 }
 
 export function preparingPage(

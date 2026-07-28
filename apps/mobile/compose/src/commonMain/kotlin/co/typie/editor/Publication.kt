@@ -37,6 +37,16 @@ internal object Publication {
     frames.size == targets.size &&
       targets.all { target -> frames[target.page]?.proof?.surfaceKey == target.key }
 
+  fun satisfiesWaiter(
+    requestedRevision: Long,
+    publishedRevision: Long?,
+    frames: Map<Int, PresentedFrame>,
+    targets: Collection<SurfaceTarget>,
+  ): Boolean =
+    publishedRevision != null &&
+      publishedRevision >= requestedRevision &&
+      (matchesTargets(frames, targets) || (targets.isEmpty() && frames.isNotEmpty()))
+
   fun accepts(
     proof: FrameProof,
     target: SurfaceTarget,

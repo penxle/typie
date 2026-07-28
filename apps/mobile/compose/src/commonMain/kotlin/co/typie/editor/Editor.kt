@@ -630,16 +630,18 @@ internal constructor(
             NoHost
           } else {
             val current = published
-            val pages = host.pages.values
-            val targets = pages.map { it.target }
             if (
               current != null &&
-                current.snapshot.version >= revision &&
-                Publication.matchesTargets(current.frames, targets)
+                Publication.satisfiesWaiter(
+                  requestedRevision = revision,
+                  publishedRevision = current.snapshot.version,
+                  frames = current.frames,
+                  targets = host.pages.values.map { it.target },
+                )
             ) {
               Published(current.snapshot.version)
             } else {
-              pages
+              host.pages.values
                 .firstOrNull { page -> (page.failedRevision ?: -1L) >= revision }
                 ?.let { page -> throw EditorSurfaceUnavailableException(page.target.page) }
               publicationWaiters.updatePersistent { it.adding(waiter) }
@@ -1015,7 +1017,7 @@ internal constructor(
     }
     val publishedRevision = currentPublishedRevision ?: 0L
     if (
-      !Publication.canPublish(
+      Publication.canPublish(
         hasVisualHost = true,
         hasPublishedFrames = published?.frames?.isNotEmpty() == true,
         appliedRevision = appliedState.version,
@@ -1024,24 +1026,29 @@ internal constructor(
         targetsChanged = targetsChanged,
       )
     ) {
-      refreshRetainedFrames()
-      return
-    }
-
-    val frames =
-      host.pages.mapNotNull { (page, record) -> record.frame?.let { page to it } }.toMap()
-    val bundle = PublishedBundle(snapshot = appliedState, frames = frames)
-    published = bundle
-    preparingPage = null
-    host.pages.values.forEach {
-      it.requiredRevision = null
-      it.failedRevision = null
+      val frames =
+        host.pages.mapNotNull { (page, record) -> record.frame?.let { page to it } }.toMap()
+      published = PublishedBundle(snapshot = appliedState, frames = frames)
+      preparingPage = null
+      host.pages.values.forEach {
+        it.requiredRevision = null
+        it.failedRevision = null
+      }
     }
     refreshRetainedFrames()
 
-    val completed = publicationWaiters.load().filter { it.revision <= bundle.snapshot.version }
+    val current = published ?: return
+    val completed =
+      publicationWaiters.load().filter {
+        Publication.satisfiesWaiter(
+          requestedRevision = it.revision,
+          publishedRevision = current.snapshot.version,
+          frames = current.frames,
+          targets = targets,
+        )
+      }
     publicationWaiters.updatePersistent { it.removingAll(completed) }
-    val result = Published(bundle.snapshot.version)
+    val result = Published(current.snapshot.version)
     completed.forEach { it.completion.complete(result) }
   }
 

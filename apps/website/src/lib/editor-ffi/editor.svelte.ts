@@ -12,7 +12,7 @@ import { TouchGestureController } from './gesture.svelte';
 import { readClipboardRich, writeClipboardPayload } from './handlers/clipboard';
 import { encodeLengthPrefixedBlobs } from './length-prefix';
 import { isMutatingMessage } from './message-gate';
-import { canPublish, preparingPage, proofSatisfies } from './publication';
+import { canPublish, preparingPage, proofSatisfies, satisfiesWaiter } from './publication';
 import { fanOutResourceUpdate, register, snapshot, unregister } from './registry';
 import { probeEvent, probeRendered } from './surface-probe';
 import { zoomDiffers } from './zoom';
@@ -728,7 +728,7 @@ export class Editor {
         this.#visualHost?.targets.size ?? 0,
       );
       if (
-        !canPublish(
+        canPublish(
           this.#applied.revision,
           this.published?.snapshot.revision,
           this.#visualHost,
@@ -736,41 +736,37 @@ export class Editor {
           (this.published?.frames.size ?? 0) > 0,
         )
       ) {
-        return;
-      }
+        // eslint-disable-next-line svelte/prefer-svelte-reactivity
+        const frames = new Map<number, PublishedFrame>();
+        for (const target of this.#visualHost?.targets.values() ?? []) {
+          if (target.proof) {
+            frames.set(target.page, {
+              surfaceKey: target.key,
+              frameKey: target.proof.frameKey,
+              canvas: target.canvas,
+            });
+          }
+        }
 
-      // eslint-disable-next-line svelte/prefer-svelte-reactivity
-      const frames = new Map<number, PublishedFrame>();
-      for (const target of this.#visualHost?.targets.values() ?? []) {
-        if (target.proof) {
-          frames.set(target.page, {
-            surfaceKey: target.key,
-            frameKey: target.proof.frameKey,
-            canvas: target.canvas,
-          });
+        this.published = { snapshot: this.#applied, frames };
+        this.#preparingPage = undefined;
+        this.#pullToolbarStateIfReady();
+
+        for (const target of this.#visualHost?.targets.values() ?? []) {
+          target.requiredRevision = undefined;
+          target.failedRevision = undefined;
         }
       }
 
-      const bundle: PublishedBundle = { snapshot: this.#applied, frames };
-      this.published = bundle;
-      this.#preparingPage = undefined;
-      this.#pullToolbarStateIfReady();
-
-      for (const target of this.#visualHost?.targets.values() ?? []) {
-        target.requiredRevision = undefined;
-        target.failedRevision = undefined;
-      }
-
+      const published = this.published;
+      if (!published) return;
       for (const waiter of this.#publicationWaiters) {
-        if (
-          bundle.snapshot.revision < waiter.revision ||
-          (waiter.requireFrame && (bundle.frames.size === 0 || !this.#publishedMatchesCurrentTargets()))
-        ) {
+        if (!satisfiesWaiter(waiter.revision, published.snapshot.revision, published.frames, this.#visualHost, waiter.requireFrame)) {
           continue;
         }
         this.#publicationWaiters.delete(waiter);
         if (waiter.signal && waiter.onAbort) waiter.signal.removeEventListener('abort', waiter.onAbort);
-        waiter.resolve({ type: 'published', revision: bundle.snapshot.revision });
+        waiter.resolve({ type: 'published', revision: published.snapshot.revision });
       }
     });
   }
@@ -786,29 +782,14 @@ export class Editor {
     this.#toolbarSyncDirty = false;
   }
 
-  #publishedMatchesCurrentTargets(): boolean {
-    const host = this.#visualHost;
-    const frames = this.published?.frames;
-    if (!host || !frames || frames.size !== host.targets.size) return false;
-    for (const [page, target] of host.targets) {
-      if (!target.available || frames.get(page)?.surfaceKey !== target.key) return false;
-    }
-    return true;
-  }
-
   #awaitPublished(revision: number, signal?: AbortSignal, requireFrame = false): Promise<EditorPublicationResult> {
     if (signal?.aborted) return Promise.reject(signal.reason ?? new DOMException('Cancelled', 'AbortError'));
     if (this.#destroyed) return Promise.reject(new Error('Editor is disposed'));
     if (this.#failed) return Promise.reject(this.#failure);
     if (!this.#visualHost) return Promise.resolve({ type: 'no_host' });
-    const publishedRevision = this.published?.snapshot.revision;
-    if (
-      publishedRevision !== undefined &&
-      publishedRevision >= revision &&
-      this.#publishedMatchesCurrentTargets() &&
-      (!requireFrame || (this.published?.frames.size ?? 0) > 0)
-    ) {
-      return Promise.resolve({ type: 'published', revision: publishedRevision });
+    const published = this.published;
+    if (published && satisfiesWaiter(revision, published.snapshot.revision, published.frames, this.#visualHost, requireFrame)) {
+      return Promise.resolve({ type: 'published', revision: published.snapshot.revision });
     }
     for (const target of this.#visualHost.targets.values()) {
       if ((target.failedRevision ?? -1) >= revision) {

@@ -270,6 +270,37 @@ class EditorPublicationHostTest {
     }
 
   @Test
+  fun pendingWaitCompletesWhenTheLastReplacementTargetDetaches() =
+    runTest(dispatcher) {
+      val fake = FakeFfiEditor(pageSizesProvider = { listOf(Size(width = 100f, height = 100f)) })
+      val editor = Editor(fake, this, dispatcher)
+      editor.activateVisualHost(Any())
+      val session = editor.attachSurface(0, 10L, 100.0, 100.0, 1.0, wakeDelivery = {})
+      advanceUntilIdle()
+      editor.deliverFrame(session, editorRevision = 0L, frameKey = 1L)
+      advanceUntilIdle()
+
+      val update = requireNotNull(editor.update { enqueue(message) })
+      assertEquals(Published(update.revision), update.awaitPublished())
+
+      session.requestResize(SurfaceConfiguration(width = 100.0, height = 100.0, scaleFactor = 2.0))
+      advanceUntilIdle()
+      val publication = async(start = CoroutineStart.UNDISPATCHED) { update.awaitPublished() }
+      assertFalse(publication.isCompleted)
+
+      session.detach()
+      advanceUntilIdle()
+
+      try {
+        assertTrue(publication.isCompleted)
+        assertEquals(Published(update.revision), publication.await())
+      } finally {
+        publication.cancel()
+        advanceUntilIdle()
+      }
+    }
+
+  @Test
   fun detachingTheLastTargetRetainsPublishedBundleUntilReplacementProofArrives() =
     runTest(dispatcher) {
       val fake =
@@ -321,7 +352,7 @@ class EditorPublicationHostTest {
     }
 
   @Test
-  fun pageShrinkPreparesPageZeroWhenItRemovesEveryTarget() =
+  fun pageShrinkPreparationCompletesLateWaitAfterReplacementDetaches() =
     runTest(dispatcher) {
       var pageSizes = listOf(Size(width = 100f, height = 100f), Size(width = 100f, height = 100f))
       val fake =
@@ -362,6 +393,18 @@ class EditorPublicationHostTest {
 
       assertEquals(update.revision, editor.publishedRevision)
       assertNull(editor.preparingPage)
+
+      replacement.detach()
+      advanceUntilIdle()
+      val latePublication = async(start = CoroutineStart.UNDISPATCHED) { update.awaitPublished() }
+      try {
+        advanceUntilIdle()
+        assertTrue(latePublication.isCompleted)
+        assertEquals(Published(update.revision), latePublication.await())
+      } finally {
+        latePublication.cancel()
+        advanceUntilIdle()
+      }
     }
 
   @Test

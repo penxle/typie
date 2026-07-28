@@ -525,6 +525,30 @@ describe('Editor guarded core invocation', () => {
     editor.destroy();
   });
 
+  it('settles an existing ordinary waiter when the last mismatching target detaches', async () => {
+    const { editor, core } = await createEditor();
+    const releaseHost = editor.activateVisualHost();
+
+    try {
+      editor.attachSurface(0, document.createElement('canvas'), 100, 100);
+
+      core.surface_backend.mockReturnValue('none');
+      editor.attachSurface(0, document.createElement('canvas'), 100, 100);
+      const publication = editor.awaitPublishedRevision(1);
+      const framedPublication = editor.awaitPublishedRevision(1, { requireFrame: true });
+
+      editor.detachSurface(0);
+
+      const pending = Symbol('pending');
+      const result = await Promise.race([publication, new Promise<typeof pending>((resolve) => queueMicrotask(() => resolve(pending)))]);
+      expect(result).toEqual({ type: 'published', revision: 1 });
+      await expectPending(framedPublication);
+    } finally {
+      releaseHost();
+      editor.destroy();
+    }
+  });
+
   it('rejects a failed render revision once and retries only after applied advances', async () => {
     const { editor, core } = await createEditor();
     const releaseHost = editor.activateVisualHost();
@@ -994,7 +1018,7 @@ describe('Editor guarded core invocation', () => {
     editor.destroy();
   });
 
-  it('activates an offscreen page while the Host is preparing its replacement surface', async () => {
+  it('completes a late publication wait after an offscreen prepared page publishes and detaches', async () => {
     const core = createCore();
     core.page_sizes.mockReturnValue([{ width: 100, height: 100 }]);
     core.page_backing_sizes.mockReturnValue([{ width: 100, height: 100 }]);
@@ -1041,6 +1065,14 @@ describe('Editor guarded core invocation', () => {
       expect(editor.publishedRevision).toBe(2);
       expect(editor.preparingPage).toBeUndefined();
       expect(core.detach_surface).toHaveBeenCalledExactlyOnceWith(0);
+
+      const pending = Symbol('pending');
+      const latePublication = await Promise.race([
+        editor.awaitPublishedRevision(2),
+        new Promise<typeof pending>((resolve) => queueMicrotask(() => resolve(pending))),
+      ]);
+      expect(latePublication).toEqual({ type: 'published', revision: 2 });
+      await expectPending(editor.awaitPublishedRevision(2, { requireFrame: true }));
     } finally {
       await unmount(component);
       target.remove();

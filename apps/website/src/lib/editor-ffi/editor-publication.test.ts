@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canPublish, preparingPage, proofSatisfies } from './publication';
+import { canPublish, preparingPage, proofSatisfies, satisfiesWaiter } from './publication';
 import type { PublicationTarget } from './publication';
 
 describe('editor publication', () => {
@@ -59,6 +59,25 @@ describe('editor publication', () => {
   it('keeps a prior framed publication when the active host temporarily has zero targets', () => {
     expect(canPublish(10, 9, { targets: new Map() }, true, true)).toBe(false);
     expect(canPublish(10, undefined, { targets: new Map() }, true, false)).toBe(true);
+  });
+
+  it('lets an ordinary waiter use a retained framed publication when no targets remain', () => {
+    expect(satisfiesWaiter(10, 10, new Map([[0, { surfaceKey: 1 }]]), { targets: new Map() })).toBe(true);
+  });
+
+  it('keeps frame-required waiters pending without a matching current target', () => {
+    expect(satisfiesWaiter(10, 10, new Map([[0, { surfaceKey: 1 }]]), { targets: new Map() }, true)).toBe(false);
+  });
+
+  it('requires an exact match while the current target set is non-empty', () => {
+    const replacement: PublicationTarget = {
+      key: 2,
+      requiredRevision: 10,
+      proof: undefined,
+      available: true,
+    };
+
+    expect(satisfiesWaiter(10, 10, new Map([[0, { surfaceKey: 1 }]]), { targets: new Map([[0, replacement]]) })).toBe(false);
   });
 
   it('requests page zero only when a newer applied layout strands a framed publication without targets', () => {
