@@ -458,7 +458,7 @@
   <ToolbarButton
     icon={RemoveFormattingIcon}
     keys={['Mod', '\\']}
-    label="기본 서식 적용"
+    label="서식 지우기"
     onclick={() => enqueue({ type: 'modifier', op: { type: 'clear_all' } })}
     size="small"
   />
@@ -468,7 +468,7 @@
   <ToolbarButton
     icon={SearchIcon}
     keys={['Mod', 'F']}
-    label="찾기, 바꾸기"
+    label="찾기 및 바꾸기"
     onclick={() => onSearchClick?.()}
     onpointerdown={(e) => e.preventDefault()}
     size="small"

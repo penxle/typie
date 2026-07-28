@@ -16,6 +16,7 @@
     children: Snippet;
     style?: SystemStyleObject;
     onclose?: () => void;
+    ontransitionend?: () => void;
     overlayPadding?: number;
     focusTrapOptions?: FocusTrapOptions;
     showBackdrop?: boolean;
@@ -27,6 +28,7 @@
     children,
     style,
     onclose,
+    ontransitionend,
     loading = false,
     overlayPadding = 20,
     focusTrapOptions = {},
@@ -99,6 +101,7 @@
         },
       )}
       onclick={closable ? close : undefined}
+      onoutroend={ontransitionend}
       role="none"
       in:fade|global={{ duration: 400, easing: cubicOut }}
       out:fade|global={{ duration: 280, easing: cubicOut }}
