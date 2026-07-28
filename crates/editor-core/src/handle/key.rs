@@ -74,7 +74,6 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
                         commands::delete_text_backward(&resource),
                         commands::delete_node_backward(),
                         commands::select_node_backward(),
-                        commands::delete_page_break_backward(),
                         commands::lift_empty_list_item(),
                         commands::merge_list_item_backward(),
                         commands::lift_first_list_item(),
@@ -834,6 +833,24 @@ mod tests {
     }
 
     #[test]
+    fn backspace_after_page_break_insertion_restores_paragraph_and_caret() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 3)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::Insertion {
+            op: InsertionOp::Break { kind: Break::Page },
+        });
+        editor.apply(key(Key::Backspace));
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 3)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
     fn delete_deletes_text_forward() {
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("hello") } } }
@@ -958,7 +975,7 @@ mod tests {
     }
 
     #[test]
-    fn backspace_at_start_of_paragraph_after_page_break_paragraph_removes_marker() {
+    fn backspace_at_start_of_paragraph_after_page_break_joins_paragraphs() {
         let (state, ..) = state! {
             doc {
                 root {
@@ -969,32 +986,6 @@ mod tests {
             selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
-        editor.apply(key(Key::Backspace));
-        let (expected, ..) = state! {
-            doc {
-                root {
-                    paragraph {}
-                    p1: paragraph { text("1234") }
-                }
-            }
-            selection: (p1, 0)
-        };
-        assert_state_eq!(editor.state(), &expected);
-    }
-
-    #[test]
-    fn two_backspaces_merge_page_break_paragraph_into_text_paragraph() {
-        let (state, ..) = state! {
-            doc {
-                root {
-                    paragraph { page_break }
-                    p1: paragraph { text("1234") }
-                }
-            }
-            selection: (p1, 0)
-        };
-        let mut editor = Editor::new_test(state);
-        editor.apply(key(Key::Backspace));
         editor.apply(key(Key::Backspace));
         let (expected, ..) = state! {
             doc {

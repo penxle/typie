@@ -682,7 +682,6 @@ fn structural_backward(tr: &mut Transaction) -> CommandResult {
         commands::optional!(commands::materialize_synthetic_selection_blocks()),
         |tr| commands::first!(
             tr,
-            commands::delete_page_break_backward(),
             commands::lift_empty_list_item(),
             commands::merge_list_item_backward(),
             commands::lift_first_list_item(),
@@ -3519,7 +3518,7 @@ mod tests {
     }
 
     #[test]
-    fn structural_backward_removes_prev_trailing_page_break_before_join() {
+    fn structural_backward_removes_prev_trailing_page_break_and_joins() {
         let (state, ..) = state! {
             doc {
                 root {
@@ -3535,11 +3534,10 @@ mod tests {
         let (expected, ..) = state! {
             doc {
                 root {
-                    paragraph { text("AB") }
-                    cur: paragraph { text("CD") }
+                    p1: paragraph { text("ABCD") }
                 }
             }
-            selection: (cur, 0)
+            selection: (p1, 2)
         };
         assert_state_eq!(actual, expected);
     }
