@@ -75,7 +75,7 @@
 
 <svelte:window onclickcapture={handleClose} onkeydown={(event) => event.key === 'Escape' && handleClose()} />
 
-<div class={css({ position: 'fixed', inset: '0', size: 'full', zIndex: 'editor' })} use:portal use:scrollLock>
+<div class={css({ position: 'fixed', inset: '0', size: 'full', zIndex: 'modal' })} use:portal use:scrollLock>
   <ContentProtect>
     <div class={css({ position: 'fixed', inset: '0', size: 'full', paddingX: '[5vw]', paddingY: '[5vh]' })}>
       <div bind:this={targetEl} class={css({ size: 'full' })}></div>
