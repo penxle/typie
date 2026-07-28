@@ -62,7 +62,7 @@ internal fun EditorLineHighlightOverlay(
       displayZoom = displayZoom,
     )
 
-  Box(Modifier.editorOverlayRect(rect).background(AppTheme.colors.surfaceInset.copy(alpha = 0.55f)))
+  Box(Modifier.editorOverlayRect(rect).background(AppTheme.colors.surfaceInset))
 }
 
 // Mixed read timing on purpose. The cursor is a composition-captured value so the

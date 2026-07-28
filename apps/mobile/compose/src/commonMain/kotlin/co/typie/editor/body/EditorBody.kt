@@ -81,7 +81,7 @@ internal fun EditorBody(
             editorBounds = { uiState.editorBoundsInContainer },
             viewportTransform = { uiState.resolveViewportTransform(pageSizes) },
             enabled = Preference.lineHighlightEnabled,
-            color = AppTheme.colors.surfaceInset.copy(alpha = 0.55f),
+            color = AppTheme.colors.surfaceInset,
           )
         } else {
           this
