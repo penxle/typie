@@ -1,5 +1,7 @@
 package co.typie.screen.editor.editor.toolbar.contextual
 
+import androidx.compose.runtime.BroadcastFrameClock
+import co.typie.screen.editor.editor.toolbar.EditorToolbarSessionState
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -8,7 +10,10 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -101,5 +106,82 @@ class AttachmentOperationTest {
 
     assertSame(cancellation, thrown)
     assertTrue(pending)
+  }
+
+  @Test
+  fun pickerLaunchWaitsForBlockedInputFrame() = runTest {
+    val frameClock = BroadcastFrameClock()
+    val sessionState = EditorToolbarSessionState()
+    var launched = false
+
+    launchAttachmentPicker(
+      scope = CoroutineScope(coroutineContext + frameClock),
+      sessionState = sessionState,
+      requestIsCurrent = { true },
+      clearRequest = {},
+      launchPicker = { launched = true },
+      onFailure = {},
+    )
+
+    assertTrue(sessionState.pickerInputActive)
+    runCurrent()
+    assertFalse(launched)
+
+    frameClock.sendFrame(0L)
+    runCurrent()
+
+    assertTrue(launched)
+  }
+
+  @Test
+  fun pickerLaunchCancellationDoesNotReportFailure() = runTest {
+    val frameClock = BroadcastFrameClock()
+    val pickerJob = SupervisorJob()
+    var failureCount = 0
+
+    launchAttachmentPicker(
+      scope = CoroutineScope(coroutineContext + pickerJob + frameClock),
+      sessionState = EditorToolbarSessionState(),
+      requestIsCurrent = { true },
+      clearRequest = {},
+      launchPicker = {},
+      onFailure = { failureCount += 1 },
+    )
+    runCurrent()
+
+    pickerJob.cancel(CancellationException("picker owner disposed"))
+    runCurrent()
+
+    assertEquals(0, failureCount)
+  }
+
+  @Test
+  fun pickerLaunchFailureReleasesInputAndRequest() = runTest {
+    val frameClock = BroadcastFrameClock()
+    val pickerJob = SupervisorJob()
+    val uncaught = mutableListOf<Throwable>()
+    val exceptionHandler = CoroutineExceptionHandler { _, error -> uncaught += error }
+    val sessionState = EditorToolbarSessionState()
+    var requestCurrent = true
+    var failureCount = 0
+
+    launchAttachmentPicker(
+      scope = CoroutineScope(coroutineContext + pickerJob + frameClock + exceptionHandler),
+      sessionState = sessionState,
+      requestIsCurrent = { requestCurrent },
+      clearRequest = { requestCurrent = false },
+      launchPicker = { throw IllegalArgumentException("picker launch failed") },
+      onFailure = { failureCount += 1 },
+    )
+    runCurrent()
+
+    frameClock.sendFrame(0L)
+    runCurrent()
+
+    assertFalse(sessionState.pickerInputActive)
+    assertFalse(requestCurrent)
+    assertEquals(1, failureCount)
+    assertTrue(uncaught.isEmpty())
+    pickerJob.cancel()
   }
 }

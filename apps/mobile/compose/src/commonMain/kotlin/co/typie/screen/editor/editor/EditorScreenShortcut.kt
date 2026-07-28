@@ -20,7 +20,7 @@ import co.typie.ui.utils.matchesShortcut
 
 internal data class EditorScreenShortcutContext(
   val sceneInForeground: Boolean,
-  val subPaneBlocksEditorInput: Boolean,
+  val editorInputBlocked: Boolean,
   val editorFocused: Boolean,
   val findReplaceActive: Boolean,
   val spellcheckActive: Boolean,
@@ -113,7 +113,7 @@ internal fun Modifier.editorScreenShortcutFocusTarget(
 }
 
 private fun isEditorScreenShortcutAvailable(context: EditorScreenShortcutContext): Boolean =
-  context.sceneInForeground && !context.subPaneBlocksEditorInput
+  context.sceneInForeground && !context.editorInputBlocked
 
 private fun handleEscapeShortcut(
   context: EditorScreenShortcutContext,

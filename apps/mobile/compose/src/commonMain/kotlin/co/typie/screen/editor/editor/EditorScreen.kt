@@ -259,6 +259,7 @@ fun EditorScreen(entityId: String) {
   val zoomController = rememberEditorZoomController(key = entityId)
   val screenState = rememberEditorScreenState(key = entityId)
   val subPaneState = remember(entityId) { EditorSubPaneState() }
+  val toolbarSessionState = rememberEditorToolbarSessionState(key = entityId)
   val loading = model.query.state !is QueryState.Success
   val entity = model.query.data.entity
   val document = entity.node.onDocument
@@ -458,7 +459,8 @@ fun EditorScreen(entityId: String) {
           subPaneState.active == EditorSubPane.Comments)) ||
       dialog.acceptsInput ||
       sheet.acceptsInput ||
-      popoverOverlayState.acceptsInput
+      popoverOverlayState.acceptsInput ||
+      toolbarSessionState.pickerInputActive
   SideEffect {
     focusReturnSession.observeEditorContext(
       editor = editor,
@@ -1090,7 +1092,6 @@ fun EditorScreen(entityId: String) {
     val keyboardState =
       rememberEditorKeyboardState(isEditorInputSessionActive = { uiState.editorInputSessionActive })
     val toolbarPagerState = rememberToolbarPagerState(key = entityId)
-    val toolbarSessionState = rememberEditorToolbarSessionState(key = entityId)
     val toolbarPanel = toolbarInputState.panel
     val bottomPanelOpen = toolbarPanel != null
     val bottomPanelTransition = remember { MutableTransitionState(bottomPanelOpen) }
@@ -1098,15 +1099,16 @@ fun EditorScreen(entityId: String) {
     val panelTransitionRunning =
       bottomPanelTransition.currentState != bottomPanelTransition.targetState
     val subPaneBlocksEditorInput = subPaneState.editorInputBlocked
+    val editorInputBlocked = subPaneBlocksEditorInput || toolbarSessionState.pickerInputActive
     val screenShortcutModeActive = findReplace.active || spellcheck.active || aiFeedback.active
     val editorToolbarVisible =
       editorSessionAttached &&
         screenState.sceneInForeground &&
-        !subPaneBlocksEditorInput &&
+        !editorInputBlocked &&
         !findReplace.active &&
         directEditingEnabled
     val findReplaceToolbarVisible =
-      screenState.sceneInForeground && !subPaneBlocksEditorInput && findReplace.active
+      screenState.sceneInForeground && !editorInputBlocked && findReplace.active
     val findReplaceToolbarTransition = remember {
       MutableTransitionState(findReplaceToolbarVisible)
     }
@@ -1290,7 +1292,7 @@ fun EditorScreen(entityId: String) {
     val screenShortcutContext =
       EditorScreenShortcutContext(
         sceneInForeground = screenState.sceneInForeground,
-        subPaneBlocksEditorInput = subPaneBlocksEditorInput,
+        editorInputBlocked = editorInputBlocked,
         editorFocused = uiState.focused,
         findReplaceActive = findReplace.active,
         spellcheckActive = spellcheck.active,
@@ -1317,6 +1319,10 @@ fun EditorScreen(entityId: String) {
         aiFeedback.close()
         spellcheck.close()
         findReplace.close()
+      }
+    }
+    LaunchedEffect(editorInputBlocked) {
+      if (editorInputBlocked) {
         performInputEffects(listOf(EditorInputEffect.HideKeyboard))
       }
     }
@@ -1341,9 +1347,8 @@ fun EditorScreen(entityId: String) {
           suppressSoftwareKeyboard = toolbarSuppressesSoftwareKeyboard,
         )
       } ?: true
-    val editorInputEnabledByToolbar = toolbarTextInputSessionEnabled && !subPaneBlocksEditorInput
-    val editorSuppressesSoftwareKeyboard =
-      toolbarSuppressesSoftwareKeyboard || subPaneBlocksEditorInput
+    val editorInputEnabledByToolbar = toolbarTextInputSessionEnabled && !editorInputBlocked
+    val editorSuppressesSoftwareKeyboard = toolbarSuppressesSoftwareKeyboard || editorInputBlocked
     val previousImeVisible = remember { mutableStateOf(imeVisible) }
     val imeAppearing = !previousImeVisible.value && imeVisible
     val toolbarRetainedKeyboardInset = toolbarInputState.retainedKeyboardInset()
@@ -1617,7 +1622,7 @@ fun EditorScreen(entityId: String) {
       editorInteractionEnabled &&
         screenState.sceneInForeground &&
         !nav.isTransitioning &&
-        !subPaneBlocksEditorInput &&
+        !editorInputBlocked &&
         !screenShortcutModeActive &&
         popoverOverlayState.entry == null
     SideEffect {
@@ -1982,7 +1987,7 @@ fun EditorScreen(entityId: String) {
         modifier =
           Modifier.padding(start = startInset, end = endInset).editorScreenShortcutFocusTarget(
             active = screenShortcutModeActive,
-            enabled = editorReady && screenState.sceneInForeground && !subPaneBlocksEditorInput,
+            enabled = editorReady && screenState.sceneInForeground && !editorInputBlocked,
             editorFocused = uiState.focused,
             selection = appliedEditorState.selection,
           ) { event ->

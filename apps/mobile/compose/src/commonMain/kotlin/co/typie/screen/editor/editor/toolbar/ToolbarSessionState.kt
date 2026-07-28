@@ -38,6 +38,7 @@ internal class EditorToolbarSessionState {
     get() = (activeSecondaryToolbar as? EditorToolbarSecondary.TextOption)?.mode
 
   var modalActive by mutableStateOf(false)
+  var pickerInputActive by mutableStateOf(false)
   var secondaryToolbarInLayout by mutableStateOf(false)
 
   fun toggleSecondaryToolbar(secondary: EditorToolbarSecondary, scope: EditorToolbarScope) {

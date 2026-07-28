@@ -1,10 +1,14 @@
 package co.typie.screen.editor.editor.toolbar.contextual
 
+import androidx.compose.runtime.withFrameNanos
 import co.touchlab.kermit.Logger
 import co.typie.domain.blob.BlobUploadException
 import co.typie.network.isRecoverableNetworkError
+import co.typie.screen.editor.editor.toolbar.EditorToolbarSessionState
 import io.sentry.kotlin.multiplatform.Sentry
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 
 internal enum class AttachmentKind {
   Image,
@@ -71,5 +75,36 @@ internal fun reportAttachmentFailure(kind: AttachmentKind, error: Throwable) {
   Logger.e(cause) { "Attachment failed: kind=${kind.name}, stage=$stage" }
   if (!cause.isRecoverableNetworkError()) {
     Sentry.captureException(cause)
+  }
+}
+
+@Suppress("TooGenericExceptionCaught")
+internal fun launchAttachmentPicker(
+  scope: CoroutineScope,
+  sessionState: EditorToolbarSessionState,
+  requestIsCurrent: () -> Boolean,
+  clearRequest: () -> Unit,
+  launchPicker: () -> Unit,
+  onFailure: () -> Unit,
+) {
+  sessionState.pickerInputActive = true
+  scope.launch {
+    try {
+      // Let the toolbar observe blocked input before the native picker hides the IME.
+      withFrameNanos {}
+      if (requestIsCurrent()) {
+        launchPicker()
+      } else {
+        sessionState.pickerInputActive = false
+      }
+    } catch (error: CancellationException) {
+      throw error
+    } catch (_: Exception) {
+      if (requestIsCurrent()) {
+        clearRequest()
+        sessionState.pickerInputActive = false
+        onFailure()
+      }
+    }
   }
 }

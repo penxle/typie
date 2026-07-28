@@ -249,6 +249,43 @@ class ToolbarInputStateTest {
   }
 
   @Test
+  fun hidden_toolbar_consumes_ime_hide_without_entering_reading_mode() {
+    val inputState = EditorToolbarInputState()
+    val keyboardVisible = toolbarInputEnvironment(imeBottom = 320.dp)
+    inputState.onEnvironmentChanged(keyboardVisible)
+
+    val hiddenToolbar = keyboardVisible.copy(visible = false)
+    val hiddenEffects = inputState.onEnvironmentChanged(hiddenToolbar)
+    val hideEffects =
+      inputState.onEnvironmentChanged(
+        hiddenToolbar.copy(
+          imeBottom = 0.dp,
+          keyboardState =
+            EditorKeyboardState(
+              type = EditorKeyboardType.Software,
+              imeHideEventOwner = EditorImeInputOwner.Editor,
+            ),
+        )
+      )
+
+    val returnEffects =
+      inputState.onEnvironmentChanged(
+        toolbarInputEnvironment(
+          imeBottom = 0.dp,
+          keyboardState =
+            EditorKeyboardState(
+              type = EditorKeyboardType.Software,
+              imeHideEventOwner = EditorImeInputOwner.Editor,
+            ),
+        )
+      )
+
+    assertEquals(emptyList(), hiddenEffects)
+    assertEquals(emptyList(), hideEffects)
+    assertEquals(emptyList(), returnEffects)
+  }
+
+  @Test
   fun auxiliary_ime_hide_after_editor_focus_restore_keeps_focus() {
     val state = EditorToolbarInputState()
     val auxiliaryKeyboardVisible = toolbarInputEnvironment(focused = false, imeBottom = 320.dp)

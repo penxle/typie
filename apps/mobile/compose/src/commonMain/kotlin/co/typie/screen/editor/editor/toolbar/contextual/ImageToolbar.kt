@@ -24,6 +24,7 @@ import co.typie.screen.editor.editor.toolbar.EditorToolbarPageKey
 import co.typie.screen.editor.editor.toolbar.EditorToolbarPageScope
 import co.typie.screen.editor.editor.toolbar.EditorToolbarRow
 import co.typie.screen.editor.editor.toolbar.EditorToolbarSecondary
+import co.typie.screen.editor.editor.toolbar.EditorToolbarSessionState
 import co.typie.ui.component.toast.LocalToast
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
@@ -45,9 +46,12 @@ internal fun editorImageToolbarPage(
 
 // Must be composed outside the toolbar's AnimatedVisibility: on Android the system picker hides
 // the IME, which unmounts the toolbar pages, and an ActivityResult launcher registered there
-// would be unregistered before the result arrives.
+// would be unregistered before the result arrives. Wait one frame after blocking editor input so
+// the toolbar can consume that IME hide before presenting the picker.
 @Composable
-internal fun rememberEditorImagePicker(): (nodeId: String) -> Unit {
+internal fun rememberEditorImagePicker(
+  toolbarSessionState: EditorToolbarSessionState
+): (nodeId: String) -> Unit {
   val toast = LocalToast.current
   val runtime = LocalEditorRuntime.current
   val importer = LocalEditorAttachmentImporter.current
@@ -58,6 +62,7 @@ internal fun rememberEditorImagePicker(): (nodeId: String) -> Unit {
     rememberFilePicker(selectionMode = FilePickerSelectionMode.Multiple) { result ->
       val request = pendingRequest.value
       pendingRequest.value = null
+      toolbarSessionState.pickerInputActive = false
       val files =
         when (result) {
           FilePickerResult.Cancelled -> return@rememberFilePicker
@@ -114,13 +119,20 @@ internal fun rememberEditorImagePicker(): (nodeId: String) -> Unit {
         }
     }
 
-  return remember(picker, runtime) {
-    { nodeId ->
+  return remember(picker, runtime, toolbarSessionState) {
+    pickerAction@{ nodeId ->
       val session = runtime.session
-      if (session != null) {
-        pendingRequest.value = session to nodeId
-        picker("image/*")
-      }
+      if (session == null || toolbarSessionState.pickerInputActive) return@pickerAction
+      val request = session to nodeId
+      pendingRequest.value = request
+      launchAttachmentPicker(
+        scope = scope,
+        sessionState = toolbarSessionState,
+        requestIsCurrent = { pendingRequest.value === request },
+        clearRequest = { pendingRequest.value = null },
+        launchPicker = { picker("image/*") },
+        onFailure = { toast.error("이미지를 불러올 수 없어요.") },
+      )
     }
   }
 }
