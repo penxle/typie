@@ -8,6 +8,7 @@
   type Props = {
     document$key: Editor_document$key;
     active?: boolean;
+    viewer?: boolean;
     useWindowScroll?: boolean;
     style?: SystemStyleObject;
     header?: Snippet;
@@ -16,7 +17,7 @@
     onReady?: () => void;
   };
 
-  let { document$key, active = true, useWindowScroll = false, style, header, footer, children, onReady }: Props = $props();
+  let { document$key, active = true, viewer = false, useWindowScroll = false, style, header, footer, children, onReady }: Props = $props();
 </script>
 
 <div
@@ -30,7 +31,7 @@
     }),
   })}
 >
-  <View style={css.raw({ flex: '1' }, style)} {active} {document$key} {footer} {header} {onReady} {useWindowScroll}>
+  <View style={css.raw({ flex: '1' }, style)} {active} {document$key} {footer} {header} {onReady} {useWindowScroll} {viewer}>
     {#if children}
       {@render children()}
     {/if}
