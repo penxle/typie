@@ -523,6 +523,14 @@ impl Editor {
         })
     }
 
+    pub fn inspect_selection_as_slice_macro(&self) -> EditorResult<Option<String>> {
+        self.with_inner(|inner| {
+            Ok(editor_introspection::inspect_selection_as_slice_macro(
+                inner.editor.state(),
+            ))
+        })
+    }
+
     pub fn page_sizes(&self) -> EditorResult<Vec<Complex<editor_common::Size>>> {
         self.with_inner(|inner| {
             Ok(inner

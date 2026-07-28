@@ -884,6 +884,7 @@ dependencies = [
 name = "editor-introspection"
 version = "0.0.1"
 dependencies = [
+ "editor-clipboard",
  "editor-crdt",
  "editor-macros",
  "editor-model",

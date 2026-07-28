@@ -11,6 +11,7 @@ uniffi = ["dep:uniffi", "editor-model/uniffi", "editor-state/uniffi"]
 wasm = ["dep:tsify", "dep:wasm-bindgen", "editor-model/wasm", "editor-state/wasm"]
 
 [dependencies]
+editor-clipboard = { path = "../editor-clipboard" }
 editor-crdt = { path = "../editor-crdt" }
 editor-macros = { path = "../editor-macros" }
 editor-model = { path = "../editor-model", features = ["test-utils"] }

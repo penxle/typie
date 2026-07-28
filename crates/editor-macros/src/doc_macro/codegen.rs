@@ -157,7 +157,11 @@ fn collect_synthetic_node(
 }
 
 // Produces the PlainNode variant expression (excluding Text, which is inlined in collect_node).
-fn build_plain_node_expr(node: &NodeDef) -> TokenStream {
+pub(crate) fn build_plain_node_expr(node: &NodeDef) -> TokenStream {
+    if node.node_type == "unknown" && node.params.is_empty() {
+        return quote! { PlainNode::Unknown };
+    }
+
     let type_str = node.node_type.to_string();
 
     let variant = Ident::new(&type_str.to_pascal_case(), Span::call_site());

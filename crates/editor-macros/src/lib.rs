@@ -8,6 +8,7 @@ mod modifier_state_macro;
 mod node_attr_macro;
 mod node_companion_macro;
 mod preamble_macro;
+mod slice_macro;
 mod state_macro;
 
 use proc_macro::TokenStream;
@@ -33,6 +34,12 @@ pub fn context_expr(input: TokenStream) -> TokenStream {
 pub fn state(input: TokenStream) -> TokenStream {
     let input = syn::parse_macro_input!(input as state_macro::parse::StateInput);
     state_macro::codegen::generate(&input).into()
+}
+
+#[proc_macro]
+pub fn slice(input: TokenStream) -> TokenStream {
+    let input = syn::parse_macro_input!(input as slice_macro::parse::SliceInput);
+    slice_macro::codegen::generate(&input).into()
 }
 
 #[proc_macro_derive(FromDiscriminant, attributes(from_discriminant))]

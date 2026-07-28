@@ -375,6 +375,8 @@ internal class FakeFfiEditor(
 
   override fun inspectStateAsMacro(): String = ""
 
+  override fun inspectSelectionAsSliceMacro(): String? = null
+
   override fun receiveRemoteChangeset(payload: ByteArray) {
     pendingEntries += PendingNativeWork
     receiveRemoteChangesetProvider(payload)

@@ -1064,6 +1064,12 @@ internal constructor(
       inner.inspectStateAsMacro()
     }
 
+  fun inspectSelectionAsSliceMacro(): String? =
+    withFailureNotification(defaultValue = { null }) {
+      ensureActive()
+      inner.inspectSelectionAsSliceMacro()
+    }
+
   // Snapshot-based on purpose: these run synchronously inside touch dispatch on the
   // main thread, where a direct FFI call would contend on the Rust editor mutex and
   // stall input for as long as a background tick holds it (APP2-7P).

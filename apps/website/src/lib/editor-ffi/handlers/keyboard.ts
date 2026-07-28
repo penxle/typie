@@ -235,6 +235,12 @@ const bindings: KeyBinding[] = [
 
   { key: ['q', 'ㅂ'], modifiers: ['ctrl'], predicate: macOnly, action: (ed) => ed.inspect('state') },
   { key: ['w', 'ㅈ'], modifiers: ['ctrl'], predicate: macOnly, action: (ed) => ed.inspect('state-as-macro') },
+  {
+    key: ['s', 'ㄴ'],
+    modifiers: ['ctrl'],
+    predicate: macOnly,
+    action: (ed) => ed.inspect('selection-as-slice-macro'),
+  },
 ];
 
 const move = (movement: Movement, extend: boolean): Message => ({

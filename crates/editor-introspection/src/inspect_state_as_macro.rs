@@ -4,6 +4,10 @@ use std::collections::BTreeMap;
 use std::fmt::Write;
 
 use crate::labeler::Labeler;
+use crate::macro_format::{
+    escape_str, write_carry_macro, write_indent, write_modifier_macro, write_modifiers_macro,
+    write_node_attrs_macro,
+};
 
 enum Disp<'a> {
     Block(NodeView<'a>),
@@ -130,13 +134,6 @@ pub fn inspect_state_as_macro(state: &State) -> String {
     output
 }
 
-fn write_indent(output: &mut String, level: usize) {
-    const INDENT: &str = "    ";
-    for _ in 0..level {
-        output.push_str(INDENT);
-    }
-}
-
 fn write_macro_node(
     item: &Disp,
     indent_level: usize,
@@ -159,7 +156,7 @@ fn write_macro_node(
             let type_name: &str = node.node_type().into();
             write!(output, "{type_name}").unwrap();
 
-            write_node_attrs_macro(&node.node(), output);
+            write_node_attrs_macro(&node.node().to_plain(), output);
             write_modifiers_macro(&explicit_block_mods(pd, node.id()), output);
             write_node_carry_macro(node, pd, output);
 
@@ -189,7 +186,7 @@ fn write_macro_node(
             let type_name: &str = leaf.node_type().into();
             write!(output, "{type_name}").unwrap();
 
-            write_node_attrs_macro(&atom_node(leaf, pd), output);
+            write_node_attrs_macro(&atom_node(leaf, pd).to_plain(), output);
             write_modifiers_macro(modifiers, output);
             output.push('\n');
         }
@@ -201,20 +198,8 @@ fn is_synthetic_scaffold(id: editor_crdt::Dot) -> bool {
 }
 
 fn write_node_carry_macro(node: &NodeView, pd: &ProjectedDoc, output: &mut String) {
-    let carry = pd.carry_modifiers(node.id());
-    if carry.is_empty() {
-        return;
-    }
-    output.push_str(" carry(");
-    output.push('[');
-    for (i, m) in carry.values().enumerate() {
-        if i > 0 {
-            output.push_str(", ");
-        }
-        write_modifier_macro(m, output);
-    }
-    output.push(']');
-    output.push(')');
+    let carry: Vec<_> = pd.carry_modifiers(node.id()).into_values().collect();
+    write_carry_macro(&carry, output);
 }
 
 fn write_selection_macro(
@@ -283,129 +268,6 @@ fn write_pending_modifiers(pending: &editor_state::PendingModifiers, output: &mu
         }
     }
     output.push_str("]\n");
-}
-
-fn write_node_attrs_macro(node: &Node, output: &mut String) {
-    let mut attrs = Vec::new();
-    match node {
-        Node::Blockquote(bq) if *bq.variant.get() != BlockquoteVariant::default() => {
-            attrs.push(format!(
-                "variant: BlockquoteVariant::{:?}",
-                bq.variant.get()
-            ));
-        }
-        Node::Callout(c) if *c.variant.get() != CalloutVariant::default() => {
-            attrs.push(format!("variant: CalloutVariant::{:?}", c.variant.get()));
-        }
-        Node::HorizontalRule(hr) if *hr.variant.get() != HorizontalRuleVariant::default() => {
-            attrs.push(format!(
-                "variant: HorizontalRuleVariant::{:?}",
-                hr.variant.get()
-            ));
-        }
-        Node::Table(t) => {
-            if *t.border_style.get() != TableBorderStyle::default() {
-                attrs.push(format!(
-                    "border_style: TableBorderStyle::{:?}",
-                    t.border_style.get()
-                ));
-            }
-            if *t.proportion.get() != 100 {
-                attrs.push(format!("proportion: {}", *t.proportion.get()));
-            }
-        }
-        Node::TableCell(tc) => {
-            if let Some(w) = tc.col_width.get() {
-                attrs.push(format!("col_width: Some({w})"));
-            }
-        }
-        Node::Image(img) => {
-            if let Some(id) = img.id.get() {
-                attrs.push(format!("id: Some(\"{id}\".to_string())"));
-            }
-            if *img.proportion.get() != 100 {
-                attrs.push(format!("proportion: {}", *img.proportion.get()));
-            }
-        }
-        Node::File(f) => {
-            if let Some(id) = f.id.get() {
-                attrs.push(format!("id: Some(\"{id}\".to_string())"));
-            }
-        }
-        Node::Embed(e) => {
-            if let Some(id) = e.id.get() {
-                attrs.push(format!("id: Some(\"{id}\".to_string())"));
-            }
-        }
-        Node::Archived(a) => {
-            if let Some(id) = a.id.get() {
-                attrs.push(format!("id: Some(\"{id}\".to_string())"));
-            }
-        }
-        _ => {}
-    }
-    if !attrs.is_empty() {
-        write!(output, "({})", attrs.join(", ")).unwrap();
-    }
-}
-
-fn write_modifier_macro(m: &Modifier, output: &mut String) {
-    let name: &str = m.as_type().into();
-    match m {
-        Modifier::Bold | Modifier::Italic | Modifier::Underline | Modifier::Strikethrough => {
-            output.push_str(name);
-        }
-        Modifier::FontSize { value }
-        | Modifier::LineHeight { value }
-        | Modifier::BlockGap { value }
-        | Modifier::ParagraphIndent { value } => write!(output, "{name}({value})").unwrap(),
-        Modifier::FontWeight { value } => write!(output, "{name}({value})").unwrap(),
-        Modifier::LetterSpacing { value } => write!(output, "{name}({value})").unwrap(),
-        Modifier::FontFamily { value }
-        | Modifier::TextColor { value }
-        | Modifier::BackgroundColor { value } => {
-            write!(output, "{name}(\"{value}\".to_string())").unwrap();
-        }
-        Modifier::Link { href } => {
-            write!(output, "{name}(href: \"{href}\".to_string())").unwrap();
-        }
-        Modifier::Ruby { text } => {
-            write!(output, "{name}(text: \"{text}\".to_string())").unwrap();
-        }
-        Modifier::Alignment { value } => {
-            write!(output, "{name}(Alignment::{value:?})").unwrap();
-        }
-    }
-}
-
-fn write_modifiers_macro(modifiers: &[Modifier], output: &mut String) {
-    if modifiers.is_empty() {
-        return;
-    }
-    output.push_str(" [");
-    for (i, m) in modifiers.iter().enumerate() {
-        if i > 0 {
-            output.push_str(", ");
-        }
-        write_modifier_macro(m, output);
-    }
-    output.push(']');
-}
-
-fn escape_str(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    for c in s.chars() {
-        match c {
-            '\\' => out.push_str("\\\\"),
-            '"' => out.push_str("\\\""),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            c if c.is_control() => write!(out, "\\u{{{:x}}}", c as u32).unwrap(),
-            c => out.push(c),
-        }
-    }
-    out
 }
 
 fn non_default_root_modifiers(modifiers: &[Modifier]) -> Vec<Modifier> {

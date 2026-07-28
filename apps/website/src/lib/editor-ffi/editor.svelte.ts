@@ -2389,12 +2389,13 @@ export class Editor {
     }
   }
 
-  inspect(mode: 'state' | 'state-with-node-id' | 'state-as-macro') {
+  inspect(mode: 'state' | 'state-with-node-id' | 'state-as-macro' | 'selection-as-slice-macro') {
     const output = this.#invokeCore((core) =>
       match(mode)
         .with('state', () => core.inspect_state())
         .with('state-with-node-id', () => core.inspect_state({ show_node_ids: true }))
         .with('state-as-macro', () => core.inspect_state_as_macro())
+        .with('selection-as-slice-macro', () => core.inspect_selection_as_slice_macro())
         .exhaustive(),
     );
 

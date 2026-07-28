@@ -813,6 +813,7 @@ declare class Editor {
     freeze_selection(selection: Selection): StableSelection | undefined;
     ime(before_limit: number, after_limit: number): Ime | undefined;
     insert_template_fragment(changesets: Uint8Array): void;
+    inspect_selection_as_slice_macro(): string | undefined;
     inspect_state(options?: InspectStateOptions | null): string;
     inspect_state_as_macro(): string;
     interactive_hit_test(page: number, x: number, y: number): InteractiveHit | undefined;

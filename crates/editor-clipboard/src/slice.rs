@@ -375,8 +375,10 @@ fn extract_cell_rect(state: &State, view: &DocView, rect: &CellRect) -> Slice {
 mod tests {
     use super::*;
     use crate::test_doc::DocBuilder;
-    use editor_macros::state;
-    use editor_model::{AtomLeaf, CalloutVariant, Modifier, NodeType};
+    use editor_macros::{slice, state};
+    use editor_model::{
+        Alignment, AtomLeaf, CalloutVariant, Modifier, NodeType, PlainParagraphNode,
+    };
     use editor_resource::Resource;
     use editor_state::{Affinity, Position, Selection};
 
@@ -392,6 +394,96 @@ mod tests {
         let lo = a_col.min(h_col);
         let hi = a_col.max(h_col);
         Selection::new(Position::new(a_row, lo), Position::new(h_row, hi + 1))
+    }
+
+    #[test]
+    fn slice_macro_constructs_nested_multi_root_content() {
+        let actual = slice! {
+            content {
+                paragraph [alignment(Alignment::Center)] carry([bold]) {
+                    text("Hello") [italic]
+                }
+                paragraph {
+                    text("World")
+                }
+            }
+            open_start: 1
+            open_end: 2
+        };
+
+        let expected = Slice {
+            content: vec![
+                Fragment {
+                    node: PlainNode::Paragraph(PlainParagraphNode::default()),
+                    modifiers: vec![Modifier::Alignment {
+                        value: Alignment::Center,
+                    }],
+                    carry: vec![Modifier::Bold],
+                    children: vec![Fragment {
+                        node: PlainNode::Text(PlainTextNode {
+                            text: "Hello".into(),
+                        }),
+                        modifiers: vec![Modifier::Italic],
+                        carry: vec![],
+                        children: vec![],
+                    }],
+                },
+                Fragment {
+                    node: PlainNode::Paragraph(PlainParagraphNode::default()),
+                    modifiers: vec![],
+                    carry: vec![],
+                    children: vec![Fragment {
+                        node: PlainNode::Text(PlainTextNode {
+                            text: "World".into(),
+                        }),
+                        modifiers: vec![],
+                        carry: vec![],
+                        children: vec![],
+                    }],
+                },
+            ],
+            open_start: 1,
+            open_end: 2,
+        };
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn slice_macro_normalizes_empty_content_open_depths() {
+        let actual = slice! {
+            content {}
+            open_start: 3
+            open_end: 4
+        };
+
+        assert_eq!(actual, Slice::new(vec![], 3, 4));
+        assert_eq!((actual.open_start, actual.open_end), (0, 0));
+    }
+
+    #[test]
+    fn slice_macro_constructs_unknown_unit_variant() {
+        let actual = slice! {
+            content {
+                unknown {}
+            }
+            open_start: 0
+            open_end: 0
+        };
+
+        assert_eq!(
+            actual,
+            Slice::new(
+                vec![Fragment {
+                    node: PlainNode::Unknown,
+                    modifiers: vec![],
+                    carry: vec![],
+                    children: vec![],
+                }],
+                0,
+                0,
+            )
+        );
     }
 
     #[test]

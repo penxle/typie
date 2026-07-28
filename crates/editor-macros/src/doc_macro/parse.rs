@@ -61,7 +61,7 @@ impl Parse for DocTree {
     }
 }
 
-fn parse_node_list(input: ParseStream) -> Result<Vec<NodeDef>> {
+pub(crate) fn parse_node_list(input: ParseStream) -> Result<Vec<NodeDef>> {
     let mut nodes = Vec::new();
     while !input.is_empty() {
         nodes.push(parse_node_def(input)?);
