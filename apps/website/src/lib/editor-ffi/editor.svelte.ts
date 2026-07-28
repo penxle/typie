@@ -1563,6 +1563,10 @@ export class Editor {
     return this.#invokeCore((core) => core.selection_hit_test(page, x, y));
   }
 
+  cursorHitTest(page: number, x: number, y: number): boolean {
+    return this.#invokeCore((core) => core.cursor_hit_test(page, x, y));
+  }
+
   updatePointerHover(clientX: number, clientY: number): void {
     this.#lastPointerClient = { x: clientX, y: clientY };
     this.refreshPointerStyle();

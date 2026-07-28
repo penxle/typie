@@ -16,24 +16,21 @@ const createEvent = () =>
 const createEditor = ({
   readOnly = false,
   selectionHit = false,
-  isSelectionCollapsed = true,
-  appliedSelection,
+  cursorHit = false,
 }: {
   readOnly?: boolean;
   selectionHit?: boolean;
-  isSelectionCollapsed?: boolean;
-  appliedSelection?: Editor['appliedSnapshot']['selection'];
+  cursorHit?: boolean;
 } = {}) =>
   ({
     readOnly,
-    isSelectionCollapsed,
-    appliedSnapshot: { selection: appliedSelection },
     gesture: {
       shouldSuppressNativeContextMenu: vi.fn(() => false),
     },
     clientToLocal: vi.fn(() => ({ page: 0, x: 10, y: 20 })),
     interactiveHitTest: vi.fn(),
     selectionHitTest: vi.fn(() => selectionHit),
+    cursorHitTest: vi.fn(() => cursorHit),
     enqueue: vi.fn(),
     updateNow: vi.fn((build: () => void) => {
       build();
@@ -48,7 +45,7 @@ const createEditor = ({
   };
 
 describe('handleContextMenu', () => {
-  it('sets selection at the hit point before opening the menu', () => {
+  it('selects the hit word before opening an editable context menu', () => {
     const editor = createEditor();
     const event = createEvent();
 
@@ -56,7 +53,7 @@ describe('handleContextMenu', () => {
 
     expect(editor.enqueue).toHaveBeenCalledWith({
       type: 'selection',
-      op: { type: 'set_at', page: 0, x: 10, y: 20 },
+      op: { type: 'select_unit_at', page: 0, x: 10, y: 20, unit: 'word' },
     });
     expect(editor.updateNow).toHaveBeenCalledTimes(1);
     expect(editor.updateNow.mock.invocationCallOrder[0]).toBeLessThan(editor.openContextMenu.mock.invocationCallOrder[0]);
@@ -77,13 +74,17 @@ describe('handleContextMenu', () => {
   });
 
   it('preserves a range selection when opening inside it', () => {
-    const editor = createEditor({
-      selectionHit: true,
-      appliedSelection: {
-        anchor: { node: 'text', offset: 0, affinity: 'downstream' },
-        head: { node: 'text', offset: 4, affinity: 'downstream' },
-      },
-    });
+    const editor = createEditor({ selectionHit: true });
+    const event = createEvent();
+
+    handleContextMenu(editor, event);
+
+    expect(editor.enqueue).not.toHaveBeenCalled();
+    expect(editor.updateNow).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves a collapsed selection when opening at the current cursor', () => {
+    const editor = createEditor({ cursorHit: true });
     const event = createEvent();
 
     handleContextMenu(editor, event);
