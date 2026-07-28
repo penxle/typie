@@ -51,7 +51,7 @@ impl IcuResources {
     }
 }
 
-#[cfg(feature = "test-utils")]
+#[cfg(any(test, feature = "test-utils"))]
 impl TextSegmenters {
     pub fn new_test() -> Self {
         Self {

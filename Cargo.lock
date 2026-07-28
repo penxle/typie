@@ -993,6 +993,7 @@ dependencies = [
  "proc-macro2",
  "proptest",
  "quote",
+ "rapidhash",
  "ruzstd",
  "serde",
  "serde_json",

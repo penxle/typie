@@ -9,6 +9,7 @@ mod list;
 mod modifier;
 mod navigation;
 mod node;
+#[cfg(test)]
 mod remote;
 mod selection;
 mod system;
@@ -33,7 +34,6 @@ pub use list::handle_list_op;
 pub use modifier::handle_modifier_op;
 pub use navigation::handle_navigation_op;
 pub use node::handle_node_op;
-pub use remote::handle_remote;
 pub use selection::handle_selection_op;
 pub use system::handle_system_event;
 pub use text_input::handle_flat_ime_ops;

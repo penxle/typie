@@ -4,19 +4,25 @@ import androidx.compose.runtime.BroadcastFrameClock
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect as ComposeRect
 import androidx.compose.ui.geometry.Size as ComposeSize
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.PointerInputChange
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.Velocity
 import co.typie.editor.Editor
 import co.typie.editor.EditorZoomController
 import co.typie.editor.FakeFfiEditor
 import co.typie.editor.PagePoint
+import co.typie.editor.SurfaceSessionHandle
 import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.ffi.Affinity
 import co.typie.editor.ffi.Alignment
 import co.typie.editor.ffi.CalloutVariant
+import co.typie.editor.ffi.CommandOutcome
+import co.typie.editor.ffi.CommandRejection
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.EditorEvent
+import co.typie.editor.ffi.FrameKey
 import co.typie.editor.ffi.InputModifiers
 import co.typie.editor.ffi.InteractiveHit
 import co.typie.editor.ffi.Message
@@ -132,6 +138,17 @@ private fun testPointerInputChange(
     isInitiallyConsumed = consumed,
   )
 
+private fun Editor.deliverLatestFrame(fake: FakeFfiEditor, surface: SurfaceSessionHandle) {
+  val render = fake.renderCalls.last()
+  deliverFrame(
+    session = surface,
+    bitmap = ImageBitmap(width = 100, height = 100),
+    pixelSize = IntSize(width = 100, height = 100),
+    editorRevision = render.requestedRevision.value,
+    frameKey = render.requestedRevision.value,
+  )
+}
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class EditorInteractionControllerTest {
   @Test
@@ -236,7 +253,7 @@ class EditorInteractionControllerTest {
     runTest(StandardTestDispatcher()) {
       val fake = FakeFfiEditor()
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -314,7 +331,7 @@ class EditorInteractionControllerTest {
           selectionHitRectsProvider = { FakeFfiEditor.coveringHitRects(0) },
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -330,18 +347,18 @@ class EditorInteractionControllerTest {
       controller.onTapTimer(nowMillis = 250L)
       runCurrent()
 
-      assertFalse(host.uiState.contextMenu.isVisibleFor(editor.state))
+      assertFalse(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
 
       controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 300L)
       runCurrent()
 
-      assertFalse(host.uiState.contextMenu.isVisibleFor(editor.state))
+      assertFalse(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
 
       advanceTimeBy(EditorConsecutiveTapMaxIntervalMillis)
       runCurrent()
 
       assertEquals(emptyList(), fake.enqueued)
-      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.state))
+      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
       assertEquals(emptyList(), host.requestedBringIntoViewVersions)
     }
 
@@ -359,7 +376,7 @@ class EditorInteractionControllerTest {
           selectionHitRectsProvider = { FakeFfiEditor.coveringHitRects(0) },
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       host.point = PagePoint(page = -1, x = 10f, y = 20f)
       val controller =
@@ -377,7 +394,7 @@ class EditorInteractionControllerTest {
       controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 300L)
       advanceUntilIdle()
 
-      assertFalse(host.uiState.contextMenu.isVisibleFor(editor.state))
+      assertFalse(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
       assertEquals(emptyList(), fake.enqueued)
     }
 
@@ -395,7 +412,7 @@ class EditorInteractionControllerTest {
           selectionHitRectsProvider = { FakeFfiEditor.coveringHitRects(0) },
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -411,12 +428,12 @@ class EditorInteractionControllerTest {
       controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 40L)
       runCurrent()
 
-      assertFalse(host.uiState.contextMenu.isVisibleFor(editor.state))
+      assertFalse(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
 
       advanceTimeBy(EditorConsecutiveTapMaxIntervalMillis)
       runCurrent()
 
-      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.state))
+      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
       assertTrue(host.focused)
       assertEquals(emptyList(), fake.enqueued)
 
@@ -428,7 +445,7 @@ class EditorInteractionControllerTest {
       controller.onPointerUp(pointerId = 3L, position = start, nowMillis = 1240L)
       advanceUntilIdle()
 
-      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.state))
+      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
       assertTrue(host.focused)
       assertEquals(emptyList(), fake.enqueued)
 
@@ -436,7 +453,7 @@ class EditorInteractionControllerTest {
       controller.onPointerUp(pointerId = 4L, position = start, nowMillis = 1740L)
       advanceUntilIdle()
 
-      assertFalse(host.uiState.contextMenu.isVisibleFor(editor.state))
+      assertFalse(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
       assertEquals(emptyList(), fake.enqueued)
     }
 
@@ -454,7 +471,7 @@ class EditorInteractionControllerTest {
           selectionHitRectsProvider = { FakeFfiEditor.coveringHitRects(0) },
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -471,7 +488,7 @@ class EditorInteractionControllerTest {
       controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 40L)
       advanceUntilIdle()
 
-      assertFalse(host.uiState.contextMenu.isVisibleFor(editor.state))
+      assertFalse(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
       assertTrue(host.focused)
       assertEquals(
         listOf<Message>(Message.Selection(SelectionOp.SetAt(page = 0, x = 10f, y = 20f))),
@@ -482,8 +499,9 @@ class EditorInteractionControllerTest {
   @Test
   fun `single tap while editor already focused requests software keyboard`() =
     runTest(StandardTestDispatcher()) {
-      val editor = Editor(FakeFfiEditor(), this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      val fake = FakeFfiEditor()
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       host.focused = true
       host.uiState.updateFocus(true)
@@ -508,8 +526,9 @@ class EditorInteractionControllerTest {
   @Test
   fun `single tap that grants focus does not request software keyboard`() =
     runTest(StandardTestDispatcher()) {
-      val editor = Editor(FakeFfiEditor(), this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      val fake = FakeFfiEditor()
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -541,7 +560,7 @@ class EditorInteractionControllerTest {
       val fake =
         FakeFfiEditor(cursorProvider = { cursorAt(x = 10f) }, selectionProvider = { selection })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -602,11 +621,11 @@ class EditorInteractionControllerTest {
             if (commitNodeSelection) {
               currentSelection = nodeSelection
             }
-            emptyList()
+            listOf(EditorEvent.StateChanged(listOf(StateField.Selection)))
           },
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -624,7 +643,7 @@ class EditorInteractionControllerTest {
       controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 40L)
       advanceUntilIdle()
 
-      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.state))
+      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
       assertTrue(host.focused)
       assertEquals(listOf(2L), host.requestedBringIntoViewVersions)
     }
@@ -652,11 +671,11 @@ class EditorInteractionControllerTest {
             if (commitNodeSelection) {
               currentSelection = nodeSelection
             }
-            emptyList()
+            listOf(EditorEvent.StateChanged(listOf(StateField.Selection)))
           },
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -674,7 +693,7 @@ class EditorInteractionControllerTest {
       controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 40L)
       advanceUntilIdle()
 
-      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.state))
+      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
       assertTrue(host.focused)
     }
 
@@ -698,7 +717,7 @@ class EditorInteractionControllerTest {
           selectionHitRectsProvider = { FakeFfiEditor.coveringHitRects(0) },
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -714,26 +733,30 @@ class EditorInteractionControllerTest {
       controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 40L)
       advanceUntilIdle()
 
-      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.state))
+      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
 
       currentSelection = collapsedSelection
-      editor.sync {}
+      fake.publishSnapshot(editor)
 
-      assertFalse(host.uiState.contextMenu.isVisibleFor(editor.state))
+      assertFalse(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
 
-      controller.onEditorStateChanged(editor.state)
+      controller.onEditorStateChanged(editor.publishedState)
 
       assertFalse(host.uiState.contextMenu.visible)
-      assertFalse(host.uiState.contextMenu.isVisibleFor(editor.state))
+      assertFalse(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
     }
 
   @Test
   fun `single tap timer requests bring into view for the committed cursor version`() =
     runTest(StandardTestDispatcher()) {
       var cursor = cursorAt(x = 1f)
-      val fake = FakeFfiEditor(cursorProvider = { cursor })
+      val fake =
+        FakeFfiEditor(
+          cursorProvider = { cursor },
+          onTick = { listOf(EditorEvent.StateChanged(listOf(StateField.Cursor))) },
+        )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       cursor = cursorAt(x = 5f)
       val host = TestHost(this)
       val controller =
@@ -773,7 +796,7 @@ class EditorInteractionControllerTest {
           }
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -810,7 +833,7 @@ class EditorInteractionControllerTest {
           }
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -849,7 +872,7 @@ class EditorInteractionControllerTest {
           }
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -891,7 +914,7 @@ class EditorInteractionControllerTest {
           }
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -931,7 +954,7 @@ class EditorInteractionControllerTest {
         )
       val fake = FakeFfiEditor(selectionProvider = { selection })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -975,7 +998,7 @@ class EditorInteractionControllerTest {
         )
       val fake = FakeFfiEditor(selectionProvider = { selection })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -1054,8 +1077,9 @@ class EditorInteractionControllerTest {
   @Test
   fun `consecutive tap distance scales with density`() =
     runTest(StandardTestDispatcher()) {
-      val editor = Editor(FakeFfiEditor(), this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      val fake = FakeFfiEditor()
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       host.density = 2f
       val controller =
@@ -1087,7 +1111,7 @@ class EditorInteractionControllerTest {
         )
       val fake = FakeFfiEditor(selectionProvider = { selection })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -1102,13 +1126,13 @@ class EditorInteractionControllerTest {
       controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
       controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 40L)
       runCurrent()
-      assertFalse(host.uiState.contextMenu.isVisibleFor(editor.state))
+      assertFalse(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
 
       advanceTimeBy(100L)
       controller.onPointerDown(pointerId = 2L, position = start, nowMillis = 140L)
       controller.onPointerUp(pointerId = 2L, position = start, nowMillis = 180L)
       runCurrent()
-      assertFalse(host.uiState.contextMenu.isVisibleFor(editor.state))
+      assertFalse(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
 
       advanceTimeBy(100L)
       controller.onPointerDown(pointerId = 3L, position = start, nowMillis = 280L)
@@ -1123,7 +1147,7 @@ class EditorInteractionControllerTest {
         ),
         fake.enqueued.filterIsInstance<Message.Selection>().map { it.op },
       )
-      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.state))
+      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
     }
 
   @Test
@@ -1138,7 +1162,7 @@ class EditorInteractionControllerTest {
       val fake =
         FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -1158,7 +1182,7 @@ class EditorInteractionControllerTest {
       advanceUntilIdle()
 
       endpoints = selectionEndpoints()
-      editor.sync {}
+      fake.publishSnapshot(editor)
 
       controller.onPointerDown(pointerId = 3L, position = start, nowMillis = 200L)
       controller.onPointerUp(pointerId = 3L, position = start, nowMillis = 240L)
@@ -1169,7 +1193,7 @@ class EditorInteractionControllerTest {
         fake.enqueued.filterIsInstance<Message.Selection>().last().op,
       )
       assertFalse(host.scrollGestureLockActive)
-      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.state))
+      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
     }
 
   @Test
@@ -1184,7 +1208,7 @@ class EditorInteractionControllerTest {
       val fake =
         FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -1204,7 +1228,7 @@ class EditorInteractionControllerTest {
       advanceUntilIdle()
 
       endpoints = selectionEndpoints()
-      editor.sync {}
+      fake.publishSnapshot(editor)
 
       controller.onPointerDown(pointerId = 3L, position = start, nowMillis = 200L)
       controller.onPointerMove(
@@ -1216,7 +1240,7 @@ class EditorInteractionControllerTest {
       advanceUntilIdle()
 
       endpoints = null
-      editor.sync {}
+      fake.publishSnapshot(editor)
       fake.enqueued.clear()
 
       controller.onPointerDown(pointerId = 4L, position = start, nowMillis = 280L)
@@ -1239,7 +1263,7 @@ class EditorInteractionControllerTest {
         )
       val fake = FakeFfiEditor(selectionProvider = { selection })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -1274,8 +1298,9 @@ class EditorInteractionControllerTest {
   @Test
   fun `double tap drag threshold scales with density`() =
     runTest(StandardTestDispatcher()) {
-      val editor = Editor(FakeFfiEditor(), this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      val fake = FakeFfiEditor()
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       host.density = 2f
       val controller =
@@ -1324,7 +1349,7 @@ class EditorInteractionControllerTest {
         )
       val fake = FakeFfiEditor(selectionProvider = { selection })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -1385,7 +1410,7 @@ class EditorInteractionControllerTest {
       val fake =
         FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -1399,7 +1424,7 @@ class EditorInteractionControllerTest {
       assertTrue(controller.pointerDownOnSelectionHandle(down))
       assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
       assertTrue(host.scrollGestureLockActive)
-      assertFalse(host.uiState.contextMenu.isVisibleFor(editor.state))
+      assertFalse(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
 
       assertTrue(controller.moveSelectionHandlePointer(Offset(22f, 50f)))
 
@@ -1437,7 +1462,7 @@ class EditorInteractionControllerTest {
       val fake =
         FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -1483,7 +1508,7 @@ class EditorInteractionControllerTest {
       val fake =
         FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -1502,6 +1527,10 @@ class EditorInteractionControllerTest {
       assertEquals(EditorInteractionMode.SelectionHandleDragging, controller.interactionMode)
       assertTrue(host.scrollGestureLockActive)
       assertEquals(emptyList(), fake.enqueued.filterIsInstance<Message.Selection>())
+
+      assertTrue(controller.upSelectionHandlePointer())
+
+      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
     }
 
   @Test
@@ -1522,7 +1551,7 @@ class EditorInteractionControllerTest {
       val fake =
         FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -1564,7 +1593,7 @@ class EditorInteractionControllerTest {
       val fake =
         FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -1604,7 +1633,7 @@ class EditorInteractionControllerTest {
       val fake =
         FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -1624,14 +1653,14 @@ class EditorInteractionControllerTest {
     }
 
   @Test
-  fun `selection handle drag refreshes context menu after delayed selection commit`() =
+  fun `selection handle release waits for its terminal applied selection publication`() =
     runTest(StandardTestDispatcher()) {
       var selection =
         Selection(
           anchor = Position("text", 0, Affinity.Downstream),
           head = Position("text", 5, Affinity.Downstream),
         )
-      val committedSelection =
+      val appliedSelection =
         Selection(
           anchor = Position("text", 0, Affinity.Downstream),
           head = Position("text", 8, Affinity.Downstream),
@@ -1644,9 +1673,13 @@ class EditorInteractionControllerTest {
           toPosition = Position("text", 5, Affinity.Downstream),
         )
       val fake =
-        FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
+        FakeFfiEditor(
+          selectionProvider = { selection },
+          selectionEndpointsProvider = { endpoints },
+          onTick = { listOf(EditorEvent.StateChanged(listOf(StateField.Selection))) },
+        )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -1659,14 +1692,15 @@ class EditorInteractionControllerTest {
 
       assertTrue(controller.pointerDownOnSelectionHandle(down))
       assertTrue(controller.moveSelectionHandlePointer(Offset(52f, 50f)))
+      selection = appliedSelection
       assertTrue(controller.upSelectionHandlePointer())
-      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.state))
+      assertFalse(host.uiState.contextMenu.visible)
 
-      selection = committedSelection
-      editor.sync {}
-      controller.onEditorStateChanged(editor.state)
+      advanceUntilIdle()
+      controller.onEditorStateChanged(editor.publishedState)
 
-      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.state))
+      assertEquals(appliedSelection, editor.publishedState.selection)
+      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
     }
 
   @Test
@@ -1687,7 +1721,7 @@ class EditorInteractionControllerTest {
       val fake =
         FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host =
         TestHost(this).apply {
           edgeAutoScrollViewport = testEdgeAutoScrollViewport(ComposeRect(0f, 0f, 100f, 100f))
@@ -1738,7 +1772,7 @@ class EditorInteractionControllerTest {
       val fake =
         FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host =
         TestHost(this).apply {
           edgeAutoScrollViewport = testEdgeAutoScrollViewport(ComposeRect(0f, 0f, 100f, 100f))
@@ -1837,7 +1871,7 @@ class EditorInteractionControllerTest {
       val fake =
         FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -1869,7 +1903,7 @@ class EditorInteractionControllerTest {
       val fake =
         FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host =
         TestHost(this).apply {
           edgeAutoScrollViewport = testEdgeAutoScrollViewport(ComposeRect(0f, 0f, 100f, 100f))
@@ -1906,7 +1940,7 @@ class EditorInteractionControllerTest {
       val fake =
         FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host =
         TestHost(this).apply {
           edgeAutoScrollViewport = testEdgeAutoScrollViewport(ComposeRect(0f, 0f, 100f, 100f))
@@ -1949,7 +1983,7 @@ class EditorInteractionControllerTest {
           selectionEndpointsProvider = { selectionEndpoints() },
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -1968,10 +2002,11 @@ class EditorInteractionControllerTest {
       assertEquals(emptyList(), fake.enqueued.filterIsInstance<Message.Selection>())
       assertNull(controller.magnifierPosition)
 
-      controller.cancel()
+      assertTrue(controller.upSelectionHandlePointer())
 
       assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
       assertFalse(host.scrollGestureLockActive)
+      assertFalse(host.uiState.contextMenu.visible)
     }
 
   @Test
@@ -1988,7 +2023,7 @@ class EditorInteractionControllerTest {
           selectionEndpointsProvider = { selectionEndpoints() },
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       host.density = 2f
       val controller =
@@ -2026,7 +2061,7 @@ class EditorInteractionControllerTest {
           selectionHitRectsProvider = { FakeFfiEditor.coveringHitRects(0) },
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -2045,7 +2080,7 @@ class EditorInteractionControllerTest {
       assertEquals(emptyList(), fake.enqueued.filterIsInstance<Message.Selection>())
       assertFalse(host.scrollGestureLockActive)
       assertTrue(host.focused)
-      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.state))
+      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
     }
 
   @Test
@@ -2060,7 +2095,7 @@ class EditorInteractionControllerTest {
       val fake =
         FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -2108,7 +2143,7 @@ class EditorInteractionControllerTest {
           selectionEndpointsProvider = { selectionEndpoints() },
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -2211,7 +2246,7 @@ class EditorInteractionControllerTest {
           selectionEndpointsProvider = { selectionEndpoints() },
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -2249,7 +2284,7 @@ class EditorInteractionControllerTest {
           },
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -2300,7 +2335,7 @@ class EditorInteractionControllerTest {
           },
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -2341,7 +2376,7 @@ class EditorInteractionControllerTest {
           },
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -2385,7 +2420,7 @@ class EditorInteractionControllerTest {
           },
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host =
         TestHost(this).apply { pageOffsets = mapOf(0 to Offset.Zero, 1 to Offset(x = 0f, y = 80f)) }
       val controller =
@@ -2460,7 +2495,7 @@ class EditorInteractionControllerTest {
           tableOverlaysProvider = { listOf(tableOverlay) },
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -2479,7 +2514,7 @@ class EditorInteractionControllerTest {
       assertEquals(EditorInteractionMode.SelectionHandleDragging, controller.interactionMode)
 
       tableOverlay = tableOverlay(isFocused = false)
-      editor.sync {}
+      fake.publishSnapshot(editor)
       fake.enqueued.clear()
 
       assertTrue(
@@ -2498,7 +2533,7 @@ class EditorInteractionControllerTest {
           cellSelection =
             TableOverlayCellSelection(anchorRow = 0, anchorCol = 0, headRow = 0, headCol = 1),
         )
-      editor.sync {}
+      fake.publishSnapshot(editor)
       fake.enqueued.clear()
 
       assertTrue(
@@ -2556,7 +2591,7 @@ class EditorInteractionControllerTest {
           tableOverlaysProvider = { listOf(tableOverlay) },
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host =
         TestHost(this).apply { pageOffsets = mapOf(0 to Offset.Zero, 1 to Offset(x = 0f, y = 80f)) }
       val controller =
@@ -2583,7 +2618,7 @@ class EditorInteractionControllerTest {
           cellSelection =
             TableOverlayCellSelection(anchorRow = 0, anchorCol = 0, headRow = 0, headCol = 1),
         )
-      editor.sync {}
+      fake.publishSnapshot(editor)
       fake.enqueued.clear()
       host.point = PagePoint(page = 1, x = 0f, y = 0f)
 
@@ -2635,7 +2670,7 @@ class EditorInteractionControllerTest {
           tableOverlaysProvider = { listOf(tableOverlay) },
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -2660,7 +2695,7 @@ class EditorInteractionControllerTest {
           cellSelection =
             TableOverlayCellSelection(anchorRow = 0, anchorCol = 0, headRow = 0, headCol = 0),
         )
-      editor.sync {}
+      fake.publishSnapshot(editor)
       fake.enqueued.clear()
 
       assertTrue(
@@ -2695,7 +2730,7 @@ class EditorInteractionControllerTest {
           },
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host =
         TestHost(this).apply {
           edgeAutoScrollViewport = testEdgeAutoScrollViewport(ComposeRect(0f, 0f, 100f, 100f))
@@ -2747,7 +2782,7 @@ class EditorInteractionControllerTest {
           },
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -2788,7 +2823,7 @@ class EditorInteractionControllerTest {
           },
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -2849,7 +2884,7 @@ class EditorInteractionControllerTest {
           tableOverlaysProvider = { listOf(overlay) },
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host =
         TestHost(this).apply {
           edgeAutoScrollViewport = testEdgeAutoScrollViewport(ComposeRect(0f, 0f, 100f, 100f))
@@ -2918,7 +2953,7 @@ class EditorInteractionControllerTest {
           },
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host =
         TestHost(this).apply {
           edgeAutoScrollViewport = testEdgeAutoScrollViewport(ComposeRect(0f, 0f, 100f, 100f))
@@ -2977,7 +3012,7 @@ class EditorInteractionControllerTest {
         )
       val fake = FakeFfiEditor(selectionProvider = { selection })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -3022,7 +3057,7 @@ class EditorInteractionControllerTest {
         )
       val fake = FakeFfiEditor(selectionProvider = { selection })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -3085,7 +3120,7 @@ class EditorInteractionControllerTest {
     }
 
   @Test
-  fun `double tap drag keeps pending extension when pointer up beats word selection commit`() =
+  fun `double tap drag keeps pending extension when pointer up beats word selection applied receipt`() =
     runTest(StandardTestDispatcher()) {
       val selection =
         Selection(
@@ -3094,7 +3129,7 @@ class EditorInteractionControllerTest {
         )
       val fake = FakeFfiEditor(selectionProvider = { selection })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -3129,6 +3164,187 @@ class EditorInteractionControllerTest {
     }
 
   @Test
+  fun `new pointer down drops released double tap drag request before old receipt completes`() =
+    runTest(StandardTestDispatcher()) {
+      val selection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 5, Affinity.Downstream),
+        )
+      val fake =
+        FakeFfiEditor(
+          selectionProvider = { selection },
+          onTick = { listOf(EditorEvent.StateChanged(listOf(StateField.Selection))) },
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      fake.publishSnapshot(editor)
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+        )
+      controller.updateTapSlop(8f)
+      val start = Offset(10f, 20f)
+
+      controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
+      controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 40L)
+      advanceUntilIdle()
+      val baselineSelectionCount = fake.enqueued.filterIsInstance<Message.Selection>().size
+
+      controller.onPointerDown(pointerId = 2L, position = start, nowMillis = 120L)
+      controller.onPointerMove(pointerId = 2L, position = start + Offset(8f, 0f), nowMillis = 140L)
+      controller.onPointerUp(pointerId = 2L, position = start + Offset(8f, 0f), nowMillis = 150L)
+
+      controller.onPointerDown(
+        pointerId = 3L,
+        position = start,
+        nowMillis = 700L,
+        tapEnabled = false,
+      )
+      controller.onPointerUp(pointerId = 3L, position = start, nowMillis = 740L)
+      advanceUntilIdle()
+      controller.onEditorStateChanged(editor.publishedState)
+
+      assertEquals(
+        emptyList<SelectionOp.ExtendTo>(),
+        fake.enqueued
+          .filterIsInstance<Message.Selection>()
+          .drop(baselineSelectionCount)
+          .map { it.op }
+          .filterIsInstance<SelectionOp.ExtendTo>(),
+      )
+      assertFalse(host.uiState.contextMenu.visible)
+    }
+
+  @Test
+  fun `double tap drag waits for its terminal selection publication before opening context menu`() =
+    runTest(StandardTestDispatcher()) {
+      val collapsedSelection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 0, Affinity.Downstream),
+        )
+      val wordSelection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 5, Affinity.Downstream),
+        )
+      val draggedSelection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 8, Affinity.Downstream),
+        )
+      var currentSelection = collapsedSelection
+      lateinit var fake: FakeFfiEditor
+      fake =
+        FakeFfiEditor(
+          selectionProvider = { currentSelection },
+          pageSizesProvider = { listOf(PageSize(width = 100f, height = 100f)) },
+          onTick = {
+            when ((fake.enqueued.lastOrNull() as? Message.Selection)?.op) {
+              is SelectionOp.SelectUnitAt -> currentSelection = wordSelection
+              is SelectionOp.ExtendTo -> currentSelection = draggedSelection
+              else -> Unit
+            }
+            listOf(
+              EditorEvent.StateChanged(listOf(StateField.Selection)),
+              EditorEvent.RenderInvalidated,
+            )
+          },
+        )
+      fake.renderFrameProvider = { _, revision -> FrameKey(revision.value) }
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      fake.applySnapshot(editor)
+      val surface = fake.attachSurfaceWithoutFrame(editor)
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+        )
+      controller.updateTapSlop(8f)
+      val start = Offset(10f, 20f)
+
+      advanceUntilIdle()
+      editor.deliverLatestFrame(fake = fake, surface = surface)
+      advanceUntilIdle()
+
+      controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
+      controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 40L)
+      advanceUntilIdle()
+      controller.onPointerDown(pointerId = 2L, position = start, nowMillis = 120L)
+      controller.onPointerMove(pointerId = 2L, position = start + Offset(8f, 0f), nowMillis = 140L)
+      controller.onPointerUp(pointerId = 2L, position = start + Offset(8f, 0f), nowMillis = 150L)
+      advanceUntilIdle()
+
+      assertEquals(draggedSelection, editor.appliedState.selection)
+      assertEquals(collapsedSelection, editor.publishedState.selection)
+      controller.onEditorStateChanged(editor.publishedState)
+      assertFalse(host.uiState.contextMenu.visible)
+
+      editor.deliverLatestFrame(fake = fake, surface = surface)
+      advanceUntilIdle()
+      editor.deliverLatestFrame(fake = fake, surface = surface)
+      advanceUntilIdle()
+      controller.onEditorStateChanged(editor.publishedState)
+
+      assertEquals(draggedSelection, editor.publishedState.selection)
+      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
+    }
+
+  @Test
+  fun `rejected double tap word selection drops deferred extension and menu intent`() =
+    runTest(StandardTestDispatcher()) {
+      val fake = FakeFfiEditor()
+      fake.commandOutcomesProvider = { _, messages ->
+        messages.map { message ->
+          if ((message as? Message.Selection)?.op is SelectionOp.SelectUnitAt) {
+            CommandOutcome.Rejected(CommandRejection.InvalidArgument)
+          } else {
+            CommandOutcome.Applied
+          }
+        }
+      }
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      fake.publishSnapshot(editor)
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+        )
+      controller.updateTapSlop(8f)
+      val start = Offset(10f, 20f)
+
+      controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
+      controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 40L)
+      advanceUntilIdle()
+      val baselineSelectionCount = fake.enqueued.filterIsInstance<Message.Selection>().size
+
+      controller.onPointerDown(pointerId = 2L, position = start, nowMillis = 120L)
+      controller.onPointerMove(pointerId = 2L, position = start + Offset(8f, 0f), nowMillis = 140L)
+      controller.onPointerUp(pointerId = 2L, position = start + Offset(8f, 0f), nowMillis = 150L)
+      advanceUntilIdle()
+
+      assertEquals(
+        emptyList<SelectionOp.ExtendTo>(),
+        fake.enqueued
+          .filterIsInstance<Message.Selection>()
+          .drop(baselineSelectionCount)
+          .map { it.op }
+          .filterIsInstance<SelectionOp.ExtendTo>(),
+      )
+      assertFalse(host.uiState.contextMenu.visible)
+    }
+
+  @Test
   fun `double tap drag can shrink back to the initial selected word range`() =
     runTest(StandardTestDispatcher()) {
       val baseSelection =
@@ -3142,9 +3358,13 @@ class EditorInteractionControllerTest {
           head = Position("text", 12, Affinity.Downstream),
         )
       var currentSelection = baseSelection
-      val fake = FakeFfiEditor(selectionProvider = { currentSelection })
+      val fake =
+        FakeFfiEditor(
+          selectionProvider = { currentSelection },
+          onTick = { listOf(EditorEvent.StateChanged(listOf(StateField.Selection))) },
+        )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -3164,7 +3384,7 @@ class EditorInteractionControllerTest {
 
       controller.onPointerMove(pointerId = 2L, position = start + Offset(12f, 0f), nowMillis = 140L)
       currentSelection = expandedSelection
-      editor.sync {}
+      fake.publishSnapshot(editor)
       fake.enqueued.clear()
 
       controller.onPointerMove(pointerId = 2L, position = start + Offset(5f, 0f), nowMillis = 150L)
@@ -3185,7 +3405,7 @@ class EditorInteractionControllerTest {
         )
       val fake = FakeFfiEditor(selectionProvider = { baseSelection })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host =
         TestHost(this).apply {
           edgeAutoScrollViewport = testEdgeAutoScrollViewport(ComposeRect(0f, 0f, 100f, 100f))
@@ -3238,9 +3458,13 @@ class EditorInteractionControllerTest {
           anchor = Position("old", 0, Affinity.Downstream),
           head = Position("old", 0, Affinity.Downstream),
         )
-      val fake = FakeFfiEditor(selectionProvider = { currentSelection })
+      val fake =
+        FakeFfiEditor(
+          selectionProvider = { currentSelection },
+          onTick = { listOf(EditorEvent.StateChanged(listOf(StateField.Selection))) },
+        )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -3270,7 +3494,7 @@ class EditorInteractionControllerTest {
 
       fake.enqueued.clear()
       currentSelection = wordSelection
-      editor.sync {}
+      fake.publishSnapshot(editor)
 
       assertTrue(
         controller.onPointerMove(
@@ -3287,13 +3511,15 @@ class EditorInteractionControllerTest {
       assertEquals(start + Offset(12f, -6f), controller.magnifierPosition)
 
       assertTrue(controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 700L))
+      advanceUntilIdle()
+      controller.onEditorStateChanged(editor.publishedState)
       assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
       assertNull(controller.magnifierPosition)
-      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.state))
+      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
     }
 
   @Test
-  fun `android long press ending before word selection commit opens context menu after selection settles`() =
+  fun `android long press ending before word selection is applied opens context menu after publication`() =
     runTest(StandardTestDispatcher()) {
       val wordSelection =
         Selection(
@@ -3305,9 +3531,13 @@ class EditorInteractionControllerTest {
           anchor = Position("old", 0, Affinity.Downstream),
           head = Position("old", 0, Affinity.Downstream),
         )
-      val fake = FakeFfiEditor(selectionProvider = { currentSelection })
+      val fake =
+        FakeFfiEditor(
+          selectionProvider = { currentSelection },
+          onTick = { listOf(EditorEvent.StateChanged(listOf(StateField.Selection))) },
+        )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -3326,12 +3556,149 @@ class EditorInteractionControllerTest {
 
       assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
       assertNull(controller.magnifierPosition)
-      assertFalse(host.uiState.contextMenu.isVisibleFor(editor.state))
+      assertFalse(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
 
       currentSelection = wordSelection
       advanceUntilIdle()
 
-      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.state))
+      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
+    }
+
+  @Test
+  fun `android long press keeps menu intent until its applied selection is published`() =
+    runTest(StandardTestDispatcher()) {
+      val collapsedSelection =
+        Selection(
+          anchor = Position("old", 0, Affinity.Downstream),
+          head = Position("old", 0, Affinity.Downstream),
+        )
+      val wordSelection =
+        Selection(
+          anchor = Position("word", 0, Affinity.Downstream),
+          head = Position("word", 5, Affinity.Downstream),
+        )
+      val draggedSelection =
+        Selection(
+          anchor = Position("word", 0, Affinity.Downstream),
+          head = Position("word", 8, Affinity.Downstream),
+        )
+      val unrelatedSelection =
+        Selection(
+          anchor = Position("other", 0, Affinity.Downstream),
+          head = Position("other", 3, Affinity.Downstream),
+        )
+      var currentSelection = collapsedSelection
+      lateinit var fake: FakeFfiEditor
+      fake =
+        FakeFfiEditor(
+          selectionProvider = { currentSelection },
+          pageSizesProvider = { listOf(PageSize(width = 100f, height = 100f)) },
+          onTick = {
+            when ((fake.enqueued.lastOrNull() as? Message.Selection)?.op) {
+              is SelectionOp.SelectUnitAt -> currentSelection = wordSelection
+              is SelectionOp.ExtendTo -> currentSelection = draggedSelection
+              else -> Unit
+            }
+            listOf(
+              EditorEvent.StateChanged(listOf(StateField.Selection)),
+              EditorEvent.RenderInvalidated,
+            )
+          },
+        )
+      fake.renderFrameProvider = { _, revision -> FrameKey(revision.value) }
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      fake.applySnapshot(editor)
+      val surface = fake.attachSurfaceWithoutFrame(editor)
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+          platformProvider = { Platform.Android },
+        )
+      controller.updateTapSlop(8f)
+      val start = Offset(10f, 20f)
+
+      advanceUntilIdle()
+      editor.deliverLatestFrame(fake = fake, surface = surface)
+      advanceUntilIdle()
+
+      controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
+      assertTrue(controller.onLongPressTimer(pointerId = 1L, position = start, nowMillis = 500L))
+      assertTrue(
+        controller.onPointerMove(
+          pointerId = 1L,
+          position = start + Offset(8f, 0f),
+          nowMillis = 510L,
+        )
+      )
+      assertTrue(
+        controller.onPointerUp(pointerId = 1L, position = start + Offset(8f, 0f), nowMillis = 520L)
+      )
+      controller.onEditorStateChanged(editor.publishedState)
+
+      advanceUntilIdle()
+
+      assertEquals(draggedSelection, editor.appliedState.selection)
+      assertEquals(collapsedSelection, editor.publishedState.selection)
+      controller.onEditorStateChanged(editor.publishedState.copy(selection = unrelatedSelection))
+      assertFalse(host.uiState.contextMenu.visible)
+      controller.onEditorStateChanged(editor.publishedState)
+      assertFalse(host.uiState.contextMenu.visible)
+
+      editor.deliverLatestFrame(fake = fake, surface = surface)
+      advanceUntilIdle()
+      editor.deliverLatestFrame(fake = fake, surface = surface)
+      advanceUntilIdle()
+      controller.onEditorStateChanged(editor.publishedState)
+
+      assertEquals(draggedSelection, editor.publishedState.selection)
+      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
+    }
+
+  @Test
+  fun `rejected long press word selection drops deferred extension and menu intent`() =
+    runTest(StandardTestDispatcher()) {
+      val fake = FakeFfiEditor()
+      fake.commandOutcomesProvider = { _, messages ->
+        messages.map { message ->
+          if ((message as? Message.Selection)?.op is SelectionOp.SelectUnitAt) {
+            CommandOutcome.Rejected(CommandRejection.InvalidArgument)
+          } else {
+            CommandOutcome.Applied
+          }
+        }
+      }
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      fake.publishSnapshot(editor)
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+          platformProvider = { Platform.Android },
+        )
+      controller.updateTapSlop(8f)
+      val start = Offset(10f, 20f)
+
+      controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
+      assertTrue(controller.onLongPressTimer(pointerId = 1L, position = start, nowMillis = 500L))
+      controller.onPointerMove(pointerId = 1L, position = start + Offset(8f, 0f), nowMillis = 510L)
+      controller.onPointerUp(pointerId = 1L, position = start + Offset(8f, 0f), nowMillis = 520L)
+      advanceUntilIdle()
+
+      assertEquals(
+        emptyList<SelectionOp.ExtendTo>(),
+        fake.enqueued
+          .filterIsInstance<Message.Selection>()
+          .map { it.op }
+          .filterIsInstance<SelectionOp.ExtendTo>(),
+      )
+      assertFalse(host.uiState.contextMenu.visible)
     }
 
   @Test
@@ -3357,15 +3724,16 @@ class EditorInteractionControllerTest {
       assertFalse(controller.onLongPressTimer(pointerId = 1L, position = start, nowMillis = 500L))
       assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
       assertNull(controller.magnifierPosition)
-      assertFalse(host.uiState.contextMenu.isVisibleFor(editor.state))
+      assertFalse(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
       assertEquals(emptyList(), fake.enqueued)
     }
 
   @Test
   fun `fresh pan can start after long press ends`() =
     runTest(StandardTestDispatcher()) {
-      val editor = Editor(FakeFfiEditor(), this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      val fake = FakeFfiEditor()
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -3429,7 +3797,7 @@ class EditorInteractionControllerTest {
     runTest(StandardTestDispatcher()) {
       val fake = FakeFfiEditor(cursorProvider = { cursorAt(x = 10f) })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -3467,7 +3835,7 @@ class EditorInteractionControllerTest {
           cursorHitProvider = { _, _, _ -> cursorHit },
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -3643,7 +4011,7 @@ class EditorInteractionControllerTest {
           selectionHitRectsProvider = { FakeFfiEditor.coveringHitRects(0) },
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -3679,7 +4047,7 @@ class EditorInteractionControllerTest {
           },
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       host.uiState.updateFocus(true)
       val controller =
@@ -3697,15 +4065,15 @@ class EditorInteractionControllerTest {
       controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 300L)
       advanceUntilIdle()
 
-      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.state))
+      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
 
       controller.onPointerDown(pointerId = 2L, position = start, nowMillis = 700L)
-      assertFalse(host.uiState.contextMenu.isVisibleFor(editor.state))
+      assertFalse(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
       controller.onTapTimer(nowMillis = 950L)
       controller.onPointerUp(pointerId = 2L, position = start, nowMillis = 1000L)
       advanceUntilIdle()
 
-      assertFalse(host.uiState.contextMenu.isVisibleFor(editor.state))
+      assertFalse(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
     }
 
   @Test
@@ -3722,7 +4090,7 @@ class EditorInteractionControllerTest {
           selectionProvider = { collapsedSelection },
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       host.uiState.updateFocus(true)
       val controller =
@@ -3739,18 +4107,18 @@ class EditorInteractionControllerTest {
       controller.onTapTimer(nowMillis = 250L)
       controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 300L)
 
-      host.uiState.contextMenu.show(editor.state)
+      host.uiState.contextMenu.show(editor.publishedState)
       controller.onPointerDown(pointerId = 2L, position = start, nowMillis = 700L)
-      assertFalse(host.uiState.contextMenu.isVisibleFor(editor.state))
+      assertFalse(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
       runCurrent()
 
-      assertFalse(host.uiState.contextMenu.isVisibleFor(editor.state))
+      assertFalse(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
 
       controller.onTapTimer(nowMillis = 950L)
       controller.onPointerUp(pointerId = 2L, position = start, nowMillis = 1000L)
       advanceUntilIdle()
 
-      assertFalse(host.uiState.contextMenu.isVisibleFor(editor.state))
+      assertFalse(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
     }
 
   @Test
@@ -3767,7 +4135,7 @@ class EditorInteractionControllerTest {
           },
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -3784,7 +4152,7 @@ class EditorInteractionControllerTest {
       controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 300L)
       advanceUntilIdle()
 
-      assertFalse(host.uiState.contextMenu.isVisibleFor(editor.state))
+      assertFalse(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
       assertTrue(host.focused)
     }
 
@@ -3800,7 +4168,7 @@ class EditorInteractionControllerTest {
       val fake =
         FakeFfiEditor(cursorProvider = { cursor }, selectionProvider = { collapsedSelection })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       host.uiState.updateFocus(true)
       val controller =
@@ -3818,16 +4186,16 @@ class EditorInteractionControllerTest {
       controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 300L)
       advanceUntilIdle()
 
-      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.state))
+      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
 
       cursor = cursorAt(x = 20f)
-      editor.sync {}
+      fake.publishSnapshot(editor)
 
-      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.state))
+      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
 
-      controller.onEditorStateChanged(editor.state)
+      controller.onEditorStateChanged(editor.publishedState)
 
-      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.state))
+      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
     }
 
   @Test
@@ -3870,7 +4238,7 @@ class EditorInteractionControllerTest {
     }
 
   @Test
-  fun `second pointer cancel drops deferred double tap drag extension before word selection commit`() =
+  fun `second pointer cancel drops deferred double tap drag extension before word selection is applied`() =
     runTest(StandardTestDispatcher()) {
       val selection =
         Selection(
@@ -3879,7 +4247,7 @@ class EditorInteractionControllerTest {
         )
       val fake = FakeFfiEditor(selectionProvider = { selection })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val host = TestHost(this)
       val controller =
         EditorInteractionController(

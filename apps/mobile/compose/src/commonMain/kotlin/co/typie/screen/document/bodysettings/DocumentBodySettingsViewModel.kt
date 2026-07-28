@@ -7,7 +7,7 @@ import androidx.lifecycle.viewModelScope
 import co.typie.editor.Editor
 import co.typie.editor.EditorLocalChangesetBus
 import co.typie.editor.EditorLocalChangesetTracker
-import co.typie.editor.EditorScope
+import co.typie.editor.EditorRequestScope
 import co.typie.editor.FontLoader
 import co.typie.graphql.Apollo
 import co.typie.graphql.DocumentBodySettingsScreen_Query
@@ -65,7 +65,7 @@ internal class DocumentBodySettingsViewModel(private val entityId: String) : Vie
 
   internal suspend fun applyAndRelayBodySettings(
     editor: Editor,
-    block: EditorScope.() -> Unit,
+    block: EditorRequestScope.() -> Unit,
   ): Result<Unit, Nothing> = result {
     relayMutex.withLock {
       if (trackedEditor !== editor) {

@@ -193,7 +193,7 @@ internal class EditorInteractionScope(
     val xDp = positionInNode.x / density
     val yDp = positionInNode.y / density
     return currentUiState
-      .resolveViewportTransform(pageSizes = currentEditor.pageSizes)
+      .resolveViewportTransform(pageSizes = currentEditor.publishedState.pageSizes)
       .globalToLocal(x = xDp, y = yDp)
   }
 
@@ -206,7 +206,7 @@ internal class EditorInteractionScope(
 
     val positionDp =
       currentUiState
-        .resolveViewportTransform(pageSizes = currentEditor.pageSizes)
+        .resolveViewportTransform(pageSizes = currentEditor.publishedState.pageSizes)
         .localToGlobal(page = page, x = x, y = y) ?: return null
     return Offset(x = positionDp.x * density, y = positionDp.y * density)
   }

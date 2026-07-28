@@ -53,7 +53,9 @@ internal class EditorLongPressGesture {
   }
 
   fun reset() {
-    end()
+    pendingPointerId = null
+    session.reset()
+    semanticIntentAtPointerDown = null
   }
 
   fun startSession(
@@ -141,7 +143,7 @@ private fun EditorLongPressGesture.resolveAdmission(
 
   val editor = context.editor
   if (editor.selectionHitTest(page = point.page, x = point.x, y = point.y)) {
-    if (context.platform != Platform.Android || !editor.selection.isCollapsed()) {
+    if (context.platform != Platform.Android || !editor.publishedState.selection.isCollapsed()) {
       cancelPending()
       return null
     }

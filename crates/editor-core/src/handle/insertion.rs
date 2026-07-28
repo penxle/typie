@@ -17,7 +17,7 @@ pub fn handle_insertion_op(editor: &mut Editor, op: InsertionOp) -> Result<(), E
     // Auto surround: when the user types a bracket/quote over a non-collapsed selection
     // and IME is not active, wrap the selection instead of replacing it.
     if let InsertionOp::Text { text } = &op {
-        let enabled = editor.resource.lock().unwrap().auto_surround_enabled;
+        let enabled = editor.resource.lock().unwrap().auto_surround_enabled();
         if enabled && editor.state.composition.is_none() {
             let text = text.clone();
             let mut surround_applied = false;
@@ -342,7 +342,10 @@ fn table_fragment(rows: usize, cols: usize) -> Fragment {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{Arc, Mutex};
+
     use editor_macros::state;
+    use editor_resource::{Resource, ResourceSource};
     use editor_state::{assert_state_eq, is_unit_node_selection};
 
     use super::*;
@@ -1122,12 +1125,12 @@ mod tests {
             doc { root { p1: paragraph { text("hello world") } } }
             selection: (p1, 6) -> (p1, 11)
         };
-        let mut editor = Editor::new_test(state);
-        editor
-            .resource
-            .lock()
-            .unwrap()
-            .set_auto_surround_enabled(false);
+        let mut source = ResourceSource::new_test();
+        source
+            .set_auto_surround_enabled(false)
+            .expect("auto surround must change resources");
+        let resource = Arc::new(Mutex::new(Resource::from_snapshot(source.snapshot())));
+        let mut editor = Editor::new_test_with_resource(state, resource);
         editor.apply(Message::Insertion {
             op: InsertionOp::Text { text: "(".into() },
         });

@@ -19,6 +19,10 @@ internal expect object RenderBuffer {
 
   fun getPinnedVersion(handle: Long): Long
 
+  fun getPinnedEditorRevision(handle: Long): Long
+
+  fun getPinnedFrameKey(handle: Long): Long
+
   fun getPinnedDamageFrom(handle: Long): Long
 
   fun getPinnedDamagePointer(handle: Long): Long

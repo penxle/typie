@@ -86,7 +86,7 @@ internal fun EditorTableAxisSelectionOverlay(
               selector = selector,
               op = TableOp.SelectAxis(axis = selector.axis, index = selector.index),
             )
-            onTableAxisActionsRequest(selector.toActionsTarget(), editor.tickSelection)
+            onTableAxisActionsRequest(selector.toActionsTarget(), editor.appliedState.selection)
           },
         )
       }
@@ -126,8 +126,8 @@ internal fun EditorTableAxisSelectionOverlay(
 }
 
 internal fun resolveTableAxisSelectors(editor: Editor): List<EditorTableAxisSelector> {
-  val selectionCollapsed = editor.selection.isCollapsed()
-  return editor.tableOverlays.flatMap { overlay ->
+  val selectionCollapsed = editor.publishedState.selection.isCollapsed()
+  return editor.publishedState.tableOverlays.flatMap { overlay ->
     resolveTableAxisSelectors(overlay = overlay, selectionCollapsed = selectionCollapsed)
   }
 }
@@ -220,7 +220,7 @@ internal fun resolveTableAxisSelectorOverlayPlacements(
     return emptyList()
   }
 
-  val transform = uiState.resolveViewportTransform(pageSizes = editor.pageSizes)
+  val transform = uiState.resolveViewportTransform(pageSizes = editor.publishedState.pageSizes)
   return resolveTableAxisSelectors(editor).mapNotNull { selector ->
     val center =
       resolvePositionInOverlay(
@@ -262,7 +262,7 @@ internal data class EditorTableAxisSelectorOverlayPlacement(
 )
 
 private fun Editor.sendTableAxisOp(selector: EditorTableAxisSelector, op: TableOp) {
-  sync { enqueue(selector.tableMessage(op)) }
+  updateNow { enqueue(selector.tableMessage(op)) }
 }
 
 private fun EditorTableAxisSelector.tableMessage(op: TableOp): Message =

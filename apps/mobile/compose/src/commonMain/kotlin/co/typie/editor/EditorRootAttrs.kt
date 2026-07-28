@@ -21,7 +21,7 @@ internal val DefaultRootPaginatedLayout =
     pageMarginRight = 94,
   )
 
-internal fun EditorScope.enqueueRootLayoutMode(layoutMode: LayoutMode) {
+internal fun EditorRequestScope.enqueueRootLayoutMode(layoutMode: LayoutMode) {
   enqueue(
     Message.Node(
       NodeOp.SetAttrs(id = EditorRootId, attrs = PlainNode.Root(layoutMode = layoutMode))
@@ -29,6 +29,6 @@ internal fun EditorScope.enqueueRootLayoutMode(layoutMode: LayoutMode) {
   )
 }
 
-internal fun EditorScope.enqueueRootModifier(modifier: EditorModifier) {
+internal fun EditorRequestScope.enqueueRootModifier(modifier: EditorModifier) {
   enqueue(Message.Modifier(ModifierOp.SetOnNode(id = EditorRootId, modifier = modifier)))
 }

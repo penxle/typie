@@ -5,7 +5,7 @@
   import { tooltip } from '@typie/ui/actions';
   import { Button, Icon, RingSpinner } from '@typie/ui/components';
   import { Toast } from '@typie/ui/notification';
-  import { onMount, tick } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
   import { fly } from 'svelte/transition';
   import CircleAlertIcon from '~icons/lucide/circle-alert';
   import CircleCheckIcon from '~icons/lucide/circle-check';
@@ -217,15 +217,20 @@
     }
   });
 
+  let observedEditor = editor;
+  let observedDocumentRevision = editor?.documentRevision;
   $effect(() => {
     const activeEditor = editor;
-    if (!activeEditor) return;
-
-    return activeEditor.on('state_changed', (_, { fields }) => {
-      if (fields.includes('doc')) {
-        cancelAnalysisForDocumentEdit();
-      }
-    });
+    const revision = activeEditor?.documentRevision;
+    if (activeEditor !== observedEditor) {
+      observedEditor = activeEditor;
+      observedDocumentRevision = revision;
+      return;
+    }
+    if (revision !== undefined && observedDocumentRevision !== undefined && revision !== observedDocumentRevision) {
+      untrack(cancelAnalysisForDocumentEdit);
+    }
+    observedDocumentRevision = revision;
   });
 
   onMount(() => {

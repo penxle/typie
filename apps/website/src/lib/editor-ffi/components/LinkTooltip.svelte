@@ -6,7 +6,7 @@
   import CopyIcon from '~icons/lucide/copy';
   import GlobeIcon from '~icons/lucide/globe';
   import { getEditorContext } from '../editor.svelte';
-  import { pageRectsToVirtualElement } from '../geometry';
+  import { pageRectsToVirtualElement, selectionHeadRect } from '../geometry';
   import { openLinkEditorFromTooltip } from '../handlers/link';
   import { linkRectKey, pickLinkTooltipAnchorRect, resolveSelectionTarget } from './link-tooltip';
 
@@ -29,11 +29,13 @@
     // immediately, so guarding here keeps that cost off the normal typing path.
     const modifierStateLink = instance.modifierState?.link;
     if (modifierStateLink?.type !== 'uniform') return;
+    const snapshot = instance.published?.snapshot;
+    if (!snapshot) return;
     return resolveSelectionTarget({
-      linkRects: instance.linkRects,
+      linkRects: snapshot.linkRects,
       modifierStateLink,
-      selection: instance.selection,
-      selectionHeadRect: instance.selectionHeadRect(),
+      selection: snapshot.selection,
+      selectionHeadRect: selectionHeadRect(snapshot),
     });
   });
 

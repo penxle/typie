@@ -44,7 +44,7 @@
   const toolbarSize = $derived(app.preference.current.toolbarStyle === 'compact' ? 'medium' : 'large');
   const layoutMode = $derived(ctx.editor?.rootAttrs?.layout_mode);
   const blockState = $derived(ctx.editor?.blockState);
-  const editingDisabled = $derived(ctx.editor !== undefined && ctx.editor !== ctx.liveEditor);
+  const editingDisabled = $derived(ctx.editor?.terminal === true || (ctx.editor !== undefined && ctx.editor !== ctx.liveEditor));
 
   const enqueue = (message: Message) => {
     if (editingDisabled) return;

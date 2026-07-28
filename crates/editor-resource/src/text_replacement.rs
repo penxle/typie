@@ -5,7 +5,7 @@ use fancy_regex::{Assertion, Expr};
 use serde::{Deserialize, Serialize};
 
 #[ffi]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RawTextReplacementRule {
     pub id: String,
@@ -14,6 +14,7 @@ pub struct RawTextReplacementRule {
     pub regex: bool,
 }
 
+#[derive(Clone)]
 pub enum CompiledPattern {
     Plain(String),
     Regex {
@@ -24,13 +25,49 @@ pub enum CompiledPattern {
     },
 }
 
+#[derive(Clone)]
 pub struct TextReplacementRule {
     pub id: String,
     pub pattern: CompiledPattern,
     pub substitute: String,
 }
 
-pub fn compile_rules(raw_rules: Vec<RawTextReplacementRule>) -> Vec<TextReplacementRule> {
+impl PartialEq for CompiledPattern {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Plain(left), Self::Plain(right)) => left == right,
+            (Self::Regex { regex: left, .. }, Self::Regex { regex: right, .. }) => {
+                left.as_str() == right.as_str()
+            }
+            _ => false,
+        }
+    }
+}
+
+impl Eq for CompiledPattern {}
+
+impl PartialEq for TextReplacementRule {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id && self.pattern == other.pattern && self.substitute == other.substitute
+    }
+}
+
+impl Eq for TextReplacementRule {}
+
+#[derive(Clone)]
+pub struct PreparedTextReplacementRules {
+    pub(crate) rules: Arc<[TextReplacementRule]>,
+}
+
+pub fn prepare_text_replacement_rules(
+    raw_rules: Vec<RawTextReplacementRule>,
+) -> PreparedTextReplacementRules {
+    PreparedTextReplacementRules {
+        rules: compile_rules(raw_rules).into(),
+    }
+}
+
+fn compile_rules(raw_rules: Vec<RawTextReplacementRule>) -> Vec<TextReplacementRule> {
     raw_rules
         .into_iter()
         .filter_map(|r| {

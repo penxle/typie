@@ -1,6 +1,28 @@
 import type { ReferenceElement } from '@floating-ui/dom';
-import type { PageRect } from '@typie/editor-ffi/browser';
-import type { Editor } from './editor.svelte';
+import type { PageRect, Selection } from '@typie/editor-ffi/browser';
+import type { Editor, EditorSnapshot } from './editor.svelte';
+
+export function isSelectionCollapsed(selection: Selection | undefined): boolean {
+  return (
+    selection === undefined ||
+    (selection.anchor.node === selection.head.node &&
+      selection.anchor.offset === selection.head.offset &&
+      selection.anchor.affinity === selection.head.affinity)
+  );
+}
+
+export function selectionHeadRect(snapshot: EditorSnapshot | undefined): PageRect | null {
+  const selection = snapshot?.selection;
+  const endpoints = snapshot?.selectionEndpoints;
+  if (!selection || !endpoints) {
+    const cursor = snapshot?.cursor;
+    return cursor ? { page_idx: cursor.page_idx, rect: cursor.line } : null;
+  }
+
+  const head = selection.head;
+  const to = endpoints.to_position;
+  return head.node === to.node && head.offset === to.offset && head.affinity === to.affinity ? endpoints.to : endpoints.from;
+}
 
 export function pageRectToClientRect(editor: Editor, { page_idx, rect }: PageRect): DOMRect | null {
   const zoom = editor.safeDisplayZoom();

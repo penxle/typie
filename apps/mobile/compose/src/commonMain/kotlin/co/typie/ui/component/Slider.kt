@@ -113,10 +113,11 @@ internal fun Slider(
   val hapticFeedback = LocalHapticFeedback.current
   val currentValue by rememberUpdatedState(value)
   val currentHapticFeedback by rememberUpdatedState(hapticFeedback)
-  val currentOnDragStart by rememberUpdatedState(onDragStart)
-  val currentOnDrag by rememberUpdatedState(onDrag)
-  val currentOnDragEnd by rememberUpdatedState(onDragEnd)
-  val currentOnDragCancel by rememberUpdatedState(onDragCancel)
+  // Local function references can compare equal across re-compositions despite new captures.
+  val currentOnDragStart by rememberUpdatedState { value: Float -> onDragStart(value) }
+  val currentOnDrag by rememberUpdatedState { value: Float -> onDrag(value) }
+  val currentOnDragEnd by rememberUpdatedState { value: Float -> onDragEnd(value) }
+  val currentOnDragCancel by rememberUpdatedState { onDragCancel() }
   val normalizedStep = step?.takeIf { it > 0f }
   val inRange = value in range
   val rangeSpan = (range.endInclusive - range.start).coerceAtLeast(0.0001f)

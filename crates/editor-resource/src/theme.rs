@@ -19,15 +19,6 @@ impl Theme {
         self.variant
     }
 
-    pub fn set_variant(&mut self, variant: ThemeVariant) -> bool {
-        if self.variant == variant {
-            return false;
-        }
-        self.variant = variant;
-        self.colors = variant.colors();
-        true
-    }
-
     pub fn color(&self, token: &str) -> Color {
         self.colors.get(token).copied().unwrap_or(Color::BLACK)
     }
@@ -65,20 +56,6 @@ mod tests {
     fn new_initializes_with_given_variant() {
         let theme = Theme::new(ThemeVariant::LightWhite);
         assert_eq!(theme.variant(), ThemeVariant::LightWhite);
-    }
-
-    #[test]
-    fn set_variant_returns_false_for_same() {
-        let mut theme = Theme::new(ThemeVariant::LightWhite);
-        assert!(!theme.set_variant(ThemeVariant::LightWhite));
-        assert_eq!(theme.variant(), ThemeVariant::LightWhite);
-    }
-
-    #[test]
-    fn set_variant_returns_true_for_different_and_updates() {
-        let mut theme = Theme::new(ThemeVariant::LightWhite);
-        assert!(theme.set_variant(ThemeVariant::DarkBlack));
-        assert_eq!(theme.variant(), ThemeVariant::DarkBlack);
     }
 
     #[test]

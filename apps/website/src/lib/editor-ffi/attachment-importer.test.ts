@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EditorAttachmentImporter } from './attachment-importer';
-import type { AttachmentPlaceholderKind, EditorEvent, InputModifiers, Message } from '@typie/editor-ffi/browser';
+import type { AttachmentPlaceholderKind, CommandOutcome, EditorEvent, InputModifiers, Message } from '@typie/editor-ffi/browser';
 import type { FileAsset, ImageAsset } from './types';
 
 const upload = vi.hoisted(() => ({
@@ -14,7 +14,6 @@ vi.mock('./handlers/upload', () => upload);
 type InflightImage = { uploadId: string; url?: string; width: number; height: number };
 type InflightFile = { uploadId: string; name: string; size: number };
 type Receipt = Extract<EditorEvent, { type: 'attachment_placeholders_inserted' }>;
-type ReceiptListener = (editor: FakeEditor, event: Receipt) => void;
 
 const imageAsset = (id: string): ImageAsset => ({
   id,
@@ -43,7 +42,6 @@ const external = (node: string, kind: AttachmentPlaceholderKind, id?: string) =>
 });
 
 class FakeEditor {
-  #receiptListeners = new Set<ReceiptListener>();
   destroyed = false;
   readOnly = false;
   externalElements: ReturnType<typeof external>[] = [];
@@ -51,34 +49,27 @@ class FakeEditor {
   inflightFiles = new Map<string, InflightFile>();
   imageAssets = new Map<string, ImageAsset>();
   messages: Message[] = [];
-  listenerCountsAtEnqueue: number[] = [];
-  onRegistrations = 0;
   focus = vi.fn();
-  flushImpl: () => void = vi.fn();
+  updateEventsImpl: () => EditorEvent[] = () => [];
+  updateOutcomesImpl: () => CommandOutcome[] = () => [{ type: 'applied' }];
 
-  on(event: EditorEvent['type'], listener: ReceiptListener): () => void {
-    if (event !== 'attachment_placeholders_inserted') throw new Error(`Unexpected event: ${event}`);
-    this.onRegistrations++;
-    this.#receiptListeners.add(listener);
-    return () => this.#receiptListeners.delete(listener);
+  get appliedSnapshot() {
+    return { externalElements: this.externalElements };
   }
 
   enqueue(message: Message): void {
-    this.listenerCountsAtEnqueue.push(this.#receiptListeners.size);
     this.messages.push(message);
   }
 
-  flush(): void {
-    this.flushImpl();
-  }
-
-  emitReceipt(requestId: string, nodeIds: string[]): void {
-    const event: Receipt = { type: 'attachment_placeholders_inserted', request_id: requestId, node_ids: nodeIds };
-    for (const listener of this.#receiptListeners) listener(this, event);
-  }
-
-  get receiptListenerCount(): number {
-    return this.#receiptListeners.size;
+  updateNow(build: () => void) {
+    build();
+    const events = this.updateEventsImpl();
+    return {
+      revision: 1,
+      commandOutcomes: this.updateOutcomesImpl(),
+      events,
+      awaitPublished: async () => ({ type: 'published' as const, revision: 1 }),
+    };
   }
 }
 
@@ -107,19 +98,26 @@ const latestRequestFrom = (editor: FakeEditor): { requestId: string; kinds: Atta
   return requestFrom(message);
 };
 
+const receipt = (requestId: string, nodeIds: string[]): Receipt => ({
+  type: 'attachment_placeholders_inserted',
+  request_id: requestId,
+  node_ids: nodeIds,
+});
+
 const installReceipt = (editor: FakeEditor, nodeIds: string[], options: { unrelated?: boolean } = {}): void => {
   let emitted = false;
-  editor.flushImpl = () => {
-    if (emitted) return;
+  editor.updateEventsImpl = () => {
+    if (emitted) return [];
     emitted = true;
     const { requestId, kinds } = latestRequestFrom(editor);
-    if (options.unrelated) editor.emitReceipt('unrelated-request', ['unrelated-node']);
     for (const [index, nodeId] of nodeIds.entries()) {
       const kind = kinds[index];
       if (!kind) throw new Error(`Missing kind for ${nodeId}`);
       editor.externalElements.push(external(nodeId, kind));
     }
-    editor.emitReceipt(requestId, nodeIds);
+    const events: EditorEvent[] = [receipt(requestId, nodeIds)];
+    if (options.unrelated) events.unshift(receipt('unrelated-request', ['unrelated-node']));
+    return events;
   };
 };
 
@@ -151,7 +149,7 @@ afterEach(() => {
 });
 
 describe('attachment receipt mapping', () => {
-  it('listens before enqueue, ignores unrelated receipts, and preserves ordered item-to-node mapping', async () => {
+  it('uses the exact update receipt, ignores unrelated events, and preserves ordered item-to-node mapping', async () => {
     const { ctx, editor, importer } = createImporter();
     const image = file('cover.png', 'image/png');
     const document = file('notes.pdf', 'application/pdf');
@@ -167,8 +165,6 @@ describe('attachment receipt mapping', () => {
       ),
     ).toBe(true);
 
-    expect(editor.listenerCountsAtEnqueue[0]).toBe(1);
-    expect(editor.receiptListenerCount).toBe(0);
     expect(editor.inflightImages.has('image-node')).toBe(true);
     expect(editor.inflightFiles.has('file-node')).toBe(true);
     await waitForIdle(editor);
@@ -191,18 +187,17 @@ describe('attachment receipt mapping', () => {
     [
       'no matching receipt',
       (editor: FakeEditor) => {
-        editor.flushImpl = () => editor.emitReceipt('unrelated-request', ['unrelated-node']);
+        editor.updateEventsImpl = () => [receipt('unrelated-request', ['unrelated-node'])];
       },
       'no matching receipt',
     ],
     [
       'duplicate matching receipts',
       (editor: FakeEditor) => {
-        editor.flushImpl = () => {
+        editor.updateEventsImpl = () => {
           const { requestId } = latestRequestFrom(editor);
           editor.externalElements.push(external('node-a', 'image'));
-          editor.emitReceipt(requestId, ['node-a']);
-          editor.emitReceipt(requestId, ['node-a']);
+          return [receipt(requestId, ['node-a']), receipt(requestId, ['node-a'])];
         };
       },
       'duplicate matching receipts',
@@ -211,10 +206,10 @@ describe('attachment receipt mapping', () => {
     [
       'duplicate node IDs',
       (editor: FakeEditor) => {
-        editor.flushImpl = () => {
+        editor.updateEventsImpl = () => {
           const { requestId } = latestRequestFrom(editor);
           editor.externalElements.push(external('node-a', 'image'));
-          editor.emitReceipt(requestId, ['node-a', 'node-a']);
+          return [receipt(requestId, ['node-a', 'node-a'])];
         };
       },
       'duplicate node IDs',
@@ -234,12 +229,23 @@ describe('attachment receipt mapping', () => {
     );
 
     expect(accepted).toBe(false);
-    expect(editor.receiptListenerCount).toBe(0);
     expect(editor.inflightImages.size).toBe(0);
     expect(upload.uploadImageFile).not.toHaveBeenCalled();
     expect(onFailure).not.toHaveBeenCalled();
     expect(consoleError).toHaveBeenCalledOnce();
     expect(consoleError.mock.calls[0]?.[0]).toEqual(expect.stringContaining(diagnostic));
+  });
+
+  it('rejects an exact placeholder request outcome even if a matching receipt is present', () => {
+    const { editor, importer } = createImporter();
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(vi.fn());
+    installReceipt(editor, ['node-a']);
+    editor.updateOutcomesImpl = () => [{ type: 'rejected' as const, reason: { type: 'invalid_argument' as const } }];
+
+    expect(importer.importAtSelection([{ file: file('a.png', 'image/png'), kind: 'image' }], { onFailure: vi.fn() })).toBe(false);
+    expect(editor.inflightImages.size).toBe(0);
+    expect(upload.uploadImageFile).not.toHaveBeenCalled();
+    expect(consoleError).toHaveBeenCalledWith(expect.stringContaining('was rejected'), expect.any(String));
   });
 
   it.each([
@@ -252,23 +258,22 @@ describe('attachment receipt mapping', () => {
       },
     ],
     [
-      'flush',
+      'update',
       (editor: FakeEditor, error: Error) => {
-        editor.flushImpl = () => {
+        editor.updateEventsImpl = () => {
           throw error;
         };
       },
     ],
-  ])('disposes the receipt listener and diagnoses a thrown %s', (_name, configure) => {
+  ])('does not reserve and diagnoses a thrown %s', (_name, configure) => {
     const { editor, importer } = createImporter();
     const error = new Error('request failed');
     const consoleError = vi.spyOn(console, 'error').mockImplementation(vi.fn());
     configure(editor, error);
 
     expect(importer.importAtSelection([{ file: file('a.png', 'image/png'), kind: 'image' }], { onFailure: vi.fn() })).toBe(false);
-    expect(editor.receiptListenerCount).toBe(0);
     expect(editor.inflightImages.size).toBe(0);
-    expect(consoleError).toHaveBeenCalledExactlyOnceWith(expect.stringContaining('enqueue or flush'), error);
+    expect(consoleError).toHaveBeenCalledExactlyOnceWith(expect.stringContaining('apply attachment placeholder request'), error);
   });
 
   it.each([
@@ -307,7 +312,6 @@ describe('attachment receipt mapping', () => {
     await Promise.resolve();
 
     expect(accepted).toBe(false);
-    expect(editor.onRegistrations).toBe(0);
     expect(editor.messages).toEqual([]);
     expect(editor.inflightImages.entries().toArray()).toEqual(inflightBefore);
     expect(editor.externalElements.some(({ node }) => node === 'created')).toBe(false);
@@ -327,7 +331,6 @@ describe('attachment receipt mapping', () => {
       }),
     ).toBe(true);
 
-    expect(editor.onRegistrations).toBe(0);
     expect(editor.messages).toEqual([]);
     expect(editor.inflightImages.has('existing')).toBe(true);
     await waitForIdle(editor);
@@ -368,10 +371,10 @@ describe('attachment receipt mapping', () => {
     const { editor, importer } = createImporter();
     const consoleError = vi.spyOn(console, 'error').mockImplementation(vi.fn());
     editor.externalElements.push(external('candidate', 'image'));
-    editor.flushImpl = () => {
+    editor.updateEventsImpl = () => {
       const { requestId } = latestRequestFrom(editor);
       editor.externalElements.push(external('created', 'file'));
-      editor.emitReceipt(requestId, ['created', 'candidate']);
+      return [receipt(requestId, ['created', 'candidate'])];
     };
 
     const accepted = importer.importAtDrop(
@@ -384,7 +387,6 @@ describe('attachment receipt mapping', () => {
 
     expect(accepted).toBe(false);
     expect(editor.inflightImages.size + editor.inflightFiles.size).toBe(0);
-    expect(editor.receiptListenerCount).toBe(0);
     expect(consoleError).toHaveBeenCalledOnce();
     expect(consoleError.mock.calls[0]?.[0]).toEqual(expect.stringContaining('reuse candidate'));
   });
@@ -524,6 +526,21 @@ describe('attachment target lifecycle', () => {
       op: { type: 'set_attrs', id: 'file-node', attrs: { type: 'file', id: 'file-asset' } },
     });
     expect(editor.focus).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['image', file('picture.png', 'image/png')],
+    ['file', file('document.pdf', 'application/pdf')],
+  ] as const)('reports a rejected %s ID commit as an import failure', async (kind, input) => {
+    const { editor, importer } = createImporter();
+    const onFailure = vi.fn();
+    editor.externalElements.push(external('existing', kind));
+    editor.updateOutcomesImpl = () => [{ type: 'rejected' as const, reason: { type: 'invalid_argument' as const } }];
+
+    expect(importer.importAtSelection([{ file: input, kind }], { existingNodeId: 'existing', onFailure })).toBe(true);
+
+    await waitForIdle(editor);
+    expect(onFailure).toHaveBeenCalledExactlyOnceWith({ file: input, kind });
   });
 
   it('leaves a reused target empty, deletes an auto-created target, and lets a successful sibling finish', async () => {

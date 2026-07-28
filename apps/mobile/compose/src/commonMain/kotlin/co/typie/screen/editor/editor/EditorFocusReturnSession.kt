@@ -22,7 +22,7 @@ internal class EditorFocusReturnSession(
       editor.freezeSelection(selection)
     },
   private val applySelection: suspend (Editor, StableSelection) -> Unit = { editor, selection ->
-    editor.sync { enqueue(Message.Selection(SelectionOp.SetFrozen(selection = selection))) }
+    editor.updateNow { enqueue(Message.Selection(SelectionOp.SetFrozen(selection = selection))) }
   },
   private val focusEditor: (Editor) -> Unit = { it.focus() },
   private val awaitFocusBoundary: suspend () -> Unit = { withFrameNanos {} },
@@ -132,7 +132,7 @@ internal class EditorFocusReturnSession(
 
   private fun isRestorable(context: EditorContext): Boolean = currentContext === context
 
-  private fun Editor.currentSelection(): Selection? = state.selection
+  private fun Editor.currentSelection(): Selection? = appliedState.selection
 
   private fun focusBestEffort(context: EditorContext) {
     if (!isRestorable(context)) return

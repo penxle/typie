@@ -218,7 +218,7 @@ fn word_range_in_text(
     let target = char_offset.min(char_count);
     let boundaries = text_boundaries(
         text,
-        resource.segmenters.word.as_borrowed().segment_str(text),
+        resource.segmenters().word.as_borrowed().segment_str(text),
     );
     let mut range = range_from_boundaries(&boundaries, target, char_count);
 
@@ -252,7 +252,11 @@ fn sentence_range_in_text(
     let target = char_offset.min(char_count);
     let boundaries = text_boundaries(
         text,
-        resource.segmenters.sentence.as_borrowed().segment_str(text),
+        resource
+            .segmenters()
+            .sentence
+            .as_borrowed()
+            .segment_str(text),
     );
     let (start, mut end) = {
         let range = range_from_boundaries(&boundaries, target, char_count);

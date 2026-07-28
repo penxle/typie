@@ -487,6 +487,7 @@ mod tests {
             key,
             FontEntry {
                 data: Arc::new(FontData::new(vec![0u8; 20])),
+                base_hash: 0,
                 split_offset: 8,
             },
         );
@@ -514,6 +515,7 @@ mod tests {
             key,
             FontEntry {
                 data: Arc::new(FontData::new(vec![0u8; 20])),
+                base_hash: 0,
                 split_offset: 8,
             },
         );
@@ -647,6 +649,7 @@ mod tests {
             key,
             FontEntry {
                 data: Arc::new(FontData::new(vec![0u8; 20])),
+                base_hash: 0,
                 split_offset: 8,
             },
         );

@@ -9,6 +9,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import co.typie.editor.Editor
 import co.typie.editor.interaction.EditorInteractionGeometry
+import co.typie.editor.interaction.semantics.EditorTableColumnResizePlacement
 import co.typie.editor.interaction.semantics.EditorTableColumnResizePresentation
 import co.typie.editor.interaction.semantics.resolveTableColumnResizePlacement
 import co.typie.editor.interaction.semantics.resolveTableColumnResizePreviewDelta
@@ -23,6 +24,9 @@ internal fun EditorTableColumnResizeOverlay(
   uiState: EditorUiState,
   geometry: EditorInteractionGeometry,
   presentation: EditorTableColumnResizePresentation,
+  resolvePlacement: () -> EditorTableColumnResizePlacement? = {
+    resolveTableColumnResizePlacement(editor = editor, geometry = geometry)
+  },
 ) {
   val density = geometry.density
   if (!uiState.focused || density <= 0f) {
@@ -33,8 +37,7 @@ internal fun EditorTableColumnResizeOverlay(
 
   Canvas(modifier = Modifier.fillMaxSize()) {
     val editorOffset = uiState.editorBoundsInContainer.toPxRect(density)?.topLeft ?: return@Canvas
-    val placement =
-      resolveTableColumnResizePlacement(editor = editor, geometry = geometry) ?: return@Canvas
+    val placement = resolvePlacement() ?: return@Canvas
     val activeDraft = presentation.draft
     val resizeHandleActive = activeDraft != null || presentation.pressed
     val visualCenterX =

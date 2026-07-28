@@ -152,6 +152,18 @@ fn extract_angle_bracketed_inner(seg: &syn::PathSegment) -> Option<&syn::Type> {
 }
 
 fn parse_param_type(ty: &syn::Type) -> FfiParamType {
+    if let syn::Type::Reference(reference) = ty {
+        if reference.mutability.is_none()
+            && let syn::Type::Path(type_path) = reference.elem.as_ref()
+            && let Some(seg) = type_path.path.segments.last()
+            && seg.ident == "Owned"
+            && extract_angle_bracketed_inner(seg).is_some()
+        {
+            return parse_param_type(&reference.elem);
+        }
+        panic!("borrowed FFI parameters must have type `&Owned<T>`");
+    }
+
     if let syn::Type::Path(type_path) = ty
         && let Some(seg) = type_path.path.segments.last()
     {
@@ -174,12 +186,18 @@ fn parse_param_type(ty: &syn::Type) -> FfiParamType {
                     return FfiParamType::Option(parse_scalar_param(inner));
                 }
             }
+            "Owned" => {
+                if let Some(inner) = extract_angle_bracketed_inner(seg) {
+                    let inner_name = type_name(inner).unwrap_or_default();
+                    return FfiParamType::Owned(inner_name);
+                }
+            }
             _ => {}
         }
 
         return FfiParamType::Primitive(ident);
     }
-    FfiParamType::Primitive("unknown".into())
+    panic!("unsupported FFI parameter type")
 }
 
 fn parse_scalar_param(ty: &syn::Type) -> FfiScalarParam {
@@ -317,5 +335,47 @@ mod tests {
             parse_param_type(&ty),
             FfiParamType::Complex("Tri<SampleRefValue>".into())
         );
+    }
+
+    #[test]
+    fn borrowed_owned_object_param_uses_the_object_type() {
+        let ty: syn::Type = syn::parse_quote! {
+            &Owned<crate::host::ResourceUpdate>
+        };
+
+        assert_eq!(
+            parse_param_type(&ty),
+            FfiParamType::Owned("ResourceUpdate".into())
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "borrowed FFI parameters must have type `&Owned<T>`")]
+    fn borrowed_non_owned_param_is_rejected() {
+        let ty: syn::Type = syn::parse_quote! {
+            &String
+        };
+
+        parse_param_type(&ty);
+    }
+
+    #[test]
+    #[should_panic(expected = "borrowed FFI parameters must have type `&Owned<T>`")]
+    fn mutably_borrowed_owned_param_is_rejected() {
+        let ty: syn::Type = syn::parse_quote! {
+            &mut Owned<crate::host::ResourceUpdate>
+        };
+
+        parse_param_type(&ty);
+    }
+
+    #[test]
+    #[should_panic(expected = "unsupported FFI parameter type")]
+    fn unsupported_param_type_is_rejected() {
+        let ty: syn::Type = syn::parse_quote! {
+            (String, String)
+        };
+
+        parse_param_type(&ty);
     }
 }

@@ -288,6 +288,17 @@ mod tests {
         }
     }
 
+    fn resource_with_test_font(font: &[u8]) -> editor_resource::Resource {
+        let compressed = editor_resource::compress_zstd(font);
+        let prepared =
+            editor_resource::prepare_font_base(&compressed).expect("test font must be valid");
+        let mut source = editor_resource::ResourceSource::new_test();
+        source
+            .insert_font_base("test", 400, prepared)
+            .expect("test font must change resources");
+        editor_resource::Resource::from_snapshot(source.snapshot())
+    }
+
     #[test]
     fn fill_rect_produces_fill_path_op() {
         // 사각형 채우기 명령이 VectorPage에서 FillPath op로 기록되는지 확인한다.
@@ -401,9 +412,7 @@ mod tests {
         use editor_view::glyph_run::{Glyph, GlyphRun, Synthesis, TextDecoration};
 
         const TEST_FONT: &[u8] = include_bytes!("../../../../assets/Pretendard-Regular.ttf");
-        let mut resource = editor_resource::Resource::new_test();
-        let compressed = editor_resource::compress_zstd(TEST_FONT);
-        resource.add_font_base("test", 400, &compressed).unwrap();
+        let resource = resource_with_test_font(TEST_FONT);
         let family_id = resource.font_registry.intern_id("test").unwrap();
 
         let run = GlyphRun {
@@ -446,9 +455,7 @@ mod tests {
         use editor_view::glyph_run::{Glyph, GlyphRun, Synthesis, TextDecoration};
 
         const TEST_FONT: &[u8] = include_bytes!("../../../../assets/Pretendard-Regular.ttf");
-        let mut resource = editor_resource::Resource::new_test();
-        let compressed = editor_resource::compress_zstd(TEST_FONT);
-        resource.add_font_base("test", 400, &compressed).unwrap();
+        let resource = resource_with_test_font(TEST_FONT);
         let family_id = resource.font_registry.intern_id("test").unwrap();
 
         let run = GlyphRun {
@@ -492,9 +499,7 @@ mod tests {
     fn draw_glyph_run_emits_text_op() {
         use editor_view::glyph_run::{Glyph, GlyphRun, Synthesis, TextDecoration};
         const TEST_FONT: &[u8] = include_bytes!("../../../../assets/Pretendard-Regular.ttf");
-        let mut resource = editor_resource::Resource::new_test();
-        let compressed = editor_resource::compress_zstd(TEST_FONT);
-        resource.add_font_base("test", 400, &compressed).unwrap();
+        let resource = resource_with_test_font(TEST_FONT);
         let family_id = resource.font_registry.intern_id("test").unwrap();
         let run = GlyphRun {
             family_id,
@@ -530,9 +535,7 @@ mod tests {
     fn draw_glyph_run_text_op_uses_first_glyph_origin_and_transform() {
         use editor_view::glyph_run::{Glyph, GlyphRun, Synthesis, TextDecoration};
         const TEST_FONT: &[u8] = include_bytes!("../../../../assets/Pretendard-Regular.ttf");
-        let mut resource = editor_resource::Resource::new_test();
-        let compressed = editor_resource::compress_zstd(TEST_FONT);
-        resource.add_font_base("test", 400, &compressed).unwrap();
+        let resource = resource_with_test_font(TEST_FONT);
         let family_id = resource.font_registry.intern_id("test").unwrap();
         let run = GlyphRun {
             family_id,
@@ -583,9 +586,7 @@ mod tests {
         use editor_view::glyph_run::{Glyph, GlyphRun, Synthesis, TextDecoration};
 
         const TEST_FONT: &[u8] = include_bytes!("../../../../assets/Pretendard-Regular.ttf");
-        let mut resource = editor_resource::Resource::new_test();
-        let compressed = editor_resource::compress_zstd(TEST_FONT);
-        resource.add_font_base("test", 400, &compressed).unwrap();
+        let resource = resource_with_test_font(TEST_FONT);
         let family_id = resource.font_registry.intern_id("test").unwrap();
         let baseline_y = 20.0;
 

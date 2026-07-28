@@ -19,17 +19,8 @@ internal fun damageRowRange(damage: IntArray, count: Int, height: Int): RowRange
 
 internal fun shouldPartialUpload(
   hasCached: Boolean,
-  cachedW: Int,
-  cachedH: Int,
-  w: Int,
-  h: Int,
   readerLastVersion: Long,
   damageFrom: Long,
   damageCount: Int,
 ): Boolean =
-  hasCached &&
-    cachedW == w &&
-    cachedH == h &&
-    readerLastVersion > 0L &&
-    readerLastVersion >= damageFrom &&
-    damageCount > 0
+  hasCached && readerLastVersion > 0L && readerLastVersion >= damageFrom && damageCount > 0

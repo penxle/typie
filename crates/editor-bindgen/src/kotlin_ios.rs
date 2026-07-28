@@ -90,7 +90,7 @@ fn generate_ios_wrapper(
     }
 
     w.open_block(&format!(
-        "class Ios{}(private val native: Swift{}) : {}",
+        "class Ios{}(internal val native: Swift{}) : {}",
         iface.name, iface.name, iface.name
     ));
 
@@ -363,6 +363,7 @@ fn convert_param_value(param: &FfiParam, _custom_types: &HashMap<String, String>
     let kt_name = param.name.to_lower_camel_case();
     match &param.ty {
         FfiParamType::Complex(_) => format!("json.encodeToString({})", kt_name),
+        FfiParamType::Owned(name) => format!("({} as Ios{}).native", kt_name, name),
         FfiParamType::Vec(inner) => {
             if matches!(inner, FfiScalarParam::Primitive(p) if p == "u8") {
                 format!("{}NsData", kt_name)
@@ -611,7 +612,7 @@ mod tests {
         assert!(output.contains("private val json = Json { ignoreUnknownKeys = true }"));
         assert!(
             output.contains(
-                "class IosEditorHost(private val native: SwiftEditorHost) : EditorHost {"
+                "class IosEditorHost(internal val native: SwiftEditorHost) : EditorHost {"
             )
         );
     }

@@ -40,7 +40,7 @@ class EditorSelectionExpansionSemanticTest {
       val fake =
         FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
 
       val context =
         editor.resolveSelectionExtensionContext() ?: error("selection context should materialize")
@@ -78,7 +78,7 @@ class EditorSelectionExpansionSemanticTest {
       val fake =
         FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { null })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
 
       assertEquals(selection, editor.resolveSelectionExtensionContext()?.baseSelection)
       assertEquals(emptyList(), fake.enqueued)
@@ -113,7 +113,7 @@ class EditorSelectionExpansionSemanticTest {
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
       val selectionExpansionSemantic = EditorSelectionExpansionSemantic()
 
-      editor.sync {}
+      fake.publishSnapshot(editor)
       assertTrue(
         editor.dispatchSelectionExtension(
           point = PagePoint(page = 0, x = 30f, y = 40f),
@@ -123,7 +123,7 @@ class EditorSelectionExpansionSemanticTest {
 
       currentSelection = expandedSelection
       fake.enqueued.clear()
-      editor.sync {}
+      fake.publishSnapshot(editor)
 
       assertTrue(
         editor.dispatchSelectionExtension(
@@ -157,13 +157,13 @@ class EditorSelectionExpansionSemanticTest {
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
       val selectionExpansionSemantic = EditorSelectionExpansionSemantic()
 
-      editor.sync {}
+      fake.publishSnapshot(editor)
 
       assertEquals(selection, selectionExpansionSemantic.context(editor)?.baseSelection)
     }
 
   @Test
-  fun `word selection commit gate prevents stale context before commit`() =
+  fun `word selection applied gate prevents stale context before applied selection`() =
     runTest(StandardTestDispatcher()) {
       val staleSelection =
         Selection(
@@ -191,14 +191,14 @@ class EditorSelectionExpansionSemanticTest {
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
       val selectionExpansionSemantic = EditorSelectionExpansionSemantic()
 
-      editor.sync {}
-      selectionExpansionSemantic.awaitWordSelectionCommit()
+      fake.publishSnapshot(editor)
+      selectionExpansionSemantic.awaitWordSelectionApplied()
 
       assertNull(selectionExpansionSemantic.context(editor))
 
       currentSelection = wordSelection
-      editor.sync {}
-      selectionExpansionSemantic.markWordSelectionCommitted()
+      fake.publishSnapshot(editor)
+      selectionExpansionSemantic.markWordSelectionApplied()
 
       assertEquals(wordSelection, selectionExpansionSemantic.context(editor)?.baseSelection)
     }
@@ -232,14 +232,14 @@ class EditorSelectionExpansionSemanticTest {
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
       val selectionExpansionSemantic = EditorSelectionExpansionSemantic()
 
-      editor.sync {}
-      selectionExpansionSemantic.awaitWordSelectionCommit(baselineSelection = staleSelection)
-      selectionExpansionSemantic.markWordSelectionCommitted()
+      fake.publishSnapshot(editor)
+      selectionExpansionSemantic.awaitWordSelectionApplied(baselineSelection = staleSelection)
+      selectionExpansionSemantic.markWordSelectionApplied()
 
       assertNull(selectionExpansionSemantic.context(editor))
 
       currentSelection = wordSelection
-      editor.sync {}
+      fake.publishSnapshot(editor)
 
       assertEquals(wordSelection, selectionExpansionSemantic.context(editor)?.baseSelection)
     }

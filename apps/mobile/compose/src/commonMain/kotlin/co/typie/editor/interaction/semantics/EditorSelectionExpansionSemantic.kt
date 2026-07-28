@@ -15,29 +15,29 @@ internal data class EditorSelectionExtensionContext(
 
 internal class EditorSelectionExpansionSemantic {
   private var context: EditorSelectionExtensionContext? = null
-  private var awaitingWordSelectionCommit = false
+  private var awaitingWordSelectionApplied = false
   private var wordSelectionBaseline: Selection? = null
-  private var wordSelectionCommitMarked = false
+  private var wordSelectionAppliedMarked = false
 
   fun reset() {
     context = null
-    awaitingWordSelectionCommit = false
+    awaitingWordSelectionApplied = false
     wordSelectionBaseline = null
-    wordSelectionCommitMarked = false
+    wordSelectionAppliedMarked = false
   }
 
-  val isAwaitingWordSelectionCommit: Boolean
-    get() = awaitingWordSelectionCommit
+  val isAwaitingWordSelectionApplied: Boolean
+    get() = awaitingWordSelectionApplied
 
-  fun awaitWordSelectionCommit(baselineSelection: Selection? = null) {
+  fun awaitWordSelectionApplied(baselineSelection: Selection? = null) {
     context = null
-    awaitingWordSelectionCommit = true
+    awaitingWordSelectionApplied = true
     wordSelectionBaseline = baselineSelection
-    wordSelectionCommitMarked = false
+    wordSelectionAppliedMarked = false
   }
 
-  fun markWordSelectionCommitted() {
-    wordSelectionCommitMarked = true
+  fun markWordSelectionApplied() {
+    wordSelectionAppliedMarked = true
   }
 
   fun context(editor: Editor): EditorSelectionExtensionContext? {
@@ -45,8 +45,8 @@ internal class EditorSelectionExpansionSemantic {
     if (current != null) {
       return current
     }
-    if (awaitingWordSelectionCommit) {
-      if (!wordSelectionCommitMarked) {
+    if (awaitingWordSelectionApplied) {
+      if (!wordSelectionAppliedMarked) {
         return null
       }
       return adoptWordSelection(editor)
@@ -57,7 +57,7 @@ internal class EditorSelectionExpansionSemantic {
   }
 
   private fun adoptWordSelection(editor: Editor): EditorSelectionExtensionContext? {
-    val selection = editor.state.selection ?: return null
+    val selection = editor.appliedState.selection ?: return null
     if (selection.isCollapsed()) {
       return null
     }
@@ -67,15 +67,15 @@ internal class EditorSelectionExpansionSemantic {
 
     val resolved = editor.resolveSelectionExtensionContext() ?: return null
     context = resolved
-    awaitingWordSelectionCommit = false
+    awaitingWordSelectionApplied = false
     wordSelectionBaseline = null
-    wordSelectionCommitMarked = false
+    wordSelectionAppliedMarked = false
     return resolved
   }
 }
 
 internal fun Editor.resolveSelectionExtensionContext(): EditorSelectionExtensionContext? {
-  val baseSelection = state.selection ?: return null
+  val baseSelection = appliedState.selection ?: return null
   if (baseSelection.isCollapsed()) {
     return null
   }
@@ -89,20 +89,23 @@ internal fun Editor.dispatchSelectionExtension(
   point: PagePoint,
   context: EditorSelectionExtensionContext,
 ): Boolean {
-  if (point.page < 0) {
-    return false
-  }
-  enqueue(
-    Message.Selection(
-      SelectionOp.ExtendTo(
-        anchor = context.anchor,
-        headPage = point.page,
-        headX = point.x,
-        headY = point.y,
-        baseSelection = context.baseSelection,
-        allowCollapse = false,
-      )
-    )
-  )
+  val op = point.selectionExtensionOp(context = context) ?: return false
+  enqueue(Message.Selection(op))
   return true
+}
+
+internal fun PagePoint.selectionExtensionOp(
+  context: EditorSelectionExtensionContext
+): SelectionOp.ExtendTo? {
+  if (page < 0) {
+    return null
+  }
+  return SelectionOp.ExtendTo(
+    anchor = context.anchor,
+    headPage = page,
+    headX = x,
+    headY = y,
+    baseSelection = context.baseSelection,
+    allowCollapse = false,
+  )
 }

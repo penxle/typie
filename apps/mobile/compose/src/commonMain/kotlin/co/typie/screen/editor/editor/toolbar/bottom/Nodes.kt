@@ -45,7 +45,7 @@ import co.typie.editor.ffi.Selection
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
-import co.typie.editor.scroll.awaitWithBringIntoView
+import co.typie.editor.scroll.updateWithBringIntoView
 import co.typie.ext.InteractionScope
 import co.typie.ext.LocalInteractionSource
 import co.typie.ext.pressScale
@@ -72,11 +72,11 @@ internal fun BottomToolbarNodes(
   val runtime = LocalEditorRuntime.current
   val bringIntoViewRequests = LocalEditorBringIntoViewRequests.current
   val editor = runtime.editor
-  val showPageBreak = editor?.rootAttrs?.layoutMode is LayoutMode.Paginated
+  val showPageBreak = editor?.appliedState?.rootAttrs?.layoutMode is LayoutMode.Paginated
   val hasUnitSelection =
     isEditorToolbarUnitSelection(
-      selection = editor?.selection,
-      hasSelectedBlock = editor?.blockState?.nodes?.isNotEmpty() == true,
+      selection = editor?.appliedState?.selection,
+      hasSelectedBlock = editor?.appliedState?.blockState?.nodes?.isNotEmpty() == true,
     )
   val gridFogInsets = remember { PaddingValues(vertical = NodeInsertPanelPadding) }
 
@@ -108,9 +108,9 @@ internal fun BottomToolbarNodes(
               val session = runtime.session ?: return@NodeInsertTile
               session.submit { currentEditor, context ->
                 currentEditor.scope.launch(context) {
-                  currentEditor.awaitWithBringIntoView(bringIntoViewRequests) {
+                  currentEditor.updateWithBringIntoView(bringIntoViewRequests) {
                     enqueue(action.message)
-                    beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
+                    afterApplied { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
                   }
                 }
               }

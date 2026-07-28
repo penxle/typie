@@ -351,7 +351,7 @@ private class FindReplaceSessionController {
   private fun clearMatches(editor: Editor?) {
     val shouldClearRanges =
       matches.isNotEmpty() ||
-        editor?.state?.trackedRanges?.searchMatchRanges()?.isNotEmpty() == true
+        editor?.appliedState?.trackedRanges?.searchMatchRanges()?.isNotEmpty() == true
     matches = emptyList()
     activeIndex = null
     if (shouldClearRanges) {
@@ -378,7 +378,7 @@ private class FindReplaceSessionController {
   private suspend fun updateActiveRangeDecoration(editor: Editor) {
     editor.setActiveFindReplaceRange(
       activeId = activeMatchId(),
-      currentRanges = editor.state.trackedRanges,
+      currentRanges = editor.appliedState.trackedRanges,
     )
   }
 
@@ -386,12 +386,12 @@ private class FindReplaceSessionController {
     editor: Editor,
     bringIntoViewRequests: EditorBringIntoViewRequests,
   ) {
-    val target = editor.state.trackedRanges.searchMatchScrollTarget(activeMatchId()) ?: return
-    bringIntoViewRequests.requestForVersion(
-      target = target,
-      version = editor.state.version,
+    bringIntoViewRequests.requestForState(
+      state = editor.appliedState,
       behavior = EditorBringIntoViewBehavior.Smooth,
-    )
+    ) {
+      trackedRanges.searchMatchScrollTarget(activeMatchId())
+    }
   }
 }
 
@@ -400,6 +400,6 @@ private fun String.toSingleLineText(): String = replace('\r', ' ').replace('\n',
 private fun String.containsLineBreak(): Boolean = any { it == '\r' || it == '\n' }
 
 private suspend fun Editor.findReplaceInitialFindTextFromSelection(): String? {
-  if (selection.isCollapsed()) return null
+  if (appliedState.selection.isCollapsed()) return null
   return copySelection()?.text?.toSingleLineText()
 }

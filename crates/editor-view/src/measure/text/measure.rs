@@ -166,7 +166,7 @@ fn measure_segment<'a>(
 
     let strut =
         compute_strut(resource, base_style).expect("strut layout should have one line and run");
-    let grapheme_segmenter = Arc::clone(&resource.segmenters);
+    let grapheme_segmenter = Arc::clone(resource.segmenters());
     let style_runs = resolve_style_runs(
         seg_text,
         &seg_runs,
@@ -189,7 +189,7 @@ fn measure_segment<'a>(
         resource,
         &tab_boxes,
     );
-    let segmenters = Arc::clone(&resource.segmenters);
+    let segmenters = Arc::clone(resource.segmenters());
     let lines = extract_lines(
         seg_text,
         &layout,

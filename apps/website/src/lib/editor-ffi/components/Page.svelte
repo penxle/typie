@@ -7,13 +7,13 @@
 <script lang="ts">
   import { CROP_MARKER_SIZE } from '../constants';
   import { getEditorContext } from '../editor.svelte';
-  import { createPageSurfaceManager } from '../page-surface-manager';
+  import { createSurfaceDriver } from '../surface-driver';
   import { probeAttach, probeDetach, probeEvent } from '../surface-probe';
   import { shouldKeepEmbedsWhileHidden, visibleExternalElements } from './external-element-visibility';
   import ExternalElement from './ExternalElement.svelte';
   import LinkOverlay from './LinkOverlay.svelte';
   import TableOverlay from './TableOverlay.svelte';
-  import type { ManagerEffects } from '../page-surface-manager';
+  import type { SurfaceDriverEffects } from '../surface-driver';
 
   type Props = {
     page: number;
@@ -45,20 +45,18 @@
   const slotWidth = $derived(Math.round(width * displayZoom * scaleFactor) / scaleFactor);
   const slotHeight = $derived(Math.round(height * displayZoom * scaleFactor) / scaleFactor);
   const showCropMarker = $derived(layoutMode?.type === 'paginated' && !(ctx.editor?.readOnly ?? false));
-  // Per-visible-page queries: only on-screen pages build their fragment, turning
-  // the old whole-document O(pages · N) recompute (every keystroke) into O(N) for
-  // the few visible pages.
+  // Passive overlays must advance with the canvas, so these depend on publishedRevision.
   const externalElements = $derived.by(() => {
-    void ctx.editor?.tickRevision;
+    void ctx.editor?.publishedRevision;
     const editor = ctx.editor;
     return editor ? visibleExternalElements(overlaysVisible, keepEmbedsWhileHidden, () => editor.pageExternalElements(page)) : [];
   });
   const tableOverlays = $derived.by(() => {
-    void ctx.editor?.tickRevision;
+    void ctx.editor?.publishedRevision;
     return isPaginated && overlaysVisible && ctx.editor ? ctx.editor.pageTableOverlays(page) : [];
   });
   const linkRects = $derived.by(() => {
-    void ctx.editor?.tickRevision;
+    void ctx.editor?.publishedRevision;
     return overlaysVisible && ctx.editor ? ctx.editor.pageLinkRects(page) : [];
   });
 </script>
@@ -97,36 +95,11 @@
       {@attach (wrapper) => {
         if (!editor) return;
 
-        let manager: ReturnType<typeof createPageSurfaceManager<HTMLCanvasElement>>;
+        let manager: ReturnType<typeof createSurfaceDriver<HTMLCanvasElement>>;
         let isVisible = false;
-        let dirty = false;
-        let needsResize = false;
         let syncSeeded = false;
 
-        const paint = () => {
-          if (manager.isAttached()) {
-            editor.requestSurfaceRender(page);
-            dirty = false;
-          } else {
-            dirty = true;
-          }
-        };
-
-        // Flushes dirty/needsResize left over from edits while unattached, once (re)attached.
-        const flushIfAttached = () => {
-          if (!manager.isAttached()) return;
-          if (needsResize) {
-            editor.resizeSurfaceNow(page, width, backingHeight);
-            needsResize = false;
-            dirty = false;
-          }
-          if (dirty) {
-            editor.requestSurfaceRender(page);
-            dirty = false;
-          }
-        };
-
-        const effects: ManagerEffects<HTMLCanvasElement> = {
+        const effects: SurfaceDriverEffects<HTMLCanvasElement> = {
           createCanvas: () => {
             const canvas = document.createElement('canvas');
             canvas.className = canvasClass;
@@ -137,17 +110,16 @@
             canvas.style.height = `${cssBackingHeight}px`;
           },
           attach: (canvas) => {
-            editor.attachSurface(page, canvas, width, backingHeight);
+            const backend = editor.attachSurface(page, canvas, width, backingHeight, () => manager.replace());
             probeAttach(editor, page, canvas);
-            return editor.surfaceBackend(page) === 'cpu-oversized' ? 'cpu-oversized' : 'cpu';
+            if (backend === 'cpu') return 'cpu';
+            return backend === 'cpu-oversized' ? 'cpu-oversized' : 'none';
           },
           detach: () => {
             probeDetach(editor, page);
             editor.detachSurface(page);
           },
-          requestRender: () => editor.requestSurfaceRender(page),
-          isSuspended: () => document.visibilityState !== 'visible',
-          onPresented: (listener) => editor.onSurfacePresented(page, listener),
+          recover: () => editor.invalidateSurface(page),
           addContextListeners: (canvas, isCurrent) => {
             // 2D 캔버스도 GPU 리셋 시 백킹을 잃고 'contextrestored'를 발화한다 — 복귀 시
             // present state를 무효화하고 다시 그린다(CPU 유일 경로의 복구).
@@ -155,7 +127,6 @@
               probeEvent(`contextrestored page=${page}`);
               if (isCurrent()) {
                 editor.invalidateSurface(page);
-                paint();
               }
             };
             canvas.addEventListener('contextrestored', onContextRestored2d);
@@ -168,30 +139,29 @@
             canvas.height = 0;
           },
           promote: (next) => {
-            wrapper.append(next);
+            if (next.parentNode !== wrapper) wrapper.append(next);
           },
           removeNode: (canvas) => {
             canvas.remove();
           },
-          schedule: (fn, ms) => {
-            const id = setTimeout(fn, ms);
-            return () => clearTimeout(id);
-          },
+          replacementFailed: () => editor.surfaceReplacementFailed(page),
         };
 
-        manager = createPageSurfaceManager(effects);
+        manager = createSurfaceDriver(effects);
+        const stopPublishedSync = $effect.root(() => {
+          $effect(() => {
+            manager.syncPublished(editor.publishedSurfaceCanvas(page));
+          });
+        });
 
-        // 가시성 복귀 시 resume: 숨김 중 로스로 detach된 표면(failedParked)을 치유하고, 정체된
-        // pending은 렌더를 재촉한다. 에디터 레벨 recoverSurfaces는 attached 표면만 갱신하므로
-        // detached 표면 복구는 이 손이 담당한다(둘은 독립적).
+        // A detached target has no editor-owned requirement. Visibility recovery
+        // only recreates the target; attachSurface establishes its fresh requirement.
         const onVisible = () => {
           if (document.visibilityState === 'visible') manager.resume();
         };
         const onPageShow = () => manager.resume();
         document.addEventListener('visibilitychange', onVisible);
         window.addEventListener('pageshow', onPageShow);
-
-        const offRender = editor.on('render_invalidated', paint);
 
         $effect(() => {
           const root = editor.scrollRootEl;
@@ -200,7 +170,7 @@
           let disposed = false;
           let observers: IntersectionObserver[] = [];
           let seeded = 0;
-          const state = { inAcquire: false, inRelease: false, isVisible: false };
+          const state = { inAcquire: false, inRelease: false };
 
           let buildEpoch = 0;
           const build = () => {
@@ -221,7 +191,6 @@
                   }
                   if (seeded >= 3 && !disposed) {
                     manager.reconcile({ ...state });
-                    flushIfAttached();
                   }
                 },
                 { root, rootMargin: margin, threshold: 0 },
@@ -237,7 +206,6 @@
                   keepEmbedsWhileHidden = shouldKeepEmbedsWhileHidden(externalElements);
                 }
                 overlaysVisible = isVisible;
-                state.isVisible = hit;
               },
               true,
             );
@@ -258,12 +226,9 @@
             if (inAcquire) {
               state.inAcquire = true;
               state.inRelease = true;
-              state.isVisible = rect.bottom > rootRect.top && rect.top < rootRect.bottom;
-              isVisible = state.isVisible;
-              overlaysVisible = state.isVisible;
+              isVisible = rect.bottom > rootRect.top && rect.top < rootRect.bottom;
+              overlaysVisible = isVisible;
               manager.reconcile({ ...state });
-              flushIfAttached();
-              editor.flush();
             }
           }
           let resize: ResizeObserver | null = null;
@@ -292,21 +257,18 @@
           void editor.surfaceScaleFactor;
           void width;
           void backingHeight;
-          manager.restyle();
-          if (manager.isAttached()) {
-            editor.resizeSurfaceNow(page, width, backingHeight);
-            dirty = false;
-            needsResize = false;
-          } else {
-            needsResize = true;
-            dirty = true;
+          if (!manager.isAttached()) {
+            manager.replace();
+            return;
           }
+          if (editor.surfaceConfigMatches(page, width, backingHeight)) manager.restyle();
+          else manager.replace();
         });
 
         return () => {
           document.removeEventListener('visibilitychange', onVisible);
           window.removeEventListener('pageshow', onPageShow);
-          offRender();
+          stopPublishedSync();
           manager.destroy();
         };
       }}

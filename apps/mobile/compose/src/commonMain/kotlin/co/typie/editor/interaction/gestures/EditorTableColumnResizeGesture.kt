@@ -6,7 +6,6 @@ import co.typie.editor.interaction.EditorInteractionEvent
 import co.typie.editor.interaction.EditorInteractionMode
 import co.typie.editor.interaction.canApply
 import co.typie.editor.interaction.semantics.EditorTableColumnResizePlacement
-import co.typie.editor.interaction.semantics.resolveTableColumnResizePlacement
 
 internal class EditorTableColumnResizeGesture {
   private var pointerId: Long? = null
@@ -32,7 +31,8 @@ internal class EditorTableColumnResizeGesture {
     if (context.readOnly || !context.editing) {
       null
     } else {
-      resolveTableColumnResizePlacement(editor = context.editor, geometry = context.geometry)
+      context.semantics.tableColumnResize
+        .resolvePlacement(editor = context.editor, geometry = context.geometry)
         ?.takeIf { candidate -> candidate.handleRects.any { rect -> rect.contains(position) } }
     }
 

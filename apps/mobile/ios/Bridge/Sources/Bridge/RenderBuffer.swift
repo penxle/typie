@@ -27,6 +27,12 @@ private func renderBufferHeight(_ handle: Int64) -> Int32
 @_silgen_name("render_buffer_pinned_version")
 private func renderBufferPinnedVersion(_ handle: Int64) -> Int64
 
+@_silgen_name("render_buffer_pinned_editor_revision")
+private func renderBufferPinnedEditorRevision(_ handle: Int64) -> Int64
+
+@_silgen_name("render_buffer_pinned_frame_key")
+private func renderBufferPinnedFrameKey(_ handle: Int64) -> Int64
+
 @_silgen_name("render_buffer_pinned_damage_from")
 private func renderBufferPinnedDamageFrom(_ handle: Int64) -> Int64
 
@@ -74,6 +80,14 @@ private func renderBufferReadPinnedInto(_ handle: Int64, _ dst: Int64, _ dstLen:
 
     @objc public static func pinnedVersion(_ handle: Int64) -> Int64 {
         renderBufferPinnedVersion(handle)
+    }
+
+    @objc public static func pinnedEditorRevision(_ handle: Int64) -> Int64 {
+        renderBufferPinnedEditorRevision(handle)
+    }
+
+    @objc public static func pinnedFrameKey(_ handle: Int64) -> Int64 {
+        renderBufferPinnedFrameKey(handle)
     }
 
     @objc public static func pinnedDamageFrom(_ handle: Int64) -> Int64 {

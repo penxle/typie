@@ -1,4 +1,5 @@
 import { EditorEdgeAutoScroll } from '../edge-auto-scroll';
+import { isSelectionCollapsed } from '../geometry';
 import type { InputModifiers, InteractiveHit, Position, Rect, Selection } from '@typie/editor-ffi/browser';
 import type { Editor } from '../editor.svelte';
 import type { SelectionHandleKind } from '../gesture.svelte';
@@ -68,8 +69,10 @@ export const handlePointerDown: EditorEventHandler<HTMLElement, PointerEvent> = 
   const { page, x, y } = local;
   const count = PointerState.of(editor).resolveClickCount(e);
   const modifiers: InputModifiers = { shift: e.shiftKey, ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey };
+  const appliedSelection = editor.appliedSnapshot.selection;
 
-  const nativeDragCandidate = count === 1 && !modifiers.shift && !editor.isSelectionCollapsed && editor.selectionHitTest(page, x, y);
+  const nativeDragCandidate =
+    count === 1 && !modifiers.shift && !isSelectionCollapsed(appliedSelection) && editor.selectionHitTest(page, x, y);
   if (nativeDragCandidate) {
     const target = e.currentTarget;
     editor.beginNativeDragAdmission();
@@ -82,38 +85,41 @@ export const handlePointerDown: EditorEventHandler<HTMLElement, PointerEvent> = 
   }
 
   const state = PointerState.of(editor);
+  let interactionSelection = appliedSelection;
   if (!nativeDragCandidate) {
-    if (count === 1 && modifiers.shift && editor.selection) {
-      editor.enqueue({
-        type: 'selection',
-        op: {
-          type: 'extend_to',
-          anchor: editor.selection.anchor,
-          head_page: page,
-          head_x: x,
-          head_y: y,
-          base_selection: undefined,
-          allow_collapse: true,
-        },
-      });
-    } else if (count === 1) {
-      editor.enqueue({ type: 'selection', op: { type: 'set_at', page, x, y } });
-    } else {
-      editor.enqueue({
-        type: 'selection',
-        op: {
-          type: 'select_unit_at',
-          page,
-          x,
-          y,
-          unit: count === 2 ? 'word' : 'paragraph',
-        },
-      });
-    }
-    editor.flush();
+    const update = editor.updateNow(() => {
+      if (count === 1 && modifiers.shift && appliedSelection) {
+        editor.enqueue({
+          type: 'selection',
+          op: {
+            type: 'extend_to',
+            anchor: appliedSelection.anchor,
+            head_page: page,
+            head_x: x,
+            head_y: y,
+            base_selection: undefined,
+            allow_collapse: true,
+          },
+        });
+      } else if (count === 1) {
+        editor.enqueue({ type: 'selection', op: { type: 'set_at', page, x, y } });
+      } else {
+        editor.enqueue({
+          type: 'selection',
+          op: {
+            type: 'select_unit_at',
+            page,
+            x,
+            y,
+            unit: count === 2 ? 'word' : 'paragraph',
+          },
+        });
+      }
+    });
+    interactionSelection = update?.snapshot.selection;
     editor.scrollIntoView({ target: { type: 'current_selection_head' }, mode: 'nearest' });
   }
-  state.markPointerDown(editor, e.pointerId, !nativeDragCandidate, { page, x, y }, count, modifiers, nativeDragCandidate);
+  state.markPointerDown(e.pointerId, !nativeDragCandidate, { page, x, y }, count, modifiers, nativeDragCandidate, interactionSelection);
   if (!nativeDragCandidate) {
     editor.suspendToolbarSync();
   }
@@ -153,7 +159,6 @@ export const handlePointerUp: EditorEventHandler<HTMLElement, PointerEvent> = (e
 
   state.finishPointerUp(editor, e.pointerId, { clientX: e.clientX, clientY: e.clientY });
   state.releasePointer(e.currentTarget, e.pointerId);
-  editor.flush();
   editor.resumeToolbarSync();
   editor.endNativeDragAdmission({ restoreFocus: true });
 };
@@ -184,7 +189,6 @@ export const handlePointerCancel: EditorEventHandler<HTMLElement, PointerEvent> 
 
   state.cancelPointer(e.pointerId);
   state.releasePointer(e.currentTarget, e.pointerId);
-  editor.flush();
   editor.resumeToolbarSync();
   editor.endNativeDragAdmission({ restoreFocus: false });
 };
@@ -194,7 +198,6 @@ export const handlePointerCaptureLost: EditorEventHandler<HTMLElement, PointerEv
   if (!state.hasActivePointer(e.pointerId)) return;
 
   state.cancelPointer(e.pointerId);
-  editor.flush();
   editor.resumeToolbarSync();
   editor.endNativeDragAdmission({ restoreFocus: false });
 };
@@ -203,7 +206,6 @@ export const cancelPointerInteraction = (editor: Editor): void => {
   const state = PointerState.of(editor);
   if (!state.cancelActivePointer()) return;
 
-  editor.flush();
   editor.resumeToolbarSync();
   editor.endNativeDragAdmission({ restoreFocus: false });
 };
@@ -248,7 +250,7 @@ class PointerState {
     this.#dragPending = null;
     if (!point) return;
 
-    if (this.#extendSelectionTo(editor, point, { respectThreshold: true })) {
+    if (editor.updateNow(() => this.#extendSelectionTo(editor, point, { respectThreshold: true })) !== null) {
       this.#edgeAutoScroll.update(editor, point, (clientX, clientY) => {
         if (editor.destroyed) {
           this.#edgeAutoScroll.stop();
@@ -258,9 +260,7 @@ class PointerState {
         const local = editor.clientToLocal(clientX, clientY);
         if (!local) return;
 
-        if (this.#extendSelectionTo(editor, { ...local, clientX, clientY }, { respectThreshold: false })) {
-          editor.flush();
-        }
+        editor.updateNow(() => this.#extendSelectionTo(editor, { ...local, clientX, clientY }, { respectThreshold: false }));
       });
     }
   }
@@ -326,22 +326,22 @@ class PointerState {
   }
 
   markPointerDown(
-    editor: Editor,
     pointerId: number,
     captured: boolean,
     down: LocalPoint,
     count: number,
     modifiers: InputModifiers,
     nativeDragCandidate: boolean,
+    selection: Selection | undefined,
   ) {
-    const selection = editor.selection;
-    const canExtend = !nativeDragCandidate && (count > 1 ? selection !== undefined : modifiers.shift || editor.isSelectionCollapsed);
+    const selectionCollapsed = isSelectionCollapsed(selection);
+    const canExtend = !nativeDragCandidate && (count > 1 ? selection !== undefined : modifiers.shift || selectionCollapsed);
     this.#session = {
       pointerId,
       captured,
       down,
       anchor: canExtend ? (selection?.anchor ?? null) : null,
-      baseSelection: count > 1 && selection && !editor.isSelectionCollapsed ? selection : undefined,
+      baseSelection: count > 1 && selection && !selectionCollapsed ? selection : undefined,
       nativeDragCandidate,
       nativeDragStarted: false,
       dragging: false,
@@ -366,11 +366,16 @@ class PointerState {
     if (session.dragging) {
       const local = editor.clientToLocal(pointer.clientX, pointer.clientY);
       if (local) {
-        this.#extendSelectionTo(editor, { ...local, ...pointer }, { respectThreshold: false });
+        editor.updateNow(() => this.#extendSelectionTo(editor, { ...local, ...pointer }, { respectThreshold: false }));
       }
     }
     if (session.nativeDragCandidate && !session.nativeDragStarted) {
-      editor.enqueue({ type: 'selection', op: { type: 'set_at', page: session.down.page, x: session.down.x, y: session.down.y } });
+      editor.updateNow(() =>
+        editor.enqueue({
+          type: 'selection',
+          op: { type: 'set_at', page: session.down.page, x: session.down.x, y: session.down.y },
+        }),
+      );
       editor.scrollIntoView({ target: { type: 'current_selection_head' }, mode: 'nearest' });
     }
     this.#edgeAutoScroll.stop();

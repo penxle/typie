@@ -1,5 +1,5 @@
 use cfg_if::cfg_if;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use crate::prelude::*;
 
@@ -59,8 +59,32 @@ fn init_logger() {
 
 #[cfg_attr(feature = "uniffi", derive(uniffi::Object))]
 #[cfg_attr(feature = "wasm", wasm_bindgen::prelude::wasm_bindgen)]
+pub struct ResourceUpdate {
+    pub(crate) inner: editor_core::ResourceUpdate,
+}
+
+impl ResourceUpdate {
+    fn new(
+        snapshot: Arc<editor_resource::ResourceSnapshot>,
+        notices: Vec<editor_core::SystemEvent>,
+    ) -> Owned<Self> {
+        into_owned(Self {
+            inner: editor_core::ResourceUpdate::new(snapshot, notices),
+        })
+    }
+}
+
+#[cfg_attr(feature = "uniffi", editor_macros::ffi_export(uniffi))]
+#[cfg_attr(feature = "wasm", editor_macros::ffi_export(wasm))]
+impl ResourceUpdate {}
+
+#[cfg_attr(feature = "uniffi", derive(uniffi::Object))]
+#[cfg_attr(feature = "wasm", wasm_bindgen::prelude::wasm_bindgen)]
 pub struct EditorHost {
-    pub(crate) resource: Arc<Mutex<editor_resource::Resource>>,
+    // GraphIngest is an independently owned FFI object and may outlive the
+    // EditorHost handle, so it shares the source owner rather than capturing a
+    // snapshot before ingestion finishes.
+    pub(crate) source: Arc<Mutex<editor_resource::ResourceSource>>,
 }
 
 #[cfg_attr(feature = "uniffi", editor_macros::ffi_export(uniffi))]
@@ -76,7 +100,7 @@ impl EditorHost {
         let icu = editor_resource::IcuResources::from_icu_data(&icu_data)?;
 
         Ok(into_owned(Self {
-            resource: Arc::new(Mutex::new(editor_resource::Resource::new(icu))),
+            source: Arc::new(Mutex::new(editor_resource::ResourceSource::new(icu))),
         }))
     }
 
@@ -91,7 +115,7 @@ impl EditorHost {
         })?;
 
         let viewport = viewport.from_ffi()?;
-        let core = editor_core::Editor::new(state, viewport, Arc::clone(&self.resource));
+        let core = editor_core::Editor::new(state, viewport, self.new_local_resource()?);
 
         Ok(into_owned(crate::editor::Editor::new(
             core,
@@ -106,7 +130,7 @@ impl EditorHost {
     ) -> EditorResult<Owned<crate::editor::Editor>> {
         let (state, carrier_bytes) = crate::graph::state_from_changesets(changesets)?;
         let viewport = viewport.from_ffi()?;
-        let core = editor_core::Editor::new(state, viewport, Arc::clone(&self.resource));
+        let core = editor_core::Editor::new(state, viewport, self.new_local_resource()?);
         Ok(into_owned(crate::editor::Editor::new(core, carrier_bytes)))
     }
 
@@ -120,7 +144,7 @@ impl EditorHost {
         let (state, carrier_bytes) =
             crate::graph::state_from_changesets_with_pending(server, pending)?;
         let viewport = viewport.from_ffi()?;
-        let core = editor_core::Editor::new(state, viewport, Arc::clone(&self.resource));
+        let core = editor_core::Editor::new(state, viewport, self.new_local_resource()?);
         Ok(into_owned(crate::editor::Editor::new(core, carrier_bytes)))
     }
 
@@ -154,19 +178,30 @@ impl EditorHost {
     pub fn set_fonts(
         &self,
         families: Vec<Complex<editor_resource::FontFamily>>,
-    ) -> EditorResult<()> {
-        self.with_resource(|resource| {
-            resource.set_fonts(families.from_ffi()?);
-            Ok(())
-        })
+    ) -> EditorResult<Option<Owned<ResourceUpdate>>> {
+        let prepared = editor_resource::prepare_fonts(families.from_ffi()?);
+        let snapshot = self.lock_source()?.set_fonts(prepared);
+        Ok(snapshot.map(|snapshot| {
+            ResourceUpdate::new(snapshot, vec![editor_core::SystemEvent::FontsChanged])
+        }))
     }
 
-    pub fn add_font_base(&self, family: String, weight: u16, data: Vec<u8>) -> EditorResult<()> {
+    pub fn add_font_base(
+        &self,
+        family: String,
+        weight: u16,
+        data: Vec<u8>,
+    ) -> EditorResult<Option<Owned<ResourceUpdate>>> {
         let prepared = editor_resource::prepare_font_base(&data)?;
-        self.with_resource(|resource| {
-            resource.insert_font_base(&family, weight, prepared)?;
-            Ok(())
-        })
+        let snapshot = self
+            .lock_source()?
+            .insert_font_base(&family, weight, prepared);
+        Ok(snapshot.map(|snapshot| {
+            ResourceUpdate::new(
+                snapshot,
+                vec![editor_core::SystemEvent::FontBaseLoaded { family, weight }],
+            )
+        }))
     }
 
     pub fn add_font_chunk(
@@ -175,12 +210,22 @@ impl EditorHost {
         weight: u16,
         chunk_id: u16,
         data: Vec<u8>,
-    ) -> EditorResult<()> {
+    ) -> EditorResult<Option<Owned<ResourceUpdate>>> {
         let payload = editor_resource::decompress_zstd_capped(&data, FONT_CHUNK_MAX_BYTES)?;
-        self.with_resource(|resource| {
-            resource.add_font_chunk(&family, weight, chunk_id, &payload)?;
-            Ok(())
-        })
+        let prepared = editor_resource::prepare_font_chunk(payload)?;
+        let snapshot = self
+            .lock_source()?
+            .add_font_chunk(&family, weight, chunk_id, prepared)?;
+        Ok(snapshot.map(|snapshot| {
+            ResourceUpdate::new(
+                snapshot,
+                vec![editor_core::SystemEvent::FontChunkLoaded {
+                    family,
+                    weight,
+                    chunk_id,
+                }],
+            )
+        }))
     }
 
     pub fn add_font_manifest(
@@ -188,30 +233,35 @@ impl EditorHost {
         family: String,
         weight: u16,
         data: Vec<u8>,
-    ) -> EditorResult<()> {
+    ) -> EditorResult<Option<Owned<ResourceUpdate>>> {
         let bytes = editor_resource::decompress_zstd_capped(&data, 1024 * 1024)?;
         let manifest = editor_resource::FontManifest::from_bytes(&bytes)?;
-        self.with_resource(|resource| {
-            resource.add_font_manifest(&family, weight, manifest)?;
-            Ok(())
-        })
+        let snapshot = self
+            .lock_source()?
+            .add_font_manifest(&family, weight, manifest);
+        Ok(snapshot.map(|snapshot| {
+            ResourceUpdate::new(
+                snapshot,
+                vec![editor_core::SystemEvent::FontManifestLoaded { family, weight }],
+            )
+        }))
     }
 
     pub fn set_text_replacement_rules(
         &self,
         rules: Vec<Complex<editor_resource::RawTextReplacementRule>>,
-    ) -> EditorResult<()> {
-        self.with_resource(|resource| {
-            resource.set_text_replacement_rules(rules.from_ffi()?);
-            Ok(())
-        })
+    ) -> EditorResult<Option<Owned<ResourceUpdate>>> {
+        let prepared = editor_resource::prepare_text_replacement_rules(rules.from_ffi()?);
+        let snapshot = self.lock_source()?.set_text_replacement_rules(prepared);
+        Ok(snapshot.map(|snapshot| ResourceUpdate::new(snapshot, Vec::new())))
     }
 
-    pub fn set_auto_surround_enabled(&self, enabled: bool) -> EditorResult<()> {
-        self.with_resource(|resource| {
-            resource.set_auto_surround_enabled(enabled);
-            Ok(())
-        })
+    pub fn set_auto_surround_enabled(
+        &self,
+        enabled: bool,
+    ) -> EditorResult<Option<Owned<ResourceUpdate>>> {
+        let snapshot = self.lock_source()?.set_auto_surround_enabled(enabled);
+        Ok(snapshot.map(|snapshot| ResourceUpdate::new(snapshot, Vec::new())))
     }
 
     pub fn graph_heads(&self, changesets: Vec<u8>) -> EditorResult<Vec<u8>> {
@@ -233,36 +283,56 @@ impl EditorHost {
     pub fn set_theme_variant(
         &self,
         variant: Complex<editor_resource::ThemeVariant>,
-    ) -> EditorResult<bool> {
-        self.with_resource(|resource| Ok(resource.theme.set_variant(variant.from_ffi()?)))
+    ) -> EditorResult<Option<Owned<ResourceUpdate>>> {
+        let variant = variant.from_ffi()?;
+        let snapshot = self.lock_source()?.set_theme_variant(variant);
+        Ok(snapshot.map(|snapshot| {
+            ResourceUpdate::new(
+                snapshot,
+                vec![editor_core::SystemEvent::ThemeVariantChanged],
+            )
+        }))
     }
 }
 
 impl EditorHost {
-    pub(crate) fn with_resource<F, R>(&self, f: F) -> EditorResult<R>
-    where
-        F: FnOnce(&mut editor_resource::Resource) -> EditorResult<R>,
-    {
-        let mut resource = self.resource.lock().map_err(|_| FfiError::LockPoisoned)?;
-        f(&mut resource)
+    fn lock_source(&self) -> EditorResult<MutexGuard<'_, editor_resource::ResourceSource>> {
+        self.source
+            .lock()
+            .map_err(|_| FfiError::LockPoisoned.into())
+    }
+
+    fn new_local_resource(&self) -> EditorResult<Arc<Mutex<editor_resource::Resource>>> {
+        local_resource_from_source(&self.source)
     }
 
     #[cfg(test)]
     pub(crate) fn new_test() -> Self {
         Self {
-            resource: Arc::new(Mutex::new(editor_resource::Resource::new_test())),
+            source: Arc::new(Mutex::new(editor_resource::ResourceSource::new_test())),
         }
     }
+}
+
+pub(crate) fn local_resource_from_source(
+    source: &Mutex<editor_resource::ResourceSource>,
+) -> EditorResult<Arc<Mutex<editor_resource::Resource>>> {
+    let snapshot = source
+        .lock()
+        .map_err(|_| FfiError::LockPoisoned)?
+        .snapshot();
+    Ok(Arc::new(Mutex::new(
+        editor_resource::Resource::from_snapshot(snapshot),
+    )))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::{Arc, Mutex};
 
     fn make_host() -> EditorHost {
         EditorHost {
-            resource: Arc::new(Mutex::new(editor_resource::Resource::new_test())),
+            source: Arc::new(Mutex::new(editor_resource::ResourceSource::new_test())),
         }
     }
 
@@ -289,23 +359,30 @@ mod tests {
     }
 
     #[test]
-    fn set_theme_variant_returns_true_on_change() {
+    fn set_theme_variant_returns_exact_update_and_none_for_noop() {
         let host = make_host();
-        let result = host
-            .set_theme_variant(editor_resource::ThemeVariant::DarkBlack)
-            .unwrap();
-        assert!(result);
-    }
+        assert!(
+            host.set_theme_variant(editor_resource::ThemeVariant::LightWhite)
+                .unwrap()
+                .is_none()
+        );
 
-    #[test]
-    fn set_theme_variant_returns_false_for_same_variant() {
-        let host = make_host();
-        host.set_theme_variant(editor_resource::ThemeVariant::DarkBlack)
-            .unwrap();
-        let result = host
+        let update = host
             .set_theme_variant(editor_resource::ThemeVariant::DarkBlack)
-            .unwrap();
-        assert!(!result);
+            .unwrap()
+            .expect("changed theme must return an update");
+        let current = host.source.lock().unwrap().snapshot();
+
+        assert!(Arc::ptr_eq(update.inner.snapshot(), &current));
+        assert_eq!(
+            update.inner.notices(),
+            &[editor_core::SystemEvent::ThemeVariantChanged]
+        );
+        assert!(
+            host.set_theme_variant(editor_resource::ThemeVariant::DarkBlack)
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]

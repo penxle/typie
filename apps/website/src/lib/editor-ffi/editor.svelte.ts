@@ -1,16 +1,19 @@
 import { debounce } from '@typie/ui/utils';
 import { createContext, tick, untrack } from 'svelte';
-import { SvelteMap, SvelteSet } from 'svelte/reactivity';
+import { SvelteMap } from 'svelte/reactivity';
 import { match } from 'ts-pattern';
 import { initWasm, wasm } from '$lib/wasm-ffi.svelte';
 import { EditorAttachmentImporter } from './attachment-importer';
 import { IS_MAC } from './constants';
+import { EditorRequest, EditorUpdate } from './editor-update';
 import { fontDataMissingHandler } from './fonts';
+import { isSelectionCollapsed } from './geometry';
 import { TouchGestureController } from './gesture.svelte';
 import { readClipboardRich, writeClipboardPayload } from './handlers/clipboard';
 import { encodeLengthPrefixedBlobs } from './length-prefix';
 import { isMutatingMessage } from './message-gate';
-import { register, snapshot, unregister } from './registry';
+import { canPublish, proofSatisfies } from './publication';
+import { fanOutResourceUpdate, register, snapshot, unregister } from './registry';
 import { probeEvent, probeRendered } from './surface-probe';
 import { zoomDiffers } from './zoom';
 import type {
@@ -28,22 +31,25 @@ import type {
   Modifier,
   ModifierState,
   ModifierType,
-  PageRect,
   PlaceholderMetrics,
   PlainDoc,
   PlainRootNode,
   PointerStyle,
   Position,
+  ResourceUpdate,
   Selection,
   SelectionEndpoints,
   Size,
   StableSelection,
+  StateField,
   TableOverlay,
   ThemeVariant,
+  TickResult,
   TrackedRange,
   Viewport,
 } from '@typie/editor-ffi/browser';
 import type { ScrollViewport } from '@typie/ui/utils';
+import type { EditorPublicationResult } from './editor-update';
 import type { EditorScrollIntoViewOptions, EditorScrollScope } from './scroll.svelte';
 import type {
   ArchivedAsset,
@@ -74,6 +80,88 @@ export type AiFeedback = {
 };
 
 export type TrackedRangePosition = Pick<TrackedRange, 'anchor' | 'head'>;
+
+type PageSnapshot = Readonly<{
+  externalElements: ExternalElement[];
+  tableOverlays: TableOverlay[];
+  linkRects: LinkRect[];
+}>;
+
+export type EditorSnapshot = Readonly<{
+  revision: number;
+  cursor: CursorMetrics | undefined;
+  placeholder: PlaceholderMetrics | undefined;
+  selection: Selection | undefined;
+  selectionEndpoints: SelectionEndpoints | undefined;
+  lastHistoryTag: HistoryTag | undefined;
+  pageSizes: Size[];
+  pageBackingSizes: Size[];
+  externalElements: ExternalElement[];
+  tableOverlays: TableOverlay[];
+  linkRects: LinkRect[];
+  pageData: ReadonlyMap<number, PageSnapshot>;
+  rootAttrs: PlainRootNode | undefined;
+  rootModifiers: Modifier[];
+  trackedRanges: TrackedRange[];
+}>;
+
+type ToolbarState = Readonly<{
+  modifierState: ModifierState | undefined;
+  blockState: BlockState | undefined;
+}>;
+
+type PublishedFrame = Readonly<{
+  surfaceKey: number;
+  frameKey: number;
+  canvas: HTMLCanvasElement;
+}>;
+
+const HIDDEN_TICK = Symbol('hidden-tick');
+
+export type PublishedBundle = Readonly<{
+  snapshot: EditorSnapshot;
+  frames: ReadonlyMap<number, PublishedFrame>;
+}>;
+
+export type { EditorPublicationResult } from './editor-update';
+
+type UpdateReceipt = {
+  resolve: (update: EditorUpdate) => void;
+  reject: (error: unknown) => void;
+};
+
+type PublicationWaiter = {
+  revision: number;
+  requireFrame: boolean;
+  resolve: (result: EditorPublicationResult) => void;
+  reject: (error: unknown) => void;
+  signal: AbortSignal | undefined;
+  onAbort: (() => void) | undefined;
+};
+
+type AppliedWaiter = {
+  resolve: (revision: number) => void;
+  reject: (error: unknown) => void;
+};
+
+type SurfaceTarget = {
+  page: number;
+  key: number;
+  canvas: HTMLCanvasElement;
+  width: number;
+  height: number;
+  scaleFactor: number;
+  requiredRevision: number | undefined;
+  proof: { revision: number; surfaceKey: number; frameKey: number } | undefined;
+  failedRevision: number | undefined;
+  available: boolean;
+  replace: (() => void) | undefined;
+};
+
+type VisualHost = {
+  token: object;
+  targets: Map<number, SurfaceTarget>;
+};
 
 let wasmInitPromise: Promise<void> | null = null;
 const VIEWPORT_RESIZE_DEBOUNCE_MS = 50;
@@ -108,10 +196,6 @@ export function browserScaleFactor(): number {
   return Number.isFinite(scaleFactor) && scaleFactor > 0 ? scaleFactor : 1;
 }
 
-function samePosition(a: Position, b: Position): boolean {
-  return a.node === b.node && a.offset === b.offset && a.affinity === b.affinity;
-}
-
 export class EditorContext {
   readonly attachmentImporter = new EditorAttachmentImporter(this);
   editor = $state<Editor>();
@@ -121,6 +205,7 @@ export class EditorContext {
   // v1 chrome 호환 필드 — v2 sync 환경에선 갱신되지 않음
   user = $state<unknown>();
   paneFocused = $state(false);
+  editorAreaEl = $state<HTMLDivElement>();
   documentId = $state<string | null>(null);
   serverSnapshot = $state<Uint8Array | undefined>();
   serverVersion = $state<string | null>(null);
@@ -129,6 +214,7 @@ export class EditorContext {
   attachmentDropTargetNodeId = $state<string | null>(null);
   findReplaceOpen = $state(false);
   linkEditorOpen = $state(false);
+  reportEditorFailure: ((error: unknown) => void) | undefined;
 }
 
 const [getEditorContext, setEditorContext] = createContext<EditorContext>();
@@ -161,63 +247,36 @@ function registerSurfaceRecovery() {
 export class Editor {
   static async create(graph: Uint8Array, viewport: Viewport, themeVariant: ThemeVariant = 'light-white') {
     await ensureWasmInitialized();
+    fanOutResourceUpdate(wasm.set_theme_variant(themeVariant));
 
     const self = new this();
-
-    self.#wasm = wasm.create_editor_from_graph(graph, viewport);
-    self.#initInstance(viewport);
-
-    wasm.set_theme_variant(themeVariant);
-    self.enqueue({ type: 'system', event: { type: 'theme_variant_changed' } });
-    self.enqueue({ type: 'system', event: { type: 'initialize' } });
-
-    self.enqueue({
-      type: 'tracked_range',
-      op: {
-        type: 'set_group_decoration',
-        group: 'search-match',
-        style: {
-          background: 'ui.search-match',
-          background_radius: 2,
-          background_inset: 2,
-          underline: undefined,
-        },
-        enabled: true,
-        z_index: 0,
-      },
-    });
-    self.enqueue({
-      type: 'tracked_range',
-      op: {
-        type: 'set_group_decoration',
-        group: 'search-match-active',
-        style: {
-          background: 'ui.search-match-active',
-          background_radius: 2,
-          background_inset: 2,
-          underline: undefined,
-        },
-        enabled: true,
-        z_index: 1,
-      },
-    });
-
-    return self;
+    try {
+      self.#installCore(wasm.create_editor_from_graph(graph, viewport));
+      self.#initInstance(viewport);
+      self.#initialize(true);
+      self.#finishCreation();
+      return self;
+    } catch (err) {
+      self.#abortCreation();
+      throw err;
+    }
   }
 
   static async createFromDoc(plain: PlainDoc, viewport: Viewport, themeVariant: ThemeVariant = 'light-white'): Promise<Editor> {
     await ensureWasmInitialized();
+    fanOutResourceUpdate(wasm.set_theme_variant(themeVariant));
 
     const self = new this();
-
-    self.#wasm = wasm.create_editor_from_doc(plain, viewport);
-    self.#initInstance(viewport);
-
-    wasm.set_theme_variant(themeVariant);
-    self.enqueue({ type: 'system', event: { type: 'theme_variant_changed' } });
-    self.enqueue({ type: 'system', event: { type: 'initialize' } });
-
-    return self;
+    try {
+      self.#installCore(wasm.create_editor_from_doc(plain, viewport));
+      self.#initInstance(viewport);
+      self.#initialize(false);
+      self.#finishCreation();
+      return self;
+    } catch (err) {
+      self.#abortCreation();
+      throw err;
+    }
   }
 
   static async createWithPending(
@@ -227,64 +286,62 @@ export class Editor {
     themeVariant: ThemeVariant = 'light-white',
   ): Promise<Editor> {
     await ensureWasmInitialized();
+    fanOutResourceUpdate(wasm.set_theme_variant(themeVariant));
 
     const self = new this();
-
-    self.#wasm = wasm.create_editor_from_graph_with_pending(server, encodeLengthPrefixedBlobs(pending), viewport);
-    self.#initInstance(viewport);
-
-    wasm.set_theme_variant(themeVariant);
-    self.enqueue({ type: 'system', event: { type: 'theme_variant_changed' } });
-    self.enqueue({ type: 'system', event: { type: 'initialize' } });
-
-    self.enqueue({
-      type: 'tracked_range',
-      op: {
-        type: 'set_group_decoration',
-        group: 'search-match',
-        style: {
-          background: 'ui.search-match',
-          background_radius: 2,
-          background_inset: 2,
-          underline: undefined,
-        },
-        enabled: true,
-        z_index: 0,
-      },
-    });
-    self.enqueue({
-      type: 'tracked_range',
-      op: {
-        type: 'set_group_decoration',
-        group: 'search-match-active',
-        style: {
-          background: 'ui.search-match-active',
-          background_radius: 2,
-          background_inset: 2,
-          underline: undefined,
-        },
-        enabled: true,
-        z_index: 1,
-      },
-    });
-
-    return self;
+    try {
+      self.#installCore(wasm.create_editor_from_graph_with_pending(server, encodeLengthPrefixedBlobs(pending), viewport));
+      self.#initInstance(viewport);
+      self.#initialize(true);
+      self.#finishCreation();
+      return self;
+    } catch (err) {
+      self.#abortCreation();
+      throw err;
+    }
   }
 
   static setThemeVariant(variant: ThemeVariant): void {
-    const changed = wasm.set_theme_variant(variant);
-    if (!changed) return;
-    for (const editor of snapshot()) {
-      editor.enqueue({ type: 'system', event: { type: 'theme_variant_changed' } });
-    }
+    fanOutResourceUpdate(wasm.set_theme_variant(variant));
   }
 
   #wasm!: WasmEditor;
   #destroyed = false;
+  #creationActive = true;
+  #coreAvailable = false;
+  #failed = $state(false);
+  #failure: unknown;
 
-  #frameId: number | null = null;
-  #wasmQueued = false;
-  #surfaceWork = new SvelteSet<number>();
+  #frameId: number | typeof HIDDEN_TICK | null = null;
+  #tickScheduled = false;
+  #transitionActive = false;
+  #admission: EditorRequest | undefined;
+  #surfaceKey = 0;
+  #visualHost: VisualHost | undefined;
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity
+  #receipts = new Map<number, UpdateReceipt>();
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity
+  #appliedWaiters = new Set<AppliedWaiter>();
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity
+  #publicationWaiters = new Set<PublicationWaiter>();
+  #applied = $state.raw<EditorSnapshot>({
+    revision: 0,
+    cursor: undefined,
+    placeholder: undefined,
+    selection: undefined,
+    selectionEndpoints: undefined,
+    lastHistoryTag: undefined,
+    pageSizes: [],
+    pageBackingSizes: [],
+    externalElements: [],
+    tableOverlays: [],
+    linkRects: [],
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity
+    pageData: new Map(),
+    rootAttrs: undefined,
+    rootModifiers: [],
+    trackedRanges: [],
+  });
 
   #viewport = $state<Viewport>({ width: 0, height: 0, scale_factor: 1 });
   #appliedViewport: Viewport = { width: 0, height: 0, scale_factor: 1 };
@@ -298,35 +355,13 @@ export class Editor {
   // eslint-disable-next-line svelte/prefer-svelte-reactivity
   #listeners = new Map<EditorEvent['type'], Set<EditorEventListener<EditorEvent['type']>>>();
 
-  // eslint-disable-next-line svelte/prefer-svelte-reactivity
-  #attachedPages = new Set<number>();
-
-  // eslint-disable-next-line svelte/prefer-svelte-reactivity
-  #presentedListeners = new Map<number, Set<() => void>>();
-
-  #cursor = $state<CursorMetrics>();
-  #placeholder = $state<PlaceholderMetrics | undefined>();
-  #selection = $state<Selection | undefined>();
-  #lastHistoryTag = $state<HistoryTag>();
-  #pageSizes = $state<Size[]>([]);
-  #pageBackingSizes = $state<Size[]>([]);
-  // Whole-document derived data is expensive (O(pages · N): each builds every
-  // page's fragment). It is needed only by pointer/keyboard-driven consumers
-  // (link tooltip), so compute it lazily and memoize per tick instead of eagerly
-  // every keystroke. Per-page rendering uses the `page*` methods below.
-  #externalElementsCache: { rev: number; value: ExternalElement[] } | undefined;
-  #tableOverlaysCache: { rev: number; value: TableOverlay[] } | undefined;
-  #linkRectsCache: { rev: number; value: LinkRect[] } | undefined;
-  #rootAttrs = $state<PlainRootNode>();
-  #rootModifiers = $state<Modifier[]>();
-  #modifierState = $state<ModifierState | undefined>();
-  #blockState = $state<BlockState | undefined>();
   // While a pointer selection drag is active, the toolbar-state queries
   // (modifier_state/block_state — expensive on range selections) are
   // deferred: the toolbar only needs the final selection, so we pull once on
   // release instead of every drag frame.
+  #toolbarState = $state.raw<ToolbarState>();
   #toolbarSyncSuspended = false;
-  #toolbarSyncPending = false;
+  #toolbarSyncDirty = false;
   #focused = $state(false);
   #nativeDragAdmissionRetainsFocus = false;
   #effectCleanup: (() => void) | null = null;
@@ -359,124 +394,29 @@ export class Editor {
   #characterCountsDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   #runFrame = (): void => {
+    this.#frameId = null;
+    if (this.terminal || !this.#tickScheduled) return;
+
+    this.#tickScheduled = false;
+    let publicEvents: EditorEvent[] = [];
     try {
-      if (this.#wasmQueued) {
-        this.#wasmQueued = false;
-
-        const events = this.#wasm.tick();
-        for (const event of events) {
-          this.#emit(event);
-        }
-        this.tickRevision += 1;
-      }
-
-      this.#flushSurfaceWork();
+      this.#transitionActive = true;
+      const result = this.#invokeCore((core) => core.tick());
+      if (result) publicEvents = this.#installTick(result);
+    } catch (err) {
+      this.#fail(err);
     } finally {
-      // Keep frameId non-null while running so work queued by emitted events joins this frame.
-      this.#frameId = null;
-
-      if (!this.#destroyed && (this.#wasmQueued || this.#surfaceWork.size > 0)) {
-        this.#requestFrame();
-      }
+      this.#transitionActive = false;
     }
+
+    for (const event of publicEvents) this.#emit(event);
+    if (!this.terminal && this.#tickScheduled) this.#requestFrame();
   };
 
-  #stateChangedHandler: EditorEventListener<'state_changed'> = (_, { fields }) => {
-    if (fields.includes('last_history_tag')) {
-      this.#lastHistoryTag = this.#wasm.last_history_tag();
-    }
-
-    if (fields.includes('cursor')) {
-      this.#cursor = this.#wasm.cursor();
-    }
-
-    if (fields.includes('placeholder')) {
-      this.#placeholder = this.#wasm.placeholder() ?? undefined;
-    }
-
-    if (fields.includes('selection')) {
-      this.#selection = this.#wasm.selection();
-      // null selection is the unfocused state; release DOM focus so OS caret and IME follow.
-      if (this.#selection === undefined) {
-        this.inputEl?.blur();
-        this.closeContextMenu(); // TODO: 직접 닫아줄 필요 없음. 컨텍스트 메뉴가 포커스를 소유하게 고쳐야 함, 그럼 거기서 나오기 전까지는 어차피 셀렉션을 못 바꿀 것이므로..
-      }
-      this.#syncActiveSpellcheckErrorFromSelection();
-      this.#syncActiveAiFeedbackFromSelection();
-    }
-
-    if (fields.includes('doc') || fields.includes('selection')) {
-      this.characterCountsVersion++;
-    }
-
-    if (fields.includes('doc')) {
-      this.documentRevision++;
-    }
-
-    if (fields.includes('page_sizes')) {
-      this.#pageSizes = this.#wasm.page_sizes();
-      this.#pageBackingSizes = this.#wasm.page_backing_sizes();
-    }
-
-    // external_elements / table_overlays / link_rects are intentionally NOT
-    // recomputed here. The per-tick `tickRevision` bump invalidates their lazy
-    // getters and drives the per-visible-page overlay queries, so off-screen
-    // pages never build their fragments on a keystroke.
-
-    if (fields.includes('root_attrs')) {
-      this.#rootAttrs = this.#wasm.root_attrs();
-    }
-
-    if (fields.includes('block') || fields.includes('modifiers')) {
-      this.#rootModifiers = this.#wasm.root_modifiers();
-    }
-
-    if (this.#toolbarSyncSuspended) {
-      if (fields.includes('modifiers') || fields.includes('block')) {
-        this.#toolbarSyncPending = true;
-      }
-    } else {
-      if (fields.includes('modifiers')) {
-        this.#modifierState = this.#wasm.modifier_state();
-      }
-
-      if (fields.includes('block')) {
-        this.#blockState = this.#wasm.block_state();
-      }
-    }
-
-    if (fields.includes('tracked_ranges')) {
-      // 코어가 실제 레지스트리 변경(설치/제거/stale 자동 제거)에만 이 필드를 발행한다.
-      // 텍스트 stale 판정은 코어의 tracked_ranges_stale 이벤트가 담당하므로 여기서는
-      // 존재 여부 동기화만 남는다.
-      this.trackedRanges = this.#wasm.tracked_ranges();
-
-      // eslint-disable-next-line svelte/prefer-svelte-reactivity
-      const rangeIds = new Set(this.trackedRanges.map((r) => r.id));
-
-      this.spellcheckErrors = this.spellcheckErrors.filter((e) => rangeIds.has(e.id));
-
-      if (this.activeSpellcheckErrorId !== null && this.spellcheckErrors.every((e) => e.id !== this.activeSpellcheckErrorId)) {
-        this.activeSpellcheckErrorId = null;
-      }
-
-      this.aiFeedbacks = this.aiFeedbacks.filter((f) => rangeIds.has(f.id));
-
-      if (this.activeAiFeedbackId !== null && this.aiFeedbacks.every((f) => f.id !== this.activeAiFeedbackId)) {
-        this.activeAiFeedbackId = null;
-      }
-    }
-
-    const pageDomChanged = fields.includes('root_attrs') || fields.includes('page_sizes');
-    if (pageDomChanged) {
-      this.refreshPointerStyleAfterDomUpdate();
-    } else if (fields.some((field) => ['doc', 'external_elements', 'modifiers', 'block'].includes(field))) {
-      this.refreshPointerStyle();
-    }
-  };
-
-  tickRevision = $state(0);
+  published = $state.raw<PublishedBundle>();
   documentRevision = $state(0);
+  appliedImeRevision = $state(0);
+  appliedSelectionRevision = $state(0);
 
   inputEl = $state<HTMLTextAreaElement>();
   pageEls = $state<Record<number, HTMLDivElement | undefined>>({});
@@ -506,7 +446,6 @@ export class Editor {
   inflightFiles = $state(new SvelteMap<string, { uploadId: string; name: string; size: number }>());
 
   spellcheckErrors = $state<SpellcheckError[]>([]);
-  trackedRanges = $state<TrackedRange[]>([]);
   activeSpellcheckErrorId = $state<string | null>(null);
 
   aiFeedbacks = $state<AiFeedback[]>([]);
@@ -534,6 +473,395 @@ export class Editor {
     registerSurfaceRecovery();
   }
 
+  #installCore(core: WasmEditor): void {
+    this.#wasm = core;
+    this.#coreAvailable = true;
+  }
+
+  #finishCreation(): void {
+    this.#creationActive = false;
+    register(this);
+  }
+
+  #abortCreation(): void {
+    unregister(this);
+    this.#stopRuntime();
+    this.#discardCore();
+  }
+
+  #invokeCore<T>(operation: (core: WasmEditor) => T): T {
+    if (this.#destroyed) throw new Error('Editor is disposed');
+    if (this.#failed) throw this.#failure;
+    if (!this.#coreAvailable) throw new Error('Editor core is unavailable');
+
+    try {
+      return operation(this.#wasm);
+    } catch (err) {
+      if (!this.#creationActive) this.#fail(err);
+      throw err;
+    }
+  }
+
+  #discardCore(): void {
+    if (!this.#coreAvailable) return;
+    const core = this.#wasm;
+    this.#coreAvailable = false;
+    try {
+      // Disposal must not reenter the guarded core boundary.
+      core.free();
+    } catch {
+      // The wrapper is discarded even when its destructor reports an error.
+    }
+  }
+
+  #stopRuntime(): void {
+    this.#tickScheduled = false;
+    if (this.#frameId !== null) {
+      if (typeof this.#frameId === 'number') cancelAnimationFrame(this.#frameId);
+      this.#frameId = null;
+    }
+    if (this.#characterCountsDebounceTimer !== null) {
+      clearTimeout(this.#characterCountsDebounceTimer);
+      this.#characterCountsDebounceTimer = null;
+    }
+    this.#applyViewportResize.cancel();
+    this.#effectCleanup?.();
+    this.#effectCleanup = null;
+    this.#gesture?.destroy();
+  }
+
+  #materializeSnapshot(revision: number, fields: ReadonlySet<StateField>): EditorSnapshot {
+    return this.#invokeCore((core) => {
+      const previous = this.#applied;
+      const pageGeometryDataChanged =
+        fields.has('doc') || fields.has('external_elements') || fields.has('table_overlays') || fields.has('link_rects');
+      let pageData = previous.pageData;
+
+      if (pageGeometryDataChanged) {
+        // eslint-disable-next-line svelte/prefer-svelte-reactivity
+        const nextPageData = new Map(previous.pageData);
+        for (const page of this.#visualHost?.targets.keys() ?? []) {
+          nextPageData.set(page, {
+            externalElements: core.page_external_elements(page),
+            tableOverlays: core.page_table_overlays(page),
+            linkRects: core.page_link_rects(page),
+          });
+        }
+        pageData = nextPageData;
+      }
+
+      return {
+        revision,
+        cursor: fields.has('cursor') ? core.cursor() : previous.cursor,
+        placeholder: fields.has('placeholder') ? (core.placeholder() ?? undefined) : previous.placeholder,
+        selection: fields.has('selection') ? core.selection() : previous.selection,
+        selectionEndpoints:
+          fields.has('selection') || fields.has('cursor') || fields.has('doc') || fields.has('page_sizes')
+            ? core.selection_endpoints()
+            : previous.selectionEndpoints,
+        lastHistoryTag: fields.has('last_history_tag') ? core.last_history_tag() : previous.lastHistoryTag,
+        pageSizes: fields.has('page_sizes') ? core.page_sizes() : previous.pageSizes,
+        pageBackingSizes: fields.has('page_sizes') ? core.page_backing_sizes() : previous.pageBackingSizes,
+        externalElements: fields.has('external_elements') ? core.external_elements() : previous.externalElements,
+        tableOverlays: pageGeometryDataChanged ? [...pageData.values()].flatMap((page) => page.tableOverlays) : previous.tableOverlays,
+        linkRects: pageGeometryDataChanged ? [...pageData.values()].flatMap((page) => page.linkRects) : previous.linkRects,
+        pageData,
+        rootAttrs: fields.has('root_attrs') ? core.root_attrs() : previous.rootAttrs,
+        rootModifiers: fields.has('block') || fields.has('modifiers') ? core.root_modifiers() : previous.rootModifiers,
+        trackedRanges: fields.has('tracked_ranges') ? core.tracked_ranges() : previous.trackedRanges,
+      };
+    });
+  }
+
+  #installAppliedSideEffects(fields: ReadonlySet<StateField>): void {
+    const snapshot = this.#applied;
+
+    if (fields.has('selection')) {
+      if (snapshot.selection === undefined) {
+        this.inputEl?.blur();
+        this.closeContextMenu();
+      }
+      this.#syncActiveSpellcheckErrorFromSelection();
+      this.#syncActiveAiFeedbackFromSelection();
+    }
+
+    if (fields.has('doc') || fields.has('selection')) this.characterCountsVersion++;
+    if (fields.has('ime')) this.appliedImeRevision++;
+    if (fields.has('selection')) this.appliedSelectionRevision++;
+    if (fields.has('doc')) this.documentRevision++;
+
+    if (fields.has('tracked_ranges')) {
+      // eslint-disable-next-line svelte/prefer-svelte-reactivity
+      const rangeIds = new Set(snapshot.trackedRanges.map((range) => range.id));
+      this.spellcheckErrors = this.spellcheckErrors.filter((error) => rangeIds.has(error.id));
+      if (this.activeSpellcheckErrorId !== null && !rangeIds.has(this.activeSpellcheckErrorId)) {
+        this.activeSpellcheckErrorId = null;
+      }
+      this.aiFeedbacks = this.aiFeedbacks.filter((feedback) => rangeIds.has(feedback.id));
+      if (this.activeAiFeedbackId !== null && !rangeIds.has(this.activeAiFeedbackId)) this.activeAiFeedbackId = null;
+    }
+
+    if (fields.has('root_attrs') || fields.has('page_sizes')) {
+      this.refreshPointerStyleAfterDomUpdate();
+    } else if (['doc', 'external_elements', 'modifiers', 'block'].some((field) => fields.has(field as StateField))) {
+      this.refreshPointerStyle();
+    }
+  }
+
+  #installTick(result: TickResult): EditorEvent[] {
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity
+    const fields = new Set<StateField>();
+    let renderInvalidated = false;
+    for (const event of result.events) {
+      if (event.type === 'state_changed') {
+        for (const field of event.fields) fields.add(field);
+      } else if (event.type === 'render_invalidated') {
+        renderInvalidated = true;
+      }
+    }
+
+    if (fields.has('modifiers') || fields.has('block')) this.#toolbarSyncDirty = true;
+    this.#applied = this.#materializeSnapshot(result.revision.value, fields);
+    const replaceChangedTargets = fields.has('page_sizes') ? this.#reconcileSurfaceTargets() : [];
+    this.#installAppliedSideEffects(fields);
+
+    if (renderInvalidated) {
+      for (const target of this.#visualHost?.targets.values() ?? []) {
+        target.requiredRevision = result.revision.value;
+      }
+    }
+
+    for (const replace of replaceChangedTargets) replace();
+    this.#renderRequiredTargets();
+    this.#publishIfReady();
+    if ([...(this.#visualHost?.targets.values() ?? [])].some((target) => !target.available)) {
+      this.#rejectAllPublicationWaitersForSurface();
+    }
+
+    const publicEvents = result.events.filter((event) => event.type !== 'state_changed' && event.type !== 'render_invalidated');
+    for (const waiter of this.#appliedWaiters) waiter.resolve(result.revision.value);
+    this.#appliedWaiters.clear();
+    for (const outcome of result.request_outcomes) {
+      const receipt = this.#receipts.get(outcome.request_id.value);
+      if (!receipt) continue;
+      this.#receipts.delete(outcome.request_id.value);
+      const update = new EditorUpdate(result.revision.value, this.#applied, outcome.command_outcomes, publicEvents, (signal) =>
+        this.#awaitPublished(result.revision.value, signal),
+      );
+      receipt.resolve(update);
+    }
+    return publicEvents;
+  }
+
+  #reconcileSurfaceTargets(): (() => void)[] {
+    const host = this.#visualHost;
+    if (!host) return [];
+    const replaceChangedTargets: (() => void)[] = [];
+
+    for (const [page, target] of host.targets) {
+      const pageSize = this.#applied.pageSizes[page];
+      if (!pageSize) {
+        this.#invokeCore((core) => core.detach_surface(page));
+        host.targets.delete(page);
+        this.#removeAppliedPageData([page]);
+        continue;
+      }
+
+      const width = pageSize.width;
+      const height = this.#applied.pageBackingSizes[page]?.height ?? pageSize.height;
+      const scaleFactor = this.surfaceScaleFactor;
+      if (target.width === width && target.height === height && target.scaleFactor === scaleFactor) continue;
+
+      target.proof = undefined;
+      target.requiredRevision = this.#applied.revision;
+      target.failedRevision = undefined;
+      target.available = false;
+      if (target.replace) replaceChangedTargets.push(target.replace);
+    }
+    return replaceChangedTargets;
+  }
+
+  #renderRequiredTargets(): void {
+    const host = this.#visualHost;
+    if (!host) return;
+
+    for (const target of host.targets.values()) {
+      if (!target.available || target.requiredRevision === undefined || proofSatisfies(target)) continue;
+
+      const requestedRevision = this.#applied.revision;
+      if ((target.failedRevision ?? -1) >= requestedRevision) continue;
+      const surfaceKey = target.key;
+      const frameKey = this.#invokeCore((core) => core.render_surface(target.page, { value: requestedRevision }));
+      const current = host.targets.get(target.page);
+      if (current !== target || current.key !== surfaceKey || !current.available) continue;
+      if (frameKey) {
+        target.proof = { revision: requestedRevision, surfaceKey, frameKey: frameKey.value };
+        probeRendered(this, target.page);
+      } else {
+        target.failedRevision = requestedRevision;
+        this.#rejectPublicationWaitersThrough(requestedRevision);
+      }
+    }
+  }
+
+  #publishIfReady(): void {
+    untrack(() => {
+      let targetSetChanged = false;
+      if (this.published !== undefined && this.#visualHost !== undefined) {
+        targetSetChanged = this.published.frames.size !== this.#visualHost.targets.size;
+        if (!targetSetChanged) {
+          for (const [page, target] of this.#visualHost.targets) {
+            if (this.published.frames.get(page)?.surfaceKey === target.key) continue;
+            targetSetChanged = true;
+            break;
+          }
+        }
+      }
+      if (
+        !canPublish(
+          this.#applied.revision,
+          this.published?.snapshot.revision,
+          this.#visualHost,
+          targetSetChanged,
+          (this.published?.frames.size ?? 0) > 0,
+        )
+      ) {
+        return;
+      }
+
+      // eslint-disable-next-line svelte/prefer-svelte-reactivity
+      const frames = new Map<number, PublishedFrame>();
+      for (const target of this.#visualHost?.targets.values() ?? []) {
+        if (target.proof) {
+          frames.set(target.page, {
+            surfaceKey: target.key,
+            frameKey: target.proof.frameKey,
+            canvas: target.canvas,
+          });
+        }
+      }
+
+      const bundle: PublishedBundle = { snapshot: this.#applied, frames };
+      this.published = bundle;
+      this.#pullToolbarStateIfReady();
+
+      for (const target of this.#visualHost?.targets.values() ?? []) {
+        target.requiredRevision = undefined;
+        target.failedRevision = undefined;
+      }
+
+      for (const waiter of this.#publicationWaiters) {
+        if (
+          bundle.snapshot.revision < waiter.revision ||
+          (waiter.requireFrame && (bundle.frames.size === 0 || !this.#publishedMatchesCurrentTargets()))
+        ) {
+          continue;
+        }
+        this.#publicationWaiters.delete(waiter);
+        if (waiter.signal && waiter.onAbort) waiter.signal.removeEventListener('abort', waiter.onAbort);
+        waiter.resolve({ type: 'published', revision: bundle.snapshot.revision });
+      }
+    });
+  }
+
+  #pullToolbarStateIfReady(): void {
+    if (this.#toolbarSyncSuspended || !this.#toolbarSyncDirty || this.published?.snapshot.revision !== this.#applied.revision) return;
+
+    const state = this.#invokeCore((core) => ({
+      modifierState: core.modifier_state(),
+      blockState: core.block_state(),
+    }));
+    this.#toolbarState = state;
+    this.#toolbarSyncDirty = false;
+  }
+
+  #publishedMatchesCurrentTargets(): boolean {
+    const host = this.#visualHost;
+    const frames = this.published?.frames;
+    if (!host || !frames || frames.size !== host.targets.size) return false;
+    for (const [page, target] of host.targets) {
+      if (!target.available || frames.get(page)?.surfaceKey !== target.key) return false;
+    }
+    return true;
+  }
+
+  #awaitPublished(revision: number, signal?: AbortSignal, requireFrame = false): Promise<EditorPublicationResult> {
+    if (signal?.aborted) return Promise.reject(signal.reason ?? new DOMException('Cancelled', 'AbortError'));
+    if (this.#destroyed) return Promise.reject(new Error('Editor is disposed'));
+    if (this.#failed) return Promise.reject(this.#failure);
+    if (!this.#visualHost) return Promise.resolve({ type: 'no_host' });
+    const publishedRevision = this.published?.snapshot.revision;
+    if (
+      publishedRevision !== undefined &&
+      publishedRevision >= revision &&
+      this.#publishedMatchesCurrentTargets() &&
+      (!requireFrame || (this.published?.frames.size ?? 0) > 0)
+    ) {
+      return Promise.resolve({ type: 'published', revision: publishedRevision });
+    }
+    for (const target of this.#visualHost.targets.values()) {
+      if ((target.failedRevision ?? -1) >= revision) {
+        return Promise.reject(new DOMException('The editor surface failed to render.', 'OperationError'));
+      }
+    }
+
+    return new Promise((resolve, reject) => {
+      const waiter: PublicationWaiter = { revision, requireFrame, resolve, reject, signal, onAbort: undefined };
+      if (signal) {
+        waiter.onAbort = () => {
+          this.#publicationWaiters.delete(waiter);
+          reject(signal.reason ?? new DOMException('Cancelled', 'AbortError'));
+        };
+        signal.addEventListener('abort', waiter.onAbort, { once: true });
+      }
+      this.#publicationWaiters.add(waiter);
+    });
+  }
+
+  #rejectPublicationWaitersThrough(revision: number): void {
+    for (const waiter of this.#publicationWaiters) {
+      if (waiter.revision > revision) continue;
+      this.#publicationWaiters.delete(waiter);
+      if (waiter.signal && waiter.onAbort) waiter.signal.removeEventListener('abort', waiter.onAbort);
+      waiter.reject(new DOMException('The editor surface failed to render.', 'OperationError'));
+    }
+  }
+
+  #rejectAllPublicationWaitersForSurface(): void {
+    for (const waiter of this.#publicationWaiters) {
+      if (waiter.signal && waiter.onAbort) waiter.signal.removeEventListener('abort', waiter.onAbort);
+      waiter.reject(new DOMException('The editor surface target must be replaced.', 'OperationError'));
+    }
+    this.#publicationWaiters.clear();
+  }
+
+  #fail(error: unknown): void {
+    if (this.terminal) return;
+    const reason = error ?? new Error('Editor operation failed');
+    this.#failure = reason;
+    this.#failed = true;
+    this.#stopRuntime();
+    unregister(this);
+    for (const receipt of this.#receipts.values()) {
+      try {
+        receipt.reject(reason);
+      } catch {
+        // Failure cleanup must continue even if an internal receipt hook throws.
+      }
+    }
+    this.#receipts.clear();
+    for (const waiter of this.#appliedWaiters) waiter.reject(reason);
+    this.#appliedWaiters.clear();
+    for (const waiter of this.#publicationWaiters) {
+      if (waiter.signal && waiter.onAbort) waiter.signal.removeEventListener('abort', waiter.onAbort);
+      waiter.reject(reason);
+    }
+    this.#publicationWaiters.clear();
+    this.#listeners.clear();
+    this.#contextMenuContributors.clear();
+    this.#discardCore();
+  }
+
   #applyViewport(viewport: Viewport): void {
     this.#appliedViewport = viewport;
     this.enqueue({
@@ -551,53 +879,22 @@ export class Editor {
     this.enqueue({ type: 'system', event: { type: 'set_focused', focused } });
   }
 
-  #currentCursorLineRect(): PageRect | null {
-    const cursor = this.#cursor;
-    if (cursor) {
-      return { page_idx: cursor.page_idx, rect: cursor.line };
-    }
-    return null;
-  }
-
   #requestFrame(): void {
-    if (this.#frameId === null) {
-      this.#frameId = requestAnimationFrame(this.#runFrame);
+    if (this.#frameId !== null) return;
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+      this.#frameId = HIDDEN_TICK;
+      queueMicrotask(() => {
+        if (this.#frameId === HIDDEN_TICK) this.#runFrame();
+      });
+      return;
     }
+    this.#frameId = requestAnimationFrame(this.#runFrame);
   }
 
   #requestWasmTick(): void {
-    this.#wasmQueued = true;
+    if (this.terminal) return;
+    this.#tickScheduled = true;
     this.#requestFrame();
-  }
-
-  #flushSurfaceWork(): void {
-    const work = [...this.#surfaceWork].toSorted((a, b) => a - b);
-    this.#surfaceWork.clear();
-
-    for (const page of work) {
-      if (this.#destroyed) return;
-      this.#renderSurface(page);
-    }
-  }
-
-  #renderSurface(page: number): void {
-    if (this.#destroyed) return;
-    const committed = this.#wasm.render_surface(page);
-    if (committed) {
-      probeRendered(this, page);
-      const listeners = this.#presentedListeners.get(page);
-      if (listeners && listeners.size > 0) {
-        const snapshot = [...listeners];
-        listeners.clear();
-        for (const listener of snapshot) listener();
-        if (listeners.size === 0) this.#presentedListeners.delete(page);
-      }
-    }
-  }
-
-  #resizeSurface(page: number, width: number, height: number): void {
-    if (this.#destroyed) return;
-    this.#wasm.resize_surface(page, width, height, this.surfaceScaleFactor);
   }
 
   #moveActive(delta: number): void {
@@ -618,7 +915,9 @@ export class Editor {
     if (!match) return;
     // search() 직후엔 새 매치가 아직 flush되지 않아 tracked range가 이전 검색어의 위치를
     // 들고 있다(인덱스 기반 id 재사용으로 충돌). 이때는 조회를 건너뛰고 검색 결과를 그대로 쓴다.
-    const live = preferFresh ? undefined : this.#wasm.tracked_ranges('search-match').find((r) => r.id === match.id);
+    const live = preferFresh
+      ? undefined
+      : this.#invokeCore((core) => core.tracked_ranges('search-match')).find((range) => range.id === match.id);
     const selection = pickMatchSelection(match.selection, live);
     this.enqueue({
       type: 'tracked_range',
@@ -661,16 +960,16 @@ export class Editor {
   }
 
   #syncActiveSpellcheckErrorFromSelection(): void {
-    const cursor = this.#cursor;
+    const cursor = this.#applied.cursor;
     if (!cursor) return;
 
     const cx = cursor.caret.x;
     const cy = cursor.line.y + cursor.line.height / 2;
     const pageIdx = cursor.page_idx;
 
-    const hit =
-      this.#wasm.tracked_ranges_at(pageIdx, cx, cy, 'spellcheck-active')[0] ??
-      this.#wasm.tracked_ranges_at(pageIdx, cx, cy, 'spellcheck')[0];
+    const hit = this.#invokeCore(
+      (core) => core.tracked_ranges_at(pageIdx, cx, cy, 'spellcheck-active')[0] ?? core.tracked_ranges_at(pageIdx, cx, cy, 'spellcheck')[0],
+    );
 
     if (hit) {
       this.setActiveSpellcheckError(hit.id);
@@ -680,16 +979,17 @@ export class Editor {
   }
 
   #syncActiveAiFeedbackFromSelection(): void {
-    const cursor = this.#cursor;
+    const cursor = this.#applied.cursor;
     if (!cursor) return;
 
     const cx = cursor.caret.x;
     const cy = cursor.line.y + cursor.line.height / 2;
     const pageIdx = cursor.page_idx;
 
-    const hit =
-      this.#wasm.tracked_ranges_at(pageIdx, cx, cy, 'ai-feedback-active')[0] ??
-      this.#wasm.tracked_ranges_at(pageIdx, cx, cy, 'ai-feedback')[0];
+    const hit = this.#invokeCore(
+      (core) =>
+        core.tracked_ranges_at(pageIdx, cx, cy, 'ai-feedback-active')[0] ?? core.tracked_ranges_at(pageIdx, cx, cy, 'ai-feedback')[0],
+    );
 
     if (hit) {
       this.setActiveAiFeedback(hit.id);
@@ -716,7 +1016,6 @@ export class Editor {
     this.#appliedViewport = viewport;
     this.#gesture = new TouchGestureController(this);
 
-    this.on('state_changed', this.#stateChangedHandler);
     this.on('font_data_missing', fontDataMissingHandler);
     this.on('tracked_range_replace_result', (_, { id, outcome }) => {
       if (id.startsWith('search-match:')) {
@@ -733,8 +1032,6 @@ export class Editor {
         this.activeSpellcheckErrorId = null;
       }
     });
-
-    register(this);
 
     this.#effectCleanup = $effect.root(() => {
       $effect(() => {
@@ -789,110 +1086,187 @@ export class Editor {
     });
   }
 
+  #initialize(installSearchDecorations: boolean): void {
+    const update = this.updateNow((request) => {
+      request.enqueue({ type: 'system', event: { type: 'initialize' } });
+      if (!installSearchDecorations) return;
+
+      request.enqueue({
+        type: 'tracked_range',
+        op: {
+          type: 'set_group_decoration',
+          group: 'search-match',
+          style: {
+            background: 'ui.search-match',
+            background_radius: 2,
+            background_inset: 2,
+            underline: undefined,
+          },
+          enabled: true,
+          z_index: 0,
+        },
+      });
+      request.enqueue({
+        type: 'tracked_range',
+        op: {
+          type: 'set_group_decoration',
+          group: 'search-match-active',
+          style: {
+            background: 'ui.search-match-active',
+            background_radius: 2,
+            background_inset: 2,
+            underline: undefined,
+          },
+          enabled: true,
+          z_index: 1,
+        },
+      });
+    });
+    if (!update || update.commandOutcomes.some((outcome) => outcome.type === 'rejected')) {
+      throw new Error('Editor initialization was rejected');
+    }
+  }
+
+  #buildRequest(build: (request: EditorRequest) => void): EditorRequest {
+    if (this.#destroyed) throw new Error('Editor is disposed');
+    if (this.#failed) throw this.#failure;
+    if (this.#admission) throw new Error('Editor update admission cannot be nested');
+    const request = new EditorRequest();
+    this.#admission = request;
+    try {
+      build(request);
+    } finally {
+      this.#admission = undefined;
+    }
+    if (!this.readOnly) return request;
+
+    const allowed = request.messages.filter((message) => !isMutatingMessage(message));
+    if (allowed.length !== request.messages.length) this.editBlockedHandler?.();
+    return new EditorRequest(allowed);
+  }
+
+  #refreshAppliedPageData(pages: Iterable<number>): void {
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity
+    const pageData = new Map(this.#applied.pageData);
+    let changed = false;
+    this.#invokeCore((core) => {
+      for (const page of pages) {
+        pageData.set(page, {
+          externalElements: core.page_external_elements(page),
+          tableOverlays: core.page_table_overlays(page),
+          linkRects: core.page_link_rects(page),
+        });
+        changed = true;
+      }
+    });
+    if (!changed) return;
+    this.#applied = {
+      ...this.#applied,
+      pageData,
+      tableOverlays: [...pageData.values()].flatMap((page) => page.tableOverlays),
+      linkRects: [...pageData.values()].flatMap((page) => page.linkRects),
+    };
+  }
+
+  #removeAppliedPageData(pages: Iterable<number>): void {
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity
+    const pageData = new Map(this.#applied.pageData);
+    let changed = false;
+    for (const page of pages) changed = pageData.delete(page) || changed;
+    if (changed) {
+      this.#applied = {
+        ...this.#applied,
+        pageData,
+        tableOverlays: [...pageData.values()].flatMap((page) => page.tableOverlays),
+        linkRects: [...pageData.values()].flatMap((page) => page.linkRects),
+      };
+    }
+  }
+
   get gesture(): TouchGestureController {
     return this.#gesture;
   }
 
   setDoc(plain: PlainDoc): void {
     if (this.#destroyed) return;
-    this.#wasm.set_doc(plain);
+    this.#invokeCore((core) => core.set_doc(plain));
     this.#requestWasmTick();
   }
 
   materializeAt(heads: Uint8Array, sweepTombstones: string[]): PlainDoc {
-    return this.#wasm.materialize_at(heads, sweepTombstones);
+    return this.#invokeCore((core) => core.materialize_at(heads, sweepTombstones));
   }
 
   get cursor() {
-    return this.#cursor;
+    return this.published?.snapshot.cursor;
   }
 
   get placeholder(): PlaceholderMetrics | undefined {
-    return this.#placeholder;
+    return this.published?.snapshot.placeholder;
   }
 
   get selection() {
-    return this.#selection;
+    return this.published?.snapshot.selection;
   }
 
   freezeSelection(selection: Selection): StableSelection | undefined {
-    try {
-      return this.#wasm.freeze_selection(selection);
-    } catch {
-      return undefined;
-    }
+    return this.#invokeCore((core) => core.freeze_selection(selection));
   }
 
   get isSelectionCollapsed(): boolean {
-    const sel = this.#selection;
-    if (!sel) return true;
-    return sel.anchor.node === sel.head.node && sel.anchor.offset === sel.head.offset && sel.anchor.affinity === sel.head.affinity;
+    return isSelectionCollapsed(this.selection);
   }
 
   get pageSizes() {
-    return this.#pageSizes;
+    return this.published?.snapshot.pageSizes ?? [];
   }
 
   get pageBackingSizes() {
-    return this.#pageBackingSizes;
+    return this.published?.snapshot.pageBackingSizes ?? [];
   }
 
   get externalElements(): ExternalElement[] {
-    const rev = this.tickRevision;
-    if (this.#externalElementsCache?.rev !== rev) {
-      this.#externalElementsCache = { rev, value: this.#wasm.external_elements() };
-    }
-    return this.#externalElementsCache.value;
+    return this.published?.snapshot.externalElements ?? [];
   }
 
   get tableOverlays(): TableOverlay[] {
-    const rev = this.tickRevision;
-    if (this.#tableOverlaysCache?.rev !== rev) {
-      this.#tableOverlaysCache = { rev, value: this.#wasm.table_overlays() };
-    }
-    return this.#tableOverlaysCache.value;
+    return this.published?.snapshot.tableOverlays ?? [];
   }
 
   get linkRects(): LinkRect[] {
-    const rev = this.tickRevision;
-    if (this.#linkRectsCache?.rev !== rev) {
-      this.#linkRectsCache = { rev, value: this.#wasm.link_rects() };
-    }
-    return this.#linkRectsCache.value;
+    return this.published?.snapshot.linkRects ?? [];
   }
 
-  // Per-visible-page derived data — `O(N)` for one page instead of `O(pages · N)`
-  // for the whole document. Drives the per-page overlay rendering.
   pageExternalElements(page: number): ExternalElement[] {
-    return this.#wasm.page_external_elements(page);
+    return this.published?.snapshot.pageData.get(page)?.externalElements ?? [];
   }
 
   pageTableOverlays(page: number): TableOverlay[] {
-    return this.#wasm.page_table_overlays(page);
+    return this.published?.snapshot.pageData.get(page)?.tableOverlays ?? [];
   }
 
   pageLinkRects(page: number): LinkRect[] {
-    return this.#wasm.page_link_rects(page);
+    return this.published?.snapshot.pageData.get(page)?.linkRects ?? [];
   }
 
   get rootAttrs() {
-    return this.#rootAttrs;
+    return this.published?.snapshot.rootAttrs;
   }
 
   get rootModifiers() {
-    return this.#rootModifiers;
+    return this.published?.snapshot.rootModifiers;
   }
 
   get modifierState() {
-    return this.#modifierState;
+    return this.#toolbarState?.modifierState;
   }
 
   get blockState() {
-    return this.#blockState;
+    return this.#toolbarState?.blockState;
   }
 
   get lastHistoryTag() {
-    return this.#lastHistoryTag;
+    return this.published?.snapshot.lastHistoryTag;
   }
 
   get scaleFactor() {
@@ -953,7 +1327,7 @@ export class Editor {
       return;
     }
 
-    if (restoreFocus && this.#selection !== undefined) {
+    if (restoreFocus && this.selection !== undefined) {
       this.focus();
     } else if (!this.inputEl || document.activeElement !== this.inputEl) {
       this.#setFocused(false);
@@ -1035,7 +1409,7 @@ export class Editor {
       this.editBlockedHandler?.();
       return;
     }
-    this.#wasm.insert_template_fragment(changesets);
+    this.#invokeCore((core) => core.insert_template_fragment(changesets));
     this.#requestWasmTick();
   }
 
@@ -1057,11 +1431,36 @@ export class Editor {
   }
 
   get hasQueuedTick() {
-    return this.#wasmQueued;
+    return this.#tickScheduled;
   }
 
   get destroyed() {
     return this.#destroyed;
+  }
+
+  get terminal() {
+    return this.#destroyed || this.#failed;
+  }
+
+  get failure(): unknown {
+    void this.#failed;
+    return this.#failure;
+  }
+
+  get appliedRevision(): number {
+    return this.#applied.revision;
+  }
+
+  get appliedSnapshot(): EditorSnapshot {
+    return this.#applied;
+  }
+
+  get publishedRevision(): number | undefined {
+    return this.published?.snapshot.revision;
+  }
+
+  awaitPublishedRevision(revision: number, options?: { requireFrame?: boolean }): Promise<EditorPublicationResult> {
+    return this.#awaitPublished(revision, undefined, options?.requireFrame);
   }
 
   get focused() {
@@ -1083,36 +1482,17 @@ export class Editor {
   linkHitTestAtClient(clientX: number, clientY: number): { link: LinkRect; page: number } | undefined {
     const local = this.clientToLocal(clientX, clientY);
     if (!local) return undefined;
-    const link = this.#wasm.link_hit_test(local.page, local.x, local.y);
+    const link = this.#invokeCore((core) => core.link_hit_test(local.page, local.x, local.y));
     return link ? { link, page: local.page } : undefined;
   }
 
   safeDisplayZoom(): number {
-    const zoom = this.#rootAttrs?.layout_mode.type === 'paginated' ? this.displayZoom : 1;
+    const zoom = this.rootAttrs?.layout_mode.type === 'paginated' ? this.displayZoom : 1;
     return Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
   }
 
   clientDeltaToLocalDelta(delta: number): number {
     return delta / this.safeDisplayZoom();
-  }
-
-  selectionHeadRect(): PageRect | null {
-    const selection = this.#selection;
-    if (!selection) return this.#currentCursorLineRect();
-
-    const endpoints = this.selectionEndpoints();
-    if (!endpoints) return this.#currentCursorLineRect();
-    return samePosition(selection.head, endpoints.to_position) ? endpoints.to : endpoints.from;
-  }
-
-  trackedItem(id: string): TrackedRange | null {
-    return this.#wasm.tracked_range(id) ?? null;
-  }
-
-  trackedItemRects(id: string): PageRect[] | null {
-    const range = this.trackedItem(id);
-    if (!range) return null;
-    return range.rects.length > 0 ? range.rects : null;
   }
 
   registerScrollIntoView(handler: ((options: EditorScrollIntoViewOptions) => void) | null): void {
@@ -1124,7 +1504,7 @@ export class Editor {
   }
 
   clientToLocal(clientX: number, clientY: number) {
-    const pages = this.#pageSizes;
+    const pages = this.pageSizes;
     if (pages.length === 0) return null;
     const zoom = this.safeDisplayZoom();
 
@@ -1164,23 +1544,23 @@ export class Editor {
   }
 
   interactiveHitTest(page: number, x: number, y: number): InteractiveHit | undefined {
-    return this.#wasm.interactive_hit_test(page, x, y);
+    return this.#invokeCore((core) => core.interactive_hit_test(page, x, y));
   }
 
   selectionEndpoints(): SelectionEndpoints | undefined {
-    return this.#wasm.selection_endpoints();
+    return this.published?.snapshot.selectionEndpoints;
   }
 
   modifierSpanSelection(pos: Position, modifierType: ModifierType): Selection | undefined {
-    return this.#wasm.modifier_span_selection(pos, modifierType);
+    return this.#invokeCore((core) => core.modifier_span_selection(pos, modifierType));
   }
 
   ime(beforeLimit: number, afterLimit: number): Ime | undefined {
-    return this.#wasm.ime(beforeLimit, afterLimit);
+    return this.#invokeCore((core) => core.ime(beforeLimit, afterLimit));
   }
 
   selectionHitTest(page: number, x: number, y: number): boolean {
-    return this.#wasm.selection_hit_test(page, x, y);
+    return this.#invokeCore((core) => core.selection_hit_test(page, x, y));
   }
 
   updatePointerHover(clientX: number, clientY: number): void {
@@ -1189,7 +1569,7 @@ export class Editor {
   }
 
   refreshPointerStyle(): void {
-    if (this.#destroyed) {
+    if (this.terminal) {
       return;
     }
 
@@ -1200,8 +1580,11 @@ export class Editor {
 
     const local = this.clientToLocal(pointer.x, pointer.y);
     if (local) {
-      this.#pointerStyle = this.#wasm.pointer_style(local.page, local.x, local.y, this.readOnly);
-      const link = this.#wasm.link_hit_test(local.page, local.x, local.y);
+      const { pointerStyle, link } = this.#invokeCore((core) => ({
+        pointerStyle: core.pointer_style(local.page, local.x, local.y, this.readOnly),
+        link: core.link_hit_test(local.page, local.x, local.y),
+      }));
+      this.#pointerStyle = pointerStyle;
       this.#linkHover = link ? { link, page: local.page, clientX: pointer.x, clientY: pointer.y } : undefined;
     } else {
       this.#pointerStyle = 'default';
@@ -1216,14 +1599,14 @@ export class Editor {
   }
 
   refreshPointerStyleAfterDomUpdate(): void {
-    if (this.#destroyed || !this.#lastPointerClient || this.#pointerStyleDomRefreshQueued) {
+    if (this.terminal || !this.#lastPointerClient || this.#pointerStyleDomRefreshQueued) {
       return;
     }
 
     this.#pointerStyleDomRefreshQueued = true;
     void tick().then(() => {
       this.#pointerStyleDomRefreshQueued = false;
-      if (!this.#destroyed) {
+      if (!this.terminal) {
         this.refreshPointerStyle();
       }
     });
@@ -1242,23 +1625,69 @@ export class Editor {
   }
 
   enqueue(message: Message) {
+    if (this.terminal) return;
+    if (this.#admission) {
+      this.#admission.enqueue(message);
+      return;
+    }
     if (this.readOnly && isMutatingMessage(message)) {
       this.editBlockedHandler?.();
       return;
     }
-    this.#wasm.enqueue(message);
+    this.#invokeCore((core) => core.enqueue_request([message]));
     this.#requestWasmTick();
   }
 
-  flush(): void {
-    if (this.#frameId !== null) {
-      cancelAnimationFrame(this.#frameId);
+  async update(build: (request: EditorRequest) => void): Promise<EditorUpdate | null> {
+    if (this.terminal) return null;
+
+    const request = this.#buildRequest(build);
+    if (request.empty) return null;
+
+    const requestId = this.#invokeCore((core) => core.enqueue_request([...request.messages]));
+    const promise = new Promise<EditorUpdate>((resolve, reject) => {
+      this.#receipts.set(requestId.value, { resolve, reject });
+    });
+    this.#requestWasmTick();
+    return promise;
+  }
+
+  updateNow(build: (request: EditorRequest) => void): EditorUpdate | null {
+    if (this.#transitionActive) throw new Error('updateNow cannot run reentrant-ly');
+    if (this.terminal) return null;
+
+    let publicEvents: EditorEvent[];
+    let update: EditorUpdate | undefined;
+    let receiptFailure: { error: unknown } | undefined;
+    let admitted = false;
+    this.#transitionActive = true;
+    try {
+      const request = this.#buildRequest(build);
+      if (request.empty) return null;
+
+      const requestId = this.#invokeCore((core) => core.enqueue_request([...request.messages]));
+      admitted = true;
+      this.#receipts.set(requestId.value, {
+        resolve: (value) => {
+          update = value;
+        },
+        reject: (error) => {
+          receiptFailure = { error };
+        },
+      });
+      const result = this.#invokeCore((core) => core.tick_through(requestId));
+      publicEvents = this.#installTick(result);
+      if (receiptFailure) throw receiptFailure.error;
+      if (!update) throw new Error(`tickThrough omitted request outcome ${requestId.value}`);
+    } catch (err) {
+      if (admitted && !this.#creationActive) this.#fail(err);
+      throw err;
+    } finally {
+      this.#transitionActive = false;
     }
-    if (!this.#wasmQueued && this.#surfaceWork.size === 0) {
-      this.#frameId = null;
-      return;
-    }
-    this.#runFrame();
+
+    for (const event of publicEvents) this.#emit(event);
+    return update;
   }
 
   suspendToolbarSync(): void {
@@ -1266,74 +1695,165 @@ export class Editor {
   }
 
   resumeToolbarSync(): void {
+    if (this.terminal) return;
     this.#toolbarSyncSuspended = false;
-    if (!this.#toolbarSyncPending) return;
-    this.#toolbarSyncPending = false;
-    if (this.#destroyed) return;
-    this.#modifierState = this.#wasm.modifier_state();
-    this.#blockState = this.#wasm.block_state();
+    this.#pullToolbarStateIfReady();
   }
 
-  attachSurface(page: number, canvas: HTMLCanvasElement, width: number, height: number): void {
-    if (this.#destroyed) return;
-    this.#wasm.attach_surface(page, canvas, width, height, this.surfaceScaleFactor);
-    this.#attachedPages.add(page);
+  activateVisualHost(): () => void {
+    return untrack(() => {
+      // eslint-disable-next-line @typescript-eslint/no-empty-function
+      if (this.terminal) return () => {};
+      if (this.#visualHost) throw new Error('Editor already has an active visual host');
+
+      const token = {};
+      // eslint-disable-next-line svelte/prefer-svelte-reactivity
+      this.#visualHost = { token, targets: new Map() };
+      this.#publishIfReady();
+      return () => {
+        untrack(() => {
+          if (this.#visualHost?.token !== token) return;
+          if (this.#coreAvailable) {
+            for (const page of this.#visualHost.targets.keys()) this.#invokeCore((core) => core.detach_surface(page));
+          }
+          this.#removeAppliedPageData(this.#visualHost.targets.keys());
+          this.#visualHost = undefined;
+          for (const waiter of this.#publicationWaiters) {
+            if (waiter.signal && waiter.onAbort) waiter.signal.removeEventListener('abort', waiter.onAbort);
+            waiter.resolve({ type: 'no_host' });
+          }
+          this.#publicationWaiters.clear();
+        });
+      };
+    });
+  }
+
+  attachSurface(page: number, canvas: HTMLCanvasElement, width: number, height: number, replace?: () => void): string {
+    return untrack(() => {
+      if (this.terminal) return 'none';
+      const host = this.#visualHost;
+      if (!host) throw new Error('Cannot attach a surface without an active visual host');
+
+      const appliedPageSize = this.#applied.pageSizes[page];
+      const targetWidth = appliedPageSize?.width ?? width;
+      const targetHeight = this.#applied.pageBackingSizes[page]?.height ?? appliedPageSize?.height ?? height;
+      const scaleFactor = this.surfaceScaleFactor;
+      const current = host.targets.get(page);
+      if (
+        current?.canvas === canvas &&
+        current.width === targetWidth &&
+        current.height === targetHeight &&
+        current.scaleFactor === scaleFactor &&
+        current.available
+      ) {
+        const backend = this.#invokeCore((core) => core.surface_backend(page));
+        if (backend !== 'cpu') {
+          current.proof = undefined;
+          current.requiredRevision = this.#applied.revision;
+          current.failedRevision = undefined;
+          current.available = false;
+          this.#rejectAllPublicationWaitersForSurface();
+        }
+        return backend;
+      }
+
+      const backend = this.#invokeCore((core) => {
+        if (current) core.detach_surface(page);
+        core.attach_surface(page, canvas, targetWidth, targetHeight, scaleFactor);
+        return core.surface_backend(page);
+      });
+      const target: SurfaceTarget = {
+        page,
+        key: ++this.#surfaceKey,
+        canvas,
+        width: targetWidth,
+        height: targetHeight,
+        scaleFactor,
+        requiredRevision: this.#applied.revision,
+        proof: undefined,
+        failedRevision: undefined,
+        available: backend === 'cpu',
+        replace,
+      };
+      host.targets.set(page, target);
+      this.#refreshAppliedPageData([page]);
+      this.#renderRequiredTargets();
+      this.#publishIfReady();
+      if (!target.available) this.#rejectAllPublicationWaitersForSurface();
+      return backend;
+    });
   }
 
   detachSurface(page: number): void {
-    if (this.#destroyed) return;
-    this.#attachedPages.delete(page);
-    this.#surfaceWork.delete(page);
-    this.#wasm.detach_surface(page);
+    untrack(() => {
+      if (this.terminal) return;
+      const target = this.#visualHost?.targets.get(page);
+      if (!target) return;
+      this.#invokeCore((core) => core.detach_surface(page));
+      this.#visualHost?.targets.delete(page);
+      this.#removeAppliedPageData([page]);
+      this.#publishIfReady();
+    });
   }
 
   invalidateSurface(page: number): void {
-    if (this.#destroyed) return;
-    this.#wasm.invalidate_surface(page);
+    untrack(() => {
+      if (this.terminal) return;
+      const target = this.#visualHost?.targets.get(page);
+      if (!target) return;
+      const backend = this.#invokeCore((core) => {
+        core.invalidate_surface(page);
+        return core.surface_backend(page);
+      });
+      target.key = ++this.#surfaceKey;
+      target.proof = undefined;
+      target.requiredRevision = this.#applied.revision;
+      target.failedRevision = undefined;
+      target.available = backend === 'cpu';
+      this.#renderRequiredTargets();
+      this.#publishIfReady();
+      if (!target.available) this.#rejectAllPublicationWaitersForSurface();
+    });
   }
 
-  surfaceBackend(page: number): string {
-    if (this.#destroyed) return 'none';
-    return this.#wasm.surface_backend(page);
+  surfaceReplacementFailed(page: number): void {
+    this.#fail(new Error(`Editor surface replacement failed for page ${page}`));
   }
 
-  onSurfacePresented(page: number, listener: () => void): () => void {
-    let set = this.#presentedListeners.get(page);
-    if (!set) {
-      // eslint-disable-next-line svelte/prefer-svelte-reactivity
-      set = new Set();
-      this.#presentedListeners.set(page, set);
-    }
-    set.add(listener);
-    return () => {
-      set.delete(listener);
-      if (set.size === 0) this.#presentedListeners.delete(page);
-    };
+  publishedSurfaceCanvas(page: number): HTMLCanvasElement | undefined {
+    return this.published?.frames.get(page)?.canvas;
   }
 
   recoverSurfaces(): void {
-    if (this.#destroyed) return;
-    for (const page of this.#attachedPages) {
-      this.#wasm.refresh_surface(page);
-    }
-    this.#emit({ type: 'render_invalidated' });
+    untrack(() => {
+      if (this.terminal) return;
+      for (const target of this.#visualHost?.targets.values() ?? []) {
+        const backend = this.#invokeCore((core) => {
+          core.refresh_surface(target.page);
+          return core.surface_backend(target.page);
+        });
+        target.key = ++this.#surfaceKey;
+        target.proof = undefined;
+        target.requiredRevision = this.#applied.revision;
+        target.failedRevision = undefined;
+        target.available = backend === 'cpu';
+      }
+      this.#renderRequiredTargets();
+      this.#publishIfReady();
+      if ([...(this.#visualHost?.targets.values() ?? [])].some((target) => !target.available)) {
+        this.#rejectAllPublicationWaitersForSurface();
+      }
+    });
   }
 
-  requestSurfaceRender(page: number): void {
-    if (this.#destroyed) return;
-    this.#surfaceWork.add(page);
-    this.#requestFrame();
-  }
-
-  // Synchronous on purpose: callers react to a published geometry change inside the same
-  // task (effect flush) that will restyle the DOM, so resizing and repainting here keeps
-  // the canvas pixels and the layout in the same frame. Deferring to the next animation
-  // frame would paint one frame of the old backing stretched or clipped to the new box.
-  resizeSurfaceNow(page: number, width: number, height: number): void {
-    if (this.#destroyed) return;
-    this.#surfaceWork.delete(page);
-    this.#resizeSurface(page, width, height);
-    this.#renderSurface(page);
+  surfaceConfigMatches(page: number, width: number, height: number): boolean {
+    return untrack(() => {
+      if (this.terminal) return false;
+      const target = this.#visualHost?.targets.get(page);
+      if (!target) return false;
+      const scaleFactor = this.surfaceScaleFactor;
+      return target.width === width && target.height === height && target.scaleFactor === scaleFactor;
+    });
   }
 
   setExternalElementHeight(nodeId: string, height: number): void {
@@ -1345,38 +1865,58 @@ export class Editor {
   }
 
   currentHeads(): Uint8Array {
-    return this.#wasm.current_heads();
+    return this.#invokeCore((core) => core.current_heads());
   }
 
   localChangesetsSince(remoteHeads: Uint8Array): Uint8Array {
-    return this.#wasm.local_changesets_since(remoteHeads);
+    return this.#invokeCore((core) => core.local_changesets_since(remoteHeads));
   }
 
   changesetIds(): string[] {
-    return this.#wasm.changeset_ids();
+    return this.#invokeCore((core) => core.changeset_ids());
   }
 
   missingChangesetsFor(confirmedHeads: Uint8Array): { bytes: Uint8Array; withheld: number } {
-    const result = this.#wasm.missing_changesets_tolerant(confirmedHeads);
+    const result = this.#invokeCore((core) => core.missing_changesets_tolerant(confirmedHeads));
     return { bytes: new Uint8Array(result.bytes), withheld: result.withheld };
   }
 
   partitionRemoteChangesets(payload: Uint8Array): { ready: Uint8Array; blocked: Uint8Array } {
-    const result = this.#wasm.partition_remote_changesets(payload);
+    const result = this.#invokeCore((core) => core.partition_remote_changesets(payload));
     return { ready: new Uint8Array(result.ready), blocked: new Uint8Array(result.blocked) };
   }
 
   splitChangesets(payload: Uint8Array): { id: string; bytes: Uint8Array }[] {
-    return this.#wasm.split_changesets(payload).map((e) => ({ id: e.id, bytes: new Uint8Array(e.bytes) }));
+    return this.#invokeCore((core) => core.split_changesets(payload)).map((entry) => ({
+      id: entry.id,
+      bytes: new Uint8Array(entry.bytes),
+    }));
   }
 
-  receiveRemoteChangeset(payload: Uint8Array): void {
-    this.#wasm.receive_remote_changeset(payload);
+  receiveRemoteChangeset(payload: Uint8Array): Promise<number> {
+    if (this.#destroyed) return Promise.reject(new Error('Editor is disposed'));
+    if (this.#failed) return Promise.reject(this.#failure);
+    if (payload.byteLength === 0) return Promise.resolve(this.#applied.revision);
+    try {
+      this.#invokeCore((core) => core.receive_remote_changeset(payload));
+    } catch (err) {
+      return Promise.reject(err);
+    }
+    const promise = new Promise<number>((resolve, reject) => {
+      this.#appliedWaiters.add({ resolve, reject });
+    });
+    this.#requestWasmTick();
+    return promise;
+  }
+
+  receiveResourceUpdate(update: ResourceUpdate): void {
+    if (this.terminal) return;
+    this.#invokeCore((core) => core.receive_resource_update(update));
     this.#requestWasmTick();
   }
 
   copySelection(): ClipboardPayload | undefined {
-    return this.#wasm.copy_selection();
+    return this.#invokeCore((core) => core.copy_selection());
   }
 
   get searchMatches(): { active: boolean }[] {
@@ -1401,7 +1941,7 @@ export class Editor {
       return;
     }
 
-    const selections = this.#wasm.find_matches(query, { match_whole_word: matchWholeWord });
+    const selections = this.#invokeCore((core) => core.find_matches(query, { match_whole_word: matchWholeWord }));
     const matches = selections.map((selection, i) => ({ id: `search-match:${i}`, selection }));
 
     for (const m of matches) {
@@ -1470,23 +2010,19 @@ export class Editor {
   }
 
   proseText(): string {
-    this.flush();
-    return this.#wasm.prose_text();
+    return this.#invokeCore((core) => core.prose_text());
   }
 
   proseToSelection(start: number, end: number): Selection | undefined {
-    this.flush();
-    return this.#wasm.prose_to_selection(start, end) ?? undefined;
+    return this.#invokeCore((core) => core.prose_to_selection(start, end)) ?? undefined;
   }
 
   proseTextAnnotated(): string {
-    this.flush();
-    return this.#wasm.prose_text_annotated();
+    return this.#invokeCore((core) => core.prose_text_annotated());
   }
 
   proseToSelectionAnnotated(start: number, end: number): Selection | undefined {
-    this.flush();
-    return this.#wasm.prose_to_selection_annotated(start, end) ?? undefined;
+    return this.#invokeCore((core) => core.prose_to_selection_annotated(start, end)) ?? undefined;
   }
 
   updateCharacterCounts(): void {
@@ -1500,7 +2036,7 @@ export class Editor {
         return;
       }
 
-      const counts = this.#wasm.character_counts();
+      const counts = this.#invokeCore((core) => core.character_counts());
       this.characterCounts = {
         docWithWhitespace: counts.doc_with_whitespace,
         docWithoutWhitespace: counts.doc_without_whitespace,
@@ -1627,12 +2163,12 @@ export class Editor {
     if (this.activeSpellcheckErrorId === id) return;
 
     const restoreToNormalGroup = (errorId: string) => {
-      if (this.trackedRanges.every((r) => r.id !== errorId)) return;
+      if (this.#applied.trackedRanges.every((r) => r.id !== errorId)) return;
       this.enqueue({ type: 'tracked_range', op: { type: 'set_group', id: errorId, group: 'spellcheck' } });
     };
 
     const promoteToActiveGroup = (errorId: string): boolean => {
-      if (this.trackedRanges.every((r) => r.id !== errorId)) return false;
+      if (this.#applied.trackedRanges.every((r) => r.id !== errorId)) return false;
       this.enqueue({ type: 'tracked_range', op: { type: 'set_group', id: errorId, group: 'spellcheck-active' } });
       return true;
     };
@@ -1789,12 +2325,11 @@ export class Editor {
   }
 
   isCommentLocatable(id: string): boolean {
-    return this.trackedRanges.some((x) => x.id === id);
+    return this.#applied.trackedRanges.some((x) => x.id === id);
   }
 
   commentIdsAt(page: number, x: number, y: number): string[] {
-    return this.#wasm
-      .tracked_ranges_at(page, x, y, null)
+    return this.#invokeCore((core) => core.tracked_ranges_at(page, x, y, null))
       .filter((hit) => this.#registeredCommentIds.has(hit.id))
       .map((hit) => hit.id);
   }
@@ -1803,7 +2338,7 @@ export class Editor {
     if (this.activeCommentId === id) return;
 
     const move = (cid: string, group: 'comment' | 'comment-active'): boolean => {
-      if (this.trackedRanges.every((r) => r.id !== cid)) return false;
+      if (this.#applied.trackedRanges.every((r) => r.id !== cid)) return false;
       this.enqueue({ type: 'tracked_range', op: { type: 'set_group', id: cid, group } });
       return true;
     };
@@ -1824,12 +2359,12 @@ export class Editor {
     if (this.activeAiFeedbackId === id) return;
 
     const restoreToNormalGroup = (feedbackId: string) => {
-      if (this.trackedRanges.every((r) => r.id !== feedbackId)) return;
+      if (this.#applied.trackedRanges.every((r) => r.id !== feedbackId)) return;
       this.enqueue({ type: 'tracked_range', op: { type: 'set_group', id: feedbackId, group: 'ai-feedback' } });
     };
 
     const promoteToActiveGroup = (feedbackId: string): boolean => {
-      if (this.trackedRanges.every((r) => r.id !== feedbackId)) return false;
+      if (this.#applied.trackedRanges.every((r) => r.id !== feedbackId)) return false;
       this.enqueue({ type: 'tracked_range', op: { type: 'set_group', id: feedbackId, group: 'ai-feedback-active' } });
       return true;
     };
@@ -1851,11 +2386,13 @@ export class Editor {
   }
 
   inspect(mode: 'state' | 'state-with-node-id' | 'state-as-macro') {
-    const output = match(mode)
-      .with('state', () => this.#wasm.inspect_state())
-      .with('state-with-node-id', () => this.#wasm.inspect_state({ show_node_ids: true }))
-      .with('state-as-macro', () => this.#wasm.inspect_state_as_macro())
-      .exhaustive();
+    const output = this.#invokeCore((core) =>
+      match(mode)
+        .with('state', () => core.inspect_state())
+        .with('state-with-node-id', () => core.inspect_state({ show_node_ids: true }))
+        .with('state-as-macro', () => core.inspect_state_as_macro())
+        .exhaustive(),
+    );
 
     console.log(output);
   }
@@ -1866,22 +2403,24 @@ export class Editor {
 
     unregister(this);
 
-    this.#effectCleanup?.();
-    this.#effectCleanup = null;
+    this.#stopRuntime();
 
-    if (this.#frameId !== null) {
-      cancelAnimationFrame(this.#frameId);
-      this.#frameId = null;
+    const disposed = new Error('Editor is disposed');
+    for (const receipt of this.#receipts.values()) receipt.reject(disposed);
+    this.#receipts.clear();
+    for (const waiter of this.#appliedWaiters) waiter.reject(disposed);
+    this.#appliedWaiters.clear();
+    for (const waiter of this.#publicationWaiters) {
+      if (waiter.signal && waiter.onAbort) waiter.signal.removeEventListener('abort', waiter.onAbort);
+      waiter.reject(disposed);
     }
+    this.#publicationWaiters.clear();
+    this.#visualHost = undefined;
+    this.#listeners.clear();
+    this.#contextMenuContributors.clear();
 
-    if (this.#characterCountsDebounceTimer) {
-      clearTimeout(this.#characterCountsDebounceTimer);
-      this.#characterCountsDebounceTimer = null;
-    }
-
-    this.#applyViewportResize.cancel();
-
-    this.#gesture?.destroy();
-    this.#wasm?.free();
+    this.#discardCore();
   }
 }
+
+export { EditorRequest, EditorUpdate } from './editor-update';

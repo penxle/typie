@@ -32,6 +32,7 @@ icu_segmenter = { workspace = true, features = ["serde"] }
 log.workspace = true
 parley.workspace = true
 phf = { workspace = true, features = ["macros"] }
+rapidhash.workspace = true
 ruzstd.workspace = true
 serde.workspace = true
 skrifa.workspace = true

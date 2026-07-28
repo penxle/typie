@@ -1,7 +1,7 @@
 import { getAppContext } from '@typie/ui/context';
 import { tick, untrack } from 'svelte';
 import { CONTINUOUS_VIEW_PADDING } from './constants';
-import { pageRectsToClientRect } from './geometry';
+import { pageRectsToClientRect, selectionHeadRect } from './geometry';
 import {
   resolveKeepVisibleBottomPadding,
   resolveNearestScrollTop,
@@ -9,7 +9,7 @@ import {
   resolveTypewriterScrollTop,
 } from './scroll';
 import type { PageRect } from '@typie/editor-ffi/browser';
-import type { Editor, EditorContext } from './editor.svelte';
+import type { Editor, EditorContext, EditorSnapshot } from './editor.svelte';
 import type { EditorVisibleArea } from './scroll';
 
 export type EditorScrollRevealMode = 'nearest' | 'typewriter';
@@ -88,7 +88,8 @@ export function setupEditorScroll(ctx: EditorContext): void {
     const scroll = ctx.scroll;
     if (!editor || !scroll) return;
 
-    void editor.tickRevision;
+    // Scroll targets are visible geometry and must use the canvas-matching publication.
+    void editor.publishedRevision;
     void editor.viewport.height;
 
     untrack(() => scroll.scheduleCommit());
@@ -107,8 +108,9 @@ export class EditorScrollScope {
 
   bottomPadding = $derived.by(() => {
     void this.#editor.viewport.height;
-    const keepVisiblePadding = this.#keepVisibleBottomPadding();
-    const rect = this.#editor.selectionHeadRect();
+    const snapshot = this.#editor.published?.snapshot;
+    const keepVisiblePadding = this.#keepVisibleBottomPadding(snapshot);
+    const rect = selectionHeadRect(snapshot);
     if (!rect) {
       return keepVisiblePadding;
     }
@@ -134,18 +136,33 @@ export class EditorScrollScope {
       this.#pendingRequest = null;
       if (!request) return;
 
-      const rects = this.#resolveTargetRects(request.target);
+      // A synchronous update may request scrolling from inside its request builder.
+      // Wait until that request's applied revision has a matching visible publication.
+      await tick();
+      if (this.#destroyed || this.#editor.destroyed || this.#pendingRequest) return;
+      const requiredRevision = this.#editor.appliedRevision;
+      const publication = await this.#editor.awaitPublishedRevision(requiredRevision);
+      if (publication.type !== 'published') return;
+      if (this.#destroyed || this.#editor.destroyed || this.#pendingRequest) return;
+
+      const snapshot = this.#editor.published?.snapshot;
+      if (!snapshot || snapshot.revision < requiredRevision) return;
+      const rects = this.#resolveTargetRects(request.target, snapshot);
       if (!rects) return;
 
       const mode = request.mode === 'typewriter' && this.#typewriterPreferences().enabled ? 'typewriter' : 'nearest';
       void this.bottomPadding;
       await tick();
+      if (this.#destroyed || this.#editor.destroyed || this.#pendingRequest) return;
 
       this.#applyCommit({
         rects,
         mode,
         behavior: request.behavior,
       });
+    } catch {
+      // Publication cancellation, disposal, and unavailable targets make this
+      // best-effort visual request obsolete.
     } finally {
       this.#commitQueued = false;
       if (!this.#destroyed && !this.#editor.destroyed && this.#pendingRequest) {
@@ -154,14 +171,16 @@ export class EditorScrollScope {
     }
   }
 
-  #resolveTargetRects(target: EditorScrollIntoViewTarget): PageRect[] | null {
+  #resolveTargetRects(target: EditorScrollIntoViewTarget, snapshot: EditorSnapshot | undefined): PageRect[] | null {
+    if (!snapshot) return null;
     switch (target.type) {
       case 'current_selection_head': {
-        const rect = this.#editor.selectionHeadRect();
+        const rect = selectionHeadRect(snapshot);
         return rect ? [rect] : null;
       }
       case 'tracked_item': {
-        return this.#editor.trackedItemRects(target.id);
+        const range = snapshot.trackedRanges.find((item) => item.id === target.id);
+        return range && range.rects.length > 0 ? range.rects : null;
       }
     }
   }
@@ -193,13 +212,13 @@ export class EditorScrollScope {
     }
   }
 
-  #keepVisibleBottomPadding(): number {
+  #keepVisibleBottomPadding(snapshot: EditorSnapshot | undefined): number {
     const target = this.#keepVisibleTarget;
     if (!target) {
       return 0;
     }
 
-    const rects = this.#resolveTargetRects(target);
+    const rects = this.#resolveTargetRects(target, snapshot);
     if (!rects) {
       return 0;
     }

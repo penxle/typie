@@ -56,6 +56,16 @@ export interface Op<P> {
 }
 
 /**
+ * Opaque identity of one exact prepared frame.
+ *
+ * Hosts may compare keys for equality only. The numeric representation has no
+ * ordering or revision semantics.
+ */
+export interface FrameKey {
+    value: number;
+}
+
+/**
  * The directional bias of a [`Position`](crate::Position) at a boundary.
  *
  * Affinity disambiguates which side of a boundary a position belongs to.
@@ -408,6 +418,19 @@ export interface Rect {
     height: number;
 }
 
+export interface RequestId {
+    value: number;
+}
+
+export interface RequestOutcome {
+    request_id: RequestId;
+    command_outcomes: CommandOutcome[];
+}
+
+export interface Revision {
+    value: number;
+}
+
 export interface RubyValue {
     text: string;
 }
@@ -493,6 +516,12 @@ export interface TextColorValue {
     value: string;
 }
 
+export interface TickResult {
+    revision: Revision;
+    events: EditorEvent[];
+    request_outcomes: RequestOutcome[];
+}
+
 export interface TrackedRange {
     id: string;
     group: string;
@@ -556,6 +585,10 @@ export type CalloutNodeAttr = { type: "variant"; value: CalloutVariant };
 export type CalloutVariant = "info" | "success" | "warning" | "danger";
 
 export type ClipboardOp = { type: "paste"; html: string | undefined; text: string } | { type: "repaste_as_text" } | { type: "cut" };
+
+export type CommandOutcome = { type: "applied" } | { type: "rejected"; reason: CommandRejection };
+
+export type CommandRejection = { type: "target_not_found" } | { type: "parent_not_found" } | { type: "invalid_argument" } | { type: "wrong_node_kind" };
 
 export type DeletionOp = { type: "selection" } | { type: "move"; movement: Movement } | { type: "surrounding"; before: number; after: number } | { type: "surrounding_code_points"; before: number; after: number };
 
@@ -659,7 +692,7 @@ export type SelectionPointUnit = "word" | "sentence" | "paragraph";
 
 export type StateField = "doc" | "root_attrs" | "selection" | "cursor" | "page_sizes" | "external_elements" | "table_overlays" | "link_rects" | "ime" | "modifiers" | "block" | "tracked_ranges" | "last_history_tag" | "placeholder";
 
-export type SystemEvent = { type: "initialize" } | { type: "resize"; width: number; height: number; scale_factor: number } | { type: "set_focused"; focused: boolean } | { type: "theme_variant_changed" } | { type: "font_base_loaded"; family: string; weight: number } | { type: "font_chunk_loaded"; family: string; weight: number; chunk_id: number } | { type: "font_manifest_loaded"; family: string; weight: number } | { type: "set_external_height"; node_id: Dot; height: number } | { type: "fonts_changed" };
+export type SystemEvent = { type: "initialize" } | { type: "resize"; width: number; height: number; scale_factor: number } | { type: "set_focused"; focused: boolean } | { type: "set_external_height"; node_id: Dot; height: number };
 
 export type TabNodeAttr = void;
 
@@ -708,7 +741,7 @@ declare class Editor {
     cursor_hit_rects(): PageRect[];
     cursor_hit_test(page: number, x: number, y: number): boolean;
     detach_surface(page: number): void;
-    enqueue(message: Message): void;
+    enqueue_request(messages: Message[]): RequestId;
     export_page_vector(page: number, scale_factor: number): Uint8Array;
     external_elements(): ExternalElement[];
     find_matches(query: string, options?: SearchOptions | null): Selection[];
@@ -746,18 +779,19 @@ declare class Editor {
     prose_to_selection(start: number, end: number): Selection | undefined;
     prose_to_selection_annotated(start: number, end: number): Selection | undefined;
     receive_remote_changeset(payload: Uint8Array): void;
+    receive_resource_update(update: ResourceUpdate): void;
     /**
      * Visibility-return recovery. CPU keeps the invalidate semantics (clear → full
      * re-render on the next `render_surface`).
      */
     refresh_surface(page: number): void;
     /**
-     * Returns whether a new frame was presented. `false` means no frame will arrive
-     * from this call — the page's pixels already match the current state — so hosts
-     * that wait for a present (the mobile settle handshake) must treat the page as
-     * settled instead of waiting.
+     * Prepares the exact requested editor revision for one active page target.
+     *
+     * The same key is returned when that target already contains the exact prepared
+     * frame. `None` means the requested revision could not be prepared.
      */
-    render_surface(page: number): boolean;
+    render_surface(page: number, requested_revision: Revision): FrameKey | undefined;
     resize_surface(page: number, width: number, height: number, scale_factor: number): void;
     root_attrs(): PlainRootNode;
     root_modifiers(): Modifier[];
@@ -769,7 +803,8 @@ declare class Editor {
     split_changesets(payload: Uint8Array): ChangesetEntry[];
     surface_backend(page: number): string;
     table_overlays(): TableOverlay[];
-    tick(): EditorEvent[];
+    tick(): TickResult | undefined;
+    tick_through(request_id: RequestId): TickResult;
     tracked_range(id: string): TrackedRange | undefined;
     tracked_ranges(group?: string | null): TrackedRange[];
     tracked_ranges_at(page: number, x: number, y: number, group?: string | null): TrackedRangeHit[];
@@ -780,9 +815,9 @@ declare class EditorHost {
     private constructor();
     free(): void;
     [Symbol.dispose](): void;
-    add_font_base(family: string, weight: number, data: Uint8Array): void;
-    add_font_chunk(family: string, weight: number, chunk_id: number, data: Uint8Array): void;
-    add_font_manifest(family: string, weight: number, data: Uint8Array): void;
+    add_font_base(family: string, weight: number, data: Uint8Array): ResourceUpdate | undefined;
+    add_font_chunk(family: string, weight: number, chunk_id: number, data: Uint8Array): ResourceUpdate | undefined;
+    add_font_manifest(family: string, weight: number, data: Uint8Array): ResourceUpdate | undefined;
     static create(icu_data: Uint8Array): EditorHost;
     create_editor_from_doc(doc: PlainDoc, viewport: Viewport): Editor;
     create_editor_from_graph(changesets: Uint8Array, viewport: Viewport): Editor;
@@ -791,15 +826,22 @@ declare class EditorHost {
     graph_heads(changesets: Uint8Array): Uint8Array;
     root_attrs_from_graph(changesets: Uint8Array): PlainRootNode;
     root_modifiers_from_graph(changesets: Uint8Array): Modifier[];
-    set_auto_surround_enabled(enabled: boolean): void;
-    set_fonts(families: FontFamily[]): void;
-    set_text_replacement_rules(rules: RawTextReplacementRule[]): void;
-    set_theme_variant(variant: ThemeVariant): boolean;
+    set_auto_surround_enabled(enabled: boolean): ResourceUpdate | undefined;
+    set_fonts(families: FontFamily[]): ResourceUpdate | undefined;
+    set_text_replacement_rules(rules: RawTextReplacementRule[]): ResourceUpdate | undefined;
+    set_theme_variant(variant: ThemeVariant): ResourceUpdate | undefined;
 }
 
-export type { Editor, EditorHost };
+declare class ResourceUpdate {
+    private constructor();
+    free(): void;
+    [Symbol.dispose](): void;
+}
+
+export type { Editor, EditorHost, ResourceUpdate };
 
 export function createInstance(wasmModule: WebAssembly.Module): Promise<{
     Editor: typeof Editor;
     EditorHost: typeof EditorHost;
+    ResourceUpdate: typeof ResourceUpdate;
 }>;

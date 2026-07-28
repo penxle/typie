@@ -38,38 +38,19 @@ class DamageUploadTest {
 
   private fun partial(
     hasCached: Boolean = true,
-    cachedW: Int = 100,
-    cachedH: Int = 200,
-    w: Int = 100,
-    h: Int = 200,
     readerLastVersion: Long = 5,
     damageFrom: Long = 3,
     damageCount: Int = 2,
-  ) =
-    shouldPartialUpload(
-      hasCached,
-      cachedW,
-      cachedH,
-      w,
-      h,
-      readerLastVersion,
-      damageFrom,
-      damageCount,
-    )
+  ) = shouldPartialUpload(hasCached, readerLastVersion, damageFrom, damageCount)
 
   @Test
-  fun `shouldPartialUpload true when cached dims match and version covers damage`() {
+  fun `shouldPartialUpload true when cached and version covers damage`() {
     assertTrue(partial())
   }
 
   @Test
   fun `shouldPartialUpload false when reader lags behind damage start`() {
     assertFalse(partial(readerLastVersion = 2, damageFrom = 3))
-  }
-
-  @Test
-  fun `shouldPartialUpload false when cached width differs from current width`() {
-    assertFalse(partial(cachedW = 99))
   }
 
   @Test

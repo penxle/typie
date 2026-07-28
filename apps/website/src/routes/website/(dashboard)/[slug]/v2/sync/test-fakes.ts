@@ -31,11 +31,10 @@ export class FakeEditor {
     const ready = dec(p).filter((id) => !this.known.has(id));
     return { ready: enc(...ready), blocked: enc() };
   }
-  receiveRemoteChangeset(p: Uint8Array) {
+  async receiveRemoteChangeset(p: Uint8Array): Promise<number> {
     for (const id of dec(p)) this.known.add(id);
+    return 1;
   }
-  // eslint-disable-next-line @typescript-eslint/no-empty-function -- intentional no-op in fake
-  flush() {}
 }
 
 export class FakeStore implements DeltaStore {

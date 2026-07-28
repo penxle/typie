@@ -34,10 +34,11 @@ pub fn normalize(value: &str, resource: &Resource) -> Option<Modifier> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use editor_resource::{FontFamily, FontFamilySource, FontWeight, Resource};
+    use editor_resource::{
+        FontFamily, FontFamilySource, FontWeight, Resource, ResourceSource, prepare_fonts,
+    };
 
     fn make_resource_with(families: &[&str]) -> Resource {
-        let mut r = Resource::new_test();
         let configs: Vec<FontFamily> = families
             .iter()
             .map(|name| FontFamily {
@@ -49,8 +50,11 @@ mod tests {
                 }],
             })
             .collect();
-        r.set_fonts(configs);
-        r
+        let mut source = ResourceSource::new_test();
+        source
+            .set_fonts(prepare_fonts(configs))
+            .expect("font families must change resources");
+        Resource::from_snapshot(source.snapshot())
     }
 
     fn family(modifier: Option<Modifier>) -> Option<String> {

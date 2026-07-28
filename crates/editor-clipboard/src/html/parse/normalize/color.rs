@@ -65,7 +65,7 @@ pub fn normalize_text_color(value: &str, resource: &Resource) -> Option<Modifier
     let lab = oklab(input);
     let achromatic = chroma(&lab) < TEXT_ACHROMATIC_GATE;
     let (best_key, _) = resource
-        .theme
+        .theme()
         .text_paste_palette()
         .filter(|(key, _)| NEUTRAL_TEXT_KEYS.contains(key) == achromatic)
         .map(|(key, c)| {
@@ -98,7 +98,7 @@ pub fn normalize_background_color(value: &str, resource: &Resource) -> Option<Mo
         });
     }
     let (best_key, _) = resource
-        .theme
+        .theme()
         .bg_paste_palette()
         .filter(|(key, _)| (*key == "gray") == achromatic)
         .map(|(key, c)| {
@@ -119,7 +119,15 @@ pub fn normalize_background_color(value: &str, resource: &Resource) -> Option<Mo
 #[cfg(test)]
 mod tests {
     use super::*;
-    use editor_resource::{Resource, ThemeVariant};
+    use editor_resource::{Resource, ResourceSource, ThemeVariant};
+
+    fn dark_resource() -> Resource {
+        let mut source = ResourceSource::new_test();
+        source
+            .set_theme_variant(ThemeVariant::DarkBlack)
+            .expect("theme variant must change resources");
+        Resource::from_snapshot(source.snapshot())
+    }
 
     fn text_color_key(input: &str, r: &Resource) -> Option<String> {
         match normalize_text_color(input, r)? {
@@ -231,8 +239,7 @@ mod tests {
 
     #[test]
     fn pure_white_in_dark_theme_does_not_snap_to_bright() {
-        let mut r = Resource::new_test();
-        r.theme.set_variant(ThemeVariant::DarkBlack);
+        let r = dark_resource();
         let key = text_color_key("#ffffff", &r);
         assert_eq!(key.as_deref(), Some("black"));
         assert_ne!(key.as_deref(), Some("bright"));
@@ -292,8 +299,7 @@ mod tests {
 
     #[test]
     fn bg_pure_white_snaps_to_none_in_dark_theme() {
-        let mut r = Resource::new_test();
-        r.theme.set_variant(ThemeVariant::DarkBlack);
+        let r = dark_resource();
         assert_eq!(bg_color_key("#ffffff", &r).as_deref(), Some("none"));
     }
 

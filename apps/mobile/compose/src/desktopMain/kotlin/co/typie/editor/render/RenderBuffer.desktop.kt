@@ -27,6 +27,10 @@ internal actual object RenderBuffer {
 
   @JvmStatic actual external fun getPinnedVersion(handle: Long): Long
 
+  @JvmStatic actual external fun getPinnedEditorRevision(handle: Long): Long
+
+  @JvmStatic actual external fun getPinnedFrameKey(handle: Long): Long
+
   @JvmStatic actual external fun getPinnedDamageFrom(handle: Long): Long
 
   @JvmStatic actual external fun getPinnedDamagePointer(handle: Long): Long

@@ -20,8 +20,8 @@ import co.typie.editor.ffi.SelectionOp
 import co.typie.editor.scroll.EditorBringIntoViewBehavior
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.EditorBringIntoViewTarget
-import co.typie.editor.scroll.awaitWithBringIntoView
 import co.typie.editor.scroll.toPageRectsTarget
+import co.typie.editor.scroll.updateWithBringIntoView
 import co.typie.screen.editor.editor.state.EditorOverlayOcclusion
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastType
@@ -83,13 +83,11 @@ internal fun rememberEditorSpellcheckSession(
   fun requestRangeIntoView(id: String?) {
     val activeEditor = editor ?: return
     if (id == null) return
-    activeEditor.scope.launch {
-      val target = activeEditor.trackedRange(id)?.rects?.toPageRectsTarget() ?: return@launch
-      bringIntoViewRequests.requestForVersion(
-        target = target,
-        version = activeEditor.state.version,
-        behavior = EditorBringIntoViewBehavior.Smooth,
-      )
+    bringIntoViewRequests.requestForState(
+      state = activeEditor.appliedState,
+      behavior = EditorBringIntoViewBehavior.Smooth,
+    ) {
+      trackedRanges.firstOrNull { it.id == id }?.rects?.toPageRectsTarget()
     }
   }
 
@@ -97,7 +95,7 @@ internal fun rememberEditorSpellcheckSession(
     val activeEditor = editor ?: return
     activeEditor.setActiveSpellcheckRange(
       activeId = model?.activeRangeId,
-      currentRanges = activeEditor.state.trackedRanges,
+      currentRanges = activeEditor.appliedState.trackedRanges,
     )
   }
 
@@ -142,7 +140,7 @@ internal fun rememberEditorSpellcheckSession(
         }
       },
       onReady = { results ->
-        lastSelectionMappedToSpellcheck = activeEditor.state.selection
+        lastSelectionMappedToSpellcheck = activeEditor.appliedState.selection
         if (results.isEmpty()) {
           setOverlayBottomOcclusion(0f)
         } else {
@@ -243,7 +241,7 @@ internal fun rememberEditorSpellcheckSession(
 
     val cleanup =
       activeModel.cleanupStale(
-        activeEditor.state.trackedRanges.spellcheckRanges().associate { it.id to it.text }
+        activeEditor.appliedState.trackedRanges.spellcheckRanges().associate { it.id to it.text }
       )
     if (cleanup.isNotEmpty()) {
       activeEditor.removeSpellcheckRanges(cleanup)
@@ -368,7 +366,7 @@ internal fun rememberEditorSpellcheckSession(
                   admit = { admitMutation(activeSession) },
                 )
               if (replaced) {
-                programmaticSelectionToSkip = activeEditor.state.selection
+                programmaticSelectionToSkip = activeEditor.appliedState.selection
                 val nextId = model.remove(id, activateReplacement = true)
                 if (nextId != null) {
                   updateCompactOverlayHeightForRange(nextId)
@@ -393,7 +391,7 @@ internal fun rememberEditorSpellcheckSession(
           if (!ensureSubscription()) return@launch
           if (!onEditingIntent(activeEditor)) return@launch
           val selected =
-            activeEditor.awaitWithBringIntoView(
+            activeEditor.updateWithBringIntoView(
               bringIntoViewRequests = bringIntoViewRequests,
               admit = { admitMutation(activeSession) },
             ) {
@@ -402,7 +400,7 @@ internal fun rememberEditorSpellcheckSession(
                   SelectionOp.Set(Selection(anchor = range.anchor, head = range.head))
                 )
               )
-              beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
+              afterApplied { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
             }
           if (selected == null) return@launch
           model?.activate(null)

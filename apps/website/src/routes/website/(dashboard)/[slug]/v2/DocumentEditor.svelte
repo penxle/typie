@@ -19,7 +19,7 @@
   import LockOpenIcon from '~icons/lucide/lock-open';
   import Maximize2Icon from '~icons/lucide/maximize-2';
   import XIcon from '~icons/lucide/x';
-  import { BottomToolbar, Editor as EditorComponent, TopToolbar } from '$lib/editor-ffi/components';
+  import { BottomToolbar, Editor as EditorComponent, EditorFailureOverlay, TopToolbar } from '$lib/editor-ffi/components';
   import { IS_MAC } from '$lib/editor-ffi/constants';
   import { browserScaleFactor, Editor, getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { createAssetHydrator } from '$lib/editor-ffi/handlers/asset-hydration';
@@ -46,17 +46,21 @@
   import { GapBuffer } from './sync/gap-buffer';
   import { PeerChannel } from './sync/peer-channel';
   import { Pusher } from './sync/pusher.svelte';
+  import { RemoteChangesetPipeline } from './sync/remote-changeset-pipeline';
   import { IndexeddbDeltaStore } from './sync/store';
   import type { StableSelection } from '@typie/editor-ffi/browser';
   import type { DocumentEditorV2_query$key } from '$mearie';
+  import type { RemoteChangesetEvent } from './sync/remote-changeset-pipeline';
 
   type Props = {
     query$key: DocumentEditorV2_query$key;
     focused: boolean;
     onReady?: () => void;
+    onEditorFailed?: (error: unknown) => void;
+    onEditorRetry?: () => void;
   };
 
-  let { query$key, focused, onReady }: Props = $props();
+  let { query$key, focused, onReady, onEditorFailed, onEditorRetry }: Props = $props();
 
   setupDocumentPanelFocusReturn();
 
@@ -314,30 +318,58 @@
 
   const fontFamilies = $derived(document?.fontFamilies ?? []);
 
+  let liveEditorFailed = $state(false);
+  let previewEditorRetry = $state<() => void>();
+  const editorSurfaceFailed = $derived(liveEditorFailed || previewEditorRetry !== undefined);
+
+  const handlePreviewEditorFailed = (retry: () => void) => {
+    previewEditorRetry = retry;
+  };
+
+  const handlePreviewEditorRecovered = () => {
+    previewEditorRetry = undefined;
+  };
+
   let liveEditorCreated = false;
+  let editorFailureReported = false;
   let destroyed = false;
   let editorStore: IndexeddbDeltaStore | null = null;
   let editorServerHeads: Uint8Array = new Uint8Array();
   let editorServerDurableHeads: Uint8Array = new Uint8Array();
 
   let channelUnsubscribe: (() => void) | null = null;
-  let pendingLiveEvents: { seq: string; bundles: Uint8Array[]; heads: Uint8Array; durableHeads: Uint8Array }[] = [];
+  let pendingRemoteEvents: RemoteChangesetEvent[] = [];
+  let remoteChangesetPipeline: RemoteChangesetPipeline | undefined;
 
-  const applyChangesets = (event: { seq: string; bundles: Uint8Array[]; heads: Uint8Array; durableHeads: Uint8Array }) => {
-    const editor = ctx.liveEditor;
-    if (!editor) return;
-    let applied = false;
-    for (const payload of event.bundles) {
-      if (payload.length === 0) continue;
-      editor.receiveRemoteChangeset(payload);
-      applied = true;
-    }
-    if (applied) editor.flush();
-    if (event.seq) syncSeq = event.seq;
-    if (event.bundles.length === 0 && event.seq) return;
-    pusher?.setConfirmedHeads(event.heads);
-    pusher?.setDurableHeads(event.durableHeads);
+  const reportEditorFailure = (error: unknown) => {
+    if (editorFailureReported) return;
+    editorFailureReported = true;
+    liveEditorFailed = true;
+    channelUnsubscribe?.();
+    channelUnsubscribe = null;
+    pusher?.stop();
+    onEditorFailed?.(error);
   };
+  ctx.reportEditorFailure = reportEditorFailure;
+
+  const retryLiveEditor = () => {
+    onEditorRetry?.();
+  };
+
+  const handleEditorOperationError = (editor: Editor, error: unknown) => {
+    if (editor.destroyed) return;
+    const failure = editor.failure;
+    if (failure !== undefined) {
+      reportEditorFailure(failure);
+      return;
+    }
+    if (!destroyed) console.error(error);
+  };
+
+  $effect(() => {
+    const failure = ctx.liveEditor?.failure;
+    if (failure !== undefined) reportEditorFailure(failure);
+  });
 
   let resyncPrep: Promise<void> = Promise.resolve();
   let resyncing = false;
@@ -359,7 +391,7 @@
       }
       if (destroyed) return;
       editorStore = null;
-      pendingLiveEvents = [];
+      pendingRemoteEvents = [];
       ctx.editor = undefined;
       ctx.liveEditor = undefined;
       await tick();
@@ -380,9 +412,12 @@
     channelUnsubscribe = getDocumentChannels().subscribe(currentDocumentId, {
       onSnapshot: (graph, meta) => {
         untrack(async () => {
+          let createdEditor: Editor | undefined;
+          let createdStore: IndexeddbDeltaStore | undefined;
           try {
             await resyncPrep;
             const store = new IndexeddbDeltaStore();
+            createdStore = store;
             const pendingRecords = await store.load(currentDocumentId);
             const pending = pendingRecords.map((r) => r.changeset);
 
@@ -390,12 +425,20 @@
             editorServerDurableHeads = meta.durableHeads;
             syncSeq = meta.seq;
 
-            const liveEditor = await Editor.createWithPending(
-              graph,
-              pending,
-              { width: 1, height: 1, scale_factor: browserScaleFactor() },
-              theme.currentThemeVariant,
-            );
+            let liveEditor: Editor;
+            try {
+              liveEditor = await Editor.createWithPending(
+                graph,
+                pending,
+                { width: 1, height: 1, scale_factor: browserScaleFactor() },
+                theme.currentThemeVariant,
+              );
+              createdEditor = liveEditor;
+            } catch (err) {
+              store.destroy();
+              reportEditorFailure(err);
+              return;
+            }
 
             if (destroyed) {
               liveEditor.destroy();
@@ -403,38 +446,52 @@
               return;
             }
 
-            const queued = pendingLiveEvents;
-            pendingLiveEvents = [];
+            const queued = pendingRemoteEvents;
+            pendingRemoteEvents = [];
             let latestHeads = meta.heads;
             let latestDurableHeads = meta.durableHeads;
-            let queuedApplied = false;
+            const queuedApplied: Promise<number>[] = [];
             for (const event of queued) {
               for (const payload of event.bundles) {
                 if (payload.length === 0) continue;
-                liveEditor.receiveRemoteChangeset(payload);
-                queuedApplied = true;
+                queuedApplied.push(liveEditor.receiveRemoteChangeset(payload));
               }
               if (event.seq) syncSeq = event.seq;
               latestHeads = event.heads;
               latestDurableHeads = event.durableHeads;
             }
-            if (queuedApplied) liveEditor.flush();
+            if (queuedApplied.length > 0) await Promise.all(queuedApplied);
 
             editorServerHeads = latestHeads;
             editorServerDurableHeads = latestDurableHeads;
+            remoteChangesetPipeline = new RemoteChangesetPipeline(liveEditor, (event) => {
+              if (ctx.liveEditor !== liveEditor) return;
+              if (event.seq) syncSeq = event.seq;
+              if (event.bundles.length === 0 && event.seq) return;
+              pusher?.setConfirmedHeads(event.heads);
+              pusher?.setDurableHeads(event.durableHeads);
+            });
             ctx.editor = liveEditor;
             ctx.liveEditor = liveEditor;
           } catch (err) {
-            console.error(err);
+            if (createdEditor?.failure === undefined) {
+              console.error(err);
+            } else {
+              reportEditorFailure(createdEditor.failure);
+            }
+            createdEditor?.destroy();
+            createdStore?.destroy();
           }
         });
       },
       onChangesets: (event) => {
-        if (!ctx.liveEditor) {
-          pendingLiveEvents.push(event);
+        const receivingEditor = ctx.liveEditor;
+        const pipeline = remoteChangesetPipeline;
+        if (!receivingEditor || !pipeline) {
+          pendingRemoteEvents.push(event);
           return;
         }
-        applyChangesets(event);
+        void pipeline.apply(event).catch((err) => handleEditorOperationError(receivingEditor, err));
       },
       onReload: () => {
         beginResync();
@@ -460,7 +517,7 @@
     const editor = ctx.editor;
     const slug = entity?.slug;
     const currentDocumentId = documentId;
-    if (!editor || !slug || !currentDocumentId) return;
+    if (!editor || editor.terminal || !slug || !currentDocumentId) return;
 
     const hydrator = createAssetHydrator<DocumentAsset>({
       hasAsset: (id) => editor.imageAssets.has(id) || ctx.fileAssets.has(id) || editor.embedAssets.has(id) || editor.archivedAssets.has(id),
@@ -477,25 +534,27 @@
     const updateReferences = () => {
       hydrationQueued = false;
       if (stopped) return;
-      void hydrator.update(editor.externalElements.flatMap(({ data }) => (data.id ? [data.id] : [])));
+      void hydrator.update(editor.appliedSnapshot.externalElements.flatMap(({ data }) => (data.id ? [data.id] : [])));
     };
     const scheduleHydration = () => {
       if (hydrationQueued) return;
       hydrationQueued = true;
-      // Editor invalidates the lazy external-elements cache after emitting state_changed.
+      // Coalesce document bursts while reading the matching applied snapshot.
       queueMicrotask(updateReferences);
     };
 
-    scheduleHydration();
-    const offStateChanged = editor.on('state_changed', (_, { fields }) => {
-      if (fields.includes('doc')) scheduleHydration();
+    const stopDocumentWatch = $effect.root(() => {
+      $effect(() => {
+        void editor.documentRevision;
+        untrack(scheduleHydration);
+      });
     });
     const retry = () => void hydrator.retry();
     window.addEventListener('online', retry);
 
     return () => {
       stopped = true;
-      offStateChanged();
+      stopDocumentWatch();
       window.removeEventListener('online', retry);
       hydrator.destroy();
     };
@@ -509,7 +568,7 @@
 
   $effect(() => {
     const editor = ctx.liveEditor;
-    if (!editor) return;
+    if (!editor || editor.terminal) return;
 
     const store = editorStore;
     if (!store) return;
@@ -537,26 +596,27 @@
         return;
       }
       // O(missing) tail: each entry is a standalone bundle blob.
-      let applied = false;
+      const applied: Promise<number>[] = [];
       for (const bytes of result.changesets) {
         if (bytes.length === 0) continue;
-        ed.receiveRemoteChangeset(bytes);
-        applied = true;
+        applied.push(ed.receiveRemoteChangeset(bytes));
       }
-      if (applied) ed.flush();
+      if (applied.length > 0) await Promise.all(applied);
       if (result.seq) syncSeq = result.seq;
       pusher?.setConfirmedHeads(result.heads);
       pusher?.setDurableHeads(result.durableHeads);
+    };
+    const refetchInBackground = () => {
+      void refetchFromServer().catch((err) => handleEditorOperationError(editor, err));
     };
 
     const gap = new GapBuffer({
       partition: (p) => editor.partitionRemoteChangesets(p),
       apply: (ready) => {
-        editor.receiveRemoteChangeset(ready);
-        editor.flush();
+        void editor.receiveRemoteChangeset(ready).catch((err) => handleEditorOperationError(editor, err));
       },
       onStuck: () => {
-        void refetchFromServer();
+        refetchInBackground();
       },
     });
 
@@ -575,8 +635,14 @@
     });
     pusher = ps;
 
-    const offStateChanged = editor.on('state_changed', (_, { fields }) => {
-      if (fields.includes('doc')) ps.schedule();
+    let observedDocumentRevision = untrack(() => editor.documentRevision);
+    const stopDocumentWatch = $effect.root(() => {
+      $effect(() => {
+        const revision = editor.documentRevision;
+        if (revision === observedDocumentRevision) return;
+        observedDocumentRevision = revision;
+        untrack(() => ps.schedule());
+      });
     });
 
     const offExitedDocStart = editor.on('cursor_exited_document_start', () => {
@@ -584,12 +650,12 @@
     });
 
     const pollIntervalId = setInterval(() => {
-      void refetchFromServer();
+      refetchInBackground();
     }, 10_000);
 
     return () => {
       clearInterval(pollIntervalId);
-      offStateChanged();
+      stopDocumentWatch();
       offExitedDocStart();
       peer.close();
       ps.stop();
@@ -599,7 +665,7 @@
 
   $effect(() => {
     const editor = ctx.editor;
-    if (!editor) return;
+    if (!editor || editor.terminal) return;
     return registerLinkContextMenu(editor);
   });
 
@@ -780,7 +846,7 @@
   $effect(() => {
     const editor = ctx.editor;
     const slug = entity?.slug;
-    if (!editor || !slug) return;
+    if (!editor || editor.terminal || !slug) return;
 
     editorRegistry.register(pane.id, slug, editor);
 
@@ -793,17 +859,17 @@
 
   $effect(() => {
     const editor = ctx.liveEditor;
-    if (!editor) return;
-
-    return editor.on('state_changed', (_, { fields }) => {
-      if (!fields.includes('selection')) return;
-      const sel = editor.selection;
-      if (!sel || !documentId || !editorReady || !editor.focused) return;
+    void editor?.appliedSelectionRevision;
+    const currentDocumentId = documentId;
+    if (!editor || !currentDocumentId || !editorReady || !editor.focused) return;
+    untrack(() => {
+      const sel = editor.appliedSnapshot.selection;
+      if (!sel) return;
       const frozen = editor.freezeSelection(sel);
       if (!frozen) return;
       selectionsStore.current = {
         ...selectionsStore.current,
-        [documentId]: {
+        [currentDocumentId]: {
           selection: frozen,
           timestamp: dayjs().valueOf(),
         },
@@ -858,7 +924,9 @@
   }
 
   function handleGlobalKeydown(e: KeyboardEvent) {
-    if (!((IS_MAC ? e.metaKey : e.ctrlKey) && e.code === 'KeyF' && focused)) {
+    const targetPaneId = e.target instanceof Element ? e.target.closest<HTMLElement>('[data-pane-id]')?.dataset.paneId : undefined;
+
+    if (!((IS_MAC ? e.metaKey : e.ctrlKey) && e.code === 'KeyF' && focused && targetPaneId === pane.id)) {
       return;
     }
 
@@ -868,15 +936,21 @@
 
   onDestroy(() => {
     destroyed = true;
+    const currentEditor = ctx.editor;
+    const currentLiveEditor = ctx.liveEditor;
+    const currentEditorStore = editorStore;
+    if (ctx.reportEditorFailure === reportEditorFailure) ctx.reportEditorFailure = undefined;
     channelUnsubscribe?.();
     channelUnsubscribe = null;
     pusher?.stop();
     flushTitleUpdate();
     flushSubtitleUpdate();
-    ctx.liveEditor?.destroy();
-    editorStore?.destroy();
-    ctx.editor = undefined;
-    ctx.liveEditor = undefined;
+    queueMicrotask(() => {
+      currentLiveEditor?.destroy();
+      currentEditorStore?.destroy();
+      if (ctx.editor === currentEditor) ctx.editor = undefined;
+      if (ctx.liveEditor === currentLiveEditor) ctx.liveEditor = undefined;
+    });
   });
 </script>
 
@@ -1084,6 +1158,7 @@
               />
 
               <div
+                bind:this={ctx.editorAreaEl}
                 style:position={currentViewZenModeEnabled ? 'fixed' : 'relative'}
                 style:top={currentViewZenModeEnabled ? '0' : 'auto'}
                 style:left={currentViewZenModeEnabled ? '0' : 'auto'}
@@ -1164,123 +1239,144 @@
                   </div>
                 {/if}
 
-                {#key ctx.editor}
-                  <EditorComponent active={focused} document$key={document} onReady={handleEditorReady}>
-                    {#snippet header()}
-                      <div
-                        class={flex({
-                          flexDirection: 'column',
-                          alignItems: 'center',
-                          paddingTop: '60px',
-                          width: 'full',
-                          ...(ctx.editor?.rootAttrs?.layout_mode.type === 'paginated' && { paddingBottom: '20px' }),
-                        })}
-                      >
-                        <div class={flex({ flexDirection: 'column', flexShrink: '0', width: 'full' })}>
-                          <textarea
-                            bind:this={titleEl}
-                            class={css({ width: 'full', fontSize: '28px', fontWeight: 'bold', resize: 'none' })}
-                            autocapitalize="off"
-                            autocomplete="off"
-                            maxlength={100}
-                            onblur={() => {
-                              titleFocused = false;
-                              flushTitleUpdate();
-                            }}
-                            onfocus={() => {
-                              clearBodySelectionForHeaderFocus();
-                              titleFocused = true;
-                              if (documentId) {
-                                selectionsStore.current = {
-                                  ...selectionsStore.current,
-                                  [documentId]: { type: 'element', element: 'title', timestamp: dayjs().valueOf() },
-                                };
-                              }
-                            }}
-                            oninput={handleTitleChanged}
-                            onkeydown={(e) => {
-                              if (e.isComposing) {
-                                return;
-                              }
+                <div
+                  class={flex({
+                    flexDirection: 'column',
+                    flexGrow: '1',
+                    minHeight: '0',
+                    overflowY: 'hidden',
+                  })}
+                  inert={editorSurfaceFailed}
+                >
+                  {#key ctx.editor}
+                    <EditorComponent active={focused} document$key={document} onReady={handleEditorReady}>
+                      {#snippet header()}
+                        <div
+                          class={flex({
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            paddingTop: '60px',
+                            width: 'full',
+                            ...(ctx.editor?.rootAttrs?.layout_mode.type === 'paginated' && { paddingBottom: '20px' }),
+                          })}
+                        >
+                          <div class={flex({ flexDirection: 'column', flexShrink: '0', width: 'full' })}>
+                            <textarea
+                              bind:this={titleEl}
+                              class={css({ width: 'full', fontSize: '28px', fontWeight: 'bold', resize: 'none' })}
+                              autocapitalize="off"
+                              autocomplete="off"
+                              maxlength={100}
+                              onblur={() => {
+                                titleFocused = false;
+                                flushTitleUpdate();
+                              }}
+                              onfocus={() => {
+                                clearBodySelectionForHeaderFocus();
+                                titleFocused = true;
+                                if (documentId) {
+                                  selectionsStore.current = {
+                                    ...selectionsStore.current,
+                                    [documentId]: { type: 'element', element: 'title', timestamp: dayjs().valueOf() },
+                                  };
+                                }
+                              }}
+                              oninput={handleTitleChanged}
+                              onkeydown={(e) => {
+                                if (e.isComposing) {
+                                  return;
+                                }
 
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                subtitleEl?.focus();
-                              }
-                            }}
-                            placeholder="제목을 입력하세요"
-                            rows={1}
-                            spellcheck="false"
-                            bind:value={localTitle}
-                            use:autosize
-                            use:headerVerticalNavigation={{ down: () => subtitleEl?.focus() }}></textarea>
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  subtitleEl?.focus();
+                                }
+                              }}
+                              placeholder="제목을 입력하세요"
+                              rows={1}
+                              spellcheck="false"
+                              bind:value={localTitle}
+                              use:autosize
+                              use:headerVerticalNavigation={{ down: () => subtitleEl?.focus() }}></textarea>
 
-                          <textarea
-                            bind:this={subtitleEl}
-                            class={css({
-                              marginTop: '4px',
-                              width: 'full',
-                              fontSize: '16px',
-                              fontWeight: 'medium',
-                              overflow: 'hidden',
-                              resize: 'none',
-                            })}
-                            autocapitalize="off"
-                            autocomplete="off"
-                            maxlength={100}
-                            onblur={() => {
-                              subtitleFocused = false;
-                              flushSubtitleUpdate();
-                            }}
-                            onfocus={() => {
-                              clearBodySelectionForHeaderFocus();
-                              subtitleFocused = true;
-                              if (documentId) {
-                                selectionsStore.current = {
-                                  ...selectionsStore.current,
-                                  [documentId]: { type: 'element', element: 'subtitle', timestamp: dayjs().valueOf() },
-                                };
-                              }
-                            }}
-                            oninput={handleSubtitleChanged}
-                            onkeydown={(e) => {
-                              if (e.isComposing) {
-                                return;
-                              }
+                            <textarea
+                              bind:this={subtitleEl}
+                              class={css({
+                                marginTop: '4px',
+                                width: 'full',
+                                fontSize: '16px',
+                                fontWeight: 'medium',
+                                overflow: 'hidden',
+                                resize: 'none',
+                              })}
+                              autocapitalize="off"
+                              autocomplete="off"
+                              maxlength={100}
+                              onblur={() => {
+                                subtitleFocused = false;
+                                flushSubtitleUpdate();
+                              }}
+                              onfocus={() => {
+                                clearBodySelectionForHeaderFocus();
+                                subtitleFocused = true;
+                                if (documentId) {
+                                  selectionsStore.current = {
+                                    ...selectionsStore.current,
+                                    [documentId]: { type: 'element', element: 'subtitle', timestamp: dayjs().valueOf() },
+                                  };
+                                }
+                              }}
+                              oninput={handleSubtitleChanged}
+                              onkeydown={(e) => {
+                                if (e.isComposing) {
+                                  return;
+                                }
 
-                              if (e.key === 'Backspace' && !localSubtitle) {
-                                e.preventDefault();
-                                titleEl?.focus();
-                              }
+                                if (e.key === 'Backspace' && !localSubtitle) {
+                                  e.preventDefault();
+                                  titleEl?.focus();
+                                }
 
-                              if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) {
-                                e.preventDefault();
-                                enterDocumentFromHeader();
-                              }
-                            }}
-                            placeholder="부제목을 입력하세요"
-                            rows={1}
-                            spellcheck="false"
-                            bind:value={localSubtitle}
-                            use:autosize
-                            use:headerVerticalNavigation={{ up: () => titleEl?.focus(), down: enterDocumentFromHeader }}></textarea>
+                                if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) {
+                                  e.preventDefault();
+                                  enterDocumentFromHeader();
+                                }
+                              }}
+                              placeholder="부제목을 입력하세요"
+                              rows={1}
+                              spellcheck="false"
+                              bind:value={localSubtitle}
+                              use:autosize
+                              use:headerVerticalNavigation={{ up: () => titleEl?.focus(), down: enterDocumentFromHeader }}></textarea>
 
-                          {#if ctx.editor?.rootAttrs?.layout_mode.type !== 'paginated'}
-                            <HorizontalDivider style={css.raw({ marginTop: '10px' })} />
-                          {/if}
+                            {#if ctx.editor?.rootAttrs?.layout_mode.type !== 'paginated'}
+                              <HorizontalDivider style={css.raw({ marginTop: '10px' })} />
+                            {/if}
+                          </div>
                         </div>
-                      </div>
-                    {/snippet}
-                    <CommentPopover />
-                  </EditorComponent>
-                {/key}
+                      {/snippet}
+                      <CommentPopover />
+                    </EditorComponent>
+                  {/key}
+                </div>
                 {#if showFindReplace}
                   <DocumentFindReplace bind:this={findReplaceComponent} onclose={() => (showFindReplace = false)} />
+                {/if}
+                {#if liveEditorFailed}
+                  <EditorFailureOverlay id={`document-editor-${pane.id}`} actionLabel="다시 불러오기" onAction={retryLiveEditor} />
+                {:else if previewEditorRetry}
+                  <EditorFailureOverlay id={`document-preview-${pane.id}`} actionLabel="다시 불러오기" onAction={previewEditorRetry} />
                 {/if}
               </div>
             </div>
 
-            <DocumentPanel document$key={document} editor={ctx.editor} user$key={query.data.me} />
+            <DocumentPanel
+              document$key={document}
+              editor={ctx.editor}
+              onPreviewEditorFailed={handlePreviewEditorFailed}
+              onPreviewEditorRecovered={handlePreviewEditorRecovered}
+              user$key={query.data.me}
+            />
           </DocumentComments>
         {/if}
       </div>

@@ -69,6 +69,8 @@
   );
 
   let resizing = $state<TableResizeState | null>(null);
+  let resizeAwaitingPublication = false;
+  let resizePublicationWait: AbortController | undefined;
 
   let hoveredPointer = $state<{ x: number; y: number } | null>(null);
   const hoveredColIndex = $derived(
@@ -109,6 +111,7 @@
   });
   const resizeEdgeAutoScroll = new EditorEdgeAutoScroll();
   onDestroy(() => {
+    resizePublicationWait?.abort();
     resizing = null;
     resizeEdgeAutoScroll.stop();
   });
@@ -375,7 +378,14 @@
   }
 
   function startResize(event: PointerEvent, colIndex: number): TableResizeState | null {
-    if (!event.isPrimary || event.button !== 0 || resizing) return null;
+    if (!event.isPrimary || event.button !== 0) return null;
+    if (resizeAwaitingPublication) {
+      resizePublicationWait?.abort();
+      resizePublicationWait = undefined;
+      resizeAwaitingPublication = false;
+      resizing = null;
+    }
+    if (resizing) return null;
 
     const root = tableOverlayRoot;
     if (!root || !editor) return null;
@@ -406,14 +416,55 @@
     const finalState = resizing;
     if (!finalState || finalState.pointerId !== state.pointerId) return;
 
-    resizing = null;
     resizeEdgeAutoScroll.stop();
-    commitResize(finalState);
-    editor?.focus();
+    if (!editor) {
+      resizing = null;
+      return;
+    }
+
+    const wait = new AbortController();
+    resizePublicationWait?.abort();
+    resizePublicationWait = wait;
+    resizeAwaitingPublication = true;
+    let update: ReturnType<typeof editor.updateNow>;
+    try {
+      update = editor.updateNow(() => commitResize(finalState));
+    } catch {
+      resizePublicationWait = undefined;
+      resizeAwaitingPublication = false;
+      resizing = null;
+      editor.focus();
+      return;
+    }
+    const accepted = update?.commandOutcomes.every((outcome) => outcome.type === 'applied') ?? false;
+    if (!update || !accepted) {
+      resizePublicationWait = undefined;
+      resizeAwaitingPublication = false;
+      resizing = null;
+    } else {
+      void update.awaitPublished(wait.signal).then(
+        () => {
+          if (resizePublicationWait !== wait) return;
+          resizePublicationWait = undefined;
+          resizeAwaitingPublication = false;
+          resizing = null;
+        },
+        () => {
+          if (resizePublicationWait !== wait) return;
+          resizePublicationWait = undefined;
+          resizeAwaitingPublication = false;
+          resizing = null;
+        },
+      );
+    }
+    editor.focus();
   }
 
   function cancelResize(state: TableResizeState) {
     if (resizing?.pointerId !== state.pointerId) return;
+    resizePublicationWait?.abort();
+    resizePublicationWait = undefined;
+    resizeAwaitingPublication = false;
     resizing = null;
     resizeEdgeAutoScroll.stop();
   }
@@ -469,15 +520,16 @@
             offset={4}
             onopen={() => {
               menuOpenColIndex = activeColIndex;
-              editor?.enqueue({
-                type: 'node',
-                op: {
-                  type: 'table',
-                  id: overlay.table_id,
-                  op: { type: 'select_axis', axis: 'vertical', index: colIndex },
-                },
+              editor?.updateNow(() => {
+                editor.enqueue({
+                  type: 'node',
+                  op: {
+                    type: 'table',
+                    id: overlay.table_id,
+                    op: { type: 'select_axis', axis: 'vertical', index: colIndex },
+                  },
+                });
               });
-              editor?.flush();
             }}
             ontransitionend={() => (menuOpenColIndex = null)}
             placement="bottom-start"
@@ -617,15 +669,16 @@
             offset={4}
             onopen={() => {
               menuOpenRowIndex = activeRowIndex;
-              editor?.enqueue({
-                type: 'node',
-                op: {
-                  type: 'table',
-                  id: overlay.table_id,
-                  op: { type: 'select_axis', axis: 'horizontal', index: rowIndex },
-                },
+              editor?.updateNow(() => {
+                editor.enqueue({
+                  type: 'node',
+                  op: {
+                    type: 'table',
+                    id: overlay.table_id,
+                    op: { type: 'select_axis', axis: 'horizontal', index: rowIndex },
+                  },
+                });
               });
-              editor?.flush();
             }}
             ontransitionend={() => (menuOpenRowIndex = null)}
             placement="right-start"

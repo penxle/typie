@@ -52,7 +52,7 @@ impl EditorSnapshot {
 }
 
 pub fn apply_and_report_change(editor: &mut Editor, msg: crate::message::Message) -> bool {
-    let _ = editor.tick();
+    let _ = editor.finalize_test_setup();
     let before = EditorSnapshot::capture(editor);
     editor.apply(msg);
     EditorSnapshot::capture(editor) != before

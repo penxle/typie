@@ -1,9 +1,13 @@
+use std::sync::{Arc, Mutex};
+
 use editor_macros::state;
 use editor_model::Modifier;
-use editor_resource::RawTextReplacementRule;
+use editor_resource::{
+    RawTextReplacementRule, Resource, ResourceSource, prepare_text_replacement_rules,
+};
 use editor_state::{
     Composition, PendingModifier, Position, ResolvedPosition, ResolvedPositionFlatExt, Selection,
-    assert_state_eq,
+    State, assert_state_eq,
 };
 use editor_transaction::HistoryMeta;
 
@@ -19,12 +23,13 @@ fn rule(pattern: &str, sub: &str, regex: bool) -> RawTextReplacementRule {
     }
 }
 
-fn set_rules(editor: &Editor, rules: Vec<RawTextReplacementRule>) {
-    editor
-        .resource
-        .lock()
-        .unwrap()
-        .set_text_replacement_rules(rules);
+fn editor_with_rules(state: State, rules: Vec<RawTextReplacementRule>) -> Editor {
+    let mut source = ResourceSource::new_test();
+    source
+        .set_text_replacement_rules(prepare_text_replacement_rules(rules))
+        .expect("text replacement rules must change resources");
+    let resource = Arc::new(Mutex::new(Resource::from_snapshot(source.snapshot())));
+    Editor::new_test_with_resource(state, resource)
 }
 
 fn type_text(editor: &mut Editor, text: &str) {
@@ -74,8 +79,7 @@ fn plain_rule_applies_on_insertion() {
         doc { root { p1: paragraph { text("") } } }
         selection: (p1, 0)
     };
-    let mut editor = Editor::new_test(s);
-    set_rules(&editor, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
+    let mut editor = editor_with_rules(s, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
 
     for ch in PLAIN_PATTERN.chars() {
         type_text(&mut editor, &ch.to_string());
@@ -111,8 +115,7 @@ fn non_matching_input_is_untouched() {
         doc { root { p1: paragraph { text("") } } }
         selection: (p1, 0)
     };
-    let mut editor = Editor::new_test(s);
-    set_rules(&editor, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
+    let mut editor = editor_with_rules(s, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
 
     type_text(&mut editor, "zzz");
 
@@ -129,8 +132,7 @@ fn regex_rule_applies_on_insertion() {
         doc { root { p1: paragraph { text("") } } }
         selection: (p1, 0)
     };
-    let mut editor = Editor::new_test(s);
-    set_rules(&editor, vec![rule(REGEX_PATTERN, REGEX_SUBSTITUTE, true)]);
+    let mut editor = editor_with_rules(s, vec![rule(REGEX_PATTERN, REGEX_SUBSTITUTE, true)]);
 
     type_text(&mut editor, "42#");
 
@@ -147,9 +149,8 @@ fn multiline_substitute_creates_hard_break() {
         doc { root { p1: paragraph { text("") } } }
         selection: (p1, 0)
     };
-    let mut editor = Editor::new_test(s);
-    set_rules(
-        &editor,
+    let mut editor = editor_with_rules(
+        s,
         vec![rule(MULTILINE_SUB_PATTERN, MULTILINE_SUB_SUBSTITUTE, false)],
     );
 
@@ -182,9 +183,8 @@ fn multiline_pattern_matches_across_hard_break() {
         }
         selection: (_p1, 4)
     };
-    let mut editor = Editor::new_test(s);
-    set_rules(
-        &editor,
+    let mut editor = editor_with_rules(
+        s,
         vec![rule(MULTILINE_PAT_PATTERN, MULTILINE_PAT_SUBSTITUTE, true)],
     );
 
@@ -210,8 +210,7 @@ fn pattern_does_not_match_across_tab_atom() {
         }
         selection: (p1, 3)
     };
-    let mut editor = Editor::new_test(s);
-    set_rules(&editor, vec![rule("abz", "X", false)]);
+    let mut editor = editor_with_rules(s, vec![rule("abz", "X", false)]);
 
     type_text(&mut editor, "z");
 
@@ -236,8 +235,7 @@ fn backspace_immediately_after_replacement_restores_original() {
         doc { root { p1: paragraph { text("") } } }
         selection: (p1, 0)
     };
-    let mut editor = Editor::new_test(s);
-    set_rules(&editor, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
+    let mut editor = editor_with_rules(s, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
 
     type_text(&mut editor, PLAIN_PATTERN);
     key(&mut editor, Key::Backspace);
@@ -255,8 +253,7 @@ fn backspace_restore_clears_pending_format_restored_by_auto_replacement_undo() {
         doc { root { p1: paragraph { text("") } } }
         selection: (p1, 0)
     };
-    let mut editor = Editor::new_test(s);
-    set_rules(&editor, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
+    let mut editor = editor_with_rules(s, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
     editor
         .transact(|tr| {
             tr.set_pending_modifiers(vec![PendingModifier::Set {
@@ -291,8 +288,7 @@ fn second_backspace_after_restore_is_normal_delete() {
         doc { root { p1: paragraph { text("") } } }
         selection: (p1, 0)
     };
-    let mut editor = Editor::new_test(s);
-    set_rules(&editor, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
+    let mut editor = editor_with_rules(s, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
 
     type_text(&mut editor, PLAIN_PATTERN);
     key(&mut editor, Key::Backspace);
@@ -313,8 +309,7 @@ fn ime_backspace_batch_immediately_after_replacement_restores_original() {
         doc { root { p1: paragraph { text("") } } }
         selection: (p1, 0)
     };
-    let mut editor = Editor::new_test(s);
-    set_rules(&editor, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
+    let mut editor = editor_with_rules(s, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
 
     type_text(&mut editor, PLAIN_PATTERN);
     let caret = caret_flat(&editor);
@@ -343,8 +338,7 @@ fn ime_delete_surrounding_immediately_after_replacement_restores_original() {
         doc { root { p1: paragraph { text("") } } }
         selection: (p1, 0)
     };
-    let mut editor = Editor::new_test(s);
-    set_rules(&editor, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
+    let mut editor = editor_with_rules(s, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
 
     type_text(&mut editor, PLAIN_PATTERN);
     editor.apply(Message::TextInput {
@@ -369,8 +363,7 @@ fn ime_multi_grapheme_backward_delete_after_replacement_is_normal_delete() {
         doc { root { p1: paragraph { text("") } } }
         selection: (p1, 0)
     };
-    let mut editor = Editor::new_test(s);
-    set_rules(&editor, vec![rule("ab", "XY", false)]);
+    let mut editor = editor_with_rules(s, vec![rule("ab", "XY", false)]);
 
     for ch in "ab".chars() {
         type_text(&mut editor, &ch.to_string());
@@ -396,8 +389,7 @@ fn typing_after_replacement_invalidates_restore() {
         doc { root { p1: paragraph { text("") } } }
         selection: (p1, 0)
     };
-    let mut editor = Editor::new_test(s);
-    set_rules(&editor, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
+    let mut editor = editor_with_rules(s, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
 
     type_text(&mut editor, PLAIN_PATTERN);
     type_text(&mut editor, "z");
@@ -416,8 +408,7 @@ fn cursor_movement_invalidates_restore() {
         doc { root { p1: paragraph { text("k") } } }
         selection: (p1, 1)
     };
-    let mut editor = Editor::new_test(s);
-    set_rules(&editor, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
+    let mut editor = editor_with_rules(s, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
 
     type_text(&mut editor, PLAIN_PATTERN);
 
@@ -492,9 +483,8 @@ fn multiline_replacement_restored_by_backspace() {
         }
         selection: (_p1, 4)
     };
-    let mut editor = Editor::new_test(s);
-    set_rules(
-        &editor,
+    let mut editor = editor_with_rules(
+        s,
         vec![rule(MULTILINE_PAT_PATTERN, MULTILINE_PAT_SUBSTITUTE, true)],
     );
 
@@ -516,8 +506,7 @@ fn undo_after_replacement_does_not_leave_substitute_in_doc() {
         doc { root { p1: paragraph { text("") } } }
         selection: (p1, 0)
     };
-    let mut editor = Editor::new_test(s);
-    set_rules(&editor, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
+    let mut editor = editor_with_rules(s, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
 
     type_text(&mut editor, PLAIN_PATTERN);
     editor.apply(Message::History {
@@ -537,8 +526,7 @@ fn redo_after_undo_restores_substitute() {
         doc { root { p1: paragraph { text("") } } }
         selection: (p1, 0)
     };
-    let mut editor = Editor::new_test(s);
-    set_rules(&editor, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
+    let mut editor = editor_with_rules(s, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
 
     type_text(&mut editor, PLAIN_PATTERN);
     editor.apply(Message::History {
@@ -564,8 +552,7 @@ fn undo_then_backspace_is_safe_when_replacement_undo_state_was_live() {
         doc { root { p1: paragraph { text("") } } }
         selection: (p1, 0)
     };
-    let mut editor = Editor::new_test(s);
-    set_rules(&editor, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
+    let mut editor = editor_with_rules(s, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
 
     type_text(&mut editor, PLAIN_PATTERN);
     editor.apply(Message::History {
@@ -596,8 +583,7 @@ fn replacement_skipped_during_active_composition() {
         doc { root { p1: paragraph { text("") } } }
         selection: (p1, 0)
     };
-    let mut editor = Editor::new_test(s);
-    set_rules(&editor, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
+    let mut editor = editor_with_rules(s, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
 
     editor.apply(Message::TextInput {
         ops: vec![FlatImeOp::Compose {
@@ -626,8 +612,7 @@ fn replacement_fires_on_commit_as_is() {
         doc { root { p1: paragraph { text("") } } }
         selection: (p1, 0)
     };
-    let mut editor = Editor::new_test(s);
-    set_rules(&editor, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
+    let mut editor = editor_with_rules(s, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
 
     // CommitAsIs is the path the web host takes on `compositionend`.
     editor.apply(Message::TextInput {
@@ -657,8 +642,7 @@ fn flat_text_input_message_commits_preedit() {
         doc { root { p1: paragraph { text("") } } }
         selection: (p1, 0)
     };
-    let mut editor = Editor::new_test(s);
-    set_rules(&editor, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
+    let mut editor = editor_with_rules(s, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
 
     let message: Message = serde_json::from_value(serde_json::json!({
         "type": "text_input",
@@ -682,8 +666,7 @@ fn replacement_fires_on_explicit_commit() {
         doc { root { p1: paragraph { text("") } } }
         selection: (p1, 0)
     };
-    let mut editor = Editor::new_test(s);
-    set_rules(&editor, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
+    let mut editor = editor_with_rules(s, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
 
     editor.apply(Message::TextInput {
         ops: vec![
@@ -705,8 +688,7 @@ fn update_then_update_keeps_composition_intact() {
         doc { root { p1: paragraph { text("") } } }
         selection: (p1, 0)
     };
-    let mut editor = Editor::new_test(s);
-    set_rules(&editor, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
+    let mut editor = editor_with_rules(s, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
 
     let partial = &PLAIN_PATTERN[..PLAIN_PATTERN.len() - 1];
     editor.apply(Message::TextInput {
@@ -738,8 +720,7 @@ fn plain_rule_applies_on_flat_ime_typing() {
         doc { root { p1: paragraph { text("") } } }
         selection: (p1, 0)
     };
-    let mut editor = Editor::new_test(s);
-    set_rules(&editor, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
+    let mut editor = editor_with_rules(s, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
 
     for (i, ch) in PLAIN_PATTERN.chars().enumerate() {
         let cursor = 1 + i;
@@ -771,8 +752,7 @@ fn deletion_via_flat_ime_does_not_fire_replacement() {
         doc { root { p1: paragraph { text("abcz") } } }
         selection: (p1, 4)
     };
-    let mut editor = Editor::new_test(s);
-    set_rules(&editor, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
+    let mut editor = editor_with_rules(s, vec![rule(PLAIN_PATTERN, PLAIN_SUBSTITUTE, false)]);
 
     editor.apply(Message::TextInput {
         ops: vec![FlatImeOp::DeleteSurrounding {
@@ -795,8 +775,7 @@ fn auto_replacement_preserves_bold_of_replaced_char() {
         selection: (p1, 0)
         pending_modifiers: [bold]
     };
-    let mut editor = Editor::new_test(s);
-    set_rules(&editor, vec![rule("\"", "\u{201C}", false)]);
+    let mut editor = editor_with_rules(s, vec![rule("\"", "\u{201C}", false)]);
 
     type_text(&mut editor, "\"");
 
@@ -815,8 +794,7 @@ fn nonempty_auto_replacement_writes_no_carry() {
         selection: (p1, 1)
         pending_modifiers: [bold]
     };
-    let mut editor = Editor::new_test(s);
-    set_rules(&editor, vec![rule("ab", "X", false)]);
+    let mut editor = editor_with_rules(s, vec![rule("ab", "X", false)]);
 
     type_text(&mut editor, "b");
 
@@ -839,8 +817,7 @@ fn empty_auto_replacement_that_empties_block_updates_carry() {
         selection: (p1, 1)
         pending_modifiers: [bold]
     };
-    let mut editor = Editor::new_test(s);
-    set_rules(&editor, vec![rule("ab", "", false)]);
+    let mut editor = editor_with_rules(s, vec![rule("ab", "", false)]);
 
     type_text(&mut editor, "b");
 
@@ -862,8 +839,7 @@ fn auto_replacement_undo_restores_matched_text_in_one_step() {
         doc { root { p1: paragraph { text("") } } }
         selection: (p1, 0)
     };
-    let mut editor = Editor::new_test(s);
-    set_rules(&editor, vec![rule("abc", "X", false)]);
+    let mut editor = editor_with_rules(s, vec![rule("abc", "X", false)]);
 
     for ch in "abc".chars() {
         type_text(&mut editor, &ch.to_string());
@@ -892,9 +868,8 @@ fn lookbehind_sees_text_beyond_the_start_window() {
         doc { root { p1: paragraph { text("") } } }
         selection: (p1, 0)
     };
-    let mut editor = Editor::new_test(s);
-    set_rules(
-        &editor,
+    let mut editor = editor_with_rules(
+        s,
         vec![
             rule("(?<!\u{201C}[^\u{201D}]*)\"", "\u{201C}", true),
             rule("(?<=\u{201C}[^\u{201D}]*)\"", "\u{201D}", true),
@@ -919,8 +894,7 @@ fn linear_rule_matches_longer_than_the_start_window() {
         doc { root { p1: paragraph { text("") } } }
         selection: (p1, 0)
     };
-    let mut editor = Editor::new_test(s);
-    set_rules(&editor, vec![rule(REGEX_PATTERN, REGEX_SUBSTITUTE, true)]);
+    let mut editor = editor_with_rules(s, vec![rule(REGEX_PATTERN, REGEX_SUBSTITUTE, true)]);
 
     type_text(&mut editor, &"7".repeat(300));
     type_text(&mut editor, "#");

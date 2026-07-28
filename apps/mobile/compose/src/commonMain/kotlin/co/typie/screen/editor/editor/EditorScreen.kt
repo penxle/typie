@@ -64,6 +64,7 @@ import co.typie.editor.body.toEditorDocumentLayoutSpec
 import co.typie.editor.external.EditorExternalElementState
 import co.typie.editor.external.LocalEditorExternalElementState
 import co.typie.editor.ffi.ClipboardOp
+import co.typie.editor.ffi.CommandOutcome
 import co.typie.editor.ffi.Direction
 import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.ExternalElementData
@@ -91,10 +92,10 @@ import co.typie.editor.runtime.LocalEditorUiState
 import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.editor.scroll.EditorScrollFrame
 import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
-import co.typie.editor.scroll.awaitWithBringIntoView
 import co.typie.editor.scroll.rememberEditorBringIntoViewRequests
 import co.typie.editor.scroll.resolveBringIntoViewTargetHeight
 import co.typie.editor.scroll.resolveEditorAutoScrollPolicy
+import co.typie.editor.scroll.updateWithBringIntoView
 import co.typie.editor.sync.ActiveDocumentEditingSessions
 import co.typie.editor.sync.ChangesetDeltaStore
 import co.typie.editor.sync.DocumentEditorLoad
@@ -371,12 +372,14 @@ fun EditorScreen(entityId: String) {
       editor.inputRecorder = EditorInputRecorder()
     }
   }
-  val editorState = editor?.state ?: EditorState.Initial
-  val doubleTapToEditEnabled = Preference.doubleTapToEditEnabled && editorState.placeholder == null
+  val appliedEditorState = editor?.appliedState ?: EditorState.Initial
+  val publishedEditorState = editor?.publishedState ?: EditorState.Initial
+  val doubleTapToEditEnabled =
+    Preference.doubleTapToEditEnabled && publishedEditorState.placeholder == null
   val headerReadingTapIdentity = remember(editor, editorReadOnly, documentLocked) { Any() }
   val externalAssetIds =
-    remember(editorState.externalElements) {
-      editorState.externalElements
+    remember(publishedEditorState.externalElements) {
+      publishedEditorState.externalElements
         .mapNotNull { element ->
           when (val data = element.data) {
             is ExternalElementData.Image -> data.id
@@ -437,14 +440,14 @@ fun EditorScreen(entityId: String) {
     rememberEditorFindReplaceSession(
       documentLocked = documentLocked,
       editingSession = editingSession,
-      editorState = editorState,
+      editorState = appliedEditorState,
       bringIntoViewRequests = bringIntoViewRequests,
       ensureSubscription = ::ensureEditorMutationSubscription,
       onEditingIntent = ::requestEditing,
       admitMutation = ::canApplyEditorMutation,
     )
   fun requestEditorFocusIfSelectionActive() {
-    if (isEditing && editorState.selection != null) {
+    if (isEditing && appliedEditorState.selection != null) {
       requestEditorFocus()
     }
   }
@@ -460,7 +463,7 @@ fun EditorScreen(entityId: String) {
     focusReturnSession.observeEditorContext(
       editor = editor,
       focused = uiState.focused,
-      selection = editorState.selection,
+      selection = appliedEditorState.selection,
       contextActive = screenState.sceneInForeground && directEditingEnabled,
       auxiliaryOwnerActive = focusReturnOwnerActive,
     )
@@ -496,7 +499,7 @@ fun EditorScreen(entityId: String) {
       documentId = document?.id,
       documentLocked = documentLocked,
       editingSession = editingSession,
-      editorState = editorState,
+      editorState = appliedEditorState,
       bringIntoViewRequests = bringIntoViewRequests,
       hideContextMenu = { uiState.contextMenu.hide() },
       closeSubPane = subPaneState::dismiss,
@@ -508,7 +511,7 @@ fun EditorScreen(entityId: String) {
     rememberEditorAiFeedbackSession(
       documentId = document?.id,
       editor = editor,
-      editorState = editorState,
+      editorState = appliedEditorState,
       bringIntoViewRequests = bringIntoViewRequests,
       closeIncompatibleModes = {
         findReplace.close()
@@ -527,7 +530,7 @@ fun EditorScreen(entityId: String) {
       entityId = entityId,
       documentId = document?.id,
       editor = editor,
-      editorState = editorState,
+      editorState = appliedEditorState,
       sheetActive = subPaneState.active == EditorSubPane.Comments,
       bringIntoViewRequests = bringIntoViewRequests,
       hideContextMenu = { uiState.contextMenu.hide() },
@@ -547,12 +550,19 @@ fun EditorScreen(entityId: String) {
           screenState.sceneInForeground
       }
       val finalized =
-        activeEditor?.await(admit = transitionCurrent) {
-          if (activeEditor.tickIme?.composing != null) {
-            enqueue(Message.TextInput(listOf(FlatImeOp.CommitAsIs)))
-          }
-          enqueue(Message.System(SystemEvent.SetFocused(false)))
-        } ?: true
+        if (activeEditor == null) {
+          true
+        } else {
+          activeEditor
+            .update(admit = transitionCurrent) {
+              if (activeEditor.appliedState.ime?.composing != null) {
+                enqueue(Message.TextInput(listOf(FlatImeOp.CommitAsIs)))
+              }
+              enqueue(Message.System(SystemEvent.SetFocused(false)))
+            }
+            ?.commandOutcomes
+            ?.none { it is CommandOutcome.Rejected } == true
+        }
       if (!finalized || !transitionCurrent()) return
       model.flushDrafts()
 
@@ -663,7 +673,7 @@ fun EditorScreen(entityId: String) {
               finalizeInput = {
                 runtime.blur()
                 uiState.updateFocus(false)
-                request.session.editor.sync {
+                request.session.editor.updateNow {
                   enqueue(Message.System(SystemEvent.SetFocused(false)))
                 }
                 runtime.deactivateScene()
@@ -750,7 +760,7 @@ fun EditorScreen(entityId: String) {
             restoreFocusAfterRollback = uiState.focused
             runtime.blur()
             uiState.updateFocus(false)
-            editor.sync { enqueue(Message.System(SystemEvent.SetFocused(false))) }
+            editor.updateNow { enqueue(Message.System(SystemEvent.SetFocused(false))) }
             runtime.deactivateScene()
           },
           restoreInput = {
@@ -1040,7 +1050,7 @@ fun EditorScreen(entityId: String) {
   val preloadedLayoutSpec =
     remember(document?.layoutMode) { decodeDocumentLayoutSpec(document?.layoutMode) }
   val layoutSpec: EditorDocumentLayoutSpec =
-    layoutEditor?.state?.rootAttrs?.layoutMode?.toEditorDocumentLayoutSpec()
+    layoutEditor?.publishedState?.rootAttrs?.layoutMode?.toEditorDocumentLayoutSpec()
       ?: preloadedLayoutSpec
       ?: EditorDocumentLayoutSpec.Continuous(maxWidth = 600f)
   val background =
@@ -1064,7 +1074,7 @@ fun EditorScreen(entityId: String) {
       )
     },
   ) { innerPadding ->
-    val layoutPageSizes = layoutEditor?.pageSizes.orEmpty()
+    val layoutPageSizes = layoutEditor?.publishedState?.pageSizes.orEmpty()
     val density = LocalDensity.current.density
     val focusManager = LocalFocusManager.current
     val haptic = LocalHapticFeedback.current
@@ -1406,7 +1416,7 @@ fun EditorScreen(entityId: String) {
     val displayZoom = zoomController.displayZoom
     val typewriterTargetLineHeight =
       resolveBringIntoViewTargetHeight(
-        state = editorState,
+        state = publishedEditorState,
         layoutSpec = layoutSpec,
         target = EditorBringIntoViewTarget.CurrentSelectionHead,
         displayZoom = displayZoom,
@@ -1423,8 +1433,8 @@ fun EditorScreen(entityId: String) {
     val repasteAsTextVisible =
       directEditingEnabled &&
         uiState.focused &&
-        editorState.selection != null &&
-        editorState.lastHistoryTag is HistoryTag.PasteHtml
+        appliedEditorState.selection != null &&
+        appliedEditorState.lastHistoryTag is HistoryTag.PasteHtml
     val visibleAreas =
       screenState.resolveEditorVisibleAreas(
         topInset = topInset.value,
@@ -1470,12 +1480,15 @@ fun EditorScreen(entityId: String) {
           !currentDirectEditingEnabled
       }
       val cleaned =
-        activeEditor.await(admit = cleanupCurrent) {
-          if (activeEditor.tickIme?.composing != null) {
-            enqueue(Message.TextInput(listOf(FlatImeOp.CommitAsIs)))
+        activeEditor
+          .update(admit = cleanupCurrent) {
+            if (activeEditor.appliedState.ime?.composing != null) {
+              enqueue(Message.TextInput(listOf(FlatImeOp.CommitAsIs)))
+            }
+            enqueue(Message.System(SystemEvent.SetFocused(false)))
           }
-          enqueue(Message.System(SystemEvent.SetFocused(false)))
-        }
+          ?.commandOutcomes
+          ?.none { it is CommandOutcome.Rejected } == true
       if (!cleaned || !cleanupCurrent()) return@LaunchedEffect
       if (!uiState.focused) return@LaunchedEffect
       interactionScope.controller.cancel()
@@ -1523,18 +1536,31 @@ fun EditorScreen(entityId: String) {
         bodyTrackWidth = bodyTrackWidth,
         displayZoom = if (layoutSpec is EditorDocumentLayoutSpec.Paginated) displayZoom else 1f,
       )
+    val publishedRevision = editor?.publishedRevision
+    val hasPublishedState = publishedRevision != null
     val editorGeometryValid =
       hasValidEditorGeometry(
         editorAttached = editor != null,
-        pageSizes = editorState.pageSizes,
+        pageSizes = publishedEditorState.pageSizes,
         trackWidth = bodyTrackWidth,
       )
-    val editorReady = !loading && editorGeometryValid && editorSessionAttached
+    val editorGeometryInvalid =
+      hasInvalidPublishedEditorGeometry(
+        publishedRevision = publishedRevision,
+        geometryValid = editorGeometryValid,
+      )
+    val editorReady =
+      canHideEditorLoadingSkeleton(
+        loading = loading,
+        geometryValid = editorGeometryValid,
+        sessionAttached = editorSessionAttached,
+        hasPublishedFrame = editor?.publishedBundle?.frames?.isNotEmpty() == true,
+      )
     val editorInteractionFocused = editorReady && uiState.focused && screenState.sceneInForeground
 
-    LaunchedEffect(editor, editorGeometryValid) {
+    LaunchedEffect(editor, hasPublishedState, editorGeometryValid) {
       val attachedEditor = editor ?: return@LaunchedEffect
-      if (!editorGeometryValid && runtime.editor === attachedEditor) {
+      if (editorGeometryInvalid && runtime.editor === attachedEditor) {
         runtime.reportError(
           attachedEditor,
           IllegalStateException("Attached editor has invalid geometry"),
@@ -1557,7 +1583,7 @@ fun EditorScreen(entityId: String) {
     }
     val scrollFrame =
       EditorScrollFrame(
-        state = editorState,
+        state = publishedEditorState,
         layoutSpec = layoutSpec,
         displayZoom = displayZoom,
         visibleArea = visibleArea,
@@ -1637,7 +1663,7 @@ fun EditorScreen(entityId: String) {
           }
         },
       )
-      interactionScope.onEditorStateChanged(editorState)
+      interactionScope.onEditorStateChanged(publishedEditorState)
     }
     LaunchedEffect(screenState.viewportState, viewportScrollableState) {
       snapshotFlow { viewportScrollableState.isScrollInProgress }
@@ -1701,7 +1727,7 @@ fun EditorScreen(entityId: String) {
           val editor = runtime.editor
           if (editor != null && viewport.width > 0f && viewport.height > 0f) {
             scope.launch {
-              editor.await {
+              editor.update {
                 enqueue(
                   Message.System(
                     SystemEvent.Resize(
@@ -1811,7 +1837,8 @@ fun EditorScreen(entityId: String) {
           }
         },
         overlay = {
-          if (editorReady) {
+          val activeSession = editingSession
+          if (editorReady && activeSession != null) {
             Box(modifier = Modifier.fillMaxSize()) {
               EditorScreenOverlayHost(
                 viewportState = screenState.viewportState,
@@ -1844,7 +1871,6 @@ fun EditorScreen(entityId: String) {
                 visibleArea = visibleAreas.base,
                 modifier = Modifier.fillMaxSize(),
               )
-              val activeSession: DocumentEditingSession = editingSession
               EditorRepasteAsTextOverlay(
                 visibleArea = visibleAreas.base,
                 visible = repasteAsTextVisible,
@@ -1852,9 +1878,9 @@ fun EditorScreen(entityId: String) {
                     if (!directEditingEnabled) return@repasteAsText
                     activeSession.submit { activeEditor, context ->
                       activeEditor.scope.launch(context) {
-                        activeEditor.awaitWithBringIntoView(bringIntoViewRequests) {
+                        activeEditor.updateWithBringIntoView(bringIntoViewRequests) {
                           enqueue(Message.Clipboard(ClipboardOp.RepasteAsText))
-                          beforeCommit {
+                          afterApplied {
                             bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
                           }
                         }
@@ -1885,7 +1911,7 @@ fun EditorScreen(entityId: String) {
               overlay = {
                 if (editorReady && !editorReadOnly) {
                   EditorDocumentPlaceholder(
-                    placeholder = editorState.placeholder,
+                    placeholder = publishedEditorState.placeholder,
                     geometry = bodyGeometry,
                     layoutSpec = layoutSpec,
                     pageSizes = layoutPageSizes,
@@ -1918,7 +1944,7 @@ fun EditorScreen(entityId: String) {
             modifier = Modifier,
           )
           EditorToolbarHost(
-            editorState = editorState,
+            editorState = appliedEditorState,
             pagerState = toolbarPagerState,
             bottomPanelTransition = bottomPanelTransition,
             editorFocused = uiState.focused,
@@ -1959,7 +1985,7 @@ fun EditorScreen(entityId: String) {
             active = screenShortcutModeActive,
             enabled = editorReady && screenState.sceneInForeground && !subPaneBlocksEditorInput,
             editorFocused = uiState.focused,
-            selection = editorState.selection,
+            selection = appliedEditorState.selection,
           ) { event ->
             handleEditorScreenShortcut(
               event = event,
@@ -1980,7 +2006,7 @@ internal fun enterDocumentStartFromHeader(
   requestEditorFocus()
   val activeEditor = editor ?: return
   scope.launch {
-    activeEditor.await {
+    activeEditor.update {
       enqueue(
         Message.Navigation(NavigationOp.Move(Movement.Document(Direction.Backward), extend = false))
       )

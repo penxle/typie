@@ -73,17 +73,14 @@ class EditorLongPressSemanticTest {
   }
 
   private suspend fun kotlinx.coroutines.test.TestScope.editor(cursorHit: Boolean = false): Editor {
-    val editor =
-      Editor(
-        FakeFfiEditor(
-          cursorHitRectsProvider = {
-            if (cursorHit) FakeFfiEditor.coveringHitRects(0) else emptyList()
-          }
-        ),
-        this,
-        StandardTestDispatcher(testScheduler),
+    val fake =
+      FakeFfiEditor(
+        cursorHitRectsProvider = {
+          if (cursorHit) FakeFfiEditor.coveringHitRects(0) else emptyList()
+        }
       )
-    editor.sync {}
+    val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+    fake.publishSnapshot(editor)
     return editor
   }
 

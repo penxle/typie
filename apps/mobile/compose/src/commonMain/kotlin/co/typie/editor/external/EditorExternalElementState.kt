@@ -44,18 +44,24 @@ internal sealed interface EditorAssetResolution {
 internal class EditorExternalImageElementState {
   val assets = mutableStateMapOf<String, EditorImageAsset>()
   val uploads = mutableStateMapOf<String, EditorImageUpload>()
-  val resizeDraftProportions = mutableStateMapOf<String, Float>()
+  val resizeDrafts = mutableStateMapOf<String, EditorImageResizeDraft>()
 
   fun clearResizeState(nodeId: String) {
-    resizeDraftProportions.remove(nodeId)
+    resizeDrafts.remove(nodeId)
   }
 
   fun clear() {
     assets.clear()
     uploads.clear()
-    resizeDraftProportions.clear()
+    resizeDrafts.clear()
   }
 }
+
+internal data class EditorImageResizeDraft(
+  val proportion: Float,
+  val boundsWidth: Float,
+  val originalWidth: Float,
+)
 
 @Stable
 internal class EditorExternalFileElementState {

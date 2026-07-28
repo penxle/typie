@@ -69,6 +69,7 @@ describe('embed upload processing', () => {
       commit: (message) => {
         commitSawPending = pending;
         expect(message).toEqual(createSetEmbedAttrsMessage('node-1', asset.id));
+        return true;
       },
     });
 
@@ -93,7 +94,10 @@ describe('embed upload processing', () => {
       isCurrent: () => current,
       unfurl: () => promise,
       setEmbedAsset: (value) => assets.set(value.id, value),
-      commit: () => (committed = true),
+      commit: () => {
+        committed = true;
+        return true;
+      },
     });
 
     current = false;
@@ -103,5 +107,27 @@ describe('embed upload processing', () => {
     expect(pending).toBe(false);
     expect(assets.size).toBe(0);
     expect(committed).toBe(false);
+  });
+
+  it('reports a rejected local commit as a failed upload', async () => {
+    let pending = false;
+    let assetCached = false;
+
+    const result = await processEmbedUpload({
+      url: 'example.com',
+      nodeId: 'node-1',
+      setPending: () => (pending = true),
+      clearPending: () => (pending = false),
+      isCurrent: () => pending,
+      unfurl: async () => asset,
+      setEmbedAsset: () => {
+        assetCached = true;
+      },
+      commit: () => false,
+    });
+
+    expect(result).toBe('failed');
+    expect(pending).toBe(false);
+    expect(assetCached).toBe(true);
   });
 });

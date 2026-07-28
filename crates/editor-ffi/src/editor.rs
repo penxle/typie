@@ -82,6 +82,27 @@ fn assemble_send_payload(
 struct EditorInner {
     editor: editor_core::Editor,
     carrier_bytes: CarrierStash,
+    failed: bool,
+}
+
+impl EditorInner {
+    fn ensure_available(&self) -> EditorResult<()> {
+        if self.failed {
+            Err(FfiError::EditorFailed.into())
+        } else {
+            Ok(())
+        }
+    }
+
+    #[cfg(not(feature = "wasm-server"))]
+    fn page_render_signature_at_revision(
+        &self,
+        page: u32,
+        requested_revision: editor_core::Revision,
+    ) -> Option<u64> {
+        (self.editor.revision() == requested_revision)
+            .then(|| self.editor.page_render_signature(page))
+    }
 }
 
 // Raster/present state lives behind its own lock so a page rasterization never
@@ -92,11 +113,11 @@ struct EditorInner {
 #[cfg(not(feature = "wasm-server"))]
 struct RenderState {
     surfaces: HashMap<u32, SurfaceHandle>,
-    // Last render signature presented for each page. `render_surface` skips
-    // re-rasterizing a page whose signature is unchanged (the selection-drag hot
-    // path, where only the page under the moving endpoint actually changes).
-    // Cleared whenever the page's pixel buffer is (re)created: attach/detach/resize.
-    last_render_sig: HashMap<u32, u64>,
+    // Exact prepared frame for each active page target. The signature proves exact
+    // reuse; the key identifies that prepared frame across the FFI boundary.
+    // Cleared whenever the page's target is (re)created: attach/detach/resize.
+    last_prepared_frame: HashMap<u32, (u64, FrameKey)>,
+    next_frame_key: u64,
     prev_dl: HashMap<u32, editor_renderer::display_list::DisplayList>,
     // Content height (device px) last painted per page. The surface backing is
     // fixed at the page's max height, so when content grows we force-damage the
@@ -107,9 +128,29 @@ struct RenderState {
 #[cfg(not(feature = "wasm-server"))]
 impl RenderState {
     fn clear_page_present_state(&mut self, page: u32) {
-        self.last_render_sig.remove(&page);
+        self.last_prepared_frame.remove(&page);
         self.prev_dl.remove(&page);
         self.last_content_height.remove(&page);
+    }
+
+    fn reused_frame_key(&self, page: u32, signature: u64) -> Option<FrameKey> {
+        self.last_prepared_frame
+            .get(&page)
+            .filter(|(prepared_signature, _)| *prepared_signature == signature)
+            .map(|(_, frame_key)| *frame_key)
+    }
+
+    fn prepare_frame_key(&mut self, page: u32, signature: u64) -> FrameKey {
+        let frame_key = FrameKey {
+            value: self.next_frame_key,
+        };
+        self.next_frame_key = self
+            .next_frame_key
+            .checked_add(1)
+            .expect("frame key overflow");
+        self.last_prepared_frame
+            .insert(page, (signature, frame_key));
+        frame_key
     }
 }
 
@@ -119,6 +160,16 @@ pub struct Editor {
     inner: Mutex<EditorInner>,
     #[cfg(not(feature = "wasm-server"))]
     render: Mutex<RenderState>,
+}
+
+/// Opaque identity of one exact prepared frame.
+///
+/// Hosts may compare keys for equality only. The numeric representation has no
+/// ordering or revision semantics.
+#[ffi]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct FrameKey {
+    pub value: u64,
 }
 
 #[ffi]
@@ -239,9 +290,26 @@ fn public_tracked_range_endpoints(
 #[cfg_attr(feature = "uniffi", editor_macros::ffi_export(uniffi))]
 #[cfg_attr(feature = "wasm", editor_macros::ffi_export(wasm))]
 impl Editor {
-    pub fn enqueue(&self, message: Complex<editor_core::Message>) -> EditorResult<()> {
+    pub fn enqueue_request(
+        &self,
+        messages: Vec<Complex<editor_core::Message>>,
+    ) -> EditorResult<Complex<editor_core::RequestId>> {
         self.with_inner(|inner| {
-            inner.editor.enqueue(message.from_ffi()?);
+            Ok(inner
+                .editor
+                .enqueue_request(messages.from_ffi()?)?
+                .into_ffi()?)
+        })
+    }
+
+    // Borrow the opaque update so one immutable update can be fanned out to
+    // multiple Editors without consuming the wasm-bindgen handle.
+    pub fn receive_resource_update(
+        &self,
+        update: &Owned<crate::host::ResourceUpdate>,
+    ) -> EditorResult<()> {
+        self.with_inner(|inner| {
+            inner.editor.receive_resource_update(update.inner.clone());
             Ok(())
         })
     }
@@ -250,8 +318,16 @@ impl Editor {
         self.with_inner(|inner| Ok(inner.editor.last_history_tag().into_ffi()?))
     }
 
-    pub fn tick(&self) -> EditorResult<Vec<Complex<editor_core::EditorEvent>>> {
-        self.with_inner(|inner| Ok(inner.editor.tick()?.into_ffi()?))
+    pub fn tick(&self) -> EditorResult<Option<Complex<editor_core::TickResult>>> {
+        self.with_tick(|inner| Ok(inner.editor.tick()?.into_ffi()?))
+    }
+
+    pub fn tick_through(
+        &self,
+        request_id: Complex<editor_core::RequestId>,
+    ) -> EditorResult<Complex<editor_core::TickResult>> {
+        let request_id = request_id.from_ffi()?;
+        self.with_tick(|inner| Ok(inner.editor.tick_through(request_id)?.into_ffi()?))
     }
 
     pub fn cursor(&self) -> EditorResult<Option<Complex<editor_view::CursorMetrics>>> {
@@ -658,7 +734,7 @@ impl Editor {
 
     pub fn set_doc(&self, plain: Complex<editor_model::PlainDoc>) -> EditorResult<()> {
         self.with_inner(|inner| {
-            inner.editor.set_doc(plain.from_ffi()?);
+            inner.editor.set_doc(plain.from_ffi()?)?;
             Ok(())
         })
     }
@@ -881,7 +957,7 @@ impl Editor {
         height: f64,
         scale_factor: f64,
     ) -> EditorResult<()> {
-        self.with_render(|render| {
+        self.with_guarded_render(|render| {
             // Drop the old handle before the budget check in `SurfaceHandle::new`.
             render.surfaces.remove(&page);
             let surface = SurfaceHandle::new(handle, width, height, scale_factor)?;
@@ -914,7 +990,7 @@ impl Editor {
         height: f64,
         scale_factor: f64,
     ) -> EditorResult<()> {
-        self.with_render(|render| {
+        self.with_guarded_render(|render| {
             let changed = render
                 .surfaces
                 .get_mut(&page)
@@ -931,28 +1007,37 @@ impl Editor {
         })
     }
 
-    /// Returns whether a new frame was presented. `false` means no frame will arrive
-    /// from this call — the page's pixels already match the current state — so hosts
-    /// that wait for a present (the mobile settle handshake) must treat the page as
-    /// settled instead of waiting.
-    pub fn render_surface(&self, page: u32) -> EditorResult<bool> {
-        self.with_render(|render| {
+    /// Prepares the exact requested editor revision for one active page target.
+    ///
+    /// The same key is returned when that target already contains the exact prepared
+    /// frame. `None` means the requested revision could not be prepared.
+    pub fn render_surface(
+        &self,
+        page: u32,
+        requested_revision: Complex<editor_core::Revision>,
+    ) -> EditorResult<Option<Complex<FrameKey>>> {
+        let prepared = self.with_guarded_render(|render| {
+            let requested_revision = requested_revision.from_ffi()?;
             let scale_factor = match render.surfaces.get(&page) {
                 Some(surface) => surface.scale_factor() as f32,
-                None => return Ok(false),
+                None => return Ok(None),
             };
             // The editor lock is held only for the signature check and the
             // display-list build; the raster + present below run with the editor
             // free for concurrent ticks and reads.
             let (sig, built) = {
                 let mut inner = self.inner.lock().map_err(|_| FfiError::LockPoisoned)?;
+                inner.ensure_available()?;
                 // Skip the rebuild + incremental raster + present when nothing this page
                 // draws has changed since the last presented frame. During a selection
                 // drag only the page under the moving endpoint changes; every other
                 // visible page keeps a stable signature and is skipped here.
-                let sig = inner.editor.page_render_signature(page);
-                if render.last_render_sig.get(&page) == Some(&sig) {
-                    return Ok(false);
+                let Some(sig) = inner.page_render_signature_at_revision(page, requested_revision)
+                else {
+                    return Ok(None);
+                };
+                if let Some(frame_key) = render.reused_frame_key(page, sig) {
+                    return Ok(Some(frame_key));
                 }
                 (sig, inner.editor.build_display_list(page, scale_factor))
             };
@@ -960,11 +1045,10 @@ impl Editor {
             // surfaces outlive a shrinking document until it re-renders), in
             // which case no frame will arrive from this call.
             let Some((dl, page_bounds)) = built else {
-                return Ok(false);
+                return Ok(None);
             };
             let prev_content_h = render.last_content_height.get(&page).copied();
             let prev = render.prev_dl.get(&page);
-            let surface = render.surfaces.get_mut(&page).unwrap();
             let mut damage = match prev {
                 None => vec![page_bounds],
                 Some(prev) => editor_renderer::diff::diff(prev, &dl, page_bounds),
@@ -984,17 +1068,23 @@ impl Editor {
                     damage.push(strip);
                 }
             }
-            let committed = surface.apply_damage(&dl, &damage);
+            let frame_key = render.prepare_frame_key(page, sig);
+            let committed = render.surfaces.get_mut(&page).unwrap().apply_damage(
+                &dl,
+                &damage,
+                requested_revision.get(),
+                frame_key,
+            );
             if committed {
                 render.prev_dl.insert(page, dl);
-                render.last_render_sig.insert(page, sig);
                 render.last_content_height.insert(page, page_bounds.y1);
-                Ok(true)
+                Ok(Some(frame_key))
             } else {
                 render.clear_page_present_state(page);
-                Ok(false)
+                Ok(None)
             }
-        })
+        })?;
+        Ok(prepared.into_ffi()?)
     }
 }
 
@@ -1007,7 +1097,7 @@ impl Editor {
 #[editor_macros::ffi_export(wasm)]
 impl Editor {
     pub fn surface_backend(&self, page: u32) -> EditorResult<String> {
-        self.with_render(|render| {
+        self.with_guarded_render(|render| {
             Ok(match render.surfaces.get(&page) {
                 None => "none".to_string(),
                 Some(surface) if surface.is_oversized() => "cpu-oversized".to_string(),
@@ -1019,7 +1109,7 @@ impl Editor {
     /// Visibility-return recovery. CPU keeps the invalidate semantics (clear → full
     /// re-render on the next `render_surface`).
     pub fn refresh_surface(&self, page: u32) -> EditorResult<()> {
-        self.with_render(|render| {
+        self.with_guarded_render(|render| {
             if render.surfaces.contains_key(&page) {
                 render.clear_page_present_state(page);
             }
@@ -1034,11 +1124,13 @@ impl Editor {
             inner: Mutex::new(EditorInner {
                 editor: core,
                 carrier_bytes,
+                failed: false,
             }),
             #[cfg(not(feature = "wasm-server"))]
             render: Mutex::new(RenderState {
                 surfaces: HashMap::new(),
-                last_render_sig: HashMap::new(),
+                last_prepared_frame: HashMap::new(),
+                next_frame_key: 1,
                 prev_dl: HashMap::new(),
                 last_content_height: HashMap::new(),
             }),
@@ -1050,7 +1142,27 @@ impl Editor {
         F: FnOnce(&mut EditorInner) -> EditorResult<R>,
     {
         let mut inner = self.inner.lock().map_err(|_| FfiError::LockPoisoned)?;
+        inner.ensure_available()?;
         f(&mut inner)
+    }
+
+    fn with_tick<F, R>(&self, f: F) -> EditorResult<R>
+    where
+        F: FnOnce(&mut EditorInner) -> EditorResult<R>,
+    {
+        let mut inner = self.inner.lock().map_err(|_| FfiError::LockPoisoned)?;
+        inner.ensure_available()?;
+        match f(&mut inner) {
+            Ok(value) => Ok(value),
+            Err(error) => {
+                // Core failure may leave unversioned mutations behind. A later FFI
+                // representation failure only invalidates that call's return value.
+                if matches!(&error, EditorError::Core(_)) {
+                    inner.failed = true;
+                }
+                Err(error)
+            }
+        }
     }
 
     #[cfg(not(feature = "wasm-server"))]
@@ -1060,6 +1172,20 @@ impl Editor {
     {
         let mut render = self.render.lock().map_err(|_| FfiError::LockPoisoned)?;
         f(&mut render)
+    }
+
+    #[cfg(not(feature = "wasm-server"))]
+    fn with_guarded_render<F, R>(&self, f: F) -> EditorResult<R>
+    where
+        F: FnOnce(&mut RenderState) -> EditorResult<R>,
+    {
+        self.with_render(|render| {
+            self.inner
+                .lock()
+                .map_err(|_| FfiError::LockPoisoned)?
+                .ensure_available()?;
+            f(render)
+        })
     }
 }
 
@@ -1071,6 +1197,7 @@ fn position_is_addressable(pos: &editor_state::Position, view: &editor_model::Do
 mod tests {
     use super::*;
     use editor_macros::state;
+    use std::sync::Arc;
 
     fn make_ffi_editor(initial: editor_state::State) -> Editor {
         let mut core = editor_core::Editor::new_test(initial);
@@ -1078,6 +1205,198 @@ mod tests {
             event: editor_core::SystemEvent::Initialize,
         });
         Editor::new(core, CarrierStash::default())
+    }
+
+    impl Editor {
+        fn enqueue_for_test(&self, message: Complex<editor_core::Message>) -> EditorResult<()> {
+            self.enqueue_request(vec![message]).map(|_| ())
+        }
+    }
+
+    fn host_editor(host: &crate::host::EditorHost) -> Editor {
+        let plain =
+            crate::doc_builder::build_default_doc(editor_model::PlainRootNode::default(), vec![]);
+        host.create_editor_from_doc(plain, editor_view::Viewport::new(320.0, 640.0, 1.0))
+            .unwrap()
+    }
+
+    fn local_resource(editor: &Editor) -> Arc<Mutex<editor_resource::Resource>> {
+        let inner = editor.inner.lock().unwrap();
+        Arc::clone(inner.editor.resource())
+    }
+
+    fn local_theme(editor: &Editor) -> editor_resource::ThemeVariant {
+        local_resource(editor).lock().unwrap().theme().variant()
+    }
+
+    #[test]
+    fn host_resource_update_reaches_each_distinct_editor_only_after_its_tick() {
+        let host = crate::host::EditorHost::new_test();
+        let first = host_editor(&host);
+        let second = host_editor(&host);
+        assert!(!Arc::ptr_eq(
+            &local_resource(&first),
+            &local_resource(&second)
+        ));
+
+        let update = host
+            .set_theme_variant(editor_resource::ThemeVariant::DarkBlack)
+            .unwrap()
+            .expect("changed theme must return an update");
+        assert_eq!(
+            local_theme(&first),
+            editor_resource::ThemeVariant::LightWhite
+        );
+        assert_eq!(
+            local_theme(&second),
+            editor_resource::ThemeVariant::LightWhite
+        );
+
+        first.receive_resource_update(&update).unwrap();
+        assert_eq!(
+            local_theme(&first),
+            editor_resource::ThemeVariant::LightWhite
+        );
+        first.tick().unwrap().expect("queued update must tick");
+        assert_eq!(
+            local_theme(&first),
+            editor_resource::ThemeVariant::DarkBlack
+        );
+        assert_eq!(
+            local_theme(&second),
+            editor_resource::ThemeVariant::LightWhite
+        );
+
+        second.receive_resource_update(&update).unwrap();
+        second.tick().unwrap().expect("queued update must tick");
+        assert_eq!(
+            local_theme(&second),
+            editor_resource::ThemeVariant::DarkBlack
+        );
+    }
+
+    #[cfg(not(feature = "wasm"))]
+    #[test]
+    fn graph_ingest_uses_the_source_snapshot_current_at_finish() {
+        let host = crate::host::EditorHost::new_test();
+        let ingest = host.begin_graph_ingest().unwrap();
+        let update = host
+            .set_theme_variant(editor_resource::ThemeVariant::DarkBlack)
+            .unwrap();
+        assert!(update.is_some());
+
+        let editor = ingest
+            .finish(editor_view::Viewport::new(320.0, 640.0, 1.0))
+            .unwrap();
+
+        assert_eq!(
+            local_theme(&editor),
+            editor_resource::ThemeVariant::DarkBlack
+        );
+    }
+
+    #[test]
+    fn ffi_request_api_drains_through_the_exact_request() {
+        let (initial, ..) = state! {
+            doc { root { p: paragraph { text("") } } }
+            selection: (p, 0)
+        };
+        let editor = make_ffi_editor(initial);
+        let insert = |text: &str| editor_core::Message::Insertion {
+            op: editor_core::InsertionOp::Text { text: text.into() },
+        };
+
+        let first = editor.enqueue_request(vec![insert("a")]).unwrap();
+        let second = editor
+            .enqueue_request(vec![insert("b"), insert("c")])
+            .unwrap();
+        let result = editor.tick_through(second).unwrap();
+
+        assert!(result.revision.value > 0);
+        assert_eq!(
+            result
+                .request_outcomes
+                .iter()
+                .map(|outcome| outcome.request_id)
+                .collect::<Vec<_>>(),
+            vec![first, second]
+        );
+        assert_eq!(
+            result.request_outcomes[1].command_outcomes,
+            vec![
+                editor_core::CommandOutcome::Applied,
+                editor_core::CommandOutcome::Applied,
+            ]
+        );
+        assert!(editor.tick().unwrap().is_none());
+    }
+
+    #[test]
+    fn ffi_conversion_failure_after_a_successful_tick_does_not_fail_the_editor() {
+        let (initial, ..) = state! {
+            doc { root { p: paragraph { text("") } } }
+            selection: (p, 0)
+        };
+        let editor = make_ffi_editor(initial);
+        let request = editor
+            .enqueue_request(vec![editor_core::Message::Insertion {
+                op: editor_core::InsertionOp::Text { text: "a".into() },
+            }])
+            .unwrap();
+
+        let error = editor
+            .with_tick(|inner| {
+                inner.editor.tick_through(request)?;
+                Err::<(), EditorError>(
+                    FfiError::Serialization("synthetic conversion failure".into()).into(),
+                )
+            })
+            .unwrap_err();
+
+        assert!(matches!(
+            error,
+            EditorError::Ffi(FfiError::Serialization(_))
+        ));
+        assert!(editor.selection().is_ok());
+    }
+
+    #[test]
+    fn failed_tick_blocks_core_access_but_allows_surface_cleanup() {
+        let (initial, ..) = state! {
+            doc { root { p: paragraph { text("") } } }
+            selection: (p, 0)
+        };
+        let editor = make_ffi_editor(initial);
+        let request = editor
+            .enqueue_request(vec![editor_core::Message::Node {
+                op: editor_core::NodeOp::SetAttr {
+                    id: editor_crdt::Dot::ROOT,
+                    attr: editor_model::NodeAttr::Image {
+                        attr: editor_model::ImageNodeAttr::Proportion(50),
+                    },
+                },
+            }])
+            .unwrap();
+
+        let initial_error = editor.tick_through(request).unwrap_err().to_string();
+        assert!(!initial_error.contains("unavailable after a failed tick"));
+
+        let later_error = editor.selection().unwrap_err().to_string();
+        assert!(later_error.contains("unavailable after a failed tick"));
+        assert!(matches!(
+            editor.resize_surface(0, 100.0, 100.0, 1.0),
+            Err(EditorError::Ffi(FfiError::EditorFailed))
+        ));
+        assert!(matches!(
+            editor.render_surface(0, editor_core::Revision::INITIAL),
+            Err(EditorError::Ffi(FfiError::EditorFailed))
+        ));
+        assert!(matches!(
+            editor.attach_surface(0, 0, 100.0, 100.0, 1.0),
+            Err(EditorError::Ffi(FfiError::EditorFailed))
+        ));
+        assert!(editor.detach_surface(0).is_ok());
+        assert!(editor.invalidate_surface(0).is_ok());
     }
 
     #[test]
@@ -1568,7 +1887,7 @@ mod tests {
         let pre_heads = editor.current_heads().unwrap();
 
         editor
-            .enqueue(Message::Insertion {
+            .enqueue_for_test(Message::Insertion {
                 op: InsertionOp::Text { text: "a".into() },
             })
             .unwrap();
@@ -1635,7 +1954,7 @@ mod tests {
         let pre_heads = editor.current_heads().unwrap();
         let step = |text: &str| {
             editor
-                .enqueue(Message::Insertion {
+                .enqueue_for_test(Message::Insertion {
                     op: InsertionOp::Text { text: text.into() },
                 })
                 .unwrap();
@@ -1721,7 +2040,7 @@ mod tests {
         let pre_heads = editor.current_heads().unwrap();
         let step = |text: &str| {
             editor
-                .enqueue(Message::Insertion {
+                .enqueue_for_test(Message::Insertion {
                     op: InsertionOp::Text { text: text.into() },
                 })
                 .unwrap();
@@ -1785,7 +2104,7 @@ mod tests {
         let pre_heads = editor.current_heads().unwrap();
         let step = |text: &str| {
             editor
-                .enqueue(Message::Insertion {
+                .enqueue_for_test(Message::Insertion {
                     op: InsertionOp::Text { text: text.into() },
                 })
                 .unwrap();
@@ -1848,7 +2167,7 @@ mod tests {
         let pre_heads = editor.current_heads().unwrap();
         let step = |text: &str| {
             editor
-                .enqueue(Message::Insertion {
+                .enqueue_for_test(Message::Insertion {
                     op: InsertionOp::Text { text: text.into() },
                 })
                 .unwrap();
@@ -2023,7 +2342,7 @@ mod tests {
             *captured = editor.current_heads().unwrap();
         };
         let step = |msg: Message| {
-            editor.enqueue(msg).unwrap();
+            editor.enqueue_for_test(msg).unwrap();
             let _ = editor.tick().unwrap();
         };
 
@@ -2119,7 +2438,7 @@ mod tests {
         };
         let step = |text: &str| {
             editor
-                .enqueue(Message::Insertion {
+                .enqueue_for_test(Message::Insertion {
                     op: InsertionOp::Text { text: text.into() },
                 })
                 .unwrap();
@@ -2443,7 +2762,7 @@ mod tests {
         );
 
         editor
-            .enqueue(editor_core::Message::Clipboard {
+            .enqueue_for_test(editor_core::Message::Clipboard {
                 op: editor_core::ClipboardOp::Paste {
                     html: Some(payload.html),
                     text: payload.text,
@@ -2524,7 +2843,7 @@ mod tests {
         let editor = make_ffi_editor(initial);
 
         editor
-            .enqueue(Message::Selection {
+            .enqueue_for_test(Message::Selection {
                 op: SelectionOp::Unset,
             })
             .expect("enqueue unset");
@@ -2536,7 +2855,7 @@ mod tests {
 
         let new_sel = Selection::collapsed(Position::new(p1, 1));
         editor
-            .enqueue(Message::Selection {
+            .enqueue_for_test(Message::Selection {
                 op: SelectionOp::Set { selection: new_sel },
             })
             .expect("enqueue set");
@@ -2578,7 +2897,7 @@ mod tests {
             affinity: editor_state::Affinity::Downstream,
         });
         editor
-            .enqueue(
+            .enqueue_for_test(
                 editor_core::Message::Selection {
                     op: editor_core::SelectionOp::Set { selection },
                 }
@@ -2594,7 +2913,7 @@ mod tests {
                 modifiers: Default::default(),
             },
         };
-        editor.enqueue(msg.into_ffi().unwrap()).unwrap();
+        editor.enqueue_for_test(msg.into_ffi().unwrap()).unwrap();
         editor.tick().unwrap();
     }
 
@@ -2617,7 +2936,7 @@ mod tests {
             .expect("freeze_selection must Ok for valid selection")
             .expect("freeze_selection must return Some for valid selection");
         editor
-            .enqueue(editor_core::Message::TrackedRange {
+            .enqueue_for_test(editor_core::Message::TrackedRange {
                 op: editor_core::TrackedRangeOp::AddFrozen {
                     id: "r".into(),
                     group: "g".into(),
@@ -2647,7 +2966,7 @@ mod tests {
             .expect("valid selection");
 
         editor
-            .enqueue(
+            .enqueue_for_test(
                 editor_core::Message::TrackedRange {
                     op: editor_core::TrackedRangeOp::AddFrozen {
                         id: "r".into(),
@@ -2663,7 +2982,7 @@ mod tests {
         let _ = editor.tick().expect("tick add");
 
         editor
-            .enqueue(
+            .enqueue_for_test(
                 editor_core::Message::Selection {
                     op: editor_core::SelectionOp::Set {
                         selection: editor_state::Selection::new(
@@ -2677,7 +2996,7 @@ mod tests {
             )
             .expect("enqueue selection");
         editor
-            .enqueue(
+            .enqueue_for_test(
                 editor_core::Message::Deletion {
                     op: editor_core::DeletionOp::Selection,
                 }
@@ -2688,7 +3007,7 @@ mod tests {
         let _ = editor.tick().expect("tick delete");
 
         editor
-            .enqueue(
+            .enqueue_for_test(
                 editor_core::Message::History {
                     op: editor_core::HistoryOp::Undo,
                 }
@@ -2699,7 +3018,7 @@ mod tests {
         let _ = editor.tick().expect("tick undo");
 
         editor
-            .enqueue(
+            .enqueue_for_test(
                 editor_core::Message::Selection {
                     op: editor_core::SelectionOp::Set {
                         selection: editor_state::Selection::collapsed(editor_state::Position::new(
@@ -2712,7 +3031,7 @@ mod tests {
             )
             .expect("enqueue cursor");
         editor
-            .enqueue(
+            .enqueue_for_test(
                 editor_core::Message::Deletion {
                     op: editor_core::DeletionOp::Move {
                         movement: editor_core::Movement::Grapheme {
@@ -2751,7 +3070,7 @@ mod tests {
         };
         let editor_b = make_ffi_editor(state_b);
         editor_b
-            .enqueue(
+            .enqueue_for_test(
                 editor_core::Message::TrackedRange {
                     op: editor_core::TrackedRangeOp::AddFrozen {
                         id: "r".into(),
@@ -2808,14 +3127,14 @@ mod tests {
             .expect("collapsed cursor has metrics");
 
         editor
-            .enqueue(Message::Dnd {
+            .enqueue_for_test(Message::Dnd {
                 op: DndOp::EnterExternal {
                     payload: ExternalDndPayloadKind::Text,
                 },
             })
             .expect("ffi enqueue returns Ok");
         editor
-            .enqueue(Message::Dnd {
+            .enqueue_for_test(Message::Dnd {
                 op: DndOp::Over {
                     page: 0,
                     x: cursor.caret.x,
@@ -2825,10 +3144,14 @@ mod tests {
                 },
             })
             .expect("ffi enqueue returns Ok");
-        let events = editor.tick().expect("ffi tick returns Ok");
+        let result = editor
+            .tick()
+            .expect("ffi tick returns Ok")
+            .expect("queued work produces a tick result");
 
         assert!(
-            events
+            result
+                .events
                 .iter()
                 .any(|e| matches!(e, EditorEvent::RenderInvalidated)),
             "immediate dnd over must return render invalidation events",
@@ -2845,7 +3168,7 @@ mod tests {
         let sel = initial.selection.unwrap();
 
         editor
-            .enqueue(editor_core::Message::TrackedRange {
+            .enqueue_for_test(editor_core::Message::TrackedRange {
                 op: editor_core::TrackedRangeOp::Add {
                     id: "thread-a".into(),
                     group: "comment".into(),
@@ -2892,7 +3215,7 @@ mod tests {
         let sel = editor.prose_to_selection(0, 5).expect("ok").expect("some");
 
         editor
-            .enqueue(editor_core::Message::TrackedRange {
+            .enqueue_for_test(editor_core::Message::TrackedRange {
                 op: editor_core::TrackedRangeOp::Add {
                     id: "err-1".into(),
                     group: "spellcheck".into(),
@@ -3332,12 +3655,13 @@ mod tests {
             let mut g = editor.render.lock().unwrap();
             g.prev_dl
                 .insert(0, editor_renderer::display_list::DisplayList::default());
-            g.last_render_sig.insert(0, 123);
+            g.last_prepared_frame
+                .insert(0, (123, FrameKey { value: 1 }));
         }
         editor.render.lock().unwrap().clear_page_present_state(0);
         let g = editor.render.lock().unwrap();
         assert!(!g.prev_dl.contains_key(&0));
-        assert!(!g.last_render_sig.contains_key(&0));
+        assert!(!g.last_prepared_frame.contains_key(&0));
     }
 
     #[test]
@@ -3349,13 +3673,14 @@ mod tests {
             let mut g = editor.render.lock().unwrap();
             g.prev_dl
                 .insert(0, editor_renderer::display_list::DisplayList::default());
-            g.last_render_sig.insert(0, 123);
+            g.last_prepared_frame
+                .insert(0, (123, FrameKey { value: 1 }));
             g.last_content_height.insert(0, 456);
         }
         editor.invalidate_surface(0).unwrap();
         let g = editor.render.lock().unwrap();
         assert!(!g.prev_dl.contains_key(&0));
-        assert!(!g.last_render_sig.contains_key(&0));
+        assert!(!g.last_prepared_frame.contains_key(&0));
         assert!(!g.last_content_height.contains_key(&0));
     }
 
@@ -3368,11 +3693,52 @@ mod tests {
             let mut g = editor.render.lock().unwrap();
             g.prev_dl
                 .insert(0, editor_renderer::display_list::DisplayList::default());
-            g.last_render_sig.insert(0, 123);
+            g.last_prepared_frame
+                .insert(0, (123, FrameKey { value: 1 }));
         }
         editor.detach_surface(0).expect("detach must succeed");
         let g = editor.render.lock().unwrap();
         assert!(!g.prev_dl.contains_key(&0));
-        assert!(!g.last_render_sig.contains_key(&0));
+        assert!(!g.last_prepared_frame.contains_key(&0));
+    }
+
+    #[test]
+    fn prepared_frame_cache_reuses_only_the_exact_signature() {
+        let (initial, ..) =
+            state! { doc { root { p1: paragraph { text("hi") } } } selection: (p1, 0) };
+        let editor = make_ffi_editor(initial);
+        let mut render = editor.render.lock().unwrap();
+
+        assert_eq!(render.reused_frame_key(0, 10), None);
+        let first = render.prepare_frame_key(0, 10);
+        assert_eq!(render.reused_frame_key(0, 10), Some(first));
+        assert_eq!(render.reused_frame_key(0, 11), None);
+
+        let second = render.prepare_frame_key(0, 11);
+        assert_ne!(second, first);
+        assert_eq!(render.reused_frame_key(0, 11), Some(second));
+
+        render.clear_page_present_state(0);
+        assert_eq!(render.reused_frame_key(0, 11), None);
+        assert_ne!(render.prepare_frame_key(0, 11), second);
+    }
+
+    #[test]
+    fn render_signature_is_captured_only_at_the_exact_requested_revision() {
+        let (initial, ..) =
+            state! { doc { root { p1: paragraph { text("hi") } } } selection: (p1, 0) };
+        let editor = make_ffi_editor(initial);
+        let inner = editor.inner.lock().unwrap();
+        let current = inner.editor.revision();
+        let other = editor_core::Revision {
+            value: current.get() + 1,
+        };
+
+        assert!(
+            inner
+                .page_render_signature_at_revision(0, current)
+                .is_some()
+        );
+        assert_eq!(inner.page_render_signature_at_revision(0, other), None);
     }
 }

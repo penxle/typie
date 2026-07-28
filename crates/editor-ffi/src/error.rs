@@ -23,6 +23,9 @@ pub enum FfiError {
     #[error("lock poisoned")]
     LockPoisoned,
 
+    #[error("editor is unavailable after a failed tick")]
+    EditorFailed,
+
     #[error("no initial cursor position: doc root has no descendant cursor target")]
     NoInitialCursorPosition,
 }

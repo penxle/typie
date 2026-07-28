@@ -64,6 +64,12 @@
 
   $effect(() => {
     const editor = ctx.editor;
+    if (!editor) return;
+    return editor.activateVisualHost();
+  });
+
+  $effect(() => {
+    const editor = ctx.editor;
     return () => {
       ctx.attachmentDropTargetNodeId = null;
       if (editor) ctx.attachmentImporter.cancelEditor(editor);

@@ -9,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -92,19 +93,11 @@ internal fun EditorView(
           if (!target.isValid) return@LaunchedEffect
           val shouldUpdateTheme = editorThemeVariant != target.themeVariant
           if (shouldUpdateTheme) {
-            val hostThemeChanged = PlatformModule.editorHost.setThemeVariant(target.themeVariant)
-            if (hostThemeChanged) {
-              for (registeredEditor in EditorRegistry.snapshot()) {
-                if (registeredEditor !== editor) {
-                  registeredEditor.enqueue(Message.System(SystemEvent.ThemeVariantChanged))
-                }
-              }
+            EditorRegistry.commitResourceUpdate {
+              PlatformModule.editorHost.setThemeVariant(target.themeVariant)
             }
           }
-          editor.await {
-            if (shouldUpdateTheme) {
-              enqueue(Message.System(SystemEvent.ThemeVariantChanged))
-            }
+          editor.update {
             enqueue(
               Message.System(
                 SystemEvent.Resize(
@@ -140,24 +133,36 @@ internal fun EditorView(
     val sessionActive = session != null
 
     if (session != null) {
-      val focusManager = LocalFocusManager.current
-      var previousSelection by remember(editor) { mutableStateOf(editor.selection) }
-      LaunchedEffect(editor, themeVariant) {
-        val changed = PlatformModule.editorHost.setThemeVariant(themeVariant)
-        if (changed) {
-          for (registeredEditor in EditorRegistry.snapshot()) {
-            registeredEditor.enqueue(Message.System(SystemEvent.ThemeVariantChanged))
+      val visualHostToken = remember(editor) { Any() }
+      DisposableEffect(editor, visualHostToken) {
+        val activated =
+          try {
+            editor.activateVisualHost(visualHostToken)
+            true
+          } catch (error: Throwable) {
+            if (!editor.terminal) throw error
+            false
           }
+        onDispose { if (activated) editor.deactivateVisualHost(visualHostToken) }
+      }
+      val focusManager = LocalFocusManager.current
+      val publishedSelection by
+        remember(editor) { derivedStateOf { editor.publishedState.selection } }
+      var previousSelection by remember(editor) { mutableStateOf(publishedSelection) }
+      LaunchedEffect(editor, themeVariant) {
+        EditorRegistry.commitResourceUpdate {
+          PlatformModule.editorHost.setThemeVariant(themeVariant)
         }
       }
       val autoSurroundEnabled = Preference.autoSurroundEnabled
       LaunchedEffect(autoSurroundEnabled) {
-        PlatformModule.editorHost.setAutoSurroundEnabled(autoSurroundEnabled)
+        EditorRegistry.commitResourceUpdate {
+          PlatformModule.editorHost.setAutoSurroundEnabled(autoSurroundEnabled)
+        }
       }
-      LaunchedEffect(editor, editor.selection, uiState.focused) {
-        val currentSelection = editor.selection
-        val selectionCleared = previousSelection != null && currentSelection == null
-        previousSelection = currentSelection
+      LaunchedEffect(editor, publishedSelection, uiState.focused) {
+        val selectionCleared = previousSelection != null && publishedSelection == null
+        previousSelection = publishedSelection
         if (selectionCleared && uiState.focused) {
           focusManager.clearFocus()
         }
@@ -206,17 +211,20 @@ internal fun EditorView(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(pageSpacing),
       ) {
-        val publishedVersion = editor.state.version
-        editor.pageSizes.forEachIndexed { index, size ->
-          val pageCursor = editor.cursor?.takeIf { sessionActive && it.pageIdx == index }
+        val publishedBundle = editor.publishedBundle
+        val publishedState = publishedBundle?.snapshot ?: EditorState.Initial
+        val publishedVersion = publishedState.version
+        publishedState.pageSizes.forEachIndexed { index, size ->
+          val pageCursor = publishedState.cursor?.takeIf { sessionActive && it.pageIdx == index }
           val pageExternalElements =
-            if (sessionActive) editor.externalElements.filter { it.pageIdx == index }
+            if (sessionActive) publishedState.externalElements.filter { it.pageIdx == index }
             else emptyList()
           EditorPageSurface(
             page = index,
             width = size.width,
             height = size.height,
             publishedVersion = publishedVersion,
+            publishedFrame = publishedBundle?.frames?.get(index),
             showChrome = showPageChrome,
             debugBottomMarginHeight =
               when (layoutSpec) {
@@ -247,8 +255,6 @@ internal fun EditorView(
                   displayZoom = displayZoom,
                 )
               }
-              // TODO(editor-parity): selection rect, composition rect, 인라인 맞춤법 하이라이트,
-              // 인라인 리마크 하이라이트 같은 foreground overlay도 surface-local로 채워 넣어야 한다.
             },
             modifier =
               if (sessionActive) {

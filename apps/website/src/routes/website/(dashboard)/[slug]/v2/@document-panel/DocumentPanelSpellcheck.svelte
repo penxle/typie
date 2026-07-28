@@ -5,7 +5,7 @@
   import { tooltip } from '@typie/ui/actions';
   import { Button, Icon, RingSpinner } from '@typie/ui/components';
   import { Toast } from '@typie/ui/notification';
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import CircleAlertIcon from '~icons/lucide/circle-alert';
   import CircleCheckIcon from '~icons/lucide/circle-check';
   import CopyXIcon from '~icons/lucide/copy-x';
@@ -176,7 +176,7 @@
     if (!editor) return;
     setActiveError(errorId);
 
-    const range = editor.trackedItem(errorId);
+    const range = editor.appliedSnapshot.trackedRanges.find((item) => item.id === errorId);
     if (!range) return;
 
     editor.enqueue({
@@ -222,15 +222,20 @@
     }
   });
 
+  let observedEditor = editor;
+  let observedDocumentRevision = editor?.documentRevision;
   $effect(() => {
     const activeEditor = editor;
-    if (!activeEditor) return;
-
-    return activeEditor.on('state_changed', (_, { fields }) => {
-      if (fields.includes('doc')) {
-        cancelCheckForDocumentEdit();
-      }
-    });
+    const revision = activeEditor?.documentRevision;
+    if (activeEditor !== observedEditor) {
+      observedEditor = activeEditor;
+      observedDocumentRevision = revision;
+      return;
+    }
+    if (revision !== undefined && observedDocumentRevision !== undefined && revision !== observedDocumentRevision) {
+      untrack(cancelCheckForDocumentEdit);
+    }
+    observedDocumentRevision = revision;
   });
 
   onMount(() => {

@@ -25,6 +25,11 @@ internal actual object RenderBuffer {
 
   actual fun getPinnedVersion(handle: Long): Long = SwiftRenderBuffer.pinnedVersion(handle)
 
+  actual fun getPinnedEditorRevision(handle: Long): Long =
+    SwiftRenderBuffer.pinnedEditorRevision(handle)
+
+  actual fun getPinnedFrameKey(handle: Long): Long = SwiftRenderBuffer.pinnedFrameKey(handle)
+
   actual fun getPinnedDamageFrom(handle: Long): Long = SwiftRenderBuffer.pinnedDamageFrom(handle)
 
   actual fun getPinnedDamagePointer(handle: Long): Long =

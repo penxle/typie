@@ -23,7 +23,7 @@ import co.typie.editor.ffi.KeyEvent as FfiKeyEvent
 import co.typie.editor.ffi.Message
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.EditorBringIntoViewTarget
-import co.typie.editor.scroll.syncWithBringIntoView
+import co.typie.editor.scroll.updateNowWithBringIntoView
 import co.typie.platform.IncomingContentCandidates
 import co.typie.platform.copyIncomingContentItem
 import co.typie.platform.loadOwnedIncomingContentCandidates
@@ -79,14 +79,15 @@ internal class EditorInputConnection(
   private val batch =
     ImeEditBatch(isSessionCurrent) { messages ->
       val recorder = editor.inputRecorder
-      val imeBefore = if (recorder == null) null else editor.ime
-      val state =
-        editor.syncWithBringIntoView(bringIntoViewRequests) {
+      val imeBefore = if (recorder == null) null else editor.appliedState.ime
+      val state = editor.runInputCallback {
+        editor.updateNowWithBringIntoView(bringIntoViewRequests) {
           for (message in messages) {
             enqueue(message)
           }
-          beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
+          afterApplied { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
         }
+      }
       recorder?.record { seq, t ->
         RecordedInputEntry.Dispatch(
           seq = seq,
@@ -115,7 +116,7 @@ internal class EditorInputConnection(
       if (n < 0) {
         null
       } else {
-        editor.tickIme?.trimmedTo(n.coerceAtMost(IME_READ_OVERFLOW_GUARD), 0)?.let { ctx ->
+        editor.appliedState.ime?.trimmedTo(n.coerceAtMost(IME_READ_OVERFLOW_GUARD), 0)?.let { ctx ->
           ctx.text.substring(
             0,
             ctx.text.utf16IndexAtCodePointOffset(ctx.selection.start - ctx.windowStart),
@@ -131,7 +132,7 @@ internal class EditorInputConnection(
       if (n < 0) {
         null
       } else {
-        editor.tickIme?.trimmedTo(0, n.coerceAtMost(IME_READ_OVERFLOW_GUARD))?.let { ctx ->
+        editor.appliedState.ime?.trimmedTo(0, n.coerceAtMost(IME_READ_OVERFLOW_GUARD))?.let { ctx ->
           ctx.text.substring(
             ctx.text.utf16IndexAtCodePointOffset(ctx.selection.end - ctx.windowStart)
           )
@@ -143,7 +144,7 @@ internal class EditorInputConnection(
 
   override fun getSelectedText(flags: Int): CharSequence? {
     val result =
-      editor.tickIme?.trimmedTo(0, 0)?.let { ctx ->
+      editor.appliedState.ime?.trimmedTo(0, 0)?.let { ctx ->
         val start = ctx.text.utf16IndexAtCodePointOffset(ctx.selection.start - ctx.windowStart)
         val end = ctx.text.utf16IndexAtCodePointOffset(ctx.selection.end - ctx.windowStart)
         ctx.text.substring(start, end).ifEmpty { null }
@@ -163,7 +164,7 @@ internal class EditorInputConnection(
       recordRead("getSurroundingText", args, null)
       return null
     }
-    val full = editor.tickIme
+    val full = editor.appliedState.ime
     val ctx =
       full?.trimmedTo(
         beforeLength.coerceAtMost(IME_READ_OVERFLOW_GUARD),
@@ -192,7 +193,7 @@ internal class EditorInputConnection(
     if (request != null && (flags and InputConnection.GET_EXTRACTED_TEXT_MONITOR) != 0) {
       extractMonitor.token = request.token
     }
-    val extract = editor.tickIme?.extract()
+    val extract = editor.appliedState.ime?.extract()
     extract?.let { extractMonitor.onExtractDelivered(it) }
     recordRead(
       "getExtractedText",
@@ -222,7 +223,7 @@ internal class EditorInputConnection(
 
   override fun setComposingRegion(start: Int, end: Int): Boolean {
     recordCall("setComposingRegion", "start=$start, end=$end")
-    when (val decision = resolveComposingRegion(editor.tickIme, start, end)) {
+    when (val decision = resolveComposingRegion(editor.appliedState.ime, start, end)) {
       is ComposingRegionDecision.Set ->
         batch.enqueue(FlatImeOp.SetComposition(decision.start, decision.end))
       ComposingRegionDecision.Clear -> batch.enqueue(FlatImeOp.ClearComposition)
@@ -232,7 +233,7 @@ internal class EditorInputConnection(
 
   override fun finishComposingText(): Boolean {
     recordCall("finishComposingText", "")
-    batch.finishComposingText(hasActiveComposition = editor.tickIme?.composing != null)
+    batch.finishComposingText(hasActiveComposition = editor.appliedState.ime?.composing != null)
     return true
   }
 
@@ -250,7 +251,7 @@ internal class EditorInputConnection(
 
   override fun setSelection(start: Int, end: Int): Boolean {
     recordCall("setSelection", "start=$start, end=$end")
-    val ctx = editor.tickIme ?: return true
+    val ctx = editor.appliedState.ime ?: return true
     batch.enqueue(
       FlatImeOp.SetSelection(ctx.projectWindowUtf16Index(start), ctx.projectWindowUtf16Index(end))
     )
@@ -301,7 +302,7 @@ internal class EditorInputConnection(
   override fun closeConnection() {
     recordCall("closeConnection", "")
     extractMonitor.token = null
-    batch.closeConnection(hasActiveComposition = editor.tickIme?.composing != null)
+    batch.closeConnection(hasActiveComposition = editor.appliedState.ime?.composing != null)
   }
 
   override fun commitContent(

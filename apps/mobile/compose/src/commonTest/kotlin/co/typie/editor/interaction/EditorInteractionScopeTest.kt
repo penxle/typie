@@ -9,11 +9,13 @@ import co.typie.editor.EditorState
 import co.typie.editor.FakeFfiEditor
 import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.ffi.Affinity
+import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.Position
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.SelectionOp
 import co.typie.editor.ffi.Size
+import co.typie.editor.ffi.StateField
 import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.EditorVisibleArea
@@ -73,7 +75,8 @@ class EditorInteractionScopeTest {
   fun `external editing promotion consumes the active reading pointer without redispatching it`() =
     runTest(StandardTestDispatcher()) {
       val fake = FakeFfiEditor(pageSizesProvider = { listOf(Size(width = 400f, height = 700f)) })
-      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler)).also { it.sync {} }
+      val editor =
+        Editor(fake, this, StandardTestDispatcher(testScheduler)).also { fake.publishSnapshot(it) }
       val uiState =
         EditorUiState().apply {
           updateInteractionSurfaceBounds(
@@ -131,11 +134,14 @@ class EditorInteractionScopeTest {
           onTick = {
             if ((fake.enqueued.lastOrNull() as? Message.Selection)?.op is SelectionOp.SetAt) {
               currentSelection = nodeSelection
+              listOf(EditorEvent.StateChanged(listOf(StateField.Selection)))
+            } else {
+              emptyList()
             }
-            emptyList()
           },
         )
-      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler)).also { it.sync {} }
+      val editor =
+        Editor(fake, this, StandardTestDispatcher(testScheduler)).also { fake.publishSnapshot(it) }
       val uiState =
         EditorUiState().apply {
           updateInteractionSurfaceBounds(
@@ -187,19 +193,18 @@ class EditorInteractionScopeTest {
         2,
         fake.enqueued.filterIsInstance<Message.Selection>().count { it.op is SelectionOp.SetAt },
       )
-      assertTrue(uiState.contextMenu.isVisibleFor(editor.state))
+      assertTrue(uiState.contextMenu.isVisibleFor(editor.publishedState))
     }
 
   @Test
   fun `editor replacement clears the previous editor reading tap history`() =
     runTest(StandardTestDispatcher()) {
-      fun editor() =
-        Editor(
-            FakeFfiEditor(pageSizesProvider = { listOf(Size(width = 400f, height = 700f)) }),
-            this,
-            StandardTestDispatcher(testScheduler),
-          )
-          .also { it.sync {} }
+      fun editor(): Editor {
+        val fake = FakeFfiEditor(pageSizesProvider = { listOf(Size(width = 400f, height = 700f)) })
+        return Editor(fake, this, StandardTestDispatcher(testScheduler)).also {
+          fake.publishSnapshot(it)
+        }
+      }
 
       val firstEditor = editor()
       val secondEditor = editor()

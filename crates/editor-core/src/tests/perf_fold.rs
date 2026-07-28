@@ -10,7 +10,9 @@ use editor_model::{
     PlainFoldNode, PlainFoldTitleNode, PlainListItemNode, PlainNode, PlainNodeEntry,
     PlainParagraphNode, PlainRootNode, PlainTextNode,
 };
-use editor_resource::{FontFamily, FontFamilySource, FontManifest, FontWeight, Resource};
+use editor_resource::{
+    FontFamily, FontFamilySource, FontManifest, FontWeight, Resource, ResourceSource, prepare_fonts,
+};
 use editor_state::test_utils::build_state_from_plain;
 use editor_state::{Position, Selection, State};
 
@@ -206,36 +208,39 @@ fn perf_enter_fold_vs_root() {
 }
 
 fn make_resource() -> Resource {
-    let mut resource = Resource::new_test();
     let families = [
         ("Pretendard", vec![400u16, 700]),
         ("Paperlogy", vec![400u16, 700]),
     ];
-    resource.set_fonts(
-        families
-            .iter()
-            .map(|(name, weights)| FontFamily {
-                name: name.to_string(),
-                source: FontFamilySource::Default,
-                weights: weights
-                    .iter()
-                    .map(|&value| FontWeight {
-                        value,
-                        hash: format!("{name}-{value}"),
-                    })
-                    .collect(),
-            })
-            .collect(),
-    );
+    let mut source = ResourceSource::new_test();
+    source
+        .set_fonts(prepare_fonts(
+            families
+                .iter()
+                .map(|(name, weights)| FontFamily {
+                    name: name.to_string(),
+                    source: FontFamilySource::Default,
+                    weights: weights
+                        .iter()
+                        .map(|&value| FontWeight {
+                            value,
+                            hash: format!("{name}-{value}"),
+                        })
+                        .collect(),
+                })
+                .collect(),
+        ))
+        .expect("font families must change resources");
     for (name, weights) in &families {
-        let id = resource.font_registry.intern_id(name).unwrap();
         for &value in weights {
-            resource.font_registry.set_manifest(
-                id,
-                value,
-                FontManifest::from_coverages(&[vec![0x0000, 0xFFFF]]),
-            );
+            source
+                .add_font_manifest(
+                    name,
+                    value,
+                    FontManifest::from_coverages(&[vec![0x0000, 0xFFFF]]),
+                )
+                .expect("font manifest must change resources");
         }
     }
-    resource
+    Resource::from_snapshot(source.snapshot())
 }

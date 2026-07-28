@@ -1,6 +1,8 @@
 import { tick } from 'svelte';
 import { goto } from '$app/navigation';
-import type { Editor, EditorContext } from '../editor.svelte';
+import type { CommandOutcome } from '@typie/editor-ffi/browser';
+import type { Editor, EditorContext, EditorSnapshot } from '../editor.svelte';
+import type { EditorRequest } from '../editor-update';
 import type { ContextMenuContributor, ContextMenuItem } from '../types';
 
 const SAFE_PROTOCOLS = new Set(['http:', 'https:', 'mailto:', 'tel:']);
@@ -28,18 +30,23 @@ export const normalizeUrl = (input: string): string =>
 
 type LinkPoint = { page: number; x: number; y: number };
 
-type LinkEditorTarget = Pick<Editor, 'enqueue' | 'flush' | 'focus' | 'modifierSpanSelection' | 'selection'>;
+type LinkEditorTarget = Pick<Editor, 'enqueue' | 'focus' | 'modifierSpanSelection'> & {
+  updateNow: (
+    build: (request: EditorRequest) => void,
+  ) => { snapshot: Pick<EditorSnapshot, 'selection'>; commandOutcomes: readonly CommandOutcome[] } | null;
+};
 
 // A link is an inline modifier (no single node id), so target it by location:
 // place a caret at the page-local point, then expand to the covering link span.
 const selectLinkSpanAtPoint = (editor: LinkEditorTarget, point: LinkPoint): void => {
-  editor.enqueue({ type: 'selection', op: { type: 'set_at', page: point.page, x: point.x, y: point.y } });
-  editor.flush();
-  const caret = editor.selection?.head;
+  const update = editor.updateNow(() =>
+    editor.enqueue({ type: 'selection', op: { type: 'set_at', page: point.page, x: point.x, y: point.y } }),
+  );
+  if (!update || update.commandOutcomes.some((outcome) => outcome.type === 'rejected')) return;
+  const caret = update.snapshot.selection?.head;
   if (!caret) return;
   const selection = editor.modifierSpanSelection(caret, 'link') ?? { anchor: caret, head: caret };
-  editor.enqueue({ type: 'selection', op: { type: 'set', selection } });
-  editor.flush();
+  editor.updateNow(() => editor.enqueue({ type: 'selection', op: { type: 'set', selection } }));
 };
 
 export const registerLinkContextMenu = (editor: Editor): (() => void) => {
@@ -78,16 +85,18 @@ export const registerLinkContextMenu = (editor: Editor): (() => void) => {
 
 const editLinkAtPoint = (editor: Editor, point: LinkPoint, href: string): void => {
   selectLinkSpanAtPoint(editor, point);
-  editor.enqueue({
-    type: 'modifier',
-    op: { type: 'edit', modifier_type: 'link', modifier: { type: 'link', href: normalizeUrl(href.trim()) } },
-  });
+  editor.updateNow(() =>
+    editor.enqueue({
+      type: 'modifier',
+      op: { type: 'edit', modifier_type: 'link', modifier: { type: 'link', href: normalizeUrl(href.trim()) } },
+    }),
+  );
   editor.focus();
 };
 
 const removeLinkAtPoint = (editor: Editor, point: LinkPoint): void => {
   selectLinkSpanAtPoint(editor, point);
-  editor.enqueue({ type: 'modifier', op: { type: 'edit', modifier_type: 'link', modifier: undefined } });
+  editor.updateNow(() => editor.enqueue({ type: 'modifier', op: { type: 'edit', modifier_type: 'link', modifier: undefined } }));
   editor.focus();
 };
 

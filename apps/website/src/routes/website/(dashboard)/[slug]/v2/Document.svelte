@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createFragment } from '@mearie/svelte';
+  import { tick } from 'svelte';
   import { setupEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { graphql } from '$mearie';
   import DocumentEditor from './DocumentEditor.svelte';
@@ -9,9 +10,11 @@
     query$key: DocumentV2_query$key;
     focused: boolean;
     onReady?: () => void;
+    onEditorFailed?: (error: unknown) => void;
+    onEditorRetry?: () => void;
   };
 
-  let { query$key, focused, onReady }: Props = $props();
+  let { query$key, focused, onReady, onEditorFailed, onEditorRetry }: Props = $props();
 
   const query = createFragment(
     graphql(`
@@ -87,29 +90,29 @@
   });
 
   let mounted = $state(true);
-  let mountedTimer: ReturnType<typeof setTimeout> | null = null;
+  let remounting = false;
 
-  $effect(() => {
-    const prevDocumentId = documentId;
-    void ctx.resetKey;
+  const remountEditor = async () => {
+    if (remounting) return;
+    remounting = true;
 
-    return () => {
-      if (prevDocumentId === null) {
-        return;
-      }
+    const previousEditor = ctx.editor;
+    const previousLiveEditor = ctx.liveEditor;
+    onEditorRetry?.();
+    mounted = false;
 
-      if (mountedTimer !== null) clearTimeout(mountedTimer);
-      mounted = false;
-      mountedTimer = setTimeout(() => {
-        mountedTimer = null;
-        mounted = true;
-      }, 0);
-    };
-  });
+    await tick();
+
+    if (ctx.editor === previousEditor) ctx.editor = undefined;
+    if (ctx.liveEditor === previousLiveEditor) ctx.liveEditor = undefined;
+
+    mounted = true;
+    remounting = false;
+  };
 </script>
 
 {#if entity?.node.__typename === 'Document'}
   {#if mounted}
-    <DocumentEditor {focused} {onReady} query$key={query.data} />
+    <DocumentEditor {focused} {onEditorFailed} onEditorRetry={remountEditor} {onReady} query$key={query.data} />
   {/if}
 {/if}

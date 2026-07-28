@@ -4,6 +4,7 @@ use editor_macros::ffi;
 use editor_renderer::backend::cpu::CpuSink;
 use editor_renderer::damage::IRect;
 
+use crate::editor::FrameKey;
 use crate::error::FfiError;
 
 #[ffi]
@@ -33,6 +34,8 @@ impl SurfaceHandle {
         &mut self,
         _dl: &editor_renderer::display_list::DisplayList,
         _damage: &[IRect],
+        _editor_revision: u64,
+        _frame_key: FrameKey,
     ) -> bool {
         unreachable!()
     }

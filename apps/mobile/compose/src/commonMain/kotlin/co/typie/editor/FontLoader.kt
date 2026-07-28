@@ -6,8 +6,6 @@ import co.typie.editor.ffi.FontData
 import co.typie.editor.ffi.FontFamily
 import co.typie.editor.ffi.FontFamilySource
 import co.typie.editor.ffi.FontWeight
-import co.typie.editor.ffi.Message
-import co.typie.editor.ffi.SystemEvent
 import co.typie.graphql.fragment.FontLoader_FontFamily
 import co.typie.graphql.type.FontFamilySource as GraphqlFontFamilySource
 import co.typie.network.Http
@@ -96,9 +94,7 @@ internal suspend fun FontLoaderState.loadOnce(
     deferred.completeExceptionally(e)
     throw e
   } finally {
-    mutex.withLock {
-      if (loading[key] === deferred) loading.remove(key)
-    }
+    mutex.withLock { if (loading[key] === deferred) loading.remove(key) }
   }
 }
 
@@ -175,24 +171,23 @@ object FontLoader {
 
   suspend fun loadFonts(families: List<FontLoader_FontFamily>) =
     withContext(Dispatchers.Default) {
-      stateMutex.withLock {
-        val next = buildMap {
-          for (family in families) {
-            for (font in family.fonts) {
-              put(fontKey(family.familyName, font.weight), FontPathEntry(font.url, font.hash))
-            }
+      val next = buildMap {
+        for (family in families) {
+          for (font in family.fonts) {
+            put(fontKey(family.familyName, font.weight), FontPathEntry(font.url, font.hash))
           }
         }
+      }
+      val ffiFamilies = families.map { it.toFfi() }
+      stateMutex.withLock {
         val changed =
           next.keys.filter { key -> fontPaths[key]?.hash != next[key]?.hash } +
             fontPaths.keys.filterNot { it in next }
-        fontPaths = next
-        purgeKeysLocked(changed)
-        PlatformModule.editorHost.setFonts(families.map { it.toFfi() })
-      }
-      withContext(NonCancellable) {
-        for (editor in EditorRegistry.snapshot()) {
-          editor.enqueue(Message.System(SystemEvent.FontsChanged))
+        EditorRegistry.commitResourceUpdate {
+          val update = PlatformModule.editorHost.setFonts(ffiFamilies)
+          fontPaths = next
+          purgeKeysLocked(changed)
+          update
         }
       }
     }
@@ -297,15 +292,7 @@ object FontLoader {
         for (fd in chunks) {
           launch {
             try {
-              load(
-                family,
-                weight,
-                dispatchHash,
-                dispatchGen,
-                fd,
-                baseUrl,
-                REQUIRED_LOAD_ATTEMPTS,
-              )
+              load(family, weight, dispatchHash, dispatchGen, fd, baseUrl, REQUIRED_LOAD_ATTEMPTS)
             } catch (_: Exception) {
               state.scheduleRetry(
                 stateMutex,
@@ -313,15 +300,7 @@ object FontLoader {
                 keyOf(family, weight, dispatchHash, fd),
                 dispatchGen,
               ) {
-                load(
-                  family,
-                  weight,
-                  dispatchHash,
-                  dispatchGen,
-                  fd,
-                  baseUrl,
-                  REQUIRED_LOAD_ATTEMPTS,
-                )
+                load(family, weight, dispatchHash, dispatchGen, fd, baseUrl, REQUIRED_LOAD_ATTEMPTS)
               }
             }
           }
@@ -337,15 +316,7 @@ object FontLoader {
           }
         preloadQueue.enqueue(keyOf(family, weight, dispatchHash, fd), priority) {
           try {
-            load(
-              family,
-              weight,
-              dispatchHash,
-              dispatchGen,
-              fd,
-              baseUrl,
-              PREFETCH_LOAD_ATTEMPTS,
-            )
+            load(family, weight, dispatchHash, dispatchGen, fd, baseUrl, PREFETCH_LOAD_ATTEMPTS)
           } catch (_: Exception) {
             // best-effort
           }
@@ -365,54 +336,47 @@ object FontLoader {
   ) {
     val fk = fontKey(family, weight)
     val key = keyOf(family, weight, dispatchHash, fd)
-    val committed =
-      state.loadOnce(stateMutex, key) {
-        var lastErr: Throwable? = null
-        for (attempt in 1..attempts) {
-          try {
-            val url = urlOf(baseUrl, fd)
-            val bytes = getOrFetch(url)
-            val committed =
-              try {
-                stateMutex.withLock {
-                  if (state.isStale(fk, dispatchGen)) {
-                    false
-                  } else {
-                    when (fd) {
-                      FontData.Manifest ->
-                        PlatformModule.editorHost.addFontManifest(family, weight, bytes)
-                      FontData.Base -> PlatformModule.editorHost.addFontBase(family, weight, bytes)
-                      is FontData.Chunk ->
-                        PlatformModule.editorHost.addFontChunk(family, weight, fd.id, bytes)
-                    }
+    state.loadOnce(stateMutex, key) {
+      var lastErr: Throwable? = null
+      for (attempt in 1..attempts) {
+        try {
+          val url = urlOf(baseUrl, fd)
+          val bytes = getOrFetch(url)
+          val committed =
+            try {
+              stateMutex.withLock {
+                if (state.isStale(fk, dispatchGen)) {
+                  false
+                } else {
+                  EditorRegistry.commitResourceUpdate {
+                    val update =
+                      when (fd) {
+                        FontData.Manifest ->
+                          PlatformModule.editorHost.addFontManifest(family, weight, bytes)
+                        FontData.Base ->
+                          PlatformModule.editorHost.addFontBase(family, weight, bytes)
+                        is FontData.Chunk ->
+                          PlatformModule.editorHost.addFontChunk(family, weight, fd.id, bytes)
+                      }
                     state.loaded.add(key)
-                    true
+                    update
                   }
+                  true
                 }
-              } catch (e: Exception) {
-                PlatformModule.diskCache.remove(url)
-                throw e
               }
-            return@loadOnce committed
-          } catch (e: Exception) {
-            lastErr = e
-            if (attempt < attempts) {
-              delay(LOAD_RETRY_BASE_MS * (1L shl (attempt - 1)))
+            } catch (e: Exception) {
+              PlatformModule.diskCache.remove(url)
+              throw e
             }
+          return@loadOnce committed
+        } catch (e: Exception) {
+          lastErr = e
+          if (attempt < attempts) {
+            delay(LOAD_RETRY_BASE_MS * (1L shl (attempt - 1)))
           }
         }
-        throw lastErr ?: IllegalStateException("load failed without recorded error")
       }
-
-    if (!committed) return
-    val loadedEvent =
-      when (fd) {
-        FontData.Manifest -> SystemEvent.FontManifestLoaded(family, weight)
-        FontData.Base -> SystemEvent.FontBaseLoaded(family, weight)
-        is FontData.Chunk -> SystemEvent.FontChunkLoaded(family, weight, fd.id)
-      }
-    for (target in EditorRegistry.snapshot()) {
-      target.enqueue(Message.System(loadedEvent))
+      throw lastErr ?: IllegalStateException("load failed without recorded error")
     }
   }
 
@@ -513,11 +477,5 @@ private fun FontLoader_FontFamily.toFfi(): FontFamily =
         GraphqlFontFamilySource.FALLBACK -> FontFamilySource.Fallback
         GraphqlFontFamilySource.UNKNOWN__ -> error("Unknown FontFamilySource from server: $source")
       },
-    weights =
-      fonts.map { f ->
-        FontWeight(
-          value = f.weight,
-          hash = f.hash,
-        )
-      },
+    weights = fonts.map { f -> FontWeight(value = f.weight, hash = f.hash) },
   )

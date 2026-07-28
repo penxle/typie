@@ -128,13 +128,14 @@ fn toggle_bold_collapsed(tr: &mut Transaction, resource: &Resource) -> CommandRe
 #[cfg(test)]
 mod tests {
     use editor_macros::state;
-    use editor_resource::{FontFamily, FontFamilySource, FontWeight};
+    use editor_resource::{
+        FontFamily, FontFamilySource, FontWeight, ResourceSource, prepare_fonts,
+    };
 
     use super::*;
     use crate::test_utils::*;
 
     fn make_resource(families: impl IntoIterator<Item = (&'static str, Vec<u16>)>) -> Resource {
-        let mut resource = Resource::new_test();
         let families: Vec<FontFamily> = families
             .into_iter()
             .map(|(name, weights)| FontFamily {
@@ -149,8 +150,11 @@ mod tests {
                     .collect(),
             })
             .collect();
-        resource.font_registry.set_fonts(families);
-        resource
+        let mut source = ResourceSource::new_test();
+        source
+            .set_fonts(prepare_fonts(families))
+            .expect("font families must change resources");
+        Resource::from_snapshot(source.snapshot())
     }
 
     #[test]

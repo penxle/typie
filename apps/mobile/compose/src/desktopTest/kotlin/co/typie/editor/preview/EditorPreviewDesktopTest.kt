@@ -15,7 +15,6 @@ import androidx.compose.ui.unit.dp
 import co.typie.editor.Editor
 import co.typie.editor.EditorRootId
 import co.typie.editor.FakeFfiEditor
-import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.LayoutMode
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.NodeOp
@@ -41,7 +40,7 @@ class EditorPreviewDesktopTest {
     val editor = Editor(fake, scope, Dispatchers.Unconfined)
     val runtime = EditorRuntime(scope).apply { attach(editor) }
     var layout by mutableStateOf<LayoutMode>(A4Layout)
-    editor.sync {}
+    fake.applySnapshot(editor)
 
     try {
       setPreviewContent(runtime = runtime, layout = { layout })
@@ -64,7 +63,7 @@ class EditorPreviewDesktopTest {
     val editor = Editor(fake, scope, Dispatchers.Unconfined)
     val runtime = EditorRuntime(scope).apply { attach(editor) }
     var layout by mutableStateOf<LayoutMode>(A4Layout)
-    editor.sync {}
+    fake.applySnapshot(editor)
 
     try {
       setPreviewContent(runtime = runtime, graph = byteArrayOf(1), layout = { layout })
@@ -82,58 +81,6 @@ class EditorPreviewDesktopTest {
         ),
         fake.enqueued.filterIsInstance<Message.Node>(),
       )
-    } finally {
-      runtime.clear()
-      scope.cancel()
-    }
-  }
-
-  @Test
-  fun previewUpdatesEditorLayoutBeforeRenderInvalidation() = runComposeUiTest {
-    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
-    var reportedLayout: LayoutMode = A4Layout
-    val fake =
-      FakeFfiEditor(
-        onTick = { listOf(EditorEvent.RenderInvalidated) },
-        rootAttrsProvider = { PlainRootNode(layoutMode = reportedLayout) },
-      )
-    val editor = Editor(fake, scope, Dispatchers.Unconfined)
-    val runtime = EditorRuntime(scope).apply { attach(editor) }
-    var layout by mutableStateOf<LayoutMode>(A4Layout)
-    editor.sync {}
-
-    try {
-      setPreviewContent(runtime = runtime, layout = { layout })
-      waitForIdle()
-
-      val surface =
-        editor.attachSurface(
-          page = 0,
-          handle = 1L,
-          width = A4Layout.pageWidth.toDouble(),
-          height = A4Layout.pageHeight.toDouble(),
-          scaleFactor = 1.0,
-        )
-      var observeNextRender = false
-      var layoutAtRender: LayoutMode? = null
-      val off =
-        editor.on<EditorEvent.RenderInvalidated> { _, _ ->
-          if (observeNextRender) {
-            layoutAtRender = editor.rootAttrs?.layoutMode
-            editor.onPageSettled(page = 0, version = Long.MAX_VALUE)
-          }
-        }
-
-      runOnIdle {
-        observeNextRender = true
-        reportedLayout = B6Layout
-        layout = B6Layout
-      }
-      waitUntil { layoutAtRender != null }
-
-      assertEquals(B6Layout, layoutAtRender)
-      off()
-      surface.detach()
     } finally {
       runtime.clear()
       scope.cancel()

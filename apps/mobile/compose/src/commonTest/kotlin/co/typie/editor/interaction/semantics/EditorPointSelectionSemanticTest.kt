@@ -5,6 +5,8 @@ import co.typie.editor.Editor
 import co.typie.editor.FakeFfiEditor
 import co.typie.editor.PagePoint
 import co.typie.editor.ffi.Affinity
+import co.typie.editor.ffi.CommandOutcome
+import co.typie.editor.ffi.CommandRejection
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.PageRect
@@ -16,6 +18,7 @@ import co.typie.editor.ffi.SelectionPointUnit
 import co.typie.editor.interaction.EditorInteractionEffects
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -29,20 +32,20 @@ class EditorPointSelectionSemanticTest {
       val fake = FakeFfiEditor(cursorProvider = { cursorAt(x = 20f) })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
       val semantic = EditorPointSelectionSemantic(effects = UnusedEffects)
-      var beforeCommitCalled = false
+      var onAppliedCalled = false
 
       assertTrue(
         semantic.dispatchCursorMove(
           editor = editor,
           point = PagePoint(page = 0, x = 10f, y = 20f),
-          beforeCommit = { beforeCommitCalled = true },
+          onApplied = { onAppliedCalled = true },
         )
       )
 
       val expectedMessages: List<Message> =
         listOf(Message.Selection(SelectionOp.SetAt(page = 0, x = 10f, y = 20f)))
       assertEquals(expectedMessages, fake.enqueued)
-      assertTrue(beforeCommitCalled)
+      assertTrue(onAppliedCalled)
     }
 
   @Test
@@ -63,7 +66,7 @@ class EditorPointSelectionSemanticTest {
           },
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       fake.enqueued.clear()
 
       assertTrue(
@@ -73,6 +76,29 @@ class EditorPointSelectionSemanticTest {
       val expectedMessages: List<Message> =
         listOf(Message.Selection(SelectionOp.SetAt(page = 0, x = 10f, y = 20f)))
       assertEquals(expectedMessages, fake.enqueued)
+    }
+
+  @Test
+  fun `rejected cursor move does not run applied callback`() =
+    runTest(StandardTestDispatcher()) {
+      val fake =
+        FakeFfiEditor(cursorProvider = { cursorAt(x = 20f) }).apply {
+          commandOutcomesProvider = { _, messages ->
+            List(messages.size) { CommandOutcome.Rejected(CommandRejection.InvalidArgument) }
+          }
+        }
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      val semantic = EditorPointSelectionSemantic(effects = UnusedEffects)
+      var onAppliedCalled = false
+
+      assertFalse(
+        semantic.dispatchCursorMove(
+          editor = editor,
+          point = PagePoint(page = 0, x = 10f, y = 20f),
+          onApplied = { onAppliedCalled = true },
+        )
+      )
+      assertFalse(onAppliedCalled)
     }
 
   @Test
@@ -86,7 +112,7 @@ class EditorPointSelectionSemanticTest {
       val fake =
         FakeFfiEditor(cursorProvider = { cursorAt(x = 20f) }, selectionProvider = { selection })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val semantic = EditorPointSelectionSemantic(effects = UnusedEffects)
 
       assertTrue(
@@ -127,7 +153,7 @@ class EditorPointSelectionSemanticTest {
           selectionHitRectsProvider = { FakeFfiEditor.coveringHitRects(0) },
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       fake.enqueued.clear()
       val semantic = EditorPointSelectionSemantic(effects = UnusedEffects)
 

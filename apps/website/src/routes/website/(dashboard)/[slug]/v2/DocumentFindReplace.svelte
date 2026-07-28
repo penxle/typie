@@ -24,6 +24,7 @@
 
   const ctx = getEditorContext();
   const app = getAppContext();
+  const editor = $derived(ctx.editor?.terminal ? undefined : ctx.editor);
 
   let findInputEl: HTMLInputElement;
   let findText = $state('');
@@ -54,7 +55,6 @@
   }
 
   $effect(() => {
-    const editor = ctx.editor;
     const documentRevision = editor?.documentRevision ?? 0;
     const matchWholeWord = app.preference.current.searchMatchWholeWord;
     const query = findText;
@@ -99,9 +99,9 @@
   const handleFindKeydown = (e: KeyboardEvent) => {
     if (e.key === 'Enter' && !e.isComposing) {
       if (e.shiftKey) {
-        ctx.editor?.findPrevious();
+        editor?.findPrevious();
       } else {
-        ctx.editor?.findNext();
+        editor?.findNext();
       }
     }
   };
@@ -109,15 +109,14 @@
   const handleReplaceKeydown = (e: KeyboardEvent) => {
     if (e.key === 'Enter' && !e.isComposing) {
       if (IS_MAC ? e.metaKey : e.ctrlKey) {
-        ctx.editor?.replaceAll(replaceText);
+        editor?.replaceAll(replaceText);
       } else {
-        ctx.editor?.replace(replaceText);
+        editor?.replace(replaceText);
       }
     }
   };
 
   onMount(() => {
-    const editor = ctx.editor;
     const selectionText = editor && !editor.isSelectionCollapsed ? editor.copySelection()?.text : undefined;
     if (selectionText !== undefined) {
       findText = toSingleLineText(selectionText);
@@ -132,7 +131,7 @@
       focusReturnSession = null;
       session?.discard();
       lastSearch = undefined;
-      ctx.editor?.clearSearch();
+      editor?.clearSearch();
     };
   });
 </script>
@@ -224,8 +223,8 @@
   <div class={flex({ flex: '1', flexDirection: 'column', gap: '4px' })}>
     <div class={flex({ alignItems: 'center', height: '30px' })}>
       <div class={css({ flex: '1', paddingLeft: '4px', width: '60px', fontSize: '12px', fontWeight: 'medium', color: 'text.subtle' })}>
-        {#if ctx.editor && ctx.editor.searchMatches.length > 0}
-          {ctx.editor.searchMatches.findIndex((m) => m.active) + 1} / {ctx.editor.searchMatches.length}
+        {#if editor && editor.searchMatches.length > 0}
+          {editor.searchMatches.findIndex((m) => m.active) + 1} / {editor.searchMatches.length}
         {:else}
           결과 없음
         {/if}
@@ -243,7 +242,7 @@
             _focus: { backgroundColor: 'surface.muted' },
           })}
           disabled={!findText}
-          onclick={() => ctx.editor?.findPrevious()}
+          onclick={() => editor?.findPrevious()}
           type="button"
           use:tooltip={{ message: '이전 결과 찾기', keys: ['Shift', 'Enter'] }}
         >
@@ -260,7 +259,7 @@
             _focus: { backgroundColor: 'surface.muted' },
           })}
           disabled={!findText}
-          onclick={() => ctx.editor?.findNext()}
+          onclick={() => editor?.findNext()}
           type="button"
           use:tooltip={{ message: '다음 결과 찾기', keys: ['Enter'] }}
         >
@@ -282,7 +281,7 @@
             _focus: { backgroundColor: 'surface.muted' },
           })}
           disabled={!findText}
-          onclick={() => ctx.editor?.replace(replaceText)}
+          onclick={() => editor?.replace(replaceText)}
           type="button"
           use:tooltip={{ message: '바꾸기', keys: ['Enter'] }}
         >
@@ -299,7 +298,7 @@
             _focus: { backgroundColor: 'surface.muted' },
           })}
           disabled={!findText}
-          onclick={() => ctx.editor?.replaceAll(replaceText)}
+          onclick={() => editor?.replaceAll(replaceText)}
           type="button"
           use:tooltip={{ message: '모두 바꾸기', keys: ['Mod', 'Enter'] }}
         >

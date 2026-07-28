@@ -53,9 +53,14 @@ internal fun EditorImageExternalElement(
 
   val originalWidth = (asset?.width ?: upload?.width ?: 0).toFloat()
   val nodeProportion = data.proportion.coerceIn(IMAGE_MIN_PROPORTION, IMAGE_MAX_PROPORTION)
-  val draftProportion = imageState.resizeDraftProportions[nodeId]
-  val displayProportion = draftProportion ?: nodeProportion.toFloat()
-  val displayWidth = imageResizeWidthForProportion(displayProportion, boundsWidth, originalWidth)
+  val draft = imageState.resizeDrafts[nodeId]
+  val displayProportion = draft?.proportion ?: nodeProportion.toFloat()
+  val displayWidth =
+    imageResizeWidthForProportion(
+      proportion = displayProportion,
+      boundsWidth = draft?.boundsWidth ?: boundsWidth,
+      originalWidth = draft?.originalWidth ?: originalWidth,
+    )
   val displayHeight = displayWidth / imageRatio.toFloat()
   val imageShape = AppShapes.rounded(scope.scaledDp(4f))
 

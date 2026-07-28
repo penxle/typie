@@ -39,8 +39,8 @@ import co.typie.editor.matchesKeyBinding
 import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.EditorBringIntoViewTarget
-import co.typie.editor.scroll.awaitWithBringIntoView
-import co.typie.editor.scroll.syncWithBringIntoView
+import co.typie.editor.scroll.updateNowWithBringIntoView
+import co.typie.editor.scroll.updateWithBringIntoView
 import co.typie.ext.TextInputClient
 import co.typie.ext.TextInputKey
 import co.typie.ext.notifyTextInputFocusChanged
@@ -93,6 +93,16 @@ internal expect suspend fun PlatformTextInputSessionScope.createEditorInputReque
 ): PlatformTextInputMethodRequest
 
 internal expect fun requiresEditorInputSessionRestartForSoftwareKeyboardSuppression(): Boolean
+
+internal inline fun <T> Editor.runInputCallback(block: () -> T): T? {
+  if (terminal) return null
+  return try {
+    block()
+  } catch (error: Throwable) {
+    if (!terminal) throw error
+    null
+  }
+}
 
 internal fun rebindImeResync(
   previous: (() -> Unit)?,
@@ -228,7 +238,6 @@ internal class EditorInputNode(
     unsubscribeImeResync =
       rebindImeResync(unsubscribeImeResync, editor) { _, _ ->
         if (focused) {
-          imeSessionGeneration += 1
           syncTextInputSession()
         }
       }
@@ -265,15 +274,14 @@ internal class EditorInputNode(
 
   private fun dispatch(
     messages: List<Message>,
-    bringIntoViewTarget: EditorBringIntoViewTarget? =
-      EditorBringIntoViewTarget.CurrentSelectionHead,
+    bringIntoViewTarget: EditorBringIntoViewTarget? = EditorBringIntoViewTarget.CurrentSelectionHead,
   ) {
     if (messages.isEmpty()) return
     submit { sessionEditor, context ->
       sessionEditor.scope.launch(context) {
-        sessionEditor.awaitWithBringIntoView(bringIntoViewRequests) {
+        sessionEditor.updateWithBringIntoView(bringIntoViewRequests) {
           messages.forEach(::enqueue)
-          beforeCommit { bringIntoViewTarget?.let { target -> bringIntoView(target) } }
+          afterApplied { bringIntoViewTarget?.let { target -> bringIntoView(target) } }
         }
       }
     }
@@ -322,7 +330,7 @@ internal class EditorInputNode(
     when (val action = binding.action) {
       is EditorKeyBindingAction.Paste -> dispatchBinding(binding, clipboard)
       is EditorKeyBindingAction.Messages -> {
-        val preState = editor.state
+        val preState = editor.appliedState
         // iOS can echo a native selection before this key's queued commit. Constant message
         // actions are safe to resolve and register immediately; stateful or clipboard actions
         // resolve inside the ordered queue so their side effects cannot overtake paste.
@@ -364,28 +372,29 @@ internal class EditorInputNode(
     bringIntoViewTarget: EditorBringIntoViewTarget?,
   ): EditorState? {
     if (messages.isEmpty()) return null
-    return editor.awaitWithBringIntoView(bringIntoViewRequests) {
+    return editor.updateWithBringIntoView(bringIntoViewRequests) {
       messages.forEach(::enqueue)
-      beforeCommit { bringIntoViewTarget?.let { target -> bringIntoView(target) } }
+      afterApplied { bringIntoViewTarget?.let { target -> bringIntoView(target) } }
     }
   }
 
   private fun dispatchSync(
     messages: List<Message>,
-    bringIntoViewTarget: EditorBringIntoViewTarget? =
-      EditorBringIntoViewTarget.CurrentSelectionHead,
+    bringIntoViewTarget: EditorBringIntoViewTarget? = EditorBringIntoViewTarget.CurrentSelectionHead,
   ): EditorState? {
     if (messages.isEmpty()) return null
-    return editor.syncWithBringIntoView(bringIntoViewRequests) {
-      messages.forEach(::enqueue)
-      beforeCommit { bringIntoViewTarget?.let { target -> bringIntoView(target) } }
+    return editor.runInputCallback {
+      editor.updateNowWithBringIntoView(bringIntoViewRequests) {
+        messages.forEach(::enqueue)
+        afterApplied { bringIntoViewTarget?.let { target -> bringIntoView(target) } }
+      }
     }
   }
 
   private val textInputClient =
     object : TextInputClient {
       override val hasActiveComposition: Boolean
-        get() = editor.tickIme?.composing != null
+        get() = editor.appliedState.ime?.composing != null
 
       override fun requestFocus() {
         editor.focus()
@@ -393,7 +402,7 @@ internal class EditorInputNode(
 
       override fun insertText(text: String): Boolean {
         recordToolbarInput("insertText", text)
-        dispatch(toolbarInsertTextMessages(text, editor.tickIme?.composing != null))
+        dispatch(toolbarInsertTextMessages(text, editor.appliedState.ime?.composing != null))
         return true
       }
 
@@ -464,7 +473,7 @@ internal class EditorInputNode(
     if (!enabled || event.type != KeyEventType.KeyDown) return false
     val binding = bindings.find { matchesKeyBinding(it, platform, event) }
     if (binding != null) {
-      val composing = editor.tickIme?.composing != null
+      val composing = editor.appliedState.ime?.composing != null
       if (composing && !commitsCompositionBeforeKeyBinding(platform, event.key)) {
         recordHardwareKey(
           event = event,
@@ -513,7 +522,7 @@ internal class EditorInputNode(
             (((cp - 0x10000) and 0x3FF) + 0xDC00).toChar(),
           )
           .concatToString()
-      if (editor.tickIme?.composing != null) {
+      if (editor.appliedState.ime?.composing != null) {
         recordHardwareKey(
           event = event,
           stage = "onKeyEvent",
@@ -539,7 +548,7 @@ internal class EditorInputNode(
     val ch = cp.toChar()
     if (!ch.isDefined() || ch.isISOControl() || ch.isSurrogate()) return false
 
-    if (editor.tickIme?.composing != null) {
+    if (editor.appliedState.ime?.composing != null) {
       recordHardwareKey(
         event = event,
         stage = "onKeyEvent",
@@ -566,7 +575,8 @@ internal class EditorInputNode(
     if (!enabled || event.type != KeyEventType.KeyDown) return false
     val binding = bindings.find { matchesKeyBinding(it, platform, event) } ?: return false
     if (
-      editor.tickIme?.composing != null && !commitsCompositionBeforeKeyBinding(platform, event.key)
+      editor.appliedState.ime?.composing != null &&
+        !commitsCompositionBeforeKeyBinding(platform, event.key)
     ) {
       recordHardwareKey(
         event = event,
@@ -604,8 +614,9 @@ internal class EditorInputNode(
   }
 
   private fun syncTextInputSession() {
-    val sessionEnabled = focused && enabled
+    imeSessionGeneration += 1
     val generationAtStart = imeSessionGeneration
+    val sessionEnabled = focused && enabled
     editor.inputRecorder?.record { seq, t ->
       RecordedInputEntry.Session(seq = seq, t = t, event = if (sessionEnabled) "start" else "stop")
     }
@@ -624,8 +635,10 @@ internal class EditorInputNode(
         coroutineScope.launch {
           val uninstallPlatformSessionEffects =
             platformInputBridge.installSessionEffects(
-              cursor = { editor.cursor },
-              viewportTransform = { uiState.resolveViewportTransform(editor.pageSizes) },
+              cursor = { editor.publishedState.cursor },
+              viewportTransform = {
+                uiState.resolveViewportTransform(editor.publishedState.pageSizes)
+              },
               dispatch = { messages -> dispatch(messages) },
             )
           val inputSessionUiState = uiState
@@ -641,7 +654,7 @@ internal class EditorInputNode(
                   editor = editor,
                   bringIntoViewRequests = bringIntoViewRequests,
                   onEditCommand = { commands ->
-                    val preState = editor.state
+                    val preState = editor.appliedState
                     val intercepted =
                       platformInputBridge.interceptEditCommands(
                         commands = commands,
@@ -673,7 +686,7 @@ internal class EditorInputNode(
                       )
                     }
                   },
-                  focusedRectInRoot = { uiState.cursorRectInRoot(editor.cursor) },
+                  focusedRectInRoot = { uiState.cursorRectInRoot(editor.publishedState.cursor) },
                   textFieldRectInRoot = uiState::editorRectInRoot,
                   textClippingRectInRoot = uiState::textClippingRectInRoot,
                   suppressSoftwareKeyboard = suppressSoftwareKeyboard,
@@ -695,24 +708,24 @@ internal class EditorInputNode(
                 )
               launch {
                 notifyImeStateChanged(editor)
-                // tickIme covers window text/composing changes that leave the
+                // Applied IME covers window text/composing changes that leave the
                 // selection untouched (e.g. remote edits after the cursor), so
                 // extracted-text monitors never go stale. drop(1): the initial
                 // emission is already handled above.
                 snapshotFlow {
-                  EditorImeNotifyKey(
-                    // Both selection views on purpose: tickSelection fires the
-                    // notification the moment a tick moves the selection (push-based
-                    // IMEs must see the latest state regardless of the render cycle),
-                    // while the published selection re-fires after a parked publish
-                    // lands so pull-based sessions re-read the committed state.
-                    selection = editor.selection,
-                    tickSelection = editor.tickSelection,
-                    cursor = editor.cursor,
-                    ime = editor.tickIme,
-                    paused = editor.imeNotificationsPaused,
-                  )
-                }
+                    EditorImeNotifyKey(
+                      // Both selection views on purpose: applied selection fires the
+                      // notification the moment a tick moves the selection (push-based
+                      // IMEs must see the latest state regardless of the render cycle),
+                      // while the published selection re-fires after a parked publish
+                      // lands so pull-based sessions re-read the committed state.
+                      publishedSelection = editor.publishedState.selection,
+                      appliedSelection = editor.appliedState.selection,
+                      publishedCursor = editor.publishedState.cursor,
+                      appliedIme = editor.appliedState.ime,
+                      paused = editor.imeNotificationsPaused,
+                    )
+                  }
                   .imeNotificationEvents()
                   .collect { notifyImeStateChanged(editor) }
               }
@@ -733,6 +746,7 @@ internal class EditorInputNode(
   }
 
   override fun onDetach() {
+    imeSessionGeneration += 1
     unsubscribeImeResync?.invoke()
     unsubscribeImeResync = null
     bindingCoalescer = null
@@ -747,10 +761,10 @@ internal class EditorInputNode(
 }
 
 internal data class EditorImeNotifyKey(
-  val selection: Selection?,
-  val tickSelection: Selection?,
-  val cursor: CursorMetrics?,
-  val ime: Ime?,
+  val publishedSelection: Selection?,
+  val appliedSelection: Selection?,
+  val publishedCursor: CursorMetrics?,
+  val appliedIme: Ime?,
   val paused: Boolean,
 )
 

@@ -15,6 +15,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -29,6 +31,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import co.typie.editor.Editor
 import co.typie.editor.EditorRegistry
+import co.typie.editor.EditorState
 import co.typie.editor.EditorTapHint
 import co.typie.editor.EditorZoomController
 import co.typie.editor.LocalEditorZoomController
@@ -83,7 +86,11 @@ internal fun EditorPreview(
     remember(runtime, sourceKey) {
       defaultPreviewDoc(layoutMode).withPreviewRootModifiers(modifiers)
     }
-  val presentedLayoutMode = runtime.editor?.rootAttrs?.layoutMode ?: layoutMode
+  val editor = runtime.editor
+  val presentedLayoutMode by
+    remember(editor, layoutMode) {
+      derivedStateOf { editor?.publishedState?.rootAttrs?.layoutMode ?: layoutMode }
+    }
   val layoutSpec =
     remember(presentedLayoutMode) { presentedLayoutMode.toEditorDocumentLayoutSpec() }
   val background =
@@ -100,7 +107,7 @@ internal fun EditorPreview(
   DisposableEffect(runtime, sourceKey) { onDispose { runtime.clear() } }
   LaunchedEffect(runtime.editor, layoutMode, modifiers) {
     val editor = runtime.editor ?: return@LaunchedEffect
-    val currentModifiers = editor.rootModifiers.orEmpty().toPreviewRootModifierMap()
+    val currentModifiers = editor.appliedState.rootModifiers.orEmpty().toPreviewRootModifierMap()
     val changedModifiers = modifiers.filter { modifier ->
       val type = modifier.previewRootModifierType() ?: return@filter false
       currentModifiers[type] != modifier
@@ -108,8 +115,8 @@ internal fun EditorPreview(
 
     // The settings preview is layout-first on purpose: the frame resizes immediately
     // and the previous text stays visible scaled until the re-render lands.
-    editor.sync(publishBeforeSettle = true) {
-      if (editor.rootAttrs?.layoutMode != layoutMode) {
+    editor.updateNow {
+      if (editor.appliedState.rootAttrs?.layoutMode != layoutMode) {
         enqueueRootLayoutMode(layoutMode)
       }
       changedModifiers.forEach { modifier -> enqueueRootModifier(modifier) }
@@ -207,6 +214,21 @@ private fun EditorPreviewContent(
   val displayZoom = zoomController.displayZoom
   val editor = runtime.editor
 
+  if (editor != null) {
+    val visualHostToken = remember(editor) { Any() }
+    DisposableEffect(editor, visualHostToken) {
+      val activated =
+        try {
+          editor.activateVisualHost(visualHostToken)
+          true
+        } catch (error: Throwable) {
+          if (!editor.terminal) throw error
+          false
+        }
+      onDispose { if (activated) editor.deactivateVisualHost(visualHostToken) }
+    }
+  }
+
   LaunchedEffect(runtime, sourceKey, viewportWidth, viewportHeight, density.density, themeVariant) {
     val viewport =
       Viewport(
@@ -236,13 +258,10 @@ private fun EditorPreviewContent(
         }
       runtime.attach(nextEditor)
     } else {
-      val changed = PlatformModule.editorHost.setThemeVariant(themeVariant)
-      if (changed) {
-        for (e in EditorRegistry.snapshot()) {
-          e.enqueue(Message.System(SystemEvent.ThemeVariantChanged))
-        }
+      EditorRegistry.commitResourceUpdate {
+        PlatformModule.editorHost.setThemeVariant(themeVariant)
       }
-      activeEditor.sync(publishBeforeSettle = true) {
+      activeEditor.updateNow {
         enqueue(
           Message.System(
             SystemEvent.Resize(
@@ -257,7 +276,9 @@ private fun EditorPreviewContent(
     }
   }
 
-  val pageSizes = editor?.pageSizes.orEmpty()
+  val publishedBundle = editor?.publishedBundle
+  val publishedState = publishedBundle?.snapshot ?: EditorState.Initial
+  val pageSizes = publishedState.pageSizes
   val pageSpacing =
     when (layoutSpec) {
       is EditorDocumentLayoutSpec.Continuous -> 0.dp
@@ -272,13 +293,14 @@ private fun EditorPreviewContent(
     pageSpacing = pageSpacing,
     modifier = Modifier.fillMaxSize().clipToBounds().background(pageBackground),
   ) {
-    val publishedVersion = editor?.state?.version ?: 0L
+    val publishedVersion = publishedState.version
     pageSizes.forEachIndexed { index, size ->
       EditorPageSurface(
         page = index,
         width = size.width,
         height = size.height,
         publishedVersion = publishedVersion,
+        publishedFrame = publishedBundle?.frames?.get(index),
         showChrome = layoutSpec is EditorDocumentLayoutSpec.Paginated,
         debugBottomMarginHeight =
           when (layoutSpec) {

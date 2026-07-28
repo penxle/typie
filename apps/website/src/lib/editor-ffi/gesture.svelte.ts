@@ -9,9 +9,10 @@ import {
   TOUCH_MENU_VIEWPORT_PADDING,
 } from './constants';
 import { EditorEdgeAutoScroll } from './edge-auto-scroll';
+import { isSelectionCollapsed } from './geometry';
 import { tryHandleInteractiveHit } from './handlers/pointer';
 import type { Position, Selection, SelectionEndpoints } from '@typie/editor-ffi/browser';
-import type { Editor } from './editor.svelte';
+import type { Editor, EditorSnapshot } from './editor.svelte';
 
 export type SelectionHandleKind = 'from' | 'to';
 
@@ -158,6 +159,7 @@ export class TouchGestureController {
   #pendingSelectionHandleType: SelectionHandleKind | null = null;
   #dragAnchor: Position | null = null;
   #baseSelection: Selection | undefined;
+  #selectionUpdate: ReturnType<Editor['updateNow']> = null;
   #suppressTapOnPointerUp = false;
   #movedPastTapThreshold = false;
   #readOnlyDragStarted = false;
@@ -173,14 +175,16 @@ export class TouchGestureController {
   }
 
   #selectWordAt(point: ResolvedTouchPoint): void {
-    this.#editor.enqueue({
-      type: 'selection',
-      op: { type: 'select_unit_at', page: point.page, x: point.x, y: point.y, unit: 'word' },
+    const update = this.#editor.updateNow(() => {
+      this.#editor.enqueue({
+        type: 'selection',
+        op: { type: 'select_unit_at', page: point.page, x: point.x, y: point.y, unit: 'word' },
+      });
     });
-    this.#editor.flush();
+    this.#selectionUpdate = update;
 
-    const selection = this.#editor.selection;
-    if (selection && !this.#editor.isSelectionCollapsed) {
+    const selection = update?.snapshot.selection;
+    if (selection && !isSelectionCollapsed(selection)) {
       this.#dragAnchor = selection.anchor;
       this.#baseSelection = selection;
     } else {
@@ -211,18 +215,49 @@ export class TouchGestureController {
     this.#suppressTapOnPointerUp = true;
   }
 
-  #requestTouchMenuOpen(generation: number, fallbackPoint: { x: number; y: number } | null = this.#lastClientPoint): void {
+  #requestTouchMenuOpen(
+    generation: number,
+    fallbackPoint: { x: number; y: number } | null = this.#lastClientPoint,
+    update = this.#selectionUpdate,
+  ): void {
+    if (update) {
+      void this.#requestTouchMenuOpenAfterPublication(generation, fallbackPoint, update);
+      return;
+    }
+
+    const snapshot = this.#editor.published?.snapshot;
+    if (snapshot) this.#openTouchMenuFromSnapshot(generation, fallbackPoint, snapshot);
+  }
+
+  async #requestTouchMenuOpenAfterPublication(
+    generation: number,
+    fallbackPoint: { x: number; y: number } | null,
+    update: NonNullable<ReturnType<Editor['updateNow']>>,
+  ): Promise<void> {
+    try {
+      const publication = await update.awaitPublished();
+      if (publication.type !== 'published') return;
+      const snapshot = this.#editor.published?.snapshot;
+      if (!snapshot || snapshot.revision < publication.revision) return;
+      this.#openTouchMenuFromSnapshot(generation, fallbackPoint, snapshot);
+    } catch {
+      // A cancelled, disposed, or unavailable publication cannot anchor a
+      // touch menu to visible geometry.
+    }
+  }
+
+  #openTouchMenuFromSnapshot(generation: number, fallbackPoint: { x: number; y: number } | null, snapshot: EditorSnapshot): void {
     if (generation !== this.#pressGeneration) return;
 
     const extraItems = this.#collectTouchContextMenuItems(fallbackPoint);
 
-    const endpoints = this.#editor.selectionEndpoints();
+    const endpoints = snapshot.selectionEndpoints;
     if (!endpoints) {
       this.#openTouchMenuAtFallback(fallbackPoint, extraItems);
       return;
     }
 
-    const pageSizes = this.#editor.pageSizes ?? [];
+    const pageSizes = snapshot.pageSizes;
     const pageRects: (DOMRect | undefined)[] = Array.from({ length: pageSizes.length });
     for (let i = 0; i < pageSizes.length; i++) {
       const el = this.#editor.pageEls[i];
@@ -237,7 +272,9 @@ export class TouchGestureController {
       height: visualViewport?.height ?? (typeof window === 'undefined' ? 0 : window.innerHeight),
     };
 
-    const position = computeTouchContextMenuPosition({ endpoints, pageRects, zoom: this.#editor.safeDisplayZoom(), viewport });
+    const displayZoom = snapshot.rootAttrs?.layout_mode.type === 'paginated' ? this.#editor.displayZoom : 1;
+    const zoom = Number.isFinite(displayZoom) && displayZoom > 0 ? displayZoom : 1;
+    const position = computeTouchContextMenuPosition({ endpoints, pageRects, zoom, viewport });
     if (!position) {
       this.#openTouchMenuAtFallback(fallbackPoint, extraItems);
       return;
@@ -305,8 +342,9 @@ export class TouchGestureController {
       { clientX: this.#lastClientPoint.x, clientY: this.#lastClientPoint.y },
       (clientX, clientY) => {
         this.#lastClientPoint = { x: clientX, y: clientY };
-        if ((this.#phase === 'doubleTapDragging' || this.#phase === 'handleDragging') && this.#routeMoveToClientPoint(clientX, clientY)) {
-          this.#editor.flush();
+        if (this.#phase === 'doubleTapDragging' || this.#phase === 'handleDragging') {
+          const update = this.#editor.updateNow(() => this.#routeMoveToClientPoint(clientX, clientY));
+          if (update) this.#selectionUpdate = update;
         }
       },
     );
@@ -347,6 +385,7 @@ export class TouchGestureController {
     this.#pendingSelectionHandleType = null;
     this.#dragAnchor = null;
     this.#baseSelection = undefined;
+    this.#selectionUpdate = null;
     this.#suppressTapOnPointerUp = false;
     this.#movedPastTapThreshold = false;
     this.#readOnlyDragStarted = false;
@@ -468,9 +507,8 @@ export class TouchGestureController {
         this.#movedPastTapThreshold = true;
         this.#clearLongPressTimer();
         this.#phase = 'handleDragging';
-        if (this.#routeMoveToWasm(e)) {
-          this.#editor.flush();
-        }
+        const update = this.#editor.updateNow(() => this.#routeMoveToWasm(e));
+        if (update) this.#selectionUpdate = update;
         this.#updateEdgeAutoScroll();
         e.preventDefault();
         return;
@@ -497,9 +535,8 @@ export class TouchGestureController {
     }
 
     if (this.#phase === 'doubleTapDragging' || this.#phase === 'handleDragging') {
-      if (this.#routeMoveToWasm(e)) {
-        this.#editor.flush();
-      }
+      const update = this.#editor.updateNow(() => this.#routeMoveToWasm(e));
+      if (update) this.#selectionUpdate = update;
       this.#updateEdgeAutoScroll();
       e.preventDefault();
       return;
@@ -520,10 +557,8 @@ export class TouchGestureController {
     switch (this.#phase) {
       case 'doubleTapDragging':
       case 'handleDragging': {
-        if (this.#routeMoveToWasm(e)) {
-          this.#editor.flush();
-        }
-        this.#requestTouchMenuOpen(this.#pressGeneration, this.#lastClientPoint);
+        const update = this.#editor.updateNow(() => this.#routeMoveToWasm(e)) ?? this.#selectionUpdate;
+        this.#requestTouchMenuOpen(this.#pressGeneration, this.#lastClientPoint, update);
         this.#lastTap = null;
         break;
       }
@@ -544,8 +579,11 @@ export class TouchGestureController {
           const local = this.#editor.clientToLocal(e.clientX, e.clientY);
           if (local) {
             const hit = this.#editor.interactiveHitTest(local.page, local.x, local.y);
-            if (hit && tryHandleInteractiveHit(this.#editor, hit, { x: local.x, y: local.y })) {
-              this.#editor.flush();
+            let handledInteractiveHit = false;
+            this.#editor.updateNow(() => {
+              handledInteractiveHit = !!hit && tryHandleInteractiveHit(this.#editor, hit, { x: local.x, y: local.y });
+            });
+            if (handledInteractiveHit) {
               this.#editor.closeContextMenu();
               this.#lastTap = null;
               break;
@@ -556,11 +594,12 @@ export class TouchGestureController {
                 this.#requestTouchMenuOpen(this.#pressGeneration, this.#lastClientPoint);
               }
             } else {
-              this.#editor.enqueue({
-                type: 'selection',
-                op: { type: 'set_at', page: local.page, x: local.x, y: local.y },
+              this.#editor.updateNow(() => {
+                this.#editor.enqueue({
+                  type: 'selection',
+                  op: { type: 'set_at', page: local.page, x: local.x, y: local.y },
+                });
               });
-              this.#editor.flush();
               this.#editor.closeContextMenu();
             }
             this.#lastTap = { time: performance.now(), x: e.clientX, y: e.clientY };

@@ -23,6 +23,8 @@ pub struct Slot {
     pub data: Vec<u8>,
     pub width: u32,
     pub height: u32,
+    pub editor_revision: u64,
+    pub frame_key: u64,
     pub version: u64,
     pub damage_from: u64,
     pub damage: Vec<i32>,
@@ -35,6 +37,8 @@ impl Slot {
             data: vec![0u8; size],
             width,
             height,
+            editor_revision: 0,
+            frame_key: 0,
             version: 0,
             damage_from: 0,
             damage: Vec::new(),
@@ -116,7 +120,13 @@ impl RenderBuffer {
     /// Writer path: copy this frame's damage into a free slot (catching the slot up from its stale
     /// version via the damage log) and publish it. Returns `false` without publishing if a
     /// concurrent producer holds the single-producer guard.
-    pub fn commit_damage<F>(&self, this_frame_damage: &[IRect], mut copy_rect: F) -> bool
+    pub fn commit_damage<F>(
+        &self,
+        editor_revision: u64,
+        frame_key: u64,
+        this_frame_damage: &[IRect],
+        mut copy_rect: F,
+    ) -> bool
     where
         F: FnMut(&mut [u8], IRect),
     {
@@ -183,6 +193,8 @@ impl RenderBuffer {
             copy_rect(&mut slot.data, r);
         }
 
+        slot.editor_revision = editor_revision;
+        slot.frame_key = frame_key;
         slot.version = nv;
         slot.damage_from = damage_from;
         slot.damage.clear();
@@ -232,6 +244,14 @@ impl RenderBuffer {
 
     fn pinned_version(&self) -> u64 {
         self.pinned_slot().map(|s| s.version).unwrap_or(0)
+    }
+
+    fn pinned_editor_revision(&self) -> u64 {
+        self.pinned_slot().map(|s| s.editor_revision).unwrap_or(0)
+    }
+
+    fn pinned_frame_key(&self) -> u64 {
+        self.pinned_slot().map(|s| s.frame_key).unwrap_or(0)
     }
 
     fn pinned_damage_from(&self) -> u64 {
@@ -360,6 +380,22 @@ cfg_if! {
                 return 0;
             }
             unsafe { (*(handle as *const RenderBuffer)).pinned_version() as i64 }
+        }
+
+        #[unsafe(no_mangle)]
+        pub extern "C" fn render_buffer_pinned_editor_revision(handle: i64) -> i64 {
+            if handle == 0 {
+                return 0;
+            }
+            unsafe { (*(handle as *const RenderBuffer)).pinned_editor_revision() as i64 }
+        }
+
+        #[unsafe(no_mangle)]
+        pub extern "C" fn render_buffer_pinned_frame_key(handle: i64) -> i64 {
+            if handle == 0 {
+                return 0;
+            }
+            unsafe { (*(handle as *const RenderBuffer)).pinned_frame_key() as i64 }
         }
 
         #[unsafe(no_mangle)]
@@ -538,6 +574,30 @@ cfg_if! {
         }
 
         #[unsafe(no_mangle)]
+        pub extern "C" fn Java_co_typie_editor_render_RenderBuffer_getPinnedEditorRevision(
+            _env: *mut c_void,
+            _class: *mut c_void,
+            handle: i64,
+        ) -> i64 {
+            if handle == 0 {
+                return 0;
+            }
+            unsafe { (*(handle as *const RenderBuffer)).pinned_editor_revision() as i64 }
+        }
+
+        #[unsafe(no_mangle)]
+        pub extern "C" fn Java_co_typie_editor_render_RenderBuffer_getPinnedFrameKey(
+            _env: *mut c_void,
+            _class: *mut c_void,
+            handle: i64,
+        ) -> i64 {
+            if handle == 0 {
+                return 0;
+            }
+            unsafe { (*(handle as *const RenderBuffer)).pinned_frame_key() as i64 }
+        }
+
+        #[unsafe(no_mangle)]
         pub extern "C" fn Java_co_typie_editor_render_RenderBuffer_getPinnedDamageFrom(
             _env: *mut c_void,
             _class: *mut c_void,
@@ -645,10 +705,21 @@ mod tests {
     #[test]
     fn commit_publishes_frame_visible_to_begin_read() {
         let rb = RenderBuffer::new(2, 2);
-        assert!(rb.commit_damage(&[full_rect(2, 2)], |data, _r| data.fill(0xAB)));
+        assert!(rb.commit_damage(0, 0, &[full_rect(2, 2)], |data, _r| data.fill(0xAB)));
         assert!(rb.begin_read());
         let slot = rb.pinned_slot().unwrap();
         assert!(slot.data.iter().all(|b| *b == 0xAB));
+        rb.end_read();
+    }
+
+    #[test]
+    fn commit_publishes_exact_editor_revision_and_frame_key() {
+        let rb = RenderBuffer::new(2, 2);
+        assert!(rb.commit_damage(17, 23, &[full_rect(2, 2)], |data, _r| data.fill(0xAB)));
+        assert!(rb.begin_read());
+        let slot = rb.pinned_slot().unwrap();
+        assert_eq!(slot.editor_revision, 17);
+        assert_eq!(slot.frame_key, 23);
         rb.end_read();
     }
 
@@ -661,10 +732,10 @@ mod tests {
     #[test]
     fn writer_avoids_reading_slot() {
         let rb = RenderBuffer::new(1, 1);
-        assert!(rb.commit_damage(&[full_rect(1, 1)], |data, _r| data[0] = 0x11));
+        assert!(rb.commit_damage(0, 0, &[full_rect(1, 1)], |data, _r| data[0] = 0x11));
         assert!(rb.begin_read());
         let reader_idx = rb.reading.load(Ordering::Acquire);
-        assert!(rb.commit_damage(&[full_rect(1, 1)], |data, _r| data[0] = 0x22));
+        assert!(rb.commit_damage(0, 0, &[full_rect(1, 1)], |data, _r| data[0] = 0x22));
         let pinned = rb.pinned_slot().unwrap();
         assert_eq!(pinned.data[0], 0x11);
         let new_latest = rb.latest.load(Ordering::Acquire);
@@ -676,7 +747,12 @@ mod tests {
     fn resize_affects_next_commit() {
         let rb = RenderBuffer::new(1, 1);
         rb.resize(3, 2);
-        assert!(rb.commit_damage(&[full_rect(3, 2)], |data, _r| assert_eq!(data.len(), 24)));
+        assert!(
+            rb.commit_damage(0, 0, &[full_rect(3, 2)], |data, _r| assert_eq!(
+                data.len(),
+                24
+            ))
+        );
         assert!(rb.begin_read());
         let slot = rb.pinned_slot().unwrap();
         assert_eq!(slot.width, 3);
@@ -688,7 +764,7 @@ mod tests {
     fn first_commit_is_full_and_bumps_version() {
         let rb = RenderBuffer::new(2, 2);
         let mut recorded = Vec::new();
-        assert!(rb.commit_damage(&[px(0, 0)], |_d, r| recorded.push(r)));
+        assert!(rb.commit_damage(0, 0, &[px(0, 0)], |_d, r| recorded.push(r)));
         let tok = rb.latest.load(Ordering::Acquire);
         assert_eq!(token_version(tok), 1);
         let s = published_slot(&rb);
@@ -707,7 +783,7 @@ mod tests {
 
         master.iter_mut().for_each(|b| *b = 0x10);
         assert!(
-            rb.commit_damage(&[full_rect(w, h)], |d, r| copy_from_master(
+            rb.commit_damage(0, 0, &[full_rect(w, h)], |d, r| copy_from_master(
                 &master, stride, d, r
             ))
         );
@@ -715,17 +791,23 @@ mod tests {
         assert_eq!(published_slot(&rb).damage_from, 0);
 
         set_px(&mut master, stride, 0, 0, 0x20);
-        assert!(rb.commit_damage(&[px(0, 0)], |d, r| copy_from_master(&master, stride, d, r)));
+        assert!(rb.commit_damage(0, 0, &[px(0, 0)], |d, r| copy_from_master(
+            &master, stride, d, r
+        )));
         assert_eq!(published_slot(&rb).data, master);
 
         set_px(&mut master, stride, 3, 3, 0x30);
-        assert!(rb.commit_damage(&[px(3, 3)], |d, r| copy_from_master(&master, stride, d, r)));
+        assert!(rb.commit_damage(0, 0, &[px(3, 3)], |d, r| copy_from_master(
+            &master, stride, d, r
+        )));
         let s = published_slot(&rb);
         assert_eq!(s.data, master);
         assert_eq!(s.damage_from, 1);
 
         set_px(&mut master, stride, 1, 1, 0x40);
-        assert!(rb.commit_damage(&[px(1, 1)], |d, r| copy_from_master(&master, stride, d, r)));
+        assert!(rb.commit_damage(0, 0, &[px(1, 1)], |d, r| copy_from_master(
+            &master, stride, d, r
+        )));
         let s = published_slot(&rb);
         assert_eq!(s.data, master);
         assert_eq!(s.damage_from, 2);
@@ -740,7 +822,7 @@ mod tests {
 
         master.iter_mut().for_each(|b| *b = 0x10);
         assert!(
-            rb.commit_damage(&[full_rect(w, h)], |d, r| copy_from_master(
+            rb.commit_damage(0, 0, &[full_rect(w, h)], |d, r| copy_from_master(
                 &master, stride, d, r
             ))
         );
@@ -748,10 +830,14 @@ mod tests {
         assert!(rb.begin_read());
 
         set_px(&mut master, stride, 0, 0, 0x20);
-        assert!(rb.commit_damage(&[px(0, 0)], |d, r| copy_from_master(&master, stride, d, r)));
+        assert!(rb.commit_damage(0, 0, &[px(0, 0)], |d, r| copy_from_master(
+            &master, stride, d, r
+        )));
 
         set_px(&mut master, stride, 3, 3, 0x30);
-        assert!(rb.commit_damage(&[px(3, 3)], |d, r| copy_from_master(&master, stride, d, r)));
+        assert!(rb.commit_damage(0, 0, &[px(3, 3)], |d, r| copy_from_master(
+            &master, stride, d, r
+        )));
 
         let s = published_slot(&rb);
         assert_eq!(token_index(rb.latest.load(Ordering::Acquire)), 2);
@@ -777,7 +863,7 @@ mod tests {
 
         let this = px(4, 4);
         let mut recorded = Vec::new();
-        assert!(rb.commit_damage(&[this], |_d, r| recorded.push(r)));
+        assert!(rb.commit_damage(0, 0, &[this], |_d, r| recorded.push(r)));
         let s = unsafe { &*rb.slots[1].get() };
         assert_eq!(s.version, cur_v + 1);
         assert_eq!(s.damage_from, cur_v);
@@ -806,7 +892,7 @@ mod tests {
 
         let c = px(6, 6);
         let mut recorded = Vec::new();
-        assert!(rb.commit_damage(&[c], |_d, r| recorded.push(r)));
+        assert!(rb.commit_damage(0, 0, &[c], |_d, r| recorded.push(r)));
         let s = unsafe { &*rb.slots[1].get() };
         assert_eq!(s.damage_from, w_v);
         assert_eq!(recorded, merge_damage(&[a, b, c], full_rect(w, h)));
@@ -830,7 +916,7 @@ mod tests {
         }
 
         let mut recorded = Vec::new();
-        assert!(rb.commit_damage(&[px(6, 6)], |_d, r| recorded.push(r)));
+        assert!(rb.commit_damage(0, 0, &[px(6, 6)], |_d, r| recorded.push(r)));
         let s = unsafe { &*rb.slots[1].get() };
         assert_eq!(s.damage_from, 0);
         assert_eq!(recorded, vec![full_rect(w, h)]);
@@ -840,12 +926,12 @@ mod tests {
     #[test]
     fn resize_forces_full_reconstruction() {
         let rb = RenderBuffer::new(2, 2);
-        assert!(rb.commit_damage(&[full_rect(2, 2)], |d, _r| d.fill(0x11)));
-        assert!(rb.commit_damage(&[full_rect(2, 2)], |d, _r| d.fill(0x22)));
+        assert!(rb.commit_damage(0, 0, &[full_rect(2, 2)], |d, _r| d.fill(0x11)));
+        assert!(rb.commit_damage(0, 0, &[full_rect(2, 2)], |d, _r| d.fill(0x22)));
 
         rb.resize(3, 2);
         let mut recorded = Vec::new();
-        assert!(rb.commit_damage(&[px(0, 0)], |_d, r| recorded.push(r)));
+        assert!(rb.commit_damage(0, 0, &[px(0, 0)], |_d, r| recorded.push(r)));
         let s = published_slot(&rb);
         assert_eq!(s.damage_from, 0);
         assert_eq!(recorded, vec![full_rect(3, 2)]);
@@ -855,7 +941,7 @@ mod tests {
     #[test]
     fn commit_damage_rejects_reentrant_producer_without_publishing() {
         let rb = RenderBuffer::new(2, 2);
-        assert!(rb.commit_damage(&[full_rect(2, 2)], |d, _r| d.fill(0x33)));
+        assert!(rb.commit_damage(0, 0, &[full_rect(2, 2)], |d, _r| d.fill(0x33)));
         let latest_before = rb.latest.load(Ordering::Acquire);
         let log_len_before = unsafe { (*rb.damage_log.get()).len() };
 
@@ -864,7 +950,7 @@ mod tests {
         let prev = std::panic::take_hook();
         std::panic::set_hook(Box::new(|_| {}));
         let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            rb.commit_damage(&[full_rect(2, 2)], |_d, _r| {
+            rb.commit_damage(0, 0, &[full_rect(2, 2)], |_d, _r| {
                 called = true;
             })
         }));
@@ -881,14 +967,14 @@ mod tests {
     #[test]
     fn pinned_slot_stays_stable_while_writer_advances() {
         let rb = RenderBuffer::new(2, 2);
-        assert!(rb.commit_damage(&[full_rect(2, 2)], |d, _r| d.fill(0x01)));
+        assert!(rb.commit_damage(0, 0, &[full_rect(2, 2)], |d, _r| d.fill(0x01)));
         assert!(rb.begin_read());
         let pinned_idx = rb.reading.load(Ordering::Acquire);
         let pinned_ver = rb.pinned_version();
         let pinned_ptr = rb.pinned_slot().unwrap().data.as_ptr();
 
-        assert!(rb.commit_damage(&[full_rect(2, 2)], |d, _r| d.fill(0x02)));
-        assert!(rb.commit_damage(&[full_rect(2, 2)], |d, _r| d.fill(0x03)));
+        assert!(rb.commit_damage(0, 0, &[full_rect(2, 2)], |d, _r| d.fill(0x02)));
+        assert!(rb.commit_damage(0, 0, &[full_rect(2, 2)], |d, _r| d.fill(0x03)));
 
         assert_eq!(rb.reading.load(Ordering::Acquire), pinned_idx);
         assert_eq!(rb.pinned_version(), pinned_ver);
@@ -900,7 +986,7 @@ mod tests {
     #[test]
     fn pinned_accessors_match_pinned_slot() {
         let rb = RenderBuffer::new(4, 4);
-        assert!(rb.commit_damage(&[full_rect(4, 4)], |d, _r| d.fill(0x01)));
+        assert!(rb.commit_damage(0, 0, &[full_rect(4, 4)], |d, _r| d.fill(0x01)));
         assert!(rb.begin_read());
         let slot = published_slot(&rb);
         assert_eq!(rb.pinned_version(), slot.version);
@@ -911,8 +997,8 @@ mod tests {
         assert_eq!(rb.pinned_damage(), &[0, 0, 4, 4]);
         rb.end_read();
 
-        assert!(rb.commit_damage(&[px(1, 1)], |_d, _r| {}));
-        assert!(rb.commit_damage(&[px(2, 2)], |_d, _r| {}));
+        assert!(rb.commit_damage(0, 0, &[px(1, 1)], |_d, _r| {}));
+        assert!(rb.commit_damage(0, 0, &[px(2, 2)], |_d, _r| {}));
         assert!(rb.begin_read());
         let slot = published_slot(&rb);
         assert_eq!(rb.pinned_version(), slot.version);
@@ -932,7 +1018,7 @@ mod tests {
     }
 
     fn commit_full(rb: &RenderBuffer, w: u32, h: u32, seed: u8) {
-        rb.commit_damage(&[full_rect(w, h)], |data, r| {
+        rb.commit_damage(0, 0, &[full_rect(w, h)], |data, r| {
             for y in r.y0..r.y1 {
                 for x in r.x0..r.x1 {
                     let off = y as usize * w as usize * 4 + x as usize * 4;

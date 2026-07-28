@@ -666,15 +666,15 @@ mod tests {
             selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
-        editor.enqueue(Message::Insertion {
+        let _ = editor.enqueue_request(vec![Message::Insertion {
             op: InsertionOp::Text { text: "X".into() },
-        });
-        editor.enqueue(replace_groups_from_prose(
+        }]);
+        let _ = editor.enqueue_request(vec![replace_groups_from_prose(
             "hello",
             vec![prose_registration("new", "g1", 0, 5)],
-        ));
+        )]);
 
-        let events = editor.tick().expect("tick");
+        let events = editor.tick().expect("tick").unwrap().events;
 
         assert!(editor.tracked_ranges().is_empty());
         assert_install_outcome(&events, ProseRangeInstallOutcome::TextMismatch);
@@ -687,15 +687,15 @@ mod tests {
             selection: (p1, 0)
         };
         let mut editor = Editor::new_test(state);
-        editor.enqueue(replace_groups_from_prose(
+        let _ = editor.enqueue_request(vec![replace_groups_from_prose(
             "hello",
             vec![prose_registration("new", "g1", 0, 5)],
-        ));
-        editor.enqueue(Message::Insertion {
+        )]);
+        let _ = editor.enqueue_request(vec![Message::Insertion {
             op: InsertionOp::Text { text: "X".into() },
-        });
+        }]);
 
-        let events = editor.tick().expect("tick");
+        let events = editor.tick().expect("tick").unwrap().events;
 
         assert!(editor.tracked_ranges().contains("new"));
         assert_install_outcome(&events, ProseRangeInstallOutcome::Applied);

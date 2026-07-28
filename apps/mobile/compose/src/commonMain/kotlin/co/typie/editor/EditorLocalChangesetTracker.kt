@@ -13,7 +13,7 @@ internal class EditorLocalChangesetTracker {
     syncedHeads = editor.currentHeads()
   }
 
-  suspend fun collect(editor: Editor, block: EditorScope.() -> Unit): ByteArray {
+  suspend fun collect(editor: Editor, block: EditorRequestScope.() -> Unit): ByteArray {
     val localChangesets = editor.collectLocalChangesets(baseHeads = syncedHeads, block = block)
     syncedHeads =
       if (localChangesets.changesets.isEmpty()) {

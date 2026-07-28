@@ -3,6 +3,7 @@ package co.typie.editor.scroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
+import co.typie.editor.EditorState
 import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
@@ -50,6 +51,19 @@ internal class EditorBringIntoViewRequests {
   }
 
   private val state = AtomicReference(State())
+
+  fun requestForState(
+    state: EditorState,
+    behavior: EditorBringIntoViewBehavior = EditorBringIntoViewBehavior.Instant,
+    target: EditorState.() -> EditorBringIntoViewTarget?,
+  ): Boolean {
+    requestForVersion(
+      target = state.target() ?: return false,
+      version = state.version,
+      behavior = behavior,
+    )
+    return true
+  }
 
   fun requestForVersion(
     target: EditorBringIntoViewTarget,

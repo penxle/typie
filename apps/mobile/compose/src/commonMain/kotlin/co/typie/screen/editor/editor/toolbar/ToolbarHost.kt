@@ -39,7 +39,7 @@ import co.typie.editor.ffi.Message
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
-import co.typie.editor.scroll.awaitWithBringIntoView
+import co.typie.editor.scroll.updateWithBringIntoView
 import co.typie.graphql.fragment.EditorSettingsFontFamily_family
 import co.typie.screen.editor.editor.state.EditorInputEffect
 import co.typie.screen.editor.editor.toolbar.contextual.ImageResizeSecondaryToolbar
@@ -246,16 +246,16 @@ internal fun EditorToolbarHost(
     val session = runtime.session ?: return
     session.submit { editor, context ->
       editor.scope.launch(context) {
-        val committedState =
-          editor.awaitWithBringIntoView(bringIntoViewRequests) {
-            if (editor.ime?.composing != null) {
+        val appliedSnapshot =
+          editor.updateWithBringIntoView(bringIntoViewRequests) {
+            if (editor.appliedState.ime?.composing != null) {
               enqueue(Message.TextInput(listOf(FlatImeOp.CommitAsIs)))
             }
             messages.forEach(::enqueue)
-            beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
+            afterApplied { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
           }
-        if (committedState == null) {
-          Logger.e { "Editor toolbar messages did not commit" }
+        if (appliedSnapshot == null) {
+          Logger.e { "Editor toolbar messages were not admitted" }
         }
       }
     }

@@ -67,6 +67,7 @@ pub fn param_to_kotlin(ty: &FfiParamType, custom_types: &HashMap<String, String>
     match ty {
         FfiParamType::Primitive(p) => resolve_primitive(p, custom_types),
         FfiParamType::Complex(name) => name.clone(),
+        FfiParamType::Owned(name) => name.clone(),
         FfiParamType::Vec(inner) => {
             if matches!(inner, FfiScalarParam::Primitive(p) if p == "u8") {
                 "ByteArray".into()

@@ -24,7 +24,7 @@ internal class EditorLongPressSemantic {
       return EditorLongPressSemanticIntent.CursorMove
     }
     if (
-      editor.selection.isCollapsed() &&
+      editor.publishedState.selection.isCollapsed() &&
         editor.cursorHitTest(page = point.page, x = point.x, y = point.y)
     ) {
       return EditorLongPressSemanticIntent.CursorMove

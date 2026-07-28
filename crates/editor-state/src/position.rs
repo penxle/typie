@@ -138,7 +138,12 @@ impl<'a> ResolvedPosition<'a> {
                 }
             }
             if i > run_start {
-                for byte_off in resource.segmenters.grapheme.as_borrowed().segment_str(&run) {
+                for byte_off in resource
+                    .segmenters()
+                    .grapheme
+                    .as_borrowed()
+                    .segment_str(&run)
+                {
                     boundaries.push(run_start + run.nth_byte_char_offset(byte_off));
                 }
             } else {

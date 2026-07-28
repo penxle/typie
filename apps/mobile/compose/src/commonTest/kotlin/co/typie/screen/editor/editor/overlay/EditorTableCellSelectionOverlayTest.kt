@@ -47,7 +47,7 @@ class EditorTableCellSelectionOverlayTest {
           },
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      editor.sync {}
+      fake.publishSnapshot(editor)
       val uiState = EditorUiState().apply { updatePageOffset(page = 0, offset = Offset.Zero) }
 
       val placements =

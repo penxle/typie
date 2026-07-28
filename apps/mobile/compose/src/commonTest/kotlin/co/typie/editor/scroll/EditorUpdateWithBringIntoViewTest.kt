@@ -2,31 +2,30 @@ package co.typie.editor.scroll
 
 import co.typie.editor.Editor
 import co.typie.editor.FakeFfiEditor
-import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.SystemEvent
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
-import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlin.test.assertTrue
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
-import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 
-@OptIn(ExperimentalCoroutinesApi::class)
-class EditorAwaitWithBringIntoViewTest {
+class EditorUpdateWithBringIntoViewTest {
   private val dispatcher = StandardTestDispatcher()
 
   @Test
-  fun `bringIntoView attaches to committed editor version`() =
+  fun `update bringIntoView attaches to applied editor version`() =
     runTest(dispatcher) {
       val requests = EditorBringIntoViewRequests()
       val editor = Editor(FakeFfiEditor(), this, dispatcher)
 
-      editor.awaitWithBringIntoView(requests) {
+      editor.updateWithBringIntoView(requests) {
         enqueue(Message.System(SystemEvent.Initialize))
-        beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
+        afterApplied { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
       }
 
       assertNull(requests.activateForVersion(version = 0L))
@@ -37,14 +36,14 @@ class EditorAwaitWithBringIntoViewTest {
     }
 
   @Test
-  fun `sync bringIntoView attaches to committed editor version`() =
+  fun `updateNow bringIntoView attaches to applied editor version`() =
     runTest(dispatcher) {
       val requests = EditorBringIntoViewRequests()
       val editor = Editor(FakeFfiEditor(), this, dispatcher)
 
-      editor.syncWithBringIntoView(requests) {
+      editor.updateNowWithBringIntoView(requests) {
         enqueue(Message.System(SystemEvent.Initialize))
-        beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
+        afterApplied { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
       }
 
       assertNull(requests.activateForVersion(version = 0L))
@@ -55,33 +54,35 @@ class EditorAwaitWithBringIntoViewTest {
     }
 
   @Test
-  fun `await bringIntoView request survives cancel before commit`() =
+  fun `update bringIntoView runs afterApplied once when caller is cancelled after admission`() =
     runTest(dispatcher) {
       val requests = EditorBringIntoViewRequests()
-      val editor =
-        Editor(FakeFfiEditor(onTick = { listOf(EditorEvent.RenderInvalidated) }), this, dispatcher)
-      editor.attachSurface(page = 0, handle = 0L, width = 0.0, height = 0.0, scaleFactor = 1.0)
+      lateinit var caller: Job
+      val fake = FakeFfiEditor(beforeEnqueueRequest = { caller.cancel() })
+      val editor = Editor(fake, this, dispatcher)
+      var afterAppliedCalls = 0
 
-      val job =
-        launch(dispatcher) {
-          editor.awaitWithBringIntoView(requests) {
+      caller =
+        launch(start = CoroutineStart.LAZY) {
+          editor.updateWithBringIntoView(requests) {
             enqueue(Message.System(SystemEvent.Initialize))
-            beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
+            afterApplied {
+              afterAppliedCalls += 1
+              bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
+            }
           }
         }
+      caller.start()
       dispatcher.scheduler.advanceUntilIdle()
+      caller.join()
 
-      assertNull(requests.activateForVersion(version = 1L))
-      requests.cancel()
-
-      editor.onPageSettled(page = 0, version = 1L)
-      dispatcher.scheduler.advanceUntilIdle()
-
+      assertTrue(caller.isCancelled)
+      assertEquals(1L, editor.appliedState.version)
+      assertEquals(1, afterAppliedCalls)
       assertEquals(
         request(EditorBringIntoViewTarget.CurrentSelectionHead),
         requests.activateForVersion(version = 1L),
       )
-      job.join()
     }
 
   private fun request(

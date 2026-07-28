@@ -21,9 +21,8 @@
 
   const activeRange = $derived.by(() => {
     if (!activeError) return null;
-    // 리플로우(원격 편집 포함)를 따라가도록 tick마다 신선한 rects를 조회한다.
-    void editor.tickRevision;
-    return editor.trackedItem(activeError.id);
+    // Popover placement follows geometry published with the visible canvas.
+    return editor.published?.snapshot.trackedRanges.find((range) => range.id === activeError.id) ?? null;
   });
 
   const scroller = $derived(editor.scrollContainerEl);

@@ -107,7 +107,7 @@ internal fun EditorCharacterCountOverlay(
   // refetch.
   LaunchedEffect(editor) {
     collectDebouncedCharacterCounts(
-      versions = snapshotFlow { editor.state.documentRevision },
+      versions = snapshotFlow { editor.appliedState.documentRevision },
       debounceMillis = CharacterCountDebounceMs,
       fetch = { editor.characterCounts()?.let { counts = it } },
     )
@@ -136,7 +136,7 @@ internal fun EditorCharacterCountOverlay(
   // Typing: the cursor or selection moving means the user is editing, so get out of the way.
   LaunchedEffect(editor, autoFade) {
     if (!autoFade) return@LaunchedEffect
-    snapshotFlow { editor.state.cursor?.caret to editor.state.selection }
+    snapshotFlow { editor.publishedState.cursor?.caret to editor.publishedState.selection }
       .drop(1)
       .collect { fadeOutRequest += 1 }
   }

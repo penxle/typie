@@ -32,7 +32,7 @@ import co.typie.editor.DocumentEditingSession
 import co.typie.editor.DocumentProtectedReloadResult
 import co.typie.editor.DocumentReloadFailureDecision
 import co.typie.editor.Editor
-import co.typie.editor.EditorScope
+import co.typie.editor.EditorRequestScope
 import co.typie.editor.currentEditorThemeVariant
 import co.typie.editor.enqueueRootLayoutMode
 import co.typie.editor.enqueueRootModifier
@@ -221,7 +221,7 @@ fun DocumentBodySettingsScreen(entityId: String) {
                 finalizeInput = {
                   focusManager.clearFocus()
                   settingsRuntime.blur()
-                  request.session.editor.sync {
+                  request.session.editor.updateNow {
                     enqueue(Message.System(SystemEvent.SetFocused(false)))
                   }
                   settingsRuntime.deactivateScene()
@@ -510,8 +510,8 @@ fun DocumentBodySettingsScreen(entityId: String) {
     }
 
     val settingsEditor = settingsRuntime.editor
-    val authoritativeRootAttrs = settingsEditor?.rootAttrs
-    val authoritativeRootModifiers = settingsEditor?.rootModifiers
+    val authoritativeRootAttrs = settingsEditor?.appliedState?.rootAttrs
+    val authoritativeRootModifiers = settingsEditor?.appliedState?.rootModifiers
     LaunchedEffect(settingsEditor, authoritativeRootAttrs, authoritativeRootModifiers) {
       val rootAttrs = authoritativeRootAttrs ?: return@LaunchedEffect
       val rootModifiers = authoritativeRootModifiers ?: return@LaunchedEffect
@@ -528,7 +528,7 @@ fun DocumentBodySettingsScreen(entityId: String) {
           finalizeInput = {
             focusManager.clearFocus()
             settingsRuntime.blur()
-            activeEditor.sync { enqueue(Message.System(SystemEvent.SetFocused(false))) }
+            activeEditor.updateNow { enqueue(Message.System(SystemEvent.SetFocused(false))) }
             settingsRuntime.deactivateScene()
           },
           restoreInput = {},
@@ -596,7 +596,7 @@ fun DocumentBodySettingsScreen(entityId: String) {
       }
     }
 
-    fun save(block: EditorScope.() -> Unit) {
+    fun save(block: EditorRequestScope.() -> Unit) {
       if (!controlsEnabled) return
       val activeSession = settingsRuntime.session ?: return
       activeSession.submit { activeEditor, context ->

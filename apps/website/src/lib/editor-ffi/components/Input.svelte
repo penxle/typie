@@ -17,10 +17,8 @@
   const { editor } = ctx;
   const viewportOverlay = getViewportOverlayContext();
 
-  let adapterEnqueued = false;
-
   const enqueueMessages = (messages: Message[]) => {
-    if (!editor) return;
+    if (!editor || editor.terminal) return;
 
     let enqueued = false;
     for (const message of messages) {
@@ -28,13 +26,12 @@
       enqueued = true;
     }
     if (enqueued) {
-      adapterEnqueued = true;
       editor.scrollIntoView({ target: { type: 'current_selection_head' }, mode: 'typewriter' });
     }
   };
 
   const readEditorImeContext = (): ImeContext | null => {
-    if (!editor) return null;
+    if (!editor || editor.terminal) return null;
 
     const ime = editor.ime(IME_CONTEXT_BEFORE_LIMIT, IME_CONTEXT_AFTER_LIMIT);
     return ime ? normalizeImeContext(ime) : null;
@@ -46,17 +43,17 @@
   });
 
   const syncInput = () => {
-    if (!editor?.inputEl) return;
+    if (!editor?.inputEl || editor.terminal) return;
 
     inputAdapter.syncFromEditor(editor.inputEl);
   };
 
   const inputRect = $derived.by(() => {
     void viewportOverlay.change;
+    if (!editor || editor.terminal) return null;
+
     const cursor = editor?.cursor;
-    if (!editor || !cursor) {
-      return null;
-    }
+    if (!cursor) return null;
 
     const rect = pageRectToClientRect(editor, { page_idx: cursor.page_idx, rect: cursor.caret });
     if (!rect) return null;
@@ -70,15 +67,14 @@
   });
 
   $effect(() => {
-    if (!editor?.focused || !editor.inputEl) return;
+    if (!editor?.focused || !editor.inputEl || editor.terminal) return;
 
-    void editor.cursor;
-    void editor.selection;
+    void editor.appliedImeRevision;
     syncInput();
   });
 
   $effect(() => {
-    if (!editor) return;
+    if (!editor || editor.terminal) return;
 
     return wireImeResyncListener(editor, inputAdapter, () => editor.inputEl ?? null);
   });
@@ -103,11 +99,7 @@
     autocorrect="off"
     onbeforeinput={(e) => {
       if (editor.readOnly) return;
-      adapterEnqueued = false;
-      inputAdapter.handleBeforeInput(e as InputEvent & { currentTarget: ImeTextInput });
-      if (adapterEnqueued) {
-        editor.flush();
-      }
+      editor.updateNow(() => inputAdapter.handleBeforeInput(e as InputEvent & { currentTarget: ImeTextInput }));
     }}
     oncompositionend={() => {
       if (editor.readOnly) return;
@@ -132,15 +124,13 @@
     onfocus={syncInput}
     oninput={(e) => {
       if (editor.readOnly) return;
-      inputAdapter.handleInput(e);
-      editor.flush();
+      editor.updateNow(() => inputAdapter.handleInput(e));
     }}
     onkeydown={(e) => {
       if (editor.readOnly && e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
         editor.editBlockedHandler?.();
       }
-      handleKeyDown(editor, e);
-      editor.flush();
+      editor.updateNow(() => handleKeyDown(editor, e));
     }}
     onpaste={(e) => {
       if (editor.readOnly) {

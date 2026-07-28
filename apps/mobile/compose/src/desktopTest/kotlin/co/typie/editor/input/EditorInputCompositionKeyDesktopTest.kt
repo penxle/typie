@@ -57,11 +57,7 @@ class EditorInputCompositionKeyDesktopTest {
 
   @Test
   fun `android backspace during composition stays blocked`() {
-    runCompositionKeyTest(
-      platform = Platform.Android,
-      key = Key.Backspace,
-      expectEnqueued = null,
-    )
+    runCompositionKeyTest(platform = Platform.Android, key = Key.Backspace, expectEnqueued = null)
   }
 
   @Test
@@ -121,84 +117,75 @@ class EditorInputCompositionKeyDesktopTest {
         waitForIdle()
 
         waitUntil(timeoutMillis = 5_000) { fake.enqueued.isNotEmpty() }
-        assertEquals(
-          listOf(Message.Insertion(InsertionOp.Text("a"))),
-          fake.enqueued.toList(),
-        )
+        assertEquals(listOf(Message.Insertion(InsertionOp.Text("a"))), fake.enqueued.toList())
       } finally {
         session.stop()
         scope.cancel()
       }
     }
 
-  private fun runCompositionKeyTest(
-    platform: Platform,
-    key: Key,
-    expectEnqueued: List<Message>?,
-  ) = runComposeUiTest {
-    val fake =
-      FakeFfiEditor(
-        imeProvider = { _, _ ->
-          Ime(
-            text = "하",
-            windowStart = 0,
-            selection = ImeRange(1, 1),
-            composing = ImeRange(0, 1),
-          )
+  private fun runCompositionKeyTest(platform: Platform, key: Key, expectEnqueued: List<Message>?) =
+    runComposeUiTest {
+      val fake =
+        FakeFfiEditor(
+          imeProvider = { _, _ ->
+            Ime(text = "하", windowStart = 0, selection = ImeRange(1, 1), composing = ImeRange(0, 1))
+          }
+        )
+      val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+      val editor = Editor(fake, scope)
+      val session = createTestDocumentEditingSession(editor, scope)
+
+      try {
+        setContent {
+          val focusRequester = remember { FocusRequester() }
+          val bringIntoViewRequests = rememberEditorBringIntoViewRequests()
+          CompositionLocalProvider(
+            LocalEditorBringIntoViewRequests provides bringIntoViewRequests
+          ) {
+            Box(
+              Modifier.size(200.dp)
+                .testTag(InputTag)
+                .focusRequester(focusRequester)
+                .editorInput(
+                  session = session,
+                  uiState = EditorUiState(),
+                  platform = platform,
+                  bringIntoViewRequests = bringIntoViewRequests,
+                  enabled = true,
+                  suppressSoftwareKeyboard = true,
+                  clipboard = NoopClipboard,
+                )
+                .focusable()
+            )
+            LaunchedEffect(Unit) { focusRequester.requestFocus() }
+          }
         }
-      )
-    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    val editor = Editor(fake, scope)
-    val session = createTestDocumentEditingSession(editor, scope)
-
-    try {
-      setContent {
-        val focusRequester = remember { FocusRequester() }
-        val bringIntoViewRequests = rememberEditorBringIntoViewRequests()
-        CompositionLocalProvider(LocalEditorBringIntoViewRequests provides bringIntoViewRequests) {
-          Box(
-            Modifier.size(200.dp)
-              .testTag(InputTag)
-              .focusRequester(focusRequester)
-              .editorInput(
-                session = session,
-                uiState = EditorUiState(),
-                platform = platform,
-                bringIntoViewRequests = bringIntoViewRequests,
-                enabled = true,
-                suppressSoftwareKeyboard = true,
-                clipboard = NoopClipboard,
-              )
-              .focusable()
-          )
-          LaunchedEffect(Unit) { focusRequester.requestFocus() }
-        }
-      }
-      waitForIdle()
-
-      editor.sync { enqueue(Message.TextInput(emptyList())) }
-      waitUntil(timeoutMillis = 5_000) { editor.ime?.composing != null }
-      fake.enqueued.clear()
-
-      onNodeWithTag(InputTag).performKeyInput {
-        keyDown(key)
-        keyUp(key)
-      }
-      waitForIdle()
-
-      if (expectEnqueued == null) {
-        Thread.sleep(300)
         waitForIdle()
-        assertTrue(fake.enqueued.isEmpty())
-      } else {
-        waitUntil(timeoutMillis = 5_000) { fake.enqueued.size >= expectEnqueued.size }
-        assertEquals(expectEnqueued, fake.enqueued.toList())
+
+        editor.updateNow { enqueue(Message.TextInput(emptyList())) }
+        waitUntil(timeoutMillis = 5_000) { editor.appliedState.ime?.composing != null }
+        fake.enqueued.clear()
+
+        onNodeWithTag(InputTag).performKeyInput {
+          keyDown(key)
+          keyUp(key)
+        }
+        waitForIdle()
+
+        if (expectEnqueued == null) {
+          Thread.sleep(300)
+          waitForIdle()
+          assertTrue(fake.enqueued.isEmpty())
+        } else {
+          waitUntil(timeoutMillis = 5_000) { fake.enqueued.size >= expectEnqueued.size }
+          assertEquals(expectEnqueued, fake.enqueued.toList())
+        }
+      } finally {
+        session.stop()
+        scope.cancel()
       }
-    } finally {
-      session.stop()
-      scope.cancel()
     }
-  }
 
   private companion object {
     const val InputTag = "editor-input-composition-key"

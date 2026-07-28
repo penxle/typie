@@ -136,7 +136,7 @@ const createGestureEditor = () => {
   } as Selection;
   const menuItems = [{ label: '링크 열기', onclick: vi.fn() }];
 
-  return {
+  const editor = {
     selection,
     selectionEndpointsValue: selectionEndpoints,
     readOnly: true,
@@ -157,8 +157,27 @@ const createGestureEditor = () => {
     closeContextMenu: vi.fn(),
     clientToLocal: vi.fn(() => ({ page: 0, x: 120, y: 220 })),
     enqueue: vi.fn(),
-    flush: vi.fn(),
+    updateNow: vi.fn((build: () => void) => {
+      build();
+      return {
+        revision: 1,
+        snapshot: { selection },
+        commandOutcomes: [{ type: 'applied' as const }],
+        events: [],
+        awaitPublished: vi.fn(async () => ({ type: 'published' as const, revision: 1 })),
+      };
+    }),
+    published: {
+      snapshot: {
+        revision: 1,
+        selection,
+        selectionEndpoints,
+        pageSizes: [{ width: 800, height: 1000 }],
+        rootAttrs: undefined,
+      },
+    },
   };
+  return editor;
 };
 
 const expectedMenuOpen = {
@@ -256,7 +275,7 @@ describe('TouchGestureController', () => {
     expect(editor.openContextMenu).not.toHaveBeenCalled();
   });
 
-  it('selects a word on long press and opens the menu on release', () => {
+  it('selects a word on long press and opens the menu on release', async () => {
     const editor = createGestureEditor();
     editor.selectionHitTest = vi.fn(() => false);
     const controller = new TouchGestureController(editor as never);
@@ -271,16 +290,17 @@ describe('TouchGestureController', () => {
     expect(editor.openContextMenu).not.toHaveBeenCalled();
 
     controller.handlePointerUp(makePointerEvent());
-
-    expect(editor.collectContextMenuContributions).toHaveBeenCalledWith({
-      hit: { type: 'text' },
-      clientX: 110,
-      clientY: 220,
+    await vi.waitFor(() => {
+      expect(editor.collectContextMenuContributions).toHaveBeenCalledWith({
+        hit: { type: 'text' },
+        clientX: 110,
+        clientY: 220,
+      });
+      expect(editor.openContextMenu).toHaveBeenCalledWith(expectedMenuOpen);
     });
-    expect(editor.openContextMenu).toHaveBeenCalledWith(expectedMenuOpen);
   });
 
-  it('extends the selection by word when dragging after a long press', () => {
+  it('extends the selection by word when dragging after a long press', async () => {
     const editor = createGestureEditor();
     editor.selectionHitTest = vi.fn(() => false);
     const controller = new TouchGestureController(editor as never);
@@ -303,8 +323,9 @@ describe('TouchGestureController', () => {
     });
 
     controller.handlePointerUp(makePointerEvent({ clientX: 150 }));
-
-    expect(editor.openContextMenu).toHaveBeenCalledWith(expectedMenuOpen);
+    await vi.waitFor(() => {
+      expect(editor.openContextMenu).toHaveBeenCalledWith(expectedMenuOpen);
+    });
   });
 
   it('arms a native drag instead of selecting on long press over the selection', () => {
@@ -336,7 +357,7 @@ describe('TouchGestureController', () => {
     expect(editor.openContextMenu).not.toHaveBeenCalled();
   });
 
-  it('selects a word on double tap and extends while dragging', () => {
+  it('selects a word on double tap and extends while dragging', async () => {
     const editor = createGestureEditor();
     editor.selectionHitTest = vi.fn(() => false);
     const controller = new TouchGestureController(editor as never);
@@ -367,11 +388,12 @@ describe('TouchGestureController', () => {
     });
 
     controller.handlePointerUp(makePointerEvent({ clientX: 150 }));
-
-    expect(editor.openContextMenu).toHaveBeenCalledWith(expectedMenuOpen);
+    await vi.waitFor(() => {
+      expect(editor.openContextMenu).toHaveBeenCalledWith(expectedMenuOpen);
+    });
   });
 
-  it('extends the selection from a dragged handle and reopens the touch menu on pointer up', () => {
+  it('extends the selection from a dragged handle and reopens the touch menu on pointer up', async () => {
     const editor = createGestureEditor();
     editor.clientToLocal = vi.fn(() => ({ page: 0, x: 250, y: 240 }));
     const controller = new TouchGestureController(editor as never);
@@ -379,6 +401,9 @@ describe('TouchGestureController', () => {
     controller.handleSelectionHandlePointerDown('from', makePointerEvent({ clientX: 110, clientY: 220 }));
     controller.handleSelectionHandlePointerMove(makePointerEvent({ clientX: 250, clientY: 240 }));
     controller.handleSelectionHandlePointerUp(makePointerEvent({ clientX: 250, clientY: 240 }));
+    await vi.waitFor(() => {
+      expect(editor.openContextMenu).toHaveBeenLastCalledWith(expectedMenuOpen);
+    });
 
     expect(editor.enqueue).toHaveBeenCalledWith({
       type: 'selection',
@@ -392,8 +417,53 @@ describe('TouchGestureController', () => {
         allow_collapse: false,
       },
     });
-    expect(editor.flush).toHaveBeenCalled();
-    expect(editor.openContextMenu).toHaveBeenLastCalledWith(expectedMenuOpen);
+    expect(editor.updateNow).toHaveBeenCalled();
+  });
+
+  it('opens the release menu from the exact snapshot published for the drag update', async () => {
+    const editor = createGestureEditor();
+    editor.clientToLocal = vi.fn(() => ({ page: 0, x: 250, y: 240 }));
+    const { promise: publication, resolve: resolvePublished } = Promise.withResolvers<{ type: 'published'; revision: number }>();
+    let updateCallCount = 0;
+    editor.updateNow = vi.fn((build: () => void) => {
+      build();
+      updateCallCount += 1;
+      if (updateCallCount > 1) return null;
+      return {
+        revision: 2,
+        snapshot: { selection: editor.selection },
+        commandOutcomes: [{ type: 'applied' as const }],
+        events: [],
+        awaitPublished: vi.fn(() => publication),
+      };
+    }) as unknown as typeof editor.updateNow;
+    const controller = new TouchGestureController(editor as never);
+
+    controller.handleSelectionHandlePointerDown('from', makePointerEvent({ clientX: 110, clientY: 220 }));
+    controller.handleSelectionHandlePointerMove(makePointerEvent({ clientX: 250, clientY: 240 }));
+    controller.handleSelectionHandlePointerUp(makePointerEvent({ clientX: 250, clientY: 240 }));
+
+    expect(editor.openContextMenu).not.toHaveBeenCalled();
+
+    const publishedEndpoints = endpoints(
+      { page_idx: 0, x: 100, y: 600, width: 50, height: 20 },
+      { page_idx: 0, x: 200, y: 600, width: 30, height: 20 },
+    );
+    editor.published = {
+      snapshot: {
+        ...editor.published.snapshot,
+        revision: 2,
+        selectionEndpoints: publishedEndpoints,
+      },
+    };
+    resolvePublished({ type: 'published', revision: 2 });
+
+    await vi.waitFor(() => {
+      expect(editor.openContextMenu).toHaveBeenCalledWith({
+        ...expectedMenuOpen,
+        y: 600,
+      });
+    });
   });
 
   it('routes a handle tap that never drags through the regular tap collapse path', () => {

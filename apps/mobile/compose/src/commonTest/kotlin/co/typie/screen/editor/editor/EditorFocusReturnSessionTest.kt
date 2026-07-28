@@ -334,7 +334,7 @@ class EditorFocusReturnSessionTest {
     var selection = initialSelection
     val ffi = FakeFfiEditor(selectionProvider = { selection })
     val editor = Editor(ffi, this, StandardTestDispatcher(testScheduler))
-    val testEditor = TestEditor(editor = editor, updateSelection = { selection = it })
+    val testEditor = TestEditor(editor = editor, fake = ffi, updateSelection = { selection = it })
     testEditor.setSelection(initialSelection)
     return testEditor
   }
@@ -365,7 +365,7 @@ class EditorFocusReturnSessionTest {
     session.observeEditorContext(
       editor = editor.editor,
       focused = focused,
-      selection = editor.editor.state.selection,
+      selection = editor.editor.publishedState.selection,
       contextActive = contextActive,
       auxiliaryOwnerActive = auxiliaryOwnerActive,
     )
@@ -378,10 +378,14 @@ class EditorFocusReturnSessionTest {
   }
 }
 
-private class TestEditor(val editor: Editor, private val updateSelection: (Selection?) -> Unit) {
+private class TestEditor(
+  val editor: Editor,
+  private val fake: FakeFfiEditor,
+  private val updateSelection: (Selection?) -> Unit,
+) {
   fun setSelection(selection: Selection?) {
     updateSelection(selection)
-    editor.sync {}
+    fake.publishSnapshot(editor)
   }
 }
 

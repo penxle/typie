@@ -7,6 +7,8 @@ const LOAD_RETRY_BASE_MS = 200;
 
 type FontData = { type: 'manifest' } | { type: 'base' } | { type: 'chunk'; id: number };
 
+class FontResourceDeliveryError extends Error {}
+
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 const FETCH_CACHE_MAX = 512;
@@ -54,20 +56,22 @@ export async function registerFonts(host: EditorHost, families: readonly EditorF
     }
   }
 
-  host.set_fonts(
-    families.map((fam) => ({
-      name: fam.name,
-      source: fam.source,
-      weights: fam.weights.map((w) => ({ value: w.value, hash: w.hash })),
-    })),
-  );
+  host
+    .set_fonts(
+      families.map((fam) => ({
+        name: fam.name,
+        source: fam.source,
+        weights: fam.weights.map((w) => ({ value: w.value, hash: w.hash })),
+      })),
+    )
+    ?.free();
 
   const failedManifests = new Set<string>();
   for (const fam of families) {
     for (const w of fam.weights) {
       try {
         const manifest = await wasm.build_font_manifest({ chunks: w.chunks });
-        host.add_font_manifest(fam.name, w.value, manifest);
+        host.add_font_manifest(fam.name, w.value, manifest)?.free();
       } catch (err) {
         failedManifests.add(`${fam.name}:${w.value}`);
         console.warn(`[pdf-v2] manifest registration failed for ${fam.name}:${w.value}`, err);
@@ -87,19 +91,34 @@ async function loadOne(
   baseUrl: string,
 ): Promise<void> {
   const url = fd.type === 'base' ? `${baseUrl}/base` : `${baseUrl}/chunks/${fd.id}`;
+  const resource = fd.type === 'base' ? 'base' : `chunk ${fd.id}`;
   let lastErr: unknown;
   for (let attempt = 1; attempt <= REQUIRED_LOAD_ATTEMPTS; attempt++) {
     try {
       const data = await getOrFetch(url);
-      if (fd.type === 'base') {
-        host.add_font_base(family, weight, data);
-        editor.enqueue({ type: 'system', event: { type: 'font_base_loaded', family, weight } });
-      } else {
-        host.add_font_chunk(family, weight, fd.id, data);
-        editor.enqueue({ type: 'system', event: { type: 'font_chunk_loaded', family, weight, chunk_id: fd.id } });
+      let update;
+      try {
+        update = fd.type === 'base' ? host.add_font_base(family, weight, data) : host.add_font_chunk(family, weight, fd.id, data);
+      } catch (err) {
+        throw new FontResourceDeliveryError(`[pdf-v2] failed to apply font resource ${family}:${weight} ${resource}`, {
+          cause: err,
+        });
+      }
+      if (!update) {
+        throw new FontResourceDeliveryError(
+          `[pdf-v2] requested font resource produced no resource update: ${family}:${weight} ${resource}`,
+        );
+      }
+      try {
+        editor.receive_resource_update(update);
+      } catch (err) {
+        throw new FontResourceDeliveryError(`[pdf-v2] failed to deliver font resource ${family}:${weight} ${resource}`, { cause: err });
+      } finally {
+        update.free();
       }
       return;
     } catch (err) {
+      if (err instanceof FontResourceDeliveryError) throw err;
       lastErr = err;
       if (attempt < REQUIRED_LOAD_ATTEMPTS) await sleep(LOAD_RETRY_BASE_MS * 2 ** (attempt - 1));
     }
@@ -120,6 +139,16 @@ export async function handleFontDataMissing(
   }
   const bases = ev.required.filter((fd): fd is Extract<FontData, { type: 'base' }> => fd.type === 'base');
   const chunks = ev.required.filter((fd): fd is Extract<FontData, { type: 'chunk' }> => fd.type === 'chunk');
-  await Promise.allSettled(bases.map((fd) => loadOne(host, editor, ev.family, ev.weight, fd, baseUrl)));
-  await Promise.allSettled(chunks.map((fd) => loadOne(host, editor, ev.family, ev.weight, fd, baseUrl)));
+  for (const entries of [bases, chunks]) {
+    const results = await Promise.allSettled(entries.map((fd) => loadOne(host, editor, ev.family, ev.weight, fd, baseUrl)));
+    let deliveryError: FontResourceDeliveryError | undefined;
+    for (const [index, result] of results.entries()) {
+      if (result.status === 'fulfilled') continue;
+      const fd = entries[index];
+      const resource = fd?.type === 'chunk' ? `chunk ${fd.id}` : 'base';
+      console.warn(`[pdf-v2] failed to load required font resource ${ev.family}:${ev.weight} ${resource}`, result.reason);
+      if (result.reason instanceof FontResourceDeliveryError) deliveryError ??= result.reason;
+    }
+    if (deliveryError) throw deliveryError;
+  }
 }

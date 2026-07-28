@@ -1,13 +1,16 @@
 package co.typie.editor.interaction
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.PointerInputChange
+import androidx.compose.ui.unit.IntSize
 import co.typie.editor.Editor
 import co.typie.editor.FakeFfiEditor
 import co.typie.editor.PagePoint
 import co.typie.editor.ffi.Affinity
 import co.typie.editor.ffi.CalloutVariant
+import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.InputModifiers
 import co.typie.editor.ffi.InteractiveHit
 import co.typie.editor.ffi.Message
@@ -17,6 +20,8 @@ import co.typie.editor.ffi.Rect
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.SelectionOp
 import co.typie.editor.ffi.SelectionPointUnit
+import co.typie.editor.ffi.Size
+import co.typie.editor.ffi.StateField
 import co.typie.editor.interaction.gestures.EditorConsecutiveTapMaxIntervalMillis
 import co.typie.editor.runtime.EditorUiState
 import co.typie.platform.Platform
@@ -41,7 +46,7 @@ class EditorReadingModeInteractionTest {
   fun `reading single tap waits through the consecutive tap window before hint`() =
     runTest(StandardTestDispatcher()) {
       val fixture = fixture()
-      fixture.editor.sync {}
+      fixture.fake.publishSnapshot(fixture.editor)
 
       fixture.controller.down(pointerId = 1L, nowMillis = 0L)
       fixture.controller.up(pointerId = 1L, nowMillis = 40L)
@@ -62,10 +67,97 @@ class EditorReadingModeInteractionTest {
     }
 
   @Test
+  fun `reading hint waits for the applied selection to be published`() =
+    runTest(StandardTestDispatcher()) {
+      val movedSelection =
+        Selection(
+          anchor = Position("text", 1, Affinity.Downstream),
+          head = Position("text", 1, Affinity.Downstream),
+        )
+      val fixture = fixture(pointSelectionResult = movedSelection)
+      fixture.fake.applySnapshot(fixture.editor)
+      val surface = fixture.fake.attachSurfaceWithoutFrame(fixture.editor)
+      fun deliverFrame(editorRevision: Long, frameKey: Long) {
+        fixture.editor.deliverFrame(
+          session = surface,
+          bitmap = ImageBitmap(width = 100, height = 100),
+          pixelSize = IntSize(width = 100, height = 100),
+          editorRevision = editorRevision,
+          frameKey = frameKey,
+        )
+      }
+      advanceUntilIdle()
+      deliverFrame(editorRevision = 1L, frameKey = 1L)
+      advanceUntilIdle()
+
+      fixture.controller.down(pointerId = 1L, nowMillis = 0L)
+      fixture.controller.up(pointerId = 1L, nowMillis = 40L)
+      runCurrent()
+
+      assertEquals(movedSelection, fixture.editor.appliedState.selection)
+      assertEquals(FakeFfiEditor.EmptySelection, fixture.editor.publishedState.selection)
+      assertEquals(0, fixture.effects.hintCount)
+
+      advanceTimeBy(EditorConsecutiveTapMaxIntervalMillis)
+      runCurrent()
+
+      assertEquals(0, fixture.effects.hintCount)
+      assertEquals(2L, fixture.editor.appliedRevision)
+      assertEquals(1L, fixture.editor.publishedRevision)
+
+      deliverFrame(editorRevision = 2L, frameKey = 2L)
+      advanceUntilIdle()
+      fixture.controller.onEditorStateChanged(fixture.editor.publishedState)
+
+      assertEquals(1, fixture.effects.hintCount)
+    }
+
+  @Test
+  fun `reading hint waits for a newer applied revision when the selection is unchanged`() =
+    runTest(StandardTestDispatcher()) {
+      val fixture = fixture()
+      fixture.fake.applySnapshot(fixture.editor)
+      val surface = fixture.fake.attachSurfaceWithoutFrame(fixture.editor)
+      fun deliverFrame(editorRevision: Long) {
+        fixture.editor.deliverFrame(
+          session = surface,
+          bitmap = ImageBitmap(width = 100, height = 100),
+          pixelSize = IntSize(width = 100, height = 100),
+          editorRevision = editorRevision,
+          frameKey = editorRevision,
+        )
+      }
+      advanceUntilIdle()
+      deliverFrame(editorRevision = 1L)
+      advanceUntilIdle()
+
+      fixture.controller.down(pointerId = 1L, nowMillis = 0L)
+      fixture.controller.up(pointerId = 1L, nowMillis = 40L)
+      runCurrent()
+
+      assertEquals(FakeFfiEditor.EmptySelection, fixture.editor.appliedState.selection)
+      assertEquals(FakeFfiEditor.EmptySelection, fixture.editor.publishedState.selection)
+
+      advanceTimeBy(EditorConsecutiveTapMaxIntervalMillis)
+      runCurrent()
+      fixture.controller.onEditorStateChanged(fixture.editor.publishedState)
+
+      assertEquals(2L, fixture.editor.appliedRevision)
+      assertEquals(1L, fixture.editor.publishedRevision)
+      assertEquals(0, fixture.effects.hintCount)
+
+      deliverFrame(editorRevision = 2L)
+      advanceUntilIdle()
+      fixture.controller.onEditorStateChanged(fixture.editor.publishedState)
+
+      assertEquals(1, fixture.effects.hintCount)
+    }
+
+  @Test
   fun `editable 250 millisecond tap timer cannot present the reading hint`() =
     runTest(StandardTestDispatcher()) {
       val fixture = fixture(editing = true)
-      fixture.editor.sync {}
+      fixture.fake.publishSnapshot(fixture.editor)
 
       fixture.controller.down(pointerId = 1L, nowMillis = 0L)
       fixture.controller.onTapTimer(nowMillis = 250L)
@@ -82,7 +174,7 @@ class EditorReadingModeInteractionTest {
   fun `reading double tap applies reading selection then one editable cursor move`() =
     runTest(StandardTestDispatcher()) {
       val fixture = fixture()
-      fixture.editor.sync {}
+      fixture.fake.publishSnapshot(fixture.editor)
 
       fixture.controller.down(pointerId = 1L, nowMillis = 0L)
       fixture.controller.up(pointerId = 1L, nowMillis = 40L)
@@ -114,7 +206,7 @@ class EditorReadingModeInteractionTest {
   fun `read only single tap selects without editing regardless of the edit preference`() =
     runTest(StandardTestDispatcher()) {
       val fixture = fixture(readOnly = true, doubleTapToEditEnabled = false)
-      fixture.editor.sync {}
+      fixture.fake.publishSnapshot(fixture.editor)
 
       fixture.controller.down(pointerId = 1L, nowMillis = 0L)
       fixture.controller.up(pointerId = 1L, nowMillis = 40L)
@@ -138,7 +230,7 @@ class EditorReadingModeInteractionTest {
   fun `read only tap stays selection only while editing cleanup is pending`() =
     runTest(StandardTestDispatcher()) {
       val fixture = fixture(editing = true, readOnly = true)
-      fixture.editor.sync {}
+      fixture.fake.publishSnapshot(fixture.editor)
 
       fixture.controller.down(pointerId = 1L, nowMillis = 0L)
       fixture.controller.up(pointerId = 1L, nowMillis = 40L)
@@ -163,7 +255,7 @@ class EditorReadingModeInteractionTest {
           head = Position("text", 5, Affinity.Downstream),
         )
       val fixture = fixture(readOnly = true, unitSelectionResult = selectedWord)
-      fixture.editor.sync {}
+      fixture.fake.publishSnapshot(fixture.editor)
 
       fixture.controller.down(pointerId = 1L, nowMillis = 0L)
       fixture.controller.up(pointerId = 1L, nowMillis = 40L)
@@ -203,7 +295,7 @@ class EditorReadingModeInteractionTest {
   fun `reading activation ignores Shift and places a collapsed cursor`() =
     runTest(StandardTestDispatcher()) {
       val fixture = fixture()
-      fixture.editor.sync {}
+      fixture.fake.publishSnapshot(fixture.editor)
 
       fixture.controller.down(
         pointerId = 1L,
@@ -233,7 +325,7 @@ class EditorReadingModeInteractionTest {
   fun `single tap opt out promotes and preserves the first tap for editable double tap`() =
     runTest(StandardTestDispatcher()) {
       val fixture = fixture(doubleTapToEditEnabled = false)
-      fixture.editor.sync {}
+      fixture.fake.publishSnapshot(fixture.editor)
 
       fixture.controller.down(pointerId = 1L, nowMillis = 0L)
       fixture.controller.up(pointerId = 1L, nowMillis = 40L)
@@ -268,7 +360,7 @@ class EditorReadingModeInteractionTest {
           tapHitsSelection = true,
           platform = Platform.iOS,
         )
-      fixture.editor.sync {}
+      fixture.fake.publishSnapshot(fixture.editor)
 
       fixture.controller.down(pointerId = 1L, nowMillis = 0L)
       fixture.controller.up(pointerId = 1L, nowMillis = 40L)
@@ -287,7 +379,7 @@ class EditorReadingModeInteractionTest {
   fun `movement and pointer cancellation discard a pending reading result`() =
     runTest(StandardTestDispatcher()) {
       val moved = fixture()
-      moved.editor.sync {}
+      moved.fake.publishSnapshot(moved.editor)
       moved.controller.down(pointerId = 1L, nowMillis = 0L)
       moved.controller.move(pointerId = 1L, position = Offset(19f, 20f), nowMillis = 20L)
       moved.controller.up(pointerId = 1L, position = Offset(19f, 20f), nowMillis = 40L)
@@ -295,7 +387,7 @@ class EditorReadingModeInteractionTest {
       assertEquals(0, moved.effects.hintCount)
 
       val cancelled = fixture()
-      cancelled.editor.sync {}
+      cancelled.fake.publishSnapshot(cancelled.editor)
       cancelled.controller.down(pointerId = 2L, nowMillis = 100L)
       cancelled.controller.up(pointerId = 2L, nowMillis = 140L)
       cancelled.controller.cancel()
@@ -307,7 +399,7 @@ class EditorReadingModeInteractionTest {
   fun `header down cancels pending reading presentation without undoing the selection`() =
     runTest(StandardTestDispatcher()) {
       val fixture = fixture()
-      fixture.editor.sync {}
+      fixture.fake.publishSnapshot(fixture.editor)
 
       fixture.controller.down(pointerId = 1L, nowMillis = 0L)
       fixture.controller.up(pointerId = 1L, nowMillis = 40L)
@@ -332,7 +424,7 @@ class EditorReadingModeInteractionTest {
   fun `reading fold control performs view action without entering editing or showing hint`() =
     runTest(StandardTestDispatcher()) {
       val fixture = fixture(interactiveHit = InteractiveHit.FoldTitle(id = "fold", textRect = null))
-      fixture.editor.sync {}
+      fixture.fake.publishSnapshot(fixture.editor)
 
       fixture.controller.down(pointerId = 1L, nowMillis = 0L)
       fixture.controller.up(pointerId = 1L, nowMillis = 40L)
@@ -354,7 +446,7 @@ class EditorReadingModeInteractionTest {
           interactiveHit =
             InteractiveHit.CalloutIcon(id = "callout", nextVariant = CalloutVariant.Warning)
         )
-      fixture.editor.sync {}
+      fixture.fake.publishSnapshot(fixture.editor)
 
       fixture.controller.down(pointerId = 1L, nowMillis = 0L)
       fixture.controller.up(pointerId = 1L, nowMillis = 40L)
@@ -369,8 +461,8 @@ class EditorReadingModeInteractionTest {
   fun `dismissing an existing selection menu still applies the reading tap and shows the hint`() =
     runTest(StandardTestDispatcher()) {
       val fixture = fixture()
-      fixture.editor.sync {}
-      fixture.effects.uiState.contextMenu.show(fixture.editor.state)
+      fixture.fake.publishSnapshot(fixture.editor)
+      fixture.effects.uiState.contextMenu.show(fixture.editor.publishedState)
 
       fixture.controller.down(pointerId = 1L, nowMillis = 0L)
       fixture.controller.up(pointerId = 1L, nowMillis = 40L)
@@ -389,7 +481,7 @@ class EditorReadingModeInteractionTest {
   fun `reading tap replaces an existing range and still shows the edit hint`() =
     runTest(StandardTestDispatcher()) {
       val fixture = fixture(expandedSelection = true)
-      fixture.editor.sync {}
+      fixture.fake.publishSnapshot(fixture.editor)
 
       fixture.controller.down(pointerId = 1L, nowMillis = 0L)
       fixture.controller.up(pointerId = 1L, nowMillis = 40L)
@@ -413,7 +505,7 @@ class EditorReadingModeInteractionTest {
           head = Position("node", 1, Affinity.Downstream),
         )
       val fixture = fixture(pointSelectionResult = nodeSelection)
-      fixture.editor.sync {}
+      fixture.fake.publishSnapshot(fixture.editor)
 
       fixture.controller.down(pointerId = 1L, nowMillis = 0L)
       fixture.controller.up(pointerId = 1L, nowMillis = 40L)
@@ -428,7 +520,7 @@ class EditorReadingModeInteractionTest {
       runCurrent()
 
       assertEquals(1, fixture.effects.hintCount)
-      assertTrue(fixture.effects.uiState.contextMenu.isVisibleFor(fixture.editor.state))
+      assertTrue(fixture.effects.uiState.contextMenu.isVisibleFor(fixture.editor.publishedState))
       assertFalse(fixture.editing)
     }
 
@@ -456,18 +548,33 @@ class EditorReadingModeInteractionTest {
     fake =
       FakeFfiEditor(
         selectionProvider = { currentSelection },
+        pageSizesProvider = { listOf(Size(width = 100f, height = 100f)) },
         onTick = {
           val latestSelection = fake.enqueued.lastOrNull() as? Message.Selection
-          when (latestSelection?.op) {
-            is SelectionOp.SetAt ->
-              currentSelection = pointSelectionResult ?: FakeFfiEditor.EmptySelection
-            is SelectionOp.SelectUnitAt ->
-              if (unitSelectionResult != null) {
-                currentSelection = unitSelectionResult
+          val selectionChanged =
+            when (latestSelection?.op) {
+              is SelectionOp.SetAt -> {
+                currentSelection = pointSelectionResult ?: FakeFfiEditor.EmptySelection
+                true
               }
-            else -> Unit
+              is SelectionOp.SelectUnitAt -> {
+                if (unitSelectionResult != null) {
+                  currentSelection = unitSelectionResult
+                  true
+                } else {
+                  false
+                }
+              }
+              else -> false
+            }
+          if (selectionChanged) {
+            listOf(
+              EditorEvent.StateChanged(listOf(StateField.Selection)),
+              EditorEvent.RenderInvalidated,
+            )
+          } else {
+            emptyList()
           }
-          emptyList()
         },
         interactiveRegionsProvider = {
           interactiveHit?.let { listOf(FakeFfiEditor.coveringRegion(it)) } ?: emptyList()

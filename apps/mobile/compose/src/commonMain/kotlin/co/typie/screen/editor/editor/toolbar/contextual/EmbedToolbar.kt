@@ -23,7 +23,7 @@ import co.typie.editor.ffi.PlainNode
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
-import co.typie.editor.scroll.awaitWithBringIntoView
+import co.typie.editor.scroll.updateWithBringIntoView
 import co.typie.graphql.Apollo
 import co.typie.graphql.EditorScreen_UnfurlEmbed_Mutation
 import co.typie.graphql.executeMutation
@@ -100,9 +100,9 @@ private fun EditorEmbedToolbar(
                 cache = externalElementState::put,
                 commit = { embedded ->
                   val editor = checkNotNull(runtime.editor) { "No active editor is available" }
-                  val committedState =
-                    editor.awaitWithBringIntoView(bringIntoViewRequests) {
-                      if (editor.ime?.composing != null) {
+                  val appliedSnapshot =
+                    editor.updateWithBringIntoView(bringIntoViewRequests) {
+                      if (editor.appliedState.ime?.composing != null) {
                         enqueue(Message.TextInput(listOf(FlatImeOp.CommitAsIs)))
                       }
                       enqueue(
@@ -113,9 +113,9 @@ private fun EditorEmbedToolbar(
                           )
                         )
                       )
-                      beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
+                      afterApplied { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
                     }
-                  checkNotNull(committedState) { "Editor embed attrs did not commit" }
+                  checkNotNull(appliedSnapshot) { "Editor embed attrs were not admitted" }
                 },
                 clearPending = {
                   if (embedState.unfurls[selectedNodeId] === unfurl) {

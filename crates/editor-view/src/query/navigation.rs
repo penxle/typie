@@ -22,7 +22,7 @@ pub(crate) fn resolve_movement(
     resource: &Resource,
     preferred_x: Option<f32>,
 ) -> (Option<Selection>, Option<f32>) {
-    let segmenters = &resource.segmenters;
+    let segmenters = resource.segmenters();
     match movement {
         Movement::Grapheme {
             direction: Direction::Forward,
@@ -1447,7 +1447,7 @@ mod tests {
         // the word-boundary logic crosses the run boundary using offset_range only.
         let pos_end_of_hello = Position::new(para_id, 5);
         let sel =
-            super::segmentation::move_word_forward(&index, &pos_end_of_hello, &res.segmenters);
+            super::segmentation::move_word_forward(&index, &pos_end_of_hello, res.segmenters());
         let sel = sel.expect("word-forward from end-of-hello must resolve");
         assert_eq!(sel.head.node, para_id);
         assert_eq!(
@@ -1457,7 +1457,7 @@ mod tests {
 
         // From offset 11 (end of run1), word-backward must land in run1's territory.
         let pos_end = Position::new(para_id, 11);
-        let sel_back = super::segmentation::move_word_backward(&index, &pos_end, &res.segmenters);
+        let sel_back = super::segmentation::move_word_backward(&index, &pos_end, res.segmenters());
         let sel_back = sel_back.expect("word-backward from end must resolve");
         assert_eq!(sel_back.head.node, para_id);
         assert_eq!(

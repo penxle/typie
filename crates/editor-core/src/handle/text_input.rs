@@ -921,7 +921,7 @@ pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(
             && !surround_change.insert.is_empty()
             && result.comp.is_none()
             && editor.state().composition.is_none()
-            && editor.resource.lock().unwrap().auto_surround_enabled
+            && editor.resource.lock().unwrap().auto_surround_enabled()
         {
             let text: String = surround_change.insert.iter().collect();
             let mut surround_applied = false;
@@ -2072,10 +2072,9 @@ mod tests {
 
     #[test]
     fn update_preserves_font_weight_from_actual_bold_toggle() {
-        let mut resource = Resource::new_test();
-        resource
-            .font_registry
-            .set_fonts(vec![editor_resource::FontFamily {
+        let mut source = ResourceSource::new_test();
+        source
+            .set_fonts(prepare_fonts(vec![editor_resource::FontFamily {
                 name: "Pretendard".into(),
                 source: editor_resource::FontFamilySource::Default,
                 weights: vec![
@@ -2088,7 +2087,9 @@ mod tests {
                         hash: "pretendard_700".into(),
                     },
                 ],
-            }]);
+            }]))
+            .expect("font families must change resources");
+        let resource = Resource::from_snapshot(source.snapshot());
         let resource = Arc::new(Mutex::new(resource));
         let (state, ..) = state! {
             doc {
@@ -2663,11 +2664,20 @@ mod tests {
         assert_eq!(flat_ime_text(&s), format!("{c}"));
     }
 
-    use editor_resource::Resource;
+    use editor_resource::{Resource, ResourceSource, prepare_fonts};
     use std::sync::{Arc, Mutex};
 
     fn editor_with_resource(s: editor_state::State) -> Editor {
         let resource = Arc::new(Mutex::new(Resource::new_test()));
+        Editor::new_test_with_resource(s, resource)
+    }
+
+    fn editor_without_auto_surround(s: editor_state::State) -> Editor {
+        let mut source = ResourceSource::new_test();
+        source
+            .set_auto_surround_enabled(false)
+            .expect("auto surround must change resources");
+        let resource = Arc::new(Mutex::new(Resource::from_snapshot(source.snapshot())));
         Editor::new_test_with_resource(s, resource)
     }
 
@@ -3398,12 +3408,7 @@ mod tests {
             doc { root { p1: paragraph { text("안녕하세요") } } }
             selection: (p1, 0) -> (p1, 5)
         };
-        let mut editor = editor_with_resource(s);
-        editor
-            .resource
-            .lock()
-            .unwrap()
-            .set_auto_surround_enabled(false);
+        let mut editor = editor_without_auto_surround(s);
         editor.apply(Message::TextInput {
             ops: vec![
                 FlatImeOp::SetSelection { start: 1, end: 6 },
@@ -4848,12 +4853,12 @@ mod tests {
             ops: vec![FlatImeOp::Compose { text: "".into() }],
         });
         assert_eq!(editor.state().composition, None);
-        editor.enqueue(Message::TextInput {
+        let _ = editor.enqueue_request(vec![Message::TextInput {
             ops: vec![FlatImeOp::DeleteSurroundingUtf16 {
                 before: 1,
                 after: 0,
             }],
-        });
+        }]);
         editor
             .tick()
             .expect("backspace across open token must not fail");
@@ -4879,7 +4884,7 @@ mod tests {
         editor.apply(Message::TextInput {
             ops: vec![FlatImeOp::Compose { text: "라".into() }],
         });
-        editor.enqueue(Message::TextInput {
+        let _ = editor.enqueue_request(vec![Message::TextInput {
             ops: vec![
                 FlatImeOp::Compose { text: "".into() },
                 FlatImeOp::DeleteSurroundingUtf16 {
@@ -4887,7 +4892,7 @@ mod tests {
                     after: 0,
                 },
             ],
-        });
+        }]);
         editor
             .tick()
             .expect("batched empty compose + delete across token must not fail");
@@ -5023,7 +5028,7 @@ mod tests {
             selection: (p2, 0)
         };
         let mut editor = Editor::new_test(state);
-        editor.enqueue(Message::TextInput {
+        let _ = editor.enqueue_request(vec![Message::TextInput {
             ops: vec![
                 FlatImeOp::DeleteSurroundingUtf16 {
                     before: 1,
@@ -5031,7 +5036,7 @@ mod tests {
                 },
                 FlatImeOp::SetComposition { start: 1, end: 2 },
             ],
-        });
+        }]);
         editor
             .tick()
             .expect("composing region before the edit must not fail");
@@ -5057,7 +5062,7 @@ mod tests {
             selection: (p2, 0)
         };
         let mut editor = Editor::new_test(state);
-        editor.enqueue(Message::TextInput {
+        let _ = editor.enqueue_request(vec![Message::TextInput {
             ops: vec![
                 FlatImeOp::DeleteSurroundingUtf16 {
                     before: 1,
@@ -5065,7 +5070,7 @@ mod tests {
                 },
                 FlatImeOp::SetComposition { start: 5, end: 6 },
             ],
-        });
+        }]);
         editor
             .tick()
             .expect("unmappable composing region must not fail");

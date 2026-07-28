@@ -61,7 +61,7 @@ internal fun resolveTableCellSelectionOverlayPlacements(
     return emptyList()
   }
 
-  val transform = uiState.resolveViewportTransform(pageSizes = editor.pageSizes)
+  val transform = uiState.resolveViewportTransform(pageSizes = editor.publishedState.pageSizes)
   return resolveTableCellSelections(editor).mapNotNull { activeSelection ->
     val outline =
       resolveOutlineInOverlay(

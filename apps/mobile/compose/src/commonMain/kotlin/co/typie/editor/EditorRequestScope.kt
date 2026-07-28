@@ -2,6 +2,6 @@ package co.typie.editor
 
 import co.typie.editor.ffi.Message
 
-interface EditorScope {
+interface EditorRequestScope {
   fun enqueue(message: Message)
 }

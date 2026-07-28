@@ -30,7 +30,7 @@ internal fun EditorSubPaneHost(
 ) {
   val editor = LocalEditorRuntime.current.editor
   val active = state.active
-  val selection = editor?.tickSelection
+  val selection = editor?.appliedState?.selection
 
   LaunchedEffect(active, selection) { state.dismissTableAxisActionsIfSelectionChanged(selection) }
   LaunchedEffect(active, editorMutationEnabled) {
@@ -86,12 +86,18 @@ internal fun EditorSubPaneHost(
     is EditorSubPane.TableAxisActions ->
       EditorTableAxisActionsPane(
         pane = active,
-        currentBackgroundColor = editor?.state?.modifierState?.cellBackgroundColor,
+        currentBackgroundColor = editor?.publishedState?.modifierState?.cellBackgroundColor,
         dismissRequestVersion = state.dismissRequestVersion,
         onAction = tableAction@{ message ->
             if (!editorMutationEnabled) return@tableAction
-            editor?.sync { enqueue(message) }
-            editor?.focus()
+            val currentEditor = editor ?: return@tableAction
+            try {
+              currentEditor.updateNow { enqueue(message) }
+            } catch (error: Throwable) {
+              if (!currentEditor.terminal) throw error
+              return@tableAction
+            }
+            currentEditor.focus()
           },
         onDismissStarted = state::beginDismiss,
         onDismissCancelled = state::cancelDismiss,

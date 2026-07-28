@@ -10,16 +10,13 @@ import co.typie.editor.ffi.SystemEvent
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
-import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
-import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 
@@ -34,18 +31,19 @@ class EditorImeSnapshotGatingTest {
       var imeCalls = 0
       val fake =
         FakeFfiEditor(
-          imeProvider = { _, _ ->
-            imeCalls += 1
-            ime
-          }
-        )
+            imeProvider = { _, _ ->
+              imeCalls += 1
+              ime
+            }
+          )
+          .apply { tickWhenIdle = true }
       val dispatcher = StandardTestDispatcher(testScheduler)
       val scope = CoroutineScope(SupervisorJob() + dispatcher)
       val editor = Editor(fake, scope, dispatcher)
-      editor.await { enqueue(Message.System(SystemEvent.Initialize)) }
+      editor.update { enqueue(Message.System(SystemEvent.Initialize)) }
 
       assertEquals(0, imeCalls)
-      assertNull(editor.tickIme)
+      assertNull(editor.appliedState.ime)
       scope.cancel()
     } finally {
       Dispatchers.resetMain()
@@ -59,22 +57,23 @@ class EditorImeSnapshotGatingTest {
       var imeCalls = 0
       val fake =
         FakeFfiEditor(
-          imeProvider = { _, _ ->
-            imeCalls += 1
-            ime
-          }
-        )
+            imeProvider = { _, _ ->
+              imeCalls += 1
+              ime
+            }
+          )
+          .apply { tickWhenIdle = true }
       val dispatcher = StandardTestDispatcher(testScheduler)
       val scope = CoroutineScope(SupervisorJob() + dispatcher)
       val editor = Editor(fake, scope, dispatcher)
-      editor.await { enqueue(Message.System(SystemEvent.Initialize)) }
+      editor.update { enqueue(Message.System(SystemEvent.Initialize)) }
       assertEquals(0, imeCalls)
 
       editor.setImeSessionActive(true)
       editor.refreshImeSnapshot()
 
       assertEquals(1, imeCalls)
-      assertEquals(ime, editor.tickIme)
+      assertEquals(ime, editor.appliedState.ime)
       scope.cancel()
     } finally {
       Dispatchers.resetMain()
@@ -82,34 +81,36 @@ class EditorImeSnapshotGatingTest {
   }
 
   @Test
-  fun `ime recomputes only when the ime field changes`() = runTest {
+  fun `first tick initializes ime and later ticks follow the ime field`() = runTest {
     Dispatchers.setMain(StandardTestDispatcher(testScheduler))
     try {
       var imeCalls = 0
       var events: List<EditorEvent> = emptyList()
       val fake =
         FakeFfiEditor(
-          onTick = { events },
-          imeProvider = { _, _ ->
-            imeCalls += 1
-            Ime(text = "hello", windowStart = 0, selection = ImeRange(2, 2), composing = null)
-          },
-        )
+            onTick = { events },
+            imeProvider = { _, _ ->
+              imeCalls += 1
+              Ime(text = "hello", windowStart = 0, selection = ImeRange(2, 2), composing = null)
+            },
+          )
+          .apply { tickWhenIdle = true }
       val dispatcher = StandardTestDispatcher(testScheduler)
       val scope = CoroutineScope(SupervisorJob() + dispatcher)
       val editor = Editor(fake, scope, dispatcher)
       editor.setImeSessionActive(true)
       editor.refreshImeSnapshot()
       assertEquals(1, imeCalls)
-      val first = editor.tickIme
 
-      editor.await { enqueue(Message.System(SystemEvent.Initialize)) }
-      assertEquals(1, imeCalls)
-      assertSame(first, editor.tickIme)
+      editor.update { enqueue(Message.System(SystemEvent.Initialize)) }
+      assertEquals(2, imeCalls)
+
+      editor.update { enqueue(Message.System(SystemEvent.Initialize)) }
+      assertEquals(2, imeCalls)
 
       events = listOf(EditorEvent.StateChanged(fields = listOf(StateField.Ime)))
-      editor.await { enqueue(Message.System(SystemEvent.Initialize)) }
-      assertEquals(2, imeCalls)
+      editor.update { enqueue(Message.System(SystemEvent.Initialize)) }
+      assertEquals(3, imeCalls)
       scope.cancel()
     } finally {
       Dispatchers.resetMain()
@@ -117,111 +118,18 @@ class EditorImeSnapshotGatingTest {
   }
 
   @Test
-  fun `ime session refresh does not clobber a settle-delayed edit commit`() = runTest {
-    Dispatchers.setMain(StandardTestDispatcher(testScheduler))
-    try {
-      var events: List<EditorEvent> = emptyList()
-      val fake = FakeFfiEditor(onTick = { events }, imeProvider = { _, _ -> ime })
-      val dispatcher = StandardTestDispatcher(testScheduler)
-      val scope = CoroutineScope(SupervisorJob() + dispatcher)
-      val editor = Editor(fake, scope, dispatcher)
-      editor.attachSurface(page = 0, handle = 1L, width = 100.0, height = 100.0, scaleFactor = 1.0)
-      runCurrent()
-
-      // A document edit whose commit is held back by the surface settle barrier.
-      events =
-        listOf(
-          EditorEvent.StateChanged(fields = listOf(StateField.Doc)),
-          EditorEvent.RenderInvalidated,
-        )
-      val edit = launch { editor.await { enqueue(Message.System(SystemEvent.Initialize)) } }
-      runCurrent()
-      assertEquals(0L, editor.state.documentRevision)
-
-      // IME session activates while the edit is still waiting for settlement.
-      events = emptyList()
-      editor.setImeSessionActive(true)
-      editor.refreshImeSnapshot()
-      assertEquals(ime, editor.tickIme)
-
-      editor.onPageSettled(page = 0, version = Long.MAX_VALUE)
-      runCurrent()
-
-      assertTrue(edit.isCompleted)
-      assertEquals(
-        1L,
-        editor.state.documentRevision,
-        "the settled edit's snapshot must survive an interleaved ime refresh",
-      )
-      assertEquals(
-        ime,
-        editor.state.ime,
-        "the activation refresh must survive the settled snapshot: pull-based " +
-          "platforms (iOS/desktop) and command normalization read state.ime",
-      )
-      scope.cancel()
-    } finally {
-      Dispatchers.resetMain()
-    }
-  }
-
-  @Test
-  fun `session refresh publishes a settle-parked ime to committed state`() = runTest {
-    Dispatchers.setMain(StandardTestDispatcher(testScheduler))
-    try {
-      var events: List<EditorEvent> = emptyList()
-      val fake = FakeFfiEditor(onTick = { events }, imeProvider = { _, _ -> ime })
-      val dispatcher = StandardTestDispatcher(testScheduler)
-      val scope = CoroutineScope(SupervisorJob() + dispatcher)
-      val editor = Editor(fake, scope, dispatcher)
-      editor.attachSurface(page = 0, handle = 1L, width = 100.0, height = 100.0, scaleFactor = 1.0)
-      runCurrent()
-
-      // The session flag is already up (focus path) when an edit materializes the
-      // ime into tickSnapshot but parks its commit behind the settle barrier.
-      editor.setImeSessionActive(true)
-      events =
-        listOf(
-          EditorEvent.StateChanged(fields = listOf(StateField.Ime)),
-          EditorEvent.RenderInvalidated,
-        )
-      val edit = launch { editor.await { enqueue(Message.System(SystemEvent.Initialize)) } }
-      runCurrent()
-      assertEquals(ime, editor.tickIme)
-      assertNull(editor.state.ime)
-
-      events = emptyList()
-      editor.refreshImeSnapshot()
-
-      assertEquals(
-        ime,
-        editor.state.ime,
-        "session start must not proceed against a committed state whose ime lags the latest tick",
-      )
-
-      editor.onPageSettled(page = 0, version = Long.MAX_VALUE)
-      runCurrent()
-      assertTrue(edit.isCompleted)
-      assertEquals(ime, editor.state.ime)
-      scope.cancel()
-    } finally {
-      Dispatchers.resetMain()
-    }
-  }
-
-  @Test
-  fun `deactivation commits a live composition before hiding the ime snapshot`() = runTest {
+  fun `deactivation commits a live composition`() = runTest {
     Dispatchers.setMain(StandardTestDispatcher(testScheduler))
     try {
       val composingIme =
         Ime(text = "한", windowStart = 0, selection = ImeRange(1, 1), composing = ImeRange(0, 1))
-      val fake = FakeFfiEditor(imeProvider = { _, _ -> composingIme })
+      val fake = FakeFfiEditor(imeProvider = { _, _ -> composingIme }).apply { tickWhenIdle = true }
       val dispatcher = StandardTestDispatcher(testScheduler)
       val scope = CoroutineScope(SupervisorJob() + dispatcher)
       val editor = Editor(fake, scope, dispatcher)
       editor.setImeSessionActive(true)
       editor.refreshImeSnapshot()
-      assertEquals(composingIme, editor.tickIme)
+      assertEquals(composingIme, editor.appliedState.ime)
 
       editor.deactivateImeSession()
 
@@ -231,7 +139,34 @@ class EditorImeSnapshotGatingTest {
         },
         "a live composition must be committed as part of deactivation",
       )
-      assertNull(editor.tickIme)
+      scope.cancel()
+    } finally {
+      Dispatchers.resetMain()
+    }
+  }
+
+  @Test
+  fun `deactivation contains a commit failure already owned by the editor`() = runTest {
+    Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+    try {
+      val failure = IllegalStateException("commit failed")
+      val composingIme =
+        Ime(text = "한", windowStart = 0, selection = ImeRange(1, 1), composing = ImeRange(0, 1))
+      val reported = mutableListOf<Throwable>()
+      val fake =
+        FakeFfiEditor(onTick = { throw failure }, imeProvider = { _, _ -> composingIme }).apply {
+          tickWhenIdle = true
+        }
+      val dispatcher = StandardTestDispatcher(testScheduler)
+      val scope = CoroutineScope(SupervisorJob() + dispatcher)
+      val editor = Editor(fake, scope, dispatcher, onError = { _, error -> reported += error })
+      editor.setImeSessionActive(true)
+      editor.refreshImeSnapshot()
+
+      editor.deactivateImeSession()
+
+      assertTrue(editor.terminal)
+      assertTrue(reported.single() === failure)
       scope.cancel()
     } finally {
       Dispatchers.resetMain()
@@ -242,7 +177,7 @@ class EditorImeSnapshotGatingTest {
   fun `deactivation without a composition does not dispatch a commit`() = runTest {
     Dispatchers.setMain(StandardTestDispatcher(testScheduler))
     try {
-      val fake = FakeFfiEditor(imeProvider = { _, _ -> ime })
+      val fake = FakeFfiEditor(imeProvider = { _, _ -> ime }).apply { tickWhenIdle = true }
       val dispatcher = StandardTestDispatcher(testScheduler)
       val scope = CoroutineScope(SupervisorJob() + dispatcher)
       val editor = Editor(fake, scope, dispatcher)
@@ -252,7 +187,7 @@ class EditorImeSnapshotGatingTest {
       editor.deactivateImeSession()
 
       assertEquals(emptyList(), fake.enqueued.filterIsInstance<Message.TextInput>())
-      assertNull(editor.tickIme)
+      assertEquals(0, fake.tickCount)
 
       // Repeated deactivation is a no-op: nothing left to tear down.
       val ticksAfterDeactivation = fake.tickCount
@@ -271,22 +206,23 @@ class EditorImeSnapshotGatingTest {
       var imeCalls = 0
       val fake =
         FakeFfiEditor(
-          imeProvider = { _, _ ->
-            imeCalls += 1
-            ime
-          }
-        )
+            imeProvider = { _, _ ->
+              imeCalls += 1
+              ime
+            }
+          )
+          .apply { tickWhenIdle = true }
       val dispatcher = StandardTestDispatcher(testScheduler)
       val scope = CoroutineScope(SupervisorJob() + dispatcher)
       val editor = Editor(fake, scope, dispatcher)
       editor.setImeSessionActive(true)
       editor.refreshImeSnapshot()
-      assertEquals(ime, editor.tickIme)
+      assertEquals(ime, editor.appliedState.ime)
 
       editor.setImeSessionActive(false)
-      editor.await { enqueue(Message.System(SystemEvent.Initialize)) }
+      editor.update { enqueue(Message.System(SystemEvent.Initialize)) }
 
-      assertNull(editor.tickIme)
+      assertNull(editor.appliedState.ime)
       assertEquals(1, imeCalls)
       scope.cancel()
     } finally {

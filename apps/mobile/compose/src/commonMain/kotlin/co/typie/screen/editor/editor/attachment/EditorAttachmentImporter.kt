@@ -10,6 +10,7 @@ import co.typie.editor.external.EditorExternalElementState
 import co.typie.editor.external.EditorFileUpload
 import co.typie.editor.external.EditorImageUpload
 import co.typie.editor.ffi.AttachmentPlaceholderKind
+import co.typie.editor.ffi.CommandOutcome
 import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.ExternalElementData
 import co.typie.editor.ffi.FlatImeOp
@@ -188,33 +189,40 @@ internal class DefaultEditorAttachmentImporter(
     if (remaining.isNotEmpty()) {
       val requestId = Uuid.random().toHexString()
       val requestKinds = remaining.map { it.item.kind.toPlaceholderKind() }
-      val nodeIds =
-        editor.await(
-          beforeCommit = { state ->
-            bringIntoViewRequests.requestForVersion(
-              target = EditorBringIntoViewTarget.CurrentSelectionHead,
-              version = state.version,
-            )
-          },
-          admit = { isSessionCurrent(session) },
-          mapEvents = { events ->
-            val matches =
-              events.filterIsInstance<EditorEvent.AttachmentPlaceholdersInserted>().filter {
-                it.requestId == requestId
-              }
-            check(matches.size == 1) {
-              "Expected exactly one attachment placeholder result for $requestId, got ${matches.size}"
-            }
-            matches.single().nodeIds
-          },
-        ) {
-          if (editor.ime?.composing != null) {
+      val update =
+        editor.update(admit = { isSessionCurrent(session) }) {
+          if (editor.appliedState.ime?.composing != null) {
             enqueue(Message.TextInput(listOf(FlatImeOp.CommitAsIs)))
           }
           enqueue(Message.Insertion(InsertionOp.AttachmentPlaceholders(requestId, requestKinds)))
         } ?: return emptyList()
-      check(remaining.size == nodeIds.size) {
-        "Expected ${remaining.size} attachment placeholders, got ${nodeIds.size}"
+      bringIntoViewRequests.requestForVersion(
+        target = EditorBringIntoViewTarget.CurrentSelectionHead,
+        version = update.revision,
+      )
+      val matches =
+        update.events.filterIsInstance<EditorEvent.AttachmentPlaceholdersInserted>().filter {
+          it.requestId == requestId
+        }
+      if (matches.isEmpty()) {
+        return emptyList()
+      }
+      if (matches.size != 1) {
+        val error =
+          IllegalStateException(
+            "Expected exactly one attachment placeholder result for $requestId, got ${matches.size}"
+          )
+        editor.fail(error)
+        throw error
+      }
+      val nodeIds = matches.single().nodeIds
+      if (remaining.size != nodeIds.size) {
+        val error =
+          IllegalStateException(
+            "Expected ${remaining.size} attachment placeholders, got ${nodeIds.size}"
+          )
+        editor.fail(error)
+        throw error
       }
       targets += nodeIds.zip(remaining)
     }
@@ -260,31 +268,29 @@ internal class DefaultEditorAttachmentImporter(
     val operation =
       session.submit { _, context ->
         editor.scope.async(context) {
-          editor.await(
-            admit = { isCurrent(session, editor, target) },
-            beforeCommit = { state ->
-              bringIntoViewRequests.requestForVersion(
-                target = EditorBringIntoViewTarget.CurrentSelectionHead,
-                version = state.version,
-              )
-            },
-          ) {
-            enqueue(
-              when (target.item.kind) {
-                IncomingContentItem.Kind.Image ->
-                  Message.Node(
-                    NodeOp.SetAttr(
-                      id = target.nodeId,
-                      attr = NodeAttr.Image(ImageNodeAttr.Id(asset.id)),
+          val update =
+            editor.update(admit = { isCurrent(session, editor, target) }) {
+              enqueue(
+                when (target.item.kind) {
+                  IncomingContentItem.Kind.Image ->
+                    Message.Node(
+                      NodeOp.SetAttr(
+                        id = target.nodeId,
+                        attr = NodeAttr.Image(ImageNodeAttr.Id(asset.id)),
+                      )
                     )
-                  )
-                IncomingContentItem.Kind.File ->
-                  Message.Node(
-                    NodeOp.SetAttrs(id = target.nodeId, attrs = PlainNode.File(id = asset.id))
-                  )
-              }
-            )
-          }
+                  IncomingContentItem.Kind.File ->
+                    Message.Node(
+                      NodeOp.SetAttrs(id = target.nodeId, attrs = PlainNode.File(id = asset.id))
+                    )
+                }
+              )
+            } ?: return@async false
+          bringIntoViewRequests.requestForVersion(
+            target = EditorBringIntoViewTarget.CurrentSelectionHead,
+            version = update.revision,
+          )
+          update.commandOutcomes.none { it is CommandOutcome.Rejected }
         }
       } ?: return false
     return operation.await()
@@ -359,7 +365,8 @@ internal class DefaultEditorAttachmentImporter(
     nodeId: String,
     kind: IncomingContentItem.Kind,
   ): Boolean {
-    val data = editor.externalElements.firstOrNull { it.node == nodeId }?.data ?: return false
+    val data =
+      editor.appliedState.externalElements.firstOrNull { it.node == nodeId }?.data ?: return false
     return when (kind) {
       IncomingContentItem.Kind.Image -> data is ExternalElementData.Image && data.id == null
       IncomingContentItem.Kind.File -> data is ExternalElementData.File && data.id == null

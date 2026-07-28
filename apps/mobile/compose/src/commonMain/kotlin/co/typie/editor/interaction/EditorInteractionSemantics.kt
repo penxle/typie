@@ -32,11 +32,12 @@ internal class EditorInteractionSemantics(
     EditorSelectionHapticSemantic(effects = effects),
 ) {
   fun onEditorStateChanged(editor: Editor, state: EditorState, mode: EditorInteractionMode) {
-    contextMenu.onEditorStateChanged(state)
+    contextMenu.onEditorStateChanged(editor = editor, state = state)
     selectionHaptic.onEditorStateChanged(editor = editor, state = state, mode = mode)
   }
 
   fun reset() {
+    contextMenu.reset()
     selectionExpansion.reset()
     viewportZoom.reset()
     magnifier.reset()

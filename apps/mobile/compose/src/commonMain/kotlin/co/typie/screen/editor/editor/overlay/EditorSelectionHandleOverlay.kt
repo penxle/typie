@@ -23,11 +23,11 @@ import co.typie.ui.theme.AppTheme
 
 @Composable
 internal fun EditorSelectionHandleOverlay(editor: Editor, uiState: EditorUiState, density: Float) {
-  if (editor.selection.isCollapsed() || hasActiveTableCellSelection(editor)) {
+  if (editor.publishedState.selection.isCollapsed() || hasActiveTableCellSelection(editor)) {
     return
   }
 
-  if (editor.tickSelectionEndpoints == null) {
+  if (editor.publishedState.selectionEndpoints == null) {
     return
   }
 
@@ -83,12 +83,16 @@ internal fun resolveSelectionHandleOverlayPlacements(
   editorRectInOverlay: Rect,
   density: Float,
 ): List<EditorSelectionHandleOverlayPlacement>? {
-  if (density <= 0f || editor.selection.isCollapsed() || hasActiveTableCellSelection(editor)) {
+  if (
+    density <= 0f ||
+      editor.publishedState.selection.isCollapsed() ||
+      hasActiveTableCellSelection(editor)
+  ) {
     return null
   }
 
-  val endpoints = editor.tickSelectionEndpoints ?: return null
-  val transform = uiState.resolveViewportTransform(pageSizes = editor.pageSizes)
+  val endpoints = editor.publishedState.selectionEndpoints ?: return null
+  val transform = uiState.resolveViewportTransform(pageSizes = editor.publishedState.pageSizes)
   val from =
     resolveSelectionHandleOverlayPlacement(
       type = EditorSelectionHandleType.From,

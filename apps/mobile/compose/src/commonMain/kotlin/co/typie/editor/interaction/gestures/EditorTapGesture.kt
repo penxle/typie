@@ -6,7 +6,6 @@ import co.typie.editor.EditorState
 import co.typie.editor.ext.isCollapsed
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.InputModifiers
-import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.SelectionPointUnit
 import co.typie.editor.interaction.EditorGestureContext
 import co.typie.editor.interaction.isViewportZooming
@@ -196,7 +195,7 @@ internal class EditorTapGesture(
     return generation
   }
 
-  fun markPendingSelectionPublished(
+  fun markPendingSelectionApplied(
     generation: Long,
     snapshot: EditorState,
     showContextMenu: Boolean,
@@ -206,14 +205,22 @@ internal class EditorTapGesture(
     if (pending == null || pending.generation != generation) {
       return
     }
-    if (pending.editor.state.selection != snapshot.selection) {
+    if (pending.editor.appliedState.selection != snapshot.selection) {
       cancelPendingPresentation(context = context)
       return
     }
-    pending.selectionPublished = true
-    pending.committedSelection = snapshot.selection
+    pending.appliedState = snapshot
     pending.showContextMenu = showContextMenu
     deliverPendingPresentationIfReady(context = context)
+  }
+
+  fun onPublishedStateChanged(state: EditorState, context: EditorGestureContext) {
+    val pending = pendingPresentation ?: return
+    if (pending.editor !== context.editor) {
+      cancelPendingPresentation(context = context)
+      return
+    }
+    deliverPendingPresentationIfReady(context = context, publishedState = state)
   }
 
   fun confirmPendingPresentationAfterPointerUp(
@@ -248,16 +255,27 @@ internal class EditorTapGesture(
     deliverPendingPresentationIfReady(context = context)
   }
 
-  private fun deliverPendingPresentationIfReady(context: EditorGestureContext) {
+  private fun deliverPendingPresentationIfReady(
+    context: EditorGestureContext,
+    publishedState: EditorState = context.editor.publishedState,
+  ) {
     val pending = pendingPresentation ?: return
-    if (!pending.selectionPublished || !pending.sequenceConfirmed) {
+    if (!pending.sequenceConfirmed) {
       return
     }
+    val appliedState = pending.appliedState ?: return
     if (
       context.editor !== pending.editor ||
         context.editing != pending.expectedEditing ||
-        pending.editor.state.selection != pending.committedSelection
+        pending.editor.appliedState.selection != appliedState.selection
     ) {
+      cancelPendingPresentation(context = context)
+      return
+    }
+    if (publishedState.version < appliedState.version) {
+      return
+    }
+    if (publishedState.selection != appliedState.selection) {
       cancelPendingPresentation(context = context)
       return
     }
@@ -266,7 +284,7 @@ internal class EditorTapGesture(
       context.effects.showReadingTapHint()
     }
     if (pending.showContextMenu) {
-      context.semantics.contextMenu.show(pending.editor.state)
+      context.semantics.contextMenu.show(publishedState)
     }
   }
 
@@ -309,8 +327,7 @@ internal class EditorTapGesture(
     val expectedEditing: Boolean,
     val tapCount: Int,
     val showReadingHint: Boolean,
-    var selectionPublished: Boolean = false,
-    var committedSelection: Selection? = null,
+    var appliedState: EditorState? = null,
     var showContextMenu: Boolean = false,
     var sequenceConfirmed: Boolean = false,
   )
@@ -468,7 +485,7 @@ internal fun EditorTapGesture.handleTapTimer(
       context.editor.selectionHitTest(page = point.page, x = point.x, y = point.y)
   if (clickCount == 1 && context.platform != Platform.Android && hitSelection) {
     markTapDispatched()
-    val snapshot = context.editor.state
+    val snapshot = context.editor.publishedState
     val generation =
       beginPendingPresentation(
         editor = context.editor,
@@ -477,7 +494,7 @@ internal fun EditorTapGesture.handleTapTimer(
         showReadingHint = false,
         context = context,
       )
-    markPendingSelectionPublished(
+    markPendingSelectionApplied(
       generation = generation,
       snapshot = snapshot,
       showContextMenu = shouldOpenContextMenuForActivePointer && !snapshot.selection.isCollapsed(),
@@ -485,7 +502,7 @@ internal fun EditorTapGesture.handleTapTimer(
     )
     return
   }
-  if (clickCount == 1 && !context.editor.selection.isCollapsed()) {
+  if (clickCount == 1 && !context.editor.publishedState.selection.isCollapsed()) {
     return
   }
   markTapDispatched()
@@ -557,15 +574,15 @@ private fun EditorTapGesture.dispatchReadingTap(
       showReadingHint = true,
       context = context,
     )
-  var candidateSnapshot: EditorState? = null
+  var appliedSnapshot: EditorState? = null
   context.semantics.pointSelection.launchCursorMove(
     editor = editor,
     point = point,
-    beforeCommit = { snapshot -> candidateSnapshot = snapshot },
+    onApplied = { snapshot -> appliedSnapshot = snapshot },
     afterDispatch = { dispatched ->
-      val snapshot = candidateSnapshot
+      val snapshot = appliedSnapshot
       if (dispatched && snapshot != null) {
-        markPendingSelectionPublished(
+        markPendingSelectionApplied(
           generation = generation,
           snapshot = snapshot,
           showContextMenu = shouldOpenContextMenu && !snapshot.selection.isCollapsed(),
@@ -695,30 +712,36 @@ private fun EditorTapGesture.dispatchSelectionTap(
       context.platform != Platform.Android &&
       hitExistingSelectionAtTap
   ) {
-    markPendingSelectionPublished(
+    markPendingSelectionApplied(
       generation = generation,
-      snapshot = editor.state,
+      snapshot = editor.publishedState,
       showContextMenu = shouldOpenContextMenu,
       context = context,
     )
     return false
   }
-  val previousCursor = editor.cursor
+  val previousCursor = editor.publishedState.cursor
   beforeLaunch()
-  var candidateSnapshot: EditorState? = null
-  var candidateShowsContextMenu = false
-  val beforeCommit: (EditorState) -> Unit = { snapshot ->
-    candidateSnapshot = snapshot
+  val onWordSelectionApplied =
+    if (clickCount == 2) {
+      doubleTapDrag.captureWordSelectionApplied(tap = this, context = context)
+    } else {
+      null
+    }
+  var appliedSnapshot: EditorState? = null
+  var showContextMenuAfterPublication = false
+  val onApplied: (EditorState) -> Unit = { snapshot ->
+    appliedSnapshot = snapshot
     if (clickCount == 1) {
       when {
         !snapshot.selection.isCollapsed() -> {
           if (!hitExistingSelectionAtTap) {
-            candidateShowsContextMenu = true
+            showContextMenuAfterPublication = true
             context.effects.requestCurrentSelectionHead(version = snapshot.version)
           }
         }
         isSameCursorTap(previousCursor, snapshot) -> {
-          candidateShowsContextMenu = wasFocused
+          showContextMenuAfterPublication = wasFocused
         }
         else -> {
           if (snapshot.cursor != null) {
@@ -727,22 +750,21 @@ private fun EditorTapGesture.dispatchSelectionTap(
         }
       }
     } else {
-      candidateShowsContextMenu = !snapshot.selection.isCollapsed()
+      showContextMenuAfterPublication = !snapshot.selection.isCollapsed()
     }
   }
-  val tap = this
   val afterDispatch: (Boolean) -> Unit = { dispatched ->
-    val snapshot = candidateSnapshot
+    val snapshot = appliedSnapshot
+    if (clickCount == 2) {
+      onWordSelectionApplied?.invoke(snapshot?.takeIf { dispatched })
+    }
     if (dispatched && snapshot != null) {
-      markPendingSelectionPublished(
+      markPendingSelectionApplied(
         generation = generation,
         snapshot = snapshot,
-        showContextMenu = shouldOpenContextMenu && candidateShowsContextMenu,
+        showContextMenu = shouldOpenContextMenu && showContextMenuAfterPublication,
         context = context,
       )
-      if (clickCount == 2) {
-        doubleTapDrag.onWordSelectionCommitted(tap = tap, context = context)
-      }
     } else {
       cancelPendingPresentation(context = context)
     }
@@ -752,14 +774,14 @@ private fun EditorTapGesture.dispatchSelectionTap(
       context.semantics.pointSelection.launchSelectionExtension(
         editor = editor,
         point = point,
-        beforeCommit = beforeCommit,
+        onApplied = onApplied,
         afterDispatch = afterDispatch,
       )
     clickCount <= 1 ->
       context.semantics.pointSelection.launchCursorMove(
         editor = editor,
         point = point,
-        beforeCommit = beforeCommit,
+        onApplied = onApplied,
         afterDispatch = afterDispatch,
       )
     clickCount == 2 ->
@@ -767,7 +789,7 @@ private fun EditorTapGesture.dispatchSelectionTap(
         editor = editor,
         point = point,
         unit = SelectionPointUnit.Word,
-        beforeCommit = beforeCommit,
+        onApplied = onApplied,
         afterDispatch = afterDispatch,
       )
     else ->
@@ -775,7 +797,7 @@ private fun EditorTapGesture.dispatchSelectionTap(
         editor = editor,
         point = point,
         unit = SelectionPointUnit.Paragraph,
-        beforeCommit = beforeCommit,
+        onApplied = onApplied,
         afterDispatch = afterDispatch,
       )
   }

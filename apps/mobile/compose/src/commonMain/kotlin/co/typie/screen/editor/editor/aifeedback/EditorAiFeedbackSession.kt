@@ -72,13 +72,11 @@ internal fun rememberEditorAiFeedbackSession(
   fun requestRangeIntoView(id: String?) {
     val activeEditor = editor ?: return
     if (id == null) return
-    activeEditor.scope.launch {
-      val target = activeEditor.trackedRange(id)?.rects?.toPageRectsTarget() ?: return@launch
-      bringIntoViewRequests.requestForVersion(
-        target = target,
-        version = activeEditor.state.version,
-        behavior = EditorBringIntoViewBehavior.Smooth,
-      )
+    bringIntoViewRequests.requestForState(
+      state = activeEditor.appliedState,
+      behavior = EditorBringIntoViewBehavior.Smooth,
+    ) {
+      trackedRanges.firstOrNull { it.id == id }?.rects?.toPageRectsTarget()
     }
   }
 
@@ -86,7 +84,7 @@ internal fun rememberEditorAiFeedbackSession(
     val activeEditor = editor ?: return
     activeEditor.setActiveAiFeedbackRange(
       activeId = model?.activeRangeId,
-      currentRanges = activeEditor.state.trackedRanges,
+      currentRanges = activeEditor.appliedState.trackedRanges,
     )
   }
 
@@ -114,7 +112,7 @@ internal fun rememberEditorAiFeedbackSession(
       val analysisRunId = activeModel.prepareAnalysis(sourceText)
       activeEditor.installAiFeedbackDecorations()
       activeEditor.clearAiFeedbackRanges()
-      lastSelectionMappedToAiFeedback = activeEditor.state.selection
+      lastSelectionMappedToAiFeedback = activeEditor.appliedState.selection
       if (sourceText.trim().isBlank()) {
         activeModel.complete()
         setOverlayBottomOcclusion(0f)
@@ -150,7 +148,7 @@ internal fun rememberEditorAiFeedbackSession(
                 )
                 activeModel.appendResult(raw.toAiFeedbackResult())
                 if (wasEmpty) {
-                  lastSelectionMappedToAiFeedback = activeEditor.state.selection
+                  lastSelectionMappedToAiFeedback = activeEditor.appliedState.selection
                 }
                 updateCompactOverlayHeightForRange(activeModel.activeRangeId)
                 updateActiveRangeDecoration()
@@ -255,7 +253,7 @@ internal fun rememberEditorAiFeedbackSession(
     val removedIds =
       activeModel.cleanupMissingRanges(
         liveIds =
-          activeEditor.state.trackedRanges.aiFeedbackRanges().mapTo(mutableSetOf()) { it.id }
+          activeEditor.appliedState.trackedRanges.aiFeedbackRanges().mapTo(mutableSetOf()) { it.id }
       )
     if (removedIds.isEmpty()) return@LaunchedEffect
 

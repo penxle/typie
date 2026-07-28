@@ -6,6 +6,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import co.typie.editor.Editor
+import co.typie.editor.EditorUpdate
+import co.typie.editor.ffi.CommandOutcome
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.NodeOp
 import co.typie.editor.ffi.TableOp
@@ -14,15 +16,21 @@ import co.typie.editor.interaction.EditorInteractionGeometry
 import co.typie.editor.interaction.EditorTableCellSelection
 import co.typie.editor.interaction.EditorTableCellSelectionHandleTouchTargetDp
 import co.typie.editor.interaction.resolveActiveTableCellSelection
+import kotlin.coroutines.coroutineContext
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.roundToInt
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.job
+import kotlinx.coroutines.launch
 
 private const val TableColumnResizeTouchWidthDp = 24f
 private const val TableColumnResizeMinColumnWidth = 40f
 private const val TableColumnResizeBorderWidth = 1f
-private const val TableResizeLimitEpsilon = 0.5f
 private const val TableResizeCommitEpsilon = 0.01f
+private const val TableResizeLimitEpsilon = 0.5f
 
 internal data class EditorTableColumnResizeTarget(
   val overlay: TableOverlay,
@@ -67,11 +75,16 @@ internal class EditorTableColumnResizeSemantic {
   private var placement: EditorTableColumnResizePlacement? = null
   private var draft by mutableStateOf<EditorTableColumnResizeDraft?>(null)
   private var pressed by mutableStateOf(false)
+  private var gestureActive = false
+  private var publicationWaitJob: Job? = null
 
   val presentation: EditorTableColumnResizePresentation
     get() = EditorTableColumnResizePresentation(pressed = pressed, draft = draft)
 
   fun press(editor: Editor, placement: EditorTableColumnResizePlacement) {
+    val previousWait = publicationWaitJob
+    publicationWaitJob = null
+    previousWait?.cancel()
     this.editor = editor
     this.placement = placement
     pressed = true
@@ -79,7 +92,11 @@ internal class EditorTableColumnResizeSemantic {
 
   fun start(): Boolean {
     val currentPlacement = placement ?: return false
-    draft = currentPlacement.toDraft()
+    val previousWait = publicationWaitJob
+    publicationWaitJob = null
+    previousWait?.cancel()
+    draft = draft?.continueFromCurrent() ?: currentPlacement.toDraft()
+    gestureActive = true
     return true
   }
 
@@ -91,26 +108,86 @@ internal class EditorTableColumnResizeSemantic {
 
   fun end() {
     val currentEditor = editor
-    val finished = draft
-    clear()
-    if (currentEditor != null && finished != null) {
-      currentEditor.commitTableResize(finished)
+    val finished = draft?.normalizedForCommit()
+    pressed = false
+    gestureActive = false
+    if (currentEditor == null || finished == null) {
+      clear()
+      return
     }
+    draft = finished
+    val update =
+      try {
+        currentEditor.commitTableResize(finished)
+      } catch (error: Throwable) {
+        clear()
+        if (!currentEditor.terminal) throw error
+        return
+      }
+    if (
+      update == null || update.commandOutcomes.any { outcome -> outcome is CommandOutcome.Rejected }
+    ) {
+      clear()
+      return
+    }
+
+    val waitJob =
+      currentEditor.scope.launch(start = CoroutineStart.LAZY) {
+        try {
+          update.awaitPublished()
+        } catch (e: CancellationException) {
+          throw e
+        } catch (_: Throwable) {
+          // The Editor already owns failure reporting; this job only owns the draft handoff.
+        } finally {
+          if (publicationWaitJob === coroutineContext.job) {
+            publicationWaitJob = null
+            clear()
+          }
+        }
+      }
+    publicationWaitJob = waitJob
+    waitJob.start()
   }
 
   fun cancel() {
-    clear()
+    if (gestureActive) {
+      clear()
+    } else {
+      pressed = false
+      if (draft == null) {
+        editor = null
+        placement = null
+      }
+    }
   }
 
   fun reset() {
     clear()
   }
 
+  fun resolvePlacement(
+    editor: Editor,
+    geometry: EditorInteractionGeometry,
+  ): EditorTableColumnResizePlacement? {
+    val retainedDraft = draft
+    val retainedPlacement = placement
+    return if (this.editor === editor && retainedDraft != null && retainedPlacement != null) {
+      retainedPlacement.withDraft(retainedDraft)
+    } else {
+      resolveTableColumnResizePlacement(editor = editor, geometry = geometry)
+    }
+  }
+
   private fun clear() {
+    val previousWait = publicationWaitJob
+    publicationWaitJob = null
+    previousWait?.cancel()
     editor = null
     placement = null
     draft = null
     pressed = false
+    gestureActive = false
   }
 }
 
@@ -435,7 +512,60 @@ private fun EditorTableColumnResizePlacement.toDraft(): EditorTableColumnResizeD
   )
 }
 
-private fun Editor.commitTableResize(draft: EditorTableColumnResizeDraft) {
+private fun EditorTableColumnResizePlacement.withDraft(
+  draft: EditorTableColumnResizeDraft
+): EditorTableColumnResizePlacement {
+  val centerX =
+    draft.baseCenterX + resolveTableColumnResizePreviewDelta(draft) * draft.pxPerPageUnit
+  val deltaX = centerX - this.centerX
+  return copy(
+    centerX = centerX,
+    top = draft.top,
+    bottom = draft.bottom,
+    handleRects =
+      handleRects.map { rect ->
+        Rect(
+          left = rect.left + deltaX,
+          top = draft.top + (rect.top - top),
+          right = rect.right + deltaX,
+          bottom = draft.bottom - (bottom - rect.bottom),
+        )
+      },
+    pxPerPageUnit = draft.pxPerPageUnit,
+  )
+}
+
+private fun EditorTableColumnResizeDraft.normalizedForCommit(): EditorTableColumnResizeDraft {
+  val committedDelta =
+    if (isTableResize) {
+      resolveTableResizeCommittedDelta(
+        colCount = initialWidths.size,
+        currentTableWidth = initialTableWidth,
+        contentWidth = contentWidth,
+        minProportionWidth = minProportionWidth,
+        maxProportionWidth = maxProportionWidth,
+        deltaX = deltaX,
+      ) ?: 0f
+    } else {
+      clampTableColumnResizeDelta(widths = initialWidths, colIndex = colIndex, deltaX = deltaX)
+    }
+  return copy(deltaX = committedDelta)
+}
+
+private fun EditorTableColumnResizeDraft.continueFromCurrent(): EditorTableColumnResizeDraft {
+  val appliedDelta = resolveTableColumnResizePreviewDelta(this)
+  return copy(
+    baseCenterX = baseCenterX + appliedDelta * pxPerPageUnit,
+    initialWidths =
+      if (isTableResize) initialWidths
+      else resizeTableColumnWidths(initialWidths, colIndex, appliedDelta),
+    initialTableWidth = if (isTableResize) initialTableWidth + appliedDelta else initialTableWidth,
+    deltaX = 0f,
+  )
+}
+
+private fun Editor.commitTableResize(draft: EditorTableColumnResizeDraft): EditorUpdate? {
+  if (draft.deltaX == 0f) return null
   val op =
     if (draft.isTableResize) {
       val proportion =
@@ -446,13 +576,8 @@ private fun Editor.commitTableResize(draft: EditorTableColumnResizeDraft) {
           minProportionWidth = draft.minProportionWidth,
           maxProportionWidth = draft.maxProportionWidth,
           deltaX = draft.deltaX,
-        ) ?: return
-      val initialProportion =
-        ((draft.initialTableWidth / draft.contentWidth) * 100f).roundToInt().coerceAtLeast(0)
-      if (proportion == initialProportion) {
-        return
-      }
-      TableOp.SetProportion(proportion = proportion)
+        ) ?: return null
+      TableOp.SetProportion(proportion)
     } else {
       val nextWidths =
         resizeTableColumnWidths(
@@ -460,11 +585,8 @@ private fun Editor.commitTableResize(draft: EditorTableColumnResizeDraft) {
           colIndex = draft.colIndex,
           deltaX = draft.deltaX,
         )
-      if (!hasWidthChange(draft.initialWidths, nextWidths)) {
-        return
-      }
+      if (!hasWidthChange(draft.initialWidths, nextWidths)) return null
       TableOp.SetColumnWidths(widths = toRatioWidths(nextWidths))
     }
-
-  sync { enqueue(Message.Node(NodeOp.Table(id = draft.tableId, op = op))) }
+  return updateNow { enqueue(Message.Node(NodeOp.Table(id = draft.tableId, op = op))) }
 }

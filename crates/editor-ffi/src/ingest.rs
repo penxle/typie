@@ -6,7 +6,7 @@ use crate::prelude::*;
 
 #[cfg_attr(feature = "uniffi", derive(uniffi::Object))]
 pub struct GraphIngest {
-    resource: Arc<Mutex<editor_resource::Resource>>,
+    source: Arc<Mutex<editor_resource::ResourceSource>>,
     buffer: Mutex<Option<Vec<u8>>>,
 }
 
@@ -24,7 +24,8 @@ impl GraphIngest {
         carrier_bytes: crate::editor::CarrierStash,
         viewport: editor_view::Viewport,
     ) -> EditorResult<Owned<crate::editor::Editor>> {
-        let core = editor_core::Editor::new(state, viewport, Arc::clone(&self.resource));
+        let resource = crate::host::local_resource_from_source(&self.source)?;
+        let core = editor_core::Editor::new(state, viewport, resource);
         Ok(into_owned(crate::editor::Editor::new(core, carrier_bytes)))
     }
 }
@@ -87,7 +88,7 @@ impl GraphIngest {
 impl EditorHost {
     pub fn begin_graph_ingest(&self) -> EditorResult<Owned<GraphIngest>> {
         Ok(into_owned(GraphIngest {
-            resource: Arc::clone(&self.resource),
+            source: Arc::clone(&self.source),
             buffer: Mutex::new(Some(Vec::new())),
         }))
     }

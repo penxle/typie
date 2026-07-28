@@ -99,7 +99,7 @@ internal fun EditorScreenOverlayHost(
           )
         }
 
-        if (editorRectInOverlay != null && contextMenu.isVisibleFor(editor.state)) {
+        if (editorRectInOverlay != null && contextMenu.isVisibleFor(editor.publishedState)) {
           val anchor =
             resolveContextMenuAnchor(
               editor = editor,
@@ -144,7 +144,7 @@ internal fun EditorScreenOverlayHost(
 
 @Composable
 private fun rememberAvailableExpansionUnits(editor: Editor): Set<SelectionExpansionUnit>? {
-  val expansion = editor.state.blockState?.expansion ?: return null
+  val expansion = editor.publishedState.blockState?.expansion ?: return null
   return remember(expansion) {
     buildSet {
       if (expansion.word) add(SelectionExpansionUnit.Word)

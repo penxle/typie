@@ -26,10 +26,11 @@ pub fn generate(mode: FfiExportMode, mut item: ItemImpl) -> TokenStream {
 fn generate_iface_static(item: &ItemImpl) -> TokenStream {
     let iface = super::meta::extract(item);
 
-    let first_method = match iface.methods.first() {
-        Some(m) => m.name.clone(),
-        None => return TokenStream::new(),
-    };
+    let first_method = iface
+        .methods
+        .first()
+        .map(|method| method.name.clone())
+        .unwrap_or_else(|| "opaque".into());
 
     let encoded = bitcode::encode(&iface);
     let payload_len = encoded.len() as u32;

@@ -81,6 +81,7 @@ pub enum FfiScalarParam {
 pub enum FfiParamType {
     Primitive(String),
     Complex(String),
+    Owned(String),
     Vec(FfiScalarParam),
     Option(FfiScalarParam),
 }

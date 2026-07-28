@@ -13,7 +13,7 @@ import co.typie.editor.runtime.EditorContextMenuState
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.EditorBringIntoViewTarget
-import co.typie.editor.scroll.awaitWithBringIntoView
+import co.typie.editor.scroll.updateWithBringIntoView
 import co.typie.platform.Clipboard
 import co.typie.platform.IncomingContentMode
 import co.typie.platform.PlatformModule
@@ -40,7 +40,7 @@ internal fun rememberEditorContextMenuActions(
   availableExpansionUnits: Set<SelectionExpansionUnit>,
   clipboard: Clipboard = PlatformModule.clipboard,
 ): EditorContextMenuActions {
-  val selection = editor.selection
+  val selection = editor.publishedState.selection
   val runtime = LocalEditorRuntime.current
   val incomingContentHandler = LocalEditorIncomingContentHandler.current
   return remember(
@@ -55,15 +55,18 @@ internal fun rememberEditorContextMenuActions(
   ) {
     val expandSelection =
       { unit: SelectionExpansionUnit, bringIntoViewTarget: EditorBringIntoViewTarget? ->
-        contextMenu.requestShowAfterSelectionCommit()
         editor.scope.launch {
-          if (bringIntoViewTarget == null) {
-            editor.await { enqueue(Message.Selection(SelectionOp.Expand(unit))) }
-          } else {
-            editor.awaitWithBringIntoView(bringIntoViewRequests) {
-              enqueue(Message.Selection(SelectionOp.Expand(unit)))
-              beforeCommit { bringIntoView(bringIntoViewTarget) }
+          val appliedState =
+            if (bringIntoViewTarget == null) {
+              editor.update { enqueue(Message.Selection(SelectionOp.Expand(unit))) }?.snapshot
+            } else {
+              editor.updateWithBringIntoView(bringIntoViewRequests) {
+                enqueue(Message.Selection(SelectionOp.Expand(unit)))
+                afterApplied { bringIntoView(bringIntoViewTarget) }
+              }
             }
+          appliedState?.let { state ->
+            contextMenu.requestShowForAppliedSelection(editor = editor, state = state)
           }
         }
       }
@@ -80,9 +83,9 @@ internal fun rememberEditorContextMenuActions(
         editor.scope.launch {
           val payload = editor.copySelection() ?: return@launch
           if (clipboard.copyRichText(html = payload.html, text = payload.text)) {
-            editor.awaitWithBringIntoView(bringIntoViewRequests) {
+            editor.updateWithBringIntoView(bringIntoViewRequests) {
               enqueue(Message.Clipboard(ClipboardOp.Cut))
-              beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
+              afterApplied { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
             }
           }
         }

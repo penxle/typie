@@ -9,6 +9,7 @@ import co.typie.editor.Editor
 import co.typie.editor.EditorState
 import co.typie.editor.ffi.InputModifiers
 import co.typie.editor.interaction.gestures.EditorPanGestureDriver
+import co.typie.editor.interaction.semantics.EditorTableColumnResizePlacement
 import co.typie.editor.interaction.semantics.EditorTableColumnResizePresentation
 import co.typie.editor.runtime.EditorUiState
 import co.typie.platform.Platform
@@ -60,6 +61,9 @@ internal class EditorInteractionController(
 
   val tableColumnResizePresentation: EditorTableColumnResizePresentation
     get() = semantics.tableColumnResize.presentation
+
+  fun resolveTableColumnResizePlacement(): EditorTableColumnResizePlacement? =
+    semantics.tableColumnResize.resolvePlacement(editor = editor, geometry = geometry)
 
   fun updateTapSlop(tapSlopPx: Float) {
     gestures.updateTapSlop(tapSlopPx)
@@ -207,6 +211,7 @@ internal class EditorInteractionController(
 
   fun onEditorStateChanged(state: EditorState) {
     semantics.onEditorStateChanged(editor = editorProvider(), state = state, mode = mode)
+    gestures.onPublishedStateChanged(state = state, context = this)
   }
 
   override fun applyModeEvent(event: EditorInteractionEvent) {

@@ -540,6 +540,12 @@ impl Renderer {
         }
     }
 
+    pub fn reset_font_data_caches(&mut self) {
+        self.scale_ctx = ScaleContext::new();
+        self.glyph_cache = GlyphCache::new();
+        self.svg_path_glyph_cache = SvgPathGlyphCache::new();
+    }
+
     fn resolve_mark_color(&self, data: &MarkData, theme: &Theme) -> Option<Color> {
         match data {
             MarkData::Selection { focused } => Some(selection_mark_color(theme, *focused)),
@@ -622,7 +628,7 @@ impl Renderer {
         scale_factor: f32,
         marks: &[Mark],
     ) {
-        let theme = self.resource.lock().unwrap().theme;
+        let theme = *self.resource.lock().unwrap().theme();
 
         view.visit_page(
             page_idx,
@@ -734,7 +740,7 @@ impl Renderer {
         active: LayerSet,
         text_mode: TextRenderMode,
     ) -> RenderVisitor<'a> {
-        let theme = self.resource.lock().unwrap().theme;
+        let theme = *self.resource.lock().unwrap().theme();
         RenderVisitor {
             renderer: self,
             sink,
@@ -1566,7 +1572,10 @@ mod tests {
     use crate::vector::types::{VectorOp, VectorPage};
     use editor_common::EdgeInsets;
     use editor_crdt::Dot;
-    use editor_resource::ThemeVariant;
+    use editor_resource::{
+        RawTextReplacementRule, ResourceSource, ThemeVariant, prepare_font_base,
+        prepare_text_replacement_rules,
+    };
     use editor_state::State;
     use editor_view::PageFragmentContent;
     use editor_view::glyph_run::RubyAnnotation;
@@ -1600,6 +1609,20 @@ mod tests {
         }
 
         fn draw_image(&mut self, _i: &Image, _r: Rect, _t: Transform) {}
+    }
+
+    fn resource_with_font_bases(fonts: &[(&str, u16, &[u8])]) -> Resource {
+        let mut source = ResourceSource::new_test();
+        for &(family, weight, compressed) in fonts {
+            source
+                .insert_font_base(
+                    family,
+                    weight,
+                    prepare_font_base(compressed).expect("test font must be valid"),
+                )
+                .expect("test font must change resources");
+        }
+        Resource::from_snapshot(source.snapshot())
     }
 
     #[derive(Default)]
@@ -2367,10 +2390,9 @@ mod tests {
             }
         }
 
-        let mut resource = Resource::new_test();
         let compressed = editor_resource::compress_zstd(TEST_FONT);
-        resource.add_font_base("first", 400, &compressed).unwrap();
-        resource.add_font_base("second", 400, &compressed).unwrap();
+        let resource =
+            resource_with_font_bases(&[("first", 400, &compressed), ("second", 400, &compressed)]);
         let first_family_id = resource.font_registry.intern_id("first").unwrap();
         let second_family_id = resource.font_registry.intern_id("second").unwrap();
 
@@ -2435,7 +2457,7 @@ mod tests {
     }
 
     #[test]
-    fn baked_glyph_mask_is_cached_across_identical_renders() {
+    fn baked_glyph_cache_survives_text_replacement_rule_changes() {
         use editor_view::glyph_run::{Glyph, GlyphRun, Synthesis, TextDecoration};
 
         const TEST_FONT: &[u8] = include_bytes!("../../../assets/Pretendard-Regular.ttf");
@@ -2451,17 +2473,26 @@ mod tests {
             fn draw_image(&mut self, _i: &Image, _r: Rect, _t: Transform) {}
         }
 
-        let mut resource = Resource::new_test();
         let compressed = editor_resource::compress_zstd(TEST_FONT);
-        resource.add_font_base("test", 400, &compressed).unwrap();
+        let mut source = ResourceSource::new_test();
+        source
+            .insert_font_base(
+                "test",
+                400,
+                prepare_font_base(&compressed).expect("test font must be valid"),
+            )
+            .expect("test font must change resources");
+        let resource = Arc::new(Mutex::new(Resource::from_snapshot(source.snapshot())));
         let family_id = resource
+            .lock()
+            .unwrap()
             .font_registry
             .intern_id("test")
             .expect("test font must be registered");
 
         let state = State::empty();
         let doc = state.view();
-        let mut renderer = Renderer::new(Arc::new(Mutex::new(resource)));
+        let mut renderer = Renderer::new(Arc::clone(&resource));
 
         let make_line = || {
             let run = GlyphRun {
@@ -2521,11 +2552,22 @@ mod tests {
             "first render of real-font text must bake at least one glyph mask"
         );
 
+        let rules = prepare_text_replacement_rules(vec![RawTextReplacementRule {
+            id: "dash".into(),
+            match_pattern: "--".into(),
+            substitute: "—".into(),
+            regex: false,
+        }]);
+        let snapshot = source
+            .set_text_replacement_rules(rules)
+            .expect("text replacement rules must change resources");
+        resource.lock().unwrap().apply_update(snapshot).unwrap();
+
         render_once(&mut renderer);
         let second = BAKE_COUNT.with(|c| c.get()) - first;
         assert_eq!(
             second, 0,
-            "second render of identical text must hit the baked-glyph cache (zero re-bakes)"
+            "text replacement rules do not change glyph pixels, so the baked cache must remain valid"
         );
     }
 
@@ -2643,7 +2685,7 @@ mod tests {
             .resource
             .lock()
             .unwrap()
-            .theme
+            .theme()
             .color("ui.surface.muted");
 
         let icon_rect = Rect::from_xywh(12.0, 8.0, 20.0, 20.0);

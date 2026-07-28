@@ -1,7 +1,7 @@
 package co.typie.screen.editor.editor.subpane.comments
 
 import co.typie.editor.Editor
-import co.typie.editor.EditorScope
+import co.typie.editor.EditorRequestScope
 import co.typie.editor.ffi.DecorationStyle
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.StableSelection
@@ -17,7 +17,7 @@ internal const val COMMENT_COMPOSE_RANGE_GROUP = "__comment_compose__"
 internal const val COMMENT_COMPOSE_RANGE_ID = "__comment_compose__"
 
 internal suspend fun Editor.installCommentDecorations() {
-  await { installCommentDecorations(this) }
+  update { installCommentDecorations(this) }
 }
 
 internal suspend fun Editor.syncCommentRanges(
@@ -30,7 +30,7 @@ internal suspend fun Editor.syncCommentRanges(
   val desiredIds = selectionsById.keys
   val activeCommentId = activeId?.takeIf { it in desiredIds }
 
-  await {
+  update {
     (registeredIds - desiredIds).forEach { id ->
       enqueue(Message.TrackedRange(TrackedRangeOp.Remove(id = id)))
     }
@@ -74,7 +74,7 @@ internal suspend fun Editor.syncCommentRanges(
 }
 
 internal suspend fun Editor.setCommentComposeRange(selection: StableSelection?) {
-  await {
+  update {
     enqueue(Message.TrackedRange(TrackedRangeOp.Remove(id = COMMENT_COMPOSE_RANGE_ID)))
     if (selection != null) {
       enqueue(
@@ -102,7 +102,7 @@ internal fun List<TrackedRangeEndpoints>.commentRangeEndpoints(): List<TrackedRa
     it.isCommentRange
   }
 
-private fun installCommentDecorations(scope: EditorScope) {
+private fun installCommentDecorations(scope: EditorRequestScope) {
   val underline = Underline(color = "text.amber", style = UnderlineStyle.Solid, thickness = 2f)
   scope.enqueue(
     Message.TrackedRange(

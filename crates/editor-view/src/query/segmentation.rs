@@ -532,7 +532,7 @@ mod tests {
         let res = Resource::new_test();
 
         let pos0 = Position::new(para_id, 0);
-        let sel_fwd = move_word_forward(&index, &pos0, &res.segmenters)
+        let sel_fwd = move_word_forward(&index, &pos0, res.segmenters())
             .expect("word_forward from 0 must resolve");
         assert_eq!(sel_fwd.head.node, para_id);
         assert!(
@@ -541,7 +541,7 @@ mod tests {
             sel_fwd.head.offset
         );
 
-        let sel_bwd = move_word_backward(&index, &sel_fwd.head, &res.segmenters)
+        let sel_bwd = move_word_backward(&index, &sel_fwd.head, res.segmenters())
             .expect("word_backward must resolve");
         assert_eq!(sel_bwd.head.node, para_id);
         assert_eq!(
@@ -557,7 +557,7 @@ mod tests {
         let res = Resource::new_test();
 
         let pos0 = Position::new(para_id, 0);
-        let sel_fwd = move_sentence_forward(&index, &pos0, &res.segmenters)
+        let sel_fwd = move_sentence_forward(&index, &pos0, res.segmenters())
             .expect("sentence_forward from 0 must resolve");
         assert_eq!(sel_fwd.head.node, para_id);
         assert!(
@@ -566,7 +566,7 @@ mod tests {
             sel_fwd.head.offset
         );
 
-        let sel_bwd = move_sentence_backward(&index, &sel_fwd.head, &res.segmenters)
+        let sel_bwd = move_sentence_backward(&index, &sel_fwd.head, res.segmenters())
             .expect("sentence_backward must resolve");
         assert_eq!(sel_bwd.head.node, para_id);
         assert_eq!(
@@ -590,7 +590,7 @@ mod tests {
         // and must land at offset 11 (end of "world" in run1), crossing the
         // run boundary identified solely by offset_range (not per-run node identity).
         let pos = Position::new(para_id, 5);
-        let sel = move_word_forward(&index, &pos, &res.segmenters)
+        let sel = move_word_forward(&index, &pos, res.segmenters())
             .expect("word_forward from offset 5 must resolve");
         assert_eq!(sel.head.node, para_id);
         assert_eq!(
@@ -607,7 +607,7 @@ mod tests {
         );
         let res = Resource::new_test();
 
-        let sel = move_word_backward(&index, &Position::new(para_id, 2), &res.segmenters)
+        let sel = move_word_backward(&index, &Position::new(para_id, 2), res.segmenters())
             .expect("word backward from after trailing tab must resolve");
 
         assert_eq!(sel.head.node, para_id);

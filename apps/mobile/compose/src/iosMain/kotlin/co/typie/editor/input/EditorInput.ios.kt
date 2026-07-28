@@ -40,7 +40,7 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
     private var lastPulledValue: TextFieldValue? = null
 
     override val value: () -> TextFieldValue = {
-      val pulled = editor.ime?.toTextFieldValue() ?: TextFieldValue()
+      val pulled = editor.appliedState.ime?.toTextFieldValue() ?: TextFieldValue()
       val recorder = editor.inputRecorder
       if (recorder != null && pulled != lastPulledValue) {
         lastPulledValue = pulled

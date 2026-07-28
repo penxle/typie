@@ -102,7 +102,13 @@ class DocumentBodySettingsSyncTest {
           currentValue = payload.single().toInt()
           received += currentValue
         },
-        onTick = { listOf(EditorEvent.StateChanged(listOf(StateField.Doc))) },
+        onTick = {
+          listOf(
+            EditorEvent.StateChanged(
+              listOf(StateField.Doc, StateField.RootAttrs, StateField.Modifiers)
+            )
+          )
+        },
         rootAttrsProvider = {
           PlainRootNode(layoutMode = LayoutMode.Continuous(maxWidth = 600 + currentValue))
         },
@@ -143,8 +149,11 @@ class DocumentBodySettingsSyncTest {
     assertEquals("3-0", liveBaseline?.seq)
     assertContentEquals(byteArrayOf(3), liveBaseline?.heads)
     assertEquals(listOf<String?>("3-0"), transport.subscribeCalls)
-    assertEquals(LayoutMode.Continuous(maxWidth = 604), editor.rootAttrs?.layoutMode)
-    assertEquals(EditorStyleSettings(fontSize = 1204), editor.rootModifiers.toEditorStyleSettings())
+    assertEquals(LayoutMode.Continuous(maxWidth = 604), editor.appliedState.rootAttrs?.layoutMode)
+    assertEquals(
+      EditorStyleSettings(fontSize = 1204),
+      editor.appliedState.rootModifiers?.toEditorStyleSettings(),
+    )
 
     pipeline?.stop()
     editor.dispose()

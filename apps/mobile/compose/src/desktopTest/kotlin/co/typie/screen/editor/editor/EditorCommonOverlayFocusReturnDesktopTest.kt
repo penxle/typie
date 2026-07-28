@@ -96,15 +96,12 @@ class EditorCommonOverlayFocusReturnDesktopTest {
 private class FocusReturnFixture {
   val dialog = Dialog()
   private val selection = selection("selected")
+  private val fake = FakeFfiEditor(selectionProvider = { selection })
   val editor =
-    Editor(
-      inner = FakeFfiEditor(selectionProvider = { selection }),
-      scope = CoroutineScope(Job()),
-      dispatcher = Dispatchers.Unconfined,
-    )
+    Editor(inner = fake, scope = CoroutineScope(Job()), dispatcher = Dispatchers.Unconfined)
 
   init {
-    editor.sync {}
+    fake.publishSnapshot(editor)
   }
 }
 
@@ -141,7 +138,7 @@ private fun FocusReturnContent(fixture: FocusReturnFixture, initiallyFocused: Bo
         session.observeEditorContext(
           editor = fixture.editor,
           focused = editorFocused,
-          selection = fixture.editor.state.selection,
+          selection = fixture.editor.publishedState.selection,
           contextActive = true,
           auxiliaryOwnerActive = fixture.dialog.acceptsInput,
         )

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { SyncRequestError } from '$lib/sync/protocol';
 import { isPermanentForTest, Pusher } from './pusher.svelte';
 import { dec, enc, FakeEditor, FakeStore } from './test-fakes';
@@ -185,6 +185,27 @@ describe('Pusher (single-source-of-truth)', () => {
     await new Promise((r) => setTimeout(r, 0));
     const pruneRecs = await store.load('doc1');
     expect(pruneRecs.length).toBe(0);
+  });
+
+  it('handles a background prune failure instead of leaking an unhandled rejection', async () => {
+    const editor = new FakeEditor([1]);
+    const store = new FakeStore();
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {
+      // Suppress the expected warning while retaining it for the assertion below.
+    });
+    const pusher = new Pusher(baseOpts(editor, store, async () => ({ heads: enc(1), durableHeads: enc() })));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    editor.missingChangesetsFor = () => {
+      throw new Error('editor terminal');
+    };
+
+    pusher.setDurableHeads(enc(1));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(warning).toHaveBeenCalledWith('Pusher: prune failed; will retry on the next durable-head update', expect.any(Error));
+
+    pusher.stop();
+    warning.mockRestore();
   });
 
   it('round-1 CRIT #3: a tab WITHOUT the op in its graph never prunes a sibling crash-durable record', async () => {

@@ -43,7 +43,7 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
         InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
     outAttrs.imeOptions = EditorInfo.IME_ACTION_NONE or EditorInfo.IME_FLAG_NO_EXTRACT_UI
     outAttrs.contentMimeTypes = arrayOf("*/*")
-    val ctx = editor.tickIme
+    val ctx = editor.appliedState.ime
     outAttrs.initialSelStart = ctx?.let { it.windowUtf16Offset(it.selection.start) } ?: -1
     outAttrs.initialSelEnd = ctx?.let { it.windowUtf16Offset(it.selection.end) } ?: -1
     val connection =
@@ -82,7 +82,7 @@ internal actual fun PlatformTextInputSessionScope.notifyImeStateChanged(editor: 
     val imm =
       androidView.context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
         ?: return
-    val ctx = editor.tickIme
+    val ctx = editor.appliedState.ime
     val extract = ctx?.extract()
     val selStart = extract?.selectionStart ?: -1
     val selEnd = extract?.selectionEnd ?: -1

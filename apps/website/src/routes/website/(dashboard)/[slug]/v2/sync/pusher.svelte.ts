@@ -62,7 +62,7 @@ export class Pusher {
     const records = await this.opts.store.load(this.opts.documentId);
     // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local-only, not reactive state
     const localAll = new Set(this.localChangesetIds());
-    let adopted = false;
+    const adopted: Promise<number>[] = [];
     for (const rec of records) {
       if (localAll.has(rec.id)) {
         this.blockedCount.delete(rec.id);
@@ -72,8 +72,7 @@ export class Pusher {
       if (this.dormant.has(rec.id)) continue;
       const { ready } = this.opts.editor.partitionRemoteChangesets(rec.changeset);
       if (ready.length > 0) {
-        this.opts.editor.receiveRemoteChangeset(ready);
-        adopted = true;
+        adopted.push(this.opts.editor.receiveRemoteChangeset(ready));
         this.blockedCount.delete(rec.id);
       } else {
         const n = (this.blockedCount.get(rec.id) ?? 0) + 1;
@@ -81,7 +80,7 @@ export class Pusher {
         if (n >= DORMANT_ADOPT_LIMIT) this.dormant.add(rec.id);
       }
     }
-    if (adopted) this.opts.editor.flush();
+    if (adopted.length > 0) await Promise.all(adopted);
 
     await this.persistFresh();
   }
@@ -254,8 +253,12 @@ export class Pusher {
   }
 
   setDurableHeads(durableHeads: Uint8Array): void {
+    if (this.stopped) return;
     this.durableHeads = durableHeads;
-    void this.prune();
+    void this.prune().catch((err) => {
+      if (this.stopped) return;
+      console.warn('Pusher: prune failed; will retry on the next durable-head update', err);
+    });
   }
 
   async captureNow(): Promise<void> {

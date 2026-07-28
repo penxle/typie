@@ -81,7 +81,10 @@ mod tests {
     use editor_model::{
         AtomLeaf, Fragment, Modifier, NodeType, PlainNode, PlainParagraphNode, PlainTextNode,
     };
-    use editor_resource::{FontFamily, FontFamilySource, FontWeight, Resource, ThemeVariant};
+    use editor_resource::{
+        FontFamily, FontFamilySource, FontWeight, Resource, ResourceSource, ThemeVariant,
+        prepare_fonts,
+    };
     use editor_state::{Position, Selection};
 
     #[test]
@@ -340,8 +343,7 @@ mod tests {
 
     #[test]
     fn font_weight_700_with_registered_700_uses_font_weight_only() {
-        let mut resource = Resource::new_test();
-        resource.set_fonts(vec![FontFamily {
+        let resource = resource_with_fonts(vec![FontFamily {
             name: "Pretendard".into(),
             source: FontFamilySource::User,
             weights: vec![
@@ -376,8 +378,7 @@ mod tests {
 
     #[test]
     fn font_weight_700_without_heavier_registered_uses_synthetic_bold() {
-        let mut resource = Resource::new_test();
-        resource.set_fonts(vec![FontFamily {
+        let resource = resource_with_fonts(vec![FontFamily {
             name: "Pretendard".into(),
             source: FontFamilySource::User,
             weights: vec![FontWeight {
@@ -406,8 +407,7 @@ mod tests {
 
     #[test]
     fn roundtrip_bold_with_font_weight_does_not_accumulate() {
-        let mut resource = Resource::new_test();
-        resource.set_fonts(vec![FontFamily {
+        let resource = resource_with_fonts(vec![FontFamily {
             name: "Pretendard".into(),
             source: FontFamilySource::User,
             weights: vec![
@@ -460,8 +460,7 @@ mod tests {
 
     #[test]
     fn font_shorthand_in_style_attribute_round_trip() {
-        let mut resource = Resource::new_test();
-        resource.set_fonts(vec![FontFamily {
+        let resource = resource_with_fonts(vec![FontFamily {
             name: "Arial".into(),
             source: FontFamilySource::User,
             weights: vec![
@@ -721,15 +720,23 @@ mod tests {
         assert!(matches!(s.content[0].node, PlainNode::Table(_)));
     }
 
-    fn register_test_family(resource: &mut Resource, name: &str) {
-        resource.set_fonts(vec![FontFamily {
+    fn resource_with_fonts(families: Vec<FontFamily>) -> Resource {
+        let mut source = ResourceSource::new_test();
+        source
+            .set_fonts(prepare_fonts(families))
+            .expect("font families must change resources");
+        Resource::from_snapshot(source.snapshot())
+    }
+
+    fn resource_with_test_family(name: &str) -> Resource {
+        resource_with_fonts(vec![FontFamily {
             name: name.to_string(),
             source: FontFamilySource::User,
             weights: vec![FontWeight {
                 value: 400,
                 hash: format!("h_{name}"),
             }],
-        }]);
+        }])
     }
 
     #[test]
@@ -748,8 +755,7 @@ mod tests {
 
     #[test]
     fn paste_arial_falls_back_to_registered_family() {
-        let mut resource = Resource::new_test();
-        register_test_family(&mut resource, "Pretendard");
+        let resource = resource_with_test_family("Pretendard");
         let html = r#"<p><span style="font-family:'Arial', Pretendard, sans-serif">x</span></p>"#;
         let slice = Slice::from_html(html, &resource);
         let t = find_text(&slice).unwrap();
@@ -777,8 +783,7 @@ mod tests {
 
     #[test]
     fn paste_arbitrary_weight_snaps_to_nearest_hundred() {
-        let mut resource = Resource::new_test();
-        resource.set_fonts(vec![FontFamily {
+        let resource = resource_with_fonts(vec![FontFamily {
             name: "Pretendard".into(),
             source: FontFamilySource::User,
             weights: vec![
@@ -833,8 +838,11 @@ mod tests {
 
     #[test]
     fn paste_dark_theme_white_does_not_snap_to_bright() {
-        let mut resource = Resource::new_test();
-        resource.theme.set_variant(ThemeVariant::DarkBlack);
+        let mut source = ResourceSource::new_test();
+        source
+            .set_theme_variant(ThemeVariant::DarkBlack)
+            .expect("theme variant must change resources");
+        let resource = Resource::from_snapshot(source.snapshot());
         let html = r#"<p><span style="color:#ffffff">x</span></p>"#;
         let slice = Slice::from_html(html, &resource);
         let t = find_text(&slice).unwrap();
@@ -896,8 +904,7 @@ mod tests {
 
     #[test]
     fn strong_with_registered_700_uses_font_weight_only() {
-        let mut resource = Resource::new_test();
-        resource.set_fonts(vec![FontFamily {
+        let resource = resource_with_fonts(vec![FontFamily {
             name: "Pretendard".into(),
             source: FontFamilySource::User,
             weights: vec![
@@ -932,8 +939,7 @@ mod tests {
 
     #[test]
     fn strong_without_heavier_weight_uses_synthetic_bold() {
-        let mut resource = Resource::new_test();
-        resource.set_fonts(vec![FontFamily {
+        let resource = resource_with_fonts(vec![FontFamily {
             name: "Pretendard".into(),
             source: FontFamilySource::User,
             weights: vec![FontWeight {
@@ -979,8 +985,7 @@ mod tests {
 
     #[test]
     fn font_weight_800_snaps_to_700_when_700_registered() {
-        let mut resource = Resource::new_test();
-        resource.set_fonts(vec![FontFamily {
+        let resource = resource_with_fonts(vec![FontFamily {
             name: "Pretendard".into(),
             source: FontFamilySource::User,
             weights: vec![
@@ -1007,8 +1012,7 @@ mod tests {
 
     #[test]
     fn font_weight_900_not_downgraded_when_900_registered() {
-        let mut resource = Resource::new_test();
-        resource.set_fonts(vec![FontFamily {
+        let resource = resource_with_fonts(vec![FontFamily {
             name: "Pretendard".into(),
             source: FontFamilySource::User,
             weights: vec![
@@ -1039,8 +1043,7 @@ mod tests {
 
     #[test]
     fn font_weight_600_snaps_to_700_when_only_400_and_700_registered() {
-        let mut resource = Resource::new_test();
-        resource.set_fonts(vec![FontFamily {
+        let resource = resource_with_fonts(vec![FontFamily {
             name: "Pretendard".into(),
             source: FontFamilySource::User,
             weights: vec![
@@ -1067,8 +1070,7 @@ mod tests {
 
     #[test]
     fn font_weight_300_snaps_to_400_when_no_lighter_registered() {
-        let mut resource = Resource::new_test();
-        resource.set_fonts(vec![FontFamily {
+        let resource = resource_with_fonts(vec![FontFamily {
             name: "Pretendard".into(),
             source: FontFamilySource::User,
             weights: vec![
@@ -1128,8 +1130,7 @@ mod tests {
 
     #[test]
     fn font_weight_normal_reset_under_synth_bold_parent() {
-        let mut resource = Resource::new_test();
-        resource.set_fonts(vec![FontFamily {
+        let resource = resource_with_fonts(vec![FontFamily {
             name: "Pretendard".into(),
             source: FontFamilySource::User,
             weights: vec![FontWeight {
@@ -1154,8 +1155,7 @@ mod tests {
 
     #[test]
     fn font_weight_normal_reset_with_unregistered_child_family_suppresses_parent_bold() {
-        let mut resource = Resource::new_test();
-        resource.set_fonts(vec![FontFamily {
+        let resource = resource_with_fonts(vec![FontFamily {
             name: "Pretendard".into(),
             source: FontFamilySource::User,
             weights: vec![FontWeight {
@@ -1180,8 +1180,7 @@ mod tests {
 
     #[test]
     fn inline_font_weight_overrides_strong_tag() {
-        let mut resource = Resource::new_test();
-        resource.set_fonts(vec![FontFamily {
+        let resource = resource_with_fonts(vec![FontFamily {
             name: "Pretendard".into(),
             source: FontFamilySource::User,
             weights: vec![
@@ -1208,8 +1207,7 @@ mod tests {
 
     #[test]
     fn font_weight_bolder_resolved_against_parent_400() {
-        let mut resource = Resource::new_test();
-        resource.set_fonts(vec![FontFamily {
+        let resource = resource_with_fonts(vec![FontFamily {
             name: "Pretendard".into(),
             source: FontFamilySource::User,
             weights: vec![
@@ -1236,8 +1234,7 @@ mod tests {
 
     #[test]
     fn font_weight_lighter_resolved_against_parent_700() {
-        let mut resource = Resource::new_test();
-        resource.set_fonts(vec![FontFamily {
+        let resource = resource_with_fonts(vec![FontFamily {
             name: "Pretendard".into(),
             source: FontFamilySource::User,
             weights: vec![
@@ -1268,8 +1265,7 @@ mod tests {
 
     #[test]
     fn font_weight_bolder_against_synthetic_bold_parent() {
-        let mut resource = Resource::new_test();
-        resource.set_fonts(vec![
+        let resource = resource_with_fonts(vec![
             FontFamily {
                 name: "OnlyLight".into(),
                 source: FontFamilySource::User,

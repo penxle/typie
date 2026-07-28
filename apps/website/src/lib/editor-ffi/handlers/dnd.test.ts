@@ -61,7 +61,7 @@ const createDragEvent = (dataTransfer: DataTransfer | null = createDataTransfer(
     currentTarget,
     preventDefault: vi.fn(),
     stopPropagation: vi.fn(),
-  } as unknown as DragEvent;
+  } as unknown as DragEvent & { preventDefault: ReturnType<typeof vi.fn> };
 };
 
 const createCtx = ({ readOnly = false, protectContent = false } = {}) => {
@@ -69,7 +69,15 @@ const createCtx = ({ readOnly = false, protectContent = false } = {}) => {
   const enqueue = vi.fn((message: Message) => {
     messages.push(message);
   });
-  const flush = vi.fn();
+  const updateNow = vi.fn((build: () => void) => {
+    build();
+    return {
+      revision: 1,
+      commandOutcomes: [{ type: 'applied' as const }],
+      events: [],
+      awaitPublished: vi.fn(async () => ({ type: 'published' as const, revision: 1 })),
+    };
+  });
   const extensionAreaEl = document.createElement('div');
   const canReusePlaceholder = vi.fn<(nodeId: string, kind: 'image' | 'file') => boolean>(() => false);
   const importAtDrop = vi.fn<
@@ -94,7 +102,7 @@ const createCtx = ({ readOnly = false, protectContent = false } = {}) => {
     copySelection: vi.fn(() => ({ text: 'Hello', html: '<p>Hello</p>' })),
     endNativeDragAdmission: vi.fn(),
     enqueue,
-    flush,
+    updateNow,
     focus: vi.fn(),
     extensionAreaEl,
     gesture: {
@@ -121,7 +129,7 @@ const createCtx = ({ readOnly = false, protectContent = false } = {}) => {
     editor,
     messages,
     enqueue,
-    flush,
+    updateNow,
     extensionAreaEl,
     canReusePlaceholder,
     importAtDrop,
@@ -174,7 +182,7 @@ describe('handleDragStart', () => {
   });
 
   it('allows read-only selection drag as external copy data and clears pending pointer press', () => {
-    const { ctx, messages, flush } = createCtx({ readOnly: true });
+    const { ctx, messages, updateNow } = createCtx({ readOnly: true });
     const dataTransfer = createDataTransfer();
     const event = createDragEvent(dataTransfer);
 
@@ -191,7 +199,7 @@ describe('handleDragStart', () => {
         op: { type: 'start_internal_selection' },
       },
     ]);
-    expect(flush).toHaveBeenCalledTimes(1);
+    expect(updateNow).toHaveBeenCalledTimes(1);
     expect(event.preventDefault).not.toHaveBeenCalled();
   });
 
@@ -248,7 +256,7 @@ describe('handleDragStart', () => {
 
 describe('handleDragEnter', () => {
   it('starts an external DnD session for external files', () => {
-    const { ctx, messages, flush } = createCtx();
+    const { ctx, messages, updateNow } = createCtx();
     const event = createDragEvent(createDataTransfer({ files: [createFile('image.png', 'image/png')] }));
 
     handleDragEnter(ctx, event);
@@ -259,23 +267,23 @@ describe('handleDragEnter', () => {
         op: { type: 'enter_external', payload: 'image_files' },
       },
     ]);
-    expect(flush).toHaveBeenCalledTimes(1);
+    expect(updateNow).toHaveBeenCalledTimes(1);
   });
 
   it('does not start an external session for internal selection drags', () => {
-    const { ctx, messages, flush } = createCtx();
+    const { ctx, messages, updateNow } = createCtx();
     const event = createDragEvent(createDataTransfer({ types: ['application/x-typie-internal-selection'] }));
 
     handleDragEnter(ctx, event);
 
     expect(messages).toEqual([]);
-    expect(flush).not.toHaveBeenCalled();
+    expect(updateNow).not.toHaveBeenCalled();
   });
 });
 
 describe('handleDragOver', () => {
   it('prevents default when a transferable payload has editor-local coordinates', () => {
-    const { ctx, messages, flush } = createCtx();
+    const { ctx, messages, updateNow } = createCtx();
     const dataTransfer = createDataTransfer({ files: [createFile('image.png', 'image/png')] });
     const event = createDragEvent(dataTransfer);
 
@@ -294,13 +302,13 @@ describe('handleDragOver', () => {
         },
       },
     ]);
-    expect(flush).toHaveBeenCalledTimes(1);
+    expect(updateNow).toHaveBeenCalledTimes(1);
     expect(event.preventDefault).toHaveBeenCalled();
     expect(dataTransfer.dropEffect).toBe('copy');
   });
 
   it('uses move feedback for internal selection drags without entering an external session', () => {
-    const { ctx, messages, flush } = createCtx();
+    const { ctx, messages, updateNow } = createCtx();
     const dataTransfer = createDataTransfer({ types: ['application/x-typie-internal-selection'] });
     const event = createDragEvent(dataTransfer);
 
@@ -319,13 +327,13 @@ describe('handleDragOver', () => {
         },
       },
     ]);
-    expect(flush).toHaveBeenCalledTimes(1);
+    expect(updateNow).toHaveBeenCalledTimes(1);
     expect(event.preventDefault).toHaveBeenCalled();
     expect(dataTransfer.dropEffect).toBe('move');
   });
 
   it('keeps routing internal drags even when dragover does not expose custom transfer types', () => {
-    const { ctx, messages, flush } = createCtx();
+    const { ctx, messages, updateNow } = createCtx();
     handleDragStart(ctx, createDragEvent(createDataTransfer()));
     const dataTransfer = createDataTransfer();
     const event = createDragEvent(dataTransfer);
@@ -349,20 +357,20 @@ describe('handleDragOver', () => {
         },
       },
     ]);
-    expect(flush).toHaveBeenCalledTimes(2);
+    expect(updateNow).toHaveBeenCalledTimes(2);
     expect(event.preventDefault).toHaveBeenCalled();
     expect(dataTransfer.dropEffect).toBe('move');
   });
 
   it('does not accept browser drop when there is no transferable payload', () => {
-    const { ctx, messages, flush } = createCtx();
+    const { ctx, messages, updateNow } = createCtx();
     const dataTransfer = createDataTransfer();
     const event = createDragEvent(dataTransfer);
 
     handleDragOver(ctx, event);
 
     expect(messages).toEqual([]);
-    expect(flush).not.toHaveBeenCalled();
+    expect(updateNow).not.toHaveBeenCalled();
     expect(event.preventDefault).not.toHaveBeenCalled();
     expect(dataTransfer.dropEffect).toBe('none');
   });
@@ -404,7 +412,7 @@ describe('handleDragOver', () => {
 
 describe('handleDragLeave', () => {
   it('routes dragleave during an internal drag so the engine can clear only the active target', () => {
-    const { ctx, messages, flush } = createCtx();
+    const { ctx, messages, updateNow } = createCtx();
     handleDragStart(ctx, createDragEvent(createDataTransfer()));
     const event = {
       ...createDragEvent(createDataTransfer()),
@@ -424,7 +432,7 @@ describe('handleDragLeave', () => {
         op: { type: 'leave' },
       },
     ]);
-    expect(flush).toHaveBeenCalledTimes(2);
+    expect(updateNow).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -550,8 +558,8 @@ describe('external attachment target', () => {
 });
 
 describe('handleDrop', () => {
-  it('preserves ordered files and dispatches only after the final Over flush', () => {
-    const { ctx, messages, flush, importAtDrop } = createCtx();
+  it('preserves ordered files and dispatches only after the final Over update', () => {
+    const { ctx, messages, updateNow, importAtDrop } = createCtx();
     const png = createFile('image.png', 'image/png');
     const jpeg = createFile('photo.jpg', 'image/jpeg');
     const pdf = createFile('doc.pdf', 'application/pdf');
@@ -574,7 +582,8 @@ describe('handleDrop', () => {
         },
       },
     ]);
-    expect(flush).toHaveBeenCalledTimes(1);
+    expect(updateNow).toHaveBeenCalledTimes(1);
+    expect(event.preventDefault.mock.invocationCallOrder[0]).toBeLessThan(updateNow.mock.invocationCallOrder[0] ?? 0);
     expect(importAtDrop).toHaveBeenCalledWith(
       [
         { file: png, kind: 'image' },
@@ -590,7 +599,7 @@ describe('handleDrop', () => {
         onFailure,
       },
     );
-    expect(flush.mock.invocationCallOrder[0]).toBeLessThan(importAtDrop.mock.invocationCallOrder[0] ?? 0);
+    expect(updateNow.mock.invocationCallOrder[0]).toBeLessThan(importAtDrop.mock.invocationCallOrder[0] ?? 0);
   });
 
   it('routes text/html payload through DndOp::Drop', () => {

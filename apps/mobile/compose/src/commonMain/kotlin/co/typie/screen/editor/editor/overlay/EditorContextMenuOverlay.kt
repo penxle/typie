@@ -310,12 +310,12 @@ internal fun resolveContextMenuAnchor(
     return null
   }
 
-  val transform = uiState.resolveViewportTransform(pageSizes = editor.pageSizes)
-  val rangeSelection = editor.selection?.takeIf { !it.isCollapsed() }
+  val transform = uiState.resolveViewportTransform(pageSizes = editor.publishedState.pageSizes)
+  val rangeSelection = editor.publishedState.selection?.takeIf { !it.isCollapsed() }
   val gapPx = ContextMenuGap.value * density
 
   if (rangeSelection != null) {
-    val endpoints = editor.tickSelectionEndpoints ?: return null
+    val endpoints = editor.publishedState.selectionEndpoints ?: return null
     val fromRect = endpoints.from.rect
     val toRect = endpoints.to.rect
     val from =
@@ -336,7 +336,7 @@ internal fun resolveContextMenuAnchor(
     )
   }
 
-  val cursor = editor.cursor ?: return null
+  val cursor = editor.publishedState.cursor ?: return null
   val caret = cursor.caret
   val top = transform.localToGlobal(page = cursor.pageIdx, x = caret.x, y = caret.y) ?: return null
   val bottom =

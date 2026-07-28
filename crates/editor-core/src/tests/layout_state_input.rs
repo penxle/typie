@@ -43,11 +43,11 @@ fn empty_and_selection_only_ticks_do_not_clone_the_projected_document() {
     editor.tick().unwrap();
     assert_eq!(Arc::as_ptr(&editor.state.projected), projected);
 
-    editor.enqueue(Message::Selection {
+    let _ = editor.enqueue_request(vec![Message::Selection {
         op: SelectionOp::Set {
             selection: Selection::collapsed(Position::new(p1, 1)),
         },
-    });
+    }]);
     editor.tick().unwrap();
     assert_eq!(Arc::as_ptr(&editor.state.projected), projected);
 }
@@ -66,16 +66,14 @@ fn set_at_same_tick_as_remote_structure_selects_visible_atom_identity() {
         .find(|element| element.node == image)
         .expect("image must be laid out");
 
-    editor.enqueue(Message::Remote {
-        changeset: insert_root_paragraph_before_first_child(&initial),
-    });
-    editor.enqueue(Message::Selection {
+    editor.receive_remote_changeset(insert_root_paragraph_before_first_child(&initial));
+    let _ = editor.enqueue_request(vec![Message::Selection {
         op: SelectionOp::SetAt {
             page: external.page_idx,
             x: external.bounds.x + external.bounds.width / 2.0,
             y: external.bounds.y + external.bounds.height / 2.0,
         },
-    });
+    }]);
     editor.tick().unwrap();
 
     let selection = editor.state.selection.expect("tap must select the image");
@@ -101,17 +99,15 @@ fn select_unit_at_same_tick_as_remote_structure_selects_visible_atom_identity() 
         .find(|element| element.node == image)
         .expect("image must be laid out");
 
-    editor.enqueue(Message::Remote {
-        changeset: insert_root_paragraph_before_first_child(&initial),
-    });
-    editor.enqueue(Message::Selection {
+    editor.receive_remote_changeset(insert_root_paragraph_before_first_child(&initial));
+    let _ = editor.enqueue_request(vec![Message::Selection {
         op: SelectionOp::SelectUnitAt {
             page: external.page_idx,
             x: external.bounds.x + external.bounds.width / 2.0,
             y: external.bounds.y + external.bounds.height / 2.0,
             unit: SelectionPointUnit::Word,
         },
-    });
+    }]);
     editor.tick().unwrap();
 
     let selection = editor.state.selection.expect("tap must select the image");
@@ -133,10 +129,8 @@ fn extend_to_same_tick_as_remote_structure_tracks_visible_atom_identity() {
         .expect("image must be laid out");
 
     let mut editor = Editor::new_test(initial.clone());
-    editor.enqueue(Message::Remote {
-        changeset: insert_root_paragraph_before_first_child(&initial),
-    });
-    editor.enqueue(Message::Selection {
+    editor.receive_remote_changeset(insert_root_paragraph_before_first_child(&initial));
+    let _ = editor.enqueue_request(vec![Message::Selection {
         op: SelectionOp::ExtendTo {
             anchor: Position::new(p1, 0),
             head_page: external.page_idx,
@@ -145,7 +139,7 @@ fn extend_to_same_tick_as_remote_structure_tracks_visible_atom_identity() {
             base_selection: None,
             allow_collapse: true,
         },
-    });
+    }]);
     editor.tick().unwrap();
 
     assert_eq!(
@@ -179,15 +173,13 @@ fn dnd_drop_same_tick_as_remote_structure_uses_visible_atom_boundary() {
         .find(|element| element.node == image)
         .expect("image must be laid out");
 
-    editor.enqueue(Message::Dnd {
+    let _ = editor.enqueue_request(vec![Message::Dnd {
         op: DndOp::EnterExternal {
             payload: ExternalDndPayloadKind::Text,
         },
-    });
-    editor.enqueue(Message::Remote {
-        changeset: insert_root_paragraph_before_first_child(&initial),
-    });
-    editor.enqueue(Message::Dnd {
+    }]);
+    editor.receive_remote_changeset(insert_root_paragraph_before_first_child(&initial));
+    let _ = editor.enqueue_request(vec![Message::Dnd {
         op: DndOp::Over {
             page: external.page_idx,
             x: external.bounds.x + external.bounds.width / 2.0,
@@ -195,8 +187,8 @@ fn dnd_drop_same_tick_as_remote_structure_uses_visible_atom_boundary() {
             reuse_node_id: None,
             modifiers: InputModifiers::default(),
         },
-    });
-    editor.enqueue(Message::Dnd {
+    }]);
+    let _ = editor.enqueue_request(vec![Message::Dnd {
         op: DndOp::Drop {
             page: external.page_idx,
             x: external.bounds.x + external.bounds.width / 2.0,
@@ -207,7 +199,7 @@ fn dnd_drop_same_tick_as_remote_structure_uses_visible_atom_boundary() {
             },
             modifiers: InputModifiers::default(),
         },
-    });
+    }]);
     editor.tick().unwrap();
 
     let view = editor.state.view();
@@ -237,19 +229,18 @@ fn navigation_same_tick_as_remote_structure_moves_from_visible_selection() {
     };
 
     let mut coalesced = Editor::new_test(initial.clone());
-    coalesced.enqueue(Message::Remote {
-        changeset: change.clone(),
-    });
-    coalesced.enqueue(Message::Navigation {
+    coalesced.receive_remote_changeset(change.clone());
+    let _ = coalesced.enqueue_request(vec![Message::Navigation {
         op: NavigationOp::Move {
             movement,
             extend: false,
         },
-    });
+    }]);
     coalesced.tick().unwrap();
 
     let mut sequential = Editor::new_test(initial);
-    sequential.apply(Message::Remote { changeset: change });
+    sequential.receive_remote_changeset(change);
+    sequential.tick().unwrap();
     sequential.apply(Message::Navigation {
         op: NavigationOp::Move {
             movement,
@@ -272,16 +263,15 @@ fn deletion_move_same_tick_as_remote_structure_uses_visible_selection() {
     };
 
     let mut coalesced = Editor::new_test(initial.clone());
-    coalesced.enqueue(Message::Remote {
-        changeset: change.clone(),
-    });
-    coalesced.enqueue(Message::Deletion {
+    coalesced.receive_remote_changeset(change.clone());
+    let _ = coalesced.enqueue_request(vec![Message::Deletion {
         op: DeletionOp::Move { movement },
-    });
+    }]);
     coalesced.tick().unwrap();
 
     let mut sequential = Editor::new_test(initial);
-    sequential.apply(Message::Remote { changeset: change });
+    sequential.receive_remote_changeset(change);
+    sequential.tick().unwrap();
     sequential.apply(Message::Deletion {
         op: DeletionOp::Move { movement },
     });

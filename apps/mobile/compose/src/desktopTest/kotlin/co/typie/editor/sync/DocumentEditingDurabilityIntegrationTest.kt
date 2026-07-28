@@ -46,7 +46,7 @@ class DocumentEditingDurabilityIntegrationTest {
     ActiveDocumentEditingSessions.register(session)
     try {
       val edit = session.submit { sessionEditor, context ->
-        async(context) { sessionEditor.await { enqueue(Message.System(SystemEvent.Initialize)) } }
+        async(context) { sessionEditor.update { enqueue(Message.System(SystemEvent.Initialize)) } }
       }
       assertNotNull(edit)
 

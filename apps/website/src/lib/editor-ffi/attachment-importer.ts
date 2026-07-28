@@ -47,7 +47,7 @@ export class EditorAttachmentImporter {
   }
 
   #isEmptyPlaceholder(editor: Editor, nodeId: string, kind: AttachmentPlaceholderKind): boolean {
-    const data = editor.externalElements.find((element) => element.node === nodeId)?.data;
+    const data = editor.appliedSnapshot.externalElements.find((element) => element.node === nodeId)?.data;
     return data?.type === kind && (data.id === undefined || data.id === '');
   }
 
@@ -56,19 +56,20 @@ export class EditorAttachmentImporter {
   }
 
   #collectReceipt(editor: Editor, requestId: string, enqueue: () => void): string[] | undefined {
-    const matches: string[][] = [];
-    const dispose = editor.on('attachment_placeholders_inserted', (_, event) => {
-      if (event.request_id === requestId) matches.push(event.node_ids);
-    });
+    let update: ReturnType<Editor['updateNow']>;
     try {
-      enqueue();
-      editor.flush();
+      update = editor.updateNow(enqueue);
     } catch (err) {
-      console.error('Failed to enqueue or flush attachment placeholder request:', err);
+      console.error('Failed to apply attachment placeholder request:', err);
       return undefined;
-    } finally {
-      dispose();
     }
+    if (!update || update.commandOutcomes.some((outcome) => outcome.type === 'rejected')) {
+      console.error('Attachment placeholder request was rejected.', requestId);
+      return undefined;
+    }
+    const matches = update.events.flatMap((event) =>
+      event.type === 'attachment_placeholders_inserted' && event.request_id === requestId ? [event.node_ids] : [],
+    );
     if (matches.length === 0) {
       console.error('Attachment placeholder request emitted no matching receipt.', requestId);
       return undefined;
@@ -157,18 +158,22 @@ export class EditorAttachmentImporter {
       if (!this.#isCurrent(target)) return;
       target.editor.imageAssets.set(uploaded.id, uploaded);
       if (!this.#isCurrent(target)) return;
-      target.editor.enqueue({
-        type: 'node',
-        op: {
-          type: 'set_attr',
-          id: target.nodeId,
-          attr: {
-            type: 'image',
-            attr: { type: 'id', value: uploaded.id },
+      const update = target.editor.updateNow(() => {
+        target.editor.enqueue({
+          type: 'node',
+          op: {
+            type: 'set_attr',
+            id: target.nodeId,
+            attr: {
+              type: 'image',
+              attr: { type: 'id', value: uploaded.id },
+            },
           },
-        },
+        });
       });
-      target.editor.flush();
+      if (!update || update.commandOutcomes.some((outcome) => outcome.type === 'rejected')) {
+        throw new Error('Attachment image update was rejected');
+      }
     } catch {
       this.#handleFailure(target);
     } finally {
@@ -183,15 +188,19 @@ export class EditorAttachmentImporter {
       if (!this.#isCurrent(target)) return;
       this.#ctx.fileAssets.set(uploaded.id, uploaded);
       if (!this.#isCurrent(target)) return;
-      target.editor.enqueue({
-        type: 'node',
-        op: {
-          type: 'set_attrs',
-          id: target.nodeId,
-          attrs: { type: 'file', id: uploaded.id },
-        },
+      const update = target.editor.updateNow(() => {
+        target.editor.enqueue({
+          type: 'node',
+          op: {
+            type: 'set_attrs',
+            id: target.nodeId,
+            attrs: { type: 'file', id: uploaded.id },
+          },
+        });
       });
-      target.editor.flush();
+      if (!update || update.commandOutcomes.some((outcome) => outcome.type === 'rejected')) {
+        throw new Error('Attachment file update was rejected');
+      }
     } catch {
       this.#handleFailure(target);
     } finally {
@@ -216,11 +225,12 @@ export class EditorAttachmentImporter {
       }
       if (target.removeOnFailure && this.#isCurrent(target)) {
         try {
-          target.editor.enqueue({
-            type: 'node',
-            op: { type: 'delete', id: target.nodeId },
+          target.editor.updateNow(() => {
+            target.editor.enqueue({
+              type: 'node',
+              op: { type: 'delete', id: target.nodeId },
+            });
           });
-          target.editor.flush();
         } catch {
           // The upload has already failed; cleanup still has to complete.
         }

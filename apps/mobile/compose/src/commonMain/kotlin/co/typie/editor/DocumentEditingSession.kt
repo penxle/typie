@@ -241,7 +241,7 @@ internal class DocumentEditingSession(
 
     val job =
       scope.launch(start = CoroutineStart.UNDISPATCHED) {
-        snapshotFlow { editor.state.documentRevision }.drop(1).collect { engine.schedule() }
+        snapshotFlow { editor.appliedState.documentRevision }.drop(1).collect { engine.schedule() }
       }
     revisionJob.store(job)
     if (state.load() !== State.Active) {

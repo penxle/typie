@@ -1,14 +1,3 @@
-use editor_crdt::Changeset;
-use editor_model::EditOp;
-
-use crate::editor::Editor;
-use crate::error::EditorError;
-
-pub fn handle_remote(editor: &mut Editor, changeset: Changeset<EditOp>) -> Result<(), EditorError> {
-    editor.apply_remote_changeset(changeset)
-}
-
-#[cfg(test)]
 mod tests {
     use editor_crdt::{Changeset, Dot, ListOp};
     use editor_macros::state;
@@ -128,8 +117,7 @@ mod tests {
 
     #[test]
     fn novel_remote_changeset_observably_changes_state() {
-        use crate::message::Message;
-        use crate::test_utils::apply_and_report_change;
+        use crate::test_utils::EditorSnapshot;
 
         let (replica_a, _p1) = state! {
             doc { root { p1: paragraph { text("ab") } } }
@@ -147,8 +135,11 @@ mod tests {
         );
 
         let mut editor = Editor::new_test(replica_b);
+        let before = EditorSnapshot::capture(&editor);
+        editor.receive_remote_changeset(cs);
+        editor.tick().unwrap().unwrap();
         assert!(
-            apply_and_report_change(&mut editor, Message::Remote { changeset: cs }),
+            EditorSnapshot::capture(&editor) != before,
             "applying a novel remote changeset must observably change state"
         );
     }
@@ -158,8 +149,6 @@ mod tests {
     /// document and selection as applying them one tick at a time.
     #[test]
     fn coalesced_remote_batch_matches_sequential() {
-        use crate::message::Message;
-
         let (replica_a, ..) = state! {
             doc { root { p1: paragraph { text("ab") } } }
             selection: (p1, 1)
@@ -188,9 +177,7 @@ mod tests {
         let mut batched =
             Editor::new_test(State::from_changesets(css.clone(), replica_a.selection).unwrap());
         for cs in &batch {
-            batched.enqueue(Message::Remote {
-                changeset: cs.clone(),
-            });
+            batched.receive_remote_changeset(cs.clone());
         }
         let _ = batched.tick().unwrap();
 
@@ -198,9 +185,8 @@ mod tests {
         let mut sequential =
             Editor::new_test(State::from_changesets(css, replica_a.selection).unwrap());
         for cs in &batch {
-            sequential.apply(Message::Remote {
-                changeset: cs.clone(),
-            });
+            sequential.receive_remote_changeset(cs.clone());
+            sequential.tick().unwrap().unwrap();
         }
 
         let vb = batched.state().view();
@@ -224,8 +210,6 @@ mod tests {
     /// the selection restore entirely).
     #[test]
     fn duplicate_remote_batch_is_noop() {
-        use crate::message::Message;
-
         let (replica_a, _p1) = state! {
             doc { root { p1: paragraph { text("ab") } } }
             selection: (p1, 1)
@@ -242,24 +226,20 @@ mod tests {
         );
 
         let mut editor = Editor::new_test(replica_b);
-        editor.apply(Message::Remote {
-            changeset: cs.clone(),
-        });
+        editor.receive_remote_changeset(cs.clone());
+        editor.tick().unwrap().unwrap();
         let after_first = editor.state().selection;
         let projected_after_first = std::sync::Arc::as_ptr(&editor.state().projected);
         let view = editor.state().view();
         let text_first = editor_state::flat_text(&view, 0..editor_state::flat_size(&view));
 
         // Re-receive the same changeset: duplicate, applies nothing.
-        editor.apply(Message::Remote {
-            changeset: cs.clone(),
-        });
+        editor.receive_remote_changeset(cs.clone());
+        assert!(editor.tick().unwrap().is_none());
         // And a batch of duplicates in one tick.
-        editor.enqueue(Message::Remote {
-            changeset: cs.clone(),
-        });
-        editor.enqueue(Message::Remote { changeset: cs });
-        let _ = editor.tick().unwrap();
+        editor.receive_remote_changeset(cs.clone());
+        editor.receive_remote_changeset(cs);
+        assert!(editor.tick().unwrap().is_none());
 
         let view2 = editor.state().view();
         let text_after = editor_state::flat_text(&view2, 0..editor_state::flat_size(&view2));
@@ -281,8 +261,7 @@ mod tests {
 
     #[test]
     fn remote_changeset_already_applied_preserves_state() {
-        use crate::message::Message;
-        use crate::test_utils::apply_and_report_change;
+        use crate::test_utils::EditorSnapshot;
 
         let (replica_a, _p1) = state! {
             doc { root { p1: paragraph { text("ab") } } }
@@ -300,13 +279,12 @@ mod tests {
         );
 
         let mut editor = Editor::new_test(replica_b);
-        editor.apply(Message::Remote {
-            changeset: cs.clone(),
-        });
-        assert!(!apply_and_report_change(
-            &mut editor,
-            Message::Remote { changeset: cs }
-        ));
+        editor.receive_remote_changeset(cs.clone());
+        editor.tick().unwrap().unwrap();
+        let before_duplicate = EditorSnapshot::capture(&editor);
+        editor.receive_remote_changeset(cs);
+        assert!(editor.tick().unwrap().is_none());
+        assert_eq!(EditorSnapshot::capture(&editor), before_duplicate);
     }
 
     #[test]
@@ -321,7 +299,7 @@ mod tests {
         let root = Dot::ROOT;
         // Seed replica_b with a raw collapsed-on-atom selection (root,0,Down).
         // State::from_changesets does not call normalize, so this abnormal state
-        // persists — reproducing the bypass entry point that handle_remote must fix.
+        // persists — reproducing the bypass entry point that remote application must fix.
         let raw_on_atom = Selection::collapsed(Position {
             node: root,
             offset: 0,
@@ -330,7 +308,7 @@ mod tests {
         let replica_b = State::from_changesets(css_a, Some(raw_on_atom)).unwrap();
 
         // Generate a trivial remote op (insert 'X' before 'b', seq pos 2:
-        // [image, para, 'b']) to trigger handle_remote.
+        // [image, para, 'b']) to trigger remote application.
         let cs = remote_change(
             &replica_a,
             vec![EditOp::Seq(ListOp::Ins {
@@ -343,7 +321,8 @@ mod tests {
         editor.receive_remote_changeset(cs);
         let _ = editor.tick().unwrap();
 
-        // handle_remote must normalize after restore, expanding to the image (child[0]) node selection.
+        // Remote application must normalize after restore, expanding to the image
+        // (child[0]) node selection.
         let sel = editor.state().selection.expect("selection exists in test");
         assert!(
             !sel.is_collapsed(),

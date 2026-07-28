@@ -34,7 +34,7 @@ export const processEmbedUpload = async ({
   isCurrent: () => boolean;
   unfurl: (url: string) => Promise<EmbedAsset>;
   setEmbedAsset: (asset: EmbedAsset) => void;
-  commit: (message: Message) => void;
+  commit: (message: Message) => boolean;
 }): Promise<'uploaded' | 'failed' | 'cancelled'> => {
   setPending();
 
@@ -45,7 +45,9 @@ export const processEmbedUpload = async ({
       return 'cancelled';
     }
     setEmbedAsset(asset);
-    commit(createSetEmbedAttrsMessage(nodeId, asset.id));
+    if (!commit(createSetEmbedAttrsMessage(nodeId, asset.id))) {
+      throw new Error('Embed update was rejected');
+    }
     clearPending();
     return 'uploaded';
   } catch {

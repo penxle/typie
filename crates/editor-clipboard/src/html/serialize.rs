@@ -168,7 +168,10 @@ fn css_color(value: &str, token_prefix: &str, resource: &Resource) -> String {
     if value == "none" {
         return "transparent".to_string();
     }
-    match resource.theme.try_color(&format!("{token_prefix}.{value}")) {
+    match resource
+        .theme()
+        .try_color(&format!("{token_prefix}.{value}"))
+    {
         Some(c) => format!("#{:02x}{:02x}{:02x}", c.r, c.g, c.b),
         None => value.to_string(),
     }

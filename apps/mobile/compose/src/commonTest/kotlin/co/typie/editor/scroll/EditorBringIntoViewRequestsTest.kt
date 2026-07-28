@@ -1,5 +1,6 @@
 package co.typie.editor.scroll
 
+import co.typie.editor.EditorState
 import co.typie.editor.ffi.PageRect
 import co.typie.editor.ffi.Rect as FfiRect
 import kotlin.test.Test
@@ -13,6 +14,32 @@ class EditorBringIntoViewRequestsTest {
     EditorBringIntoViewTarget.PageRects(
       listOf(PageRect(pageIdx = 0, rect = FfiRect(x = 0f, y = 10f, width = 20f, height = 30f)))
     )
+
+  @Test
+  fun `state-based request derives target and version from the same state`() {
+    val requests = EditorBringIntoViewRequests()
+    val state = EditorState.Initial.copy(version = 11L, selectionHitRects = pageRectsTarget.rects)
+
+    assertTrue(
+      requests.requestForState(state, behavior = EditorBringIntoViewBehavior.Smooth) {
+        selectionHitRects.toPageRectsTarget()
+      }
+    )
+
+    assertNull(requests.activateForVersion(version = 10L))
+    assertEquals(
+      request(pageRectsTarget, behavior = EditorBringIntoViewBehavior.Smooth),
+      requests.activateForVersion(version = 11L),
+    )
+  }
+
+  @Test
+  fun `state-based request reports when state has no target`() {
+    val requests = EditorBringIntoViewRequests()
+
+    assertFalse(requests.requestForState(EditorState.Initial) { null })
+    assertNull(requests.activateForVersion(version = EditorState.Initial.version))
+  }
 
   @Test
   fun `bring-into-view target attaches to requested editor version only`() {

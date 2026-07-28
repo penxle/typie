@@ -6,11 +6,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -18,7 +18,6 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset as ComposeOffset
 import androidx.compose.ui.geometry.Size as ComposeSize
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
@@ -28,14 +27,19 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import co.touchlab.kermit.Logger
+import co.typie.editor.EditorSurfaceUnavailableException
 import co.typie.editor.LocalEditorZoomController
+import co.typie.editor.PresentedFrame
 import co.typie.editor.SurfaceConfiguration
 import co.typie.editor.SurfaceSessionHandle
-import co.typie.editor.ffi.EditorEvent
+import co.typie.editor.ffi.FrameKey
 import co.typie.editor.render.RenderCanvas
+import co.typie.editor.render.RenderCanvasLifecycle
+import co.typie.editor.runSurfaceCleanup
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.ui.theme.AppTheme
 import kotlin.math.round
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 
@@ -44,24 +48,20 @@ private val DebugRustSurfaceTintAlternate = Color(0x2234C759)
 private val DebugPageBottomMarginTint = Color(0x22FFD600)
 private val DebugPageBoundaryTint = Color(0xE6FF3B30)
 private val DebugPageBoundaryThickness = 2.dp
-private val DebugFrameSizeMismatchTint = Color(0x99FF9500)
 private val DebugMissingFrameTint = Color(0x990066FF)
 private val DebugFrameAheadTint = Color(0x9930D158)
-
-private data class PresentedFrame(
-  val bitmap: ImageBitmap,
-  val pixelSize: IntSize,
-  val renderZoom: Float,
-  val version: Long,
-)
-
-private class AppliedFrameHolder {
-  var frame: PresentedFrame? = null
-}
 
 private class DebugMismatchLogHolder {
   var lastKey: String? = null
 }
+
+internal data class FrameDisplay(val frame: PresentedFrame?, val pixelSize: IntSize)
+
+internal fun resolveFrameDisplay(
+  publishedFrame: PresentedFrame?,
+  desiredPixelSize: IntSize,
+): FrameDisplay =
+  FrameDisplay(frame = publishedFrame, pixelSize = publishedFrame?.pixelSize ?: desiredPixelSize)
 
 @Composable
 internal fun EditorPageSurface(
@@ -69,6 +69,7 @@ internal fun EditorPageSurface(
   width: Float,
   height: Float,
   publishedVersion: Long,
+  publishedFrame: PresentedFrame?,
   showChrome: Boolean,
   debugBottomMarginHeight: Float = 0f,
   showDebugOverlay: Boolean = false,
@@ -85,16 +86,22 @@ internal fun EditorPageSurface(
   val editor = runtime.editor ?: runtime.failedEditor ?: return
 
   val trigger = remember {
-    MutableSharedFlow<Long>(replay = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    MutableSharedFlow<FrameKey>(replay = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
   }
-  val onPresented =
+  val wakeDelivery =
     remember(trigger) {
-      { version: Long ->
-        trigger.tryEmit(version)
+      { frameKey: FrameKey ->
+        trigger.tryEmit(frameKey)
         Unit
       }
     }
-  var surfaceSession by remember(editor, page) { mutableStateOf<SurfaceSessionHandle?>(null) }
+  var surfaceInstance by remember(editor, page) { mutableIntStateOf(0) }
+  // A replacement is successful only after its frame is published. Failure before that
+  // means this document host cannot create a usable replacement target.
+  var replacingUnavailableTarget by remember(editor, page) { mutableStateOf(false) }
+  LaunchedEffect(publishedFrame?.proof?.surfaceKey) {
+    if (publishedFrame != null) replacingUnavailableTarget = false
+  }
 
   val widthDouble = width.toDouble()
   val heightDouble = height.toDouble()
@@ -105,35 +112,15 @@ internal fun EditorPageSurface(
       width = round(configuration.width * configuration.scaleFactor).toInt().coerceAtLeast(1),
       height = round(configuration.height * configuration.scaleFactor).toInt().coerceAtLeast(1),
     )
-  val pendingFramesState = remember(editor, page) { mutableStateOf(emptyList<PresentedFrame>()) }
-  val appliedFrameHolder = remember(editor, page) { AppliedFrameHolder() }
-  val debugMismatchLog = remember(editor, page) { DebugMismatchLogHolder() }
   val debugAheadLog = remember(editor, page) { DebugMismatchLogHolder() }
-  // A committed frame becomes visible only once the page box and the published state
-  // agree with it. Both conditions compare against values derived from this
-  // composition's own parameters — the geometry from width/height and the version from
-  // publishedVersion — so pixels, box, overlays, and the caret-reveal scroll can only
-  // ever change together. Reading the editor state directly here instead would race:
-  // the publish lands on a background thread, and a frame-delivery recomposition can
-  // observe the new version before the parent's parameter propagation. Without the
-  // version condition, a same-size frame would apply at delivery and move its content
-  // one edit ahead of the publish (and of the reveal scroll that lands with it).
-  // The last frame of each recent size is retained: under rapid edits the next frame can
-  // arrive before the composition for the previous publish runs, and a single slot would
-  // lose the frame the current box needs.
-  val frame =
-    pendingFramesState.value.firstOrNull {
-      it.pixelSize == desiredPixelSize && it.version <= publishedVersion
-    } ?: appliedFrameHolder.frame
-  appliedFrameHolder.frame = frame
-  val committedPixelSize = frame?.pixelSize ?: desiredPixelSize
-  val committedRenderZoom = frame?.renderZoom ?: renderZoom
-  val currentRenderZoom by rememberUpdatedState(renderZoom)
-  val render =
-    remember(editor, page, onPresented) { { surfaceSession?.requestRender(onPresented) } }
+  // The published frame and page geometry come from one coherent bundle. A different
+  // desired pixel size means only that a zoom/density replacement is pending, so keep
+  // transforming the published frame until its replacement is delivered.
+  val display = resolveFrameDisplay(publishedFrame, desiredPixelSize)
+  val frame = display.frame
+  val committedPixelSize = display.pixelSize
   var renderActive by remember(editor, page) { mutableStateOf(false) }
 
-  val safeCommittedRenderZoom = if (committedRenderZoom > 0f) committedRenderZoom else 1f
   val displayedWidthPxInt =
     round(widthDouble * density.density.toDouble() * displayZoom.toDouble())
       .toInt()
@@ -148,7 +135,8 @@ internal fun EditorPageSurface(
     round(debugBottomMarginHeight.toDouble() * density.density.toDouble() * displayZoom.toDouble())
       .toInt()
       .coerceIn(0, displayedHeightPxInt)
-  val committedRenderScale = displayZoom / safeCommittedRenderZoom
+  val displayScaleX = displayedWidthPxInt.toFloat() / committedPixelSize.width
+  val displayScaleY = displayedHeightPxInt.toFloat() / committedPixelSize.height
   val chromeModifier =
     if (showChrome) {
       Modifier.editorPageChromeShadow(AppTheme.themeMode)
@@ -170,38 +158,22 @@ internal fun EditorPageSurface(
             size = ComposeSize(width = size.width, height = displayBottomMarginPx.toFloat()),
           )
         }
-        // Composition-consistency probes: a frame where the shown pixels do not match the
-        // published page geometry flashes orange; a frame with no pixels at all flashes
-        // magenta. Render-gated pages draw no canvas at all, so their retained frame
-        // reference is not a visible mismatch.
-        if (!renderActive) {
-          debugMismatchLog.lastKey = null
-        } else if (frame == null) {
+        // A frame with no published pixels flashes magenta. A pixel-size mismatch is
+        // expected while a zoom/density replacement is prepared: the coherent published
+        // frame stays visible through the current display transform.
+        if (renderActive && frame == null) {
           drawRect(DebugMissingFrameTint)
-        } else if (frame.pixelSize != desiredPixelSize) {
-          val key = "${frame.version}:${frame.pixelSize}:$desiredPixelSize"
-          if (debugMismatchLog.lastKey != key) {
-            debugMismatchLog.lastKey = key
-            Logger.i {
-              "[settle-trace] ORANGE page=$page frame=${frame.pixelSize} frameV=${frame.version}" +
-                " desired=$desiredPixelSize stateV=${editor.state.version}" +
-                " param=${width}x$height sf=$scaleFactor renderZoom=$renderZoom"
-            }
-          }
-          drawRect(DebugFrameSizeMismatchTint)
-        } else if (debugMismatchLog.lastKey != null) {
-          debugMismatchLog.lastKey = null
-          Logger.i { "[settle-trace] ORANGE-CLEAR page=$page frameV=${frame.version}" }
         }
         // Content-ahead probe: the applied frame's tick is newer than the published
         // version this composition was built with — structurally impossible with the
         // version condition in the gate; kept as a tripwire.
-        if (renderActive && frame != null && frame.version > publishedVersion) {
-          val key = "${frame.version}:$publishedVersion"
+        if (renderActive && frame != null && frame.proof.editorRevision > publishedVersion) {
+          val key = "${frame.proof.editorRevision}:${frame.proof.frameKey.value}:$publishedVersion"
           if (debugAheadLog.lastKey != key) {
             debugAheadLog.lastKey = key
             Logger.i {
-              "[settle-trace] EARLY page=$page frameV=${frame.version}" +
+              "[settle-trace] EARLY page=$page frameV=${frame.proof.editorRevision}" +
+                " frameKey=${frame.proof.frameKey.value}" +
                 " publishedV=$publishedVersion size=${frame.pixelSize}"
             }
           }
@@ -240,46 +212,87 @@ internal fun EditorPageSurface(
     if (renderActive) {
       Layout(
         content = {
-          RenderCanvas(
-            modifier =
-              Modifier.graphicsLayer(
-                scaleX = committedRenderScale,
-                scaleY = committedRenderScale,
-                transformOrigin = TransformOrigin(0f, 0f),
-              ),
-            desiredPixelSize = desiredPixelSize,
-            configuration = configuration,
-            frame = frame?.bitmap,
-            trigger = trigger,
-            onAttach = { handle ->
+          RenderCanvasLifecycle(owner = editor, page = page, instance = surfaceInstance) {
+            var surfaceHandle by remember { mutableStateOf<Long?>(null) }
+            var surfaceSession by remember { mutableStateOf<SurfaceSessionHandle?>(null) }
+            val attachSurface = { handle: Long ->
+              surfaceHandle = handle
               surfaceSession =
-                editor.attachSurface(page, handle, widthDouble, heightDouble, scaleFactor)
-            },
-            onDetach = { releaseBuffer ->
-              surfaceSession?.detach(releaseBuffer) ?: releaseBuffer()
-              surfaceSession = null
-            },
-            onResize = { surfaceSession?.requestResize(configuration, onPresented) },
-            onFrame = { bitmap, size, version ->
-              val next =
-                PresentedFrame(
-                  bitmap = bitmap,
-                  pixelSize = size,
-                  renderZoom = currentRenderZoom,
-                  version = version,
+                editor.attachSurface(
+                  page,
+                  handle,
+                  widthDouble,
+                  heightDouble,
+                  scaleFactor,
+                  wakeDelivery,
                 )
-              // Two frames per size: at publish time the qualifying frame is the one
-              // whose version the publish covers, which a newest-only rule would have
-              // already replaced when the next same-size frame landed first.
-              val existing = pendingFramesState.value
-              pendingFramesState.value =
-                listOf(next) +
-                  existing.filter { it.pixelSize == size }.take(1) +
-                  existing.filter { it.pixelSize != size }.take(2)
-              editor.onPageSettled(page, version)
-            },
-            onFrameSkipped = { version -> editor.onPageSettled(page, version) },
-          )
+            }
+            val appliedPageExists = editor.appliedState.pageSizes.getOrNull(page) != null
+            LaunchedEffect(appliedPageExists, surfaceSession?.isRetired, surfaceHandle) {
+              val handle = surfaceHandle
+              // Applied shrink retires only the editor session; this canvas still owns its buffer.
+              if (appliedPageExists && surfaceSession?.isRetired == true && handle != null) {
+                try {
+                  attachSurface(handle)
+                } catch (error: CancellationException) {
+                  throw error
+                } catch (error: Throwable) {
+                  editor.surfaceDeliveryFailed(page, session = null, error)
+                }
+              }
+            }
+            RenderCanvas(
+              modifier =
+                Modifier.graphicsLayer(
+                  scaleX = displayScaleX,
+                  scaleY = displayScaleY,
+                  transformOrigin = TransformOrigin(0f, 0f),
+                ),
+              desiredPixelSize = desiredPixelSize,
+              configuration = configuration,
+              frame = frame?.bitmap,
+              retainedFrames = { editor.retainedFrames(page) },
+              trigger = trigger,
+              onAttach = attachSurface,
+              onDetach = { releaseBuffer ->
+                runSurfaceCleanup { surfaceSession?.detach(releaseBuffer) ?: releaseBuffer() }
+              },
+              onResize = { surfaceSession?.requestResize(configuration) },
+              onFrame = { bitmap, size, editorRevision, frameKey ->
+                surfaceSession?.let { session ->
+                  editor.deliverFrame(
+                    session = session,
+                    bitmap = bitmap,
+                    pixelSize = size,
+                    editorRevision = editorRevision,
+                    frameKey = frameKey,
+                  )
+                }
+              },
+              onFrameUnavailable = { frameKey ->
+                surfaceSession?.let { session -> editor.surfaceUnavailable(session, frameKey) }
+              },
+              onTargetUnavailable = { frameKey ->
+                val replaceOrFail = {
+                  if (replacingUnavailableTarget) {
+                    runtime.reportError(editor, EditorSurfaceUnavailableException(page))
+                  } else {
+                    replacingUnavailableTarget = true
+                    surfaceInstance += 1
+                  }
+                }
+                val session = surfaceSession
+                if (session != null && frameKey != null) {
+                  editor.surfaceTargetUnavailable(session, frameKey) { accepted ->
+                    if (accepted) replaceOrFail()
+                  }
+                } else {
+                  replaceOrFail()
+                }
+              },
+              onFailure = { error -> editor.surfaceDeliveryFailed(page, surfaceSession, error) },
+            )
+          }
         }
       ) { measurables, _ ->
         val placeable =
@@ -299,11 +312,5 @@ internal fun EditorPageSurface(
     }
 
     foregroundOverlay()
-  }
-
-  DisposableEffect(editor, page) {
-    val off = editor.on<EditorEvent.RenderInvalidated> { _, _ -> render() }
-
-    onDispose { off() }
   }
 }

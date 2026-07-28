@@ -92,7 +92,7 @@ internal class EditorTableHandleGesture(
           return false
         }
     val baseSelection =
-      context.editor.selection
+      context.editor.publishedState.selection
         ?: run {
           resetPointerOwnedState(context = context)
           return false
@@ -257,11 +257,11 @@ internal class EditorTableHandleGesture(
     }
 
     if (
-      !context.editor.tableOverlays.any { overlay ->
+      !context.editor.publishedState.tableOverlays.any { overlay ->
         overlay.tableId == drag.tableId &&
           overlay.contains(
             point = point,
-            layoutMode = context.editor.rootAttrs?.layoutMode,
+            layoutMode = context.editor.publishedState.rootAttrs?.layoutMode,
             project = context.geometry::resolvePagePosition,
           )
       }

@@ -139,9 +139,9 @@ internal fun rememberEditorCommentsSession(
   val visibleFilter = model?.threadState?.filter ?: CommentFilter.Open
   val activeThreadId = model?.threadState?.activeThreadId
   var lastRequestedActiveThreadId by remember(editor) { mutableStateOf<String?>(null) }
-  val activeThreadRangeInstalled =
+  val activeThreadRange =
     remember(activeThreadId, trackedCommentRanges) {
-      activeThreadId != null && trackedCommentRanges.any { it.id == activeThreadId }
+      trackedCommentRanges.firstOrNull { it.id == activeThreadId }
     }
   val visibleThreads =
     if (sheetActive && visibleFilter == CommentFilter.Open) {
@@ -189,24 +189,25 @@ internal fun rememberEditorCommentsSession(
     )
   }
   LaunchedEffect(editor, composeSelection) { editor?.setCommentComposeRange(composeSelection) }
-  LaunchedEffect(editor, activeThreadId, activeThreadRangeInstalled) {
+  LaunchedEffect(editor, activeThreadId, activeThreadRange) {
     val threadId = activeThreadId
     if (threadId == null) {
       lastRequestedActiveThreadId = null
       return@LaunchedEffect
     }
-    if (!activeThreadRangeInstalled) return@LaunchedEffect
+    if (activeThreadRange == null) return@LaunchedEffect
     if (lastRequestedActiveThreadId == threadId) {
       return@LaunchedEffect
     }
-    val activeEditor = editor ?: return@LaunchedEffect
-    val target =
-      activeEditor.trackedRange(threadId)?.rects?.toPageRectsTarget() ?: return@LaunchedEffect
-    bringIntoViewRequests.requestForVersion(
-      target = target,
-      version = activeEditor.state.version,
-      behavior = EditorBringIntoViewBehavior.Smooth,
-    )
+    if (editor == null) return@LaunchedEffect
+    val requested =
+      bringIntoViewRequests.requestForState(
+        state = editorState,
+        behavior = EditorBringIntoViewBehavior.Smooth,
+      ) {
+        trackedRanges.firstOrNull { it.id == threadId }?.rects?.toPageRectsTarget()
+      }
+    if (!requested) return@LaunchedEffect
     lastRequestedActiveThreadId = threadId
   }
   LaunchedEffect(sheetActive, collapsedSelectionHead, collapsedCommentRangeIds) {

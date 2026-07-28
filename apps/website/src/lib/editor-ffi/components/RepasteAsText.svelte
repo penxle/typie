@@ -3,7 +3,7 @@
   import { pushEscapeHandler } from '@typie/ui/utils';
   import ClipboardTypeIcon from '~icons/lucide/clipboard-type';
   import { getEditorContext } from '../editor.svelte';
-  import { pageRectToClientRect } from '../geometry';
+  import { pageRectToClientRect, selectionHeadRect } from '../geometry';
   import { getViewportOverlayContext } from './ViewportOverlay.svelte';
 
   const { editor } = getEditorContext();
@@ -23,7 +23,9 @@
     }
 
     void viewportOverlay.change;
-    const anchor = editor.cursor ? { page_idx: editor.cursor.page_idx, rect: editor.cursor.caret } : editor.selectionHeadRect();
+    const snapshot = editor.published?.snapshot;
+    const cursor = snapshot?.cursor;
+    const anchor = cursor ? { page_idx: cursor.page_idx, rect: cursor.caret } : selectionHeadRect(snapshot);
     if (!anchor) return null;
 
     const rect = pageRectToClientRect(editor, anchor);

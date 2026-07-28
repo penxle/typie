@@ -8,6 +8,8 @@ import co.typie.editor.external.EditorFileUpload
 import co.typie.editor.external.EditorImageAsset
 import co.typie.editor.external.EditorImageUpload
 import co.typie.editor.ffi.AttachmentPlaceholderKind
+import co.typie.editor.ffi.CommandOutcome
+import co.typie.editor.ffi.CommandRejection
 import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.ExternalElement
 import co.typie.editor.ffi.ExternalElementData
@@ -56,10 +58,11 @@ class DefaultEditorAttachmentImporterTest {
       FakeFfiEditor(
         onTick = {
           listOf(
+            EditorEvent.StateChanged(fields = listOf(StateField.ExternalElements)),
             EditorEvent.AttachmentPlaceholdersInserted(
               requestId = requestedPlaceholderId(fake),
               nodeIds = listOf(nodeId),
-            )
+            ),
           )
         },
         externalElementsProvider = { listOf(emptyImageElement(nodeId)) },
@@ -106,7 +109,9 @@ class DefaultEditorAttachmentImporterTest {
         onTick = {
           if (fake.placeholderRequests().isNotEmpty()) {
             listOf(
-              EditorEvent.StateChanged(fields = listOf(StateField.Ime)),
+              EditorEvent.StateChanged(
+                fields = listOf(StateField.Ime, StateField.ExternalElements)
+              ),
               EditorEvent.AttachmentPlaceholdersInserted(
                 requestId = requestedPlaceholderId(fake),
                 nodeIds = listOf(nodeId),
@@ -162,10 +167,11 @@ class DefaultEditorAttachmentImporterTest {
         onTick = {
           if (fake.placeholderRequests().isNotEmpty()) {
             listOf(
+              EditorEvent.StateChanged(fields = listOf(StateField.ExternalElements)),
               EditorEvent.AttachmentPlaceholdersInserted(
                 requestId = requestedPlaceholderId(fake),
                 nodeIds = listOf(nodeId),
-              )
+              ),
             )
           } else {
             emptyList()
@@ -209,7 +215,7 @@ class DefaultEditorAttachmentImporterTest {
     assertFalse(released)
     assertEquals(
       EditorBringIntoViewRequests.Request(EditorBringIntoViewTarget.CurrentSelectionHead),
-      bringIntoViewRequests.activateForVersion(editor.state.version),
+      bringIntoViewRequests.activateForVersion(editor.appliedState.version),
     )
 
     persistenceStarted.await()
@@ -233,6 +239,7 @@ class DefaultEditorAttachmentImporterTest {
           tick += 1
           if (tick == 1) {
             listOf(
+              EditorEvent.StateChanged(fields = listOf(StateField.ExternalElements)),
               EditorEvent.AttachmentPlaceholdersInserted(
                 requestId = "other-request",
                 nodeIds = emptyList(),
@@ -300,10 +307,11 @@ class DefaultEditorAttachmentImporterTest {
           if (!placeholderRequestHandled && fake.placeholderRequests().isNotEmpty()) {
             placeholderRequestHandled = true
             listOf(
+              EditorEvent.StateChanged(fields = listOf(StateField.ExternalElements)),
               EditorEvent.AttachmentPlaceholdersInserted(
                 requestId = requestedPlaceholderId(fake),
                 nodeIds = listOf(insertedNodeId),
-              )
+              ),
             )
           } else {
             emptyList()
@@ -314,7 +322,7 @@ class DefaultEditorAttachmentImporterTest {
         },
       )
     val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-    editor.sync {}
+    fake.applySnapshot(editor)
     val session = createTestDocumentEditingSession(editor, this)
     val state = EditorExternalElementState()
     val importer =
@@ -394,10 +402,11 @@ class DefaultEditorAttachmentImporterTest {
           if (!placeholderRequestHandled && fake.placeholderRequests().isNotEmpty()) {
             placeholderRequestHandled = true
             listOf(
+              EditorEvent.StateChanged(fields = listOf(StateField.ExternalElements)),
               EditorEvent.AttachmentPlaceholdersInserted(
                 requestId = requestedPlaceholderId(fake),
                 nodeIds = nodeIds,
-              )
+              ),
             )
           } else {
             emptyList()
@@ -490,7 +499,7 @@ class DefaultEditorAttachmentImporterTest {
     val nodeId = "file-node"
     val fake = FakeFfiEditor(externalElementsProvider = { listOf(emptyFileElement(nodeId)) })
     val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-    editor.sync {}
+    fake.applySnapshot(editor)
     val session = createTestDocumentEditingSession(editor, this)
     val state = EditorExternalElementState()
     val importer =
@@ -558,7 +567,7 @@ class DefaultEditorAttachmentImporterTest {
     val nodeId = "image-node"
     val fake = FakeFfiEditor(externalElementsProvider = { listOf(emptyImageElement(nodeId)) })
     val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-    editor.sync {}
+    fake.applySnapshot(editor)
     val session = createTestDocumentEditingSession(editor, this)
     val state = EditorExternalElementState()
     val replacement =
@@ -617,10 +626,11 @@ class DefaultEditorAttachmentImporterTest {
           tick += 1
           if (tick == 1) {
             listOf(
+              EditorEvent.StateChanged(fields = listOf(StateField.ExternalElements)),
               EditorEvent.AttachmentPlaceholdersInserted(
                 requestId = requestedPlaceholderId(fake),
                 nodeIds = listOf(nodeId),
-              )
+              ),
             )
           } else {
             emptyList()
@@ -675,10 +685,11 @@ class DefaultEditorAttachmentImporterTest {
           tick += 1
           if (tick == 1) {
             listOf(
+              EditorEvent.StateChanged(fields = listOf(StateField.ExternalElements)),
               EditorEvent.AttachmentPlaceholdersInserted(
                 requestId = requestedPlaceholderId(fake),
                 nodeIds = nodeIds,
-              )
+              ),
             )
           } else {
             emptyList()
@@ -740,10 +751,11 @@ class DefaultEditorAttachmentImporterTest {
       FakeFfiEditor(
         onTick = {
           listOf(
+            EditorEvent.StateChanged(fields = listOf(StateField.ExternalElements)),
             EditorEvent.AttachmentPlaceholdersInserted(
               requestId = requestedPlaceholderId(fake),
               nodeIds = listOf(nodeId),
-            )
+            ),
           )
         },
         externalElementsProvider = { listOf(emptyImageElement(nodeId)) },
@@ -796,10 +808,11 @@ class DefaultEditorAttachmentImporterTest {
           if (!placeholderRequestHandled && fake.placeholderRequests().isNotEmpty()) {
             placeholderRequestHandled = true
             listOf(
+              EditorEvent.StateChanged(fields = listOf(StateField.ExternalElements)),
               EditorEvent.AttachmentPlaceholdersInserted(
                 requestId = requestedPlaceholderId(fake),
                 nodeIds = listOf(nodeId),
-              )
+              ),
             )
           } else {
             emptyList()
@@ -821,7 +834,7 @@ class DefaultEditorAttachmentImporterTest {
           object : EditorAttachmentPersistence by FakePersistence {
             override suspend fun persistImage(file: PickedFile): EditorImageAsset {
               placeholderExists = false
-              editor.sync {}
+              fake.applySnapshot(editor)
               return FakePersistence.persistImage(file)
             }
           },
@@ -892,39 +905,233 @@ class DefaultEditorAttachmentImporterTest {
   }
 
   @Test
-  fun missingPlaceholderResultDoesNotStartUploadsAndClosesFiles() = runTest {
-    assertInvalidPlaceholderResultDoesNotStartUploads(nodeIds = null)
+  fun missingPlaceholderResultIsNonterminalAndCompletesWithZero() = runTest {
+    var releasedCount = 0
+    var persistenceCount = 0
+    val reported = mutableListOf<Throwable>()
+    val fake = FakeFfiEditor()
+    val dispatcher = StandardTestDispatcher(testScheduler)
+    val editor = Editor(fake, this, dispatcher, onError = { _, error -> reported += error })
+    val session = createTestDocumentEditingSession(editor, this)
+    val importer =
+      DefaultEditorAttachmentImporter(
+        externalElementState = EditorExternalElementState(),
+        bringIntoViewRequests = EditorBringIntoViewRequests(),
+        persistence =
+          object : EditorAttachmentPersistence by FakePersistence {
+            override suspend fun persistImage(file: PickedFile): EditorImageAsset {
+              persistenceCount += 1
+              return FakePersistence.persistImage(file)
+            }
+          },
+        isSessionCurrent = { it === session },
+        backgroundScope = this,
+      )
+    val callbackInvocations = mutableListOf<Int>()
+
+    val accepted =
+      importer.import(
+        session = session,
+        items =
+          listOf(
+            imageItem(filename = "first.png") { releasedCount += 1 },
+            imageItem(filename = "second.png") { releasedCount += 1 },
+          ),
+        destination = EditorAttachmentDestination.CurrentSelection,
+        onCompleted = { importedCount -> callbackInvocations += importedCount },
+      )
+    advanceUntilIdle()
+
+    assertFalse(accepted)
+    assertFalse(editor.terminal)
+    assertTrue(reported.isEmpty())
+    assertEquals(listOf(0), callbackInvocations)
+    assertEquals(0, persistenceCount)
+    assertEquals(2, releasedCount)
   }
 
   @Test
-  fun placeholderCountMismatchDoesNotStartUploadsAndClosesFiles() = runTest {
-    assertInvalidPlaceholderResultDoesNotStartUploads(nodeIds = listOf("only-one-node"))
+  fun duplicatePlaceholderResultsFailEditorExactlyOnceAndCloseFiles() = runTest {
+    assertTerminalPlaceholderInvariant(
+      itemCount = 1,
+      nodeIdResults = listOf(listOf("first-node"), listOf("second-node")),
+    )
   }
 
-  private suspend fun TestScope.assertInvalidPlaceholderResultDoesNotStartUploads(
-    nodeIds: List<String>?
-  ) {
-    var releasedCount = 0
+  @Test
+  fun placeholderCountMismatchFailsEditorExactlyOnceAndClosesFiles() = runTest {
+    assertTerminalPlaceholderInvariant(
+      itemCount = 2,
+      nodeIdResults = listOf(listOf("only-one-node")),
+    )
+  }
+
+  @Test
+  fun rejectedCommitIsNonterminalAndCompletesWithZero() = runTest {
+    var released = false
     var persistenceCount = 0
+    val nodeId = "image-node"
+    val reported = mutableListOf<Throwable>()
+    lateinit var fake: FakeFfiEditor
+    fake =
+      FakeFfiEditor(
+          onTick = {
+            listOf(
+              EditorEvent.StateChanged(fields = listOf(StateField.ExternalElements)),
+              EditorEvent.AttachmentPlaceholdersInserted(
+                requestId = requestedPlaceholderId(fake),
+                nodeIds = listOf(nodeId),
+              ),
+            )
+          },
+          externalElementsProvider = { listOf(emptyImageElement(nodeId)) },
+        )
+        .apply {
+          commandOutcomesProvider = { _, messages ->
+            messages.map { message ->
+              if (message is Message.Node) {
+                CommandOutcome.Rejected(CommandRejection.InvalidArgument)
+              } else {
+                CommandOutcome.Applied
+              }
+            }
+          }
+        }
+    val dispatcher = StandardTestDispatcher(testScheduler)
+    val editor = Editor(fake, this, dispatcher, onError = { _, error -> reported += error })
+    val session = createTestDocumentEditingSession(editor, this)
+    val state = EditorExternalElementState()
+    val importer =
+      DefaultEditorAttachmentImporter(
+        externalElementState = state,
+        bringIntoViewRequests = EditorBringIntoViewRequests(),
+        persistence =
+          object : EditorAttachmentPersistence by FakePersistence {
+            override suspend fun persistImage(file: PickedFile): EditorImageAsset {
+              persistenceCount += 1
+              return FakePersistence.persistImage(file)
+            }
+          },
+        isSessionCurrent = { it === session },
+        backgroundScope = this,
+      )
+    val callbackInvocations = mutableListOf<Int>()
+
+    val accepted =
+      importer.import(
+        session = session,
+        items = listOf(imageItem { released = true }),
+        destination = EditorAttachmentDestination.CurrentSelection,
+        onCompleted = { importedCount -> callbackInvocations += importedCount },
+      )
+    advanceUntilIdle()
+
+    assertTrue(accepted)
+    assertFalse(editor.terminal)
+    assertTrue(reported.isEmpty())
+    assertEquals(listOf(0), callbackInvocations)
+    assertEquals(1, persistenceCount)
+    assertNull(state.images.uploads[nodeId])
+    assertTrue(released)
+  }
+
+  @Test
+  fun commitHostFailureFailsEditorExactlyOnceAndCleansPending() = runTest {
+    var released = false
+    var failCommit = false
+    val nodeId = "image-node"
+    val hostFailure = IllegalStateException("commit host failed")
+    val reported = mutableListOf<Throwable>()
     lateinit var fake: FakeFfiEditor
     fake =
       FakeFfiEditor(
         onTick = {
-          if (fake.placeholderRequests().isEmpty() || nodeIds == null) {
+          listOf(
+            EditorEvent.StateChanged(fields = listOf(StateField.ExternalElements)),
+            EditorEvent.AttachmentPlaceholdersInserted(
+              requestId = requestedPlaceholderId(fake),
+              nodeIds = listOf(nodeId),
+            ),
+          )
+        },
+        externalElementsProvider = { listOf(emptyImageElement(nodeId)) },
+        beforeEnqueueRequest = {
+          if (failCommit) {
+            throw hostFailure
+          }
+        },
+      )
+    val dispatcher = StandardTestDispatcher(testScheduler)
+    val editorScope = CoroutineScope(SupervisorJob() + dispatcher)
+    val editor = Editor(fake, editorScope, dispatcher, onError = { _, error -> reported += error })
+    val session = createTestDocumentEditingSession(editor, this)
+    val state = EditorExternalElementState()
+    val importer =
+      DefaultEditorAttachmentImporter(
+        externalElementState = state,
+        bringIntoViewRequests = EditorBringIntoViewRequests(),
+        persistence =
+          object : EditorAttachmentPersistence by FakePersistence {
+            override suspend fun persistImage(file: PickedFile): EditorImageAsset {
+              failCommit = true
+              return FakePersistence.persistImage(file)
+            }
+          },
+        isSessionCurrent = { it === session },
+        backgroundScope = this,
+      )
+    val callbackInvocations = mutableListOf<Int>()
+
+    try {
+      val accepted =
+        importer.import(
+          session = session,
+          items = listOf(imageItem { released = true }),
+          destination = EditorAttachmentDestination.CurrentSelection,
+          onCompleted = { importedCount -> callbackInvocations += importedCount },
+        )
+      assertTrue(state.images.uploads.containsKey(nodeId))
+      advanceUntilIdle()
+
+      assertTrue(accepted)
+      assertTrue(editor.terminal)
+      assertEquals(1, reported.size)
+      assertTrue(reported.single() is IllegalStateException)
+      assertEquals(hostFailure.message, reported.single().message)
+      assertEquals(listOf(0), callbackInvocations)
+      assertNull(state.images.uploads[nodeId])
+      assertTrue(released)
+    } finally {
+      editorScope.cancel()
+    }
+  }
+
+  private suspend fun TestScope.assertTerminalPlaceholderInvariant(
+    itemCount: Int,
+    nodeIdResults: List<List<String>>,
+  ) {
+    var releasedCount = 0
+    var persistenceCount = 0
+    val reported = mutableListOf<Throwable>()
+    lateinit var fake: FakeFfiEditor
+    fake =
+      FakeFfiEditor(
+        onTick = {
+          if (fake.placeholderRequests().isEmpty()) {
             emptyList()
           } else {
-            listOf(
+            nodeIdResults.map { nodeIds ->
               EditorEvent.AttachmentPlaceholdersInserted(
                 requestId = requestedPlaceholderId(fake),
                 nodeIds = nodeIds,
               )
-            )
+            }
           }
         }
       )
     val dispatcher = StandardTestDispatcher(testScheduler)
     val editorScope = CoroutineScope(SupervisorJob() + dispatcher)
-    val editor = Editor(fake, editorScope, dispatcher)
+    val editor = Editor(fake, editorScope, dispatcher, onError = { _, error -> reported += error })
     val session = createTestDocumentEditingSession(editor, this)
     val importer =
       DefaultEditorAttachmentImporter(
@@ -941,25 +1148,29 @@ class DefaultEditorAttachmentImporterTest {
         backgroundScope = this,
       )
 
+    lateinit var thrown: IllegalStateException
     try {
-      assertFailsWith<IllegalStateException> {
-        importer.import(
-          session = session,
-          items =
-            listOf(
-              imageItem(filename = "first.png") { releasedCount += 1 },
-              imageItem(filename = "second.png") { releasedCount += 1 },
-            ),
-          destination = EditorAttachmentDestination.CurrentSelection,
-          onCompleted = {},
-        )
-      }
+      thrown =
+        assertFailsWith<IllegalStateException> {
+          importer.import(
+            session = session,
+            items =
+              List(itemCount) { index ->
+                imageItem(filename = "image-$index.png") { releasedCount += 1 }
+              },
+            destination = EditorAttachmentDestination.CurrentSelection,
+            onCompleted = {},
+          )
+        }
     } finally {
       editorScope.cancel()
     }
 
+    assertTrue(editor.terminal)
+    assertEquals(1, reported.size)
+    assertTrue(thrown === reported.single())
     assertEquals(0, persistenceCount)
-    assertEquals(2, releasedCount)
+    assertEquals(itemCount, releasedCount)
   }
 
   private fun requestedPlaceholderId(fake: FakeFfiEditor?): String {

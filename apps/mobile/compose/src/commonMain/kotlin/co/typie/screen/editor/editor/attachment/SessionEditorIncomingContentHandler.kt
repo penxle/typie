@@ -2,6 +2,7 @@ package co.typie.screen.editor.editor.attachment
 
 import co.typie.editor.DocumentEditingSession
 import co.typie.editor.ffi.ClipboardOp
+import co.typie.editor.ffi.CommandOutcome
 import co.typie.editor.ffi.FlatImeOp
 import co.typie.editor.ffi.Message
 import co.typie.editor.input.EditorIncomingContentHandler
@@ -96,20 +97,20 @@ internal class SessionEditorIncomingContentHandler(
     val operation =
       session.submit { editor, context ->
         editor.scope.async(context) {
-          editor.await(
-            admit = { isSessionCurrent(session) },
-            beforeCommit = { state ->
-              bringIntoViewRequests.requestForVersion(
-                target = EditorBringIntoViewTarget.CurrentSelectionHead,
-                version = state.version,
+          val update =
+            editor.update(admit = { isSessionCurrent(session) }) {
+              if (editor.appliedState.ime?.composing != null) {
+                enqueue(Message.TextInput(listOf(FlatImeOp.CommitAsIs)))
+              }
+              enqueue(
+                Message.Clipboard(ClipboardOp.Paste(html = content.html, text = content.text))
               )
-            },
-          ) {
-            if (editor.ime?.composing != null) {
-              enqueue(Message.TextInput(listOf(FlatImeOp.CommitAsIs)))
-            }
-            enqueue(Message.Clipboard(ClipboardOp.Paste(html = content.html, text = content.text)))
-          }
+            } ?: return@async false
+          bringIntoViewRequests.requestForVersion(
+            target = EditorBringIntoViewTarget.CurrentSelectionHead,
+            version = update.revision,
+          )
+          update.commandOutcomes.none { it is CommandOutcome.Rejected }
         }
       } ?: return false
     return operation.await()

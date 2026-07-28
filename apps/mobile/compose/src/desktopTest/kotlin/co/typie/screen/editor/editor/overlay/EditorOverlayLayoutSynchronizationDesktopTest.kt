@@ -33,12 +33,14 @@ import co.typie.editor.ffi.Affinity
 import co.typie.editor.ffi.Alignment
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.EditorEvent
+import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.PageRect
 import co.typie.editor.ffi.Position
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.SelectionEndpoints
 import co.typie.editor.ffi.Size
 import co.typie.editor.ffi.StateField
+import co.typie.editor.ffi.SystemEvent
 import co.typie.editor.ffi.TableBorderStyle
 import co.typie.editor.ffi.TableOverlay
 import co.typie.editor.ffi.TableOverlayCellSelection
@@ -68,104 +70,118 @@ import kotlinx.coroutines.cancel
 @OptIn(ExperimentalTestApi::class)
 class EditorOverlayLayoutSynchronizationDesktopTest {
   @Test
-  fun tableAxisActionRequestUsesPostTickSelectionWhilePublishedStateAwaitsSettle() =
-    runComposeUiTest {
-      val initialPosition = Position("cell-text", 0, Affinity.Downstream)
-      val initialSelection = Selection(anchor = initialPosition, head = initialPosition)
-      val selectedAxis =
-        Selection(
-          anchor = Position("first-cell", 0, Affinity.Downstream),
-          head = Position("last-cell", 1, Affinity.Upstream),
-        )
-      var selection = initialSelection
-      var selectAxisOnNextTick = false
-      val uiState = focusedUiState()
-      val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-      val fake =
-        FakeFfiEditor(
-          onTick = {
-            if (selectAxisOnNextTick) {
-              selectAxisOnNextTick = false
-              selection = selectedAxis
-              listOf(
-                EditorEvent.StateChanged(fields = listOf(StateField.Selection)),
-                EditorEvent.RenderInvalidated,
+  fun tableAxisActionUsesAppliedSelectionWhilePreviousFrameRemainsPublished() = runComposeUiTest {
+    val initialPosition = Position("cell-text", 0, Affinity.Downstream)
+    val initialSelection = Selection(anchor = initialPosition, head = initialPosition)
+    val selectedAxis =
+      Selection(
+        anchor = Position("first-cell", 0, Affinity.Downstream),
+        head = Position("last-cell", 1, Affinity.Upstream),
+      )
+    var selection = initialSelection
+    var selectAxisOnNextTick = false
+    val uiState = focusedUiState()
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val fake =
+      FakeFfiEditor(
+        onTick = {
+          if (selectAxisOnNextTick) {
+            selectAxisOnNextTick = false
+            selection = selectedAxis
+            listOf(
+              EditorEvent.StateChanged(fields = listOf(StateField.Selection)),
+              EditorEvent.RenderInvalidated,
+            )
+          } else {
+            listOf(
+              EditorEvent.StateChanged(
+                fields =
+                  listOf(StateField.Selection, StateField.PageSizes, StateField.TableOverlays)
               )
-            } else {
-              emptyList()
-            }
-          },
-          selectionProvider = { selection },
-          pageSizesProvider = {
-            listOf(Size(width = 100f, height = 100f), Size(width = 100f, height = 100f))
-          },
-          tableOverlaysProvider = { listOf(tableOverlay()) },
-        )
-      val editor = Editor(fake, scope)
-      editor.sync {}
-      editor.attachSurface(page = 1, handle = 1L, width = 100.0, height = 100.0, scaleFactor = 1.0)
-      var openedSelection: Selection? = null
+            )
+          }
+        },
+        selectionProvider = { selection },
+        pageSizesProvider = {
+          listOf(Size(width = 100f, height = 100f), Size(width = 100f, height = 100f))
+        },
+        tableOverlaysProvider = { listOf(tableOverlay()) },
+      )
+    val editor = Editor(fake, scope)
+    val host = Any()
+    editor.activateVisualHost(host)
+    editor.updateNow { enqueue(Message.System(SystemEvent.Initialize)) }
+    val surface =
+      editor.attachSurface(
+        page = 1,
+        handle = 1L,
+        width = 100.0,
+        height = 100.0,
+        scaleFactor = 1.0,
+        wakeDelivery = {},
+      )
+    var openedSelection: Selection? = null
 
-      try {
-        setContent {
-          CompositionLocalProvider(
-            LocalDensity provides Density(1f),
-            LocalAppColors provides LightColors,
-            LocalAppShadows provides LightAppShadows,
-            LocalThemeMode provides ResolvedThemeMode.Light,
-          ) {
-            Box(Modifier.size(RootSize.dp)) {
-              Box(
-                Modifier.offset {
-                    IntOffset(PageOffsetAtZoomOne.toInt(), PageOffsetAtZoomOne.toInt())
-                  }
-                  .size(PageSizeAtZoomOne.dp)
-                  .editorPagePositionTracker(uiState = uiState, page = 1, density = 1f)
-              )
-              EditorTableAxisSelectionOverlay(
-                editor = editor,
-                uiState = uiState,
-                editorRectInOverlay = { Rect(0f, 0f, RootSize, RootSize) },
-                density = 1f,
-                onTableAxisActionsRequest = { _, selection -> openedSelection = selection },
-              )
-            }
+    try {
+      setContent {
+        CompositionLocalProvider(
+          LocalDensity provides Density(1f),
+          LocalAppColors provides LightColors,
+          LocalAppShadows provides LightAppShadows,
+          LocalThemeMode provides ResolvedThemeMode.Light,
+        ) {
+          Box(Modifier.size(RootSize.dp)) {
+            Box(
+              Modifier.offset {
+                  IntOffset(PageOffsetAtZoomOne.toInt(), PageOffsetAtZoomOne.toInt())
+                }
+                .size(PageSizeAtZoomOne.dp)
+                .editorPagePositionTracker(uiState = uiState, page = 1, density = 1f)
+            )
+            EditorTableAxisSelectionOverlay(
+              editor = editor,
+              uiState = uiState,
+              editorRectInOverlay = { Rect(0f, 0f, RootSize, RootSize) },
+              density = 1f,
+              onTableAxisActionsRequest = { _, selection -> openedSelection = selection },
+            )
           }
         }
-
-        selectAxisOnNextTick = true
-        onNodeWithContentDescription(ColumnMenuDescription).performClick()
-        waitForIdle()
-
-        assertEquals(2, fake.tickCount)
-        assertEquals(initialSelection, editor.selection)
-        assertEquals(selectedAxis, editor.tickSelection)
-        assertEquals(selectedAxis, openedSelection)
-      } finally {
-        scope.cancel()
       }
+
+      selectAxisOnNextTick = true
+      onNodeWithContentDescription(ColumnMenuDescription).performClick()
+      waitForIdle()
+
+      assertEquals(2, fake.tickCount)
+      assertEquals(initialSelection, editor.publishedState.selection)
+      assertEquals(selectedAxis, editor.appliedState.selection)
+      assertEquals(selectedAxis, openedSelection)
+    } finally {
+      surface.detach()
+      editor.deactivateVisualHost(host)
+      scope.cancel()
     }
+  }
 
   @Test
   fun firstZoomedTableAxisPlacementUsesTheNewPagePosition() = runComposeUiTest {
     val zoom = mutableStateOf(1f)
     val uiState = focusedUiState()
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    val editor =
-      Editor(
-        FakeFfiEditor(
-          selectionProvider = {
-            val position = Position("cell-text", 0, Affinity.Downstream)
-            Selection(anchor = position, head = position)
-          },
-          pageSizesProvider = {
-            listOf(Size(width = 100f, height = 100f), Size(width = 100f, height = 100f))
-          },
-          tableOverlaysProvider = { listOf(tableOverlay()) },
-        ),
-        scope,
+    val fake =
+      FakeFfiEditor(
+        selectionProvider = {
+          val position = Position("cell-text", 0, Affinity.Downstream)
+          Selection(anchor = position, head = position)
+        },
+        pageSizesProvider = {
+          listOf(Size(width = 100f, height = 100f), Size(width = 100f, height = 100f))
+        },
+        tableOverlaysProvider = { listOf(tableOverlay()) },
       )
-    editor.sync {}
+    val editor = Editor(fake, scope)
+    fake.publishSnapshot(editor)
     mainClock.autoAdvance = false
 
     try {
@@ -368,18 +384,16 @@ class EditorOverlayLayoutSynchronizationDesktopTest {
       )
     val uiState = focusedUiState()
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    val editor =
-      Editor(
-        FakeFfiEditor(
-          selectionProvider = { selection },
-          selectionEndpointsProvider = { endpoints },
-          pageSizesProvider = {
-            listOf(Size(width = 100f, height = 100f), Size(width = 100f, height = 100f))
-          },
-        ),
-        scope,
+    val fake =
+      FakeFfiEditor(
+        selectionProvider = { selection },
+        selectionEndpointsProvider = { endpoints },
+        pageSizesProvider = {
+          listOf(Size(width = 100f, height = 100f), Size(width = 100f, height = 100f))
+        },
       )
-    editor.sync {}
+    val editor = Editor(fake, scope)
+    fake.publishSnapshot(editor)
     mainClock.autoAdvance = false
 
     try {
@@ -423,28 +437,26 @@ class EditorOverlayLayoutSynchronizationDesktopTest {
     val zoom = mutableStateOf(1f)
     val uiState = focusedUiState()
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    val editor =
-      Editor(
-        FakeFfiEditor(
-          selectionProvider = {
-            val position = Position("cell-text", 0, Affinity.Downstream)
-            Selection(anchor = position, head = position)
-          },
-          pageSizesProvider = {
-            listOf(Size(width = 100f, height = 100f), Size(width = 100f, height = 100f))
-          },
-          tableOverlaysProvider = {
-            listOf(
-              tableOverlay(
-                cellSelection =
-                  TableOverlayCellSelection(anchorRow = 0, anchorCol = 0, headRow = 0, headCol = 0)
-              )
+    val fake =
+      FakeFfiEditor(
+        selectionProvider = {
+          val position = Position("cell-text", 0, Affinity.Downstream)
+          Selection(anchor = position, head = position)
+        },
+        pageSizesProvider = {
+          listOf(Size(width = 100f, height = 100f), Size(width = 100f, height = 100f))
+        },
+        tableOverlaysProvider = {
+          listOf(
+            tableOverlay(
+              cellSelection =
+                TableOverlayCellSelection(anchorRow = 0, anchorCol = 0, headRow = 0, headCol = 0)
             )
-          },
-        ),
-        scope,
+          )
+        },
       )
-    editor.sync {}
+    val editor = Editor(fake, scope)
+    fake.publishSnapshot(editor)
     mainClock.autoAdvance = false
 
     try {
@@ -488,22 +500,20 @@ class EditorOverlayLayoutSynchronizationDesktopTest {
     val zoom = mutableStateOf(1f)
     val uiState = focusedUiState()
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    val editor =
-      Editor(
-        FakeFfiEditor(
-          selectionProvider = {
-            val position = Position("cell-text", 0, Affinity.Downstream)
-            Selection(anchor = position, head = position)
-          },
-          pageSizesProvider = {
-            listOf(Size(width = 100f, height = 100f), Size(width = 100f, height = 100f))
-          },
-          tableOverlaysProvider = { listOf(tableOverlay()) },
-        ),
-        scope,
+    val fake =
+      FakeFfiEditor(
+        selectionProvider = {
+          val position = Position("cell-text", 0, Affinity.Downstream)
+          Selection(anchor = position, head = position)
+        },
+        pageSizesProvider = {
+          listOf(Size(width = 100f, height = 100f), Size(width = 100f, height = 100f))
+        },
+        tableOverlaysProvider = { listOf(tableOverlay()) },
       )
+    val editor = Editor(fake, scope)
     val interactionGeometry = TestInteractionGeometry(editor = editor, uiState = uiState)
-    editor.sync {}
+    fake.publishSnapshot(editor)
     mainClock.autoAdvance = false
 
     try {
@@ -592,7 +602,9 @@ class EditorOverlayLayoutSynchronizationDesktopTest {
     override fun resolvePoint(positionInNode: Offset): PagePoint? = null
 
     override fun resolvePagePosition(page: Int, x: Float, y: Float): Offset? =
-      uiState.resolveViewportTransform(editor.pageSizes).localToGlobal(page = page, x = x, y = y)
+      uiState
+        .resolveViewportTransform(editor.publishedState.pageSizes)
+        .localToGlobal(page = page, x = x, y = y)
 
     override fun resolveEdgeAutoScrollViewport(): EditorEdgeAutoScrollViewport? = null
   }

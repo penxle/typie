@@ -12,20 +12,25 @@ internal fun Editor.dispatchSelectionHandleExtension(
   anchor: Position,
   baseSelection: Selection? = null,
 ): Boolean {
-  if (point.page < 0) {
-    return false
-  }
-  enqueue(
-    Message.Selection(
-      SelectionOp.ExtendTo(
-        anchor = anchor,
-        headPage = point.page,
-        headX = point.x,
-        headY = point.y,
-        baseSelection = baseSelection,
-        allowCollapse = false,
-      )
-    )
-  )
+  val op =
+    point.selectionHandleExtensionOp(anchor = anchor, baseSelection = baseSelection) ?: return false
+  enqueue(Message.Selection(op))
   return true
+}
+
+internal fun PagePoint.selectionHandleExtensionOp(
+  anchor: Position,
+  baseSelection: Selection? = null,
+): SelectionOp.ExtendTo? {
+  if (page < 0) {
+    return null
+  }
+  return SelectionOp.ExtendTo(
+    anchor = anchor,
+    headPage = page,
+    headX = x,
+    headY = y,
+    baseSelection = baseSelection,
+    allowCollapse = false,
+  )
 }

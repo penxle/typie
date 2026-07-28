@@ -4,6 +4,7 @@ use editor_renderer::backend::cpu::CpuSink;
 use editor_renderer::damage::IRect;
 
 use super::render_buffer::RenderBuffer;
+use crate::editor::FrameKey;
 use crate::error::FfiError;
 
 #[ffi]
@@ -56,6 +57,8 @@ impl SurfaceHandle {
         &mut self,
         dl: &editor_renderer::display_list::DisplayList,
         damage: &[IRect],
+        editor_revision: u64,
+        frame_key: FrameKey,
     ) -> bool {
         let sink = self.cpu_sink();
         for &r in damage {
@@ -64,10 +67,15 @@ impl SurfaceHandle {
             editor_renderer::diff::replay(dl, r, sink);
         }
         sink.set_clip(None);
-        self.present_damage(damage)
+        self.present_damage(damage, editor_revision, frame_key)
     }
 
-    pub fn present_damage(&mut self, damage: &[IRect]) -> bool {
+    pub fn present_damage(
+        &mut self,
+        damage: &[IRect],
+        editor_revision: u64,
+        frame_key: FrameKey,
+    ) -> bool {
         if self.handle == 0 {
             return true;
         }
@@ -75,9 +83,14 @@ impl SurfaceHandle {
         let (w, handle) = (self.width, self.handle);
         match &mut self.backend {
             RenderBackend::Cpu(sink) => unsafe {
-                (*(handle as *const RenderBuffer)).commit_damage(damage, |data, r| {
-                    sink.read_back_rect_absolute(data, w as usize * 4, r);
-                })
+                (*(handle as *const RenderBuffer)).commit_damage(
+                    editor_revision,
+                    frame_key.value,
+                    damage,
+                    |data, r| {
+                        sink.read_back_rect_absolute(data, w as usize * 4, r);
+                    },
+                )
             },
         }
     }

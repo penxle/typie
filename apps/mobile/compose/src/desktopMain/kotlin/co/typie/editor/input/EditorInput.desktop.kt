@@ -22,7 +22,7 @@ import co.typie.editor.ffi.KeyEvent
 import co.typie.editor.ffi.Message
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.EditorBringIntoViewTarget
-import co.typie.editor.scroll.syncWithBringIntoView
+import co.typie.editor.scroll.updateNowWithBringIntoView
 import co.typie.platform.IncomingContentCandidates
 
 @OptIn(ExperimentalComposeUiApi::class)
@@ -39,7 +39,7 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
 ): PlatformTextInputMethodRequest {
   return object : PlatformTextInputMethodRequest {
     override val value: () -> TextFieldValue = {
-      editor.ime?.toTextFieldValue() ?: TextFieldValue()
+      editor.appliedState.ime?.toTextFieldValue() ?: TextFieldValue()
     }
 
     override val imeOptions: ImeOptions =
@@ -85,16 +85,18 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
       }
 
     override val editText: (block: TextEditingScope.() -> Unit) -> Unit = { block ->
-      editor.syncWithBringIntoView(bringIntoViewRequests) {
-        val batch =
-          EditorDesktopTextEditingBatch(
-            initialHasActiveComposition = editor.tickIme?.composing != null
-          )
-        batch.block()
-        for (message in batch.drainMessages()) {
-          enqueue(message)
+      editor.runInputCallback {
+        editor.updateNowWithBringIntoView(bringIntoViewRequests) {
+          val batch =
+            EditorDesktopTextEditingBatch(
+              initialHasActiveComposition = editor.appliedState.ime?.composing != null
+            )
+          batch.block()
+          for (message in batch.drainMessages()) {
+            enqueue(message)
+          }
+          afterApplied { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
         }
-        beforeCommit { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
       }
     }
   }

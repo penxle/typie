@@ -37,6 +37,18 @@ internal fun hasValidEditorGeometry(
     pageSizes.isNotEmpty() &&
     pageSizes.all { it.width.isPositiveFinite() && it.height.isPositiveFinite() }
 
+internal fun hasInvalidPublishedEditorGeometry(
+  publishedRevision: Long?,
+  geometryValid: Boolean,
+): Boolean = publishedRevision != null && !geometryValid
+
+internal fun canHideEditorLoadingSkeleton(
+  loading: Boolean,
+  geometryValid: Boolean,
+  sessionAttached: Boolean,
+  hasPublishedFrame: Boolean,
+): Boolean = !loading && geometryValid && sessionAttached && hasPublishedFrame
+
 private fun Float.isPositiveFinite(): Boolean = isFinite() && this > 0f
 
 @Composable

@@ -1,5 +1,5 @@
 import { wasm } from '$lib/wasm-ffi.svelte';
-import { snapshot } from './registry';
+import { fanOutResourceUpdate } from './registry';
 import type { FontFamilySource } from '$mearie';
 import type { EditorEventListener } from './types';
 
@@ -157,20 +157,18 @@ export function loadFonts(families: readonly FontFamily[]): void {
   state.purge(changed);
   preloadQueue.purge(purgePrefixesFor(changed));
 
-  wasm.set_fonts(
-    families.map((family) => ({
-      name: family.familyName,
-      source: family.source,
-      weights: family.fonts.map((font) => ({
-        value: font.weight,
-        hash: font.hash,
+  fanOutResourceUpdate(
+    wasm.set_fonts(
+      families.map((family) => ({
+        name: family.familyName,
+        source: family.source,
+        weights: family.fonts.map((font) => ({
+          value: font.weight,
+          hash: font.hash,
+        })),
       })),
-    })),
+    ),
   );
-
-  for (const editor of snapshot()) {
-    editor.enqueue({ type: 'system', event: { type: 'fonts_changed' } });
-  }
 }
 
 let cachePromise: Promise<Cache> | null = null;
@@ -296,7 +294,7 @@ async function load(
   const fk = fontKey(family, weight);
   const key = keyOf(family, weight, dispatchHash, fd);
 
-  const committed = await loadOnce(state, key, async () => {
+  await loadOnce(state, key, async () => {
     let lastErr: unknown;
     for (let attempt = 1; attempt <= attempts; attempt++) {
       const url = urlOf(baseUrl, fd);
@@ -306,13 +304,13 @@ async function load(
         if (state.isStale(fk, dispatchGen)) return false;
 
         try {
-          if (fd.type === 'manifest') {
-            wasm.add_font_manifest(family, weight, data);
-          } else if (fd.type === 'base') {
-            wasm.add_font_base(family, weight, data);
-          } else {
-            wasm.add_font_chunk(family, weight, fd.id, data);
-          }
+          const update =
+            fd.type === 'manifest'
+              ? wasm.add_font_manifest(family, weight, data)
+              : fd.type === 'base'
+                ? wasm.add_font_base(family, weight, data)
+                : wasm.add_font_chunk(family, weight, fd.id, data);
+          fanOutResourceUpdate(update);
         } catch (err) {
           const cache = await getCache();
           await cache.delete(url);
@@ -329,18 +327,6 @@ async function load(
     }
     throw lastErr;
   });
-
-  if (!committed) return;
-
-  for (const target of snapshot()) {
-    if (fd.type === 'manifest') {
-      target.enqueue({ type: 'system', event: { type: 'font_manifest_loaded', family, weight } });
-    } else if (fd.type === 'base') {
-      target.enqueue({ type: 'system', event: { type: 'font_base_loaded', family, weight } });
-    } else {
-      target.enqueue({ type: 'system', event: { type: 'font_chunk_loaded', family, weight, chunk_id: fd.id } });
-    }
-  }
 }
 
 async function loadRequired(

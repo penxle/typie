@@ -48,7 +48,7 @@ fn resolve_ruby_font_runs(
     resource: &mut Resource,
 ) -> Vec<RubyFontRun> {
     let requested_family_id = resource.font_registry.intern(family);
-    let segmenters = std::sync::Arc::clone(&resource.segmenters);
+    let segmenters = std::sync::Arc::clone(resource.segmenters());
     let mut runs: Vec<RubyFontRun> = Vec::new();
     let mut cluster_codepoints: Vec<u32> = Vec::new();
     let mut cluster_start = 0usize;
@@ -305,7 +305,8 @@ mod tests {
     use std::ops::Range;
 
     use editor_resource::{
-        FontFamily, FontFamilySource, FontManifest, FontWeight, Resource, compress_zstd,
+        FontFamily, FontFamilySource, FontManifest, FontWeight, Resource, ResourceSource,
+        compress_zstd, prepare_font_base, prepare_font_chunk, prepare_fonts,
     };
 
     use super::*;
@@ -367,47 +368,61 @@ mod tests {
     fn fallback_resource() -> Resource {
         const TEST_FONT: &[u8] = include_bytes!("../../../assets/test-font.ttf");
 
-        let mut resource = Resource::new_test();
-        resource.set_fonts(vec![
-            FontFamily {
-                name: "Primary".to_string(),
-                source: FontFamilySource::Default,
-                weights: vec![FontWeight {
-                    value: 400,
-                    hash: "primary".to_string(),
-                }],
-            },
-            FontFamily {
-                name: "Fallback".to_string(),
-                source: FontFamilySource::Fallback,
-                weights: vec![FontWeight {
-                    value: 700,
-                    hash: "fallback".to_string(),
-                }],
-            },
-        ]);
-        let primary_id = resource.font_registry.intern_id("Primary").unwrap();
-        resource.font_registry.set_manifest(
-            primary_id,
-            400,
-            FontManifest::from_coverages(&[vec!['A' as u32, 'A' as u32, 'C' as u32, 'C' as u32]]),
-        );
-        let fallback_id = resource.font_registry.intern_id("Fallback").unwrap();
-        resource.font_registry.set_manifest(
-            fallback_id,
-            700,
-            FontManifest::from_coverages(&[vec!['B' as u32, 'B' as u32]]),
-        );
+        let mut source = ResourceSource::new_test();
+        source
+            .set_fonts(prepare_fonts(vec![
+                FontFamily {
+                    name: "Primary".to_string(),
+                    source: FontFamilySource::Default,
+                    weights: vec![FontWeight {
+                        value: 400,
+                        hash: "primary".to_string(),
+                    }],
+                },
+                FontFamily {
+                    name: "Fallback".to_string(),
+                    source: FontFamilySource::Fallback,
+                    weights: vec![FontWeight {
+                        value: 700,
+                        hash: "fallback".to_string(),
+                    }],
+                },
+            ]))
+            .expect("font families must change resources");
+        source
+            .add_font_manifest(
+                "Primary",
+                400,
+                FontManifest::from_coverages(&[vec![
+                    'A' as u32, 'A' as u32, 'C' as u32, 'C' as u32,
+                ]]),
+            )
+            .expect("primary manifest must change resources");
+        source
+            .add_font_manifest(
+                "Fallback",
+                700,
+                FontManifest::from_coverages(&[vec!['B' as u32, 'B' as u32]]),
+            )
+            .expect("fallback manifest must change resources");
 
         let font = compress_zstd(TEST_FONT);
         let empty_chunk = 0u32.to_be_bytes();
         for (family, weight) in [("Primary", 400), ("Fallback", 700)] {
-            resource.add_font_base(family, weight, &font).unwrap();
-            resource
-                .add_font_chunk(family, weight, 0, &empty_chunk)
-                .unwrap();
+            source
+                .insert_font_base(family, weight, prepare_font_base(&font).unwrap())
+                .expect("font base must change resources");
+            source
+                .add_font_chunk(
+                    family,
+                    weight,
+                    0,
+                    prepare_font_chunk(empty_chunk.to_vec()).unwrap(),
+                )
+                .unwrap()
+                .expect("font chunk must change resources");
         }
-        resource
+        Resource::from_snapshot(source.snapshot())
     }
 
     #[test]

@@ -1,6 +1,7 @@
 package co.typie.screen.editor.editor.findreplace
 
 import co.typie.editor.Editor
+import co.typie.editor.ffi.CommandOutcome
 import co.typie.editor.ffi.DecorationStyle
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.Selection
@@ -21,7 +22,7 @@ internal fun List<TrackedRange>.searchMatchRanges(): List<TrackedRange> = filter
 }
 
 internal suspend fun Editor.installFindReplaceDecorations() {
-  await {
+  update {
     enqueue(
       Message.TrackedRange(
         TrackedRangeOp.SetGroupDecoration(
@@ -63,7 +64,7 @@ internal fun Editor.clearFindReplaceRanges() {
 }
 
 internal suspend fun Editor.setFindReplaceRanges(items: List<FindReplaceRangeRegistration>) {
-  await {
+  update {
     enqueue(Message.TrackedRange(TrackedRangeOp.ClearGroup(group = SEARCH_MATCH_RANGE_GROUP)))
     enqueue(
       Message.TrackedRange(TrackedRangeOp.ClearGroup(group = ACTIVE_SEARCH_MATCH_RANGE_GROUP))
@@ -87,7 +88,7 @@ internal suspend fun Editor.setActiveFindReplaceRange(
   currentRanges: List<TrackedRange>,
 ) {
   val searchRanges = currentRanges.searchMatchRanges()
-  await {
+  update {
     searchRanges
       .filter { it.group == ACTIVE_SEARCH_MATCH_RANGE_GROUP && it.id != activeId }
       .forEach { range ->
@@ -117,14 +118,20 @@ internal suspend fun Editor.replaceFindReplaceRangeText(
   replacement: String,
   admit: () -> Boolean = { true },
 ): Boolean =
-  await(admit = admit) {
-    enqueue(
-      Message.TrackedRange(
-        TrackedRangeOp.ReplaceText(id = id, expectedText = expectedText, replacement = replacement)
+  update(admit = admit) {
+      enqueue(
+        Message.TrackedRange(
+          TrackedRangeOp.ReplaceText(
+            id = id,
+            expectedText = expectedText,
+            replacement = replacement,
+          )
+        )
       )
-    )
-    enqueue(Message.TrackedRange(TrackedRangeOp.Remove(id = id)))
-  }
+      enqueue(Message.TrackedRange(TrackedRangeOp.Remove(id = id)))
+    }
+    ?.commandOutcomes
+    ?.none { it is CommandOutcome.Rejected } == true
 
 internal suspend fun Editor.replaceAllFindReplaceRanges(
   matches: List<FindReplaceMatch>,
@@ -132,23 +139,25 @@ internal suspend fun Editor.replaceAllFindReplaceRanges(
   replacement: String,
   admit: () -> Boolean = { true },
 ): Boolean =
-  await(admit = admit) {
-    matches.forEach { match ->
-      enqueue(
-        Message.TrackedRange(
-          TrackedRangeOp.ReplaceText(
-            id = match.id,
-            expectedText = expectedText,
-            replacement = replacement,
+  update(admit = admit) {
+      matches.forEach { match ->
+        enqueue(
+          Message.TrackedRange(
+            TrackedRangeOp.ReplaceText(
+              id = match.id,
+              expectedText = expectedText,
+              replacement = replacement,
+            )
           )
         )
+      }
+      enqueue(Message.TrackedRange(TrackedRangeOp.ClearGroup(group = SEARCH_MATCH_RANGE_GROUP)))
+      enqueue(
+        Message.TrackedRange(TrackedRangeOp.ClearGroup(group = ACTIVE_SEARCH_MATCH_RANGE_GROUP))
       )
     }
-    enqueue(Message.TrackedRange(TrackedRangeOp.ClearGroup(group = SEARCH_MATCH_RANGE_GROUP)))
-    enqueue(
-      Message.TrackedRange(TrackedRangeOp.ClearGroup(group = ACTIVE_SEARCH_MATCH_RANGE_GROUP))
-    )
-  }
+    ?.commandOutcomes
+    ?.none { it is CommandOutcome.Rejected } == true
 
 internal fun List<TrackedRange>.searchMatchScrollTarget(id: String?): EditorBringIntoViewTarget? {
   if (id == null) return null

@@ -40,4 +40,38 @@ class EditorLoadingSkeletonTest {
       ),
     )
   }
+
+  @Test
+  fun `missing first publication is not an invalid geometry failure`() {
+    assertEquals(
+      false,
+      hasInvalidPublishedEditorGeometry(publishedRevision = null, geometryValid = false),
+    )
+    assertEquals(
+      true,
+      hasInvalidPublishedEditorGeometry(publishedRevision = 1L, geometryValid = false),
+    )
+  }
+
+  @Test
+  fun `loading skeleton stays until the first published frame is ready`() {
+    assertEquals(
+      false,
+      canHideEditorLoadingSkeleton(
+        loading = false,
+        geometryValid = true,
+        sessionAttached = true,
+        hasPublishedFrame = false,
+      ),
+    )
+    assertEquals(
+      true,
+      canHideEditorLoadingSkeleton(
+        loading = false,
+        geometryValid = true,
+        sessionAttached = true,
+        hasPublishedFrame = true,
+      ),
+    )
+  }
 }

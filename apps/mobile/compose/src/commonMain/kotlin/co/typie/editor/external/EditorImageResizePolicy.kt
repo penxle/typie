@@ -39,6 +39,18 @@ internal fun imageResizeWidthForProportion(
     originalWidth = originalWidth,
   )
 
+internal fun imageResizeHeightForProportion(
+  proportion: Float,
+  boundsWidth: Float,
+  originalWidth: Float,
+  imageRatio: Float,
+): Float =
+  imageResizeWidthForProportion(
+    proportion = proportion,
+    boundsWidth = boundsWidth,
+    originalWidth = originalWidth,
+  ) / imageRatio
+
 internal fun imageResizeDisplayPercent(
   proportion: Float,
   boundsWidth: Float,

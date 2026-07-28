@@ -2,7 +2,7 @@ use editor_clipboard::Slice;
 use editor_commands::CommandError;
 use editor_common::{HistoryTag, Movement, time::Duration};
 use editor_crdt::{Changeset, CrdtError, Dot, Op};
-use editor_model::{EditOp, ModifierState, ModifierType};
+use editor_model::{EditOp, ModifierState, ModifierType, PlainDoc, PlainNode};
 use editor_renderer::{Mark, MarkData, RenderSink, Renderer, damage::IRect};
 #[cfg(any(test, feature = "test-utils"))]
 use editor_resource::ThemeVariant;
@@ -15,6 +15,7 @@ use editor_state::{
 use editor_transaction::{Effect, HistoryMeta, MergeKind, StepError, Transaction};
 use editor_view::{GapPhantom, PageRect, PendingOverlay, View, Viewport};
 use hashbrown::{HashMap, HashSet};
+use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use strum::IntoEnumIterator;
 
@@ -26,6 +27,9 @@ use crate::handle;
 use crate::ime::{Ime, ImeRange};
 use crate::message::*;
 use crate::state_field::StateField;
+use crate::tick::{
+    CommandOutcome, CommandRejection, QueueEntry, RequestId, RequestOutcome, Revision, TickResult,
+};
 use crate::tracked_range::TrackedRangeRegistry;
 use editor_common::time::Instant;
 use editor_state::undo::{RecordMerge, TransientState, UndoEntry, UndoHistory};
@@ -85,6 +89,35 @@ fn is_illegal_slot(e: &EditorError) -> bool {
             e,
             EditorError::Command(CommandError::Step(StepError::IllegalInsertSlot { .. }))
         )
+}
+
+// The outer Root check is the only O(1) validation available at admission.
+// Building a valid-root payload here would duplicate the O(document) build performed at apply;
+// deeper validation runs once in tick and follows the Editor's fail-stop error contract.
+fn ensure_plain_doc_root(plain: &PlainDoc) -> Result<(), EditorError> {
+    if matches!(&plain.root.node, PlainNode::Root(_)) {
+        return Ok(());
+    }
+    Err(EditorError::General {
+        msg: format!("{:?}", editor_state::BuildError::MissingRoot),
+    })
+}
+
+fn expected_rejection_reason(error: &EditorError) -> Option<CommandRejection> {
+    match error {
+        EditorError::Step(StepError::NodeNotFound(_))
+        | EditorError::Command(
+            CommandError::NodeNotFound(_) | CommandError::Step(StepError::NodeNotFound(_)),
+        ) => Some(CommandRejection::TargetNotFound),
+        EditorError::Command(CommandError::NoParent(_)) => Some(CommandRejection::ParentNotFound),
+        EditorError::Command(CommandError::InvalidArgument(_)) => {
+            Some(CommandRejection::InvalidArgument)
+        }
+        EditorError::Command(CommandError::ExpectedElementNode(_)) => {
+            Some(CommandRejection::WrongNodeKind)
+        }
+        _ => None,
+    }
 }
 
 fn is_flat_offset_insertable(doc: &editor_model::DocView, offset: usize) -> bool {
@@ -209,7 +242,11 @@ pub struct Editor {
     /// stays stable for pages whose selection rects are unchanged, letting
     /// `render_surface` skip re-rasterizing them.
     render_epoch: u64,
-    message_queue: Vec<Message>,
+    queue: VecDeque<QueueEntry>,
+    next_request_id: u64,
+    revision: Revision,
+    #[cfg(test)]
+    resource_apply_count: usize,
     pending_events: Vec<EditorEvent>,
     pub(crate) pending_ops: Vec<Op<EditOp>>,
     pending_effects: HashSet<Effect>,
@@ -255,7 +292,11 @@ impl Editor {
             dnd: DndState::default(),
             focused: false,
             render_epoch: 0,
-            message_queue: Vec::new(),
+            queue: VecDeque::new(),
+            next_request_id: 1,
+            revision: Revision::INITIAL,
+            #[cfg(test)]
+            resource_apply_count: 0,
             pending_events: Vec::new(),
             pending_ops: Vec::new(),
             pending_effects: HashSet::new(),
@@ -375,7 +416,7 @@ impl Editor {
     }
 
     pub fn receive_remote_changeset(&mut self, changeset: Changeset<EditOp>) {
-        self.enqueue(Message::Remote { changeset });
+        self.queue.push_back(QueueEntry::Remote(changeset));
     }
 
     pub fn local_changesets_since(
@@ -450,8 +491,8 @@ impl Editor {
             .unwrap_or_default();
 
         let resource = self.resource.lock().unwrap();
-        let doc = count_text(&doc_text, &resource.general_category);
-        let selection = count_text(&selection_text, &resource.general_category);
+        let doc = count_text(&doc_text, resource.general_category());
+        let selection = count_text(&selection_text, resource.general_category());
         (doc, selection)
     }
 
@@ -651,7 +692,7 @@ impl Editor {
         before_limit: usize,
         after_limit: usize,
     ) -> Result<Option<Ime>, EditorError> {
-        let state = self.state();
+        let state = &self.state;
         let doc = state.view();
         let doc_size = editor_state::flat_size(&doc);
 
@@ -743,11 +784,72 @@ impl Editor {
         }))
     }
 
-    pub fn enqueue(&mut self, msg: Message) {
-        self.message_queue.push(msg);
+    pub fn enqueue_request(&mut self, messages: Vec<Message>) -> Result<RequestId, EditorError> {
+        if messages.is_empty() {
+            return Err(EditorError::EmptyRequest);
+        }
+        let id = RequestId::new(self.next_request_id);
+        self.next_request_id = self
+            .next_request_id
+            .checked_add(1)
+            .expect("request id overflow");
+        self.queue.push_back(QueueEntry::Request { id, messages });
+        Ok(id)
     }
 
-    pub fn tick(&mut self) -> Result<Vec<EditorEvent>, EditorError> {
+    pub fn receive_resource_update(&mut self, update: crate::ResourceUpdate) {
+        if let Some(QueueEntry::Resource(previous)) = self.queue.back_mut() {
+            previous.coalesce(update);
+        } else {
+            self.queue.push_back(QueueEntry::Resource(update));
+        }
+    }
+
+    pub fn tick(&mut self) -> Result<Option<TickResult>, EditorError> {
+        let item_count = self.queue.len();
+        if item_count == 0 {
+            return Ok(None);
+        }
+        self.tick_prefix(item_count)
+    }
+
+    pub fn tick_through(&mut self, request_id: RequestId) -> Result<TickResult, EditorError> {
+        let item_count = self
+            .queue
+            .iter()
+            .rposition(|entry| matches!(entry, QueueEntry::Request { id, .. } if *id == request_id))
+            .map(|index| index + 1)
+            .ok_or(EditorError::RequestNotQueued { request_id })?;
+        Ok(self
+            .tick_prefix(item_count)?
+            .expect("a prefix ending at a queued request must produce a tick result"))
+    }
+
+    fn tick_prefix(&mut self, item_count: usize) -> Result<Option<TickResult>, EditorError> {
+        let mut entries: VecDeque<_> = self.queue.drain(..item_count).collect();
+        let mut request_outcomes = Vec::new();
+
+        let (events, applied) = self.process_tick_entries(&mut entries, &mut request_outcomes)?;
+        if !applied && events.is_empty() {
+            return Ok(None);
+        }
+        self.revision = self.revision.next();
+        Ok(Some(TickResult {
+            revision: self.revision,
+            events,
+            request_outcomes,
+        }))
+    }
+
+    pub fn revision(&self) -> Revision {
+        self.revision
+    }
+
+    fn process_tick_entries(
+        &mut self,
+        entries: &mut VecDeque<QueueEntry>,
+        request_outcomes: &mut Vec<RequestOutcome>,
+    ) -> Result<(Vec<EditorEvent>, bool), EditorError> {
         let old_selection = self.state.selection;
         let old_pending_modifiers = self.state.pending_modifiers.clone();
         let old_composition = self.state.composition;
@@ -755,87 +857,49 @@ impl Editor {
         let old_last_history_tag_revision = self.undo_history.last_tag_revision();
 
         let mut ime_failed = false;
-
-        let messages = std::mem::take(&mut self.message_queue);
-        // Coalesce a consecutive run of remote changesets into one batched receive:
-        // a sync burst enqueues many `Message::Remote` back-to-back, and applying
-        // each separately re-clones the whole projected state (O(N)) per changeset.
-        let mut iter = messages.into_iter().peekable();
-        while let Some(msg) = iter.next() {
-            let result: Result<(), EditorError> = match msg {
-                Message::Remote { changeset } => {
+        let mut applied = false;
+        while let Some(entry) = entries.pop_front() {
+            match entry {
+                QueueEntry::Request { id, messages } => {
+                    applied = true;
+                    let mut command_outcomes = Vec::with_capacity(messages.len());
+                    self.process_request_messages(
+                        messages,
+                        &mut command_outcomes,
+                        &mut ime_failed,
+                    )?;
+                    request_outcomes.push(RequestOutcome {
+                        request_id: id,
+                        command_outcomes,
+                    });
+                }
+                QueueEntry::Resource(update) => {
+                    self.ime_delete_paint = None;
+                    applied |= self.apply_resource_update(update)?;
+                }
+                QueueEntry::Remote(changeset) => {
                     self.ime_delete_paint = None;
                     let mut batch = vec![changeset];
-                    while matches!(iter.peek(), Some(Message::Remote { .. })) {
-                        if let Some(Message::Remote { changeset }) = iter.next() {
+                    while matches!(entries.front(), Some(QueueEntry::Remote(_))) {
+                        if let QueueEntry::Remote(changeset) =
+                            entries.pop_front().expect("matched remote queue entry")
+                        {
                             batch.push(changeset);
                         }
                     }
-                    self.apply_remote_changesets(batch)
+                    applied |= self.apply_remote_changesets(batch)?;
                 }
-                // Coalesce a consecutive run of text-input batches into one reduce +
-                // transact: an IME composition update enqueues several `TextInput`
-                // messages per frame, and each separately rebuilds the flat window
-                // and re-derives the edit. A batch containing `CommitAsIs` ends the
-                // run — the commit's text replacement must see the committed text
-                // before a following batch reopens a composition (it no-ops while
-                // one is active).
-                Message::TextInput { ops } => {
-                    let mut batch = ops;
-                    while matches!(iter.peek(), Some(Message::TextInput { .. }))
-                        && !batch.iter().any(|op| matches!(op, FlatImeOp::CommitAsIs))
-                    {
-                        if let Some(Message::TextInput { ops }) = iter.next() {
-                            batch.extend(ops);
-                        }
-                    }
-                    if ime_failed {
-                        log::warn!(
-                            "dropping text input batch queued after an absorbed ime failure"
-                        );
-                        continue;
-                    }
-                    if let Err(e) = self.process_message(Message::TextInput { ops: batch }) {
-                        if is_illegal_slot(&e) {
-                            log::warn!(
-                                "text input rejected by insert-slot guard; requesting ime resync: {e}"
-                            );
-                        } else {
-                            log::error!("text input failed; requesting ime resync: {e}");
-                        }
-                        ime_failed = true;
-                    }
-                    Ok(())
-                }
-                Message::Insertion { op } => {
+                QueueEntry::SetDocument(plain) => {
+                    applied = true;
                     self.ime_delete_paint = None;
-                    if ime_failed {
-                        log::warn!("dropping insertion queued after an absorbed ime failure");
-                        continue;
-                    }
-                    if let Err(e) = self.process_message(Message::Insertion { op }) {
-                        if is_illegal_slot(&e) {
-                            log::warn!(
-                                "insertion rejected by insert-slot guard; requesting ime resync: {e}"
-                            );
-                        } else {
-                            log::error!("insertion failed; requesting ime resync: {e}");
-                        }
-                        ime_failed = true;
-                    }
-                    Ok(())
+                    self.apply_set_doc(plain)?;
                 }
-                other => {
+                QueueEntry::InsertTemplate(template) => {
+                    applied = true;
                     self.ime_delete_paint = None;
-                    self.process_message(other)
+                    self.apply_template_fragment(template)?;
                 }
-            };
-            if let Err(e) = &result
-                && is_illegal_slot(e)
-            {
-                log::error!("tick rejected message: {e}");
             }
-            result?;
         }
         // Defense-in-depth: every op-applying path seals its own changeset
         // (`Transaction::commit`, `apply_undo_result`). If a future path leaks
@@ -978,7 +1042,111 @@ impl Editor {
             }
         }
 
-        Ok(std::mem::take(&mut self.pending_events))
+        Ok((std::mem::take(&mut self.pending_events), applied))
+    }
+
+    fn process_request_messages(
+        &mut self,
+        messages: Vec<Message>,
+        command_outcomes: &mut Vec<CommandOutcome>,
+        ime_failed: &mut bool,
+    ) -> Result<(), EditorError> {
+        let mut messages: VecDeque<_> = messages.into();
+        while let Some(message) = messages.pop_front() {
+            let mut consumed = 1;
+            let mut outcome = CommandOutcome::Applied;
+            let result: Result<(), EditorError> = match message {
+                // Coalesce a consecutive run of text-input batches into one reduce +
+                // transact: an IME composition update enqueues several `TextInput`
+                // messages per frame, and each separately rebuilds the flat window
+                // and re-derives the edit. A batch containing `CommitAsIs` ends the
+                // run — the commit's text replacement must see the committed text
+                // before a following batch reopens a composition (it no-ops while
+                // one is active).
+                Message::TextInput { ops } => {
+                    let mut batch = ops;
+                    while matches!(messages.front(), Some(Message::TextInput { .. }))
+                        && !batch.iter().any(|op| matches!(op, FlatImeOp::CommitAsIs))
+                    {
+                        if let Message::TextInput { ops } =
+                            messages.pop_front().expect("matched text input message")
+                        {
+                            batch.extend(ops);
+                            consumed += 1;
+                        }
+                    }
+                    if *ime_failed {
+                        log::warn!(
+                            "dropping text input batch queued after an absorbed ime failure"
+                        );
+                        outcome = CommandOutcome::Rejected {
+                            reason: CommandRejection::InvalidArgument,
+                        };
+                    } else if let Err(e) = self.process_message(Message::TextInput { ops: batch }) {
+                        if is_illegal_slot(&e) {
+                            log::warn!(
+                                "text input rejected by insert-slot guard; requesting ime resync: {e}"
+                            );
+                        } else {
+                            log::error!("text input failed; requesting ime resync: {e}");
+                        }
+                        *ime_failed = true;
+                        outcome = CommandOutcome::Rejected {
+                            reason: expected_rejection_reason(&e)
+                                .unwrap_or(CommandRejection::InvalidArgument),
+                        };
+                    }
+                    Ok(())
+                }
+                Message::Insertion { op } => {
+                    self.ime_delete_paint = None;
+                    if *ime_failed {
+                        log::warn!("dropping insertion queued after an absorbed ime failure");
+                        outcome = CommandOutcome::Rejected {
+                            reason: CommandRejection::InvalidArgument,
+                        };
+                    } else if let Err(e) = self.process_message(Message::Insertion { op }) {
+                        if is_illegal_slot(&e) {
+                            log::warn!(
+                                "insertion rejected by insert-slot guard; requesting ime resync: {e}"
+                            );
+                        } else {
+                            log::error!("insertion failed; requesting ime resync: {e}");
+                        }
+                        *ime_failed = true;
+                        outcome = CommandOutcome::Rejected {
+                            reason: expected_rejection_reason(&e)
+                                .unwrap_or(CommandRejection::InvalidArgument),
+                        };
+                    }
+                    Ok(())
+                }
+                other => {
+                    self.ime_delete_paint = None;
+                    self.process_message(other)
+                }
+            };
+            if let Err(e) = &result
+                && is_illegal_slot(e)
+            {
+                log::error!("tick rejected message: {e}");
+            }
+            if let Err(error) = result {
+                if let Some(reason) = expected_rejection_reason(&error) {
+                    outcome = CommandOutcome::Rejected { reason };
+                } else {
+                    return Err(error);
+                }
+            }
+            command_outcomes.extend(std::iter::repeat_n(outcome, consumed));
+        }
+        Ok(())
+    }
+
+    #[cfg(any(test, feature = "test-utils"))]
+    pub(crate) fn finalize_test_setup(&mut self) -> Result<Vec<EditorEvent>, EditorError> {
+        self.process_tick_entries(&mut VecDeque::new(), &mut Vec::new())
+            .map(|(events, _)| events)
     }
 
     #[cfg(test)]
@@ -1114,7 +1282,7 @@ impl Editor {
             }
         }
         let res = self.resource.lock().unwrap();
-        res.theme.variant().hash(&mut hasher);
+        res.theme().variant().hash(&mut hasher);
         res.font_registry.font_generation().hash(&mut hasher);
         drop(res);
         hasher.finish()
@@ -1233,9 +1401,33 @@ impl Editor {
             Message::History { op } => handle::handle_history_op(self, op)?,
             Message::System { event } => handle::handle_system_event(self, event)?,
             Message::TrackedRange { op } => handle::handle_tracked_range_op(self, op)?,
-            Message::Remote { changeset } => handle::handle_remote(self, changeset)?,
         }
         Ok(())
+    }
+
+    fn apply_resource_update(
+        &mut self,
+        update: crate::ResourceUpdate,
+    ) -> Result<bool, EditorError> {
+        let changed = self
+            .resource
+            .lock()
+            .unwrap()
+            .apply_update(Arc::clone(update.snapshot()))
+            .map_err(|error| EditorError::General {
+                msg: error.to_string(),
+            })?;
+        if !changed {
+            return Ok(false);
+        }
+        #[cfg(test)]
+        {
+            self.resource_apply_count += 1;
+        }
+        for notice in update.into_notices() {
+            handle::handle_system_event(self, notice)?;
+        }
+        Ok(true)
     }
 
     pub(crate) fn transact(
@@ -1632,23 +1824,16 @@ impl Editor {
         self.try_undo()
     }
 
-    pub(crate) fn apply_remote_changeset(
-        &mut self,
-        changeset: Changeset<EditOp>,
-    ) -> Result<(), EditorError> {
-        self.apply_remote_changesets(vec![changeset])
-    }
-
     /// Apply a batch of remote changesets as a single unit. A sync burst enqueues
-    /// many `Message::Remote`; the tick loop coalesces the consecutive run and
+    /// many remote queue entries; the tick loop coalesces the consecutive run and
     /// hands it here so the whole batch pays one selection freeze/restore and one
     /// `ProjectedState` clone instead of one per changeset.
     pub(crate) fn apply_remote_changesets(
         &mut self,
         changesets: Vec<Changeset<EditOp>>,
-    ) -> Result<(), EditorError> {
+    ) -> Result<bool, EditorError> {
         if changesets.is_empty() {
-            return Ok(());
+            return Ok(false);
         }
 
         let frozen = self.state.selection.as_ref().map(|s| {
@@ -1674,12 +1859,21 @@ impl Editor {
             self.undo_history.invalidate_last_tag();
         }
         self.state = next;
+        let changed = !applied_ops.is_empty();
         self.pending_ops.extend(applied_ops);
+        Ok(changed)
+    }
+
+    pub fn set_doc(&mut self, plain: PlainDoc) -> Result<(), EditorError> {
+        ensure_plain_doc_root(&plain)?;
+        self.queue.push_back(QueueEntry::SetDocument(plain));
         Ok(())
     }
 
-    pub fn set_doc(&mut self, plain: editor_model::PlainDoc) {
-        self.state = State::from_plain(&plain).expect("set_doc template must build");
+    fn apply_set_doc(&mut self, plain: PlainDoc) -> Result<(), EditorError> {
+        self.state = State::from_plain(&plain).map_err(|error| EditorError::General {
+            msg: format!("{error:?}"),
+        })?;
         self.composition_paint = None;
         self.ime_delete_paint = None;
         crate::font::reresolve_fonts(self).ok();
@@ -1688,12 +1882,16 @@ impl Editor {
             fields: StateField::iter().collect(),
         });
         self.invalidate_render();
+        Ok(())
     }
 
-    pub fn insert_template_fragment(
-        &mut self,
-        template: editor_model::PlainDoc,
-    ) -> Result<(), EditorError> {
+    pub fn insert_template_fragment(&mut self, template: PlainDoc) -> Result<(), EditorError> {
+        ensure_plain_doc_root(&template)?;
+        self.queue.push_back(QueueEntry::InsertTemplate(template));
+        Ok(())
+    }
+
+    fn apply_template_fragment(&mut self, template: PlainDoc) -> Result<(), EditorError> {
         let root_entry = &template.root;
         let root_node = root_entry.node.clone();
         let root_modifiers: Vec<editor_model::Modifier> =
@@ -1703,8 +1901,8 @@ impl Editor {
         // subtree (subtrees carry their own modifiers/style/carry recursively, so
         // inserting them re-establishes per-node styling in the eg-walker model).
         let template_state =
-            editor_state::State::from_plain(&template).map_err(|e| EditorError::General {
-                msg: format!("{e:?}"),
+            editor_state::State::from_plain(&template).map_err(|error| EditorError::General {
+                msg: format!("{error:?}"),
             })?;
         let subtrees: Vec<editor_model::Subtree> = {
             let view = template_state.view();
@@ -1962,7 +2160,11 @@ impl Editor {
             dnd: DndState::default(),
             focused: false,
             render_epoch: 0,
-            message_queue: Vec::new(),
+            queue: VecDeque::new(),
+            next_request_id: 1,
+            revision: Revision::INITIAL,
+            #[cfg(test)]
+            resource_apply_count: 0,
             pending_events: Vec::new(),
             pending_ops: Vec::new(),
             pending_effects: HashSet::new(),
@@ -1986,8 +2188,8 @@ impl Editor {
     }
 
     pub fn apply(&mut self, msg: Message) -> Vec<EditorEvent> {
-        self.enqueue(msg);
-        self.tick().unwrap()
+        self.enqueue_request(vec![msg]).unwrap();
+        self.tick().unwrap().unwrap().events
     }
 
     pub fn is_focused(&self) -> bool {
@@ -2003,6 +2205,16 @@ impl Editor {
     }
 
     #[cfg(test)]
+    pub(crate) fn queued_entry_count_for_test(&self) -> usize {
+        self.queue.len()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn resource_apply_count_for_test(&self) -> usize {
+        self.resource_apply_count
+    }
+
+    #[cfg(test)]
     pub(crate) fn drop_indicator_for_test(&self) -> Option<editor_view::DropIndicator> {
         if self.dnd.reuse_node_id().is_some() {
             return None;
@@ -2012,7 +2224,7 @@ impl Editor {
 
     #[cfg(any(test, feature = "test-utils"))]
     pub(crate) fn theme_variant(&self) -> ThemeVariant {
-        self.resource.lock().unwrap().theme.variant()
+        self.resource.lock().unwrap().theme().variant()
     }
 }
 
@@ -2026,6 +2238,7 @@ mod tests {
         ChildView, EditOp, LayoutMode, Modifier, ModifierType, Node, NodeType, PlainDoc, PlainNode,
         PlainNodeEntry, PlainParagraphNode, PlainRootNode, PlainTextNode, SeqItem,
     };
+    use editor_resource::{ResourceSource, prepare_font_base, prepare_font_chunk, prepare_fonts};
     use editor_state::{
         Affinity, Composition, PendingModifier, PendingModifiers, Position, ResolvedPosition,
         ResolvedPositionFlatExt, Selection, StablePosition, StableResolveCtx, State,
@@ -2055,12 +2268,22 @@ mod tests {
             vec![FlatImeOp::CommitAsIs],
             vec![FlatImeOp::Compose { text: "ㄴ".into() }],
         ];
-        for ops in batches.clone() {
-            coalesced.enqueue(Message::TextInput { ops });
-        }
-        coalesced.tick().unwrap();
+        coalesced
+            .enqueue_request(
+                batches
+                    .clone()
+                    .into_iter()
+                    .map(|ops| Message::TextInput { ops })
+                    .collect(),
+            )
+            .unwrap();
+        let result = coalesced.tick().unwrap().unwrap();
+        assert_eq!(
+            result.request_outcomes[0].command_outcomes,
+            vec![CommandOutcome::Applied; batches.len()]
+        );
         for ops in batches {
-            sequential.enqueue(Message::TextInput { ops });
+            let _ = sequential.enqueue_request(vec![Message::TextInput { ops }]);
             sequential.tick().unwrap();
         }
 
@@ -2227,7 +2450,7 @@ mod tests {
     fn tick_drains_projection_repair_stats() {
         let state = State::from_changesets(zombie_css(), None).unwrap();
         let mut editor = Editor::new_test(state);
-        editor.tick().unwrap();
+        editor.finalize_test_setup().unwrap();
         assert_eq!(
             editor.state.projected_mut().take_repair_stats(),
             editor_model::RepairStats::default()
@@ -2240,7 +2463,7 @@ mod tests {
     // fail through the insert-slot guard.
     fn zombie_fixture_editor() -> Editor {
         let mut editor = Editor::new_test(State::from_changesets(zombie_css(), None).unwrap());
-        editor.tick().unwrap();
+        editor.finalize_test_setup().unwrap();
         let view = editor.state().view();
         let caret = ResolvedPosition::from_flat(&view, 0)
             .expect("document-start position resolves")
@@ -2267,9 +2490,9 @@ mod tests {
     }
 
     fn enqueue_illegal_text_input(editor: &mut Editor) {
-        editor.enqueue(Message::TextInput {
+        let _ = editor.enqueue_request(vec![Message::TextInput {
             ops: vec![FlatImeOp::ReplaceSelection { text: "X".into() }],
-        });
+        }]);
     }
 
     fn legal_selection_message(editor: &Editor) -> Message {
@@ -2300,11 +2523,11 @@ mod tests {
     }
 
     fn enqueue_failing_non_text_input_message(editor: &mut Editor) {
-        editor.enqueue(Message::Node {
+        let _ = editor.enqueue_request(vec![Message::Node {
             op: NodeOp::Delete {
                 id: Dot::new(1, 999),
             },
-        });
+        }]);
     }
 
     #[test]
@@ -2313,7 +2536,7 @@ mod tests {
         seed_active_composition(&mut editor);
         enqueue_illegal_text_input(&mut editor);
 
-        let events = editor.tick().unwrap();
+        let events = editor.tick().unwrap().unwrap().events;
 
         assert_eq!(
             events
@@ -2328,16 +2551,55 @@ mod tests {
     }
 
     #[test]
+    fn tick_rejects_absorbed_coalesced_and_dropped_input_messages() {
+        let mut editor = zombie_fixture_editor();
+        let rejected = CommandOutcome::Rejected {
+            reason: CommandRejection::InvalidArgument,
+        };
+        let _ = editor.enqueue_request(vec![
+            Message::TextInput {
+                ops: legal_insert_ops("a"),
+            },
+            Message::TextInput {
+                ops: legal_insert_ops("b"),
+            },
+        ]);
+        let _ = editor.enqueue_request(vec![legal_selection_message(&editor)]);
+        let _ = editor.enqueue_request(vec![Message::TextInput {
+            ops: legal_insert_ops("c"),
+        }]);
+        let _ = editor.enqueue_request(vec![Message::Insertion {
+            op: InsertionOp::Text { text: "d".into() },
+        }]);
+
+        let result = editor.tick().unwrap().unwrap();
+
+        assert_eq!(
+            result.request_outcomes[0].command_outcomes,
+            vec![rejected.clone(), rejected.clone()]
+        );
+        assert_eq!(
+            result.request_outcomes[1].command_outcomes,
+            vec![CommandOutcome::Applied]
+        );
+        assert_eq!(
+            result.request_outcomes[2].command_outcomes,
+            vec![rejected.clone()]
+        );
+        assert_eq!(result.request_outcomes[3].command_outcomes, vec![rejected]);
+    }
+
+    #[test]
     fn tick_drops_text_input_batches_after_failure_but_processes_other_messages() {
         let mut editor = zombie_fixture_editor();
         let doc_before = editor.state().projected.projected().clone();
         enqueue_illegal_text_input(&mut editor);
-        editor.enqueue(legal_selection_message(&editor));
-        editor.enqueue(Message::TextInput {
+        let _ = editor.enqueue_request(vec![legal_selection_message(&editor)]);
+        let _ = editor.enqueue_request(vec![Message::TextInput {
             ops: legal_insert_ops("a"),
-        });
+        }]);
 
-        let events = editor.tick().unwrap();
+        let events = editor.tick().unwrap().unwrap().events;
 
         assert_eq!(
             events
@@ -2358,15 +2620,15 @@ mod tests {
         let mut editor = zombie_fixture_editor();
         seed_active_composition(&mut editor);
         enqueue_illegal_text_input(&mut editor);
-        editor.enqueue(resize_message());
-        editor.enqueue(Message::TextInput {
+        let _ = editor.enqueue_request(vec![resize_message()]);
+        let _ = editor.enqueue_request(vec![Message::TextInput {
             ops: vec![
                 FlatImeOp::Compose { text: "가".into() },
                 FlatImeOp::CommitAsIs,
             ],
-        });
+        }]);
 
-        let events = editor.tick().unwrap();
+        let events = editor.tick().unwrap().unwrap().events;
 
         assert_eq!(
             events
@@ -2379,12 +2641,28 @@ mod tests {
     }
 
     #[test]
-    fn tick_still_propagates_non_text_input_errors_even_after_absorbed_failure() {
+    fn tick_reports_expected_non_text_rejection_after_absorbed_input_failure() {
         let mut editor = zombie_fixture_editor();
         enqueue_illegal_text_input(&mut editor);
         enqueue_failing_non_text_input_message(&mut editor);
 
-        assert!(editor.tick().is_err());
+        let result = editor.tick().unwrap().unwrap();
+        assert!(
+            result
+                .events
+                .iter()
+                .any(|event| matches!(event, EditorEvent::ImeResyncRequired))
+        );
+        assert!(result.request_outcomes.iter().any(|request| {
+            request.command_outcomes.iter().any(|command| {
+                matches!(
+                    command,
+                    CommandOutcome::Rejected {
+                        reason: CommandRejection::TargetNotFound
+                    }
+                )
+            })
+        }));
     }
 
     #[test]
@@ -2392,18 +2670,25 @@ mod tests {
         let mut editor = zombie_fixture_editor();
         seed_active_composition(&mut editor);
         let doc_before = editor.state().projected.projected().clone();
-        editor.enqueue(Message::Insertion {
+        let _ = editor.enqueue_request(vec![Message::Insertion {
             op: InsertionOp::Text { text: "X".into() },
-        });
+        }]);
 
-        let events = editor.tick().unwrap();
+        let result = editor.tick().unwrap().unwrap();
 
         assert_eq!(
-            events
+            result
+                .events
                 .iter()
                 .filter(|e| matches!(e, EditorEvent::ImeResyncRequired))
                 .count(),
             1
+        );
+        assert_eq!(
+            result.request_outcomes[0].command_outcomes,
+            vec![CommandOutcome::Rejected {
+                reason: CommandRejection::InvalidArgument,
+            }]
         );
         assert_eq!(editor.state().projected.projected(), &doc_before);
         assert!(editor.state().composition.is_none());
@@ -2415,18 +2700,18 @@ mod tests {
     fn tick_drops_input_messages_after_insertion_failure_but_processes_other_messages() {
         let mut editor = zombie_fixture_editor();
         let doc_before = editor.state().projected.projected().clone();
-        editor.enqueue(Message::Insertion {
+        let _ = editor.enqueue_request(vec![Message::Insertion {
             op: InsertionOp::Text { text: "X".into() },
-        });
-        editor.enqueue(legal_selection_message(&editor));
-        editor.enqueue(Message::TextInput {
+        }]);
+        let _ = editor.enqueue_request(vec![legal_selection_message(&editor)]);
+        let _ = editor.enqueue_request(vec![Message::TextInput {
             ops: legal_insert_ops("a"),
-        });
-        editor.enqueue(Message::Insertion {
+        }]);
+        let _ = editor.enqueue_request(vec![Message::Insertion {
             op: InsertionOp::Text { text: "b".into() },
-        });
+        }]);
 
-        let events = editor.tick().unwrap();
+        let events = editor.tick().unwrap().unwrap().events;
 
         assert_eq!(
             events
@@ -2542,7 +2827,7 @@ mod tests {
             .unwrap();
         assert!(!editor.state.projected.graph().pending().is_empty());
 
-        let _ = editor.tick().unwrap();
+        let _ = editor.finalize_test_setup().unwrap();
 
         let graph = editor.state.projected.graph();
         assert!(graph.pending().is_empty(), "tick left unsealed pending ops");
@@ -2682,16 +2967,16 @@ mod tests {
 
         let selection = Selection::collapsed(Position::new(t, 3));
 
-        editor.enqueue(Message::System {
+        let _ = editor.enqueue_request(vec![Message::System {
             event: SystemEvent::Resize {
                 width: 1024.0,
                 height: 768.0,
                 scale_factor: 2.0,
             },
-        });
-        editor.enqueue(Message::Selection {
+        }]);
+        let _ = editor.enqueue_request(vec![Message::Selection {
             op: SelectionOp::Set { selection },
-        });
+        }]);
         editor.tick().unwrap();
 
         assert_eq!(editor.view().viewport().width, 1024.0);
@@ -2708,11 +2993,11 @@ mod tests {
     fn tick_returns_state_changed_on_selection_set() {
         let (mut editor, t) = test_editor();
         let target = Selection::collapsed(Position::new(t, 3));
-        editor.enqueue(Message::Selection {
+        let _ = editor.enqueue_request(vec![Message::Selection {
             op: SelectionOp::Set { selection: target },
-        });
+        }]);
 
-        let events = editor.tick().unwrap();
+        let events = editor.tick().unwrap().unwrap().events;
 
         let has_selection_changed = events.iter().any(|e| {
             matches!(
@@ -2724,34 +3009,39 @@ mod tests {
     }
 
     #[test]
-    fn tick_returns_empty_events_when_no_messages() {
+    fn tick_returns_none_when_no_messages() {
         let (mut editor, _) = test_editor();
-        let events = editor.tick().unwrap();
-        assert!(events.is_empty());
+        assert!(editor.tick().unwrap().is_none());
     }
 
     #[test]
     fn process_effects_emits_font_data_missing() {
         let (mut editor, _) = test_editor();
         // Configure Inter/400 so resolve_codepoint_mappings finds the primary.
-        {
-            let mut resource = editor.resource.lock().unwrap();
-            let families = vec![editor_resource::FontFamily {
+        let mut source = ResourceSource::new_test();
+        source
+            .set_fonts(prepare_fonts(vec![editor_resource::FontFamily {
                 name: "Inter".into(),
                 source: editor_resource::FontFamilySource::Default,
                 weights: vec![editor_resource::FontWeight {
                     value: 400,
                     hash: "inter-400".into(),
                 }],
-            }];
-            resource.set_fonts(families);
-            let inter_id = resource.font_registry.intern_id("Inter").unwrap();
-            resource.font_registry.set_manifest(
-                inter_id,
+            }]))
+            .expect("font families must change resources");
+        source
+            .add_font_manifest(
+                "Inter",
                 400,
                 editor_resource::FontManifest::from_coverages(&[vec![0x41, 0x42]]),
-            );
-        }
+            )
+            .expect("font manifest must change resources");
+        editor
+            .resource
+            .lock()
+            .unwrap()
+            .apply_update(source.snapshot())
+            .unwrap();
 
         editor.process_effects(HashSet::from([Effect::LoadFont {
             family: "Inter".to_string(),
@@ -2785,10 +3075,9 @@ mod tests {
             selection: (p1, 0)
         };
 
-        let mut editor = Editor::new_test(state);
-        {
-            let mut resource = editor.resource.lock().unwrap();
-            resource.set_fonts(vec![editor_resource::FontFamily {
+        let mut source = ResourceSource::new_test();
+        source
+            .set_fonts(prepare_fonts(vec![editor_resource::FontFamily {
                 name: "TestFont".into(),
                 source: editor_resource::FontFamilySource::Default,
                 weights: vec![
@@ -2801,8 +3090,10 @@ mod tests {
                         hash: "tf-700".into(),
                     },
                 ],
-            }]);
-        }
+            }]))
+            .expect("font families must change resources");
+        let resource = Arc::new(Mutex::new(Resource::from_snapshot(source.snapshot())));
+        let mut editor = Editor::new_test_with_resource(state, resource);
 
         let init = editor.apply(Message::System {
             event: SystemEvent::Initialize,
@@ -2818,31 +3109,47 @@ mod tests {
             "sibling manifest prefetch is deferred until quiescence"
         );
 
-        {
-            let mut resource = editor.resource.lock().unwrap();
-            resource
-                .add_font_manifest(
-                    "TestFont",
-                    400,
-                    editor_resource::FontManifest::from_coverages(&[vec![0x41, 0x41]]),
-                )
-                .unwrap();
-        }
+        let snapshot = source
+            .add_font_manifest(
+                "TestFont",
+                400,
+                editor_resource::FontManifest::from_coverages(&[vec![0x41, 0x41]]),
+            )
+            .expect("font manifest must change resources");
+        editor
+            .resource
+            .lock()
+            .unwrap()
+            .apply_update(snapshot)
+            .unwrap();
         editor.apply(Message::System {
             event: SystemEvent::FontManifestLoaded {
                 family: "TestFont".to_string(),
                 weight: 400,
             },
         });
-        {
-            let mut resource = editor.resource.lock().unwrap();
-            resource
-                .add_font_base("TestFont", 400, compressed_test_font())
-                .unwrap();
-            resource
-                .add_font_chunk("TestFont", 400, 0, &0u32.to_be_bytes())
-                .unwrap();
-        }
+        source
+            .insert_font_base(
+                "TestFont",
+                400,
+                prepare_font_base(compressed_test_font()).unwrap(),
+            )
+            .expect("font base must change resources");
+        let snapshot = source
+            .add_font_chunk(
+                "TestFont",
+                400,
+                0,
+                prepare_font_chunk(0u32.to_be_bytes().to_vec()).unwrap(),
+            )
+            .unwrap()
+            .expect("font chunk must change resources");
+        editor
+            .resource
+            .lock()
+            .unwrap()
+            .apply_update(snapshot)
+            .unwrap();
         let quiescent = editor.apply(Message::System {
             event: SystemEvent::FontChunkLoaded {
                 family: "TestFont".to_string(),
@@ -2927,11 +3234,11 @@ mod tests {
     fn tick_emits_modifiers_and_block_on_selection_step() {
         let (mut editor, t) = test_editor();
         let target = Selection::collapsed(Position::new(t, 3));
-        editor.enqueue(Message::Selection {
+        let _ = editor.enqueue_request(vec![Message::Selection {
             op: SelectionOp::Set { selection: target },
-        });
+        }]);
 
-        let events = editor.tick().unwrap();
+        let events = editor.tick().unwrap().unwrap().events;
 
         let has_modifiers = events.iter().any(|e| {
             matches!(
@@ -3226,7 +3533,7 @@ mod tests {
         editor.push_event(EditorEvent::RenderInvalidated);
         editor.push_event(EditorEvent::RenderInvalidated);
 
-        let events = editor.tick().unwrap();
+        let events = editor.finalize_test_setup().unwrap();
 
         let count = events
             .iter()
@@ -3244,7 +3551,7 @@ mod tests {
         editor.push_event(ev.clone());
         editor.push_event(ev);
 
-        let events = editor.tick().unwrap();
+        let events = editor.finalize_test_setup().unwrap();
 
         let count = events
             .iter()
@@ -3268,7 +3575,7 @@ mod tests {
             fields: vec![StateField::Selection],
         });
 
-        let events = editor.tick().unwrap();
+        let events = editor.finalize_test_setup().unwrap();
 
         let count = events
             .iter()
@@ -3426,7 +3733,7 @@ mod tests {
             fields: vec![StateField::Selection, StateField::Doc],
         });
 
-        let events = editor.tick().unwrap();
+        let events = editor.finalize_test_setup().unwrap();
 
         let count = events
             .iter()
@@ -3460,7 +3767,7 @@ mod tests {
         editor.view.layout(&editor.state);
 
         editor.receive_remote_changeset(cs);
-        let events = editor.tick().unwrap();
+        let events = editor.tick().unwrap().unwrap().events;
 
         let has_render = events
             .iter()
@@ -3526,7 +3833,7 @@ mod tests {
         editor.receive_remote_changeset(cs1);
         editor.receive_remote_changeset(cs2);
         editor.receive_remote_changeset(cs3);
-        let events = editor.tick().unwrap();
+        let events = editor.tick().unwrap().unwrap().events;
 
         let view = editor.state().view();
         let text_str = editor_state::flat_text(&view, 0..editor_state::flat_size(&view));
@@ -3573,7 +3880,7 @@ mod tests {
         editor.view.layout(&editor.state);
 
         editor.receive_remote_changeset(cs);
-        let events = editor.tick().unwrap();
+        let events = editor.tick().unwrap().unwrap().events;
 
         // The remote changeset must still emit a single pair of events — covers dedup
         // along the actual remote-receive path, not just the push_event helper.
@@ -4882,7 +5189,7 @@ mod tests {
         // populated layout to invalidate when gap_phantom flips on. layout()
         // itself clears gap_phantom, so it must run before the gap tick.
         editor.view.layout(&editor.state);
-        let _ = editor.tick().unwrap();
+        let _ = editor.finalize_test_setup().unwrap();
         let st = editor.state();
         assert!(
             editor
@@ -4892,11 +5199,11 @@ mod tests {
             "gap cursor must produce a caret via the phantom line"
         );
 
-        editor.enqueue(Message::Selection {
+        let _ = editor.enqueue_request(vec![Message::Selection {
             op: SelectionOp::Set {
                 selection: Selection::collapsed(Position::new(p1, 1)),
             },
-        });
+        }]);
         let _ = editor.tick().unwrap();
         let st2 = editor.state();
         assert!(
@@ -4920,23 +5227,23 @@ mod tests {
         let pre_selection = editor.state().selection;
         let pre_can_undo = editor.undo_history.can_undo();
 
-        editor.enqueue(Message::Key {
+        let _ = editor.enqueue_request(vec![Message::Key {
             event: KeyEvent {
                 key: Key::Backspace,
                 modifiers: InputModifiers::default(),
             },
-        });
-        editor.enqueue(Message::Insertion {
+        }]);
+        let _ = editor.enqueue_request(vec![Message::Insertion {
             op: InsertionOp::Text { text: "X".into() },
-        });
-        editor.enqueue(Message::Navigation {
+        }]);
+        let _ = editor.enqueue_request(vec![Message::Navigation {
             op: NavigationOp::Move {
                 movement: Movement::Grapheme {
                     direction: Direction::Forward,
                 },
                 extend: false,
             },
-        });
+        }]);
         editor.tick().unwrap();
 
         editor_state::assert_doc_eq!(editor.state(), &pre_state);
@@ -5544,6 +5851,7 @@ mod tests {
         editor
             .insert_template_fragment(template.to_plain())
             .expect("template insert ok");
+        editor.tick().unwrap();
 
         let view = editor.state().view();
         let texts: Vec<String> = view
@@ -5586,6 +5894,7 @@ mod tests {
         editor
             .insert_template_fragment(template.to_plain())
             .expect("template insert ok");
+        editor.tick().unwrap();
 
         let Node::Root(root) = editor.state().view().root().unwrap().node() else {
             panic!("document root must be a Root node");
@@ -5623,6 +5932,7 @@ mod tests {
         editor
             .insert_template_fragment(template.to_plain())
             .expect("template insert ok");
+        editor.tick().unwrap();
 
         // The Root-direct horizontal rule survives the fragment insertion; capturing
         // only child_blocks() would have silently dropped it, breaking totality.
@@ -5654,6 +5964,7 @@ mod tests {
         editor
             .insert_template_fragment(template.to_plain())
             .expect("template insert ok");
+        editor.tick().unwrap();
 
         let has_rule =
             editor.state().view().root().unwrap().children().any(
@@ -5762,6 +6073,7 @@ mod tests {
         editor
             .insert_template_fragment(template.to_plain())
             .expect("template insert ok");
+        editor.tick().unwrap();
         assert!(editor.view().placeholder_metrics(editor.state()).is_none());
     }
 
@@ -5825,6 +6137,7 @@ mod tests {
         let template = tstate.to_plain();
 
         editor.insert_template_fragment(template).unwrap();
+        editor.tick().unwrap();
 
         // destination's stale root.modifiers must be cleared and replaced by the
         // template's root modifiers (here: none).
@@ -5891,11 +6204,11 @@ mod tests {
 
         let sig_before = editor.page_render_signature(0);
 
-        editor.enqueue(Message::Insertion {
+        let _ = editor.enqueue_request(vec![Message::Insertion {
             op: InsertionOp::Text {
                 text: "x".to_string(),
             },
-        });
+        }]);
         editor.tick().unwrap();
 
         let sig_after = editor.page_render_signature(0);
@@ -5916,14 +6229,14 @@ mod tests {
 
         let sig_before = editor.page_render_signature(0);
 
-        editor.enqueue(Message::Navigation {
+        let _ = editor.enqueue_request(vec![Message::Navigation {
             op: NavigationOp::Move {
                 movement: Movement::Grapheme {
                     direction: Direction::Forward,
                 },
                 extend: false,
             },
-        });
+        }]);
         editor.tick().unwrap();
 
         let sig_after = editor.page_render_signature(0);
@@ -5939,17 +6252,22 @@ mod tests {
             doc { root { p1: paragraph { text("hello") } } }
             selection: (p1, 0)
         };
-        let mut editor = Editor::new_test(state);
+        let mut source = ResourceSource::new_test();
+        let resource = Arc::new(Mutex::new(Resource::from_snapshot(source.snapshot())));
+        let mut editor = Editor::new_test_with_resource(state, resource);
         editor.tick().unwrap();
 
         let sig_before = editor.page_render_signature(0);
 
+        let snapshot = source
+            .set_theme_variant(ThemeVariant::DarkBlack)
+            .expect("theme variant must change resources");
         editor
             .resource
             .lock()
             .unwrap()
-            .theme
-            .set_variant(ThemeVariant::DarkBlack);
+            .apply_update(snapshot)
+            .unwrap();
 
         let sig_after = editor.page_render_signature(0);
         assert_ne!(
@@ -5964,16 +6282,25 @@ mod tests {
             doc { root { p1: paragraph { text("hello") } } }
             selection: (p1, 0)
         };
-        let mut editor = Editor::new_test(state);
+        let mut source = ResourceSource::new_test();
+        let resource = Arc::new(Mutex::new(Resource::from_snapshot(source.snapshot())));
+        let mut editor = Editor::new_test_with_resource(state, resource);
         editor.tick().unwrap();
 
         let sig_before = editor.page_render_signature(0);
 
+        let snapshot = source
+            .insert_font_base(
+                "test",
+                400,
+                prepare_font_base(compressed_test_font()).unwrap(),
+            )
+            .expect("font base must change resources");
         editor
             .resource
             .lock()
             .unwrap()
-            .add_font_base("test", 400, compressed_test_font())
+            .apply_update(snapshot)
             .unwrap();
 
         let sig_after = editor.page_render_signature(0);
@@ -6130,26 +6457,41 @@ mod tests {
         C.get_or_init(|| editor_resource::compress_zstd(TEST_FONT_TTF))
     }
 
-    fn real_font_resource() -> Arc<Mutex<editor_resource::Resource>> {
+    fn real_font_source() -> ResourceSource {
         use editor_resource::{FontFamily, FontFamilySource, FontManifest, FontWeight};
-        let mut res = editor_resource::Resource::new_test();
-        res.set_fonts(vec![FontFamily {
-            name: "test".into(),
-            source: FontFamilySource::Default,
-            weights: vec![FontWeight {
-                value: 400,
-                hash: "test-400".into(),
-            }],
-        }]);
-        let test_id = res.font_registry.intern_id("test").unwrap();
-        res.font_registry.set_manifest(
-            test_id,
-            400,
-            FontManifest::from_coverages(&[vec![0x0000, 0xFFFF]]),
-        );
-        res.add_font_base("test", 400, compressed_test_font())
-            .unwrap();
-        Arc::new(Mutex::new(res))
+        let mut source = ResourceSource::new_test();
+        source
+            .set_fonts(prepare_fonts(vec![FontFamily {
+                name: "test".into(),
+                source: FontFamilySource::Default,
+                weights: vec![FontWeight {
+                    value: 400,
+                    hash: "test-400".into(),
+                }],
+            }]))
+            .expect("font families must change resources");
+        source
+            .add_font_manifest(
+                "test",
+                400,
+                FontManifest::from_coverages(&[vec![0x0000, 0xFFFF]]),
+            )
+            .expect("font manifest must change resources");
+        source
+            .insert_font_base(
+                "test",
+                400,
+                prepare_font_base(compressed_test_font()).unwrap(),
+            )
+            .expect("font base must change resources");
+        source
+    }
+
+    fn real_font_resource() -> Arc<Mutex<editor_resource::Resource>> {
+        let source = real_font_source();
+        Arc::new(Mutex::new(editor_resource::Resource::from_snapshot(
+            source.snapshot(),
+        )))
     }
 
     fn root_font_modifiers() -> BTreeMap<ModifierType, Modifier> {
@@ -6167,13 +6509,76 @@ mod tests {
         ])
     }
 
-    fn editor_with_real_font(state: State) -> Editor {
-        let res = real_font_resource();
+    fn editor_with_resource(state: State, res: Arc<Mutex<editor_resource::Resource>>) -> Editor {
         let mut editor = Editor::new_test_with_resource(state, Arc::clone(&res));
         editor.view = View::new(Viewport::new(800.0, 600.0, 1.0), res);
         editor.view.layout(&editor.state);
         editor.tick().unwrap();
         editor
+    }
+
+    fn editor_with_real_font(state: State) -> Editor {
+        editor_with_resource(state, real_font_resource())
+    }
+
+    #[test]
+    fn hot_replacing_font_data_matches_a_fresh_renderer() {
+        const REPLACEMENT_FONT_TTF: &[u8] = include_bytes!("../../../assets/Noto-Phantom.ttf");
+
+        let (state, ..) = state! {
+            doc {
+                root [font_family("test".to_string()), font_weight(400)] {
+                    p1: paragraph {
+                        text("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789")
+                    }
+                }
+            }
+            selection: (p1, 0)
+        };
+        let fresh_state = state.clone();
+
+        let mut source = real_font_source();
+        let resource = Arc::new(Mutex::new(editor_resource::Resource::from_snapshot(
+            source.snapshot(),
+        )));
+        let mut hot = editor_with_resource(state, resource);
+
+        let size = hot.view().pages()[0].size;
+        let (width, height) = (size.width.round() as u16, size.height.round() as u16);
+        let initial_pixels = full_page_buf(&mut hot, 0, 1.0, width, height);
+
+        let replacement = editor_resource::compress_zstd(REPLACEMENT_FONT_TTF);
+        let snapshot = source
+            .insert_font_base(
+                "test",
+                400,
+                prepare_font_base(&replacement).expect("replacement font must be valid"),
+            )
+            .expect("replacement font base must change resources");
+        hot.receive_resource_update(crate::ResourceUpdate::new(
+            snapshot,
+            vec![SystemEvent::FontBaseLoaded {
+                family: "test".into(),
+                weight: 400,
+            }],
+        ));
+        hot.tick().expect("font replacement tick must succeed");
+        let hot_pixels = full_page_buf(&mut hot, 0, 1.0, width, height);
+
+        let fresh_resource = Arc::new(Mutex::new(editor_resource::Resource::from_snapshot(
+            source.snapshot(),
+        )));
+        let mut fresh = editor_with_resource(fresh_state, fresh_resource);
+        let fresh_pixels = full_page_buf(&mut fresh, 0, 1.0, width, height);
+
+        assert_ne!(
+            initial_pixels, fresh_pixels,
+            "the test fonts must produce different pixels"
+        );
+        assert!(
+            hot_pixels == fresh_pixels,
+            "hot replacement must not reuse glyph data from the previous font base"
+        );
     }
 
     fn big_doc_editor(n_paras: usize) -> Editor {
@@ -6791,7 +7196,7 @@ mod tests {
     }
 
     fn enqueue_text_input_at(editor: &mut Editor, ime: &Ime, ch: char) {
-        editor.enqueue(Message::TextInput {
+        let _ = editor.enqueue_request(vec![Message::TextInput {
             ops: vec![
                 FlatImeOp::SetSelection {
                     start: ime.selection.start,
@@ -6801,7 +7206,7 @@ mod tests {
                     text: ch.to_string(),
                 },
             ],
-        });
+        }]);
     }
 
     fn set_selection_flat_range(editor: &mut Editor, start: usize, end: usize) -> bool {
@@ -6842,7 +7247,7 @@ mod tests {
                 };
                 let doc_before = editor.state().projected.projected().clone();
                 enqueue_text_input_at(&mut editor, &ime, 'x');
-                let events = editor.tick().unwrap();
+                let events = editor.tick().unwrap().unwrap().events;
                 assert!(
                     !events
                         .iter()
@@ -6888,7 +7293,7 @@ mod tests {
                 };
                 let doc_before = editor.state().projected.projected().clone();
                 enqueue_text_input_at(&mut editor, &ime, 'x');
-                let events = editor.tick().unwrap();
+                let events = editor.tick().unwrap().unwrap().events;
                 assert!(
                     !events
                         .iter()

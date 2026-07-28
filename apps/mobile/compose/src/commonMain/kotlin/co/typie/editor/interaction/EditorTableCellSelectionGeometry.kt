@@ -35,8 +35,8 @@ internal data class EditorTableCellSelection(
 )
 
 internal fun resolveTableCellSelections(editor: Editor): List<EditorTableCellSelection> {
-  val selectionCollapsed = editor.selection.isCollapsed()
-  return editor.tableOverlays.mapNotNull { overlay ->
+  val selectionCollapsed = editor.publishedState.selection.isCollapsed()
+  return editor.publishedState.tableOverlays.mapNotNull { overlay ->
     val range =
       resolveTableCellSelectionRange(overlay = overlay, selectionCollapsed = selectionCollapsed)
         ?: return@mapNotNull null

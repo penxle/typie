@@ -64,7 +64,7 @@ fn generate_class(iface: &FfiInterface, custom_types: &HashMap<String, String>) 
         out.push('\n');
         out.push_str("    @objc public override init() { super.init() }\n");
     } else {
-        out.push_str(&format!("    private let inner: {}\n", inner_type));
+        out.push_str(&format!("    fileprivate let inner: {}\n", inner_type));
         out.push('\n');
         out.push_str(&format!("    init(inner: {}) {{\n", inner_type));
         out.push_str("        self.inner = inner\n");
@@ -205,6 +205,20 @@ fn build_return_expr(
                 call_expr
             )
         }
+        FfiReturnType::Option(FfiScalarReturn::Owned(name)) => {
+            let native_name = format!("Native{}", name);
+            format!(
+                "let result = try {}\n            return result.map {{ {}(inner: $0) }}",
+                call_expr, native_name
+            )
+        }
+        FfiReturnType::Vec(FfiScalarReturn::Owned(name)) => {
+            let native_name = format!("Native{}", name);
+            format!(
+                "let result = try {}\n            return result.map {{ {}(inner: $0) }}",
+                call_expr, native_name
+            )
+        }
         _ => format!("return try {}", call_expr),
     }
 }
@@ -241,6 +255,7 @@ fn swift_param_type(ty: &FfiParamType, custom_types: &HashMap<String, String>) -
     match ty {
         FfiParamType::Primitive(p) => resolve_swift_primitive(p, custom_types),
         FfiParamType::Complex(_) => "String".into(),
+        FfiParamType::Owned(name) => format!("Native{}", name),
         FfiParamType::Vec(inner) => {
             if matches!(inner, FfiScalarParam::Primitive(p) if p == "u8") {
                 "Data".into()
@@ -270,7 +285,8 @@ fn objc_return_type(ret: &FfiReturnType, custom_types: &HashMap<String, String>)
         FfiReturnType::Vec(inner) => {
             let base = match inner {
                 FfiScalarReturn::Primitive(p) if p == "u8" => "Data".into(),
-                FfiScalarReturn::Complex(_) | FfiScalarReturn::Owned(_) => "[String]".into(),
+                FfiScalarReturn::Complex(_) => "[String]".into(),
+                FfiScalarReturn::Owned(name) => format!("[Native{}]", name),
                 FfiScalarReturn::Primitive(p) => {
                     format!("[{}]", resolve_swift_primitive(p, custom_types))
                 }
@@ -331,6 +347,7 @@ fn param_conversion(param: &FfiParam, custom_types: &HashMap<String, String>) ->
                 _ => name,
             }
         }
+        FfiParamType::Owned(_) => format!("{}.inner", name),
         _ => name,
     }
 }
@@ -565,6 +582,70 @@ mod tests {
             "func maybeHit(error: AutoreleasingUnsafeMutablePointer<NSError?>) -> NSNumber?"
         ));
         assert!(output.contains("return result.map { NSNumber(value: $0) }"));
+    }
+
+    #[test]
+    fn optional_owned_return_is_wrapped_for_objc_export() {
+        let iface = FfiInterface {
+            name: "EditorHost".into(),
+            methods: vec![
+                FfiMethod {
+                    name: "create".into(),
+                    is_async: false,
+                    is_constructor: true,
+                    params: vec![],
+                    return_type: FfiReturnType::Owned("EditorHost".into()),
+                },
+                FfiMethod {
+                    name: "set_fonts".into(),
+                    is_async: false,
+                    is_constructor: false,
+                    params: vec![],
+                    return_type: FfiReturnType::Option(FfiScalarReturn::Owned(
+                        "ResourceUpdate".into(),
+                    )),
+                },
+            ],
+        };
+
+        let output = generate_class(&iface, &empty_ct());
+
+        assert!(output.contains(
+            "func setFonts(error: AutoreleasingUnsafeMutablePointer<NSError?>) -> NativeResourceUpdate?"
+        ));
+        assert!(output.contains("return result.map { NativeResourceUpdate(inner: $0) }"));
+    }
+
+    #[test]
+    fn vec_owned_return_is_wrapped_for_objc_export() {
+        let iface = FfiInterface {
+            name: "EditorHost".into(),
+            methods: vec![
+                FfiMethod {
+                    name: "create".into(),
+                    is_async: false,
+                    is_constructor: true,
+                    params: vec![],
+                    return_type: FfiReturnType::Owned("EditorHost".into()),
+                },
+                FfiMethod {
+                    name: "updates".into(),
+                    is_async: false,
+                    is_constructor: false,
+                    params: vec![],
+                    return_type: FfiReturnType::Vec(FfiScalarReturn::Owned(
+                        "ResourceUpdate".into(),
+                    )),
+                },
+            ],
+        };
+
+        let output = generate_class(&iface, &empty_ct());
+
+        assert!(output.contains(
+            "func updates(error: AutoreleasingUnsafeMutablePointer<NSError?>) -> [NativeResourceUpdate]?"
+        ));
+        assert!(output.contains("return result.map { NativeResourceUpdate(inner: $0) }"));
     }
 
     #[test]

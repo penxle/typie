@@ -149,7 +149,7 @@ class EditorDocumentManipulationDesktopTest {
         onZoomSnap = {},
       )
     lateinit var interactionScope: EditorInteractionScope
-    editor.sync {}
+    fake.publishSnapshot(editor)
     try {
       setOverlayHostContent(
         editor = editor,
@@ -215,7 +215,7 @@ class EditorDocumentManipulationDesktopTest {
         viewportState = viewportState,
       )
     lateinit var interactionScope: EditorInteractionScope
-    editor.sync {}
+    fake.publishSnapshot(editor)
     try {
       setOverlayHostContent(
         editor = editor,
@@ -281,7 +281,7 @@ class EditorDocumentManipulationDesktopTest {
         viewportState = viewportState,
       )
     lateinit var interactionScope: EditorInteractionScope
-    editor.sync {}
+    fake.publishSnapshot(editor)
     try {
       setOverlayHostContent(
         editor = editor,
@@ -351,7 +351,7 @@ class EditorDocumentManipulationDesktopTest {
         updateEditorBounds(TestRootRect, density = 1f)
       }
     val runtime = EditorRuntime(scope).apply { attach(editor) }
-    editor.sync {}
+    fake.publishSnapshot(editor)
     try {
       setOverlayHostContent(editor = editor, runtime = runtime, uiState = uiState, scope = scope)
       waitForIdle()
@@ -412,7 +412,7 @@ class EditorDocumentManipulationDesktopTest {
         )
       }
     val runtime = EditorRuntime(scope).apply { attach(editor) }
-    editor.sync {}
+    fake.publishSnapshot(editor)
     try {
       setOverlayHostContent(
         editor = editor,
@@ -492,7 +492,7 @@ class EditorDocumentManipulationDesktopTest {
       }
     val runtime = EditorRuntime(scope).apply { attach(editor) }
     val viewportState = EditorViewportState()
-    editor.sync {}
+    fake.publishSnapshot(editor)
     try {
       setOverlayHostContent(
         editor = editor,
@@ -575,7 +575,7 @@ class EditorDocumentManipulationDesktopTest {
         density = 1f,
         onZoomSnap = {},
       )
-    editor.sync {}
+    fake.publishSnapshot(editor)
     try {
       setOverlayHostContent(
         editor = editor,
@@ -640,7 +640,7 @@ class EditorDocumentManipulationDesktopTest {
       }
     val runtime = EditorRuntime(scope).apply { attach(editor) }
     var lowerPointerDownCount = 0
-    editor.sync {}
+    fake.publishSnapshot(editor)
     try {
       setOverlayHostContent(
         editor = editor,
@@ -694,7 +694,7 @@ class EditorDocumentManipulationDesktopTest {
           updateEditorBounds(TestRootRect, density = 1f)
         }
       val runtime = EditorRuntime(scope).apply { attach(editor) }
-      editor.sync {}
+      fake.publishSnapshot(editor)
       try {
         setOverlayHostContent(editor = editor, runtime = runtime, uiState = uiState, scope = scope)
         waitForIdle()
@@ -712,7 +712,7 @@ class EditorDocumentManipulationDesktopTest {
             cellSelection =
               TableOverlayCellSelection(anchorRow = 0, anchorCol = 0, headRow = 0, headCol = 1),
           )
-        editor.sync {}
+        fake.publishSnapshot(editor)
         fake.enqueued.clear()
         waitForIdle()
 
@@ -760,7 +760,7 @@ class EditorDocumentManipulationDesktopTest {
         updateEditorBounds(TestRootRect, density = 1f)
       }
     val runtime = EditorRuntime(scope).apply { attach(editor) }
-    editor.sync {}
+    fake.publishSnapshot(editor)
     try {
       setOverlayHostContent(editor = editor, runtime = runtime, uiState = uiState, scope = scope)
       waitForIdle()
@@ -807,7 +807,7 @@ class EditorDocumentManipulationDesktopTest {
         updateEditorBounds(TestRootRect, density = 1f)
       }
     val runtime = EditorRuntime(scope).apply { attach(editor) }
-    editor.sync {}
+    fake.publishSnapshot(editor)
     try {
       setOverlayHostContent(editor = editor, runtime = runtime, uiState = uiState, scope = scope)
       waitForIdle()
@@ -858,7 +858,7 @@ class EditorDocumentManipulationDesktopTest {
         updateEditorBounds(TestRootRect, density = 1f)
       }
     val runtime = EditorRuntime(scope).apply { attach(editor) }
-    editor.sync {}
+    fake.publishSnapshot(editor)
     try {
       setOverlayHostContent(editor = editor, runtime = runtime, uiState = uiState, scope = scope)
       waitForIdle()
@@ -922,7 +922,7 @@ class EditorDocumentManipulationDesktopTest {
         )
       }
     val runtime = EditorRuntime(scope).apply { attach(editor) }
-    editor.sync {}
+    fake.publishSnapshot(editor)
     try {
       setOverlayHostContent(editor = editor, runtime = runtime, uiState = uiState, scope = scope)
       waitForIdle()
@@ -981,7 +981,7 @@ class EditorDocumentManipulationDesktopTest {
       }
     val runtime = EditorRuntime(scope).apply { attach(editor) }
     lateinit var interactionScope: EditorInteractionScope
-    editor.sync {}
+    fake.publishSnapshot(editor)
     try {
       setOverlayHostContent(
         editor = editor,
@@ -1049,7 +1049,7 @@ class EditorDocumentManipulationDesktopTest {
         )
       }
     val runtime = EditorRuntime(scope).apply { attach(editor) }
-    editor.sync {}
+    fake.publishSnapshot(editor)
     try {
       setOverlayHostContent(
         editor = editor,
@@ -1099,7 +1099,7 @@ class EditorDocumentManipulationDesktopTest {
         updateEditorBounds(TestRootRect, density = 1f)
       }
     val runtime = EditorRuntime(scope).apply { attach(editor) }
-    editor.sync {}
+    fake.publishSnapshot(editor)
     try {
       setOverlayHostContent(editor = editor, runtime = runtime, uiState = uiState, scope = scope)
       waitForIdle()
@@ -1150,7 +1150,7 @@ class EditorDocumentManipulationDesktopTest {
         updateEditorBounds(TestRootRect, density = 1f)
       }
     val runtime = EditorRuntime(scope).apply { attach(editor) }
-    editor.sync {}
+    fake.publishSnapshot(editor)
     try {
       setOverlayHostContent(editor = editor, runtime = runtime, uiState = uiState, scope = scope)
       waitForIdle()
@@ -1202,7 +1202,7 @@ class EditorDocumentManipulationDesktopTest {
         updateEditorBounds(TestRootRect, density = 1f)
       }
     val runtime = EditorRuntime(scope).apply { attach(editor) }
-    editor.sync {}
+    fake.publishSnapshot(editor)
     try {
       setOverlayHostContent(editor = editor, runtime = runtime, uiState = uiState, scope = scope)
       waitForIdle()
@@ -1285,7 +1285,7 @@ class EditorDocumentManipulationDesktopTest {
           onSelectionHaptic = {},
           onRequestSoftwareKeyboard = {},
         )
-        interactionScope.onEditorStateChanged(editor.state)
+        interactionScope.onEditorStateChanged(editor.publishedState)
       }
 
       CompositionLocalProvider(

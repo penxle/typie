@@ -1,14 +1,17 @@
 package co.typie.editor.interaction.sessions
 
 import androidx.compose.ui.geometry.Offset
+import co.typie.editor.PagePoint
+import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.Position
 import co.typie.editor.ffi.Selection
+import co.typie.editor.ffi.SelectionOp
 import co.typie.editor.interaction.EditorGestureContext
 import co.typie.editor.interaction.contains
 import co.typie.editor.interaction.gestures.EditorSelectionHandleTableCellHandoff
 import co.typie.editor.interaction.gestures.EditorSelectionHandleType
 import co.typie.editor.interaction.resolveActiveTableCellSelection
-import co.typie.editor.interaction.semantics.dispatchSelectionHandleExtension
+import co.typie.editor.interaction.semantics.selectionHandleExtensionOp
 
 internal class EditorSelectionHandleDragSession {
   private var pendingContext: EditorPendingSelectionHandleDrag? = null
@@ -54,7 +57,7 @@ internal class EditorSelectionHandleDragSession {
       return false
     }
 
-    val endpoints = context.editor.tickSelectionEndpoints ?: return false
+    val endpoints = context.editor.publishedState.selectionEndpoints ?: return false
     val handle =
       when (type) {
         EditorSelectionHandleType.From -> endpoints.from
@@ -138,13 +141,13 @@ internal class EditorSelectionHandleDragSession {
     if (
       !activeSelection.overlay.contains(
         point = point,
-        layoutMode = context.editor.rootAttrs?.layoutMode,
+        layoutMode = context.editor.publishedState.rootAttrs?.layoutMode,
         project = context.geometry::resolvePagePosition,
       )
     ) {
       return null
     }
-    val baseSelection = drag.baseSelection ?: context.editor.selection ?: return null
+    val baseSelection = drag.baseSelection ?: context.editor.publishedState.selection ?: return null
     return EditorSelectionHandleTableCellHandoff(
       touchPosition = touchPosition,
       handlePosition = selectionPosition,
@@ -169,19 +172,32 @@ internal class EditorSelectionHandleDragSession {
     context.semantics.edgeAutoScroll.trackSelectionHandle(
       edgePosition = touchPosition,
       dispatchPosition = selectionPosition,
-      anchor = drag.anchor,
-      baseSelection = drag.baseSelection,
       context = context,
+      dispatch = { scrolled ->
+        dispatchAndRetain(point = scrolled.point, drag = drag, context = context)
+      },
     )
     val point = context.geometry.resolvePoint(positionInNode = selectionPosition) ?: return false
-    if (point.page < 0) {
-      return false
-    }
-    return context.editor.dispatchSelectionHandleExtension(
-      point = point,
-      anchor = drag.anchor,
-      baseSelection = drag.baseSelection,
-    )
+    return dispatchAndRetain(point = point, drag = drag, context = context)
+  }
+
+  fun finish(type: EditorSelectionHandleType): SelectionOp.ExtendTo? {
+    val terminalExtension = dragContext?.takeIf { it.type == type }?.latestExtension
+    reset()
+    return terminalExtension
+  }
+
+  private fun dispatchAndRetain(
+    point: PagePoint,
+    drag: EditorSelectionHandleDragContext,
+    context: EditorGestureContext,
+  ): Boolean {
+    val op =
+      point.selectionHandleExtensionOp(anchor = drag.anchor, baseSelection = drag.baseSelection)
+        ?: return false
+    context.editor.enqueue(Message.Selection(op))
+    drag.latestExtension = op
+    return true
   }
 
   fun reset() {
@@ -202,6 +218,7 @@ private data class EditorSelectionHandleDragContext(
   val anchor: Position,
   val baseSelection: Selection?,
   val tableId: String?,
+  var latestExtension: SelectionOp.ExtendTo? = null,
 ) {
   fun selectionPosition(touchPosition: Offset): Offset =
     startHandlePosition + (touchPosition - startTouchPosition)

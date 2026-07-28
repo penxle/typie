@@ -4,6 +4,7 @@ use editor_renderer::damage::IRect;
 use wasm_bindgen::prelude::*;
 
 use super::surface_budget;
+use crate::editor::FrameKey;
 use crate::error::FfiError;
 
 pub type PlatformHandle = web_sys::HtmlCanvasElement;
@@ -99,6 +100,8 @@ impl CpuPageSurface {
         &mut self,
         dl: &editor_renderer::display_list::DisplayList,
         damage: &[IRect],
+        _editor_revision: u64,
+        _frame_key: FrameKey,
     ) -> bool {
         if self.oversized {
             return false;

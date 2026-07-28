@@ -16,8 +16,11 @@ object TextReplacementLoader {
   fun watchTextReplacements(scope: CoroutineScope, user: () -> TextReplacementLoader_user?) {
     scope.launch {
       snapshotFlow(user).filterNotNull().distinctUntilChanged().collect { user ->
+        val rules = user.toTextReplacementRules()
         withContext(Dispatchers.Default) {
-          PlatformModule.editorHost.setTextReplacementRules(user.toTextReplacementRules())
+          EditorRegistry.commitResourceUpdate {
+            PlatformModule.editorHost.setTextReplacementRules(rules)
+          }
         }
       }
     }

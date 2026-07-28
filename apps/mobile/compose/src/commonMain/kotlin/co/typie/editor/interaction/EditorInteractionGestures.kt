@@ -2,6 +2,7 @@ package co.typie.editor.interaction
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerInputChange
+import co.typie.editor.EditorState
 import co.typie.editor.ffi.InputModifiers
 import co.typie.editor.interaction.gestures.EditorDndGesture
 import co.typie.editor.interaction.gestures.EditorLongPressDispatchDelayMillis
@@ -54,6 +55,10 @@ internal class EditorInteractionGestures(
     tableColumnResize.updateDragSlop(dragSlopPx)
   }
 
+  fun onPublishedStateChanged(state: EditorState, context: EditorGestureContext) {
+    tap.onPublishedStateChanged(state = state, context = context)
+  }
+
   fun handlePointerDown(
     change: PointerInputChange,
     positionInEditor: Offset?,
@@ -76,6 +81,9 @@ internal class EditorInteractionGestures(
       return false
     }
 
+    longPress.reset()
+    doubleTapDrag.resetPointerOwnedState(context = context)
+    selectionHandle.reset()
     tap.cancelPendingPresentation(context = context)
 
     if (

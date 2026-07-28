@@ -22,6 +22,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -59,7 +60,7 @@ class EditorHitTestSnapshotTest {
       val dispatcher = StandardTestDispatcher(testScheduler)
       val scope = CoroutineScope(SupervisorJob() + dispatcher)
       val editor = Editor(fake, scope, dispatcher)
-      editor.await { enqueue(Message.System(SystemEvent.Initialize)) }
+      editor.update { enqueue(Message.System(SystemEvent.Initialize)) }
 
       assertTrue(editor.selectionHitTest(page = 0, x = 10f, y = 10f))
       assertTrue(editor.selectionHitTest(page = 0, x = 30f, y = 30f))
@@ -87,7 +88,7 @@ class EditorHitTestSnapshotTest {
       val dispatcher = StandardTestDispatcher(testScheduler)
       val scope = CoroutineScope(SupervisorJob() + dispatcher)
       val editor = Editor(fake, scope, dispatcher)
-      editor.await { enqueue(Message.System(SystemEvent.Initialize)) }
+      editor.update { enqueue(Message.System(SystemEvent.Initialize)) }
 
       assertTrue(editor.cursorHitTest(page = 2, x = 6f, y = 10f))
       assertFalse(editor.cursorHitTest(page = 0, x = 6f, y = 10f))
@@ -121,7 +122,7 @@ class EditorHitTestSnapshotTest {
       val dispatcher = StandardTestDispatcher(testScheduler)
       val scope = CoroutineScope(SupervisorJob() + dispatcher)
       val editor = Editor(fake, scope, dispatcher)
-      editor.await { enqueue(Message.System(SystemEvent.Initialize)) }
+      editor.update { enqueue(Message.System(SystemEvent.Initialize)) }
 
       assertNull(editor.interactiveHitTest(page = 0, x = 10f, y = 10f))
       assertEquals(callout.hit, editor.interactiveHitTest(page = 0, x = 42f, y = 42f))
@@ -149,19 +150,19 @@ class EditorHitTestSnapshotTest {
       val dispatcher = StandardTestDispatcher(testScheduler)
       val scope = CoroutineScope(SupervisorJob() + dispatcher)
       val editor = Editor(fake, scope, dispatcher)
-      editor.await { enqueue(Message.System(SystemEvent.Initialize)) }
+      editor.update { enqueue(Message.System(SystemEvent.Initialize)) }
       assertTrue(editor.selectionHitTest(page = 0, x = 5f, y = 5f))
 
       rects =
         listOf(PageRect(pageIdx = 0, rect = Rect(x = 100f, y = 100f, width = 10f, height = 10f)))
-      editor.await { enqueue(Message.System(SystemEvent.Initialize)) }
+      editor.update { enqueue(Message.System(SystemEvent.Initialize)) }
       assertTrue(
         editor.selectionHitTest(page = 0, x = 5f, y = 5f),
         "rects must carry over when no geometry-affecting event fired",
       )
 
       events = listOf(EditorEvent.RenderInvalidated)
-      editor.await { enqueue(Message.System(SystemEvent.Initialize)) }
+      editor.update { enqueue(Message.System(SystemEvent.Initialize)) }
       assertFalse(editor.selectionHitTest(page = 0, x = 5f, y = 5f))
       assertTrue(editor.selectionHitTest(page = 0, x = 105f, y = 105f))
       scope.cancel()
@@ -184,6 +185,53 @@ class EditorHitTestSnapshotTest {
 
       editor.dispose()
       assertNull(editor.copySelection())
+      scope.cancel()
+    } finally {
+      Dispatchers.resetMain()
+    }
+  }
+
+  @Test
+  fun failedEditorDoesNotCallCoreForSupplementalReads() = runTest {
+    Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+    try {
+      var characterCountCalls = 0
+      var copyCalls = 0
+      var imeCalls = 0
+      val failure = IllegalStateException("render failed")
+      val fake =
+        FakeFfiEditor(
+          characterCountsProvider = {
+            characterCountCalls += 1
+            FakeFfiEditor.EmptyCharacterCounts
+          },
+          copySelectionProvider = {
+            copyCalls += 1
+            null
+          },
+          imeProvider = { _, _ ->
+            imeCalls += 1
+            FakeFfiEditor.EmptyIme
+          },
+          renderSurfaceProvider = { throw failure },
+        )
+      val dispatcher = StandardTestDispatcher(testScheduler)
+      val scope = CoroutineScope(SupervisorJob() + dispatcher)
+      val reported = mutableListOf<Throwable>()
+      val editor = Editor(fake, scope, dispatcher, onError = { _, error -> reported += error })
+      editor.activateVisualHost(Any())
+      editor.attachSurface(0, 10L, 100.0, 100.0, 1.0, wakeDelivery = {})
+      advanceUntilIdle()
+      editor.setImeSessionActive(true)
+
+      assertNull(editor.characterCounts())
+      assertNull(editor.copySelection())
+      editor.refreshImeSnapshot()
+
+      assertEquals(listOf<Throwable>(failure), reported)
+      assertEquals(0, characterCountCalls)
+      assertEquals(0, copyCalls)
+      assertEquals(0, imeCalls)
       scope.cancel()
     } finally {
       Dispatchers.resetMain()

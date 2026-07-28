@@ -1,6 +1,8 @@
 package co.typie.editor.interaction.sessions
 
 import androidx.compose.ui.geometry.Offset
+import co.typie.editor.Editor
+import co.typie.editor.EditorState
 import co.typie.editor.ext.isCollapsed
 import co.typie.editor.interaction.EditorGestureContext
 import co.typie.editor.interaction.EditorInteractionEvent
@@ -14,10 +16,9 @@ private const val EditorDoubleTapDragStartThresholdDp = 4f
 
 internal class EditorDoubleTapDragSession {
   private var phase = EditorDoubleTapDragPhase.Idle
-  private var pendingSelectionExtensionPosition: Offset? = null
   private var startPosition: Offset? = null
   private var startThresholdPx = 0f
-  private var terminalDragAwaitingWordCommit = false
+  private var wordSelectionRequest: WordSelectionRequest? = null
 
   val active: Boolean
     get() = phase != EditorDoubleTapDragPhase.Idle
@@ -38,9 +39,9 @@ internal class EditorDoubleTapDragSession {
     }
     context.effects.cancelTapDispatch()
     tap.markTapDispatched()
-    terminalDragAwaitingWordCommit = false
+    wordSelectionRequest = WordSelectionRequest(editor = context.editor)
     context.semantics.selectionExpansion.reset()
-    context.semantics.selectionExpansion.awaitWordSelectionCommit()
+    context.semantics.selectionExpansion.awaitWordSelectionApplied()
     context.semantics.contextMenu.hide()
     context.effects.setScrollGestureLocked(true)
     startPosition = position
@@ -81,25 +82,46 @@ internal class EditorDoubleTapDragSession {
       if (context.mode.canApply(EditorInteractionEvent.DoubleTapDragEnd)) {
         context.reduceMode(EditorInteractionEvent.DoubleTapDragEnd)
       }
-      if (context.semantics.selectionExpansion.isAwaitingWordSelectionCommit) {
-        terminalDragAwaitingWordCommit = true
-      } else if (!context.editor.selection.isCollapsed()) {
-        context.semantics.contextMenu.show(context.editor.state)
+      if (context.semantics.selectionExpansion.isAwaitingWordSelectionApplied) {
+        wordSelectionRequest?.showMenuWhenPublished = true
+      } else {
+        wordSelectionRequest?.let { request ->
+          request.showMenuWhenPublished = true
+          requestSelectionMenuIfReady(request = request, context = context)
+        }
       }
     }
     context.semantics.magnifier.hide()
     return wasActive
   }
 
-  fun onWordSelectionCommitted(tap: EditorTapGesture, context: EditorGestureContext) {
-    context.semantics.selectionExpansion.markWordSelectionCommitted()
-    flushPendingSelectionExtension(context = context)
-    if (!tap.hasActivePointer && !active) {
-      if (terminalDragAwaitingWordCommit && !context.editor.selection.isCollapsed()) {
-        context.semantics.contextMenu.show(context.editor.state)
+  fun captureWordSelectionApplied(
+    tap: EditorTapGesture,
+    context: EditorGestureContext,
+  ): (EditorState?) -> Unit {
+    val request = wordSelectionRequest
+    return onApplied@{ snapshot ->
+      if (
+        request == null || wordSelectionRequest !== request || context.editor !== request.editor
+      ) {
+        return@onApplied
       }
-      terminalDragAwaitingWordCommit = false
-      resetSelectionExtensionState(context = context)
+      if (snapshot == null) {
+        wordSelectionRequest = null
+        resetSelectionExtensionState(context = context)
+        return@onApplied
+      }
+      request.appliedState = snapshot
+      context.semantics.selectionExpansion.markWordSelectionApplied()
+      if (!tap.hasActivePointer && !active && request.showMenuWhenPublished) {
+        requestSelectionMenuIfReady(request = request, context = context)
+      } else {
+        flushPendingSelectionExtension(request = request, context = context)
+        if (!tap.hasActivePointer && !active) {
+          wordSelectionRequest = null
+          resetSelectionExtensionState(context = context)
+        }
+      }
     }
   }
 
@@ -113,13 +135,12 @@ internal class EditorDoubleTapDragSession {
     context.effects.setScrollGestureLocked(false)
     context.semantics.edgeAutoScroll.stop()
     resetSelectionExtensionState(context = context)
-    terminalDragAwaitingWordCommit = false
+    wordSelectionRequest = null
     reset()
   }
 
   fun reset() {
-    pendingSelectionExtensionPosition = null
-    terminalDragAwaitingWordCommit = false
+    wordSelectionRequest = null
     stop()
   }
 
@@ -183,11 +204,15 @@ internal class EditorDoubleTapDragSession {
       context = context,
     )
     val point = context.geometry.resolvePoint(positionInNode = position) ?: return false
+    val request = wordSelectionRequest ?: return false
     val editor = context.editor
+    if (editor !== request.editor) {
+      return false
+    }
     val selectionContext = context.semantics.selectionExpansion.context(editor)
     if (selectionContext == null) {
-      if (context.semantics.selectionExpansion.isAwaitingWordSelectionCommit) {
-        pendingSelectionExtensionPosition = position
+      if (context.semantics.selectionExpansion.isAwaitingWordSelectionApplied) {
+        request.latestExtension = position
       }
       return false
     }
@@ -195,26 +220,101 @@ internal class EditorDoubleTapDragSession {
       return false
     }
     if (editor.dispatchSelectionExtension(point = point, context = selectionContext)) {
-      pendingSelectionExtensionPosition = null
+      request.latestExtension = position
       context.semantics.magnifier.show(position)
       return true
     }
     return false
   }
 
-  private fun flushPendingSelectionExtension(context: EditorGestureContext) {
-    val position = pendingSelectionExtensionPosition ?: return
-    pendingSelectionExtensionPosition = null
+  private fun flushPendingSelectionExtension(
+    request: WordSelectionRequest,
+    context: EditorGestureContext,
+  ) {
+    val position = request.latestExtension ?: return
     extendSelection(position = position, context = context)
   }
 
   private fun hasDeferredSelectionExtension(context: EditorGestureContext): Boolean =
-    pendingSelectionExtensionPosition != null &&
-      context.semantics.selectionExpansion.isAwaitingWordSelectionCommit
+    wordSelectionRequest?.latestExtension != null &&
+      context.semantics.selectionExpansion.isAwaitingWordSelectionApplied
 
   private fun resetSelectionExtensionState(context: EditorGestureContext) {
-    pendingSelectionExtensionPosition = null
     context.semantics.selectionExpansion.reset()
+  }
+
+  private fun requestSelectionMenuIfReady(
+    request: WordSelectionRequest,
+    context: EditorGestureContext,
+  ) {
+    if (
+      wordSelectionRequest !== request ||
+        context.editor !== request.editor ||
+        !request.showMenuWhenPublished
+    ) {
+      return
+    }
+    val appliedState = request.appliedState ?: return
+    if (appliedState.selection.isCollapsed()) {
+      wordSelectionRequest = null
+      return
+    }
+
+    request.showMenuWhenPublished = false
+    val extensionPosition = request.latestExtension
+    val point = extensionPosition?.let { context.geometry.resolvePoint(positionInNode = it) }
+    val extensionContext = point?.let {
+      context.semantics.selectionExpansion.context(context.editor)
+    }
+    if (point == null || extensionContext == null) {
+      requestMenuForPublishedSelection(request = request, state = appliedState, context = context)
+      return
+    }
+
+    context.semantics.pointSelection.launchSelectionExtension(
+      editor = request.editor,
+      point = point,
+      context = extensionContext,
+      onApplied = onApplied@{ snapshot ->
+          if (wordSelectionRequest !== request) {
+            return@onApplied
+          }
+          requestMenuForPublishedSelection(request = request, state = snapshot, context = context)
+        },
+      afterDispatch = { dispatched ->
+        if (wordSelectionRequest === request && !dispatched) {
+          requestMenuForPublishedSelection(
+            request = request,
+            state = appliedState,
+            context = context,
+          )
+        }
+      },
+    )
+  }
+
+  private fun requestMenuForPublishedSelection(
+    request: WordSelectionRequest,
+    state: EditorState,
+    context: EditorGestureContext,
+  ) {
+    if (wordSelectionRequest !== request || context.editor !== request.editor) {
+      return
+    }
+    wordSelectionRequest = null
+    if (state.selection.isCollapsed()) {
+      return
+    }
+    context.semantics.contextMenu.requestShowForAppliedSelection(
+      editor = request.editor,
+      state = state,
+    )
+  }
+
+  private class WordSelectionRequest(val editor: Editor) {
+    var appliedState: EditorState? = null
+    var latestExtension: Offset? = null
+    var showMenuWhenPublished = false
   }
 }
 

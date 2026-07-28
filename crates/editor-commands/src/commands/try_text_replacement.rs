@@ -9,7 +9,7 @@ use crate::helpers::{apply_inline_modifiers, child_leaf_dots, insert_hard_break_
 use crate::{CommandError, CommandResult};
 
 pub fn try_text_replacement(tr: &mut Transaction, resource: &Resource) -> CommandResult {
-    let rules = &resource.text_replacement_rules;
+    let rules = resource.text_replacement_rules();
     if rules.is_empty() {
         return Ok(false);
     }

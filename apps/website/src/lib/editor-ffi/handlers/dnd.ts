@@ -187,11 +187,12 @@ const dispatchDndOverAtClient = (
   if (!local) return false;
 
   const reuseNodeId = updateAttachmentDropTarget(ctx, editor, root, clientX, clientY, dataTransfer);
-  editor.enqueue({
-    type: 'dnd',
-    op: { type: 'over', page: local.page, x: local.x, y: local.y, reuse_node_id: reuseNodeId ?? undefined, modifiers },
+  editor.updateNow(() => {
+    editor.enqueue({
+      type: 'dnd',
+      op: { type: 'over', page: local.page, x: local.x, y: local.y, reuse_node_id: reuseNodeId ?? undefined, modifiers },
+    });
   });
-  editor.flush();
   return true;
 };
 
@@ -254,8 +255,7 @@ export const handleDragStart = (ctx: EditorContext, event: DragEvent) => {
     dataTransfer.effectAllowed = 'copy';
     dataTransfer.setData('text/plain', payload.text);
     dataTransfer.setData('text/html', payload.html);
-    editor.enqueue({ type: 'dnd', op: { type: 'start_internal_selection' } });
-    editor.flush();
+    editor.updateNow(() => editor.enqueue({ type: 'dnd', op: { type: 'start_internal_selection' } }));
     return;
   }
 
@@ -265,8 +265,7 @@ export const handleDragStart = (ctx: EditorContext, event: DragEvent) => {
   dataTransfer.setData(INTERNAL_SELECTION_MIME, '1');
   dataTransfer.setData('text/plain', payload.text);
   dataTransfer.setData('text/html', payload.html);
-  editor.enqueue({ type: 'dnd', op: { type: 'start_internal_selection' } });
-  editor.flush();
+  editor.updateNow(() => editor.enqueue({ type: 'dnd', op: { type: 'start_internal_selection' } }));
 };
 
 export const handleDragEnter = (ctx: EditorContext, event: DragEvent) => {
@@ -283,8 +282,7 @@ export const handleDragEnter = (ctx: EditorContext, event: DragEvent) => {
     return;
   }
 
-  editor.enqueue({ type: 'dnd', op: { type: 'enter_external', payload } });
-  editor.flush();
+  editor.updateNow(() => editor.enqueue({ type: 'dnd', op: { type: 'enter_external', payload } }));
 };
 
 export const handleDragOver = (ctx: EditorContext, event: DragEvent) => {
@@ -307,11 +305,12 @@ export const handleDragOver = (ctx: EditorContext, event: DragEvent) => {
 
   const modifiers = modifiersFromEvent(event);
   const reuseNodeId = updateAttachmentDropTarget(ctx, editor, root, event.clientX, event.clientY, dataTransfer);
-  editor.enqueue({
-    type: 'dnd',
-    op: { type: 'over', page: local.page, x: local.x, y: local.y, reuse_node_id: reuseNodeId ?? undefined, modifiers },
+  editor.updateNow(() => {
+    editor.enqueue({
+      type: 'dnd',
+      op: { type: 'over', page: local.page, x: local.x, y: local.y, reuse_node_id: reuseNodeId ?? undefined, modifiers },
+    });
   });
-  editor.flush();
   if (ctx.editor !== editor || editor.destroyed || editor.readOnly) {
     setAttachmentDropTarget(ctx, null);
     stopDndEdgeAutoScroll(editor);
@@ -346,8 +345,7 @@ export const handleDragLeave = (ctx: EditorContext, event: DragEvent) => {
   }
 
   setAttachmentDropTarget(ctx, null);
-  editor.enqueue({ type: 'dnd', op: { type: 'leave' } });
-  editor.flush();
+  editor.updateNow(() => editor.enqueue({ type: 'dnd', op: { type: 'leave' } }));
   stopDndEdgeAutoScroll(editor);
 };
 
@@ -374,18 +372,20 @@ export const handleDrop = (ctx: EditorContext, event: DragEvent, onFailure: Atta
   const files = hasInternalSelectionDrag(editor, dataTransfer) ? [] : filesFromTransfer(dataTransfer);
   const attachmentIntent =
     files.length > 0 ? attachmentDropIntent(ctx, editor, event.currentTarget, event.clientX, event.clientY, files) : undefined;
-  editor.enqueue({
-    type: 'dnd',
-    op: {
-      type: 'over',
-      page: local.page,
-      x: local.x,
-      y: local.y,
-      reuse_node_id: attachmentIntent?.reuseNodeId,
-      modifiers,
-    },
+  event.preventDefault();
+  editor.updateNow(() => {
+    editor.enqueue({
+      type: 'dnd',
+      op: {
+        type: 'over',
+        page: local.page,
+        x: local.x,
+        y: local.y,
+        reuse_node_id: attachmentIntent?.reuseNodeId,
+        modifiers,
+      },
+    });
   });
-  editor.flush();
   if (ctx.editor !== editor || editor.destroyed || editor.readOnly) {
     setAttachmentDropTarget(ctx, null);
     return;
@@ -393,7 +393,6 @@ export const handleDrop = (ctx: EditorContext, event: DragEvent, onFailure: Atta
   if (attachmentIntent) {
     const { items, reuseNodeId } = attachmentIntent;
     setAttachmentDropTarget(ctx, null);
-    event.preventDefault();
     setDropEffect(dataTransfer, dropEffectFromTransfer(editor, dataTransfer, modifiers));
     ctx.attachmentImporter.importAtDrop(items, {
       page: local.page,
@@ -413,27 +412,26 @@ export const handleDrop = (ctx: EditorContext, event: DragEvent, onFailure: Atta
   if (!payload) {
     setAttachmentDropTarget(ctx, null);
     setDropEffect(dataTransfer, 'none');
-    editor.enqueue({ type: 'dnd', op: { type: 'leave' } });
-    editor.flush();
+    editor.updateNow(() => editor.enqueue({ type: 'dnd', op: { type: 'leave' } }));
     internalDndEditors.delete(editor);
     return;
   }
 
   setAttachmentDropTarget(ctx, null);
-  event.preventDefault();
   setDropEffect(dataTransfer, dropEffectFromTransfer(editor, dataTransfer, modifiers));
-  editor.enqueue({
-    type: 'dnd',
-    op: {
-      type: 'drop',
-      page: local.page,
-      x: local.x,
-      y: local.y,
-      payload,
-      modifiers,
-    },
+  editor.updateNow(() => {
+    editor.enqueue({
+      type: 'dnd',
+      op: {
+        type: 'drop',
+        page: local.page,
+        x: local.x,
+        y: local.y,
+        payload,
+        modifiers,
+      },
+    });
   });
-  editor.flush();
   editor.endNativeDragAdmission({ restoreFocus: true });
   editor.focus();
   internalDndEditors.delete(editor);
@@ -447,8 +445,7 @@ export const handleDragEnd = (ctx: EditorContext) => {
   stopDndEdgeAutoScroll(editor);
   editor.gesture.handleNativeDragEnd();
   editor.endNativeDragAdmission({ restoreFocus: false });
-  editor.enqueue({ type: 'dnd', op: { type: 'end' } });
-  editor.flush();
+  editor.updateNow(() => editor.enqueue({ type: 'dnd', op: { type: 'end' } }));
 };
 
 const dropPayloadFromTransfer = (editor: EditorInstance, dataTransfer: DataTransfer): DndDropPayload | null => {

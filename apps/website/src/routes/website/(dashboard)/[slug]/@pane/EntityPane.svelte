@@ -118,9 +118,11 @@
   });
 
   let editorReady = $state(false);
+  let liveEditorFailed = $state(false);
 
   const showSkeleton = $derived(
-    !query.data || !entity || (entity.state === EntityState.ACTIVE && entity.node.__typename === 'Document' && !editorReady),
+    !liveEditorFailed &&
+      (!query.data || !entity || (entity.state === EntityState.ACTIVE && entity.node.__typename === 'Document' && !editorReady)),
   );
 
   setupPane(pane);
@@ -152,7 +154,18 @@
     {#if entity?.state === EntityState.ACTIVE}
       {#if entity?.node.__typename === 'Document'}
         {#if entity.node.state}
-          <DocumentV2 {focused} onReady={() => (editorReady = true)} query$key={query.data} />
+          <DocumentV2
+            {focused}
+            onEditorFailed={() => {
+              liveEditorFailed = true;
+            }}
+            onEditorRetry={() => {
+              liveEditorFailed = false;
+              editorReady = false;
+            }}
+            onReady={() => (editorReady = true)}
+            query$key={query.data}
+          />
         {:else}
           <Document {focused} onReady={() => (editorReady = true)} query$key={query.data} slug={entity.slug} />
         {/if}

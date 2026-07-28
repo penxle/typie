@@ -83,24 +83,36 @@ const createEditor = ({
   selectionHit = false,
   isSelectionCollapsed = true,
   selection = collapsedSelection,
+  appliedSelection = selection,
   readOnly = false,
 }: {
   selectionHit?: boolean;
   isSelectionCollapsed?: boolean;
   selection?: typeof collapsedSelection | typeof rangeSelection | undefined;
+  appliedSelection?: typeof collapsedSelection | typeof rangeSelection | undefined;
   readOnly?: boolean;
 } = {}) => {
-  return {
+  const editor = {
     readOnly,
     isSelectionCollapsed,
     selection,
+    appliedSnapshot: { selection: appliedSelection },
     clientToLocal: vi.fn(() => ({ page: 0, x: 10, y: 20 })),
     interactiveHitTest: vi.fn(() => null),
     selectionHitTest: vi.fn(() => selectionHit),
     beginNativeDragAdmission: vi.fn(),
     endNativeDragAdmission: vi.fn(),
     enqueue: vi.fn(),
-    flush: vi.fn(),
+    updateNow: vi.fn((build: () => void) => {
+      build();
+      return {
+        revision: 1,
+        snapshot: { selection },
+        commandOutcomes: [{ type: 'applied' as const }],
+        events: [],
+        awaitPublished: vi.fn(async () => ({ type: 'published' as const, revision: 1 })),
+      };
+    }),
     scrollIntoView: vi.fn(),
     suspendToolbarSync: vi.fn(),
     resumeToolbarSync: vi.fn(),
@@ -111,9 +123,10 @@ const createEditor = ({
       handlePointerCancel: vi.fn(),
     },
     updatePointerHover: vi.fn(),
-  } as unknown as Editor & {
+  };
+  return editor as unknown as Editor & {
     enqueue: ReturnType<typeof vi.fn>;
-    flush: ReturnType<typeof vi.fn>;
+    updateNow: ReturnType<typeof vi.fn>;
     scrollIntoView: ReturnType<typeof vi.fn>;
     selectionHitTest: ReturnType<typeof vi.fn>;
     suspendToolbarSync: ReturnType<typeof vi.fn>;
@@ -135,7 +148,7 @@ describe('pointer native drag admission', () => {
     expect(target.removeAttribute).toHaveBeenCalledWith('tabindex');
     expect(target.setAttribute).not.toHaveBeenCalled();
     expect(editor.enqueue).not.toHaveBeenCalled();
-    expect(editor.flush).not.toHaveBeenCalled();
+    expect(editor.updateNow).not.toHaveBeenCalled();
     vi.runAllTimers();
     expect(target.setAttribute).toHaveBeenCalledWith('tabindex', '0');
     vi.useRealTimers();
@@ -145,12 +158,30 @@ describe('pointer native drag admission', () => {
     expect(editor.endNativeDragAdmission).toHaveBeenCalledWith({ restoreFocus: true });
     expect(editor.enqueue).toHaveBeenCalledWith({ type: 'selection', op: { type: 'set_at', page: 0, x: 10, y: 20 } });
     expect(editor.scrollIntoView).toHaveBeenCalledWith({ target: { type: 'current_selection_head' }, mode: 'nearest' });
-    expect(editor.flush).toHaveBeenCalledTimes(1);
+    expect(editor.updateNow).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses the applied selection when admitting a native drag', () => {
+    vi.useFakeTimers();
+    const editor = createEditor({
+      selectionHit: true,
+      isSelectionCollapsed: true,
+      selection: collapsedSelection,
+      appliedSelection: rangeSelection,
+    });
+    const target = createPointerTarget();
+
+    handlePointerDown(editor, createPointerEvent({ target }));
+
+    expect(editor.beginNativeDragAdmission).toHaveBeenCalledTimes(1);
+    expect(target.setPointerCapture).not.toHaveBeenCalled();
+    vi.runAllTimers();
+    vi.useRealTimers();
   });
 
   it('restores tabindex even after the browser clears event.currentTarget', () => {
     vi.useFakeTimers();
-    const editor = createEditor({ selectionHit: true, isSelectionCollapsed: false });
+    const editor = createEditor({ selectionHit: true, isSelectionCollapsed: false, selection: rangeSelection });
     const target = createPointerTarget();
     let currentTarget: ReturnType<typeof createPointerTarget> | null = target;
     const down = {
@@ -385,6 +416,43 @@ describe('pointer native drag admission', () => {
         base_selection: undefined,
         allow_collapse: true,
       },
+    });
+    vi.unstubAllGlobals();
+  });
+
+  it('bases a new drag on the exact applied selection when publication is still stale', () => {
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(0);
+      return 1;
+    });
+    const appliedSelection = {
+      anchor: { node: 'applied', offset: 3, affinity: 'downstream' },
+      head: { node: 'applied', offset: 3, affinity: 'downstream' },
+    } as const;
+    const editor = createEditor({ selection: rangeSelection, isSelectionCollapsed: false });
+    editor.updateNow.mockImplementation((build: () => void) => {
+      build();
+      return {
+        revision: 2,
+        snapshot: { selection: appliedSelection },
+        commandOutcomes: [{ type: 'applied' as const }],
+        events: [],
+        awaitPublished: vi.fn(async () => ({ type: 'published' as const, revision: 2 })),
+      };
+    });
+    const target = createPointerTarget({ captured: true });
+    editor.clientToLocal = vi.fn((clientX: number, clientY: number) => ({ page: 0, x: clientX - 100, y: clientY - 200 }));
+
+    handlePointerDown(editor, createPointerEvent({ target, clientX: 110, clientY: 220 }));
+    editor.enqueue.mockClear();
+    handlePointerMove(editor, createPointerEvent({ target, clientX: 130, clientY: 220 }));
+
+    expect(editor.enqueue).toHaveBeenCalledWith({
+      type: 'selection',
+      op: expect.objectContaining({
+        type: 'extend_to',
+        anchor: appliedSelection.anchor,
+      }),
     });
     vi.unstubAllGlobals();
   });

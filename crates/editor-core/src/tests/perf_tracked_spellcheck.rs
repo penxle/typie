@@ -136,9 +136,9 @@ fn run_keystrokes(editor: &mut Editor, expected_ranges: usize) -> KeystrokeCost 
         marks: Duration::ZERO,
     };
     for _ in 0..KEYSTROKES {
-        editor.enqueue(Message::Insertion {
+        let _ = editor.enqueue_request(vec![Message::Insertion {
             op: InsertionOp::Text { text: "x".into() },
-        });
+        }]);
         let t = Instant::now();
         editor.tick().expect("tick");
         cost.tick += t.elapsed();

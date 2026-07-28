@@ -1807,10 +1807,9 @@ mod tests {
             },
         });
         editor.receive_remote_changeset(duplicate_cs);
-        let remote_events = editor.tick().unwrap();
         assert!(
-            !has_state_field(&remote_events, StateField::LastHistoryTag),
-            "duplicate remote changeset must not change last history tag"
+            editor.tick().unwrap().is_none(),
+            "duplicate remote changeset must be a complete no-op"
         );
         editor.apply(Message::Clipboard {
             op: ClipboardOp::RepasteAsText,

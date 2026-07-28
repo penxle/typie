@@ -20,7 +20,8 @@ fn set_doc_replaces_rendered_doc() {
     };
     let plain = other.to_plain();
 
-    editor.set_doc(plain);
+    editor.set_doc(plain).unwrap();
+    editor.tick().unwrap();
     let view = editor.state().view();
     let text = editor_state::prose(&view).text().to_string();
     assert!(

@@ -107,7 +107,7 @@
   const isRubyMixed = $derived(ctx.editor?.modifierState?.ruby?.type === 'mixed');
 
   const isCollapsed = $derived(ctx.editor?.isSelectionCollapsed ?? true);
-  const editingDisabled = $derived(ctx.editor !== undefined && ctx.editor !== ctx.liveEditor);
+  const editingDisabled = $derived(ctx.editor?.terminal === true || (ctx.editor !== undefined && ctx.editor !== ctx.liveEditor));
 
   const enqueue = (message: Message) => {
     if (editingDisabled) return;
@@ -133,10 +133,7 @@
     const span = editor.modifierSpanSelection(selection.head, modifier_type);
     if (!span) return;
 
-    editor.enqueue({ type: 'selection', op: { type: 'set', selection: span } });
-    // Flush so the editor popover reads the extended selection synchronously
-    // instead of the pre-extend one on this same open.
-    editor.flush();
+    editor.updateNow(() => editor.enqueue({ type: 'selection', op: { type: 'set', selection: span } }));
   };
 </script>
 

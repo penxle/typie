@@ -19,7 +19,7 @@ internal fun editorListToolbarPage(mode: EditorToolbarListMode?): EditorToolbarP
     contentDescription = "목록 툴바",
     content = { scope ->
       val editor = LocalEditorRuntime.current.editor
-      val affordances = editor?.state?.blockState?.list
+      val affordances = editor?.appliedState?.blockState?.list
       EditorToolbarRow(scope = scope) {
         EditorToolbarButton(
           icon = Lucide.Dot,

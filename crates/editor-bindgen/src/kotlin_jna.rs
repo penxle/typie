@@ -42,7 +42,7 @@ fn generate_jna_class(
     out.push('\n');
 
     out.push_str(&format!(
-        "class Jna{}(private val native: Native{}) : {} {{\n",
+        "class Jna{}(internal val native: Native{}) : {} {{\n",
         iface.name, iface.name, iface.name
     ));
 
@@ -180,6 +180,7 @@ fn convert_param(
     match ty {
         FfiParamType::Primitive(name) => jna_primitive_conversion(name, kt_name, custom_types),
         FfiParamType::Complex(_) => format!("json.encodeToString({})", kt_name),
+        FfiParamType::Owned(name) => format!("({} as Jna{}).native", kt_name, name),
         FfiParamType::Vec(inner) => match inner {
             FfiScalarParam::Primitive(p) if p == "u8" => kt_name.into(),
             FfiScalarParam::Primitive(p) => {

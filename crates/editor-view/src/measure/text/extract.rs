@@ -620,7 +620,7 @@ mod tests {
             line_height: 1.6,
         };
         let strut = compute_strut(&mut resource, &base).expect("strut");
-        let segmenters = Arc::clone(&resource.segmenters);
+        let segmenters = Arc::clone(resource.segmenters());
         let style_runs = resolve_style_runs(
             &text,
             &runs,
@@ -643,7 +643,7 @@ mod tests {
             &mut resource,
             &tab_boxes,
         );
-        let segmenters = Arc::clone(&resource.segmenters);
+        let segmenters = Arc::clone(resource.segmenters());
         drop(resource);
         extract_lines(
             &text,

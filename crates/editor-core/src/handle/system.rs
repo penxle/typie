@@ -28,6 +28,7 @@ pub fn handle_system_event(editor: &mut Editor, event: SystemEvent) -> Result<()
         }
 
         SystemEvent::FontBaseLoaded { family, weight } => {
+            editor.renderer.reset_font_data_caches();
             editor.queue_font_load(family, weight, crate::font::FontLoadKind::Base);
             Ok(())
         }
@@ -74,45 +75,55 @@ pub fn handle_system_event(editor: &mut Editor, event: SystemEvent) -> Result<()
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{Arc, Mutex};
+
     use super::*;
     use crate::event::{EditorEvent, FontData};
     use crate::state_field::StateField;
     use crate::test_utils::apply_and_report_change;
     use editor_macros::state;
+    use editor_resource::{
+        Resource, ResourceSource, prepare_font_base, prepare_font_chunk, prepare_fonts,
+    };
 
-    fn test_config_single_chunk(
-        resource: &mut editor_resource::Resource,
+    fn test_source_single_chunk(
         family: &str,
         weight: u16,
         hash: &str,
         start: u32,
         end: u32,
-    ) {
-        resource.set_fonts(vec![editor_resource::FontFamily {
-            name: family.into(),
-            source: editor_resource::FontFamilySource::Default,
-            weights: vec![editor_resource::FontWeight {
-                value: weight,
-                hash: hash.into(),
-            }],
-        }]);
-        let id = resource.font_registry.intern(family);
-        resource.font_registry.set_manifest(
-            id,
-            weight,
-            editor_resource::FontManifest::from_coverages(&[vec![start, end]]),
-        );
+    ) -> ResourceSource {
+        let mut source = ResourceSource::new_test();
+        source
+            .set_fonts(prepare_fonts(vec![editor_resource::FontFamily {
+                name: family.into(),
+                source: editor_resource::FontFamilySource::Default,
+                weights: vec![editor_resource::FontWeight {
+                    value: weight,
+                    hash: hash.into(),
+                }],
+            }]))
+            .expect("font families must change resources");
+        source
+            .add_font_manifest(
+                family,
+                weight,
+                editor_resource::FontManifest::from_coverages(&[vec![start, end]]),
+            )
+            .expect("font manifest must change resources");
+        source
     }
 
-    fn fake_base_bytes() -> Vec<u8> {
-        editor_resource::compress_zstd(include_bytes!(
+    fn fake_base() -> editor_resource::PreparedFontBase {
+        let compressed = editor_resource::compress_zstd(include_bytes!(
             "../../../editor-resource/assets/placeholder.ttf"
-        ))
+        ));
+        prepare_font_base(&compressed).expect("test font must be valid")
     }
 
-    fn fake_chunk_bytes() -> Vec<u8> {
+    fn fake_chunk() -> editor_resource::PreparedFontChunk {
         // num_entries = 0 header — no glyph patches. add_font_chunk just marks the chunk loaded.
-        0u32.to_be_bytes().to_vec()
+        prepare_font_chunk(0u32.to_be_bytes().to_vec()).expect("test chunk must be valid")
     }
 
     #[test]
@@ -147,12 +158,10 @@ mod tests {
             selection: (p1, 0)
         };
 
-        let mut editor = Editor::new_test(state);
         // Populate FontConfig so resolve_codepoint_mappings can find the primary.
-        {
-            let mut resource = editor.resource.lock().unwrap();
-            test_config_single_chunk(&mut resource, "TestFont", 400, "h1", 0x41, 0x41);
-        }
+        let source = test_source_single_chunk("TestFont", 400, "h1", 0x41, 0x41);
+        let resource = Arc::new(Mutex::new(Resource::from_snapshot(source.snapshot())));
+        let mut editor = Editor::new_test_with_resource(state, resource);
 
         let events = editor.apply(Message::System {
             event: SystemEvent::Initialize,
@@ -242,25 +251,27 @@ mod tests {
             selection: (p1, 0)
         };
 
-        let mut editor = Editor::new_test(state);
         // Config covers 'A' only (chunk 0). 'B' has no chunk → stays Missing.
-        {
-            let mut resource = editor.resource.lock().unwrap();
-            test_config_single_chunk(&mut resource, "TestFont", 400, "h", 0x41, 0x41);
-        }
+        let mut source = test_source_single_chunk("TestFont", 400, "h", 0x41, 0x41);
+        let resource = Arc::new(Mutex::new(Resource::from_snapshot(source.snapshot())));
+        let mut editor = Editor::new_test_with_resource(state, resource);
         editor.apply(Message::System {
             event: SystemEvent::Initialize,
         });
 
-        {
-            let mut resource = editor.resource.lock().unwrap();
-            resource
-                .add_font_base("TestFont", 400, &fake_base_bytes())
-                .unwrap();
-            resource
-                .add_font_chunk("TestFont", 400, 0, &fake_chunk_bytes())
-                .unwrap();
-        }
+        source
+            .insert_font_base("TestFont", 400, fake_base())
+            .expect("font base must change resources");
+        let snapshot = source
+            .add_font_chunk("TestFont", 400, 0, fake_chunk())
+            .unwrap()
+            .expect("font chunk must change resources");
+        editor
+            .resource
+            .lock()
+            .unwrap()
+            .apply_update(snapshot)
+            .unwrap();
 
         editor.apply(Message::System {
             event: SystemEvent::FontBaseLoaded {
@@ -286,24 +297,26 @@ mod tests {
             selection: (p1, 0)
         };
 
-        let mut editor = Editor::new_test(state);
-        {
-            let mut resource = editor.resource.lock().unwrap();
-            test_config_single_chunk(&mut resource, "TestFont", 400, "h", 0x41, 0x41);
-        }
+        let mut source = test_source_single_chunk("TestFont", 400, "h", 0x41, 0x41);
+        let resource = Arc::new(Mutex::new(Resource::from_snapshot(source.snapshot())));
+        let mut editor = Editor::new_test_with_resource(state, resource);
         editor.apply(Message::System {
             event: SystemEvent::Initialize,
         });
 
-        {
-            let mut resource = editor.resource.lock().unwrap();
-            resource
-                .add_font_base("TestFont", 400, &fake_base_bytes())
-                .unwrap();
-            resource
-                .add_font_chunk("TestFont", 400, 0, &fake_chunk_bytes())
-                .unwrap();
-        }
+        source
+            .insert_font_base("TestFont", 400, fake_base())
+            .expect("font base must change resources");
+        let snapshot = source
+            .add_font_chunk("TestFont", 400, 0, fake_chunk())
+            .unwrap()
+            .expect("font chunk must change resources");
+        editor
+            .resource
+            .lock()
+            .unwrap()
+            .apply_update(snapshot)
+            .unwrap();
 
         editor.apply(Message::System {
             event: SystemEvent::FontBaseLoaded {
@@ -331,25 +344,27 @@ mod tests {
             selection: (p1, 0)
         };
 
-        let mut editor = Editor::new_test(state);
         // Config covers 'A' only — 'B' stays unresolved for this family.
-        {
-            let mut resource = editor.resource.lock().unwrap();
-            test_config_single_chunk(&mut resource, "TestFont", 400, "h", 0x41, 0x41);
-        }
+        let mut source = test_source_single_chunk("TestFont", 400, "h", 0x41, 0x41);
+        let resource = Arc::new(Mutex::new(Resource::from_snapshot(source.snapshot())));
+        let mut editor = Editor::new_test_with_resource(state, resource);
         editor.apply(Message::System {
             event: SystemEvent::Initialize,
         });
 
-        {
-            let mut resource = editor.resource.lock().unwrap();
-            resource
-                .add_font_base("TestFont", 400, &fake_base_bytes())
-                .unwrap();
-            resource
-                .add_font_chunk("TestFont", 400, 0, &fake_chunk_bytes())
-                .unwrap();
-        }
+        source
+            .insert_font_base("TestFont", 400, fake_base())
+            .expect("font base must change resources");
+        let snapshot = source
+            .add_font_chunk("TestFont", 400, 0, fake_chunk())
+            .unwrap()
+            .expect("font chunk must change resources");
+        editor
+            .resource
+            .lock()
+            .unwrap()
+            .apply_update(snapshot)
+            .unwrap();
 
         let events = editor.apply(Message::System {
             event: SystemEvent::FontBaseLoaded {
@@ -391,12 +406,10 @@ mod tests {
             selection: (p1, 0)
         };
 
-        let mut editor = Editor::new_test(state);
         // Config covers ' ' (space) so strut resolves Pending before load.
-        {
-            let mut resource = editor.resource.lock().unwrap();
-            test_config_single_chunk(&mut resource, "TestFont", 400, "h", 0x20, 0x20);
-        }
+        let mut source = test_source_single_chunk("TestFont", 400, "h", 0x20, 0x20);
+        let resource = Arc::new(Mutex::new(Resource::from_snapshot(source.snapshot())));
+        let mut editor = Editor::new_test_with_resource(state, resource);
         editor.apply(Message::System {
             event: SystemEvent::Initialize,
         });
@@ -408,15 +421,19 @@ mod tests {
         );
         assert!(editor.pending_fonts[&key].contains_key(&p2));
 
-        {
-            let mut resource = editor.resource.lock().unwrap();
-            resource
-                .add_font_base("TestFont", 400, &fake_base_bytes())
-                .unwrap();
-            resource
-                .add_font_chunk("TestFont", 400, 0, &fake_chunk_bytes())
-                .unwrap();
-        }
+        source
+            .insert_font_base("TestFont", 400, fake_base())
+            .expect("font base must change resources");
+        let snapshot = source
+            .add_font_chunk("TestFont", 400, 0, fake_chunk())
+            .unwrap()
+            .expect("font chunk must change resources");
+        editor
+            .resource
+            .lock()
+            .unwrap()
+            .apply_update(snapshot)
+            .unwrap();
 
         let events = editor.apply(Message::System {
             event: SystemEvent::FontBaseLoaded {
@@ -452,24 +469,26 @@ mod tests {
             selection: (p1, 0)
         };
 
-        let mut editor = Editor::new_test(state);
-        {
-            let mut resource = editor.resource.lock().unwrap();
-            test_config_single_chunk(&mut resource, "TestFont", 400, "h", 0x41, 0x41);
-        }
+        let mut source = test_source_single_chunk("TestFont", 400, "h", 0x41, 0x41);
+        let resource = Arc::new(Mutex::new(Resource::from_snapshot(source.snapshot())));
+        let mut editor = Editor::new_test_with_resource(state, resource);
         editor.apply(Message::System {
             event: SystemEvent::Initialize,
         });
 
-        {
-            let mut resource = editor.resource.lock().unwrap();
-            resource
-                .add_font_base("TestFont", 400, &fake_base_bytes())
-                .unwrap();
-            resource
-                .add_font_chunk("TestFont", 400, 0, &fake_chunk_bytes())
-                .unwrap();
-        }
+        source
+            .insert_font_base("TestFont", 400, fake_base())
+            .expect("font base must change resources");
+        let snapshot = source
+            .add_font_chunk("TestFont", 400, 0, fake_chunk())
+            .unwrap()
+            .expect("font chunk must change resources");
+        editor
+            .resource
+            .lock()
+            .unwrap()
+            .apply_update(snapshot)
+            .unwrap();
 
         let events = editor.apply(Message::System {
             event: SystemEvent::FontBaseLoaded {
@@ -692,24 +711,26 @@ mod tests {
             selection: (p1, 0)
         };
 
-        let mut editor = Editor::new_test(state);
-        {
-            let mut resource = editor.resource.lock().unwrap();
-            test_config_single_chunk(&mut resource, "TestFont", 400, "h", 0x41, 0x41);
-        }
+        let mut source = test_source_single_chunk("TestFont", 400, "h", 0x41, 0x41);
+        let resource = Arc::new(Mutex::new(Resource::from_snapshot(source.snapshot())));
+        let mut editor = Editor::new_test_with_resource(state, resource);
         editor.apply(Message::System {
             event: SystemEvent::Initialize,
         });
 
-        {
-            let mut resource = editor.resource.lock().unwrap();
-            resource
-                .add_font_base("TestFont", 400, &fake_base_bytes())
-                .unwrap();
-            resource
-                .add_font_chunk("TestFont", 400, 0, &fake_chunk_bytes())
-                .unwrap();
-        }
+        source
+            .insert_font_base("TestFont", 400, fake_base())
+            .expect("font base must change resources");
+        let snapshot = source
+            .add_font_chunk("TestFont", 400, 0, fake_chunk())
+            .unwrap()
+            .expect("font chunk must change resources");
+        editor
+            .resource
+            .lock()
+            .unwrap()
+            .apply_update(snapshot)
+            .unwrap();
 
         let events = editor.apply(Message::System {
             event: SystemEvent::FontBaseLoaded {
@@ -736,34 +757,33 @@ mod tests {
             selection: (p1, 0)
         };
 
-        let mut editor = Editor::new_test(state);
-
         // Step 1: Load config via set_fonts — Primary covers 'A' (chunk 0 of 4),
         // Fallback covers 'B' (chunk 0 of 1).
-        {
-            let mut resource = editor.resource.lock().unwrap();
-            let families = vec![
-                editor_resource::FontFamily {
-                    name: "Primary".into(),
-                    source: editor_resource::FontFamilySource::Default,
-                    weights: vec![editor_resource::FontWeight {
-                        value: 400,
-                        hash: "primary-400".into(),
-                    }],
-                },
-                editor_resource::FontFamily {
-                    name: "Fallback".into(),
-                    source: editor_resource::FontFamilySource::Fallback,
-                    weights: vec![editor_resource::FontWeight {
-                        value: 400,
-                        hash: "fallback-400".into(),
-                    }],
-                },
-            ];
-            resource.set_fonts(families);
-            let primary_id = resource.font_registry.intern_id("Primary").unwrap();
-            resource.font_registry.set_manifest(
-                primary_id,
+        let mut source = ResourceSource::new_test();
+        let families = vec![
+            editor_resource::FontFamily {
+                name: "Primary".into(),
+                source: editor_resource::FontFamilySource::Default,
+                weights: vec![editor_resource::FontWeight {
+                    value: 400,
+                    hash: "primary-400".into(),
+                }],
+            },
+            editor_resource::FontFamily {
+                name: "Fallback".into(),
+                source: editor_resource::FontFamilySource::Fallback,
+                weights: vec![editor_resource::FontWeight {
+                    value: 400,
+                    hash: "fallback-400".into(),
+                }],
+            },
+        ];
+        source
+            .set_fonts(prepare_fonts(families))
+            .expect("font families must change resources");
+        source
+            .add_font_manifest(
+                "Primary",
                 400,
                 editor_resource::FontManifest::from_coverages(&[
                     vec![0x41, 0x41],
@@ -771,14 +791,17 @@ mod tests {
                     vec![0x62, 0x62],
                     vec![0x63, 0x63],
                 ]),
-            );
-            let fallback_id = resource.font_registry.intern_id("Fallback").unwrap();
-            resource.font_registry.set_manifest(
-                fallback_id,
+            )
+            .expect("primary manifest must change resources");
+        source
+            .add_font_manifest(
+                "Fallback",
                 400,
                 editor_resource::FontManifest::from_coverages(&[vec![0x42, 0x42]]),
-            );
-        }
+            )
+            .expect("fallback manifest must change resources");
+        let resource = Arc::new(Mutex::new(Resource::from_snapshot(source.snapshot())));
+        let mut editor = Editor::new_test_with_resource(state, resource);
 
         // Step 2: Initialize — should emit FontDataMissing for Primary and Fallback.
         let events = editor.apply(Message::System {
@@ -831,15 +854,19 @@ mod tests {
         }
 
         // Step 3: Load Primary base + chunk 0, then fire FontBaseLoaded — 'A' resolves, 'B' still pending.
-        {
-            let mut resource = editor.resource.lock().unwrap();
-            resource
-                .add_font_base("Primary", 400, &fake_base_bytes())
-                .unwrap();
-            resource
-                .add_font_chunk("Primary", 400, 0, &fake_chunk_bytes())
-                .unwrap();
-        }
+        source
+            .insert_font_base("Primary", 400, fake_base())
+            .expect("font base must change resources");
+        let snapshot = source
+            .add_font_chunk("Primary", 400, 0, fake_chunk())
+            .unwrap()
+            .expect("font chunk must change resources");
+        editor
+            .resource
+            .lock()
+            .unwrap()
+            .apply_update(snapshot)
+            .unwrap();
         let events = editor.apply(Message::System {
             event: SystemEvent::FontBaseLoaded {
                 family: "Primary".to_string(),
@@ -865,15 +892,19 @@ mod tests {
         }));
 
         // Step 4: Load Fallback base + chunk 0, then fire FontBaseLoaded — 'B' resolves.
-        {
-            let mut resource = editor.resource.lock().unwrap();
-            resource
-                .add_font_base("Fallback", 400, &fake_base_bytes())
-                .unwrap();
-            resource
-                .add_font_chunk("Fallback", 400, 0, &fake_chunk_bytes())
-                .unwrap();
-        }
+        source
+            .insert_font_base("Fallback", 400, fake_base())
+            .expect("font base must change resources");
+        let snapshot = source
+            .add_font_chunk("Fallback", 400, 0, fake_chunk())
+            .unwrap()
+            .expect("font chunk must change resources");
+        editor
+            .resource
+            .lock()
+            .unwrap()
+            .apply_update(snapshot)
+            .unwrap();
         let events = editor.apply(Message::System {
             event: SystemEvent::FontBaseLoaded {
                 family: "Fallback".to_string(),
@@ -924,28 +955,30 @@ mod tests {
             }
             selection: (p1, 0)
         };
-        let mut editor = Editor::new_test(state);
-        {
-            let mut resource = editor.resource.lock().unwrap();
-            resource.set_fonts(vec![editor_resource::FontFamily {
+        let mut source = ResourceSource::new_test();
+        source
+            .set_fonts(prepare_fonts(vec![editor_resource::FontFamily {
                 name: "TestFont".into(),
                 source: editor_resource::FontFamilySource::Default,
                 weights: vec![editor_resource::FontWeight {
                     value: 400,
                     hash: "tf".into(),
                 }],
-            }]);
-            let id = resource.font_registry.intern_id("TestFont").unwrap();
-            resource.font_registry.set_manifest(
-                id,
+            }]))
+            .expect("font families must change resources");
+        source
+            .add_font_manifest(
+                "TestFont",
                 400,
                 editor_resource::FontManifest::from_coverages(&[
                     vec![0x41, 0x41],
                     vec![0x42, 0x42],
                     vec![0x43, 0x43],
                 ]),
-            );
-        }
+            )
+            .expect("font manifest must change resources");
+        let resource = Arc::new(Mutex::new(Resource::from_snapshot(source.snapshot())));
+        let mut editor = Editor::new_test_with_resource(state, resource);
 
         let events = editor.apply(Message::System {
             event: SystemEvent::Initialize,
@@ -971,15 +1004,19 @@ mod tests {
             "prefetch must not be emitted before quiescence"
         );
 
-        {
-            let mut resource = editor.resource.lock().unwrap();
-            resource
-                .add_font_base("TestFont", 400, &fake_base_bytes())
-                .unwrap();
-            resource
-                .add_font_chunk("TestFont", 400, 0, &fake_chunk_bytes())
-                .unwrap();
-        }
+        source
+            .insert_font_base("TestFont", 400, fake_base())
+            .expect("font base must change resources");
+        let snapshot = source
+            .add_font_chunk("TestFont", 400, 0, fake_chunk())
+            .unwrap()
+            .expect("font chunk must change resources");
+        editor
+            .resource
+            .lock()
+            .unwrap()
+            .apply_update(snapshot)
+            .unwrap();
         let events = editor.apply(Message::System {
             event: SystemEvent::FontChunkLoaded {
                 family: "TestFont".to_string(),
@@ -1030,12 +1067,16 @@ mod tests {
             "re-armed prefetch must wait for the next quiescence"
         );
 
-        {
-            let mut resource = editor.resource.lock().unwrap();
-            resource
-                .add_font_chunk("TestFont", 400, 1, &fake_chunk_bytes())
-                .unwrap();
-        }
+        let snapshot = source
+            .add_font_chunk("TestFont", 400, 1, fake_chunk())
+            .unwrap()
+            .expect("font chunk must change resources");
+        editor
+            .resource
+            .lock()
+            .unwrap()
+            .apply_update(snapshot)
+            .unwrap();
         let events = editor.apply(Message::System {
             event: SystemEvent::FontChunkLoaded {
                 family: "TestFont".to_string(),
@@ -1072,47 +1113,51 @@ mod tests {
             selection: (p1, 0) -> (p1, 2)
         };
 
-        let mut editor = Editor::new_test(state);
-        {
-            let mut resource = editor.resource.lock().unwrap();
-            let families = vec![
-                editor_resource::FontFamily {
-                    name: "Arial".into(),
-                    source: editor_resource::FontFamilySource::Default,
-                    weights: vec![editor_resource::FontWeight {
-                        value: 400,
-                        hash: "arial-400".into(),
-                    }],
-                },
-                editor_resource::FontFamily {
-                    name: "Pretendard".into(),
-                    source: editor_resource::FontFamilySource::Default,
-                    weights: vec![editor_resource::FontWeight {
-                        value: 400,
-                        hash: "pretendard-400".into(),
-                    }],
-                },
-            ];
-            resource.set_fonts(families);
-            let arial_id = resource.font_registry.intern_id("Arial").unwrap();
-            resource.font_registry.set_manifest(
-                arial_id,
+        let mut source = ResourceSource::new_test();
+        let families = vec![
+            editor_resource::FontFamily {
+                name: "Arial".into(),
+                source: editor_resource::FontFamilySource::Default,
+                weights: vec![editor_resource::FontWeight {
+                    value: 400,
+                    hash: "arial-400".into(),
+                }],
+            },
+            editor_resource::FontFamily {
+                name: "Pretendard".into(),
+                source: editor_resource::FontFamilySource::Default,
+                weights: vec![editor_resource::FontWeight {
+                    value: 400,
+                    hash: "pretendard-400".into(),
+                }],
+            },
+        ];
+        source
+            .set_fonts(prepare_fonts(families))
+            .expect("font families must change resources");
+        source
+            .add_font_manifest(
+                "Arial",
                 400,
                 editor_resource::FontManifest::from_coverages(&[vec![0x41, 0x42]]),
-            );
-            let pretendard_id = resource.font_registry.intern_id("Pretendard").unwrap();
-            resource.font_registry.set_manifest(
-                pretendard_id,
+            )
+            .expect("Arial manifest must change resources");
+        source
+            .add_font_manifest(
+                "Pretendard",
                 400,
                 editor_resource::FontManifest::from_coverages(&[vec![0x41, 0x42]]),
-            );
-            resource
-                .add_font_base("Arial", 400, &fake_base_bytes())
-                .unwrap();
-            resource
-                .add_font_chunk("Arial", 400, 0, &fake_chunk_bytes())
-                .unwrap();
-        }
+            )
+            .expect("Pretendard manifest must change resources");
+        source
+            .insert_font_base("Arial", 400, fake_base())
+            .expect("font base must change resources");
+        source
+            .add_font_chunk("Arial", 400, 0, fake_chunk())
+            .unwrap()
+            .expect("font chunk must change resources");
+        let resource = Arc::new(Mutex::new(Resource::from_snapshot(source.snapshot())));
+        let mut editor = Editor::new_test_with_resource(state, resource);
         editor.apply(Message::System {
             event: SystemEvent::Initialize,
         });
@@ -1153,35 +1198,38 @@ mod tests {
             selection: (p1, 1)
         };
 
-        let mut editor = Editor::new_test(state);
-        {
-            let mut resource = editor.resource.lock().unwrap();
-            // chunk 0 covers 'A' (0x41), chunk 1 covers 'B' (0x42).
-            let families = vec![editor_resource::FontFamily {
-                name: "TestFont".into(),
-                source: editor_resource::FontFamilySource::Default,
-                weights: vec![editor_resource::FontWeight {
-                    value: 400,
-                    hash: "testfont-400".into(),
-                }],
-            }];
-            resource.set_fonts(families);
-            let id = resource.font_registry.intern_id("TestFont").unwrap();
-            resource.font_registry.set_manifest(
-                id,
+        let mut source = ResourceSource::new_test();
+        // chunk 0 covers 'A' (0x41), chunk 1 covers 'B' (0x42).
+        let families = vec![editor_resource::FontFamily {
+            name: "TestFont".into(),
+            source: editor_resource::FontFamilySource::Default,
+            weights: vec![editor_resource::FontWeight {
+                value: 400,
+                hash: "testfont-400".into(),
+            }],
+        }];
+        source
+            .set_fonts(prepare_fonts(families))
+            .expect("font families must change resources");
+        source
+            .add_font_manifest(
+                "TestFont",
                 400,
                 editor_resource::FontManifest::from_coverages(&[
                     vec![0x41, 0x41],
                     vec![0x42, 0x42],
                 ]),
-            );
-            resource
-                .add_font_base("TestFont", 400, &fake_base_bytes())
-                .unwrap();
-            resource
-                .add_font_chunk("TestFont", 400, 0, &fake_chunk_bytes())
-                .unwrap();
-        }
+            )
+            .expect("font manifest must change resources");
+        source
+            .insert_font_base("TestFont", 400, fake_base())
+            .expect("font base must change resources");
+        source
+            .add_font_chunk("TestFont", 400, 0, fake_chunk())
+            .unwrap()
+            .expect("font chunk must change resources");
+        let resource = Arc::new(Mutex::new(Resource::from_snapshot(source.snapshot())));
+        let mut editor = Editor::new_test_with_resource(state, resource);
         editor.apply(Message::System {
             event: SystemEvent::Initialize,
         });
@@ -1219,22 +1267,23 @@ mod tests {
             selection: (p1, 0)
         };
 
-        let mut editor = Editor::new_test(state);
-        {
-            let mut resource = editor.resource.lock().unwrap();
-            test_config_single_chunk(&mut resource, "TestFont", 400, "h", 0x41, 0x41);
-        }
+        let mut source = test_source_single_chunk("TestFont", 400, "h", 0x41, 0x41);
+        let resource = Arc::new(Mutex::new(Resource::from_snapshot(source.snapshot())));
+        let mut editor = Editor::new_test_with_resource(state, resource);
         editor.apply(Message::System {
             event: SystemEvent::Initialize,
         });
 
         // Load base only — chunk 0 still missing.
-        {
-            let mut resource = editor.resource.lock().unwrap();
-            resource
-                .add_font_base("TestFont", 400, &fake_base_bytes())
-                .unwrap();
-        }
+        let snapshot = source
+            .insert_font_base("TestFont", 400, fake_base())
+            .expect("font base must change resources");
+        editor
+            .resource
+            .lock()
+            .unwrap()
+            .apply_update(snapshot)
+            .unwrap();
 
         editor.apply(Message::System {
             event: SystemEvent::FontBaseLoaded {
@@ -1266,22 +1315,23 @@ mod tests {
             selection: (p1, 0)
         };
 
-        let mut editor = Editor::new_test(state);
-        {
-            let mut resource = editor.resource.lock().unwrap();
-            test_config_single_chunk(&mut resource, "TestFont", 400, "h", 0x41, 0x41);
-        }
+        let mut source = test_source_single_chunk("TestFont", 400, "h", 0x41, 0x41);
+        let resource = Arc::new(Mutex::new(Resource::from_snapshot(source.snapshot())));
+        let mut editor = Editor::new_test_with_resource(state, resource);
         editor.apply(Message::System {
             event: SystemEvent::Initialize,
         });
 
         // Load base first — cp still pending (chunk not yet loaded).
-        {
-            let mut resource = editor.resource.lock().unwrap();
-            resource
-                .add_font_base("TestFont", 400, &fake_base_bytes())
-                .unwrap();
-        }
+        let snapshot = source
+            .insert_font_base("TestFont", 400, fake_base())
+            .expect("font base must change resources");
+        editor
+            .resource
+            .lock()
+            .unwrap()
+            .apply_update(snapshot)
+            .unwrap();
         editor.apply(Message::System {
             event: SystemEvent::FontBaseLoaded {
                 family: "TestFont".to_string(),
@@ -1290,12 +1340,16 @@ mod tests {
         });
 
         // Then load chunk and fire FontChunkLoaded — chunk event is what should transition cp to Ready.
-        {
-            let mut resource = editor.resource.lock().unwrap();
-            resource
-                .add_font_chunk("TestFont", 400, 0, &fake_chunk_bytes())
-                .unwrap();
-        }
+        let snapshot = source
+            .add_font_chunk("TestFont", 400, 0, fake_chunk())
+            .unwrap()
+            .expect("font chunk must change resources");
+        editor
+            .resource
+            .lock()
+            .unwrap()
+            .apply_update(snapshot)
+            .unwrap();
         let events = editor.apply(Message::System {
             event: SystemEvent::FontChunkLoaded {
                 family: "TestFont".to_string(),
@@ -1375,10 +1429,13 @@ mod tests {
             "Initialize must not emit FontDataMissing when family is absent from registry"
         );
 
-        {
-            let mut resource = editor.resource.lock().unwrap();
-            test_config_single_chunk(&mut resource, "TestFont", 400, "h1", 0x41, 0x41);
-        }
+        let source = test_source_single_chunk("TestFont", 400, "h1", 0x41, 0x41);
+        editor
+            .resource
+            .lock()
+            .unwrap()
+            .apply_update(source.snapshot())
+            .unwrap();
 
         let events = editor.apply(Message::System {
             event: SystemEvent::FontsChanged,
@@ -1412,18 +1469,16 @@ mod tests {
             selection: (p1, 0)
         };
 
-        let mut editor = Editor::new_test(state);
-
-        {
-            let mut resource = editor.resource.lock().unwrap();
-            test_config_single_chunk(&mut resource, "TestFont", 400, "h1", 0x41, 0x41);
-            resource
-                .add_font_base("TestFont", 400, &fake_base_bytes())
-                .unwrap();
-            resource
-                .add_font_chunk("TestFont", 400, 0, &fake_chunk_bytes())
-                .unwrap();
-        }
+        let mut source = test_source_single_chunk("TestFont", 400, "h1", 0x41, 0x41);
+        source
+            .insert_font_base("TestFont", 400, fake_base())
+            .expect("font base must change resources");
+        source
+            .add_font_chunk("TestFont", 400, 0, fake_chunk())
+            .unwrap()
+            .expect("font chunk must change resources");
+        let resource = Arc::new(Mutex::new(Resource::from_snapshot(source.snapshot())));
+        let mut editor = Editor::new_test_with_resource(state, resource);
 
         editor.apply(Message::System {
             event: SystemEvent::Initialize,
@@ -1810,20 +1865,21 @@ mod tests {
             selection: (p1, 0)
         };
 
-        let mut editor = Editor::new_test(state);
-        {
-            let mut resource = editor.resource.lock().unwrap();
-            test_config_single_chunk(&mut resource, "TestFont", 400, "h", 0x41, 0x41);
-        }
+        let mut source = test_source_single_chunk("TestFont", 400, "h", 0x41, 0x41);
+        let resource = Arc::new(Mutex::new(Resource::from_snapshot(source.snapshot())));
+        let mut editor = Editor::new_test_with_resource(state, resource);
         editor.apply(Message::System {
             event: SystemEvent::Initialize,
         });
-        {
-            let mut resource = editor.resource.lock().unwrap();
-            resource
-                .add_font_base("TestFont", 400, &fake_base_bytes())
-                .unwrap();
-        }
+        let snapshot = source
+            .insert_font_base("TestFont", 400, fake_base())
+            .expect("font base must change resources");
+        editor
+            .resource
+            .lock()
+            .unwrap()
+            .apply_update(snapshot)
+            .unwrap();
 
         let events = editor.apply(Message::System {
             event: SystemEvent::FontBaseLoaded {
@@ -1859,59 +1915,66 @@ mod tests {
             selection: (p1, 0)
         };
 
-        let mut editor = Editor::new_test(state);
-        {
-            let mut resource = editor.resource.lock().unwrap();
-            let families = vec![
-                editor_resource::FontFamily {
-                    name: "Primary".into(),
-                    source: editor_resource::FontFamilySource::Default,
-                    weights: vec![editor_resource::FontWeight {
-                        value: 400,
-                        hash: "p".into(),
-                    }],
-                },
-                editor_resource::FontFamily {
-                    name: "Fallback".into(),
-                    source: editor_resource::FontFamilySource::Fallback,
-                    weights: vec![editor_resource::FontWeight {
-                        value: 400,
-                        hash: "f".into(),
-                    }],
-                },
-            ];
-            resource.set_fonts(families);
-            let primary_id = resource.font_registry.intern_id("Primary").unwrap();
-            resource.font_registry.set_manifest(
-                primary_id,
+        let mut source = ResourceSource::new_test();
+        let families = vec![
+            editor_resource::FontFamily {
+                name: "Primary".into(),
+                source: editor_resource::FontFamilySource::Default,
+                weights: vec![editor_resource::FontWeight {
+                    value: 400,
+                    hash: "p".into(),
+                }],
+            },
+            editor_resource::FontFamily {
+                name: "Fallback".into(),
+                source: editor_resource::FontFamilySource::Fallback,
+                weights: vec![editor_resource::FontWeight {
+                    value: 400,
+                    hash: "f".into(),
+                }],
+            },
+        ];
+        source
+            .set_fonts(prepare_fonts(families))
+            .expect("font families must change resources");
+        source
+            .add_font_manifest(
+                "Primary",
                 400,
                 editor_resource::FontManifest::from_coverages(&[vec![0x41, 0x41]]),
-            );
-            let fallback_id = resource.font_registry.intern_id("Fallback").unwrap();
-            resource.font_registry.set_manifest(
-                fallback_id,
+            )
+            .expect("primary manifest must change resources");
+        source
+            .add_font_manifest(
+                "Fallback",
                 400,
                 editor_resource::FontManifest::from_coverages(&[vec![0x42, 0x42]]),
-            );
-            // Primary fully loaded; 'B' is not in Primary so it falls back to Fallback.
-            resource
-                .add_font_base("Primary", 400, &fake_base_bytes())
-                .unwrap();
-            resource
-                .add_font_chunk("Primary", 400, 0, &fake_chunk_bytes())
-                .unwrap();
-        }
+            )
+            .expect("fallback manifest must change resources");
+        // Primary fully loaded; 'B' is not in Primary so it falls back to Fallback.
+        source
+            .insert_font_base("Primary", 400, fake_base())
+            .expect("font base must change resources");
+        source
+            .add_font_chunk("Primary", 400, 0, fake_chunk())
+            .unwrap()
+            .expect("font chunk must change resources");
+        let resource = Arc::new(Mutex::new(Resource::from_snapshot(source.snapshot())));
+        let mut editor = Editor::new_test_with_resource(state, resource);
         editor.apply(Message::System {
             event: SystemEvent::Initialize,
         });
 
         // Load the fallback's base only — 'B' now resolves needs_base=false via Fallback.
-        {
-            let mut resource = editor.resource.lock().unwrap();
-            resource
-                .add_font_base("Fallback", 400, &fake_base_bytes())
-                .unwrap();
-        }
+        let snapshot = source
+            .insert_font_base("Fallback", 400, fake_base())
+            .expect("font base must change resources");
+        editor
+            .resource
+            .lock()
+            .unwrap()
+            .apply_update(snapshot)
+            .unwrap();
 
         let events = editor.apply(Message::System {
             event: SystemEvent::FontBaseLoaded {
@@ -1940,48 +2003,52 @@ mod tests {
             selection: (p1, 1)
         };
 
-        let mut editor = Editor::new_test(state);
-        {
-            let mut resource = editor.resource.lock().unwrap();
-            let families = vec![
-                editor_resource::FontFamily {
-                    name: "FontA".into(),
-                    source: editor_resource::FontFamilySource::Default,
-                    weights: vec![editor_resource::FontWeight {
-                        value: 400,
-                        hash: "a".into(),
-                    }],
-                },
-                editor_resource::FontFamily {
-                    name: "FontB".into(),
-                    source: editor_resource::FontFamilySource::Default,
-                    weights: vec![editor_resource::FontWeight {
-                        value: 400,
-                        hash: "b".into(),
-                    }],
-                },
-            ];
-            resource.set_fonts(families);
-            let font_a_id = resource.font_registry.intern_id("FontA").unwrap();
-            resource.font_registry.set_manifest(
-                font_a_id,
+        let mut source = ResourceSource::new_test();
+        let families = vec![
+            editor_resource::FontFamily {
+                name: "FontA".into(),
+                source: editor_resource::FontFamilySource::Default,
+                weights: vec![editor_resource::FontWeight {
+                    value: 400,
+                    hash: "a".into(),
+                }],
+            },
+            editor_resource::FontFamily {
+                name: "FontB".into(),
+                source: editor_resource::FontFamilySource::Default,
+                weights: vec![editor_resource::FontWeight {
+                    value: 400,
+                    hash: "b".into(),
+                }],
+            },
+        ];
+        source
+            .set_fonts(prepare_fonts(families))
+            .expect("font families must change resources");
+        source
+            .add_font_manifest(
+                "FontA",
                 400,
                 editor_resource::FontManifest::from_coverages(&[vec![0x41, 0x41]]),
-            );
-            let font_b_id = resource.font_registry.intern_id("FontB").unwrap();
-            resource.font_registry.set_manifest(
-                font_b_id,
+            )
+            .expect("FontA manifest must change resources");
+        source
+            .add_font_manifest(
+                "FontB",
                 400,
                 editor_resource::FontManifest::from_coverages(&[vec![0x5a, 0x5a]]),
-            );
-            // FontA fully loaded so re-inserting 'A' into p1 raises no missing-data event.
-            resource
-                .add_font_base("FontA", 400, &fake_base_bytes())
-                .unwrap();
-            resource
-                .add_font_chunk("FontA", 400, 0, &fake_chunk_bytes())
-                .unwrap();
-        }
+            )
+            .expect("FontB manifest must change resources");
+        // FontA fully loaded so re-inserting 'A' into p1 raises no missing-data event.
+        source
+            .insert_font_base("FontA", 400, fake_base())
+            .expect("font base must change resources");
+        source
+            .add_font_chunk("FontA", 400, 0, fake_chunk())
+            .unwrap()
+            .expect("font chunk must change resources");
+        let resource = Arc::new(Mutex::new(Resource::from_snapshot(source.snapshot())));
+        let mut editor = Editor::new_test_with_resource(state, resource);
         editor.apply(Message::System {
             event: SystemEvent::Initialize,
         });
@@ -2016,41 +2083,44 @@ mod tests {
             selection: (p1, 0) -> (p1, 1)
         };
 
-        let mut editor = Editor::new_test(state);
-        {
-            let mut resource = editor.resource.lock().unwrap();
-            let families = vec![
-                editor_resource::FontFamily {
-                    name: "FontA".into(),
-                    source: editor_resource::FontFamilySource::Default,
-                    weights: vec![editor_resource::FontWeight {
-                        value: 400,
-                        hash: "a".into(),
-                    }],
-                },
-                editor_resource::FontFamily {
-                    name: "FontF".into(),
-                    source: editor_resource::FontFamilySource::Default,
-                    weights: vec![editor_resource::FontWeight {
-                        value: 400,
-                        hash: "f".into(),
-                    }],
-                },
-            ];
-            resource.set_fonts(families);
-            let font_a_id = resource.font_registry.intern_id("FontA").unwrap();
-            resource.font_registry.set_manifest(
-                font_a_id,
+        let mut source = ResourceSource::new_test();
+        let families = vec![
+            editor_resource::FontFamily {
+                name: "FontA".into(),
+                source: editor_resource::FontFamilySource::Default,
+                weights: vec![editor_resource::FontWeight {
+                    value: 400,
+                    hash: "a".into(),
+                }],
+            },
+            editor_resource::FontFamily {
+                name: "FontF".into(),
+                source: editor_resource::FontFamilySource::Default,
+                weights: vec![editor_resource::FontWeight {
+                    value: 400,
+                    hash: "f".into(),
+                }],
+            },
+        ];
+        source
+            .set_fonts(prepare_fonts(families))
+            .expect("font families must change resources");
+        source
+            .add_font_manifest(
+                "FontA",
                 400,
                 editor_resource::FontManifest::from_coverages(&[vec![0x58, 0x58]]),
-            );
-            let font_f_id = resource.font_registry.intern_id("FontF").unwrap();
-            resource.font_registry.set_manifest(
-                font_f_id,
+            )
+            .expect("FontA manifest must change resources");
+        source
+            .add_font_manifest(
+                "FontF",
                 400,
                 editor_resource::FontManifest::from_coverages(&[vec![0x58, 0x58]]),
-            );
-        }
+            )
+            .expect("FontF manifest must change resources");
+        let resource = Arc::new(Mutex::new(Resource::from_snapshot(source.snapshot())));
+        let mut editor = Editor::new_test_with_resource(state, resource);
         editor.apply(Message::System {
             event: SystemEvent::Initialize,
         });
@@ -2088,11 +2158,9 @@ mod tests {
             selection: (p1, 0)
         };
 
-        let mut editor = Editor::new_test(state);
-        {
-            let mut resource = editor.resource.lock().unwrap();
-            test_config_single_chunk(&mut resource, "TestFont", 400, "h1", 0x41, 0x41);
-        }
+        let source = test_source_single_chunk("TestFont", 400, "h1", 0x41, 0x41);
+        let resource = Arc::new(Mutex::new(Resource::from_snapshot(source.snapshot())));
+        let mut editor = Editor::new_test_with_resource(state, resource);
         editor.apply(Message::System {
             event: SystemEvent::Initialize,
         });
@@ -2142,12 +2210,11 @@ mod tests {
             selection: (p1, 0)
         };
 
-        let mut editor = Editor::new_test(state);
         // 2-weight family (400, 700) registered WITHOUT manifests. Resolving 'A' at weight
         // 400 must demand the 400 manifest first, and prefetch sibling weight 700's manifest.
-        {
-            let mut resource = editor.resource.lock().unwrap();
-            resource.set_fonts(vec![editor_resource::FontFamily {
+        let mut source = ResourceSource::new_test();
+        source
+            .set_fonts(prepare_fonts(vec![editor_resource::FontFamily {
                 name: "TestFont".into(),
                 source: editor_resource::FontFamilySource::Default,
                 weights: vec![
@@ -2160,8 +2227,10 @@ mod tests {
                         hash: "tf-700".into(),
                     },
                 ],
-            }]);
-        }
+            }]))
+            .expect("font families must change resources");
+        let resource = Arc::new(Mutex::new(Resource::from_snapshot(source.snapshot())));
+        let mut editor = Editor::new_test_with_resource(state, resource);
 
         let events = editor.apply(Message::System {
             event: SystemEvent::Initialize,
@@ -2197,16 +2266,19 @@ mod tests {
 
         // Deliver weight 400's manifest (covers 'A') and fire FontManifestLoaded. Reinterpreting
         // pending now demands base + chunk 0 instead of the manifest.
-        {
-            let mut resource = editor.resource.lock().unwrap();
-            resource
-                .add_font_manifest(
-                    "TestFont",
-                    400,
-                    editor_resource::FontManifest::from_coverages(&[vec![0x41, 0x41]]),
-                )
-                .unwrap();
-        }
+        let snapshot = source
+            .add_font_manifest(
+                "TestFont",
+                400,
+                editor_resource::FontManifest::from_coverages(&[vec![0x41, 0x41]]),
+            )
+            .expect("font manifest must change resources");
+        editor
+            .resource
+            .lock()
+            .unwrap()
+            .apply_update(snapshot)
+            .unwrap();
 
         let events = editor.apply(Message::System {
             event: SystemEvent::FontManifestLoaded {
@@ -2230,15 +2302,19 @@ mod tests {
             "once the manifest arrives, weight 400 must demand base + chunk 0"
         );
 
-        {
-            let mut resource = editor.resource.lock().unwrap();
-            resource
-                .add_font_base("TestFont", 400, &fake_base_bytes())
-                .unwrap();
-            resource
-                .add_font_chunk("TestFont", 400, 0, &fake_chunk_bytes())
-                .unwrap();
-        }
+        source
+            .insert_font_base("TestFont", 400, fake_base())
+            .expect("font base must change resources");
+        let snapshot = source
+            .add_font_chunk("TestFont", 400, 0, fake_chunk())
+            .unwrap()
+            .expect("font chunk must change resources");
+        editor
+            .resource
+            .lock()
+            .unwrap()
+            .apply_update(snapshot)
+            .unwrap();
         let events = editor.apply(Message::System {
             event: SystemEvent::FontChunkLoaded {
                 family: "TestFont".to_string(),
@@ -2277,32 +2353,36 @@ mod tests {
             selection: (p1, 0)
         };
 
-        let mut editor = Editor::new_test(state);
-        {
-            let mut resource = editor.resource.lock().unwrap();
-            resource.set_fonts(vec![editor_resource::FontFamily {
+        let mut source = ResourceSource::new_test();
+        source
+            .set_fonts(prepare_fonts(vec![editor_resource::FontFamily {
                 name: "TestFont".into(),
                 source: editor_resource::FontFamilySource::Default,
                 weights: vec![editor_resource::FontWeight {
                     value: 400,
                     hash: "tf".into(),
                 }],
-            }]);
-        }
+            }]))
+            .expect("font families must change resources");
+        let resource = Arc::new(Mutex::new(Resource::from_snapshot(source.snapshot())));
+        let mut editor = Editor::new_test_with_resource(state, resource);
         editor.apply(Message::System {
             event: SystemEvent::Initialize,
         });
 
-        {
-            let mut resource = editor.resource.lock().unwrap();
-            resource
-                .add_font_manifest(
-                    "TestFont",
-                    400,
-                    editor_resource::FontManifest::from_coverages(&[vec![0x41, 0x41]]),
-                )
-                .unwrap();
-        }
+        let snapshot = source
+            .add_font_manifest(
+                "TestFont",
+                400,
+                editor_resource::FontManifest::from_coverages(&[vec![0x41, 0x41]]),
+            )
+            .expect("font manifest must change resources");
+        editor
+            .resource
+            .lock()
+            .unwrap()
+            .apply_update(snapshot)
+            .unwrap();
 
         let first = editor.apply(Message::System {
             event: SystemEvent::FontManifestLoaded {
@@ -2342,10 +2422,9 @@ mod tests {
             selection: (p1, 0)
         };
 
-        let mut editor = Editor::new_test(state);
-        {
-            let mut resource = editor.resource.lock().unwrap();
-            resource.set_fonts(vec![
+        let mut source = ResourceSource::new_test();
+        source
+            .set_fonts(prepare_fonts(vec![
                 editor_resource::FontFamily {
                     name: "P".into(),
                     source: editor_resource::FontFamilySource::Default,
@@ -2370,17 +2449,19 @@ mod tests {
                         hash: "fb2".into(),
                     }],
                 },
-            ]);
-            // Primary's manifest is present but does NOT cover 'A' (0x41; covers only 0x50), so
-            // resolution walks into the fallbacks, whose manifests are still absent.
-            resource
-                .add_font_manifest(
-                    "P",
-                    400,
-                    editor_resource::FontManifest::from_coverages(&[vec![0x50, 0x50]]),
-                )
-                .unwrap();
-        }
+            ]))
+            .expect("font families must change resources");
+        // Primary's manifest is present but does NOT cover 'A' (0x41; covers only 0x50), so
+        // resolution walks into the fallbacks, whose manifests are still absent.
+        source
+            .add_font_manifest(
+                "P",
+                400,
+                editor_resource::FontManifest::from_coverages(&[vec![0x50, 0x50]]),
+            )
+            .expect("font manifest must change resources");
+        let resource = Arc::new(Mutex::new(Resource::from_snapshot(source.snapshot())));
+        let mut editor = Editor::new_test_with_resource(state, resource);
 
         let events = editor.apply(Message::System {
             event: SystemEvent::Initialize,
@@ -2428,31 +2509,38 @@ mod tests {
             "primary with a present manifest must not appear in manifest requests"
         );
 
-        {
-            let mut resource = editor.resource.lock().unwrap();
-            resource
-                .add_font_manifest(
-                    "FB1",
-                    400,
-                    editor_resource::FontManifest::from_coverages(&[vec![0x41, 0x41]]),
-                )
-                .unwrap();
-        }
+        let snapshot = source
+            .add_font_manifest(
+                "FB1",
+                400,
+                editor_resource::FontManifest::from_coverages(&[vec![0x41, 0x41]]),
+            )
+            .expect("font manifest must change resources");
+        editor
+            .resource
+            .lock()
+            .unwrap()
+            .apply_update(snapshot)
+            .unwrap();
         editor.apply(Message::System {
             event: SystemEvent::FontManifestLoaded {
                 family: "FB1".to_string(),
                 weight: 400,
             },
         });
-        {
-            let mut resource = editor.resource.lock().unwrap();
-            resource
-                .add_font_base("FB1", 400, &fake_base_bytes())
-                .unwrap();
-            resource
-                .add_font_chunk("FB1", 400, 0, &fake_chunk_bytes())
-                .unwrap();
-        }
+        source
+            .insert_font_base("FB1", 400, fake_base())
+            .expect("font base must change resources");
+        let snapshot = source
+            .add_font_chunk("FB1", 400, 0, fake_chunk())
+            .unwrap()
+            .expect("font chunk must change resources");
+        editor
+            .resource
+            .lock()
+            .unwrap()
+            .apply_update(snapshot)
+            .unwrap();
         let events = editor.apply(Message::System {
             event: SystemEvent::FontChunkLoaded {
                 family: "FB1".to_string(),

@@ -30,13 +30,15 @@
     document$key: DocumentPanelV2_document$key;
     user$key: DocumentPanelV2_user$key;
     editor?: Editor | undefined;
+    onPreviewEditorFailed?: (retry: () => void) => void;
+    onPreviewEditorRecovered?: () => void;
   };
 
   const minWidth = 240;
   const maxWidth = 400;
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  let { document$key, user$key, editor: _editor }: Props = $props();
+  let { document$key, user$key, editor: _editor, onPreviewEditorFailed, onPreviewEditorRecovered }: Props = $props();
 
   const document = createFragment(
     graphql(`
@@ -227,7 +229,7 @@
       <DocumentPanelNote entity$key={document.data.entity} />
     {:else if paneGroup.state.current.panelTabByPaneId[paneId] === 'timeline'}
       {#if ctx.editor}
-        <DocumentPanelTimeline document$key={document.data} />
+        <DocumentPanelTimeline document$key={document.data} {onPreviewEditorFailed} {onPreviewEditorRecovered} />
       {/if}
     {:else if paneGroup.state.current.panelTabByPaneId[paneId] === 'spellcheck'}
       {#if user.data.subscription}

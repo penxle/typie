@@ -350,16 +350,20 @@ pub enum SystemEvent {
     SetFocused {
         focused: bool,
     },
+    #[ffi(skip)]
     ThemeVariantChanged,
+    #[ffi(skip)]
     FontBaseLoaded {
         family: String,
         weight: u16,
     },
+    #[ffi(skip)]
     FontChunkLoaded {
         family: String,
         weight: u16,
         chunk_id: u16,
     },
+    #[ffi(skip)]
     FontManifestLoaded {
         family: String,
         weight: u16,
@@ -368,6 +372,7 @@ pub enum SystemEvent {
         node_id: Dot,
         height: f32,
     },
+    #[ffi(skip)]
     FontsChanged,
 }
 
@@ -468,59 +473,22 @@ pub enum TrackedRangeOp {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Message {
-    Key {
-        event: KeyEvent,
-    },
-    Insertion {
-        op: InsertionOp,
-    },
-    Deletion {
-        op: DeletionOp,
-    },
-    Selection {
-        op: SelectionOp,
-    },
-    Modifier {
-        op: ModifierOp,
-    },
-    Node {
-        op: NodeOp,
-    },
-    Block {
-        op: BlockOp,
-    },
-    List {
-        op: ListOp,
-    },
-    View {
-        op: ViewOp,
-    },
-    Clipboard {
-        op: ClipboardOp,
-    },
-    TextInput {
-        ops: Vec<FlatImeOp>,
-    },
-    Dnd {
-        op: DndOp,
-    },
-    Navigation {
-        op: NavigationOp,
-    },
-    History {
-        op: HistoryOp,
-    },
-    System {
-        event: SystemEvent,
-    },
-    TrackedRange {
-        op: TrackedRangeOp,
-    },
-
-    #[ffi(skip)]
-    Remote {
-        changeset: editor_crdt::Changeset<editor_model::EditOp>,
-    },
+    Key { event: KeyEvent },
+    Insertion { op: InsertionOp },
+    Deletion { op: DeletionOp },
+    Selection { op: SelectionOp },
+    Modifier { op: ModifierOp },
+    Node { op: NodeOp },
+    Block { op: BlockOp },
+    List { op: ListOp },
+    View { op: ViewOp },
+    Clipboard { op: ClipboardOp },
+    TextInput { ops: Vec<FlatImeOp> },
+    Dnd { op: DndOp },
+    Navigation { op: NavigationOp },
+    History { op: HistoryOp },
+    System { event: SystemEvent },
+    TrackedRange { op: TrackedRangeOp },
 }
 
 #[cfg(test)]

@@ -160,8 +160,8 @@ class DocumentEditingSessionTest {
     session.start()
     runCurrent()
 
-    editor.await { enqueue(Message.System(SystemEvent.Initialize)) }
-    assertEquals(1L, editor.state.documentRevision)
+    editor.update { enqueue(Message.System(SystemEvent.Initialize)) }
+    assertEquals(1L, editor.appliedState.documentRevision)
     Snapshot.sendApplyNotifications()
     runCurrent()
 
@@ -188,7 +188,7 @@ class DocumentEditingSessionTest {
       async(context = context) {
         started = true
         gate.await()
-        sessionEditor.await { enqueue(Message.System(SystemEvent.Initialize)) }
+        sessionEditor.update { enqueue(Message.System(SystemEvent.Initialize)) }
       }
     }
     assertNotNull(accepted)
@@ -229,7 +229,7 @@ class DocumentEditingSessionTest {
     val accepted = session.submit { sessionEditor, context ->
       async(context = context) {
         gate.await()
-        sessionEditor.await { enqueue(Message.System(SystemEvent.Initialize)) }
+        sessionEditor.update { enqueue(Message.System(SystemEvent.Initialize)) }
       }
     }
     assertNotNull(accepted)
@@ -268,7 +268,7 @@ class DocumentEditingSessionTest {
     session.submit { sessionEditor, context ->
       async(context) {
         gate.await()
-        sessionEditor.await { enqueue(Message.System(SystemEvent.Initialize)) }
+        sessionEditor.update { enqueue(Message.System(SystemEvent.Initialize)) }
       }
     }
     val close = session.beginStop()

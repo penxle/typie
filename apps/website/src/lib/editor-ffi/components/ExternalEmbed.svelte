@@ -71,7 +71,9 @@
       !editor.destroyed &&
       !editor.readOnly &&
       editor.inflightEmbeds.get(element.node)?.uploadId === uploadId &&
-      editor.externalElements.some((external) => external.node === element.node && external.data.type === 'embed' && !external.data.id);
+      editor.appliedSnapshot.externalElements.some(
+        (external) => external.node === element.node && external.data.type === 'embed' && !external.data.id,
+      );
 
     const result = await processEmbedUpload({
       url,
@@ -95,8 +97,8 @@
       setEmbedAsset: (value) => editor.embedAssets.set(value.id, value),
       commit: (message) => {
         if (!isCurrent()) throw new Error('Embed upload is no longer current');
-        editor.enqueue(message);
-        editor.flush();
+        const update = editor.updateNow(() => editor.enqueue(message));
+        return update?.commandOutcomes.every((outcome) => outcome.type === 'applied') ?? false;
       },
     });
 

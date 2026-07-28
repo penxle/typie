@@ -56,4 +56,17 @@ class EditorImageResizePolicyTest {
       imageResizeDisplayPercent(proportion = 50f, boundsWidth = 800f, originalWidth = 1200f),
     )
   }
+
+  @Test
+  fun final_height_uses_the_same_original_width_cap_as_the_display() {
+    assertEquals(
+      160f,
+      imageResizeHeightForProportion(
+        proportion = 40f,
+        boundsWidth = 800f,
+        originalWidth = 320f,
+        imageRatio = 2f,
+      ),
+    )
+  }
 }

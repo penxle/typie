@@ -41,16 +41,8 @@
 
   $effect(() => {
     if (!editor || !element) return;
-
-    const off = editor.on('state_changed', (_, { fields }) => {
-      if (fields.includes('cursor')) {
-        resetAnimation();
-      }
-    });
-
-    return () => {
-      off();
-    };
+    void cursor;
+    resetAnimation();
   });
 </script>
 

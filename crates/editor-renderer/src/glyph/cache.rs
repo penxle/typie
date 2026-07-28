@@ -169,14 +169,12 @@ impl Default for BakedGlyphCache {
 
 #[cfg(test)]
 mod tests {
-    use super::{BakedGlyphCache, GlyphCacheKey, SvgPathGlyphCache};
+    use super::{BakedGlyphCache, GlyphCache, GlyphCacheKey, SvgPathGlyphCache};
     use crate::glyph::{GlyphKey, SvgPathGlyph};
     use crate::types::{Color, Image, Path, PathElement};
 
     #[test]
-    fn svg_path_cache_preserves_svg_path_glyph() {
-        // SVG path glyph cache 가 SVG path 기반 글리프 표현을 그대로 저장하고
-        // 다시 꺼낼 수 있는지 확인한다.
+    fn svg_path_cache_preserves_a_hit_after_a_chunk_update() {
         let mut cache = SvgPathGlyphCache::new();
         let key = GlyphCacheKey::new(1, 400, 42, 16.0, false, false, 0);
         let glyph = SvgPathGlyph {
@@ -194,7 +192,7 @@ mod tests {
         cache.insert(key, Some(glyph), 7);
 
         let cached = cache
-            .get(&key, 7)
+            .get(&key, 8)
             .expect("cache entry must exist")
             .as_ref()
             .expect("cache entry must contain glyph");
@@ -202,6 +200,22 @@ mod tests {
         assert_eq!(cached.placement_left, 3);
         assert_eq!(cached.placement_top, 4);
         assert_eq!(cached.path.elements.len(), 3);
+    }
+
+    #[test]
+    fn glyph_cache_retries_a_miss_after_a_chunk_update() {
+        let key = GlyphCacheKey::new(1, 400, 42, 16.0, false, false, 0);
+        let mut cache = GlyphCache::new();
+        cache.insert(key, None, 7);
+
+        assert!(
+            cache.get(&key, 7).is_some(),
+            "a miss remains valid while the font version is unchanged"
+        );
+        assert!(
+            cache.get(&key, 8).is_none(),
+            "a chunk update may supply a previously missing glyph"
+        );
     }
 
     fn baked_glyph_key(id: u32) -> GlyphKey {

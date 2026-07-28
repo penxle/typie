@@ -219,12 +219,55 @@ class SliderDesktopTest {
     }
   }
 
+  @Test
+  fun dragEndUsesLatestCapturedValueAfterRecomposition() = runComposeUiTest {
+    var nodeValue by mutableFloatStateOf(100f)
+
+    setContent {
+      val capturedNodeValue = nodeValue
+
+      fun commit(next: Float) {
+        if (next != capturedNodeValue) {
+          nodeValue = next
+        }
+      }
+
+      Slider(
+        value = nodeValue,
+        range = 0f..100f,
+        onDragStart = {},
+        onDrag = {},
+        onDragEnd = ::commit,
+        thumbSize = 0.dp,
+        modifier =
+          Modifier.testTag(RecomposedCallbackSliderTag).size(width = 200.dp, height = 32.dp),
+      )
+    }
+    waitForIdle()
+
+    val slider = onNodeWithTag(RecomposedCallbackSliderTag)
+    slider.performTouchInput {
+      down(Offset(x = width.toFloat(), y = center.y))
+      moveTo(Offset(x = width * 0.5f, y = center.y))
+      up()
+    }
+    runOnIdle { assertEquals(50f, nodeValue) }
+
+    slider.performTouchInput {
+      down(Offset(x = width * 0.5f, y = center.y))
+      moveTo(Offset(x = width.toFloat(), y = center.y))
+      up()
+    }
+    runOnIdle { assertEquals(100f, nodeValue) }
+  }
+
   private companion object {
     const val SliderTag = "slider-track"
     const val ConsumedSliderTag = "consumed-slider-track"
     const val ConsumedReleaseSliderTag = "consumed-release-slider-track"
     const val ConsumedTapReleaseSliderTag = "consumed-tap-release-slider-track"
     const val LatestDraftSliderTag = "latest-draft-slider-track"
+    const val RecomposedCallbackSliderTag = "recomposed-callback-slider-track"
   }
 }
 

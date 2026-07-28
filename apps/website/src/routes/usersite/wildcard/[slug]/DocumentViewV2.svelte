@@ -21,7 +21,7 @@
   import { page } from '$app/state';
   import { env } from '$env/dynamic/public';
   import { Img } from '$lib/components';
-  import { Editor as EditorComponent } from '$lib/editor-ffi/components';
+  import { Editor as EditorComponent, EditorFailureOverlay } from '$lib/editor-ffi/components';
   import { browserScaleFactor, Editor, setupEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { registerLinkContextMenu } from '$lib/editor-ffi/handlers/link';
   import { unwrapError } from '$lib/graphql';
@@ -38,6 +38,11 @@
   type Props = {
     entityView$key: UsersiteWildcardSlugPage_DocumentViewV2_entityView$key;
     user$key: UsersiteWildcardSlugPage_DocumentViewV2_user$key | null | undefined;
+  };
+
+  type EditorFailure = {
+    documentId: string;
+    editor?: Editor;
   };
 
   let { entityView$key, user$key }: Props = $props();
@@ -235,6 +240,9 @@
 
   let hydrated = $state(false);
   let editorReady = $state(false);
+  let editorFailure = $state<EditorFailure>();
+  let editorForDocumentId = $state<string | null>(null);
+  let fallbackBodySurface = $state<HTMLDivElement>();
   let destroyed = false;
 
   onMount(() => {
@@ -243,6 +251,8 @@
 
   const document = $derived(entityView.data.node.__typename === 'DocumentView' ? entityView.data.node : null);
   const documentId = $derived(document?.id);
+  const activeEditorFailure = $derived(editorFailure?.documentId === documentId ? editorFailure : undefined);
+  const failureSurface = $derived(activeEditorFailure ? (activeEditorFailure.editor?.extensionAreaEl ?? fallbackBodySurface) : undefined);
 
   const graph = $derived(
     document?.documentBody?.__typename === 'DocumentViewBodyAvailableV2' ? Uint8Array.fromBase64(document.documentBody.graph) : undefined,
@@ -250,24 +260,33 @@
 
   let createdForDocumentId: string | null = null;
 
+  const reportEditorFailure = (id: string, error: unknown, editor?: Editor) => {
+    if (destroyed || documentId !== id || editorFailure?.documentId === id) return;
+    editorFailure = { documentId: id, editor };
+    console.error(error);
+  };
+
   $effect(() => {
     const id = documentId;
     const g = graph;
     if (!id || !g) {
-      if (ctx.editor) {
-        ctx.editor.destroy();
-        ctx.editor = undefined;
-        createdForDocumentId = null;
-      }
+      ctx.editor?.destroy();
+      ctx.editor = undefined;
+      createdForDocumentId = null;
+      editorForDocumentId = null;
+      editorReady = false;
+      editorFailure = undefined;
       return;
     }
-    if (createdForDocumentId === id && ctx.editor) return;
+    if (createdForDocumentId === id) return;
 
     createdForDocumentId = id;
+    ctx.editor?.destroy();
+    ctx.editor = undefined;
+    editorForDocumentId = null;
     const protectContent = document?.protectContent ?? false;
 
     untrack(async () => {
-      const previous = ctx.editor;
       try {
         const editor = await Editor.create(g, { width: 1, height: 1, scale_factor: browserScaleFactor() }, theme.currentThemeVariant);
 
@@ -278,12 +297,31 @@
 
         editor.readOnly = true;
         editor.protectContent = protectContent;
+        editorForDocumentId = id;
         ctx.editor = editor;
-        previous?.destroy();
       } catch (err) {
-        console.error(err);
+        if (destroyed || createdForDocumentId !== id || documentId !== id) return;
+        reportEditorFailure(id, err);
       }
     });
+  });
+
+  $effect(() => {
+    const editor = ctx.editor;
+    const id = editorForDocumentId;
+    const failure = editor?.failure;
+    if (editor && id && failure !== undefined) {
+      reportEditorFailure(id, failure, editor);
+    }
+  });
+
+  $effect(() => {
+    const surface = failureSurface;
+    if (!surface) return;
+    surface.inert = true;
+    return () => {
+      surface.inert = false;
+    };
   });
 
   $effect(() => {
@@ -301,7 +339,14 @@
   $effect(() => {
     void documentId;
     editorReady = false;
+    editorFailure = undefined;
   });
+
+  const handleEditorReady = () => {
+    if (editorForDocumentId === documentId && ctx.editor) {
+      editorReady = true;
+    }
+  };
 
   const assets = $derived(document?.assets);
 
@@ -534,19 +579,37 @@
         </div>
       {/snippet}
 
-      {#if hydrated && !editorReady}
-        <div style:max-width="640px" style:padding-inline="20px" class={flex({ flexDirection: 'column', width: 'full', marginX: 'auto' })}>
-          {@render documentHeader()}
-          <DocumentViewSkeleton />
-          {@render documentFooter()}
-        </div>
-      {/if}
+      <div class={css({ position: 'relative', isolation: 'isolate' })}>
+        {#if hydrated && !editorReady}
+          <div
+            style:max-width="640px"
+            style:padding-inline="20px"
+            class={flex({ flexDirection: 'column', width: 'full', marginX: 'auto' })}
+          >
+            {@render documentHeader()}
+            <div bind:this={fallbackBodySurface}>
+              <DocumentViewSkeleton />
+            </div>
+            {@render documentFooter()}
+          </div>
+        {/if}
 
-      {#key document.id}
-        <div class={flex({ flexDirection: 'column' })}>
-          {#if document.protectContent}
-            <ContentProtect>
-              <EditorComponent active={false} document$key={document} onReady={() => (editorReady = true)} useWindowScroll>
+        {#key document.id}
+          <div class={flex({ flexDirection: 'column' })}>
+            {#if document.protectContent}
+              <ContentProtect>
+                <EditorComponent active={false} document$key={document} onReady={handleEditorReady} useWindowScroll>
+                  {#snippet header()}
+                    {@render documentHeader()}
+                  {/snippet}
+
+                  {#snippet footer()}
+                    {@render documentFooter()}
+                  {/snippet}
+                </EditorComponent>
+              </ContentProtect>
+            {:else}
+              <EditorComponent active={false} document$key={document} onReady={handleEditorReady} useWindowScroll>
                 {#snippet header()}
                   {@render documentHeader()}
                 {/snippet}
@@ -555,20 +618,20 @@
                   {@render documentFooter()}
                 {/snippet}
               </EditorComponent>
-            </ContentProtect>
-          {:else}
-            <EditorComponent active={false} document$key={document} onReady={() => (editorReady = true)} useWindowScroll>
-              {#snippet header()}
-                {@render documentHeader()}
-              {/snippet}
+            {/if}
+          </div>
+        {/key}
 
-              {#snippet footer()}
-                {@render documentFooter()}
-              {/snippet}
-            </EditorComponent>
-          {/if}
-        </div>
-      {/key}
+        {#if activeEditorFailure && failureSurface}
+          <EditorFailureOverlay
+            id={`usersite-editor-${document.id}`}
+            actionLabel="새로고침"
+            contentPosition="viewport"
+            onAction={() => location.reload()}
+            surfaceElement={failureSurface}
+          />
+        {/if}
+      </div>
     {/if}
   {:else if document.documentBody.__typename === 'DocumentViewBodyUnavailable'}
     <div class={flex({ align: 'center', justify: 'center', minHeight: '[100dvh]', fontSize: '16px', fontWeight: 'medium' })}>

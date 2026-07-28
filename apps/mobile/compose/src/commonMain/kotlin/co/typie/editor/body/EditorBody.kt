@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
@@ -59,6 +60,9 @@ internal fun EditorBody(
   val uiState = LocalEditorUiState.current
   val interactionScope = LocalEditorInteractionScope.current
   var bodyContentHeight by remember { mutableFloatStateOf(0f) }
+  val pageSizes by
+    remember(editor) { derivedStateOf { editor?.publishedState?.pageSizes.orEmpty() } }
+  val cursor by remember(editor) { derivedStateOf { editor?.publishedState?.cursor } }
   val extensionAreaFillSpacerHeight =
     remember(geometry.minimumBodyHeight, bodyContentHeight) {
       resolveExtensionAreaFillSpacerHeight(
@@ -71,9 +75,8 @@ internal fun EditorBody(
       .trackEditorInteractionSurfaceBounds(uiState = uiState, density = density.density)
       .run {
         if (layoutSpec is EditorDocumentLayoutSpec.Continuous) {
-          val pageSizes = editor?.pageSizes.orEmpty()
           editorExtensionAreaLineHighlight(
-            cursor = editor?.cursor,
+            cursor = cursor,
             focused = uiState.focused,
             editorBounds = { uiState.editorBoundsInContainer },
             viewportTransform = { uiState.resolveViewportTransform(pageSizes) },
@@ -159,6 +162,7 @@ internal fun EditorBody(
           uiState = uiState,
           geometry = interactionScope,
           presentation = interactionScope.controller.tableColumnResizePresentation,
+          resolvePlacement = interactionScope.controller::resolveTableColumnResizePlacement,
         )
         EditorTableCellSelectionOverlay(
           editor = editor,

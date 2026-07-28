@@ -56,7 +56,7 @@ private fun Editor.selectionEndpointsForHaptics(selection: Selection?): Selectio
   if (selection.isCollapsed()) {
     return null
   }
-  return tickSelectionEndpoints
+  return publishedState.selectionEndpoints
 }
 
 private fun SelectionEndpoints.hasSameHandlePositionsAs(other: SelectionEndpoints): Boolean =

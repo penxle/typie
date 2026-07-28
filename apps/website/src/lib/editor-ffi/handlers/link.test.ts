@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { openLinkEditorFromTooltip } from './link';
+import type { EditorRequest } from '../editor-update';
 
 const caret = { node: 't1', offset: 0, affinity: 'downstream' as const };
 const point = { page: 0, x: 25, y: 25 };
@@ -10,12 +11,22 @@ describe('openLinkEditorFromTooltip', () => {
       anchor: { node: 't1', offset: 0, affinity: 'downstream' as const },
       head: { node: 't2', offset: 5, affinity: 'downstream' as const },
     };
+    const staleCaret = { node: 'stale', offset: 9, affinity: 'downstream' as const };
     const editor = {
       enqueue: vi.fn(),
-      flush: vi.fn(),
+      updateNow: vi.fn((build: (request: EditorRequest) => void) => {
+        build({} as EditorRequest);
+        return {
+          revision: 1,
+          snapshot: { selection: { anchor: caret, head: caret } },
+          commandOutcomes: [{ type: 'applied' as const }],
+          events: [],
+          awaitPublished: vi.fn(),
+        };
+      }),
       focus: vi.fn(),
       modifierSpanSelection: vi.fn(() => span),
-      selection: { anchor: caret, head: caret },
+      selection: { anchor: staleCaret, head: staleCaret },
     };
     const ctx = { linkEditorOpen: false };
     const closeTooltip = vi.fn();
@@ -26,7 +37,7 @@ describe('openLinkEditorFromTooltip', () => {
     expect(editor.enqueue).toHaveBeenCalledWith({ type: 'selection', op: { type: 'set_at', page: 0, x: 25, y: 25 } });
     expect(editor.modifierSpanSelection).toHaveBeenCalledWith(caret, 'link');
     expect(editor.enqueue).toHaveBeenCalledWith({ type: 'selection', op: { type: 'set', selection: span } });
-    expect(editor.flush).toHaveBeenCalled();
+    expect(editor.updateNow).toHaveBeenCalledTimes(2);
     expect(closeTooltip).toHaveBeenCalled();
     expect(ctx.linkEditorOpen).toBe(true);
   });
@@ -34,7 +45,16 @@ describe('openLinkEditorFromTooltip', () => {
   it('falls back to a collapsed caret when the span cannot be resolved', async () => {
     const editor = {
       enqueue: vi.fn(),
-      flush: vi.fn(),
+      updateNow: vi.fn((build: (request: EditorRequest) => void) => {
+        build({} as EditorRequest);
+        return {
+          revision: 1,
+          snapshot: { selection: { anchor: caret, head: caret } },
+          commandOutcomes: [{ type: 'applied' as const }],
+          events: [],
+          awaitPublished: vi.fn(),
+        };
+      }),
       focus: vi.fn(),
       modifierSpanSelection: vi.fn(),
       selection: { anchor: caret, head: caret },

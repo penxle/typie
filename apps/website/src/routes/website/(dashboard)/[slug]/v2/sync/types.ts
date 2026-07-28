@@ -6,8 +6,7 @@ export type SyncEditor = {
   missingChangesetsFor(confirmedHeads: Uint8Array): { bytes: Uint8Array; withheld: number };
   partitionRemoteChangesets(payload: Uint8Array): { ready: Uint8Array; blocked: Uint8Array };
   splitChangesets(payload: Uint8Array): { id: string; bytes: Uint8Array }[];
-  receiveRemoteChangeset(payload: Uint8Array): void;
-  flush(): void;
+  receiveRemoteChangeset(payload: Uint8Array): Promise<number>;
 };
 
 export type PushStatus = 'idle' | 'pushing' | 'retrying' | 'error';

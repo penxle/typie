@@ -46,30 +46,33 @@ export async function generateDocumentPdfV2(params: GenerateDocumentPdfV2Params)
     }
 
     try {
-      editor.enqueue({ type: 'system', event: { type: 'initialize' } });
-      editor.enqueue({
-        type: 'node',
-        op: {
-          type: 'set_attrs',
-          id: EDITOR_FFI_ROOT_ID,
-          attrs: {
-            type: 'root',
-            layout_mode: {
-              type: 'paginated',
-              page_width: layout.pageWidth,
-              page_height: layout.pageHeight,
-              page_margin_top: layout.pageMarginTop,
-              page_margin_bottom: layout.pageMarginBottom,
-              page_margin_left: layout.pageMarginLeft,
-              page_margin_right: layout.pageMarginRight,
+      let events = editor.tick_through(
+        editor.enqueue_request([
+          { type: 'system', event: { type: 'initialize' } },
+          {
+            type: 'node',
+            op: {
+              type: 'set_attrs',
+              id: EDITOR_FFI_ROOT_ID,
+              attrs: {
+                type: 'root',
+                layout_mode: {
+                  type: 'paginated',
+                  page_width: layout.pageWidth,
+                  page_height: layout.pageHeight,
+                  page_margin_top: layout.pageMarginTop,
+                  page_margin_bottom: layout.pageMarginBottom,
+                  page_margin_left: layout.pageMarginLeft,
+                  page_margin_right: layout.pageMarginRight,
+                },
+              },
             },
           },
-        },
-      });
+        ]),
+      ).events;
 
       let loadedThisRound = false;
       for (let round = 0; round < MAX_FONT_PASSES; round++) {
-        const events = editor.tick();
         const missing = events.filter((e): e is Extract<EditorEvent, { type: 'font_data_missing' }> => e.type === 'font_data_missing');
         for (const e of missing) {
           const key = manifestEscalationKey(e, reg.failedManifests);
@@ -83,22 +86,28 @@ export async function generateDocumentPdfV2(params: GenerateDocumentPdfV2Params)
         }
         loadedThisRound = true;
         await Promise.all(missing.map((e) => handleFontDataMissing(host, editor, reg, e)));
-      }
-      if (loadedThisRound) {
-        const finalEvents = editor.tick();
-        if (finalEvents.some((e) => e.type === 'font_data_missing')) {
-          console.warn('[pdf-v2] font resolution did not converge; degraded export');
+        const tick = editor.tick();
+        if (!tick) {
+          console.warn('[pdf-v2] font resource loading produced no editor tick; degraded export');
+          events = [];
+          break;
         }
+        events = tick.events;
+      }
+      if (loadedThisRound && events.some((e) => e.type === 'font_data_missing')) {
+        console.warn('[pdf-v2] font resolution did not converge; degraded export');
       }
 
       const externals = editor.external_elements().map(mapExternalElement);
       if (externals.length > 0) {
         const assets = await resolveAssets(externals);
-        for (const ext of externals) {
-          const { height } = computeDesiredSize(ext, assets.get(ext.nodeId));
-          editor.enqueue({ type: 'system', event: { type: 'set_external_height', node_id: ext.nodeId, height } });
-        }
-        editor.tick();
+        const requestId = editor.enqueue_request(
+          externals.map((ext) => {
+            const { height } = computeDesiredSize(ext, assets.get(ext.nodeId));
+            return { type: 'system', event: { type: 'set_external_height', node_id: ext.nodeId, height } };
+          }),
+        );
+        editor.tick_through(requestId);
       }
 
       const sizes = editor.page_sizes();

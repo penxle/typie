@@ -12,11 +12,12 @@ import kotlinx.coroutines.test.runTest
 class EditorImeNotificationFlowTest {
   private fun key(offset: Int, paused: Boolean = false): EditorImeNotifyKey {
     val position = Position(node = "n", offset = offset, affinity = Affinity.Downstream)
+    val selection = Selection(anchor = position, head = position)
     return EditorImeNotifyKey(
-      selection = Selection(anchor = position, head = position),
-      tickSelection = Selection(anchor = position, head = position),
-      cursor = null,
-      ime = null,
+      publishedSelection = selection,
+      appliedSelection = selection,
+      publishedCursor = null,
+      appliedIme = null,
       paused = paused,
     )
   }
@@ -24,12 +25,7 @@ class EditorImeNotificationFlowTest {
   @Test
   fun `paused emissions are suppressed and resume delivers the trailing state once`() = runTest {
     val emitted =
-      flowOf(
-          key(0),
-          key(1, paused = true),
-          key(2, paused = true),
-          key(2, paused = false),
-        )
+      flowOf(key(0), key(1, paused = true), key(2, paused = true), key(2, paused = false))
         .imeNotificationEvents()
         .toList()
 

@@ -1,5 +1,6 @@
 package co.typie.editor.interaction.semantics
 
+import co.typie.editor.Editor
 import co.typie.editor.EditorState
 import co.typie.editor.runtime.EditorContextMenuState
 
@@ -15,16 +16,15 @@ internal class EditorContextMenuSemantic(private val stateProvider: () -> Editor
     stateProvider().hide()
   }
 
-  fun requestShowAfterSelectionCommit() {
-    stateProvider().requestShowAfterSelectionCommit()
+  fun requestShowForAppliedSelection(editor: Editor, state: EditorState) {
+    stateProvider().requestShowForAppliedSelection(editor = editor, state = state)
   }
 
-  fun showAfterSelectionCommitIfRequested(state: EditorState) {
-    stateProvider().showAfterSelectionCommitIfRequested(state)
+  fun onEditorStateChanged(editor: Editor, state: EditorState) {
+    stateProvider().onEditorStateChanged(editor = editor, state = state)
   }
 
-  fun onEditorStateChanged(state: EditorState) {
-    stateProvider().onEditorStateChanged(state)
-    stateProvider().showAfterSelectionCommitIfRequested(state)
+  fun reset() {
+    stateProvider().reset()
   }
 }

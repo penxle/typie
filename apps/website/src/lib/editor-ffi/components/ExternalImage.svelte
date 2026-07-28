@@ -5,6 +5,7 @@
   import { createFloatingActions, pointerCapture } from '@typie/ui/actions';
   import { Icon, Img, RingSpinner } from '@typie/ui/components';
   import { Toast } from '@typie/ui/notification';
+  import { onDestroy } from 'svelte';
   import DownloadIcon from '~icons/lucide/download';
   import ExternalLinkIcon from '~icons/lucide/external-link';
   import ImageIcon from '~icons/lucide/image';
@@ -37,6 +38,12 @@
   let enlarged = $state(false);
   let containerEl = $state<HTMLDivElement>();
   let pickerOpened = $state(false);
+  let publicationOwned = $state(false);
+  let publicationWait: AbortController | undefined;
+
+  onDestroy(() => {
+    publicationWait?.abort();
+  });
 
   const imageData = $derived(element.data.type === 'image' ? element.data : undefined);
   const imageId = $derived(imageData?.id || undefined);
@@ -75,7 +82,7 @@
   });
 
   $effect(() => {
-    if (imageData && !isResizing) {
+    if (imageData && !isResizing && !publicationOwned) {
       proportion = imageData.proportion;
     }
   });
@@ -145,6 +152,9 @@
     event.preventDefault();
     event.stopPropagation();
 
+    publicationWait?.abort();
+    publicationWait = undefined;
+    publicationOwned = false;
     isResizing = true;
     return {
       x: event.clientX,
@@ -167,22 +177,66 @@
   const handleResizeEnd = (session: ResizeSession, event: PointerEvent) => {
     handleResize(session, event);
     const finalProportion = Math.round(proportion);
+    const editor = ctx.editor;
+    if (!editor) {
+      isResizing = false;
+      return;
+    }
+    const wait = new AbortController();
+    publicationWait?.abort();
+    publicationWait = wait;
+    publicationOwned = true;
     isResizing = false;
-    ctx.editor?.enqueue({
-      type: 'node',
-      op: {
-        type: 'set_attr',
-        id: element.node,
-        attr: {
-          type: 'image',
-          attr: { type: 'proportion', value: finalProportion },
+    let update: ReturnType<typeof editor.updateNow>;
+    try {
+      update = editor.updateNow(() => {
+        editor.enqueue({
+          type: 'node',
+          op: {
+            type: 'set_attr',
+            id: element.node,
+            attr: {
+              type: 'image',
+              attr: { type: 'proportion', value: finalProportion },
+            },
+          },
+        });
+      });
+    } catch {
+      publicationWait = undefined;
+      publicationOwned = false;
+      proportion = imageData?.proportion ?? session.proportion;
+      editor.focus();
+      return;
+    }
+    const accepted = update?.commandOutcomes.every((outcome) => outcome.type === 'applied') ?? false;
+    if (!update || !accepted) {
+      publicationWait = undefined;
+      publicationOwned = false;
+      proportion = imageData?.proportion ?? session.proportion;
+    } else {
+      void update.awaitPublished(wait.signal).then(
+        () => {
+          if (publicationWait !== wait) return;
+          publicationWait = undefined;
+          publicationOwned = false;
+          proportion = imageData?.proportion ?? finalProportion;
         },
-      },
-    });
-    ctx.editor?.focus();
+        () => {
+          if (publicationWait !== wait) return;
+          publicationWait = undefined;
+          publicationOwned = false;
+          proportion = imageData?.proportion ?? finalProportion;
+        },
+      );
+    }
+    editor.focus();
   };
 
   const handleResizeCancel = (session: ResizeSession) => {
+    publicationWait?.abort();
+    publicationWait = undefined;
+    publicationOwned = false;
     proportion = session.proportion;
     isResizing = false;
   };

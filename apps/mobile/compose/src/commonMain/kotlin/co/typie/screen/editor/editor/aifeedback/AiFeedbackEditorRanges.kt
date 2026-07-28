@@ -1,7 +1,7 @@
 package co.typie.screen.editor.editor.aifeedback
 
 import co.typie.editor.Editor
-import co.typie.editor.EditorScope
+import co.typie.editor.EditorRequestScope
 import co.typie.editor.ffi.DecorationStyle
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.Selection
@@ -15,7 +15,7 @@ internal const val ACTIVE_AI_FEEDBACK_RANGE_GROUP = "ai-feedback-active"
 internal data class AiFeedbackRangeRegistration(val id: String, val selection: Selection)
 
 internal suspend fun Editor.installAiFeedbackDecorations() {
-  await { installAiFeedbackDecorations(this) }
+  update { installAiFeedbackDecorations(this) }
 }
 
 internal fun Editor.clearAiFeedbackRanges() {
@@ -24,7 +24,7 @@ internal fun Editor.clearAiFeedbackRanges() {
 }
 
 internal suspend fun Editor.addAiFeedbackRange(item: AiFeedbackRangeRegistration) {
-  await {
+  update {
     enqueue(
       Message.TrackedRange(
         TrackedRangeOp.Add(
@@ -42,7 +42,7 @@ internal suspend fun Editor.setActiveAiFeedbackRange(
   currentRanges: List<TrackedRange>,
 ) {
   val aiFeedbackRanges = currentRanges.aiFeedbackRanges()
-  await {
+  update {
     aiFeedbackRanges
       .filter { it.group == ACTIVE_AI_FEEDBACK_RANGE_GROUP && it.id != activeId }
       .forEach { range ->
@@ -67,11 +67,11 @@ internal suspend fun Editor.setActiveAiFeedbackRange(
 }
 
 internal suspend fun Editor.removeAiFeedbackRange(id: String) {
-  await { enqueue(Message.TrackedRange(TrackedRangeOp.Remove(id = id))) }
+  update { enqueue(Message.TrackedRange(TrackedRangeOp.Remove(id = id))) }
 }
 
 internal suspend fun Editor.removeAiFeedbackRanges(ids: Iterable<String>) {
-  await { ids.forEach { id -> enqueue(Message.TrackedRange(TrackedRangeOp.Remove(id = id))) } }
+  update { ids.forEach { id -> enqueue(Message.TrackedRange(TrackedRangeOp.Remove(id = id))) } }
 }
 
 internal val TrackedRangeEndpoints.isAiFeedbackRange: Boolean
@@ -86,7 +86,7 @@ internal fun List<TrackedRange>.aiFeedbackRanges(): List<TrackedRange> = filter 
   it.group == AI_FEEDBACK_RANGE_GROUP || it.group == ACTIVE_AI_FEEDBACK_RANGE_GROUP
 }
 
-private fun installAiFeedbackDecorations(scope: EditorScope) {
+private fun installAiFeedbackDecorations(scope: EditorRequestScope) {
   scope.enqueue(
     Message.TrackedRange(
       TrackedRangeOp.SetGroupDecoration(

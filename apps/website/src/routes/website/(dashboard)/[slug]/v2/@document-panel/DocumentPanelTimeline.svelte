@@ -26,9 +26,11 @@
 
   type Props = {
     document$key: DocumentPanelV2Timeline_document$key;
+    onPreviewEditorFailed?: (retry: () => void) => void;
+    onPreviewEditorRecovered?: () => void;
   };
 
-  let { document$key }: Props = $props();
+  let { document$key, onPreviewEditorFailed, onPreviewEditorRecovered }: Props = $props();
 
   const document = createFragment(
     graphql(`
@@ -91,12 +93,20 @@
   const paneGroup = getPaneGroup();
   const focusReturn = getDocumentPanelFocusReturn();
 
-  const editorViewport = $derived(ctx.editor?.scrollContainerEl?.parentElement);
-
-  let timelineEditor: Editor | undefined;
+  let timelineEditor = $state<Editor>();
   let creatingTimeline = false;
   let pendingHeadId: string | null = null;
+  let pendingTimelinePublication:
+    | {
+        editor: Editor;
+        headId: string;
+        afterRevision: number;
+      }
+    | undefined;
+  let previewFailed = $state(false);
+  let sliderElement = $state<HTMLButtonElement>();
   let destroyed = false;
+  const unusableTimelineEditors = new WeakSet<Editor>();
   let restoring = $state(false);
 
   let selectedHeadId = $state<string | null>(null);
@@ -128,12 +138,61 @@
   const p = $derived(max > 0 && sliderIndex >= 0 ? `${(sliderIndex / max) * 100}%` : '100%');
   const shownHead = $derived(headsAsc.find((h) => h.id === shownHeadId) ?? null);
 
+  const retryPreview = (): void => {
+    if (!selectedHeadId) return;
+    updateView.cancel();
+    void applyHead(selectedHeadId);
+  };
+
+  const reportTimelineFailure = (editor?: Editor): void => {
+    if (destroyed) return;
+    if (editor) {
+      if (unusableTimelineEditors.has(editor)) return;
+      unusableTimelineEditors.add(editor);
+    }
+    pendingTimelinePublication = undefined;
+    previewFailed = true;
+    onPreviewEditorFailed?.(retryPreview);
+  };
+
+  const clearTimelineFailure = (): void => {
+    previewFailed = false;
+    onPreviewEditorRecovered?.();
+  };
+
+  const reportTimelineRecovery = (): void => {
+    if (previewFailed) sliderElement?.focus({ preventScroll: true });
+    clearTimelineFailure();
+  };
+
+  const awaitTimelinePublication = (editor: Editor, headId: string, afterRevision: number): void => {
+    const pending = { editor, headId, afterRevision };
+    pendingTimelinePublication = pending;
+    void editor
+      .awaitPublishedRevision(pending.afterRevision + 1, { requireFrame: true })
+      .then((publication) => {
+        if (destroyed || pendingTimelinePublication !== pending || timelineEditor !== editor) return;
+        if (publication.type !== 'published') {
+          reportTimelineFailure(editor);
+          return;
+        }
+        pendingTimelinePublication = undefined;
+        shownHeadId = headId;
+        reportTimelineRecovery();
+      })
+      .catch(() => {
+        if (pendingTimelinePublication === pending && timelineEditor === editor) reportTimelineFailure(editor);
+      });
+  };
+
   const exitTimeline = (): void => {
     const exitingEditor = timelineEditor;
     timelineEditor = undefined;
     ctx.editor = ctx.liveEditor;
     creatingTimeline = false;
     pendingHeadId = null;
+    pendingTimelinePublication = undefined;
+    clearTimelineFailure();
     // The keyed editor subtree still references the previous editor until the next render.
     void tick().then(() => exitingEditor?.destroy());
   };
@@ -155,52 +214,107 @@
   }, 50);
 
   const applyHead = async (headId: string): Promise<void> => {
+    if (destroyed) return;
     const liveEditor = ctx.liveEditor;
-    if (!liveEditor) return;
+    if (!liveEditor || liveEditor.terminal) return;
     const head = headsAsc.find((h) => h.id === headId);
     if (!head) return;
-
-    let plain;
-    try {
-      plain = liveEditor.materializeAt(Uint8Array.fromBase64(head.heads), [...(query.data?.document.sweepTombstones ?? [])]);
-    } catch {
-      if (selectedHeadId === headId && shownHeadId !== null) selectedHeadId = shownHeadId;
-      return;
-    }
-
-    if (timelineEditor) {
-      timelineEditor.setDoc(plain);
-      shownHeadId = headId;
-      return;
-    }
-
     if (creatingTimeline) {
       pendingHeadId = headId;
       return;
     }
 
+    const currentTimelineEditor = timelineEditor;
+    if (
+      currentTimelineEditor &&
+      currentTimelineEditor.failure === undefined &&
+      !unusableTimelineEditors.has(currentTimelineEditor) &&
+      ((pendingTimelinePublication?.editor === currentTimelineEditor && pendingTimelinePublication.headId === headId) ||
+        (pendingTimelinePublication === undefined && shownHeadId === headId))
+    ) {
+      return;
+    }
+
+    let plain;
+    try {
+      plain = liveEditor.materializeAt(Uint8Array.fromBase64(head.heads), [...(query.data?.document.sweepTombstones ?? [])]);
+    } catch {
+      if (liveEditor.failure === undefined) {
+        reportTimelineFailure(currentTimelineEditor);
+      } else {
+        ctx.reportEditorFailure?.(liveEditor.failure);
+      }
+      return;
+    }
+
+    if (currentTimelineEditor && currentTimelineEditor.failure === undefined && !unusableTimelineEditors.has(currentTimelineEditor)) {
+      const afterRevision = currentTimelineEditor.appliedRevision;
+      try {
+        currentTimelineEditor.setDoc(plain);
+      } catch {
+        reportTimelineFailure(currentTimelineEditor);
+        return;
+      }
+      awaitTimelinePublication(currentTimelineEditor, headId, afterRevision);
+      return;
+    }
+
     creatingTimeline = true;
     try {
-      const created = await Editor.createFromDoc(plain, liveEditor.viewport, theme.currentThemeVariant);
+      let created: Editor;
+      try {
+        created = await Editor.createFromDoc(plain, liveEditor.viewport, theme.currentThemeVariant);
+      } catch {
+        reportTimelineFailure();
+        return;
+      }
       created.readOnly = true;
-      if (destroyed) {
+      if (destroyed || ctx.liveEditor !== liveEditor || liveEditor.terminal) {
         created.destroy();
         return;
       }
+      const publicationRevision = created.appliedRevision;
+      const exitingEditor = timelineEditor;
       timelineEditor = created;
       ctx.editor = created;
-      shownHeadId = headId;
+      shownHeadId = null;
+      await tick();
+      exitingEditor?.destroy();
+      if (destroyed || timelineEditor !== created) return;
+
+      try {
+        const publication = await created.awaitPublishedRevision(publicationRevision, { requireFrame: true });
+        if (destroyed || timelineEditor !== created) return;
+        if (publication.type !== 'published') {
+          reportTimelineFailure(created);
+          return;
+        }
+      } catch {
+        if (destroyed || timelineEditor !== created) return;
+        reportTimelineFailure(created);
+        return;
+      }
+
+      if (pendingHeadId === null || pendingHeadId === headId) {
+        if (pendingHeadId === headId) pendingHeadId = null;
+        shownHeadId = headId;
+        reportTimelineRecovery();
+      }
     } finally {
       creatingTimeline = false;
-    }
-
-    if (pendingHeadId !== null) {
-      const next = pendingHeadId;
-      pendingHeadId = null;
-      void applyHead(next);
+      if (pendingHeadId !== null) {
+        const next = pendingHeadId;
+        pendingHeadId = null;
+        void applyHead(next);
+      }
     }
   };
   const updateView = throttle(applyHead, 32);
+
+  $effect(() => {
+    const editor = timelineEditor;
+    if (editor?.failure !== undefined) reportTimelineFailure(editor);
+  });
 
   const selectHead = (headId: string, timing: 'throttled' | 'immediate') => {
     const changed = selectedHeadId !== headId;
@@ -433,10 +547,10 @@
   </div>
 </div>
 
-{#if editorViewport && !isLoading && headsAsc.length > 0}
+{#if ctx.editorAreaEl && !isLoading && headsAsc.length > 0}
   <div
     class={center({ position: 'absolute', left: '0', right: '0', bottom: '32px', pointerEvents: 'none' })}
-    use:portal={editorViewport}
+    use:portal={ctx.editorAreaEl}
     in:fly={{ y: 32, duration: 300 }}
   >
     <div
@@ -463,6 +577,7 @@
 
       <div class={flex({ position: 'relative', flexGrow: '1', align: 'center', minWidth: '100px', maxWidth: '420px', height: '36px' })}>
         <button
+          bind:this={sliderElement}
           class={cx('group', css({ position: 'relative', width: 'full', height: '16px', overflow: 'hidden', cursor: 'pointer' }))}
           aria-label="Timeline slider"
           type="button"

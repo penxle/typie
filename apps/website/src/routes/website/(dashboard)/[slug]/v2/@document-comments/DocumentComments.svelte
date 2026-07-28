@@ -6,6 +6,7 @@
   import MessageSquarePlusIcon from '~icons/lucide/message-square-plus';
   import { reconcileComments } from '$lib/editor-ffi/comments';
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
+  import { isSelectionCollapsed, selectionHeadRect } from '$lib/editor-ffi/geometry';
   import { FocusReturnSession } from '$lib/focus-return-session';
   import { cache } from '$lib/graphql';
   import { graphql } from '$mearie';
@@ -137,7 +138,7 @@
 
   $effect(() => {
     if (!editor) return;
-    void editor.trackedRanges;
+    void editor.appliedSnapshot.trackedRanges;
     if (activeThreadId && editor.hasComment(activeThreadId)) {
       editor.setActiveComment(activeThreadId);
     } else if (!activeThreadId) {
@@ -187,9 +188,13 @@
 
   const anchorFromPageRects = (rects: PageRect[]): CommentAnchor | null => (rects.length > 0 ? { rects } : null);
 
+  const publishedTrackedRangeRects = (id: string): PageRect[] | null => {
+    const range = editor?.published?.snapshot.trackedRanges.find((item) => item.id === id);
+    return range && range.rects.length > 0 ? range.rects : null;
+  };
+
   const anchorForThread = (id: string): CommentAnchor | null => {
-    if (!editor) return null;
-    const rects = editor.trackedItemRects(id);
+    const rects = publishedTrackedRangeRects(id);
     return rects ? anchorFromPageRects(rects) : null;
   };
 
@@ -198,8 +203,11 @@
   }
 
   function startComposing() {
-    if (!editor || editor.isSelectionCollapsed || !editor.selection) return;
-    const frozen = editor.freezeSelection(editor.selection);
+    if (!editor) return;
+    const snapshot = editor.published?.snapshot;
+    const selection = snapshot?.selection;
+    if (!selection || isSelectionCollapsed(selection)) return;
+    const frozen = editor.freezeSelection(selection);
     if (!frozen) {
       Toast.error('선택 영역에 코멘트를 달 수 없어요');
       return;
@@ -210,10 +218,10 @@
     activeThreadId = null;
 
     // TODO: compose range를 active anchor로 쓰고, compose range로 scrollIntoView 하기
-    if (editor.cursor) {
-      activeAnchor = { rects: [{ page_idx: editor.cursor.page_idx, rect: editor.cursor.caret }] };
+    if (snapshot.cursor) {
+      activeAnchor = { rects: [{ page_idx: snapshot.cursor.page_idx, rect: snapshot.cursor.caret }] };
     } else {
-      const rect = editor.selectionHeadRect();
+      const rect = selectionHeadRect(snapshot);
       activeAnchor = rect ? anchorFromPageRects([rect]) : null;
       ctx.scroll?.scrollIntoView({ target: { type: 'current_selection_head' } });
     }
@@ -239,7 +247,7 @@
       return;
     }
     composing = false;
-    const rects = editor.trackedItemRects(id);
+    const rects = publishedTrackedRangeRects(id);
     const anchor = rects ? anchorFromPageRects(rects) : null;
     if (!anchor) {
       Toast.error('원문에서 위치를 찾을 수 없는 코멘트예요');

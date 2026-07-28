@@ -236,7 +236,9 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use editor_macros::state;
-    use editor_resource::{FontFamily, FontFamilySource, FontWeight, Resource};
+    use editor_resource::{
+        FontFamily, FontFamilySource, FontWeight, Resource, ResourceSource, prepare_fonts,
+    };
     use editor_state::assert_state_eq;
 
     use super::*;
@@ -247,24 +249,25 @@ mod tests {
     };
 
     fn make_resource(families: impl IntoIterator<Item = (&'static str, Vec<u16>)>) -> Resource {
-        let mut resource = Resource::new_test();
-        resource.set_fonts(
-            families
-                .into_iter()
-                .map(|(name, weights)| FontFamily {
-                    name: name.to_string(),
-                    source: FontFamilySource::Default,
-                    weights: weights
-                        .into_iter()
-                        .map(|value| FontWeight {
-                            value,
-                            hash: format!("{name}-{value}"),
-                        })
-                        .collect(),
-                })
-                .collect(),
-        );
-        resource
+        let families = families
+            .into_iter()
+            .map(|(name, weights)| FontFamily {
+                name: name.to_string(),
+                source: FontFamilySource::Default,
+                weights: weights
+                    .into_iter()
+                    .map(|value| FontWeight {
+                        value,
+                        hash: format!("{name}-{value}"),
+                    })
+                    .collect(),
+            })
+            .collect();
+        let mut source = ResourceSource::new_test();
+        source
+            .set_fonts(prepare_fonts(families))
+            .expect("font families must change resources");
+        Resource::from_snapshot(source.snapshot())
     }
 
     #[test]

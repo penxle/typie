@@ -21,6 +21,7 @@
   import { EnvironmentBanner } from '$lib/components';
   import { AdminImpersonateBanner } from '$lib/components/admin';
   import { preloadEditorWasm } from '$lib/editor/editor.svelte';
+  import { fanOutResourceUpdate } from '$lib/editor-ffi/registry';
   import { hydrateQuery } from '$lib/graphql';
   import { isLegacyTrial, shouldShowOnboarding } from '$lib/subscription-logic';
   import { initWasm } from '$lib/wasm.svelte';
@@ -197,7 +198,7 @@
       wasm.setTextReplacementRules(JSON.parse(rules));
     });
     initWasmFfi().then((host) => {
-      host.set_text_replacement_rules(JSON.parse(rules));
+      fanOutResourceUpdate(host.set_text_replacement_rules(JSON.parse(rules)));
     });
   });
 
@@ -205,6 +206,9 @@
     const enabled = app.preference.current.autoSurroundEnabled;
     initWasm().then((wasm) => {
       wasm.setAutoSurroundEnabled(enabled);
+    });
+    initWasmFfi().then((host) => {
+      fanOutResourceUpdate(host.set_auto_surround_enabled(enabled));
     });
   });
 
