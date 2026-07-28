@@ -34,10 +34,10 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -45,6 +45,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.LocalDensity
@@ -68,6 +69,8 @@ import co.typie.graphql.fragment.NoteCard_note
 import co.typie.graphql.fragment.NoteLinkedEntity_entity
 import co.typie.graphql.type.NoteStatus
 import co.typie.icons.Lucide
+import co.typie.platform.Platform
+import co.typie.platform.PlatformModule
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.Text
 import co.typie.ui.component.popover.Popover
@@ -83,6 +86,8 @@ import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.shadow
+import co.typie.ui.utils.ShortcutModifier
+import co.typie.ui.utils.onShortcut
 import kotlin.math.abs
 
 private val NoteCardShape = AppShapes.rounded(AppShapes.md)
@@ -112,11 +117,25 @@ private val NoteEditorBringIntoViewSpec =
     }
   }
 
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+internal fun NoteEditorBringIntoViewScope(content: @Composable () -> Unit) {
+  if (PlatformModule.platform == Platform.iOS) {
+    CompositionLocalProvider(
+      LocalBringIntoViewSpec provides NoteEditorBringIntoViewSpec,
+      content = content,
+    )
+  } else {
+    content()
+  }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun NoteCard(
   note: NoteCard_note,
   expanded: Boolean,
+  autoFocusContent: Boolean,
   isDragging: Boolean,
   content: String,
   isSaving: Boolean,
@@ -126,6 +145,7 @@ internal fun NoteCard(
   modifier: Modifier = Modifier,
   onExpand: () -> Unit,
   onCollapse: () -> Unit,
+  onCreateNote: () -> Unit,
   onContentChange: (String) -> Unit,
   onBlur: () -> Unit,
   onToggleStatus: () -> Unit,
@@ -201,7 +221,6 @@ internal fun NoteCard(
             }
           )
       },
-      label = "note-card-content",
     ) { isExpanded ->
       if (isExpanded) {
         NoteExpandedContent(
@@ -211,8 +230,10 @@ internal fun NoteCard(
           colorOption = colorOption,
           dragHandleModifier = dragHandleModifier,
           contentEditable = contentEditable,
+          autoFocusContent = autoFocusContent,
           noteColorOptions = noteColorOptions,
           onCollapse = onCollapse,
+          onCreateNote = onCreateNote,
           onContentChange = onContentChange,
           onBlur = onBlur,
           onToggleStatus = onToggleStatus,
@@ -243,8 +264,10 @@ private fun NoteExpandedContent(
   colorOption: NoteColorOption,
   dragHandleModifier: Modifier,
   contentEditable: Boolean,
+  autoFocusContent: Boolean,
   noteColorOptions: List<NoteColorOption>,
   onCollapse: () -> Unit,
+  onCreateNote: () -> Unit,
   onContentChange: (String) -> Unit,
   onBlur: () -> Unit,
   onToggleStatus: () -> Unit,
@@ -274,8 +297,11 @@ private fun NoteExpandedContent(
         Column(modifier = Modifier.weight(1f).padding(top = 2.dp)) {
           NoteContentEditor(
             content = content,
+            resolved = note.status == NoteStatus.RESOLVED,
             onValueChange = onContentChange,
             onBlur = onBlur,
+            onCreateNote = onCreateNote,
+            autoFocus = autoFocusContent,
             readOnly = !contentEditable,
           )
         }
@@ -788,8 +814,11 @@ private fun NoteColorDot(option: NoteColorOption, selected: Boolean, onClick: ()
 @Composable
 private fun NoteContentEditor(
   content: String,
+  resolved: Boolean,
   onValueChange: (String) -> Unit,
   onBlur: () -> Unit,
+  onCreateNote: () -> Unit,
+  autoFocus: Boolean,
   readOnly: Boolean,
 ) {
   val focusManager = LocalFocusManager.current
@@ -800,18 +829,32 @@ private fun NoteContentEditor(
       onDismiss = { focusManager.clearFocus() },
     )
 
+  LaunchedEffect(autoFocus) {
+    if (autoFocus) {
+      textInputState.requestFocus()
+    }
+  }
+
   CompositionLocalProvider(LocalBringIntoViewSpec provides NoteEditorBringIntoViewSpec) {
     BasicTextField(
       value = textInputState.value,
       onValueChange = textInputState::onValueChange,
       modifier =
-        Modifier.fillMaxWidth().defaultMinSize(minHeight = 90.dp).textInputFocusable(
-          textInputState
-        ) { state ->
-          if (!state.isFocused) {
-            onBlur()
+        Modifier.fillMaxWidth()
+          .defaultMinSize(minHeight = 90.dp)
+          .textInputFocusable(textInputState) { state ->
+            if (!state.isFocused) {
+              onBlur()
+            }
           }
-        },
+          .onShortcut(
+            key = Key.Enter,
+            modifiers = setOf(ShortcutModifier.Mod),
+            enabled = !readOnly && textInputState.value.text.isNotBlank(),
+          ) {
+            textInputState.finishCompositionAndCollapseSelection()
+            onCreateNote()
+          },
       readOnly = readOnly,
       textStyle = AppTheme.typography.body.copy(color = AppTheme.colors.textDefault),
       keyboardOptions =
@@ -824,7 +867,7 @@ private fun NoteContentEditor(
         Box(modifier = Modifier.fillMaxWidth()) {
           if (textInputState.value.text.isEmpty()) {
             Text(
-              text = "내용을 입력하세요",
+              text = if (resolved) "(내용 없음)" else "떠오르는 생각을 적어보세요",
               style = AppTheme.typography.body,
               color = AppTheme.colors.textHint,
             )

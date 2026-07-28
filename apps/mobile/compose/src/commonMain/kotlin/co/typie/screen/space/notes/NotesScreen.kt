@@ -16,12 +16,17 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.domain.entity.isFolder
+import co.typie.domain.note.NoteEditorBringIntoViewScope
 import co.typie.domain.note.NoteEntityPickerSheet
 import co.typie.domain.note.NoteEntityPickerStops
 import co.typie.domain.note.NoteLinkedEntityActionsSheet
@@ -90,6 +95,7 @@ fun NotesScreen() {
   val sheet = LocalSheet.current
   val siteId = model.siteId
   val noteColorOptions = rememberNoteColorOptions()
+  var shortcutCreateInFlight by remember { mutableStateOf(false) }
 
   DisposableEffect(noteEditState, model) {
     onDispose {
@@ -164,7 +170,7 @@ fun NotesScreen() {
     scrollState.scrollTo(0)
   }
 
-  suspend fun handleCreateNote() {
+  suspend fun handleCreateNote(autoFocusContent: Boolean = false) {
     if (siteId == null) {
       return
     }
@@ -185,8 +191,9 @@ fun NotesScreen() {
     when (val result = model.createNote()) {
       is Result.Ok -> {
         model.listState(NoteStatus.OPEN).markEntering(result.value)
-        noteEditState.open(note = result.value)
+        noteEditState.open(note = result.value, autoFocusContent = autoFocusContent)
         model.refetch()
+        scrollState.animateScrollTo(0)
       }
 
       is Result.Err,
@@ -196,17 +203,34 @@ fun NotesScreen() {
     }
   }
 
-  suspend fun handleDeleteNote(note: NoteCard_note, sceneStatus: NoteStatus) {
-    val confirmed =
-      dialog.confirm(
-        title = "노트 삭제",
-        message = "이 노트를 삭제하시겠어요?\n복구할 수 없어요.",
-        confirmText = "삭제",
-        confirmIsDestructive = true,
-      )
-
-    if (confirmed !is DialogResult.Resolved) {
+  fun handleShortcutCreateNote() {
+    if (shortcutCreateInFlight) {
       return
+    }
+
+    shortcutCreateInFlight = true
+    scope.launch {
+      try {
+        handleCreateNote(autoFocusContent = true)
+      } finally {
+        shortcutCreateInFlight = false
+      }
+    }
+  }
+
+  suspend fun handleDeleteNote(note: NoteCard_note, sceneStatus: NoteStatus) {
+    if (note.content.isNotBlank()) {
+      val confirmed =
+        dialog.confirm(
+          title = "노트 삭제",
+          message = "이 노트를 삭제하시겠어요?\n복구할 수 없어요.",
+          confirmText = "삭제",
+          confirmIsDestructive = true,
+        )
+
+      if (confirmed !is DialogResult.Resolved) {
+        return
+      }
     }
 
     noteEditState.cancelPendingSaves(note.id)
@@ -387,6 +411,7 @@ fun NotesScreen() {
           isSaving = noteEditState.isSaving(note.id) || noteEditState.isSavingColor(note.id),
           hasPendingColor = noteEditState.hasPendingColor(note.id),
           isDirty = noteEditState.isDirty(note.id),
+          autoFocusContent = noteEditState.shouldAutoFocusContent(note.id),
           isEntering = listState.isEntering(note.id),
           isExiting = listState.isExiting(note.id),
           isExitVisible = listState.isExitVisible(note.id),
@@ -396,6 +421,7 @@ fun NotesScreen() {
         NoteListActions(
           onExpand = { note -> scope.launch { handleExpandNote(note) } },
           onCollapse = { scope.launch { collapseExpandedNote() } },
+          onCreateNote = ::handleShortcutCreateNote,
           onContentChange = { noteId, content ->
             noteEditState.updateContent(noteId = noteId, value = content, save = ::saveNoteContent)
           },
@@ -413,37 +439,39 @@ fun NotesScreen() {
       val reorderViewportBottomInset =
         WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding() + 72.dp
 
-      Box(
-        modifier =
-          Modifier.fillMaxSize()
-            .reorderableViewport(
-              state = reorderState,
-              viewportTopInset = topBarOcclusion,
-              viewportBottomInset = reorderViewportBottomInset,
-            )
-            .imePadding()
-      ) {
-        Column(
-          modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(innerPadding),
-          verticalArrangement = Arrangement.spacedBy(16.dp),
+      NoteEditorBringIntoViewScope {
+        Box(
+          modifier =
+            Modifier.fillMaxSize()
+              .reorderableViewport(
+                state = reorderState,
+                viewportTopInset = topBarOcclusion,
+                viewportBottomInset = reorderViewportBottomInset,
+              )
+              .imePadding()
         ) {
-          Skeleton.Keep { Text(text = "노트", style = AppTheme.typography.display) }
+          Column(
+            modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(innerPadding),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+          ) {
+            Skeleton.Keep { Text(text = "노트", style = AppTheme.typography.display) }
 
-          NoteList(
-            emptyMessage = status.emptyMessage(),
-            queryState = model.queryState(status),
-            items = listItems,
-            onEnterAnimationFinished = listState::finishEntering,
-            onExitAnimationFinished = listState::finishExiting,
-            reorderState = reorderState,
-            noteColorOptions = noteColorOptions,
-            interactive = status == model.filterStatus,
-            reorderEnabled = SubscriptionService.entitlement !is Entitlement.Expired,
-            contentEditable = SubscriptionService.entitlement !is Entitlement.Expired,
-            actions = listActions,
-          )
+            NoteList(
+              emptyMessage = status.emptyMessage(),
+              queryState = model.queryState(status),
+              items = listItems,
+              onEnterAnimationFinished = listState::finishEntering,
+              onExitAnimationFinished = listState::finishExiting,
+              reorderState = reorderState,
+              noteColorOptions = noteColorOptions,
+              interactive = status == model.filterStatus,
+              reorderEnabled = SubscriptionService.entitlement !is Entitlement.Expired,
+              contentEditable = SubscriptionService.entitlement !is Entitlement.Expired,
+              actions = listActions,
+            )
 
-          Spacer(Modifier.height(140.dp))
+            Spacer(Modifier.height(140.dp))
+          }
         }
       }
     }

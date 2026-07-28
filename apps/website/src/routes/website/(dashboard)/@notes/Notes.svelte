@@ -6,20 +6,37 @@
   import { Button, Icon, Modal } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { Toast } from '@typie/ui/notification';
-  import { animateFlip, pushEscapeHandler } from '@typie/ui/utils';
+  import { animateFlip, createDragScroll, elementScrollViewport, pushEscapeHandler } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
-  import { SvelteSet } from 'svelte/reactivity';
+  import { onDestroy, tick } from 'svelte';
+  import { SvelteMap, SvelteSet } from 'svelte/reactivity';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import CommandIcon from '~icons/lucide/command';
   import CornerDownLeftIcon from '~icons/lucide/corner-down-left';
   import { beforeNavigate } from '$app/navigation';
   import { cache } from '$lib/graphql';
+  import { reorderedNoteIdsForDrag } from '$lib/note-reorder';
   import { graphql } from '$mearie';
   import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
   import { noteColors } from './colors';
   import NoteComponent from './Note.svelte';
   import NoteEntitySearchModal from './NoteEntitySearchModal.svelte';
+  import type { NoteReorderDirection, NoteReorderGeometry } from '$lib/note-reorder';
+
+  type NoteDragPosition = {
+    clientX: number;
+    clientY: number;
+    direction: NoteReorderDirection;
+    ghost: NoteReorderGeometry;
+  };
+
+  type NoteDragging = {
+    noteId: string;
+    originalOrder: string[];
+    position: NoteDragPosition | null;
+    sectionNoteIds: string[];
+  };
 
   const [createNote] = createMutation(
     graphql(`
@@ -153,17 +170,17 @@
   let inputValue = $state('');
   let inputEl = $state<HTMLTextAreaElement>();
   let selectedColor = $state('gray');
+  let createInFlight = $state(false);
   let expandedNoteId = $state<string | null>(null);
   let entitySearchNoteId = $state<string | null>(null);
   let resolvedOpen = $state(false);
   const resolvingNoteIds = new SvelteSet<string>();
 
-  let dragging = $state<{
-    noteId: string;
-    originalIndex: number;
-    dropTargetNoteId: string | null;
-  } | null>(null);
+  let dragging = $state<NoteDragging | null>(null);
   let localNoteOrder = $state<string[]>([]);
+  let scrollContainer = $state<HTMLElement | null>(null);
+  let composer = $state<HTMLElement | null>(null);
+  let dragScroll: ReturnType<typeof createDragScroll> | null = null;
 
   const sortedNotes = $derived.by(() => {
     if (localNoteOrder.length === 0) return notes;
@@ -185,25 +202,99 @@
     return n?.entities?.map((e) => e.id) ?? [];
   });
 
-  const handleDragEnd = async () => {
+  const resolveDraggingPosition = (position: NoteDragPosition) => {
+    const currentDragging = dragging;
+    if (!currentDragging || !scrollContainer) return;
+
+    const sectionNoteIds = new Set(currentDragging.sectionNoteIds);
+    const currentSectionOrder = localNoteOrder.filter((noteId) => sectionNoteIds.has(noteId));
+    const noteGeometries = new SvelteMap<string, NoteReorderGeometry>();
+
+    for (const noteElement of scrollContainer.querySelectorAll<HTMLElement>('[data-note-id]')) {
+      const noteId = noteElement.dataset.noteId;
+      if (!noteId || !sectionNoteIds.has(noteId)) continue;
+
+      const { top, bottom } = noteElement.getBoundingClientRect();
+      noteGeometries.set(noteId, { top, bottom });
+    }
+    noteGeometries.set(currentDragging.noteId, position.ghost);
+
+    const reorderedSection = reorderedNoteIdsForDrag(currentSectionOrder, currentDragging.noteId, position.direction, noteGeometries);
+    if (!reorderedSection || reorderedSection.every((noteId, index) => noteId === currentSectionOrder[index])) return;
+
+    let sectionIndex = 0;
+    const reorderedNotes = localNoteOrder.map((noteId) => {
+      if (!sectionNoteIds.has(noteId)) return noteId;
+      return reorderedSection[sectionIndex++] ?? noteId;
+    });
+    if (reorderedNotes.some((noteId, index) => noteId !== localNoteOrder[index])) {
+      localNoteOrder = reorderedNotes;
+    }
+  };
+
+  const updateDraggingPosition = (position: NoteDragPosition) => {
     if (!dragging) return;
 
-    const currentIndex = localNoteOrder.indexOf(dragging.noteId);
+    dragging.position = position;
+    dragScroll?.updatePointer(position.clientX, position.clientY);
+    resolveDraggingPosition(position);
+  };
 
-    if (currentIndex !== -1 && dragging.originalIndex !== -1 && currentIndex !== dragging.originalIndex && sortedNotes.length > 1) {
+  const stopDragScroll = () => {
+    dragScroll?.destroy();
+    dragScroll = null;
+  };
+
+  const startDragScroll = (draggingNoteId: string, initialPointer: { clientX: number; clientY: number }) => {
+    stopDragScroll();
+    if (!scrollContainer || !composer) return;
+
+    const baseViewport = elementScrollViewport(scrollContainer);
+    dragScroll = createDragScroll(
+      {
+        ...baseViewport,
+        getRect: () => {
+          const rect = baseViewport.getRect();
+          const bottom = Math.min(rect.bottom, window.innerHeight);
+          return {
+            ...rect,
+            top: Math.min(Math.max(rect.top, composer?.getBoundingClientRect().bottom ?? rect.top), bottom),
+            bottom,
+          };
+        },
+      },
+      {
+        initialPointer,
+        stickyCandidates: [],
+        onScroll: () => {
+          if (dragging?.noteId === draggingNoteId && dragging.position) {
+            resolveDraggingPosition(dragging.position);
+          }
+        },
+      },
+    );
+  };
+
+  const handleDragEnd = async () => {
+    const currentDragging = dragging;
+    if (!currentDragging) return;
+
+    const currentIndex = localNoteOrder.indexOf(currentDragging.noteId);
+    const originalIndex = currentDragging.originalOrder.indexOf(currentDragging.noteId);
+    dragging = null;
+    stopDragScroll();
+
+    if (currentIndex !== -1 && originalIndex !== -1 && currentIndex !== originalIndex && sortedNotes.length > 1) {
       if (!SubscribeModal.gate('notes_move')) {
-        dragging = null;
+        localNoteOrder = [...currentDragging.originalOrder];
         return;
       }
 
-      const notes = sortedNotes;
-      let lowerNote, upperNote;
-
-      lowerNote = notes[currentIndex - 1] ?? null;
-      upperNote = notes[currentIndex + 1] ?? null;
+      const lowerNote = sortedNotes[currentIndex - 1] ?? null;
+      const upperNote = sortedNotes[currentIndex + 1] ?? null;
 
       try {
-        const { noteId } = dragging;
+        const { noteId } = currentDragging;
         await moveNote({
           input: {
             noteId,
@@ -219,32 +310,17 @@
           cache.invalidate({ __typename: 'Entity', id: entity.id, $field: 'notes' });
         }
       } catch {
-        localNoteOrder = notes.map((note) => note.id);
+        localNoteOrder = [...currentDragging.originalOrder];
         Toast.error('노트 순서 변경에 실패했습니다. 잠시 후 다시 시도해주세요.');
-      }
-    }
-
-    dragging = null;
-  };
-
-  const handleNoteDragEnter = (noteId: string) => {
-    if (dragging && dragging.noteId !== noteId) {
-      dragging.dropTargetNoteId = noteId;
-      const draggedIndex = localNoteOrder.indexOf(dragging.noteId);
-      const dropIndex = localNoteOrder.indexOf(noteId);
-
-      if (draggedIndex !== -1 && dropIndex !== -1 && draggedIndex !== dropIndex) {
-        const newOrder = [...localNoteOrder];
-        const [removed] = newOrder.splice(draggedIndex, 1);
-        newOrder.splice(dropIndex, 0, removed);
-        localNoteOrder = newOrder;
       }
     }
   };
 
   let prevNoteIds = $state<string[]>([]);
   $effect(() => {
-    const noteIds = notes.map((n) => n.id);
+    const noteIds = notes.map((note) => note.id);
+    if (dragging) return;
+
     const noteIdsStr = noteIds.join(',');
     const prevNoteIdsStr = prevNoteIds.join(',');
 
@@ -254,35 +330,43 @@
     }
   });
 
-  const handleDragStart = (noteId: string) => {
-    dragging = {
+  const handleDragStart = (noteId: string, initialPointer: { clientX: number; clientY: number }) => {
+    const sectionNotes = openNotes.some((note) => note.id === noteId) ? openNotes : resolvedNotes;
+    const originalOrder = sortedNotes.map((note) => note.id);
+    localNoteOrder = [...originalOrder];
+    const currentDragging: NoteDragging = {
       noteId,
-      originalIndex: localNoteOrder.indexOf(noteId),
-      dropTargetNoteId: null,
+      originalOrder,
+      position: null,
+      sectionNoteIds: sectionNotes.map((note) => note.id),
     };
+    dragging = currentDragging;
+    startDragScroll(noteId, initialPointer);
+    return true;
   };
 
   const handleDragCancel = (noteId: string) => {
-    if (dragging?.noteId !== noteId) return;
+    const currentDragging = dragging;
+    if (currentDragging?.noteId !== noteId) return;
 
-    const { originalIndex } = dragging;
-    const currentIndex = localNoteOrder.indexOf(noteId);
     dragging = null;
-
-    if (currentIndex === -1 || originalIndex === -1 || currentIndex === originalIndex) return;
-
-    const restoredOrder = [...localNoteOrder];
-    const [removed] = restoredOrder.splice(currentIndex, 1);
-    restoredOrder.splice(originalIndex, 0, removed);
-    localNoteOrder = restoredOrder;
+    stopDragScroll();
+    localNoteOrder = [...currentDragging.originalOrder];
   };
 
   const handleExpand = (noteId: string) => {
     expandedNoteId = noteId;
   };
 
-  const handleCollapse = () => {
+  const handleCollapse = (options: { focusComposer?: boolean } = {}) => {
     expandedNoteId = null;
+    if (options.focusComposer) {
+      void tick().then(() => {
+        if (expandedNoteId === null && app.state.notesOpen) {
+          inputEl?.focus();
+        }
+      });
+    }
   };
 
   $effect(() => {
@@ -304,25 +388,35 @@
   };
 
   const handleAddNote = async (via: string) => {
+    if (createInFlight) return;
     if (!inputValue.trim()) return;
 
     if (!SubscribeModal.gate('notes_create')) {
       return;
     }
 
-    await createNote({
-      input: {
-        siteId: app.preference.current.currentSiteId,
-        color: selectedColor,
-        content: inputValue,
-      },
-    });
-    mixpanel.track('create_note', { via });
-    cache.invalidate({ __typename: 'Query', $field: 'notes' });
+    const submittedContent = inputValue;
+    const submittedColor = selectedColor;
+    createInFlight = true;
+    try {
+      await createNote({
+        input: {
+          siteId: app.preference.current.currentSiteId,
+          color: submittedColor,
+          content: submittedContent,
+        },
+      });
+      mixpanel.track('create_note', { via });
+      cache.invalidate({ __typename: 'Query', $field: 'notes' });
 
-    inputValue = '';
-    selectedColor = 'gray';
-    inputEl?.focus();
+      if (inputValue === submittedContent && selectedColor === submittedColor) {
+        inputValue = '';
+        selectedColor = 'gray';
+      }
+      inputEl?.focus();
+    } finally {
+      createInFlight = false;
+    }
   };
 
   const handleDeleteNote = async (noteId: string) => {
@@ -446,6 +540,10 @@
     }
   });
 
+  onDestroy(() => {
+    stopDragScroll();
+  });
+
   $effect.pre(() => {
     void localNoteOrder;
     animateFlip('[data-note-id]', 'noteId');
@@ -470,6 +568,7 @@
   overlayPadding={0}
 >
   <div
+    bind:this={scrollContainer}
     class={flex({
       position: 'relative',
       paddingTop: '[15dvh]',
@@ -504,6 +603,7 @@
 
     <!-- Input Area -->
     <div
+      bind:this={composer}
       class={flex({
         position: 'sticky',
         top: '[calc(16px - 15dvh)]',
@@ -531,14 +631,18 @@
           resize: 'none',
         })}
         onkeydown={(e) => {
-          if (!(e.key === 'Enter' && (e.metaKey || e.ctrlKey)) || e.isComposing) {
+          if (e.key !== 'Enter' || !(e.metaKey || e.ctrlKey)) return;
+
+          e.stopPropagation();
+          if (e.isComposing) {
+            setTimeout(() => void handleAddNote('shortcut'), 0);
             return;
           }
 
           e.preventDefault();
-          handleAddNote('shortcut');
+          void handleAddNote('shortcut');
         }}
-        placeholder="떠오르는 생각을 자유롭게 적어보세요..."
+        placeholder="떠오르는 생각을 적어보세요"
         bind:value={inputValue}></textarea>
 
       <div class={flex({ alignItems: 'center', gap: '8px', paddingX: '12px', paddingY: '6px' })}>
@@ -563,7 +667,13 @@
           {/each}
         </div>
 
-        <Button style={css.raw({ marginLeft: 'auto', gap: '4px' })} onclick={() => handleAddNote('button')} size="sm" variant="primary">
+        <Button
+          style={css.raw({ marginLeft: 'auto', gap: '4px' })}
+          loading={createInFlight}
+          onclick={() => handleAddNote('button')}
+          size="sm"
+          variant="primary"
+        >
           추가
           <div class={flex({ alignItems: 'center', opacity: '70' })}>
             {#if navigator.platform.includes('Mac')}
@@ -600,8 +710,8 @@
               ondelete={handleDeleteNote}
               ondragcancel={() => handleDragCancel(note.id)}
               ondragend={handleDragEnd}
-              ondragmove={handleNoteDragEnter}
-              ondragstart={() => handleDragStart(note.id)}
+              ondragmove={updateDraggingPosition}
+              ondragstart={(pointer) => handleDragStart(note.id, pointer)}
               onendresolve={handleEndResolve}
               onexpand={handleExpand}
               onremoveentity={handleRemoveEntity}
@@ -654,8 +764,8 @@
                 ondelete={handleDeleteNote}
                 ondragcancel={() => handleDragCancel(note.id)}
                 ondragend={handleDragEnd}
-                ondragmove={handleNoteDragEnter}
-                ondragstart={() => handleDragStart(note.id)}
+                ondragmove={updateDraggingPosition}
+                ondragstart={(pointer) => handleDragStart(note.id, pointer)}
                 onendresolve={handleEndResolve}
                 onexpand={handleExpand}
                 onremoveentity={handleRemoveEntity}

@@ -56,6 +56,7 @@ internal data class NoteListItem(
   val isSaving: Boolean,
   val hasPendingColor: Boolean,
   val isDirty: Boolean,
+  val autoFocusContent: Boolean,
   val isEntering: Boolean,
   val isExiting: Boolean,
   val isExitVisible: Boolean,
@@ -64,6 +65,7 @@ internal data class NoteListItem(
 internal class NoteListActions(
   val onExpand: (NoteCard_note) -> Unit,
   val onCollapse: () -> Unit,
+  val onCreateNote: () -> Unit,
   val onContentChange: (String, String) -> Unit,
   val onBlur: (String) -> Unit,
   val onToggleStatus: (NoteCard_note) -> Unit,
@@ -124,6 +126,7 @@ internal fun NoteList(
             val noteIsEntering = !isLoading && item.isEntering
             val noteIsExiting = !isLoading && item.isExiting
             val noteIsExitVisible = !isLoading && item.isExitVisible
+            val cardExpanded = !isLoading && item.expanded
 
             LaunchedEffect(item.note.id, noteIsEntering) {
               if (noteIsEntering) {
@@ -142,6 +145,7 @@ internal fun NoteList(
             val visibilityState =
               remember(item.note.id) { MutableTransitionState(initialState = !noteIsEntering) }
             visibilityState.targetState = !noteIsExiting
+
             val rowModifier =
               if (reorderState.isDragging && !reorderState.isDragging(item.note.id)) {
                 Modifier.animateBounds(
@@ -193,7 +197,8 @@ internal fun NoteList(
             ) {
               NoteCard(
                 note = note,
-                expanded = !isLoading && item.expanded,
+                expanded = cardExpanded,
+                autoFocusContent = item.autoFocusContent,
                 isDragging = !isLoading && interactive && reorderState.isDragging(note.id),
                 content = noteContent,
                 isSaving = !isLoading && item.isSaving,
@@ -230,6 +235,11 @@ internal fun NoteList(
                   },
                 onExpand = { if (interactive && !isLoading) actions.onExpand(note) },
                 onCollapse = { if (interactive && !isLoading) actions.onCollapse() },
+                onCreateNote = {
+                  if (interactive && !isLoading) {
+                    actions.onCreateNote()
+                  }
+                },
                 onContentChange = { nextValue ->
                   if (interactive && !isLoading) {
                     actions.onContentChange(note.id, nextValue)

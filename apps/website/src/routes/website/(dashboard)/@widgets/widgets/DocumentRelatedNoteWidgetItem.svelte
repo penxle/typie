@@ -6,6 +6,7 @@
   import { autosize, tooltip } from '@typie/ui/actions';
   import { HorizontalDivider, Icon, Menu, MenuItem, Submenu } from '@typie/ui/components';
   import { Dialog } from '@typie/ui/notification';
+  import { pushEscapeHandler } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import { onDestroy } from 'svelte';
   import CheckIcon from '~icons/lucide/check';
@@ -17,7 +18,15 @@
   import { graphql } from '$mearie';
   import { getNoteColor, noteColors } from '../../@notes/colors';
   import { SubscribeModal } from '../../@subscription/subscribe-modal.svelte';
+  import type { NoteReorderDirection, NoteReorderGeometry } from '$lib/note-reorder';
   import type { DocumentRelatedNoteWidgetItem_note$key } from '$mearie';
+
+  type NoteDragPosition = {
+    clientX: number;
+    clientY: number;
+    direction: NoteReorderDirection;
+    ghost: NoteReorderGeometry;
+  };
 
   type Props = {
     note$key: DocumentRelatedNoteWidgetItem_note$key;
@@ -27,10 +36,9 @@
     onAddNote: () => void;
     onBeginResolve: () => void;
     onDragCancel: () => void;
-    onDragEnd: (clientX: number, clientY: number) => void;
-    onDragEnter: () => void;
-    onDragMove: (clientX: number, clientY: number) => void;
-    onDragStart: () => void;
+    onDragEnd: () => void;
+    onDragMove: (position: NoteDragPosition) => void;
+    onDragStart: () => boolean;
     onEndResolve: () => void;
   };
 
@@ -43,7 +51,6 @@
     onBeginResolve,
     onDragCancel,
     onDragEnd,
-    onDragEnter,
     onDragMove,
     onDragStart,
     onEndResolve,
@@ -98,6 +105,7 @@
   const colorHex = $derived(getNoteColor(note.data.color) ?? token('colors.surface.default'));
 
   const DRAG_THRESHOLD = 5;
+  const DRAG_DIRECTION_EPSILON = 0.5;
   let cancelDrag: (() => void) | null = null;
 
   onDestroy(() => cancelDrag?.());
@@ -194,20 +202,27 @@
     }
   };
 
+  const executeDeleteNote = async () => {
+    const entityId = note.data.entity?.id;
+    await deleteNote({ input: { noteId: note.data.id } });
+    mixpanel.track('delete_related_note');
+    if (entityId) {
+      cache.invalidate({ __typename: 'Entity', id: entityId, $field: 'notes' });
+    }
+  };
+
   const handleDeleteNote = () => {
+    if (content.trim() === '') {
+      void executeDeleteNote();
+      return;
+    }
+
     Dialog.confirm({
       title: '노트를 삭제하시겠어요?',
       message: '삭제된 노트는 복구할 수 없어요.',
       action: 'danger',
       actionLabel: '삭제',
-      actionHandler: async () => {
-        const entityId = note.data.entity?.id;
-        await deleteNote({ input: { noteId: note.data.id } });
-        mixpanel.track('delete_related_note');
-        if (entityId) {
-          cache.invalidate({ __typename: 'Entity', id: entityId, $field: 'notes' });
-        }
-      },
+      actionHandler: executeDeleteNote,
     });
   };
 </script>
@@ -227,19 +242,16 @@
     }),
   )}
   data-widget-note-id={note.data.id}
-  ondragenter={onDragEnter}
-  ondragover={(e) => {
-    e.preventDefault();
-  }}
   onpointerdown={(e) => {
     if (palette || !e.isPrimary || e.button !== 0) return;
     const target = e.target as HTMLElement;
-    if (target.closest('button, textarea')) return;
+    if (target.closest('button, textarea, a')) return;
 
     e.preventDefault();
     const el = e.currentTarget as HTMLElement;
     const rect = el.getBoundingClientRect();
     const pointerId = e.pointerId;
+    const pointerCaptureTarget = document.documentElement;
 
     const state = {
       startX: e.clientX,
@@ -249,34 +261,79 @@
       started: false,
       ghost: null as HTMLElement | null,
       cursorStyle: null as HTMLStyleElement | null,
+      removeEscapeHandler: null as (() => void) | null,
+      moveFrame: null as number | null,
+      pendingMove: null as PointerEvent | null,
       active: true,
+      previousCenterY: rect.top + rect.height / 2,
+      direction: 0 as NoteReorderDirection,
     };
 
     const cleanup = (cancelled = false) => {
       if (!state.active) return;
       const wasStarted = state.started;
       state.active = false;
+      if (state.moveFrame !== null) {
+        cancelAnimationFrame(state.moveFrame);
+        state.moveFrame = null;
+      }
+      state.pendingMove = null;
       state.ghost?.remove();
       state.cursorStyle?.remove();
+      state.removeEscapeHandler?.();
+      state.removeEscapeHandler = null;
       document.removeEventListener('pointermove', handleMove);
       document.removeEventListener('pointerup', handleUp);
       document.removeEventListener('pointercancel', handleCancel);
+      pointerCaptureTarget.removeEventListener('lostpointercapture', handleLostPointerCapture);
+      if (pointerCaptureTarget.hasPointerCapture(pointerId)) {
+        pointerCaptureTarget.releasePointerCapture(pointerId);
+      }
       cancelDrag = null;
       if (cancelled && wasStarted) {
         onDragCancel();
       }
     };
 
-    const handleMove = (ev: PointerEvent) => {
-      if (ev.pointerId !== pointerId) return;
+    const updateGhost = (ev: PointerEvent) => {
+      if (!state.ghost) return;
 
-      const dist = Math.abs(ev.clientX - state.startX) + Math.abs(ev.clientY - state.startY);
+      const top = ev.clientY - state.offsetY;
+      const centerY = top + rect.height / 2;
+      const centerDeltaY = centerY - state.previousCenterY;
 
+      state.ghost.style.left = `${ev.clientX - state.offsetX}px`;
+      state.ghost.style.top = `${top}px`;
+      state.previousCenterY = centerY;
+
+      if (Math.abs(centerDeltaY) > DRAG_DIRECTION_EPSILON) {
+        state.direction = centerDeltaY < 0 ? -1 : 1;
+      }
+
+      onDragMove({
+        clientX: ev.clientX,
+        clientY: ev.clientY,
+        direction: state.direction,
+        ghost: {
+          top,
+          bottom: top + rect.height,
+        },
+      });
+    };
+
+    const processMove = (ev: PointerEvent) => {
+      const dist = Math.hypot(ev.clientX - state.startX, ev.clientY - state.startY);
       if (!state.started && dist > DRAG_THRESHOLD) {
+        if (!onDragStart()) {
+          cleanup();
+          return;
+        }
         state.started = true;
 
         const ghost = document.createElement('div');
         const cloned = el.cloneNode(true) as HTMLElement;
+        (cloned as unknown as { inert: boolean }).inert = true;
+        cloned.setAttribute('aria-hidden', 'true');
         cloned.style.pointerEvents = 'none';
         cloned.style.transform = 'rotate(1.5deg) scale(1.05)';
         cloned.style.opacity = '0.8';
@@ -286,8 +343,9 @@
 
         ghost.style.position = 'fixed';
         ghost.style.pointerEvents = 'none';
-        ghost.style.zIndex = '9999';
+        ghost.style.zIndex = token('zIndex.ghost');
         ghost.style.width = `${rect.width}px`;
+        ghost.style.height = `${rect.height}px`;
         ghost.style.left = `${ev.clientX - state.offsetX}px`;
         ghost.style.top = `${ev.clientY - state.offsetY}px`;
         document.body.append(ghost);
@@ -296,23 +354,57 @@
         state.cursorStyle = document.createElement('style');
         state.cursorStyle.textContent = '* { cursor: grabbing !important; }';
         document.head.append(state.cursorStyle);
-        onDragStart();
+        state.removeEscapeHandler = pushEscapeHandler(() => {
+          cleanup(true);
+          return true;
+        });
       }
 
       if (state.started && state.ghost) {
-        state.ghost.style.left = `${ev.clientX - state.offsetX}px`;
-        state.ghost.style.top = `${ev.clientY - state.offsetY}px`;
-        onDragMove(ev.clientX, ev.clientY);
+        updateGhost(ev);
+      }
+    };
+
+    const handleMove = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
+
+      state.pendingMove = ev;
+      if (state.moveFrame !== null) return;
+
+      state.moveFrame = requestAnimationFrame(() => {
+        state.moveFrame = null;
+        const pendingMove = state.pendingMove;
+        state.pendingMove = null;
+        if (pendingMove && state.active) {
+          processMove(pendingMove);
+        }
+      });
+    };
+
+    const flushPendingMove = () => {
+      if (state.moveFrame !== null) {
+        cancelAnimationFrame(state.moveFrame);
+        state.moveFrame = null;
+      }
+      const pendingMove = state.pendingMove;
+      state.pendingMove = null;
+      if (pendingMove && state.active) {
+        processMove(pendingMove);
       }
     };
 
     const handleUp = (ev: PointerEvent) => {
       if (ev.pointerId !== pointerId) return;
 
+      flushPendingMove();
+      if (!state.active) return;
       const wasStarted = state.started;
+      if (wasStarted) {
+        updateGhost(ev);
+      }
       cleanup();
       if (wasStarted) {
-        onDragEnd(ev.clientX, ev.clientY);
+        onDragEnd();
       }
     };
 
@@ -321,10 +413,22 @@
       cleanup(true);
     };
 
+    const handleLostPointerCapture = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
+      cleanup(true);
+    };
+
     cancelDrag?.();
     document.addEventListener('pointermove', handleMove);
     document.addEventListener('pointerup', handleUp);
     document.addEventListener('pointercancel', handleCancel);
+    pointerCaptureTarget.addEventListener('lostpointercapture', handleLostPointerCapture);
+    try {
+      pointerCaptureTarget.setPointerCapture(pointerId);
+    } catch {
+      cleanup();
+      return;
+    }
     cancelDrag = () => cleanup(true);
   }}
   ontransitionend={(e) => {
@@ -408,17 +512,20 @@
         handleContentChanged();
       }}
       onkeydown={(e) => {
-        if (!(e.key === 'Enter' && (e.metaKey || e.ctrlKey)) || e.isComposing) {
+        if (!(e.key === 'Enter' && (e.metaKey || e.ctrlKey))) return;
+
+        e.stopPropagation();
+        if (e.isComposing) {
+          setTimeout(onAddNote, 0);
           return;
         }
-
         e.preventDefault();
         onAddNote();
       }}
-      placeholder="기억할 내용이나 작성에 도움이 되는 내용을 자유롭게 적어보세요."
+      placeholder={displayStatus === 'RESOLVED' ? '(내용 없음)' : '떠오르는 생각을 적어보세요'}
       rows={1}
       bind:value={content}
-      use:autosize={{ cacheKey: `widget-note-${note.data.id}` }}></textarea>
+      use:autosize={{ cacheKey: `widget-note-${note.data.id}`, value: content }}></textarea>
   </div>
 
   {#if !palette}

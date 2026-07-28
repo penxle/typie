@@ -13,26 +13,12 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.isAltPressed
-import androidx.compose.ui.input.key.isCtrlPressed
-import androidx.compose.ui.input.key.isMetaPressed
-import androidx.compose.ui.input.key.isShiftPressed
-import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.type
 import co.typie.editor.ffi.Selection
-import co.typie.platform.Platform
-
-internal enum class EditorScreenShortcutModifier {
-  Shift,
-  Mod,
-  Ctrl,
-  Alt,
-}
+import co.typie.ui.utils.ShortcutModifier
+import co.typie.ui.utils.matchesShortcut
 
 internal data class EditorScreenShortcutContext(
-  val platform: Platform,
   val sceneInForeground: Boolean,
   val subPaneBlocksEditorInput: Boolean,
   val editorFocused: Boolean,
@@ -50,7 +36,7 @@ internal data class EditorScreenShortcutActions(
 
 private data class EditorScreenShortcutBinding(
   val key: Key,
-  val modifiers: Set<EditorScreenShortcutModifier> = emptySet(),
+  val modifiers: Set<ShortcutModifier> = emptySet(),
   val enabled: (EditorScreenShortcutContext) -> Boolean = { true },
   val action: (EditorScreenShortcutContext, EditorScreenShortcutActions) -> Boolean,
 )
@@ -59,7 +45,7 @@ private val EditorScreenShortcutBindings =
   listOf(
     EditorScreenShortcutBinding(
       key = Key.F,
-      modifiers = setOf(EditorScreenShortcutModifier.Mod),
+      modifiers = setOf(ShortcutModifier.Mod),
       enabled = ::isEditorScreenShortcutAvailable,
       action = { _, actions ->
         actions.openFindReplace()
@@ -81,12 +67,7 @@ internal fun handleEditorScreenShortcut(
   val binding =
     EditorScreenShortcutBindings.firstOrNull { binding ->
       binding.enabled(context) &&
-        matchesEditorShortcut(
-          event = event,
-          platform = context.platform,
-          key = binding.key,
-          modifiers = binding.modifiers,
-        )
+        matchesShortcut(event = event, key = binding.key, modifiers = binding.modifiers)
     } ?: return false
 
   return binding.action(context, actions)
@@ -129,27 +110,6 @@ internal fun Modifier.editorScreenShortcutFocusTarget(
   return focusRequester(focusRequester)
     .onPreviewKeyEvent(onPreviewKeyEvent)
     .focusable(enabled = active && enabled)
-}
-
-internal fun matchesEditorShortcut(
-  event: KeyEvent,
-  platform: Platform,
-  key: Key,
-  modifiers: Set<EditorScreenShortcutModifier> = emptySet(),
-): Boolean {
-  if (event.type != KeyEventType.KeyDown) return false
-  if (event.key != key) return false
-
-  val modModifier = EditorScreenShortcutModifier.Mod in modifiers
-  val ctrlModifier = EditorScreenShortcutModifier.Ctrl in modifiers
-  val metaModifier = modModifier && platform != Platform.Android
-  val expectedCtrl = ctrlModifier || (modModifier && platform == Platform.Android)
-  val expectedMeta = metaModifier
-
-  return event.isShiftPressed == (EditorScreenShortcutModifier.Shift in modifiers) &&
-    event.isCtrlPressed == expectedCtrl &&
-    event.isMetaPressed == expectedMeta &&
-    event.isAltPressed == (EditorScreenShortcutModifier.Alt in modifiers)
 }
 
 private fun isEditorScreenShortcutAvailable(context: EditorScreenShortcutContext): Boolean =

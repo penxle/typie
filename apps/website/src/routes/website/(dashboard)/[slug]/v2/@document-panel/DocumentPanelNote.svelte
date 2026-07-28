@@ -8,15 +8,24 @@
   import { animateFlip, createDragScroll, elementScrollViewport } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import { tick, untrack } from 'svelte';
-  import { SvelteSet } from 'svelte/reactivity';
+  import { SvelteMap, SvelteSet } from 'svelte/reactivity';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import PlusIcon from '~icons/lucide/plus';
   import StickyNoteIcon from '~icons/lucide/sticky-note';
   import { cache } from '$lib/graphql';
+  import { reorderedNoteIdsForDrag } from '$lib/note-reorder';
   import { graphql } from '$mearie';
   import { SubscribeModal } from '../../../@subscription/subscribe-modal.svelte';
   import DocumentPanelNoteItem from './DocumentPanelNoteItem.svelte';
+  import type { NoteReorderDirection, NoteReorderGeometry } from '$lib/note-reorder';
   import type { DocumentPanelV2_Note_entity$key } from '$mearie';
+
+  type NoteDragPosition = {
+    clientX: number;
+    clientY: number;
+    direction: NoteReorderDirection;
+    ghost: NoteReorderGeometry;
+  };
 
   type Props = {
     entity$key: DocumentPanelV2_Note_entity$key;
@@ -68,12 +77,14 @@
 
   let dragging = $state<{
     noteId: string;
-    originalIndex: number;
-    pointer: { clientX: number; clientY: number } | null;
+    originalOrder: string[];
+    position: NoteDragPosition | null;
+    sectionNoteIds: string[];
   } | null>(null);
   let localNoteOrder = $state<string[]>([]);
   let scrollContainer = $state<HTMLElement | null>(null);
   let dragScroll: ReturnType<typeof createDragScroll> | null = null;
+  let createInFlight = $state(false);
 
   const sortedNotes = $derived.by(() => {
     if (localNoteOrder.length === 0) {
@@ -106,97 +117,104 @@
   let lastAddedNoteId = $state<string>();
 
   const handleAddNote = async (via: string) => {
+    if (createInFlight) return;
+
     if (!SubscribeModal.gate('notes_create')) {
       return;
     }
 
-    const result = await createNote({
-      input: {
-        content: '',
-        color: 'gray',
-        entityId: entity.data.id,
-      },
-    });
-
-    if (result?.createNote?.id) {
-      lastAddedNoteId = result.createNote.id;
-      mixpanel.track('create_related_note', {
-        via,
+    createInFlight = true;
+    try {
+      const result = await createNote({
+        input: {
+          content: '',
+          color: 'gray',
+          entityId: entity.data.id,
+        },
       });
-      cache.invalidate({ __typename: 'Entity', id: entity.data.id, $field: 'notes' });
+
+      if (result?.createNote?.id) {
+        lastAddedNoteId = result.createNote.id;
+        mixpanel.track('create_related_note', {
+          via,
+        });
+        cache.invalidate({ __typename: 'Entity', id: entity.data.id, $field: 'notes' });
+      }
+    } finally {
+      createInFlight = false;
     }
   };
 
   const handleDragStart = (noteId: string) => {
+    const sectionNotes = openNotes.some((note) => note.id === noteId) ? openNotes : resolvedNotes;
+    const originalOrder = sortedNotes.map((note) => note.id);
+    localNoteOrder = [...originalOrder];
     dragging = {
       noteId,
-      originalIndex: localNoteOrder.indexOf(noteId),
-      pointer: null,
+      originalOrder,
+      position: null,
+      sectionNoteIds: sectionNotes.map((note) => note.id),
     };
+    return true;
   };
 
   const handleDragCancel = (noteId: string) => {
-    if (dragging?.noteId !== noteId) return;
+    const currentDragging = dragging;
+    if (currentDragging?.noteId !== noteId) return;
 
-    const { originalIndex } = dragging;
-    const currentIndex = localNoteOrder.indexOf(noteId);
     dragging = null;
-
-    if (currentIndex === -1 || originalIndex === -1 || currentIndex === originalIndex) return;
-
-    const restoredOrder = [...localNoteOrder];
-    const [removed] = restoredOrder.splice(currentIndex, 1);
-    restoredOrder.splice(originalIndex, 0, removed);
-    localNoteOrder = restoredOrder;
+    localNoteOrder = [...currentDragging.originalOrder];
   };
 
-  const moveDraggingNote = (noteId: string) => {
-    if (dragging && dragging.noteId !== noteId) {
-      const draggedIndex = localNoteOrder.indexOf(dragging.noteId);
-      const dropIndex = localNoteOrder.indexOf(noteId);
+  const resolveDraggingPosition = (position: NoteDragPosition) => {
+    const currentDragging = dragging;
+    if (!currentDragging || !scrollContainer) return;
 
-      if (draggedIndex !== -1 && dropIndex !== -1 && draggedIndex !== dropIndex) {
-        const newOrder = [...localNoteOrder];
-        const [removed] = newOrder.splice(draggedIndex, 1);
-        newOrder.splice(dropIndex, 0, removed);
-        localNoteOrder = newOrder;
-      }
+    const sectionNoteIds = new Set(currentDragging.sectionNoteIds);
+    const currentSectionOrder = localNoteOrder.filter((noteId) => sectionNoteIds.has(noteId));
+    const noteGeometries = new SvelteMap<string, NoteReorderGeometry>();
+
+    for (const noteElement of scrollContainer.querySelectorAll<HTMLElement>('[data-related-note-id]')) {
+      const noteId = noteElement.dataset.relatedNoteId;
+      if (!noteId || !sectionNoteIds.has(noteId)) continue;
+
+      const { top, bottom } = noteElement.getBoundingClientRect();
+      noteGeometries.set(noteId, { top, bottom });
+    }
+    noteGeometries.set(currentDragging.noteId, position.ghost);
+
+    const reorderedSection = reorderedNoteIdsForDrag(currentSectionOrder, currentDragging.noteId, position.direction, noteGeometries);
+    if (!reorderedSection || reorderedSection.every((noteId, index) => noteId === currentSectionOrder[index])) return;
+
+    let sectionIndex = 0;
+    const reorderedNotes = localNoteOrder.map((noteId) => {
+      if (!sectionNoteIds.has(noteId)) return noteId;
+      return reorderedSection[sectionIndex++] ?? noteId;
+    });
+    if (reorderedNotes.some((noteId, index) => noteId !== localNoteOrder[index])) {
+      localNoteOrder = reorderedNotes;
     }
   };
 
-  const resolveDraggingPosition = (clientX: number, clientY: number) => {
-    if (!dragging || !scrollContainer) return;
-
-    const element = document.elementFromPoint(clientX, clientY);
-    const noteElement = element?.closest('[data-related-note-id]') as HTMLElement | null;
-    if (!noteElement || !scrollContainer.contains(noteElement)) return;
-
-    const noteId = noteElement.dataset.relatedNoteId;
-    if (noteId) moveDraggingNote(noteId);
-  };
-
-  const updateDraggingPosition = (clientX: number, clientY: number) => {
-    if (!dragging) return;
-    dragging.pointer = { clientX, clientY };
-    dragScroll?.updatePointer(clientX, clientY);
-    resolveDraggingPosition(clientX, clientY);
-  };
-
-  const handleDragEnd = async (clientX: number, clientY: number) => {
+  const updateDraggingPosition = (position: NoteDragPosition) => {
     if (!dragging) return;
 
-    updateDraggingPosition(clientX, clientY);
+    dragging.position = position;
+    dragScroll?.updatePointer(position.clientX, position.clientY);
+    resolveDraggingPosition(position);
+  };
+
+  const handleDragEnd = async () => {
     const currentDragging = dragging;
+    if (!currentDragging) return;
+
     const currentIndex = localNoteOrder.indexOf(currentDragging.noteId);
+    const originalIndex = currentDragging.originalOrder.indexOf(currentDragging.noteId);
     dragging = null;
 
-    if (
-      currentIndex !== -1 &&
-      currentDragging.originalIndex !== -1 &&
-      currentIndex !== currentDragging.originalIndex &&
-      sortedNotes.length > 1
-    ) {
+    if (currentIndex !== -1 && originalIndex !== -1 && currentIndex !== originalIndex && sortedNotes.length > 1) {
       if (!SubscribeModal.gate('notes_move')) {
+        localNoteOrder = [...currentDragging.originalOrder];
         return;
       }
 
@@ -214,7 +232,7 @@
         mixpanel.track('move_related_note');
         cache.invalidate({ __typename: 'Entity', id: entity.data.id, $field: 'notes' });
       } catch {
-        localNoteOrder = entity.data.notes.map((note) => note.id);
+        localNoteOrder = [...currentDragging.originalOrder];
         Toast.error('노트 순서 변경에 실패했습니다. 잠시 후 다시 시도해주세요.');
       }
     }
@@ -222,13 +240,15 @@
 
   let prevNoteIds = $state<string[]>([]);
   $effect(() => {
-    const noteIds = entity.data.notes.map((n) => n.id);
-    const noteIdsStr = noteIds.join(',');
-    const prevNoteIdsStr = prevNoteIds.join(',');
+    const noteIds = entity.data.notes.map((note) => note.id);
+    if (!dragging) {
+      const noteIdsStr = noteIds.join(',');
+      const prevNoteIdsStr = prevNoteIds.join(',');
 
-    if (noteIdsStr !== prevNoteIdsStr) {
-      prevNoteIds = noteIds;
-      localNoteOrder = noteIds;
+      if (noteIdsStr !== prevNoteIdsStr) {
+        prevNoteIds = noteIds;
+        localNoteOrder = noteIds;
+      }
     }
 
     if (lastAddedNoteId && noteIds.includes(lastAddedNoteId)) {
@@ -245,11 +265,16 @@
     const current = dragging;
     if (!scrollContainer || !current) return;
 
-    const initialPointer = untrack(() => current.pointer ?? undefined);
+    const initialPointer = untrack(() => {
+      const position = current.position;
+      return position ? { clientX: position.clientX, clientY: position.clientY } : undefined;
+    });
     const activeDragScroll = createDragScroll(elementScrollViewport(scrollContainer), {
       initialPointer,
-      onScroll: (clientX, clientY) => {
-        if (dragging === current) resolveDraggingPosition(clientX, clientY);
+      onScroll: () => {
+        if (dragging === current && current.position) {
+          resolveDraggingPosition(current.position);
+        }
       },
     });
     dragScroll = activeDragScroll;
@@ -360,7 +385,7 @@
           </p>
         </div>
 
-        <Button onclick={() => handleAddNote('button')} size="sm" variant="secondary">노트 추가</Button>
+        <Button loading={createInFlight} onclick={() => handleAddNote('button')} size="sm" variant="secondary">노트 추가</Button>
       </div>
     {:else}
       {#each openNotes as note (note.id)}
@@ -371,7 +396,6 @@
           onBeginResolve={() => handleBeginResolve(note.id)}
           onDragCancel={() => handleDragCancel(note.id)}
           onDragEnd={handleDragEnd}
-          onDragEnter={() => moveDraggingNote(note.id)}
           onDragMove={updateDraggingPosition}
           onDragStart={() => handleDragStart(note.id)}
           onEndResolve={() => handleEndResolve(note.id)}
@@ -440,7 +464,6 @@
               }}
               onDragCancel={() => handleDragCancel(note.id)}
               onDragEnd={handleDragEnd}
-              onDragEnter={() => moveDraggingNote(note.id)}
               onDragMove={updateDraggingPosition}
               onDragStart={() => handleDragStart(note.id)}
               onEndResolve={() => {

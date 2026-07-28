@@ -173,20 +173,27 @@
     }
   };
 
+  const executeDeleteNote = async () => {
+    const entityId = note.data.entity?.id;
+    await deleteNote({ input: { noteId: note.data.id } });
+    mixpanel.track('delete_related_note');
+    if (entityId) {
+      cache.invalidate({ __typename: 'Entity', id: entityId, $field: 'notes' });
+    }
+  };
+
   const handleDeleteNote = () => {
+    if (content.trim() === '') {
+      void executeDeleteNote();
+      return;
+    }
+
     Dialog.confirm({
       title: '노트를 삭제하시겠어요?',
       message: '삭제된 노트는 복구할 수 없어요.',
       action: 'danger',
       actionLabel: '삭제',
-      actionHandler: async () => {
-        const entityId = note.data.entity?.id;
-        await deleteNote({ input: { noteId: note.data.id } });
-        mixpanel.track('delete_related_note');
-        if (entityId) {
-          cache.invalidate({ __typename: 'Entity', id: entityId, $field: 'notes' });
-        }
-      },
+      actionHandler: executeDeleteNote,
     });
   };
 </script>
@@ -372,19 +379,20 @@
         handleContentChanged();
       }}
       onkeydown={(e) => {
-        if (!(e.key === 'Enter' && (e.metaKey || e.ctrlKey)) || e.isComposing) {
+        if (!(e.key === 'Enter' && (e.metaKey || e.ctrlKey))) return;
+
+        e.stopPropagation();
+        if (e.isComposing) {
+          setTimeout(onAddNote, 0);
           return;
         }
-
         e.preventDefault();
         onAddNote();
       }}
-      placeholder={displayStatus === 'RESOLVED' && !resolving
-        ? '(내용 없음)'
-        : '기억할 내용이나 작성에 도움이 되는 내용을 자유롭게 적어보세요.'}
+      placeholder={displayStatus === 'RESOLVED' ? '(내용 없음)' : '떠오르는 생각을 적어보세요'}
       rows={1}
       bind:value={content}
-      use:autosize={{ cacheKey: `document-panel-note-${note.data.id}` }}></textarea>
+      use:autosize={{ cacheKey: `document-panel-note-${note.data.id}`, value: content }}></textarea>
   </div>
 
   <!-- ⋯ More button with Menu -->

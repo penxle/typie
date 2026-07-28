@@ -8,7 +8,7 @@
   import { animateFlip, createDragScroll, elementScrollViewport } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import { tick, untrack } from 'svelte';
-  import { SvelteSet } from 'svelte/reactivity';
+  import { SvelteMap, SvelteSet } from 'svelte/reactivity';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import ChevronUpIcon from '~icons/lucide/chevron-up';
   import ExpandIcon from '~icons/lucide/expand';
@@ -16,11 +16,20 @@
   import PlusIcon from '~icons/lucide/plus';
   import StickyNoteIcon from '~icons/lucide/sticky-note';
   import { cache } from '$lib/graphql';
+  import { reorderedNoteIdsForDrag } from '$lib/note-reorder';
   import { graphql } from '$mearie';
   import { SubscribeModal } from '../../@subscription/subscribe-modal.svelte';
   import Widget from '../Widget.svelte';
   import { getWidgetContext } from '../widget-context.svelte';
   import DocumentRelatedNoteWidgetItem from './DocumentRelatedNoteWidgetItem.svelte';
+  import type { NoteReorderDirection, NoteReorderGeometry } from '$lib/note-reorder';
+
+  type NoteDragPosition = {
+    clientX: number;
+    clientY: number;
+    direction: NoteReorderDirection;
+    ghost: NoteReorderGeometry;
+  };
 
   type Props = {
     widgetId: string;
@@ -80,8 +89,9 @@
 
   let dragging = $state<{
     noteId: string;
-    originalIndex: number;
-    pointer: { clientX: number; clientY: number } | null;
+    originalOrder: string[];
+    position: NoteDragPosition | null;
+    sectionNoteIds: string[];
   } | null>(null);
   let localNoteOrder = $state<string[]>([]);
   let scrollContainer = $state<HTMLElement | null>(null);
@@ -156,78 +166,77 @@
   };
 
   const handleDragStart = (noteId: string) => {
+    const originalOrder = sortedNotes.map((note) => note.id);
+    localNoteOrder = [...originalOrder];
     dragging = {
       noteId,
-      originalIndex: localNoteOrder.indexOf(noteId),
-      pointer: null,
+      originalOrder,
+      position: null,
+      sectionNoteIds: openNotes.map((note) => note.id),
     };
+    return true;
   };
 
   const handleDragCancel = (noteId: string) => {
-    if (dragging?.noteId !== noteId) return;
+    const currentDragging = dragging;
+    if (currentDragging?.noteId !== noteId) return;
 
-    const { originalIndex } = dragging;
-    const currentIndex = localNoteOrder.indexOf(noteId);
     dragging = null;
-
-    if (currentIndex === -1 || originalIndex === -1 || currentIndex === originalIndex) return;
-
-    const restoredOrder = [...localNoteOrder];
-    const [removed] = restoredOrder.splice(currentIndex, 1);
-    restoredOrder.splice(originalIndex, 0, removed);
-    localNoteOrder = restoredOrder;
+    localNoteOrder = [...currentDragging.originalOrder];
   };
 
-  const moveDraggingNote = (noteId: string) => {
-    if (dragging && dragging.noteId !== noteId) {
-      const draggedIndex = localNoteOrder.indexOf(dragging.noteId);
-      const dropIndex = localNoteOrder.indexOf(noteId);
+  const resolveDraggingPosition = (position: NoteDragPosition) => {
+    const currentDragging = dragging;
+    if (!currentDragging || !scrollContainer) return;
 
-      if (draggedIndex !== -1 && dropIndex !== -1 && draggedIndex !== dropIndex) {
-        const newOrder = [...localNoteOrder];
-        const [removed] = newOrder.splice(draggedIndex, 1);
-        newOrder.splice(dropIndex, 0, removed);
-        localNoteOrder = newOrder;
-      }
+    const sectionNoteIds = new Set(currentDragging.sectionNoteIds);
+    const currentSectionOrder = localNoteOrder.filter((noteId) => sectionNoteIds.has(noteId));
+    const noteGeometries = new SvelteMap<string, NoteReorderGeometry>();
+
+    for (const noteElement of scrollContainer.querySelectorAll<HTMLElement>('[data-widget-note-id]')) {
+      const noteId = noteElement.dataset.widgetNoteId;
+      if (!noteId || !sectionNoteIds.has(noteId)) continue;
+
+      const { top, bottom } = noteElement.getBoundingClientRect();
+      noteGeometries.set(noteId, { top, bottom });
+    }
+    noteGeometries.set(currentDragging.noteId, position.ghost);
+
+    const reorderedSection = reorderedNoteIdsForDrag(currentSectionOrder, currentDragging.noteId, position.direction, noteGeometries);
+    if (!reorderedSection || reorderedSection.every((noteId, index) => noteId === currentSectionOrder[index])) return;
+
+    let sectionIndex = 0;
+    const reorderedNotes = localNoteOrder.map((noteId) => {
+      if (!sectionNoteIds.has(noteId)) return noteId;
+      return reorderedSection[sectionIndex++] ?? noteId;
+    });
+    if (reorderedNotes.some((noteId, index) => noteId !== localNoteOrder[index])) {
+      localNoteOrder = reorderedNotes;
     }
   };
 
-  const resolveDraggingPosition = (clientX: number, clientY: number) => {
-    if (!dragging || !scrollContainer) return;
-
-    const element = document.elementFromPoint(clientX, clientY);
-    const noteElement = element?.closest('[data-widget-note-id]') as HTMLElement | null;
-    if (!noteElement || !scrollContainer.contains(noteElement)) return;
-
-    const noteId = noteElement.dataset.widgetNoteId;
-    if (noteId) moveDraggingNote(noteId);
-  };
-
-  const updateDraggingPosition = (clientX: number, clientY: number) => {
-    if (!dragging) return;
-    dragging.pointer = { clientX, clientY };
-    dragScroll?.updatePointer(clientX, clientY);
-    resolveDraggingPosition(clientX, clientY);
-  };
-
-  const handleDragEnd = async (clientX: number, clientY: number) => {
+  const updateDraggingPosition = (position: NoteDragPosition) => {
     if (!dragging) return;
 
-    updateDraggingPosition(clientX, clientY);
+    dragging.position = position;
+    dragScroll?.updatePointer(position.clientX, position.clientY);
+    resolveDraggingPosition(position);
+  };
+
+  const handleDragEnd = async () => {
     const currentDragging = dragging;
+    if (!currentDragging) return;
+
     const currentIndex = localNoteOrder.indexOf(currentDragging.noteId);
+    const originalIndex = currentDragging.originalOrder.indexOf(currentDragging.noteId);
     dragging = null;
 
     const currentDocument = relatedDocument.data;
     if (!currentDocument) return;
 
-    if (
-      currentIndex !== -1 &&
-      currentDragging.originalIndex !== -1 &&
-      currentIndex !== currentDragging.originalIndex &&
-      sortedNotes.length > 1
-    ) {
+    if (currentIndex !== -1 && originalIndex !== -1 && currentIndex !== originalIndex && sortedNotes.length > 1) {
       if (!SubscribeModal.gate('notes_move')) {
+        localNoteOrder = [...currentDragging.originalOrder];
         return;
       }
 
@@ -257,7 +266,7 @@
     const noteIdsStr = noteIds.join(',');
     const prevNoteIdsStr = prevNoteIds.join(',');
 
-    if (noteIdsStr !== prevNoteIdsStr) {
+    if (!dragging && noteIdsStr !== prevNoteIdsStr) {
       prevNoteIds = noteIds;
       localNoteOrder = noteIds;
     }
@@ -276,11 +285,16 @@
     const current = dragging;
     if (palette || !scrollContainer || !current) return;
 
-    const initialPointer = untrack(() => current.pointer ?? undefined);
+    const initialPointer = untrack(() => {
+      const position = current.position;
+      return position ? { clientX: position.clientX, clientY: position.clientY } : undefined;
+    });
     const activeDragScroll = createDragScroll(elementScrollViewport(scrollContainer), {
       initialPointer,
-      onScroll: (clientX, clientY) => {
-        if (dragging === current) resolveDraggingPosition(clientX, clientY);
+      onScroll: () => {
+        if (dragging?.noteId === current.noteId && current.position) {
+          resolveDraggingPosition(current.position);
+        }
       },
     });
     dragScroll = activeDragScroll;
@@ -413,7 +427,6 @@
           onBeginResolve={() => handleBeginResolve(note.id)}
           onDragCancel={() => handleDragCancel(note.id)}
           onDragEnd={handleDragEnd}
-          onDragEnter={() => moveDraggingNote(note.id)}
           onDragMove={updateDraggingPosition}
           onDragStart={() => handleDragStart(note.id)}
           onEndResolve={() => handleEndResolve(note.id)}

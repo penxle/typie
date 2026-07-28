@@ -9,10 +9,37 @@ const cleanupTimeouts = new SvelteMap<string, ReturnType<typeof setTimeout>>();
 type AutosizeParams = {
   // NOTE: 높이 캐싱을 위한 stable key
   cacheKey?: string;
+  // NOTE: input event 없이 value가 바뀌는 경우 높이 재계산에 사용
+  value?: string;
 };
 
 export const autosize: Action<HTMLTextAreaElement, AutosizeParams | undefined> = (element, params = {}) => {
   const cacheKey = params.cacheKey;
+  let currentValue = params.value;
+  let resizeFrame: number | null = null;
+
+  const resize = () => {
+    // NOTE: 요소가 숨겨져 있으면 scrollHeight 계산을 건너뜀
+    if (element.offsetParent === null) {
+      return;
+    }
+
+    element.style.height = 'auto';
+    const height = element.scrollHeight;
+    element.style.height = `${height}px`;
+
+    if (cacheKey) {
+      heightCache.set(cacheKey, height);
+    }
+  };
+
+  const scheduleResize = () => {
+    if (resizeFrame !== null) return;
+    resizeFrame = requestAnimationFrame(() => {
+      resizeFrame = null;
+      resize();
+    });
+  };
 
   if (cacheKey) {
     const existingTimeout = cleanupTimeouts.get(cacheKey);
@@ -32,22 +59,7 @@ export const autosize: Action<HTMLTextAreaElement, AutosizeParams | undefined> =
 
     let lastWidth = 0;
 
-    const handler = () => {
-      // NOTE: 요소가 숨겨져 있으면 scrollHeight 계산을 건너뜀
-      if (element.offsetParent === null) {
-        return;
-      }
-
-      element.style.height = 'auto';
-      const height = element.scrollHeight;
-      element.style.height = `${height}px`;
-
-      if (cacheKey) {
-        heightCache.set(cacheKey, height);
-      }
-    };
-
-    const off = on(element, 'input', handler);
+    const off = on(element, 'input', resize);
 
     const resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
@@ -55,26 +67,32 @@ export const autosize: Action<HTMLTextAreaElement, AutosizeParams | undefined> =
 
         if (newWidth > 0 && newWidth !== lastWidth) {
           lastWidth = newWidth;
-          requestAnimationFrame(() => {
-            handler();
-          });
+          scheduleResize();
         }
       }
     });
 
     resizeObserver.observe(element);
-
-    requestAnimationFrame(() => {
-      handler();
-    });
+    scheduleResize();
 
     return () => {
       off();
       resizeObserver.disconnect();
+      if (resizeFrame !== null) {
+        cancelAnimationFrame(resizeFrame);
+        resizeFrame = null;
+      }
     };
   });
 
   return {
+    update(nextParams = {}) {
+      const valueChanged = nextParams.value !== currentValue;
+      currentValue = nextParams.value;
+      if (valueChanged) {
+        scheduleResize();
+      }
+    },
     destroy() {
       if (cacheKey) {
         // NOTE: animateFlip이 완료될 때까지 캐시를 유지한 후 삭제

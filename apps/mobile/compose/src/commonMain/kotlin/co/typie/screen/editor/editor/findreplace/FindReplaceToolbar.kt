@@ -35,9 +35,6 @@ import androidx.compose.ui.unit.dp
 import co.typie.ext.rememberTextInputState
 import co.typie.ext.textInputFocusable
 import co.typie.icons.Lucide
-import co.typie.platform.PlatformModule
-import co.typie.screen.editor.editor.EditorScreenShortcutModifier
-import co.typie.screen.editor.editor.matchesEditorShortcut
 import co.typie.screen.editor.editor.toolbar.EditorToolbarButton
 import co.typie.screen.editor.editor.toolbar.EditorToolbarSurfaceBackground
 import co.typie.screen.editor.editor.toolbar.ToolbarBorderWidth
@@ -58,6 +55,8 @@ import co.typie.ui.component.Text
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.shadow
+import co.typie.ui.utils.ShortcutModifier
+import co.typie.ui.utils.matchesShortcut
 
 @Composable
 internal fun FindReplaceToolbar(
@@ -186,20 +185,15 @@ private fun handleReplaceInputShortcut(
   session: EditorFindReplaceSession,
 ): Boolean =
   when {
-    matchesEditorShortcut(event = event, platform = PlatformModule.platform, key = Key.Escape) -> {
+    matchesShortcut(event = event, key = Key.Escape) -> {
       session.close()
       true
     }
-    matchesEditorShortcut(
-      event = event,
-      platform = PlatformModule.platform,
-      key = Key.Enter,
-      modifiers = setOf(EditorScreenShortcutModifier.Mod),
-    ) -> {
+    matchesShortcut(event = event, key = Key.Enter, modifiers = setOf(ShortcutModifier.Mod)) -> {
       session.replaceAll()
       true
     }
-    matchesEditorShortcut(event = event, platform = PlatformModule.platform, key = Key.Enter) -> {
+    matchesShortcut(event = event, key = Key.Enter) -> {
       session.replace()
       true
     }

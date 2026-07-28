@@ -17,8 +17,15 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     }
 
     let window = UIWindow(windowScene: windowScene)
-    let controller = MainViewControllerKt.MainViewController()
-    controller.view.backgroundColor = .systemBackground
+    let shortcutRegistry = NativeShortcutRegistry()
+    let composeController = MainViewControllerKt.MainViewController(
+      shortcutRegistry: shortcutRegistry
+    )
+    composeController.view.backgroundColor = .systemBackground
+    let controller = ShortcutHostingViewController(
+      content: composeController,
+      shortcutRegistry: shortcutRegistry
+    )
     window.backgroundColor = .systemBackground
     window.rootViewController = controller
     self.window = window

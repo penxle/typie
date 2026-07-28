@@ -25,7 +25,7 @@ internal class NoteEditState(
 
   private var activeForm: ActiveNoteFormState? by mutableStateOf(null)
 
-  fun open(note: NoteCard_note) {
+  fun open(note: NoteCard_note, autoFocusContent: Boolean = false) {
     val currentForm = activeForm
     if (currentForm?.noteId == note.id) {
       currentForm.commitServerSnapshot(note)
@@ -38,6 +38,7 @@ internal class NoteEditState(
         note = note,
         contentDebounceMillis = contentDebounceMillis,
         colorDebounceMillis = colorDebounceMillis,
+        autoFocusContent = autoFocusContent,
       )
   }
 
@@ -108,6 +109,9 @@ internal class NoteEditState(
   fun isSavingColor(noteId: String): Boolean =
     activeForm?.takeIf { it.noteId == noteId }?.isColorSaving == true
 
+  fun shouldAutoFocusContent(noteId: String): Boolean =
+    activeForm?.takeIf { it.noteId == noteId }?.autoFocusContent == true
+
   fun cancelPendingSaves(noteId: String) {
     activeForm?.takeIf { it.noteId == noteId }?.cancelPendingSaves()
   }
@@ -140,6 +144,7 @@ private class ActiveNoteFormState(
   note: NoteCard_note,
   contentDebounceMillis: Long,
   colorDebounceMillis: Long,
+  val autoFocusContent: Boolean,
 ) {
   val noteId: String = note.id
 

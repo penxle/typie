@@ -1289,7 +1289,6 @@ fun EditorScreen(entityId: String) {
     }
     val screenShortcutContext =
       EditorScreenShortcutContext(
-        platform = PlatformModule.platform,
         sceneInForeground = screenState.sceneInForeground,
         subPaneBlocksEditorInput = subPaneBlocksEditorInput,
         editorFocused = uiState.focused,

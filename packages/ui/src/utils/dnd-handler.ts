@@ -176,7 +176,7 @@ export const createDndHandler = (node: HTMLElement, options: DndHandlerOptions) 
     animationFrameId = requestAnimationFrame(() => {
       if (!dragStartEvent || !dragTarget) return;
 
-      const distance = Math.sqrt(Math.pow(e.clientX - dragStartEvent.clientX, 2) + Math.pow(e.clientY - dragStartEvent.clientY, 2));
+      const distance = Math.hypot(e.clientX - dragStartEvent.clientX, e.clientY - dragStartEvent.clientY);
 
       if (distance > threshold && !isDragActive) {
         isDragActive = true;

@@ -16,7 +16,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
@@ -25,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.domain.entity.isFolder
 import co.typie.domain.note.NoteEditState
+import co.typie.domain.note.NoteEditorBringIntoViewScope
 import co.typie.domain.note.NoteEntityPickerSheet
 import co.typie.domain.note.NoteEntityPickerStops
 import co.typie.domain.note.NoteLinkedEntityActionsSheet
@@ -205,6 +210,7 @@ private fun RelatedNotesSheetContent(
   val scope = rememberCoroutineScope()
   val sheet = LocalSheet.current
   val noteColorOptions = rememberNoteColorOptions()
+  var shortcutCreateInFlight by remember { mutableStateOf(false) }
 
   suspend fun flushNoteEdits(noteId: String): Boolean {
     return noteEditState.flush(
@@ -236,7 +242,7 @@ private fun RelatedNotesSheetContent(
     scrollState.scrollTo(0)
   }
 
-  suspend fun handleCreateNote() {
+  suspend fun handleCreateNote(autoFocusContent: Boolean = false) {
     if (!SubscriptionService.gate(sheet, GatedAction.CreateNote)) {
       return
     }
@@ -253,8 +259,9 @@ private fun RelatedNotesSheetContent(
     when (val result = model.createNote()) {
       is Result.Ok -> {
         model.listState(NoteStatus.OPEN).markEntering(result.value)
-        noteEditState.open(note = result.value)
+        noteEditState.open(note = result.value, autoFocusContent = autoFocusContent)
         model.refetch()
+        scrollState.animateScrollTo(0)
       }
 
       is Result.Err,
@@ -264,17 +271,34 @@ private fun RelatedNotesSheetContent(
     }
   }
 
-  suspend fun handleDeleteNote(note: NoteCard_note, sceneStatus: NoteStatus) {
-    val confirmed =
-      dialog.confirm(
-        title = "노트 삭제",
-        message = "이 노트를 삭제하시겠어요?\n복구할 수 없어요.",
-        confirmText = "삭제",
-        confirmIsDestructive = true,
-      )
-
-    if (confirmed !is DialogResult.Resolved) {
+  fun handleShortcutCreateNote() {
+    if (shortcutCreateInFlight) {
       return
+    }
+
+    shortcutCreateInFlight = true
+    scope.launch {
+      try {
+        handleCreateNote(autoFocusContent = true)
+      } finally {
+        shortcutCreateInFlight = false
+      }
+    }
+  }
+
+  suspend fun handleDeleteNote(note: NoteCard_note, sceneStatus: NoteStatus) {
+    if (note.content.isNotBlank()) {
+      val confirmed =
+        dialog.confirm(
+          title = "노트 삭제",
+          message = "이 노트를 삭제하시겠어요?\n복구할 수 없어요.",
+          confirmText = "삭제",
+          confirmIsDestructive = true,
+        )
+
+      if (confirmed !is DialogResult.Resolved) {
+        return
+      }
     }
 
     noteEditState.cancelPendingSaves(note.id)
@@ -465,6 +489,7 @@ private fun RelatedNotesSheetContent(
           isSaving = noteEditState.isSaving(note.id) || noteEditState.isSavingColor(note.id),
           hasPendingColor = noteEditState.hasPendingColor(note.id),
           isDirty = noteEditState.isDirty(note.id),
+          autoFocusContent = noteEditState.shouldAutoFocusContent(note.id),
           isEntering = listState.isEntering(note.id),
           isExiting = listState.isExiting(note.id),
           isExitVisible = listState.isExitVisible(note.id),
@@ -474,6 +499,7 @@ private fun RelatedNotesSheetContent(
         NoteListActions(
           onExpand = { note -> scope.launch { handleExpandNote(note) } },
           onCollapse = { scope.launch { collapseExpandedNote() } },
+          onCreateNote = ::handleShortcutCreateNote,
           onContentChange = { noteId, content ->
             noteEditState.updateContent(noteId = noteId, value = content, save = saveNoteContent)
           },
@@ -489,26 +515,29 @@ private fun RelatedNotesSheetContent(
         )
       val reorderState = rememberNoteListReorderState(items = listItems, scrollState = scrollState)
 
-      Box(modifier = Modifier.fillMaxSize().reorderableViewport(state = reorderState)) {
-        Column(
-          modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(horizontal = 16.dp),
-          verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-          NoteList(
-            emptyMessage = status.emptyMessage(),
-            queryState = model.queryState(status),
-            items = listItems,
-            onEnterAnimationFinished = listState::finishEntering,
-            onExitAnimationFinished = listState::finishExiting,
-            reorderState = reorderState,
-            noteColorOptions = noteColorOptions,
-            interactive = status == model.filterStatus,
-            reorderEnabled = SubscriptionService.entitlement !is Entitlement.Expired,
-            contentEditable = SubscriptionService.entitlement !is Entitlement.Expired,
-            actions = listActions,
-          )
+      NoteEditorBringIntoViewScope {
+        Box(modifier = Modifier.fillMaxSize().reorderableViewport(state = reorderState)) {
+          Column(
+            modifier =
+              Modifier.fillMaxSize().verticalScroll(scrollState).padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+          ) {
+            NoteList(
+              emptyMessage = status.emptyMessage(),
+              queryState = model.queryState(status),
+              items = listItems,
+              onEnterAnimationFinished = listState::finishEntering,
+              onExitAnimationFinished = listState::finishExiting,
+              reorderState = reorderState,
+              noteColorOptions = noteColorOptions,
+              interactive = status == model.filterStatus,
+              reorderEnabled = SubscriptionService.entitlement !is Entitlement.Expired,
+              contentEditable = SubscriptionService.entitlement !is Entitlement.Expired,
+              actions = listActions,
+            )
 
-          Spacer(Modifier.height(RelatedNotesListBottomContentPadding))
+            Spacer(Modifier.height(RelatedNotesListBottomContentPadding))
+          }
         }
       }
     }
