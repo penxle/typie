@@ -73,7 +73,7 @@
     {:else}
       <h1 class={css({ fontSize: '24px', fontWeight: 'extrabold' })}>
         {#if page.status === 404}
-          존재하지 않는 페이지에요
+          존재하지 않는 페이지예요
         {:else}
           앗! 문제가 발생했어요
         {/if}

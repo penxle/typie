@@ -286,7 +286,7 @@ class _GeneralTab extends HookWidget {
                   .regex(r'^[\da-z-]+$', message: '스페이스 주소는 소문자, 숫자, 하이픈만 사용할 수 있어요')
                   .regex(r'^(?!.*--)[\da-z-]+$', message: '하이픈을 연속으로 사용할 수 없어요')
                   .regex(r'^[\da-z][\da-z-]*[\da-z]$', message: '스페이스 주소는 하이픈으로 시작하거나 끝날 수 없어요')
-                  .custom((value) => !_unavailableSiteSlugs.contains(value), message: '사용할 수 없는 스페이스 주소에요')
+                  .custom((value) => !_unavailableSiteSlugs.contains(value), message: '사용할 수 없는 스페이스 주소예요')
                   .required(message: '스페이스 주소를 입력해 주세요'),
             }),
             onSubmit: (form) async {

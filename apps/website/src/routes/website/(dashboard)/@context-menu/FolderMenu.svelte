@@ -705,7 +705,7 @@
         })}
       >
         <Icon style={css.raw({ color: 'text.success' })} icon={CheckIcon} size={14} />
-        <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.success' })}>비어있는 폴더에요</span>
+        <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.success' })}>비어있는 폴더예요</span>
       </div>
     {/if}
   {/if}

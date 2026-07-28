@@ -61,7 +61,7 @@ class SpaceSettingsForm(scope: CoroutineScope) : FormState(scope, autoFocusFirst
         pattern(Regex("^[\\da-z-]+$"), "스페이스 주소는 소문자, 숫자, 하이픈만 사용할 수 있어요")
         pattern(Regex("^(?!.*--)[\\da-z-]+$"), "하이픈을 연속으로 사용할 수 없어요")
         pattern(Regex("^[\\da-z][\\da-z-]*[\\da-z]$"), "스페이스 주소는 하이픈으로 시작하거나 끝날 수 없어요")
-        rule { if (it in UNAVAILABLE_SITE_SLUGS) "사용할 수 없는 스페이스 주소에요" else null }
+        rule { if (it in UNAVAILABLE_SITE_SLUGS) "사용할 수 없는 스페이스 주소예요" else null }
       }
     }
 
