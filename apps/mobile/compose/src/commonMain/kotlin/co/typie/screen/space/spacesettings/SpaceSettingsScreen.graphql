@@ -39,6 +39,7 @@ mutation SpaceSettingsScreen_UpdateSiteSlug_Mutation($input: UpdateSiteSlugInput
   updateSiteSlug(input: $input) {
     id
     slug
+    url
   }
 }
 
