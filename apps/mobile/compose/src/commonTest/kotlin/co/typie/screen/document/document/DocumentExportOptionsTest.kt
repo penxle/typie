@@ -7,7 +7,10 @@ import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.ffi.LayoutMode
 import co.typie.graphql.type.DocumentExportFormat
 import co.typie.ui.component.editorsettings.MinContentSizePx
+import co.typie.ui.component.editorsettings.MinPageSizeMm
 import co.typie.ui.component.editorsettings.clampPageMargins
+import co.typie.ui.component.editorsettings.mmToPx
+import co.typie.ui.component.editorsettings.pxToMm
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -194,6 +197,50 @@ class DocumentExportOptionsTest {
   fun `using the document layout disables layout controls`() {
     assertFalse(exportLayoutControlsEnabled(DocumentExportFormat.PDF, true))
     assertTrue(exportLayoutControlsEnabled(DocumentExportFormat.PDF, false))
+  }
+
+  @Test
+  fun `chip selection prefers explicit custom mode over the derived preset`() {
+    assertEquals(PagePresetCustom, exportChipSelection(customMode = true, derivedPreset = "a4"))
+    assertEquals("a4", exportChipSelection(customMode = false, derivedPreset = "a4"))
+    assertEquals(
+      PagePresetCustom,
+      exportChipSelection(customMode = false, derivedPreset = PagePresetCustom),
+    )
+  }
+
+  @Test
+  fun `initial custom mode follows whether the layout already matches a preset`() {
+    assertFalse(exportInitialPageSizeCustomMode(layoutOf(a4, "normal")))
+    assertFalse(exportInitialMarginCustomMode(layoutOf(a4, "normal")))
+
+    val customSize = layoutOf(a4, "normal").copy(pageWidth = 500)
+    assertTrue(exportInitialPageSizeCustomMode(customSize))
+    assertTrue(exportInitialMarginCustomMode(customSize))
+
+    val customMargin = layoutOf(a4, "normal").copy(pageMarginTop = 3)
+    assertFalse(exportInitialPageSizeCustomMode(customMargin))
+    assertTrue(exportInitialMarginCustomMode(customMargin))
+  }
+
+  @Test
+  fun `editing the page width to a custom size still leaves exactly one margin chip selected`() {
+    var layout = layoutOf(a4, "normal")
+    val marginCustomMode = false
+
+    layout =
+      clampPageMargins(layout.copy(pageWidth = mmToPx(maxOf(MinPageSizeMm, pxToMm(mmToPx(200))))))
+
+    assertEquals(emptyList(), exportMarginOptions(layout))
+    val marginPreset = exportMarginPreset(layout)
+    assertEquals(PagePresetCustom, marginPreset)
+
+    val namedChipSelected = exportChipSelection(marginCustomMode, marginPreset)
+    val trailingChipSelected =
+      exportChipSelection(marginCustomMode, marginPreset) == PagePresetCustom
+
+    assertEquals(PagePresetCustom, namedChipSelected)
+    assertTrue(trailingChipSelected)
   }
 
   @Test

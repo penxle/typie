@@ -2,6 +2,7 @@ package co.typie.screen.document.document
 
 import co.typie.editor.EditorPageMarginOption
 import co.typie.editor.EditorValues
+import co.typie.editor.PagePresetCustom
 import co.typie.editor.applyMarginPreset
 import co.typie.editor.applyPageSizePreset
 import co.typie.editor.body.EditorDocumentLayoutSpec
@@ -43,6 +44,15 @@ internal fun exportPageSizePreset(layout: LayoutMode.Paginated): String = pageSi
 
 internal fun exportMarginPreset(layout: LayoutMode.Paginated): String =
   pageMarginPresetOf(layout, exportMarginOptions(layout))
+
+internal fun exportInitialPageSizeCustomMode(layout: LayoutMode.Paginated): Boolean =
+  exportPageSizePreset(layout) == PagePresetCustom
+
+internal fun exportInitialMarginCustomMode(layout: LayoutMode.Paginated): Boolean =
+  exportMarginPreset(layout) == PagePresetCustom
+
+internal fun exportChipSelection(customMode: Boolean, derivedPreset: String): String =
+  if (customMode) PagePresetCustom else derivedPreset
 
 internal fun exportApplyPageSizePreset(
   layout: LayoutMode.Paginated,

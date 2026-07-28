@@ -108,8 +108,12 @@ internal fun DocumentExportSheet(
 
   val canUseDocumentLayout = remember(documentLayout) { exportCanUseDocumentLayout(documentLayout) }
   var useDocumentLayout by remember(documentLayout) { mutableStateOf(canUseDocumentLayout) }
-  var layout by remember(documentLayout) { mutableStateOf(exportInitialLayout(documentLayout)) }
-  var customExpanded by remember { mutableStateOf(false) }
+  val initialLayout = remember(documentLayout) { exportInitialLayout(documentLayout) }
+  var layout by remember(documentLayout) { mutableStateOf(initialLayout) }
+  var pageSizeCustomMode by
+    remember(documentLayout) { mutableStateOf(exportInitialPageSizeCustomMode(initialLayout)) }
+  var marginCustomMode by
+    remember(documentLayout) { mutableStateOf(exportInitialMarginCustomMode(initialLayout)) }
   var exporting by remember { mutableStateOf(false) }
   var elapsedSeconds by remember { mutableIntStateOf(0) }
 
@@ -176,9 +180,15 @@ internal fun DocumentExportSheet(
   ) {
     Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
       Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("파일 형식", style = AppTheme.typography.caption, color = AppTheme.colors.textMuted)
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          Text("파일 형식", style = AppTheme.typography.body, color = AppTheme.colors.textDefault)
 
-        SelectField(field = form.format, items = ExportFormatItems, enabled = !exporting)
+          SelectField(field = form.format, items = ExportFormatItems, enabled = !exporting)
+        }
 
         formatNotice(format)?.let { AlertBanner(text = it) }
       }
@@ -196,9 +206,14 @@ internal fun DocumentExportSheet(
           )
           SettingSwitch(
             checked = useDocumentLayout,
-            onCheckedChange = {
-              useDocumentLayout = it
-              if (it) layout = exportInitialLayout(documentLayout)
+            onCheckedChange = { checked ->
+              useDocumentLayout = checked
+              if (checked) {
+                val restored = exportInitialLayout(documentLayout)
+                layout = restored
+                pageSizeCustomMode = exportInitialPageSizeCustomMode(restored)
+                marginCustomMode = exportInitialMarginCustomMode(restored)
+              }
             },
             enabled = format != DocumentExportFormat.EPUB && !exporting,
           )
@@ -217,45 +232,24 @@ internal fun DocumentExportSheet(
               EditorValues.pageLayout.map {
                 EditorOption(label = it.label.substringBefore(" "), value = it.value)
               },
-            selected = pageSizePreset,
+            selected = exportChipSelection(pageSizeCustomMode, pageSizePreset),
             onSelect = { preset ->
               if (!controlsEnabled) return@EditorSettingsChipRow
               layout = exportApplyPageSizePreset(layout, preset)
+              pageSizeCustomMode = false
             },
             trailing = {
               EditorSettingsTrailingChip(
                 label = "사용자 정의",
-                selected = pageSizePreset == PagePresetCustom || customExpanded,
+                selected =
+                  exportChipSelection(pageSizeCustomMode, pageSizePreset) == PagePresetCustom,
               ) {
-                if (controlsEnabled) customExpanded = !customExpanded
+                if (controlsEnabled) pageSizeCustomMode = true
               }
             },
           )
-        }
 
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-          Text("여백", style = AppTheme.typography.caption, color = AppTheme.colors.textMuted)
-
-          EditorSettingsChipRow(
-            options = marginItems,
-            selected = marginPreset,
-            onSelect = { preset ->
-              if (!controlsEnabled) return@EditorSettingsChipRow
-              layout = exportApplyMarginPreset(layout, preset)
-            },
-            trailing = {
-              EditorSettingsTrailingChip(
-                label = "사용자 정의",
-                selected = marginPreset == PagePresetCustom || customExpanded,
-              ) {
-                if (controlsEnabled) customExpanded = !customExpanded
-              }
-            },
-          )
-        }
-
-        if (customExpanded && controlsEnabled) {
-          Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+          if (pageSizeCustomMode && controlsEnabled) {
             Row(
               modifier = Modifier.fillMaxWidth(),
               horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -283,41 +277,67 @@ internal fun DocumentExportSheet(
                 modifier = Modifier.weight(1f),
               )
             }
+          }
+        }
 
-            Row(
-              modifier = Modifier.fillMaxWidth(),
-              horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-              MmInputField(
-                label = "상",
-                valuePx = layout.pageMarginTop,
-                onCommit = { layout = clampPageMargins(layout.copy(pageMarginTop = it)) },
-                modifier = Modifier.weight(1f),
-              )
-              MmInputField(
-                label = "하",
-                valuePx = layout.pageMarginBottom,
-                onCommit = { layout = clampPageMargins(layout.copy(pageMarginBottom = it)) },
-                modifier = Modifier.weight(1f),
-              )
-            }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+          Text("여백", style = AppTheme.typography.caption, color = AppTheme.colors.textMuted)
 
-            Row(
-              modifier = Modifier.fillMaxWidth(),
-              horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-              MmInputField(
-                label = "좌",
-                valuePx = layout.pageMarginLeft,
-                onCommit = { layout = clampPageMargins(layout.copy(pageMarginLeft = it)) },
-                modifier = Modifier.weight(1f),
-              )
-              MmInputField(
-                label = "우",
-                valuePx = layout.pageMarginRight,
-                onCommit = { layout = clampPageMargins(layout.copy(pageMarginRight = it)) },
-                modifier = Modifier.weight(1f),
-              )
+          EditorSettingsChipRow(
+            options = marginItems,
+            selected = exportChipSelection(marginCustomMode, marginPreset),
+            onSelect = { preset ->
+              if (!controlsEnabled) return@EditorSettingsChipRow
+              layout = exportApplyMarginPreset(layout, preset)
+              marginCustomMode = false
+            },
+            trailing = {
+              EditorSettingsTrailingChip(
+                label = "사용자 정의",
+                selected = exportChipSelection(marginCustomMode, marginPreset) == PagePresetCustom,
+              ) {
+                if (controlsEnabled) marginCustomMode = true
+              }
+            },
+          )
+
+          if (marginCustomMode && controlsEnabled) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+              ) {
+                MmInputField(
+                  label = "상",
+                  valuePx = layout.pageMarginTop,
+                  onCommit = { layout = clampPageMargins(layout.copy(pageMarginTop = it)) },
+                  modifier = Modifier.weight(1f),
+                )
+                MmInputField(
+                  label = "하",
+                  valuePx = layout.pageMarginBottom,
+                  onCommit = { layout = clampPageMargins(layout.copy(pageMarginBottom = it)) },
+                  modifier = Modifier.weight(1f),
+                )
+              }
+
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+              ) {
+                MmInputField(
+                  label = "좌",
+                  valuePx = layout.pageMarginLeft,
+                  onCommit = { layout = clampPageMargins(layout.copy(pageMarginLeft = it)) },
+                  modifier = Modifier.weight(1f),
+                )
+                MmInputField(
+                  label = "우",
+                  valuePx = layout.pageMarginRight,
+                  onCommit = { layout = clampPageMargins(layout.copy(pageMarginRight = it)) },
+                  modifier = Modifier.weight(1f),
+                )
+              }
             }
           }
         }
