@@ -1,8 +1,10 @@
 import { EntityState, NoteState, NoteStatus, SiteState } from '@typie/lib/enums';
-import { TypieError } from '@typie/lib/errors';
+import { NotFoundError } from '@typie/lib/errors';
 import dayjs from 'dayjs';
 import { and, asc, eq, inArray } from 'drizzle-orm';
-import { db, Entities, first, firstOrThrow, NoteEntities, Notes, Sites, TableCode, validateDbId } from '#/db/index.ts';
+import { filter, pipe } from 'graphql-yoga';
+import { db, Entities, first, firstOrThrow, firstOrThrowWith, NoteEntities, Notes, Sites, TableCode, validateDbId } from '#/db/index.ts';
+import { NOTE_UPDATE_KINDS, pubsub } from '#/pubsub.ts';
 import { generateFractionalOrder } from '#/utils/order.ts';
 import { assertSitePermission } from '#/utils/permission.ts';
 import { assertActiveSubscription } from '#/utils/plan.ts';
@@ -142,15 +144,12 @@ builder.queryFields((t) => ({
     args: {
       noteId: t.arg.id({ validate: validateDbId(TableCode.NOTES) }),
     },
-    resolve: async (_, args, ctx) => {
-      const note = await db
+    resolve: async (_, args, ctx) =>
+      db
         .select()
         .from(Notes)
         .where(and(eq(Notes.id, args.noteId), eq(Notes.userId, ctx.session.userId), eq(Notes.state, NoteState.ACTIVE)))
-        .then(firstOrThrow);
-
-      return note;
-    },
+        .then(firstOrThrowWith(new NotFoundError())),
   }),
 }));
 
@@ -163,6 +162,7 @@ builder.mutationFields((t) => ({
       entityIds: t.input.idList({ required: false }),
       content: t.input.string(),
       color: t.input.string(),
+      clientId: t.input.string({ required: false }),
     },
     resolve: async (_, { input }, ctx) => {
       await assertActiveSubscription({ userId: ctx.session.userId });
@@ -200,7 +200,7 @@ builder.mutationFields((t) => ({
           .where(and(inArray(Entities.id, allEntityIds), eq(Entities.siteId, siteId), eq(Entities.state, EntityState.ACTIVE)));
 
         if (entities.length !== allEntityIds.length) {
-          throw new TypieError({ code: 'not_found' });
+          throw new NotFoundError();
         }
       }
 
@@ -215,7 +215,7 @@ builder.mutationFields((t) => ({
 
       const order = generateFractionalOrder({ lower: null, upper: firstNote?.order });
 
-      return await db.transaction(async (tx) => {
+      const note = await db.transaction(async (tx) => {
         const note = await tx
           .insert(Notes)
           .values({
@@ -239,6 +239,13 @@ builder.mutationFields((t) => ({
 
         return note;
       });
+
+      pubsub.publish('note:update', siteId, {
+        kind: 'CREATED',
+        noteId: note.id,
+        originClientId: input.clientId ?? undefined,
+      });
+      return note;
     },
   }),
 
@@ -250,17 +257,19 @@ builder.mutationFields((t) => ({
       content: t.input.string({ required: false }),
       color: t.input.string({ required: false }),
       status: t.input.field({ type: NoteStatus, required: false }),
+      clientId: t.input.string({ required: false }),
     },
     resolve: async (_, { input }, ctx) => {
       await assertActiveSubscription({ userId: ctx.session.userId });
 
-      const note = await db
-        .select()
-        .from(Notes)
-        .where(and(eq(Notes.id, input.noteId), eq(Notes.userId, ctx.session.userId), eq(Notes.state, NoteState.ACTIVE)))
-        .then(firstOrThrow);
+      const updated = await db.transaction(async (tx) => {
+        const note = await tx
+          .select()
+          .from(Notes)
+          .where(and(eq(Notes.id, input.noteId), eq(Notes.userId, ctx.session.userId), eq(Notes.state, NoteState.ACTIVE)))
+          .for('update')
+          .then(firstOrThrowWith(new NotFoundError()));
 
-      return await db.transaction(async (tx) => {
         const updated = await tx
           .update(Notes)
           .set({
@@ -269,7 +278,7 @@ builder.mutationFields((t) => ({
             status: input.status ?? undefined,
             updatedAt: dayjs(),
           })
-          .where(eq(Notes.id, input.noteId))
+          .where(eq(Notes.id, note.id))
           .returning()
           .then(firstOrThrow);
 
@@ -277,21 +286,22 @@ builder.mutationFields((t) => ({
           await tx
             .select({ id: Entities.id })
             .from(Entities)
-            .where(
-              and(
-                eq(Entities.id, input.entityId),
-                eq(Entities.state, EntityState.ACTIVE),
-                ...(note.siteId ? [eq(Entities.siteId, note.siteId)] : []),
-              ),
-            )
+            .where(and(eq(Entities.id, input.entityId), eq(Entities.state, EntityState.ACTIVE), eq(Entities.siteId, note.siteId)))
             .then(firstOrThrow);
 
-          await tx.delete(NoteEntities).where(eq(NoteEntities.noteId, input.noteId));
-          await tx.insert(NoteEntities).values({ noteId: input.noteId, entityId: input.entityId });
+          await tx.delete(NoteEntities).where(eq(NoteEntities.noteId, note.id));
+          await tx.insert(NoteEntities).values({ noteId: note.id, entityId: input.entityId });
         }
 
         return updated;
       });
+
+      pubsub.publish('note:update', updated.siteId, {
+        kind: 'UPDATED',
+        noteId: updated.id,
+        originClientId: input.clientId ?? undefined,
+      });
+      return updated;
     },
   }),
 
@@ -301,27 +311,33 @@ builder.mutationFields((t) => ({
       noteId: t.input.id({ validate: validateDbId(TableCode.NOTES) }),
       lowerOrder: t.input.string({ required: false }),
       upperOrder: t.input.string({ required: false }),
+      clientId: t.input.string({ required: false }),
     },
     resolve: async (_, { input }, ctx) => {
       const note = await db
         .select()
         .from(Notes)
         .where(and(eq(Notes.id, input.noteId), eq(Notes.userId, ctx.session.userId), eq(Notes.state, NoteState.ACTIVE)))
-        .then(firstOrThrow);
+        .then(firstOrThrowWith(new NotFoundError()));
 
       await assertActiveSubscription({ userId: ctx.session.userId });
 
-      const newOrder = generateFractionalOrder({
-        lower: input.lowerOrder,
-        upper: input.upperOrder,
-      });
-
-      return await db
+      const updated = await db
         .update(Notes)
-        .set({ order: newOrder, updatedAt: dayjs() })
-        .where(eq(Notes.id, note.id))
+        .set({
+          order: generateFractionalOrder({ lower: input.lowerOrder, upper: input.upperOrder }),
+          updatedAt: dayjs(),
+        })
+        .where(and(eq(Notes.id, note.id), eq(Notes.state, NoteState.ACTIVE)))
         .returning()
-        .then(firstOrThrow);
+        .then(firstOrThrowWith(new NotFoundError()));
+
+      pubsub.publish('note:update', updated.siteId, {
+        kind: 'UPDATED',
+        noteId: updated.id,
+        originClientId: input.clientId ?? undefined,
+      });
+      return updated;
     },
   }),
 
@@ -329,20 +345,22 @@ builder.mutationFields((t) => ({
     type: Note,
     input: {
       noteId: t.input.id({ validate: validateDbId(TableCode.NOTES) }),
+      clientId: t.input.string({ required: false }),
     },
     resolve: async (_, { input }, ctx) => {
-      await db
-        .select()
-        .from(Notes)
-        .where(and(eq(Notes.id, input.noteId), eq(Notes.userId, ctx.session.userId), eq(Notes.state, NoteState.ACTIVE)))
-        .then(firstOrThrow);
-
-      return await db
+      const deleted = await db
         .update(Notes)
         .set({ state: NoteState.DELETED, updatedAt: dayjs() })
-        .where(eq(Notes.id, input.noteId))
+        .where(and(eq(Notes.id, input.noteId), eq(Notes.userId, ctx.session.userId), eq(Notes.state, NoteState.ACTIVE)))
         .returning()
-        .then(firstOrThrow);
+        .then(firstOrThrowWith(new NotFoundError()));
+
+      pubsub.publish('note:update', deleted.siteId, {
+        kind: 'DELETED',
+        noteId: deleted.id,
+        originClientId: input.clientId ?? undefined,
+      });
+      return deleted;
     },
   }),
 
@@ -351,13 +369,14 @@ builder.mutationFields((t) => ({
     input: {
       noteId: t.input.id({ validate: validateDbId(TableCode.NOTES) }),
       entityId: t.input.id({ validate: validateDbId(TableCode.ENTITIES) }),
+      clientId: t.input.string({ required: false }),
     },
     resolve: async (_, { input }, ctx) => {
       const note = await db
         .select()
         .from(Notes)
         .where(and(eq(Notes.id, input.noteId), eq(Notes.userId, ctx.session.userId), eq(Notes.state, NoteState.ACTIVE)))
-        .then(firstOrThrow);
+        .then(firstOrThrowWith(new NotFoundError()));
 
       await assertActiveSubscription({ userId: ctx.session.userId });
 
@@ -367,8 +386,13 @@ builder.mutationFields((t) => ({
         .where(and(eq(Entities.id, input.entityId), eq(Entities.state, EntityState.ACTIVE)))
         .then(firstOrThrow);
 
-      await db.insert(NoteEntities).values({ noteId: input.noteId, entityId: input.entityId }).onConflictDoNothing();
+      await db.insert(NoteEntities).values({ noteId: note.id, entityId: input.entityId }).onConflictDoNothing();
 
+      pubsub.publish('note:update', note.siteId, {
+        kind: 'UPDATED',
+        noteId: note.id,
+        originClientId: input.clientId ?? undefined,
+      });
       return note;
     },
   }),
@@ -378,19 +402,60 @@ builder.mutationFields((t) => ({
     input: {
       noteId: t.input.id({ validate: validateDbId(TableCode.NOTES) }),
       entityId: t.input.id({ validate: validateDbId(TableCode.ENTITIES) }),
+      clientId: t.input.string({ required: false }),
     },
     resolve: async (_, { input }, ctx) => {
       const note = await db
         .select()
         .from(Notes)
         .where(and(eq(Notes.id, input.noteId), eq(Notes.userId, ctx.session.userId), eq(Notes.state, NoteState.ACTIVE)))
-        .then(firstOrThrow);
+        .then(firstOrThrowWith(new NotFoundError()));
 
       await assertActiveSubscription({ userId: ctx.session.userId });
 
-      await db.delete(NoteEntities).where(and(eq(NoteEntities.noteId, input.noteId), eq(NoteEntities.entityId, input.entityId)));
+      await db.delete(NoteEntities).where(and(eq(NoteEntities.noteId, note.id), eq(NoteEntities.entityId, input.entityId)));
 
+      pubsub.publish('note:update', note.siteId, {
+        kind: 'UPDATED',
+        noteId: note.id,
+        originClientId: input.clientId ?? undefined,
+      });
       return note;
     },
+  }),
+}));
+
+/**
+ * * Subscriptions
+ */
+
+builder.subscriptionFields((t) => ({
+  noteUpdateStream: t.withAuth({ session: true }).field({
+    type: t.builder.simpleObject('NoteUpdateStreamPayload', {
+      fields: (t) => ({
+        kind: t.field({
+          type: t.builder.enumType('NoteUpdateKind', {
+            values: NOTE_UPDATE_KINDS,
+          }),
+        }),
+        noteId: t.id(),
+      }),
+    }),
+    args: {
+      siteId: t.arg.id({ validate: validateDbId(TableCode.SITES) }),
+      clientId: t.arg.string(),
+    },
+    subscribe: async (_, args, ctx) => {
+      await assertSitePermission({
+        userId: ctx.session.userId,
+        siteId: args.siteId,
+      });
+
+      return pipe(
+        pubsub.subscribe('note:update', args.siteId),
+        filter((event) => event.originClientId !== args.clientId),
+      );
+    },
+    resolve: (event) => event,
   }),
 }));

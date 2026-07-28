@@ -4,6 +4,8 @@ import { Redis } from 'ioredis';
 import { env } from '#/env.ts';
 import type { DocumentSyncType } from '@typie/lib/enums';
 
+export const NOTE_UPDATE_KINDS = ['CREATED', 'UPDATED', 'DELETED'] as const;
+
 export const pubsub = createPubSub<{
   'document:sync': [documentId: string, payload: { target: string; type: DocumentSyncType; data: string }];
   'document:changesets': [
@@ -11,6 +13,7 @@ export const pubsub = createPubSub<{
     payload: { target: string; seq: string; changesets: string[]; heads: string; durableHeads: string },
   ];
   'document:comment': [documentId: string, payload: { threadId: string; originClientId: string }];
+  'note:update': [siteId: string, payload: { kind: (typeof NOTE_UPDATE_KINDS)[number]; noteId: string; originClientId?: string }];
   'site:update': [siteId: string, payload: { scope: 'site' } | { scope: 'entity'; entityId: string }];
   'site:usage:update': [siteId: string, payload: null];
   'user:usage:update': [userId: string, payload: null];
