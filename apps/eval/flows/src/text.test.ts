@@ -109,8 +109,8 @@ describe('createFindRange', () => {
   });
 
   it('공백이 소실된 앵커를 구제한다', () => {
-    const doc = '나는 어제 민수 형이 했던 말을 떠올렸다. 다음 문장.';
-    const range = createFindRange(doc)('민수 형이했던 말을 떠올렸다.', '민수 형이했던 말을 떠올렸다.', 0);
+    const doc = '나는 어제 철수 형이 남긴 말을 떠올렸다. 다음 문장.';
+    const range = createFindRange(doc)('철수 형이남긴 말을 떠올렸다.', '철수 형이남긴 말을 떠올렸다.', 0);
     expect(range).toEqual({ rangeStart: 6, rangeEnd: 23 });
   });
 
@@ -180,25 +180,25 @@ describe('renderMetaBlock 별칭 구조형', () => {
       narrator: { pov: '3인칭 제한', reliability: '신뢰 가능' },
       setting: '현대',
       themes: [],
-      characters: [{ name: '하민', aliases: [{ alias: '산호', usage: '마린이 하민을 부르는 애칭' }, '하민씨'], role: '주인공', arc: '' }],
+      characters: [{ name: '철수', aliases: [{ alias: '철이', usage: '영희이 철수을 부르는 애칭' }, '철수씨'], role: '주인공', arc: '' }],
       structure: [],
       style: '',
     };
     const block = renderMetaBlock(meta);
-    expect(block).toContain('하민 (산호: 마린이 하민을 부르는 애칭/하민씨)');
+    expect(block).toContain('철수 (철이: 영희이 철수을 부르는 애칭/철수씨)');
   });
 });
 
 describe('renderAdjacentSummary', () => {
-  const base = { narrative: '두 사람이 카페에서 만난다.', characters: [], pov: '', tense: '', location: '', tone: '' };
+  const base = { narrative: '두 사람이 서점에서 만난다.', characters: [], pov: '', tense: '', location: '', tone: '' };
 
   it('구조 필드들이 META 입력과 동일한 형식으로 덧붙는다', () => {
-    const rendered = renderAdjacentSummary({ ...base, pov: '3인칭 제한', location: '카페', transitions: '중반부터 회상, 복귀 없음' });
-    expect(rendered).toBe('두 사람이 카페에서 만난다.\n[시점: 3인칭 제한]\n[장소: 카페] [장면·시간 구조: 중반부터 회상, 복귀 없음]');
+    const rendered = renderAdjacentSummary({ ...base, pov: '3인칭 제한', location: '서점', transitions: '중반부터 회상, 복귀 없음' });
+    expect(rendered).toBe('두 사람이 서점에서 만난다.\n[시점: 3인칭 제한]\n[장소: 서점] [장면·시간 구조: 중반부터 회상, 복귀 없음]');
   });
 
   it('구조 필드가 없으면(구형 저장분) narrative만 반환한다', () => {
-    expect(renderAdjacentSummary(base)).toBe('두 사람이 카페에서 만난다.');
+    expect(renderAdjacentSummary(base)).toBe('두 사람이 서점에서 만난다.');
     expect(renderAdjacentSummary(undefined)).toBe('');
   });
 });

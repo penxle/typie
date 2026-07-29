@@ -9,7 +9,7 @@ export type StagePrompt = {
 };
 export type VariantContent = Record<StageKey, StagePrompt>;
 export type VariantStatus = 'draft' | 'ran' | 'adopted' | 'applied';
-export type RunKind = 'sampling' | 'pipeline' | 'analysis';
+export type RunKind = 'sampling' | 'pipeline' | 'analysis' | 'judge';
 export type RunStatus = 'running' | 'succeeded' | 'failed' | 'cancelled';
 export type RunPhase = 'candidates' | 'classify' | 'extract' | 'freeze';
 export type RunDocStatus = 'pending' | 'running' | 'done' | 'failed' | 'cancelled';

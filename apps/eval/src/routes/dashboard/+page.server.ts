@@ -16,7 +16,6 @@ import { ALL_FEEDBACK_LABELS, JUDGMENT_ERROR_KEYS, STRICT_FALSE_POSITIVE_KEYS, S
 import {
   createDb,
   Documents,
-  EvaluatorConsents,
   Feedbacks,
   FeedbackSets,
   FeedbackVerdicts,
@@ -28,6 +27,7 @@ import {
   Tasks,
   Variants,
 } from '$lib/server/db/index.ts';
+import { countParticipants } from '$lib/server/participants.ts';
 import type { JudgmentResult, PairVerdict } from '$lib/domain/types.ts';
 import type { PageServerLoad } from './$types';
 
@@ -47,15 +47,8 @@ export const load: PageServerLoad = async ({ platform }) => {
   const variants = await db.select().from(Variants);
   const variantLabels = new Map(variants.map((v) => [v.id, v.label]));
 
-  // 중복 구간(requiredJudgments=null)은 동의한 평가자 전원이 보는 것이 목표다 — 그 인원이 분모다.
-  const admins = new Set(
-    (platform.env.ADMIN_EMAILS ?? '')
-      .split(',')
-      .map((e) => e.trim())
-      .filter((e) => e.length > 0),
-  );
-  const consents = await db.select({ email: EvaluatorConsents.email }).from(EvaluatorConsents);
-  const participants = Math.max(1, consents.filter((c) => !admins.has(c.email)).length);
+  // 중복 구간(requiredJudgments=null)은 참여자 전원이 보는 것이 목표다 — 그 인원이 분모다.
+  const participants = await countParticipants(db);
 
   const summaries = [];
   for (const round of rounds) {

@@ -38,6 +38,8 @@ export type CostInput = {
   completionTokens: number;
   // promptTokens에 포함된, 캐시에서 읽힌 몫. 이 만큼은 싼 단가로 친다.
   cachedTokens?: number;
+  // promptTokens에 포함된, 캐시에 쓰인 몫. 읽기와 반대로 입력가보다 비싸다(1.25배).
+  cacheWriteTokens?: number;
   // 이 실행이 쓴 서로 다른 모델들. 하나일 때만 금액이 나온다.
   models: string[];
 };
@@ -46,6 +48,10 @@ export type Cost =
   | { kind: 'exact'; model: string; usd: number; krw: number }
   | { kind: 'mixed'; models: string[] }
   | { kind: 'unknown'; model: string | null };
+
+// 캐시 쓰기는 입력가의 1.25배다(5분 TTL 기준). 읽기가 0.1배이므로 같은 접두부를 두 번만
+// 읽어도 남는다 — 반대로 한 번 쓰고 읽지 못하면 손해다.
+const CACHE_WRITE_MULTIPLIER = 1.25;
 
 export const estimateCost = (input: CostInput, table: PriceTable): Cost => {
   const models = [...new Set(input.models)];
@@ -56,13 +62,33 @@ export const estimateCost = (input: CostInput, table: PriceTable): Cost => {
   const price = table.models[model];
   if (!price) return { kind: 'unknown', model };
 
-  // 캐시 몫은 promptTokens 안에 들어 있으므로 빼낸 뒤 각자의 단가로 친다.
-  const cached = Math.min(Math.max(input.cachedTokens ?? 0, 0), input.promptTokens);
-  const fresh = input.promptTokens - cached;
+  // 캐시 몫은 promptTokens 안에 들어 있으므로 빼낸 뒤 각자의 단가로 친다. 합이 입력을 넘지
+  // 않도록 자른다 — 넘는 값이 들어오면 없는 토큰에 값을 매기게 된다.
+  const written = Math.min(Math.max(input.cacheWriteTokens ?? 0, 0), input.promptTokens);
+  const cached = Math.min(Math.max(input.cachedTokens ?? 0, 0), input.promptTokens - written);
+  const fresh = input.promptTokens - cached - written;
   const cacheRead = price.cacheRead ?? price.input;
-  const usd = (fresh / 1_000_000) * price.input + (cached / 1_000_000) * cacheRead + (input.completionTokens / 1_000_000) * price.output;
+  const usd =
+    (fresh / 1_000_000) * price.input +
+    (cached / 1_000_000) * cacheRead +
+    (written / 1_000_000) * price.input * CACHE_WRITE_MULTIPLIER +
+    (input.completionTokens / 1_000_000) * price.output;
   return { kind: 'exact', model, usd, krw: usd * table.usdKrw };
 };
+
+// 단계별로 낸 금액의 합. 단계마다 모델이 다르면 실행 단위로는 '혼합'이 되어 금액이 나오지
+// 않지만, 어느 단계가 어느 모델로 얼마를 썼는지 알면 정확한 총액을 낼 수 있다.
+// complete=false는 값을 못 낸 단계가 섞였다는 뜻이다 — 그때 금액은 하한이다.
+export type CostTotal = { usd: number; krw: number; complete: boolean };
+
+export const sumCosts = (costs: Cost[]): CostTotal =>
+  costs.reduce<CostTotal>(
+    (total, cost) =>
+      cost.kind === 'exact'
+        ? { usd: total.usd + cost.usd, krw: total.krw + cost.krw, complete: total.complete }
+        : { ...total, complete: false },
+    { usd: 0, krw: 0, complete: true },
+  );
 
 // 자당 비용. 코퍼스를 키울지 말지는 총액보다 이 값으로 판단하게 된다.
 export const costPerCharacter = (krw: number, characters: number): number | null => (characters > 0 ? krw / characters : null);

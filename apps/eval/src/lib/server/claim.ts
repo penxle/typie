@@ -1,6 +1,7 @@
 import { and, asc, eq, gte, inArray, isNull, lt, notInArray, or, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
-import { EvaluatorConsents, Judgments, ReleasedTasks, Rounds, Tasks } from './db/index.ts';
+import { Judgments, ReleasedTasks, Rounds, Tasks } from './db/index.ts';
+import { listParticipants } from './participants.ts';
 import type { createDb } from './db/index.ts';
 
 type Db = ReturnType<typeof createDb>;
@@ -64,21 +65,6 @@ export const capRemaining = (input: {
   const left = softCap(input.requiredTotal, input.expectedEvaluators) - input.myConfirmed;
   if (left > 0) return left;
   return input.nowEpochSec - input.lastOtherProgressEpochSec >= STALE_RELEASE_HOURS * 3600 ? Infinity : 0;
-};
-
-const parseAdminEmails = (adminEmails: string): Set<string> =>
-  new Set(
-    adminEmails
-      .split(',')
-      .map((e) => e.trim())
-      .filter((e) => e.length > 0),
-  );
-
-// 참여자 = 동의 명단 − 어드민. 최소 몫·예약 계산은 실제 평가 인력만으로 한다.
-const participantEmails = async (db: Db, adminEmails: string): Promise<string[]> => {
-  const admins = parseAdminEmails(adminEmails);
-  const consents = await db.select({ email: EvaluatorConsents.email }).from(EvaluatorConsents);
-  return consents.map((c) => c.email).filter((e) => !admins.has(e));
 };
 
 // 라운드가 필요 수를 이미 채웠어도 최소 몫을 못 채운 평가자에게는 몫만큼 추가 판정을 연다 —
@@ -248,14 +234,13 @@ const hasOpenDraft = async (db: Db, email: string): Promise<boolean> => {
   return !!openDraft;
 };
 
-export const claimNextTask = async (db: Db, email: string, adminEmails = ''): Promise<string | null> => {
-  // 어드민은 몫 계산만이 아니라 배정 자격 자체에서 제외한다 — 판정이 집계에 섞이지 않게.
-  if (parseAdminEmails(adminEmails).has(email)) return null;
+export const claimNextTask = async (db: Db, email: string): Promise<string | null> => {
+  // 참여자가 아니면 몫 계산만이 아니라 배정 자격 자체가 없다 — 판정이 집계에 섞이지 않게.
+  const participants = await listParticipants(db);
+  if (!participants.includes(email)) return null;
 
   await reclaimExpiredReservations(db);
   if (await hasOpenDraft(db, email)) return null;
-
-  const participants = await participantEmails(db, adminEmails);
 
   const candidates = await claimableQuery(db, email);
   let taskId: string | null = null;
@@ -290,12 +275,11 @@ export type ClaimableSummary = {
 // remaining은 캡을 반영한 "지금 실제로 받을 수 있는" 건수다. quota는 캡이 걸린 라운드가
 // 있을 때만 채워진다(복수 라운드면 합산) — 남은 태스크가 아무리 많아도 개인에게는
 // 한도까지만 배정된다는 사실을 화면에 그대로 보여주기 위한 값.
-export const claimableSummary = async (db: Db, email: string, adminEmails = ''): Promise<ClaimableSummary> => {
-  if (parseAdminEmails(adminEmails).has(email)) return { remaining: 0, potential: 0, quota: null };
+export const claimableSummary = async (db: Db, email: string): Promise<ClaimableSummary> => {
+  const participants = await listParticipants(db);
+  if (!participants.includes(email)) return { remaining: 0, potential: 0, quota: null };
 
   await reclaimExpiredReservations(db);
-
-  const participants = await participantEmails(db, adminEmails);
 
   const candidates = await claimableQuery(db, email);
   let potential = 0;

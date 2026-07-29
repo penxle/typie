@@ -81,7 +81,7 @@ export const load: PageServerLoad = async ({ params, platform, locals }) => {
   }));
 
   // 내 판정 분자·분모는 현재(최신) 라운드만 센다 — 지난 라운드 판정을 이월하지 않는다.
-  const round = await effectiveProgress(db, platform.env.ADMIN_EMAILS ?? '');
+  const round = await effectiveProgress(db);
   const roundScope = round.roundId ? eq(Tasks.roundId, round.roundId) : sql`0 = 1`;
   const [myDone] = await db
     .select({ n: sql<number>`count(*)` })
@@ -93,7 +93,7 @@ export const load: PageServerLoad = async ({ params, platform, locals }) => {
     .from(Judgments)
     .innerJoin(Tasks, eq(Tasks.id, Judgments.taskId))
     .where(and(eq(Judgments.evaluatorEmail, locals.email), eq(Judgments.draft, true), roundScope));
-  const { potential } = await claimableSummary(db, locals.email, platform.env.ADMIN_EMAILS ?? '');
+  const { potential } = await claimableSummary(db, locals.email);
 
   return {
     isAnalysis,
@@ -423,7 +423,7 @@ export const actions: Actions = {
       reviewVerdicts,
       draft: false,
     });
-    const nextTaskId = await claimNextTask(db, locals.email, platform.env.ADMIN_EMAILS ?? '');
+    const nextTaskId = await claimNextTask(db, locals.email);
     redirect(302, nextTaskId ? `/tasks/${nextTaskId}` : '/?finished=1');
   },
   release: async ({ params, platform, locals }) => {

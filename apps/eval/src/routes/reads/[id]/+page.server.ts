@@ -1,8 +1,9 @@
 import { error } from '@sveltejs/kit';
 import { eq, inArray } from 'drizzle-orm';
-import { createDb, Documents, FeedbackAnchors, Feedbacks, FeedbackSets, Judgments } from '$lib/server/db/index.ts';
+import { createDb, Documents, FeedbackAnchors, Feedbacks, FeedbackSets, Judgments, StageCache } from '$lib/server/db/index.ts';
 import type { TaskKind } from '$lib/domain/types.ts';
 import type { FeedbackVerdictMap, ReviewVerdictMap } from '$lib/domain/verdicts.ts';
+import type { EditorialPlan, Research } from '../../../../flows/src/editorial-types.ts';
 import type { PageServerLoad } from './$types';
 
 // 라운드에 속하지 않은 피드백 세트를 평가 화면과 같은 모양으로 읽기만 한다. 태스크 행을 만들지
@@ -27,12 +28,24 @@ export const load: PageServerLoad = async ({ params, platform }) => {
     error(500, 'document missing');
   }
 
+  // 에디토리얼 실행이 남긴 리서치·최종 계획. 'plan' 키는 구 분석 파이프라인도 다른 형태로 쓰므로
+  // 에디토리얼 전용인 'research' 키와 final 필드를 함께 요구한다 — 없으면 열람 버튼을 숨긴다.
+  const cachePrefix = `analysis/${set.runId}/${set.documentId}/`;
+  const artifactRows = await db
+    .select()
+    .from(StageCache)
+    .where(inArray(StageCache.key, [`${cachePrefix}research`, `${cachePrefix}plan`]));
+  const research = artifactRows.find((r) => r.key === `${cachePrefix}research`)?.value as Research | undefined;
+  const planValue = artifactRows.find((r) => r.key === `${cachePrefix}plan`)?.value as { final?: EditorialPlan } | undefined;
+  const artifacts = research && planValue?.final ? { research, plan: planValue.final } : null;
+
   const feedbacks = await db.select().from(Feedbacks).where(eq(Feedbacks.setId, set.id)).orderBy(Feedbacks.ord);
   const feedbackIds = feedbacks.map((f) => f.id);
   const anchors =
     feedbackIds.length > 0 ? await db.select().from(FeedbackAnchors).where(inArray(FeedbackAnchors.feedbackId, feedbackIds)) : [];
 
   return {
+    artifacts,
     isAnalysis: set.review !== null,
     verdicts: {} as FeedbackVerdictMap,
     reviewVerdicts: {} as ReviewVerdictMap,

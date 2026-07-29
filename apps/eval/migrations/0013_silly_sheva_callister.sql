@@ -1,0 +1,1 @@
+ALTER TABLE `evaluator_consents` ADD `evaluating` integer;

@@ -6,6 +6,7 @@
   import { Dialog, Toast } from '@typie/ui/notification';
   import { untrack } from 'svelte';
   import { invalidateAll } from '$app/navigation';
+  import { formatKrw } from '$lib/domain/pricing.ts';
   import FeedbackSetPanel from '../../../tasks/[id]/FeedbackSetPanel.svelte';
   import CostCell from '../../lib/CostCell.svelte';
   import { usePolling } from '../../lib/poll.svelte.ts';
@@ -27,6 +28,25 @@
   type Props = { data: PageData };
   const { data }: Props = $props();
 
+  const STAGE_LABELS: Record<string, string> = {
+    survey: '작품 파악',
+    background: '원작 조사',
+    review: '짚을 곳 찾기',
+    dedupe: '중복 묶기',
+    verify: '검증',
+    research: '작품 조사',
+    'plan-draft': '계획 초안',
+    'plan-revise-0': '계획 수정 1',
+    'plan-revise-1': '계획 수정 2',
+    'plan-revise-2': '계획 수정 3',
+    plan: '계획 검수',
+    planReview: '계획 검수',
+    execute: '작품 검토',
+    local: '문면 교열',
+    compose: '피드백 쓰기',
+    composeReview: '총평 쓰기',
+  };
+
   type RunFetchResponse = { run: typeof data.run; docs: typeof data.docs };
 
   // data.run/data.docs는 폴링으로 갱신되므로 로컬 $state로 들고, summary/preview는 완료 시점에만 필요하고
@@ -37,6 +57,44 @@
   let retrying = $state(false);
   let retryError = $state<string | null>(null);
   let selectedFailedDocId = $state<string | null>(null);
+
+  // 도구 원장(진단용) — 문서를 고르면 스테이지별 read/grep/search 호출과 게이트 이벤트를 보여준다.
+  type LedgerTool =
+    | { turn: number; tool: 'read'; start: number; end: number }
+    | { turn: number; tool: 'grep'; pattern: string; total: number }
+    | { turn: number; tool: 'search'; query: string; hits: number };
+  type LedgerStage = { stage: string; tools: LedgerTool[]; events: { turn?: number; kind: string; detail: string }[]; live: boolean };
+  let ledgerDocId = $state<string | null>(null);
+  let ledgerLoading = $state(false);
+  let ledgerError = $state<string | null>(null);
+  let ledgerByDoc = $state<Record<string, LedgerStage[]>>({});
+
+  const toolLine = (t: LedgerTool) =>
+    t.tool === 'read'
+      ? `[턴${t.turn}] read ${t.start}~${t.end}`
+      : t.tool === 'grep'
+        ? `[턴${t.turn}] grep '${t.pattern}' → ${t.total}건`
+        : `[턴${t.turn}] search '${t.query}' → ${t.hits}건`;
+
+  const openLedger = async (documentId: string) => {
+    ledgerDocId = ledgerDocId === documentId ? null : documentId;
+    if (!ledgerDocId || Object.hasOwn(ledgerByDoc, documentId)) return;
+    ledgerLoading = true;
+    ledgerError = null;
+    try {
+      const res = await fetch(`/admin/api/runs/${run.id}/ledger?documentId=${encodeURIComponent(documentId)}`);
+      if (res.ok) {
+        const body = (await res.json()) as { stages: LedgerStage[] };
+        ledgerByDoc = { ...ledgerByDoc, [documentId]: body.stages };
+      } else {
+        ledgerError = `원장 조회 실패 (${res.status})`;
+      }
+    } catch (err) {
+      ledgerError = `원장 조회 실패: ${String(err).slice(0, 120)}`;
+    } finally {
+      ledgerLoading = false;
+    }
+  };
 
   // 세션(페이지 진입) 시작 시점 샘플 — 처리율·ETA를 이 시점 대비 실측한다.
   const sessionStart = untrack(() => ({ at: Date.now(), done: primaryMetric(data.run) }));
@@ -89,9 +147,9 @@
     cancelled: '취소됨',
   };
 
-  // 재설계 파이프라인의 단계. 구 파이프라인 문서에는 phase가 없다.
+  // 파이프라인 세대별 단계. 구 파이프라인 문서에는 phase가 없다.
   // 순서가 곧 진행도다 — 셀에서 몇 번째 칸까지 찼는지로 어디까지 왔는지 바로 읽힌다.
-  const PHASES = [
+  const ANALYSIS_PHASES = [
     { key: 'queued', label: '대기' },
     { key: 'survey', label: '작품 파악' },
     { key: 'review', label: '짚을 곳 찾기' },
@@ -100,9 +158,27 @@
     { key: 'compose', label: '피드백 다듬기' },
     { key: 'done', label: '완료' },
   ];
-  const PHASE_LABEL: Record<string, string> = Object.fromEntries(PHASES.map((p) => [p.key, p.label]));
-  // 대기는 아직 시작 전이라 칸을 채우지 않는다 — 실제로 지나온 단계는 '작품 파악'부터 여섯이다.
-  const PHASE_STEPS = PHASES.slice(1);
+  const EDITORIAL_PHASES = [
+    { key: 'queued', label: '대기' },
+    { key: 'research', label: '작품 조사' },
+    { key: 'plan', label: '비평 계획' },
+    { key: 'execute', label: '작품 검토' },
+    { key: 'local', label: '문면 교열' },
+    { key: 'compose', label: '피드백 다듬기' },
+    { key: 'done', label: '완료' },
+  ];
+  const EDITORIAL_PHASE_KEYS = new Set(['research', 'plan', 'execute', 'local']);
+  // 어느 세대의 실행인지는 세트 id(meta)로 먼저 판별하고, 없으면 문서들이 실제로 밟은 단계로
+  // 보강한다 — 완료된 실행은 phase가 전부 'done'이라 단계 관측만으로는 판별이 안 된다.
+  const PHASES = $derived.by(() => {
+    const promptSetId = (run.meta as { promptSetId?: string } | null)?.promptSetId;
+    if (promptSetId?.startsWith('aps-editorial')) return EDITORIAL_PHASES;
+    if (docs.some((d) => d.phase !== null && EDITORIAL_PHASE_KEYS.has(d.phase))) return EDITORIAL_PHASES;
+    return ANALYSIS_PHASES;
+  });
+  const PHASE_LABEL: Record<string, string> = Object.fromEntries([...ANALYSIS_PHASES, ...EDITORIAL_PHASES].map((p) => [p.key, p.label]));
+  // 대기는 아직 시작 전이라 칸을 채우지 않는다.
+  const PHASE_STEPS = $derived(PHASES.slice(1));
   const phaseIndex = (phase: string | null) => (phase === null ? -1 : PHASE_STEPS.findIndex((p) => p.key === phase));
 
   // 서른 편이 어느 단계에 몰려 있는지는 셀을 하나씩 세는 것보다 한 줄 요약이 빠르다.
@@ -263,7 +339,12 @@
       <div class={statCardClass}>
         <p class={css({ fontSize: '12px', color: 'text.faint' })}>비용</p>
         <p class={css({ marginTop: '2px', fontSize: '16px', fontWeight: 'bold' })}>
-          <CostCell cost={data.cost} tokens={run.promptTokens + run.completionTokens} />
+          {#if data.cost.kind !== 'exact' && data.stageTotal?.complete}
+            <!-- 단계마다 모델이 달라 실행 단위로는 금액이 안 나오지만, 단계별 합으로는 나온다. -->
+            {formatKrw(data.stageTotal.krw)}
+          {:else}
+            <CostCell cost={data.cost} tokens={run.promptTokens + run.completionTokens} />
+          {/if}
         </p>
         <p class={css({ marginTop: '2px', fontSize: '11px', color: 'text.faint' })}>
           {#if data.krwPerCharacter !== null}
@@ -276,6 +357,53 @@
         </p>
       </div>
     </div>
+
+    {#if data.stages.length > 0}
+      <div class={css({ marginTop: '16px', overflowX: 'auto' })}>
+        <table
+          class={css({
+            width: 'full',
+            fontSize: '12px',
+            fontVariantNumeric: 'tabular-nums',
+            '& td, & th': { paddingX: '10px', paddingY: '6px', textAlign: 'right', whiteSpace: 'nowrap' },
+            '& td:first-child, & th:first-child': { textAlign: 'left' },
+            '& th': { color: 'text.faint', fontWeight: 'medium', borderBottomWidth: '1px', borderColor: 'border.default' },
+            '& td': { borderBottomWidth: '1px', borderColor: 'border.subtle' },
+          })}
+        >
+          <thead>
+            <tr>
+              <th>단계</th>
+              <th>호출</th>
+              <th>입력</th>
+              <th>캐시 읽기</th>
+              <th>캐시 쓰기</th>
+              <th>출력</th>
+              <th>비용</th>
+              <th>모델</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each data.stages as stage (stage.stage)}
+              <tr>
+                <td class={css({ fontWeight: 'medium' })}>{STAGE_LABELS[stage.stage] ?? stage.stage}</td>
+                <td>{stage.calls.toLocaleString()}</td>
+                <td>{stage.promptTokens.toLocaleString()}</td>
+                <td class={css({ color: stage.cachedTokens > 0 ? 'text.success' : 'text.faint' })}>
+                  {stage.cachedTokens > 0 ? stage.cachedTokens.toLocaleString() : '—'}
+                </td>
+                <td class={css({ color: 'text.faint' })}>
+                  {stage.cacheWriteTokens > 0 ? stage.cacheWriteTokens.toLocaleString() : '—'}
+                </td>
+                <td>{stage.completionTokens.toLocaleString()}</td>
+                <td>{stage.cost.kind === 'exact' ? formatKrw(stage.cost.krw) : '—'}</td>
+                <td class={css({ color: 'text.faint' })}>{stage.model?.split('/').at(-1) ?? '—'}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+    {/if}
 
     <div class={flex({ gap: '8px', marginTop: '16px', align: 'center' })}>
       {#if run.status === 'running'}
@@ -407,6 +535,78 @@
           <p class={css({ color: 'text.danger' })}>{selectedFailedDoc.error ?? '알 수 없는 오류'}</p>
         {:else}
           <p class={css({ color: 'text.faint' })}>실패한 문서를 클릭하면 오류 메시지가 여기에 표시됩니다.</p>
+        {/if}
+      </div>
+
+      <div class={css({ marginTop: '16px' })}>
+        <h3 class={css({ fontSize: '13px', fontWeight: 'bold', color: 'text.subtle', marginBottom: '8px' })}>도구 원장</h3>
+        <div class={flex({ wrap: 'wrap', gap: '6px', marginBottom: '10px' })}>
+          {#each docs as doc, i (doc.id)}
+            <button
+              class={css({
+                paddingX: '10px',
+                paddingY: '4px',
+                borderWidth: '1px',
+                borderColor: ledgerDocId === doc.documentId ? 'border.strong' : 'border.default',
+                borderRadius: '6px',
+                backgroundColor: ledgerDocId === doc.documentId ? 'surface.muted' : 'surface.default',
+                fontSize: '12px',
+                cursor: 'pointer',
+              })}
+              onclick={() => openLedger(doc.documentId)}
+              type="button"
+              use:tooltip={{ message: doc.documentId, delay: 200 }}
+            >
+              문서 {i + 1}
+            </button>
+          {/each}
+        </div>
+        {#if ledgerDocId}
+          {#if ledgerLoading && !Object.hasOwn(ledgerByDoc, ledgerDocId)}
+            <p class={css({ fontSize: '13px', color: 'text.faint' })}>원장을 불러오는 중…</p>
+          {:else if ledgerError && !Object.hasOwn(ledgerByDoc, ledgerDocId)}
+            <p class={css({ fontSize: '13px', color: 'text.danger' })}>{ledgerError}</p>
+          {:else if (ledgerByDoc[ledgerDocId] ?? []).length === 0}
+            <p class={css({ fontSize: '13px', color: 'text.faint' })}>이 문서의 도구 원장이 없습니다 (구 파이프라인 실행).</p>
+          {:else}
+            <div class={flex({ direction: 'column', gap: '12px' })}>
+              {#each ledgerByDoc[ledgerDocId] ?? [] as stage (stage.stage)}
+                <div class={css({ borderWidth: '1px', borderColor: 'border.default', borderRadius: '8px', padding: '10px' })}>
+                  <p class={css({ fontSize: '12px', fontWeight: 'bold', marginBottom: '6px' })}>
+                    {STAGE_LABELS[stage.stage] ?? stage.stage}
+                    <span class={css({ fontWeight: 'normal', color: 'text.faint' })}>
+                      · 도구 {stage.tools.length}{stage.live ? ' · 진행 중 (이벤트는 단계 완료 후)' : ` · 이벤트 ${stage.events.length}`}
+                    </span>
+                  </p>
+                  {#if stage.tools.length > 0}
+                    <pre
+                      class={css({
+                        fontSize: '12px',
+                        fontFamily: 'mono',
+                        whiteSpace: 'pre-wrap',
+                        overflowWrap: 'anywhere',
+                        color: 'text.default',
+                      })}>{stage.tools.map(toolLine).join('\n')}</pre>
+                  {/if}
+                  {#if stage.events.length > 0}
+                    <pre
+                      class={css({
+                        fontSize: '12px',
+                        fontFamily: 'mono',
+                        whiteSpace: 'pre-wrap',
+                        overflowWrap: 'anywhere',
+                        color: 'text.danger',
+                        marginTop: stage.tools.length > 0 ? '6px' : '0',
+                      })}>{stage.events.map((e) => `[${e.kind}] ${e.detail}`).join('\n')}</pre>
+                  {/if}
+                </div>
+              {/each}
+            </div>
+          {/if}
+        {:else}
+          <p class={css({ fontSize: '13px', color: 'text.faint' })}>
+            문서를 선택하면 스테이지별 read·grep·search 호출과 게이트 이벤트가 표시됩니다.
+          </p>
         {/if}
       </div>
     </section>

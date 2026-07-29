@@ -3,23 +3,23 @@ import { buildBackgroundQuery, MAX_QUERY_NOUNS, renderSearchHits } from './searc
 
 describe('buildBackgroundQuery', () => {
   it('원작명이 있으면 그것을 주어로 삼는다', () => {
-    const q = buildBackgroundQuery({ derivativeSource: '천관사복', properNouns: ['사무도', '사청현', '풍사선'] });
-    expect(q).toBe('천관사복 등장인물 관계 설정 줄거리 사무도 사청현 풍사선');
+    const q = buildBackgroundQuery({ derivativeSource: '홍길동전', properNouns: ['홍길동', '이몽룡', '성춘향'] });
+    expect(q).toBe('홍길동전 등장인물 관계 설정 줄거리 홍길동 이몽룡 성춘향');
   });
 
   it('원작명이 없으면 고유명사로 되짚는다', () => {
-    const q = buildBackgroundQuery({ derivativeSource: null, properNouns: ['시마', '이부키'] });
-    expect(q).toBe('시마 이부키 등장인물 원작 어느 작품');
+    const q = buildBackgroundQuery({ derivativeSource: null, properNouns: ['홍길동', '성춘향'] });
+    expect(q).toBe('홍길동 성춘향 등장인물 원작 어느 작품');
   });
 
   it("'원작 불명'은 원작명이 없는 것으로 본다", () => {
-    const q = buildBackgroundQuery({ derivativeSource: '원작 불명', properNouns: ['시마', '이부키'] });
-    expect(q).toBe('시마 이부키 등장인물 원작 어느 작품');
+    const q = buildBackgroundQuery({ derivativeSource: '원작 불명', properNouns: ['홍길동', '성춘향'] });
+    expect(q).toBe('홍길동 성춘향 등장인물 원작 어느 작품');
   });
 
   // 이름 하나로 검색하면 엉뚱한 원작을 물어온다. 잘못된 배경은 배경이 없는 것보다 나쁘다.
   it('단서가 너무 적으면 검색하지 않는다', () => {
-    expect(buildBackgroundQuery({ derivativeSource: null, properNouns: ['시마'] })).toBeNull();
+    expect(buildBackgroundQuery({ derivativeSource: null, properNouns: ['홍길동'] })).toBeNull();
     expect(buildBackgroundQuery({ derivativeSource: null, properNouns: [] })).toBeNull();
   });
 
@@ -30,8 +30,8 @@ describe('buildBackgroundQuery', () => {
   });
 
   it('빈 문자열·공백 고유명사는 버린다', () => {
-    const q = buildBackgroundQuery({ derivativeSource: null, properNouns: ['  ', '시마', '', ' 이부키 '] });
-    expect(q).toBe('시마 이부키 등장인물 원작 어느 작품');
+    const q = buildBackgroundQuery({ derivativeSource: null, properNouns: ['  ', '홍길동', '', ' 성춘향 '] });
+    expect(q).toBe('홍길동 성춘향 등장인물 원작 어느 작품');
   });
 });
 

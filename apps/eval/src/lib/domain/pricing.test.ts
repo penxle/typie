@@ -22,6 +22,25 @@ describe('estimateCost', () => {
     expect(cost.usd).toBeCloseTo(0.5);
   });
 
+  // 캐시 쓰기는 입력가의 1.25배다. 읽기만 세면 캐싱이 실제보다 이득으로 보인다.
+  it('캐시 쓰기는 입력가보다 비싸게 친다', () => {
+    const cost = estimateCost(
+      { promptTokens: 1_000_000, completionTokens: 0, cacheWriteTokens: 400_000, cachedTokens: 500_000, models: ['m1'] },
+      table,
+    );
+    if (cost.kind !== 'exact') throw new Error('exact expected');
+    expect(cost.usd).toBeCloseTo(0.1 * 5 + 0.4 * 5 * 1.25 + 0.5 * 0.5);
+  });
+
+  it('쓰기와 읽기의 합도 입력을 넘지 못한다', () => {
+    const cost = estimateCost(
+      { promptTokens: 1_000_000, completionTokens: 0, cacheWriteTokens: 900_000, cachedTokens: 900_000, models: ['m1'] },
+      table,
+    );
+    if (cost.kind !== 'exact') throw new Error('exact expected');
+    expect(cost.usd).toBeCloseTo(0.9 * 5 * 1.25 + 0.1 * 0.5);
+  });
+
   it('캐시 단가가 없는 모델은 입력 단가로 친다', () => {
     const cost = estimateCost({ promptTokens: 1_000_000, completionTokens: 0, cachedTokens: 1_000_000, models: ['m2'] }, table);
     if (cost.kind !== 'exact') throw new Error('exact expected');

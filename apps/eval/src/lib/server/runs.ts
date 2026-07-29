@@ -121,6 +121,9 @@ export const spawnAnalysisRun = async (
   }
   // 비용 환산용. 프롬프트는 나중에 고쳐질 수 있어 실행 시각의 모델을 그대로 박아둔다.
   const models = [...new Set(Object.values(promptSet.content).map((p) => p.model))];
+  // 에디토리얼 세트(research 키 보유)는 EditorialWorkflow로 간다 — AnalysisWorkflow는 이 세트의
+  // 단계 구성을 해석하지 못한다. 파라미터 형태는 두 워크플로가 동일하다.
+  const workflow = 'research' in promptSet.content ? env.EDITORIAL : env.ANALYSIS;
 
   const docs = await db
     .select({ id: Documents.id })
@@ -162,7 +165,7 @@ export const spawnAnalysisRun = async (
   for (const doc of docs) {
     await db.insert(PipelineRunDocs).values({ id: nanoid(), runId, documentId: doc.id, status: 'pending', phase: 'queued' });
     try {
-      const instance = await env.ANALYSIS.create({
+      const instance = await workflow.create({
         params: {
           runId,
           promptSetId: input.promptSetId,
@@ -209,8 +212,20 @@ export const spawnSamplingRun = async (
   }
 };
 
+// 스폰과 같은 규칙으로 바인딩을 고른다 — 에디토리얼 세트의 인스턴스는 eval-editorial 소속이라
+// ANALYSIS 바인딩으로는 찾지도(get) 다시 띄우지도(create) 못한다.
+const workflowForSet = async (db: Db, env: Env, promptSetId: string | null): Promise<Env['ANALYSIS'] | Env['EDITORIAL']> => {
+  if (!promptSetId) return env.ANALYSIS;
+  const [set] = await db
+    .select({ content: AnalysisPromptSets.content })
+    .from(AnalysisPromptSets)
+    .where(eq(AnalysisPromptSets.id, promptSetId))
+    .limit(1);
+  return set && 'research' in set.content ? env.EDITORIAL : env.ANALYSIS;
+};
+
 // 구 파이프라인과 재설계 파이프라인은 문서 단위 워크플로라는 점이 같고 바인딩만 다르다.
-const refreshDocs = async (db: Db, workflow: Env['PIPELINE'] | Env['ANALYSIS'], runId: string): Promise<void> => {
+const refreshDocs = async (db: Db, workflow: Env['PIPELINE'] | Env['ANALYSIS'] | Env['EDITORIAL'], runId: string): Promise<void> => {
   const docs = await db.select().from(PipelineRunDocs).where(eq(PipelineRunDocs.runId, runId));
 
   for (const doc of docs) {
@@ -262,7 +277,7 @@ const refreshSamplingInstance = async (db: Db, env: Env, runId: string): Promise
 
 export const refreshRun = async (db: Db, env: Env, runId: string): Promise<void> => {
   const [run] = await db
-    .select({ kind: PipelineRuns.kind, status: PipelineRuns.status })
+    .select({ kind: PipelineRuns.kind, status: PipelineRuns.status, meta: PipelineRuns.meta })
     .from(PipelineRuns)
     .where(eq(PipelineRuns.id, runId))
     .limit(1);
@@ -271,7 +286,8 @@ export const refreshRun = async (db: Db, env: Env, runId: string): Promise<void>
   if (run.kind === 'pipeline') {
     await refreshDocs(db, env.PIPELINE, runId);
   } else if (run.kind === 'analysis') {
-    await refreshDocs(db, env.ANALYSIS, runId);
+    const promptSetId = (run.meta as { promptSetId?: string } | null)?.promptSetId ?? null;
+    await refreshDocs(db, await workflowForSet(db, env, promptSetId), runId);
   } else {
     await refreshSamplingInstance(db, env, runId);
   }
@@ -284,7 +300,10 @@ export const cancelRun = async (db: Db, env: Env, runId: string): Promise<{ ok: 
   }
 
   if (run.kind === 'pipeline' || run.kind === 'analysis') {
-    const workflow = run.kind === 'pipeline' ? env.PIPELINE : env.ANALYSIS;
+    const workflow =
+      run.kind === 'pipeline'
+        ? env.PIPELINE
+        : await workflowForSet(db, env, (run.meta as { promptSetId?: string } | null)?.promptSetId ?? null);
     const docs = await db.select().from(PipelineRunDocs).where(eq(PipelineRunDocs.runId, runId));
     for (const doc of docs) {
       if (TERMINAL_DOC_STATUSES.has(doc.status)) continue;
@@ -349,8 +368,9 @@ export const retryFailedDocs = async (db: Db, env: Env, runId: string): Promise<
       return { error: 'prompt set not resolved' };
     }
     const resolvedSetId = promptSetId;
+    const workflow = await workflowForSet(db, env, resolvedSetId);
     spawnDoc = (documentId) =>
-      env.ANALYSIS.create({
+      workflow.create({
         params: { runId, promptSetId: resolvedSetId, variantLabel: variant.id, corpusVersion: run.corpusVersion, documentId },
       });
   } else {

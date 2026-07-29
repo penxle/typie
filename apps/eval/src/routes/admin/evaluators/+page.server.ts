@@ -1,9 +1,10 @@
-import { error } from '@sveltejs/kit';
+import { error, fail } from '@sveltejs/kit';
 import { desc, eq } from 'drizzle-orm';
 import { effectiveContributions } from '$lib/domain/contributions.ts';
 import { softCap } from '$lib/server/claim.ts';
 import { createDb, EvaluatorConsents, Judgments, Rounds, Tasks } from '$lib/server/db/index.ts';
-import type { PageServerLoad } from './$types';
+import { listRoster } from '$lib/server/participants.ts';
+import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ platform }) => {
   if (!platform) {
@@ -12,15 +13,8 @@ export const load: PageServerLoad = async ({ platform }) => {
 
   const db = createDb(platform.env.DB);
 
-  // 어드민은 평가 인력이 아니므로 명단에서 제외한다 — 최소 몫·미참여 판정을 오염시키지 않게.
-  const adminSet = new Set(
-    (platform.env.ADMIN_EMAILS ?? '')
-      .split(',')
-      .map((e) => e.trim())
-      .filter((e) => e.length > 0),
-  );
-  const allConsents = await db.select({ email: EvaluatorConsents.email }).from(EvaluatorConsents);
-  const consents = allConsents.filter((c) => !adminSet.has(c.email));
+  const roster = await listRoster(db, platform.env.ADMIN_EMAILS ?? '');
+  const consents = roster.filter((c) => c.evaluating);
   // requiredJudgments가 null인 태스크(중복 구간)는 상한 없이 전원이 보는 것이 목표다 — 그 인원이 분모다.
   const participants = Math.max(1, consents.length);
   const rounds = await db.select().from(Rounds).orderBy(desc(Rounds.createdAt));
@@ -99,5 +93,37 @@ export const load: PageServerLoad = async ({ platform }) => {
     });
   }
 
-  return { summaries };
+  return { summaries, roster };
+};
+
+export const actions: Actions = {
+  // 라운드가 도는 중에 바꾸면 중복 구간의 필요 수(분모)가 즉시 달라지므로,
+  // 화면에 그 영향을 함께 보여주고 누른다.
+  participation: async ({ request, platform }) => {
+    if (!platform) {
+      return fail(500, { error: 'platform unavailable' });
+    }
+
+    const form = await request.formData();
+    const email = form.get('email');
+    const evaluating = form.get('evaluating');
+    if (typeof email !== 'string' || email.length === 0) {
+      return fail(400, { error: 'email이 필요합니다.' });
+    }
+    if (evaluating !== 'true' && evaluating !== 'false') {
+      return fail(400, { error: 'evaluating은 true 또는 false여야 합니다.' });
+    }
+
+    const db = createDb(platform.env.DB);
+    const updated = await db
+      .update(EvaluatorConsents)
+      .set({ evaluating: evaluating === 'true' })
+      .where(eq(EvaluatorConsents.email, email))
+      .returning({ email: EvaluatorConsents.email });
+    if (updated.length === 0) {
+      return fail(404, { error: '동의 명단에 없는 이메일입니다.' });
+    }
+
+    return { success: true };
+  },
 };

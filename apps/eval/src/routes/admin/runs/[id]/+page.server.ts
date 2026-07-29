@@ -1,9 +1,10 @@
 import { error } from '@sveltejs/kit';
 import { eq, inArray } from 'drizzle-orm';
 import { anchorMatchRate, categoryComplianceRate, feedbackCountDistribution } from '$lib/domain/aggregate.ts';
-import { costPerCharacter, estimateCost } from '$lib/domain/pricing.ts';
+import { costPerCharacter, estimateCost, sumCosts } from '$lib/domain/pricing.ts';
 import { createDb, Documents, Feedbacks, FeedbackSets, PipelineRunDocs, Variants } from '$lib/server/db/index.ts';
 import { readPriceTable, resolveRunModels } from '$lib/server/pricing.ts';
+import { readStageUsage } from '$lib/server/stage-usage.ts';
 import type { RunDocStatus, RunKind, RunPhase, RunStatus } from '$lib/domain/admin-types.ts';
 import type { PageServerLoad } from './$types';
 
@@ -22,6 +23,8 @@ type RunDetail = {
   completionTokens: number;
   cachedTokens: number;
   error: string | null;
+  // admin API는 run 행 전체를 반환한다 — 세대 판별(에디토리얼 단계 표시)에 promptSetId를 쓴다.
+  meta: Record<string, unknown> | null;
   createdAt: string;
   finishedAt: string | null;
 };
@@ -67,7 +70,7 @@ export const load: PageServerLoad = async ({ params, platform, locals, fetch }) 
   let preview: {
     documentId: string;
     refId: string;
-    feedbacks: { id: string; category: string | null; body: string; matchStart: number | null }[];
+    feedbacks: { id: string; category: string | null; layer: string | null; body: string; matchStart: number | null }[];
   }[] = [];
 
   // 완료된 파이프라인 실행에서만 기계 지표·프리뷰를 계산한다(브리프: "완료 시"). feedbacks/documents는 읽기 전용 select.
@@ -111,7 +114,7 @@ export const load: PageServerLoad = async ({ params, platform, locals, fetch }) 
         feedbacks: feedbacks
           .filter((f) => f.setId === s.setId)
           .toSorted((a, b) => a.ord - b.ord)
-          .map((f) => ({ id: f.id, category: f.category, body: f.body, matchStart: f.matchStart })),
+          .map((f) => ({ id: f.id, category: f.category, layer: f.layer, body: f.body, matchStart: f.matchStart })),
       }));
   }
 
@@ -133,6 +136,12 @@ export const load: PageServerLoad = async ({ params, platform, locals, fetch }) 
     ids.length > 0 ? await db.select({ characterCount: Documents.characterCount }).from(Documents).where(inArray(Documents.id, ids)) : [];
   const characters = sizes.reduce((sum, d) => sum + d.characterCount, 0);
 
+  // 단계마다 모델이 다르면 실행 단위 금액은 '혼합'으로 물러난다. 단계별로는 모델을 알 수 있어
+  // 정확한 총액이 나오므로, 그때는 이쪽을 쓴다.
+  const stages = await readStageUsage(db, run.id);
+  const stageTotal = stages.length > 0 ? sumCosts(stages.map((s) => s.cost)) : null;
+  const krw = cost.kind === 'exact' ? cost.krw : stageTotal?.complete ? stageTotal.krw : null;
+
   return {
     run,
     docs,
@@ -140,8 +149,10 @@ export const load: PageServerLoad = async ({ params, platform, locals, fetch }) 
     summary,
     preview,
     cost,
+    stages,
+    stageTotal,
     models,
     characters,
-    krwPerCharacter: cost.kind === 'exact' ? costPerCharacter(cost.krw, characters) : null,
+    krwPerCharacter: krw === null ? null : costPerCharacter(krw, characters),
   };
 };

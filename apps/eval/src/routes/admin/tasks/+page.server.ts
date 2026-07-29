@@ -1,6 +1,7 @@
 import { error } from '@sveltejs/kit';
 import { desc, eq, inArray, sql } from 'drizzle-orm';
-import { createDb, Documents, EvaluatorConsents, Judgments, Rounds, Tasks } from '$lib/server/db/index.ts';
+import { createDb, Documents, Judgments, Rounds, Tasks } from '$lib/server/db/index.ts';
+import { countParticipants } from '$lib/server/participants.ts';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ platform }) => {
@@ -45,14 +46,7 @@ export const load: PageServerLoad = async ({ platform }) => {
   // 1로 세면 첫 판정에 완료로 보여 남은 몫이 감춰진다.
   let participants = 1;
   if (tasks.some((t) => t.requiredJudgments === null)) {
-    const admins = new Set(
-      (platform.env.ADMIN_EMAILS ?? '')
-        .split(',')
-        .map((e) => e.trim())
-        .filter((e) => e.length > 0),
-    );
-    const consents = await db.select({ email: EvaluatorConsents.email }).from(EvaluatorConsents);
-    participants = Math.max(1, consents.filter((c) => !admins.has(c.email)).length);
+    participants = await countParticipants(db);
   }
 
   return {

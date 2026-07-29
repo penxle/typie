@@ -8,6 +8,7 @@ export const createDb = (d1: D1Database) => drizzle(d1, { schema });
 export type Db = ReturnType<typeof createDb>;
 
 export const {
+  AnalysisStageUsage,
   Documents,
   Variants,
   PromptVariants,

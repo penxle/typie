@@ -30,7 +30,21 @@ export type Scene = {
   boundaryQuality: 'clean' | 'weak' | 'none';
 };
 
-export type FindingKind = 'error' | 'readability' | 'structure' | 'strength';
+export type FindingKind = 'error' | 'readability' | 'structure';
+
+// 비평 계획. 검토는 axes로만 이루어지고 protected는 지적 대상에서 제외된다 —
+// 문서 수준 판단(총평에서 거의 만점)을 생성 앞으로 옮기는 장치다.
+//
+// evidence는 원고에서 글자 그대로 복사한 인용 배열이다. 앵커와 같은 취급 — 코드가
+// 원고와 대조하고, 찾지 못한 인용은 그 자리에서 삭제된다(plan-check).
+export type Plan = {
+  intent: string;
+  protected: { technique: string; evidence: string[]; rationale: string }[];
+  // 검수 발견을 반영하지 않았다면 그 사유. 침묵 기각을 막고, 다음 라운드 검수가
+  // 재론 여부를 정할 수 있게 한다.
+  rejectedFindings: { target: string; reason: string }[];
+  axes: { label: string; description: string; risk: string; evidence: string[] }[];
+};
 
 // observation → cause → direction 3분할이 오라클의 상을 스키마로 강제한다.
 // direction을 별도 필드로 두면 대안 문장 대필이 구조적으로 억제된다.
@@ -40,6 +54,11 @@ export type Finding = {
   matchStart: number | null;
   matchEnd: number | null;
   kind: FindingKind;
+  // 읽다가 멈춘 자리. 이 단계의 기준이 "실제로 멈춘 곳만 적으라"이므로, 그 주장을 말이 아니라
+  // 좌표로 받는다. 조건 없이 모든 지적에 요구한다 — 면제되는 갈래를 하나라도 두면 그리로 몰린다.
+  stumbleQuote: string;
+  stumbleStart: number | null;
+  stumbleEnd: number | null;
   // 이 대목이 하려는 일을 작가의 편에서 읽어낸 것. 라운드 2 라벨 데이터에서 의도를 먼저 읽은
   // 지적이 '핵심 지적'·'즉시 적용 가능'으로 평가받았고, 의도를 건너뛴 지적이 '의도 무시'·'스타일 강요'로 찍혔다.
   intent: string;
@@ -47,6 +66,8 @@ export type Finding = {
   cause: string;
   direction: string;
   evidence: string;
+  // 계획 귀속 검토에서만 존재한다 — 이 지적이 비평 계획의 어느 축을 위한 것인가.
+  axis?: string;
   // 몇 번째 REVIEW 실행에서 나왔는가. 같은 문제를 묶는 일은 COMPOSE가 하며,
   // 한 묶음에 서로 다른 실행이 몇 개나 들어왔는지가 그 지적의 신뢰도가 된다.
   runIndex: number;
@@ -67,16 +88,26 @@ export type FeedbackAnchor = {
 };
 
 // anchors가 비어 있으면 특정 위치에 붙지 않는 지적이다.
+// polarity는 남기되 값은 항상 issue다 — 강점은 이 경로를 타지 않는다.
 export type Feedback = {
   category: string;
-  polarity: 'issue' | 'highlight';
+  polarity: 'issue';
   body: string;
   anchors: FeedbackAnchor[];
 };
 
+// 짚을 곳과 달리 중복 묶기·피드백 쓰기를 거치지 않고 총평으로 바로 간다.
+export type Strength = {
+  quoteStart: string;
+  quoteEnd: string;
+  principle: string;
+  matchStart: number | null;
+  matchEnd: number | null;
+};
+
 export type WorkReview = {
   characterization: string;
-  strengths: string;
+  strengths: { body: string; quoteStart: string; quoteEnd: string }[];
   patterns: { theme: string; body: string }[];
   priority: string;
 };

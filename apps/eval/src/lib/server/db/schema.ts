@@ -71,6 +71,9 @@ export const Feedbacks = sqliteTable('feedbacks', {
   matchEnd: integer('match_end'),
   category: text('category'),
   polarity: text('polarity'),
+  // 지적의 층위 — 'plan'(계획 축 검토) | 'local'(문면 교열: 문장 결·원고 사고). 층위마다
+  // 작가가 받아들일 무게가 달라 표시를 분리한다. 구 파이프라인 행은 null.
+  layer: text('layer'),
   body: text('body').notNull(),
 });
 
@@ -252,6 +255,26 @@ export const PipelineRunDocs = sqliteTable(
   (t) => [uniqueIndex('pipeline_run_docs_run_id_document_id').on(t.runId, t.documentId)],
 );
 
+// 단계별 토큰 사용량. pipeline_runs의 합계만으로는 어느 단계가 비용을 쓰는지 알 수 없어
+// 최적화의 효과를 검증할 수 없다. calls를 함께 세는 이유는 호출당 고정비(reasoning)가
+// 출력 토큰의 상당 부분을 차지하는데 합계만으로는 그 몫이 보이지 않기 때문이다.
+export const AnalysisStageUsage = sqliteTable(
+  'analysis_stage_usage',
+  {
+    runId: text('run_id').notNull(),
+    documentId: text('document_id').notNull(),
+    stage: text('stage').notNull(),
+    calls: integer('calls').notNull().default(0),
+    promptTokens: integer('prompt_tokens').notNull().default(0),
+    completionTokens: integer('completion_tokens').notNull().default(0),
+    // 둘 다 promptTokens에 포함된 값이다(별도 합이 아니다). 캐시 읽기는 입력 단가의 10%,
+    // 쓰기는 1.25배라 서로 반대 방향으로 움직인다 — 나눠 세지 않으면 캐싱의 손익을 못 낸다.
+    cachedTokens: integer('cached_tokens').notNull().default(0),
+    cacheWriteTokens: integer('cache_write_tokens').notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.runId, t.documentId, t.stage] })],
+);
+
 export const StageCache = sqliteTable('stage_cache', {
   key: text('key').primaryKey(),
   value: text('value', { mode: 'json' }).notNull(),
@@ -260,5 +283,8 @@ export const StageCache = sqliteTable('stage_cache', {
 
 export const EvaluatorConsents = sqliteTable('evaluator_consents', {
   email: text('email').primaryKey(),
+  // 동의만으로는 평가자가 되지 않는다 — 어드민이 명단에서 켜야 배정이 열린다(사후승인).
+  // 어드민 권한(ADMIN_EMAILS)과는 무관한 축이다: 어드민이면서 평가자일 수 있다.
+  evaluating: integer('evaluating', { mode: 'boolean' }).notNull().default(false),
   createdAt: createdAt(),
 });

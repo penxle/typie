@@ -1,14 +1,43 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
-  import { Helmet, Icon } from '@typie/ui/components';
+  import { Helmet, Icon, Switch } from '@typie/ui/components';
+  import { Toast } from '@typie/ui/notification';
   import IconCheck from '~icons/lucide/check';
+  import { deserialize } from '$app/forms';
+  import { invalidateAll } from '$app/navigation';
   import type { PageData } from './$types';
 
   type Props = { data: PageData };
   const { data }: Props = $props();
 
   const STAGE_LABELS: Record<string, string> = { screening: '스크리닝', confirmation: '확정' };
+
+  let pending = $state<string | null>(null);
+
+  const setParticipation = async (email: string, evaluating: boolean) => {
+    pending = email;
+    try {
+      const formData = new FormData();
+      formData.set('email', email);
+      formData.set('evaluating', String(evaluating));
+      const response = await fetch('?/participation', { method: 'POST', body: formData });
+      const result = deserialize(await response.text());
+
+      if (result.type === 'failure') {
+        Toast.error((result.data as { error?: string } | undefined)?.error ?? '변경에 실패했습니다.');
+        return;
+      }
+      if (result.type === 'error') {
+        Toast.error(result.error instanceof Error ? result.error.message : '변경에 실패했습니다.');
+        return;
+      }
+
+      await invalidateAll();
+    } finally {
+      pending = null;
+    }
+  };
 
   const formatLastAt = (iso: string | null) => {
     if (!iso) return '—';
@@ -45,6 +74,16 @@
     color: 'accent.warning.default',
   });
 
+  const adminChipClass = css({
+    paddingX: '8px',
+    paddingY: '2px',
+    borderRadius: 'full',
+    fontSize: '11px',
+    fontWeight: 'medium',
+    backgroundColor: 'accent.brand.subtle',
+    color: 'accent.brand.default',
+  });
+
   const tableClass = css({
     width: 'full',
     fontSize: '13px',
@@ -61,6 +100,59 @@
     <h1 class={css({ fontSize: '22px', fontWeight: 'bold' })}>평가자</h1>
     <p class={css({ marginTop: '4px', fontSize: '14px', color: 'text.subtle' })}>라운드별 평가자 참여 현황과 남은 할당량입니다.</p>
   </header>
+
+  <section class={cardClass}>
+    <div class={flex({ align: 'center', gap: '10px' })}>
+      <h2 class={css({ fontSize: '15px', fontWeight: 'bold' })}>참여 명단</h2>
+      <span class={css({ marginLeft: 'auto', fontSize: '13px', color: 'text.faint', fontVariantNumeric: 'tabular-nums' })}>
+        참여 {data.roster.filter((r) => r.evaluating).length}명 / 동의 {data.roster.length}명
+      </span>
+    </div>
+    <p class={css({ marginTop: '4px', fontSize: '12px', color: 'text.faint' })}>
+      동의만으로는 평가가 시작되지 않습니다 — 여기서 켜야 태스크가 배정됩니다. 어드민 권한과는 무관한 축이라 어드민도 켜면 평가자가 됩니다.
+      참여 인원은 중복 구간(필요 수가 정해지지 않은 태스크)의 필요 수이자 최소 몫의 분모라, 라운드 중에 바꾸면 아래 필요 총합이 즉시
+      달라집니다.
+    </p>
+
+    <div class={css({ marginTop: '12px', overflowX: 'auto' })}>
+      <table class={tableClass}>
+        <thead>
+          <tr
+            class={css({
+              '& th': { color: 'text.faint', fontWeight: 'medium', borderBottomWidth: '1px', borderColor: 'border.default' },
+            })}
+          >
+            <th>이메일</th>
+            <th>평가 참여</th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each data.roster as person (person.email)}
+            <tr class={css({ '& td': { borderBottomWidth: '1px', borderColor: 'border.subtle' } })}>
+              <td>
+                <span class={flex({ align: 'center', gap: '6px' })}>
+                  <span class={css({ fontWeight: 'medium', wordBreak: 'break-all' })}>{person.email}</span>
+                  {#if person.admin}
+                    <span class={adminChipClass}>어드민</span>
+                  {/if}
+                </span>
+              </td>
+              <td>
+                <span class={flex({ justify: 'flex-end' })}>
+                  <Switch
+                    name={`evaluating-${person.email}`}
+                    checked={person.evaluating}
+                    disabled={pending !== null}
+                    onchange={(event) => setParticipation(person.email, event.currentTarget.checked)}
+                  />
+                </span>
+              </td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    </div>
+  </section>
 
   {#if data.summaries.length === 0}
     <section class={cardClass}>

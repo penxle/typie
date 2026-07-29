@@ -1,0 +1,1 @@
+ALTER TABLE `analysis_stage_usage` ADD `cache_write_tokens` integer DEFAULT 0 NOT NULL;

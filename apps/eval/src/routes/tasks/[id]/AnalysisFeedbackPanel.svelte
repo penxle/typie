@@ -8,7 +8,7 @@
   // 피드백은 카드가 아니라 원고 여백에 적힌 메모다. 마흔 건에 상자를 하나씩 두르면
   // 상자끼리 경쟁해 눈이 갈 곳을 잃는다 — 매다는 번호와 여백만으로 구분한다.
   type Anchor = { matchStart: number | null; matchEnd: number | null };
-  type Feedback = { id: string; category: string | null; polarity: string | null; body: string; anchors: Anchor[] };
+  type Feedback = { id: string; category: string | null; polarity: string | null; layer?: string | null; body: string; anchors: Anchor[] };
   type Props = {
     feedbacks: Feedback[];
     verdicts: FeedbackVerdictMap;
@@ -19,8 +19,10 @@
     // 읽기 전용 열람에서는 판정 문항을 아예 걸지 않는다 — 저장되지 않는 입력을 보여주면
     // 답하라는 뜻으로 읽힌다.
     readOnly?: boolean;
+    // 탭이 층위별로 목록을 나눠 넘기므로 전역 번호는 호출부가 준다 — 총평·레일 참조와 어긋나지 않게.
+    numbers?: Record<string, number>;
   };
-  const { feedbacks, verdicts, focusedId = null, onUpdate, onHover, onSelect, readOnly = false }: Props = $props();
+  const { feedbacks, verdicts, focusedId = null, onUpdate, onHover, onSelect, readOnly = false, numbers }: Props = $props();
 
   let anchorCursors = $state<Record<string, number>>({});
 
@@ -91,7 +93,7 @@
           color: 'text.subtle',
         })}
       >
-        {i + 1}
+        {numbers?.[feedback.id] ?? i + 1}
       </span>
 
       <div class={css({ minWidth: '0' })}>

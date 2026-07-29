@@ -72,10 +72,41 @@
     </section>
   {/if}
 
-  {#if review.strengths}
+  {#if review.strengths.length > 0}
     <section class={sectionClass}>
       <h2 class={headingClass}>잘 되고 있는 것</h2>
-      <p class={bodyClass}>{review.strengths}</p>
+      <div class={flex({ direction: 'column', gap: '16px' })}>
+        {#each review.strengths as strength, i (i)}
+          <div>
+            <p class={bodyClass}>{strength.body}</p>
+            <!-- 인용은 강점이 어느 대목인지 가리키는 유일한 단서다. 옛 실행에는 없어 조건부로 둔다. -->
+            {#if strength.quoteStart}
+              <p class={css({ marginTop: '4px', fontSize: '12px', color: 'text.subtle' })}>
+                {strength.quoteStart}
+                {#if strength.quoteEnd && strength.quoteEnd !== strength.quoteStart}
+                  … {strength.quoteEnd}
+                {/if}
+              </p>
+            {/if}
+          </div>
+        {/each}
+      </div>
+    </section>
+  {/if}
+
+  {#if review.cleared.length > 0}
+    <section class={sectionClass}>
+      <h2 class={headingClass}>살펴봤지만 문제가 없던 것</h2>
+      <div class={flex({ direction: 'column', gap: '16px' })}>
+        {#each review.cleared as item, i (i)}
+          <div>
+            <h3 class={css({ marginBottom: '2px', fontSize: '14px', fontWeight: 'bold', color: 'text.default' })}>
+              {item.axis}
+            </h3>
+            <p class={bodyClass}>{item.note}</p>
+          </div>
+        {/each}
+      </div>
     </section>
   {/if}
 

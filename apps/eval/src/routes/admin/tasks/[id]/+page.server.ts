@@ -49,7 +49,7 @@ export const load: PageServerLoad = async ({ params, platform }) => {
       })),
   }));
 
-  const round = await effectiveProgress(db, platform.env.ADMIN_EMAILS ?? '');
+  const round = await effectiveProgress(db);
 
   return {
     isAnalysis,

@@ -22,6 +22,7 @@
   import FeedbackSetPanel from './FeedbackSetPanel.svelte';
   import FindingRail from './FindingRail.svelte';
   import WorkReviewPanel from './WorkReviewPanel.svelte';
+  import type { Snippet } from 'svelte';
   import type { FeedbackLabelEntry, FeedbackLabelMap } from '$lib/domain/feedback-labels.ts';
   import type { JudgmentResult, PairVerdict } from '$lib/domain/types.ts';
   import type { FeedbackVerdict, FeedbackVerdictMap, ReviewVerdictMap } from '$lib/domain/verdicts.ts';
@@ -30,8 +31,8 @@
 
   // evaluate = 실제 평가, preview = 어드민 점검(조작은 되지만 저장 안 됨),
   // read = 열람 전용(판정 문항과 제출을 아예 걸지 않는다).
-  type Props = { data: PageData; mode?: 'evaluate' | 'preview' | 'read' };
-  const { data, mode = 'evaluate' }: Props = $props();
+  type Props = { data: PageData; mode?: 'evaluate' | 'preview' | 'read'; headerAccessory?: Snippet };
+  const { data, mode = 'evaluate', headerAccessory }: Props = $props();
 
   const preview = $derived(mode === 'preview');
   const readOnly = $derived(mode === 'read');
@@ -103,7 +104,7 @@
   let focusedFeedbackId = $state<string | null>(null);
   let focusedAnchorKey = $state<string | null>(null);
   let activeSetIndex = $state(0);
-  let activeTab = $state<'review' | 'findings'>('review');
+  let activeTab = $state<'review' | 'plan' | 'local'>('review');
   let savedAt = $state<string | null>(null);
   let saving = $state(false);
   let submitting = $state(false);
@@ -113,7 +114,7 @@
   let documentPaneEl = $state<HTMLElement | undefined>();
   let reviewPaneEl = $state<HTMLElement | undefined>();
   let findingsPaneEl = $state<HTMLElement | undefined>();
-  const paneScrollTops: Record<'review' | 'findings', number> = { review: 0, findings: 0 };
+  const paneScrollTops: Record<'review' | 'plan' | 'local', number> = { review: 0, plan: 0, local: 0 };
   let documentViewport = $state<{ start: number; end: number } | null>(null);
 
   const outlineButtonClass = css({
@@ -220,6 +221,17 @@
 
   // '남음'은 세 항목을 다 채우지 못한 피드백 수다. 하나라도 비면 그 피드백은 집계에 쓸 수 없다.
   const pendingCount = $derived(activeSet.feedbacks.filter((f) => !isFeedbackComplete(verdictMap[f.id])).length);
+
+  // 층위 분리 탭 — 작품 검토(계획 축)와 문면 교열(문장 결·원고 사고)은 받아들일 무게가 다르다.
+  // layer가 없는 구 실행 행은 category로 보정한다.
+  const LOCAL_CATEGORIES = new Set(['문장 결', '원고 사고']);
+  const isLocalFeedback = (f: { layer?: string | null; category: string | null }) =>
+    f.layer === 'local' || (!f.layer && f.category !== null && LOCAL_CATEGORIES.has(f.category));
+  const planFeedbacks = $derived(activeSet.feedbacks.filter((f) => !isLocalFeedback(f)));
+  const localFeedbacks = $derived(activeSet.feedbacks.filter((f) => isLocalFeedback(f)));
+  const hasLocal = $derived(localFeedbacks.length > 0);
+  const pendingPlan = $derived(planFeedbacks.filter((f) => !isFeedbackComplete(verdictMap[f.id])).length);
+  const pendingLocal = $derived(localFeedbacks.filter((f) => !isFeedbackComplete(verdictMap[f.id])).length);
   // 제출 조건 — 배정된 세트마다 피드백 전부와 총평 두 문항이 채워져야 한다.
   const analysisComplete = $derived.by(() => {
     if (!data.isAnalysis) return true;
@@ -243,14 +255,15 @@
     container.scrollTo({ top: container.scrollTop + offset, behavior: reducedMotion() ? 'auto' : 'smooth' });
   };
 
-  const switchTab = (tab: 'review' | 'findings') => {
+  const switchTab = (tab: 'review' | 'plan' | 'local') => {
     if (tab === activeTab) return;
-    const current = activeTab === 'review' ? reviewPaneEl : findingsPaneEl;
+    const paneOf = (t: typeof tab) => (t === 'review' ? reviewPaneEl : findingsPaneEl);
+    const current = paneOf(activeTab);
     if (current) paneScrollTops[activeTab] = current.scrollTop;
     activeTab = tab;
     requestAnimationFrame(() => {
-      const next = tab === 'review' ? reviewPaneEl : findingsPaneEl;
-      if (next) next.scrollTop = paneScrollTops[tab];
+      const next = paneOf(tab);
+      if (next) next.scrollTop = paneScrollTops[tab] ?? 0;
     });
   };
 
@@ -262,7 +275,8 @@
       if (el && findingsPaneEl) scrollWithin(findingsPaneEl, el);
       return;
     }
-    switchTab('findings');
+    const target = activeSet.feedbacks.find((f) => f.id === feedbackId);
+    switchTab(target && isLocalFeedback(target) ? 'local' : 'plan');
     requestAnimationFrame(() => {
       const el = document.querySelector<HTMLElement>(`[data-feedback-card="${feedbackId}"]`);
       if (el && findingsPaneEl) scrollWithin(findingsPaneEl, el);
@@ -439,7 +453,7 @@
     if (e.key === 'j') stepFeedback(1);
     else if (e.key === 'k') stepFeedback(-1);
     else if (e.key === 'u') jumpToPending();
-    else if (e.key === 'r') switchTab(activeTab === 'review' ? 'findings' : 'review');
+    else if (e.key === 'r') switchTab(activeTab === 'review' ? 'plan' : activeTab === 'plan' && hasLocal ? 'local' : 'review');
   };
 
   const readingMinutes = $derived(Math.max(1, Math.round(data.document.characterCount / 500)));
@@ -531,27 +545,29 @@
         </div>
       </div>
     {/if}
-    <span
-      class={flex({
-        align: 'center',
-        gap: '4px',
-        marginLeft: 'auto',
-        fontSize: '13px',
-        color: 'text.faint',
-        fontVariantNumeric: 'tabular-nums',
-      })}
-    >
-      {data.document.characterCount.toLocaleString()}자 · 약 {readingMinutes}분
-      {#if saving}
-        · 저장 중…
-      {:else if submitError}
-        <!-- 실패한 뒤에도 마지막 성공 시각이 남아 있으면 저장된 것으로 읽힌다. -->
-        ·
-        <span class={css({ color: 'text.danger', fontWeight: 'medium' })}>저장되지 않음</span>
-      {:else if savedAt}
-        · <Icon icon={IconCheck} size={12} /> 임시 저장됨 {savedAt}
-      {/if}
-    </span>
+    <div class={flex({ align: 'center', gap: '16px', marginLeft: 'auto' })}>
+      {@render headerAccessory?.()}
+      <span
+        class={flex({
+          align: 'center',
+          gap: '4px',
+          fontSize: '13px',
+          color: 'text.faint',
+          fontVariantNumeric: 'tabular-nums',
+        })}
+      >
+        {data.document.characterCount.toLocaleString()}자 · 약 {readingMinutes}분
+        {#if saving}
+          · 저장 중…
+        {:else if submitError}
+          <!-- 실패한 뒤에도 마지막 성공 시각이 남아 있으면 저장된 것으로 읽힌다. -->
+          ·
+          <span class={css({ color: 'text.danger', fontWeight: 'medium' })}>저장되지 않음</span>
+        {:else if savedAt}
+          · <Icon icon={IconCheck} size={12} /> 임시 저장됨 {savedAt}
+        {/if}
+      </span>
+    </div>
     <ThemeToggle />
   </header>
 
@@ -725,14 +741,24 @@
              각자 스크롤을 갖게 하고 전환 시 위치를 되돌려 읽던 자리를 지킨다. -->
         <div class={flex({ paddingX: '16px', borderBottomWidth: '1px', borderColor: 'border.default', flexShrink: '0' })}>
           <button class={tabClass(activeTab === 'review')} onclick={() => switchTab('review')} type="button">작품 총평</button>
-          <button class={tabClass(activeTab === 'findings')} onclick={() => switchTab('findings')} type="button">
-            피드백 {activeSet.feedbacks.length}건
-            {#if pendingCount > 0 && !readOnly}
+          <button class={tabClass(activeTab === 'plan')} onclick={() => switchTab('plan')} type="button">
+            작품 검토 {planFeedbacks.length}건
+            {#if pendingPlan > 0 && !readOnly}
               <span class={css({ fontWeight: 'normal', color: 'text.faint', fontVariantNumeric: 'tabular-nums' })}>
-                {pendingCount} 남음
+                {pendingPlan} 남음
               </span>
             {/if}
           </button>
+          {#if hasLocal}
+            <button class={tabClass(activeTab === 'local')} onclick={() => switchTab('local')} type="button">
+              문면 교열 {localFeedbacks.length}건
+              {#if pendingLocal > 0 && !readOnly}
+                <span class={css({ fontWeight: 'normal', color: 'text.faint', fontVariantNumeric: 'tabular-nums' })}>
+                  {pendingLocal} 남음
+                </span>
+              {/if}
+            </button>
+          {/if}
         </div>
 
         <div
@@ -752,12 +778,13 @@
 
         <div
           bind:this={findingsPaneEl}
-          style:display={activeTab === 'findings' ? 'block' : 'none'}
+          style:display={activeTab === 'review' ? 'none' : 'block'}
           class={css({ flex: '1', overflowY: 'auto', paddingY: '4px', minHeight: '0' })}
         >
           <AnalysisFeedbackPanel
-            feedbacks={activeSet.feedbacks}
+            feedbacks={activeTab === 'local' ? localFeedbacks : planFeedbacks}
             focusedId={focusedFeedbackId}
+            numbers={feedbackNumbers}
             onHover={(id) => (hoveredFeedbackId = id)}
             onSelect={focusAnchor}
             onUpdate={updateVerdict}

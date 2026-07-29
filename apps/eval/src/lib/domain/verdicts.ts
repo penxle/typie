@@ -53,14 +53,41 @@ export const hasRejection = (v: FeedbackVerdict | undefined): boolean =>
 // 작품 총평. 파이프라인이 넣은 그대로라 스키마 밖 값이 섞일 수 있어 방어적으로 읽는다.
 // feedbackIndexes는 세트 안 피드백 순번이며 0-based다(실행 데이터로 확인). 화면 번호는 1-based라
 // 표시할 때 1을 더한다. 값이 아예 없는 실행도 있어 빈 배열을 허용한다.
+export type ReviewStrength = { body: string; quoteStart: string; quoteEnd: string; matchStart: number | null; matchEnd: number | null };
+
 export type WorkReview = {
   characterization: string;
-  strengths: string;
+  strengths: ReviewStrength[];
+  // v1.12부터 — 검토했으나 지적이 없었던 계획 축. 이전 실행의 총평에는 없다.
+  cleared: { axis: string; note: string }[];
   patterns: { theme: string; body: string; feedbackIndexes: number[] }[];
   priority: { body: string; feedbackIndexes: number[] }[];
 };
 
 const asText = (value: unknown): string => (typeof value === 'string' ? value : '');
+
+const asPosition = (value: unknown): number | null => (Number.isSafeInteger(value) ? (value as number) : null);
+
+// 강점은 문단 하나였다가 위치를 가진 목록이 되었다. 라운드 3까지의 실행은 문자열로 저장돼 있고
+// 그 데이터는 계속 열람되므로, 옛 모양은 위치 없는 항목 하나로 읽는다.
+const asStrengths = (value: unknown): ReviewStrength[] => {
+  if (typeof value === 'string') {
+    return value.trim() ? [{ body: value, quoteStart: '', quoteEnd: '', matchStart: null, matchEnd: null }] : [];
+  }
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((s) => {
+      const source = (s ?? {}) as Record<string, unknown>;
+      return {
+        body: asText(source.body),
+        quoteStart: asText(source.quoteStart),
+        quoteEnd: asText(source.quoteEnd),
+        matchStart: asPosition(source.matchStart),
+        matchEnd: asPosition(source.matchEnd),
+      };
+    })
+    .filter((s) => s.body);
+};
 
 const asIndexes = (value: unknown): number[] =>
   Array.isArray(value) ? [...new Set(value.filter((n): n is number => Number.isSafeInteger(n) && n >= 0))] : [];
@@ -70,7 +97,13 @@ export const parseWorkReview = (raw: unknown): WorkReview | null => {
   const source = raw as Record<string, unknown>;
   return {
     characterization: asText(source.characterization),
-    strengths: asText(source.strengths),
+    strengths: asStrengths(source.strengths),
+    cleared: (Array.isArray(source.cleared) ? source.cleared : [])
+      .map((c) => ({
+        axis: asText((c as Record<string, unknown>)?.axis),
+        note: asText((c as Record<string, unknown>)?.note),
+      }))
+      .filter((c) => c.axis && c.note),
     patterns: (Array.isArray(source.patterns) ? source.patterns : [])
       .map((p) => ({
         theme: asText((p as Record<string, unknown>)?.theme),

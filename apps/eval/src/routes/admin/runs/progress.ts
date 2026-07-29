@@ -1,6 +1,6 @@
 import type { RunKind, RunPhase } from '$lib/domain/admin-types.ts';
 
-export const KIND_LABELS: Record<RunKind, string> = { pipeline: '파이프라인', sampling: '샘플링', analysis: '분석' };
+export const KIND_LABELS: Record<RunKind, string> = { pipeline: '파이프라인', sampling: '샘플링', analysis: '분석', judge: '판정' };
 
 export const PHASE_LABELS: Record<RunPhase, string> = {
   candidates: '후보 수집',
@@ -24,7 +24,7 @@ export const formatProgressSummary = (run: ProgressRun): string => {
     return `${run.doneChunks.toLocaleString()}/${run.totalChunks.toLocaleString()} 청크`;
   }
 
-  if (run.kind === 'analysis') {
+  if (run.kind === 'analysis' || run.kind === 'judge') {
     return `${run.doneDocs.toLocaleString()}/${run.totalDocs.toLocaleString()} 문서`;
   }
 

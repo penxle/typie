@@ -8,6 +8,6 @@ export const POST: RequestHandler = async ({ platform, locals }) => {
     error(500, 'platform unavailable');
   }
   const db = createDb(platform.env.DB);
-  const taskId = await claimNextTask(db, locals.email, platform.env.ADMIN_EMAILS ?? '');
+  const taskId = await claimNextTask(db, locals.email);
   return json({ taskId });
 };
