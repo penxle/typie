@@ -187,6 +187,10 @@ function sameViewport(a: Viewport, b: Viewport): boolean {
   return a.width === b.width && a.height === b.height && a.scale_factor === b.scale_factor;
 }
 
+function isContinuousLayout(rootAttrs: PlainRootNode | undefined): boolean {
+  return rootAttrs?.layout_mode.type === 'continuous';
+}
+
 export function browserScaleFactor(): number {
   if (typeof window === 'undefined') {
     return 1;
@@ -536,6 +540,8 @@ export class Editor {
       const previous = this.#applied;
       const pageGeometryDataChanged =
         fields.has('doc') || fields.has('external_elements') || fields.has('table_overlays') || fields.has('link_rects');
+      const rootAttrs = fields.has('root_attrs') ? core.root_attrs() : previous.rootAttrs;
+      const continuous = isContinuousLayout(rootAttrs);
       let pageData = previous.pageData;
 
       if (pageGeometryDataChanged) {
@@ -544,7 +550,7 @@ export class Editor {
         for (const page of this.#visualHost?.targets.keys() ?? []) {
           nextPageData.set(page, {
             externalElements: core.page_external_elements(page),
-            tableOverlays: core.page_table_overlays(page),
+            tableOverlays: continuous ? [] : core.page_table_overlays(page),
             linkRects: core.page_link_rects(page),
           });
         }
@@ -564,10 +570,14 @@ export class Editor {
         pageSizes: fields.has('page_sizes') ? core.page_sizes() : previous.pageSizes,
         pageBackingSizes: fields.has('page_sizes') ? core.page_backing_sizes() : previous.pageBackingSizes,
         externalElements: fields.has('external_elements') ? core.external_elements() : previous.externalElements,
-        tableOverlays: pageGeometryDataChanged ? [...pageData.values()].flatMap((page) => page.tableOverlays) : previous.tableOverlays,
+        tableOverlays: pageGeometryDataChanged
+          ? continuous
+            ? core.table_overlays()
+            : [...pageData.values()].flatMap((page) => page.tableOverlays)
+          : previous.tableOverlays,
         linkRects: pageGeometryDataChanged ? [...pageData.values()].flatMap((page) => page.linkRects) : previous.linkRects,
         pageData,
-        rootAttrs: fields.has('root_attrs') ? core.root_attrs() : previous.rootAttrs,
+        rootAttrs,
         rootModifiers: fields.has('block') || fields.has('modifiers') ? core.root_modifiers() : previous.rootModifiers,
         trackedRanges: fields.has('tracked_ranges') ? core.tracked_ranges() : previous.trackedRanges,
       };
@@ -1141,12 +1151,13 @@ export class Editor {
   #refreshAppliedPageData(pages: Iterable<number>): void {
     // eslint-disable-next-line svelte/prefer-svelte-reactivity
     const pageData = new Map(this.#applied.pageData);
+    const continuous = isContinuousLayout(this.#applied.rootAttrs);
     let changed = false;
     this.#invokeCore((core) => {
       for (const page of pages) {
         pageData.set(page, {
           externalElements: core.page_external_elements(page),
-          tableOverlays: core.page_table_overlays(page),
+          tableOverlays: continuous ? [] : core.page_table_overlays(page),
           linkRects: core.page_link_rects(page),
         });
         changed = true;
@@ -1156,9 +1167,17 @@ export class Editor {
     this.#applied = {
       ...this.#applied,
       pageData,
-      tableOverlays: [...pageData.values()].flatMap((page) => page.tableOverlays),
+      tableOverlays: this.#tableOverlaysFor(pageData),
       linkRects: [...pageData.values()].flatMap((page) => page.linkRects),
     };
+  }
+
+  // Continuous overlays are document-scoped: the engine merges the page fragments of a
+  // split table into one overlay per table, so page mounts must not re-derive them from
+  // page-local fragments (which repeat the same table_id).
+  #tableOverlaysFor(pageData: ReadonlyMap<number, PageSnapshot>): TableOverlay[] {
+    if (isContinuousLayout(this.#applied.rootAttrs)) return this.#applied.tableOverlays;
+    return [...pageData.values()].flatMap((page) => page.tableOverlays);
   }
 
   #removeAppliedPageData(pages: Iterable<number>): void {
@@ -1170,7 +1189,7 @@ export class Editor {
       this.#applied = {
         ...this.#applied,
         pageData,
-        tableOverlays: [...pageData.values()].flatMap((page) => page.tableOverlays),
+        tableOverlays: this.#tableOverlaysFor(pageData),
         linkRects: [...pageData.values()].flatMap((page) => page.linkRects),
       };
     }

@@ -4,7 +4,7 @@ import { Editor } from './editor.svelte';
 import { createTrackedEffect } from './editor-effect-harness.svelte';
 import PageLifecycleTestHost from './page-lifecycle-test-host.svelte';
 import { snapshot } from './registry';
-import type { Size, TickResult, TrackedRange } from '@typie/editor-ffi/browser';
+import type { PlainRootNode, Size, TickResult, TrackedRange } from '@typie/editor-ffi/browser';
 
 const wasmHarness = vi.hoisted(() => ({
   createEditor: vi.fn(),
@@ -83,6 +83,7 @@ function createCore() {
     selection_endpoints: vi.fn(() => void 0),
     selection: vi.fn(() => void 0),
     tracked_ranges: vi.fn<() => TrackedRange[]>(() => []),
+    root_attrs: vi.fn<() => PlainRootNode>(() => ({}) as PlainRootNode),
     cursor: vi.fn(() => void 0),
     root_modifiers: vi.fn(() => []),
     modifier_state: vi.fn(() => void 0),
@@ -1106,6 +1107,30 @@ describe('Editor guarded core invocation', () => {
     expect(core.link_rects).not.toHaveBeenCalled();
     expect(editor.tableOverlays).toEqual([{ table_id: 'table-1' }]);
     expect(editor.linkRects).toEqual([{ href: 'https://example.com' }]);
+
+    releaseHost();
+    editor.destroy();
+  });
+
+  it('keeps continuous table overlays document-scoped so a split table is not repeated per page', async () => {
+    const { editor, core } = await createEditor();
+    const releaseHost = editor.activateVisualHost();
+    core.root_attrs.mockReturnValue({ layout_mode: { type: 'continuous', max_width: 800 } } as PlainRootNode);
+    core.page_table_overlays.mockReturnValue([{ table_id: 'table-1' }] as never);
+    core.table_overlays.mockReturnValue([{ table_id: 'table-1', page_idx: 0 }] as never);
+    editor.attachSurface(0, document.createElement('canvas'), 100, 100);
+    editor.attachSurface(1, document.createElement('canvas'), 100, 100);
+    core.tick.mockReturnValue({
+      revision: { value: 2 },
+      events: [{ type: 'state_changed', fields: ['root_attrs', 'table_overlays'] }],
+      request_outcomes: [],
+    });
+
+    editor.enqueue({ type: 'history', op: { type: 'undo' } });
+    frames.at(-1)?.(0);
+
+    expect(editor.tableOverlays).toEqual([{ table_id: 'table-1', page_idx: 0 }]);
+    expect(new Set(editor.tableOverlays.map((overlay) => overlay.table_id)).size).toBe(editor.tableOverlays.length);
 
     releaseHost();
     editor.destroy();
