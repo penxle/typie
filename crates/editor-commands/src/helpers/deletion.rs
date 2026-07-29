@@ -10,8 +10,8 @@ use editor_transaction::{Step, Transaction, first_child_type, fulfill, minimal_s
 use super::{
     apply_carry_from_selection, apply_carry_on_emptied, capture_first_charlike_paint,
     cell_first_charlike_block, child_elem_id, find_ancestor_textblock, find_lowest_common_ancestor,
-    is_block_container, materialize_selection_endpoints, merge_element_cross_parent, next_sibling,
-    path_from_ancestor,
+    is_block_container, is_list_type, materialize_selection_endpoints, merge_element_cross_parent,
+    next_sibling, path_from_ancestor,
 };
 use crate::{CommandError, CommandResult};
 
@@ -1196,7 +1196,9 @@ fn merge_after_delete(
         }
     }
 
-    // Container-level merge: walk up, merge adjacent same-type siblings.
+    // Container-level merge: walk up through the boundary removed by the
+    // selection. Same-type containers merge normally; adjacent lists also
+    // merge across kinds, preserving the earlier list's type.
     let mut from_current = {
         let view = tr.state().view();
         view.node(from_tb).and_then(|n| n.parent()).map(|p| p.id())
@@ -1207,81 +1209,54 @@ fn merge_after_delete(
             break;
         }
 
-        let (next_id, next_same_type, parent_id, is_list_item) = {
+        let (next_id, next_mergeable, parent_id, seam_lists) = {
             let view = tr.state().view();
             let Some(from_node) = view.node(from_id) else {
                 break;
             };
             match next_sibling(&from_node) {
                 Some(ChildView::Block(next)) => {
-                    let same = next.node_type() == from_node.node_type();
+                    let same_type = next.node_type() == from_node.node_type();
+                    let list_pair =
+                        is_list_type(from_node.node_type()) && is_list_type(next.node_type());
+                    let seam_lists = if from_node.node_type() == NodeType::ListItem && same_type {
+                        let left = from_node
+                            .child_blocks()
+                            .filter(|child| child.id().as_op_dot().is_some())
+                            .last();
+                        let right = next
+                            .child_blocks()
+                            .find(|child| child.id().as_op_dot().is_some());
+                        match (left, right) {
+                            (Some(left), Some(right))
+                                if is_list_type(left.node_type())
+                                    && is_list_type(right.node_type()) =>
+                            {
+                                Some((left.id(), right.id()))
+                            }
+                            _ => None,
+                        }
+                    } else {
+                        None
+                    };
                     (
                         Some(next.id()),
-                        same,
+                        same_type || list_pair,
                         from_node.parent().map(|p| p.id()),
-                        from_node.node_type() == NodeType::ListItem,
+                        seam_lists,
                     )
                 }
-                Some(ChildView::Leaf(_)) => {
-                    (None, false, from_node.parent().map(|p| p.id()), false)
-                }
-                None => (None, false, from_node.parent().map(|p| p.id()), false),
+                Some(ChildView::Leaf(_)) => (None, false, from_node.parent().map(|p| p.id()), None),
+                None => (None, false, from_node.parent().map(|p| p.id()), None),
             }
         };
 
         match next_id {
-            Some(next_id) if next_same_type => {
-                if is_list_item {
-                    let (target_sublist, moved_sublist) = {
-                        let view = tr.state().view();
-                        let target_sublist = view.node(from_id).and_then(|n| {
-                            n.child_blocks()
-                                .find(|c| {
-                                    matches!(
-                                        c.node_type(),
-                                        NodeType::BulletList | NodeType::OrderedList
-                                    )
-                                })
-                                .map(|c| c.id())
-                        });
-                        let moved_sublist = view.node(next_id).and_then(|n| {
-                            n.child_blocks()
-                                .find(|c| {
-                                    matches!(
-                                        c.node_type(),
-                                        NodeType::BulletList | NodeType::OrderedList
-                                    )
-                                })
-                                .map(|c| c.id())
-                        });
-                        (target_sublist, moved_sublist)
-                    };
-
-                    if let Some(moved_id) = moved_sublist {
-                        match target_sublist {
-                            // A list item cannot hold two sublists (normalization
-                            // drops the second), so relocate the next item's
-                            // sublist ITEMS into the existing sublist rather than
-                            // moving the sublist whole.
-                            Some(target_id) => merge_containers(tr, target_id, moved_id)?,
-                            None => {
-                                let from_len = {
-                                    let view = tr.state().view();
-                                    view.node(from_id)
-                                        .map(|n| {
-                                            n.children()
-                                                .filter(|c| child_elem_id(c).as_op_dot().is_some())
-                                                .count()
-                                        })
-                                        .unwrap_or(0)
-                                };
-                                tr.move_node(moved_id, from_id, from_len)?;
-                            }
-                        }
-                    }
+            Some(_) if next_mergeable => {
+                if let Some((target_list, source_list)) = seam_lists {
+                    merge_containers(tr, target_list, source_list)?;
                 }
 
-                let _ = next_id;
                 merge_with_next_sibling(tr, from_id)?;
                 from_current = parent_id;
             }

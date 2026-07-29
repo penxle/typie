@@ -1254,9 +1254,8 @@ mod tests {
     }
 
     #[test]
-    fn extra_paragraph_in_list_item_becomes_sibling_item() {
-        // <li><p>a</p><p>b</p></li> — the surplus Paragraph is SPLIT-HOISTed to the
-        // list level and WRAPped into its own ListItem: siblings, not a merge.
+    fn multiple_paragraphs_in_list_item_stay_in_one_item() {
+        // <li><p>a</p><p>b</p></li> is schema-valid and is preserved as one item.
         let a = Dot::new(1, 4);
         let b = Dot::new(1, 6);
         let tree = raw_root(vec![raw_block_child(
@@ -1276,7 +1275,9 @@ mod tests {
         let order = preorder_real_dots(&flat);
         assert!(index_of(&order, a) < index_of(&order, b), "a precedes b");
         let list = flat.get(Dot::new(1, 1)).expect("bullet list present");
-        assert_eq!(list.children.len(), 2, "two sibling ListItems");
+        assert_eq!(list.children.len(), 1, "one ListItem");
+        let item = flat.get(Dot::new(1, 2)).expect("list item present");
+        assert_eq!(item.children.len(), 2, "two direct paragraphs");
         assert!(valid(&out).is_ok());
     }
 
@@ -2413,7 +2414,7 @@ mod tests {
     }
 
     #[test]
-    fn normalize_window_forest_for_container_terminal_split_hoists_and_forest_truncates() {
+    fn normalize_window_forest_for_list_item_preserves_multiple_paragraphs() {
         let container_id = Dot::new(1, 2);
         let first_para = Dot::new(1, 3);
         let second_para = Dot::new(1, 5);
@@ -2429,10 +2430,11 @@ mod tests {
             children,
             &mut stats,
         );
-        assert_eq!(forest.len(), 1);
+        assert_eq!(forest.len(), 2);
         assert!(matches!(&forest[0], RawChild::Block(b) if b.id == first_para));
-        assert_eq!(hoisted.len(), 1);
-        assert!(matches!(&hoisted[0], RawChild::Block(b) if b.id == second_para));
+        assert!(matches!(&forest[1], RawChild::Block(b) if b.id == second_para));
+        assert!(hoisted.is_empty());
+        assert_eq!(stats.repairs, 0);
     }
 
     mod proptests {

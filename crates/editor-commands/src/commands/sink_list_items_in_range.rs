@@ -49,4 +49,19 @@ mod tests {
         };
         assert_state_eq!(&actual, &expected);
     }
+
+    #[test]
+    fn unsinkable_range_returns_false() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    bullet_list { list_item { p1: paragraph { text("AB") } } }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0) -> (p1, 2)
+        };
+        let (actual, ..) = transact_fail!(initial.clone(), |tr| sink_list_items_in_range(&mut tr));
+        assert_state_eq!(&actual, &initial);
+    }
 }

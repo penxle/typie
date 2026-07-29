@@ -1157,6 +1157,92 @@ mod tests {
     }
 
     #[test]
+    fn multi_block_list_item_delete_merges_only_sublists_at_splice_seam() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item {
+                            paragraph { text("A") }
+                            ordered_list {
+                                list_item { paragraph { text("X") } }
+                            }
+                            p1: paragraph { text("T") }
+                        }
+                        list_item {
+                            p2: paragraph { text("B") }
+                            bullet_list {
+                                list_item { paragraph { text("Y") } }
+                            }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 1) -> (p2, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item {
+                            paragraph { text("A") }
+                            ordered_list {
+                                list_item { paragraph { text("X") } }
+                            }
+                            p1: paragraph { text("TB") }
+                            bullet_list {
+                                list_item { paragraph { text("Y") } }
+                            }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 1)
+        };
+        assert_state_eq!(&actual, &expected);
+        assert_projection_integrity(&actual);
+    }
+
+    #[test]
+    fn multi_block_list_item_delete_joins_different_outer_list_kinds() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    ordered_list {
+                        list_item { paragraph { text("A") } }
+                        list_item { p1: paragraph { text("B") } }
+                    }
+                    bullet_list {
+                        list_item { p2: paragraph { text("C") } }
+                        list_item { paragraph { text("D") } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0) -> (p2, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    ordered_list {
+                        list_item { paragraph { text("A") } }
+                        list_item { p1: paragraph { text("C") } }
+                        list_item { paragraph { text("D") } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+        assert_projection_integrity(&actual);
+    }
+
+    #[test]
     fn cross_paragraph_range_delete_drops_trailing_page_break() {
         // `from` is the paragraph-anchored cursor at offset 2 (past p1's
         // trailing page_break), so delete_from's sibling sweep would leave

@@ -1,12 +1,8 @@
-use editor_crdt::Dot;
 use editor_model::{ChildView, NodeType, Subtree};
 use editor_state::{Position, Selection};
-use editor_transaction::Transaction;
+use editor_transaction::{StepError, Transaction};
 
-use crate::helpers::{
-    capture_charlike_slots, continuation_paint_at, find_enclosing_list_item_id,
-    insert_charlike_slots,
-};
+use crate::helpers::{continuation_paint_at, find_enclosing_list_item_id};
 use crate::{CommandError, CommandResult};
 
 pub fn split_list_item(tr: &mut Transaction) -> CommandResult {
@@ -28,46 +24,30 @@ pub fn split_list_item(tr: &mut Transaction) -> CommandResult {
     let list_item = view
         .node(list_item_id)
         .ok_or(CommandError::NodeNotFound(list_item_id))?;
-    let paragraph = match list_item.first_child() {
-        Some(ChildView::Block(p)) => p,
-        _ => {
-            return Err(CommandError::Corrupted(
-                "list_item missing paragraph".into(),
-            ));
-        }
-    };
-    let paragraph_id = paragraph.id();
-
-    if pos.node != paragraph_id {
+    let paragraph = view
+        .node(pos.node)
+        .ok_or(CommandError::NodeNotFound(pos.node))?;
+    if paragraph.node_type() != NodeType::Paragraph
+        || paragraph.parent().map(|parent| parent.id()) != Some(list_item_id)
+    {
         return Ok(false);
     }
-    if paragraph.children().count() == 0 {
-        return Ok(false);
-    }
-
-    let split_index = pos.offset;
-    let para_len = paragraph.children().count();
-
-    // The inline slots after the cursor cannot be reparented (move/split re-emit
-    // drops identity, and a list_item rejects a second paragraph), so capture
-    // visible content plus leaf-owned formatting and re-create them in the new
-    // item's paragraph.
-    let has_uncapturable = paragraph
+    if list_item
         .children()
-        .skip(split_index)
-        .any(|c| matches!(c, ChildView::Leaf(l) if l.item().is_unknown_bearing()));
-    if has_uncapturable {
+        .any(|child| matches!(child, ChildView::Leaf(_)))
+    {
         return Err(CommandError::Corrupted(
-            "list item split tail contains an unsupported node".into(),
+            "list item contains an unsupported direct child".into(),
         ));
     }
-    let tail = capture_charlike_slots(&tr.state().projected, &paragraph, split_index, para_len)?;
-    let tail_len = para_len - split_index;
-
-    let sublist_id: Option<Dot> = list_item
-        .child_blocks()
-        .find(|b| matches!(b.node_type(), NodeType::BulletList | NodeType::OrderedList))
-        .map(|b| b.id());
+    let paragraph_id = paragraph.id();
+    let paragraph_index = paragraph
+        .parent()
+        .and_then(|item| {
+            item.child_blocks()
+                .position(|child| child.id() == paragraph_id)
+        })
+        .ok_or_else(|| CommandError::orphan_child(paragraph_id, list_item_id))?;
 
     let (list_id, li_block_index) = {
         let list = list_item
@@ -83,55 +63,47 @@ pub fn split_list_item(tr: &mut Transaction) -> CommandResult {
     let paint = continuation_paint_at(&tr.state().projected, pos);
     drop(view);
 
-    if tail_len > 0 {
-        tr.remove_child_slots(paragraph_id, split_index, para_len)?;
-    }
+    tr.batch::<_, CommandError>(|tr| {
+        tr.split_node(paragraph_id, pos.offset)?;
 
-    let new_li = Subtree::leaf(NodeType::ListItem.into_node().to_plain()).with_children(vec![
-        Subtree::leaf(NodeType::Paragraph.into_node().to_plain()),
-    ]);
-    tr.insert_subtree(list_id, li_block_index + 1, new_li)?;
-
-    let (new_list_item_id, new_paragraph_id) = {
-        let view = tr.view();
-        let list = view
-            .node(list_id)
-            .ok_or(CommandError::NodeNotFound(list_id))?;
-        let new_li = list
-            .child_blocks()
-            .nth(li_block_index + 1)
-            .ok_or(CommandError::Corrupted("new list_item missing".into()))?;
-        let new_li_id = new_li.id();
-        let new_para = match new_li.first_child() {
-            Some(ChildView::Block(p)) => p.id(),
-            _ => {
-                return Err(CommandError::Corrupted(
-                    "new list_item missing paragraph".into(),
-                ));
-            }
+        let moving = {
+            let view = tr.view_clean().map_err(StepError::from)?;
+            let item = view
+                .node(list_item_id)
+                .ok_or(CommandError::NodeNotFound(list_item_id))?;
+            item.child_blocks()
+                .skip(paragraph_index + 1)
+                .map(|child| child.id())
+                .collect::<Vec<_>>()
         };
-        (new_li_id, new_para)
-    };
+        if moving.is_empty() {
+            return Err(CommandError::Corrupted(
+                "list item split produced no right paragraph".into(),
+            ));
+        }
 
-    if let Some(sublist) = &sublist_id {
-        let at = {
-            let view = tr.view();
-            view.node(new_list_item_id)
-                .map(|li| li.child_blocks().count())
-                .unwrap_or(1)
-        };
-        tr.move_node(*sublist, new_list_item_id, at)?;
-    }
+        let (_, moved) = tr.insert_subtree_with_moved(
+            list_id,
+            li_block_index + 1,
+            Subtree::leaf(NodeType::ListItem.into_node().to_plain()),
+            &moving,
+        )?;
+        let new_paragraph_id =
+            moved
+                .first()
+                .map(|moved| moved.root)
+                .ok_or(CommandError::Corrupted(
+                    "list item split moved no paragraph".into(),
+                ))?;
 
-    insert_charlike_slots(tr, new_paragraph_id, 0, &tail)?;
-
-    tr.replace_carry(paragraph_id, paint.clone())?;
-    tr.replace_carry(new_paragraph_id, paint)?;
-
-    tr.set_selection(Some(Selection::collapsed(Position::new(
-        new_paragraph_id,
-        0,
-    ))))?;
+        tr.replace_carry(paragraph_id, paint.clone())?;
+        tr.replace_carry(new_paragraph_id, paint.clone())?;
+        tr.set_selection(Some(Selection::collapsed(Position::new(
+            new_paragraph_id,
+            0,
+        ))))?;
+        Ok(())
+    })?;
 
     Ok(true)
 }
@@ -182,18 +154,30 @@ mod tests {
     }
 
     #[test]
-    fn empty_paragraph_returns_false() {
+    fn split_empty_paragraph_at_command_layer() {
         let (initial, ..) = state! {
             doc { root { bullet_list { list_item { p1: paragraph {} } } paragraph {} } }
             selection: (p1, 0)
         };
-        transact_fail!(initial, |tr| split_list_item(&mut tr));
+        let (actual, ..) = transact!(initial, |tr| split_list_item(&mut tr));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { paragraph {} }
+                        list_item { p2: paragraph {} }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p2, 0)
+        };
+        assert_state_eq!(&actual, &expected);
     }
 
-    /// The tail is captured by value (Char/Atom) and re-created in the new
-    /// item's paragraph — an unknown-bearing leaf cannot be captured losslessly,
-    /// so the split must reject rather than silently drop it, leaving the
-    /// document untouched (safe to retry).
+    /// `split_node` cannot split through an unknown-bearing inline leaf
+    /// losslessly. The surrounding batch must therefore roll back the attempted
+    /// split rather than leaving a partial item partition.
     #[test]
     fn split_rejects_unknown_leaf_in_tail_leaving_doc_unchanged() {
         use editor_crdt::ListOp;
@@ -446,6 +430,58 @@ mod tests {
             selection: (p2, 0)
         };
         assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn split_middle_direct_paragraph_moves_following_siblings() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item {
+                            paragraph { text("before") }
+                            bullet_list {
+                                list_item { paragraph { text("nested-before") } }
+                            }
+                            p1: paragraph { text("hello") }
+                            ordered_list {
+                                list_item { paragraph { text("nested-after") } }
+                            }
+                            paragraph { text("after") }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 2)
+        };
+        let (actual, ..) = transact!(initial, |tr| split_list_item(&mut tr));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item {
+                            paragraph { text("before") }
+                            bullet_list {
+                                list_item { paragraph { text("nested-before") } }
+                            }
+                            paragraph { text("he") }
+                        }
+                        list_item {
+                            p2: paragraph { text("llo") }
+                            ordered_list {
+                                list_item { paragraph { text("nested-after") } }
+                            }
+                            paragraph { text("after") }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p2, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+        assert_projection_integrity(&actual);
     }
 
     #[test]

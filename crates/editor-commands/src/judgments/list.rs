@@ -27,9 +27,6 @@ pub fn judge_outdent_list(view: &DocView, selection: &Selection) -> Verdict<Outd
         return Verdict::NotApplicable;
     };
     let mut items = collect_list_items_in_selection(&rs);
-    if items.is_empty() {
-        return Verdict::NotApplicable;
-    }
     retain_topmost_list_items(view, &mut items);
     if items.is_empty() {
         return Verdict::NotApplicable;
@@ -68,16 +65,19 @@ pub(crate) fn lift_selected_list_items(tr: &mut Transaction) -> CommandResult {
 }
 
 /// `Change` ⇒ 최소 한 그룹의 첫 항목이 선행 형제를 가져 sink가 실제로 일어남, 또는
-/// 선택 endpoint가 synthetic scaffold라 handler의 materialize 프렐류드가 실 dot을
-/// 남김(핸들러 chain은 이 verdict의 handled(true)를 소비하므로 롤백되지 않음).
-/// `AbsorbOnly` ⇒ range 선택이 리스트 항목을 포함하지만 sink 가능한 그룹이 없고
-/// endpoint도 모두 real dot — 실행은 handled(true)로 Tab 폴스루를 흡수하고 관측
-/// 변화는 없음.
+/// 선택 endpoint가 synthetic scaffold라 handler의 materialize 프렐류드 후 다시
+/// 판단해야 함.
+/// `AbsorbOnly` ⇒ 선택이 리스트 항목을 포함하지만 sink 가능한 그룹이 없고 endpoint도
+/// 모두 real dot — handler는 Tab 폴스루를 흡수하지만 적용된 변경은 없음.
 pub fn judge_indent_list(view: &DocView, selection: &Selection) -> Verdict<IndentPlan> {
     let Some(rs) = selection.resolve(view) else {
         return Verdict::NotApplicable;
     };
-    let items = collect_list_items_in_selection(&rs);
+    let mut items = collect_list_items_in_selection(&rs);
+    if items.is_empty() {
+        return Verdict::NotApplicable;
+    }
+    retain_topmost_list_items(view, &mut items);
     if items.is_empty() {
         return Verdict::NotApplicable;
     }
@@ -91,8 +91,6 @@ pub fn judge_indent_list(view: &DocView, selection: &Selection) -> Verdict<Inden
         });
     if any_sinkable {
         Verdict::Change(IndentPlan { items })
-    } else if selection.is_collapsed() {
-        Verdict::NotApplicable
     } else if is_materializable_synthetic(selection.anchor.node)
         || is_materializable_synthetic(selection.head.node)
     {
@@ -113,7 +111,7 @@ pub(crate) fn sink_selected_list_items(tr: &mut Transaction) -> CommandResult {
         }
         match judge_indent_list(&view, &selection) {
             crate::types::Verdict::NotApplicable => return Ok(false),
-            crate::types::Verdict::AbsorbOnly => return Ok(true),
+            crate::types::Verdict::AbsorbOnly => return Ok(false),
             crate::types::Verdict::Change(plan) => plan,
         }
     };
@@ -159,7 +157,7 @@ pub(crate) fn sink_selected_list_items(tr: &mut Transaction) -> CommandResult {
         }
     }
     if !any_sunk {
-        return Ok(!selection.is_collapsed());
+        return Ok(false);
     }
 
     let sel = {
@@ -255,7 +253,62 @@ mod tests {
     }
 
     #[test]
-    fn judge_indent_first_item_collapsed_is_not_applicable() {
+    fn judgments_include_later_direct_paragraph() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { paragraph { text("A") } }
+                        list_item {
+                            paragraph { text("B") }
+                            p2: paragraph { text("C") }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p2, 1)
+        };
+        let selection = state.selection.unwrap();
+        let view = state.view();
+
+        assert!(matches!(
+            judge_indent_list(&view, &selection),
+            crate::Verdict::Change(_)
+        ));
+        assert!(matches!(
+            judge_outdent_list(&view, &selection),
+            crate::Verdict::Change(_)
+        ));
+    }
+
+    #[test]
+    fn range_across_direct_paragraphs_collects_item_once() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item {
+                            p1: paragraph { text("A") }
+                            p2: paragraph { text("B") }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0) -> (p2, 1)
+        };
+        let selection = state.selection.unwrap();
+        let view = state.view();
+
+        match judge_outdent_list(&view, &selection) {
+            crate::Verdict::Change(plan) => assert_eq!(plan.items.len(), 1),
+            _ => panic!("expected one-item Change plan"),
+        }
+    }
+
+    #[test]
+    fn judge_indent_first_item_collapsed_is_absorb_only() {
         let (state, ..) = state! {
             doc {
                 root {
@@ -269,7 +322,7 @@ mod tests {
         let view = state.view();
         assert!(matches!(
             judge_indent_list(&view, &selection),
-            crate::Verdict::NotApplicable
+            crate::Verdict::AbsorbOnly
         ));
     }
 

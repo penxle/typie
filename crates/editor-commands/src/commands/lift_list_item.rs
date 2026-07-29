@@ -481,10 +481,8 @@ mod tests {
 
     #[test]
     fn lift_nested_item_with_existing_sublist_appends_after_items() {
-        // Nested list_item B already owns a sublist and is followed by trailing
-        // siblings C, D. Lifting B must move it out as a sibling on the outer list
-        // and append C, D into B's existing sublist — list_item allows at most one
-        // trailing sublist, so a second one cannot be created.
+        // Nested list_item B ends in a same-kind sublist and is followed by
+        // siblings C, D, so lifting B reuses that trailing sublist.
         let (initial, ..) = state! {
             doc {
                 root {
@@ -532,6 +530,118 @@ mod tests {
             selection: (p_b, 0)
         };
         assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn multi_block_list_item_lift_appends_following_items_after_paragraph_tail() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item {
+                            paragraph { text("outer") }
+                            bullet_list {
+                                list_item { paragraph { text("A") } }
+                                list_item {
+                                    p1: paragraph { text("B") }
+                                    ordered_list {
+                                        list_item { paragraph { text("X") } }
+                                    }
+                                    paragraph { text("tail") }
+                                }
+                                list_item { paragraph { text("C") } }
+                            }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| lift_list_item(&mut tr));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item {
+                            paragraph { text("outer") }
+                            bullet_list {
+                                list_item { paragraph { text("A") } }
+                            }
+                        }
+                        list_item {
+                            p1: paragraph { text("B") }
+                            ordered_list {
+                                list_item { paragraph { text("X") } }
+                            }
+                            paragraph { text("tail") }
+                            bullet_list {
+                                list_item { paragraph { text("C") } }
+                            }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+        assert_projection_integrity(&actual);
+    }
+
+    #[test]
+    fn multi_block_list_item_lift_keeps_different_trailing_sublist_separate() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item {
+                            paragraph { text("outer") }
+                            bullet_list {
+                                list_item { paragraph { text("A") } }
+                                list_item {
+                                    p1: paragraph { text("B") }
+                                    ordered_list {
+                                        list_item { paragraph { text("X") } }
+                                    }
+                                }
+                                list_item { paragraph { text("C") } }
+                            }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| lift_list_item(&mut tr));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item {
+                            paragraph { text("outer") }
+                            bullet_list {
+                                list_item { paragraph { text("A") } }
+                            }
+                        }
+                        list_item {
+                            p1: paragraph { text("B") }
+                            ordered_list {
+                                list_item { paragraph { text("X") } }
+                            }
+                            bullet_list {
+                                list_item { paragraph { text("C") } }
+                            }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+        assert_projection_integrity(&actual);
     }
 
     #[test]

@@ -425,6 +425,28 @@ mod tests {
     }
 
     #[test]
+    fn serialize_multi_paragraph_list_item_uses_one_li() {
+        let (s, ..) = state! {
+            doc { r: root {
+                bullet_list {
+                    list_item {
+                        paragraph { text("a") }
+                        paragraph { text("b") }
+                    }
+                }
+            } }
+            selection: (r, 0, >) -> (r, 1, <)
+        };
+
+        let html = Slice::extract(&s).unwrap().to_html(&Resource::new_test());
+
+        assert_eq!(html.matches("<li>").count(), 1);
+        assert!(html.contains("<p>a</p>"));
+        assert!(html.contains("<p>b</p>"));
+        assert!(html.find("<p>a</p>").unwrap() < html.find("<p>b</p>").unwrap());
+    }
+
+    #[test]
     fn serialize_table() {
         let (s, ..) = state! {
             doc { r: root {

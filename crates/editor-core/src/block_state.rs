@@ -359,6 +359,29 @@ mod tests {
     }
 
     #[test]
+    fn list_affordances_inside_later_direct_paragraph() {
+        let (state, ..) = state! {
+            doc { root {
+                bullet_list {
+                    list_item { paragraph { text("A") } }
+                    list_item {
+                        paragraph { text("B") }
+                        p2: paragraph { text("C") }
+                    }
+                }
+                paragraph {}
+            } }
+            selection: (p2, 1)
+        };
+        let resource = editor_resource::Resource::new_test();
+        let bs = resolve_block_state(&state, &resource).unwrap();
+        assert!(bs.list.toggle_bullet);
+        assert!(bs.list.toggle_ordered);
+        assert!(bs.list.indent);
+        assert!(bs.list.outdent);
+    }
+
+    #[test]
     fn list_affordances_plain_paragraph() {
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("Hi") } } }

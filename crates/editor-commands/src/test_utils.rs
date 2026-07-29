@@ -86,6 +86,31 @@ pub(crate) fn selection_shape(state: &State) -> Option<(PathWithAffinity, PathWi
     Some((anchor, head))
 }
 
+pub(crate) fn assert_projection_integrity(state: &State) {
+    let warm = &state.projected;
+    let cold = editor_state::ProjectedState::from_graph(warm.graph().clone())
+        .expect("cold rebuild projects");
+    assert_eq!(
+        warm.projected(),
+        cold.projected(),
+        "warm/cold projection diverged"
+    );
+
+    let visible: hashbrown::HashSet<Dot> = warm
+        .seq_checkout()
+        .snapshot(warm.seq())
+        .into_iter()
+        .map(|(dot, _)| dot)
+        .collect();
+    let reachable: hashbrown::HashSet<Dot> =
+        warm.subtree_real_dots(Dot::ROOT).into_iter().collect();
+    let unreachable: Vec<Dot> = visible.difference(&reachable).copied().collect();
+    assert!(
+        unreachable.is_empty(),
+        "visible-but-unreachable dots: {unreachable:?}"
+    );
+}
+
 pub(crate) fn assert_state_eq_impl(actual: &State, expected: &State) {
     let a = doc_shape(actual);
     let e = doc_shape(expected);

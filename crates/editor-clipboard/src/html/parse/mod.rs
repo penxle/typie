@@ -218,6 +218,48 @@ mod tests {
     }
 
     #[test]
+    fn from_html_keeps_interleaved_blocks_in_one_list_item() {
+        let html = "<ul><li><p>A</p><ul><li><p>X</p></li></ul><p>B</p><ol><li><p>Y</p></li></ol></li></ul>";
+        let slice = Slice::from_html(html, &Resource::new_test());
+
+        assert_eq!(slice.content.len(), 1);
+        let list = &slice.content[0];
+        assert_eq!(list.node.as_type(), NodeType::BulletList);
+        assert_eq!(list.children.len(), 1);
+        let item = &list.children[0];
+        assert_eq!(item.node.as_type(), NodeType::ListItem);
+        assert_eq!(
+            item.children
+                .iter()
+                .map(|child| child.node.as_type())
+                .collect::<Vec<_>>(),
+            vec![
+                NodeType::Paragraph,
+                NodeType::BulletList,
+                NodeType::Paragraph,
+                NodeType::OrderedList,
+            ]
+        );
+    }
+
+    #[test]
+    fn from_html_keeps_closed_adjacent_lists_distinct() {
+        let slice = Slice::from_html(
+            "<ul><li><p>A</p></li></ul><ol><li><p>B</p></li></ol>",
+            &Resource::new_test(),
+        );
+
+        assert_eq!(
+            slice
+                .content
+                .iter()
+                .map(|fragment| fragment.node.as_type())
+                .collect::<Vec<_>>(),
+            vec![NodeType::BulletList, NodeType::OrderedList]
+        );
+    }
+
+    #[test]
     fn from_html_orphan_tr_wrapped_in_table() {
         let html = "<tr><td>a</td></tr>";
         let slice = Slice::from_html(html, &Resource::new_test());

@@ -2,7 +2,7 @@ use editor_clipboard::Slice;
 use editor_crdt::Dot;
 use editor_model::{
     ChildView, ContentExpr, DocView, Fragment, Modifier, NodeType, NodeView, PlainNode,
-    PlainParagraphNode, Schema, context_allows, wrap_chain,
+    PlainParagraphNode, Schema, Subtree, context_allows, wrap_chain,
 };
 use editor_state::{Affinity, Position, Selection};
 use editor_transaction::{Transaction, fulfill};
@@ -159,6 +159,57 @@ pub(crate) fn fit_slice_for_textblock_parent(
     ))
 }
 
+/// A text-range copied across sibling list items carries `List > ListItem >
+/// Paragraph` as open edge context. Inserting that range in a direct list-item
+/// paragraph must splice at the surrounding list, not nest the copied list in
+/// the current item merely because the expanded schema permits it.
+pub(crate) fn open_list_items_for_textblock_insert(
+    view: &DocView,
+    position: &Position,
+    slice: &Slice,
+) -> Option<Vec<Fragment>> {
+    if slice.open_start < 3 || slice.open_end < 3 || slice.content.len() != 1 {
+        return None;
+    }
+    let textblock_id = find_ancestor_textblock(view, position.node)?;
+    let textblock = view.node(textblock_id)?;
+    if textblock.node_type() != NodeType::Paragraph {
+        return None;
+    }
+    let list_item = textblock.parent()?;
+    if list_item.node_type() != NodeType::ListItem {
+        return None;
+    }
+    let list = list_item.parent()?;
+    if !matches!(
+        list.node_type(),
+        NodeType::BulletList | NodeType::OrderedList
+    ) {
+        return None;
+    }
+
+    let outer = &slice.content[0];
+    if !matches!(
+        outer.node.as_type(),
+        NodeType::BulletList | NodeType::OrderedList
+    ) || outer.children.len() < 2
+        || !outer
+            .children
+            .iter()
+            .all(|item| item.node.as_type() == NodeType::ListItem)
+    {
+        return None;
+    }
+    let first_paragraph = outer.children.first()?.children.first()?;
+    let last_paragraph = outer.children.last()?.children.last()?;
+    if first_paragraph.node.as_type() != NodeType::Paragraph
+        || last_paragraph.node.as_type() != NodeType::Paragraph
+    {
+        return None;
+    }
+    Some(outer.children.clone())
+}
+
 pub(crate) fn open_inline_content_for_textblock_insert<'a>(
     view: &DocView,
     position: &Position,
@@ -221,6 +272,154 @@ pub(crate) fn insert_blocks_in_textblock_at_position(
 ) -> Result<Option<Selection>, CommandError> {
     tr.set_selection(Some(Selection::collapsed(position)))?;
     insert_blocks_in_textblock(tr, slice, mode)
+}
+
+/// Splice an open multi-item list range around a caret: the first and last
+/// source paragraphs join the split destination edges, while source item
+/// boundaries remain sibling items in the destination list.
+pub(crate) fn insert_open_list_items_in_textblock_at_position(
+    tr: &mut Transaction,
+    position: Position,
+    items: &[Fragment],
+    mode: &InlineMode,
+) -> Result<Option<Selection>, CommandError> {
+    if items.len() < 2 {
+        return Err(CommandError::Corrupted(
+            "open list splice requires at least two items".into(),
+        ));
+    }
+    let (
+        textblock_id,
+        list_item_id,
+        list_id,
+        list_item_index,
+        paragraph_index,
+        first_inline,
+        first_tail,
+        middle_items,
+        last_prefix,
+        last_inline,
+    ) = {
+        let view = tr.state().view();
+        let textblock_id = find_ancestor_textblock(&view, position.node)
+            .ok_or(CommandError::NodeNotFound(position.node))?;
+        let textblock = view
+            .node(textblock_id)
+            .ok_or(CommandError::NodeNotFound(textblock_id))?;
+        let list_item = textblock
+            .parent()
+            .ok_or(CommandError::NoParent(textblock_id))?;
+        let list = list_item
+            .parent()
+            .ok_or(CommandError::NoParent(list_item.id()))?;
+        let list_item_index = list_item
+            .index()
+            .ok_or_else(|| CommandError::orphan_child(list_item.id(), list.id()))?;
+        let paragraph_index = textblock
+            .index()
+            .ok_or_else(|| CommandError::orphan_child(textblock_id, list_item.id()))?;
+
+        let first = items
+            .first()
+            .ok_or_else(|| CommandError::Corrupted("open list slice has no first item".into()))?;
+        let last = items
+            .last()
+            .ok_or_else(|| CommandError::Corrupted("open list slice has no last item".into()))?;
+        let first_paragraph = first.children.first().ok_or_else(|| {
+            CommandError::Corrupted("open list slice first item has no paragraph".into())
+        })?;
+        let last_paragraph = last.children.last().ok_or_else(|| {
+            CommandError::Corrupted("open list slice last item has no paragraph".into())
+        })?;
+
+        (
+            textblock_id,
+            list_item.id(),
+            list.id(),
+            list_item_index,
+            paragraph_index,
+            first_paragraph.children.clone(),
+            first.children[1..].to_vec(),
+            items[1..items.len() - 1].to_vec(),
+            last.children[..last.children.len() - 1].to_vec(),
+            last_paragraph.children.clone(),
+        )
+    };
+
+    let mut inserted = None;
+    tr.batch::<_, CommandError>(|tr| {
+        tr.split_node(textblock_id, position.offset)?;
+
+        let moving = {
+            let view = tr
+                .view_clean()
+                .map_err(editor_transaction::StepError::from)?;
+            let item = view
+                .node(list_item_id)
+                .ok_or(CommandError::NodeNotFound(list_item_id))?;
+            item.child_blocks()
+                .skip(paragraph_index + 1)
+                .map(|child| child.id())
+                .collect::<Vec<_>>()
+        };
+        let (right_item_id, moved) = tr.insert_subtree_with_moved(
+            list_id,
+            list_item_index + 1,
+            Subtree::leaf(NodeType::ListItem.into_node().to_plain()),
+            &moving,
+        )?;
+        let right_paragraph_id =
+            moved
+                .first()
+                .map(|moved| moved.root)
+                .ok_or(CommandError::Corrupted(
+                    "open list splice produced no right paragraph".into(),
+                ))?;
+
+        let start = position_at_end_of_block(tr, textblock_id)?;
+        tr.set_selection(Some(Selection::collapsed(start)))?;
+        insert_inline_fragments(tr, &first_inline, mode)?;
+
+        for fragment in first_tail {
+            let index = tr
+                .state()
+                .view()
+                .node(list_item_id)
+                .map(|item| item.child_blocks().count())
+                .ok_or(CommandError::NodeNotFound(list_item_id))?;
+            tr.insert_subtree(list_item_id, index, fragment.into_subtree())?;
+        }
+
+        let mut insert_at = {
+            let view = tr.state().view();
+            view.node(right_item_id)
+                .and_then(|item| item.index())
+                .ok_or_else(|| CommandError::orphan_child(right_item_id, list_id))?
+        };
+        for item in middle_items {
+            tr.insert_subtree(list_id, insert_at, item.into_subtree())?;
+            insert_at += 1;
+        }
+
+        for (index, fragment) in last_prefix.into_iter().enumerate() {
+            tr.insert_subtree(right_item_id, index, fragment.into_subtree())?;
+        }
+
+        tr.set_selection(Some(Selection::collapsed(position_at_start_of_block(
+            tr,
+            right_paragraph_id,
+        )?)))?;
+        insert_inline_fragments(tr, &last_inline, mode)?;
+        let mut end = tr
+            .selection()
+            .expect("selection preserved through open list splice")
+            .head;
+        end.affinity = Affinity::Downstream;
+        tr.set_selection(Some(Selection::collapsed(end)))?;
+        inserted = Some(Selection::new(start, end));
+        Ok(())
+    })?;
+    Ok(inserted)
 }
 
 fn insert_inline_fragments(
@@ -1206,7 +1405,7 @@ mod repair_tests {
     }
 
     #[test]
-    fn splits_list_item_with_two_paragraphs_into_sibling_items() {
+    fn keeps_list_item_with_two_paragraphs() {
         let mut content = vec![bullet_list(vec![list_item(vec![
             para(vec![text("a")]),
             para(vec![text("b")]),
@@ -1216,13 +1415,15 @@ mod repair_tests {
 
         assert_eq!(types(&content), vec![NodeType::BulletList]);
         let items = &content[0].children;
-        assert_eq!(types(items), vec![NodeType::ListItem, NodeType::ListItem]);
-        assert_eq!(items[0].children, vec![para(vec![text("a")])]);
-        assert_eq!(items[1].children, vec![para(vec![text("b")])]);
+        assert_eq!(types(items), vec![NodeType::ListItem]);
+        assert_eq!(
+            items[0].children,
+            vec![para(vec![text("a")]), para(vec![text("b")])]
+        );
     }
 
     #[test]
-    fn splits_list_item_with_three_paragraphs_into_three_items() {
+    fn keeps_list_item_with_three_paragraphs() {
         let mut content = vec![bullet_list(vec![list_item(vec![
             para(vec![text("a")]),
             para(vec![text("b")]),
@@ -1232,17 +1433,19 @@ mod repair_tests {
         repair_slice_fragments(&mut content);
 
         let items = &content[0].children;
+        assert_eq!(types(items), vec![NodeType::ListItem]);
         assert_eq!(
-            types(items),
-            vec![NodeType::ListItem, NodeType::ListItem, NodeType::ListItem]
+            items[0].children,
+            vec![
+                para(vec![text("a")]),
+                para(vec![text("b")]),
+                para(vec![text("c")]),
+            ]
         );
-        assert_eq!(items[0].children, vec![para(vec![text("a")])]);
-        assert_eq!(items[1].children, vec![para(vec![text("b")])]);
-        assert_eq!(items[2].children, vec![para(vec![text("c")])]);
     }
 
     #[test]
-    fn keeps_trailing_paragraph_after_nested_list_in_a_sibling_item() {
+    fn keeps_trailing_paragraph_after_nested_list_in_same_item() {
         let mut content = vec![bullet_list(vec![list_item(vec![
             para(vec![text("a")]),
             bullet_list(vec![list_item(vec![para(vec![text("x")])])]),
@@ -1252,12 +1455,16 @@ mod repair_tests {
         repair_slice_fragments(&mut content);
 
         let items = &content[0].children;
-        assert_eq!(types(items), vec![NodeType::ListItem, NodeType::ListItem]);
+        assert_eq!(types(items), vec![NodeType::ListItem]);
         assert_eq!(
             types(&items[0].children),
-            vec![NodeType::Paragraph, NodeType::BulletList]
+            vec![
+                NodeType::Paragraph,
+                NodeType::BulletList,
+                NodeType::Paragraph,
+            ]
         );
-        assert_eq!(items[1].children, vec![para(vec![text("b")])]);
+        assert_eq!(items[0].children[2], para(vec![text("b")]));
     }
 
     #[test]

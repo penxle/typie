@@ -55,10 +55,15 @@ fn fixtures() -> Vec<State> {
     {
         let (s, ..) = state! {
             doc { root {
-                bullet_list { list_item { p1: paragraph { text("only first") } } }
+                bullet_list {
+                    list_item {
+                        paragraph { text("first") }
+                        p1: paragraph { text("later direct") }
+                    }
+                }
                 paragraph {}
             } }
-            selection: (p1, 0)
+            selection: (p1, 3)
         };
         out.push(s);
     }

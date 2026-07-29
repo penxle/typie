@@ -679,6 +679,55 @@ mod tests {
     }
 
     #[test]
+    fn insert_open_list_slice_into_list_item_preserves_sibling_items() {
+        let (source, ..) = state! {
+            doc { root {
+                bullet_list {
+                    list_item { p1: paragraph { text("first") } }
+                    list_item { p2: paragraph { text("second") } }
+                }
+                paragraph {}
+            } }
+            selection: (p1, 2) -> (p2, 3)
+        };
+        let slice = Slice::extract(&source).expect("open list slice");
+
+        let (initial, ..) = state! {
+            doc { root {
+                bullet_list {
+                    list_item {
+                        target: paragraph { text("xy") }
+                        paragraph { text("tail") }
+                    }
+                }
+                paragraph {}
+            } }
+            selection: (target, 1)
+        };
+        let (actual, ..) = transact!(initial, |tr| insert_slice(
+            &mut tr,
+            slice,
+            SliceProvenance::Formatted
+        ));
+
+        let (expected, ..) = state! {
+            doc { root {
+                bullet_list {
+                    list_item { paragraph { text("xrst") } }
+                    list_item {
+                        p2: paragraph { text("secy") }
+                        paragraph { text("tail") }
+                    }
+                }
+                paragraph {}
+            } }
+            selection: (p2, 3)
+        };
+        assert_state_eq!(&actual, &expected);
+        assert_projection_integrity(&actual);
+    }
+
+    #[test]
     fn insert_image_at_text_middle_splits_paragraph_and_inserts() {
         use editor_model::PlainImageNode;
         let (initial, ..) = state! {

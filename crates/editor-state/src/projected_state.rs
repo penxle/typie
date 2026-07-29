@@ -2739,17 +2739,16 @@ impl ProjectedState {
             return false;
         }
         // `simple` only looks at the split block's own content; whether the PARENT
-        // tolerates a second sibling of that type is separate — e.g. a ListItem
-        // (`Paragraph, (BulletList|OrderedList)?`) rejects a second Paragraph (cold
-        // SPLIT-HOISTs it out), and Fold's FoldTitle (`Text*`, so `simple` passes)
-        // is the same shape one level up. Two static bypasses below make the common
-        // cases O(1) so a windowless Enter stays sublinear in document size: (1) a
-        // legal Paragraph beside Root's `(…)*, Paragraph` is always fit — the `*`
-        // absorbs any count; (2) inside a repetition-closed expr, every existing
-        // sibling already passed this parent's normalization, so one more
-        // `inner`-fit type preserves fitness. Anything else pays an O(children) scan
-        // of the parent's current content to confirm the augmented sequence still
-        // validates.
+        // tolerates a second sibling of that type is separate. Fold rejects a
+        // second FoldTitle (`Text*`, so `simple` passes), while ListItem accepts a
+        // repeated Paragraph only after its required leading Paragraph. Two static
+        // bypasses below make the common cases O(1) so a windowless Enter stays
+        // sublinear in document size: (1) a legal Paragraph beside Root's
+        // `(…)*, Paragraph` is always fit — the `*` absorbs any count; (2) inside a
+        // repetition-closed expr, every existing sibling already passed this
+        // parent's normalization, so one more `inner`-fit type preserves fitness.
+        // Anything else pays an O(children) scan of the parent's current content to
+        // confirm the augmented sequence still validates.
         let parent_type = if intended_parent == Dot::ROOT {
             NodeType::Root
         } else {
@@ -3837,7 +3836,7 @@ mod tests {
     }
 
     #[test]
-    fn list_item_second_paragraph_split_falls_back() {
+    fn list_item_second_paragraph_uses_incremental_splice() {
         let mut s = ProjectedState::empty();
         let mut pos = 1;
         let list = s
@@ -3869,8 +3868,9 @@ mod tests {
         ))
         .unwrap();
         assert_eq!(
-            s.incremental_block_inserts, before,
-            "a second paragraph does not fit ListItem content; must fall back"
+            s.incremental_block_inserts,
+            before + 1,
+            "a second paragraph fits ListItem content and should use the incremental splice"
         );
         crate::corpus::assert_matches_cold_rebuild(&s);
     }

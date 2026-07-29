@@ -382,6 +382,40 @@ mod tests {
     }
 
     #[test]
+    fn collapsed_inside_later_direct_paragraph_converts_item_list() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    ordered_list {
+                        list_item {
+                            paragraph { text("A") }
+                            p2: paragraph { text("BC") }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p2, 1)
+        };
+        let (actual, ..) = transact!(initial, |tr| set_list_kind(&mut tr, NodeType::BulletList));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item {
+                            paragraph { text("A") }
+                            p2: paragraph { text("BC") }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p2, 1)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
     fn collapsed_inside_same_kind_returns_false() {
         let (initial, ..) = state! {
             doc {

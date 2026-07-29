@@ -282,6 +282,38 @@ mod tests {
     }
 
     #[test]
+    fn lift_sole_nested_list_paragraph_collapses_empty_wrappers() {
+        let (initial, ..) = state! {
+            doc { root {
+                bullet_list {
+                    list_item {
+                        p1: paragraph { text("A") }
+                        bullet_list {
+                            list_item { paragraph { text("B") } }
+                        }
+                    }
+                }
+                paragraph {}
+            } }
+            selection: (p1, 1)
+        };
+        let (actual, ..) = transact!(initial, |tr| lift_paragraph_forward(&mut tr));
+        let (expected, ..) = state! {
+            doc { root {
+                bullet_list {
+                    list_item {
+                        p1: paragraph { text("AB") }
+                    }
+                }
+                paragraph {}
+            } }
+            selection: (p1, 1)
+        };
+        assert_state_eq!(&actual, &expected);
+        assert_projection_integrity(&actual);
+    }
+
+    #[test]
     fn next_is_paragraph_returns_false() {
         let (initial, ..) = state! {
             doc {

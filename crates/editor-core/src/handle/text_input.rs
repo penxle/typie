@@ -682,10 +682,11 @@ fn structural_backward(tr: &mut Transaction) -> CommandResult {
         commands::optional!(commands::materialize_synthetic_selection_blocks()),
         |tr| commands::first!(
             tr,
-            commands::lift_empty_list_item(),
+            commands::merge_adjacent_list_backward(),
             commands::merge_list_item_backward(),
+            commands::lift_empty_list_item(),
             commands::lift_first_list_item(),
-            commands::join_paragraph_backward_into_prev_list_item(),
+            commands::move_paragraph_backward_into_prev_list(),
             commands::join_paragraph_backward(),
             commands::sink_paragraph_backward(),
             commands::lift_first_paragraph(),
@@ -701,8 +702,9 @@ fn structural_forward(tr: &mut Transaction) -> CommandResult {
         |tr| commands::first!(
             tr,
             commands::delete_page_break_forward(),
+            commands::merge_adjacent_list_forward(),
             commands::merge_list_item_forward(),
-            commands::join_next_paragraph_forward_into_list_item(),
+            commands::move_next_paragraph_forward_into_list(),
             commands::join_paragraph_forward(),
             commands::lift_last_paragraph(),
             commands::lift_paragraph_forward(),
@@ -5164,6 +5166,39 @@ mod tests {
     }
 
     #[test]
+    fn flat_ime_token_delete_backward_matches_key_after_trailing_nested_list() {
+        let (state, ..) = state! {
+            doc { root {
+                ordered_list {
+                    list_item {
+                        paragraph { text("A") }
+                        bullet_list {
+                            list_item { paragraph { text("B") } }
+                        }
+                    }
+                }
+                p2: paragraph { text("C") }
+            } }
+            selection: (p2, 0)
+        };
+        let caret = state
+            .selection
+            .as_ref()
+            .unwrap()
+            .head
+            .resolve(&state.view())
+            .unwrap()
+            .to_flat();
+        let mut ime_editor = Editor::new_test(state.clone());
+        let mut key_editor = Editor::new_test(state);
+        ime_editor.apply(Message::TextInput {
+            ops: ios_backspace_ops(caret - 1, caret),
+        });
+        key_editor.apply(key_message(Key::Backspace));
+        assert_state_eq!(ime_editor.state(), key_editor.state());
+    }
+
+    #[test]
     fn flat_ime_token_delete_forward_matches_key_delete_between_list_items() {
         let (state, ..) = state! {
             doc {
@@ -5181,6 +5216,107 @@ mod tests {
         let mut key_editor = Editor::new_test(state);
         ime_editor.apply(Message::TextInput {
             ops: ios_backspace_ops(4, 5),
+        });
+        key_editor.apply(key_message(Key::Delete));
+        assert_state_eq!(ime_editor.state(), key_editor.state());
+    }
+
+    #[test]
+    fn flat_ime_token_delete_backward_matches_key_backspace_between_adjacent_lists() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { paragraph { text("A") } }
+                    }
+                    ordered_list {
+                        list_item { p2: paragraph { text("B") } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p2, 0)
+        };
+        let caret = state
+            .selection
+            .as_ref()
+            .unwrap()
+            .head
+            .resolve(&state.view())
+            .unwrap()
+            .to_flat();
+        let mut ime_editor = Editor::new_test(state.clone());
+        let mut key_editor = Editor::new_test(state);
+        ime_editor.apply(Message::TextInput {
+            ops: ios_backspace_ops(caret - 1, caret),
+        });
+        key_editor.apply(key_message(Key::Backspace));
+        assert_state_eq!(ime_editor.state(), key_editor.state());
+    }
+
+    #[test]
+    fn flat_ime_token_delete_forward_matches_key_delete_between_adjacent_lists() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    ordered_list {
+                        list_item { p1: paragraph { text("A") } }
+                    }
+                    bullet_list {
+                        list_item { paragraph { text("B") } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 1)
+        };
+        let caret = state
+            .selection
+            .as_ref()
+            .unwrap()
+            .head
+            .resolve(&state.view())
+            .unwrap()
+            .to_flat();
+        let mut ime_editor = Editor::new_test(state.clone());
+        let mut key_editor = Editor::new_test(state);
+        ime_editor.apply(Message::TextInput {
+            ops: ios_backspace_ops(caret, caret + 1),
+        });
+        key_editor.apply(key_message(Key::Delete));
+        assert_state_eq!(ime_editor.state(), key_editor.state());
+    }
+
+    #[test]
+    fn flat_ime_token_delete_forward_matches_key_from_trailing_nested_item() {
+        let (state, ..) = state! {
+            doc { root {
+                ordered_list {
+                    list_item {
+                        paragraph { text("A") }
+                        bullet_list {
+                            list_item { p1: paragraph { text("B") } }
+                        }
+                    }
+                }
+                bullet_list {
+                    list_item { paragraph { text("C") } }
+                }
+            } }
+            selection: (p1, 1)
+        };
+        let caret = state
+            .selection
+            .as_ref()
+            .unwrap()
+            .head
+            .resolve(&state.view())
+            .unwrap()
+            .to_flat();
+        let mut ime_editor = Editor::new_test(state.clone());
+        let mut key_editor = Editor::new_test(state);
+        ime_editor.apply(Message::TextInput {
+            ops: ios_backspace_ops(caret, caret + 1),
         });
         key_editor.apply(key_message(Key::Delete));
         assert_state_eq!(ime_editor.state(), key_editor.state());

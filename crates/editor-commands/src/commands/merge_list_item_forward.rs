@@ -1,9 +1,8 @@
-use editor_crdt::Dot;
-use editor_model::{ChildView, NodeType};
-use editor_state::{Affinity, Position, Selection};
+use editor_model::ChildView;
+use editor_state::Selection;
 use editor_transaction::{Transaction, fulfill};
 
-use crate::helpers::{find_enclosing_list_item_id, merge_element_cross_parent};
+use crate::helpers::{ForwardListBoundary, find_forward_list_boundary};
 use crate::{CommandError, CommandResult};
 
 pub fn merge_list_item_forward(tr: &mut Transaction) -> CommandResult {
@@ -15,103 +14,62 @@ pub fn merge_list_item_forward(tr: &mut Transaction) -> CommandResult {
     }
 
     let pos = selection.head;
-    let view = tr.view();
+    let cursor_target = pos;
 
-    let list_item_id = match find_enclosing_list_item_id(&view, pos.node) {
-        Some(id) => id,
-        None => return Ok(false),
-    };
-
-    let list_item = view
-        .node(list_item_id)
-        .ok_or(CommandError::NodeNotFound(list_item_id))?;
-    let paragraph = match list_item.first_child() {
-        Some(ChildView::Block(p)) => p,
-        _ => {
+    let (list_item_id, next_id, children, current_len) = {
+        let view = tr.view();
+        let Some(ForwardListBoundary::NextListItem {
+            current_item_id,
+            next_item_id,
+        }) = find_forward_list_boundary(&view, pos)?
+        else {
+            return Ok(false);
+        };
+        let current = view
+            .node(current_item_id)
+            .ok_or(CommandError::NodeNotFound(current_item_id))?;
+        let next = view
+            .node(next_item_id)
+            .ok_or(CommandError::NodeNotFound(next_item_id))?;
+        if current
+            .children()
+            .chain(next.children())
+            .any(|child| matches!(child, ChildView::Leaf(_)))
+        {
             return Err(CommandError::Corrupted(
-                "list_item missing paragraph".into(),
+                "list item contains an unsupported direct child".into(),
             ));
         }
-    };
-    let paragraph_id = paragraph.id();
-
-    let at_end = pos.node == paragraph_id && pos.offset >= paragraph.children().count();
-    if !at_end {
-        return Ok(false);
-    }
-
-    if list_item.child_blocks().last().map(|b| b.id()) != Some(paragraph_id) {
-        return Ok(false);
-    }
-
-    let cursor_target = Position {
-        node: pos.node,
-        offset: pos.offset,
-        affinity: Affinity::Downstream,
-    };
-
-    let list = list_item
-        .parent()
-        .ok_or(CommandError::NoParent(list_item_id))?;
-    let li_idx = list_item
-        .index()
-        .ok_or_else(|| CommandError::orphan_child(list_item_id, list.id()))?;
-    let next = list.child_blocks().nth(li_idx + 1);
-
-    if let Some(next_li) = next
-        && next_li.node_type() == NodeType::ListItem
-    {
-        let next_id = next_li.id();
-        let next_paragraph = match next_li.first_child() {
-            Some(ChildView::Block(p)) => p,
-            _ => {
-                return Err(CommandError::Corrupted(
-                    "next list_item missing paragraph".into(),
-                ));
-            }
-        };
-        let next_paragraph_id = next_paragraph.id();
-
-        let target_sublist_id: Option<Dot> = list_item
+        let children = next
             .child_blocks()
-            .find(|b| matches!(b.node_type(), NodeType::BulletList | NodeType::OrderedList))
-            .map(|b| b.id());
-        let moved_sublist_id: Option<Dot> = next_li
-            .child_blocks()
-            .find(|b| matches!(b.node_type(), NodeType::BulletList | NodeType::OrderedList))
-            .map(|b| b.id());
+            .map(|child| child.id())
+            .collect::<Vec<_>>();
+        if children.is_empty() {
+            return Err(CommandError::Corrupted(
+                "next list_item missing direct children".into(),
+            ));
+        }
+        (
+            current_item_id,
+            next_item_id,
+            children,
+            current.child_blocks().count(),
+        )
+    };
 
-        drop(view);
+    tr.batch::<_, CommandError>(|tr| {
+        tr.move_nodes_consecutive(&children, list_item_id, current_len)?;
+        tr.remove_subtree(next_id)?;
 
-        tr.batch::<_, CommandError>(|tr| {
-            if let Some(moved_id) = &moved_sublist_id {
-                let cur_len = {
-                    let view = tr.view();
-                    view.node(list_item_id)
-                        .ok_or(CommandError::NodeNotFound(list_item_id))?
-                        .child_blocks()
-                        .count()
-                };
-                tr.move_node(*moved_id, list_item_id, cur_len)?;
-            }
-            if let (Some(target), Some(_)) = (&target_sublist_id, &moved_sublist_id) {
-                tr.merge_node(*target)?;
-            }
-            merge_element_cross_parent(tr, next_paragraph_id, paragraph_id)?;
-            tr.remove_subtree(next_id)?;
-
-            let view = tr.view();
-            if let Some(current) = view.node(list_item_id) {
-                tr.apply_steps(fulfill(&current))?;
-            }
-            Ok(())
-        })?;
-
+        let view = tr.view();
+        if let Some(current) = view.node(list_item_id) {
+            tr.apply_steps(fulfill(&current))?;
+        }
         tr.set_selection(Some(Selection::collapsed(cursor_target)))?;
-        return Ok(true);
-    }
+        Ok(())
+    })?;
 
-    Ok(false)
+    Ok(true)
 }
 
 #[cfg(test)]
@@ -140,7 +98,10 @@ mod tests {
             doc {
                 root {
                     bullet_list {
-                        list_item { p1: paragraph { text("HelloWorld") } }
+                        list_item {
+                            p1: paragraph { text("Hello") }
+                            paragraph { text("World") }
+                        }
                     }
                     paragraph {}
                 }
@@ -148,6 +109,45 @@ mod tests {
             selection: (p1, 5)
         };
         assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn merge_next_item_moves_all_direct_children_in_order() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { p1: paragraph { text("A") } }
+                        list_item {
+                            paragraph { text("B") }
+                            ordered_list { list_item { paragraph { text("nested") } } }
+                            paragraph { text("C") }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 1)
+        };
+        let (actual, ..) = transact!(initial, |tr| merge_list_item_forward(&mut tr));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item {
+                            p1: paragraph { text("A") }
+                            paragraph { text("B") }
+                            ordered_list { list_item { paragraph { text("nested") } } }
+                            paragraph { text("C") }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 1)
+        };
+        assert_state_eq!(&actual, &expected);
+        assert_projection_integrity(&actual);
     }
 
     #[test]

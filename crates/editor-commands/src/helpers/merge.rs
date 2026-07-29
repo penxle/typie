@@ -18,10 +18,10 @@ fn next_block_sibling_id(parent: &NodeView, target_id: Dot) -> Option<Dot> {
 /// moved to sit right after `target` and folded in with `merge_node`, which
 /// keeps the inline leaves (and their span formatting) intact.
 ///
-/// Single-slot containers (a `ListItem` holds exactly one paragraph) reject the
-/// extra sibling: projection normalization drops it again, so the move cannot
-/// land. In that case `source`'s inline content (chars and formatting-bearing
-/// atoms) is appended to `target` and the `source` subtree is removed.
+/// Containers that reject `source` as an adjacent sibling cause projection
+/// normalization to drop the move again. In that case `source`'s inline content
+/// (chars and formatting-bearing atoms) is appended to `target` and the
+/// `source` subtree is removed.
 pub(crate) fn merge_element_cross_parent(
     tr: &mut Transaction,
     source_id: Dot,

@@ -6,6 +6,7 @@ use editor_transaction::HistoryMeta;
 
 use crate::editor::Editor;
 use crate::error::EditorError;
+use crate::handle::paragraph_break::apply_list_paragraph_break;
 use crate::message::*;
 
 pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), EditorError> {
@@ -32,17 +33,21 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
                     tr,
                     commands::materialize_gap_paragraph(),
                     commands::insert_paragraph_after_unit_selection(),
-                    |tr| commands::chain!(
-                        tr,
-                        commands::optional!(commands::delete_selection()),
-                        |tr| commands::first!(
+                    |tr| {
+                        let selection_was_range = tr
+                            .selection()
+                            .is_some_and(|selection| !selection.is_collapsed());
+                        commands::chain!(
                             tr,
-                            commands::lift_empty_list_item(),
-                            commands::split_list_item(),
-                            commands::lift_last_paragraph(),
-                            commands::split_paragraph(),
-                        ),
-                    ),
+                            commands::optional!(commands::delete_selection()),
+                            |tr| commands::first!(
+                                tr,
+                                |tr| apply_list_paragraph_break(tr, selection_was_range),
+                                commands::lift_last_paragraph(),
+                                commands::split_paragraph(),
+                            ),
+                        )
+                    },
                 ),
             )?;
             if applied {
@@ -74,10 +79,11 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
                         commands::delete_text_backward(&resource),
                         commands::delete_node_backward(),
                         commands::select_node_backward(),
-                        commands::lift_empty_list_item(),
+                        commands::merge_adjacent_list_backward(),
                         commands::merge_list_item_backward(),
+                        commands::lift_empty_list_item(),
                         commands::lift_first_list_item(),
-                        commands::join_paragraph_backward_into_prev_list_item(),
+                        commands::move_paragraph_backward_into_prev_list(),
                         commands::join_paragraph_backward(),
                         commands::sink_paragraph_backward(),
                         commands::lift_first_paragraph(),
@@ -102,8 +108,9 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
                         commands::delete_node_forward(),
                         commands::select_node_forward(),
                         commands::delete_page_break_forward(),
+                        commands::merge_adjacent_list_forward(),
                         commands::merge_list_item_forward(),
-                        commands::join_next_paragraph_forward_into_list_item(),
+                        commands::move_next_paragraph_forward_into_list(),
                         commands::join_paragraph_forward(),
                         commands::lift_paragraph_forward(),
                         commands::delete_empty_paragraph_forward(),
@@ -119,7 +126,7 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
                 |tr| commands::first!(
                     tr,
                     commands::lift_list_items_in_range(),
-                    commands::lift_list_item_at_start(),
+                    commands::lift_list_item_at_caret(),
                     commands::delete_preceding_tab(),
                 ),
             )?;
@@ -129,16 +136,27 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
             Ok(())
         }),
         (Key::Tab, _) => editor.transact(|tr| {
-            let applied = commands::chain!(
-                tr,
-                commands::optional!(commands::materialize_synthetic_selection_blocks()),
-                |tr| commands::first!(
+            let verdict = match tr.selection() {
+                Some(selection) => commands::judge_indent_list(&tr.view(), &selection),
+                None => commands::Verdict::NotApplicable,
+            };
+            let applied = match verdict {
+                commands::Verdict::Change(_) => {
+                    let materialized = commands::materialize_synthetic_selection_blocks(tr)?;
+                    let sunk = commands::first!(
+                        tr,
+                        commands::sink_list_items_in_range(),
+                        commands::sink_list_item_at_caret(),
+                    )?;
+                    materialized || sunk
+                }
+                commands::Verdict::AbsorbOnly => false,
+                commands::Verdict::NotApplicable => commands::chain!(
                     tr,
-                    commands::sink_list_items_in_range(),
-                    commands::sink_list_item_at_start(),
+                    commands::optional!(commands::materialize_synthetic_selection_blocks()),
                     commands::insert_tab(),
-                ),
-            )?;
+                )?,
+            };
             if applied {
                 tr.clear_pending_format()?;
             }
@@ -1049,24 +1067,49 @@ mod tests {
     }
 
     #[test]
-    fn enter_splits_list_item() {
+    fn enter_splits_middle_list_item_and_round_trips_through_undo() {
         let (state, ..) = state! {
             doc {
                 root {
-                    bullet_list { list_item { p1: paragraph { text("Hello") } } }
+                    bullet_list {
+                        list_item {
+                            paragraph { text("before") }
+                            bullet_list {
+                                list_item { paragraph { text("nested-before") } }
+                            }
+                            p1: paragraph { text("hello") }
+                            ordered_list {
+                                list_item { paragraph { text("nested-after") } }
+                            }
+                            paragraph { text("after") }
+                        }
+                    }
                     paragraph {}
                 }
             }
-            selection: (p1, 5)
+            selection: (p1, 2)
         };
+        let initial = state.clone();
         let mut editor = Editor::new_test(state);
         editor.apply(key(Key::Enter));
         let (expected, ..) = state! {
             doc {
                 root {
                     bullet_list {
-                        list_item { p1: paragraph { text("Hello") } }
-                        list_item { p2: paragraph {} }
+                        list_item {
+                            paragraph { text("before") }
+                            bullet_list {
+                                list_item { paragraph { text("nested-before") } }
+                            }
+                            paragraph { text("he") }
+                        }
+                        list_item {
+                            p2: paragraph { text("llo") }
+                            ordered_list {
+                                list_item { paragraph { text("nested-after") } }
+                            }
+                            paragraph { text("after") }
+                        }
                     }
                     paragraph {}
                 }
@@ -1074,6 +1117,16 @@ mod tests {
             selection: (p2, 0)
         };
         assert_state_eq!(editor.state(), &expected);
+        let after_enter = editor.state().clone();
+
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+        assert_state_eq!(editor.state(), &initial);
+        editor.apply(Message::History {
+            op: HistoryOp::Redo,
+        });
+        assert_state_eq!(editor.state(), &after_enter);
     }
 
     #[test]
@@ -1103,6 +1156,175 @@ mod tests {
             selection: (p1, 0)
         };
         assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn enter_on_internal_empty_list_item_paragraph_splits_item() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item {
+                            paragraph { text("A") }
+                            p1: paragraph {}
+                            paragraph { text("B") }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Enter));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item {
+                            paragraph { text("A") }
+                            paragraph {}
+                        }
+                        list_item {
+                            p2: paragraph {}
+                            paragraph { text("B") }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p2, 0)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn enter_on_trailing_empty_list_item_paragraph_lifts_it_out() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item {
+                            paragraph { text("A") }
+                            p1: paragraph {}
+                        }
+                        list_item { paragraph { text("B") } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Enter));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { paragraph { text("A") } }
+                    }
+                    p1: paragraph {}
+                    bullet_list {
+                        list_item { paragraph { text("B") } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn enter_after_selecting_all_list_item_text_still_splits_item() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { p1: paragraph { text("abc") } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0) -> (p1, 3)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Enter));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { paragraph {} }
+                        list_item { p2: paragraph {} }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p2, 0)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn enter_on_nested_trailing_empty_paragraph_preserves_global_block_order() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item {
+                            paragraph { text("A") }
+                            bullet_list {
+                                list_item {
+                                    paragraph { text("inner") }
+                                    p1: paragraph {}
+                                }
+                                list_item { paragraph { text("B") } }
+                            }
+                            paragraph { text("C") }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        let initial = state.clone();
+        let mut editor = Editor::new_test(state);
+        editor.apply(key(Key::Enter));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item {
+                            paragraph { text("A") }
+                            bullet_list {
+                                list_item { paragraph { text("inner") } }
+                            }
+                        }
+                        list_item {
+                            p1: paragraph {}
+                            bullet_list {
+                                list_item { paragraph { text("B") } }
+                            }
+                        }
+                        list_item { paragraph { text("C") } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        let after_enter = editor.state().clone();
+
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+        assert_state_eq!(editor.state(), &initial);
+        editor.apply(Message::History {
+            op: HistoryOp::Redo,
+        });
+        assert_state_eq!(editor.state(), &after_enter);
     }
 
     #[test]
@@ -1152,12 +1374,15 @@ mod tests {
             doc {
                 root {
                     bullet_list {
-                        list_item { p1: paragraph { text("HelloWorld") } }
+                        list_item {
+                            paragraph { text("Hello") }
+                            p2: paragraph { text("World") }
+                        }
                     }
                     paragraph {}
                 }
             }
-            selection: (p1, 5)
+            selection: (p2, 0)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -1182,12 +1407,15 @@ mod tests {
             doc {
                 root {
                     bullet_list {
-                        list_item { p1: paragraph { text("HelloWorld") [bold] } }
+                        list_item {
+                            paragraph { text("Hello") [bold] }
+                            p2: paragraph { text("World") [bold] }
+                        }
                     }
                     paragraph {}
                 }
             }
-            selection: (p1, 5)
+            selection: (p2, 0)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -1222,11 +1450,7 @@ mod tests {
     }
 
     #[test]
-    fn backspace_on_empty_nested_list_item_unindents() {
-        // An empty list_item at any nesting level should unindent on Backspace
-        // (matches Google Docs / Notion). The presence of a prev sibling does
-        // not change this — empty list_items always lift; merge is reserved
-        // for non-empty content that has somewhere to flow into.
+    fn backspace_on_empty_nested_list_item_joins_previous_item() {
         let (state, ..) = state! {
             doc {
                 root {
@@ -1263,10 +1487,10 @@ mod tests {
                                     bullet_list {
                                         list_item { paragraph { text("c") } }
                                     }
+                                    p1: paragraph {}
                                 }
                             }
                         }
-                        list_item { p1: paragraph {} }
                     }
                     paragraph {}
                 }
@@ -1296,7 +1520,10 @@ mod tests {
             doc {
                 root {
                     bullet_list {
-                        list_item { p1: paragraph { text("HelloWorld") } }
+                        list_item {
+                            p1: paragraph { text("Hello") }
+                            paragraph { text("World") }
+                        }
                     }
                     paragraph {}
                 }
@@ -1307,7 +1534,416 @@ mod tests {
     }
 
     #[test]
-    fn delete_at_end_of_last_list_item_pulls_next_paragraph() {
+    fn delete_from_end_of_trailing_nested_item_merges_outer_next_item() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    ordered_list {
+                        list_item {
+                            paragraph { text("asdasd") }
+                            ordered_list {
+                                list_item {
+                                    p1: paragraph { text("asdasd") }
+                                }
+                            }
+                        }
+                        list_item {
+                            paragraph { text("asd") }
+                        }
+                    }
+                    synthetic paragraph {}
+                }
+            }
+            selection: (p1, 6, <)
+        };
+        let initial = state.clone();
+        let mut editor = Editor::new_test(state);
+
+        editor.apply(key(Key::Delete));
+
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    ordered_list {
+                        list_item {
+                            paragraph { text("asdasd") }
+                            ordered_list {
+                                list_item {
+                                    p1: paragraph { text("asdasd") }
+                                }
+                            }
+                            paragraph { text("asd") }
+                        }
+                    }
+                    synthetic paragraph {}
+                }
+            }
+            selection: (p1, 6, <)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(
+            editor.state().selection.unwrap().head.affinity,
+            Affinity::Upstream
+        );
+        let after_delete = editor.state().clone();
+
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+        assert_state_eq!(editor.state(), &initial);
+        editor.apply(Message::History {
+            op: HistoryOp::Redo,
+        });
+        assert_state_eq!(editor.state(), &after_delete);
+    }
+
+    #[test]
+    fn delete_from_deepest_trailing_item_moves_following_paragraph_outermost_first() {
+        let (state, ..) = state! {
+            doc { root {
+                ordered_list {
+                    list_item {
+                        paragraph { text("A") }
+                        bullet_list {
+                            list_item {
+                                paragraph { text("B") }
+                                ordered_list {
+                                    list_item { p1: paragraph { text("C") } }
+                                }
+                            }
+                        }
+                    }
+                }
+                p2: paragraph { text("D") }
+            } }
+            selection: (p1, 1)
+        };
+        let initial = state.clone();
+        let mut editor = Editor::new_test(state);
+
+        editor.apply(key(Key::Delete));
+        let (after_outer_list, ..) = state! {
+            doc { root {
+                ordered_list {
+                    list_item {
+                        paragraph { text("A") }
+                        bullet_list {
+                            list_item {
+                                paragraph { text("B") }
+                                ordered_list {
+                                    list_item { p1: paragraph { text("C") } }
+                                }
+                            }
+                        }
+                    }
+                    list_item { p2: paragraph { text("D") } }
+                }
+            } }
+            selection: (p1, 1)
+        };
+        assert_state_eq!(editor.state(), &after_outer_list);
+
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+        assert_state_eq!(editor.state(), &initial);
+        editor.apply(Message::History {
+            op: HistoryOp::Redo,
+        });
+        assert_state_eq!(editor.state(), &after_outer_list);
+
+        editor.apply(key(Key::Delete));
+        let (after_outer_item, ..) = state! {
+            doc { root {
+                ordered_list {
+                    list_item {
+                        paragraph { text("A") }
+                        bullet_list {
+                            list_item {
+                                paragraph { text("B") }
+                                ordered_list {
+                                    list_item { p1: paragraph { text("C") } }
+                                }
+                            }
+                        }
+                        p2: paragraph { text("D") }
+                    }
+                }
+            } }
+            selection: (p1, 1)
+        };
+        assert_state_eq!(editor.state(), &after_outer_item);
+
+        editor.apply(key(Key::Delete));
+        let (after_nested_list, ..) = state! {
+            doc { root {
+                ordered_list {
+                    list_item {
+                        paragraph { text("A") }
+                        bullet_list {
+                            list_item {
+                                paragraph { text("B") }
+                                ordered_list {
+                                    list_item { p1: paragraph { text("C") } }
+                                }
+                            }
+                            list_item { p2: paragraph { text("D") } }
+                        }
+                    }
+                }
+            } }
+            selection: (p1, 1)
+        };
+        assert_state_eq!(editor.state(), &after_nested_list);
+    }
+
+    #[test]
+    fn backspace_before_following_paragraph_moves_it_outermost_first() {
+        let (state, ..) = state! {
+            doc { root {
+                ordered_list {
+                    list_item {
+                        paragraph { text("A") }
+                        bullet_list {
+                            list_item {
+                                paragraph { text("B") }
+                                ordered_list {
+                                    list_item { paragraph { text("C") } }
+                                }
+                            }
+                        }
+                    }
+                }
+                p2: paragraph { text("D") }
+            } }
+            selection: (p2, 0)
+        };
+        let initial = state.clone();
+        let mut editor = Editor::new_test(state);
+
+        editor.apply(key(Key::Backspace));
+        let (after_outer_list, ..) = state! {
+            doc { root {
+                ordered_list {
+                    list_item {
+                        paragraph { text("A") }
+                        bullet_list {
+                            list_item {
+                                paragraph { text("B") }
+                                ordered_list {
+                                    list_item { paragraph { text("C") } }
+                                }
+                            }
+                        }
+                    }
+                    list_item { p2: paragraph { text("D") } }
+                }
+            } }
+            selection: (p2, 0)
+        };
+        assert_state_eq!(editor.state(), &after_outer_list);
+
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+        assert_state_eq!(editor.state(), &initial);
+        editor.apply(Message::History {
+            op: HistoryOp::Redo,
+        });
+        assert_state_eq!(editor.state(), &after_outer_list);
+
+        editor.apply(key(Key::Backspace));
+        let (after_outer_item, ..) = state! {
+            doc { root {
+                ordered_list {
+                    list_item {
+                        paragraph { text("A") }
+                        bullet_list {
+                            list_item {
+                                paragraph { text("B") }
+                                ordered_list {
+                                    list_item { paragraph { text("C") } }
+                                }
+                            }
+                        }
+                        p2: paragraph { text("D") }
+                    }
+                }
+            } }
+            selection: (p2, 0)
+        };
+        assert_state_eq!(editor.state(), &after_outer_item);
+
+        editor.apply(key(Key::Backspace));
+        let (after_nested_list, ..) = state! {
+            doc { root {
+                ordered_list {
+                    list_item {
+                        paragraph { text("A") }
+                        bullet_list {
+                            list_item {
+                                paragraph { text("B") }
+                                ordered_list {
+                                    list_item { paragraph { text("C") } }
+                                }
+                            }
+                            list_item { p2: paragraph { text("D") } }
+                        }
+                    }
+                }
+            } }
+            selection: (p2, 0)
+        };
+        assert_state_eq!(editor.state(), &after_nested_list);
+    }
+
+    #[test]
+    fn backspace_removes_list_then_item_then_paragraph_boundaries() {
+        let (state, ..) = state! {
+            doc { root {
+                bullet_list {
+                    list_item { p1: paragraph { text("A") } }
+                }
+                ordered_list {
+                    list_item { p2: paragraph { text("B") } }
+                }
+            } }
+            selection: (p2, 0)
+        };
+        let initial = state.clone();
+        let mut editor = Editor::new_test(state);
+
+        editor.apply(key(Key::Backspace));
+        let after_lists = editor.state().clone();
+        let (expected_lists, ..) = state! {
+            doc { root {
+                bullet_list {
+                    list_item { paragraph { text("A") } }
+                    list_item { p2: paragraph { text("B") } }
+                }
+            } }
+            selection: (p2, 0)
+        };
+        assert_state_eq!(&after_lists, &expected_lists);
+
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+        assert_state_eq!(editor.state(), &initial);
+        editor.apply(Message::History {
+            op: HistoryOp::Redo,
+        });
+        assert_state_eq!(editor.state(), &after_lists);
+
+        editor.apply(key(Key::Backspace));
+        let (expected_items, ..) = state! {
+            doc { root {
+                bullet_list {
+                    list_item {
+                        paragraph { text("A") }
+                        p2: paragraph { text("B") }
+                    }
+                }
+            } }
+            selection: (p2, 0)
+        };
+        assert_state_eq!(editor.state(), &expected_items);
+
+        editor.apply(key(Key::Backspace));
+        let (expected_paragraphs, ..) = state! {
+            doc { root {
+                bullet_list {
+                    list_item { p1: paragraph { text("AB") } }
+                }
+            } }
+            selection: (p1, 1)
+        };
+        assert_state_eq!(editor.state(), &expected_paragraphs);
+    }
+
+    #[test]
+    fn backspace_empty_first_item_of_adjacent_list_joins_lists_before_lifting() {
+        let (state, ..) = state! {
+            doc { root {
+                bullet_list {
+                    list_item { paragraph { text("A") } }
+                }
+                ordered_list {
+                    list_item { p2: paragraph {} }
+                }
+            } }
+            selection: (p2, 0)
+        };
+        let mut editor = Editor::new_test(state);
+
+        editor.apply(key(Key::Backspace));
+        let (expected, ..) = state! {
+            doc { root {
+                bullet_list {
+                    list_item { paragraph { text("A") } }
+                    list_item { p2: paragraph {} }
+                }
+            } }
+            selection: (p2, 0)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn delete_removes_list_then_item_then_paragraph_boundaries() {
+        let (state, ..) = state! {
+            doc { root {
+                ordered_list {
+                    list_item { p1: paragraph { text("A") } }
+                }
+                bullet_list {
+                    list_item { paragraph { text("B") } }
+                }
+            } }
+            selection: (p1, 1)
+        };
+        let mut editor = Editor::new_test(state);
+
+        editor.apply(key(Key::Delete));
+        let (expected_lists, ..) = state! {
+            doc { root {
+                ordered_list {
+                    list_item { p1: paragraph { text("A") } }
+                    list_item { paragraph { text("B") } }
+                }
+            } }
+            selection: (p1, 1)
+        };
+        assert_state_eq!(editor.state(), &expected_lists);
+
+        editor.apply(key(Key::Delete));
+        let (expected_items, ..) = state! {
+            doc { root {
+                ordered_list {
+                    list_item {
+                        p1: paragraph { text("A") }
+                        paragraph { text("B") }
+                    }
+                }
+            } }
+            selection: (p1, 1)
+        };
+        assert_state_eq!(editor.state(), &expected_items);
+
+        editor.apply(key(Key::Delete));
+        let (expected_paragraphs, ..) = state! {
+            doc { root {
+                ordered_list {
+                    list_item { p1: paragraph { text("AB") } }
+                }
+            } }
+            selection: (p1, 1)
+        };
+        assert_state_eq!(editor.state(), &expected_paragraphs);
+    }
+
+    #[test]
+    fn delete_at_end_of_last_list_item_moves_next_paragraph_into_new_item() {
         let (state, ..) = state! {
             doc {
                 root {
@@ -1322,8 +1958,10 @@ mod tests {
         let (expected, ..) = state! {
             doc {
                 root {
-                    bullet_list { list_item { p1: paragraph { text("AB") } } }
-                    paragraph {}
+                    bullet_list {
+                        list_item { p1: paragraph { text("A") } }
+                        list_item { paragraph { text("B") } }
+                    }
                 }
             }
             selection: (p1, 1)
@@ -1332,7 +1970,7 @@ mod tests {
     }
 
     #[test]
-    fn delete_at_end_of_synthetic_last_list_item_pulls_next_paragraph() {
+    fn delete_at_end_of_synthetic_empty_item_moves_next_paragraph_into_new_item() {
         let (state, ..) = state! {
             doc {
                 root [text_color("black".to_string()), background_color("none".to_string())] {
@@ -1353,7 +1991,8 @@ mod tests {
             doc {
                 root [text_color("black".to_string()), background_color("none".to_string())] {
                     bullet_list {
-                        list_item { p1: paragraph { text("B") } }
+                        list_item { p1: paragraph {} }
+                        list_item { paragraph { text("B") } }
                     }
                     paragraph {}
                 }
@@ -1364,7 +2003,7 @@ mod tests {
     }
 
     #[test]
-    fn backspace_at_paragraph_start_after_list_joins_into_last_list_item() {
+    fn backspace_at_paragraph_start_after_list_moves_it_into_new_item() {
         let (state, ..) = state! {
             doc {
                 root [text_color("black".to_string()), background_color("none".to_string())] {
@@ -1383,12 +2022,12 @@ mod tests {
             doc {
                 root [text_color("black".to_string()), background_color("none".to_string())] {
                     bullet_list {
-                        list_item { p1: paragraph { text("AB") } }
+                        list_item { p1: paragraph { text("A") } }
+                        list_item { p2: paragraph { text("B") } }
                     }
-                    paragraph {}
                 }
             }
-            selection: (p1, 1)
+            selection: (p2, 0)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -1608,7 +2247,7 @@ mod tests {
     }
 
     #[test]
-    fn tab_first_item_no_op() {
+    fn tab_first_item_no_op_preserves_pending_format() {
         let (state, ..) = state! {
             doc {
                 root {
@@ -1617,6 +2256,7 @@ mod tests {
                 }
             }
             selection: (p1, 0)
+            pending_modifiers: [bold]
         };
         let mut editor = Editor::new_test(state);
         editor.apply(key(Key::Tab));
@@ -1628,6 +2268,7 @@ mod tests {
                 }
             }
             selection: (p1, 0)
+            pending_modifiers: [bold]
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -1677,7 +2318,7 @@ mod tests {
     }
 
     #[test]
-    fn tab_mid_list_item_inserts_tab() {
+    fn tab_mid_first_list_item_is_consumed() {
         let (state, ..) = state! {
             doc { root {
                 bullet_list { list_item { p1: paragraph { text("AB") } } }
@@ -1689,10 +2330,10 @@ mod tests {
         editor.apply(key(Key::Tab));
         let (expected, ..) = state! {
             doc { root {
-                bullet_list { list_item { p1: paragraph { text("A") tab text("B") } } }
+                bullet_list { list_item { p1: paragraph { text("AB") } } }
                 paragraph {}
             } }
-            selection: (p1, 2)
+            selection: (p1, 1)
         };
         assert_state_eq!(editor.state(), &expected);
     }

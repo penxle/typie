@@ -1,9 +1,8 @@
-use editor_crdt::Dot;
 use editor_model::{ChildView, NodeType};
-use editor_state::{Affinity, Position, Selection};
+use editor_state::{Position, Selection};
 use editor_transaction::{Transaction, fulfill};
 
-use crate::helpers::{find_enclosing_list_item_id, merge_element_cross_parent};
+use crate::helpers::find_enclosing_list_item_id;
 use crate::{CommandError, CommandResult};
 
 pub fn merge_list_item_backward(tr: &mut Transaction) -> CommandResult {
@@ -29,17 +28,14 @@ pub fn merge_list_item_backward(tr: &mut Transaction) -> CommandResult {
     let list_item = view
         .node(list_item_id)
         .ok_or(CommandError::NodeNotFound(list_item_id))?;
-    let paragraph = match list_item.first_child() {
-        Some(ChildView::Block(p)) => p,
-        _ => {
-            return Err(CommandError::Corrupted(
-                "list_item missing paragraph".into(),
-            ));
-        }
-    };
-    let paragraph_id = paragraph.id();
-
-    if pos.node != paragraph_id || pos.offset != 0 {
+    let first_paragraph = list_item
+        .child_blocks()
+        .next()
+        .ok_or_else(|| CommandError::Corrupted("list_item missing first paragraph".into()))?;
+    if first_paragraph.node_type() != NodeType::Paragraph
+        || pos.node != first_paragraph.id()
+        || pos.offset != 0
+    {
         return Ok(false);
     }
 
@@ -56,78 +52,52 @@ pub fn merge_list_item_backward(tr: &mut Transaction) -> CommandResult {
         .child_blocks()
         .nth(li_idx - 1)
         .ok_or(CommandError::Corrupted("prev list_item missing".into()))?;
+    if prev.node_type() != NodeType::ListItem {
+        return Err(CommandError::Corrupted(
+            "list contains non-list_item child".into(),
+        ));
+    }
     let prev_id = prev.id();
-    let prev_paragraph = match prev.first_child() {
-        Some(ChildView::Block(p)) => p,
-        _ => {
-            return Err(CommandError::Corrupted(
-                "prev list_item missing paragraph".into(),
-            ));
-        }
-    };
-    let prev_paragraph_id = prev_paragraph.id();
-
-    let target_sublist_id: Option<Dot> = prev
+    let prev_len = prev.child_blocks().count();
+    if prev
+        .children()
+        .chain(list_item.children())
+        .any(|child| matches!(child, ChildView::Leaf(_)))
+    {
+        return Err(CommandError::Corrupted(
+            "list item contains an unsupported direct child".into(),
+        ));
+    }
+    let children = list_item
         .child_blocks()
-        .find(|b| matches!(b.node_type(), NodeType::BulletList | NodeType::OrderedList))
-        .map(|b| b.id());
-    let moved_sublist_id: Option<Dot> = list_item
-        .child_blocks()
-        .find(|b| matches!(b.node_type(), NodeType::BulletList | NodeType::OrderedList))
-        .map(|b| b.id());
-
-    let join_cursor = Position {
-        node: prev_paragraph_id,
-        offset: prev_paragraph.children().count(),
-        affinity: Affinity::Downstream,
-    };
+        .map(|child| child.id())
+        .collect::<Vec<_>>();
+    if children.is_empty() {
+        return Err(CommandError::Corrupted(
+            "list_item missing direct children".into(),
+        ));
+    }
 
     drop(view);
 
     tr.batch::<_, CommandError>(|tr| {
-        match (&target_sublist_id, &moved_sublist_id) {
-            (Some(target), Some(moved)) => {
-                let items: Vec<Dot> = {
-                    let view = tr.view();
-                    view.node(*moved)
-                        .map(|m| m.child_blocks().map(|b| b.id()).collect())
-                        .unwrap_or_default()
-                };
-                let base = {
-                    let view = tr.view();
-                    view.node(*target)
-                        .ok_or(CommandError::NodeNotFound(*target))?
-                        .child_blocks()
-                        .count()
-                };
-                for (i, item) in items.into_iter().enumerate() {
-                    tr.move_node(item, *target, base + i)?;
-                }
-            }
-            (None, Some(moved)) => {
-                let prev_len = {
-                    let view = tr.view();
-                    view.node(prev_id)
-                        .ok_or(CommandError::NodeNotFound(prev_id))?
-                        .child_blocks()
-                        .count()
-                };
-                tr.move_node(*moved, prev_id, prev_len)?;
-            }
-            _ => {}
-        }
-
-        merge_element_cross_parent(tr, paragraph_id, prev_paragraph_id)?;
+        let moved = tr.move_nodes_consecutive(&children, prev_id, prev_len)?;
+        let first_moved = moved
+            .first()
+            .map(|moved| moved.root)
+            .ok_or(CommandError::Corrupted(
+                "list item merge moved no children".into(),
+            ))?;
         tr.remove_subtree(list_item_id)?;
 
         let view = tr.view();
         if let Some(prev) = view.node(prev_id) {
             tr.apply_steps(fulfill(&prev))?;
         }
+        tr.set_selection(Some(Selection::collapsed(Position::new(first_moved, 0))))?;
         Ok(())
     })?;
 
-    tr.set_selection(Some(Selection::collapsed(join_cursor)))?;
     Ok(true)
 }
 
@@ -157,12 +127,15 @@ mod tests {
             doc {
                 root {
                     bullet_list {
-                        list_item { t1: paragraph { text("HelloWorld") } }
+                        list_item {
+                            paragraph { text("Hello") }
+                            t2: paragraph { text("World") }
+                        }
                     }
                     paragraph {}
                 }
             }
-            selection: (t1, 5)
+            selection: (t2, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -252,14 +225,15 @@ mod tests {
                 root {
                     bullet_list {
                         list_item {
-                            t_a: paragraph { text("AB") }
+                            paragraph { text("A") }
                             bullet_list { list_item { paragraph { text("a1") } } }
+                            t2: paragraph { text("B") }
                         }
                     }
                     paragraph {}
                 }
             }
-            selection: (t_a, 1)
+            selection: (t2, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -287,14 +261,15 @@ mod tests {
                 root {
                     bullet_list {
                         list_item {
-                            t_a: paragraph { text("AB") }
+                            paragraph { text("A") }
+                            t2: paragraph { text("B") }
                             bullet_list { list_item { paragraph { text("b1") } } }
                         }
                     }
                     paragraph {}
                 }
             }
-            selection: (t_a, 1)
+            selection: (t2, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -325,17 +300,18 @@ mod tests {
                 root {
                     bullet_list {
                         list_item {
-                            t_a: paragraph { text("AB") }
+                            paragraph { text("A") }
                             bullet_list {
                                 list_item { paragraph { text("a1") } }
-                                list_item { paragraph { text("b1") } }
                             }
+                            t2: paragraph { text("B") }
+                            bullet_list { list_item { paragraph { text("b1") } } }
                         }
                     }
                     paragraph {}
                 }
             }
-            selection: (t_a, 1)
+            selection: (t2, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -359,12 +335,15 @@ mod tests {
             doc {
                 root {
                     bullet_list {
-                        list_item { t1: paragraph { text("A") text("B") [bold] } }
+                        list_item {
+                            paragraph { text("A") }
+                            t2: paragraph { text("B") [bold] }
+                        }
                     }
                     paragraph {}
                 }
             }
-            selection: (t1, 1)
+            selection: (t2, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -388,12 +367,15 @@ mod tests {
             doc {
                 root {
                     bullet_list {
-                        list_item { t1: paragraph { text("A") text("B") tab text("C") hard_break } }
+                        list_item {
+                            paragraph { text("A") }
+                            t2: paragraph { text("B") tab text("C") hard_break }
+                        }
                     }
                     paragraph {}
                 }
             }
-            selection: (t1, 1)
+            selection: (t2, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -404,7 +386,7 @@ mod tests {
             doc {
                 root {
                     bullet_list {
-                        list_item { t_a: paragraph { text("A") } }
+                        list_item { paragraph { text("A") } }
                         list_item { p2: paragraph {} }
                     }
                     paragraph {}
@@ -417,12 +399,15 @@ mod tests {
             doc {
                 root {
                     bullet_list {
-                        list_item { t_a: paragraph { text("A") } }
+                        list_item {
+                            paragraph { text("A") }
+                            p2: paragraph {}
+                        }
                     }
                     paragraph {}
                 }
             }
-            selection: (t_a, 1)
+            selection: (p2, 0)
         };
         assert_state_eq!(&actual, &expected);
     }

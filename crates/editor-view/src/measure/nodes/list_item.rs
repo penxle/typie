@@ -685,6 +685,101 @@ mod tests {
         )
     }
 
+    fn measure_root_of_interleaved_list_item(resource: &mut Resource) -> MeasuredNode {
+        let root = Dot::ROOT;
+        let list = Dot::new(11, 1);
+        let li = Dot::new(11, 2);
+        let first_para = Dot::new(11, 3);
+        let first_char = Dot::new(11, 4);
+        let nested_list = Dot::new(11, 5);
+        let nested_item = Dot::new(11, 6);
+        let nested_para = Dot::new(11, 7);
+        let nested_char = Dot::new(11, 8);
+        let second_para = Dot::new(11, 9);
+        let second_char = Dot::new(11, 10);
+        let root_para = Dot::new(11, 11);
+        let items = vec![
+            (
+                list,
+                SeqItem::Block {
+                    node_type: NodeType::BulletList,
+                    parents: vec![root],
+                    attrs: vec![],
+                },
+            ),
+            (
+                li,
+                SeqItem::Block {
+                    node_type: NodeType::ListItem,
+                    parents: vec![root, list],
+                    attrs: vec![],
+                },
+            ),
+            (
+                first_para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, list, li],
+                    attrs: vec![],
+                },
+            ),
+            (first_char, SeqItem::Char('A')),
+            (
+                nested_list,
+                SeqItem::Block {
+                    node_type: NodeType::OrderedList,
+                    parents: vec![root, list, li],
+                    attrs: vec![],
+                },
+            ),
+            (
+                nested_item,
+                SeqItem::Block {
+                    node_type: NodeType::ListItem,
+                    parents: vec![root, list, li, nested_list],
+                    attrs: vec![],
+                },
+            ),
+            (
+                nested_para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, list, li, nested_list, nested_item],
+                    attrs: vec![],
+                },
+            ),
+            (nested_char, SeqItem::Char('N')),
+            (
+                second_para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root, list, li],
+                    attrs: vec![],
+                },
+            ),
+            (second_char, SeqItem::Char('B')),
+            (
+                root_para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                    attrs: vec![],
+                },
+            ),
+        ];
+        let doc = logs(&items);
+        let pd = project_document(&doc).unwrap();
+        let view = DocView::new(&pd);
+        let root_node = view.root().unwrap();
+        measure_node(
+            &mut Measurer::new(),
+            &root_node,
+            400.0,
+            &MeasureContext::default(),
+            resource,
+        )
+    }
+
     fn extract_list_item_box(result: &MeasuredNode) -> &MeasuredBox {
         let MeasuredContent::Box(ref root_box) = result.content else {
             panic!("expected Box at root");
@@ -735,6 +830,28 @@ mod tests {
         assert!(
             matches!(dec.data, DecorationData::Bullet),
             "expected Bullet decoration"
+        );
+    }
+
+    #[test]
+    fn interleaved_list_item_has_one_marker_aligned_with_first_paragraph() {
+        let mut res = resource_with_font();
+        let result = measure_root_of_interleaved_list_item(&mut res);
+        let li_box = extract_list_item_box(&result);
+        assert_eq!(
+            li_box.children.len(),
+            3,
+            "both paragraphs and the nested list must be measured"
+        );
+        assert_eq!(
+            li_box.style.decorations.len(),
+            1,
+            "the list item must render one marker"
+        );
+        let marker = &li_box.style.decorations[0];
+        assert!(
+            marker.rect.y < li_box.children[0].height,
+            "the marker must stay within the first paragraph's vertical extent"
         );
     }
 

@@ -5,12 +5,96 @@ use editor_model::{ChildView, DocView, NodeType, NodeView, Subtree};
 use editor_state::{
     Affinity, Position, ResolvedSelection, Selection, StableResolveCtx, StableSelection,
 };
-use editor_transaction::{Step, StepError, Transaction, fulfill};
+use editor_transaction::{Step, StepError, Transaction, fulfill, minimal_subtree};
 
 use crate::{CommandError, CommandResult};
 
 pub(crate) fn is_list_type(ty: NodeType) -> bool {
     matches!(ty, NodeType::BulletList | NodeType::OrderedList)
+}
+
+pub(crate) enum ForwardListBoundary {
+    NextListItem {
+        current_item_id: Dot,
+        next_item_id: Dot,
+    },
+    NextBlock {
+        list_id: Dot,
+        next_id: Dot,
+    },
+}
+
+/// Finds the first structural boundary after a caret at the end of a trailing
+/// list-item paragraph. Each enclosing list/item pair is crossed only when it
+/// is the trailing child at that level, so callers remove one boundary per
+/// edit instead of skipping directly to a deeper merge target.
+pub(crate) fn find_forward_list_boundary(
+    view: &DocView,
+    position: Position,
+) -> Result<Option<ForwardListBoundary>, CommandError> {
+    let paragraph = view
+        .node(position.node)
+        .ok_or(CommandError::NodeNotFound(position.node))?;
+    if paragraph.node_type() != NodeType::Paragraph
+        || position.offset < paragraph.children().count()
+    {
+        return Ok(None);
+    }
+
+    let Some(mut current_item) = paragraph.parent() else {
+        return Ok(None);
+    };
+    if current_item.node_type() != NodeType::ListItem
+        || current_item.child_blocks().last().map(|child| child.id()) != Some(paragraph.id())
+    {
+        return Ok(None);
+    }
+
+    loop {
+        let list = current_item
+            .parent()
+            .ok_or(CommandError::NoParent(current_item.id()))?;
+        if !is_list_type(list.node_type()) {
+            return Ok(None);
+        }
+        let item_index = list
+            .child_blocks()
+            .position(|child| child.id() == current_item.id())
+            .ok_or_else(|| CommandError::orphan_child(current_item.id(), list.id()))?;
+
+        if let Some(next_item) = list.child_blocks().nth(item_index + 1) {
+            if next_item.node_type() != NodeType::ListItem {
+                return Err(CommandError::Corrupted(
+                    "list contains non-list_item child".into(),
+                ));
+            }
+            return Ok(Some(ForwardListBoundary::NextListItem {
+                current_item_id: current_item.id(),
+                next_item_id: next_item.id(),
+            }));
+        }
+
+        let owner = list.parent().ok_or(CommandError::NoParent(list.id()))?;
+        let list_index = list
+            .index()
+            .ok_or_else(|| CommandError::orphan_child(list.id(), owner.id()))?;
+        if let Some(next) = owner.child_at(list_index + 1) {
+            let ChildView::Block(next) = next else {
+                return Err(CommandError::Corrupted(
+                    "list has an unsupported direct sibling".into(),
+                ));
+            };
+            return Ok(Some(ForwardListBoundary::NextBlock {
+                list_id: list.id(),
+                next_id: next.id(),
+            }));
+        }
+
+        if owner.node_type() != NodeType::ListItem {
+            return Ok(None);
+        }
+        current_item = owner;
+    }
 }
 
 #[derive(Clone)]
@@ -54,7 +138,9 @@ enum ItemPlanKind {
         outer_list_id: Dot,
         outer_index: usize,
         own_child_count: usize,
-        existing_sublist: Option<(Dot, usize)>,
+        trailing_sublist: Option<(Dot, usize)>,
+        owner_tail: Vec<Dot>,
+        owner_tail_starts_with_paragraph: bool,
     },
     TopLevel {
         children: Vec<Dot>,
@@ -117,15 +203,30 @@ fn build_item_plan(
             .index()
             .ok_or_else(|| CommandError::orphan_child(owner_id, outer_list_id))?;
         let own_child_count = list_item.child_blocks().count();
-        let existing_sublist = list_item
+        let trailing_sublist = list_item
             .child_blocks()
-            .find(|c| is_list_type(c.node_type()))
+            .filter(|child| is_real_child(scheduled, child.id()))
+            .last()
+            .filter(|child| child.node_type() == list_type)
             .map(|c| (c.id(), real_child_count(scheduled, &c)));
+        let owner_tail: Vec<Dot> = owner
+            .child_blocks()
+            .skip(list_index + 1)
+            .filter(|child| is_real_child(scheduled, child.id()))
+            .map(|child| child.id())
+            .collect();
+        let owner_tail_starts_with_paragraph = owner
+            .child_blocks()
+            .skip(list_index + 1)
+            .find(|child| is_real_child(scheduled, child.id()))
+            .is_some_and(|child| child.node_type() == NodeType::Paragraph);
         ItemPlanKind::NestedUnderListItem {
             outer_list_id,
             outer_index,
             own_child_count,
-            existing_sublist,
+            trailing_sublist,
+            owner_tail,
+            owner_tail_starts_with_paragraph,
         }
     } else {
         let children: Vec<Dot> = list_item.child_blocks().map(|c| c.id()).collect();
@@ -205,14 +306,16 @@ fn lift_list_item_to_parent(
             outer_list_id,
             outer_index,
             own_child_count,
-            existing_sublist,
+            trailing_sublist,
+            owner_tail,
+            owner_tail_starts_with_paragraph,
         } => {
             let moved = tr.move_node(list_item_id, outer_list_id, outer_index + 1)?;
             let moved_item_id = moved.root;
             let target = LiftedListItemTarget::ListItem(moved_item_id);
 
             if !after_items.is_empty() {
-                match existing_sublist {
+                match trailing_sublist {
                     Some((old_sublist_id, base)) => {
                         let new_sublist_id = moved
                             .pairs
@@ -234,6 +337,20 @@ fn lift_list_item_to_parent(
                         )?;
                     }
                 }
+            }
+            if !owner_tail.is_empty() {
+                let container = if owner_tail_starts_with_paragraph {
+                    Subtree::leaf(NodeType::ListItem.into_node().to_plain())
+                } else {
+                    minimal_subtree(NodeType::ListItem)
+                };
+                tr.projected_clean().map_err(StepError::from)?;
+                tr.insert_subtree_with_moved(
+                    outer_list_id,
+                    outer_index + 2,
+                    container,
+                    &owner_tail,
+                )?;
             }
             Some(target)
         }
@@ -363,21 +480,20 @@ pub(crate) fn find_enclosing_list_item_id(view: &DocView, node: Dot) -> Option<D
     }
 }
 
-pub(crate) fn is_at_list_item_content_start(view: &DocView, selection: &Selection) -> bool {
+pub(crate) fn is_in_direct_list_item_paragraph(view: &DocView, selection: &Selection) -> bool {
     if selection.anchor != selection.head {
         return false;
     }
     let pos = &selection.head;
-    let Some(item_id) = find_enclosing_list_item_id(view, pos.node) else {
+    let Some(paragraph) = view.node(pos.node) else {
         return false;
     };
-    let Some(item) = view.node(item_id) else {
+    if paragraph.node_type() != NodeType::Paragraph {
         return false;
-    };
-    let Some(para) = item.child_blocks().next() else {
-        return false;
-    };
-    pos.node == para.id() && pos.offset == 0
+    }
+    paragraph
+        .parent()
+        .is_some_and(|parent| parent.node_type() == NodeType::ListItem)
 }
 
 pub(crate) fn collect_list_items_in_selection(rs: &ResolvedSelection<'_>) -> Vec<Dot> {
@@ -416,9 +532,8 @@ pub(crate) fn list_item_own_paragraph_intersects(
     item: &NodeView<'_>,
 ) -> bool {
     item.child_blocks()
-        .next()
-        .map(|paragraph| rs.intersects_subtree(&paragraph))
-        .unwrap_or_else(|| rs.intersects_subtree(item))
+        .filter(|paragraph| paragraph.node_type() == NodeType::Paragraph)
+        .any(|paragraph| rs.intersects_subtree(&paragraph))
 }
 
 pub(crate) fn sort_list_items_for_lift(view: &DocView, items: &mut [Dot]) {
@@ -626,7 +741,9 @@ pub(crate) fn sink_list_item_inner(
 
         let target_sublist_id = prev
             .child_blocks()
-            .find(|c| is_list_type(c.node_type()))
+            .filter(|child| child.id().as_op_dot().is_some())
+            .last()
+            .filter(|child| child.node_type() == list_type)
             .map(|c| c.id());
 
         (prev_id, list_type, target_sublist_id)

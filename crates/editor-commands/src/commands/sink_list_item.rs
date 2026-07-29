@@ -262,7 +262,7 @@ mod tests {
     }
 
     #[test]
-    fn sink_range_first_has_no_prev_consumes_without_change() {
+    fn sink_range_first_has_no_prev_returns_false_without_change() {
         let (initial, _, _) = state! {
             doc {
                 root {
@@ -275,7 +275,7 @@ mod tests {
             }
             selection: (p1, 0) -> (p2, 1)
         };
-        let (actual, ..) = transact!(initial, |tr| sink_list_item(&mut tr));
+        let (actual, ..) = transact_fail!(initial, |tr| sink_list_item(&mut tr));
         let (expected, _, _) = state! {
             doc {
                 root {
@@ -292,7 +292,7 @@ mod tests {
     }
 
     #[test]
-    fn sink_range_with_plain_paragraph_consumes_when_first_list_item_cannot_indent() {
+    fn sink_range_with_plain_paragraph_returns_false_when_first_list_item_cannot_indent() {
         let (initial, _, _) = state! {
             doc {
                 root {
@@ -306,7 +306,7 @@ mod tests {
             }
             selection: (p0, 0) -> (p1, 1)
         };
-        let (actual, ..) = transact!(initial, |tr| sink_list_item(&mut tr));
+        let (actual, ..) = transact_fail!(initial, |tr| sink_list_item(&mut tr));
         let (expected, _, _) = state! {
             doc {
                 root {
@@ -402,10 +402,56 @@ mod tests {
     }
 
     #[test]
-    fn sink_into_prev_with_different_type_sublist_reuses_existing() {
-        // prev_list_item already owns an ordered sublist (a state reachable only
-        // via paste/import). Reusing it regardless of type preserves the single-
-        // sublist invariant; the sunk item becomes a child of the ordered list.
+    fn sink_range_parent_and_later_nested_child_does_not_sink_child_twice() {
+        let (initial, _, _) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { paragraph { text("P") } }
+                        list_item {
+                            paragraph { text("A") }
+                            bullet_list {
+                                list_item { paragraph { text("B0") } }
+                                list_item { p2: paragraph { text("B1") } }
+                            }
+                            p3: paragraph { text("tail") }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p2, 0) -> (p3, 1)
+        };
+        let (actual, ..) = transact!(initial, |tr| sink_list_item(&mut tr));
+        let (expected, _, _) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item {
+                            paragraph { text("P") }
+                            bullet_list {
+                                list_item {
+                                    paragraph { text("A") }
+                                    bullet_list {
+                                        list_item { paragraph { text("B0") } }
+                                        list_item { p2: paragraph { text("B1") } }
+                                    }
+                                    p3: paragraph { text("tail") }
+                                }
+                            }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p2, 0) -> (p3, 1)
+        };
+        assert_state_eq!(&actual, &expected);
+        assert_projection_integrity(&actual);
+    }
+
+    #[test]
+    fn multi_block_list_item_sink_keeps_different_trailing_sublist_separate() {
         let (initial, _) = state! {
             doc {
                 root {
@@ -428,8 +474,8 @@ mod tests {
                     bullet_list {
                         list_item {
                             paragraph { text("A") }
-                            ordered_list {
-                                list_item { paragraph { text("a1") } }
+                            ordered_list { list_item { paragraph { text("a1") } } }
+                            bullet_list {
                                 list_item { p1: paragraph { text("B") } }
                             }
                         }
@@ -440,6 +486,48 @@ mod tests {
             selection: (p1, 0)
         };
         assert_state_eq!(&actual, &expected);
+        assert_projection_integrity(&actual);
+    }
+
+    #[test]
+    fn multi_block_list_item_sink_appends_after_non_trailing_sublist() {
+        let (initial, _) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item {
+                            paragraph { text("A") }
+                            ordered_list { list_item { paragraph { text("X") } } }
+                            paragraph { text("tail") }
+                        }
+                        list_item { p1: paragraph { text("B") } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| sink_list_item(&mut tr));
+        let (expected, _) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item {
+                            paragraph { text("A") }
+                            ordered_list { list_item { paragraph { text("X") } } }
+                            paragraph { text("tail") }
+                            bullet_list {
+                                list_item { p1: paragraph { text("B") } }
+                            }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+        assert_projection_integrity(&actual);
     }
 
     #[test]

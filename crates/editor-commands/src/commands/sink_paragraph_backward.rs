@@ -280,11 +280,8 @@ mod tests {
 
     #[test]
     fn sink_deep_blockquote() {
-        // Blockquote/Callout are monolithic and cannot nest, and the only
-        // containers that accept a blockquote (FoldContent/TableCell) are
-        // isolating, so the deepest reachable sink target is the blockquote
-        // itself. This exercises descend-and-backtrack: the sink walks past the
-        // non-appendable inner list and lands in the blockquote.
+        // The sink chooses the deepest schema-valid target. A ListItem can own
+        // another direct paragraph, so the paragraph lands after its first one.
         let (initial, ..) = state! {
             doc {
                 root {
@@ -301,8 +298,12 @@ mod tests {
             doc {
                 root {
                     blockquote {
-                        bullet_list { list_item { p1: paragraph { text("A") } } }
-                        p2: paragraph { text("B") }
+                        bullet_list {
+                            list_item {
+                                p1: paragraph { text("A") }
+                                p2: paragraph { text("B") }
+                            }
+                        }
                     }
                     paragraph {}
                 }
@@ -340,11 +341,7 @@ mod tests {
     }
 
     #[test]
-    fn prev_list_does_not_sink_into_list_item() {
-        // ListItem content: Paragraph, (BulletList|OrderedList)*
-        // Appending Paragraph at end is invalid
-        // But BulletList itself accepts ListItem+, not Paragraph
-        // So no valid target → Ok(false)
+    fn prev_list_sinks_into_final_list_item() {
         let (initial, ..) = state! {
             doc {
                 root {
@@ -356,7 +353,22 @@ mod tests {
             }
             selection: (p2, 0)
         };
-        transact_fail!(initial, |tr| sink_paragraph_backward(&mut tr));
+        let (actual, ..) = transact!(initial, |tr| sink_paragraph_backward(&mut tr));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item {
+                            p1: paragraph { text("A") }
+                            p2: paragraph { text("B") }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p2, 0)
+        };
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]

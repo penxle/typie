@@ -21,11 +21,14 @@ pub fn handle_list_op(editor: &mut Editor, op: ListOp) -> Result<(), EditorError
                 )?;
             }
             ListOp::Indent => {
-                commands::chain!(
-                    tr,
-                    commands::optional!(commands::materialize_synthetic_selection_blocks()),
-                    commands::sink_list_item(),
-                )?;
+                let verdict = match tr.selection() {
+                    Some(selection) => commands::judge_indent_list(&tr.view(), &selection),
+                    None => commands::Verdict::NotApplicable,
+                };
+                if matches!(verdict, commands::Verdict::Change(_)) {
+                    commands::materialize_synthetic_selection_blocks(tr)?;
+                    commands::sink_list_item(tr)?;
+                }
             }
             ListOp::Outdent => {
                 commands::chain!(

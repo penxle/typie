@@ -439,4 +439,28 @@ mod tests {
             None
         );
     }
+
+    #[test]
+    fn list_item_accepts_interleaved_paragraphs_and_lists() {
+        let content = &NodeType::ListItem.spec().content;
+
+        assert!(content.matches_sequence(&[NodeType::Paragraph]));
+        assert!(content.matches_sequence(&[NodeType::Paragraph, NodeType::Paragraph]));
+        assert!(content.matches_sequence(&[
+            NodeType::Paragraph,
+            NodeType::BulletList,
+            NodeType::Paragraph,
+            NodeType::OrderedList,
+            NodeType::BulletList,
+            NodeType::Paragraph,
+        ]));
+
+        assert!(!content.matches_sequence(&[]));
+        assert!(!content.matches_sequence(&[NodeType::BulletList]));
+        assert!(!content.matches_sequence(&[NodeType::Paragraph, NodeType::Blockquote]));
+        assert_eq!(
+            content.completion_insertions(&[NodeType::BulletList]),
+            Some(vec![(0, NodeType::Paragraph)])
+        );
+    }
 }

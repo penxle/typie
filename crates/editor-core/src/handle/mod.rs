@@ -9,6 +9,7 @@ mod list;
 mod modifier;
 mod navigation;
 mod node;
+mod paragraph_break;
 #[cfg(test)]
 mod remote;
 mod selection;

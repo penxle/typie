@@ -1,47 +1,21 @@
-use editor_state::{Position, Selection};
 use editor_transaction::Transaction;
 
 use crate::CommandResult;
-use crate::helpers::{
-    find_enclosing_list_item_id, is_at_list_item_content_start, sink_list_item_inner,
-};
+use crate::helpers::is_in_direct_list_item_paragraph;
+use crate::judgments::sink_selected_list_items;
 
-// Tab at a list item's content start indents it. Consumes the key (Ok(true))
-// whenever the caret is at a list item's content start — even for the first
-// item, where there is nothing to sink into — so Tab never falls through to
-// literal tab insertion at a list item's start.
-pub fn sink_list_item_at_start(tr: &mut Transaction) -> CommandResult {
+// Tab anywhere in a list item's direct paragraph indents the whole item.
+pub fn sink_list_item_at_caret(tr: &mut Transaction) -> CommandResult {
     let Some(selection) = tr.selection() else {
         return Ok(false);
     };
-    let item_id = {
+    {
         let view = tr.view();
-        if !is_at_list_item_content_start(&view, &selection) {
+        if !is_in_direct_list_item_paragraph(&view, &selection) {
             return Ok(false);
-        }
-        let Some(item_id) = find_enclosing_list_item_id(&view, selection.head.node) else {
-            return Ok(false);
-        };
-        item_id
-    };
-    let offset = selection.head.offset;
-    let affinity = selection.head.affinity;
-    if let Some(new_item) = sink_list_item_inner(tr, item_id)? {
-        let new_para = {
-            let view = tr.view();
-            view.node(new_item)
-                .and_then(|li| li.child_blocks().next())
-                .map(|p| p.id())
-        };
-        if let Some(new_para) = new_para {
-            tr.set_selection(Some(Selection::collapsed(Position {
-                node: new_para,
-                offset,
-                affinity,
-            })))?;
         }
     }
-    Ok(true)
+    sink_selected_list_items(tr)
 }
 
 #[cfg(test)]
@@ -57,11 +31,11 @@ mod tests {
             doc { root { p1: paragraph { text("Hello") } } }
             selection: (p1, 2)
         };
-        transact_fail!(initial, |tr| sink_list_item_at_start(&mut tr));
+        transact_fail!(initial, |tr| sink_list_item_at_caret(&mut tr));
     }
 
     #[test]
-    fn mid_list_item_text_returns_false() {
+    fn first_item_mid_text_returns_false_without_change() {
         let (initial, ..) = state! {
             doc {
                 root {
@@ -71,11 +45,12 @@ mod tests {
             }
             selection: (p1, 1)
         };
-        transact_fail!(initial, |tr| sink_list_item_at_start(&mut tr));
+        let (actual, ..) = transact_fail!(initial.clone(), |tr| sink_list_item_at_caret(&mut tr));
+        assert_state_eq!(&actual, &initial);
     }
 
     #[test]
-    fn consumes_at_first_item_start_without_change() {
+    fn first_item_start_returns_false_without_change() {
         let (initial, ..) = state! {
             doc {
                 root {
@@ -85,9 +60,7 @@ mod tests {
             }
             selection: (p1, 0)
         };
-        // First item cannot sink, but the key is consumed (transact! asserts Ok(true))
-        // and the document is unchanged.
-        let (actual, ..) = transact!(initial, |tr| sink_list_item_at_start(&mut tr));
+        let (actual, ..) = transact_fail!(initial, |tr| sink_list_item_at_caret(&mut tr));
         let (expected, ..) = state! {
             doc {
                 root {
@@ -114,7 +87,7 @@ mod tests {
             }
             selection: (p1, 0)
         };
-        let (actual, ..) = transact!(initial, |tr| sink_list_item_at_start(&mut tr));
+        let (actual, ..) = transact!(initial, |tr| sink_list_item_at_caret(&mut tr));
         let (expected, ..) = state! {
             doc {
                 root {
@@ -128,6 +101,46 @@ mod tests {
                 }
             }
             selection: (p1, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn sinks_from_later_direct_paragraph_and_preserves_position() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { paragraph { text("A") } }
+                        list_item {
+                            paragraph { text("B") }
+                            p2: paragraph { text("CD") }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p2, 1)
+        };
+        let (actual, ..) = transact!(initial, |tr| sink_list_item_at_caret(&mut tr));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item {
+                            paragraph { text("A") }
+                            bullet_list {
+                                list_item {
+                                    paragraph { text("B") }
+                                    p2: paragraph { text("CD") }
+                                }
+                            }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p2, 1)
         };
         assert_state_eq!(&actual, &expected);
     }

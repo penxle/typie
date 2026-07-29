@@ -30,6 +30,11 @@ pub fn lift_empty_list_item(tr: &mut Transaction) -> CommandResult {
         if parent.node_type() != NodeType::ListItem {
             return Ok(false);
         }
+        if parent.child_blocks().count() != 1
+            || parent.child_blocks().next().map(|child| child.id()) != Some(node.id())
+        {
+            return Ok(false);
+        }
         parent.id()
     };
 
@@ -133,6 +138,26 @@ mod tests {
     }
 
     #[test]
+    fn internal_empty_paragraph_returns_false() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item {
+                            paragraph { text("A") }
+                            p1: paragraph {}
+                            paragraph { text("B") }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        transact_fail!(initial, |tr| lift_empty_list_item(&mut tr));
+    }
+
+    #[test]
     fn outside_list_returns_false() {
         let (initial, ..) = state! {
             doc { root { p1: paragraph {} } }
@@ -173,5 +198,96 @@ mod tests {
             selection: (p1, 0)
         };
         assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn lift_empty_nested_preserves_following_inner_items_and_owner_tail() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item {
+                            paragraph { text("A") }
+                            bullet_list {
+                                list_item { p1: paragraph {} }
+                                list_item { paragraph { text("B") } }
+                            }
+                            paragraph { text("C") }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| lift_empty_list_item(&mut tr));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item {
+                            paragraph { text("A") }
+                        }
+                        list_item {
+                            p1: paragraph {}
+                            bullet_list {
+                                list_item { paragraph { text("B") } }
+                            }
+                        }
+                        list_item { paragraph { text("C") } }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+        assert_projection_integrity(&actual);
+    }
+
+    #[test]
+    fn lift_empty_nested_materializes_paragraph_before_list_only_owner_tail() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item {
+                            paragraph { text("A") }
+                            bullet_list {
+                                list_item { p1: paragraph {} }
+                            }
+                            ordered_list {
+                                list_item { paragraph { text("B") } }
+                            }
+                            paragraph { text("C") }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| lift_empty_list_item(&mut tr));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { paragraph { text("A") } }
+                        list_item { p1: paragraph {} }
+                        list_item {
+                            paragraph {}
+                            ordered_list {
+                                list_item { paragraph { text("B") } }
+                            }
+                            paragraph { text("C") }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+        assert_projection_integrity(&actual);
     }
 }

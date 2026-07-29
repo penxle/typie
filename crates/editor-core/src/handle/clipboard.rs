@@ -232,7 +232,9 @@ mod tests {
     use editor_macros::state;
     use editor_model::ModifierType;
     use editor_resource::Resource;
-    use editor_state::{ResolvedPositionFlatExt, Selection, assert_doc_eq, assert_state_eq};
+    use editor_state::{
+        Position, ResolvedPositionFlatExt, Selection, assert_doc_eq, assert_state_eq,
+    };
 
     use super::*;
     use crate::test_utils::assert_apply_preserves_state;
@@ -2007,7 +2009,7 @@ mod tests {
     }
 
     #[test]
-    fn paste_list_item_with_two_paragraphs_splits_into_sibling_items_without_zombies() {
+    fn paste_list_item_with_two_paragraphs_keeps_one_item_without_zombies() {
         let (s, ..) = state! {
             doc { root { p1: paragraph { text("") } } }
             selection: (p1, 0)
@@ -2028,20 +2030,16 @@ mod tests {
             .find(|b| b.node_type() == editor_model::NodeType::BulletList)
             .expect("pasted list survives as a bullet list");
         let items: Vec<_> = list.child_blocks().collect();
-        assert_eq!(
-            items.len(),
-            2,
-            "list item with two paragraphs becomes two sibling list items"
-        );
+        assert_eq!(items.len(), 1, "the pasted list keeps one list item");
         assert!(
             items
                 .iter()
                 .all(|it| it.node_type() == editor_model::NodeType::ListItem)
         );
-        assert_eq!(items[0].child_blocks().count(), 1);
-        assert_eq!(items[1].child_blocks().count(), 1);
-        assert_eq!(items[0].child_blocks().next().unwrap().inline_text(), "a");
-        assert_eq!(items[1].child_blocks().next().unwrap().inline_text(), "b");
+        let paragraphs: Vec<_> = items[0].child_blocks().collect();
+        assert_eq!(paragraphs.len(), 2);
+        assert_eq!(paragraphs[0].inline_text(), "a");
+        assert_eq!(paragraphs[1].inline_text(), "b");
 
         let ps = &editor.state().projected;
         let visible: hashbrown::HashSet<editor_crdt::Dot> = ps
@@ -2066,6 +2064,11 @@ mod tests {
         // sequence and the reprojection would repair it (repairs > 0).
         let css = editor.state().graph().changesets_as_vec();
         let cold = editor_state::State::from_changesets(css, None).expect("reprojects");
+        assert_eq!(
+            editor.state().projected.projected(),
+            cold.projected.projected(),
+            "warm/cold projection diverged after paste"
+        );
         assert_eq!(
             cold.projected.repair_stats().repairs,
             0,
@@ -2106,7 +2109,7 @@ mod tests {
             },
         });
 
-        // Every filled cell holds a valid list: two sibling items, one paragraph each.
+        // Every filled cell holds one valid list item with both paragraphs.
         let view = editor.state().view();
         for cid in [c00, c01, c10, c11] {
             let cell = view.node(cid).expect("cell survives fill");
@@ -2115,9 +2118,11 @@ mod tests {
                 .find(|b| b.node_type() == editor_model::NodeType::BulletList)
                 .expect("cell holds the pasted bullet list");
             let items: Vec<_> = list.child_blocks().collect();
-            assert_eq!(items.len(), 2, "filled cell splits into two sibling items");
-            assert_eq!(items[0].child_blocks().next().unwrap().inline_text(), "a");
-            assert_eq!(items[1].child_blocks().next().unwrap().inline_text(), "b");
+            assert_eq!(items.len(), 1, "filled cell keeps one list item");
+            let paragraphs: Vec<_> = items[0].child_blocks().collect();
+            assert_eq!(paragraphs.len(), 2);
+            assert_eq!(paragraphs[0].inline_text(), "a");
+            assert_eq!(paragraphs[1].inline_text(), "b");
         }
 
         // Coverage witness: the cell-rect path also repairs before insert, so the
@@ -2128,6 +2133,73 @@ mod tests {
             cold.projected.repair_stats().repairs,
             0,
             "cell-rect fill inserted a schema-valid slice; no projection repair should be needed"
+        );
+    }
+
+    #[test]
+    fn paste_multiline_plain_text_keeps_paragraphs_in_list_item() {
+        let (state, ..) = state! {
+            doc { root {
+                bullet_list {
+                    list_item { p1: paragraph { text("abcd") } }
+                }
+                paragraph {}
+            } }
+            selection: (p1, 2)
+        };
+        let mut editor = Editor::new_test(state);
+
+        editor.apply(Message::Clipboard {
+            op: ClipboardOp::Paste {
+                html: None,
+                text: "x\ny".into(),
+            },
+        });
+
+        let view = editor.state().view();
+        let list = view.root().unwrap().child_blocks().next().unwrap();
+        let item = list.child_blocks().next().unwrap();
+        let paragraphs: Vec<_> = item.child_blocks().collect();
+        assert_eq!(paragraphs.len(), 2);
+        assert_eq!(paragraphs[0].inline_text(), "abx");
+        assert_eq!(paragraphs[1].inline_text(), "ycd");
+        assert_eq!(
+            editor.state().selection,
+            Some(Selection::collapsed(Position::new(paragraphs[1].id(), 1)))
+        );
+    }
+
+    #[test]
+    fn paste_multiline_plain_text_into_empty_list_paragraph_keeps_one_item() {
+        let (state, ..) = state! {
+            doc { root {
+                bullet_list {
+                    list_item { p1: paragraph {} }
+                }
+                paragraph {}
+            } }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+
+        editor.apply(Message::Clipboard {
+            op: ClipboardOp::Paste {
+                html: None,
+                text: "x\ny".into(),
+            },
+        });
+
+        let view = editor.state().view();
+        let list = view.root().unwrap().child_blocks().next().unwrap();
+        let items: Vec<_> = list.child_blocks().collect();
+        assert_eq!(items.len(), 1);
+        let paragraphs: Vec<_> = items[0].child_blocks().collect();
+        assert_eq!(paragraphs.len(), 2);
+        assert_eq!(paragraphs[0].inline_text(), "x");
+        assert_eq!(paragraphs[1].inline_text(), "y");
+        assert_eq!(
+            editor.state().selection,
+            Some(Selection::collapsed(Position::new(paragraphs[1].id(), 1)))
         );
     }
 }

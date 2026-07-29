@@ -11,6 +11,7 @@ use editor_transaction::Transaction;
 use crate::editor::Editor;
 use crate::error::EditorError;
 use crate::event::EditorEvent;
+use crate::handle::paragraph_break::apply_list_paragraph_break;
 use crate::message::*;
 
 pub fn handle_insertion_op(editor: &mut Editor, op: InsertionOp) -> Result<(), EditorError> {
@@ -58,16 +59,22 @@ pub fn handle_insertion_op(editor: &mut Editor, op: InsertionOp) -> Result<(), E
                     tr,
                     commands::materialize_gap_paragraph(),
                     commands::insert_paragraph_after_unit_selection(),
-                    |tr| commands::chain!(
-                        tr,
-                        commands::optional!(commands::ensure_paragraph()),
-                        commands::optional!(commands::delete_selection()),
-                        |tr| commands::first!(
+                    |tr| {
+                        let selection_was_range = tr
+                            .selection()
+                            .is_some_and(|selection| !selection.is_collapsed());
+                        commands::chain!(
                             tr,
-                            commands::lift_paragraph_forward(),
-                            commands::split_paragraph(),
-                        ),
-                    ),
+                            commands::optional!(commands::ensure_paragraph()),
+                            commands::optional!(commands::delete_selection()),
+                            |tr| commands::first!(
+                                tr,
+                                |tr| apply_list_paragraph_break(tr, selection_was_range),
+                                commands::lift_paragraph_forward(),
+                                commands::split_paragraph(),
+                            ),
+                        )
+                    },
                 )?;
                 if applied {
                     tr.clear_pending_format()?;
@@ -689,6 +696,46 @@ mod tests {
         let (expected, ..) = state! {
             doc { root { paragraph { text("hel") } p1: paragraph { text("lo") } } }
             selection: (p1, 0)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn insert_break_paragraph_splits_list_item() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item {
+                            p1: paragraph { text("hello") }
+                            paragraph { text("after") }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p1, 2)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::Insertion {
+            op: InsertionOp::Break {
+                kind: Break::Paragraph,
+            },
+        });
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    bullet_list {
+                        list_item { paragraph { text("he") } }
+                        list_item {
+                            p2: paragraph { text("llo") }
+                            paragraph { text("after") }
+                        }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (p2, 0)
         };
         assert_state_eq!(editor.state(), &expected);
     }

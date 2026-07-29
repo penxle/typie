@@ -8,15 +8,17 @@ use crate::helpers::{
     block_boundary_fragments, build_inline_mode, can_splice_textblock, find_ancestor_textblock,
     fit_slice_for_textblock_parent, fragments_are_inline, fragments_fit_parent,
     insert_blocks_at_block_boundary, insert_blocks_in_textblock_at_position,
-    insert_content_as_inline_at_position, is_insertable_inline_fragment,
-    materialize_position_block, open_inline_content_for_textblock_insert, position_in_textblock,
-    prepare_page_breaks_for_position, repair_slice_fragments, splice_emits_change,
-    top_level_fragments,
+    insert_content_as_inline_at_position, insert_open_list_items_in_textblock_at_position,
+    is_insertable_inline_fragment, materialize_position_block,
+    open_inline_content_for_textblock_insert, open_list_items_for_textblock_insert,
+    position_in_textblock, prepare_page_breaks_for_position, repair_slice_fragments,
+    splice_emits_change, top_level_fragments,
 };
 use crate::types::SliceProvenance;
 
 pub enum SliceInsertionPlan {
     DirectInline { fragments: Vec<Fragment> },
+    SpliceOpenListItems { items: Vec<Fragment> },
     SpliceBlocks { candidate: Slice },
     OpenInline { fragments: Vec<Fragment> },
     BlockBoundary { blocks: Vec<Fragment> },
@@ -61,6 +63,10 @@ pub(crate) fn resolve_slice_insertion_outcome(
                 return SliceInsertionOutcome::NoFit;
             }
             return SliceInsertionOutcome::Plan(SliceInsertionPlan::DirectInline { fragments });
+        }
+
+        if let Some(items) = open_list_items_for_textblock_insert(view, &position, &slice) {
+            return SliceInsertionOutcome::Plan(SliceInsertionPlan::SpliceOpenListItems { items });
         }
 
         let parent_fitted = fit_slice_for_textblock_parent(view, &position, &slice);
@@ -141,6 +147,17 @@ pub(crate) fn insert_slice_at_position(
             let position = materialize_position_block(tr, position)?;
             let mode = build_inline_mode(tr, &position, provenance)?;
             insert_content_as_inline_at_position(tr, position, fragments, &mode)
+        }
+        SliceInsertionPlan::SpliceOpenListItems { items } => {
+            let mut inserted = None;
+            tr.batch::<_, CommandError>(|tr| {
+                let position = materialize_position_block(tr, position)?;
+                let mode = build_inline_mode(tr, &position, provenance)?;
+                inserted =
+                    insert_open_list_items_in_textblock_at_position(tr, position, &items, &mode)?;
+                Ok(())
+            })?;
+            Ok(inserted)
         }
         SliceInsertionPlan::SpliceBlocks { candidate } => {
             let mut inserted = None;

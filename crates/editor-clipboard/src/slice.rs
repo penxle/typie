@@ -824,6 +824,38 @@ mod tests {
     }
 
     #[test]
+    fn extract_complete_multi_paragraph_list_item_keeps_direct_children() {
+        let (state, ..) = state! {
+            doc { root {
+                list: bullet_list {
+                    list_item {
+                        paragraph { text("first") }
+                        ordered_list {
+                            list_item { paragraph { text("nested") } }
+                        }
+                        paragraph { text("second") }
+                    }
+                }
+            } }
+            selection: (list, 0) -> (list, 1)
+        };
+
+        let slice = Slice::extract(&state).expect("non-collapsed");
+        let item = &slice.content[0].children[0];
+        assert_eq!(
+            item.children
+                .iter()
+                .map(|fragment| fragment.node.as_type())
+                .collect::<Vec<_>>(),
+            vec![
+                NodeType::Paragraph,
+                NodeType::OrderedList,
+                NodeType::Paragraph,
+            ]
+        );
+    }
+
+    #[test]
     fn extract_node_selection_image() {
         let mut b = DocBuilder::new();
         let root = Dot::ROOT;
