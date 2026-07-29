@@ -1,11 +1,10 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
-  import type { RunStatus } from '$lib/domain/admin-types.ts';
 
-  type Props = { status: RunStatus };
+  type Props = { status: string };
   const { status }: Props = $props();
 
-  const LABELS: Record<RunStatus, string> = { running: '실행 중', succeeded: '성공', failed: '실패', cancelled: '취소됨' };
+  const LABELS: Record<string, string> = { pending: '대기', running: '실행 중', done: '성공', failed: '실패', cancelled: '취소됨' };
 </script>
 
 <span
@@ -19,7 +18,7 @@
     fontWeight: 'bold',
     flexShrink: '0',
     backgroundColor:
-      status === 'succeeded'
+      status === 'done'
         ? 'accent.success.subtle'
         : status === 'failed'
           ? 'accent.danger.subtle'
@@ -27,7 +26,7 @@
             ? 'accent.info.subtle'
             : 'surface.muted',
     color:
-      status === 'succeeded'
+      status === 'done'
         ? 'text.success'
         : status === 'failed'
           ? 'text.danger'
@@ -36,5 +35,5 @@
             : 'text.faint',
   })}
 >
-  {LABELS[status]}
+  {LABELS[status] ?? status}
 </span>

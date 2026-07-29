@@ -2,31 +2,19 @@
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Helmet } from '@typie/ui/components';
-  import { goto } from '$app/navigation';
+  import { enhance } from '$app/forms';
   import { page } from '$app/state';
   import ThemeToggle from '$lib/components/ThemeToggle.svelte';
   import type { PageData } from './$types';
 
-  type Props = { data: PageData };
-  const { data }: Props = $props();
+  type Props = { data: PageData; form: { message?: string } | null };
+  const { data, form }: Props = $props();
 
-  let claiming = $state(false);
+  let claiming = $state<string | null>(null);
 
   const finished = $derived(page.url.searchParams.has('finished'));
-  const progressPct = $derived(data.round.required === 0 ? 0 : Math.round((data.round.done / data.round.required) * 100));
-
-  const claim = async () => {
-    claiming = true;
-    try {
-      const response = await fetch('/api/tasks/claim', { method: 'POST' });
-      const { taskId } = (await response.json()) as { taskId: string | null };
-      if (taskId) {
-        await goto(`/tasks/${taskId}`);
-      }
-    } finally {
-      claiming = false;
-    }
-  };
+  const empty = $derived(page.url.searchParams.has('empty'));
+  const claimable = $derived(data.rounds.reduce((sum, round) => sum + round.claimable, 0));
 
   const headerLinkClass = css({
     flexShrink: '0',
@@ -54,14 +42,13 @@
       <div class={flex({ align: 'center', gap: '8px', flexShrink: '0' })}>
         <ThemeToggle />
         {#if data.isAdmin}
-          <a class={headerLinkClass} href="/dashboard">대시보드</a>
           <a class={headerLinkClass} href="/admin">어드민</a>
         {/if}
         <a class={headerLinkClass} data-sveltekit-reload href="/cdn-cgi/access/logout">로그아웃</a>
       </div>
     </header>
 
-    {#if finished && data.remaining === 0 && data.drafts.length === 0}
+    {#if (finished || empty) && claimable === 0 && data.drafts.length === 0}
       <section
         class={css({
           backgroundColor: 'accent.success.subtle',
@@ -72,80 +59,146 @@
         })}
       >
         <p class={css({ fontSize: '16px', fontWeight: 'bold', color: 'text.success' })}>모든 평가를 마쳤습니다. 감사합니다!</p>
-        <p class={css({ marginTop: '4px', fontSize: '13px', color: 'text.subtle' })}>새 태스크가 배정되면 이 화면에 다시 나타납니다.</p>
+        <p class={css({ marginTop: '4px', fontSize: '13px', color: 'text.subtle' })}>새 평가가 배정되면 이 화면에 다시 나타납니다.</p>
       </section>
     {/if}
 
-    <section
-      class={css({
-        backgroundColor: 'surface.default',
-        borderWidth: '1px',
-        borderColor: 'border.default',
-        borderRadius: '12px',
-        padding: '24px',
-        boxShadow: 'small',
-      })}
-    >
-      <div class={flex({ align: 'baseline', gap: '8px' })}>
-        <span class={css({ fontSize: '32px', fontWeight: 'bold', fontVariantNumeric: 'tabular-nums' })}>
-          {data.doneCount}
-          <span class={css({ fontSize: '18px', fontWeight: 'medium', color: 'text.subtle' })}>/ {data.myTotal}</span>
-        </span>
-        <span class={css({ fontSize: '14px', color: 'text.subtle' })}>건 판정 완료</span>
-        <span class={css({ marginLeft: 'auto', fontSize: '13px', color: 'text.faint', fontVariantNumeric: 'tabular-nums' })}>
-          {#if data.remaining > 0}
-            새로 시작할 수 있는 태스크 {data.remaining}개
-          {:else if data.drafts.length > 0}
-            작성 중인 평가 {data.drafts.length}건
-          {:else}
-            새로 받을 태스크 없음
-          {/if}
-        </span>
-      </div>
-      <div class={css({ marginTop: '12px', height: '6px', borderRadius: 'full', backgroundColor: 'surface.muted', overflow: 'hidden' })}>
-        <div style:width={`${progressPct}%`} class={css({ height: 'full', backgroundColor: 'accent.brand.default' })}></div>
-      </div>
-      <p class={css({ marginTop: '6px', fontSize: '12px', color: 'text.faint' })}>
-        라운드 전체 진행 {data.round.done} / {data.round.required} — 라운드에 필요한 판정 중 채워진 수입니다.
-      </p>
-      {#if data.quota}
-        <p class={css({ marginTop: '2px', fontSize: '12px', color: 'text.faint' })}>
-          작업이 한 사람에게 몰리지 않도록 1인당 최대 {data.quota.limit}건까지만 배정됩니다 — 채워야 하는 목표가 아니며, 남은 태스크가
-          없으면 그 전에 끝납니다.
-        </p>
-      {/if}
-
-      <button
+    {#if form?.message}
+      <p
         class={css({
-          width: 'full',
-          marginTop: '20px',
+          marginBottom: '16px',
+          paddingX: '14px',
           paddingY: '12px',
           borderRadius: '10px',
-          backgroundColor: 'accent.brand.default',
-          color: 'text.bright',
-          fontSize: '15px',
-          fontWeight: 'bold',
-          cursor: 'pointer',
-          transition: '[background-color 0.15s ease]',
-          _disabled: { backgroundColor: 'interactive.disabled', cursor: 'not-allowed' },
-          ['&:hover:not(:disabled)']: { backgroundColor: 'accent.brand.hover' },
+          backgroundColor: 'accent.danger.subtle',
+          fontSize: '13px',
+          color: 'text.danger',
         })}
-        disabled={claiming || data.remaining === 0}
-        onclick={claim}
-        type="button"
       >
-        {data.remaining === 0 ? '시작할 새 태스크가 없습니다' : claiming ? '배정 중…' : '다음 평가 시작'}
-      </button>
-      <p class={css({ marginTop: '10px', fontSize: '12px', color: 'text.faint', textAlign: 'center' })}>
-        {#if data.remaining > 0}
-          원문을 읽고 피드백 하나하나를 판정하는 작업입니다. 한 편에 피드백이 30개쯤 있어 40분–1시간 걸립니다.
-        {:else if data.drafts.length > 0}
-          새로 배정받을 태스크는 없습니다. 아래 작성 중인 평가를 마무리해 주세요.
-        {:else}
-          내 몫의 평가를 모두 마쳤습니다. 남은 태스크는 다른 평가자에게 배정되어 있으며, 새 태스크가 열리면 여기에 다시 표시됩니다.
-        {/if}
+        {form.message}
       </p>
-    </section>
+    {/if}
+
+    {#if !data.evaluating}
+      <section
+        class={css({
+          backgroundColor: 'surface.default',
+          borderWidth: '1px',
+          borderColor: 'border.default',
+          borderRadius: '12px',
+          padding: '24px',
+          boxShadow: 'small',
+        })}
+      >
+        <p class={css({ fontSize: '14px', color: 'text.subtle' })}>
+          동의는 접수됐습니다. 관리자가 명단에 올리면 이 화면에서 평가를 시작할 수 있습니다.
+        </p>
+      </section>
+    {:else if data.rounds.length === 0}
+      <section
+        class={css({
+          backgroundColor: 'surface.default',
+          borderWidth: '1px',
+          borderColor: 'border.default',
+          borderRadius: '12px',
+          padding: '24px',
+          boxShadow: 'small',
+        })}
+      >
+        <p class={css({ fontSize: '14px', color: 'text.subtle' })}>열려 있는 라운드가 없습니다. 새 라운드가 열리면 여기에 표시됩니다.</p>
+      </section>
+    {:else}
+      {#each data.rounds as round (round.id)}
+        <section
+          class={css({
+            backgroundColor: 'surface.default',
+            borderWidth: '1px',
+            borderColor: 'border.default',
+            borderRadius: '12px',
+            padding: '24px',
+            boxShadow: 'small',
+            marginBottom: '16px',
+          })}
+        >
+          <h2 class={css({ fontSize: '16px', fontWeight: 'bold', marginBottom: '14px' })}>{round.label}</h2>
+          <div class={flex({ align: 'baseline', gap: '8px' })}>
+            <span class={css({ fontSize: '32px', fontWeight: 'bold', fontVariantNumeric: 'tabular-nums' })}>{round.mine}</span>
+            <span class={css({ fontSize: '14px', color: 'text.subtle' })}>건 평가 완료</span>
+            <span class={css({ marginLeft: 'auto', fontSize: '13px', color: 'text.faint', fontVariantNumeric: 'tabular-nums' })}>
+              {#if round.claimable > 0}
+                새로 시작할 수 있는 평가 {round.claimable}건
+              {:else}
+                새로 받을 평가 없음
+              {/if}
+            </span>
+          </div>
+          <div
+            class={css({ marginTop: '12px', height: '6px', borderRadius: 'full', backgroundColor: 'surface.muted', overflow: 'hidden' })}
+          >
+            <div
+              style:width={`${round.total === 0 ? 0 : Math.round((round.done / round.total) * 100)}%`}
+              class={css({ height: 'full', backgroundColor: 'accent.brand.default' })}
+            ></div>
+          </div>
+          <p class={css({ marginTop: '6px', fontSize: '12px', color: 'text.faint' })}>
+            전체 진행 {round.done} / {round.total} — 평가자 전원의 평가를 합한 라운드 전체 수로, 내 할당량이 아닙니다.
+          </p>
+
+          <form
+            action="?/claim"
+            method="post"
+            use:enhance={() => {
+              claiming = round.id;
+              return async ({ update }) => {
+                await update();
+                claiming = null;
+              };
+            }}
+          >
+            <input name="roundId" type="hidden" value={round.id} />
+            <button
+              class={css({
+                width: 'full',
+                marginTop: '20px',
+                paddingY: '12px',
+                borderRadius: '10px',
+                backgroundColor: 'accent.brand.default',
+                color: 'text.bright',
+                fontSize: '15px',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                transition: '[background-color 0.15s ease]',
+                _disabled: { backgroundColor: 'interactive.disabled', cursor: 'not-allowed' },
+                ['&:hover:not(:disabled)']: { backgroundColor: 'accent.brand.hover' },
+              })}
+              disabled={claiming !== null || round.claimable === 0 || data.drafts.length > 0}
+              type="submit"
+            >
+              {#if data.drafts.length > 0}
+                작성 중인 평가를 먼저 마무리해 주세요
+              {:else if round.claimable === 0}
+                시작할 새 평가가 없습니다
+              {:else if claiming === round.id}
+                배정 중…
+              {:else}
+                다음 평가 시작
+              {/if}
+            </button>
+          </form>
+          <p class={css({ marginTop: '10px', fontSize: '12px', color: 'text.faint', textAlign: 'center' })}>
+            {#if round.claimable > 0}
+              {#if round.manuscript}
+                이 라운드의 원고는 {round.manuscript.min.toLocaleString()}~{round.manuscript.max.toLocaleString()}자(평균 {round.manuscript.avg.toLocaleString()}자)입니다.
+              {/if}
+            {:else if data.drafts.length > 0}
+              새로 배정받을 평가는 없습니다. 아래 작성 중인 평가를 마무리해 주세요.
+            {:else}
+              내 몫의 평가를 모두 마쳤습니다. 남은 평가는 다른 평가자에게 배정되어 있으며, 새 평가가 열리면 여기에 다시 표시됩니다.
+            {/if}
+          </p>
+        </section>
+      {/each}
+    {/if}
 
     {#if data.drafts.length > 0}
       <section class={css({ marginTop: '16px' })}>

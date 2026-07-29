@@ -1,3 +1,19 @@
 {
-  "extends": ["@typie/tsconfig", "./.svelte-kit/tsconfig.json"]
+  "extends": ["@typie/tsconfig", "./.svelte-kit/tsconfig.json"],
+  "include": [
+    ".svelte-kit/ambient.d.ts",
+    ".svelte-kit/env.d.ts",
+    ".svelte-kit/non-ambient.d.ts",
+    ".svelte-kit/types/**/$types.d.ts",
+    "vite.config.ts",
+    "drizzle.config.ts",
+    "src/**/*.js",
+    "src/**/*.ts",
+    "src/**/*.svelte",
+    "core/**/*.ts",
+    "generations/**/*.ts",
+    "generations/**/*.svelte",
+    "scripts/**/*.ts"
+  ],
+  "exclude": ["node_modules/**", "flows/**", "core/worker/**", "generations/*/run/**"]
 }

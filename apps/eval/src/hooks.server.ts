@@ -9,9 +9,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 
   const auth = resolveAuth({
     pathname: event.url.pathname,
-    authorizationHeader: event.request.headers.get('authorization'),
     accessEmailHeader: event.request.headers.get('cf-access-authenticated-user-email'),
-    ingestToken: event.platform.env.INGEST_TOKEN,
     devEmail: event.platform.env.DEV_EMAIL,
     adminEmails: event.platform.env.ADMIN_EMAILS,
   });
@@ -20,7 +18,7 @@ export const handle: Handle = async ({ event, resolve }) => {
     error(auth.status, 'unauthorized');
   }
 
-  event.locals.email = auth.kind === 'evaluator' ? auth.email : 'runner';
+  event.locals.email = auth.email;
 
   return resolve(event);
 };

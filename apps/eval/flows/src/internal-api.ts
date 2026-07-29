@@ -1,4 +1,4 @@
-export type Candidate = { documentId: string; characterCount: number };
+export type Candidate = { documentId: string; characterCount: number; userId: string };
 export type CandidateText = { documentId: string; text: string };
 export type ExtractResult = { documentId: string; prose: string | null };
 

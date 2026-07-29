@@ -1,39 +1,20 @@
-import { eq } from 'drizzle-orm';
-import { drizzle } from 'drizzle-orm/d1';
-import * as schema from '../../src/lib/server/db/schema.ts';
-import { CHUNK_VERSION } from './text.ts';
-import type { D1Database } from '@cloudflare/workers-types';
+import { and, eq } from 'drizzle-orm';
+import { CallCache } from '../../core/db.ts';
+import type { Db } from '../../core/db.ts';
 
-export const createDb = (d1: D1Database) => drizzle(d1, { schema });
-export type Db = ReturnType<typeof createDb>;
+export * from '../../core/db.ts';
 
-export const {
-  AnalysisStageUsage,
-  Documents,
-  Variants,
-  PromptVariants,
-  AnalysisPromptSets,
-  PipelineRuns,
-  PipelineRunDocs,
-  FeedbackSets,
-  Feedbacks,
-  FeedbackAnchors,
-  StageCache,
-} = schema;
-
-// 청크 index가 키에 들어가므로 청킹 규칙이 바뀌면 같은 index가 다른 본문을 가리킨다 —
-// CHUNK_VERSION을 섞어 옛 요약이 조용히 재사용되는 것을 막는다.
-export const summarizeCacheKey = (promptHash: string, documentId: string, index: number): string =>
-  `summarize/v${CHUNK_VERSION}/${promptHash}-${documentId}-${index}`;
-
-export const metaCacheKey = (summarizeHash: string, metaHash: string, documentId: string): string =>
-  `meta/v${CHUNK_VERSION}/${summarizeHash}-${metaHash}-${documentId}`;
-
-export const readStageCache = async <T>(db: Db, key: string): Promise<T | null> => {
-  const [row] = await db.select({ value: StageCache.value }).from(StageCache).where(eq(StageCache.key, key)).limit(1);
-  return row ? (row.value as T) : null;
+export const readCache = async <T>(db: Db, runId: string, key: string): Promise<T | null> => {
+  const [row] = await db
+    .select({ value: CallCache.value })
+    .from(CallCache)
+    .where(and(eq(CallCache.runId, runId), eq(CallCache.key, key)))
+    .limit(1);
+  return row ? ((row.value as { value: T }).value ?? null) : null;
 };
 
-export const writeStageCache = async (db: Db, key: string, value: unknown): Promise<void> => {
-  await db.insert(StageCache).values({ key, value }).onConflictDoNothing();
+export const writeCache = async (db: Db, runId: string, key: string, value: unknown): Promise<void> => {
+  await db.insert(CallCache).values({ runId, key, value: { value } }).onConflictDoNothing();
 };
+
+export { createDb } from '../../core/db.ts';

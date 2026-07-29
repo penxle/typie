@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   candidateLimitFor,
-  corpusConflict,
+  capPerAuthor,
+  excludeExisting,
   fillQuotas,
   MAX_CANDIDATES,
   pickLiteraryDocs,
@@ -12,7 +13,7 @@ import {
 import type { Candidate } from './internal-api.ts';
 import type { LiteraryDoc } from './sampling-select.ts';
 
-const candidate = (documentId: string): Candidate => ({ documentId, characterCount: 100 });
+const candidate = (documentId: string, userId = 'u1'): Candidate => ({ documentId, characterCount: 100, userId });
 
 const seededRng = (seq: number[]): (() => number) => {
   let i = 0;
@@ -41,6 +42,48 @@ describe('pickLiteraryDocs', () => {
       { candidate: candidate('c'), kind: '번역', genre: 'romance', ...pass, original: false },
     ]);
     expect(result).toEqual([]);
+  });
+});
+
+describe('excludeExisting', () => {
+  it('이미 들인 refId는 후보에서 뺀다', () => {
+    const result = excludeExisting([candidate('a'), candidate('b'), candidate('c')], new Set(['b']));
+    expect(result.map((c) => c.documentId)).toEqual(['a', 'c']);
+  });
+
+  it('빈 제외 집합이면 그대로 둔다', () => {
+    const input = [candidate('a')];
+    expect(excludeExisting(input, new Set())).toEqual(input);
+  });
+});
+
+describe('capPerAuthor', () => {
+  const doc = (documentId: string, genre = 'romance'): LiteraryDoc => ({ documentId, genre });
+
+  it('같은 작성자는 기본 1편만 남긴다 — 장르가 달라도 합산이다', () => {
+    const authorOf = new Map([
+      ['a1', 'u1'],
+      ['a2', 'u1'],
+      ['a3', 'u1'],
+      ['b1', 'u2'],
+    ]);
+    const result = capPerAuthor([doc('a1', 'fantasy'), doc('a2', 'sf'), doc('b1'), doc('a3', 'modern-drama')], authorOf);
+    expect(result.map((d) => d.documentId)).toEqual(['a1', 'b1']);
+  });
+
+  it('cap을 올리면 그만큼 남긴다', () => {
+    const authorOf = new Map([
+      ['a1', 'u1'],
+      ['a2', 'u1'],
+      ['a3', 'u1'],
+    ]);
+    const result = capPerAuthor([doc('a1'), doc('a2'), doc('a3')], authorOf, 2);
+    expect(result.map((d) => d.documentId)).toEqual(['a1', 'a2']);
+  });
+
+  it('작성자를 모르는 문서는 자르지 않는다', () => {
+    const result = capPerAuthor([doc('x1'), doc('x2')], new Map());
+    expect(result.map((d) => d.documentId)).toEqual(['x1', 'x2']);
   });
 });
 
@@ -102,12 +145,12 @@ describe('fillQuotas', () => {
 });
 
 describe('candidateLimitFor', () => {
-  it('코퍼스 크기의 20배수를 요청한다', () => {
-    expect(candidateLimitFor(30)).toBe(600);
+  it('코퍼스 크기의 5배수를 요청한다', () => {
+    expect(candidateLimitFor(30)).toBe(150);
   });
 
   it('소형 코퍼스는 하한 100을 지킨다', () => {
-    expect(candidateLimitFor(3)).toBe(100);
+    expect(candidateLimitFor(19)).toBe(100);
   });
 
   it('대형 코퍼스는 api 스키마 상한에서 잘린다', () => {
@@ -144,23 +187,5 @@ describe('selectSuccessfulExtracts', () => {
       { id: 'id-1', refId: 'a', content: '가나다', characterCount: 3 },
       { id: 'id-2', refId: 'd', content: '𠀀𠀁', characterCount: 2 },
     ]);
-  });
-});
-
-describe('corpusConflict', () => {
-  it('비어 있으면 충돌 아님 (최초 동결)', () => {
-    expect(corpusConflict([], ['a', 'b'])).toBe(false);
-  });
-
-  it('기존 세트 == 내 선발이면 충돌 아님 (재시도 시 succeeded 유지)', () => {
-    expect(corpusConflict(['b', 'a'], ['a', 'b'])).toBe(false);
-  });
-
-  it('다른 문서가 섞였으면 충돌', () => {
-    expect(corpusConflict(['a', 'x'], ['a', 'b'])).toBe(true);
-  });
-
-  it('개수가 다르면 충돌', () => {
-    expect(corpusConflict(['a'], ['a', 'b'])).toBe(true);
   });
 });

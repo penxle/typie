@@ -1,19 +1,19 @@
 import { WorkflowEntrypoint } from 'cloudflare:workers';
-import { eq, sql } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { classifyCorpusDocument } from './corpus-filter.ts';
-import { createDb, Documents, PipelineRuns, readStageCache, StageCache } from './db.ts';
+import { createDb, Documents, inChunks, readCache, Samplings, writeCache } from './db.ts';
 import { createInternalApi } from './internal-api.ts';
-import { createOpenAI } from './llm.ts';
+import { createOpenAI } from './openai.ts';
 import {
   candidateLimitFor,
-  corpusConflict,
+  capPerAuthor,
+  excludeExisting,
   fillQuotas,
   pickLiteraryDocs,
   selectSuccessfulExtracts,
   stratifySelection,
 } from './sampling-select.ts';
 import type { WorkflowEvent, WorkflowStep } from 'cloudflare:workers';
-import type { RunPhase } from '../../src/lib/domain/admin-types.ts';
 import type { Db } from './db.ts';
 import type { FlowEnv, SamplingParams } from './index.ts';
 import type { Classified, LiteraryDoc, SelectedDocument } from './sampling-select.ts';
@@ -26,62 +26,67 @@ const EXTRACT_BATCH = 5;
 const TEXTS_BATCH = 20;
 const LLM_STEP = { retries: { limit: 2, delay: '10 seconds' as const, backoff: 'exponential' as const }, timeout: '5 minutes' as const };
 
-const candidateKey = (runId: string, documentId: string): string => `sample/${runId}/candidate/${documentId}`;
+const candidateKey = (documentId: string): string => `candidate/${documentId}`;
 
-const setPhase = async (db: Db, runId: string, phase: RunPhase): Promise<void> => {
-  await db.update(PipelineRuns).set({ phase }).where(eq(PipelineRuns.id, runId));
-};
+type SamplingPhase = 'candidates' | 'classify' | 'extract' | 'freeze';
 
-const addDoneDocs = async (db: Db, runId: string, n: number): Promise<void> => {
-  await db
-    .update(PipelineRuns)
-    .set({ doneDocs: sql`${PipelineRuns.doneDocs} + ${n}` })
-    .where(eq(PipelineRuns.id, runId));
+const setPhase = async (db: Db, runId: string, phase: SamplingPhase): Promise<void> => {
+  await db.update(Samplings).set({ phase }).where(eq(Samplings.id, runId));
 };
 
 export class SamplingWorkflow extends WorkflowEntrypoint<FlowEnv, SamplingParams> {
   async run(event: WorkflowEvent<SamplingParams>, step: WorkflowStep) {
-    const { runId, corpusVersion, size } = event.payload;
+    const { runId, size } = event.payload;
     const db = createDb(this.env.DB);
     const api = createInternalApi(this.env.INTERNAL_API_BASE, this.env.INTERNAL_API_KEY);
-    const openai = createOpenAI(this.env.CLOUDFLARE_API_KEY, this.env.CLOUDFLARE_AIGATEWAY_URL);
+    // provider/model 명명('anthropic/claude-opus-5')은 compat 경로만 받는다 — anthropic 전용
+    // 경로에 붙이면 전 호출이 404로 죽고, 아래 catch가 삼켜 후보 전멸로만 나타난다(2026-07-30 실측).
+    const openai = createOpenAI(this.env.CLOUDFLARE_API_KEY, this.env.CLOUDFLARE_AIGATEWAY_COMPAT_URL);
 
     try {
-      const candidateIds = await step.do('candidates', async () => {
+      const candidatePairs = await step.do('candidates', async () => {
         await setPhase(db, runId, 'candidates');
         const candidates = await api.candidates({ limit: candidateLimitFor(size) });
-        await db.update(PipelineRuns).set({ totalDocs: candidates.length, doneDocs: 0 }).where(eq(PipelineRuns.id, runId));
-        return candidates.map((c) => c.documentId);
+        const existing = await inChunks(
+          candidates.map((c) => c.documentId),
+          (chunk) => db.select({ refId: Documents.refId }).from(Documents).where(inArray(Documents.refId, chunk)),
+        );
+        const fresh = excludeExisting(candidates, new Set(existing.map((e) => e.refId)));
+        return fresh.map((c) => ({ documentId: c.documentId, userId: c.userId }));
       });
+      const candidateIds = candidatePairs.map((c) => c.documentId);
+      const authorByDoc = new Map(candidatePairs.map((c) => [c.documentId, c.userId]));
 
       for (let t = 0; t < candidateIds.length; t += TEXTS_BATCH) {
         const batchIds = candidateIds.slice(t, t + TEXTS_BATCH);
         await step.do(`texts-${t}`, LLM_STEP, async () => {
           const texts = await api.texts(batchIds);
           if (texts.length === 0) return;
-          await db
-            .insert(StageCache)
-            .values(texts.map((row) => ({ key: candidateKey(runId, row.documentId), value: { text: row.text } })))
-            .onConflictDoNothing();
+          for (const row of texts) {
+            await writeCache(db, runId, candidateKey(row.documentId), { text: row.text });
+          }
         });
       }
 
       const literaryDocs: LiteraryDoc[] = [];
+      // 개별 심사 오류는 삼키되 계수한다 — 계수가 없으면 계통 장애(전 호출 404 등)가
+      // "후보 전멸"로만 보여 원인을 고고학으로 찾아야 한다.
+      let classifyErrors = 0;
       await step.do('phase-classify', () => setPhase(db, runId, 'classify'));
       for (let b = 0; b < candidateIds.length; b += CLASSIFY_BATCH) {
         const batchIds = candidateIds.slice(b, b + CLASSIFY_BATCH);
-        const found = await step.do(`classify-${b}`, LLM_STEP, async () => {
+        const { found, errored } = await step.do(`classify-${b}`, LLM_STEP, async () => {
           const classified = await Promise.all(
             batchIds.map(async (documentId): Promise<Classified> => {
-              const cached = await readStageCache<{ text: string }>(db, candidateKey(runId, documentId));
+              const cached = await readCache<{ text: string }>(db, runId, candidateKey(documentId));
               const text = cached?.text ?? '';
               try {
                 // 앞부분만 잘라 넘기면 묶음·후기·복수 엔딩을 놓친다 — 전문을 주고 발췌는 심사기가 정한다.
                 const result = await classifyCorpusDocument(openai, CLASSIFY_MODEL, text);
-                return { candidate: { documentId, characterCount: 0 }, ...result };
+                return { candidate: { documentId, characterCount: 0, userId: authorByDoc.get(documentId) ?? '' }, ...result };
               } catch {
                 return {
-                  candidate: { documentId, characterCount: 0 },
+                  candidate: { documentId, characterCount: 0, userId: authorByDoc.get(documentId) ?? '' },
                   kind: 'error',
                   genre: 'etc',
                   narrative: false,
@@ -92,17 +97,18 @@ export class SamplingWorkflow extends WorkflowEntrypoint<FlowEnv, SamplingParams
               }
             }),
           );
-          return pickLiteraryDocs(classified);
+          return { found: pickLiteraryDocs(classified), errored: classified.filter((c) => c.kind === 'error').length };
         });
         literaryDocs.push(...found);
-        await step.do(`classify-progress-${b}`, () => addDoneDocs(db, runId, batchIds.length));
+        classifyErrors += errored;
       }
 
-      const { genreDist, allocation, picks } = await step.do('select-strata', () => Promise.resolve(stratifySelection(literaryDocs, size)));
+      const { genreDist, allocation, picks } = await step.do('select-strata', () =>
+        Promise.resolve(stratifySelection(capPerAuthor(literaryDocs, authorByDoc), size)),
+      );
 
       await step.do('phase-extract', async () => {
         await setPhase(db, runId, 'extract');
-        await db.update(PipelineRuns).set({ totalDocs: picks.length, doneDocs: 0 }).where(eq(PipelineRuns.id, runId));
       });
 
       const genreByRef = new Map(picks.map((p) => [p.documentId, p.genre]));
@@ -116,7 +122,6 @@ export class SamplingWorkflow extends WorkflowEntrypoint<FlowEnv, SamplingParams
           return selectSuccessfulExtracts(results, () => crypto.randomUUID());
         });
         extracted.push(...good);
-        await step.do(`extract-progress-${batchNo}`, () => addDoneDocs(db, runId, batchIds.length));
       }
 
       const selected = fillQuotas(
@@ -126,20 +131,10 @@ export class SamplingWorkflow extends WorkflowEntrypoint<FlowEnv, SamplingParams
       );
 
       if (selected.length < size) {
-        throw new Error(`insufficient documents after extraction: ${selected.length}/${size}`);
+        throw new Error(
+          `insufficient documents after extraction: ${selected.length}/${size} (후보 ${candidateIds.length}, 심사 오류 ${classifyErrors})`,
+        );
       }
-
-      await step.do('corpus-guard', async () => {
-        const existing = await db.select({ refId: Documents.refId }).from(Documents).where(eq(Documents.corpusVersion, corpusVersion));
-        if (
-          corpusConflict(
-            existing.map((e) => e.refId),
-            selected.map((d) => d.refId),
-          )
-        ) {
-          throw new Error(`corpus version already frozen: ${corpusVersion}`);
-        }
-      });
 
       await step.do('freeze', async () => {
         await setPhase(db, runId, 'freeze');
@@ -148,29 +143,31 @@ export class SamplingWorkflow extends WorkflowEntrypoint<FlowEnv, SamplingParams
           refId: d.refId,
           content: d.content,
           characterCount: d.characterCount,
-          corpusVersion,
+          kind: 'sampled' as const,
           genre: d.genre,
+          samplingId: runId,
         }));
-        // D1은 문장당 바인딩 파라미터 100개 제한 — 7컬럼 × 14행 = 98이 상한이라 10행씩 나눈다.
+        // D1은 문장당 바인딩 파라미터 100개 제한 — 8컬럼 × 12행 = 96이 상한이라 10행씩 나눈다.
         for (let i = 0; i < rows.length; i += 10) {
           await db
             .insert(Documents)
             .values(rows.slice(i, i + 10))
             .onConflictDoNothing();
         }
-        await db
-          .update(PipelineRuns)
-          .set({ status: 'succeeded', doneDocs: selected.length, totalDocs: selected.length, finishedAt: new Date(), meta: { genreDist } })
-          .where(eq(PipelineRuns.id, runId));
+        await db.update(Samplings).set({ status: 'done', phase: null, finishedAt: new Date() }).where(eq(Samplings.id, runId));
+        console.warn(`sampling ${runId}: 장르 분포 ${JSON.stringify(genreDist)}`);
       });
 
       return { done: true, frozen: selected.length };
     } catch (err) {
       const message = String(err).slice(0, 1000);
       await step.do('mark-failed', async () => {
-        await db.update(PipelineRuns).set({ status: 'failed', error: message, finishedAt: new Date() }).where(eq(PipelineRuns.id, runId));
+        await db
+          .update(Samplings)
+          .set({ status: 'failed', phase: null, error: message, finishedAt: new Date() })
+          .where(eq(Samplings.id, runId));
       });
-      return { failed: true };
+      throw err;
     }
   }
 }

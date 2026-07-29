@@ -21,16 +21,45 @@ export type StratifiedSelection = {
 
 const SPARES_PER_STRATUM = 2;
 
-// 후보 수는 코퍼스 크기에 비례한다 — 실측 깔때기(라운드 1)의 최소 필요치는 13배
-// (문학성 생존 ~50% × 장르 비례·추출 실패 여유 ~6.5배)이고, 20배는 다양성 여유를 얹은 값.
+// 후보 수는 코퍼스 크기에 비례한다. TABLESAMPLE 시절에는 20배를 요청해도 자격 풀의
+// ~10%(~230편)만 와서 상한이 유명무실했는데, 행 단위 무작위로 바꾸며 상한이 실효화됐다 —
+// 후보 전수가 opus 심사를 거치므로 배수가 곧 표집 비용이다. 5배는 실측 성공 깔때기
+// (50편 선별에 후보 230=4.6배로 충분, 2026-07-30)에 여유를 얹은 값이고, 모자라면 실행을
+// 한 번 더 하는 쪽이 배수를 올려두는 것보다 싸다(오너 확정).
 // 하한 100은 소형 코퍼스에서도 장르 배분이 성립하게, 상한은 api candidatesSchema와 동일
 // (후보 텍스트가 한 응답으로 오므로 응답 크기가 실질 상한이다 — 2000편 ≈ 최대 60MB).
-export const CANDIDATES_PER_DOC = 20;
+export const CANDIDATES_PER_DOC = 5;
 export const MAX_CANDIDATES = 2000;
 export const candidateLimitFor = (size: number): number => Math.min(MAX_CANDIDATES, Math.max(100, size * CANDIDATES_PER_DOC));
 
 export const pickLiteraryDocs = (classified: Classified[]): LiteraryDoc[] =>
   classified.filter((c) => isAccepted(c)).map((c) => ({ documentId: c.candidate.documentId, genre: c.genre }));
+
+// 이미 들인 문서(이전 표집·반입 전부)는 후보에서 뺀다 — 본문·심사 비용을 내기 전에 걸러야
+// 하고, 어드민 문구("이미 들인 글은 건너뜁니다")가 약속하는 동작이기도 하다.
+export const excludeExisting = (candidates: Candidate[], existingRefIds: Set<string>): Candidate[] =>
+  candidates.filter((c) => !existingRefIds.has(c.documentId));
+
+// 작성자당 상한 — 문서 단위 무작위는 다작 작성자에게 비례 이상으로 쏠리고(50편 중 한
+// 작성자 5편, 2026-07-30 실측), 장르 쿼터가 희소 장르에서 이를 다시 증폭한다. 심사를
+// 통과한 뒤·배분 전에 자르면 어느 장르로 세든 작성자당 cap편을 넘지 못한다.
+export const capPerAuthor = (docs: LiteraryDoc[], authorOf: Map<string, string>, cap = 1): LiteraryDoc[] => {
+  const counts = new Map<string, number>();
+  const kept: LiteraryDoc[] = [];
+  for (const doc of docs) {
+    const author = authorOf.get(doc.documentId);
+    // 작성자를 모르는 문서는 자르지 않는다 — 상한은 방어 장치이지 자격 조건이 아니다.
+    if (author === undefined) {
+      kept.push(doc);
+      continue;
+    }
+    const n = counts.get(author) ?? 0;
+    if (n >= cap) continue;
+    counts.set(author, n + 1);
+    kept.push(doc);
+  }
+  return kept;
+};
 
 export const shuffle = <T>(items: T[], random: () => number = Math.random): T[] => {
   const result = [...items];
@@ -115,11 +144,4 @@ export const selectSuccessfulExtracts = (results: ExtractResult[], newId: () => 
     selected.push({ id: newId(), refId: documentId, content: prose, characterCount: [...prose].length });
   }
   return selected;
-};
-
-export const corpusConflict = (existingRefIds: string[], selectedRefIds: string[]): boolean => {
-  if (existingRefIds.length === 0) return false;
-  if (existingRefIds.length !== selectedRefIds.length) return true;
-  const mine = new Set(selectedRefIds);
-  return existingRefIds.some((refId) => !mine.has(refId));
 };

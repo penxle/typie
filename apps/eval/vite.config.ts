@@ -14,6 +14,6 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'core/**/*.test.ts', 'generations/**/*.test.ts', 'flows/src/**/*.test.ts', 'scripts/**/*.test.ts'],
   },
 });

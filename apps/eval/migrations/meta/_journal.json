@@ -127,6 +127,41 @@
       "when": 1785228313831,
       "tag": "0017_medical_stranger",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1785260367465,
+      "tag": "0018_magenta_argent",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1785266311913,
+      "tag": "0019_retire_legacy",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1785266311914,
+      "tag": "0020_drop_round_config",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1785266311915,
+      "tag": "0021_restore_document_kind",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "6",
+      "when": 1785320786517,
+      "tag": "0022_judgment_stage",
+      "breakpoints": true
     }
   ]
 }

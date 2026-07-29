@@ -1,167 +1,51 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
-  import { flex, grid } from '@typie/styled-system/patterns';
+  import { flex } from '@typie/styled-system/patterns';
   import { Helmet } from '@typie/ui/components';
   import { Dialog, Toast } from '@typie/ui/notification';
-  import { nanoid } from 'nanoid';
   import { untrack } from 'svelte';
-  import { deserialize } from '$app/forms';
+  import { SvelteSet } from 'svelte/reactivity';
+  import { deserialize, enhance } from '$app/forms';
   import { invalidateAll } from '$app/navigation';
-  import type { RoundStage } from '$lib/domain/types.ts';
+  import {
+    checkboxClass,
+    emptyClass,
+    formInputClass,
+    formLabelClass,
+    formNoticeClass,
+    formSubmitClass,
+    pageClass,
+    pageDescClass,
+    pageTitleClass,
+    panelClass,
+    quietButtonClass,
+    rowLinkClass,
+    tableClass,
+    tableHeadClass,
+    tableRowClass,
+  } from '$lib/styles.ts';
   import type { PageData } from './$types';
 
-  type Props = { data: PageData };
-  const { data }: Props = $props();
+  type Props = { data: PageData; form: { message?: string; roundId?: string } | null };
+  const { data, form }: Props = $props();
 
-  const STAGE_LABELS: Record<RoundStage, string> = { screening: '스크리닝', confirmation: '확정', absolute: '절대평가' };
+  const selected = new SvelteSet<string>();
+  let evaluationId = $state(untrack(() => data.evaluations[0]?.id ?? ''));
+  let creating = $state(false);
 
-  let stage = $state<RoundStage>('screening');
-  // 이 페이지는 목록·폼이 한 화면에 공존하는 단일 페이지라 {#key}로 다시 마운트되지 않는다 — 코퍼스 버전 select의
-  // 초깃값은 최초 로드 시점만 참조하고, 이후 invalidateAll()로 data가 갱신되어도 사용자가 고른 값을 유지한다.
-  let corpusVersion = $state(untrack(() => data.corpusVersions[0] ?? ''));
-  let selectedLabels = $state<string[]>([]);
-  let baselineLabel = $state('');
-  let v0Label = $state('');
-  let candidateLabel = $state('');
-  let absoluteLabel = $state('');
-  let absoluteRequired = $state('2');
-  let absoluteOverlap = $state('0.1');
-  let expectedEvaluators = $state('');
-  let overlapRatio = $state('0.3');
+  const generationOf = $derived(data.evaluations.find((e) => e.id === evaluationId)?.generationId ?? null);
+  const eligible = $derived(generationOf ? data.candidates.filter((c) => c.generationId === generationOf) : data.candidates);
 
-  // roundId는 제출마다 새로 만들지 않고 폼이 준비된 시점에 한 번만 발급한다 — 네트워크 오류 등으로 사용자가
-  // 같은 입력으로 재시도해도 동일 roundId가 재사용되어 admin/api의 멱등 처리(이미 존재하면 created:false)가
-  // 중복 라운드 생성을 막아준다. 성공적으로 라운드가 만들어진 뒤에만 다음 제출을 위해 새 id를 발급한다.
-  let roundId = $state(nanoid());
-
-  const availableLabels = $derived(data.labelsByCorpusVersion[corpusVersion] ?? []);
-
-  // 코퍼스 버전이 바뀌면 더 이상 유효하지 않은 선택을 정리한다. availableLabels만 추적하고 정리 대상
-  // 상태는 untrack으로 읽는다 — 추적 상태를 같은 effect에서 읽고 쓰면 무한 재실행된다.
-  $effect(() => {
-    const labels = availableLabels;
-    untrack(() => {
-      if (selectedLabels.some((label) => !labels.includes(label))) {
-        selectedLabels = selectedLabels.filter((label) => labels.includes(label));
-      }
-      if (v0Label && !labels.includes(v0Label)) v0Label = '';
-      if (candidateLabel && !labels.includes(candidateLabel)) candidateLabel = '';
-      if (absoluteLabel && !labels.includes(absoluteLabel)) absoluteLabel = '';
-      if (!selectedLabels.includes(baselineLabel)) {
-        baselineLabel = selectedLabels.includes('현행') ? '현행' : (selectedLabels[0] ?? '');
-      }
-    });
+  // 목록이 짧거나 비면 실행이 실패한 것처럼 읽힌다 — 무엇을 왜 뺐는지 밝힌다.
+  const excludedNote = $derived.by(() => {
+    const parts = [
+      data.excluded.used > 0 ? `이미 라운드에 쓰인 문서 ${data.excluded.used}건` : null,
+      data.excluded.intake > 0 ? `반입 문서 ${data.excluded.intake}건` : null,
+    ].filter((p) => p !== null);
+    return parts.length > 0 ? `${parts.join(', ')}은 후보에서 제외했습니다.` : null;
   });
 
-  const toggleLabel = (label: string) => {
-    selectedLabels = selectedLabels.includes(label) ? selectedLabels.filter((l) => l !== label) : [...selectedLabels, label];
-    if (!selectedLabels.includes(baselineLabel)) {
-      baselineLabel = selectedLabels.includes('현행') ? '현행' : (selectedLabels[0] ?? '');
-    }
-  };
-
-  let creating = $state(false);
-  let createError = $state<string | null>(null);
-  let createResult = $state<string | null>(null);
-
-  const submitRound = async () => {
-    createError = null;
-    createResult = null;
-
-    if (!corpusVersion) {
-      createError = '코퍼스 버전을 선택하세요.';
-      return;
-    }
-    if (stage === 'screening' && selectedLabels.length < 2) {
-      createError = '대상 후보를 2개 이상 선택하세요.';
-      return;
-    }
-    if (stage === 'screening' && !selectedLabels.includes(baselineLabel)) {
-      createError = '기준선은 선택된 후보 중 하나여야 합니다.';
-      return;
-    }
-    if (stage === 'absolute' && !absoluteLabel) {
-      createError = '대상 후보를 선택하세요.';
-      return;
-    }
-    const parsedRequired = Math.floor(Number(absoluteRequired));
-    const parsedAbsoluteOverlap = Number(absoluteOverlap);
-    if (stage === 'absolute' && parsedRequired < 1) {
-      createError = '문서당 판정 수는 1 이상이어야 합니다.';
-      return;
-    }
-    if (stage === 'absolute' && (!Number.isFinite(parsedAbsoluteOverlap) || parsedAbsoluteOverlap < 0 || parsedAbsoluteOverlap > 1)) {
-      createError = '중복 비율은 0과 1 사이여야 합니다.';
-      return;
-    }
-    if (stage === 'confirmation' && (!v0Label || !candidateLabel)) {
-      createError = 'v0과 후보 라벨을 모두 선택하세요.';
-      return;
-    }
-    if (stage === 'confirmation' && v0Label === candidateLabel) {
-      createError = 'v0과 후보는 서로 달라야 합니다.';
-      return;
-    }
-
-    const parsedOverlap = Number(overlapRatio);
-    if (stage === 'screening' && (!Number.isFinite(parsedOverlap) || parsedOverlap < 0 || parsedOverlap > 1)) {
-      createError = '중복 비율은 0과 1 사이여야 합니다.';
-      return;
-    }
-
-    const parsedEvaluators = Math.floor(Number(expectedEvaluators));
-    let payload;
-    if (stage === 'screening') {
-      payload = {
-        roundId,
-        stage: 'screening' as const,
-        corpusVersion,
-        variantLabels: selectedLabels,
-        baselineLabel,
-        overlapRatio: parsedOverlap,
-        ...(parsedEvaluators >= 1 && { expectedEvaluators: parsedEvaluators }),
-      };
-    } else if (stage === 'absolute') {
-      payload = {
-        roundId,
-        stage: 'absolute' as const,
-        corpusVersion,
-        label: absoluteLabel,
-        requiredJudgments: parsedRequired,
-        overlapRatio: parsedAbsoluteOverlap,
-        ...(parsedEvaluators >= 1 && { expectedEvaluators: parsedEvaluators }),
-      };
-    } else {
-      payload = { roundId, stage: 'confirmation' as const, corpusVersion, v0Label, candidateLabel };
-    }
-
-    creating = true;
-    try {
-      const response = await fetch('/admin/api/corpus/rounds', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (!response.ok) {
-        const body = await response.text();
-        createError = `라운드 생성에 실패했습니다 (${response.status}: ${body.slice(0, 200)}).`;
-        return;
-      }
-
-      const body = (await response.json()) as { created: boolean; taskCount: number };
-      createResult = body.created ? `${body.taskCount}개 태스크가 생성되었습니다.` : '이미 존재하는 라운드입니다.';
-      selectedLabels = [];
-      v0Label = '';
-      candidateLabel = '';
-      absoluteLabel = '';
-      roundId = nanoid();
-      await invalidateAll();
-    } finally {
-      creating = false;
-    }
-  };
-
-  const requestInvalidate = (invalidateRoundId: string) => {
+  const requestInvalidate = (roundId: string) => {
     Dialog.confirm({
       title: '라운드를 무효화할까요?',
       message: '이 라운드의 태스크가 모두 삭제됩니다. 아직 판정이 없는 라운드만 무효화할 수 있습니다.',
@@ -169,59 +53,59 @@
       actionLabel: '무효화',
       cancelLabel: '되돌아가기',
       actionHandler: async () => {
-        const formData = new FormData();
-        formData.set('roundId', invalidateRoundId);
-        const response = await fetch('?/invalidate', { method: 'POST', body: formData });
+        const body = new FormData();
+        body.set('roundId', roundId);
+        const response = await fetch('?/invalidate', { method: 'POST', body });
         const result = deserialize(await response.text());
-
         if (result.type === 'failure') {
-          Toast.error((result.data as { error?: string } | undefined)?.error ?? '무효화에 실패했습니다.');
+          Toast.error((result.data as { message?: string } | undefined)?.message ?? '무효화에 실패했습니다.');
           return false;
         }
         if (result.type === 'error') {
           Toast.error(result.error instanceof Error ? result.error.message : '무효화에 실패했습니다.');
           return false;
         }
-
         await invalidateAll();
       },
     });
   };
 
-  const formatConfig = (round: PageData['rounds'][number]) => {
-    const config = round.config as { overlapRatio?: number; label?: string; requiredJudgments?: number } | null;
-    if (!config) return '—';
-    if (round.stage === 'absolute') {
-      const overlap = config.overlapRatio ?? 0;
-      return `${config.label ?? '—'} · 판정 ${config.requiredJudgments ?? 1}명${overlap > 0 ? ` · 중복 ${(overlap * 100).toFixed(0)}%` : ''}`;
-    }
-    if (round.stage !== 'screening') return '—';
-    return `중복 ${((config.overlapRatio ?? 0) * 100).toFixed(0)}%`;
+  const toggle = (id: string, on: boolean) => {
+    if (on) selected.add(id);
+    else selected.delete(id);
   };
 
-  const inputClass = css({
-    width: 'full',
-    paddingX: '10px',
-    paddingY: '8px',
-    borderWidth: '1px',
-    borderColor: 'border.default',
-    borderRadius: '8px',
-    fontSize: '14px',
-    backgroundColor: 'surface.default',
-    cursor: 'pointer',
-    transition: '[border-color 0.15s ease]',
-    _hover: { borderColor: 'border.strong' },
-  });
-
-  const labelClass = css({ display: 'block', fontSize: '12px', color: 'text.faint', marginBottom: '4px' });
+  // 열고 닫는 것은 평가자 전원에게 즉시 보이는 스위치다 — 실수로 누른 클릭 한 번이 라운드를
+  // 여닫지 않게 확인을 끼운다.
+  const requestToggle = (round: { id: string; label: string; active: boolean }) => {
+    Dialog.confirm({
+      title: round.active ? '라운드를 닫을까요?' : '라운드를 열까요?',
+      message: round.active
+        ? `‘${round.label}’이 비활성화됩니다. 평가자는 새로 배정받을 수 없고, 작성 중인 평가도 저장·제출이 막힙니다.`
+        : `‘${round.label}’이 활성화됩니다. 평가자 홈에 바로 노출되고 배정이 시작됩니다.`,
+      actionLabel: round.active ? '닫기' : '열기',
+      actionHandler: async () => {
+        const body = new FormData();
+        body.set('id', round.id);
+        body.set('active', String(!round.active));
+        const response = await fetch('?/toggle', { method: 'POST', body });
+        const result = deserialize(await response.text());
+        if (result.type === 'failure' || result.type === 'error') {
+          Toast.error('상태를 바꾸지 못했습니다. 잠시 후 다시 시도해주세요.');
+          return;
+        }
+        await invalidateAll();
+      },
+    });
+  };
 </script>
 
 <Helmet title="라운드" trailing="타이피 평가" />
 
-<div class={css({ maxWidth: '960px', marginX: 'auto', paddingY: '40px', paddingX: '32px' })}>
+<div class={pageClass}>
   <header class={css({ marginBottom: '20px' })}>
-    <h1 class={css({ fontSize: '22px', fontWeight: 'bold' })}>라운드</h1>
-    <p class={css({ marginTop: '4px', fontSize: '14px', color: 'text.subtle' })}>평가 라운드를 만들고 진행 현황을 확인합니다.</p>
+    <h1 class={pageTitleClass}>라운드</h1>
+    <p class={pageDescClass}>평가 라운드를 만들고 진행 현황을 확인합니다.</p>
   </header>
 
   <section
@@ -237,225 +121,131 @@
   >
     <h2 class={css({ fontSize: '14px', fontWeight: 'bold', marginBottom: '12px' })}>새 라운드</h2>
 
-    <div class={grid({ columns: 3, gap: '6px', marginBottom: '16px' })}>
-      {#each Object.entries(STAGE_LABELS) as [value, label] (value)}
-        <button
-          class={css({
-            paddingY: '8px',
-            borderRadius: '8px',
-            borderWidth: '1px',
-            borderColor: stage === value ? 'border.strong' : 'border.default',
-            backgroundColor: stage === value ? 'surface.dark' : 'surface.default',
-            color: stage === value ? 'text.bright' : 'text.default',
-            fontSize: '14px',
-            fontWeight: stage === value ? 'bold' : 'normal',
-            cursor: 'pointer',
-            transition: '[background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease]',
-          })}
-          onclick={() => (stage = value as RoundStage)}
-          type="button"
-        >
-          {label}
-        </button>
-      {/each}
-    </div>
-
-    <div class={css({ marginBottom: '16px' })}>
-      <label class={labelClass} for="round-corpus-version">코퍼스 버전</label>
-      {#if data.corpusVersions.length === 0}
-        <p class={css({ fontSize: '13px', color: 'text.faint' })}>적재된 코퍼스가 없습니다.</p>
-      {:else}
-        <select id="round-corpus-version" class={inputClass} bind:value={corpusVersion}>
-          {#each data.corpusVersions as version (version)}
-            <option value={version}>{version}</option>
-          {/each}
-        </select>
-      {/if}
-    </div>
-
-    {#if stage === 'screening'}
-      <div class={css({ marginBottom: '16px' })}>
-        <label class={labelClass} for="round-overlap-ratio">중복 비율 (0~1)</label>
-        <input id="round-overlap-ratio" class={inputClass} max="1" min="0" step="0.05" type="number" bind:value={overlapRatio} />
+    <form
+      action="?/create"
+      method="post"
+      use:enhance={() => {
+        creating = true;
+        return async ({ result, update }) => {
+          // 만들어진 실행은 후보에서 빠지는데 선택 상태는 남는다 — 버튼이 없는 것을 세게 된다.
+          // 실패했을 때는 다시 누를 수 있도록 선택을 지우지 않는다.
+          if (result.type === 'success') selected.clear();
+          await update();
+          creating = false;
+        };
+      }}
+    >
+      <div
+        style:grid-template-columns={`repeat(${Math.max(1, data.evaluations.length)}, 1fr)`}
+        class={css({ display: 'grid', gap: '6px', marginBottom: '16px' })}
+      >
+        {#each data.evaluations as evaluation (evaluation.id)}
+          <button
+            class={css({
+              paddingY: '8px',
+              borderRadius: '8px',
+              borderWidth: '1px',
+              borderColor: evaluationId === evaluation.id ? 'border.strong' : 'border.default',
+              backgroundColor: evaluationId === evaluation.id ? 'surface.dark' : 'surface.default',
+              color: evaluationId === evaluation.id ? 'text.bright' : 'text.default',
+              fontSize: '14px',
+              fontWeight: evaluationId === evaluation.id ? 'bold' : 'normal',
+              cursor: 'pointer',
+              transition: '[background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease]',
+            })}
+            onclick={() => (evaluationId = evaluation.id)}
+            type="button"
+          >
+            {evaluation.label}
+          </button>
+        {/each}
       </div>
-      <div class={css({ marginBottom: '16px' })}>
-        <label class={labelClass} for="round-expected-evaluators">예상 평가자 수 (선택)</label>
-        <input
-          id="round-expected-evaluators"
-          class={inputClass}
-          min="1"
-          placeholder="설정하면 평가자당 균등 몫 + 1건까지만 새 태스크가 배정됩니다"
-          type="number"
-          bind:value={expectedEvaluators}
-        />
-      </div>
-    {/if}
+      <input name="evaluationId" type="hidden" value={evaluationId} />
 
-    {#if availableLabels.length === 0}
-      <p class={css({ fontSize: '13px', color: 'text.faint', marginBottom: '4px' })}>
-        이 코퍼스 버전에 실행 완료된 후보가 없습니다. 먼저 후보를 실행하세요.
-      </p>
-    {:else if stage === 'screening'}
+      <div class={css({ marginBottom: '16px' })}>
+        <label class={formLabelClass} for="round-label">라벨</label>
+        <input id="round-label" name="label" class={formInputClass} placeholder="예: 3라운드" required type="text" />
+      </div>
+
       <div class={css({ marginBottom: '4px' })}>
-        <span class={labelClass}>대상 후보 (2개 이상)</span>
-        <div class={flex({ direction: 'column', gap: '6px' })}>
-          {#each availableLabels as label (label)}
-            <label class={flex({ align: 'center', gap: '8px', fontSize: '14px', cursor: 'pointer' })}>
-              <input
-                class={css({
-                  appearance: 'none',
-                  width: '16px',
-                  height: '16px',
-                  borderWidth: '1px',
-                  borderColor: 'border.strong',
-                  borderRadius: '4px',
-                  backgroundColor: 'surface.default',
-                  cursor: 'pointer',
-                  flexShrink: '0',
-                  transition: '[background-color 0.15s ease, border-color 0.15s ease]',
-                  _checked: { backgroundColor: 'accent.brand.default', borderColor: 'border.brand' },
-                })}
-                checked={selectedLabels.includes(label)}
-                onchange={() => toggleLabel(label)}
-                type="checkbox"
-              />
-              {label}
-            </label>
-          {/each}
-        </div>
-        {#if selectedLabels.length >= 2}
-          <div class={css({ marginTop: '12px' })}>
-            <label class={labelClass} for="round-baseline-label">기준선 (비교 기준이 되는 변형)</label>
-            <select id="round-baseline-label" class={inputClass} bind:value={baselineLabel}>
-              {#each selectedLabels as label (label)}
-                <option value={label}>{label}</option>
-              {/each}
-            </select>
+        <span class={formLabelClass}>대상 실행</span>
+        {#if eligible.length === 0}
+          <p class={css({ fontSize: '13px', color: 'text.faint' })}>
+            고를 수 있는 실행이 없습니다. 아직 어느 라운드에도 쓰이지 않은 표집 문서의 완료 실행만 고를 수 있습니다.
+          </p>
+        {:else}
+          <div class={flex({ direction: 'column', gap: '6px', maxHeight: '240px', overflowY: 'auto' })}>
+            {#each eligible as candidate (candidate.id)}
+              <label class={flex({ align: 'center', gap: '8px', fontSize: '14px', cursor: 'pointer' })}>
+                <input
+                  name="runIds"
+                  class={checkboxClass}
+                  checked={selected.has(candidate.id)}
+                  onchange={(e) => toggle(candidate.id, e.currentTarget.checked)}
+                  type="checkbox"
+                  value={candidate.id}
+                />
+                {candidate.refId ?? candidate.id}
+                {#if candidate.promptSetLabel}
+                  <span class={css({ fontSize: '13px', color: 'text.faint' })}>{candidate.promptSetLabel}</span>
+                {/if}
+              </label>
+            {/each}
           </div>
         {/if}
+        {#if excludedNote}
+          <p class={css({ marginTop: '6px', fontSize: '12px', color: 'text.faint' })}>{excludedNote}</p>
+        {/if}
       </div>
-    {:else if stage === 'absolute'}
-      <div class={css({ marginBottom: '4px' })}>
-        <label class={labelClass} for="round-absolute-label">대상 후보</label>
-        <select id="round-absolute-label" class={inputClass} bind:value={absoluteLabel}>
-          <option value="">선택하세요</option>
-          {#each availableLabels as label (label)}
-            <option value={label}>{label}</option>
-          {/each}
-        </select>
-        <p class={css({ marginTop: '6px', fontSize: '12px', color: 'text.faint' })}>
-          이 후보로 돌린 모든 실행의 문서를 합쳐 태스크를 만듭니다.
-        </p>
-      </div>
-      <div class={grid({ columns: 2, gap: '16px', marginTop: '16px' })}>
-        <div>
-          <label class={labelClass} for="round-absolute-required">문서당 판정 수</label>
-          <input id="round-absolute-required" class={inputClass} min="1" type="number" bind:value={absoluteRequired} />
-        </div>
-        <div>
-          <label class={labelClass} for="round-absolute-overlap">중복 비율 (0~1)</label>
-          <input id="round-absolute-overlap" class={inputClass} max="1" min="0" step="0.05" type="number" bind:value={absoluteOverlap} />
-        </div>
-      </div>
-      <p class={css({ marginTop: '6px', fontSize: '12px', color: 'text.faint' })}>
-        중복 비율에 걸린 문서는 배정 상한 없이 열려 동의한 평가자 전원이 봅니다. 판정자 간 일치도를 재는 구간입니다.
-      </p>
-      <div class={css({ marginTop: '16px' })}>
-        <label class={labelClass} for="round-absolute-evaluators">예상 평가자 수 (선택)</label>
-        <input
-          id="round-absolute-evaluators"
-          class={inputClass}
-          min="1"
-          placeholder="설정하면 평가자당 균등 몫 + 1건까지만 새 태스크가 배정됩니다"
-          type="number"
-          bind:value={expectedEvaluators}
-        />
-      </div>
-    {:else}
-      <div class={grid({ columns: 2, gap: '16px', marginBottom: '4px' })}>
-        <div>
-          <label class={labelClass} for="round-v0-label">v0 라벨</label>
-          <select id="round-v0-label" class={inputClass} bind:value={v0Label}>
-            <option value="">선택하세요</option>
-            {#each availableLabels as label (label)}
-              <option value={label}>{label}</option>
-            {/each}
-          </select>
-        </div>
-        <div>
-          <label class={labelClass} for="round-candidate-label">후보 라벨</label>
-          <select id="round-candidate-label" class={inputClass} bind:value={candidateLabel}>
-            <option value="">선택하세요</option>
-            {#each availableLabels as label (label)}
-              <option value={label}>{label}</option>
-            {/each}
-          </select>
-        </div>
-      </div>
-    {/if}
 
-    <button
-      class={css({
-        marginTop: '16px',
-        paddingX: '16px',
-        paddingY: '10px',
-        borderRadius: '8px',
-        backgroundColor: 'accent.brand.default',
-        color: 'text.bright',
-        fontSize: '13px',
-        fontWeight: 'bold',
-        cursor: 'pointer',
-        transition: '[background-color 0.15s ease]',
-        _disabled: { backgroundColor: 'interactive.disabled', cursor: 'not-allowed' },
-        ['&:hover:not(:disabled)']: { backgroundColor: 'accent.brand.hover' },
-      })}
-      disabled={creating || data.corpusVersions.length === 0}
-      onclick={submitRound}
-      type="button"
-    >
-      {creating ? '생성 중…' : '라운드 생성'}
-    </button>
-    <p class={css({ marginTop: '8px', height: '16px', fontSize: '12px', color: createResult ? 'text.success' : 'text.danger' })}>
-      {createError ?? createResult ?? ''}
-    </p>
+      <button
+        class={[formSubmitClass, css({ marginTop: '16px' })]}
+        disabled={creating || !evaluationId || selected.size === 0}
+        type="submit"
+      >
+        {creating ? '생성 중…' : `라운드 생성 (${selected.size}건)`}
+      </button>
+      <p class={[formNoticeClass, css({ color: form?.roundId ? 'text.success' : 'text.danger' })]}>
+        {form?.message ?? (form?.roundId ? '라운드가 생성되었습니다.' : '')}
+      </p>
+    </form>
   </section>
 
-  <section
-    class={css({
-      backgroundColor: 'surface.default',
-      borderWidth: '1px',
-      borderColor: 'border.default',
-      borderRadius: '12px',
-      boxShadow: 'small',
-      overflow: 'hidden',
-    })}
-  >
+  <section class={panelClass}>
     {#if data.rounds.length === 0}
-      <p class={css({ paddingY: '48px', textAlign: 'center', fontSize: '14px', color: 'text.faint' })}>아직 만들어진 라운드가 없습니다.</p>
+      <p class={emptyClass}>아직 만들어진 라운드가 없습니다.</p>
     {:else}
-      <table class={css({ width: 'full', fontSize: '13px', '& td, & th': { paddingX: '16px', paddingY: '10px', textAlign: 'left' } })}>
+      <table class={tableClass}>
         <thead>
-          <tr
-            class={css({
-              '& th': { color: 'text.faint', fontWeight: 'medium', borderBottomWidth: '1px', borderColor: 'border.default' },
-            })}
-          >
-            <th>스테이지</th>
-            <th>설정</th>
+          <tr class={tableHeadClass}>
+            <th>라운드</th>
+            <th>평가 방식</th>
             <th>태스크</th>
             <th>판정</th>
             <th>생성 시각</th>
+            <th>상태</th>
+            <th></th>
             <th></th>
           </tr>
         </thead>
         <tbody>
           {#each data.rounds as round (round.id)}
-            <tr class={css({ '& td': { borderBottomWidth: '1px', borderColor: 'border.subtle' } })}>
-              <td>{STAGE_LABELS[round.stage]}</td>
-              <td class={css({ color: 'text.faint' })}>{formatConfig(round)}</td>
-              <td>{round.taskCount.toLocaleString()}</td>
-              <td>{round.judgmentCount.toLocaleString()}</td>
+            <tr class={tableRowClass}>
+              <td>{round.label}</td>
+              <td class={css({ color: 'text.faint' })}>{round.evaluationLabel}</td>
+              <td>{round.total.toLocaleString()}</td>
+              <td>{round.done.toLocaleString()}</td>
               <td class={css({ color: 'text.faint' })}>{new Date(round.createdAt).toLocaleString('ko')}</td>
+              <td>
+                <button
+                  class={[quietButtonClass, css({ color: round.active ? 'text.success' : 'text.faint' })]}
+                  onclick={() => requestToggle(round)}
+                  type="button"
+                >
+                  {round.active ? '활성 — 닫기' : '비활성 — 열기'}
+                </button>
+              </td>
+              <td><a class={rowLinkClass} href="/admin/rounds/{round.id}">보기 →</a></td>
               <td>
                 <button
                   class={css({
@@ -471,9 +261,9 @@
                     _disabled: { color: 'text.disabled', cursor: 'not-allowed' },
                     ['&:hover:not(:disabled)']: { backgroundColor: 'accent.danger.subtle' },
                   })}
-                  disabled={round.taskCount === 0 || round.judgmentCount > 0}
+                  disabled={round.total === 0 || round.done > 0}
                   onclick={() => requestInvalidate(round.id)}
-                  title={round.judgmentCount > 0 ? '판정이 존재해 무효화할 수 없습니다.' : undefined}
+                  title={round.done > 0 ? '판정이 존재해 무효화할 수 없습니다.' : undefined}
                   type="button"
                 >
                   무효화

@@ -90,11 +90,12 @@ internal.post('/corpus/candidates', async (c) => {
   }
 
   const { limit, minLength, maxLength } = parsed.data;
-  // TABLESAMPLE SYSTEM은 블록을 물리 순서로 스캔하므로 ORDER BY 없이 LIMIT을 걸면
-  // 힙 앞부분(오래된 문서)에서만 후보가 나온다 — 샘플 전체를 무작위 정렬한 뒤 자른다.
-  const rows = await dbr.execute<{ document_id: string; text: string; character_count: number }>(sql`
-    select dc.document_id, dc.text, dc.character_count
-    from document_contents dc tablesample system (10)
+  // TABLESAMPLE은 쓰지 않는다 — 블록 단위 추첨이라 같은 시기에 쓰인(=같은 작성자의) 행이
+  // 통째로 들어오거나 통째로 빠져, 다작 작성자가 후보에 상관되어 몰린다(2026-07-30 실측:
+  // 풀 0.75% 작성자가 후보의 2.6%). 자격 행이 수천 규모라 전체 필터 후 무작위 정렬이 싸다.
+  const rows = await dbr.execute<{ document_id: string; text: string; character_count: number; user_id: string }>(sql`
+    select dc.document_id, dc.text, dc.character_count, e.user_id
+    from document_contents dc
     join documents d on d.id = dc.document_id
     join entities e on e.id = d.entity_id
     where dc.character_count between ${minLength} and ${maxLength}
@@ -105,8 +106,9 @@ internal.post('/corpus/candidates', async (c) => {
   `);
 
   // 응답에는 id만 담는다 — 본문은 /corpus/texts로 나눠 받는다(전체 텍스트를 한 응답에 담으면 수십 MB).
+  // user_id는 표집 쪽 작성자당 상한의 근거다 — 없으면 표집이 작성자 쏠림을 알 길이 없다.
   const seen = new Set<string>();
-  const candidates: { documentId: string; characterCount: number }[] = [];
+  const candidates: { documentId: string; characterCount: number; userId: string }[] = [];
   for (const row of rows) {
     if (hangulRatio(row.text) < 0.7) continue;
 
@@ -114,7 +116,7 @@ internal.post('/corpus/candidates', async (c) => {
     if (seen.has(hash)) continue;
     seen.add(hash);
 
-    candidates.push({ documentId: row.document_id, characterCount: row.character_count });
+    candidates.push({ documentId: row.document_id, characterCount: row.character_count, userId: row.user_id });
   }
 
   return c.json({ candidates });

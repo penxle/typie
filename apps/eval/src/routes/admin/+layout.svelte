@@ -11,15 +11,11 @@
 
   const navItems = [
     { href: '/admin', label: '홈' },
-    { href: '/admin/variants', label: '후보' },
-    { href: '/admin/analysis', label: '분석 파이프라인' },
-    { href: '/admin/corpus', label: '코퍼스' },
-    { href: '/admin/reads', label: '개인 열람' },
+    { href: '/admin/documents', label: '문서' },
+    { href: '/admin/prompt-sets', label: '프롬프트' },
     { href: '/admin/runs', label: '실행' },
     { href: '/admin/rounds', label: '라운드' },
-    { href: '/admin/tasks', label: '태스크' },
     { href: '/admin/evaluators', label: '평가자' },
-    { href: '/admin/apply', label: '적용' },
   ];
 
   const isActive = (href: string) => (href === '/admin' ? page.url.pathname === '/admin' : page.url.pathname.startsWith(href));

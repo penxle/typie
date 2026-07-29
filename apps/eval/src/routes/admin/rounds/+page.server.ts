@@ -1,104 +1,115 @@
 import { error, fail } from '@sveltejs/kit';
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
-import { createDb, Documents, Judgments, PipelineRuns, Rounds, Tasks, Variants } from '$lib/server/db/index.ts';
+import { desc, eq, inArray } from 'drizzle-orm';
+import { createRound, roundedDocumentIds, setRoundActive } from '$lib/server/rounds.ts';
+import { createDb, Documents, inChunks, Judgments, PromptSets, Rounds, Runs, TaskReleases, Tasks } from '../../../../core/db.ts';
+import { evaluationById, GENERATIONS, qualifiedEvaluationId } from '../../../../core/registry.ts';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ platform }) => {
-  if (!platform) {
-    error(500, 'platform unavailable');
-  }
-
+  if (!platform) error(500, 'platform unavailable');
   const db = createDb(platform.env.DB);
 
-  const corpusVersionRows = await db
-    .select({ corpusVersion: Documents.corpusVersion })
-    .from(Documents)
-    .groupBy(Documents.corpusVersion)
-    .orderBy(sql`max(${Documents.createdAt}) desc`);
-  const corpusVersions = corpusVersionRows.map((r) => r.corpusVersion);
-
-  // 대상 variant 자동 제안 = 해당 코퍼스 버전에 succeeded 실행이 있는 legacy Variants 라벨.
-  // admin/api/corpus/rounds가 variantLabels/v0Label/candidateLabel을 이 테이블의 label로 조회하므로
-  // (resolveLabelSets: eq(Variants.label, label)) 여기서도 동일하게 legacy Variants를 기준으로 삼는다.
-  const succeededRuns = await db
-    .select({ corpusVersion: PipelineRuns.corpusVersion, variantId: PipelineRuns.variantId })
-    .from(PipelineRuns)
-    .where(and(inArray(PipelineRuns.kind, ['pipeline', 'analysis']), eq(PipelineRuns.status, 'succeeded')));
-
-  const succeededVariantIds = [...new Set(succeededRuns.map((r) => r.variantId).filter((id): id is string => id !== null))];
-  const succeededVariants =
-    succeededVariantIds.length > 0
-      ? await db.select({ id: Variants.id, label: Variants.label }).from(Variants).where(inArray(Variants.id, succeededVariantIds))
-      : [];
-  const labelById = new Map(succeededVariants.map((v) => [v.id, v.label]));
-
-  const labelsByCorpusVersion: Record<string, string[]> = {};
-  for (const run of succeededRuns) {
-    if (!run.variantId) continue;
-    const label = labelById.get(run.variantId);
-    if (!label) continue;
-    const list = (labelsByCorpusVersion[run.corpusVersion] ??= []);
-    if (!list.includes(label)) list.push(label);
-  }
-  for (const list of Object.values(labelsByCorpusVersion)) list.sort((a, b) => a.localeCompare(b));
-
   const rounds = await db.select().from(Rounds).orderBy(desc(Rounds.createdAt));
+  const tasks = await db.select({ id: Tasks.id, roundId: Tasks.roundId }).from(Tasks);
+  const taskIds = tasks.map((t) => t.id);
+  const judgments = await inChunks(taskIds, (chunk) =>
+    db.select({ taskId: Judgments.taskId, draft: Judgments.draft }).from(Judgments).where(inArray(Judgments.taskId, chunk)),
+  );
+  const roundOf = new Map(tasks.map((t) => [t.id, t.roundId]));
+  const doneBy = new Map<string, number>();
+  for (const judgment of judgments) {
+    if (judgment.draft) continue;
+    const roundId = roundOf.get(judgment.taskId);
+    if (roundId) doneBy.set(roundId, (doneBy.get(roundId) ?? 0) + 1);
+  }
 
-  const taskCounts = await db
-    .select({ roundId: Tasks.roundId, count: sql<number>`count(*)` })
-    .from(Tasks)
-    .groupBy(Tasks.roundId);
-  const judgmentCounts = await db
-    .select({ roundId: Tasks.roundId, count: sql<number>`count(*)` })
-    .from(Judgments)
-    .innerJoin(Tasks, eq(Judgments.taskId, Tasks.id))
-    .groupBy(Tasks.roundId);
+  // 후보는 실행이 아니라 문서로 거른다. 같은 원고를 다시 돌리면 실행 id가 새로 나므로 실행으로만
+  // 거르면 한 번 평가한 글이 다음 라운드에 그대로 다시 들어간다. 반입 문서는 공개 관문을 지나지
+  // 않았으므로 평가자에게 내보내지 않는다 — 화면에서 빼고 createRound에서도 거부한다.
+  const usedDocumentIds = new Set(await roundedDocumentIds(db));
+  const done = await db
+    .select({
+      id: Runs.id,
+      documentId: Runs.documentId,
+      documentKind: Documents.kind,
+      refId: Documents.refId,
+      promptSetLabel: PromptSets.label,
+      generationId: PromptSets.generationId,
+    })
+    .from(Runs)
+    .leftJoin(Documents, eq(Documents.id, Runs.documentId))
+    .leftJoin(PromptSets, eq(PromptSets.id, Runs.promptSetId))
+    .where(eq(Runs.status, 'done'))
+    .orderBy(desc(Runs.createdAt));
 
-  const taskCountByRound = new Map(taskCounts.map((t) => [t.roundId, t.count]));
-  const judgmentCountByRound = new Map(judgmentCounts.map((j) => [j.roundId, j.count]));
+  const candidates = done.filter((c) => c.documentKind === 'sampled' && !usedDocumentIds.has(c.documentId));
 
-  const roundSummaries = rounds.map((r) => ({
-    id: r.id,
-    stage: r.stage,
-    config: r.config,
-    createdAt: r.createdAt.toISOString(),
-    taskCount: taskCountByRound.get(r.id) ?? 0,
-    judgmentCount: judgmentCountByRound.get(r.id) ?? 0,
-  }));
+  // 왜 안 보이는지 없으면 목록이 비었을 때 실행이 실패한 것처럼 읽힌다. 실행이 아니라 문서로 센다.
+  const countDocuments = (rows: typeof done) => new Set(rows.map((r) => r.documentId)).size;
+  const excluded = {
+    used: countDocuments(done.filter((c) => c.documentKind === 'sampled' && usedDocumentIds.has(c.documentId))),
+    intake: countDocuments(done.filter((c) => c.documentKind !== 'sampled')),
+  };
 
-  return { corpusVersions, labelsByCorpusVersion, rounds: roundSummaries };
+  return {
+    rounds: rounds.map((r) => ({
+      id: r.id,
+      label: r.label,
+      evaluationId: r.evaluationId,
+      evaluationLabel: evaluationById(r.evaluationId)?.evaluation.label ?? `${r.evaluationId} (제거됨)`,
+      active: r.active,
+      createdAt: r.createdAt.toISOString(),
+      total: tasks.filter((t) => t.roundId === r.id).length,
+      done: doneBy.get(r.id) ?? 0,
+    })),
+    candidates,
+    excluded,
+    evaluations: GENERATIONS.flatMap((g) =>
+      g.evaluations.map((e) => ({ id: qualifiedEvaluationId(g.id, e.id), label: `${g.label} · ${e.label}`, generationId: g.id })),
+    ),
+  };
 };
 
 export const actions: Actions = {
-  // admin/api에는 라운드 무효화(태스크 삭제) 라우트가 없어 페이지 서버 action에서 직접 D1 delete를 수행한다.
-  // 판정(Judgments)이 하나라도 존재하는 라운드는 평가 이력 보존을 위해 삭제를 거부한다.
-  invalidate: async ({ request, platform }) => {
-    if (!platform) {
-      return fail(500, { error: 'platform unavailable' });
-    }
-
+  create: async ({ request, platform }) => {
+    if (!platform) error(500, 'platform unavailable');
     const form = await request.formData();
-    const roundId = form.get('roundId');
-    if (typeof roundId !== 'string' || roundId.length === 0) {
-      return fail(400, { error: 'roundId가 필요합니다.' });
-    }
+    const result = await createRound(createDb(platform.env.DB), {
+      label: String(form.get('label') ?? '').trim(),
+      evaluationId: String(form.get('evaluationId') ?? ''),
+      runIds: form.getAll('runIds').map(String),
+    });
+    return 'error' in result ? fail(400, { message: result.error }) : { roundId: result.roundId };
+  },
 
+  // 판정이 하나라도 있으면 지우지 않는다 — 사람이 들인 시간이 태스크에 매달려 있다.
+  invalidate: async ({ request, platform }) => {
+    if (!platform) error(500, 'platform unavailable');
     const db = createDb(platform.env.DB);
+    const form = await request.formData();
+    const roundId = String(form.get('roundId') ?? '');
 
-    const tasks = await db.select({ id: Tasks.id }).from(Tasks).where(eq(Tasks.roundId, roundId));
-    if (tasks.length === 0) {
-      return fail(400, { error: '무효화할 태스크가 없습니다.' });
-    }
+    const roundTasks = await db.select({ id: Tasks.id }).from(Tasks).where(eq(Tasks.roundId, roundId));
+    if (roundTasks.length === 0) return fail(400, { message: '무효화할 태스크가 없습니다' });
 
-    const [judgmentCount] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(Judgments)
-      .where(inArray(Judgments.taskId, db.select({ id: Tasks.id }).from(Tasks).where(eq(Tasks.roundId, roundId))));
-    if ((judgmentCount?.count ?? 0) > 0) {
-      return fail(409, { error: '판정이 존재하는 라운드는 무효화할 수 없습니다.' });
-    }
+    const roundTaskIds = roundTasks.map((t) => t.id);
+    const judged = await inChunks(roundTaskIds, (chunk) =>
+      db.select({ id: Judgments.id }).from(Judgments).where(inArray(Judgments.taskId, chunk)).limit(1),
+    );
+    if (judged.length > 0) return fail(409, { message: '판정이 존재하는 라운드는 무효화할 수 없습니다' });
 
+    await inChunks(roundTaskIds, (chunk) =>
+      db.delete(TaskReleases).where(inArray(TaskReleases.taskId, chunk)).returning({ taskId: TaskReleases.taskId }),
+    );
     await db.delete(Tasks).where(eq(Tasks.roundId, roundId));
-    return { success: true };
+    await db.delete(Rounds).where(eq(Rounds.id, roundId));
+    return { invalidated: true };
+  },
+
+  toggle: async ({ request, platform }) => {
+    if (!platform) error(500, 'platform unavailable');
+    const form = await request.formData();
+    await setRoundActive(createDb(platform.env.DB), String(form.get('id') ?? ''), form.get('active') === 'true');
+    return { ok: true };
   },
 };

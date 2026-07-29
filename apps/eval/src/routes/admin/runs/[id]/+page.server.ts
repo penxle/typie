@@ -1,158 +1,106 @@
-import { error } from '@sveltejs/kit';
-import { eq, inArray } from 'drizzle-orm';
-import { anchorMatchRate, categoryComplianceRate, feedbackCountDistribution } from '$lib/domain/aggregate.ts';
-import { costPerCharacter, estimateCost, sumCosts } from '$lib/domain/pricing.ts';
-import { createDb, Documents, Feedbacks, FeedbackSets, PipelineRunDocs, Variants } from '$lib/server/db/index.ts';
-import { readPriceTable, resolveRunModels } from '$lib/server/pricing.ts';
-import { readStageUsage } from '$lib/server/stage-usage.ts';
-import type { RunDocStatus, RunKind, RunPhase, RunStatus } from '$lib/domain/admin-types.ts';
-import type { PageServerLoad } from './$types';
+import { error, fail } from '@sveltejs/kit';
+import { eq } from 'drizzle-orm';
+import { costPerCharacter, sumCosts } from '$lib/domain/pricing.ts';
+import { phaseCosts, readPriceTable, runCost, totalUsage } from '$lib/server/pricing.ts';
+import { cancelRun, isRunLocked, refreshRun, retryRun } from '$lib/server/run-service.ts';
+import { loadRunView } from '$lib/server/run-view.ts';
+import { createDb, Ledgers, PhaseUsage, PromptSets, Runs } from '../../../../../core/db.ts';
+import { generationById } from '../../../../../core/registry.ts';
+import type { ToolRecord } from '../../../../../core/contracts.ts';
+import type { Actions, PageServerLoad } from './$types';
 
-type RunDetail = {
-  id: string;
-  kind: RunKind;
-  variantId: string | null;
-  corpusVersion: string;
-  status: RunStatus;
-  phase: RunPhase | null;
-  doneChunks: number;
-  totalChunks: number;
-  doneDocs: number;
-  totalDocs: number;
-  promptTokens: number;
-  completionTokens: number;
-  cachedTokens: number;
-  error: string | null;
-  // admin API는 run 행 전체를 반환한다 — 세대 판별(에디토리얼 단계 표시)에 promptSetId를 쓴다.
-  meta: Record<string, unknown> | null;
-  createdAt: string;
-  finishedAt: string | null;
-};
-
-type RunDocRow = {
-  id: string;
-  runId: string;
-  documentId: string;
-  workflowInstanceId: string | null;
-  status: RunDocStatus;
-  doneChunks: number;
-  totalChunks: number;
-  // 재설계 파이프라인만 채운다 — 구 파이프라인은 청크 수로 진행률을 낸다.
-  phase: string | null;
-  error: string | null;
-};
-
-export const load: PageServerLoad = async ({ params, platform, locals, fetch }) => {
-  if (!platform) {
-    error(500, 'platform unavailable');
-  }
-
-  // 목록과 동일하게 admin API를 self-fetch — GET이 refreshRun을 실행해 워크플로 인스턴스 상태를 최신화한다.
-  const res = await fetch(`/admin/api/runs/${params.id}`, { headers: { 'cf-access-authenticated-user-email': locals.email } });
-  if (!res.ok) {
-    error(res.status, 'failed to load run');
-  }
-  const { run, docs } = (await res.json()) as { run: RunDetail; docs: RunDocRow[] };
-
+export const load: PageServerLoad = async ({ params, platform }) => {
+  if (!platform) error(500, 'platform unavailable');
   const db = createDb(platform.env.DB);
 
-  let variantLabel: string | null = null;
-  if (run.variantId) {
-    const [variant] = await db.select({ label: Variants.label }).from(Variants).where(eq(Variants.id, run.variantId)).limit(1);
-    variantLabel = variant?.label ?? run.variantId;
-  }
+  await refreshRun(db, platform.env, params.id);
 
-  let summary: {
-    anchorMatchRate: number;
-    feedbackDistribution: { zero: number; total: number };
-    categoryCompliance: number;
-  } | null = null;
-  let preview: {
-    documentId: string;
-    refId: string;
-    feedbacks: { id: string; category: string | null; layer: string | null; body: string; matchStart: number | null }[];
-  }[] = [];
+  const [run] = await db.select().from(Runs).where(eq(Runs.id, params.id));
+  if (!run) error(404, 'run not found');
 
-  // 완료된 파이프라인 실행에서만 기계 지표·프리뷰를 계산한다(브리프: "완료 시"). feedbacks/documents는 읽기 전용 select.
-  if (run.status === 'succeeded' && (run.kind === 'pipeline' || run.kind === 'analysis')) {
-    const sets = await db.select().from(FeedbackSets).where(eq(FeedbackSets.runId, run.id));
-    const setIds = sets.map((s) => s.id);
-    const feedbacks = setIds.length > 0 ? await db.select().from(Feedbacks).where(inArray(Feedbacks.setId, setIds)) : [];
-    const docIds = [...new Set(sets.map((s) => s.documentId))];
-    const documents =
-      docIds.length > 0
-        ? await db.select({ id: Documents.id, refId: Documents.refId }).from(Documents).where(inArray(Documents.id, docIds))
-        : [];
-    const refIdByDoc = new Map(documents.map((d) => [d.id, d.refId]));
+  const view = await loadRunView(db, params.id);
+  if (!view) error(500, 'run view missing');
 
-    // aggregate 함수는 variantId로 그룹핑하지만 이 화면은 실행 하나=variant 하나이므로 그룹 키로만 사용한다.
-    const groupKey = run.variantId ?? run.id;
-    const anchorEntries = sets.map((s) => {
-      const setFeedbacks = feedbacks.filter((f) => f.setId === s.id);
+  const manifest = generationById(view.generationId ?? '');
+  const usage = await db.select().from(PhaseUsage).where(eq(PhaseUsage.runId, params.id));
+
+  const [set] = run.promptSetId
+    ? await db.select({ content: PromptSets.content }).from(PromptSets).where(eq(PromptSets.id, run.promptSetId))
+    : [];
+  const table = await readPriceTable(db);
+  const content = set?.content ?? null;
+  const costs = new Map(phaseCosts(usage, content, table).map((row) => [row.phase, row]));
+  // 실행 단위로는 모델이 섞여 금액이 안 나와도 단계별 합으로는 나온다.
+  const stageTotal = usage.length > 0 ? sumCosts([...costs.values()].map((c) => c.cost)) : null;
+  const cost = runCost(usage, content, table);
+  const totals = totalUsage(usage);
+  // 원장은 턴마다 갱신되므로 진행 중인 단계도 그대로 읽으면 된다.
+  const ledgerRows = await db.select().from(Ledgers).where(eq(Ledgers.runId, params.id));
+  // 원장은 턴마다 갱신되므로 진행 중인 단계도 그대로 읽으면 된다.
+  // 순서는 기록 시각으로 낸다 — 매니페스트에 없는 키가 섞여도 실제 실행 순서대로 놓인다.
+  const ledgers = ledgerRows
+    .filter((row) => row.key.startsWith('ledger/'))
+    .map((row) => {
+      const stage = row.key.slice('ledger/'.length);
+      const value = row.value as { tools?: unknown; events?: unknown };
       return {
-        variantId: groupKey,
-        matchedCount: setFeedbacks.filter((f) => f.matchStart !== null).length,
-        feedbackCount: setFeedbacks.length,
+        stage,
+        at: row.createdAt.getTime(),
+        label: manifest?.phases.find((p) => p.key === stage)?.label ?? stage,
+        tools: Array.isArray(value.tools) ? (value.tools as ToolRecord[]) : [],
+        events: Array.isArray(value.events) ? (value.events as { turn?: number; kind: string; detail: string }[]) : [],
       };
-    });
-    const countEntries = sets.map((s) => ({ variantId: groupKey, feedbackCount: feedbacks.filter((f) => f.setId === s.id).length }));
-    const categories = feedbacks.map((f) => f.category);
-
-    summary = {
-      anchorMatchRate: anchorMatchRate(anchorEntries).get(groupKey) ?? NaN,
-      feedbackDistribution: feedbackCountDistribution(countEntries).get(groupKey) ?? { zero: 0, total: 0 },
-      categoryCompliance: categoryComplianceRate(categories),
-    };
-
-    preview = sets
-      .map((s) => ({ documentId: s.documentId, refId: refIdByDoc.get(s.documentId) ?? s.documentId, setId: s.id }))
-      .toSorted((a, b) => a.refId.localeCompare(b.refId))
-      .slice(0, 3)
-      .map((s) => ({
-        documentId: s.documentId,
-        refId: s.refId,
-        feedbacks: feedbacks
-          .filter((f) => f.setId === s.setId)
-          .toSorted((a, b) => a.ord - b.ord)
-          .map((f) => ({ id: f.id, category: f.category, layer: f.layer, body: f.body, matchStart: f.matchStart })),
-      }));
-  }
-
-  const priceTable = await readPriceTable(db);
-  const modelsByRun = await resolveRunModels(db, [run.id]);
-  const models = modelsByRun.get(run.id) ?? [];
-  const cost = estimateCost(
-    { promptTokens: run.promptTokens, completionTokens: run.completionTokens, cachedTokens: run.cachedTokens, models },
-    priceTable,
-  );
-
-  // 자당 비용은 이 실행이 실제로 읽은 문서들의 자수로 낸다 — 코퍼스 전체가 아니라 실행 범위다.
-  const runDocIds = await db
-    .select({ documentId: PipelineRunDocs.documentId })
-    .from(PipelineRunDocs)
-    .where(eq(PipelineRunDocs.runId, run.id));
-  const ids = [...new Set(runDocIds.map((d) => d.documentId))];
-  const sizes =
-    ids.length > 0 ? await db.select({ characterCount: Documents.characterCount }).from(Documents).where(inArray(Documents.id, ids)) : [];
-  const characters = sizes.reduce((sum, d) => sum + d.characterCount, 0);
-
-  // 단계마다 모델이 다르면 실행 단위 금액은 '혼합'으로 물러난다. 단계별로는 모델을 알 수 있어
-  // 정확한 총액이 나오므로, 그때는 이쪽을 쓴다.
-  const stages = await readStageUsage(db, run.id);
-  const stageTotal = stages.length > 0 ? sumCosts(stages.map((s) => s.cost)) : null;
-  const krw = cost.kind === 'exact' ? cost.krw : stageTotal?.complete ? stageTotal.krw : null;
+    })
+    .toSorted((a, b) => a.at - b.at);
 
   return {
-    run,
-    docs,
-    variantLabel,
-    summary,
-    preview,
+    run: { ...run, createdAt: run.createdAt.toISOString(), finishedAt: run.finishedAt?.toISOString() ?? null },
+    view,
+    // 진행 표시와 비용표가 같은 축이다 — 매니페스트의 phases 하나로 둘 다 그린다.
+    phases:
+      manifest?.phases.map((p) => ({
+        ...p,
+        usage: usage.find((u) => u.phase === p.key) ?? null,
+        model: costs.get(p.key)?.model ?? null,
+        cost: costs.get(p.key)?.cost ?? null,
+      })) ?? [],
+    orphanUsage: usage
+      .filter((u) => !manifest?.phases.some((p) => p.key === u.phase))
+      .map((u) => ({ ...u, model: costs.get(u.phase)?.model ?? null, cost: costs.get(u.phase)?.cost ?? null })),
     cost,
-    stages,
     stageTotal,
-    models,
-    characters,
-    krwPerCharacter: krw === null ? null : costPerCharacter(krw, characters),
+    krwPerCharacter:
+      stageTotal?.complete && stageTotal.krw > 0
+        ? costPerCharacter(stageTotal.krw, view.document.characterCount)
+        : cost.kind === 'exact'
+          ? costPerCharacter(cost.krw, view.document.characterCount)
+          : null,
+    characters: view.document.characterCount,
+    models: [...new Set([...costs.values()].map((c) => c.model).filter((m): m is string => m !== null))],
+    tokens: totals.promptTokens + totals.completionTokens,
+    ledgers,
+    // 앵커가 본문에서 실제로 잡혔는가 — 산출물이 원고를 가리키는지 보는 유일한 기계 지표다.
+    metrics: {
+      anchorMatchRate: (() => {
+        const anchors = view.items.flatMap((i) => i.anchors);
+        return anchors.length === 0 ? NaN : anchors.filter((a) => a.matchStart !== null).length / anchors.length;
+      })(),
+      findings: view.items.filter((i) => i.kind === 'finding').length,
+      reviewItems: view.items.filter((i) => i.kind !== 'finding').length,
+    },
+    locked: await isRunLocked(db, params.id),
   };
+};
+
+export const actions: Actions = {
+  retry: async ({ params, platform }) => {
+    if (!platform) error(500, 'platform unavailable');
+    const result = await retryRun(createDb(platform.env.DB), platform.env, params.id);
+    return 'error' in result ? fail(400, { message: result.error }) : { ok: true };
+  },
+  cancel: async ({ params, platform }) => {
+    if (!platform) error(500, 'platform unavailable');
+    const result = await cancelRun(createDb(platform.env.DB), platform.env, params.id);
+    return 'error' in result ? fail(400, { message: result.error }) : { ok: true };
+  },
 };

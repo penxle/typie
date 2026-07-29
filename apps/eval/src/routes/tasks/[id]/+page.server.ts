@@ -1,447 +1,201 @@
 import { error, redirect } from '@sveltejs/kit';
-import { and, eq, inArray, notInArray, sql } from 'drizzle-orm';
-import { nanoid } from 'nanoid';
-import { deriveFalsePositiveIds, FEEDBACK_LABEL_KEYS } from '$lib/domain/feedback-labels.ts';
-import { isEmptyFeedbackVerdict, isEmptyReviewVerdict, isFeedbackComplete, isReviewComplete } from '$lib/domain/verdicts.ts';
-import { claimableSummary, claimNextTask } from '$lib/server/claim.ts';
-import {
-  chunkRows,
-  createDb,
-  Documents,
-  FeedbackAnchors,
-  Feedbacks,
-  FeedbackSets,
-  FeedbackVerdicts,
-  Judgments,
-  ReleasedTasks,
-  ReviewVerdicts,
-  Tasks,
-} from '$lib/server/db/index.ts';
-import { effectiveProgress } from '$lib/server/progress.ts';
-import type { BatchItem } from 'drizzle-orm/batch';
-import type { FeedbackLabelMap } from '$lib/domain/feedback-labels.ts';
-import type { JudgmentResult } from '$lib/domain/types.ts';
-import type { FeedbackVerdictMap, ReviewVerdictMap } from '$lib/domain/verdicts.ts';
+import { eq, inArray } from 'drizzle-orm';
+import { loadArtifacts } from '$lib/server/artifacts.ts';
+import { claimTask, releaseTask } from '$lib/server/assign.ts';
+import { loadRunView } from '$lib/server/run-view.ts';
+import { createDb, inChunks, JudgmentItems, Judgments, Rounds, Tasks } from '../../../../core/db.ts';
+import { judgmentGaps, stageTargetFor } from '../../../../core/evaluation.ts';
+import { evaluationById } from '../../../../core/registry.ts';
+import { judgmentLock, LOCK_MESSAGE, releasable, stageIndexOf } from './lock.ts';
 import type { Actions, PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ params, platform, locals }) => {
-  if (!platform) {
-    error(500, 'platform unavailable');
-  }
-
+const context = async (platform: App.Platform | undefined, taskId: string) => {
+  if (!platform) error(500, 'platform unavailable');
   const db = createDb(platform.env.DB);
 
-  const [task] = await db.select().from(Tasks).where(eq(Tasks.id, params.id));
-  if (!task) {
-    error(404, 'task not found');
-  }
+  const [task] = await db.select().from(Tasks).where(eq(Tasks.id, taskId));
+  if (!task) error(404, 'task not found');
+  const [round] = await db.select().from(Rounds).where(eq(Rounds.id, task.roundId));
+  if (!round) error(500, 'round missing');
 
-  const [document] = await db.select().from(Documents).where(eq(Documents.id, task.documentId));
-  if (!document) {
-    error(500, 'document missing');
-  }
+  const resolved = evaluationById(round.evaluationId);
+  if (!resolved) error(500, `unknown evaluation: ${round.evaluationId}`);
 
-  const sets = await db.select().from(FeedbackSets).where(inArray(FeedbackSets.id, task.setIds));
-  const feedbacks = await db.select().from(Feedbacks).where(inArray(Feedbacks.setId, task.setIds)).orderBy(Feedbacks.ord);
+  return { db, task, round, evaluation: resolved.evaluation };
+};
 
-  const [draft] = await db
-    .select()
-    .from(Judgments)
-    .where(and(eq(Judgments.taskId, task.id), eq(Judgments.evaluatorEmail, locals.email)));
+export const load: PageServerLoad = async ({ params, platform, locals }) => {
+  const { db, task, round, evaluation } = await context(platform, params.id);
 
-  if (draft && !draft.draft) {
-    redirect(302, '/');
-  }
+  const [judgment] = await db.select().from(Judgments).where(eq(Judgments.taskId, task.id));
+  if (!judgment || judgment.evaluatorEmail !== locals.email) error(404, 'task not assigned to you');
+  if (!judgment.draft) redirect(302, '/');
 
-  // 재설계 파이프라인 세트는 총평(review)을 갖는다 — 이 값의 유무로 판정 형식이 갈린다.
-  const analysisSets = sets.filter((s) => s.review !== null);
-  const isAnalysis = analysisSets.length > 0;
+  const view = await loadRunView(db, task.runId);
+  if (!view) error(500, 'run missing');
 
-  const feedbackIds = feedbacks.map((f) => f.id);
-  const anchors =
-    isAnalysis && feedbackIds.length > 0
-      ? await db.select().from(FeedbackAnchors).where(inArray(FeedbackAnchors.feedbackId, feedbackIds))
-      : [];
+  const entries = await db.select().from(JudgmentItems).where(eq(JudgmentItems.judgmentId, judgment.id));
 
-  const verdicts = isAnalysis && draft ? await db.select().from(FeedbackVerdicts).where(eq(FeedbackVerdicts.judgmentId, draft.id)) : [];
-  const reviewVerdicts = isAnalysis && draft ? await db.select().from(ReviewVerdicts).where(eq(ReviewVerdicts.judgmentId, draft.id)) : [];
-
-  const orderedSets = task.setIds.map((setId) => ({
-    setId,
-    review: sets.find((s) => s.id === setId)?.review ?? null,
-    feedbacks: feedbacks
-      .filter((f) => f.setId === setId)
-      .map((f) => ({
-        ...f,
-        anchors: anchors
-          .filter((a) => a.feedbackId === f.id)
-          .toSorted((a, b) => a.ord - b.ord)
-          .map((a) => ({ startText: a.startText, endText: a.endText, matchStart: a.matchStart, matchEnd: a.matchEnd })),
-      })),
-  }));
-
-  // 내 판정 분자·분모는 현재(최신) 라운드만 센다 — 지난 라운드 판정을 이월하지 않는다.
-  const round = await effectiveProgress(db);
-  const roundScope = round.roundId ? eq(Tasks.roundId, round.roundId) : sql`0 = 1`;
-  const [myDone] = await db
-    .select({ n: sql<number>`count(*)` })
-    .from(Judgments)
-    .innerJoin(Tasks, eq(Tasks.id, Judgments.taskId))
-    .where(and(eq(Judgments.evaluatorEmail, locals.email), eq(Judgments.draft, false), roundScope));
-  const [myDrafts] = await db
-    .select({ n: sql<number>`count(*)` })
-    .from(Judgments)
-    .innerJoin(Tasks, eq(Tasks.id, Judgments.taskId))
-    .where(and(eq(Judgments.evaluatorEmail, locals.email), eq(Judgments.draft, true), roundScope));
-  const { potential } = await claimableSummary(db, locals.email);
+  // 헤더의 진행 표시 — 내 판정과 라운드 전체를 함께 보여야 내 몫이 전체 어디쯤인지 읽힌다.
+  const roundTasks = await db.select({ id: Tasks.id }).from(Tasks).where(eq(Tasks.roundId, round.id));
+  const roundJudgments = await inChunks(
+    roundTasks.map((t) => t.id),
+    (chunk) =>
+      db
+        .select({ evaluatorEmail: Judgments.evaluatorEmail, draft: Judgments.draft })
+        .from(Judgments)
+        .where(inArray(Judgments.taskId, chunk)),
+  );
 
   return {
-    isAnalysis,
-    verdicts: Object.fromEntries(
-      verdicts.map((v) => [v.feedbackId, { correct: v.correct, needed: v.needed, useful: v.useful, ...(v.note && { note: v.note }) }]),
-    ) as FeedbackVerdictMap,
-    reviewVerdicts: Object.fromEntries(
-      reviewVerdicts.map((v) => [
-        v.setId,
-        { readCorrectly: v.readCorrectly, priorityUseful: v.priorityUseful, ...(v.note && { note: v.note }) },
-      ]),
-    ) as ReviewVerdictMap,
-    task: { id: task.id, kind: task.kind, setIds: task.setIds },
-    document: { content: document.content, characterCount: document.characterCount },
-    sets: orderedSets,
-    // 배열 구조분해는 undefined를 타입에 남기지 않아 ?? null이 지워진다. 명시하지 않으면
-    // draft 없는 화면(어드민 미리보기)이 같은 형태를 만들 수 없다.
-    draft: (draft ?? null) as typeof Judgments.$inferSelect | null,
-    setCount: sets.length,
+    // 평가 정의는 함수를 품어 직렬화되지 않는다 — id만 넘기고 화면이 레지스트리에서 해석한다.
+    evaluationId: round.evaluationId,
+    round: { id: round.id, label: round.label, active: round.active },
     progress: {
-      done: myDone?.n ?? 0,
-      myTotal: (myDone?.n ?? 0) + (myDrafts?.n ?? 0) + potential,
-      roundDone: round.done,
-      roundRequired: round.required,
+      mine: roundJudgments.filter((j) => j.evaluatorEmail === locals.email && !j.draft).length,
+      roundDone: roundJudgments.filter((j) => !j.draft).length,
+      roundTotal: roundTasks.length,
     },
+    view,
+    answers: Object.fromEntries(entries.map((e) => [e.itemId, e.payload])),
+    runAnswer: judgment.payload,
+    elapsedSeconds: judgment.elapsedSeconds,
+    lock: judgmentLock(round, judgment),
+    stageIndex: stageIndexOf(evaluation, judgment),
+    // 산출물은 항상 싣는다 — 언제 무엇을 보여줄지는 세대 UI가 정한다.
+    artifacts: await loadArtifacts(db, view.generationId, task.runId),
   };
 };
 
-// 판정 행만 확보한다(내용도 확정 여부도 건드리지 않는다). 판정 항목이 judgment_id를 참조하므로
-// id가 먼저 있어야 하는데, 이 단계에서 내용을 함께 쓰면 뒤 단계가 실패했을 때 "제출됨"만 남는다.
-// 원자적 insert — select-후-insert는 제출 연타 시 동시 요청이 겹쳐 UNIQUE 위반 500을 낸다.
-const ensureJudgment = async (db: ReturnType<typeof createDb>, taskId: string, email: string): Promise<string> => {
-  await db.insert(Judgments).values({ id: nanoid(), taskId, evaluatorEmail: email }).onConflictDoNothing();
-
-  const [row] = await db
-    .select({ id: Judgments.id })
-    .from(Judgments)
-    .where(and(eq(Judgments.taskId, taskId), eq(Judgments.evaluatorEmail, email)));
-  if (!row) {
-    error(500, 'judgment missing after insert');
-  }
-  return row.id;
-};
-
-// 판정 항목과 확정 여부를 D1 배치 하나로 넘긴다. 배치는 단일 트랜잭션이라 전부 반영되거나
-// 전부 취소된다 — 항목 저장이 실패했는데 "제출됨"만 남는 일이 여기서 막힌다.
-//
-// save(draft)는 이미 확정된 판정을 되돌리지 못한다: 느린 임시 저장 응답이 제출보다 늦게
-// 도착해도 확정을 draft로 강등하지 않는다(setWhere).
-const commitJudgment = async (
-  db: ReturnType<typeof createDb>,
-  input: {
-    judgmentId: string;
-    taskId: string;
-    email: string;
-    result: JudgmentResult | null;
-    falsePositiveFeedbackIds: string[];
-    feedbackLabels: FeedbackLabelMap;
-    comment: string;
-    elapsedSeconds: number;
-    draft: boolean;
-    verdicts: FeedbackVerdictMap;
-    reviewVerdicts: ReviewVerdictMap;
-  },
-) => {
-  const { judgmentId } = input;
-  const statements: BatchItem<'sqlite'>[] = [];
-
-  const feedbackRows = Object.entries(input.verdicts).map(([feedbackId, v]) => ({
-    id: nanoid(),
-    judgmentId,
-    feedbackId,
-    correct: v.correct,
-    needed: v.needed,
-    useful: v.useful,
-    note: v.note ?? null,
-  }));
-  // D1은 문장당 바인딩 100개 제한 — 판정은 7컬럼이라 14행씩 나눈다(한 문장에 몰면 15행부터 실패).
-  chunkRows(feedbackRows, 7, (chunk) => {
-    statements.push(
-      db
-        .insert(FeedbackVerdicts)
-        .values(chunk)
-        .onConflictDoUpdate({
-          target: [FeedbackVerdicts.judgmentId, FeedbackVerdicts.feedbackId],
-          set: {
-            correct: sql`excluded.correct`,
-            needed: sql`excluded.needed`,
-            useful: sql`excluded.useful`,
-            note: sql`excluded.note`,
-          },
-        }),
-    );
-  });
-
-  const reviewRows = Object.entries(input.reviewVerdicts).map(([setId, v]) => ({
-    id: nanoid(),
-    judgmentId,
-    setId,
-    readCorrectly: v.readCorrectly,
-    priorityUseful: v.priorityUseful,
-    note: v.note ?? null,
-  }));
-  chunkRows(reviewRows, 6, (chunk) => {
-    statements.push(
-      db
-        .insert(ReviewVerdicts)
-        .values(chunk)
-        .onConflictDoUpdate({
-          target: [ReviewVerdicts.judgmentId, ReviewVerdicts.setId],
-          set: {
-            readCorrectly: sql`excluded.read_correctly`,
-            priorityUseful: sql`excluded.priority_useful`,
-            note: sql`excluded.note`,
-          },
-        }),
-    );
-  });
-
-  // 이번에 답하지 않은 항목만 걷어낸다 — 평가자가 판정을 되돌린 경우가 여기 해당한다.
-  const feedbackIds = Object.keys(input.verdicts);
-  const setIds = Object.keys(input.reviewVerdicts);
-  statements.push(
-    db
-      .delete(FeedbackVerdicts)
-      .where(
-        feedbackIds.length > 0
-          ? and(eq(FeedbackVerdicts.judgmentId, judgmentId), notInArray(FeedbackVerdicts.feedbackId, feedbackIds))
-          : eq(FeedbackVerdicts.judgmentId, judgmentId),
-      ),
-    db
-      .delete(ReviewVerdicts)
-      .where(
-        setIds.length > 0
-          ? and(eq(ReviewVerdicts.judgmentId, judgmentId), notInArray(ReviewVerdicts.setId, setIds))
-          : eq(ReviewVerdicts.judgmentId, judgmentId),
-      ),
-    // 확정은 마지막이다. 앞의 어느 문장이든 실패하면 배치 전체가 취소되어 draft로 남는다.
-    db
-      .update(Judgments)
-      .set({
-        ...(input.result && { result: input.result }),
-        falsePositiveFeedbackIds: input.falsePositiveFeedbackIds,
-        feedbackLabels: input.feedbackLabels,
-        comment: input.comment,
-        elapsedSeconds: input.elapsedSeconds,
-        draft: input.draft,
-        updatedAt: new Date(),
-      })
-      .where(input.draft ? and(eq(Judgments.id, judgmentId), eq(Judgments.draft, true)) : eq(Judgments.id, judgmentId)),
-  );
-
-  await db.batch(statements as [BatchItem<'sqlite'>, ...BatchItem<'sqlite'>[]]);
-};
-const parseForm = async (request: Request) => {
+const parse = async (request: Request) => {
   const form = await request.formData();
   return {
-    result: form.get('result') ? (JSON.parse(form.get('result') as string) as JudgmentResult) : null,
-    feedbackLabels: JSON.parse((form.get('feedbackLabels') as string) || '{}') as FeedbackLabelMap,
-    verdicts: JSON.parse((form.get('verdicts') as string) || '{}') as FeedbackVerdictMap,
-    reviewVerdicts: JSON.parse((form.get('reviewVerdicts') as string) || '{}') as ReviewVerdictMap,
-    comment: (form.get('comment') as string) || '',
+    answers: JSON.parse((form.get('answers') as string) || '{}') as Record<string, Record<string, unknown>>,
+    runAnswer: JSON.parse((form.get('runAnswer') as string) || '{}') as Record<string, unknown>,
     elapsedSeconds: Number(form.get('elapsedSeconds') ?? 0),
   };
 };
 
-// 클라이언트가 보낸 판정에서 이 태스크에 속하지 않는 setId·피드백 id를 걷어낸다 — 폼 상태가
-// 태스크 간에 새는 클라이언트 버그가 재발해도 다른 태스크의 항목이 저장되지 않게 하는 방어선.
-const sanitizeForTask = async (db: ReturnType<typeof createDb>, taskId: string, input: Awaited<ReturnType<typeof parseForm>>) => {
-  const [task] = await db.select({ setIds: Tasks.setIds }).from(Tasks).where(eq(Tasks.id, taskId));
-  if (!task) {
-    error(404, 'task not found');
+// 클라이언트가 보낸 판정을 평가 정의로 걸러낸다. 확정된 단계의 답은 저장본이 진실이고,
+// 클라이언트 값은 현재 단계의 필드에만 반영된다 — 확정 뒤에는 폼을 직접 던져도 고칠 수 없다.
+const sanitizeForTask = async (
+  platform: App.Platform | undefined,
+  taskId: string,
+  email: string,
+  raw: Awaited<ReturnType<typeof parse>>,
+) => {
+  const { db, task, round, evaluation } = await context(platform, taskId);
+
+  const [judgment] = await db.select().from(Judgments).where(eq(Judgments.taskId, task.id));
+  if (!judgment || judgment.evaluatorEmail !== email) error(404, 'task not assigned to you');
+
+  const lock = judgmentLock(round, judgment);
+  if (lock) error(423, LOCK_MESSAGE[lock]);
+
+  const view = await loadRunView(db, task.runId);
+  if (!view) error(500, 'run missing');
+
+  const stageIndex = stageIndexOf(evaluation, judgment);
+  const stage = evaluation.stages[stageIndex];
+  const stored = judgment.payload as Record<string, unknown>;
+  const storedEntries = await db.select().from(JudgmentItems).where(eq(JudgmentItems.judgmentId, judgment.id));
+
+  const itemPayloads: Record<string, Record<string, unknown>> = Object.fromEntries(storedEntries.map((e) => [e.itemId, e.payload]));
+  for (const item of view.items) {
+    const target = stageTargetFor(stage, item);
+    const submitted = raw.answers[item.id];
+    if (!target || !submitted) continue;
+    itemPayloads[item.id] = Object.fromEntries(target.fields.map((f) => [f.key, f.sanitize(submitted[f.key])]));
   }
 
-  const feedbackRows = await db.select({ id: Feedbacks.id }).from(Feedbacks).where(inArray(Feedbacks.setId, task.setIds));
-  const validFeedbackIds = new Set(feedbackRows.map((f) => f.id));
-
-  let result = input.result;
-  if (result?.kind === 'ranking') {
-    result = { kind: 'ranking', ranks: result.ranks.filter((r) => task.setIds.includes(r.setId)) };
-  }
-  if (result?.kind === 'scores') {
-    result = {
-      kind: 'scores',
-      scores: result.scores
-        .filter((s) => task.setIds.includes(s.setId) && Number.isSafeInteger(s.score) && s.score >= 1 && s.score <= 5)
-        .map((s) => ({ setId: s.setId, score: s.score })),
-    };
-  }
-
-  const sanitizedLabels: FeedbackLabelMap = {};
-  for (const [feedbackId, entry] of Object.entries(input.feedbackLabels)) {
-    if (!validFeedbackIds.has(feedbackId)) continue;
-    const labels = [...new Set(entry.labels)].filter((key) => FEEDBACK_LABEL_KEYS.has(key));
-    const comment = typeof entry.comment === 'string' ? entry.comment.slice(0, 1000) : undefined;
-    if (labels.length === 0 && !comment) continue;
-    sanitizedLabels[feedbackId] = { labels, ...(comment && { comment }) };
-  }
-
-  // 세 값 모두 3상태다 — true/false만 신뢰하고 나머지는 미판정(null)으로 떨어뜨린다.
-  const asVerdict = (value: unknown) => (value === true ? true : value === false ? false : null);
-  const asNote = (value: unknown) => (typeof value === 'string' && value.trim() ? { note: value.trim().slice(0, 1000) } : {});
-
-  const sanitizedVerdicts: FeedbackVerdictMap = {};
-  for (const [feedbackId, entry] of Object.entries(input.verdicts)) {
-    if (!validFeedbackIds.has(feedbackId)) continue;
-    const verdict = {
-      correct: asVerdict(entry.correct),
-      needed: asVerdict(entry.needed),
-      useful: asVerdict(entry.useful),
-      ...asNote(entry.note),
-    };
-    if (isEmptyFeedbackVerdict(verdict)) continue;
-    sanitizedVerdicts[feedbackId] = verdict;
-  }
-
-  const sanitizedReviewVerdicts: ReviewVerdictMap = {};
-  for (const [setId, entry] of Object.entries(input.reviewVerdicts)) {
-    if (!task.setIds.includes(setId)) continue;
-    const verdict = {
-      readCorrectly: asVerdict(entry.readCorrectly),
-      priorityUseful: asVerdict(entry.priorityUseful),
-      ...asNote(entry.note),
-    };
-    if (isEmptyReviewVerdict(verdict)) continue;
-    sanitizedReviewVerdicts[setId] = verdict;
+  const runPayload: Record<string, unknown> = {};
+  for (const [index, s] of evaluation.stages.entries()) {
+    if (index > stageIndex) break;
+    for (const f of s.run) runPayload[f.key] = index === stageIndex ? f.sanitize(raw.runAnswer[f.key]) : (stored[f.key] ?? null);
   }
 
   return {
-    input: {
-      ...input,
-      result,
-      feedbackLabels: sanitizedLabels,
-      verdicts: sanitizedVerdicts,
-      reviewVerdicts: sanitizedReviewVerdicts,
-      falsePositiveFeedbackIds: deriveFalsePositiveIds(sanitizedLabels),
-    },
-    taskSetIds: task.setIds,
+    db,
+    task,
+    judgment,
+    evaluation,
+    view,
+    stageIndex,
+    stage,
+    itemPayloads,
+    runPayload,
+    elapsedSeconds: Math.max(0, Math.round(raw.elapsedSeconds)),
   };
 };
 
-// 제출은 화면에서도 막지만 서버가 다시 본다 — 폼을 직접 던지면 화면 조건은 우회된다.
-// 일부만 답한 판정이 들어오면 비율의 분모가 무너져 라운드 전체의 수치를 못 쓰게 된다.
-const assertAnalysisComplete = async (
+const commit = async (
   db: ReturnType<typeof createDb>,
-  taskSetIds: string[],
-  verdicts: FeedbackVerdictMap,
-  reviewVerdicts: ReviewVerdictMap,
-) => {
-  const sets = await db
-    .select({ id: FeedbackSets.id, review: FeedbackSets.review })
-    .from(FeedbackSets)
-    .where(inArray(FeedbackSets.id, taskSetIds));
-  const analysisSets = sets.filter((s) => s.review !== null);
-  if (analysisSets.length === 0) return;
-
-  const feedbacks = await db
-    .select({ id: Feedbacks.id })
-    .from(Feedbacks)
-    .where(
-      inArray(
-        Feedbacks.setId,
-        analysisSets.map((s) => s.id),
-      ),
-    );
-  const missing = feedbacks.filter((f) => !isFeedbackComplete(verdicts[f.id])).length;
-  if (missing > 0) {
-    error(400, `${missing} feedbacks not fully judged`);
+  input: {
+    judgmentId: string;
+    itemPayloads: Record<string, Record<string, unknown>>;
+    runPayload: Record<string, unknown>;
+    elapsedSeconds: number;
+    draft: boolean;
+    stage: number;
+  },
+): Promise<void> => {
+  await db.delete(JudgmentItems).where(eq(JudgmentItems.judgmentId, input.judgmentId));
+  for (const [itemId, payload] of Object.entries(input.itemPayloads)) {
+    await db.insert(JudgmentItems).values({ id: crypto.randomUUID(), judgmentId: input.judgmentId, itemId, payload });
   }
-  const missingReviews = analysisSets.filter((s) => !isReviewComplete(reviewVerdicts[s.id])).length;
-  if (missingReviews > 0) {
-    error(400, `${missingReviews} reviews not judged`);
-  }
-};
-
-const isComplete = (result: JudgmentResult | null, taskSetIds: string[]): boolean => {
-  if (!result) return false;
-  if (result.kind === 'pair') return true;
-  if (result.kind === 'scores') {
-    const scored = new Map(result.scores.map((s) => [s.setId, s.score]));
-    return taskSetIds.every((setId) => scored.has(setId));
-  }
-  const ranked = new Map(result.ranks.map((r) => [r.setId, r.rank]));
-  return taskSetIds.every((setId) => (ranked.get(setId) ?? 0) > 0);
+  await db
+    .update(Judgments)
+    .set({ payload: input.runPayload, elapsedSeconds: input.elapsedSeconds, draft: input.draft, stage: input.stage, updatedAt: new Date() })
+    .where(eq(Judgments.id, input.judgmentId));
 };
 
 export const actions: Actions = {
   save: async ({ params, request, platform, locals }) => {
-    if (!platform) {
-      error(500, 'platform unavailable');
-    }
-
-    const db = createDb(platform.env.DB);
-    const { input } = await sanitizeForTask(db, params.id, await parseForm(request));
-    const { verdicts, reviewVerdicts, ...judgment } = input;
-    const judgmentId = await ensureJudgment(db, params.id, locals.email);
-    await commitJudgment(db, {
-      judgmentId,
-      taskId: params.id,
-      email: locals.email,
-      ...judgment,
-      verdicts,
-      reviewVerdicts,
+    const ctx = await sanitizeForTask(platform, params.id, locals.email, await parse(request));
+    await commit(ctx.db, {
+      judgmentId: ctx.judgment.id,
+      itemPayloads: ctx.itemPayloads,
+      runPayload: ctx.runPayload,
+      elapsedSeconds: ctx.elapsedSeconds,
       draft: true,
+      stage: ctx.judgment.stage,
     });
     return { saved: true };
   },
+
   submit: async ({ params, request, platform, locals }) => {
-    if (!platform) {
-      error(500, 'platform unavailable');
+    const ctx = await sanitizeForTask(platform, params.id, locals.email, await parse(request));
+    const gaps = judgmentGaps(ctx.stage, ctx.view.items, ctx.runPayload, ctx.itemPayloads);
+    if (gaps.run.length > 0 || gaps.items.length > 0) {
+      error(400, `아직 답하지 않은 항목이 있습니다 (항목 ${gaps.items.length}건, 문항 ${gaps.run.length}건)`);
     }
 
-    const db = createDb(platform.env.DB);
-    const { input, taskSetIds } = await sanitizeForTask(db, params.id, await parseForm(request));
-    if (!isComplete(input.result, taskSetIds)) {
-      error(400, 'result required');
-    }
-    const { verdicts, reviewVerdicts, ...judgment } = input;
-    await assertAnalysisComplete(db, taskSetIds, verdicts, reviewVerdicts);
-    const judgmentId = await ensureJudgment(db, params.id, locals.email);
-    await commitJudgment(db, {
-      judgmentId,
-      taskId: params.id,
-      email: locals.email,
-      ...judgment,
-      verdicts,
-      reviewVerdicts,
-      draft: false,
+    const confirmed = ctx.stageIndex + 1;
+    const done = confirmed >= ctx.evaluation.stages.length;
+    await commit(ctx.db, {
+      judgmentId: ctx.judgment.id,
+      itemPayloads: ctx.itemPayloads,
+      runPayload: ctx.runPayload,
+      elapsedSeconds: ctx.elapsedSeconds,
+      draft: !done,
+      stage: confirmed,
     });
-    const nextTaskId = await claimNextTask(db, locals.email);
-    redirect(302, nextTaskId ? `/tasks/${nextTaskId}` : '/?finished=1');
-  },
-  release: async ({ params, platform, locals }) => {
-    if (!platform) {
-      error(500, 'platform unavailable');
-    }
 
-    const db = createDb(platform.env.DB);
-    // 반납 기록 — 이 평가자에게는 같은 태스크를 다시 배정하지 않는다(타 평가자 배정은 정상).
-    await db.insert(ReleasedTasks).values({ taskId: params.id, evaluatorEmail: locals.email }).onConflictDoNothing();
-    const [dropped] = await db
-      .delete(Judgments)
-      .where(and(eq(Judgments.taskId, params.id), eq(Judgments.evaluatorEmail, locals.email), eq(Judgments.draft, true)))
-      .returning({ id: Judgments.id });
-    if (dropped) {
-      await db.delete(FeedbackVerdicts).where(eq(FeedbackVerdicts.judgmentId, dropped.id));
-      await db.delete(ReviewVerdicts).where(eq(ReviewVerdicts.judgmentId, dropped.id));
+    // 마지막 단계가 아니면 태스크는 계속된다 — 화면이 다시 로드해 다음 단계로 들어간다.
+    if (!done) return { stageConfirmed: true };
+
+    const next = await claimTask(ctx.db, ctx.task.roundId, locals.email);
+    redirect(302, next ? `/tasks/${next}` : '/?finished=1');
+  },
+
+  release: async ({ params, platform, locals }) => {
+    const { db, task } = await context(platform, params.id);
+    const [judgment] = await db.select().from(Judgments).where(eq(Judgments.taskId, task.id));
+    // 확정된 단계가 있는 판정의 반납은 확정된 답을 버린다 — 첫 단계에서만 허용한다.
+    if (judgment && judgment.evaluatorEmail === locals.email && !releasable(judgment)) {
+      error(400, '확정한 단계가 있어 반납할 수 없습니다');
     }
+    await releaseTask(db, params.id, locals.email);
     redirect(303, '/');
   },
 };

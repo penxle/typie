@@ -1,15 +1,17 @@
-<script lang="ts">
-  import { css } from '@typie/styled-system/css';
-
+<script lang="ts" module>
   // 본문 오른쪽에 세우는 눈금자. 브라우저 스크롤바를 대신하면서, 그 자리에 지적 분포까지 얹는다.
   // 스크롤바와 나란히 두면 같은 일을 하는 막대가 둘이 되므로 원래 스크롤바는 감춘다.
-  export type RailMark = { feedbackId: string; number: number; position: number; state: 'unseen' | 'seen' | 'fail' };
+  export type RailMark = { itemId: string; number: number; position: number; state: 'unseen' | 'seen' | 'fail' };
+</script>
+
+<script lang="ts">
+  import { css } from '@typie/styled-system/css';
 
   type Props = {
     marks: RailMark[];
     // 본문 스크롤 창의 위치(0~1). 없으면 창을 그리지 않는다.
     viewport: { start: number; end: number } | null;
-    onSelect: (feedbackId: string) => void;
+    onSelect: (itemId: string) => void;
     onSeek: (fraction: number) => void;
   };
   const { marks, viewport, onSelect, onSeek }: Props = $props();
@@ -69,14 +71,14 @@
     ></div>
   {/if}
 
-  {#each marks as mark (mark.feedbackId)}
+  {#each marks as mark (mark.itemId)}
     <button
       style:top={`${mark.position * 100}%`}
       class={`${markBase} ${markTone[mark.state]}`}
       aria-label={`지적 ${mark.number}로 이동`}
       onclick={(e) => {
         e.stopPropagation();
-        onSelect(mark.feedbackId);
+        onSelect(mark.itemId);
       }}
       onpointerdown={(e) => e.stopPropagation()}
       type="button"

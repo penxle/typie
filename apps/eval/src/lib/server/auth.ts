@@ -1,39 +1,31 @@
 type AuthInput = {
   pathname: string;
-  authorizationHeader: string | null;
   accessEmailHeader: string | null;
-  ingestToken: string;
   devEmail?: string;
   adminEmails?: string;
 };
 
-type AuthResult = { kind: 'runner' } | { kind: 'evaluator'; email: string } | { kind: 'denied'; status: 401 | 403 };
+type AuthResult = { kind: 'evaluator'; email: string } | { kind: 'denied'; status: 403 };
 
-const runnerPaths = ['/api/ingest/', '/api/rounds'];
-const adminPathPrefixes = ['/admin', '/dashboard'];
+const adminPathPrefixes = ['/admin'];
 
+// 들어오는 길은 Access 하나뿐이다. 러너용 Bearer 경로는 워크플로가 D1에 직접 쓰면서 사라졌다.
 export const resolveAuth = (input: AuthInput): AuthResult => {
-  if (runnerPaths.some((p) => input.pathname.startsWith(p))) {
-    if (input.authorizationHeader === `Bearer ${input.ingestToken}`) {
-      return { kind: 'runner' };
-    }
-    return { kind: 'denied', status: 401 };
-  }
-
   const email = input.accessEmailHeader ?? input.devEmail;
   if (!email) {
     return { kind: 'denied', status: 403 };
   }
 
-  if (adminPathPrefixes.some((p) => input.pathname.startsWith(p))) {
-    const allowed = (input.adminEmails ?? '')
-      .split(',')
-      .map((e) => e.trim())
-      .filter((e) => e.length > 0);
-    if (!allowed.includes(email)) {
-      return { kind: 'denied', status: 403 };
-    }
+  if (adminPathPrefixes.some((p) => input.pathname.startsWith(p)) && !isAdmin({ ADMIN_EMAILS: input.adminEmails }, email)) {
+    return { kind: 'denied', status: 403 };
   }
 
   return { kind: 'evaluator', email };
 };
+
+export const isAdmin = (env: { ADMIN_EMAILS?: string }, email: string): boolean =>
+  (env.ADMIN_EMAILS ?? '')
+    .split(',')
+    .map((e) => e.trim())
+    .filter((e) => e.length > 0)
+    .includes(email);

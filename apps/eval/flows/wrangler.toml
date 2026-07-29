@@ -14,32 +14,12 @@ binding = "SAMPLING"
 name = "eval-sampling"
 class_name = "SamplingWorkflow"
 
-[[workflows]]
-binding = "PIPELINE"
-name = "eval-pipeline"
-class_name = "PipelineWorkflow"
-
-[[workflows]]
-binding = "ANALYSIS"
-name = "eval-analysis"
-class_name = "AnalysisWorkflow"
-
-[[workflows]]
-binding = "JUDGE"
-name = "eval-judge"
-class_name = "JudgeWorkflow"
-
-[[workflows]]
-binding = "RULING"
-name = "eval-ruling"
-class_name = "RulingWorkflow"
-
-[[workflows]]
-binding = "EDITORIAL"
-name = "eval-editorial"
-class_name = "EditorialWorkflow"
-
 [[d1_databases]]
 binding = "DB"
 database_name = "typie-eval"
 database_id = "b747f2cb-559e-4e62-b789-9475a83221e1"
+
+[[workflows]]
+binding = "RUN"
+name = "eval-run"
+class_name = "RunWorkflow"

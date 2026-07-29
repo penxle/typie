@@ -1,10 +1,8 @@
-import { eq, inArray } from 'drizzle-orm';
-import { DEFAULT_PRICE_TABLE, parsePriceTable } from '$lib/domain/pricing.ts';
-import { AnalysisPromptSets, PipelineRuns, PromptVariants, Settings, Variants } from './db/index.ts';
-import type { PriceTable } from '$lib/domain/pricing.ts';
-import type { createDb } from './db/index.ts';
-
-type Db = ReturnType<typeof createDb>;
+import { eq } from 'drizzle-orm';
+import { DEFAULT_PRICE_TABLE, estimateCost, parsePriceTable } from '$lib/domain/pricing.ts';
+import { Settings } from '../../../core/db.ts';
+import type { Cost, PriceTable } from '$lib/domain/pricing.ts';
+import type { Db } from '../../../core/db.ts';
 
 export const PRICE_SETTING_KEY = 'model_prices';
 
@@ -18,80 +16,52 @@ export const readPriceTable = async (db: Db): Promise<PriceTable> => {
   }
 };
 
-export const writePriceTable = async (db: Db, table: PriceTable): Promise<void> => {
-  await db
-    .insert(Settings)
-    .values({ key: PRICE_SETTING_KEY, value: JSON.stringify(table) })
-    .onConflictDoUpdate({ target: Settings.key, set: { value: JSON.stringify(table) } });
+export type PhaseUsageRow = {
+  phase: string;
+  calls: number;
+  promptTokens: number;
+  completionTokens: number;
+  cachedTokens: number;
+  cacheWriteTokens: number;
 };
 
-const distinct = (models: (string | undefined)[]): string[] => [...new Set(models.filter((m): m is string => typeof m === 'string'))];
+// 프롬프트 묶음이 단계마다 모델을 정한다 — 어느 토큰이 어느 모델 것인지는 이 표로만 되돌린다.
+// 열 자체는 자유 JSON이라 모양을 믿지 않고 꺼낸다.
+export type PromptContent = Record<string, unknown>;
 
-// 실행이 쓴 모델 목록. 실행 시각에 meta.models로 박아두지만, 그 전에 돈 실행은 프롬프트를
-// 되짚어 알아낸다 — 그 사이 프롬프트가 수정됐다면 지금 값이라 어긋날 수 있다.
-export const resolveRunModels = async (db: Db, runIds: string[]): Promise<Map<string, string[]>> => {
-  const result = new Map<string, string[]>();
-  if (runIds.length === 0) return result;
-
-  const runs = await db
-    .select({ id: PipelineRuns.id, variantId: PipelineRuns.variantId, meta: PipelineRuns.meta })
-    .from(PipelineRuns)
-    .where(inArray(PipelineRuns.id, runIds));
-
-  const needSet: { runId: string; promptSetId: string }[] = [];
-  const needVariant: { runId: string; variantId: string }[] = [];
-
-  for (const run of runs) {
-    const meta = (run.meta ?? {}) as { models?: unknown; promptSetId?: unknown };
-    if (Array.isArray(meta.models)) {
-      result.set(run.id, distinct(meta.models as string[]));
-      continue;
-    }
-    if (typeof meta.promptSetId === 'string') {
-      needSet.push({ runId: run.id, promptSetId: meta.promptSetId });
-      continue;
-    }
-    if (run.variantId) needVariant.push({ runId: run.id, variantId: run.variantId });
-  }
-
-  if (needSet.length > 0) {
-    const sets = await db
-      .select({ id: AnalysisPromptSets.id, content: AnalysisPromptSets.content })
-      .from(AnalysisPromptSets)
-      .where(inArray(AnalysisPromptSets.id, [...new Set(needSet.map((n) => n.promptSetId))]));
-    const byId = new Map(sets.map((s) => [s.id, s.content]));
-    for (const need of needSet) {
-      const content = byId.get(need.promptSetId);
-      result.set(need.runId, content ? distinct(Object.values(content).map((p) => p.model)) : []);
-    }
-  }
-
-  if (needVariant.length > 0) {
-    const variantIds = [...new Set(needVariant.map((n) => n.variantId))];
-    const variants = await db
-      .select({ id: Variants.id, promptVariantId: Variants.promptVariantId })
-      .from(Variants)
-      .where(inArray(Variants.id, variantIds));
-    const promptVariantIds = variants.map((v) => v.promptVariantId).filter((id): id is string => id !== null);
-    const prompts =
-      promptVariantIds.length > 0
-        ? await db
-            .select({ id: PromptVariants.id, content: PromptVariants.content })
-            .from(PromptVariants)
-            .where(inArray(PromptVariants.id, promptVariantIds))
-        : [];
-    const contentById = new Map(prompts.map((p) => [p.id, p.content]));
-    const promptVariantByVariant = new Map(variants.map((v) => [v.id, v.promptVariantId]));
-
-    for (const need of needVariant) {
-      const promptVariantId = promptVariantByVariant.get(need.variantId);
-      const content = promptVariantId ? contentById.get(promptVariantId) : undefined;
-      result.set(need.runId, content ? distinct(Object.values(content).map((p) => p.model)) : []);
-    }
-  }
-
-  for (const run of runs) {
-    if (!result.has(run.id)) result.set(run.id, []);
-  }
-  return result;
+export const modelOf = (content: PromptContent | null, phase: string): string | null => {
+  const model = (content?.[phase] as { model?: unknown } | undefined)?.model;
+  return typeof model === 'string' && model ? model : null;
 };
+
+// 단계마다 모델이 다를 수 있어 금액도 단계별로 낸다 — 실행 단위 estimateCost는 모델이 둘 이상이면
+// '혼합'으로 떨어져 금액을 내지 못한다.
+export const phaseCosts = (
+  usage: PhaseUsageRow[],
+  content: PromptContent | null,
+  table: PriceTable,
+): (PhaseUsageRow & { model: string | null; cost: Cost })[] =>
+  usage.map((row) => {
+    const model = modelOf(content, row.phase);
+    return { ...row, model, cost: estimateCost({ ...row, models: model ? [model] : [] }, table) };
+  });
+
+export const totalUsage = (usage: PhaseUsageRow[]) =>
+  usage.reduce(
+    (sum, row) => ({
+      promptTokens: sum.promptTokens + row.promptTokens,
+      completionTokens: sum.completionTokens + row.completionTokens,
+      cachedTokens: sum.cachedTokens + row.cachedTokens,
+      cacheWriteTokens: sum.cacheWriteTokens + row.cacheWriteTokens,
+    }),
+    { promptTokens: 0, completionTokens: 0, cachedTokens: 0, cacheWriteTokens: 0 },
+  );
+
+export const runCost = (usage: PhaseUsageRow[], content: PromptContent | null, table: PriceTable): Cost =>
+  estimateCost(
+    {
+      ...totalUsage(usage),
+      models: [...new Set(usage.map((row) => modelOf(content, row.phase)).filter((m): m is string => m !== null))],
+    },
+    table,
+  );

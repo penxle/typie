@@ -1,63 +1,68 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { Helmet } from '@typie/ui/components';
-  import { untrack } from 'svelte';
+  import { invalidateAll } from '$app/navigation';
+  import { page } from '$app/state';
+  import {
+    emptyClass,
+    pageClass,
+    pageDescClass,
+    pageTitleClass,
+    panelClass,
+    rowLinkClass,
+    tableClass,
+    tableHeadClass,
+    tableRowClass,
+  } from '$lib/styles.ts';
   import CostCell from '../lib/CostCell.svelte';
   import { usePolling } from '../lib/poll.svelte.ts';
-  import { formatProgressSummary, KIND_LABELS } from './progress.ts';
   import RunStatusBadge from './RunStatusBadge.svelte';
   import type { PageData } from './$types';
 
   type Props = { data: PageData };
   const { data }: Props = $props();
 
-  type RunListItem = PageData['runs'][number];
+  // 문서 화면에서 걸고 넘어온 직후의 알림. 방금 만든 것이 목록 맨 위에 있다.
+  const spawned = $derived(Number(page.url.searchParams.get('spawned') ?? 0));
+  const failed = $derived(Number(page.url.searchParams.get('failed') ?? 0));
 
-  let runs = $state<RunListItem[]>(untrack(() => data.runs));
-
-  const refresh = async () => {
-    const response = await fetch('/admin/api/runs');
-    if (!response.ok) return;
-    const { runs: fresh } = (await response.json()) as { runs: Omit<RunListItem, 'variantLabel'>[] };
-
-    const labelByVariantId = new Map(runs.filter((r) => r.variantId).map((r) => [r.variantId as string, r.variantLabel]));
-    runs = fresh.map((run) => ({ ...run, variantLabel: run.variantId ? (labelByVariantId.get(run.variantId) ?? run.variantId) : null }));
-  };
-
-  usePolling(refresh, 3000);
+  // 실행 상태는 로드가 인스턴스에 물어 갱신한다 — 목록을 다시 태우는 것이 곧 폴링이다.
+  usePolling(() => invalidateAll(), 3000, { enabled: () => data.runs.some((r) => r.status === 'running' || r.status === 'pending') });
 </script>
 
 <Helmet title="실행" trailing="타이피 평가" />
 
-<div class={css({ maxWidth: '1080px', marginX: 'auto', paddingY: '40px', paddingX: '32px' })}>
+<div class={pageClass}>
   <header class={css({ marginBottom: '20px' })}>
-    <h1 class={css({ fontSize: '22px', fontWeight: 'bold' })}>실행</h1>
-    <p class={css({ marginTop: '4px', fontSize: '14px', color: 'text.subtle' })}>파이프라인·샘플링 실행 목록입니다. 3초마다 갱신됩니다.</p>
+    <h1 class={pageTitleClass}>실행</h1>
+    <p class={pageDescClass}>원고 한 편에 프롬프트 묶음 하나를 돌린 결과입니다. 3초마다 갱신됩니다.</p>
   </header>
 
-  <section
-    class={css({
-      backgroundColor: 'surface.default',
-      borderWidth: '1px',
-      borderColor: 'border.default',
-      borderRadius: '12px',
-      boxShadow: 'small',
-      overflow: 'hidden',
-    })}
-  >
-    {#if runs.length === 0}
-      <p class={css({ paddingY: '48px', textAlign: 'center', fontSize: '14px', color: 'text.faint' })}>아직 실행된 작업이 없습니다.</p>
+  {#if spawned > 0 || failed > 0}
+    <p
+      class={css({
+        marginBottom: '16px',
+        paddingX: '14px',
+        paddingY: '12px',
+        borderRadius: '10px',
+        fontSize: '13px',
+        backgroundColor: failed > 0 ? 'accent.danger.subtle' : 'accent.success.subtle',
+        color: failed > 0 ? 'text.danger' : 'text.success',
+      })}
+    >
+      실행 {spawned}건을 시작했습니다{failed > 0 ? `, ${failed}건은 걸지 못했습니다` : ''}.
+    </p>
+  {/if}
+
+  <section class={panelClass}>
+    {#if data.runs.length === 0}
+      <p class={emptyClass}>아직 실행된 작업이 없습니다.</p>
     {:else}
-      <table class={css({ width: 'full', fontSize: '13px', '& td, & th': { paddingX: '16px', paddingY: '10px', textAlign: 'left' } })}>
+      <table class={tableClass}>
         <thead>
-          <tr
-            class={css({
-              '& th': { color: 'text.faint', fontWeight: 'medium', borderBottomWidth: '1px', borderColor: 'border.default' },
-            })}
-          >
-            <th>종류</th>
-            <th>후보</th>
-            <th>코퍼스</th>
+          <tr class={tableHeadClass}>
+            <th>문서</th>
+            <th>묶음</th>
             <th>상태</th>
             <th>진행</th>
             <th>비용</th>
@@ -66,23 +71,15 @@
           </tr>
         </thead>
         <tbody>
-          {#each runs as run (run.id)}
-            <tr class={css({ '& td': { borderBottomWidth: '1px', borderColor: 'border.subtle' } })}>
-              <td>{KIND_LABELS[run.kind]}</td>
-              <td>{run.variantLabel ?? '—'}</td>
-              <td>{run.corpusVersion}</td>
+          {#each data.runs as run (run.id)}
+            <tr class={tableRowClass}>
+              <td>{run.refId ?? run.id}</td>
+              <td>{run.promptSetLabel ?? '—'}</td>
               <td><RunStatusBadge status={run.status} /></td>
-              <td>{formatProgressSummary(run)}</td>
-              <td><CostCell cost={run.cost} tokens={run.promptTokens + run.completionTokens} /></td>
+              <td>{run.phaseLabel ?? '—'}</td>
+              <td><CostCell cost={run.cost} tokens={run.tokens} total={run.stageTotal} /></td>
               <td class={css({ color: 'text.faint' })}>{new Date(run.createdAt).toLocaleString('ko')}</td>
-              <td>
-                <a
-                  class={css({ fontSize: '12px', color: 'text.subtle', _hover: { color: 'text.default' } })}
-                  href={`/admin/runs/${run.id}`}
-                >
-                  보기 →
-                </a>
-              </td>
+              <td><a class={rowLinkClass} href="/admin/runs/{run.id}">보기 →</a></td>
             </tr>
           {/each}
         </tbody>

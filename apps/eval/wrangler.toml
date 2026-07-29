@@ -27,19 +27,7 @@ class_name = "SamplingWorkflow"
 script_name = "typie-eval-flows"
 
 [[workflows]]
-binding = "PIPELINE"
-name = "eval-pipeline"
-class_name = "PipelineWorkflow"
-script_name = "typie-eval-flows"
-
-[[workflows]]
-binding = "ANALYSIS"
-name = "eval-analysis"
-class_name = "AnalysisWorkflow"
-script_name = "typie-eval-flows"
-
-[[workflows]]
-binding = "EDITORIAL"
-name = "eval-editorial"
-class_name = "EditorialWorkflow"
+binding = "RUN"
+name = "eval-run"
+class_name = "RunWorkflow"
 script_name = "typie-eval-flows"

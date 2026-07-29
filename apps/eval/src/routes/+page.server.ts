@@ -1,53 +1,46 @@
-import { error } from '@sveltejs/kit';
+import { error, fail, redirect } from '@sveltejs/kit';
 import { and, eq } from 'drizzle-orm';
-import { claimableSummary } from '$lib/server/claim.ts';
-import { createDb, Judgments, Tasks } from '$lib/server/db/index.ts';
-import { effectiveProgress } from '$lib/server/progress.ts';
-import type { PageServerLoad } from './$types';
+import { claimTask, isEvaluator } from '$lib/server/assign.ts';
+import { isAdmin } from '$lib/server/auth.ts';
+import { activeRounds } from '$lib/server/rounds.ts';
+import { createDb, Evaluators, Judgments, Tasks } from '../../core/db.ts';
+import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ platform, locals }) => {
-  if (!platform) {
-    error(500, 'platform unavailable');
-  }
-
+  if (!platform) error(500, 'platform unavailable');
   const db = createDb(platform.env.DB);
 
-  // "내 진행"과 "라운드 전체 진행"을 분리한다 — 태스크는 평가자들이 나눠 가지므로 전체 태스크
-  // 수는 개인 목표가 아니다. 개인에게는 판정 건수·이어할 것·새로 받을 수 있는 것만 보여준다.
-  const round = await effectiveProgress(db);
-  const { remaining, potential, quota } = await claimableSummary(db, locals.email);
+  const [consent] = await db.select().from(Evaluators).where(eq(Evaluators.email, locals.email));
+  if (!consent) redirect(302, '/consent');
 
-  // 이어서 하기 목록은 라운드 무관 전부 보여준다(미제출 draft는 새 배정을 막으므로 숨기면 안 된다).
-  // 반면 "내 판정" 분자·분모는 현재 라운드만 센다 — 지난 라운드 판정이 이월되면 안 된다.
+  // 받아 놓고 아직 제출하지 않은 것들. draft로 좁히지 않으면 제출한 태스크가 계속 "이어서 하기"로
+  // 남아 새 배정을 막는다.
   const drafts = await db
-    .select({ taskId: Judgments.taskId, kind: Tasks.kind, roundId: Tasks.roundId, updatedAt: Judgments.updatedAt })
+    .select({ taskId: Judgments.taskId, roundId: Tasks.roundId })
     .from(Judgments)
     .innerJoin(Tasks, eq(Tasks.id, Judgments.taskId))
     .where(and(eq(Judgments.evaluatorEmail, locals.email), eq(Judgments.draft, true)));
 
-  const done = round.roundId
-    ? await db
-        .select({ taskId: Judgments.taskId })
-        .from(Judgments)
-        .innerJoin(Tasks, eq(Tasks.id, Judgments.taskId))
-        .where(and(eq(Judgments.evaluatorEmail, locals.email), eq(Judgments.draft, false), eq(Tasks.roundId, round.roundId)))
-    : [];
-  const currentDraftCount = drafts.filter((d) => d.roundId === round.roundId).length;
-
-  const isAdmin = (platform.env.ADMIN_EMAILS ?? '')
-    .split(',')
-    .map((e) => e.trim())
-    .includes(locals.email);
-
   return {
     email: locals.email,
-    isAdmin,
+    isAdmin: isAdmin(platform.env, locals.email),
+    evaluating: consent.evaluating,
+    rounds: await activeRounds(db, locals.email),
     drafts,
-    doneCount: done.length,
-    // 개인 진행 분모 — 지금 기준 내가 하게 될 총량. 남이 태스크를 가져가면 줄어드는 동적 값이다.
-    myTotal: done.length + currentDraftCount + potential,
-    round,
-    remaining,
-    quota,
   };
+};
+
+export const actions: Actions = {
+  claim: async ({ request, platform, locals }) => {
+    if (!platform) error(500, 'platform unavailable');
+    const db = createDb(platform.env.DB);
+    const form = await request.formData();
+    // 자격이 없어도 오류 화면을 띄우지 않는다 — 버튼이 보이지 않아야 하는 상태이므로 안내만 남긴다.
+    if (!(await isEvaluator(db, locals.email))) return fail(403, { message: '아직 평가자로 등록되지 않았습니다' });
+
+    const roundId = String(form.get('roundId') ?? '');
+    const taskId = await claimTask(db, roundId, locals.email);
+    if (!taskId) redirect(303, '/?empty=1');
+    redirect(303, `/tasks/${taskId}`);
+  },
 };
