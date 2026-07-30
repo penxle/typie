@@ -1,4 +1,4 @@
-import { desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { Documents, inChunks, Judgments, PromptSets, Rounds, Runs, TaskReleases, Tasks } from '../../../core/db.ts';
 import { evaluationById } from '../../../core/registry.ts';
@@ -139,10 +139,15 @@ const cardFor = async (db: Db, round: { id: string; label: string; evaluationId:
             .where(inArray(Judgments.taskId, chunk)),
         )
       : [];
+  // 반납은 반납한 본인에게만 금지다 — 전원의 반납을 빼면 남이 무른 태스크가 모두의 화면에서
+  // "받을 것 없음"이 되고, 정작 서버 배정(claimTask)은 허용하는 것을 버튼이 막는다.
   const released =
     ids.length > 0
       ? await inChunks(ids, (chunk) =>
-          db.select({ taskId: TaskReleases.taskId }).from(TaskReleases).where(inArray(TaskReleases.taskId, chunk)),
+          db
+            .select({ taskId: TaskReleases.taskId })
+            .from(TaskReleases)
+            .where(and(eq(TaskReleases.evaluatorEmail, email), inArray(TaskReleases.taskId, chunk))),
         )
       : [];
 
