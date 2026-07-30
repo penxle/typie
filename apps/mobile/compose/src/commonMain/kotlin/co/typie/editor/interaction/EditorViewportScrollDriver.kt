@@ -13,6 +13,7 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.unit.Velocity
 import co.typie.editor.interaction.gestures.EditorPanGestureDriver
 import co.typie.editor.viewport.editorViewportWheelScrollDeltaPx
+import kotlin.math.abs
 import kotlin.math.pow
 import kotlin.math.sqrt
 import kotlinx.coroutines.CoroutineStart
@@ -237,25 +238,53 @@ private suspend fun performFlingAnimation(
   var velocityLeft = velocity
   state.scroll(MutatePriority.Default) {
     val scroll2DScope = this
-    val flingScope =
-      object : ScrollScope {
-        override fun scrollBy(pixels: Float): Float {
-          val delta = pixels.toOffset(velocity)
-          val consumed =
-            scroll2DScope.dispatchScroll(
-              delta = delta,
-              dispatcher = dispatcher,
-              source = NestedScrollSource.SideEffect,
-            )
-          return consumed.magnitude
+    var activeVelocity = velocity
+    var unavailableVelocity = Velocity.Zero
+    while (activeVelocity != Velocity.Zero) {
+      // A scalar fling stops when either vector component is not consumed. Retry with the
+      // remaining axis so one boundary does not discard inertia that the other axis can consume.
+      var xBlocked = false
+      var yBlocked = false
+      val flingScope =
+        object : ScrollScope {
+          override fun scrollBy(pixels: Float): Float {
+            val delta = pixels.toOffset(activeVelocity)
+            val consumed =
+              scroll2DScope.dispatchScroll(
+                delta = delta,
+                dispatcher = dispatcher,
+                source = NestedScrollSource.SideEffect,
+              )
+            xBlocked = xBlocked || abs(delta.x - consumed.x) > FlingConsumptionTolerancePx
+            yBlocked = yBlocked || abs(delta.y - consumed.y) > FlingConsumptionTolerancePx
+            return consumed.magnitude
+          }
         }
+      val remainingMagnitude =
+        with(flingBehavior) { with(flingScope) { performFling(activeVelocity.magnitude) } }
+      val remainingVelocity = remainingMagnitude.toVelocity(activeVelocity)
+      velocityLeft = unavailableVelocity + remainingVelocity
+      if (!xBlocked && !yBlocked) {
+        break
       }
-    val remainingMagnitude =
-      with(flingBehavior) { with(flingScope) { performFling(velocity.magnitude) } }
-    velocityLeft = remainingMagnitude.toVelocity(velocity)
+
+      unavailableVelocity =
+        Velocity(
+          x = if (xBlocked) remainingVelocity.x else unavailableVelocity.x,
+          y = if (yBlocked) remainingVelocity.y else unavailableVelocity.y,
+        )
+      activeVelocity =
+        Velocity(
+          x = if (xBlocked) 0f else remainingVelocity.x,
+          y = if (yBlocked) 0f else remainingVelocity.y,
+        )
+      velocityLeft = unavailableVelocity + activeVelocity
+    }
   }
   return velocityLeft
 }
+
+private const val FlingConsumptionTolerancePx = 0.5f
 
 private val Offset.magnitude: Float
   get() = sqrt(x.pow(2) + y.pow(2))

@@ -1359,6 +1359,42 @@ class EditorInteractionsDesktopTest {
   }
 
   @Test
+  fun `diagonal fling continues on scrollable axis when dominant axis reaches boundary`() =
+    runComposeUiTest {
+      val consumedDistances = mutableListOf<Float>()
+      val boundaryStoppingFling =
+        object : FlingBehavior {
+          override suspend fun ScrollScope.performFling(initialVelocity: Float): Float {
+            val requestedDistance = 10f
+            val consumedDistance = scrollBy(requestedDistance)
+            consumedDistances += consumedDistance
+            return if (abs(requestedDistance - consumedDistance) > 0.5f) initialVelocity else 0f
+          }
+        }
+      val fixture =
+        Fixture(
+          scrollConsumer = { delta -> Offset(x = 0f, y = delta.y) },
+          flingBehaviorOverride = boundaryStoppingFling,
+        )
+      setEditorContent(fixture)
+
+      onNodeWithTag(EditorTag).performTouchInput {
+        down(pointerId = 0, position = Offset(100f, 100f))
+        moveTo(pointerId = 0, position = Offset(120f, 110f))
+        moveTo(pointerId = 0, position = Offset(140f, 120f))
+        up(pointerId = 0)
+      }
+      waitUntil { fixture.nestedPostFlingAvailable.isNotEmpty() }
+
+      assertEquals(2, consumedDistances.size)
+      assertTrue(
+        consumedDistances.first() in 0f..9.5f,
+        "Expected the diagonal fling to stop at the horizontal boundary, got $consumedDistances",
+      )
+      assertEquals(10f, consumedDistances.last(), absoluteTolerance = 0.001f)
+    }
+
+  @Test
   fun `stationary editor touch catches active self fling without becoming pan`() =
     runComposeUiTest {
       var flingStarted = false
