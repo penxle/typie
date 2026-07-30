@@ -666,6 +666,13 @@
       "when": 1785408986623,
       "tag": "0094_purple_kang",
       "breakpoints": false
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1785439424567,
+      "tag": "0095_llm-usage-instrumentation",
+      "breakpoints": false
     }
   ]
 }

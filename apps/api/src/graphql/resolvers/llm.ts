@@ -1,5 +1,6 @@
 import * as Sentry from '@sentry/node';
 import { PromptId } from '@typie/lib/const';
+import { LlmAnalysisRunState, LlmCallState } from '@typie/lib/enums';
 import { eq } from 'drizzle-orm';
 import escape from 'escape-string-regexp';
 import { Repeater } from 'graphql-yoga';
@@ -7,8 +8,10 @@ import { nanoid } from 'nanoid';
 import OpenAI from 'openai';
 import { dbr, Prompts } from '#/db/index.ts';
 import { env } from '#/env.ts';
+import { createUsageTracker, extractGatewayHeaders, extractUsage } from '#/utils/llm-usage.ts';
 import { assertActiveSubscription } from '#/utils/plan.ts';
 import { builder } from '../builder.ts';
+import type { UsageRecord } from '#/utils/llm-usage.ts';
 
 const openai = new OpenAI({
   apiKey: env.CLOUDFLARE_API_KEY,
@@ -174,11 +177,14 @@ const loadPrompt = async (id: (typeof PromptId)[keyof typeof PromptId]) => {
 
 type Prompt = Awaited<ReturnType<typeof loadPrompt>>;
 
+type Track = { phase: 'summarize' | 'meta' | 'analyze'; record: (entry: UsageRecord) => void };
+
 const runTool = async <T>(
   prompt: Prompt,
   tool: OpenAI.Chat.Completions.ChatCompletionFunctionTool,
   userContent: string,
   signal?: AbortSignal,
+  track?: Track,
 ): Promise<T> => {
   const toolName = tool.function.name;
   const params: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming = {
@@ -193,7 +199,40 @@ const runTool = async <T>(
   if (prompt.effort) {
     params.reasoning_effort = prompt.effort as never;
   }
-  const response = await openai.chat.completions.create(params, { signal });
+
+  const inputChars = prompt.systemPrompt.length + userContent.length;
+  const startedAt = Date.now();
+
+  const { data: response, response: raw } = await openai.chat.completions
+    .create(params, { signal })
+    .withResponse()
+    .catch((err: unknown) => {
+      track?.record({
+        phase: track.phase,
+        model: prompt.model,
+        inputTokens: null,
+        outputTokens: null,
+        cachedInputTokens: null,
+        reasoningTokens: null,
+        totalTokens: null,
+        inputChars,
+        durationMs: Date.now() - startedAt,
+        cacheStatus: null,
+        gatewayLogId: null,
+        state: signal?.aborted ? LlmCallState.ABORTED : LlmCallState.FAILED,
+      });
+      throw err;
+    });
+
+  track?.record({
+    phase: track.phase,
+    model: prompt.model,
+    ...extractUsage(response.usage),
+    inputChars,
+    durationMs: Date.now() - startedAt,
+    ...extractGatewayHeaders(raw),
+    state: LlmCallState.COMPLETED,
+  });
 
   const toolCall = response.choices[0]?.message?.tool_calls?.[0];
   if (!toolCall || toolCall.type !== 'function' || toolCall.function.name !== toolName) {
@@ -371,6 +410,7 @@ const analyzeGlobal = async (
   tool: OpenAI.Chat.Completions.ChatCompletionFunctionTool,
   summaries: SummaryStructured[],
   signal?: AbortSignal,
+  track?: Track,
 ): Promise<MetaStructured> => {
   const summaryBlocks = summaries.map((s, i) => `[${i + 1}]\n${renderSummaryForMeta(s)}`).join('\n\n');
   const userContent = [
@@ -383,7 +423,7 @@ const analyzeGlobal = async (
     '</청크별 요약>',
   ].join('\n');
 
-  return runTool<MetaStructured>(prompt, tool, userContent, signal);
+  return runTool<MetaStructured>(prompt, tool, userContent, signal, track);
 };
 
 const analyzeChunkWithContext = async (
@@ -392,6 +432,7 @@ const analyzeChunkWithContext = async (
   context: ChunkContext,
   onFeedback: (feedback: Feedback) => void,
   signal?: AbortSignal,
+  track?: Track,
 ): Promise<void> => {
   const userContent = [
     renderMetaBlock(context.meta),
@@ -417,42 +458,93 @@ const analyzeChunkWithContext = async (
     ],
     tools: [tool],
     stream: true,
+    stream_options: { include_usage: true },
   };
   if (prompt.effort) {
     params.reasoning_effort = prompt.effort as never;
   }
-  const stream = await openai.chat.completions.create(params, { signal });
+
+  const inputChars = prompt.systemPrompt.length + userContent.length;
+  const startedAt = Date.now();
+
+  let rawResponse: Response | null = null;
+
+  const recordFailure = () => {
+    track?.record({
+      phase: track.phase,
+      model: prompt.model,
+      inputTokens: null,
+      outputTokens: null,
+      cachedInputTokens: null,
+      reasoningTokens: null,
+      totalTokens: null,
+      inputChars,
+      durationMs: Date.now() - startedAt,
+      ...(rawResponse ? extractGatewayHeaders(rawResponse) : { cacheStatus: null, gatewayLogId: null }),
+      state: signal?.aborted ? LlmCallState.ABORTED : LlmCallState.FAILED,
+    });
+  };
+
+  const { data: stream, response: raw } = await openai.chat.completions
+    .create(params, { signal })
+    .withResponse()
+    .catch((err: unknown) => {
+      recordFailure();
+      throw err;
+    });
+
+  rawResponse = raw;
 
   const accumulators = new Map<number, { name: string; arguments: string }>();
+  let usage: OpenAI.Chat.Completions.ChatCompletionChunk['usage'] = null;
 
-  for await (const chunk of stream) {
-    const choice = chunk.choices[0];
-    if (!choice) continue;
+  try {
+    for await (const chunk of stream) {
+      if (chunk.usage) {
+        usage = chunk.usage;
+      }
 
-    for (const delta of choice.delta?.tool_calls ?? []) {
-      const acc = accumulators.get(delta.index) ?? { name: '', arguments: '' };
-      if (delta.function?.name) acc.name = delta.function.name;
-      if (delta.function?.arguments) acc.arguments += delta.function.arguments;
-      accumulators.set(delta.index, acc);
-    }
+      const choice = chunk.choices[0];
+      if (!choice) continue;
 
-    if (choice.finish_reason === 'tool_calls' || choice.finish_reason === 'stop') {
-      for (const acc of accumulators.values()) {
-        if (acc.name !== 'provide_feedback') continue;
-        for (const objStr of extractJsonObjects(acc.arguments)) {
-          try {
-            const input = JSON.parse(objStr) as Feedback;
-            if (input.start && input.end && input.feedback) {
-              onFeedback(input);
+      for (const delta of choice.delta?.tool_calls ?? []) {
+        const acc = accumulators.get(delta.index) ?? { name: '', arguments: '' };
+        if (delta.function?.name) acc.name = delta.function.name;
+        if (delta.function?.arguments) acc.arguments += delta.function.arguments;
+        accumulators.set(delta.index, acc);
+      }
+
+      if (choice.finish_reason === 'tool_calls' || choice.finish_reason === 'stop') {
+        for (const acc of accumulators.values()) {
+          if (acc.name !== 'provide_feedback') continue;
+          for (const objStr of extractJsonObjects(acc.arguments)) {
+            try {
+              const input = JSON.parse(objStr) as Feedback;
+              if (input.start && input.end && input.feedback) {
+                onFeedback(input);
+              }
+            } catch (err: unknown) {
+              Sentry.captureException(err, { extra: { objStr } });
             }
-          } catch (err: unknown) {
-            Sentry.captureException(err, { extra: { objStr } });
           }
         }
+        accumulators.clear();
       }
-      accumulators.clear();
     }
+  } catch (err: unknown) {
+    recordFailure();
+    throw err;
   }
+
+  track?.record({
+    phase: track.phase,
+    model: prompt.model,
+    ...extractUsage(usage),
+    inputChars,
+    durationMs: Date.now() - startedAt,
+    ...extractGatewayHeaders(raw),
+    state: LlmCallState.COMPLETED,
+  });
 };
 
 const LiteraryAnalysisProgress = builder.simpleObject('LiteraryAnalysisProgress', {
@@ -788,6 +880,7 @@ builder.subscriptionFields((t) => ({
     }),
     args: {
       text: t.arg.string(),
+      documentId: t.arg.id({ required: false }),
     },
     subscribe: async (_, args, ctx) => {
       await assertActiveSubscription({ userId: ctx.session.userId });
@@ -802,6 +895,9 @@ builder.subscriptionFields((t) => ({
           abortController.abort();
           stop();
         });
+
+        // WS 업그레이드 Request에는 signal이 배선되지 않아 위 리스너가 발화하지 않는다 — 취소는 stop으로만 온다
+        void stop.then(() => abortController.abort());
 
         if (!text.trim()) {
           push({ type: 'complete' });
@@ -851,7 +947,17 @@ builder.subscriptionFields((t) => ({
           return range;
         };
 
+        let trackerRef: Awaited<ReturnType<typeof createUsageTracker>> | null = null;
+
         try {
+          const tracker = await createUsageTracker({
+            userId: ctx.session.userId,
+            documentId: args.documentId ?? null,
+            text,
+            chunkCount: chunks.length,
+          });
+          trackerRef = tracker;
+
           const [summarizePrompt, metaPrompt, analyzePrompt] = await Promise.all([
             loadPrompt(PromptId.SUMMARIZE),
             loadPrompt(PromptId.META),
@@ -866,7 +972,10 @@ builder.subscriptionFields((t) => ({
           await Promise.all(
             chunks.map(async (chunk, index) => {
               signal.throwIfAborted();
-              summaries[index] = await runTool<SummaryStructured>(summarizePrompt, summaryTool, chunk.text, signal);
+              summaries[index] = await runTool<SummaryStructured>(summarizePrompt, summaryTool, chunk.text, signal, {
+                phase: 'summarize',
+                record: tracker.record,
+              });
               summarizedCount++;
               push({
                 type: 'progress',
@@ -874,11 +983,13 @@ builder.subscriptionFields((t) => ({
               });
             }),
           );
+          await tracker.flush();
 
           push({ type: 'progress', data: { current: 0, total: 1, phase: 'meta' } });
           signal.throwIfAborted();
-          const meta = await analyzeGlobal(metaPrompt, metaTool, summaries, signal);
+          const meta = await analyzeGlobal(metaPrompt, metaTool, summaries, signal, { phase: 'meta', record: tracker.record });
           push({ type: 'progress', data: { current: 1, total: 1, phase: 'meta' } });
+          await tracker.flush();
 
           let analyzedCount = 0;
           push({
@@ -918,6 +1029,7 @@ builder.subscriptionFields((t) => ({
                   });
                 },
                 signal,
+                { phase: 'analyze', record: tracker.record },
               );
 
               analyzedCount++;
@@ -925,12 +1037,18 @@ builder.subscriptionFields((t) => ({
                 type: 'progress',
                 data: { current: analyzedCount, total: chunks.length, phase: 'analyzing' },
               });
+              await tracker.flush();
             }),
           );
 
           push({ type: 'complete' });
+          await tracker.finish(LlmAnalysisRunState.COMPLETED);
         } catch (err) {
-          if (!signal.aborted) {
+          const aborted = signal.aborted;
+          abortController.abort();
+          await trackerRef?.finish(aborted ? LlmAnalysisRunState.ABORTED : LlmAnalysisRunState.FAILED);
+
+          if (!aborted) {
             Sentry.captureException(err);
             console.error(err);
             push({ type: 'error' });

@@ -40,3 +40,5 @@ export const _TextReplacementState = createPgEnum('_text_replacement_state', E.T
 export const _UserDevicePlatform = createPgEnum('_user_device_platform', E.UserDevicePlatform);
 export const _UserRole = createPgEnum('_user_role', E.UserRole);
 export const _UserState = createPgEnum('_user_state', E.UserState);
+export const _LlmAnalysisRunState = createPgEnum('_llm_analysis_run_state', E.LlmAnalysisRunState);
+export const _LlmCallState = createPgEnum('_llm_call_state', E.LlmCallState);

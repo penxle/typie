@@ -1,5 +1,5 @@
-subscription AiFeedback_LiteraryAnalysisDocumentStream_Subscription($text: String!) {
-  literaryAnalysisDocumentStreamV2(text: $text) {
+subscription AiFeedback_LiteraryAnalysisDocumentStream_Subscription($text: String!, $documentId: ID) {
+  literaryAnalysisDocumentStreamV2(text: $text, documentId: $documentId) {
     type
     feedback {
       id

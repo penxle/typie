@@ -22,6 +22,7 @@ import co.typie.graphql.Apollo
 import co.typie.screen.editor.editor.state.EditorOverlayOcclusion
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastType
+import com.apollographql.apollo.api.Optional
 import kotlin.math.max
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -122,7 +123,10 @@ internal fun rememberEditorAiFeedbackSession(
 
       try {
         Apollo.subscription(
-            AiFeedback_LiteraryAnalysisDocumentStream_Subscription(text = sourceText)
+            AiFeedback_LiteraryAnalysisDocumentStream_Subscription(
+              text = sourceText,
+              documentId = Optional.presentIfNotNull(documentId),
+            )
           )
           .toFlow()
           .collect { response ->

@@ -285,3 +285,18 @@ export const UserState = {
   ACTIVE: 'ACTIVE',
   DEACTIVATED: 'DEACTIVATED',
 } as const;
+
+export type LlmAnalysisRunState = keyof typeof LlmAnalysisRunState;
+export const LlmAnalysisRunState = {
+  RUNNING: 'RUNNING',
+  COMPLETED: 'COMPLETED',
+  ABORTED: 'ABORTED',
+  FAILED: 'FAILED',
+} as const;
+
+export type LlmCallState = keyof typeof LlmCallState;
+export const LlmCallState = {
+  COMPLETED: 'COMPLETED',
+  FAILED: 'FAILED',
+  ABORTED: 'ABORTED',
+} as const;

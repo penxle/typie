@@ -792,6 +792,19 @@ type LiteraryAnalysisProgress {
   total: Int!
 }
 
+enum LlmAnalysisRunState {
+  ABORTED
+  COMPLETED
+  FAILED
+  RUNNING
+}
+
+enum LlmCallState {
+  ABORTED
+  COMPLETED
+  FAILED
+}
+
 input LoginWithEmailInput {
   email: String!
   password: String!
@@ -1422,7 +1435,7 @@ type Subscription {
   documentCommentStream(clientId: String!, documentId: ID!): DocumentCommentThread!
   documentSyncStream(clientId: String!, documentId: ID!): DocumentSyncStreamPayload!
   literaryAnalysisDocumentStream(mappings: [DocumentTextMappingInput!]!, text: String!): DocumentLiteraryAnalysisPayload!
-  literaryAnalysisDocumentStreamV2(text: String!): DocumentLiteraryAnalysisPayloadV2!
+  literaryAnalysisDocumentStreamV2(documentId: ID, text: String!): DocumentLiteraryAnalysisPayloadV2!
   noteUpdateStream(clientId: String!, siteId: ID!): NoteUpdateStreamPayload!
   siteUpdateStream(siteId: ID!): SiteUpdateStreamPayload!
   siteUsageUpdateStream(siteId: ID!): Site!

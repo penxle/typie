@@ -883,6 +883,58 @@ export const Prompts = pgTable('prompts', {
     .default(sql`now()`),
 });
 
+export const LlmAnalysisRuns = pgTable(
+  'llm_analysis_runs',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.LLM_ANALYSIS_RUNS)),
+    userId: text('user_id')
+      .notNull()
+      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    // 클라이언트가 보낸 값이라 존재하지 않는 id면 FK 위반으로 분석 자체가 실패하므로 FK를 걸지 않는다
+    documentId: text('document_id'),
+    textLength: integer('text_length').notNull(),
+    chunkCount: integer('chunk_count').notNull(),
+    prefixHash: text('prefix_hash').notNull(),
+    fullHash: text('full_hash').notNull(),
+    state: E._LlmAnalysisRunState('state').notNull(),
+    startedAt: datetime('started_at')
+      .notNull()
+      .default(sql`now()`),
+    endedAt: datetime('ended_at'),
+  },
+  (t) => [index().on(t.userId, t.startedAt), index().on(t.userId, t.prefixHash)],
+);
+
+export const LlmCallUsage = pgTable(
+  'llm_call_usage',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.LLM_CALL_USAGE)),
+    runId: text('run_id')
+      .notNull()
+      .references(() => LlmAnalysisRuns.id, { onUpdate: 'cascade', onDelete: 'cascade' }),
+    phase: text('phase').notNull(),
+    model: text('model').notNull(),
+    inputTokens: integer('input_tokens'),
+    outputTokens: integer('output_tokens'),
+    cachedInputTokens: integer('cached_input_tokens'),
+    reasoningTokens: integer('reasoning_tokens'),
+    totalTokens: integer('total_tokens'),
+    inputChars: integer('input_chars').notNull(),
+    durationMs: integer('duration_ms').notNull(),
+    cacheStatus: text('cache_status'),
+    gatewayLogId: text('gateway_log_id'),
+    state: E._LlmCallState('state').notNull(),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [index().on(t.runId)],
+);
+
 export const Redirects = pgTable(
   'redirects',
   {

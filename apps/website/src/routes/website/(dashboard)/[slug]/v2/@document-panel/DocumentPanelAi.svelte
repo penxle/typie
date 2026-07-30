@@ -25,7 +25,6 @@
 
   let { document$key, user$key, editor }: Props = $props();
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const document = createFragment(
     graphql(`
       fragment DocumentPanelV2_Ai_document on Document {
@@ -56,8 +55,8 @@
 
   createSubscription(
     graphql(`
-      subscription DocumentPanelV2_Ai_LiteraryAnalysisDocumentStreamV2($text: String!) {
-        literaryAnalysisDocumentStreamV2(text: $text) {
+      subscription DocumentPanelV2_Ai_LiteraryAnalysisDocumentStreamV2($text: String!, $documentId: ID) {
+        literaryAnalysisDocumentStreamV2(text: $text, documentId: $documentId) {
           type
           feedback {
             id
@@ -76,7 +75,7 @@
         }
       }
     `),
-    () => ({ text: analysisText ?? '' }),
+    () => ({ text: analysisText ?? '', documentId: document.data.id }),
     () => ({
       skip: !analysisText,
       onData: (data) => {
