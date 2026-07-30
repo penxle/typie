@@ -17,15 +17,11 @@ import co.typie.graphql.builder.buildUser
 import co.typie.graphql.fragment.NoteEntityPicker_entity
 import co.typie.graphql.text
 import co.typie.graphql.watchQuery
-import co.typie.storage.Preference
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-class NoteEntityPickerViewModel : ViewModel() {
-  private val currentSiteId: String?
-    get() = Preference.siteId
-
+internal class NoteEntityPickerViewModel(private val siteId: String) : ViewModel() {
   private val recentPlaceholder = recentPlaceholderData()
 
   var inputKeyword: String by mutableStateOf("")
@@ -35,21 +31,17 @@ class NoteEntityPickerViewModel : ViewModel() {
     private set
 
   val recentQuery =
-    Apollo.watchQuery(
-      scope = viewModelScope,
-      placeholderData = recentPlaceholder,
-      skip = { currentSiteId == null },
-    ) {
-      NoteEntityPicker_Recent_Query(siteId = currentSiteId!!)
+    Apollo.watchQuery(scope = viewModelScope, placeholderData = recentPlaceholder) {
+      NoteEntityPicker_Recent_Query(siteId = siteId)
     }
 
   val searchQuery =
     Apollo.watchQuery(
       scope = viewModelScope,
-      skip = { currentSiteId == null || activeKeyword.isBlank() },
+      skip = { activeKeyword.isBlank() },
       resetOnChange = false,
     ) {
-      NoteEntityPicker_Search_Query(siteId = currentSiteId!!, query = activeKeyword)
+      NoteEntityPicker_Search_Query(siteId = siteId, query = activeKeyword)
     }
 
   val recentEntities: List<NoteEntityPicker_entity>
@@ -58,8 +50,23 @@ class NoteEntityPickerViewModel : ViewModel() {
   val recentPlaceholderEntities: List<NoteEntityPicker_entity>
     get() = recentPlaceholder.linkedEntities()
 
-  val searchHits: List<NoteEntityPicker_Search_Query.Hit>
-    get() = searchQuery.data?.search?.hits.orEmpty()
+  val searchState: QueryState<List<NoteEntityPicker_Search_Query.Hit>>
+    get() {
+      val input = inputKeyword
+      if (
+        input.isBlank() ||
+          activeKeyword != input ||
+          searchQuery.stateQuery != NoteEntityPicker_Search_Query(siteId = siteId, query = input)
+      ) {
+        return QueryState.Loading
+      }
+
+      return when (val state = searchQuery.state) {
+        QueryState.Loading -> QueryState.Loading
+        is QueryState.Success -> QueryState.Success(state.data.search.hits)
+        is QueryState.Error -> state
+      }
+    }
 
   private var debounceJob: Job? = null
 

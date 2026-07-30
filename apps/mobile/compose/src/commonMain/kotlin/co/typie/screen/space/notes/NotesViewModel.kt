@@ -10,14 +10,19 @@ import androidx.lifecycle.viewModelScope
 import co.typie.domain.note.DEFAULT_NOTE_COLOR
 import co.typie.domain.note.NoteEditState
 import co.typie.domain.note.NoteListState
+import co.typie.domain.note.NoteSaveOutcome
+import co.typie.domain.note.NoteSync
 import co.typie.domain.note.addNoteEntity as addNoteEntityMutation
 import co.typie.domain.note.createNote as createNoteMutation
 import co.typie.domain.note.deleteNote as deleteNoteMutation
 import co.typie.domain.note.moveNote as moveNoteMutation
 import co.typie.domain.note.removeNoteEntity as removeNoteEntityMutation
+import co.typie.domain.note.toNoteSaveOutcome
 import co.typie.domain.note.updateNoteColor as updateNoteColorMutation
 import co.typie.domain.note.updateNoteContent as updateNoteContentMutation
 import co.typie.domain.note.updateNoteStatus as updateNoteStatusMutation
+import co.typie.domain.subscription.Entitlement
+import co.typie.domain.subscription.SubscriptionService
 import co.typie.graphql.Apollo
 import co.typie.graphql.NotesScreen_Query
 import co.typie.graphql.PlaceholderResolver
@@ -49,7 +54,7 @@ internal class NotesViewModel : ViewModel() {
       skip = { Preference.siteId == null },
       resetOnChange = false,
     ) {
-      NotesScreen_Query(siteId = Preference.siteId!!, status = filterStatus)
+      NotesScreen_Query(siteId = Preference.siteId!!)
     }
 
   init {
@@ -57,14 +62,30 @@ internal class NotesViewModel : ViewModel() {
       snapshotFlow { query.state }
         .collect { state ->
           if (state is QueryState.Success) {
-            val notes = state.data.notes()
-            val key = queryStateKey() ?: return@collect
-            sceneCache.commitSuccess(key, notes)
+            val responseSiteId = queryStateSiteId() ?: return@collect
+            if (responseSiteId != siteId) return@collect
+            val notes =
+              state.data.notes().filterNot { NoteSync.isTerminallyDeleted(responseSiteId, it.id) }
+            sceneCache.commitSuccess(siteId = responseSiteId, notes = notes)
 
             val activeNoteId = noteEditState.expandedNoteId ?: return@collect
             notes.firstOrNull { it.id == activeNoteId }?.let(noteEditState::commitServerSnapshot)
           }
         }
+    }
+
+    viewModelScope.launch {
+      snapshotFlow { siteId }.collect { currentSiteId -> sceneCache.activateSite(currentSiteId) }
+    }
+
+    viewModelScope.launch {
+      NoteSync.updates.collect { update ->
+        if (update.siteId != siteId) {
+          return@collect
+        }
+
+        refetch()
+      }
     }
   }
 
@@ -82,7 +103,7 @@ internal class NotesViewModel : ViewModel() {
   fun notes(status: NoteStatus): List<NoteCard_note> =
     sceneCache.notes(
       key = sceneKey(status),
-      queryKey = queryStateKey(),
+      querySiteId = queryStateSiteId(),
       queryState = queryNotesState(),
       placeholderNotes = placeholderNotes(status),
     )
@@ -90,8 +111,7 @@ internal class NotesViewModel : ViewModel() {
   fun queryState(status: NoteStatus): QueryState<*> =
     sceneCache.queryState(
       key = sceneKey(status),
-      activeKey = sceneKey(filterStatus),
-      queryKey = queryStateKey(),
+      querySiteId = queryStateSiteId(),
       queryState = queryNotesState(),
     )
 
@@ -103,50 +123,90 @@ internal class NotesViewModel : ViewModel() {
     query.refetch()
   }
 
-  suspend fun createNote(color: String = DEFAULT_NOTE_COLOR): Result<NoteCard_note, Nothing> =
-    createNoteMutation(color = color)
+  suspend fun createNote(
+    siteId: String,
+    color: String = DEFAULT_NOTE_COLOR,
+  ): Result<NoteCard_note, Nothing> = createNoteMutation(siteId = siteId, color = color)
 
-  suspend fun updateNoteContent(noteId: String, content: String): Result<NoteCard_note, Nothing> =
-    updateNoteContentMutation(noteId = noteId, content = content)
+  suspend fun updateNoteContent(
+    siteId: String,
+    noteId: String,
+    content: String,
+  ): Result<NoteCard_note, Nothing> =
+    updateNoteContentMutation(siteId = siteId, noteId = noteId, content = content)
 
-  suspend fun updateNoteColor(noteId: String, color: String): Result<NoteCard_note, Nothing> =
-    updateNoteColorMutation(noteId = noteId, color = color)
+  suspend fun updateNoteColor(
+    siteId: String,
+    noteId: String,
+    color: String,
+  ): Result<NoteCard_note, Nothing> =
+    updateNoteColorMutation(siteId = siteId, noteId = noteId, color = color)
 
-  suspend fun updateNoteStatus(noteId: String, status: NoteStatus): Result<NoteCard_note, Nothing> =
-    updateNoteStatusMutation(noteId = noteId, status = status)
+  suspend fun updateNoteStatus(
+    siteId: String,
+    noteId: String,
+    status: NoteStatus,
+  ): Result<NoteCard_note, Nothing> =
+    updateNoteStatusMutation(siteId = siteId, noteId = noteId, status = status)
 
-  suspend fun deleteNote(noteId: String): Result<Unit, Nothing> =
-    deleteNoteMutation(noteId = noteId)
+  suspend fun deleteNote(siteId: String, noteId: String): Result<String, Nothing> =
+    deleteNoteMutation(siteId = siteId, noteId = noteId)
 
   suspend fun moveNote(
-    noteId: String,
+    note: NoteCard_note,
     lowerOrder: String?,
     upperOrder: String?,
-  ): Result<Unit, Nothing> =
-    moveNoteMutation(noteId = noteId, lowerOrder = lowerOrder, upperOrder = upperOrder)
+  ): Result<String, Nothing> =
+    moveNoteMutation(note = note, lowerOrder = lowerOrder, upperOrder = upperOrder)
 
-  suspend fun addNoteEntity(noteId: String, entityId: String): Result<NoteCard_note, Nothing> =
-    addNoteEntityMutation(noteId = noteId, entityId = entityId)
+  suspend fun addNoteEntity(
+    siteId: String,
+    noteId: String,
+    entityId: String,
+  ): Result<NoteCard_note, Nothing> =
+    addNoteEntityMutation(siteId = siteId, noteId = noteId, entityId = entityId)
 
-  suspend fun removeNoteEntity(noteId: String, entityId: String): Result<NoteCard_note, Nothing> =
-    removeNoteEntityMutation(noteId = noteId, entityId = entityId)
+  suspend fun removeNoteEntity(
+    siteId: String,
+    noteId: String,
+    entityId: String,
+  ): Result<NoteCard_note, Nothing> =
+    removeNoteEntityMutation(siteId = siteId, noteId = noteId, entityId = entityId)
 
-  fun savePendingNoteContent(noteId: String, content: String) {
-    viewModelScope.launch { updateNoteContent(noteId = noteId, content = content) }
+  suspend fun savePendingNoteContent(
+    siteId: String,
+    noteId: String,
+    content: String,
+  ): NoteSaveOutcome {
+    if (SubscriptionService.entitlement is Entitlement.Expired) {
+      return NoteSaveOutcome.SubscriptionGated
+    }
+    return updateNoteContent(siteId = siteId, noteId = noteId, content = content)
+      .toNoteSaveOutcome(siteId = siteId, noteId = noteId)
   }
 
-  fun savePendingNoteColor(noteId: String, color: String) {
-    viewModelScope.launch { updateNoteColor(noteId = noteId, color = color) }
+  suspend fun savePendingNoteColor(siteId: String, noteId: String, color: String): NoteSaveOutcome {
+    if (SubscriptionService.entitlement is Entitlement.Expired) {
+      return NoteSaveOutcome.SubscriptionGated
+    }
+    return updateNoteColor(siteId = siteId, noteId = noteId, color = color)
+      .toNoteSaveOutcome(siteId = siteId, noteId = noteId)
+  }
+
+  fun convergeDeletedNote(noteId: String) {
+    siteId?.let { noteEditState.remove(siteId = it, noteId = noteId) }
+    sceneCache.convergeDeletedNote(
+      noteId = noteId,
+      querySiteId = queryStateSiteId(),
+      queryNotes = (queryNotesState() as? QueryState.Success)?.data,
+    )
   }
 
   private fun sceneKey(status: NoteStatus): NotesSceneKey? = siteId?.let {
     NotesSceneKey(siteId = it, status = status)
   }
 
-  private fun queryStateKey(): NotesSceneKey? =
-    (query.stateQuery as? NotesScreen_Query)?.let { query ->
-      NotesSceneKey(siteId = query.siteId, status = query.status)
-    }
+  private fun queryStateSiteId(): String? = (query.stateQuery as? NotesScreen_Query)?.siteId
 
   private fun queryNotesState(): QueryState<List<NoteCard_note>> =
     when (val state = query.state) {
@@ -162,47 +222,94 @@ internal class NotesSceneCache {
   private val settledNotesByKey = mutableStateMapOf<NotesSceneKey, List<NoteCard_note>>()
   private val listStatesByKey = mutableMapOf<NotesSceneKey, NoteListState>()
   private val fallbackListStates = mutableMapOf<NoteStatus, NoteListState>()
+  private var activeSiteId: String? = null
+  private var hasActiveSite = false
 
-  fun commitSuccess(key: NotesSceneKey, notes: List<NoteCard_note>) {
-    settledNotesByKey[key] = notes
-    listState(key).sync(notes)
+  fun activateSite(siteId: String?) {
+    if (hasActiveSite && activeSiteId == siteId) return
+
+    activeSiteId = siteId
+    hasActiveSite = true
+    settledNotesByKey.clear()
+    listStatesByKey.clear()
+    fallbackListStates.clear()
   }
 
-  fun listState(key: NotesSceneKey): NoteListState =
-    listStatesByKey.getOrPut(key) { NoteListState(key.status.normalizedListStatus()) }
+  fun commitSuccess(siteId: String, notes: List<NoteCard_note>) {
+    if (!hasActiveSite) activateSite(siteId)
+    if (activeSiteId != siteId) return
+
+    val currentNotes = notes.withoutTerminalNotes(siteId)
+    listOf(NoteStatus.OPEN, NoteStatus.RESOLVED).forEach { status ->
+      val key = NotesSceneKey(siteId = siteId, status = status)
+      settledNotesByKey[key] = currentNotes.filter { it.status == status }
+      listState(key).sync(currentNotes)
+    }
+  }
+
+  fun listState(key: NotesSceneKey): NoteListState {
+    activateSite(key.siteId)
+    return listStatesByKey.getOrPut(key) { NoteListState(key.status.normalizedListStatus()) }
+  }
 
   fun fallbackListState(status: NoteStatus): NoteListState =
     fallbackListStates.getOrPut(status.normalizedListStatus()) {
       NoteListState(status.normalizedListStatus())
     }
 
+  fun convergeDeletedNote(noteId: String, querySiteId: String?, queryNotes: List<NoteCard_note>?) {
+    listStatesByKey.forEach { (key, state) ->
+      val note =
+        settledNotesByKey[key]?.firstOrNull { it.id == noteId }
+          ?: if (key.siteId == querySiteId) {
+            queryNotes?.firstOrNull { it.id == noteId && it.status == key.status }
+          } else {
+            null
+          }
+      state.markDeleted(noteId = noteId, fallbackNote = note)
+    }
+    fallbackListStates.values.forEach { it.markDeleted(noteId) }
+  }
+
   fun notes(
     key: NotesSceneKey?,
-    queryKey: NotesSceneKey?,
+    querySiteId: String?,
     queryState: QueryState<List<NoteCard_note>>,
     placeholderNotes: List<NoteCard_note>,
   ): List<NoteCard_note> =
     when {
-      key != null && key == queryKey && queryState is QueryState.Success -> queryState.data
+      key != null && hasActiveSite && key.siteId != activeSiteId -> placeholderNotes
+      key != null && key.siteId == querySiteId && queryState is QueryState.Success ->
+        queryState.data.withoutTerminalNotes(key.siteId).filter { it.status == key.status }
       key != null && key in settledNotesByKey -> settledNotesByKey.getValue(key)
       else -> placeholderNotes
     }
 
   fun queryState(
     key: NotesSceneKey?,
-    activeKey: NotesSceneKey?,
-    queryKey: NotesSceneKey?,
+    querySiteId: String?,
     queryState: QueryState<List<NoteCard_note>>,
-  ): QueryState<*> =
-    when {
-      key != null &&
-        key == activeKey &&
-        key == queryKey &&
-        queryState is QueryState.Error &&
-        key !in settledNotesByKey -> queryState
-      key != null && key == queryKey && queryState is QueryState.Success -> QueryState.Success(Unit)
-      key != null && key in settledNotesByKey -> QueryState.Success(Unit)
-      else -> QueryState.Loading
+  ): QueryState<*> {
+    if (key == null || (hasActiveSite && key.siteId != activeSiteId)) {
+      return QueryState.Loading
+    }
+    if (key in settledNotesByKey) {
+      return QueryState.Success(Unit)
+    }
+    if (key.siteId != querySiteId) {
+      return QueryState.Loading
+    }
+
+    return when (queryState) {
+      is QueryState.Success -> QueryState.Success(Unit)
+      is QueryState.Error -> queryState
+      QueryState.Loading -> QueryState.Loading
+    }
+  }
+
+  private fun List<NoteCard_note>.withoutTerminalNotes(siteId: String): List<NoteCard_note> =
+    filterNot {
+      NoteSync.isTerminallyDeleted(siteId, it.id)
     }
 }
 

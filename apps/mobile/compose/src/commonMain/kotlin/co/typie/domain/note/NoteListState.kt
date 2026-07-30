@@ -17,10 +17,17 @@ internal class NoteListState(private val status: NoteStatus) {
   private val enteringAnimationIds = mutableStateMapOf<String, Boolean>()
   private val expectedEntryNotesById = mutableStateMapOf<String, NoteCard_note>()
   private val exitingNotesById = mutableStateMapOf<String, ExitingNoteSnapshot>()
+  private var serverNotesById: Map<String, NoteCard_note> = emptyMap()
 
   fun sync(serverNotes: List<NoteCard_note>) {
+    val wasSettled = hasSettled
+    val previousServerNotesById = serverNotesById
+    val latestServerNotesById = serverNotes.associateBy { it.id }
+    val nextServerNotesById = serverNotes.filter { it.status == status }.associateBy { it.id }
+    val locallyEnteringIds = enteringNotesById.keys.toSet()
+    val expectedEntryIds = expectedEntryNotesById.keys.toSet()
     hasSettled = true
-    val serverIds = serverNotes.mapTo(mutableSetOf()) { it.id }
+    val serverIds = nextServerNotesById.keys
 
     enteringNotesById.keys
       .filter { it in serverIds }
@@ -33,12 +40,32 @@ internal class NoteListState(private val status: NoteStatus) {
       }
     }
 
+    if (wasSettled) {
+      nextServerNotesById.forEach { (noteId, _) ->
+        if (noteId in previousServerNotesById) return@forEach
+
+        if (exitingNotesById.remove(noteId) != null) {
+          enteringAnimationIds[noteId] = true
+        } else if (noteId !in locallyEnteringIds && noteId !in expectedEntryIds) {
+          enteringAnimationIds[noteId] = true
+        }
+      }
+
+      previousServerNotesById.forEach { (noteId, note) ->
+        if (noteId !in nextServerNotesById && noteId !in exitingNotesById) {
+          markExiting(latestServerNotesById[noteId] ?: note)
+        }
+      }
+    }
+
     exitingNotesById.keys.toList().forEach { noteId ->
       val snapshot = exitingNotesById[noteId] ?: return@forEach
       if (!snapshot.isVisible && noteId !in serverIds) {
         exitingNotesById.remove(noteId)
       }
     }
+
+    serverNotesById = nextServerNotesById
   }
 
   fun merge(serverNotes: List<NoteCard_note>): List<NoteCard_note> {
@@ -85,10 +112,32 @@ internal class NoteListState(private val status: NoteStatus) {
   }
 
   fun markExiting(note: NoteCard_note) {
+    if (note.id in exitingNotesById) {
+      return
+    }
+
     expectedEntryNotesById.remove(note.id)
     enteringNotesById.remove(note.id)
     enteringAnimationIds.remove(note.id)
     exitingNotesById[note.id] = ExitingNoteSnapshot(note = note, isVisible = true)
+  }
+
+  fun markDeleted(noteId: String, fallbackNote: NoteCard_note? = null) {
+    val note =
+      exitingNotesById[noteId]?.note
+        ?: enteringNotesById[noteId]
+        ?: expectedEntryNotesById[noteId]
+        ?: serverNotesById[noteId]
+        ?: fallbackNote
+    if (note != null) {
+      markExiting(note)
+    } else {
+      remove(noteId)
+    }
+  }
+
+  fun confirmMembershipRemoval(noteId: String) {
+    serverNotesById = serverNotesById - noteId
   }
 
   fun finishExiting(noteId: String) {

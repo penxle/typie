@@ -17,6 +17,7 @@ internal fun notesNote(
   content: String = "",
   color: String = "gray",
   status: NoteStatus = NoteStatus.OPEN,
+  siteId: String = "site",
   updatedAt: Instant = Instant.parse("2024-01-01T00:00:00Z"),
   entities: List<NoteLinkedEntity_entity> = emptyList(),
 ) =
@@ -28,6 +29,7 @@ internal fun notesNote(
     color = color,
     status = status,
     updatedAt = updatedAt,
+    site = NoteCard_note.Site(__typename = "Site", id = siteId),
     entities =
       entities.map { NoteCard_note.Entity(__typename = "Entity", noteLinkedEntity_entity = it) },
   )

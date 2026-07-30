@@ -777,6 +777,7 @@ fun EditorScreen(entityId: String) {
             }
           },
           beginStop = session::beginStop,
+          savePendingChanges = subPaneState::prepareForRouteRemoval,
           onPreparationStarted = {
             routeRemovalOwnsPriority = true
             try {
@@ -1970,6 +1971,7 @@ fun EditorScreen(entityId: String) {
           EditorSubPaneHost(
             state = subPaneState,
             entityId = entityId,
+            siteId = entity.site.id,
             editorMutationEnabled = directEditingEnabled,
             comments =
               CommentsSubPaneEnvironment(

@@ -3,50 +3,8 @@ package co.typie.domain.note
 import co.typie.graphql.type.NoteStatus
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNull
 
 class NoteHelpersTest {
-  @Test
-  fun `resolveMovedNoteOrders returns adjacent bounds for middle note`() {
-    val notes =
-      listOf(
-        notesNote(id = "a", order = "100"),
-        notesNote(id = "b", order = "200"),
-        notesNote(id = "c", order = "300"),
-      )
-
-    assertEquals(
-      NoteMoveOrders(lowerOrder = "100", upperOrder = "300"),
-      resolveMovedNoteOrders(notes, movedNoteId = "b"),
-    )
-  }
-
-  @Test
-  fun `resolveMovedNoteOrders returns null bound at list edges`() {
-    val notes =
-      listOf(
-        notesNote(id = "a", order = "100"),
-        notesNote(id = "b", order = "200"),
-        notesNote(id = "c", order = "300"),
-      )
-
-    assertEquals(
-      NoteMoveOrders(lowerOrder = null, upperOrder = "200"),
-      resolveMovedNoteOrders(notes, movedNoteId = "a"),
-    )
-    assertEquals(
-      NoteMoveOrders(lowerOrder = "200", upperOrder = null),
-      resolveMovedNoteOrders(notes, movedNoteId = "c"),
-    )
-  }
-
-  @Test
-  fun `resolveMovedNoteOrders returns null when note is missing`() {
-    val notes = listOf(notesNote(id = "a", order = "100"))
-
-    assertNull(resolveMovedNoteOrders(notes, movedNoteId = "missing"))
-  }
-
   @Test
   fun `status labels and empty messages follow screen copy`() {
     assertEquals("진행 중", NoteStatus.OPEN.filterLabel())
@@ -71,25 +29,5 @@ class NoteHelpersTest {
 
     assertEquals(listOf("1"), meta.visibleEntities.map { it.id })
     assertEquals(2, meta.overflowCount)
-  }
-
-  @Test
-  fun `displayOrderedNotes falls back when reorder keys are stale`() {
-    val notes = listOf(notesNote(id = "a", order = "100"), notesNote(id = "b", order = "200"))
-
-    assertEquals(
-      notes,
-      displayOrderedNotes(notes, orderedKeys = listOf("placeholder-1", "placeholder-2")),
-    )
-  }
-
-  @Test
-  fun `displayOrderedNotes uses displayed order when complete`() {
-    val notes = listOf(notesNote(id = "a", order = "100"), notesNote(id = "b", order = "200"))
-
-    assertEquals(
-      listOf("b", "a"),
-      displayOrderedNotes(notes, orderedKeys = listOf("b", "a")).map { it.id },
-    )
   }
 }

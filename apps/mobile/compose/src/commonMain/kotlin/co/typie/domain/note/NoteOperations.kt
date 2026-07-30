@@ -8,126 +8,238 @@ import co.typie.graphql.Note_Delete_Mutation
 import co.typie.graphql.Note_Move_Mutation
 import co.typie.graphql.Note_RemoveEntity_Mutation
 import co.typie.graphql.Note_Update_Mutation
-import co.typie.graphql.PlaceholderResolver
-import co.typie.graphql.builder.Data
-import co.typie.graphql.builder.buildNote
 import co.typie.graphql.executeMutation
 import co.typie.graphql.fragment.NoteCard_note
 import co.typie.graphql.fragment.NoteEntityPicker_entity
-import co.typie.graphql.midpointOrder
 import co.typie.graphql.type.AddNoteEntityInput
 import co.typie.graphql.type.CreateNoteInput
 import co.typie.graphql.type.DeleteNoteInput
 import co.typie.graphql.type.MoveNoteInput
 import co.typie.graphql.type.NoteStatus
+import co.typie.graphql.type.NoteUpdateKind
 import co.typie.graphql.type.RemoveNoteEntityInput
 import co.typie.graphql.type.UpdateNoteInput
 import co.typie.result.Result
 import co.typie.result.result
-import co.typie.storage.Preference
 
 const val DEFAULT_NOTE_COLOR = "gray"
 
 suspend fun createNote(
+  siteId: String,
   color: String = DEFAULT_NOTE_COLOR,
   entityId: String? = null,
-): Result<NoteCard_note, Nothing> = result {
-  val input =
-    CreateNoteInput.Builder()
-      .content("")
-      .color(color)
-      .apply {
-        if (entityId != null) {
-          entityId(entityId)
-        } else {
-          siteId(Preference.siteId ?: error("missing siteId"))
+): Result<NoteCard_note, Nothing> =
+  executeSyncedNoteMutation(siteId = siteId, noteId = null, kind = NoteUpdateKind.CREATED) {
+    val input =
+      CreateNoteInput.Builder()
+        .clientId(NoteSync.clientId)
+        .content("")
+        .color(color)
+        .apply {
+          if (entityId != null) {
+            entityId(entityId)
+          } else {
+            siteId(siteId)
+          }
         }
+        .build()
+    Apollo.executeMutation(Note_Create_Mutation(input = input)).createNote.noteCard_note
+  }
+
+suspend fun updateNoteContent(
+  siteId: String,
+  noteId: String,
+  content: String,
+): Result<NoteCard_note, Nothing> =
+  executeSyncedNoteMutation(siteId = siteId, noteId = noteId, kind = NoteUpdateKind.UPDATED) {
+    Apollo.executeMutation(
+        Note_Update_Mutation(
+          input =
+            UpdateNoteInput.Builder()
+              .clientId(NoteSync.clientId)
+              .noteId(noteId)
+              .content(content)
+              .build()
+        )
+      )
+      .updateNote
+      .noteCard_note
+  }
+
+suspend fun updateNoteColor(
+  siteId: String,
+  noteId: String,
+  color: String,
+): Result<NoteCard_note, Nothing> =
+  executeSyncedNoteMutation(siteId = siteId, noteId = noteId, kind = NoteUpdateKind.UPDATED) {
+    Apollo.executeMutation(
+        Note_Update_Mutation(
+          input =
+            UpdateNoteInput.Builder()
+              .clientId(NoteSync.clientId)
+              .noteId(noteId)
+              .color(color)
+              .build()
+        )
+      )
+      .updateNote
+      .noteCard_note
+  }
+
+suspend fun updateNoteStatus(
+  siteId: String,
+  noteId: String,
+  status: NoteStatus,
+): Result<NoteCard_note, Nothing> =
+  executeSyncedNoteMutation(siteId = siteId, noteId = noteId, kind = NoteUpdateKind.UPDATED) {
+    Apollo.executeMutation(
+        Note_Update_Mutation(
+          input =
+            UpdateNoteInput.Builder()
+              .clientId(NoteSync.clientId)
+              .noteId(noteId)
+              .status(status)
+              .build()
+        )
+      )
+      .updateNote
+      .noteCard_note
+  }
+
+suspend fun deleteNote(siteId: String, noteId: String): Result<String, Nothing> {
+  val mutationResult =
+    result<String, Nothing> {
+      Apollo.executeMutation(
+          Note_Delete_Mutation(
+            input = DeleteNoteInput.Builder().clientId(NoteSync.clientId).noteId(noteId).build()
+          )
+        )
+        .deleteNote
+        .id
+    }
+
+  when (mutationResult) {
+    is Result.Ok ->
+      NoteSync.publish(NoteUpdate(kind = NoteUpdateKind.DELETED, noteId = noteId, siteId = siteId))
+    is Result.Exception -> {
+      if (mutationResult.isNoteNotFound()) {
+        NoteSync.publish(
+          NoteUpdate(kind = NoteUpdateKind.DELETED, noteId = noteId, siteId = siteId)
+        )
       }
-      .build()
-  Apollo.executeMutation(Note_Create_Mutation(input = input)).createNote.noteCard_note
-}
+    }
 
-suspend fun updateNoteContent(noteId: String, content: String): Result<NoteCard_note, Nothing> =
-  result {
-    Apollo.executeMutation(
-        Note_Update_Mutation(
-          input = UpdateNoteInput.Builder().noteId(noteId).content(content).build()
-        )
-      )
-      .updateNote
-      .noteCard_note
+    is Result.Err -> Unit
   }
-
-suspend fun updateNoteColor(noteId: String, color: String): Result<NoteCard_note, Nothing> =
-  result {
-    Apollo.executeMutation(
-        Note_Update_Mutation(input = UpdateNoteInput.Builder().noteId(noteId).color(color).build())
-      )
-      .updateNote
-      .noteCard_note
-  }
-
-suspend fun updateNoteStatus(noteId: String, status: NoteStatus): Result<NoteCard_note, Nothing> =
-  result {
-    Apollo.executeMutation(
-        Note_Update_Mutation(
-          input = UpdateNoteInput.Builder().noteId(noteId).status(status).build()
-        )
-      )
-      .updateNote
-      .noteCard_note
-  }
-
-suspend fun deleteNote(noteId: String): Result<Unit, Nothing> = result {
-  Apollo.executeMutation(Note_Delete_Mutation(input = DeleteNoteInput(noteId = noteId)))
+  return mutationResult
 }
 
 suspend fun moveNote(
-  noteId: String,
+  note: NoteCard_note,
   lowerOrder: String?,
   upperOrder: String?,
-): Result<Unit, Nothing> = result {
-  val newOrder = midpointOrder(lowerOrder, upperOrder)
-  Apollo.executeMutation(
-    Note_Move_Mutation(
-      input =
-        MoveNoteInput.Builder()
-          .noteId(noteId)
-          .apply {
-            if (lowerOrder != null) lowerOrder(lowerOrder)
-            if (upperOrder != null) upperOrder(upperOrder)
-          }
-          .build()
-    ),
-    optimisticUpdate =
-      Note_Move_Mutation.Data(PlaceholderResolver) {
-        moveNote = buildNote {
-          id = noteId
-          order = newOrder
-        }
-      },
-  )
+): Result<String, Nothing> {
+  val mutationResult =
+    result<String, Nothing> {
+      Apollo.executeMutation(
+          Note_Move_Mutation(
+            input =
+              MoveNoteInput.Builder()
+                .clientId(NoteSync.clientId)
+                .noteId(note.id)
+                .apply {
+                  if (lowerOrder != null) lowerOrder(lowerOrder)
+                  if (upperOrder != null) upperOrder(upperOrder)
+                }
+                .build()
+          )
+        )
+        .moveNote
+        .order
+    }
+
+  when (mutationResult) {
+    is Result.Ok ->
+      NoteSync.publish(
+        NoteUpdate(kind = NoteUpdateKind.UPDATED, noteId = note.id, siteId = note.site.id)
+      )
+    is Result.Exception -> {
+      if (mutationResult.isNoteNotFound()) {
+        NoteSync.publish(
+          NoteUpdate(kind = NoteUpdateKind.DELETED, noteId = note.id, siteId = note.site.id)
+        )
+      }
+    }
+    is Result.Err -> Unit
+  }
+  return mutationResult
 }
 
-suspend fun addNoteEntity(noteId: String, entityId: String): Result<NoteCard_note, Nothing> =
-  result {
+suspend fun addNoteEntity(
+  siteId: String,
+  noteId: String,
+  entityId: String,
+): Result<NoteCard_note, Nothing> =
+  executeSyncedNoteMutation(siteId = siteId, noteId = noteId, kind = NoteUpdateKind.UPDATED) {
     Apollo.executeMutation(
-        Note_AddEntity_Mutation(input = AddNoteEntityInput(noteId = noteId, entityId = entityId))
+        Note_AddEntity_Mutation(
+          input =
+            AddNoteEntityInput.Builder()
+              .clientId(NoteSync.clientId)
+              .noteId(noteId)
+              .entityId(entityId)
+              .build()
+        )
       )
       .addNoteEntity
       .noteCard_note
   }
 
-suspend fun removeNoteEntity(noteId: String, entityId: String): Result<NoteCard_note, Nothing> =
-  result {
+suspend fun removeNoteEntity(
+  siteId: String,
+  noteId: String,
+  entityId: String,
+): Result<NoteCard_note, Nothing> =
+  executeSyncedNoteMutation(siteId = siteId, noteId = noteId, kind = NoteUpdateKind.UPDATED) {
     Apollo.executeMutation(
         Note_RemoveEntity_Mutation(
-          input = RemoveNoteEntityInput(noteId = noteId, entityId = entityId)
+          input =
+            RemoveNoteEntityInput.Builder()
+              .clientId(NoteSync.clientId)
+              .noteId(noteId)
+              .entityId(entityId)
+              .build()
         )
       )
       .removeNoteEntity
       .noteCard_note
   }
+
+private suspend fun executeSyncedNoteMutation(
+  siteId: String,
+  noteId: String?,
+  kind: NoteUpdateKind,
+  block: suspend () -> NoteCard_note,
+): Result<NoteCard_note, Nothing> {
+  val mutationResult = result<NoteCard_note, Nothing> { block() }
+  when (mutationResult) {
+    is Result.Ok -> {
+      val note = mutationResult.value
+      NoteSync.publish(NoteUpdate(kind = kind, noteId = note.id, siteId = note.site.id))
+    }
+
+    is Result.Exception -> {
+      if (noteId != null && mutationResult.isNoteNotFound()) {
+        NoteSync.publish(
+          NoteUpdate(kind = NoteUpdateKind.DELETED, noteId = noteId, siteId = siteId)
+        )
+      }
+    }
+
+    is Result.Err -> Unit
+  }
+  return mutationResult
+}
 
 internal fun NoteEntityPicker_Recent_Query.Data.linkedEntities(): List<NoteEntityPicker_entity> =
   me.recentlyViewedEntities.map { it.noteEntityPicker_entity }.distinctBy { it.id }

@@ -18,6 +18,7 @@ internal class EditorRouteLeaveInterceptor(
   private val beginStop: () -> DocumentEditingStop,
   private val onPreparationStarted: suspend () -> Unit = {},
   private val resumeReloadBeforeRollback: suspend () -> Boolean = { false },
+  private val savePendingChanges: suspend () -> Boolean = { true },
   private val resolveDecision: suspend () -> RouteRemovalDecision,
   private val delayedFeedbackMillis: Long = DEFAULT_DELAYED_FEEDBACK_MILLIS,
   private val checkpointWatchdogMillis: Long = DEFAULT_CHECKPOINT_WATCHDOG_MILLIS,
@@ -49,7 +50,7 @@ internal class EditorRouteLeaveInterceptor(
         onPreparationStarted()
         reloadPaused = true
       }
-      return if (awaitCheckpoint(currentStop, onDelayed)) {
+      return if (awaitProtection(currentStop, onDelayed)) {
         RouteRemovalPreparation.Ready
       } else {
         RouteRemovalPreparation.NeedsDecision
@@ -91,11 +92,18 @@ internal class EditorRouteLeaveInterceptor(
     return cleanup(currentStop, restore = !reloadResumed, failure)
   }
 
-  private suspend fun awaitCheckpoint(
+  private suspend fun awaitProtection(
     stop: DocumentEditingStop,
     onDelayed: (suspend () -> Unit)? = null,
   ): Boolean {
-    suspend fun awaitResult(): Boolean = stop.awaitCheckpoint() == EditingCheckpointResult.Protected
+    suspend fun awaitResult(): Boolean = coroutineScope {
+      val checkpoint =
+        async(start = CoroutineStart.UNDISPATCHED) {
+          stop.awaitCheckpoint() == EditingCheckpointResult.Protected
+        }
+      val pendingChanges = async(start = CoroutineStart.UNDISPATCHED) { savePendingChanges() }
+      checkpoint.await() && pendingChanges.await()
+    }
 
     return try {
       withTimeoutOrNull(checkpointWatchdogMillis) {

@@ -240,6 +240,63 @@ class ReorderableColumnStateTest {
     assertNull(state.draggingKey)
     assertNull(state.edgeAutoScrollController.pointer)
   }
+
+  @Test
+  fun `local dropped order survives intermediate input and rolls back to the latest input`() =
+    runTest {
+      val state = createState<String>()
+      state.inputKeys = listOf("a", "b", "c")
+      state.registerSlotBounds("a", Rect(0f, 0f, 100f, 50f))
+      state.registerSlotBounds("b", Rect(0f, 50f, 100f, 100f))
+      state.registerSlotBounds("c", Rect(0f, 100f, 100f, 150f))
+
+      state.beginDrag("a", Offset(0f, 25f))
+      state.updateDrag(Offset(0f, 140f))
+      state.endDrag()
+      assertEquals(listOf("b", "c", "a"), state.keys)
+
+      state.inputKeys = listOf("a", "c", "b")
+      assertEquals(listOf("b", "c", "a"), state.keys)
+
+      state.cancelDrag()
+      assertEquals(listOf("a", "c", "b"), state.keys)
+    }
+
+  @Test
+  fun `cancelling a later drag restores the previous local dropped order`() = runTest {
+    val state = createState<String>()
+    state.inputKeys = listOf("a", "b", "c")
+    state.registerSlotBounds("a", Rect(0f, 0f, 100f, 50f))
+    state.registerSlotBounds("b", Rect(0f, 50f, 100f, 100f))
+    state.registerSlotBounds("c", Rect(0f, 100f, 100f, 150f))
+
+    state.beginDrag("a", Offset(0f, 25f))
+    state.updateDrag(Offset(0f, 140f))
+    state.endDrag()
+    assertEquals(listOf("b", "c", "a"), state.keys)
+
+    state.beginDrag("b", Offset(0f, 75f))
+    state.cancelDrag()
+
+    assertEquals(listOf("b", "c", "a"), state.keys)
+  }
+
+  @Test
+  fun `cancelling a drag restores the latest input order when no local drop is pending`() =
+    runTest {
+      val state = createState<String>()
+      state.inputKeys = listOf("a", "b", "c")
+      state.registerSlotBounds("a", Rect(0f, 0f, 100f, 50f))
+      state.registerSlotBounds("b", Rect(0f, 50f, 100f, 100f))
+      state.registerSlotBounds("c", Rect(0f, 100f, 100f, 150f))
+
+      state.beginDrag("a", Offset(0f, 25f))
+      state.updateDrag(Offset(0f, 140f))
+      state.inputKeys = listOf("c", "b", "a")
+      state.cancelDrag()
+
+      assertEquals(listOf("c", "b", "a"), state.keys)
+    }
 }
 
 private fun <K : Any> createState(): ReorderableColumnState<K> =

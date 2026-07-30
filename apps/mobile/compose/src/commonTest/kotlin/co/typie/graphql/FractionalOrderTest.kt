@@ -3,9 +3,58 @@ package co.typie.graphql
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class FractionalOrderTest {
+  @Test
+  fun `next move advances the first desired mismatch using authoritative bounds`() {
+    val authoritative = linkedMapOf("a" to "100", "b" to "200", "c" to "300")
+
+    assertEquals(
+      FractionalOrderMove(key = "b", lowerOrder = null, upperOrder = "100"),
+      resolveNextFractionalOrderMove(authoritative, desiredKeys = listOf("b", "c", "a")),
+    )
+  }
+
+  @Test
+  fun `next move preserves the dragged key when it alone explains the desired order`() {
+    val authoritative = linkedMapOf("a" to "100", "b" to "200", "c" to "300")
+
+    assertEquals(
+      FractionalOrderMove(key = "a", lowerOrder = "300", upperOrder = null),
+      resolveNextFractionalOrderMove(
+        authoritative,
+        desiredKeys = listOf("b", "c", "a"),
+        preferredKey = "a",
+      ),
+    )
+  }
+
+  @Test
+  fun `next move rebases on an actual server order response`() {
+    val authoritative = linkedMapOf("a" to "100", "b" to "050", "c" to "300")
+
+    assertEquals(
+      FractionalOrderMove(key = "c", lowerOrder = "050", upperOrder = "100"),
+      resolveNextFractionalOrderMove(authoritative, desiredKeys = listOf("b", "c", "a")),
+    )
+  }
+
+  @Test
+  fun `next move is absent when authoritative order already matches`() {
+    val authoritative = linkedMapOf("a" to "100", "b" to "200")
+
+    assertNull(resolveNextFractionalOrderMove(authoritative, desiredKeys = listOf("a", "b")))
+  }
+
+  @Test
+  fun `next move rejects an incomplete desired order`() {
+    val authoritative = linkedMapOf("a" to "100", "b" to "200")
+
+    assertNull(resolveNextFractionalOrderMove(authoritative, desiredKeys = listOf("a")))
+  }
+
   @Test
   fun `both null returns MID char`() {
     assertEquals("N", midpointOrder(null, null))

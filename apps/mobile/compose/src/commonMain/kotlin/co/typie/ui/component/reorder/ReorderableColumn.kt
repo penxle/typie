@@ -55,6 +55,7 @@ private data class ActiveDrag<K : Any>(
   val key: K,
   val startIndex: Int,
   val startKeys: List<K>,
+  val restoreLatestInputOnCancel: Boolean,
   val pointer: Offset,
   val pointerOffsetInItemY: Float,
   val comparisonY: Float,
@@ -76,9 +77,10 @@ internal constructor(internal val edgeAutoScrollController: EdgeAutoScrollContro
   internal var inputKeys: List<K>
     get() = _inputKeys.value
     set(value) {
-      if (_inputKeys.value == value) return
+      val previousInputKeys = _inputKeys.value
+      if (previousInputKeys == value) return
       _inputKeys.value = value
-      if (activeDrag == null) {
+      if (activeDrag == null && _keys == previousInputKeys) {
         _keys = value
       }
     }
@@ -141,6 +143,7 @@ internal constructor(internal val edgeAutoScrollController: EdgeAutoScrollContro
         key = key,
         startIndex = startIndex,
         startKeys = _keys,
+        restoreLatestInputOnCancel = _keys == inputKeys,
         pointer = pointer,
         pointerOffsetInItemY = pointerOffsetInItemY,
         comparisonY = comparisonY,
@@ -191,9 +194,20 @@ internal constructor(internal val edgeAutoScrollController: EdgeAutoScrollContro
   }
 
   fun cancelDrag() {
+    val drag = activeDrag
+    resetOrder(
+      if (drag?.restoreLatestInputOnCancel == false) {
+        drag.startKeys
+      } else {
+        inputKeys
+      }
+    )
+  }
+
+  fun resetOrder(keys: List<K>) {
     activeDrag = null
     settling = null
-    _keys = inputKeys
+    _keys = keys
     edgeAutoScrollController.pointer = null
   }
 

@@ -12,10 +12,13 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import co.typie.domain.note.NoteSync
+import co.typie.domain.note.NoteUpdate
 import co.typie.domain.subscription.PlanChangeNoticeHost
 import co.typie.domain.subscription.SubscriptionGateHost
 import co.typie.graphql.Apollo
 import co.typie.graphql.MainShell_SiteUpdateStream_Subscription
+import co.typie.graphql.Note_UpdateStream_Subscription
 import co.typie.navigation.Nav
 import co.typie.navigation.NavigationScaffold
 import co.typie.navigation.NavigationStack
@@ -55,6 +58,22 @@ fun MainShell(content: @Composable (Route) -> Unit) {
       .retryOnError(true)
       .toFlow()
       .collect()
+  }
+
+  LaunchedEffect(siteId) {
+    if (siteId == null) {
+      return@LaunchedEffect
+    }
+
+    Apollo.subscription(
+        Note_UpdateStream_Subscription(siteId = siteId, clientId = NoteSync.clientId)
+      )
+      .retryOnError(true)
+      .toFlow()
+      .collect { response ->
+        val payload = response.data?.noteUpdateStream ?: return@collect
+        NoteSync.publish(NoteUpdate(kind = payload.kind, noteId = payload.noteId, siteId = siteId))
+      }
   }
 
   CompositionLocalProvider(

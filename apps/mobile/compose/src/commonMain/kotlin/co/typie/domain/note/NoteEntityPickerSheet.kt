@@ -43,7 +43,8 @@ import co.typie.graphql.fragment.EntityParentMeta_folder
 import co.typie.graphql.fragment.EntityRow_entity
 import co.typie.graphql.fragment.NoteEntityPicker_entity
 import co.typie.icons.Lucide
-import co.typie.storage.Preference
+import co.typie.ui.component.Button
+import co.typie.ui.component.ButtonVariant
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardSurface
 import co.typie.ui.component.LabelPosition
@@ -66,15 +67,22 @@ import kotlinx.coroutines.launch
 internal val NoteEntityPickerStops = listOf(SheetStop.Top(64.dp))
 private val NoteEntityPickerListFadeHeight = 24.dp
 
+internal enum class NoteEntityMutationOutcome {
+  Updated,
+  Terminal,
+  NotUpdated,
+}
+
 @Composable
 context(_: SheetScope<Unit>)
 internal fun NoteEntityPickerSheet(
+  siteId: String,
   linkedEntityIds: Set<String>,
-  onAddEntity: suspend (String) -> Boolean,
-  onRemoveEntity: suspend (String) -> Boolean,
+  onAddEntity: suspend (String) -> NoteEntityMutationOutcome,
+  onRemoveEntity: suspend (String) -> NoteEntityMutationOutcome,
 ) {
-  if (Preference.siteId == null) return
-  val model = viewModel { NoteEntityPickerViewModel() }
+  val model =
+    viewModel(key = "note-entity-picker:$siteId") { NoteEntityPickerViewModel(siteId = siteId) }
   val listScrollState = rememberScrollState()
   var updatingEntityId by remember { mutableStateOf<String?>(null) }
   var selectedEntityIds by remember(linkedEntityIds) { mutableStateOf(linkedEntityIds) }
@@ -88,25 +96,32 @@ internal fun NoteEntityPickerSheet(
     model.inputKeyword.isBlank() && model.recentQuery.state is QueryState.Loading
   val visibleEntities =
     if (model.inputKeyword.isBlank()) {
-      resolveRecentNotePickerEntities(
-          inputKeyword = model.inputKeyword,
-          recentQueryState = model.recentQuery.state,
-          settledEntities = model.recentEntities,
-          placeholderEntities = model.recentPlaceholderEntities,
-        )
-        .map(::recentNotePickerItem)
+      when (model.recentQuery.state) {
+        QueryState.Loading -> model.recentPlaceholderEntities
+        is QueryState.Success -> model.recentEntities
+        is QueryState.Error -> emptyList()
+      }.map(::recentNotePickerItem)
     } else {
-      model.searchHits
+      (model.searchState as? QueryState.Success)
+        ?.data
+        .orEmpty()
         .mapNotNull { searchNotePickerItem(it, highlightColor, mutedTextColor) }
         .distinctBy { it.id }
     }
 
+  val errorMessage =
+    when {
+      model.inputKeyword.isBlank() && model.recentQuery.state is QueryState.Error ->
+        "최근 항목을 불러오지 못했어요."
+      model.inputKeyword.isNotBlank() && model.searchState is QueryState.Error ->
+        "검색 결과를 불러오지 못했어요."
+      else -> null
+    }
   val emptyMessage =
     when {
       model.inputKeyword.isBlank() && model.recentQuery.state is QueryState.Loading -> "불러오는 중..."
       model.inputKeyword.isBlank() -> "최근 항목이 없어요."
-      model.searchQuery.state is QueryState.Loading -> "검색 중..."
-      model.searchQuery.state is QueryState.Error -> "검색 결과를 불러올 수 없어요."
+      model.searchState is QueryState.Loading -> "검색 중..."
       else -> "검색 결과가 없어요."
     }
 
@@ -164,7 +179,20 @@ internal fun NoteEntityPickerSheet(
             modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 16.dp),
             contentAlignment = Alignment.TopCenter,
           ) {
-            NotePickerEmptyState(message = emptyMessage)
+            if (errorMessage != null) {
+              NotePickerQueryError(
+                message = errorMessage,
+                onRetry = {
+                  if (model.inputKeyword.isBlank()) {
+                    model.recentQuery.refetch()
+                  } else {
+                    model.searchQuery.refetch()
+                  }
+                },
+              )
+            } else {
+              NotePickerEmptyState(message = emptyMessage)
+            }
           }
         } else {
           val listFogInsets = remember { PaddingValues(vertical = NoteEntityPickerListFadeHeight) }
@@ -200,12 +228,15 @@ internal fun NoteEntityPickerSheet(
                           updatingEntityId = item.id
 
                           try {
-                            val didToggle =
+                            val outcome =
                               if (selected) onRemoveEntity(item.id) else onAddEntity(item.id)
-                            if (didToggle) {
-                              selectedEntityIds =
-                                if (selected) selectedEntityIds - item.id
-                                else selectedEntityIds + item.id
+                            when (outcome) {
+                              NoteEntityMutationOutcome.Updated ->
+                                selectedEntityIds =
+                                  if (selected) selectedEntityIds - item.id
+                                  else selectedEntityIds + item.id
+                              NoteEntityMutationOutcome.Terminal -> dismiss()
+                              NoteEntityMutationOutcome.NotUpdated -> Unit
                             }
                           } finally {
                             updatingEntityId = null
@@ -221,6 +252,14 @@ internal fun NoteEntityPickerSheet(
         }
       }
     }
+  }
+}
+
+@Composable
+private fun NotePickerQueryError(message: String, onRetry: suspend () -> Unit) {
+  Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    NotePickerEmptyState(message = message)
+    Button(text = "다시 시도", variant = ButtonVariant.Secondary, onClick = onRetry)
   }
 }
 
@@ -276,23 +315,6 @@ private data class NotePickerItem(
 ) {
   val id: String
     get() = entity.id
-}
-
-internal fun <T> resolveRecentNotePickerEntities(
-  inputKeyword: String,
-  recentQueryState: QueryState<*>,
-  settledEntities: List<T>,
-  placeholderEntities: List<T>,
-): List<T> {
-  if (inputKeyword.isNotBlank()) {
-    return emptyList()
-  }
-
-  return when (recentQueryState) {
-    QueryState.Loading -> placeholderEntities
-    is QueryState.Success<*> -> settledEntities
-    is QueryState.Error -> emptyList()
-  }
 }
 
 private fun recentNotePickerItem(entity: NoteEntityPicker_entity): NotePickerItem {

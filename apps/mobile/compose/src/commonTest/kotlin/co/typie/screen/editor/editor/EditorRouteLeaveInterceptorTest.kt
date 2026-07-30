@@ -198,6 +198,22 @@ class EditorRouteLeaveInterceptorTest {
   }
 
   @Test
+  fun pendingSubPaneChangesMustBeSavedBeforeTheEditorRouteCanLeave() = runTest {
+    var saveAttempts = 0
+    val interceptor =
+      interceptor(
+        awaitResult = { EditingCheckpointResult.Protected },
+        savePendingChanges = {
+          saveAttempts += 1
+          false
+        },
+      )
+
+    assertEquals(RouteRemovalPreparation.NeedsDecision, interceptor.prepare())
+    assertEquals(1, saveAttempts)
+  }
+
+  @Test
   fun routeAcquiresItsStopBeforeSuspendingReload() = runTest {
     var routeOwnsStop = false
     val interceptor =
@@ -422,6 +438,7 @@ private fun interceptor(
   showDelayedFeedback: () -> Unit = {},
   hideDelayedFeedback: () -> Unit = {},
   resumeReloadBeforeRollback: suspend () -> Boolean = { false },
+  savePendingChanges: suspend () -> Boolean = { true },
 ): EditorRouteLeaveInterceptor =
   EditorRouteLeaveInterceptor(
     finalizeInput = {},
@@ -443,4 +460,5 @@ private fun interceptor(
     showDelayedFeedback = showDelayedFeedback,
     hideDelayedFeedback = hideDelayedFeedback,
     resumeReloadBeforeRollback = resumeReloadBeforeRollback,
+    savePendingChanges = savePendingChanges,
   )

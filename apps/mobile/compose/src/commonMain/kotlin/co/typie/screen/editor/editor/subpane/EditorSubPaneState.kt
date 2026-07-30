@@ -53,6 +53,11 @@ internal data class EditorSubPaneLayoutInfo(
 
 @Stable
 internal class EditorSubPaneState {
+  private data class RouteRemovalPreparationRegistration(
+    val pane: EditorSubPane,
+    val prepare: suspend () -> Boolean,
+  )
+
   var active by mutableStateOf<EditorSubPane?>(null)
     private set
 
@@ -63,6 +68,7 @@ internal class EditorSubPaneState {
     private set
 
   private var dismissalInProgress by mutableStateOf(false)
+  private var routeRemovalPreparation: RouteRemovalPreparationRegistration? = null
 
   val editorInputBlocked: Boolean
     get() = active != null && !dismissalInProgress
@@ -133,5 +139,25 @@ internal class EditorSubPaneState {
     if (layoutInfo?.pane == pane) {
       layoutInfo = null
     }
+  }
+
+  fun registerRouteRemovalPreparation(
+    pane: EditorSubPane,
+    prepare: suspend () -> Boolean,
+  ): () -> Unit {
+    val registration = RouteRemovalPreparationRegistration(pane = pane, prepare = prepare)
+    routeRemovalPreparation = registration
+    return {
+      if (routeRemovalPreparation === registration) {
+        routeRemovalPreparation = null
+      }
+    }
+  }
+
+  suspend fun prepareForRouteRemoval(): Boolean {
+    val registration = routeRemovalPreparation ?: return true
+    if (active != registration.pane) return true
+
+    return registration.prepare()
   }
 }

@@ -16,11 +16,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
@@ -28,14 +28,19 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.domain.entity.isFolder
+import co.typie.domain.note.NoteActionOutcome
+import co.typie.domain.note.NoteActionRequest
+import co.typie.domain.note.NoteActions
 import co.typie.domain.note.NoteEditState
 import co.typie.domain.note.NoteEditorBringIntoViewScope
+import co.typie.domain.note.NoteEntityMutationOutcome
 import co.typie.domain.note.NoteEntityPickerSheet
 import co.typie.domain.note.NoteEntityPickerStops
 import co.typie.domain.note.NoteLinkedEntityActionsSheet
 import co.typie.domain.note.NoteList
 import co.typie.domain.note.NoteListActions
-import co.typie.domain.note.NoteListItem
+import co.typie.domain.note.NoteListIdentity
+import co.typie.domain.note.NoteSaveOutcome
 import co.typie.domain.note.emptyMessage
 import co.typie.domain.note.filterLabel
 import co.typie.domain.note.rememberNoteColorOptions
@@ -53,7 +58,6 @@ import co.typie.icons.Lucide
 import co.typie.icons.Typie
 import co.typie.navigation.Nav
 import co.typie.navigation.PlatformBackHandler
-import co.typie.result.Result
 import co.typie.route.Route
 import co.typie.screen.editor.editor.subpane.EditorResizableSheetSurface
 import co.typie.screen.editor.editor.subpane.EditorSubPane
@@ -86,6 +90,7 @@ private val RelatedNotesListBottomContentPadding = 8.dp
 @Composable
 internal fun RelatedNotesSheet(
   entityId: String,
+  siteId: String,
   maxTopInset: Dp,
   safeBottomInset: Dp,
   trustedImeBottomInset: Dp,
@@ -93,21 +98,41 @@ internal fun RelatedNotesSheet(
   onDismiss: () -> Unit,
   onLayoutInfoChanged: (EditorSubPaneLayoutInfo) -> Unit,
   onLayoutInfoCleared: (EditorSubPane) -> Unit,
+  registerRouteRemovalPreparation: (suspend () -> Boolean) -> (() -> Unit),
   modifier: Modifier = Modifier,
 ) {
   val keyboardOcclusion = (trustedImeBottomInset - safeBottomInset).coerceAtLeast(0.dp)
   val model =
-    viewModel(key = "$RelatedNotesSheetViewModelKeyPrefix:$entityId") {
-      RelatedNotesViewModel(entityId)
+    viewModel(key = "$RelatedNotesSheetViewModelKeyPrefix:$siteId:$entityId") {
+      RelatedNotesViewModel(entityId = entityId, siteId = siteId)
     }
   val noteEditState = model.noteEditState
-  val toast = LocalToast.current
+  val noteActions = remember { NoteActions() }
+  SideEffect {
+    noteActions.activate(
+      siteId = siteId,
+      entityId = entityId,
+      editState = noteEditState,
+      onTerminal = model::convergeDeletedNote,
+    )
+  }
+
+  DisposableEffect(noteEditState, model, registerRouteRemovalPreparation) {
+    val unregister = registerRouteRemovalPreparation {
+      noteEditState.flushPendingEdits(
+        savePendingContent = model::savePendingNoteContent,
+        savePendingColor = model::savePendingNoteColor,
+      )
+    }
+    onDispose { unregister() }
+  }
 
   DisposableEffect(onLayoutInfoCleared) {
     onDispose { onLayoutInfoCleared(EditorSubPane.RelatedNotes) }
   }
   DisposableEffect(noteEditState, model) {
     onDispose {
+      noteActions.dispose()
       noteEditState.dispose(
         savePendingContent = model::savePendingNoteContent,
         savePendingColor = model::savePendingNoteColor,
@@ -115,38 +140,32 @@ internal fun RelatedNotesSheet(
     }
   }
 
-  suspend fun saveNoteContent(noteId: String, content: String): Boolean {
-    return when (val result = model.updateNoteContent(noteId = noteId, content = content)) {
-      is Result.Ok -> {
-        noteEditState.commitServerSnapshot(result.value)
-        true
-      }
+  suspend fun saveNoteContent(noteId: String, content: String): NoteSaveOutcome {
+    val request =
+      noteActions.captureRequest(siteId = siteId, entityId = entityId)
+        ?: return NoteSaveOutcome.Superseded
+    if (SubscriptionService.entitlement is Entitlement.Expired) {
+      SubscriptionService.requestSubscribeSheet(GatedAction.EditNote)
+      return NoteSaveOutcome.SubscriptionGated
+    }
 
-      is Result.Err,
-      is Result.Exception -> {
-        toast.show(ToastType.Error, "노트를 저장할 수 없어요.")
-        false
-      }
+    return noteActions.save(request, noteId) { _ ->
+      model.updateNoteContent(noteId = noteId, content = content)
     }
   }
 
-  suspend fun saveNoteColor(noteId: String, color: String): Boolean {
-    return when (val result = model.updateNoteColor(noteId = noteId, color = color)) {
-      is Result.Ok -> {
-        noteEditState.commitServerSnapshot(result.value)
-        true
-      }
-
-      is Result.Err,
-      is Result.Exception -> {
-        toast.show(ToastType.Error, "색상을 바꿀 수 없어요.")
-        false
-      }
+  suspend fun saveNoteColor(noteId: String, color: String): NoteSaveOutcome {
+    val request =
+      noteActions.captureRequest(siteId = siteId, entityId = entityId)
+        ?: return NoteSaveOutcome.Superseded
+    if (SubscriptionService.entitlement is Entitlement.Expired) {
+      SubscriptionService.requestSubscribeSheet(GatedAction.EditNote)
+      return NoteSaveOutcome.SubscriptionGated
     }
-  }
 
-  suspend fun collapseExpandedNote(): Boolean {
-    return noteEditState.collapse(saveContent = ::saveNoteContent, saveColor = ::saveNoteColor)
+    return noteActions.save(request, noteId) { _ ->
+      model.updateNoteColor(noteId = noteId, color = color)
+    }
   }
 
   EditorResizableSheetSurface(
@@ -183,9 +202,9 @@ internal fun RelatedNotesSheet(
       sheetDragHandleModifier = Modifier.sheetDragHandle(),
       model = model,
       noteEditState = noteEditState,
+      noteActions = noteActions,
       saveNoteContent = ::saveNoteContent,
       saveNoteColor = ::saveNoteColor,
-      collapseExpandedNote = ::collapseExpandedNote,
     )
   }
 }
@@ -199,9 +218,9 @@ private fun RelatedNotesSheetContent(
   sheetDragHandleModifier: Modifier,
   model: RelatedNotesViewModel,
   noteEditState: NoteEditState,
-  saveNoteContent: suspend (noteId: String, content: String) -> Boolean,
-  saveNoteColor: suspend (noteId: String, color: String) -> Boolean,
-  collapseExpandedNote: suspend () -> Boolean,
+  noteActions: NoteActions,
+  saveNoteContent: suspend (noteId: String, content: String) -> NoteSaveOutcome,
+  saveNoteColor: suspend (noteId: String, color: String) -> NoteSaveOutcome,
 ) {
   val nav = Nav.current
   val dialog = LocalDialog.current
@@ -210,83 +229,88 @@ private fun RelatedNotesSheetContent(
   val scope = rememberCoroutineScope()
   val sheet = LocalSheet.current
   val noteColorOptions = rememberNoteColorOptions()
-  var shortcutCreateInFlight by remember { mutableStateOf(false) }
 
-  suspend fun flushNoteEdits(noteId: String): Boolean {
-    return noteEditState.flush(
-      noteId = noteId,
+  LaunchedEffect(noteEditState, toast) {
+    noteEditState.saveFailures.collect { toast.show(ToastType.Error, "노트를 저장하지 못했어요.") }
+  }
+
+  suspend fun handleExpandNote(note: NoteCard_note) {
+    val request = noteActions.captureRequest(siteId = note.site.id, entityId = entityId) ?: return
+    noteActions.open(
+      request = request,
+      note = note,
       saveContent = saveNoteContent,
       saveColor = saveNoteColor,
     )
   }
 
-  suspend fun handleExpandNote(note: NoteCard_note) {
-    val expandedNoteId = noteEditState.expandedNoteId
-    if (expandedNoteId != null && expandedNoteId != note.id && !flushNoteEdits(expandedNoteId)) {
-      return
-    }
-
-    noteEditState.open(note = note)
-  }
-
-  suspend fun handleFilterSelection(nextStatus: NoteStatus) {
+  suspend fun handleFilterSelection(request: NoteActionRequest, nextStatus: NoteStatus) {
+    if (!noteActions.isCurrent(request)) return
     if (nextStatus == model.filterStatus || nextStatus == NoteStatus.UNKNOWN__) {
       return
     }
 
-    if (!collapseExpandedNote()) {
+    if (
+      !noteActions.collapse(
+        request = request,
+        saveContent = saveNoteContent,
+        saveColor = saveNoteColor,
+      )
+    ) {
       return
     }
 
-    model.updateFilterStatus(nextStatus)
     scrollState.scrollTo(0)
+    if (!noteActions.isCurrent(request)) return
+    model.updateFilterStatus(nextStatus)
   }
 
-  suspend fun handleCreateNote(autoFocusContent: Boolean = false) {
+  suspend fun handleCreateNote(request: NoteActionRequest, autoFocusContent: Boolean = false) {
+    if (!noteActions.isCurrent(request)) return
     if (!SubscriptionService.gate(sheet, GatedAction.CreateNote)) {
       return
     }
+    if (!noteActions.isCurrent(request)) return
 
-    if (!collapseExpandedNote()) {
+    if (
+      !noteActions.collapse(
+        request = request,
+        saveContent = saveNoteContent,
+        saveColor = saveNoteColor,
+      )
+    ) {
       return
     }
 
-    if (model.filterStatus == NoteStatus.RESOLVED) {
-      model.updateFilterStatus(NoteStatus.OPEN)
-      scrollState.scrollTo(0)
-    }
-
-    when (val result = model.createNote()) {
-      is Result.Ok -> {
-        model.listState(NoteStatus.OPEN).markEntering(result.value)
-        noteEditState.open(note = result.value, autoFocusContent = autoFocusContent)
-        model.refetch()
+    when (val outcome = noteActions.create(request) { model.createNote() }) {
+      is NoteActionOutcome.Success -> {
+        if (model.filterStatus == NoteStatus.RESOLVED) {
+          model.updateFilterStatus(NoteStatus.OPEN)
+        }
+        model.listState(NoteStatus.OPEN).markEntering(outcome.value)
+        noteEditState.open(note = outcome.value, autoFocusContent = autoFocusContent)
         scrollState.animateScrollTo(0)
       }
 
-      is Result.Err,
-      is Result.Exception -> {
-        toast.show(ToastType.Error, "노트를 만들 수 없어요.")
+      is NoteActionOutcome.Failure -> {
+        toast.show(ToastType.Error, "노트를 만들지 못했어요.")
       }
+
+      null,
+      NoteActionOutcome.Terminal,
+      NoteActionOutcome.Superseded -> Unit
     }
   }
 
   fun handleShortcutCreateNote() {
-    if (shortcutCreateInFlight) {
-      return
-    }
-
-    shortcutCreateInFlight = true
-    scope.launch {
-      try {
-        handleCreateNote(autoFocusContent = true)
-      } finally {
-        shortcutCreateInFlight = false
-      }
-    }
+    val request = noteActions.captureRequest() ?: return
+    scope.launch { handleCreateNote(request = request, autoFocusContent = true) }
   }
 
-  suspend fun handleDeleteNote(note: NoteCard_note, sceneStatus: NoteStatus) {
+  suspend fun handleDeleteNote(note: NoteCard_note) {
+    val request = noteActions.captureRequest(siteId = note.site.id, entityId = entityId) ?: return
+    if (noteActions.isPendingDeletion(note.id)) return
+
     if (note.content.isNotBlank()) {
       val confirmed =
         dialog.confirm(
@@ -300,54 +324,46 @@ private fun RelatedNotesSheetContent(
         return
       }
     }
+    if (!noteActions.isCurrent(request)) return
 
-    noteEditState.cancelPendingSaves(note.id)
-    model.listState(sceneStatus).markExiting(note)
-
-    when (model.deleteNote(note.id)) {
-      is Result.Ok -> {
-        noteEditState.remove(note.id)
-        model.refetch()
-        toast.show(ToastType.Success, "노트를 삭제했어요.")
-      }
-
-      is Result.Err,
-      is Result.Exception -> {
-        model.listState(sceneStatus).remove(note.id)
-        toast.show(ToastType.Error, "노트를 삭제할 수 없어요.")
-      }
+    val outcome =
+      noteActions.delete(request = request, noteId = note.id) { model.deleteNote(note.id) }
+    if (outcome is NoteActionOutcome.Failure) {
+      toast.show(ToastType.Error, "노트를 삭제하지 못했어요.")
     }
   }
 
   suspend fun handleToggleStatus(note: NoteCard_note, sceneStatus: NoteStatus) {
-    if (!SubscriptionService.gate(sheet, GatedAction.EditNote)) {
-      return
-    }
-
-    if (!flushNoteEdits(note.id)) {
-      return
-    }
-
+    val request = noteActions.captureRequest(siteId = note.site.id, entityId = entityId) ?: return
     val nextStatus = note.status.toggled()
-    model.listState(sceneStatus).markExiting(note.copy(status = nextStatus))
-
-    when (val result = model.updateNoteStatus(noteId = note.id, status = nextStatus)) {
-      is Result.Ok -> {
-        noteEditState.commitServerSnapshot(result.value)
-        noteEditState.clearExpanded(note.id)
-        model.listState(nextStatus).expectEntry(result.value)
-        model.refetch()
+    val outcome =
+      noteActions.toggleStatus(
+        request = request,
+        note = note,
+        sourceState = model.listState(sceneStatus),
+        destinationState = model.listState(nextStatus),
+        beforeMutation = beforeMutation@{
+            if (!SubscriptionService.gate(sheet, GatedAction.EditNote)) {
+              return@beforeMutation false
+            }
+            if (!noteActions.isCurrent(request)) return@beforeMutation false
+            noteActions.flush(
+              request = request,
+              noteId = note.id,
+              saveContent = saveNoteContent,
+              saveColor = saveNoteColor,
+            )
+          },
+      ) { _, status ->
+        model.updateNoteStatus(noteId = note.id, status = status)
       }
-
-      is Result.Err,
-      is Result.Exception -> {
-        model.listState(sceneStatus).remove(note.id)
-        toast.show(ToastType.Error, "상태를 바꿀 수 없어요.")
-      }
+    if (outcome is NoteActionOutcome.Failure) {
+      toast.show(ToastType.Error, "상태를 바꾸지 못했어요.")
     }
   }
 
   fun handleColorChange(note: NoteCard_note, color: String) {
+    val request = noteActions.captureRequest(siteId = note.site.id, entityId = entityId) ?: return
     if (SubscriptionService.entitlement is Entitlement.Expired) {
       SubscriptionService.requestSubscribeSheet(GatedAction.EditNote)
       return
@@ -357,73 +373,122 @@ private fun RelatedNotesSheetContent(
       return
     }
 
-    noteEditState.updateColor(noteId = note.id, value = color, save = saveNoteColor)
+    noteActions.updateColor(
+      request = request,
+      noteId = note.id,
+      value = color,
+      save = saveNoteColor,
+    )
   }
 
-  suspend fun handleAddEntity(noteId: String, linkedEntityId: String): Boolean {
-    if (!flushNoteEdits(noteId)) {
-      return false
+  suspend fun handleAddEntity(
+    request: NoteActionRequest,
+    noteId: String,
+    linkedEntityId: String,
+  ): NoteEntityMutationOutcome {
+    if (!noteActions.isCurrent(request)) return NoteEntityMutationOutcome.NotUpdated
+    if (!SubscriptionService.gate(sheet, GatedAction.EditNote)) {
+      return NoteEntityMutationOutcome.NotUpdated
+    }
+    if (!noteActions.isCurrent(request)) return NoteEntityMutationOutcome.NotUpdated
+
+    if (
+      !noteActions.flush(
+        request = request,
+        noteId = noteId,
+        saveContent = saveNoteContent,
+        saveColor = saveNoteColor,
+      )
+    ) {
+      return NoteEntityMutationOutcome.NotUpdated
     }
 
-    return when (val result = model.addNoteEntity(noteId = noteId, entityId = linkedEntityId)) {
-      is Result.Ok -> {
-        noteEditState.commitServerSnapshot(result.value)
-        true
-      }
-
-      is Result.Err,
-      is Result.Exception -> {
-        toast.show(ToastType.Error, "연결을 추가할 수 없어요.")
-        false
+    return when (
+      val outcome =
+        noteActions.update(request = request, noteId = noteId) {
+          model.addNoteEntity(noteId = noteId, entityId = linkedEntityId)
+        }
+    ) {
+      is NoteActionOutcome.Success -> NoteEntityMutationOutcome.Updated
+      NoteActionOutcome.Terminal -> NoteEntityMutationOutcome.Terminal
+      NoteActionOutcome.Superseded -> NoteEntityMutationOutcome.NotUpdated
+      is NoteActionOutcome.Failure -> {
+        toast.show(ToastType.Error, "연결을 추가하지 못했어요.")
+        NoteEntityMutationOutcome.NotUpdated
       }
     }
   }
 
   suspend fun handleRemoveEntity(
+    request: NoteActionRequest,
     note: NoteCard_note,
     linkedEntityId: String,
     sceneStatus: NoteStatus,
-  ): Boolean {
-    if (!flushNoteEdits(note.id)) {
-      return false
+  ): NoteEntityMutationOutcome {
+    if (!noteActions.isCurrent(request)) return NoteEntityMutationOutcome.NotUpdated
+    if (!SubscriptionService.gate(sheet, GatedAction.EditNote)) {
+      return NoteEntityMutationOutcome.NotUpdated
+    }
+    if (!noteActions.isCurrent(request)) return NoteEntityMutationOutcome.NotUpdated
+
+    if (
+      !noteActions.flush(
+        request = request,
+        noteId = note.id,
+        saveContent = saveNoteContent,
+        saveColor = saveNoteColor,
+      )
+    ) {
+      return NoteEntityMutationOutcome.NotUpdated
     }
 
     val removesCurrentDocument = linkedEntityId == entityId
-    if (removesCurrentDocument) {
-      model.listState(sceneStatus).markExiting(note)
-    }
-
-    return when (val result = model.removeNoteEntity(noteId = note.id, entityId = linkedEntityId)) {
-      is Result.Ok -> {
-        noteEditState.commitServerSnapshot(result.value)
-        if (removesCurrentDocument) {
-          noteEditState.clearExpanded(note.id)
-          model.refetch()
+    val outcome =
+      if (removesCurrentDocument) {
+        noteActions.updateAndExit(
+          request = request,
+          note = note,
+          state = model.listState(sceneStatus),
+        ) {
+          model.removeNoteEntity(noteId = note.id, entityId = linkedEntityId)
         }
-        true
+      } else {
+        noteActions.update(request = request, noteId = note.id) {
+          model.removeNoteEntity(noteId = note.id, entityId = linkedEntityId)
+        }
+      }
+    return when (outcome) {
+      is NoteActionOutcome.Success -> {
+        if (removesCurrentDocument) {
+          noteEditState.clearExpanded(siteId = request.siteId, noteId = note.id)
+        }
+        NoteEntityMutationOutcome.Updated
       }
 
-      is Result.Err,
-      is Result.Exception -> {
-        if (removesCurrentDocument) {
-          model.listState(sceneStatus).remove(note.id)
-        }
-        toast.show(ToastType.Error, "연결을 해제할 수 없어요.")
-        false
+      NoteActionOutcome.Terminal -> NoteEntityMutationOutcome.Terminal
+
+      NoteActionOutcome.Superseded -> NoteEntityMutationOutcome.NotUpdated
+
+      is NoteActionOutcome.Failure -> {
+        toast.show(ToastType.Error, "연결을 해제하지 못했어요.")
+        NoteEntityMutationOutcome.NotUpdated
       }
     }
   }
 
   fun presentEntityPicker(note: NoteCard_note, sceneStatus: NoteStatus) {
+    val request = noteActions.captureRequest() ?: return
     scope.launch {
       if (!SubscriptionService.gate(sheet, GatedAction.EditNote)) return@launch
+      if (!noteActions.isCurrent(request)) return@launch
 
       sheet.present(stops = NoteEntityPickerStops) {
         NoteEntityPickerSheet(
+          siteId = model.siteId,
           linkedEntityIds = note.entities.mapTo(mutableSetOf()) { it.noteLinkedEntity_entity.id },
-          onAddEntity = { linkedEntityId -> handleAddEntity(note.id, linkedEntityId) },
+          onAddEntity = { linkedEntityId -> handleAddEntity(request, note.id, linkedEntityId) },
           onRemoveEntity = { linkedEntityId ->
-            handleRemoveEntity(note, linkedEntityId, sceneStatus)
+            handleRemoveEntity(request, note, linkedEntityId, sceneStatus)
           },
         )
       }
@@ -435,7 +500,9 @@ private fun RelatedNotesSheetContent(
     linkedEntity: NoteLinkedEntity_entity,
     sceneStatus: NoteStatus,
   ) {
+    val request = noteActions.captureRequest(siteId = note.site.id, entityId = entityId) ?: return
     scope.launch {
+      if (!noteActions.isCurrent(request)) return@launch
       sheet.present {
         NoteLinkedEntityActionsSheet(
           linkedEntity = linkedEntity,
@@ -447,11 +514,7 @@ private fun RelatedNotesSheetContent(
             }
           },
           onUnlink = {
-            scope.launch {
-              if (SubscriptionService.gate(sheet, GatedAction.EditNote)) {
-                handleRemoveEntity(note, linkedEntity.id, sceneStatus)
-              }
-            }
+            scope.launch { handleRemoveEntity(request, note, linkedEntity.id, sceneStatus) }
           },
         )
       }
@@ -469,8 +532,16 @@ private fun RelatedNotesSheetContent(
       RelatedNotesSheetBar(
         selectedStatus = model.filterStatus,
         onDismiss = onDismiss,
-        onFilterSelect = { nextStatus -> scope.launch { handleFilterSelection(nextStatus) } },
-        onCreate = { scope.launch { handleCreateNote() } },
+        onFilterSelect = { nextStatus ->
+          noteActions.captureRequest()?.let { request ->
+            scope.launch { handleFilterSelection(request = request, nextStatus = nextStatus) }
+          }
+        },
+        onCreate = {
+          noteActions.captureRequest()?.let { request ->
+            scope.launch { handleCreateNote(request = request) }
+          }
+        },
         modifier = sheetDragHandleModifier,
       )
     },
@@ -481,36 +552,54 @@ private fun RelatedNotesSheetContent(
       animationSpec = tween(durationMillis = 200),
     ) { status ->
       val listState = model.listState(status)
-      val renderedNotes = listState.merge(model.notes(status)).map(noteEditState::overlay)
-      val listItems = renderedNotes.map { note ->
-        NoteListItem(
-          note = note,
-          expanded = noteEditState.expandedNoteId == note.id,
-          isSaving = noteEditState.isSaving(note.id) || noteEditState.isSavingColor(note.id),
-          hasPendingColor = noteEditState.hasPendingColor(note.id),
-          isDirty = noteEditState.isDirty(note.id),
-          autoFocusContent = noteEditState.shouldAutoFocusContent(note.id),
-          isEntering = listState.isEntering(note.id),
-          isExiting = listState.isExiting(note.id),
-          isExitVisible = listState.isExitVisible(note.id),
-        )
-      }
+      val authoritativeNotes = model.notes(status)
+      val renderedNotes = listState.merge(authoritativeNotes).map(noteEditState::overlay)
+      val listItems =
+        noteActions.listItems(notes = renderedNotes, state = listState, editState = noteEditState)
       val listActions =
         NoteListActions(
           onExpand = { note -> scope.launch { handleExpandNote(note) } },
-          onCollapse = { scope.launch { collapseExpandedNote() } },
-          onCreateNote = ::handleShortcutCreateNote,
-          onContentChange = { noteId, content ->
-            noteEditState.updateContent(noteId = noteId, value = content, save = saveNoteContent)
+          onCollapse = {
+            noteActions.captureRequest()?.let { request ->
+              scope.launch {
+                noteActions.collapse(
+                  request = request,
+                  saveContent = saveNoteContent,
+                  saveColor = saveNoteColor,
+                )
+              }
+            }
           },
-          onBlur = { noteId -> scope.launch { flushNoteEdits(noteId) } },
+          onCreateNote = ::handleShortcutCreateNote,
+          onContentChange = { note, content ->
+            noteActions.captureRequest(siteId = note.site.id, entityId = entityId)?.let { request ->
+              noteActions.updateContent(
+                request = request,
+                noteId = note.id,
+                value = content,
+                save = saveNoteContent,
+              )
+            }
+          },
+          onBlur = { note ->
+            noteActions.captureRequest(siteId = note.site.id, entityId = entityId)?.let { request ->
+              scope.launch {
+                noteActions.flush(
+                  request = request,
+                  noteId = note.id,
+                  saveContent = saveNoteContent,
+                  saveColor = saveNoteColor,
+                )
+              }
+            }
+          },
           onToggleStatus = { note -> scope.launch { handleToggleStatus(note, status) } },
           onColorChange = ::handleColorChange,
           onAddEntity = { note -> presentEntityPicker(note, status) },
           onEntityClick = { note, entity -> presentLinkedEntityActions(note, entity, status) },
-          onDelete = { note -> scope.launch { handleDeleteNote(note, status) } },
-          onMoveNote = { noteId, lowerOrder, upperOrder ->
-            model.moveNote(noteId = noteId, lowerOrder = lowerOrder, upperOrder = upperOrder)
+          onDelete = { note -> scope.launch { handleDeleteNote(note) } },
+          onMoveNote = { note, lowerOrder, upperOrder ->
+            model.moveNote(note = note, lowerOrder = lowerOrder, upperOrder = upperOrder)
           },
         )
       val reorderState = rememberNoteListReorderState(items = listItems, scrollState = scrollState)
@@ -523,14 +612,18 @@ private fun RelatedNotesSheetContent(
             verticalArrangement = Arrangement.spacedBy(16.dp),
           ) {
             NoteList(
+              identity =
+                NoteListIdentity(siteId = model.siteId, status = status, entityId = entityId),
               emptyMessage = status.emptyMessage(),
               queryState = model.queryState(status),
               items = listItems,
+              authoritativeNotes = authoritativeNotes,
               onEnterAnimationFinished = listState::finishEntering,
               onExitAnimationFinished = listState::finishExiting,
               reorderState = reorderState,
               noteColorOptions = noteColorOptions,
               interactive = status == model.filterStatus,
+              onRetry = model::refetch,
               reorderEnabled = SubscriptionService.entitlement !is Entitlement.Expired,
               contentEditable = SubscriptionService.entitlement !is Entitlement.Expired,
               actions = listActions,

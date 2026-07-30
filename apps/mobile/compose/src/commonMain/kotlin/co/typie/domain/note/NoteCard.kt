@@ -138,7 +138,7 @@ internal fun NoteCard(
   autoFocusContent: Boolean,
   isDragging: Boolean,
   content: String,
-  isSaving: Boolean,
+  saveStatus: NoteSaveStatus,
   colorOption: NoteColorOption,
   dragHandleModifier: Modifier,
   contentEditable: Boolean = true,
@@ -153,6 +153,7 @@ internal fun NoteCard(
   onAddEntity: () -> Unit,
   onEntityClick: (NoteLinkedEntity_entity) -> Unit,
   onDelete: () -> Unit,
+  isDeleting: Boolean,
   noteColorOptions: List<NoteColorOption>,
 ) {
   val containerColor by
@@ -226,7 +227,7 @@ internal fun NoteCard(
         NoteExpandedContent(
           note = note,
           content = content,
-          isSaving = isSaving,
+          saveStatus = saveStatus,
           colorOption = colorOption,
           dragHandleModifier = dragHandleModifier,
           contentEditable = contentEditable,
@@ -241,6 +242,7 @@ internal fun NoteCard(
           onAddEntity = onAddEntity,
           onEntityClick = onEntityClick,
           onDelete = onDelete,
+          isDeleting = isDeleting,
         )
       } else {
         NoteCollapsedContent(
@@ -260,7 +262,7 @@ internal fun NoteCard(
 private fun NoteExpandedContent(
   note: NoteCard_note,
   content: String,
-  isSaving: Boolean,
+  saveStatus: NoteSaveStatus,
   colorOption: NoteColorOption,
   dragHandleModifier: Modifier,
   contentEditable: Boolean,
@@ -275,6 +277,7 @@ private fun NoteExpandedContent(
   onAddEntity: () -> Unit,
   onEntityClick: (NoteLinkedEntity_entity) -> Unit,
   onDelete: () -> Unit,
+  isDeleting: Boolean,
 ) {
   Column(modifier = Modifier.fillMaxWidth()) {
     Row(
@@ -332,12 +335,21 @@ private fun NoteExpandedContent(
           horizontalArrangement = Arrangement.spacedBy(8.dp),
           verticalAlignment = Alignment.CenterVertically,
         ) {
-          if (isSaving) {
-            Text("저장 중...", style = AppTheme.typography.micro, color = AppTheme.colors.textHint)
+          when (saveStatus) {
+            NoteSaveStatus.NONE -> Unit
+            NoteSaveStatus.SAVING ->
+              Text("저장 중...", style = AppTheme.typography.micro, color = AppTheme.colors.textHint)
+            NoteSaveStatus.FAILED ->
+              Text(
+                text = "저장 실패",
+                style = AppTheme.typography.micro,
+                color = AppTheme.colors.danger,
+              )
           }
 
           NoteCardMenuPopover(
             status = note.status,
+            isDeleting = isDeleting,
             onAddEntity = onAddEntity,
             onToggleStatus = onToggleStatus,
             onDelete = onDelete,
@@ -458,6 +470,7 @@ private fun NoteCardLeadingContent(
 @Composable
 private fun NoteCardMenuPopover(
   status: NoteStatus,
+  isDeleting: Boolean,
   onAddEntity: () -> Unit,
   onToggleStatus: () -> Unit,
   onDelete: () -> Unit,
@@ -499,7 +512,10 @@ private fun NoteCardMenuPopover(
             },
           ),
           PopoverListItem(
-            content = { row(Lucide.Trash2, "삭제", AppTheme.colors.danger) },
+            content = {
+              row(Lucide.Trash2, if (isDeleting) "삭제 중..." else "삭제", AppTheme.colors.danger)
+            },
+            enabled = !isDeleting,
             onSelected = {
               close()
               onDelete()

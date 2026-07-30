@@ -21,6 +21,7 @@ internal data class CommentsSubPaneEnvironment(
 internal fun EditorSubPaneHost(
   state: EditorSubPaneState,
   entityId: String,
+  siteId: String,
   editorMutationEnabled: Boolean,
   comments: CommentsSubPaneEnvironment,
   maxTopInset: Dp,
@@ -49,6 +50,7 @@ internal fun EditorSubPaneHost(
     EditorSubPane.RelatedNotes ->
       RelatedNotesSheet(
         entityId = entityId,
+        siteId = siteId,
         maxTopInset = maxTopInset,
         safeBottomInset = safeBottomInset,
         trustedImeBottomInset = trustedImeBottomInset,
@@ -56,6 +58,9 @@ internal fun EditorSubPaneHost(
         onDismiss = state::dismiss,
         onLayoutInfoChanged = state::updateLayoutInfo,
         onLayoutInfoCleared = state::clearLayoutInfo,
+        registerRouteRemovalPreparation = { prepare ->
+          state.registerRouteRemovalPreparation(EditorSubPane.RelatedNotes, prepare)
+        },
         modifier = modifier,
       )
     EditorSubPane.Comments ->

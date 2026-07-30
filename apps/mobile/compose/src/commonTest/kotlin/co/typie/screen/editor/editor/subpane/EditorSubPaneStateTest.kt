@@ -9,8 +9,43 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.test.runTest
 
 class EditorSubPaneStateTest {
+  @Test
+  fun `active sub pane prepares its pending changes before route removal`() = runTest {
+    val state = EditorSubPaneState()
+    state.open(EditorSubPane.RelatedNotes)
+    var preparations = 0
+    state.registerRouteRemovalPreparation(EditorSubPane.RelatedNotes) {
+      preparations += 1
+      false
+    }
+
+    assertFalse(state.prepareForRouteRemoval())
+    assertEquals(1, preparations)
+  }
+
+  @Test
+  fun `inactive or unregistered sub pane does not participate in route removal`() = runTest {
+    val state = EditorSubPaneState()
+    state.open(EditorSubPane.RelatedNotes)
+    var preparations = 0
+    val unregister =
+      state.registerRouteRemovalPreparation(EditorSubPane.RelatedNotes) {
+        preparations += 1
+        false
+      }
+
+    state.dismiss()
+    assertTrue(state.prepareForRouteRemoval())
+
+    state.open(EditorSubPane.RelatedNotes)
+    unregister()
+    assertTrue(state.prepareForRouteRemoval())
+    assertEquals(0, preparations)
+  }
+
   @Test
   fun `open activates related notes and dismiss clears it`() {
     val state = EditorSubPaneState()

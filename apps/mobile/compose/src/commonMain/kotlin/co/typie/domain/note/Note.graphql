@@ -18,6 +18,10 @@ fragment NoteCard_note on Note {
   status
   updatedAt
 
+  site {
+    id
+  }
+
   entities {
     ...NoteLinkedEntity_entity
   }
@@ -101,5 +105,12 @@ mutation Note_AddEntity_Mutation($input: AddNoteEntityInput!) {
 mutation Note_RemoveEntity_Mutation($input: RemoveNoteEntityInput!) {
   removeNoteEntity(input: $input) {
     ...NoteCard_note
+  }
+}
+
+subscription Note_UpdateStream_Subscription($siteId: ID!, $clientId: String!) {
+  noteUpdateStream(siteId: $siteId, clientId: $clientId) {
+    kind
+    noteId
   }
 }
