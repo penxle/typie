@@ -33,6 +33,35 @@ class ToolbarPagerStateTest {
   }
 
   @Test
+  fun outer_edge_drag_accumulates_resisted_offset_and_unwinds_before_pager_delta() {
+    val dragged =
+      ToolbarOuterEdgeDrag()
+        .applyRejectedPositionDelta(rejectedDelta = 40f, resistance = 0.5f, limit = 30f)
+
+    val partial = dragged.consumeInwardScrollDelta(delta = 20f, resistance = 0.5f)
+    val escaped = partial.drag.consumeInwardScrollDelta(delta = 30f, resistance = 0.5f)
+
+    assertEquals(-20f, dragged.offset)
+    assertEquals(-10f, partial.drag.offset)
+    assertEquals(0f, partial.remainingDelta)
+    assertEquals(0f, escaped.drag.offset)
+    assertEquals(10f, escaped.remainingDelta)
+  }
+
+  @Test
+  fun outer_edge_drag_mirrors_direction_and_caps_visual_offset() {
+    val dragged =
+      ToolbarOuterEdgeDrag()
+        .applyRejectedPositionDelta(rejectedDelta = -100f, resistance = 0.5f, limit = 30f)
+
+    val partial = dragged.consumeInwardScrollDelta(delta = -20f, resistance = 0.5f)
+
+    assertEquals(30f, dragged.offset)
+    assertEquals(20f, partial.drag.offset)
+    assertEquals(0f, partial.remainingDelta)
+  }
+
+  @Test
   fun metrics_snap_using_resolved_velocity_threshold() {
     val metrics = ToolbarPagerMetrics(pageDistance = 300f, scrollRanges = listOf(120, 0, 0))
 

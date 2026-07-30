@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -30,8 +31,10 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -160,9 +163,17 @@ internal fun EditorToolbarPages(
     val pageCount = pages.size.coerceAtLeast(1)
     val lastPageIndex = pageCount - 1
     val pageDistance = with(density) { maxWidth.roundToPx().coerceAtLeast(0) }.toFloat()
-    val hardStopOverscrollLimitPx = with(density) { ToolbarHardStopOverscrollLimit.toPx() }
+    val overscrollLimitPx = with(density) { ToolbarOverscrollLimit.toPx() }
     val hardStopActivationEpsilonPx = with(density) { ToolbarHardStopActivationEpsilon.toPx() }
     val swipeVelocityThresholdPx = with(density) { ToolbarSwipeVelocityThreshold.toPx() }
+    var outerEdgeDrag by remember { mutableStateOf(ToolbarOuterEdgeDrag()) }
+    val outerEdgeVisualOffset =
+      animateFloatAsState(
+        targetValue = if (pagerState.pointerScrollGestureActive) outerEdgeDrag.offset else 0f,
+        animationSpec =
+          if (pagerState.pointerScrollGestureActive) snap() else ToolbarOverscrollSpring,
+        label = "EditorToolbarOuterEdgeOffset",
+      )
     val pageScrollRanges = pages.map { it.scrollState?.maxValue ?: 0 }
     val pageMetrics =
       remember(pageDistance, pageScrollRanges) {
@@ -198,10 +209,23 @@ internal fun EditorToolbarPages(
     val currentPageKey = pages.getOrNull(currentPageIndex)?.key
     val scrollableState = rememberScrollableState { delta ->
       val currentPosition = pagerState.scrollPosition
+      val pagerDelta =
+        if (pagerState.pointerScrollGestureActive) {
+          val consumption =
+            outerEdgeDrag.consumeInwardScrollDelta(
+              delta = delta,
+              resistance = ToolbarOverscrollResistance,
+            )
+          outerEdgeDrag = consumption.drag
+          consumption.remainingDelta
+        } else {
+          delta
+        }
       val gestureStartPosition =
         pagerState.scrollGestureStartPosition
           ?: currentPosition.also { pagerState.scrollGestureStartPosition = it }
-      val proposedPosition = (currentPosition - delta).coerceIn(0f, pageMetrics.maxPosition)
+      val unboundedProposedPosition = currentPosition - pagerDelta
+      val proposedPosition = unboundedProposedPosition.coerceIn(0f, pageMetrics.maxPosition)
       val scrollResult =
         pageMetrics.applyHardStop(
           currentPosition = currentPosition,
@@ -211,15 +235,34 @@ internal fun EditorToolbarPages(
           activationEpsilon = hardStopActivationEpsilonPx,
         )
       val nextPosition = scrollResult.position
+      val outerEdgeRejectedPositionDelta =
+        if (pagerState.pointerScrollGestureActive && scrollResult.rejectedDelta == 0f) {
+          unboundedProposedPosition - proposedPosition
+        } else {
+          0f
+        }
+      if (outerEdgeRejectedPositionDelta != 0f) {
+        outerEdgeDrag =
+          outerEdgeDrag.applyRejectedPositionDelta(
+            rejectedDelta = outerEdgeRejectedPositionDelta,
+            resistance = ToolbarOverscrollResistance,
+            limit = overscrollLimitPx,
+          )
+      }
       val bounceHardStopDuringDecay =
         pagerState.decayFlingInProgress &&
           scrollResult.rejectedDelta != 0f &&
           !pagerState.decayHardStopBounceStarted
       val consumed =
-        if (scrollResult.rejectedDelta != 0f) {
-          if (pagerState.decayFlingInProgress) currentPosition - nextPosition else delta
-        } else {
-          currentPosition - nextPosition
+        when {
+          scrollResult.rejectedDelta != 0f ->
+            if (pagerState.decayFlingInProgress) currentPosition - nextPosition else delta
+          outerEdgeRejectedPositionDelta != 0f -> delta
+          else -> {
+            val outerEdgeUnwindConsumedDelta = delta - pagerDelta
+            val pagerConsumedDelta = currentPosition - nextPosition
+            outerEdgeUnwindConsumedDelta + pagerConsumedDelta
+          }
         }
       val nextVisualOffset =
         if (scrollResult.rejectedDelta != 0f) {
@@ -227,8 +270,8 @@ internal fun EditorToolbarPages(
             pagerState.hardStopVisualOffset.value
           } else {
             (pagerState.hardStopVisualOffset.value -
-                scrollResult.rejectedDelta * ToolbarHardStopOverscrollResistance)
-              .coerceIn(-hardStopOverscrollLimitPx, hardStopOverscrollLimitPx)
+                scrollResult.rejectedDelta * ToolbarOverscrollResistance)
+              .coerceIn(-overscrollLimitPx, overscrollLimitPx)
           }
         } else if (scrollResult.hardStop == null) {
           0f
@@ -259,7 +302,7 @@ internal fun EditorToolbarPages(
             pagerState.hardStopVisualOffset.snapTo(nextVisualOffset)
           }
           if (bounceHardStopDuringDecay) {
-            pagerState.hardStopVisualOffset.animateTo(0f, ToolbarHardStopOverscrollSpring)
+            pagerState.hardStopVisualOffset.animateTo(0f, ToolbarOverscrollSpring)
             pagerState.decayHardStopBounceStarted = false
           }
         }
@@ -457,7 +500,7 @@ internal fun EditorToolbarPages(
       pagerState.settledPageKey = snapPageKey
       pagerState.activeHardStop = null
       if (pagerState.hardStopVisualOffset.value != 0f) {
-        pagerState.hardStopVisualOffset.animateTo(0f, ToolbarHardStopOverscrollSpring)
+        pagerState.hardStopVisualOffset.animateTo(0f, ToolbarOverscrollSpring)
       }
     }
 
@@ -632,6 +675,7 @@ internal fun EditorToolbarPages(
               .emitPressInteractions(toolbarInteractionSource)
               .trackToolbarScrollGestureStart(
                 onStart = {
+                  outerEdgeDrag = ToolbarOuterEdgeDrag(offset = outerEdgeVisualOffset.value)
                   pagerState.pointerScrollGestureActive = true
                   pagerState.scrollGestureStartPosition = pagerState.scrollPosition
                 },
@@ -649,7 +693,7 @@ internal fun EditorToolbarPages(
           Box(
             modifier =
               Modifier.fillMaxSize().graphicsLayer {
-                translationX = pagerState.hardStopVisualOffset.value
+                translationX = pagerState.hardStopVisualOffset.value + outerEdgeVisualOffset.value
               }
           ) {
             pages.forEachIndexed { index, page ->

@@ -63,6 +63,43 @@ internal data class ToolbarScrollResult(
   val rejectedDelta: Float = 0f,
 )
 
+internal data class ToolbarOuterEdgeDrag(val offset: Float = 0f) {
+  fun applyRejectedPositionDelta(
+    rejectedDelta: Float,
+    resistance: Float,
+    limit: Float,
+  ): ToolbarOuterEdgeDrag {
+    if (rejectedDelta == 0f || resistance <= 0f || limit <= 0f) {
+      return this
+    }
+    return copy(offset = (offset - rejectedDelta * resistance).coerceIn(-limit, limit))
+  }
+
+  fun consumeInwardScrollDelta(delta: Float, resistance: Float): ToolbarOuterEdgeDragConsumption {
+    if (offset == 0f || delta == 0f || offset * delta >= 0f || resistance <= 0f) {
+      return ToolbarOuterEdgeDragConsumption(drag = this, remainingDelta = delta)
+    }
+
+    val deltaToRest = -offset / resistance
+    return if (abs(delta) < abs(deltaToRest)) {
+      ToolbarOuterEdgeDragConsumption(
+        drag = copy(offset = offset + delta * resistance),
+        remainingDelta = 0f,
+      )
+    } else {
+      ToolbarOuterEdgeDragConsumption(
+        drag = ToolbarOuterEdgeDrag(),
+        remainingDelta = delta - deltaToRest,
+      )
+    }
+  }
+}
+
+internal data class ToolbarOuterEdgeDragConsumption(
+  val drag: ToolbarOuterEdgeDrag,
+  val remainingDelta: Float,
+)
+
 internal data class ToolbarPagerMetrics(
   private val pageDistance: Float,
   private val scrollRanges: List<Int>,
@@ -322,7 +359,7 @@ private fun Float.directionSign(): Int =
 
 private fun Float.isNear(other: Float): Boolean = abs(this - other) <= ToolbarSnapPositionEpsilon
 
-internal val ToolbarHardStopOverscrollSpring =
+internal val ToolbarOverscrollSpring =
   spring<Float>(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)
 
 internal const val ToolbarSnapPositionEpsilon = 0.5f

@@ -393,6 +393,105 @@ class EditorToolbarPagesDesktopTest {
   }
 
   @Test
+  fun outerDragMovesToolbarAtBothEndsAndReturnsOnRelease() = runComposeUiTest {
+    val textScrollState = setToolbarContent()
+    val initialLeft = pageLeft(MainPageTag)
+
+    startToolbarDrag(startFraction = 0.18f, endFraction = 0.58f)
+
+    assertTrue(pageLeft(MainPageTag) > initialLeft)
+
+    releaseToolbarDrag()
+
+    assertNear(initialLeft, pageLeft(MainPageTag), "release should return the outer offset")
+    goToImagePage(textScrollState)
+    val initialRight = pageRight(ImagePageTag)
+
+    startToolbarDrag(startFraction = 0.82f, endFraction = 0.42f)
+
+    assertTrue(pageRight(ImagePageTag) < initialRight)
+
+    releaseToolbarDrag()
+
+    assertNear(initialRight, pageRight(ImagePageTag), "release should return the outer offset")
+  }
+
+  @Test
+  fun outerHorizontalWheelDoesNotCreateDragOverscroll() = runComposeUiTest {
+    val textScrollState = setToolbarContent()
+    val initialLeft = pageLeft(MainPageTag)
+
+    wheelToolbar(delta = -120f)
+
+    assertPageActive(MainPageTag)
+    assertNear(initialLeft, pageLeft(MainPageTag), "wheel should not move the first outer edge")
+
+    goToImagePage(textScrollState)
+    val initialRight = pageRight(ImagePageTag)
+    wheelToolbar(delta = 120f)
+
+    assertPageActive(ImagePageTag)
+    assertNear(initialRight, pageRight(ImagePageTag), "wheel should not move the last outer edge")
+  }
+
+  @Test
+  fun newOuterDragCancelsReturnAnimation() = runComposeUiTest {
+    setToolbarContent()
+    val initialLeft = pageLeft(MainPageTag)
+    startToolbarDrag(startFraction = 0.18f, endFraction = 0.58f)
+    assertTrue(pageLeft(MainPageTag) > initialLeft)
+
+    mainClock.autoAdvance = false
+    onNodeWithTag(ToolbarTag).performTouchInput { up() }
+    mainClock.advanceTimeByFrame()
+    onNodeWithTag(ToolbarTag).performTouchInput {
+      down(Offset(x = width * 0.18f, y = height - 16f))
+      moveTo(Offset(x = width * 0.58f, y = height - 16f))
+    }
+    mainClock.advanceTimeByFrame()
+    val heldLeft = pageLeft(MainPageTag)
+    assertTrue(heldLeft > initialLeft)
+
+    mainClock.advanceTimeBy(200)
+
+    assertNear(heldLeft, pageLeft(MainPageTag), "previous return should not overwrite a new drag")
+
+    onNodeWithTag(ToolbarTag).performTouchInput { up() }
+    mainClock.advanceTimeByFrame()
+    mainClock.autoAdvance = true
+    waitForIdle()
+
+    assertNear(initialLeft, pageLeft(MainPageTag), "released second drag should return to rest")
+  }
+
+  @Test
+  fun outerDragDoesNotSurviveToolbarDisposalDuringReturn() = runComposeUiTest {
+    val toolbarVisible = mutableStateOf(true)
+    setContent {
+      val pagerState = rememberToolbarPagerState()
+      val textScrollState = rememberScrollState()
+      if (toolbarVisible.value) {
+        ToolbarTestContent(textScrollState = textScrollState, pagerState = pagerState)
+      }
+    }
+    waitForIdle()
+    val initialLeft = pageLeft(MainPageTag)
+    startToolbarDrag(startFraction = 0.18f, endFraction = 0.58f)
+    assertTrue(pageLeft(MainPageTag) > initialLeft)
+
+    mainClock.autoAdvance = false
+    onNodeWithTag(ToolbarTag).performTouchInput { up() }
+    mainClock.advanceTimeByFrame()
+    runOnIdle { toolbarVisible.value = false }
+    mainClock.advanceTimeByFrame()
+    runOnIdle { toolbarVisible.value = true }
+    mainClock.advanceTimeByFrame()
+
+    assertNear(initialLeft, pageLeft(MainPageTag), "disposed drag offset should not return")
+    mainClock.autoAdvance = true
+  }
+
+  @Test
   fun slowSwipeAtTextRightEdgeDoesNotChangePage() = runComposeUiTest {
     val textScrollState = setToolbarContent()
     goToTextPageAtEnd(textScrollState)
@@ -1384,6 +1483,19 @@ class EditorToolbarPagesDesktopTest {
     }
   }
 
+  private fun ComposeUiTest.startToolbarDrag(startFraction: Float, endFraction: Float) {
+    onNodeWithTag(ToolbarTag).performTouchInput {
+      down(Offset(x = width * startFraction, y = height - 16f))
+      moveTo(Offset(x = width * endFraction, y = height - 16f))
+    }
+    waitForIdle()
+  }
+
+  private fun ComposeUiTest.releaseToolbarDrag() {
+    onNodeWithTag(ToolbarTag).performTouchInput { up() }
+    waitForIdle()
+  }
+
   private fun ComposeUiTest.flingToolbarLeft(distanceFraction: Float) {
     flingToolbar(startFraction = 0.82f, endFraction = 0.82f - distanceFraction, endVelocity = 1400f)
   }
@@ -1490,6 +1602,9 @@ class EditorToolbarPagesDesktopTest {
 
   private fun SemanticsNodeInteractionsProvider.pageLeft(tag: String): Float =
     onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.left
+
+  private fun SemanticsNodeInteractionsProvider.pageRight(tag: String): Float =
+    onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.right
 
   private fun assertNear(expected: Float, actual: Float, message: String) {
     assertTrue(abs(expected - actual) <= 2f, "$message. expected=$expected actual=$actual")
