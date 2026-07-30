@@ -90,6 +90,53 @@ describe('createDndHandler', () => {
     handler.destroy();
   });
 
+  it('flushes the latest move before ending an active drag', () => {
+    const element = createElement();
+    installPointerCapture(element);
+    installAnimationFrames();
+    const events: string[] = [];
+    const onDragMove = vi.fn(() => {
+      events.push('move');
+    });
+    const onDragEnd = vi.fn(() => {
+      events.push('end');
+    });
+    const handler = createDndHandler(element, { threshold: 0, showGhost: false, onDragMove, onDragEnd });
+
+    element.dispatchEvent(pointerEvent('pointerdown'));
+    const finalMove = pointerEvent('pointermove', 1, 10);
+    element.dispatchEvent(finalMove);
+    element.dispatchEvent(pointerEvent('pointerup', 1, 10));
+
+    expect(onDragMove).toHaveBeenCalledOnce();
+    expect(onDragMove).toHaveBeenCalledWith(finalMove);
+    expect(events).toEqual(['move', 'end']);
+    handler.destroy();
+  });
+
+  it('does not report cancellation before a drag becomes active', () => {
+    const element = createElement();
+    installPointerCapture(element);
+    const frames = installAnimationFrames();
+    const onDragCancel = vi.fn();
+    const handler = createDndHandler(element, { threshold: 5, showGhost: false, onDragCancel });
+
+    element.dispatchEvent(pointerEvent('pointerdown'));
+    handler.destroy();
+
+    expect(onDragCancel).not.toHaveBeenCalled();
+
+    const secondElement = createElement();
+    installPointerCapture(secondElement);
+    const secondHandler = createDndHandler(secondElement, { threshold: 5, showGhost: false, onDragCancel });
+    secondElement.dispatchEvent(pointerEvent('pointerdown'));
+    secondElement.dispatchEvent(pointerEvent('pointermove', 1, 10));
+    frames.flush();
+    secondHandler.destroy();
+
+    expect(onDragCancel).toHaveBeenCalledOnce();
+  });
+
   it('cancels an active drag when pointer capture is lost', () => {
     const element = createElement();
     const capture = installPointerCapture(element);

@@ -13,8 +13,8 @@
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import Trash2Icon from '~icons/lucide/trash-2';
   import { cache } from '$lib/graphql';
+  import { getNoteColor, noteColors } from '$lib/note/note-colors';
   import { graphql } from '$mearie';
-  import { getNoteColor, noteColors } from '../../@notes/colors';
   import type { DocumentPanelNoteItem_note$key } from '$mearie';
 
   type Props = {

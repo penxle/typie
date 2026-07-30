@@ -43,6 +43,20 @@ export const animateFlip = async (selector: string, idAttribute = 'id', containe
   }
 
   let hasAnimation = false;
+  const pendingTransformFinishes = new Set<() => void>();
+  const finishTransforms = () => {
+    for (const finish of pendingTransformFinishes) {
+      finish();
+    }
+  };
+  const handlePointerDown = (event: Event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const item = target.closest(selector);
+    if (!item || !container.contains(item)) return;
+
+    finishTransforms();
+  };
 
   if (containerElement && firstContainerHeight !== undefined) {
     const lastContainerHeight = containerElement.getBoundingClientRect().height;
@@ -94,16 +108,35 @@ export const animateFlip = async (selector: string, idAttribute = 'id', containe
       const element = elRef.deref();
       if (!element) return;
 
+      let finished = false;
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+
+        element.removeEventListener('transitionend', handleTransitionFinished);
+        element.removeEventListener('transitioncancel', handleTransitionFinished);
+        pendingTransformFinishes.delete(finish);
+        if (pendingTransformFinishes.size === 0) {
+          container.removeEventListener('pointerdown', handlePointerDown, { capture: true });
+        }
+        clearTimeout(fallbackTimeout);
+        element.style.transition = originalTransition;
+      };
+      const handleTransitionFinished = (event: TransitionEvent) => {
+        if (event.target === element && event.propertyName === 'transform') {
+          finish();
+        }
+      };
+
+      if (pendingTransformFinishes.size === 0) {
+        container.addEventListener('pointerdown', handlePointerDown, { capture: true });
+      }
+      pendingTransformFinishes.add(finish);
+      element.addEventListener('transitionend', handleTransitionFinished);
+      element.addEventListener('transitioncancel', handleTransitionFinished);
       element.style.transition = `transform ${ANIMATION_DURATION}ms cubic-bezier(0.4, 0, 0.2, 1)`;
       element.style.transform = '';
-      element.style.pointerEvents = 'none';
-      setTimeout(() => {
-        const el = elRef.deref();
-        if (!el) return;
-
-        el.style.transition = originalTransition;
-        el.style.pointerEvents = '';
-      }, ANIMATION_DURATION);
+      const fallbackTimeout = setTimeout(finish, ANIMATION_DURATION + 100);
     });
   }
 

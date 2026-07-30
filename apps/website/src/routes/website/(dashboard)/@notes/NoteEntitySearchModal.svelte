@@ -1,19 +1,19 @@
 <script lang="ts">
-  import { createMutation, createQuery } from '@mearie/svelte';
+  import { createQuery } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
-  import { Icon, Modal } from '@typie/ui/components';
+  import { Button, Icon, Modal } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
+  import { Toast } from '@typie/ui/notification';
   import ArrowDownIcon from '~icons/lucide/arrow-down';
   import ArrowUpIcon from '~icons/lucide/arrow-up';
   import CheckIcon from '~icons/lucide/check';
   import CornerDownLeftIcon from '~icons/lucide/corner-down-left';
   import FolderIcon from '~icons/lucide/folder';
   import SearchIcon from '~icons/lucide/search';
-  import { cache } from '$lib/graphql';
+  import { getNoteOperationsContext } from '$lib/note/note-mutation';
   import { graphql } from '$mearie';
   import EntityIcon from '../@context-menu/EntityIcon.svelte';
-  import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
   import type { EntityIcon_entity$key } from '$mearie';
 
   type Props = {
@@ -26,11 +26,22 @@
   let { noteId, existingEntityIds, open, onclose }: Props = $props();
 
   const app = getAppContext();
+  const noteOperations = getNoteOperationsContext();
+  const currentSiteId = $derived(app.preference.current.currentSiteId ?? null);
 
   let query = $state('');
   let selectedIndex = $state(0);
   let debounceTimeout: ReturnType<typeof setTimeout> | null = null;
   let debouncedQuery = $state('');
+  let addRequestId = 0;
+  let activeAddRequest: { id: number; noteId: string; siteId: string } | null = null;
+  let activeAddIdentity: string | null = null;
+
+  $effect(() => {
+    const identity = open && currentSiteId ? JSON.stringify([currentSiteId, noteId]) : null;
+    if (activeAddIdentity !== identity) activeAddRequest = null;
+    activeAddIdentity = identity;
+  });
 
   $effect(() => {
     if (!open) {
@@ -58,6 +69,9 @@
           recentlyViewedEntities(siteId: $siteId) {
             id
             slug
+            site {
+              id
+            }
             ...EntityIcon_entity
             node {
               __typename
@@ -74,8 +88,8 @@
         }
       }
     `),
-    () => ({ siteId: app.preference.current.currentSiteId }),
-    () => ({ skip: !open }),
+    () => ({ siteId: currentSiteId }),
+    () => ({ skip: !open || !currentSiteId }),
   );
 
   const searchQuery = createQuery(
@@ -91,6 +105,9 @@
                 entity {
                   id
                   slug
+                  site {
+                    id
+                  }
                   ...EntityIcon_entity
                 }
               }
@@ -102,6 +119,9 @@
                 entity {
                   id
                   slug
+                  site {
+                    id
+                  }
                   ...EntityIcon_entity
                 }
               }
@@ -110,18 +130,8 @@
         }
       }
     `),
-    () => ({ query: debouncedQuery, siteId: app.preference.current.currentSiteId ?? '' }),
-    () => ({ skip: !debouncedQuery || !open }),
-  );
-
-  const [addNoteEntity] = createMutation(
-    graphql(`
-      mutation NoteEntitySearchModal_AddNoteEntity_Mutation($input: AddNoteEntityInput!) {
-        addNoteEntity(input: $input) {
-          id
-        }
-      }
-    `),
+    () => ({ query: debouncedQuery, siteId: currentSiteId ?? '' }),
+    () => ({ skip: !debouncedQuery || !open || !currentSiteId }),
   );
 
   type ResultItem = {
@@ -137,7 +147,7 @@
     if (debouncedQuery && searchQuery.data?.search) {
       return searchQuery.data.search.hits
         .map((hit): ResultItem | null => {
-          if (hit.__typename === 'SearchHitDocument' && hit.document) {
+          if (hit.__typename === 'SearchHitDocument' && hit.document?.entity.site.id === currentSiteId) {
             return {
               entityId: hit.document.entity.id,
               slug: hit.document.entity.slug,
@@ -147,7 +157,7 @@
               entity: hit.document.entity,
             };
           }
-          if (hit.__typename === 'SearchHitFolder' && hit.folder) {
+          if (hit.__typename === 'SearchHitFolder' && hit.folder?.entity.site.id === currentSiteId) {
             return {
               entityId: hit.folder.entity.id,
               slug: hit.folder.entity.slug,
@@ -163,35 +173,76 @@
     }
 
     if (recentQuery.data?.me) {
-      return recentQuery.data.me.recentlyViewedEntities.slice(0, 10).map((entity) => ({
-        entityId: entity.id,
-        slug: entity.slug,
-        title:
-          entity.node.__typename === 'Document'
-            ? entity.node.title || '(제목 없음)'
-            : entity.node.__typename === 'Folder'
-              ? entity.node.name || '(제목 없음)'
-              : '(제목 없음)',
-        type: entity.node.__typename === 'Folder' ? ('folder' as const) : ('document' as const),
-        isLinked: existingEntityIds.includes(entity.id),
-        entity,
-      }));
+      return recentQuery.data.me.recentlyViewedEntities
+        .filter((entity) => entity.site.id === currentSiteId)
+        .slice(0, 10)
+        .map((entity) => ({
+          entityId: entity.id,
+          slug: entity.slug,
+          title:
+            entity.node.__typename === 'Document'
+              ? entity.node.title || '(제목 없음)'
+              : entity.node.__typename === 'Folder'
+                ? entity.node.name || '(제목 없음)'
+                : '(제목 없음)',
+          type: entity.node.__typename === 'Folder' ? ('folder' as const) : ('document' as const),
+          isLinked: existingEntityIds.includes(entity.id),
+          entity,
+        }));
     }
 
     return [];
   });
+  const activeQuery = $derived(debouncedQuery ? searchQuery : recentQuery);
+  const emptyMessage = $derived(
+    activeQuery.loading
+      ? debouncedQuery
+        ? '검색 중...'
+        : '불러오는 중...'
+      : debouncedQuery
+        ? '검색 결과가 없어요.'
+        : '최근 항목이 없어요.',
+  );
+  const errorMessage = $derived(
+    activeQuery.error ? (debouncedQuery ? '검색 결과를 불러오지 못했어요.' : '최근 항목을 불러오지 못했어요.') : null,
+  );
+
+  $effect(() => {
+    const resultCount = results.length;
+    if (resultCount === 0 || !Number.isSafeInteger(selectedIndex) || selectedIndex >= resultCount) {
+      selectedIndex = 0;
+    }
+  });
+
+  const retryActiveQuery = () => {
+    activeQuery.refetch();
+  };
 
   const handleSelect = async (item: ResultItem) => {
-    if (item.isLinked) return;
+    if (item.isLinked || activeAddRequest !== null) return;
 
-    if (!SubscribeModal.gate('notes_add_entity')) {
-      return;
+    const siteId = currentSiteId;
+    const selectedNoteId = noteId;
+    if (!siteId || !selectedNoteId) return;
+
+    const requestId = ++addRequestId;
+    activeAddRequest = { id: requestId, noteId: selectedNoteId, siteId };
+    try {
+      const outcome = await noteOperations.addEntity(
+        { noteId: selectedNoteId, entityId: item.entityId },
+        {
+          lastKnown: { siteId, noteId: selectedNoteId },
+        },
+      );
+      if (activeAddRequest?.id !== requestId || currentSiteId !== siteId || noteId !== selectedNoteId) return;
+      if (outcome.status === 'failure') {
+        Toast.error('연결을 추가하지 못했어요.');
+      } else if (outcome.status !== 'subscription_gated') {
+        onclose();
+      }
+    } finally {
+      if (activeAddRequest?.id === requestId) activeAddRequest = null;
     }
-
-    await addNoteEntity({ input: { noteId, entityId: item.entityId } });
-    cache.invalidate({ __typename: 'Query', $field: 'notes' });
-    cache.invalidate({ __typename: 'Entity', id: item.entityId, $field: 'notes' });
-    onclose();
   };
 
   const scrollSelectedIntoView = () => {
@@ -200,6 +251,9 @@
   };
 
   const handleKeyDown = (e: KeyboardEvent) => {
+    if (errorMessage) return;
+    if (results.length === 0) return;
+
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       selectedIndex = (selectedIndex + 1) % results.length;
@@ -262,9 +316,24 @@
         paddingY: '4px',
       })}
     >
-      {#if results.length === 0}
+      {#if errorMessage}
+        <div
+          class={flex({
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '12px',
+            paddingX: '16px',
+            paddingY: '32px',
+            color: 'text.faint',
+            fontSize: '13px',
+          })}
+        >
+          <span>{errorMessage}</span>
+          <Button onclick={retryActiveQuery} size="sm" variant="secondary">다시 시도</Button>
+        </div>
+      {:else if results.length === 0}
         <div class={center({ paddingY: '32px', color: 'text.faint', fontSize: '13px' })}>
-          {debouncedQuery ? '검색 결과가 없습니다' : '최근 항목이 없습니다'}
+          {emptyMessage}
         </div>
       {:else}
         {#each results as item, index (item.entityId)}

@@ -42,6 +42,7 @@
   import TrashModal from './@trash/TrashModal.svelte';
   import CommandPalette from './CommandPalette.svelte';
   import MarketingConsentModal from './MarketingConsentModal.svelte';
+  import { setupNoteContext } from './note-context.svelte';
   import ReferralWelcomeModal from './ReferralWelcomeModal.svelte';
   import Shortcuts from './Shortcuts.svelte';
   import ShortcutsModal from './ShortcutsModal.svelte';
@@ -71,6 +72,8 @@
   let currentSite = $derived(query.data.me.sites.find((s) => s.id === app.preference.current.currentSiteId) ?? query.data.me.sites[0]);
   let siteId = $derived(currentSite.id);
   let userId = $derived(query.data.me.id);
+
+  setupNoteContext(() => siteId);
 
   createSubscription(
     graphql(`

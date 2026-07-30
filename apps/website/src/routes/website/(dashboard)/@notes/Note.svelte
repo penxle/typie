@@ -5,7 +5,6 @@
   import { autosize, tooltip } from '@typie/ui/actions';
   import { HorizontalDivider, Icon, Menu, MenuItem, Submenu, TimeAgo } from '@typie/ui/components';
   import { Dialog } from '@typie/ui/notification';
-  import { pushEscapeHandler } from '@typie/ui/utils';
   import { onDestroy, untrack } from 'svelte';
   import CheckIcon from '~icons/lucide/check';
   import CircleIcon from '~icons/lucide/circle';
@@ -15,17 +14,13 @@
   import LinkIcon from '~icons/lucide/link';
   import Trash2Icon from '~icons/lucide/trash-2';
   import UnlinkIcon from '~icons/lucide/unlink';
+  import { getNoteColor, noteColors } from '$lib/note/note-colors';
+  import { noteDrag } from '$lib/note/note-drag.svelte';
+  import { getNoteEditsContext } from '$lib/note/note-edit-state.svelte';
+  import NoteColorPalette from '$lib/note/NoteColorPalette.svelte';
   import EntityIcon from '../@context-menu/EntityIcon.svelte';
-  import { getNoteColor, noteColors } from './colors';
-  import type { NoteReorderDirection, NoteReorderGeometry } from '$lib/note-reorder';
+  import type { NoteListDragPosition } from '$lib/note/NoteList.svelte';
   import type { EntityIcon_entity$key } from '$mearie';
-
-  type NoteDragPosition = {
-    clientX: number;
-    clientY: number;
-    direction: NoteReorderDirection;
-    ghost: NoteReorderGeometry;
-  };
 
   type NoteEntity = EntityIcon_entity$key & {
     id: string;
@@ -44,61 +39,58 @@
       color: string;
       status: string;
       updatedAt: string;
+      site: { id: string };
       entities: ArrayLike<NoteEntity> & Iterable<NoteEntity>;
     };
     cancelling: boolean;
+    dragging: boolean;
+    anyDragging: boolean;
     expanded: boolean;
     resolving: boolean;
-    draggingNoteId: string | null;
+    reorderEnabled: boolean;
     onexpand: (id: string) => void;
     oncollapse: (options?: CollapseOptions) => void;
     ondelete: (id: string) => void;
     ontogglestatus: (id: string) => void;
-    onchangecolor: (id: string, color: string) => void;
-    onupdatecontent: (id: string, content: string) => void;
     ondragstart: (pointer: { clientX: number; clientY: number }) => boolean;
     ondragend: () => void;
     ondragcancel: () => void;
-    ondragmove: (position: NoteDragPosition) => void;
+    ondragmove: (position: NoteListDragPosition) => void;
     onaddentity: (noteId: string) => void;
     onremoveentity: (noteId: string, entityId: string) => void;
-    onendresolve: (noteId: string) => void;
+    onColorSaved: (color: string) => void;
   };
 
   let {
     note,
     cancelling,
+    dragging,
+    anyDragging,
     expanded,
     resolving,
-    draggingNoteId,
+    reorderEnabled,
     onexpand,
     oncollapse,
     ondelete,
     ontogglestatus,
-    onchangecolor,
-    onupdatecontent,
     ondragstart,
     ondragend,
     ondragcancel,
     ondragmove,
     onaddentity,
     onremoveentity,
-    onendresolve,
+    onColorSaved,
   }: Props = $props();
 
-  // Inline editing — DocumentPanelNoteItem pattern
-  let content = $state(note.content);
-  let focused = $state(false);
-  let dirty = $state(false);
-  let contentUpdatePending = false;
-  let contentUpdateTimeout: ReturnType<typeof setTimeout> | null = null;
+  const noteEdits = getNoteEditsContext();
+  const editState = noteEdits.get(note.id, { content: note.content, color: note.color }, note.site.id);
   let textareaEl = $state<HTMLTextAreaElement>();
 
-  const isDragging = $derived(draggingNoteId === note.id);
-  const anyDragging = $derived(draggingNoteId !== null);
+  const content = $derived(editState?.content ?? note.content);
+  const color = $derived(editState?.color ?? note.color);
   const displayStatus = $derived(cancelling ? 'OPEN' : resolving ? 'RESOLVED' : note.status);
   const isResolved = $derived(displayStatus === 'RESOLVED');
-  const colorHex = $derived(getNoteColor(note.color) ?? token('colors.surface.default'));
+  const colorHex = $derived(getNoteColor(color) ?? token('colors.surface.default'));
 
   function getEntityTitle(entity: NoteEntity): string {
     if (entity.node.__typename === 'Document') return entity.node.title || '(제목 없음)';
@@ -106,45 +98,19 @@
     return '(제목 없음)';
   }
 
-  const DRAG_THRESHOLD = 5;
-  const DRAG_DIRECTION_EPSILON = 0.5;
-  const RESOLVE_PAUSE_DURATION = 250;
-
-  let cancelDrag: (() => void) | null = null;
-  let resolveCollapsing = $state(false);
-  let collapseFinished = $state(false);
-
   onDestroy(() => {
-    cancelDrag?.();
+    editState?.flush();
   });
 
   $effect(() => {
-    const serverContent = note.content;
-    if (dirty && serverContent === content) {
-      dirty = false;
-    }
-    if (!dirty && !focused) {
-      content = serverContent;
-    }
+    const noteId = note.id;
+    const snapshot = { content: note.content, color: note.color };
+    noteEdits.sync(noteId, snapshot);
   });
 
-  function flushContentUpdate() {
-    if (contentUpdateTimeout) {
-      clearTimeout(contentUpdateTimeout);
-      contentUpdateTimeout = null;
-    }
-    if (!contentUpdatePending) return;
-
-    contentUpdatePending = false;
-    onupdatecontent(note.id, content);
-  }
-
-  function handleContentChanged() {
-    dirty = true;
-    contentUpdatePending = true;
-    if (contentUpdateTimeout) clearTimeout(contentUpdateTimeout);
-    contentUpdateTimeout = setTimeout(flushContentUpdate, 300);
-  }
+  $effect(() => {
+    if (!expanded) untrack(() => editState?.flush());
+  });
 
   function handleDeleteNote() {
     if (content.trim() === '') {
@@ -163,8 +129,7 @@
 
   function completeShortcut() {
     textareaEl?.blur();
-    focused = false;
-    flushContentUpdate();
+    editState?.flush();
     oncollapse({ focusComposer: true });
   }
 
@@ -190,56 +155,12 @@
     const initialCaretPosition = untrack(() => content.length);
     textareaEl.setSelectionRange(initialCaretPosition, initialCaretPosition);
   });
-
-  function handleResolveTransitionEnd(event: TransitionEvent) {
-    if (
-      event.target !== event.currentTarget ||
-      event.propertyName !== 'grid-template-rows' ||
-      !resolveCollapsing ||
-      !resolving ||
-      cancelling
-    ) {
-      return;
-    }
-
-    collapseFinished = true;
-  }
-
-  $effect(() => {
-    collapseFinished = false;
-    if (!resolving || cancelling) {
-      resolveCollapsing = false;
-      return;
-    }
-
-    const timeout = setTimeout(() => {
-      resolveCollapsing = true;
-    }, RESOLVE_PAUSE_DURATION);
-
-    return () => clearTimeout(timeout);
-  });
-
-  $effect(() => {
-    if (!collapseFinished || note.status !== 'RESOLVED' || !resolving || cancelling) {
-      return;
-    }
-
-    collapseFinished = false;
-    onendresolve(note.id);
-  });
 </script>
 
-<div
-  style:grid-template-rows={resolveCollapsing ? '0fr' : '1fr'}
-  style:margin-bottom={resolveCollapsing ? '-8px' : '0px'}
-  style:opacity={resolveCollapsing ? '0' : '1'}
-  style:transition={cancelling ? 'none' : 'grid-template-rows 180ms ease, margin-bottom 180ms ease, opacity 180ms ease'}
-  class={css({ display: 'grid', minWidth: '0', width: 'full' })}
-  ontransitionend={handleResolveTransitionEnd}
->
+<div class={css({ display: 'grid', minWidth: '0', width: 'full' })}>
   <div
-    style:overflow={resolveCollapsing ? 'hidden' : 'visible'}
-    style:opacity={isDragging ? '0.5' : '1'}
+    style:overflow="visible"
+    style:opacity={dragging ? '0.5' : '1'}
     style:transition="opacity 180ms ease, background-color 150ms, box-shadow 150ms, border-color 150ms"
     class={cx(
       'group',
@@ -248,7 +169,7 @@
         position: 'relative',
         minHeight: '0',
         borderRadius: '10px',
-        cursor: 'grab',
+        cursor: reorderEnabled ? 'grab' : 'default',
         backgroundColor: expanded ? 'surface.default' : 'surface.subtle',
         boxShadow: expanded ? 'large' : 'small',
         borderWidth: '1px',
@@ -266,199 +187,16 @@
         onexpand(note.id);
       }
     }}
-    onpointerdown={(e) => {
-      if (!e.isPrimary || e.button !== 0) return;
-      const target = e.target as HTMLElement;
-      if (target.closest('button, textarea, a')) return;
-
-      e.preventDefault();
-      const el = e.currentTarget as HTMLElement;
-      const rect = el.getBoundingClientRect();
-      const pointerId = e.pointerId;
-      const pointerCaptureTarget = document.documentElement;
-
-      const state = {
-        startX: e.clientX,
-        startY: e.clientY,
-        offsetX: e.clientX - rect.left,
-        offsetY: e.clientY - rect.top,
-        started: false,
-        ghost: null as HTMLElement | null,
-        cursorStyle: null as HTMLStyleElement | null,
-        removeEscapeHandler: null as (() => void) | null,
-        moveFrame: null as number | null,
-        pendingMove: null as PointerEvent | null,
-        active: true,
-        previousCenterY: rect.top + rect.height / 2,
-        direction: 0 as NoteReorderDirection,
-      };
-
-      const cleanup = (cancelled = false) => {
-        if (!state.active) return;
-        const wasStarted = state.started;
-        state.active = false;
-        if (state.moveFrame !== null) {
-          cancelAnimationFrame(state.moveFrame);
-          state.moveFrame = null;
-        }
-        state.pendingMove = null;
-        state.ghost?.remove();
-        state.cursorStyle?.remove();
-        state.removeEscapeHandler?.();
-        state.removeEscapeHandler = null;
-        document.removeEventListener('pointermove', handleMove);
-        document.removeEventListener('pointerup', handleUp);
-        document.removeEventListener('pointercancel', handleCancel);
-        pointerCaptureTarget.removeEventListener('lostpointercapture', handleLostPointerCapture);
-        if (pointerCaptureTarget.hasPointerCapture(pointerId)) {
-          pointerCaptureTarget.releasePointerCapture(pointerId);
-        }
-        cancelDrag = null;
-        if (cancelled && wasStarted) {
-          ondragcancel();
-        }
-      };
-
-      const updateGhost = (ev: PointerEvent) => {
-        if (!state.ghost) return;
-
-        const top = ev.clientY - state.offsetY;
-        const centerY = top + rect.height / 2;
-        const centerDeltaY = centerY - state.previousCenterY;
-
-        state.ghost.style.left = `${ev.clientX - state.offsetX}px`;
-        state.ghost.style.top = `${top}px`;
-        state.previousCenterY = centerY;
-
-        if (Math.abs(centerDeltaY) > DRAG_DIRECTION_EPSILON) {
-          state.direction = centerDeltaY < 0 ? -1 : 1;
-        }
-
-        ondragmove({
-          clientX: ev.clientX,
-          clientY: ev.clientY,
-          direction: state.direction,
-          ghost: {
-            top,
-            bottom: top + rect.height,
-          },
-        });
-      };
-
-      const processMove = (ev: PointerEvent) => {
-        const dist = Math.hypot(ev.clientX - state.startX, ev.clientY - state.startY);
-        if (!state.started && dist > DRAG_THRESHOLD) {
-          if (!ondragstart({ clientX: ev.clientX, clientY: ev.clientY })) {
-            cleanup();
-            return;
-          }
-          state.started = true;
-
-          const ghost = document.createElement('div');
-          const cloned = el.cloneNode(true) as HTMLElement;
-          (cloned as unknown as { inert: boolean }).inert = true;
-          cloned.setAttribute('aria-hidden', 'true');
-          cloned.style.pointerEvents = 'none';
-          cloned.style.transform = 'rotate(1.5deg) scale(1.05)';
-          cloned.style.opacity = '0.8';
-          cloned.style.width = '100%';
-          cloned.style.height = '100%';
-          ghost.append(cloned);
-
-          ghost.style.position = 'fixed';
-          ghost.style.pointerEvents = 'none';
-          ghost.style.zIndex = token('zIndex.ghost');
-          ghost.style.width = `${rect.width}px`;
-          ghost.style.height = `${rect.height}px`;
-          ghost.style.left = `${ev.clientX - state.offsetX}px`;
-          ghost.style.top = `${ev.clientY - state.offsetY}px`;
-          document.body.append(ghost);
-
-          state.ghost = ghost;
-          state.cursorStyle = document.createElement('style');
-          state.cursorStyle.textContent = '* { cursor: grabbing !important; }';
-          document.head.append(state.cursorStyle);
-          state.removeEscapeHandler = pushEscapeHandler(() => {
-            cleanup(true);
-            return true;
-          });
-        }
-
-        if (state.started && state.ghost) {
-          updateGhost(ev);
-        }
-      };
-
-      const handleMove = (ev: PointerEvent) => {
-        if (ev.pointerId !== pointerId) return;
-
-        state.pendingMove = ev;
-        if (state.moveFrame !== null) return;
-
-        state.moveFrame = requestAnimationFrame(() => {
-          state.moveFrame = null;
-          const pendingMove = state.pendingMove;
-          state.pendingMove = null;
-          if (pendingMove && state.active) {
-            processMove(pendingMove);
-          }
-        });
-      };
-
-      const flushPendingMove = () => {
-        if (state.moveFrame !== null) {
-          cancelAnimationFrame(state.moveFrame);
-          state.moveFrame = null;
-        }
-        const pendingMove = state.pendingMove;
-        state.pendingMove = null;
-        if (pendingMove && state.active) {
-          processMove(pendingMove);
-        }
-      };
-
-      const handleUp = (ev: PointerEvent) => {
-        if (ev.pointerId !== pointerId) return;
-
-        flushPendingMove();
-        if (!state.active) return;
-        const wasStarted = state.started;
-        if (wasStarted) {
-          updateGhost(ev);
-        }
-        cleanup();
-        if (wasStarted) {
-          ondragend();
-        } else if (!expanded) {
-          onexpand(note.id);
-        }
-      };
-
-      const handleCancel = (ev: PointerEvent) => {
-        if (ev.pointerId !== pointerId) return;
-        cleanup(true);
-      };
-
-      const handleLostPointerCapture = (ev: PointerEvent) => {
-        if (ev.pointerId !== pointerId) return;
-        cleanup(true);
-      };
-
-      cancelDrag?.();
-      document.addEventListener('pointermove', handleMove);
-      document.addEventListener('pointerup', handleUp);
-      document.addEventListener('pointercancel', handleCancel);
-      pointerCaptureTarget.addEventListener('lostpointercapture', handleLostPointerCapture);
-      try {
-        pointerCaptureTarget.setPointerCapture(pointerId);
-      } catch {
-        cleanup();
-        return;
-      }
-      cancelDrag = () => cleanup(true);
-    }}
     role="button"
     tabindex="0"
+    use:noteDrag={{
+      dragging,
+      onDragStart: ondragstart,
+      onDragMove: ondragmove,
+      onDragEnd: ondragend,
+      onDragCancel: ondragcancel,
+      onPress: expanded ? undefined : () => onexpand(note.id),
+    }}
   >
     <div class={flex({ gap: '10px', padding: '12px', paddingBottom: expanded ? '8px' : '12px' })}>
       <!-- Color Checkbox -->
@@ -520,19 +258,15 @@
               opacity: isResolved && !resolving ? '50' : '100',
             })}
             onblur={() => {
-              focused = false;
-              flushContentUpdate();
+              editState?.flush();
             }}
-            onfocus={() => {
-              focused = true;
-            }}
-            oninput={() => {
-              handleContentChanged();
+            oninput={(event) => {
+              editState?.setContent(event.currentTarget.value);
             }}
             onkeydown={handleEditorShortcut}
             placeholder={isResolved ? '(내용 없음)' : '떠오르는 생각을 적어보세요'}
             rows={1}
-            bind:value={content}
+            value={content}
             use:autosize={{ cacheKey: `note-${note.id}`, value: content }}></textarea>
         {:else}
           <p
@@ -541,7 +275,7 @@
               fontSize: '14px',
               lineHeight: '[1.55]',
               paddingRight: '22px',
-              color: note.content.trim() ? 'text.default' : 'text.faint',
+              color: content.trim() ? 'text.default' : 'text.faint',
               whiteSpace: 'pre-wrap',
               wordBreak: 'break-word',
               lineClamp: '3',
@@ -550,7 +284,7 @@
               textDecorationColor: isResolved ? 'text.faint' : 'transparent',
             })}
           >
-            {note.content.trim() || '(내용 없음)'}
+            {content.trim() || '(내용 없음)'}
           </p>
         {/if}
 
@@ -600,7 +334,6 @@
     </div>
 
     <!-- Expanded Toolbar -->
-    <!-- Expanded Toolbar -->
     <div
       class={css({
         display: 'grid',
@@ -619,27 +352,13 @@
             paddingBottom: '10px',
           })}
         >
-          <div class={flex({ alignItems: 'center', gap: '8px' })}>
+          <div class={flex({ alignItems: 'center', gap: '8px', minWidth: '0', width: 'full' })}>
             <!-- Color dots -->
-            <div class={flex({ alignItems: 'center', gap: '4px' })}>
-              {#each noteColors as c (c.value)}
-                <button
-                  style:background-color={c.value === note.color ? c.color : 'transparent'}
-                  style:border={c.value === note.color ? 'none' : `1.5px solid ${c.color}`}
-                  class={center({
-                    width: '12px',
-                    height: '12px',
-                    borderRadius: 'full',
-                    cursor: 'pointer',
-                    padding: '0',
-                  })}
-                  aria-label={c.label}
-                  onclick={() => onchangecolor(note.id, c.value)}
-                  type="button"
-                  use:tooltip={{ message: c.label, placement: 'top' }}
-                ></button>
-              {/each}
-            </div>
+            <NoteColorPalette
+              onchange={(nextColor) => editState?.setColor(nextColor, { onSaved: () => onColorSaved(nextColor) })}
+              selectedColor={color}
+              size="12px"
+            />
 
             <div class={css({ width: '1px', height: '12px', backgroundColor: 'border.subtle' })}></div>
 
@@ -660,6 +379,27 @@
               <Icon icon={LinkIcon} size={12} />
               연결 추가
             </button>
+
+            <span
+              class={flex({
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+                flex: '1',
+                minWidth: '0',
+                overflow: 'hidden',
+                fontSize: '11px',
+                color: 'text.faint',
+                whiteSpace: 'nowrap',
+              })}
+              aria-atomic="true"
+              aria-live="polite"
+            >
+              {#if editState?.saveDisplay === 'saving'}
+                저장 중...
+              {:else if editState?.saveDisplay === 'failed'}
+                <span class={css({ color: 'text.danger' })}>저장 실패</span>
+              {/if}
+            </span>
           </div>
 
           {#if note.entities.length > 0}
@@ -740,13 +480,13 @@
             ></div>
           {/snippet}
           {#each noteColors as c (c.value)}
-            <MenuItem onclick={() => onchangecolor(note.id, c.value)}>
+            <MenuItem onclick={() => editState?.setColor(c.value, { onSaved: () => onColorSaved(c.value) })}>
               {#snippet prefix()}
                 <div
                   style:background-color={c.color}
                   class={center({ width: '14px', height: '14px', borderRadius: 'full', flexShrink: '0' })}
                 >
-                  {#if c.value === note.color}
+                  {#if c.value === color}
                     <Icon style={css.raw({ color: 'surface.default' })} icon={CheckIcon} size={10} />
                   {/if}
                 </div>

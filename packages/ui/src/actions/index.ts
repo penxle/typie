@@ -9,4 +9,5 @@ export * from './pointer-capture.svelte';
 export * from './portal.svelte';
 export * from './scroll-lock.svelte';
 export * from './textarea-scrollpadding.svelte';
+export * from './threshold-drag.svelte';
 export * from './tooltip.svelte';

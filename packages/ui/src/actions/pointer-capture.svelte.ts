@@ -10,6 +10,7 @@ export type PointerCaptureParameters<Session> = {
 };
 
 type ActiveSession<Session> = {
+  captureTarget: HTMLElement;
   pointerId: number;
   value: Session;
 };
@@ -22,14 +23,25 @@ export type PointerCaptureHandle<Session> = ActionReturn<PointerCaptureParameter
 export const pointerCapture = <Session>(
   element: HTMLElement,
   initialParameters: PointerCaptureParameters<Session>,
+  captureTarget = element,
 ): PointerCaptureHandle<Session> => {
   let parameters = initialParameters;
   let active: ActiveSession<Session> | null = null;
+  let listening = false;
 
-  const release = (pointerId: number) => {
-    if (element.hasPointerCapture(pointerId)) {
-      element.releasePointerCapture(pointerId);
+  const release = (session: ActiveSession<Session>) => {
+    if (session.captureTarget.hasPointerCapture(session.pointerId)) {
+      session.captureTarget.releasePointerCapture(session.pointerId);
     }
+  };
+
+  const stopListening = () => {
+    if (!listening) return;
+    listening = false;
+    captureTarget.removeEventListener('pointermove', handlePointerMove);
+    captureTarget.removeEventListener('pointerup', handlePointerUp);
+    captureTarget.removeEventListener('pointercancel', handlePointerCancel);
+    captureTarget.removeEventListener('lostpointercapture', handleLostPointerCapture);
   };
 
   const cancel = (reason: PointerCaptureCancelReason, event?: PointerEvent) => {
@@ -38,8 +50,9 @@ export const pointerCapture = <Session>(
 
     active = null;
     if (reason !== 'lostpointercapture') {
-      release(current.pointerId);
+      release(current);
     }
+    stopListening();
     parameters.cancel?.(current.value, reason, event);
   };
 
@@ -49,9 +62,14 @@ export const pointerCapture = <Session>(
     const value = parameters.start(event);
     if (value === null) return;
 
-    active = { pointerId: event.pointerId, value };
+    active = { captureTarget, pointerId: event.pointerId, value };
+    listening = true;
+    captureTarget.addEventListener('pointermove', handlePointerMove);
+    captureTarget.addEventListener('pointerup', handlePointerUp);
+    captureTarget.addEventListener('pointercancel', handlePointerCancel);
+    captureTarget.addEventListener('lostpointercapture', handleLostPointerCapture);
     try {
-      element.setPointerCapture(event.pointerId);
+      captureTarget.setPointerCapture(event.pointerId);
     } catch {
       cancel('capture-failed', event);
     }
@@ -68,7 +86,8 @@ export const pointerCapture = <Session>(
     if (!current || event.pointerId !== current.pointerId) return;
 
     active = null;
-    release(current.pointerId);
+    release(current);
+    stopListening();
     parameters.end?.(current.value, event);
   };
 
@@ -76,10 +95,6 @@ export const pointerCapture = <Session>(
   const handleLostPointerCapture = (event: PointerEvent) => cancel('lostpointercapture', event);
 
   element.addEventListener('pointerdown', handlePointerDown);
-  element.addEventListener('pointermove', handlePointerMove);
-  element.addEventListener('pointerup', handlePointerUp);
-  element.addEventListener('pointercancel', handlePointerCancel);
-  element.addEventListener('lostpointercapture', handleLostPointerCapture);
 
   return {
     cancel() {
@@ -90,11 +105,8 @@ export const pointerCapture = <Session>(
     },
     destroy() {
       element.removeEventListener('pointerdown', handlePointerDown);
-      element.removeEventListener('pointermove', handlePointerMove);
-      element.removeEventListener('pointerup', handlePointerUp);
-      element.removeEventListener('pointercancel', handlePointerCancel);
-      element.removeEventListener('lostpointercapture', handleLostPointerCapture);
       cancel('destroy');
+      stopListening();
     },
   };
 };

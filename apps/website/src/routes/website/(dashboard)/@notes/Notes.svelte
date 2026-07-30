@@ -1,132 +1,43 @@
 <script lang="ts">
-  import { createMutation, createQuery } from '@mearie/svelte';
+  import { createQuery } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
-  import { center, flex } from '@typie/styled-system/patterns';
-  import { tooltip } from '@typie/ui/actions';
+  import { flex } from '@typie/styled-system/patterns';
   import { Button, Icon, Modal } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { Toast } from '@typie/ui/notification';
-  import { animateFlip, createDragScroll, elementScrollViewport, pushEscapeHandler } from '@typie/ui/utils';
+  import { createDragScroll, elementScrollViewport, pushEscapeHandler } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import { onDestroy, tick } from 'svelte';
-  import { SvelteMap, SvelteSet } from 'svelte/reactivity';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import CommandIcon from '~icons/lucide/command';
   import CornerDownLeftIcon from '~icons/lucide/corner-down-left';
   import { beforeNavigate } from '$app/navigation';
   import { cache } from '$lib/graphql';
-  import { reorderedNoteIdsForDrag } from '$lib/note-reorder';
+  import { NoteActions } from '$lib/note/note-actions.svelte';
+  import { NoteListState } from '$lib/note/note-list-state.svelte';
+  import { getNoteOperationsContext } from '$lib/note/note-mutation';
+  import { getNoteSyncContext } from '$lib/note/note-sync.svelte';
+  import NoteColorPalette from '$lib/note/NoteColorPalette.svelte';
+  import NoteList from '$lib/note/NoteList.svelte';
   import { graphql } from '$mearie';
-  import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
-  import { noteColors } from './colors';
   import NoteComponent from './Note.svelte';
   import NoteEntitySearchModal from './NoteEntitySearchModal.svelte';
-  import type { NoteReorderDirection, NoteReorderGeometry } from '$lib/note-reorder';
-
-  type NoteDragPosition = {
-    clientX: number;
-    clientY: number;
-    direction: NoteReorderDirection;
-    ghost: NoteReorderGeometry;
-  };
+  import type { NoteListDragPosition, NoteListItemReorder } from '$lib/note/NoteList.svelte';
 
   type NoteDragging = {
     noteId: string;
-    originalOrder: string[];
-    position: NoteDragPosition | null;
-    sectionNoteIds: string[];
+    position: NoteListDragPosition | null;
+    move: NoteListItemReorder['ondragmove'];
+    end: NoteListItemReorder['ondragend'];
+    cancel: NoteListItemReorder['ondragcancel'];
   };
 
-  const [createNote] = createMutation(
-    graphql(`
-      mutation DashboardLayout_Notes_CreateNote_Mutation($input: CreateNoteInput!) {
-        createNote(input: $input) {
-          id
-          content
-          createdAt
-          color
-          status
-          entities {
-            id
-            slug
-
-            ...EntityIcon_entity
-
-            node {
-              __typename
-            }
-          }
-        }
-      }
-    `),
-  );
-
-  const [updateNote] = createMutation(
-    graphql(`
-      mutation DashboardLayout_Notes_UpdateNote_Mutation($input: UpdateNoteInput!) {
-        updateNote(input: $input) {
-          id
-          content
-          updatedAt
-          status
-          entities {
-            id
-            slug
-
-            ...EntityIcon_entity
-
-            node {
-              __typename
-            }
-          }
-        }
-      }
-    `),
-  );
-
-  const [deleteNote] = createMutation(
-    graphql(`
-      mutation DashboardLayout_Notes_DeleteNote_Mutation($input: DeleteNoteInput!) {
-        deleteNote(input: $input) {
-          id
-        }
-      }
-    `),
-  );
-
-  const [moveNote] = createMutation(
-    graphql(`
-      mutation DashboardLayout_Notes_MoveNote_Mutation($input: MoveNoteInput!) {
-        moveNote(input: $input) {
-          id
-          order
-        }
-      }
-    `),
-  );
-
-  const [removeNoteEntity] = createMutation(
-    graphql(`
-      mutation DashboardLayout_Notes_RemoveNoteEntity_Mutation($input: RemoveNoteEntityInput!) {
-        removeNoteEntity(input: $input) {
-          id
-          entities {
-            id
-            slug
-
-            ...EntityIcon_entity
-
-            node {
-              __typename
-            }
-          }
-        }
-      }
-    `),
-  );
-
   const app = getAppContext();
+  const noteOperations = getNoteOperationsContext();
+  const noteSync = getNoteSyncContext();
+  const currentSiteId = $derived(app.preference.current.currentSiteId ?? null);
+  let requestedQuerySiteId: string | null = null;
 
   const siteQuery = createQuery(
     graphql(`
@@ -139,6 +50,9 @@
           order
           color
           status
+          site {
+            id
+          }
           entities {
             id
             slug
@@ -162,39 +76,66 @@
         }
       }
     `),
-    () => ({ siteId: app.preference.current.currentSiteId }),
+    () => {
+      requestedQuerySiteId = currentSiteId;
+      return { siteId: currentSiteId };
+    },
   );
 
-  const notes = $derived(siteQuery.data?.notes ?? []);
+  let successfulDataSiteId = $state<string | null>(null);
+  $effect(() => {
+    const siteId = currentSiteId;
+    const data = siteQuery.data;
+    const loading = siteQuery.loading;
+    const error = siteQuery.error;
+
+    // Mearie retains data across variable changes. It unsubscribes the previous operation before evaluating the next variables.
+    if (requestedQuerySiteId === siteId && data !== undefined && !loading && !error) {
+      successfulDataSiteId = requestedQuerySiteId;
+    }
+  });
+
+  const hasCurrentSiteData = $derived(siteQuery.data !== undefined && successfulDataSiteId === currentSiteId);
+  const notes = $derived(hasCurrentSiteData ? (siteQuery.data?.notes.filter((note) => note.site.id === currentSiteId) ?? []) : []);
+  type SiteNote = (typeof notes)[number];
 
   let inputValue = $state('');
   let inputEl = $state<HTMLTextAreaElement>();
   let selectedColor = $state('gray');
-  let createInFlight = $state(false);
+  let createRequestId = 0;
+  let activeCreateRequest = $state<{ id: number; siteId: string } | null>(null);
+  const createInFlight = $derived(activeCreateRequest?.siteId === currentSiteId);
   let expandedNoteId = $state<string | null>(null);
   let entitySearchNoteId = $state<string | null>(null);
   let resolvedOpen = $state(false);
-  const resolvingNoteIds = new SvelteSet<string>();
+  const noteActions = new NoteActions<SiteNote>();
 
   let dragging = $state<NoteDragging | null>(null);
-  let localNoteOrder = $state<string[]>([]);
   let scrollContainer = $state<HTMLElement | null>(null);
   let composer = $state<HTMLElement | null>(null);
   let dragScroll: ReturnType<typeof createDragScroll> | null = null;
 
-  const sortedNotes = $derived.by(() => {
-    if (localNoteOrder.length === 0) return notes;
-    return [...notes].toSorted((a, b) => {
-      const indexA = localNoteOrder.indexOf(a.id);
-      const indexB = localNoteOrder.indexOf(b.id);
-      if (indexA === -1) return 1;
-      if (indexB === -1) return -1;
-      return indexA - indexB;
-    });
+  const openListState = new NoteListState<SiteNote>({
+    isTerminallyDeleted: (siteId, noteId) => noteSync.isTerminallyDeleted(siteId, noteId),
+    isPendingDeletion: (noteId) => noteActions.isPendingDeletion(noteId),
+  });
+  const resolvedListState = new NoteListState<SiteNote>({
+    isTerminallyDeleted: (siteId, noteId) => noteSync.isTerminallyDeleted(siteId, noteId),
+    isPendingDeletion: (noteId) => noteActions.isPendingDeletion(noteId),
   });
 
-  const openNotes = $derived(sortedNotes.filter((n) => n.status === 'OPEN' || resolvingNoteIds.has(n.id)));
-  const resolvedNotes = $derived(sortedNotes.filter((n) => n.status === 'RESOLVED' && !resolvingNoteIds.has(n.id)));
+  const openNotes = $derived(notes.filter((note) => note.status === 'OPEN' && noteActions.isStatusAdmitted(note.id, 'OPEN')));
+  const resolvedNotes = $derived(notes.filter((note) => note.status === 'RESOLVED' && noteActions.isStatusAdmitted(note.id, 'RESOLVED')));
+  const openVisibleCount = $derived(openListState.visibleNotes().length);
+  const resolvedVisibleCount = $derived(resolvedListState.visibleNotes().length);
+
+  $effect.pre(() => {
+    noteActions.syncStatus({
+      siteId: currentSiteId,
+      notes,
+      visibleStatuses: app.state.notesOpen ? (resolvedOpen ? ['OPEN', 'RESOLVED'] : ['OPEN']) : [],
+    });
+  });
 
   const entitySearchExistingIds = $derived.by(() => {
     if (!entitySearchNoteId) return [];
@@ -202,42 +143,18 @@
     return n?.entities?.map((e) => e.id) ?? [];
   });
 
-  const resolveDraggingPosition = (position: NoteDragPosition) => {
+  const replayDraggingPosition = (position: NoteListDragPosition) => {
     const currentDragging = dragging;
-    if (!currentDragging || !scrollContainer) return;
-
-    const sectionNoteIds = new Set(currentDragging.sectionNoteIds);
-    const currentSectionOrder = localNoteOrder.filter((noteId) => sectionNoteIds.has(noteId));
-    const noteGeometries = new SvelteMap<string, NoteReorderGeometry>();
-
-    for (const noteElement of scrollContainer.querySelectorAll<HTMLElement>('[data-note-id]')) {
-      const noteId = noteElement.dataset.noteId;
-      if (!noteId || !sectionNoteIds.has(noteId)) continue;
-
-      const { top, bottom } = noteElement.getBoundingClientRect();
-      noteGeometries.set(noteId, { top, bottom });
-    }
-    noteGeometries.set(currentDragging.noteId, position.ghost);
-
-    const reorderedSection = reorderedNoteIdsForDrag(currentSectionOrder, currentDragging.noteId, position.direction, noteGeometries);
-    if (!reorderedSection || reorderedSection.every((noteId, index) => noteId === currentSectionOrder[index])) return;
-
-    let sectionIndex = 0;
-    const reorderedNotes = localNoteOrder.map((noteId) => {
-      if (!sectionNoteIds.has(noteId)) return noteId;
-      return reorderedSection[sectionIndex++] ?? noteId;
-    });
-    if (reorderedNotes.some((noteId, index) => noteId !== localNoteOrder[index])) {
-      localNoteOrder = reorderedNotes;
-    }
+    if (!currentDragging) return;
+    currentDragging.move(position);
   };
 
-  const updateDraggingPosition = (position: NoteDragPosition) => {
-    if (!dragging) return;
+  const updateDraggingPosition = (noteId: string, position: NoteListDragPosition) => {
+    if (dragging?.noteId !== noteId) return;
 
     dragging.position = position;
     dragScroll?.updatePointer(position.clientX, position.clientY);
-    resolveDraggingPosition(position);
+    replayDraggingPosition(position);
   };
 
   const stopDragScroll = () => {
@@ -268,79 +185,31 @@
         stickyCandidates: [],
         onScroll: () => {
           if (dragging?.noteId === draggingNoteId && dragging.position) {
-            resolveDraggingPosition(dragging.position);
+            replayDraggingPosition(dragging.position);
           }
         },
       },
     );
   };
 
-  const handleDragEnd = async () => {
+  const handleDragEnd = (noteId: string) => {
     const currentDragging = dragging;
-    if (!currentDragging) return;
-
-    const currentIndex = localNoteOrder.indexOf(currentDragging.noteId);
-    const originalIndex = currentDragging.originalOrder.indexOf(currentDragging.noteId);
+    if (currentDragging?.noteId !== noteId) return;
     dragging = null;
     stopDragScroll();
-
-    if (currentIndex !== -1 && originalIndex !== -1 && currentIndex !== originalIndex && sortedNotes.length > 1) {
-      if (!SubscribeModal.gate('notes_move')) {
-        localNoteOrder = [...currentDragging.originalOrder];
-        return;
-      }
-
-      const lowerNote = sortedNotes[currentIndex - 1] ?? null;
-      const upperNote = sortedNotes[currentIndex + 1] ?? null;
-
-      try {
-        const { noteId } = currentDragging;
-        await moveNote({
-          input: {
-            noteId,
-            lowerOrder: lowerNote?.order,
-            upperOrder: upperNote?.order,
-          },
-        });
-        mixpanel.track('move_note');
-        cache.invalidate({ __typename: 'Query', $field: 'notes' });
-
-        const movedNote = sortedNotes.find((n) => n.id === noteId);
-        for (const entity of movedNote?.entities ?? []) {
-          cache.invalidate({ __typename: 'Entity', id: entity.id, $field: 'notes' });
-        }
-      } catch {
-        localNoteOrder = [...currentDragging.originalOrder];
-        Toast.error('노트 순서 변경에 실패했습니다. 잠시 후 다시 시도해주세요.');
-      }
-    }
+    void currentDragging.end();
   };
 
-  let prevNoteIds = $state<string[]>([]);
-  $effect(() => {
-    const noteIds = notes.map((note) => note.id);
-    if (dragging) return;
+  const handleDragStart = (noteId: string, initialPointer: { clientX: number; clientY: number }, reorder: NoteListItemReorder): boolean => {
+    if (!reorder.ondragstart()) return false;
 
-    const noteIdsStr = noteIds.join(',');
-    const prevNoteIdsStr = prevNoteIds.join(',');
-
-    if (noteIdsStr !== prevNoteIdsStr) {
-      prevNoteIds = noteIds;
-      localNoteOrder = noteIds;
-    }
-  });
-
-  const handleDragStart = (noteId: string, initialPointer: { clientX: number; clientY: number }) => {
-    const sectionNotes = openNotes.some((note) => note.id === noteId) ? openNotes : resolvedNotes;
-    const originalOrder = sortedNotes.map((note) => note.id);
-    localNoteOrder = [...originalOrder];
-    const currentDragging: NoteDragging = {
+    dragging = {
       noteId,
-      originalOrder,
       position: null,
-      sectionNoteIds: sectionNotes.map((note) => note.id),
+      move: reorder.ondragmove,
+      end: reorder.ondragend,
+      cancel: reorder.ondragcancel,
     };
-    dragging = currentDragging;
     startDragScroll(noteId, initialPointer);
     return true;
   };
@@ -351,8 +220,36 @@
 
     dragging = null;
     stopDragScroll();
-    localNoteOrder = [...currentDragging.originalOrder];
+    currentDragging.cancel();
   };
+
+  let activeSiteId = $state<string | null>(null);
+  let siteInitialized = $state(false);
+  $effect(() => {
+    const siteId = currentSiteId;
+    if (siteInitialized && activeSiteId !== siteId) {
+      if (dragging) handleDragCancel(dragging.noteId);
+      activeCreateRequest = null;
+      if (siteId === null) {
+        openListState.reset();
+        resolvedListState.reset();
+      }
+      expandedNoteId = null;
+      entitySearchNoteId = null;
+      resolvedOpen = false;
+    }
+    siteInitialized = true;
+    activeSiteId = siteId;
+    if (!siteId) return;
+
+    return noteActions.activate({
+      siteId,
+      onTerminal: (noteId) => {
+        if (expandedNoteId === noteId) expandedNoteId = null;
+        if (entitySearchNoteId === noteId) entitySearchNoteId = null;
+      },
+    });
+  });
 
   const handleExpand = (noteId: string) => {
     expandedNoteId = noteId;
@@ -391,119 +288,73 @@
     if (createInFlight) return;
     if (!inputValue.trim()) return;
 
-    if (!SubscribeModal.gate('notes_create')) {
-      return;
-    }
+    const siteId = app.preference.current.currentSiteId;
+    if (!siteId) return;
 
     const submittedContent = inputValue;
     const submittedColor = selectedColor;
-    createInFlight = true;
+    const requestId = ++createRequestId;
+    activeCreateRequest = { id: requestId, siteId };
     try {
-      await createNote({
-        input: {
-          siteId: app.preference.current.currentSiteId,
+      const outcome = await noteOperations.create(
+        {
+          siteId,
           color: submittedColor,
           content: submittedContent,
         },
-      });
-      mixpanel.track('create_note', { via });
-      cache.invalidate({ __typename: 'Query', $field: 'notes' });
+        {
+          analytics: {
+            onSuccess: () => mixpanel.track('create_note', { via }),
+          },
+        },
+      );
 
-      if (inputValue === submittedContent && selectedColor === submittedColor) {
+      if (activeCreateRequest?.id !== requestId || app.preference.current.currentSiteId !== siteId) return;
+      if (outcome.status === 'success' && inputValue === submittedContent && selectedColor === submittedColor) {
         inputValue = '';
         selectedColor = 'gray';
       }
-      inputEl?.focus();
+      if (outcome.status === 'success') {
+        inputEl?.focus();
+      } else if (outcome.status === 'failure') {
+        Toast.error('노트를 만들지 못했어요.');
+      }
     } finally {
-      createInFlight = false;
+      if (activeCreateRequest?.id === requestId) activeCreateRequest = null;
     }
   };
 
   const handleDeleteNote = async (noteId: string) => {
-    await deleteNote({ input: { noteId } });
-    mixpanel.track('delete_note');
-    cache.invalidate({ __typename: 'Query', $field: 'notes' });
+    const siteId = currentSiteId;
+    if (!siteId) return;
 
-    const note = notes.find((n) => n.id === noteId);
-    for (const entity of note?.entities ?? []) {
-      cache.invalidate({ __typename: 'Entity', id: entity.id, $field: 'notes' });
-    }
+    const state = openListState.visibleNotes().some(({ note }) => note.id === noteId) ? openListState : resolvedListState;
+    await noteActions.delete({
+      noteId,
+      siteId,
+      state,
+      onSuccess: () => mixpanel.track('delete_note'),
+    });
   };
-
-  const cancellingNoteIds = new SvelteSet<string>();
 
   const handleToggleStatus = async (noteId: string) => {
     const note = notes.find((n) => n.id === noteId);
     if (!note) return;
 
-    if (cancellingNoteIds.has(noteId)) return;
+    const siteId = app.preference.current.currentSiteId;
+    if (!siteId) return;
 
-    if (!SubscribeModal.gate('notes_update')) {
-      return;
-    }
-
-    // Cancel resolving animation
-    if (resolvingNoteIds.has(noteId)) {
-      cancellingNoteIds.add(noteId);
-      try {
-        await updateNote({ input: { noteId, status: 'OPEN' } });
-        mixpanel.track('toggle_note_status', { status: 'OPEN' });
-        cache.invalidate({ __typename: 'Query', $field: 'notes' });
-      } catch {
-        cancellingNoteIds.delete(noteId);
-        return;
-      }
-      cancellingNoteIds.delete(noteId);
-      resolvingNoteIds.delete(noteId);
-      return;
-    }
-
-    const newStatus = note.status === 'OPEN' ? 'RESOLVED' : 'OPEN';
-
-    if (newStatus === 'RESOLVED') {
-      resolvingNoteIds.add(noteId);
-    }
-
-    try {
-      await updateNote({ input: { noteId, status: newStatus } });
-      mixpanel.track('toggle_note_status', { status: newStatus });
-      if (newStatus === 'OPEN') {
-        cache.invalidate({ __typename: 'Query', $field: 'notes' });
-        for (const entity of note.entities ?? []) {
-          cache.invalidate({ __typename: 'Entity', id: entity.id, $field: 'notes' });
-        }
-      }
-    } catch {
-      resolvingNoteIds.delete(noteId);
-    }
+    await noteActions.toggleStatus({
+      note,
+      states: { OPEN: openListState, RESOLVED: resolvedListState },
+      siteId,
+      onSuccess: (status) => mixpanel.track('toggle_note_status', { status }),
+    });
   };
 
-  const handleEndResolve = (noteId: string) => {
-    const note = notes.find((n) => n.id === noteId);
-    resolvingNoteIds.delete(noteId);
-    cache.invalidate({ __typename: 'Query', $field: 'notes' });
-    for (const entity of note?.entities ?? []) {
-      cache.invalidate({ __typename: 'Entity', id: entity.id, $field: 'notes' });
-    }
-  };
-
-  const handleUpdateContent = async (noteId: string, content: string) => {
-    if (!SubscribeModal.gate('notes_update')) {
-      return;
-    }
-
-    await updateNote({ input: { noteId, content } });
-    cache.invalidate({ __typename: 'Query', $field: 'notes' });
-  };
-
-  const handleChangeColor = async (noteId: string, color: string) => {
-    if (!SubscribeModal.gate('notes_update')) {
-      return;
-    }
-
-    await updateNote({ input: { noteId, color } });
-    cache.invalidate({ __typename: 'Query', $field: 'notes' });
-    mixpanel.track('change_note_color', { color });
+  const handleStatusExitComplete = (noteId: string, sourceStatus: 'OPEN' | 'RESOLVED') => {
+    if (expandedNoteId === noteId) expandedNoteId = null;
+    noteActions.finishStatusTransfer(noteId, sourceStatus);
   };
 
   const handleAddEntity = (noteId: string) => {
@@ -511,13 +362,19 @@
   };
 
   const handleRemoveEntity = async (noteId: string, entityId: string) => {
-    if (!SubscribeModal.gate('notes_remove_entity')) {
-      return;
-    }
+    const siteId = app.preference.current.currentSiteId;
+    if (!siteId) return;
 
-    await removeNoteEntity({ input: { noteId, entityId } });
-    cache.invalidate({ __typename: 'Query', $field: 'notes' });
-    cache.invalidate({ __typename: 'Entity', id: entityId, $field: 'notes' });
+    const outcome = await noteOperations.removeEntity(
+      { noteId, entityId },
+      {
+        lastKnown: { siteId, noteId },
+      },
+    );
+    if (currentSiteId !== siteId || notes.every((note) => note.id !== noteId)) return;
+    if (outcome.status === 'failure') {
+      Toast.error('연결을 해제하지 못했어요.');
+    }
   };
 
   const close = () => {
@@ -541,12 +398,8 @@
   });
 
   onDestroy(() => {
-    stopDragScroll();
-  });
-
-  $effect.pre(() => {
-    void localNoteOrder;
-    animateFlip('[data-note-id]', 'noteId');
+    if (dragging) handleDragCancel(dragging.noteId);
+    else stopDragScroll();
   });
 </script>
 
@@ -647,25 +500,7 @@
 
       <div class={flex({ alignItems: 'center', gap: '8px', paddingX: '12px', paddingY: '6px' })}>
         <!-- Color dots -->
-        <div class={flex({ alignItems: 'center', gap: '4px' })}>
-          {#each noteColors as c (c.value)}
-            <button
-              style:background-color={selectedColor === c.value ? c.color : 'transparent'}
-              style:border={selectedColor === c.value ? 'none' : `1.5px solid ${c.color}`}
-              class={center({
-                width: '12px',
-                height: '12px',
-                borderRadius: 'full',
-                cursor: 'pointer',
-                padding: '0',
-              })}
-              aria-label={c.label}
-              onclick={() => (selectedColor = c.value)}
-              type="button"
-              use:tooltip={{ message: c.label, placement: 'top' }}
-            ></button>
-          {/each}
-        </div>
+        <NoteColorPalette onchange={(color) => (selectedColor = color)} {selectedColor} size="12px" />
 
         <Button
           style={css.raw({ marginLeft: 'auto', gap: '4px' })}
@@ -696,89 +531,7 @@
         width: 'full',
       })}
     >
-      {#if openNotes.length > 0}
-        <div class={flex({ flexDirection: 'column', gap: '8px' })} role="list">
-          {#each openNotes as note (note.id)}
-            <NoteComponent
-              cancelling={cancellingNoteIds.has(note.id)}
-              draggingNoteId={dragging?.noteId ?? null}
-              expanded={expandedNoteId === note.id}
-              {note}
-              onaddentity={handleAddEntity}
-              onchangecolor={handleChangeColor}
-              oncollapse={handleCollapse}
-              ondelete={handleDeleteNote}
-              ondragcancel={() => handleDragCancel(note.id)}
-              ondragend={handleDragEnd}
-              ondragmove={updateDraggingPosition}
-              ondragstart={(pointer) => handleDragStart(note.id, pointer)}
-              onendresolve={handleEndResolve}
-              onexpand={handleExpand}
-              onremoveentity={handleRemoveEntity}
-              ontogglestatus={handleToggleStatus}
-              onupdatecontent={handleUpdateContent}
-              resolving={resolvingNoteIds.has(note.id)}
-            />
-          {/each}
-        </div>
-      {/if}
-
-      {#if resolvedNotes.length > 0}
-        <button
-          class={flex({
-            alignItems: 'center',
-            gap: '6px',
-            marginTop: '16px',
-            paddingX: '8px',
-            paddingY: '6px',
-            fontSize: '13px',
-            fontWeight: 'medium',
-            color: 'text.subtle',
-            cursor: 'pointer',
-            borderRadius: '6px',
-            transitionProperty: 'common!',
-            backgroundColor: 'surface.dark/10',
-            _hover: { color: 'text.default', backgroundColor: 'surface.dark/15' },
-          })}
-          onclick={() => {
-            handleCollapse();
-            resolvedOpen = !resolvedOpen;
-          }}
-          type="button"
-        >
-          <Icon icon={resolvedOpen ? ChevronDownIcon : ChevronRightIcon} size={14} />
-          완료됨 ({resolvedNotes.length})
-        </button>
-
-        {#if resolvedOpen}
-          <div class={flex({ flexDirection: 'column', gap: '8px', marginTop: '4px' })} role="list">
-            {#each resolvedNotes as note (note.id)}
-              <NoteComponent
-                cancelling={cancellingNoteIds.has(note.id)}
-                draggingNoteId={dragging?.noteId ?? null}
-                expanded={expandedNoteId === note.id}
-                {note}
-                onaddentity={handleAddEntity}
-                onchangecolor={handleChangeColor}
-                oncollapse={handleCollapse}
-                ondelete={handleDeleteNote}
-                ondragcancel={() => handleDragCancel(note.id)}
-                ondragend={handleDragEnd}
-                ondragmove={updateDraggingPosition}
-                ondragstart={(pointer) => handleDragStart(note.id, pointer)}
-                onendresolve={handleEndResolve}
-                onexpand={handleExpand}
-                onremoveentity={handleRemoveEntity}
-                ontogglestatus={handleToggleStatus}
-                onupdatecontent={handleUpdateContent}
-                resolving={resolvingNoteIds.has(note.id)}
-              />
-            {/each}
-          </div>
-        {/if}
-      {/if}
-
-      {#if sortedNotes.length === 0}
+      {#if !hasCurrentSiteData && !siteQuery.error}
         <p
           class={css({
             paddingY: '32px',
@@ -786,9 +539,151 @@
             fontSize: '14px',
             color: 'text.faint',
           })}
+          role="status"
         >
-          떠오르는 생각이나 아이디어를 자유롭게 기록해보세요
+          노트를 불러오는 중...
         </p>
+      {:else if !hasCurrentSiteData && siteQuery.error}
+        <div
+          class={flex({
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '12px',
+            paddingY: '32px',
+            color: 'text.faint',
+            fontSize: '14px',
+          })}
+        >
+          <span>노트를 불러오지 못했어요.</span>
+          <Button onclick={() => siteQuery.refetch()} size="sm" variant="secondary">다시 시도</Button>
+        </div>
+      {:else}
+        {#if currentSiteId}
+          <NoteList
+            class={flex({ flexDirection: 'column' })}
+            authoritativeNotes={openNotes}
+            gap="8px"
+            identity={{ siteId: currentSiteId, status: 'OPEN' }}
+            onMoveSuccess={() => mixpanel.track('move_note')}
+            onexitcomplete={(note) => handleStatusExitComplete(note.id, 'OPEN')}
+            state={openListState}
+          >
+            {#snippet children({ item, reorder })}
+              <NoteComponent
+                anyDragging={dragging !== null}
+                cancelling={noteActions.isCancelling(item.note.id)}
+                dragging={reorder.dragging}
+                expanded={expandedNoteId === item.note.id}
+                note={item.note}
+                onColorSaved={(color) => mixpanel.track('change_note_color', { color })}
+                onaddentity={handleAddEntity}
+                oncollapse={handleCollapse}
+                ondelete={handleDeleteNote}
+                ondragcancel={() => handleDragCancel(item.note.id)}
+                ondragend={() => handleDragEnd(item.note.id)}
+                ondragmove={(position) => updateDraggingPosition(item.note.id, position)}
+                ondragstart={(pointer) => handleDragStart(item.note.id, pointer, reorder)}
+                onexpand={handleExpand}
+                onremoveentity={handleRemoveEntity}
+                ontogglestatus={handleToggleStatus}
+                reorderEnabled={reorder.enabled}
+                resolving={noteActions.isResolving(item.note.id)}
+              />
+            {/snippet}
+          </NoteList>
+        {/if}
+
+        {#if resolvedVisibleCount > 0}
+          <button
+            class={flex({
+              position: 'relative',
+              zIndex: '1',
+              alignItems: 'center',
+              gap: '6px',
+              marginTop: '16px',
+              paddingX: '8px',
+              paddingY: '6px',
+              fontSize: '13px',
+              fontWeight: 'medium',
+              color: 'text.subtle',
+              cursor: 'pointer',
+              borderRadius: '6px',
+              transitionProperty: 'common!',
+              backgroundColor: 'surface.dark/10',
+              _hover: { color: 'text.default', backgroundColor: 'surface.dark/15' },
+            })}
+            onclick={() => {
+              handleCollapse();
+              resolvedOpen = !resolvedOpen;
+            }}
+            type="button"
+          >
+            <Icon icon={resolvedOpen ? ChevronDownIcon : ChevronRightIcon} size={14} />
+            완료됨 ({resolvedVisibleCount})
+          </button>
+        {/if}
+
+        {#if currentSiteId}
+          <div
+            class={css({
+              display: 'grid',
+              gridTemplateRows: resolvedOpen ? '1fr' : '0fr',
+              transitionProperty: '[grid-template-rows]',
+              transitionDuration: '150ms',
+            })}
+            aria-hidden={!resolvedOpen}
+            aria-label="완료된 노트"
+            inert={!resolvedOpen}
+          >
+            <div class={css({ minHeight: '0', overflow: 'hidden' })}>
+              <NoteList
+                class={flex({ flexDirection: 'column', marginTop: '4px' })}
+                authoritativeNotes={resolvedNotes}
+                gap="8px"
+                identity={{ siteId: currentSiteId, status: 'RESOLVED' }}
+                onMoveSuccess={() => mixpanel.track('move_note')}
+                onexitcomplete={(note) => handleStatusExitComplete(note.id, 'RESOLVED')}
+                state={resolvedListState}
+              >
+                {#snippet children({ item, reorder })}
+                  <NoteComponent
+                    anyDragging={dragging !== null}
+                    cancelling={noteActions.isCancelling(item.note.id)}
+                    dragging={reorder.dragging}
+                    expanded={expandedNoteId === item.note.id}
+                    note={item.note}
+                    onColorSaved={(color) => mixpanel.track('change_note_color', { color })}
+                    onaddentity={handleAddEntity}
+                    oncollapse={handleCollapse}
+                    ondelete={handleDeleteNote}
+                    ondragcancel={() => handleDragCancel(item.note.id)}
+                    ondragend={() => handleDragEnd(item.note.id)}
+                    ondragmove={(position) => updateDraggingPosition(item.note.id, position)}
+                    ondragstart={(pointer) => handleDragStart(item.note.id, pointer, reorder)}
+                    onexpand={handleExpand}
+                    onremoveentity={handleRemoveEntity}
+                    ontogglestatus={handleToggleStatus}
+                    reorderEnabled={reorder.enabled}
+                    resolving={noteActions.isResolving(item.note.id)}
+                  />
+                {/snippet}
+              </NoteList>
+            </div>
+          </div>
+        {/if}
+
+        {#if openVisibleCount + resolvedVisibleCount === 0}
+          <p
+            class={css({
+              paddingY: '32px',
+              textAlign: 'center',
+              fontSize: '14px',
+              color: 'text.faint',
+            })}
+          >
+            떠오르는 생각이나 아이디어를 자유롭게 기록해보세요
+          </p>
+        {/if}
       {/if}
     </div>
   </div>
