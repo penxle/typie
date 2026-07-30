@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -59,6 +60,7 @@ import co.typie.domain.subscription.SubscriptionService
 import co.typie.domain.subscription.gate
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
+import co.typie.ext.navigationBars
 import co.typie.ext.navigationBarsPadding
 import co.typie.ext.pointerIgnore
 import co.typie.ext.pressScale
@@ -511,18 +513,25 @@ private fun Drawer.visibleProgress(panelWidthPx: Float): Float =
 @Composable
 fun mainDrawerSwipeToOpenModifier(drawer: Drawer, enabled: Boolean): Modifier {
   val scope = rememberCoroutineScope()
+  val density = LocalDensity.current
+  val bottomNavigationInsetPx = WindowInsets.navigationBars.getBottom(density)
 
   if (!enabled) {
     return Modifier
   }
 
-  return Modifier.pointerInput(drawer) {
+  return Modifier.pointerInput(drawer, bottomNavigationInsetPx) {
     val slop = viewConfiguration.touchSlop
     val velocityThresholdPx = DrawerDefaults.VelocityThreshold.toPx()
 
     awaitEachGesture {
       val down = awaitFirstDown(requireUnconsumed = false)
-      if (down.type == PointerType.Mouse || drawer.isOpen || drawer.isProgrammaticAnimating) {
+      if (
+        down.position.y >= (size.height - bottomNavigationInsetPx).toFloat() ||
+          down.type == PointerType.Mouse ||
+          drawer.isOpen ||
+          drawer.isProgrammaticAnimating
+      ) {
         return@awaitEachGesture
       }
 

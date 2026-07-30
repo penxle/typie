@@ -91,6 +91,27 @@ class MainDrawerGestureDesktopTest {
   }
 
   @Test
+  fun `drag starting in bottom navigation inset never opens the drawer`() = runComposeUiTest {
+    lateinit var drawer: Drawer
+
+    setContent {
+      drawer = rememberTestDrawer()
+      DrawerSwipeHost(drawer)
+    }
+    waitForIdle()
+
+    onNodeWithTag(SwipeHostTag).performTouchInput {
+      down(Offset(x = 20f, y = bottom - 1f))
+      repeat(15) { moveBy(Offset(x = 12f, y = 0f), delayMillis = 50L) }
+      up()
+    }
+    waitForIdle()
+
+    assertEquals(-300f, drawer.state.requireOffset(), absoluteTolerance = 0.1f)
+    assertEquals(DrawerAnchor.Closed, drawer.state.currentValue)
+  }
+
+  @Test
   fun `vertical dominant full area gesture stays rejected`() = runComposeUiTest {
     lateinit var drawer: Drawer
     var touchSlop = 0f
