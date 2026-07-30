@@ -1,10 +1,10 @@
 import { error, fail } from '@sveltejs/kit';
 import { eq } from 'drizzle-orm';
 import { costPerCharacter, sumCosts } from '$lib/domain/pricing.ts';
-import { phaseCosts, readPriceTable, runCost, totalUsage } from '$lib/server/pricing.ts';
+import { phaseCosts, pipelineUsage, readPriceTable, runCost, totalUsage } from '$lib/server/pricing.ts';
 import { cancelRun, isRunLocked, refreshRun, retryRun } from '$lib/server/run-service.ts';
 import { loadRunView } from '$lib/server/run-view.ts';
-import { createDb, Ledgers, PhaseUsage, PromptSets, Runs } from '../../../../../core/db.ts';
+import { CallUsage, createDb, Ledgers, PromptSets, Runs } from '../../../../../core/db.ts';
 import { generationById } from '../../../../../core/registry.ts';
 import type { ToolRecord } from '../../../../../core/contracts.ts';
 import type { Actions, PageServerLoad } from './$types';
@@ -22,7 +22,13 @@ export const load: PageServerLoad = async ({ params, platform }) => {
   if (!view) error(500, 'run view missing');
 
   const manifest = generationById(view.generationId ?? '');
-  const usage = await db.select().from(PhaseUsage).where(eq(PhaseUsage.runId, params.id));
+  // 회계는 호출별 원장(call_usage) 하나에서만 나온다 — phase_usage는 재시도 비용까지 누적되는
+  // 진단 기록이라 화면에 쓰지 않는다.
+  const calls = await db
+    .select({ phase: CallUsage.phase, usage: CallUsage.usage, durationMs: CallUsage.durationMs })
+    .from(CallUsage)
+    .where(eq(CallUsage.runId, params.id));
+  const usage = pipelineUsage(calls);
 
   const [set] = run.promptSetId
     ? await db.select({ content: PromptSets.content }).from(PromptSets).where(eq(PromptSets.id, run.promptSetId))
@@ -53,8 +59,20 @@ export const load: PageServerLoad = async ({ params, platform }) => {
     })
     .toSorted((a, b) => a.at - b.at);
 
+  // 완료된 실행의 소요는 파이프라인 1회분(원장 합), 진행 중은 벽시계 경과 — 목록과 같은 규칙.
+  // 합 0은 미기록(시간 기록이 없던 시절의 백필)이다.
+  const started = run.startedAt ?? run.createdAt;
+  const pipelineSeconds = usage.reduce((sum, p) => sum + p.durationMs, 0) / 1000;
+  const durationSeconds = run.status === 'running' ? (Date.now() - started.getTime()) / 1000 : pipelineSeconds > 0 ? pipelineSeconds : null;
+
   return {
-    run: { ...run, createdAt: run.createdAt.toISOString(), finishedAt: run.finishedAt?.toISOString() ?? null },
+    run: {
+      ...run,
+      createdAt: run.createdAt.toISOString(),
+      startedAt: run.startedAt?.toISOString() ?? null,
+      finishedAt: run.finishedAt?.toISOString() ?? null,
+    },
+    durationSeconds,
     view,
     // 진행 표시와 비용표가 같은 축이다 — 매니페스트의 phases 하나로 둘 다 그린다.
     phases:

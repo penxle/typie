@@ -15,6 +15,7 @@
     tableRowClass,
   } from '$lib/styles.ts';
   import CostCell from '../lib/CostCell.svelte';
+  import { formatDuration } from '../lib/format.ts';
   import { usePolling } from '../lib/poll.svelte.ts';
   import RunStatusBadge from './RunStatusBadge.svelte';
   import type { PageData } from './$types';
@@ -62,10 +63,13 @@
         <thead>
           <tr class={tableHeadClass}>
             <th>문서</th>
+            <th>글자 수</th>
             <th>묶음</th>
             <th>상태</th>
             <th>진행</th>
+            <th>소요</th>
             <th>비용</th>
+            <th>자당</th>
             <th>생성 시각</th>
             <th></th>
           </tr>
@@ -74,10 +78,19 @@
           {#each data.runs as run (run.id)}
             <tr class={tableRowClass}>
               <td>{run.refId ?? run.id}</td>
+              <td class={css({ fontVariantNumeric: 'tabular-nums' })}>
+                {run.characterCount === null ? '—' : `${run.characterCount.toLocaleString('ko')}자`}
+              </td>
               <td>{run.promptSetLabel ?? '—'}</td>
               <td><RunStatusBadge status={run.status} /></td>
               <td>{run.phaseLabel ?? '—'}</td>
+              <td class={css({ fontVariantNumeric: 'tabular-nums' })}>
+                {run.durationSeconds === null ? '—' : formatDuration(run.durationSeconds)}
+              </td>
               <td><CostCell cost={run.cost} tokens={run.tokens} total={run.stageTotal} /></td>
+              <td class={css({ fontVariantNumeric: 'tabular-nums' })}>
+                {run.krwPerCharacter === null ? '—' : `${run.krwPerCharacter.toFixed(2)}원`}
+              </td>
               <td class={css({ color: 'text.faint' })}>{new Date(run.createdAt).toLocaleString('ko')}</td>
               <td><a class={rowLinkClass} href="/admin/runs/{run.id}">보기 →</a></td>
             </tr>

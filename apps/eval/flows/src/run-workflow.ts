@@ -30,7 +30,7 @@ export class RunWorkflow extends WorkflowEntrypoint<FlowEnv, RunParams> {
       if (!Object.hasOwn(RUNNERS, set.generationId)) throw new Error(`generation runner missing: ${set.generationId}`);
 
       const prompts = resolvePrompts(manifest, set.content);
-      await db.update(Runs).set({ status: 'running', error: null }).where(eq(Runs.id, runId));
+      await db.update(Runs).set({ status: 'running', error: null, startedAt: new Date() }).where(eq(Runs.id, runId));
       return { generationId: set.generationId, content: document.content, documentId: document.id, prompts } as never;
     })) as unknown as {
       generationId: string;

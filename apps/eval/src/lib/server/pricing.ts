@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm';
 import { DEFAULT_PRICE_TABLE, estimateCost, parsePriceTable } from '$lib/domain/pricing.ts';
 import { Settings } from '../../../core/db.ts';
 import type { Cost, PriceTable } from '$lib/domain/pricing.ts';
+import type { Usage } from '../../../core/contracts.ts';
 import type { Db } from '../../../core/db.ts';
 
 export const PRICE_SETTING_KEY = 'model_prices';
@@ -23,6 +24,37 @@ export type PhaseUsageRow = {
   completionTokens: number;
   cachedTokens: number;
   cacheWriteTokens: number;
+};
+
+export type CallUsageRow = { phase: string; usage: Usage; durationMs: number };
+export type PipelinePhase = PhaseUsageRow & { durationMs: number };
+
+// 호출별 원장(call_usage)을 단계로 합친다. phase_usage는 시도를 넘어 누적되어 캐시를 비우고
+// 재실행하면 실패한 시도의 비용까지 합산돼 보이지만, 원장 행은 호출당 하나라 이 합이 곧 마지막
+// 성공 경로의 파이프라인 1회분이다. 화면 회계는 이 함수 하나로만 나온다 — 도입 이전 실행은
+// 마이그레이션이 phase_usage를 합성 행으로 백필해 같은 길로 들어온다.
+export const pipelineUsage = (rows: CallUsageRow[]): PipelinePhase[] => {
+  const byPhase = new Map<string, PipelinePhase>();
+  for (const row of rows) {
+    const acc = byPhase.get(row.phase) ?? {
+      phase: row.phase,
+      calls: 0,
+      promptTokens: 0,
+      completionTokens: 0,
+      cachedTokens: 0,
+      cacheWriteTokens: 0,
+      durationMs: 0,
+    };
+    acc.calls += row.usage.calls;
+    acc.promptTokens += row.usage.promptTokens;
+    acc.completionTokens += row.usage.completionTokens;
+    acc.cachedTokens += row.usage.cachedTokens;
+    acc.cacheWriteTokens += row.usage.cacheWriteTokens;
+    acc.durationMs += row.durationMs;
+    byPhase.set(row.phase, acc);
+  }
+  // 사용량도 시간도 없는 단계는 표에 빈 줄만 만든다.
+  return [...byPhase.values()].filter((row) => row.calls > 0 || row.promptTokens > 0 || row.completionTokens > 0 || row.durationMs > 0);
 };
 
 // 프롬프트 묶음이 단계마다 모델을 정한다 — 어느 토큰이 어느 모델 것인지는 이 표로만 되돌린다.

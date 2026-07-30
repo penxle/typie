@@ -8,6 +8,7 @@
   import { formatKrw } from '$lib/domain/pricing.ts';
   import { outlineButtonClass, pageClass, sectionCardClass } from '$lib/styles.ts';
   import CostCell from '../../lib/CostCell.svelte';
+  import { formatDuration } from '../../lib/format.ts';
   import { usePolling } from '../../lib/poll.svelte.ts';
   import RunStatusBadge from '../RunStatusBadge.svelte';
   import type { ToolRecord } from '../../../../../core/contracts.ts';
@@ -46,18 +47,6 @@
   const ratio = $derived(data.run.status === 'done' ? 1 : data.phases.length === 0 || phaseIndex < 0 ? 0 : phaseIndex / data.phases.length);
   const phaseLabel = $derived(
     data.run.status === 'done' ? '완료' : (data.phases.find((p) => p.key === data.run.phase)?.label ?? '대기 중'),
-  );
-
-  const formatDuration = (totalSeconds: number): string => {
-    const seconds = Math.max(0, Math.round(totalSeconds));
-    if (seconds < 60) return `${seconds}초`;
-    const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return `${minutes}분 ${seconds % 60}초`;
-    return `${Math.floor(minutes / 60)}시간 ${minutes % 60}분`;
-  };
-
-  const elapsedSeconds = $derived(
-    ((data.run.finishedAt ? new Date(data.run.finishedAt).getTime() : Date.now()) - new Date(data.run.createdAt).getTime()) / 1000,
   );
 
   const post = async (action: string) => {
@@ -174,8 +163,9 @@
 
     <div class={grid({ columns: 3, gap: '10px', marginTop: '16px' })}>
       <div class={statCardClass}>
-        <p class={statLabelClass}>경과</p>
-        <p class={statValueClass}>{formatDuration(elapsedSeconds)}</p>
+        <!-- 진행 중엔 벽시계 경과(멈췄는지 보는 신호), 끝나면 파이프라인 1회분 합 — 비용과 같은 축. -->
+        <p class={statLabelClass}>{data.run.status === 'running' ? '경과' : '소요'}</p>
+        <p class={statValueClass}>{data.durationSeconds === null ? '—' : formatDuration(data.durationSeconds)}</p>
       </div>
       <div class={statCardClass}>
         <p class={statLabelClass}>누적 토큰</p>
@@ -224,6 +214,7 @@
             <th>캐시 읽기</th>
             <th>캐시 쓰기</th>
             <th>출력</th>
+            <th>소요</th>
             <th>비용</th>
             <th>모델</th>
           </tr>
@@ -241,6 +232,7 @@
                 {(phase.usage?.cacheWriteTokens ?? 0) > 0 ? number(phase.usage?.cacheWriteTokens ?? 0) : '—'}
               </td>
               <td>{number(phase.usage?.completionTokens ?? 0)}</td>
+              <td>{phase.usage && phase.usage.durationMs > 0 ? formatDuration(phase.usage.durationMs / 1000) : '—'}</td>
               <td>{phase.cost?.kind === 'exact' ? formatKrw(phase.cost.krw) : '—'}</td>
               <td class={css({ color: 'text.faint' })}>{phase.model?.split('/').at(-1) ?? '—'}</td>
             </tr>
@@ -253,6 +245,7 @@
               <td>{row.cachedTokens > 0 ? number(row.cachedTokens) : '—'}</td>
               <td>{row.cacheWriteTokens > 0 ? number(row.cacheWriteTokens) : '—'}</td>
               <td>{number(row.completionTokens)}</td>
+              <td>{row.durationMs > 0 ? formatDuration(row.durationMs / 1000) : '—'}</td>
               <td>{row.cost?.kind === 'exact' ? formatKrw(row.cost.krw) : '—'}</td>
               <td>{row.model?.split('/').at(-1) ?? '—'}</td>
             </tr>

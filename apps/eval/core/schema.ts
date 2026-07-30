@@ -1,4 +1,5 @@
 import { integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import type { Usage } from './contracts.ts';
 
 const createdAt = () =>
   integer('created_at', { mode: 'timestamp' })
@@ -44,6 +45,9 @@ export const Runs = sqliteTable('runs', {
   phase: text('phase'),
   error: text('error'),
   createdAt: createdAt(),
+  // 워크플로가 돌기 시작한 시각. 재시도마다 새로 찍힌다 — 소요 시간은 createdAt이 아니라
+  // 여기서부터 잰다(재시도는 같은 행을 다시 걸어 createdAt이 첫 시도 것으로 남는다).
+  startedAt: integer('started_at', { mode: 'timestamp' }),
   finishedAt: integer('finished_at', { mode: 'timestamp' }),
 });
 
@@ -109,6 +113,23 @@ export const CallCache = sqliteTable(
     runId: text('run_id').notNull(),
     key: text('key').notNull(),
     value: text('value', { mode: 'json' }).notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.runId, t.key] })],
+);
+
+// 호출별 회계 원장 — 캐시가 아니므로 삭제 대상이 아니다. 회계의 자연 단위는 호출이다:
+// 리플레이 적중은 재실행되지 않아 그 비용·시간은 처음 실행된 시도가 남긴 행만이 안다.
+// 행이 호출당 하나라 몇 번을 재실행해도 합이 파이프라인 1회분이다 — phase_usage는 시도를
+// 넘어 누적되어 재실행 비용까지 합산된다.
+export const CallUsage = sqliteTable(
+  'call_usage',
+  {
+    runId: text('run_id').notNull(),
+    key: text('key').notNull(),
+    phase: text('phase').notNull(),
+    usage: text('usage', { mode: 'json' }).notNull().$type<Usage>(),
+    durationMs: integer('duration_ms').notNull(),
     createdAt: createdAt(),
   },
   (t) => [primaryKey({ columns: [t.runId, t.key] })],

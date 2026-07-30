@@ -87,7 +87,10 @@ export const retryRun = async (db: Db, env: Env, runId: string): Promise<{ ok: t
   if (!run) return { error: 'run not found' };
   if (await isRunLocked(db, runId)) return { error: '판정이 걸린 실행은 다시 돌릴 수 없습니다' };
 
-  await db.update(Runs).set({ status: 'pending', phase: null, error: null, instanceId: null, finishedAt: null }).where(eq(Runs.id, runId));
+  await db
+    .update(Runs)
+    .set({ status: 'pending', phase: null, error: null, instanceId: null, startedAt: null, finishedAt: null })
+    .where(eq(Runs.id, runId));
   try {
     const instance = await env.RUN.create({ params: { runId } });
     await db.update(Runs).set({ instanceId: instance.id }).where(eq(Runs.id, runId));

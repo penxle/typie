@@ -1,9 +1,9 @@
 import { error, fail } from '@sveltejs/kit';
 import { desc, eq } from 'drizzle-orm';
-import { sumCosts } from '$lib/domain/pricing.ts';
-import { phaseCosts, readPriceTable, runCost, totalUsage } from '$lib/server/pricing.ts';
+import { costPerCharacter, sumCosts } from '$lib/domain/pricing.ts';
+import { phaseCosts, pipelineUsage, readPriceTable, runCost, totalUsage } from '$lib/server/pricing.ts';
 import { cancelRun, refreshRun, retryRun } from '$lib/server/run-service.ts';
-import { createDb, Documents, PhaseUsage, PromptSets, Runs } from '../../../../core/db.ts';
+import { CallUsage, createDb, Documents, PromptSets, Runs } from '../../../../core/db.ts';
 import { generationById } from '../../../../core/registry.ts';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -18,7 +18,9 @@ export const load: PageServerLoad = async ({ platform }) => {
       phase: Runs.phase,
       error: Runs.error,
       createdAt: Runs.createdAt,
+      startedAt: Runs.startedAt,
       refId: Documents.refId,
+      characterCount: Documents.characterCount,
       promptSetLabel: PromptSets.label,
       promptSetContent: PromptSets.content,
       generationId: PromptSets.generationId,
@@ -42,24 +44,39 @@ export const load: PageServerLoad = async ({ platform }) => {
   );
 
   // 비용은 단계별 사용량을 실행 단위로 합쳐 낸다 — 단계마다 모델이 다르면 '혼합'으로 떨어진다.
-  const usage = await db.select().from(PhaseUsage);
+  // 회계는 호출별 원장(call_usage) 하나에서만 나온다 — phase_usage는 재시도 비용까지 누적되는
+  // 진단 기록이라 화면에 쓰지 않는다.
+  const calls = await db
+    .select({ runId: CallUsage.runId, phase: CallUsage.phase, usage: CallUsage.usage, durationMs: CallUsage.durationMs })
+    .from(CallUsage);
   const table = await readPriceTable(db);
-  const usageByRun = new Map<string, typeof usage>();
-  for (const row of usage) usageByRun.set(row.runId, [...(usageByRun.get(row.runId) ?? []), row]);
+  const callsByRun = new Map<string, typeof calls>();
+  for (const row of calls) callsByRun.set(row.runId, [...(callsByRun.get(row.runId) ?? []), row]);
 
   return {
     runs: rows.map((r) => {
-      const mine = usageByRun.get(r.id) ?? [];
+      const mine = pipelineUsage(callsByRun.get(r.id) ?? []);
       const totals = totalUsage(mine);
-      const { promptSetContent, ...rest } = r;
+      const { promptSetContent, startedAt, ...rest } = r;
+      const cost = runCost(mine, promptSetContent, table);
+      const stageTotal = mine.length > 0 ? sumCosts(phaseCosts(mine, promptSetContent, table).map((c) => c.cost)) : null;
+      const krw = stageTotal?.complete && stageTotal.krw > 0 ? stageTotal.krw : cost.kind === 'exact' ? cost.krw : null;
+      const started = startedAt ?? r.createdAt;
+      // 완료된 실행의 소요는 파이프라인 1회분(원장 합)이다 — 비용과 같은 축이라 캐시로 이어
+      // 돌린 재실행에서도 원래 걸린 시간이 보인다. 벽시계는 진행 중 표시에만 쓴다 — 라이브
+      // 표시가 묻는 것은 "얼마나 지났나(멈췄나)"이고, 원장 합은 호출이 끝나야만 자란다.
+      // 합 0은 미기록(시간 기록이 없던 시절의 백필)이다.
+      const pipelineSeconds = mine.reduce((sum, p) => sum + p.durationMs, 0) / 1000;
       return {
         ...rest,
         createdAt: r.createdAt.toISOString(),
         phaseLabel: generationById(r.generationId ?? '')?.phases.find((p) => p.key === r.phase)?.label ?? r.phase,
-        cost: runCost(mine, promptSetContent, table),
+        cost,
         // 실행 단위로 '혼합'이 되어도 단계별 합으로는 정확한 금액이 나온다.
-        stageTotal: mine.length > 0 ? sumCosts(phaseCosts(mine, promptSetContent, table).map((c) => c.cost)) : null,
+        stageTotal,
         tokens: totals.promptTokens + totals.completionTokens,
+        krwPerCharacter: krw !== null && r.characterCount ? costPerCharacter(krw, r.characterCount) : null,
+        durationSeconds: r.status === 'running' ? (Date.now() - started.getTime()) / 1000 : pipelineSeconds > 0 ? pipelineSeconds : null,
       };
     }),
   };

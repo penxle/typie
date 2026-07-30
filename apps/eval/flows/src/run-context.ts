@@ -1,6 +1,6 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { emptyUsage } from '../../core/contracts.ts';
-import { CallCache, Ledgers, PhaseUsage, Runs } from '../../core/db.ts';
+import { CallCache, CallUsage, Ledgers, PhaseUsage, Runs } from '../../core/db.ts';
 import type { WorkflowStep } from 'cloudflare:workers';
 import type { PhasePrompt, Usage } from '../../core/contracts.ts';
 import type { Db } from '../../core/db.ts';
@@ -65,7 +65,16 @@ export const createRunContext = (deps: {
       if (hit) return { value: (hit.value as { value: unknown }).value as never, cached: true };
 
       const usage = emptyUsage();
+      const startedAt = Date.now();
       const value = await fn(usage);
+      const row = accumulate(emptyUsage(), usage);
+      const durationMs = Math.max(0, Math.round(Date.now() - startedAt));
+      // 원장을 캐시보다 먼저 쓴다. 캐시가 먼저 들어가고 그 사이에 실패하면 다음 시도는 적중으로
+      // 끝나 이 호출의 회계가 영영 빠진다 — 원장이 먼저면 실패해도 다음 시도가 재실행해 덮어쓴다.
+      await deps.db
+        .insert(CallUsage)
+        .values({ runId: deps.runId, key, phase: current, usage: row, durationMs })
+        .onConflictDoUpdate({ target: [CallUsage.runId, CallUsage.key], set: { phase: current, usage: row, durationMs } });
       // 값을 한 겹 감싼다. 러너가 null이나 배열을 반환해도 적중 판별이 무너지지 않게.
       await deps.db.insert(CallCache).values({ runId: deps.runId, key, value: { value } }).onConflictDoNothing();
       await addPhaseUsage(deps.db, deps.runId, current, usage);
