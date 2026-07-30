@@ -415,7 +415,9 @@ fun NavigationStack(
       }
 
       if (segment.blockedRoute == null) {
-        if (delayed) {
+        val animatesSeparately = delayed || transitionStyle == RouteTransitionStyle.Fade
+        if (animatesSeparately) {
+          exitAnimation.cancelAndJoin()
           if (!animateRemovalTo(target)) {
             return@coroutineScope performProgressiveRemoval(target)
           }
@@ -426,7 +428,7 @@ fun NavigationStack(
           return@coroutineScope rollbackGestureAndRetry()
         }
 
-        if (!delayed) commitRemovalTo(target)
+        if (!animatesSeparately) commitRemovalTo(target)
         navigator.routeRemovals.commitSegment()
         return@coroutineScope NavigationResult.ReachedTarget
       }

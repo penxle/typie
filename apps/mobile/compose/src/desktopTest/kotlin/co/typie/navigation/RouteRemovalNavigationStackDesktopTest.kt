@@ -1,5 +1,6 @@
 package co.typie.navigation
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -8,8 +9,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performTouchInput
@@ -246,6 +250,51 @@ class RouteRemovalNavigationStackDesktopTest {
       "A committed back swipe must continue toward the exit: released=$releasedLeft, animated=$animatedLeft",
     )
     clock.autoAdvance = true
+    waitUntil { navigator.current == Route.Home && !navigator.isTransitioning }
+  }
+
+  @Test
+  fun committedFadeBackSwipeCrossfadesAfterRelease() = runComposeUiTest {
+    val navigator = Navigator(Route.Home)
+
+    setContent {
+      NavigationStack(
+        navigator = navigator,
+        topBarState = remember { TopBarState() },
+        modifier = Modifier.size(width = 320.dp, height = 640.dp),
+      ) { route ->
+        Box(
+          Modifier.fillMaxSize()
+            .background(if (route == Route.Search) Color.Blue else Color.Red)
+            .testTag(if (route == Route.Search) SearchRouteTag else HomeRouteTag)
+        )
+      }
+      LaunchedEffect(Unit) { navigator.navigate(Route.Search) }
+    }
+    waitUntil { navigator.current == Route.Search && !navigator.isTransitioning }
+
+    val clock = mainClock
+    onNodeWithTag(SearchRouteTag).performTouchInput {
+      down(center)
+      moveBy(Offset(x = 100f, y = 0f))
+      moveBy(Offset(x = 120f, y = 0f))
+      clock.autoAdvance = false
+      up()
+    }
+    clock.advanceTimeBy(100L)
+
+    try {
+      assertEquals(Route.Search, navigator.current)
+      val pixels =
+        onNodeWithTag(NavigationSceneSurfaceCompositeTestTag).captureToImage().toPixelMap()
+      val center = pixels[pixels.width / 2, pixels.height / 2]
+      assertTrue(
+        center.red > 0.05f && center.blue > 0.05f,
+        "A committed fade back swipe must show both routes during the transition: color=$center",
+      )
+    } finally {
+      clock.autoAdvance = true
+    }
     waitUntil { navigator.current == Route.Home && !navigator.isTransitioning }
   }
 
@@ -672,6 +721,7 @@ class RouteRemovalNavigationStackDesktopTest {
   private companion object {
     const val GuardedRouteTag = "guarded-route"
     const val HomeRouteTag = "home-route"
+    const val SearchRouteTag = "search-route"
     const val UnguardedRouteTag = "unguarded-route"
     const val TopRouteTag = "top-route"
     const val BackgroundRouteTag = "background-route"
