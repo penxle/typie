@@ -944,6 +944,105 @@ describe('Editor guarded core invocation', () => {
     editor.destroy();
   });
 
+  it('publishes the immediately applied viewport only after its replacement frame', async () => {
+    const core = createCore();
+    core.page_sizes.mockReturnValue([{ width: 40, height: 1064 }]);
+    core.page_backing_sizes.mockReturnValue([{ width: 40, height: 1064 }]);
+    core.tick_through.mockImplementation((requestId) => ({
+      revision: { value: 1 },
+      events: [{ type: 'state_changed', fields: ['page_sizes'] }],
+      request_outcomes: [{ request_id: requestId, command_outcomes: [{ type: 'applied' }] }],
+    }));
+    const { editor } = await createEditor(core);
+    const releaseHost = editor.activateVisualHost();
+    const displayed = document.createElement('canvas');
+    const candidate = document.createElement('canvas');
+    core.render_surface.mockReset().mockReturnValueOnce({ value: 1 }).mockReturnValue(undefined);
+    const replace = vi.fn(() => {
+      editor.attachSurface(0, candidate, 320, 1064, replace);
+    });
+    editor.attachSurface(0, displayed, 40, 1064, replace);
+
+    core.page_sizes.mockReturnValue([{ width: 320, height: 1064 }]);
+    core.page_backing_sizes.mockReturnValue([{ width: 320, height: 1064 }]);
+    core.tick_through.mockImplementation((requestId) => ({
+      revision: { value: 2 },
+      events: [{ type: 'state_changed', fields: ['page_sizes'] }, { type: 'render_invalidated' }],
+      request_outcomes: [{ request_id: requestId, command_outcomes: [{ type: 'applied' }] }],
+    }));
+
+    editor.resizeViewportNow(320, 800, 1);
+    expect(editor.appliedRevision).toBe(2);
+    expect(editor.publishedRevision).toBe(1);
+    expect(editor.isPublished(editor.appliedRevision, { requireFrame: true })).toBe(false);
+
+    core.render_surface.mockReturnValue({ value: 2 });
+    editor.invalidateSurface(0);
+
+    expect(editor.publishedRevision).toBe(2);
+    expect(editor.publishedSurfaceCanvas(0)).toBe(candidate);
+    expect(editor.isPublished(editor.appliedRevision, { requireFrame: true })).toBe(true);
+
+    releaseHost();
+    editor.destroy();
+  });
+
+  it('publishes an already matching viewport when its first frame arrives', async () => {
+    const core = createCore();
+    core.page_sizes.mockReturnValue([{ width: 320, height: 1064 }]);
+    core.page_backing_sizes.mockReturnValue([{ width: 320, height: 1064 }]);
+    core.tick_through.mockImplementation((requestId) => ({
+      revision: { value: 1 },
+      events: [{ type: 'state_changed', fields: ['page_sizes'] }],
+      request_outcomes: [{ request_id: requestId, command_outcomes: [{ type: 'applied' }] }],
+    }));
+    wasmHarness.createEditor.mockReturnValue(core);
+    const editor = await Editor.createFromDoc({} as never, { width: 320, height: 800, scale_factor: 1 });
+    const releaseHost = editor.activateVisualHost();
+
+    editor.resizeViewportNow(320, 800, 1);
+    expect(editor.isPublished(editor.appliedRevision, { requireFrame: true })).toBe(false);
+
+    editor.attachSurface(0, document.createElement('canvas'), 320, 1064);
+
+    expect(editor.isPublished(editor.appliedRevision, { requireFrame: true })).toBe(true);
+
+    releaseHost();
+    editor.destroy();
+  });
+
+  it('requires a frame from the current visual host after reactivation', async () => {
+    const core = createCore();
+    core.page_sizes.mockReturnValue([{ width: 320, height: 1064 }]);
+    core.page_backing_sizes.mockReturnValue([{ width: 320, height: 1064 }]);
+    core.tick_through.mockImplementation((requestId) => ({
+      revision: { value: 1 },
+      events: [{ type: 'state_changed', fields: ['page_sizes'] }],
+      request_outcomes: [{ request_id: requestId, command_outcomes: [{ type: 'applied' }] }],
+    }));
+    wasmHarness.createEditor.mockReturnValue(core);
+    const editor = await Editor.createFromDoc({} as never, { width: 320, height: 800, scale_factor: 1 });
+    const releaseFirstHost = editor.activateVisualHost();
+
+    editor.resizeViewportNow(320, 800, 1);
+    editor.attachSurface(0, document.createElement('canvas'), 320, 1064);
+    expect(editor.isPublished(editor.appliedRevision, { requireFrame: true })).toBe(true);
+
+    releaseFirstHost();
+    const releaseSecondHost = editor.activateVisualHost();
+
+    expect(editor.isPublished(editor.appliedRevision, { requireFrame: true })).toBe(false);
+
+    const secondCanvas = document.createElement('canvas');
+    editor.attachSurface(0, secondCanvas, 320, 1064);
+
+    expect(editor.publishedSurfaceCanvas(0)).toBe(secondCanvas);
+    expect(editor.isPublished(editor.appliedRevision, { requireFrame: true })).toBe(true);
+
+    releaseSecondHost();
+    editor.destroy();
+  });
+
   it('requests a preparing surface when page shrink removes every active target', async () => {
     const core = createCore();
     core.page_sizes.mockReturnValue([

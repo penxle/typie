@@ -350,7 +350,6 @@ export class Editor {
 
   #viewport = $state<Viewport>({ width: 0, height: 0, scale_factor: 1 });
   #appliedViewport: Viewport = { width: 0, height: 0, scale_factor: 1 };
-  #firstResizeApplied = false;
   #applyViewportResize = debounce(() => {
     if (this.#destroyed || sameViewport(this.#appliedViewport, this.#viewport)) return;
 
@@ -771,9 +770,7 @@ export class Editor {
       const published = this.published;
       if (!published) return;
       for (const waiter of this.#publicationWaiters) {
-        if (!satisfiesWaiter(waiter.revision, published.snapshot.revision, published.frames, this.#visualHost, waiter.requireFrame)) {
-          continue;
-        }
+        if (!this.isPublished(waiter.revision, { requireFrame: waiter.requireFrame })) continue;
         this.#publicationWaiters.delete(waiter);
         if (waiter.signal && waiter.onAbort) waiter.signal.removeEventListener('abort', waiter.onAbort);
         waiter.resolve({ type: 'published', revision: published.snapshot.revision });
@@ -798,7 +795,7 @@ export class Editor {
     if (this.#failed) return Promise.reject(this.#failure);
     if (!this.#visualHost) return Promise.resolve({ type: 'no_host' });
     const published = this.published;
-    if (published && satisfiesWaiter(revision, published.snapshot.revision, published.frames, this.#visualHost, requireFrame)) {
+    if (published && this.isPublished(revision, { requireFrame })) {
       return Promise.resolve({ type: 'published', revision: published.snapshot.revision });
     }
     for (const target of this.#visualHost.targets.values()) {
@@ -1289,8 +1286,12 @@ export class Editor {
     return this.#viewport.scale_factor * this.renderZoom;
   }
 
-  get viewportResized(): boolean {
-    return this.#firstResizeApplied;
+  isPublished(revision: number, options?: { requireFrame?: boolean }): boolean {
+    const published = this.published;
+    return (
+      published !== undefined &&
+      satisfiesWaiter(revision, published.snapshot.revision, published.frames, this.#visualHost, options?.requireFrame)
+    );
   }
 
   resizeViewport(width: number, height: number, scaleFactor: number): void {
@@ -1303,13 +1304,25 @@ export class Editor {
     this.#viewport = viewport;
     if (sameViewport(this.#appliedViewport, viewport)) return;
 
-    if (!this.#firstResizeApplied) {
-      this.#firstResizeApplied = true;
-      this.#applyViewport(viewport);
-      return;
-    }
-
     this.#applyViewportResize.call();
+  }
+
+  resizeViewportNow(width: number, height: number, scaleFactor: number): void {
+    if (!Number.isFinite(width) || !Number.isFinite(height) || !Number.isFinite(scaleFactor)) return;
+    if (width <= 0 || height <= 0 || scaleFactor <= 0) return;
+
+    const viewport = { width, height, scale_factor: scaleFactor };
+    this.#viewport = viewport;
+    this.#applyViewportResize.cancel();
+    if (sameViewport(this.#appliedViewport, viewport)) return;
+
+    this.#appliedViewport = viewport;
+    this.updateNow((request) => {
+      request.enqueue({
+        type: 'system',
+        event: { type: 'resize', width: viewport.width, height: viewport.height, scale_factor: viewport.scale_factor },
+      });
+    });
   }
 
   setRenderZoom(renderZoom: number): void {

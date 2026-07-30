@@ -169,6 +169,7 @@
   });
 
   let readyFired = false;
+  let viewportEditor: (typeof ctx)['editor'];
 
   $effect(() => {
     const editor = ctx.editor;
@@ -180,14 +181,21 @@
     const effectiveWidth = isContinuous ? Math.max(CONTINUOUS_MIN_WIDTH, width) : width;
 
     untrack(() => {
-      editor.resizeViewport(effectiveWidth, height, viewportScaleFactor);
-
-      if (!readyFired && editor.viewportResized) {
-        readyFired = true;
-        loadFonts(document.data.editorFontFamilies);
-        onReady?.();
+      if (viewportEditor === editor) {
+        editor.resizeViewport(effectiveWidth, height, viewportScaleFactor);
+      } else {
+        viewportEditor = editor;
+        editor.resizeViewportNow(effectiveWidth, height, viewportScaleFactor);
       }
     });
+
+    if (!readyFired && editor.isPublished(editor.appliedRevision, { requireFrame: true })) {
+      readyFired = true;
+      untrack(() => {
+        loadFonts(document.data.editorFontFamilies);
+        onReady?.();
+      });
+    }
   });
 
   $effect(() => {
