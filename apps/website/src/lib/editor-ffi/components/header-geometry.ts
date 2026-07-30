@@ -42,7 +42,7 @@ export function resolveHeaderGeometry(input: HeaderGeometryInput): HeaderGeometr
   const trackWidth = Math.max(bodyTrackWidth, leftInset + rightInset + Math.min(readableMin, visibleCapacity));
   const fieldWidth = Math.min(
     Math.max(0, trackWidth - leftInset - rightInset),
-    Math.max(0, viewportWidth - EDITOR_HEADER_VIEWPORT_GAP * 2),
+    Math.max(EDITOR_HEADER_MIN_WIDTH * EDITOR_HEADER_MIN_SCALE, viewportWidth - EDITOR_HEADER_VIEWPORT_GAP * 2),
   );
 
   return {

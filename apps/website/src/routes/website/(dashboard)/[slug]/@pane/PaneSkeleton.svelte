@@ -304,7 +304,7 @@
   </div>
 {:else if pane.kind === 'home'}
   <!-- Home skeleton: centered like the actual HomePane layout -->
-  <div class={css({ width: 'full', height: 'full', overflowY: 'auto' })}>
+  <div class={css({ width: 'full', height: 'full', overflow: 'auto' })}>
     <div
       class={flex({
         flexDirection: 'column',
@@ -312,6 +312,7 @@
         gap: '32px',
         width: '800px',
         maxWidth: 'full',
+        minWidth: '400px',
         minHeight: 'full',
         marginX: 'auto',
         padding: '64px',
