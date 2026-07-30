@@ -15,7 +15,7 @@
 <div
   class={css({
     position: 'sticky',
-    bottom: '0',
+    bottom: '4px',
     marginTop: '32px',
     left: '16px',
     right: '16px',
