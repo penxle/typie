@@ -91,6 +91,7 @@ ipaddr
 jaccard
 kakao
 kakaokompassauth
+kakaopay
 karpenter
 khtml
 koin

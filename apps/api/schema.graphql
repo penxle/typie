@@ -48,6 +48,11 @@ input AuthorizeSingleSignOnInput {
 
 scalar BigInt
 
+enum BillingKeyType {
+  CARD
+  KAKAOPAY
+}
+
 scalar Binary
 
 interface Blob {
@@ -911,6 +916,7 @@ type Mutation {
   unlockDocumentView(input: UnlockDocumentViewInput!): DocumentView!
   unresolveDocumentCommentThread(input: UnresolveDocumentCommentThreadInput!): DocumentCommentThread!
   updateBillingKey(input: UpdateBillingKeyInput!): UserBillingKey!
+  updateBillingKeyWithEasyPay(input: UpdateBillingKeyWithEasyPayInput!): UserBillingKey!
   updateBootstrap(input: UpdateBootstrapInput!): JSON!
   updateDocument(input: UpdateDocumentInput!): Document!
   updateDocumentComment(input: UpdateDocumentCommentInput!): DocumentCommentThread!
@@ -1502,6 +1508,10 @@ input UpdateBillingKeyInput {
   passwordTwoDigits: String!
 }
 
+input UpdateBillingKeyWithEasyPayInput {
+  billingKey: String!
+}
+
 input UpdateBootstrapInput {
   bootstrap: JSON!
 }
@@ -1654,6 +1664,7 @@ type User implements IUser {
   surveys: [String!]!
   textReplacements: [TextReplacementNode!]!
   trial: UserTrial
+  usableBillingKeyTypes: [BillingKeyType!]!
   usage: UserUsage!
   uuid: String!
 }
@@ -1662,6 +1673,7 @@ type UserBillingKey {
   createdAt: DateTime!
   id: ID!
   name: String!
+  type: BillingKeyType!
 }
 
 type UserDevice {

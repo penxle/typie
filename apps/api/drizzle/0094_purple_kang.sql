@@ -1,0 +1,1 @@
+ALTER TABLE "user_billing_keys" DROP COLUMN "card_number_hash";

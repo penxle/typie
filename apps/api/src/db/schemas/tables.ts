@@ -1064,8 +1064,8 @@ export const UserBillingKeys = pgTable('user_billing_keys', {
     .notNull()
     .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
   name: text('name').notNull(),
+  type: E._BillingKeyType('type').notNull().default('CARD'),
   billingKey: text('billing_key').unique().notNull(),
-  cardNumberHash: text('card_number_hash'),
   createdAt: datetime('created_at')
     .notNull()
     .default(sql`now()`),

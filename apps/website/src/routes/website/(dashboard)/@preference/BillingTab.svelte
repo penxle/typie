@@ -1,8 +1,9 @@
 <script lang="ts">
   import { createFragment, createMutation } from '@mearie/svelte';
   import { PlanPair, SUBSCRIPTION_GRACE_DAYS } from '@typie/lib/const';
-  import { PlanAvailability, PlanInterval, SubscriptionState } from '@typie/lib/enums';
+  import { BillingKeyType, PlanAvailability, PlanInterval, SubscriptionState } from '@typie/lib/enums';
   import { TypieError } from '@typie/lib/errors';
+  import { supportsPlanInterval } from '@typie/lib/plan';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Button } from '@typie/ui/components';
@@ -10,9 +11,11 @@
   import { comma } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
+  import KakaoPayLogo from '$assets/icons/kakaopay.svg?component';
   import { SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
   import { cache } from '$lib/graphql';
   import { graphql } from '$mearie';
+  import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
   import RedeemCreditCodeModal from './RedeemCreditCodeModal.svelte';
   import SubscriptionCancellationSurveyModal from './SubscriptionCancellationSurveyModal.svelte';
   import UpdatePaymentMethodModal from './UpdatePaymentMethodModal.svelte';
@@ -35,6 +38,7 @@
         billingKey {
           id
           name
+          type
         }
 
         subscription {
@@ -165,8 +169,12 @@
     `),
   );
 
+  const planChangeUnsupportedMessages: Record<BillingKeyType, string> = {
+    [BillingKeyType.CARD]: '신용·체크카드로는 전환하려는 플랜을 결제할 수 없어요. 결제 수단을 바꾸면 전환할 수 있어요.',
+    [BillingKeyType.KAKAOPAY]: '연간 플랜은 카카오페이로 결제할 수 없어요. 결제 수단을 카드로 바꾸면 전환할 수 있어요.',
+  };
+
   let updatePaymentMethodOpen = $state(false);
-  let updatePaymentMethodMode = $state<'register' | 'subscribe'>('register');
   let redeemCreditCodeOpen = $state(false);
   let cancellationSurveyOpen = $state(false);
 
@@ -205,16 +213,7 @@
             읽기 전용 상태예요.
           {/snippet}
           {#snippet value()}
-            <Button
-              onclick={() => {
-                updatePaymentMethodMode = 'subscribe';
-                updatePaymentMethodOpen = true;
-              }}
-              size="sm"
-              variant="primary"
-            >
-              구독 시작하기
-            </Button>
+            <Button onclick={() => SubscribeModal.show('billing_tab_no_subscription')} size="sm" variant="primary">구독 시작하기</Button>
           {/snippet}
         </SettingsRow>
       </SettingsCard>
@@ -267,12 +266,21 @@
             {/snippet}
             {#snippet description()}
               {@const isMonthly = subscription.plan.interval === PlanInterval.MONTHLY}
-              {isMonthly ? '1년 단위로 결제하면 2개월 무료 혜택을 받아요.' : '한 달 단위로 결제할 수 있어요.'}
+              {@const targetInterval = isMonthly ? PlanInterval.YEARLY : PlanInterval.MONTHLY}
+              {@const canChangePlan = !user.data.billingKey || supportsPlanInterval(user.data.billingKey.type, targetInterval)}
+              {#if canChangePlan}
+                {isMonthly ? '1년 단위로 결제하면 2개월 무료 혜택을 받아요.' : '한 달 단위로 결제할 수 있어요.'}
+              {:else if user.data.billingKey}
+                {planChangeUnsupportedMessages[user.data.billingKey.type]}
+              {/if}
             {/snippet}
             {#snippet value()}
               {@const targetPlanId = PlanPair[subscription.plan.id as keyof typeof PlanPair]}
               {@const isMonthly = subscription.plan.interval === PlanInterval.MONTHLY}
+              {@const targetInterval = isMonthly ? PlanInterval.YEARLY : PlanInterval.MONTHLY}
+              {@const canChangePlan = !user.data.billingKey || supportsPlanInterval(user.data.billingKey.type, targetInterval)}
               <Button
+                disabled={!canChangePlan}
                 onclick={() => {
                   Dialog.confirm({
                     title: isMonthly ? '연간 플랜으로 전환하시겠어요?' : '월간 플랜으로 전환하시겠어요?',
@@ -313,16 +321,7 @@
                 결제 수단을 등록하고 유료 플랜으로 업그레이드하세요.
               {/snippet}
               {#snippet value()}
-                <Button
-                  onclick={() => {
-                    updatePaymentMethodMode = 'subscribe';
-                    updatePaymentMethodOpen = true;
-                  }}
-                  size="sm"
-                  variant="primary"
-                >
-                  지금 업그레이드
-                </Button>
+                <Button onclick={() => SubscribeModal.show('billing_tab_trial')} size="sm" variant="primary">지금 업그레이드</Button>
               {/snippet}
             </SettingsRow>
           {:else}
@@ -476,40 +475,39 @@
     <SettingsCard>
       <SettingsRow>
         {#snippet label()}
-          결제 카드
+          결제 수단
         {/snippet}
         {#snippet description()}
           {#if user.data.billingKey}
-            {user.data.billingKey.name}
+            <span class={flex({ alignItems: 'center', gap: '6px' })}>
+              {#if user.data.billingKey.type === BillingKeyType.KAKAOPAY}
+                <KakaoPayLogo class={css({ height: '14px' })} />
+              {:else}
+                {user.data.billingKey.name}
+              {/if}
+            </span>
           {:else}
-            등록된 카드가 없어요.
+            등록된 결제 수단이 없어요.
           {/if}
         {/snippet}
         {#snippet value()}
           <div class={flex({ gap: '8px' })}>
-            <Button
-              onclick={() => {
-                updatePaymentMethodMode = 'register';
-                updatePaymentMethodOpen = true;
-              }}
-              size="sm"
-              variant="secondary"
-            >
-              {user.data.billingKey ? '변경' : '카드 등록'}
+            <Button onclick={() => (updatePaymentMethodOpen = true)} size="sm" variant="secondary">
+              {user.data.billingKey ? '변경' : '결제 수단 등록'}
             </Button>
             {#if user.data.billingKey && (!user.data.subscription || isTrial) && !user.data.nextSubscription}
               <Button
                 onclick={() => {
                   Dialog.confirm({
-                    title: '결제 카드를 삭제하시겠어요?',
-                    message: '등록된 카드 정보가 삭제돼요. 유료 플랜을 구독하려면 다시 등록해야 해요.',
+                    title: '결제 수단을 삭제하시겠어요?',
+                    message: '등록된 결제 수단이 삭제돼요. 유료 플랜을 구독하려면 다시 등록해야 해요.',
                     action: 'danger',
                     actionLabel: '삭제',
                     actionHandler: async () => {
                       await deleteBillingKey();
                       cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'billingKey' });
                       mixpanel.track('delete_billing_key');
-                      Toast.success('카드가 삭제되었어요');
+                      Toast.success('결제 수단이 삭제되었어요');
                     },
                   });
                 }}
@@ -585,6 +583,6 @@
   {/if}
 </div>
 
-<UpdatePaymentMethodModal mode={updatePaymentMethodMode} user$key={user.data} bind:open={updatePaymentMethodOpen} />
+<UpdatePaymentMethodModal user$key={user.data} bind:open={updatePaymentMethodOpen} />
 <RedeemCreditCodeModal bind:open={redeemCreditCodeOpen} />
 <SubscriptionCancellationSurveyModal onSubmit={handleCancellationSurveySubmit} user$key={user.data} bind:open={cancellationSurveyOpen} />

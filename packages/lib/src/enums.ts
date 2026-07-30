@@ -1,3 +1,9 @@
+export type BillingKeyType = keyof typeof BillingKeyType;
+export const BillingKeyType = {
+  CARD: 'CARD',
+  KAKAOPAY: 'KAKAOPAY',
+} as const;
+
 export type CouponState = keyof typeof CouponState;
 export const CouponState = {
   ACTIVE: 'ACTIVE',

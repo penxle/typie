@@ -1,5 +1,6 @@
 import { PortOneClient, RestError } from '@portone/server-sdk';
 import { env } from '../env.ts';
+import type { BillingKeyIssuance } from '#/utils/billing-key.ts';
 
 export const client = PortOneClient({ secret: env.PORTONE_API_SECRET });
 
@@ -70,6 +71,24 @@ export const deleteBillingKey = async (params: DeleteBillingKeyParams): Promise<
   }
 };
 
+type GetBillingKeyInfoParams = { billingKey: string };
+type GetBillingKeyInfoResult = PortOneResult<{ issuance: BillingKeyIssuance }>;
+export const getBillingKeyInfo = async (params: GetBillingKeyInfoParams): Promise<GetBillingKeyInfoResult> => {
+  try {
+    const resp = await client.payment.billingKey.getBillingKeyInfo({ billingKey: params.billingKey });
+
+    return makeSuccessResult({
+      issuance: {
+        status: String(resp.status),
+        customerId: resp.status === 'ISSUED' ? resp.customer.id : undefined,
+        channelKeys: resp.status === 'ISSUED' ? resp.channels.map((channel) => channel.key).filter((key) => key !== undefined) : [],
+      },
+    });
+  } catch (err) {
+    return makeFailureResult(err);
+  }
+};
+
 type PayWithBillingKeyParams = {
   paymentId: string;
   billingKey: string;
@@ -78,7 +97,7 @@ type PayWithBillingKeyParams = {
   orderName: string;
   amount: number;
 };
-type PayWithBillingKeyResult = PortOneResult<{ approvalNumber: string; receiptUrl: string }>;
+type PayWithBillingKeyResult = PortOneResult<{ approvalNumber: string | undefined; receiptUrl: string | undefined }>;
 export const payWithBillingKey = async (params: PayWithBillingKeyParams): Promise<PayWithBillingKeyResult> => {
   try {
     await client.payment.payWithBillingKey({
@@ -95,16 +114,14 @@ export const payWithBillingKey = async (params: PayWithBillingKeyParams): Promis
 
     const resp = await client.payment.getPayment({ paymentId: params.paymentId });
 
-    if (!resp || resp.status !== 'PAID' || resp.method?.type !== 'PaymentMethodCard') {
+    if (!resp || resp.status !== 'PAID') {
       throw new Error('Failed to make payment');
     }
 
-    /* eslint-disable @typescript-eslint/no-non-null-assertion */
     return makeSuccessResult({
-      approvalNumber: resp.method.approvalNumber!,
-      receiptUrl: resp.receiptUrl!,
+      approvalNumber: resp.method?.type === 'PaymentMethodCard' ? resp.method.approvalNumber : undefined,
+      receiptUrl: resp.receiptUrl,
     });
-    /* eslint-enable @typescript-eslint/no-non-null-assertion */
   } catch (err) {
     return makeFailureResult(err);
   }

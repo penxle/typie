@@ -1,7 +1,7 @@
-import { createHash } from 'node:crypto';
 import * as Sentry from '@sentry/node';
 import { defaultPlanRules, TRIAL_DURATION_DAYS } from '@typie/lib/const';
 import {
+  BillingKeyType,
   CreditCodeState,
   InAppPurchaseStore,
   PaymentInvoiceState,
@@ -12,6 +12,7 @@ import {
   UserState,
 } from '@typie/lib/enums';
 import { NotFoundError, TypieError } from '@typie/lib/errors';
+import { supportsPlanInterval } from '@typie/lib/plan';
 import { cardSchema, redeemCodeSchema } from '@typie/lib/validation';
 import dayjs from 'dayjs';
 import { and, desc, eq, gt, inArray, ne, or, sql } from 'drizzle-orm';
@@ -37,12 +38,15 @@ import {
   UserTrials,
   validateDbId,
 } from '#/db/index.ts';
+import { env } from '#/env.ts';
 import * as appstore from '#/external/appstore.ts';
 import * as googleplay from '#/external/googleplay.ts';
 import * as portone from '#/external/portone.ts';
+import { verifyEasyPayBillingKey } from '#/utils/billing-key.ts';
 import { getSubscriptionExpiresAt, hasBillableUsageDuring, payAmountWithBillingKey, payInvoiceWithBillingKey } from '#/utils/index.ts';
 import { createTrialSubscription } from '#/utils/plan.ts';
 import { delay } from '#/utils/promise.ts';
+import { hasLiveYearlyBillingKeySubscription, replaceUserBillingKey } from '#/utils/subscription-billing-key.ts';
 import { resolveEnrollAction } from '#/utils/subscription-enroll.ts';
 import { lockUserSubscriptionState } from '#/utils/subscription-lock.ts';
 import { getUserUuid } from '#/utils/user.ts';
@@ -245,50 +249,60 @@ builder.mutationFields((t) => ({
         throw new TypieError({ code: 'billing_key_issue_failed' });
       }
 
-      try {
-        return await db.transaction(async (tx) => {
-          await lockUserSubscriptionState(tx, ctx.session.userId);
+      return await replaceUserBillingKey({
+        userId: ctx.session.userId,
+        name: `${result.cardName} ${input.cardNumber.slice(-4)}`,
+        type: BillingKeyType.CARD,
+        billingKey: result.billingKey,
+      });
+    },
+  }),
 
-          // 발급 대기 중 탈퇴가 완료됐으면 키를 재삽입하지 않는다.
-          await tx
-            .select({ id: Users.id })
-            .from(Users)
-            .where(and(eq(Users.id, ctx.session.userId), eq(Users.state, UserState.ACTIVE)))
-            .then(firstOrThrow);
+  updateBillingKeyWithEasyPay: t.withAuth({ session: true }).fieldWithInput({
+    type: UserBillingKey,
+    input: { billingKey: t.input.string() },
+    resolve: async (_, { input }, ctx) => {
+      const result = await portone.getBillingKeyInfo({ billingKey: input.billingKey });
 
-          const existingBillingKey = await tx
-            .delete(UserBillingKeys)
-            .where(eq(UserBillingKeys.userId, ctx.session.userId))
-            .returning({ billingKey: UserBillingKeys.billingKey })
-            .then(first);
-
-          if (existingBillingKey) {
-            await portone.deleteBillingKey({ billingKey: existingBillingKey.billingKey });
-          }
-
-          return await tx
-            .insert(UserBillingKeys)
-            .values({
-              userId: ctx.session.userId,
-              name: `${result.cardName} ${input.cardNumber.slice(-4)}`,
-              billingKey: result.billingKey,
-              cardNumberHash: createHash('sha256').update(input.cardNumber).digest('hex'),
-            })
-            .returning()
-            .then(firstOrThrow);
-        });
-      } catch (err) {
-        // 저장 실패(탈퇴 경합 등) 시 방금 발급한 외부 키가 로컬 참조 없는 고아로 남지 않게 회수한다.
-        // deleteBillingKey 는 throw 하지 않고 상태를 반환하므로, 결과를 검사해야 회수 실패가 무음으로 사라지지 않는다.
-        const deletion = await portone.deleteBillingKey({ billingKey: result.billingKey });
-        if (deletion.status === 'failed') {
-          Sentry.captureMessage('billing key compensation cleanup failed', {
-            level: 'warning',
-            extra: { userId: ctx.session.userId, billingKey: result.billingKey, code: deletion.code, message: deletion.message },
-          });
-        }
-        throw err;
+      if (result.status === 'failed') {
+        throw new TypieError({ code: 'billing_key_issue_failed' });
       }
+
+      const verification = verifyEasyPayBillingKey(result.issuance, {
+        userId: ctx.session.userId,
+        channelKey: env.PORTONE_KAKAOPAY_CHANNEL_KEY,
+      });
+
+      if (!verification.ok) {
+        // 저장되는 키에는 항상 customerId 가 있으므로 customer_missing 만 우리 DB 가 참조하지 않음이 보장된다 — 다른 사유는 타인의·참조 중인 키를 지울 수 있어 회수하지 않는다.
+        const deletion =
+          verification.reason === 'customer_missing' ? await portone.deleteBillingKey({ billingKey: input.billingKey }) : undefined;
+
+        Sentry.captureMessage('easy pay billing key rejected', {
+          level: 'warning',
+          extra: {
+            userId: ctx.session.userId,
+            reason: verification.reason,
+            billingKey: input.billingKey,
+            channelKeys: result.issuance.channelKeys,
+            deletion,
+          },
+        });
+
+        throw new TypieError({ code: 'billing_key_issue_failed' });
+      }
+
+      return await replaceUserBillingKey({
+        userId: ctx.session.userId,
+        name: '카카오페이',
+        type: BillingKeyType.KAKAOPAY,
+        billingKey: input.billingKey,
+        guard: async (tx) => {
+          if (await hasLiveYearlyBillingKeySubscription(tx, ctx.session.userId)) {
+            throw new TypieError({ code: 'plan_interval_not_supported' });
+          }
+        },
+      });
     },
   }),
 
@@ -360,16 +374,20 @@ builder.mutationFields((t) => ({
           throw new TypieError({ code: 'subscription_already_exists' });
         }
 
+        const billingKey = await tx
+          .select({ id: UserBillingKeys.id, type: UserBillingKeys.type })
+          .from(UserBillingKeys)
+          .where(eq(UserBillingKeys.userId, ctx.session.userId))
+          .then(first);
+
+        if (billingKey && !supportsPlanInterval(billingKey.type, plan.interval)) {
+          throw new TypieError({ code: 'plan_interval_not_supported' });
+        }
+
         if (action.kind === 'schedule') {
           const startsAt = action.startsAt;
           const expiresAt = getSubscriptionExpiresAt(startsAt, plan.interval);
           const hadReservation = subscriptionRows.some((row) => row.state === SubscriptionState.WILL_ACTIVATE);
-
-          const billingKey = await tx
-            .select({ id: UserBillingKeys.id })
-            .from(UserBillingKeys)
-            .where(eq(UserBillingKeys.userId, ctx.session.userId))
-            .then(first);
 
           if (!billingKey) {
             throw new TypieError({ code: 'billing_key_required' });
@@ -467,6 +485,16 @@ builder.mutationFields((t) => ({
             ),
           )
           .then(firstOrThrow);
+
+        const billingKey = await tx
+          .select({ type: UserBillingKeys.type })
+          .from(UserBillingKeys)
+          .where(eq(UserBillingKeys.userId, ctx.session.userId))
+          .then(firstOrThrow);
+
+        if (!supportsPlanInterval(billingKey.type, plan.interval)) {
+          throw new TypieError({ code: 'plan_interval_not_supported' });
+        }
 
         const startsAt = activeSubscription.expiresAt;
         const expiresAt = getSubscriptionExpiresAt(startsAt, plan.interval);

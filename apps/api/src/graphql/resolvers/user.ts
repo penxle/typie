@@ -1,6 +1,7 @@
 import { PutObjectCommand } from '@aws-sdk/client-s3';
 import * as Sentry from '@sentry/node';
 import {
+  BillingKeyType,
   CouponState,
   CreditCodeState,
   EntityState,
@@ -9,6 +10,7 @@ import {
   FontFamilyState,
   PaymentInvoiceState,
   PlanAvailability,
+  PlanInterval,
   SingleSignOnProvider,
   SiteState,
   SubscriptionState,
@@ -17,6 +19,7 @@ import {
   UserState,
 } from '@typie/lib/enums';
 import { TypieError } from '@typie/lib/errors';
+import { supportsPlanInterval } from '@typie/lib/plan';
 import { redeemCodeSchema, userSchema } from '@typie/lib/validation';
 import argon2 from 'argon2';
 import dayjs from 'dayjs';
@@ -66,6 +69,7 @@ import { evaluateCouponCondition } from '#/utils/coupon.ts';
 import { getDocumentFontFamilies } from '#/utils/document.ts';
 import { assertActiveSubscription } from '#/utils/plan.ts';
 import { delay } from '#/utils/promise.ts';
+import { hasLiveYearlyBillingKeySubscription } from '#/utils/subscription-billing-key.ts';
 import { lockUserSubscriptionState } from '#/utils/subscription-lock.ts';
 import { getUserUsage, getUserUuid } from '#/utils/user.ts';
 import { builder } from '../builder.ts';
@@ -140,6 +144,16 @@ User.implement({
           .then(first);
 
         return !!subscription;
+      },
+    }),
+
+    usableBillingKeyTypes: t.field({
+      type: [BillingKeyType],
+      resolve: async (self) => {
+        const hasYearly = await hasLiveYearlyBillingKeySubscription(db, self.id);
+        const interval = hasYearly ? PlanInterval.YEARLY : PlanInterval.MONTHLY;
+
+        return Object.values(BillingKeyType).filter((type) => supportsPlanInterval(type, interval));
       },
     }),
 
@@ -512,6 +526,7 @@ UserBillingKey.implement({
   fields: (t) => ({
     id: t.exposeID('id'),
     name: t.exposeString('name'),
+    type: t.expose('type', { type: BillingKeyType }),
     createdAt: t.expose('createdAt', { type: 'DateTime' }),
   }),
 });

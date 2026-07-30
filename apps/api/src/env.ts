@@ -39,6 +39,7 @@ const schema = z.object({
   OTEL_EXPORTER_OTLP_ENDPOINT: z.string().optional(),
   PORTONE_API_SECRET: z.string(),
   PORTONE_CHANNEL_KEY: z.string(),
+  PORTONE_KAKAOPAY_CHANNEL_KEY: z.string(),
   PREVIEW_SIGNING_SECRET: z.string(),
   REDIS_URL: z.string(),
   SENTRY_DSN: z.string().optional(),

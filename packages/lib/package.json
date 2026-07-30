@@ -11,6 +11,7 @@
     "./const": "./src/const.ts",
     "./enums": "./src/enums.ts",
     "./errors": "./src/errors.ts",
+    "./plan": "./src/plan.ts",
     "./validation": "./src/validation.ts",
     "./vite": {
       "types": "./src/vite/index.d.ts",
@@ -19,7 +20,8 @@
   },
   "scripts": {
     "lint:eslint": "eslint --max-warnings 0 .",
-    "lint:typecheck": "tsc"
+    "lint:typecheck": "tsc",
+    "test": "node --test src/**/*.test.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.0.8",

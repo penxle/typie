@@ -1,8 +1,10 @@
 <script lang="ts">
   import { createFragment, createMutation } from '@mearie/svelte';
+  import * as Sentry from '@sentry/sveltekit';
   import { PlanId } from '@typie/lib/const';
-  import { PlanAvailability, PlanInterval, SubscriptionState } from '@typie/lib/enums';
+  import { BillingKeyType, PlanAvailability, PlanInterval, SubscriptionState } from '@typie/lib/enums';
   import { TypieError } from '@typie/lib/errors';
+  import { supportsPlanInterval } from '@typie/lib/plan';
   import { cardSchema } from '@typie/lib/validation';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
@@ -19,11 +21,15 @@
   import InfoIcon from '~icons/lucide/info';
   import LockIcon from '~icons/lucide/lock';
   import MoonIcon from '~icons/lucide/moon';
+  import KakaoPayLogo from '$assets/icons/kakaopay.svg?component';
   import { fb } from '$lib/analytics';
   import { cache } from '$lib/graphql';
+  import { requestKakaoPayBillingKey } from '$lib/portone';
   import { graphql } from '$mearie';
   import SubscriptionCelebrationModal from '../SubscriptionCelebrationModal.svelte';
   import BillingCardForm from './BillingCardForm.svelte';
+  import PaymentAgreements from './PaymentAgreements.svelte';
+  import PaymentMethodSelector from './PaymentMethodSelector.svelte';
   import { SubscribeModal } from './subscribe-modal.svelte';
   import type { DashboardLayout_SubscribeModal_user$key } from '$mearie';
 
@@ -42,6 +48,7 @@
         billingKey {
           id
           name
+          type
         }
 
         subscription {
@@ -68,6 +75,20 @@
         updateBillingKey(input: $input) {
           id
           name
+          type
+          createdAt
+        }
+      }
+    `),
+  );
+
+  const [updateBillingKeyWithEasyPay] = createMutation(
+    graphql(`
+      mutation DashboardLayout_SubscribeModal_UpdateBillingKeyWithEasyPay_Mutation($input: UpdateBillingKeyWithEasyPayInput!) {
+        updateBillingKeyWithEasyPay(input: $input) {
+          id
+          name
+          type
           createdAt
         }
       }
@@ -140,6 +161,7 @@
   let isEditingCard = $state(false);
   let celebrationModalOpen = $state(false);
   let scheduledCelebration = $state(false);
+  let method = $state<BillingKeyType>(BillingKeyType.CARD);
 
   const isTrial = $derived(user.data.subscription?.plan.availability === PlanAvailability.TRIAL);
   const hasScheduled = $derived(Boolean(user.data.nextSubscription));
@@ -149,7 +171,27 @@
   const creditDiscount = $derived(Math.min(user.data.credit, planFee));
   const finalAmount = $derived(planFee - creditDiscount);
 
-  const useExistingCard = $derived(Boolean(user.data.billingKey) && !isEditingCard);
+  const useExistingBillingKey = $derived(Boolean(user.data.billingKey) && !isEditingCard);
+  const effectiveMethod = $derived(useExistingBillingKey ? (user.data.billingKey?.type ?? BillingKeyType.CARD) : method);
+
+  const intervalUnsupportedMessages: Record<BillingKeyType, string> = {
+    [BillingKeyType.CARD]: '신용·체크카드로는 선택한 결제 주기를 이용할 수 없어요.',
+    [BillingKeyType.KAKAOPAY]: '카카오페이는 월간 결제만 지원해요.',
+  };
+
+  const disabledMethods = $derived(
+    Object.fromEntries(
+      Object.values(BillingKeyType)
+        .filter((type) => !supportsPlanInterval(type, interval))
+        .map((type) => [type, intervalUnsupportedMessages[type]]),
+    ),
+  );
+
+  $effect(() => {
+    if (!supportsPlanInterval(method, interval)) {
+      method = BillingKeyType.CARD;
+    }
+  });
 
   const form = createForm({
     schema: z.object({
@@ -169,28 +211,48 @@
         throw new FormError('agreementsAccepted', '약관에 동의해주세요.');
       }
 
-      if (!useExistingCard) {
-        if (!data.cardNumber) {
-          throw new FormError('cardNumber', '카드 번호를 입력해 주세요');
-        }
-        if (!data.expiryDate) {
-          throw new FormError('expiryDate', '만료일을 입력해 주세요');
-        }
-        if (!data.passwordTwoDigits) {
-          throw new FormError('passwordTwoDigits', '카드 비밀번호를 입력해 주세요');
-        }
-        if (!data.birthOrBusinessRegistrationNumber) {
-          throw new FormError('birthOrBusinessRegistrationNumber', '생년월일 또는 사업자 등록번호를 입력해 주세요');
-        }
+      if (!useExistingBillingKey) {
+        if (method === BillingKeyType.KAKAOPAY) {
+          const result = await requestKakaoPayBillingKey({ userId: user.data.id });
 
-        await updateBillingKey({
-          input: {
-            birthOrBusinessRegistrationNumber: data.birthOrBusinessRegistrationNumber,
-            cardNumber: data.cardNumber,
-            expiryDate: data.expiryDate,
-            passwordTwoDigits: data.passwordTwoDigits,
-          },
-        });
+          if (result.status === 'canceled') {
+            return;
+          }
+
+          if (result.status === 'failed') {
+            Sentry.captureMessage('kakaopay billing key issue failed', {
+              level: 'warning',
+              extra: { code: result.code, message: result.message, pgCode: result.pgCode, pgMessage: result.pgMessage },
+            });
+
+            submitError = '카카오페이 결제 수단 등록에 실패했어요.';
+            return;
+          }
+
+          await updateBillingKeyWithEasyPay({ input: { billingKey: result.billingKey } });
+        } else {
+          if (!data.cardNumber) {
+            throw new FormError('cardNumber', '카드 번호를 입력해 주세요');
+          }
+          if (!data.expiryDate) {
+            throw new FormError('expiryDate', '만료일을 입력해 주세요');
+          }
+          if (!data.passwordTwoDigits) {
+            throw new FormError('passwordTwoDigits', '카드 비밀번호를 입력해 주세요');
+          }
+          if (!data.birthOrBusinessRegistrationNumber) {
+            throw new FormError('birthOrBusinessRegistrationNumber', '생년월일 또는 사업자 등록번호를 입력해 주세요');
+          }
+
+          await updateBillingKey({
+            input: {
+              birthOrBusinessRegistrationNumber: data.birthOrBusinessRegistrationNumber,
+              cardNumber: data.cardNumber,
+              expiryDate: data.expiryDate,
+              passwordTwoDigits: data.passwordTwoDigits,
+            },
+          });
+        }
 
         cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'billingKey' });
         mixpanel.track('update_payment_billing_key');
@@ -213,12 +275,16 @@
       celebrationModalOpen = true;
     },
     onError: (error) => {
+      const isCard = effectiveMethod === BillingKeyType.CARD;
       const errorMessages: Record<string, string> = {
-        billing_key_issue_failed: '결제 키 발급에 실패했어요. 카드 정보를 확인해주세요.',
-        billing_key_required: '결제 카드를 먼저 등록해 주세요.',
+        billing_key_issue_failed: isCard
+          ? '결제 키 발급에 실패했어요. 카드 정보를 확인해주세요.'
+          : '결제 수단 등록에 실패했어요. 다시 시도해 주세요.',
+        billing_key_required: '결제 수단을 먼저 등록해 주세요.',
         plan_already_enrolled: '이미 구독 중이에요.',
         unpaid_invoice_exists: '미결제 내역이 있어요. 고객센터에 문의해주세요.',
-        payment_failed: '결제에 실패했어요. 카드 정보를 확인해주세요.',
+        payment_failed: isCard ? '결제에 실패했어요. 카드 정보를 확인해주세요.' : '결제에 실패했어요. 다시 시도해 주세요.',
+        plan_interval_not_supported: '선택한 결제 수단으로는 이 결제 주기를 이용할 수 없어요.',
       };
 
       if (error instanceof TypieError) {
@@ -238,6 +304,7 @@
         interval = PlanInterval.MONTHLY;
         submitError = null;
         isEditingCard = false;
+        method = BillingKeyType.CARD;
         form.reset();
       });
     }
@@ -501,7 +568,7 @@
               </div>
 
               <div class={flex({ flex: '1', flexDirection: 'column', gap: '16px' })}>
-                {#if useExistingCard}
+                {#if useExistingBillingKey}
                   <div
                     class={flex({
                       justify: 'space-between',
@@ -513,10 +580,18 @@
                       backgroundColor: 'surface.default',
                     })}
                   >
-                    <span class={css({ fontSize: '14px', color: 'text.default' })}>{user.data.billingKey?.name}</span>
+                    {#if user.data.billingKey?.type === BillingKeyType.KAKAOPAY}
+                      <KakaoPayLogo class={css({ height: '14px' })} />
+                    {:else}
+                      <span class={css({ fontSize: '14px', color: 'text.default' })}>{user.data.billingKey?.name}</span>
+                    {/if}
                     <Button onclick={() => (isEditingCard = true)} size="sm" variant="secondary">변경</Button>
                   </div>
-                  <BillingCardForm errors={form.errors} fields={form.fields} showCardFields={false} />
+                  <PaymentAgreements
+                    error={form.errors.agreementsAccepted}
+                    method={effectiveMethod}
+                    onchange={(accepted) => (form.fields.agreementsAccepted = accepted)}
+                  />
                 {:else}
                   {#if isEditingCard && user.data.billingKey}
                     <button
@@ -531,10 +606,18 @@
                       onclick={() => (isEditingCard = false)}
                       type="button"
                     >
-                      기존 카드 사용하기
+                      기존 결제 수단 사용하기
                     </button>
                   {/if}
-                  <BillingCardForm errors={form.errors} fields={form.fields} />
+                  <PaymentMethodSelector disabled={disabledMethods} bind:method />
+                  {#if effectiveMethod === BillingKeyType.CARD}
+                    <BillingCardForm errors={form.errors} fields={form.fields} />
+                  {/if}
+                  <PaymentAgreements
+                    error={form.errors.agreementsAccepted}
+                    method={effectiveMethod}
+                    onchange={(accepted) => (form.fields.agreementsAccepted = accepted)}
+                  />
                 {/if}
 
                 {#if submitError}
@@ -564,7 +647,7 @@
 
                   <div class={flex({ alignItems: 'center', justify: 'center', gap: '5px', fontSize: '12px', color: 'text.faint' })}>
                     <Icon icon={LockIcon} size={12} />
-                    <span>카드 정보는 암호화되어 안전하게 전송돼요.</span>
+                    <span>결제 정보는 암호화되어 안전하게 전송돼요.</span>
                   </div>
                 </div>
               </div>

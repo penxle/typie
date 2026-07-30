@@ -1,7 +1,7 @@
 <script lang="ts">
   import { createFragment, createMutation } from '@mearie/svelte';
-  import { PlanId } from '@typie/lib/const';
-  import { PlanAvailability, PlanInterval, SubscriptionState } from '@typie/lib/enums';
+  import * as Sentry from '@sentry/sveltekit';
+  import { BillingKeyType } from '@typie/lib/enums';
   import { TypieError } from '@typie/lib/errors';
   import { cardSchema } from '@typie/lib/validation';
   import { css } from '@typie/styled-system/css';
@@ -9,45 +9,35 @@
   import { Button, Modal } from '@typie/ui/components';
   import { createForm, FormError } from '@typie/ui/form';
   import { Toast } from '@typie/ui/notification';
-  import { comma } from '@typie/ui/utils';
-  import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
   import { untrack } from 'svelte';
   import { z } from 'zod';
   import { fb } from '$lib/analytics';
   import { cache } from '$lib/graphql';
+  import { requestKakaoPayBillingKey } from '$lib/portone';
   import { graphql } from '$mearie';
   import BillingCardForm from '../@subscription/BillingCardForm.svelte';
-  import SubscriptionCelebrationModal from '../SubscriptionCelebrationModal.svelte';
+  import PaymentAgreements from '../@subscription/PaymentAgreements.svelte';
+  import PaymentMethodSelector from '../@subscription/PaymentMethodSelector.svelte';
   import type { DashboardLayout_PreferenceModal_BillingTab_UpdatePaymentMethodModal_user$key } from '$mearie';
 
   type Props = {
     open: boolean;
     user$key: DashboardLayout_PreferenceModal_BillingTab_UpdatePaymentMethodModal_user$key;
-    mode: 'register' | 'subscribe';
   };
 
-  let { open = $bindable(), user$key, mode }: Props = $props();
+  let { open = $bindable(), user$key }: Props = $props();
 
   const user = createFragment(
     graphql(`
       fragment DashboardLayout_PreferenceModal_BillingTab_UpdatePaymentMethodModal_user on User {
         id
-        credit
+        usableBillingKeyTypes
 
         billingKey {
           id
           name
-        }
-
-        subscription {
-          id
-          expiresAt
-
-          plan {
-            id
-            availability
-          }
+          type
         }
       }
     `),
@@ -62,39 +52,49 @@
         updateBillingKey(input: $input) {
           id
           name
+          type
           createdAt
         }
       }
     `),
   );
 
-  const [subscribePlanWithBillingKey] = createMutation(
+  const [updateBillingKeyWithEasyPay] = createMutation(
     graphql(`
-      mutation DashboardLayout_PreferenceModal_BillingTab_UpdatePaymentMethodModal_SubscribePlanWithBillingKey_Mutation(
-        $input: SubscribePlanWithBillingKeyInput!
+      mutation DashboardLayout_PreferenceModal_BillingTab_UpdatePaymentMethodModal_UpdateBillingKeyWithEasyPay_Mutation(
+        $input: UpdateBillingKeyWithEasyPayInput!
       ) {
-        subscribePlanWithBillingKey(input: $input) {
+        updateBillingKeyWithEasyPay(input: $input) {
           id
-          state
-
-          user {
-            id
-            ...DashboardLayout_PreferenceModal_BillingTab_user
-            ...DashboardLayout_TrialWidget_user
-            ...DashboardLayout_Profile_user
-          }
+          name
+          type
+          createdAt
         }
       }
     `),
   );
 
-  let interval = $state<PlanInterval>(PlanInterval.MONTHLY);
   let submitError = $state<string | null>(null);
-  let celebrationModalOpen = $state(false);
-  let isEditingCard = $state(false);
+  let method = $state<BillingKeyType>(BillingKeyType.CARD);
 
-  const isTrial = $derived(user.data.subscription?.plan.availability === PlanAvailability.TRIAL);
-  let scheduledCelebration = $state(false);
+  const subscriptionUnsupportedMessages: Record<BillingKeyType, string> = {
+    [BillingKeyType.CARD]: '구독 중인 플랜은 신용·체크카드로 결제할 수 없어요.',
+    [BillingKeyType.KAKAOPAY]: '연간 플랜은 카카오페이로 결제할 수 없어요. 월간 플랜으로 전환하면 카카오페이를 사용할 수 있어요.',
+  };
+
+  const disabledMethods = $derived(
+    Object.fromEntries(
+      Object.values(BillingKeyType)
+        .filter((type) => !user.data.usableBillingKeyTypes.includes(type))
+        .map((type) => [type, subscriptionUnsupportedMessages[type]]),
+    ),
+  );
+
+  $effect(() => {
+    if (Object.hasOwn(disabledMethods, method)) {
+      method = BillingKeyType.CARD;
+    }
+  });
 
   const form = createForm({
     schema: z.object({
@@ -114,9 +114,25 @@
         throw new FormError('agreementsAccepted', '약관에 동의해주세요.');
       }
 
-      const needsCardRegistration = mode === 'register' || !user.data.billingKey || isEditingCard;
+      if (method === BillingKeyType.KAKAOPAY) {
+        const result = await requestKakaoPayBillingKey({ userId: user.data.id });
 
-      if (needsCardRegistration) {
+        if (result.status === 'canceled') {
+          return;
+        }
+
+        if (result.status === 'failed') {
+          Sentry.captureMessage('kakaopay billing key issue failed', {
+            level: 'warning',
+            extra: { code: result.code, message: result.message, pgCode: result.pgCode, pgMessage: result.pgMessage },
+          });
+
+          submitError = '카카오페이 결제 수단 등록에 실패했어요.';
+          return;
+        }
+
+        await updateBillingKeyWithEasyPay({ input: { billingKey: result.billingKey } });
+      } else {
         if (!data.cardNumber) {
           throw new FormError('cardNumber', '카드 번호를 입력해 주세요');
         }
@@ -138,40 +154,22 @@
             passwordTwoDigits: data.passwordTwoDigits,
           },
         });
-
-        cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'billingKey' });
-        mixpanel.track('update_payment_billing_key');
-        fb.track('AddPaymentInfo');
       }
 
-      if (mode === 'register') {
-        Toast.success(user.data.billingKey ? '카드 정보가 변경되었어요.' : '카드가 등록되었어요.');
-        open = false;
-      } else {
-        const planId =
-          interval === PlanInterval.YEARLY ? PlanId.FULL_ACCESS_1YEAR_WITH_BILLING_KEY : PlanId.FULL_ACCESS_1MONTH_WITH_BILLING_KEY;
-        const result = await subscribePlanWithBillingKey({ input: { planId } });
-        // 사후 메시지·전환 이벤트는 사전 추정(isTrial)이 아니라 실제 처리 결과로 분기한다 — 롤링 배포·만료 직후 등록에서도 정합.
-        const scheduled = result.subscribePlanWithBillingKey.state === SubscriptionState.WILL_ACTIVATE;
+      cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'billingKey' });
+      mixpanel.track('update_payment_billing_key');
+      fb.track('AddPaymentInfo');
 
-        mixpanel.track('enroll_plan', { planId, scheduled });
-        if (!scheduled) {
-          const value = interval === PlanInterval.YEARLY ? '29000.00' : '2900.00';
-          fb.track('Subscribe', { value, currency: 'KRW', predicted_ltv: value });
-        }
-
-        scheduledCelebration = scheduled;
-        open = false;
-        celebrationModalOpen = true;
-      }
+      Toast.success(user.data.billingKey ? '결제 수단이 변경되었어요.' : '결제 수단이 등록되었어요.');
+      open = false;
     },
     onError: (error) => {
+      const isCard = method === BillingKeyType.CARD;
       const errorMessages: Record<string, string> = {
-        billing_key_issue_failed: '결제 키 발급에 실패했어요. 카드 정보를 확인해주세요.',
-        billing_key_required: '결제 카드를 먼저 등록해 주세요.',
-        plan_already_enrolled: '이미 구독 중이에요.',
-        unpaid_invoice_exists: '미결제 내역이 있어요. 고객센터에 문의해주세요.',
-        payment_failed: '결제에 실패했어요. 카드 정보를 확인해주세요.',
+        billing_key_issue_failed: isCard
+          ? '결제 키 발급에 실패했어요. 카드 정보를 확인해주세요.'
+          : '결제 수단 등록에 실패했어요. 다시 시도해 주세요.',
+        plan_interval_not_supported: '선택한 결제 수단으로는 이 결제 주기를 이용할 수 없어요.',
       };
 
       if (error instanceof TypieError) {
@@ -188,186 +186,30 @@
     if (!open) {
       untrack(() => {
         form.reset();
-        isEditingCard = false;
         submitError = null;
+        method = BillingKeyType.CARD;
       });
     }
   });
-
-  const planFee = $derived(interval === PlanInterval.MONTHLY ? 2900 : 29_000);
-  const creditDiscount = $derived(Math.min(user.data.credit, planFee));
-  const finalAmount = $derived(planFee - creditDiscount);
 </script>
 
 <Modal style={css.raw({ padding: '24px', maxWidth: '480px' })} closable={!form.state.isLoading} bind:open>
   <h2 class={css({ fontSize: '16px', fontWeight: 'semibold', color: 'text.default', marginBottom: '24px' })}>
-    {mode === 'register' ? (user.data.billingKey ? '결제 카드 변경' : '결제 카드 등록') : '플랜 업그레이드'}
+    {user.data.billingKey ? '결제 수단 변경' : '결제 수단 등록'}
   </h2>
 
   <form class={flex({ direction: 'column', gap: '24px' })} onsubmit={form.handleSubmit}>
-    {#if mode === 'subscribe'}
-      <div>
-        <div class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default', marginBottom: '8px' })}>플랜 선택</div>
-        <div class={flex({ gap: '8px' })}>
-          <button
-            class={css({
-              flex: '1',
-              padding: '12px',
-              borderRadius: '6px',
-              borderWidth: '1px',
-              borderColor: interval === PlanInterval.MONTHLY ? 'accent.brand.default' : 'border.subtle',
-              backgroundColor: 'surface.default',
-              cursor: 'pointer',
-              transition: 'common',
-              textAlign: 'left',
-              _hover: { borderColor: interval === PlanInterval.MONTHLY ? 'accent.brand.default' : 'border.default' },
-            })}
-            onclick={() => (interval = PlanInterval.MONTHLY)}
-            type="button"
-          >
-            <div class={flex({ justify: 'space-between', alignItems: 'center' })}>
-              <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default' })}>월간</span>
-              <span class={css({ fontSize: '14px', fontWeight: 'semibold', color: 'text.default' })}>2,900원</span>
-            </div>
-            <div class={css({ fontSize: '12px', color: 'text.subtle', marginTop: '4px' })}>매월 결제</div>
-          </button>
+    <PaymentMethodSelector disabled={disabledMethods} bind:method />
 
-          <button
-            class={css({
-              flex: '1',
-              position: 'relative',
-              padding: '12px',
-              borderRadius: '6px',
-              borderWidth: '1px',
-              borderColor: interval === PlanInterval.YEARLY ? 'accent.brand.default' : 'border.subtle',
-              backgroundColor: 'surface.default',
-              cursor: 'pointer',
-              transition: 'common',
-              textAlign: 'left',
-              _hover: { borderColor: interval === PlanInterval.YEARLY ? 'accent.brand.default' : 'border.default' },
-            })}
-            onclick={() => (interval = PlanInterval.YEARLY)}
-            type="button"
-          >
-            <div
-              class={css({
-                position: 'absolute',
-                top: '-8px',
-                right: '8px',
-                borderRadius: 'full',
-                paddingX: '8px',
-                paddingY: '2px',
-                fontSize: '11px',
-                fontWeight: 'semibold',
-                color: 'text.bright',
-                backgroundColor: 'accent.brand.default',
-              })}
-            >
-              2개월 무료
-            </div>
-            <div class={flex({ justify: 'space-between', alignItems: 'center' })}>
-              <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default' })}>연간</span>
-              <span class={css({ fontSize: '14px', fontWeight: 'semibold', color: 'text.default' })}>29,000원</span>
-            </div>
-            <div class={css({ fontSize: '12px', color: 'text.subtle', marginTop: '4px' })}>
-              매년 결제 · <span class={css({ color: 'accent.brand.default', fontWeight: 'medium' })}>월 2,416원</span>
-            </div>
-          </button>
-        </div>
-      </div>
+    {#if method === BillingKeyType.CARD}
+      <div class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default' })}>카드 정보</div>
+      <BillingCardForm errors={form.errors} fields={form.fields} />
     {/if}
 
-    {#if mode === 'subscribe' && user.data.billingKey && !isEditingCard}
-      <div class={flex({ direction: 'column', gap: '12px' })}>
-        <div class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default', marginBottom: '4px' })}>결제 카드</div>
-        <div
-          class={flex({
-            justify: 'space-between',
-            alignItems: 'center',
-            borderRadius: '8px',
-            borderWidth: '1px',
-            borderColor: 'border.subtle',
-            padding: '12px',
-            backgroundColor: 'surface.default',
-          })}
-        >
-          <span class={css({ fontSize: '14px', color: 'text.default' })}>{user.data.billingKey.name}</span>
-          <Button onclick={() => (isEditingCard = true)} size="sm" variant="secondary">카드 변경</Button>
-        </div>
-      </div>
-    {:else}
-      <div class={flex({ direction: 'column', gap: '12px' })}>
-        <div class={flex({ justify: 'space-between', alignItems: 'center', marginBottom: '4px' })}>
-          <div class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default' })}>카드 정보</div>
-          {#if isEditingCard && user.data.billingKey}
-            <button
-              class={css({
-                fontSize: '13px',
-                fontWeight: 'medium',
-                color: 'text.faint',
-                cursor: 'pointer',
-                transition: 'common',
-                _hover: { color: 'text.muted' },
-              })}
-              onclick={() => (isEditingCard = false)}
-              type="button"
-            >
-              기존 카드 사용하기
-            </button>
-          {/if}
-        </div>
-      </div>
-    {/if}
-
-    {#if mode === 'subscribe'}
-      <div>
-        <div class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default', marginBottom: '8px' })}>결제 정보</div>
-        <div
-          class={css({
-            borderRadius: '6px',
-            borderWidth: '1px',
-            borderColor: 'border.subtle',
-            padding: '12px',
-            backgroundColor: 'surface.default',
-          })}
-        >
-          <div class={flex({ justify: 'space-between', fontSize: '13px', marginBottom: '6px' })}>
-            <span class={css({ color: 'text.subtle' })}>플랜 금액</span>
-            <span class={css({ color: 'text.default' })}>{comma(planFee)}원</span>
-          </div>
-          {#if creditDiscount > 0}
-            <div class={flex({ justify: 'space-between', fontSize: '13px', marginBottom: '6px' })}>
-              <span class={css({ color: 'text.subtle' })}>크레딧 차감</span>
-              <span class={css({ color: 'accent.brand.default', fontWeight: 'medium' })}>-{comma(creditDiscount)}원</span>
-            </div>
-          {/if}
-          <div
-            class={css({
-              marginTop: '8px',
-              paddingTop: '8px',
-              borderTopWidth: '1px',
-              borderColor: 'border.subtle',
-            })}
-          >
-            <div class={flex({ justify: 'space-between', fontSize: '14px', fontWeight: 'semibold' })}>
-              <span class={css({ color: 'text.default' })}>{isTrial ? '예상 결제 금액' : '최종 금액'}</span>
-              <span class={css({ color: 'text.default' })}>{comma(finalAmount)}원</span>
-            </div>
-          </div>
-          {#if isTrial && user.data.subscription}
-            <div class={css({ marginTop: '8px', fontSize: '12px', color: 'text.subtle' })}>
-              무료 체험이 끝나는 {dayjs(user.data.subscription.expiresAt).formatAsDate()}에 결제돼요. 크레딧은 결제 시점 잔액 기준으로
-              차감돼요.
-            </div>
-          {/if}
-        </div>
-      </div>
-    {/if}
-
-    <BillingCardForm
-      errors={form.errors}
-      fields={form.fields}
-      showCardFields={!(mode === 'subscribe' && user.data.billingKey) || isEditingCard}
+    <PaymentAgreements
+      error={form.errors.agreementsAccepted}
+      {method}
+      onchange={(accepted) => (form.fields.agreementsAccepted = accepted)}
     />
 
     {#if submitError}
@@ -385,21 +227,7 @@
     {/if}
 
     <Button style={css.raw({ width: 'full' })} loading={form.state.isLoading} type="submit">
-      {#if mode === 'register'}
-        {user.data.billingKey ? '변경하기' : '등록하기'}
-      {:else if isTrial}
-        {finalAmount === 0 ? '구독 예약하기' : `${comma(finalAmount)}원 결제 예약하기`}
-      {:else if finalAmount === 0}
-        구독 시작하기
-      {:else}
-        {comma(finalAmount)}원 결제하고 시작하기
-      {/if}
+      {user.data.billingKey ? '변경하기' : '등록하기'}
     </Button>
   </form>
 </Modal>
-
-<SubscriptionCelebrationModal
-  message={scheduledCelebration ? '무료 체험이 끝나면 자동으로 결제되고 플랜이 시작돼요.' : '타이피의 모든 기능을 자유롭게 이용해보세요.'}
-  title={scheduledCelebration ? '구독이 예약됐어요!' : '구독이 시작됐어요!'}
-  bind:open={celebrationModalOpen}
-/>
