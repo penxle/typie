@@ -4,18 +4,28 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NoteListState } from '$lib/note/note-list-state.svelte';
 import Notes from './Notes.svelte';
 
-const { app, createNote, createQuery, noteSync, toastError } = vi.hoisted(() => ({
+const { app, createNote, createQuery, noteEdits, noteSync, terminalNoteIds, terminalListeners, toastError } = vi.hoisted(() => ({
   app: {
     preference: undefined as unknown as { readonly current: { currentSiteId: string | undefined } },
     state: { notesOpen: true },
   },
   createNote: vi.fn(),
   createQuery: vi.fn(),
+  noteEdits: {
+    get: vi.fn(),
+    remove: vi.fn(),
+    sync: vi.fn(),
+  },
   noteSync: {
-    isTerminallyDeleted: vi.fn(() => false),
-    onTerminalDelete: vi.fn(() => vi.fn()),
+    isTerminallyDeleted: vi.fn((_siteId: string, noteId: string) => terminalNoteIds.has(noteId)),
+    onTerminalDelete: vi.fn(({ listener }: { listener: (noteId: string) => void }) => {
+      terminalListeners.add(listener);
+      return () => terminalListeners.delete(listener);
+    }),
     retainRelatedEntity: vi.fn(),
   },
+  terminalNoteIds: new Set<string>(),
+  terminalListeners: new Set<(noteId: string) => void>(),
   toastError: vi.fn(),
 }));
 
@@ -32,7 +42,7 @@ vi.mock('@typie/ui/context', async (importOriginal) => ({
 }));
 vi.mock('@typie/ui/notification', () => ({ Toast: { error: toastError } }));
 vi.mock('mixpanel-browser', () => ({ default: { track: vi.fn() } }));
-vi.mock('$app/navigation', () => ({ beforeNavigate: vi.fn() }));
+vi.mock('$app/navigation', () => ({ afterNavigate: vi.fn(), beforeNavigate: vi.fn() }));
 vi.mock('$lib/graphql', () => ({ cache: { invalidate: vi.fn() } }));
 vi.mock('$lib/note/note-mutation', async (importOriginal) => ({
   ...(await importOriginal<typeof import('$lib/note/note-mutation')>()),
@@ -45,17 +55,45 @@ vi.mock('$lib/note/note-mutation', async (importOriginal) => ({
     update: vi.fn(),
   }),
 }));
+vi.mock('$lib/note/note-edit-state.svelte', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('$lib/note/note-edit-state.svelte')>()),
+  getNoteEditsContext: () => noteEdits,
+}));
 vi.mock('$lib/note/note-sync.svelte', async (importOriginal) => ({
   ...(await importOriginal<typeof import('$lib/note/note-sync.svelte')>()),
   getNoteSyncContext: () => noteSync,
 }));
 
+type SiteNote = {
+  id: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+  order: string;
+  color: string;
+  status: 'OPEN' | 'RESOLVED';
+  site: { id: string };
+  entities: [];
+};
+
 type SiteQuery = {
-  data?: { notes: [] };
+  data?: { notes: SiteNote[] };
   loading: boolean;
   error?: Error;
   refetch: ReturnType<typeof vi.fn>;
 };
+
+const siteNote = (status: SiteNote['status']): SiteNote => ({
+  id: 'note-1',
+  content: 'note content',
+  createdAt: '2026-07-29T00:00:00.000Z',
+  updatedAt: status === 'OPEN' ? '2026-07-29T00:00:01.000Z' : '2026-07-29T00:00:00.000Z',
+  order: '100',
+  color: 'gray',
+  status,
+  site: { id: 'site-1' },
+  entities: [],
+});
 
 const createSiteQueryController = (initial: SiteQuery) => {
   const state = new SvelteMap([['snapshot', initial]]);
@@ -106,6 +144,14 @@ const mountNotes = async (siteQuery: SiteQuery | ReturnType<typeof createSiteQue
 
 describe('global notes error UX', () => {
   beforeEach(() => {
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe = vi.fn();
+        unobserve = vi.fn();
+        disconnect = vi.fn();
+      },
+    );
     Object.defineProperty(Element.prototype, 'animate', {
       configurable: true,
       value: vi.fn(() => ({
@@ -128,10 +174,14 @@ describe('global notes error UX', () => {
     noteSync.isTerminallyDeleted.mockClear();
     noteSync.onTerminalDelete.mockClear();
     noteSync.retainRelatedEntity.mockClear();
+    terminalNoteIds.clear();
+    terminalListeners.clear();
     toastError.mockReset();
   });
 
   afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
     Reflect.deleteProperty(Element.prototype, 'animate');
     document.body.replaceChildren();
   });
@@ -187,6 +237,60 @@ describe('global notes error UX', () => {
       expect(region).not.toBeNull();
       expect(region?.inert).toBe(true);
       expect(region?.getAttribute('aria-hidden')).toBe('true');
+    } finally {
+      await unmount(component);
+    }
+  });
+
+  it('does not retain a hidden completed exit or let its completion collapse the reopened note', async () => {
+    vi.useFakeTimers();
+    const controller = createSiteQueryController({
+      data: { notes: [siteNote('RESOLVED')] },
+      loading: false,
+      refetch: vi.fn(),
+    });
+    const { component } = await mountNotes(controller);
+
+    try {
+      controller.publish({
+        data: { notes: [siteNote('OPEN')] },
+        loading: false,
+        refetch: vi.fn(),
+      });
+      await tick();
+
+      const ownedCards = () => [...document.body.querySelectorAll<HTMLElement>('[data-note-list-owned-item][data-note-id="note-1"]')];
+      expect(ownedCards()).toHaveLength(1);
+
+      const openCard = ownedCards()[0]?.querySelector<HTMLElement>('[role="button"][data-note-id="note-1"]');
+      openCard?.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Enter' }));
+      await tick();
+      expect(openCard?.querySelector('textarea')).not.toBeNull();
+
+      await vi.advanceTimersByTimeAsync(500);
+      await tick();
+
+      expect(ownedCards()).toHaveLength(1);
+      expect(openCard?.querySelector('textarea')).not.toBeNull();
+    } finally {
+      await unmount(component);
+    }
+  });
+
+  it('does not retain a terminally deleted card in the hidden completed list', async () => {
+    const controller = createSiteQueryController({
+      data: { notes: [siteNote('RESOLVED')] },
+      loading: false,
+      refetch: vi.fn(),
+    });
+    const { component } = await mountNotes(controller);
+
+    try {
+      terminalNoteIds.add('note-1');
+      for (const listener of terminalListeners) listener('note-1');
+      await tick();
+
+      expect(document.body.querySelector('[data-note-list-owned-item][data-note-id="note-1"]')).toBeNull();
     } finally {
       await unmount(component);
     }

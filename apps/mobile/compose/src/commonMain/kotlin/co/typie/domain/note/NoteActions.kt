@@ -165,6 +165,22 @@ internal class NoteActions {
     return owns(request)
   }
 
+  suspend fun flushOnFocusLoss(
+    request: NoteActionRequest,
+    noteId: String,
+    saveContent: suspend (noteId: String, content: String) -> NoteSaveOutcome,
+    saveColor: suspend (noteId: String, color: String) -> NoteSaveOutcome,
+  ) {
+    if (!owns(request)) return
+    val currentEditState = editState ?: return
+    currentEditState.flushOnFocusLoss(
+      siteId = request.siteId,
+      noteId = noteId,
+      saveContent = saveContent,
+      saveColor = saveColor,
+    )
+  }
+
   fun updateContent(
     request: NoteActionRequest,
     noteId: String,

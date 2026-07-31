@@ -58,9 +58,7 @@ internal fun EditorSubPaneHost(
         onDismiss = state::dismiss,
         onLayoutInfoChanged = state::updateLayoutInfo,
         onLayoutInfoCleared = state::clearLayoutInfo,
-        registerRouteRemovalPreparation = { prepare ->
-          state.registerRouteRemovalPreparation(EditorSubPane.RelatedNotes, prepare)
-        },
+        registerRouteRemovalPreparation = state::registerRouteRemovalPreparation,
         modifier = modifier,
       )
     EditorSubPane.Comments ->

@@ -10,6 +10,9 @@ import co.typie.graphql.fragment.NoteCard_note
 import co.typie.graphql.fragment.NoteLinkedEntity_entity
 import co.typie.graphql.type.NoteStatus
 import kotlin.time.Instant
+import kotlinx.coroutines.test.TestScope
+
+internal fun TestScope.createNoteEditState() = NoteEditState(scope = backgroundScope)
 
 internal fun notesNote(
   id: String,

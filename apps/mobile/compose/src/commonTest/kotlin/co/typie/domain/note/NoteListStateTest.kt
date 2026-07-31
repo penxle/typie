@@ -92,7 +92,7 @@ class NoteListStateTest {
   }
 
   @Test
-  fun `remote status change keeps the destination style while exiting the source list`() {
+  fun `remote status change keeps the source snapshot while exiting its list`() {
     val state = NoteListState(NoteStatus.OPEN)
     val openNote = notesNote(id = "a", order = "100", status = NoteStatus.OPEN)
     val resolvedNote = openNote.copy(status = NoteStatus.RESOLVED)
@@ -101,12 +101,26 @@ class NoteListStateTest {
     state.sync(serverNotes = listOf(resolvedNote))
 
     assertTrue(state.isExiting(openNote.id))
-    assertEquals(NoteStatus.RESOLVED, state.merge(serverNotes = emptyList()).single().status)
+    assertEquals(NoteStatus.OPEN, state.merge(serverNotes = emptyList()).single().status)
 
     state.finishExiting(openNote.id)
     state.sync(serverNotes = emptyList())
 
     assertFalse(state.isExiting(openNote.id))
+  }
+
+  @Test
+  fun `authoritative reversal restores a visible source without reentering`() {
+    val state = NoteListState(NoteStatus.OPEN)
+    val openNote = notesNote(id = "a", order = "100", status = NoteStatus.OPEN)
+    state.sync(serverNotes = listOf(openNote))
+    state.sync(serverNotes = listOf(openNote.copy(status = NoteStatus.RESOLVED)))
+
+    state.sync(serverNotes = listOf(openNote))
+
+    assertFalse(state.isExiting(openNote.id))
+    assertFalse(state.isEntering(openNote.id))
+    assertEquals(listOf(openNote), state.merge(serverNotes = listOf(openNote)))
   }
 
   @Test

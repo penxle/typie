@@ -163,26 +163,14 @@ fun NotesScreen() {
   }
 
   LaunchedEffect(siteId, noteEditState, model) {
-    val activeNoteId = noteEditState.expandedNoteId ?: return@LaunchedEffect
     val activeSiteId = noteEditState.expandedNoteSiteId ?: return@LaunchedEffect
+    val activeNoteId = noteEditState.expandedNoteId ?: return@LaunchedEffect
     if (activeSiteId != siteId) {
-      noteEditState.dispose(
-        savePendingContent = model::savePendingNoteContent,
-        savePendingColor = model::savePendingNoteColor,
-      )
       noteEditState.remove(siteId = activeSiteId, noteId = activeNoteId)
     }
   }
 
-  DisposableEffect(noteEditState, model) {
-    onDispose {
-      noteActions.dispose()
-      noteEditState.dispose(
-        savePendingContent = model::savePendingNoteContent,
-        savePendingColor = model::savePendingNoteColor,
-      )
-    }
-  }
+  DisposableEffect(noteActions) { onDispose { noteActions.dispose() } }
 
   suspend fun saveNoteContent(noteId: String, content: String): NoteSaveOutcome {
     val activeSiteId = siteId ?: return NoteSaveOutcome.Superseded
@@ -552,7 +540,7 @@ fun NotesScreen() {
           onBlur = { note ->
             noteActions.captureRequest(siteId = note.site.id, entityId = null)?.let { request ->
               scope.launch {
-                noteActions.flush(
+                noteActions.flushOnFocusLoss(
                   request = request,
                   noteId = note.id,
                   saveContent = ::saveNoteContent,

@@ -48,6 +48,7 @@
     identity: NoteListIdentity;
     authoritativeNotes: readonly T[];
     children: Snippet<[NoteListRenderProps<T>]>;
+    presentationActive?: boolean;
     reorderEnabled?: boolean;
     onMoveSuccess?: (note: T) => void;
     onexitcomplete?: (item: T) => void;
@@ -60,6 +61,7 @@
     identity,
     authoritativeNotes,
     children,
+    presentationActive = true,
     reorderEnabled = true,
     onMoveSuccess,
     onexitcomplete,
@@ -77,6 +79,7 @@
   } | null>(null);
   let activeIdentityKey: string | null = null;
   let ownedListState: NoteListState<T> | null = null;
+  let ownedPresentationActive: boolean | null = null;
   let latestSyncGeneration = 0;
   let visibleSyncGeneration = 0;
   let suppressedFlipGeneration: number | null = null;
@@ -86,6 +89,7 @@
   let preferredMove: { noteId: string } | null = null;
   let reconcileTask: Promise<void> | null = null;
   let lastAuthoritativeMembership: readonly string[] | null = null;
+  let latestAuthoritativeNotes: readonly T[] = [];
 
   $effect.pre(() => {
     const nextIdentityKey = JSON.stringify([identity.siteId, identity.entityId, identity.status]);
@@ -93,13 +97,14 @@
     const suppressFlip = activeIdentityKey !== nextIdentityKey;
     const identityChanged = activeIdentityKey !== null && activeIdentityKey !== nextIdentityKey;
     const stateChanged = ownedListState !== null && ownedListState !== listState;
+    const presentationChanged = ownedPresentationActive !== null && ownedPresentationActive !== presentationActive;
     const membershipChanged =
       !identityChanged &&
       !stateChanged &&
       lastAuthoritativeMembership !== null &&
       (nextAuthoritativeMembership.length !== lastAuthoritativeMembership.length ||
         nextAuthoritativeMembership.some((noteId, index) => noteId !== lastAuthoritativeMembership?.[index]));
-    if (identityChanged || stateChanged || (membershipChanged && (dragging !== null || reconcileTask !== null))) {
+    if (identityChanged || stateChanged || presentationChanged || (membershipChanged && (dragging !== null || reconcileTask !== null))) {
       operationOwner += 1;
       preferredMove = null;
       reconcileTask = null;
@@ -109,20 +114,29 @@
     }
     activeIdentityKey = nextIdentityKey;
     ownedListState = listState;
+    ownedPresentationActive = presentationActive;
+    latestAuthoritativeNotes = authoritativeNotes;
     lastAuthoritativeMembership = nextAuthoritativeMembership;
     visibleSyncGeneration = ++latestSyncGeneration;
-    if (suppressFlip) suppressedFlipGeneration = visibleSyncGeneration;
-    listState.sync(identity, authoritativeNotes);
+    if (suppressFlip || !presentationActive) suppressedFlipGeneration = visibleSyncGeneration;
+    if (presentationActive) listState.sync(identity, authoritativeNotes);
+    else listState.settle(identity, authoritativeNotes);
   });
 
   $effect(() => {
     const activeState = listState;
-    const siteId = identity.siteId;
-    const entityId = identity.entityId;
+    const activeIdentity = { ...identity };
+    const activePresentationActive = presentationActive;
+    const siteId = activeIdentity.siteId;
+    const entityId = activeIdentity.entityId;
     if (entityId) noteSync.retainRelatedEntity({ siteId, entityId });
     const unregisterDelete = noteSync.onTerminalDelete({
       siteId,
       listener: (noteId) => {
+        if (!activePresentationActive) {
+          activeState.settle(activeIdentity, latestAuthoritativeNotes);
+          return;
+        }
         const item = activeState.visibleNotes().find(({ note }) => note.id === noteId);
         if (!item) return;
 
@@ -172,7 +186,7 @@
 
   const beginDrag = (noteId: string): boolean => {
     const item = visibleNotes.find(({ note }) => note.id === noteId);
-    if (item === undefined || dragging !== null || item.deleting || item.presence === 'exiting' || !reorderEnabled) {
+    if (item === undefined || dragging !== null || item.deleting || item.presence === 'exiting' || !presentationActive || !reorderEnabled) {
       return false;
     }
 
@@ -321,7 +335,12 @@
   };
 
   const reorderFor = (item: VisibleNote<T>): NoteListItemReorder => ({
-    enabled: reorderEnabled && item.presence !== 'exiting' && !item.deleting && (dragging === null || dragging.noteId === item.note.id),
+    enabled:
+      presentationActive &&
+      reorderEnabled &&
+      item.presence !== 'exiting' &&
+      !item.deleting &&
+      (dragging === null || dragging.noteId === item.note.id),
     dragging: dragging?.noteId === item.note.id,
     ondragstart: () => beginDrag(item.note.id),
     ondragmove: (position) => updateDrag(item.note.id, position),

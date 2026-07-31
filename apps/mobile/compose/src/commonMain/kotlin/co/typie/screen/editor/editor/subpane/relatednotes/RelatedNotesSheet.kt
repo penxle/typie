@@ -98,7 +98,7 @@ internal fun RelatedNotesSheet(
   onDismiss: () -> Unit,
   onLayoutInfoChanged: (EditorSubPaneLayoutInfo) -> Unit,
   onLayoutInfoCleared: (EditorSubPane) -> Unit,
-  registerRouteRemovalPreparation: (suspend () -> Boolean) -> (() -> Unit),
+  registerRouteRemovalPreparation: (suspend () -> Boolean) -> Unit,
   modifier: Modifier = Modifier,
 ) {
   val keyboardOcclusion = (trustedImeBottomInset - safeBottomInset).coerceAtLeast(0.dp)
@@ -117,28 +117,19 @@ internal fun RelatedNotesSheet(
     )
   }
 
-  DisposableEffect(noteEditState, model, registerRouteRemovalPreparation) {
-    val unregister = registerRouteRemovalPreparation {
+  SideEffect {
+    registerRouteRemovalPreparation {
       noteEditState.flushPendingEdits(
         savePendingContent = model::savePendingNoteContent,
         savePendingColor = model::savePendingNoteColor,
       )
     }
-    onDispose { unregister() }
   }
 
   DisposableEffect(onLayoutInfoCleared) {
     onDispose { onLayoutInfoCleared(EditorSubPane.RelatedNotes) }
   }
-  DisposableEffect(noteEditState, model) {
-    onDispose {
-      noteActions.dispose()
-      noteEditState.dispose(
-        savePendingContent = model::savePendingNoteContent,
-        savePendingColor = model::savePendingNoteColor,
-      )
-    }
-  }
+  DisposableEffect(noteActions) { onDispose { noteActions.dispose() } }
 
   suspend fun saveNoteContent(noteId: String, content: String): NoteSaveOutcome {
     val request =
@@ -584,7 +575,7 @@ private fun RelatedNotesSheetContent(
           onBlur = { note ->
             noteActions.captureRequest(siteId = note.site.id, entityId = entityId)?.let { request ->
               scope.launch {
-                noteActions.flush(
+                noteActions.flushOnFocusLoss(
                   request = request,
                   noteId = note.id,
                   saveContent = saveNoteContent,

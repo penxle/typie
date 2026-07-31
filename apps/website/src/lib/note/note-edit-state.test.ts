@@ -658,24 +658,48 @@ describe('NoteEditState delayed save display and failures', () => {
   });
 
   it.each([{ kind: 'failed' as const }, { kind: 'subscription_gated' as const }])(
-    'does not retry an unchanged $kind revision when focus loss flushes the draft',
+    'retries an unchanged $kind revision on a later flush without automatic replay',
     async (outcome) => {
-      const save = vi.fn().mockResolvedValue(outcome);
+      const save = vi
+        .fn()
+        .mockResolvedValueOnce(outcome)
+        .mockResolvedValue(saved(snapshot({ content: 'content draft' })));
       const { state } = createState(save);
       state.setContent('content draft');
       await vi.advanceTimersByTimeAsync(300);
       await settle();
 
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(save).toHaveBeenCalledOnce();
+
       state.flush();
       await settle();
 
-      expect(save).toHaveBeenCalledOnce();
-
-      state.setContent('edited after failure');
-      await vi.advanceTimersByTimeAsync(300);
       expect(save).toHaveBeenCalledTimes(2);
+      expect(state.content).toBe('content draft');
+      expect(state.saveDisplay).toBe('none');
     },
   );
+
+  it('retries dirty content after an unrelated color save is gated', async () => {
+    const save = vi
+      .fn<(request: NoteFieldSave) => Promise<NoteSaveOutcome>>()
+      .mockResolvedValueOnce({ kind: 'subscription_gated' })
+      .mockResolvedValue(saved(snapshot({ content: 'content draft', color: 'blue' })));
+    const { state } = createState(save);
+    state.setContent('content draft');
+    state.setColor('blue');
+    await vi.advanceTimersByTimeAsync(180);
+    await settle();
+
+    state.flush();
+    await settle();
+
+    expect(save).toHaveBeenCalledTimes(3);
+    expect(save).toHaveBeenNthCalledWith(1, { field: 'color', value: 'blue' });
+    expect(save).toHaveBeenNthCalledWith(2, { field: 'content', value: 'content draft' });
+    expect(save).toHaveBeenNthCalledWith(3, { field: 'color', value: 'blue' });
+  });
 
   it.each([{ kind: 'failed' as const }, { kind: 'subscription_gated' as const }])(
     'treats a matching authoritative snapshot as confirmation after $kind',

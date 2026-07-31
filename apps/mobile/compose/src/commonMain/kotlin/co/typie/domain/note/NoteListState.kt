@@ -22,7 +22,6 @@ internal class NoteListState(private val status: NoteStatus) {
   fun sync(serverNotes: List<NoteCard_note>) {
     val wasSettled = hasSettled
     val previousServerNotesById = serverNotesById
-    val latestServerNotesById = serverNotes.associateBy { it.id }
     val nextServerNotesById = serverNotes.filter { it.status == status }.associateBy { it.id }
     val locallyEnteringIds = enteringNotesById.keys.toSet()
     val expectedEntryIds = expectedEntryNotesById.keys.toSet()
@@ -44,16 +43,19 @@ internal class NoteListState(private val status: NoteStatus) {
       nextServerNotesById.forEach { (noteId, _) ->
         if (noteId in previousServerNotesById) return@forEach
 
-        if (exitingNotesById.remove(noteId) != null) {
+        val exitingSnapshot = exitingNotesById.remove(noteId)
+        if (exitingSnapshot?.isVisible == false) {
           enteringAnimationIds[noteId] = true
-        } else if (noteId !in locallyEnteringIds && noteId !in expectedEntryIds) {
+        } else if (
+          exitingSnapshot == null && noteId !in locallyEnteringIds && noteId !in expectedEntryIds
+        ) {
           enteringAnimationIds[noteId] = true
         }
       }
 
       previousServerNotesById.forEach { (noteId, note) ->
         if (noteId !in nextServerNotesById && noteId !in exitingNotesById) {
-          markExiting(latestServerNotesById[noteId] ?: note)
+          markExiting(note)
         }
       }
     }
@@ -66,6 +68,15 @@ internal class NoteListState(private val status: NoteStatus) {
     }
 
     serverNotesById = nextServerNotesById
+  }
+
+  fun settle(serverNotes: List<NoteCard_note>) {
+    hasSettled = true
+    enteringNotesById.clear()
+    enteringAnimationIds.clear()
+    expectedEntryNotesById.clear()
+    exitingNotesById.clear()
+    serverNotesById = serverNotes.filter { it.status == status }.associateBy { it.id }
   }
 
   fun merge(serverNotes: List<NoteCard_note>): List<NoteCard_note> {

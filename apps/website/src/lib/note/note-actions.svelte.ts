@@ -150,10 +150,11 @@ export class NoteActions<T extends ActionNote> {
     return request?.source !== status && this.#statusTransfers.get(noteId)?.target !== status;
   }
 
-  finishStatusTransfer(noteId: string, source: NoteStatus): void {
-    if (this.#statusTransfers.get(noteId)?.source === source) {
-      this.#statusTransfers.delete(noteId);
-    }
+  finishStatusTransfer(noteId: string, source: NoteStatus): boolean {
+    if (this.#statusTransfers.get(noteId)?.source !== source) return false;
+
+    this.#statusTransfers.delete(noteId);
+    return true;
   }
 
   activate({ siteId, entityId, onTerminal }: { siteId: string; entityId?: string; onTerminal?: (noteId: string) => void }): () => void {

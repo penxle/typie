@@ -7,7 +7,9 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Instant
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -19,7 +21,7 @@ import kotlinx.coroutines.test.runTest
 class NoteEditStateTest {
   @Test
   fun `open tracks expanded note`() = runTest {
-    val state = NoteEditState(scope = this)
+    val state = createNoteEditState()
     val note = notesNote(id = "existing")
 
     state.open(note = note)
@@ -29,7 +31,7 @@ class NoteEditStateTest {
 
   @Test
   fun `debounced content save runs after delay`() = runTest {
-    val state = NoteEditState(scope = this)
+    val state = createNoteEditState()
     val saved = mutableListOf<Pair<String, String>>()
     state.open(note = notesNote(id = "note"))
 
@@ -54,7 +56,7 @@ class NoteEditStateTest {
 
   @Test
   fun `debounced color save runs after delay`() = runTest {
-    val state = NoteEditState(scope = this)
+    val state = createNoteEditState()
     val saved = mutableListOf<Pair<String, String>>()
     state.open(note = notesNote(id = "note", color = "gray"))
 
@@ -79,7 +81,7 @@ class NoteEditStateTest {
 
   @Test
   fun `overlay preserves latest server snapshot fields while applying local drafts`() = runTest {
-    val state = NoteEditState(scope = this)
+    val state = createNoteEditState()
     val linkedEntity = notesDocumentEntity(id = "entity-1")
     state.open(note = notesNote(id = "note", content = "server", color = "gray"))
     state.updateContent(siteId = "site", noteId = "note", value = "draft content") { _, _ ->
@@ -116,7 +118,7 @@ class NoteEditStateTest {
 
   @Test
   fun `unrelated note snapshot does not clear active draft`() = runTest {
-    val state = NoteEditState(scope = this)
+    val state = createNoteEditState()
     state.open(note = notesNote(id = "open", color = "gray"))
     state.updateColor(siteId = "site", noteId = "open", value = "red") { _, _ ->
       NoteSaveOutcome.Saved
@@ -132,7 +134,7 @@ class NoteEditStateTest {
 
   @Test
   fun `the same note id in another site cannot reuse or overwrite the active draft`() = runTest {
-    val state = NoteEditState(scope = this)
+    val state = createNoteEditState()
     state.open(notesNote(id = "shared", siteId = "site-a", content = "site a"))
     state.updateContent(siteId = "site-a", noteId = "shared", value = "site a draft") { _, _ ->
       NoteSaveOutcome.Saved
@@ -154,7 +156,7 @@ class NoteEditStateTest {
 
   @Test
   fun `flush persists both content and color before collapse`() = runTest {
-    val state = NoteEditState(scope = this)
+    val state = createNoteEditState()
     val contentSaves = mutableListOf<Pair<String, String>>()
     val colorSaves = mutableListOf<Pair<String, String>>()
     state.open(note = notesNote(id = "note", content = "server", color = "gray"))
@@ -189,45 +191,8 @@ class NoteEditStateTest {
   }
 
   @Test
-  fun `dispose saves pending drafts and keeps expanded note`() = runTest {
-    val state = NoteEditState(scope = this)
-    val contentSaves = mutableListOf<Pair<String, String>>()
-    val colorSaves = mutableListOf<Pair<String, String>>()
-    state.open(note = notesNote(id = "note", content = "server", color = "gray"))
-    state.updateContent(siteId = "site", noteId = "note", value = "local content") { noteId, content
-      ->
-      contentSaves += noteId to content
-      NoteSaveOutcome.Saved
-    }
-    state.updateColor(siteId = "site", noteId = "note", value = "red") { noteId, color ->
-      colorSaves += noteId to color
-      NoteSaveOutcome.Saved
-    }
-
-    state.dispose(
-      savePendingContent = { _, noteId, content ->
-        contentSaves += noteId to content
-        NoteSaveOutcome.Saved
-      },
-      savePendingColor = { _, noteId, color ->
-        colorSaves += noteId to color
-        NoteSaveOutcome.Saved
-      },
-    )
-    runCurrent()
-
-    assertEquals(listOf("note" to "local content"), contentSaves)
-    assertEquals(listOf("note" to "red"), colorSaves)
-    assertEquals("note", state.expandedNoteId)
-    assertEquals(
-      notesNote(id = "note", content = "local content", color = "red"),
-      state.overlay(notesNote(id = "note", content = "server", color = "gray")),
-    )
-  }
-
-  @Test
   fun `route removal flushes pending drafts with their site identity`() = runTest {
-    val state = NoteEditState(scope = this)
+    val state = createNoteEditState()
     val saved = mutableListOf<Triple<String, String, String>>()
     state.open(note = notesNote(id = "note", siteId = "site", content = "server", color = "gray"))
     state.updateContent(siteId = "site", noteId = "note", value = "local content") { _, _ ->
@@ -258,7 +223,7 @@ class NoteEditStateTest {
 
   @Test
   fun `older content save completion does not clear newer draft before snapshot`() = runTest {
-    val state = NoteEditState(scope = this)
+    val state = createNoteEditState()
     val firstSaveStarted = CompletableDeferred<Unit>()
     val finishFirstSave = CompletableDeferred<Unit>()
     val saved = mutableListOf<String>()
@@ -295,8 +260,39 @@ class NoteEditStateTest {
   }
 
   @Test
+  fun `superseded older save does not cancel a newer field debounce`() = runTest {
+    val state = createNoteEditState()
+    val contentSaveStarted = CompletableDeferred<Unit>()
+    val finishContentSave = CompletableDeferred<Unit>()
+    val savedColors = mutableListOf<String>()
+    state.open(note = notesNote(id = "note", content = "server", color = "gray"))
+
+    state.updateContent(siteId = "site", noteId = "note", value = "draft") { _, _ ->
+      contentSaveStarted.complete(Unit)
+      finishContentSave.await()
+      NoteSaveOutcome.Superseded
+    }
+    advanceTimeBy(300)
+    runCurrent()
+    contentSaveStarted.await()
+
+    state.updateColor(siteId = "site", noteId = "note", value = "red") { _, color ->
+      savedColors += color
+      NoteSaveOutcome.Saved
+    }
+    finishContentSave.complete(Unit)
+    runCurrent()
+    advanceTimeBy(180)
+    runCurrent()
+
+    assertEquals(listOf("red"), savedColors)
+    assertFalse(state.hasPendingColor(siteId = "site", noteId = "note"))
+    assertTrue(state.isDirty(siteId = "site", noteId = "note"))
+  }
+
+  @Test
   fun `same field saves are serialized so the latest draft is written last`() = runTest {
-    val state = NoteEditState(scope = this)
+    val state = createNoteEditState()
     val firstSaveStarted = CompletableDeferred<Unit>()
     val finishFirstSave = CompletableDeferred<Unit>()
     val saved = mutableListOf<String>()
@@ -331,7 +327,7 @@ class NoteEditStateTest {
   @Test
   fun `content and color saves are serialized so full snapshots cannot arrive out of order`() =
     runTest {
-      val state = NoteEditState(scope = this)
+      val state = createNoteEditState()
       val contentStarted = CompletableDeferred<Unit>()
       val finishContent = CompletableDeferred<Unit>()
       val colorStarted = CompletableDeferred<Unit>()
@@ -372,7 +368,7 @@ class NoteEditStateTest {
 
   @Test
   fun `saving status stays hidden until the request has lasted 500ms`() = runTest {
-    val state = NoteEditState(scope = this)
+    val state = createNoteEditState()
     val saveStarted = CompletableDeferred<Unit>()
     val finishSave = CompletableDeferred<Unit>()
     state.open(note = notesNote(id = "note", content = "server"))
@@ -405,7 +401,7 @@ class NoteEditStateTest {
 
   @Test
   fun `saving status uses one interval across serialized content and color requests`() = runTest {
-    val state = NoteEditState(scope = this)
+    val state = createNoteEditState()
     val contentStarted = CompletableDeferred<Unit>()
     val finishContent = CompletableDeferred<Unit>()
     val colorStarted = CompletableDeferred<Unit>()
@@ -447,7 +443,7 @@ class NoteEditStateTest {
   @Test
   fun `saving status stays visible while a newer content save waits for the active request`() =
     runTest {
-      val state = NoteEditState(scope = this)
+      val state = createNoteEditState()
       val firstSaveStarted = CompletableDeferred<Unit>()
       val finishFirstSave = CompletableDeferred<Unit>()
       val secondSaveStarted = CompletableDeferred<Unit>()
@@ -486,42 +482,51 @@ class NoteEditStateTest {
     }
 
   @Test
-  fun `authoritative content matching a queued save ends the retained saving interval`() = runTest {
-    val state = NoteEditState(scope = this)
-    val firstSaveStarted = CompletableDeferred<Unit>()
-    val finishFirstSave = CompletableDeferred<Unit>()
-    state.open(note = notesNote(id = "note", content = "server"))
+  fun `authoritative content matching desired does not clear the local save obligation`() =
+    runTest {
+      val state = createNoteEditState()
+      val firstSaveStarted = CompletableDeferred<Unit>()
+      val finishFirstSave = CompletableDeferred<Unit>()
+      val saved = mutableListOf<String>()
+      state.open(note = notesNote(id = "note", content = "server"))
 
-    state.updateContent(siteId = "site", noteId = "note", value = "draft A") { _, content ->
-      firstSaveStarted.complete(Unit)
-      finishFirstSave.await()
-      state.commitServerSnapshot(notesNote(id = "note", content = content))
-      NoteSaveOutcome.Saved
+      state.updateContent(siteId = "site", noteId = "note", value = "draft A") { _, content ->
+        saved += content
+        firstSaveStarted.complete(Unit)
+        finishFirstSave.await()
+        state.commitServerSnapshot(notesNote(id = "note", content = content))
+        NoteSaveOutcome.Saved
+      }
+      advanceTimeBy(300)
+      runCurrent()
+      firstSaveStarted.await()
+      advanceTimeBy(500)
+      runCurrent()
+
+      state.updateContent(siteId = "site", noteId = "note", value = "draft B") { _, _ ->
+        saved += "draft B"
+        NoteSaveOutcome.Saved
+      }
+      finishFirstSave.complete(Unit)
+      runCurrent()
+      assertEquals(NoteSaveStatus.SAVING, state.saveStatus(siteId = "site", noteId = "note"))
+
+      state.commitServerSnapshot(notesNote(id = "note", content = "draft B"))
+      runCurrent()
+
+      assertTrue(state.isDirty(siteId = "site", noteId = "note"))
+
+      advanceTimeBy(300)
+      runCurrent()
+
+      assertEquals(listOf("draft A", "draft B"), saved)
+      assertFalse(state.isDirty(siteId = "site", noteId = "note"))
+      assertEquals(NoteSaveStatus.NONE, state.saveStatus(siteId = "site", noteId = "note"))
     }
-    advanceTimeBy(300)
-    runCurrent()
-    firstSaveStarted.await()
-    advanceTimeBy(500)
-    runCurrent()
-
-    state.updateContent(siteId = "site", noteId = "note", value = "draft B") { _, _ ->
-      NoteSaveOutcome.Saved
-    }
-    finishFirstSave.complete(Unit)
-    runCurrent()
-    assertEquals(NoteSaveStatus.SAVING, state.saveStatus(siteId = "site", noteId = "note"))
-
-    state.commitServerSnapshot(notesNote(id = "note", content = "draft B"))
-    runCurrent()
-
-    assertFalse(state.isSaving(siteId = "site", noteId = "note"))
-    assertEquals(NoteSaveStatus.NONE, state.saveStatus(siteId = "site", noteId = "note"))
-    assertFalse(state.isDirty(siteId = "site", noteId = "note"))
-  }
 
   @Test
   fun `reverting content while a save is in flight persists the reverted value`() = runTest {
-    val state = NoteEditState(scope = this)
+    val state = createNoteEditState()
     val firstSaveStarted = CompletableDeferred<Unit>()
     val finishFirstSave = CompletableDeferred<Unit>()
     val saved = mutableListOf<String>()
@@ -555,7 +560,7 @@ class NoteEditStateTest {
 
   @Test
   fun `reverting content compensates for an ambiguous in flight failure`() = runTest {
-    val state = NoteEditState(scope = this)
+    val state = createNoteEditState()
     val firstSaveStarted = CompletableDeferred<Unit>()
     val finishFirstSave = CompletableDeferred<Unit>()
     val saved = mutableListOf<String>()
@@ -589,8 +594,49 @@ class NoteEditStateTest {
   }
 
   @Test
+  fun `flush saves a reverted color after the older color save fails`() = runTest {
+    val state = createNoteEditState()
+    val firstSaveStarted = CompletableDeferred<Unit>()
+    val finishFirstSave = CompletableDeferred<Unit>()
+    val saved = mutableListOf<String>()
+    state.open(note = notesNote(id = "note", color = "gray"))
+
+    state.updateColor(siteId = "site", noteId = "note", value = "red") { _, color ->
+      saved += color
+      firstSaveStarted.complete(Unit)
+      finishFirstSave.await()
+      NoteSaveOutcome.Failed
+    }
+    advanceTimeBy(180)
+    runCurrent()
+    firstSaveStarted.await()
+
+    state.updateColor(siteId = "site", noteId = "note", value = "gray") { _, _ ->
+      error("flush must own the reverted save")
+    }
+    finishFirstSave.complete(Unit)
+    runCurrent()
+
+    val flushed =
+      state.flush(
+        siteId = "site",
+        noteId = "note",
+        saveContent = { _, _ -> NoteSaveOutcome.Saved },
+        saveColor = { _, color ->
+          saved += color
+          NoteSaveOutcome.Saved
+        },
+      )
+
+    assertTrue(flushed)
+    assertEquals(listOf("red", "gray"), saved)
+    assertFalse(state.hasPendingColor(siteId = "site", noteId = "note"))
+    assertEquals(NoteSaveStatus.NONE, state.saveStatus(siteId = "site", noteId = "note"))
+  }
+
+  @Test
   fun `failed save keeps the draft and the next edit saves the latest value`() = runTest {
-    val state = NoteEditState(scope = this)
+    val state = createNoteEditState()
     val saved = mutableListOf<String>()
     state.open(note = notesNote(id = "note", content = "server"))
 
@@ -619,8 +665,26 @@ class NoteEditStateTest {
   }
 
   @Test
+  fun `reopening the same live session keeps a failed desired value`() = runTest {
+    val state = createNoteEditState()
+    val serverNote = notesNote(id = "note", content = "server")
+    state.open(note = serverNote)
+    state.updateContent(siteId = "site", noteId = "note", value = "draft") { _, _ ->
+      NoteSaveOutcome.Failed
+    }
+    advanceTimeBy(300)
+    runCurrent()
+
+    state.open(note = serverNote)
+
+    assertEquals("draft", state.overlay(serverNote).content)
+    assertTrue(state.isDirty(siteId = "site", noteId = "note"))
+    assertEquals(NoteSaveStatus.FAILED, state.saveStatus(siteId = "site", noteId = "note"))
+  }
+
+  @Test
   fun `content and color failures emit once per aggregate failure episode`() = runTest {
-    val state = NoteEditState(scope = this)
+    val state = createNoteEditState()
     val failures = mutableListOf<Unit>()
     backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
       state.saveFailures.collect { failures += it }
@@ -678,7 +742,7 @@ class NoteEditStateTest {
 
   @Test
   fun `older failed save does not report failure for a newer queued draft`() = runTest {
-    val state = NoteEditState(scope = this)
+    val state = createNoteEditState()
     val failures = mutableListOf<Unit>()
     backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
       state.saveFailures.collect { failures += it }
@@ -721,7 +785,7 @@ class NoteEditStateTest {
 
   @Test
   fun `subscription gated save keeps the draft without reporting a failure`() = runTest {
-    val state = NoteEditState(scope = this)
+    val state = createNoteEditState()
     val failures = mutableListOf<Unit>()
     backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
       state.saveFailures.collect { failures += it }
@@ -741,13 +805,13 @@ class NoteEditStateTest {
   }
 
   @Test
-  fun `focus loss does not retry an unchanged failed or gated revision`() = runTest {
+  fun `a later flush retries an unchanged failed or gated revision`() = runTest {
     listOf(NoteSaveOutcome.Failed, NoteSaveOutcome.SubscriptionGated).forEach { outcome ->
-      val state = NoteEditState(scope = this)
+      val state = createNoteEditState()
       var saveCount = 0
       val saveContent: suspend (String, String) -> NoteSaveOutcome = { _, _ ->
         saveCount += 1
-        outcome
+        if (saveCount == 1) outcome else NoteSaveOutcome.Saved
       }
       state.open(note = notesNote(id = "note-$outcome", content = "server"))
 
@@ -757,7 +821,14 @@ class NoteEditStateTest {
         value = "draft",
         save = saveContent,
       )
+      advanceTimeBy(300)
       runCurrent()
+      assertEquals(1, saveCount)
+      assertTrue(state.isDirty(siteId = "site", noteId = "note-$outcome"))
+
+      advanceTimeBy(1_000)
+      runCurrent()
+      assertEquals(1, saveCount)
 
       val flushed =
         state.flush(
@@ -767,15 +838,192 @@ class NoteEditStateTest {
           saveColor = { _, _ -> NoteSaveOutcome.Saved },
         )
 
-      assertFalse(flushed)
-      assertEquals(1, saveCount)
-      assertTrue(state.isDirty(siteId = "site", noteId = "note-$outcome"))
+      assertTrue(flushed)
+      assertEquals(2, saveCount)
+      assertFalse(state.isDirty(siteId = "site", noteId = "note-$outcome"))
     }
   }
 
   @Test
+  fun `a later focus loss retries desired fields after a subscription gate`() = runTest {
+    val state = createNoteEditState()
+    var contentSaveCount = 0
+    var colorSaveCount = 0
+    state.open(note = notesNote(id = "note", content = "server", color = "gray"))
+    state.updateContent(siteId = "site", noteId = "note", value = "draft") { _, _ ->
+      contentSaveCount += 1
+      NoteSaveOutcome.Saved
+    }
+    state.updateColor(siteId = "site", noteId = "note", value = "red") { _, _ ->
+      colorSaveCount += 1
+      NoteSaveOutcome.SubscriptionGated
+    }
+    advanceTimeBy(180)
+    runCurrent()
+
+    state.flushOnFocusLoss(
+      siteId = "site",
+      noteId = "note",
+      saveContent = { _, _ ->
+        contentSaveCount += 1
+        NoteSaveOutcome.Saved
+      },
+      saveColor = { _, _ ->
+        colorSaveCount += 1
+        NoteSaveOutcome.Saved
+      },
+    )
+
+    assertEquals(1, contentSaveCount)
+    assertEquals(2, colorSaveCount)
+    assertFalse(state.isDirty(siteId = "site", noteId = "note"))
+    assertFalse(state.hasPendingColor(siteId = "site", noteId = "note"))
+  }
+
+  @Test
+  fun `focus loss does not duplicate a matching in flight save`() = runTest {
+    val state = createNoteEditState()
+    val finishSave = CompletableDeferred<Unit>()
+    var saveCount = 0
+    val saveContent: suspend (String, String) -> NoteSaveOutcome = { _, _ ->
+      saveCount += 1
+      finishSave.await()
+      NoteSaveOutcome.Saved
+    }
+    state.open(note = notesNote(id = "note", content = "server"))
+    state.updateContent(siteId = "site", noteId = "note", value = "draft", save = saveContent)
+    advanceTimeBy(300)
+    runCurrent()
+
+    backgroundScope.launch {
+      state.flushOnFocusLoss(
+        siteId = "site",
+        noteId = "note",
+        saveContent = saveContent,
+        saveColor = { _, _ -> NoteSaveOutcome.Saved },
+      )
+    }
+    runCurrent()
+    assertEquals(1, saveCount)
+
+    finishSave.complete(Unit)
+    runCurrent()
+
+    assertEquals(1, saveCount)
+    assertFalse(state.isDirty(siteId = "site", noteId = "note"))
+  }
+
+  @Test
+  fun `focus loss does not retry content that fails while waiting for color`() = runTest {
+    val state = createNoteEditState()
+    val contentSaveStarted = CompletableDeferred<Unit>()
+    val finishContentSave = CompletableDeferred<Unit>()
+    var contentSaveCount = 0
+    var colorSaveCount = 0
+    val saveColor: suspend (String, String) -> NoteSaveOutcome = { _, _ ->
+      colorSaveCount += 1
+      NoteSaveOutcome.Saved
+    }
+    state.open(note = notesNote(id = "note", content = "server", color = "gray"))
+    state.updateContent(siteId = "site", noteId = "note", value = "draft") { _, _ ->
+      contentSaveCount += 1
+      contentSaveStarted.complete(Unit)
+      finishContentSave.await()
+      NoteSaveOutcome.Failed
+    }
+    advanceTimeBy(300)
+    runCurrent()
+    contentSaveStarted.await()
+
+    state.updateColor(siteId = "site", noteId = "note", value = "red", save = saveColor)
+    val firstBlur = backgroundScope.launch {
+      state.flushOnFocusLoss(
+        siteId = "site",
+        noteId = "note",
+        saveContent = { _, _ ->
+          contentSaveCount += 1
+          NoteSaveOutcome.Saved
+        },
+        saveColor = saveColor,
+      )
+    }
+    runCurrent()
+
+    finishContentSave.complete(Unit)
+    runCurrent()
+
+    assertTrue(firstBlur.isCompleted)
+    assertEquals(1, contentSaveCount)
+    assertEquals(1, colorSaveCount)
+    assertTrue(state.isDirty(siteId = "site", noteId = "note"))
+
+    state.flushOnFocusLoss(
+      siteId = "site",
+      noteId = "note",
+      saveContent = { _, _ ->
+        contentSaveCount += 1
+        NoteSaveOutcome.Saved
+      },
+      saveColor = { _, _ -> NoteSaveOutcome.Saved },
+    )
+
+    assertEquals(2, contentSaveCount)
+    assertFalse(state.isDirty(siteId = "site", noteId = "note"))
+  }
+
+  @Test
+  fun `focus loss cancels pending content debounce before waiting for color`() = runTest {
+    val state = createNoteEditState()
+    val colorSaveStarted = CompletableDeferred<Unit>()
+    val finishColorSave = CompletableDeferred<Unit>()
+    var automaticContentSaveCount = 0
+    var focusLossContentSaveCount = 0
+    var colorSaveCount = 0
+    val saveColor: suspend (String, String) -> NoteSaveOutcome = { _, _ ->
+      colorSaveCount += 1
+      colorSaveStarted.complete(Unit)
+      finishColorSave.await()
+      NoteSaveOutcome.Saved
+    }
+    state.open(note = notesNote(id = "note", content = "server", color = "gray"))
+
+    state.updateColor(siteId = "site", noteId = "note", value = "red", save = saveColor)
+    advanceTimeBy(180)
+    runCurrent()
+    colorSaveStarted.await()
+
+    state.updateContent(siteId = "site", noteId = "note", value = "draft") { _, _ ->
+      automaticContentSaveCount += 1
+      NoteSaveOutcome.Superseded
+    }
+    val blurJob = backgroundScope.launch {
+      state.flushOnFocusLoss(
+        siteId = "site",
+        noteId = "note",
+        saveContent = { _, _ ->
+          focusLossContentSaveCount += 1
+          NoteSaveOutcome.Saved
+        },
+        saveColor = saveColor,
+      )
+    }
+    runCurrent()
+
+    advanceTimeBy(300)
+    runCurrent()
+    finishColorSave.complete(Unit)
+    runCurrent()
+
+    assertTrue(blurJob.isCompleted)
+    assertEquals(0, automaticContentSaveCount)
+    assertEquals(1, focusLossContentSaveCount)
+    assertEquals(1, colorSaveCount)
+    assertFalse(state.isDirty(siteId = "site", noteId = "note"))
+  }
+
+  @Test
   fun `subscription gated save does not automatically run a queued newer draft`() = runTest {
-    val state = NoteEditState(scope = this)
+    val state = createNoteEditState()
     val firstSaveStarted = CompletableDeferred<Unit>()
     val finishFirstSave = CompletableDeferred<Unit>()
     val saved = mutableListOf<String>()
@@ -806,39 +1054,224 @@ class NoteEditStateTest {
   }
 
   @Test
-  fun `subscription gated save discards a queued save for the other field`() = runTest {
-    val state = NoteEditState(scope = this)
-    val contentStarted = CompletableDeferred<Unit>()
-    val finishContent = CompletableDeferred<Unit>()
+  fun `concurrent triggers share content queued behind an active color save`() = runTest {
+    val state = createNoteEditState()
+    val colorSaveStarted = CompletableDeferred<Unit>()
+    val finishColorSave = CompletableDeferred<Unit>()
+    val contentSaveStarted = CompletableDeferred<Unit>()
+    val finishContentSave = CompletableDeferred<Unit>()
+    var contentSaveCount = 0
     var colorSaveCount = 0
-    state.open(note = notesNote(id = "note", content = "server", color = "gray"))
-
-    state.updateContent(siteId = "site", noteId = "note", value = "draft") { _, _ ->
-      contentStarted.complete(Unit)
-      finishContent.await()
-      NoteSaveOutcome.SubscriptionGated
-    }
-    advanceTimeBy(300)
-    runCurrent()
-    contentStarted.await()
-
-    state.updateColor(siteId = "site", noteId = "note", value = "red") { _, _ ->
+    val saveColor: suspend (String, String) -> NoteSaveOutcome = { _, _ ->
       colorSaveCount += 1
+      colorSaveStarted.complete(Unit)
+      finishColorSave.await()
       NoteSaveOutcome.Saved
     }
+    val saveContent: suspend (String, String) -> NoteSaveOutcome = { _, _ ->
+      contentSaveCount += 1
+      contentSaveStarted.complete(Unit)
+      finishContentSave.await()
+      NoteSaveOutcome.Saved
+    }
+    state.open(note = notesNote(id = "note", content = "server", color = "gray"))
+
+    state.updateColor(siteId = "site", noteId = "note", value = "red", save = saveColor)
+    advanceTimeBy(180)
+    runCurrent()
+    colorSaveStarted.await()
+
+    state.updateContent(siteId = "site", noteId = "note", value = "draft", save = saveContent)
+    advanceTimeBy(300)
+    runCurrent()
+    assertEquals(0, contentSaveCount)
+
+    val blurJob = backgroundScope.launch {
+      state.flushOnFocusLoss(
+        siteId = "site",
+        noteId = "note",
+        saveContent = saveContent,
+        saveColor = saveColor,
+      )
+    }
+    var flushResult: Boolean? = null
+    val flushJob = backgroundScope.launch {
+      flushResult =
+        state.flush(
+          siteId = "site",
+          noteId = "note",
+          saveContent = saveContent,
+          saveColor = saveColor,
+        )
+    }
     runCurrent()
 
+    finishColorSave.complete(Unit)
+    runCurrent()
+    contentSaveStarted.await()
+    assertEquals(1, contentSaveCount)
+    assertFalse(flushJob.isCompleted)
+
+    finishContentSave.complete(Unit)
+    runCurrent()
+
+    assertTrue(blurJob.isCompleted)
+    assertTrue(flushJob.isCompleted)
+    assertEquals(true, flushResult)
+    assertEquals(1, contentSaveCount)
+    assertEquals(1, colorSaveCount)
+    assertFalse(state.isDirty(siteId = "site", noteId = "note"))
+  }
+
+  @Test
+  fun `caller cancellation does not strand an owner scoped field attempt`() = runTest {
+    val state = createNoteEditState()
+    val saveStarted = CompletableDeferred<Unit>()
+    val finishSave = CompletableDeferred<Unit>()
+    var saveCount = 0
+    val saveContent: suspend (String, String) -> NoteSaveOutcome = { _, _ ->
+      saveCount += 1
+      saveStarted.complete(Unit)
+      finishSave.await()
+      NoteSaveOutcome.Saved
+    }
+    state.open(note = notesNote(id = "note", content = "server"))
+    state.updateContent(siteId = "site", noteId = "note", value = "draft", save = saveContent)
+
+    val firstFlush = backgroundScope.launch {
+      state.flush(
+        siteId = "site",
+        noteId = "note",
+        saveContent = saveContent,
+        saveColor = { _, _ -> NoteSaveOutcome.Saved },
+      )
+    }
+    runCurrent()
+    saveStarted.await()
+
+    firstFlush.cancel()
+    runCurrent()
+    assertTrue(firstFlush.isCancelled)
+
+    var secondResult: Boolean? = null
+    val secondFlush = backgroundScope.launch {
+      secondResult =
+        state.flush(
+          siteId = "site",
+          noteId = "note",
+          saveContent = saveContent,
+          saveColor = { _, _ -> NoteSaveOutcome.Saved },
+        )
+    }
+    runCurrent()
+    assertFalse(secondFlush.isCompleted)
+    assertEquals(1, saveCount)
+
+    finishSave.complete(Unit)
+    runCurrent()
+
+    assertTrue(secondFlush.isCompleted)
+    assertEquals(true, secondResult)
+    assertEquals(1, saveCount)
+    assertFalse(state.isDirty(siteId = "site", noteId = "note"))
+  }
+
+  @Test
+  fun `owner cancellation completes a waiting field attempt`() = runTest {
+    val ownerJob = Job()
+    val ownerScope = CoroutineScope(coroutineContext + ownerJob)
+    val state = NoteEditState(scope = ownerScope)
+    val saveStarted = CompletableDeferred<Unit>()
+    val finishSave = CompletableDeferred<Unit>()
+    state.open(note = notesNote(id = "note", content = "server"))
+    state.updateContent(siteId = "site", noteId = "note", value = "draft") { _, _ ->
+      error("flush must replace the pending debounce callback")
+    }
+
+    val flushJob = backgroundScope.launch {
+      state.flush(
+        siteId = "site",
+        noteId = "note",
+        saveContent = { _, _ ->
+          saveStarted.complete(Unit)
+          finishSave.await()
+          NoteSaveOutcome.Saved
+        },
+        saveColor = { _, _ -> NoteSaveOutcome.Saved },
+      )
+    }
+    runCurrent()
+    saveStarted.await()
+
+    ownerJob.cancel()
+    runCurrent()
+
+    assertTrue(flushJob.isCompleted)
+    assertTrue(flushJob.isCancelled)
+  }
+
+  @Test
+  fun `flush rechecks color after content wait creates a newer color generation`() = runTest {
+    val state = createNoteEditState()
+    val contentStarted = CompletableDeferred<Unit>()
+    val finishContent = CompletableDeferred<Unit>()
+    val secondColorStarted = CompletableDeferred<Unit>()
+    val finishSecondColor = CompletableDeferred<Unit>()
+    val colorSaves = mutableListOf<String>()
+    state.open(note = notesNote(id = "note", content = "server", color = "gray"))
+    state.updateContent(siteId = "site", noteId = "note", value = "draft") { _, _ ->
+      error("flush must own the content save")
+    }
+    state.updateColor(siteId = "site", noteId = "note", value = "red") { _, _ ->
+      error("flush must own the color save")
+    }
+
+    var flushResult: Boolean? = null
+    val flushJob = backgroundScope.launch {
+      flushResult =
+        state.flush(
+          siteId = "site",
+          noteId = "note",
+          saveContent = { _, _ ->
+            contentStarted.complete(Unit)
+            finishContent.await()
+            NoteSaveOutcome.Saved
+          },
+          saveColor = { _, color ->
+            colorSaves += color
+            if (colorSaves.size == 2) {
+              secondColorStarted.complete(Unit)
+              finishSecondColor.await()
+            }
+            NoteSaveOutcome.Saved
+          },
+        )
+    }
+    runCurrent()
+    contentStarted.await()
+    assertEquals(listOf("red"), colorSaves)
+
+    state.updateColor(siteId = "site", noteId = "note", value = "blue") { _, _ ->
+      error("the same flush must own the newer color")
+    }
     finishContent.complete(Unit)
     runCurrent()
+    secondColorStarted.await()
 
-    assertEquals(0, colorSaveCount)
-    assertTrue(state.hasPendingColor(siteId = "site", noteId = "note"))
-    assertEquals("red", state.overlay(notesNote(id = "note", color = "gray")).color)
+    assertFalse(flushJob.isCompleted)
+    assertEquals(listOf("red", "blue"), colorSaves)
+
+    finishSecondColor.complete(Unit)
+    runCurrent()
+
+    assertTrue(flushJob.isCompleted)
+    assertEquals(true, flushResult)
+    assertFalse(state.hasPendingColor(siteId = "site", noteId = "note"))
   }
 
   @Test
   fun `cancelled active save ignores its late failure`() = runTest {
-    val state = NoteEditState(scope = this)
+    val state = createNoteEditState()
     val saveStarted = CompletableDeferred<Unit>()
     val finishSave = CompletableDeferred<Unit>()
     val failures = mutableListOf<Unit>()
@@ -865,8 +1298,8 @@ class NoteEditStateTest {
   }
 
   @Test
-  fun `cancelled save completion cannot end a newer saving interval`() = runTest {
-    val state = NoteEditState(scope = this)
+  fun `cancelling an active save lets a newer save own its saving interval`() = runTest {
+    val state = createNoteEditState()
     val contentSaveStarted = CompletableDeferred<Unit>()
     val finishContentSave = CompletableDeferred<Unit>()
     val colorSaveStarted = CompletableDeferred<Unit>()
@@ -888,150 +1321,18 @@ class NoteEditStateTest {
       finishColorSave.await()
       NoteSaveOutcome.Saved
     }
-    advanceTimeBy(680)
+    advanceTimeBy(300)
     runCurrent()
 
-    assertEquals(NoteSaveStatus.SAVING, state.saveStatus(siteId = "site", noteId = "note"))
-    assertFalse(colorSaveStarted.isCompleted)
+    assertTrue(colorSaveStarted.isCompleted)
+    assertEquals(NoteSaveStatus.NONE, state.saveStatus(siteId = "site", noteId = "note"))
 
-    finishContentSave.complete(Unit)
+    advanceTimeBy(500)
     runCurrent()
-    colorSaveStarted.await()
-
     assertEquals(NoteSaveStatus.SAVING, state.saveStatus(siteId = "site", noteId = "note"))
 
     finishColorSave.complete(Unit)
     runCurrent()
     assertEquals(NoteSaveStatus.NONE, state.saveStatus(siteId = "site", noteId = "note"))
-  }
-
-  @Test
-  fun `dispose does not retry an unchanged failed draft`() = runTest {
-    val state = NoteEditState(scope = this)
-    var disposeSaveCount = 0
-    state.open(note = notesNote(id = "note", content = "server"))
-    state.updateContent(siteId = "site", noteId = "note", value = "draft") { _, _ ->
-      NoteSaveOutcome.Failed
-    }
-    advanceTimeBy(300)
-    runCurrent()
-
-    repeat(2) {
-      state.dispose(
-        savePendingContent = { _, _, _ ->
-          disposeSaveCount += 1
-          NoteSaveOutcome.Saved
-        },
-        savePendingColor = { _, _, _ -> NoteSaveOutcome.Saved },
-      )
-      runCurrent()
-    }
-
-    assertEquals(0, disposeSaveCount)
-    assertEquals(NoteSaveStatus.FAILED, state.saveStatus(siteId = "site", noteId = "note"))
-  }
-
-  @Test
-  fun `dispose does not duplicate an active save`() = runTest {
-    val state = NoteEditState(scope = this)
-    val saveStarted = CompletableDeferred<Unit>()
-    val finishSave = CompletableDeferred<Unit>()
-    var disposeSaveCount = 0
-    state.open(note = notesNote(id = "note", content = "server"))
-    state.updateContent(siteId = "site", noteId = "note", value = "draft") { _, _ ->
-      saveStarted.complete(Unit)
-      finishSave.await()
-      NoteSaveOutcome.Saved
-    }
-    advanceTimeBy(300)
-    runCurrent()
-    saveStarted.await()
-
-    state.dispose(
-      savePendingContent = { _, _, _ ->
-        disposeSaveCount += 1
-        NoteSaveOutcome.Saved
-      },
-      savePendingColor = { _, _, _ -> NoteSaveOutcome.Saved },
-    )
-    finishSave.complete(Unit)
-    runCurrent()
-
-    assertEquals(0, disposeSaveCount)
-  }
-
-  @Test
-  fun `dispose persists a newer draft behind a superseded active save`() = runTest {
-    val state = NoteEditState(scope = this)
-    val activeSaveStarted = CompletableDeferred<Unit>()
-    val finishActiveSave = CompletableDeferred<Unit>()
-    val activeSaves = mutableListOf<String>()
-    val pendingSaves = mutableListOf<String>()
-    state.open(note = notesNote(id = "note", content = "server"))
-    state.updateContent(siteId = "site", noteId = "note", value = "draft A") { _, content ->
-      activeSaves += content
-      activeSaveStarted.complete(Unit)
-      finishActiveSave.await()
-      NoteSaveOutcome.Superseded
-    }
-    advanceTimeBy(300)
-    runCurrent()
-    activeSaveStarted.await()
-
-    state.updateContent(siteId = "site", noteId = "note", value = "draft B") { _, _ ->
-      error("the disposed surface callback must not save the newer draft")
-    }
-    state.dispose(
-      savePendingContent = { _, _, content ->
-        pendingSaves += content
-        NoteSaveOutcome.Saved
-      },
-      savePendingColor = { _, _, _ -> NoteSaveOutcome.Saved },
-    )
-    finishActiveSave.complete(Unit)
-    runCurrent()
-
-    assertEquals(listOf("draft A"), activeSaves)
-    assertEquals(listOf("draft B"), pendingSaves)
-    assertFalse(state.isDirty(siteId = "site", noteId = "note"))
-  }
-
-  @Test
-  fun `dispose replaces a content save that has not reached the network`() = runTest {
-    val state = NoteEditState(scope = this)
-    val colorSaveStarted = CompletableDeferred<Unit>()
-    val finishColorSave = CompletableDeferred<Unit>()
-    var disposedSurfaceSaveCount = 0
-    val pendingSaves = mutableListOf<String>()
-    state.open(note = notesNote(id = "note", content = "server", color = "gray"))
-    state.updateColor(siteId = "site", noteId = "note", value = "red") { _, _ ->
-      colorSaveStarted.complete(Unit)
-      finishColorSave.await()
-      NoteSaveOutcome.Saved
-    }
-    advanceTimeBy(180)
-    runCurrent()
-    colorSaveStarted.await()
-
-    state.updateContent(siteId = "site", noteId = "note", value = "draft") { _, _ ->
-      disposedSurfaceSaveCount += 1
-      NoteSaveOutcome.Saved
-    }
-    advanceTimeBy(300)
-    runCurrent()
-
-    state.dispose(
-      savePendingContent = { _, _, content ->
-        pendingSaves += content
-        NoteSaveOutcome.Saved
-      },
-      savePendingColor = { _, _, _ -> NoteSaveOutcome.Saved },
-    )
-    finishColorSave.complete(Unit)
-    runCurrent()
-
-    assertEquals(0, disposedSurfaceSaveCount)
-    assertEquals(listOf("draft"), pendingSaves)
-    assertFalse(state.isDirty(siteId = "site", noteId = "note"))
   }
 }

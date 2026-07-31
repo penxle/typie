@@ -329,6 +329,7 @@ export class NoteEditState {
     for (const field of ['content', 'color'] as const) {
       const fieldState = this.#fieldState(field);
       if (!fieldState.dirty) continue;
+      if (fieldState.blockedRevision === fieldState.revision) fieldState.blockedRevision = null;
       this.#clearDebounce(fieldState);
       const pending = { revision: fieldState.revision, value: this.#draft(field), onSaved: fieldState.onSaved };
       if (this.#activeSave) this.#queueSave(field, pending);

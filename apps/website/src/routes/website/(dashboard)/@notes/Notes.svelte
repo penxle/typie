@@ -353,8 +353,8 @@
   };
 
   const handleStatusExitComplete = (noteId: string, sourceStatus: 'OPEN' | 'RESOLVED') => {
+    if (!noteActions.finishStatusTransfer(noteId, sourceStatus)) return;
     if (expandedNoteId === noteId) expandedNoteId = null;
-    noteActions.finishStatusTransfer(noteId, sourceStatus);
   };
 
   const handleAddEntity = (noteId: string) => {
@@ -566,6 +566,7 @@
             identity={{ siteId: currentSiteId, status: 'OPEN' }}
             onMoveSuccess={() => mixpanel.track('move_note')}
             onexitcomplete={(note) => handleStatusExitComplete(note.id, 'OPEN')}
+            presentationActive={app.state.notesOpen}
             state={openListState}
           >
             {#snippet children({ item, reorder })}
@@ -643,6 +644,7 @@
                 identity={{ siteId: currentSiteId, status: 'RESOLVED' }}
                 onMoveSuccess={() => mixpanel.track('move_note')}
                 onexitcomplete={(note) => handleStatusExitComplete(note.id, 'RESOLVED')}
+                presentationActive={app.state.notesOpen && resolvedOpen}
                 state={resolvedListState}
               >
                 {#snippet children({ item, reorder })}

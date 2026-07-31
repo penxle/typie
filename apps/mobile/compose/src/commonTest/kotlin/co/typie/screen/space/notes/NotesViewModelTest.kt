@@ -223,7 +223,7 @@ class NotesViewModelTest {
   }
 
   @Test
-  fun `one authoritative snapshot drives both sides of a remote status change`() {
+  fun `one authoritative snapshot animates only the visible side of a remote status change`() {
     val cache = NotesSceneCache()
     val siteId = "site-a"
     val openKey = NotesSceneKey(siteId = siteId, status = NoteStatus.OPEN)
@@ -236,9 +236,84 @@ class NotesViewModelTest {
 
     assertEquals(true, cache.listState(openKey).isExiting(openNote.id))
     assertEquals(
-      NoteStatus.RESOLVED,
+      NoteStatus.OPEN,
       cache.listState(openKey).merge(serverNotes = emptyList()).single().status,
     )
-    assertEquals(true, cache.listState(resolvedKey).isEntering(openNote.id))
+    assertFalse(cache.listState(resolvedKey).isEntering(openNote.id))
+    assertEquals(
+      listOf(resolvedNote),
+      cache.listState(resolvedKey).merge(serverNotes = listOf(resolvedNote)),
+    )
+  }
+
+  @Test
+  fun `switching the visible status settles both sides and transfers ownership`() {
+    val cache = NotesSceneCache()
+    val siteId = "site-a"
+    val openKey = NotesSceneKey(siteId = siteId, status = NoteStatus.OPEN)
+    val resolvedKey = NotesSceneKey(siteId = siteId, status = NoteStatus.RESOLVED)
+    val resolvedNote = notesNote(id = "a", siteId = siteId, status = NoteStatus.RESOLVED)
+    val reopenedNote = resolvedNote.copy(status = NoteStatus.OPEN)
+
+    cache.commitSuccess(siteId = siteId, notes = listOf(resolvedNote))
+    cache.updateVisibleStatus(NoteStatus.RESOLVED)
+
+    assertFalse(cache.listState(openKey).isEntering(resolvedNote.id))
+    assertFalse(cache.listState(resolvedKey).isEntering(resolvedNote.id))
+
+    cache.commitSuccess(siteId = siteId, notes = listOf(reopenedNote))
+
+    assertFalse(cache.listState(openKey).isEntering(reopenedNote.id))
+    assertEquals(true, cache.listState(resolvedKey).isExiting(resolvedNote.id))
+
+    cache.updateVisibleStatus(NoteStatus.OPEN)
+
+    assertFalse(cache.listState(openKey).isEntering(reopenedNote.id))
+    assertFalse(cache.listState(resolvedKey).isExiting(resolvedNote.id))
+    assertEquals(
+      listOf(reopenedNote),
+      cache.listState(openKey).merge(serverNotes = listOf(reopenedNote)),
+    )
+  }
+
+  @Test
+  fun `switching status before the first success does not animate initial notes`() {
+    val cache = NotesSceneCache()
+    val siteId = "site-a"
+    val resolvedKey = NotesSceneKey(siteId = siteId, status = NoteStatus.RESOLVED)
+    val resolvedNote = notesNote(id = "a", siteId = siteId, status = NoteStatus.RESOLVED)
+
+    cache.activateSite(siteId)
+    cache.updateVisibleStatus(NoteStatus.RESOLVED)
+    cache.commitSuccess(siteId = siteId, notes = listOf(resolvedNote))
+
+    assertFalse(cache.listState(resolvedKey).isEntering(resolvedNote.id))
+  }
+
+  @Test
+  fun `terminal deletion does not retain an exit in the hidden status`() {
+    val cache = NotesSceneCache()
+    val siteId = "site-a"
+    val resolvedKey = NotesSceneKey(siteId = siteId, status = NoteStatus.RESOLVED)
+    val resolvedNote = notesNote(id = "a", siteId = siteId, status = NoteStatus.RESOLVED)
+
+    cache.commitSuccess(siteId = siteId, notes = listOf(resolvedNote))
+    cache.convergeDeletedNote(
+      noteId = resolvedNote.id,
+      querySiteId = siteId,
+      queryNotes = listOf(resolvedNote),
+    )
+
+    assertFalse(cache.listState(resolvedKey).isExiting(resolvedNote.id))
+    assertEquals(emptyList(), cache.listState(resolvedKey).merge(serverNotes = emptyList()))
+    assertEquals(
+      emptyList(),
+      cache.notes(
+        key = resolvedKey,
+        querySiteId = null,
+        queryState = QueryState.Loading,
+        placeholderNotes = emptyList(),
+      ),
+    )
   }
 }

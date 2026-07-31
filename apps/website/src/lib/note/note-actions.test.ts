@@ -612,10 +612,10 @@ describe('NoteActions status transfer admission', () => {
     syncStatus(actions, [note()]);
     syncStatus(actions, [note({ status: 'RESOLVED' })]);
 
-    actions.finishStatusTransfer('note-1', 'RESOLVED');
+    expect(actions.finishStatusTransfer('note-1', 'RESOLVED')).toBe(false);
     expect(actions.isStatusAdmitted('note-1', 'RESOLVED')).toBe(false);
 
-    actions.finishStatusTransfer('note-1', 'OPEN');
+    expect(actions.finishStatusTransfer('note-1', 'OPEN')).toBe(true);
     expect(actions.isStatusAdmitted('note-1', 'RESOLVED')).toBe(true);
   });
 

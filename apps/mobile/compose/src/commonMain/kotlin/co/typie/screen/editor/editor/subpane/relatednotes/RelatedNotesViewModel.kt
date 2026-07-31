@@ -1,9 +1,6 @@
 package co.typie.screen.editor.editor.subpane.relatednotes
 
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -11,6 +8,7 @@ import co.typie.domain.note.DEFAULT_NOTE_COLOR
 import co.typie.domain.note.NoteEditState
 import co.typie.domain.note.NoteListState
 import co.typie.domain.note.NoteSaveOutcome
+import co.typie.domain.note.NoteStatusListStates
 import co.typie.domain.note.NoteSync
 import co.typie.domain.note.addNoteEntity as addNoteEntityMutation
 import co.typie.domain.note.createNote as createNoteMutation
@@ -40,12 +38,11 @@ internal class RelatedNotesViewModel(private val entityId: String, val siteId: S
   ViewModel() {
   val noteEditState = NoteEditState(scope = viewModelScope)
 
-  var filterStatus by mutableStateOf(NoteStatus.OPEN)
-    private set
+  val filterStatus: NoteStatus
+    get() = statusLists.visibleStatus
 
   private val settledNotesByStatus = mutableStateMapOf<NoteStatus, List<NoteCard_note>>()
-  private val openListState = NoteListState(NoteStatus.OPEN)
-  private val resolvedListState = NoteListState(NoteStatus.RESOLVED)
+  private val statusLists = NoteStatusListStates()
 
   val query =
     Apollo.watchQuery(scope = viewModelScope, resetOnChange = false) {
@@ -60,8 +57,8 @@ internal class RelatedNotesViewModel(private val entityId: String, val siteId: S
             val notes = state.data.notes().filterNot { NoteSync.isTerminallyDeleted(siteId, it.id) }
             listOf(NoteStatus.OPEN, NoteStatus.RESOLVED).forEach { status ->
               settledNotesByStatus[status] = notes.filter { it.status == status }
-              listState(status).sync(notes)
             }
+            statusLists.sync(notes)
 
             val activeNoteId = noteEditState.expandedNoteId ?: return@collect
             notes.firstOrNull { it.id == activeNoteId }?.let(noteEditState::commitServerSnapshot)
@@ -80,18 +77,14 @@ internal class RelatedNotesViewModel(private val entityId: String, val siteId: S
     }
   }
 
-  fun listState(status: NoteStatus): NoteListState =
-    when (status) {
-      NoteStatus.RESOLVED -> resolvedListState
-      else -> openListState
-    }
+  fun listState(status: NoteStatus): NoteListState = statusLists.state(status)
 
   fun updateFilterStatus(status: NoteStatus) {
     if (status == NoteStatus.UNKNOWN__ || filterStatus == status) {
       return
     }
 
-    filterStatus = status
+    statusLists.updateVisibleStatus(status)
   }
 
   fun notes(status: NoteStatus): List<NoteCard_note> {
@@ -175,11 +168,13 @@ internal class RelatedNotesViewModel(private val entityId: String, val siteId: S
       } else {
         null
       }
-    listOf(NoteStatus.OPEN, NoteStatus.RESOLVED).forEach { status ->
-      val note =
-        settledNotesByStatus[status]?.firstOrNull { it.id == noteId }
-          ?: liveNotes?.takeIf { it.status == status }
-      listState(status).markDeleted(noteId = noteId, fallbackNote = note)
+    statusLists.convergeDeletedNote(noteId) { status ->
+      settledNotesByStatus[status]?.firstOrNull { it.id == noteId }
+        ?: liveNotes?.takeIf { it.status == status }
+    }
+    settledNotesByStatus.keys.toList().forEach { status ->
+      settledNotesByStatus[status] =
+        settledNotesByStatus.getValue(status).filterNot { it.id == noteId }
     }
   }
 }

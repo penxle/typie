@@ -17,7 +17,7 @@ class EditorSubPaneStateTest {
     val state = EditorSubPaneState()
     state.open(EditorSubPane.RelatedNotes)
     var preparations = 0
-    state.registerRouteRemovalPreparation(EditorSubPane.RelatedNotes) {
+    state.registerRouteRemovalPreparation {
       preparations += 1
       false
     }
@@ -27,23 +27,41 @@ class EditorSubPaneStateTest {
   }
 
   @Test
-  fun `inactive or unregistered sub pane does not participate in route removal`() = runTest {
+  fun `registered preparation remains available after its sub pane is dismissed`() = runTest {
     val state = EditorSubPaneState()
-    state.open(EditorSubPane.RelatedNotes)
     var preparations = 0
-    val unregister =
-      state.registerRouteRemovalPreparation(EditorSubPane.RelatedNotes) {
-        preparations += 1
-        false
-      }
 
-    state.dismiss()
     assertTrue(state.prepareForRouteRemoval())
 
     state.open(EditorSubPane.RelatedNotes)
-    unregister()
+    state.registerRouteRemovalPreparation {
+      preparations += 1
+      false
+    }
+    state.dismiss()
+
+    assertFalse(state.prepareForRouteRemoval())
+    assertEquals(1, preparations)
+  }
+
+  @Test
+  fun `later route removal preparation replaces the previous registration`() = runTest {
+    val state = EditorSubPaneState()
+    var firstPreparations = 0
+    var secondPreparations = 0
+
+    state.registerRouteRemovalPreparation {
+      firstPreparations += 1
+      false
+    }
+    state.registerRouteRemovalPreparation {
+      secondPreparations += 1
+      true
+    }
+
     assertTrue(state.prepareForRouteRemoval())
-    assertEquals(0, preparations)
+    assertEquals(0, firstPreparations)
+    assertEquals(1, secondPreparations)
   }
 
   @Test

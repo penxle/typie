@@ -198,6 +198,10 @@ export class NoteListState<T extends ListNote> {
     this.#rebuildVisible();
   }
 
+  settle(identity: NoteListIdentity, authoritativeNotes: readonly T[]): void {
+    this.#reset(identity, authoritativeNotes);
+  }
+
   authoritativeNote(noteId: string): T | undefined {
     return this.#authoritativeNotesById.get(noteId);
   }

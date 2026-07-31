@@ -27,7 +27,7 @@ class NoteActionsTest {
     actions.activate(
       siteId = siteId,
       entityId = null,
-      editState = NoteEditState(scope = this),
+      editState = createNoteEditState(),
       onTerminal = { converged += it },
     )
     NoteSync.publish(NoteUpdate(NoteUpdateKind.DELETED, noteId = note.id, siteId = siteId))
@@ -47,13 +47,13 @@ class NoteActionsTest {
     actions.activate(
       siteId = oldSiteId,
       entityId = null,
-      editState = NoteEditState(scope = this),
+      editState = createNoteEditState(),
       onTerminal = { converged += "old:$it" },
     )
     actions.activate(
       siteId = newSiteId,
       entityId = null,
-      editState = NoteEditState(scope = this),
+      editState = createNoteEditState(),
       onTerminal = { converged += "new:$it" },
     )
 
@@ -81,7 +81,7 @@ class NoteActionsTest {
     actions.activate(
       siteId = siteId,
       entityId = null,
-      editState = NoteEditState(scope = this),
+      editState = createNoteEditState(),
       onTerminal = { converged += it },
     )
 
@@ -118,8 +118,8 @@ class NoteActionsTest {
   @Test
   fun `completion from a replaced surface is ignored`() = runTest {
     val actions = NoteActions()
-    val oldEditState = NoteEditState(scope = this)
-    val newEditState = NoteEditState(scope = this)
+    val oldEditState = createNoteEditState()
+    val newEditState = createNoteEditState()
     val oldNote = notesNote(id = "old-note", siteId = "site")
     val mutationStarted = CompletableDeferred<Unit>()
     val finishMutation = CompletableDeferred<Unit>()
@@ -167,7 +167,7 @@ class NoteActionsTest {
     actions.activate(
       siteId = "old-site",
       entityId = null,
-      editState = NoteEditState(scope = this),
+      editState = createNoteEditState(),
       onTerminal = {},
     )
     val oldRequest = actions.captureRequest()!!
@@ -184,7 +184,7 @@ class NoteActionsTest {
     actions.activate(
       siteId = "new-site",
       entityId = null,
-      editState = NoteEditState(scope = this),
+      editState = createNoteEditState(),
       onTerminal = {},
     )
     val newRequest = actions.captureRequest()!!
@@ -219,7 +219,7 @@ class NoteActionsTest {
     actions.activate(
       siteId = siteId,
       entityId = null,
-      editState = NoteEditState(scope = this),
+      editState = createNoteEditState(),
       onTerminal = { converged += it },
     )
 
@@ -255,7 +255,7 @@ class NoteActionsTest {
     actions.activate(
       siteId = "old-delete-site",
       entityId = null,
-      editState = NoteEditState(scope = this),
+      editState = createNoteEditState(),
       onTerminal = {},
     )
     val oldRequest = actions.captureRequest()!!
@@ -271,7 +271,7 @@ class NoteActionsTest {
     actions.activate(
       siteId = "new-delete-site",
       entityId = null,
-      editState = NoteEditState(scope = this),
+      editState = createNoteEditState(),
       onTerminal = {},
     )
     val newRequest = actions.captureRequest()!!
@@ -306,7 +306,7 @@ class NoteActionsTest {
     actions.activate(
       siteId = siteId,
       entityId = null,
-      editState = NoteEditState(scope = this),
+      editState = createNoteEditState(),
       onTerminal = {},
     )
 
@@ -357,7 +357,7 @@ class NoteActionsTest {
       actions.activate(
         siteId = siteId,
         entityId = null,
-        editState = NoteEditState(scope = this),
+        editState = createNoteEditState(),
         onTerminal = {},
       )
 

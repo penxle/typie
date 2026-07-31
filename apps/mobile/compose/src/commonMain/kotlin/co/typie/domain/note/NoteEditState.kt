@@ -4,9 +4,10 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import co.typie.form.FieldState
 import co.typie.form.FormState
 import co.typie.graphql.fragment.NoteCard_note
-import kotlin.coroutines.coroutineContext
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
@@ -41,6 +42,7 @@ internal class NoteEditState(private val scope: CoroutineScope) {
       return
     }
 
+    currentForm?.cancelPendingSaves()
     activeForm =
       ActiveNoteFormState(
         scope = scope,
@@ -51,10 +53,8 @@ internal class NoteEditState(private val scope: CoroutineScope) {
   }
 
   fun clearExpanded(siteId: String, noteId: String? = expandedNoteId) {
-    if (noteId == null || activeFormFor(siteId = siteId, noteId = noteId) == null) {
-      return
-    }
-
+    val currentForm = noteId?.let { activeFormFor(siteId = siteId, noteId = it) } ?: return
+    currentForm.cancelPendingSaves()
     activeForm = null
   }
 
@@ -91,8 +91,17 @@ internal class NoteEditState(private val scope: CoroutineScope) {
     saveColor: suspend (noteId: String, color: String) -> NoteSaveOutcome,
   ): Boolean {
     val currentForm = activeFormFor(siteId = siteId, noteId = noteId) ?: return true
-
     return currentForm.flush(saveContent = saveContent, saveColor = saveColor)
+  }
+
+  suspend fun flushOnFocusLoss(
+    siteId: String,
+    noteId: String,
+    saveContent: suspend (noteId: String, content: String) -> NoteSaveOutcome,
+    saveColor: suspend (noteId: String, color: String) -> NoteSaveOutcome,
+  ) {
+    activeFormFor(siteId = siteId, noteId = noteId)
+      ?.flushOnFocusLoss(saveContent = saveContent, saveColor = saveColor)
   }
 
   suspend fun collapse(
@@ -101,13 +110,10 @@ internal class NoteEditState(private val scope: CoroutineScope) {
     saveColor: suspend (noteId: String, color: String) -> NoteSaveOutcome,
   ): Boolean {
     val currentForm = activeForm ?: return true
-    if (currentForm.siteId != siteId) {
-      return true
-    }
-    if (!currentForm.flush(saveContent = saveContent, saveColor = saveColor)) {
-      return false
-    }
+    if (currentForm.siteId != siteId) return true
+    if (!currentForm.flush(saveContent = saveContent, saveColor = saveColor)) return false
 
+    currentForm.cancelPendingSaves()
     activeForm = null
     return true
   }
@@ -152,18 +158,6 @@ internal class NoteEditState(private val scope: CoroutineScope) {
     activeForm = null
   }
 
-  fun dispose(
-    savePendingContent:
-      suspend (siteId: String, noteId: String, content: String) -> NoteSaveOutcome,
-    savePendingColor: suspend (siteId: String, noteId: String, color: String) -> NoteSaveOutcome,
-  ) {
-    val currentForm = activeForm ?: return
-    currentForm.dispose(
-      savePendingContent = savePendingContent,
-      savePendingColor = savePendingColor,
-    )
-  }
-
   private fun activeFormFor(siteId: String, noteId: String): ActiveNoteFormState? =
     activeForm?.takeIf {
       it.siteId == siteId && it.noteId == noteId
@@ -202,15 +196,17 @@ private class ActiveNoteFormState(
   var isColorSaving by mutableStateOf(false)
     private set
 
+  private val form = NoteEditorForm(scope = scope, note = note)
+  private val contentEdit = FieldEditState()
+  private val colorEdit = FieldEditState()
+  private val contentSaveController =
+    NotesDebouncedSaveController(scope = scope, debounceMillis = CONTENT_SAVE_DEBOUNCE_MILLIS)
+  private val colorSaveController =
+    NotesDebouncedSaveController(scope = scope, debounceMillis = COLOR_SAVE_DEBOUNCE_MILLIS)
+  private val attemptAdmissionMutex = Mutex()
+  private val saveMutex = Mutex()
+
   private var showSaving by mutableStateOf(false)
-  private var contentSaveFailed by mutableStateOf(false)
-  private var colorSaveFailed by mutableStateOf(false)
-  private var contentRevision = 0
-  private var colorRevision = 0
-  private var blockedContentRevision: Int? = null
-  private var blockedColorRevision: Int? = null
-  private var inFlightContentRevision: Int? = null
-  private var inFlightColorRevision: Int? = null
   private var activeSaveCount = 0
   private var savingGeneration = 0L
   private var savingIntervalActive = false
@@ -219,24 +215,19 @@ private class ActiveNoteFormState(
   val saveStatus: NoteSaveStatus
     get() =
       when {
-        contentSaveFailed || colorSaveFailed -> NoteSaveStatus.FAILED
+        hasSaveFailure -> NoteSaveStatus.FAILED
         showSaving -> NoteSaveStatus.SAVING
         else -> NoteSaveStatus.NONE
       }
 
   val isContentDirty: Boolean
-    get() = form.content.isDirty
+    get() = contentEdit.desired != null
 
   val isColorDirty: Boolean
-    get() = form.color.isDirty
+    get() = colorEdit.desired != null
 
-  private val form = NoteEditorForm(scope = scope, note = note)
-
-  private val contentSaveController =
-    NotesDebouncedSaveController(scope = scope, debounceMillis = CONTENT_SAVE_DEBOUNCE_MILLIS)
-  private val colorSaveController =
-    NotesDebouncedSaveController(scope = scope, debounceMillis = COLOR_SAVE_DEBOUNCE_MILLIS)
-  private val saveMutex = Mutex()
+  private val hasSaveFailure: Boolean
+    get() = contentEdit.hasCurrentFailure || colorEdit.hasCurrentFailure
 
   fun overlay(note: NoteCard_note): NoteCard_note =
     if (note.id == noteId && note.site.id == siteId) {
@@ -246,37 +237,11 @@ private class ActiveNoteFormState(
     }
 
   fun commitServerSnapshot(note: NoteCard_note): NoteCard_note {
-    if (note.id != noteId || note.site.id != siteId) {
-      return note
-    }
-
-    val desiredContent = form.content.value
-    val desiredColor = form.color.value
-    val preserveContent = contentSaveController.hasWork()
-    val preserveColor = colorSaveController.hasWork()
+    if (note.id != noteId || note.site.id != siteId) return note
 
     serverSnapshot = note
-    form.syncFromSnapshot(note)
-    if (preserveContent) form.content.setValue(desiredContent)
-    if (preserveColor) form.color.setValue(desiredColor)
-    if (!form.content.isDirty) {
-      blockedContentRevision = null
-      updateContentSaveFailed(false)
-      if (contentSaveController.hasWork() && !contentSaveController.hasExecutingSave()) {
-        contentSaveController.cancel()
-        isContentSaving = false
-        endSavingIntervalIfIdle()
-      }
-    }
-    if (!form.color.isDirty) {
-      blockedColorRevision = null
-      updateColorSaveFailed(false)
-      if (colorSaveController.hasWork() && !colorSaveController.hasExecutingSave()) {
-        colorSaveController.cancel()
-        isColorSaving = false
-        endSavingIntervalIfIdle()
-      }
-    }
+    syncFieldFromSource(field = form.content, edit = contentEdit, sourceValue = note.content)
+    syncFieldFromSource(field = form.color, edit = colorEdit, sourceValue = note.color)
     return overlay(note)
   }
 
@@ -284,75 +249,80 @@ private class ActiveNoteFormState(
     value: String,
     save: suspend (noteId: String, content: String) -> NoteSaveOutcome,
   ) {
-    if (form.content.value != value) {
-      contentRevision += 1
-      blockedContentRevision = null
-    }
+    if (form.content.value == value) return
+
+    val desired = contentEdit.recordEdit(value)
     form.content.setValue(value)
-
-    val mustCompensateForInFlightSave = inFlightContentRevision != null
-    if (!form.content.isDirty && !mustCompensateForInFlightSave) {
-      contentSaveController.cancel()
-      isContentSaving = false
-      endSavingIntervalIfIdle()
-      blockedContentRevision = null
-      updateContentSaveFailed(false)
-      return
-    }
-    if (blockedContentRevision == contentRevision) return
-
-    updateContentSaveFailed(false)
-    contentSaveController.submit { generation ->
-      saveContentNow(save = save, generation = generation, force = mustCompensateForInFlightSave)
-    }
+    contentSaveController.submit { attemptContent(desired = desired, save = save) }
   }
 
   fun updateColor(value: String, save: suspend (noteId: String, color: String) -> NoteSaveOutcome) {
-    if (form.color.value != value) {
-      colorRevision += 1
-      blockedColorRevision = null
-    }
+    if (form.color.value == value) return
+
+    val desired = colorEdit.recordEdit(value)
     form.color.setValue(value)
-
-    val mustCompensateForInFlightSave = inFlightColorRevision != null
-    if (!form.color.isDirty && !mustCompensateForInFlightSave) {
-      colorSaveController.cancel()
-      isColorSaving = false
-      endSavingIntervalIfIdle()
-      blockedColorRevision = null
-      updateColorSaveFailed(false)
-      return
-    }
-    if (blockedColorRevision == colorRevision) return
-
-    updateColorSaveFailed(false)
-    colorSaveController.submit { generation ->
-      saveColorNow(save = save, generation = generation, force = mustCompensateForInFlightSave)
-    }
+    colorSaveController.submit { attemptColor(desired = desired, save = save) }
   }
 
   suspend fun flush(
     saveContent: suspend (noteId: String, content: String) -> NoteSaveOutcome,
     saveColor: suspend (noteId: String, color: String) -> NoteSaveOutcome,
   ): Boolean {
-    val mustCompensateContent = inFlightContentRevision != null
-    val mustCompensateColor = inFlightColorRevision != null
-    if (
-      !colorSaveController.runNow { generation ->
-        saveColorNow(save = saveColor, generation = generation, force = mustCompensateColor)
+    contentSaveController.cancel()
+    colorSaveController.cancel()
+    val attemptedContent = mutableSetOf<Long>()
+    val attemptedColor = mutableSetOf<Long>()
+
+    while (true) {
+      if (!flushColorGenerations(attempted = attemptedColor, save = saveColor)) return false
+      if (!flushContentGenerations(attempted = attemptedContent, save = saveContent)) return false
+      if (contentEdit.desired == null && colorEdit.desired == null) return true
+    }
+  }
+
+  suspend fun flushOnFocusLoss(
+    saveContent: suspend (noteId: String, content: String) -> NoteSaveOutcome,
+    saveColor: suspend (noteId: String, color: String) -> NoteSaveOutcome,
+  ) {
+    val contentTarget = contentEdit.desired
+    val colorTarget = colorEdit.desired
+    val contentAttemptAtEntry =
+      contentEdit.attempt?.takeIf { it.generation == contentTarget?.generation }
+    val colorAttemptAtEntry = colorEdit.attempt?.takeIf { it.generation == colorTarget?.generation }
+
+    colorSaveController.cancel()
+    contentSaveController.cancel()
+    if (colorTarget != null) {
+      if (colorAttemptAtEntry != null) {
+        colorAttemptAtEntry.result.await()
+      } else {
+        attemptColor(desired = colorTarget, save = saveColor)
       }
-    ) {
-      return false
     }
 
-    return contentSaveController.runNow { generation ->
-      saveContentNow(save = saveContent, generation = generation, force = mustCompensateContent)
+    if (contentTarget != null) {
+      if (contentAttemptAtEntry != null) {
+        contentAttemptAtEntry.result.await()
+      } else {
+        attemptContent(desired = contentTarget, save = saveContent)
+      }
     }
   }
 
   fun cancelPendingSaves() {
     contentSaveController.cancel()
     colorSaveController.cancel()
+
+    val contentAttempt = contentEdit.attempt
+    val colorAttempt = colorEdit.attempt
+    contentEdit.attempt = null
+    colorEdit.attempt = null
+    contentAttempt?.job?.cancel()
+    colorAttempt?.job?.cancel()
+
+    contentEdit.failedGeneration = null
+    colorEdit.failedGeneration = null
+
     savingGeneration += 1
     savingIndicatorJob?.cancel()
     savingIndicatorJob = null
@@ -361,184 +331,227 @@ private class ActiveNoteFormState(
     isContentSaving = false
     isColorSaving = false
     showSaving = false
-    updateContentSaveFailed(false)
-    updateColorSaveFailed(false)
   }
 
-  fun dispose(
-    savePendingContent:
-      suspend (siteId: String, noteId: String, content: String) -> NoteSaveOutcome,
-    savePendingColor: suspend (siteId: String, noteId: String, color: String) -> NoteSaveOutcome,
-  ) {
-    val mustCompensateContent = inFlightContentRevision != null
-    val shouldFlushContent =
-      blockedContentRevision != contentRevision &&
-        inFlightContentRevision != contentRevision &&
-        (form.content.isDirty || inFlightContentRevision != null)
-    if (shouldFlushContent) {
-      contentSaveController.launchNow { generation ->
-        saveContentNow(
-          save = { pendingNoteId, content -> savePendingContent(siteId, pendingNoteId, content) },
-          generation = generation,
-          force = mustCompensateContent,
-        )
-      }
-    } else {
-      contentSaveController.cancelScheduled()
-    }
-
-    val mustCompensateColor = inFlightColorRevision != null
-    val shouldFlushColor =
-      blockedColorRevision != colorRevision &&
-        inFlightColorRevision != colorRevision &&
-        (form.color.isDirty || inFlightColorRevision != null)
-    if (shouldFlushColor) {
-      colorSaveController.launchNow { generation ->
-        saveColorNow(
-          save = { pendingNoteId, color -> savePendingColor(siteId, pendingNoteId, color) },
-          generation = generation,
-          force = mustCompensateColor,
-        )
-      }
-    } else {
-      colorSaveController.cancelScheduled()
-    }
-  }
-
-  private suspend fun saveContentNow(
+  private suspend fun flushContentGenerations(
+    attempted: MutableSet<Long>,
     save: suspend (noteId: String, content: String) -> NoteSaveOutcome,
-    generation: Long,
-    force: Boolean,
   ): Boolean {
-    if (!form.content.isDirty && !force) {
-      isContentSaving = false
-      endSavingIntervalIfIdle()
-      return true
+    while (true) {
+      val desired = contentEdit.desired ?: return true
+      if (!attempted.add(desired.generation)) return false
+      attemptContent(desired = desired, save = save)
+      val remaining = contentEdit.desired ?: return true
+      if (remaining.generation == desired.generation) return false
     }
-    if (blockedContentRevision == contentRevision) {
-      isContentSaving = false
-      endSavingIntervalIfIdle()
-      return false
-    }
-
-    val currentContent = form.content.value
-    val revision = contentRevision
-    updateContentSaveFailed(false)
-    isContentSaving = true
-    val savingGeneration = beginSaving()
-    val outcome: NoteSaveOutcome?
-    try {
-      outcome = saveMutex.withLock {
-        if (!contentSaveController.isCurrent(generation)) {
-          return@withLock null
-        }
-        inFlightContentRevision = revision
-        val result = save(noteId, currentContent)
-        val isCurrent = contentSaveController.isCurrent(generation)
-        if (result == NoteSaveOutcome.SubscriptionGated) {
-          contentSaveController.cancel()
-          colorSaveController.cancel()
-          blockDirtyRevisions()
-        } else if (isCurrent && result == NoteSaveOutcome.Superseded) {
-          contentSaveController.cancel()
-          colorSaveController.cancel()
-        }
-        result.takeIf { isCurrent }
-      }
-    } finally {
-      inFlightContentRevision = null
-      val hasQueuedSave = contentSaveController.hasPendingAfter(generation)
-      isContentSaving = hasQueuedSave
-      finishSaving(generation = savingGeneration, keepInterval = hasQueuedSave)
-    }
-    if (outcome == null) {
-      return false
-    }
-
-    when (outcome) {
-      NoteSaveOutcome.Saved -> {
-        blockedContentRevision = null
-        form.content.syncFromSource(currentContent)
-      }
-      NoteSaveOutcome.Failed -> {
-        if (revision == contentRevision) {
-          blockedContentRevision = revision
-          updateContentSaveFailed(true)
-        }
-      }
-      NoteSaveOutcome.SubscriptionGated,
-      NoteSaveOutcome.Superseded -> Unit
-    }
-
-    return outcome == NoteSaveOutcome.Saved || outcome == NoteSaveOutcome.Superseded
   }
 
-  private suspend fun saveColorNow(
+  private suspend fun flushColorGenerations(
+    attempted: MutableSet<Long>,
     save: suspend (noteId: String, color: String) -> NoteSaveOutcome,
-    generation: Long,
-    force: Boolean,
   ): Boolean {
-    if (!form.color.isDirty && !force) {
-      isColorSaving = false
-      endSavingIntervalIfIdle()
-      return true
+    while (true) {
+      val desired = colorEdit.desired ?: return true
+      if (!attempted.add(desired.generation)) return false
+      attemptColor(desired = desired, save = save)
+      val remaining = colorEdit.desired ?: return true
+      if (remaining.generation == desired.generation) return false
     }
-    if (blockedColorRevision == colorRevision) {
-      isColorSaving = false
-      endSavingIntervalIfIdle()
-      return false
-    }
+  }
 
-    val currentColor = form.color.value
-    val revision = colorRevision
-    updateColorSaveFailed(false)
-    isColorSaving = true
-    val savingGeneration = beginSaving()
-    val outcome: NoteSaveOutcome?
-    try {
-      outcome = saveMutex.withLock {
-        if (!colorSaveController.isCurrent(generation)) {
-          return@withLock null
-        }
-        inFlightColorRevision = revision
-        val result = save(noteId, currentColor)
-        val isCurrent = colorSaveController.isCurrent(generation)
-        if (result == NoteSaveOutcome.SubscriptionGated) {
-          contentSaveController.cancel()
-          colorSaveController.cancel()
-          blockDirtyRevisions()
-        } else if (isCurrent && result == NoteSaveOutcome.Superseded) {
-          contentSaveController.cancel()
-          colorSaveController.cancel()
-        }
-        result.takeIf { isCurrent }
+  private suspend fun attemptContent(
+    desired: DesiredValue,
+    save: suspend (noteId: String, content: String) -> NoteSaveOutcome,
+  ) {
+    attemptField(
+      edit = contentEdit,
+      controller = contentSaveController,
+      desired = desired,
+      setSaving = { isContentSaving = it },
+      save = { value -> save(noteId, value) },
+      applyOutcome = { outcome -> applyContentOutcome(outcome = outcome, saved = desired) },
+    )
+  }
+
+  private suspend fun attemptColor(
+    desired: DesiredValue,
+    save: suspend (noteId: String, color: String) -> NoteSaveOutcome,
+  ) {
+    attemptField(
+      edit = colorEdit,
+      controller = colorSaveController,
+      desired = desired,
+      setSaving = { isColorSaving = it },
+      save = { value -> save(noteId, value) },
+      applyOutcome = { outcome -> applyColorOutcome(outcome = outcome, saved = desired) },
+    )
+  }
+
+  private suspend fun attemptField(
+    edit: FieldEditState,
+    controller: NotesDebouncedSaveController,
+    desired: DesiredValue,
+    setSaving: (Boolean) -> Unit,
+    save: suspend (value: String) -> NoteSaveOutcome,
+    applyOutcome: (NoteSaveOutcome) -> Unit,
+  ) {
+    while (true) {
+      var created = false
+      val attempt =
+        attemptAdmissionMutex.withLock {
+          if (edit.desired?.generation != desired.generation) return@withLock null
+
+          edit.attempt
+            ?: FieldSaveAttempt(generation = desired.generation, value = desired.value).also {
+              edit.attempt = it
+              created = true
+              setSaving(true)
+            }
+        } ?: return
+
+      if (created) {
+        startFieldAttempt(
+          edit = edit,
+          controller = controller,
+          attempt = attempt,
+          setSaving = setSaving,
+          save = save,
+          applyOutcome = applyOutcome,
+        )
       }
-    } finally {
-      inFlightColorRevision = null
-      val hasQueuedSave = colorSaveController.hasPendingAfter(generation)
-      isColorSaving = hasQueuedSave
-      finishSaving(generation = savingGeneration, keepInterval = hasQueuedSave)
-    }
-    if (outcome == null) {
-      return false
-    }
 
+      val outcome = attempt.result.await()
+      if (
+        attempt.generation == desired.generation || outcome == NoteSaveOutcome.SubscriptionGated
+      ) {
+        return
+      }
+    }
+  }
+
+  private fun startFieldAttempt(
+    edit: FieldEditState,
+    controller: NotesDebouncedSaveController,
+    attempt: FieldSaveAttempt,
+    setSaving: (Boolean) -> Unit,
+    save: suspend (value: String) -> NoteSaveOutcome,
+    applyOutcome: (NoteSaveOutcome) -> Unit,
+  ) {
+    val job =
+      scope.launch(start = CoroutineStart.LAZY) {
+        try {
+          val outcome = saveMutex.withLock {
+            if (edit.desired?.generation != attempt.generation) return@withLock null
+
+            clearFailureForAttempt(edit = edit, generation = attempt.generation)
+            val intervalGeneration = beginSaving()
+            try {
+              save(attempt.value)
+            } finally {
+              finishSaving(
+                generation = intervalGeneration,
+                keepInterval = hasSaveWork(excluding = attempt),
+              )
+            }
+          }
+
+          if (outcome != null) applyOutcome(outcome)
+          attempt.result.complete(outcome)
+        } catch (error: Throwable) {
+          if (!attempt.result.isCompleted) attempt.result.completeExceptionally(error)
+          throw error
+        } finally {
+          finishFieldAttempt(
+            edit = edit,
+            controller = controller,
+            attempt = attempt,
+            setSaving = setSaving,
+          )
+        }
+      }
+    attempt.job = job
+    job.invokeOnCompletion { error ->
+      if (error != null && !attempt.result.isCompleted) {
+        attempt.result.completeExceptionally(error)
+      }
+      finishFieldAttempt(
+        edit = edit,
+        controller = controller,
+        attempt = attempt,
+        setSaving = setSaving,
+      )
+    }
+    job.start()
+  }
+
+  private fun finishFieldAttempt(
+    edit: FieldEditState,
+    controller: NotesDebouncedSaveController,
+    attempt: FieldSaveAttempt,
+    setSaving: (Boolean) -> Unit,
+  ) {
+    if (edit.attempt === attempt) edit.attempt = null
+    setSaving(edit.attempt != null || controller.hasWork())
+    settleSavingInterval()
+  }
+
+  private fun applyContentOutcome(outcome: NoteSaveOutcome, saved: DesiredValue) {
     when (outcome) {
-      NoteSaveOutcome.Saved -> {
-        blockedColorRevision = null
-        form.color.syncFromSource(currentColor)
-      }
-      NoteSaveOutcome.Failed -> {
-        if (revision == colorRevision) {
-          blockedColorRevision = revision
-          updateColorSaveFailed(true)
-        }
-      }
-      NoteSaveOutcome.SubscriptionGated,
+      NoteSaveOutcome.Saved -> applySaved(field = form.content, edit = contentEdit, saved = saved)
+      NoteSaveOutcome.Failed -> applyFailed(edit = contentEdit, generation = saved.generation)
+      NoteSaveOutcome.SubscriptionGated -> cancelDebouncedSaves()
       NoteSaveOutcome.Superseded -> Unit
     }
+  }
 
-    return outcome == NoteSaveOutcome.Saved || outcome == NoteSaveOutcome.Superseded
+  private fun applyColorOutcome(outcome: NoteSaveOutcome, saved: DesiredValue) {
+    when (outcome) {
+      NoteSaveOutcome.Saved -> applySaved(field = form.color, edit = colorEdit, saved = saved)
+      NoteSaveOutcome.Failed -> applyFailed(edit = colorEdit, generation = saved.generation)
+      NoteSaveOutcome.SubscriptionGated -> cancelDebouncedSaves()
+      NoteSaveOutcome.Superseded -> Unit
+    }
+  }
+
+  private fun applySaved(field: FieldState<String>, edit: FieldEditState, saved: DesiredValue) {
+    if (edit.desired?.generation == saved.generation) {
+      edit.desired = null
+      edit.failedGeneration = null
+      field.syncFromSource(saved.value, preserveDirty = false)
+      return
+    }
+
+    field.syncFromSource(saved.value, preserveDirty = false)
+    edit.desired?.let { field.setValue(it.value) }
+  }
+
+  private fun applyFailed(edit: FieldEditState, generation: Long) {
+    if (edit.desired?.generation != generation) return
+
+    val wasFailed = hasSaveFailure
+    edit.failedGeneration = generation
+    if (!wasFailed && hasSaveFailure) onSaveFailed()
+  }
+
+  private fun clearFailureForAttempt(edit: FieldEditState, generation: Long) {
+    if (edit.failedGeneration == generation) edit.failedGeneration = null
+  }
+
+  private fun cancelDebouncedSaves() {
+    contentSaveController.cancel()
+    colorSaveController.cancel()
+    isContentSaving = contentEdit.attempt != null
+    isColorSaving = colorEdit.attempt != null
+    settleSavingInterval()
+  }
+
+  private fun syncFieldFromSource(
+    field: FieldState<String>,
+    edit: FieldEditState,
+    sourceValue: String,
+  ) {
+    field.syncFromSource(sourceValue, preserveDirty = false)
+    edit.desired?.let { field.setValue(it.value) }
   }
 
   private fun beginSaving(): Long {
@@ -549,9 +562,7 @@ private class ActiveNoteFormState(
     savingIndicatorJob?.cancel()
     savingIndicatorJob = scope.launch {
       delay(SAVING_INDICATOR_DELAY_MILLIS)
-      if (activeSaveCount > 0) {
-        showSaving = true
-      }
+      if (activeSaveCount > 0 || hasSaveWork()) showSaving = true
     }
     return savingGeneration
   }
@@ -561,130 +572,77 @@ private class ActiveNoteFormState(
 
     activeSaveCount = (activeSaveCount - 1).coerceAtLeast(0)
     if (activeSaveCount != 0 || keepInterval) return
-
-    endSavingIntervalIfIdle()
+    endSavingInterval()
   }
 
-  private fun endSavingIntervalIfIdle() {
-    if (activeSaveCount != 0) return
+  private fun settleSavingInterval() {
+    if (activeSaveCount == 0 && !hasSaveWork()) endSavingInterval()
+  }
 
+  private fun endSavingInterval() {
     savingIntervalActive = false
     savingIndicatorJob?.cancel()
     savingIndicatorJob = null
     showSaving = false
   }
 
-  private fun updateContentSaveFailed(value: Boolean) {
-    val wasFailed = contentSaveFailed || colorSaveFailed
-    contentSaveFailed = value
-    if (!wasFailed && (contentSaveFailed || colorSaveFailed)) {
-      onSaveFailed()
-    }
-  }
+  private fun hasSaveWork(excluding: FieldSaveAttempt? = null): Boolean =
+    contentSaveController.hasWork() ||
+      colorSaveController.hasWork() ||
+      (contentEdit.attempt != null && contentEdit.attempt !== excluding) ||
+      (colorEdit.attempt != null && colorEdit.attempt !== excluding)
+}
 
-  private fun updateColorSaveFailed(value: Boolean) {
-    val wasFailed = contentSaveFailed || colorSaveFailed
-    colorSaveFailed = value
-    if (!wasFailed && (contentSaveFailed || colorSaveFailed)) {
-      onSaveFailed()
-    }
-  }
+private data class DesiredValue(val generation: Long, val value: String)
 
-  private fun blockDirtyRevisions() {
-    if (form.content.isDirty) blockedContentRevision = contentRevision
-    if (form.color.isDirty) blockedColorRevision = colorRevision
+private class FieldEditState {
+  var desired: DesiredValue? by mutableStateOf(null)
+  var failedGeneration: Long? by mutableStateOf(null)
+  var attempt: FieldSaveAttempt? = null
+  private var nextGeneration = 0L
+
+  val hasCurrentFailure: Boolean
+    get() = failedGeneration != null && failedGeneration == desired?.generation
+
+  fun recordEdit(value: String): DesiredValue {
+    val next = DesiredValue(generation = ++nextGeneration, value = value)
+    desired = next
+    failedGeneration = null
+    return next
   }
+}
+
+private class FieldSaveAttempt(val generation: Long, val value: String) {
+  val result = CompletableDeferred<NoteSaveOutcome?>()
+  var job: Job? = null
 }
 
 private class NoteEditorForm(scope: CoroutineScope, note: NoteCard_note) : FormState(scope) {
   val content = field(note.content)
   val color = field(note.color) { focusable = false }
-
-  fun syncFromSnapshot(note: NoteCard_note) {
-    content.syncFromSource(note.content)
-    color.syncFromSource(note.color)
-  }
 }
 
 private class NotesDebouncedSaveController(
   private val scope: CoroutineScope,
   private val debounceMillis: Long,
 ) {
-  private var debounceJob: Job? = null
-  private val saveMutex = Mutex()
-  private val executingGenerations = mutableSetOf<Long>()
-  private var generation = 0L
+  private var job: Job? = null
 
-  fun submit(action: suspend (generation: Long) -> Unit) {
-    debounceJob?.cancel()
-    val generation = advanceGeneration()
-
-    var nextDebounceJob: Job? = null
-    nextDebounceJob = scope.launch {
+  fun submit(action: suspend () -> Unit) {
+    job?.cancel()
+    var nextJob: Job? = null
+    nextJob = scope.launch {
       delay(debounceMillis)
-      if (debounceJob === nextDebounceJob) {
-        debounceJob = null
-      }
-      runNow(generation) {
-        action(generation)
-        true
-      }
+      if (job === nextJob) job = null
+      action()
     }
-
-    debounceJob = nextDebounceJob
+    job = nextJob
   }
-
-  suspend fun runNow(action: suspend (generation: Long) -> Boolean): Boolean {
-    val generation = advanceGeneration()
-    val currentJob = debounceJob
-    debounceJob = null
-    if (currentJob != coroutineContext[Job]) {
-      currentJob?.cancel()
-    }
-
-    return runNow(generation) { action(generation) }
-  }
-
-  private suspend fun runNow(generation: Long, action: suspend () -> Boolean): Boolean {
-    executingGenerations.add(generation)
-    return try {
-      saveMutex.withLock {
-        if (this.generation != generation) {
-          false
-        } else {
-          action()
-        }
-      }
-    } finally {
-      executingGenerations.remove(generation)
-    }
-  }
-
-  fun hasPendingAfter(generation: Long): Boolean =
-    debounceJob != null || executingGenerations.any { it != generation && it == this.generation }
-
-  fun hasWork(): Boolean = debounceJob != null || executingGenerations.isNotEmpty()
-
-  fun hasExecutingSave(): Boolean = executingGenerations.isNotEmpty()
-
-  fun isCurrent(generation: Long): Boolean = this.generation == generation
 
   fun cancel() {
-    advanceGeneration()
-    debounceJob?.cancel()
-    debounceJob = null
+    job?.cancel()
+    job = null
   }
 
-  fun cancelScheduled() {
-    debounceJob?.cancel()
-    debounceJob = null
-  }
-
-  fun launchNow(action: suspend (generation: Long) -> Boolean) {
-    val generation = advanceGeneration()
-    cancelScheduled()
-    scope.launch(start = CoroutineStart.UNDISPATCHED) { runNow(generation) { action(generation) } }
-  }
-
-  private fun advanceGeneration(): Long = ++generation
+  fun hasWork(): Boolean = job != null
 }

@@ -271,31 +271,28 @@
 <Widget collapsed={isCollapsed} icon={StickyNoteIcon} noPadding title="노트">
   {#snippet headerActions()}
     {#if !palette && !isCollapsed}
-      <button
-        class={center({
-          height: '26px',
-          borderRadius: '6px',
-          paddingX: '6px',
-          color: 'text.subtle',
-          transition: 'common',
-          _hover: { backgroundColor: 'surface.muted', color: 'text.default' },
-          cursor: hasActiveDocument ? 'pointer' : 'default',
-          opacity: hasActiveDocument ? '100' : '40',
-        })}
-        disabled={!hasActiveDocument}
-        onclick={(event) => {
-          event.stopPropagation();
-          void handleAddNote('button');
-        }}
-        onpointerdown={(event) => event.stopPropagation()}
-        type="button"
-        use:tooltip={{
-          message: hasActiveDocument ? '노트 추가' : '문서를 열어야 노트를 추가할 수 있어요',
-          placement: 'top',
-        }}
-      >
-        <Icon icon={PlusIcon} size={14} />
-      </button>
+      {#if hasActiveDocument}
+        <button
+          class={center({
+            height: '26px',
+            borderRadius: '6px',
+            paddingX: '6px',
+            color: 'text.subtle',
+            transition: 'common',
+            _hover: { backgroundColor: 'surface.muted', color: 'text.default' },
+            cursor: 'pointer',
+          })}
+          onclick={(event) => {
+            event.stopPropagation();
+            void handleAddNote('button');
+          }}
+          onpointerdown={(event) => event.stopPropagation()}
+          type="button"
+          use:tooltip={{ message: '노트 추가', placement: 'top' }}
+        >
+          <Icon icon={PlusIcon} size={14} />
+        </button>
+      {/if}
       <button
         class={center({
           height: '26px',
@@ -369,11 +366,7 @@
         >
           <Icon icon={StickyNoteIcon} size={20} />
         </div>
-        <p class={css({ fontSize: '12px', color: 'text.faint', textAlign: 'center' })}>
-          문서를 열면 관련 노트를
-          <br />
-          사용할 수 있어요
-        </p>
+        <p class={css({ fontSize: '12px', color: 'text.faint', textAlign: 'center' })}>문서를 열면 연결된 노트를 볼 수 있어요</p>
       </div>
     {:else if siteId && entityId}
       <NoteList

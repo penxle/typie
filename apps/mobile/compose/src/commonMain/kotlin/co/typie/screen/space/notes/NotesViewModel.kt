@@ -1,9 +1,6 @@
 package co.typie.screen.space.notes
 
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -11,6 +8,7 @@ import co.typie.domain.note.DEFAULT_NOTE_COLOR
 import co.typie.domain.note.NoteEditState
 import co.typie.domain.note.NoteListState
 import co.typie.domain.note.NoteSaveOutcome
+import co.typie.domain.note.NoteStatusListStates
 import co.typie.domain.note.NoteSync
 import co.typie.domain.note.addNoteEntity as addNoteEntityMutation
 import co.typie.domain.note.createNote as createNoteMutation
@@ -43,8 +41,8 @@ internal class NotesViewModel : ViewModel() {
   val siteId: String?
     get() = Preference.siteId
 
-  var filterStatus by mutableStateOf(NoteStatus.OPEN)
-    private set
+  val filterStatus: NoteStatus
+    get() = sceneCache.visibleStatus
 
   private val sceneCache = NotesSceneCache()
 
@@ -97,7 +95,7 @@ internal class NotesViewModel : ViewModel() {
       return
     }
 
-    filterStatus = status
+    sceneCache.updateVisibleStatus(status)
   }
 
   fun notes(status: NoteStatus): List<NoteCard_note> =
@@ -220,7 +218,7 @@ internal data class NotesSceneKey(val siteId: String, val status: NoteStatus)
 
 internal class NotesSceneCache {
   private val settledNotesByKey = mutableStateMapOf<NotesSceneKey, List<NoteCard_note>>()
-  private val listStatesByKey = mutableMapOf<NotesSceneKey, NoteListState>()
+  private var statusLists = NoteStatusListStates()
   private val fallbackListStates = mutableMapOf<NoteStatus, NoteListState>()
   private var activeSiteId: String? = null
   private var hasActiveSite = false
@@ -231,8 +229,15 @@ internal class NotesSceneCache {
     activeSiteId = siteId
     hasActiveSite = true
     settledNotesByKey.clear()
-    listStatesByKey.clear()
+    statusLists = NoteStatusListStates(initialVisibleStatus = statusLists.visibleStatus)
     fallbackListStates.clear()
+  }
+
+  val visibleStatus: NoteStatus
+    get() = statusLists.visibleStatus
+
+  fun updateVisibleStatus(status: NoteStatus) {
+    statusLists.updateVisibleStatus(status)
   }
 
   fun commitSuccess(siteId: String, notes: List<NoteCard_note>) {
@@ -243,13 +248,13 @@ internal class NotesSceneCache {
     listOf(NoteStatus.OPEN, NoteStatus.RESOLVED).forEach { status ->
       val key = NotesSceneKey(siteId = siteId, status = status)
       settledNotesByKey[key] = currentNotes.filter { it.status == status }
-      listState(key).sync(currentNotes)
     }
+    statusLists.sync(currentNotes)
   }
 
   fun listState(key: NotesSceneKey): NoteListState {
     activateSite(key.siteId)
-    return listStatesByKey.getOrPut(key) { NoteListState(key.status.normalizedListStatus()) }
+    return statusLists.state(key.status)
   }
 
   fun fallbackListState(status: NoteStatus): NoteListState =
@@ -258,15 +263,17 @@ internal class NotesSceneCache {
     }
 
   fun convergeDeletedNote(noteId: String, querySiteId: String?, queryNotes: List<NoteCard_note>?) {
-    listStatesByKey.forEach { (key, state) ->
-      val note =
-        settledNotesByKey[key]?.firstOrNull { it.id == noteId }
-          ?: if (key.siteId == querySiteId) {
-            queryNotes?.firstOrNull { it.id == noteId && it.status == key.status }
-          } else {
-            null
-          }
-      state.markDeleted(noteId = noteId, fallbackNote = note)
+    statusLists.convergeDeletedNote(noteId) { status ->
+      val key = activeSiteId?.let { NotesSceneKey(siteId = it, status = status) }
+      key?.let(settledNotesByKey::get)?.firstOrNull { it.id == noteId }
+        ?: if (activeSiteId == querySiteId) {
+          queryNotes?.firstOrNull { it.id == noteId && it.status == status }
+        } else {
+          null
+        }
+    }
+    settledNotesByKey.keys.toList().forEach { key ->
+      settledNotesByKey[key] = settledNotesByKey.getValue(key).filterNot { it.id == noteId }
     }
     fallbackListStates.values.forEach { it.markDeleted(noteId) }
   }
