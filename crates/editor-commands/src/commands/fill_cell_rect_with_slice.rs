@@ -1,51 +1,69 @@
 use std::collections::BTreeMap;
 
+#[cfg(test)]
 use editor_clipboard::Slice;
 use editor_crdt::Dot;
-use editor_model::{Fragment, Modifier, PlainNode, PlainParagraphNode};
+use editor_model::{Modifier, NodeType};
 use editor_state::{PendingModifiers, Position, Selection, apply_pending};
 use editor_transaction::Transaction;
 
 use crate::helpers::{
     cell_first_charlike_block, consume_pending_modifiers, find_first_text_position,
-    paint_block_uniformly, repair_slice_fragments, replace_cell_children,
+    materialize_planned_endpoint, paint_block_uniformly, replace_cell_children,
     resolve_effective_modifiers,
 };
+use crate::judgments::{CellFillPlan, TableFinalSelection};
 use crate::types::SliceProvenance;
 use crate::{CommandError, CommandResult};
 
 /// Replace every cell in a cell-rect selection with the same slice content.
 /// Inline-only slices are wrapped in a single paragraph so the cell stays
 /// schema-valid; block slices are inserted verbatim.
-pub fn fill_cell_rect_with_slice(
+#[cfg(test)]
+fn fill_cell_rect_with_slice(
     tr: &mut Transaction,
-    mut slice: Slice,
+    slice: Slice,
     provenance: SliceProvenance,
 ) -> CommandResult {
-    repair_slice_fragments(&mut slice.content);
-    let blocks = slice_to_cell_blocks(&slice);
-    if blocks.is_empty() {
-        return Ok(false);
-    }
+    crate::insert_slice(tr, slice, provenance)
+}
 
-    let (anchor_cell_id, cell_ids) = {
-        let Some(sel) = tr.selection() else {
-            return Ok(false);
-        };
+pub(crate) fn apply_cell_fill_plan(
+    tr: &mut Transaction,
+    plan: CellFillPlan,
+    provenance: SliceProvenance,
+) -> CommandResult {
+    let cell_ids = plan
+        .cells
+        .iter()
+        .map(|cell| materialize_planned_endpoint(tr, cell).map(|position| position.node))
+        .collect::<Result<Vec<_>, _>>()?;
+    let anchor_cell_id = *cell_ids
+        .first()
+        .ok_or_else(|| CommandError::Corrupted("cell-fill Slice plan has no anchor cell".into()))?;
+    let structure_matches = {
         let view = tr.view();
-        let Some(rs) = sel.resolve(&view) else {
-            return Ok(false);
-        };
-        let Some(rect) = rs.as_cell_rect() else {
-            return Ok(false);
-        };
-        let ids: Vec<Dot> = rect.cells().into_iter().map(|c| c.id()).collect();
-        if ids.is_empty() {
-            return Ok(false);
-        }
-        (ids[0], ids)
+        cell_ids
+            .iter()
+            .zip(&plan.original_child_types)
+            .all(|(cell_id, expected)| {
+                view.node(*cell_id).is_some_and(|cell| {
+                    cell.node_type() == NodeType::TableCell
+                        && cell
+                            .children()
+                            .map(|child| match child {
+                                editor_model::ChildView::Block(block) => block.node_type(),
+                                editor_model::ChildView::Leaf(leaf) => leaf.node_type(),
+                            })
+                            .eq(expected.iter().copied())
+                })
+            })
     };
-
+    if !structure_matches {
+        return Err(CommandError::Corrupted(
+            "cell-fill Slice target changed after planning".into(),
+        ));
+    }
     let pending = if provenance.is_plain() {
         let pending = tr.pending_modifiers().clone();
         consume_pending_modifiers(tr)?;
@@ -59,7 +77,7 @@ pub fn fill_cell_rect_with_slice(
             let paint = pending
                 .as_ref()
                 .map(|pending| cell_plain_paint(tr, *cell_id, pending));
-            replace_cell_children(tr, *cell_id, &blocks)?;
+            replace_cell_children(tr, *cell_id, &plan.blocks)?;
             if let Some(paint) = &paint {
                 let block_ids: Vec<Dot> = {
                     let view = tr.view();
@@ -72,12 +90,16 @@ pub fn fill_cell_rect_with_slice(
                 }
             }
         }
+        let cursor = match plan.final_selection {
+            TableFinalSelection::FirstTextInAnchorCell => {
+                find_first_text_position(&tr.view(), anchor_cell_id)
+                    .unwrap_or_else(|| Position::new(anchor_cell_id, 0))
+            }
+        };
+        tr.set_selection(Some(Selection::collapsed(cursor)))?;
         Ok(())
     })?;
 
-    let cursor = find_first_text_position(&tr.view(), anchor_cell_id)
-        .unwrap_or_else(|| Position::new(anchor_cell_id, 0));
-    tr.set_selection(Some(Selection::collapsed(cursor)))?;
     Ok(true)
 }
 
@@ -96,36 +118,6 @@ fn cell_plain_paint(tr: &Transaction, cell_id: Dot, pending: &PendingModifiers) 
             map.into_values().collect()
         }
     }
-}
-
-fn slice_to_cell_blocks(slice: &Slice) -> Vec<Fragment> {
-    let top_children: Vec<&Fragment> = slice.content.iter().collect();
-
-    let mut out: Vec<Fragment> = Vec::new();
-    let mut inline_run: Vec<Fragment> = Vec::new();
-    let flush = |run: &mut Vec<Fragment>, out: &mut Vec<Fragment>| {
-        if !run.is_empty() {
-            out.push(Fragment {
-                node: PlainNode::Paragraph(PlainParagraphNode::default()),
-                modifiers: vec![],
-                carry: vec![],
-                children: std::mem::take(run),
-            });
-        }
-    };
-    for child in top_children {
-        match &child.node {
-            PlainNode::Text(_) | PlainNode::HardBreak(_) | PlainNode::Tab(_) => {
-                inline_run.push(child.clone())
-            }
-            _ => {
-                flush(&mut inline_run, &mut out);
-                out.push(child.clone());
-            }
-        }
-    }
-    flush(&mut inline_run, &mut out);
-    out
 }
 
 #[cfg(test)]
@@ -195,19 +187,6 @@ mod tests {
             .carry_modifiers(block)
             .into_values()
             .collect()
-    }
-
-    #[test]
-    fn returns_false_when_selection_is_not_cell_rect() {
-        let (initial, ..) = state! {
-            doc { root { p1: paragraph { text("hello") } } }
-            selection: (p1, 0) -> (p1, 5)
-        };
-        transact_fail!(initial, |tr| fill_cell_rect_with_slice(
-            &mut tr,
-            Slice::from_text("hi"),
-            SliceProvenance::Formatted
-        ));
     }
 
     #[test]

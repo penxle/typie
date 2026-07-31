@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use editor_crdt::Dot;
 use editor_model::{
     ChildView, DocView, Fragment, LeafView, Modifier, ModifierType, NodeType, NodeView,
-    OwnModifier, PlainNode, PlainTextNode,
+    OwnModifier, PlainNode, PlainTextNode, Schema,
 };
 use editor_resource::Resource;
 use editor_state::State;
@@ -15,6 +15,12 @@ use crate::html::serialize as html_serialize;
 use crate::payload::ClipboardPayload;
 use crate::text::parse as text_parse;
 use crate::text::serialize as text_serialize;
+
+/// Upper bounds on decoded Fragment work admitted to command-side fitting.
+/// The node budget bounds iterative validation work, while the depth budget
+/// keeps later recursive fitting and projection within the tested stack.
+const SLICE_PREFLIGHT_NODE_BUDGET: usize = 1_000_000;
+const MAX_SLICE_STRUCTURE_DEPTH: usize = 32;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -28,6 +34,21 @@ pub struct Slice {
 pub enum PayloadSource {
     Html,
     Text,
+}
+
+pub struct SlicePreflight {
+    pub contains_table: bool,
+    max_depth: usize,
+}
+
+impl SlicePreflight {
+    /// Keep recursive fitting and projection work within a bounded structural
+    /// depth. `destination_depth` excludes the document root.
+    pub fn fits_at_destination_depth(&self, destination_depth: usize) -> bool {
+        destination_depth
+            .checked_add(self.max_depth)
+            .is_some_and(|depth| depth <= MAX_SLICE_STRUCTURE_DEPTH)
+    }
 }
 
 impl Slice {
@@ -57,11 +78,11 @@ impl Slice {
         let open_end =
             (to_block_depth.saturating_sub(common_depth)) as u32 + to.is_inline_position() as u32;
 
-        let fragment = build_fragment(state, &common_nv, &rs);
+        let mut fragment = build_fragment(state, &common_nv, &rs);
 
         let mut slice = if can_use_as_slice_roots(&fragment.children) {
             Slice::new(
-                fragment.children,
+                std::mem::take(&mut fragment.children),
                 open_start.saturating_sub(1),
                 open_end.saturating_sub(1),
             )
@@ -126,11 +147,95 @@ impl Slice {
         self.content.is_empty()
     }
 
+    /// Whether both declared open edges exist in the Fragment forest and
+    /// contain only wrappers that can actually be opened.
+    ///
+    /// The walk is bounded by the decoded forest rather than the advertised
+    /// `u32` depth, so malformed clipboard metadata cannot request an
+    /// allocation or loop proportional to that value.
+    fn has_valid_open_edges(&self) -> bool {
+        if self.content.is_empty() {
+            return self.open_start == 0 && self.open_end == 0;
+        }
+        fragment_has_open_edge(self.content.first(), self.open_start, true)
+            && fragment_has_open_edge(self.content.last(), self.open_end, false)
+    }
+
+    /// Validate the decoded forest before routing or fitting it.
+    ///
+    /// The scan is iterative so malformed metadata cannot turn advertised or
+    /// decoded Fragment depth into recursive validation work.
+    pub fn preflight(&self) -> Option<SlicePreflight> {
+        self.inspect_structure(Some(MAX_SLICE_STRUCTURE_DEPTH))
+    }
+
+    pub(crate) fn has_valid_structure(&self) -> bool {
+        self.inspect_structure(None).is_some()
+    }
+
+    fn inspect_structure(&self, depth_limit: Option<usize>) -> Option<SlicePreflight> {
+        if depth_limit.is_some_and(|limit| {
+            u64::from(self.open_start) > limit as u64 || u64::from(self.open_end) > limit as u64
+        }) {
+            return None;
+        }
+        if !self.has_valid_open_edges() {
+            return None;
+        }
+        let mut contains_table = false;
+        let mut max_depth = 0;
+        let mut remaining = SLICE_PREFLIGHT_NODE_BUDGET;
+        let mut stack: Vec<_> = self.content.iter().map(|fragment| (fragment, 1)).collect();
+        while let Some((fragment, depth)) = stack.pop() {
+            if remaining == 0
+                || depth_limit.is_some_and(|limit| depth > limit)
+                || fragment.node.as_type() == NodeType::Unknown
+            {
+                return None;
+            }
+            remaining -= 1;
+            max_depth = max_depth.max(depth);
+            contains_table |= fragment.node.as_type() == NodeType::Table;
+            stack.extend(fragment.children.iter().map(|child| (child, depth + 1)));
+        }
+        Some(SlicePreflight {
+            contains_table,
+            max_depth,
+        })
+    }
+
     pub fn to_payload(&self, resource: &Resource) -> ClipboardPayload {
         ClipboardPayload {
             html: self.to_html(resource),
             text: self.to_text(),
         }
+    }
+}
+
+fn fragment_has_open_edge(root: Option<&Fragment>, mut depth: u32, first: bool) -> bool {
+    if depth == 0 {
+        return true;
+    }
+    let Some(mut current) = root else {
+        return false;
+    };
+    loop {
+        if Schema::node_spec(current.node.as_type()).inline {
+            return false;
+        }
+        depth -= 1;
+        if depth == 0 {
+            return true;
+        }
+        let next = if first {
+            current.children.first()
+        } else {
+            current.children.last()
+        };
+        let Some(next) = next else {
+            return false;
+        };
+        current = next;
     }
 }
 
@@ -1053,6 +1158,107 @@ mod tests {
         );
         assert_eq!(source, PayloadSource::Text);
         assert_eq!(parsed.to_text(), "plain");
+    }
+
+    #[test]
+    fn empty_metadata_falls_back_to_non_empty_html_body() {
+        use base64::Engine;
+
+        let empty = Slice::new(vec![], 0, 0);
+        let encoded =
+            base64::engine::general_purpose::STANDARD.encode(serde_json::to_vec(&empty).unwrap());
+        let html = format!(
+            r#"<meta data-slice-v2="{encoded}" data-version="1"><div data-root><p>body</p></div>"#
+        );
+
+        let (parsed, source) = Slice::from_payload(Some(&html), "plain", &Resource::new_test());
+
+        assert_eq!(source, PayloadSource::Html);
+        assert_eq!(parsed.to_text(), "body");
+    }
+
+    #[test]
+    fn invalid_open_metadata_with_empty_body_falls_back_to_plain_text() {
+        use base64::Engine;
+
+        let invalid = Slice {
+            content: vec![
+                Fragment::leaf(PlainNode::Paragraph(PlainParagraphNode::default())).with_children(
+                    vec![Fragment::leaf(PlainNode::Text(PlainTextNode {
+                        text: "metadata".into(),
+                    }))],
+                ),
+            ],
+            open_start: u32::MAX,
+            open_end: 0,
+        };
+        let encoded =
+            base64::engine::general_purpose::STANDARD.encode(serde_json::to_vec(&invalid).unwrap());
+        let html = format!(r#"<meta data-slice-v2="{encoded}" data-version="1">"#);
+
+        let (parsed, source) = Slice::from_payload(Some(&html), "plain", &Resource::new_test());
+
+        assert_eq!(source, PayloadSource::Text);
+        assert_eq!(parsed.to_text(), "plain");
+    }
+
+    #[test]
+    fn structurally_invalid_metadata_with_empty_body_falls_back_to_plain_text() {
+        use base64::Engine;
+
+        let invalid = Slice {
+            content: vec![Fragment::leaf(PlainNode::Unknown)],
+            open_start: 0,
+            open_end: 0,
+        };
+        let encoded =
+            base64::engine::general_purpose::STANDARD.encode(serde_json::to_vec(&invalid).unwrap());
+        let html = format!(r#"<meta data-slice-v2="{encoded}" data-version="1">"#);
+
+        let (parsed, source) = Slice::from_payload(Some(&html), "plain", &Resource::new_test());
+
+        assert_eq!(source, PayloadSource::Text);
+        assert_eq!(parsed.to_text(), "plain");
+    }
+
+    #[test]
+    fn slice_open_edges_must_exist_and_remain_non_inline() {
+        let paragraph = Fragment::leaf(PlainNode::Paragraph(PlainParagraphNode::default()))
+            .with_children(vec![Fragment::leaf(PlainNode::Text(PlainTextNode {
+                text: "x".into(),
+            }))]);
+
+        assert!(Slice::new(vec![paragraph.clone()], 1, 1).has_valid_open_edges());
+        assert!(!Slice::new(vec![paragraph.clone()], 2, 1).has_valid_open_edges());
+        assert!(!Slice::new(vec![paragraph], u32::MAX, 0).has_valid_open_edges());
+        assert!(
+            !Slice {
+                content: vec![],
+                open_start: 1,
+                open_end: 0,
+            }
+            .has_valid_open_edges()
+        );
+    }
+
+    #[test]
+    fn slice_preflight_bounds_source_and_resulting_structure_depth() {
+        let nested = |depth: usize| {
+            let mut fragment = Fragment::leaf(PlainNode::Text(PlainTextNode { text: "x".into() }));
+            for _ in 1..depth {
+                fragment = Fragment::leaf(PlainNode::Blockquote(
+                    editor_model::PlainBlockquoteNode::default(),
+                ))
+                .with_children(vec![fragment]);
+            }
+            Slice::new(vec![fragment], 0, 0)
+        };
+
+        let at_limit = nested(MAX_SLICE_STRUCTURE_DEPTH);
+        let preflight = at_limit.preflight().expect("source at the limit");
+        assert!(preflight.fits_at_destination_depth(0));
+        assert!(!preflight.fits_at_destination_depth(1));
+        assert!(nested(MAX_SLICE_STRUCTURE_DEPTH + 1).preflight().is_none());
     }
 
     #[test]

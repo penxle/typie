@@ -7,3 +7,6 @@
 cc 08b774ad10f1bf065e049681ef236e49df944641f9c291b5b7546f3dd1f55db9 # shrinks to fixture_idx = 3, pos_off = 13, src_a = 12, src_b = 3, payload_idx = 4
 cc 51ac090bc459461da9cf50928acfedf0367e6b5d7688f545cea25d8c5bf45def # shrinks to fixture_idx = 1, pos_off = 16, src_a = 25, src_b = 26, payload_idx = 4
 cc 8af8c293ea40d3571b0d93e69a1973000b2c351f7b574cbee30ce693b4870d80 # shrinks to fixture_idx = 3, pos_off = 21, src_a = 3, src_b = 20, payload_idx = 4
+cc db34f687835797c4fe7ceb563b3e7ab83f1eb64a33b1f6ca2450ebc71e3b870c # shrinks to fixture_idx = 3, pos_off = 0, src_a = 3, src_b = 21, payload_idx = 5
+cc 5eaaf1f13546411d2be1ae9b643b4d99d2a86e4fe09bddf9a2905c6d9acbd555 # shrinks to fixture_idx = 1, pos_off = 0, src_a = 0, src_b = 0, payload_idx = 0
+cc 847764786e22bf7292aea39a9ae7a46ee7eeb39d0f4d004ad8cac962d8dd821b # shrinks to fixture_idx = 3, pos_off = 4, src_a = 0, src_b = 0, payload_idx = 2

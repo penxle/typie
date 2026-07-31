@@ -9,11 +9,14 @@ use editor_transaction::{Step, Transaction, first_child_type, fulfill, minimal_s
 
 use super::{
     apply_carry_from_selection, apply_carry_on_emptied, capture_first_charlike_paint,
-    cell_first_charlike_block, child_elem_id, find_ancestor_textblock, find_lowest_common_ancestor,
-    is_block_container, is_list_type, materialize_selection_endpoints, merge_element_cross_parent,
-    next_sibling, path_from_ancestor,
+    cell_first_charlike_block, find_ancestor_textblock, find_lowest_common_ancestor,
+    is_block_container, materialize_selection_endpoints, merge_block_container_into,
+    merge_element_cross_parent, path_from_ancestor,
 };
 use crate::{CommandError, CommandResult};
+
+mod plan;
+pub(crate) use plan::*;
 
 enum SlotKind {
     Char,
@@ -447,6 +450,25 @@ pub(crate) fn delete_selection_range_no_carry(
     delete_selection_range_carry(tr, selection, false)
 }
 
+/// Apply only the removal geometry of a planned cross-node range.
+///
+/// Replacement planning owns any subsequent joins or branch splits. This
+/// primitive deliberately performs neither.
+pub(crate) fn apply_cross_range_removal_without_join(
+    tr: &mut Transaction,
+    plan: &LinearDeletionPlan,
+) -> CommandResult {
+    let LinearDeletionKind::Cross { geometry, .. } = &plan.kind else {
+        return Err(CommandError::Corrupted(
+            "cross-range removal requires a cross-node plan".into(),
+        ));
+    };
+    tr.batch::<_, CommandError>(|tr| {
+        delete_range(tr, &geometry.from_path, &geometry.to_path, geometry.lca_id)
+    })?;
+    Ok(true)
+}
+
 fn delete_selection_range_carry(
     tr: &mut Transaction,
     selection: Selection,
@@ -479,9 +501,11 @@ fn delete_selection_range_carry(
                 anchor_id,
             }
         } else {
-            let from = resolved.from().position();
-            let to = resolved.to().position();
-            Plan::Range { from, to }
+            let plan = plan_linear_deletion(&view, selection)?.ok_or_else(|| {
+                CommandError::Corrupted("non-cell deletion has no linear range".into())
+            })?;
+            let join = plan_linear_join(&view, &plan)?;
+            Plan::Linear { plan, join }
         }
     };
 
@@ -524,36 +548,203 @@ fn delete_selection_range_carry(
             tr.set_selection(Some(Selection::collapsed(cursor)))?;
             Ok(true)
         }
-        Plan::Range { from, to } => delete_resolved_range(tr, from, to, write_carry),
+        Plan::Linear { plan, join } => {
+            apply_linear_deletion_plan(tr, &plan, join.as_ref(), write_carry)
+        }
     }
 }
 
 enum Plan {
-    CellRect { cell_ids: Vec<Dot>, anchor_id: Dot },
-    Range { from: Position, to: Position },
+    CellRect {
+        cell_ids: Vec<Dot>,
+        anchor_id: Dot,
+    },
+    Linear {
+        plan: LinearDeletionPlan,
+        join: Option<LinearJoinExecution>,
+    },
 }
 
-fn delete_resolved_range(
+#[derive(Clone)]
+pub(crate) struct LinearDeletionPlan {
+    pub from: Position,
+    pub to: Position,
+    pub from_path: Vec<usize>,
+    pub to_path: Vec<usize>,
+    pub kind: LinearDeletionKind,
+}
+
+#[derive(Clone)]
+pub(crate) enum LinearDeletionKind {
+    SameNode {
+        is_container: bool,
+    },
+    Cross {
+        geometry: CrossRangeGeometry,
+        from_textblock: Option<Dot>,
+        to_textblock: Option<Dot>,
+        merge_textblocks: bool,
+    },
+}
+
+#[derive(Clone)]
+pub(crate) enum LinearDeletionSemantics {
+    SameNode { is_container: bool },
+    Cross { merge_textblocks: bool },
+}
+
+#[derive(Clone)]
+pub(crate) struct LinearJoinExecution {
+    pub(crate) from_textblock: Dot,
+    pub(crate) to_textblock: Dot,
+    pub(crate) trailing_page_break: Option<Dot>,
+    pub(crate) prune: Vec<Dot>,
+    pub(crate) container_merges: Vec<(Dot, Dot)>,
+    pub(crate) affected: Vec<Dot>,
+}
+
+impl LinearDeletionPlan {
+    pub(crate) fn semantics(&self) -> LinearDeletionSemantics {
+        match &self.kind {
+            LinearDeletionKind::SameNode { is_container } => LinearDeletionSemantics::SameNode {
+                is_container: *is_container,
+            },
+            LinearDeletionKind::Cross {
+                merge_textblocks, ..
+            } => LinearDeletionSemantics::Cross {
+                merge_textblocks: *merge_textblocks,
+            },
+        }
+    }
+}
+
+pub(crate) fn plan_linear_deletion(
+    view: &DocView,
+    selection: Selection,
+) -> Result<Option<LinearDeletionPlan>, CommandError> {
+    let resolved = selection
+        .resolve(view)
+        .ok_or_else(|| CommandError::Corrupted("cannot resolve deletion selection".into()))?;
+    if resolved.as_cell_rect().is_some() || selection.is_collapsed() {
+        return Ok(None);
+    }
+    let from = resolved.from().position();
+    let to = resolved.to().position();
+    let from_path = resolved.from().path().to_vec();
+    let to_path = resolved.to().path().to_vec();
+    let kind = if from.node == to.node {
+        LinearDeletionKind::SameNode {
+            is_container: view
+                .node(from.node)
+                .is_some_and(|node| is_block_container(&node)),
+        }
+    } else {
+        let geometry = cross_range_geometry(view, from, to)?;
+        let from_textblock = find_ancestor_textblock(view, from.node);
+        let to_textblock = find_ancestor_textblock(view, to.node);
+        let merge_textblocks = matches!(
+            (from_textblock, to_textblock),
+            (Some(from), Some(to))
+                if from != to && structural_region(view, from) == structural_region(view, to)
+        );
+        LinearDeletionKind::Cross {
+            geometry,
+            from_textblock,
+            to_textblock,
+            merge_textblocks,
+        }
+    };
+    Ok(Some(LinearDeletionPlan {
+        from,
+        to,
+        from_path,
+        to_path,
+        kind,
+    }))
+}
+
+/// Rebuild endpoint geometry after projection-only endpoints have been
+/// materialized, while requiring the accepted deletion semantics to remain
+/// unchanged. This is an identity remap for an existing plan, not a second
+/// replacement judgment.
+pub(crate) fn remap_linear_deletion_plan(
+    view: &DocView,
+    planned: &LinearDeletionSemantics,
+    selection: Selection,
+) -> Result<LinearDeletionPlan, CommandError> {
+    let resolved = selection.resolve(view).ok_or_else(|| {
+        CommandError::Corrupted("materialized Slice replacement no longer resolves".into())
+    })?;
+    if resolved.as_cell_rect().is_some() || selection.is_collapsed() {
+        return Err(CommandError::Corrupted(
+            "materialized Slice replacement is no longer a linear range".into(),
+        ));
+    }
+    let from = resolved.from().position();
+    let to = resolved.to().position();
+    let from_path = resolved.from().path().to_vec();
+    let to_path = resolved.to().path().to_vec();
+    let kind = match planned {
+        LinearDeletionSemantics::SameNode { is_container } => {
+            if from.node != to.node
+                || view
+                    .node(from.node)
+                    .is_some_and(|node| is_block_container(&node))
+                    != *is_container
+            {
+                return Err(CommandError::Corrupted(
+                    "materialized Slice replacement changed its same-node boundary".into(),
+                ));
+            }
+            LinearDeletionKind::SameNode {
+                is_container: *is_container,
+            }
+        }
+        LinearDeletionSemantics::Cross { merge_textblocks } => {
+            if from.node == to.node {
+                return Err(CommandError::Corrupted(
+                    "materialized Slice replacement collapsed its cross-node boundary".into(),
+                ));
+            }
+            let geometry = cross_range_geometry(view, from, to)?;
+            let from_textblock = find_ancestor_textblock(view, from.node);
+            let to_textblock = find_ancestor_textblock(view, to.node);
+            LinearDeletionKind::Cross {
+                geometry,
+                from_textblock,
+                to_textblock,
+                merge_textblocks: *merge_textblocks,
+            }
+        }
+    };
+    Ok(LinearDeletionPlan {
+        from,
+        to,
+        from_path,
+        to_path,
+        kind,
+    })
+}
+
+pub(crate) fn apply_linear_deletion_plan(
     tr: &mut Transaction,
-    from: Position,
-    to: Position,
+    plan: &LinearDeletionPlan,
+    join: Option<&LinearJoinExecution>,
     write_carry: bool,
 ) -> CommandResult {
-    let captured = write_carry
-        .then(|| {
-            let state = tr.state();
-            let view = state.view();
-            first_textblock_in_range(&view, &from)
-                .map(|block| capture_first_charlike_paint(state, block))
-        })
-        .flatten();
+    let from = plan.from;
+    let to = plan.to;
 
-    if from.node == to.node {
-        let is_container = {
-            let view = tr.state().view();
-            view.node(from.node).is_some_and(|n| is_block_container(&n))
-        };
-        if is_container {
+    if let LinearDeletionKind::SameNode { is_container } = &plan.kind {
+        let captured = write_carry
+            .then(|| {
+                let state = tr.state();
+                let view = state.view();
+                first_textblock_in_range(&view, &from)
+                    .map(|block| capture_first_charlike_paint(state, block))
+            })
+            .flatten();
+        if *is_container {
             tr.batch::<_, CommandError>(|tr| {
                 delete_child_slots(tr, from.node, from.offset, to.offset)?;
                 let steps = {
@@ -581,21 +772,37 @@ fn delete_resolved_range(
         return Ok(true);
     }
 
-    // Cross-node range.
-    let (lca_id, from_tb, to_tb, from_path, to_path) = {
-        let view = tr.state().view();
-        let lca_id = find_lowest_common_ancestor(&view, from.node, to.node)
-            .ok_or_else(|| CommandError::Corrupted("no common ancestor".into()))?;
-        let from_tb = find_ancestor_textblock(&view, from.node);
-        let to_tb = find_ancestor_textblock(&view, to.node);
-        let mut from_path = path_from_ancestor(&view, from.node, lca_id)
-            .ok_or_else(|| CommandError::Corrupted("from is not descendant of LCA".into()))?;
-        from_path.push(from.offset);
-        let mut to_path = path_from_ancestor(&view, to.node, lca_id)
-            .ok_or_else(|| CommandError::Corrupted("to is not descendant of LCA".into()))?;
-        to_path.push(to.offset);
-        (lca_id, from_tb, to_tb, from_path, to_path)
+    apply_cross_linear_deletion(tr, plan, join, write_carry)
+}
+
+fn apply_cross_linear_deletion(
+    tr: &mut Transaction,
+    plan: &LinearDeletionPlan,
+    join: Option<&LinearJoinExecution>,
+    write_carry: bool,
+) -> CommandResult {
+    let from = plan.from;
+    let to = plan.to;
+    let captured = write_carry
+        .then(|| {
+            let state = tr.state();
+            let view = state.view();
+            first_textblock_in_range(&view, &from)
+                .map(|block| capture_first_charlike_paint(state, block))
+        })
+        .flatten();
+    let LinearDeletionKind::Cross {
+        geometry,
+        from_textblock: _,
+        to_textblock: to_tb,
+        merge_textblocks,
+    } = &plan.kind
+    else {
+        return Err(CommandError::Corrupted(
+            "linear deletion plan kind does not match its endpoints".into(),
+        ));
     };
+    let lca_id = geometry.lca_id;
 
     let to_captured = write_carry
         .then(|| to_tb.map(|tb| capture_first_charlike_paint(tr.state(), tb)))
@@ -604,10 +811,24 @@ fn delete_resolved_range(
     let from_node_id = from.node;
     let to_node_id = to.node;
     tr.batch::<_, CommandError>(|tr| {
-        delete_range(tr, &from_path, &to_path, lca_id)?;
-        merge_after_delete(tr, from_tb, to_tb, lca_id)?;
-        fulfill_ancestors(tr, from_node_id, lca_id)?;
-        fulfill_ancestors(tr, to_node_id, lca_id)?;
+        delete_range(tr, &geometry.from_path, &geometry.to_path, geometry.lca_id)?;
+        match (*merge_textblocks, join) {
+            (true, Some(join)) => apply_planned_join(tr, join)?,
+            (false, None) => {
+                fulfill_ancestors(tr, from_node_id, lca_id)?;
+                fulfill_ancestors(tr, to_node_id, lca_id)?;
+            }
+            (true, None) => {
+                return Err(CommandError::Corrupted(
+                    "linear deletion has no planned join".into(),
+                ));
+            }
+            (false, Some(_)) => {
+                return Err(CommandError::Corrupted(
+                    "linear deletion received an unexpected join".into(),
+                ));
+            }
+        }
         Ok(())
     })?;
 
@@ -628,10 +849,86 @@ fn delete_resolved_range(
     if let Some(captured) = &captured {
         apply_carry_from_selection(tr, captured)?;
     }
-    if let (Some(to_tb), Some(to_captured)) = (to_tb, &to_captured) {
+    if let (Some(to_tb), Some(to_captured)) = (*to_tb, &to_captured) {
         apply_carry_on_emptied(tr, to_tb, to_captured)?;
     }
     Ok(true)
+}
+
+fn apply_planned_join(
+    tr: &mut Transaction,
+    join: &LinearJoinExecution,
+) -> Result<(), CommandError> {
+    if let Some(page_break) = join.trailing_page_break
+        && tr.view().leaf(page_break).is_some()
+    {
+        remove_subtree_full(tr, page_break)?;
+    }
+    merge_element_cross_parent(tr, join.to_textblock, join.from_textblock)?;
+
+    for &node in &join.prune {
+        let valid = {
+            let view = tr.view();
+            view.node(node).is_some_and(|node| {
+                is_structurally_empty(&node)
+                    && node.spec().content.min_required() > 0
+                    && !node.spec().structural
+            })
+        };
+        if !valid {
+            return Err(CommandError::Corrupted(
+                "planned Slice join prune no longer matches its empty container".into(),
+            ));
+        }
+        remove_subtree_full(tr, node)?;
+    }
+
+    for &(target, source) in &join.container_merges {
+        if tr.view().node(source).is_none() {
+            return Err(CommandError::Corrupted(
+                "planned Slice join lost its source container".into(),
+            ));
+        }
+        merge_block_container_into(tr, target, source)?;
+    }
+
+    for &node in &join.affected {
+        let steps = {
+            let view = tr.view();
+            view.node(node)
+                .map(|node| fulfill(&node))
+                .unwrap_or_default()
+        };
+        tr.apply_steps(steps)?;
+    }
+    Ok(())
+}
+
+#[derive(Clone)]
+pub(crate) struct CrossRangeGeometry {
+    pub lca_id: Dot,
+    pub from_path: Vec<usize>,
+    pub to_path: Vec<usize>,
+}
+
+fn cross_range_geometry(
+    view: &DocView,
+    from: Position,
+    to: Position,
+) -> Result<CrossRangeGeometry, CommandError> {
+    let lca_id = find_lowest_common_ancestor(view, from.node, to.node)
+        .ok_or_else(|| CommandError::Corrupted("no common ancestor".into()))?;
+    let mut from_path = path_from_ancestor(view, from.node, lca_id)
+        .ok_or_else(|| CommandError::Corrupted("from is not descendant of LCA".into()))?;
+    from_path.push(from.offset);
+    let mut to_path = path_from_ancestor(view, to.node, lca_id)
+        .ok_or_else(|| CommandError::Corrupted("to is not descendant of LCA".into()))?;
+    to_path.push(to.offset);
+    Ok(CrossRangeGeometry {
+        lca_id,
+        from_path,
+        to_path,
+    })
 }
 
 fn materialize_cell_textblock(
@@ -1084,255 +1381,6 @@ fn structural_region(view: &DocView, node_id: Dot) -> Option<Dot> {
         }
         current = current.parent()?;
     }
-}
-
-/// Merges `source` (a block container) into `target` by re-parenting each of
-/// source's child blocks to the end of `target`, then removing the emptied
-/// source. Unlike `merge_node` (which only flows up loose char/atom leaves),
-/// this correctly relocates block children whose parents chain would otherwise
-/// dangle to the deleted container.
-fn merge_containers(tr: &mut Transaction, target: Dot, source: Dot) -> Result<(), CommandError> {
-    loop {
-        // Only real children move; the projection synthesizes a Derived
-        // placeholder for an empty required container, so stop when only
-        // placeholders remain (otherwise this loops forever).
-        let child = {
-            let view = tr.state().view();
-            match view.node(source) {
-                Some(s) => s
-                    .child_blocks()
-                    .find(|c| c.id().as_op_dot().is_some())
-                    .map(|c| c.id()),
-                None => return Ok(()),
-            }
-        };
-        let Some(child) = child else { break };
-        let target_len = {
-            let view = tr.state().view();
-            view.node(target)
-                .map(|n| {
-                    n.children()
-                        .filter(|c| child_elem_id(c).as_op_dot().is_some())
-                        .count()
-                })
-                .unwrap_or(0)
-        };
-        tr.move_node(child, target, target_len)?;
-    }
-    remove_subtree_full(tr, source)
-}
-
-/// Merges `block`'s next same-parent sibling into it via `merge_containers`
-/// (re-resolving the sibling, whose dot may be fresh after a prior move).
-fn merge_with_next_sibling(tr: &mut Transaction, block: Dot) -> Result<(), CommandError> {
-    let next = {
-        let view = tr.state().view();
-        view.node(block)
-            .and_then(|n| next_sibling(&n))
-            .and_then(|c| match c {
-                ChildView::Block(b) => Some(b.id()),
-                ChildView::Leaf(_) => None,
-            })
-    };
-    match next {
-        Some(next_id) => merge_containers(tr, block, next_id),
-        None => Ok(()),
-    }
-}
-
-fn merge_after_delete(
-    tr: &mut Transaction,
-    from_tb: Option<Dot>,
-    to_tb: Option<Dot>,
-    lca_id: Dot,
-) -> Result<(), CommandError> {
-    let (from_tb, to_tb) = match (from_tb, to_tb) {
-        (Some(a), Some(b)) if a != b => (a, b),
-        _ => return Ok(()),
-    };
-
-    {
-        let view = tr.state().view();
-        if view.node(from_tb).is_none() || view.node(to_tb).is_none() {
-            return Ok(());
-        }
-        if structural_region(&view, from_tb) != structural_region(&view, to_tb) {
-            return Ok(());
-        }
-    }
-
-    let to_tb_parent = {
-        let view = tr.state().view();
-        view.node(to_tb).and_then(|n| n.parent()).map(|p| p.id())
-    };
-
-    // Trailing PageBreak guard: drop it before merging so it does not end up mid-list.
-    let trailing_page_break = {
-        let view = tr.state().view();
-        view.node(from_tb)
-            .and_then(|target| match target.last_child() {
-                Some(ChildView::Leaf(l)) if l.node_type() == NodeType::PageBreak => Some(l.dot()),
-                _ => None,
-            })
-    };
-    if let Some(pb) = trailing_page_break {
-        remove_subtree_full(tr, pb)?;
-    }
-
-    merge_element_cross_parent(tr, to_tb, from_tb)?;
-
-    // The to-side container that held to_tb is now emptied (its content merged
-    // into from_tb); drop it before the container walk so it is not carried into
-    // the merged container as an empty item.
-    if let Some(parent_id) = to_tb_parent {
-        let empty = {
-            let view = tr.state().view();
-            view.node(parent_id)
-                .map(|p| is_structurally_empty(&p))
-                .unwrap_or(false)
-        };
-        if empty {
-            prune_empty_full(tr, parent_id)?;
-        }
-    }
-
-    // Container-level merge: walk up through the boundary removed by the
-    // selection. Same-type containers merge normally; adjacent lists also
-    // merge across kinds, preserving the earlier list's type.
-    let mut from_current = {
-        let view = tr.state().view();
-        view.node(from_tb).and_then(|n| n.parent()).map(|p| p.id())
-    };
-
-    while let Some(from_id) = from_current {
-        if from_id == lca_id {
-            break;
-        }
-
-        let (next_id, next_mergeable, parent_id, seam_lists) = {
-            let view = tr.state().view();
-            let Some(from_node) = view.node(from_id) else {
-                break;
-            };
-            match next_sibling(&from_node) {
-                Some(ChildView::Block(next)) => {
-                    let same_type = next.node_type() == from_node.node_type();
-                    let list_pair =
-                        is_list_type(from_node.node_type()) && is_list_type(next.node_type());
-                    let seam_lists = if from_node.node_type() == NodeType::ListItem && same_type {
-                        let left = from_node
-                            .child_blocks()
-                            .filter(|child| child.id().as_op_dot().is_some())
-                            .last();
-                        let right = next
-                            .child_blocks()
-                            .find(|child| child.id().as_op_dot().is_some());
-                        match (left, right) {
-                            (Some(left), Some(right))
-                                if is_list_type(left.node_type())
-                                    && is_list_type(right.node_type()) =>
-                            {
-                                Some((left.id(), right.id()))
-                            }
-                            _ => None,
-                        }
-                    } else {
-                        None
-                    };
-                    (
-                        Some(next.id()),
-                        same_type || list_pair,
-                        from_node.parent().map(|p| p.id()),
-                        seam_lists,
-                    )
-                }
-                Some(ChildView::Leaf(_)) => (None, false, from_node.parent().map(|p| p.id()), None),
-                None => (None, false, from_node.parent().map(|p| p.id()), None),
-            }
-        };
-
-        match next_id {
-            Some(_) if next_mergeable => {
-                if let Some((target_list, source_list)) = seam_lists {
-                    merge_containers(tr, target_list, source_list)?;
-                }
-
-                merge_with_next_sibling(tr, from_id)?;
-                from_current = parent_id;
-            }
-            _ => {
-                if next_id.is_none() {
-                    from_current = parent_id;
-                } else {
-                    break;
-                }
-            }
-        }
-    }
-
-    // Repair structural ancestors and prune empties.
-    let ancestor_chain: Vec<Dot> = {
-        let view = tr.state().view();
-        let mut chain = Vec::new();
-        if let Some(start_id) = to_tb_parent {
-            let mut current = start_id;
-            loop {
-                chain.push(current);
-                if current == lca_id {
-                    break;
-                }
-                match view.node(current).and_then(|n| n.parent()).map(|p| p.id()) {
-                    Some(parent_id) => current = parent_id,
-                    None => break,
-                }
-            }
-        }
-        chain
-    };
-
-    if let Some(parent_id) = to_tb_parent {
-        let (empty, structural) = {
-            let view = tr.state().view();
-            match view.node(parent_id) {
-                Some(parent) => (is_structurally_empty(&parent), parent.spec().structural),
-                None => (false, false),
-            }
-        };
-        if empty {
-            if structural {
-                let steps = {
-                    let view = tr.state().view();
-                    view.node(parent_id)
-                        .map(|parent| fulfill(&parent))
-                        .unwrap_or_default()
-                };
-                tr.apply_steps(steps)?;
-            } else {
-                prune_empty_full(tr, parent_id)?;
-            }
-        }
-    }
-
-    for id in &ancestor_chain {
-        let steps = {
-            let view = tr.state().view();
-            match view.node(*id) {
-                Some(node) if node.spec().structural => fulfill(&node),
-                _ => Vec::new(),
-            }
-        };
-        tr.apply_steps(steps)?;
-    }
-
-    let lca_steps = {
-        let view = tr.state().view();
-        view.node(lca_id)
-            .map(|lca| fulfill(&lca))
-            .unwrap_or_default()
-    };
-    tr.apply_steps(lca_steps)?;
-
-    Ok(())
 }
 
 fn fulfill_ancestors(tr: &mut Transaction, start_id: Dot, lca_id: Dot) -> Result<(), CommandError> {

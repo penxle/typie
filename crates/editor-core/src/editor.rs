@@ -2249,6 +2249,28 @@ mod tests {
     use super::*;
     use crate::test_utils::{EditorSnapshot, apply_and_report_change};
 
+    fn text_and_page_break_signature(state: &State) -> String {
+        state
+            .view()
+            .root()
+            .expect("root")
+            .descendants()
+            .filter_map(|child| match child {
+                ChildView::Leaf(leaf) => leaf
+                    .as_char()
+                    .map(|ch| ch.to_string())
+                    .or_else(|| (leaf.node_type() == NodeType::PageBreak).then(|| "|".to_string())),
+                ChildView::Block(_) => None,
+            })
+            .collect()
+    }
+
+    fn assert_warm_matches_cold(state: &State) {
+        let cold = editor_state::ProjectedState::from_graph(state.projected.graph().clone())
+            .expect("cold projection");
+        assert_eq!(state.projected.projected(), cold.projected());
+    }
+
     // A frame's worth of IME composition traffic arrives as several consecutive
     // `TextInput` messages; `tick` coalesces them into batched reduces. The
     // coalesced drain must land on the same document, composition, and selection
@@ -2469,11 +2491,12 @@ mod tests {
             .expect("document-start position resolves")
             .position();
         drop(view);
-        editor.apply(Message::Selection {
-            op: SelectionOp::Set {
-                selection: Selection::collapsed(caret),
-            },
-        });
+        editor
+            .transact(|tr| {
+                tr.set_selection(Some(Selection::collapsed(caret)))?;
+                Ok(())
+            })
+            .unwrap();
         editor
     }
 
@@ -4338,7 +4361,7 @@ mod tests {
     }
 
     #[test]
-    fn internal_dnd_page_break_source_rejects_nested_inline_drop_indicator() {
+    fn internal_dnd_page_break_source_allows_nested_hoisted_drop_indicator() {
         let (initial, _p1, p2) = state! {
             doc { root {
                 p1: paragraph { text("a") page_break }
@@ -4370,11 +4393,11 @@ mod tests {
             },
         });
 
-        assert!(editor.drop_indicator_for_test().is_none());
+        assert!(editor.drop_indicator_for_test().is_some());
     }
 
     #[test]
-    fn internal_dnd_text_and_page_break_source_allows_nested_inline_drop_indicator() {
+    fn internal_dnd_text_and_page_break_source_allows_nested_hoisted_drop_indicator() {
         let (initial, _p1, p2) = state! {
             doc { root {
                 p1: paragraph { text("a") page_break }
@@ -4947,7 +4970,7 @@ mod tests {
     }
 
     #[test]
-    fn internal_drop_moves_text_and_discards_page_break_at_nested_destination() {
+    fn internal_drop_text_and_page_break_nested_moves_without_loss() {
         let (initial, _p1, p2) = state! {
             doc { root {
                 p1: paragraph { text("a") page_break }
@@ -4957,7 +4980,7 @@ mod tests {
             selection: (p1, 0) -> (p1, 2)
         };
         let source = initial.selection.expect("source selection");
-        let mut editor = Editor::new_test(initial);
+        let mut editor = Editor::new_test(initial.clone());
 
         crate::handle::apply_drop_for_test(
             &mut editor,
@@ -4966,21 +4989,14 @@ mod tests {
             InputModifiers::default(),
             Some(source),
         )
-        .expect("drop succeeds");
+        .expect("drop succeeds through non-isolating Blockquote");
 
-        let (expected, ..) = state! {
-            doc { root {
-                paragraph {}
-                blockquote { p2: paragraph { text("inaside") } }
-                paragraph {}
-            } }
-            selection: (p2, 2) -> (p2, 3)
-        };
-        editor_state::assert_state_eq!(editor.state(), &expected);
+        assert_eq!(text_and_page_break_signature(editor.state()), "ina|side");
+        assert_warm_matches_cold(editor.state());
     }
 
     #[test]
-    fn internal_drop_page_break_only_nested_preserves_source() {
+    fn internal_drop_page_break_only_nested_moves_without_loss() {
         let (initial, _p1, p2) = state! {
             doc { root {
                 p1: paragraph { text("a") page_break }
@@ -4999,13 +5015,14 @@ mod tests {
             InputModifiers::default(),
             Some(source),
         )
-        .expect("drop is a no-op");
+        .expect("drop succeeds through non-isolating Blockquote");
 
-        editor_state::assert_state_eq!(editor.state(), &initial);
+        assert_eq!(text_and_page_break_signature(editor.state()), "ain|side");
+        assert_warm_matches_cold(editor.state());
     }
 
     #[test]
-    fn external_drop_inserts_text_and_discards_page_break_at_nested_destination() {
+    fn external_drop_text_and_page_break_nested_hoists_without_loss() {
         let (source, ..) = state! {
             doc { root { p1: paragraph { text("a") page_break } } }
             selection: (p1, 0) -> (p1, 2)
@@ -5020,7 +5037,12 @@ mod tests {
             } }
             selection: (p2, 0)
         };
-        let mut editor = Editor::new_test(target);
+        let mut editor = Editor::new_test(target.clone());
+        let previous_tag = HistoryTag::PasteHtml {
+            plain_text: "previous".into(),
+            start: None,
+        };
+        editor.undo_history.set_last_tag(Some(previous_tag.clone()));
 
         crate::handle::apply_drop_for_test(
             &mut editor,
@@ -5032,16 +5054,11 @@ mod tests {
             InputModifiers::default(),
             None,
         )
-        .expect("drop succeeds");
+        .expect("drop succeeds through non-isolating Blockquote");
 
-        let (expected, ..) = state! {
-            doc { root {
-                blockquote { p2: paragraph { text("inaside") } }
-                paragraph {}
-            } }
-            selection: (p2, 2) -> (p2, 3)
-        };
-        editor_state::assert_state_eq!(editor.state(), &expected);
+        assert_eq!(text_and_page_break_signature(editor.state()), "ina|side");
+        assert_warm_matches_cold(editor.state());
+        assert_ne!(editor.last_history_tag(), Some(previous_tag));
     }
 
     #[test]
@@ -6000,7 +6017,7 @@ mod tests {
     }
 
     #[test]
-    fn dnd_hover_guard_rejection_leaves_no_telemetry_or_side_effect() {
+    fn dnd_hover_fitting_only_publishes_the_drop_indicator() {
         let (initial, _p1, p2) = state! {
             doc { root {
                 p1: paragraph { text("a") page_break }
@@ -6023,15 +6040,13 @@ mod tests {
             op: DndOp::StartInternalSelection,
         });
 
-        // Snapshot every observable side channel before the rejected hover.
+        // Snapshot the engine-side channels before the pure fitting judgment.
         let repair_before = editor.state().projected.projected().repair_stats;
         let epoch_before = editor.render_epoch;
         assert!(editor.pending_ops.is_empty());
         assert!(editor.pending_effects.is_empty());
 
-        // First hover targets a position the schema guard rejects (a page-break
-        // source dropping into a nested inline slot), decided by a side-effect-free
-        // judgment rather than a committed transaction.
+        // A PageBreak can hoist through Blockquote, so the hover is applicable.
         let events = editor.apply(Message::Dnd {
             op: DndOp::Over {
                 page: 0,
@@ -6042,18 +6057,18 @@ mod tests {
             },
         });
 
-        // The guard rejected and the judgment left no trace: no drop indicator, no
-        // repair telemetry, no queued ops/effects, no render invalidation.
-        assert!(editor.drop_indicator_for_test().is_none());
+        // Fitting itself leaves the document engine untouched; only the
+        // drop-indicator UI is published and invalidated for rendering.
+        assert!(editor.drop_indicator_for_test().is_some());
         assert_eq!(
             editor.state().projected.projected().repair_stats,
             repair_before
         );
-        assert_eq!(editor.render_epoch, epoch_before);
+        assert_eq!(editor.render_epoch, epoch_before.wrapping_add(1));
         assert!(editor.pending_ops.is_empty());
         assert!(editor.pending_effects.is_empty());
         assert!(
-            !events
+            events
                 .iter()
                 .any(|e| matches!(e, EditorEvent::RenderInvalidated))
         );

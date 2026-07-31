@@ -114,7 +114,7 @@ pub use delete_text_forward::delete_text_forward;
 pub use edit_modifier::edit_modifier;
 pub use edit_modifier_in_selection::edit_modifier_in_selection;
 pub use ensure_paragraph::ensure_paragraph;
-pub use fill_cell_rect_with_slice::fill_cell_rect_with_slice;
+pub(crate) use fill_cell_rect_with_slice::apply_cell_fill_plan;
 pub use insert_fragment::insert_fragment;
 pub use insert_hard_break::insert_hard_break;
 pub use insert_page_break_into_prev_paragraph::insert_page_break_into_prev_paragraph;
@@ -152,7 +152,7 @@ pub use move_paragraph_backward_into_prev_list::move_paragraph_backward_into_pre
 pub use move_table_axis::move_table_axis;
 pub use normalize_selected_blocks_in_blockquote::normalize_selected_blocks_in_blockquote;
 pub use normalize_selected_blocks_in_callout::normalize_selected_blocks_in_callout;
-pub use paste_cells_into_cell_rect::paste_cells_into_cell_rect;
+pub(crate) use paste_cells_into_cell_rect::apply_table_grid_plan;
 pub use replace_range_with_text::replace_range_with_text;
 pub use replace_selection_with_text::replace_selection_with_text;
 pub use replace_tracked_range::replace_tracked_range;

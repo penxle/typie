@@ -2,10 +2,10 @@ use std::collections::BTreeMap;
 
 use editor_crdt::Dot;
 use editor_model::{DocView, Modifier, ModifierType, NodeAttr, NodeType, PlainNode, Subtree};
-use editor_state::Selection;
-use editor_state::undo::RecordedOp;
+use editor_state::undo::{RecordedOp, UndoEntry, apply_inverse};
 use editor_state::{
-    BatchedState, Composition, PendingModifiers, ProjectedState, State, StateError,
+    BatchedState, Composition, PendingModifiers, ProjectedState, Selection, StableResolveCtx,
+    State, StateError,
 };
 use strum::IntoEnumIterator;
 
@@ -31,6 +31,8 @@ pub struct Savepoint {
     step_records_len: usize,
     recorded_len: usize,
     effects_len: usize,
+    meta: TransactionMeta,
+    keep_pending: bool,
 }
 
 /// `Step::DeleteOpaque`'s `emitted` field does not exist at construction (the
@@ -98,7 +100,7 @@ impl Transaction {
     }
 
     pub fn doc_changed(&self) -> bool {
-        self.steps.iter().any(|s| s.is_doc_step())
+        !self.recorded.is_empty() || self.steps.iter().any(|s| s.is_doc_step())
     }
 
     pub fn selection_changed(&self) -> bool {
@@ -185,6 +187,8 @@ impl Transaction {
             step_records_len: self.step_records.len(),
             recorded_len: self.recorded.len(),
             effects_len: self.effects.len(),
+            meta: self.meta.clone(),
+            keep_pending: self.keep_pending,
         }
     }
 
@@ -194,6 +198,38 @@ impl Transaction {
         self.step_records.truncate(sp.step_records_len);
         self.recorded.truncate(sp.recorded_len);
         self.effects.truncate(sp.effects_len);
+        self.meta = sp.meta;
+        self.keep_pending = sp.keep_pending;
+    }
+
+    /// Apply the inverse of an undo entry inside this transaction without
+    /// consuming the history entry itself. This lets a replacement compose
+    /// "remove the previous edit" and its new content into one CRDT commit and
+    /// one undo entry.
+    pub fn apply_undo_entry_inverse(&mut self, entry: &UndoEntry) -> Result<(), StepError> {
+        let savepoint = self.savepoint();
+        let result = (|| {
+            let (recorded, failure) = apply_inverse(self.state.projected_mut(), &entry.ops);
+            if let Some(error) = failure {
+                return Err(error.into());
+            }
+            self.recorded.extend(recorded);
+
+            let selection = entry.transient.selection.as_ref().and_then(|stable| {
+                let view = self.state.view();
+                let ctx = StableResolveCtx::from_live(&view, self.state.projected.seq_checkout());
+                let resolved = stable.resolve(&ctx)?;
+                Some(resolved.normalize(&view).unwrap_or(resolved))
+            });
+            self.set_selection(selection)?;
+            self.set_composition(None)?;
+            self.clear_pending_format()?;
+            Ok(())
+        })();
+        if result.is_err() {
+            self.rollback(savepoint);
+        }
+        result
     }
 
     pub fn insert_text(&mut self, block: Dot, offset: usize, text: &str) -> Result<(), StepError> {
@@ -816,10 +852,15 @@ mod tests {
 
     use super::*;
     use crate::HistoryMeta;
+    use editor_common::{
+        HistoryTag,
+        time::{Duration, Instant},
+    };
     use editor_crdt::ListOp;
     use editor_macros::state;
     use editor_model::{AtomLeaf, Child, EditOp, NodeType, SeqItem, UnknownNode};
-    use editor_state::{Position, ProjectedState, Selection};
+    use editor_state::undo::{RecordMerge, RecordedOp, TransientState, UndoEntry, UndoHistory};
+    use editor_state::{Position, ProjectedState, Selection, assert_state_eq};
 
     fn block_text(state: &State, elem: &Dot) -> String {
         state
@@ -855,6 +896,102 @@ mod tests {
         let (_, steps, _, _, _) = tr.commit();
         assert_eq!(steps.len(), 1);
         assert!(matches!(&steps[0].step, Step::InsertText { .. }));
+    }
+
+    #[test]
+    fn transaction_history_inverse_matches_normal_undo() {
+        let (initial, p) = state! {
+            doc { root { p: paragraph { text("ab") } } }
+            selection: none
+        };
+        let mut forward = Transaction::new(&initial);
+        forward.insert_text(p, 1, "x").unwrap();
+        let (after, _, recorded, _, _) = forward.commit();
+        let entry = UndoEntry {
+            ops: recorded,
+            tag: Some(HistoryTag::PasteHtml {
+                plain_text: "x".into(),
+                start: None,
+            }),
+            transient: TransientState::default(),
+            merge: RecordMerge::Isolated,
+        };
+
+        let mut expected = after.clone();
+        let mut history = UndoHistory::new(Duration::from_secs(0));
+        history.record(entry.clone(), Instant::now());
+        let (normal_ops, _) = history
+            .undo(expected.projected_mut(), TransientState::default())
+            .expect("normal undo applies");
+
+        let mut tr = Transaction::new(&after);
+        tr.apply_undo_entry_inverse(&entry)
+            .expect("transaction inverse applies");
+        assert!(tr.doc_changed());
+        let (actual, _, transaction_recorded, _, _) = tr.commit();
+
+        assert_state_eq!(&actual, &expected);
+        assert_eq!(
+            transaction_recorded
+                .into_iter()
+                .map(|recorded| recorded.op)
+                .collect::<Vec<_>>(),
+            normal_ops
+        );
+    }
+
+    #[test]
+    fn transaction_history_inverse_rolls_back_a_partial_failure() {
+        let (initial, p) = state! {
+            doc { root { p: paragraph { text("ab") } } }
+            selection: none
+        };
+        let mut forward = Transaction::new(&initial);
+        forward.insert_text(p, 1, "x").unwrap();
+        let (mut after, _, recorded, _, _) = forward.commit();
+        let invalid_insert = after
+            .projected_mut()
+            .apply_warm_only(EditOp::Seq(ListOp::Ins {
+                pos: 0,
+                item: SeqItem::Block {
+                    node_type: NodeType::Root,
+                    parents: vec![Dot::ROOT],
+                    attrs: Vec::new(),
+                },
+            }))
+            .unwrap();
+        let invalid_pos = after
+            .projected
+            .seq_visible_pos(invalid_insert.id)
+            .expect("warm insertion is visible in the sequence");
+        let invalid_delete = after
+            .projected_mut()
+            .apply_warm_only(EditOp::Seq(ListOp::Del {
+                pos: invalid_pos,
+                len: 1,
+            }))
+            .unwrap();
+        after.projected_mut().reproject_all().unwrap();
+        after.projected_mut().commit();
+        let invalid_delete = RecordedOp {
+            op: invalid_delete,
+            prior: None,
+        };
+        let entry = UndoEntry {
+            // Inverse order is reversed: the real insertion is removed first,
+            // then undeleting the hidden Root-typed block fails projection.
+            ops: vec![invalid_delete, recorded[0].clone()],
+            tag: None,
+            transient: TransientState::default(),
+            merge: RecordMerge::Isolated,
+        };
+
+        let mut tr = Transaction::new(&after);
+        let before = tr.state().clone();
+        assert!(tr.apply_undo_entry_inverse(&entry).is_err());
+        assert_state_eq!(tr.state(), &before);
+        assert!(tr.ops_for_test().is_empty());
+        assert!(!tr.doc_changed());
     }
 
     #[test]
@@ -1090,6 +1227,23 @@ mod tests {
         let after_two = tr.ops_for_test().len();
         tr.rollback(sp);
         assert!(after_two > tr.ops_for_test().len());
+    }
+
+    #[test]
+    fn savepoint_rollback_restores_meta_and_keep_pending() {
+        let (state, ..) = state! {
+            doc { root { p: paragraph { text("Hi") } } }
+            selection: (p, 0)
+        };
+        let mut tr = Transaction::new(&state);
+        let sp = tr.savepoint();
+        tr.update_meta(|meta| meta.history = HistoryMeta::Skip);
+        tr.keep_pending_modifiers();
+
+        tr.rollback(sp);
+
+        assert!(matches!(tr.meta().history, HistoryMeta::Record));
+        assert!(!tr.keeps_pending_modifiers());
     }
 
     #[test]

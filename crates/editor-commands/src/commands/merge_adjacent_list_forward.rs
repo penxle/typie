@@ -1,8 +1,10 @@
-use editor_model::ChildView;
-use editor_state::{StableResolveCtx, StableSelection};
+use editor_state::StableSelection;
 use editor_transaction::Transaction;
 
-use crate::helpers::{ForwardListBoundary, find_forward_list_boundary, is_list_type};
+use crate::helpers::{
+    ForwardListBoundary, find_forward_list_boundary, is_list_type, merge_adjacent_list_pair,
+    restore_selection_after_adjacent_list_merge,
+};
 use crate::{CommandError, CommandResult};
 
 pub fn merge_adjacent_list_forward(tr: &mut Transaction) -> CommandResult {
@@ -13,7 +15,7 @@ pub fn merge_adjacent_list_forward(tr: &mut Transaction) -> CommandResult {
         return Ok(false);
     }
 
-    let (earlier_list_id, later_list_id, earlier_len, items) = {
+    let (earlier_list_id, later_list_id) = {
         let view = tr.view();
         let Some(ForwardListBoundary::NextBlock { list_id, next_id }) =
             find_forward_list_boundary(&view, selection.head)?
@@ -29,47 +31,12 @@ pub fn merge_adjacent_list_forward(tr: &mut Transaction) -> CommandResult {
         if !is_list_type(later_list.node_type()) {
             return Ok(false);
         }
-        if earlier_list
-            .children()
-            .chain(later_list.children())
-            .any(|child| matches!(child, ChildView::Leaf(_)))
-        {
-            return Err(CommandError::Corrupted(
-                "list contains an unsupported direct child".into(),
-            ));
-        }
-        let items = later_list
-            .child_blocks()
-            .map(|item| item.id())
-            .collect::<Vec<_>>();
-        if items.is_empty() {
-            return Err(CommandError::Corrupted(
-                "later list contains no list items".into(),
-            ));
-        }
-        (
-            earlier_list.id(),
-            later_list.id(),
-            earlier_list.child_blocks().count(),
-            items,
-        )
+        (earlier_list.id(), later_list.id())
     };
 
-    let stable_selection = StableSelection::capture(&selection, &tr.view());
-    tr.batch::<_, CommandError>(|tr| {
-        tr.move_nodes_consecutive(&items, earlier_list_id, earlier_len)?;
-        tr.remove_subtree(later_list_id)?;
-        let resolved = {
-            let view = tr.view();
-            let ctx = StableResolveCtx::from_live(&view, tr.state().projected.seq_checkout());
-            stable_selection.resolve(&ctx)
-        }
-        .ok_or_else(|| {
-            CommandError::Corrupted("cannot restore selection after list merge".into())
-        })?;
-        tr.set_selection(Some(resolved))?;
-        Ok(())
-    })?;
+    let stable = StableSelection::capture(&selection, &tr.view());
+    let merged = merge_adjacent_list_pair(tr, earlier_list_id, later_list_id)?;
+    restore_selection_after_adjacent_list_merge(tr, selection, stable, &merged)?;
 
     Ok(true)
 }

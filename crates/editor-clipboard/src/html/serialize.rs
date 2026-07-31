@@ -3,118 +3,137 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use editor_model::{Fragment, Modifier, PlainNode};
 use editor_resource::Resource;
+use serde::Serialize;
 
 pub fn to_html(slice: &Slice, resource: &Resource) -> String {
     let mut out = String::new();
     out.push_str(r#"<meta charset="utf-8">"#);
-    let meta_json = serde_json::to_string(slice).expect("Slice serde");
-    let meta_b64 = STANDARD.encode(meta_json.as_bytes());
+    let mut meta_json = Vec::new();
+    let mut serializer = serde_json::Serializer::new(&mut meta_json);
+    slice
+        .serialize(serde_stacker::Serializer::new(&mut serializer))
+        .expect("Slice serde");
+    let meta_b64 = STANDARD.encode(meta_json);
     out.push_str(&format!(
         r#"<meta data-slice-v2="{meta_b64}" data-version="1">"#,
     ));
     out.push_str("<div data-root>");
-    for fragment in &slice.content {
-        serialize_node(fragment, resource, &mut out);
-    }
+    serialize_forest(&slice.content, resource, &mut out);
     out.push_str("</div>");
     out
 }
 
-fn serialize_node(fragment: &Fragment, resource: &Resource, out: &mut String) {
-    match &fragment.node {
-        PlainNode::Text(t) => serialize_text(&t.text, &fragment.modifiers, resource, out),
-        PlainNode::HardBreak(_) => out.push_str("<br>"),
-        PlainNode::Tab(_) => out.push('\t'),
-        PlainNode::Paragraph(_) => wrap("p", fragment, resource, out, None),
-        PlainNode::BulletList(_) => wrap("ul", fragment, resource, out, None),
-        PlainNode::OrderedList(_) => wrap("ol", fragment, resource, out, None),
-        PlainNode::ListItem(_) => wrap("li", fragment, resource, out, None),
-        PlainNode::Blockquote(b) => wrap(
-            "blockquote",
-            fragment,
-            resource,
-            out,
-            Some(format!(r#"data-variant="{}""#, variant_str(&b.variant))),
-        ),
-        PlainNode::Callout(c) => wrap(
-            "aside",
-            fragment,
-            resource,
-            out,
-            Some(format!(
-                r#"data-callout data-variant="{}""#,
-                variant_str(&c.variant)
-            )),
-        ),
-        PlainNode::Fold(_) => wrap("details", fragment, resource, out, None),
-        PlainNode::FoldTitle(_) => wrap("summary", fragment, resource, out, None),
-        PlainNode::FoldContent(_) => {
-            for child in &fragment.children {
-                serialize_node(child, resource, out);
+enum SerializeTask<'a> {
+    Node(&'a Fragment),
+    Close(&'static str),
+}
+
+fn serialize_forest(fragments: &[Fragment], resource: &Resource, out: &mut String) {
+    let mut tasks = Vec::new();
+    push_children(&mut tasks, fragments);
+    while let Some(task) = tasks.pop() {
+        let fragment = match task {
+            SerializeTask::Node(fragment) => fragment,
+            SerializeTask::Close(tag) => {
+                out.push_str(tag);
+                continue;
             }
-        }
-        PlainNode::Table(t) => wrap(
-            "table",
-            fragment,
-            resource,
-            out,
-            Some(format!(
-                r#"data-border-style="{}" data-proportion="{}""#,
-                variant_str(&t.border_style),
-                t.proportion,
-            )),
-        ),
-        PlainNode::TableRow(_) => wrap("tr", fragment, resource, out, None),
-        PlainNode::TableCell(c) => {
-            let attrs = c.col_width.map(|w| format!(r#"data-col-width="{w}""#));
-            wrap("td", fragment, resource, out, attrs);
-        }
-        PlainNode::Image(i) => {
-            out.push_str(&format!(
-                r#"<img data-id="{}" data-proportion="{}">"#,
-                html_escape(i.id.as_deref().unwrap_or("")),
-                i.proportion,
-            ));
-        }
-        PlainNode::Embed(e) => {
-            out.push_str(&format!(
-                r#"<a data-embed data-id="{}"></a>"#,
-                html_escape(e.id.as_deref().unwrap_or("")),
-            ));
-        }
-        PlainNode::File(f) => {
-            out.push_str(&format!(
-                r#"<a data-file data-id="{}"></a>"#,
-                html_escape(f.id.as_deref().unwrap_or("")),
-            ));
-        }
-        PlainNode::Archived(_) => {}
-        PlainNode::PageBreak(_) => out.push_str(r#"<div style="page-break-after:always"></div>"#),
-        PlainNode::HorizontalRule(_) => out.push_str("<hr>"),
-        PlainNode::Root(_) => {
-            for child in &fragment.children {
-                serialize_node(child, resource, out);
+        };
+        match &fragment.node {
+            PlainNode::Text(t) => serialize_text(&t.text, &fragment.modifiers, resource, out),
+            PlainNode::HardBreak(_) => out.push_str("<br>"),
+            PlainNode::Tab(_) => out.push('\t'),
+            PlainNode::Paragraph(_) => open_container("<p>", "</p>", fragment, &mut tasks, out),
+            PlainNode::BulletList(_) => open_container("<ul>", "</ul>", fragment, &mut tasks, out),
+            PlainNode::OrderedList(_) => open_container("<ol>", "</ol>", fragment, &mut tasks, out),
+            PlainNode::ListItem(_) => open_container("<li>", "</li>", fragment, &mut tasks, out),
+            PlainNode::Blockquote(b) => open_container(
+                &format!(r#"<blockquote data-variant="{}">"#, variant_str(&b.variant)),
+                "</blockquote>",
+                fragment,
+                &mut tasks,
+                out,
+            ),
+            PlainNode::Callout(c) => open_container(
+                &format!(
+                    r#"<aside data-callout data-variant="{}">"#,
+                    variant_str(&c.variant)
+                ),
+                "</aside>",
+                fragment,
+                &mut tasks,
+                out,
+            ),
+            PlainNode::Fold(_) => {
+                open_container("<details>", "</details>", fragment, &mut tasks, out)
             }
+            PlainNode::FoldTitle(_) => {
+                open_container("<summary>", "</summary>", fragment, &mut tasks, out)
+            }
+            PlainNode::FoldContent(_) => push_children(&mut tasks, &fragment.children),
+            PlainNode::Table(t) => open_container(
+                &format!(
+                    r#"<table data-border-style="{}" data-proportion="{}">"#,
+                    variant_str(&t.border_style),
+                    t.proportion,
+                ),
+                "</table>",
+                fragment,
+                &mut tasks,
+                out,
+            ),
+            PlainNode::TableRow(_) => open_container("<tr>", "</tr>", fragment, &mut tasks, out),
+            PlainNode::TableCell(c) => {
+                let open = match c.col_width {
+                    Some(width) => format!(r#"<td data-col-width="{width}">"#),
+                    None => "<td>".to_string(),
+                };
+                open_container(&open, "</td>", fragment, &mut tasks, out);
+            }
+            PlainNode::Image(i) => {
+                out.push_str(&format!(
+                    r#"<img data-id="{}" data-proportion="{}">"#,
+                    html_escape(i.id.as_deref().unwrap_or("")),
+                    i.proportion,
+                ));
+            }
+            PlainNode::Embed(e) => {
+                out.push_str(&format!(
+                    r#"<a data-embed data-id="{}"></a>"#,
+                    html_escape(e.id.as_deref().unwrap_or("")),
+                ));
+            }
+            PlainNode::File(f) => {
+                out.push_str(&format!(
+                    r#"<a data-file data-id="{}"></a>"#,
+                    html_escape(f.id.as_deref().unwrap_or("")),
+                ));
+            }
+            PlainNode::Archived(_) => {}
+            PlainNode::PageBreak(_) => {
+                out.push_str(r#"<div style="page-break-after:always"></div>"#)
+            }
+            PlainNode::HorizontalRule(_) => out.push_str("<hr>"),
+            PlainNode::Root(_) => push_children(&mut tasks, &fragment.children),
+            PlainNode::Unknown => {}
         }
-        PlainNode::Unknown => {}
     }
 }
 
-fn wrap(
-    tag: &str,
-    fragment: &Fragment,
-    resource: &Resource,
+fn open_container<'a>(
+    open: &str,
+    close: &'static str,
+    fragment: &'a Fragment,
+    tasks: &mut Vec<SerializeTask<'a>>,
     out: &mut String,
-    attrs: Option<String>,
 ) {
-    match attrs {
-        Some(a) => out.push_str(&format!("<{tag} {a}>")),
-        None => out.push_str(&format!("<{tag}>")),
-    }
-    for c in &fragment.children {
-        serialize_node(c, resource, out);
-    }
-    out.push_str(&format!("</{tag}>"));
+    out.push_str(open);
+    tasks.push(SerializeTask::Close(close));
+    push_children(tasks, &fragment.children);
+}
+
+fn push_children<'a>(tasks: &mut Vec<SerializeTask<'a>>, children: &'a [Fragment]) {
+    tasks.extend(children.iter().rev().map(SerializeTask::Node));
 }
 
 // 변형 enum 들은 #[serde(rename_all = "snake_case")] 의 plain string 직렬화를 가정

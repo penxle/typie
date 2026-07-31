@@ -17,8 +17,8 @@ pub use commands::*;
 pub use compose::*;
 pub use error::*;
 pub use judgments::{
-    SliceInsertionPlan, judge_expand_all, judge_expand_paragraph, judge_expand_sentence,
-    judge_expand_word, judge_indent_list, judge_outdent_list, judge_toggle_list_kind,
-    resolve_slice_insertion,
+    FitOutcome, SliceFitPlan, fit_slice, judge_expand_all, judge_expand_paragraph,
+    judge_expand_sentence, judge_expand_word, judge_indent_list, judge_outdent_list,
+    judge_toggle_list_kind,
 };
 pub use types::Verdict;

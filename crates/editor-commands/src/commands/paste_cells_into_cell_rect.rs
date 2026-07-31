@@ -1,139 +1,92 @@
+#[cfg(test)]
 use editor_clipboard::Slice;
-use editor_model::{Fragment, PlainNode};
-use editor_state::enclosing_table_cell;
 use editor_state::{Position, Selection};
 use editor_transaction::Transaction;
 
 use crate::helpers::{
-    find_first_text_position, insert_empty_table_column, insert_empty_table_row, nth_table_cell,
-    repair_slice_fragments, replace_cell_children, table_col_count, table_row_count,
+    find_first_text_position, insert_empty_table_column, insert_empty_table_row,
+    materialize_planned_endpoint, nth_table_cell, replace_cell_children, table_col_count,
+    table_row_count,
 };
+use crate::judgments::{TableFinalSelection, TableGridPlan};
+#[cfg(test)]
+use crate::types::SliceProvenance;
 use crate::{CommandError, CommandResult};
 
 /// Cell-wise paste of a table slice. Anchor is the top-left of the target
 /// cell-rect, or — for a collapsed caret inside a cell — that cell as a 1×1
 /// rect. Missing rows/columns are appended (never inserted in the middle) so
 /// cells outside the source rectangle keep their content and position.
-pub fn paste_cells_into_cell_rect(tr: &mut Transaction, mut slice: Slice) -> CommandResult {
-    repair_slice_fragments(&mut slice.content);
-    let Some(source_rows) = extract_source_rows(&slice) else {
-        return Ok(false);
-    };
-    let sr = source_rows.len();
-    let sc = source_rows.iter().map(|r| r.len()).max().unwrap_or(0);
-    if sr == 0 || sc == 0 {
-        return Ok(false);
-    }
+#[cfg(test)]
+fn paste_cells_into_cell_rect(tr: &mut Transaction, slice: Slice) -> CommandResult {
+    crate::insert_slice(tr, slice, SliceProvenance::Formatted)
+}
 
-    let (table_id, anchor_row, anchor_col, total_r, total_c) = {
-        let Some(sel) = tr.selection() else {
-            return Ok(false);
-        };
-        let view = tr.view();
-        let Some(rs) = sel.resolve(&view) else {
-            return Ok(false);
-        };
-        let (table_id, anchor_row, anchor_col) = if let Some(rect) = rs.as_cell_rect() {
-            (rect.table.id(), *rect.rows.start(), *rect.cols.start())
-        } else {
-            let head_id = rs.head().node();
-            let Some(cell_id) = enclosing_table_cell(&view, head_id) else {
-                return Ok(false);
-            };
-            let cell = view
-                .node(cell_id)
-                .ok_or(CommandError::NodeNotFound(cell_id))?;
-            let row = cell.parent().ok_or(CommandError::NoParent(cell_id))?;
-            let table = row
-                .parent()
-                .ok_or_else(|| CommandError::NoParent(row.id()))?;
-            let row_idx = row
-                .index()
-                .ok_or_else(|| CommandError::orphan_child(row.id(), table.id()))?;
-            let col_idx = cell
-                .index()
-                .ok_or_else(|| CommandError::orphan_child(cell_id, row.id()))?;
-            (table.id(), row_idx, col_idx)
-        };
-        let table = view
-            .node(table_id)
-            .ok_or(CommandError::NodeNotFound(table_id))?;
-        let total_r = table.child_blocks().count();
-        let total_c = table
-            .child_blocks()
-            .next()
-            .map(|row| row.child_blocks().count())
-            .unwrap_or(0);
-        if total_r == 0 || total_c == 0 {
-            return Ok(false);
+pub(crate) fn apply_table_grid_plan(tr: &mut Transaction, plan: TableGridPlan) -> CommandResult {
+    let table_id = materialize_planned_endpoint(tr, &plan.table)?.node;
+    let mut materialized_cells = Vec::with_capacity(plan.target_cells.len());
+    for row in &plan.target_cells {
+        let mut materialized_row = Vec::with_capacity(row.len());
+        for cell in row {
+            materialized_row.push(materialize_planned_endpoint(tr, cell)?.node);
         }
-        (table_id, anchor_row, anchor_col, total_r, total_c)
-    };
-
-    let extra_r = (anchor_row + sr).saturating_sub(total_r);
-    let extra_c = (anchor_col + sc).saturating_sub(total_c);
-
+        materialized_cells.push(materialized_row);
+    }
+    let current_rows = table_row_count(tr, table_id)?;
+    let current_cols = table_col_count(tr, table_id)?;
+    if current_rows != plan.original_rows || current_cols != plan.original_cols {
+        return Err(CommandError::Corrupted(
+            "table-grid Slice target changed after planning".into(),
+        ));
+    }
+    for (row_offset, row) in materialized_cells.iter().enumerate() {
+        for (col_offset, cell) in row.iter().enumerate() {
+            if nth_table_cell(
+                tr,
+                table_id,
+                plan.anchor_row + row_offset,
+                plan.anchor_col + col_offset,
+            )? != *cell
+            {
+                return Err(CommandError::Corrupted(
+                    "table-grid Slice target changed after materialization".into(),
+                ));
+            }
+        }
+    }
+    let source_row_count = plan.source_rows.len();
+    let source_col_count = plan.source_rows.first().map(Vec::len).unwrap_or(0);
     tr.batch::<_, CommandError>(|tr| {
         // Columns first so subsequent row insertions inherit the new width.
-        for _ in 0..extra_c {
+        for _ in 0..plan.append_cols {
             let col_count = table_col_count(tr, table_id)?;
             insert_empty_table_column(tr, table_id, col_count)?;
         }
-        for _ in 0..extra_r {
+        for _ in 0..plan.append_rows {
             let row_count = table_row_count(tr, table_id)?;
             insert_empty_table_row(tr, table_id, row_count)?;
         }
 
-        for sr_i in 0..sr {
-            for sc_i in 0..sc {
-                let Some(source_cell) = source_rows.get(sr_i).and_then(|r| r.get(sc_i)) else {
-                    continue;
-                };
+        for sr_i in 0..source_row_count {
+            for sc_i in 0..source_col_count {
+                let source_cell = &plan.source_rows[sr_i][sc_i];
                 let target_cell_id =
-                    nth_table_cell(tr, table_id, anchor_row + sr_i, anchor_col + sc_i)?;
+                    nth_table_cell(tr, table_id, plan.anchor_row + sr_i, plan.anchor_col + sc_i)?;
                 replace_cell_children(tr, target_cell_id, &source_cell.children)?;
             }
         }
+        let anchor_cell_id = nth_table_cell(tr, table_id, plan.anchor_row, plan.anchor_col)?;
+        let cursor = match plan.final_selection {
+            TableFinalSelection::FirstTextInAnchorCell => {
+                find_first_text_position(&tr.view(), anchor_cell_id)
+                    .unwrap_or_else(|| Position::new(anchor_cell_id, 0))
+            }
+        };
+        tr.set_selection(Some(Selection::collapsed(cursor)))?;
         Ok(())
     })?;
 
-    let anchor_cell_id = nth_table_cell(tr, table_id, anchor_row, anchor_col)?;
-    let cursor = find_first_text_position(&tr.view(), anchor_cell_id)
-        .unwrap_or_else(|| Position::new(anchor_cell_id, 0));
-    tr.set_selection(Some(Selection::collapsed(cursor)))?;
     Ok(true)
-}
-
-fn extract_source_rows(slice: &Slice) -> Option<Vec<Vec<Fragment>>> {
-    let table = slice.content.iter().find_map(find_table_fragment)?;
-    let mut rows: Vec<Vec<Fragment>> = Vec::new();
-    for r in &table.children {
-        if !matches!(r.node, PlainNode::TableRow(_)) {
-            continue;
-        }
-        let cells: Vec<Fragment> = r
-            .children
-            .iter()
-            .filter(|c| matches!(c.node, PlainNode::TableCell(_)))
-            .cloned()
-            .collect();
-        if !cells.is_empty() {
-            rows.push(cells);
-        }
-    }
-    (!rows.is_empty()).then_some(rows)
-}
-
-fn find_table_fragment(frag: &Fragment) -> Option<&Fragment> {
-    if matches!(frag.node, PlainNode::Table(_)) {
-        return Some(frag);
-    }
-    for c in &frag.children {
-        if let Some(t) = find_table_fragment(c) {
-            return Some(t);
-        }
-    }
-    None
 }
 
 #[cfg(test)]
@@ -190,27 +143,178 @@ mod tests {
         (rows, cols)
     }
 
-    #[test]
-    fn returns_false_when_slice_has_no_table() {
-        let (state, _, c00) = state! {
-            doc { root { table { tr0: table_row {
-                c00: table_cell { paragraph { text("x") } }
-            } } } }
-            selection: (c00, 0)
-        };
-        let initial = with_cell_rect(state, c00, c00);
-        let slice = Slice::from_text("plain");
-        transact_fail!(initial, |tr| paste_cells_into_cell_rect(&mut tr, slice));
+    fn invert_recorded_ops(
+        state: &mut editor_state::State,
+        ops: &[editor_state::undo::RecordedOp],
+    ) -> Vec<editor_state::undo::RecordedOp> {
+        use editor_state::undo::{RecordedOp, capture_prior, invert};
+
+        let mut out = Vec::new();
+        for recorded in ops.iter().rev() {
+            for payload in invert(&state.projected, recorded) {
+                let prior = capture_prior(&state.projected, &payload);
+                let op = state.projected_mut().apply(payload).unwrap();
+                out.push(RecordedOp { op, prior });
+            }
+        }
+        out
     }
 
     #[test]
-    fn returns_false_when_selection_is_not_cell_rect() {
-        let (initial, _) = state! {
-            doc { root { p1: paragraph { text("hello") } } }
-            selection: (p1, 0) -> (p1, 5)
+    fn architecture_a_table_grid_accepts_same_cell_range() {
+        let (initial, table, _p) = state! {
+            doc { root { table: table {
+                table_row {
+                    table_cell { p: paragraph { text("ab") } }
+                    table_cell { paragraph { text("untouched") } }
+                }
+            } } }
+            selection: (p, 0) -> (p, 2)
         };
         let source = source_slice_2x2();
-        transact_fail!(initial, |tr| paste_cells_into_cell_rect(&mut tr, source));
+
+        let (after, ..) = transact!(initial, |tr| paste_cells_into_cell_rect(&mut tr, source));
+
+        let view = after.view();
+        assert_eq!(table_dims(&view, table), (2, 2));
+        assert_eq!(cell_text_at(&view, table, 0, 0), "X");
+        assert_eq!(cell_text_at(&view, table, 0, 1), "Y");
+        assert_eq!(cell_text_at(&view, table, 1, 0), "Z");
+        assert_eq!(cell_text_at(&view, table, 1, 1), "W");
+    }
+
+    #[test]
+    fn table_grid_materializes_a_projected_row_cell_and_paragraph() {
+        let (mut initial, table) = state! {
+            doc { root {
+                table: table {}
+                paragraph {}
+            } }
+            selection: none
+        };
+        let synthetic_paragraph = {
+            let view = initial.view();
+            let table = view.node(table).expect("table");
+            let row = table.child_blocks().next().expect("projected row");
+            let cell = row.child_blocks().next().expect("projected cell");
+            let paragraph = cell.child_blocks().next().expect("projected paragraph");
+            assert!(row.id().is_synthetic());
+            assert!(cell.id().is_synthetic());
+            assert!(paragraph.id().is_synthetic());
+            paragraph.id()
+        };
+        initial.selection = Some(Selection::collapsed(Position::new(synthetic_paragraph, 0)));
+
+        let mut tr = Transaction::new(&initial);
+        assert!(
+            paste_cells_into_cell_rect(&mut tr, source_slice_2x2()).unwrap(),
+            "a planned synthetic grid target must execute"
+        );
+        let (after, ..) = tr.commit();
+
+        let view = after.view();
+        assert_eq!(table_dims(&view, table), (2, 2));
+        assert_eq!(cell_text_at(&view, table, 0, 0), "X");
+        assert_eq!(cell_text_at(&view, table, 0, 1), "Y");
+        assert_eq!(cell_text_at(&view, table, 1, 0), "Z");
+        assert_eq!(cell_text_at(&view, table, 1, 1), "W");
+        let selection = after.selection.expect("final caret");
+        assert!(!selection.head.node.is_synthetic());
+        assert_projection_integrity(&after);
+    }
+
+    #[test]
+    fn table_grid_materializes_non_anchor_synthetic_completion_cells() {
+        let (initial, table, _paragraph) = state! {
+            doc { root {
+                table: table {
+                    table_row {
+                        table_cell { paragraph: paragraph { text("a") } }
+                        table_cell { paragraph { text("b") } }
+                        table_cell { paragraph { text("c") } }
+                    }
+                    table_row {
+                        table_cell { paragraph { text("d") } }
+                    }
+                }
+                paragraph {}
+            } }
+            selection: (paragraph, 0)
+        };
+        {
+            let view = initial.view();
+            let second_row = view
+                .node(table)
+                .expect("table")
+                .child_blocks()
+                .nth(1)
+                .expect("second row");
+            let completions = second_row
+                .child_blocks()
+                .skip(1)
+                .map(|cell| cell.id())
+                .collect::<Vec<_>>();
+            assert_eq!(completions.len(), 2);
+            assert!(completions.iter().all(|cell| cell.is_synthetic()));
+        }
+
+        let mut tr = Transaction::new(&initial);
+        assert!(
+            paste_cells_into_cell_rect(&mut tr, source_slice_2x3()).unwrap(),
+            "the accepted grid plan must materialize every target cell slot"
+        );
+        let (after, _, recorded, ..) = tr.commit();
+
+        let view = after.view();
+        assert_eq!(table_dims(&view, table), (2, 3));
+        assert_eq!(cell_text_at(&view, table, 0, 0), "X");
+        assert_eq!(cell_text_at(&view, table, 0, 1), "Y");
+        assert_eq!(cell_text_at(&view, table, 0, 2), "Z");
+        assert_eq!(cell_text_at(&view, table, 1, 0), "P");
+        assert_eq!(cell_text_at(&view, table, 1, 1), "Q");
+        assert_eq!(cell_text_at(&view, table, 1, 2), "R");
+        assert_projection_integrity(&after);
+
+        let mut restored = after.clone();
+        let redo = invert_recorded_ops(&mut restored, &recorded);
+        assert_eq!(restored.to_plain(), initial.to_plain());
+        assert_projection_integrity(&restored);
+        invert_recorded_ops(&mut restored, &redo);
+        assert_eq!(restored.to_plain(), after.to_plain());
+        assert_projection_integrity(&restored);
+    }
+
+    #[test]
+    fn full_table_cell_rect_is_canonicalized_to_linear_replacement() {
+        let (initial, old_table, cell) = state! {
+            doc { root { old_table: table {
+                table_row {
+                    cell: table_cell { paragraph { text("old") } }
+                }
+            } } }
+            selection: (cell, 0)
+        };
+        let initial = with_cell_rect(initial, cell, cell);
+
+        let (after, ..) = transact!(initial, |tr| paste_cells_into_cell_rect(
+            &mut tr,
+            source_slice_2x2(),
+        ));
+
+        let view = after.view();
+        assert!(
+            view.node(old_table).is_none(),
+            "a canonical full-table replacement must not mutate the old grid in place"
+        );
+        let table = view
+            .root()
+            .unwrap()
+            .child_blocks()
+            .find(|block| block.node_type() == editor_model::NodeType::Table)
+            .expect("replacement table");
+        assert_eq!(table_dims(&view, table.id()), (2, 2));
+        assert_eq!(cell_text_at(&view, table.id(), 0, 0), "X");
+        assert_eq!(cell_text_at(&view, table.id(), 1, 1), "W");
     }
 
     fn source_slice_2x2() -> Slice {
@@ -233,6 +337,33 @@ mod tests {
         };
         let s = editor_state::State {
             selection: Some(sel),
+            ..s
+        };
+        Slice::extract(&s).unwrap()
+    }
+
+    fn source_slice_2x3() -> Slice {
+        let (s, c00, c12) = state! {
+            doc { root { table {
+                table_row {
+                    c00: table_cell { paragraph { text("X") } }
+                    table_cell { paragraph { text("Y") } }
+                    table_cell { paragraph { text("Z") } }
+                }
+                table_row {
+                    table_cell { paragraph { text("P") } }
+                    table_cell { paragraph { text("Q") } }
+                    c12: table_cell { paragraph { text("R") } }
+                }
+            } } }
+            selection: (c00, 0)
+        };
+        let selection = {
+            let view = s.view();
+            cell_rect_selection(c00, c12, &view).unwrap()
+        };
+        let s = editor_state::State {
+            selection: Some(selection),
             ..s
         };
         Slice::extract(&s).unwrap()

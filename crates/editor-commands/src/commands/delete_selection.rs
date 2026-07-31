@@ -1086,6 +1086,20 @@ mod tests {
             }
             selection: (p2, 1) -> (p3, 0)
         };
+        let planned = crate::helpers::plan_linear_deletion(
+            &initial.view(),
+            initial.selection.expect("selection"),
+        )
+        .unwrap()
+        .expect("linear deletion");
+        let join = crate::helpers::plan_linear_join(&initial.view(), &planned)
+            .unwrap()
+            .expect("joined deletion");
+        assert_eq!(
+            join.container_merges.len(),
+            2,
+            "the nested-list seam and its two outer list items must both be planned"
+        );
         let (actual, ..) = transact!(initial, |tr| delete_selection(&mut tr));
         let (expected, ..) = state! {
             doc {

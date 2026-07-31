@@ -1,35 +1,20 @@
-use editor_model::{ChildView, ContentExpr, NodeType, NodeView, Subtree};
+use editor_model::{ChildView, ContentExpr, NodeType, NodeView, Subtree, content_placement};
 
 use crate::Step;
 
 /// Analyzes a node's content expression and returns InsertSubtree steps
 /// needed to make it valid. Returns empty vec if already valid.
 pub fn fulfill(node: &NodeView) -> Vec<Step> {
-    let spec = node.spec();
-    let (child_types, real_indices) = known_child_types(node);
-
-    if spec.content.matches_sequence(&child_types) {
-        return vec![];
-    }
-
-    let insertions = spec
-        .content
-        .completion_insertions(&child_types)
+    let insertions = content_placement(node.node_type(), &child_types(node))
+        .completion_insertions
         .unwrap_or_default();
-    let total_children = node.child_count();
     insertions
         .into_iter()
-        .enumerate()
-        .map(|(k, (filtered_index, node_type))| {
-            let unshifted = filtered_index - k;
-            let real_index = real_indices
-                .get(unshifted)
-                .copied()
-                .unwrap_or(total_children);
-            let subtree = scaffold(node_type);
+        .map(|insertion| {
+            let subtree = scaffold(insertion.node_type);
             Step::InsertSubtree {
                 parent: node.id(),
-                index: real_index + k,
+                index: insertion.index,
                 subtree,
             }
         })
@@ -50,21 +35,13 @@ pub fn minimal_subtree(node_type: NodeType) -> Subtree {
     scaffold(node_type)
 }
 
-fn known_child_types(node: &NodeView) -> (Vec<NodeType>, Vec<usize>) {
-    let mut types = Vec::new();
-    let mut real_indices = Vec::new();
-    for (i, c) in node.children().enumerate() {
-        let node_type = match c {
-            ChildView::Block(b) => b.node_type(),
-            ChildView::Leaf(l) => l.node_type(),
-        };
-        if node_type == NodeType::Unknown {
-            continue;
-        }
-        types.push(node_type);
-        real_indices.push(i);
-    }
-    (types, real_indices)
+fn child_types(node: &NodeView) -> Vec<NodeType> {
+    node.children()
+        .map(|child| match child {
+            ChildView::Block(block) => block.node_type(),
+            ChildView::Leaf(leaf) => leaf.node_type(),
+        })
+        .collect()
 }
 
 fn first_type(expr: &ContentExpr) -> NodeType {
@@ -182,15 +159,10 @@ mod tests {
         );
     }
 
-    /// The append-fallback case above hits `real_indices.get(unshifted) == None`
-    /// (the missing type sorts after every known child, so the repair index
-    /// falls back to `total_children`). This oracle instead hits `Some(_)`: an
-    /// interior real_indices lookup succeeds because the missing child must be
-    /// inserted *before* an already-present known child. Physical order here
-    /// is [FoldContent, Unknown], so `fulfill` must insert the missing FoldTitle
-    /// at real index 0, not append it after the Unknown.
+    /// Physical order is [FoldContent, Unknown], so the shared placement result
+    /// inserts the missing FoldTitle at index 0, not after the Unknown.
     #[test]
-    fn fulfill_remaps_insertion_index_via_real_indices_hit_before_unknown() {
+    fn fulfill_inserts_missing_role_before_trailing_unknown() {
         use editor_crdt::Dot;
         use editor_model::{BlockTree, DocView, ProjectedDoc, RawChild, RawNode, RawTree};
 
@@ -243,17 +215,10 @@ mod tests {
         );
     }
 
-    /// The two oracles above both land on `real_index == unshifted` (0 in both
-    /// cases) because their Unknown sits *after* the insertion point — a
-    /// regression that dropped the `real_indices` remap entirely (using the
-    /// filtered index directly as the real index) would slip through both
-    /// unnoticed. This oracle puts the Unknown *before* the insertion point
-    /// (`[Unknown, FoldContent]`), so the real index (1, past the
-    /// Unknown) diverges from the filtered index (0, Unknown excluded) —
-    /// only the `real_indices` lookup, not the raw filtered index, produces
-    /// the expected step.
+    /// Physical order is [Unknown, FoldContent], so the shared placement result
+    /// keeps the Unknown transparent while inserting FoldTitle after it.
     #[test]
-    fn fulfill_remaps_insertion_index_when_real_and_filtered_indices_diverge() {
+    fn fulfill_inserts_missing_role_after_leading_unknown() {
         use editor_crdt::Dot;
         use editor_model::{BlockTree, DocView, ProjectedDoc, RawChild, RawNode, RawTree};
 

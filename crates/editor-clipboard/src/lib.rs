@@ -9,4 +9,4 @@ pub mod text;
 pub(crate) mod test_doc;
 
 pub use payload::ClipboardPayload;
-pub use slice::{PayloadSource, Slice};
+pub use slice::{PayloadSource, Slice, SlicePreflight};

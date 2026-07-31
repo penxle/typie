@@ -3,7 +3,8 @@ use editor_state::{Position, Selection};
 use editor_transaction::Transaction;
 
 use crate::CommandError;
-use crate::judgments::insert_slice_at_position;
+use crate::commands::insert_slice::apply_fitted_slice;
+use crate::judgments::{FitOutcome, fit_slice};
 use crate::types::SliceProvenance;
 
 pub fn insert_slice_at(
@@ -12,7 +13,17 @@ pub fn insert_slice_at(
     slice: Slice,
     provenance: SliceProvenance,
 ) -> Result<Option<Selection>, CommandError> {
-    insert_slice_at_position(tr, position, slice, provenance)
+    if slice.is_empty() {
+        return Ok(None);
+    }
+    if tr.view().node(position.node).is_none() {
+        return Err(CommandError::NodeNotFound(position.node));
+    }
+    let plan = match fit_slice(tr.state(), Selection::collapsed(position), slice)? {
+        FitOutcome::Plan(plan) => plan,
+        FitOutcome::NoOp | FitOutcome::NoFit => return Ok(None),
+    };
+    apply_fitted_slice(tr, plan, provenance).map(Some)
 }
 
 #[cfg(test)]
@@ -67,6 +78,22 @@ mod tests {
             open_start: 0,
             open_end: 0,
         }
+    }
+
+    fn text_and_page_break_signature(state: &editor_state::State) -> String {
+        state
+            .view()
+            .root()
+            .expect("root")
+            .descendants()
+            .filter_map(|child| match child {
+                ChildView::Leaf(leaf) => leaf
+                    .as_char()
+                    .map(|ch| ch.to_string())
+                    .or_else(|| (leaf.node_type() == NodeType::PageBreak).then(|| "|".to_string())),
+                ChildView::Block(_) => None,
+            })
+            .collect()
     }
 
     fn text_and_page_break_slice(text: &str) -> Slice {
@@ -538,6 +565,120 @@ mod tests {
     }
 
     #[test]
+    fn closed_list_between_adjacent_lists_uses_the_planned_earlier_kind_merges() {
+        let (initial, root, earlier) = state! {
+            doc { root: root {
+                earlier: ordered_list {
+                    list_item { paragraph { text("A") } }
+                }
+                bullet_list {
+                    list_item { paragraph { text("C") } }
+                }
+                paragraph {}
+            } }
+            selection: none
+        };
+
+        let mut tr = Transaction::new(&initial);
+        let inserted = insert_slice_at(
+            &mut tr,
+            Position::new(root, 1),
+            open_bullet_list_slice("B", 0, 0),
+            SliceProvenance::Formatted,
+        )
+        .expect("command succeeds");
+        assert_eq!(
+            inserted,
+            Some(Selection::new(
+                Position {
+                    node: earlier,
+                    offset: 1,
+                    affinity: Affinity::Downstream,
+                },
+                Position {
+                    node: earlier,
+                    offset: 2,
+                    affinity: Affinity::Upstream,
+                },
+            ))
+        );
+        let (actual, ..) = tr.commit();
+
+        let view = actual.view();
+        let lists = view
+            .node(root)
+            .unwrap()
+            .child_blocks()
+            .filter(|child| {
+                matches!(
+                    child.node_type(),
+                    NodeType::BulletList | NodeType::OrderedList
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(lists.len(), 1);
+        assert_eq!(lists[0].id(), earlier);
+        assert_eq!(lists[0].node_type(), NodeType::OrderedList);
+        assert_eq!(list_item_texts(&view, earlier), ["A", "B", "C"]);
+    }
+
+    #[test]
+    fn closed_list_replacing_empty_paragraph_merges_with_the_earlier_list() {
+        let (initial, earlier, empty) = state! {
+            doc { root {
+                earlier: ordered_list {
+                    list_item { paragraph { text("A") } }
+                }
+                empty: paragraph {}
+            } }
+            selection: none
+        };
+
+        let mut tr = Transaction::new(&initial);
+        let inserted = insert_slice_at(
+            &mut tr,
+            Position::new(empty, 0),
+            open_bullet_list_slice("B", 0, 0),
+            SliceProvenance::Formatted,
+        )
+        .expect("command succeeds")
+        .expect("closed list is inserted");
+        assert_eq!(
+            inserted,
+            Selection::new(
+                Position {
+                    node: earlier,
+                    offset: 1,
+                    affinity: Affinity::Downstream,
+                },
+                Position {
+                    node: earlier,
+                    offset: 2,
+                    affinity: Affinity::Upstream,
+                },
+            )
+        );
+        let (actual, ..) = tr.commit();
+
+        let view = actual.view();
+        let lists = view
+            .root()
+            .unwrap()
+            .child_blocks()
+            .filter(|child| {
+                matches!(
+                    child.node_type(),
+                    NodeType::BulletList | NodeType::OrderedList
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(lists.len(), 1);
+        assert_eq!(lists[0].id(), earlier);
+        assert_eq!(lists[0].node_type(), NodeType::OrderedList);
+        assert_eq!(list_item_texts(&view, earlier), ["A", "B"]);
+    }
+
+    #[test]
     fn insert_open_list_context_with_only_start_edge_open_merges_item() {
         let (initial, list) = state! {
             doc { root {
@@ -622,7 +763,7 @@ mod tests {
     }
 
     #[test]
-    fn rejected_slice_does_not_materialize_or_split_synthetic_textblock() {
+    fn hoisted_slice_does_not_materialize_synthetic_textblock() {
         let (initial, ..) = state! {
             doc { root { blockquote paragraph {} } }
             selection: none
@@ -639,7 +780,27 @@ mod tests {
                 .unwrap()
                 .id()
         };
-        assert_rejected_slice_preserves_synthetic_target(initial, target, horizontal_rule_slice());
+        let mut tr = Transaction::new(&initial);
+        let inserted = insert_slice_at(
+            &mut tr,
+            Position::new(target, 0),
+            horizontal_rule_slice(),
+            SliceProvenance::Formatted,
+        )
+        .expect("HorizontalRule hoists through Blockquote");
+        let (actual, ..) = tr.commit();
+
+        assert!(inserted.is_some());
+        assert!(target.is_synthetic());
+        assert!(
+            actual.view().node(target).is_some(),
+            "edge hoist must preserve the synthetic target paragraph"
+        );
+        let (expected, ..) = state! {
+            doc { root { horizontal_rule blockquote paragraph {} } }
+            selection: none
+        };
+        editor_state::assert_doc_eq!(&actual, &expected);
     }
 
     #[test]
@@ -947,6 +1108,36 @@ mod tests {
     }
 
     #[test]
+    fn task3_bare_text_and_page_break_at_root_paragraph_end_is_lossless() {
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("World") } } }
+            selection: none
+        };
+
+        let mut tr = Transaction::new(&initial);
+        let inserted = insert_slice_at(
+            &mut tr,
+            Position::new(p1, 5),
+            text_and_page_break_slice("X"),
+            SliceProvenance::Formatted,
+        )
+        .expect("insert succeeds")
+        .expect("text and page break inserted");
+        let (actual, ..) = tr.commit();
+
+        let (expected, ..) = state! {
+            doc { root {
+                paragraph { text("WorldX") page_break }
+                p2: paragraph {}
+            } }
+            selection: (p2, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+        assert_trailing_paragraph_is_synthetic(&actual);
+        assert!(!inserted.is_collapsed());
+    }
+
+    #[test]
     fn open_textblock_after_terminal_inline_stays_in_its_wrapper() {
         let (initial, p1) = state! {
             doc { root {
@@ -1015,7 +1206,7 @@ mod tests {
     }
 
     #[test]
-    fn insert_page_break_only_in_nested_paragraph_is_atomic_no_op() {
+    fn insert_page_break_only_in_nested_paragraph_hoists_without_loss() {
         let (initial, p1) = state! {
             doc { root { blockquote { p1: paragraph { text("Nested") } } paragraph {} } }
             selection: none
@@ -1028,15 +1219,16 @@ mod tests {
             page_break_slice(),
             SliceProvenance::Formatted,
         )
-        .expect("invalid page break is a no-op");
-        assert!(inserted.is_none());
+        .expect("PageBreak hoists through Blockquote");
+        assert!(inserted.is_some());
         let (actual, ..) = tr.commit();
 
-        assert_state_eq!(&actual, &initial);
+        assert_eq!(text_and_page_break_signature(&actual), "Nes|ted");
+        assert_projection_integrity(&actual);
     }
 
     #[test]
-    fn insert_page_break_only_paragraph_nested_is_atomic_no_op() {
+    fn insert_page_break_only_paragraph_nested_hoists_without_loss() {
         let (initial, p1) = state! {
             doc { root { blockquote { p1: paragraph { text("Nested") } } paragraph {} } }
             selection: none
@@ -1049,10 +1241,60 @@ mod tests {
             paragraph_with_page_break_slice("", 0, 0),
             SliceProvenance::Formatted,
         )
-        .expect("invalid page break is a no-op");
-        assert!(inserted.is_none());
+        .expect("PageBreak paragraph hoists through Blockquote");
+        assert!(inserted.is_some());
         let (actual, ..) = tr.commit();
 
+        assert_eq!(text_and_page_break_signature(&actual), "Nes|ted");
+        assert_projection_integrity(&actual);
+    }
+
+    #[test]
+    fn insert_page_break_does_not_cross_table_cell_isolation() {
+        let (initial, p) = state! {
+            doc { root {
+                table { table_row { table_cell { p: paragraph { text("Nested") } } } }
+                paragraph {}
+            } }
+            selection: none
+        };
+        let mut tr = Transaction::new(&initial);
+        let inserted = insert_slice_at(
+            &mut tr,
+            Position::new(p, 3),
+            page_break_slice(),
+            SliceProvenance::Formatted,
+        )
+        .expect("isolating rejection is a normal NoFit");
+        let (actual, ..) = tr.commit();
+
+        assert!(inserted.is_none());
+        assert_state_eq!(&actual, &initial);
+    }
+
+    #[test]
+    fn insert_page_break_does_not_cross_fold_content_isolation() {
+        let (initial, p) = state! {
+            doc { root {
+                fold {
+                    fold_title { text("title") }
+                    fold_content { p: paragraph { text("Nested") } }
+                }
+                paragraph {}
+            } }
+            selection: none
+        };
+        let mut tr = Transaction::new(&initial);
+        let inserted = insert_slice_at(
+            &mut tr,
+            Position::new(p, 3),
+            page_break_slice(),
+            SliceProvenance::Formatted,
+        )
+        .expect("isolating rejection is a normal NoFit");
+        let (actual, ..) = tr.commit();
+
+        assert!(inserted.is_none());
         assert_state_eq!(&actual, &initial);
     }
 
@@ -1098,7 +1340,7 @@ mod tests {
     }
 
     #[test]
-    fn insert_non_terminal_page_break_drops_it_and_keeps_following_text() {
+    fn insert_non_terminal_page_break_preserves_following_text_by_splitting() {
         let (initial, p1) = state! {
             doc { root { p1: paragraph { text("ab") } } }
             selection: none
@@ -1119,16 +1361,18 @@ mod tests {
             slice,
             SliceProvenance::Formatted,
         )
-        .expect("insert succeeds")
-        .expect("text inserted");
+        .expect("lossless PageBreak fitting succeeds");
         let (actual, ..) = tr.commit();
 
+        assert!(inserted.is_some());
         let (expected, ..) = state! {
-            doc { root { p1: paragraph { text("axb") } } }
-            selection: (p1, 2)
+            doc { root {
+                paragraph { text("a") page_break }
+                p2: paragraph { text("xb") }
+            } }
+            selection: (p2, 1)
         };
         assert_state_eq!(&actual, &expected);
-        assert!(!inserted.is_collapsed());
     }
 
     #[test]
@@ -1165,6 +1409,190 @@ mod tests {
     }
 
     #[test]
+    fn insert_page_break_through_non_isolating_blockquote_splits_without_loss() {
+        let (initial, p) = state! {
+            doc { root {
+                blockquote { p: paragraph { text("target") } }
+                paragraph {}
+            } }
+            selection: none
+        };
+        let mut tr = Transaction::new(&initial);
+        let inserted = insert_slice_at(
+            &mut tr,
+            Position::new(p, 3),
+            paragraph_with_page_break_slice("lo", 0, 0),
+            SliceProvenance::Formatted,
+        )
+        .expect("PageBreak hoists through a non-isolating wrapper");
+        let (actual, ..) = tr.commit();
+
+        assert!(inserted.is_some());
+        let (expected, ..) = state! {
+            doc { root {
+                blockquote { paragraph { text("tar") } }
+                paragraph { text("lo") page_break }
+                blockquote { q: paragraph { text("get") } }
+                paragraph {}
+            } }
+            selection: (q, 0)
+        };
+        editor_state::assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn hoisted_page_break_at_wrapper_start_places_caret_in_following_textblock() {
+        let (initial, p) = state! {
+            doc { root {
+                blockquote { p: paragraph { text("target") } }
+                paragraph {}
+            } }
+            selection: none
+        };
+        let mut tr = Transaction::new(&initial);
+        insert_slice_at(
+            &mut tr,
+            Position::new(p, 0),
+            page_break_slice(),
+            SliceProvenance::Formatted,
+        )
+        .expect("PageBreak hoists through a non-isolating wrapper")
+        .expect("PageBreak is inserted");
+        let (actual, ..) = tr.commit();
+
+        let (expected, ..) = state! {
+            doc { root {
+                paragraph { page_break }
+                blockquote { q: paragraph { text("target") } }
+                paragraph {}
+            } }
+            selection: (q, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn hoisted_page_break_before_fold_places_caret_in_fold_title() {
+        let (initial, p) = state! {
+            doc { root {
+                blockquote { p: paragraph { text("target") } }
+                fold {
+                    fold_title { text("title") }
+                    fold_content { paragraph { text("content") } }
+                }
+                paragraph {}
+            } }
+            selection: none
+        };
+        let mut tr = Transaction::new(&initial);
+        insert_slice_at(
+            &mut tr,
+            Position::new(p, 6),
+            page_break_slice(),
+            SliceProvenance::Formatted,
+        )
+        .expect("PageBreak hoists through a non-isolating wrapper")
+        .expect("PageBreak is inserted");
+        let (actual, ..) = tr.commit();
+
+        let (expected, ..) = state! {
+            doc { root {
+                blockquote { paragraph { text("target") } }
+                paragraph { page_break }
+                fold {
+                    title: fold_title { text("title") }
+                    fold_content { paragraph { text("content") } }
+                }
+                paragraph {}
+            } }
+            selection: (title, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn hoisted_page_break_before_block_atom_places_caret_at_the_gap() {
+        let (initial, p) = state! {
+            doc { root {
+                blockquote { p: paragraph { text("target") } }
+                horizontal_rule
+                paragraph {}
+            } }
+            selection: none
+        };
+        let mut tr = Transaction::new(&initial);
+        insert_slice_at(
+            &mut tr,
+            Position::new(p, 6),
+            page_break_slice(),
+            SliceProvenance::Formatted,
+        )
+        .expect("PageBreak hoists through a non-isolating wrapper")
+        .expect("PageBreak is inserted");
+        let (actual, ..) = tr.commit();
+
+        let (expected, ..) = state! {
+            doc { root: root {
+                blockquote { paragraph { text("target") } }
+                paragraph { page_break }
+                horizontal_rule
+                paragraph {}
+            } }
+            selection: (root, 2, >)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn hoisting_page_break_authors_required_completion_in_split_list_item() {
+        let (initial, p) = state! {
+            doc { root {
+                bullet_list {
+                    list_item {
+                        p: paragraph { text("a") }
+                        bullet_list { list_item { paragraph { text("x") } } }
+                    }
+                }
+                paragraph {}
+            } }
+            selection: none
+        };
+        let mut tr = Transaction::new(&initial);
+        let inserted = insert_slice_at(
+            &mut tr,
+            Position::new(p, 1),
+            page_break_slice(),
+            SliceProvenance::Formatted,
+        )
+        .expect("PageBreak hoists through list wrappers");
+        let (actual, ..) = tr.commit();
+
+        assert!(inserted.is_some());
+        assert_eq!(text_and_page_break_signature(&actual), "a|x");
+        let right_first_paragraph = {
+            let view = actual.view();
+            view.root()
+                .expect("root")
+                .child_blocks()
+                .filter(|node| node.node_type() == NodeType::BulletList)
+                .nth(1)
+                .expect("right list")
+                .child_blocks()
+                .next()
+                .expect("right item")
+                .child_blocks()
+                .next()
+                .expect("required paragraph")
+                .id()
+        };
+        assert!(
+            right_first_paragraph.as_op_dot().is_some(),
+            "accepted plan must author required split-wrapper completion"
+        );
+        assert_projection_integrity(&actual);
+    }
+
+    #[test]
     fn insert_open_page_break_paragraph_keeps_page_break_terminal() {
         let (initial, p1) = state! {
             doc { root { p1: paragraph { text("World") } } }
@@ -1194,7 +1622,7 @@ mod tests {
     }
 
     #[test]
-    fn insert_closed_page_break_paragraph_nested_drops_only_page_break() {
+    fn insert_closed_page_break_paragraph_nested_hoists_without_loss() {
         let (initial, p1) = state! {
             doc { root { blockquote { p1: paragraph { text("Nested") } } paragraph {} } }
             selection: none
@@ -1207,27 +1635,16 @@ mod tests {
             paragraph_with_page_break_slice("lo", 0, 0),
             SliceProvenance::Formatted,
         )
-        .expect("insert succeeds")
-        .expect("paragraph inserted");
+        .expect("PageBreak paragraph hoists through Blockquote");
         let (actual, ..) = tr.commit();
 
-        let (expected, ..) = state! {
-            doc { root {
-                blockquote {
-                    paragraph { text("Nes") }
-                    paragraph { text("lo") }
-                    paragraph { text("ted") }
-                }
-                paragraph {}
-            } }
-            selection: none
-        };
-        editor_state::assert_doc_eq!(&actual, &expected);
-        assert!(!inserted.is_collapsed());
+        assert!(inserted.is_some());
+        assert_eq!(text_and_page_break_signature(&actual), "Neslo|ted");
+        assert_projection_integrity(&actual);
     }
 
     #[test]
-    fn removing_first_page_break_only_block_does_not_transfer_its_openness() {
+    fn leading_page_break_only_block_hoists_in_order() {
         let (initial, p1) = state! {
             doc { root { blockquote { p1: paragraph { text("Nested") } } paragraph {} } }
             selection: none
@@ -1248,26 +1665,16 @@ mod tests {
             slice,
             SliceProvenance::Formatted,
         )
-        .expect("insert succeeds")
-        .expect("text inserted");
+        .expect("PageBreak blocks hoist through Blockquote");
         let (actual, ..) = tr.commit();
 
-        let (expected, ..) = state! {
-            doc { root {
-                blockquote {
-                    paragraph { text("Nes") }
-                    paragraph { text("xted") }
-                }
-                paragraph {}
-            } }
-            selection: none
-        };
-        editor_state::assert_doc_eq!(&actual, &expected);
-        assert!(!inserted.is_collapsed());
+        assert!(inserted.is_some());
+        assert_eq!(text_and_page_break_signature(&actual), "Nes|xted");
+        assert_projection_integrity(&actual);
     }
 
     #[test]
-    fn removing_last_page_break_only_block_does_not_transfer_its_openness() {
+    fn trailing_page_break_only_block_hoists_in_order() {
         let (initial, p1) = state! {
             doc { root { blockquote { p1: paragraph { text("Nested") } } paragraph {} } }
             selection: none
@@ -1288,21 +1695,11 @@ mod tests {
             slice,
             SliceProvenance::Formatted,
         )
-        .expect("insert succeeds")
-        .expect("text inserted");
+        .expect("PageBreak blocks hoist through Blockquote");
         let (actual, ..) = tr.commit();
 
-        let (expected, ..) = state! {
-            doc { root {
-                blockquote {
-                    paragraph { text("Nesx") }
-                    paragraph { text("ted") }
-                }
-                paragraph {}
-            } }
-            selection: none
-        };
-        editor_state::assert_doc_eq!(&actual, &expected);
-        assert!(!inserted.is_collapsed());
+        assert!(inserted.is_some());
+        assert_eq!(text_and_page_break_signature(&actual), "Nesx|ted");
+        assert_projection_integrity(&actual);
     }
 }

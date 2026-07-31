@@ -14,6 +14,50 @@ use crate::editor::Editor;
 use crate::error::EditorError;
 use crate::message::*;
 
+fn canonicalize_set_selection(
+    view: &DocView,
+    current: Option<Selection>,
+    selection: Selection,
+) -> Option<Selection> {
+    selection.resolve(view)?;
+
+    let selection = if let (Some(anchor_cell), Some(head_cell)) = (
+        enclosing_table_cell(view, selection.anchor.node),
+        enclosing_table_cell(view, selection.head.node),
+    ) && anchor_cell != head_cell
+        && enclosing_table(view, anchor_cell)
+            .zip(enclosing_table(view, head_cell))
+            .is_some_and(|(anchor_table, head_table)| anchor_table == head_table)
+    {
+        cell_rect_selection(anchor_cell, head_cell, view)?
+    } else {
+        selection.normalize(view)?
+    };
+
+    Some(match current {
+        Some(current) if same_cell_rect(view, current, selection) => current,
+        _ => selection,
+    })
+}
+
+fn same_cell_rect(view: &DocView, left: Selection, right: Selection) -> bool {
+    let Some(left) = left
+        .resolve(view)
+        .and_then(|selection| selection.as_cell_rect())
+    else {
+        return false;
+    };
+    let Some(right) = right
+        .resolve(view)
+        .and_then(|selection| selection.as_cell_rect())
+    else {
+        return false;
+    };
+    left.table_id() == right.table_id()
+        && left.rows() == right.rows()
+        && left.cols() == right.cols()
+}
+
 pub fn handle_selection_op(editor: &mut Editor, op: SelectionOp) -> Result<(), EditorError> {
     if matches!(op, SelectionOp::Unset) {
         editor.clear_preferred_x();
@@ -29,7 +73,12 @@ pub fn handle_selection_op(editor: &mut Editor, op: SelectionOp) -> Result<(), E
     match op {
         SelectionOp::Set { selection } => editor.transact(|tr| {
             tr.update_meta(|m| m.history = HistoryMeta::Skip);
-            if selection.resolve(&tr.view()).is_some() {
+            let selection = {
+                let current = tr.selection();
+                let view = tr.view();
+                canonicalize_set_selection(&view, current, selection)
+            };
+            if let Some(selection) = selection {
                 if tr.selection() != Some(selection) {
                     tr.clear_pending_format()?;
                 }
@@ -40,9 +89,12 @@ pub fn handle_selection_op(editor: &mut Editor, op: SelectionOp) -> Result<(), E
         SelectionOp::SetFrozen { selection } => editor.transact(|tr| {
             tr.update_meta(|m| m.history = HistoryMeta::Skip);
             let live = {
+                let current = tr.selection();
                 let view = tr.view();
                 let ctx = StableResolveCtx::from_live(&view, tr.state().projected.seq_checkout());
-                selection.resolve(&ctx)
+                selection
+                    .resolve(&ctx)
+                    .and_then(|live| canonicalize_set_selection(&view, current, live))
             };
             if let Some(live) = live {
                 if tr.selection() != Some(live) {
@@ -80,7 +132,13 @@ pub fn handle_selection_op(editor: &mut Editor, op: SelectionOp) -> Result<(), E
                     Some(p) => p,
                     None => return Ok(()),
                 };
-                Selection::new(Position::from(&start_pos), Position::from(&end_pos))
+                let selection =
+                    Selection::new(Position::from(&start_pos), Position::from(&end_pos));
+                let Some(selection) = canonicalize_set_selection(&view, tr.selection(), selection)
+                else {
+                    return Ok(());
+                };
+                selection
             };
             if tr.selection() != Some(selection) {
                 tr.clear_pending_format()?;
@@ -471,6 +529,131 @@ mod tests {
         });
         assert_eq!(editor.state().selection, Some(target));
         assert!(!editor.undo_history.can_undo());
+    }
+
+    #[test]
+    fn select_set_across_table_cells_canonicalizes_to_cell_rect() {
+        let (state, c00, p00, c01, p01) = state! {
+            doc { root {
+                table {
+                    table_row {
+                        c00: table_cell { p00: paragraph { text("hello") } }
+                        c01: table_cell { p01: paragraph { text("world") } }
+                        table_cell { paragraph { text("tail") } }
+                    }
+                }
+                paragraph {}
+            } }
+            selection: (p00, 0)
+        };
+        let mut editor = Editor::new_test(state);
+
+        editor.apply(Message::Selection {
+            op: SelectionOp::Set {
+                selection: Selection::new(Position::new(p00, 2), Position::new(p01, 3)),
+            },
+        });
+
+        let view = editor.state().view();
+        let rect = editor
+            .state()
+            .selection
+            .and_then(|selection| selection.resolve(&view))
+            .and_then(|selection| selection.as_cell_rect())
+            .expect("cross-cell Set must canonicalize to a cell rect");
+        assert_eq!(rect.anchor_cell.id(), c00);
+        assert_eq!(rect.head_cell.id(), c01);
+    }
+
+    #[test]
+    fn task1_set_set_flat_and_set_frozen_share_table_boundary_canonicalization() {
+        let (state, inside, outside) = state! {
+            doc { root {
+                table {
+                    table_row {
+                        table_cell { inside: paragraph { text("inside") } }
+                    }
+                }
+                outside: paragraph { text("outside") }
+            } }
+            selection: (outside, 0)
+        };
+        let requested = Selection::new(Position::new(inside, 2), Position::new(outside, 3));
+        let (start, end, frozen, expected) = {
+            let view = state.view();
+            let resolved = requested
+                .resolve(&view)
+                .expect("requested selection resolves");
+            (
+                resolved.anchor().to_flat(),
+                resolved.head().to_flat(),
+                StableSelection::capture(&requested, &view),
+                requested
+                    .normalize(&view)
+                    .expect("table boundary selection normalizes"),
+            )
+        };
+        assert_ne!(requested, expected);
+
+        for op in [
+            SelectionOp::Set {
+                selection: requested,
+            },
+            SelectionOp::SetFlat { start, end },
+            SelectionOp::SetFrozen { selection: frozen },
+        ] {
+            let mut editor = Editor::new_test(state.clone());
+            editor.apply(Message::Selection { op });
+            assert_eq!(editor.state().selection, Some(expected));
+        }
+    }
+
+    #[test]
+    fn select_set_flat_round_trips_cell_rect_without_losing_direction_or_pending_format() {
+        let (mut state, c00, c11, _tail) = state! {
+            doc { root {
+                table {
+                    table_row {
+                        c00: table_cell { paragraph { text("00") } }
+                        table_cell { paragraph { text("01") } }
+                        table_cell { paragraph { text("02") } }
+                    }
+                    table_row {
+                        table_cell { paragraph { text("10") } }
+                        c11: table_cell { paragraph { text("11") } }
+                        table_cell { paragraph { text("12") } }
+                    }
+                }
+                tail: paragraph {}
+            } }
+            selection: (tail, 0)
+        };
+        let expected = {
+            let view = state.view();
+            cell_rect_selection(c11, c00, &view).expect("partial reverse cell rect")
+        };
+        state.selection = Some(expected);
+        let mut editor = Editor::new_test(state);
+        let pending_modifiers = vec![PendingModifier::Set {
+            modifier: Modifier::Bold,
+        }];
+        editor
+            .transact(|tr| {
+                tr.set_pending_modifiers(pending_modifiers.clone())?;
+                Ok(())
+            })
+            .unwrap();
+
+        let ime_selection = editor.ime(64, 64).unwrap().unwrap().selection;
+        editor.apply(Message::Selection {
+            op: SelectionOp::SetFlat {
+                start: ime_selection.start,
+                end: ime_selection.end,
+            },
+        });
+
+        assert_eq!(editor.state().selection, Some(expected));
+        assert_eq!(editor.state().pending_modifiers, pending_modifiers);
     }
 
     #[test]

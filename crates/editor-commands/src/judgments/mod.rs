@@ -8,8 +8,14 @@ pub use list_kind::judge_toggle_list_kind;
 pub use selection::{
     judge_expand_all, judge_expand_paragraph, judge_expand_sentence, judge_expand_word,
 };
-pub use slice::{SliceInsertionPlan, resolve_slice_insertion};
+pub use slice::{FitOutcome, SliceFitPlan, fit_slice};
 
 pub(crate) use list::{lift_selected_list_items, sink_selected_list_items};
 pub(crate) use list_kind::{judge_lift_list_items_of_kind, judge_set_list_kind};
-pub(crate) use slice::insert_slice_at_position;
+pub(crate) use slice::{
+    AppliedSliceInsertion, CellFillPlan, JoinedReplacementPlan, LinearFinalSelection,
+    LinearFitPlan, LinearMutation, PlannedBoundaryInsertion, PlannedBranchInsertion,
+    PlannedBranchNode, PlannedBranchSplit, PlannedJoin, PlannedOutputKey, RangePlacement,
+    SliceFitPlanKind, SliceInsertionPlan, TableFinalSelection, TableGridPlan,
+    apply_slice_insertion_plan,
+};

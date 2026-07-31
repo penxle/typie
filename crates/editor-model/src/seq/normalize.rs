@@ -1,11 +1,11 @@
-use std::collections::VecDeque;
-
 use editor_crdt::Dot;
 use hashbrown::HashSet;
 
 use super::project::{RawChild, RawNode, RawTree, synthetic_id};
 use crate::nodes::NodeType;
-use crate::schema::{ContentExpr, context_allows, wrap_chain};
+use crate::schema::{
+    CompletionInsertion, ContentExpr, RepairTransition, content_placement, repair_transition,
+};
 
 /// Counters for the deterministic repair pass. `drops` and `totality_violations`
 /// record real (authored) content loss — `drops` should always be zero under the
@@ -143,222 +143,25 @@ pub fn is_fixed_slot(t: NodeType) -> bool {
     fixed_slot_roles(&t.spec().content).is_some()
 }
 
-/// Move any leading `Unknown` children (opaque preserved ops) verbatim from
-/// `kids` to `out` without consuming a content slot — they belong with the
-/// preceding real sibling and are invisible to content matching.
-fn skip_unknowns(kids: &mut VecDeque<RawChild>, out: &mut Vec<RawChild>) {
-    while kids
-        .front()
-        .and_then(|c| c.as_child_type())
-        .is_some_and(|t| t == NodeType::Unknown)
-    {
-        out.push(kids.pop_front().unwrap());
-    }
-}
-
-/// Greedily consume `kids` against `expr`, appending matched real children and
-/// deterministic fillers for missing required slots to `out`, leaving any residue
-/// in `kids`. `Unknown` children pass through transparently. Returns the number
-/// of real (non-`Unknown`) children consumed. This is the container-completion
-/// engine: it never removes or reorders existing real children.
-fn match_content(
-    expr: &ContentExpr,
-    kids: &mut VecDeque<RawChild>,
-    parent: Dot,
-    out: &mut Vec<RawChild>,
-) -> usize {
-    let front = |k: &VecDeque<RawChild>, e: &ContentExpr| {
-        k.front()
-            .and_then(|c| c.as_child_type())
-            .is_some_and(|t| t != NodeType::Unknown && e.matches(t))
-    };
-    match expr {
-        ContentExpr::Empty | ContentExpr::Any => 0,
-        ContentExpr::Single(t) => {
-            skip_unknowns(kids, out);
-            if kids
-                .front()
-                .and_then(|c| c.as_child_type())
-                .is_some_and(|ct| ct == *t)
-            {
-                out.push(kids.pop_front().unwrap());
-                1
-            } else {
-                out.push(RawChild::Block(scaffold_block(*t, 0, parent)));
-                0
-            }
-        }
-        ContentExpr::Optional(inner) => {
-            skip_unknowns(kids, out);
-            if front(kids, inner) {
-                out.push(kids.pop_front().unwrap());
-                1
-            } else {
-                0
-            }
-        }
-        ContentExpr::ZeroOrMore(inner) => {
-            let mut n = 0;
-            loop {
-                skip_unknowns(kids, out);
-                if front(kids, inner) {
-                    out.push(kids.pop_front().unwrap());
-                    n += 1;
-                } else {
-                    break;
-                }
-            }
-            n
-        }
-        ContentExpr::OneOrMore(inner) => {
-            let mut n = 0;
-            loop {
-                skip_unknowns(kids, out);
-                if front(kids, inner) {
-                    out.push(kids.pop_front().unwrap());
-                    n += 1;
-                } else {
-                    break;
-                }
-            }
-            if n == 0 {
-                out.push(RawChild::Block(scaffold_block(
-                    first_type(inner),
-                    0,
-                    parent,
-                )));
-            }
-            n
-        }
-        ContentExpr::Choice(cs) => {
-            skip_unknowns(kids, out);
-            match cs.iter().find(|c| front(kids, c)) {
-                Some(c) => match_content(c, kids, parent, out),
-                None => {
-                    out.push(RawChild::Block(scaffold_block(
-                        first_type(&cs[0]),
-                        0,
-                        parent,
-                    )));
-                    0
-                }
-            }
-        }
-        ContentExpr::Seq(exprs) => {
-            let mut n = 0;
-            for e in exprs {
-                n += match_content(e, kids, parent, out);
-            }
-            n
-        }
-    }
-}
-
-/// Greedily consume `types` (real child types only) against `expr` and return how
-/// many were consumed — the mirror of [`match_content`] without scaffolding. A
-/// residue exists exactly when the returned count is short of `types.len()`.
-fn greedy_consume(expr: &ContentExpr, types: &[NodeType]) -> usize {
-    fn matches_at(e: &ContentExpr, types: &[NodeType], idx: usize) -> bool {
-        types.get(idx).is_some_and(|t| e.matches(*t))
-    }
-    fn walk(expr: &ContentExpr, types: &[NodeType], idx: &mut usize) {
-        match expr {
-            ContentExpr::Empty => {}
-            ContentExpr::Any => *idx = types.len(),
-            ContentExpr::Single(t) => {
-                if types.get(*idx) == Some(t) {
-                    *idx += 1;
-                }
-            }
-            ContentExpr::Optional(inner) => {
-                if matches_at(inner, types, *idx) {
-                    walk(inner, types, idx);
-                }
-            }
-            ContentExpr::ZeroOrMore(inner) | ContentExpr::OneOrMore(inner) => {
-                while matches_at(inner, types, *idx) {
-                    walk(inner, types, idx);
-                }
-            }
-            ContentExpr::Choice(cs) => {
-                if let Some(c) = cs.iter().find(|c| matches_at(c, types, *idx)) {
-                    walk(c, types, idx);
-                }
-            }
-            ContentExpr::Seq(es) => {
-                for e in es {
-                    walk(e, types, idx);
-                }
-            }
-        }
-    }
-    let mut idx = 0;
-    walk(expr, types, &mut idx);
-    idx
-}
-
-/// The index of the first content residue among `node`'s children (the first real
-/// child greedy matching cannot consume), treating `Unknown` as transparent.
-/// `None` when the content is a completable prefix (missing required slots are a
-/// completion concern, not a residue).
-fn content_residue_index(node: &RawNode) -> Option<usize> {
-    if node.node_type == NodeType::Unknown {
-        return None;
-    }
-    let reals: Vec<(usize, NodeType)> = node
-        .children
+fn raw_child_types(node: &RawNode) -> Vec<NodeType> {
+    node.children
         .iter()
-        .enumerate()
-        .filter_map(|(i, c)| {
-            c.as_child_type()
-                .filter(|t| *t != NodeType::Unknown)
-                .map(|t| (i, t))
-        })
-        .collect();
-    let types: Vec<NodeType> = reals.iter().map(|(_, t)| *t).collect();
-    let consumed = greedy_consume(&node.node_type.spec().content, &types);
-    (consumed < reals.len()).then(|| reals[consumed].0)
+        .map(|child| child.as_child_type().unwrap_or(NodeType::Unknown))
+        .collect()
 }
 
-fn min_opt(a: Option<usize>, b: Option<usize>) -> Option<usize> {
-    match (a, b) {
-        (Some(x), Some(y)) => Some(x.min(y)),
-        (Some(x), None) | (None, Some(x)) => Some(x),
-        (None, None) => None,
-    }
-}
-
-/// The index of the first child that cannot legally stay a direct child here — a
-/// content residue or an actual-path context violation — in document order.
-fn first_misfit(node: &RawNode, path: &[NodeType]) -> Option<usize> {
-    let ctx_viol = (node.node_type != NodeType::Unknown)
-        .then(|| {
-            node.children.iter().position(|c| {
-                c.as_child_type()
-                    .is_some_and(|ct| ct != NodeType::Unknown && !context_allows(path, ct))
-            })
-        })
-        .flatten();
-    min_opt(ctx_viol, content_residue_index(node))
-}
-
-/// Whether the child at `i` is a misfit here (context violation or the first
-/// content residue). Correct when every child before `i` already fits and
-/// `residue` equals `content_residue_index(node)` for the node's current
-/// children — callers cache it across loop iterations and must recompute it
-/// after any mutation of `node.children`.
-fn is_misfit_at(node: &RawNode, i: usize, path: &[NodeType], residue: Option<usize>) -> bool {
-    debug_assert_eq!(residue, content_residue_index(node));
-    let Some(ct) = node.children[i].as_child_type() else {
-        return false;
-    };
-    if ct == NodeType::Unknown {
-        return false;
-    }
-    if node.node_type != NodeType::Unknown && !context_allows(path, ct) {
-        return true;
-    }
-    residue == Some(i)
+fn raw_repair_transition(
+    node: &RawNode,
+    path: &[NodeType],
+    ctx: &RepairCtx,
+) -> Option<RepairTransition> {
+    repair_transition(path, &raw_child_types(node), |index| {
+        !matches!(
+            node.children.get(index),
+            Some(RawChild::Block(block))
+                if ctx.wrap_created.contains(&(block.id, path.len()))
+        )
+    })
 }
 
 fn child_own_dot(c: &RawChild) -> Dot {
@@ -421,56 +224,27 @@ fn empty_scaffold(
 }
 
 /// Insert deterministic fillers for `node`'s missing required content slots,
-/// preserving every existing child (including `Unknown`s) in place. Assumes the
-/// node is residue-free (misfits already resolved).
+/// preserving every existing child (including `Unknown`s) in place. If insertion
+/// alone cannot complete the current sequence, leave it for the subsequent
+/// WRAP/SPLIT repair pass.
 fn complete_required(node: &mut RawNode) {
     if node.node_type == NodeType::Unknown {
         return;
     }
-    let content = node.node_type.spec().content.clone();
-    // Already valid — do not run the greedy filler, whose repeatable groups would
-    // absorb an existing trailing required slot and re-scaffold it (non-idempotent).
-    let real_types: Vec<NodeType> = node
-        .children
-        .iter()
-        .filter_map(|c| c.as_child_type())
-        .filter(|t| *t != NodeType::Unknown)
-        .collect();
-    if content.matches_sequence(&real_types) {
+    let placement = content_placement(node.node_type, &raw_child_types(node));
+    let Some(insertions) = placement.completion_insertions else {
         return;
-    }
-    let mut kids: VecDeque<RawChild> = std::mem::take(&mut node.children).into_iter().collect();
-    let mut out = Vec::new();
-    match_content(&content, &mut kids, node.id, &mut out);
-    skip_unknowns(&mut kids, &mut out);
-    out.extend(kids);
-    node.children = out;
+    };
+    apply_completion(node, &insertions);
 }
 
-/// The WRAP plan for the misfit child at `i`: the scaffold chain to wrap it in, or
-/// `None` when it must SPLIT-HOIST instead — the type fits directly (an
-/// empty chain, i.e. a count/position overflow), no chain exists, the context is
-/// unsatisfiable, or the child is a wrap scaffold already created at this level.
-fn wrap_plan(
-    node: &RawNode,
-    i: usize,
-    path: &[NodeType],
-    ctx: &RepairCtx,
-) -> Option<Vec<NodeType>> {
-    let ct = node.children[i].as_child_type()?;
-    if ct == NodeType::Unknown {
-        return None;
+fn apply_completion(node: &mut RawNode, insertions: &[CompletionInsertion]) {
+    for insertion in insertions {
+        node.children.insert(
+            insertion.index,
+            RawChild::Block(scaffold_block(insertion.node_type, 0, node.id)),
+        );
     }
-    let chain = wrap_chain(path, ct)?;
-    if chain.is_empty() {
-        return None;
-    }
-    if let RawChild::Block(b) = &node.children[i]
-        && ctx.wrap_created.contains(&(b.id, path.len()))
-    {
-        return None;
-    }
-    Some(chain)
 }
 
 /// Replace the child at `i` with a scaffold chain (`chain[0]` outermost) that
@@ -513,6 +287,7 @@ fn wrap_child(
 fn split_out(
     node: &mut RawNode,
     k: usize,
+    retained_completion: &[CompletionInsertion],
     path: &[NodeType],
     ctx: &mut RepairCtx,
 ) -> Vec<RawChild> {
@@ -521,7 +296,7 @@ fn split_out(
     }
     let tail: Vec<RawChild> = node.children.split_off(k + 1);
     let promoted = node.children.pop().expect("k is a valid child index");
-    complete_required(node);
+    apply_completion(node, retained_completion);
     let mut out = vec![promoted];
     if !tail.is_empty() {
         let cause = tail
@@ -554,12 +329,17 @@ fn resolve_own_misfits(
         if ctx.capped {
             return Vec::new();
         }
-        let Some(k) = first_misfit(node, path) else {
-            return Vec::new();
-        };
-        match wrap_plan(node, k, path, ctx) {
-            Some(chain) => wrap_child(node, k, &chain, path, ctx),
-            None => return split_out(node, k, path, ctx),
+        match raw_repair_transition(node, path, ctx) {
+            Some(RepairTransition::Ready { .. }) | None => return Vec::new(),
+            Some(RepairTransition::Wrap { index, chain }) => {
+                wrap_child(node, index, &chain, path, ctx)
+            }
+            Some(RepairTransition::SplitHoist {
+                index,
+                retained_completion,
+            }) => {
+                return split_out(node, index, &retained_completion, path, ctx);
+            }
         }
     }
 }
@@ -605,26 +385,14 @@ fn normalize_grid(table: &mut RawNode) {
 
 fn scaffold_block(role: NodeType, slot: usize, parent: Dot) -> RawNode {
     let id = synthetic_id(parent, slot, role);
-    let mut out = Vec::new();
-    match_content(&role.spec().content, &mut VecDeque::new(), id, &mut out);
-    RawNode {
+    let mut node = RawNode {
         id,
         node_type: role,
         attrs: vec![],
-        children: out,
-    }
-}
-
-fn first_type(e: &ContentExpr) -> NodeType {
-    match e {
-        ContentExpr::Single(t) => *t,
-        ContentExpr::Choice(cs) => first_type(&cs[0]),
-        ContentExpr::OneOrMore(i) | ContentExpr::ZeroOrMore(i) | ContentExpr::Optional(i) => {
-            first_type(i)
-        }
-        ContentExpr::Seq(es) => first_type(&es[0]),
-        ContentExpr::Empty | ContentExpr::Any => unreachable!(),
-    }
+        children: Vec::new(),
+    };
+    complete_required(&mut node);
+    node
 }
 
 fn last_known_child(children: &[RawChild]) -> Option<&RawChild> {
@@ -728,31 +496,30 @@ pub fn normalize_window_forest_with_stats(
     // Mirror `process_children` for the Root node WITHOUT its terminal
     // `complete_required` (Root completion is applied document-globally elsewhere).
     let mut path = vec![NodeType::Root];
-    let mut residue = content_residue_index(&root);
     let mut i = 0;
     while i < root.children.len() {
         if ctx.capped {
             break;
         }
-        if is_misfit_at(&root, i, &path, residue) {
-            match wrap_plan(&root, i, &path, &ctx) {
-                Some(chain) => {
-                    wrap_child(&mut root, i, &chain, &path, &mut ctx);
-                    residue = content_residue_index(&root);
-                    // The scaffold now fits here; re-examine slot i (recursed next pass).
-                    continue;
-                }
-                None => {
-                    // Root accepts every block type through WRAP, so a terminating
-                    // SPLIT here is unreachable; keep the promoted forest as Root
-                    // children rather than lose it (total).
-                    let hoist = split_out(&mut root, i, &path, &mut ctx);
-                    root.children.splice(i + 1..i + 1, hoist);
-                    residue = content_residue_index(&root);
-                    i += 1;
-                    continue;
-                }
+        match raw_repair_transition(&root, &path, &ctx) {
+            Some(RepairTransition::Wrap { index, chain }) if index == i => {
+                wrap_child(&mut root, i, &chain, &path, &mut ctx);
+                // The scaffold now fits here; re-examine slot i (recursed next pass).
+                continue;
             }
+            Some(RepairTransition::SplitHoist {
+                index,
+                retained_completion,
+            }) if index == i => {
+                // Root accepts every block type through WRAP, so a terminating
+                // SPLIT here is unreachable; keep the promoted forest as Root
+                // children rather than lose it (total).
+                let hoist = split_out(&mut root, i, &retained_completion, &path, &mut ctx);
+                root.children.splice(i + 1..i + 1, hoist);
+                i += 1;
+                continue;
+            }
+            _ => {}
         }
         let child_hoist = if let RawChild::Block(b) = &mut root.children[i] {
             normalize_node(b, &mut path, &mut ctx)
@@ -764,11 +531,9 @@ pub fn normalize_window_forest_with_stats(
                 matches!(&root.children[i], RawChild::Block(b) if first_real_dot_node(b).is_none());
             if husk_emptied {
                 root.children.splice(i..i + 1, child_hoist);
-                residue = content_residue_index(&root);
                 continue;
             }
             root.children.splice(i + 1..i + 1, child_hoist);
-            residue = content_residue_index(&root);
         }
         i += 1;
     }
@@ -795,24 +560,24 @@ pub fn normalize_window_forest_for(
     let mut path = ancestors.to_vec();
     path.push(container_type);
     let mut hoisted: Vec<RawChild> = Vec::new();
-    let mut residue = content_residue_index(&root);
     let mut i = 0;
     while i < root.children.len() {
         if ctx.capped {
             break;
         }
-        if is_misfit_at(&root, i, &path, residue) {
-            match wrap_plan(&root, i, &path, &ctx) {
-                Some(chain) => {
-                    wrap_child(&mut root, i, &chain, &path, &mut ctx);
-                    residue = content_residue_index(&root);
-                    continue;
-                }
-                None => {
-                    hoisted = split_out(&mut root, i, &path, &mut ctx);
-                    break;
-                }
+        match raw_repair_transition(&root, &path, &ctx) {
+            Some(RepairTransition::Wrap { index, chain }) if index == i => {
+                wrap_child(&mut root, i, &chain, &path, &mut ctx);
+                continue;
             }
+            Some(RepairTransition::SplitHoist {
+                index,
+                retained_completion,
+            }) if index == i => {
+                hoisted = split_out(&mut root, i, &retained_completion, &path, &mut ctx);
+                break;
+            }
+            _ => {}
         }
         let child_hoist = if let RawChild::Block(b) = &mut root.children[i] {
             normalize_node(b, &mut path, &mut ctx)
@@ -824,11 +589,9 @@ pub fn normalize_window_forest_for(
                 matches!(&root.children[i], RawChild::Block(b) if first_real_dot_node(b).is_none());
             if husk_emptied {
                 root.children.splice(i..i + 1, child_hoist);
-                residue = content_residue_index(&root);
                 continue;
             }
             root.children.splice(i + 1..i + 1, child_hoist);
-            residue = content_residue_index(&root);
         }
         i += 1;
     }
@@ -867,8 +630,8 @@ pub fn normalize_subtree_with_stats(
 /// assuming its children are already individually normalized — no deep recursion.
 /// Lets a caller re-establish a container's content invariant (e.g. the Root's
 /// required trailing paragraph) by deferring to the schema rather than hardcoding
-/// it. Newly scaffolded children are themselves shaped by `match_content`, so they
-/// need no further normalization here.
+/// it. Newly scaffolded children are themselves completed from the shared
+/// schema-placement decision, so they need no further normalization here.
 pub fn normalize_content_shallow(node: &mut RawNode, ancestors: &[NodeType]) {
     let mut stats = RepairStats::default();
     normalize_content_shallow_with_stats(node, ancestors, &mut stats);
@@ -920,23 +683,25 @@ fn process_children(
     path: &mut Vec<NodeType>,
     ctx: &mut RepairCtx,
 ) -> Vec<RawChild> {
-    let mut residue = content_residue_index(node);
     let mut i = 0;
     while i < node.children.len() {
         if ctx.capped {
             return Vec::new();
         }
-        if is_misfit_at(node, i, path, residue) {
-            match wrap_plan(node, i, path, ctx) {
-                Some(chain) => {
-                    wrap_child(node, i, &chain, path, ctx);
-                    residue = content_residue_index(node);
-                    // The scaffold now fits here; re-examine slot i (it will be
-                    // recursed on the next pass).
-                    continue;
-                }
-                None => return split_out(node, i, path, ctx),
+        match raw_repair_transition(node, path, ctx) {
+            Some(RepairTransition::Wrap { index, chain }) if index == i => {
+                wrap_child(node, i, &chain, path, ctx);
+                // The scaffold now fits here; re-examine slot i (it will be
+                // recursed on the next pass).
+                continue;
             }
+            Some(RepairTransition::SplitHoist {
+                index,
+                retained_completion,
+            }) if index == i => {
+                return split_out(node, i, &retained_completion, path, ctx);
+            }
+            _ => {}
         }
         let child_hoist = match &mut node.children[i] {
             RawChild::Block(b) => normalize_node(b, path, ctx),
@@ -947,15 +712,15 @@ fn process_children(
                 matches!(&node.children[i], RawChild::Block(b) if first_real_dot_node(b).is_none());
             if husk_emptied {
                 node.children.splice(i..i + 1, child_hoist);
-                residue = content_residue_index(node);
                 continue;
             }
             node.children.splice(i + 1..i + 1, child_hoist);
-            residue = content_residue_index(node);
         }
         i += 1;
     }
-    complete_required(node);
+    if let Some(RepairTransition::Ready { completion }) = raw_repair_transition(node, path, ctx) {
+        apply_completion(node, &completion);
+    }
     Vec::new()
 }
 
@@ -1111,6 +876,23 @@ mod tests {
             flat.get(promoted_para).is_some(),
             "its Paragraph survives inside the ListItem"
         );
+        assert!(valid(&out).is_ok());
+    }
+
+    #[test]
+    fn normalize_repairs_children_of_malformed_leaf_block() {
+        let tree = RawTree {
+            roots: vec![raw_block(
+                0,
+                NodeType::Text,
+                vec![raw_char(1, 'A'), raw_char(2, ' ')],
+            )],
+        };
+        let expected_dots = raw_real_dots(&tree);
+
+        let out = normalize(tree);
+
+        assert_eq!(raw_real_dots(&out), expected_dots);
         assert!(valid(&out).is_ok());
     }
 
@@ -1426,6 +1208,40 @@ mod tests {
             ],
             "the Unknown stays first and the typed roles follow in order"
         );
+        assert!(valid(&out).is_ok());
+    }
+
+    #[test]
+    fn fold_completion_inserts_title_after_leading_unknown() {
+        let tree = raw_root(vec![raw_block_child(
+            1,
+            NodeType::Fold,
+            vec![
+                raw_block_child(2, NodeType::Unknown, vec![]),
+                raw_block_child(
+                    3,
+                    NodeType::FoldContent,
+                    vec![raw_block_child(4, NodeType::Paragraph, vec![])],
+                ),
+            ],
+        )]);
+
+        let out = normalize(tree);
+        let RawChild::Block(fold) = &out.roots[0].children[0] else {
+            panic!("fold");
+        };
+        assert_eq!(
+            fold.children
+                .iter()
+                .filter_map(RawChild::as_child_type)
+                .collect::<Vec<_>>(),
+            vec![
+                NodeType::Unknown,
+                NodeType::FoldTitle,
+                NodeType::FoldContent,
+            ]
+        );
+        assert!(matches!(&fold.children[1], RawChild::Block(title) if title.id.is_synthetic()));
         assert!(valid(&out).is_ok());
     }
 

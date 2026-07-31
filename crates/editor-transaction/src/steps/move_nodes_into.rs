@@ -63,9 +63,10 @@ pub(crate) fn capture_items(
 }
 
 fn collect_source_dots(subtree: &Subtree, out: &mut Vec<Dot>) {
-    out.extend(subtree.source_dots.iter().copied());
-    for child in &subtree.children {
-        collect_source_dots(child, out);
+    let mut stack = vec![subtree];
+    while let Some(subtree) = stack.pop() {
+        out.extend(subtree.source_dots.iter().copied());
+        stack.extend(subtree.children.iter().rev());
     }
 }
 

@@ -7,10 +7,150 @@ use editor_state::{
 };
 use editor_transaction::{Step, StepError, Transaction, fulfill, minimal_subtree};
 
+use crate::helpers::merge_block_container_into;
 use crate::{CommandError, CommandResult};
 
 pub(crate) fn is_list_type(ty: NodeType) -> bool {
     matches!(ty, NodeType::BulletList | NodeType::OrderedList)
+}
+
+/// Merge two adjacent sibling lists by moving the later list's items into the
+/// earlier list. The earlier container owns the resulting list kind.
+pub(crate) struct AdjacentListMerge {
+    pub survivor: Dot,
+    pub removed: Dot,
+    pub parent: Dot,
+    pub removed_index: usize,
+    pub appended_at: usize,
+    pub appended_count: usize,
+}
+
+pub(crate) fn merge_adjacent_list_pair(
+    tr: &mut Transaction,
+    earlier_list_id: Dot,
+    later_list_id: Dot,
+) -> Result<AdjacentListMerge, CommandError> {
+    {
+        let view = tr.view();
+        let earlier_list = view
+            .node(earlier_list_id)
+            .ok_or(CommandError::NodeNotFound(earlier_list_id))?;
+        let later_list = view
+            .node(later_list_id)
+            .ok_or(CommandError::NodeNotFound(later_list_id))?;
+        if !is_list_type(earlier_list.node_type()) || !is_list_type(later_list.node_type()) {
+            return Err(CommandError::Corrupted(
+                "adjacent-list merge received a non-list node".into(),
+            ));
+        }
+        if earlier_list.parent().map(|parent| parent.id())
+            != later_list.parent().map(|parent| parent.id())
+            || earlier_list.index().and_then(|index| index.checked_add(1)) != later_list.index()
+        {
+            return Err(CommandError::Corrupted(
+                "list merge requires adjacent siblings".into(),
+            ));
+        }
+        if earlier_list
+            .children()
+            .chain(later_list.children())
+            .any(|child| matches!(child, ChildView::Leaf(_)))
+        {
+            return Err(CommandError::Corrupted(
+                "list contains an unsupported direct child".into(),
+            ));
+        }
+        let items = later_list
+            .child_blocks()
+            .map(|item| item.id())
+            .collect::<Vec<_>>();
+        if items.is_empty() {
+            return Err(CommandError::Corrupted(
+                "later list contains no list items".into(),
+            ));
+        }
+    }
+    let (parent, removed_index, appended_count) = {
+        let view = tr.view();
+        let later = view
+            .node(later_list_id)
+            .ok_or(CommandError::NodeNotFound(later_list_id))?;
+        let parent = later
+            .parent()
+            .ok_or(CommandError::NoParent(later_list_id))?;
+        (
+            parent.id(),
+            later
+                .index()
+                .ok_or_else(|| CommandError::orphan_child(later_list_id, parent.id()))?,
+            later.child_blocks().count(),
+        )
+    };
+    let merged = merge_block_container_into(tr, earlier_list_id, later_list_id)?;
+    Ok(AdjacentListMerge {
+        survivor: earlier_list_id,
+        removed: later_list_id,
+        parent,
+        removed_index,
+        appended_at: merged.appended_at,
+        appended_count,
+    })
+}
+
+pub(crate) fn resolve_selection_after_adjacent_list_merge(
+    tr: &Transaction,
+    before: Selection,
+    stable: StableSelection,
+    merged: &AdjacentListMerge,
+) -> Result<Selection, CommandError> {
+    let mut resolved = {
+        let view = tr.view();
+        let ctx = StableResolveCtx::from_live(&view, tr.state().projected.seq_checkout());
+        stable.resolve(&ctx)
+    }
+    .ok_or_else(|| CommandError::Corrupted("cannot restore selection after list merge".into()))?;
+    let remap_boundary = |position: Position, fallback: Position| {
+        if position.node == merged.removed {
+            Position {
+                node: merged.survivor,
+                offset: merged.appended_at + position.offset,
+                affinity: position.affinity,
+            }
+        } else if position.node == merged.parent && position.offset == merged.removed_index {
+            Position {
+                node: merged.survivor,
+                offset: merged.appended_at,
+                affinity: position.affinity,
+            }
+        } else if position.node == merged.parent && position.offset == merged.removed_index + 1 {
+            Position {
+                node: merged.survivor,
+                offset: merged.appended_at + merged.appended_count,
+                affinity: position.affinity,
+            }
+        } else {
+            fallback
+        }
+    };
+    resolved = Selection::new(
+        remap_boundary(before.anchor, resolved.anchor),
+        remap_boundary(before.head, resolved.head),
+    );
+    let resolved = resolved.normalize(&tr.view()).ok_or_else(|| {
+        CommandError::Corrupted("cannot normalize selection after list merge".into())
+    })?;
+    Ok(resolved)
+}
+
+pub(crate) fn restore_selection_after_adjacent_list_merge(
+    tr: &mut Transaction,
+    before: Selection,
+    stable: StableSelection,
+    merged: &AdjacentListMerge,
+) -> Result<(), CommandError> {
+    let resolved = resolve_selection_after_adjacent_list_merge(tr, before, stable, merged)?;
+    tr.set_selection(Some(resolved))?;
+    Ok(())
 }
 
 pub(crate) enum ForwardListBoundary {
@@ -815,4 +955,41 @@ fn capture_anchor(view: &DocView, items: &[Dot], pos: &Position) -> Option<Selec
             affinity: pos.affinity,
         })
     })
+}
+
+#[cfg(test)]
+mod adjacent_merge_tests {
+    use editor_macros::state;
+
+    use super::*;
+
+    #[test]
+    fn adjacent_list_merge_is_selection_free_and_keeps_the_earlier_container() {
+        let (initial, earlier, later, _p) = state! {
+            doc { root {
+                earlier: ordered_list {
+                    list_item { paragraph { text("A") } }
+                }
+                later: bullet_list {
+                    list_item { p: paragraph { text("B") } }
+                }
+            } }
+            selection: (p, 1)
+        };
+        let mut tr = Transaction::new(&initial);
+        let merged =
+            merge_adjacent_list_pair(&mut tr, earlier, later).expect("adjacent lists merge");
+        let (actual, steps, ..) = tr.commit();
+
+        assert_eq!(merged.survivor, earlier);
+        assert_eq!(merged.removed, later);
+        assert!(actual.view().node(earlier).is_some());
+        assert!(actual.view().node(later).is_none());
+        assert!(
+            steps
+                .iter()
+                .all(|record| !matches!(record.step, Step::SetSelection { .. })),
+            "the mutation primitive must not own selection restoration"
+        );
+    }
 }

@@ -267,12 +267,19 @@ pub(crate) fn judge_apply_drop(
     match payload {
         DndDropPayload::Text { text, html } => {
             let (slice, _) = Slice::from_payload(html.as_deref(), text, resource);
-            commands::resolve_slice_insertion(&state.view(), position, slice).is_some()
+            matches!(
+                commands::fit_slice(state, Selection::collapsed(position), slice),
+                Ok(commands::FitOutcome::Plan(_))
+            )
         }
-        DndDropPayload::Files { kinds, .. } => {
-            commands::resolve_slice_insertion(&state.view(), position, placeholder_slice(kinds))
-                .is_some()
-        }
+        DndDropPayload::Files { kinds, .. } => matches!(
+            commands::fit_slice(
+                state,
+                Selection::collapsed(position),
+                placeholder_slice(kinds),
+            ),
+            Ok(commands::FitOutcome::Plan(_))
+        ),
         DndDropPayload::InternalSelection => {
             let Some(source) = source else {
                 return false;
@@ -287,7 +294,10 @@ pub(crate) fn judge_apply_drop(
             };
             if modifiers.alt {
                 // copy: 소스를 삭제하지 않으므로 드롭 전 원시 위치가 곧 실제 삽입 지점이다.
-                return commands::resolve_slice_insertion(&state.view(), position, slice).is_some();
+                return matches!(
+                    commands::fit_slice(state, Selection::collapsed(position), slice),
+                    Ok(commands::FitOutcome::Plan(_))
+                );
             }
             move_insertion_fits_after_delete(state, position, *source, slice)
         }
@@ -301,10 +311,9 @@ pub(crate) fn judge_apply_drop(
 /// 커밋하지 않으므로 관측 부작용이 없다. 재앵커 실패는 실행의 rollback no-op과 정확히
 /// 합치해 false를 돌린다.
 ///
-/// 마지막 삽입 가능성은 `resolve_slice_insertion`으로 판정한다 — 그 계약("Some(plan) ⇒
-/// 관측 가능한 삽입 op 방출")이 `insert_slice_at`과 정확히 대응하므로(빈 슬라이스가 splice
-/// edge join으로 소진돼 no-op이 되는 경우까지 `splice_emits_change`로 흡수됨) 이 근사는
-/// 실행과 합치한다.
+/// 마지막 삽입 가능성은 공통 `fit_slice`로 판정한다. 실행도 같은 Fitter를 거치는
+/// `insert_slice_at`을 사용하므로, source 삭제 뒤의 실제 destination을 기준으로
+/// indicator와 drop 실행이 같은 결론을 낸다.
 fn move_insertion_fits_after_delete(
     state: &State,
     position: Position,
@@ -324,7 +333,10 @@ fn move_insertion_fits_after_delete(
     let Some(target) = stable_target.resolve(&ctx).map(|sel| sel.head) else {
         return false;
     };
-    commands::resolve_slice_insertion(&view, target, slice).is_some()
+    matches!(
+        commands::fit_slice(tr.state(), Selection::collapsed(target), slice),
+        Ok(commands::FitOutcome::Plan(_))
+    )
 }
 
 fn representative_external_payload(payload: ExternalDndPayloadKind) -> DndDropPayload {
@@ -544,7 +556,7 @@ fn drop_slice_at(
     slice: Slice,
     provenance: commands::types::SliceProvenance,
 ) -> Result<(), EditorError> {
-    editor.transact(|tr| {
+    editor.transact_observable(|tr| {
         let inserted_selection =
             commands::insert_slice_at(tr, position, slice.clone(), provenance)?;
         if let Some(inserted_selection) = inserted_selection
@@ -590,7 +602,7 @@ fn drop_internal_selection_at(
 
     let stable_target =
         StableSelection::capture(&Selection::collapsed(position), &editor.state.view());
-    editor.transact(|tr| {
+    editor.transact_observable(|tr| {
         let savepoint = tr.savepoint();
         commands::set_selection(tr, source)?;
         commands::delete_selection(tr)?;

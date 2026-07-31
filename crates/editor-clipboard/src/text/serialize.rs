@@ -4,8 +4,20 @@ use editor_model::{Fragment, PlainNode, Schema};
 pub fn to_text(slice: &Slice) -> String {
     let mut out = String::new();
     let mut context = TextContext::default();
-    for fragment in &slice.content {
-        walk(fragment, &mut out, &mut context);
+    let mut stack: Vec<_> = slice.content.iter().rev().collect();
+    while let Some(fragment) = stack.pop() {
+        match &fragment.node {
+            PlainNode::Text(t) => out.push_str(&t.text),
+            PlainNode::HardBreak(_) => out.push('\n'),
+            PlainNode::Tab(_) => out.push('\t'),
+            PlainNode::Table(_) => walk_table(fragment, &mut out, &mut context),
+            _ => {
+                if is_textblock_node(&fragment.node) {
+                    separate_textblock(&mut out, &mut context);
+                }
+                stack.extend(fragment.children.iter().rev());
+            }
+        }
     }
     out
 }
@@ -13,23 +25,6 @@ pub fn to_text(slice: &Slice) -> String {
 #[derive(Default)]
 struct TextContext {
     seen_textblock: bool,
-}
-
-fn walk(fragment: &Fragment, out: &mut String, context: &mut TextContext) {
-    match &fragment.node {
-        PlainNode::Text(t) => out.push_str(&t.text),
-        PlainNode::HardBreak(_) => out.push('\n'),
-        PlainNode::Tab(_) => out.push('\t'),
-        PlainNode::Table(_) => walk_table(fragment, out, context),
-        _ => {
-            if is_textblock_node(&fragment.node) {
-                separate_textblock(out, context);
-            }
-            for child in &fragment.children {
-                walk(child, out, context);
-            }
-        }
-    }
 }
 
 fn is_textblock_node(n: &PlainNode) -> bool {
@@ -71,14 +66,12 @@ fn walk_table(table: &Fragment, out: &mut String, context: &mut TextContext) {
 }
 
 fn collect_cell_text(node: &Fragment, out: &mut String) {
-    match &node.node {
-        PlainNode::Text(t) => out.push_str(&t.text),
-        PlainNode::HardBreak(_) => out.push(' '),
-        PlainNode::Tab(_) => out.push(' '),
-        _ => {
-            for c in &node.children {
-                collect_cell_text(c, out);
-            }
+    let mut stack = vec![node];
+    while let Some(fragment) = stack.pop() {
+        match &fragment.node {
+            PlainNode::Text(t) => out.push_str(&t.text),
+            PlainNode::HardBreak(_) | PlainNode::Tab(_) => out.push(' '),
+            _ => stack.extend(fragment.children.iter().rev()),
         }
     }
 }

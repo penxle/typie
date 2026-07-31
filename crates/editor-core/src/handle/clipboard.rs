@@ -1,10 +1,7 @@
 use editor_clipboard::{PayloadSource, Slice};
 use editor_commands::{self as commands};
 use editor_common::HistoryTag;
-use editor_model::{Fragment, PlainNode};
-use editor_state::{
-    ResolvedPosition, ResolvedPositionFlatExt, Selection, StableSelection, enclosing_table_cell,
-};
+use editor_state::{ResolvedPosition, ResolvedPositionFlatExt, Selection, StableSelection};
 use editor_transaction::HistoryMeta;
 
 use crate::editor::Editor;
@@ -41,7 +38,15 @@ pub fn handle_clipboard_op(editor: &mut Editor, op: ClipboardOp) -> Result<(), E
             } else {
                 (None, None)
             };
-            editor.transact(|tr| {
+            let mut paste_applied = false;
+            editor.transact_observable(|tr| {
+                let savepoint = tr.savepoint();
+                let applied = commands::insert_slice(tr, slice.clone(), provenance)?;
+                if !applied {
+                    tr.rollback(savepoint);
+                    return Ok(());
+                }
+                paste_applied = true;
                 if let Some(plain_text) = plain_text.clone() {
                     tr.update_meta(|m| {
                         m.history = HistoryMeta::Tagged {
@@ -52,25 +57,11 @@ pub fn handle_clipboard_op(editor: &mut Editor, op: ClipboardOp) -> Result<(), E
                         };
                     });
                 }
-                let in_cell_context = is_cell_rect_selection(tr) || caret_in_table_cell(tr);
-                if in_cell_context && slice_has_table(&slice) {
-                    commands::paste_cells_into_cell_rect(tr, slice.clone())?;
-                    return Ok(());
-                }
-                if is_cell_rect_selection(tr) {
-                    commands::fill_cell_rect_with_slice(tr, slice.clone(), provenance)?;
-                    return Ok(());
-                }
-                commands::chain!(
-                    tr,
-                    commands::optional!(commands::materialize_gap_paragraph()),
-                    commands::optional!(commands::ensure_paragraph()),
-                    commands::optional!(commands::delete_selection()),
-                    |tr| commands::insert_slice(tr, slice.clone(), provenance),
-                )?;
                 Ok(())
             })?;
-            if let (Some(start), Some(pre), Some(plain_text)) = (start_flat, pre_block, plain_text)
+            if paste_applied
+                && let (Some(start), Some(pre), Some(plain_text)) =
+                    (start_flat, pre_block, plain_text)
                 && matches!(
                     editor.last_history_tag(),
                     Some(HistoryTag::PasteHtml { .. })
@@ -122,17 +113,21 @@ pub fn handle_clipboard_op(editor: &mut Editor, op: ClipboardOp) -> Result<(), E
                         })
                         .collect()
                 };
-                editor.transact(|tr| {
+                editor.transact_observable(|tr| {
+                    let savepoint = tr.savepoint();
                     tr.set_selection(Some(range))?;
-                    commands::chain!(
-                        tr,
-                        commands::optional!(commands::delete_selection()),
-                        |tr| commands::insert_slice(
+                    let applied = if plain_slice.is_empty() {
+                        commands::delete_selection(tr)?
+                    } else {
+                        commands::insert_slice(
                             tr,
                             plain_slice.clone(),
-                            commands::types::SliceProvenance::Plain
-                        ),
-                    )?;
+                            commands::types::SliceProvenance::Plain,
+                        )?
+                    };
+                    if !applied {
+                        tr.rollback(savepoint);
+                    }
                     Ok(())
                 })?;
                 let mut changed = false;
@@ -174,54 +169,26 @@ pub fn handle_clipboard_op(editor: &mut Editor, op: ClipboardOp) -> Result<(), E
                 return Ok(());
             }
 
-            if !editor.try_undo() {
-                return Ok(());
-            }
-            editor.transact(|tr| {
-                commands::chain!(
-                    tr,
-                    commands::optional!(commands::materialize_gap_paragraph()),
-                    commands::optional!(commands::ensure_paragraph()),
-                    commands::optional!(commands::delete_selection()),
-                    |tr| commands::insert_slice(
-                        tr,
-                        plain_slice.clone(),
-                        commands::types::SliceProvenance::Plain
-                    ),
-                )?;
-                Ok(())
-            })
+            repaste_structural_as_text(editor, plain_slice)
         }
     }
 }
 
-fn is_cell_rect_selection(tr: &editor_transaction::Transaction) -> bool {
-    let Some(sel) = tr.selection() else {
-        return false;
+fn repaste_structural_as_text(editor: &mut Editor, plain_slice: Slice) -> Result<(), EditorError> {
+    let Some(paste_entry) = editor.undo_history.last_entry().cloned() else {
+        return Ok(());
     };
-    let doc = tr.view();
-    sel.resolve(&doc).and_then(|rs| rs.as_cell_rect()).is_some()
-}
 
-fn caret_in_table_cell(tr: &editor_transaction::Transaction) -> bool {
-    let Some(sel) = tr.selection() else {
-        return false;
-    };
-    if !sel.is_collapsed() {
-        return false;
-    }
-    let doc = tr.view();
-    enclosing_table_cell(&doc, sel.head.node).is_some()
-}
-
-fn slice_has_table(slice: &Slice) -> bool {
-    fn walk(f: &Fragment) -> bool {
-        if matches!(f.node, PlainNode::Table(_)) {
-            return true;
+    editor.transact_observable(|tr| {
+        let savepoint = tr.savepoint();
+        tr.apply_undo_entry_inverse(&paste_entry)?;
+        if !plain_slice.is_empty()
+            && !commands::insert_slice(tr, plain_slice, commands::types::SliceProvenance::Plain)?
+        {
+            tr.rollback(savepoint);
         }
-        f.children.iter().any(walk)
-    }
-    slice.content.iter().any(walk)
+        Ok(())
+    })
 }
 
 #[cfg(test)]
@@ -230,7 +197,10 @@ mod tests {
     use crate::state_field::StateField;
     use editor_common::HistoryTag;
     use editor_macros::state;
-    use editor_model::ModifierType;
+    use editor_model::{
+        ChildView, Fragment, ModifierType, NodeType, PlainNode, PlainParagraphNode,
+        PlainTableCellNode, PlainTextNode,
+    };
     use editor_resource::Resource;
     use editor_state::{
         Position, ResolvedPositionFlatExt, Selection, assert_doc_eq, assert_state_eq,
@@ -243,6 +213,22 @@ mod tests {
         events.iter().any(|event| {
             matches!(event, EditorEvent::StateChanged { fields } if fields.contains(&field))
         })
+    }
+
+    fn text_and_page_break_signature(state: &editor_state::State) -> String {
+        state
+            .view()
+            .root()
+            .expect("root")
+            .descendants()
+            .filter_map(|child| match child {
+                ChildView::Leaf(leaf) => leaf
+                    .as_char()
+                    .map(|ch| ch.to_string())
+                    .or_else(|| (leaf.node_type() == NodeType::PageBreak).then(|| "|".to_string())),
+                ChildView::Block(_) => None,
+            })
+            .collect()
     }
 
     #[test]
@@ -277,6 +263,63 @@ mod tests {
     }
 
     #[test]
+    fn deeply_nested_proprietary_metadata_reaches_no_fit_without_stack_overflow() {
+        const CHILD_ENV: &str = "TYPIE_DEEP_SLICE_CLIPBOARD_CHILD";
+        if std::env::var_os(CHILD_ENV).is_some() {
+            std::thread::Builder::new()
+                .stack_size(256 * 1024)
+                .spawn(|| {
+                    let mut fragment =
+                        Fragment::leaf(PlainNode::Paragraph(PlainParagraphNode::default()))
+                            .with_children(vec![Fragment::leaf(PlainNode::Text(PlainTextNode {
+                                text: "deep".into(),
+                            }))]);
+                    for _ in 0..4096 {
+                        fragment =
+                            Fragment::leaf(PlainNode::TableCell(PlainTableCellNode::default()))
+                                .with_children(vec![fragment]);
+                    }
+                    drop(fragment.clone().into_subtree());
+                    let payload =
+                        Slice::new(vec![fragment], 0, 0).to_payload(&Resource::new_test());
+                    let (state, ..) = state! {
+                        doc { root {
+                            target: paragraph { text("unchanged") }
+                        } }
+                        selection: (target, 0)
+                    };
+                    let before = state.clone();
+                    let mut editor = Editor::new_test(state);
+                    editor.apply(Message::Clipboard {
+                        op: ClipboardOp::Paste {
+                            html: Some(payload.html),
+                            text: payload.text,
+                        },
+                    });
+                    assert_state_eq!(editor.state(), &before);
+                })
+                .expect("spawn bounded-stack clipboard worker")
+                .join()
+                .expect("deep metadata paste remains stack-safe");
+            return;
+        }
+
+        let status = std::process::Command::new(std::env::current_exe().expect("test executable"))
+            .args([
+                "--exact",
+                "handle::clipboard::tests::deeply_nested_proprietary_metadata_reaches_no_fit_without_stack_overflow",
+                "--nocapture",
+            ])
+            .env(CHILD_ENV, "1")
+            .status()
+            .expect("spawn isolated deep metadata test");
+        assert!(
+            status.success(),
+            "deep metadata clipboard path crashed in the isolated test process"
+        );
+    }
+
+    #[test]
     fn paste_text_replaces_node_selection() {
         let (s, ..) = state! {
             doc { r: root {
@@ -300,6 +343,369 @@ mod tests {
                 paragraph { text("c") }
             } }
             selection: (p1, 1)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn paste_plain_text_at_cell_caret_uses_linear_fitting() {
+        let (initial, ..) = state! {
+            doc { root {
+                table {
+                    table_row {
+                        table_cell { p: paragraph { text("ab") } }
+                    }
+                }
+                paragraph {}
+            } }
+            selection: (p, 1)
+        };
+        let mut editor = Editor::new_test(initial);
+
+        editor.apply(Message::Clipboard {
+            op: ClipboardOp::Paste {
+                html: None,
+                text: "X".into(),
+            },
+        });
+
+        let (expected, ..) = state! {
+            doc { root {
+                table {
+                    table_row {
+                        table_cell { p: paragraph { text("aXb") } }
+                    }
+                }
+                paragraph {}
+            } }
+            selection: (p, 2)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn paste_closed_block_across_distinct_lists_preserves_both_list_boundaries() {
+        let (source, ..) = state! {
+            doc { root: root {
+                paragraph { text("before") }
+                horizontal_rule
+                paragraph { text("after") }
+            } }
+            selection: (root, 1, >) -> (root, 2, <)
+        };
+        let payload = Slice::extract(&source)
+            .expect("horizontal-rule selection extracts")
+            .to_payload(&Resource::new_test());
+
+        let (target, left_list, left_item, left, right_list, right_item, right) = state! {
+            doc { root {
+                left_list: bullet_list {
+                    left_item: list_item { left: paragraph { text("ab") } }
+                }
+                right_list: ordered_list {
+                    right_item: list_item { right: paragraph { text("cd") } }
+                }
+                paragraph {}
+            } }
+            selection: (left, 1) -> (right, 1)
+        };
+        let before_paste = target.clone();
+        let mut editor = Editor::new_test(target);
+
+        editor.apply(Message::Clipboard {
+            op: ClipboardOp::Paste {
+                html: Some(payload.html),
+                text: payload.text,
+            },
+        });
+
+        let (expected, ..) = state! {
+            doc { root: root {
+                bullet_list {
+                    list_item { paragraph { text("a") } }
+                }
+                horizontal_rule
+                ordered_list {
+                    list_item { paragraph { text("d") } }
+                }
+                paragraph {}
+            } }
+            selection: (root, 1, >) -> (root, 2, <)
+        };
+        assert_state_eq!(editor.state(), &expected);
+
+        {
+            let view = editor.state().view();
+            assert_eq!(
+                view.node(left_list).unwrap().node_type(),
+                NodeType::BulletList
+            );
+            assert_eq!(
+                view.node(left_item).unwrap().node_type(),
+                NodeType::ListItem
+            );
+            assert_eq!(view.node(left).unwrap().inline_text(), "a");
+            assert_eq!(
+                view.node(right_list).unwrap().node_type(),
+                NodeType::OrderedList
+            );
+            assert_eq!(
+                view.node(right_item).unwrap().node_type(),
+                NodeType::ListItem
+            );
+            assert_eq!(view.node(right).unwrap().inline_text(), "d");
+        }
+        let cold =
+            editor_state::ProjectedState::from_graph(editor.state().projected.graph().clone())
+                .expect("cold rebuild projects");
+        assert_eq!(editor.state().projected.projected(), cold.projected());
+
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+        assert_state_eq!(editor.state(), &before_paste);
+        editor.apply(Message::History {
+            op: HistoryOp::Redo,
+        });
+        assert_state_eq!(editor.state(), &expected);
+        let view = editor.state().view();
+        for survivor in [left_list, left_item, left, right_list, right_item, right] {
+            assert!(
+                view.node(survivor).is_some(),
+                "replacement survivor {survivor:?} lost identity after redo"
+            );
+        }
+    }
+
+    #[test]
+    fn paste_closed_block_across_items_splits_the_shared_list() {
+        let (source, ..) = state! {
+            doc { root: root {
+                paragraph { text("before") }
+                horizontal_rule
+                paragraph { text("after") }
+            } }
+            selection: (root, 1, >) -> (root, 2, <)
+        };
+        let payload = Slice::extract(&source)
+            .expect("horizontal-rule selection extracts")
+            .to_payload(&Resource::new_test());
+
+        let (target, ..) = state! {
+            doc { root {
+                bullet_list {
+                    list_item { left: paragraph { text("ab") } }
+                    list_item { right: paragraph { text("cd") } }
+                }
+                paragraph {}
+            } }
+            selection: (left, 1) -> (right, 1)
+        };
+        let mut editor = Editor::new_test(target);
+
+        editor.apply(Message::Clipboard {
+            op: ClipboardOp::Paste {
+                html: Some(payload.html),
+                text: payload.text,
+            },
+        });
+
+        let (expected, ..) = state! {
+            doc { root: root {
+                bullet_list {
+                    list_item { paragraph { text("a") } }
+                }
+                horizontal_rule
+                bullet_list {
+                    list_item { paragraph { text("d") } }
+                }
+                paragraph {}
+            } }
+            selection: (root, 1, >) -> (root, 2, <)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn paste_closed_list_across_lists_merges_into_the_earlier_list_kind() {
+        let (source, ..) = state! {
+            doc { source_root: root {
+                bullet_list {
+                    list_item { paragraph { text("X") } }
+                }
+                paragraph {}
+            } }
+            selection: (source_root, 0, >) -> (source_root, 1, <)
+        };
+        let payload = Slice::extract(&source)
+            .expect("closed list selection extracts")
+            .to_payload(&Resource::new_test());
+
+        let (target, ..) = state! {
+            doc { root {
+                ordered_list {
+                    list_item { left: paragraph { text("ab") } }
+                }
+                bullet_list {
+                    list_item { right: paragraph { text("cd") } }
+                }
+                paragraph {}
+            } }
+            selection: (left, 1) -> (right, 1)
+        };
+        let before_paste = target.clone();
+        let mut editor = Editor::new_test(target);
+
+        editor.apply(Message::Clipboard {
+            op: ClipboardOp::Paste {
+                html: Some(payload.html),
+                text: payload.text,
+            },
+        });
+
+        let (expected, ..) = state! {
+            doc { root {
+                ordered_list {
+                    list_item { paragraph { text("a") } }
+                    list_item { paragraph { text("X") } }
+                    list_item { right_tail: paragraph { text("d") } }
+                }
+                paragraph {}
+            } }
+            selection: (right_tail, 0)
+        };
+        assert_state_eq!(editor.state(), &expected);
+
+        let cold =
+            editor_state::ProjectedState::from_graph(editor.state().projected.graph().clone())
+                .expect("cold rebuild projects");
+        assert_eq!(
+            editor.state().projected.projected(),
+            cold.projected(),
+            "warm/cold projection diverged after list replacement"
+        );
+
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+        assert_state_eq!(editor.state(), &before_paste);
+        editor.apply(Message::History {
+            op: HistoryOp::Redo,
+        });
+        assert_state_eq!(editor.state(), &expected);
+        let cold =
+            editor_state::ProjectedState::from_graph(editor.state().projected.graph().clone())
+                .expect("redo cold rebuild projects");
+        assert_eq!(editor.state().projected.projected(), cold.projected());
+    }
+
+    #[test]
+    fn paste_open_list_slice_round_trips_history_and_projection() {
+        let (source, ..) = state! {
+            doc { root {
+                bullet_list {
+                    list_item { first: paragraph { text("first") } }
+                    list_item { second: paragraph { text("second") } }
+                }
+                paragraph {}
+            } }
+            selection: (first, 2) -> (second, 3)
+        };
+        let payload = Slice::extract(&source)
+            .expect("open list selection extracts")
+            .to_payload(&Resource::new_test());
+
+        let (target, ..) = state! {
+            doc { root {
+                ordered_list {
+                    list_item { left: paragraph { text("AB") } }
+                    list_item { right: paragraph { text("CD") } }
+                }
+                paragraph {}
+            } }
+            selection: (left, 1) -> (right, 1)
+        };
+        let before_paste = target.clone();
+        let mut editor = Editor::new_test(target);
+
+        editor.apply(Message::Clipboard {
+            op: ClipboardOp::Paste {
+                html: Some(payload.html),
+                text: payload.text,
+            },
+        });
+
+        let (expected, ..) = state! {
+            doc { root {
+                ordered_list {
+                    list_item { paragraph { text("Arst") } }
+                    list_item { caret: paragraph { text("secD") } }
+                }
+                paragraph {}
+            } }
+            selection: (caret, 3)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        let cold =
+            editor_state::ProjectedState::from_graph(editor.state().projected.graph().clone())
+                .expect("cold rebuild projects");
+        assert_eq!(editor.state().projected.projected(), cold.projected());
+
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+        assert_state_eq!(editor.state(), &before_paste);
+        editor.apply(Message::History {
+            op: HistoryOp::Redo,
+        });
+        assert_state_eq!(editor.state(), &expected);
+        let cold =
+            editor_state::ProjectedState::from_graph(editor.state().projected.graph().clone())
+                .expect("redo cold rebuild projects");
+        assert_eq!(editor.state().projected.projected(), cold.projected());
+    }
+
+    #[test]
+    fn paste_inline_across_distinct_lists_uses_the_earlier_list_join() {
+        let (source, ..) = state! {
+            doc { root {
+                text: paragraph { text("X") }
+            } }
+            selection: (text, 0) -> (text, 1)
+        };
+        let payload = Slice::extract(&source)
+            .expect("inline selection extracts")
+            .to_payload(&Resource::new_test());
+
+        let (target, ..) = state! {
+            doc { root {
+                bullet_list {
+                    list_item { left: paragraph { text("ab") } }
+                }
+                ordered_list {
+                    list_item { right: paragraph { text("cd") } }
+                }
+                paragraph {}
+            } }
+            selection: (left, 1) -> (right, 1)
+        };
+        let mut editor = Editor::new_test(target);
+
+        editor.apply(Message::Clipboard {
+            op: ClipboardOp::Paste {
+                html: Some(payload.html),
+                text: payload.text,
+            },
+        });
+
+        let (expected, ..) = state! {
+            doc { root {
+                bullet_list {
+                    list_item { caret: paragraph { text("aXd") } }
+                }
+                paragraph {}
+            } }
+            selection: (caret, 2)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -875,6 +1281,98 @@ mod tests {
     }
 
     #[test]
+    fn paste_mixed_table_slice_at_cell_caret_is_a_whole_no_fit() {
+        let (source, _source_root, ..) = state! {
+            doc { source_root: root {
+                paragraph { text("before") }
+                table {
+                    table_row {
+                        table_cell { paragraph { text("grid") } }
+                    }
+                }
+                paragraph { text("after") }
+            } }
+            selection: (source_root, 0, >) -> (source_root, 3, <)
+        };
+        let payload = Slice::extract(&source)
+            .expect("closed mixed slice")
+            .to_payload(&Resource::new_test());
+
+        let (target, ..) = state! {
+            doc { root {
+                table {
+                    table_row {
+                        table_cell { p: paragraph { text("target") } }
+                    }
+                }
+                paragraph {}
+            } }
+            selection: (p, 3)
+            pending_modifiers: [bold]
+        };
+        let mut editor = Editor::new_test(target.clone());
+        let previous_tag = HistoryTag::PasteHtml {
+            plain_text: "previous".into(),
+            start: None,
+        };
+        editor.undo_history.set_last_tag(Some(previous_tag.clone()));
+
+        editor.apply(Message::Clipboard {
+            op: ClipboardOp::Paste {
+                html: Some(payload.html),
+                text: payload.text,
+            },
+        });
+
+        assert_state_eq!(editor.state(), &target);
+        assert_eq!(editor.last_history_tag(), Some(previous_tag));
+    }
+
+    #[test]
+    fn paste_text_and_page_break_into_list_paragraph_hoists_without_loss() {
+        let (source, ..) = state! {
+            doc { root {
+                source: paragraph { text("X") page_break }
+            } }
+            selection: (source, 0) -> (source, 2)
+        };
+        let payload = Slice::extract(&source)
+            .expect("open inline slice with a page break")
+            .to_payload(&Resource::new_test());
+
+        let (target, ..) = state! {
+            doc { root {
+                bullet_list {
+                    list_item { p: paragraph { text("target") } }
+                }
+                paragraph {}
+            } }
+            selection: (p, 0)
+            pending_modifiers: [bold]
+        };
+        let mut editor = Editor::new_test(target.clone());
+        let previous_tag = HistoryTag::PasteHtml {
+            plain_text: "previous".into(),
+            start: None,
+        };
+        editor.undo_history.set_last_tag(Some(previous_tag.clone()));
+
+        editor.apply(Message::Clipboard {
+            op: ClipboardOp::Paste {
+                html: Some(payload.html),
+                text: payload.text,
+            },
+        });
+
+        assert_eq!(text_and_page_break_signature(editor.state()), "X|target");
+        assert!(matches!(
+            editor.last_history_tag(),
+            Some(HistoryTag::PasteHtml { .. })
+        ));
+        assert_ne!(editor.last_history_tag(), Some(previous_tag));
+    }
+
+    #[test]
     fn paste_plain_text_into_cell_rect_fills_every_cell() {
         let (s, c00, c01, c10, c11) = state! {
             doc { root { table {
@@ -1043,7 +1541,7 @@ mod tests {
     }
 
     #[test]
-    fn paste_page_break_only_into_nested_selection_preserves_selection() {
+    fn paste_page_break_only_into_nested_selection_replaces_and_hoists() {
         let (source, ..) = state! {
             doc { root { p1: paragraph { text("a") page_break } } }
             selection: (p1, 1) -> (p1, 2)
@@ -1067,7 +1565,17 @@ mod tests {
             },
         });
 
+        assert_eq!(text_and_page_break_signature(editor.state()), "N|ed");
+        let after_paste = editor.state().clone();
+
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
         assert_state_eq!(editor.state(), &target);
+        editor.apply(Message::History {
+            op: HistoryOp::Redo,
+        });
+        assert_state_eq!(editor.state(), &after_paste);
     }
 
     #[test]
@@ -1207,6 +1715,194 @@ mod tests {
             selection: (p3, 6)
         };
         editor_state::assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn repaste_empty_plain_text_removes_inline_html_and_is_undoable() {
+        let (initial, ..) = state! {
+            doc { root { p: paragraph { text("ab") } } }
+            selection: (p, 1)
+        };
+        let mut editor = Editor::new_test(initial.clone());
+        editor.apply(Message::Clipboard {
+            op: ClipboardOp::Paste {
+                html: Some("<br>".into()),
+                text: String::new(),
+            },
+        });
+        let html_state = editor.state().clone();
+        assert!(matches!(
+            editor.last_history_tag(),
+            Some(HistoryTag::PasteHtml { .. })
+        ));
+
+        editor.apply(Message::Clipboard {
+            op: ClipboardOp::RepasteAsText,
+        });
+        assert_state_eq!(editor.state(), &initial);
+
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+        assert_state_eq!(editor.state(), &html_state);
+    }
+
+    #[test]
+    fn repaste_empty_plain_text_removes_structural_html_as_one_undo_unit() {
+        let (initial, ..) = state! {
+            doc { root { p: paragraph { text("ab") } } }
+            selection: (p, 1)
+        };
+        let mut editor = Editor::new_test(initial.clone());
+        editor.apply(Message::Clipboard {
+            op: ClipboardOp::Paste {
+                html: Some("<hr>".into()),
+                text: String::new(),
+            },
+        });
+        let html_state = editor.state().clone();
+        assert!(matches!(
+            editor.last_history_tag(),
+            Some(HistoryTag::PasteHtml { .. })
+        ));
+
+        editor.apply(Message::Clipboard {
+            op: ClipboardOp::RepasteAsText,
+        });
+        assert_state_eq!(editor.state(), &initial);
+
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+        assert_state_eq!(editor.state(), &html_state);
+        editor.apply(Message::History {
+            op: HistoryOp::Redo,
+        });
+        assert_state_eq!(editor.state(), &initial);
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+        assert_state_eq!(editor.state(), &html_state);
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+        assert_state_eq!(editor.state(), &initial);
+    }
+
+    #[test]
+    fn repaste_structural_html_with_text_is_one_reversible_replacement() {
+        let (initial, ..) = state! {
+            doc { root { p: paragraph { text("ab") } } }
+            selection: (p, 1)
+        };
+        let mut editor = Editor::new_test(initial.clone());
+        editor.apply(Message::Clipboard {
+            op: ClipboardOp::Paste {
+                html: Some("<hr>".into()),
+                text: "plain".into(),
+            },
+        });
+        let html_state = editor.state().clone();
+
+        editor.apply(Message::Clipboard {
+            op: ClipboardOp::RepasteAsText,
+        });
+        let plain_state = editor.state().clone();
+        assert_eq!(text_and_page_break_signature(&plain_state), "aplainb");
+        assert_eq!(editor.last_history_tag(), None);
+
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+        assert_state_eq!(editor.state(), &html_state);
+        assert_eq!(editor.last_history_tag(), None);
+        editor.apply(Message::History {
+            op: HistoryOp::Redo,
+        });
+        assert_state_eq!(editor.state(), &plain_state);
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+        assert_state_eq!(editor.state(), &html_state);
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+        assert_state_eq!(editor.state(), &initial);
+    }
+
+    #[test]
+    fn structural_paste_and_repaste_in_one_request_record_two_history_entries() {
+        let (initial, ..) = state! {
+            doc { root { p: paragraph { text("ab") } } }
+            selection: (p, 1)
+        };
+        let mut editor = Editor::new_test(initial.clone());
+        let request = editor
+            .enqueue_request(vec![
+                Message::Clipboard {
+                    op: ClipboardOp::Paste {
+                        html: Some("<hr>".into()),
+                        text: "plain".into(),
+                    },
+                },
+                Message::Clipboard {
+                    op: ClipboardOp::RepasteAsText,
+                },
+            ])
+            .unwrap();
+        editor.tick_through(request).unwrap();
+
+        assert_eq!(text_and_page_break_signature(editor.state()), "aplainb");
+        assert_eq!(editor.history_undos_len(), 2);
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+        let (html_expected, ..) = state! {
+            doc { root {
+                paragraph { text("a") }
+                horizontal_rule
+                paragraph { text("b") }
+            } }
+            selection: none
+        };
+        assert_doc_eq!(editor.state(), &html_expected);
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+        assert_state_eq!(editor.state(), &initial);
+    }
+
+    #[test]
+    fn structural_repaste_no_fit_preserves_state_history_and_pending_ops() {
+        let (initial, ..) = state! {
+            doc { root { p: paragraph { text("ab") } } }
+            selection: (p, 1)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::Clipboard {
+            op: ClipboardOp::Paste {
+                html: Some("<hr>".into()),
+                text: "plain".into(),
+            },
+        });
+        let html_state = editor.state().clone();
+        let history_undos = editor.history_undos_len();
+        let history_redos = editor.history_redos_len();
+        let history_tag = editor.last_history_tag();
+        let pending_ops = editor.pending_ops.len();
+        let malformed = Slice {
+            content: vec![Fragment::leaf(PlainNode::Unknown)],
+            open_start: 0,
+            open_end: 0,
+        };
+
+        repaste_structural_as_text(&mut editor, malformed).unwrap();
+
+        assert_state_eq!(editor.state(), &html_state);
+        assert_eq!(editor.history_undos_len(), history_undos);
+        assert_eq!(editor.history_redos_len(), history_redos);
+        assert_eq!(editor.last_history_tag(), history_tag);
+        assert_eq!(editor.pending_ops.len(), pending_ops);
     }
 
     #[test]

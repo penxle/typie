@@ -13,6 +13,7 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use editor_resource::Resource;
 use scraper::{Html, Selector};
+use serde::Deserialize;
 use std::sync::OnceLock;
 
 fn body_selector() -> &'static Selector {
@@ -49,10 +50,24 @@ pub fn from_html(html: &str, resource: &Resource) -> Slice {
 
 fn extract_meta_slice(doc: &Html) -> Option<Slice> {
     let meta = doc.select(meta_data_slice_selector()).next()?;
+    if meta.value().attr("data-version") != Some("1") {
+        return None;
+    }
     let b64 = meta.value().attr("data-slice-v2")?;
     let bytes = STANDARD.decode(b64.as_bytes()).ok()?;
     let s = std::str::from_utf8(&bytes).ok()?;
-    serde_json::from_str(s).ok()
+    let mut json = serde_json::Deserializer::from_str(s);
+    json.disable_recursion_limit();
+    let slice = Slice::deserialize(serde_stacker::Deserializer::new(&mut json)).ok()?;
+    if json.end().is_err() {
+        drop(slice);
+        return None;
+    }
+    if !slice.is_empty() && slice.has_valid_structure() {
+        return Some(slice);
+    }
+    drop(slice);
+    None
 }
 
 fn fallback_body_parse(doc: &Html, resource: &Resource) -> Slice {
@@ -79,7 +94,8 @@ mod tests {
     use editor_crdt::Dot;
     use editor_macros::state;
     use editor_model::{
-        AtomLeaf, Fragment, Modifier, NodeType, PlainNode, PlainParagraphNode, PlainTextNode,
+        AtomLeaf, Fragment, Modifier, NodeType, PlainBlockquoteNode, PlainNode, PlainParagraphNode,
+        PlainTextNode,
     };
     use editor_resource::{
         FontFamily, FontFamilySource, FontWeight, Resource, ResourceSource, ThemeVariant,
@@ -101,6 +117,48 @@ mod tests {
         let resource = Resource::new_test();
         let parsed = Slice::from_html(&html, &resource);
         assert_eq!(parsed, original);
+    }
+
+    #[test]
+    fn deeply_nested_slice_metadata_and_fallback_formats_are_stack_safe() {
+        const DEPTH: usize = 256;
+        std::thread::Builder::new()
+            .stack_size(64 * 1024)
+            .spawn(|| {
+                let mut fragment = Fragment::leaf(PlainNode::Text(PlainTextNode {
+                    text: "deep".into(),
+                }));
+                fragment = Fragment::leaf(PlainNode::Paragraph(PlainParagraphNode::default()))
+                    .with_children(vec![fragment]);
+                for _ in 0..DEPTH {
+                    fragment =
+                        Fragment::leaf(PlainNode::Blockquote(PlainBlockquoteNode::default()))
+                            .with_children(vec![fragment]);
+                }
+                let slice = Slice::new(vec![fragment], 0, 0);
+                let resource = Resource::new_test();
+
+                let html = slice.to_html(&resource);
+                assert_eq!(html.matches("<blockquote ").count(), DEPTH);
+                assert_eq!(slice.to_text(), "deep");
+
+                let parsed = Slice::from_html(&html, &resource);
+                let mut node_count = 0;
+                let mut stack: Vec<_> = parsed.content.iter().collect();
+                while let Some(fragment) = stack.pop() {
+                    node_count += 1;
+                    stack.extend(fragment.children.iter());
+                }
+                assert_eq!(node_count, DEPTH + 2);
+                assert_eq!(parsed.open_start, 0);
+                assert_eq!(parsed.open_end, 0);
+
+                drop(parsed);
+                drop(slice);
+            })
+            .expect("spawn deep Slice test")
+            .join()
+            .expect("deep Slice round trip");
     }
 
     #[test]
@@ -272,6 +330,49 @@ mod tests {
         let slice = Slice::from_html(html, &Resource::new_test());
         assert_eq!(slice.content.len(), 1);
         assert!(matches!(slice.content[0].node, PlainNode::Paragraph(_)));
+    }
+
+    #[test]
+    fn invalid_version_or_open_depth_metadata_falls_back_to_body() {
+        let metadata_slice = Slice {
+            content: vec![
+                Fragment::leaf(PlainNode::Paragraph(PlainParagraphNode::default())).with_children(
+                    vec![Fragment::leaf(PlainNode::Text(PlainTextNode {
+                        text: "metadata".into(),
+                    }))],
+                ),
+            ],
+            open_start: u32::MAX,
+            open_end: u32::MAX,
+        };
+        let encoded = STANDARD.encode(serde_json::to_vec(&metadata_slice).unwrap());
+
+        for version in ["999", "1"] {
+            let html = format!(
+                r#"<meta data-slice-v2="{encoded}" data-version="{version}"><div data-root><p>body</p></div>"#
+            );
+            let slice = Slice::from_html(&html, &Resource::new_test());
+            assert_eq!(slice.to_text(), "body");
+            assert_eq!((slice.open_start, slice.open_end), (0, 0));
+        }
+    }
+
+    #[test]
+    fn structurally_invalid_metadata_falls_back_to_body() {
+        let metadata_slice = Slice {
+            content: vec![Fragment::leaf(PlainNode::Unknown)],
+            open_start: 0,
+            open_end: 0,
+        };
+        let encoded = STANDARD.encode(serde_json::to_vec(&metadata_slice).unwrap());
+        let html = format!(
+            r#"<meta data-slice-v2="{encoded}" data-version="1"><div data-root><p>body</p></div>"#
+        );
+
+        let slice = Slice::from_html(&html, &Resource::new_test());
+
+        assert_eq!(slice.to_text(), "body");
+        assert_eq!((slice.open_start, slice.open_end), (0, 0));
     }
 
     #[test]

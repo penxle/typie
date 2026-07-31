@@ -35,6 +35,7 @@ scraper = { workspace = true }
 selectors = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+serde_stacker = { workspace = true }
 tsify = { workspace = true, optional = true }
 uniffi = { workspace = true, optional = true }
 wasm-bindgen = { workspace = true, optional = true }

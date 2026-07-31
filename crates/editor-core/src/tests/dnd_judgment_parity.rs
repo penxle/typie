@@ -229,7 +229,7 @@ proptest::proptest! {
 
 // Pins the input that `assert_drop_parity`'s 4096-case sweep once surfaced as a
 // `judge_apply_drop` under-prediction (fixture 3, InternalSelection move,
-// pos_off=13/src_a=12/src_b=3): `resolve_slice_insertion` against the raw
+// pos_off=13/src_a=12/src_b=3): `fit_slice` against the raw
 // pre-delete position gets `NoFit`, yet the real drop execution changes state
 // because the move's delete-then-remap (`drop_internal_selection_at`) re-anchors
 // the drop through a `StableSelection` captured before the delete and resolved
@@ -295,42 +295,19 @@ fn move_bullet_list_child_range_drop_judge_follows_delete_then_remap() {
     );
 }
 
-// Pins the seed-51ac09 input (fixture 1, InternalSelection move,
-// pos_off=16/src_a=25/src_b=26) that surfaced the "plan-then-no-op" class. The
-// drop position (flat 16, inside the fold) lies outside the source (flat 25..26,
-// the document tail) and off its boundary, so neither `position_inside_selection`
-// nor the move boundary no-op filters it — production-reachable. The judge routes
-// this move through `move_insertion_fits_after_delete`, which deletes the source
-// and re-anchors to the SAME target the execution reaches (Dot{1,17}@6). The
-// extracted slice there is a single EMPTY paragraph; at the textblock's end that
-// splice is structurally valid (`can_splice_textblock` = true) but emits zero ops
-// (the block is consumed by the start-edge join and contributes no inline), so the
-// execution's `insert_slice_at` returns `Ok(None)` — a clean no-op. Previously
-// `resolve_slice_insertion` still reported `Some(SpliceBlocks)` there, violating
-// its own contract ("Some(plan) ⇒ observable change") and over-predicting. The
-// contract is now upheld at the source: `resolve_slice_insertion_outcome`'s
-// SpliceBlocks branch is guarded by `splice_emits_change` (an exact mirror of
-// `insert_blocks_in_textblock`'s Ok(Some) condition), so resolve returns NoFit and
-// the move simulation reports `false`. judge and execution now agree exactly (both
-// no-op); the fix benefits every `resolve_slice_insertion` consumer, not just DnD.
+// Empty external HTML exercises the same no-observable-plan contract without
+// relying on a non-canonical affinity-only range. Both the drop indicator and
+// execution must use the shared Fitter and leave state untouched.
 #[test]
-fn move_empty_splice_judged_as_noop_matching_execution() {
+fn empty_html_drop_is_judged_as_noop_matching_execution() {
     let state = fixtures().swap_remove(1);
     let mut editor = Editor::new_test(state);
-    let source = source_range(&mut editor, 25, 26).expect("document-tail source");
     let position = position_at_flat(&mut editor, 16).expect("position inside the fold");
-    editor.apply(Message::Selection {
-        op: SelectionOp::SetFlat { start: 25, end: 26 },
-    });
     let modifiers = InputModifiers::default();
-
-    {
-        let view = editor.state().view();
-        assert!(
-            !position_inside_selection(&view, position, &source),
-            "the drop position lies outside the moved selection; production does not filter it"
-        );
-    }
+    let payload = DndDropPayload::Text {
+        text: String::new(),
+        html: Some(String::new()),
+    };
 
     let judged = {
         let resource = editor.resource().clone();
@@ -339,32 +316,26 @@ fn move_empty_splice_judged_as_noop_matching_execution() {
             editor.state(),
             &resource,
             position,
-            &DndDropPayload::InternalSelection,
+            &payload,
             modifiers,
-            Some(&source),
+            None,
         )
     };
     assert!(
         !judged,
-        "resolve now returns NoFit for the empty splice, so the move simulation predicts the no-op"
+        "the shared Fitter must not advertise an empty drop"
     );
 
     let (run_result, run_changed) = {
         let mut scratch = Editor::new_test(editor.state().clone());
         let before = crate::test_utils::EditorSnapshot::capture(&scratch);
-        let result = apply_drop_for_test(
-            &mut scratch,
-            position,
-            DndDropPayload::InternalSelection,
-            modifiers,
-            Some(source),
-        );
+        let result = apply_drop_for_test(&mut scratch, position, payload, modifiers, None);
         let after = crate::test_utils::EditorSnapshot::capture(&scratch);
         (result, before != after)
     };
     assert!(
         matches!(run_result, Ok(())) && !run_changed,
-        "the move's actual insert_slice_at at the same target returns Ok(None), rolling back to a clean no-op: {run_result:?}"
+        "empty drop execution must remain a clean no-op: {run_result:?}"
     );
 }
 
@@ -504,7 +475,14 @@ fn copy_drop_at_list_item_source_boundary_succeeds_observably() {
     let state = fixtures().swap_remove(3);
     let mut editor = Editor::new_test(state);
     let source = source_range(&mut editor, 2, 20).expect("boundary-touching source");
-    let position = position_at_flat(&mut editor, 2).expect("position at the source from-boundary");
+    let position = {
+        let view = editor.state().view();
+        source
+            .resolve(&view)
+            .expect("source resolves")
+            .from()
+            .position()
+    };
     let modifiers = InputModifiers {
         alt: true,
         ..InputModifiers::default()
@@ -555,10 +533,79 @@ fn copy_drop_at_list_item_source_boundary_succeeds_observably() {
     );
 }
 
+// Copying the structural tail from the end of a list into the start of another
+// item inserts an open list wrapper followed by a paragraph. The fitted final
+// sequence also requires a leading paragraph in the destination ListItem. That
+// completion must be authored by the plan before the source blocks, rather than
+// appearing later as a projection repair scaffold.
+#[test]
+fn copy_open_list_tail_authors_required_completion_before_execution() {
+    let (state, _root, p1, _p2) = state! {
+        doc { root: root {
+            bullet_list {
+                list_item { p1: paragraph { text("alpha") } }
+                list_item { p2: paragraph { text("beta") } }
+            }
+            paragraph {}
+        } }
+        selection: (p2, 4, >) -> (root, 2, <)
+    };
+    let source = state.selection.expect("structural list-tail source");
+    let mut editor = Editor::new_test(state);
+    let position = Position::new(p1, 0);
+    let modifiers = InputModifiers {
+        alt: true,
+        ..InputModifiers::default()
+    };
+
+    let judged = {
+        let resource = editor.resource().clone();
+        let resource = resource.lock().unwrap();
+        judge_apply_drop(
+            editor.state(),
+            &resource,
+            position,
+            &DndDropPayload::InternalSelection,
+            modifiers,
+            Some(&source),
+        )
+    };
+    assert!(judged, "the structural Slice has an observable fit");
+
+    assert_drop_parity(
+        &mut editor,
+        position,
+        &DndDropPayload::InternalSelection,
+        modifiers,
+        Some(source),
+    );
+
+    apply_drop_for_test(
+        &mut editor,
+        position,
+        DndDropPayload::InternalSelection,
+        modifiers,
+        Some(source),
+    )
+    .expect("fitted copy executes");
+    let view = editor.state().view();
+    let item = view
+        .node(p1)
+        .and_then(|paragraph| paragraph.parent())
+        .expect("destination paragraph stays in its list item");
+    assert!(
+        item.children().all(|child| match child {
+            editor_model::ChildView::Block(block) => block.id().as_op_dot().is_some(),
+            editor_model::ChildView::Leaf(leaf) => leaf.dot().as_op_dot().is_some(),
+        }),
+        "the accepted plan must author required completion instead of relying on projection scaffolds"
+    );
+}
+
 // Copying a fold-spanning selection into the gap past the fold's fixed slots
 // (title, content). A fixed-arity container can never absorb an extra child —
 // the fragments would stay projection-suppressed misfits — so
-// `resolve_slice_insertion` refuses (NoFit) and the execution, consuming the
+// `fit_slice` refuses (NoFit) and the execution, consuming the
 // same resolve, is a clean no-op: judgment and execution agree at `false`.
 // (This used to over-predict and then die on IndexOutOfBounds once mid-batch
 // normalization suppressed the first inserted child.)
