@@ -79,6 +79,24 @@ fn build_node_rules() -> Vec<NodeParseRule> {
         NodeParseRule::simple("p", |_| {
             Some(PlainNode::Paragraph(PlainParagraphNode::default()))
         }),
+        NodeParseRule::simple("h1", |_| {
+            Some(PlainNode::Paragraph(PlainParagraphNode::default()))
+        }),
+        NodeParseRule::simple("h2", |_| {
+            Some(PlainNode::Paragraph(PlainParagraphNode::default()))
+        }),
+        NodeParseRule::simple("h3", |_| {
+            Some(PlainNode::Paragraph(PlainParagraphNode::default()))
+        }),
+        NodeParseRule::simple("h4", |_| {
+            Some(PlainNode::Paragraph(PlainParagraphNode::default()))
+        }),
+        NodeParseRule::simple("h5", |_| {
+            Some(PlainNode::Paragraph(PlainParagraphNode::default()))
+        }),
+        NodeParseRule::simple("h6", |_| {
+            Some(PlainNode::Paragraph(PlainParagraphNode::default()))
+        }),
         NodeParseRule::simple("blockquote", |_| {
             Some(PlainNode::Blockquote(PlainBlockquoteNode::default()))
         }),

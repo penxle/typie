@@ -200,6 +200,23 @@ mod tests {
     }
 
     #[test]
+    fn from_html_all_heading_levels_become_paragraphs() {
+        let slice = Slice::from_html(
+            "<h1>1</h1><h2>2</h2><h3>3</h3><h4>4</h4><h5>5</h5><h6>6</h6>",
+            &Resource::new_test(),
+        );
+
+        assert_eq!(slice.content.len(), 6);
+        assert!(
+            slice
+                .content
+                .iter()
+                .all(|fragment| fragment.node.as_type() == NodeType::Paragraph)
+        );
+        assert_eq!(slice.to_text(), "1\n2\n3\n4\n5\n6");
+    }
+
+    #[test]
     fn from_html_ignores_apple_interchange_newline_break() {
         let html = r#"<p>Hello</p><br class="Apple-interchange-newline">"#;
         let slice = Slice::from_html(html, &Resource::new_test());
