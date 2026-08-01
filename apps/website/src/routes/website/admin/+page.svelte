@@ -1,30 +1,7 @@
 <script lang="ts">
-  import { css } from '@typie/styled-system/css';
-  import { center, flex } from '@typie/styled-system/patterns';
-  import { hydrateQuery } from '$lib/graphql';
-
-  let { data } = $props();
-
-  const query = $derived(hydrateQuery(() => data.query));
+  import { AdminEmpty, AdminPageHeader } from '$lib/components/admin';
 </script>
 
-<div class={center({ height: 'full', backgroundColor: 'gray.900' })}>
-  <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '24px' })}>
-    <div
-      class={css({
-        borderWidth: '2px',
-        borderStyle: 'solid',
-        borderColor: 'amber.500',
-        padding: '24px',
-      })}
-    >
-      <h1 class={css({ fontSize: '18px', color: 'amber.500', fontWeight: 'normal', textAlign: 'center' })}>TYPIE ADMIN SYSTEM</h1>
-    </div>
-    <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '12px' })}>
-      <p class={css({ fontFamily: 'mono', fontSize: '13px', color: 'amber.500' })}>
-        WELCOME, {query.data.me.name.toUpperCase()}
-      </p>
-      <p class={css({ fontFamily: 'mono', fontSize: '11px', color: 'amber.500' })}>SYSTEM READY_</p>
-    </div>
-  </div>
-</div>
+<AdminPageHeader title="홈" />
+
+<AdminEmpty text="추후 지표 대시보드가 표시될 예정입니다" />

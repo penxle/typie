@@ -2,9 +2,9 @@
   import { createFragment, createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
+  import { Button, Icon, Modal } from '@typie/ui/components';
   import AlertTriangleIcon from '~icons/lucide/alert-triangle';
   import ArrowRightIcon from '~icons/lucide/arrow-right';
-  import { AdminIcon, AdminModal } from '$lib/components/admin';
   import { graphql } from '$mearie';
   import type { AdminImpersonateBanner_query$key } from '$mearie';
 
@@ -53,92 +53,58 @@
 {#if query.data.impersonation}
   <div
     class={css({
-      backgroundColor: 'amber.500',
-      fontFamily: 'mono',
-      fontSize: '12px',
-      letterSpacing: '0.02em',
+      backgroundColor: 'accent.warning.subtle',
+      borderBottomWidth: '1px',
+      borderColor: 'accent.warning.default/30',
     })}
   >
-    <div
-      class={flex({
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingX: '20px',
-        paddingY: '8px',
-      })}
-    >
+    <div class={flex({ alignItems: 'center', justifyContent: 'space-between', paddingX: '20px', paddingY: '10px' })}>
       <div class={flex({ alignItems: 'center', gap: '16px' })}>
         <div class={flex({ alignItems: 'center', gap: '8px' })}>
-          <AdminIcon style={css.raw({ color: 'gray.900' })} icon={AlertTriangleIcon} size={16} />
-          <span class={css({ fontWeight: 'bold', color: 'gray.900' })}>IMPERSONATING</span>
+          <Icon style={css.raw({ color: 'accent.warning.default' })} icon={AlertTriangleIcon} size={16} />
+          <span class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'accent.warning.default' })}>대리 로그인 중</span>
         </div>
 
         <div class={flex({ alignItems: 'center', gap: '12px' })}>
           <div class={flex({ alignItems: 'center', gap: '6px' })}>
-            <span class={css({ fontWeight: 'bold', color: 'gray.900' })}>
+            <span class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'accent.warning.default' })}>
               {query.data.impersonation.admin.name}
             </span>
-            <span class={css({ color: 'gray.700', fontSize: '11px' })}>
+            <span class={css({ fontSize: '12px', color: 'accent.warning.default/70' })}>
               ({query.data.impersonation.admin.email})
             </span>
           </div>
 
-          <AdminIcon style={css.raw({ color: 'gray.700' })} icon={ArrowRightIcon} size={16} />
+          <Icon style={css.raw({ color: 'accent.warning.default/70' })} icon={ArrowRightIcon} size={14} />
 
           <div class={flex({ alignItems: 'center', gap: '6px' })}>
-            <span class={css({ fontWeight: 'bold', color: 'gray.900' })}>
+            <span class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'accent.warning.default' })}>
               {query.data.impersonation.user.name}
             </span>
-            <span class={css({ color: 'gray.700', fontSize: '11px' })}>
+            <span class={css({ fontSize: '12px', color: 'accent.warning.default/70' })}>
               ({query.data.impersonation.user.email})
             </span>
           </div>
         </div>
       </div>
 
-      <button
-        class={css({
-          paddingX: '18px',
-          paddingY: '6px',
-          fontSize: '11px',
-          fontWeight: 'medium',
-          color: 'amber.500',
-          backgroundColor: 'gray.900',
-          borderWidth: '1px',
-          borderColor: 'gray.900',
-          cursor: 'pointer',
-          transition: 'common',
-          _hover: {
-            backgroundColor: 'amber.500',
-            color: 'gray.900',
-            borderColor: 'gray.900',
-          },
-        })}
-        onclick={() => (confirmModalOpen = true)}
-        type="button"
-      >
-        STOP IMPERSONATION
-      </button>
+      <Button onclick={() => (confirmModalOpen = true)} size="sm" variant="danger">중단</Button>
     </div>
   </div>
 
-  <AdminModal
-    actions={{
-      cancel: {},
-      confirm: {
-        label: 'CONFIRM STOP',
-        onclick: handleStop,
-        variant: 'danger',
-      },
-    }}
-    title="CONFIRM ACTION"
-    bind:open={confirmModalOpen}
-  >
-    <div class={css({ marginBottom: '16px' })}>
-      <p class={css({ marginBottom: '8px' })}>ARE YOU SURE YOU WANT TO STOP IMPERSONATING?</p>
-      <p class={css({ color: 'amber.400' })}>
-        CURRENT USER: {query.data.impersonation?.user.name.toUpperCase()} ({query.data.impersonation?.user.email})
-      </p>
+  <Modal style={css.raw({ padding: '24px', maxWidth: '400px' })} bind:open={confirmModalOpen}>
+    <div class={flex({ flexDirection: 'column', gap: '24px' })}>
+      <div class={flex({ flexDirection: 'column', gap: '8px' })}>
+        <div class={css({ fontSize: '15px', fontWeight: 'bold', color: 'text.default' })}>대리 로그인을 중단할까요?</div>
+        <div class={css({ fontSize: '13px', color: 'text.faint', wordBreak: 'keep-all' })}>
+          현재 대상: {query.data.impersonation.user.name} ({query.data.impersonation.user.email})
+        </div>
+      </div>
+
+      <div class={flex({ justifyContent: 'flex-end', gap: '10px' })}>
+        <Button onclick={() => (confirmModalOpen = false)} size="sm" type="button" variant="secondary">취소</Button>
+        <Button onclick={handleStop} size="sm" type="button" variant="danger">중단</Button>
+      </div>
     </div>
-  </AdminModal>
+  </Modal>
 {/if}

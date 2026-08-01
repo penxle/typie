@@ -54,4 +54,7 @@ export const shadows = defineTokens.shadows({
   buttonSubtle: {
     value: '0 1px 2px {colors.shadow.default/5}',
   },
+  adminCard: {
+    value: ['0 2px 6px -1px {colors.shadow.default/7}', '0 1px 1px {colors.shadow.default/4}'],
+  },
 });

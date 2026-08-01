@@ -4,8 +4,8 @@ input AddNoteEntityInput {
   noteId: ID!
 }
 
-type AdminDocumentsResult {
-  documents: [Document!]!
+type AdminEntitiesResult {
+  entities: [Entity!]!
   totalCount: Int!
 }
 
@@ -18,9 +18,21 @@ input AdminImpersonateInput {
   userId: String!
 }
 
+type AdminInvoicesResult {
+  invoices: [PaymentInvoice!]!
+  totalCount: Int!
+}
+
 input AdminRefundPaymentInput {
   invoiceId: String!
   reason: String
+}
+
+union AdminSearchResult = Entity | PaymentInvoice | Site | Subscription_ | User
+
+type AdminSubscriptionsResult {
+  subscriptions: [Subscription_!]!
+  totalCount: Int!
 }
 
 type AdminUsersResult {
@@ -515,6 +527,7 @@ type Entity implements IEntity {
   availability: EntityAvailability!
   children: [Entity!]!
   container: EntityContainer!
+  createdAt: DateTime!
   deletedAt: DateTime
   deletedChildren: [Entity!]!
   depth: Int!
@@ -997,6 +1010,7 @@ type PaymentInvoice {
   records: [PaymentRecord!]!
   state: PaymentInvoiceState!
   subscription: Subscription_!
+  user: User!
 }
 
 enum PaymentInvoiceState {
@@ -1202,9 +1216,12 @@ input PurgeEntitiesInput {
 
 type Query {
   activeWritersCount: Int!
-  adminDocument(documentId: String!): Document!
-  adminDocuments(limit: Int! = 20, offset: Int! = 0, search: String, state: EntityState, type: DocumentType): AdminDocumentsResult!
-  adminRawQuery(params: [JSON!], query: String!): [JSON!]!
+  adminEntities(limit: Int! = 20, offset: Int! = 0, search: String, state: EntityState, type: EntityType, visibility: EntityVisibility): AdminEntitiesResult!
+  adminEntity(entityId: String!): Entity!
+  adminInvoices(from: DateTime, limit: Int! = 20, offset: Int! = 0, state: PaymentInvoiceState, until: DateTime): AdminInvoicesResult!
+  adminSearch(query: String!): [AdminSearchResult!]!
+  adminSiteEntities(includeDeleted: Boolean! = false, siteId: String!): [Entity!]!
+  adminSubscriptions(limit: Int! = 20, offset: Int! = 0, planId: String, state: SubscriptionState): AdminSubscriptionsResult!
   adminUser(userId: String!): User!
   adminUsers(limit: Int! = 20, offset: Int! = 0, role: UserRole, search: String, state: UserState): AdminUsersResult!
   creditCode(code: String!): CreditCode!
@@ -1654,8 +1671,10 @@ type User implements IUser {
   email: String!
   fontFamilies: [FontFamily!]!
   hadSubscription: Boolean!
+  hasActiveSubscription: Boolean!
   hasPassword: Boolean!
   id: ID!
+  inAppPurchase: UserInAppPurchase
   marketingConsent: Boolean!
   marketingConsentAskedAt: DateTime
   name: String!
@@ -1674,6 +1693,7 @@ type User implements IUser {
   sites: [Site!]!
   state: UserState!
   subscription: Subscription_
+  subscriptions: [Subscription_!]!
   surveys: [String!]!
   textReplacements: [TextReplacementNode!]!
   trial: UserTrial
@@ -1703,6 +1723,13 @@ enum UserDevicePlatform {
   ANDROID
   IOS
   WEB
+}
+
+type UserInAppPurchase {
+  createdAt: DateTime!
+  id: ID!
+  identifier: String!
+  store: InAppPurchaseStore!
 }
 
 type UserPersonalIdentity {

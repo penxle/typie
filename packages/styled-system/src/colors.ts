@@ -531,4 +531,7 @@ export const semanticColors = defineSemanticTokens.colors({
   'palette.green': { value: { base: '#22c55e', _dark: '#86efac' } },
   'palette.blue': { value: { base: '#3b82f6', _dark: '#93c5fd' } },
   'palette.purple': { value: { base: '#8b5cf6', _dark: '#c4b5fd' } },
+  'admin.canvas': { value: { base: '{colors.surface.subtle}', _dark: '{colors.surface.default}' } },
+  'admin.card.default': { value: { base: '{colors.surface.default}', _dark: '{colors.surface.subtle}' } },
+  'admin.card.hover': { value: { base: '{colors.surface.subtle}', _dark: '{colors.surface.muted}' } },
 });

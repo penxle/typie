@@ -85,6 +85,7 @@ export const TextReplacementPreference = createObjectRef('TextReplacementPrefere
 export const User = createObjectRef('User', T.Users);
 export const UserBillingKey = createObjectRef('UserBillingKey', T.UserBillingKeys);
 export const UserDevice = createObjectRef('UserDevice', T.UserDevices);
+export const UserInAppPurchase = createObjectRef('UserInAppPurchase', T.UserInAppPurchases);
 export const UserPersonalIdentity = createObjectRef('UserPersonalIdentity', T.UserPersonalIdentities);
 export const UserSingleSignOn = createObjectRef('UserSingleSignOn', T.UserSingleSignOns);
 export const UserTrial = createObjectRef('UserTrial', T.UserTrials);

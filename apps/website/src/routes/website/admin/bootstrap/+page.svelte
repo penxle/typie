@@ -2,8 +2,12 @@
   import { createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
+  import { Button, Icon, Switch, TextInput } from '@typie/ui/components';
+  import { Toast } from '@typie/ui/notification';
   import dayjs from 'dayjs';
-  import { hydrateQuery } from '$lib/graphql';
+  import XIcon from '~icons/lucide/x';
+  import { AdminEmpty, adminFilledControl, AdminPageHeader } from '$lib/components/admin';
+  import { hydrateQuery, unwrapError } from '$lib/graphql';
   import { graphql } from '$mearie';
 
   let { data } = $props();
@@ -38,7 +42,6 @@
   let bootstrapData = $state<Bootstrap | null>(null);
   let loading = $state(true);
   let saving = $state(false);
-  let message = $state<{ type: 'success' | 'error'; text: string } | null>(null);
 
   $effect(() => {
     if (!query.data) {
@@ -54,16 +57,16 @@
     if (!bootstrapData) return;
 
     saving = true;
-    message = null;
 
     try {
       const { version, updatedAt, ...rest } = bootstrapData;
       void version;
       void updatedAt;
       await updateBootstrapMutation({ input: { bootstrap: rest } });
-      message = { type: 'success', text: 'BOOTSTRAP CONFIG UPDATED SUCCESSFULLY' };
+      Toast.success('부트스트랩 설정을 저장했어요');
     } catch (err) {
-      message = { type: 'error', text: err instanceof Error ? err.message : 'FAILED TO UPDATE BOOTSTRAP CONFIG' };
+      const unwrapped = unwrapError(err);
+      Toast.error(unwrapped instanceof Error ? unwrapped.message : '저장에 실패했어요. 잠시 후 다시 시도해주세요.');
     } finally {
       saving = false;
     }
@@ -96,367 +99,222 @@
     }
   }
 
-  const inputStyle = css({
-    width: 'full',
-    paddingX: '12px',
-    paddingY: '8px',
-    borderWidth: '2px',
-    borderColor: 'amber.500',
-    backgroundColor: 'gray.800',
-    color: 'amber.500',
-    fontSize: '13px',
-    outline: 'none',
-    caretColor: 'amber.500',
-    _focus: {
-      borderColor: 'amber.400',
-    },
-    _placeholder: {
-      color: 'amber.700',
-    },
-  });
-
-  const labelStyle = css({ fontSize: '11px', color: 'amber.400' });
+  const platformLabels: Record<'ios' | 'android' | 'web' | 'api', string> = {
+    ios: 'iOS',
+    android: 'Android',
+    web: 'Web',
+    api: 'API',
+  };
 
   const sectionStyle = css({
-    borderWidth: '2px',
-    borderColor: 'amber.500',
-    backgroundColor: 'gray.900',
+    borderWidth: '1px',
+    borderColor: 'border.subtle',
+    borderRadius: '12px',
+    backgroundColor: 'admin.card.default',
+    boxShadow: 'adminCard',
   });
-
   const sectionHeaderStyle = css({
-    padding: '16px',
-    borderBottomWidth: '2px',
-    borderColor: 'amber.500',
+    paddingX: '20px',
+    paddingY: '14px',
+    borderBottomWidth: '1px',
+    borderColor: 'border.subtle',
     fontSize: '14px',
-    color: 'amber.500',
+    fontWeight: 'semibold',
+    color: 'text.default',
   });
-
   const sectionBodyStyle = css({ padding: '20px' });
+  const fieldLabelStyle = css({ fontSize: '12px', fontWeight: 'medium', color: 'text.muted' });
+  const subCardStyle = css({ borderRadius: '8px', padding: '16px', backgroundColor: 'surface.muted' });
 
   const textareaStyle = css({
     width: 'full',
+    borderWidth: '1px',
+    borderColor: 'transparent',
+    borderRadius: '8px',
+    backgroundColor: 'surface.muted',
     paddingX: '12px',
     paddingY: '8px',
-    borderWidth: '2px',
-    borderColor: 'amber.500',
-    backgroundColor: 'gray.800',
-    color: 'amber.500',
     fontSize: '13px',
+    color: 'text.default',
     outline: 'none',
-    caretColor: 'amber.500',
     minHeight: '80px',
     resize: 'vertical',
-    _focus: {
-      borderColor: 'amber.400',
-    },
-    _placeholder: {
-      color: 'amber.700',
-    },
+    _focus: { borderColor: 'border.brand' },
+    _placeholder: { color: 'text.disabled' },
   });
 </script>
 
-<div class={flex({ flexDirection: 'column', gap: '24px', color: 'amber.500' })}>
-  <div>
-    <h2 class={css({ fontSize: '18px', color: 'amber.500' })}>BOOTSTRAP CONFIG</h2>
-    <p class={css({ marginTop: '8px', fontSize: '13px', color: 'amber.400' })}>SERVICE STATUS AND VERSION CONTROL</p>
-  </div>
+<AdminPageHeader description="점검 모드와 최소 지원 버전을 관리해요" title="부트스트랩 설정" />
 
-  {#if loading}
-    <div class={css({ fontSize: '13px', color: 'amber.400' })}>LOADING...</div>
-  {:else if bootstrapData}
-    <form onsubmit={handleSubmit}>
-      <div class={flex({ flexDirection: 'column', gap: '24px' })}>
-        <div class={sectionStyle}>
-          <div class={sectionHeaderStyle}>MAINTENANCE</div>
-          <div class={sectionBodyStyle}>
-            <div class={flex({ flexDirection: 'column', gap: '16px' })}>
-              <div class={flex({ alignItems: 'center', gap: '12px' })}>
-                <label class={labelStyle} for="maintenance-enabled">ENABLED</label>
-                <button
-                  id="maintenance-enabled"
-                  class={css({
-                    width: '48px',
-                    height: '24px',
-                    borderWidth: '2px',
-                    borderColor: 'amber.500',
-                    backgroundColor: bootstrapData.maintenance.enabled ? 'amber.500' : 'gray.800',
-                    position: 'relative',
-                    cursor: 'pointer',
-                  })}
-                  aria-label="Toggle maintenance mode"
-                  onclick={() => {
-                    if (bootstrapData) bootstrapData.maintenance.enabled = !bootstrapData.maintenance.enabled;
+{#if loading}
+  <AdminEmpty text="불러오는 중이에요..." />
+{:else if bootstrapData}
+  <form onsubmit={handleSubmit}>
+    <div class={flex({ flexDirection: 'column', gap: '20px' })}>
+      <div class={sectionStyle}>
+        <div class={sectionHeaderStyle}>점검 모드</div>
+        <div class={sectionBodyStyle}>
+          <div class={flex({ flexDirection: 'column', gap: '20px' })}>
+            <div class={flex({ alignItems: 'center', gap: '8px' })}>
+              <Switch bind:checked={bootstrapData.maintenance.enabled} />
+              <span class={css({ fontSize: '13px', color: 'text.subtle' })}>
+                {bootstrapData.maintenance.enabled ? '점검 모드가 켜져 있어요' : '점검 모드가 꺼져 있어요'}
+              </span>
+            </div>
+
+            <div class={flex({ flexDirection: 'column', gap: '6px' })}>
+              <span class={fieldLabelStyle}>제목</span>
+              <TextInput
+                style={css.raw(adminFilledControl)}
+                placeholder="서비스 점검 중"
+                size="sm"
+                bind:value={bootstrapData.maintenance.title}
+              />
+            </div>
+
+            <div class={flex({ flexDirection: 'column', gap: '6px' })}>
+              <span class={fieldLabelStyle}>안내 메시지</span>
+              <textarea class={textareaStyle} placeholder="점검 안내 메시지" bind:value={bootstrapData.maintenance.message}></textarea>
+            </div>
+
+            <div class={flex({ flexDirection: 'column', gap: '6px' })}>
+              <span class={fieldLabelStyle}>점검 종료 시각(선택)</span>
+              <TextInput
+                style={css.raw(adminFilledControl)}
+                oninput={(e) => {
+                  if (!bootstrapData) return;
+                  const value = e.currentTarget.value;
+                  bootstrapData.maintenance.until = value ? new Date(value).toISOString() : null;
+                }}
+                size="sm"
+                type="datetime-local"
+                value={bootstrapData.maintenance.until ? dayjs(bootstrapData.maintenance.until).format('YYYY-MM-DDTHH:mm') : ''}
+              />
+            </div>
+
+            <div class={flex({ flexDirection: 'column', gap: '8px' })}>
+              <span class={fieldLabelStyle}>적용 플랫폼</span>
+              <div class={flex({ gap: '20px' })}>
+                {#each ['ios', 'android', 'web', 'api'] as platform (platform)}
+                  {@const p = platform as 'ios' | 'android' | 'web' | 'api'}
+                  <div class={flex({ alignItems: 'center', gap: '8px' })}>
+                    <Switch checked={bootstrapData.maintenance.platforms.includes(p)} onclick={() => togglePlatform(p)} />
+                    <span class={css({ fontSize: '13px', color: 'text.subtle' })}>{platformLabels[p]}</span>
+                  </div>
+                {/each}
+              </div>
+            </div>
+
+            <div class={flex({ flexDirection: 'column', gap: '8px' })}>
+              <span class={fieldLabelStyle}>허용 IP</span>
+              <div class={flex({ gap: '8px' })}>
+                <TextInput
+                  style={css.raw(adminFilledControl, { flexGrow: '1' })}
+                  onkeydown={(e) => {
+                    if (e.key !== 'Enter') {
+                      return;
+                    }
+
+                    e.preventDefault();
+                    addIp();
                   }}
-                  type="button"
-                >
-                  <div
-                    style={`left: ${bootstrapData.maintenance.enabled ? '26px' : '2px'}`}
-                    class={css({
-                      position: 'absolute',
-                      top: '2px',
-                      width: '16px',
-                      height: '16px',
-                      backgroundColor: bootstrapData.maintenance.enabled ? 'gray.900' : 'amber.500',
-                      transitionProperty: '[left]',
-                      transitionDuration: '0.2s',
-                    })}
-                  ></div>
-                </button>
-                <span class={css({ fontSize: '11px', color: bootstrapData.maintenance.enabled ? 'amber.500' : 'amber.700' })}>
-                  {bootstrapData.maintenance.enabled ? 'ON' : 'OFF'}
-                </span>
-              </div>
-
-              <div class={flex({ flexDirection: 'column', gap: '8px' })}>
-                <label class={labelStyle} for="maintenance-title">TITLE</label>
-                <input
-                  id="maintenance-title"
-                  class={inputStyle}
-                  placeholder="서비스 점검 중"
-                  type="text"
-                  bind:value={bootstrapData.maintenance.title}
+                  placeholder="0.0.0.0"
+                  size="sm"
+                  bind:value={newIp}
                 />
+                <Button onclick={addIp} size="sm" type="button" variant="secondary">추가</Button>
               </div>
 
-              <div class={flex({ flexDirection: 'column', gap: '8px' })}>
-                <label class={labelStyle} for="maintenance-message">MESSAGE</label>
-                <textarea
-                  id="maintenance-message"
-                  class={textareaStyle}
-                  placeholder="점검 안내 메시지"
-                  bind:value={bootstrapData.maintenance.message}></textarea>
-              </div>
-
-              <div class={flex({ flexDirection: 'column', gap: '8px' })}>
-                <label class={labelStyle} for="maintenance-until">UNTIL (OPTIONAL)</label>
-                <input
-                  id="maintenance-until"
-                  class={inputStyle}
-                  oninput={(e) => {
-                    if (!bootstrapData) return;
-                    const value = e.currentTarget.value;
-                    bootstrapData.maintenance.until = value ? new Date(value).toISOString() : null;
-                  }}
-                  type="datetime-local"
-                  value={bootstrapData.maintenance.until ? dayjs(bootstrapData.maintenance.until).format('YYYY-MM-DDTHH:mm') : ''}
-                />
-              </div>
-
-              <div class={flex({ flexDirection: 'column', gap: '8px' })}>
-                <span class={labelStyle}>PLATFORMS</span>
-                <div class={flex({ gap: '16px' })}>
-                  {#each ['ios', 'android', 'web', 'api'] as platform (platform)}
-                    <button
-                      class={css({
-                        display: 'flex',
+              {#if bootstrapData.maintenance.allowedIps.length === 0}
+                <div class={css({ fontSize: '12px', color: 'text.disabled' })}>등록된 IP가 없어요</div>
+              {:else}
+                <div class={flex({ flexDirection: 'column', gap: '6px' })}>
+                  {#each bootstrapData.maintenance.allowedIps as ip (ip)}
+                    <div
+                      class={flex({
                         alignItems: 'center',
-                        gap: '8px',
-                        cursor: 'pointer',
-                        backgroundColor: 'transparent',
-                        border: 'none',
-                        padding: '0',
+                        justifyContent: 'space-between',
+                        borderRadius: '8px',
+                        backgroundColor: 'surface.muted',
+                        paddingX: '12px',
+                        paddingY: '6px',
                       })}
-                      onclick={() => togglePlatform(platform as 'ios' | 'android' | 'web' | 'api')}
-                      type="button"
                     >
-                      <div
-                        class={css({
-                          width: '16px',
-                          height: '16px',
-                          borderWidth: '2px',
-                          borderColor: 'amber.500',
-                          backgroundColor: bootstrapData.maintenance.platforms.includes(platform as 'ios' | 'android' | 'web' | 'api')
-                            ? 'amber.500'
-                            : 'transparent',
-                        })}
-                      ></div>
-                      <span class={css({ fontSize: '12px', color: 'amber.500' })}>{platform.toUpperCase()}</span>
-                    </button>
+                      <span class={css({ fontSize: '13px', color: 'text.subtle' })}>{ip}</span>
+                      <Button onclick={() => removeIp(ip)} size="sm" type="button" variant="ghost">
+                        <Icon icon={XIcon} size={14} />
+                      </Button>
+                    </div>
                   {/each}
                 </div>
-              </div>
-
-              <div class={flex({ flexDirection: 'column', gap: '8px' })}>
-                <span class={labelStyle}>ALLOWED IPS</span>
-                <div class={flex({ gap: '8px' })}>
-                  <input
-                    class={inputStyle}
-                    onkeydown={(e) => {
-                      if (e.key !== 'Enter') {
-                        return;
-                      }
-
-                      e.preventDefault();
-                      addIp();
-                    }}
-                    placeholder="0.0.0.0"
-                    type="text"
-                    bind:value={newIp}
-                  />
-                  <button
-                    class={css({
-                      paddingX: '16px',
-                      paddingY: '8px',
-                      borderWidth: '2px',
-                      borderColor: 'amber.500',
-                      backgroundColor: 'amber.500',
-                      color: 'gray.900',
-                      fontSize: '13px',
-                      cursor: 'pointer',
-                      whiteSpace: 'nowrap',
-                      _hover: {
-                        backgroundColor: 'amber.400',
-                        borderColor: 'amber.400',
-                      },
-                    })}
-                    onclick={addIp}
-                    type="button"
-                  >
-                    ADD
-                  </button>
-                </div>
-
-                {#if bootstrapData.maintenance.allowedIps.length === 0}
-                  <div class={css({ fontSize: '12px', color: 'amber.700' })}>NO ALLOWED IPS</div>
-                {:else}
-                  <div class={flex({ flexDirection: 'column', gap: '4px' })}>
-                    {#each bootstrapData.maintenance.allowedIps as ip (ip)}
-                      <div
-                        class={flex({
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          paddingX: '12px',
-                          paddingY: '8px',
-                          borderWidth: '1px',
-                          borderColor: 'amber.700',
-                        })}
-                      >
-                        <span class={css({ fontSize: '13px', color: 'amber.500' })}>{ip}</span>
-                        <button
-                          class={css({
-                            backgroundColor: 'transparent',
-                            border: 'none',
-                            color: 'red.500',
-                            fontSize: '12px',
-                            cursor: 'pointer',
-                            _hover: { color: 'red.400' },
-                          })}
-                          onclick={() => removeIp(ip)}
-                          type="button"
-                        >
-                          REMOVE
-                        </button>
-                      </div>
-                    {/each}
-                  </div>
-                {/if}
-              </div>
+              {/if}
             </div>
           </div>
-        </div>
-
-        <div class={sectionStyle}>
-          <div class={sectionHeaderStyle}>MIN VERSION</div>
-          <div class={sectionBodyStyle}>
-            <div class={flex({ flexDirection: 'column', gap: '16px' })}>
-              <div class={css({ borderWidth: '1px', borderColor: 'amber.700', padding: '16px' })}>
-                <div class={css({ fontSize: '12px', color: 'amber.500', marginBottom: '12px' })}>iOS</div>
-                <div class={flex({ gap: '16px' })}>
-                  <div class={flex({ flexDirection: 'column', gap: '8px', flex: '1' })}>
-                    <label class={labelStyle} for="ios-version">VERSION</label>
-                    <input
-                      id="ios-version"
-                      class={inputStyle}
-                      placeholder="1.2.0"
-                      type="text"
-                      bind:value={bootstrapData.minVersion.ios.version}
-                    />
-                  </div>
-                  <div class={css(flex.raw({ flexDirection: 'column', gap: '8px' }), { flexGrow: '2' })}>
-                    <label class={labelStyle} for="ios-store-url">STORE URL</label>
-                    <input
-                      id="ios-store-url"
-                      class={inputStyle}
-                      placeholder="https://apps.apple.com/app/..."
-                      type="url"
-                      bind:value={bootstrapData.minVersion.ios.storeUrl}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div class={css({ borderWidth: '1px', borderColor: 'amber.700', padding: '16px' })}>
-                <div class={css({ fontSize: '12px', color: 'amber.500', marginBottom: '12px' })}>ANDROID</div>
-                <div class={flex({ gap: '16px' })}>
-                  <div class={flex({ flexDirection: 'column', gap: '8px', flex: '1' })}>
-                    <label class={labelStyle} for="android-version">VERSION</label>
-                    <input
-                      id="android-version"
-                      class={inputStyle}
-                      placeholder="1.2.0"
-                      type="text"
-                      bind:value={bootstrapData.minVersion.android.version}
-                    />
-                  </div>
-                  <div class={css(flex.raw({ flexDirection: 'column', gap: '8px' }), { flexGrow: '2' })}>
-                    <label class={labelStyle} for="android-store-url">STORE URL</label>
-                    <input
-                      id="android-store-url"
-                      class={inputStyle}
-                      placeholder="https://play.google.com/store/apps/..."
-                      type="url"
-                      bind:value={bootstrapData.minVersion.android.storeUrl}
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {#if message}
-          <div
-            class={css({
-              padding: '12px',
-              borderWidth: '2px',
-              borderColor: message.type === 'success' ? 'green.500' : 'red.500',
-              color: message.type === 'success' ? 'green.500' : 'red.500',
-              fontSize: '12px',
-            })}
-          >
-            {message.text}
-          </div>
-        {/if}
-
-        <div class={flex({ gap: '12px' })}>
-          <button
-            class={css({
-              paddingX: '24px',
-              paddingY: '12px',
-              borderWidth: '2px',
-              borderColor: 'amber.500',
-              backgroundColor: 'amber.500',
-              color: 'gray.900',
-              fontSize: '13px',
-              cursor: 'pointer',
-              _hover: {
-                backgroundColor: 'amber.400',
-                borderColor: 'amber.400',
-              },
-              _disabled: {
-                opacity: '50',
-                cursor: 'not-allowed',
-              },
-            })}
-            disabled={saving}
-            type="submit"
-          >
-            {saving ? 'SAVING...' : 'SAVE CONFIG'}
-          </button>
         </div>
       </div>
-    </form>
-  {:else}
-    <div class={css({ fontSize: '13px', color: 'red.500' })}>FAILED TO LOAD BOOTSTRAP CONFIG</div>
-  {/if}
-</div>
+
+      <div class={sectionStyle}>
+        <div class={sectionHeaderStyle}>최소 지원 버전</div>
+        <div class={sectionBodyStyle}>
+          <div class={flex({ flexDirection: 'column', gap: '16px' })}>
+            <div class={subCardStyle}>
+              <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.default', marginBottom: '12px' })}>iOS</div>
+              <div class={flex({ gap: '16px' })}>
+                <div class={flex({ flexDirection: 'column', gap: '6px', flex: '1' })}>
+                  <span class={fieldLabelStyle}>버전</span>
+                  <TextInput
+                    style={css.raw(adminFilledControl)}
+                    placeholder="1.2.0"
+                    size="sm"
+                    bind:value={bootstrapData.minVersion.ios.version}
+                  />
+                </div>
+                <div class={css(flex.raw({ flexDirection: 'column', gap: '6px' }), { flexGrow: '2' })}>
+                  <span class={fieldLabelStyle}>스토어 URL</span>
+                  <TextInput
+                    style={css.raw(adminFilledControl)}
+                    placeholder="https://apps.apple.com/app/..."
+                    size="sm"
+                    type="url"
+                    bind:value={bootstrapData.minVersion.ios.storeUrl}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div class={subCardStyle}>
+              <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.default', marginBottom: '12px' })}>Android</div>
+              <div class={flex({ gap: '16px' })}>
+                <div class={flex({ flexDirection: 'column', gap: '6px', flex: '1' })}>
+                  <span class={fieldLabelStyle}>버전</span>
+                  <TextInput
+                    style={css.raw(adminFilledControl)}
+                    placeholder="1.2.0"
+                    size="sm"
+                    bind:value={bootstrapData.minVersion.android.version}
+                  />
+                </div>
+                <div class={css(flex.raw({ flexDirection: 'column', gap: '6px' }), { flexGrow: '2' })}>
+                  <span class={fieldLabelStyle}>스토어 URL</span>
+                  <TextInput
+                    style={css.raw(adminFilledControl)}
+                    placeholder="https://play.google.com/store/apps/..."
+                    size="sm"
+                    type="url"
+                    bind:value={bootstrapData.minVersion.android.storeUrl}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class={flex({ gap: '12px' })}>
+        <Button disabled={saving} loading={saving} size="sm" type="submit">저장</Button>
+      </div>
+    </div>
+  </form>
+{:else}
+  <AdminEmpty text="부트스트랩 설정을 불러오지 못했어요" />
+{/if}
