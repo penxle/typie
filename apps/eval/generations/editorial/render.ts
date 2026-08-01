@@ -49,7 +49,9 @@ export const renderEditorialPlanBlock = (p: EditorialPlan): string =>
     ...p.protected.map((x) => `  · ${x.technique} — ${x.rationale}\n    (${x.evidence.join(' / ')})`),
     '',
     '검토 축 — 계획이 정한 살펴볼 곳:',
-    ...p.axes.map((a) => `  · ${a.label}: ${a.inquiry}\n    위험: ${a.risk}`),
+    // expectedFinding은 넘기지 않는다 — 예시 지적이 검토를 그 형태의 검산으로 좁힌다(앵커링).
+    // ?? ''는 구계약 캐시 리플레이 방어.
+    ...p.axes.map((a) => `  · ${a.label}: ${a.inquiry}\n    위험: ${a.risk}\n    독자 비용: ${a.readerCost ?? ''}`),
     '</비평 계획>',
   ].join('\n');
 
@@ -94,7 +96,10 @@ export const renderReviewFindingsForRevise = (findings: PlanReviewFinding[]): st
 
 // 지적은 호출부가 원고 순서로 정렬해 넘긴다. 좌표는 입력에 넣지 않는다 —
 // 작성자가 "1,700자께" 식으로 본문에 반향하는 누출이 실측됐다.
-export const renderComposeInputV2 = (findings: AcceptedFinding[]): string =>
+// crossRefs는 같은 대목(앵커 문자 범위 중첩)을 다른 층위에서 짚은 지적들의 인덱스 맵.
+// 병합·삭제 지시가 아니다 — 문면에서 서로 참조해 같은 내용을 두 번 서술하지 않게 하는 재료다
+// (라운드 4 실측: 같은 대목 이중 서술이 평가자 3건에서 감점 요인).
+export const renderComposeInputV2 = (findings: AcceptedFinding[], crossRefs?: Map<number, number[]>): string =>
   [
     `<지적 ${findings.length}건>`,
     ...findings.map((f, i) =>
@@ -106,6 +111,15 @@ export const renderComposeInputV2 = (findings: AcceptedFinding[]): string =>
         `  원인: ${f.cause}`,
         `  방향: ${f.direction}`,
         `  근거: ${f.evidence}`,
+        `  비중: ${f.stake}`,
+        ...((crossRefs?.get(i)?.length ?? 0) > 0
+          ? [
+              `  ※ ${crossRefs
+                ?.get(i)
+                ?.map((j) => `[${j}]`)
+                .join(' ')}와 같은 대목 — 각자 유지하되 겹치는 서술은 한쪽에서 참조로 줄여라`,
+            ]
+          : []),
       ].join('\n'),
     ),
     '</지적>',

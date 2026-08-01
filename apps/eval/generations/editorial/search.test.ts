@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildBackgroundQuery, MAX_QUERY_NOUNS, renderSearchHits } from './search.ts';
+import { buildBackgroundQuery, MAX_QUERY_NOUNS, parseSearchHits, renderSearchHits } from './search.ts';
 
 describe('buildBackgroundQuery', () => {
   it('원작명이 있으면 그것을 주어로 삼는다', () => {
@@ -32,6 +32,37 @@ describe('buildBackgroundQuery', () => {
   it('빈 문자열·공백 고유명사는 버린다', () => {
     const q = buildBackgroundQuery({ derivativeSource: null, properNouns: ['  ', '홍길동', '', ' 성춘향 '] });
     expect(q).toBe('홍길동 성춘향 등장인물 원작 어느 작품');
+  });
+});
+
+describe('parseSearchHits', () => {
+  it('본문을 상한에서 자른다', () => {
+    const hits = parseSearchHits([{ title: '가', url: 'https://a', text: '본문'.repeat(100) }], 10);
+    expect(hits[0].text).toHaveLength(10);
+  });
+
+  it('같은 URL은 첫 결과만 싣는다', () => {
+    const hits = parseSearchHits(
+      [
+        { title: '가', url: 'https://a', text: '첫째' },
+        { title: '나', url: 'https://a', text: '둘째' },
+        { title: '다', url: 'https://b', text: '셋째' },
+      ],
+      100,
+    );
+    expect(hits.map((h) => h.text)).toEqual(['첫째', '셋째']);
+  });
+
+  it('본문이 비면 버리고, URL이 없으면 중복 판정 없이 싣는다', () => {
+    const hits = parseSearchHits(
+      [
+        { title: '가', url: 'https://a', text: '  ' },
+        { title: '나', text: '둘째' },
+        { title: '다', text: '셋째' },
+      ],
+      100,
+    );
+    expect(hits.map((h) => h.text)).toEqual(['둘째', '셋째']);
   });
 });
 

@@ -38,5 +38,8 @@
     "vitest": "^4.1.10",
     "wrangler": "^4.118.0",
     "zod": "^4.4.3"
+  },
+  "dependencies": {
+    "yaml": "^2.9.0"
   }
 }

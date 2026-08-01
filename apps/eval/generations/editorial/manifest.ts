@@ -21,7 +21,7 @@ export const EDITORIAL_MANIFEST: GenerationManifest = {
     { key: 'finding', label: '지적' },
     { key: 'strength', label: '강점' },
     { key: 'cleared', label: '살펴봤지만 문제가 없던 것' },
-    { key: 'pattern', label: '반복되는 무늬' },
+    { key: 'pattern', label: '되풀이되는 경향' },
     { key: 'priority', label: '먼저 손댈 것' },
   ],
   facets: [

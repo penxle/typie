@@ -32,6 +32,8 @@ export type EditorialPlan = {
     label: string;
     inquiry: string;
     risk: string;
+    readerCost: string;
+    expectedFinding: string;
     evidence: string[];
     conventionsCheck: string;
     conventionsBasis: 'charter' | 'search' | 'unrelated' | 'unresolved';
@@ -62,6 +64,7 @@ export type EditorialFinding = {
   cause: string;
   direction: string;
   evidence: string;
+  stake: string;
   manuscriptBasis: 'grep' | 'reread' | 'local';
   manuscriptCheck: string;
   conventionsCheck: string;

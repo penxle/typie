@@ -1,94 +1,107 @@
-import { checkFinding, coverageGaps, FILE_REJECT_MAX } from '../checks.ts';
-import { fileFindingTool, GREP_TOOL, LOCAL_AXES, READ_TOOL, SUBMIT_REVIEW_TOOL } from '../contracts.ts';
-import { renderRejection } from '../render.ts';
-import { runAgentStage, shapeRejection } from './agent-stage.ts';
-import type Anthropic from '@anthropic-ai/sdk';
+import { checkFinding, coverageGaps, leakLineLint } from '../checks.ts';
+import { findingSchema, LOCAL_AXES } from '../contracts.ts';
+import { runAgentStage } from './agent-stage.ts';
+import type { LlmClients } from '../../../core/worker/compat.ts';
+import type { Deliverable } from '../../../core/worker/deliverable.ts';
 import type { RunContext } from '../../../core/worker/run-contracts.ts';
+import type { Workspace } from '../../../core/worker/workspace.ts';
 import type { StageLedger } from '../ledger.ts';
 import type { AcceptedFinding, EditorialFinding, ResolvedResearch } from '../types.ts';
+
+type LocalDraft = { findings: EditorialFinding[] };
+
+const PROOFREAD_PATH = 'output/proofread.yaml';
+
+const LOCAL_DELIVERABLE: Deliverable = {
+  label: '교열 결과',
+  submitName: 'submit_review',
+  submitDescription: '교열 종료를 선언하고 산출물을 확정한다. 열람이 본문 전체를 덮고 검사를 통과해야 접수된다.',
+  outputs: {
+    [PROOFREAD_PATH]: {
+      schema: {
+        type: 'object',
+        properties: {
+          findings: { type: 'array', description: '읽다가 걸린 문면 지적. 걸린 그 자리에서 적는다', items: findingSchema(LOCAL_AXES) },
+        },
+        required: ['findings'],
+        additionalProperties: false,
+      },
+      lints: [leakLineLint],
+      description: '문면 교열 결과 — 문장 결·원고 사고 지적',
+    },
+  },
+};
 
 // 문면 층위(문장 결·원고 사고)의 단독 소유자. 접근 방식은 회수와 무관함이 실측됐고
 // (주입 6/13 vs read 5/13), 회수를 만드는 것은 층위 전용 범위다.
 export const runLocal = async (
   ctx: RunContext,
-  client: Anthropic,
+  clients: LlmClients,
+  workspace: Workspace,
+  manuscriptFile: string,
   charter: string,
   research: ResolvedResearch,
+  // 작품 검토가 접수한 앵커의 문자 범위 — 겹침은 차단하지 않고 알린다(같은 대목의 다른
+  // 층위 지적은 정당한 경우가 실측된다).
+  executeAnchors: { matchStart: number; matchEnd: number }[],
 ): Promise<{ findings: AcceptedFinding[]; ledger: StageLedger }> => {
   const content = ctx.document.content;
-  const findings: AcceptedFinding[] = [];
-  const localFindingTool = fileFindingTool(LOCAL_AXES);
-  const localRejects = new Map<string, number>();
   let nudged = false;
 
-  const stage = await runAgentStage<true>(ctx, {
-    client,
+  const stage = await runAgentStage<LocalDraft, AcceptedFinding[]>(ctx, {
+    clients,
     stage: 'local',
     prompt: ctx.prompts.local,
-    tools: [READ_TOOL, GREP_TOOL, localFindingTool, SUBMIT_REVIEW_TOOL],
+    workspace,
+    manuscriptAccess: true,
     system: charter,
-    initial:
-      '원고를 처음부터 끝까지 read로 통독하며 문면 층위를 검토하세요. 걸리면 그 자리에서 file_finding으로 제출하고, 끝나면 submit_review로 마치세요.',
+    initial: `원고를 처음부터 끝까지 read로 통독하며 문면 층위를 검토하세요. 걸리면 그 자리에서 ${PROOFREAD_PATH}의 findings에 적고, 끝나면 submit_review로 마치세요.`,
     search: null,
+    deliverable: LOCAL_DELIVERABLE,
+    manuscriptFile,
     baseTools: [],
-    onSubmissions: (subs, turn, tools, ledger) => {
-      const results: { toolUseId: string; content: string }[] = [];
-      let done: true | undefined;
-      for (const sub of subs) {
-        if (sub.name === 'file_finding') {
-          const shape = shapeRejection(localFindingTool, sub.input);
-          if (shape) {
-            ledger.events.push({ turn, kind: 'finding-rejected', detail: `오형 제출: ${shape[1] ?? ''}`.slice(0, 120) });
-            results.push({ toolUseId: sub.id, content: renderRejection(shape) });
-            continue;
-          }
-          const finding = sub.input as EditorialFinding;
-          const check = checkFinding(content, finding, tools, turn, LOCAL_AXES, research.boundaryRanges);
-          if (check.accepted) {
-            findings.push(check.accepted);
-            results.push({ toolUseId: sub.id, content: '접수.' });
-            continue;
-          }
-          const key = finding.quoteStart.slice(0, 20);
-          const count = (localRejects.get(key) ?? 0) + 1;
-          localRejects.set(key, count);
-          for (const reason of check.reasons) ledger.events.push({ turn, kind: 'finding-rejected', detail: `${key} — ${reason}` });
-          if (count > FILE_REJECT_MAX) {
-            ledger.events.push({ turn, kind: 'finding-discarded', detail: key });
-            results.push({ toolUseId: sub.id, content: '반려 상한 초과 — 이 지적은 폐기합니다. 다음으로 진행하세요.' });
-          } else {
-            results.push({ toolUseId: sub.id, content: renderRejection(check.reasons) });
-          }
-          continue;
-        }
-        if (sub.name === 'submit_review') {
-          const gaps = coverageGaps(content.length, tools, research.boundaryRanges);
-          if (gaps.length > 0) {
-            results.push({
-              toolUseId: sub.id,
-              content: renderRejection([`미열람 구간이 남았습니다: ${gaps.map((g) => `${g.start}~${g.end}`).join(', ')}`]),
-            });
-            continue;
-          }
-          // 실측된 유실 모드(대조까지 하고 미제출) 조준 — 종료 전 정확히 한 번 되묻는다.
-          if (!nudged) {
-            nudged = true;
-            results.push({
-              toolUseId: sub.id,
-              content:
-                '제출 전 확인: 대조로 확인했지만 제출하지 않은 후보가 남아 있으면 지금 file_finding으로 제출하세요. 없으면 submit_review를 다시 호출해 마치세요.',
-            });
-            continue;
-          }
-          done = true;
-          results.push({ toolUseId: sub.id, content: '검토 종료.' });
-          continue;
-        }
-        results.push({ toolUseId: sub.id, content: '알 수 없는 제출' });
+    onSubmit: (_path, value, { turn, tools, ledger, file }) => {
+      const gaps = coverageGaps(content.length, tools, research.boundaryRanges, file);
+      if (gaps.length > 0) {
+        return { reject: [`미열람 구간이 남았습니다: ${gaps.map((g) => `${g.start}~${g.end}`).join(', ')}`] };
       }
-      return { done, results };
+      // 실측된 유실 모드(대조까지 하고 미제출) 조준 — 종료 전 정확히 한 번 되묻는다.
+      if (!nudged) {
+        nudged = true;
+        return {
+          reject: [
+            '제출 전 확인: 대조로 확인했지만 파일에 적지 않은 후보가 남아 있으면 지금 findings에 추가하세요. 없으면 submit_review를 다시 호출해 마치세요.',
+          ],
+        };
+      }
+      const notes: string[] = [];
+      const accepted: AcceptedFinding[] = [];
+      for (const [i, finding] of value.findings.entries()) {
+        const key = finding.quoteStart.slice(0, 20);
+        const check = checkFinding(content, finding, tools, turn, LOCAL_AXES, research.boundaryRanges, file);
+        if (check.accepted) {
+          accepted.push(check.accepted);
+          continue;
+        }
+        for (const reason of check.reasons) {
+          ledger.events.push({ turn, kind: 'finding-rejected', detail: `${key} — ${reason}` });
+          notes.push(`findings[${i}] (${key}…): ${reason} — 고치거나 항목을 삭제하세요`);
+        }
+      }
+      if (notes.length > 0) return { reject: notes };
+
+      // 겹침 소프트 경고 — 접수 메시지에 동봉할 뿐 차단하지 않는다.
+      const warnings: string[] = [];
+      for (const f of accepted) {
+        const overlaps = executeAnchors.filter((a) => f.matchStart < a.matchEnd && a.matchStart < f.matchEnd);
+        if (overlaps.length > 0) {
+          ledger.events.push({ turn, kind: 'finding-overlap', detail: f.quoteStart.slice(0, 20) });
+          warnings.push(`"${f.quoteStart.slice(0, 20)}…" — 작품 검토 지적과 겹칩니다. 다른 층위의 결함인지 확인하세요`);
+        }
+      }
+      return { accept: accepted, message: [`교열 종료. 지적 ${accepted.length}건 접수.`, ...warnings].join('\n') };
     },
   });
 
-  return { findings, ledger: stage.ledger };
+  return { findings: stage.value, ledger: stage.ledger };
 };

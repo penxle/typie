@@ -1,9 +1,10 @@
-// 에이전틱 턴 실행기. 모델 턴 하나를 돌리고, 로컬 도구(read/grep)와 검색을 실행해
-// tool_result로 되돌린다. 제출 도구는 실행하지 않고 호출부에 넘긴다 — 검증·반려는 단계의
-// 계약이지 루프의 일이 아니다.
-import { executeGrep, executeRead } from '../manuscript-tools.ts';
+// 에이전틱 턴 실행기. 모델 턴 하나를 돌리고, 비결정적 도구(search)를 실행해 tool_result로
+// 되돌린다. 파일 도구(read/grep/write/edit)는 워크스페이스의 순수 적용이고 제출은 스테이지
+// 루프의 몫이다 — 여기는 캐시가 필요한 검색만 안다.
+import { isAnthropicModel, runTurnCompat } from './compat.ts';
 import type Anthropic from '@anthropic-ai/sdk';
 import type { PhasePrompt, ToolRecord, Usage } from '../contracts.ts';
+import type { LlmClients } from './compat.ts';
 
 const MAX_OUTPUT_TOKENS = 64_000;
 const SKIP_CACHE = { headers: { 'cf-aig-skip-cache': 'true' } };
@@ -12,8 +13,6 @@ const modelId = (model: string): string => model.replace(/^anthropic\//, '');
 
 export type ToolUse = { id: string; name: string; input: unknown };
 export type TurnOutput = { content: unknown[]; toolUses: ToolUse[] };
-
-const SUBMISSION_TOOLS = new Set(['submit_research', 'submit_plan', 'file_finding', 'file_strength', 'submit_review']);
 
 // 대화 접두부가 턴마다 캐시되도록 마지막 메시지의 마지막 블록에 표시를 옮겨 단다.
 // 이것이 없으면 대화 비용이 턴 수에 제곱으로 는다.
@@ -30,13 +29,16 @@ const withLastBlockCached = (messages: Anthropic.MessageParam[]): Anthropic.Mess
   });
 
 export const runTurn = async (
-  client: Anthropic,
+  clients: LlmClients,
   prompt: PhasePrompt,
   tools: Anthropic.Messages.Tool[],
   system: string,
   messages: Anthropic.MessageParam[],
   usage: Usage,
 ): Promise<TurnOutput> => {
+  // 어느 경로로 나갈지는 모델이 정한다. 대화 상태는 양쪽 다 Anthropic 블록 형태 하나다.
+  if (!isAnthropicModel(prompt.model)) return runTurnCompat(clients.compat, prompt, tools, system, messages, usage);
+
   const systemBlocks: Anthropic.TextBlockParam[] = [{ type: 'text', text: prompt.system, cache_control: { type: 'ephemeral' } }];
   if (system) systemBlocks.push({ type: 'text', text: system, cache_control: { type: 'ephemeral' } });
 
@@ -47,10 +49,13 @@ export const runTurn = async (
     tool_choice: { type: 'auto' as const },
     system: systemBlocks,
     messages: withLastBlockCached(messages),
+    // 5계열 기본 display가 omitted라 thinking 본문이 빈 채로 온다. 요약을 받아 원장 턴
+    // 기록에 싣는다 — 비용은 동일하고, 블록은 어차피 서명째 왕복하므로 대화 계약도 그대로다.
+    thinking: { type: 'adaptive', display: 'summarized' } as never,
     ...(prompt.effort && { output_config: { effort: prompt.effort as never } }),
   };
 
-  const message = await client.messages.stream(params, SKIP_CACHE).finalMessage();
+  const message = await clients.anthropic.messages.stream(params, SKIP_CACHE).finalMessage();
 
   usage.calls += 1;
   const fresh = message.usage.input_tokens ?? 0;
@@ -72,49 +77,14 @@ export type SearchExecutor = (query: string) => Promise<{ content: string; hits:
 
 export type ExecutedTools = {
   results: { toolUseId: string; content: string }[];
-  submissions: ToolUse[];
   records: ToolRecord[];
 };
 
-const renderReadResult = (r: ReturnType<typeof executeRead>): string =>
-  `[${r.start}~${r.end}]${r.truncated ? ' (상한으로 잘림 — 이어서 read 하세요)' : ''}\n${r.text}`;
-
-const renderGrepResult = (r: ReturnType<typeof executeGrep>): string => {
-  if (r.error) return r.error;
-  if (r.total === 0) return '매치 없음 — 무매치는 부재의 증거가 아니다. 변형 패턴을 더 시도하거나 구간을 열람해 확인하라.';
-  const head = `총 ${r.total}건${r.total > r.matches.length ? ` (앞 ${r.matches.length}건만 표시)` : ''}`;
-  return [head, ...r.matches.map((m) => `[${m.start}~${m.end}] …${m.context}…`)].join('\n');
-};
-
-export const executeToolUses = async (
-  content: string,
-  toolUses: ToolUse[],
-  turn: number,
-  search: SearchExecutor | null,
-): Promise<ExecutedTools> => {
+export const executeSearches = async (toolUses: ToolUse[], turn: number, search: SearchExecutor | null): Promise<ExecutedTools> => {
   const results: { toolUseId: string; content: string }[] = [];
-  const submissions: ToolUse[] = [];
   const records: ToolRecord[] = [];
 
   for (const use of toolUses) {
-    if (SUBMISSION_TOOLS.has(use.name)) {
-      submissions.push(use);
-      continue;
-    }
-    if (use.name === 'read') {
-      const input = use.input as { start: number; end: number };
-      const r = executeRead(content, input.start, input.end);
-      records.push({ turn, tool: 'read', start: r.start, end: r.end });
-      results.push({ toolUseId: use.id, content: renderReadResult(r) });
-      continue;
-    }
-    if (use.name === 'grep') {
-      const input = use.input as { pattern: string };
-      const r = executeGrep(content, input.pattern);
-      records.push({ turn, tool: 'grep', pattern: input.pattern, total: r.total });
-      results.push({ toolUseId: use.id, content: renderGrepResult(r) });
-      continue;
-    }
     if (use.name === 'search') {
       const input = use.input as { query: string };
       if (!search) {
@@ -135,5 +105,5 @@ export const executeToolUses = async (
     results.push({ toolUseId: use.id, content: `알 수 없는 도구: ${use.name}` });
   }
 
-  return { results, submissions, records };
+  return { results, records };
 };

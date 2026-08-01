@@ -12,7 +12,8 @@ export type RunEnv = {
 export type RunContext = {
   step: WorkflowStep;
   env: RunEnv;
-  document: { id: string; content: string };
+  // refId는 반입 원본 문서 식별자 — 워크스페이스의 원고 파일명(manuscript/<refId>.txt)이 된다.
+  document: { id: string; refId: string; content: string };
   prompts: Record<string, PhasePrompt>;
   phase: (key: string) => Promise<void>;
   cached: <T>(key: string, fn: (usage: Usage) => Promise<T>) => Promise<{ value: T; cached: boolean }>;

@@ -83,9 +83,10 @@ export const emptyUsage = (): Usage => ({
 
 // 실행 중 도구 호출 기록. 열람 범위·커버리지 판정의 진실 원천이며, 워크플로 리플레이 때
 // 캐시된 도구 실행 결과에서 재구성되므로 순수한 값이어야 한다.
+// file은 원고 파일 경로다 — 구원장(파일시스템 전환 전)의 무필드 기록은 유일 원고로 해석한다.
 export type ToolRecord =
-  | { turn: number; tool: 'read'; start: number; end: number }
-  | { turn: number; tool: 'grep'; pattern: string; total: number }
+  | { turn: number; tool: 'read'; file?: string; start: number; end: number }
+  | { turn: number; tool: 'grep'; file?: string; pattern: string; total: number }
   | { turn: number; tool: 'search'; query: string; hits: number };
 
 export type AnchorDraft = {

@@ -11,7 +11,8 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
-    "openai": "^7.3.0"
+    "openai": "^7.3.0",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260801.1",

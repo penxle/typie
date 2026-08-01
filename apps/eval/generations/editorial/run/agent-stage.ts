@@ -1,61 +1,86 @@
-import { schemaViolations } from '../../../core/tool-schema.ts';
-import { executeToolUses, runTurn } from '../../../core/worker/agent-loop.ts';
+// 에이전틱 스테이지 루프. 역할은 오케스트레이션뿐이다: 턴을 돌리고, 파일 도구를 워크스페이스에
+// 순수 적용하고, 검색을 캐시로 실행하고, 제출을 게이트한 뒤 도메인 수용(onSubmit) 하나에
+// 넘긴다. 산출물이 무엇인지는 deliverable이, 그것을 받을지는 onSubmit이 정한다.
+//
+// 턴 하나 = 스텝 하나, 턴당 D1 캐시. 원장은 캐시된 턴 출력에서 매 리플레이 재구성된다 —
+// 여기서 하는 모든 일이 결정적이어야 하는 이유다.
+import { executeSearches, runTurn } from '../../../core/worker/agent-loop.ts';
+import { deliverableGuide, deliverableTools, finalizeHeader, validateOutput } from '../../../core/worker/deliverable.ts';
 import { LLM_STEP } from '../../../core/worker/llm.ts';
-import { hasToolSyntaxLeak, LEAK_STREAK_MAX, TURN_CAP } from '../checks.ts';
-import { emptyLedger } from '../ledger.ts';
+import { TURN_CAP } from '../checks.ts';
+import { SEARCH_TOOL } from '../contracts.ts';
+import { emptyLedger, turnNote } from '../ledger.ts';
 import { renderRejection } from '../render.ts';
 import type Anthropic from '@anthropic-ai/sdk';
 import type { PhasePrompt, ToolRecord } from '../../../core/contracts.ts';
-import type { SearchExecutor, ToolUse, TurnOutput } from '../../../core/worker/agent-loop.ts';
+import type { SearchExecutor, TurnOutput } from '../../../core/worker/agent-loop.ts';
+import type { LlmClients } from '../../../core/worker/compat.ts';
+import type { Deliverable } from '../../../core/worker/deliverable.ts';
 import type { RunContext } from '../../../core/worker/run-contracts.ts';
+import type { Workspace } from '../../../core/worker/workspace.ts';
 import type { StageLedger } from '../ledger.ts';
 
-// 직렬화 사고는 strict 스키마도 뚫는다(실측: protected 필드 누락 제출로 검증 크래시).
-// 오형 제출은 처리 전에 걸러 반려 루프로 보낸다 — 검증 코드는 정형 입력만 전제한다.
-export const shapeRejection = (tool: { input_schema: unknown }, input: unknown): string[] | null => {
-  const violations = schemaViolations(tool.input_schema, input);
-  return violations.length > 0
-    ? ['제출이 스키마와 다릅니다 — 필드 형태를 스키마 그대로 지켜 다시 제출하세요', ...violations.slice(0, 5)]
-    : null;
-};
+// file은 이 실행의 원고 파일 경로 — 커버리지·인용 대조가 파일별로 일반화되어 있어
+// onSubmit의 정합성 검사가 어느 원고에 대한 것인지 명시해야 한다.
+export type SubmitContext = { turn: number; tools: ToolRecord[]; ledger: StageLedger; file: string };
 
-// 제출 처리 결과. done이 설정되면 이 턴의 나머지 결과를 반영한 뒤 단계를 끝낸다.
-export type SubmissionOutcome<T> = { done?: T; results: { toolUseId: string; content: string }[] };
+// 수용이면 스테이지가 accept 값을 돌려주며 끝난다. 반려면 사유가 모델에게 돌아가고 계속된다.
+export type SubmitOutcome<R> = { accept: R; message: string } | { reject: string[] };
 
-export type AgentStageOptions<T> = {
-  client: Anthropic;
+export type AgentStageOptions<T, R> = {
+  clients: LlmClients;
   stage: string;
   prompt: PhasePrompt;
-  tools: Anthropic.Messages.Tool[];
+  // 실행 단위 워크스페이스 — 스테이지가 이어받는다. 이전 산출물은 확정되어 읽기 전용이다.
+  workspace: Workspace;
+  // 원고 접근은 스테이지 속성 — 원고 대조가 설계상 없는 단계(compose류)는 끈다.
+  manuscriptAccess: boolean;
   system: string;
   initial: string;
   search: SearchExecutor | null;
-  // 이전 단계에서 넘어온 도구 기록 — 열람 범위 검증이 단계를 넘어 이어진다(계획 초안에서 읽은
-  // 대목을 수정 라운드에서 인용하는 경우).
+  deliverable: Deliverable;
+  // 이 실행의 원고 파일 경로. SubmitContext.file로 전파된다.
+  manuscriptFile: string;
+  // 이전 단계에서 넘어온 도구 기록 — 열람 범위 검증이 단계를 넘어 이어진다.
   baseTools: ToolRecord[];
   // 원장을 남길 키와 누산기. 한 매니페스트 단계가 내부적으로 여러 라운드로 갈릴 때
   // 라운드마다 따로 남기면 같은 도구가 중복되고 화면의 단계 순서도 무너진다.
   ledgerKey?: string;
   ledger?: StageLedger;
-  onSubmissions: (subs: ToolUse[], turn: number, tools: ToolRecord[], ledger: StageLedger) => SubmissionOutcome<T>;
+  // 접수 시 산출물을 확정(헤더 부착·불변화)할지. 라운드가 이어지는 스테이지(계획 검수의
+  // 수정 라운드)는 끄고, 소유 스테이지가 수렴 후 직접 확정한다. 기본 true.
+  finalizeOnAccept?: boolean;
+  onSubmit: (path: string, value: T, ctx: SubmitContext) => SubmitOutcome<R>;
 };
 
-// 에이전틱 단계의 공통 루프. 턴 하나 = 스텝 하나, 턴당 D1 캐시. 원장은 캐시된 도구 실행
-// 결과에서 매 리플레이 재구성된다 — 순수해야 하는 이유다.
-export const runAgentStage = async <T>(ctx: RunContext, options: AgentStageOptions<T>): Promise<{ value: T; ledger: StageLedger }> => {
-  const { client, stage, prompt, tools, system, initial, search, baseTools, onSubmissions } = options;
-  const content = ctx.document.content;
+const renderNotes = (notes: string[]): string =>
+  notes.length === 0 ? '검사: 통과' : `검사 노트 ${notes.length}건:\n${notes.map((n) => `- ${n}`).join('\n')}`;
+
+const pathOf = (use: { input: unknown }): string => {
+  const input = (use.input ?? {}) as { path?: unknown };
+  return typeof input.path === 'string' ? input.path : '';
+};
+
+export const runAgentStage = async <T, R>(
+  ctx: RunContext,
+  options: AgentStageOptions<T, R>,
+): Promise<{ value: R; ledger: StageLedger }> => {
+  const { clients, stage, prompt, search, deliverable, workspace, baseTools, onSubmit } = options;
   const ledger = options.ledger ?? emptyLedger();
   const ledgerKey = options.ledgerKey ?? stage;
-  const messages: Anthropic.MessageParam[] = [{ role: 'user', content: initial }];
-  let leakStreak = 0;
+  // 권한을 먼저 세운다 — 색인(가이드에 렌더)이 현재 권한을 반영해야 한다.
+  workspace.setDeclaredOutputs(Object.keys(deliverable.outputs));
+  workspace.setManuscriptAccess(options.manuscriptAccess);
+  const tools = [...deliverableTools(deliverable), ...(search ? [SEARCH_TOOL] : [])];
+  const system = [options.system, deliverableGuide(deliverable, workspace.index())].filter((s) => s.length > 0).join('\n\n');
+  const messages: Anthropic.MessageParam[] = [{ role: 'user', content: options.initial }];
 
   for (let turn = 0; turn < TURN_CAP; turn++) {
     // step.do의 반환 타입은 Serializable로 좁혀져 있어 unknown을 품은 구조를 그대로 통과시키지
     // 못한다. 값은 실제로 JSON 왕복이 되므로 경계에서만 단언한다.
     const turnStep = (await ctx.step.do(`${stage}-${turn}`, LLM_STEP, async () => {
       const { value, cached } = await ctx.cached<TurnOutput>(`${stage}/turn/${turn}`, (usage) =>
-        runTurn(client, prompt, tools, system, messages, usage),
+        runTurn(clients, prompt, tools, system, messages, usage),
       );
       return { out: value, cached } as never;
     })) as unknown as { out: TurnOutput; cached: boolean };
@@ -64,65 +89,75 @@ export const runAgentStage = async <T>(ctx: RunContext, options: AgentStageOptio
     messages.push({ role: 'assistant', content: out.content as Anthropic.MessageParam['content'] });
 
     if (out.toolUses.length === 0) {
+      // 텍스트만 있는 턴도 진행 기록에는 남긴다 — 모델이 어디서 머뭇거렸는지가 보인다.
+      ledger.turns.push(turnNote(stage, turn, out.content, []));
+      await ctx.ledger(`ledger/${ledgerKey}`, ledger);
       messages.push({ role: 'user', content: '도구를 호출하거나 제출 도구로 마무리하세요.' });
       continue;
     }
 
-    // 검색이 비결정적이므로 도구 실행 전체를 캐시한다 — 리플레이가 같은 결과를 재사용한다.
-    const executed = (await ctx.step.do(`${stage}-tools-${turn}`, async () => {
-      const { value } = await ctx.cached(`${stage}/tools/${turn}`, () => executeToolUses(content, out.toolUses, turn, search));
-      return value as never;
-    })) as unknown as Awaited<ReturnType<typeof executeToolUses>>;
+    const actions: string[] = [];
+    const resultOf = new Map<string, string>();
 
-    ledger.tools.push(...executed.records);
-
-    const combinedTools = [...baseTools, ...ledger.tools];
-
-    // 직렬화 오염 제출은 핸들러 앞에서 중앙 차단한다. 오염 문면이 대화에 남으면 이후 제출이
-    // 그 형태를 모방하므로 원문을 컨텍스트에서 제거하고 처음부터 다시 쓰게 한다. 연속 오염은
-    // 스테이지를 중단해 턴 낭비를 끊는다 — 회수는 캐시 리플레이 재실행.
-    const cleanSubs: ToolUse[] = [];
-    const leakResults: { toolUseId: string; content: string }[] = [];
-    for (const sub of executed.submissions) {
-      if (!hasToolSyntaxLeak([JSON.stringify(sub.input)])) {
-        leakStreak = 0;
-        cleanSubs.push(sub);
-        continue;
-      }
-      leakStreak += 1;
-      const input = sub.input as Record<string, unknown>;
-      const excerpt = String(typeof input?.quoteStart === 'string' ? input.quoteStart : (input?.intent ?? '')).slice(0, 30);
-      ledger.events.push({ turn, kind: 'leak-rejected', detail: `${sub.name}: ${excerpt}` });
-      ledger.leaked.push({ turn, name: sub.name, input: sub.input });
-      // 라이브 턴에서만 중단한다. 리플레이(캐시 턴)에서 발동하면 자력 회복하고 완주했던 실행의
-      // 회수가 영구히 막힌다 — 실측: 7연속 오염 후 회복·완주 사례 존재.
-      if (leakStreak > LEAK_STREAK_MAX && !turnStep.cached) {
-        throw new Error(`${stage}: 직렬화 오염 연속 ${leakStreak}회 — 컨텍스트 오염으로 스테이지 중단`);
-      }
-      leakResults.push({
-        toolUseId: sub.id,
-        content: renderRejection([
-          '제출 필드에 도구 호출 구문이 혼입되어 원문을 대화에서 제거했습니다',
-          `제출 식별: ${excerpt || sub.name}`,
-          '직전 제출 문면을 참조하지 말고, 같은 내용을 처음부터 순수 텍스트로 새로 작성해 제출하세요',
-        ]),
-      });
-      const last = messages.at(-1);
-      if (last?.role === 'assistant' && Array.isArray(last.content)) {
-        for (const block of last.content) {
-          if (block.type === 'tool_use' && block.id === sub.id) {
-            block.input = { scrubbed: '직렬화 오염 제출 — 원문 제거됨' };
-          }
-        }
-      }
+    // 파일 연산 — 순수하므로 캐시 밖에서 즉시 적용한다. 산출물 저장이 일어나면 검사 노트를
+    // 붙인다(scratch는 무검사). 원고 관찰 기록은 정합성 원장에 쌓인다.
+    for (const use of out.toolUses) {
+      const outcome = workspace.apply(use, turn);
+      if (outcome === null) continue;
+      const path = pathOf(use);
+      const note =
+        outcome.changed && Object.hasOwn(deliverable.outputs, path)
+          ? `${outcome.message}\n${renderNotes(validateOutput(deliverable, path, workspace.file(path)).notes)}`
+          : outcome.message;
+      resultOf.set(use.id, note);
+      if (outcome.record) ledger.tools.push(outcome.record);
+      actions.push(workspace.summarize(use));
     }
 
-    const outcome = onSubmissions(cleanSubs, turn, combinedTools, ledger);
-
-    const resultOf = new Map<string, string>();
+    // 검색 — 비결정적이므로 실행 결과를 캐시한다. 이 턴에 검색이 없으면 스텝을 만들지
+    // 않는다(분기는 캐시된 턴 출력의 순수 함수라 리플레이에 안전).
+    const searchUses = out.toolUses.filter((use) => !resultOf.has(use.id) && use.name !== deliverable.submitName);
+    const executed =
+      searchUses.length === 0
+        ? { results: [], records: [] }
+        : ((await ctx.step.do(`${stage}-tools-${turn}`, async () => {
+            const { value } = await ctx.cached(`${stage}/tools/${turn}`, () => executeSearches(searchUses, turn, search));
+            return value as never;
+          })) as unknown as Awaited<ReturnType<typeof executeSearches>>);
     for (const r of executed.results) resultOf.set(r.toolUseId, r.content);
-    for (const r of leakResults) resultOf.set(r.toolUseId, r.content);
-    for (const r of outcome.results) resultOf.set(r.toolUseId, r.content);
+    ledger.tools.push(...executed.records);
+
+    // 제출 — 저장 검사와 같은 게이트를 통과한 값만 도메인 수용에 닿는다. 접수되면 그 자리에서
+    // 확정된다: 자기 서술 헤더가 붙고 이후 수정이 봉인된다.
+    const combinedTools = [...baseTools, ...ledger.tools];
+    let accepted: R | undefined;
+    for (const use of out.toolUses) {
+      if (use.name !== deliverable.submitName || resultOf.has(use.id)) continue;
+      const path = pathOf(use);
+      const gate = validateOutput<T>(deliverable, path, workspace.file(path));
+      if (gate.value === undefined) {
+        ledger.events.push({ turn, kind: 'submit-rejected', detail: `검사 노트 ${gate.notes.length}건` });
+        resultOf.set(use.id, renderRejection(gate.notes));
+        actions.push(`${deliverable.submitName} ${path} → 반려 ${gate.notes.length}건`);
+        continue;
+      }
+      const outcome = onSubmit(path, gate.value, { turn, tools: combinedTools, ledger, file: options.manuscriptFile });
+      if ('reject' in outcome) {
+        resultOf.set(use.id, renderRejection(outcome.reject));
+        actions.push(`${deliverable.submitName} ${path} → 반려 ${outcome.reject.length}건`);
+        continue;
+      }
+      if (options.finalizeOnAccept ?? true) {
+        const spec = deliverable.outputs[path];
+        workspace.finalize(path, finalizeHeader(spec, deliverable.label), spec.description);
+      }
+      accepted = outcome.accept;
+      resultOf.set(use.id, outcome.message);
+      actions.push(`${deliverable.submitName} ${path} → 접수`);
+    }
+
+    ledger.turns.push(turnNote(stage, turn, out.content, actions));
+
     messages.push({
       role: 'user',
       content: out.toolUses.map((use) => ({
@@ -132,11 +167,14 @@ export const runAgentStage = async <T>(ctx: RunContext, options: AgentStageOptio
       })),
     });
 
+    // 스테이지가 끝나면 작업 메모를 스냅샷으로 남긴다 — 무엇을 메모하며 일했는지의 사후 열람.
+    if (accepted !== undefined) ledger.scratchFiles = workspace.scratchFiles();
+
     // 단계가 끝나야 원장이 남으면 도는 동안 무엇을 읽고 무엇이 걸렸는지 볼 수 없다.
     // 턴마다 덮어써 진행 중에도 최신 상태가 보이게 한다.
     await ctx.ledger(`ledger/${ledgerKey}`, ledger);
 
-    if (outcome.done !== undefined) return { value: outcome.done, ledger };
+    if (accepted !== undefined) return { value: accepted, ledger };
   }
 
   throw new Error(`${stage}: 턴 백스톱(${TURN_CAP}) 초과`);

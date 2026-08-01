@@ -44,9 +44,13 @@ describe('resolveAuth', () => {
     expect(result).toEqual({ kind: 'denied', status: 403 });
   });
 
-  // 어드민 밖 열람 경로는 Access만 통과하면 열린다 — 작가에게 링크로 건네는 자리다.
-  it('열람 경로는 admin 검사를 받지 않는다', () => {
-    const result = resolveAuth({ ...base, pathname: '/reads/abc', accessEmailHeader: 'writer@penxle.io', adminEmails: 'admin@penxle.io' });
-    expect(result).toEqual({ kind: 'evaluator', email: 'writer@penxle.io' });
+  // 열람 경로는 인증 없이 연다 — 작가에게 링크로 건네는 자리고, Access도 이 경로를 bypass한다.
+  it('열람 경로는 이메일 없이도 public으로 연다', () => {
+    expect(resolveAuth({ ...base, pathname: '/reads/abc', accessEmailHeader: null })).toEqual({ kind: 'public' });
+    expect(resolveAuth({ ...base, pathname: '/reads/abc', accessEmailHeader: 'writer@penxle.io' })).toEqual({ kind: 'public' });
+  });
+
+  it('열람 접두어를 가장한 다른 경로는 public이 아니다', () => {
+    expect(resolveAuth({ ...base, pathname: '/readsomething', accessEmailHeader: null })).toEqual({ kind: 'denied', status: 403 });
   });
 });
