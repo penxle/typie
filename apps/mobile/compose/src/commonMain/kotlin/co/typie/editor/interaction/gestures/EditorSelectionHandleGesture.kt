@@ -2,7 +2,6 @@ package co.typie.editor.interaction.gestures
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import co.typie.editor.Editor
 import co.typie.editor.ext.isCollapsed
 import co.typie.editor.ffi.PageRect
 import co.typie.editor.ffi.Position
@@ -84,7 +83,6 @@ internal class EditorSelectionHandleGesture(
   private val session: EditorSelectionHandleDragSession = EditorSelectionHandleDragSession(),
 ) {
   private var dragSlop = 0f
-  private var terminalExtensionRequest: TerminalExtensionRequest? = null
 
   val pendingDrag: Boolean
     get() = session.pendingDrag
@@ -176,7 +174,6 @@ internal class EditorSelectionHandleGesture(
     preserveTapDispatch: Boolean = false,
   ): Boolean {
     val context = contextProvider()
-    terminalExtensionRequest = null
     if (!context.mode.canApply(EditorInteractionEvent.SelectionHandleDragStart)) {
       return false
     }
@@ -278,7 +275,6 @@ internal class EditorSelectionHandleGesture(
   fun handleDragHandoff(): Boolean {
     val context = contextProvider()
     val wasActive = activeDrag
-    terminalExtensionRequest = null
     session.reset()
     context.semantics.edgeAutoScroll.stop()
     context.effects.setScrollGestureLocked(false)
@@ -305,34 +301,10 @@ internal class EditorSelectionHandleGesture(
     if (context.mode.canApply(EditorInteractionEvent.SelectionHandleDragEnd)) {
       context.reduceMode(EditorInteractionEvent.SelectionHandleDragEnd)
     }
-    if (terminalExtension != null) {
-      val request = TerminalExtensionRequest(editor = context.editor)
-      terminalExtensionRequest = request
-      context.semantics.pointSelection.launchSelection(
-        editor = request.editor,
-        op = terminalExtension,
-        onApplied = { snapshot ->
-          if (terminalExtensionRequest === request) {
-            terminalExtensionRequest = null
-            val currentContext = contextProvider()
-            if (currentContext.editor === request.editor) {
-              currentContext.semantics.contextMenu.requestShowForAppliedSelection(
-                editor = request.editor,
-                state = snapshot,
-              )
-            }
-          }
-        },
-        afterDispatch = { dispatched ->
-          if (!dispatched && terminalExtensionRequest === request) {
-            terminalExtensionRequest = null
-          }
-        },
-      )
-    } else if (wasDragging) {
-      context.semantics.contextMenu.requestShowForAppliedSelection(
+    if (wasDragging) {
+      context.semantics.selectionHandle.requestContextMenuAfterSelection(
         editor = context.editor,
-        state = context.editor.appliedState,
+        terminalExtension = terminalExtension,
       )
     }
     return wasActive
@@ -347,7 +319,6 @@ internal class EditorSelectionHandleGesture(
   }
 
   fun resetPointerOwnedState(context: EditorGestureContext) {
-    terminalExtensionRequest = null
     session.reset()
     context.semantics.edgeAutoScroll.stop()
     context.effects.setScrollGestureLocked(false)
@@ -355,10 +326,5 @@ internal class EditorSelectionHandleGesture(
     context.editor.imeNotificationsPaused = false
   }
 
-  fun reset() {
-    terminalExtensionRequest = null
-    session.reset()
-  }
-
-  private data class TerminalExtensionRequest(val editor: Editor)
+  fun reset() = session.reset()
 }

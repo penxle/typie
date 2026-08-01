@@ -3,6 +3,7 @@ package co.typie.editor.interaction.sessions
 import androidx.compose.ui.geometry.Offset
 import co.typie.editor.ffi.Position
 import co.typie.editor.ffi.Selection
+import co.typie.editor.ffi.SelectionOp
 
 internal class EditorTableHandleDragSession {
   private var pendingContext: EditorPendingTableHandleDrag? = null
@@ -83,6 +84,12 @@ internal class EditorTableHandleDragSession {
     return drag.startHandlePosition + (touchPosition - drag.startTouchPosition)
   }
 
+  fun finish(): SelectionOp.ExtendTo? {
+    val terminalExtension = dragContext?.latestExtension
+    reset()
+    return terminalExtension
+  }
+
   fun reset() {
     pendingContext = null
     dragContext = null
@@ -97,4 +104,5 @@ internal data class EditorTableHandleDragContext(
   val startHandlePosition: Offset,
   val anchor: Position,
   val baseSelection: Selection,
+  var latestExtension: SelectionOp.ExtendTo? = null,
 )

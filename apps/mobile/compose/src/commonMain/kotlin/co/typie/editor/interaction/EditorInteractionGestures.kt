@@ -83,6 +83,7 @@ internal class EditorInteractionGestures(
 
     longPress.reset()
     doubleTapDrag.resetPointerOwnedState(context = context)
+    context.semantics.selectionHandle.cancelPendingContextMenuRequest()
     selectionHandle.reset()
     tap.cancelPendingPresentation(context = context)
 
@@ -502,6 +503,7 @@ internal class EditorInteractionGestures(
   }
 
   fun resetPointerOwnedState(context: EditorGestureContext) {
+    context.semantics.selectionHandle.cancelPendingContextMenuRequest()
     tableColumnResize.cancel(context = context)
     tableHandle.resetPointerOwnedState(context = context)
     selectionHandle.resetPointerOwnedState(context = context)
@@ -560,7 +562,7 @@ internal class EditorInteractionGestures(
   private fun handoffTableDragToSelectionHandle(
     update: EditorTableHandleDragUpdate.HandoffToSelectionHandle
   ): Boolean {
-    tableHandle.handleDragEnd()
+    tableHandle.handleDragHandoff()
     return selectionHandle.adoptTableCellDrag(
       touchPosition = update.touchPosition,
       handlePosition = update.handlePosition,

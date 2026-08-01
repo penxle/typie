@@ -30,11 +30,12 @@ internal class EditorEdgeAutoScrollSemantic {
       dispatchPosition = dispatchPosition,
       context = context,
       dispatch = { scrolled ->
-        context.editor.dispatchSelectionHandleExtension(
+        context.semantics.selectionHandle.enqueueExtension(
+          editor = context.editor,
           point = scrolled.point,
           anchor = anchor,
           baseSelection = baseSelection,
-        )
+        ) != null
       },
     )
   }

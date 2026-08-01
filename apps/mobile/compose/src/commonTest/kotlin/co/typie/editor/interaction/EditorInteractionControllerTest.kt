@@ -2320,6 +2320,65 @@ class EditorInteractionControllerTest {
     }
 
   @Test
+  fun `table cell handle release waits for its terminal applied selection publication`() =
+    runTest(StandardTestDispatcher()) {
+      var selection =
+        Selection(
+          anchor = Position("cell-text", 0, Affinity.Downstream),
+          head = Position("cell-text", 0, Affinity.Downstream),
+        )
+      var tableOverlay = tableOverlay(isFocused = true, focusedRowIndex = 0, focusedColIndex = 0)
+      val fake =
+        FakeFfiEditor(
+          onTick = {
+            listOf(EditorEvent.StateChanged(listOf(StateField.Selection, StateField.TableOverlays)))
+          },
+          selectionProvider = { selection },
+          tableOverlaysProvider = { listOf(tableOverlay) },
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      fake.publishSnapshot(editor)
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+        )
+      controller.updateTapSlop(8f)
+      val down = Offset(60f, 60f)
+
+      assertTrue(controller.onPointerDown(pointerId = 1L, position = down, nowMillis = 0L))
+      assertTrue(
+        controller.onPointerMove(pointerId = 1L, position = Offset(100f, 90f), nowMillis = 20L)
+      )
+
+      selection =
+        Selection(
+          anchor = Position("cell-text", 0, Affinity.Downstream),
+          head = Position("next-cell-text", 2, Affinity.Downstream),
+        )
+      tableOverlay =
+        tableOverlay(
+          isFocused = true,
+          cellSelection =
+            TableOverlayCellSelection(anchorRow = 0, anchorCol = 0, headRow = 0, headCol = 1),
+        )
+
+      assertTrue(
+        controller.onPointerUp(pointerId = 1L, position = Offset(100f, 90f), nowMillis = 40L)
+      )
+      assertFalse(host.uiState.contextMenu.visible)
+
+      advanceUntilIdle()
+      controller.onEditorStateChanged(editor.publishedState)
+
+      assertEquals(selection, editor.publishedState.selection)
+      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
+    }
+
+  @Test
   fun `table cell handle tap dispatches a normal cell tap`() =
     runTest(StandardTestDispatcher()) {
       val selection =
@@ -2358,6 +2417,7 @@ class EditorInteractionControllerTest {
         fake.enqueued.filterIsInstance<Message.Selection>(),
       )
       assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
+      assertFalse(host.uiState.contextMenu.visible)
     }
 
   @Test
@@ -2463,6 +2523,7 @@ class EditorInteractionControllerTest {
       assertFalse(outsideExtend.allowCollapse)
       assertEquals(EditorInteractionMode.SelectionHandleDragging, controller.interactionMode)
       assertEquals(Offset(30f, 110f), controller.magnifierPosition)
+      assertFalse(host.uiState.contextMenu.visible)
 
       fake.enqueued.clear()
       assertTrue(

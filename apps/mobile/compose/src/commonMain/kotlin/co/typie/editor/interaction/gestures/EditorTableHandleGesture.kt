@@ -11,7 +11,6 @@ import co.typie.editor.interaction.EditorTableCellSelectionHandleTouchTargetDp
 import co.typie.editor.interaction.canApply
 import co.typie.editor.interaction.contains
 import co.typie.editor.interaction.resolveActiveTableCellSelection
-import co.typie.editor.interaction.semantics.dispatchSelectionHandleExtension
 import co.typie.editor.interaction.sessions.EditorTableHandleDragContext
 import co.typie.editor.interaction.sessions.EditorTableHandleDragSession
 
@@ -208,6 +207,26 @@ internal class EditorTableHandleGesture(
   fun handleDragEnd(): Boolean {
     val context = contextProvider()
     val wasActive = dragging
+    val wasDragging = activeDrag
+    val terminalExtension = session.finish()
+    context.semantics.edgeAutoScroll.stop()
+    context.effects.setScrollGestureLocked(false)
+    context.semantics.magnifier.hide()
+    if (context.mode.canApply(EditorInteractionEvent.TableHandleDragEnd)) {
+      context.reduceMode(EditorInteractionEvent.TableHandleDragEnd)
+    }
+    if (wasDragging) {
+      context.semantics.selectionHandle.requestContextMenuAfterSelection(
+        editor = context.editor,
+        terminalExtension = terminalExtension,
+      )
+    }
+    return wasActive
+  }
+
+  fun handleDragHandoff(): Boolean {
+    val context = contextProvider()
+    val wasActive = activeDrag
     session.reset()
     context.semantics.edgeAutoScroll.stop()
     context.effects.setScrollGestureLocked(false)
@@ -275,11 +294,14 @@ internal class EditorTableHandleGesture(
       )
     }
 
-    context.editor.dispatchSelectionHandleExtension(
-      point = point,
-      anchor = drag.anchor,
-      baseSelection = drag.baseSelection,
-    )
+    val op =
+      context.semantics.selectionHandle.enqueueExtension(
+        editor = context.editor,
+        point = point,
+        anchor = drag.anchor,
+        baseSelection = drag.baseSelection,
+      ) ?: return EditorTableHandleDragUpdate.Consumed
+    drag.latestExtension = op
     return EditorTableHandleDragUpdate.Consumed
   }
 }

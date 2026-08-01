@@ -2,7 +2,6 @@ package co.typie.editor.interaction.sessions
 
 import androidx.compose.ui.geometry.Offset
 import co.typie.editor.PagePoint
-import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.Position
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.SelectionOp
@@ -11,7 +10,6 @@ import co.typie.editor.interaction.contains
 import co.typie.editor.interaction.gestures.EditorSelectionHandleTableCellHandoff
 import co.typie.editor.interaction.gestures.EditorSelectionHandleType
 import co.typie.editor.interaction.resolveActiveTableCellSelection
-import co.typie.editor.interaction.semantics.selectionHandleExtensionOp
 
 internal class EditorSelectionHandleDragSession {
   private var pendingContext: EditorPendingSelectionHandleDrag? = null
@@ -193,9 +191,12 @@ internal class EditorSelectionHandleDragSession {
     context: EditorGestureContext,
   ): Boolean {
     val op =
-      point.selectionHandleExtensionOp(anchor = drag.anchor, baseSelection = drag.baseSelection)
-        ?: return false
-    context.editor.enqueue(Message.Selection(op))
+      context.semantics.selectionHandle.enqueueExtension(
+        editor = context.editor,
+        point = point,
+        anchor = drag.anchor,
+        baseSelection = drag.baseSelection,
+      ) ?: return false
     drag.latestExtension = op
     return true
   }

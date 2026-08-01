@@ -9,6 +9,7 @@ import co.typie.editor.interaction.semantics.EditorLongPressSemantic
 import co.typie.editor.interaction.semantics.EditorMagnifierSemantic
 import co.typie.editor.interaction.semantics.EditorPointSelectionSemantic
 import co.typie.editor.interaction.semantics.EditorSelectionExpansionSemantic
+import co.typie.editor.interaction.semantics.EditorSelectionHandleSemantic
 import co.typie.editor.interaction.semantics.EditorSelectionHapticSemantic
 import co.typie.editor.interaction.semantics.EditorTableColumnResizeSemantic
 import co.typie.editor.interaction.semantics.EditorViewportZoomSemantic
@@ -21,6 +22,8 @@ internal class EditorInteractionSemantics(
     EditorPointSelectionSemantic(effects = effects),
   val contextMenu: EditorContextMenuSemantic =
     EditorContextMenuSemantic(stateProvider = contextMenuStateProvider),
+  val selectionHandle: EditorSelectionHandleSemantic =
+    EditorSelectionHandleSemantic(pointSelection = pointSelection, contextMenu = contextMenu),
   val interactiveHit: EditorInteractiveHitSemantic = EditorInteractiveHitSemantic(),
   val longPress: EditorLongPressSemantic = EditorLongPressSemantic(),
   val selectionExpansion: EditorSelectionExpansionSemantic = EditorSelectionExpansionSemantic(),
@@ -38,6 +41,7 @@ internal class EditorInteractionSemantics(
 
   fun reset() {
     contextMenu.reset()
+    selectionHandle.reset()
     selectionExpansion.reset()
     viewportZoom.reset()
     magnifier.reset()
