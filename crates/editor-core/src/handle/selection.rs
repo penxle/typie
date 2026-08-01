@@ -5,7 +5,7 @@ use editor_state::{
     Position, ResolvedPosition, ResolvedPositionFlatExt, Selection, StableResolveCtx,
     cell_rect_selection, enclosing_table, enclosing_table_cell, expand_unit_at, remap_selection,
     resolve_paragraph_selection_expansion, resolve_sentence_selection_expansion,
-    resolve_word_selection_expansion, table_cell_ids,
+    resolve_word_selection_expansion,
 };
 use editor_transaction::HistoryMeta;
 use editor_view::ExtendingHitSource;
@@ -261,6 +261,10 @@ fn resolve_extend_to_selection(
 ) -> Option<Selection> {
     let input_state = editor.layout_input_state()?;
     let view = input_state.view();
+    let head_hit =
+        editor
+            .view
+            .hit_test_extending(&input_state, &anchor, head_page, head_x, head_y)?;
     let base_cell_rect_anchor = base_selection
         .as_ref()
         .and_then(|selection| selection.resolve(&view))
@@ -271,51 +275,24 @@ fn resolve_extend_to_selection(
     if let Some(anchor_cell) =
         base_cell_rect_anchor.or_else(|| enclosing_table_cell(&view, anchor.node))
         && let Some(table_id) = enclosing_table(&view, anchor_cell)
+        && let Some(head_cell) = common_enclosing_table_cell(&view, &head_hit.selection)
+        && enclosing_table(&view, head_cell) == Some(table_id)
     {
-        let head_inside_table = editor
-            .view
-            .node_box_contains(head_page, head_x, head_y, table_id);
-        if head_inside_table {
-            let cells = table_cell_ids(&view, anchor_cell);
-            if let Some(head_cell) = editor
-                .view
-                .nearest_node_box(head_page, head_x, head_y, &cells)
-            {
-                let is_cell_mode = started_from_cell_rect
-                    || input_state
-                        .selection
-                        .as_ref()
-                        .and_then(|selection| selection.resolve(&view))
-                        .is_some_and(|resolved| resolved.as_cell_rect().is_some());
-                let is_same_cell_content_hit = if head_cell == anchor_cell && !is_cell_mode {
-                    editor
-                        .view
-                        .hit_test_extending(&input_state, &anchor, head_page, head_x, head_y)
-                        .is_some_and(|hit| {
-                            hit.source == ExtendingHitSource::Exact
-                                && selection_endpoints_inside_cell(
-                                    &view,
-                                    &hit.selection,
-                                    anchor_cell,
-                                )
-                        })
-                } else {
-                    false
-                };
-                if (head_cell != anchor_cell || is_cell_mode || !is_same_cell_content_hit)
-                    && let Some(selection) = cell_rect_selection(anchor_cell, head_cell, &view)
-                {
-                    return remap_layout_selection(editor, selection);
-                }
-            }
+        let is_cell_mode = started_from_cell_rect
+            || input_state
+                .selection
+                .as_ref()
+                .and_then(|selection| selection.resolve(&view))
+                .is_some_and(|resolved| resolved.as_cell_rect().is_some());
+        let is_same_cell_content_hit = head_cell == anchor_cell
+            && !is_cell_mode
+            && head_hit.source == ExtendingHitSource::Exact;
+        if (head_cell != anchor_cell || is_cell_mode || !is_same_cell_content_hit)
+            && let Some(selection) = cell_rect_selection(anchor_cell, head_cell, &view)
+        {
+            return remap_layout_selection(editor, selection);
         }
-        // head outside table: fall through; normalize promotes anchor to table boundary
     }
-
-    let head_hit =
-        editor
-            .view
-            .hit_test_extending(&input_state, &anchor, head_page, head_x, head_y)?;
 
     let base_selection = base_selection.or_else(|| expand_unit_at(&anchor, &view));
     let selection = if let Some(base_selection) = base_selection {
@@ -330,13 +307,10 @@ fn resolve_extend_to_selection(
         .and_then(|selection| remap_layout_selection(editor, selection))
 }
 
-fn selection_endpoints_inside_cell(view: &DocView, selection: &Selection, cell: Dot) -> bool {
-    let Some(resolved) = selection.resolve(view) else {
-        return false;
-    };
-    [resolved.anchor().node(), resolved.head().node()]
-        .into_iter()
-        .all(|node| enclosing_table_cell(view, node) == Some(cell))
+fn common_enclosing_table_cell(view: &DocView, selection: &Selection) -> Option<Dot> {
+    let resolved = selection.resolve(view)?;
+    let cell = enclosing_table_cell(view, resolved.anchor().node())?;
+    (enclosing_table_cell(view, resolved.head().node()) == Some(cell)).then_some(cell)
 }
 
 fn extend_base_selection(
@@ -1873,6 +1847,105 @@ mod tests {
             .expect("dragging to another cell should select a cell rect");
         assert_eq!(cell_rect.anchor_cell.id(), c00);
         assert_eq!(cell_rect.head_cell.id(), c01);
+        assert!(!editor.undo_history.can_undo());
+    }
+
+    #[test]
+    fn extend_from_cell_text_to_side_gutter_selects_cell_rect() {
+        let (state, table, c00, p00, c01) = state! {
+            doc {
+                root {
+                    table: table {
+                        table_row {
+                            c00: table_cell { p00: paragraph { text("left") } }
+                            c01: table_cell { paragraph { text("right") } }
+                        }
+                        table_row {
+                            table_cell { paragraph { text("below") } }
+                            table_cell { paragraph { text("more") } }
+                        }
+                    }
+                }
+            }
+            selection: (p00, 2)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state);
+        let table_rect = editor.view.node_box_rects(&[table])[0].rect;
+        let target_rect = editor.view.node_box_rects(&[c01])[0].rect;
+
+        editor.apply(Message::Selection {
+            op: SelectionOp::ExtendTo {
+                anchor: Position::new(p00, 2),
+                head_page: 0,
+                head_x: table_rect.right() + 1.0,
+                head_y: target_rect.y + target_rect.height / 2.0,
+                base_selection: None,
+                allow_collapse: true,
+            },
+        });
+
+        let view = editor.state().view();
+        let rect = editor
+            .state()
+            .selection
+            .and_then(|selection| selection.resolve(&view))
+            .and_then(|resolved| resolved.as_cell_rect())
+            .expect("side gutter drag should stay a cell selection");
+        assert_eq!(rect.anchor_cell.id(), c00);
+        assert_eq!(rect.head_cell.id(), c01);
+        assert!(!editor.undo_history.can_undo());
+    }
+
+    #[test]
+    fn extend_from_cell_rect_to_side_gutter_stays_cell_rect() {
+        let (mut state, table, c00, _p00, c01) = state! {
+            doc {
+                root {
+                    table: table {
+                        table_row {
+                            c00: table_cell { p00: paragraph { text("left") } }
+                            c01: table_cell { paragraph { text("right") } }
+                        }
+                        table_row {
+                            table_cell { paragraph { text("below") } }
+                            table_cell { paragraph { text("more") } }
+                        }
+                    }
+                }
+            }
+            selection: (p00, 2)
+        };
+        let base_selection = {
+            let view = state.view();
+            cell_rect_selection(c00, c00, &view).expect("single-cell selection builds")
+        };
+        state.selection = Some(base_selection);
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state);
+        let table_rect = editor.view.node_box_rects(&[table])[0].rect;
+        let target_rect = editor.view.node_box_rects(&[c01])[0].rect;
+
+        editor.apply(Message::Selection {
+            op: SelectionOp::ExtendTo {
+                anchor: base_selection.anchor,
+                head_page: 0,
+                head_x: table_rect.right() + 1.0,
+                head_y: target_rect.y + target_rect.height / 2.0,
+                base_selection: Some(base_selection),
+                allow_collapse: false,
+            },
+        });
+
+        let view = editor.state().view();
+        let rect = editor
+            .state()
+            .selection
+            .and_then(|selection| selection.resolve(&view))
+            .and_then(|resolved| resolved.as_cell_rect())
+            .expect("cell handle drag in the side gutter should stay a cell selection");
+        assert_eq!(rect.anchor_cell.id(), c00);
+        assert_eq!(rect.head_cell.id(), c01);
         assert!(!editor.undo_history.can_undo());
     }
 
