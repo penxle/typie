@@ -56,15 +56,15 @@ import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
-private object TextReplacementsTitleKey
+private const val TextReplacementsTitleKey = "text-replacements-title"
 
-private object TextReplacementsDescriptionKey
+private const val TextReplacementsDescriptionKey = "text-replacements-description"
 
-private object TextReplacementsPresetKey
+private const val TextReplacementsPresetKey = "text-replacements-preset"
 
-private object TextReplacementsCustomHeaderKey
+private const val TextReplacementsCustomHeaderKey = "text-replacements-custom-header"
 
-private object TextReplacementsEmptyKey
+private const val TextReplacementsEmptyKey = "text-replacements-empty"
 
 @Composable
 fun TextReplacementsScreen() {

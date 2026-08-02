@@ -213,10 +213,10 @@ internal fun NoteList(
               LaunchedEffect(item.note.id, noteIsEntering) {
                 if (!noteIsEntering) return@LaunchedEffect
                 snapshotFlow {
-                    visibilityState.isIdle &&
-                      visibilityState.currentState &&
-                      visibilityState.targetState
-                  }
+                  visibilityState.isIdle &&
+                    visibilityState.currentState &&
+                    visibilityState.targetState
+                }
                   .first { it }
                 onEnterAnimationFinished(item.note.id)
               }
@@ -224,10 +224,10 @@ internal fun NoteList(
               LaunchedEffect(item.note.id, noteIsExitVisible) {
                 if (!noteIsExitVisible) return@LaunchedEffect
                 snapshotFlow {
-                    visibilityState.isIdle &&
-                      !visibilityState.currentState &&
-                      !visibilityState.targetState
-                  }
+                  visibilityState.isIdle &&
+                    !visibilityState.currentState &&
+                    !visibilityState.targetState
+                }
                   .first { it }
                 onExitAnimationFinished(item.note.id)
               }
@@ -359,11 +359,11 @@ internal fun NoteList(
   }
 }
 
-private object NoteListHeaderKey
+private const val NoteListHeaderKey = "note-list-header"
 
-private object NoteListBodyStateKey
+private const val NoteListBodyStateKey = "note-list-body-state"
 
-private object NoteListFooterKey
+private const val NoteListFooterKey = "note-list-footer"
 
 @Composable
 private fun NoteQueryError(onRetry: suspend () -> Unit) {

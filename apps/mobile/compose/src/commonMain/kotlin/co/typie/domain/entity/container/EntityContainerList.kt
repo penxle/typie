@@ -183,11 +183,11 @@ private fun EntityContainerNormalRow(
   }
 }
 
-private object EntityContainerHeaderKey
+private const val EntityContainerHeaderKey = "entity-container-header"
 
-private object EntityContainerEmptyKey
+private const val EntityContainerEmptyKey = "entity-container-empty"
 
-private object EntityContainerBottomSpacerKey
+private const val EntityContainerBottomSpacerKey = "entity-container-bottom-spacer"
 
 @Composable
 private fun EntityContainerReorderRow(
