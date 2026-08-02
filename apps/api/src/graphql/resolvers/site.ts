@@ -51,14 +51,7 @@ Site.implement({
             return await db
               .select()
               .from(Entities)
-              .where(
-                and(
-                  inArray(Entities.siteId, ids),
-                  eq(Entities.state, EntityState.ACTIVE),
-                  ne(Entities.type, EntityType.POST),
-                  isNull(Entities.parentId),
-                ),
-              )
+              .where(and(inArray(Entities.siteId, ids), eq(Entities.state, EntityState.ACTIVE), isNull(Entities.parentId)))
               .orderBy(asc(Entities.order));
           },
           key: ({ siteId }) => siteId,
@@ -111,7 +104,6 @@ Site.implement({
                 FROM ${Entities}
                 WHERE ${inArray(Entities.siteId, ids)}
                 AND ${eq(Entities.state, EntityState.ACTIVE)}
-                AND ${ne(Entities.type, EntityType.POST)}
                 AND ${isNull(Entities.parentId)}
               ) sq WHERE rn = 1
             `);
@@ -178,7 +170,6 @@ Site.implement({
             and(
               eq(Entities.siteId, self.id),
               eq(Entities.state, EntityState.DELETED),
-              ne(Entities.type, EntityType.POST),
               gt(Entities.deletedAt, dayjs().subtract(30, 'days')),
               or(isNull(parentEntities.id), eq(parentEntities.state, EntityState.ACTIVE)),
             ),
@@ -207,7 +198,6 @@ SiteView.implement({
                 and(
                   inArray(Entities.siteId, ids),
                   eq(Entities.state, EntityState.ACTIVE),
-                  ne(Entities.type, EntityType.POST),
                   eq(Entities.visibility, EntityVisibility.PUBLIC),
                   isNull(Entities.parentId),
                 ),

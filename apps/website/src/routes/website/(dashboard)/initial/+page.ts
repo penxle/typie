@@ -14,7 +14,7 @@ export const load = async (event) => {
           sites {
             id
 
-            firstEntity(type: POST) {
+            firstEntity(type: DOCUMENT) {
               id
               slug
             }

@@ -517,7 +517,6 @@ enum EntityState {
 enum EntityType {
   DOCUMENT
   FOLDER
-  POST
 }
 
 type EntityView implements IEntity {

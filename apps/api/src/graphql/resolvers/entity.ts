@@ -99,9 +99,6 @@ Entity.implement({
               key: ({ entityId }) => entityId,
             }),
           )
-          .with(EntityType.POST, () => {
-            throw new NotFoundError();
-          })
           .exhaustive();
 
         return await loader.load(self.id);
@@ -118,7 +115,7 @@ Entity.implement({
             return await db
               .select()
               .from(Entities)
-              .where(and(inArray(Entities.parentId, ids), eq(Entities.state, EntityState.ACTIVE), ne(Entities.type, EntityType.POST)))
+              .where(and(inArray(Entities.parentId, ids), eq(Entities.state, EntityState.ACTIVE)))
               .orderBy(asc(Entities.order));
           },
           // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
@@ -143,7 +140,6 @@ Entity.implement({
                 FROM ${Entities}
                 WHERE ${inArray(Entities.parentId, ids)}
                 AND ${eq(Entities.state, EntityState.ACTIVE)}
-                AND ${ne(Entities.type, EntityType.POST)}
               ) sq WHERE rn = 1
             `);
           },
@@ -169,7 +165,6 @@ Entity.implement({
                 FROM ${Entities}
                 WHERE ${inArray(Entities.parentId, ids)}
                 AND ${eq(Entities.state, EntityState.ACTIVE)}
-                AND ${ne(Entities.type, EntityType.POST)}
               ) sq WHERE rn = 1
             `);
           },
@@ -195,7 +190,6 @@ Entity.implement({
                 and(
                   inArray(Entities.parentId, ids),
                   eq(Entities.state, EntityState.DELETED),
-                  ne(Entities.type, EntityType.POST),
                   gt(Entities.deletedAt, dayjs().subtract(30, 'days')),
                 ),
               )
@@ -309,9 +303,6 @@ EntityView.implement({
               key: ({ entityId }) => entityId,
             }),
           )
-          .with(EntityType.POST, () => {
-            throw new NotFoundError();
-          })
           .exhaustive();
 
         return await loader.load(self.id);
@@ -327,14 +318,7 @@ EntityView.implement({
         return await db
           .select()
           .from(Entities)
-          .where(
-            and(
-              eq(Entities.parentId, self.id),
-              eq(Entities.state, EntityState.ACTIVE),
-              ne(Entities.type, EntityType.POST),
-              inArray(Entities.visibility, visibilities),
-            ),
-          )
+          .where(and(eq(Entities.parentId, self.id), eq(Entities.state, EntityState.ACTIVE), inArray(Entities.visibility, visibilities)))
           .orderBy(asc(Entities.order));
       },
     }),

@@ -687,6 +687,13 @@
       "when": 1785666035401,
       "tag": "0097_drop-document-v1-tables",
       "breakpoints": false
+    },
+    {
+      "idx": 98,
+      "version": "7",
+      "when": 1785666143713,
+      "tag": "0098_drop-entity-type-post",
+      "breakpoints": false
     }
   ]
 }

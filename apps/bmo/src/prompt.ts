@@ -76,7 +76,6 @@ export const buildSystemPrompt = (schema: unknown) => dedent`
   | \`apps/desktop\` | 데스크톱 앱 |
   | \`crates\` | 에디터 코어 (Rust, WASM) |
   | \`packages\` | 공용 라이브러리 |
-  | \`legacy\` | 구버전 코드. 과거 데이터를 해석할 때만 참고 |
 
   ### 언제 코드베이스를 보는가
   DB 스키마에는 주석이 없습니다. 컬럼과 테이블의 의미는 코드에만 있습니다. 다음 경우 답하기 전에 확인하세요.

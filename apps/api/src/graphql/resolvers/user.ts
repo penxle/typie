@@ -174,7 +174,6 @@ User.implement({
               eq(Entities.userId, self.id),
               eq(Entities.state, EntityState.ACTIVE),
               isNotNull(Entities.viewedAt),
-              ne(Entities.type, EntityType.POST),
               args.siteId ? eq(Entities.siteId, args.siteId) : undefined,
             ),
           )

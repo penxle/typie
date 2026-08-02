@@ -87,9 +87,6 @@ og.get('/:entityId', async (c) => {
   }
 
   const node = await match(entity.type)
-    .with(EntityType.POST, () => {
-      throw new HTTPException(404);
-    })
     .with(EntityType.FOLDER, () => renderFolder(entityId))
     .with(EntityType.DOCUMENT, () => renderDocument(entityId))
     .exhaustive();
