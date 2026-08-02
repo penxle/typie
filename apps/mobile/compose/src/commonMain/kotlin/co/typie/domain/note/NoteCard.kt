@@ -97,6 +97,7 @@ private val NoteStatusHitTargetSize = 28.dp
 private val NoteGripHitTargetSize = 28.dp
 private val NoteColorDotHitTargetWidth = 20.dp
 private val NoteColorDotHitTargetHeight = 24.dp
+internal const val NoteColorPaletteScrubArmDelayMillis = 180L
 private const val NoteExpandAnimationDurationMillis = 220
 
 private data class NoteCardVisualState(val expanded: Boolean, val dragging: Boolean)
@@ -626,10 +627,11 @@ private fun NoteActionIconAnchor(icon: IconData, tint: Color = AppTheme.colors.t
 }
 
 @Composable
-private fun NoteColorPalette(
+internal fun NoteColorPalette(
   noteColorOptions: List<NoteColorOption>,
   selectedColor: String,
   onColorChange: (String) -> Unit,
+  modifier: Modifier = Modifier,
 ) {
   val density = LocalDensity.current
   val haptic = LocalHapticFeedback.current
@@ -640,13 +642,14 @@ private fun NoteColorPalette(
 
   Row(
     modifier =
-      Modifier.height(NoteColorDotHitTargetHeight).pointerInput(noteColorOptions, optionWidthPx) {
+      modifier.height(NoteColorDotHitTargetHeight).pointerInput(noteColorOptions, optionWidthPx) {
         awaitEachGesture {
           val down = awaitFirstDown(requireUnconsumed = false)
-          var lastPointerX = down.position.x
+          val touchSlop = viewConfiguration.touchSlop
           var lastSelectedColor = selectedColorState.value
+          var scrubbing = false
 
-          fun selectColorAt(x: Float, fromPan: Boolean) {
+          fun selectColorAt(x: Float) {
             val index = (x / optionWidthPx).toInt().coerceIn(0, noteColorOptions.lastIndex)
             val nextColor = noteColorOptions[index].value
             if (nextColor == lastSelectedColor) {
@@ -654,13 +657,9 @@ private fun NoteColorPalette(
             }
 
             lastSelectedColor = nextColor
-            if (fromPan) {
-              hapticState.value.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-            }
+            hapticState.value.performHapticFeedback(HapticFeedbackType.TextHandleMove)
             onColorChangeState.value(nextColor)
           }
-
-          selectColorAt(down.position.x, fromPan = false)
 
           while (true) {
             val event = awaitPointerEvent()
@@ -669,10 +668,28 @@ private fun NoteColorPalette(
               break
             }
 
-            if (change.position.x != lastPointerX) {
-              selectColorAt(change.position.x, fromPan = true)
-              lastPointerX = change.position.x
+            if (!scrubbing) {
+              if (change.isConsumed) {
+                break
+              }
+
+              val offset = change.position - down.position
+              if (offset.getDistance() < touchSlop) {
+                continue
+              }
+
+              val elapsedMillis = change.uptimeMillis - down.uptimeMillis
+              if (
+                elapsedMillis < NoteColorPaletteScrubArmDelayMillis ||
+                  abs(offset.y) >= abs(offset.x)
+              ) {
+                break
+              }
+
+              scrubbing = true
             }
+
+            selectColorAt(change.position.x)
             change.consume()
           }
         }
