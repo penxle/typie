@@ -1004,32 +1004,6 @@ type PlanRule {
   maxTotalCharacterCount: Int!
 }
 
-enum PostAvailableAction {
-  EDIT
-}
-
-enum PostContentRating {
-  ALL
-  R15
-  R19
-}
-
-enum PostLayoutMode {
-  PAGE
-  SCROLL
-}
-
-enum PostType {
-  NORMAL
-  TEMPLATE
-}
-
-enum PostViewBodyUnavailableReason {
-  REQUIRE_IDENTITY_VERIFICATION
-  REQUIRE_MINIMUM_AGE
-  REQUIRE_PASSWORD
-}
-
 enum PreorderPaymentState {
   COMPLETED
   FAILED

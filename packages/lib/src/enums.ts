@@ -128,29 +128,6 @@ export const DocumentAvailableAction = {
   EDIT: 'EDIT',
 } as const;
 
-export const PostAvailableAction = {
-  EDIT: 'EDIT',
-} as const;
-
-export type PostContentRating = keyof typeof PostContentRating;
-export const PostContentRating = {
-  ALL: 'ALL',
-  R15: 'R15',
-  R19: 'R19',
-} as const;
-
-export type PostLayoutMode = keyof typeof PostLayoutMode;
-export const PostLayoutMode = {
-  SCROLL: 'SCROLL',
-  PAGE: 'PAGE',
-} as const;
-
-export type PostType = keyof typeof PostType;
-export const PostType = {
-  NORMAL: 'NORMAL',
-  TEMPLATE: 'TEMPLATE',
-} as const;
-
 export type DocumentExportFormat = keyof typeof DocumentExportFormat;
 export const DocumentExportFormat = {
   DOCX: 'DOCX',
@@ -190,13 +167,6 @@ export const DocumentContentRating = {
 
 export type DocumentViewBodyUnavailableReason = keyof typeof DocumentViewBodyUnavailableReason;
 export const DocumentViewBodyUnavailableReason = {
-  REQUIRE_PASSWORD: 'REQUIRE_PASSWORD',
-  REQUIRE_IDENTITY_VERIFICATION: 'REQUIRE_IDENTITY_VERIFICATION',
-  REQUIRE_MINIMUM_AGE: 'REQUIRE_MINIMUM_AGE',
-} as const;
-
-export type PostViewBodyUnavailableReason = keyof typeof PostViewBodyUnavailableReason;
-export const PostViewBodyUnavailableReason = {
   REQUIRE_PASSWORD: 'REQUIRE_PASSWORD',
   REQUIRE_IDENTITY_VERIFICATION: 'REQUIRE_IDENTITY_VERIFICATION',
   REQUIRE_MINIMUM_AGE: 'REQUIRE_MINIMUM_AGE',

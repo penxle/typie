@@ -673,6 +673,13 @@
       "when": 1785439424567,
       "tag": "0095_llm-usage-instrumentation",
       "breakpoints": false
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1785665820985,
+      "tag": "0096_drop-post-tables",
+      "breakpoints": false
     }
   ]
 }
