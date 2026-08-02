@@ -20,12 +20,11 @@
   import MicrosoftWordIcon from '~icons/simple-icons/microsoftword';
   import FileEpubIcon from '~icons/typie/file-epub';
   import FileHwpIcon from '~icons/typie/file-hwp';
-  import { createPaginatedLayout, getMaxMargin, mmToPx, pxToMm } from '$lib/editor/utils';
-  import { values } from '$lib/editor/values';
+  import { createPaginatedLayout, getMaxMargin, mmToPx, pxToMm } from '$lib/editor-ffi/page-layout';
+  import { values } from '$lib/editor-ffi/values';
   import { graphql } from '$mearie';
   import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
-  import type { LayoutMode } from '@typie/editor';
-  import type { PageLayout, PageLayoutPreset } from '$lib/editor/utils';
+  import type { DocumentLayoutMode, PageLayout, PageLayoutPreset } from '$lib/editor-ffi/page-layout';
   import type { DashboardLayout_DocumentExportModal_user$key } from '$mearie';
 
   type Format = 'DOCX' | 'EPUB' | 'HWP' | 'PDF';
@@ -118,7 +117,7 @@
 
   $effect(() => {
     if (documentQuery.data) {
-      const layoutMode = documentQuery.data.document.layoutMode as LayoutMode;
+      const layoutMode = documentQuery.data.document.layoutMode as DocumentLayoutMode;
       const isPaginated = layoutMode.type === 'paginated';
 
       useCurrentSettings = isPaginated;
@@ -188,7 +187,7 @@
   {open}
 >
   {#if documentQuery.data}
-    {@const layoutMode = documentQuery.data.document.layoutMode as LayoutMode}
+    {@const layoutMode = documentQuery.data.document.layoutMode as DocumentLayoutMode}
     {@const currentPageEnabled = layoutMode.type === 'paginated'}
 
     <div class={css({ padding: '24px' })}>

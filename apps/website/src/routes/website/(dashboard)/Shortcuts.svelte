@@ -2,7 +2,7 @@
   import { createFragment } from '@mearie/svelte';
   import { getAppContext } from '@typie/ui/context';
   import mixpanel from 'mixpanel-browser';
-  import { IS_MAC } from '$lib/editor/constants';
+  import { IS_MAC } from '$lib/editor-ffi/constants';
   import { graphql } from '$mearie';
   import { getPaneGroup } from './[slug]/@pane/context.svelte';
   import type { DashboardLayout_Shortcuts_query$key } from '$mearie';

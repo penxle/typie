@@ -24,13 +24,13 @@
   import PlusIcon from '~icons/lucide/plus';
   import TableProperties from '~icons/lucide/table-properties';
   import Trash2Icon from '~icons/lucide/trash-2';
-  import ToolbarColorGrid from '$lib/components/editor/toolbar/ToolbarColorGrid.svelte';
-  import { THEME_COLORS } from '$lib/editor/theme';
-  import { values } from '$lib/editor/values';
+  import ToolbarColorGrid from '$lib/editor-ffi/components/toolbar/ToolbarColorGrid.svelte';
+  import { THEME_COLORS } from '$lib/editor-ffi/theme';
+  import { values } from '$lib/editor-ffi/values';
   import { EditorEdgeAutoScroll } from '../edge-auto-scroll';
   import { getEditorContext } from '../editor.svelte';
   import type { Message, TableOverlay as TableOverlayType } from '@typie/editor-ffi/browser';
-  import type { ThemeVariant } from '$lib/editor/theme';
+  import type { ThemeVariant } from '$lib/editor-ffi/theme';
 
   type Props = {
     overlay: TableOverlayType;

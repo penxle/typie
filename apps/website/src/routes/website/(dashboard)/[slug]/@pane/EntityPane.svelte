@@ -10,7 +10,6 @@
   import XIcon from '~icons/lucide/x';
   import { fb } from '$lib/analytics';
   import { graphql } from '$mearie';
-  import Document from '../Document.svelte';
   import DocumentV2 from '../v2/Document.svelte';
   import CloseButton from './CloseButton.svelte';
   import { getPaneGroup, setupPane } from './context.svelte';
@@ -51,14 +50,10 @@
             ... on Document {
               id
               layoutMode
-              state {
-                __typename
-              }
             }
           }
         }
 
-        ...Document_query
         ...DocumentV2_query
       }
     `),
@@ -153,22 +148,18 @@
   {#if query.data && entity}
     {#if entity?.state === EntityState.ACTIVE}
       {#if entity?.node.__typename === 'Document'}
-        {#if entity.node.state}
-          <DocumentV2
-            {focused}
-            onEditorFailed={() => {
-              liveEditorFailed = true;
-            }}
-            onEditorRetry={() => {
-              liveEditorFailed = false;
-              editorReady = false;
-            }}
-            onReady={() => (editorReady = true)}
-            query$key={query.data}
-          />
-        {:else}
-          <Document {focused} onReady={() => (editorReady = true)} query$key={query.data} slug={entity.slug} />
-        {/if}
+        <DocumentV2
+          {focused}
+          onEditorFailed={() => {
+            liveEditorFailed = true;
+          }}
+          onEditorRetry={() => {
+            liveEditorFailed = false;
+            editorReady = false;
+          }}
+          onReady={() => (editorReady = true)}
+          query$key={query.data}
+        />
       {/if}
     {:else}
       {@const name = '문서'}

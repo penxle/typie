@@ -71,7 +71,6 @@ export const Plan = createObjectRef('Plan', T.Plans);
 export const DocumentReaction = createObjectRef('DocumentReaction', T.DocumentReactions);
 export const DocumentCommentThread = createObjectRef('DocumentCommentThread', T.DocumentCommentThreads);
 export const DocumentComment = createObjectRef('DocumentComment', T.DocumentComments);
-export const DocumentVersion = createObjectRef('DocumentVersion', T.DocumentVersions);
 export const Redirect = createObjectRef('Redirect', T.Redirects);
 export const Referral = createObjectRef('Referral', T.Referrals);
 export const Site = createObjectRef('Site', T.Sites);

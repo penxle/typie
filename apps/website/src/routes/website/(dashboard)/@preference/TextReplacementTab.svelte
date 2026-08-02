@@ -12,7 +12,6 @@
   import TrashIcon from '~icons/lucide/trash';
   import { SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
   import { cache } from '$lib/graphql';
-  import { initWasm } from '$lib/wasm.svelte';
   import { graphql } from '$mearie';
   import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
   import type { DashboardLayout_PreferenceModal_TextReplacementTab_user$key } from '$mearie';
@@ -251,7 +250,7 @@
     resetForm();
   };
 
-  const validateForm = async (): Promise<boolean> => {
+  const validateForm = (): boolean => {
     if (!formMatch.trim()) {
       formError = '찾을 텍스트를 입력해 주세요.';
       return false;
@@ -265,8 +264,9 @@
       return false;
     }
     if (formRegex) {
-      const wasm = await initWasm();
-      if (!wasm.validateRegex(formMatch)) {
+      try {
+        new RegExp(formMatch);
+      } catch {
         formError = '유효하지 않은 정규식이에요.';
         return false;
       }
@@ -276,7 +276,7 @@
   };
 
   const handleSave = async () => {
-    if (!(await validateForm())) return;
+    if (!validateForm()) return;
 
     if (!SubscribeModal.gate('text_replacement')) {
       return;

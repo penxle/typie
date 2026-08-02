@@ -32,8 +32,7 @@ import { convertTableV2 } from './table.ts';
 import { buildRunOptionsV2, runsToComponents } from './text.ts';
 import type { ExportFontFamily, PageLayout } from '../../core/types.ts';
 import type { NodeVisitorV2 } from '../../core/v2/types.ts';
-import type { DocDefaults } from '../blocks.ts';
-import type { FileChild } from '../index.ts';
+import type { DocDefaults, FileChild } from '../blocks.ts';
 import type { TextConvertContextV2 } from './text.ts';
 
 export type ConvertContextV2 = {

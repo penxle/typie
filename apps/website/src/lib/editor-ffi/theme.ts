@@ -1,4 +1,4 @@
-import themeData from '@typie/editor/theme.json' with { type: 'json' };
+import themeData from '@typie/assets/theme.json' with { type: 'json' };
 import type { DarkVariant, EffectiveTheme, LightVariant } from '@typie/ui/context';
 
 export type ThemeColors = {

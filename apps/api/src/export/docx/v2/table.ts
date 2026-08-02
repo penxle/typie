@@ -2,7 +2,7 @@ import { BorderStyle, ShadingType, Table, TableCell, TableRow, WidthType } from 
 import { toBlockChildren } from '../blocks.ts';
 import type { IBorderOptions, ITableBordersOptions } from 'docx';
 import type { TableV2 } from '../../core/v2/types.ts';
-import type { FileChild } from '../index.ts';
+import type { FileChild } from '../blocks.ts';
 
 function mapBorderStyle(style: string): IBorderOptions {
   switch (style) {

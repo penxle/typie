@@ -3,7 +3,7 @@ import { DocumentContentRating, EntityState, EntityVisibility } from '@typie/lib
 import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { db, dbr, DocumentBundles, DocumentContents, Documents, Entities, Prompts } from '#/db/index.ts';
+import { db, dbr, DocumentBundles, Documents, DocumentStates, Entities, Prompts } from '#/db/index.ts';
 import { env } from '#/env.ts';
 import { wasmThread } from '#/utils/wasm-thread.ts';
 import type { Env } from '#/context.ts';
@@ -94,11 +94,12 @@ internal.post('/corpus/candidates', async (c) => {
   // 통째로 들어오거나 통째로 빠져, 다작 작성자가 후보에 상관되어 몰린다(2026-07-30 실측:
   // 풀 0.75% 작성자가 후보의 2.6%). 자격 행이 수천 규모라 전체 필터 후 무작위 정렬이 싸다.
   const rows = await dbr.execute<{ document_id: string; text: string; character_count: number; user_id: string }>(sql`
-    select dc.document_id, dc.text, dc.character_count, e.user_id
-    from document_contents dc
-    join documents d on d.id = dc.document_id
+    select ds.document_id, ds.text, ds.character_count, e.user_id
+    from document_states ds
+    join documents d on d.id = ds.document_id
     join entities e on e.id = d.entity_id
-    where dc.character_count between ${minLength} and ${maxLength}
+    where ds.character_count between ${minLength} and ${maxLength}
+      and ds.projection_degraded = false
       and e.visibility = ${EntityVisibility.PUBLIC} and e.state = ${EntityState.ACTIVE}
       and d.password is null and d.content_rating = ${DocumentContentRating.ALL}
     order by random()
@@ -132,13 +133,13 @@ internal.post('/corpus/texts', async (c) => {
 
   // candidates가 준 id를 되받는 경로지만, 호출 사이에 문서 상태가 바뀔 수 있어 공개 조건을 다시 검증한다.
   const rows = await dbr
-    .select({ documentId: DocumentContents.documentId, text: DocumentContents.text })
-    .from(DocumentContents)
-    .innerJoin(Documents, eq(Documents.id, DocumentContents.documentId))
+    .select({ documentId: DocumentStates.documentId, text: DocumentStates.text })
+    .from(DocumentStates)
+    .innerJoin(Documents, eq(Documents.id, DocumentStates.documentId))
     .innerJoin(Entities, eq(Entities.id, Documents.entityId))
     .where(
       and(
-        inArray(DocumentContents.documentId, parsed.data.documentIds),
+        inArray(DocumentStates.documentId, parsed.data.documentIds),
         eq(Entities.visibility, EntityVisibility.PUBLIC),
         eq(Entities.state, EntityState.ACTIVE),
         isNull(Documents.password),

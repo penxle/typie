@@ -12,7 +12,6 @@
   import mixpanel from 'mixpanel-browser';
   import qs from 'query-string';
   import { onMount, untrack } from 'svelte';
-  import { browser } from '$app/environment';
   import { goto } from '$app/navigation';
   import { updated } from '$app/state';
   import Logo from '$assets/logos/logo.svg?component';
@@ -20,12 +19,10 @@
   import { pollBootstrapAssertion } from '$lib/bootstrap';
   import { EnvironmentBanner } from '$lib/components';
   import { AdminImpersonateBanner } from '$lib/components/admin';
-  import { preloadEditorWasm } from '$lib/editor/editor.svelte';
   import { fanOutResourceUpdate } from '$lib/editor-ffi/registry';
   import { hydrateQuery } from '$lib/graphql';
   import { isLegacyTrial, shouldShowOnboarding } from '$lib/subscription-logic';
-  import { initWasm } from '$lib/wasm.svelte';
-  import { initWasm as initWasmFfi } from '$lib/wasm-ffi.svelte';
+  import { initWasm } from '$lib/wasm-ffi.svelte';
   import { graphql } from '$mearie';
   import { setupPaneGroup } from './[slug]/@pane/context.svelte';
   import { setupEditorRegistry } from './[slug]/@pane/editor-registry.svelte';
@@ -49,10 +46,6 @@
   import Sidebar from './Sidebar.svelte';
   import TrialExpiredModal from './TrialExpiredModal.svelte';
   import UserSurveyModal from './UserSurveyModal.svelte';
-
-  if (browser) {
-    preloadEditorWasm();
-  }
 
   let { data, children } = $props();
 
@@ -197,20 +190,14 @@
 
   $effect(() => {
     const rules = textReplacementRulesJson;
-    initWasm().then((wasm) => {
-      wasm.setTextReplacementRules(JSON.parse(rules));
-    });
-    initWasmFfi().then((host) => {
+    initWasm().then((host) => {
       fanOutResourceUpdate(host.set_text_replacement_rules(JSON.parse(rules)));
     });
   });
 
   $effect(() => {
     const enabled = app.preference.current.autoSurroundEnabled;
-    initWasm().then((wasm) => {
-      wasm.setAutoSurroundEnabled(enabled);
-    });
-    initWasmFfi().then((host) => {
+    initWasm().then((host) => {
       fanOutResourceUpdate(host.set_auto_surround_enabled(enabled));
     });
   });

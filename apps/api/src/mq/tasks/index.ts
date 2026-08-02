@@ -6,13 +6,6 @@ import {
   DocumentZombieSweepJob,
 } from './changeset.ts';
 import {
-  DocumentGCJob,
-  DocumentGCScanCron,
-  DocumentPreviewInvalidateJob,
-  DocumentSyncCollectJob,
-  DocumentSyncScanCron,
-} from './document.ts';
-import {
   SendSubscriptionExpiredEmailJob,
   SendSubscriptionExpiringEmailJob,
   SendSubscriptionGracePeriodEmailJob,
@@ -34,11 +27,8 @@ export const jobs = [
   DocumentChangesetsCollectJob,
   DocumentChangesetsConsolidateJob,
   DocumentZombieSweepJob,
-  DocumentSyncCollectJob,
-  DocumentPreviewInvalidateJob,
   DocumentIndexJob,
   FolderIndexJob,
-  DocumentGCJob,
   SubscriptionRenewalInitialJob,
   SubscriptionRenewalRetryJob,
   SubscriptionRenewalPlanChangeJob,
@@ -53,8 +43,6 @@ export const jobs = [
 export const crons = [
   DocumentChangesetsScanCron,
   DocumentZombieSweepDueCron,
-  DocumentSyncScanCron,
-  DocumentGCScanCron,
   SubscriptionRenewalCron,
   SubscriptionTransitionCron,
   SubscriptionReconcileInAppPurchaseCron,

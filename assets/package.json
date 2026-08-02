@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./fonts.json": "./fonts.json"
+    "./fonts.json": "./fonts.json",
+    "./theme.json": "./theme.json"
   },
   "files": [
     "./"

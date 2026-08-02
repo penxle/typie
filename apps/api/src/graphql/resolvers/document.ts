@@ -1,9 +1,7 @@
-import { createHash, createHmac } from 'node:crypto';
-import { setTimeout } from 'node:timers/promises';
+import { createHash } from 'node:crypto';
 import {
   DocumentAvailableAction,
   DocumentContentRating,
-  DocumentSyncType,
   DocumentType,
   DocumentViewBodyUnavailableReason,
   EntityAvailability,
@@ -17,10 +15,7 @@ import { NotFoundError, TypieError } from '@typie/lib/errors';
 import dayjs from 'dayjs';
 import dedent from 'dedent';
 import { and, asc, count, desc, eq, gt, gte, inArray, isNull, lt, sum } from 'drizzle-orm';
-import { filter, pipe, Repeater } from 'graphql-yoga';
-import { LoroDoc, VersionVector } from 'loro-crdt';
 import { nanoid } from 'nanoid';
-import qs from 'query-string';
 import { match } from 'ts-pattern';
 import { redis } from '#/cache.ts';
 import {
@@ -29,15 +24,12 @@ import {
   DocumentArchivedNodes,
   DocumentBundles,
   DocumentCharacterCountChanges,
-  DocumentContents,
   DocumentHeadContributors,
   DocumentHeads,
   DocumentReactions,
   Documents,
   DocumentStates,
   DocumentSweeps,
-  DocumentVersionContributors,
-  DocumentVersions,
   Embeds,
   Entities,
   Files,
@@ -56,13 +48,10 @@ import {
 import { env } from '#/env.ts';
 import * as slack from '#/external/slack.ts';
 import * as spellcheck from '#/external/spellcheck.ts';
-import { Lock } from '#/lock.ts';
 import { enqueueJob } from '#/mq/index.ts';
 import { pubsub } from '#/pubsub.ts';
 import { appendBundle, getDurableHeads, readMergedGraph, setLiveHeads } from '#/utils/changeset.ts';
-import { compressZstd, decompressZstd } from '#/utils/compression.ts';
 import { getDocumentFontFamilies } from '#/utils/document.ts';
-import { isSnapshotUsable } from '#/utils/document-state.ts';
 import { isPrivateVisibilityOnlyInput } from '#/utils/documents-option-policy.ts';
 import {
   buildFreshV2Content,
@@ -73,20 +62,9 @@ import {
   extractPlainDocLayoutMode,
   insertFreshV2Content,
 } from '#/utils/entity.ts';
-import {
-  extractAssetIdsFromLoroDoc,
-  extractLoroDocContents,
-  extractLoroDocLayoutMode,
-  generateFractionalOrder,
-  generatePermalink,
-  generateSlug,
-  getKoreanAge,
-  makeLoroDoc,
-} from '#/utils/index.ts';
-import { migrateDocumentToV2 } from '#/utils/migrate-v2.ts';
+import { generateFractionalOrder, generatePermalink, generateSlug, getKoreanAge } from '#/utils/index.ts';
 import { assertSitePermission } from '#/utils/permission.ts';
 import { assertActiveSubscription, hasActiveSubscription } from '#/utils/plan.ts';
-import { wasm } from '#/utils/wasm.ts';
 import { wasm as wasmFfi } from '#/utils/wasm-ffi.ts';
 import { builder } from '../builder.ts';
 import {
@@ -96,7 +74,6 @@ import {
   DocumentFontFamily,
   DocumentHead,
   DocumentReaction,
-  DocumentVersion,
   DocumentView,
   Embed,
   Entity,
@@ -145,23 +122,9 @@ async function loadMaterializedDocumentAssetIds(documentId: string): Promise<Mat
     .select({ json: DocumentStates.json })
     .from(DocumentStates)
     .where(eq(DocumentStates.documentId, documentId))
-    .then(first);
+    .then(firstOrThrow);
 
-  let assetIds: { imageIds: string[]; fileIds: string[]; embedIds: string[]; archivedIds: string[] };
-  if (state) {
-    assetIds = extractAssetIdsFromPlainDoc(state.json as PlainDoc);
-  } else {
-    const content = await db
-      .select({ snapshot: DocumentContents.snapshot })
-      .from(DocumentContents)
-      .where(eq(DocumentContents.documentId, documentId))
-      .then(firstOrThrow);
-    const doc = new LoroDoc();
-    doc.import(content.snapshot);
-    assetIds = extractAssetIdsFromLoroDoc(doc);
-  }
-
-  return assetIds;
+  return extractAssetIdsFromPlainDoc(state.json as PlainDoc);
 }
 
 async function loadExistingDocumentAssetIds({ imageIds, fileIds, embedIds, archivedIds }: MaterializedDocumentAssetIds): Promise<string[]> {
@@ -248,40 +211,17 @@ IDocument.implement({
       resolve: async (self, _, ctx) => {
         const stateLoader = ctx.loader({
           name: 'Document.excerpt.v2',
-          nullable: true,
           load: async (ids: string[]) => {
             return await db
-              .select({
-                documentId: DocumentStates.documentId,
-                text: DocumentStates.text,
-                projectionDegraded: DocumentStates.projectionDegraded,
-              })
+              .select({ documentId: DocumentStates.documentId, text: DocumentStates.text })
               .from(DocumentStates)
               .where(inArray(DocumentStates.documentId, ids));
           },
-          key: (row) => row?.documentId,
+          key: ({ documentId }: { documentId: string }) => documentId,
         });
 
         const state = await stateLoader.load(self.id);
-
-        let text: string;
-        if (isSnapshotUsable(state)) {
-          text = state.text.replaceAll(/\s+/g, ' ').trim();
-        } else {
-          const loader = ctx.loader({
-            name: 'Document.excerpt',
-            load: async (ids: string[]) => {
-              return await db
-                .select({ documentId: DocumentContents.documentId, text: DocumentContents.text })
-                .from(DocumentContents)
-                .where(inArray(DocumentContents.documentId, ids));
-            },
-            key: ({ documentId }: { documentId: string }) => documentId,
-          });
-
-          const content = await loader.load(self.id);
-          text = content.text.replaceAll(/\s+/g, ' ').trim();
-        }
+        const text = state.text.replaceAll(/\s+/g, ' ').trim();
 
         return text.length <= 200 ? text : text.slice(0, 200) + '...';
       },
@@ -349,21 +289,6 @@ Document.implement({
       resolve: (self) => self.thumbnailId,
     }),
 
-    previewUrl: t.string({
-      resolve: (self) => {
-        const now = Math.floor(Date.now() / 1000);
-        const expires = Math.ceil(now / 3600) * 3600;
-        const sig = createHmac('sha256', env.PREVIEW_SIGNING_SECRET).update(`${self.entityId}:${expires}`).digest('hex').slice(0, 16);
-        return qs.stringifyUrl({
-          url: `${env.API_URL}/entity/${self.entityId}/preview`,
-          query: {
-            expires,
-            sig,
-          },
-        });
-      },
-    }),
-
     reactionCount: t.int({
       resolve: async (self) => {
         const r = await db
@@ -375,62 +300,16 @@ Document.implement({
       },
     }),
 
-    snapshot: t.field({
-      type: 'Binary',
-      resolve: async (self) => {
-        const content = await db
-          .select({ snapshot: DocumentContents.snapshot })
-          .from(DocumentContents)
-          .where(eq(DocumentContents.documentId, self.id))
-          .then(firstOrThrow);
-
-        return content.snapshot;
-      },
-    }),
-
-    version: t.field({
-      type: 'Binary',
-      resolve: async (self) => {
-        const content = await db
-          .select({ version: DocumentContents.version })
-          .from(DocumentContents)
-          .where(eq(DocumentContents.documentId, self.id))
-          .then(firstOrThrow);
-        return content.version;
-      },
-    }),
-
-    generation: t.int({
-      resolve: async (self) => {
-        const content = await db
-          .select({ generation: DocumentContents.generation })
-          .from(DocumentContents)
-          .where(eq(DocumentContents.documentId, self.id))
-          .then(firstOrThrow);
-        return content.generation;
-      },
-    }),
-
     layoutMode: t.field({
       type: 'JSON',
       resolve: async (self) => {
         const state = await db
-          .select({ json: DocumentStates.json, projectionDegraded: DocumentStates.projectionDegraded })
+          .select({ json: DocumentStates.json })
           .from(DocumentStates)
           .where(eq(DocumentStates.documentId, self.id))
-          .then(first);
-
-        if (isSnapshotUsable(state)) {
-          return extractPlainDocLayoutMode(state.json as PlainDoc);
-        }
-
-        const content = await db
-          .select({ snapshot: DocumentContents.snapshot })
-          .from(DocumentContents)
-          .where(eq(DocumentContents.documentId, self.id))
           .then(firstOrThrow);
 
-        return extractLoroDocLayoutMode(content.snapshot);
+        return extractPlainDocLayoutMode(state.json as PlainDoc);
       },
     }),
 
@@ -438,34 +317,17 @@ Document.implement({
       resolve: async (self, _, ctx) => {
         const stateLoader = ctx.loader({
           name: 'Document.characterCount.v2',
-          nullable: true,
           load: async (ids: string[]) => {
             return await db
               .select({ documentId: DocumentStates.documentId, characterCount: DocumentStates.characterCount })
               .from(DocumentStates)
               .where(inArray(DocumentStates.documentId, ids));
           },
-          key: (row) => row?.documentId,
-        });
-
-        const state = await stateLoader.load(self.id);
-        if (state) {
-          return state.characterCount;
-        }
-
-        const loader = ctx.loader({
-          name: 'Document.characterCount',
-          load: async (ids: string[]) => {
-            return await db
-              .select({ documentId: DocumentContents.documentId, characterCount: DocumentContents.characterCount })
-              .from(DocumentContents)
-              .where(inArray(DocumentContents.documentId, ids));
-          },
           key: ({ documentId }: { documentId: string }) => documentId,
         });
 
-        const content = await loader.load(self.id);
-        return content.characterCount;
+        const state = await stateLoader.load(self.id);
+        return state.characterCount;
       },
     }),
 
@@ -499,44 +361,6 @@ Document.implement({
     }),
 
     entity: t.expose('entityId', { type: Entity }),
-
-    versions: t.field({
-      type: [DocumentVersion],
-      args: {
-        first: t.arg.int({ defaultValue: 20 }),
-        before: t.arg({ type: 'DateTime', required: false }),
-      },
-      resolve: async (self, args) => {
-        return await db
-          .select()
-          .from(DocumentVersions)
-          .where(
-            args.before
-              ? and(eq(DocumentVersions.documentId, self.id), lt(DocumentVersions.createdAt, args.before))
-              : eq(DocumentVersions.documentId, self.id),
-          )
-          .orderBy(desc(DocumentVersions.createdAt))
-          .limit(args.first);
-      },
-    }),
-
-    versionMetas: t.field({
-      type: [
-        builder.simpleObject('DocumentVersionMeta', {
-          fields: (t) => ({
-            id: t.id(),
-            createdAt: t.field({ type: 'DateTime' }),
-          }),
-        }),
-      ],
-      resolve: async (self) => {
-        return await db
-          .select({ id: DocumentVersions.id, createdAt: DocumentVersions.createdAt })
-          .from(DocumentVersions)
-          .where(eq(DocumentVersions.documentId, self.id))
-          .orderBy(asc(DocumentVersions.createdAt));
-      },
-    }),
 
     heads: t.field({
       type: [DocumentHead],
@@ -682,82 +506,25 @@ DocumentView.implement({
 
         const stateLoader = ctx.loader({
           name: 'DocumentView.excerpt.v2',
-          nullable: true,
           load: async (ids: string[]) => {
             return await db
-              .select({
-                documentId: DocumentStates.documentId,
-                text: DocumentStates.text,
-                projectionDegraded: DocumentStates.projectionDegraded,
-              })
+              .select({ documentId: DocumentStates.documentId, text: DocumentStates.text })
               .from(DocumentStates)
               .where(inArray(DocumentStates.documentId, ids));
-          },
-          key: (row) => row?.documentId,
-        });
-
-        const state = await stateLoader.load(self.id);
-
-        let text: string;
-        if (isSnapshotUsable(state)) {
-          text = state.text.replaceAll(/\s+/g, ' ').trim();
-        } else {
-          const loader = ctx.loader({
-            name: 'DocumentView.excerpt',
-            load: async (ids: string[]) => {
-              return await db
-                .select({ documentId: DocumentContents.documentId, text: DocumentContents.text })
-                .from(DocumentContents)
-                .where(inArray(DocumentContents.documentId, ids));
-            },
-            key: ({ documentId }: { documentId: string }) => documentId,
-          });
-
-          const content = await loader.load(self.id);
-          text = content.text.replaceAll(/\s+/g, ' ').trim();
-        }
-
-        return text.length <= 200 ? text : text.slice(0, 200) + '...';
-      },
-    }),
-
-    snapshot: t.field({
-      type: 'Binary',
-      nullable: true,
-      resolve: async (self, _, ctx) => {
-        const access = await checkDocumentViewAccess(self, ctx);
-        if (!access.accessible) {
-          return null;
-        }
-
-        const loader = ctx.loader({
-          name: 'DocumentView.snapshot',
-          load: async (ids: string[]) => {
-            return await db
-              .select({ documentId: DocumentContents.documentId, snapshot: DocumentContents.snapshot })
-              .from(DocumentContents)
-              .where(inArray(DocumentContents.documentId, ids));
           },
           key: ({ documentId }: { documentId: string }) => documentId,
         });
 
-        const content = await loader.load(self.id);
-        if (!content?.snapshot) {
-          return null;
-        }
+        const state = await stateLoader.load(self.id);
+        const text = state.text.replaceAll(/\s+/g, ' ').trim();
 
-        const doc = new LoroDoc();
-        doc.import(content.snapshot);
-        return new Uint8Array(doc.export({ mode: 'shallow-snapshot', frontiers: doc.oplogFrontiers() }));
+        return text.length <= 200 ? text : text.slice(0, 200) + '...';
       },
     }),
 
     body: t.field({
       type: t.builder.unionType('DocumentViewBody', {
         types: [
-          t.builder.simpleObject('DocumentViewBodyAvailable', {
-            fields: (t) => ({ snapshot: t.field({ type: 'Binary' }) }),
-          }),
           t.builder.simpleObject('DocumentViewBodyAvailableV2', {
             fields: (t) => ({ graph: t.field({ type: 'Binary' }) }),
           }),
@@ -775,46 +542,14 @@ DocumentView.implement({
           };
         }
 
-        const state = await db
-          .select({ documentId: DocumentStates.documentId })
-          .from(DocumentStates)
-          .where(eq(DocumentStates.documentId, self.id))
-          .then(first);
-
-        if (state) {
-          const graph = await readMergedGraph(self.id);
-          return {
-            __typename: 'DocumentViewBodyAvailableV2' as const,
-            graph,
-          };
+        const graph = await readMergedGraph(self.id);
+        if (graph.length === 0) {
+          throw new NotFoundError();
         }
-
-        const loader = ctx.loader({
-          name: 'DocumentView.body',
-          load: async (ids: string[]) => {
-            return await db
-              .select({ documentId: DocumentContents.documentId, snapshot: DocumentContents.snapshot })
-              .from(DocumentContents)
-              .where(inArray(DocumentContents.documentId, ids));
-          },
-          key: ({ documentId }: { documentId: string }) => documentId,
-        });
-
-        const content = await loader.load(self.id);
-        if (!content?.snapshot) {
-          return {
-            __typename: 'DocumentViewBodyUnavailable' as const,
-            reason: DocumentViewBodyUnavailableReason.REQUIRE_PASSWORD,
-          };
-        }
-
-        const doc = new LoroDoc();
-        doc.import(content.snapshot);
-        const snapshot = new Uint8Array(doc.export({ mode: 'shallow-snapshot', frontiers: doc.oplogFrontiers() }));
 
         return {
-          __typename: 'DocumentViewBodyAvailable' as const,
-          snapshot,
+          __typename: 'DocumentViewBodyAvailableV2' as const,
+          graph,
         };
       },
     }),
@@ -887,15 +622,6 @@ DocumentReaction.implement({
   }),
 });
 
-DocumentVersion.implement({
-  isTypeOf: isTypeOf(TableCode.DOCUMENT_VERSIONS),
-  fields: (t) => ({
-    id: t.exposeID('id'),
-    version: t.field({ type: 'Binary', resolve: async (self) => decompressZstd(self.version) }),
-    createdAt: t.expose('createdAt', { type: 'DateTime' }),
-  }),
-});
-
 DocumentHead.implement({
   isTypeOf: isTypeOf(TableCode.DOCUMENT_HEADS),
   fields: (t) => ({
@@ -950,13 +676,6 @@ builder.queryFields((t) => ({
     },
   }),
 }));
-
-const SyncDocumentPayload = builder.simpleObject('SyncDocumentPayload', {
-  fields: (t) => ({
-    type: t.field({ type: DocumentSyncType }),
-    data: t.string(),
-  }),
-});
 
 builder.mutationFields((t) => ({
   createDocument: t.withAuth({ session: true }).fieldWithInput({
@@ -1050,35 +769,6 @@ builder.mutationFields((t) => ({
           })
           .returning()
           .then(firstOrThrow);
-
-        const emptyDoc = makeLoroDoc(preset);
-        const snapshot = emptyDoc.export({ mode: 'snapshot' });
-        const version = emptyDoc.version().encode();
-        const { json, text, characterCount, blobSize } = await extractLoroDocContents(emptyDoc);
-
-        await tx.insert(DocumentContents).values({
-          documentId: document.id,
-          json,
-          text,
-          characterCount,
-          blobSize,
-          snapshot,
-          version,
-        });
-
-        const documentVersion = await tx
-          .insert(DocumentVersions)
-          .values({
-            documentId: document.id,
-            version: await compressZstd(version),
-          })
-          .returning({ id: DocumentVersions.id })
-          .then(firstOrThrow);
-
-        await tx.insert(DocumentVersionContributors).values({
-          versionId: documentVersion.id,
-          userId: ctx.session.userId,
-        });
 
         const { root, modifiers } = derivePlainRootFromPreset(preset);
         await wasmFfi.use(async (host) => {
@@ -1201,17 +891,8 @@ builder.mutationFields((t) => ({
         .select({
           title: Documents.title,
           subtitle: Documents.subtitle,
-          content: {
-            json: DocumentContents.json,
-            text: DocumentContents.text,
-            characterCount: DocumentContents.characterCount,
-            blobSize: DocumentContents.blobSize,
-            snapshot: DocumentContents.snapshot,
-            version: DocumentContents.version,
-          },
         })
         .from(Documents)
-        .innerJoin(DocumentContents, eq(Documents.id, DocumentContents.documentId))
         .where(eq(Documents.id, input.documentId))
         .then(firstOrThrow);
 
@@ -1230,6 +911,9 @@ builder.mutationFields((t) => ({
         .where(and(eq(NoteEntities.entityId, entity.id), eq(Notes.state, NoteState.ACTIVE)));
 
       const v2Content = await buildFreshV2Content(input.documentId);
+      if (!v2Content) {
+        throw new TypieError({ code: 'document_projection_degraded', message: '문서를 복사할 수 없는 상태예요.', status: 409 });
+      }
 
       const title = `(사본) ${document.title ?? '(제목 없음)'}`;
 
@@ -1261,41 +945,9 @@ builder.mutationFields((t) => ({
           .returning()
           .then(firstOrThrow);
 
-        const json = await wasm.snapshotToJson(new Uint8Array(document.content.snapshot));
-        const freshSnapshot = await wasm.jsonToSnapshot(json);
-        const freshDoc = new LoroDoc();
-        freshDoc.import(freshSnapshot);
-        const freshVersion = freshDoc.version().encode();
-
-        await tx.insert(DocumentContents).values({
-          documentId: newDocument.id,
-          json,
-          text: document.content.text,
-          characterCount: document.content.characterCount,
-          blobSize: document.content.blobSize,
-          snapshot: freshSnapshot,
-          version: freshVersion,
-        });
-
         // TODO: anchors
 
-        const documentVersion = await tx
-          .insert(DocumentVersions)
-          .values({
-            documentId: newDocument.id,
-            version: await compressZstd(freshVersion),
-          })
-          .returning({ id: DocumentVersions.id })
-          .then(firstOrThrow);
-
-        await tx.insert(DocumentVersionContributors).values({
-          versionId: documentVersion.id,
-          userId: ctx.session.userId,
-        });
-
-        if (v2Content) {
-          await insertFreshV2Content(tx, newDocument.id, v2Content);
-        }
+        await insertFreshV2Content(tx, newDocument.id, v2Content);
 
         if (noteRows.length > 0) {
           let prevOrder: string | null = null;
@@ -1509,161 +1161,6 @@ builder.mutationFields((t) => ({
       }
 
       return documents.map((doc) => doc.id);
-    },
-  }),
-
-  syncDocument: t.withAuth({ session: true }).fieldWithInput({
-    type: [SyncDocumentPayload],
-    input: {
-      clientId: t.input.string(),
-      documentId: t.input.id({ validate: validateDbId(TableCode.DOCUMENTS) }),
-      type: t.input.field({ type: DocumentSyncType }),
-      data: t.input.string(),
-    },
-    resolve: async (_, { input }, ctx) => {
-      const document = await db
-        .select({ siteId: Entities.siteId, availability: Entities.availability })
-        .from(Documents)
-        .innerJoin(Entities, eq(Documents.entityId, Entities.id))
-        .where(eq(Documents.id, input.documentId))
-        .then(firstOrThrow);
-
-      if (document.availability === EntityAvailability.PRIVATE) {
-        await assertSitePermission({
-          userId: ctx.session.userId,
-          siteId: document.siteId,
-        });
-      }
-
-      if (input.type === DocumentSyncType.UPDATE || input.type === DocumentSyncType.VECTOR) {
-        const migrated = await db
-          .select({ documentId: DocumentStates.documentId })
-          .from(DocumentStates)
-          .where(eq(DocumentStates.documentId, input.documentId))
-          .then(first);
-
-        if (migrated || (await redis.exists(`document:v2migrating:${input.documentId}`)) > 0) {
-          throw new TypieError({ code: 'document_migrated' });
-        }
-      }
-
-      const { snapshot, version } = await db
-        .select({
-          snapshot: DocumentContents.snapshot,
-          version: DocumentContents.version,
-        })
-        .from(DocumentContents)
-        .where(eq(DocumentContents.documentId, input.documentId))
-        .then(firstOrThrow);
-
-      if (input.type === DocumentSyncType.UPDATE) {
-        await assertActiveSubscription({ userId: ctx.session.userId });
-
-        pubsub.publish('document:sync', input.documentId, {
-          target: `!${input.clientId}`,
-          type: DocumentSyncType.UPDATE,
-          data: input.data,
-        });
-
-        await redis.lpush(
-          `document:sync:updates:${input.documentId}`,
-          JSON.stringify({
-            userId: ctx.session.userId,
-            data: input.data,
-          }),
-        );
-
-        await enqueueJob('document:sync:collect', input.documentId);
-      } else if (input.type === DocumentSyncType.VECTOR) {
-        const clientVV = VersionVector.decode(Uint8Array.fromBase64(input.data));
-        const doc = new LoroDoc();
-        doc.import(snapshot);
-        const updates = doc.export({ mode: 'update', from: clientVV });
-
-        const updatesBase64 = updates.toBase64();
-        const versionBase64 = version.toBase64();
-
-        pubsub.publish('document:sync', input.documentId, {
-          target: input.clientId,
-          type: DocumentSyncType.UPDATE,
-          data: updatesBase64,
-        });
-
-        pubsub.publish('document:sync', input.documentId, {
-          target: input.clientId,
-          type: DocumentSyncType.VECTOR,
-          data: versionBase64,
-        });
-
-        return [
-          { type: DocumentSyncType.UPDATE, data: updatesBase64 },
-          { type: DocumentSyncType.VECTOR, data: versionBase64 },
-        ];
-      } else if (input.type === DocumentSyncType.AWARENESS) {
-        pubsub.publish('document:sync', input.documentId, {
-          target: `!${input.clientId}`,
-          type: DocumentSyncType.AWARENESS,
-          data: input.data,
-        });
-      }
-
-      return [];
-    },
-  }),
-
-  convertDocumentToV2: t.withAuth({ session: true }).fieldWithInput({
-    type: Document,
-    input: {
-      documentId: t.input.id({ validate: validateDbId(TableCode.DOCUMENTS) }),
-    },
-    resolve: async (_, { input }, ctx) => {
-      const document = await db
-        .select({ siteId: Entities.siteId, entityId: Entities.id })
-        .from(Documents)
-        .innerJoin(Entities, eq(Documents.entityId, Entities.id))
-        .where(eq(Documents.id, input.documentId))
-        .then(firstOrThrow);
-
-      await assertSitePermission({ userId: ctx.session.userId, siteId: document.siteId });
-
-      const lock = new Lock(`document:${input.documentId}`);
-      const acquired = await lock.acquire();
-      if (!acquired) {
-        throw new TypieError({ code: 'document_busy' });
-      }
-
-      try {
-        await redis.set(`document:v2migrating:${input.documentId}`, '1', 'EX', 900);
-        await setTimeout(750);
-
-        const pending = await redis.llen(`document:sync:updates:${input.documentId}`);
-        if (pending > 0) {
-          throw new TypieError({ code: 'document_busy' });
-        }
-
-        const result = await migrateDocumentToV2(input.documentId);
-        if (result.status === 'skipped') {
-          throw new TypieError({ code: 'already_migrated' });
-        }
-        if (result.status === 'failed') {
-          throw new TypieError({ code: 'migration_failed', message: result.error });
-        }
-
-        const late = await redis.llen(`document:sync:updates:${input.documentId}`);
-        if (late > 0) {
-          console.warn(`convertDocumentToV2: ${late} legacy updates slipped in during migration of ${input.documentId}`);
-        }
-      } finally {
-        await redis.del(`document:v2migrating:${input.documentId}`);
-        await lock.release();
-      }
-
-      pubsub.publish('site:update', document.siteId, { scope: 'entity', entityId: document.entityId });
-
-      await enqueueJob('search:index:document', input.documentId);
-      await enqueueJob('document:preview:invalidate', input.documentId);
-
-      return await db.select().from(Documents).where(eq(Documents.id, input.documentId)).then(firstOrThrow);
     },
   }),
 
@@ -2018,84 +1515,6 @@ builder.mutationFields((t) => ({
       });
 
       return true;
-    },
-  }),
-}));
-
-builder.subscriptionFields((t) => ({
-  documentSyncStream: t.withAuth({ session: true }).field({
-    type: t.builder.simpleObject('DocumentSyncStreamPayload', {
-      fields: (t) => ({
-        documentId: t.id(),
-        type: t.field({ type: DocumentSyncType }),
-        data: t.string(),
-      }),
-    }),
-    args: {
-      clientId: t.arg.string(),
-      documentId: t.arg.id({ validate: validateDbId(TableCode.DOCUMENTS) }),
-    },
-    subscribe: async (_, args, ctx) => {
-      const document = await db
-        .select({ siteId: Entities.siteId, availability: Entities.availability })
-        .from(Documents)
-        .innerJoin(Entities, eq(Documents.entityId, Entities.id))
-        .where(eq(Documents.id, args.documentId))
-        .then(firstOrThrow);
-
-      if (document.availability === EntityAvailability.PRIVATE) {
-        await assertSitePermission({
-          userId: ctx.session.userId,
-          siteId: document.siteId,
-        });
-      }
-
-      pubsub.publish('document:sync', args.documentId, {
-        target: `!${args.clientId}`,
-        type: DocumentSyncType.PRESENCE,
-        data: '',
-      });
-
-      const repeater = Repeater.merge([
-        pubsub.subscribe('document:sync', args.documentId),
-        new Repeater<{ target: string; type: DocumentSyncType; data: string }>(async (push, stop) => {
-          const heartbeat = async () => {
-            await redis.zadd('writers:active', Date.now(), ctx.session.userId);
-            push({
-              target: args.clientId,
-              type: DocumentSyncType.HEARTBEAT,
-              data: dayjs().toISOString(),
-            });
-          };
-
-          await heartbeat();
-          const interval = setInterval(heartbeat, 1000);
-
-          await stop;
-
-          clearInterval(interval);
-        }),
-      ]);
-
-      return pipe(
-        repeater,
-        filter(({ target }) => {
-          if (target === '*') {
-            return true;
-          }
-          if (target.startsWith('!')) {
-            return target.slice(1) !== args.clientId;
-          }
-          return target === args.clientId;
-        }),
-      );
-    },
-    resolve: async (payload, args) => {
-      return {
-        documentId: args.documentId,
-        type: payload.type,
-        data: payload.data,
-      };
     },
   }),
 }));

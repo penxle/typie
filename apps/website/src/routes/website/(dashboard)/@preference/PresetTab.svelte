@@ -26,13 +26,13 @@
   import LineHeightIcon from '~icons/typie/line-height';
   import { FontSpecimen, SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
   import { familySpecimenFallbacks, weightSpecimenFallbacks } from '$lib/components/font-specimen';
-  import { getRepresentativeFont } from '$lib/editor/fonts';
-  import { createPaginatedLayout, getMaxMargin, mmToPx, pxToMm } from '$lib/editor/utils';
-  import { values } from '$lib/editor/values';
+  import { getRepresentativeFont } from '$lib/editor-ffi/font-utils';
+  import { createPaginatedLayout, getMaxMargin, mmToPx, pxToMm } from '$lib/editor-ffi/page-layout';
+  import { values } from '$lib/editor-ffi/values';
   import { activeFontsByWeight, fontWeightItemsForFonts, fontWeightValueLabel, resolveFontWeightForFamily } from '$lib/font-weight';
   import { graphql } from '$mearie';
   import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
-  import type { PageLayoutPreset } from '$lib/editor/utils';
+  import type { DocumentLayoutMode, PageLayoutPreset } from '$lib/editor-ffi/page-layout';
   import type { DashboardLayout_PreferenceModal_PresetTab_user$key } from '$mearie';
 
   type Props = {
@@ -84,17 +84,7 @@
     fontWeight?: number;
     letterSpacing?: number;
     lineHeight?: number;
-    layout?:
-      | { type: 'continuous'; maxWidth: number }
-      | {
-          type: 'paginated';
-          pageWidth: number;
-          pageHeight: number;
-          pageMarginTop: number;
-          pageMarginBottom: number;
-          pageMarginLeft: number;
-          pageMarginRight: number;
-        };
+    layout?: DocumentLayoutMode;
     paragraphIndent?: number;
     blockGap?: number;
   };

@@ -2,18 +2,7 @@ import { EntityState, EntityType, EntityVisibility } from '@typie/lib/enums';
 import { TypieError } from '@typie/lib/errors';
 import dayjs from 'dayjs';
 import { and, desc, eq, getTableColumns, inArray, isNull, sql } from 'drizzle-orm';
-import {
-  db,
-  DocumentContents,
-  Documents,
-  DocumentStates,
-  Entities,
-  first,
-  firstOrThrow,
-  Folders,
-  TableCode,
-  validateDbId,
-} from '#/db/index.ts';
+import { db, Documents, DocumentStates, Entities, first, firstOrThrow, Folders, TableCode, validateDbId } from '#/db/index.ts';
 import { enqueueJob } from '#/mq/index.ts';
 import { pubsub } from '#/pubsub.ts';
 import { generateFractionalOrder, generatePermalink, generateSlug } from '#/utils/index.ts';
@@ -77,11 +66,10 @@ Folder.implement({
               JOIN descendant_entities de ON e.parent_id = de.id
               WHERE e.state = ${EntityState.ACTIVE}
             )
-            SELECT COALESCE(SUM(COALESCE(ds.character_count, dc.character_count)), 0) AS total
+            SELECT COALESCE(SUM(ds.character_count), 0) AS total
             FROM descendant_entities de
             JOIN ${Documents} d ON d.entity_id = de.id
-            JOIN ${DocumentContents} dc ON dc.document_id = d.id
-            LEFT JOIN ${DocumentStates} ds ON ds.document_id = d.id
+            JOIN ${DocumentStates} ds ON ds.document_id = d.id
             JOIN ${Entities} e ON e.id = d.entity_id
             WHERE e.state = ${EntityState.ACTIVE}
           `,

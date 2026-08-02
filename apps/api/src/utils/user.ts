@@ -1,7 +1,7 @@
 import { EntityState } from '@typie/lib/enums';
-import { and, eq, sql, sum } from 'drizzle-orm';
+import { and, eq, sum } from 'drizzle-orm';
 import * as uuid from 'uuid';
-import { db, DocumentContents, Documents, DocumentStates, Entities, firstOrThrow } from '#/db/index.ts';
+import { db, Documents, DocumentStates, Entities, firstOrThrow } from '#/db/index.ts';
 
 // 유저 id 로부터 결정적으로 파생하는 외부 계정 식별자. IAP 구매 시 appAccountToken / obfuscatedAccountId 로 쓰이며,
 // 등록/복구 시 스토어가 돌려준 계정 식별자와 대조해 다른 유저의 구매가 현재 세션에 바인딩되는 것을 막는다.
@@ -16,13 +16,12 @@ type GetUserUsageParams = {
 export const getUserUsage = async ({ userId }: GetUserUsageParams) => {
   const documentUsage = await db
     .select({
-      totalCharacterCount: sum(sql`COALESCE(${DocumentStates.characterCount}, ${DocumentContents.characterCount})`).mapWith(Number),
-      totalBlobSize: sum(sql`COALESCE(${DocumentStates.blobSize}, ${DocumentContents.blobSize})`).mapWith(Number),
+      totalCharacterCount: sum(DocumentStates.characterCount).mapWith(Number),
+      totalBlobSize: sum(DocumentStates.blobSize).mapWith(Number),
     })
     .from(Documents)
     .innerJoin(Entities, eq(Documents.entityId, Entities.id))
-    .innerJoin(DocumentContents, eq(DocumentContents.documentId, Documents.id))
-    .leftJoin(DocumentStates, eq(DocumentStates.documentId, Documents.id))
+    .innerJoin(DocumentStates, eq(DocumentStates.documentId, Documents.id))
     .where(and(eq(Entities.userId, userId), eq(Entities.state, EntityState.ACTIVE)))
     .then(firstOrThrow);
 

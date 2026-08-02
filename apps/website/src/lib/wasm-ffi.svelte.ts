@@ -5,7 +5,35 @@ import type { EditorHost } from '@typie/editor-ffi/browser';
 
 let host: EditorHost | undefined;
 let hostPromise: Promise<EditorHost> | undefined;
-const panicked = $state(false);
+let panicked = $state(false);
+
+function wrapWithCrashDetection<T extends object>(target: T): T {
+  return new Proxy(target, {
+    get(obj, prop) {
+      const value = Reflect.get(obj, prop);
+      if (typeof value !== 'function') {
+        return value;
+      }
+
+      return (...args: unknown[]) => {
+        try {
+          const result = value.apply(obj, args);
+          if (result != null && typeof result === 'object' && '__wbg_ptr' in result) {
+            return wrapWithCrashDetection(result);
+          }
+
+          return result;
+        } catch (err) {
+          if (err instanceof WebAssembly.RuntimeError) {
+            panicked = true;
+          }
+
+          throw err;
+        }
+      };
+    },
+  });
+}
 
 export function initWasm(): Promise<EditorHost> {
   return (hostPromise ??= (async () => {
@@ -17,7 +45,7 @@ export function initWasm(): Promise<EditorHost> {
     ]);
 
     const { EditorHost } = await createInstance(mod);
-    host = EditorHost.create(icuData);
+    host = wrapWithCrashDetection(EditorHost.create(icuData));
     return host;
   })());
 }

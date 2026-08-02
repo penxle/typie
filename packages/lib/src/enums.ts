@@ -159,16 +159,6 @@ export const DocumentExportFormat = {
   PDF: 'PDF',
 } as const;
 
-export type DocumentSyncType = keyof typeof DocumentSyncType;
-export const DocumentSyncType = {
-  HEARTBEAT: 'HEARTBEAT',
-  UPDATE: 'UPDATE',
-  VECTOR: 'VECTOR',
-  AWARENESS: 'AWARENESS',
-  PRESENCE: 'PRESENCE',
-  RESET: 'RESET',
-} as const;
-
 export type DocumentConflictKind = keyof typeof DocumentConflictKind;
 export const DocumentConflictKind = {
   ATTRIBUTE: 'ATTRIBUTE',

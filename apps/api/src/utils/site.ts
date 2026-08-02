@@ -1,20 +1,7 @@
 import { EntityState, EntityType } from '@typie/lib/enums';
 import { and, eq } from 'drizzle-orm';
-import { LoroDoc } from 'loro-crdt';
-import {
-  DocumentContents,
-  Documents,
-  DocumentVersionContributors,
-  DocumentVersions,
-  Entities,
-  first,
-  firstOrThrow,
-  Folders,
-  Sites,
-} from '#/db/index.ts';
-import { compressZstd } from './compression.ts';
+import { Documents, Entities, first, firstOrThrow, Folders, Sites } from '#/db/index.ts';
 import { buildFreshV2Content, generatePermalink, generateSlug, insertFreshV2Content } from './entity.ts';
-import { wasm } from './wasm.ts';
 import type { Transaction } from '#/db/index.ts';
 
 type CreateSiteParams = {
@@ -97,14 +84,6 @@ export const createSite = async ({ userId, name, slug, logoId, tx }: CreateSiteP
         id: Documents.id,
         title: Documents.title,
         subtitle: Documents.subtitle,
-        content: {
-          json: DocumentContents.json,
-          text: DocumentContents.text,
-          characterCount: DocumentContents.characterCount,
-          blobSize: DocumentContents.blobSize,
-          snapshot: DocumentContents.snapshot,
-          version: DocumentContents.version,
-        },
         entity: {
           depth: Entities.depth,
           parentId: Entities.parentId,
@@ -113,7 +92,6 @@ export const createSite = async ({ userId, name, slug, logoId, tx }: CreateSiteP
       })
       .from(Documents)
       .innerJoin(Entities, eq(Documents.entityId, Entities.id))
-      .innerJoin(DocumentContents, eq(Documents.id, DocumentContents.documentId))
       .where(and(eq(Entities.siteId, templateSite.id), eq(Entities.state, EntityState.ACTIVE)));
 
     for (const doc of templateDocuments) {
@@ -142,40 +120,12 @@ export const createSite = async ({ userId, name, slug, logoId, tx }: CreateSiteP
         .returning({ id: Documents.id })
         .then(firstOrThrow);
 
-      const json = await wasm.snapshotToJson(new Uint8Array(doc.content.snapshot));
-      const freshSnapshot = await wasm.jsonToSnapshot(json);
-      const freshDoc = new LoroDoc();
-      freshDoc.import(freshSnapshot);
-      const freshVersion = freshDoc.version().encode();
-
-      await tx.insert(DocumentContents).values({
-        documentId: newDocument.id,
-        json,
-        text: doc.content.text,
-        characterCount: doc.content.characterCount,
-        blobSize: doc.content.blobSize,
-        snapshot: freshSnapshot,
-        version: freshVersion,
-      });
-
-      const documentVersion = await tx
-        .insert(DocumentVersions)
-        .values({
-          documentId: newDocument.id,
-          version: await compressZstd(freshVersion),
-        })
-        .returning({ id: DocumentVersions.id })
-        .then(firstOrThrow);
-
-      await tx.insert(DocumentVersionContributors).values({
-        versionId: documentVersion.id,
-        userId,
-      });
-
       const v2 = await buildFreshV2Content(doc.id);
-      if (v2) {
-        await insertFreshV2Content(tx, newDocument.id, v2);
+      if (!v2) {
+        throw new Error(`template document projection is unusable: ${doc.id}`);
       }
+
+      await insertFreshV2Content(tx, newDocument.id, v2);
     }
   }
 };

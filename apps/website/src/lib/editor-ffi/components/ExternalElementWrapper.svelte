@@ -1,7 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { getThemeContext } from '@typie/ui/context';
-  import { THEME_COLORS } from '$lib/editor/theme';
+  import { THEME_COLORS } from '$lib/editor-ffi/theme';
   import { getEditorContext } from '../editor.svelte';
   import type { ExternalElement } from '@typie/editor-ffi/browser';
   import type { Snippet } from 'svelte';

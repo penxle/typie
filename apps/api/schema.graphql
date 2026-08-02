@@ -77,10 +77,6 @@ input CheckSpellingDocumentV2Input {
   text: String!
 }
 
-input ConvertDocumentToV2Input {
-  documentId: ID!
-}
-
 input CopyEntitiesInput {
   entityIds: [ID!]!
   lowerOrder: String
@@ -221,17 +217,14 @@ type Document implements IDocument {
   entity: Entity!
   excerpt: String!
   fontFamilies(sources: [FontFamilySource!]! = [DEFAULT, USER]): [DocumentFontFamily!]!
-  generation: Int!
   heads: [DocumentHead!]!
   id: ID!
   layoutMode: JSON!
   locked: Boolean!
   nullableTitle: String
   password: String
-  previewUrl: String!
   protectContent: Boolean!
   reactionCount: Int!
-  snapshot: Binary!
   state: DocumentState
   subtitle: String
   sweepTombstones: [String!]!
@@ -239,9 +232,6 @@ type Document implements IDocument {
   title: String!
   type: DocumentType!
   updatedAt: DateTime!
-  version: Binary!
-  versionMetas: [DocumentVersionMeta!]!
-  versions(before: DateTime, first: Int! = 20): [DocumentVersion!]!
   view: DocumentView!
 }
 
@@ -406,21 +396,6 @@ type DocumentState {
   updatedAt: DateTime!
 }
 
-type DocumentSyncStreamPayload {
-  data: String!
-  documentId: ID!
-  type: DocumentSyncType!
-}
-
-enum DocumentSyncType {
-  AWARENESS
-  HEARTBEAT
-  PRESENCE
-  RESET
-  UPDATE
-  VECTOR
-}
-
 input DocumentTextMappingInput {
   blockOffset: Int!
   nodeId: String!
@@ -431,17 +406,6 @@ input DocumentTextMappingInput {
 enum DocumentType {
   NORMAL
   TEMPLATE
-}
-
-type DocumentVersion {
-  createdAt: DateTime!
-  id: ID!
-  version: Binary!
-}
-
-type DocumentVersionMeta {
-  createdAt: DateTime!
-  id: ID!
 }
 
 type DocumentView implements IDocument {
@@ -460,7 +424,6 @@ type DocumentView implements IDocument {
   passwordUnlocked: Boolean!
   protectContent: Boolean!
   reactions: [DocumentReaction!]!
-  snapshot: Binary
   state: DocumentViewState
   subtitle: String
   thumbnail: Image
@@ -469,11 +432,7 @@ type DocumentView implements IDocument {
   updatedAt: DateTime!
 }
 
-union DocumentViewBody = DocumentViewBodyAvailable | DocumentViewBodyAvailableV2 | DocumentViewBodyUnavailable
-
-type DocumentViewBodyAvailable {
-  snapshot: Binary!
-}
+union DocumentViewBody = DocumentViewBodyAvailableV2 | DocumentViewBodyUnavailable
 
 type DocumentViewBodyAvailableV2 {
   graph: Binary!
@@ -837,7 +796,6 @@ type Mutation {
   cancelSubscriptionCancellation: Subscription_!
   checkSpellingDocument(input: CheckSpellingDocumentInput!): [DocumentSpellingError!]!
   checkSpellingDocumentV2(input: CheckSpellingDocumentV2Input!): [DocumentSpellingErrorV2!]!
-  convertDocumentToV2(input: ConvertDocumentToV2Input!): Document!
   copyEntities(input: CopyEntitiesInput!): [Entity!]!
   createDocument(input: CreateDocumentInput!): Document!
   createDocumentComment(input: CreateDocumentCommentInput!): DocumentCommentThread!
@@ -901,7 +859,6 @@ type Mutation {
   subscribeOrChangePlanWithInAppPurchase(input: SubscribeOrChangePlanWithInAppPurchaseInput!): Subscription_!
   subscribePlanWithBillingKey(input: SubscribePlanWithBillingKeyInput!): Subscription_!
   subscribePlanWithTrial: Subscription_!
-  syncDocument(input: SyncDocumentInput!): [SyncDocumentPayload!]!
   unfurlEmbed(input: UnfurlEmbedInput!): Embed!
   unlockDocumentView(input: UnlockDocumentViewInput!): DocumentView!
   unresolveDocumentCommentThread(input: UnresolveDocumentCommentThreadInput!): DocumentCommentThread!
@@ -1319,7 +1276,6 @@ input SubscribePlanWithBillingKeyInput {
 
 type Subscription {
   documentCommentStream(clientId: String!, documentId: ID!): DocumentCommentThread!
-  documentSyncStream(clientId: String!, documentId: ID!): DocumentSyncStreamPayload!
   literaryAnalysisDocumentStream(mappings: [DocumentTextMappingInput!]!, text: String!): DocumentLiteraryAnalysisPayload!
   literaryAnalysisDocumentStreamV2(documentId: ID, text: String!): DocumentLiteraryAnalysisPayloadV2!
   noteUpdateStream(clientId: String!, siteId: ID!): NoteUpdateStreamPayload!
@@ -1344,18 +1300,6 @@ type Subscription_ {
   startsAt: DateTime!
   state: SubscriptionState!
   user: User!
-}
-
-input SyncDocumentInput {
-  clientId: String!
-  data: String!
-  documentId: ID!
-  type: DocumentSyncType!
-}
-
-type SyncDocumentPayload {
-  data: String!
-  type: DocumentSyncType!
 }
 
 type TextReplacement {

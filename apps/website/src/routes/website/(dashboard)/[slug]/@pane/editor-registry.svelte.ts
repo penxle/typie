@@ -1,9 +1,8 @@
 import { getContext, setContext } from 'svelte';
 import { SvelteMap } from 'svelte/reactivity';
-import type { Editor as NativeEditor } from '$lib/editor/editor.svelte';
 import type { Editor as FfiEditor } from '$lib/editor-ffi/editor.svelte';
 
-export type RegisteredEditor = NativeEditor | FfiEditor;
+export type RegisteredEditor = FfiEditor;
 
 const key: unique symbol = Symbol('EditorRegistry');
 

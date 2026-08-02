@@ -1,16 +1,13 @@
 import { faker } from '@faker-js/faker';
 import { defaultValues } from '@typie/lib/const';
 import { EntityState, EntityType, NoteState } from '@typie/lib/enums';
+import { TypieError } from '@typie/lib/errors';
 import { and, asc, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
-import { LoroDoc, LoroList, LoroMap } from 'loro-crdt';
 import {
   db,
   DocumentBundles,
-  DocumentContents,
   Documents,
   DocumentStates,
-  DocumentVersionContributors,
-  DocumentVersions,
   Entities,
   Files,
   first,
@@ -21,33 +18,14 @@ import {
   Notes,
 } from '#/db/index.ts';
 import { readMergedGraph } from '#/utils/changeset.ts';
-import { compressZstd } from '#/utils/compression.ts';
 import { isSnapshotUsable } from '#/utils/document-state.ts';
 import { generateFractionalOrder } from '#/utils/order.ts';
-import { wasm } from '#/utils/wasm.ts';
 import { wasm as wasmFfi } from '#/utils/wasm-ffi.ts';
 import type { Modifier, PlainDoc, PlainNodeEntry, PlainRootNode } from '@typie/editor-ffi/server';
 import type { Transaction } from '#/db/index.ts';
 
 export const generateSlug = () => faker.string.hexadecimal({ length: 32, casing: 'lower', prefix: '' });
 export const generatePermalink = () => faker.string.alphanumeric({ length: 6, casing: 'mixed' });
-
-const ROOT_ID = '00000000000000000000000000000000';
-
-const collectReachableNodeIds = (nodes: Record<string, { children?: string[] }>): Set<string> => {
-  const reachable = new Set<string>();
-  const traverse = (nodeId: string) => {
-    if (reachable.has(nodeId)) return;
-    reachable.add(nodeId);
-    const node = nodes[nodeId];
-    if (!node?.children) return;
-    for (const childId of node.children) {
-      traverse(childId);
-    }
-  };
-  traverse(ROOT_ID);
-  return reachable;
-};
 
 export type TemplatePreset = {
   fontFamily?: string;
@@ -147,57 +125,6 @@ export const resolvePreset = (preset?: TemplatePreset): ResolvedPreset => {
   };
 };
 
-export const makeLoroDoc = (template?: TemplatePreset) => {
-  const doc = new LoroDoc();
-
-  const r = resolvePreset(template);
-
-  const settings = doc.getMap('settings');
-  settings.set('block_gap', r.blockGap);
-  settings.set('paragraph_indent', r.paragraphIndent);
-
-  const loroLayout = settings.setContainer('layout_mode', new LoroMap());
-  if (r.layout.type === 'paginated') {
-    loroLayout.set('type', 'paginated');
-    loroLayout.set('page_width', r.layout.pageWidth);
-    loroLayout.set('page_height', r.layout.pageHeight);
-    loroLayout.set('page_margin_top', r.layout.pageMarginTop);
-    loroLayout.set('page_margin_bottom', r.layout.pageMarginBottom);
-    loroLayout.set('page_margin_left', r.layout.pageMarginLeft);
-    loroLayout.set('page_margin_right', r.layout.pageMarginRight);
-  } else {
-    loroLayout.set('type', 'continuous');
-    loroLayout.set('max_width', r.layout.maxWidth);
-  }
-
-  const paragraphId = faker.string.uuid().replaceAll('-', '');
-
-  const nodes = doc.getMap('nodes');
-
-  const rootNode = nodes.setContainer(ROOT_ID, new LoroMap());
-  rootNode.set('type', 'root');
-  const rootChildren = rootNode.setContainer('children', new LoroList());
-  rootChildren.insert(0, paragraphId);
-
-  const cascadeAttrs = rootNode.setContainer('cascade_attrs', new LoroMap());
-  cascadeAttrs.set('style:font_family', r.fontFamily);
-  cascadeAttrs.set('style:font_size', r.fontSize);
-  cascadeAttrs.set('style:font_weight', r.fontWeight);
-  cascadeAttrs.set('style:text_color', r.textColor);
-  cascadeAttrs.set('style:background_color', r.backgroundColor);
-  cascadeAttrs.set('style:letter_spacing', r.letterSpacing);
-  cascadeAttrs.set('paragraph:line_height', r.lineHeight);
-
-  const paragraphNode = nodes.setContainer(paragraphId, new LoroMap());
-  paragraphNode.set('type', 'paragraph');
-  paragraphNode.set('align', defaultValues.textAlign);
-  paragraphNode.set('line_height', r.lineHeight);
-  paragraphNode.set('parent', ROOT_ID);
-  paragraphNode.setContainer('children', new LoroList());
-
-  return doc;
-};
-
 export const derivePlainRootFromPreset = (preset?: TemplatePreset): { root: PlainRootNode; modifiers: Modifier[] } => {
   const r = resolvePreset(preset);
 
@@ -264,48 +191,6 @@ export const extractAssetIdsFromPlainDoc = (
   return { imageIds, fileIds, embedIds, archivedIds };
 };
 
-const extractTextFromLoroDoc = (doc: LoroDoc): string => {
-  const nodes = doc.getMap('nodes').toJSON() as Record<string, { text?: string; children?: string[] }>;
-  const reachable = collectReachableNodeIds(nodes);
-  const texts: string[] = [];
-
-  for (const nodeId of reachable) {
-    const node = nodes[nodeId];
-    if (node?.text) {
-      texts.push(node.text);
-    }
-  }
-
-  return texts.join('');
-};
-
-export const extractAssetIdsFromLoroDoc = (
-  doc: LoroDoc,
-): { imageIds: string[]; fileIds: string[]; embedIds: string[]; archivedIds: string[] } => {
-  const allNodes = doc.getMap('nodes').toJSON() as Record<string, unknown>;
-  const reachable = collectReachableNodeIds(allNodes as Record<string, { children?: string[] }>);
-
-  const imageIds: string[] = [];
-  const fileIds: string[] = [];
-  const embedIds: string[] = [];
-  const archivedIds: string[] = [];
-
-  for (const nodeId of reachable) {
-    const typedNode = allNodes[nodeId] as { type?: string; id?: string };
-    if (typedNode.type === 'image' && typedNode.id) {
-      imageIds.push(typedNode.id);
-    } else if (typedNode.type === 'file' && typedNode.id) {
-      fileIds.push(typedNode.id);
-    } else if (typedNode.type === 'embed' && typedNode.id) {
-      embedIds.push(typedNode.id);
-    } else if (typedNode.type === 'archived' && typedNode.id) {
-      archivedIds.push(typedNode.id);
-    }
-  }
-
-  return { imageIds, fileIds, embedIds, archivedIds };
-};
-
 export const calculateBlobSizeFromAssetIds = async (imageIds: string[], fileIds: string[]): Promise<number> => {
   let totalSize = 0;
 
@@ -322,40 +207,11 @@ export const calculateBlobSizeFromAssetIds = async (imageIds: string[], fileIds:
   return totalSize;
 };
 
-export const garbageCollectLoroDoc = (doc: LoroDoc): number => {
-  const nodes = doc.getMap('nodes');
-  const allNodes = nodes.toJSON() as Record<string, { children?: string[]; text?: unknown }>;
-  const reachable = collectReachableNodeIds(allNodes as Record<string, { children?: string[] }>);
-
-  let deletedNodes = 0;
-  for (const key of nodes.keys()) {
-    if (reachable.has(key)) {
-      continue;
-    }
-
-    nodes.delete(key);
-    deletedNodes++;
-  }
-
-  return deletedNodes;
-};
-
 export const countCharacters = (text: string) => {
   return [...text.replaceAll('\u{200B}', '').replaceAll(/\s+/g, ' ').trim()].length;
 };
 
-export const extractLoroDocContents = async (doc: LoroDoc) => {
-  const snapshot = new Uint8Array(doc.export({ mode: 'snapshot' }));
-  const json = await wasm.snapshotToJson(snapshot);
-  const text = extractTextFromLoroDoc(doc);
-  const characterCount = countCharacters(text);
-  const { imageIds, fileIds } = extractAssetIdsFromLoroDoc(doc);
-  const blobSize = await calculateBlobSizeFromAssetIds(imageIds, fileIds);
-
-  return { json, text, characterCount, blobSize };
-};
-
-export type LoroLayoutMode =
+export type DocLayoutMode =
   | {
       type: 'paginated';
       pageWidth: number;
@@ -367,46 +223,7 @@ export type LoroLayoutMode =
     }
   | { type: 'continuous'; maxWidth: number };
 
-export const extractLoroDocLayoutMode = (snapshot: Uint8Array): LoroLayoutMode => {
-  const doc = new LoroDoc();
-  doc.import(snapshot);
-
-  const settings = doc.getMap('settings');
-  const layoutMode = settings.get('layout_mode') as LoroMap | undefined;
-
-  if (!layoutMode) {
-    return {
-      type: 'paginated',
-      pageWidth: 794,
-      pageHeight: 1123,
-      pageMarginTop: 96,
-      pageMarginBottom: 96,
-      pageMarginLeft: 96,
-      pageMarginRight: 96,
-    };
-  }
-
-  const type = layoutMode.get('type') as string;
-
-  if (type === 'continuous') {
-    return {
-      type: 'continuous',
-      maxWidth: (layoutMode.get('max_width') as number) ?? 600,
-    };
-  }
-
-  return {
-    type: 'paginated',
-    pageWidth: (layoutMode.get('page_width') as number) ?? 794,
-    pageHeight: (layoutMode.get('page_height') as number) ?? 1123,
-    pageMarginTop: (layoutMode.get('page_margin_top') as number) ?? 96,
-    pageMarginBottom: (layoutMode.get('page_margin_bottom') as number) ?? 96,
-    pageMarginLeft: (layoutMode.get('page_margin_left') as number) ?? 96,
-    pageMarginRight: (layoutMode.get('page_margin_right') as number) ?? 96,
-  };
-};
-
-export const extractPlainDocLayoutMode = (plain: PlainDoc): LoroLayoutMode => {
+export const extractPlainDocLayoutMode = (plain: PlainDoc): DocLayoutMode => {
   const node = plain.root.node;
   if (node.type !== 'root') {
     return {
@@ -530,12 +347,9 @@ const copyDocument = async (
   newEntityId: string,
   targetParentId: string | null,
   targetSiteId: string,
-  userId: string,
   v2Map: Map<string, FreshV2Content>,
 ) => {
   const sourceDoc = await tx.select().from(Documents).where(eq(Documents.entityId, sourceEntityId)).then(firstOrThrow);
-
-  const sourceContent = await tx.select().from(DocumentContents).where(eq(DocumentContents.documentId, sourceDoc.id)).then(firstOrThrow);
 
   const resolvedTitle = await resolveNameConflict(tx, sourceDoc.title ?? '(제목 없음)', targetParentId, targetSiteId, 'DOCUMENT');
 
@@ -556,40 +370,12 @@ const copyDocument = async (
     .returning()
     .then(firstOrThrow);
 
-  const json = await wasm.snapshotToJson(new Uint8Array(sourceContent.snapshot));
-  const freshSnapshot = await wasm.jsonToSnapshot(json);
-  const freshDoc = new LoroDoc();
-  freshDoc.import(freshSnapshot);
-  const freshVersion = freshDoc.version().encode();
-
-  await tx.insert(DocumentContents).values({
-    documentId: newDoc.id,
-    json,
-    text: sourceContent.text,
-    characterCount: sourceContent.characterCount,
-    blobSize: sourceContent.blobSize,
-    snapshot: freshSnapshot,
-    version: freshVersion,
-  });
-
-  const documentVersion = await tx
-    .insert(DocumentVersions)
-    .values({
-      documentId: newDoc.id,
-      version: await compressZstd(freshVersion),
-    })
-    .returning({ id: DocumentVersions.id })
-    .then(firstOrThrow);
-
-  await tx.insert(DocumentVersionContributors).values({
-    versionId: documentVersion.id,
-    userId,
-  });
-
   const v2 = v2Map.get(sourceDoc.id) ?? (await buildFreshV2Content(sourceDoc.id));
-  if (v2) {
-    await insertFreshV2Content(tx, newDoc.id, v2);
+  if (!v2) {
+    throw new TypieError({ code: 'document_projection_degraded', message: '문서를 복사할 수 없는 상태예요.', status: 409 });
   }
+
+  await insertFreshV2Content(tx, newDoc.id, v2);
 
   return newDoc;
 };
@@ -659,7 +445,7 @@ export const copyEntityRecursive = async (
     .then(firstOrThrow);
 
   if (sourceEntity.type === EntityType.DOCUMENT) {
-    await copyDocument(tx, sourceEntityId, newEntity.id, targetParentId, targetSiteId, userId, v2Map);
+    await copyDocument(tx, sourceEntityId, newEntity.id, targetParentId, targetSiteId, v2Map);
   } else if (sourceEntity.type === EntityType.FOLDER) {
     const sourceFolder = await tx.select().from(Folders).where(eq(Folders.entityId, sourceEntityId)).then(firstOrThrow);
     const resolvedName = await resolveNameConflict(tx, sourceFolder.name, targetParentId, targetSiteId, 'FOLDER');

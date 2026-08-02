@@ -12,8 +12,7 @@ import {
 } from '../blocks.ts';
 import type { Alignment } from '@typie/editor-ffi/server';
 import type { IParagraphOptions } from 'docx';
-import type { DocDefaults } from '../blocks.ts';
-import type { FileChild } from '../index.ts';
+import type { DocDefaults, FileChild } from '../blocks.ts';
 
 export function buildParagraphV2(
   align: Alignment,

@@ -356,10 +356,6 @@ export const DocumentChangesetsCollectJob = defineJob('document:changesets:colle
         deduplication: { id: `search:index:document:${documentId}`, ttl: 60 * 1000 },
       });
 
-      await enqueueJob('document:preview:invalidate', documentId, {
-        deduplication: { id: `document:preview:invalidate:${documentId}`, ttl: 60 * 60 * 1000 },
-      });
-
       await scheduleSweepDue(documentId);
     }
   }

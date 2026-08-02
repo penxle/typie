@@ -11,7 +11,7 @@
   import InfoIcon from '~icons/lucide/info';
   import TypeIcon from '~icons/lucide/type';
   import UploadIcon from '~icons/lucide/upload';
-  import { values } from '$lib/editor/values';
+  import { values } from '$lib/editor-ffi/values';
   import { cache, unwrapError } from '$lib/graphql';
   import { uploadBlob } from '$lib/utils';
   import { graphql } from '$mearie';

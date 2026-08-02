@@ -8,16 +8,14 @@ import {
   ShadingType,
   Table,
   TableCell,
-  TableLayoutType,
   TableRow,
   TextRun,
   WidthType,
 } from 'docx';
 import { resolveColorToHex } from '../core/theme.ts';
 import type { IParagraphOptions, ISpacingProperties } from 'docx';
-import type { FileChild } from './index.ts';
 
-const INDENT_LEFT_TWIPS = 720; // 0.5 inch
+export type FileChild = Paragraph | Table;
 
 export const NO_BORDER = { style: BorderStyle.NONE, size: 0 } as const;
 export const SUBTLE_BORDER = { style: BorderStyle.SINGLE, size: 1, color: 'E3E4EB' } as const;
@@ -68,112 +66,6 @@ export function convertParagraph(
     spacing,
     indent: indentTwips ? { firstLine: indentTwips } : undefined,
     children: inlineChildren ?? [],
-  });
-}
-
-export type BlockquoteParagraph = {
-  inlineChildren: IParagraphOptions['children'];
-  align?: string;
-  lineHeight?: number;
-};
-
-export function convertBlockquote(
-  node: { variant?: string },
-  paragraphs: BlockquoteParagraph[],
-  defaults: DocDefaults = DEFAULT_DEFAULTS,
-): FileChild[] {
-  const variant = node.variant ?? 'left_line';
-
-  if (variant === 'left_line' || variant === 'left_quote') {
-    const borderColor = variant === 'left_quote' ? '000000' : 'CCCCCC';
-    const cellChildren = paragraphs.map(({ inlineChildren, align, lineHeight }) => {
-      const alignment = align ? mapAlignment(align) : undefined;
-      const spacing = lineHeightToSpacing(lineHeight, defaults.fontSizePt, defaults.blockGapTwips);
-      return new Paragraph({ alignment, spacing, children: inlineChildren ?? [] });
-    });
-    if (cellChildren.length === 0) {
-      cellChildren.push(new Paragraph({ children: [] }));
-    }
-
-    return [
-      new Table({
-        width: { size: 100, type: WidthType.PERCENTAGE },
-        borders: {
-          top: NO_BORDER,
-          bottom: NO_BORDER,
-          left: NO_BORDER,
-          right: NO_BORDER,
-          insideHorizontal: NO_BORDER,
-          insideVertical: NO_BORDER,
-        },
-        rows: [
-          new TableRow({
-            children: [
-              new TableCell({
-                children: cellChildren,
-                borders: {
-                  top: NO_BORDER,
-                  bottom: NO_BORDER,
-                  left: { style: BorderStyle.SINGLE, size: 18, color: borderColor },
-                  right: NO_BORDER,
-                },
-                margins: { top: 40, bottom: 40, left: 200, right: 0 },
-              }),
-            ],
-          }),
-        ],
-      }),
-    ];
-  }
-
-  if (variant === 'message_sent' || variant === 'message_received') {
-    const isSent = variant === 'message_sent';
-    const hex =
-      resolveColorToHex(isSent ? 'ui.blockquote.message-sent' : 'ui.blockquote.message-received') ?? (isSent ? '248BF5' : 'E5E5EA');
-
-    return paragraphs.map(({ inlineChildren, align, lineHeight }) => {
-      const alignment = align ? mapAlignment(align) : undefined;
-      const spacing = lineHeightToSpacing(lineHeight, defaults.fontSizePt, defaults.blockGapTwips);
-
-      return new Table({
-        alignment: isSent ? AlignmentType.END : AlignmentType.START,
-        layout: TableLayoutType.AUTOFIT,
-        width: { size: 0, type: WidthType.AUTO },
-        borders: {
-          top: NO_BORDER,
-          bottom: NO_BORDER,
-          left: NO_BORDER,
-          right: NO_BORDER,
-          insideHorizontal: NO_BORDER,
-          insideVertical: NO_BORDER,
-        },
-        rows: [
-          new TableRow({
-            children: [
-              new TableCell({
-                children: [
-                  new Paragraph({
-                    alignment,
-                    spacing,
-                    children: inlineChildren ?? [],
-                  }),
-                ],
-                shading: { fill: hex, type: ShadingType.CLEAR },
-                borders: { top: NO_BORDER, bottom: NO_BORDER, left: NO_BORDER, right: NO_BORDER },
-                margins: { top: 80, bottom: 80, left: 160, right: 160 },
-              }),
-            ],
-          }),
-        ],
-      });
-    });
-  }
-
-  // fallback: 일반 paragraph
-  return paragraphs.map(({ inlineChildren, align, lineHeight }) => {
-    const alignment = align ? mapAlignment(align) : undefined;
-    const spacing = lineHeightToSpacing(lineHeight, defaults.fontSizePt, defaults.blockGapTwips);
-    return new Paragraph({ alignment, spacing, children: inlineChildren ?? [], indent: { left: INDENT_LEFT_TWIPS } });
   });
 }
 
@@ -297,10 +189,6 @@ export function convertPlaceholderTable(text: string): Table {
       }),
     ],
   });
-}
-
-export function convertHardBreak(): TextRun {
-  return new TextRun({ break: 1 });
 }
 
 export function toBlockChildren(elements: FileChild[]): (Paragraph | Table)[] {

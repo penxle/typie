@@ -26,9 +26,6 @@ export const load: PageLoad = async (event) => {
 
             ... on Document {
               id
-              state {
-                __typename
-              }
             }
           }
         }

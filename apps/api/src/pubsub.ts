@@ -2,12 +2,10 @@ import { createRedisEventTarget } from '@graphql-yoga/redis-event-target';
 import { createPubSub } from 'graphql-yoga';
 import { Redis } from 'ioredis';
 import { env } from '#/env.ts';
-import type { DocumentSyncType } from '@typie/lib/enums';
 
 export const NOTE_UPDATE_KINDS = ['CREATED', 'UPDATED', 'DELETED'] as const;
 
 export const pubsub = createPubSub<{
-  'document:sync': [documentId: string, payload: { target: string; type: DocumentSyncType; data: string }];
   'document:changesets': [
     documentId: string,
     payload: { target: string; seq: string; changesets: string[]; heads: string; durableHeads: string },

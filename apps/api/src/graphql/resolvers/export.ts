@@ -4,11 +4,9 @@ import { NotFoundError, TypieError } from '@typie/lib/errors';
 import { and, asc, eq, inArray } from 'drizzle-orm';
 import {
   db,
-  DocumentContents,
   Documents,
   DocumentStates,
   Entities,
-  first,
   firstOrThrow,
   firstOrThrowWith,
   FontFamilies,
@@ -18,12 +16,11 @@ import {
   Users,
   validateDbId,
 } from '#/db/index.ts';
-import { generateDocument } from '#/export/index.ts';
 import { loadBundleStream } from '#/utils/changeset.ts';
 import { isSnapshotUsable } from '#/utils/document-state.ts';
 import { assertActiveSubscription } from '#/utils/plan.ts';
 import { builder } from '../builder.ts';
-import type { ExportFontFamily, ExportFormat, PageLayout } from '#/export/index.ts';
+import type { ExportFontFamily, ExportFormat, PageLayout } from '#/export/core/types.ts';
 
 type FontFamilyEntry = {
   source: 'DEFAULT' | 'FALLBACK';
@@ -115,9 +112,9 @@ builder.mutationFields((t) => ({
         .select({ documentId: DocumentStates.documentId, projectionDegraded: DocumentStates.projectionDegraded })
         .from(DocumentStates)
         .where(eq(DocumentStates.documentId, document.id))
-        .then(first);
+        .then(firstOrThrowWith(new NotFoundError()));
 
-      if (state && !isSnapshotUsable(state)) {
+      if (!isSnapshotUsable(state)) {
         throw new TypieError({ code: 'document_projection_degraded', message: '문서를 내보낼 수 없는 상태예요.', status: 409 });
       }
 
@@ -126,55 +123,35 @@ builder.mutationFields((t) => ({
 
       const user = await db.select({ name: Users.name }).from(Users).where(eq(Users.id, entity.userId)).then(firstOrThrow);
 
-      if (state) {
-        // No stream-tail merge: export reads the persisted snapshot as-of the
-        // last collect run, matching the existing freshness contract.
-        const graph = await loadBundleStream(document.id);
+      // No stream-tail merge: export reads the persisted snapshot as-of the
+      // last collect run, matching the existing freshness contract.
+      const graph = await loadBundleStream(document.id);
 
-        let data: Uint8Array;
+      let data: Uint8Array;
 
-        if (format === 'pdf') {
-          const { generateDocumentPdfV2 } = await import('../../export/pdf/v2/generate.ts');
-          data = await generateDocumentPdfV2({
-            graph,
-            userId: entity.userId,
-            title,
-            author: user.name,
-            layout: layout as PageLayout,
-          });
+      if (format === 'pdf') {
+        const { generateDocumentPdfV2 } = await import('../../export/pdf/v2/generate.ts');
+        data = await generateDocumentPdfV2({
+          graph,
+          userId: entity.userId,
+          title,
+          author: user.name,
+          layout: layout as PageLayout,
+        });
+      } else {
+        const fonts = await buildExportFonts(entity.userId);
+
+        if (format === 'hwp') {
+          const { generateDocumentHwpV2 } = await import('../../export/hwp/v2/index.ts');
+          data = await generateDocumentHwpV2({ graph, title, author: user.name, fonts, layout: layout as PageLayout });
+        } else if (format === 'docx') {
+          const { generateDocumentDocxV2 } = await import('../../export/docx/v2/index.ts');
+          data = await generateDocumentDocxV2({ graph, title, author: user.name, fonts, layout: layout as PageLayout });
         } else {
-          const fonts = await buildExportFonts(entity.userId);
-
-          if (format === 'hwp') {
-            const { generateDocumentHwpV2 } = await import('../../export/hwp/v2/index.ts');
-            data = await generateDocumentHwpV2({ graph, title, author: user.name, fonts, layout: layout as PageLayout });
-          } else if (format === 'docx') {
-            const { generateDocumentDocxV2 } = await import('../../export/docx/v2/index.ts');
-            data = await generateDocumentDocxV2({ graph, title, author: user.name, fonts, layout: layout as PageLayout });
-          } else {
-            const { generateDocumentEpubV2 } = await import('../../export/epub/v2/index.ts');
-            data = await generateDocumentEpubV2({ graph, title, author: user.name, fonts });
-          }
+          const { generateDocumentEpubV2 } = await import('../../export/epub/v2/index.ts');
+          data = await generateDocumentEpubV2({ graph, title, author: user.name, fonts });
         }
-
-        return { data, filename: `${filename}.${meta.ext}`, mimeType: meta.mimeType };
       }
-
-      const content = await db
-        .select()
-        .from(DocumentContents)
-        .where(eq(DocumentContents.documentId, document.id))
-        .then(firstOrThrowWith(new NotFoundError()));
-
-      const fonts = await buildExportFonts(entity.userId);
-
-      const data = await generateDocument(format, {
-        snapshot: content.snapshot,
-        title,
-        author: user.name,
-        fonts,
-        layout: input.layout ?? undefined,
-      });
 
       return { data, filename: `${filename}.${meta.ext}`, mimeType: meta.mimeType };
     },
@@ -182,7 +159,7 @@ builder.mutationFields((t) => ({
 }));
 
 /** ExportFontFamily[] 빌드 (기본 폰트 + 유저 업로드 폰트) */
-export async function buildExportFonts(userId: string): Promise<ExportFontFamily[]> {
+async function buildExportFonts(userId: string): Promise<ExportFontFamily[]> {
   const families: ExportFontFamily[] = [];
 
   // 기본 폰트

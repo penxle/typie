@@ -4,7 +4,7 @@
   import { Button, Icon } from '@typie/ui/components';
   import AlertTriangleIcon from '~icons/lucide/alert-triangle';
   import { page } from '$app/state';
-  import { wasm } from '$lib/wasm.svelte';
+  import { wasm } from '$lib/wasm-ffi.svelte';
 
   const isEditor = $derived(page.route.id?.startsWith('/website/') ?? false);
 </script>

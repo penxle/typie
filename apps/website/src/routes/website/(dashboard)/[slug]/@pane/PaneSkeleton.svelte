@@ -2,8 +2,8 @@
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { getAppContext } from '@typie/ui/context';
-  import { CONTINUOUS_MIN_WIDTH, CONTINUOUS_VIEW_PADDING } from '$lib/editor/constants';
-  import type { LayoutMode } from '$lib/editor/types';
+  import { CONTINUOUS_MIN_WIDTH, CONTINUOUS_VIEW_PADDING } from '$lib/editor-ffi/constants';
+  import type { DocumentLayoutMode } from '$lib/editor-ffi/page-layout';
   import type { Pane } from './types';
 
   const DEFAULT_CONTENT_WIDTH = 600;
@@ -12,7 +12,7 @@
 
   type Props = {
     pane: Pane;
-    documentLayoutMode?: LayoutMode | null;
+    documentLayoutMode?: DocumentLayoutMode | null;
   };
 
   let { pane, documentLayoutMode = null }: Props = $props();

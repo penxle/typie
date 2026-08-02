@@ -40,7 +40,6 @@ const schema = z.object({
   PORTONE_API_SECRET: z.string(),
   PORTONE_CHANNEL_KEY: z.string(),
   PORTONE_KAKAOPAY_CHANNEL_KEY: z.string(),
-  PREVIEW_SIGNING_SECRET: z.string(),
   REDIS_URL: z.string(),
   SENTRY_DSN: z.string().optional(),
   IMAGE_TAG: z.string().optional(),

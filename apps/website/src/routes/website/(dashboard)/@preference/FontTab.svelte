@@ -7,8 +7,8 @@
   import PlusIcon from '~icons/lucide/plus';
   import { FontSpecimen, SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
   import { familySpecimenFallbacks, weightSpecimenFallbacks } from '$lib/components/font-specimen';
-  import { getRepresentativeFont } from '$lib/editor/fonts';
-  import { values } from '$lib/editor/values';
+  import { getRepresentativeFont } from '$lib/editor-ffi/font-utils';
+  import { values } from '$lib/editor-ffi/values';
   import { cache } from '$lib/graphql';
   import { graphql } from '$mearie';
   import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';

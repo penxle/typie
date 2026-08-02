@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createPaginatedLayout, getMaxMargin, mmToPx, resizePageUnit } from '$lib/editor/utils';
-import type { PageLayout } from '$lib/editor/utils';
+import { createPaginatedLayout, getMaxMargin, mmToPx, resizePageUnit } from '$lib/editor-ffi/page-layout';
+import type { PageLayout } from '$lib/editor-ffi/page-layout';
 
 const toV2Layout = (layout: PageLayout) => ({
   type: 'paginated' as const,

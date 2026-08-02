@@ -75,7 +75,6 @@
     "json-logic-engine": "^5.0.7",
     "jszip": "^3.10.1",
     "ky": "^2.0.2",
-    "loro-crdt": "^1.13.6",
     "mime": "^4.1.0",
     "nanoid": "^5.1.16",
     "openai": "^6.48.0",

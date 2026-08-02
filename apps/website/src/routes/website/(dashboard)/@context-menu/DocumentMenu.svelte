@@ -339,6 +339,7 @@
       const errorMessages: Record<string, string> = {
         character_count_limit_exceeded: '현재 플랜의 글자 수 제한을 초과했어요.',
         blob_size_limit_exceeded: '현재 플랜의 파일 크기 제한을 초과했어요.',
+        document_projection_degraded: '문서를 복사할 수 없는 상태예요.',
       };
 
       const error = unwrapError(err);

@@ -34,14 +34,14 @@
   import LineHeightIcon from '~icons/typie/line-height';
   import { FontSpecimen } from '$lib/components';
   import { familySpecimenFallbacks } from '$lib/components/font-specimen';
-  import { getMaxMargin, getPageMargin, MIN_PAGE_SIZE_MM, pxToMm, resizePageUnit } from '$lib/editor/utils';
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
+  import { getMaxMargin, getPageMargin, MIN_PAGE_SIZE_MM, pxToMm, resizePageUnit } from '$lib/editor-ffi/page-layout';
   import { defaultContinuousLayout, defaultPaginatedLayout, setRootLayoutMode, setRootModifier } from '$lib/editor-ffi/root-attrs';
   import { values } from '$lib/editor-ffi/values';
   import { activeFontsByWeight, fontWeightItemsForFonts, resolveFontWeightForFamily } from '$lib/font-weight';
   import { graphql } from '$mearie';
   import type { LayoutMode, Modifier, ModifierType } from '@typie/editor-ffi/browser';
-  import type { PageLayout, PageMarginSide } from '$lib/editor/utils';
+  import type { PageLayout, PageMarginSide } from '$lib/editor-ffi/page-layout';
   import type { DocumentPanelV2_Settings_document$key } from '$mearie';
 
   type Props = {
