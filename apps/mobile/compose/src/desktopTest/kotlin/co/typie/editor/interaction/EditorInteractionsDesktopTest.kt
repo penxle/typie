@@ -54,6 +54,7 @@ import co.typie.editor.ffi.Size as PageSize
 import co.typie.editor.interaction.semantics.EditorViewportZoomSemanticConfig
 import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.viewport.EditorViewportState
+import co.typie.editor.viewport.consumeEditorViewportTouchPan
 import co.typie.ext.ScrollGestureLockState
 import co.typie.navigation.LocalNavigationPopNestedScroll
 import co.typie.navigation.NavigationStack
@@ -1392,6 +1393,62 @@ class EditorInteractionsDesktopTest {
         "Expected the diagonal fling to stop at the horizontal boundary, got $consumedDistances",
       )
       assertEquals(10f, consumedDistances.last(), absoluteTolerance = 0.001f)
+    }
+
+  @Test
+  fun `rightward diagonal fling continues vertically after combined delta yields to navigation`() =
+    runComposeUiTest {
+      val consumedDistances = mutableListOf<Float>()
+      val viewportState =
+        EditorViewportState().apply {
+          updateMeasuredBounds(
+            viewportSize = Size(width = 100f, height = 100f),
+            contentSize = Size(width = 100f, height = 300f),
+          )
+          scrollToY(100f)
+        }
+      val boundaryStoppingFling =
+        object : FlingBehavior {
+          override suspend fun ScrollScope.performFling(initialVelocity: Float): Float {
+            val requestedDistance = 10f
+            val consumedDistance = scrollBy(requestedDistance)
+            consumedDistances += consumedDistance
+            return if (abs(requestedDistance - consumedDistance) > 0.5f) initialVelocity else 0f
+          }
+        }
+      val fixture =
+        Fixture(
+          scrollConsumer = { delta ->
+            consumeEditorViewportTouchPan(
+              viewportState = viewportState,
+              deltaPx = delta,
+              density = 1f,
+              canNavigateBack = true,
+            )
+          },
+          flingBehaviorOverride = boundaryStoppingFling,
+        )
+      setEditorContent(fixture)
+
+      listOf(-20f, 20f).forEachIndexed { gestureIndex, verticalDelta ->
+        onNodeWithTag(EditorTag).performTouchInput {
+          down(pointerId = 0, position = Offset(100f, 100f))
+          moveTo(pointerId = 0, position = Offset(140f, 100f + verticalDelta))
+          moveTo(pointerId = 0, position = Offset(180f, 100f + verticalDelta * 2f))
+          up(pointerId = 0)
+        }
+        waitUntil { fixture.nestedPostFlingAvailable.size > gestureIndex }
+      }
+
+      assertEquals(
+        2,
+        consumedDistances.count { distance -> abs(distance - 10f) < 0.001f },
+        "Expected the vertical axis to keep flinging after the combined delta was rejected, got $consumedDistances",
+      )
+      fixture.nestedPostFlingAvailable.forEach { residualVelocity ->
+        assertTrue(residualVelocity.x > 0f)
+        assertEquals(0f, residualVelocity.y, absoluteTolerance = 0.001f)
+      }
     }
 
   @Test

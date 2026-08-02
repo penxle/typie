@@ -249,12 +249,29 @@ private suspend fun performFlingAnimation(
         object : ScrollScope {
           override fun scrollBy(pixels: Float): Float {
             val delta = pixels.toOffset(activeVelocity)
-            val consumed =
+            var consumed =
               scroll2DScope.dispatchScroll(
                 delta = delta,
                 dispatcher = dispatcher,
                 source = NestedScrollSource.SideEffect,
               )
+            if (consumed == Offset.Zero && delta.x != 0f && delta.y != 0f) {
+              // A direction-sensitive consumer can reject the combined delta while one axis is
+              // still scrollable. Probe the axes before treating both as unavailable.
+              val consumedX =
+                scroll2DScope.dispatchScroll(
+                  delta = Offset(x = delta.x, y = 0f),
+                  dispatcher = dispatcher,
+                  source = NestedScrollSource.SideEffect,
+                )
+              val consumedY =
+                scroll2DScope.dispatchScroll(
+                  delta = Offset(x = 0f, y = delta.y),
+                  dispatcher = dispatcher,
+                  source = NestedScrollSource.SideEffect,
+                )
+              consumed = consumedX + consumedY
+            }
             xBlocked = xBlocked || abs(delta.x - consumed.x) > FlingConsumptionTolerancePx
             yBlocked = yBlocked || abs(delta.y - consumed.y) > FlingConsumptionTolerancePx
             return consumed.magnitude
