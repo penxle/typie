@@ -43,5 +43,6 @@
       zIndex: '[-1]',
       pointerEvents: 'none',
     })}
+    data-editor-line-highlight
   ></div>
 {/if}

@@ -109,8 +109,11 @@ export class EditorScrollScope {
   bottomPadding = $derived.by(() => {
     void this.#editor.viewport.height;
     const snapshot = this.#editor.published?.snapshot;
-    const minimumPadding = Math.max(this.visibleArea.bottomInset, this.#keepVisibleBottomPadding(snapshot));
     const rect = selectionHeadRect(snapshot);
+    const needsKeepVisiblePadding = rect !== undefined || this.#hasResolvedKeepVisibleTarget(snapshot);
+    const minimumPadding = needsKeepVisiblePadding
+      ? resolveKeepVisibleBottomPadding({ visibleArea: this.visibleArea })
+      : this.visibleArea.bottomInset;
     if (!rect) {
       return minimumPadding;
     }
@@ -212,20 +215,9 @@ export class EditorScrollScope {
     }
   }
 
-  #keepVisibleBottomPadding(snapshot: EditorSnapshot | undefined): number {
+  #hasResolvedKeepVisibleTarget(snapshot: EditorSnapshot | undefined): boolean {
     const target = this.#keepVisibleTarget;
-    if (!target) {
-      return 0;
-    }
-
-    const rects = this.#resolveTargetRects(target, snapshot);
-    if (!rects) {
-      return 0;
-    }
-
-    return resolveKeepVisibleBottomPadding({
-      visibleArea: this.visibleArea,
-    });
+    return target !== null && this.#resolveTargetRects(target, snapshot) !== null;
   }
 
   #typewriterBottomPaddingForRect(rect: PageRect): number {

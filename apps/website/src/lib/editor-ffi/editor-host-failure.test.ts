@@ -200,6 +200,24 @@ describe('Editor guarded core invocation', () => {
     expect(frames).toEqual([]);
   });
 
+  it('retires a scheduled RAF when updateNow drains the queued request prefix', async () => {
+    const { editor, core } = await createEditor();
+    editor.enqueue({ type: 'history', op: { type: 'undo' } });
+    const scheduledFrame = frames.at(-1);
+
+    expect(editor.hasQueuedTick).toBe(true);
+    expect(scheduledFrame).toBeDefined();
+
+    editor.updateNow((request) => request.enqueue({ type: 'history', op: { type: 'undo' } }));
+
+    expect(editor.hasQueuedTick).toBe(false);
+    expect(cancelAnimationFrame).toHaveBeenCalledWith(frames.length);
+    scheduledFrame?.(0);
+    expect(core.tick).not.toHaveBeenCalled();
+
+    editor.destroy();
+  });
+
   it.each([
     [
       'request admission',

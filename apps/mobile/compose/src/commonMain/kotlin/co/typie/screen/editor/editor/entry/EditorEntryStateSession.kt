@@ -54,7 +54,7 @@ internal fun rememberEditorEntryStateSession(
 
     activeEditor.updateWithBringIntoView(bringIntoViewRequests) {
       enqueue(Message.Selection(SelectionOp.SetFrozen(selection = selection)))
-      afterApplied { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
+      bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
     }
   }
 

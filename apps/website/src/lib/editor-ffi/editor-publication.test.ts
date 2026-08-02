@@ -81,12 +81,34 @@ describe('editor publication', () => {
   });
 
   it('requests page zero only when a newer applied layout strands a framed publication without targets', () => {
-    expect(preparingPage(true, true, 10, 9, 1, 0)).toBe(0);
-    expect(preparingPage(true, false, 10, 9, 1, 0)).toBeUndefined();
-    expect(preparingPage(true, true, 9, 9, 1, 0)).toBeUndefined();
-    expect(preparingPage(true, true, 10, 9, 0, 0)).toBeUndefined();
-    expect(preparingPage(true, true, 10, 9, 1, 1)).toBeUndefined();
-    expect(preparingPage(false, true, 10, 9, 1, 0)).toBeUndefined();
+    const facts = {
+      hasPublishedFrames: true,
+      appliedRevision: 10,
+      publishedRevision: 9,
+      appliedPageCount: 1,
+      publishedPageCount: 1,
+      targets: new Map<number, PublicationTarget>(),
+    };
+    expect(preparingPage(facts)).toBe(0);
+    expect(preparingPage({ ...facts, hasPublishedFrames: false })).toBeUndefined();
+    expect(preparingPage({ ...facts, appliedRevision: 9 })).toBeUndefined();
+    expect(preparingPage({ ...facts, appliedPageCount: 0 })).toBeUndefined();
+    expect(preparingPage({ ...facts, targets: new Map([[0, {} as PublicationTarget]]) })).toBeUndefined();
+    expect(preparingPage({ ...facts, targets: undefined })).toBeUndefined();
+  });
+
+  it('prepares a newly appended page until its target is attached', () => {
+    const pageZero = new Map([[0, {} as PublicationTarget]]);
+    const facts = {
+      hasPublishedFrames: true,
+      appliedRevision: 10,
+      publishedRevision: 9,
+      appliedPageCount: 2,
+      publishedPageCount: 1,
+      targets: pageZero,
+    };
+    expect(preparingPage(facts)).toBe(1);
+    expect(preparingPage({ ...facts, targets: new Map([...pageZero, [1, {} as PublicationTarget]]) })).toBeUndefined();
   });
 
   it('republishes a replacement target at the same revision but not a no-change reevaluation', () => {

@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
@@ -23,7 +22,9 @@ import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import co.typie.editor.EditorState
 import co.typie.editor.EditorView
+import co.typie.editor.PublishedBundle
 import co.typie.editor.ext.unclippedBoundsInRoot
 import co.typie.editor.interaction.LocalEditorInteractionScope
 import co.typie.editor.overlay.editorExtensionAreaLineHighlight
@@ -45,6 +46,7 @@ private val DebugExtensionFillColor = Color(0x2200B8D4)
 @Composable
 internal fun EditorBody(
   load: DocumentEditorLoad,
+  publishedBundle: PublishedBundle?,
   geometry: EditorBodyGeometry,
   layoutSpec: EditorDocumentLayoutSpec,
   autoScrollPolicy: EditorAutoScrollPolicy,
@@ -60,9 +62,9 @@ internal fun EditorBody(
   val uiState = LocalEditorUiState.current
   val interactionScope = LocalEditorInteractionScope.current
   var bodyContentHeight by remember { mutableFloatStateOf(0f) }
-  val pageSizes by
-    remember(editor) { derivedStateOf { editor?.publishedState?.pageSizes.orEmpty() } }
-  val cursor by remember(editor) { derivedStateOf { editor?.publishedState?.cursor } }
+  val publishedState = publishedBundle?.snapshot ?: EditorState.Initial
+  val pageSizes = publishedState.pageSizes
+  val cursor = publishedState.cursor
   val extensionAreaFillSpacerHeight =
     remember(geometry.minimumBodyHeight, bodyContentHeight) {
       resolveExtensionAreaFillSpacerHeight(
@@ -126,6 +128,7 @@ internal fun EditorBody(
             ) {
               EditorView(
                 load = load,
+                publishedBundle = publishedBundle,
                 layoutSpec = layoutSpec,
                 viewportWidth = geometry.visibleBodySize.width,
                 viewportHeight = geometry.visibleBodySize.height,

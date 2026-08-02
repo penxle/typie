@@ -45,25 +45,32 @@ export function satisfiesWaiter(
   return matchesTargets(frames, host.targets) || (!requireFrame && host.targets.size === 0 && frames.size > 0);
 }
 
-export function preparingPage(
-  hasVisualHost: boolean,
-  hasPublishedFrames: boolean,
-  appliedRevision: number,
-  publishedRevision: number | undefined,
-  appliedPageCount: number,
-  targetCount: number,
-): number | undefined {
+export function preparingPage({
+  hasPublishedFrames,
+  appliedRevision,
+  publishedRevision,
+  appliedPageCount,
+  publishedPageCount,
+  targets,
+}: {
+  hasPublishedFrames: boolean;
+  appliedRevision: number;
+  publishedRevision: number | undefined;
+  appliedPageCount: number;
+  publishedPageCount: number;
+  targets: Pick<ReadonlyMap<number, PublicationTarget>, 'size' | 'has'> | undefined;
+}): number | undefined {
   if (
-    hasVisualHost &&
-    hasPublishedFrames &&
-    publishedRevision !== undefined &&
-    appliedRevision > publishedRevision &&
-    appliedPageCount > 0 &&
-    targetCount === 0
+    !targets ||
+    !hasPublishedFrames ||
+    publishedRevision === undefined ||
+    appliedRevision <= publishedRevision ||
+    appliedPageCount === 0
   ) {
-    return 0;
+    return undefined;
   }
-  return undefined;
+  if (targets.size === 0) return 0;
+  return appliedPageCount > publishedPageCount && !targets.has(publishedPageCount) ? publishedPageCount : undefined;
 }
 
 export function canPublish(

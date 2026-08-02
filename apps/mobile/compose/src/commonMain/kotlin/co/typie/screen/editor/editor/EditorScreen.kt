@@ -374,7 +374,8 @@ fun EditorScreen(entityId: String) {
     }
   }
   val appliedEditorState = editor?.appliedState ?: EditorState.Initial
-  val publishedEditorState = editor?.publishedState ?: EditorState.Initial
+  val publishedBundle = editor?.publishedBundle
+  val publishedEditorState = publishedBundle?.snapshot ?: EditorState.Initial
   val doubleTapToEditEnabled =
     Preference.doubleTapToEditEnabled && publishedEditorState.placeholder == null
   val headerReadingTapIdentity = remember(editor, editorReadOnly, documentLocked) { Any() }
@@ -1049,11 +1050,13 @@ fun EditorScreen(entityId: String) {
     }
   }
 
-  val layoutEditor = editor ?: runtime.failedEditor
+  val layoutPublishedBundle =
+    if (editor != null) publishedBundle else runtime.failedEditor?.publishedBundle
+  val layoutPublishedState = layoutPublishedBundle?.snapshot ?: EditorState.Initial
   val preloadedLayoutSpec =
     remember(document?.layoutMode) { decodeDocumentLayoutSpec(document?.layoutMode) }
   val layoutSpec: EditorDocumentLayoutSpec =
-    layoutEditor?.publishedState?.rootAttrs?.layoutMode?.toEditorDocumentLayoutSpec()
+    layoutPublishedState.rootAttrs?.layoutMode?.toEditorDocumentLayoutSpec()
       ?: preloadedLayoutSpec
       ?: EditorDocumentLayoutSpec.Continuous(maxWidth = 600f)
   val background =
@@ -1077,7 +1080,7 @@ fun EditorScreen(entityId: String) {
       )
     },
   ) { innerPadding ->
-    val layoutPageSizes = layoutEditor?.publishedState?.pageSizes.orEmpty()
+    val layoutPageSizes = layoutPublishedState.pageSizes
     val density = LocalDensity.current.density
     val focusManager = LocalFocusManager.current
     val haptic = LocalHapticFeedback.current
@@ -1885,9 +1888,7 @@ fun EditorScreen(entityId: String) {
                       activeEditor.scope.launch(context) {
                         activeEditor.updateWithBringIntoView(bringIntoViewRequests) {
                           enqueue(Message.Clipboard(ClipboardOp.RepasteAsText))
-                          afterApplied {
-                            bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
-                          }
+                          bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
                         }
                       }
                     }
@@ -1903,6 +1904,7 @@ fun EditorScreen(entityId: String) {
           if (editorLoad != null) {
             EditorBody(
               load = editorLoad,
+              publishedBundle = layoutPublishedBundle,
               geometry = bodyGeometry,
               layoutSpec = layoutSpec,
               autoScrollPolicy = autoScrollPolicy,

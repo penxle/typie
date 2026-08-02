@@ -26,11 +26,11 @@
   import Caret from './Caret.svelte';
   import ContextMenu from './ContextMenu.svelte';
   import DocumentOverlayLayer from './DocumentOverlayLayer.svelte';
+  import EditorPages from './EditorPages.svelte';
   import { resolveHeaderGeometry } from './header-geometry';
   import Input from './Input.svelte';
   import LineHighlight from './LineHighlight.svelte';
   import LinkTooltip from './LinkTooltip.svelte';
-  import Page from './Page.svelte';
   import PlaceholderOverlay from './PlaceholderOverlay.svelte';
   import RepasteAsText from './RepasteAsText.svelte';
   import Scrollbar from './Scrollbar.svelte';
@@ -349,9 +349,7 @@
           tabindex={0}
           use:touchPanLock={ctx.editor.gesture.panLockActive}
         >
-          {#each ctx.editor.pageSizes as { width, height }, i (i)}
-            <Page backingHeight={ctx.editor.pageBackingSizes[i]?.height ?? height} {height} page={i} {width} />
-          {/each}
+          <EditorPages editor={ctx.editor} />
 
           <DocumentOverlayLayer />
 

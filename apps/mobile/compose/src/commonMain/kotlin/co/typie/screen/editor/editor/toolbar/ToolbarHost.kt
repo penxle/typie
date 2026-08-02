@@ -246,15 +246,15 @@ internal fun EditorToolbarHost(
     val session = runtime.session ?: return
     session.submit { editor, context ->
       editor.scope.launch(context) {
-        val appliedSnapshot =
+        val update =
           editor.updateWithBringIntoView(bringIntoViewRequests) {
             if (editor.appliedState.ime?.composing != null) {
               enqueue(Message.TextInput(listOf(FlatImeOp.CommitAsIs)))
             }
             messages.forEach(::enqueue)
-            afterApplied { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
+            bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
           }
-        if (appliedSnapshot == null) {
+        if (update == null) {
           Logger.e { "Editor toolbar messages were not admitted" }
         }
       }

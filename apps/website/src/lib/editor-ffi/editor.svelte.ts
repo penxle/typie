@@ -519,11 +519,7 @@ export class Editor {
   }
 
   #stopRuntime(): void {
-    this.#tickScheduled = false;
-    if (this.#frameId !== null) {
-      if (typeof this.#frameId === 'number') cancelAnimationFrame(this.#frameId);
-      this.#frameId = null;
-    }
+    this.#clearScheduledTick();
     if (this.#characterCountsDebounceTimer !== null) {
       clearTimeout(this.#characterCountsDebounceTimer);
       this.#characterCountsDebounceTimer = null;
@@ -532,6 +528,14 @@ export class Editor {
     this.#effectCleanup?.();
     this.#effectCleanup = null;
     this.#gesture?.destroy();
+  }
+
+  #clearScheduledTick(): void {
+    this.#tickScheduled = false;
+    if (this.#frameId !== null) {
+      if (typeof this.#frameId === 'number') cancelAnimationFrame(this.#frameId);
+      this.#frameId = null;
+    }
   }
 
   #materializeSnapshot(revision: number, fields: ReadonlySet<StateField>): EditorSnapshot {
@@ -716,6 +720,9 @@ export class Editor {
 
   #publishIfReady(): void {
     untrack(() => {
+      if (this.#preparingPage !== undefined && this.#preparingPage >= this.#applied.pageSizes.length) {
+        this.#preparingPage = undefined;
+      }
       let targetSetChanged = false;
       if (this.published !== undefined && this.#visualHost !== undefined) {
         targetSetChanged = this.published.frames.size !== this.#visualHost.targets.size;
@@ -728,14 +735,15 @@ export class Editor {
         }
       }
       const publishedRevision = this.published?.snapshot.revision;
-      this.#preparingPage ??= preparingPage(
-        this.#visualHost !== undefined,
-        (this.published?.frames.size ?? 0) > 0,
-        this.#applied.revision,
+      this.#preparingPage ??= preparingPage({
+        hasPublishedFrames: (this.published?.frames.size ?? 0) > 0,
+        appliedRevision: this.#applied.revision,
         publishedRevision,
-        this.#applied.pageSizes.length,
-        this.#visualHost?.targets.size ?? 0,
-      );
+        appliedPageCount: this.#applied.pageSizes.length,
+        publishedPageCount: this.published?.snapshot.pageSizes.length ?? 0,
+        targets: this.#visualHost?.targets,
+      });
+      if (this.#preparingPage !== undefined && !this.#visualHost?.targets.has(this.#preparingPage)) return;
       if (
         canPublish(
           this.#applied.revision,
@@ -1709,6 +1717,9 @@ export class Editor {
         },
       });
       const result = this.#invokeCore((core) => core.tick_through(requestId));
+      // tickThrough has consumed every entry through this synchronously admitted request.
+      // Retire an older queued RAF so Host work does not wait for a tick that is already installed.
+      this.#clearScheduledTick();
       publicEvents = this.#installTick(result);
       if (receiptFailure) throw receiptFailure.error;
       if (!update) throw new Error(`tickThrough omitted request outcome ${requestId.value}`);

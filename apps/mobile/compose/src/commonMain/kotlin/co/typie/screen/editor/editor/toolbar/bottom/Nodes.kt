@@ -110,7 +110,7 @@ internal fun BottomToolbarNodes(
                 currentEditor.scope.launch(context) {
                   currentEditor.updateWithBringIntoView(bringIntoViewRequests) {
                     enqueue(action.message)
-                    afterApplied { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
+                    bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
                   }
                 }
               }

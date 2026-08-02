@@ -263,7 +263,7 @@ internal class EditorInputNode(
       sessionEditor.scope.launch(context) {
         sessionEditor.updateWithBringIntoView(bringIntoViewRequests) {
           messages.forEach(::enqueue)
-          afterApplied { bringIntoViewTarget?.let { target -> bringIntoView(target) } }
+          bringIntoViewTarget?.let { target -> bringIntoView(target) }
         }
       }
     }
@@ -372,10 +372,15 @@ internal class EditorInputNode(
     bringIntoViewTarget: EditorBringIntoViewTarget?,
   ): EditorState? {
     if (messages.isEmpty()) return null
-    return editor.updateWithBringIntoView(bringIntoViewRequests) {
-      messages.forEach(::enqueue)
-      afterApplied { bringIntoViewTarget?.let { target -> bringIntoView(target) } }
-    }
+    val update =
+      editor.updateWithBringIntoView(bringIntoViewRequests) {
+        messages.forEach(::enqueue)
+        bringIntoViewTarget?.let { target -> bringIntoView(target) }
+      } ?: return null
+    // Keep the ordered key consumer behind visual publication so repeated input
+    // coalesces into the next batch instead of outrunning the displayed revision.
+    update.awaitPublished()
+    return update.snapshot
   }
 
   private fun dispatchSync(
@@ -383,12 +388,14 @@ internal class EditorInputNode(
     bringIntoViewTarget: EditorBringIntoViewTarget? = EditorBringIntoViewTarget.CurrentSelectionHead,
   ): EditorState? {
     if (messages.isEmpty()) return null
-    return editor.runInputCallback {
-      editor.updateNowWithBringIntoView(bringIntoViewRequests) {
-        messages.forEach(::enqueue)
-        afterApplied { bringIntoViewTarget?.let { target -> bringIntoView(target) } }
+    return editor
+      .runInputCallback {
+        editor.updateNowWithBringIntoView(bringIntoViewRequests) {
+          messages.forEach(::enqueue)
+          bringIntoViewTarget?.let { target -> bringIntoView(target) }
+        }
       }
-    }
+      ?.snapshot
   }
 
   private fun commitCompositionBeforeBindingDispatch(resetPlatformInput: Boolean) {

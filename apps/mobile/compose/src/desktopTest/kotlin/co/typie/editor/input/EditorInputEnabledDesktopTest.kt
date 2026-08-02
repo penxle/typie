@@ -8,17 +8,20 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.v2.runComposeUiTest
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import co.typie.editor.Editor
 import co.typie.editor.FakeFfiEditor
 import co.typie.editor.ffi.Break
 import co.typie.editor.ffi.Direction
+import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.FlatImeOp
 import co.typie.editor.ffi.Ime
 import co.typie.editor.ffi.ImeRange
@@ -30,6 +33,8 @@ import co.typie.editor.ffi.ModifierOp
 import co.typie.editor.ffi.ModifierType
 import co.typie.editor.ffi.Movement
 import co.typie.editor.ffi.NavigationOp
+import co.typie.editor.ffi.Size as EditorSize
+import co.typie.editor.ffi.StateField
 import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
 import co.typie.editor.scroll.rememberEditorBringIntoViewRequests
@@ -39,6 +44,7 @@ import co.typie.platform.IncomingContentCandidates
 import co.typie.platform.IncomingContentMode
 import co.typie.platform.NoopClipboard
 import co.typie.platform.Platform
+import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -48,9 +54,131 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestCoroutineScheduler
 
 @OptIn(ExperimentalTestApi::class)
 class EditorInputEnabledDesktopTest {
+  @Test
+  fun later33msKeyRepeatsWaitForTheActiveVisualPublication() = runComposeUiTest {
+    val scheduler = TestCoroutineScheduler()
+    val dispatcher = StandardTestDispatcher(scheduler)
+    var pageHeight = 100f
+    val fake =
+      FakeFfiEditor(
+        onTick = {
+          pageHeight += 10f
+          listOf(
+            EditorEvent.StateChanged(listOf(StateField.PageSizes)),
+            EditorEvent.RenderInvalidated,
+          )
+        },
+        pageSizesProvider = { listOf(EditorSize(width = 100f, height = pageHeight)) },
+      )
+    val scope = CoroutineScope(SupervisorJob() + dispatcher)
+    val editor = Editor(fake, scope, dispatcher)
+    fake.applySnapshot(editor)
+    val session = createTestDocumentEditingSession(editor, scope)
+    val readyFrameKeys = ConcurrentLinkedQueue<Long>()
+    val host = Any()
+    editor.activateVisualHost(host)
+    val surface =
+      editor.attachSurface(
+        page = 0,
+        handle = 1L,
+        width = 100.0,
+        height = pageHeight.toDouble(),
+        scaleFactor = 1.0,
+      ) { frameKey ->
+        readyFrameKeys += frameKey.value
+      }
+
+    fun deliverFrame(revision: Long) {
+      scheduler.runCurrent()
+      val frameKey = checkNotNull(readyFrameKeys.poll())
+      editor.deliverFrame(
+        session = surface,
+        bitmap = ImageBitmap(width = 100, height = 100),
+        pixelSize = IntSize(width = 100, height = 100),
+        editorRevision = revision,
+        frameKey = frameKey,
+      )
+      scheduler.runCurrent()
+    }
+
+    try {
+      deliverFrame(editor.appliedRevision)
+      assertEquals(editor.appliedRevision, editor.publishedRevision)
+
+      setContent {
+        val focusRequester = remember { FocusRequester() }
+        val bringIntoViewRequests = rememberEditorBringIntoViewRequests()
+        Box(
+          Modifier.size(200.dp)
+            .testTag(InputTag)
+            .focusRequester(focusRequester)
+            .editorInput(
+              session = session,
+              uiState = EditorUiState(),
+              platform = Platform.Desktop,
+              bringIntoViewRequests = bringIntoViewRequests,
+              enabled = true,
+              suppressSoftwareKeyboard = true,
+              clipboard = NoopClipboard,
+            )
+            .focusable()
+        )
+        LaunchedEffect(Unit) { focusRequester.requestFocus() }
+      }
+      waitForIdle()
+
+      onNodeWithTag(InputTag).performKeyInput {
+        keyDown(Key.Enter)
+        keyUp(Key.Enter)
+        advanceEventTime(RealisticRepeatIntervalMillis)
+      }
+      waitUntil(timeoutMillis = 5_000) {
+        scheduler.runCurrent()
+        fake.enqueuedRequests.size == 1
+      }
+      val firstRevision = editor.appliedRevision
+      assertTrue(firstRevision > requireNotNull(editor.publishedRevision))
+
+      repeat(3) {
+        onNodeWithTag(InputTag).performKeyInput {
+          keyDown(Key.Enter)
+          keyUp(Key.Enter)
+          advanceEventTime(RealisticRepeatIntervalMillis)
+        }
+      }
+      repeat(5) {
+        waitForIdle()
+        scheduler.runCurrent()
+      }
+
+      assertEquals(
+        firstRevision,
+        editor.appliedRevision,
+        "33ms key repeats overtook an extent-changing frame that had not been published",
+      )
+      assertEquals(1, fake.enqueuedRequests.size)
+
+      deliverFrame(firstRevision)
+      waitUntil(timeoutMillis = 5_000) {
+        scheduler.runCurrent()
+        fake.enqueuedRequests.size == 2
+      }
+      assertEquals(3, fake.enqueuedRequests.last().messages.size)
+
+      deliverFrame(editor.appliedRevision)
+      assertEquals(editor.appliedRevision, editor.publishedRevision)
+    } finally {
+      editor.deactivateVisualHost(host)
+      session.stop()
+      scope.cancel()
+    }
+  }
+
   @Test
   fun navigationAndShortcutsCommitCompositionBeforeDispatch() = runComposeUiTest {
     val composingIme =
@@ -336,5 +464,6 @@ class EditorInputEnabledDesktopTest {
 
   private companion object {
     const val InputTag = "editor-input-disabled"
+    const val RealisticRepeatIntervalMillis = 33L
   }
 }

@@ -88,25 +88,6 @@ class EditorRequestTest {
     }
 
   @Test
-  fun update_afterApplied_exception_does_not_fail_editor() =
-    runTest(dispatcher) {
-      val boom = IllegalStateException("boom")
-      val reported = mutableListOf<Throwable>()
-      val editor =
-        Editor(FakeFfiEditor(), this, dispatcher, onError = { _, error -> reported += error })
-
-      val thrown =
-        assertFailsWith<IllegalStateException> {
-          editor.update(afterApplied = { throw boom }) { enqueue(sampleMessage) }
-        }
-
-      assertEquals(boom.message, thrown.message)
-      assertFalse(editor.terminal)
-      assertTrue(reported.isEmpty())
-      assertEquals(1L, editor.appliedState.version)
-    }
-
-  @Test
   fun prose_range_install_returns_the_single_result() =
     runTest(dispatcher) {
       lateinit var fake: FakeFfiEditor

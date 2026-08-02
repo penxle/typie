@@ -80,12 +80,12 @@ internal class EditorInputConnection(
     ImeEditBatch(isSessionCurrent) { messages ->
       val recorder = editor.inputRecorder
       val imeBefore = if (recorder == null) null else editor.appliedState.ime
-      val state = editor.runInputCallback {
+      val update = editor.runInputCallback {
         editor.updateNowWithBringIntoView(bringIntoViewRequests) {
           for (message in messages) {
             enqueue(message)
           }
-          afterApplied { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
+          bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
         }
       }
       recorder?.record { seq, t ->
@@ -94,7 +94,7 @@ internal class EditorInputConnection(
           t = t,
           messages = messages,
           imeBefore = imeBefore,
-          imeAfter = state?.ime,
+          imeAfter = update?.snapshot?.ime,
         )
       }
     }

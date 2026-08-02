@@ -59,6 +59,7 @@
     animation: 'blink 1s step-end infinite',
     pointerEvents: 'none',
   })}
+  data-editor-caret
 ></div>
 
 <style>

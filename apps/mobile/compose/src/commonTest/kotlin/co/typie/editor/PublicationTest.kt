@@ -112,7 +112,8 @@ class PublicationTest {
         appliedRevision = 10,
         publishedRevision = 9,
         appliedPageCount = 1,
-        targetCount = 0,
+        publishedPageCount = 1,
+        targetPages = emptySet(),
       ),
     )
     assertNull(
@@ -122,7 +123,8 @@ class PublicationTest {
         appliedRevision = 10,
         publishedRevision = 9,
         appliedPageCount = 1,
-        targetCount = 0,
+        publishedPageCount = 1,
+        targetPages = emptySet(),
       )
     )
     assertNull(
@@ -132,7 +134,8 @@ class PublicationTest {
         appliedRevision = 9,
         publishedRevision = 9,
         appliedPageCount = 1,
-        targetCount = 0,
+        publishedPageCount = 1,
+        targetPages = emptySet(),
       )
     )
     assertNull(
@@ -142,7 +145,8 @@ class PublicationTest {
         appliedRevision = 10,
         publishedRevision = 9,
         appliedPageCount = 0,
-        targetCount = 0,
+        publishedPageCount = 1,
+        targetPages = emptySet(),
       )
     )
     assertNull(
@@ -152,7 +156,8 @@ class PublicationTest {
         appliedRevision = 10,
         publishedRevision = 9,
         appliedPageCount = 1,
-        targetCount = 1,
+        publishedPageCount = 1,
+        targetPages = setOf(0),
       )
     )
     assertNull(
@@ -162,7 +167,34 @@ class PublicationTest {
         appliedRevision = 10,
         publishedRevision = 9,
         appliedPageCount = 1,
-        targetCount = 0,
+        publishedPageCount = 1,
+        targetPages = emptySet(),
+      )
+    )
+  }
+
+  @Test
+  fun nextAppendedPageIsPreparedUntilItsTargetIsAttached() {
+    val preparingPage =
+      Publication.preparingPage(
+        hasVisualHost = true,
+        hasPublishedFrames = true,
+        appliedRevision = 10,
+        publishedRevision = 9,
+        appliedPageCount = 2,
+        publishedPageCount = 1,
+        targetPages = setOf(0),
+      )
+    assertEquals(1, preparingPage)
+    assertNull(
+      Publication.preparingPage(
+        hasVisualHost = true,
+        hasPublishedFrames = true,
+        appliedRevision = 10,
+        publishedRevision = 9,
+        appliedPageCount = 2,
+        publishedPageCount = 1,
+        targetPages = setOf(0, 1),
       )
     )
   }

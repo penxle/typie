@@ -100,7 +100,7 @@ private fun EditorEmbedToolbar(
                 cache = externalElementState::put,
                 commit = { embedded ->
                   val editor = checkNotNull(runtime.editor) { "No active editor is available" }
-                  val appliedSnapshot =
+                  val update =
                     editor.updateWithBringIntoView(bringIntoViewRequests) {
                       if (editor.appliedState.ime?.composing != null) {
                         enqueue(Message.TextInput(listOf(FlatImeOp.CommitAsIs)))
@@ -113,9 +113,9 @@ private fun EditorEmbedToolbar(
                           )
                         )
                       )
-                      afterApplied { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
+                      bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
                     }
-                  checkNotNull(appliedSnapshot) { "Editor embed attrs were not admitted" }
+                  checkNotNull(update) { "Editor embed attrs were not admitted" }
                 },
                 clearPending = {
                   if (embedState.unfurls[selectedNodeId] === unfurl) {

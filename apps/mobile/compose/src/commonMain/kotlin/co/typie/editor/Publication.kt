@@ -63,20 +63,21 @@ internal object Publication {
     appliedRevision: Long,
     publishedRevision: Long?,
     appliedPageCount: Int,
-    targetCount: Int,
-  ): Int? =
+    publishedPageCount: Int,
+    targetPages: Set<Int>,
+  ): Int? {
     if (
-      hasVisualHost &&
-        hasPublishedFrames &&
-        publishedRevision != null &&
-        appliedRevision > publishedRevision &&
-        appliedPageCount > 0 &&
-        targetCount == 0
+      !hasVisualHost ||
+        !hasPublishedFrames ||
+        publishedRevision == null ||
+        appliedRevision <= publishedRevision ||
+        appliedPageCount == 0
     ) {
-      0
-    } else {
-      null
+      return null
     }
+    if (targetPages.isEmpty()) return 0
+    return publishedPageCount.takeIf { appliedPageCount > publishedPageCount && it !in targetPages }
+  }
 
   fun canPublish(
     hasVisualHost: Boolean,

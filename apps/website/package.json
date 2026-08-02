@@ -10,7 +10,8 @@
     "lint:eslint": "eslint --max-warnings 0 .",
     "lint:svelte": "svelte-check --fail-on-warnings",
     "start": "node dist/index.js",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:browser": "vitest run --config vitest.browser.config.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.0.8",
@@ -47,6 +48,7 @@
     "@typie/styled-system": "workspace:*",
     "@typie/tsconfig": "workspace:*",
     "@typie/ui": "workspace:*",
+    "@vitest/browser-playwright": "4.1.10",
     "dayjs": "^1.11.21",
     "es-hangul": "^2.3.8",
     "fake-indexeddb": "^6.2.5",

@@ -50,7 +50,7 @@ const wasmReloadPlugin = (): Plugin => {
   };
 };
 
-const config = ({ mode }: ConfigEnv) => ({
+export const createConfig = ({ mode }: Pick<ConfigEnv, 'mode'>) => ({
   clearScreen: false,
   plugins: [
     svg(),
@@ -78,9 +78,10 @@ const config = ({ mode }: ConfigEnv) => ({
   },
   test: {
     environment: 'jsdom',
+    exclude: ['src/**/*.browser.test.ts'],
     include: ['src/**/*.test.ts'],
     setupFiles: ['./src/vitest-setup.ts'],
   },
 });
 
-export default defineConfig((env) => config(env) as UserConfig);
+export default defineConfig((env) => createConfig(env) as UserConfig);

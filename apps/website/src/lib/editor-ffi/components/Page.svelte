@@ -20,9 +20,10 @@
     width: number;
     height: number;
     backingHeight: number;
+    preparing?: boolean;
   };
 
-  let { page, width, height, backingHeight }: Props = $props();
+  let { page, width, height, backingHeight, preparing = false }: Props = $props();
 
   const ctx = getEditorContext();
   const { editor } = ctx;
@@ -61,7 +62,14 @@
   });
 </script>
 
-<div style:width={`${slotWidth}px`} style:height={`${slotHeight}px`} class={css({ position: 'relative', flexShrink: '0' })}>
+<div
+  style:width={`${slotWidth}px`}
+  style:height={`${slotHeight}px`}
+  style:position={preparing ? 'absolute' : undefined}
+  style:visibility={preparing ? 'hidden' : undefined}
+  style:pointer-events={preparing ? 'none' : undefined}
+  class={css({ position: 'relative', flexShrink: '0' })}
+>
   <div
     style:width={`${cssWidth}px`}
     style:height={`${cssHeight}px`}

@@ -75,6 +75,11 @@ private data class PublicationWaiter(
   val completion: CompletableDeferred<EditorPublicationResult>,
 )
 
+private data class PendingRequest(
+  val completion: CompletableDeferred<EditorUpdate>?,
+  val beforePublish: ((EditorUpdate) -> Unit)?,
+)
+
 internal data class PublishedBundle(val snapshot: EditorState, val frames: Map<Int, PresentedFrame>)
 
 private class SurfacePage(
@@ -146,8 +151,7 @@ internal constructor(
     AtomicReference(persistentMapOf())
   private val queuedLocalEdits: AtomicReference<PersistentList<LocalEdit>> =
     AtomicReference(persistentListOf())
-  private val requestReceipts:
-    AtomicReference<PersistentMap<Long, CompletableDeferred<EditorUpdate>>> =
+  private val pendingRequests: AtomicReference<PersistentMap<Long, PendingRequest>> =
     AtomicReference(persistentMapOf())
   private val publicationWaiters: AtomicReference<PersistentList<PublicationWaiter>> =
     AtomicReference(persistentListOf())
@@ -218,17 +222,11 @@ internal constructor(
   suspend fun update(
     admit: () -> Boolean = { true },
     block: EditorRequestScope.() -> Unit,
-  ): EditorUpdate? = updateInternal(admit = admit, afterApplied = null, block = block)
+  ): EditorUpdate? = update(admit = admit, beforePublish = null, block = block)
 
   internal suspend fun update(
-    admit: () -> Boolean = { true },
-    afterApplied: (EditorUpdate) -> Unit,
-    block: EditorRequestScope.() -> Unit,
-  ): EditorUpdate? = updateInternal(admit = admit, afterApplied = afterApplied, block = block)
-
-  private suspend fun updateInternal(
     admit: () -> Boolean,
-    afterApplied: ((EditorUpdate) -> Unit)?,
+    beforePublish: ((EditorUpdate) -> Unit)?,
     block: EditorRequestScope.() -> Unit,
   ): EditorUpdate? {
     if (terminal) return null
@@ -242,7 +240,6 @@ internal constructor(
     val localEdit = inheritedLocalEdit ?: localEdits.register() ?: return null
     val ownsLocalEdit = inheritedLocalEdit == null
     var admitted = false
-    var afterAppliedCompletion: CompletableDeferred<Unit>? = null
     val update =
       try {
         val accepted =
@@ -252,22 +249,14 @@ internal constructor(
               if (!admit()) return@withLock false
               val requestId = inner.enqueueRequest(messages)
               admitted = true
-              requestReceipts.updatePersistent { it.putting(requestId.value, receipt) }
+              registerPendingRequest(
+                requestId = requestId,
+                completion = receipt,
+                beforePublish = beforePublish,
+              )
               if (ownsLocalEdit) {
                 receipt.invokeOnCompletion { error ->
                   if (error == null) localEdit.complete() else localEdit.fail(error)
-                }
-              }
-              if (afterApplied != null) {
-                val completion = CompletableDeferred<Unit>()
-                afterAppliedCompletion = completion
-                scope.launch(start = CoroutineStart.UNDISPATCHED) {
-                  try {
-                    afterApplied(receipt.await())
-                    completion.complete(Unit)
-                  } catch (error: Throwable) {
-                    completion.completeExceptionally(error)
-                  }
                 }
               }
               scheduleTick()
@@ -288,15 +277,15 @@ internal constructor(
         fail(e)
         throw e
       }
-    afterAppliedCompletion?.await()
     return update
   }
 
   fun updateNow(block: EditorRequestScope.() -> Unit): EditorUpdate? =
-    updateNow(admit = { true }, block = block)
+    updateNow(admit = { true }, beforePublish = null, block = block)
 
   internal fun updateNow(
     admit: () -> Boolean,
+    beforePublish: ((EditorUpdate) -> Unit)? = null,
     block: EditorRequestScope.() -> Unit,
   ): EditorUpdate? {
     if (!syncInProgress.compareAndSet(expectedValue = false, newValue = true)) {
@@ -316,6 +305,11 @@ internal constructor(
               ensureActive()
               if (!admit()) return@withPriorityLock null
               val requestId = inner.enqueueRequest(messages)
+              registerPendingRequest(
+                requestId = requestId,
+                completion = null,
+                beforePublish = beforePublish,
+              )
               val tick = inner.tickThrough(requestId)
               install(tick)
               updateFor(tick, requestId)
@@ -529,13 +523,12 @@ internal constructor(
       renderInvalidated = tick.events.any { it is EditorEvent.RenderInvalidated },
     )
     startSurfaceRenders()
-    publishIfReady()
 
     val events = publicEvents(tick.events)
+    val completions = mutableListOf<Pair<CompletableDeferred<EditorUpdate>, EditorUpdate>>()
     for (request in tick.requestOutcomes) {
-      val receipt = requestReceipts.load()[request.requestId.value] ?: continue
-      requestReceipts.updatePersistent { it.removing(request.requestId.value) }
-      receipt.complete(
+      val pending = pendingRequests.load()[request.requestId.value] ?: continue
+      val update =
         EditorUpdate(
           revision = tick.revision.value,
           snapshot = appliedState,
@@ -543,6 +536,24 @@ internal constructor(
           commandOutcomes = request.commandOutcomes,
           editor = this,
         )
+      pending.beforePublish?.invoke(update)
+      pendingRequests.updatePersistent { it.removing(request.requestId.value) }
+      pending.completion?.let { completion -> completions += completion to update }
+    }
+    publishIfReady()
+    completions.forEach { (completion, update) -> completion.complete(update) }
+  }
+
+  private fun registerPendingRequest(
+    requestId: RequestId,
+    completion: CompletableDeferred<EditorUpdate>?,
+    beforePublish: ((EditorUpdate) -> Unit)?,
+  ) {
+    if (completion == null && beforePublish == null) return
+    pendingRequests.updatePersistent {
+      it.putting(
+        requestId.value,
+        PendingRequest(completion = completion, beforePublish = beforePublish),
       )
     }
   }
@@ -992,6 +1003,10 @@ internal constructor(
       refreshRetainedFrames()
       return
     }
+    val pendingPage = preparingPage
+    if (pendingPage != null && pendingPage >= appliedState.pageSizes.size) {
+      preparingPage = null
+    }
     val targets = host.pages.values.map { it.target }
     val targetsChanged = published?.let { !Publication.matchesTargets(it.frames, targets) } ?: false
     val pages =
@@ -1012,9 +1027,12 @@ internal constructor(
           appliedRevision = appliedState.version,
           publishedRevision = currentPublishedRevision,
           appliedPageCount = appliedState.pageSizes.size,
-          targetCount = host.pages.size,
+          publishedPageCount = published?.snapshot?.pageSizes?.size ?: 0,
+          targetPages = host.pages.keys,
         )
     }
+    val pageBeingPrepared = preparingPage
+    if (pageBeingPrepared != null && pageBeingPrepared !in host.pages) return
     val publishedRevision = currentPublishedRevision ?: 0L
     if (
       Publication.canPublish(
@@ -1234,7 +1252,7 @@ internal constructor(
       var waiters: List<PublicationWaiter> = emptyList()
       var edits: List<LocalEdit> = emptyList()
       mutex.withPriorityLock {
-        receipts = requestReceipts.exchange(persistentMapOf()).values
+        receipts = pendingRequests.exchange(persistentMapOf()).values.mapNotNull { it.completion }
         waiters = publicationWaiters.exchange(persistentListOf())
         edits = queuedLocalEdits.exchange(persistentListOf())
         visualHost = null
@@ -1398,7 +1416,7 @@ internal constructor(
       var waiters: List<PublicationWaiter> = emptyList()
       var edits: List<LocalEdit> = emptyList()
       mutex.withPriorityLock {
-        receipts = requestReceipts.exchange(persistentMapOf()).values
+        receipts = pendingRequests.exchange(persistentMapOf()).values.mapNotNull { it.completion }
         waiters = publicationWaiters.exchange(persistentListOf())
         edits = queuedLocalEdits.exchange(persistentListOf())
         preparingPage = null

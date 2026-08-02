@@ -390,7 +390,7 @@ internal fun rememberEditorSpellcheckSession(
 
           if (!ensureSubscription()) return@launch
           if (!onEditingIntent(activeEditor)) return@launch
-          val selected =
+          val update =
             activeEditor.updateWithBringIntoView(
               bringIntoViewRequests = bringIntoViewRequests,
               admit = { admitMutation(activeSession) },
@@ -400,9 +400,9 @@ internal fun rememberEditorSpellcheckSession(
                   SelectionOp.Set(Selection(anchor = range.anchor, head = range.head))
                 )
               )
-              afterApplied { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
+              bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
             }
-          if (selected == null) return@launch
+          if (update == null) return@launch
           model?.activate(null)
           updateCompactOverlayHeightForRange(null)
           model?.updateExpanded(false)

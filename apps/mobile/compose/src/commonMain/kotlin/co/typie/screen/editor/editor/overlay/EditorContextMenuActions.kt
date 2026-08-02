@@ -60,10 +60,12 @@ internal fun rememberEditorContextMenuActions(
             if (bringIntoViewTarget == null) {
               editor.update { enqueue(Message.Selection(SelectionOp.Expand(unit))) }?.snapshot
             } else {
-              editor.updateWithBringIntoView(bringIntoViewRequests) {
-                enqueue(Message.Selection(SelectionOp.Expand(unit)))
-                afterApplied { bringIntoView(bringIntoViewTarget) }
-              }
+              editor
+                .updateWithBringIntoView(bringIntoViewRequests) {
+                  enqueue(Message.Selection(SelectionOp.Expand(unit)))
+                  bringIntoView(bringIntoViewTarget)
+                }
+                ?.snapshot
             }
           appliedState?.let { state ->
             contextMenu.requestShowForAppliedSelection(editor = editor, state = state)
@@ -85,7 +87,7 @@ internal fun rememberEditorContextMenuActions(
           if (clipboard.copyRichText(html = payload.html, text = payload.text)) {
             editor.updateWithBringIntoView(bringIntoViewRequests) {
               enqueue(Message.Clipboard(ClipboardOp.Cut))
-              afterApplied { bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead) }
+              bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
             }
           }
         }
