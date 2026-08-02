@@ -1,5 +1,5 @@
 // 실서비스에서 원고 본문을 가져오는 유일한 경로. 코퍼스에 저장되는 본문은 이 프로즈다 —
-// document_contents의 평문과 달라서, 다른 경로를 쓰면 세대가 코퍼스와 다른 형태의 글을 읽는다.
+// document_states의 평문과 달라서, 다른 경로를 쓰면 세대가 코퍼스와 다른 형태의 글을 읽는다.
 export type InternalApi = {
   extract: (documentIds: string[]) => Promise<{ documentId: string; prose: string | null }[]>;
 };

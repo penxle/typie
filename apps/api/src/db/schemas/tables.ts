@@ -51,69 +51,6 @@ export const Documents = pgTable(
   ],
 );
 
-export const DocumentContents = pgTable('document_contents', {
-  id: text('id')
-    .primaryKey()
-    .$defaultFn(() => createDbId(TableCode.DOCUMENT_CONTENTS)),
-  documentId: text('document_id')
-    .notNull()
-    .unique()
-    .references(() => Documents.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-  json: jsonb('json').notNull(),
-  text: text('text').notNull(),
-  characterCount: integer('character_count').notNull().default(0),
-  blobSize: bigint('blob_size', { mode: 'number' }).notNull().default(0),
-  snapshot: bytea('snapshot').notNull(),
-  version: bytea('version').notNull(),
-  generation: integer('generation').notNull().default(0),
-  compactedAt: datetime('compacted_at')
-    .notNull()
-    .default(sql`now()`),
-  createdAt: datetime('created_at')
-    .notNull()
-    .default(sql`now()`),
-  updatedAt: datetime('updated_at')
-    .notNull()
-    .default(sql`now()`),
-});
-
-export const DocumentVersions = pgTable(
-  'document_versions',
-  {
-    id: text('id')
-      .primaryKey()
-      .$defaultFn(() => createDbId(TableCode.DOCUMENT_VERSIONS)),
-    documentId: text('document_id')
-      .notNull()
-      .references(() => Documents.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-    version: bytea('version').notNull(),
-    order: integer('order').notNull().default(0),
-    createdAt: datetime('created_at')
-      .notNull()
-      .default(sql`now()`),
-  },
-  (t) => [index().on(t.documentId, t.createdAt, t.order)],
-);
-
-export const DocumentVersionContributors = pgTable(
-  'document_version_contributors',
-  {
-    id: text('id')
-      .primaryKey()
-      .$defaultFn(() => createDbId(TableCode.DOCUMENT_VERSION_CONTRIBUTORS)),
-    versionId: text('version_id')
-      .notNull()
-      .references(() => DocumentVersions.id, { onUpdate: 'cascade', onDelete: 'cascade' }),
-    userId: text('user_id')
-      .notNull()
-      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-    createdAt: datetime('created_at')
-      .notNull()
-      .default(sql`now()`),
-  },
-  (t) => [unique().on(t.versionId, t.userId)],
-);
-
 export const DocumentCharacterCountChanges = pgTable(
   'document_character_count_changes',
   {

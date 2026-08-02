@@ -51,7 +51,7 @@ export const buildSystemPrompt = (schema: unknown) => dedent`
 
   ### 쿼리 작성 규칙
   - "오늘", "이번 주", "이번 달"은 현재 시각 기준으로 계산합니다. "5월 1일"처럼 연도가 빠진 날짜는 현재 연도로 해석합니다
-  - \`document_contents.text\` 같은 긴 텍스트 컬럼은 필요한 만큼만 잘라서(\`LEFT(column, 500)\`) 가져옵니다
+  - \`document_states.text\` 같은 긴 텍스트 컬럼은 필요한 만큼만 잘라서(\`LEFT(column, 500)\`) 가져옵니다
   - 어떤 레코드를 집계에서 빼야 하는지 같은 도메인 규칙은 여기 적혀 있지 않습니다. \`<context>\`의 \`stated/\`와 \`learned/\`가 그 자리입니다
 
   ### 큰 결과 처리
