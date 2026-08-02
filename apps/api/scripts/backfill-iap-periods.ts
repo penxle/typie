@@ -550,8 +550,14 @@ const main = async () => {
 
   let corrected = 0;
   let quarantined = 0;
+  let processed = 0;
 
   for (const binding of googleBindings) {
+    processed += 1;
+    if (processed % 25 === 0) {
+      console.log(`  진행: ${processed}/${googleBindings.length}건 (교정 ${corrected} / 격리 ${quarantined})`);
+    }
+
     const resolution = resolutions.get(binding.id) as CanonicalResolution;
 
     if (resolution.kind === 'suspended') {

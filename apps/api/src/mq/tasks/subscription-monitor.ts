@@ -154,12 +154,18 @@ const INVARIANT_CHECKS: InvariantCheck[] = [
   },
   {
     // LIFETIME sentinel(9999-12-31)·MANUAL 플랜은 기간 검증 대상이 아니다.
+    // IAP 는 주기를 스토어가 준다 — 스토어가 0길이 창을 보고하는 행이 실재하므로 등호는 위반이 아니다.
+    // 역전(시작 > 종료)은 채널과 무관하게 위반이다.
     key: 'period-order-violation',
     violations: sql`
       SELECT ${Subscriptions.id} AS id
       FROM ${Subscriptions}
       INNER JOIN ${Plans} ON ${Subscriptions.planId} = ${Plans.id}
-      WHERE ${Subscriptions.currentPeriodStartsAt} >= ${Subscriptions.currentPeriodEndsAt}
+      WHERE (
+              ${Subscriptions.currentPeriodStartsAt} > ${Subscriptions.currentPeriodEndsAt}
+              OR (${Subscriptions.currentPeriodStartsAt} = ${Subscriptions.currentPeriodEndsAt}
+                  AND ${Plans.availability} != 'IN_APP_PURCHASE')
+            )
         AND ${Plans.interval} != 'LIFETIME'
         AND ${Plans.availability} != 'MANUAL'
     `,

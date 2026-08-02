@@ -436,8 +436,14 @@ const applyServicePeriods = async (tx: Transaction, manifest: Manifest) => {
   const rows = await selectInvoiceProjection(tx);
   const frozenById = frozenIndex(manifest);
   let updated = 0;
+  let processed = 0;
 
   for (const row of rows) {
+    processed += 1;
+    if (processed % 500 === 0) {
+      console.log(`  진행: ${processed}/${rows.length}건 (기록 ${updated}건)`);
+    }
+
     const resolved = resolveServicePeriod(row, frozenById, manifest.invoicePaths);
 
     if ('manual' in resolved) {
