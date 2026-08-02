@@ -1,7 +1,8 @@
-query SubscriptionPurchaseService_Query {
+query SubscriptionPurchaseService_Query($store: InAppPurchaseStore!) {
   me {
     id
     uuid
+    canEnrollInAppPurchase(store: $store)
 
     subscription {
       id

@@ -1,5 +1,5 @@
 import { eq, sql } from 'drizzle-orm';
-import { bigint, boolean, index, integer, jsonb, pgTable, text, unique, uniqueIndex } from 'drizzle-orm/pg-core';
+import { bigint, boolean, foreignKey, index, integer, jsonb, pgTable, text, unique, uniqueIndex } from 'drizzle-orm/pg-core';
 import { TableCode } from './codes.ts';
 import * as E from './enums.ts';
 import { createDbId } from './id.ts';
@@ -352,28 +352,48 @@ export const PaymentInvoices = pgTable(
     amount: integer('amount').notNull(),
     state: E._PaymentInvoiceState('state').notNull(),
     dueAt: datetime('due_at').notNull(),
+    paymentKey: text('payment_key').notNull().unique(),
+    servicePeriodStartsAt: datetime('service_period_starts_at').notNull(),
+    servicePeriodEndsAt: datetime('service_period_ends_at').notNull(),
     createdAt: datetime('created_at')
       .notNull()
       .default(sql`now()`),
   },
-  (t) => [index().on(t.userId, t.state)],
+  (t) => [
+    index().on(t.userId, t.state),
+    uniqueIndex('payment_invoices_subscription_service_period_unique').on(t.subscriptionId, t.servicePeriodStartsAt),
+    uniqueIndex('payment_invoices_open_subscription_unique')
+      .on(t.subscriptionId)
+      .where(sql`${t.state} IN ('UPCOMING', 'OVERDUE')`),
+    index('payment_invoices_overdue_service_start_index')
+      .on(t.servicePeriodStartsAt)
+      .where(eq(t.state, sql`'OVERDUE'`)),
+  ],
 );
 
-export const PaymentRecords = pgTable('payment_records', {
-  id: text('id')
-    .primaryKey()
-    .$defaultFn(() => createDbId(TableCode.PAYMENT_RECORDS)),
-  invoiceId: text('invoice_id')
-    .notNull()
-    .references(() => PaymentInvoices.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-  outcome: E._PaymentOutcome('outcome').notNull(),
-  billingAmount: integer('billing_amount').notNull(),
-  creditAmount: integer('credit_amount').notNull(),
-  data: jsonb('data').notNull(),
-  createdAt: datetime('created_at')
-    .notNull()
-    .default(sql`now()`),
-});
+export const PaymentRecords = pgTable(
+  'payment_records',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.PAYMENT_RECORDS)),
+    invoiceId: text('invoice_id')
+      .notNull()
+      .references(() => PaymentInvoices.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    outcome: E._PaymentOutcome('outcome').notNull(),
+    billingAmount: integer('billing_amount').notNull(),
+    creditAmount: integer('credit_amount').notNull(),
+    data: jsonb('data').notNull(),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    uniqueIndex('payment_records_invoice_success_unique')
+      .on(t.invoiceId)
+      .where(eq(t.outcome, sql`'SUCCESS'`)),
+  ],
+);
 
 export const Plans = pgTable('plans', {
   id: text('id')
@@ -759,8 +779,11 @@ export const Subscriptions = pgTable(
       .notNull()
       .references(() => Plans.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     startsAt: datetime('starts_at').notNull(),
-    expiresAt: datetime('expires_at').notNull(),
-    renewedAt: datetime('renewed_at').notNull(),
+    // 구버전 앱 shim 스냅샷 — 런타임 코드는 읽지도 쓰지도 않는다(백필·마이그레이션 전용)
+    expiresAt: datetime('expires_at'),
+    currentPeriodStartsAt: datetime('current_period_starts_at').notNull(),
+    currentPeriodEndsAt: datetime('current_period_ends_at').notNull(),
+    billingAnchorAt: datetime('billing_anchor_at'),
     state: E._SubscriptionState('state').notNull().default('ACTIVE'),
     createdAt: datetime('created_at')
       .notNull()
@@ -776,9 +799,14 @@ export const Subscriptions = pgTable(
     index('subscriptions_will_activate_starts_at_index')
       .on(t.startsAt)
       .where(eq(t.state, sql`'WILL_ACTIVATE'`)),
-    index('subscriptions_will_expire_expires_at_index')
-      .on(t.expiresAt)
+    index('subscriptions_will_expire_period_ends_index')
+      .on(t.currentPeriodEndsAt)
       .where(eq(t.state, sql`'WILL_EXPIRE'`)),
+    index('subscriptions_active_period_ends_index')
+      .on(t.currentPeriodEndsAt)
+      .where(eq(t.state, sql`'ACTIVE'`)),
+    index('subscriptions_user_id_state_index').on(t.userId, t.state),
+    unique('subscriptions_id_user_id_unique').on(t.id, t.userId),
   ],
 );
 
@@ -875,11 +903,21 @@ export const UserInAppPurchases = pgTable(
       .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     store: E._InAppPurchaseStore('store').notNull(),
     identifier: text('identifier').notNull(),
+    subscriptionId: text('subscription_id'),
+    reconcileSuspendedAt: datetime('reconcile_suspended_at'),
     createdAt: datetime('created_at')
       .notNull()
       .default(sql`now()`),
   },
-  (t) => [unique().on(t.store, t.identifier)],
+  (t) => [
+    unique().on(t.store, t.identifier),
+    unique('user_in_app_purchases_subscription_id_unique').on(t.subscriptionId),
+    foreignKey({
+      columns: [t.subscriptionId, t.userId],
+      foreignColumns: [Subscriptions.id, Subscriptions.userId],
+      name: 'user_in_app_purchases_subscription_user_fk',
+    }),
+  ],
 );
 
 export const UserMarketingConsents = pgTable('user_marketing_consents', {

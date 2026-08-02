@@ -12,6 +12,7 @@ import co.typie.graphql.QueryState
 import co.typie.graphql.SubscriptionService_Query
 import co.typie.graphql.watchQuery
 import co.typie.platform.appLifecycleService
+import co.typie.storage.Preference
 import co.typie.ui.component.sheet.Sheet
 import kotlin.time.Clock
 import kotlinx.coroutines.CoroutineScope
@@ -35,44 +36,47 @@ object SubscriptionService {
       SubscriptionService_Query()
     }
 
-  private var lastKnown: Subscription? by mutableStateOf(null)
   private var clockTick by mutableStateOf(0L)
+  private var sessionUserId: String? by mutableStateOf(null)
+
+  private val me: SubscriptionService_Query.Me?
+    get() = (query.state as? QueryState.Success)?.data?.me
+
+  private val cache: EntitlementCache?
+    get() = entitlementCacheFor(Preference.entitlementCache, sessionUserId)
 
   val entitlement: Entitlement by derivedStateOf {
     @Suppress("UNUSED_EXPRESSION") clockTick
-    when (val raw = query.state) {
-      QueryState.Loading,
-      is QueryState.Error ->
-        if (lastKnown == null) Entitlement.Unknown
-        else resolveEntitlement(lastKnown, Clock.System.now())
-      is QueryState.Success -> {
-        val me = raw.data.me
-        if (me == null) {
-          if (lastKnown == null) Entitlement.Unknown
-          else resolveEntitlement(lastKnown, Clock.System.now())
-        } else {
-          resolveEntitlement(me.subscription?.toSubscription(), Clock.System.now())
-        }
-      }
-    }
+    val me = me
+    // 서버 응답이 있으면 그 값이 권한이다. 응답이 없는 동안(최초 로딩·오프라인)만 캐시를 유효 창 안에서 쓴다.
+    if (me != null) resolveEntitlement(me.entitled, me.subscription?.toSubscription())
+    else resolveEntitlement(cache, Clock.System.now())
   }
 
   val subscription: Subscription? by derivedStateOf {
-    when (val raw = query.state) {
-      is QueryState.Success -> {
-        val me = raw.data.me
-        if (me == null) lastKnown else me.subscription?.toSubscription()
-      }
-      else -> lastKnown
-    }
+    val me = me
+    if (me != null) me.subscription?.toSubscription() else cache?.subscription?.toSubscription()
   }
 
   init {
     scope.launch {
-      snapshotFlow {
-        (query.state as? QueryState.Success)?.data?.me?.subscription?.toSubscription()
-      }
-        .collect { subscription -> if (subscription != null) lastKnown = subscription }
+      // 데이터가 그대로여도 서버 응답마다 다시 쓴다 — checkedAt 은 "값이 바뀐 시각"이 아니라
+      // "마지막으로 서버에 확인한 시각"이어야 유효 창이 온라인에서 조기 폐쇄되지 않는다.
+      snapshotFlow { query.networkGeneration to me }
+        .collect { (_, me) ->
+          if (me == null) return@collect
+          sessionUserId = me.id
+          // 구독이 없는 응답(entitled = false)도 저장한다 — 회수를 관측한 뒤 오프라인이 되면
+          // 과거 true 가 되살아난다.
+          Preference.entitlementCache =
+            entitlementCacheOf(
+              userId = me.id,
+              entitled = me.entitled,
+              entitledUntil = me.entitledUntil,
+              subscription = me.subscription?.toSubscription(),
+              checkedAt = Clock.System.now(),
+            )
+        }
     }
 
     scope.launch {
@@ -84,9 +88,9 @@ object SubscriptionService {
     }
 
     scope.launch {
-      // 만료일이 아닌 유효 판정 마감(유예 중이면 유예 상한)에 예약한다 — 만료일 틱만으로는
-      // 유예 상한 도달 시 재평가가 없어 오프라인 유예 권한이 무기한 유지된다.
-      snapshotFlow { subscription?.let(::entitlementDeadline) }
+      // 캐시 유효 창의 끝에 예약한다. entitledUntil 이 없는 ACTIVE 류에도 72시간 상한 타이머가 항상
+      // 걸려야, foreground 오프라인 앱이 상한을 지나도 재평가 없이 fail-open 으로 남지 않는다.
+      snapshotFlow { cache?.let(::entitlementCacheDeadline) }
         .distinctUntilChanged()
         .collectLatest { deadline ->
           if (deadline == null) return@collectLatest
@@ -95,7 +99,7 @@ object SubscriptionService {
             if (!remaining.isPositive()) break
             delay(remaining)
           }
-          // 판정 마감 도달: 서버 판정 우선(갱신 결제가 반영됐으면 새 마감으로 이 collect가 재시작됨),
+          // 마감 도달: 서버 판정 우선(응답이 오면 새 마감으로 이 collect가 재시작됨),
           // 확인 불가(오프라인)면 clockTick 재평가로 비관 강등된다.
           query.refetch()
           clockTick += 1
@@ -124,7 +128,7 @@ private fun SubscriptionService_Query.Subscription.toSubscription(): Subscriptio
     id = id,
     state = state,
     startsAt = startsAt,
-    expiresAt = expiresAt,
+    currentPeriodEndsAt = currentPeriodEndsAt,
     planId = plan.id,
     planName = plan.name,
     fee = plan.fee,
@@ -133,7 +137,7 @@ private fun SubscriptionService_Query.Subscription.toSubscription(): Subscriptio
 }
 
 suspend fun SubscriptionService.gate(sheet: Sheet, action: GatedAction): Boolean {
-  if (entitlement !is Entitlement.Expired) return true
+  if (entitlement.grantsAccess()) return true
 
   sheet.presentSubscribeSheet()
   return false

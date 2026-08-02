@@ -10,11 +10,11 @@ type Props = {
 
 const Email = ({ userName, planName, dashboardUrl, reason }: Props) => {
   return (
-    <TypieEmail preview="내일까지 결제 정보를 업데이트해 주세요">
+    <TypieEmail preview="지금 결제 정보를 업데이트해 주세요">
       <Heading className="text-[28px] font-bold text-zinc-950 mb-[20px] tracking-[-0.02em]">곧 구독이 중단돼요</Heading>
 
       <Text className="text-[16px] text-zinc-700 mb-[28px] leading-[1.5]">
-        {userName}님의 {planName} 구독 갱신을 위한 결제에 실패했어요. 내일까지 결제 정보를 업데이트하지 않으면 구독이 중단돼요.
+        {userName}님의 {planName} 구독 갱신을 위한 결제에 실패했어요. 결제 정보를 업데이트하지 않으면 곧 구독이 중단돼요.
       </Text>
 
       <Text className="text-[14px] text-zinc-700 bg-zinc-100 p-[12px] rounded-[4px] mb-[28px]">사유: {reason}</Text>

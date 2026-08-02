@@ -19,9 +19,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import co.typie.domain.subscription.Entitlement
 import co.typie.domain.subscription.GatedAction
 import co.typie.domain.subscription.SubscriptionService
+import co.typie.domain.subscription.grantsAccess
 import co.typie.editor.sync.ChangesetDeltaStore
 import co.typie.ext.clickable
 import co.typie.ext.navigationBarsPadding
@@ -41,7 +41,7 @@ fun BoxScope.EditorSubscriptionBanner(
   hazeState: HazeState,
   backdropColor: Color,
 ) {
-  if (SubscriptionService.entitlement !is Entitlement.Expired) return
+  if (SubscriptionService.entitlement.grantsAccess()) return
 
   var hasLocalStash by remember(documentId) { mutableStateOf(false) }
   LaunchedEffect(documentId) {

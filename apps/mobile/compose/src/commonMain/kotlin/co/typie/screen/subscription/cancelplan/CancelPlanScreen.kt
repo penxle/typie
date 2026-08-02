@@ -12,10 +12,10 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.datetime.formatKoreanDate
-import co.typie.domain.subscription.Entitlement
 import co.typie.domain.subscription.SubscriptionFeatureList
 import co.typie.domain.subscription.SubscriptionService
 import co.typie.domain.subscription.fullPlanFeatures
+import co.typie.domain.subscription.grantsAccess
 import co.typie.ext.verticalScroll
 import co.typie.navigation.Nav
 import co.typie.platform.Platform
@@ -40,7 +40,7 @@ fun CancelPlanScreen() {
   val uriHandler = LocalUriHandler.current
 
   LaunchedEffect(SubscriptionService.entitlement) {
-    if (SubscriptionService.entitlement is Entitlement.Expired) {
+    if (!SubscriptionService.entitlement.grantsAccess()) {
       nav.pop()
     }
   }
@@ -95,7 +95,7 @@ fun CancelPlanScreen() {
 
       Text(
         text =
-          "지금 해지하더라도 ${subscription.expiresAt.formatKoreanDate()}까지는 계속해서 ${subscription.planName} 혜택을 이용할 수 있어요.",
+          "지금 해지하더라도 ${subscription.currentPeriodEndsAt.formatKoreanDate()}까지는 계속해서 ${subscription.planName} 혜택을 이용할 수 있어요.",
         style = AppTheme.typography.body,
         color = AppTheme.colors.textMuted,
       )

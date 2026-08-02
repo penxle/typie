@@ -1,40 +1,343 @@
-import { DeliveryStatus, RefundPreference } from '@apple/app-store-server-library';
 import * as Sentry from '@sentry/node';
 import { InAppPurchaseStore, PlanAvailability, SubscriptionState } from '@typie/lib/enums';
 import dayjs from 'dayjs';
-import { and, desc, eq, inArray, lt, lte, ne, sql } from 'drizzle-orm';
+import { and, eq, inArray, ne } from 'drizzle-orm';
 import { Hono } from 'hono';
-import { match } from 'ts-pattern';
-import { db, first, Plans, Subscriptions, UserInAppPurchases, UserTrials } from '#/db/index.ts';
+import { redis } from '#/cache.ts';
+import { db, first, Plans, Subscriptions, UserInAppPurchases } from '#/db/index.ts';
 import { production } from '#/env.ts';
 import * as appstore from '#/external/appstore.ts';
 import * as googleplay from '#/external/googleplay.ts';
 import * as slack from '#/external/slack.ts';
+import { enqueueJob } from '#/mq/index.ts';
+import { discoverAppleSuccessor, mapUnsupportedStorePayloadReason, normalizeGoogle, selectAppleStatusItem } from '#/utils/iap-normalize.ts';
+import { applyNormalizedIapLocked, resolveAcknowledgeDuty } from '#/utils/iap-sync.ts';
+import { opsAlert, opsAlertOnce } from '#/utils/ops-alert.ts';
 import { lockUserSubscriptionState } from '#/utils/subscription-lock.ts';
+import { getUserUuid } from '#/utils/user.ts';
 import type { ResponseBodyV2 } from '@apple/app-store-server-library';
+import type { androidpublisher_v3 } from '@googleapis/androidpublisher';
+import type { PlanInterval } from '@typie/lib/enums';
 import type { Env } from '#/context.ts';
+import type { Transaction } from '#/db/index.ts';
 import type { DeveloperNotification } from '#/external/googleplay.ts';
+import type { IapPriorPeriod } from '#/utils/iap-normalize.ts';
+import type { IapAcknowledgeDuty } from '#/utils/iap-sync.ts';
+import type { OpsAlertId } from '#/utils/ops-alert.ts';
 
 export const iap = new Hono<Env>();
 
-const getLiveInAppPurchaseSubscription = async (userId: string) => {
+const PENDING_REFUND_REVIEW_WINDOW_MS = 86_400_000;
+// 미바인딩·미등록은 이 창 안에서는 정상 국면이다 — 스토어 결제 직후 등록 mutation 이 아직 바인딩을 만들지 않았거나,
+// 연속 변경 알림이 역순으로 도착한 구간이다. 재전송 백오프가 이 구간을 자연 해소하므로 알람은 그 뒤에 낸다.
+const ENROLLMENT_RACE_WINDOW_MS = 3_600_000;
+const OPS_ALERT_DEDUPE_TTL_SECONDS = 86_400;
+const VOIDED_PRODUCT_TYPE_SUBSCRIPTION = 1;
+
+type SuccessionBinding = { id: string; userId: string; identifier: string };
+
+const logNotification = async (payload: Record<string, unknown>) => {
+  await slack.sendMessage({
+    channel: 'iap',
+    username: '인앱결제 알림',
+    iconEmoji: ':credit_card:',
+    message: `\`\`\`\n${JSON.stringify(payload, null, 2)}\n\`\`\``,
+  });
+};
+
+// 재전송이 같은 사실을 반복 보고하면 실제 실패가 그 안에 묻힌다 — 토큰·원거래 ID 당 하루 1회로 접는다.
+// 레디스 실패는 알람 발화 쪽으로 폴백한다(디듀프 저장소 장애가 관측을 없애서는 안 된다).
+const alertOnce = async (id: OpsAlertId, key: string, context: Record<string, unknown>) => {
+  let acquired: boolean;
+
+  try {
+    acquired = (await redis.set(`ops-alert-dedupe:${id}:${key}`, '1', 'EX', OPS_ALERT_DEDUPE_TTL_SECONDS, 'NX')) === 'OK';
+  } catch {
+    acquired = true;
+  }
+
+  if (acquired) {
+    await opsAlert(id, context);
+  }
+};
+
+// 관측 시각을 못 재면(필드 부재·비유한) 완충 구간으로 간주하지 않는다 — 판정 불가는 알람 쪽으로 기운다.
+const isBeyondEnrollmentRace = (observedAt: number | null): boolean =>
+  observedAt === null || !Number.isFinite(observedAt) || dayjs().diff(dayjs(observedAt)) > ENROLLMENT_RACE_WINDOW_MS;
+
+// 커밋 후 의무다 — 롤백된 트랜잭션의 토큰을 승인하지 않는다.
+// Apple 정규화는 productId 를 싣지 않아(iap-normalize 의 normalizeApple) 이 경로의 duty 는 항상 null 이다 — 승인은 Google 전용 의무다.
+const settleAcknowledge = async (duty: IapAcknowledgeDuty | null) => {
+  if (!duty) {
+    return;
+  }
+
+  try {
+    await googleplay.acknowledgeSubscription(duty);
+  } catch (err) {
+    await opsAlert('google-acknowledge-failed', { ...duty, error: err instanceof Error ? err.message : String(err) });
+  }
+};
+
+const findBinding = async (store: InAppPurchaseStore, identifier: string) => {
   return await db
-    .select({
-      id: Subscriptions.id,
-      state: Subscriptions.state,
-      expiresAt: Subscriptions.expiresAt,
-    })
+    .select({ id: UserInAppPurchases.id, userId: UserInAppPurchases.userId, identifier: UserInAppPurchases.identifier })
+    .from(UserInAppPurchases)
+    .where(and(eq(UserInAppPurchases.store, store), eq(UserInAppPurchases.identifier, identifier)))
+    .then(first);
+};
+
+// 승격 전 충돌 검사는 primitive 를 직접 부르는 경로가 스스로 해야 한다 — syncIapBinding 을 우회하면 검사도 함께
+// 우회된다. 유니크 위반은 경합의 최후 방어일 뿐이고, WILL_ACTIVATE 는 부분 유니크가 분리되어 DB 가 잡지도 못한다.
+const findPromotionConflict = async (tx: Transaction, { userId, subscriptionId }: { userId: string; subscriptionId: string }) => {
+  return await tx
+    .select({ id: Subscriptions.id })
     .from(Subscriptions)
     .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
     .where(
       and(
         eq(Subscriptions.userId, userId),
-        eq(Plans.availability, PlanAvailability.IN_APP_PURCHASE),
-        inArray(Subscriptions.state, [SubscriptionState.ACTIVE, SubscriptionState.WILL_EXPIRE, SubscriptionState.IN_GRACE_PERIOD]),
+        ne(Subscriptions.id, subscriptionId),
+        ne(Plans.availability, PlanAvailability.IN_APP_PURCHASE),
+        inArray(Subscriptions.state, [SubscriptionState.ACTIVE, SubscriptionState.WILL_ACTIVATE]),
       ),
     )
-    .orderBy(desc(eq(Subscriptions.state, SubscriptionState.ACTIVE)), desc(Subscriptions.createdAt))
     .then(first);
+};
+
+type LockedSuccession =
+  | {
+      kind: 'ok';
+      binding: { id: string; userId: string; store: InAppPurchaseStore; identifier: string; subscriptionId: string };
+      prior: IapPriorPeriod;
+      canonicalId: string;
+    }
+  | { kind: 'changed' }
+  | { kind: 'invariant'; reason: string; bindingId: string };
+
+// 락 전 캡처값과의 동일성 재검증 — 대기 중 등록·이전이 바인딩을 옮겼으면 우리가 쥔 것은 이전 유저의 락이다.
+const loadLockedSuccession = async (tx: Transaction, captured: SuccessionBinding): Promise<LockedSuccession> => {
+  const binding = await tx
+    .select({
+      id: UserInAppPurchases.id,
+      userId: UserInAppPurchases.userId,
+      store: UserInAppPurchases.store,
+      identifier: UserInAppPurchases.identifier,
+      subscriptionId: UserInAppPurchases.subscriptionId,
+    })
+    .from(UserInAppPurchases)
+    .where(eq(UserInAppPurchases.id, captured.id))
+    .for('no key update')
+    .then(first);
+
+  if (!binding || binding.userId !== captured.userId || binding.identifier !== captured.identifier) {
+    return { kind: 'changed' };
+  }
+
+  if (!binding.subscriptionId) {
+    return { kind: 'invariant', reason: 'iap binding without canonical subscription', bindingId: binding.id };
+  }
+
+  const canonical = await tx
+    .select({
+      id: Subscriptions.id,
+      state: Subscriptions.state,
+      currentPeriodStartsAt: Subscriptions.currentPeriodStartsAt,
+      currentPeriodEndsAt: Subscriptions.currentPeriodEndsAt,
+    })
+    .from(Subscriptions)
+    .where(eq(Subscriptions.id, binding.subscriptionId))
+    .for('no key update')
+    .then(first);
+
+  if (!canonical) {
+    return { kind: 'invariant', reason: 'iap binding canonical subscription missing', bindingId: binding.id };
+  }
+
+  return {
+    kind: 'ok',
+    binding: { ...binding, subscriptionId: binding.subscriptionId },
+    prior: {
+      state: canonical.state,
+      currentPeriodStartsAt: canonical.currentPeriodStartsAt,
+      currentPeriodEndsAt: canonical.currentPeriodEndsAt,
+    },
+    canonicalId: canonical.id,
+  };
+};
+
+type SuccessionOutcome =
+  | { kind: 'applied'; acknowledge: IapAcknowledgeDuty | null }
+  | { kind: 'bound'; bindingId: string }
+  | { kind: 'changed' }
+  | {
+      kind: 'conflict';
+      userId: string;
+      subscriptionId: string;
+      conflictingSubscriptionId: string;
+      acknowledge: IapAcknowledgeDuty | null;
+    }
+  | { kind: 'invariant'; reason: string; bindingId: string };
+
+// enrollmentRace = "아직 아무것도 없다"(매칭 유저 0건·후보 0건) 계열. 구조적 미해결(복수·불일치)과 달리
+// 등록 경합 완충 구간에서는 정상 국면이라 알람을 신선도로 거른다.
+type AppleUnresolved = { kind: 'unresolved'; reason: string; candidates: number; enrollmentRace: boolean };
+
+type AppleSuccessionOutcome = SuccessionOutcome | AppleUnresolved | { kind: 'lookup-failed' };
+
+type AppleCandidate = AppleUnresolved | { kind: 'found'; binding: SuccessionBinding } | { kind: 'lookup-failed' };
+
+// getUserUuid 는 uuid.v5 단방향 파생이고 저장 컬럼이 없어 역조회가 불가능하다 — 승계는 기존 바인딩 보유자에게만
+// 성립하므로 후보군을 APP_STORE 바인딩 보유 유저 전건으로 한정해 순방향으로 계산·대조한다.
+const findAppleBindingByAccountToken = async (appAccountToken: string): Promise<AppleCandidate> => {
+  const bindings = await db
+    .select({ id: UserInAppPurchases.id, userId: UserInAppPurchases.userId, identifier: UserInAppPurchases.identifier })
+    .from(UserInAppPurchases)
+    .where(eq(UserInAppPurchases.store, InAppPurchaseStore.APP_STORE));
+
+  const matched = bindings.filter((binding) => getUserUuid(binding.userId) === appAccountToken);
+  if (matched.length !== 1) {
+    return {
+      kind: 'unresolved',
+      reason: matched.length === 0 ? 'apple-account-token-unmatched' : 'apple-account-token-ambiguous',
+      candidates: matched.length,
+      enrollmentRace: matched.length === 0,
+    };
+  }
+
+  return { kind: 'found', binding: matched[0] };
+};
+
+// 토큰 없는 앱 밖 구매의 정상 경로다 — 새 ID 조회는 같은 고객의 전 구독을 반환하므로 응답 안의 다른 원거래 ID로
+// 기존 바인딩을 역발견한다.
+const findAppleBindingByStatuses = async (originalTransactionId: string): Promise<AppleCandidate> => {
+  const statuses = await appstore.getSubscriptionStatuses(originalTransactionId);
+  if (statuses.kind === 'error') {
+    return { kind: 'lookup-failed' };
+  }
+
+  const identifiers = [
+    ...new Set(
+      statuses.items
+        .map((item) => item.transaction?.originalTransactionId)
+        .filter((identifier): identifier is string => !!identifier && identifier !== originalTransactionId),
+    ),
+  ];
+
+  if (identifiers.length === 0) {
+    return { kind: 'unresolved', reason: 'apple-reverse-discovery-empty', candidates: 0, enrollmentRace: true };
+  }
+
+  const bindings = await db
+    .select({ id: UserInAppPurchases.id, userId: UserInAppPurchases.userId, identifier: UserInAppPurchases.identifier })
+    .from(UserInAppPurchases)
+    .where(and(eq(UserInAppPurchases.store, InAppPurchaseStore.APP_STORE), inArray(UserInAppPurchases.identifier, identifiers)));
+
+  if (bindings.length !== 1) {
+    return {
+      kind: 'unresolved',
+      reason: bindings.length === 0 ? 'apple-reverse-discovery-unbound' : 'apple-reverse-discovery-ambiguous',
+      candidates: bindings.length,
+      enrollmentRace: bindings.length === 0,
+    };
+  }
+
+  return { kind: 'found', binding: bindings[0] };
+};
+
+const adoptUnboundAppleNotification = async ({
+  originalTransactionId,
+  appAccountToken,
+}: {
+  originalTransactionId: string;
+  appAccountToken: string | null;
+}): Promise<AppleSuccessionOutcome> => {
+  const candidate = appAccountToken
+    ? await findAppleBindingByAccountToken(appAccountToken)
+    : await findAppleBindingByStatuses(originalTransactionId);
+
+  if (candidate.kind !== 'found') {
+    return candidate;
+  }
+
+  const captured = candidate.binding;
+
+  return await db.transaction(async (tx): Promise<AppleSuccessionOutcome> => {
+    await lockUserSubscriptionState(tx, captured.userId);
+
+    // 락 대기 중 등록 경로가 이 원거래 ID 를 선점했으면 (store, identifier) 유니크가 교체를 막는다 — 점유자에게 넘긴다.
+    const occupant = await tx
+      .select({ id: UserInAppPurchases.id })
+      .from(UserInAppPurchases)
+      .where(and(eq(UserInAppPurchases.store, InAppPurchaseStore.APP_STORE), eq(UserInAppPurchases.identifier, originalTransactionId)))
+      .then(first);
+
+    if (occupant) {
+      return { kind: 'bound', bindingId: occupant.id };
+    }
+
+    const locked = await loadLockedSuccession(tx, captured);
+    if (locked.kind !== 'ok') {
+      return locked;
+    }
+
+    const now = dayjs();
+
+    // 확정 조회는 유저 락 안이다 — 라이브 응답이 곧 최신이라 stale 판별 규칙이 사라진다.
+    const statuses = await appstore.getSubscriptionStatuses(locked.binding.identifier);
+    if (statuses.kind === 'error') {
+      return { kind: 'lookup-failed' };
+    }
+
+    const selection = selectAppleStatusItem(statuses.items, locked.binding.identifier);
+    if (selection.kind === 'unknown') {
+      return { kind: 'unresolved', reason: selection.reason, candidates: 0, enrollmentRace: false };
+    }
+
+    const successor = discoverAppleSuccessor({
+      items: statuses.items,
+      selected: selection.item,
+      requestedOriginalTransactionId: locked.binding.identifier,
+      prior: locked.prior,
+      now,
+    });
+
+    if (successor.kind !== 'succeeded') {
+      return {
+        kind: 'unresolved',
+        reason: `apple-successor-${successor.kind}`,
+        candidates: successor.kind === 'unresolved' ? successor.candidates : 0,
+        enrollmentRace: successor.kind === 'none',
+      };
+    }
+
+    // 알림이 알린 새 ID 가 아닌 후계는 이 경로의 대상이 아니다 — 그 계약은 자기 알림·일일 재조정이 다룬다.
+    if (successor.originalTransactionId !== originalTransactionId) {
+      return { kind: 'unresolved', reason: 'apple-successor-identifier-mismatch', candidates: 1, enrollmentRace: false };
+    }
+
+    if (successor.normalized.kind === 'tracked' && successor.normalized.state === SubscriptionState.ACTIVE) {
+      const conflict = await findPromotionConflict(tx, { userId: locked.binding.userId, subscriptionId: locked.canonicalId });
+      if (conflict) {
+        // 전이는 막아도 승인 의무는 남는다 — 승격을 스킵했다고 3일 자동 환불을 방치하면 돈의 불변식이 깨진다.
+        return {
+          kind: 'conflict',
+          userId: locked.binding.userId,
+          subscriptionId: locked.canonicalId,
+          conflictingSubscriptionId: conflict.id,
+          acknowledge: resolveAcknowledgeDuty(successor.normalized, originalTransactionId),
+        };
+      }
+    }
+
+    const { acknowledge } = await applyNormalizedIapLocked(tx, {
+      binding: locked.binding,
+      normalized: successor.normalized,
+      newIdentifier: originalTransactionId,
+    });
+
+    return { kind: 'applied', acknowledge };
+  });
 };
 
 iap.post('/appstore', async (c) => {
@@ -43,549 +346,333 @@ iap.post('/appstore', async (c) => {
     return c.json({ error: 'invalid_request' }, 400);
   }
 
-  const notification = await appstore.decodeNotification(body.signedPayload);
+  const notification = await appstore.decodeNotification(body.signedPayload).catch((err: unknown) => {
+    // 서명 검증 실패는 재전송해도 통과하지 않는다 — 재시도를 유도하지 않고 원인은 사람이 본다.
+    Sentry.captureException(err);
+    return null;
+  });
+
+  if (!notification) {
+    return c.json({ error: 'invalid_signature' }, 401);
+  }
+
+  // 유효한 동의 없이 소비 정보를 회신하지 않는다 — 회신 재개는 동의 모델 도입 이후다.
+  if (notification.notificationType === 'CONSUMPTION_REQUEST') {
+    return c.json({}, 200);
+  }
+
   const originalTransactionId = notification.data.transaction?.originalTransactionId;
-  const planId = notification.data.transaction?.productId?.toUpperCase();
-
   if (!originalTransactionId) {
-    await slack.sendMessage({
-      channel: 'iap',
-      username: '인앱결제 알림',
-      iconEmoji: ':credit_card:',
-      message: `\`\`\`\n${JSON.stringify({ source: 'rest/appstore', reason: 'no_transaction', notification }, null, 2)}\n\`\`\``,
-    });
+    await logNotification({ source: 'rest/appstore', reason: 'no_transaction', notification });
     return c.json({}, 200);
   }
 
-  const inAppPurchase = await db
-    .select({
-      userId: UserInAppPurchases.userId,
-    })
-    .from(UserInAppPurchases)
-    .where(and(eq(UserInAppPurchases.identifier, originalTransactionId), eq(UserInAppPurchases.store, InAppPurchaseStore.APP_STORE)))
-    .then(first);
-
-  if (!inAppPurchase) {
+  // 알림 타입은 보지 않는다 — 어떤 알림이든 바인딩을 찾아 락 안 조회로 확정한다.
+  const binding = await findBinding(InAppPurchaseStore.APP_STORE, originalTransactionId);
+  if (binding) {
+    await enqueueJob('iap:sync', { bindingId: binding.id });
     return c.json({}, 200);
   }
 
-  const subscription = await getLiveInAppPurchaseSubscription(inAppPurchase.userId);
+  const outcome = await adoptUnboundAppleNotification({
+    originalTransactionId,
+    appAccountToken: notification.data.transaction?.appAccountToken ?? null,
+  });
 
-  await match(notification.notificationType)
-    .with('DID_RENEW', 'SUBSCRIBED', 'OFFER_REDEEMED', 'REFUND_REVERSED', async () => {
-      const purchaseDate = dayjs(notification.data.transaction?.purchaseDate);
-      const expiresDate = dayjs(notification.data.transaction?.expiresDate);
-      const plan = planId ? await db.select({ id: Plans.id }).from(Plans).where(eq(Plans.id, planId)).then(first) : null;
+  if (outcome.kind === 'lookup-failed') {
+    return c.json({ error: 'retry' }, 500);
+  }
 
-      if (subscription) {
-        // 스냅샷 비교 후 무조건 갱신하면 동시·역순 재전송이 최신 갱신을 짧은 만료일로 되돌릴 수 있다.
-        // 조건을 UPDATE 안으로 옮겨(커밋된 최신 행 값과 재평가됨) 만료일 단조 증가를 원자적으로 보장한다.
-        // 동시 환불로 EXPIRED 가 된 행은 되살리지 않는다 — 웹훅 UPDATE 는 EXPIRED 를 벗어나게 하지 않는다(부활은 insert·재조정 경로만).
-        await db
-          .update(Subscriptions)
-          .set({
-            state: SubscriptionState.ACTIVE,
-            ...(plan && { planId: plan.id }),
-            renewedAt: purchaseDate,
-            expiresAt: expiresDate,
-          })
-          .where(
-            and(
-              eq(Subscriptions.id, subscription.id),
-              ne(Subscriptions.state, SubscriptionState.EXPIRED),
-              lte(Subscriptions.expiresAt, expiresDate),
-            ),
-          );
-      } else if (plan && expiresDate.isAfter(dayjs())) {
-        // 알림의 서명 데이터는 발행 시점 기준이라(최대 72시간 재전송) 환불 이후 도착한 stale 갱신이
-        // 새 ACTIVE 행을 만들 수 있다. 삽입 전에 현재 스토어 상태로 자격을 확인해 이 부활 창을 닫는다.
-        // 조회~삽입 사이에 환불이 일어나는 경우는 이후 도착하는 REFUND/REVOKE 웹훅이 이 행을 회수한다.
-        const status = await appstore.getSubscriptionStatus(originalTransactionId);
-        if (status.kind === 'error' || status.kind === 'unknown') {
-          // 자격을 판정할 수 없으면 삽입도 폐기도 하지 않고 5xx 로 재전송을 유도한다 — 신규 결제를 조용히 잃지 않는다.
-          throw new Error('appstore subscription status lookup failed');
-        }
-        if (status.kind !== 'active' && status.kind !== 'grace') {
-          return;
-        }
+  // 락 안에서 귀속이 달라졌으면 등록·탈퇴가 먼저 처리한 것이다 — 전이하지 않는다(일일 재조정이 같은 발견 단계를 수행한다).
+  if (outcome.kind === 'changed') {
+    return c.json({}, 200);
+  }
 
-        await db.transaction(async (tx) => {
-          await lockUserSubscriptionState(tx, inAppPurchase.userId);
-
-          // 락 대기 중 바인딩이 삭제·이전(재등록/탈퇴 — 탈퇴는 바인딩을 지운다)됐으면 stale userId 로 만들지 않는다.
-          const freshBinding = await tx
-            .select({ userId: UserInAppPurchases.userId })
-            .from(UserInAppPurchases)
-            .where(
-              and(
-                eq(UserInAppPurchases.userId, inAppPurchase.userId),
-                eq(UserInAppPurchases.store, InAppPurchaseStore.APP_STORE),
-                eq(UserInAppPurchases.identifier, originalTransactionId),
-              ),
-            )
-            .then(first);
-
-          if (!freshBinding) {
-            return;
-          }
-
-          const upserted = await tx
-            .insert(Subscriptions)
-            .values({
-              userId: inAppPurchase.userId,
-              planId: plan.id,
-              startsAt: purchaseDate,
-              expiresAt: expiresDate,
-              renewedAt: purchaseDate,
-              state: SubscriptionState.ACTIVE,
-            })
-            .onConflictDoUpdate({
-              target: [Subscriptions.userId],
-              targetWhere: eq(Subscriptions.state, SubscriptionState.ACTIVE),
-              set: { planId: plan.id, startsAt: purchaseDate, expiresAt: expiresDate, renewedAt: purchaseDate },
-              // 충돌하는 ACTIVE 행이 IAP 이고 만료일이 역행하지 않을 때만 갱신한다.
-              // 다른 채널(빌링키 등)의 ACTIVE 구독을 덮어쓰지 않고, stale 재전송이 최신 갱신을 되돌리지 못하게 한다.
-              setWhere: and(
-                inArray(
-                  Subscriptions.planId,
-                  tx.select({ id: Plans.id }).from(Plans).where(eq(Plans.availability, PlanAvailability.IN_APP_PURCHASE)),
-                ),
-                lte(Subscriptions.expiresAt, expiresDate),
-              ),
-            })
-            .returning({ id: Subscriptions.id });
-
-          if (upserted.length === 0) {
-            // 스토어는 이미 과금했는데 비IAP ACTIVE 와 충돌해 조용히 사라지는 구매 — 운영이 인지해야 수동 환불이 가능하다.
-            Sentry.captureMessage('iap webhook upsert skipped by conflicting non-iap active subscription', {
-              level: 'warning',
-              extra: { userId: inAppPurchase.userId, store: 'APP_STORE', identifier: originalTransactionId },
-            });
-          }
-        });
-      }
-    })
-    .with('EXPIRED', 'GRACE_PERIOD_EXPIRED', async () => {
-      if (!subscription) {
-        return;
-      }
-
-      // Apple 은 실패한 알림을 최대 72시간 재전송하고, DID_RENEW 유실 시 로컬 만료일이 갱신을 반영하지 못한다.
-      // 로컬 만료일만으론 stale 여부를 구분할 수 없으므로 현재 스토어 상태를 직접 조회해 실제 비활성일 때만 회수한다.
-      const status = await appstore.getSubscriptionStatus(originalTransactionId);
-      if (status.kind === 'error') {
-        // 스토어 조회 실패 — 회수를 보류하고 5xx 로 재전송을 유도한다.
-        throw new Error('appstore subscription status lookup failed');
-      }
-
-      if (status.kind === 'active') {
-        // 스토어는 여전히 활성 = stale EXPIRED. 갱신이 반영되지 않았으면 만료일을 끌어올려 락아웃을 막는다.
-        // renewedAt 은 스냅샷이 아닌 갱신 시점의 실제 이전 만료일(행의 현재 값)을 쓴다.
-        // 스토어 조회~갱신 사이 동시 REFUND/REVOKE 가 EXPIRED+만료일 clip 을 먼저 커밋하면 만료일 조건만으론
-        // 환불된 행을 부활시키므로, EXPIRED 가 아닌 행만 복구한다.
-        if (status.expiresDate) {
-          const storeExpiresAt = dayjs(status.expiresDate);
-          await db
-            .update(Subscriptions)
-            .set({ state: SubscriptionState.ACTIVE, renewedAt: sql`${Subscriptions.expiresAt}`, expiresAt: storeExpiresAt })
-            .where(
-              and(
-                eq(Subscriptions.id, subscription.id),
-                ne(Subscriptions.state, SubscriptionState.EXPIRED),
-                lt(Subscriptions.expiresAt, storeExpiresAt),
-              ),
-            );
-        }
-        return;
-      }
-
-      if (status.kind === 'grace') {
-        // 유예 중 — 회수하지 않는다.
-        return;
-      }
-
-      if (status.kind === 'suspended') {
-        // 재청구 중 — 권한은 없지만(만료일 경과로 이미 차단) 복구 가능하므로 종료하지 않고 live 로 남겨
-        // 재조정 크론이 계속 다루게 한다. EXPIRED 로 보내면 재조정 대상에서 빠져 복구 경로가 사라진다.
-        await db
-          .update(Subscriptions)
-          .set({ state: SubscriptionState.WILL_EXPIRE })
-          .where(
-            and(
-              eq(Subscriptions.id, subscription.id),
-              ne(Subscriptions.state, SubscriptionState.EXPIRED),
-              lte(Subscriptions.expiresAt, dayjs()),
-            ),
-          );
-        return;
-      }
-
-      if (status.kind === 'unknown') {
-        // 조회는 됐으나 이 트랜잭션을 확인할 수 없음 — 판정을 보류한다(재조정 크론이 다시 다룬다).
-        return;
-      }
-
-      // 확정 종료(expired/revoked). expired 는 조회~갱신 사이 동시 갱신이 만료일을 미래로 올렸으면 건드리지
-      // 않도록 CAS(만료일이 현재 이하일 때만)로 회수하고, revoked(환불·철회)는 스토어 확정 종료이므로 즉시 회수한다.
-      await db
-        .update(Subscriptions)
-        .set({ state: SubscriptionState.EXPIRED, expiresAt: sql`LEAST(${Subscriptions.expiresAt}, NOW())` })
-        .where(
-          status.kind === 'revoked'
-            ? eq(Subscriptions.id, subscription.id)
-            : and(eq(Subscriptions.id, subscription.id), lte(Subscriptions.expiresAt, dayjs())),
-        );
-    })
-    .with('DID_CHANGE_RENEWAL_PREF', async () => {
-      if (subscription && planId) {
-        const plan = await db.select({ id: Plans.id }).from(Plans).where(eq(Plans.id, planId)).then(first);
-        if (plan) {
-          // stale 재전송이 갱신된 만료일을 되돌리지 못하게 단조 가드를 건다. 갱신이 사이에 끼었다면
-          // 그 갱신 트랜잭션이 이미 최신 플랜을 반영하므로(DID_RENEW 가 planId 동기화) 여기서 건너뛰어도 안전하다.
-          const expiresDate = dayjs(notification.data.transaction?.expiresDate);
-          await db
-            .update(Subscriptions)
-            .set({ planId, expiresAt: expiresDate })
-            .where(
-              and(
-                eq(Subscriptions.id, subscription.id),
-                ne(Subscriptions.state, SubscriptionState.EXPIRED),
-                lte(Subscriptions.expiresAt, expiresDate),
-              ),
-            );
-        }
-      }
-    })
-    .with('DID_CHANGE_RENEWAL_STATUS', async () => {
-      if (subscription) {
-        // 상태 전제조건을 스냅샷이 아닌 UPDATE 조건으로 검사해 동시 전이(환불로 EXPIRED 등)와 원자적으로 배타한다.
-        if (notification.subtype === 'AUTO_RENEW_DISABLED') {
-          await db
-            .update(Subscriptions)
-            .set({ state: SubscriptionState.WILL_EXPIRE })
-            .where(and(eq(Subscriptions.id, subscription.id), eq(Subscriptions.state, SubscriptionState.ACTIVE)));
-        } else if (notification.subtype === 'AUTO_RENEW_ENABLED') {
-          await db
-            .update(Subscriptions)
-            .set({ state: SubscriptionState.ACTIVE })
-            .where(and(eq(Subscriptions.id, subscription.id), eq(Subscriptions.state, SubscriptionState.WILL_EXPIRE)));
-        }
-      }
-    })
-    .with('RENEWAL_EXTENDED', async () => {
-      if (subscription) {
-        // 연장은 만료일이 늘어나는 방향만 유효하다 — stale 재전송이 갱신된 만료일을 되돌리지 못하게 한다.
-        const expiresDate = dayjs(notification.data.transaction?.expiresDate);
-        await db
-          .update(Subscriptions)
-          .set({ expiresAt: expiresDate })
-          .where(
-            and(
-              eq(Subscriptions.id, subscription.id),
-              ne(Subscriptions.state, SubscriptionState.EXPIRED),
-              lte(Subscriptions.expiresAt, expiresDate),
-            ),
-          );
-      }
-    })
-    .with('REFUND', 'REVOKE', async () => {
-      if (subscription) {
-        await db
-          .update(Subscriptions)
-          .set({ state: SubscriptionState.EXPIRED, expiresAt: sql`LEAST(${Subscriptions.expiresAt}, NOW())` })
-          .where(eq(Subscriptions.id, subscription.id));
-      }
-    })
-    .with('CONSUMPTION_REQUEST', async () => {
-      const transactionId = notification.data.transaction?.transactionId;
-      if (!transactionId) {
-        return;
-      }
-
-      const trial = await db.select({ id: UserTrials.id }).from(UserTrials).where(eq(UserTrials.userId, inAppPurchase.userId)).then(first);
-
-      await appstore.sendConsumptionInformation(transactionId, {
-        customerConsented: true,
-        sampleContentProvided: !!trial,
-        deliveryStatus: DeliveryStatus.DELIVERED,
-        refundPreference: RefundPreference.DECLINE,
-      });
-    })
-    .with('DID_FAIL_TO_RENEW', async () => {
-      if (subscription) {
-        // 알림의 서명된 만료일은 갱신에 실패한 기간의 끝이다. 로컬 만료일이 그보다 뒤면 이미 더 최신 갱신
-        // (DID_RENEW)이 반영된 것이므로, 최대 72시간 재전송되는 stale 실패 알림이 새 기간을 회수하지 못하게 한다.
-        const failedExpiresDate = dayjs(notification.data.transaction?.expiresDate);
-        await db
-          .update(Subscriptions)
-          .set(
-            notification.subtype === 'GRACE_PERIOD'
-              ? { state: SubscriptionState.IN_GRACE_PERIOD }
-              : // 유예 없이 재청구(billing retry): 권한은 없지만 복구 가능하므로 WILL_EXPIRE(만료일 경과)로 둔다.
-                { state: SubscriptionState.WILL_EXPIRE, expiresAt: sql`LEAST(${Subscriptions.expiresAt}, NOW())` },
-          )
-          .where(
-            and(
-              eq(Subscriptions.id, subscription.id),
-              ne(Subscriptions.state, SubscriptionState.EXPIRED),
-              lte(Subscriptions.expiresAt, failedExpiresDate),
-            ),
-          );
-      }
-    })
-    .otherwise(async () => {
-      await slack.sendMessage({
-        channel: 'iap',
-        username: '인앱결제 알림',
-        iconEmoji: ':credit_card:',
-        message: `\`\`\`\n${JSON.stringify({ source: 'rest/appstore', notification }, null, 2)}\n\`\`\``,
-      });
+  // canonical 부재는 사람이 고칠 불변식 위반이다 — 200 으로 삼키면 수리 후 이 알림을 다시 태울 트리거가 없어
+  // 유저가 앱을 열 때까지 잠긴다. 재전송 창이 수리 시간을 감당한다(syncIapBinding 의 deferred 와 같은 취급).
+  if (outcome.kind === 'invariant') {
+    await alertOnce('invariant-violation', originalTransactionId, {
+      source: 'rest/appstore',
+      reason: outcome.reason,
+      bindingId: outcome.bindingId,
+      identifier: originalTransactionId,
     });
+
+    return c.json({ error: 'retry' }, 500);
+  }
+
+  if (outcome.kind === 'applied') {
+    await settleAcknowledge(outcome.acknowledge);
+  } else if (outcome.kind === 'bound') {
+    await enqueueJob('iap:sync', { bindingId: outcome.bindingId });
+  } else if (outcome.kind === 'conflict') {
+    await opsAlert('iap-promotion-conflict-skipped', {
+      source: 'rest/appstore',
+      identifier: originalTransactionId,
+      userId: outcome.userId,
+      subscriptionId: outcome.subscriptionId,
+      conflictingSubscriptionId: outcome.conflictingSubscriptionId,
+    });
+    await settleAcknowledge(outcome.acknowledge);
+  } else // 결제 직후의 0건은 등록 mutation 이 아직 바인딩을 만들지 않은 완충 구간이다 — 구조적 미해결만 즉시 알람한다.
+  if (
+    outcome.kind === 'unresolved' &&
+    (!outcome.enrollmentRace || isBeyondEnrollmentRace(notification.data.transaction?.purchaseDate ?? null))
+  ) {
+    await alertOnce('apple-unbound-discovery-unresolved', originalTransactionId, {
+      identifier: originalTransactionId,
+      reason: outcome.reason,
+      candidates: outcome.candidates,
+    });
+  }
 
   return c.json({}, 200);
 });
 
+type GoogleSuccessionOutcome =
+  | SuccessionOutcome
+  | { kind: 'foreign'; bindingId: string; userId: string; obfuscatedAccountId: string }
+  | { kind: 'not-adopted'; reason: string; bindingId: string };
+
+const adoptUnboundGoogleNotification = async ({
+  purchaseToken,
+  purchase,
+  captured,
+}: {
+  purchaseToken: string;
+  purchase: androidpublisher_v3.Schema$SubscriptionPurchaseV2;
+  captured: SuccessionBinding;
+}): Promise<GoogleSuccessionOutcome> => {
+  return await db.transaction(async (tx): Promise<GoogleSuccessionOutcome> => {
+    await lockUserSubscriptionState(tx, captured.userId);
+
+    // 락 대기 중 등록 경로가 이 토큰을 선점했으면 (store, identifier) 유니크가 교체를 막는다 — 점유자에게 넘긴다.
+    const occupant = await tx
+      .select({ id: UserInAppPurchases.id })
+      .from(UserInAppPurchases)
+      .where(and(eq(UserInAppPurchases.store, InAppPurchaseStore.GOOGLE_PLAY), eq(UserInAppPurchases.identifier, purchaseToken)))
+      .then(first);
+
+    if (occupant) {
+      return { kind: 'bound', bindingId: occupant.id };
+    }
+
+    const locked = await loadLockedSuccession(tx, captured);
+    if (locked.kind !== 'ok') {
+      return locked;
+    }
+
+    // 세션 없는 경로는 승계까지만 한다 — 스토어가 알려준 소유자가 predecessor 바인딩의 유저와 다르면 이전이고,
+    // 회수·이전은 소유 증거가 있는 등록 경로의 몫이다.
+    const obfuscatedAccountId =
+      purchase.externalAccountIdentifiers?.obfuscatedExternalAccountId ??
+      purchase.outOfAppPurchaseContext?.expiredExternalAccountIdentifiers?.obfuscatedExternalAccountId;
+
+    if (obfuscatedAccountId && obfuscatedAccountId !== getUserUuid(locked.binding.userId)) {
+      return { kind: 'foreign', bindingId: locked.binding.id, userId: locked.binding.userId, obfuscatedAccountId };
+    }
+
+    const plans = await tx
+      .select({ id: Plans.id, interval: Plans.interval })
+      .from(Plans)
+      .where(eq(Plans.availability, PlanAvailability.IN_APP_PURCHASE));
+    const planIntervals: Record<string, PlanInterval> = Object.fromEntries(plans.map((plan) => [plan.id, plan.interval]));
+
+    const normalized = normalizeGoogle({ purchase, prior: locked.prior, planIntervals, now: dayjs() });
+
+    // unknown 이 곧바로 아래에서 'not-adopted' 로 접히며 reason 을 잃는다 — 접히기 전, 사유가 실제로 관측·폐기되는
+    // 이 지점에서 알람 배선을 한다(등록·재조정과 같은 사유 집합을 공유하는 매핑 함수).
+    if (normalized.kind === 'unknown') {
+      const alertId = mapUnsupportedStorePayloadReason(normalized.reason);
+      if (alertId) {
+        await opsAlertOnce(alertId, purchaseToken, {
+          source: 'rest/iap#adoptUnboundGoogleNotification',
+          bindingId: locked.binding.id,
+          identifier: purchaseToken,
+          reason: normalized.reason,
+        });
+      }
+    }
+
+    // 성공·추적 대상이 아닌 새 토큰은 canonical 을 탈취하지 못한다 — 교체 없이 기존 토큰을 유지하고 그 토큰을 재조회한다.
+    if (normalized.kind === 'expired' || normalized.kind === 'defer' || normalized.kind === 'untracked' || normalized.kind === 'unknown') {
+      return { kind: 'not-adopted', reason: normalized.kind, bindingId: locked.binding.id };
+    }
+
+    if (normalized.state === SubscriptionState.ACTIVE) {
+      const conflict = await findPromotionConflict(tx, { userId: locked.binding.userId, subscriptionId: locked.canonicalId });
+      if (conflict) {
+        // 전이는 막아도 승인 의무는 남는다 — 토큰을 교체하지 않았어도 스토어는 이 토큰을 이미 확인했으므로
+        // 승격을 스킵했다고 3일 자동 환불을 방치하면 돈의 불변식이 깨진다.
+        return {
+          kind: 'conflict',
+          userId: locked.binding.userId,
+          subscriptionId: locked.canonicalId,
+          conflictingSubscriptionId: conflict.id,
+          acknowledge: resolveAcknowledgeDuty(normalized, purchaseToken),
+        };
+      }
+    }
+
+    const { acknowledge } = await applyNormalizedIapLocked(tx, {
+      binding: locked.binding,
+      normalized,
+      newIdentifier: purchaseToken,
+    });
+
+    return { kind: 'applied', acknowledge };
+  });
+};
+
 iap.post('/googleplay', async (c) => {
   const notification = await c.req.json<DeveloperNotification>();
 
-  if (notification.subscriptionNotification) {
-    const purchaseToken = notification.subscriptionNotification.purchaseToken;
+  if (notification.testNotification || notification.oneTimeProductNotification) {
+    await logNotification({ source: 'rest/googleplay', notification });
+    return c.json({}, 200);
+  }
 
-    // 조회 실패(일시적 오류 포함)는 throw 하여 5xx 로 응답 → Pub/Sub 가 재전송한다. 200 으로 삼키면 알림이 영구 유실된다.
-    const googlePlaySubscription = await googleplay.getSubscription(purchaseToken);
+  if (notification.pendingRefundReviewNotification) {
+    // 24시간 기한의 chargeback 검토 요청 — 자동 판정 없이 사람이 콘솔에서 ReviewRefund 를 수행한다.
+    const eventTime = Number(notification.eventTimeMillis);
+    await opsAlert('google-pending-refund-review', {
+      payload: notification.pendingRefundReviewNotification,
+      eventTimeMillis: notification.eventTimeMillis,
+      deadline: Number.isFinite(eventTime)
+        ? dayjs(eventTime + PENDING_REFUND_REVIEW_WINDOW_MS)
+            .kst()
+            .format()
+        : null,
+    });
 
-    const item = googlePlaySubscription.lineItems?.[0];
-    const planId = item?.offerDetails?.basePlanId?.toUpperCase();
+    return c.json({}, 200);
+  }
 
-    if (!item || !planId) {
-      return c.json({ error: 'invalid_request' }, 400);
-    }
-
-    const inAppPurchase = await db
-      .select({
-        userId: UserInAppPurchases.userId,
-      })
-      .from(UserInAppPurchases)
-      .where(
-        and(
-          eq(UserInAppPurchases.identifier, notification.subscriptionNotification.purchaseToken),
-          eq(UserInAppPurchases.store, InAppPurchaseStore.GOOGLE_PLAY),
-        ),
-      )
-      .then(first);
-
-    // 구글 플레이는 발생한 알림이 환경 상관 없이 prod/dev 모두 발송됨
-    if (!inAppPurchase) {
-      if (production) {
-        // prod 환경에서는 inAppPurchase 없을 시 오류 반환하고 pubsub에 재시도 맡김
-        return c.json({ error: 'invalid_request' }, 400);
-      }
-      // dev 환경에서는 inAppPurchase 없어도 무시함
+  if (notification.voidedPurchaseNotification) {
+    const voided = notification.voidedPurchaseNotification;
+    if (voided.productType !== VOIDED_PRODUCT_TYPE_SUBSCRIPTION) {
+      await logNotification({ source: 'rest/googleplay', notification });
       return c.json({}, 200);
     }
 
-    const subscription = await getLiveInAppPurchaseSubscription(inAppPurchase.userId);
-
-    await match(googlePlaySubscription.subscriptionState)
-      .with('SUBSCRIPTION_STATE_ACTIVE', async () => {
-        const expiresAt = dayjs(item.expiryTime);
-        if (subscription) {
-          // 스냅샷 비교가 아닌 조건부 UPDATE 로 만료일 단조 증가를 원자적으로 보장한다(동시·역순 전달 대비).
-          // renewedAt 은 스냅샷이 아닌 갱신 시점의 실제 이전 만료일(행의 현재 값)을 쓴다.
-          // 동시 환불로 EXPIRED 가 된 행은 되살리지 않는다 — 웹훅 UPDATE 는 EXPIRED 를 벗어나게 하지 않는다(부활은 insert·재조정 경로만).
-          const renewed = await db
-            .update(Subscriptions)
-            .set({ state: SubscriptionState.ACTIVE, planId, renewedAt: sql`${Subscriptions.expiresAt}`, expiresAt })
-            .where(
-              and(
-                eq(Subscriptions.id, subscription.id),
-                ne(Subscriptions.state, SubscriptionState.EXPIRED),
-                lt(Subscriptions.expiresAt, expiresAt),
-              ),
-            )
-            .returning({ id: Subscriptions.id });
-
-          if (renewed.length === 0) {
-            // 만료일이 같은 재전송·상태 복구(재구독 등) — 상태·플랜만 동기화한다. 만료일이 이미 앞서 있으면 no-op.
-            await db
-              .update(Subscriptions)
-              .set({ state: SubscriptionState.ACTIVE, planId })
-              .where(
-                and(
-                  eq(Subscriptions.id, subscription.id),
-                  ne(Subscriptions.state, SubscriptionState.EXPIRED),
-                  eq(Subscriptions.expiresAt, expiresAt),
-                ),
-              );
-          }
-        } else if (expiresAt.isAfter(dayjs())) {
-          const startsAt = dayjs(googlePlaySubscription.startTime);
-          await db.transaction(async (tx) => {
-            await lockUserSubscriptionState(tx, inAppPurchase.userId);
-
-            // 락 대기 중 바인딩이 삭제·이전(재등록/탈퇴 — 탈퇴는 바인딩을 지운다)됐으면 stale userId 로 만들지 않는다.
-            const freshBinding = await tx
-              .select({ userId: UserInAppPurchases.userId })
-              .from(UserInAppPurchases)
-              .where(
-                and(
-                  eq(UserInAppPurchases.userId, inAppPurchase.userId),
-                  eq(UserInAppPurchases.store, InAppPurchaseStore.GOOGLE_PLAY),
-                  eq(UserInAppPurchases.identifier, purchaseToken),
-                ),
-              )
-              .then(first);
-
-            if (!freshBinding) {
-              return;
-            }
-
-            const upserted = await tx
-              .insert(Subscriptions)
-              .values({
-                userId: inAppPurchase.userId,
-                planId,
-                startsAt,
-                expiresAt,
-                renewedAt: startsAt,
-                state: SubscriptionState.ACTIVE,
-              })
-              .onConflictDoUpdate({
-                target: [Subscriptions.userId],
-                targetWhere: eq(Subscriptions.state, SubscriptionState.ACTIVE),
-                set: { planId, startsAt, expiresAt, renewedAt: startsAt },
-                // 충돌하는 ACTIVE 행이 IAP 이고 만료일이 역행하지 않을 때만 갱신한다.
-                // 다른 채널(빌링키 등)의 ACTIVE 구독을 덮어쓰지 않고, stale 재전송이 최신 갱신을 되돌리지 못하게 한다.
-                setWhere: and(
-                  inArray(
-                    Subscriptions.planId,
-                    tx.select({ id: Plans.id }).from(Plans).where(eq(Plans.availability, PlanAvailability.IN_APP_PURCHASE)),
-                  ),
-                  lte(Subscriptions.expiresAt, expiresAt),
-                ),
-              })
-              .returning({ id: Subscriptions.id });
-
-            if (upserted.length === 0) {
-              // 스토어는 이미 과금했는데 비IAP ACTIVE 와 충돌해 조용히 사라지는 구매 — 운영이 인지해야 수동 환불이 가능하다.
-              Sentry.captureMessage('iap webhook upsert skipped by conflicting non-iap active subscription', {
-                level: 'warning',
-                extra: {
-                  userId: inAppPurchase.userId,
-                  store: 'GOOGLE_PLAY',
-                  identifier: purchaseToken,
-                },
-              });
-            }
-          });
-        }
-      })
-      .with('SUBSCRIPTION_STATE_EXPIRED', async () => {
-        if (subscription) {
-          // SUBSCRIPTION_REVOKED(12)는 스토어가 확정한 중도 환불·철회이므로 만료일이 미래여도 즉시 회수한다.
-          // 자연 만료는 조회~갱신 사이 동시 갱신이 만료일을 미래로 올렸으면 건드리지 않는다(CAS).
-          const revoked = notification.subscriptionNotification?.notificationType === 12;
-          await db
-            .update(Subscriptions)
-            .set({ state: SubscriptionState.EXPIRED, expiresAt: sql`LEAST(${Subscriptions.expiresAt}, NOW())` })
-            .where(
-              revoked
-                ? eq(Subscriptions.id, subscription.id)
-                : and(eq(Subscriptions.id, subscription.id), lte(Subscriptions.expiresAt, dayjs())),
-            );
-        }
-      })
-      .with('SUBSCRIPTION_STATE_CANCELED', async () => {
-        if (subscription) {
-          await db
-            .update(Subscriptions)
-            .set({ state: SubscriptionState.WILL_EXPIRE })
-            .where(and(eq(Subscriptions.id, subscription.id), ne(Subscriptions.state, SubscriptionState.EXPIRED)));
-        }
-      })
-      .with('SUBSCRIPTION_STATE_IN_GRACE_PERIOD', async () => {
-        if (subscription) {
-          await db
-            .update(Subscriptions)
-            .set({ state: SubscriptionState.IN_GRACE_PERIOD })
-            .where(and(eq(Subscriptions.id, subscription.id), ne(Subscriptions.state, SubscriptionState.EXPIRED)));
-        }
-      })
-      .with('SUBSCRIPTION_STATE_ON_HOLD', async () => {
-        if (subscription) {
-          // 계정 보류(payment on hold): 권한은 없지만 복구 가능하므로 WILL_EXPIRE(만료일 경과)로 둔다.
-          // 조회~갱신 사이 동시 갱신이 만료일을 미래로 올렸으면 건드리지 않는다(CAS).
-          await db
-            .update(Subscriptions)
-            .set({ state: SubscriptionState.WILL_EXPIRE, expiresAt: sql`LEAST(${Subscriptions.expiresAt}, NOW())` })
-            .where(
-              and(
-                eq(Subscriptions.id, subscription.id),
-                ne(Subscriptions.state, SubscriptionState.EXPIRED),
-                lte(Subscriptions.expiresAt, dayjs()),
-              ),
-            );
-        }
-      })
-      .with('SUBSCRIPTION_STATE_PAUSED', async () => {
-        if (subscription) {
-          await db
-            .update(Subscriptions)
-            .set({ state: SubscriptionState.WILL_EXPIRE })
-            .where(and(eq(Subscriptions.id, subscription.id), ne(Subscriptions.state, SubscriptionState.EXPIRED)));
-        }
-      })
-      .with('SUBSCRIPTION_STATE_PENDING', 'SUBSCRIPTION_STATE_PENDING_PURCHASE_CANCELED', async () => {
-        // 결제 대기 중 또는 대기 중 취소 — 구독 미생성 상태이므로 처리 불필요
-      })
-      .otherwise(async () => {
-        await slack.sendMessage({
-          channel: 'iap',
-          username: '인앱결제 알림',
-          iconEmoji: ':credit_card:',
-          message: `\`\`\`\n${JSON.stringify({ source: 'rest/googleplay', subscription }, null, 2)}\n\`\`\``,
-        });
-      });
-  } else if (notification.voidedPurchaseNotification && notification.voidedPurchaseNotification.productType === 1) {
-    const purchaseToken = notification.voidedPurchaseNotification.purchaseToken;
-
-    const inAppPurchase = await db
-      .select({ userId: UserInAppPurchases.userId })
-      .from(UserInAppPurchases)
-      .where(and(eq(UserInAppPurchases.identifier, purchaseToken), eq(UserInAppPurchases.store, InAppPurchaseStore.GOOGLE_PLAY)))
-      .then(first);
-
-    if (inAppPurchase) {
-      // 위조 방지: 엔드포인트 인증이 없으므로, 스토어가 실제로 종료(EXPIRED)를 확인해 준 경우에만 회수한다.
-      // CANCELED(만료 전까지 권한 유지)·IN_GRACE_PERIOD 등은 여전히 권한이 있으므로 "비-ACTIVE"를 회수 근거로 삼지 않는다.
-      // 조회 실패(일시적 오류)는 판정하지 않고 재시도한다 — 실결제 사용자 오만료 방지.
-      let revoked: boolean;
-      try {
-        const googlePlaySubscription = await googleplay.getSubscription(purchaseToken);
-        revoked = googlePlaySubscription.subscriptionState === 'SUBSCRIPTION_STATE_EXPIRED';
-      } catch (err) {
-        Sentry.captureException(err);
-        return c.json({ error: 'retry' }, 500);
-      }
-
-      if (revoked) {
-        const subscription = await getLiveInAppPurchaseSubscription(inAppPurchase.userId);
-
-        if (subscription) {
-          await db
-            .update(Subscriptions)
-            .set({ state: SubscriptionState.EXPIRED, expiresAt: sql`LEAST(${Subscriptions.expiresAt}, NOW())` })
-            .where(eq(Subscriptions.id, subscription.id));
-        }
-      }
+    const binding = await findBinding(InAppPurchaseStore.GOOGLE_PLAY, voided.purchaseToken);
+    if (binding) {
+      await enqueueJob('iap:sync', { bindingId: binding.id });
+    } else {
+      await logNotification({ source: 'rest/googleplay', reason: 'voided_purchase_unbound', notification });
     }
-  } else {
-    await slack.sendMessage({
-      channel: 'iap',
-      username: '인앱결제 알림',
-      iconEmoji: ':credit_card:',
-      message: `\`\`\`\n${JSON.stringify({ source: 'rest/googleplay', notification }, null, 2)}\n\`\`\``,
+
+    return c.json({}, 200);
+  }
+
+  if (!notification.subscriptionNotification) {
+    await logNotification({ source: 'rest/googleplay', notification });
+    return c.json({}, 200);
+  }
+
+  const purchaseToken = notification.subscriptionNotification.purchaseToken;
+
+  // 알림 타입은 보지 않는다 — 어떤 알림이든 바인딩을 찾아 락 안 조회로 확정한다.
+  const binding = await findBinding(InAppPurchaseStore.GOOGLE_PLAY, purchaseToken);
+  if (binding) {
+    await enqueueJob('iap:sync', { bindingId: binding.id });
+    return c.json({}, 200);
+  }
+
+  // 구글 알림은 환경과 무관하게 prod·dev 양쪽으로 발송된다 — dev 에 없는 바인딩을 재전송으로 기다리면
+  // 성립할 수 없는 재시도가 무한히 쌓인다(현행 동작 유지).
+  if (!production) {
+    await logNotification({ source: 'rest/googleplay', reason: 'unbound_token', notification });
+    return c.json({}, 200);
+  }
+
+  // 미지 토큰은 무시 전에 조회한다 — 앱 밖 재가입은 새 토큰으로만 알림이 오므로 무시하면 승계 신호를 볼 기회가 없다.
+  const result = await googleplay.getSubscriptionV2(purchaseToken);
+  if (result.kind !== 'ok') {
+    await logNotification({ source: 'rest/googleplay', reason: `unbound_lookup_${result.kind}`, notification });
+    return c.json({ error: 'retry' }, 400);
+  }
+
+  const purchase = result.purchase;
+  const successorTokens = [purchase.linkedPurchaseToken, purchase.outOfAppPurchaseContext?.expiredPurchaseToken].filter(
+    (token): token is string => !!token,
+  );
+
+  if (successorTokens.length === 0) {
+    // 진짜 독립 토큰 — 400 재시도가 등록 경합 완충이다(백오프 동안 등록 mutation 이 바인딩을 만들면 다음 전송이 정상 경로를 탄다).
+    // 그 완충 구간을 알람하면 정상 등록 지연이 매번 알람이 된다 — 코드는 유지하고 알람만 신선도로 거른다.
+    if (isBeyondEnrollmentRace(Number(notification.eventTimeMillis))) {
+      await alertOnce('iap-unbound-independent-notification', purchaseToken, {
+        purchaseToken,
+        notificationType: notification.subscriptionNotification.notificationType,
+      });
+    }
+
+    return c.json({ error: 'retry' }, 400);
+  }
+
+  // 승계 신호는 전역 기준으로 판정한다 — 같은 스토어 계정의 이전 계약은 다른 타이피 유저에게 연결돼 있을 수 있다.
+  const predecessors = await db
+    .select({ id: UserInAppPurchases.id, userId: UserInAppPurchases.userId, identifier: UserInAppPurchases.identifier })
+    .from(UserInAppPurchases)
+    .where(and(eq(UserInAppPurchases.store, InAppPurchaseStore.GOOGLE_PLAY), inArray(UserInAppPurchases.identifier, successorTokens)));
+
+  const captured = successorTokens.flatMap((token) => predecessors.filter((row) => row.identifier === token))[0] ?? null;
+
+  if (!captured) {
+    // 연속 플랜 변경의 역순 도착이면 선행 알림 처리로 자연 해소된다 — 재전송을 유도하되, 해소되지 않으면 알람이다.
+    if (isBeyondEnrollmentRace(Number(notification.eventTimeMillis))) {
+      await alertOnce('iap-succession-target-unregistered', purchaseToken, {
+        purchaseToken,
+        successorTokens,
+        eventTimeMillis: notification.eventTimeMillis,
+      });
+    }
+
+    return c.json({ error: 'retry' }, 503);
+  }
+
+  const outcome = await adoptUnboundGoogleNotification({ purchaseToken, purchase, captured });
+
+  // 락 안에서 귀속이 달라졌으면 처리하지 않는다 — 재전송이 새 귀속으로 다시 탄다.
+  if (outcome.kind === 'changed') {
+    return c.json({ error: 'retry' }, 400);
+  }
+
+  // canonical 부재는 사람이 고칠 불변식 위반이다 — 200 으로 삼키면 수리 후 이 알림을 다시 태울 트리거가 없어
+  // 유저가 앱을 열 때까지 잠긴다. 재전송 창이 수리 시간을 감당한다(syncIapBinding 의 deferred 와 같은 취급).
+  if (outcome.kind === 'invariant') {
+    await alertOnce('invariant-violation', purchaseToken, {
+      source: 'rest/googleplay',
+      reason: outcome.reason,
+      bindingId: outcome.bindingId,
+      purchaseToken,
     });
+
+    return c.json({ error: 'retry' }, 500);
+  }
+
+  if (outcome.kind === 'applied') {
+    await settleAcknowledge(outcome.acknowledge);
+  } else if (outcome.kind === 'bound' || outcome.kind === 'not-adopted') {
+    await enqueueJob('iap:sync', { bindingId: outcome.bindingId });
+  } else if (outcome.kind === 'foreign') {
+    await opsAlert('iap-foreign-predecessor-observed', {
+      source: 'rest/googleplay',
+      purchaseToken,
+      predecessorBindingId: outcome.bindingId,
+      predecessorUserId: outcome.userId,
+      obfuscatedAccountId: outcome.obfuscatedAccountId,
+    });
+  } else if (outcome.kind === 'conflict') {
+    await opsAlert('iap-promotion-conflict-skipped', {
+      source: 'rest/googleplay',
+      identifier: purchaseToken,
+      userId: outcome.userId,
+      subscriptionId: outcome.subscriptionId,
+      conflictingSubscriptionId: outcome.conflictingSubscriptionId,
+    });
+    await settleAcknowledge(outcome.acknowledge);
   }
 
   return c.json({}, 200);

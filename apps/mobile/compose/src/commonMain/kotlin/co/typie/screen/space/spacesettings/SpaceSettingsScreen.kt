@@ -34,10 +34,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import co.typie.domain.subscription.Entitlement
 import co.typie.domain.subscription.GatedAction
 import co.typie.domain.subscription.SubscriptionService
 import co.typie.domain.subscription.gate
+import co.typie.domain.subscription.grantsAccess
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.navigationBarsOrImePadding
@@ -190,9 +190,7 @@ fun SpaceSettingsScreen() {
 
           Box(
             modifier =
-              Modifier.fillMaxWidth().thenIf(
-                SubscriptionService.entitlement is Entitlement.Expired
-              ) {
+              Modifier.fillMaxWidth().thenIf(!SubscriptionService.entitlement.grantsAccess()) {
                 clickable { SubscriptionService.gate(sheet, GatedAction.ChangeSpaceAddress) }
               }
           ) {
@@ -200,13 +198,13 @@ fun SpaceSettingsScreen() {
               field = model.form.slug,
               label = "주소",
               help =
-                if (SubscriptionService.entitlement is Entitlement.Expired) {
+                if (!SubscriptionService.entitlement.grantsAccess()) {
                   "스페이스 주소 기능은 FULL ACCESS 플랜에서 사용할 수 있어요."
                 } else null,
               labelPosition = LabelPosition.Internal,
               placeholder = "스페이스 주소",
-              enabled = SubscriptionService.entitlement is Entitlement.Active,
-              readOnly = SubscriptionService.entitlement !is Entitlement.Active,
+              enabled = SubscriptionService.entitlement.grantsAccess(),
+              readOnly = !SubscriptionService.entitlement.grantsAccess(),
               suffix = {
                 Text(
                   ".${model.usersiteHost}",
@@ -216,7 +214,7 @@ fun SpaceSettingsScreen() {
               },
             )
 
-            if (SubscriptionService.entitlement is Entitlement.Expired) {
+            if (!SubscriptionService.entitlement.grantsAccess()) {
               LockedBadge(
                 modifier = Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 12.dp)
               )
@@ -349,9 +347,7 @@ private fun DeleteSiteSheet(
   documentCount: Int,
   folderCount: Int,
   isDeleting: Boolean,
-  onDelete:
-    suspend context(SheetScope<Unit>)
-    () -> Unit,
+  onDelete: suspend context(SheetScope<Unit>) () -> Unit,
 ) {
   var inputValue by remember { mutableStateOf("") }
 

@@ -19,8 +19,15 @@ export const shouldShowOnboarding = ({ createdAt, preferences, now }: Onboarding
   return !preferences.mobileOnboardingCompletedAt && !preferences.webOnboardingCompletedAt;
 };
 
-export const trialDaysLeft = (expiresAt: string, now: Dayjs): number => {
-  return Math.max(0, dayjs(expiresAt).diff(now, 'day'));
+export const trialDaysLeft = (endsAt: string, now: Dayjs): number => {
+  return Math.max(0, dayjs(endsAt).diff(now, 'day'));
+};
+
+// LIFETIME·MANUAL은 주기 종료를 sentinel(9999-12-31)로 저장한다. 값은 유지하되 날짜로 렌더하지 않는다.
+export const INDEFINITE_PERIOD_YEAR = 9999;
+
+export const isIndefinitePeriod = (endsAt: string): boolean => {
+  return dayjs(endsAt).year() >= INDEFINITE_PERIOD_YEAR;
 };
 
 export const trialStatusLabel = (daysLeft: number, legacy: boolean): string => {

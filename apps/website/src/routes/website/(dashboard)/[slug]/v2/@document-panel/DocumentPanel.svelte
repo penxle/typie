@@ -64,10 +64,7 @@
     graphql(`
       fragment DocumentPanelV2_user on User {
         id
-
-        subscription {
-          id
-        }
+        entitled
 
         ...DocumentPanelV2_Ai_user
         ...DocumentPanelV2_Info_user
@@ -232,13 +229,13 @@
         <DocumentPanelTimeline document$key={document.data} {onPreviewEditorFailed} {onPreviewEditorRecovered} />
       {/if}
     {:else if paneGroup.state.current.panelTabByPaneId[paneId] === 'spellcheck'}
-      {#if user.data.subscription}
+      {#if user.data.entitled}
         <DocumentPanelSpellcheck document$key={document.data} editor={ctx.editor} user$key={user.data} />
       {:else}
         {@render planUpgradePrompt(SpellCheckIcon, '맞춤법 검사', '글의 맞춤법과 띄어쓰기를\n자동으로 검사하고 수정할 수 있어요.')}
       {/if}
     {:else if paneGroup.state.current.panelTabByPaneId[paneId] === 'ai'}
-      {#if user.data.subscription}
+      {#if user.data.entitled}
         <DocumentPanelAi document$key={document.data} editor={ctx.editor} user$key={user.data} />
       {:else}
         {@render planUpgradePrompt(LightbulbIcon, 'AI 피드백', '글의 구조, 표현, 흐름에 대한\nAI 분석과 피드백을 받아볼 수 있어요.')}

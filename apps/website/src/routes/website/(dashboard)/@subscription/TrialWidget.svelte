@@ -35,7 +35,7 @@
         subscription {
           id
           startsAt
-          expiresAt
+          currentPeriodEndsAt
 
           plan {
             id
@@ -59,7 +59,7 @@
   const legacy = $derived(
     subscription ? isLegacyTrial({ availability: subscription.plan.availability, startsAt: subscription.startsAt }) : false,
   );
-  const daysLeft = $derived(subscription ? trialDaysLeft(subscription.expiresAt, dayjs()) : 0);
+  const daysLeft = $derived(subscription ? trialDaysLeft(subscription.currentPeriodEndsAt, dayjs()) : 0);
 
   const visible = $derived((isTrial || expired) && !hasScheduled);
 

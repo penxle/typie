@@ -17,9 +17,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.datetime.formatKoreanDate
-import co.typie.domain.subscription.Entitlement
+import co.typie.datetime.toLocalDate
 import co.typie.domain.subscription.Subscription
 import co.typie.domain.subscription.SubscriptionService
+import co.typie.domain.subscription.grantsAccess
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.comma
@@ -38,6 +39,26 @@ import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
+import kotlin.time.Clock
+import kotlin.time.Instant
+
+// LIFETIME·MANUAL 은 주기 종료를 sentinel(9999-12-31)로 저장한다. 값은 유지하되 날짜로 렌더하지 않는다.
+private const val INDEFINITE_PERIOD_YEAR = 9999
+
+internal fun isIndefinitePeriod(currentPeriodEndsAt: Instant): Boolean =
+  currentPeriodEndsAt.toLocalDate().year >= INDEFINITE_PERIOD_YEAR
+
+internal fun subscriptionPeriodLine(subscription: Subscription, now: Instant): String =
+  when {
+    isIndefinitePeriod(subscription.currentPeriodEndsAt) -> "무기한"
+    // 갱신 창이 열리기 전의 ACTIVE 는 기간이 지난 채로 권한을 유지한다 — 지난 날짜를 다음 결제일로 쓰지 않는다.
+    subscription.state == SubscriptionState.ACTIVE ->
+      if (subscription.currentPeriodEndsAt <= now) "갱신 처리 중"
+      else "다음 결제일: ${subscription.currentPeriodEndsAt.formatKoreanDate()}"
+    subscription.state == SubscriptionState.IN_GRACE_PERIOD -> "결제를 다시 시도하고 있어요"
+    subscription.state == SubscriptionState.WILL_ACTIVATE -> "플랜 전환 처리 중"
+    else -> "해지 예정일: ${subscription.currentPeriodEndsAt.formatKoreanDate()}"
+  }
 
 @Composable
 fun CurrentPlanScreen() {
@@ -51,7 +72,7 @@ fun CurrentPlanScreen() {
   )
 
   LaunchedEffect(SubscriptionService.entitlement) {
-    if (SubscriptionService.entitlement is Entitlement.Expired) {
+    if (!SubscriptionService.entitlement.grantsAccess()) {
       nav.pop()
     }
   }
@@ -95,15 +116,11 @@ fun CurrentPlanScreen() {
             ) {
               val detailLines =
                 if (subscription.availability == PlanAvailability.TRIAL) {
-                  listOf("무료 체험이 ${subscription.expiresAt.formatKoreanDate()}에 종료돼요.")
+                  listOf("무료 체험이 ${subscription.currentPeriodEndsAt.formatKoreanDate()}에 종료돼요.")
                 } else {
                   listOf(
                     "이용권 가격: ${subscription.fee.comma}원",
-                    if (subscription.state == SubscriptionState.ACTIVE) {
-                      "다음 결제일: ${subscription.expiresAt.formatKoreanDate()}"
-                    } else {
-                      "해지 예정일: ${subscription.expiresAt.formatKoreanDate()}"
-                    },
+                    subscriptionPeriodLine(subscription, Clock.System.now()),
                   )
                 }
 

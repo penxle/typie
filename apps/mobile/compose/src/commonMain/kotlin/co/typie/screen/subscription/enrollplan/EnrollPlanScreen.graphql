@@ -9,7 +9,7 @@ mutation EnrollPlanScreen_SubscribePlanWithTrial_Mutation {
   subscribePlanWithTrial {
     id
     state
-    expiresAt
+    currentPeriodEndsAt
 
     plan {
       id

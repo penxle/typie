@@ -8,7 +8,7 @@ data class Subscription(
   val id: String,
   val state: SubscriptionState,
   val startsAt: Instant,
-  val expiresAt: Instant,
+  val currentPeriodEndsAt: Instant,
   val planId: String,
   val planName: String,
   val fee: Int,

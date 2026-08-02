@@ -55,13 +55,15 @@ fun PlanChangeNoticeHost() {
     if (Preference.planChangeNoticeShown) return@LaunchedEffect
 
     val initial = SubscriptionService.entitlement
-    if (initial is Entitlement.Active && !initial.subscription.isLegacyTrial()) {
+    if (initial is Entitlement.Active && initial.subscription?.isLegacyTrial() != true) {
       return@LaunchedEffect
     }
 
     val subscription = snapshotFlow {
       (SubscriptionService.entitlement as? Entitlement.Active)?.subscription
-    }.filterNotNull().first()
+    }
+      .filterNotNull()
+      .first()
     if (!subscription.isLegacyTrial()) return@LaunchedEffect
 
     Preference.planChangeNoticeShown = true

@@ -38,9 +38,6 @@
     graphql(`
       fragment DocumentPanelV2_Spellcheck_user on User {
         id
-        subscription {
-          id
-        }
       }
     `),
     () => user$key,

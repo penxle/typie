@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createFragment, createMutation } from '@mearie/svelte';
-  import { PlanPair, SUBSCRIPTION_GRACE_DAYS } from '@typie/lib/const';
+  import { PlanPair } from '@typie/lib/const';
   import { BillingKeyType, PlanAvailability, PlanInterval, SubscriptionState } from '@typie/lib/enums';
   import { TypieError } from '@typie/lib/errors';
   import { supportsPlanInterval } from '@typie/lib/plan';
@@ -14,6 +14,7 @@
   import KakaoPayLogo from '$assets/icons/kakaopay.svg?component';
   import { SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
   import { cache } from '$lib/graphql';
+  import { isIndefinitePeriod } from '$lib/subscription-logic';
   import { graphql } from '$mearie';
   import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
   import RedeemCreditCodeModal from './RedeemCreditCodeModal.svelte';
@@ -32,6 +33,7 @@
       fragment DashboardLayout_PreferenceModal_BillingTab_user on User {
         id
         credit
+        entitled
         ...DashboardLayout_PreferenceModal_BillingTab_UpdatePaymentMethodModal_user
         ...DashboardLayout_PreferenceModal_BillingTab_SubscriptionCancellationSurveyModal_user
 
@@ -45,7 +47,7 @@
           id
           state
           startsAt
-          expiresAt
+          currentPeriodEndsAt
 
           plan {
             id
@@ -58,9 +60,7 @@
 
         nextSubscription {
           id
-          state
           startsAt
-          expiresAt
 
           plan {
             id
@@ -78,13 +78,24 @@
   const isBillingKey = $derived(user.data.subscription?.plan.availability === PlanAvailability.BILLING_KEY);
   const isInAppPurchase = $derived(user.data.subscription?.plan.availability === PlanAvailability.IN_APP_PURCHASE);
 
+  const periodEndsAt = $derived(user.data.subscription?.currentPeriodEndsAt);
+  const indefinite = $derived(!!periodEndsAt && isIndefinitePeriod(periodEndsAt));
+
+  // 야간 경계의 ACTIVE는 다음 결제 창까지 주기가 지난 채로 권한을 유지한다. 과거 날짜를 결제일로 내보내지 않는다.
+  const renewing = $derived(user.data.entitled && !!periodEndsAt && !indefinite && dayjs(periodEndsAt).isBefore(dayjs()));
+
+  // 대표 구독이 WILL_ACTIVATE인 것은 시작이 지났는데 전환 잡이 아직 커밋되지 않은 창뿐이다(시작 전 예약은 nextSubscription으로 나온다).
+  const switching = $derived(user.data.subscription?.state === SubscriptionState.WILL_ACTIVATE);
+
+  const nextBillingLabel = $derived(renewing || !periodEndsAt ? '다음 결제일' : `다음 결제일(${dayjs(periodEndsAt).formatAsDate()})`);
+
   const [scheduleSubscriptionCancellation] = createMutation(
     graphql(`
       mutation DashboardLayout_PreferenceModal_BillingTab_ScheduleSubscriptionCancellation_Mutation {
         scheduleSubscriptionCancellation {
           id
           state
-          expiresAt
+          currentPeriodEndsAt
         }
       }
     `),
@@ -96,7 +107,7 @@
         cancelSubscriptionCancellation {
           id
           state
-          expiresAt
+          currentPeriodEndsAt
         }
       }
     `),
@@ -109,7 +120,7 @@
           id
           state
           startsAt
-          expiresAt
+          currentPeriodEndsAt
           plan {
             id
             name
@@ -126,7 +137,7 @@
         cancelPlanChange {
           id
           state
-          expiresAt
+          currentPeriodEndsAt
         }
       }
     `),
@@ -139,7 +150,7 @@
           id
           state
           startsAt
-          expiresAt
+          currentPeriodEndsAt
 
           plan {
             id
@@ -188,6 +199,11 @@
 
     await scheduleSubscriptionCancellation();
 
+    // 유예 중 해지는 즉시 EXPIRED가 되어 권한이 끊기므로, 응답 정규화만으로는 entitled가 옛 값으로 남는다.
+    cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'entitled' });
+    cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'entitledUntil' });
+    cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'subscription' });
+
     mixpanel.track('cancel_plan', surveyData as Record<string, unknown>);
     Toast.success('구독이 해지되었어요');
   }
@@ -228,32 +244,40 @@
             {#if isTrial}
               <span>
                 {#if user.data.nextSubscription}
-                  무료 체험이 {dayjs(subscription.expiresAt).formatAsDate()}에 종료되고 {user.data.nextSubscription.plan.name} 플랜이 시작돼요.
+                  무료 체험이 {dayjs(subscription.currentPeriodEndsAt).formatAsDate()}에 종료되고 {user.data.nextSubscription.plan.name} 플랜이
+                  시작돼요.
                 {:else}
-                  무료 체험이 {dayjs(subscription.expiresAt).formatAsDate()}에 종료돼요.
+                  무료 체험이 {dayjs(subscription.currentPeriodEndsAt).formatAsDate()}에 종료돼요.
                 {/if}
-              </span>
-            {:else if subscription.state === SubscriptionState.ACTIVE}
-              <span>
-                {dayjs(subscription.expiresAt).formatAsDate()}에 {comma(subscription.plan.fee)}원 결제 예정
               </span>
             {:else if subscription.state === SubscriptionState.IN_GRACE_PERIOD}
               <span class={css({ color: 'text.danger' })}>
-                결제에 실패했어요. {dayjs(subscription.expiresAt).add(SUBSCRIPTION_GRACE_DAYS, 'day').formatAsDate()}까지 결제 수단을 확인해
-                주세요.
+                결제에 실패해 결제를 다시 시도하고 있어요. 결제가 확인되지 않으면 곧 이용이 제한돼요. 결제 수단을 확인해 주세요.
               </span>
+            {:else if switching}
+              <span>플랜 전환 처리 중</span>
             {:else if subscription.state === SubscriptionState.WILL_EXPIRE && user.data.nextSubscription}
               <span>
-                {dayjs(subscription.expiresAt).formatAsDate()}에 다음 플랜으로 전환 예정
+                {dayjs(subscription.currentPeriodEndsAt).formatAsDate()}에 다음 플랜으로 전환 예정
               </span>
             {:else if subscription.state === SubscriptionState.WILL_EXPIRE}
               <span class={css({ color: 'text.danger' })}>
-                {dayjs(subscription.expiresAt).formatAsDate()} 해지 예정
+                {dayjs(subscription.currentPeriodEndsAt).formatAsDate()} 해지 예정
+              </span>
+            {:else if indefinite}
+              <span>기간 제한 없이 이용할 수 있어요.</span>
+            {:else if subscription.state === SubscriptionState.ACTIVE && renewing}
+              <span>갱신 처리 중</span>
+            {:else if subscription.state === SubscriptionState.ACTIVE}
+              <span>
+                {dayjs(subscription.currentPeriodEndsAt).formatAsDate()}에 {comma(subscription.plan.fee)}원 결제 예정
               </span>
             {/if}
           {/snippet}
           {#snippet value()}
-            이용 기간: {dayjs(subscription.startsAt).formatAsDate()} ~ {dayjs(subscription.expiresAt).formatAsDate()}
+            이용 기간: {dayjs(subscription.startsAt).formatAsDate()} ~ {indefinite
+              ? '무기한'
+              : dayjs(subscription.currentPeriodEndsAt).formatAsDate()}
           {/snippet}
         </SettingsRow>
 
@@ -285,11 +309,13 @@
                   Dialog.confirm({
                     title: isMonthly ? '연간 플랜으로 전환하시겠어요?' : '월간 플랜으로 전환하시겠어요?',
                     message: isMonthly
-                      ? `다음 결제일(${dayjs(subscription.expiresAt).formatAsDate()})부터 연간 플랜(29,000원/년)이 적용돼요.`
-                      : `다음 결제일(${dayjs(subscription.expiresAt).formatAsDate()})부터 월간 플랜(2,900원/월)이 적용돼요.`,
+                      ? `${nextBillingLabel}부터 연간 플랜(29,000원/년)이 적용돼요.`
+                      : `${nextBillingLabel}부터 월간 플랜(2,900원/월)이 적용돼요.`,
                     actionLabel: '전환하기',
                     actionHandler: async () => {
                       await schedulePlanChange({ input: { planId: targetPlanId } });
+                      cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'entitled' });
+                      cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'entitledUntil' });
                       cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'subscription' });
                       cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'nextSubscription' });
                       mixpanel.track('change_plan', {
@@ -351,6 +377,8 @@
                             throw err;
                           }
                         } finally {
+                          cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'entitled' });
+                          cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'entitledUntil' });
                           cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'subscription' });
                         }
                       },
@@ -418,6 +446,8 @@
                                 throw err;
                               }
                             } finally {
+                              cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'entitled' });
+                              cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'entitledUntil' });
                               cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'subscription' });
                               cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'nextSubscription' });
                             }
@@ -448,6 +478,8 @@
                               throw err;
                             }
                           } finally {
+                            cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'entitled' });
+                            cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'entitledUntil' });
                             cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'subscription' });
                             cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'nextSubscription' });
                           }

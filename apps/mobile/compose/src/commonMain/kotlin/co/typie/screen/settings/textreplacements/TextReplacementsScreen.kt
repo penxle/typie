@@ -22,10 +22,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.domain.settings.SettingSwitch
-import co.typie.domain.subscription.Entitlement
 import co.typie.domain.subscription.GatedAction
 import co.typie.domain.subscription.SubscriptionService
 import co.typie.domain.subscription.gate
+import co.typie.domain.subscription.grantsAccess
 import co.typie.ext.clickable
 import co.typie.ext.plus
 import co.typie.ext.separated
@@ -97,7 +97,7 @@ fun TextReplacementsScreen() {
     val byId = remember(displayed) { displayed.associateBy { it.textReplacementId } }
     val ordered = reorderState.keys.mapNotNull(byId::get)
     val toast = LocalToast.current
-    val reorderEnabled = SubscriptionService.entitlement !is Entitlement.Expired
+    val reorderEnabled = SubscriptionService.entitlement.grantsAccess()
 
     ReorderableLazyColumn(
       state = reorderState,

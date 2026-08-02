@@ -7,7 +7,7 @@ query CurrentPlanScreen_Query {
       id
       state
       startsAt
-      expiresAt
+      currentPeriodEndsAt
 
       plan {
         id

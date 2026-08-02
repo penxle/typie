@@ -24,12 +24,12 @@ for (const { id, fee } of NEW_FEES) {
 
 const extended = await db
   .update(Subscriptions)
-  .set({ expiresAt: TRIAL_EXPIRES_AT })
+  .set({ currentPeriodEndsAt: TRIAL_EXPIRES_AT })
   .where(
     and(
       eq(Subscriptions.planId, PlanId.FULL_ACCESS_TRIAL),
       eq(Subscriptions.state, SubscriptionState.WILL_EXPIRE),
-      lt(Subscriptions.expiresAt, TRIAL_EXPIRES_AT),
+      lt(Subscriptions.currentPeriodEndsAt, TRIAL_EXPIRES_AT),
     ),
   )
   .returning({ userId: Subscriptions.userId });

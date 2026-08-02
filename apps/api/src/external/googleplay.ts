@@ -1,5 +1,6 @@
 import { androidpublisher, auth } from '@googleapis/androidpublisher';
 import { env } from '#/env.ts';
+import type { androidpublisher_v3 } from '@googleapis/androidpublisher';
 
 const client = androidpublisher({
   version: 'v3',
@@ -26,24 +27,56 @@ export const isPurchaseTokenGoneError = (error: unknown): boolean => {
   return status === 404 || status === 410;
 };
 
+export type GoogleSubscriptionResult =
+  | { kind: 'ok'; purchase: androidpublisher_v3.Schema$SubscriptionPurchaseV2 }
+  | { kind: 'gone' } // 410 — 토큰 영구 소멸, 재시도해도 복구되지 않는다
+  | { kind: 'not-found' } // 404 — 설정 오류일 수 있어 gone과 동일 취급하지 않는다
+  | { kind: 'error' };
+
+export const getSubscriptionV2 = async (purchaseToken: string): Promise<GoogleSubscriptionResult> => {
+  try {
+    // spell-checker:disable-next-line
+    const response = await client.purchases.subscriptionsv2.get({
+      packageName: env.GOOGLE_PLAY_PACKAGE_NAME,
+      token: purchaseToken,
+    });
+
+    return { kind: 'ok', purchase: response.data };
+  } catch (err_) {
+    const err = err_ as { status?: unknown; response?: { status?: unknown } } | null | undefined;
+    const status = err?.response?.status ?? err?.status;
+
+    if (status === 410) {
+      return { kind: 'gone' };
+    }
+    if (status === 404) {
+      return { kind: 'not-found' };
+    }
+
+    return { kind: 'error' };
+  }
+};
+
+export const acknowledgeSubscription = async ({
+  productId,
+  purchaseToken,
+}: {
+  productId: string;
+  purchaseToken: string;
+}): Promise<void> => {
+  await client.purchases.subscriptions.acknowledge({
+    packageName: env.GOOGLE_PLAY_PACKAGE_NAME,
+    subscriptionId: productId,
+    token: purchaseToken,
+  });
+};
+
 export type OneTimeProductNotificationType = 1 | 2; // 1: ONE_TIME_PRODUCT_PURCHASED, 2: ONE_TIME_PRODUCT_CANCELED
 export type VoidedProductType = 1 | 2; // 1: PRODUCT_TYPE_SUBSCRIPTION, 2: PRODUCT_TYPE_ONE_TIME
 export type RefundType = 1 | 2; // 1: REFUND_TYPE_FULL_REFUND, 2: REFUND_TYPE_QUANTITY_BASED_PARTIAL_REFUND
-export type SubscriptionNotificationType =
-  | 1 // SUBSCRIPTION_RECOVERED
-  | 2 // SUBSCRIPTION_RENEWED
-  | 3 // SUBSCRIPTION_CANCELED
-  | 4 // SUBSCRIPTION_PURCHASED
-  | 5 // SUBSCRIPTION_ON_HOLD
-  | 6 // SUBSCRIPTION_IN_GRACE_PERIOD
-  | 7 // SUBSCRIPTION_RESTARTED
-  | 8 // SUBSCRIPTION_PRICE_CHANGE_CONFIRMED
-  | 9 // SUBSCRIPTION_DEFERRED
-  | 10 // SUBSCRIPTION_PAUSED
-  | 11 // SUBSCRIPTION_PAUSE_SCHEDULE_CHANGED
-  | 12 // SUBSCRIPTION_REVOKED
-  | 13 // SUBSCRIPTION_EXPIRED
-  | 20; // SUBSCRIPTION_PENDING_PURCHASE_CANCELED
+// 알림은 타입 무관 전부 조회 트리거라 개별 매핑하지 않는다 — 공식 20종 중 일부만 허용하던 닫힌 union은
+// 신규 타입 수신 시 그 알림만 조용히 드롭한다.
+export type SubscriptionNotificationType = number;
 
 export type TestNotification = {
   version: string;
@@ -60,7 +93,7 @@ export type SubscriptionNotification = {
   version: string;
   notificationType: SubscriptionNotificationType;
   purchaseToken: string;
-  subscriptionId: string;
+  subscriptionId?: string; // 수신 방어 — 소비처 없음
 };
 
 export type VoidedPurchaseNotification = {
@@ -70,12 +103,23 @@ export type VoidedPurchaseNotification = {
   refundType: RefundType;
 };
 
+// chargeback 검토 요청. 마감 필드는 payload에 없다 — 봉투의 eventTimeMillis + 24시간을 소비처가 계산한다.
+export type PendingRefundReviewNotification = {
+  version?: string;
+  pendingRefundToken?: string;
+  orderId?: string;
+  refundReason?: number;
+  obfuscatedAccountId?: string;
+  obfuscatedProfileId?: string;
+};
+
 export type DeveloperNotification = {
   version: string;
   packageName: string;
-  eventTimeMillis: number;
+  eventTimeMillis: string; // wire상 int64 문자열 — 소비처는 Number(...) + Number.isFinite 검증 후 사용
   oneTimeProductNotification?: OneTimeProductNotification;
   subscriptionNotification?: SubscriptionNotification;
   voidedPurchaseNotification?: VoidedPurchaseNotification;
   testNotification?: TestNotification;
+  pendingRefundReviewNotification?: PendingRefundReviewNotification;
 };

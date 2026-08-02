@@ -58,10 +58,6 @@
       fragment DashboardLayout_PreferenceModal_user on User {
         id
 
-        subscription {
-          id
-        }
-
         ...DashboardLayout_PreferenceModal_ProfileTab_user
         ...DashboardLayout_PreferenceModal_SecurityTab_user
         ...DashboardLayout_PreferenceModal_EditorTab_user

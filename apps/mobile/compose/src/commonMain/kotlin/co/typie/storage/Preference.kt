@@ -3,6 +3,7 @@ package co.typie.storage
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import co.typie.domain.preflight.Preflight
+import co.typie.domain.subscription.EntitlementCache
 import co.typie.platform.PlatformModule
 import co.typie.ui.theme.ThemeMode
 import eu.anifantakis.lib.ksafe.KSafeWriteMode
@@ -47,6 +48,8 @@ object Preference {
   var trialReminderLastShownDate by prefs<String?>("trial_reminder_last_shown_date", null)
 
   var preflightCache by prefs<Preflight?>("preflight_cache", null)
+
+  var entitlementCache by prefs<EntitlementCache?>("entitlement_cache", null)
 
   private var _deviceId: String? by prefs<String?>("device_id", null)
 

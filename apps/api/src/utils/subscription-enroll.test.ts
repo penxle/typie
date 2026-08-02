@@ -9,10 +9,10 @@ const now = dayjs('2026-07-22T12:00:00.000Z');
 const future = now.add(7, 'days');
 const past = now.subtract(1, 'hour');
 
-const row = (state: SubscriptionState, planAvailability: PlanAvailability, expiresAt: dayjs.Dayjs): EnrollSubscriptionRow => ({
+const row = (state: SubscriptionState, planAvailability: PlanAvailability, currentPeriodEndsAt: dayjs.Dayjs): EnrollSubscriptionRow => ({
   state,
   planAvailability,
-  expiresAt,
+  currentPeriodEndsAt,
 });
 
 test('구독 이력이 없으면 즉시 결제', () => {

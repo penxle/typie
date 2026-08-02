@@ -5,7 +5,7 @@ query CancelPlanScreen_Query {
     subscription {
       id
       state
-      expiresAt
+      currentPeriodEndsAt
 
       plan {
         id

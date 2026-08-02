@@ -47,10 +47,10 @@ import co.typie.domain.note.filterLabel
 import co.typie.domain.note.rememberNoteColorOptions
 import co.typie.domain.note.rememberNoteListReorderState
 import co.typie.domain.note.toggled
-import co.typie.domain.subscription.Entitlement
 import co.typie.domain.subscription.GatedAction
 import co.typie.domain.subscription.SubscriptionService
 import co.typie.domain.subscription.gate
+import co.typie.domain.subscription.grantsAccess
 import co.typie.graphql.fragment.NoteCard_note
 import co.typie.graphql.fragment.NoteLinkedEntity_entity
 import co.typie.graphql.type.NoteStatus
@@ -134,7 +134,7 @@ internal fun RelatedNotesSheet(
     val request =
       noteActions.captureRequest(siteId = siteId, entityId = entityId)
         ?: return NoteSaveOutcome.Superseded
-    if (SubscriptionService.entitlement is Entitlement.Expired) {
+    if (!SubscriptionService.entitlement.grantsAccess()) {
       SubscriptionService.requestSubscribeSheet(GatedAction.EditNote)
       return NoteSaveOutcome.SubscriptionGated
     }
@@ -148,7 +148,7 @@ internal fun RelatedNotesSheet(
     val request =
       noteActions.captureRequest(siteId = siteId, entityId = entityId)
         ?: return NoteSaveOutcome.Superseded
-    if (SubscriptionService.entitlement is Entitlement.Expired) {
+    if (!SubscriptionService.entitlement.grantsAccess()) {
       SubscriptionService.requestSubscribeSheet(GatedAction.EditNote)
       return NoteSaveOutcome.SubscriptionGated
     }
@@ -358,7 +358,7 @@ private fun RelatedNotesSheetContent(
 
   fun handleColorChange(note: NoteCard_note, color: String) {
     val request = noteActions.captureRequest(siteId = note.site.id, entityId = entityId) ?: return
-    if (SubscriptionService.entitlement is Entitlement.Expired) {
+    if (!SubscriptionService.entitlement.grantsAccess()) {
       SubscriptionService.requestSubscribeSheet(GatedAction.EditNote)
       return
     }
@@ -615,8 +615,8 @@ private fun RelatedNotesSheetContent(
             noteColorOptions = noteColorOptions,
             interactive = status == model.filterStatus,
             onRetry = model::refetch,
-            reorderEnabled = SubscriptionService.entitlement !is Entitlement.Expired,
-            contentEditable = SubscriptionService.entitlement !is Entitlement.Expired,
+            reorderEnabled = SubscriptionService.entitlement.grantsAccess(),
+            contentEditable = SubscriptionService.entitlement.grantsAccess(),
             actions = listActions,
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(horizontal = 16.dp),

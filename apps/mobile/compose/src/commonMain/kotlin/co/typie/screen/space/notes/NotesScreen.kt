@@ -44,10 +44,10 @@ import co.typie.domain.note.filterLabel
 import co.typie.domain.note.rememberNoteColorOptions
 import co.typie.domain.note.rememberNoteListReorderState
 import co.typie.domain.note.toggled
-import co.typie.domain.subscription.Entitlement
 import co.typie.domain.subscription.GatedAction
 import co.typie.domain.subscription.SubscriptionService
 import co.typie.domain.subscription.gate
+import co.typie.domain.subscription.grantsAccess
 import co.typie.ext.imePadding
 import co.typie.ext.navigationBarsPadding
 import co.typie.ext.safeDrawing
@@ -180,7 +180,7 @@ fun NotesScreen() {
     val request =
       noteActions.captureRequest(siteId = activeSiteId, entityId = null)
         ?: return NoteSaveOutcome.Superseded
-    if (SubscriptionService.entitlement is Entitlement.Expired) {
+    if (!SubscriptionService.entitlement.grantsAccess()) {
       SubscriptionService.requestSubscribeSheet(GatedAction.EditNote)
       return NoteSaveOutcome.SubscriptionGated
     }
@@ -195,7 +195,7 @@ fun NotesScreen() {
     val request =
       noteActions.captureRequest(siteId = activeSiteId, entityId = null)
         ?: return NoteSaveOutcome.Superseded
-    if (SubscriptionService.entitlement is Entitlement.Expired) {
+    if (!SubscriptionService.entitlement.grantsAccess()) {
       SubscriptionService.requestSubscribeSheet(GatedAction.EditNote)
       return NoteSaveOutcome.SubscriptionGated
     }
@@ -340,7 +340,7 @@ fun NotesScreen() {
 
   fun handleColorChange(note: NoteCard_note, color: String) {
     val request = noteActions.captureRequest(siteId = note.site.id, entityId = null) ?: return
-    if (SubscriptionService.entitlement is Entitlement.Expired) {
+    if (!SubscriptionService.entitlement.grantsAccess()) {
       SubscriptionService.requestSubscribeSheet(GatedAction.EditNote)
       return
     }
@@ -590,8 +590,8 @@ fun NotesScreen() {
             noteColorOptions = noteColorOptions,
             interactive = status == model.filterStatus,
             onRetry = model::refetch,
-            reorderEnabled = SubscriptionService.entitlement !is Entitlement.Expired,
-            contentEditable = SubscriptionService.entitlement !is Entitlement.Expired,
+            reorderEnabled = SubscriptionService.entitlement.grantsAccess(),
+            contentEditable = SubscriptionService.entitlement.grantsAccess(),
             actions = listActions,
             modifier = Modifier.fillMaxSize(),
             contentPadding = innerPadding,

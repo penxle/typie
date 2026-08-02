@@ -53,7 +53,7 @@
 
         subscription {
           id
-          expiresAt
+          currentPeriodEndsAt
 
           plan {
             id
@@ -165,7 +165,7 @@
 
   const isTrial = $derived(user.data.subscription?.plan.availability === PlanAvailability.TRIAL);
   const hasScheduled = $derived(Boolean(user.data.nextSubscription));
-  const firstBillingDate = $derived(user.data.subscription ? dayjs(user.data.subscription.expiresAt).format('M월 D일') : null);
+  const firstBillingDate = $derived(user.data.subscription ? dayjs(user.data.subscription.currentPeriodEndsAt).format('M월 D일') : null);
 
   const planFee = $derived(interval === PlanInterval.MONTHLY ? 2900 : 29_000);
   const creditDiscount = $derived(Math.min(user.data.credit, planFee));
@@ -263,6 +263,11 @@
         interval === PlanInterval.YEARLY ? PlanId.FULL_ACCESS_1YEAR_WITH_BILLING_KEY : PlanId.FULL_ACCESS_1MONTH_WITH_BILLING_KEY;
       const result = await subscribePlanWithBillingKey({ input: { planId } });
       const scheduled = result.subscribePlanWithBillingKey.state === SubscriptionState.WILL_ACTIVATE;
+
+      // entitled는 응답 fragment에 없으므로 정규화만으로는 권한 가드가 갱신되지 않는다.
+      cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'entitled' });
+      cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'entitledUntil' });
+      cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'subscription' });
 
       mixpanel.track('enroll_plan', { planId, scheduled });
       if (!scheduled) {

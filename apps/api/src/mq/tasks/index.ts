@@ -13,6 +13,8 @@ import {
 } from './email.ts';
 import { DocumentIndexJob, FolderIndexJob } from './search.ts';
 import {
+  IapSyncJob,
+  SubscriptionBillingScanCron,
   SubscriptionReconcileInAppPurchaseCron,
   SubscriptionReconcileInAppPurchaseJob,
   SubscriptionRenewalCancelJob,
@@ -22,6 +24,7 @@ import {
   SubscriptionRenewalRetryJob,
   SubscriptionTransitionCron,
 } from './subscription.ts';
+import { SubscriptionInvariantsCron } from './subscription-monitor.ts';
 
 export const jobs = [
   DocumentChangesetsCollectJob,
@@ -34,6 +37,7 @@ export const jobs = [
   SubscriptionRenewalPlanChangeJob,
   SubscriptionRenewalCancelJob,
   SubscriptionReconcileInAppPurchaseJob,
+  IapSyncJob,
   SendSubscriptionGracePeriodEmailJob,
   SendSubscriptionExpiringEmailJob,
   SendSubscriptionExpiredEmailJob,
@@ -43,9 +47,11 @@ export const jobs = [
 export const crons = [
   DocumentChangesetsScanCron,
   DocumentZombieSweepDueCron,
+  SubscriptionBillingScanCron,
   SubscriptionRenewalCron,
   SubscriptionTransitionCron,
   SubscriptionReconcileInAppPurchaseCron,
+  SubscriptionInvariantsCron,
 ];
 
 export type Jobs = typeof jobs;

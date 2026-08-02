@@ -1,0 +1,15 @@
+DROP INDEX "subscriptions_will_expire_expires_at_index";
+ALTER TABLE "payment_invoices" ALTER COLUMN "payment_key" SET NOT NULL;
+ALTER TABLE "payment_invoices" ALTER COLUMN "service_period_starts_at" SET NOT NULL;
+ALTER TABLE "payment_invoices" ALTER COLUMN "service_period_ends_at" SET NOT NULL;
+ALTER TABLE "subscriptions" ALTER COLUMN "current_period_ends_at" SET NOT NULL;
+ALTER TABLE "user_in_app_purchases" ADD CONSTRAINT "user_in_app_purchases_subscription_user_fk" FOREIGN KEY ("subscription_id","user_id") REFERENCES "public"."subscriptions"("id","user_id") ON DELETE no action ON UPDATE no action;
+CREATE UNIQUE INDEX "payment_invoices_subscription_service_period_unique" ON "payment_invoices" USING btree ("subscription_id","service_period_starts_at");
+CREATE UNIQUE INDEX "payment_invoices_open_subscription_unique" ON "payment_invoices" USING btree ("subscription_id") WHERE "payment_invoices"."state" IN ('UPCOMING', 'OVERDUE');
+CREATE INDEX "payment_invoices_overdue_service_start_index" ON "payment_invoices" USING btree ("service_period_starts_at") WHERE "payment_invoices"."state" = 'OVERDUE';
+CREATE UNIQUE INDEX "payment_records_invoice_success_unique" ON "payment_records" USING btree ("invoice_id") WHERE "payment_records"."outcome" = 'SUCCESS';
+CREATE INDEX "subscriptions_will_expire_period_ends_index" ON "subscriptions" USING btree ("current_period_ends_at") WHERE "subscriptions"."state" = 'WILL_EXPIRE';
+CREATE INDEX "subscriptions_active_period_ends_index" ON "subscriptions" USING btree ("current_period_ends_at") WHERE "subscriptions"."state" = 'ACTIVE';
+CREATE INDEX "subscriptions_user_id_state_index" ON "subscriptions" USING btree ("user_id","state");
+ALTER TABLE "payment_invoices" ADD CONSTRAINT "payment_invoices_payment_key_unique" UNIQUE("payment_key");
+ALTER TABLE "user_in_app_purchases" ADD CONSTRAINT "user_in_app_purchases_subscription_id_unique" UNIQUE("subscription_id");

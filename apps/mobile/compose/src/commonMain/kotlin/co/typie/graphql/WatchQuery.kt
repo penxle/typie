@@ -17,6 +17,7 @@ import com.apollographql.apollo.api.Query
 import com.apollographql.apollo.exception.CacheMissException
 import com.apollographql.cache.normalized.FetchPolicy
 import com.apollographql.cache.normalized.fetchPolicy
+import com.apollographql.cache.normalized.isFromCache
 import com.apollographql.cache.normalized.refetchPolicyInterceptor
 import com.apollographql.cache.normalized.watch
 import io.sentry.kotlin.multiplatform.Sentry
@@ -50,6 +51,13 @@ internal constructor(
    * replace this value until it publishes data or an error.
    */
   var stateQuery: Query<D>? by mutableStateOf(null)
+    private set
+
+  /**
+   * 서버 응답이 도착한 횟수. 데이터가 그대로여도 증가하므로 "마지막으로 서버에 확인한 시점"의 신호가 된다. 캐시 방출은 세지 않는다 — 세면 서버 확인 없이 신선도가
+   * 연장된다.
+   */
+  var networkGeneration: Long by mutableStateOf(0L)
     private set
 
   @Suppress("UNCHECKED_CAST")
@@ -146,6 +154,9 @@ internal constructor(
             val data = response.data
             if (data != null) {
               stateQuery = query
+              if (!response.isFromCache) {
+                networkGeneration += 1
+              }
               state = QueryState.Success(data)
               if (!initialized) {
                 initialized = true

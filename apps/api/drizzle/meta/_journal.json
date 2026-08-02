@@ -694,6 +694,20 @@
       "when": 1785666143713,
       "tag": "0098_drop-entity-type-post",
       "breakpoints": false
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1785666743713,
+      "tag": "0099_subscription-entitlement-split",
+      "breakpoints": false
+    },
+    {
+      "idx": 100,
+      "version": "7",
+      "when": 1785667343713,
+      "tag": "0100_subscription-entitlement-constraints",
+      "breakpoints": false
     }
   ]
 }

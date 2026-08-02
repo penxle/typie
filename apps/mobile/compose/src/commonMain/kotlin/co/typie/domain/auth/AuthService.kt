@@ -4,11 +4,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import co.typie.Konfig
+import co.typie.domain.subscription.shouldDiscardEntitlementCache
 import co.typie.editor.sync.ActiveDocumentEditingSessions
 import co.typie.editor.sync.catchingNonCancellation
 import co.typie.editor.sync.orphanSweeper
 import co.typie.graphql.Apollo
 import co.typie.network.Http
+import co.typie.storage.Preference
 import co.typie.storage.Vault
 import com.apollographql.cache.normalized.apolloStore
 import io.ktor.client.call.body
@@ -97,6 +99,10 @@ object AuthService {
   private suspend fun authenticate(sessionToken: String) {
     val accessToken = exchangeToken(sessionToken)
 
+    if (shouldDiscardEntitlementCache(Vault.authTokens?.sessionToken, sessionToken)) {
+      Preference.entitlementCache = null
+    }
+
     Vault.authTokens = AuthTokens(sessionToken = sessionToken, accessToken = accessToken)
     state = AuthState.Authenticated(Vault.authTokens!!)
   }
@@ -161,6 +167,8 @@ object AuthService {
 
   private suspend fun unauthenticate() {
     Vault.authTokens = null
+    // 권한 캐시는 세션에 귀속된다 — 남겨두면 다음 로그인 유저가 앞 유저의 권한을 본다.
+    Preference.entitlementCache = null
     state = AuthState.Unauthenticated
 
     Apollo.apolloStore.clearAll()

@@ -60,9 +60,7 @@
           ...Img_image
         }
 
-        subscription {
-          id
-        }
+        entitled
       }
     `),
     () => user$key,
@@ -523,7 +521,7 @@
     })}
     use:portal
   >
-    {#if user.data.subscription}
+    {#if user.data.entitled}
       <a
         class={flex({
           alignItems: 'center',

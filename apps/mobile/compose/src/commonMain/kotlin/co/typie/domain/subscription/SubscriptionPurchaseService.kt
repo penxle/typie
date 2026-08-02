@@ -5,6 +5,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import co.touchlab.kermit.Logger
 import co.typie.graphql.Apollo
 import co.typie.graphql.SubscriptionPurchaseService_Query
 import co.typie.graphql.SubscriptionPurchaseService_SubscribeOrChangePlanWithInAppPurchase_Mutation
@@ -18,6 +19,7 @@ import co.typie.platform.Platform
 import co.typie.platform.PlatformModule
 import co.typie.platform.PurchaseEvent
 import co.typie.platform.PurchaseProduct
+import co.typie.platform.PurchaseReplacementMode
 import com.apollographql.cache.normalized.FetchPolicy
 import com.apollographql.cache.normalized.fetchPolicy
 import kotlin.coroutines.cancellation.CancellationException
@@ -94,7 +96,7 @@ object SubscriptionPurchaseService {
   suspend fun purchase(product: PurchaseProduct): Boolean {
     val me =
       try {
-        Apollo.query(SubscriptionPurchaseService_Query())
+        Apollo.query(SubscriptionPurchaseService_Query(store = currentStore()))
           .fetchPolicy(FetchPolicy.NetworkOnly)
           .execute()
           .dataOrThrow()
@@ -106,20 +108,35 @@ object SubscriptionPurchaseService {
         return false
       }
 
-    // 서버는 만료일과 무관하게 비-EXPIRED 상태의 타 채널 구독이 있으면 subscription_already_exists 로 거부한다.
-    // 앱 내 결제 후 과금됐는데 등록이 거부되는 것을 막기 위해, 캐시가 아닌 최신 서버 응답으로 동일 기준을 선차단한다.
-    // (me.subscription 은 비-EXPIRED 구독만 노출하므로 non-null 이면 서버가 거부한다)
-    val current = me.subscription
-    if (
-      current != null &&
-        current.plan.availability != PlanAvailability.IN_APP_PURCHASE &&
-        current.plan.availability != PlanAvailability.TRIAL
-    ) {
+    // 서버 등록이 쓰는 것과 같은 판정이다. 다만 advisory 다 — 스토어 결제와 서버 등록 사이에 원자성이 없어
+    // 통과한 뒤에도 등록이 거절될 수 있다.
+    if (!me.canEnrollInAppPurchase) {
       _failures.emit(PurchaseFailure.ConflictBeforePurchase)
       return false
     }
 
-    return PlatformModule.purchaseService.purchase(product = product, accountId = me.uuid)
+    // 같은 스토어의 IAP 구독을 보유한 채로 다른 플랜을 사면 플랜 변경이다 — 승계 파라미터 없이 시작하면
+    // 독립 토큰이 되어 서버 등록에서 거절된다.
+    val current = me.subscription
+    val existingPurchaseToken =
+      if (current?.plan?.availability == PlanAvailability.IN_APP_PURCHASE) {
+        PlatformModule.purchaseService.currentSubscriptionPurchaseToken()
+      } else {
+        null
+      }
+    val replacementMode =
+      if (current != null && existingPurchaseToken != null) {
+        planReplacementMode(currentPlanId = current.plan.id, newPlanId = product.planId)
+      } else {
+        null
+      }
+
+    return PlatformModule.purchaseService.purchase(
+      product = product,
+      accountId = me.uuid,
+      existingPurchaseToken = existingPurchaseToken.takeIf { replacementMode != null },
+      replacementMode = replacementMode,
+    )
   }
 
   suspend fun awaitRegistration(sinceGeneration: Long) {
@@ -138,15 +155,7 @@ object SubscriptionPurchaseService {
             input =
               SubscribeOrChangePlanWithInAppPurchaseInput(
                 data = event.subscriptionId,
-                store =
-                  when (PlatformModule.platform) {
-                    Platform.Android -> InAppPurchaseStore.GOOGLE_PLAY
-                    Platform.iOS -> InAppPurchaseStore.APP_STORE
-                    else ->
-                      throw IllegalArgumentException(
-                        "Unsupported platform: ${PlatformModule.platform}"
-                      )
-                  },
+                store = currentStore(),
               )
           )
         )
@@ -170,6 +179,10 @@ object SubscriptionPurchaseService {
       when (e.code) {
         "subscription_already_exists" -> _failures.emit(PurchaseFailure.ConflictAfterPurchase)
         "in_app_purchase_account_mismatch" -> _failures.emit(PurchaseFailure.AccountMismatch)
+        // 등록 경합·불변식 위반이다. 재시도로 풀리거나 사람이 정리해야 하므로 사용자에게 알리지 않는다.
+        "in_app_purchase_registration_conflict" ->
+          Logger.w { "in-app purchase registration conflict: retrying on next launch" }
+        else -> Logger.w { "in-app purchase registration rejected: ${e.code}" }
       }
     } catch (_: Exception) {
       // best effort
@@ -190,6 +203,33 @@ internal fun storeProductIds(platform: Platform): List<String> =
   when (platform) {
     Platform.Android -> listOf("plan.full")
     else -> listOf("pl0fl1map", "pl0fl1yap")
+  }
+
+private fun currentStore(): InAppPurchaseStore =
+  when (PlatformModule.platform) {
+    Platform.Android -> InAppPurchaseStore.GOOGLE_PLAY
+    Platform.iOS -> InAppPurchaseStore.APP_STORE
+    else -> throw IllegalArgumentException("Unsupported platform: ${PlatformModule.platform}")
+  }
+
+// 서버 플랜 ID 는 대문자(PL0FL1MAP), 스토어 base plan ID 는 소문자(pl0fl1map)로 같은 플랜을 가리킨다.
+private fun planRank(planId: String): Int =
+  when (planId.lowercase()) {
+    "pl0fl1map" -> 0
+    "pl0fl1yap" -> 1
+    else -> -1
+  }
+
+/** 업그레이드(월간 → 연간)는 잔여 가치를 시간으로 환산해 즉시 발효하고, 다운그레이드(연간 → 월간)는 기간이 끝난 뒤 발효한다. 같은 플랜이면 변경이 아니다. */
+internal fun planReplacementMode(
+  currentPlanId: String,
+  newPlanId: String,
+): PurchaseReplacementMode? =
+  when {
+    currentPlanId.equals(newPlanId, ignoreCase = true) -> null
+    planRank(newPlanId) > planRank(currentPlanId) ->
+      PurchaseReplacementMode.UPGRADE_WITH_TIME_PRORATION
+    else -> PurchaseReplacementMode.DEFERRED
   }
 
 internal fun isNewSubscription(

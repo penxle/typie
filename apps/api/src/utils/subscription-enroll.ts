@@ -4,7 +4,7 @@ import type dayjs from 'dayjs';
 export type EnrollSubscriptionRow = {
   state: SubscriptionState;
   planAvailability: PlanAvailability;
-  expiresAt: dayjs.Dayjs;
+  currentPeriodEndsAt: dayjs.Dayjs;
 };
 
 export type EnrollAction = { kind: 'reject' } | { kind: 'immediate' } | { kind: 'schedule'; startsAt: dayjs.Dayjs };
@@ -18,7 +18,7 @@ export const resolveEnrollAction = (rows: EnrollSubscriptionRow[], now: dayjs.Da
     (row) =>
       row.state !== SubscriptionState.EXPIRED &&
       row.state !== SubscriptionState.WILL_ACTIVATE &&
-      !(row.state === SubscriptionState.WILL_EXPIRE && !row.expiresAt.isAfter(now)),
+      !(row.state === SubscriptionState.WILL_EXPIRE && !row.currentPeriodEndsAt.isAfter(now)),
   );
 
   if (current.some((row) => row.planAvailability !== PlanAvailability.TRIAL)) {
@@ -27,7 +27,7 @@ export const resolveEnrollAction = (rows: EnrollSubscriptionRow[], now: dayjs.Da
 
   const trial = current.find((row) => row.planAvailability === PlanAvailability.TRIAL);
   if (trial) {
-    return { kind: 'schedule', startsAt: trial.expiresAt };
+    return { kind: 'schedule', startsAt: trial.currentPeriodEndsAt };
   }
 
   return { kind: 'immediate' };

@@ -23,6 +23,7 @@ import {
 import * as portone from '#/external/portone.ts';
 import { assertAdminPermission } from '#/utils/permission.ts';
 import { lockUserSubscriptionState } from '#/utils/subscription-lock.ts';
+import { retireReservation } from '#/utils/subscription-retire.ts';
 import { SYSTEM_USER_ID } from '#/utils/system-actor.ts';
 import { builder } from '../builder.ts';
 import { Document, User } from '../objects.ts';
@@ -290,9 +291,7 @@ builder.mutationFields((t) => ({
         await lockUserSubscriptionState(tx, invoiceRef.userId);
 
         // 환불은 미래 예약도 함께 취소한다 — 예약이 남으면 환불 직후 전환 크론이 재과금한다.
-        await tx
-          .delete(Subscriptions)
-          .where(and(eq(Subscriptions.userId, invoiceRef.userId), eq(Subscriptions.state, SubscriptionState.WILL_ACTIVATE)));
+        await retireReservation(tx, { userId: invoiceRef.userId });
 
         await tx
           .select({ id: Subscriptions.id })
@@ -315,8 +314,9 @@ builder.mutationFields((t) => ({
           .then(first);
 
         if (record && record.billingAmount > 0) {
+          // PG 를 향한 모든 경로는 저장된 payment_key 만 쓴다 — 백필 인보이스는 id 와 같고 신규부터 갈라진다.
           const result = await portone.cancelPayment({
-            paymentId: invoice.id,
+            paymentId: invoice.paymentKey,
             reason: input.reason ?? '관리자 환불',
           });
           if (result.status === 'failed') {
@@ -336,10 +336,8 @@ builder.mutationFields((t) => ({
             ),
           );
 
-        await tx
-          .update(Subscriptions)
-          .set({ state: SubscriptionState.EXPIRED, expiresAt: sql`LEAST(${Subscriptions.expiresAt}, NOW())` })
-          .where(eq(Subscriptions.id, invoice.subscriptionId));
+        // 회수는 상태가 표현한다 — 주기 컬럼은 서비스 기간의 사실이라 자르지 않는다.
+        await tx.update(Subscriptions).set({ state: SubscriptionState.EXPIRED }).where(eq(Subscriptions.id, invoice.subscriptionId));
 
         return true;
       });

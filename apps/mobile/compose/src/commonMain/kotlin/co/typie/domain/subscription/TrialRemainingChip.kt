@@ -59,12 +59,13 @@ fun TrialRemainingChip() {
 
   val entitlement = SubscriptionService.entitlement
   if (entitlement !is Entitlement.Active) return
-  if (entitlement.subscription.availability != PlanAvailability.TRIAL) return
 
-  val subscription = entitlement.subscription
+  val subscription = entitlement.subscription ?: return
+  if (subscription.availability != PlanAvailability.TRIAL) return
+
   val now = Clock.System.now()
-  if (!(subscription.expiresAt - now).isPositive()) return
-  val daysLeft = now.toLocalDate().daysUntil(subscription.expiresAt.toLocalDate())
+  if (!(subscription.currentPeriodEndsAt - now).isPositive()) return
+  val daysLeft = now.toLocalDate().daysUntil(subscription.currentPeriodEndsAt.toLocalDate())
 
   val openSubscribe: suspend () -> Unit = {
     if (subscription.isLegacyTrial()) {

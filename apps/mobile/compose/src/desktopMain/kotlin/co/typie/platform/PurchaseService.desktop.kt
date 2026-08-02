@@ -27,7 +27,12 @@ internal class DesktopPurchaseService : PurchaseService {
   }
 
   context(_: ActivityContext)
-  override suspend fun purchase(product: PurchaseProduct, accountId: String): Boolean = false
+  override suspend fun purchase(
+    product: PurchaseProduct,
+    accountId: String,
+    existingPurchaseToken: String?,
+    replacementMode: PurchaseReplacementMode?,
+  ): Boolean = false
 
   override suspend fun finishTransaction(subscriptionId: String) = Unit
 }

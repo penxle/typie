@@ -1,0 +1,10 @@
+ALTER TABLE "subscriptions" RENAME COLUMN "renewed_at" TO "current_period_starts_at";
+ALTER TABLE "subscriptions" ALTER COLUMN "expires_at" DROP NOT NULL;
+ALTER TABLE "payment_invoices" ADD COLUMN "payment_key" text;
+ALTER TABLE "payment_invoices" ADD COLUMN "service_period_starts_at" timestamp with time zone;
+ALTER TABLE "payment_invoices" ADD COLUMN "service_period_ends_at" timestamp with time zone;
+ALTER TABLE "subscriptions" ADD COLUMN "current_period_ends_at" timestamp with time zone;
+ALTER TABLE "subscriptions" ADD COLUMN "billing_anchor_at" timestamp with time zone;
+ALTER TABLE "user_in_app_purchases" ADD COLUMN "subscription_id" text;
+ALTER TABLE "user_in_app_purchases" ADD COLUMN "reconcile_suspended_at" timestamp with time zone;
+ALTER TABLE "subscriptions" ADD CONSTRAINT "subscriptions_id_user_id_unique" UNIQUE("id","user_id");

@@ -1261,6 +1261,7 @@ enum SubscriptionState {
 }
 
 type Subscription_ {
+  currentPeriodEndsAt: DateTime!
   expiresAt: DateTime!
   hasBillableUsage: Boolean!
   id: ID!
@@ -1442,6 +1443,7 @@ input UpdateWidgetInput {
 type User implements IUser {
   avatar: Image!
   billingKey: UserBillingKey
+  canEnrollInAppPurchase(store: InAppPurchaseStore!): Boolean!
   canStartTrial: Boolean!
   characterCountChanges: [CharacterCountChange!]!
   createdAt: DateTime!
@@ -1450,6 +1452,8 @@ type User implements IUser {
   documentCount: Int!
   documentFontFamilies(sources: [FontFamilySource!]! = [DEFAULT, USER]): [DocumentFontFamily!]!
   email: String!
+  entitled: Boolean!
+  entitledUntil: DateTime
   fontFamilies: [FontFamily!]!
   hadSubscription: Boolean!
   hasPassword: Boolean!

@@ -32,7 +32,7 @@ export const load = async (event) => {
               id
               state
               startsAt
-              expiresAt
+              currentPeriodEndsAt
               plan {
                 id
                 name

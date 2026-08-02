@@ -70,9 +70,7 @@
         me @required {
           id
           role
-          subscription {
-            id
-          }
+          entitled
           ...EditorContextV2_user
           ...DocumentPanelV2_user
           ...CommentComposerV2_user
@@ -774,7 +772,7 @@
   $effect(() => {
     const editor = ctx.liveEditor;
     if (editor) {
-      editor.readOnly = (document?.locked ?? false) || !query.data.me.subscription;
+      editor.readOnly = (document?.locked ?? false) || !query.data.me.entitled;
     }
   });
 
@@ -1084,7 +1082,7 @@
               <DocumentMenu {document} {entity} via="editor" />
             </Menu>
 
-            {#if query.data.me.subscription}
+            {#if query.data.me.entitled}
               <button
                 class={center({
                   borderRadius: '4px',
@@ -1148,7 +1146,7 @@
               <BottomToolbar
                 {fontFamilies}
                 onFontUploadClick={() => {
-                  if (entity.user.subscription) {
+                  if (query.data.me.entitled) {
                     fontUploadModalOpen = true;
                   } else {
                     SubscribeModal.show('font_family_upload');

@@ -5,7 +5,7 @@ import type { BillingKeyIssuance } from '#/utils/billing-key.ts';
 export const client = PortOneClient({ secret: env.PORTONE_API_SECRET });
 
 type PortOneSuccessResult<T> = T & { status: 'succeeded' };
-type PortOneFailureResult = { status: 'failed'; code: string; message: string };
+type PortOneFailureResult = { status: 'failed'; code: string; message: string; portoneErrorType: string | null };
 
 type PortOneResult<T> = PortOneSuccessResult<T> | PortOneFailureResult;
 
@@ -97,10 +97,10 @@ type PayWithBillingKeyParams = {
   orderName: string;
   amount: number;
 };
-type PayWithBillingKeyResult = PortOneResult<{ approvalNumber: string | undefined; receiptUrl: string | undefined }>;
+export type PayWithBillingKeyResult = PortOneFailureResult | { status: 'succeeded'; pgTxId: string | null; paidAt: string | null };
 export const payWithBillingKey = async (params: PayWithBillingKeyParams): Promise<PayWithBillingKeyResult> => {
   try {
-    await client.payment.payWithBillingKey({
+    const response = await client.payment.payWithBillingKey({
       paymentId: params.paymentId,
       billingKey: params.billingKey,
       orderName: params.orderName,
@@ -112,16 +112,7 @@ export const payWithBillingKey = async (params: PayWithBillingKeyParams): Promis
       },
     });
 
-    const resp = await client.payment.getPayment({ paymentId: params.paymentId });
-
-    if (!resp || resp.status !== 'PAID') {
-      throw new Error('Failed to make payment');
-    }
-
-    return makeSuccessResult({
-      approvalNumber: resp.method?.type === 'PaymentMethodCard' ? resp.method.approvalNumber : undefined,
-      receiptUrl: resp.receiptUrl,
-    });
+    return { status: 'succeeded', pgTxId: response?.payment?.pgTxId ?? null, paidAt: response?.payment?.paidAt ?? null };
   } catch (err) {
     return makeFailureResult(err);
   }
@@ -159,6 +150,39 @@ export const getPayment = async (params: GetPaymentParams): Promise<GetPaymentRe
   return makeFailureResult(resp);
 };
 
+export type LookupPaymentResult = { kind: 'paid'; amount: number } | { kind: 'not-paid'; paymentStatus: string } | { kind: 'error' };
+export const lookupPayment = async (params: { paymentId: string }): Promise<LookupPaymentResult> => {
+  try {
+    const resp = await client.payment.getPayment({ paymentId: params.paymentId });
+
+    if (resp.status === 'PAID') {
+      return { kind: 'paid', amount: resp.amount.total };
+    }
+
+    return { kind: 'not-paid', paymentStatus: String(resp.status) };
+  } catch {
+    return { kind: 'error' };
+  }
+};
+
+export type PaymentReceipt = { approvalNumber: string | null; receiptUrl: string | null };
+export const getPaymentReceipt = async (params: { paymentId: string }): Promise<PaymentReceipt | null> => {
+  try {
+    const resp = await client.payment.getPayment({ paymentId: params.paymentId });
+
+    if (resp.status !== 'PAID') {
+      return null;
+    }
+
+    return {
+      approvalNumber: resp.method?.type === 'PaymentMethodCard' ? (resp.method.approvalNumber ?? null) : null,
+      receiptUrl: resp.receiptUrl ?? null,
+    };
+  } catch {
+    return null;
+  }
+};
+
 type GetIdentityVerificationParams = { identityVerificationId: string };
 type GetIdentityVerificationResult = PortOneResult<{
   name: string;
@@ -194,26 +218,16 @@ const makeSuccessResult = <T>(data: T): PortOneSuccessResult<T> => {
 };
 
 const makeFailureResult = (error: unknown): PortOneFailureResult => {
-  return {
-    status: 'failed',
-    ...(() => {
-      if (error instanceof RestError && error.data.type === 'PG_PROVIDER') {
-        // Narrowing PgProviderError https://portone-io.github.io/server-sdk/js/types/Common.PgProviderError.html
-        return {
-          code: error.data.pgCode,
-          message: error.data.pgMessage,
-        };
-      }
-      if (error instanceof Error) {
-        return {
-          code: error.name,
-          message: error.message,
-        };
-      }
-      return {
-        code: 'unknown',
-        message: String(error),
-      };
-    })(),
-  };
+  if (error instanceof RestError) {
+    if (error.data.type === 'PG_PROVIDER') {
+      // Narrowing PgProviderError https://portone-io.github.io/server-sdk/js/types/Common.PgProviderError.html
+      return { status: 'failed', code: error.data.pgCode, message: error.data.pgMessage, portoneErrorType: error.data.type };
+    }
+    const portoneErrorType = String(error.data.type);
+    return { status: 'failed', code: portoneErrorType, message: error.message, portoneErrorType };
+  }
+  if (error instanceof Error) {
+    return { status: 'failed', code: error.name, message: error.message, portoneErrorType: null };
+  }
+  return { status: 'failed', code: 'unknown', message: String(error), portoneErrorType: null };
 };

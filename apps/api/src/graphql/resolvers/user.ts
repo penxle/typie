@@ -8,6 +8,7 @@ import {
   EntityType,
   FontFamilySource,
   FontFamilyState,
+  InAppPurchaseStore,
   PaymentInvoiceState,
   PlanAvailability,
   PlanInterval,
@@ -23,7 +24,7 @@ import { supportsPlanInterval } from '@typie/lib/plan';
 import { redeemCodeSchema, userSchema } from '@typie/lib/validation';
 import argon2 from 'argon2';
 import dayjs from 'dayjs';
-import { and, asc, desc, eq, gt, gte, inArray, isNotNull, lt, ne, sql, sum } from 'drizzle-orm';
+import { and, asc, desc, eq, getTableColumns, gt, gte, inArray, isNotNull, lt, ne, sql, sum } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import qs from 'query-string';
 import { redis } from '#/cache.ts';
@@ -67,6 +68,9 @@ import * as aws from '#/external/aws.ts';
 import * as portone from '#/external/portone.ts';
 import { evaluateCouponCondition } from '#/utils/coupon.ts';
 import { getDocumentFontFamilies } from '#/utils/document.ts';
+import { resolveUserEntitlement, selectRepresentativeSubscription } from '#/utils/entitlement.ts';
+import { precheckIapEnroll } from '#/utils/iap-normalize.ts';
+import { opsAlert } from '#/utils/ops-alert.ts';
 import { assertActiveSubscription } from '#/utils/plan.ts';
 import { delay } from '#/utils/promise.ts';
 import { enqueueSearchSyncForEntityIds } from '#/utils/search-index.ts';
@@ -94,6 +98,7 @@ import {
   UserTrial,
   UserView,
 } from '../objects.ts';
+import type { Context } from '#/context.ts';
 
 /**
  * * Types
@@ -242,33 +247,75 @@ User.implement({
       },
     }),
 
+    entitled: t.boolean({
+      resolve: async (self, _args, ctx) => {
+        const { rows, now } = await loadSessionEntitlement(self, ctx);
+
+        return resolveUserEntitlement(rows, now).entitled;
+      },
+    }),
+
+    entitledUntil: t.field({
+      type: 'DateTime',
+      nullable: true,
+      resolve: async (self, _args, ctx) => {
+        const { rows, now } = await loadSessionEntitlement(self, ctx);
+
+        return resolveUserEntitlement(rows, now).entitledUntil;
+      },
+    }),
+
+    canEnrollInAppPurchase: t.boolean({
+      args: { store: t.arg({ type: InAppPurchaseStore }) },
+      resolve: async (self, args, ctx) => {
+        const { rows, now } = await loadSessionEntitlement(self, ctx);
+
+        const binding = await inAppPurchaseBindingLoader(ctx).load(self.id);
+        const iapPlan = await planAvailabilityExistsLoader(ctx).load(PlanAvailability.IN_APP_PURCHASE);
+
+        const precheck = precheckIapEnroll({
+          rows,
+          binding,
+          store: args.store,
+          iapPlanAvailable: !!iapPlan,
+          now,
+        });
+
+        // 정상 모바일 흐름은 여기서 끝나므로 등록 mutation 의 알람만으로는 거절 신호가 최빈 경로에서 사라진다.
+        if (!precheck.allowed && precheck.reason === 'cross-store-binding') {
+          void alertCrossStoreEnrollRejectionOnce(`${self.id}:${args.store}`, {
+            source: 'graphql/User.canEnrollInAppPurchase',
+            userId: self.id,
+            store: args.store,
+            boundStore: binding?.store,
+            bindingId: binding?.id,
+          });
+        }
+
+        return precheck.allowed;
+      },
+    }),
+
     subscription: t.field({
       type: Subscription,
       nullable: true,
-      resolve: async (self) => {
-        return await db
-          .select()
-          .from(Subscriptions)
-          .where(
-            and(
-              eq(Subscriptions.userId, self.id),
-              inArray(Subscriptions.state, [SubscriptionState.ACTIVE, SubscriptionState.WILL_EXPIRE, SubscriptionState.IN_GRACE_PERIOD]),
-            ),
-          )
-          .orderBy(desc(eq(Subscriptions.state, SubscriptionState.ACTIVE)), desc(Subscriptions.createdAt))
-          .then(first);
+      resolve: async (self, _args, ctx) => {
+        const now = (ctx.entitlementNow ??= dayjs());
+        const rows = await entitlementLoader(ctx).load(self.id);
+
+        return selectRepresentativeSubscription(rows, now);
       },
     }),
 
     nextSubscription: t.field({
       type: Subscription,
       nullable: true,
-      resolve: async (self) => {
-        return await db
-          .select()
-          .from(Subscriptions)
-          .where(and(eq(Subscriptions.userId, self.id), eq(Subscriptions.state, SubscriptionState.WILL_ACTIVATE)))
-          .then(first);
+      resolve: async (self, _args, ctx) => {
+        const now = (ctx.entitlementNow ??= dayjs());
+        const rows = await entitlementLoader(ctx).load(self.id);
+
+        // 시작이 지난 예약은 대표 구독의 후보다 — 여기서도 내보내면 같은 행이 양쪽에 동시 노출된다.
+        return rows.find((row) => row.state === SubscriptionState.WILL_ACTIVATE && row.startsAt.isAfter(now)) ?? null;
       },
     }),
 
@@ -447,7 +494,7 @@ User.implement({
     }),
 
     surveys: t.stringList({
-      resolve: async (self) => {
+      resolve: async (self, _args, ctx) => {
         const results: string[] = [];
 
         const existingSurveys = await db
@@ -468,18 +515,11 @@ User.implement({
           .where(eq(Subscriptions.userId, self.id))
           .then(first);
 
-        const activeSubscription = await db
-          .select({ id: Subscriptions.id })
-          .from(Subscriptions)
-          .where(
-            and(
-              eq(Subscriptions.userId, self.id),
-              inArray(Subscriptions.state, [SubscriptionState.ACTIVE, SubscriptionState.WILL_EXPIRE, SubscriptionState.IN_GRACE_PERIOD]),
-            ),
-          )
-          .then(first);
+        const now = (ctx.entitlementNow ??= dayjs());
+        const subscriptionRows = await entitlementLoader(ctx).load(self.id);
+        const entitled = resolveUserEntitlement(subscriptionRows, now).entitled;
 
-        if (!shownSurveys.has('trial_expired_modal_shown') && trial && !activeSubscription) {
+        if (!shownSurveys.has('trial_expired_modal_shown') && trial && !entitled) {
           const paidSubscription = await db
             .select({ id: Subscriptions.id })
             .from(Subscriptions)
@@ -501,7 +541,7 @@ User.implement({
           results.push('trial_popup_content_entry_202605');
         }
 
-        if (!shownSurveys.has('202509_ir') && activeSubscription && self.createdAt.isBefore(dayjs().subtract(1, 'weeks'))) {
+        if (!shownSurveys.has('202509_ir') && entitled && self.createdAt.isBefore(dayjs().subtract(1, 'weeks'))) {
           results.push('202509_ir');
         }
 
@@ -736,10 +776,8 @@ builder.mutationFields((t) => ({
 
         await tx.update(Sites).set({ state: SiteState.DELETED }).where(eq(Sites.userId, ctx.session.userId));
 
-        await tx
-          .update(Subscriptions)
-          .set({ state: SubscriptionState.EXPIRED, expiresAt: sql`LEAST(${Subscriptions.expiresAt}, NOW())` })
-          .where(eq(Subscriptions.userId, ctx.session.userId));
+        // 회수는 상태가 표현한다 — 주기 컬럼은 서비스 기간의 사실이라 자르지 않는다.
+        await tx.update(Subscriptions).set({ state: SubscriptionState.EXPIRED }).where(eq(Subscriptions.userId, ctx.session.userId));
         await tx.delete(UserInAppPurchases).where(eq(UserInAppPurchases.userId, ctx.session.userId));
 
         const billingKey = await tx
@@ -1140,3 +1178,82 @@ builder.mutationFields((t) => ({
     },
   }),
 }));
+
+/**
+ * * Utils
+ */
+
+const OPS_ALERT_DEDUPE_TTL_SECONDS = 86_400;
+
+// 조회 필드라 alias 반복으로 요청 1건 안에서도 여러 번 평가된다 — 디듀프 없이는 유저 1명이 알람 N건을 만든다.
+const alertCrossStoreEnrollRejectionOnce = async (key: string, context: Record<string, unknown>) => {
+  let acquired: boolean;
+
+  // 디듀프가 죽었다고 거절 신호까지 사라지면 안 된다 — Redis 실패는 발화 쪽으로 기운다.
+  try {
+    acquired =
+      (await redis.set(`ops-alert-dedupe:iap-cross-store-enroll-rejected:${key}`, '1', 'EX', OPS_ALERT_DEDUPE_TTL_SECONDS, 'NX')) === 'OK';
+  } catch {
+    acquired = true;
+  }
+
+  if (!acquired) {
+    return;
+  }
+
+  // 거절 반환값과 무관한 부수효과라 호출부가 응답을 기다리지 않는다 — 실패가 조용히 사라지지 않게 여기서 잡는다.
+  await opsAlert('iap-cross-store-enroll-rejected', context).catch((err: unknown) => Sentry.captureException(err));
+};
+
+// 권한·대표 구독·shim 이 같은 스냅샷을 보게 하는 단일 로더. resolver 마다 따로 질의하면 질의 사이의
+// 상태 변화가 서로 모순된 값을 함께 반환하고 목록 API 에서 N+1 이 된다.
+const entitlementLoader = (ctx: Context) =>
+  ctx.loader({
+    name: 'User.entitlementRows',
+    many: true,
+    load: async (userIds: string[]) => {
+      return await db
+        .select({ ...getTableColumns(Subscriptions), planAvailability: Plans.availability })
+        .from(Subscriptions)
+        .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
+        .where(and(inArray(Subscriptions.userId, userIds), ne(Subscriptions.state, SubscriptionState.EXPIRED)))
+        // 대표 선택의 createdAt 동률이 요청마다 다른 행을 고르지 않도록 id 까지 정렬한다.
+        .orderBy(asc(Subscriptions.createdAt), asc(Subscriptions.id));
+    },
+    key: (row) => row.userId,
+  });
+
+const inAppPurchaseBindingLoader = (ctx: Context) =>
+  ctx.loader({
+    name: 'User.inAppPurchaseBinding',
+    nullable: true,
+    load: async (userIds: string[]) => {
+      return await db
+        .select({ id: UserInAppPurchases.id, userId: UserInAppPurchases.userId, store: UserInAppPurchases.store })
+        .from(UserInAppPurchases)
+        .where(inArray(UserInAppPurchases.userId, userIds));
+    },
+    key: (row) => row?.userId,
+  });
+
+const planAvailabilityExistsLoader = (ctx: Context) =>
+  ctx.loader({
+    name: 'User.planAvailabilityExists',
+    nullable: true,
+    load: async (availabilities: PlanAvailability[]) => {
+      return await db.selectDistinct({ availability: Plans.availability }).from(Plans).where(inArray(Plans.availability, availabilities));
+    },
+    key: (row) => row?.availability,
+  });
+
+// 세션 유저 전용이다 — 문서 소유자 등 임의 User 에서 계산되면 UI 와 서버가 서로 다른 사람을 판정한다.
+const loadSessionEntitlement = async (self: { id: string }, ctx: Context) => {
+  if (ctx.session?.userId !== self.id) {
+    throw new TypieError({ code: 'permission_denied' });
+  }
+
+  const now = (ctx.entitlementNow ??= dayjs());
+  const rows = await entitlementLoader(ctx).load(self.id);
+
+  return { rows, now };
+};

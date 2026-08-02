@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createFragment } from '@mearie/svelte';
+  import { PlanAvailability } from '@typie/lib/enums';
   import { css } from '@typie/styled-system/css';
   import { flex, grid } from '@typie/styled-system/patterns';
   import { Button, Icon } from '@typie/ui/components';
@@ -18,11 +19,10 @@
     graphql(`
       fragment DashboardLayout_PreferenceModal_PlanTab_user on User {
         id
+        entitled
 
         subscription {
           id
-          state
-          expiresAt
 
           plan {
             id
@@ -43,13 +43,7 @@
     () => user$key,
   );
 
-  const hasActiveSubscription = $derived(
-    user.data.subscription?.state === 'ACTIVE' ||
-      user.data.subscription?.state === 'IN_GRACE_PERIOD' ||
-      user.data.subscription?.state === 'WILL_EXPIRE',
-  );
-
-  const isOnTrial = $derived(user.data.subscription?.plan.availability === 'TRIAL');
+  const isOnTrial = $derived(user.data.subscription?.plan.availability === PlanAvailability.TRIAL);
   const hasScheduled = $derived(Boolean(user.data.nextSubscription));
 </script>
 
@@ -64,8 +58,8 @@
 
   <!-- Plan Comparison Section -->
   <div>
-    <div class={grid({ columns: user.data.subscription ? 1 : 2, gap: '16px' })}>
-      {#if !user.data.subscription}
+    <div class={grid({ columns: user.data.entitled ? 1 : 2, gap: '16px' })}>
+      {#if !user.data.entitled}
         <!-- No Subscription -->
         <div
           class={flex({
@@ -155,7 +149,7 @@
               {user.data.billingKey ? '구독 예약하기' : '결제 수단 등록하기'}
             </Button>
           {/if}
-        {:else if hasActiveSubscription}
+        {:else if user.data.entitled}
           <div
             class={css({
               display: 'flex',

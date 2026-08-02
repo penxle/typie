@@ -39,10 +39,6 @@
       fragment DashboardLayout_SpaceMenu_user on User {
         id
 
-        subscription {
-          id
-        }
-
         sites {
           id
           name

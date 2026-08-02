@@ -27,6 +27,10 @@ type DefaultContext = {
   ip: string;
   deviceId: string;
 
+  // 권한 판정·대표 구독·shim이 같은 시각을 보게 하는 요청당 1회 캡처. 따로 읽으면 경계 순간에
+  // entitled = true 와 권한 없는 대표가 함께 반환된다.
+  entitlementNow?: dayjs.Dayjs;
+
   loader: <
     Key = string,
     Result = unknown,
@@ -161,6 +165,9 @@ export const clearLoaders = (ctx: Context) => {
   for (const loader of ctx[' $loaders'].values()) {
     loader.clearAll();
   }
+
+  // 스냅샷을 버리면 그 스냅샷과 짝인 시각도 버려야 한다 — 장수 스트림에서 최초 캡처가 영구히 남는다.
+  ctx.entitlementNow = undefined;
 
   clearAllDataLoaders(ctx);
 };

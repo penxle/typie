@@ -35,7 +35,7 @@ export const worker = new Worker(
   async (job) => {
     const fn = taskMap[job.name];
     if (cronNames.has(job.name)) {
-      await Sentry.withMonitor(job.name, () => fn?.(job.data));
+      await Sentry.withMonitor(job.name.replaceAll(':', '-'), () => fn?.(job.data));
     } else {
       await fn?.(job.data);
     }

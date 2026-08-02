@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createSubscription } from '@mearie/svelte';
+  import { createQuery, createSubscription } from '@mearie/svelte';
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { token } from '@typie/styled-system/tokens';
@@ -150,11 +150,69 @@
   });
 
   $effect(() => {
-    app.state.subscribed = !!query.data.me.subscription;
+    app.state.subscribed = query.data.me.entitled;
   });
 
   $effect(() => {
-    SubscribeModalState.sync(!!query.data.me.subscription);
+    SubscribeModalState.sync(query.data.me.entitled);
+  });
+
+  // 권한 재조회는 이 소형 쿼리만 돌린다 — 대형 레이아웃 쿼리를 재실행하면 포그라운드 복귀마다 폰트·사이트까지 통째로 다시 받는다.
+  // 응답은 User 엔티티로 정규화되므로 위 전역 게이트와 각 fragment 소비처에 캐시 패치로 전파된다.
+  const entitlementQuery = createQuery(
+    graphql(`
+      query DashboardLayout_Entitlement_Query {
+        me @required {
+          id
+          entitled
+          entitledUntil
+        }
+      }
+    `),
+  );
+
+  const ENTITLEMENT_REFETCH_TTL_MS = 24 * 60 * 60 * 1000;
+  // 클라이언트 시계가 서버보다 앞서면 entitledUntil이 항상 과거로 보이므로 재조회 간격에 하한을 둔다.
+  const ENTITLEMENT_REFETCH_MIN_INTERVAL_MS = 60 * 1000;
+
+  let lastEntitlementRefetchedAt = Date.now();
+
+  const refetchEntitlement = () => {
+    lastEntitlementRefetchedAt = Date.now();
+    entitlementQuery.refetch();
+  };
+
+  // entitledUntil이 null인 상태(ACTIVE류)도 콘솔 환불 같은 DB 전이로 권한을 잃을 수 있는데 그 전이에는 시각 신호가 없다.
+  // 타이머가 entitledUntil에만 걸리면 foreground를 유지하는 탭이 옛 true를 무기한 쓰므로 상시 TTL을 항상 함께 건다.
+  $effect(() => {
+    // refetch()는 void를 돌려주므로 완료를 기다릴 수 없다. 응답 도착(loading 하강)만이 다음 타이머를 거는 신호다.
+    if (entitlementQuery.loading) {
+      return;
+    }
+
+    const until = entitlementQuery.data?.me.entitledUntil;
+    const untilMs = until ? dayjs(until).diff(dayjs()) : Infinity;
+    const delay = Math.max(Math.min(untilMs, ENTITLEMENT_REFETCH_TTL_MS), ENTITLEMENT_REFETCH_MIN_INTERVAL_MS);
+
+    const timer = setTimeout(refetchEntitlement, delay);
+    return () => clearTimeout(timer);
+  });
+
+  $effect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') {
+        return;
+      }
+
+      if (Date.now() - lastEntitlementRefetchedAt < ENTITLEMENT_REFETCH_MIN_INTERVAL_MS) {
+        return;
+      }
+
+      refetchEntitlement();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   });
 
   let onboardingModalOpen = $state(false);
@@ -350,7 +408,7 @@
     <EnvironmentBanner />
     <AdminImpersonateBanner query$key={query.data} />
 
-    {#if !query.data.me.subscription}
+    {#if !query.data.me.entitled}
       <div
         class={flex({
           position: 'relative',

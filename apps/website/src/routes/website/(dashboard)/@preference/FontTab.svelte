@@ -40,10 +40,6 @@
             url
           }
         }
-
-        subscription {
-          id
-        }
       }
     `),
     () => user$key,

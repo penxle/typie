@@ -67,9 +67,17 @@ internal class AndroidPurchaseService(private val context: Context) : PurchaseSe
   }
 
   private suspend fun recoverPurchases() {
+    for (purchase in queryOwnedSubscriptions()) {
+      if (!purchase.isAcknowledged) {
+        handlePurchase(purchase)
+      }
+    }
+  }
+
+  private suspend fun queryOwnedSubscriptions(): List<Purchase> {
     val params = QueryPurchasesParams.newBuilder().setProductType(ProductType.SUBS).build()
 
-    val purchases = suspendCancellableCoroutine { continuation ->
+    return suspendCancellableCoroutine { continuation ->
       billingClient.queryPurchasesAsync(params) { billingResult, purchases ->
         if (billingResult.responseCode == BillingResponseCode.OK) {
           continuation.resume(purchases)
@@ -78,12 +86,14 @@ internal class AndroidPurchaseService(private val context: Context) : PurchaseSe
         }
       }
     }
+  }
 
-    for (purchase in purchases) {
-      if (!purchase.isAcknowledged) {
-        handlePurchase(purchase)
-      }
-    }
+  override suspend fun currentSubscriptionPurchaseToken(): String? {
+    ensureConnected()
+
+    return queryOwnedSubscriptions()
+      .firstOrNull { it.purchaseState == Purchase.PurchaseState.PURCHASED }
+      ?.purchaseToken
   }
 
   override suspend fun queryProducts(productIds: List<String>): List<PurchaseProduct> {
@@ -122,12 +132,17 @@ internal class AndroidPurchaseService(private val context: Context) : PurchaseSe
   }
 
   context(activity: ActivityContext)
-  override suspend fun purchase(product: PurchaseProduct, accountId: String): Boolean {
+  override suspend fun purchase(
+    product: PurchaseProduct,
+    accountId: String,
+    existingPurchaseToken: String?,
+    replacementMode: PurchaseReplacementMode?,
+  ): Boolean {
     ensureConnected()
 
     val androidProduct = product as? AndroidPurchaseProduct ?: return false
 
-    val params =
+    val builder =
       BillingFlowParams.newBuilder()
         .setProductDetailsParamsList(
           listOf(
@@ -138,9 +153,17 @@ internal class AndroidPurchaseService(private val context: Context) : PurchaseSe
           )
         )
         .setObfuscatedAccountId(accountId)
-        .build()
 
-    val billingResult = billingClient.launchBillingFlow(activity, params)
+    if (existingPurchaseToken != null && replacementMode != null) {
+      builder.setSubscriptionUpdateParams(
+        BillingFlowParams.SubscriptionUpdateParams.newBuilder()
+          .setOldPurchaseToken(existingPurchaseToken)
+          .setSubscriptionReplacementMode(replacementMode.toBillingReplacementMode())
+          .build()
+      )
+    }
+
+    val billingResult = billingClient.launchBillingFlow(activity, builder.build())
     return billingResult.responseCode == BillingResponseCode.OK
   }
 
@@ -181,6 +204,14 @@ internal class AndroidPurchaseService(private val context: Context) : PurchaseSe
       }
     }
   }
+
+  private fun PurchaseReplacementMode.toBillingReplacementMode(): Int =
+    when (this) {
+      PurchaseReplacementMode.UPGRADE_WITH_TIME_PRORATION ->
+        BillingFlowParams.SubscriptionUpdateParams.ReplacementMode.WITH_TIME_PRORATION
+      PurchaseReplacementMode.DEFERRED ->
+        BillingFlowParams.SubscriptionUpdateParams.ReplacementMode.DEFERRED
+    }
 
   private fun List<ProductDetails>.toPurchaseProducts() = flatMap { product ->
     product.subscriptionOfferDetails.orEmpty().mapNotNull { offer ->

@@ -19,8 +19,8 @@ import co.typie.domain.note.toNoteSaveOutcome
 import co.typie.domain.note.updateNoteColor as updateNoteColorMutation
 import co.typie.domain.note.updateNoteContent as updateNoteContentMutation
 import co.typie.domain.note.updateNoteStatus as updateNoteStatusMutation
-import co.typie.domain.subscription.Entitlement
 import co.typie.domain.subscription.SubscriptionService
+import co.typie.domain.subscription.grantsAccess
 import co.typie.graphql.Apollo
 import co.typie.graphql.NotesScreen_Query
 import co.typie.graphql.PlaceholderResolver
@@ -176,7 +176,7 @@ internal class NotesViewModel : ViewModel() {
     noteId: String,
     content: String,
   ): NoteSaveOutcome {
-    if (SubscriptionService.entitlement is Entitlement.Expired) {
+    if (!SubscriptionService.entitlement.grantsAccess()) {
       return NoteSaveOutcome.SubscriptionGated
     }
     return updateNoteContent(siteId = siteId, noteId = noteId, content = content)
@@ -184,7 +184,7 @@ internal class NotesViewModel : ViewModel() {
   }
 
   suspend fun savePendingNoteColor(siteId: String, noteId: String, color: String): NoteSaveOutcome {
-    if (SubscriptionService.entitlement is Entitlement.Expired) {
+    if (!SubscriptionService.entitlement.grantsAccess()) {
       return NoteSaveOutcome.SubscriptionGated
     }
     return updateNoteColor(siteId = siteId, noteId = noteId, color = color)

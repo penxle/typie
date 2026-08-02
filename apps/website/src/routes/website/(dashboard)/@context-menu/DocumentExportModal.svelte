@@ -39,10 +39,7 @@
     graphql(`
       fragment DashboardLayout_DocumentExportModal_user on User {
         id
-
-        subscription {
-          id
-        }
+        entitled
       }
     `),
     () => user$key,
@@ -60,7 +57,7 @@
   const format = $derived(app.preference.current.exportFormat);
 
   $effect(() => {
-    if (!user.data.subscription && format !== 'PDF') {
+    if (!user.data.entitled && format !== 'PDF') {
       app.preference.current.exportFormat = 'PDF';
     }
   });
@@ -75,7 +72,7 @@
     EPUB: '전자책 특성상 문서에 포함된 장식 요소들이 간소화되고, 페이지 레이아웃이 적용되지 않아요.',
   };
 
-  const needUpgrade = $derived(!user.data.subscription);
+  const needUpgrade = $derived(!user.data.entitled);
 
   const formatItems = $derived(
     [

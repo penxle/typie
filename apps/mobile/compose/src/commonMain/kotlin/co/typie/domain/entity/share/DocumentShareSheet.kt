@@ -17,9 +17,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import co.typie.domain.settings.SettingSwitch
-import co.typie.domain.subscription.Entitlement
 import co.typie.domain.subscription.GatedAction
 import co.typie.domain.subscription.SubscriptionService
+import co.typie.domain.subscription.grantsAccess
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
@@ -241,8 +241,7 @@ internal fun DocumentShareSheet(
     if (loading) return
     if (isUpdatingVisibility) return
     if (
-      nextVisibility != EntityVisibility.PRIVATE &&
-        SubscriptionService.entitlement is Entitlement.Expired
+      nextVisibility != EntityVisibility.PRIVATE && !SubscriptionService.entitlement.grantsAccess()
     ) {
       SubscriptionService.requestSubscribeSheet(GatedAction.ShareDocument)
       return
@@ -271,7 +270,7 @@ internal fun DocumentShareSheet(
   fun updateContentRating(nextContentRating: DocumentContentRating) {
     if (loading) return
     if (isUpdatingContentRating) return
-    if (SubscriptionService.entitlement is Entitlement.Expired) {
+    if (!SubscriptionService.entitlement.grantsAccess()) {
       SubscriptionService.requestSubscribeSheet(GatedAction.ShareDocument)
       return
     }
@@ -299,7 +298,7 @@ internal fun DocumentShareSheet(
   fun updateAllowReaction(nextAllowReaction: Boolean) {
     if (loading) return
     if (isUpdatingAllowReaction) return
-    if (SubscriptionService.entitlement is Entitlement.Expired) {
+    if (!SubscriptionService.entitlement.grantsAccess()) {
       SubscriptionService.requestSubscribeSheet(GatedAction.ShareDocument)
       return
     }
@@ -327,7 +326,7 @@ internal fun DocumentShareSheet(
   fun updateProtectContent(nextProtectContent: Boolean) {
     if (loading) return
     if (isUpdatingProtectContent) return
-    if (SubscriptionService.entitlement is Entitlement.Expired) {
+    if (!SubscriptionService.entitlement.grantsAccess()) {
       SubscriptionService.requestSubscribeSheet(GatedAction.ShareDocument)
       return
     }
@@ -359,7 +358,7 @@ internal fun DocumentShareSheet(
   fun commitPassword(password: String) {
     if (loading) return
     if (isUpdatingPassword) return
-    if (SubscriptionService.entitlement is Entitlement.Expired) {
+    if (!SubscriptionService.entitlement.grantsAccess()) {
       SubscriptionService.requestSubscribeSheet(GatedAction.ShareDocument)
       return
     }
@@ -405,7 +404,7 @@ internal fun DocumentShareSheet(
   fun updatePasswordProtection(nextEnabled: Boolean) {
     if (loading) return
     if (isUpdatingPassword) return
-    if (SubscriptionService.entitlement is Entitlement.Expired) {
+    if (!SubscriptionService.entitlement.grantsAccess()) {
       SubscriptionService.requestSubscribeSheet(GatedAction.ShareDocument)
       return
     }
@@ -446,7 +445,7 @@ internal fun DocumentShareSheet(
   fun removeThumbnail() {
     if (loading) return
     if (isUploadingThumbnail || isRemovingThumbnail) return
-    if (SubscriptionService.entitlement is Entitlement.Expired) {
+    if (!SubscriptionService.entitlement.grantsAccess()) {
       SubscriptionService.requestSubscribeSheet(GatedAction.ShareDocument)
       return
     }
@@ -511,7 +510,7 @@ internal fun DocumentShareSheet(
       file.close()
       return@rememberFilePicker
     }
-    if (SubscriptionService.entitlement is Entitlement.Expired) {
+    if (!SubscriptionService.entitlement.grantsAccess()) {
       file.close()
       SubscriptionService.requestSubscribeSheet(GatedAction.ShareDocument)
       return@rememberFilePicker
@@ -682,7 +681,7 @@ internal fun DocumentShareSheet(
                 isRemoving = isRemovingThumbnail,
                 onUploadClick = {
                   if (!loading && !isUploadingThumbnail && !isRemovingThumbnail) {
-                    if (SubscriptionService.entitlement is Entitlement.Expired) {
+                    if (!SubscriptionService.entitlement.grantsAccess()) {
                       SubscriptionService.requestSubscribeSheet(GatedAction.ShareDocument)
                     } else {
                       filePicker("image/*")

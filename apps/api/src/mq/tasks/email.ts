@@ -1,7 +1,6 @@
-import { SUBSCRIPTION_GRACE_DAYS } from '@typie/lib/const';
 import { PaymentInvoiceState, PaymentOutcome } from '@typie/lib/enums';
 import dayjs from 'dayjs';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, lt } from 'drizzle-orm';
 import { db, first, firstOrThrow, PaymentInvoices, PaymentRecords, Plans, Subscriptions, Users } from '#/db/index.ts';
 import { sendEmail } from '#/email/index.ts';
 import {
@@ -17,7 +16,6 @@ export const SendSubscriptionGracePeriodEmailJob = defineJob('email:subscription
   const subscription = await db
     .select({
       userId: Subscriptions.userId,
-      expiresAt: Subscriptions.expiresAt,
       plan: { name: Plans.name },
       user: { name: Users.name, email: Users.email },
     })
@@ -45,10 +43,8 @@ export const SendSubscriptionGracePeriodEmailJob = defineJob('email:subscription
       .limit(1)
       .then(first);
 
-    reason = (paymentRecord?.data as { message?: string }).message;
+    reason = (paymentRecord?.data as { message?: string } | undefined)?.message;
   }
-
-  const gracePeriodEndsAt = subscription.expiresAt.add(SUBSCRIPTION_GRACE_DAYS, 'days');
 
   await sendEmail({
     subject: '[타이피] 결제 정보 확인이 필요해요',
@@ -56,7 +52,6 @@ export const SendSubscriptionGracePeriodEmailJob = defineJob('email:subscription
     body: SubscriptionGracePeriodEmail({
       userName: subscription.user.name,
       planName: subscription.plan.name,
-      gracePeriodEndsAt: gracePeriodEndsAt.kst().format('YYYY년 M월 D일'),
       dashboardUrl: env.WEBSITE_URL,
       reason: reason || '결제 실패',
     }),
@@ -93,7 +88,7 @@ export const SendSubscriptionExpiringEmailJob = defineJob('email:subscription-ex
       .limit(1)
       .then(first);
 
-    reason = (paymentRecord?.data as { message?: string }).message;
+    reason = (paymentRecord?.data as { message?: string } | undefined)?.message;
   }
 
   await sendEmail({
@@ -134,7 +129,7 @@ export const SendSubscriptionExpiredEmailJob = defineJob('email:subscription-exp
 export const SendSubscriptionWaivedEmailJob = defineJob('email:subscription-waived', async (subscriptionId: string) => {
   const subscription = await db
     .select({
-      renewedAt: Subscriptions.renewedAt,
+      currentPeriodStartsAt: Subscriptions.currentPeriodStartsAt,
       plan: { name: Plans.name, interval: Plans.interval },
       user: { name: Users.name, email: Users.email },
     })
@@ -144,11 +139,37 @@ export const SendSubscriptionWaivedEmailJob = defineJob('email:subscription-waiv
     .where(eq(Subscriptions.id, subscriptionId))
     .then(firstOrThrow);
 
-  // 이메일 job 실행 시점에 renewedAt은 이미 새 주기 시작점으로 업데이트됨
-  // 면제된 기간 = [renewedAt - interval, renewedAt)
   const isYearly = subscription.plan.interval === 'YEARLY';
-  const waivedStart = isYearly ? subscription.renewedAt.subtract(1, 'year') : subscription.renewedAt.subtract(1, 'month');
-  const waivedEnd = subscription.renewedAt;
+
+  // 메일이 말하는 기간은 미사용 판정 대상이었던 직전 주기다 — WAIVED 인보이스의 서비스 주기는 그 판정으로 면제된 다음 주기다.
+  const waivedInvoice = await db
+    .select({ servicePeriodStartsAt: PaymentInvoices.servicePeriodStartsAt })
+    .from(PaymentInvoices)
+    .where(and(eq(PaymentInvoices.subscriptionId, subscriptionId), eq(PaymentInvoices.state, PaymentInvoiceState.WAIVED)))
+    .orderBy(desc(PaymentInvoices.createdAt))
+    .limit(1)
+    .then(first);
+
+  // 판정 대상 주기의 기록은 상태를 가리지 않는다(PAID·WAIVED 모두 그 주기의 인보이스다).
+  const evaluatedInvoice = waivedInvoice
+    ? await db
+        .select({ servicePeriodStartsAt: PaymentInvoices.servicePeriodStartsAt, servicePeriodEndsAt: PaymentInvoices.servicePeriodEndsAt })
+        .from(PaymentInvoices)
+        .where(
+          and(
+            eq(PaymentInvoices.subscriptionId, subscriptionId),
+            lt(PaymentInvoices.servicePeriodStartsAt, waivedInvoice.servicePeriodStartsAt),
+          ),
+        )
+        .orderBy(desc(PaymentInvoices.servicePeriodStartsAt))
+        .limit(1)
+        .then(first)
+    : null;
+
+  // 선행 인보이스가 없는 행(백필 이전 레거시·수기 생성)은 표시할 기록이 없어 주기 컬럼에서 역산한다 — 월말 앵커에서 하루씩 어긋날 수 있다.
+  const waivedStart =
+    evaluatedInvoice?.servicePeriodStartsAt ?? subscription.currentPeriodStartsAt.subtract(1, isYearly ? 'year' : 'month');
+  const waivedEnd = evaluatedInvoice?.servicePeriodEndsAt ?? subscription.currentPeriodStartsAt;
   const period = isYearly ? '올해' : '이번 달';
 
   const startStr = waivedStart.kst().format('YYYY년 M월 D일');

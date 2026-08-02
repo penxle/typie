@@ -8,6 +8,7 @@
   import { AdminIcon, AdminModal } from '$lib/components/admin';
   import { hydrateQuery } from '$lib/graphql';
   import { unwrapError } from '$lib/graphql/error';
+  import { isIndefinitePeriod } from '$lib/subscription-logic';
   import { graphql } from '$mearie';
 
   let { data } = $props();
@@ -495,9 +496,11 @@
               </div>
 
               <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
-                <span class={css({ fontSize: '11px', color: 'amber.400' })}>EXPIRES</span>
+                <span class={css({ fontSize: '11px', color: 'amber.400' })}>PERIOD ENDS</span>
                 <span class={css({ fontSize: '12px', color: 'amber.500' })}>
-                  {dayjs(query.data.adminUser.subscription.expiresAt).formatAsDateTime()}
+                  {isIndefinitePeriod(query.data.adminUser.subscription.currentPeriodEndsAt)
+                    ? 'INDEFINITE'
+                    : dayjs(query.data.adminUser.subscription.currentPeriodEndsAt).formatAsDateTime()}
                 </span>
               </div>
 

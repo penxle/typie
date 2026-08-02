@@ -51,9 +51,7 @@
     graphql(`
       fragment DashboardLayout_SiteSettingsModal_GeneralTab_user on User {
         id
-        subscription {
-          id
-        }
+        entitled
 
         sites {
           id
@@ -256,9 +254,9 @@
           <div class={css({ position: 'relative' })}>
             <TextInput
               style={css.raw({ width: '[280px]', height: '32px', fontSize: '13px' })}
-              disabled={!user.data.subscription}
+              disabled={!user.data.entitled}
               onblur={() => {
-                if (user.data.subscription && slugForm.state.isDirty) {
+                if (user.data.entitled && slugForm.state.isDirty) {
                   slugForm.handleSubmit();
                 }
               }}
@@ -281,7 +279,7 @@
                 </span>
               {/snippet}
             </TextInput>
-            {#if !user.data.subscription}
+            {#if !user.data.entitled}
               <button
                 class={css({
                   position: 'absolute',

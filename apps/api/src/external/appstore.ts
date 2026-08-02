@@ -2,6 +2,7 @@ import { AppStoreServerAPIClient, Environment, SignedDataVerifier, Status } from
 import ky from 'ky';
 import { env } from '#/env.ts';
 import type { ConsumptionRequest } from '@apple/app-store-server-library';
+import type { AppleStatusItem } from '#/utils/iap-normalize.ts';
 
 const certificateUrls = [
   'https://www.apple.com/appleca/AppleIncRootCertificate.cer',
@@ -34,25 +35,6 @@ const verifiers = {
 };
 
 const environments = ['production', 'sandbox'] as const;
-
-export const getSubscription = async (transactionId: string) => {
-  for (const environment of environments) {
-    const client = clients[environment];
-    const verifier = verifiers[environment];
-
-    try {
-      const subscription = await client.getAllSubscriptionStatuses(transactionId, [Status.ACTIVE]);
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      const transaction = await verifier.verifyAndDecodeTransaction(subscription.data![0].lastTransactions![0].signedTransactionInfo!);
-
-      return transaction;
-    } catch {
-      // pass
-    }
-  }
-
-  throw new Error('Transaction not found');
-};
 
 export type ReconcileSubscriptionStatus =
   | { kind: 'active'; expiresDate: number | undefined; productId: string | undefined }
@@ -133,6 +115,54 @@ export const getSubscriptionStatus = async (transactionId: string): Promise<Reco
   return anyLookupSucceeded ? { kind: 'unknown' } : { kind: 'error' };
 };
 
+export type AppleStatusesResult = { kind: 'ok'; items: AppleStatusItem[] } | { kind: 'error' }; // 전 환경 조회 실패
+
+// 재조정·미바인딩 역발견(anyTransactionId 조회)·등록을 전부 감당한다: 필터 없이 전 그룹·전 항목을 디코딩해 반환하고,
+// 항목 선택(대상 originalTransactionId 매칭·복수 일치 정렬)은 iap-normalize 의 몫으로 남긴다.
+export const getSubscriptionStatuses = async (anyTransactionId: string): Promise<AppleStatusesResult> => {
+  for (const environment of environments) {
+    const client = clients[environment];
+    const verifier = verifiers[environment];
+
+    // 응답 수신 이후의 예외는 조회 실패가 아니라 서명 검증 실패다. 이 환경이 맞는 스토어임은 이미
+    // 확인됐으므로 다음 환경으로 넘기지 않고 error 로 구분한다(getSubscriptionStatus 의 matched 패턴과 동형).
+    let responded = false;
+    try {
+      const response = await client.getAllSubscriptionStatuses(anyTransactionId);
+      responded = true;
+
+      const items: AppleStatusItem[] = [];
+      for (const group of response.data ?? []) {
+        for (const lastTransaction of group.lastTransactions ?? []) {
+          const transaction = lastTransaction.signedTransactionInfo
+            ? await verifier.verifyAndDecodeTransaction(lastTransaction.signedTransactionInfo)
+            : null;
+          const renewalInfo = lastTransaction.signedRenewalInfo
+            ? await verifier.verifyAndDecodeRenewalInfo(lastTransaction.signedRenewalInfo)
+            : null;
+
+          items.push({
+            status: lastTransaction.status ?? 0,
+            outerOriginalTransactionId: lastTransaction.originalTransactionId ?? null,
+            transaction,
+            renewalInfo,
+            subscriptionGroupIdentifier: group.subscriptionGroupIdentifier ?? null,
+          });
+        }
+      }
+
+      return { kind: 'ok', items };
+    } catch {
+      if (responded) {
+        return { kind: 'error' };
+      }
+      // 이 환경 조회 실패 — 다음 환경 시도
+    }
+  }
+
+  return { kind: 'error' };
+};
+
 export const decodeNotification = async (signedPayload: string) => {
   for (const environment of environments) {
     const verifier = verifiers[environment];
@@ -146,6 +176,9 @@ export const decodeNotification = async (signedPayload: string) => {
           ...notification.data,
           transaction: notification.data?.signedTransactionInfo
             ? await verifier.verifyAndDecodeTransaction(notification.data.signedTransactionInfo)
+            : undefined,
+          renewalInfo: notification.data?.signedRenewalInfo
+            ? await verifier.verifyAndDecodeRenewalInfo(notification.data.signedRenewalInfo)
             : undefined,
           signedRenewalInfo: undefined,
           signedTransactionInfo: undefined,

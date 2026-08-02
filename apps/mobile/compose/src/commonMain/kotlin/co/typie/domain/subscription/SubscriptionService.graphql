@@ -1,12 +1,14 @@
 query SubscriptionService_Query {
   me @catch(to: NULL) {
     id
+    entitled
+    entitledUntil
 
     subscription {
       id
       state
       startsAt
-      expiresAt
+      currentPeriodEndsAt
 
       plan {
         id

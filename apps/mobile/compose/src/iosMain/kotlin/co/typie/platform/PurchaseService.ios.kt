@@ -51,8 +51,14 @@ internal class IOSPurchaseService : PurchaseService {
     }
   }
 
+  // StoreKit 은 같은 구독 그룹 안의 플랜 변경을 스토어가 직접 처리하므로 승계 파라미터를 쓰지 않는다.
   context(activity: ActivityContext)
-  override suspend fun purchase(product: PurchaseProduct, accountId: String): Boolean {
+  override suspend fun purchase(
+    product: PurchaseProduct,
+    accountId: String,
+    existingPurchaseToken: String?,
+    replacementMode: PurchaseReplacementMode?,
+  ): Boolean {
     val bridge = bridge ?: return false
 
     return withContext(Dispatchers.Main) {

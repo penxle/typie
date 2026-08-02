@@ -15,7 +15,7 @@ import { NotFoundError, TypieError } from '@typie/lib/errors';
 import { supportsPlanInterval } from '@typie/lib/plan';
 import { cardSchema, redeemCodeSchema } from '@typie/lib/validation';
 import dayjs from 'dayjs';
-import { and, desc, eq, gt, inArray, ne, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, ne, notInArray } from 'drizzle-orm';
 import {
   CreditCodes,
   db,
@@ -34,16 +34,23 @@ import {
   validateDbId,
 } from '#/db/index.ts';
 import { env } from '#/env.ts';
-import * as appstore from '#/external/appstore.ts';
 import * as googleplay from '#/external/googleplay.ts';
 import * as portone from '#/external/portone.ts';
 import { verifyEasyPayBillingKey } from '#/utils/billing-key.ts';
-import { getSubscriptionExpiresAt, hasBillableUsageDuring, payInvoiceWithBillingKey } from '#/utils/index.ts';
-import { createTrialSubscription } from '#/utils/plan.ts';
+import { computeNextPeriodEnd, floorToHourKst } from '#/utils/billing-period.ts';
+import { deriveExpiresAtShim } from '#/utils/entitlement.ts';
+import { lookupIapEnrollment } from '#/utils/iap-enroll.ts';
+import { precheckIapEnroll } from '#/utils/iap-normalize.ts';
+import { applyNormalizedIapLocked } from '#/utils/iap-sync.ts';
+import { attemptInvoicePayment, enrichPaymentRecordReceipt, hasBillableUsageDuring } from '#/utils/index.ts';
+import { opsAlert } from '#/utils/ops-alert.ts';
+import { derivePaymentKey } from '#/utils/payment-key.ts';
+import { createTrialSubscription, hasFutureBillingObligation } from '#/utils/plan.ts';
 import { delay } from '#/utils/promise.ts';
 import { hasLiveYearlyBillingKeySubscription, replaceUserBillingKey } from '#/utils/subscription-billing-key.ts';
 import { resolveEnrollAction } from '#/utils/subscription-enroll.ts';
 import { lockUserSubscriptionState } from '#/utils/subscription-lock.ts';
+import { retireReservation } from '#/utils/subscription-retire.ts';
 import { getUserUuid } from '#/utils/user.ts';
 import { builder } from '../builder.ts';
 import {
@@ -58,6 +65,8 @@ import {
   UserBillingKey,
   UserTrial,
 } from '../objects.ts';
+import type { Database, Transaction } from '#/db/index.ts';
+import type { IapEnrollLookup } from '#/utils/iap-enroll.ts';
 
 /**
  * * Types
@@ -130,12 +139,23 @@ Subscription.implement({
     id: t.exposeID('id'),
     plan: t.expose('planId', { type: Plan }),
     startsAt: t.expose('startsAt', { type: 'DateTime' }),
-    expiresAt: t.expose('expiresAt', { type: 'DateTime' }),
+    currentPeriodEndsAt: t.expose('currentPeriodEndsAt', { type: 'DateTime' }),
+
+    // 구버전 앱 호환 전용 파생값이다 — 저장하면 상태를 바꾸는 모든 경로가 함께 갱신해야 한다.
+    expiresAt: t.field({
+      type: 'DateTime',
+      resolve: async (self, _args, ctx) => {
+        const plan = await Plan.getDataloader(ctx).load(self.planId);
+
+        return deriveExpiresAtShim({ ...self, planAvailability: plan.availability }, (ctx.entitlementNow ??= dayjs()));
+      },
+    }),
+
     state: t.expose('state', { type: SubscriptionState }),
     user: t.expose('userId', { type: User }),
     hasBillableUsage: t.boolean({
       resolve: async (self) => {
-        return await hasBillableUsageDuring(db, self.userId, self.renewedAt, self.expiresAt);
+        return await hasBillableUsageDuring(db, self.userId, self.currentPeriodStartsAt, self.currentPeriodEndsAt);
       },
     }),
   }),
@@ -308,25 +328,7 @@ builder.mutationFields((t) => ({
         await lockUserSubscriptionState(tx, ctx.session.userId);
 
         // 가드와 삭제가 같은 트랜잭션이어야 예약 생성과의 경합(빌링키 없는 예약 잔존)을 막는다.
-        const activeSubscription = await tx
-          .select({ id: Subscriptions.id })
-          .from(Subscriptions)
-          .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
-          .where(
-            and(
-              eq(Subscriptions.userId, ctx.session.userId),
-              inArray(Subscriptions.state, [
-                SubscriptionState.ACTIVE,
-                SubscriptionState.WILL_EXPIRE,
-                SubscriptionState.IN_GRACE_PERIOD,
-                SubscriptionState.WILL_ACTIVATE,
-              ]),
-              eq(Plans.availability, PlanAvailability.BILLING_KEY),
-            ),
-          )
-          .then(first);
-
-        if (activeSubscription) {
+        if (await hasFutureBillingObligation(tx, ctx.session.userId)) {
           throw new TypieError({ code: 'active_subscription_exists' });
         }
 
@@ -355,11 +357,15 @@ builder.mutationFields((t) => ({
         .where(and(eq(Plans.id, input.planId), eq(Plans.availability, PlanAvailability.BILLING_KEY)))
         .then(firstOrThrow);
 
-      return await db.transaction(async (tx) => {
+      const { subscription, paidInvoiceId } = await db.transaction(async (tx) => {
         await lockUserSubscriptionState(tx, ctx.session.userId);
 
         const subscriptionRows = await tx
-          .select({ state: Subscriptions.state, planAvailability: Plans.availability, expiresAt: Subscriptions.expiresAt })
+          .select({
+            state: Subscriptions.state,
+            planAvailability: Plans.availability,
+            currentPeriodEndsAt: Subscriptions.currentPeriodEndsAt,
+          })
           .from(Subscriptions)
           .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
           .where(and(eq(Subscriptions.userId, ctx.session.userId), ne(Subscriptions.state, SubscriptionState.EXPIRED)));
@@ -380,78 +386,93 @@ builder.mutationFields((t) => ({
         }
 
         if (action.kind === 'schedule') {
+          // 전환 잡의 predecessor 판정이 이 값과 트라이얼 주기 종료의 등호로 성립한다 — 내리지 않는다.
           const startsAt = action.startsAt;
-          const expiresAt = getSubscriptionExpiresAt(startsAt, plan.interval);
+          const periodStartsAt = floorToHourKst(startsAt);
+          const periodEndsAt = computeNextPeriodEnd({ periodStartsAt, interval: plan.interval, billingAnchorAt: periodStartsAt });
           const hadReservation = subscriptionRows.some((row) => row.state === SubscriptionState.WILL_ACTIVATE);
 
           if (!billingKey) {
             throw new TypieError({ code: 'billing_key_required' });
           }
 
-          const replaced = await tx
-            .delete(Subscriptions)
-            .where(and(eq(Subscriptions.userId, ctx.session.userId), eq(Subscriptions.state, SubscriptionState.WILL_ACTIVATE)))
-            .returning({ id: Subscriptions.id });
+          const replaced = await retireReservation(tx, { userId: ctx.session.userId });
 
           // 봤던 예약이 사라졌다면 전환 잡이 그 사이 결제·활성화한 것 — 새 예약을 얹으면 안 된다.
           if (hadReservation && replaced.length === 0) {
             throw new TypieError({ code: 'subscription_already_exists' });
           }
 
-          return await tx
+          const reservation = await tx
             .insert(Subscriptions)
             .values({
               userId: ctx.session.userId,
               planId: plan.id,
               startsAt,
-              expiresAt,
-              renewedAt: startsAt,
+              currentPeriodStartsAt: periodStartsAt,
+              currentPeriodEndsAt: periodEndsAt,
+              billingAnchorAt: periodStartsAt,
               state: SubscriptionState.WILL_ACTIVATE,
             })
             .returning()
             .then(firstOrThrow);
+
+          return { subscription: reservation, paidInvoiceId: null };
         }
 
         const startsAt = dayjs();
-        const expiresAt = getSubscriptionExpiresAt(startsAt, plan.interval);
+        // 사용량 버킷이 시간 단위라 주기 하한도 시간 경계로 내린다(가입 직전 같은 시간대 사용이 포함되는 과다 방향은 수용).
+        const periodStartsAt = floorToHourKst(startsAt);
+        const periodEndsAt = computeNextPeriodEnd({ periodStartsAt, interval: plan.interval, billingAnchorAt: periodStartsAt });
 
         // 유령 예약이 새 ACTIVE 와 공존하면 전환 잡이 결제를 시도한다 — 신규 구독 의사가 예약을 대체한다.
-        await tx
-          .delete(Subscriptions)
-          .where(and(eq(Subscriptions.userId, ctx.session.userId), eq(Subscriptions.state, SubscriptionState.WILL_ACTIVATE)));
+        await retireReservation(tx, { userId: ctx.session.userId });
 
-        const subscription = await tx
+        const created = await tx
           .insert(Subscriptions)
           .values({
             userId: ctx.session.userId,
             planId: plan.id,
             startsAt,
-            expiresAt,
-            renewedAt: startsAt,
+            currentPeriodStartsAt: periodStartsAt,
+            currentPeriodEndsAt: periodEndsAt,
+            billingAnchorAt: periodStartsAt,
             state: SubscriptionState.ACTIVE,
           })
           .returning()
           .then(firstOrThrow);
 
+        // UPCOMING 으로 시작해야 성공 확정의 PAID CAS 가 소유권 가드로 작동한다.
         const invoice = await tx
           .insert(PaymentInvoices)
           .values({
             userId: ctx.session.userId,
-            subscriptionId: subscription.id,
+            subscriptionId: created.id,
             amount: plan.fee,
-            dueAt: startsAt,
-            state: PaymentInvoiceState.PAID,
+            state: PaymentInvoiceState.UPCOMING,
+            dueAt: periodStartsAt,
+            paymentKey: derivePaymentKey(created.id, periodStartsAt),
+            servicePeriodStartsAt: periodStartsAt,
+            servicePeriodEndsAt: periodEndsAt,
           })
           .returning({ id: PaymentInvoices.id })
           .then(firstOrThrow);
 
-        const success = await payInvoiceWithBillingKey(tx, invoice.id);
-        if (!success) {
+        // 신규 즉시 결제 실패는 유예가 아니라 롤백이다 — 구독을 만들지 않는다.
+        const outcome = await attemptInvoicePayment(tx, invoice.id);
+        if (outcome.kind !== 'paid') {
           throw new TypieError({ code: 'payment_failed' });
         }
 
-        return subscription;
+        return { subscription: created, paidInvoiceId: invoice.id };
       });
+
+      // 영수증 보강은 커밋 이후다 — 조회 실패가 성공 확정을 뒤집지 않고, 승인~커밋 창을 늘리지도 않는다.
+      if (paidInvoiceId) {
+        await enrichPaymentRecordReceipt(paidInvoiceId);
+      }
+
+      return subscription;
     },
   }),
 
@@ -469,7 +490,7 @@ builder.mutationFields((t) => ({
         await lockUserSubscriptionState(tx, ctx.session.userId);
 
         const activeSubscription = await tx
-          .select({ id: Subscriptions.id, expiresAt: Subscriptions.expiresAt })
+          .select({ id: Subscriptions.id, currentPeriodEndsAt: Subscriptions.currentPeriodEndsAt })
           .from(Subscriptions)
           .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
           .where(
@@ -491,12 +512,13 @@ builder.mutationFields((t) => ({
           throw new TypieError({ code: 'plan_interval_not_supported' });
         }
 
-        const startsAt = activeSubscription.expiresAt;
-        const expiresAt = getSubscriptionExpiresAt(startsAt, plan.interval);
+        // 전환 잡의 predecessor 판정이 이 값과 현 구독 주기 종료의 등호로 성립한다 — 내리지 않는다.
+        const startsAt = activeSubscription.currentPeriodEndsAt;
+        // 플랜 변경은 앵커 재설정 시점이다.
+        const billingAnchorAt = floorToHourKst(startsAt);
+        const periodEndsAt = computeNextPeriodEnd({ periodStartsAt: startsAt, interval: plan.interval, billingAnchorAt });
 
-        await tx
-          .delete(Subscriptions)
-          .where(and(eq(Subscriptions.userId, ctx.session.userId), eq(Subscriptions.state, SubscriptionState.WILL_ACTIVATE)));
+        await retireReservation(tx, { userId: ctx.session.userId });
 
         await tx.update(Subscriptions).set({ state: SubscriptionState.WILL_EXPIRE }).where(eq(Subscriptions.id, activeSubscription.id));
 
@@ -506,8 +528,9 @@ builder.mutationFields((t) => ({
             userId: ctx.session.userId,
             planId: plan.id,
             startsAt,
-            expiresAt,
-            renewedAt: activeSubscription.expiresAt,
+            currentPeriodStartsAt: startsAt,
+            currentPeriodEndsAt: periodEndsAt,
+            billingAnchorAt,
             state: SubscriptionState.WILL_ACTIVATE,
           })
           .returning()
@@ -522,13 +545,10 @@ builder.mutationFields((t) => ({
       return await db.transaction(async (tx) => {
         await lockUserSubscriptionState(tx, ctx.session.userId);
 
-        // 전환 잡이 이미 결제·활성화했거나 IAP 가 대체했으면 0건 — id 로만 지우면 ACTIVE 행 삭제 시도가 인보이스 FK 에 걸린다.
-        const deleted = await tx
-          .delete(Subscriptions)
-          .where(and(eq(Subscriptions.userId, ctx.session.userId), eq(Subscriptions.state, SubscriptionState.WILL_ACTIVATE)))
-          .returning({ id: Subscriptions.id });
+        // 전환 잡이 이미 결제·활성화했거나 IAP 가 대체했으면 0건.
+        const retired = await retireReservation(tx, { userId: ctx.session.userId });
 
-        if (deleted.length === 0) {
+        if (retired.length === 0) {
           throw new TypieError({ code: 'plan_change_already_processed', status: 409 });
         }
 
@@ -560,7 +580,7 @@ builder.mutationFields((t) => ({
             and(
               eq(Subscriptions.userId, ctx.session.userId),
               eq(Subscriptions.state, SubscriptionState.WILL_EXPIRE),
-              gt(Subscriptions.expiresAt, dayjs()),
+              gt(Subscriptions.currentPeriodEndsAt, dayjs()),
               eq(Plans.availability, PlanAvailability.BILLING_KEY),
             ),
           )
@@ -582,10 +602,11 @@ builder.mutationFields((t) => ({
         }
 
         // 이전 구독이 이미 만료 확정된 뒤의 취소 — 예약 삭제(취소 의사)는 유지하고 최신 구독 행을 반환한다.
+        // 방금 tombstone 한 예약 행(EXPIRED)이 createdAt 최신이라 이 조회에 다시 걸리므로 id 로 명시 제외한다.
         return await tx
           .select()
           .from(Subscriptions)
-          .where(eq(Subscriptions.userId, ctx.session.userId))
+          .where(and(eq(Subscriptions.userId, ctx.session.userId), notInArray(Subscriptions.id, retired)))
           .orderBy(desc(Subscriptions.createdAt))
           .limit(1)
           .then(firstOrThrow);
@@ -600,229 +621,464 @@ builder.mutationFields((t) => ({
       data: t.input.string(),
     },
     resolve: async (_, { input }, ctx) => {
-      let identifier: string;
-      let planId: string;
-      let startsAt: dayjs.Dayjs;
-      let expiresAt: dayjs.Dayjs;
-      // Google 은 purchaseToken 이 바뀔 때 이전 토큰을 알려준다: 비만료 재가입/플랜 변경은 linkedPurchaseToken 으로,
-      // 만료 후 Play 구독 센터 재구독(out-of-app)은 outOfAppPurchaseContext.expiredPurchaseToken 으로(acknowledge 후 소멸).
-      let previousPurchaseTokens: string[] = [];
-      // 스토어 응답의 계정 식별자로 현재 세션 소유가 증명됐는지. 증명 없이 이전 토큰이 타 계정에 바인딩돼 있으면 배정을 거부한다.
-      let ownershipVerified = false;
+      const sessionUuid = getUserUuid(ctx.session.userId);
+      const alertContext = {
+        source: 'graphql/subscribeOrChangePlanWithInAppPurchase',
+        userId: ctx.session.userId,
+        store: input.store,
+        identifier: input.data,
+      };
 
-      if (input.store === InAppPurchaseStore.APP_STORE) {
-        const subscription = await appstore.getSubscription(input.data);
-
-        if (!subscription.productId || !subscription.originalTransactionId || !subscription.purchaseDate || !subscription.expiresDate) {
-          throw new Error('required fields are missing');
+      // 거절의 알람·오류 코드는 GraphQL 표면의 몫이다 — 관측(조회·소유 증거·정규화)은 utils 가 판정하고 여기서는 옮기기만 한다.
+      const enrollmentError = async (lookup: Exclude<IapEnrollLookup, { kind: 'observed' }>) => {
+        if (lookup.kind === 'lookup-failed') {
+          return new Error(`in-app purchase lookup failed: ${lookup.detail}`);
         }
 
-        // 소유권 검증: 다른 유저의 구매(예: 복구 경로가 잘못 흘려보낸 구매)가 현재 세션에 바인딩되는 것을 막는다.
-        // appAccountToken 이 없는 레거시 구매는 통과시킨다.
-        if (subscription.appAccountToken && subscription.appAccountToken !== getUserUuid(ctx.session.userId)) {
-          throw new TypieError({ code: 'in_app_purchase_account_mismatch' });
+        if (lookup.reason === 'ownership-mismatch') {
+          await opsAlert('iap-ownership-mismatch', { ...alertContext, detail: lookup.detail });
+          return new TypieError({ code: 'in_app_purchase_account_mismatch' });
         }
 
-        identifier = subscription.originalTransactionId;
-        planId = subscription.productId.toUpperCase();
-        startsAt = dayjs(subscription.purchaseDate);
-        expiresAt = dayjs(subscription.expiresDate);
-      } else if (input.store === InAppPurchaseStore.GOOGLE_PLAY) {
-        const subscription = await googleplay.getSubscription(input.data);
-
-        if (subscription.subscriptionState !== 'SUBSCRIPTION_STATE_ACTIVE') {
-          throw new Error('subscriptionState is not active');
+        if (lookup.reason === 'family-shared') {
+          await opsAlert('iap-unsupported-store-payload', { ...alertContext, detail: lookup.detail });
+          return new TypieError({ code: 'in_app_purchase_account_mismatch' });
         }
 
-        const item = subscription.lineItems?.[0];
-        if (!item || !item.offerDetails?.basePlanId || !subscription.startTime || !item.expiryTime) {
-          throw new Error('required fields are missing');
-        }
+        return new Error(`in-app purchase is not trackable: ${lookup.detail}`);
+      };
 
-        // 소유권 검증: 다른 유저의 구매가 현재 세션에 바인딩되는 것을 막는다.
-        // 만료 후 재구독(out-of-app)은 externalAccountIdentifiers 없이 이전 구매의 식별자를
-        // outOfAppPurchaseContext 로만 노출하므로 그쪽도 함께 본다. 둘 다 없는 레거시 구매는 통과.
-        const obfuscatedAccountId =
-          subscription.externalAccountIdentifiers?.obfuscatedExternalAccountId ??
-          subscription.outOfAppPurchaseContext?.expiredExternalAccountIdentifiers?.obfuscatedExternalAccountId;
-        if (obfuscatedAccountId && obfuscatedAccountId !== getUserUuid(ctx.session.userId)) {
-          throw new TypieError({ code: 'in_app_purchase_account_mismatch' });
-        }
+      const planIntervalsOf = (plans: { id: string; interval: PlanInterval }[]): Record<string, PlanInterval> =>
+        Object.fromEntries(plans.map((plan) => [plan.id, plan.interval]));
 
-        identifier = input.data;
-        planId = item.offerDetails.basePlanId.toUpperCase();
-        startsAt = dayjs(subscription.startTime);
-        expiresAt = dayjs(item.expiryTime);
-        previousPurchaseTokens = [subscription.linkedPurchaseToken, subscription.outOfAppPurchaseContext?.expiredPurchaseToken].filter(
-          (token): token is string => !!token,
-        );
-        ownershipVerified = !!obfuscatedAccountId;
-      } else {
-        throw new Error('Invalid store');
-      }
+      const findRelatedBindings = async (executor: Database | Transaction, tokens: string[]) =>
+        await executor
+          .select({
+            id: UserInAppPurchases.id,
+            userId: UserInAppPurchases.userId,
+            identifier: UserInAppPurchases.identifier,
+            subscriptionId: UserInAppPurchases.subscriptionId,
+          })
+          .from(UserInAppPurchases)
+          .where(and(eq(UserInAppPurchases.store, input.store), inArray(UserInAppPurchases.identifier, tokens)));
 
-      if (!expiresAt.isAfter(dayjs())) {
-        throw new Error('expiresAt should be in the future');
-      }
-
-      await db
-        .select({ id: Plans.id })
+      // 1차 조회는 소유 증거·수용 가능성·관련 유저 확정 전용이다 — 상태·주기의 확정은 락 안 재조회가 한다.
+      const probePlans = await db
+        .select({ id: Plans.id, interval: Plans.interval })
         .from(Plans)
-        .where(and(eq(Plans.id, planId), eq(Plans.availability, PlanAvailability.IN_APP_PURCHASE)))
-        .then(firstOrThrow);
+        .where(eq(Plans.availability, PlanAvailability.IN_APP_PURCHASE));
 
-      return await db.transaction(async (tx) => {
-        await lockUserSubscriptionState(tx, ctx.session.userId);
+      // 선행 주기는 락 밖에서도 읽는다 — 없이 정규화하면 1차 판정이 락 안 판정과 갈라져(주기 역산 불가 등)
+      // 락 안에서라면 수용될 등록이 락 전에 거절된다.
+      const probePrior = await db
+        .select({
+          state: Subscriptions.state,
+          currentPeriodStartsAt: Subscriptions.currentPeriodStartsAt,
+          currentPeriodEndsAt: Subscriptions.currentPeriodEndsAt,
+        })
+        .from(UserInAppPurchases)
+        .innerJoin(Subscriptions, eq(UserInAppPurchases.subscriptionId, Subscriptions.id))
+        .where(and(eq(UserInAppPurchases.userId, ctx.session.userId), eq(UserInAppPurchases.store, input.store)))
+        .then(first);
 
-        // 스토어 서명·소유권 검증은 락 밖 결과를 쓰되, 계정·구독 상태는 락 후 재판정한다(탈퇴·동시 구독 경합).
+      const probe = await lookupIapEnrollment({
+        store: input.store,
+        data: input.data,
+        sessionUuid,
+        prior: probePrior ?? null,
+        planIntervals: planIntervalsOf(probePlans),
+        now: dayjs(),
+      });
+
+      if (probe.kind !== 'observed') {
+        throw await enrollmentError(probe);
+      }
+
+      // 교착 방지: 관련 유저(세션 유저 + predecessor 소유 유저)를 락 획득 전에 확정하고 userId 사전순으로 잠근다.
+      // lockUserSubscriptionState 는 호출 즉시 xact 락을 잡으므로, 잠근 뒤 predecessor 를 발견하면 역순 잠금이 성립한다.
+      const probeTokens = [...new Set([input.data, ...probe.observation.predecessorTokens])];
+      const capturedBindings = await findRelatedBindings(db, probeTokens);
+      // 사전순은 바이트 비교다 — 로케일 비교는 런타임 로케일에 따라 순서가 갈려 락 순서 규약이 흔들린다.
+      const compareUserId = (a: string, b: string) => (a < b ? -1 : 1);
+      const lockUserIds = [...new Set([ctx.session.userId, ...capturedBindings.map((row) => row.userId)])].toSorted(compareUserId);
+
+      const { subscription, acknowledge } = await db.transaction(async (tx) => {
+        for (const userId of lockUserIds) {
+          await lockUserSubscriptionState(tx, userId);
+        }
+
+        // 탈퇴 경합: 스토어 결제가 끝났어도 계정이 사라졌으면 등록하지 않는다.
         await tx
           .select({ id: Users.id })
           .from(Users)
           .where(and(eq(Users.id, ctx.session.userId), eq(Users.state, UserState.ACTIVE)))
           .then(firstOrThrow);
 
-        // 시간상 만료된 WILL_EXPIRE 는 차단하지 않는다 — resolveEnrollAction 과 동일한 liveness 기준.
-        // 해지 확정 잡 지연(~1분)이 이미 스토어 결제를 마친 등록을 거부하면 안 된다.
-        const existingSubscription = await tx
-          .select({ id: Subscriptions.id })
-          .from(Subscriptions)
-          .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
-          .where(
-            and(
-              eq(Subscriptions.userId, ctx.session.userId),
-              ne(Subscriptions.state, SubscriptionState.EXPIRED),
-              ne(Subscriptions.state, SubscriptionState.WILL_ACTIVATE),
-              or(ne(Subscriptions.state, SubscriptionState.WILL_EXPIRE), gt(Subscriptions.expiresAt, dayjs())),
-              ne(Plans.availability, PlanAvailability.IN_APP_PURCHASE),
-              ne(Plans.availability, PlanAvailability.TRIAL),
-            ),
-          )
+        const binding = await tx
+          .select({
+            id: UserInAppPurchases.id,
+            store: UserInAppPurchases.store,
+            identifier: UserInAppPurchases.identifier,
+            subscriptionId: UserInAppPurchases.subscriptionId,
+          })
+          .from(UserInAppPurchases)
+          .where(eq(UserInAppPurchases.userId, ctx.session.userId))
+          .for('no key update')
           .then(first);
 
-        if (existingSubscription) {
-          throw new TypieError({ code: 'subscription_already_exists' });
+        // canonical FK 가 빈 바인딩(백필 전 레거시·마커 격리)은 등록을 진행시키지 않는다 — 새 행을 만들면 그 바인딩이
+        // 가리켰어야 할 구 행과 이중화되고, 어느 쪽이 canonical 인지 아무도 판정할 수 없다. 사람이 잇는다.
+        if (binding && !binding.subscriptionId) {
+          await opsAlert('invariant-violation', {
+            ...alertContext,
+            check: 'enroll-binding-null-canonical',
+            bindingId: binding.id,
+            boundIdentifier: binding.identifier,
+          });
+
+          throw new TypieError({ code: 'in_app_purchase_registration_conflict', status: 409 });
         }
 
-        const trialSubscription = await tx
-          .select({ id: Subscriptions.id })
-          .from(Subscriptions)
-          .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
-          .where(
-            and(
-              eq(Subscriptions.userId, ctx.session.userId),
-              ne(Subscriptions.state, SubscriptionState.EXPIRED),
-              eq(Plans.availability, PlanAvailability.TRIAL),
-            ),
-          )
-          .then(first);
+        const canonical = binding?.subscriptionId
+          ? await tx
+              .select({
+                id: Subscriptions.id,
+                state: Subscriptions.state,
+                currentPeriodStartsAt: Subscriptions.currentPeriodStartsAt,
+                currentPeriodEndsAt: Subscriptions.currentPeriodEndsAt,
+              })
+              .from(Subscriptions)
+              .where(eq(Subscriptions.id, binding.subscriptionId))
+              .for('no key update')
+              .then(first)
+          : null;
 
-        // 스토어 구매가 웹 예약을 대체한다(오너 결정). 예약이 남으면 전환 잡이 카드 결제까지 시도한다.
-        await tx
-          .delete(Subscriptions)
-          .where(and(eq(Subscriptions.userId, ctx.session.userId), eq(Subscriptions.state, SubscriptionState.WILL_ACTIVATE)));
+        // 복합 FK 가 강제하는 참조라 도달하지 않는다 — 도달했다면 사람이 고칠 불변식 위반이다.
+        if (binding?.subscriptionId && !canonical) {
+          await opsAlert('invariant-violation', {
+            ...alertContext,
+            reason: 'iap binding canonical subscription missing',
+            bindingId: binding.id,
+            subscriptionId: binding.subscriptionId,
+          });
 
-        // 이전 purchaseToken 을 보유한 "다른" 타이피 계정이 있으면(같은 스토어 계정에서 플랜 변경/재구독으로 토큰이 바뀐 경우),
-        // 그 구독을 만료시키고 바인딩을 제거한다. 하나의 스토어 구독이 여러 타이피 계정에 동시에 활성화되는 것을 막는다.
-        // (같은 계정의 토큰 변경은 아래 userId 기준 upsert 가 바인딩을 이동시키므로 여기서 건드리지 않는다)
-        for (const previousPurchaseToken of previousPurchaseTokens) {
-          const previousBinding = await tx
-            .select({ userId: UserInAppPurchases.userId })
-            .from(UserInAppPurchases)
-            .where(
-              and(
-                eq(UserInAppPurchases.store, InAppPurchaseStore.GOOGLE_PLAY),
-                eq(UserInAppPurchases.identifier, previousPurchaseToken),
-                ne(UserInAppPurchases.userId, ctx.session.userId),
-              ),
-            )
-            .then(first);
+          throw new TypieError({ code: 'in_app_purchase_registration_conflict', status: 409 });
+        }
 
-          if (previousBinding) {
-            // 계정 증빙 없는 구매(레거시·out-of-app)의 이전 토큰이 다른 계정 소유 — 정당한 주인이 따로 있다는 뜻이므로
-            // 현재 세션에 임의 배정하지 않고 거부한다. 주인 계정으로 로그인하면 복구 경로가 다시 등록한다.
-            if (!ownershipVerified) {
-              throw new TypieError({ code: 'in_app_purchase_account_mismatch' });
-            }
+        const plans = await tx
+          .select({ id: Plans.id, interval: Plans.interval })
+          .from(Plans)
+          .where(eq(Plans.availability, PlanAvailability.IN_APP_PURCHASE));
 
-            await tx
-              .update(Subscriptions)
-              .set({ state: SubscriptionState.EXPIRED, expiresAt: sql`LEAST(${Subscriptions.expiresAt}, NOW())` })
-              .where(
-                and(
-                  eq(Subscriptions.userId, previousBinding.userId),
-                  inArray(Subscriptions.state, [
-                    SubscriptionState.ACTIVE,
-                    SubscriptionState.WILL_EXPIRE,
-                    SubscriptionState.IN_GRACE_PERIOD,
-                  ]),
-                  inArray(
-                    Subscriptions.planId,
-                    tx.select({ id: Plans.id }).from(Plans).where(eq(Plans.availability, PlanAvailability.IN_APP_PURCHASE)),
-                  ),
-                ),
-              );
+        const now = dayjs();
 
-            await tx
-              .delete(UserInAppPurchases)
-              .where(
-                and(eq(UserInAppPurchases.store, InAppPurchaseStore.GOOGLE_PLAY), eq(UserInAppPurchases.identifier, previousPurchaseToken)),
-              );
+        // 락 안 재조회·재정규화의 결과만 적용한다 — 락 밖 관측을 적용하면 그 사이 커밋된 환불 웹훅·재조정 뒤에
+        // stale 한 상태가 되살아난다.
+        const lookup = await lookupIapEnrollment({
+          store: input.store,
+          data: input.data,
+          sessionUuid,
+          // 선행 주기는 같은 스토어 계약의 사실이다 — 크로스 스토어 바인딩의 주기를 먹이면 남의 계약으로 주기를 계산한다
+          // (그 등록 자체는 아래 precheck 이 거절한다).
+          prior:
+            canonical && binding?.store === input.store
+              ? {
+                  state: canonical.state,
+                  currentPeriodStartsAt: canonical.currentPeriodStartsAt,
+                  currentPeriodEndsAt: canonical.currentPeriodEndsAt,
+                }
+              : null,
+          planIntervals: planIntervalsOf(plans),
+          now,
+        });
+
+        if (lookup.kind !== 'observed') {
+          throw await enrollmentError(lookup);
+        }
+
+        const observation = lookup.observation;
+
+        // (store, identifier) 의 소유 이동은 유저 advisory 락으로 검출되지 않는다 — 락 안 재SELECT 가 유일한 검출점이다.
+        const relatedTokens = [...new Set([...probeTokens, ...observation.predecessorTokens])];
+        const relatedBindings = await findRelatedBindings(tx, relatedTokens);
+
+        // 잠그지 않은 유저의 바인딩은 건드릴 수 없다 — 재시도가 새 집합으로 잠근다.
+        if (relatedBindings.some((row) => !lockUserIds.includes(row.userId))) {
+          throw new TypieError({ code: 'in_app_purchase_registration_conflict', status: 409 });
+        }
+
+        for (const captured of capturedBindings) {
+          const current = relatedBindings.find((row) => row.id === captured.id);
+          if (!current || current.userId !== captured.userId || current.identifier !== captured.identifier) {
+            throw new TypieError({ code: 'in_app_purchase_registration_conflict', status: 409 });
           }
         }
 
-        if (trialSubscription) {
-          await tx
-            .update(Subscriptions)
-            .set({ state: SubscriptionState.EXPIRED, expiresAt: sql`LEAST(${Subscriptions.expiresAt}, NOW())` })
-            .where(eq(Subscriptions.id, trialSubscription.id));
+        const subscriptionRows = await tx
+          .select({
+            id: Subscriptions.id,
+            state: Subscriptions.state,
+            planAvailability: Plans.availability,
+            startsAt: Subscriptions.startsAt,
+            currentPeriodStartsAt: Subscriptions.currentPeriodStartsAt,
+            currentPeriodEndsAt: Subscriptions.currentPeriodEndsAt,
+            createdAt: Subscriptions.createdAt,
+          })
+          .from(Subscriptions)
+          .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
+          .where(and(eq(Subscriptions.userId, ctx.session.userId), ne(Subscriptions.state, SubscriptionState.EXPIRED)));
+
+        // preflight 는 신뢰하지 않는다 — 서버가 같은 판정을 다시 수행한다.
+        const precheck = precheckIapEnroll({
+          rows: subscriptionRows,
+          binding: binding ? { store: binding.store } : null,
+          store: input.store,
+          iapPlanAvailable: plans.length > 0,
+          now,
+        });
+
+        if (!precheck.allowed) {
+          if (precheck.reason === 'cross-store-binding') {
+            // 거절은 알람을 남긴다 — CS 유입 신호다.
+            await opsAlert('iap-cross-store-enroll-rejected', { ...alertContext, boundStore: binding?.store, bindingId: binding?.id });
+            throw new TypieError({ code: 'subscription_already_exists' });
+          }
+
+          if (precheck.reason === 'non-iap-subscription') {
+            throw new TypieError({ code: 'subscription_already_exists' });
+          }
+
+          throw new Error('no in-app purchase plan is available');
         }
 
+        // 같은 스토어의 허용은 동일 토큰 재등록 또는 검증된 승계뿐이다 — 연결 없는 독립 토큰을 등록하면
+        // 유저당 1행인 바인딩이 기존 계약의 추적 주소를 잃는다.
+        if (binding && binding.identifier !== input.data && !observation.successionSources.includes(binding.identifier)) {
+          await opsAlert('iap-independent-token-rejected', {
+            ...alertContext,
+            bindingId: binding.id,
+            boundIdentifier: binding.identifier,
+          });
+
+          throw new TypieError({ code: 'subscription_already_exists' });
+        }
+
+        // 타 유저 predecessor 회수 — 한 스토어 계약이 두 타이피 유저의 권한으로 남지 않게 한다.
+        // 잠금은 계보 전체로 넓게 잡되(위), 쓰기는 락 안 관측이 확정 종료로 판정한 원천과 요청 토큰으로만 좁힌다.
+        const observedTokens = new Set([input.data, ...observation.predecessorTokens]);
+        const recoveryTokens = new Set([input.data, ...observation.successionSources]);
+        const foreignBindings = relatedBindings.filter((row) => row.userId !== ctx.session.userId && observedTokens.has(row.identifier));
+
+        // 소유 증거 없는 구매(레거시·out-of-app)의 토큰이 다른 계정 소유면 정당한 주인이 따로 있다는 뜻이다 —
+        // 현재 세션에 임의 배정하지 않는다. 조건 미충족·소유 증거 없는 레거시는 거절 + 알람 + 수동이다.
+        const unverifiedRecovery = foreignBindings.find((row) => recoveryTokens.has(row.identifier));
+        if (unverifiedRecovery && !observation.ownershipVerified) {
+          await opsAlert('iap-ownership-mismatch', {
+            ...alertContext,
+            detail: 'legacy-registration-foreign-recovery-token',
+            foreignBindingId: unverifiedRecovery.id,
+            foreignUserId: unverifiedRecovery.userId,
+          });
+
+          throw new TypieError({ code: 'in_app_purchase_account_mismatch' });
+        }
+
+        const retirableStates = [SubscriptionState.ACTIVE, SubscriptionState.WILL_EXPIRE, SubscriptionState.IN_GRACE_PERIOD];
+
+        for (const foreign of foreignBindings) {
+          // 확정 종료가 아닌 형제 계약은 관측만 남긴다 — 살아 있는 계약을 회수하면 남의 유료 권한을 끊는다.
+          if (!recoveryTokens.has(foreign.identifier)) {
+            await opsAlert('iap-foreign-predecessor-observed', {
+              ...alertContext,
+              predecessorBindingId: foreign.id,
+              predecessorUserId: foreign.userId,
+              predecessorIdentifier: foreign.identifier,
+            });
+
+            continue;
+          }
+
+          // 회수 대상은 그 바인딩의 canonical 한 행뿐이다 — 유저·플랜으로 쓸면 그 유저의 다른 IAP 계약까지 끊는다.
+          // 회수는 상태가 표현한다 — 주기 컬럼은 서비스 기간의 사실이라 자르지 않는다.
+          await tx
+            .update(Subscriptions)
+            .set({ state: SubscriptionState.EXPIRED })
+            .where(
+              foreign.subscriptionId
+                ? and(eq(Subscriptions.id, foreign.subscriptionId), inArray(Subscriptions.state, retirableStates))
+                : // 백필 전 레거시 바인딩에는 가리키는 행이 없다 — 현행 폴백(그 유저의 IAP 행)을 유지한다.
+                  and(
+                    eq(Subscriptions.userId, foreign.userId),
+                    inArray(Subscriptions.state, retirableStates),
+                    inArray(
+                      Subscriptions.planId,
+                      tx.select({ id: Plans.id }).from(Plans).where(eq(Plans.availability, PlanAvailability.IN_APP_PURCHASE)),
+                    ),
+                  ),
+            );
+
+          await tx.delete(UserInAppPurchases).where(eq(UserInAppPurchases.id, foreign.id));
+        }
+
+        // 스토어가 선언한 승계 포인터가 전역에도 없으면 신규로 취급하되 남긴다 — 계정 이전·재설치 변칙의 신호다.
+        if (
+          observation.declaredPredecessors.length > 0 &&
+          relatedBindings.every((row) => !observation.declaredPredecessors.includes(row.identifier))
+        ) {
+          await opsAlert('iap-succession-token-unknown-globally', {
+            ...alertContext,
+            successorTokens: observation.declaredPredecessors,
+          });
+        }
+
+        // 스토어 구매가 웹 예약을 대체한다(오너 결정). 예약이 남으면 전환 잡이 카드 결제까지 시도한다.
+        await retireReservation(tx, { userId: ctx.session.userId });
+
+        // canonical 은 정리 대상에서 뺀다 — 여기서 EXPIRED 로 만들면 적용 primitive 의 복권 게이트가 방금 등록한 계약을 되돌린다.
+        const canonicalExclusion = canonical ? ne(Subscriptions.id, canonical.id) : undefined;
+
+        // 트라이얼 행을 같은 락 안에서 종료하지 않으면 재조정이 매일 승격 충돌로 스킵한다.
         await tx
           .update(Subscriptions)
-          .set({ state: SubscriptionState.EXPIRED, expiresAt: sql`LEAST(${Subscriptions.expiresAt}, NOW())` })
+          .set({ state: SubscriptionState.EXPIRED })
+          .where(
+            and(
+              eq(Subscriptions.userId, ctx.session.userId),
+              ne(Subscriptions.state, SubscriptionState.EXPIRED),
+              canonicalExclusion,
+              inArray(Subscriptions.planId, tx.select({ id: Plans.id }).from(Plans).where(eq(Plans.availability, PlanAvailability.TRIAL))),
+            ),
+          );
+
+        const retiredOpenSubscriptions = await tx
+          .update(Subscriptions)
+          .set({ state: SubscriptionState.EXPIRED })
           .where(
             and(
               eq(Subscriptions.userId, ctx.session.userId),
               inArray(Subscriptions.state, [SubscriptionState.WILL_EXPIRE, SubscriptionState.IN_GRACE_PERIOD]),
+              canonicalExclusion,
+            ),
+          )
+          .returning({ id: Subscriptions.id });
+
+        // 이 시점에 열린 인보이스가 없다는 보장은 이 함수 밖 상태 전이 불변식(원격 술어)에 의존한다 — 로컬로
+        // 검증할 수 없으므로 형제 지점(scheduleSubscriptionCancellation·retireReservation)과 동형으로 CAS 방어를 심층화한다.
+        await tx
+          .update(PaymentInvoices)
+          .set({ state: PaymentInvoiceState.CANCELED })
+          .where(
+            and(
+              inArray(
+                PaymentInvoices.subscriptionId,
+                retiredOpenSubscriptions.map((row) => row.id),
+              ),
+              inArray(PaymentInvoices.state, [PaymentInvoiceState.UPCOMING, PaymentInvoiceState.OVERDUE]),
             ),
           );
 
-        await tx
-          .insert(UserInAppPurchases)
-          .values({
+        let lockedBinding: { id: string; userId: string; store: InAppPurchaseStore; identifier: string; subscriptionId: string };
+
+        if (binding && canonical) {
+          // 바인딩이 있으면 canonical 은 그 FK 가 가리키는 한 행이다 — upsert 는 목표 상태가 ACTIVE 가 아닐 때
+          // 충돌 없이 새 행을 만들어 한 행 원칙을 깬다. 상태·주기는 아래 primitive 가 이 행 ID 로 갱신한다.
+          // 토큰 교체와 재조정 비활성 마커 해제는 같은 UPDATE 다 — 갈라지면 승계된 토큰이 재조정에서 영구 제외된다.
+          await tx
+            .update(UserInAppPurchases)
+            .set({
+              identifier: input.data,
+              subscriptionId: canonical.id,
+              ...(binding.identifier !== input.data && { reconcileSuspendedAt: null }),
+            })
+            .where(eq(UserInAppPurchases.id, binding.id));
+
+          lockedBinding = {
+            id: binding.id,
             userId: ctx.session.userId,
             store: input.store,
-            identifier,
-          })
-          .onConflictDoUpdate({
-            target: [UserInAppPurchases.userId],
-            set: { store: input.store, identifier },
-          });
+            identifier: input.data,
+            subscriptionId: canonical.id,
+          };
+        } else {
+          const plan = await tx
+            .select({ id: Plans.id })
+            .from(Plans)
+            .where(and(eq(Plans.id, observation.normalized.planKey), eq(Plans.availability, PlanAvailability.IN_APP_PURCHASE)))
+            .then(firstOrThrow);
 
-        return await tx
-          .insert(Subscriptions)
-          .values({
+          const created = await tx
+            .insert(Subscriptions)
+            .values({
+              userId: ctx.session.userId,
+              planId: plan.id,
+              startsAt: observation.startsAt,
+              currentPeriodStartsAt: observation.normalized.periodStartsAt,
+              currentPeriodEndsAt: observation.normalized.periodEndsAt,
+              state: observation.normalized.state,
+            })
+            .onConflictDoUpdate({
+              target: [Subscriptions.userId],
+              targetWhere: eq(Subscriptions.state, SubscriptionState.ACTIVE),
+              // 기존 행의 startsAt 은 보존한다(구독이 처음 부여된 시각).
+              set: {
+                planId: plan.id,
+                currentPeriodStartsAt: observation.normalized.periodStartsAt,
+                currentPeriodEndsAt: observation.normalized.periodEndsAt,
+                state: observation.normalized.state,
+              },
+              // 위 검사 이후 동시에 커밋된 다른 채널(빌링키 등) ACTIVE 구독을 IAP 값으로 덮어쓰지 않는다.
+              // 충돌 행이 IAP 가 아니면 no-op → returning 이 비어 firstOrThrow 로 트랜잭션 전체가 롤백된다(오염 대신 실패).
+              setWhere: inArray(
+                Subscriptions.planId,
+                tx.select({ id: Plans.id }).from(Plans).where(eq(Plans.availability, PlanAvailability.IN_APP_PURCHASE)),
+              ),
+            })
+            .returning({ id: Subscriptions.id })
+            .then(firstOrThrow);
+
+          // 크로스 스토어 덮어쓰기는 하지 않는다(precheck 이 이미 거절했다) — setWhere 가 없으면 경합이 그 문을 다시 연다.
+          const bound = await tx
+            .insert(UserInAppPurchases)
+            .values({ userId: ctx.session.userId, store: input.store, identifier: input.data, subscriptionId: created.id })
+            .onConflictDoUpdate({
+              target: [UserInAppPurchases.userId],
+              set: { identifier: input.data, subscriptionId: created.id, reconcileSuspendedAt: null },
+              setWhere: eq(UserInAppPurchases.store, input.store),
+            })
+            .returning({ id: UserInAppPurchases.id })
+            .then(firstOrThrow);
+
+          lockedBinding = {
+            id: bound.id,
             userId: ctx.session.userId,
-            planId,
-            startsAt,
-            expiresAt,
-            renewedAt: startsAt,
-            state: SubscriptionState.ACTIVE,
-          })
-          .onConflictDoUpdate({
-            target: [Subscriptions.userId],
-            targetWhere: eq(Subscriptions.state, SubscriptionState.ACTIVE),
-            set: { planId, startsAt, expiresAt, renewedAt: startsAt },
-            // 상단 eligibility 검사 이후 동시에 커밋된 다른 채널(빌링키 등) ACTIVE 구독을 IAP 값으로 덮어쓰지 않는다.
-            // 충돌 행이 IAP 가 아니면 no-op → returning 이 비어 firstOrThrow 로 트랜잭션 전체가 롤백된다(오염 대신 실패).
-            setWhere: inArray(
-              Subscriptions.planId,
-              tx.select({ id: Plans.id }).from(Plans).where(eq(Plans.availability, PlanAvailability.IN_APP_PURCHASE)),
-            ),
-          })
-          .returning()
+            store: input.store,
+            identifier: input.data,
+            subscriptionId: created.id,
+          };
+        }
+
+        // 상태·주기·플랜의 적용은 재조정·웹훅과 같은 primitive 를 공유한다(직접 UPDATE 금지).
+        const { acknowledge } = await applyNormalizedIapLocked(tx, { binding: lockedBinding, normalized: observation.normalized });
+
+        const subscription = await tx
+          .select()
+          .from(Subscriptions)
+          .where(eq(Subscriptions.id, lockedBinding.subscriptionId))
           .then(firstOrThrow);
+
+        return { subscription, acknowledge };
       });
+
+      // 승인은 커밋 후 의무다 — 롤백된 트랜잭션의 토큰을 승인하지 않는다.
+      if (acknowledge) {
+        try {
+          await googleplay.acknowledgeSubscription(acknowledge);
+        } catch (err) {
+          await opsAlert('google-acknowledge-failed', { ...acknowledge, error: err instanceof Error ? err.message : String(err) });
+        }
+      }
+
+      return subscription;
     },
   }),
 
@@ -847,26 +1103,29 @@ builder.mutationFields((t) => ({
 
         // 교착 방지 전역 락 순서: WILL_ACTIVATE 구독 → 주 구독 → 인보이스.
         // 환불·갱신 재시도가 구독을 잠근 채 인보이스를 갱신하므로, 여기서 인보이스를 구독보다 먼저 잠그면 역순 교착이 된다.
-        await tx
-          .delete(Subscriptions)
-          .where(and(eq(Subscriptions.userId, ctx.session.userId), eq(Subscriptions.state, SubscriptionState.WILL_ACTIVATE)));
+        await retireReservation(tx, { userId: ctx.session.userId });
 
+        // 회수는 상태가 표현한다 — 주기 컬럼은 서비스 기간의 사실이라 자르지 않는다.
         const subscription = await tx
           .update(Subscriptions)
-          .set(
-            activeSubscription.state === SubscriptionState.ACTIVE
-              ? { state: SubscriptionState.WILL_EXPIRE }
-              : { state: SubscriptionState.EXPIRED, expiresAt: sql`LEAST(${Subscriptions.expiresAt}, NOW())` },
-          )
+          .set({
+            state: activeSubscription.state === SubscriptionState.ACTIVE ? SubscriptionState.WILL_EXPIRE : SubscriptionState.EXPIRED,
+          })
           .where(eq(Subscriptions.id, activeSubscription.id))
           .returning()
           .then(firstOrThrow);
 
+        // 청구 이탈 전이는 열린 인보이스를 같은 트랜잭션에서 거둔다 — 남기면 늦은 성공 확정이 해지한 구독을 되살린다.
         if (activeSubscription.state === SubscriptionState.IN_GRACE_PERIOD) {
           await tx
             .update(PaymentInvoices)
             .set({ state: PaymentInvoiceState.CANCELED })
-            .where(and(eq(PaymentInvoices.subscriptionId, activeSubscription.id), eq(PaymentInvoices.state, PaymentInvoiceState.OVERDUE)));
+            .where(
+              and(
+                eq(PaymentInvoices.subscriptionId, activeSubscription.id),
+                inArray(PaymentInvoices.state, [PaymentInvoiceState.UPCOMING, PaymentInvoiceState.OVERDUE]),
+              ),
+            );
         }
 
         return subscription;
@@ -889,7 +1148,7 @@ builder.mutationFields((t) => ({
             and(
               eq(Subscriptions.userId, ctx.session.userId),
               eq(Subscriptions.state, SubscriptionState.WILL_EXPIRE),
-              gt(Subscriptions.expiresAt, dayjs()),
+              gt(Subscriptions.currentPeriodEndsAt, dayjs()),
               eq(Plans.availability, PlanAvailability.BILLING_KEY),
             ),
           )
