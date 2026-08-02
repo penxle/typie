@@ -92,7 +92,13 @@ export const pointerCapture = <Session>(
   };
 
   const handlePointerCancel = (event: PointerEvent) => cancel('pointercancel', event);
-  const handleLostPointerCapture = (event: PointerEvent) => cancel('lostpointercapture', event);
+  const handleLostPointerCapture = (event: PointerEvent) => {
+    if (event.pointerType === 'mouse' && event.buttons === 0) {
+      handlePointerUp(event);
+      return;
+    }
+    cancel('lostpointercapture', event);
+  };
 
   element.addEventListener('pointerdown', handlePointerDown);
 

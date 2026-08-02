@@ -2,11 +2,12 @@ import { pointerCapture } from '@typie/ui/actions';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PointerCaptureParameters } from '@typie/ui/actions';
 
-const pointerEvent = (type: string, pointerId = 1) => {
+const pointerEvent = (type: string, pointerId = 1, properties: { buttons?: number; pointerType?: string } = {}) => {
   const event = new MouseEvent(type, { bubbles: true, button: 0 });
   Object.defineProperties(event, {
     pointerId: { value: pointerId },
     isPrimary: { value: true },
+    ...Object.fromEntries(Object.entries(properties).map(([key, value]) => [key, { value }])),
   });
   return event as PointerEvent;
 };
@@ -25,9 +26,9 @@ const installPointerCapture = (element: HTMLElement) => {
   });
 
   return {
-    lose(pointerId: number) {
+    lose(pointerId: number, event = pointerEvent('lostpointercapture', pointerId)) {
       capturedPointerId = null;
-      element.dispatchEvent(pointerEvent('lostpointercapture', pointerId));
+      element.dispatchEvent(event);
     },
   };
 };
@@ -130,12 +131,30 @@ describe('pointerCapture', () => {
     const action = pointerCapture(element, { start: () => session, cancel });
 
     element.dispatchEvent(pointerEvent('pointerdown'));
-    capture.lose(1);
+    capture.lose(1, pointerEvent('lostpointercapture', 1, { pointerType: 'mouse', buttons: 1 }));
 
     expect(cancel).toHaveBeenCalledOnce();
     expect(cancel).toHaveBeenCalledWith(session, 'lostpointercapture', expect.any(MouseEvent));
     action.destroy?.();
     expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it('ends when mouse capture is lost after all buttons are released', () => {
+    const element = createElement();
+    const capture = installPointerCapture(element);
+    const session = { id: 'owner' };
+    const end = vi.fn();
+    const cancel = vi.fn();
+    const action = pointerCapture(element, { start: () => session, end, cancel });
+
+    element.dispatchEvent(pointerEvent('pointerdown'));
+    const event = pointerEvent('lostpointercapture', 1, { pointerType: 'mouse', buttons: 0 });
+    capture.lose(1, event);
+
+    expect(end).toHaveBeenCalledOnce();
+    expect(end).toHaveBeenCalledWith(session, event);
+    expect(cancel).not.toHaveBeenCalled();
+    action.destroy?.();
   });
 
   it('cancels on destroy and removes its listeners', () => {
