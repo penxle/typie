@@ -65,6 +65,10 @@ const alertOnce = async (id: OpsAlertId, key: string, context: Record<string, un
 const isBeyondEnrollmentRace = (observedAt: number | null): boolean =>
   observedAt === null || !Number.isFinite(observedAt) || dayjs().diff(dayjs(observedAt)) > ENROLLMENT_RACE_WINDOW_MS;
 
+// 해당 토큰의 계약이 끝났다는 통지 — REVOKED(12) · EXPIRED(13) · PENDING_PURCHASE_CANCELED(20).
+// 이후 등록이 와도 되살아날 구독이 없으므로 바인딩 없는 상태로 재시도를 이어갈 이유가 없다.
+const TERMINAL_SUBSCRIPTION_NOTIFICATION_TYPES = new Set([12, 13, 20]);
+
 // 커밋 후 의무다 — 롤백된 트랜잭션의 토큰을 승인하지 않는다.
 // Apple 정규화는 productId 를 싣지 않아(iap-normalize 의 normalizeApple) 이 경로의 duty 는 항상 null 이다 — 승인은 Google 전용 의무다.
 const settleAcknowledge = async (duty: IapAcknowledgeDuty | null) => {
@@ -606,6 +610,13 @@ iap.post('/googleplay', async (c) => {
         purchaseToken,
         notificationType: notification.subscriptionNotification.notificationType,
       });
+
+      // 종결 알림은 완충이 끝난 시점에 닫는다 — 여기서 400 을 유지하면 Pub/Sub 보존 기한까지
+      // 같은 알림이 재전송되며 하루 1회 알람이 반복된다(성립할 수 없는 재시도).
+      if (TERMINAL_SUBSCRIPTION_NOTIFICATION_TYPES.has(notification.subscriptionNotification.notificationType)) {
+        await logNotification({ source: 'rest/googleplay', reason: 'unbound_terminal_settled', notification });
+        return c.json({}, 200);
+      }
     }
 
     return c.json({ error: 'retry' }, 400);
