@@ -1,5 +1,5 @@
 import { eq, sql } from 'drizzle-orm';
-import { bigint, boolean, foreignKey, index, integer, jsonb, pgTable, text, unique, uniqueIndex } from 'drizzle-orm/pg-core';
+import { bigint, boolean, foreignKey, index, integer, jsonb, pgTable, text, unique, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { TableCode } from './codes.ts';
 import * as E from './enums.ts';
 import { createDbId } from './id.ts';
@@ -855,6 +855,11 @@ export const Users = pgTable(
     id: text('id')
       .primaryKey()
       .$defaultFn(() => createDbId(TableCode.USERS, { length: 'short' })),
+    // 스토어에 노출하는 불투명 식별자다(appAccountToken·obfuscatedExternalAccountId). id 와 무관한 난수여야
+    // 내부 식별자가 외부로 새지 않는다 — 기존 행만 발급된 트랜잭션과의 호환을 위해 구 파생값(uuid v5)을 유지한다.
+    uuid: uuid('uuid')
+      .notNull()
+      .$defaultFn(() => crypto.randomUUID()),
     email: text('email').notNull(),
     password: text('password'),
     name: text('name').notNull(),
@@ -872,6 +877,7 @@ export const Users = pgTable(
     uniqueIndex()
       .on(t.email)
       .where(eq(t.state, sql`'ACTIVE'`)),
+    uniqueIndex().on(t.uuid),
   ],
 );
 

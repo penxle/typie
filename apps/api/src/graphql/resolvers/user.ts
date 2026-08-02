@@ -76,7 +76,7 @@ import { delay } from '#/utils/promise.ts';
 import { enqueueSearchSyncForEntityIds } from '#/utils/search-index.ts';
 import { hasLiveYearlyBillingKeySubscription } from '#/utils/subscription-billing-key.ts';
 import { lockUserSubscriptionState } from '#/utils/subscription-lock.ts';
-import { getUserUsage, getUserUuid } from '#/utils/user.ts';
+import { getUserUsage } from '#/utils/user.ts';
 import { builder } from '../builder.ts';
 import {
   CharacterCountChange,
@@ -162,9 +162,7 @@ User.implement({
       },
     }),
 
-    uuid: t.string({
-      resolve: (self) => getUserUuid(self.id),
-    }),
+    uuid: t.exposeString('uuid'),
 
     hasPassword: t.boolean({ resolve: (user) => !!user.password }),
 

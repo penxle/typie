@@ -7,11 +7,11 @@ import { InAppPurchaseStore, PlanAvailability, PlanInterval, SubscriptionState }
 import dayjs from 'dayjs';
 import {
   discoverAppleSuccessor,
+  extractIapRegistrationOwnership,
   normalizeApple,
   normalizeGoogle,
   precheckIapEnroll,
   selectAppleStatusItem,
-  validateIapRegistrationOwnership,
 } from './iap-normalize.ts';
 import type { JWSRenewalInfoDecodedPayload, JWSTransactionDecodedPayload } from '@apple/app-store-server-library';
 import type { androidpublisher_v3 } from '@googleapis/androidpublisher';
@@ -1274,7 +1274,7 @@ test('등록 사전 판정: 같은 스토어 바인딩·트라이얼·기간 경
   assert.deepEqual(allowedWith([enrollRow({ state: SubscriptionState.EXPIRED })]), { allowed: true });
 });
 
-const SESSION_UUID = '018f0000-0000-7000-8000-0000000000aa';
+const OWNER_UUID = '018f0000-0000-7000-8000-0000000000aa';
 const OTHER_UUID = '018f0000-0000-7000-8000-0000000000bb';
 
 const appleOwnership = (over: Record<string, unknown> = {}) => ({
@@ -1287,116 +1287,84 @@ const appleOwnership = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-test('소유 증거: 애플 거래 토큰만 있고 세션과 일치하면 수용한다', () => {
-  const result = validateIapRegistrationOwnership({
-    sessionUuid: SESSION_UUID,
-    apple: appleOwnership({ transactionAppAccountToken: SESSION_UUID }),
+test('소유 증거: 애플 거래 토큰이 소유자를 지목한다', () => {
+  const result = extractIapRegistrationOwnership({
+    apple: appleOwnership({ transactionAppAccountToken: OWNER_UUID }),
   });
 
-  assert.deepEqual(result, { kind: 'accepted', legacy: false });
+  assert.deepEqual(result, { kind: 'evidenced', ownerUuid: OWNER_UUID });
 });
 
-test('소유 증거: 애플 갱신 토큰만 있어도 레거시로 통과시키지 않고 대조한다', () => {
-  const matched = validateIapRegistrationOwnership({
-    sessionUuid: SESSION_UUID,
-    apple: appleOwnership({ renewalAppAccountToken: SESSION_UUID }),
+test('소유 증거: 애플 갱신 토큰만 있어도 레거시가 아니라 소유자 지목이다', () => {
+  const result = extractIapRegistrationOwnership({
+    apple: appleOwnership({ renewalAppAccountToken: OWNER_UUID }),
   });
-  assert.deepEqual(matched, { kind: 'accepted', legacy: false });
 
-  const mismatched = validateIapRegistrationOwnership({
-    sessionUuid: SESSION_UUID,
-    apple: appleOwnership({ renewalAppAccountToken: OTHER_UUID }),
-  });
-  assert.deepEqual(mismatched, { kind: 'rejected', reason: 'mismatch' });
+  assert.deepEqual(result, { kind: 'evidenced', ownerUuid: OWNER_UUID });
 });
 
-test('소유 증거: 애플 양쪽 토큰이 세션·서로 일치하면 수용한다', () => {
-  const result = validateIapRegistrationOwnership({
-    sessionUuid: SESSION_UUID,
+test('소유 증거: 애플 양쪽 토큰이 서로 일치하면 그 값으로 지목한다', () => {
+  const result = extractIapRegistrationOwnership({
     apple: appleOwnership({
-      transactionAppAccountToken: SESSION_UUID,
-      renewalAppAccountToken: SESSION_UUID,
+      transactionAppAccountToken: OWNER_UUID,
+      renewalAppAccountToken: OWNER_UUID,
       renewalOriginalTransactionId: ORIGINAL_TRANSACTION_ID,
     }),
   });
 
-  assert.deepEqual(result, { kind: 'accepted', legacy: false });
+  assert.deepEqual(result, { kind: 'evidenced', ownerUuid: OWNER_UUID });
 });
 
-test('소유 증거: 애플 양쪽 토큰이 서로 어긋나면 거절한다', () => {
-  const result = validateIapRegistrationOwnership({
-    sessionUuid: SESSION_UUID,
-    apple: appleOwnership({ transactionAppAccountToken: SESSION_UUID, renewalAppAccountToken: OTHER_UUID }),
+test('소유 증거: 애플 양쪽 토큰이 서로 어긋나면 소유자를 지목할 수 없어 거절한다', () => {
+  const result = extractIapRegistrationOwnership({
+    apple: appleOwnership({ transactionAppAccountToken: OWNER_UUID, renewalAppAccountToken: OTHER_UUID }),
   });
 
   assert.deepEqual(result, { kind: 'rejected', reason: 'mismatch' });
 });
 
 test('소유 증거: 애플 갱신 정보의 원거래 ID가 거래·요청 값과 다르면 거절한다', () => {
-  const result = validateIapRegistrationOwnership({
-    sessionUuid: SESSION_UUID,
-    apple: appleOwnership({ transactionAppAccountToken: SESSION_UUID, renewalOriginalTransactionId: 'OT-999' }),
+  const result = extractIapRegistrationOwnership({
+    apple: appleOwnership({ transactionAppAccountToken: OWNER_UUID, renewalOriginalTransactionId: 'OT-999' }),
   });
 
   assert.deepEqual(result, { kind: 'rejected', reason: 'mismatch' });
 });
 
-test('소유 증거: 애플 토큰이 양쪽 모두 없을 때만 레거시로 통과시킨다', () => {
-  const result = validateIapRegistrationOwnership({ sessionUuid: SESSION_UUID, apple: appleOwnership() });
+test('소유 증거: 애플 토큰이 양쪽 모두 없을 때만 레거시다', () => {
+  const result = extractIapRegistrationOwnership({ apple: appleOwnership() });
 
-  assert.deepEqual(result, { kind: 'accepted', legacy: true });
+  assert.deepEqual(result, { kind: 'legacy' });
 });
 
 test('소유 증거: 애플 가족 공유 거래는 거절한다', () => {
-  const result = validateIapRegistrationOwnership({
-    sessionUuid: SESSION_UUID,
-    apple: appleOwnership({ transactionAppAccountToken: SESSION_UUID, inAppOwnershipType: 'FAMILY_SHARED' }),
+  const result = extractIapRegistrationOwnership({
+    apple: appleOwnership({ transactionAppAccountToken: OWNER_UUID, inAppOwnershipType: 'FAMILY_SHARED' }),
   });
 
   assert.deepEqual(result, { kind: 'rejected', reason: 'family-shared' });
 });
 
-test('소유 증거: 구글 계정 식별자가 세션과 일치하면 수용한다', () => {
-  const result = validateIapRegistrationOwnership({
-    sessionUuid: SESSION_UUID,
-    google: { obfuscatedExternalAccountId: SESSION_UUID, expiredObfuscatedExternalAccountId: null },
+test('소유 증거: 구글 계정 식별자가 소유자를 지목한다', () => {
+  const result = extractIapRegistrationOwnership({
+    google: { obfuscatedExternalAccountId: OWNER_UUID, expiredObfuscatedExternalAccountId: null },
   });
 
-  assert.deepEqual(result, { kind: 'accepted', legacy: false });
+  assert.deepEqual(result, { kind: 'evidenced', ownerUuid: OWNER_UUID });
 });
 
-test('소유 증거: 구글 계정 식별자가 어긋나면 거절한다', () => {
-  const result = validateIapRegistrationOwnership({
-    sessionUuid: SESSION_UUID,
-    google: { obfuscatedExternalAccountId: OTHER_UUID, expiredObfuscatedExternalAccountId: null },
+test('소유 증거: 구글 계정 식별자 부재 시 만료 구매의 식별자가 소유자를 지목한다', () => {
+  const result = extractIapRegistrationOwnership({
+    google: { obfuscatedExternalAccountId: null, expiredObfuscatedExternalAccountId: OWNER_UUID },
   });
 
-  assert.deepEqual(result, { kind: 'rejected', reason: 'mismatch' });
+  assert.deepEqual(result, { kind: 'evidenced', ownerUuid: OWNER_UUID });
 });
 
-test('소유 증거: 구글 계정 식별자 부재 시 만료 구매의 식별자로 대조해 수용한다', () => {
-  const result = validateIapRegistrationOwnership({
-    sessionUuid: SESSION_UUID,
-    google: { obfuscatedExternalAccountId: null, expiredObfuscatedExternalAccountId: SESSION_UUID },
-  });
-
-  assert.deepEqual(result, { kind: 'accepted', legacy: false });
-});
-
-test('소유 증거: 구글 만료 구매 식별자가 어긋나면 거절한다', () => {
-  const result = validateIapRegistrationOwnership({
-    sessionUuid: SESSION_UUID,
-    google: { obfuscatedExternalAccountId: null, expiredObfuscatedExternalAccountId: OTHER_UUID },
-  });
-
-  assert.deepEqual(result, { kind: 'rejected', reason: 'mismatch' });
-});
-
-test('소유 증거: 구글 식별자가 양쪽 모두 없으면 레거시로 통과시킨다', () => {
-  const result = validateIapRegistrationOwnership({
-    sessionUuid: SESSION_UUID,
+test('소유 증거: 구글 식별자가 양쪽 모두 없으면 레거시다', () => {
+  const result = extractIapRegistrationOwnership({
     google: { obfuscatedExternalAccountId: null, expiredObfuscatedExternalAccountId: null },
   });
 
-  assert.deepEqual(result, { kind: 'accepted', legacy: true });
+  assert.deepEqual(result, { kind: 'legacy' });
 });

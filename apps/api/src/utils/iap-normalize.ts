@@ -591,14 +591,16 @@ export const precheckIapEnroll = ({
   return { allowed: true };
 };
 
-export type IapOwnershipVerdict = { kind: 'accepted'; legacy: boolean } | { kind: 'rejected'; reason: 'mismatch' | 'family-shared' };
+export type IapRegistrationOwnership =
+  { kind: 'evidenced'; ownerUuid: string } | { kind: 'legacy' } | { kind: 'rejected'; reason: 'mismatch' | 'family-shared' };
 
-export const validateIapRegistrationOwnership = ({
-  sessionUuid,
+// 스토어 payload 의 계정 식별자(appAccountToken·obfuscatedExternalAccountId)에서 등록 대상을 추출한다.
+// 세션과의 대조가 아니다 — 결제한 계정과 로그인 계정이 달라도 등록은 소유자에게 귀속되므로, 여기서는
+// 소유자를 하나로 지목할 수 있는지만 판정한다. 증거가 없는 구매(식별자 도입 전)는 legacy 로 남긴다.
+export const extractIapRegistrationOwnership = ({
   apple,
   google,
 }: {
-  sessionUuid: string;
   apple?: {
     transactionAppAccountToken: string | null;
     renewalAppAccountToken: string | null;
@@ -608,9 +610,7 @@ export const validateIapRegistrationOwnership = ({
     inAppOwnershipType: string | null;
   };
   google?: { obfuscatedExternalAccountId: string | null; expiredObfuscatedExternalAccountId: string | null };
-}): IapOwnershipVerdict => {
-  let legacy = true;
-
+}): IapRegistrationOwnership => {
   if (apple) {
     if (apple.inAppOwnershipType === InAppOwnershipType.FAMILY_SHARED) {
       return { kind: 'rejected', reason: 'family-shared' };
@@ -628,27 +628,23 @@ export const validateIapRegistrationOwnership = ({
       return { kind: 'rejected', reason: 'mismatch' };
     }
 
-    // 두 서명 payload 모두 optional이라, 한쪽 부재를 레거시로 통과시키면 다른 쪽에 명시된 타인 소유가 새어 들어온다.
+    // 두 서명 payload 모두 optional 이다. 둘 다 실렸는데 서로 다르면 소유자를 하나로 지목할 수 없다 — 임의로 고르지 않는다.
     const tokens = [apple.transactionAppAccountToken, apple.renewalAppAccountToken].filter((token): token is string => token !== null);
     if (tokens.length > 0) {
-      if (tokens.some((token) => token !== sessionUuid)) {
+      if (new Set(tokens).size > 1) {
         return { kind: 'rejected', reason: 'mismatch' };
       }
 
-      legacy = false;
+      return { kind: 'evidenced', ownerUuid: tokens[0] };
     }
   }
 
   if (google) {
     const identifier = google.obfuscatedExternalAccountId ?? google.expiredObfuscatedExternalAccountId;
     if (identifier !== null) {
-      if (identifier !== sessionUuid) {
-        return { kind: 'rejected', reason: 'mismatch' };
-      }
-
-      legacy = false;
+      return { kind: 'evidenced', ownerUuid: identifier };
     }
   }
 
-  return { kind: 'accepted', legacy };
+  return { kind: 'legacy' };
 };

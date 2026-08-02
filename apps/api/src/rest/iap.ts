@@ -3,8 +3,9 @@ import { InAppPurchaseStore, PlanAvailability, SubscriptionState } from '@typie/
 import dayjs from 'dayjs';
 import { and, eq, inArray, ne } from 'drizzle-orm';
 import { Hono } from 'hono';
+import * as uuid from 'uuid';
 import { redis } from '#/cache.ts';
-import { db, first, Plans, Subscriptions, UserInAppPurchases } from '#/db/index.ts';
+import { db, first, Plans, Subscriptions, UserInAppPurchases, Users } from '#/db/index.ts';
 import { production } from '#/env.ts';
 import * as appstore from '#/external/appstore.ts';
 import * as googleplay from '#/external/googleplay.ts';
@@ -14,7 +15,6 @@ import { discoverAppleSuccessor, mapUnsupportedStorePayloadReason, normalizeGoog
 import { applyNormalizedIapLocked, resolveAcknowledgeDuty } from '#/utils/iap-sync.ts';
 import { opsAlert, opsAlertOnce } from '#/utils/ops-alert.ts';
 import { lockUserSubscriptionState } from '#/utils/subscription-lock.ts';
-import { getUserUuid } from '#/utils/user.ts';
 import type { ResponseBodyV2 } from '@apple/app-store-server-library';
 import type { androidpublisher_v3 } from '@googleapis/androidpublisher';
 import type { PlanInterval } from '@typie/lib/enums';
@@ -191,15 +191,19 @@ type AppleSuccessionOutcome = SuccessionOutcome | AppleUnresolved | { kind: 'loo
 
 type AppleCandidate = AppleUnresolved | { kind: 'found'; binding: SuccessionBinding } | { kind: 'lookup-failed' };
 
-// getUserUuid 는 uuid.v5 단방향 파생이고 저장 컬럼이 없어 역조회가 불가능하다 — 승계는 기존 바인딩 보유자에게만
-// 성립하므로 후보군을 APP_STORE 바인딩 보유 유저 전건으로 한정해 순방향으로 계산·대조한다.
+// appAccountToken 은 구매 시점에 스토어가 서명해 박은 소유 증거다 — users.uuid 로 소유자를 직접 찾는다.
+// 유저는 찾았는데 APP_STORE 바인딩이 없으면 등록이 아직 안 온 것이다(경합).
 const findAppleBindingByAccountToken = async (appAccountToken: string): Promise<AppleCandidate> => {
-  const bindings = await db
-    .select({ id: UserInAppPurchases.id, userId: UserInAppPurchases.userId, identifier: UserInAppPurchases.identifier })
-    .from(UserInAppPurchases)
-    .where(eq(UserInAppPurchases.store, InAppPurchaseStore.APP_STORE));
+  if (!uuid.validate(appAccountToken)) {
+    return { kind: 'unresolved', reason: 'apple-account-token-unmatched', candidates: 0, enrollmentRace: false };
+  }
 
-  const matched = bindings.filter((binding) => getUserUuid(binding.userId) === appAccountToken);
+  const matched = await db
+    .select({ id: UserInAppPurchases.id, userId: UserInAppPurchases.userId, identifier: UserInAppPurchases.identifier })
+    .from(Users)
+    .innerJoin(UserInAppPurchases, and(eq(UserInAppPurchases.userId, Users.id), eq(UserInAppPurchases.store, InAppPurchaseStore.APP_STORE)))
+    .where(eq(Users.uuid, appAccountToken));
+
   if (matched.length !== 1) {
     return {
       kind: 'unresolved',
@@ -472,8 +476,12 @@ const adoptUnboundGoogleNotification = async ({
       purchase.externalAccountIdentifiers?.obfuscatedExternalAccountId ??
       purchase.outOfAppPurchaseContext?.expiredExternalAccountIdentifiers?.obfuscatedExternalAccountId;
 
-    if (obfuscatedAccountId && obfuscatedAccountId !== getUserUuid(locked.binding.userId)) {
-      return { kind: 'foreign', bindingId: locked.binding.id, userId: locked.binding.userId, obfuscatedAccountId };
+    if (obfuscatedAccountId) {
+      const owner = await tx.select({ uuid: Users.uuid }).from(Users).where(eq(Users.id, locked.binding.userId)).then(first);
+
+      if (owner?.uuid !== obfuscatedAccountId) {
+        return { kind: 'foreign', bindingId: locked.binding.id, userId: locked.binding.userId, obfuscatedAccountId };
+      }
     }
 
     const plans = await tx

@@ -28,6 +28,8 @@ import co.typie.domain.preflight.PreflightState
 import co.typie.domain.pushnotification.PushNotificationService
 import co.typie.domain.pushnotification.PushNotificationToastEffect
 import co.typie.domain.subscription.Entitlement
+import co.typie.domain.subscription.PurchaseFailure
+import co.typie.domain.subscription.SubscriptionPurchaseService
 import co.typie.domain.subscription.SubscriptionService
 import co.typie.editor.sync.ActiveDocumentEditingSessions
 import co.typie.editor.sync.orphanSweeper
@@ -152,6 +154,21 @@ fun RootShell() {
   val sheet = remember { Sheet() }
   val dialog = remember { Dialog() }
   val popover = remember { PopoverOverlayState() }
+
+  // 등록 실패 안내는 루트에서 수집한다 — 미완료 트랜잭션 재시도는 화면 밖(앱 실행 시 복구)에서도 일어나므로
+  // 구매 화면에서만 들으면 조용히 버려진다.
+  LaunchedEffect(Unit) {
+    SubscriptionPurchaseService.failures.collect {
+      when (it) {
+        PurchaseFailure.ConflictBeforePurchase ->
+          toast.error("이미 이용 중인 구독이 있어 스토어 결제를 시작할 수 없어요. 웹사이트에서 기존 구독을 확인해주세요.")
+        PurchaseFailure.ConflictAfterPurchase ->
+          toast.error("이용 중인 구독이 있어 스토어 결제 등록을 보류했어요.\n정리되면 자동으로 등록돼요.")
+        PurchaseFailure.AccountMismatch -> toast.error("스토어 결제가 다른 타이피 계정 소유예요.\n결제한 계정으로 로그인해주세요.")
+        PurchaseFailure.PreflightFailed -> toast.error("일시적인 오류가 발생했어요. 잠시 후 다시 시도해주세요.")
+      }
+    }
+  }
 
   val screen =
     when {

@@ -708,6 +708,20 @@
       "when": 1785667343713,
       "tag": "0100_subscription-entitlement-constraints",
       "breakpoints": false
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1785709588015,
+      "tag": "0101_user-uuid",
+      "breakpoints": false
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1785710188015,
+      "tag": "0102_user-uuid-constraints",
+      "breakpoints": false
     }
   ]
 }

@@ -178,7 +178,12 @@ object SubscriptionPurchaseService {
       // (iOS 는 pending 재전송, Android 는 recoverPurchases). 여기서는 사유만 사용자에게 알린다.
       when (e.code) {
         "subscription_already_exists" -> _failures.emit(PurchaseFailure.ConflictAfterPurchase)
-        "in_app_purchase_account_mismatch" -> _failures.emit(PurchaseFailure.AccountMismatch)
+        // 서버가 결제를 소유 증거의 계정에 이미 귀속시킨 뒤 내려주는 코드다 — 이 세션에서 재시도해도 결과가
+        // 바뀌지 않으므로 트랜잭션을 종료해 재시도 루프를 끊는다. 결제는 소유 계정에 반영돼 있어 유실되지 않는다.
+        "in_app_purchase_account_mismatch" -> {
+          PlatformModule.purchaseService.finishTransaction(event.subscriptionId)
+          _failures.emit(PurchaseFailure.AccountMismatch)
+        }
         // 등록 경합·불변식 위반이다. 재시도로 풀리거나 사람이 정리해야 하므로 사용자에게 알리지 않는다.
         "in_app_purchase_registration_conflict" ->
           Logger.w { "in-app purchase registration conflict: retrying on next launch" }
