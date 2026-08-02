@@ -123,6 +123,14 @@ impl EditorServer {
         Ok(editor_server::font::outline_text_to_svg(&font_data, &text)?)
     }
 
+    /// Returns the compile error when the pattern is unusable, `None` when it is
+    /// fine. Invalid input is an expected answer here, not a failure, so it does
+    /// not go through `EditorResult`.
+    #[cfg(feature = "wasm-server")]
+    pub fn validate_regex(&self, pattern: String) -> Option<String> {
+        editor_resource::validate_regex(&pattern).err()
+    }
+
     #[cfg(feature = "wasm-server")]
     pub fn build_font(
         &self,

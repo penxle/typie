@@ -5,8 +5,22 @@ import { and, asc, eq, isNotNull, or } from 'drizzle-orm';
 import { db, firstOrThrow, TableCode, TextReplacementPreferences, TextReplacements, validateDbId } from '#/db/index.ts';
 import { generateFractionalOrder } from '#/utils/index.ts';
 import { assertActiveSubscription } from '#/utils/plan.ts';
+import { wasm } from '#/utils/wasm-ffi.ts';
 import { builder } from '../builder.ts';
 import { isTypeOf, TextReplacement, TextReplacementPreference, User } from '../objects.ts';
+
+// 클라이언트도 저장 전에 검사하지만 근사치다. 실제로 매칭에 쓰이는 fancy_regex 로 여기서 한 번 더
+// 거른다 — 통과하지 못한 규칙은 저장돼도 런타임에 조용히 무시되기만 한다.
+const assertValidMatchPattern = async (match: string, regex: boolean) => {
+  if (!regex) {
+    return;
+  }
+
+  const error = await wasm.validate_regex(match);
+  if (error) {
+    throw new TypieError({ code: 'invalid_regex', message: '정규식이 올바르지 않아요.' });
+  }
+};
 
 TextReplacement.implement({
   isTypeOf: isTypeOf(TableCode.TEXT_REPLACEMENTS),
@@ -72,6 +86,7 @@ builder.mutationFields((t) => ({
     },
     resolve: async (_, { input }, ctx) => {
       await assertActiveSubscription({ userId: ctx.session.userId });
+      await assertValidMatchPattern(input.match, input.regex ?? false);
 
       return await db.transaction(async (tx) => {
         const textReplacement = await tx
@@ -179,6 +194,9 @@ builder.mutationFields((t) => ({
         (input.regex !== null && input.regex !== undefined) ||
         (input.note !== null && input.note !== undefined)
       ) {
+        // match 나 regex 중 하나만 와도 나머지는 기존 값이 남으므로, 병합한 결과로 검사한다.
+        await assertValidMatchPattern(input.match ?? textReplacement.match, input.regex ?? textReplacement.regex);
+
         await db
           .update(TextReplacements)
           .set({

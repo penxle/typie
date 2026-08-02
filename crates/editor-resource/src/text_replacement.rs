@@ -85,10 +85,23 @@ fn compile_rules(raw_rules: Vec<RawTextReplacementRule>) -> Vec<TextReplacementR
         .collect()
 }
 
+fn anchor_pattern(pattern: &str) -> String {
+    format!("(?:{pattern})\\z")
+}
+
+/// Validation for the write path. It must take the same anchoring and
+/// compilation route as the runtime, or a rule can pass validation and then be
+/// silently dropped by `compile_regex` at match time.
+pub fn validate_regex(pattern: &str) -> Result<(), String> {
+    fancy_regex::Regex::new(&anchor_pattern(pattern))
+        .map(|_| ())
+        .map_err(|err| err.to_string())
+}
+
 /// Only a match ending at the caret is ever accepted, so the anchor belongs in
 /// the pattern rather than in a filter over candidate matches.
 fn compile_regex(pattern: &str) -> Option<CompiledPattern> {
-    let anchored = format!("(?:{pattern})\\z");
+    let anchored = anchor_pattern(pattern);
     let regex = fancy_regex::Regex::new(&anchored).ok()?;
     let expr = Expr::parse_tree(&anchored).ok().map(|tree| tree.expr);
 

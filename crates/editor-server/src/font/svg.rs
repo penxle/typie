@@ -176,6 +176,28 @@ mod tests {
         assert!(result.is_err());
     }
 
+    // apps/api 의 폰트 시연 라우트가 이 문구로 "글리프 없음"과 "폰트 손상"을 가른다.
+    // 문구를 바꾸면 그쪽이 조용히 422 로 퇴화하므로 계약으로 고정한다.
+    #[test]
+    fn outline_text_to_svg_reports_missing_glyph_by_message() {
+        let data = load_test_font();
+        let unmapped = char::from_u32(0x10_FFFD).expect("valid scalar value");
+        assert!(
+            FontRef::new(&data)
+                .expect("valid test font")
+                .charmap()
+                .map(unmapped)
+                .is_none(),
+            "test font must not map the probe codepoint"
+        );
+
+        let err = outline_text_to_svg(&data, &unmapped.to_string()).expect_err("must fail");
+        assert!(
+            err.to_string().contains("missing glyph"),
+            "message must contain 'missing glyph', got: {err}"
+        );
+    }
+
     #[test]
     fn outline_text_to_svg_applies_advance_width_between_glyphs() {
         // 여러 글자를 그릴 때 glyph advance width 가 반영되어 SVG viewBox 폭이 커지는지 확인한다.

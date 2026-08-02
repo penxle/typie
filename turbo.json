@@ -5,6 +5,7 @@
     "teamSlug": "typie"
   },
   "globalEnv": ["NODE_ENV"],
+  "globalDependencies": ["apps/api/schema.graphql"],
   "tasks": {
     "codegen": {
       "dependsOn": ["^build"],

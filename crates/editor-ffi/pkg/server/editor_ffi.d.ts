@@ -942,6 +942,12 @@ declare class EditorServer {
     update_heads(prev_heads: Uint8Array, bundle: Uint8Array): Uint8Array;
     validate_and_extract_text(changeset_payloads: Uint8Array): string;
     /**
+     * Returns the compile error when the pattern is unusable, `None` when it is
+     * fine. Invalid input is an expected answer here, not a failure, so it does
+     * not go through `EditorResult`.
+     */
+    validate_regex(pattern: string): string | undefined;
+    /**
      * Verifies a PlainDoc's structural invariants by attempting to load it.
      */
     verify_plain(plain: PlainDoc): void;

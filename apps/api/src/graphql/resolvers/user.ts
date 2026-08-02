@@ -69,6 +69,7 @@ import { evaluateCouponCondition } from '#/utils/coupon.ts';
 import { getDocumentFontFamilies } from '#/utils/document.ts';
 import { assertActiveSubscription } from '#/utils/plan.ts';
 import { delay } from '#/utils/promise.ts';
+import { enqueueSearchSyncForEntityIds } from '#/utils/search-index.ts';
 import { hasLiveYearlyBillingKeySubscription } from '#/utils/subscription-billing-key.ts';
 import { lockUserSubscriptionState } from '#/utils/subscription-lock.ts';
 import { getUserUsage, getUserUuid } from '#/utils/user.ts';
@@ -705,7 +706,7 @@ builder.mutationFields((t) => ({
   deleteUser: t.withAuth({ session: true }).field({
     type: 'Boolean',
     resolve: async (_, __, ctx) => {
-      const billingKey = await db.transaction(async (tx) => {
+      const { billingKey, purgedEntityIds } = await db.transaction(async (tx) => {
         await lockUserSubscriptionState(tx, ctx.session.userId);
 
         // 가드가 락 밖이면 조회 직후 갱신 잡이 청구를 커밋해 탈퇴 시점 과금이 남는다.
@@ -718,7 +719,7 @@ builder.mutationFields((t) => ({
           throw new TypieError({ code: 'overdue_invoices_exist' });
         }
 
-        await tx
+        const purgedEntities = await tx
           .update(Entities)
           .set({ state: EntityState.PURGED, purgedAt: dayjs() })
           .where(
@@ -730,7 +731,8 @@ builder.mutationFields((t) => ({
                 .innerJoin(Sites, eq(Entities.siteId, Sites.id))
                 .where(eq(Sites.userId, ctx.session.userId)),
             ),
-          );
+          )
+          .returning({ id: Entities.id });
 
         await tx.update(Sites).set({ state: SiteState.DELETED }).where(eq(Sites.userId, ctx.session.userId));
 
@@ -753,8 +755,10 @@ builder.mutationFields((t) => ({
 
         await tx.update(Users).set({ state: UserState.DEACTIVATED }).where(eq(Users.id, ctx.session.userId));
 
-        return billingKey;
+        return { billingKey, purgedEntityIds: purgedEntities.map((entity) => entity.id) };
       });
+
+      await enqueueSearchSyncForEntityIds(purgedEntityIds);
 
       if (billingKey) {
         try {

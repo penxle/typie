@@ -10,6 +10,23 @@ process.env.SCRIPT = '1';
 
 const CHUNK_SIZE = 500;
 
+// bulk는 per-item 실패를 HTTP 200 + errors:true로 돌려주고 throw하지 않는다. 확인하지 않으면
+// 색인이 통째로 실패해도 "Done. N indexed"가 그대로 찍힌다. delete의 404는 이미 없는 문서라 무시한다.
+const runBulk = async (operations: object[]) => {
+  const result = await elasticsearch.bulk({ operations });
+  if (!result.errors) return;
+
+  const failures = result.items.filter((item) => {
+    const action = item.index ?? item.delete ?? item.create ?? item.update;
+    if (!action?.error) return false;
+    return !(item.delete && action.status === 404);
+  });
+
+  if (failures.length > 0) {
+    throw new Error(`elasticsearch bulk: ${failures.length}건 실패 — ${JSON.stringify(failures.slice(0, 3))}`);
+  }
+};
+
 const formatEta = (ms: number): string => {
   const seconds = Math.ceil(ms / 1000);
   if (seconds < 60) return `${seconds}s`;
@@ -109,7 +126,7 @@ const processDocumentsInChunks = async (total: number): Promise<number> => {
       );
     }
 
-    await elasticsearch.bulk({ operations });
+    await runBulk(operations);
 
     totalProcessed += documents.length;
     logProgress('Documents indexed', totalProcessed, total, startTime);
@@ -149,7 +166,7 @@ const processDeletedDocumentsInChunks = async (total: number): Promise<number> =
     if (deletedDocuments.length === 0) break;
 
     const operations = deletedDocuments.map((doc) => ({ delete: { _index: esIndex.documents, _id: doc.id } }));
-    await elasticsearch.bulk({ operations });
+    await runBulk(operations);
 
     totalProcessed += deletedDocuments.length;
     logProgress('Documents deleted', totalProcessed, total, startTime);
@@ -179,7 +196,7 @@ const processFoldersInChunks = async (total: number): Promise<number> => {
       })
       .from(Folders)
       .innerJoin(Entities, eq(Entities.id, Folders.entityId))
-      .where(cursor ? sql`${Entities.state} = ${EntityState.ACTIVE} AND ${Folders.id} > ${cursor}` : eq(Entities.state, EntityState.ACTIVE))
+      .where(and(eq(Entities.state, EntityState.ACTIVE), cursor ? sql`${Folders.id} > ${cursor}` : undefined))
       .orderBy(Folders.id)
       .limit(CHUNK_SIZE);
 
@@ -201,7 +218,7 @@ const processFoldersInChunks = async (total: number): Promise<number> => {
       );
     }
 
-    await elasticsearch.bulk({ operations });
+    await runBulk(operations);
 
     totalProcessed += folders.length;
     logProgress('Folders indexed', totalProcessed, total, startTime);
@@ -225,18 +242,14 @@ const processDeletedFoldersInChunks = async (total: number): Promise<number> => 
       .select({ id: Folders.id })
       .from(Folders)
       .innerJoin(Entities, eq(Entities.id, Folders.entityId))
-      .where(
-        cursor
-          ? sql`${Entities.state} IN (${EntityState.DELETED}, ${EntityState.PURGED}) AND ${Folders.id} > ${cursor}`
-          : inArray(Entities.state, [EntityState.DELETED, EntityState.PURGED]),
-      )
+      .where(and(inArray(Entities.state, [EntityState.DELETED, EntityState.PURGED]), cursor ? sql`${Folders.id} > ${cursor}` : undefined))
       .orderBy(Folders.id)
       .limit(CHUNK_SIZE);
 
     if (deletedFolders.length === 0) break;
 
     const operations = deletedFolders.map((folder) => ({ delete: { _index: esIndex.folders, _id: folder.id } }));
-    await elasticsearch.bulk({ operations });
+    await runBulk(operations);
 
     totalProcessed += deletedFolders.length;
     logProgress('Folders deleted', totalProcessed, total, startTime);
