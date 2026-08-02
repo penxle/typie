@@ -242,6 +242,23 @@ describe('global notes error UX', () => {
     }
   });
 
+  it('closes when the empty scroll surface is clicked after scrolling', async () => {
+    const { component } = await mountNotes({ data: { notes: [] }, loading: false, refetch: vi.fn() });
+
+    try {
+      const scrollSurface = document.body.querySelector<HTMLElement>('[role="presentation"]');
+      expect(scrollSurface).not.toBeNull();
+      if (!scrollSurface) return;
+
+      scrollSurface.scrollTop = 100;
+      scrollSurface.click();
+
+      expect(app.state.notesOpen).toBe(false);
+    } finally {
+      await unmount(component);
+    }
+  });
+
   it('does not retain a hidden completed exit or let its completion collapse the reopened note', async () => {
     vi.useFakeTimers();
     const controller = createSiteQueryController({

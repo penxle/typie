@@ -426,7 +426,6 @@
   <div
     bind:this={scrollContainer}
     class={flex({
-      position: 'relative',
       paddingTop: '[15dvh]',
       flexDirection: 'column',
       gap: '20px',
@@ -442,20 +441,13 @@
         handleCollapse();
         return;
       }
-      if (target.closest('[data-notes-backdrop]')) {
+      if (target === e.currentTarget || target.closest('[data-notes-backdrop]')) {
         close();
       }
     }}
     role="presentation"
   >
-    <div
-      class={css({
-        position: 'absolute',
-        inset: '0',
-      })}
-      data-notes-backdrop
-      role="none"
-    ></div>
+    <div class={css({ position: 'fixed', inset: '0' })} data-notes-backdrop role="none"></div>
 
     <!-- Input Area -->
     <div
