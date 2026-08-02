@@ -547,7 +547,7 @@ enum EntityAvailability {
 
 union EntityContainer = Entity | Site
 
-union EntityNode = Document | Folder | Post
+union EntityNode = Document | Folder
 
 enum EntityState {
   ACTIVE
@@ -582,7 +582,7 @@ type EntityView implements IEntity {
   visibility: EntityVisibility!
 }
 
-union EntityViewNode = DocumentView | FolderView | PostView
+union EntityViewNode = DocumentView | FolderView
 
 enum EntityVisibility {
   PRIVATE
@@ -626,7 +626,6 @@ type Folder implements IFolder {
   id: ID!
   maxDescendantFoldersDepth: Int!
   name: String!
-  postCount: Int!
   thumbnail: Image
   view: FolderView!
 }
@@ -637,7 +636,6 @@ type FolderView implements IFolder {
   folderCount: Int!
   id: ID!
   name: String!
-  postCount: Int!
   thumbnail: Image
 }
 
@@ -713,26 +711,6 @@ interface IFolder {
   id: ID!
   name: String!
   thumbnail: Image
-}
-
-interface IPost {
-  allowComment: Boolean!
-  allowReaction: Boolean!
-  availableActions: [PostAvailableAction!]!
-  contentRating: PostContentRating!
-  coverImage: Image
-  createdAt: DateTime!
-  excerpt: String!
-  id: ID!
-  layoutMode: PostLayoutMode!
-  maxWidth: Int!
-  pageLayout: JSON
-  protectContent: Boolean!
-  subtitle: String
-  thumbnail: Image
-  title: String!
-  type: PostType!
-  updatedAt: DateTime!
 }
 
 interface ISite {
@@ -901,7 +879,6 @@ type Mutation {
   persistBlobAsFont(input: PersistBlobAsFontInput!): Font!
   persistBlobAsFontLegacy(input: PersistBlobAsFontLegacyInput!): Font!
   persistBlobAsImage(input: PersistBlobAsImageInput!): Image!
-  purchasePaywall(input: PurchasePaywallInput!): Boolean!
   purgeEntities(input: PurgeEntitiesInput!): Site!
   recordSurvey(input: RecordSurveyInput!): User!
   recoverEntity(input: RecoverEntityInput!): Entity!
@@ -1075,38 +1052,6 @@ type PlanRule {
   maxTotalCharacterCount: Int!
 }
 
-type Post implements IPost {
-  allowComment: Boolean!
-  allowReaction: Boolean!
-  availableActions: [PostAvailableAction!]!
-  body: JSON!
-  characterCount: Int!
-  characterCountChange: CharacterCountChange!
-  contentRating: PostContentRating!
-  coverImage: Image
-  createdAt: DateTime!
-  document: Document
-  entity: Entity!
-  excerpt: String!
-  id: ID!
-  layoutMode: PostLayoutMode!
-  maxWidth: Int!
-  pageLayout: JSON
-  password: String
-  protectContent: Boolean!
-  reactionCount: Int!
-  snapshotMetas: [PostSnapshotMeta!]!
-  snapshots(before: DateTime, first: Int! = 20): [PostSnapshot!]!
-  storedMarks: JSON!
-  subtitle: String
-  thumbnail: Image
-  title: String!
-  type: PostType!
-  update: Binary!
-  updatedAt: DateTime!
-  view: PostView!
-}
-
 enum PostAvailableAction {
   EDIT
 }
@@ -1122,61 +1067,9 @@ enum PostLayoutMode {
   SCROLL
 }
 
-type PostReaction {
-  emoji: String!
-  id: ID!
-  post: PostView!
-}
-
-type PostSnapshot {
-  createdAt: DateTime!
-  id: ID!
-  snapshot: Binary!
-}
-
-type PostSnapshotMeta {
-  createdAt: DateTime!
-  id: ID!
-}
-
 enum PostType {
   NORMAL
   TEMPLATE
-}
-
-type PostView implements IPost {
-  allowComment: Boolean!
-  allowReaction: Boolean!
-  availableActions: [PostAvailableAction!]!
-  body: PostViewBody!
-  contentRating: PostContentRating!
-  coverImage: Image
-  createdAt: DateTime!
-  document: DocumentView
-  entity: EntityView!
-  excerpt: String!
-  hasPassword: Boolean!
-  id: ID!
-  layoutMode: PostLayoutMode!
-  maxWidth: Int!
-  pageLayout: JSON
-  protectContent: Boolean!
-  reactions: [PostReaction!]!
-  subtitle: String
-  thumbnail: Image
-  title: String!
-  type: PostType!
-  updatedAt: DateTime!
-}
-
-union PostViewBody = PostViewBodyAvailable | PostViewBodyUnavailable
-
-type PostViewBodyAvailable {
-  content: JSON!
-}
-
-type PostViewBodyUnavailable {
-  reason: PostViewBodyUnavailableReason!
 }
 
 enum PostViewBodyUnavailableReason {
@@ -1189,11 +1082,6 @@ enum PreorderPaymentState {
   COMPLETED
   FAILED
   PENDING
-}
-
-input PurchasePaywallInput {
-  nodeId: String!
-  postId: ID!
 }
 
 input PurgeEntitiesInput {
@@ -1221,7 +1109,6 @@ type Query {
   note(noteId: ID!): Note!
   notes(entityId: ID, siteId: ID, status: NoteStatus): [Note!]!
   permalink(permalink: String!): Permalink!
-  post(slug: String!): Post!
   randomName: String!
   redirect(from: String!, type: RedirectType!): Redirect
   search(ancestorEntityId: ID, query: String!, siteId: ID!): SearchResult!
@@ -1375,7 +1262,6 @@ type Site implements ISite {
   logo: Image!
   name: String!
   slug: String!
-  templates: [Post!]!
   url: String!
   user: User!
   view: SiteView!
@@ -1662,9 +1548,7 @@ type User implements IUser {
   nextSubscription: Subscription_
   paymentInvoices: [PaymentInvoice!]!
   personalIdentity: UserPersonalIdentity
-  postCount: Int!
   preferences: JSON!
-  recentPosts: [Post!]!
   recentlyViewedEntities(siteId: ID): [Entity!]!
   referral: Referral
   referrals: [Referral!]!

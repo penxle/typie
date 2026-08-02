@@ -14,7 +14,6 @@ import './resolvers/llm.ts';
 import './resolvers/note.ts';
 import './resolvers/stats.ts';
 import './resolvers/payment.ts';
-import './resolvers/post.ts';
 import './resolvers/redirect.ts';
 import './resolvers/search.ts';
 import './resolvers/site.ts';

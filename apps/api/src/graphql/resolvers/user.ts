@@ -82,7 +82,6 @@ import {
   isTypeOf,
   IUser,
   PaymentInvoice,
-  Post,
   Referral,
   Site,
   Subscription,
@@ -273,11 +272,6 @@ User.implement({
       },
     }),
 
-    recentPosts: t.field({
-      type: [Post],
-      resolve: async () => [],
-    }),
-
     characterCountChanges: t.field({
       type: [CharacterCountChange],
       resolve: async (self) => {
@@ -366,10 +360,6 @@ User.implement({
 
         return revenue?.amount ?? 0;
       },
-    }),
-
-    postCount: t.int({
-      resolve: async () => 0,
     }),
 
     documentCount: t.int({

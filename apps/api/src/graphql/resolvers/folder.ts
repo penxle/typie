@@ -137,10 +137,6 @@ Folder.implement({
         return Number(rows[0]?.count || 0);
       },
     }),
-
-    postCount: t.int({
-      resolve: async () => 0,
-    }),
   }),
 });
 
@@ -198,10 +194,6 @@ FolderView.implement({
         );
         return Number(rows[0]?.count || 0);
       },
-    }),
-
-    postCount: t.int({
-      resolve: async () => 0,
     }),
   }),
 });

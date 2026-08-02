@@ -11,7 +11,7 @@ import satori from 'satori';
 import sharp from 'sharp';
 import { match } from 'ts-pattern';
 import twemoji from 'twemoji';
-import { db, Documents, Entities, first, Folders, Images, Posts } from '#/db/index.ts';
+import { db, Documents, Entities, first, Folders, Images } from '#/db/index.ts';
 import * as aws from '#/external/aws.ts';
 import type { Env } from '#/context.ts';
 
@@ -87,7 +87,9 @@ og.get('/:entityId', async (c) => {
   }
 
   const node = await match(entity.type)
-    .with(EntityType.POST, () => renderPost(entityId))
+    .with(EntityType.POST, () => {
+      throw new HTTPException(404);
+    })
     .with(EntityType.FOLDER, () => renderFolder(entityId))
     .with(EntityType.DOCUMENT, () => renderDocument(entityId))
     .exhaustive();
@@ -133,52 +135,6 @@ og.get('/:entityId', async (c) => {
     },
   });
 });
-
-const renderPost = async (entityId: string) => {
-  const post = await db
-    .select({
-      title: Posts.title,
-      subtitle: Posts.subtitle,
-      coverImagePath: Images.path,
-    })
-    .from(Entities)
-    .innerJoin(Posts, eq(Posts.entityId, Entities.id))
-    .leftJoin(Images, eq(Images.id, Posts.coverImageId))
-    .where(eq(Entities.id, entityId))
-    .then(first);
-
-  if (!post) {
-    throw new HTTPException(404);
-  }
-
-  return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '60px',
-        width: '1200px',
-        height: '630px',
-        fontFamily: 'SUIT, Pretendard, NotoSansKR, KoPubWorldDotum',
-        color: colors.gray[950],
-        lineHeight: '1.4',
-        backgroundColor: colors.white,
-        wordBreak: 'break-all',
-      }}
-    >
-      {post.coverImagePath ? (
-        <img src={await toDataUri(post.coverImagePath ?? '')} width={1200} height={240} style={{ objectFit: 'cover' }} />
-      ) : (
-        <div style={{ width: '1200px', height: '240px', backgroundColor: colors.gray[100] }} />
-      )}
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '32px', width: '1000px', margin: '0 auto' }}>
-        <div style={{ display: 'block', fontSize: '60px', fontWeight: 800, lineClamp: 2 }}>{post.title ?? '(제목 없음)'}</div>
-        <div style={{ display: 'block', fontSize: '40px', fontWeight: 500, lineClamp: 1, color: colors.gray[500] }}>{post.subtitle}</div>
-      </div>
-    </div>
-  );
-};
 
 const renderFolder = async (entityId: string) => {
   const folder = await db

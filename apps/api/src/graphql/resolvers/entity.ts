@@ -16,7 +16,6 @@ import {
   Folders,
   NoteEntities,
   Notes,
-  Posts,
   Redirects,
   Sites,
   TableCode,
@@ -100,13 +99,9 @@ Entity.implement({
               key: ({ entityId }) => entityId,
             }),
           )
-          .with(EntityType.POST, () =>
-            ctx.loader({
-              name: 'Entity.node (Post)',
-              load: (ids) => db.select().from(Posts).where(inArray(Posts.entityId, ids)),
-              key: ({ entityId }) => entityId,
-            }),
-          )
+          .with(EntityType.POST, () => {
+            throw new NotFoundError();
+          })
           .exhaustive();
 
         return await loader.load(self.id);
@@ -314,13 +309,9 @@ EntityView.implement({
               key: ({ entityId }) => entityId,
             }),
           )
-          .with(EntityType.POST, () =>
-            ctx.loader({
-              name: 'EntityView.node (Post)',
-              load: (ids) => db.select().from(Posts).where(inArray(Posts.entityId, ids)),
-              key: ({ entityId }) => entityId,
-            }),
-          )
+          .with(EntityType.POST, () => {
+            throw new NotFoundError();
+          })
           .exhaustive();
 
         return await loader.load(self.id);

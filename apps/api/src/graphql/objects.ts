@@ -49,7 +49,6 @@ export const isTypeOf = (tableCode: string) => (self: unknown) => {
 export const IEntity = createInterfaceRef('IEntity', T.Entities);
 export const IDocument = createInterfaceRef('IDocument', T.Documents);
 export const IFolder = createInterfaceRef('IFolder', T.Folders);
-export const IPost = createInterfaceRef('IPost', T.Posts);
 export const ISite = createInterfaceRef('ISite', T.Sites);
 export const IUser = createInterfaceRef('IUser', T.Users);
 
@@ -69,12 +68,9 @@ export const Note = createObjectRef('Note', T.Notes);
 export const PaymentInvoice = createObjectRef('PaymentInvoice', T.PaymentInvoices);
 export const PaymentRecord = createObjectRef('PaymentRecord', T.PaymentRecords);
 export const Plan = createObjectRef('Plan', T.Plans);
-export const Post = createObjectRef('Post', T.Posts);
 export const DocumentReaction = createObjectRef('DocumentReaction', T.DocumentReactions);
 export const DocumentCommentThread = createObjectRef('DocumentCommentThread', T.DocumentCommentThreads);
 export const DocumentComment = createObjectRef('DocumentComment', T.DocumentComments);
-export const PostReaction = createObjectRef('PostReaction', T.PostReactions);
-export const PostSnapshot = createObjectRef('PostSnapshot', T.PostSnapshots);
 export const DocumentVersion = createObjectRef('DocumentVersion', T.DocumentVersions);
 export const Redirect = createObjectRef('Redirect', T.Redirects);
 export const Referral = createObjectRef('Referral', T.Referrals);
@@ -93,7 +89,6 @@ export const Widget = createObjectRef('Widget', T.Widgets);
 export const DocumentView = createObjectRef('DocumentView', T.Documents);
 export const EntityView = createObjectRef('EntityView', T.Entities);
 export const FolderView = createObjectRef('FolderView', T.Folders);
-export const PostView = createObjectRef('PostView', T.Posts);
 export const SiteView = createObjectRef('SiteView', T.Sites);
 export const UserView = createObjectRef('UserView', T.Users);
 
@@ -105,11 +100,11 @@ export const EntityContainer = builder.unionType('EntityContainer', {
 });
 
 export const EntityNode = builder.unionType('EntityNode', {
-  types: [Document, Folder, Post],
+  types: [Document, Folder],
 });
 
 export const EntityViewNode = builder.unionType('EntityViewNode', {
-  types: [DocumentView, FolderView, PostView],
+  types: [DocumentView, FolderView],
 });
 
 export const CharacterCountChange = builder.simpleObject('CharacterCountChange', {

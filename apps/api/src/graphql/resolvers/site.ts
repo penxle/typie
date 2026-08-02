@@ -15,7 +15,7 @@ import { generateRandomAvatar, persistBlobAsImage } from '#/utils/index.ts';
 import { assertSitePermission } from '#/utils/permission.ts';
 import { assertActiveSubscription } from '#/utils/plan.ts';
 import { builder } from '../builder.ts';
-import { Document, Entity, EntityView, Image, ISite, isTypeOf, Post, Site, SiteView, User } from '../objects.ts';
+import { Document, Entity, EntityView, Image, ISite, isTypeOf, Site, SiteView, User } from '../objects.ts';
 
 /**
  * * Types
@@ -122,11 +122,6 @@ Site.implement({
         const rows = await loader.load(self.id);
         return rows[0]?.id ?? null;
       },
-    }),
-
-    templates: t.field({
-      type: [Post],
-      resolve: async () => [],
     }),
 
     documentTemplates: t.field({
