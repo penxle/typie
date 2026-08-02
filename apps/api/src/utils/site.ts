@@ -44,6 +44,8 @@ export const createSite = async ({ userId, name, slug, logoId, tx }: CreateSiteP
           depth: Entities.depth,
           parentId: Entities.parentId,
           order: Entities.order,
+          icon: Entities.icon,
+          iconColor: Entities.iconColor,
         },
       })
       .from(Folders)
@@ -65,6 +67,8 @@ export const createSite = async ({ userId, name, slug, logoId, tx }: CreateSiteP
           depth: folder.entity.depth,
           parentId: folder.entity.parentId ? folderEntityIdMap.get(folder.entity.parentId) : null,
           order: folder.entity.order,
+          icon: folder.entity.icon,
+          iconColor: folder.entity.iconColor,
         })
         .returning({
           id: Entities.id,
@@ -88,6 +92,8 @@ export const createSite = async ({ userId, name, slug, logoId, tx }: CreateSiteP
           depth: Entities.depth,
           parentId: Entities.parentId,
           order: Entities.order,
+          icon: Entities.icon,
+          iconColor: Entities.iconColor,
         },
       })
       .from(Documents)
@@ -106,6 +112,8 @@ export const createSite = async ({ userId, name, slug, logoId, tx }: CreateSiteP
           type: EntityType.DOCUMENT,
           order: doc.entity.order,
           depth: doc.entity.depth,
+          icon: doc.entity.icon,
+          iconColor: doc.entity.iconColor,
         })
         .returning({ id: Entities.id })
         .then(firstOrThrow);
