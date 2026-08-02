@@ -1,5 +1,4 @@
 import { optimize } from 'svgo';
-import { wasm as legacyWasm } from './wasm.ts';
 import { wasm } from './wasm-ffi.ts';
 
 const CHUNK_SIZE = 200;
@@ -189,7 +188,7 @@ export async function processFont(name: string, ttfData: Uint8Array): Promise<Pr
 }
 
 export async function outlineTextToSvg(fontData: Uint8Array, text: string): Promise<string> {
-  const raw = await legacyWasm.outlineTextToSvg(fontData, text);
+  const raw = await wasm.use((host) => host.outline_text_to_svg(fontData, text));
   const { data } = optimize(raw, { multipass: true });
   return data;
 }

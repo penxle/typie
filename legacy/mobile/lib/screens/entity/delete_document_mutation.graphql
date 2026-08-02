@@ -1,5 +1,0 @@
-mutation EntityScreen_DeleteDocument_Mutation($input: DeleteDocumentInput!) {
-  deleteDocument(input: $input) {
-    id
-  }
-}

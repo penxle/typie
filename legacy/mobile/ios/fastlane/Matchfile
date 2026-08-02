@@ -1,2 +1,0 @@
-storage_mode("git")
-git_url("git@github.com:penxle/certificates.git")

@@ -6,7 +6,6 @@ import { stack } from '#/env.ts';
 import * as aws from '#/external/aws.ts';
 import { decompressZstd } from '#/utils/compression.ts';
 import { isNonEmptyHead, isUnsupportedFontFormat, processFont } from '#/utils/font.ts';
-import { processFont as processFontLegacy } from '#/utils/font-legacy.ts';
 import { wasm } from '#/utils/wasm-ffi.ts';
 
 export const FONTS_BUCKET = 'typie-usercontents';
@@ -14,7 +13,6 @@ export const FONTS_BUCKET = 'typie-usercontents';
 export type BackfillTarget = {
   row: { id: string; postScriptName: string; path: string; userId: string };
   needsV2: boolean;
-  needsLegacy: boolean;
   needsManifest: boolean;
 };
 
@@ -51,7 +49,7 @@ export const objectExistsNonEmpty = async (key: string): Promise<boolean> => {
   }
 };
 
-export const backfillFont = async ({ row, needsV2, needsLegacy, needsManifest }: BackfillTarget): Promise<BackfillStatus> => {
+export const backfillFont = async ({ row, needsV2, needsManifest }: BackfillTarget): Promise<BackfillStatus> => {
   const s3Base = `fonts/${row.path}`;
   const tagging = qs.stringify({ UserId: row.userId, Environment: stack });
   let skippedReason: string | undefined;
@@ -69,40 +67,26 @@ export const backfillFont = async ({ row, needsV2, needsLegacy, needsManifest }:
     }
   }
 
-  if (needsV2 || needsLegacy) {
+  if (needsV2) {
     const original = await getObject(`${s3Base}/original.bin`);
     const buffer = await decompressZstd(original);
 
-    if (needsV2) {
-      try {
-        const { hash, coverages, base, chunks, manifest } = await processFont(row.postScriptName, buffer);
-        await Promise.all([
-          putObject(`${s3Base}/${hash}/base`, base, 'application/octet-stream', tagging),
-          putObject(`${s3Base}/${hash}/manifest.v1`, manifest, 'application/octet-stream', tagging),
-          ...chunks.map((data, id) => putObject(`${s3Base}/${hash}/chunks/${id}`, data, 'application/octet-stream', tagging)),
-        ]);
-        // DB hash가 v2 완료 마커 — 산출물 업로드가 끝난 뒤에만 기록한다.
-        await db.update(Fonts).set({ hash, chunks: coverages }).where(eq(Fonts.id, row.id));
-      } catch (err) {
-        if (isUnsupportedFontFormat(err)) {
-          skippedReason = 'unsupported_font_format';
-          await db.update(Fonts).set({ hash: '', chunks: [] }).where(eq(Fonts.id, row.id));
-        } else {
-          throw err;
-        }
-      }
-    }
-
-    if (needsLegacy) {
-      const legacy = await processFontLegacy(row.postScriptName, buffer);
+    try {
+      const { hash, coverages, base, chunks, manifest } = await processFont(row.postScriptName, buffer);
       await Promise.all([
-        putObject(`${s3Base}/${legacy.manifest.hash}/base.bin`, legacy.base, 'application/octet-stream', tagging),
-        ...legacy.chunks.map((chunk, i) =>
-          putObject(`${s3Base}/${legacy.manifest.hash}/chunks/${i}.bin`, chunk, 'application/octet-stream', tagging),
-        ),
+        putObject(`${s3Base}/${hash}/base`, base, 'application/octet-stream', tagging),
+        putObject(`${s3Base}/${hash}/manifest.v1`, manifest, 'application/octet-stream', tagging),
+        ...chunks.map((data, id) => putObject(`${s3Base}/${hash}/chunks/${id}`, data, 'application/octet-stream', tagging)),
       ]);
-      // manifest.json이 legacy 완료 마커 — 반드시 마지막에 업로드한다.
-      await putObject(`${s3Base}/manifest.json`, JSON.stringify(legacy.manifest), 'application/json', tagging);
+      // DB hash가 v2 완료 마커 — 산출물 업로드가 끝난 뒤에만 기록한다.
+      await db.update(Fonts).set({ hash, chunks: coverages }).where(eq(Fonts.id, row.id));
+    } catch (err) {
+      if (isUnsupportedFontFormat(err)) {
+        skippedReason = 'unsupported_font_format';
+        await db.update(Fonts).set({ hash: '', chunks: [] }).where(eq(Fonts.id, row.id));
+      } else {
+        throw err;
+      }
     }
   }
 

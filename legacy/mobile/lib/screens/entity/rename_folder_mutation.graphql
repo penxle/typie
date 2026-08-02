@@ -1,6 +1,0 @@
-mutation EntityScreen_RenameFolder_Mutation($input: RenameFolderInput!) {
-  renameFolder(input: $input) {
-    id
-    name
-  }
-}

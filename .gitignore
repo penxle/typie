@@ -9,7 +9,6 @@ out/
 pkg/
 
 !crates/editor-ffi/pkg/
-!legacy/editor/pkg/
 
 .env.local
 kubeconfig

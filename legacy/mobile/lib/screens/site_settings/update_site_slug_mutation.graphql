@@ -1,6 +1,0 @@
-mutation SiteSettingsScreen_UpdateSiteSlug_Mutation($input: UpdateSiteSlugInput!) {
-  updateSiteSlug(input: $input) {
-    id
-    slug
-  }
-}

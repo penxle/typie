@@ -66,7 +66,7 @@ const config = ({ mode }: ConfigEnv) => ({
     wasmReloadPlugin(),
   ],
   optimizeDeps: {
-    exclude: ['@typie/editor', '@typie/editor-ffi'],
+    exclude: ['@typie/editor-ffi'],
   },
   ...(mode === 'test' && { resolve: { conditions: [...defaultClientConditions] } }),
   server: {

@@ -42,7 +42,6 @@
     "@types/textarea-caret": "^3.0.4",
     "@typie/adapter-node": "workspace:*",
     "@typie/assets": "workspace:*",
-    "@typie/editor": "workspace:*",
     "@typie/editor-ffi": "workspace:*",
     "@typie/lib": "workspace:*",
     "@typie/styled-system": "workspace:*",

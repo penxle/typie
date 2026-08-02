@@ -1,5 +1,0 @@
-mutation SurveyProvider_RecordSurvey_Mutation($input: RecordSurveyInput!) {
-  recordSurvey(input: $input) {
-    id
-  }
-}

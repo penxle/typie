@@ -1,9 +1,0 @@
-fragment EntityScreen_Site_site on Site {
-  id
-  name
-
-  logo {
-    id
-    url
-  }
-}

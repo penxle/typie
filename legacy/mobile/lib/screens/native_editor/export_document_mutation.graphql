@@ -1,7 +1,0 @@
-mutation ExportSheet_ExportDocument_Mutation($input: ExportDocumentInput!) {
-  exportDocument(input: $input) {
-    data
-    filename
-    mimeType
-  }
-}

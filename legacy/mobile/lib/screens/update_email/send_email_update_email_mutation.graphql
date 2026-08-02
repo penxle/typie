@@ -1,3 +1,0 @@
-mutation UpdateEmailScreen_SendEmailUpdateEmail_Mutation($input: SendEmailUpdateEmailInput!) {
-  sendEmailUpdateEmail(input: $input)
-}

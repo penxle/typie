@@ -1,6 +1,0 @@
-mutation SettingsScreen_UpdateMarketingConsent_Mutation($input: UpdateMarketingConsentInput!) {
-  updateMarketingConsent(input: $input) {
-    id
-    marketingConsent
-  }
-}

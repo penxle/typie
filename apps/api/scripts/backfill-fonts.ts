@@ -3,7 +3,7 @@
 import os from 'node:os';
 import { parseArgs } from 'node:util';
 import { Worker } from 'node:worker_threads';
-import { GetObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
+import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { asc, eq } from 'drizzle-orm';
 import { db, FontFamilies, Fonts } from '#/db/index.ts';
 import * as aws from '#/external/aws.ts';
@@ -58,18 +58,6 @@ const mapWithConcurrency = async <T, R>(items: T[], limit: number, fn: (item: T)
     }),
   );
   return results;
-};
-
-const objectExists = async (key: string): Promise<boolean> => {
-  try {
-    await aws.s3.send(new HeadObjectCommand({ Bucket: FONTS_BUCKET, Key: key }));
-    return true;
-  } catch (err) {
-    if (err instanceof Error && err.name === 'NotFound') {
-      return false;
-    }
-    throw err;
-  }
 };
 
 const getObject = async (key: string): Promise<Uint8Array> => {
@@ -207,15 +195,13 @@ const scanTargets = await mapWithConcurrency(rows, SCAN_CONCURRENCY, async (row)
   const chunkProbeNeeded = row.hash !== '' && !manifestV1Ok;
   const hasChunk0 = chunkProbeNeeded && (await objectExistsNonEmpty(`fonts/${row.path}/${row.hash}/chunks/0`));
   const needsV2 = row.hash === '' || !baseOk || (!manifestV1Ok && !hasChunk0);
-  const needsLegacy = !(await objectExists(`fonts/${row.path}/manifest.json`));
   const needsManifest = baseOk && !manifestV1Ok && hasChunk0;
   scanned++;
   logProgress('스캔', scanned, rows.length, scanStart);
-  return needsV2 || needsLegacy || needsManifest
+  return needsV2 || needsManifest
     ? {
         row: { id: row.id, postScriptName: row.postScriptName, path: row.path, userId: row.userId },
         needsV2,
-        needsLegacy,
         needsManifest,
       }
     : null;
@@ -226,17 +212,14 @@ const pending = scanTargets.filter((target) => target !== null);
 process.stdout.write('\n');
 
 const v2Count = pending.filter((t) => t.needsV2).length;
-const legacyCount = pending.filter((t) => t.needsLegacy).length;
 const manifestCount = pending.filter((t) => t.needsManifest).length;
 console.log(
-  `대상 ${pending.length}개 (완료 ${rows.length - pending.length}개 스킵) — v2 필요 ${v2Count}개, legacy 필요 ${legacyCount}개, manifest 필요 ${manifestCount}개`,
+  `대상 ${pending.length}개 (완료 ${rows.length - pending.length}개 스킵) — v2 필요 ${v2Count}개, manifest 필요 ${manifestCount}개`,
 );
 
 if (dryRun) {
-  for (const { row, needsV2, needsLegacy, needsManifest } of pending) {
-    console.log(
-      `- ${row.id} ${row.path} (${[needsV2 && 'v2', needsLegacy && 'legacy', needsManifest && 'manifest'].filter(Boolean).join(', ')})`,
-    );
+  for (const { row, needsV2, needsManifest } of pending) {
+    console.log(`- ${row.id} ${row.path} (${[needsV2 && 'v2', needsManifest && 'manifest'].filter(Boolean).join(', ')})`);
   }
   process.exit(0);
 }

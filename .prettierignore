@@ -8,8 +8,6 @@ docs/*
 
 apps/api/drizzle/*
 apps/mobile/*
-legacy/mobile/*
-legacy/editor/benches/fixtures/**
 
 **/build/**
 **/vendor/**

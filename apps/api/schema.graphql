@@ -835,7 +835,6 @@ type Mutation {
   persistBlobAsAvatar(input: PersistBlobAsAvatarInput!): Image!
   persistBlobAsFile(input: PersistBlobAsFileInput!): File!
   persistBlobAsFont(input: PersistBlobAsFontInput!): Font!
-  persistBlobAsFontLegacy(input: PersistBlobAsFontLegacyInput!): Font!
   persistBlobAsImage(input: PersistBlobAsImageInput!): Image!
   purgeEntities(input: PurgeEntitiesInput!): Site!
   recordSurvey(input: RecordSurveyInput!): User!
@@ -969,10 +968,6 @@ input PersistBlobAsFileInput {
 }
 
 input PersistBlobAsFontInput {
-  path: String!
-}
-
-input PersistBlobAsFontLegacyInput {
   path: String!
 }
 

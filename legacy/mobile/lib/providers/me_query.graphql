@@ -1,9 +1,0 @@
-query MarketingConsentProvider_Me_Query {
-  me {
-    id
-    marketingConsentAskedAt
-    usage {
-      totalCharacterCount
-    }
-  }
-}

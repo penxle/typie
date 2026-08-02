@@ -86,7 +86,6 @@ typie/
 │   └── desktop/  Tauri 실험용 셸
 ├── packages/     TypeScript, Svelte 공용 라이브러리
 ├── crates/       Rust 에디터 엔진 (editor-* 15개)
-├── legacy/       구 에디터, Flutter 모바일
 ├── assets/       폰트, 아이콘, 테마
 ├── docs/         내부 문서
 └── .github/workflows/
@@ -840,9 +839,6 @@ PR 등록 이후 동작하는 워크플로는 다음과 같다.
 | `production.yml` | 수동         | dev 이미지를 prod 태그로 재태깅 후 prod 배포  |
 | `deployment.yml` | 배포 후      | `penxle/kube`, `penxle/kube2` 매니페스트 갱신 |
 
-> `build-wasm-legacy.yml` (`legacy/editor` WASM 빌드) 등 레거시 워크플로는
-> [참고: 현재 작업과 무관한 영역](#참고-현재-작업과-무관한-영역) 참조.
-
 ---
 
 ## 주의 사항
@@ -964,17 +960,6 @@ Tauri 2가 SvelteKit static build를 감싼 실험용 데스크톱 셸이다. �
 > desktop 타깃(모바일 앱 개발용 native)을 빌드한다. 이름이 비슷해서 자주
 > 혼동되므로 주의한다.
 
-### `legacy/` 디렉터리 (구 에디터, Flutter 모바일)
-
-`legacy/`에는 다음이 들어 있다.
-
-- `legacy/editor`: 구 에디터. `@typie/editor` 워크스페이스 패키지로 일부
-  의존성에 여전히 남아 있다. **신규 작업은 모두 `crates/editor-*`에서 진행한다.**
-- `legacy/` 하위의 Flutter 모바일 구현체: 현재 `apps/mobile`(Kotlin
-  Multiplatform)로 대체되었다.
-
-레거시 정리 PR이 아닌 한 이 디렉터리는 수정하지 않는다.
-
 ### Rust nightly 관련 안내 (모두 레거시)
 
 저장소의 일부 문서, 코드 주석, 과거 CI 흔적에 **nightly toolchain 관련 안내가
@@ -985,9 +970,3 @@ Tauri 2가 SvelteKit static build를 감싼 실험용 데스크톱 셸이다. �
   빌드한다" 같은 안내는 따르지 않는다.
 - 빌드 실패 메시지가 nightly를 지시하더라도, 원인은 다른 곳(의존성, 환경 변수
   등)에 있다고 가정하고 stable 기준으로 디버깅한다.
-
-### `build-wasm-legacy.yml` 워크플로
-
-GitHub Actions의 `build-wasm-legacy.yml`은 `legacy/editor` WASM을 빌드한다.
-신규 에디터 빌드와는 무관하다. 일상 개발에서 이 워크플로의 결과를 참조할 일은
-없다.

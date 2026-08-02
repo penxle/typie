@@ -1,1 +1,0 @@
-enum ScrollMode { auto, typewriter }

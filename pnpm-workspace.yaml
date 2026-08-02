@@ -3,7 +3,6 @@ packages:
   - apps/eval/flows
   - crates/*
   - packages/*
-  - legacy/*
   - assets
 overrides:
   ioredis: ^5.11.1
