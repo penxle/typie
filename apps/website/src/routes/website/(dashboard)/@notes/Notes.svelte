@@ -183,9 +183,12 @@
       {
         initialPointer,
         stickyCandidates: [],
-        onScroll: () => {
+        onScroll: (_clientX, _clientY, { deltaY }) => {
           if (dragging?.noteId === draggingNoteId && dragging.position) {
-            replayDraggingPosition(dragging.position);
+            replayDraggingPosition({
+              ...dragging.position,
+              direction: deltaY < 0 ? -1 : deltaY > 0 ? 1 : dragging.position.direction,
+            });
           }
         },
       },

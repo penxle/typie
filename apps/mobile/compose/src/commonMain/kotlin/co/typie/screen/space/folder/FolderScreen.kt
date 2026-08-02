@@ -71,7 +71,6 @@ import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
 import co.typie.ext.safeDrawing
-import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
 import co.typie.graphql.fragment.EntityIcon_entity
 import co.typie.icons.Lucide
@@ -95,8 +94,7 @@ import co.typie.ui.component.bottombar.ProvideBottomBar
 import co.typie.ui.component.dialog.DialogResult
 import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.dialog.confirm
-import co.typie.ui.component.reorder.rememberReorderableColumnState
-import co.typie.ui.component.reorder.reorderableViewport
+import co.typie.ui.component.reorder.rememberReorderableLazyColumnState
 import co.typie.ui.component.sheet.LocalSheet
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastType
@@ -105,7 +103,7 @@ import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.TopBarDefaults
 import co.typie.ui.icon.Icon
 import co.typie.ui.skeleton.Skeleton
-import co.typie.ui.state.rememberScrollState
+import co.typie.ui.state.rememberLazyListState
 import co.typie.ui.theme.AppTheme
 import kotlin.time.Duration
 import kotlinx.coroutines.launch
@@ -122,7 +120,7 @@ fun FolderScreen(entityId: String) {
   val createActionModel = viewModel { EntityCreateViewModel() }
   val model = viewModel { FolderViewModel() }
   val selectionActionModel = viewModel { EntitySelectionViewModel() }
-  val scrollState = rememberScrollState()
+  val scrollState = rememberLazyListState()
   var isReordering by remember { mutableStateOf(false) }
   var isPasting by remember { mutableStateOf(false) }
   val root = (model.query.state as? QueryState.Success)?.data?.entity
@@ -151,7 +149,7 @@ fun FolderScreen(entityId: String) {
     }
   val serverChildIds = remember(serverChildren) { serverChildren.map { it.id } }
   val reorderState =
-    rememberReorderableColumnState(keys = serverChildIds, verticalScrollableState = scrollState)
+    rememberReorderableLazyColumnState(keys = serverChildIds, lazyListState = scrollState)
   val displayChildren =
     remember(serverChildren, reorderState.keys) {
       displayEntityRows(serverChildren, reorderState.keys)
@@ -426,274 +424,262 @@ fun FolderScreen(entityId: String) {
     val reorderViewportBottomInset =
       WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding() + overlayBaseBottomInset
 
-    Box(
-      modifier =
-        Modifier.fillMaxSize()
-          .reorderableViewport(
-            state = reorderState,
-            viewportTopInset = topBarOcclusion,
-            viewportBottomInset = reorderViewportBottomInset,
-          )
-    ) {
-      EntityContainerListContent(
-        items = displayChildren,
-        emptyMessage = "폴더가 비어 있어요",
-        isReordering = isReordering,
-        reorderState = reorderState,
-        selectionState = selectionState,
-        dimmedItemIds = cutDimmedItemIds,
-        bottomSpacerHeight = overlayState.reservedBottomSpacerHeight,
-        modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(innerPadding),
-        header = {},
-        onDocumentClick = { childEntityId -> nav.navigate(Route.Editor(childEntityId)) },
-        onDocumentLongPress = onDocumentLongPress@{ entity ->
-            val document = entity.document ?: return@onDocumentLongPress
-            if (selectionState.isSelecting) {
-              if (entity.id in selectionState.selectedIds) {
-                openSelectionActions()
-              } else {
-                selection.toggle(entity.id)
-              }
+    EntityContainerListContent(
+      items = displayChildren,
+      emptyMessage = "폴더가 비어 있어요",
+      isReordering = isReordering,
+      reorderState = reorderState,
+      selectionState = selectionState,
+      dimmedItemIds = cutDimmedItemIds,
+      bottomSpacerHeight = overlayState.reservedBottomSpacerHeight,
+      viewportTopInset = topBarOcclusion,
+      viewportBottomInset = reorderViewportBottomInset,
+      modifier = Modifier.fillMaxSize(),
+      contentPadding = innerPadding,
+      onDocumentClick = { childEntityId -> nav.navigate(Route.Editor(childEntityId)) },
+      onDocumentLongPress = onDocumentLongPress@{ entity ->
+          val document = entity.document ?: return@onDocumentLongPress
+          if (selectionState.isSelecting) {
+            if (entity.id in selectionState.selectedIds) {
+              openSelectionActions()
             } else {
-              presenterScope.launch {
-                sheet.present {
-                  DocumentItemActionsSheet(entity = entity) { action ->
-                    when (action) {
-                      EntityAction.Rename -> {
-                        presenterScope.launch {
-                          if (!SubscriptionService.gate(sheet, GatedAction.RenameEntity))
-                            return@launch
-                          sheet.present {
-                            DocumentRenameSheet(
-                              model = model,
-                              documentId = document.id,
-                              initialTitle = document.title,
-                            )
-                          }
-                        }
-                      }
-
-                      EntityAction.ChangeIcon -> {
-                        presenterScope.launch {
-                          if (!SubscriptionService.gate(sheet, GatedAction.ChangeIcon))
-                            return@launch
-                          sheet.present(
-                            stops = EntityIconPickerStops,
-                            stopPolicy = EntityIconPickerStopPolicy,
-                          ) {
-                            EntityIconPickerSheet(
-                              model = model,
-                              entityId = entity.id,
-                              initialIcon = entity.entityIcon_entity.icon,
-                              initialColor = entity.entityIcon_entity.iconColor,
-                              defaultIconName = "file",
-                            )
-                          }
-                        }
-                      }
-
-                      EntityAction.OpenExternal -> uriHandler.openUri(entity.url)
-
-                      EntityAction.Share -> presentDocumentShare(listOf(entity.id))
-
-                      EntityAction.Move -> {
-                        presenterScope.launch {
-                          if (!SubscriptionService.gate(sheet, GatedAction.MoveEntity))
-                            return@launch
-                          sheet.present(stops = EntityMoveStops) {
-                            EntityMoveSheet(
-                              source = entity.toTransferSource(),
-                              initialDestinationId = entityId,
-                            )
-                          }
-                        }
-                      }
-
-                      EntityAction.Copy -> {
-                        clipboard.setCopy(
-                          sourceSiteId = Preference.siteId!!,
-                          items = listOf(entity.toTransferSource()),
-                        )
-                      }
-
-                      EntityAction.Cut -> {
-                        clipboard.setCut(
-                          sourceSiteId = Preference.siteId!!,
-                          items = listOf(entity.toTransferSource()),
-                        )
-                      }
-
-                      EntityAction.Delete -> {
-                        presenterScope.launch {
-                          val result =
-                            dialog.confirm(
-                              title = "문서 삭제",
-                              message =
-                                "\"${formatDocumentTitle(document.title)}\" 문서를 삭제하시겠어요? 삭제 후 30일 동안 휴지통에 보관돼요.",
-                              confirmText = "삭제하기",
-                              confirmIsDestructive = true,
-                            )
-                          if (result is DialogResult.Resolved) {
-                            model.deleteDocument(document.id).withDefaultExceptionHandler(toast)
-                          }
-                        }
-                      }
-
-                      EntityAction.SelectMultiple -> Unit
-
-                      EntityAction.StartReorder -> {
-                        presenterScope.launch {
-                          if (!SubscriptionService.gate(sheet, GatedAction.MoveEntity)) {
-                            return@launch
-                          }
-                          selection.reset()
-                          isReordering = true
-                        }
-                      }
-                    }
-                  }
-                }
-              }
+              selection.toggle(entity.id)
             }
-          },
-        onFolderClick = { childEntityId -> nav.navigate(Route.Folder(childEntityId)) },
-        onFolderLongPress = onFolderLongPress@{ entity ->
-            val folder = entity.folder ?: return@onFolderLongPress
-            if (selectionState.isSelecting) {
-              if (entity.id in selectionState.selectedIds) {
-                openSelectionActions()
-              } else {
-                selection.toggle(entity.id)
-              }
-            } else {
-              presenterScope.launch {
-                sheet.present {
-                  FolderItemActionsSheet(entity = entity) { action ->
-                    when (action) {
-                      EntityAction.Rename -> {
-                        presenterScope.launch {
-                          if (!SubscriptionService.gate(sheet, GatedAction.RenameEntity))
-                            return@launch
-                          sheet.present {
-                            FolderRenameSheet(
-                              model = model,
-                              folderId = folder.id,
-                              initialName = folder.name,
-                            )
-                          }
-                        }
-                      }
-
-                      EntityAction.ChangeIcon -> {
-                        presenterScope.launch {
-                          if (!SubscriptionService.gate(sheet, GatedAction.ChangeIcon))
-                            return@launch
-                          sheet.present(
-                            stops = EntityIconPickerStops,
-                            stopPolicy = EntityIconPickerStopPolicy,
-                          ) {
-                            EntityIconPickerSheet(
-                              model = model,
-                              entityId = entity.id,
-                              initialIcon = entity.entityIcon_entity.icon,
-                              initialColor = entity.entityIcon_entity.iconColor,
-                              defaultIconName = "folder",
-                            )
-                          }
-                        }
-                      }
-
-                      EntityAction.OpenExternal -> uriHandler.openUri(entity.url)
-
-                      EntityAction.Share -> presentFolderShare(listOf(entity.id))
-
-                      EntityAction.Move -> {
-                        presenterScope.launch {
-                          if (!SubscriptionService.gate(sheet, GatedAction.MoveEntity))
-                            return@launch
-                          sheet.present(stops = EntityMoveStops) {
-                            EntityMoveSheet(
-                              source = entity.toTransferSource(),
-                              initialDestinationId = entityId,
-                            )
-                          }
-                        }
-                      }
-
-                      EntityAction.Copy -> {
-                        clipboard.setCopy(
-                          sourceSiteId = Preference.siteId!!,
-                          items = listOf(entity.toTransferSource()),
-                        )
-                      }
-
-                      EntityAction.Cut -> {
-                        clipboard.setCut(
-                          sourceSiteId = Preference.siteId!!,
-                          items = listOf(entity.toTransferSource()),
-                        )
-                      }
-
-                      EntityAction.Delete -> {
-                        presenterScope.launch {
-                          val result =
-                            dialog.confirm(
-                              title = "폴더 삭제",
-                              message =
-                                "\"${formatFolderName(folder.name)}\" 폴더를 삭제하시겠어요? 삭제 후 30일 동안 휴지통에 보관돼요.",
-                              confirmText = "삭제하기",
-                              confirmIsDestructive = true,
-                            )
-                          if (result is DialogResult.Resolved) {
-                            model.deleteFolderEntity(entity.id).withDefaultExceptionHandler(toast)
-                          }
-                        }
-                      }
-
-                      EntityAction.SelectMultiple -> Unit
-
-                      EntityAction.StartReorder -> {
-                        presenterScope.launch {
-                          if (!SubscriptionService.gate(sheet, GatedAction.MoveEntity)) {
-                            return@launch
-                          }
-                          selection.reset()
-                          isReordering = true
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          },
-        onSelectionToggle = { selection.toggle(it) },
-        onDragStopped = onDragStopped@{ drop ->
-            if (drop == null || drop.orderedKeys == serverChildIds) {
-              return@onDragStopped
-            }
-
-            val parentEntityId = entity?.id ?: return@onDragStopped
-            val reorderOrders =
-              calculateEntityReorderOrdersFromOrderedKeys(
-                items = serverChildren,
-                orderedKeys = drop.orderedKeys,
-                movedKey = drop.movedKey,
-              ) ?: return@onDragStopped
-
+          } else {
             presenterScope.launch {
-              model
-                .moveChildEntity(
-                  entityId = drop.movedKey,
-                  parentEntityId = parentEntityId,
-                  lowerOrder = reorderOrders.lowerOrder,
-                  upperOrder = reorderOrders.upperOrder,
-                )
-                .withDefaultExceptionHandler(toast)
+              sheet.present {
+                DocumentItemActionsSheet(entity = entity) { action ->
+                  when (action) {
+                    EntityAction.Rename -> {
+                      presenterScope.launch {
+                        if (!SubscriptionService.gate(sheet, GatedAction.RenameEntity))
+                          return@launch
+                        sheet.present {
+                          DocumentRenameSheet(
+                            model = model,
+                            documentId = document.id,
+                            initialTitle = document.title,
+                          )
+                        }
+                      }
+                    }
+
+                    EntityAction.ChangeIcon -> {
+                      presenterScope.launch {
+                        if (!SubscriptionService.gate(sheet, GatedAction.ChangeIcon)) return@launch
+                        sheet.present(
+                          stops = EntityIconPickerStops,
+                          stopPolicy = EntityIconPickerStopPolicy,
+                        ) {
+                          EntityIconPickerSheet(
+                            model = model,
+                            entityId = entity.id,
+                            initialIcon = entity.entityIcon_entity.icon,
+                            initialColor = entity.entityIcon_entity.iconColor,
+                            defaultIconName = "file",
+                          )
+                        }
+                      }
+                    }
+
+                    EntityAction.OpenExternal -> uriHandler.openUri(entity.url)
+
+                    EntityAction.Share -> presentDocumentShare(listOf(entity.id))
+
+                    EntityAction.Move -> {
+                      presenterScope.launch {
+                        if (!SubscriptionService.gate(sheet, GatedAction.MoveEntity)) return@launch
+                        sheet.present(stops = EntityMoveStops) {
+                          EntityMoveSheet(
+                            source = entity.toTransferSource(),
+                            initialDestinationId = entityId,
+                          )
+                        }
+                      }
+                    }
+
+                    EntityAction.Copy -> {
+                      clipboard.setCopy(
+                        sourceSiteId = Preference.siteId!!,
+                        items = listOf(entity.toTransferSource()),
+                      )
+                    }
+
+                    EntityAction.Cut -> {
+                      clipboard.setCut(
+                        sourceSiteId = Preference.siteId!!,
+                        items = listOf(entity.toTransferSource()),
+                      )
+                    }
+
+                    EntityAction.Delete -> {
+                      presenterScope.launch {
+                        val result =
+                          dialog.confirm(
+                            title = "문서 삭제",
+                            message =
+                              "\"${formatDocumentTitle(document.title)}\" 문서를 삭제하시겠어요? 삭제 후 30일 동안 휴지통에 보관돼요.",
+                            confirmText = "삭제하기",
+                            confirmIsDestructive = true,
+                          )
+                        if (result is DialogResult.Resolved) {
+                          model.deleteDocument(document.id).withDefaultExceptionHandler(toast)
+                        }
+                      }
+                    }
+
+                    EntityAction.SelectMultiple -> Unit
+
+                    EntityAction.StartReorder -> {
+                      presenterScope.launch {
+                        if (!SubscriptionService.gate(sheet, GatedAction.MoveEntity)) {
+                          return@launch
+                        }
+                        selection.reset()
+                        isReordering = true
+                      }
+                    }
+                  }
+                }
+              }
             }
-          },
-      )
-    }
+          }
+        },
+      onFolderClick = { childEntityId -> nav.navigate(Route.Folder(childEntityId)) },
+      onFolderLongPress = onFolderLongPress@{ entity ->
+          val folder = entity.folder ?: return@onFolderLongPress
+          if (selectionState.isSelecting) {
+            if (entity.id in selectionState.selectedIds) {
+              openSelectionActions()
+            } else {
+              selection.toggle(entity.id)
+            }
+          } else {
+            presenterScope.launch {
+              sheet.present {
+                FolderItemActionsSheet(entity = entity) { action ->
+                  when (action) {
+                    EntityAction.Rename -> {
+                      presenterScope.launch {
+                        if (!SubscriptionService.gate(sheet, GatedAction.RenameEntity))
+                          return@launch
+                        sheet.present {
+                          FolderRenameSheet(
+                            model = model,
+                            folderId = folder.id,
+                            initialName = folder.name,
+                          )
+                        }
+                      }
+                    }
+
+                    EntityAction.ChangeIcon -> {
+                      presenterScope.launch {
+                        if (!SubscriptionService.gate(sheet, GatedAction.ChangeIcon)) return@launch
+                        sheet.present(
+                          stops = EntityIconPickerStops,
+                          stopPolicy = EntityIconPickerStopPolicy,
+                        ) {
+                          EntityIconPickerSheet(
+                            model = model,
+                            entityId = entity.id,
+                            initialIcon = entity.entityIcon_entity.icon,
+                            initialColor = entity.entityIcon_entity.iconColor,
+                            defaultIconName = "folder",
+                          )
+                        }
+                      }
+                    }
+
+                    EntityAction.OpenExternal -> uriHandler.openUri(entity.url)
+
+                    EntityAction.Share -> presentFolderShare(listOf(entity.id))
+
+                    EntityAction.Move -> {
+                      presenterScope.launch {
+                        if (!SubscriptionService.gate(sheet, GatedAction.MoveEntity)) return@launch
+                        sheet.present(stops = EntityMoveStops) {
+                          EntityMoveSheet(
+                            source = entity.toTransferSource(),
+                            initialDestinationId = entityId,
+                          )
+                        }
+                      }
+                    }
+
+                    EntityAction.Copy -> {
+                      clipboard.setCopy(
+                        sourceSiteId = Preference.siteId!!,
+                        items = listOf(entity.toTransferSource()),
+                      )
+                    }
+
+                    EntityAction.Cut -> {
+                      clipboard.setCut(
+                        sourceSiteId = Preference.siteId!!,
+                        items = listOf(entity.toTransferSource()),
+                      )
+                    }
+
+                    EntityAction.Delete -> {
+                      presenterScope.launch {
+                        val result =
+                          dialog.confirm(
+                            title = "폴더 삭제",
+                            message =
+                              "\"${formatFolderName(folder.name)}\" 폴더를 삭제하시겠어요? 삭제 후 30일 동안 휴지통에 보관돼요.",
+                            confirmText = "삭제하기",
+                            confirmIsDestructive = true,
+                          )
+                        if (result is DialogResult.Resolved) {
+                          model.deleteFolderEntity(entity.id).withDefaultExceptionHandler(toast)
+                        }
+                      }
+                    }
+
+                    EntityAction.SelectMultiple -> Unit
+
+                    EntityAction.StartReorder -> {
+                      presenterScope.launch {
+                        if (!SubscriptionService.gate(sheet, GatedAction.MoveEntity)) {
+                          return@launch
+                        }
+                        selection.reset()
+                        isReordering = true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+      onSelectionToggle = { selection.toggle(it) },
+      onDragStopped = onDragStopped@{ drop ->
+          if (drop == null || drop.orderedKeys == serverChildIds) {
+            return@onDragStopped
+          }
+
+          val parentEntityId = entity?.id ?: return@onDragStopped
+          val reorderOrders =
+            calculateEntityReorderOrdersFromOrderedKeys(
+              items = serverChildren,
+              orderedKeys = drop.orderedKeys,
+              movedKey = drop.movedKey,
+            ) ?: return@onDragStopped
+
+          presenterScope.launch {
+            model
+              .moveChildEntity(
+                entityId = drop.movedKey,
+                parentEntityId = parentEntityId,
+                lowerOrder = reorderOrders.lowerOrder,
+                upperOrder = reorderOrders.upperOrder,
+              )
+              .withDefaultExceptionHandler(toast)
+          }
+        },
+    )
   }
 }
 

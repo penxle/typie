@@ -4,7 +4,6 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -14,6 +13,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -50,7 +51,6 @@ import co.typie.domain.subscription.gate
 import co.typie.ext.imePadding
 import co.typie.ext.navigationBarsPadding
 import co.typie.ext.safeDrawing
-import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
 import co.typie.graphql.fragment.NoteCard_note
 import co.typie.graphql.fragment.NoteLinkedEntity_entity
@@ -85,7 +85,6 @@ import co.typie.ui.component.topbar.TopBarButton
 import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.icon.Icon
 import co.typie.ui.skeleton.Skeleton
-import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.launch
 
@@ -97,7 +96,11 @@ fun NotesScreen() {
   val dialog = LocalDialog.current
   val model = viewModel { NotesViewModel() }
   val noteEditState = model.noteEditState
-  val scrollState = rememberScrollState()
+  val openScrollState = rememberLazyListState()
+  val resolvedScrollState = rememberLazyListState()
+  fun scrollStateFor(status: NoteStatus): LazyListState =
+    if (status == NoteStatus.RESOLVED) resolvedScrollState else openScrollState
+  val scrollState = scrollStateFor(model.filterStatus)
   val toast = LocalToast.current
   val scope = rememberCoroutineScope()
   val sheet = LocalSheet.current
@@ -228,8 +231,8 @@ fun NotesScreen() {
       return
     }
 
-    scrollState.scrollTo(0)
     if (!noteActions.isCurrent(request)) return
+    scrollStateFor(nextStatus).requestScrollToItem(0)
     model.updateFilterStatus(nextStatus)
   }
 
@@ -260,7 +263,7 @@ fun NotesScreen() {
         }
         model.listState(NoteStatus.OPEN).markEntering(outcome.value)
         noteEditState.open(note = outcome.value, autoFocusContent = autoFocusContent)
-        scrollState.animateScrollTo(0)
+        scrollStateFor(NoteStatus.OPEN).animateScrollToItem(0)
       }
 
       is NoteActionOutcome.Failure -> {
@@ -507,11 +510,11 @@ fun NotesScreen() {
       modifier = Modifier,
       animationSpec = tween(durationMillis = 200),
     ) { status ->
+      val sceneScrollState = scrollStateFor(status)
       val listState = model.listState(status)
       val authoritativeNotes = model.notes(status)
-      val renderedNotes = listState.merge(authoritativeNotes).map(noteEditState::overlay)
       val listItems =
-        noteActions.listItems(notes = renderedNotes, state = listState, editState = noteEditState)
+        noteActions.listItems(notes = listState.merge(authoritativeNotes), state = listState)
       val listActions =
         NoteListActions(
           onExpand = { note -> scope.launch { handleExpandNote(note) } },
@@ -558,7 +561,8 @@ fun NotesScreen() {
             model.moveNote(note = note, lowerOrder = lowerOrder, upperOrder = upperOrder)
           },
         )
-      val reorderState = rememberNoteListReorderState(items = listItems, scrollState = scrollState)
+      val reorderState =
+        rememberNoteListReorderState(items = listItems, scrollState = sceneScrollState)
       val reorderViewportBottomInset =
         WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding() + 72.dp
 
@@ -573,31 +577,27 @@ fun NotesScreen() {
               )
               .imePadding()
         ) {
-          Column(
-            modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(innerPadding),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-          ) {
-            Skeleton.Keep { Text(text = "노트", style = AppTheme.typography.display) }
-
-            NoteList(
-              identity = NoteListIdentity(siteId = siteId.orEmpty(), status = status),
-              emptyMessage = status.emptyMessage(),
-              queryState = model.queryState(status),
-              items = listItems,
-              authoritativeNotes = authoritativeNotes,
-              onEnterAnimationFinished = listState::finishEntering,
-              onExitAnimationFinished = listState::finishExiting,
-              reorderState = reorderState,
-              noteColorOptions = noteColorOptions,
-              interactive = status == model.filterStatus,
-              onRetry = model::refetch,
-              reorderEnabled = SubscriptionService.entitlement !is Entitlement.Expired,
-              contentEditable = SubscriptionService.entitlement !is Entitlement.Expired,
-              actions = listActions,
-            )
-
-            Spacer(Modifier.height(140.dp))
-          }
+          NoteList(
+            identity = NoteListIdentity(siteId = siteId.orEmpty(), status = status),
+            emptyMessage = status.emptyMessage(),
+            queryState = model.queryState(status),
+            items = listItems,
+            authoritativeNotes = authoritativeNotes,
+            editState = noteEditState,
+            onEnterAnimationFinished = listState::finishEntering,
+            onExitAnimationFinished = listState::finishExiting,
+            reorderState = reorderState,
+            noteColorOptions = noteColorOptions,
+            interactive = status == model.filterStatus,
+            onRetry = model::refetch,
+            reorderEnabled = SubscriptionService.entitlement !is Entitlement.Expired,
+            contentEditable = SubscriptionService.entitlement !is Entitlement.Expired,
+            actions = listActions,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = innerPadding,
+            header = { Skeleton.Keep { Text(text = "노트", style = AppTheme.typography.display) } },
+            footer = { Spacer(Modifier.height(140.dp)) },
+          )
         }
       }
     }

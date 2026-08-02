@@ -325,7 +325,6 @@ class NoteActionsTest {
     mutationStarted.await()
 
     assertTrue(actions.isChangingStatus(note.id))
-    assertTrue(sourceState.isExiting(note.id))
     assertNull(
       actions.toggleStatus(
         request = actions.captureRequest()!!,
@@ -344,6 +343,33 @@ class NoteActionsTest {
     assertFalse(sourceState.isExiting(note.id))
     assertEquals(listOf(note.id), sourceState.merge(listOf(note)).map { it.id })
   }
+
+  @Test
+  fun `expanded note stays expanded in the source exit after a successful status mutation`() =
+    runTest {
+      val siteId = "expanded-status-site"
+      val note = notesNote(id = "expanded-status-note", siteId = siteId)
+      val openState = NoteListState(NoteStatus.OPEN)
+      val resolvedState = NoteListState(NoteStatus.RESOLVED)
+      val editState = createNoteEditState()
+      editState.open(note)
+      val actions = NoteActions()
+      actions.activate(siteId = siteId, entityId = null, editState = editState, onTerminal = {})
+
+      val outcome =
+        actions.toggleStatus(
+          request = actions.captureRequest()!!,
+          note = note,
+          sourceState = openState,
+          destinationState = resolvedState,
+          beforeMutation = { true },
+        ) { _, status ->
+          Result.Ok(note.copy(status = status))
+        }
+
+      assertIs<NoteActionOutcome.Success<*>>(outcome)
+      assertTrue(openState.isExitExpanded(note.id))
+    }
 
   @Test
   fun `authoritative source reentry after a successful status mutation restores presence`() =

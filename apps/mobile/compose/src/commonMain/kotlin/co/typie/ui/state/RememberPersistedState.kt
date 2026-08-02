@@ -1,6 +1,8 @@
 package co.typie.ui.state
 
 import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState as foundationRememberLazyListState
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState as foundationRememberPagerState
 import androidx.compose.foundation.rememberScrollState as foundationRememberScrollState
@@ -19,6 +21,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 private class PositionHolder<T>(initial: T) : ViewModel() {
   var position by mutableStateOf(initial)
 }
+
+private data class LazyListPosition(val index: Int, val offset: Int)
 
 @Composable
 private inline fun <S, reified T> rememberPersistedState(
@@ -44,6 +48,30 @@ fun rememberScrollState(key: String? = null, initial: Int = 0): ScrollState =
     initial = initial,
     factory = { foundationRememberScrollState(initial = it) },
     read = { it.value },
+  )
+
+@Composable
+fun rememberLazyListState(
+  key: String? = null,
+  initialFirstVisibleItemIndex: Int = 0,
+  initialFirstVisibleItemScrollOffset: Int = 0,
+): LazyListState =
+  rememberPersistedState(
+    key = key,
+    initial =
+      LazyListPosition(
+        index = initialFirstVisibleItemIndex,
+        offset = initialFirstVisibleItemScrollOffset,
+      ),
+    factory = {
+      foundationRememberLazyListState(
+        initialFirstVisibleItemIndex = it.index,
+        initialFirstVisibleItemScrollOffset = it.offset,
+      )
+    },
+    read = {
+      LazyListPosition(index = it.firstVisibleItemIndex, offset = it.firstVisibleItemScrollOffset)
+    },
   )
 
 @Composable

@@ -2,10 +2,15 @@ import type { ScrollViewport } from './scroll-viewport';
 
 export type DragScrollAxis = 'vertical' | 'both';
 
+export type DragScrollDelta = {
+  deltaX: number;
+  deltaY: number;
+};
+
 export type DragScrollOptions = {
   axis?: DragScrollAxis;
   initialPointer?: { clientX: number; clientY: number };
-  onScroll?: (clientX: number, clientY: number) => void;
+  onScroll?: (clientX: number, clientY: number, delta: DragScrollDelta) => void;
   onScrollThrottleMs?: number;
   stickyCandidates?: HTMLElement[];
 };
@@ -248,10 +253,12 @@ export function createDragScroll(viewport: ScrollViewport, options: DragScrollOp
     const prevScrollLeft = viewport.getScrollLeft();
     viewport.scrollBy(velocityX * elapsedSeconds, velocityY * elapsedSeconds);
 
-    const didScroll = viewport.getScrollTop() !== prevScrollTop || viewport.getScrollLeft() !== prevScrollLeft;
+    const deltaY = viewport.getScrollTop() - prevScrollTop;
+    const deltaX = viewport.getScrollLeft() - prevScrollLeft;
+    const didScroll = deltaY !== 0 || deltaX !== 0;
     if (shouldCallOnScroll && didScroll) {
       lastOnScrollTime = frameTime;
-      onScroll?.(lastPointerX, lastPointerY);
+      onScroll?.(lastPointerX, lastPointerY, { deltaX, deltaY });
     }
 
     if (!destroyed) {

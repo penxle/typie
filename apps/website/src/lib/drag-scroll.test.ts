@@ -246,7 +246,7 @@ describe('drag scroll', () => {
     expect(onScroll).not.toHaveBeenCalled();
     frames.runNext(120);
     expect(onScroll).toHaveBeenCalledTimes(1);
-    expect(onScroll).toHaveBeenLastCalledWith(100, 0);
+    expect(onScroll).toHaveBeenLastCalledWith(100, 0, expect.any(Object));
 
     dragScroll.updatePointer(100, 170);
     frames.runNext(140);
@@ -255,7 +255,31 @@ describe('drag scroll', () => {
     dragScroll.updatePointer(100, 199);
     frames.runNext(180);
     expect(onScroll).toHaveBeenCalledTimes(2);
-    expect(onScroll).toHaveBeenLastCalledWith(100, 199);
+    expect(onScroll).toHaveBeenLastCalledWith(100, 199, expect.any(Object));
+
+    dragScroll.destroy();
+  });
+
+  it('reports the actual scroll delta after reversing edge direction', () => {
+    const { viewport } = createViewport();
+    const frames = installAnimationFrames();
+    const onScroll = vi.fn();
+    const dragScroll = createDragScroll(viewport, {
+      stickyCandidates: [],
+      onScrollThrottleMs: 0,
+      initialPointer: { clientX: 100, clientY: 199 },
+      onScroll,
+    });
+
+    frames.runNext(0);
+    frames.runNext(100);
+    expect(onScroll).toHaveBeenLastCalledWith(100, 199, expect.objectContaining({ deltaX: 0, deltaY: expect.any(Number) }));
+    expect(onScroll.mock.lastCall?.[2]?.deltaY).toBeGreaterThan(0);
+
+    dragScroll.updatePointer(100, 0);
+    frames.runNext(200);
+    expect(onScroll).toHaveBeenLastCalledWith(100, 0, expect.objectContaining({ deltaX: 0, deltaY: expect.any(Number) }));
+    expect(onScroll.mock.lastCall?.[2]?.deltaY).toBeLessThan(0);
 
     dragScroll.destroy();
   });
@@ -291,7 +315,7 @@ describe('drag scroll', () => {
     target.dispatchEvent(new MouseEvent('pointermove', { clientX: 100, clientY: 0 }));
     frames.runNext(0);
     frames.runNext(100);
-    expect(onScroll).toHaveBeenCalledWith(100, 0);
+    expect(onScroll).toHaveBeenCalledWith(100, 0, expect.any(Object));
 
     cleanup?.();
     expect(frames.pendingCount()).toBe(0);

@@ -6,6 +6,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -144,11 +145,18 @@ internal constructor(
   var scrollEpoch: Long by mutableLongStateOf(0L)
     private set
 
+  internal var verticalScrollDirection: Int by mutableIntStateOf(0)
+    private set
+
   internal var viewport: Rect? by mutableStateOf(null)
   internal var enabled: Boolean by mutableStateOf(true)
 
   internal fun bumpScrollEpoch() {
     scrollEpoch++
+  }
+
+  internal fun updateVerticalScrollDirection(direction: Float) {
+    verticalScrollDirection = direction.compareTo(0f)
   }
 }
 
@@ -195,49 +203,58 @@ fun Modifier.edgeAutoScroll(
       }
       .distinctUntilChanged()
       .collectLatest { shouldScroll ->
-        if (!shouldScroll) return@collectLatest
-        var lastFrameNanos = withFrameNanos { it }
-        while (isActive) {
-          val nowNanos = withFrameNanos { it }
-          val frameDeltaNanos = nowNanos - lastFrameNanos
-          lastFrameNanos = nowNanos
-          if (frameDeltaNanos > EdgeAutoScrollMaximumFrameDeltaNanos) continue
-          val dtSeconds = frameDeltaNanos / 1_000_000_000f
+        if (!shouldScroll) {
+          controller.updateVerticalScrollDirection(0f)
+          return@collectLatest
+        }
+        try {
+          var lastFrameNanos = withFrameNanos { it }
+          while (isActive) {
+            val nowNanos = withFrameNanos { it }
+            val frameDeltaNanos = nowNanos - lastFrameNanos
+            lastFrameNanos = nowNanos
+            if (frameDeltaNanos > EdgeAutoScrollMaximumFrameDeltaNanos) continue
+            val dtSeconds = frameDeltaNanos / 1_000_000_000f
 
-          val viewport = controller.viewport ?: break
-          val pointer = controller.pointer ?: break
-          val plan =
-            computeEdgeAutoScrollPlan(
-              pointer = pointer,
-              insetViewport = insetEdgeAutoScrollViewportRect(viewport, topInsetPx, bottomInsetPx),
-              density = densityValue,
-            )
-          if (plan.isNoOp) break
+            val viewport = controller.viewport ?: break
+            val pointer = controller.pointer ?: break
+            val plan =
+              computeEdgeAutoScrollPlan(
+                pointer = pointer,
+                insetViewport =
+                  insetEdgeAutoScrollViewportRect(viewport, topInsetPx, bottomInsetPx),
+                density = densityValue,
+              )
+            if (plan.isNoOp) break
+            controller.updateVerticalScrollDirection(plan.verticalDirection)
 
-          val vertical = controller.verticalScrollableState
-          val horizontal = controller.horizontalScrollableState
-          var consumed = 0f
-          if (
-            plan.verticalDirection != 0f &&
-              vertical != null &&
-              vertical.canScroll(plan.verticalDirection)
-          ) {
-            consumed +=
-              vertical.dispatchRawDelta(
-                plan.verticalDirection * plan.verticalSpeedPxPerSec * dtSeconds
-              )
+            val vertical = controller.verticalScrollableState
+            val horizontal = controller.horizontalScrollableState
+            var consumed = 0f
+            if (
+              plan.verticalDirection != 0f &&
+                vertical != null &&
+                vertical.canScroll(plan.verticalDirection)
+            ) {
+              consumed +=
+                vertical.dispatchRawDelta(
+                  plan.verticalDirection * plan.verticalSpeedPxPerSec * dtSeconds
+                )
+            }
+            if (
+              plan.horizontalDirection != 0f &&
+                horizontal != null &&
+                horizontal.canScroll(plan.horizontalDirection)
+            ) {
+              consumed +=
+                horizontal.dispatchRawDelta(
+                  plan.horizontalDirection * plan.horizontalSpeedPxPerSec * dtSeconds
+                )
+            }
+            if (consumed != 0f) controller.bumpScrollEpoch()
           }
-          if (
-            plan.horizontalDirection != 0f &&
-              horizontal != null &&
-              horizontal.canScroll(plan.horizontalDirection)
-          ) {
-            consumed +=
-              horizontal.dispatchRawDelta(
-                plan.horizontalDirection * plan.horizontalSpeedPxPerSec * dtSeconds
-              )
-          }
-          if (consumed != 0f) controller.bumpScrollEpoch()
+        } finally {
+          controller.updateVerticalScrollDirection(0f)
         }
       }
   }

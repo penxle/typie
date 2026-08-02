@@ -201,28 +201,18 @@ internal class NoteActions {
     editState?.updateColor(siteId = request.siteId, noteId = noteId, value = value, save = save)
   }
 
-  fun listItems(
-    notes: List<NoteCard_note>,
-    state: NoteListState,
-    editState: NoteEditState,
-  ): List<NoteListItem> = notes.map { note ->
-    NoteListItem(
-      note = note,
-      expanded = editState.isExpanded(siteId = note.site.id, noteId = note.id),
-      isSaving =
-        editState.isSaving(siteId = note.site.id, noteId = note.id) ||
-          editState.isSavingColor(siteId = note.site.id, noteId = note.id),
-      saveStatus = editState.saveStatus(siteId = note.site.id, noteId = note.id),
-      hasPendingColor = editState.hasPendingColor(siteId = note.site.id, noteId = note.id),
-      isDirty = editState.isDirty(siteId = note.site.id, noteId = note.id),
-      isDeleting = isPendingDeletion(note.id),
-      isChangingStatus = isChangingStatus(note.id),
-      autoFocusContent = editState.shouldAutoFocusContent(siteId = note.site.id, noteId = note.id),
-      isEntering = state.isEntering(note.id),
-      isExiting = state.isExiting(note.id),
-      isExitVisible = state.isExitVisible(note.id),
-    )
-  }
+  fun listItems(notes: List<NoteCard_note>, state: NoteListState): List<NoteListItem> =
+    notes.map { note ->
+      NoteListItem(
+        note = note,
+        isDeleting = isPendingDeletion(note.id),
+        isChangingStatus = isChangingStatus(note.id),
+        isEntering = state.isEntering(note.id),
+        isExiting = state.isExiting(note.id),
+        isExitVisible = state.isExitVisible(note.id),
+        isExitExpanded = state.isExitExpanded(note.id),
+      )
+    }
 
   suspend fun <T> create(
     request: NoteActionRequest,
@@ -304,11 +294,13 @@ internal class NoteActions {
       if (!owns(request)) return NoteActionOutcome.Superseded
 
       val nextStatus = note.status.toggled()
+      val keepExpanded = editState?.isExpanded(siteId = request.siteId, noteId = note.id) == true
       val outcome =
         updateAndExit(
           request = request,
           note = note.copy(status = nextStatus),
           state = sourceState,
+          keepExpanded = keepExpanded,
         ) { activeSiteId ->
           mutation(activeSiteId, nextStatus)
         }
@@ -328,22 +320,25 @@ internal class NoteActions {
     request: NoteActionRequest,
     note: NoteCard_note,
     state: NoteListState,
+    keepExpanded: Boolean = false,
     mutation: suspend (siteId: String) -> Result<NoteCard_note, Nothing>,
   ): NoteActionOutcome<NoteCard_note> {
     if (!owns(request)) return NoteActionOutcome.Superseded
 
-    state.markExiting(note)
-    var restorePresence = true
-    return try {
-      val outcome = update(request = request, noteId = note.id, mutation = mutation)
-      if (outcome is NoteActionOutcome.Success || outcome is NoteActionOutcome.Terminal) {
-        restorePresence = false
+    val outcome = update(request = request, noteId = note.id, mutation = mutation)
+    when (outcome) {
+      is NoteActionOutcome.Success -> {
+        state.markExiting(note = outcome.value, keepExpanded = keepExpanded)
         state.confirmMembershipRemoval(note.id)
       }
-      outcome
-    } finally {
-      if (restorePresence && owns(request)) state.remove(note.id)
+      NoteActionOutcome.Terminal -> {
+        state.markExiting(note = note, keepExpanded = keepExpanded)
+        state.confirmMembershipRemoval(note.id)
+      }
+      NoteActionOutcome.Superseded,
+      is NoteActionOutcome.Failure -> Unit
     }
+    return outcome
   }
 
   private fun <T> resolve(

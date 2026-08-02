@@ -1,16 +1,14 @@
 package co.typie.domain.entity
 
-import androidx.compose.animation.animateBounds
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,11 +16,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -31,17 +28,18 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import co.typie.datetime.timeAgo
-import co.typie.ext.separated
 import co.typie.graphql.fragment.EntityRow_entity
 import co.typie.icons.Lucide
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardSurface
 import co.typie.ui.component.Text
 import co.typie.ui.component.reorder.ReorderDrop
-import co.typie.ui.component.reorder.ReorderableColumn
-import co.typie.ui.component.reorder.ReorderableColumnState
+import co.typie.ui.component.reorder.ReorderableLazyColumn
+import co.typie.ui.component.reorder.ReorderableLazyColumnState
+import co.typie.ui.component.reorder.reorderableAnimatedItem
 import co.typie.ui.component.reorder.reorderableDragHandle
 import co.typie.ui.component.reorder.reorderableItem
+import co.typie.ui.component.reorder.reorderableViewport
 import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
@@ -52,12 +50,15 @@ fun EntityContainerListContent(
   items: List<EntityRow_entity>,
   emptyMessage: String,
   isReordering: Boolean,
-  reorderState: ReorderableColumnState<String>,
+  reorderState: ReorderableLazyColumnState<String>,
   selectionState: EntityContainerSelectionState = EntityContainerSelectionState(),
   dimmedItemIds: Set<String> = emptySet(),
   bottomSpacerHeight: Dp = EntityBottomOverlayDefaults.DefaultBottomSpacerHeight,
+  viewportTopInset: Dp = 0.dp,
+  viewportBottomInset: Dp = 0.dp,
   modifier: Modifier = Modifier,
-  header: @Composable ColumnScope.() -> Unit = {},
+  contentPadding: PaddingValues = PaddingValues(0.dp),
+  header: (@Composable () -> Unit)? = null,
   onDocumentClick: suspend (entityId: String) -> Unit,
   onDocumentLongPress: (suspend (item: EntityRow_entity) -> Unit)? = null,
   onFolderClick: suspend (entityId: String) -> Unit,
@@ -67,100 +68,29 @@ fun EntityContainerListContent(
   onDragMoved: () -> Unit = {},
   onDragStopped: (ReorderDrop<String>?) -> Unit,
 ) {
-  Column(modifier = modifier.fillMaxSize()) {
-    header()
+  ReorderableLazyColumn(
+    state = reorderState,
+    modifier =
+      modifier
+        .fillMaxSize()
+        .reorderableViewport(
+          state = reorderState,
+          viewportTopInset = viewportTopInset,
+          viewportBottomInset = viewportBottomInset,
+        ),
+    contentPadding = contentPadding,
+  ) {
+    if (header != null) {
+      item(key = EntityContainerHeaderKey) { header() }
+    }
 
     if (isReordering) {
-      EntityContainerReorderListCard(
-        items = items,
-        reorderState = reorderState,
-        modifier = Modifier,
-        onDragStarted = onDragStarted,
-        onDragMoved = onDragMoved,
-        onDragStopped = onDragStopped,
-      )
-    } else if (items.isEmpty()) {
-      Box(
-        modifier =
-          Modifier.fillMaxWidth()
-            .height(110.dp)
-            .background(AppTheme.colors.surfaceDefault, AppShapes.rounded(AppShapes.md)),
-        contentAlignment = Alignment.Center,
-      ) {
-        Text(emptyMessage, style = AppTheme.typography.action, color = AppTheme.colors.textMuted)
-      }
-    } else {
-      CardSurface(modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.fillMaxWidth()) {
-          items.separated(separator = { CardDivider() }) { entity ->
-            EntityContainerItemRow(
-              entity = entity,
-              selected = entity.id in selectionState.selectedIds,
-              showSelectionControls = selectionState.isSelecting,
-              opacity = if (entity.id in dimmedItemIds) 0.5f else 1f,
-              onLongPress =
-                when {
-                  entity.document != null ->
-                    onDocumentLongPress?.let { handler -> { handler(entity) } }
-                  entity.folder != null -> onFolderLongPress?.let { handler -> { handler(entity) } }
-                  else -> null
-                },
-              onClick = {
-                if (selectionState.isSelecting) {
-                  onSelectionToggle(entity.id)
-                } else {
-                  when {
-                    entity.document != null -> onDocumentClick(entity.id)
-                    entity.folder != null -> onFolderClick(entity.id)
-                  }
-                }
-              },
-            )
-          }
-        }
-      }
-    }
-
-    Spacer(Modifier.height(bottomSpacerHeight))
-  }
-}
-
-@Composable
-fun EntityContainerReorderListCard(
-  items: List<EntityRow_entity>,
-  reorderState: ReorderableColumnState<String>,
-  onDragStarted: () -> Unit = {},
-  onDragMoved: () -> Unit = {},
-  onDragStopped: (ReorderDrop<String>?) -> Unit,
-  modifier: Modifier = Modifier,
-) {
-  ReorderableColumn(
-    state = reorderState,
-    modifier = modifier.fillMaxWidth(),
-    verticalArrangement = Arrangement.spacedBy(0.dp),
-  ) {
-    val boundsTransform = remember {
-      androidx.compose.animation.BoundsTransform { _, _ ->
-        spring(dampingRatio = 0.9f, stiffness = Spring.StiffnessMedium)
-      }
-    }
-
-    items.forEachIndexed { index, entity ->
-      key(entity.id) {
+      itemsIndexed(items = items, key = { _, entity -> entity.id }) { index, entity ->
         val isDragging = reorderState.isDragging(entity.id)
-
-        val rowModifier =
-          if (isDragging || reorderState.isSettling(entity.id)) {
-            Modifier
-          } else {
-            Modifier.animateBounds(
-              lookaheadScope = this@ReorderableColumn,
-              boundsTransform = boundsTransform,
-            )
-          }
-
         EntityContainerReorderRow(
-          modifier = rowModifier.reorderableItem(state = reorderState, key = entity.id),
+          modifier =
+            reorderableAnimatedItem(state = reorderState, key = entity.id)
+              .reorderableItem(state = reorderState, key = entity.id),
           item = entity,
           isDragging = isDragging,
           isFirst = index == 0,
@@ -175,9 +105,89 @@ fun EntityContainerReorderListCard(
             ),
         )
       }
+    } else if (items.isEmpty()) {
+      item(key = EntityContainerEmptyKey) {
+        Box(
+          modifier =
+            Modifier.fillMaxWidth()
+              .height(110.dp)
+              .background(AppTheme.colors.surfaceDefault, AppShapes.rounded(AppShapes.md)),
+          contentAlignment = Alignment.Center,
+        ) {
+          Text(emptyMessage, style = AppTheme.typography.action, color = AppTheme.colors.textMuted)
+        }
+      }
+    } else {
+      itemsIndexed(items = items, key = { _, entity -> entity.id }) { index, entity ->
+        EntityContainerNormalRow(
+          entity = entity,
+          isFirst = index == 0,
+          isLast = index == items.lastIndex,
+          selected = entity.id in selectionState.selectedIds,
+          showSelectionControls = selectionState.isSelecting,
+          opacity = if (entity.id in dimmedItemIds) 0.5f else 1f,
+          onLongPress =
+            when {
+              entity.document != null -> onDocumentLongPress?.let { handler -> { handler(entity) } }
+              entity.folder != null -> onFolderLongPress?.let { handler -> { handler(entity) } }
+              else -> null
+            },
+          onClick = {
+            if (selectionState.isSelecting) {
+              onSelectionToggle(entity.id)
+            } else {
+              when {
+                entity.document != null -> onDocumentClick(entity.id)
+                entity.folder != null -> onFolderClick(entity.id)
+              }
+            }
+          },
+        )
+      }
+    }
+
+    item(key = EntityContainerBottomSpacerKey) { Spacer(Modifier.height(bottomSpacerHeight)) }
+  }
+}
+
+@Composable
+private fun EntityContainerNormalRow(
+  entity: EntityRow_entity,
+  isFirst: Boolean,
+  isLast: Boolean,
+  selected: Boolean,
+  showSelectionControls: Boolean,
+  opacity: Float,
+  onLongPress: (suspend () -> Unit)?,
+  onClick: suspend () -> Unit,
+) {
+  val shape =
+    RoundedCornerShape(
+      topStart = if (isFirst) AppShapes.md else 0.dp,
+      topEnd = if (isFirst) AppShapes.md else 0.dp,
+      bottomStart = if (isLast) AppShapes.md else 0.dp,
+      bottomEnd = if (isLast) AppShapes.md else 0.dp,
+    )
+  CardSurface(modifier = Modifier.fillMaxWidth(), shape = shape) {
+    Column(Modifier.fillMaxWidth()) {
+      if (!isFirst) CardDivider()
+      EntityContainerItemRow(
+        entity = entity,
+        selected = selected,
+        showSelectionControls = showSelectionControls,
+        opacity = opacity,
+        onLongPress = onLongPress,
+        onClick = onClick,
+      )
     }
   }
 }
+
+private object EntityContainerHeaderKey
+
+private object EntityContainerEmptyKey
+
+private object EntityContainerBottomSpacerKey
 
 @Composable
 private fun EntityContainerReorderRow(

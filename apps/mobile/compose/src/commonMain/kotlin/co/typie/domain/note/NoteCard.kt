@@ -2,12 +2,13 @@ package co.typie.domain.note
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
-import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateColor
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateDp
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.updateTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
@@ -47,7 +48,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.SubcomposeLayout
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.layoutId
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -85,7 +87,6 @@ import co.typie.ui.skeleton.LocalSkeleton
 import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
-import co.typie.ui.theme.shadow
 import co.typie.ui.utils.ShortcutModifier
 import co.typie.ui.utils.onShortcut
 import kotlin.math.abs
@@ -97,6 +98,8 @@ private val NoteGripHitTargetSize = 28.dp
 private val NoteColorDotHitTargetWidth = 20.dp
 private val NoteColorDotHitTargetHeight = 24.dp
 private const val NoteExpandAnimationDurationMillis = 220
+
+private data class NoteCardVisualState(val expanded: Boolean, val dragging: Boolean)
 
 // NOTE: iOS에서 마지막 노트의 텍스트 필드에 포커스하면 scroll offset 0까지 천천히 스크롤되는 버그의 workaround
 @OptIn(ExperimentalFoundationApi::class)
@@ -156,56 +159,79 @@ internal fun NoteCard(
   isDeleting: Boolean,
   noteColorOptions: List<NoteColorOption>,
 ) {
+  val visualTransition =
+    updateTransition(
+      targetState = NoteCardVisualState(expanded = expanded, dragging = isDragging),
+      label = "Note card visual state",
+    )
   val containerColor by
-    animateColorAsState(
-      targetValue = if (expanded) AppTheme.colors.surfaceDefault else AppTheme.colors.surfaceInset,
-      animationSpec = tween(durationMillis = NoteExpandAnimationDurationMillis),
-    )
+    visualTransition.animateColor(
+      transitionSpec = { tween(durationMillis = NoteExpandAnimationDurationMillis) },
+      label = "Note card container color",
+    ) { state ->
+      if (state.expanded) AppTheme.colors.surfaceDefault else AppTheme.colors.surfaceInset
+    }
   val borderColor by
-    animateColorAsState(
-      targetValue = if (expanded) AppTheme.colors.borderDefault else AppTheme.colors.borderHairline,
-      animationSpec = tween(durationMillis = NoteExpandAnimationDurationMillis),
-    )
+    visualTransition.animateColor(
+      transitionSpec = { tween(durationMillis = NoteExpandAnimationDurationMillis) },
+      label = "Note card border color",
+    ) { state ->
+      if (state.expanded) AppTheme.colors.borderDefault else AppTheme.colors.borderHairline
+    }
   val baseShadowElevation by
-    animateDpAsState(
-      targetValue = if (expanded) 8.dp else 3.dp,
-      animationSpec = tween(durationMillis = NoteExpandAnimationDurationMillis),
-    )
+    visualTransition.animateDp(
+      transitionSpec = { tween(durationMillis = NoteExpandAnimationDurationMillis) },
+      label = "Note card base shadow",
+    ) { state ->
+      if (state.expanded) 8.dp else 3.dp
+    }
   val dragShadowElevation by
-    animateDpAsState(
-      targetValue = if (isDragging) 16.dp else 0.dp,
-      animationSpec =
-        if (isDragging) tween(durationMillis = 120)
-        else spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMediumLow),
-    )
+    visualTransition.animateDp(
+      transitionSpec = {
+        if (targetState.dragging) tween(durationMillis = 120)
+        else spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMediumLow)
+      },
+      label = "Note card drag shadow",
+    ) { state ->
+      if (state.dragging) 16.dp else 0.dp
+    }
   val dragScale by
-    animateFloatAsState(
-      targetValue = if (isDragging) 1.014f else 1f,
-      animationSpec =
-        if (isDragging) tween(durationMillis = 120)
-        else spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMediumLow),
-    )
+    visualTransition.animateFloat(
+      transitionSpec = {
+        if (targetState.dragging) tween(durationMillis = 120)
+        else spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMediumLow)
+      },
+      label = "Note card drag scale",
+    ) { state ->
+      if (state.dragging) 1.014f else 1f
+    }
   val dragRotation by
-    animateFloatAsState(
-      targetValue = if (isDragging) -1.5f else 0f,
-      animationSpec =
-        if (isDragging) tween(durationMillis = 120)
-        else spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMediumLow),
-    )
+    visualTransition.animateFloat(
+      transitionSpec = {
+        if (targetState.dragging) tween(durationMillis = 120)
+        else spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMediumLow)
+      },
+      label = "Note card drag rotation",
+    ) { state ->
+      if (state.dragging) -1.5f else 0f
+    }
+  val baseAmbientShadowColor = AppTheme.shadows.lg.layers.firstOrNull()?.color ?: Color.Transparent
+  val baseSpotShadowColor = AppTheme.shadows.lg.layers.lastOrNull()?.color ?: Color.Transparent
   val cardModifier =
     modifier
       .fillMaxWidth()
-      .shadow(
-        AppTheme.shadows.lg,
-        NoteCardShape,
-        alpha = { ((baseShadowElevation + dragShadowElevation).value / 24f).coerceIn(0f, 1f) },
-      )
-      .clip(NoteCardShape)
       .graphicsLayer {
+        val shadowAlpha = ((baseShadowElevation + dragShadowElevation).value / 24f).coerceIn(0f, 1f)
+        shadowElevation = 8.dp.toPx()
+        shape = NoteCardShape
+        ambientShadowColor =
+          baseAmbientShadowColor.copy(alpha = baseAmbientShadowColor.alpha * shadowAlpha)
+        spotShadowColor = baseSpotShadowColor.copy(alpha = baseSpotShadowColor.alpha * shadowAlpha)
         scaleX = dragScale
         scaleY = dragScale
         rotationZ = dragRotation
       }
+      .clip(NoteCardShape)
       .background(containerColor, NoteCardShape)
       .border(1.dp, borderColor, NoteCardShape)
 
@@ -664,55 +690,64 @@ private fun NoteColorPalette(
 }
 
 @Composable
-private fun NoteCollapsedMetaRow(note: NoteCard_note) {
+internal fun NoteCollapsedMetaRow(note: NoteCard_note) {
   val meta = buildCollapsedMeta(note.entities.map { it.noteLinkedEntity_entity })
   val density = LocalDensity.current
   val spacingPx = with(density) { 6.dp.roundToPx() }
   val mutedCaptionStyle = AppTheme.typography.caption.copy(color = AppTheme.colors.textHint)
   val showSeparator = meta.visibleEntities.isNotEmpty() || meta.overflowCount > 0
+  val timeAgo = note.updatedAt.timeAgo()
 
-  SubcomposeLayout(modifier = Modifier.fillMaxWidth()) { constraints ->
+  Layout(
+    modifier = Modifier.fillMaxWidth(),
+    content = {
+      meta.visibleEntities.firstOrNull()?.let { entity ->
+        NoteLinkedEntityChip(
+          linkedEntity = entity,
+          modifier = Modifier.layoutId(NoteCollapsedMetaSlot.Chip),
+        )
+      }
+      if (meta.overflowCount > 0) {
+        Text(
+          text = "+${meta.overflowCount}",
+          modifier = Modifier.layoutId(NoteCollapsedMetaSlot.Overflow),
+          style = AppTheme.typography.caption,
+          color = AppTheme.colors.textHint,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+        )
+      }
+      if (showSeparator) {
+        Text(
+          text = "·",
+          modifier = Modifier.layoutId(NoteCollapsedMetaSlot.Separator),
+          style = AppTheme.typography.caption,
+          color = AppTheme.colors.textHint,
+        )
+      }
+      Text(
+        text = timeAgo,
+        modifier = Modifier.layoutId(NoteCollapsedMetaSlot.Time),
+        style = mutedCaptionStyle,
+        maxLines = 1,
+        softWrap = false,
+        overflow = TextOverflow.Clip,
+      )
+    },
+  ) { measurables, constraints ->
     val looseConstraints = constraints.copy(minWidth = 0, minHeight = 0)
     val timePlaceable =
-      subcompose("time") {
-          Text(
-            text = note.updatedAt.timeAgo(),
-            style = mutedCaptionStyle,
-            maxLines = 1,
-            softWrap = false,
-            overflow = TextOverflow.Clip,
-          )
-        }
-        .single()
-        .measure(looseConstraints)
+      measurables.single { it.layoutId == NoteCollapsedMetaSlot.Time }.measure(looseConstraints)
 
     val overflowPlaceable =
-      if (meta.overflowCount > 0) {
-        subcompose("overflow") {
-            Text(
-              text = "+${meta.overflowCount}",
-              style = AppTheme.typography.caption,
-              color = AppTheme.colors.textHint,
-              maxLines = 1,
-              overflow = TextOverflow.Ellipsis,
-            )
-          }
-          .single()
-          .measure(looseConstraints)
-      } else {
-        null
-      }
+      measurables
+        .firstOrNull { it.layoutId == NoteCollapsedMetaSlot.Overflow }
+        ?.measure(looseConstraints)
 
     val separatorPlaceable =
-      if (showSeparator) {
-        subcompose("separator") {
-            Text("·", style = AppTheme.typography.caption, color = AppTheme.colors.textHint)
-          }
-          .single()
-          .measure(looseConstraints)
-      } else {
-        null
-      }
+      measurables
+        .firstOrNull { it.layoutId == NoteCollapsedMetaSlot.Separator }
+        ?.measure(looseConstraints)
 
     val trailingWidth =
       buildList {
@@ -735,11 +770,9 @@ private fun NoteCollapsedMetaRow(note: NoteCard_note) {
         .coerceAtLeast(0)
 
     val chipPlaceable =
-      meta.visibleEntities.firstOrNull()?.let { entity ->
-        subcompose("chip") { NoteLinkedEntityChip(linkedEntity = entity) }
-          .single()
-          .measure(looseConstraints.copy(maxWidth = chipMaxWidth))
-      }
+      measurables
+        .firstOrNull { it.layoutId == NoteCollapsedMetaSlot.Chip }
+        ?.measure(looseConstraints.copy(maxWidth = chipMaxWidth))
 
     val placeables =
       listOfNotNull(chipPlaceable, overflowPlaceable, separatorPlaceable, timePlaceable)
@@ -760,6 +793,13 @@ private fun NoteCollapsedMetaRow(note: NoteCard_note) {
       timePlaceable.placeRelative(x = x, y = (height - timePlaceable.height) / 2)
     }
   }
+}
+
+private enum class NoteCollapsedMetaSlot {
+  Chip,
+  Overflow,
+  Separator,
+  Time,
 }
 
 @Composable

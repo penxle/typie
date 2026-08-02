@@ -122,15 +122,22 @@ internal class NoteListState(private val status: NoteStatus) {
     enteringAnimationIds.remove(noteId)
   }
 
-  fun markExiting(note: NoteCard_note) {
-    if (note.id in exitingNotesById) {
+  fun markExiting(note: NoteCard_note, keepExpanded: Boolean = false) {
+    val existingSnapshot = exitingNotesById[note.id]
+    if (existingSnapshot != null) {
+      exitingNotesById[note.id] =
+        existingSnapshot.copy(
+          note = note,
+          keepExpanded = existingSnapshot.keepExpanded || keepExpanded,
+        )
       return
     }
 
     expectedEntryNotesById.remove(note.id)
     enteringNotesById.remove(note.id)
     enteringAnimationIds.remove(note.id)
-    exitingNotesById[note.id] = ExitingNoteSnapshot(note = note, isVisible = true)
+    exitingNotesById[note.id] =
+      ExitingNoteSnapshot(note = note, isVisible = true, keepExpanded = keepExpanded)
   }
 
   fun markDeleted(noteId: String, fallbackNote: NoteCard_note? = null) {
@@ -168,6 +175,12 @@ internal class NoteListState(private val status: NoteStatus) {
   fun isExiting(noteId: String): Boolean = noteId in exitingNotesById
 
   fun isExitVisible(noteId: String): Boolean = exitingNotesById[noteId]?.isVisible == true
+
+  fun isExitExpanded(noteId: String): Boolean = exitingNotesById[noteId]?.keepExpanded == true
 }
 
-private data class ExitingNoteSnapshot(val note: NoteCard_note, val isVisible: Boolean)
+private data class ExitingNoteSnapshot(
+  val note: NoteCard_note,
+  val isVisible: Boolean,
+  val keepExpanded: Boolean,
+)

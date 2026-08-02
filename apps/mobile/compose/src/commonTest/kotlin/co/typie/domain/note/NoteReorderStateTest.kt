@@ -1,10 +1,9 @@
 package co.typie.domain.note
 
-import co.typie.ext.EdgeAutoScrollController
 import co.typie.graphql.type.NoteStatus
 import co.typie.result.Result
 import co.typie.ui.component.reorder.ReorderDrop
-import co.typie.ui.component.reorder.ReorderableColumnState
+import co.typie.ui.component.reorder.ReorderState
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -275,9 +274,4 @@ class NoteReorderStateTest {
 
 private data class MoveCall(val noteId: String, val lowerOrder: String?, val upperOrder: String?)
 
-private fun reorderableState(keys: List<String>): ReorderableColumnState<String> =
-  ReorderableColumnState<String>(
-      edgeAutoScrollController =
-        EdgeAutoScrollController(verticalScrollableState = null, horizontalScrollableState = null)
-    )
-    .also { it.inputKeys = keys }
+private fun reorderableState(keys: List<String>): ReorderState<String> = ReorderState(keys)

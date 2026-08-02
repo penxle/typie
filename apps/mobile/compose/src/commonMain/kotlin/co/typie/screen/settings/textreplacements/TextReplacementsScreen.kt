@@ -9,8 +9,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -26,8 +27,8 @@ import co.typie.domain.subscription.GatedAction
 import co.typie.domain.subscription.SubscriptionService
 import co.typie.domain.subscription.gate
 import co.typie.ext.clickable
+import co.typie.ext.plus
 import co.typie.ext.separated
-import co.typie.ext.verticalScroll
 import co.typie.icons.Lucide
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.ui.component.CardDivider
@@ -36,9 +37,10 @@ import co.typie.ui.component.CardSurface
 import co.typie.ui.component.Screen
 import co.typie.ui.component.SectionTitle
 import co.typie.ui.component.Text
-import co.typie.ui.component.reorder.ReorderableColumn
-import co.typie.ui.component.reorder.ReorderableColumnState
-import co.typie.ui.component.reorder.rememberReorderableColumnState
+import co.typie.ui.component.reorder.ReorderableLazyColumn
+import co.typie.ui.component.reorder.ReorderableLazyColumnState
+import co.typie.ui.component.reorder.rememberReorderableLazyColumnState
+import co.typie.ui.component.reorder.reorderableAnimatedItem
 import co.typie.ui.component.reorder.reorderableDragHandle
 import co.typie.ui.component.reorder.reorderableItem
 import co.typie.ui.component.reorder.reorderableViewport
@@ -48,18 +50,28 @@ import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarButton
 import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.icon.Icon
-import co.typie.ui.state.rememberScrollState
+import co.typie.ui.state.rememberLazyListState
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+
+private object TextReplacementsTitleKey
+
+private object TextReplacementsDescriptionKey
+
+private object TextReplacementsPresetKey
+
+private object TextReplacementsCustomHeaderKey
+
+private object TextReplacementsEmptyKey
 
 @Composable
 fun TextReplacementsScreen() {
   val model = viewModel { TextReplacementsViewModel() }
 
   val scope = rememberCoroutineScope()
-  val scrollState = rememberScrollState()
+  val scrollState = rememberLazyListState()
 
   val sheet = LocalSheet.current
 
@@ -81,36 +93,96 @@ fun TextReplacementsScreen() {
   Screen(loadable = model.query) { innerPadding ->
     val displayed = model.customs
     val keys = displayed.map { it.textReplacementId }
-    val reorderState =
-      rememberReorderableColumnState(keys = keys, verticalScrollableState = scrollState)
+    val reorderState = rememberReorderableLazyColumnState(keys = keys, lazyListState = scrollState)
+    val byId = remember(displayed) { displayed.associateBy { it.textReplacementId } }
+    val ordered = reorderState.keys.mapNotNull(byId::get)
+    val toast = LocalToast.current
+    val reorderEnabled = SubscriptionService.entitlement !is Entitlement.Expired
 
-    Box(
+    ReorderableLazyColumn(
+      state = reorderState,
       modifier =
         Modifier.fillMaxSize()
-          .reorderableViewport(state = reorderState, viewportTopInset = topBarOcclusion)
+          .reorderableViewport(state = reorderState, viewportTopInset = topBarOcclusion),
+      contentPadding = innerPadding + AppTheme.spacings.scrollBottomPadding,
     ) {
-      Column(
-        modifier =
-          Modifier.fillMaxSize()
-            .verticalScroll(scrollState)
-            .padding(innerPadding)
-            .padding(AppTheme.spacings.scrollBottomPadding),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-      ) {
-        Text("텍스트 대치", style = AppTheme.typography.display)
+      item(key = TextReplacementsTitleKey) { Text("텍스트 대치", style = AppTheme.typography.display) }
+      item(key = TextReplacementsDescriptionKey) {
         Text(
           "입력 중 특정 텍스트를 자동으로 변환해요.",
+          modifier = Modifier.padding(top = 16.dp),
           style = AppTheme.typography.caption,
           color = AppTheme.colors.textMuted,
         )
+      }
+      item(key = TextReplacementsPresetKey) {
+        Box(modifier = Modifier.padding(top = 16.dp)) {
+          PresetSection(model = model, scope = scope)
+        }
+      }
+      item(key = TextReplacementsCustomHeaderKey) {
+        Column(
+          modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 12.dp),
+          verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+          SectionTitle(text = "사용자 대치", modifier = Modifier.padding(top = 4.dp))
+          Text(
+            text = "위에서부터 순서대로 먼저 매치되는 규칙이 적용돼요.",
+            style = AppTheme.typography.caption,
+            color = AppTheme.colors.textMuted,
+          )
+        }
+      }
 
-        PresetSection(model = model, scope = scope)
-        CustomSection(
-          model = model,
-          displayed = displayed,
-          reorderState = reorderState,
-          scope = scope,
-        )
+      if (ordered.isEmpty()) {
+        item(key = TextReplacementsEmptyKey) {
+          CardSurface(modifier = Modifier.fillMaxWidth()) { EmptyStateMessage() }
+        }
+      } else {
+        itemsIndexed(items = ordered, key = { _, entry -> entry.textReplacementId }) { index, entry
+          ->
+          val id = entry.textReplacementId
+          val shape =
+            RoundedCornerShape(
+              topStart = if (index == 0) AppShapes.md else 0.dp,
+              topEnd = if (index == 0) AppShapes.md else 0.dp,
+              bottomStart = if (index == ordered.lastIndex) AppShapes.md else 0.dp,
+              bottomEnd = if (index == ordered.lastIndex) AppShapes.md else 0.dp,
+            )
+          CardSurface(
+            modifier =
+              reorderableAnimatedItem(state = reorderState, key = id)
+                .reorderableItem(state = reorderState, key = id),
+            shape = shape,
+          ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+              if (index > 0) CardDivider(inset = 20.dp)
+              CustomRow(
+                entry = entry,
+                order = index + 1,
+                reorderState = reorderState,
+                reorderEnabled = reorderEnabled,
+                onEdit = {
+                  if (SubscriptionService.gate(sheet, GatedAction.TextReplacement)) {
+                    sheet.present { TextReplacementEditSheet(model = model, editing = entry) }
+                  }
+                },
+                onToggle = {
+                  if (SubscriptionService.gate(sheet, GatedAction.TextReplacement)) {
+                    model
+                      .updateTextReplacementState(entry.textReplacementId, entry.isActive)
+                      .withDefaultExceptionHandler(toast)
+                  }
+                },
+                onReorderCommit = { movedKey, orderedKeys ->
+                  scope.launch {
+                    model.reorderCustom(movedKey, orderedKeys).withDefaultExceptionHandler(toast)
+                  }
+                },
+              )
+            }
+          }
+        }
       }
     }
   }
@@ -181,66 +253,6 @@ private fun PresetSection(model: TextReplacementsViewModel, scope: CoroutineScop
 }
 
 @Composable
-private fun CustomSection(
-  model: TextReplacementsViewModel,
-  displayed: List<TextReplacement>,
-  reorderState: ReorderableColumnState<String>,
-  scope: CoroutineScope,
-) {
-  val sheet = LocalSheet.current
-  val toast = LocalToast.current
-  val reorderEnabled = SubscriptionService.entitlement !is Entitlement.Expired
-
-  Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-    SectionTitle(text = "사용자 대치", modifier = Modifier.padding(top = 4.dp))
-    Text(
-      text = "위에서부터 순서대로 먼저 매치되는 규칙이 적용돼요.",
-      style = AppTheme.typography.caption,
-      color = AppTheme.colors.textMuted,
-    )
-
-    if (displayed.isEmpty()) {
-      CardSurface(modifier = Modifier.fillMaxWidth()) { EmptyStateMessage() }
-    } else {
-      val byId = remember(displayed) { displayed.associateBy { it.textReplacementId } }
-      val ordered = reorderState.keys.mapNotNull(byId::get)
-      CardSurface(modifier = Modifier.fillMaxWidth()) {
-        ReorderableColumn(state = reorderState, modifier = Modifier.fillMaxWidth()) {
-          ordered.forEachIndexed { index, entry ->
-            key(entry.textReplacementId) {
-              if (index > 0) CardDivider(inset = 20.dp)
-              CustomRow(
-                entry = entry,
-                order = index + 1,
-                reorderState = reorderState,
-                reorderEnabled = reorderEnabled,
-                onEdit = {
-                  if (SubscriptionService.gate(sheet, GatedAction.TextReplacement)) {
-                    sheet.present { TextReplacementEditSheet(model = model, editing = entry) }
-                  }
-                },
-                onToggle = {
-                  if (SubscriptionService.gate(sheet, GatedAction.TextReplacement)) {
-                    model
-                      .updateTextReplacementState(entry.textReplacementId, entry.isActive)
-                      .withDefaultExceptionHandler(toast)
-                  }
-                },
-                onReorderCommit = { movedKey, orderedKeys ->
-                  scope.launch {
-                    model.reorderCustom(movedKey, orderedKeys).withDefaultExceptionHandler(toast)
-                  }
-                },
-              )
-            }
-          }
-        }
-      }
-    }
-  }
-}
-
-@Composable
 private fun PresetRow(
   entry: TextReplacement,
   onClick: suspend () -> Unit,
@@ -256,7 +268,7 @@ private fun PresetRow(
 private fun CustomRow(
   entry: TextReplacement,
   order: Int,
-  reorderState: ReorderableColumnState<String>,
+  reorderState: ReorderableLazyColumnState<String>,
   reorderEnabled: Boolean,
   onEdit: suspend () -> Unit,
   onToggle: suspend () -> Unit,
@@ -265,10 +277,7 @@ private fun CustomRow(
   val id = entry.textReplacementId
   val toggleScope = rememberCoroutineScope()
 
-  Row(
-    modifier = Modifier.fillMaxWidth().reorderableItem(state = reorderState, key = id),
-    verticalAlignment = Alignment.CenterVertically,
-  ) {
+  Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
     Box(
       modifier =
         Modifier.reorderableDragHandle(

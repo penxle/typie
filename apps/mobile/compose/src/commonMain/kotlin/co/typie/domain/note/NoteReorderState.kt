@@ -6,7 +6,7 @@ import co.typie.graphql.resolveNextFractionalOrderMove
 import co.typie.graphql.type.NoteStatus
 import co.typie.result.Result
 import co.typie.ui.component.reorder.ReorderDrop
-import co.typie.ui.component.reorder.ReorderableColumnState
+import co.typie.ui.component.reorder.ReorderState
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -23,7 +23,7 @@ internal data class NoteListIdentity(
 @Stable
 internal class NoteReorderState(
   private val scope: CoroutineScope,
-  private val reorderState: ReorderableColumnState<String>,
+  private val reorderState: ReorderState<String>,
 ) {
   private val mutableFailures = MutableSharedFlow<Throwable>(extraBufferCapacity = 1)
   val failures = mutableFailures.asSharedFlow()

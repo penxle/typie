@@ -164,6 +164,7 @@ osslicenses
 penxle
 pgbouncer
 pilcrow
+pinnable
 plpgsql
 pooler
 prefs
