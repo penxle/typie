@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import co.typie.ext.LocalInteractionSource
 import co.typie.ext.clickable
 import co.typie.ext.navigationBars
+import co.typie.ext.rememberTrustedImeBottomInset
 import co.typie.icons.Lucide
 import co.typie.ui.component.Text
 import co.typie.ui.component.popover.PopoverList
@@ -79,6 +80,7 @@ data class BottomBarAction(
 private const val ACTION_SIZE = 56
 private const val ACTION_GAP = 8
 private const val ACTION_MENU_GAP = 10
+private const val ACTION_IME_GAP = 12
 private const val ACTION_SELECTION_ARM_DELAY_MS = 180L
 
 internal const val ACTION_BUTTON_TOTAL_WIDTH = ACTION_SIZE + ACTION_GAP
@@ -93,7 +95,10 @@ fun BottomBarActionButton(
   val actionInteractionSource = remember { MutableInteractionSource() }
   val actionScale = remember { Animatable(1f) }
   val isActionPressed by actionInteractionSource.collectIsPressedAsState()
-  val safeBottomPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+  val navigationBarsBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+  val imeBottom = rememberTrustedImeBottomInset()
+  val actionBottomPadding =
+    maxOf(navigationBarsBottom + BottomBarDefaults.BottomPadding, imeBottom + ACTION_IME_GAP.dp)
   val hasMenu = menus.isNotEmpty()
   val pressGestureSessionState = rememberPressGestureSessionState()
   var isMenuOpen by remember(icon, menus) { mutableStateOf(false) }
@@ -149,11 +154,7 @@ fun BottomBarActionButton(
           Modifier.align(Alignment.BottomEnd)
             .padding(
               end = shellHorizontalInset,
-              bottom =
-                safeBottomPadding +
-                  BottomBarDefaults.BottomPadding +
-                  ACTION_SIZE.dp +
-                  ACTION_MENU_GAP.dp,
+              bottom = actionBottomPadding + ACTION_SIZE.dp + ACTION_MENU_GAP.dp,
             ),
         enter =
           fadeIn(animationSpec = tween(280)) +
@@ -207,10 +208,7 @@ fun BottomBarActionButton(
       Box(
         modifier =
           Modifier.align(Alignment.BottomEnd)
-            .padding(
-              end = shellHorizontalInset,
-              bottom = safeBottomPadding + BottomBarDefaults.BottomPadding,
-            )
+            .padding(end = shellHorizontalInset, bottom = actionBottomPadding)
             .size(ACTION_SIZE.dp)
             .onGloballyPositioned { coordinates ->
               buttonWindowTopLeft = coordinates.positionInWindow()
