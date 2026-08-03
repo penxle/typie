@@ -1,4 +1,5 @@
 import * as Sentry from '@sentry/node';
+import { logger } from '@typie/lib';
 import { InAppPurchaseStore, PlanAvailability, SubscriptionState } from '@typie/lib/enums';
 import dayjs from 'dayjs';
 import { and, eq, inArray, ne } from 'drizzle-orm';
@@ -26,6 +27,8 @@ import type { IapAcknowledgeDuty } from '#/utils/iap-sync.ts';
 import type { OpsAlertId } from '#/utils/ops-alert.ts';
 
 export const iap = new Hono<Env>();
+
+const log = logger.getChild('iap');
 
 const PENDING_REFUND_REVIEW_WINDOW_MS = 86_400_000;
 // 미바인딩·미등록은 이 창 안에서는 정상 국면이다 — 스토어 결제 직후 등록 mutation 이 아직 바인딩을 만들지 않았거나,
@@ -592,9 +595,10 @@ iap.post('/googleplay', async (c) => {
   }
 
   // 구글 알림은 환경과 무관하게 prod·dev 양쪽으로 발송된다 — dev 에 없는 바인딩을 재전송으로 기다리면
-  // 성립할 수 없는 재시도가 무한히 쌓인다(현행 동작 유지).
+  // 성립할 수 없는 재시도가 무한히 쌓인다(현행 동작 유지). 실유저의 모든 구글 알림이 여기로 떨어지므로
+  // 슬랙에 내면 결제·갱신마다 소음이 된다 — 서버 로그로만 남긴다.
   if (!production) {
-    await logNotification({ source: 'rest/googleplay', reason: 'unbound_token', notification });
+    log.info('unbound google notification dropped on non-production {*}', { notification });
     return c.json({}, 200);
   }
 
