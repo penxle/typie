@@ -140,6 +140,16 @@ object SyncWs {
     channels.values.toList().forEach { it.resetPermanentFailure() }
   }
 
+  /** 계정 전환/로그아웃 시 호출된다. 소켓 인증은 hello 시점 유저로 고정되므로 즉시 끊는다 — 다음 사용 시 새 티켓으로 재연결된다. */
+  fun onSessionChanged() {
+    if (!connectionDelegate.isInitialized()) return
+    scope.launch {
+      connection.resetTerminal()
+      connection.disconnect()
+      channels.values.toList().forEach { it.resetPermanentFailure() }
+    }
+  }
+
   fun onAppForeground() {
     if (connectionDelegate.isInitialized()) connection.onAppForeground()
   }

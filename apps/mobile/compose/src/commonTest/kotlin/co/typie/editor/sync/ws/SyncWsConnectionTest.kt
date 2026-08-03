@@ -139,6 +139,43 @@ class SyncWsConnectionTest {
   }
 
   @Test
+  fun disconnectTerminatesSocketAndNextRequestFetchesNewTicket() = runTest {
+    val (connection, sockets) = harness()
+    connection.disconnect()
+    runCurrent()
+    assertEquals(0, sockets.size)
+
+    val pushDeferred = async { connection.push("D1", byteArrayOf(1)) }
+    runCurrent()
+    val socket0 = sockets[0]
+    handshake(socket0)
+    val push0 = assertIs<WsClientMessage.Push>(socket0.lastOf("push"))
+    socket0.serverSend(
+      WsServerMessage.PushAck(id = push0.id, heads = ByteArray(0), durableHeads = ByteArray(0))
+    )
+    pushDeferred.await()
+
+    connection.disconnect()
+    runCurrent()
+    assertEquals(1, socket0.terminateCalls)
+
+    val pushDeferred2 = async { connection.push("D1", byteArrayOf(2)) }
+    runCurrent()
+    assertEquals(2, sockets.size)
+    val socket1 = sockets[1]
+    val hello = assertIs<WsClientMessage.Hello>(socket1.lastOf("hello"))
+    assertEquals("TK-2", hello.ticket)
+
+    handshake(socket1)
+    val push1 = assertIs<WsClientMessage.Push>(socket1.lastOf("push"))
+    socket1.serverSend(
+      WsServerMessage.PushAck(id = push1.id, heads = ByteArray(0), durableHeads = ByteArray(0))
+    )
+    pushDeferred2.await()
+    connection.dispose()
+  }
+
+  @Test
   fun registerChannelRoutesByDocumentIdAndUnregisters() = runTest {
     val (connection, sockets) = harness()
     val received = mutableListOf<String>()

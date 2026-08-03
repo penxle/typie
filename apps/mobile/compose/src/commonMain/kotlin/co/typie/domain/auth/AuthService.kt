@@ -8,7 +8,9 @@ import co.typie.domain.subscription.shouldDiscardEntitlementCache
 import co.typie.editor.sync.ActiveDocumentEditingSessions
 import co.typie.editor.sync.catchingNonCancellation
 import co.typie.editor.sync.orphanSweeper
+import co.typie.editor.sync.ws.SyncWs
 import co.typie.graphql.Apollo
+import co.typie.graphql.closeApolloSubscriptionConnection
 import co.typie.network.Http
 import co.typie.storage.Preference
 import co.typie.storage.Vault
@@ -99,12 +101,19 @@ object AuthService {
   private suspend fun authenticate(sessionToken: String) {
     val accessToken = exchangeToken(sessionToken)
 
-    if (shouldDiscardEntitlementCache(Vault.authTokens?.sessionToken, sessionToken)) {
+    val previousSessionToken = Vault.authTokens?.sessionToken
+    if (shouldDiscardEntitlementCache(previousSessionToken, sessionToken)) {
       Preference.entitlementCache = null
     }
 
     Vault.authTokens = AuthTokens(sessionToken = sessionToken, accessToken = accessToken)
     state = AuthState.Authenticated(Vault.authTokens!!)
+
+    // 로그아웃을 거치지 않고 세션이 바뀌는 경로 방어. state 갱신 후에 끊어야 재연결이 새 유저 티켓을 받는다.
+    if (previousSessionToken != null && previousSessionToken != sessionToken) {
+      closeApolloSubscriptionConnection()
+      SyncWs.onSessionChanged()
+    }
   }
 
   private suspend fun exchangeToken(sessionToken: String): String {
@@ -172,6 +181,9 @@ object AuthService {
     state = AuthState.Unauthenticated
 
     Apollo.apolloStore.clearAll()
+    // 두 WS 모두 hello/connectionPayload 시점 유저로 인증이 고정된다 — 신원이 끝나면 즉시 끊는다.
+    closeApolloSubscriptionConnection()
+    SyncWs.onSessionChanged()
   }
 
   @Serializable

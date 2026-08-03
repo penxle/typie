@@ -1,6 +1,8 @@
 package co.typie.editor.sync
 
 import co.touchlab.kermit.Logger
+import co.typie.domain.auth.AuthService
+import co.typie.domain.auth.AuthState
 import co.typie.domain.subscription.SubscriptionService
 import co.typie.domain.subscription.shouldAttemptPush
 import co.typie.editor.sync.ws.SyncWs
@@ -22,7 +24,7 @@ class OrphanSweeper(
   }
 
   suspend fun sweep(includeOpenDocuments: Boolean = false, deleteOnSuccess: Boolean = false) {
-    // Expired면 push를 시도하지 않는다. 로컬 스태시는 그대로 유지.
+    // 비로그인·Expired면 push를 시도하지 않는다. 로컬 스태시는 그대로 유지.
     if (!canPush()) return
     if (!mutex.tryLock()) return
     try {
@@ -62,6 +64,9 @@ val orphanSweeper: OrphanSweeper by lazy {
     store = ChangesetDeltaStore,
     pushFn = { documentId, payload -> SyncWs.connection.push(documentId, payload) },
     openDocumentIds = { ActiveDocumentEditingSessions.openDocumentIds() },
-    canPush = { shouldAttemptPush(SubscriptionService.entitlement) },
+    canPush = {
+      AuthService.state is AuthState.Authenticated &&
+        shouldAttemptPush(SubscriptionService.entitlement)
+    },
   )
 }

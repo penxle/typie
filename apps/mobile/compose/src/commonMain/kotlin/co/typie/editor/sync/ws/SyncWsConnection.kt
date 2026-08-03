@@ -149,6 +149,10 @@ class SyncWsConnection(
     return { reconnectedCallbacks.remove(callback) }
   }
 
+  fun disconnect() {
+    socket?.terminate()
+  }
+
   fun dispose() {
     if (disposed) return
     disposed = true
