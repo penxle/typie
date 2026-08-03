@@ -32,6 +32,7 @@ import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.excludeBottom
 import co.typie.ext.imePadding
+import co.typie.ext.nativeTextInputPlatformImeOptions
 import co.typie.ext.pressScale
 import co.typie.ext.separated
 import co.typie.ext.truncate
@@ -160,6 +161,7 @@ private fun SearchInputField(
     placeholder = placeholder,
     autoFocus = true,
     imeAction = ImeAction.Search,
+    platformImeOptions = nativeTextInputPlatformImeOptions(),
     onImeAction = onSubmit,
     leadingIcon = {
       Icon(icon = Lucide.Search, modifier = Modifier.size(16.dp), tint = AppTheme.colors.textHint)

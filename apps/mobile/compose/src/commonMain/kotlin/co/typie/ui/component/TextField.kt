@@ -52,6 +52,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.PlatformImeOptions
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
@@ -226,6 +227,7 @@ fun TextField(
   onBlur: (() -> Unit)? = null,
   keyboardType: KeyboardType = KeyboardType.Text,
   imeAction: ImeAction? = null,
+  platformImeOptions: PlatformImeOptions? = null,
   onImeAction: (() -> Unit)? = null,
   onTabAction: (() -> Unit)? = null,
   onShiftTabAction: (() -> Unit)? = null,
@@ -383,7 +385,11 @@ fun TextField(
         ),
       cursorBrush = SolidColor(AppTheme.colors.textDefault),
       keyboardOptions =
-        KeyboardOptions(keyboardType = resolvedKeyboardType, imeAction = resolvedImeAction),
+        KeyboardOptions(
+          keyboardType = resolvedKeyboardType,
+          imeAction = resolvedImeAction,
+          platformImeOptions = platformImeOptions,
+        ),
       keyboardActions =
         KeyboardActions(onNext = { onImeAction?.invoke() }, onDone = { onImeAction?.invoke() }),
       visualTransformation =
