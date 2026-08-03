@@ -1423,6 +1423,7 @@ class EditorInteractionControllerTest {
 
       assertTrue(controller.pointerDownOnSelectionHandle(down))
       assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
+      assertFalse(controller.tryClaimScrollbarDirectDrag())
       assertTrue(host.scrollGestureLockActive)
       assertFalse(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
 
@@ -1440,6 +1441,7 @@ class EditorInteractionControllerTest {
 
       assertTrue(controller.upSelectionHandlePointer())
       assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
+      assertTrue(controller.tryClaimScrollbarDirectDrag())
       assertFalse(host.scrollGestureLockActive)
       assertNull(controller.magnifierPosition)
     }
@@ -1996,6 +1998,7 @@ class EditorInteractionControllerTest {
 
       assertTrue(controller.pointerDownOnSelectionHandle(down))
       assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
+      assertFalse(controller.tryClaimScrollbarDirectDrag())
       assertTrue(host.scrollGestureLockActive)
 
       assertTrue(controller.moveSelectionHandlePointer(down))
@@ -2005,6 +2008,7 @@ class EditorInteractionControllerTest {
       assertTrue(controller.upSelectionHandlePointer())
 
       assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
+      assertTrue(controller.tryClaimScrollbarDirectDrag())
       assertFalse(host.scrollGestureLockActive)
       assertFalse(host.uiState.contextMenu.visible)
     }
@@ -2297,9 +2301,11 @@ class EditorInteractionControllerTest {
       val down = Offset(60f, 60f)
 
       assertTrue(controller.onPointerDown(pointerId = 1L, position = down, nowMillis = 0L))
+      assertFalse(controller.tryClaimScrollbarDirectDrag())
       assertTrue(
         controller.onPointerMove(pointerId = 1L, position = Offset(100f, 90f), nowMillis = 20L)
       )
+      assertFalse(controller.tryClaimScrollbarDirectDrag())
 
       val extend =
         fake.enqueued.filterIsInstance<Message.Selection>().single().op as SelectionOp.ExtendTo
@@ -2316,6 +2322,7 @@ class EditorInteractionControllerTest {
         controller.onPointerUp(pointerId = 1L, position = Offset(100f, 90f), nowMillis = 40L)
       )
       assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
+      assertTrue(controller.tryClaimScrollbarDirectDrag())
       assertFalse(host.scrollGestureLockActive)
     }
 
@@ -2897,19 +2904,23 @@ class EditorInteractionControllerTest {
       val down = Offset(60f, 30f)
 
       assertTrue(controller.onPointerDown(pointerId = 1L, position = down, nowMillis = 0L))
+      assertFalse(controller.tryClaimScrollbarDirectDrag())
       assertFalse(host.scrollGestureLockActive)
 
       assertTrue(
         controller.onPointerMove(pointerId = 1L, position = Offset(70f, 30f), nowMillis = 20L)
       )
+      assertFalse(controller.tryClaimScrollbarDirectDrag())
       assertTrue(host.scrollGestureLockActive)
 
       assertTrue(
         controller.onPointerUp(pointerId = 1L, position = Offset(70f, 30f), nowMillis = 40L)
       )
+      assertTrue(controller.tryClaimScrollbarDirectDrag())
       assertFalse(host.scrollGestureLockActive)
 
       assertTrue(controller.onPointerDown(pointerId = 2L, position = down, nowMillis = 60L))
+      assertFalse(controller.tryClaimScrollbarDirectDrag())
       assertTrue(
         controller.onPointerMove(pointerId = 2L, position = Offset(70f, 30f), nowMillis = 80L)
       )
@@ -2917,6 +2928,7 @@ class EditorInteractionControllerTest {
 
       controller.cancel()
 
+      assertTrue(controller.tryClaimScrollbarDirectDrag())
       assertFalse(host.scrollGestureLockActive)
     }
 

@@ -80,11 +80,14 @@ import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
 import co.typie.editor.scroll.rememberEditorBringIntoViewRequests
 import co.typie.editor.scroll.resolveEditorAutoScrollPolicy
 import co.typie.editor.viewport.EditorViewportState
+import co.typie.editor.viewport.resolveEditorViewportScrollbarMetrics
+import co.typie.editor.viewport.resolveEditorViewportScrollbarScrollPositionFromDrag
 import co.typie.ext.ScrollGestureLockState
 import co.typie.navigation.LocalNavigationPopNestedScroll
 import co.typie.navigation.NavigationPopNestedScroll
 import co.typie.screen.editor.editor.header.EditorHeaderFrame
 import co.typie.screen.editor.editor.header.resolveEditorHeaderGeometry
+import co.typie.screen.editor.editor.overlay.EditorScrollbarPressAndHoldDurationMillis
 import co.typie.screen.editor.editor.overlay.EditorScrollbars
 import co.typie.screen.editor.editor.state.EditorScreenState
 import co.typie.ui.theme.LightColors
@@ -648,30 +651,33 @@ class EditorScreenLayoutDesktopTest {
   }
 
   @Test
-  fun scrollbarOwnsDownAndSharesWheelWithViewport() = runComposeUiTest {
+  fun scrollbarShortTouchAndMouseInputsFallThroughAndShareWheelWithViewport() = runComposeUiTest {
     val fixture = ViewportOverlayFixture()
     setViewportOverlayContent(
       fixture = fixture,
-      viewportOverlay = {
-        CompositionLocalProvider(LocalAppColors provides LightColors) {
-          EditorScrollbars(
-            viewportState = fixture.viewportState,
-            visibleArea = fixture.visibleArea,
-            layoutSpec = fixture.layoutSpec,
-            pageSizes = fixture.pageSizes,
-            displayZoom = 1f,
-          )
-        }
-      },
+      viewportOverlay = { ScrollbarViewportOverlay(fixture) },
+      bodyTapEnabled = true,
     )
     runOnIdle { fixture.viewportState.scrollToY(1f) }
     waitForIdle()
 
     onNodeWithTag(LayoutTag).performTouchInput {
-      down(Offset(x = TestViewportSize.width - 20f, y = 32f))
+      down(Offset(x = TestViewportSize.width - 6f, y = 32f))
+      advanceEventTime(EditorScrollbarPressAndHoldDurationMillis - 1L)
       up()
     }
     waitForIdle()
+    assertEquals(1, fixture.bodyTapCount)
+    assertEquals(EditorInteractionMode.Idle, fixture.interactionScope.controller.interactionMode)
+
+    onNodeWithTag(LayoutTag).performMouseInput {
+      moveTo(Offset(x = TestViewportSize.width - 6f, y = 32f))
+      press()
+      advanceEventTime(EditorScrollbarPressAndHoldDurationMillis - 1L)
+      release()
+    }
+    waitForIdle()
+    assertEquals(2, fixture.bodyTapCount)
     assertEquals(EditorInteractionMode.Idle, fixture.interactionScope.controller.interactionMode)
 
     onNodeWithTag(LayoutTag).performMouseInput {
@@ -683,12 +689,370 @@ class EditorScreenLayoutDesktopTest {
     runOnIdle { fixture.scrollDeltas.clear() }
 
     onNodeWithTag(LayoutTag).performMouseInput {
-      moveTo(Offset(x = TestViewportSize.width - 20f, y = 32f))
+      moveTo(Offset(x = TestViewportSize.width - 6f, y = 32f))
       scroll(Offset(x = 0f, y = 120f))
     }
     waitForIdle()
 
     assertTrue(fixture.scrollDeltas.isNotEmpty(), "wheel over the thumb did not reach viewport")
+  }
+
+  @Test
+  fun scrollbarCoreTouchPressAndHoldClaimsWithoutMovement() = runComposeUiTest {
+    val fixture = ViewportOverlayFixture()
+    setViewportOverlayContent(
+      fixture = fixture,
+      viewportOverlay = { ScrollbarViewportOverlay(fixture) },
+      bodyTapEnabled = true,
+    )
+    runOnIdle { fixture.viewportState.scrollToY(1f) }
+    waitForIdle()
+
+    val layout = onNodeWithTag(LayoutTag)
+    layout.performTouchInput {
+      down(Offset(x = TestViewportSize.width - 6f, y = 32f))
+      advanceEventTime(EditorScrollbarPressAndHoldDurationMillis)
+      // Compose Desktop's test clock does not drive pointer-node timeouts deterministically.
+      // A stationary event at the deadline verifies the same policy and routing path by uptime.
+      move(delayMillis = 0L)
+    }
+
+    assertEquals(1, fixture.directDragClaimCount)
+    layout.performTouchInput { up() }
+    assertEquals(0, fixture.bodyTapCount)
+  }
+
+  @Test
+  fun scrollbarCoreTouchPressAndHoldThenDrags() = runComposeUiTest {
+    val fixture = ViewportOverlayFixture()
+    setViewportOverlayContent(
+      fixture = fixture,
+      viewportOverlay = { ScrollbarViewportOverlay(fixture) },
+    )
+    runOnIdle { fixture.viewportState.scrollToY(1f) }
+    waitForIdle()
+    runOnIdle { fixture.scrollDeltas.clear() }
+
+    val initialScroll = fixture.viewportState.scrollOffset.y
+    val layout = onNodeWithTag(LayoutTag)
+    layout.performTouchInput {
+      down(Offset(x = TestViewportSize.width - 6f, y = 32f))
+      advanceEventTime(EditorScrollbarPressAndHoldDurationMillis)
+      move(delayMillis = 0L)
+    }
+
+    assertEquals(1, fixture.directDragClaimCount)
+    layout.performTouchInput {
+      moveTo(Offset(x = TestViewportSize.width - 6f, y = 72f))
+      up()
+    }
+
+    assertEquals(1, fixture.directDragClaimCount)
+    assertTrue(fixture.viewportState.scrollOffset.y > initialScroll)
+    assertTrue(fixture.scrollDeltas.isEmpty())
+  }
+
+  @Test
+  fun scrollbarCoreTouchMicroMovementDoesNotRestartPressAndHoldDeadline() = runComposeUiTest {
+    val fixture = ViewportOverlayFixture()
+    setViewportOverlayContent(
+      fixture = fixture,
+      viewportOverlay = { ScrollbarViewportOverlay(fixture) },
+    )
+    runOnIdle { fixture.viewportState.scrollToY(1f) }
+    waitForIdle()
+
+    val layout = onNodeWithTag(LayoutTag)
+    val firstInterval = EditorScrollbarPressAndHoldDurationMillis / 2L
+    layout.performTouchInput {
+      down(Offset(x = TestViewportSize.width - 6f, y = 32f))
+      advanceEventTime(firstInterval)
+      moveBy(Offset(x = 0f, y = 1f), delayMillis = 0L)
+      advanceEventTime(EditorScrollbarPressAndHoldDurationMillis - firstInterval)
+      move(delayMillis = 0L)
+    }
+
+    assertEquals(1, fixture.directDragClaimCount)
+    layout.performTouchInput { up() }
+  }
+
+  @Test
+  fun scrollbarCoreMousePressAndHoldClaimsWithoutMovement() = runComposeUiTest {
+    val fixture = ViewportOverlayFixture()
+    setViewportOverlayContent(
+      fixture = fixture,
+      viewportOverlay = { ScrollbarViewportOverlay(fixture) },
+      bodyTapEnabled = true,
+    )
+    runOnIdle { fixture.viewportState.scrollToY(1f) }
+    waitForIdle()
+
+    val layout = onNodeWithTag(LayoutTag)
+    layout.performMouseInput {
+      moveTo(Offset(x = TestViewportSize.width - 6f, y = 32f))
+      press()
+      advanceEventTime(EditorScrollbarPressAndHoldDurationMillis)
+      moveTo(currentPosition, delayMillis = 0L)
+    }
+
+    assertEquals(1, fixture.directDragClaimCount)
+    layout.performMouseInput { release() }
+    assertEquals(0, fixture.bodyTapCount)
+  }
+
+  @Test
+  fun scrollbarCorePressAndHoldYieldsWhenEditorHandleIsPending() = runComposeUiTest {
+    val fixture = ViewportOverlayFixture()
+    setViewportOverlayContent(
+      fixture = fixture,
+      viewportOverlay = {
+        ScrollbarViewportOverlay(fixture = fixture, allowDirectDragClaim = { false })
+      },
+      bodyTapEnabled = true,
+    )
+    runOnIdle { fixture.viewportState.scrollToY(1f) }
+    waitForIdle()
+    runOnIdle { fixture.scrollDeltas.clear() }
+
+    val initialScroll = fixture.viewportState.scrollOffset.y
+    val layout = onNodeWithTag(LayoutTag)
+    layout.performTouchInput {
+      down(Offset(x = TestViewportSize.width - 6f, y = 32f))
+      advanceEventTime(EditorScrollbarPressAndHoldDurationMillis)
+      move(delayMillis = 0L)
+    }
+
+    assertEquals(0, fixture.directDragClaimCount)
+    assertEquals(initialScroll, fixture.viewportState.scrollOffset.y)
+    assertTrue(fixture.scrollDeltas.isEmpty())
+    layout.performTouchInput { up() }
+    assertEquals(1, fixture.bodyTapCount)
+  }
+
+  @Test
+  fun areaOutsideScrollbarMouseClickFallsThrough() = runComposeUiTest {
+    val fixture = ViewportOverlayFixture()
+    setViewportOverlayContent(
+      fixture = fixture,
+      viewportOverlay = { ScrollbarViewportOverlay(fixture) },
+      bodyTapEnabled = true,
+    )
+    runOnIdle { fixture.viewportState.scrollToY(1f) }
+    waitForIdle()
+
+    onNodeWithTag(LayoutTag).performMouseInput {
+      moveTo(Offset(x = TestViewportSize.width - 20f, y = 32f))
+      press()
+      release()
+    }
+    waitForIdle()
+
+    assertEquals(1, fixture.bodyTapCount)
+    assertEquals(0, fixture.directDragClaimCount)
+  }
+
+  @Test
+  fun scrollbarCoreTouchAxisDragClaimsAfterSlop() = runComposeUiTest {
+    val fixture = ViewportOverlayFixture()
+    setViewportOverlayContent(
+      fixture = fixture,
+      viewportOverlay = { ScrollbarViewportOverlay(fixture) },
+    )
+    runOnIdle { fixture.viewportState.scrollToY(1f) }
+    waitForIdle()
+    runOnIdle { fixture.scrollDeltas.clear() }
+
+    val initialScroll = fixture.viewportState.scrollOffset.y
+    val dragDelta = 40f
+    val scrollbarMetrics =
+      resolveEditorViewportScrollbarMetrics(
+        viewportLength = fixture.viewportState.viewportSize.height,
+        contentLength = fixture.viewportState.contentSize.height,
+        scrollPosition = initialScroll,
+        minThumbSize = ExpectedScrollbarMinThumbSize,
+        leadingInset = fixture.visibleArea.topOcclusion,
+        trailingInset = fixture.visibleArea.bottomOcclusion,
+        leadingPadding = ExpectedScrollbarTrackPadding,
+        trailingPadding = ExpectedScrollbarTrackPadding,
+      )
+    val expectedScroll =
+      resolveEditorViewportScrollbarScrollPositionFromDrag(
+        startScrollPosition = initialScroll,
+        dragDelta = dragDelta,
+        trackLength = scrollbarMetrics.trackLength,
+        thumbSize = scrollbarMetrics.thumbSize,
+        viewportLength = fixture.viewportState.viewportSize.height,
+        contentLength = fixture.viewportState.contentSize.height,
+      )
+    onNodeWithTag(LayoutTag).performTouchInput {
+      down(Offset(x = TestViewportSize.width - 6f, y = 32f))
+      advanceEventTime(16L)
+      moveTo(Offset(x = TestViewportSize.width - 6f, y = 32f + dragDelta))
+      up()
+    }
+    waitForIdle()
+
+    assertEquals(1, fixture.directDragClaimCount)
+    assertEquals(expectedScroll, fixture.viewportState.scrollOffset.y)
+    assertTrue(fixture.scrollDeltas.isEmpty())
+  }
+
+  @Test
+  fun areaOutsideScrollbarQuickTouchDragGoesToViewportPan() = runComposeUiTest {
+    val fixture = ViewportOverlayFixture()
+    setViewportOverlayContent(
+      fixture = fixture,
+      viewportOverlay = { ScrollbarViewportOverlay(fixture) },
+    )
+    runOnIdle { fixture.viewportState.scrollToY(1f) }
+    waitForIdle()
+    runOnIdle { fixture.scrollDeltas.clear() }
+
+    val initialScroll = fixture.viewportState.scrollOffset.y
+    onNodeWithTag(LayoutTag).performTouchInput {
+      down(Offset(x = TestViewportSize.width - 20f, y = 32f))
+      advanceEventTime(16L)
+      moveTo(Offset(x = TestViewportSize.width - 20f, y = 72f))
+      up()
+    }
+    waitForIdle()
+
+    assertEquals(0, fixture.directDragClaimCount)
+    assertEquals(initialScroll, fixture.viewportState.scrollOffset.y)
+    assertTrue(fixture.scrollDeltas.isNotEmpty())
+  }
+
+  @Test
+  fun areaOutsideScrollbarHeldTouchDragStaysWithViewportPan() = runComposeUiTest {
+    val fixture = ViewportOverlayFixture()
+    setViewportOverlayContent(
+      fixture = fixture,
+      viewportOverlay = { ScrollbarViewportOverlay(fixture) },
+    )
+    runOnIdle { fixture.viewportState.scrollToY(1f) }
+    waitForIdle()
+    runOnIdle { fixture.scrollDeltas.clear() }
+
+    val initialScroll = fixture.viewportState.scrollOffset.y
+    onNodeWithTag(LayoutTag).performTouchInput {
+      down(Offset(x = TestViewportSize.width - 20f, y = 32f))
+      advanceEventTime(EditorScrollbarPressAndHoldDurationMillis)
+      moveTo(Offset(x = TestViewportSize.width - 20f, y = 72f))
+      up()
+    }
+    waitForIdle()
+
+    assertEquals(0, fixture.directDragClaimCount)
+    assertEquals(initialScroll, fixture.viewportState.scrollOffset.y)
+    assertTrue(fixture.scrollDeltas.isNotEmpty())
+  }
+
+  @Test
+  fun scrollbarCoreTouchDragYieldsWhenEditorHandleIsPending() = runComposeUiTest {
+    val fixture = ViewportOverlayFixture()
+    setViewportOverlayContent(
+      fixture = fixture,
+      viewportOverlay = {
+        ScrollbarViewportOverlay(fixture = fixture, allowDirectDragClaim = { false })
+      },
+    )
+    runOnIdle { fixture.viewportState.scrollToY(1f) }
+    waitForIdle()
+    runOnIdle { fixture.scrollDeltas.clear() }
+
+    val initialScroll = fixture.viewportState.scrollOffset.y
+    onNodeWithTag(LayoutTag).performTouchInput {
+      down(Offset(x = TestViewportSize.width - 6f, y = 32f))
+      advanceEventTime(16L)
+      moveTo(Offset(x = TestViewportSize.width - 6f, y = 72f))
+      up()
+    }
+    waitForIdle()
+
+    assertEquals(initialScroll, fixture.viewportState.scrollOffset.y)
+    assertTrue(fixture.scrollDeltas.isNotEmpty())
+    assertEquals(0, fixture.directDragClaimCount)
+  }
+
+  @Test
+  fun scrollbarMouseDragInCoreClaimsWithoutDelay() = runComposeUiTest {
+    val fixture = ViewportOverlayFixture()
+    setViewportOverlayContent(
+      fixture = fixture,
+      viewportOverlay = { ScrollbarViewportOverlay(fixture) },
+    )
+    runOnIdle { fixture.viewportState.scrollToY(1f) }
+    waitForIdle()
+    runOnIdle { fixture.scrollDeltas.clear() }
+
+    val initialScroll = fixture.viewportState.scrollOffset.y
+    onNodeWithTag(LayoutTag).performMouseInput {
+      moveTo(Offset(x = TestViewportSize.width - 6f, y = 32f))
+      press()
+      moveTo(Offset(x = TestViewportSize.width - 6f, y = 72f))
+      release()
+    }
+    waitForIdle()
+
+    assertEquals(1, fixture.directDragClaimCount)
+    assertTrue(
+      fixture.viewportState.scrollOffset.y > initialScroll,
+      "scrollbar claimed but did not move: initial=$initialScroll " +
+        "actual=${fixture.viewportState.scrollOffset.y} " +
+        "viewportDeltas=${fixture.scrollDeltas}",
+    )
+    assertTrue(fixture.scrollDeltas.isEmpty())
+  }
+
+  @Test
+  fun areaOutsideScrollbarQuickMouseDragGoesToViewportPan() = runComposeUiTest {
+    val fixture = ViewportOverlayFixture()
+    setViewportOverlayContent(
+      fixture = fixture,
+      viewportOverlay = { ScrollbarViewportOverlay(fixture) },
+    )
+    runOnIdle { fixture.viewportState.scrollToY(1f) }
+    waitForIdle()
+    runOnIdle { fixture.scrollDeltas.clear() }
+
+    val initialScroll = fixture.viewportState.scrollOffset.y
+    onNodeWithTag(LayoutTag).performMouseInput {
+      moveTo(Offset(x = TestViewportSize.width - 20f, y = 32f))
+      press()
+      moveTo(Offset(x = TestViewportSize.width - 20f, y = 72f))
+      release()
+    }
+    waitForIdle()
+
+    assertEquals(initialScroll, fixture.viewportState.scrollOffset.y)
+    assertTrue(fixture.scrollDeltas.isNotEmpty())
+    assertEquals(0, fixture.directDragClaimCount)
+  }
+
+  @Test
+  fun areaOutsideScrollbarHeldMouseDragStaysWithViewportPan() = runComposeUiTest {
+    val fixture = ViewportOverlayFixture()
+    setViewportOverlayContent(
+      fixture = fixture,
+      viewportOverlay = { ScrollbarViewportOverlay(fixture) },
+    )
+    runOnIdle { fixture.viewportState.scrollToY(1f) }
+    waitForIdle()
+    runOnIdle { fixture.scrollDeltas.clear() }
+
+    val initialScroll = fixture.viewportState.scrollOffset.y
+    onNodeWithTag(LayoutTag).performMouseInput {
+      moveTo(Offset(x = TestViewportSize.width - 20f, y = 32f))
+      press()
+      advanceEventTime(EditorScrollbarPressAndHoldDurationMillis)
+      moveTo(Offset(x = TestViewportSize.width - 20f, y = 72f))
+      release()
+    }
+    waitForIdle()
+
+    assertEquals(initialScroll, fixture.viewportState.scrollOffset.y)
+    assertTrue(fixture.scrollDeltas.isNotEmpty())
+    assertEquals(0, fixture.directDragClaimCount)
   }
 
   @Test
@@ -1146,6 +1510,7 @@ class EditorScreenLayoutDesktopTest {
     viewportOverlay: @Composable BoxScope.() -> Unit = {},
     overlay: @Composable () -> Unit = {},
     onRequestEditing: (() -> Boolean)? = null,
+    bodyTapEnabled: Boolean = false,
   ) {
     setContent {
       val coroutineScope = rememberCoroutineScope()
@@ -1170,7 +1535,19 @@ class EditorScreenLayoutDesktopTest {
           onRequestEditing = onRequestEditing,
           onMeasuredViewportSizeChange = {},
           header = {},
-          body = { Box(Modifier.fillMaxWidth().height(800.dp)) },
+          body = {
+            Box(
+              Modifier.fillMaxWidth()
+                .height(800.dp)
+                .then(
+                  if (bodyTapEnabled) {
+                    Modifier.pointerInput(Unit) { detectTapGestures { fixture.bodyTapCount += 1 } }
+                  } else {
+                    Modifier
+                  }
+                )
+            )
+          },
           viewportOverlay = viewportOverlay,
           overlay = overlay,
           toolbar = {},
@@ -1258,12 +1635,38 @@ class EditorScreenLayoutDesktopTest {
     )
   }
 
+  @Composable
+  private fun ScrollbarViewportOverlay(
+    fixture: ViewportOverlayFixture,
+    allowDirectDragClaim: () -> Boolean = { true },
+  ) {
+    CompositionLocalProvider(LocalAppColors provides LightColors) {
+      EditorScrollbars(
+        viewportState = fixture.viewportState,
+        visibleArea = fixture.visibleArea,
+        layoutSpec = fixture.layoutSpec,
+        pageSizes = fixture.pageSizes,
+        displayZoom = 1f,
+        tryClaimDirectDrag = {
+          if (!allowDirectDragClaim()) {
+            false
+          } else {
+            fixture.directDragClaimCount += 1
+            true
+          }
+        },
+      )
+    }
+  }
+
   private class ViewportOverlayFixture {
     val viewportState = EditorViewportState()
     val visibleArea = EditorVisibleArea(viewport = TestViewportSize)
     val uiState = EditorUiState()
     lateinit var interactionScope: EditorInteractionScope
     val scrollDeltas = mutableListOf<Offset>()
+    var bodyTapCount = 0
+    var directDragClaimCount = 0
 
     val layoutSpec =
       EditorDocumentLayoutSpec.Paginated(
@@ -1397,6 +1800,8 @@ class EditorScreenLayoutDesktopTest {
     const val HeaderFixtureContentWidth = 640f
     const val HeaderHeightPx = 96f
     const val HeaderText = "Header title"
+    const val ExpectedScrollbarMinThumbSize = 30f
+    const val ExpectedScrollbarTrackPadding = 2f
     val ControlPointerMove = Offset(x = 40f, y = 40f)
     val ControlPointerStart = Offset(x = 80f, y = 40f)
     val EditorPointerMove = Offset(x = 300f, y = HeaderHeightPx + 140f)

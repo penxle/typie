@@ -1840,6 +1840,7 @@ fun EditorScreen(entityId: String) {
               pageSizes = layoutPageSizes,
               displayZoom = displayZoom,
               modifier = Modifier.fillMaxSize(),
+              tryClaimDirectDrag = interactionScope.controller::tryClaimScrollbarDirectDrag,
             )
           }
         },

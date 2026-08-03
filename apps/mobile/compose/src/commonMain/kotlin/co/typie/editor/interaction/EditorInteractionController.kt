@@ -236,6 +236,14 @@ internal class EditorInteractionController(
     gestures.cancel(context = this)
   }
 
+  fun tryClaimScrollbarDirectDrag(): Boolean {
+    if (mode != EditorInteractionMode.Idle || gestures.hasPendingHandleGesture) {
+      return false
+    }
+    cancel()
+    return true
+  }
+
   fun consumeActiveTapAfterEditingPromotion() {
     gestures.consumeActiveTapAfterEditingPromotion(context = this)
   }

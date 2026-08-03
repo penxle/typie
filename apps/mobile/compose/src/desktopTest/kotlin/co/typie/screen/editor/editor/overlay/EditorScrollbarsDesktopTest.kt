@@ -218,10 +218,10 @@ class EditorScrollbarsDesktopTest {
 
     onRoot().performTouchInput {
       down(Offset(x = 90f, y = 20f))
-      moveBy(Offset(x = 0f, y = 10f))
+      moveBy(Offset(x = 0f, y = 20f))
     }
     waitForIdle()
-    assertEquals(21.833334f, viewportState.scrollOffset.y, absoluteTolerance = 0.01f)
+    assertEquals(42.666668f, viewportState.scrollOffset.y, absoluteTolerance = 0.01f)
 
     runOnIdle { contentSize.value = Size(width = 100f, height = 300f) }
     waitForIdle()
@@ -232,7 +232,7 @@ class EditorScrollbarsDesktopTest {
     }
     waitForIdle()
 
-    assertEquals(53.083336f, viewportState.scrollOffset.y, absoluteTolerance = 0.01f)
+    assertEquals(73.91667f, viewportState.scrollOffset.y, absoluteTolerance = 0.01f)
   }
 
   @Test

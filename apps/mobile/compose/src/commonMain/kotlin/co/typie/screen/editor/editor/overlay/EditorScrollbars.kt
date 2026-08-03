@@ -32,7 +32,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.AwaitPointerEventScope
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.Layout
@@ -40,6 +42,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -51,10 +54,12 @@ import co.typie.editor.viewport.EditorViewportScrollbarMetrics
 import co.typie.editor.viewport.EditorViewportState
 import co.typie.editor.viewport.resolveEditorViewportScrollbarMetrics
 import co.typie.editor.viewport.resolveEditorViewportScrollbarScrollPositionFromDrag
-import co.typie.screen.editor.editor.layout.viewportDirectControl
+import co.typie.ext.LocalScrollGestureLockState
+import co.typie.ext.ScrollGestureLockState
 import co.typie.ui.component.Text
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -63,18 +68,58 @@ import kotlinx.coroutines.withTimeoutOrNull
 
 private const val ScrollbarOpacityAnimationMs = 300
 private const val ScrollbarThumbAnimationMs = 250
-private const val ScrollbarLongPressDurationMs = 100L
 private const val ScrollbarMinThumbSize = 30f
 private const val ScrollbarTrackPadding = 2f
 private const val ScrollbarTrackWidth = 12f
 private const val ScrollbarThumbWidth = 6f
 private const val ScrollbarActiveThumbWidth = 10f
-private const val ScrollbarLongPressHitExpansion = 16f
 private const val ScrollbarHideDelayMs = 1500L
 private const val ScrollbarIndicatorHideDelayMs = 300L
 private const val ScrollbarIndicatorHeight = 24f
 private const val ScrollbarIndicatorGap = 8f
 private val ScrollbarShape = AppShapes.rounded(4.dp)
+
+internal const val EditorScrollbarPressAndHoldDurationMillis = 300L
+
+internal enum class EditorScrollbarDragDecision {
+  Pending,
+  Claim,
+  Yield,
+}
+
+internal fun resolveEditorScrollbarDragDecision(
+  horizontal: Boolean,
+  directDragEnabled: Boolean,
+  displacement: Offset,
+  touchSlop: Float,
+  elapsedMillis: Long,
+): EditorScrollbarDragDecision {
+  val effectiveTouchSlop = touchSlop.coerceAtLeast(0f)
+  val movedPastSlop = displacement.getDistanceSquared() > effectiveTouchSlop * effectiveTouchSlop
+  if (movedPastSlop) {
+    val axisDelta = abs(if (horizontal) displacement.x else displacement.y)
+    val crossAxisDelta = abs(if (horizontal) displacement.y else displacement.x)
+    if (axisDelta <= crossAxisDelta) {
+      return EditorScrollbarDragDecision.Yield
+    }
+
+    return if (directDragEnabled) {
+      EditorScrollbarDragDecision.Claim
+    } else {
+      EditorScrollbarDragDecision.Yield
+    }
+  }
+
+  if (elapsedMillis >= EditorScrollbarPressAndHoldDurationMillis) {
+    return if (directDragEnabled) {
+      EditorScrollbarDragDecision.Claim
+    } else {
+      EditorScrollbarDragDecision.Yield
+    }
+  }
+
+  return EditorScrollbarDragDecision.Pending
+}
 
 private data class EditorScrollbarLayoutMetrics(
   val viewportSize: Size,
@@ -170,6 +215,7 @@ internal fun EditorScrollbars(
   pageSizes: List<PageSize>,
   displayZoom: Float,
   modifier: Modifier = Modifier,
+  tryClaimDirectDrag: () -> Boolean = { true },
 ) {
   val haptic = LocalHapticFeedback.current
   var overlayVisible by remember { mutableStateOf(false) }
@@ -258,6 +304,7 @@ internal fun EditorScrollbars(
         isAutoScroll = lastScrollWasAuto,
         directDragEnabled = directDragEnabled,
         isDragging = isVerticalThumbDragged,
+        tryClaimDirectDrag = tryClaimDirectDrag,
         onDragChanged = { dragging ->
           if (isVerticalThumbDragged != dragging) {
             haptic.performHapticFeedback(
@@ -284,6 +331,7 @@ internal fun EditorScrollbars(
         isAutoScroll = lastScrollWasAuto,
         directDragEnabled = directDragEnabled,
         isDragging = isHorizontalThumbDragged,
+        tryClaimDirectDrag = tryClaimDirectDrag,
         onDragChanged = { dragging ->
           if (isHorizontalThumbDragged != dragging) {
             haptic.performHapticFeedback(
@@ -473,11 +521,14 @@ private fun EditorScrollbarThumb(
   isAutoScroll: Boolean,
   directDragEnabled: Boolean,
   isDragging: Boolean,
+  tryClaimDirectDrag: () -> Boolean,
   onDragChanged: (Boolean) -> Unit,
 ) {
   val density = LocalDensity.current
+  val scrollGestureLockState = LocalScrollGestureLockState.current
   val latestDirectDragEnabled = rememberUpdatedState(directDragEnabled)
   val latestVisibleArea = rememberUpdatedState(visibleArea)
+  val latestTryClaimDirectDrag = rememberUpdatedState(tryClaimDirectDrag)
   val latestOnDragChanged = rememberUpdatedState(onDragChanged)
   val trackWidth = ScrollbarTrackWidth.dp
   val trackPadding = ScrollbarTrackPadding.dp
@@ -503,112 +554,31 @@ private fun EditorScrollbarThumb(
   ) {
     Box(
       modifier =
-        Modifier.fillMaxSize().viewportDirectControl().pointerInput(
+        Modifier.fillMaxSize().pointerInput(
           horizontal,
           viewportState,
           density,
+          scrollGestureLockState,
         ) {
-          val touchSlop = viewConfiguration.touchSlop
-          val touchSlopSquared = touchSlop * touchSlop
-
-          fun currentLayoutMetrics(): EditorScrollbarLayoutMetrics =
-            resolveEditorScrollbarLayoutMetrics(viewportState, latestVisibleArea.value)
-
           awaitEachGesture {
-            val down = awaitFirstDown(requireUnconsumed = false)
-            down.consume()
-            if (!latestDirectDragEnabled.value) {
-              var cancelled = false
-              val longPressed =
-                withTimeoutOrNull(ScrollbarLongPressDurationMs) {
-                  while (true) {
-                    val event = awaitPointerEvent(PointerEventPass.Main)
-                    val change =
-                      event.changes.firstOrNull { it.id == down.id }
-                        ?: run {
-                          cancelled = true
-                          return@withTimeoutOrNull
-                        }
-                    val offset = change.position - down.position
-                    val movedPastSlop = offset.x * offset.x + offset.y * offset.y > touchSlopSquared
-
-                    if (!change.pressed || change.isConsumed || movedPastSlop) {
-                      cancelled = true
-                      return@withTimeoutOrNull
-                    }
-
-                    val finalEvent = awaitPointerEvent(PointerEventPass.Final)
-                    if (finalEvent.changes.any { it.id == down.id && it.isConsumed }) {
-                      cancelled = true
-                      return@withTimeoutOrNull
-                    }
-                  }
-                } == null
-
-              if (!longPressed || cancelled) {
-                return@awaitEachGesture
-              }
-            }
-            val dragStartLayoutMetrics = currentLayoutMetrics()
-            var dragMetrics = dragStartLayoutMetrics.dragMetrics(horizontal)
-            var dragStartScroll = dragStartLayoutMetrics.scrollPosition(horizontal)
-            var accumulatedDrag = 0f
-
-            latestOnDragChanged.value(true)
-            try {
-              while (true) {
-                val event = awaitPointerEvent(PointerEventPass.Main)
-                val change = event.changes.firstOrNull { it.id == down.id } ?: break
-
-                if (!change.pressed) {
-                  change.consume()
-                  break
-                }
-
-                val dragAmount = change.positionChange()
-                val dragDelta =
-                  with(density) {
-                    if (!horizontal) {
-                      dragAmount.y.toDp().value
-                    } else {
-                      dragAmount.x.toDp().value
-                    }
-                  }
-
-                if (dragDelta != 0f) {
-                  val currentLayoutMetrics = currentLayoutMetrics()
-                  val currentDragMetrics = currentLayoutMetrics.dragMetrics(horizontal)
-                  if (currentDragMetrics != dragMetrics) {
-                    dragMetrics = currentDragMetrics
-                    dragStartScroll = currentLayoutMetrics.scrollPosition(horizontal)
-                    accumulatedDrag = 0f
-                  }
-                  val nextScrollPosition =
-                    resolveEditorViewportScrollbarScrollPositionFromDrag(
-                      startScrollPosition = dragStartScroll,
-                      dragDelta = accumulatedDrag + dragDelta,
-                      trackLength = dragMetrics.trackLength,
-                      thumbSize = dragMetrics.thumbSize,
-                      viewportLength = dragMetrics.viewportLength,
-                      contentLength = dragMetrics.contentLength,
-                    )
-
-                  change.consume()
-                  accumulatedDrag += dragDelta
-                  if (!horizontal) {
-                    viewportState.scrollTo(
-                      offset = Offset(x = viewportState.scrollOffset.x, y = nextScrollPosition)
-                    )
-                  } else {
-                    viewportState.scrollTo(
-                      offset = Offset(x = nextScrollPosition, y = viewportState.scrollOffset.y)
-                    )
-                  }
-                }
-              }
-            } finally {
-              latestOnDragChanged.value(false)
-            }
+            val admission =
+              awaitEditorScrollbarDragAdmission(
+                horizontal = horizontal,
+                directDragEnabled = { latestDirectDragEnabled.value },
+                tryClaimDirectDrag = { latestTryClaimDirectDrag.value() },
+                touchSlop = viewConfiguration.touchSlop,
+              ) ?: return@awaitEachGesture
+            dragEditorScrollbar(
+              admission = admission,
+              horizontal = horizontal,
+              density = density,
+              viewportState = viewportState,
+              scrollGestureLockState = scrollGestureLockState,
+              currentLayoutMetrics = {
+                resolveEditorScrollbarLayoutMetrics(viewportState, latestVisibleArea.value)
+              },
+              onDragChanged = { latestOnDragChanged.value(it) },
+            )
           }
         }
     ) {
@@ -656,7 +626,7 @@ internal fun EditorScrollbarThumbLayout(
   Layout(modifier = modifier, content = content) { measurables, constraints ->
     val layoutMetrics = resolveEditorScrollbarLayoutMetrics(viewportState, visibleArea)
     val axisMetrics = if (!horizontal) layoutMetrics.vertical else layoutMetrics.horizontal
-    val hitThickness = Dp(ScrollbarTrackWidth + ScrollbarLongPressHitExpansion).roundToPx()
+    val hitThickness = Dp(ScrollbarTrackWidth).roundToPx()
     val thumbLength = Dp(axisMetrics.thumbSize).roundToPx()
     val childConstraints =
       if (!horizontal) {
@@ -670,13 +640,7 @@ internal fun EditorScrollbarThumbLayout(
       if (axisMetrics.isVisible) {
         val x =
           if (!horizontal) {
-            Dp(
-                layoutMetrics.viewportSize.width -
-                  ScrollbarTrackWidth -
-                  ScrollbarLongPressHitExpansion
-              )
-              .roundToPx()
-              .coerceAtLeast(0)
+            Dp(layoutMetrics.viewportSize.width - ScrollbarTrackWidth).roundToPx().coerceAtLeast(0)
           } else {
             Dp(ScrollbarTrackPadding + axisMetrics.thumbOffset).roundToPx().coerceAtLeast(0)
           }
@@ -689,14 +653,199 @@ internal fun EditorScrollbarThumbLayout(
             Dp(
                 layoutMetrics.viewportSize.height -
                   visibleArea.bottomOcclusion -
-                  ScrollbarTrackWidth -
-                  ScrollbarLongPressHitExpansion
+                  ScrollbarTrackWidth
               )
               .roundToPx()
               .coerceAtLeast(0)
           }
         placeable.place(x = x, y = y)
       }
+    }
+  }
+}
+
+private data class EditorScrollbarDragAdmission(
+  val down: PointerInputChange,
+  val initialDragAmount: Offset,
+)
+
+private sealed interface EditorScrollbarPendingResult {
+  data class Claim(val change: PointerInputChange) : EditorScrollbarPendingResult
+
+  data object Yield : EditorScrollbarPendingResult
+}
+
+private suspend fun AwaitPointerEventScope.awaitEditorScrollbarDragAdmission(
+  horizontal: Boolean,
+  directDragEnabled: () -> Boolean,
+  tryClaimDirectDrag: () -> Boolean,
+  touchSlop: Float,
+): EditorScrollbarDragAdmission? {
+  val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+  val downInActualBounds =
+    down.position.x >= 0f &&
+      down.position.x < size.width.toFloat() &&
+      down.position.y >= 0f &&
+      down.position.y < size.height.toFloat()
+  if (down.isConsumed || !downInActualBounds) {
+    return null
+  }
+
+  var latestDisplacement = Offset.Zero
+  val pendingResult =
+    withTimeoutOrNull<EditorScrollbarPendingResult>(
+      timeMillis = EditorScrollbarPressAndHoldDurationMillis
+    ) {
+      while (true) {
+        val event = awaitPointerEvent(PointerEventPass.Initial)
+        val change =
+          event.changes.firstOrNull { it.id == down.id }
+            ?: return@withTimeoutOrNull EditorScrollbarPendingResult.Yield
+        if (!change.pressed || change.isConsumed) {
+          return@withTimeoutOrNull EditorScrollbarPendingResult.Yield
+        }
+
+        latestDisplacement = change.position - down.position
+        when (
+          resolveEditorScrollbarDragDecision(
+            horizontal = horizontal,
+            directDragEnabled = directDragEnabled(),
+            displacement = latestDisplacement,
+            touchSlop = touchSlop,
+            elapsedMillis = (change.uptimeMillis - down.uptimeMillis).coerceAtLeast(0L),
+          )
+        ) {
+          EditorScrollbarDragDecision.Pending -> {
+            val finalEvent = awaitPointerEvent(PointerEventPass.Final)
+            val finalChange =
+              finalEvent.changes.firstOrNull { it.id == down.id }
+                ?: return@withTimeoutOrNull EditorScrollbarPendingResult.Yield
+            if (!finalChange.pressed || finalChange.isConsumed) {
+              return@withTimeoutOrNull EditorScrollbarPendingResult.Yield
+            }
+          }
+
+          EditorScrollbarDragDecision.Claim ->
+            return@withTimeoutOrNull EditorScrollbarPendingResult.Claim(change)
+
+          EditorScrollbarDragDecision.Yield ->
+            return@withTimeoutOrNull EditorScrollbarPendingResult.Yield
+        }
+      }
+      error("Unreachable scrollbar admission state")
+    }
+
+  val claimedChange =
+    when (pendingResult) {
+      null -> {
+        val timeoutDecision =
+          resolveEditorScrollbarDragDecision(
+            horizontal = horizontal,
+            directDragEnabled = directDragEnabled(),
+            displacement = latestDisplacement,
+            touchSlop = touchSlop,
+            elapsedMillis = EditorScrollbarPressAndHoldDurationMillis,
+          )
+        if (timeoutDecision != EditorScrollbarDragDecision.Claim) {
+          return null
+        }
+        null
+      }
+
+      is EditorScrollbarPendingResult.Claim -> pendingResult.change
+      EditorScrollbarPendingResult.Yield -> return null
+    }
+  val initialDragAmount = claimedChange?.positionChange() ?: Offset.Zero
+  if (!tryClaimDirectDrag()) {
+    return null
+  }
+  claimedChange?.consume()
+  return EditorScrollbarDragAdmission(down = down, initialDragAmount = initialDragAmount)
+}
+
+private suspend fun AwaitPointerEventScope.dragEditorScrollbar(
+  admission: EditorScrollbarDragAdmission,
+  horizontal: Boolean,
+  density: Density,
+  viewportState: EditorViewportState,
+  scrollGestureLockState: ScrollGestureLockState,
+  currentLayoutMetrics: () -> EditorScrollbarLayoutMetrics,
+  onDragChanged: (Boolean) -> Unit,
+) {
+  val dragLock = scrollGestureLockState.acquire()
+  var dragActivated = false
+  try {
+    val dragStartLayoutMetrics = currentLayoutMetrics()
+    var dragMetrics = dragStartLayoutMetrics.dragMetrics(horizontal)
+    var dragStartScroll = dragStartLayoutMetrics.scrollPosition(horizontal)
+    var accumulatedDrag = 0f
+
+    fun applyDragAmount(dragAmount: Offset) {
+      val dragDelta =
+        with(density) {
+          if (!horizontal) {
+            dragAmount.y.toDp().value
+          } else {
+            dragAmount.x.toDp().value
+          }
+        }
+      if (dragDelta == 0f) {
+        return
+      }
+
+      val latestLayoutMetrics = currentLayoutMetrics()
+      val latestDragMetrics = latestLayoutMetrics.dragMetrics(horizontal)
+      if (latestDragMetrics != dragMetrics) {
+        dragMetrics = latestDragMetrics
+        dragStartScroll = latestLayoutMetrics.scrollPosition(horizontal)
+        accumulatedDrag = 0f
+      }
+      val nextScrollPosition =
+        resolveEditorViewportScrollbarScrollPositionFromDrag(
+          startScrollPosition = dragStartScroll,
+          dragDelta = accumulatedDrag + dragDelta,
+          trackLength = dragMetrics.trackLength,
+          thumbSize = dragMetrics.thumbSize,
+          viewportLength = dragMetrics.viewportLength,
+          contentLength = dragMetrics.contentLength,
+        )
+
+      accumulatedDrag += dragDelta
+      val currentScrollOffset = viewportState.scrollOffset
+      viewportState.scrollTo(
+        offset =
+          if (!horizontal) {
+            Offset(x = currentScrollOffset.x, y = nextScrollPosition)
+          } else {
+            Offset(x = nextScrollPosition, y = currentScrollOffset.y)
+          }
+      )
+    }
+
+    onDragChanged(true)
+    dragActivated = true
+    applyDragAmount(admission.initialDragAmount)
+    while (true) {
+      val event = awaitPointerEvent(PointerEventPass.Initial)
+      val change = event.changes.firstOrNull { it.id == admission.down.id } ?: break
+      if (!change.pressed) {
+        change.consume()
+        break
+      }
+
+      val dragAmount = change.positionChange()
+      if (dragAmount != Offset.Zero) {
+        change.consume()
+        applyDragAmount(dragAmount)
+      }
+    }
+  } finally {
+    try {
+      if (dragActivated) {
+        onDragChanged(false)
+      }
+    } finally {
+      dragLock.release()
     }
   }
 }

@@ -45,6 +45,9 @@ internal class EditorInteractionGestures(
       onHandoffToSelectionHandle = ::handoffTableDragToSelectionHandle,
     )
 
+  val hasPendingHandleGesture: Boolean
+    get() = tableColumnResize.pending || tableHandle.pendingDrag || selectionHandle.pendingDrag
+
   fun updateTapSlop(tapSlopPx: Float) {
     tap.updateTapSlop(tapSlopPx)
     selectionHandle.updateDragSlop(tapSlopPx)
