@@ -51,7 +51,7 @@ fun Modifier.navigationBarsPadding(): Modifier = windowInsetsPadding(WindowInset
 @Composable
 fun Modifier.navigationBarsOrImePadding(): Modifier {
   val navigationBarsBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-  val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
+  val imeBottom = rememberTrustedImeBottomInset()
   return windowInsetsPadding(WindowInsets(bottom = maxOf(navigationBarsBottom, imeBottom)))
 }
 

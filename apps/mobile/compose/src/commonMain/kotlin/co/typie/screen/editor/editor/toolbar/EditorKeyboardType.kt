@@ -3,6 +3,7 @@ package co.typie.screen.editor.editor.toolbar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import co.typie.ext.trustedImeBottomInset as trustedSettledImeBottomInset
 
 internal enum class EditorKeyboardType {
   Software,
@@ -93,12 +94,10 @@ internal fun trustedImeBottomInset(rawImeBottom: Dp, keyboardState: EditorKeyboa
     return 0.dp
   }
 
-  val settledImeInset = keyboardState.settledImeBottom
-  return if (settledImeInset != null && rawImeBottom > settledImeInset) {
-    settledImeInset
-  } else {
-    rawImeBottom
-  }
+  return trustedSettledImeBottomInset(
+    rawImeBottom = rawImeBottom,
+    settledImeBottom = keyboardState.settledImeBottom,
+  )
 }
 
 internal fun resolveKeyboardPresentation(
