@@ -1,6 +1,7 @@
 package co.typie.shell
 
 import androidx.compose.foundation.gestures.DraggableAnchors
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
@@ -8,7 +9,10 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalViewConfiguration
@@ -91,6 +95,34 @@ class MainDrawerGestureDesktopTest {
   }
 
   @Test
+  fun `admitted drawer drag survives can start recomposition`() = runComposeUiTest {
+    lateinit var drawer: Drawer
+    var canStart by mutableStateOf(true)
+    var touchSlop = 0f
+
+    setContent {
+      drawer = rememberTestDrawer()
+      touchSlop = LocalViewConfiguration.current.touchSlop
+      DrawerSwipeHost(drawer, canStart = { canStart })
+    }
+    waitForIdle()
+
+    val host = onNodeWithTag(SwipeHostTag)
+    host.performTouchInput {
+      down(Offset(x = 20f, y = center.y))
+      moveBy(Offset(x = touchSlop + 1f, y = 0f), delayMillis = 16L)
+    }
+    runOnIdle { canStart = false }
+    host.performTouchInput {
+      repeat(15) { moveBy(Offset(x = 12f, y = 0f), delayMillis = 16L) }
+      up()
+    }
+
+    waitUntil { abs(drawer.state.requireOffset()) < 0.1f }
+    assertEquals(DrawerAnchor.Open, drawer.state.currentValue)
+  }
+
+  @Test
   fun `drag starting in bottom navigation inset never opens the drawer`() = runComposeUiTest {
     lateinit var drawer: Drawer
 
@@ -158,6 +190,141 @@ class MainDrawerGestureDesktopTest {
   }
 
   @Test
+  fun `outward drag on the home main pager opens the drawer`() = runComposeUiTest {
+    lateinit var drawer: Drawer
+    lateinit var pagerState: PagerState
+
+    setContent {
+      drawer = rememberTestDrawer()
+      pagerState = rememberPagerState(pageCount = { Tab.entries.size })
+      DrawerSwipeHost(drawer) {
+        MainTabPager(
+          state = pagerState,
+          userScrollEnabled = true,
+          modifier = Modifier.fillMaxSize().testTag(PagerTag),
+        ) {
+          Box(Modifier.fillMaxSize())
+        }
+      }
+    }
+    waitForIdle()
+
+    onNodeWithTag(PagerTag).performTouchInput {
+      down(center)
+      repeat(15) { moveBy(Offset(x = 12f, y = 0f), delayMillis = 16L) }
+      up()
+    }
+    waitUntil { !pagerState.isScrollInProgress && !drawer.state.isAnimationRunning }
+
+    assertEquals(DrawerAnchor.Open, drawer.state.currentValue)
+    assertEquals(Tab.Home.ordinal, pagerState.settledPage)
+  }
+
+  @Test
+  fun `home to space drag settles after the home drawer becomes unavailable`() = runComposeUiTest {
+    lateinit var drawer: Drawer
+    lateinit var pagerState: PagerState
+
+    setContent {
+      drawer = rememberTestDrawer()
+      pagerState = rememberPagerState(pageCount = { Tab.entries.size })
+      val isDirectDrag by pagerState.interactionSource.collectIsDraggedAsState()
+      val settledTab = Tab.entries[pagerState.settledPage]
+      val chromeTab =
+        resolveMainTabChrome(
+          settledTab = settledTab,
+          targetTab = Tab.entries[pagerState.targetPage],
+          isDirectDrag = isDirectDrag,
+        )
+      DrawerSwipeHost(drawer = drawer, enabled = settledTab == Tab.Home && chromeTab == Tab.Home) {
+        MainTabPager(
+          state = pagerState,
+          userScrollEnabled = true,
+          modifier = Modifier.fillMaxSize().testTag(PagerTag),
+        ) {
+          Box(Modifier.fillMaxSize())
+        }
+      }
+    }
+    waitForIdle()
+
+    onNodeWithTag(PagerTag).performTouchInput {
+      down(center)
+      repeat(10) { moveBy(Offset(x = -20f, y = 0f), delayMillis = 16L) }
+      up()
+    }
+    waitUntil(timeoutMillis = 5_000L) { !pagerState.isScrollInProgress }
+
+    assertEquals(Tab.Space.ordinal, pagerState.settledPage)
+    assertEquals(0f, pagerState.currentPageOffsetFraction, absoluteTolerance = 0.001f)
+  }
+
+  @Test
+  fun `claimed drawer drag never hands the reversed sequence to the main pager`() =
+    runComposeUiTest {
+      lateinit var drawer: Drawer
+      lateinit var pagerState: PagerState
+
+      setContent {
+        drawer = rememberTestDrawer()
+        pagerState = rememberPagerState(pageCount = { Tab.entries.size })
+        DrawerSwipeHost(drawer) {
+          MainTabPager(
+            state = pagerState,
+            userScrollEnabled = true,
+            modifier = Modifier.fillMaxSize().testTag(PagerTag),
+          ) {
+            Box(Modifier.fillMaxSize())
+          }
+        }
+      }
+      waitForIdle()
+
+      onNodeWithTag(PagerTag).performTouchInput {
+        down(center)
+        repeat(6) { moveBy(Offset(x = 12f, y = 0f), delayMillis = 16L) }
+        repeat(20) { moveBy(Offset(x = -12f, y = 0f), delayMillis = 16L) }
+        up()
+      }
+      waitUntil { !pagerState.isScrollInProgress && !drawer.state.isAnimationRunning }
+
+      assertEquals(DrawerAnchor.Closed, drawer.state.currentValue)
+      assertEquals(Tab.Home.ordinal, pagerState.settledPage)
+    }
+
+  @Test
+  fun `mouse outward drag on the home main pager never opens the drawer`() = runComposeUiTest {
+    lateinit var drawer: Drawer
+    lateinit var pagerState: PagerState
+
+    setContent {
+      drawer = rememberTestDrawer()
+      pagerState = rememberPagerState(pageCount = { Tab.entries.size })
+      DrawerSwipeHost(drawer) {
+        MainTabPager(
+          state = pagerState,
+          userScrollEnabled = true,
+          modifier = Modifier.fillMaxSize().testTag(PagerTag),
+        ) {
+          Box(Modifier.fillMaxSize())
+        }
+      }
+    }
+    waitForIdle()
+
+    onNodeWithTag(PagerTag).performTrackpadInput {
+      moveTo(center)
+      press()
+      moveBy(Offset(x = 180f, y = 0f), delayMillis = 16L)
+      release()
+    }
+    waitUntil { !pagerState.isScrollInProgress && !drawer.state.isAnimationRunning }
+
+    assertEquals(DrawerAnchor.Closed, drawer.state.currentValue)
+    assertEquals(Tab.Home.ordinal, pagerState.settledPage)
+  }
+
+  @Test
   fun `mouse drag over horizontal pager never reveals the full area drawer`() = runComposeUiTest {
     lateinit var drawer: Drawer
     lateinit var pagerState: PagerState
@@ -195,11 +362,16 @@ class MainDrawerGestureDesktopTest {
   private fun rememberTestDrawer(): Drawer = remember { Drawer().also { it.updateTestAnchors() } }
 
   @Composable
-  private fun DrawerSwipeHost(drawer: Drawer, content: @Composable () -> Unit = {}) {
+  private fun DrawerSwipeHost(
+    drawer: Drawer,
+    enabled: Boolean = true,
+    canStart: () -> Boolean = { true },
+    content: @Composable () -> Unit = {},
+  ) {
     Box(
       Modifier.size(width = 320.dp, height = 640.dp)
         .testTag(SwipeHostTag)
-        .then(mainDrawerSwipeToOpenModifier(drawer, enabled = true))
+        .then(mainDrawerSwipeToOpenModifier(drawer, enabled = enabled, canStart = canStart))
     ) {
       content()
     }

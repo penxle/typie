@@ -11,12 +11,12 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
 @Composable
-actual fun PlatformBackHandler(enabled: Boolean, onBack: () -> Unit) {
+internal actual fun PlatformBackHandlerImpl(enabled: Boolean, onBack: () -> Unit) {
   BackHandler(enabled = enabled) { onBack() }
 }
 
 @Composable
-actual fun PlatformPredictiveBackHandler(
+internal actual fun PlatformPredictiveBackHandlerImpl(
   enabled: Boolean,
   onBack: suspend (progress: Flow<Float>) -> Unit,
 ) {

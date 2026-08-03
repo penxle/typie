@@ -26,17 +26,16 @@ import kotlin.math.abs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
 @Composable
 internal fun MainBottomBarPillEffects(
   state: MainBottomBarPillState,
-  currentTab: Tab,
+  isBodyMoving: Boolean,
   isPillPressed: Boolean,
 ) {
   LaunchedEffect(isPillPressed) { state.animatePillScale(isPillPressed) }
-  LaunchedEffect(currentTab) { state.startTransition(currentTab) }
+  LaunchedEffect(isBodyMoving) { state.syncBodyMotion(isBodyMoving = isBodyMoving) }
 }
 
 internal fun Modifier.mainBottomBarPillGestures(
@@ -53,6 +52,7 @@ internal fun Modifier.mainBottomBarPillGestures(
     indicatorInsetPx,
     totalWidth,
     tabState.currentTab,
+    tabState.bodyPosition,
     tabState.onSelectTab,
   ) {
     if (totalWidth <= 0f) return@pointerInput
@@ -88,6 +88,8 @@ internal fun Modifier.mainBottomBarPillGestures(
               snapshotLeft = snapshotLeft,
               snapshotRight = snapshotRight,
               targetTab = nearestTab(tabCenters, totalWidth, releaseX),
+              currentTab = tabState.currentTab,
+              bodyPosition = tabState.bodyPosition,
               onSelectTab = tabState.onSelectTab,
             )
             break
@@ -151,15 +153,11 @@ internal class MainBottomBarPillState(private val scope: CoroutineScope, initial
   val interactionSource = MutableInteractionSource()
   val pillScale = Animatable(1f)
 
-  // Per-tab "active progress" 0..1. Drives tab box widths.
-  val tabProgress = Tab.entries.associateWith { Animatable(if (it == initialActiveTab) 1f else 0f) }
-
   // 0 = at snapshotPrev (release point); 1 = at the new active tab's natural bounds.
   val transitionProgress = Animatable(1f)
 
-  // Snapshot of indicator bounds at the moment of the latest activeTab change. The
-  // indicator morphs from these bounds → new active tab's natural bounds as
-  // transitionProgress animates 0→1, in lockstep with the tab box width animations.
+  // Snapshot of indicator bounds at the end of a direct pill gesture. A same-tab release
+  // returns from this snapshot on a local clock; a changed-tab release follows pager travel.
   private var snapshotPrevLeft by mutableFloatStateOf(0f)
   private var snapshotPrevRight by mutableFloatStateOf(0f)
 
@@ -169,6 +167,9 @@ internal class MainBottomBarPillState(private val scope: CoroutineScope, initial
   // that runs before the launched startTransition coroutine has executed snapTo.
   private var transitionPending by mutableStateOf(false)
   private var lastTransitionedToTab: Tab = initialActiveTab
+  private var pagerHandoffOrigin by mutableFloatStateOf(0f)
+  private var pagerHandoffTarget by mutableFloatStateOf(0f)
+  private var pagerHandoffActive by mutableStateOf(false)
 
   // Drag follower. On press, animated from currentBaseCenter → downX (smooth catch-up
   // for taps). On any movement, snapped directly to the pointer (no Animatable mutex →
@@ -210,14 +211,16 @@ internal class MainBottomBarPillState(private val scope: CoroutineScope, initial
       scope.launch(start = CoroutineStart.UNDISPATCHED) {
         transitionProgress.snapTo(0f)
         transitionPending = false
-        coroutineScope {
-          Tab.entries.forEach { tab ->
-            val target = if (tab == activeTab) 1f else 0f
-            launch { tabProgress.getValue(tab).animateTo(target, MainBottomBarPillProgressSpec) }
-          }
-          launch { transitionProgress.animateTo(1f, MainBottomBarPillProgressSpec) }
-        }
+        transitionProgress.animateTo(1f, MainBottomBarPillProgressSpec)
       }
+  }
+
+  suspend fun syncBodyMotion(isBodyMoving: Boolean) {
+    if (pagerHandoffActive && !isBodyMoving) {
+      pagerHandoffActive = false
+      transitionPending = false
+      transitionProgress.snapTo(1f)
+    }
   }
 
   fun beginGesture(
@@ -275,15 +278,21 @@ internal class MainBottomBarPillState(private val scope: CoroutineScope, initial
     snapshotLeft: Float,
     snapshotRight: Float,
     targetTab: Tab,
+    currentTab: Tab,
+    bodyPosition: Float,
     onSelectTab: (Tab) -> Unit,
   ) {
     scope.launch { interactionSource.emit(PressInteraction.Release(pressInteraction)) }
     captureSnapshotAndExitGesture(snapshotLeft, snapshotRight)
+    if (targetTab != currentTab) {
+      transitionJob?.cancel()
+      pagerHandoffOrigin = bodyPosition
+      pagerHandoffTarget = targetTab.ordinal.toFloat()
+      pagerHandoffActive = true
+      transitionPending = false
+    }
     onSelectTab(targetTab)
-    // Always start the transition directly (covers the same-tab tap case where
-    // LaunchedEffect won't fire). Idempotent: if LaunchedEffect also fires for a tab
-    // change, the second startTransition call short-circuits via the early return.
-    startTransition(targetTab)
+    if (targetTab == currentTab) startTransition(targetTab)
   }
 
   fun cancelGesture(
@@ -312,6 +321,7 @@ internal class MainBottomBarPillState(private val scope: CoroutineScope, initial
   fun indicatorShape(
     naturalLeft: Float,
     naturalRight: Float,
+    bodyPosition: Float,
     tabCenters: Map<Tab, Float>,
     tabWidths: Map<Tab, Float>,
     indicatorInsetPx: Float,
@@ -329,6 +339,17 @@ internal class MainBottomBarPillState(private val scope: CoroutineScope, initial
           val boxWidth = interpolatedBoxWidth(center, tabCenters, tabWidths)
           val width = (boxWidth - indicatorInsetPx * 2f).coerceAtLeast(0f)
           (center - width / 2f) to (center + width / 2f)
+        }
+        pagerHandoffActive -> {
+          val t =
+            mainTabPillHandoffProgress(
+              position = bodyPosition,
+              originPosition = pagerHandoffOrigin,
+              targetPosition = pagerHandoffTarget,
+            )
+          val l = snapshotPrevLeft + (naturalLeft - snapshotPrevLeft) * t
+          val r = snapshotPrevRight + (naturalRight - snapshotPrevRight) * t
+          l to r
         }
         transitionPending -> {
           // Snapshot just captured but the launched startTransition coroutine hasn't

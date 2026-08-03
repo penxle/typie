@@ -4,12 +4,12 @@ import androidx.compose.runtime.Composable
 import kotlinx.coroutines.flow.Flow
 
 @Composable
-actual fun PlatformBackHandler(enabled: Boolean, onBack: () -> Unit) {
+internal actual fun PlatformBackHandlerImpl(enabled: Boolean, onBack: () -> Unit) {
   // Desktop: no system back button
 }
 
 @Composable
-actual fun PlatformPredictiveBackHandler(
+internal actual fun PlatformPredictiveBackHandlerImpl(
   enabled: Boolean,
   onBack: suspend (progress: Flow<Float>) -> Unit,
 ) {

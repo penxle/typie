@@ -13,6 +13,8 @@ val LocalRoute = staticCompositionLocalOf<Route> { error("No Route provided") }
 internal val LocalNavigationPopNestedScroll =
   staticCompositionLocalOf<NavigationPopNestedScroll?> { null }
 
+internal val LocalNavigationForegroundInteractive = staticCompositionLocalOf { true }
+
 @Composable
 internal fun Modifier.navigationPopNestedScroll(): Modifier {
   val navigationPopNestedScroll = LocalNavigationPopNestedScroll.current ?: return this

@@ -36,8 +36,10 @@ import androidx.compose.ui.input.pointer.positionChangeIgnoreConsumed
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.input.pointer.util.addPointerInputChange
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
@@ -201,6 +203,7 @@ fun NavigationStack(
   topBarState: TopBarState,
   bottomBarState: BottomBarState? = null,
   modifier: Modifier = Modifier,
+  foregroundInteractive: Boolean = true,
   content: @Composable (Route) -> Unit,
 ) {
   val exitTopBarState = remember { TopBarState() }
@@ -254,6 +257,7 @@ fun NavigationStack(
         topBarState = topBar,
         bottomBarState = bottomBar,
         modifier = foregroundModifier,
+        interactive = foregroundInteractive,
       )
     }
 
@@ -283,9 +287,11 @@ fun NavigationStack(
   val backGestureZoneWidth by rememberUpdatedState(systemBackGestureZoneWidth())
   val popPointerVelocity = remember { NavigationPopPointerVelocity() }
   var predictiveBackActive by remember { mutableStateOf(false) }
+  val focusManager = LocalFocusManager.current
 
   fun canStartPopGesture(): Boolean =
-    navigator.canPop &&
+    foregroundInteractive &&
+      navigator.canPop &&
       !navigator.current.popGestureDisabled &&
       !navigator.isTransitioning &&
       !predictiveBackActive &&
@@ -533,6 +539,15 @@ fun NavigationStack(
     onCancel = ::cancelPopDrag,
   )
 
+  LaunchedEffect(foregroundInteractive) {
+    if (!foregroundInteractive) {
+      predictiveBackActive = false
+      popNestedScroll.cancel()
+      cancelPopDrag()
+      focusManager.clearFocus(force = true)
+    }
+  }
+
   // pop 요청은 이 collector가 애니메이션과 stack 변경을 함께 처리한다.
   LaunchedEffect(Unit) {
     snapshotFlow { navigator.peekPopTarget() to animState }
@@ -635,12 +650,15 @@ fun NavigationStack(
   val animationProviders =
     buildList<ProvidedValue<*>> {
       add(Nav provides navigator)
-      add(LocalNavigationPopNestedScroll provides popNestedScroll)
+      add(
+        LocalNavigationPopNestedScroll provides if (foregroundInteractive) popNestedScroll else null
+      )
+      add(LocalNavigationForegroundInteractive provides foregroundInteractive)
       add(LocalTopBarAnimationSource provides topBarState)
       bottomBarState?.let { add(LocalBottomBarAnimationSource provides it) }
     }
   CompositionLocalProvider(*animationProviders.toTypedArray()) {
-    PlatformPredictiveBackHandler(enabled = navigator.canPop) { events ->
+    PlatformPredictiveBackHandler(enabled = foregroundInteractive && navigator.canPop) { events ->
       var interactive = false
       try {
         events.collect { value ->
@@ -666,14 +684,9 @@ fun NavigationStack(
         scope.launch { navigator.pop() }
       }
     }
-    Box(
-      modifier
-        .fillMaxSize()
-        .onSizeChanged {
-          containerWidth = it.width.toFloat()
-          containerHeight = it.height.toFloat()
-        }
-        .pointerInput(popNestedScroll) {
+    val pointerTrackingModifier =
+      if (foregroundInteractive) {
+        Modifier.pointerInput(popNestedScroll) {
           awaitPointerEventScope {
             while (true) {
               val event = awaitPointerEvent(PointerEventPass.Initial)
@@ -695,9 +708,6 @@ fun NavigationStack(
                 } else {
                   null
                 }
-              // Compose excludes the UP position from velocity samples, but still uses the
-              // event to
-              // apply its platform-specific pointer-stop timeout.
               val pointerSample = activePointer ?: releasedPointer
               popPointerVelocity.update(pressedDragPointerCount, pointerSample)
               popNestedScroll.updatePressedDragPointerCount(
@@ -710,6 +720,17 @@ fun NavigationStack(
             }
           }
         }
+      } else {
+        Modifier
+      }
+    Box(
+      modifier
+        .fillMaxSize()
+        .onSizeChanged {
+          containerWidth = it.width.toFloat()
+          containerHeight = it.height.toFloat()
+        }
+        .then(pointerTrackingModifier)
     ) {
       val useFadeTransition = transitionStyle == RouteTransitionStyle.Fade
       val useVerticalTransition = transitionStyle == RouteTransitionStyle.VerticalSlide
@@ -763,20 +784,24 @@ fun NavigationStack(
         }
       }
 
-      Box(
-        Modifier.fillMaxSize().pointerInput(navigationPopActivationDistance) {
-          detectNavigationPopDrag(
-            activationDistance = navigationPopActivationDistance,
-            pointerVelocity = popPointerVelocity,
-            canStart = ::canStartPopGesture,
-            isSequenceRejected = { popNestedScroll.isCurrentSequenceRejected },
-            onStart = ::startPopDrag,
-            onDrag = ::updatePopDrag,
-            onRelease = popNestedScroll::finishDirectGesture,
-            onCancel = popNestedScroll::cancelDirectGesture,
-          )
+      val directPopModifier =
+        if (foregroundInteractive) {
+          Modifier.pointerInput(navigationPopActivationDistance) {
+            detectNavigationPopDrag(
+              activationDistance = navigationPopActivationDistance,
+              pointerVelocity = popPointerVelocity,
+              canStart = ::canStartPopGesture,
+              isSequenceRejected = { popNestedScroll.isCurrentSequenceRejected },
+              onStart = ::startPopDrag,
+              onDrag = ::updatePopDrag,
+              onRelease = popNestedScroll::finishDirectGesture,
+              onCancel = popNestedScroll::cancelDirectGesture,
+            )
+          }
+        } else {
+          Modifier
         }
-      ) {
+      Box(Modifier.fillMaxSize().then(directPopModifier)) {
         val behindTopBar =
           when (animState) {
             AnimState.Push -> exitTopBarState
@@ -1010,7 +1035,11 @@ fun NavigationStack(
         }
 
         // 엣지 제스처 감지 영역 (platform touch slop의 3배를 넘긴 dominant-right drag만 claim)
-        if (navigator.canPop && (animState == AnimState.Idle || animState == AnimState.Dragging)) {
+        if (
+          foregroundInteractive &&
+            navigator.canPop &&
+            (animState == AnimState.Idle || animState == AnimState.Dragging)
+        ) {
           Box(
             Modifier.fillMaxHeight().width(20.dp).align(Alignment.CenterStart).pointerInput(
               navigationPopActivationDistance
@@ -1026,6 +1055,14 @@ fun NavigationStack(
                 onCancel = popNestedScroll::cancelDirectGesture,
               )
             }
+          )
+        }
+
+        if (!foregroundInteractive) {
+          Box(
+            Modifier.fillMaxSize()
+              .clearAndSetSemantics {}
+              .pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } }
           )
         }
       }

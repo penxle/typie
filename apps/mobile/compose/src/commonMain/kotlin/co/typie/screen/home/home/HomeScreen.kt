@@ -90,6 +90,7 @@ import co.typie.shell.MainBottomBarPillKey
 import co.typie.shell.MainDrawerTrigger
 import co.typie.shell.MainDrawerTriggerLeadingKey
 import co.typie.shell.Tab
+import co.typie.shell.mainTabPagerChildHorizontalGesture
 import co.typie.ui.component.Divider
 import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
@@ -425,7 +426,10 @@ private fun ContinueWritingSection(docs: List<HomeScreen_ContinueWriting_documen
 
     Spacer(Modifier.height(12.dp))
 
-    HorizontalPager(state = pagerState, modifier = Modifier.fillMaxWidth()) { page ->
+    HorizontalPager(
+      state = pagerState,
+      modifier = Modifier.fillMaxWidth().mainTabPagerChildHorizontalGesture(),
+    ) { page ->
       val progress = pagerState.currentPage + pagerState.currentPageOffsetFraction
       val activeness = (1f - abs(progress - page)).coerceIn(0f, 1f)
 

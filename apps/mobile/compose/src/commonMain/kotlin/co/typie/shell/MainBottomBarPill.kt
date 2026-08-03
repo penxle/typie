@@ -85,13 +85,12 @@ fun MainBottomBarPill() {
 
   MainBottomBarPillEffects(
     state = state,
-    currentTab = tabState.currentTab,
+    isBodyMoving = tabState.isBodyMoving,
     isPillPressed = isPillPressed,
   )
 
-  // Per-tab widths and cumulative centers derived from progress.
-  // Single source: state.tabProgress → tab box width → indicator bounds.
-  val currentTabWidths = tabWidthsConfig.currentWidths(state)
+  val activationWeights = mainTabActivationWeights(tabState.bodyPosition)
+  val currentTabWidths = tabWidthsConfig.currentWidths(activationWeights)
   val tabCenters = cumulativeCenters(currentTabWidths)
   val totalWidthPx = currentTabWidths.values.sum()
 
@@ -109,17 +108,26 @@ fun MainBottomBarPill() {
         tween(MainBottomBarPillIndicatorInsetAnimationDurationMillis, easing = EaseOutCubic),
     )
 
-  // Natural indicator bounds = active tab's box contracted by the resting inset.
-  val activeTab = tabState.currentTab
-  val activeBoxCenter = tabCenters.getValue(activeTab)
-  val activeBoxWidth = currentTabWidths.getValue(activeTab)
-  val naturalIndicatorLeft = activeBoxCenter - activeBoxWidth / 2f + restingIndicatorInsetPx
-  val naturalIndicatorRight = activeBoxCenter + activeBoxWidth / 2f - restingIndicatorInsetPx
+  val naturalIndicatorCenter =
+    Tab.entries
+      .sumOf { tab -> (tabCenters.getValue(tab) * activationWeights.getValue(tab)).toDouble() }
+      .toFloat()
+  val naturalIndicatorWidth =
+    Tab.entries
+      .sumOf { tab ->
+        (currentTabWidths.getValue(tab) * activationWeights.getValue(tab)).toDouble()
+      }
+      .toFloat()
+  val naturalIndicatorLeft =
+    naturalIndicatorCenter - naturalIndicatorWidth / 2f + restingIndicatorInsetPx
+  val naturalIndicatorRight =
+    naturalIndicatorCenter + naturalIndicatorWidth / 2f - restingIndicatorInsetPx
 
   val indicatorShape =
     state.indicatorShape(
       naturalLeft = naturalIndicatorLeft,
       naturalRight = naturalIndicatorRight,
+      bodyPosition = tabState.bodyPosition,
       tabCenters = tabCenters,
       tabWidths = currentTabWidths,
       indicatorInsetPx = restingIndicatorInsetPx,
@@ -154,6 +162,7 @@ fun MainBottomBarPill() {
     indicatorInsetPx = visualIndicatorInsetPx,
     state = state,
     currentTabWidths = currentTabWidths,
+    activationWeights = activationWeights,
     activeWidthsPx = tabWidthsConfig.activeWidthsPx,
     labelStyle = labelStyle,
   )
@@ -171,6 +180,7 @@ private fun MainBottomBarPillLayout(
   indicatorInsetPx: Float,
   state: MainBottomBarPillState,
   currentTabWidths: Map<Tab, Float>,
+  activationWeights: Map<Tab, Float>,
   activeWidthsPx: Map<Tab, Float>,
   labelStyle: TextStyle,
 ) {
@@ -202,8 +212,8 @@ private fun MainBottomBarPillLayout(
             }
 
             MainBottomBarPillTrack(
-              state = state,
               currentTabWidths = currentTabWidths,
+              activationWeights = activationWeights,
               activeWidthsPx = activeWidthsPx,
               labelStyle = labelStyle,
             )
@@ -219,8 +229,8 @@ private fun MainBottomBarPillLayout(
 
 @Composable
 private fun MainBottomBarPillTrack(
-  state: MainBottomBarPillState,
   currentTabWidths: Map<Tab, Float>,
+  activationWeights: Map<Tab, Float>,
   activeWidthsPx: Map<Tab, Float>,
   labelStyle: TextStyle,
 ) {
@@ -230,7 +240,7 @@ private fun MainBottomBarPillTrack(
     Tab.entries.forEach { tab ->
       val widthDp = with(density) { currentTabWidths.getValue(tab).toDp() }
       val activeWidthDp = with(density) { activeWidthsPx.getValue(tab).toDp() }
-      val progress = state.tabProgress.getValue(tab).value
+      val progress = activationWeights.getValue(tab)
       val presentation = tab.presentation
       // The active indicator sits restingInset inward from its box, leaving a
       // visual gap on each inactive tab's active-adjacent edge. Shift the tab's
@@ -241,9 +251,7 @@ private fun MainBottomBarPillTrack(
       val visualOffsetPx =
         (Tab.entries.sumOf { other ->
             if (other == tab) 0.0
-            else
-              state.tabProgress.getValue(other).value.toDouble() *
-                (other.ordinal - tab.ordinal).sign
+            else activationWeights.getValue(other).toDouble() * (other.ordinal - tab.ordinal).sign
           } * insetPx / 2.0)
           .toFloat()
       Box(
@@ -329,8 +337,8 @@ private data class MainBottomBarPillTabWidthsConfig(
   fun widthFor(tab: Tab, progress: Float): Float =
     inactiveWidthPx + (activeWidthsPx.getValue(tab) - inactiveWidthPx) * progress
 
-  fun currentWidths(state: MainBottomBarPillState): Map<Tab, Float> =
-    Tab.entries.associateWith { tab -> widthFor(tab, state.tabProgress.getValue(tab).value) }
+  fun currentWidths(progressByTab: Map<Tab, Float>): Map<Tab, Float> =
+    Tab.entries.associateWith { tab -> widthFor(tab, progressByTab.getValue(tab)) }
 }
 
 @Composable

@@ -70,6 +70,7 @@ internal class NavigationForegroundRegistry {
     topBarState: TopBarState?,
     bottomBarState: BottomBarState?,
     modifier: Modifier,
+    interactive: Boolean,
   ) {
     entries.forEach { entry ->
       var hostBoundsInRoot by remember(entry) { mutableStateOf<Rect?>(null) }
@@ -78,7 +79,7 @@ internal class NavigationForegroundRegistry {
         modifier =
           modifier
             .then(
-              if (entry.sharePointerInputWithSiblings) {
+              if (interactive && entry.sharePointerInputWithSiblings) {
                 ShareNavigationForegroundPointerInputElement
               } else {
                 Modifier

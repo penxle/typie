@@ -19,9 +19,13 @@ import androidx.compose.runtime.ExperimentalComposeRuntimeApi
 import androidx.compose.runtime.InternalComposeApi
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.RecomposeScope
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.currentComposer
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.tooling.CompositionObserver
 import androidx.compose.runtime.tooling.ObservableComposition
@@ -52,6 +56,7 @@ import co.typie.ui.component.topbar.TopBarState
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -298,6 +303,51 @@ class NavigationStackDesktopTest {
 
     routeNode.performTouchInput { up() }
     waitUntil { !navigator.isTransitioning }
+  }
+
+  @Test
+  fun inactiveNavigationStackCannotReceivePointerOrNavigationPopNestedScroll() = runComposeUiTest {
+    val navigator = Navigator(Route.Home)
+    val editorRoute = Route.Editor("inactive-editor")
+    var foregroundInteractive by mutableStateOf(true)
+    var nestedScrollAvailable = false
+    var routeDownCount = 0
+
+    setContent {
+      NavigationStack(
+        navigator = navigator,
+        topBarState = remember { TopBarState() },
+        foregroundInteractive = foregroundInteractive,
+        modifier = Modifier.size(width = 320.dp, height = 640.dp),
+      ) { route ->
+        val routeNestedScrollAvailable = LocalNavigationPopNestedScroll.current != null
+        SideEffect { if (route == editorRoute) nestedScrollAvailable = routeNestedScrollAvailable }
+        Box(
+          Modifier.fillMaxSize().testTag("inactive-route-$route").pointerInput(Unit) {
+            awaitEachGesture {
+              awaitFirstDown(requireUnconsumed = false)
+              routeDownCount++
+            }
+          }
+        )
+      }
+      LaunchedEffect(Unit) { navigator.navigate(editorRoute) }
+    }
+    waitUntil { navigator.current == editorRoute && !navigator.isTransitioning }
+    assertTrue(nestedScrollAvailable)
+
+    runOnIdle { foregroundInteractive = false }
+    waitUntil { !nestedScrollAvailable }
+    onNodeWithTag("inactive-route-$editorRoute").performTouchInput {
+      down(center)
+      moveBy(Offset(x = 160f, y = 0f), delayMillis = 100L)
+      up()
+    }
+    waitForIdle()
+
+    assertEquals(0, routeDownCount)
+    assertEquals(editorRoute, navigator.current)
+    assertFalse(navigator.isTransitioning)
   }
 
   @Test

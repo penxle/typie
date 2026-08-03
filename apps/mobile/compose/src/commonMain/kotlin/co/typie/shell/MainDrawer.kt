@@ -32,12 +32,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerType
@@ -511,24 +516,40 @@ private fun Drawer.visibleProgress(panelWidthPx: Float): Float =
   else ((offsetOrClosed(panelWidthPx) + panelWidthPx) / panelWidthPx).coerceIn(0f, 1f)
 
 @Composable
-fun mainDrawerSwipeToOpenModifier(drawer: Drawer, enabled: Boolean): Modifier {
+fun mainDrawerSwipeToOpenModifier(
+  drawer: Drawer,
+  enabled: Boolean,
+  canStart: () -> Boolean = { true },
+): Modifier {
   val scope = rememberCoroutineScope()
   val density = LocalDensity.current
   val bottomNavigationInsetPx = WindowInsets.navigationBars.getBottom(density)
+  val velocityThresholdPx = with(density) { DrawerDefaults.VelocityThreshold.toPx() }
+  val latestEnabled by rememberUpdatedState(enabled)
+  val latestCanStart by rememberUpdatedState(canStart)
 
-  if (!enabled) {
-    return Modifier
-  }
+  val nestedScrollConnection =
+    remember(drawer, velocityThresholdPx) {
+      MainDrawerOpenNestedScrollConnection(
+        drawer = drawer,
+        canStart = { latestEnabled && latestCanStart() },
+        velocityThresholdPx = velocityThresholdPx,
+      )
+    }
 
-  return Modifier.pointerInput(drawer, bottomNavigationInsetPx) {
+  return Modifier.nestedScroll(nestedScrollConnection).pointerInput(
+    drawer,
+    bottomNavigationInsetPx,
+  ) {
     val slop = viewConfiguration.touchSlop
-    val velocityThresholdPx = DrawerDefaults.VelocityThreshold.toPx()
 
     awaitEachGesture {
       val down = awaitFirstDown(requireUnconsumed = false)
       if (
-        down.position.y >= (size.height - bottomNavigationInsetPx).toFloat() ||
+        !latestEnabled ||
+          down.position.y >= (size.height - bottomNavigationInsetPx).toFloat() ||
           down.type == PointerType.Mouse ||
+          !latestCanStart() ||
           drawer.isOpen ||
           drawer.isProgrammaticAnimating
       ) {
@@ -610,5 +631,47 @@ fun mainDrawerSwipeToOpenModifier(drawer: Drawer, enabled: Boolean): Modifier {
         drawer.settle(velocityX = releaseVelocityX, velocityThresholdPx = velocityThresholdPx)
       }
     }
+  }
+}
+
+private class MainDrawerOpenNestedScrollConnection(
+  private val drawer: Drawer,
+  private val canStart: () -> Boolean,
+  private val velocityThresholdPx: Float,
+) : NestedScrollConnection {
+  private var ownsSequence = false
+
+  override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+    if (!ownsSequence || source != NestedScrollSource.UserInput) return Offset.Zero
+    drawer.state.dispatchRawDelta(available.x)
+    return Offset(x = available.x, y = 0f)
+  }
+
+  override fun onPostScroll(
+    consumed: Offset,
+    available: Offset,
+    source: NestedScrollSource,
+  ): Offset {
+    if (
+      source != NestedScrollSource.UserInput || available.x <= 0f || (!ownsSequence && !canStart())
+    ) {
+      return Offset.Zero
+    }
+
+    ownsSequence = true
+    drawer.state.dispatchRawDelta(available.x)
+    return Offset(x = available.x, y = 0f)
+  }
+
+  override suspend fun onPreFling(available: Velocity): Velocity = settle(available.x)
+
+  override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity =
+    settle(available.x)
+
+  private suspend fun settle(velocityX: Float): Velocity {
+    if (!ownsSequence) return Velocity.Zero
+    ownsSequence = false
+    drawer.settle(velocityX = velocityX, velocityThresholdPx = velocityThresholdPx)
+    return Velocity(x = velocityX, y = 0f)
   }
 }
