@@ -244,7 +244,10 @@ const checkQueueHealth = async () => {
   }
 
   try {
-    const activeJobs = await queue.getActive(0, -1);
+    // getActive 는 목록 조회와 개별 잡 해시 조회 사이에 완료된 잡(removeOnComplete 로 해시 즉시 삭제)을
+    // undefined 로 돌려준다 — 타입은 Job[] 이지만 실제로는 구멍이 있다.
+    const fetchedJobs = await queue.getActive(0, -1);
+    const activeJobs = fetchedJobs.filter((job) => !!job);
     // 오름차순 정렬 후 임계 초과분만 남긴다 — 정렬한 배열의 앞쪽이 곧 최고령이라 그대로 표본이 된다.
     // count 는 전체 active 수가 아니라 실제 고착(임계 초과) 수다 — 정상 처리 중인 잡까지 세면 알람이 과장된다.
     // 나이는 처리 시작 시각(processedOn)으로 잰다 — timestamp 는 생성 시각이라 반복 잡에서 한 주기(이 크론은
