@@ -17,15 +17,19 @@ import co.typie.editor.EditorRootId
 import co.typie.editor.FakeFfiEditor
 import co.typie.editor.ffi.LayoutMode
 import co.typie.editor.ffi.Message
+import co.typie.editor.ffi.Modifier as EditorModifier
 import co.typie.editor.ffi.NodeOp
 import co.typie.editor.ffi.PlainNode
 import co.typie.editor.ffi.PlainRootNode
 import co.typie.editor.runtime.EditorRuntime
 import co.typie.ui.theme.LocalThemeMode
 import co.typie.ui.theme.ResolvedThemeMode
+import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 import kotlin.test.assertSame
+import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -33,6 +37,61 @@ import kotlinx.coroutines.cancel
 
 @OptIn(ExperimentalTestApi::class)
 class EditorPreviewDesktopTest {
+  @Test
+  fun pageSizeAndBodySizeChangesPublishCoherentPreviewFrames() = runComposeUiTest {
+    configureRenderBufferLibrary()
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+    val runtime = EditorRuntime(scope)
+    var layout by mutableStateOf<LayoutMode>(A5Layout)
+    var modifiers by mutableStateOf(listOf<EditorModifier>(EditorModifier.FontSize(1200)))
+
+    try {
+      setContent {
+        CompositionLocalProvider(
+          LocalDensity provides Density(1f),
+          LocalThemeMode provides ResolvedThemeMode.Light,
+        ) {
+          EditorPreview(
+            layoutMode = layout,
+            runtime = runtime,
+            modifier = Modifier.size(width = 320.dp, height = 220.dp),
+            shape = RoundedCornerShape(0.dp),
+            modifiers = modifiers,
+          )
+        }
+      }
+      waitUntil(timeoutMillis = 10_000) {
+        runtime.editor?.hasPublishedFrameFor(layout = A5Layout, fontSize = 1200) == true
+      }
+      val a5FrameSize = runtime.editor!!.publishedBundle!!.frames.getValue(0).pixelSize
+
+      runOnIdle { layout = B6Layout }
+      waitUntil(timeoutMillis = 10_000) {
+        runtime.editor?.hasPublishedFrameFor(layout = B6Layout, fontSize = 1200) == true
+      }
+      waitForIdle()
+      val b6Bundle = runtime.editor!!.publishedBundle!!
+
+      assertNotEquals(a5FrameSize, b6Bundle.frames.getValue(0).pixelSize)
+
+      runOnIdle { modifiers = listOf(EditorModifier.FontSize(1800)) }
+      waitUntil(timeoutMillis = 10_000) {
+        runtime.editor?.hasPublishedFrameFor(layout = B6Layout, fontSize = 1800) == true
+      }
+      waitForIdle()
+      val bodySizeBundle = runtime.editor!!.publishedBundle!!
+
+      assertTrue(bodySizeBundle.snapshot.version > b6Bundle.snapshot.version)
+      assertNotEquals(
+        b6Bundle.frames.getValue(0).proof.frameKey,
+        bodySizeBundle.frames.getValue(0).proof.frameKey,
+      )
+    } finally {
+      runtime.clear()
+      scope.cancel()
+    }
+  }
+
   @Test
   fun generatedPreviewKeepsItsEditorWhenPageSizeChanges() = runComposeUiTest {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
@@ -121,12 +180,54 @@ class EditorPreviewDesktopTest {
 
     val B6Layout =
       LayoutMode.Paginated(
-        pageWidth = 484,
-        pageHeight = 686,
-        pageMarginTop = 57,
-        pageMarginBottom = 57,
-        pageMarginLeft = 57,
-        pageMarginRight = 57,
+        pageWidth = 472,
+        pageHeight = 665,
+        pageMarginTop = 38,
+        pageMarginBottom = 38,
+        pageMarginLeft = 38,
+        pageMarginRight = 38,
+      )
+
+    val A5Layout =
+      LayoutMode.Paginated(
+        pageWidth = 559,
+        pageHeight = 794,
+        pageMarginTop = 76,
+        pageMarginBottom = 76,
+        pageMarginLeft = 76,
+        pageMarginRight = 76,
       )
   }
+}
+
+private fun Editor.hasPublishedFrameFor(layout: LayoutMode, fontSize: Int): Boolean {
+  val bundle = publishedBundle ?: return false
+  val presentedFontSize =
+    bundle.snapshot.rootModifiers
+      .orEmpty()
+      .filterIsInstance<EditorModifier.FontSize>()
+      .firstOrNull()
+  return bundle.snapshot.rootAttrs?.layoutMode == layout &&
+    presentedFontSize?.value == fontSize &&
+    bundle.frames.size == bundle.snapshot.pageSizes.size &&
+    bundle.frames.values.all { frame -> frame.proof.editorRevision == bundle.snapshot.version }
+}
+
+private fun configureRenderBufferLibrary() {
+  if (System.getProperty("jna.library.path") != null) return
+
+  val repository =
+    generateSequence(File(System.getProperty("user.dir"))) { it.parentFile }
+      .firstOrNull { File(it, "Cargo.toml").isFile } ?: error("Typie repository root not found")
+  val host =
+    when (System.getProperty("os.arch")) {
+      "aarch64" -> "aarch64-apple-darwin"
+      "x86_64" -> "x86_64-apple-darwin"
+      else -> error("Unsupported desktop test architecture: ${System.getProperty("os.arch")}")
+    }
+  val directory = File(repository, "target/$host/release-uniffi")
+  check(File(directory, "libeditor_ffi.dylib").isFile) {
+    "Desktop editor FFI is not built; run `just -f crates/editor-ffi/justfile desktop`"
+  }
+  System.setProperty("jna.library.path", directory.absolutePath)
 }

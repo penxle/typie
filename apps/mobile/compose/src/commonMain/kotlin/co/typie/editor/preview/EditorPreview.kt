@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Constraints
@@ -278,7 +279,6 @@ private fun EditorPreviewContent(
 
   val publishedBundle = editor?.publishedBundle
   val publishedState = publishedBundle?.snapshot ?: EditorState.Initial
-  val pageSizes = publishedState.pageSizes
   val pageSpacing =
     when (layoutSpec) {
       is EditorDocumentLayoutSpec.Continuous -> 0.dp
@@ -294,25 +294,37 @@ private fun EditorPreviewContent(
     modifier = Modifier.fillMaxSize().clipToBounds().background(pageBackground),
   ) {
     val publishedVersion = publishedState.version
-    pageSizes.forEachIndexed { index, size ->
+    val publishedPageCount = publishedState.pageSizes.size
+    val preparingPage = editor?.preparingPage
+    val presentedPageCount = maxOf(publishedPageCount, (preparingPage ?: -1) + 1)
+    repeat(presentedPageCount) { index ->
+      val preparing = index >= publishedPageCount
+      val size =
+        publishedState.pageSizes.getOrNull(index)
+          ?: editor?.appliedState?.pageSizes?.getOrNull(index)?.takeIf { preparingPage == index }
+          ?: return@repeat
       EditorPageSurface(
         page = index,
         width = size.width,
         height = size.height,
         publishedVersion = publishedVersion,
         publishedFrame = publishedBundle?.frames?.get(index),
-        showChrome = layoutSpec is EditorDocumentLayoutSpec.Paginated,
+        showChrome = layoutSpec is EditorDocumentLayoutSpec.Paginated && !preparing,
         debugBottomMarginHeight =
           when (layoutSpec) {
             is EditorDocumentLayoutSpec.Paginated -> layoutSpec.pageMarginBottom
             is EditorDocumentLayoutSpec.Continuous -> 0f
           },
         modifier =
-          Modifier.editorPagePositionTracker(
-            uiState = uiState,
-            page = index,
-            density = density.density,
-          ),
+          if (preparing) {
+            Modifier.graphicsLayer(alpha = 0f)
+          } else {
+            Modifier.editorPagePositionTracker(
+              uiState = uiState,
+              page = index,
+              density = density.density,
+            )
+          },
       )
     }
   }
