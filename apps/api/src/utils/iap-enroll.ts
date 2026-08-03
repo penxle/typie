@@ -53,7 +53,7 @@ export type IapEnrollSource =
     };
 
 export type IapEnrollRejection =
-  | { kind: 'rejected'; reason: 'ownership-mismatch' | 'family-shared' | 'payload-invalid' | 'not-trackable'; detail: string }
+  | { kind: 'rejected'; reason: 'ownership-mismatch' | 'family-shared' | 'payload-invalid' | 'not-trackable' | 'expired'; detail: string }
   | { kind: 'lookup-failed'; detail: string };
 
 export type IapEnrollFetch = IapEnrollRejection | { kind: 'fetched'; source: IapEnrollSource };
@@ -192,8 +192,10 @@ const normalizeAppleEnrollment = async ({
       });
     }
   }
+  // 만료는 별도 reason 으로 가른다 — 스토어가 종료를 확정한 구매는 재시도로 절대 풀리지 않아,
+  // GraphQL 표면이 클라이언트에게 트랜잭션 종료(재시도 루프 종결)를 지시할 전용 코드를 내려야 한다.
   if (normalized.kind !== 'tracked') {
-    return { kind: 'rejected', reason: 'not-trackable', detail: untrackedDetail(normalized) };
+    return { kind: 'rejected', reason: normalized.kind === 'expired' ? 'expired' : 'not-trackable', detail: untrackedDetail(normalized) };
   }
 
   const lineage = appleLineageTokens(source.items, source.selected, source.requestedOriginalTransactionId);
@@ -245,8 +247,10 @@ const normalizeGoogleEnrollment = async ({
       });
     }
   }
+  // 만료는 별도 reason 으로 가른다 — 스토어가 종료를 확정한 구매는 재시도로 절대 풀리지 않아,
+  // GraphQL 표면이 클라이언트에게 트랜잭션 종료(재시도 루프 종결)를 지시할 전용 코드를 내려야 한다.
   if (normalized.kind !== 'tracked') {
-    return { kind: 'rejected', reason: 'not-trackable', detail: untrackedDetail(normalized) };
+    return { kind: 'rejected', reason: normalized.kind === 'expired' ? 'expired' : 'not-trackable', detail: untrackedDetail(normalized) };
   }
 
   return {

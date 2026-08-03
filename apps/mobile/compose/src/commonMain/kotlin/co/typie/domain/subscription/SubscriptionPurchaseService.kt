@@ -184,6 +184,12 @@ object SubscriptionPurchaseService {
           PlatformModule.purchaseService.finishTransaction(event.subscriptionId)
           _failures.emit(PurchaseFailure.AccountMismatch)
         }
+        // 스토어가 종료를 확정한 구매다 — 재시도해도 결과가 바뀌지 않으므로 트랜잭션을 종료해
+        // 앱 실행마다 반복되는 재등록 루프를 끊는다. 이미 만료된 구매라 종료로 유실되는 권한도 없다.
+        "in_app_purchase_expired" -> {
+          Logger.w { "in-app purchase already expired: finishing transaction" }
+          PlatformModule.purchaseService.finishTransaction(event.subscriptionId)
+        }
         // 등록 경합·불변식 위반이다. 재시도로 풀리거나 사람이 정리해야 하므로 사용자에게 알리지 않는다.
         "in_app_purchase_registration_conflict" ->
           Logger.w { "in-app purchase registration conflict: retrying on next launch" }

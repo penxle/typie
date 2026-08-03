@@ -648,6 +648,12 @@ builder.mutationFields((t) => ({
           return new TypieError({ code: 'in_app_purchase_account_mismatch' });
         }
 
+        // 만료된 구매의 재등록은 미완료 트랜잭션의 앱 실행마다 재전송이 만드는 정상 거절이다 — 일반 Error 로 두면
+        // 무한 반복이 Sentry 에 쌓인다. 전용 코드를 받은 클라이언트는 트랜잭션을 종료해 루프를 끊는다.
+        if (lookup.reason === 'expired') {
+          return new TypieError({ code: 'in_app_purchase_expired' });
+        }
+
         return new Error(`in-app purchase is not trackable: ${lookup.detail}`);
       };
 
