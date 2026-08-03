@@ -126,12 +126,13 @@
         pendingCompositionDispatch = undefined;
         return;
       }
-      const committed = inputAdapter.handleCompositionEnd();
       const action = pendingCompositionDispatch;
       pendingCompositionDispatch = undefined;
-      if (committed) {
-        action?.();
-      }
+      let committed = false;
+      editor.updateNow(() => {
+        committed = inputAdapter.handleCompositionEnd();
+      });
+      if (committed) action?.();
     }}
     oncompositionstart={(e) => {
       if (editor.readOnly) return;
@@ -160,6 +161,7 @@
         editor.editBlockedHandler?.();
       }
       editor.updateNow(() => {
+        inputAdapter.handleKeyDown(e);
         pendingCompositionDispatch =
           deferPasteShortcutDuringComposition(
             e,

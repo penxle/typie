@@ -1,3 +1,4 @@
+import { initialCompositionTailState, resolveCompositionTail } from './composition-tail-resolver';
 import {
   canPreserveNativeInputOnEditorSync,
   codePointLength,
@@ -11,6 +12,7 @@ import {
 } from './ime-context';
 import { normalizeLineBreakBeforeInput, readDomComposingReplacement, readDomInputDiff, textInputMessage } from './ime-normalizer';
 import type { Message } from '@typie/editor-ffi/browser';
+import type { CompositionTailEffect, CompositionTailObservation, CompositionTailState } from './composition-tail-resolver';
 import type { ImeContext, ImeRange, ImeTextInput } from './ime-context';
 import type { DomInputDiff } from './ime-normalizer';
 
@@ -28,6 +30,14 @@ type ImeEditIntent = {
 type ImeCompositionEdit = {
   target: ImeRange;
   text: string;
+};
+
+type DeferredCompositionEdit = {
+  generation: number;
+  context: ImeContext;
+  input: ImeTextInput;
+  edit: ImeCompositionEdit;
+  timer: ReturnType<typeof setTimeout>;
 };
 
 const isCollapsedRange = (range: ImeRange): boolean => range.start === range.end;
@@ -136,12 +146,89 @@ export class ImeInputAdapter {
   #pendingEditIntent: ImeEditIntent | null = null;
   #pendingCompositionText: string | null = null;
   #pendingCompositionTarget: ImeRange | null = null;
+  #compositionTailState: CompositionTailState = initialCompositionTailState;
+  #deferredCompositionEdit: DeferredCompositionEdit | null = null;
   #compositionActive = false;
   #commitPendingText: string | null = null;
   #resyncInProgress = false;
 
   constructor(deps: ImeInputAdapterDeps) {
     this.#deps = deps;
+  }
+
+  #takeDeferredCompositionEdit(generation: number): DeferredCompositionEdit | null {
+    const deferred = this.#deferredCompositionEdit;
+    if (deferred && deferred.generation !== generation) {
+      return null;
+    }
+    this.#deferredCompositionEdit = null;
+    if (deferred) {
+      clearTimeout(deferred.timer);
+    }
+    return deferred;
+  }
+
+  #applyDeferredCompositionEdit(generation: number): void {
+    const deferred = this.#takeDeferredCompositionEdit(generation);
+    if (!deferred) {
+      return;
+    }
+    this.#applyCompositionEdit(deferred.context, deferred.input, deferred.edit);
+  }
+
+  #observeCompositionTail(observation: CompositionTailObservation): CompositionTailEffect[] {
+    const resolution = resolveCompositionTail(this.#compositionTailState, observation);
+    this.#compositionTailState = resolution.state;
+    return resolution.effects;
+  }
+
+  #applyCompositionTailEffects(
+    effects: CompositionTailEffect[],
+    currentEdit?: { context: ImeContext; input: ImeTextInput; edit: ImeCompositionEdit },
+  ): Extract<CompositionTailEffect, { type: 'commit_then_insert' }> | null {
+    let commit: Extract<CompositionTailEffect, { type: 'commit_then_insert' }> | null = null;
+    for (const effect of effects) {
+      switch (effect.type) {
+        case 'apply_current_edit': {
+          if (!currentEdit) {
+            throw new Error('Composition-tail resolution requires the current edit');
+          }
+          this.#applyCompositionEdit(currentEdit.context, currentEdit.input, currentEdit.edit);
+          break;
+        }
+        case 'defer_current_edit': {
+          if (!currentEdit) {
+            throw new Error('Composition-tail resolution requires the current edit');
+          }
+          this.#deferCompositionEdit(effect.generation, currentEdit.context, currentEdit.input, currentEdit.edit);
+          break;
+        }
+        case 'apply_deferred_edit': {
+          this.#applyDeferredCompositionEdit(effect.generation);
+          break;
+        }
+        case 'discard_deferred_edit': {
+          this.#takeDeferredCompositionEdit(effect.generation);
+          break;
+        }
+        case 'commit_then_insert': {
+          commit = effect;
+          break;
+        }
+      }
+    }
+    return commit;
+  }
+
+  #continueCompositionTail(): void {
+    this.#applyCompositionTailEffects(this.#observeCompositionTail({ type: 'composition_continues' }));
+  }
+
+  #deferCompositionEdit(generation: number, context: ImeContext, input: ImeTextInput, edit: ImeCompositionEdit): void {
+    const timer = setTimeout(() => {
+      this.#applyCompositionTailEffects(this.#observeCompositionTail({ type: 'timeout', generation }));
+    }, 0);
+    this.#deferredCompositionEdit = { generation, context, input, edit, timer };
   }
 
   #handleInputWithoutDiff(context: ImeContext, input: ImeTextInput): void {
@@ -155,6 +242,7 @@ export class ImeInputAdapter {
       this.#pendingCompositionText = null;
       const target = pendingTarget ?? context.composing;
       if (target && text != null) {
+        this.#applyCompositionTailEffects(this.#observeCompositionTail({ type: 'key_down', key: null }));
         this.#applyCompositionEdit(context, input, { target, text });
         return;
       }
@@ -190,7 +278,16 @@ export class ImeInputAdapter {
     }
     const edit = this.#compositionEdit(context, replacement);
     this.#pendingCompositionText = null;
-    this.#applyCompositionEdit(context, input, edit);
+    const currentText = readContextCompositionText(context);
+    const targetsCurrentComposition =
+      !!context.composing && edit.target.start === context.composing.start && edit.target.end === context.composing.end;
+    const effects = this.#observeCompositionTail({
+      type: 'composition_edit',
+      currentText,
+      editText: edit.text,
+      targetsCurrentComposition,
+    });
+    this.#applyCompositionTailEffects(effects, { context, input, edit });
   }
 
   #handleTextInputWithDiff(context: ImeContext, input: ImeTextInput, diff: DomInputDiff): void {
@@ -292,6 +389,7 @@ export class ImeInputAdapter {
       this.#pendingEditIntent = null;
       this.#pendingCompositionText = null;
       this.#pendingCompositionTarget = null;
+      this.#applyCompositionTailEffects(this.#observeCompositionTail({ type: 'reset' }));
       this.#compositionActive = false;
       this.#commitPendingText = null;
 
@@ -346,6 +444,8 @@ export class ImeInputAdapter {
       return;
     }
 
+    this.#continueCompositionTail();
+
     if (
       this.#commitPendingText != null &&
       (e.inputType === 'insertText' || e.inputType === 'insertCompositionText') &&
@@ -386,6 +486,29 @@ export class ImeInputAdapter {
         context && !context.composing
           ? utf16SelectionToFlatRange(context.text, context.windowStart, readInputUtf16Selection(e.currentTarget))
           : null;
+    }
+
+    if (this.#compositionActive && e.inputType === 'insertText' && e.data != null && context?.composing) {
+      const committedText = readContextCompositionText(context);
+      if (committedText != null) {
+        e.preventDefault();
+        this.#compositionActive = false;
+        this.#pendingEditIntent = null;
+        this.#pendingCompositionText = null;
+        this.#pendingCompositionTarget = null;
+        this.#applyCompositionTailEffects(this.#observeCompositionTail({ type: 'key_down', key: null }));
+        this.#context = {
+          ...context,
+          selection: { start: context.composing.end, end: context.composing.end },
+          composing: null,
+        };
+        this.#deps.enqueue([
+          { type: 'text_input', ops: [{ type: 'commit_as_is' }] },
+          ...textInputMessage([{ type: 'replace_selection', text: e.data }]),
+        ]);
+        this.#setCommitPending(committedText);
+        return;
+      }
     }
 
     this.#pendingEditIntent =
@@ -429,6 +552,9 @@ export class ImeInputAdapter {
       return;
     }
 
+    this.#continueCompositionTail();
+    this.#applyCompositionTailEffects(this.#observeCompositionTail({ type: 'key_down', key: null }));
+
     this.#clearCommitPending();
     const wasCompositionActive = this.#compositionActive;
     const pendingTarget = this.#pendingCompositionTarget;
@@ -444,12 +570,40 @@ export class ImeInputAdapter {
       return;
     }
 
+    this.#continueCompositionTail();
+
     this.#pendingCompositionText = e.data;
+  }
+
+  handleKeyDown(e: KeyboardEvent): void {
+    const key =
+      this.#compositionActive && e.isComposing && !e.ctrlKey && !e.metaKey && !e.altKey && codePointLength(e.key) === 1 ? e.key : null;
+    this.#applyCompositionTailEffects(this.#observeCompositionTail({ type: 'key_down', key }));
   }
 
   handleCompositionEnd(): boolean {
     if (this.#resyncInProgress) {
       return false;
+    }
+
+    const commitTail = this.#applyCompositionTailEffects(this.#observeCompositionTail({ type: 'composition_end' }));
+    if (commitTail) {
+      const deferred = this.#takeDeferredCompositionEdit(commitTail.generation);
+      if (deferred) {
+        const committedText = readContextCompositionText(deferred.context);
+        this.#compositionActive = false;
+        this.#pendingCompositionText = null;
+        this.#pendingCompositionTarget = null;
+        this.#context = updateContextFromInputElement(deferred.context, deferred.input, null);
+        if (committedText != null) {
+          this.#deps.enqueue([
+            { type: 'text_input', ops: [{ type: 'commit_as_is' }] },
+            ...textInputMessage([{ type: 'replace_selection', text: commitTail.text }]),
+          ]);
+          this.#setCommitPending(committedText);
+          return true;
+        }
+      }
     }
 
     this.#compositionActive = false;

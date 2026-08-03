@@ -149,6 +149,26 @@ class EditorImeCommandNormalizerTest {
   }
 
   @Test
+  fun `finish composition stays ordered before following committed text`() {
+    val ime =
+      Ime(text = "ㅜㅜ", windowStart = 0, selection = ImeRange(2, 2), composing = ImeRange(1, 2))
+    val messages =
+      EditorImeCommandNormalizer.normalize(
+        listOf(FinishComposingTextCommand(), CommitTextCommand(" ", 1)),
+        ime = ime,
+      )
+
+    assertEquals(
+      listOf(
+        Message.TextInput(
+          listOf(FlatImeOp.CommitAsIs, FlatImeOp.Compose(" "), FlatImeOp.CommitAsIs)
+        )
+      ),
+      messages,
+    )
+  }
+
+  @Test
   fun `finish composing command commits preedit started in same command batch`() {
     val messages =
       EditorImeCommandNormalizer.normalize(

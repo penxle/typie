@@ -31,15 +31,17 @@ internal object EditorImeCommandNormalizer {
     val messages = mutableListOf<Message>()
     val ops = mutableListOf<FlatImeOp>()
     var hasActiveComposition = ime?.composing != null
+    fun flushOps() {
+      if (ops.isEmpty()) return
+      messages += Message.TextInput(ops.toList())
+      ops.clear()
+    }
 
     for (command in commands) {
       if (command is CommitTextCommand) {
         val text = command.text.replace("\r\n", "\n").replace('\r', '\n')
         if (text == "\n") {
-          if (ops.isNotEmpty()) {
-            messages += Message.TextInput(ops.toList())
-            ops.clear()
-          }
+          flushOps()
 
           messages += Message.Key(KeyEvent(Key.Enter))
           continue
@@ -48,10 +50,7 @@ internal object EditorImeCommandNormalizer {
         // paragraph splits via the enter key path.
         text.split("\n").forEachIndexed { index, segment ->
           if (index > 0) {
-            if (ops.isNotEmpty()) {
-              messages += Message.TextInput(ops.toList())
-              ops.clear()
-            }
+            flushOps()
             messages += Message.Key(KeyEvent(Key.Enter))
           }
           if (segment.isNotEmpty() || index == 0) {
@@ -84,9 +83,7 @@ internal object EditorImeCommandNormalizer {
         }
     }
 
-    if (ops.isNotEmpty()) {
-      messages += Message.TextInput(ops)
-    }
+    flushOps()
 
     return messages
   }

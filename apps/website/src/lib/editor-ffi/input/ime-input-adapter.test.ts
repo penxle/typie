@@ -30,6 +30,8 @@ const createImeHarness = (initialContext: ImeContext) => {
     compositionStart: (data = '') => adapter.handleCompositionStart(compositionEvent(input, data)),
     compositionUpdate: (data: string) => adapter.handleCompositionUpdate(compositionEvent(input, data)),
     compositionEnd: () => adapter.handleCompositionEnd(),
+    composingKeyDown: (key: string) =>
+      adapter.handleKeyDown({ key, isComposing: true, ctrlKey: false, metaKey: false, altKey: false } as KeyboardEvent),
     beforeCompositionInput: (text: string) => adapter.handleBeforeInput(beforeInputEvent(input, 'insertCompositionText', text)),
     beforeTextInput: (text: string) => {
       const event = beforeInputEvent(input, 'insertText', text);
@@ -1165,6 +1167,93 @@ describe('ImeInputAdapter', () => {
         ops: [
           { type: 'set_selection', start: 21, end: 21 },
           { type: 'replace_selection', text: ' ' },
+        ],
+      },
+    ]);
+  });
+
+  it('commits preedit before a non-composition text insertion delivered before compositionend', () => {
+    const ime = createImeHarness(context('ㅜ'));
+
+    ime.syncFromEditor();
+    ime.compositionStart();
+    ime.beforeCompositionInput('ㅜ');
+    ime.applyNativeInput('ㅜㅜ', 2);
+
+    const spaceEvent = ime.beforeTextInput(' ');
+    expect(spaceEvent.preventDefault).toHaveBeenCalledOnce();
+    expect(ime.compositionEnd()).toBe(false);
+    const duplicateCommittedPreedit = ime.beforeTextInput('ㅜ');
+    expect(duplicateCommittedPreedit.preventDefault).toHaveBeenCalledOnce();
+
+    expect(ime.messages).toEqual([
+      {
+        type: 'text_input',
+        ops: [
+          { type: 'set_composition', start: 21, end: 21 },
+          { type: 'compose', text: 'ㅜ' },
+        ],
+      },
+      { type: 'text_input', ops: [{ type: 'commit_as_is' }] },
+      { type: 'text_input', ops: [{ type: 'replace_selection', text: ' ' }] },
+    ]);
+  });
+
+  it('inserts an appended composition key at the caret produced by commit', () => {
+    const ime = createImeHarness(context('ㅠ'));
+
+    ime.syncFromEditor();
+    ime.compositionStart();
+    ime.beforeCompositionInput('ㅠ');
+    ime.applyNativeInput('ㅠㅠ', 2);
+
+    ime.composingKeyDown(' ');
+    ime.compositionUpdate('ㅠ ');
+    ime.beforeCompositionInput('ㅠ ');
+    ime.applyNativeInput('ㅠㅠ ', 3);
+    expect(ime.compositionEnd()).toBe(true);
+
+    expect(ime.messages).toEqual([
+      {
+        type: 'text_input',
+        ops: [
+          { type: 'set_composition', start: 21, end: 21 },
+          { type: 'compose', text: 'ㅠ' },
+        ],
+      },
+      { type: 'text_input', ops: [{ type: 'commit_as_is' }] },
+      { type: 'text_input', ops: [{ type: 'replace_selection', text: ' ' }] },
+    ]);
+  });
+
+  it('applies an appended composition key when the composition continues', async () => {
+    const ime = createImeHarness(context(''));
+
+    ime.syncFromEditor();
+    ime.compositionStart();
+    ime.beforeCompositionInput('にほ');
+    ime.applyNativeInput('にほ', 2);
+
+    ime.composingKeyDown('n');
+    ime.compositionUpdate('にほn');
+    ime.beforeCompositionInput('にほn');
+    ime.applyNativeInput('にほn', 3);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(ime.messages).toEqual([
+      {
+        type: 'text_input',
+        ops: [
+          { type: 'set_composition', start: 20, end: 20 },
+          { type: 'compose', text: 'にほ' },
+        ],
+      },
+      {
+        type: 'text_input',
+        ops: [
+          { type: 'set_composition', start: 20, end: 22 },
+          { type: 'compose', text: 'にほn' },
         ],
       },
     ]);

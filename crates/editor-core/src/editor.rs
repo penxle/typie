@@ -1107,13 +1107,9 @@ impl Editor {
             let mut consumed = 1;
             let mut outcome = CommandOutcome::Applied;
             let result: Result<(), EditorError> = match message {
-                // Coalesce a consecutive run of text-input batches into one reduce +
-                // transact: an IME composition update enqueues several `TextInput`
-                // messages per frame, and each separately rebuilds the flat window
-                // and re-derives the edit. A batch containing `CommitAsIs` ends the
-                // run — the commit's text replacement must see the committed text
-                // before a following batch reopens a composition (it no-ops while
-                // one is active).
+                // Coalesce composition updates until a committed message boundary.
+                // `handle_flat_ime_ops` still preserves barriers inside one message,
+                // while stopping here keeps per-message failure outcomes truthful.
                 Message::TextInput { ops } => {
                     let mut batch = ops;
                     while matches!(messages.front(), Some(Message::TextInput { .. }))
@@ -2372,8 +2368,8 @@ mod tests {
     // A frame's worth of IME composition traffic arrives as several consecutive
     // `TextInput` messages; `tick` coalesces them into batched reduces. The
     // coalesced drain must land on the same document, composition, and selection
-    // as ticking each message separately (the run splits after `CommitAsIs` so
-    // the commit's text replacement still sees the committed text).
+    // as ticking each message separately. `CommitAsIs` remains an execution
+    // barrier inside the combined flat-op vector.
     #[test]
     fn tick_coalesces_consecutive_text_input_messages() {
         let (state, ..) = state! {
@@ -2708,6 +2704,44 @@ mod tests {
             vec![rejected.clone()]
         );
         assert_eq!(result.request_outcomes[3].command_outcomes, vec![rejected]);
+    }
+
+    #[test]
+    fn tick_does_not_coalesce_a_committed_input_with_a_later_failure() {
+        let mut editor = zombie_fixture_editor();
+        let request = editor
+            .enqueue_request(vec![
+                Message::TextInput {
+                    ops: vec![
+                        FlatImeOp::SetSelection { start: 1, end: 1 },
+                        FlatImeOp::ReplaceSelection { text: "a".into() },
+                        FlatImeOp::CommitAsIs,
+                    ],
+                },
+                Message::TextInput {
+                    ops: vec![
+                        FlatImeOp::SetSelection { start: 0, end: 0 },
+                        FlatImeOp::ReplaceSelection { text: "X".into() },
+                    ],
+                },
+            ])
+            .unwrap();
+
+        let result = editor.tick().unwrap().unwrap();
+
+        assert_eq!(
+            result.request_outcomes[0],
+            RequestOutcome {
+                request_id: request,
+                command_outcomes: vec![
+                    CommandOutcome::Applied,
+                    CommandOutcome::Rejected {
+                        reason: CommandRejection::InvalidArgument,
+                    },
+                ],
+            }
+        );
+        assert_eq!(text_and_page_break_signature(editor.state()), "aaz");
     }
 
     #[test]

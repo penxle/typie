@@ -217,6 +217,7 @@ struct FlatImeReduction {
     // must see the full replacement — trimming swallows a leading trigger
     // char that matches the selection's first character.
     untrimmed_text_change: Option<FlatImeTextChange>,
+    committed_composition: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -402,6 +403,15 @@ impl FlatImeAnchoredChangeTracker {
 }
 
 impl FlatImeState {
+    fn has_valid_composition(&self) -> bool {
+        self.comp.is_some_and(|(start, end)| {
+            start < end
+                && start >= self.text.base
+                && end <= self.text.base + self.text.chars.len()
+                && self.text.slice(start..end).iter().all(|c| !is_token(*c))
+        })
+    }
+
     fn from_editor(editor: &Editor, ops: &[FlatImeOp]) -> Option<Self> {
         let state = editor.state();
         let doc = state.view();
@@ -615,8 +625,12 @@ impl FlatImeState {
         let initial_sel_start = self.sel_start;
         let mut anchored_change: Option<FlatImeAnchoredChangeTracker> = None;
         let mut can_track_anchored_change = true;
+        let mut committed_composition = false;
 
         for op in ops {
+            if matches!(op, FlatImeOp::CommitAsIs) && self.has_valid_composition() {
+                committed_composition = true;
+            }
             if let Some(change) = self.apply(op) {
                 if !can_track_anchored_change {
                     continue;
@@ -662,6 +676,7 @@ impl FlatImeState {
             state: self,
             text_change,
             untrimmed_text_change,
+            committed_composition,
         }
     }
 }
@@ -829,11 +844,17 @@ fn flat_ime_ops_form_plain_backspace(editor: &Editor, ops: &[FlatImeOp]) -> bool
 }
 
 pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(), EditorError> {
+    for segment in ops.split_inclusive(|op| matches!(op, FlatImeOp::CommitAsIs)) {
+        handle_flat_ime_segment(editor, segment)?;
+    }
+    Ok(())
+}
+
+fn handle_flat_ime_segment(editor: &mut Editor, ops: &[FlatImeOp]) -> Result<(), EditorError> {
     let mut delete_paint = editor.ime_delete_paint.take();
-    let commit_as_is = ops.iter().any(|op| matches!(op, FlatImeOp::CommitAsIs));
 
     if matches!(editor.last_history_tag(), Some(HistoryTag::AutoReplacement))
-        && flat_ime_ops_form_plain_backspace(editor, &ops)
+        && flat_ime_ops_form_plain_backspace(editor, ops)
         && editor.try_undo_auto_replacement()
     {
         if !editor.state().pending_modifiers.is_empty() {
@@ -846,13 +867,14 @@ pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(
         return Ok(());
     }
 
+    let mut committed_composition = false;
     let committed_insert = (|| -> Result<bool, EditorError> {
-        let initial = match FlatImeState::from_editor(editor, &ops) {
+        let initial = match FlatImeState::from_editor(editor, ops) {
             Some(s) => s,
             None => return Ok(false),
         };
 
-        let reduced = initial.clone().reduce_flat_ime_ops(&ops);
+        let reduced = initial.clone().reduce_flat_ime_ops(ops);
 
         if reduced.text_change.is_none() {
             return Ok(false);
@@ -889,6 +911,7 @@ pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(
             (initial, reduced)
         };
 
+        let reduced_committed_composition = reduced.committed_composition;
         let result = reduced.state;
         let untrimmed_text_change = reduced.untrimmed_text_change;
         let Some(text_change) = reduced.text_change else {
@@ -1181,11 +1204,12 @@ pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(
         }
 
         editor.ime_delete_paint = next_delete_paint;
+        committed_composition = reduced_committed_composition;
 
         Ok(!text_change.insert.is_empty() && result.comp.is_none())
     })()?;
 
-    if commit_as_is || committed_insert {
+    if committed_composition || committed_insert {
         let resource = Arc::clone(&editor.resource);
         let resource = resource.lock().unwrap();
         editor.transact(|tr| {

@@ -637,6 +637,170 @@ fn replacement_fires_on_commit_as_is() {
 }
 
 #[test]
+fn commit_barrier_replaces_before_later_op_in_same_text_input() {
+    let (s, ..) = state! {
+        doc { root { p1: paragraph { text("") } } }
+        selection: (p1, 0)
+    };
+    let mut editor = editor_with_rules(s, vec![rule("ㅠㅠ", "하하하", false)]);
+
+    type_text(&mut editor, "ㅠ");
+    editor.apply(Message::TextInput {
+        ops: vec![FlatImeOp::Compose { text: "ㅠ".into() }],
+    });
+    editor.apply(Message::TextInput {
+        ops: vec![
+            FlatImeOp::CommitAsIs,
+            FlatImeOp::ReplaceSelection { text: " ".into() },
+        ],
+    });
+
+    let (expected, ..) = state! {
+        doc { root { p1: paragraph { text("하하하 ") } } }
+        selection: (p1, 4)
+    };
+    assert_state_eq!(editor.state(), &expected);
+}
+
+#[test]
+fn commit_barrier_matches_split_delivery_including_undo() {
+    let (s, ..) = state! {
+        doc { root { p1: paragraph { text("") } } }
+        selection: (p1, 0)
+    };
+    let rules = vec![rule("ㅠㅠ", "하하하", false)];
+    let mut batched = editor_with_rules(s.clone(), rules.clone());
+    let mut split = editor_with_rules(s, rules);
+
+    for editor in [&mut batched, &mut split] {
+        type_text(editor, "ㅠ");
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::Compose { text: "ㅠ".into() }],
+        });
+    }
+    batched.apply(Message::TextInput {
+        ops: vec![
+            FlatImeOp::CommitAsIs,
+            FlatImeOp::ReplaceSelection { text: " ".into() },
+        ],
+    });
+    split.apply(Message::TextInput {
+        ops: vec![FlatImeOp::CommitAsIs],
+    });
+    split.apply(Message::TextInput {
+        ops: vec![FlatImeOp::ReplaceSelection { text: " ".into() }],
+    });
+
+    assert_state_eq!(batched.state(), split.state());
+    for editor in [&mut batched, &mut split] {
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+    }
+    assert_state_eq!(batched.state(), split.state());
+}
+
+#[test]
+fn commit_as_is_without_active_composition_does_not_trigger_replacement() {
+    let (s, ..) = state! {
+        doc { root { p1: paragraph { text("abc") } } }
+        selection: (p1, 3)
+    };
+    let mut editor = editor_with_rules(s, vec![rule("abc", "X", false)]);
+
+    editor.apply(Message::TextInput {
+        ops: vec![FlatImeOp::CommitAsIs],
+    });
+
+    let (expected, ..) = state! {
+        doc { root { p1: paragraph { text("abc") } } }
+        selection: (p1, 3)
+    };
+    assert_state_eq!(editor.state(), &expected);
+}
+
+#[test]
+fn empty_compose_commit_without_active_composition_does_not_trigger_replacement() {
+    let (s, ..) = state! {
+        doc { root { p1: paragraph { text("abc") } } }
+        selection: (p1, 3)
+    };
+    let mut editor = editor_with_rules(s, vec![rule("abc", "X", false)]);
+
+    editor.apply(Message::TextInput {
+        ops: vec![
+            FlatImeOp::Compose {
+                text: String::new(),
+            },
+            FlatImeOp::CommitAsIs,
+        ],
+    });
+
+    let (expected, ..) = state! {
+        doc { root { p1: paragraph { text("abc") } } }
+        selection: (p1, 3)
+    };
+    assert_state_eq!(editor.state(), &expected);
+}
+
+#[test]
+fn commit_after_clear_composition_does_not_trigger_replacement() {
+    let (s, ..) = state! {
+        doc { root { p1: paragraph { text("abc") } } }
+        selection: (p1, 3)
+    };
+    let mut editor = editor_with_rules(s, vec![rule("abc", "X", false)]);
+    editor.apply(Message::TextInput {
+        ops: vec![FlatImeOp::SetComposition { start: 1, end: 4 }],
+    });
+
+    editor.apply(Message::TextInput {
+        ops: vec![FlatImeOp::ClearComposition, FlatImeOp::CommitAsIs],
+    });
+
+    let (expected, ..) = state! {
+        doc { root { p1: paragraph { text("abc") } } }
+        selection: (p1, 3)
+    };
+    assert_state_eq!(editor.state(), &expected);
+    assert!(editor.state().composition.is_none());
+}
+
+#[test]
+fn replacement_fires_before_following_text_input_in_same_request() {
+    let (s, ..) = state! {
+        doc { root { p1: paragraph { text("") } } }
+        selection: (p1, 0)
+    };
+    let mut editor = editor_with_rules(s, vec![rule("ㅜㅜ", "ㅋㅋ", false)]);
+
+    type_text(&mut editor, "ㅜ");
+    editor.apply(Message::TextInput {
+        ops: vec![FlatImeOp::Compose { text: "ㅜ".into() }],
+    });
+    editor
+        .enqueue_request(vec![
+            Message::TextInput {
+                ops: vec![FlatImeOp::CommitAsIs],
+            },
+            Message::TextInput {
+                ops: vec![
+                    FlatImeOp::Compose { text: " ".into() },
+                    FlatImeOp::CommitAsIs,
+                ],
+            },
+        ])
+        .unwrap();
+    editor.tick().unwrap();
+
+    let (expected, ..) = state! {
+        doc { root { p1: paragraph { text("ㅋㅋ ") } } }
+        selection: (p1, 3)
+    };
+    assert_state_eq!(editor.state(), &expected);
+}
+
+#[test]
 fn movement_after_replacement_uses_the_replaced_document_layout() {
     let (s, ..) = state! {
         doc { root { p1: paragraph { text("가가") } } }
