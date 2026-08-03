@@ -523,8 +523,8 @@ private fun EditorScreenForegroundLayout(
 
     layout(width = constraints.maxWidth, height = constraints.maxHeight) {
       overlayPlaceables.forEach { it.place(x = 0, y = 0) }
-      toolbarPlaceables.forEach { it.place(x = 0, y = constraints.maxHeight - it.height) }
       subPanePlaceables.forEach { it.place(x = 0, y = 0) }
+      toolbarPlaceables.forEach { it.place(x = 0, y = constraints.maxHeight - it.height) }
     }
   }
 }

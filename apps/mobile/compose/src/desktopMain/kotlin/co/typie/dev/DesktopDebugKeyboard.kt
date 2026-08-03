@@ -253,14 +253,14 @@ internal object DesktopDebugKeyboard {
             endPointerInteraction()
           }
         }
-        .background(DesktopDebugKeyboardBackground.copy(alpha = 0.98f))
+        .background(DesktopDebugKeyboardBackground.copy(alpha = 0.78f))
         .border(1.dp, AppTheme.colors.borderHairline.copy(alpha = 0.95f))
         .padding(horizontal = 10.dp, vertical = 10.dp)
     ) {
       Column(
         modifier =
           Modifier.fillMaxWidth()
-            .background(DesktopDebugKeyboardBody.copy(alpha = 0.92f), RoundedCornerShape(18.dp))
+            .background(DesktopDebugKeyboardBody.copy(alpha = 0.72f), RoundedCornerShape(18.dp))
             .padding(10.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
       ) {

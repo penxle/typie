@@ -66,7 +66,12 @@ internal class EditorSubPaneState {
   private var routeRemovalPreparation: (suspend () -> Boolean)? = null
 
   val editorInputBlocked: Boolean
-    get() = active != null && !dismissalInProgress
+    get() = active is EditorSubPane.TableAxisActions && !dismissalInProgress
+
+  val auxiliaryFocusOwnerActive: Boolean
+    get() =
+      !dismissalInProgress &&
+        (active == EditorSubPane.RelatedNotes || active == EditorSubPane.Comments)
 
   fun open(pane: EditorSubPane) {
     val previous = active
@@ -119,6 +124,12 @@ internal class EditorSubPaneState {
     val pane = active as? EditorSubPane.TableAxisActions ?: return
     if (pane.openedSelection != selection) {
       requestDismiss()
+    }
+  }
+
+  fun dismissTableAxisActions() {
+    if (active is EditorSubPane.TableAxisActions) {
+      dismiss()
     }
   }
 

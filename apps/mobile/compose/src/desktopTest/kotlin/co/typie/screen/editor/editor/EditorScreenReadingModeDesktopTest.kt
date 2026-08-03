@@ -4,7 +4,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.v2.runComposeUiTest
 import co.typie.screen.editor.editor.state.EditorInputEffect
+import co.typie.screen.editor.editor.subpane.EditorSubPane
+import co.typie.screen.editor.editor.subpane.EditorSubPaneState
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNotSame
@@ -13,6 +16,23 @@ import kotlin.test.assertTrue
 
 @OptIn(ExperimentalTestApi::class)
 class EditorScreenReadingModeDesktopTest {
+  @Test
+  fun openingAuxiliarySubPaneBlursEditorWithoutBlockingLaterInput() {
+    val subPaneState = EditorSubPaneState()
+    var blurCount = 0
+
+    openEditorAuxiliarySubPane(
+      state = subPaneState,
+      pane = EditorSubPane.Comments,
+      blurEditor = { blurCount += 1 },
+    )
+
+    assertEquals(1, blurCount)
+    assertEquals(EditorSubPane.Comments, subPaneState.active)
+    assertFalse(subPaneState.editorInputBlocked)
+    assertTrue(subPaneState.auxiliaryFocusOwnerActive)
+  }
+
   @Test
   fun newEntityStartsInReadingModeAfterThePreviousEntityWasEditing() = runComposeUiTest {
     val entityId = mutableStateOf("A")

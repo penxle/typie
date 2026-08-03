@@ -95,6 +95,53 @@ class EditorSubPaneStateTest {
   }
 
   @Test
+  fun `related notes keeps editor input available while owning focus return`() {
+    val state = EditorSubPaneState()
+
+    state.open(EditorSubPane.RelatedNotes)
+
+    assertFalse(state.editorInputBlocked)
+    assertTrue(state.auxiliaryFocusOwnerActive)
+  }
+
+  @Test
+  fun `comments keeps editor input available while owning focus return`() {
+    val state = EditorSubPaneState()
+
+    state.open(EditorSubPane.Comments)
+
+    assertFalse(state.editorInputBlocked)
+    assertTrue(state.auxiliaryFocusOwnerActive)
+  }
+
+  @Test
+  fun `beginning auxiliary pane dismissal releases focus return ownership`() {
+    val state = EditorSubPaneState()
+    state.open(EditorSubPane.RelatedNotes)
+
+    state.beginDismiss()
+
+    assertFalse(state.auxiliaryFocusOwnerActive)
+  }
+
+  @Test
+  fun `direct editing loss dismisses only table axis actions`() {
+    val state = EditorSubPaneState()
+
+    state.open(EditorSubPane.RelatedNotes)
+    state.dismissTableAxisActions()
+    assertEquals(EditorSubPane.RelatedNotes, state.active)
+
+    state.open(EditorSubPane.Comments)
+    state.dismissTableAxisActions()
+    assertEquals(EditorSubPane.Comments, state.active)
+
+    state.open(tableAxisPane(tableId = "table"))
+    state.dismissTableAxisActions()
+    assertNull(state.active)
+  }
+
+  @Test
   fun `table axis actions remain valid while selection stays at opening selection`() {
     val openingSelection = selection(offset = 1)
     val pane =

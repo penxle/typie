@@ -27,6 +27,8 @@ internal fun EditorSubPaneHost(
   maxTopInset: Dp,
   safeBottomInset: Dp,
   trustedImeBottomInset: Dp,
+  editorFocused: Boolean,
+  foregroundOcclusion: EditorSubPaneForegroundOcclusion,
   modifier: Modifier = Modifier,
 ) {
   val editor = LocalEditorRuntime.current.editor
@@ -35,8 +37,8 @@ internal fun EditorSubPaneHost(
 
   LaunchedEffect(active, selection) { state.dismissTableAxisActionsIfSelectionChanged(selection) }
   LaunchedEffect(active, editorMutationEnabled) {
-    if (active is EditorSubPane.TableAxisActions && !editorMutationEnabled) {
-      state.dismiss()
+    if (!editorMutationEnabled) {
+      state.dismissTableAxisActions()
     }
   }
 
@@ -54,6 +56,8 @@ internal fun EditorSubPaneHost(
         maxTopInset = maxTopInset,
         safeBottomInset = safeBottomInset,
         trustedImeBottomInset = trustedImeBottomInset,
+        editorFocused = editorFocused,
+        foregroundOcclusion = foregroundOcclusion,
         onDismissStarted = state::beginDismiss,
         onDismiss = state::dismiss,
         onLayoutInfoChanged = state::updateLayoutInfo,
@@ -79,6 +83,8 @@ internal fun EditorSubPaneHost(
           maxTopInset = maxTopInset,
           safeBottomInset = safeBottomInset,
           trustedImeBottomInset = trustedImeBottomInset,
+          editorFocused = editorFocused,
+          foregroundOcclusion = foregroundOcclusion,
           onDismissStarted = state::beginDismiss,
           onDismiss = state::dismiss,
           onLayoutInfoChanged = state::updateLayoutInfo,

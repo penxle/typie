@@ -61,6 +61,8 @@ import co.typie.navigation.PlatformBackHandler
 import co.typie.route.Route
 import co.typie.screen.editor.editor.subpane.EditorResizableSheetSurface
 import co.typie.screen.editor.editor.subpane.EditorSubPane
+import co.typie.screen.editor.editor.subpane.EditorSubPaneBarHeight
+import co.typie.screen.editor.editor.subpane.EditorSubPaneForegroundOcclusion
 import co.typie.screen.editor.editor.subpane.EditorSubPaneLayoutInfo
 import co.typie.screen.editor.editor.subpane.resolveResizableSubPaneVisibleAreaMode
 import co.typie.ui.component.Text
@@ -93,6 +95,8 @@ internal fun RelatedNotesSheet(
   maxTopInset: Dp,
   safeBottomInset: Dp,
   trustedImeBottomInset: Dp,
+  editorFocused: Boolean,
+  foregroundOcclusion: EditorSubPaneForegroundOcclusion,
   onDismissStarted: () -> Unit,
   onDismiss: () -> Unit,
   onLayoutInfoChanged: (EditorSubPaneLayoutInfo) -> Unit,
@@ -100,7 +104,6 @@ internal fun RelatedNotesSheet(
   registerRouteRemovalPreparation: (suspend () -> Boolean) -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  val keyboardOcclusion = (trustedImeBottomInset - safeBottomInset).coerceAtLeast(0.dp)
   val model =
     viewModel(key = "$RelatedNotesSheetViewModelKeyPrefix:$siteId:$entityId") {
       RelatedNotesViewModel(entityId = entityId, siteId = siteId)
@@ -163,7 +166,10 @@ internal fun RelatedNotesSheet(
     minHeight = RelatedNotesMinHeight,
     dismissThreshold = RelatedNotesDismissThreshold,
     maxTopInset = maxTopInset,
-    keyboardOcclusion = keyboardOcclusion,
+    trustedImeBottomInset = trustedImeBottomInset,
+    safeBottomInset = safeBottomInset,
+    editorFocused = editorFocused,
+    foregroundOcclusion = foregroundOcclusion,
     minKeyboardVisibleHeight = RelatedNotesMinKeyboardVisibleHeight,
     onDismissStarted = onDismissStarted,
     onDismissed = onDismiss,
@@ -636,7 +642,9 @@ private fun RelatedNotesSheetBar(
   onCreate: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  Box(modifier = modifier.fillMaxWidth().height(44.dp).padding(horizontal = 0.dp)) {
+  Box(
+    modifier = modifier.fillMaxWidth().height(EditorSubPaneBarHeight).padding(horizontal = 0.dp)
+  ) {
     SheetBarButton(
       icon = Lucide.X,
       onClick = { onDismiss() },

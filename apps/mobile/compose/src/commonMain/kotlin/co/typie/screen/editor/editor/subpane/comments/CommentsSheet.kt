@@ -41,6 +41,8 @@ import co.typie.navigation.PlatformBackHandler
 import co.typie.result.Result
 import co.typie.screen.editor.editor.subpane.EditorResizableSheetSurface
 import co.typie.screen.editor.editor.subpane.EditorSubPane
+import co.typie.screen.editor.editor.subpane.EditorSubPaneBarHeight
+import co.typie.screen.editor.editor.subpane.EditorSubPaneForegroundOcclusion
 import co.typie.screen.editor.editor.subpane.EditorSubPaneLayoutInfo
 import co.typie.screen.editor.editor.subpane.resolveResizableSubPaneVisibleAreaMode
 import co.typie.ui.component.Text
@@ -82,13 +84,14 @@ internal fun CommentsSheet(
   maxTopInset: Dp,
   safeBottomInset: Dp,
   trustedImeBottomInset: Dp,
+  editorFocused: Boolean,
+  foregroundOcclusion: EditorSubPaneForegroundOcclusion,
   onDismissStarted: () -> Unit,
   onDismiss: () -> Unit,
   onLayoutInfoChanged: (EditorSubPaneLayoutInfo) -> Unit,
   onLayoutInfoCleared: (EditorSubPane) -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  val keyboardOcclusion = (trustedImeBottomInset - safeBottomInset).coerceAtLeast(0.dp)
   val state = model.threadState
   val dialog = LocalDialog.current
   val latestOnLayoutInfoCleared = rememberUpdatedState(onLayoutInfoCleared)
@@ -100,7 +103,10 @@ internal fun CommentsSheet(
     minHeight = CommentsMinHeight,
     dismissThreshold = CommentsDismissThreshold,
     maxTopInset = maxTopInset,
-    keyboardOcclusion = keyboardOcclusion,
+    trustedImeBottomInset = trustedImeBottomInset,
+    safeBottomInset = safeBottomInset,
+    editorFocused = editorFocused,
+    foregroundOcclusion = foregroundOcclusion,
     minKeyboardVisibleHeight = CommentsMinKeyboardVisibleHeight,
     canDismiss = { confirmDiscardCommentInput(state = state, dialog = dialog) },
     onDismissStarted = onDismissStarted,
@@ -536,7 +542,7 @@ private fun CommentsSheetBar(
   onCreate: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  Box(modifier = modifier.fillMaxWidth().height(44.dp)) {
+  Box(modifier = modifier.fillMaxWidth().height(EditorSubPaneBarHeight)) {
     SheetBarButton(
       icon = Lucide.X,
       onClick = onDismiss,

@@ -1116,6 +1116,74 @@ class EditorScreenLayoutDesktopTest {
   }
 
   @Test
+  fun toolbarReceivesPointerAboveOverlappingSubPane() = runComposeUiTest {
+    var toolbarTaps = 0
+    var subPaneTaps = 0
+
+    setContent {
+      val coroutineScope = rememberCoroutineScope()
+      val interactionScope = remember { EditorInteractionScope(coroutineScope = coroutineScope) }
+      val visibleArea = EditorVisibleArea(viewport = Size(width = 320f, height = 640f))
+      val scrollFrame =
+        EditorScrollFrame(
+          state = EditorState.Initial,
+          layoutSpec = EditorDocumentLayoutSpec.Continuous(maxWidth = 320f),
+          displayZoom = 1f,
+          visibleArea = visibleArea,
+          autoScrollPolicy = resolveEditorAutoScrollPolicy(visibleArea),
+          headerHeight = 0f,
+          density = 1f,
+          editorBounds = EditorBoundsInContainer(),
+        )
+
+      CompositionLocalProvider(
+        LocalEditorBringIntoViewRequests provides rememberEditorBringIntoViewRequests(),
+        LocalEditorInteractionScope provides interactionScope,
+        LocalEditorUiState provides remember { EditorUiState() },
+      ) {
+        EditorScreenLayout(
+          state = remember { EditorScreenState(EditorViewportState()) },
+          scrollFrame = scrollFrame,
+          visibleArea = visibleArea,
+          viewportScrollableState = rememberScrollable2DState { Offset.Zero },
+          viewportContentWidth = 320f,
+          viewportScrollReconcileMode = EditorViewportScrollReconcileMode.Disabled,
+          onMeasuredViewportSizeChange = {},
+          header = {},
+          body = { Box(Modifier.fillMaxWidth().height(800.dp)) },
+          toolbar = {
+            Box(
+              Modifier.fillMaxWidth().height(160.dp).testTag(ToolbarTag).pointerInput(Unit) {
+                detectTapGestures { toolbarTaps += 1 }
+              }
+            )
+          },
+          subPane = {
+            Box(
+              Modifier.align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .height(160.dp)
+                .testTag(SubPaneTag)
+                .pointerInput(Unit) { detectTapGestures { subPaneTaps += 1 } }
+            )
+          },
+          modifier = Modifier.size(width = 320.dp, height = 640.dp).testTag(LayoutTag),
+        )
+      }
+    }
+    waitForIdle()
+
+    onNodeWithTag(LayoutTag).performTouchInput {
+      down(Offset(x = center.x, y = 600f))
+      up()
+    }
+    waitForIdle()
+
+    assertEquals(1, toolbarTaps)
+    assertEquals(0, subPaneTaps)
+  }
+
+  @Test
   fun disabledEditorInteractionDoesNotPanFromTouchOrWheel() = runComposeUiTest {
     var consumed = Offset.Zero
 
@@ -1795,6 +1863,7 @@ class EditorScreenLayoutDesktopTest {
     const val HeaderTag = "editor-screen-layout-header"
     const val LayoutTag = "editor-screen-layout"
     const val SubPaneTag = "editor-screen-layout-subpane"
+    const val ToolbarTag = "editor-screen-layout-toolbar"
     const val ViewportOverlayTag = "editor-screen-layout-viewport-overlay-target"
     const val HeaderFixtureBodyHeight = 800f
     const val HeaderFixtureContentWidth = 640f

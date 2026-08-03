@@ -165,6 +165,7 @@ import co.typie.screen.editor.editor.subpane.EditorSubPane
 import co.typie.screen.editor.editor.subpane.EditorSubPaneHost
 import co.typie.screen.editor.editor.subpane.EditorSubPaneState
 import co.typie.screen.editor.editor.subpane.comments.rememberEditorCommentsSession
+import co.typie.screen.editor.editor.subpane.computeEditorSubPaneForegroundOcclusion
 import co.typie.screen.editor.editor.subpane.resolveSubPaneBottomOcclusion
 import co.typie.screen.editor.editor.template.EditorTemplateSheet
 import co.typie.screen.editor.editor.toolbar.EditorToolbarDebugOverlays
@@ -233,6 +234,16 @@ private class EditorReloadRequest(
   val completion = CompletableDeferred<Unit>()
   var policyJob: Job? = null
   var snapshotInFlight = snapshotInFlight
+}
+
+internal fun openEditorAuxiliarySubPane(
+  state: EditorSubPaneState,
+  pane: EditorSubPane,
+  blurEditor: () -> Unit,
+) {
+  require(pane == EditorSubPane.RelatedNotes || pane == EditorSubPane.Comments)
+  blurEditor()
+  state.open(pane)
 }
 
 @OptIn(ExperimentalComposeUiApi::class)
@@ -455,9 +466,7 @@ fun EditorScreen(entityId: String) {
   }
   val focusReturnOwnerActive =
     findReplace.active ||
-      (subPaneState.editorInputBlocked &&
-        (subPaneState.active == EditorSubPane.RelatedNotes ||
-          subPaneState.active == EditorSubPane.Comments)) ||
+      subPaneState.auxiliaryFocusOwnerActive ||
       dialog.acceptsInput ||
       sheet.acceptsInput ||
       popoverOverlayState.acceptsInput ||
@@ -537,7 +546,13 @@ fun EditorScreen(entityId: String) {
       sheetActive = subPaneState.active == EditorSubPane.Comments,
       bringIntoViewRequests = bringIntoViewRequests,
       hideContextMenu = { uiState.contextMenu.hide() },
-      openSheet = { subPaneState.open(EditorSubPane.Comments) },
+      openSheet = {
+        openEditorAuxiliarySubPane(
+          state = subPaneState,
+          pane = EditorSubPane.Comments,
+          blurEditor = runtime::blur,
+        )
+      },
       ensureMutationSubscription = ::ensureCommentMutationSubscription,
     )
   suspend fun enterReadingMode() {
@@ -571,11 +586,13 @@ fun EditorScreen(entityId: String) {
 
       if (!transitionCurrent()) return
 
-      subPaneState.dismiss()
       uiState.contextMenu.hide()
       popoverOverlayState.dismissFromOutsideGesture()
       interactionScope.controller.cancel()
-      runtime.blur()
+      subPaneState.dismissTableAxisActions()
+      if (uiState.focused) {
+        runtime.blur()
+      }
       readingModeCleanupRequest += 1
       editingState.completeReadingTransition(transition)
     } finally {
@@ -1169,7 +1186,11 @@ fun EditorScreen(entityId: String) {
           aiFeedback.close()
           spellcheck.close()
           uiState.contextMenu.hide()
-          subPaneState.open(EditorSubPane.RelatedNotes)
+          openEditorAuxiliarySubPane(
+            state = subPaneState,
+            pane = EditorSubPane.RelatedNotes,
+            blurEditor = runtime::blur,
+          )
         }
         EditorToolbarToolAction.Comment -> {
           findReplace.close()
@@ -1388,6 +1409,24 @@ fun EditorScreen(entityId: String) {
         toolbarRestoreInset?.let { maxOf(bottomSafeInset, it) }
           ?: maxOf(bottomSafeInset, toolbarEffectiveImeInset, toolbarRetainedKeyboardInset)
       }
+    val subPaneToolbarControlsOcclusion =
+      if (toolbarPresented || panelTransitionRunning) {
+        ToolbarHeight + ToolbarBottomPadding + textOptionsToolbarOcclusion.value
+      } else {
+        0.dp
+      }
+    val subPaneForegroundOcclusion =
+      computeEditorSubPaneForegroundOcclusion(
+        trustedImeBottomInset = trustedImeBottom,
+        toolbarControlsOcclusion = subPaneToolbarControlsOcclusion,
+        bottomPanelOrKeyboardOcclusion = bottomPanelOrKeyboardOcclusion,
+        lastBottomPanelOcclusion =
+          bottomSafeInset + ToolbarBottomPanelGap + toolbarInputState.lastBottomPanelHeight,
+        bottomPanelOpen = bottomPanelOpen,
+        panelTransitionRunning = panelTransitionRunning,
+        keyboardRestoreInset = toolbarRestoreInset,
+        softwareKeyboardVisible = imeVisible,
+      )
     val toolbarBottomOcclusionTarget = toolbarControlsOcclusion + bottomPanelOrKeyboardOcclusion
     val inputSpaceOwnsOcclusion = !bottomPanelOpen && (imeVisible || !panelTransitionRunning)
     val toolbarBottomOcclusion =
@@ -1985,6 +2024,8 @@ fun EditorScreen(entityId: String) {
             maxTopInset = topInset,
             safeBottomInset = bottomSafeInset,
             trustedImeBottomInset = trustedImeBottom,
+            editorFocused = uiState.focused,
+            foregroundOcclusion = subPaneForegroundOcclusion,
             modifier = Modifier.fillMaxSize(),
           )
         },

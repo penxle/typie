@@ -117,20 +117,21 @@ fun SheetLayout(
 }
 
 private val HandleTopPadding = 8.dp
-private val HandleHeight = 4.dp
+private val HandleIndicatorHeight = 4.dp
 private val HandleBottomPadding = 8.dp
 private val HandleWidth = 36.dp
+internal val SheetHandleContainerHeight =
+  HandleTopPadding + HandleIndicatorHeight + HandleBottomPadding
 
 @Composable
 private fun SheetHandle(modifier: Modifier) {
   Box(
-    modifier =
-      modifier.fillMaxWidth().height(HandleTopPadding + HandleHeight + HandleBottomPadding),
+    modifier = modifier.fillMaxWidth().height(SheetHandleContainerHeight),
     contentAlignment = Alignment.Center,
   ) {
     Box(
       modifier =
-        Modifier.size(width = HandleWidth, height = HandleHeight)
+        Modifier.size(width = HandleWidth, height = HandleIndicatorHeight)
           .clip(AppShapes.rounded(AppShapes.sm))
           .background(AppTheme.colors.borderHairline)
     )
