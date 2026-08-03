@@ -146,6 +146,60 @@ class EditorPreviewDesktopTest {
     }
   }
 
+  @Test
+  fun attachedDocumentPreviewDoesNotOwnOrRestyleItsEditor() = runComposeUiTest {
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+    val fake =
+      FakeFfiEditor(
+        rootAttrsProvider = { PlainRootNode(layoutMode = A4Layout) },
+        rootModifiersProvider = { listOf(EditorModifier.FontSize(1200)) },
+      )
+    val editor = Editor(fake, scope, Dispatchers.Unconfined)
+    val runtime = EditorRuntime(scope).apply { attach(editor) }
+    var shown by mutableStateOf(true)
+    var layout by mutableStateOf<LayoutMode>(A4Layout)
+    var modifiers by mutableStateOf(listOf<EditorModifier>(EditorModifier.FontSize(1200)))
+    fake.applySnapshot(editor)
+
+    try {
+      setContent {
+        if (shown) {
+          CompositionLocalProvider(
+            LocalDensity provides Density(1f),
+            LocalThemeMode provides ResolvedThemeMode.Light,
+          ) {
+            EditorPreview(
+              layoutMode = layout,
+              runtime = runtime,
+              modifier = Modifier.size(0.dp),
+              shape = RoundedCornerShape(0.dp),
+              source = EditorPreviewSource.AttachedEditor,
+              modifiers = modifiers,
+            )
+          }
+        }
+      }
+      waitForIdle()
+      fake.enqueued.clear()
+
+      runOnIdle {
+        layout = B6Layout
+        modifiers = listOf(EditorModifier.FontSize(1800))
+      }
+      waitForIdle()
+
+      assertTrue(fake.enqueued.none { it is Message.Node || it is Message.Modifier })
+
+      runOnIdle { shown = false }
+      waitForIdle()
+
+      runOnIdle { assertSame(editor, runtime.editor) }
+    } finally {
+      runtime.clear()
+      scope.cancel()
+    }
+  }
+
   private fun androidx.compose.ui.test.ComposeUiTest.setPreviewContent(
     runtime: EditorRuntime,
     graph: ByteArray? = null,
@@ -161,7 +215,7 @@ class EditorPreviewDesktopTest {
           runtime = runtime,
           modifier = Modifier.size(0.dp),
           shape = RoundedCornerShape(0.dp),
-          graph = graph,
+          source = graph?.let(EditorPreviewSource::Graph) ?: EditorPreviewSource.Generated,
         )
       }
     }

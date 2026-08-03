@@ -41,6 +41,7 @@ import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.SystemEvent
 import co.typie.editor.ffi.Viewport
 import co.typie.editor.preview.EditorPreview
+import co.typie.editor.preview.EditorPreviewSource
 import co.typie.editor.runProtectedDocumentReload
 import co.typie.editor.runtime.EditorRuntime
 import co.typie.editor.sync.ActiveDocumentEditingSessions
@@ -62,7 +63,6 @@ import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
 import co.typie.navigation.Nav
 import co.typie.navigation.RouteRemovalDecision
-import co.typie.platform.PlatformModule
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.route.Route
 import co.typie.screen.editor.editor.EditorRouteLeaveInterceptor
@@ -103,7 +103,6 @@ import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalAtomicApi::class)
 @Composable
@@ -138,7 +137,6 @@ fun DocumentBodySettingsScreen(entityId: String) {
     var loaderFailedCode by remember(document.id) { mutableStateOf<String?>(null) }
     var routeLeaveActive by remember(document.id) { mutableStateOf(false) }
     val channel = remember(document.id) { SyncWs.channel(document.id) }
-    val graph = load?.graph
 
     val colors = AppTheme.colors
     val layoutDirection = LocalLayoutDirection.current
@@ -146,10 +144,16 @@ fun DocumentBodySettingsScreen(entityId: String) {
     val previewHeight = 200.dp
     val previewContainerHeight = topBarClearance + previewHeight
     val previewShape = RoundedCornerShape(bottomStart = AppShapes.xl, bottomEnd = AppShapes.xl)
-    val graphKey = remember(graph) { graph?.let { it.size to it.contentHashCode() } }
     var initial by
-      remember(document.id, graphKey) { mutableStateOf<DocumentBodySettingsInitialState?>(null) }
-    val previewGraph = if (initial?.hasText == true) graph else null
+      remember(document.id, load) { mutableStateOf<DocumentBodySettingsInitialState?>(null) }
+    val previewUsesDocumentEditor = initial?.hasText == true
+    val activePreviewRuntime = if (previewUsesDocumentEditor) settingsRuntime else previewRuntime
+    val previewSource =
+      if (previewUsesDocumentEditor) {
+        EditorPreviewSource.AttachedEditor
+      } else {
+        EditorPreviewSource.Generated
+      }
     var bodyStyle by remember(document.id) { mutableStateOf<EditorStyleSettings?>(null) }
     val editorThemeVariant = currentEditorThemeVariant()
     var layout by remember(document.id) { mutableStateOf<LayoutMode?>(null) }
@@ -365,30 +369,6 @@ fun DocumentBodySettingsScreen(entityId: String) {
       }
     }
 
-    LaunchedEffect(graphKey) {
-      val currentGraph = graph ?: return@LaunchedEffect
-      val nextInitial =
-        withContext(Dispatchers.Default) {
-          DocumentBodySettingsInitialState(
-            hasText =
-              runCatching {
-                  PlatformModule.editorHost.extractTextFromGraph(currentGraph).isNotBlank()
-                }
-                .getOrDefault(true),
-            style =
-              runCatching { PlatformModule.editorHost.rootModifiersFromGraph(currentGraph) }
-                .getOrDefault(emptyList())
-                .toEditorStyleSettings(),
-            layout =
-              runCatching { PlatformModule.editorHost.rootAttrsFromGraph(currentGraph).layoutMode }
-                .getOrDefault(DefaultRootPaginatedLayout),
-          )
-        }
-      initial = nextInitial
-      if (bodyStyle == null) bodyStyle = nextInitial.style
-      if (layout == null) layout = nextInitial.layout
-    }
-
     LaunchedEffect(load, document.id, channel) {
       val readyLoad = load ?: return@LaunchedEffect
       if (!settingsRuntime.canCreateEditor) return@LaunchedEffect
@@ -419,6 +399,12 @@ fun DocumentBodySettingsScreen(entityId: String) {
           )
         readyEditor = createdEditor
         bootstrapFailure.load()?.let { throw it }
+        val nextInitial = createdEditor.readBodySettingsInitialState()
+        bootstrapFailure.load()?.let { throw it }
+        if (load !== readyLoad) return@LaunchedEffect
+        initial = nextInitial
+        if (bodyStyle == null) bodyStyle = nextInitial.style
+        if (layout == null) layout = nextInitial.layout
 
         lateinit var createdSession: DocumentEditingSession
         readyLoad.activate(
@@ -677,11 +663,11 @@ fun DocumentBodySettingsScreen(entityId: String) {
         if (initial != null) {
           EditorPreview(
             layoutMode = resolvedLayout,
-            runtime = previewRuntime,
+            runtime = activePreviewRuntime,
             modifier = Modifier.fillMaxWidth().height(previewContainerHeight).zIndex(1f),
             shape = previewShape,
             contentTopPadding = topBarClearance,
-            graph = previewGraph,
+            source = previewSource,
             modifiers = resolvedBodyStyle.toEditorModifiers(),
           )
         } else {
@@ -712,6 +698,15 @@ private data class DocumentBodySettingsInitialState(
   val style: EditorStyleSettings,
   val layout: LayoutMode,
 )
+
+private suspend fun Editor.readBodySettingsInitialState(): DocumentBodySettingsInitialState {
+  val state = appliedState
+  return DocumentBodySettingsInitialState(
+    hasText = proseText().isNotBlank(),
+    style = state.rootModifiers.orEmpty().toEditorStyleSettings(),
+    layout = state.rootAttrs?.layoutMode ?: DefaultRootPaginatedLayout,
+  )
+}
 
 internal class DocumentBodySettingsLoad(val graph: ByteArray, baseline: DocumentSyncBaseline) {
   private val pending = mutableListOf<AttachEvent.ChangesetsEvent>()

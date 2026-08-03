@@ -3,11 +3,14 @@ package co.typie.editor.sync.ws
 import co.typie.editor.ffi.Editor
 import co.typie.editor.ffi.GraphIngest
 import co.typie.editor.ffi.Viewport
+import kotlin.coroutines.CoroutineContext
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertSame
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.test.runTest
 
 private class FakeGraphIngest : GraphIngest {
   val appended = mutableListOf<ByteArray>()
@@ -44,9 +47,37 @@ private fun chunk(bytes: ByteArray = byteArrayOf(1)) =
 private fun end(seq: String = "0-1") =
   AttachEvent.SnapshotEndEvent(seq = seq, heads = ByteArray(0), durableHeads = ByteArray(0))
 
+private class RecordingDispatcher : CoroutineDispatcher() {
+  var dispatchCount = 0
+    private set
+
+  override fun dispatch(context: CoroutineContext, block: Runnable) {
+    dispatchCount += 1
+    block.run()
+  }
+}
+
 class DocumentGraphLoaderTest {
   @Test
-  fun restart_aborts_old_handle_and_begins_new_handle_exactly_once() {
+  fun snapshot_chunk_append_runs_on_ingest_dispatcher_before_transfer() = runTest {
+    val dispatcher = RecordingDispatcher()
+    val handles = mutableListOf<FakeGraphIngest>()
+    val loader =
+      DocumentGraphLoader(
+        beginIngest = { FakeGraphIngest().also(handles::add) },
+        ingestDispatcher = dispatcher,
+      )
+
+    assertNull(loader.handle(chunk(byteArrayOf(1, 2, 3))))
+    val loaded = assertIs<DocumentGraphLoaderEvent.Loaded>(loader.handle(end()))
+
+    assertEquals(1, dispatcher.dispatchCount)
+    assertEquals(byteArrayOf(1, 2, 3).toList(), handles.single().appended.single().toList())
+    assertSame(handles.single(), loaded.handle)
+  }
+
+  @Test
+  fun restart_aborts_old_handle_and_begins_new_handle_exactly_once() = runTest {
     val handles = mutableListOf<FakeGraphIngest>()
     val loader = DocumentGraphLoader { FakeGraphIngest().also(handles::add) }
 
@@ -67,30 +98,31 @@ class DocumentGraphLoaderTest {
   }
 
   @Test
-  fun reload_after_transferred_does_not_abort_handle_and_begins_new_ingest_on_next_chunk() {
-    val handles = mutableListOf<FakeGraphIngest>()
-    val loader = DocumentGraphLoader { FakeGraphIngest().also(handles::add) }
+  fun reload_after_transferred_does_not_abort_handle_and_begins_new_ingest_on_next_chunk() =
+    runTest {
+      val handles = mutableListOf<FakeGraphIngest>()
+      val loader = DocumentGraphLoader { FakeGraphIngest().also(handles::add) }
 
-    assertNull(loader.handle(chunk()))
-    val firstLoaded = loader.handle(end())
-    assertIs<DocumentGraphLoaderEvent.Loaded>(firstLoaded)
-    val firstHandle = handles.single()
+      assertNull(loader.handle(chunk()))
+      val firstLoaded = loader.handle(end())
+      assertIs<DocumentGraphLoaderEvent.Loaded>(firstLoaded)
+      val firstHandle = handles.single()
 
-    assertNull(loader.handle(AttachEvent.ReloadEvent))
-    assertEquals(0, firstHandle.abortCount)
+      assertNull(loader.handle(AttachEvent.ReloadEvent))
+      assertEquals(0, firstHandle.abortCount)
 
-    assertNull(loader.handle(chunk()))
-    assertEquals(2, handles.size)
-    assertEquals(0, firstHandle.abortCount)
+      assertNull(loader.handle(chunk()))
+      assertEquals(2, handles.size)
+      assertEquals(0, firstHandle.abortCount)
 
-    val secondLoaded = loader.handle(end())
-    assertIs<DocumentGraphLoaderEvent.Loaded>(secondLoaded)
-    assertSame(handles[1], secondLoaded.handle)
-    assertEquals(0, firstHandle.abortCount)
-  }
+      val secondLoaded = loader.handle(end())
+      assertIs<DocumentGraphLoaderEvent.Loaded>(secondLoaded)
+      assertSame(handles[1], secondLoaded.handle)
+      assertEquals(0, firstHandle.abortCount)
+    }
 
   @Test
-  fun duplicate_snapshot_end_after_transfer_is_ignored() {
+  fun duplicate_snapshot_end_after_transfer_is_ignored() = runTest {
     val handles = mutableListOf<FakeGraphIngest>()
     val loader = DocumentGraphLoader { FakeGraphIngest().also(handles::add) }
 
@@ -105,7 +137,7 @@ class DocumentGraphLoaderTest {
   }
 
   @Test
-  fun handle_is_delivered_exactly_once_ready_to_finish_after_end() {
+  fun handle_is_delivered_exactly_once_ready_to_finish_after_end() = runTest {
     val handles = mutableListOf<FakeGraphIngest>()
     val loader = DocumentGraphLoader { FakeGraphIngest().also(handles::add) }
 
@@ -126,7 +158,7 @@ class DocumentGraphLoaderTest {
   }
 
   @Test
-  fun restart_after_transferred_is_ignored() {
+  fun restart_after_transferred_is_ignored() = runTest {
     val handles = mutableListOf<FakeGraphIngest>()
     val loader = DocumentGraphLoader { FakeGraphIngest().also(handles::add) }
 
@@ -146,7 +178,7 @@ class DocumentGraphLoaderTest {
   }
 
   @Test
-  fun permanent_error_while_receiving_aborts_handle_once_and_emits_failed() {
+  fun permanent_error_while_receiving_aborts_handle_once_and_emits_failed() = runTest {
     val handles = mutableListOf<FakeGraphIngest>()
     val loader = DocumentGraphLoader { FakeGraphIngest().also(handles::add) }
 
@@ -160,7 +192,7 @@ class DocumentGraphLoaderTest {
   }
 
   @Test
-  fun cancel_while_receiving_aborts_handle_once() {
+  fun cancel_while_receiving_aborts_handle_once() = runTest {
     val handles = mutableListOf<FakeGraphIngest>()
     val loader = DocumentGraphLoader { FakeGraphIngest().also(handles::add) }
 
@@ -173,7 +205,7 @@ class DocumentGraphLoaderTest {
   }
 
   @Test
-  fun cancel_after_transferred_does_not_abort_handle() {
+  fun cancel_after_transferred_does_not_abort_handle() = runTest {
     val handles = mutableListOf<FakeGraphIngest>()
     val loader = DocumentGraphLoader { FakeGraphIngest().also(handles::add) }
 

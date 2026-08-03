@@ -68,6 +68,14 @@ import dev.chrisbanes.haze.hazeSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
 
+internal sealed interface EditorPreviewSource {
+  data object Generated : EditorPreviewSource
+
+  data class Graph(val bytes: ByteArray) : EditorPreviewSource
+
+  data object AttachedEditor : EditorPreviewSource
+}
+
 @Composable
 internal fun EditorPreview(
   layoutMode: LayoutMode,
@@ -75,14 +83,20 @@ internal fun EditorPreview(
   modifier: Modifier = Modifier,
   shape: RoundedCornerShape,
   contentTopPadding: Dp = 0.dp,
-  graph: ByteArray? = null,
+  source: EditorPreviewSource = EditorPreviewSource.Generated,
   modifiers: List<EditorModifier> = emptyList(),
   hintText: String = "미리보기 텍스트",
 ) {
   val colors = AppTheme.colors
   val scope = rememberCoroutineScope()
   val sourceKey =
-    remember(graph) { graph?.let { it.size to it.contentHashCode() } ?: GeneratedPreviewSourceKey }
+    remember(source) {
+      when (source) {
+        is EditorPreviewSource.Graph -> source.bytes.size to source.bytes.contentHashCode()
+        EditorPreviewSource.AttachedEditor,
+        EditorPreviewSource.Generated -> source
+      }
+    }
   val doc =
     remember(runtime, sourceKey) {
       defaultPreviewDoc(layoutMode).withPreviewRootModifiers(modifiers)
@@ -105,8 +119,11 @@ internal fun EditorPreview(
   val hintHazeState = remember { HazeState() }
   val hintEvents = remember { MutableSharedFlow<Unit>(extraBufferCapacity = 1) }
 
-  DisposableEffect(runtime, sourceKey) { onDispose { runtime.clear() } }
-  LaunchedEffect(runtime.editor, layoutMode, modifiers) {
+  DisposableEffect(runtime, sourceKey) {
+    onDispose { if (source !== EditorPreviewSource.AttachedEditor) runtime.clear() }
+  }
+  LaunchedEffect(runtime.editor, sourceKey, layoutMode, modifiers) {
+    if (source === EditorPreviewSource.AttachedEditor) return@LaunchedEffect
     val editor = runtime.editor ?: return@LaunchedEffect
     val currentModifiers = editor.appliedState.rootModifiers.orEmpty().toPreviewRootModifierMap()
     val changedModifiers = modifiers.filter { modifier ->
@@ -166,7 +183,7 @@ internal fun EditorPreview(
             LocalEditorBringIntoViewRequests provides bringIntoViewRequests,
           ) {
             EditorPreviewContent(
-              graph = graph,
+              source = source,
               doc = doc,
               sourceKey = sourceKey,
               editorScope = scope,
@@ -199,7 +216,7 @@ internal fun EditorPreview(
 
 @Composable
 private fun EditorPreviewContent(
-  graph: ByteArray?,
+  source: EditorPreviewSource,
   doc: PlainDoc,
   sourceKey: Any,
   editorScope: CoroutineScope,
@@ -230,7 +247,15 @@ private fun EditorPreviewContent(
     }
   }
 
-  LaunchedEffect(runtime, sourceKey, viewportWidth, viewportHeight, density.density, themeVariant) {
+  LaunchedEffect(
+    runtime,
+    editor,
+    sourceKey,
+    viewportWidth,
+    viewportHeight,
+    density.density,
+    themeVariant,
+  ) {
     val viewport =
       Viewport(
         width = viewportWidth,
@@ -240,22 +265,24 @@ private fun EditorPreviewContent(
     val activeEditor = runtime.editor
     if (activeEditor == null) {
       val nextEditor =
-        if (graph != null) {
-          Editor.create(
-            graph = graph,
-            viewport = viewport,
-            themeVariant = themeVariant,
-            scope = editorScope,
-            onError = { activeEditor, error -> runtime.reportError(activeEditor, error) },
-          )
-        } else {
-          Editor.createFromDoc(
-            doc = doc,
-            viewport = viewport,
-            themeVariant = themeVariant,
-            scope = editorScope,
-            onError = { activeEditor, error -> runtime.reportError(activeEditor, error) },
-          )
+        when (source) {
+          is EditorPreviewSource.Graph ->
+            Editor.create(
+              graph = source.bytes,
+              viewport = viewport,
+              themeVariant = themeVariant,
+              scope = editorScope,
+              onError = { activeEditor, error -> runtime.reportError(activeEditor, error) },
+            )
+          EditorPreviewSource.Generated ->
+            Editor.createFromDoc(
+              doc = doc,
+              viewport = viewport,
+              themeVariant = themeVariant,
+              scope = editorScope,
+              onError = { activeEditor, error -> runtime.reportError(activeEditor, error) },
+            )
+          EditorPreviewSource.AttachedEditor -> return@LaunchedEffect
         }
       runtime.attach(nextEditor)
     } else {
@@ -407,8 +434,6 @@ private fun EditorModifier.previewRootModifierType(): ModifierType? =
     is EditorModifier.BlockGap -> ModifierType.BlockGap
     else -> null
   }
-
-private data object GeneratedPreviewSourceKey
 
 private val DefaultPreviewRootModifiers =
   mapOf(

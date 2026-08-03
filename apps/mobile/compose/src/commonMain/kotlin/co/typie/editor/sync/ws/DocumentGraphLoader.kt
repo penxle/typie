@@ -1,6 +1,9 @@
 package co.typie.editor.sync.ws
 
 import co.typie.editor.ffi.GraphIngest
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 data class DocumentSyncBaseline(val seq: String, val heads: ByteArray, val durableHeads: ByteArray)
 
@@ -11,7 +14,10 @@ sealed interface DocumentGraphLoaderEvent {
   data class Failed(val code: String) : DocumentGraphLoaderEvent
 }
 
-class DocumentGraphLoader(private val beginIngest: () -> GraphIngest) {
+class DocumentGraphLoader(
+  private val ingestDispatcher: CoroutineDispatcher = Dispatchers.Default,
+  private val beginIngest: () -> GraphIngest,
+) {
   private sealed interface State {
     data object Idle : State
 
@@ -24,7 +30,7 @@ class DocumentGraphLoader(private val beginIngest: () -> GraphIngest) {
 
   private var state: State = State.Idle
 
-  fun handle(event: AttachEvent): DocumentGraphLoaderEvent? =
+  suspend fun handle(event: AttachEvent): DocumentGraphLoaderEvent? =
     when (event) {
       is AttachEvent.SnapshotChunkEvent -> onChunk(event.bytes)
       AttachEvent.SnapshotRestart -> onRestart()
@@ -38,7 +44,7 @@ class DocumentGraphLoader(private val beginIngest: () -> GraphIngest) {
     onReload()
   }
 
-  private fun onChunk(bytes: ByteArray): DocumentGraphLoaderEvent? {
+  private suspend fun onChunk(bytes: ByteArray): DocumentGraphLoaderEvent? {
     val receiving = state as? State.Receiving
     val handle: GraphIngest
     if (receiving != null) {
@@ -46,8 +52,8 @@ class DocumentGraphLoader(private val beginIngest: () -> GraphIngest) {
     } else {
       handle = beginIngest()
     }
-    handle.appendChunk(bytes)
     state = State.Receiving(handle)
+    withContext(ingestDispatcher) { handle.appendChunk(bytes) }
     return null
   }
 
