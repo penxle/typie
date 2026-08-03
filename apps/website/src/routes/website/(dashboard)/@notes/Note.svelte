@@ -202,7 +202,7 @@
       <!-- Color Checkbox -->
       <button
         style:background-color={isResolved ? colorHex : 'transparent'}
-        style:border={isResolved ? 'none' : `1.5px solid ${colorHex}`}
+        style:border={isResolved ? 'none' : `2px solid ${colorHex}`}
         style:transition={resolving || cancelling ? 'none' : undefined}
         class={center({
           width: '16px',

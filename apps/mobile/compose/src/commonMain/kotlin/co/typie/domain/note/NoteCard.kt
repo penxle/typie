@@ -581,7 +581,7 @@ private fun NoteStatusToggleButton(
             .clip(AppShapes.circle)
             .background(if (resolved) colorOption.stroke else Color.Transparent, AppShapes.circle)
             .border(
-              width = if (resolved) 0.dp else 2.dp,
+              width = if (resolved) 0.dp else 2.5.dp,
               color = colorOption.stroke,
               shape = AppShapes.circle,
             ),
