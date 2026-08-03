@@ -38,9 +38,9 @@ type SuccessionBinding = { id: string; userId: string; identifier: string };
 
 const logNotification = async (payload: Record<string, unknown>) => {
   await slack.sendMessage({
-    channel: 'iap',
-    username: '인앱결제 알림',
-    iconEmoji: ':credit_card:',
+    channel: '#alert',
+    username: '운영 알림',
+    iconEmoji: ':rotating_light:',
     message: `\`\`\`\n${JSON.stringify(payload, null, 2)}\n\`\`\``,
   });
 };

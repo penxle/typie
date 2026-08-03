@@ -28,7 +28,9 @@ export const opsAlert = async (id: OpsAlertId, context: Record<string, unknown>)
   Sentry.captureMessage(`ops:${id}`, { level: 'error', extra: context });
 
   await slack.sendMessage({
-    channel: 'iap',
+    channel: '#alert',
+    username: '운영 알림',
+    iconEmoji: ':rotating_light:',
     message: `\`\`\`\n${JSON.stringify({ id, ...context }, null, 2)}\n\`\`\``,
   });
 };
