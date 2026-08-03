@@ -1,9 +1,12 @@
 package co.typie.domain.note
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -13,8 +16,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.v2.runComposeUiTest
@@ -23,6 +28,8 @@ import co.typie.datetime.timeAgo
 import co.typie.graphql.QueryState
 import co.typie.graphql.type.NoteStatus
 import co.typie.result.Result
+import co.typie.ui.component.popover.LocalPopoverOverlayState
+import co.typie.ui.component.popover.PopoverOverlayState
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.Toast
 import co.typie.ui.theme.LightAppShadows
@@ -111,6 +118,83 @@ class NoteListDesktopTest {
   }
 
   @Test
+  fun deletionCollapseMatchesOrdinaryCollapseBeforeExitStarts() = runComposeUiTest {
+    val note = notesNote(id = "note", content = "첫째 줄\n둘째 줄\n셋째 줄\n넷째 줄\n다섯째 줄")
+    var deletionExiting by mutableStateOf(false)
+    lateinit var ordinaryEditState: NoteEditState
+    lateinit var deletionEditState: NoteEditState
+
+    setContent {
+      val popoverOverlayState = remember { PopoverOverlayState() }
+      CompositionLocalProvider(
+        LocalAppColors provides LightColors,
+        LocalAppShadows provides LightAppShadows,
+        LocalThemeMode provides ResolvedThemeMode.Light,
+        LocalHazeBlurStyle provides
+          HazeBlurStyle(blurRadius = 20.dp, noiseFactor = 0f, colorEffects = listOf()),
+        LocalToast provides Toast(),
+        LocalPopoverOverlayState provides popoverOverlayState,
+      ) {
+        Row {
+          NoteListExitComparisonPane(
+            tag = "ordinary-collapse",
+            note = note,
+            exiting = false,
+            onEditState = { ordinaryEditState = it },
+          )
+          NoteListExitComparisonPane(
+            tag = "deletion-collapse",
+            note = note,
+            exiting = deletionExiting,
+            onEditState = { deletionEditState = it },
+          )
+        }
+      }
+    }
+    waitForIdle()
+
+    runOnUiThread {
+      ordinaryEditState.open(note)
+      deletionEditState.open(note)
+    }
+    waitForIdle()
+    mainClock.autoAdvance = false
+    runOnUiThread {
+      ordinaryEditState.remove(siteId = "site", noteId = note.id)
+      deletionEditState.remove(siteId = "site", noteId = note.id)
+      deletionExiting = true
+    }
+    waitForIdle()
+    mainClock.advanceTimeByFrame()
+    mainClock.advanceTimeBy(110)
+
+    val ordinary = onNodeWithTag("ordinary-collapse").captureToImage().toPixelMap()
+    val deletion = onNodeWithTag("deletion-collapse").captureToImage().toPixelMap()
+    assertTrue(
+      ordinary.width == deletion.width && ordinary.height == deletion.height,
+      "Collapse captures have different sizes: " +
+        "${ordinary.width}x${ordinary.height} vs ${deletion.width}x${deletion.height}",
+    )
+    var differingPixels = 0
+    for (y in 0 until ordinary.height) {
+      for (x in 0 until ordinary.width) {
+        val expected = ordinary[x, y]
+        val actual = deletion[x, y]
+        val difference =
+          kotlin.math.abs(expected.red - actual.red) +
+            kotlin.math.abs(expected.green - actual.green) +
+            kotlin.math.abs(expected.blue - actual.blue) +
+            kotlin.math.abs(expected.alpha - actual.alpha)
+        if (difference > 0.02f) differingPixels += 1
+      }
+    }
+    assertTrue(
+      differingPixels == 0,
+      "Deletion collapse differs from ordinary collapse before exit: " + "$differingPixels pixels",
+    )
+  }
+
+  @Test
   fun exitingItemAndSiblingPlacementAnimationDoNotProduceANegativeSize() = runComposeUiTest {
     val note = notesNote(id = "exiting", content = "content")
     val sibling = notesNote(id = "sibling", content = "sibling", order = "200")
@@ -191,5 +275,62 @@ class NoteListDesktopTest {
       largestDownwardStep < 2f,
       "Sibling moved down by $largestDownwardStep px after the exiting item was removed",
     )
+  }
+
+  @Composable
+  private fun NoteListExitComparisonPane(
+    tag: String,
+    note: co.typie.graphql.fragment.NoteCard_note,
+    exiting: Boolean,
+    onEditState: (NoteEditState) -> Unit,
+  ) {
+    val item =
+      NoteListItem(
+        note = note,
+        isDeleting = false,
+        isChangingStatus = false,
+        isEntering = false,
+        isExiting = exiting,
+        isExitVisible = exiting,
+      )
+    val items = listOf(item)
+    val scope = rememberCoroutineScope()
+    val editState = remember(scope) { NoteEditState(scope) }
+    val lazyListState = rememberLazyListState()
+    val reorderState = rememberNoteListReorderState(items = items, scrollState = lazyListState)
+    SideEffect { onEditState(editState) }
+
+    Box(Modifier.size(width = 400.dp, height = 300.dp)) {
+      NoteList(
+        identity = NoteListIdentity(siteId = "site", status = NoteStatus.OPEN),
+        emptyMessage = "",
+        queryState = QueryState.Success(Unit),
+        items = items,
+        authoritativeNotes = listOf(note),
+        editState = editState,
+        onEnterAnimationFinished = {},
+        onExitAnimationFinished = {},
+        reorderState = reorderState,
+        noteColorOptions =
+          listOf(NoteColorOption(value = "gray", label = "그레이", stroke = Color.Gray)),
+        interactive = true,
+        onRetry = {},
+        actions =
+          NoteListActions(
+            onExpand = {},
+            onCollapse = {},
+            onCreateNote = {},
+            onContentChange = { _, _ -> },
+            onBlur = {},
+            onToggleStatus = {},
+            onColorChange = { _, _ -> },
+            onAddEntity = {},
+            onEntityClick = { _, _ -> },
+            onDelete = {},
+            onMoveNote = { _, _, _ -> Result.Ok("") },
+          ),
+        modifier = Modifier.background(Color.Magenta).testTag(tag),
+      )
+    }
   }
 }

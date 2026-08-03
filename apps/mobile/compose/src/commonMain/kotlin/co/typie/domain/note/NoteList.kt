@@ -52,6 +52,7 @@ import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import io.sentry.kotlin.multiplatform.Sentry
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 
 internal const val NoteEnterDurationMillis = 220
@@ -208,15 +209,23 @@ internal fun NoteList(
 
               val visibilityState =
                 remember(item.note.id) { MutableTransitionState(initialState = !noteIsEntering) }
-              visibilityState.targetState = !noteIsExiting
+
+              LaunchedEffect(item.note.id, noteIsExiting) {
+                if (noteIsExiting) {
+                  delay(NoteExitDelayMillis.toLong())
+                  visibilityState.targetState = false
+                } else {
+                  visibilityState.targetState = true
+                }
+              }
 
               LaunchedEffect(item.note.id, noteIsEntering) {
                 if (!noteIsEntering) return@LaunchedEffect
                 snapshotFlow {
-                  visibilityState.isIdle &&
-                    visibilityState.currentState &&
-                    visibilityState.targetState
-                }
+                    visibilityState.isIdle &&
+                      visibilityState.currentState &&
+                      visibilityState.targetState
+                  }
                   .first { it }
                 onEnterAnimationFinished(item.note.id)
               }
@@ -224,10 +233,10 @@ internal fun NoteList(
               LaunchedEffect(item.note.id, noteIsExitVisible) {
                 if (!noteIsExitVisible) return@LaunchedEffect
                 snapshotFlow {
-                  visibilityState.isIdle &&
-                    !visibilityState.currentState &&
-                    !visibilityState.targetState
-                }
+                    visibilityState.isIdle &&
+                      !visibilityState.currentState &&
+                      !visibilityState.targetState
+                  }
                   .first { it }
                 onExitAnimationFinished(item.note.id)
               }
@@ -256,27 +265,13 @@ internal fun NoteList(
                       expandFrom = Alignment.Top,
                     ),
                 exit =
-                  fadeOut(
-                    animationSpec =
-                      tween(
-                        durationMillis = NoteExitDurationMillis,
-                        delayMillis = NoteExitDelayMillis,
-                      )
-                  ) +
+                  fadeOut(animationSpec = tween(durationMillis = NoteExitDurationMillis)) +
                     slideOutVertically(
-                      animationSpec =
-                        tween(
-                          durationMillis = NoteExitDurationMillis,
-                          delayMillis = NoteExitDelayMillis,
-                        ),
+                      animationSpec = tween(durationMillis = NoteExitDurationMillis),
                       targetOffsetY = { -it / 6 },
                     ) +
                     shrinkVertically(
-                      animationSpec =
-                        tween(
-                          durationMillis = NoteExitDurationMillis,
-                          delayMillis = NoteExitDelayMillis,
-                        ),
+                      animationSpec = tween(durationMillis = NoteExitDurationMillis),
                       shrinkTowards = Alignment.Top,
                     ),
               ) {
