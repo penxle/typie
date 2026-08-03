@@ -81,7 +81,7 @@ afterEach(async () => {
 });
 
 describe('global notes overlay', () => {
-  it('closes when the notes-list wrapper fills the scrolled viewport', async () => {
+  it('keeps the empty scrim on the native scroll surface after scrolling', async () => {
     const target = document.createElement('div');
     document.body.append(target);
     component = mount(Notes, { target, intro: false });
@@ -91,23 +91,24 @@ describe('global notes overlay', () => {
 
     const scrollSurface = document.querySelector<HTMLElement>('[role="presentation"]');
     const noteList = document.querySelector<HTMLElement>('[data-note-list]');
-    const notesArea = noteList?.parentElement;
+    const notesContent = noteList?.parentElement;
     expect(scrollSurface).not.toBeNull();
-    expect(notesArea).toBeInstanceOf(HTMLElement);
-    if (!scrollSurface || !notesArea) throw new Error('Expected the notes overlay scroll surface and list area');
-    expect(notesArea.contains(noteList)).toBe(true);
+    expect(notesContent).toBeInstanceOf(HTMLElement);
+    if (!scrollSurface || !notesContent) return;
+    expect(notesContent.contains(noteList)).toBe(true);
     expect(scrollSurface.scrollHeight).toBeGreaterThan(scrollSurface.clientHeight);
+
+    const contentRect = notesContent.getBoundingClientRect();
+    expect(document.elementFromPoint(Math.max(1, contentRect.left - 8), contentRect.top + 8)).toBe(scrollSurface);
 
     scrollSurface.scrollTop = scrollSurface.scrollHeight;
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
     const scrollRect = scrollSurface.getBoundingClientRect();
-    const notesRect = notesArea.getBoundingClientRect();
-    const clientX = notesRect.left + notesRect.width / 2;
-    const clientY = Math.min(notesRect.bottom, scrollRect.bottom) - 8;
+    const clientX = scrollRect.left + scrollRect.width / 2;
+    const clientY = scrollRect.bottom - 8;
     const hit = document.elementFromPoint(clientX, clientY);
-    expect(hit).not.toBeNull();
-    expect(hit === scrollSurface || hit?.closest('[data-notes-backdrop]') !== null).toBe(true);
+    expect(hit).toBe(scrollSurface);
     expect(app.state.notesOpen).toBe(true);
     hit?.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX, clientY }));
 

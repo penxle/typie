@@ -429,7 +429,6 @@
       paddingTop: '[15dvh]',
       paddingX: '20px',
       flexDirection: 'column',
-      gap: '20px',
       width: 'full',
       height: 'full',
       overflowY: 'auto',
@@ -442,14 +441,12 @@
         handleCollapse();
         return;
       }
-      if (target === e.currentTarget || target.closest('[data-notes-backdrop]')) {
+      if (target === e.currentTarget) {
         close();
       }
     }}
     role="presentation"
   >
-    <div class={css({ position: 'fixed', inset: '0' })} data-notes-backdrop role="none"></div>
-
     <!-- Input Area -->
     <div
       bind:this={composer}
@@ -521,9 +518,10 @@
     <!-- Notes List -->
     <div
       class={css({
-        paddingBottom: '50px',
+        marginTop: '20px',
+        marginBottom: '50px',
         maxWidth: '480px',
-        flexGrow: '1',
+        flexShrink: '0',
         width: 'full',
       })}
     >
