@@ -55,10 +55,12 @@ const header: Handle = async ({ event, resolve }) => {
 };
 
 const errorHandler: HandleServerError = ({ error, status, message }) => {
-  if (isAggregatedError(error)) {
-    log.error('Server error {*}', { status, message, errors: error.errors });
+  const properties = isAggregatedError(error) ? { status, message, errors: error.errors } : { status, message, error };
+
+  if (status >= 400 && status < 500) {
+    log.warn('Server error {*}', properties);
   } else {
-    log.error('Server error {*}', { status, message, error });
+    log.error('Server error {*}', properties);
   }
 };
 
