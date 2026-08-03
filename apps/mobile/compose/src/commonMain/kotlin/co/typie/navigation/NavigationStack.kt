@@ -816,66 +816,85 @@ fun NavigationStack(
             bottomBarState
           }
 
-        val p = progress.value
+        val presentationAnimState = animState
+        val presentationPopRequested = navigator.popRequested
         val mainPresentation =
           when {
-            animState == AnimState.Idle -> NavigationRoutePresentation()
+            presentationAnimState == AnimState.Idle -> NavigationRoutePresentation()
             useFadeTransition ->
               NavigationRoutePresentation(
-                alpha =
-                  when (animState) {
+                alpha = {
+                  val p = progress.value
+                  when (presentationAnimState) {
                     AnimState.Push -> p
                     AnimState.Pop -> 1f - p
                     AnimState.PopGestureCommitted -> 1f
-                    AnimState.Dragging -> if (navigator.popRequested) 1f - p else 1f
+                    AnimState.Dragging -> if (presentationPopRequested) 1f - p else 1f
                     AnimState.Idle -> 1f
                   }
+                }
               )
             useVerticalTransition ->
               NavigationRoutePresentation(
-                translationY =
-                  when (animState) {
+                translationY = {
+                  val p = progress.value
+                  when (presentationAnimState) {
                     AnimState.Push -> containerHeight * (1f - p)
                     AnimState.Pop,
                     AnimState.PopGestureCommitted,
                     AnimState.Dragging -> containerHeight * p
                     AnimState.Idle -> 0f
-                  },
-                clipShape =
-                  AppShapes.rounded(cornerRadius(if (animState == AnimState.Push) p else 1f - p)),
+                  }
+                },
+                clipShape = {
+                  val p = progress.value
+                  AppShapes.rounded(
+                    cornerRadius(if (presentationAnimState == AnimState.Push) p else 1f - p)
+                  )
+                },
               )
             else ->
               NavigationRoutePresentation(
-                translationX =
-                  when (animState) {
+                translationX = {
+                  val p = progress.value
+                  when (presentationAnimState) {
                     AnimState.Push -> containerWidth * (1f - p)
                     else -> containerWidth * p
-                  },
-                clipShape =
-                  AppShapes.rounded(cornerRadius(if (animState == AnimState.Push) p else 1f - p)),
+                  }
+                },
+                clipShape = {
+                  val p = progress.value
+                  AppShapes.rounded(
+                    cornerRadius(if (presentationAnimState == AnimState.Push) p else 1f - p)
+                  )
+                },
               )
           }
         val behindPresentation =
           when {
             useFadeTransition ->
               NavigationRoutePresentation(
-                alpha =
-                  when (animState) {
+                alpha = {
+                  val p = progress.value
+                  when (presentationAnimState) {
                     AnimState.Push -> 1f - p
                     AnimState.Pop -> p
                     AnimState.PopGestureCommitted -> 0f
-                    AnimState.Dragging -> if (navigator.popRequested) p else 0f
+                    AnimState.Dragging -> if (presentationPopRequested) p else 0f
                     AnimState.Idle -> 1f
                   }
+                }
               )
             useVerticalTransition -> NavigationRoutePresentation()
             else ->
               NavigationRoutePresentation(
-                translationX =
-                  when (animState) {
+                translationX = {
+                  val p = progress.value
+                  when (presentationAnimState) {
                     AnimState.Push -> -containerWidth / 6f * p
                     else -> -containerWidth / 6f * (1f - p)
                   }
+                }
               )
           }
         val behindDimPresentation =
@@ -883,19 +902,24 @@ fun NavigationStack(
             useFadeTransition -> null
             useVerticalTransition ->
               NavigationRoutePresentation(
-                alpha =
-                  when (animState) {
+                alpha = {
+                  val p = progress.value
+                  when (presentationAnimState) {
                     AnimState.Push -> p
                     AnimState.Pop,
                     AnimState.PopGestureCommitted,
                     AnimState.Dragging -> 1f - p
                     AnimState.Idle -> 0f
                   }
+                }
               )
             else ->
               NavigationRoutePresentation(
                 translationX = behindPresentation.translationX,
-                alpha = if (animState == AnimState.Push) p else 1f - p,
+                alpha = {
+                  val p = progress.value
+                  if (presentationAnimState == AnimState.Push) p else 1f - p
+                },
               )
           }
 
@@ -924,32 +948,41 @@ fun NavigationStack(
           }
         }
 
-        val mainBackdropWeight =
-          when {
-            behindRoute == null -> 1f
-            animState == AnimState.Push -> p
-            animState == AnimState.Pop ||
-              animState == AnimState.PopGestureCommitted ||
-              animState == AnimState.Dragging -> 1f - p
-            else -> 1f
-          }
-        val backdropStyle =
-          resolveNavigationTopBarBackdropStyle(
-            behindBackground =
-              behindRoute?.let { route ->
-                routeSceneFor(route).foregroundRegistry.topBarBackdropBackground
-              },
-            behindPresence = if (behindTopBar.hasTopBarBackdrop()) 1f else 0f,
-            mainBackground = routeSceneFor(mainRoute).foregroundRegistry.topBarBackdropBackground,
-            mainPresence = if (mainTopBar.hasTopBarBackdrop()) 1f else 0f,
-            mainWeight = mainBackdropWeight,
-            fallbackBackground = AppTheme.colors.surfaceCanvas,
+        val behindBackdropBackground = behindRoute?.let { route ->
+          routeSceneFor(route).foregroundRegistry.topBarBackdropBackground
+        }
+        val behindBackdropPresence = if (behindTopBar.hasTopBarBackdrop()) 1f else 0f
+        val mainBackdropBackground =
+          routeSceneFor(mainRoute).foregroundRegistry.topBarBackdropBackground
+        val mainBackdropPresence = if (mainTopBar.hasTopBarBackdrop()) 1f else 0f
+        val fallbackBackdropBackground = AppTheme.colors.surfaceCanvas
+        val hasBehindRoute = behindRoute != null
+        if (behindBackdropPresence > 0f || mainBackdropPresence > 0f) {
+          NavigationTopBarBackdrop(
+            hazeState = topBarBackdropHazeState,
+            style = {
+              val p = progress.value
+              val mainWeight =
+                when {
+                  !hasBehindRoute -> 1f
+                  presentationAnimState == AnimState.Push -> p
+                  presentationAnimState == AnimState.Pop ||
+                    presentationAnimState == AnimState.PopGestureCommitted ||
+                    presentationAnimState == AnimState.Dragging -> 1f - p
+                  else -> 1f
+                }
+              resolveNavigationTopBarBackdropStyle(
+                behindBackground = behindBackdropBackground,
+                behindPresence = behindBackdropPresence,
+                mainBackground = mainBackdropBackground,
+                mainPresence = mainBackdropPresence,
+                mainWeight = mainWeight,
+                fallbackBackground = fallbackBackdropBackground,
+              )
+            },
+            modifier = Modifier.align(Alignment.TopCenter),
           )
-        NavigationTopBarBackdrop(
-          hazeState = topBarBackdropHazeState,
-          style = backdropStyle,
-          modifier = Modifier.align(Alignment.TopCenter),
-        )
+        }
 
         // Scene foregrounds use the matching presentation. Behind foreground is excluded from the
         // transformed main-route coverage so it cannot leak over an opaque front surface.

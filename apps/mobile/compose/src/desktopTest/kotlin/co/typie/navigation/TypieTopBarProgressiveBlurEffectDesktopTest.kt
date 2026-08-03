@@ -30,6 +30,24 @@ private const val MaximumContinuousLuminanceStep = 0.08f
 @OptIn(ExperimentalTestApi::class)
 class TypieTopBarProgressiveBlurEffectDesktopTest {
   @Test
+  fun hiddenTopBarDoesNotKeepBackdropEffectComposed() = runComposeUiTest {
+    setContent {
+      val hazeState = rememberHazeState()
+      val topBarState = remember { TopBarState().apply { animatedAlpha = 0f } }
+
+      CompositionLocalProvider(LocalTopBarAnimationSource provides topBarState) {
+        NavigationTopBarBackdrop(
+          hazeState = hazeState,
+          style = { NavigationTopBarBackdropStyle(background = Color.Black, presence = 1f) },
+        )
+      }
+    }
+    waitForIdle()
+
+    onNodeWithTag(NavigationTopBarBackdropTestTag).assertDoesNotExist()
+  }
+
+  @Test
   fun navigationTopBarBlurChangesContinuouslyThroughFade() = runComposeUiTest {
     setContent {
       val hazeState = rememberHazeState()
@@ -49,7 +67,9 @@ class TypieTopBarProgressiveBlurEffectDesktopTest {
           }
           NavigationTopBarBackdrop(
             hazeState = hazeState,
-            style = NavigationTopBarBackdropStyle(background = Color.Transparent, presence = 1f),
+            style = {
+              NavigationTopBarBackdropStyle(background = Color.Transparent, presence = 1f)
+            },
             modifier = Modifier,
           )
         }

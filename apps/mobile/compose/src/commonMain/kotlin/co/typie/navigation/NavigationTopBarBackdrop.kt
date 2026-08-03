@@ -1,6 +1,5 @@
 package co.typie.navigation
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -8,7 +7,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -52,34 +53,33 @@ internal fun resolveNavigationTopBarBackdropStyle(
 @OptIn(ExperimentalHazeApi::class)
 internal fun NavigationTopBarBackdrop(
   hazeState: HazeState,
-  style: NavigationTopBarBackdropStyle,
+  style: () -> NavigationTopBarBackdropStyle,
   modifier: Modifier = Modifier,
 ) {
   val animationSource = LocalTopBarAnimationSource.current
-  val alpha = (animationSource?.animatedAlpha ?: 0f) * style.presence
-  if (alpha <= 0f) return
+  val animatedAlpha = animationSource?.animatedAlpha ?: 0f
+  if (animatedAlpha <= 0f) return
+  val styleState = rememberUpdatedState(style)
 
   val topPadding = TopBarDefaults.topPadding()
+  val blurEffect = remember {
+    TypieTopBarProgressiveBlurEffect(
+      blurRadius = TopBarDefaults.BlurRadius,
+      progressiveBrush = navigationTopBarProgressiveBrush(Color.Black),
+      fallbackProgressive = TopBarDefaults.hazeProgressive(),
+      backgroundColor = { styleState.value().background },
+    )
+  }
   val backdropModifier =
     modifier
       .fillMaxWidth()
       .height(topPadding + TopBarDefaults.Height + TopBarDefaults.BlurFadeHeight)
       .testTag(NavigationTopBarBackdropTestTag)
       .graphicsLayer {
-        this.alpha = alpha
+        val resolvedStyle = styleState.value()
+        alpha = animatedAlpha * resolvedStyle.presence
         translationY = (animationSource?.animatedTranslationY ?: 0f) * size.height
       }
-
-  val fadeColor = style.background.copy(alpha = TopBarDefaults.FadeOpacity)
-  val blurEffect = remember {
-    TypieTopBarProgressiveBlurEffect(
-      blurRadius = TopBarDefaults.BlurRadius,
-      progressiveBrush = navigationTopBarProgressiveBrush(Color.Black),
-      fallbackProgressive = TopBarDefaults.hazeProgressive(),
-      backgroundColor = style.background,
-    )
-  }
-  blurEffect.backgroundColor = style.background
 
   Box(modifier = backdropModifier) {
     Column(modifier = Modifier.fillMaxWidth().hazeEffect(hazeState) { visualEffect = blurEffect }) {
@@ -87,11 +87,18 @@ internal fun NavigationTopBarBackdrop(
       Spacer(Modifier.height(TopBarDefaults.BlurFadeHeight))
     }
     Column(modifier = Modifier.fillMaxWidth()) {
-      Spacer(Modifier.fillMaxWidth().height(topPadding).background(fadeColor))
+      Spacer(
+        Modifier.fillMaxWidth().height(topPadding).drawBehind {
+          drawRect(styleState.value().background.copy(alpha = TopBarDefaults.FadeOpacity))
+        }
+      )
       Spacer(
         Modifier.fillMaxWidth()
           .height(TopBarDefaults.Height + TopBarDefaults.BlurFadeHeight)
-          .background(navigationTopBarProgressiveBrush(fadeColor))
+          .drawBehind {
+            val fadeColor = styleState.value().background.copy(alpha = TopBarDefaults.FadeOpacity)
+            drawRect(navigationTopBarProgressiveBrush(fadeColor))
+          }
       )
     }
   }

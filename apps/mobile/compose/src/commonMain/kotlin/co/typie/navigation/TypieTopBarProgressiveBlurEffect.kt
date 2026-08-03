@@ -1,9 +1,6 @@
 package co.typie.navigation
 
 import androidx.compose.runtime.Stable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -52,15 +49,13 @@ internal class TypieTopBarProgressiveBlurEffect(
   private val blurRadius: Dp,
   private val progressiveBrush: Brush,
   fallbackProgressive: HazeProgressive,
-  backgroundColor: Color,
+  private val backgroundColor: () -> Color,
 ) : VisualEffect {
-  var backgroundColor: Color by mutableStateOf(backgroundColor)
-
-  private var resolvedBackgroundColor: Color = backgroundColor
+  private var resolvedBackgroundColor: Color = Color.Unspecified
   private val fallbackEffect =
     BlurVisualEffect().apply {
       this.blurRadius = blurRadius
-      this.backgroundColor = backgroundColor
+      this.backgroundColor = Color.Unspecified
       progressive = fallbackProgressive
     }
 
@@ -75,7 +70,7 @@ internal class TypieTopBarProgressiveBlurEffect(
   }
 
   override fun update(context: VisualEffectContext) {
-    val currentBackgroundColor = backgroundColor
+    val currentBackgroundColor = backgroundColor()
     if (currentBackgroundColor != resolvedBackgroundColor) {
       resolvedBackgroundColor = currentBackgroundColor
       fallbackEffect.backgroundColor = currentBackgroundColor

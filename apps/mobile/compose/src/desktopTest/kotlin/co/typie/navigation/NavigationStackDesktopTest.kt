@@ -15,10 +15,17 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.ExperimentalComposeRuntimeApi
+import androidx.compose.runtime.InternalComposeApi
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.RecomposeScope
+import androidx.compose.runtime.currentComposer
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.tooling.CompositionObserver
+import androidx.compose.runtime.tooling.ObservableComposition
+import androidx.compose.runtime.tooling.setObserver
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -239,6 +246,57 @@ class NavigationStackDesktopTest {
     )
 
     foreground.performTouchInput { up() }
+    waitUntil { !navigator.isTransitioning }
+  }
+
+  @Test
+  @OptIn(ExperimentalComposeRuntimeApi::class, InternalComposeApi::class)
+  fun directBackDragMotionDoesNotRecomposeNavigationScene() = runComposeUiTest {
+    val navigator = Navigator(Route.Home)
+    val editorRoute = Route.Editor("document-id")
+    val compositionObserver = CountingCompositionObserver()
+    val topBarState = TopBarState().apply { animatedAlpha = 1f }
+    var platformTouchSlop = 0f
+
+    setContent {
+      val composition = currentComposer.composition
+      DisposableEffect(composition) {
+        val observerHandle = composition.setObserver(compositionObserver)
+        onDispose { observerHandle?.dispose() }
+      }
+      platformTouchSlop = LocalViewConfiguration.current.touchSlop
+      NavigationStack(
+        navigator = navigator,
+        topBarState = topBarState,
+        modifier = Modifier.size(width = 320.dp, height = 640.dp),
+      ) { route ->
+        PublishNavigationTopBarBackdropStyle(
+          background = if (route == editorRoute) Color.Blue else Color.Red
+        )
+        ProvideTopBar()
+        Box(
+          Modifier.fillMaxSize().testTag(if (route == editorRoute) EditorRouteTag else HomeRouteTag)
+        )
+      }
+      LaunchedEffect(Unit) { navigator.navigate(editorRoute) }
+    }
+    waitUntil { navigator.current == editorRoute && !navigator.isTransitioning }
+
+    val routeNode = onNodeWithTag(EditorRouteTag)
+    routeNode.performTouchInput {
+      down(center)
+      moveBy(Offset(x = platformTouchSlop * 4f, y = 0f), delayMillis = 100L)
+    }
+    waitUntil { routeNode.fetchSemanticsNode().boundsInRoot.left > 1f }
+    waitForIdle()
+    val settledCompositionCount = compositionObserver.compositionCount
+
+    routeNode.performTouchInput { repeat(5) { moveBy(Offset(x = 8f, y = 0f), delayMillis = 16L) } }
+    waitForIdle()
+
+    assertEquals(settledCompositionCount, compositionObserver.compositionCount)
+
+    routeNode.performTouchInput { up() }
     waitUntil { !navigator.isTransitioning }
   }
 
@@ -782,3 +840,25 @@ class NavigationStackDesktopTest {
 }
 
 private val LocalForegroundTestValue = staticCompositionLocalOf { "missing" }
+
+@OptIn(ExperimentalComposeRuntimeApi::class)
+private class CountingCompositionObserver : CompositionObserver {
+  var compositionCount = 0
+    private set
+
+  override fun onBeginComposition(composition: ObservableComposition) {
+    compositionCount += 1
+  }
+
+  override fun onScopeEnter(scope: RecomposeScope) = Unit
+
+  override fun onReadInScope(scope: RecomposeScope, value: Any) = Unit
+
+  override fun onScopeExit(scope: RecomposeScope) = Unit
+
+  override fun onEndComposition(composition: ObservableComposition) = Unit
+
+  override fun onScopeInvalidated(scope: RecomposeScope, value: Any?) = Unit
+
+  override fun onScopeDisposed(scope: RecomposeScope) = Unit
+}
