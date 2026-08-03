@@ -18,11 +18,18 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.hapticfeedback.HapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsNodeInteractionsProvider
 import androidx.compose.ui.test.click
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.performTouchInput
@@ -1294,60 +1301,285 @@ class EditorToolbarPagesDesktopTest {
   }
 
   @Test
-  fun dismissIndicatorHidesCurrentPulseUntilNextPulse() = runComposeUiTest {
-    lateinit var pagerState: ToolbarPagerState
-    setContent {
-      pagerState = rememberToolbarPagerState()
-      val textScrollState = rememberScrollState()
-      ToolbarTestContent(textScrollState = textScrollState, pagerState = pagerState)
-    }
-    waitForIdle()
-    mainClock.autoAdvance = false
-    runOnIdle {
-      pagerState.indicatorPageTransitioning = true
-      pagerState.indicatorPulse++
-    }
-    mainClock.advanceTimeByFrame()
-    runOnIdle { assertTrue(pagerState.indicatorVisible) }
+  fun swipeUpFromFixedActionRevealsIndicatorAndRestartsTimeoutWithoutClickingButton() =
+    runComposeUiTest {
+      lateinit var pagerState: ToolbarPagerState
+      var fixedActionClicks = 0
+      mainClock.autoAdvance = false
+      setContent {
+        pagerState = rememberToolbarPagerState()
+        ToolbarTestContent(
+          textScrollState = rememberScrollState(),
+          pagerState = pagerState,
+          onToolbarDismissRequest = {},
+          onKeyboardDismissRequest = { fixedActionClicks++ },
+        )
+      }
+      mainClock.advanceTimeByFrame()
+      mainClock.advanceTimeBy(ToolbarIndicatorVisibleMillis + 1)
+      mainClock.advanceTimeByFrame()
+      runOnIdle { assertFalse(pagerState.indicatorVisible) }
 
-    runOnIdle { pagerState.dismissIndicator() }
-    mainClock.advanceTimeByFrame()
+      swipeToolbarVerticallyFromFixedAction(up = true)
+      mainClock.advanceTimeByFrame()
 
-    runOnIdle {
-      assertFalse(pagerState.indicatorVisible)
-      pagerState.indicatorPageTransitioning = false
-      pagerState.indicatorPulse++
+      runOnIdle {
+        assertTrue(pagerState.indicatorVisible)
+        assertEquals(0, fixedActionClicks)
+        assertEquals(EditorToolbarPageKey.Main, pagerState.settledPageKey)
+      }
+
+      mainClock.advanceTimeBy(ToolbarIndicatorVisibleMillis / 2)
+      swipeToolbarVerticallyFromFixedAction(up = true)
+      mainClock.advanceTimeByFrame()
+      mainClock.advanceTimeBy(ToolbarIndicatorVisibleMillis - 100)
+
+      runOnIdle { assertTrue(pagerState.indicatorVisible) }
+
+      mainClock.advanceTimeBy(101)
+      mainClock.advanceTimeByFrame()
+      runOnIdle { assertFalse(pagerState.indicatorVisible) }
     }
-    mainClock.advanceTimeByFrame()
-    runOnIdle { assertTrue(pagerState.indicatorVisible) }
+
+  @Test
+  fun swipeDownFromFixedActionDismissesToolbarOnceWithoutClickingButton() = runComposeUiTest {
+    var toolbarDismissals = 0
+    var fixedActionClicks = 0
+    setToolbarContent(
+      onToolbarDismissRequest = { toolbarDismissals++ },
+      onKeyboardDismissRequest = { fixedActionClicks++ },
+    )
+
+    swipeToolbarVerticallyFromFixedAction(up = false)
+
+    assertEquals(1, toolbarDismissals)
+    assertEquals(0, fixedActionClicks)
   }
 
   @Test
-  fun dismissedIndicatorInteractionDuringFadeStartsNewPulse() = runComposeUiTest {
+  fun swipeDownBelowActivationThresholdDoesNotDismissToolbar() = runComposeUiTest {
+    var toolbarDismissals = 0
+    setToolbarContent(onToolbarDismissRequest = { toolbarDismissals++ })
+
+    swipeToolbarVerticallyFromFixedAction(up = false, downDistance = 35.dp)
+
+    assertEquals(0, toolbarDismissals)
+  }
+
+  @Test
+  fun swipeDownAboveActivationThresholdDismissesOnlyOnRelease() = runComposeUiTest {
+    var toolbarDismissals = 0
+    setToolbarContent(onToolbarDismissRequest = { toolbarDismissals++ })
+
+    startToolbarVerticalDrag(37.dp)
+
+    assertEquals(0, toolbarDismissals)
+
+    releaseToolbarVerticalDrag()
+
+    assertEquals(1, toolbarDismissals)
+  }
+
+  @Test
+  fun swipeDownUsesHysteresisForReleaseDecision() = runComposeUiTest {
+    var toolbarDismissals = 0
+    setToolbarContent(onToolbarDismissRequest = { toolbarDismissals++ })
+
+    startToolbarVerticalDrag(37.dp)
+    moveToolbarVerticalDragTo(33.dp)
+    releaseToolbarVerticalDrag()
+
+    assertEquals(1, toolbarDismissals, "33dp should remain armed after crossing 36dp")
+
+    startToolbarVerticalDrag(37.dp)
+    moveToolbarVerticalDragTo(32.dp)
+    releaseToolbarVerticalDrag()
+
+    assertEquals(1, toolbarDismissals, "32dp should disarm before release")
+  }
+
+  @Test
+  fun swipeDownHapticRepeatsAfterDisarmingAndRearming() = runComposeUiTest {
+    val haptics = mutableListOf<HapticFeedbackType>()
+    val hapticFeedback =
+      object : HapticFeedback {
+        override fun performHapticFeedback(hapticFeedbackType: HapticFeedbackType) {
+          haptics += hapticFeedbackType
+        }
+      }
+    setContent {
+      ToolbarTestContent(textScrollState = rememberScrollState(), hapticFeedback = hapticFeedback)
+    }
+    waitForIdle()
+
+    startToolbarVerticalDrag(37.dp)
+    moveToolbarVerticalDragTo(33.dp)
+    moveToolbarVerticalDragTo(32.dp)
+    moveToolbarVerticalDragTo(37.dp)
+    releaseToolbarVerticalDrag()
+
+    assertEquals(
+      listOf(
+        HapticFeedbackType.GestureThresholdActivate,
+        HapticFeedbackType.GestureThresholdActivate,
+      ),
+      haptics,
+    )
+  }
+
+  @Test
+  fun dismissSwipeVisualFeedbackUsesStableOriginAcrossThreshold() = runComposeUiTest {
+    mainClock.autoAdvance = false
+    var density = 0f
+    setContent {
+      density = LocalDensity.current.density
+      ToolbarTestContent(textScrollState = rememberScrollState())
+    }
+    mainClock.advanceTimeByFrame()
+    val initialTop = pageTop(MainPageTag)
+
+    startToolbarVerticalDrag(20.dp)
+    mainClock.advanceTimeByFrame()
+    assertNear(initialTop + 4f * density, pageTop(MainPageTag), "unarmed drag should follow 20%")
+
+    moveToolbarVerticalDragTo(37.dp)
+    mainClock.advanceTimeBy(500)
+    assertNear(initialTop + 16f * density, pageTop(MainPageTag), "armed drag should shift 16dp")
+
+    moveToolbarVerticalDragTo(33.dp)
+    mainClock.advanceTimeByFrame()
+    assertNear(initialTop + 16f * density, pageTop(MainPageTag), "33dp should remain armed")
+
+    moveToolbarVerticalDragTo(32.dp)
+    mainClock.advanceTimeBy(500)
+    assertNear(initialTop + 6.4f * density, pageTop(MainPageTag), "32dp should return to 20%")
+
+    releaseToolbarVerticalDrag()
+    mainClock.autoAdvance = true
+    waitForIdle()
+  }
+
+  @Test
+  fun swipeUpFromToolbarButtonRevealsIndicatorWithoutClickingButton() = runComposeUiTest {
+    lateinit var pagerState: ToolbarPagerState
+    var toolbarButtonClicks = 0
+    setContent {
+      pagerState = rememberToolbarPagerState()
+      ToolbarTestContent(
+        textScrollState = rememberScrollState(),
+        pagerState = pagerState,
+        onToolbarDismissRequest = {},
+        onMainButtonClick = { toolbarButtonClicks++ },
+      )
+    }
+    waitForIdle()
+    val pulseBeforeSwipe = pagerState.indicatorPulse
+
+    swipeToolbarVerticallyFromMainButton(up = true)
+
+    assertTrue(pagerState.indicatorPulse > pulseBeforeSwipe)
+    assertEquals(0, toolbarButtonClicks)
+    assertPageActive(MainPageTag)
+  }
+
+  @Test
+  fun swipeDownFromToolbarButtonDismissesToolbarOnceWithoutClickingButton() = runComposeUiTest {
+    var toolbarDismissals = 0
+    var toolbarButtonClicks = 0
+    setToolbarContent(
+      onToolbarDismissRequest = { toolbarDismissals++ },
+      onMainButtonClick = { toolbarButtonClicks++ },
+    )
+
+    swipeToolbarVerticallyFromMainButton(up = false)
+
+    assertEquals(1, toolbarDismissals)
+    assertEquals(0, toolbarButtonClicks)
+  }
+
+  @Test
+  fun toolbarButtonsStillClickWithoutVerticalSwipe() = runComposeUiTest {
+    var fixedActionClicks = 0
+    var toolbarButtonClicks = 0
+    setToolbarContent(
+      onToolbarDismissRequest = {},
+      onKeyboardDismissRequest = { fixedActionClicks++ },
+      onMainButtonClick = { toolbarButtonClicks++ },
+    )
+
+    onNodeWithTag(MainButtonTag).performTouchInput { click(center) }
+    onNodeWithContentDescription("에디터 포커스 해제").performTouchInput { click(center) }
+    waitForIdle()
+
+    assertEquals(1, toolbarButtonClicks)
+    assertEquals(1, fixedActionClicks)
+  }
+
+  @Test
+  fun horizontalToolbarSwipeDoesNotDismissToolbar() = runComposeUiTest {
+    var toolbarDismissals = 0
+    setToolbarContent(onToolbarDismissRequest = { toolbarDismissals++ })
+
+    swipeToolbarLeft(distanceFraction = 0.7f)
+
+    assertEquals(0, toolbarDismissals)
+    assertPageActive(TextPageTag)
+  }
+
+  @Test
+  fun swipeUpWithOnePageDoesNotPulseIndicator() = runComposeUiTest {
     lateinit var pagerState: ToolbarPagerState
     setContent {
       pagerState = rememberToolbarPagerState()
-      val textScrollState = rememberScrollState()
-      ToolbarTestContent(textScrollState = textScrollState, pagerState = pagerState)
+      ToolbarTestContent(
+        textScrollState = rememberScrollState(),
+        pageKeys = listOf(EditorToolbarPageKey.Main),
+        pagerState = pagerState,
+        onToolbarDismissRequest = {},
+      )
     }
     waitForIdle()
-    mainClock.autoAdvance = false
-    runOnIdle { pagerState.indicatorPulse++ }
-    mainClock.advanceTimeByFrame()
-    val dismissedPulse = runOnIdle {
-      pagerState.dismissIndicator()
-      pagerState.indicatorPulse
-    }
-    mainClock.advanceTimeByFrame()
+    val pulseBeforeSwipe = pagerState.indicatorPulse
 
-    tapToolbarIndicatorPage(pageIndex = 1, pageCount = DefaultPageKeys.size)
-    mainClock.advanceTimeByFrame()
+    swipeToolbarVerticallyFromFixedAction(up = true)
 
-    runOnIdle {
-      assertTrue(pagerState.indicatorPulse > dismissedPulse)
-      assertFalse(pagerState.indicatorDismissed)
-      assertTrue(pagerState.indicatorVisible)
+    assertEquals(pulseBeforeSwipe, pagerState.indicatorPulse)
+  }
+
+  @Test
+  fun ancestorConsumedVerticalMovementDoesNotTriggerToolbarSwipe() = runComposeUiTest {
+    lateinit var pagerState: ToolbarPagerState
+    var toolbarDismissals = 0
+    val consumingAncestor =
+      Modifier.pointerInput(Unit) {
+        awaitPointerEventScope {
+          while (true) {
+            val event = awaitPointerEvent(PointerEventPass.Initial)
+            event.changes.forEach { change ->
+              if (change.pressed && change.previousPressed) {
+                change.consume()
+              }
+            }
+          }
+        }
+      }
+    setContent {
+      pagerState = rememberToolbarPagerState()
+      ToolbarTestContent(
+        textScrollState = rememberScrollState(),
+        pagerState = pagerState,
+        onToolbarDismissRequest = { toolbarDismissals++ },
+        ancestorModifier = consumingAncestor,
+      )
     }
+    waitForIdle()
+    val pulseBeforeSwipe = pagerState.indicatorPulse
+
+    swipeToolbarVerticallyFromFixedAction(up = true)
+    swipeToolbarVerticallyFromFixedAction(up = false)
+
+    assertEquals(pulseBeforeSwipe, pagerState.indicatorPulse)
+    assertEquals(0, toolbarDismissals)
   }
 
   @Test
@@ -1364,11 +1596,20 @@ class EditorToolbarPagesDesktopTest {
     )
   }
 
-  private fun ComposeUiTest.setToolbarContent(): ScrollState {
+  private fun ComposeUiTest.setToolbarContent(
+    onToolbarDismissRequest: () -> Unit = {},
+    onKeyboardDismissRequest: () -> Unit = {},
+    onMainButtonClick: () -> Unit = {},
+  ): ScrollState {
     lateinit var textScrollState: ScrollState
     setContent {
       textScrollState = rememberScrollState()
-      ToolbarTestContent(textScrollState = textScrollState)
+      ToolbarTestContent(
+        textScrollState = textScrollState,
+        onToolbarDismissRequest = onToolbarDismissRequest,
+        onKeyboardDismissRequest = onKeyboardDismissRequest,
+        onMainButtonClick = onMainButtonClick,
+      )
     }
     waitForIdle()
     assertPageActive(MainPageTag)
@@ -1508,6 +1749,59 @@ class EditorToolbarPagesDesktopTest {
     waitForIdle()
   }
 
+  private fun ComposeUiTest.swipeToolbarVerticallyFromFixedAction(
+    up: Boolean,
+    downDistance: Dp = 40.dp,
+  ) {
+    onNodeWithTag(ToolbarTag).performTouchInput {
+      val x = width - ToolbarFixedActionWidth.toPx() / 2f
+      val startY = height - ToolbarHeight.toPx() / 2f
+      val distance = (if (up) 20.dp else downDistance).toPx()
+      swipe(
+        start = Offset(x = x, y = startY),
+        end = Offset(x = x, y = startY + if (up) -distance else distance),
+        durationMillis = 120,
+      )
+    }
+    waitForIdle()
+  }
+
+  private fun ComposeUiTest.swipeToolbarVerticallyFromMainButton(up: Boolean) {
+    onNodeWithTag(MainButtonTag).performTouchInput {
+      val distance = (if (up) 20.dp else 40.dp).toPx()
+      swipe(
+        start = center,
+        end = center + Offset(x = 0f, y = if (up) -distance else distance),
+        durationMillis = 120,
+      )
+    }
+    waitForIdle()
+  }
+
+  private fun ComposeUiTest.startToolbarVerticalDrag(distance: Dp) {
+    onNodeWithTag(ToolbarTag).performTouchInput {
+      val x = width - ToolbarFixedActionWidth.toPx() / 2f
+      val startY = height - ToolbarHeight.toPx() / 2f
+      down(Offset(x = x, y = startY))
+      moveTo(Offset(x = x, y = startY + distance.toPx()))
+    }
+    waitForIdle()
+  }
+
+  private fun ComposeUiTest.moveToolbarVerticalDragTo(distance: Dp) {
+    onNodeWithTag(ToolbarTag).performTouchInput {
+      val x = width - ToolbarFixedActionWidth.toPx() / 2f
+      val startY = height - ToolbarHeight.toPx() / 2f
+      moveTo(Offset(x = x, y = startY + distance.toPx()))
+    }
+    waitForIdle()
+  }
+
+  private fun ComposeUiTest.releaseToolbarVerticalDrag() {
+    onNodeWithTag(ToolbarTag).performTouchInput { up() }
+    waitForIdle()
+  }
+
   private fun ComposeUiTest.tapToolbarIndicatorPage(pageIndex: Int, pageCount: Int) {
     onNodeWithTag(ToolbarTag).performTouchInput {
       val itemPx = ToolbarIndicatorItemSize.toPx()
@@ -1606,6 +1900,9 @@ class EditorToolbarPagesDesktopTest {
   private fun SemanticsNodeInteractionsProvider.pageRight(tag: String): Float =
     onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.right
 
+  private fun SemanticsNodeInteractionsProvider.pageTop(tag: String): Float =
+    onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.top
+
   private fun assertNear(expected: Float, actual: Float, message: String) {
     assertTrue(abs(expected - actual) <= 2f, "$message. expected=$expected actual=$actual")
   }
@@ -1619,46 +1916,63 @@ class EditorToolbarPagesDesktopTest {
     visible: Boolean = true,
     pagerState: ToolbarPagerState = rememberToolbarPagerState(),
     textItemWidth: Dp = 80.dp,
+    onToolbarDismissRequest: () -> Unit = {},
+    onKeyboardDismissRequest: () -> Unit = {},
+    onMainButtonClick: () -> Unit = {},
+    ancestorModifier: Modifier = Modifier,
+    hapticFeedback: HapticFeedback? = null,
   ) {
     val pages =
       rememberToolbarTestPages(
         textScrollState = textScrollState,
         pageKeys = pageKeys,
         textItemWidth = textItemWidth,
+        onMainButtonClick = onMainButtonClick,
       )
     val commandScope = rememberCoroutineScope()
-    ToolbarTestTheme {
-      Box(Modifier.width(360.dp).height(ToolbarStackHeight).testTag(ToolbarTag)) {
-        if (visible) {
-          EditorToolbarPages(
-            pages = pages,
-            commandScope = commandScope,
-            pagerState = pagerState,
-            autoTargetPageKey = autoTargetPageKey,
-            autoTargetKey = autoTargetRevision,
-            editorFocused = true,
-            activeBottomPanel = null,
-            fixedAction = ToolbarFixedAction.DismissInput,
-            onEditorInputRequest = {},
-            onKeyboardDismissRequest = {},
-            onBottomPanelToggle = { _, _ -> },
-            modifier = Modifier.fillMaxSize(),
-          )
+    ToolbarTestTheme(hapticFeedback = hapticFeedback) {
+      Box(ancestorModifier) {
+        Box(Modifier.width(360.dp).height(ToolbarStackHeight).testTag(ToolbarTag)) {
+          if (visible) {
+            EditorToolbarPages(
+              pages = pages,
+              commandScope = commandScope,
+              pagerState = pagerState,
+              autoTargetPageKey = autoTargetPageKey,
+              autoTargetKey = autoTargetRevision,
+              editorFocused = true,
+              activeBottomPanel = null,
+              fixedAction = ToolbarFixedAction.DismissInput,
+              onEditorInputRequest = {},
+              onKeyboardDismissRequest = onKeyboardDismissRequest,
+              onToolbarDismissRequest = onToolbarDismissRequest,
+              onBottomPanelToggle = { _, _ -> },
+              modifier = Modifier.fillMaxSize(),
+            )
+          }
         }
       }
     }
   }
 
   @Composable
-  private fun ToolbarTestTheme(content: @Composable () -> Unit) {
+  private fun ToolbarTestTheme(
+    hapticFeedback: HapticFeedback? = null,
+    content: @Composable () -> Unit,
+  ) {
     CompositionLocalProvider(
       LocalAppColors provides LightColors,
       LocalAppShadows provides LightAppShadows,
       LocalThemeMode provides ResolvedThemeMode.Light,
       LocalHazeBlurStyle provides
         HazeBlurStyle(blurRadius = 20.dp, noiseFactor = 0f, colorEffects = listOf()),
-      content = content,
-    )
+    ) {
+      if (hapticFeedback == null) {
+        content()
+      } else {
+        CompositionLocalProvider(LocalHapticFeedback provides hapticFeedback, content = content)
+      }
+    }
   }
 
   @Composable
@@ -1666,8 +1980,9 @@ class EditorToolbarPagesDesktopTest {
     textScrollState: ScrollState,
     pageKeys: List<EditorToolbarPageKey>,
     textItemWidth: Dp,
+    onMainButtonClick: () -> Unit,
   ): List<EditorToolbarPage> =
-    remember(textScrollState, pageKeys, textItemWidth) {
+    remember(textScrollState, pageKeys, textItemWidth, onMainButtonClick) {
       pageKeys.map { key ->
         when (key) {
           EditorToolbarPageKey.Main ->
@@ -1675,7 +1990,16 @@ class EditorToolbarPagesDesktopTest {
               key = EditorToolbarPageKey.Main,
               icon = Lucide.CircleSmall,
               contentDescription = "메인 툴바",
-              content = { Box(Modifier.fillMaxSize().testTag(MainPageTag)) },
+              content = {
+                Box(Modifier.fillMaxSize().testTag(MainPageTag)) {
+                  EditorToolbarButton(
+                    icon = Lucide.CircleSmall,
+                    contentDescription = "테스트 툴바 버튼",
+                    onClick = onMainButtonClick,
+                    modifier = Modifier.align(Alignment.CenterStart).testTag(MainButtonTag),
+                  )
+                }
+              },
             )
           EditorToolbarPageKey.Text ->
             EditorToolbarPage(
@@ -1745,6 +2069,7 @@ class EditorToolbarPagesDesktopTest {
 
   private companion object {
     const val ToolbarTag = "editor-toolbar"
+    const val MainButtonTag = "main-toolbar-button"
     const val MainPageTag = "main-page"
     const val TextPageTag = "text-page"
     const val ImagePageTag = "image-page"

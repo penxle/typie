@@ -1,5 +1,7 @@
 package co.typie.screen.editor.editor.toolbar
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
@@ -45,11 +47,18 @@ internal val ToolbarIndicatorPadding = 2.dp
 internal val ToolbarIndicatorItemGap = 2.dp
 internal val ToolbarOverscrollLimit = ToolbarPageIndicatorSlotWidth
 internal val ToolbarHardStopActivationEpsilon = 10.dp
+internal val ToolbarDismissSwipeThreshold = 36.dp
+internal val ToolbarDismissSwipeDisarmThreshold = 32.dp
+internal val ToolbarDismissSwipeArmedOffset = 16.dp
 
 internal const val ToolbarCapsulePressedScale = 1.015f
 internal const val ToolbarFixedActionPressedScale = 1.1f
 internal const val ToolbarOverscrollResistance = 0.45f
+internal const val ToolbarDismissSwipeDirectionRatio = 1.5f
+internal const val ToolbarDismissSwipeFollowFraction = 0.2f
 internal val ToolbarSwipeVelocityThreshold = 400.dp
+internal val ToolbarDismissSwipeThresholdSpring =
+  spring<Float>(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessHigh)
 internal const val ToolbarVisibilityEnterMillis = 200
 internal const val ToolbarVisibilityExitMillis = 160
 internal const val ToolbarFixedActionIconCrossfadeMillis = 150

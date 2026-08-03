@@ -1714,7 +1714,6 @@ fun EditorScreen(entityId: String) {
         platformIndirectScaleEnabled = platformIndirectScaleEnabled,
         viewportContentWidth = bodyTrackWidth,
         viewportScrollReconcileMode = viewportScrollReconcileMode,
-        onEditorPointerInput = { toolbarPagerState.dismissIndicator() },
         onViewportIndirectInput = { uiState.contextMenu.hide() },
         onRequestEditing =
           if (!isEditing && !editorReadOnly) {

@@ -307,6 +307,10 @@ internal fun EditorToolbarHost(
             sessionState.clearSecondaryToolbar()
             onInputEffects(inputState.dispatch(ToolbarIntent.DismissInput, environment))
           },
+          onToolbarDismissRequest = {
+            sessionState.clearSecondaryToolbar()
+            onInputEffects(inputState.dispatch(ToolbarIntent.HideInput, environment))
+          },
           onBottomPanelToggle = ::toggleBottomPanel,
           onEditorMessage = { message -> sendEditorMessages(listOf(message)) },
           onToolAction = onToolAction,

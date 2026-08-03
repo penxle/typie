@@ -1,6 +1,7 @@
 package co.typie.screen.editor.editor.toolbar
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -42,7 +43,9 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import co.typie.editor.ffi.Message
@@ -69,6 +72,7 @@ import dev.chrisbanes.haze.hazeEffect
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
@@ -130,6 +134,7 @@ internal fun EditorToolbarPages(
   fixedAction: ToolbarFixedAction,
   onEditorInputRequest: () -> Unit,
   onKeyboardDismissRequest: () -> Unit,
+  onToolbarDismissRequest: () -> Unit,
   onBottomPanelToggle: (EditorToolbarBottomPanel, EditorToolbarScope) -> Unit,
   onEditorMessage: (Message) -> Unit = {},
   onToolAction: (EditorToolbarToolAction) -> Unit = {},
@@ -144,6 +149,7 @@ internal fun EditorToolbarPages(
 ) {
   val scope = rememberCoroutineScope()
   val density = LocalDensity.current
+  val hapticFeedback = LocalHapticFeedback.current
   val hazeState = LocalHazeState.current
   val secondaryToolbarTransition = remember { MutableTransitionState(false) }
   secondaryToolbarTransition.targetState = secondaryToolbarVisible
@@ -164,9 +170,24 @@ internal fun EditorToolbarPages(
     val lastPageIndex = pageCount - 1
     val pageDistance = with(density) { maxWidth.roundToPx().coerceAtLeast(0) }.toFloat()
     val overscrollLimitPx = with(density) { ToolbarOverscrollLimit.toPx() }
+    val dismissSwipeArmedOffsetPx = with(density) { ToolbarDismissSwipeArmedOffset.toPx() }
     val hardStopActivationEpsilonPx = with(density) { ToolbarHardStopActivationEpsilon.toPx() }
     val swipeVelocityThresholdPx = with(density) { ToolbarSwipeVelocityThreshold.toPx() }
     var outerEdgeDrag by remember { mutableStateOf(ToolbarOuterEdgeDrag()) }
+    var dismissSwipeProgress by remember { mutableStateOf<ToolbarDismissSwipeProgress?>(null) }
+    var dismissSwipeArmedProgress by remember { mutableStateOf(Animatable(0f)) }
+    val dismissSwipeArmedAnimationJob = remember { mutableStateOf<Job?>(null) }
+    val dismissSwipeFollowOffset =
+      dismissSwipeProgress?.distancePx?.times(ToolbarDismissSwipeFollowFraction) ?: 0f
+    val dismissSwipeDragOffset =
+      dismissSwipeFollowOffset +
+        (dismissSwipeArmedOffsetPx - dismissSwipeFollowOffset) * dismissSwipeArmedProgress.value
+    val dismissSwipeVisualOffset by
+      animateFloatAsState(
+        targetValue = if (dismissSwipeProgress != null) dismissSwipeDragOffset else 0f,
+        animationSpec = if (dismissSwipeProgress != null) snap() else ToolbarOverscrollSpring,
+        label = "EditorToolbarDismissSwipeOffset",
+      )
     val outerEdgeVisualOffset =
       animateFloatAsState(
         targetValue = if (pagerState.pointerScrollGestureActive) outerEdgeDrag.offset else 0f,
@@ -381,12 +402,9 @@ internal fun EditorToolbarPages(
     }
 
     val indicatorHeldVisible =
-      !pagerState.indicatorDismissed &&
-        (pagerState.indicatorInteracting || pagerState.indicatorPageTransitioning)
-    LaunchedEffect(pagerState.indicatorPulse, pagerState.indicatorDismissed, indicatorHeldVisible) {
-      if (
-        pagerState.indicatorDismissed || (pagerState.indicatorPulse == 0 && !indicatorHeldVisible)
-      ) {
+      pagerState.indicatorInteracting || pagerState.indicatorPageTransitioning
+    LaunchedEffect(pagerState.indicatorPulse, indicatorHeldVisible) {
+      if (pagerState.indicatorPulse == 0 && !indicatorHeldVisible) {
         pagerState.indicatorVisible = false
         return@LaunchedEffect
       }
@@ -577,14 +595,7 @@ internal fun EditorToolbarPages(
 
     val indicatorAlpha by
       animateFloatAsState(
-        targetValue =
-          if (
-            !pagerState.indicatorDismissed && (pagerState.indicatorVisible || indicatorHeldVisible)
-          ) {
-            1f
-          } else {
-            0f
-          },
+        targetValue = if (pagerState.indicatorVisible || indicatorHeldVisible) 1f else 0f,
         animationSpec = tween(ToolbarIndicatorFadeMillis),
         label = "editor-toolbar-indicator-alpha",
       )
@@ -655,6 +666,44 @@ internal fun EditorToolbarPages(
           Modifier.align(Alignment.BottomCenter)
             .fillMaxWidth()
             .height(ToolbarHeight)
+            .toolbarVerticalSwipeGestures(
+              onPointerSessionStart = {
+                dismissSwipeArmedAnimationJob.value?.cancel()
+                dismissSwipeArmedAnimationJob.value = null
+                dismissSwipeProgress = null
+                dismissSwipeArmedProgress = Animatable(0f)
+              },
+              onSwipeUp = {
+                if (pageCount > 1) {
+                  pagerState.indicatorPulse++
+                }
+              },
+              onSwipeDown = {
+                dismissSwipeProgress = null
+                onToolbarDismissRequest()
+              },
+              onSwipeDownProgress = { progress ->
+                val armedChanged = (dismissSwipeProgress?.armed == true) != progress.armed
+                dismissSwipeProgress = progress
+                if (armedChanged) {
+                  dismissSwipeArmedAnimationJob.value?.cancel()
+                  val armedProgress = dismissSwipeArmedProgress
+                  dismissSwipeArmedAnimationJob.value = scope.launch {
+                    armedProgress.animateTo(
+                      targetValue = if (progress.armed) 1f else 0f,
+                      animationSpec = ToolbarDismissSwipeThresholdSpring,
+                    )
+                  }
+                  if (progress.armed) {
+                    hapticFeedback.performHapticFeedback(
+                      HapticFeedbackType.GestureThresholdActivate
+                    )
+                  }
+                }
+              },
+              onSwipeDownCancelled = { dismissSwipeProgress = null },
+            )
+            .graphicsLayer { translationY = dismissSwipeVisualOffset }
             .shadow(AppTheme.shadows.sm, ToolbarCapsuleShape)
             .pressScale(ToolbarCapsulePressedScale)
             .clip(ToolbarCapsuleShape)

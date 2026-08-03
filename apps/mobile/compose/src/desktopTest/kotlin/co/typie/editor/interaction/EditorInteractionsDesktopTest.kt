@@ -377,13 +377,11 @@ class EditorInteractionsDesktopTest {
   }
 
   @Test
-  fun `platform indirect scale reports editor and viewport indirect input`() = runComposeUiTest {
+  fun `platform indirect scale reports viewport indirect input`() = runComposeUiTest {
     val fixture = Fixture()
-    var pointerInputCount = 0
     var viewportIndirectInputCount = 0
     setEditorContent(
       fixture = fixture,
-      onEditorPointerInput = { pointerInputCount += 1 },
       onViewportIndirectInput = { viewportIndirectInputCount += 1 },
     )
 
@@ -398,30 +396,8 @@ class EditorInteractionsDesktopTest {
       fixture.platformIndirectScaleBridge.end()
     }
 
-    assertEquals(1, pointerInputCount)
     assertEquals(1, viewportIndirectInputCount)
   }
-
-  @Test
-  fun `direct pointer down reports editor input without viewport indirect input`() =
-    runComposeUiTest {
-      val fixture = Fixture()
-      var pointerInputCount = 0
-      var viewportIndirectInputCount = 0
-      setEditorContent(
-        fixture = fixture,
-        onEditorPointerInput = { pointerInputCount += 1 },
-        onViewportIndirectInput = { viewportIndirectInputCount += 1 },
-      )
-
-      onNodeWithTag(EditorTag).performTouchInput { down(center) }
-      waitForIdle()
-
-      assertEquals(1, pointerInputCount)
-      assertEquals(0, viewportIndirectInputCount)
-
-      onNodeWithTag(EditorTag).performTouchInput { up() }
-    }
 
   @Test
   fun `platform indirect scale takes over a pending physical pan candidate`() = runComposeUiTest {
@@ -1777,7 +1753,6 @@ class EditorInteractionsDesktopTest {
     includeInteractionBoundary: () -> Boolean = { true },
     editorWidth: androidx.compose.ui.unit.Dp = 400.dp,
     consumeIndirectInputAtChild: Boolean = false,
-    onEditorPointerInput: () -> Unit = {},
     onViewportIndirectInput: () -> Unit = {},
     onCoroutineScope: (CoroutineScope) -> Unit = {},
   ) {
@@ -1808,7 +1783,6 @@ class EditorInteractionsDesktopTest {
                   flingBehavior = fixture.flingBehavior,
                   touchSlop = 8f,
                   density = 1f,
-                  onEditorPointerInput = onEditorPointerInput,
                   onViewportIndirectInput = onViewportIndirectInput,
                 )
               } else {

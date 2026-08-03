@@ -193,7 +193,6 @@ class EditorScreenLayoutDesktopTest {
 
       assertEquals(1, controlDownCount)
       assertTrue(fixture.scrollDeltas.isEmpty())
-      assertEquals(0, fixture.editorPointerInputCount)
       assertEquals(EditorInteractionMode.Idle, fixture.interactionScope.controller.interactionMode)
     } finally {
       fixture.close()
@@ -223,12 +222,8 @@ class EditorScreenLayoutDesktopTest {
       }
       waitForIdle()
       assertTrue(fixture.scrollDeltas.isEmpty())
-      assertEquals(0, fixture.editorPointerInputCount)
 
-      runOnIdle {
-        fixture.scrollDeltas.clear()
-        fixture.editorPointerInputCount = 0
-      }
+      runOnIdle { fixture.scrollDeltas.clear() }
       onNodeWithTag(LayoutTag).performTouchInput {
         down(pointerId = 0, position = Offset(x = 280f, y = 40f))
         moveTo(pointerId = 0, position = Offset(x = 282f, y = HeaderHeightPx + 100f))
@@ -237,7 +232,6 @@ class EditorScreenLayoutDesktopTest {
       waitForIdle()
 
       assertTrue(fixture.scrollDeltas.isNotEmpty())
-      assertTrue(fixture.editorPointerInputCount > 0)
       assertEquals(EditorInteractionMode.Idle, fixture.interactionScope.controller.interactionMode)
     } finally {
       fixture.close()
@@ -650,7 +644,6 @@ class EditorScreenLayoutDesktopTest {
     }
     waitForIdle()
 
-    assertEquals(0, fixture.editorPointerInputCount)
     assertEquals(EditorInteractionMode.Idle, fixture.interactionScope.controller.interactionMode)
   }
 
@@ -679,7 +672,7 @@ class EditorScreenLayoutDesktopTest {
       up()
     }
     waitForIdle()
-    assertEquals(0, fixture.editorPointerInputCount, "scrollbar down reached editor")
+    assertEquals(EditorInteractionMode.Idle, fixture.interactionScope.controller.interactionMode)
 
     onNodeWithTag(LayoutTag).performMouseInput {
       moveTo(center)
@@ -1102,7 +1095,6 @@ class EditorScreenLayoutDesktopTest {
           viewportScrollableState = viewportScrollableState,
           viewportContentWidth = HeaderFixtureContentWidth,
           viewportScrollReconcileMode = EditorViewportScrollReconcileMode.Disabled,
-          onEditorPointerInput = { fixture.editorPointerInputCount += 1 },
           onMeasuredViewportSizeChange = {},
           header = {
             EditorHeaderFrame(
@@ -1175,7 +1167,6 @@ class EditorScreenLayoutDesktopTest {
             },
           viewportContentWidth = TestViewportSize.width,
           viewportScrollReconcileMode = EditorViewportScrollReconcileMode.Disabled,
-          onEditorPointerInput = { fixture.editorPointerInputCount += 1 },
           onRequestEditing = onRequestEditing,
           onMeasuredViewportSizeChange = {},
           header = {},
@@ -1273,7 +1264,6 @@ class EditorScreenLayoutDesktopTest {
     val uiState = EditorUiState()
     lateinit var interactionScope: EditorInteractionScope
     val scrollDeltas = mutableListOf<Offset>()
-    var editorPointerInputCount = 0
 
     val layoutSpec =
       EditorDocumentLayoutSpec.Paginated(
@@ -1385,7 +1375,6 @@ class EditorScreenLayoutDesktopTest {
     var headerFocused = false
     var headerPositionInRoot: Offset? = null
     var bodyPositionInRoot: Offset? = null
-    var editorPointerInputCount = 0
 
     fun close() {
       coroutineScope.cancel()

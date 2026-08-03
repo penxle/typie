@@ -25,7 +25,7 @@ class ToolbarInputStateTest {
   }
 
   @Test
-  fun hide_input_closes_panel_and_keyboard_without_restoring_or_clearing_focus() {
+  fun hide_input_closes_panel_and_enters_reading_mode_without_restoring_keyboard() {
     val state = EditorToolbarInputState()
     val keyboardVisible = toolbarInputEnvironment(imeBottom = 320.dp)
 
@@ -37,7 +37,14 @@ class ToolbarInputStateTest {
     assertEquals(null, state.panel)
     assertEquals(null, state.keyboardRestoreInset)
     assertEquals(0.dp, state.rememberedKeyboardInset)
-    assertEquals(listOf(EditorInputEffect.HideKeyboard), effects)
+    assertEquals(
+      listOf(
+        EditorInputEffect.HideKeyboard,
+        EditorInputEffect.ClearFocus,
+        EditorInputEffect.EnterReadingMode,
+      ),
+      effects,
+    )
   }
 
   @Test
@@ -51,7 +58,41 @@ class ToolbarInputStateTest {
     val effects = state.dispatch(ToolbarIntent.HideInput, keyboardVisible)
     state.onEnvironmentChanged(keyboardVisible.copy(visible = false))
 
-    assertEquals(listOf(EditorInputEffect.HideKeyboard), effects)
+    assertEquals(
+      listOf(
+        EditorInputEffect.HideKeyboard,
+        EditorInputEffect.ClearFocus,
+        EditorInputEffect.EnterReadingMode,
+      ),
+      effects,
+    )
+  }
+
+  @Test
+  fun hardware_keyboard_toolbar_hide_action_enters_reading_mode() {
+    val state = EditorToolbarInputState()
+    val hardwareKeyboard =
+      toolbarInputEnvironment(
+        keyboardState = EditorKeyboardState(EditorKeyboardType.Hardware),
+        imeBottom = 0.dp,
+      )
+
+    val effects = state.dispatch(ToolbarIntent.DismissInput, hardwareKeyboard)
+
+    assertEquals(listOf(EditorInputEffect.ClearFocus, EditorInputEffect.EnterReadingMode), effects)
+  }
+
+  @Test
+  fun panel_close_action_restores_editor_input_without_entering_reading_mode() {
+    val state = EditorToolbarInputState()
+    val keyboardVisible = toolbarInputEnvironment(imeBottom = 320.dp)
+
+    state.onEnvironmentChanged(keyboardVisible)
+    state.dispatch(ToolbarIntent.OpenPanel(EditorToolbarBottomPanel.Tools), keyboardVisible)
+
+    val effects = state.dispatch(ToolbarIntent.DismissInput, keyboardVisible)
+
+    assertEquals(listOf(EditorInputEffect.RequestFocus, EditorInputEffect.ShowKeyboard), effects)
   }
 
   @Test

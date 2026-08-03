@@ -264,7 +264,7 @@ internal class EditorToolbarInputState {
       is ToolbarIntent.OpenPanel -> openPanel(intent.panel, intent.scope, environment)
       ToolbarIntent.RestoreEditorInput -> restoreEditorInput(environment)
       ToolbarIntent.DismissInput -> dismissInput(environment)
-      ToolbarIntent.HideInput -> hideInput()
+      ToolbarIntent.HideInput -> hideInput(environment)
       ToolbarIntent.Reset -> reset()
     }
 
@@ -374,16 +374,20 @@ internal class EditorToolbarInputState {
     if (environment.focused) {
       effects += EditorInputEffect.ClearFocus
     }
-    if (fixedAction == ToolbarFixedAction.DismissInput) {
-      effects += EditorInputEffect.EnterReadingMode
-    }
+    effects += EditorInputEffect.EnterReadingMode
     return effects
   }
 
-  private fun hideInput(): List<EditorInputEffect> {
+  private fun hideInput(environment: ToolbarInputEnvironment): List<EditorInputEffect> {
     resetInputState()
     lastPanelSnapshot = null
-    return listOf(EditorInputEffect.HideKeyboard)
+    return buildList {
+      add(EditorInputEffect.HideKeyboard)
+      if (environment.focused) {
+        add(EditorInputEffect.ClearFocus)
+      }
+      add(EditorInputEffect.EnterReadingMode)
+    }
   }
 
   private fun resetInputState() {

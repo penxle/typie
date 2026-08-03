@@ -24,11 +24,13 @@ import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -49,6 +51,7 @@ import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
+import kotlin.math.abs
 
 internal val ToolbarCapsuleShape = AppShapes.rounded(AppShapes.full)
 internal val ToolbarButtonShape = AppShapes.circle
@@ -296,6 +299,100 @@ internal fun Modifier.emitPressInteractions(interactionSource: MutableInteractio
       interactionSource.tryEmit(release)
     }
   }
+
+@Composable
+internal fun Modifier.toolbarVerticalSwipeGestures(
+  onPointerSessionStart: () -> Unit,
+  onSwipeUp: () -> Unit,
+  onSwipeDown: () -> Unit,
+  onSwipeDownProgress: (ToolbarDismissSwipeProgress) -> Unit,
+  onSwipeDownCancelled: () -> Unit,
+): Modifier {
+  val latestOnPointerSessionStart = rememberUpdatedState(onPointerSessionStart)
+  val latestOnSwipeUp = rememberUpdatedState(onSwipeUp)
+  val latestOnSwipeDown = rememberUpdatedState(onSwipeDown)
+  val latestOnSwipeDownProgress = rememberUpdatedState(onSwipeDownProgress)
+  val latestOnSwipeDownCancelled = rememberUpdatedState(onSwipeDownCancelled)
+
+  return pointerInput(Unit) {
+    awaitEachGesture {
+      val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+      latestOnPointerSessionStart.value()
+      var lastPosition = down.position
+      var totalDelta = Offset.Zero
+      var direction = 0
+      var dismissSwipeArmed = false
+
+      fun updateDismissSwipe(distance: Float) {
+        val nextArmed =
+          if (dismissSwipeArmed) {
+            distance > ToolbarDismissSwipeDisarmThreshold.toPx()
+          } else {
+            distance >= ToolbarDismissSwipeThreshold.toPx()
+          }
+        dismissSwipeArmed = nextArmed
+        latestOnSwipeDownProgress.value(
+          ToolbarDismissSwipeProgress(distancePx = distance, armed = nextArmed)
+        )
+      }
+
+      while (true) {
+        val event = awaitPointerEvent(PointerEventPass.Initial)
+        val change = event.changes.firstOrNull { it.id == down.id }
+        if (change == null || change.isConsumed) {
+          if (direction > 0) {
+            latestOnSwipeDownCancelled.value()
+          }
+          break
+        }
+
+        totalDelta += change.position - lastPosition
+        lastPosition = change.position
+
+        if (!change.pressed) {
+          if (direction > 0) {
+            change.consume()
+            if (dismissSwipeArmed) {
+              latestOnSwipeDown.value()
+            } else {
+              latestOnSwipeDownCancelled.value()
+            }
+          }
+          break
+        }
+
+        if (direction < 0) {
+          change.consume()
+          continue
+        }
+
+        if (direction > 0) {
+          change.consume()
+          updateDismissSwipe(totalDelta.y.coerceAtLeast(0f))
+          continue
+        }
+
+        val horizontalDistance = abs(totalDelta.x)
+        val verticalDistance = abs(totalDelta.y)
+        if (maxOf(horizontalDistance, verticalDistance) <= viewConfiguration.touchSlop) {
+          continue
+        }
+        if (verticalDistance < horizontalDistance * ToolbarDismissSwipeDirectionRatio) break
+
+        change.consume()
+        if (totalDelta.y < 0f) {
+          direction = -1
+          latestOnSwipeUp.value()
+        } else {
+          direction = 1
+          updateDismissSwipe(totalDelta.y)
+        }
+      }
+    }
+  }
+}
+
+internal data class ToolbarDismissSwipeProgress(val distancePx: Float, val armed: Boolean)
 
 internal fun Modifier.trackToolbarScrollGestureStart(
   onStart: () -> Unit,
