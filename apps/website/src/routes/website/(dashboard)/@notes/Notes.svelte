@@ -427,6 +427,7 @@
     bind:this={scrollContainer}
     class={flex({
       paddingTop: '[15dvh]',
+      paddingX: '20px',
       flexDirection: 'column',
       gap: '20px',
       width: 'full',
