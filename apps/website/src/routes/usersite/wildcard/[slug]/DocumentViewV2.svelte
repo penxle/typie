@@ -25,6 +25,7 @@
   import { browserScaleFactor, Editor, setupEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { registerLinkContextMenu } from '$lib/editor-ffi/handlers/link';
   import { unwrapError } from '$lib/graphql';
+  import { sanitizePasswordInput } from '$lib/utils/password';
   import { graphql } from '$mearie';
   import BodyUnavailable from './BodyUnavailable.svelte';
   import ContentNavigation from './ContentNavigation.svelte';
@@ -234,6 +235,14 @@
   $effect(() => {
     void form;
   });
+
+  const handlePasswordInput = (event: Event & { currentTarget: HTMLInputElement }) => {
+    const value = sanitizePasswordInput(event.currentTarget);
+
+    if (form.fields.password !== value) {
+      form.fields.password = value;
+    }
+  };
 
   const theme = getThemeContext();
   const ctx = setupEditorContext();
@@ -658,6 +667,8 @@
               <TextInput
                 id="password"
                 style={css.raw({ width: 'full', height: '36px' })}
+                oncompositionend={handlePasswordInput}
+                oninput={handlePasswordInput}
                 placeholder="비밀번호를 입력하세요"
                 type="password"
                 bind:value={form.fields.password}

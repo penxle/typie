@@ -144,6 +144,10 @@ private fun generateDocumentSharePassword(): String {
   return List(4) { Random.nextInt(10).toString() }.joinToString("")
 }
 
+private fun sanitizeDocumentSharePassword(value: String): String {
+  return value.filter { it in '\u0021'..'\u007E' }
+}
+
 private val DocumentShare_entity.document
   get() = requireNotNull(node.onDocument)
 
@@ -638,10 +642,10 @@ internal fun DocumentShareSheet(
         if (!loading && form.hasPassword.value) {
           TextField(
             value = form.password.value,
-            onValueChange = { form.password.setValue(it) },
+            onValueChange = { form.password.setValue(sanitizeDocumentSharePassword(it)) },
             label = "비밀번호",
             placeholder = "비밀번호를 입력해주세요.",
-            keyboardType = KeyboardType.Number,
+            keyboardType = KeyboardType.Ascii,
             imeAction = ImeAction.Done,
             onImeAction = { commitPassword(form.password.value) },
             onBlur = { commitPassword(form.password.value) },

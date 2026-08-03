@@ -27,6 +27,7 @@
   import { env } from '$env/dynamic/public';
   import { Img } from '$lib/components';
   import { uploadBlobAsImage } from '$lib/utils';
+  import { sanitizePasswordInput } from '$lib/utils/password';
   import { graphql } from '$mearie';
   import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
   import type { DashboardLayout_Share_Document_document$key } from '$mearie';
@@ -201,6 +202,14 @@
       }
     };
   });
+
+  const handlePasswordInput = (event: Event & { currentTarget: HTMLInputElement }) => {
+    const value = sanitizePasswordInput(event.currentTarget);
+
+    if (form.fields.password !== value) {
+      form.fields.password = value;
+    }
+  };
 
   const generateRandomPassword = () => {
     isRolling = true;
@@ -444,9 +453,11 @@
               })}
               autocomplete="off"
               data-1p-ignore
+              oncompositionend={handlePasswordInput}
+              oninput={handlePasswordInput}
               placeholder="비밀번호 입력"
               type={showPassword ? 'text' : 'password'}
-              bind:value={form.fields.password}
+              value={form.fields.password ?? ''}
             />
 
             <button
