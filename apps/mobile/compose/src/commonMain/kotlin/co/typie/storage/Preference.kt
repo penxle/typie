@@ -21,31 +21,33 @@ internal inline fun <reified T> prefs(key: String, defaultValue: T): PersistentS
   return PersistentState(initial) { holder.v = it }
 }
 
+internal val userScopedRegistry = UserScopedRegistry()
+
 object Preference {
   var themeMode by prefs("theme_mode", ThemeMode.System)
 
-  var siteId by prefs<String?>("site_id", null)
+  var siteId by userPrefs<String?>("site_id", null)
 
-  var recentSearches by prefs("recent_searches", emptyList<String>())
+  var recentSearches by userPrefs("recent_searches", emptyList<String>())
 
-  var typewriterEnabled by prefs("typewriter_enabled", false)
-  var typewriterPosition by prefs("typewriter_position", 0.5)
-  var lineHighlightEnabled by prefs("line_highlight_enabled", true)
-  var doubleTapToEditEnabled by prefs("double_tap_to_edit_enabled", true)
-  var autoSurroundEnabled by prefs("auto_surround_enabled", true)
-  var searchMatchWholeWord by prefs("search_match_whole_word", false)
-  var characterCountFloatingEnabled by prefs("character_count_floating_enabled", false)
-  var characterCountFloatingPositionX by prefs("character_count_floating_position_x", 0.05)
-  var characterCountFloatingPositionY by prefs("character_count_floating_position_y", 0.05)
-  var widgetAutoFadeEnabled by prefs("widget_auto_fade_enabled", true)
+  var typewriterEnabled by userPrefs("typewriter_enabled", false)
+  var typewriterPosition by userPrefs("typewriter_position", 0.5)
+  var lineHighlightEnabled by userPrefs("line_highlight_enabled", true)
+  var doubleTapToEditEnabled by userPrefs("double_tap_to_edit_enabled", true)
+  var autoSurroundEnabled by userPrefs("auto_surround_enabled", true)
+  var searchMatchWholeWord by userPrefs("search_match_whole_word", false)
+  var characterCountFloatingEnabled by userPrefs("character_count_floating_enabled", false)
+  var characterCountFloatingPositionX by userPrefs("character_count_floating_position_x", 0.05)
+  var characterCountFloatingPositionY by userPrefs("character_count_floating_position_y", 0.05)
+  var widgetAutoFadeEnabled by userPrefs("widget_auto_fade_enabled", true)
 
   var devMode by prefs("dev_mode", false)
 
   var legacyMigrationHandled by prefs("legacy_migration_handled", false)
 
-  var planChangeNoticeShown by prefs("plan_change_notice_shown", false)
+  var planChangeNoticeShown by userPrefs("plan_change_notice_shown", false)
 
-  var trialReminderLastShownDate by prefs<String?>("trial_reminder_last_shown_date", null)
+  var trialReminderLastShownDate by userPrefs<String?>("trial_reminder_last_shown_date", null)
 
   var preflightCache by prefs<Preflight?>("preflight_cache", null)
 
@@ -56,4 +58,8 @@ object Preference {
   @OptIn(ExperimentalUuidApi::class)
   val deviceId: String
     get() = _deviceId ?: Uuid.random().toHexString().also { _deviceId = it }
+
+  fun switchUser(userId: String?) {
+    userScopedRegistry.switchUser(userId)
+  }
 }

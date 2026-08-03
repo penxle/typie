@@ -8,4 +8,5 @@ sealed interface AuthState {
   data object Unauthenticated : AuthState
 }
 
-@Serializable data class AuthTokens(val sessionToken: String, val accessToken: String)
+@Serializable
+data class AuthTokens(val sessionToken: String, val accessToken: String, val userId: String? = null)

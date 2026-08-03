@@ -37,7 +37,10 @@ object SubscriptionService {
     }
 
   private var clockTick by mutableStateOf(0L)
-  private var sessionUserId: String? by mutableStateOf(null)
+
+  // me 응답 전(콜드 스타트·오프라인)에도 캐시가 세션 유저로 필터되도록 인증 시점 userId에서 파생한다.
+  private val sessionUserId: String?
+    get() = (AuthService.state as? AuthState.Authenticated)?.tokens?.userId
 
   private val me: SubscriptionService_Query.Me?
     get() = (query.state as? QueryState.Success)?.data?.me
@@ -65,7 +68,6 @@ object SubscriptionService {
       snapshotFlow { query.networkGeneration to me }
         .collect { (_, me) ->
           if (me == null) return@collect
-          sessionUserId = me.id
           // 구독이 없는 응답(entitled = false)도 저장한다 — 회수를 관측한 뒤 오프라인이 되면
           // 과거 true 가 되살아난다.
           Preference.entitlementCache =

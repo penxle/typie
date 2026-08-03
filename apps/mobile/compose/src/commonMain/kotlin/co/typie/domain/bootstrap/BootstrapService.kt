@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import co.typie.domain.auth.AuthService
 import co.typie.domain.auth.AuthState
+import co.typie.domain.auth.resolveActiveSiteId
 import co.typie.domain.preflight.PreflightService
 import co.typie.domain.preflight.PreflightState
 import co.typie.domain.subscription.SubscriptionPurchaseService
@@ -71,12 +72,6 @@ object BootstrapService {
   private suspend fun ensureSiteId() {
     val response = Apollo.query(BootstrapService_Query()).execute()
     val siteIds = response.dataOrThrow().me.sites.map { it.id }
-
-    val siteId = Preference.siteId
-    if (siteId != null && siteId in siteIds) {
-      return
-    }
-
-    Preference.siteId = siteIds.first()
+    resolveActiveSiteId(Preference.siteId, siteIds)?.let { Preference.siteId = it }
   }
 }
