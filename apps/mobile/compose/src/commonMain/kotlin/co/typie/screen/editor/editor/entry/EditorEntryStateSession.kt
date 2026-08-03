@@ -8,7 +8,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import co.typie.editor.Editor
 import co.typie.editor.ffi.Message
-import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.SelectionOp
 import co.typie.editor.ffi.StableSelection
 import co.typie.editor.scroll.EditorBringIntoViewRequests
@@ -62,18 +61,14 @@ internal fun rememberEditorEntryStateSession(
     val activeDocumentId = documentId ?: return@LaunchedEffect
     val activeEditor = editor ?: return@LaunchedEffect
 
-    snapshotFlow { activeEditor.publishedState.selection }
+    snapshotFlow { activeEditor.appliedState.selection }
       .filterNotNull()
-      .collect { selection ->
+      .collect {
         if (!currentEditorFocused.value) {
           return@collect
         }
 
-        controller.saveBodySelection(
-          documentId = activeDocumentId,
-          editor = activeEditor,
-          selection = selection,
-        )
+        controller.saveBodySelection(documentId = activeDocumentId, editor = activeEditor)
       }
   }
 
@@ -91,8 +86,10 @@ private class EditorEntryStateSessionController(private val store: EditorEntrySt
     save(documentId = documentId, target = target, bodySelection = null)
   }
 
-  suspend fun saveBodySelection(documentId: String, editor: Editor, selection: Selection) {
+  suspend fun saveBodySelection(documentId: String, editor: Editor) {
+    val selection = editor.appliedState.selection ?: return
     val frozen = editor.freezeSelection(selection) ?: return
+
     save(documentId = documentId, target = EditorEntryTarget.Body, bodySelection = frozen)
   }
 
