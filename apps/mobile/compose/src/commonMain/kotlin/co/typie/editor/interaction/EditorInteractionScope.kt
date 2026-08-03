@@ -61,7 +61,7 @@ internal class EditorInteractionScope(
 
   val controller: EditorInteractionController =
     EditorInteractionController(
-      editorProvider = { checkNotNull(editor) { "Editor interaction scope has no editor" } },
+      editorProvider = { editor },
       effects = this,
       geometry = this,
       semantics = semantics,

@@ -271,6 +271,27 @@ class EditorInteractionScopeTest {
     }
 
   @Test
+  fun `cancellation is ignored before editor attaches`() =
+    runTest(StandardTestDispatcher()) {
+      val scope = EditorInteractionScope(coroutineScope = this)
+
+      scope.update(
+        editor = null,
+        bringIntoViewRequests = EditorBringIntoViewRequests(),
+        uiState = EditorUiState(),
+        density = 1f,
+        visibleArea = EditorVisibleArea(),
+        viewportState = EditorViewportState(),
+        scrollGestureLockState = ScrollGestureLockState(),
+        viewportZoomConfig = null,
+        onSelectionHaptic = {},
+        onRequestSoftwareKeyboard = {},
+      )
+
+      scope.controller.cancel()
+    }
+
+  @Test
   fun `root Down eligibility and mapping distinguish header from document body`() =
     runTest(StandardTestDispatcher()) {
       val uiState =

@@ -15,7 +15,7 @@ import co.typie.editor.runtime.EditorUiState
 import co.typie.platform.Platform
 
 internal class EditorInteractionController(
-  private val editorProvider: () -> Editor,
+  private val editorProvider: () -> Editor?,
   override val effects: EditorInteractionEffects,
   override val geometry: EditorInteractionGeometry,
   private val uiStateProvider: () -> EditorUiState,
@@ -31,7 +31,7 @@ internal class EditorInteractionController(
   private val doubleTapToEditEnabledProvider: () -> Boolean = { true },
 ) : EditorGestureContext {
   override val editor: Editor
-    get() = editorProvider()
+    get() = checkNotNull(editorProvider()) { "Editor interaction scope has no editor" }
 
   override var mode by mutableStateOf(EditorInteractionMode.Idle)
     private set
@@ -210,7 +210,7 @@ internal class EditorInteractionController(
   }
 
   fun onEditorStateChanged(state: EditorState) {
-    semantics.onEditorStateChanged(editor = editorProvider(), state = state, mode = mode)
+    semantics.onEditorStateChanged(editor = editor, state = state, mode = mode)
     gestures.onPublishedStateChanged(state = state, context = this)
   }
 
@@ -229,6 +229,9 @@ internal class EditorInteractionController(
   }
 
   fun cancel() {
+    if (editorProvider() == null) {
+      return
+    }
     reduceMode(EditorInteractionEvent.PointerCancel)
     gestures.cancel(context = this)
   }
