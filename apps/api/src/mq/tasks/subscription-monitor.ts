@@ -212,8 +212,10 @@ const checkQueueHealth = async () => {
   const now = Date.now();
 
   try {
+    // 반복 잡의 timestamp 는 생성 시각 = 이전 회차 시작 시점이라 한 주기만큼 이르다. 예정 시각은 timestamp +
+    // opts.delay 로 복원한다 — 해시의 delay 필드는 승격 시 0 으로 리셋되므로 쓸 수 없다.
     const [oldestWaiting] = await queue.getWaiting(0, 0);
-    if (oldestWaiting && now - oldestWaiting.timestamp > QUEUE_STUCK_THRESHOLD_MS) {
+    if (oldestWaiting && now - (oldestWaiting.timestamp + (oldestWaiting.opts.delay ?? 0)) > QUEUE_STUCK_THRESHOLD_MS) {
       await opsAlert('invariant-violation', {
         check: 'queue-waiting-stuck',
         count: 1,
@@ -245,7 +247,12 @@ const checkQueueHealth = async () => {
     const activeJobs = await queue.getActive(0, -1);
     // 오름차순 정렬 후 임계 초과분만 남긴다 — 정렬한 배열의 앞쪽이 곧 최고령이라 그대로 표본이 된다.
     // count 는 전체 active 수가 아니라 실제 고착(임계 초과) 수다 — 정상 처리 중인 잡까지 세면 알람이 과장된다.
-    const stuck = activeJobs.filter((job) => now - job.timestamp > QUEUE_STUCK_THRESHOLD_MS).toSorted((a, b) => a.timestamp - b.timestamp);
+    // 나이는 처리 시작 시각(processedOn)으로 잰다 — timestamp 는 생성 시각이라 반복 잡에서 한 주기(이 크론은
+    // 임계와 같은 30분)를 이미 품고 있어, 이 크론이 매 회차 자기 자신을 고착으로 신고했다.
+    const startedAt = (job: (typeof activeJobs)[number]) => job.processedOn ?? job.timestamp;
+    const stuck = activeJobs
+      .filter((job) => now - startedAt(job) > QUEUE_STUCK_THRESHOLD_MS)
+      .toSorted((a, b) => startedAt(a) - startedAt(b));
     if (stuck.length > 0) {
       await opsAlert('invariant-violation', {
         check: 'queue-active-stuck',
