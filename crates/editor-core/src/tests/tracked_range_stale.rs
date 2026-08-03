@@ -1,3 +1,4 @@
+use editor_common::{Direction, Movement};
 use editor_macros::state;
 use editor_state::{Position, Selection};
 
@@ -167,6 +168,38 @@ fn undo_does_not_resurrect_stale_range() {
     assert!(
         !editor.tracked_ranges().contains("r1"),
         "undo restores text but never resurrects a removed range"
+    );
+    assert!(stale_ids(&events).is_empty());
+}
+
+#[test]
+fn transient_text_change_before_navigation_is_verified_at_tick_end() {
+    let (mut editor, p1) = hello_world_editor();
+    set_cursor(&mut editor, p1, 2);
+
+    let request_id = editor
+        .enqueue_request(vec![
+            Message::Insertion {
+                op: InsertionOp::Text { text: "X".into() },
+            },
+            Message::Navigation {
+                op: NavigationOp::Move {
+                    movement: Movement::Grapheme {
+                        direction: Direction::Forward,
+                    },
+                    extend: false,
+                },
+            },
+            Message::History {
+                op: HistoryOp::Undo,
+            },
+        ])
+        .unwrap();
+    let events = editor.tick_through(request_id).unwrap().events;
+
+    assert!(
+        editor.tracked_ranges().contains("r1"),
+        "a range whose captured text matches the final state must survive the tick"
     );
     assert!(stale_ids(&events).is_empty());
 }

@@ -637,6 +637,42 @@ fn replacement_fires_on_commit_as_is() {
 }
 
 #[test]
+fn movement_after_replacement_uses_the_replaced_document_layout() {
+    let (s, ..) = state! {
+        doc { root { p1: paragraph { text("가가") } } }
+        selection: (p1, 2)
+    };
+    let mut editor = editor_with_rules(s, vec![rule("ㅠㅠ", "하하하", false)]);
+
+    type_text(&mut editor, "ㅠ");
+    editor.apply(Message::TextInput {
+        ops: vec![FlatImeOp::Compose { text: "ㅠ".into() }],
+    });
+    editor
+        .enqueue_request(vec![
+            Message::TextInput {
+                ops: vec![FlatImeOp::CommitAsIs],
+            },
+            Message::Navigation {
+                op: NavigationOp::Move {
+                    movement: Movement::Grapheme {
+                        direction: Direction::Forward,
+                    },
+                    extend: false,
+                },
+            },
+        ])
+        .unwrap();
+    editor.tick().unwrap();
+
+    let (expected, ..) = state! {
+        doc { root { p1: paragraph { text("가가하하하") } } }
+        selection: (p1, 5)
+    };
+    assert_state_eq!(editor.state(), &expected);
+}
+
+#[test]
 fn flat_text_input_message_commits_preedit() {
     let (s, ..) = state! {
         doc { root { p1: paragraph { text("") } } }

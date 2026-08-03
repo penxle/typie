@@ -3,7 +3,6 @@ use std::sync::Arc;
 use editor_commands::{self as commands, CommandError, CommandResult};
 use editor_state::{
     Position, ResolvedPosition, ResolvedPositionFlatExt, Selection, flat_size, flat_text,
-    remap_selection,
 };
 use editor_transaction::Transaction;
 
@@ -59,9 +58,7 @@ pub fn handle_deletion_op(editor: &mut Editor, op: DeletionOp) -> Result<(), Edi
             })?;
         }
         DeletionOp::Move { movement } => {
-            let Some(input_state) = editor.layout_input_state() else {
-                return Ok(());
-            };
+            let input_state = editor.state.clone();
             let Some(selection) = input_state.selection else {
                 return Ok(());
             };
@@ -74,10 +71,6 @@ pub fn handle_deletion_op(editor: &mut Editor, op: DeletionOp) -> Result<(), Edi
 
             if let Some(target) = target {
                 let selection = Selection::new(head, target.head);
-                let Some(selection) = remap_selection(selection, &input_state, &editor.state)
-                else {
-                    return Ok(());
-                };
                 editor.transact(|tr| {
                     commands::set_selection(tr, selection)?;
                     commands::delete_selection(tr)?;

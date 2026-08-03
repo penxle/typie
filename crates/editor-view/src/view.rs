@@ -412,6 +412,25 @@ impl View {
         self.layout_state.as_ref()
     }
 
+    /// Returns whether the retained geometry was built from the current document
+    /// and its layout-affecting transient state. Selection differences are
+    /// intentionally excluded; their layout effects are represented by the
+    /// pending overlay and gap phantom passed separately.
+    pub fn retained_layout_matches(
+        &self,
+        state: &State,
+        pending_overlay: Option<&PendingOverlay>,
+        gap_phantom: Option<&GapPhantom>,
+    ) -> bool {
+        self.layout.is_some()
+            && self
+                .layout_state
+                .as_ref()
+                .is_some_and(|layout_state| Arc::ptr_eq(&layout_state.projected, &state.projected))
+            && self.view_state.pending_overlay.as_ref() == pending_overlay
+            && self.view_state.gap_phantom.as_ref() == gap_phantom
+    }
+
     /// Consumes projected layout dirtiness without making the retained layout
     /// snapshot force a copy-on-write clone of an otherwise unchanged document.
     pub fn take_layout_dirty(&mut self, state: &mut State) -> LayoutDirty {

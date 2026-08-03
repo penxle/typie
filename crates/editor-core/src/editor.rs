@@ -10,7 +10,6 @@ use editor_resource::{CharacterCount, Resource, count_text};
 use editor_state::{
     LayoutDirty, Position, ResolvedPosition, ResolvedPositionFlatExt, Selection, StableSelection,
     State, closest_empty_paragraph_break_end_between, farther_endpoint, is_unit_node_selection,
-    remap_selection,
 };
 use editor_transaction::{Effect, HistoryMeta, MergeKind, StepError, Transaction};
 use editor_view::{GapPhantom, PageRect, PendingOverlay, View, Viewport};
@@ -218,6 +217,39 @@ fn typing_run(kind: MergeKind, before: &State, after: &State) -> RecordMerge {
 type SelectionMarkRectsCache = Mutex<Option<(Selection, u64, Arc<Vec<PageRect>>)>>;
 type TrackedDecorationMarksCache = Mutex<Option<(u64, Arc<Vec<Mark>>)>>;
 
+#[derive(Default)]
+struct TickChanges {
+    // Pending ops stay on Editor until the tick succeeds; this count records
+    // which prefix has already contributed to an earlier layout phase.
+    reconciled_op_count: usize,
+    view_changed: bool,
+    // Layout may be reconciled more than once for geometry-dependent commands,
+    // but text-sensitive ranges are verified only against the final tick state.
+    tracked_text_dirty: Option<LayoutDirty>,
+}
+
+impl TickChanges {
+    fn record_layout_dirty(&mut self, dirty: &LayoutDirty) {
+        let accumulated = self
+            .tracked_text_dirty
+            .get_or_insert_with(LayoutDirty::empty);
+        match dirty {
+            LayoutDirty::Full => accumulated.mark_full(),
+            LayoutDirty::Incremental {
+                content,
+                structural,
+            } => {
+                for &dot in content {
+                    accumulated.mark_content(dot);
+                }
+                for &dot in structural {
+                    accumulated.mark_structural(dot);
+                }
+            }
+        }
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ManifestRequestClass {
     Prefetch,
@@ -249,6 +281,10 @@ pub struct Editor {
     resource_apply_count: usize,
     pending_events: Vec<EditorEvent>,
     pub(crate) pending_ops: Vec<Op<EditOp>>,
+    // A mid-tick layout reconciliation drains projected layout dirtiness. If a
+    // later message fails unexpectedly, retain its bookkeeping alongside
+    // `pending_ops` until a successful tick can finish publication.
+    pending_tick_changes: TickChanges,
     pending_effects: HashSet<Effect>,
     pub(crate) pending_fonts: HashMap<(String, u16), HashMap<Dot, HashSet<u32>>>,
     pub(crate) pending_font_index: Option<crate::font::PendingFontIndex>,
@@ -299,6 +335,7 @@ impl Editor {
             resource_apply_count: 0,
             pending_events: Vec::new(),
             pending_ops: Vec::new(),
+            pending_tick_changes: TickChanges::default(),
             pending_effects: HashSet::new(),
             pending_fonts: HashMap::new(),
             pending_font_index: None,
@@ -856,51 +893,15 @@ impl Editor {
         let old_composition_paint = self.composition_paint.clone();
         let old_last_history_tag_revision = self.undo_history.last_tag_revision();
 
-        let mut ime_failed = false;
-        let mut applied = false;
-        while let Some(entry) = entries.pop_front() {
-            match entry {
-                QueueEntry::Request { id, messages } => {
-                    applied = true;
-                    let mut command_outcomes = Vec::with_capacity(messages.len());
-                    self.process_request_messages(
-                        messages,
-                        &mut command_outcomes,
-                        &mut ime_failed,
-                    )?;
-                    request_outcomes.push(RequestOutcome {
-                        request_id: id,
-                        command_outcomes,
-                    });
+        let mut changes = std::mem::take(&mut self.pending_tick_changes);
+        let (ime_failed, applied) =
+            match self.apply_tick_entries(entries, request_outcomes, &mut changes) {
+                Ok(result) => result,
+                Err(error) => {
+                    self.pending_tick_changes = changes;
+                    return Err(error);
                 }
-                QueueEntry::Resource(update) => {
-                    self.ime_delete_paint = None;
-                    applied |= self.apply_resource_update(update)?;
-                }
-                QueueEntry::Remote(changeset) => {
-                    self.ime_delete_paint = None;
-                    let mut batch = vec![changeset];
-                    while matches!(entries.front(), Some(QueueEntry::Remote(_))) {
-                        if let QueueEntry::Remote(changeset) =
-                            entries.pop_front().expect("matched remote queue entry")
-                        {
-                            batch.push(changeset);
-                        }
-                    }
-                    applied |= self.apply_remote_changesets(batch)?;
-                }
-                QueueEntry::SetDocument(plain) => {
-                    applied = true;
-                    self.ime_delete_paint = None;
-                    self.apply_set_doc(plain)?;
-                }
-                QueueEntry::InsertTemplate(template) => {
-                    applied = true;
-                    self.ime_delete_paint = None;
-                    self.apply_template_fragment(template)?;
-                }
-            }
-        }
+            };
         // Defense-in-depth: every op-applying path seals its own changeset
         // (`Transaction::commit`, `apply_undo_result`). If a future path leaks
         // unsealed ops past this boundary, the sync layer snapshots
@@ -926,32 +927,24 @@ impl Editor {
             self.push_event(EditorEvent::ImeResyncRequired);
         }
 
-        crate::font::flush_font_loads(self);
-
-        let layout_dirty = self.view.take_layout_dirty(&mut self.state);
-
-        if !self.pending_ops.is_empty() {
-            self.augment_font_state_from_ops(&layout_dirty);
-        }
-
-        let tracked_ranges_went_stale = self.reverify_tracked_text(&layout_dirty);
+        self.reconcile_pending_layout(&mut changes);
+        let tracked_ranges_went_stale = changes
+            .tracked_text_dirty
+            .take()
+            .is_some_and(|dirty| self.reverify_tracked_text(&dirty));
 
         let effects = std::mem::take(&mut self.pending_effects);
         if !effects.is_empty() {
             self.process_effects(effects);
         }
-
         crate::font::emit_prefetch_if_quiescent(self);
 
         let ops = std::mem::take(&mut self.pending_ops);
-        let pending_overlay = normalize_pending_overlay(&self.state);
-        let gap_phantom = normalize_gap_phantom(&self.state);
-        // `reconcile` reports view-level change sources (pending overlay, gap phantom,
-        // layout fingerprint); applied doc ops also dirty the rendered layout.
-        let dirty = self
-            .view
-            .reconcile(&self.state, layout_dirty, pending_overlay, gap_phantom)
-            || !ops.is_empty();
+        let TickChanges {
+            reconciled_op_count: _,
+            view_changed: dirty,
+            tracked_text_dirty: _,
+        } = changes;
 
         let mut fields: HashSet<StateField> = HashSet::new();
 
@@ -1045,11 +1038,69 @@ impl Editor {
         Ok((std::mem::take(&mut self.pending_events), applied))
     }
 
+    /// Applies queued entries before tick-final publication. If an entry fails,
+    /// the caller retains `changes` with the state mutations that remain applied.
+    fn apply_tick_entries(
+        &mut self,
+        entries: &mut VecDeque<QueueEntry>,
+        request_outcomes: &mut Vec<RequestOutcome>,
+        changes: &mut TickChanges,
+    ) -> Result<(bool, bool), EditorError> {
+        let mut ime_failed = false;
+        let mut applied = false;
+        while let Some(entry) = entries.pop_front() {
+            match entry {
+                QueueEntry::Request { id, messages } => {
+                    applied = true;
+                    let mut command_outcomes = Vec::with_capacity(messages.len());
+                    self.process_request_messages(
+                        messages,
+                        &mut command_outcomes,
+                        &mut ime_failed,
+                        changes,
+                    )?;
+                    request_outcomes.push(RequestOutcome {
+                        request_id: id,
+                        command_outcomes,
+                    });
+                }
+                QueueEntry::Resource(update) => {
+                    self.ime_delete_paint = None;
+                    applied |= self.apply_resource_update(update)?;
+                }
+                QueueEntry::Remote(changeset) => {
+                    self.ime_delete_paint = None;
+                    let mut batch = vec![changeset];
+                    while matches!(entries.front(), Some(QueueEntry::Remote(_))) {
+                        if let QueueEntry::Remote(changeset) =
+                            entries.pop_front().expect("matched remote queue entry")
+                        {
+                            batch.push(changeset);
+                        }
+                    }
+                    applied |= self.apply_remote_changesets(batch)?;
+                }
+                QueueEntry::SetDocument(plain) => {
+                    applied = true;
+                    self.ime_delete_paint = None;
+                    self.apply_set_doc(plain)?;
+                }
+                QueueEntry::InsertTemplate(template) => {
+                    applied = true;
+                    self.ime_delete_paint = None;
+                    self.apply_template_fragment(template)?;
+                }
+            }
+        }
+        Ok((ime_failed, applied))
+    }
+
     fn process_request_messages(
         &mut self,
         messages: Vec<Message>,
         command_outcomes: &mut Vec<CommandOutcome>,
         ime_failed: &mut bool,
+        changes: &mut TickChanges,
     ) -> Result<(), EditorError> {
         let mut messages: VecDeque<_> = messages.into();
         while let Some(message) = messages.pop_front() {
@@ -1082,7 +1133,9 @@ impl Editor {
                         outcome = CommandOutcome::Rejected {
                             reason: CommandRejection::InvalidArgument,
                         };
-                    } else if let Err(e) = self.process_message(Message::TextInput { ops: batch }) {
+                    } else if let Err(e) =
+                        self.process_message(Message::TextInput { ops: batch }, changes)
+                    {
                         if is_illegal_slot(&e) {
                             log::warn!(
                                 "text input rejected by insert-slot guard; requesting ime resync: {e}"
@@ -1105,7 +1158,8 @@ impl Editor {
                         outcome = CommandOutcome::Rejected {
                             reason: CommandRejection::InvalidArgument,
                         };
-                    } else if let Err(e) = self.process_message(Message::Insertion { op }) {
+                    } else if let Err(e) = self.process_message(Message::Insertion { op }, changes)
+                    {
                         if is_illegal_slot(&e) {
                             log::warn!(
                                 "insertion rejected by insert-slot guard; requesting ime resync: {e}"
@@ -1123,7 +1177,7 @@ impl Editor {
                 }
                 other => {
                     self.ime_delete_paint = None;
-                    self.process_message(other)
+                    self.process_message(other, changes)
                 }
             };
             if let Err(e) = &result
@@ -1141,6 +1195,44 @@ impl Editor {
             command_outcomes.extend(std::iter::repeat_n(outcome, consumed));
         }
         Ok(())
+    }
+
+    /// Reconciles the retained layout with the current state. This may run before
+    /// geometry-dependent commands, so irreversible tick-final work stays out.
+    fn reconcile_pending_layout(&mut self, changes: &mut TickChanges) {
+        crate::font::flush_font_loads(self);
+
+        let layout_dirty = self.view.take_layout_dirty(&mut self.state);
+        let has_new_ops = self.pending_ops.len() > changes.reconciled_op_count;
+        if has_new_ops {
+            self.augment_font_state_from_ops(&layout_dirty);
+        }
+        changes.record_layout_dirty(&layout_dirty);
+
+        let pending_overlay = normalize_pending_overlay(&self.state);
+        let gap_phantom = normalize_gap_phantom(&self.state);
+        // `reconcile` reports view-level change sources (pending overlay, gap phantom,
+        // layout fingerprint); applied doc ops also dirty the rendered layout.
+        changes.view_changed |=
+            self.view
+                .reconcile(&self.state, layout_dirty, pending_overlay, gap_phantom)
+                || has_new_ops;
+        changes.reconciled_op_count = self.pending_ops.len();
+    }
+
+    /// Establishes the dispatcher invariant for handlers that query retained geometry.
+    fn synchronize_layout_for_command(&mut self, changes: &mut TickChanges) {
+        let pending_overlay = normalize_pending_overlay(&self.state);
+        let gap_phantom = normalize_gap_phantom(&self.state);
+        if !self.pending_font_loads.is_empty()
+            || !self.view.retained_layout_matches(
+                &self.state,
+                pending_overlay.as_ref(),
+                gap_phantom.as_ref(),
+            )
+        {
+            self.reconcile_pending_layout(changes);
+        }
     }
 
     #[cfg(any(test, feature = "test-utils"))]
@@ -1383,11 +1475,24 @@ impl Editor {
             .export_page_vector(&doc, &self.view, page_idx as usize, scale_factor)
     }
 
-    fn process_message(&mut self, msg: Message) -> Result<(), EditorError> {
+    fn process_message(
+        &mut self,
+        msg: Message,
+        changes: &mut TickChanges,
+    ) -> Result<(), EditorError> {
         match msg {
             Message::Key { event } => handle::handle_key_event(self, event)?,
             Message::Insertion { op } => handle::handle_insertion_op(self, op)?,
-            Message::Deletion { op } => handle::handle_deletion_op(self, op)?,
+            Message::Deletion { op } => {
+                if matches!(
+                    &op,
+                    DeletionOp::Move { movement }
+                        if !matches!(movement, Movement::Grapheme { .. })
+                ) {
+                    self.synchronize_layout_for_command(changes);
+                }
+                handle::handle_deletion_op(self, op)?;
+            }
             Message::Modifier { op } => handle::handle_modifier_op(self, op)?,
             Message::Selection { op } => handle::handle_selection_op(self, op)?,
             Message::Node { op } => handle::handle_node_op(self, op)?,
@@ -1397,7 +1502,10 @@ impl Editor {
             Message::Clipboard { op } => handle::handle_clipboard_op(self, op)?,
             Message::TextInput { ops } => handle::handle_flat_ime_ops(self, ops)?,
             Message::Dnd { op } => handle::handle_dnd_op(self, op)?,
-            Message::Navigation { op } => handle::handle_navigation_op(self, op)?,
+            Message::Navigation { op } => {
+                self.synchronize_layout_for_command(changes);
+                handle::handle_navigation_op(self, op)?;
+            }
             Message::History { op } => handle::handle_history_op(self, op)?,
             Message::System { event } => handle::handle_system_event(self, event)?,
             Message::TrackedRange { op } => handle::handle_tracked_range_op(self, op)?,
@@ -1719,17 +1827,6 @@ impl Editor {
             let resource = self.resource.lock().unwrap();
             self.view.resolve_movement(pos, movement, &resource)
         }
-    }
-
-    /// Rebinds the latest live selection by identity into the document snapshot
-    /// that produced the current layout.
-    pub(crate) fn layout_input_state(&self) -> Option<State> {
-        let mut state = self.view.layout_state()?.clone();
-        state.selection = self
-            .state
-            .selection
-            .and_then(|selection| remap_selection(selection, &self.state, &state));
-        Some(state)
     }
 
     pub(crate) fn resolve_extend_movement(
@@ -2167,6 +2264,7 @@ impl Editor {
             resource_apply_count: 0,
             pending_events: Vec::new(),
             pending_ops: Vec::new(),
+            pending_tick_changes: TickChanges::default(),
             pending_effects: HashSet::new(),
             pending_fonts: HashMap::new(),
             pending_font_index: None,

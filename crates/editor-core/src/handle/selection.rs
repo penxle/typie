@@ -259,7 +259,11 @@ fn resolve_extend_to_selection(
     base_selection: Option<Selection>,
     allow_collapse: bool,
 ) -> Option<Selection> {
-    let input_state = editor.layout_input_state()?;
+    let mut input_state = editor.view.layout_state()?.clone();
+    input_state.selection = editor
+        .state
+        .selection
+        .and_then(|selection| remap_selection(selection, &editor.state, &input_state));
     let view = input_state.view();
     let head_hit =
         editor

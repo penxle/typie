@@ -3,7 +3,7 @@ use editor_model::{ChildView, DocView, Schema};
 use editor_state::{
     Affinity, GapCursor, Position, Selection, as_gap_cursor, cell_rect_selection, enclosing_table,
     enclosing_table_cell, first_cursor_position, gap_cursor_selection_at, is_unit_node_selection,
-    last_cursor_position, remap_selection,
+    last_cursor_position,
 };
 use editor_transaction::HistoryMeta;
 
@@ -15,9 +15,7 @@ use crate::message::*;
 pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(), EditorError> {
     match op {
         NavigationOp::Move { movement, extend } => {
-            let Some(input_state) = editor.layout_input_state() else {
-                return Ok(());
-            };
+            let input_state = editor.state.clone();
             let Some(selection) = input_state.selection else {
                 if !extend && let Movement::Document { .. } = movement {
                     let probe_pos = Position {
@@ -26,7 +24,7 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                         affinity: Affinity::Upstream,
                     };
                     if let Some(target) = editor.resolve_movement(&probe_pos, &movement) {
-                        set_navigation_selection(editor, &input_state, target)?;
+                        set_navigation_selection(editor, target)?;
                     }
                 }
                 return Ok(());
@@ -184,7 +182,7 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                 };
                 if let Some(exit) = gap_exit {
                     if let Some(sel) = exit {
-                        set_navigation_selection(editor, &input_state, sel)?;
+                        set_navigation_selection(editor, sel)?;
                     }
                     return Ok(());
                 }
@@ -205,7 +203,7 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                         gap_cursor_selection_at(parent, idx + 1, &input_state.view())
                     };
                     if let Some(sel) = entry {
-                        set_navigation_selection(editor, &input_state, sel)?;
+                        set_navigation_selection(editor, sel)?;
                         return Ok(());
                     }
                 }
@@ -305,7 +303,7 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                         })
                     };
 
-                    set_navigation_selection(editor, &input_state, target)?;
+                    set_navigation_selection(editor, target)?;
                     return Ok(());
                 }
 
@@ -335,7 +333,7 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                     if matches!(movement, Movement::Line { .. }) {
                         editor.ensure_preferred_x_at(&selection.head);
                     }
-                    set_navigation_selection(editor, &input_state, sel)?;
+                    set_navigation_selection(editor, sel)?;
                     return Ok(());
                 }
             }
@@ -369,7 +367,7 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                                 new_head_cell_id,
                                 &input_state.view(),
                             ) {
-                                set_navigation_selection(editor, &input_state, new_selection)?;
+                                set_navigation_selection(editor, new_selection)?;
                             }
                             return Ok(());
                         }
@@ -409,7 +407,7 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                             Some(extended)
                         };
                         if let Some(new_selection) = new_selection {
-                            set_navigation_selection(editor, &input_state, new_selection)?;
+                            set_navigation_selection(editor, new_selection)?;
                         }
                         return Ok(());
                     }
@@ -449,28 +447,21 @@ pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(),
                                 None
                             };
                             if let Some(cell_sel) = cell_sel {
-                                set_navigation_selection(editor, &input_state, cell_sel)?;
+                                set_navigation_selection(editor, cell_sel)?;
                                 return Ok(());
                             }
                         }
                     }
                 }
 
-                set_navigation_selection(editor, &input_state, new_selection)?;
+                set_navigation_selection(editor, new_selection)?;
             }
         }
     }
     Ok(())
 }
 
-fn set_navigation_selection(
-    editor: &mut Editor,
-    input_state: &editor_state::State,
-    selection: Selection,
-) -> Result<(), EditorError> {
-    let Some(selection) = remap_selection(selection, input_state, &editor.state) else {
-        return Ok(());
-    };
+fn set_navigation_selection(editor: &mut Editor, selection: Selection) -> Result<(), EditorError> {
     editor.transact(|tr| {
         tr.update_meta(|meta| meta.history = HistoryMeta::Skip);
         if tr.selection() != Some(selection) {

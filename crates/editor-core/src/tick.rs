@@ -140,6 +140,7 @@ mod tests {
     use std::collections::BTreeMap;
     use std::sync::{Arc, Mutex};
 
+    use editor_common::{Direction, Movement};
     use editor_crdt::Dot;
     use editor_macros::state;
     use editor_model::{
@@ -150,7 +151,11 @@ mod tests {
         prepare_text_replacement_rules,
     };
 
-    use crate::{CommandOutcome, Editor, EditorError, InsertionOp, Message, NodeOp, Revision};
+    use crate::{
+        CommandOutcome, Editor, EditorError, EditorEvent, InsertionOp, Message, NavigationOp,
+        NodeOp, Revision, SelectionOp, StateField, TrackedRangeOp,
+    };
+    use editor_state::{Position, Selection};
 
     fn editor_with_empty_paragraph() -> Editor {
         let (state, ..) = state! {
@@ -530,6 +535,94 @@ mod tests {
         assert!(editor.tick().is_err());
         assert_eq!(editor.revision(), Revision::INITIAL);
         assert_eq!(text(&editor), "unversioned");
+    }
+
+    #[test]
+    fn unexpected_failure_after_layout_phase_keeps_applied_ops_pending() {
+        let mut editor = editor_with_empty_paragraph();
+        editor
+            .enqueue_request(vec![
+                insert("unversioned"),
+                Message::Navigation {
+                    op: NavigationOp::Move {
+                        movement: Movement::Grapheme {
+                            direction: Direction::Forward,
+                        },
+                        extend: false,
+                    },
+                },
+                unexpected_failure(),
+            ])
+            .unwrap();
+
+        assert!(editor.tick().is_err());
+        assert_eq!(text(&editor), "unversioned");
+        assert!(!editor.pending_ops.is_empty());
+    }
+
+    #[test]
+    fn unexpected_failure_after_layout_phase_preserves_tracked_text_verification() {
+        let (state, p) = state! {
+            doc { root { p: paragraph { text("hello") } } }
+            selection: (p, 0) -> (p, 5)
+        };
+        let sensitive_range = state.selection.unwrap();
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::TrackedRange {
+            op: TrackedRangeOp::Add {
+                id: "r1".into(),
+                group: "spellcheck".into(),
+                selection: sensitive_range,
+                metadata: String::new(),
+                invalidate_on_text_change: true,
+            },
+        });
+        editor.apply(Message::Selection {
+            op: SelectionOp::Set {
+                selection: Selection::collapsed(Position::new(p, 2)),
+            },
+        });
+        editor
+            .enqueue_request(vec![
+                insert("X"),
+                Message::Navigation {
+                    op: NavigationOp::Move {
+                        movement: Movement::Grapheme {
+                            direction: Direction::Forward,
+                        },
+                        extend: false,
+                    },
+                },
+                unexpected_failure(),
+            ])
+            .unwrap();
+
+        assert!(editor.tick().is_err());
+        assert!(editor.tracked_ranges().contains("r1"));
+
+        editor
+            .enqueue_request(vec![Message::Navigation {
+                op: NavigationOp::Move {
+                    movement: Movement::Grapheme {
+                        direction: Direction::Backward,
+                    },
+                    extend: false,
+                },
+            }])
+            .unwrap();
+        let result = editor.tick().unwrap().unwrap();
+
+        assert!(!editor.tracked_ranges().contains("r1"));
+        assert!(result.events.iter().any(
+            |event| matches!(event, EditorEvent::TrackedRangesStale { ids } if ids == &["r1"])
+        ));
+        assert!(result.events.iter().any(|event| {
+            matches!(
+                event,
+                EditorEvent::StateChanged { fields }
+                    if fields.contains(&StateField::TrackedRanges)
+            )
+        }));
     }
 
     #[test]
