@@ -10,10 +10,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.click
@@ -102,7 +106,61 @@ class NoteColorPaletteDesktopTest {
   }
 
   @Test
-  fun holdThenVerticalDragScrollsParentWithoutChangingColor() = runComposeUiTest {
+  fun armSelectsCurrentColorExactlyOnce() = runComposeUiTest {
+    val colors = mutableListOf<String>()
+
+    setContent { TestPalette(onColorChange = colors::add) }
+    waitForIdle()
+
+    val palette = onNodeWithTag(PaletteTag)
+    palette.performTouchInput { down(Offset(x = width / 2f, y = center.y)) }
+    runOnIdle { assertTrue(colors.isEmpty()) }
+
+    mainClock.advanceTimeBy(NoteColorPaletteScrubArmDelayMillis + 1L)
+    runOnIdle { assertContentEquals(listOf("red"), colors) }
+
+    palette.performTouchInput { up() }
+    waitForIdle()
+
+    assertContentEquals(listOf("red"), colors)
+  }
+
+  @Test
+  fun armAndScrubUseFrequentSegmentTickForEachColorChange() = runComposeUiTest {
+    val colors = mutableListOf<String>()
+    val haptics = mutableListOf<HapticFeedbackType>()
+    val hapticFeedback =
+      object : HapticFeedback {
+        override fun performHapticFeedback(hapticFeedbackType: HapticFeedbackType) {
+          haptics += hapticFeedbackType
+        }
+      }
+
+    setContent {
+      CompositionLocalProvider(LocalHapticFeedback provides hapticFeedback) {
+        TestPalette(onColorChange = colors::add)
+      }
+    }
+    waitForIdle()
+
+    onNodeWithTag(PaletteTag).performTouchInput {
+      down(Offset(x = width / 2f, y = center.y))
+      advanceEventTime(NoteColorPaletteScrubArmDelayMillis)
+      moveTo(Offset(x = width * 5f / 6f, y = center.y), delayMillis = 16L)
+      moveBy(Offset(x = 1f, y = 0f), delayMillis = 16L)
+      up()
+    }
+    waitForIdle()
+
+    assertContentEquals(listOf("red", "blue"), colors)
+    assertContentEquals(
+      listOf(HapticFeedbackType.SegmentFrequentTick, HapticFeedbackType.SegmentFrequentTick),
+      haptics,
+    )
+  }
+
+  @Test
+  fun holdThenVerticalDragSelectsArmColorAndScrollsParent() = runComposeUiTest {
     val colors = mutableListOf<String>()
     var scrollValue = 0
 
@@ -127,7 +185,7 @@ class NoteColorPaletteDesktopTest {
     waitForIdle()
 
     assertTrue(scrollValue > 0)
-    assertTrue(colors.isEmpty())
+    assertContentEquals(listOf("red"), colors)
   }
 
   @Test

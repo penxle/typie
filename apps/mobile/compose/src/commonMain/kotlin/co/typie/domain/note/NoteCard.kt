@@ -37,6 +37,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
@@ -90,6 +91,7 @@ import co.typie.ui.theme.AppTheme
 import co.typie.ui.utils.ShortcutModifier
 import co.typie.ui.utils.onShortcut
 import kotlin.math.abs
+import kotlinx.coroutines.withTimeoutOrNull
 
 private val NoteCardShape = AppShapes.rounded(AppShapes.md)
 private val NoteActionButtonSize = 24.dp
@@ -638,6 +640,7 @@ internal fun NoteColorPalette(
   val selectedColorState = rememberUpdatedState(selectedColor)
   val onColorChangeState = rememberUpdatedState(onColorChange)
   val hapticState = rememberUpdatedState(haptic)
+  val armedColorState = remember { mutableStateOf<String?>(null) }
   val optionWidthPx = with(density) { NoteColorDotHitTargetWidth.roundToPx().toFloat() }
 
   Row(
@@ -645,8 +648,12 @@ internal fun NoteColorPalette(
       modifier.height(NoteColorDotHitTargetHeight).pointerInput(noteColorOptions, optionWidthPx) {
         awaitEachGesture {
           val down = awaitFirstDown(requireUnconsumed = false)
+          armedColorState.value = null
           val touchSlop = viewConfiguration.touchSlop
           var lastSelectedColor = selectedColorState.value
+          var currentPosition = down.position
+          var elapsedMillis = 0L
+          var armed = false
           var scrubbing = false
 
           fun selectColorAt(x: Float) {
@@ -657,13 +664,41 @@ internal fun NoteColorPalette(
             }
 
             lastSelectedColor = nextColor
-            hapticState.value.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            hapticState.value.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
             onColorChangeState.value(nextColor)
           }
 
+          fun arm() {
+            armed = true
+            val previousColor = lastSelectedColor
+            selectColorAt(currentPosition.x)
+            armedColorState.value = lastSelectedColor.takeIf { it != previousColor }
+          }
+
           while (true) {
-            val event = awaitPointerEvent()
+            val event =
+              if (armed) {
+                awaitPointerEvent()
+              } else {
+                withTimeoutOrNull(
+                  (NoteColorPaletteScrubArmDelayMillis - elapsedMillis).coerceAtLeast(0L)
+                ) {
+                  awaitPointerEvent()
+                }
+              }
+
+            if (event == null) {
+              arm()
+              continue
+            }
+
             val change = event.changes.firstOrNull { it.id == down.id } ?: break
+            currentPosition = change.position
+            elapsedMillis = change.uptimeMillis - down.uptimeMillis
+            if (!armed && elapsedMillis >= NoteColorPaletteScrubArmDelayMillis) {
+              arm()
+            }
+
             if (!change.pressed) {
               break
             }
@@ -678,11 +713,7 @@ internal fun NoteColorPalette(
                 continue
               }
 
-              val elapsedMillis = change.uptimeMillis - down.uptimeMillis
-              if (
-                elapsedMillis < NoteColorPaletteScrubArmDelayMillis ||
-                  abs(offset.y) >= abs(offset.x)
-              ) {
+              if (!armed || abs(offset.y) >= abs(offset.x)) {
                 break
               }
 
@@ -700,7 +731,12 @@ internal fun NoteColorPalette(
       NoteColorDot(
         option = option,
         selected = option.value == selectedColor,
-        onClick = { onColorChange(option.value) },
+        onClick = {
+          if (armedColorState.value != option.value) {
+            onColorChange(option.value)
+          }
+          armedColorState.value = null
+        },
       )
     }
   }
