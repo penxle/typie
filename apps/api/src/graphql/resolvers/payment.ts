@@ -809,7 +809,7 @@ builder.mutationFields((t) => ({
           : null;
 
         // 복합 FK 가 강제하는 참조라 도달하지 않는다 — 도달했다면 사람이 고칠 불변식 위반이다.
-        if (binding?.subscriptionId && !canonical) {
+        if (!canonical && binding?.subscriptionId) {
           await opsAlert('invariant-violation', {
             ...alertContext,
             reason: 'iap binding canonical subscription missing',

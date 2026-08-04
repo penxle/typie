@@ -62,7 +62,7 @@ export const registerLinkContextMenu = (editor: Editor): (() => void) => {
     ];
 
     const local = editor.clientToLocal(clientX, clientY);
-    if (!editor.readOnly && local) {
+    if (local && !editor.readOnly) {
       const point: LinkPoint = { page: local.page, x: local.x, y: local.y };
       items.push(
         {

@@ -219,7 +219,7 @@
   };
 
   const handleSelect = async (item: ResultItem) => {
-    if (item.isLinked || activeAddRequest !== null) return;
+    if (activeAddRequest !== null || item.isLinked) return;
 
     const siteId = currentSiteId;
     const selectedNoteId = noteId;
@@ -234,7 +234,7 @@
           lastKnown: { siteId, noteId: selectedNoteId },
         },
       );
-      if (activeAddRequest?.id !== requestId || currentSiteId !== siteId || noteId !== selectedNoteId) return;
+      if (currentSiteId !== siteId || noteId !== selectedNoteId || activeAddRequest?.id !== requestId) return;
       if (outcome.status === 'failure') {
         Toast.error('연결을 추가하지 못했어요.');
       } else if (outcome.status !== 'subscription_gated') {

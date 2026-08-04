@@ -24,13 +24,13 @@
   },
   "scripts": {
     "codegen": "panda codegen",
-    "lint:typescript": "tsc"
+    "lint:typecheck": "tsc"
   },
   "dependencies": {
-    "@pandacss/preset-base": "^1.11.4"
+    "@pandacss/preset-base": "^1.12.0"
   },
   "devDependencies": {
-    "@pandacss/dev": "^1.11.4",
+    "@pandacss/dev": "^1.12.0",
     "@typie/tsconfig": "workspace:*",
     "typescript": "^6.0.3"
   }

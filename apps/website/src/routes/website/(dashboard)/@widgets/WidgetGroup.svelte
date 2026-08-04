@@ -719,7 +719,7 @@
             const { widgetId, dropIndex } = currentDragging;
 
             if (query.data.widgets.some((w) => w.id === widgetId)) {
-              if (!currentDragging.isOutsideDropZone && dropIndex !== null) {
+              if (dropIndex !== null && !currentDragging.isOutsideDropZone) {
                 await widgetContext.moveWidgetInGroup?.(widgetId, dropIndex);
               } else if (currentDragging.calculatedPosition) {
                 await widgetContext.moveWidgetToFreePosition?.(widgetId, currentDragging.calculatedPosition);

@@ -64,8 +64,8 @@ export function preparingPage({
     !targets ||
     !hasPublishedFrames ||
     publishedRevision === undefined ||
-    appliedRevision <= publishedRevision ||
-    appliedPageCount === 0
+    appliedPageCount === 0 ||
+    appliedRevision <= publishedRevision
   ) {
     return undefined;
   }
@@ -81,7 +81,7 @@ export function canPublish(
   hasPublishedFrames = false,
 ): boolean {
   if (!host || (publishedRevision !== undefined && appliedRevision < publishedRevision)) return false;
-  if (host.targets.size === 0 && hasPublishedFrames) return false;
+  if (hasPublishedFrames && host.targets.size === 0) return false;
   let hasRequirement = false;
   for (const target of host.targets.values()) {
     if (target.requiredRevision === undefined) continue;

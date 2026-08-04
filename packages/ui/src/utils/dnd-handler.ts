@@ -186,7 +186,7 @@ export const createDndHandler = (node: HTMLElement, options: DndHandlerOptions) 
   };
 
   const handleKeyDown = (e: KeyboardEvent) => {
-    if (!(e.key === 'Escape' && dragging)) {
+    if (!(dragging && e.key === 'Escape')) {
       return;
     }
 

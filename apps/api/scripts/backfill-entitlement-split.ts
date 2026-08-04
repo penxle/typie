@@ -318,7 +318,7 @@ const classifyInvoicePaths = async (manifest: Manifest) => {
     const live = row.subscriptionState === SubscriptionState.ACTIVE || row.subscriptionState === SubscriptionState.WILL_EXPIRE;
 
     let resolved: InvoicePath = row.transitionShaped ? 'TRANSITION' : 'RENEWAL';
-    if ((row.transitionShaped && live) || (!row.transitionShaped && reserved)) {
+    if ((live && row.transitionShaped) || (reserved && !row.transitionShaped)) {
       resolved = 'AMBIGUOUS';
     }
 

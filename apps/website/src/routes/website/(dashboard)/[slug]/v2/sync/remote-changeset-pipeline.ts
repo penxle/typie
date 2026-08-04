@@ -23,10 +23,9 @@ export class RemoteChangesetPipeline {
 
   apply(event: RemoteChangesetEvent): Promise<void> {
     const applied = event.bundles.filter((payload) => payload.length > 0).map((payload) => this.#editor.receiveRemoteChangeset(payload));
-    const settled = Promise.all(applied).then(
-      () => ({ type: 'applied' }) as const,
-      (err: unknown) => ({ type: 'failed', error: err }) as const,
-    );
+    const settled = Promise.all(applied)
+      .then(() => ({ type: 'applied' }) as const)
+      .catch((err: unknown) => ({ type: 'failed', error: err }) as const);
     const completed = this.#metadataTail.then(async () => {
       const result = await settled;
       if (result.type === 'failed') throw result.error;

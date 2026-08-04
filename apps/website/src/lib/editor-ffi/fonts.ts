@@ -216,20 +216,15 @@ export class PreloadQueue {
       }
 
       this.#inflight++;
-      item.fn().then(
-        () => {
+      item
+        .fn()
+        .then(() => item.resolve())
+        .catch((err: unknown) => item.reject(err))
+        .finally(() => {
           if (this.#queued.get(item.key) === item) this.#queued.delete(item.key);
-          item.resolve();
           this.#inflight--;
           this.#flush();
-        },
-        (err) => {
-          if (this.#queued.get(item.key) === item) this.#queued.delete(item.key);
-          item.reject(err);
-          this.#inflight--;
-          this.#flush();
-        },
-      );
+        });
     }
   }
 

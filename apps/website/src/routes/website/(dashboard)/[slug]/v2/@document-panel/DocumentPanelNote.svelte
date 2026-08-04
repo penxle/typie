@@ -193,7 +193,7 @@
           },
         },
       );
-      if (activeCreateRequest?.id !== requestId || siteId !== targetSiteId || entityId !== targetEntityId) return;
+      if (siteId !== targetSiteId || entityId !== targetEntityId || activeCreateRequest?.id !== requestId) return;
       if (outcome.status === 'success') {
         lastAddedNoteId = outcome.value.id;
       } else if (outcome.status === 'failure') {

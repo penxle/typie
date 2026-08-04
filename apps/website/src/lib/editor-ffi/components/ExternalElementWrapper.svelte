@@ -34,7 +34,7 @@
 
     const observer = new ResizeObserver((entries) => {
       const height = entries[0]?.contentRect.height ?? 0;
-      if (!Number.isFinite(height) || height <= 0 || height === reportedHeight) return;
+      if (height === reportedHeight || !Number.isFinite(height) || height <= 0) return;
 
       reportedHeight = height;
       editor.setExternalElementHeight(element.node, height);

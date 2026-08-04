@@ -34,7 +34,7 @@ export const handlePush = async (
   const durableHeads = (await ctx.deps.getDurableHeads(message.documentId)) ?? new Uint8Array();
   heads ??= await ctx.deps.bootstrapLiveHeads(message.documentId);
 
-  if (opsCount > 0 && seq) {
+  if (seq && opsCount > 0) {
     const headsB64 = heads.toBase64();
     const durableHeadsB64 = durableHeads.toBase64();
     ctx.deps.publishChangesets(message.documentId, {

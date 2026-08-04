@@ -351,7 +351,7 @@
   };
 
   $effect(() => {
-    if (query.data && selectedHeadId === null && headsAsc.length > 0) {
+    if (selectedHeadId === null && query.data && headsAsc.length > 0) {
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       selectHead(headsAsc.at(-1)!.id, 'immediate');
     }

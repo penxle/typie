@@ -97,7 +97,7 @@ export const replacePane = (node: Member, id: string, pane: PaneInit): { root: M
 export const swapPanes = (root: Member, firstId: string, secondId: string): Member => {
   const first = findMemberById(root, firstId);
   const second = findMemberById(root, secondId);
-  if (!first || first.type !== 'pane' || !second || second.type !== 'pane') return root;
+  if (!first || !second || first.type !== 'pane' || second.type !== 'pane') return root;
 
   const walk = (node: Member): Member => {
     if (node.type === 'pane') {

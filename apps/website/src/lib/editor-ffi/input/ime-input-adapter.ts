@@ -373,7 +373,7 @@ export class ImeInputAdapter {
     const current = readContextCompositionText(context) ?? '';
     const targetsCurrentComposition = target.start === context.composing.start && target.end === context.composing.end;
 
-    if (replacement.text === `${current}${pending}` && current.endsWith(pending) && targetsCurrentComposition) {
+    if (targetsCurrentComposition && replacement.text === `${current}${pending}` && current.endsWith(pending)) {
       return { target, text: replacement.text };
     }
 
@@ -470,7 +470,7 @@ export class ImeInputAdapter {
     }
 
     const duplicateCommittedPreeditTarget =
-      this.#compositionActive && this.#pendingCompositionText == null && e.inputType === 'insertText' && context
+      context && this.#compositionActive && this.#pendingCompositionText == null && e.inputType === 'insertText'
         ? readDuplicateCommittedPreeditTarget(context, e.currentTarget, e.data)
         : null;
     if (duplicateCommittedPreeditTarget) {
@@ -512,7 +512,7 @@ export class ImeInputAdapter {
     }
 
     this.#pendingEditIntent =
-      !this.#compositionActive && context && e.inputType === 'insertText' && e.data != null
+      context && !this.#compositionActive && e.inputType === 'insertText' && e.data != null
         ? {
             inputType: e.inputType,
             text: e.data,
@@ -562,7 +562,7 @@ export class ImeInputAdapter {
     this.#compositionActive = true;
     const context = this.#currentContext(e.currentTarget);
     this.#pendingCompositionTarget =
-      pendingTarget ?? (context?.composing && !wasCompositionActive ? { start: context.composing.end, end: context.composing.end } : null);
+      pendingTarget ?? (!wasCompositionActive && context?.composing ? { start: context.composing.end, end: context.composing.end } : null);
   }
 
   handleCompositionUpdate(e: CompositionEvent): void {

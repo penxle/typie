@@ -313,7 +313,7 @@
       );
 
       if (activeCreateRequest?.id !== requestId || app.preference.current.currentSiteId !== siteId) return;
-      if (outcome.status === 'success' && inputValue === submittedContent && selectedColor === submittedColor) {
+      if (inputValue === submittedContent && selectedColor === submittedColor && outcome.status === 'success') {
         inputValue = '';
         selectedColor = 'gray';
       }

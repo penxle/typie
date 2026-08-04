@@ -215,7 +215,7 @@ export const setupPaneGroup = (initialSiteId: string, options: PaneGroupOptions)
         const focusedPane = focusedPaneId ? panes.find((p) => p.id === focusedPaneId) : null;
 
         if (isHome) {
-          if (focusedPane?.kind !== 'home' && focusedPaneId) {
+          if (focusedPaneId && focusedPane?.kind !== 'home') {
             context.replacePane(focusedPaneId, { kind: 'home' });
           }
         } else {

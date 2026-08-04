@@ -78,7 +78,7 @@
       for (const entity of entities) {
         ids.push(entity.id);
 
-        if (entity.children && tree) {
+        if (tree && entity.children) {
           const folderElement = tree.querySelector(`[data-id="${entity.id}"]`) as HTMLDetailsElement;
           const isOpen = folderElement?.open ?? false;
 

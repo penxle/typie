@@ -209,7 +209,7 @@ export const checkFinding = (
     reasons.push('전문 대조를 했다는데 원장에 grep 기록이 없음');
   }
 
-  if (reasons.length > 0 || !range) return { accepted: null, reasons };
+  if (!range || reasons.length > 0) return { accepted: null, reasons };
   return { accepted: { ...finding, matchStart: range.rangeStart, matchEnd: range.rangeEnd, filedAtTurn: turn }, reasons: [] };
 };
 

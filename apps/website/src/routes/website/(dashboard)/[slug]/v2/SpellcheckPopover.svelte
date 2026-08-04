@@ -60,7 +60,7 @@
   });
 
   $effect(() => {
-    if (activeRange && activeRange.rects.length > 0 && scroller) {
+    if (activeRange && scroller && activeRange.rects.length > 0) {
       anchor(pageRectsToVirtualElement(editor, activeRange.rects));
     }
   });

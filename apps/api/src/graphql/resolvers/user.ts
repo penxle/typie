@@ -517,7 +517,7 @@ User.implement({
         const subscriptionRows = await entitlementLoader(ctx).load(self.id);
         const entitled = resolveUserEntitlement(subscriptionRows, now).entitled;
 
-        if (!shownSurveys.has('trial_expired_modal_shown') && trial && !entitled) {
+        if (trial && !entitled && !shownSurveys.has('trial_expired_modal_shown')) {
           const paidSubscription = await db
             .select({ id: Subscriptions.id })
             .from(Subscriptions)
@@ -535,11 +535,11 @@ User.implement({
           }
         }
 
-        if (!shownSurveys.has('trial_popup_content_entry_202605') && !trial && !subscriptionHistory) {
+        if (!trial && !subscriptionHistory && !shownSurveys.has('trial_popup_content_entry_202605')) {
           results.push('trial_popup_content_entry_202605');
         }
 
-        if (!shownSurveys.has('202509_ir') && entitled && self.createdAt.isBefore(dayjs().subtract(1, 'weeks'))) {
+        if (entitled && !shownSurveys.has('202509_ir') && self.createdAt.isBefore(dayjs().subtract(1, 'weeks'))) {
           results.push('202509_ir');
         }
 

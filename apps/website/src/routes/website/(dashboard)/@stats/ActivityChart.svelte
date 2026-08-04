@@ -164,7 +164,7 @@
     const scaleFactor = hasCompression && maxCompressedHeight > 0 ? chartHeight / maxCompressedHeight : 1;
 
     const calculateAdditionHeight = () => {
-      if (data.additions === 0 || !showAdditions) {
+      if (!showAdditions || data.additions === 0) {
         return 0;
       }
 
@@ -193,7 +193,7 @@
     };
 
     const calculateDeletionHeight = () => {
-      if (data.deletions === 0 || !showDeletions) {
+      if (!showDeletions || data.deletions === 0) {
         return 0;
       }
 
@@ -384,7 +384,7 @@
                   backgroundColor: additionColor.backgroundColor,
                   borderRadius: '1px',
                   transition: 'all',
-                  marginTop: data.deletions > 0 && showDeletions ? '1px' : '0',
+                  marginTop: showDeletions && data.deletions > 0 ? '1px' : '0',
                   position: 'relative',
                 })}
               ></div>

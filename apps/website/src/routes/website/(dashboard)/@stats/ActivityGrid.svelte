@@ -114,7 +114,7 @@
       }
 
       if (weekMonth !== -1 && (monthStartWeek === -1 || (hasFirstOfMonth && weekMonth !== prevMonth))) {
-        if (monthStartWeek >= 0 && prevMonth !== -1) {
+        if (prevMonth !== -1 && monthStartWeek >= 0) {
           monthSpans.push({ month: prevMonth, start: monthStartWeek, end: weekIndex - 1 });
         }
 
@@ -126,7 +126,7 @@
       weekIndex++;
     }
 
-    if (monthStartWeek >= 0 && prevMonth !== -1) {
+    if (prevMonth !== -1 && monthStartWeek >= 0) {
       monthSpans.push({ month: prevMonth, start: monthStartWeek, end: weekIndex - 1 });
     }
 

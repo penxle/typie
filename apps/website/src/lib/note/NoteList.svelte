@@ -186,7 +186,7 @@
 
   const beginDrag = (noteId: string): boolean => {
     const item = visibleNotes.find(({ note }) => note.id === noteId);
-    if (item === undefined || dragging !== null || item.deleting || item.presence === 'exiting' || !presentationActive || !reorderEnabled) {
+    if (item === undefined || dragging !== null || !presentationActive || !reorderEnabled || item.deleting || item.presence === 'exiting') {
       return false;
     }
 
@@ -199,7 +199,7 @@
 
   const updateDrag = (noteId: string, position: NoteListDragPosition): void => {
     const current = dragging;
-    if (!current || current.noteId !== noteId || !listElement) return;
+    if (!current || !listElement || current.noteId !== noteId) return;
     current.position = position;
 
     const noteIds = visibleNotes.map(({ note }) => note.id);

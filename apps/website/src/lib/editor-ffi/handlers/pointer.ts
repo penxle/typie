@@ -28,7 +28,7 @@ export const tryHandleInteractiveHit = (editor: Editor, hit: InteractiveHit, loc
       editor.enqueue({ type: 'view', op: { type: 'toggle_fold', id: hit.id } });
       return true;
     }
-  } else if (hit.type === 'callout_icon' && editMode) {
+  } else if (editMode && hit.type === 'callout_icon') {
     editor.enqueue({ type: 'node', op: { type: 'set_attrs', id: hit.id, attrs: { type: 'callout', variant: hit.next_variant } } });
     return true;
   }
@@ -88,7 +88,7 @@ export const handlePointerDown: EditorEventHandler<HTMLElement, PointerEvent> = 
   let interactionSelection = appliedSelection;
   if (!nativeDragCandidate) {
     const update = editor.updateNow(() => {
-      if (count === 1 && modifiers.shift && appliedSelection) {
+      if (count === 1 && appliedSelection && modifiers.shift) {
         editor.enqueue({
           type: 'selection',
           op: {
@@ -341,7 +341,7 @@ class PointerState {
       captured,
       down,
       anchor: canExtend ? (selection?.anchor ?? null) : null,
-      baseSelection: count > 1 && selection && !selectionCollapsed ? selection : undefined,
+      baseSelection: selection && !selectionCollapsed && count > 1 ? selection : undefined,
       nativeDragCandidate,
       nativeDragStarted: false,
       dragging: false,

@@ -69,7 +69,7 @@ export function createFloatingActions(options?: CreateFloatingActionsOptions): C
       });
     }
 
-    if (middlewareData.arrow && arrowElement) {
+    if (arrowElement && middlewareData.arrow) {
       const { x, y } = middlewareData.arrow;
 
       const side = match(placement)

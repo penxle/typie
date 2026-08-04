@@ -515,7 +515,7 @@
     const editor = ctx.editor;
     const slug = entity?.slug;
     const currentDocumentId = documentId;
-    if (!editor || editor.terminal || !slug || !currentDocumentId) return;
+    if (!editor || !slug || !currentDocumentId || editor.terminal) return;
 
     const hydrator = createAssetHydrator<DocumentAsset>({
       hasAsset: (id) => editor.imageAssets.has(id) || ctx.fileAssets.has(id) || editor.embedAssets.has(id) || editor.archivedAssets.has(id),
@@ -844,7 +844,7 @@
   $effect(() => {
     const editor = ctx.editor;
     const slug = entity?.slug;
-    if (!editor || editor.terminal || !slug) return;
+    if (!editor || !slug || editor.terminal) return;
 
     editorRegistry.register(pane.id, slug, editor);
 
@@ -924,7 +924,7 @@
   function handleGlobalKeydown(e: KeyboardEvent) {
     const targetPaneId = e.target instanceof Element ? e.target.closest<HTMLElement>('[data-pane-id]')?.dataset.paneId : undefined;
 
-    if (!((IS_MAC ? e.metaKey : e.ctrlKey) && e.code === 'KeyF' && focused && targetPaneId === pane.id)) {
+    if (!(focused && (IS_MAC ? e.metaKey : e.ctrlKey) && e.code === 'KeyF' && targetPaneId === pane.id)) {
       return;
     }
 
@@ -1168,7 +1168,7 @@
                   flexGrow: '1',
                   overflowX: 'auto',
                   overflowY: 'hidden',
-                  zIndex: app.preference.current.zenModeEnabled && !currentViewZenModeEnabled ? 'underEditor' : 'editor',
+                  zIndex: !currentViewZenModeEnabled && app.preference.current.zenModeEnabled ? 'underEditor' : 'editor',
                   backgroundColor: 'surface.default',
                 })}
               >
@@ -1330,7 +1330,7 @@
                                   return;
                                 }
 
-                                if (e.key === 'Backspace' && !localSubtitle) {
+                                if (!localSubtitle && e.key === 'Backspace') {
                                   e.preventDefault();
                                   titleEl?.focus();
                                 }

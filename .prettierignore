@@ -12,6 +12,7 @@ apps/mobile/*
 **/build/**
 **/vendor/**
 **/pkg/**
+**/.wrangler/**
 Dockerfile
 
 **/.dart_tool/**

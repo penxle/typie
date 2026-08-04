@@ -34,6 +34,8 @@
 
   let { pane }: Props = $props();
 
+  const app = getAppContext();
+
   const query = createQuery(
     graphql(`
       query HomePane_Query($siteId: ID) {
@@ -120,7 +122,6 @@
     `),
   );
 
-  const app = getAppContext();
   const currentSite = $derived(query.data?.me.sites.find((s) => s.id === app.preference.current.currentSiteId) ?? query.data?.me.sites[0]);
   const paneGroup = getPaneGroup();
 
@@ -309,7 +310,7 @@
 
             <Button
               onclick={async () => {
-                if (!query.data || !currentSite) return;
+                if (!currentSite || !query.data) return;
 
                 if (!SubscribeModal.gate('home_create_document')) {
                   return;

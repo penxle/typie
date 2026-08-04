@@ -86,7 +86,7 @@
       .filter((i) => i.kind === 'finding')
       .flatMap((item) => {
         const first = item.anchors.find((a) => a.matchStart !== null);
-        if (first?.matchStart === null || first === undefined) return [];
+        if (first === undefined || first?.matchStart === null) return [];
         const length = Math.max(1, view.document.characterCount);
         return [
           {

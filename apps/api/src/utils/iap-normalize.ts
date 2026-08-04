@@ -193,7 +193,7 @@ export const normalizeApple = ({ item, prior, now }: { item: AppleStatusItem; pr
   let state: typeof SubscriptionState.ACTIVE | typeof SubscriptionState.WILL_EXPIRE | typeof SubscriptionState.IN_GRACE_PERIOD;
   if (item.status === Status.BILLING_GRACE_PERIOD) {
     state = SubscriptionState.IN_GRACE_PERIOD;
-  } else if (item.status === Status.BILLING_RETRY || intent === 'OFF') {
+  } else if (intent === 'OFF' || item.status === Status.BILLING_RETRY) {
     state = SubscriptionState.WILL_EXPIRE;
   } else {
     state = SubscriptionState.ACTIVE;
@@ -264,7 +264,7 @@ export const discoverAppleSuccessor = ({
   const terminated = prior?.state === SubscriptionState.EXPIRED || isAppleTerminated(selected);
 
   // 기존 계약이 스토어 확정 종료가 아닌데 추적 가능한 다른 계약이 있으면 잔여 계약의 오승계 위험이다 — 사람이 본다.
-  if (candidates.length > 1 || !terminated) {
+  if (!terminated || candidates.length > 1) {
     return { kind: 'unresolved', candidates: candidates.length };
   }
 
@@ -371,7 +371,7 @@ const resolveGooglePeriod = ({
 
   const replacementMode = item.itemReplacement?.replacementMode ?? null;
   if (replacementMode !== null) {
-    if (!NEW_SERVICE_PERIOD_MODES.has(replacementMode) && !PLAN_ONLY_MODES.has(replacementMode) && replacementMode !== DEFERRED_MODE) {
+    if (replacementMode !== DEFERRED_MODE && !NEW_SERVICE_PERIOD_MODES.has(replacementMode) && !PLAN_ONLY_MODES.has(replacementMode)) {
       return { kind: 'unknown', reason: 'google-replacement-mode-unrecognized' };
     }
 
@@ -543,7 +543,7 @@ export const normalizeGoogle = ({
 
   return {
     kind: 'tracked',
-    state: state === GOOGLE_STATE.ACTIVE && intent !== 'OFF' ? SubscriptionState.ACTIVE : SubscriptionState.WILL_EXPIRE,
+    state: intent !== 'OFF' && state === GOOGLE_STATE.ACTIVE ? SubscriptionState.ACTIVE : SubscriptionState.WILL_EXPIRE,
     periodStartsAt: period.periodStartsAt,
     periodEndsAt: period.periodEndsAt,
     ...tracked,

@@ -297,7 +297,7 @@
   $effect(() => {
     if (!app.preference.current.sidebarHidden) return;
 
-    if (app.state.openMenuCount === 0 && !hovered) {
+    if (!hovered && app.state.openMenuCount === 0) {
       untrack(() => {
         if (hideTimeout) {
           clearTimeout(hideTimeout);

@@ -215,20 +215,20 @@
       publicationOwned = false;
       proportion = imageData?.proportion ?? session.proportion;
     } else {
-      void update.awaitPublished(wait.signal).then(
-        () => {
+      void update
+        .awaitPublished(wait.signal)
+        .then(() => {
           if (publicationWait !== wait) return;
           publicationWait = undefined;
           publicationOwned = false;
           proportion = imageData?.proportion ?? finalProportion;
-        },
-        () => {
+        })
+        .catch(() => {
           if (publicationWait !== wait) return;
           publicationWait = undefined;
           publicationOwned = false;
           proportion = imageData?.proportion ?? finalProportion;
-        },
-      );
+        });
     }
     editor.focus();
   };

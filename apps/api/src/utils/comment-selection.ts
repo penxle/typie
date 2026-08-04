@@ -38,13 +38,13 @@ export const normalizeStablePosition = (position: unknown): StablePositionNormal
   }
 
   const { chain, affinity } = position;
-  if (Array.isArray(chain) && chain.every((dot) => typeof dot === 'string') && typeof affinity === 'string') {
+  if (typeof affinity === 'string' && Array.isArray(chain) && chain.every((dot) => typeof dot === 'string')) {
     return { kind: 'normalized', value: { chain, child: null, affinity } };
   }
 
   // v2 position whose None child was dropped at the wasm boundary: restore the
   // child key as explicit null so kotlinx decoders (which require it) don't fail.
-  if (Array.isArray(chain) && chain.every((step) => isRecord(step) && typeof step.type === 'string') && typeof affinity === 'string') {
+  if (typeof affinity === 'string' && Array.isArray(chain) && chain.every((step) => isRecord(step) && typeof step.type === 'string')) {
     return { kind: 'normalized', value: { chain, child: null, affinity } };
   }
 
@@ -179,7 +179,7 @@ export const normalizeStablePositionForMigration = (position: unknown): Migratio
 
   if ('binding' in position) {
     const chainDots = stringArray(chain);
-    if (chainDots === null || !isRecord(binding) || typeof affinity !== 'string') {
+    if (chainDots === null || typeof affinity !== 'string' || !isRecord(binding)) {
       return null;
     }
     if (binding.type === 'adjacent' && typeof binding.anchor === 'string') {
@@ -218,10 +218,10 @@ export const normalizeStablePositionForMigration = (position: unknown): Migratio
   // and the leaf anchor is char_dot. Prepend the implicit root so a fully-dead block
   // chain still degrades against root rather than failing to resolve outright.
   if (
+    typeof affinity === 'string' &&
     Array.isArray(chain) &&
     chain.length > 0 &&
-    chain.every((step) => isRecord(step) && typeof step.node_id === 'string' && typeof step.child_dot === 'string') &&
-    typeof affinity === 'string'
+    chain.every((step) => isRecord(step) && typeof step.node_id === 'string' && typeof step.child_dot === 'string')
   ) {
     const blockChain = [ROOT_DOT, ...(chain as Record<string, unknown>[]).map((step) => step.child_dot as string)];
     if (kind === 'char' && typeof char_dot === 'string') {

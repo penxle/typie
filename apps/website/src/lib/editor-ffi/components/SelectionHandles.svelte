@@ -27,7 +27,7 @@
     void editor.pageSizes;
     const selection = editor.selection;
 
-    if (!editor.readOnly || !isTouchCapable() || !selection) {
+    if (!selection || !editor.readOnly || !isTouchCapable()) {
       return null;
     }
 

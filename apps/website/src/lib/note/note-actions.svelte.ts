@@ -72,7 +72,7 @@ export class NoteActions<T extends ActionNote> {
     const observation = this.#statusObservations.get(noteId);
     const newerSource =
       request.successfulUpdatedAt !== null && observation?.status === request.source && observation.updatedAt > request.successfulUpdatedAt;
-    if (observation?.status === request.target || newerSource) {
+    if (newerSource || observation?.status === request.target) {
       this.#statusRequests.delete(noteId);
       const transfer = this.#statusTransfers.get(noteId);
       if (newerSource && transfer?.source === request.source && transfer.target === request.target) {
@@ -277,7 +277,7 @@ export class NoteActions<T extends ActionNote> {
     }
 
     this.#statusRequests.delete(note.id);
-    if (currentRequest.restoredSource && transfer) {
+    if (transfer && currentRequest.restoredSource) {
       states[transfer.source]?.resumeExiting(note.id);
     } else if (!transfer) {
       const activeTransfer = this.#statusTransfers.get(note.id);

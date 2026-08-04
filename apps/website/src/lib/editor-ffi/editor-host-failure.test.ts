@@ -106,14 +106,13 @@ function enterTerminalState(editor: Editor, state: TerminalState): void {
 async function expectPending(promise: Promise<unknown> | undefined): Promise<void> {
   if (!promise) throw new Error('Expected a publication promise');
   let settled = false;
-  void promise.then(
-    () => {
+  void promise
+    .then(() => {
       settled = true;
-    },
-    () => {
+    })
+    .catch(() => {
       settled = true;
-    },
-  );
+    });
   await Promise.resolve();
   expect(settled).toBe(false);
 }
@@ -592,16 +591,16 @@ describe('Editor guarded core invocation', () => {
       });
     let failedPublicationResult: unknown;
     let failedPublicationSettled = false;
-    void editor.awaitPublishedRevision(2).then(
-      (result) => {
+    void editor
+      .awaitPublishedRevision(2)
+      .then((result) => {
         failedPublicationResult = result;
         failedPublicationSettled = true;
-      },
-      (err: unknown) => {
+      })
+      .catch((err: unknown) => {
         failedPublicationResult = err;
         failedPublicationSettled = true;
-      },
-    );
+      });
     const laterPublication = editor.awaitPublishedRevision(3).catch((err: unknown) => err);
 
     editor.enqueue({ type: 'history', op: { type: 'undo' } });

@@ -119,7 +119,7 @@ for (const thread of threads) {
   }
 
   try {
-    if (thread.documentId !== currentDocId || !currentGraph) {
+    if (!currentGraph || thread.documentId !== currentDocId) {
       currentGraph = await readMergedGraph(thread.documentId);
       currentDocId = thread.documentId;
     }

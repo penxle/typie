@@ -227,7 +227,7 @@
                     seededSelf = true;
                     seeded += 1;
                   }
-                  if (seeded >= 3 && !disposed) {
+                  if (!disposed && seeded >= 3) {
                     updateDriverActive();
                   }
                 },

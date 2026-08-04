@@ -57,7 +57,7 @@
   const format = $derived(app.preference.current.exportFormat);
 
   $effect(() => {
-    if (!user.data.entitled && format !== 'PDF') {
+    if (format !== 'PDF' && !user.data.entitled) {
       app.preference.current.exportFormat = 'PDF';
     }
   });

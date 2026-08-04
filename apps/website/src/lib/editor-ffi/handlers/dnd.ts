@@ -271,7 +271,7 @@ export const handleDragStart = (ctx: EditorContext, event: DragEvent) => {
 export const handleDragEnter = (ctx: EditorContext, event: DragEvent) => {
   const editor = ctx.editor;
   const dataTransfer = event.dataTransfer;
-  if (!editor || editor.readOnly || !dataTransfer || hasInternalSelectionDrag(editor, dataTransfer)) {
+  if (!editor || !dataTransfer || editor.readOnly || hasInternalSelectionDrag(editor, dataTransfer)) {
     setAttachmentDropTarget(ctx, null);
     return;
   }
@@ -289,14 +289,14 @@ export const handleDragOver = (ctx: EditorContext, event: DragEvent) => {
   const editor = ctx.editor;
   const dataTransfer = event.dataTransfer;
   const root = event.currentTarget;
-  if (!editor || editor.readOnly || !dataTransfer) {
+  if (!editor || !dataTransfer || editor.readOnly) {
     setAttachmentDropTarget(ctx, null);
     if (editor) stopDndEdgeAutoScroll(editor);
     return;
   }
 
   const local = editor.clientToLocal(event.clientX, event.clientY);
-  if (!hasTransferablePayload(editor, dataTransfer) || !local) {
+  if (!local || !hasTransferablePayload(editor, dataTransfer)) {
     setDropEffect(dataTransfer, 'none');
     setAttachmentDropTarget(ctx, null);
     stopDndEdgeAutoScroll(editor);
@@ -357,7 +357,7 @@ export const handleDrop = (ctx: EditorContext, event: DragEvent, onFailure: Atta
     return;
   }
   stopDndEdgeAutoScroll(editor);
-  if (editor.readOnly || !dataTransfer) {
+  if (!dataTransfer || editor.readOnly) {
     setAttachmentDropTarget(ctx, null);
     return;
   }

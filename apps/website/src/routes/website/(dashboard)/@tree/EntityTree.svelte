@@ -350,7 +350,7 @@
   };
 
   const handlePointerDown: PointerEventHandler<HTMLDivElement> = (e) => {
-    if (!e.isPrimary || e.button !== 0 || dragging || pendingTouchDrag) return;
+    if (dragging || pendingTouchDrag || !e.isPrimary || e.button !== 0) return;
 
     const target = e.target as HTMLElement;
 
@@ -554,7 +554,7 @@
 
         if (!detailsElement.open) {
           folderHoverTimeout = setTimeout(async () => {
-            if (!(hoveredFolderId === folderId && dragging?.eligible && detailsElement)) {
+            if (!(hoveredFolderId === folderId && detailsElement && dragging?.eligible)) {
               return;
             }
 
@@ -643,7 +643,7 @@
   };
 
   $effect(() => {
-    if (!dragging?.eligible || !tree) return;
+    if (!tree || !dragging?.eligible) return;
 
     const scrollContainer = tree.parentElement;
     if (!scrollContainer) return;

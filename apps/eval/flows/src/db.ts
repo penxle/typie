@@ -16,5 +16,3 @@ export const readCache = async <T>(db: Db, runId: string, key: string): Promise<
 export const writeCache = async (db: Db, runId: string, key: string, value: unknown): Promise<void> => {
   await db.insert(CallCache).values({ runId, key, value: { value } }).onConflictDoNothing();
 };
-
-export { createDb } from '../../core/db.ts';

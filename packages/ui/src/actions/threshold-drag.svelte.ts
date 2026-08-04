@@ -137,7 +137,8 @@ export const thresholdDrag = <Session>(
         const wasActive = session.active;
         const rejected = session.rejected;
         const value = session.value;
-        if (!finish(session) || rejected) return;
+        const finished = finish(session);
+        if (!finished || rejected) return;
         parameters.cancel?.(value, reason, wasActive, event);
       },
     },

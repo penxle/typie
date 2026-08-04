@@ -371,7 +371,7 @@
   function updateResize(pointerId: number, clientX: number) {
     const current = resizing;
     const root = tableOverlayRoot;
-    if (!current || current.pointerId !== pointerId || !root) return;
+    if (!current || !root || current.pointerId !== pointerId) return;
 
     const currentTableX = (clientX - root.getBoundingClientRect().left) / safeDisplayZoom;
     resizing = { ...current, deltaX: currentTableX - current.startTableX };
@@ -442,20 +442,20 @@
       resizeAwaitingPublication = false;
       resizing = null;
     } else {
-      void update.awaitPublished(wait.signal).then(
-        () => {
+      void update
+        .awaitPublished(wait.signal)
+        .then(() => {
           if (resizePublicationWait !== wait) return;
           resizePublicationWait = undefined;
           resizeAwaitingPublication = false;
           resizing = null;
-        },
-        () => {
+        })
+        .catch(() => {
           if (resizePublicationWait !== wait) return;
           resizePublicationWait = undefined;
           resizeAwaitingPublication = false;
           resizing = null;
-        },
-      );
+        });
     }
     editor.focus();
   }

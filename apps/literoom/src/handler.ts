@@ -102,7 +102,7 @@ export const handler = async (event: Event) => {
   let image = sharp(input, { failOn: 'none', animated: true, limitInputPixels: false }).keepIccProfile();
   const metadata = await image.metadata();
 
-  if (metadata.format === 'svg' && format === 'auto') {
+  if (format === 'auto' && metadata.format === 'svg') {
     await S3.send(
       new WriteGetObjectResponseCommand({
         RequestRoute: event.getObjectContext.outputRoute,

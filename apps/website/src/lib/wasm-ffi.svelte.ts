@@ -18,7 +18,7 @@ function wrapWithCrashDetection<T extends object>(target: T): T {
       return (...args: unknown[]) => {
         try {
           const result = value.apply(obj, args);
-          if (result != null && typeof result === 'object' && '__wbg_ptr' in result) {
+          if (typeof result === 'object' && result != null && '__wbg_ptr' in result) {
             return wrapWithCrashDetection(result);
           }
 

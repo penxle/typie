@@ -65,7 +65,7 @@ export const autosize: Action<HTMLTextAreaElement, AutosizeParams | undefined> =
       for (const entry of entries) {
         const newWidth = entry.contentRect.width;
 
-        if (newWidth > 0 && newWidth !== lastWidth) {
+        if (newWidth !== lastWidth && newWidth > 0) {
           lastWidth = newWidth;
           scheduleResize();
         }

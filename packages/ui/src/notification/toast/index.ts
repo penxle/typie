@@ -45,22 +45,21 @@ export const toast = {
       dismissible: false,
     });
 
-    promise.then(
-      (data) => {
+    promise
+      .then((data) => {
         sonner.custom(PromiseItem, {
           id,
           componentProps: { message: resolve(messages.success, data), loading: false },
           duration,
         });
-      },
-      (err) => {
+      })
+      .catch((err) => {
         sonner.custom(PromiseItem, {
           id,
           componentProps: { message: resolve(messages.error, err), loading: false },
           duration,
         });
-      },
-    );
+      });
 
     return promise;
   },

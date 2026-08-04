@@ -203,7 +203,7 @@ export function createDragScroll(viewport: ScrollViewport, options: DragScrollOp
       return;
     }
 
-    if (isNearEdge(rect) && animationId === null) {
+    if (animationId === null && isNearEdge(rect)) {
       animationId = requestAnimationFrame(scroll);
     }
   };

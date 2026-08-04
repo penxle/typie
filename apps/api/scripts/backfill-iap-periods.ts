@@ -248,7 +248,7 @@ const buildPeriodUpdate = (
   planId: string | null,
 ): PeriodUpdate | null => {
   const planSettled = planId === null || planId === canonical.planId;
-  if (same(canonical.currentPeriodStartsAt, periodStartsAt) && same(canonical.currentPeriodEndsAt, periodEndsAt) && planSettled) {
+  if (planSettled && same(canonical.currentPeriodStartsAt, periodStartsAt) && same(canonical.currentPeriodEndsAt, periodEndsAt)) {
     return null;
   }
 

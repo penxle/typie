@@ -356,13 +356,13 @@ export const createPool = (makeThread: () => Thread, size: number) => {
   };
 
   const reclaim = (thread: Thread) => {
-    thread.waitHealthy().then(
-      () => handOut(thread),
-      () => {
+    thread
+      .waitHealthy()
+      .then(() => handOut(thread))
+      .catch(() => {
         const timer = setTimeout(() => reclaim(thread), RECLAIM_RETRY_MS);
         timer.unref?.();
-      },
-    );
+      });
   };
 
   const release = (thread: Thread) => {

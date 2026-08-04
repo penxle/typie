@@ -55,6 +55,9 @@
     () => user$key,
   );
 
+  const app = getAppContext();
+  const currentSiteId = $derived((user.data.sites.find((s) => s.id === app.preference.current.currentSiteId) ?? user.data.sites[0]).id);
+
   let debouncedQuery = $state('');
 
   const searchQuery = createQuery(
@@ -152,9 +155,6 @@
       }
     `),
   );
-
-  const app = getAppContext();
-  const currentSiteId = $derived((user.data.sites.find((s) => s.id === app.preference.current.currentSiteId) ?? user.data.sites[0]).id);
 
   const recentlyViewedQuery = createQuery(
     graphql(`

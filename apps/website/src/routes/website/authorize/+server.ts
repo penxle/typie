@@ -11,7 +11,7 @@ export const GET: RequestHandler = async ({ url, cookies }) => {
   const error = url.searchParams.get('error');
   const state = url.searchParams.get('state');
 
-  if ((!code && !error) || !state) {
+  if (!state || (!code && !error)) {
     return new Response('Missing required parameters', { status: 400 });
   }
 

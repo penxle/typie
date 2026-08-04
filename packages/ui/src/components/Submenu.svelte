@@ -241,7 +241,7 @@
           (items[0] as HTMLElement).focus();
         }
       });
-    } else if (e.key === 'ArrowLeft' && submenuOpen) {
+    } else if (submenuOpen && e.key === 'ArrowLeft') {
       e.preventDefault();
       e.stopPropagation();
       submenuOpen = false;

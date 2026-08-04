@@ -74,7 +74,7 @@
   });
 
   $effect(() => {
-    if (hasFocusedAction || (contentPosition === 'viewport' && !visibleBounds) || !actionButton) return;
+    if (hasFocusedAction || !actionButton || (contentPosition === 'viewport' && !visibleBounds)) return;
     hasFocusedAction = true;
     actionButton.focus({ preventScroll: true });
   });

@@ -243,7 +243,7 @@ export class NoteOperations {
     try {
       value = await mutate({ ...input, clientId: this.#clientId } as TInput);
     } catch (err) {
-      if (classifyNoteMutationError(err) !== 'not_found' || notFoundIsFailure) {
+      if (notFoundIsFailure || classifyNoteMutationError(err) !== 'not_found') {
         reportNoteMutationFailure(err);
         return { status: 'failure', error: err };
       }

@@ -249,10 +249,9 @@ export class NoteEditState {
     } catch {
       result = Promise.resolve({ kind: 'failed' });
     }
-    void result.then(
-      (outcome) => this.#completeSave(field, pending, outcome),
-      () => this.#completeSave(field, pending, { kind: 'failed' }),
-    );
+    void result
+      .then((outcome) => this.#completeSave(field, pending, outcome))
+      .catch(() => this.#completeSave(field, pending, { kind: 'failed' }));
   }
 
   #completeSave(field: NoteField, pending: PendingSave, outcome: NoteSaveOutcome): void {

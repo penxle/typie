@@ -138,11 +138,12 @@ export const handlePaste = (
   const html = data.getData('text/html') || undefined;
   const text = data.getData('text/plain');
   const files = html?.trim() ? [] : filesFromTransfer(data);
-  if (!html?.trim() && files.length === 0 && text === '') return;
+  if (text === '' && !html?.trim() && files.length === 0) return;
 
   e.preventDefault();
   const editor = ctx.editor;
-  if (paste(ctx, { html, text, files }, onFailure) && editor) {
+  const pasted = paste(ctx, { html, text, files }, onFailure);
+  if (pasted && editor) {
     scrollAfterPaste(editor);
   }
 };

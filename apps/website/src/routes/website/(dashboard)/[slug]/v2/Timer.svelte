@@ -21,7 +21,7 @@
   const durationStep = 5;
 
   $effect(() => {
-    if (app.timerState.current.status !== 'init' && !app.timerState.current.paused && !timerInterval) {
+    if (!timerInterval && app.timerState.current.status !== 'init' && !app.timerState.current.paused) {
       startTimer();
     }
   });

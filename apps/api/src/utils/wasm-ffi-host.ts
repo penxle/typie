@@ -58,7 +58,7 @@ export async function useHost<T>(fn: (host: EditorHost) => T): Promise<Awaited<T
     returnToPool(host);
     return result;
   } catch (err) {
-    if (err instanceof WebAssembly.RuntimeError && wasmModule) {
+    if (wasmModule && err instanceof WebAssembly.RuntimeError) {
       try {
         returnToPool(await createHost(wasmModule));
       } catch {
