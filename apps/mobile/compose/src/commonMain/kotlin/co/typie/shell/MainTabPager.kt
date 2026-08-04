@@ -1,6 +1,8 @@
 package co.typie.shell
 
+import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerDefaults
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -25,10 +27,18 @@ internal fun MainTabPager(
   content: @Composable (Tab) -> Unit,
 ) {
   val deferredUserScrollEnabled = rememberMainTabPagerUserScrollEnabled(userScrollEnabled)
+  val defaultPageNestedScrollConnection =
+    PagerDefaults.pageNestedScrollConnection(state, Orientation.Horizontal)
   HorizontalPager(
     state = state,
     modifier = modifier,
     userScrollEnabled = deferredUserScrollEnabled,
+    pageNestedScrollConnection =
+      if (deferredUserScrollEnabled) {
+        defaultPageNestedScrollConnection
+      } else {
+        DisabledMainTabPagerNestedScrollConnection
+      },
     overscrollEffect = null,
   ) { page ->
     content(Tab.entries[page])
@@ -54,6 +64,8 @@ private fun rememberMainTabPagerUserScrollEnabled(requested: Boolean): Boolean {
 
   return requested && enabledAfterFrame
 }
+
+private data object DisabledMainTabPagerNestedScrollConnection : NestedScrollConnection
 
 internal fun mainTabActivationWeights(position: Float): Map<Tab, Float> =
   Tab.entries.associateWith { tab -> (1f - abs(position - tab.ordinal)).coerceIn(0f, 1f) }
