@@ -9,12 +9,18 @@ import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.platform.PlatformTextInputSessionScope
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.CommitTextCommand
+import androidx.compose.ui.text.input.DeleteSurroundingTextInCodePointsCommand
 import androidx.compose.ui.text.input.EditCommand
+import androidx.compose.ui.text.input.FinishComposingTextCommand
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.ImeOptions
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PlatformImeOptions
+import androidx.compose.ui.text.input.SetComposingRegionCommand
+import androidx.compose.ui.text.input.SetComposingTextCommand
+import androidx.compose.ui.text.input.SetSelectionCommand
 import androidx.compose.ui.text.input.TextEditingScope
 import androidx.compose.ui.text.input.TextEditorState
 import androidx.compose.ui.text.input.TextFieldValue
@@ -121,7 +127,41 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
           value().text.subSequence(startIndex, endIndex)
       }
 
-    override val editText: (block: TextEditingScope.() -> Unit) -> Unit = { _ -> }
+    override val editText: (block: TextEditingScope.() -> Unit) -> Unit = { block ->
+      val commands = mutableListOf<EditCommand>()
+      val scope =
+        object : TextEditingScope {
+          override fun deleteSurroundingTextInCodePoints(
+            lengthBeforeCursor: Int,
+            lengthAfterCursor: Int,
+          ) {
+            commands +=
+              DeleteSurroundingTextInCodePointsCommand(lengthBeforeCursor, lengthAfterCursor)
+          }
+
+          override fun setSelection(start: Int, end: Int) {
+            commands += SetSelectionCommand(start, end)
+          }
+
+          override fun commitText(text: CharSequence, newCursorPosition: Int) {
+            commands += CommitTextCommand(text.toString(), newCursorPosition)
+          }
+
+          override fun setComposingRegion(start: Int, end: Int) {
+            commands += SetComposingRegionCommand(start, end)
+          }
+
+          override fun setComposingText(text: CharSequence, newCursorPosition: Int) {
+            commands += SetComposingTextCommand(text.toString(), newCursorPosition)
+          }
+
+          override fun finishComposingText() {
+            commands += FinishComposingTextCommand()
+          }
+        }
+      scope.block()
+      onEditCommand(commands)
+    }
   }
 }
 
