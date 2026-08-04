@@ -115,6 +115,7 @@ internal fun EditorToolbarHost(
     )
   val panel = inputState.panel
   val activeBottomPanel = panel?.panel
+  val includeBottomGapInToolbarTouchArea = panel == null && bottomPanelTransition.isIdle
   val effectiveImeInset = effectiveImeInset(environment)
   val imeVisible =
     isImeVisible(imeBottom = effectiveImeInset, safeBottomInset = environment.safeBottomInset)
@@ -285,7 +286,7 @@ internal fun EditorToolbarHost(
         .padding(
           start = ToolbarHorizontalPadding,
           end = ToolbarHorizontalPadding,
-          bottom = ToolbarBottomPadding,
+          bottom = if (includeBottomGapInToolbarTouchArea) 0.dp else ToolbarBottomPadding,
         ),
   ) {
     Box(contentAlignment = Alignment.BottomCenter) {
@@ -377,6 +378,7 @@ internal fun EditorToolbarHost(
               null -> Unit
             }
           },
+          includeBottomGapInTouchArea = includeBottomGapInToolbarTouchArea,
           modifier = Modifier.fillMaxWidth(),
         )
 

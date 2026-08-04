@@ -145,6 +145,7 @@ internal fun EditorToolbarPages(
   secondaryToolbarVisible: Boolean = false,
   onSecondaryToolbarInLayoutChange: (Boolean) -> Unit = {},
   secondaryToolbar: @Composable () -> Unit = {},
+  includeBottomGapInTouchArea: Boolean,
   modifier: Modifier = Modifier,
 ) {
   val scope = rememberCoroutineScope()
@@ -163,8 +164,9 @@ internal fun EditorToolbarPages(
     )
   SideEffect { onSecondaryToolbarInLayoutChange(secondaryToolbarInLayout) }
   DisposableEffect(Unit) { onDispose { onSecondaryToolbarInLayoutChange(false) } }
+  val bottomTouchPadding = if (includeBottomGapInTouchArea) ToolbarBottomPadding else 0.dp
 
-  BoxWithConstraints(modifier = modifier.height(toolbarStackHeight)) {
+  BoxWithConstraints(modifier = modifier.height(toolbarStackHeight + bottomTouchPadding)) {
     val pageKeys = pages.map { it.key }
     val pageCount = pages.size.coerceAtLeast(1)
     val lastPageIndex = pageCount - 1
@@ -651,7 +653,7 @@ internal fun EditorToolbarPages(
       exit = fadeOut(animationSpec = tween(ToolbarSecondaryVisibilityMillis)),
       modifier =
         Modifier.align(Alignment.BottomCenter)
-          .padding(bottom = ToolbarHeight + ToolbarSecondaryGap)
+          .padding(bottom = ToolbarHeight + ToolbarSecondaryGap + bottomTouchPadding)
           .fillMaxWidth(),
     ) {
       secondaryToolbar()
@@ -661,11 +663,29 @@ internal fun EditorToolbarPages(
       val toolbarInteractionSource =
         LocalInteractionSource.current ?: remember { MutableInteractionSource() }
       val toolbarSurfaceColor = AppTheme.colors.surfaceDefault
+      val toolbarPagerInputModifier =
+        Modifier.emitPressInteractions(toolbarInteractionSource)
+          .trackToolbarScrollGestureStart(
+            onStart = {
+              outerEdgeDrag = ToolbarOuterEdgeDrag(offset = outerEdgeVisualOffset.value)
+              pagerState.pointerScrollGestureActive = true
+              pagerState.scrollGestureStartPosition = pagerState.scrollPosition
+            },
+            onEnd = { pagerState.pointerScrollGestureActive = false },
+          )
+          .scrollable(
+            state = scrollableState,
+            orientation = Orientation.Horizontal,
+            enabled = pageDistance > 0f && pageCount > 1,
+            flingBehavior = flingBehavior,
+            interactionSource = toolbarInteractionSource,
+          )
+          .preserveEditorFocusOnToolbarInteraction()
       Box(
         modifier =
           Modifier.align(Alignment.BottomCenter)
             .fillMaxWidth()
-            .height(ToolbarHeight)
+            .height(ToolbarHeight + bottomTouchPadding)
             .toolbarVerticalSwipeGestures(
               onPointerSessionStart = {
                 dismissSwipeArmedAnimationJob.value?.cancel()
@@ -703,102 +723,100 @@ internal fun EditorToolbarPages(
               },
               onSwipeDownCancelled = { dismissSwipeProgress = null },
             )
-            .graphicsLayer { translationY = dismissSwipeVisualOffset }
-            .shadow(AppTheme.shadows.sm, ToolbarCapsuleShape)
-            .pressScale(ToolbarCapsulePressedScale)
-            .clip(ToolbarCapsuleShape)
-            .hazeEffect(hazeState) {
-              blurEffect {
-                backgroundColor = toolbarSurfaceColor
-                blurRadius = ToolbarBackdropBlurRadius
-              }
-            }
-            .border(ToolbarBorderWidth, AppTheme.colors.borderEmphasis, ToolbarCapsuleShape)
       ) {
-        EditorToolbarSurfaceBackground(shape = ToolbarCapsuleShape)
-
         Box(
           modifier =
-            Modifier.matchParentSize()
-              .clipToBounds()
-              .emitPressInteractions(toolbarInteractionSource)
-              .trackToolbarScrollGestureStart(
-                onStart = {
-                  outerEdgeDrag = ToolbarOuterEdgeDrag(offset = outerEdgeVisualOffset.value)
-                  pagerState.pointerScrollGestureActive = true
-                  pagerState.scrollGestureStartPosition = pagerState.scrollPosition
-                },
-                onEnd = { pagerState.pointerScrollGestureActive = false },
-              )
-              .scrollable(
-                state = scrollableState,
-                orientation = Orientation.Horizontal,
-                enabled = pageDistance > 0f && pageCount > 1,
-                flingBehavior = flingBehavior,
-                interactionSource = toolbarInteractionSource,
-              )
-              .preserveEditorFocusOnToolbarInteraction()
-        ) {
-          Box(
-            modifier =
-              Modifier.fillMaxSize().graphicsLayer {
-                translationX = pagerState.hardStopVisualOffset.value + outerEdgeVisualOffset.value
+            Modifier.align(Alignment.TopCenter)
+              .fillMaxWidth()
+              .height(ToolbarHeight)
+              .graphicsLayer { translationY = dismissSwipeVisualOffset }
+              .shadow(AppTheme.shadows.sm, ToolbarCapsuleShape)
+              .pressScale(ToolbarCapsulePressedScale)
+              .clip(ToolbarCapsuleShape)
+              .hazeEffect(hazeState) {
+                blurEffect {
+                  backgroundColor = toolbarSurfaceColor
+                  blurRadius = ToolbarBackdropBlurRadius
+                }
               }
-          ) {
-            pages.forEachIndexed { index, page ->
-              val pageScope =
-                EditorToolbarPageScope(
-                  toolbarScope = page.toolbarScope,
-                  activeBottomPanel = activeBottomPanel,
-                  activeSecondaryToolbar = activeSecondaryToolbar,
-                  commandScope = commandScope,
-                  hasNextPage = index < lastPageIndex,
-                  navigateToPage = ::navigateToPage,
-                  onSecondaryToolbarToggle = onSecondaryToolbarToggle,
-                  clearSecondaryToolbar = onSecondaryToolbarClear,
-                  onBottomPanelToggle = onBottomPanelToggle,
-                  sendMessage = onEditorMessage,
-                  performToolAction = onToolAction,
-                )
+              .border(ToolbarBorderWidth, AppTheme.colors.borderEmphasis, ToolbarCapsuleShape)
+        ) {
+          EditorToolbarSurfaceBackground(shape = ToolbarCapsuleShape)
 
-              Box(
-                modifier =
-                  Modifier.fillMaxSize().offset {
-                    val pageOffset = pageMetrics.pageOffsetFor(index, visualScrollPosition)
-                    IntOffset(x = pageOffset.roundToInt(), y = 0)
-                  }
-              ) {
-                page.content(pageScope)
+          Box(
+            modifier = Modifier.matchParentSize().clipToBounds().then(toolbarPagerInputModifier)
+          ) {
+            Box(
+              modifier =
+                Modifier.fillMaxSize().graphicsLayer {
+                  translationX = pagerState.hardStopVisualOffset.value + outerEdgeVisualOffset.value
+                }
+            ) {
+              pages.forEachIndexed { index, page ->
+                val pageScope =
+                  EditorToolbarPageScope(
+                    toolbarScope = page.toolbarScope,
+                    activeBottomPanel = activeBottomPanel,
+                    activeSecondaryToolbar = activeSecondaryToolbar,
+                    commandScope = commandScope,
+                    hasNextPage = index < lastPageIndex,
+                    navigateToPage = ::navigateToPage,
+                    onSecondaryToolbarToggle = onSecondaryToolbarToggle,
+                    clearSecondaryToolbar = onSecondaryToolbarClear,
+                    onBottomPanelToggle = onBottomPanelToggle,
+                    sendMessage = onEditorMessage,
+                    performToolAction = onToolAction,
+                  )
+
+                Box(
+                  modifier =
+                    Modifier.fillMaxSize().offset {
+                      val pageOffset = pageMetrics.pageOffsetFor(index, visualScrollPosition)
+                      IntOffset(x = pageOffset.roundToInt(), y = 0)
+                    }
+                ) {
+                  page.content(pageScope)
+                }
               }
             }
           }
+
+          InteractionScope {
+            EditorToolbarIconButton(
+              icon =
+                when (fixedAction) {
+                  ToolbarFixedAction.ClosePanel -> Lucide.CircleX
+                  ToolbarFixedAction.HideToolbar -> Lucide.ChevronDown
+                  ToolbarFixedAction.DismissInput -> Lucide.KeyboardOff
+                },
+              contentDescription =
+                when (fixedAction) {
+                  ToolbarFixedAction.ClosePanel -> "하단 패널 닫기"
+                  ToolbarFixedAction.HideToolbar -> "툴바 숨기기"
+                  ToolbarFixedAction.DismissInput -> if (editorFocused) "에디터 포커스 해제" else "키보드 닫기"
+                },
+              onClick = onKeyboardDismissRequest,
+              shape = ToolbarFixedActionShape,
+              fixedActionSurface = true,
+              inheritInteractionSource = true,
+              crossfadeIcon = true,
+              modifier =
+                Modifier.align(Alignment.CenterEnd)
+                  .width(ToolbarFixedActionWidth)
+                  .fillMaxHeight()
+                  .padding(ToolbarFixedActionPadding)
+                  .pressScale(ToolbarFixedActionPressedScale),
+            )
+          }
         }
 
-        InteractionScope {
-          EditorToolbarIconButton(
-            icon =
-              when (fixedAction) {
-                ToolbarFixedAction.ClosePanel -> Lucide.CircleX
-                ToolbarFixedAction.HideToolbar -> Lucide.ChevronDown
-                ToolbarFixedAction.DismissInput -> Lucide.KeyboardOff
-              },
-            contentDescription =
-              when (fixedAction) {
-                ToolbarFixedAction.ClosePanel -> "하단 패널 닫기"
-                ToolbarFixedAction.HideToolbar -> "툴바 숨기기"
-                ToolbarFixedAction.DismissInput -> if (editorFocused) "에디터 포커스 해제" else "키보드 닫기"
-              },
-            onClick = onKeyboardDismissRequest,
-            shape = ToolbarFixedActionShape,
-            fixedActionSurface = true,
-            inheritInteractionSource = true,
-            crossfadeIcon = true,
+        if (includeBottomGapInTouchArea) {
+          Box(
             modifier =
-              Modifier.align(Alignment.CenterEnd)
-                .width(ToolbarFixedActionWidth)
-                .fillMaxHeight()
-                .padding(ToolbarFixedActionPadding)
-                .pressScale(ToolbarFixedActionPressedScale),
+              Modifier.align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .height(bottomTouchPadding)
+                .then(toolbarPagerInputModifier)
           )
         }
       }

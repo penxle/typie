@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -1301,6 +1302,109 @@ class EditorToolbarPagesDesktopTest {
   }
 
   @Test
+  fun horizontalSwipeFromBottomGapMovesToolbarPager() = runComposeUiTest {
+    setToolbarContent(includeBottomGapInTouchArea = true)
+
+    onNodeWithTag(ToolbarTag).performTouchInput {
+      val start = Offset(x = width * 0.5f, y = height - ToolbarBottomPadding.toPx() / 2f)
+      swipe(start = start, end = start - Offset(x = width * 0.7f, y = 0f), durationMillis = 120)
+    }
+    waitForIdle()
+
+    assertPageActive(TextPageTag)
+  }
+
+  @Test
+  fun verticalSwipesFromBottomGapStayWithToolbar() = runComposeUiTest {
+    lateinit var pagerState: ToolbarPagerState
+    var toolbarDismissals = 0
+    setContent {
+      pagerState = rememberToolbarPagerState()
+      ToolbarTestContent(
+        textScrollState = rememberScrollState(),
+        pagerState = pagerState,
+        onToolbarDismissRequest = { toolbarDismissals++ },
+        includeBottomGapInTouchArea = true,
+      )
+    }
+    waitForIdle()
+    val pulseBeforeSwipe = pagerState.indicatorPulse
+
+    swipeToolbarVerticallyFromBottomGap(up = true)
+
+    assertTrue(pagerState.indicatorPulse > pulseBeforeSwipe)
+
+    swipeToolbarVerticallyFromBottomGap(up = false)
+
+    assertEquals(1, toolbarDismissals)
+  }
+
+  @Test
+  fun tapInBottomGapDoesNotClickToolbarButtons() = runComposeUiTest {
+    var fixedActionClicks = 0
+    var toolbarButtonClicks = 0
+    setToolbarContent(
+      onKeyboardDismissRequest = { fixedActionClicks++ },
+      onMainButtonClick = { toolbarButtonClicks++ },
+      includeBottomGapInTouchArea = true,
+    )
+
+    onNodeWithTag(ToolbarTag).performTouchInput {
+      val gapY = height - ToolbarBottomPadding.toPx() + 1.dp.toPx()
+      click(Offset(x = width * 0.1f, y = gapY))
+      click(Offset(x = width * 0.9f, y = gapY))
+    }
+    waitForIdle()
+
+    assertEquals(0, toolbarButtonClicks)
+    assertEquals(0, fixedActionClicks)
+  }
+
+  @Test
+  fun bottomGapDoesNotMoveVisibleToolbars() = runComposeUiTest {
+    setContent {
+      ToolbarTestContent(textScrollState = rememberScrollState(), secondaryToolbarVisible = true)
+    }
+    waitForIdle()
+    val originalMainBounds = onNodeWithTag(MainPageTag).fetchSemanticsNode().boundsInRoot
+    val originalSecondaryBounds =
+      onNodeWithTag(SecondaryToolbarTag).fetchSemanticsNode().boundsInRoot
+
+    setContent {
+      ToolbarTestContent(
+        textScrollState = rememberScrollState(),
+        secondaryToolbarVisible = true,
+        includeBottomGapInTouchArea = true,
+      )
+    }
+    waitForIdle()
+    val expandedMainBounds = onNodeWithTag(MainPageTag).fetchSemanticsNode().boundsInRoot
+    val expandedSecondaryBounds =
+      onNodeWithTag(SecondaryToolbarTag).fetchSemanticsNode().boundsInRoot
+
+    assertNear(
+      originalMainBounds.top,
+      expandedMainBounds.top,
+      "bottom gap should not move the main toolbar top",
+    )
+    assertNear(
+      originalMainBounds.bottom,
+      expandedMainBounds.bottom,
+      "bottom gap should not move the main toolbar bottom",
+    )
+    assertNear(
+      originalSecondaryBounds.top,
+      expandedSecondaryBounds.top,
+      "bottom gap should not move the secondary toolbar top",
+    )
+    assertNear(
+      originalSecondaryBounds.bottom,
+      expandedSecondaryBounds.bottom,
+      "bottom gap should not move the secondary toolbar bottom",
+    )
+  }
+
+  @Test
   fun swipeUpFromFixedActionRevealsIndicatorAndRestartsTimeoutWithoutClickingButton() =
     runComposeUiTest {
       lateinit var pagerState: ToolbarPagerState
@@ -1353,6 +1457,25 @@ class EditorToolbarPagesDesktopTest {
     swipeToolbarVerticallyFromFixedAction(up = false)
 
     assertEquals(1, toolbarDismissals)
+    assertEquals(0, fixedActionClicks)
+  }
+
+  @Test
+  fun horizontalSwipeFromFixedActionDoesNotMoveToolbarPagerOrClickButton() = runComposeUiTest {
+    var fixedActionClicks = 0
+    setToolbarContent(onKeyboardDismissRequest = { fixedActionClicks++ })
+
+    onNodeWithTag(ToolbarTag).performTouchInput {
+      val start =
+        Offset(
+          x = width - ToolbarFixedActionWidth.toPx() / 2f,
+          y = height - ToolbarHeight.toPx() / 2f,
+        )
+      swipe(start = start, end = start - Offset(x = width * 0.7f, y = 0f), durationMillis = 120)
+    }
+    waitForIdle()
+
+    assertPageActive(MainPageTag)
     assertEquals(0, fixedActionClicks)
   }
 
@@ -1600,6 +1723,7 @@ class EditorToolbarPagesDesktopTest {
     onToolbarDismissRequest: () -> Unit = {},
     onKeyboardDismissRequest: () -> Unit = {},
     onMainButtonClick: () -> Unit = {},
+    includeBottomGapInTouchArea: Boolean = false,
   ): ScrollState {
     lateinit var textScrollState: ScrollState
     setContent {
@@ -1609,6 +1733,7 @@ class EditorToolbarPagesDesktopTest {
         onToolbarDismissRequest = onToolbarDismissRequest,
         onKeyboardDismissRequest = onKeyboardDismissRequest,
         onMainButtonClick = onMainButtonClick,
+        includeBottomGapInTouchArea = includeBottomGapInTouchArea,
       )
     }
     waitForIdle()
@@ -1778,6 +1903,19 @@ class EditorToolbarPagesDesktopTest {
     waitForIdle()
   }
 
+  private fun ComposeUiTest.swipeToolbarVerticallyFromBottomGap(up: Boolean) {
+    onNodeWithTag(ToolbarTag).performTouchInput {
+      val start = Offset(x = width * 0.5f, y = height - ToolbarBottomPadding.toPx() / 2f)
+      val distance = (if (up) 20.dp else 40.dp).toPx()
+      swipe(
+        start = start,
+        end = start + Offset(x = 0f, y = if (up) -distance else distance),
+        durationMillis = 120,
+      )
+    }
+    waitForIdle()
+  }
+
   private fun ComposeUiTest.startToolbarVerticalDrag(distance: Dp) {
     onNodeWithTag(ToolbarTag).performTouchInput {
       val x = width - ToolbarFixedActionWidth.toPx() / 2f
@@ -1920,6 +2058,8 @@ class EditorToolbarPagesDesktopTest {
     onKeyboardDismissRequest: () -> Unit = {},
     onMainButtonClick: () -> Unit = {},
     ancestorModifier: Modifier = Modifier,
+    includeBottomGapInTouchArea: Boolean = false,
+    secondaryToolbarVisible: Boolean = false,
     hapticFeedback: HapticFeedback? = null,
   ) {
     val pages =
@@ -1930,9 +2070,14 @@ class EditorToolbarPagesDesktopTest {
         onMainButtonClick = onMainButtonClick,
       )
     val commandScope = rememberCoroutineScope()
+    val bottomTouchGapHeight = if (includeBottomGapInTouchArea) ToolbarBottomPadding else 0.dp
+    val toolbarLayoutHeight =
+      ToolbarStackHeight +
+        bottomTouchGapHeight +
+        if (secondaryToolbarVisible) ToolbarSecondaryStackHeight else 0.dp
     ToolbarTestTheme(hapticFeedback = hapticFeedback) {
       Box(ancestorModifier) {
-        Box(Modifier.width(360.dp).height(ToolbarStackHeight).testTag(ToolbarTag)) {
+        Box(Modifier.width(360.dp).height(toolbarLayoutHeight).testTag(ToolbarTag)) {
           if (visible) {
             EditorToolbarPages(
               pages = pages,
@@ -1947,6 +2092,15 @@ class EditorToolbarPagesDesktopTest {
               onKeyboardDismissRequest = onKeyboardDismissRequest,
               onToolbarDismissRequest = onToolbarDismissRequest,
               onBottomPanelToggle = { _, _ -> },
+              secondaryToolbarVisible = secondaryToolbarVisible,
+              secondaryToolbar = {
+                Box(
+                  Modifier.fillMaxWidth()
+                    .height(ToolbarSecondaryHeight)
+                    .testTag(SecondaryToolbarTag)
+                )
+              },
+              includeBottomGapInTouchArea = includeBottomGapInTouchArea,
               modifier = Modifier.fillMaxSize(),
             )
           }
@@ -2069,6 +2223,7 @@ class EditorToolbarPagesDesktopTest {
 
   private companion object {
     const val ToolbarTag = "editor-toolbar"
+    const val SecondaryToolbarTag = "secondary-toolbar"
     const val MainButtonTag = "main-toolbar-button"
     const val MainPageTag = "main-page"
     const val TextPageTag = "text-page"
