@@ -162,7 +162,7 @@ fn char_boundary_at_or_after(text: &str, mut byte: usize) -> usize {
     byte
 }
 
-fn expand_substitute(caps: &fancy_regex::Captures<'_>, template: &str) -> String {
+fn expand_substitute(caps: &fancy_regex::Captures<'_, str>, template: &str) -> String {
     let mut result = String::new();
     let mut chars = template.chars().peekable();
 

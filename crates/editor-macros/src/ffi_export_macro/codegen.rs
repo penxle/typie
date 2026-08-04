@@ -58,7 +58,10 @@ impl VisitMut for ComplexRewriter {
     fn visit_type_mut(&mut self, ty: &mut Type) {
         syn::visit_mut::visit_type_mut(self, ty);
 
-        if let Type::Path(TypePath { path, qself: None }) = ty {
+        if let Type::Path(TypePath {
+            path, qself: None, ..
+        }) = ty
+        {
             let last = match path.segments.last() {
                 Some(seg) if seg.ident == "Complex" => seg,
                 _ => return,

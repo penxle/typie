@@ -17,7 +17,7 @@ litemap = { version = "0.8", default-features = false, features = ["serde"] }
 log = { version = "0.4", default-features = false, features = ["std"] }
 once_cell = { version = "1", default-features = false, features = ["alloc"] }
 phf_shared = { version = "0.14", default-features = false, features = ["std"] }
-read-fonts = { version = "0.40", features = ["experimental_font_api"] }
+read-fonts = { version = "0.42" }
 serde = { version = "1", features = ["alloc", "derive"] }
 serde_core = { version = "1", features = ["alloc"] }
 serde_json = { version = "1", features = ["unbounded_depth"] }
@@ -41,13 +41,14 @@ litemap = { version = "0.8", default-features = false, features = ["serde"] }
 log = { version = "0.4", default-features = false, features = ["std"] }
 once_cell = { version = "1", default-features = false, features = ["alloc"] }
 phf_shared = { version = "0.14", default-features = false, features = ["std"] }
-read-fonts = { version = "0.40", features = ["experimental_font_api"] }
+read-fonts = { version = "0.42" }
 serde = { version = "1", features = ["alloc", "derive"] }
 serde_core = { version = "1", features = ["alloc"] }
 serde_json = { version = "1", features = ["unbounded_depth"] }
 smallvec = { version = "1", default-features = false, features = ["const_new", "serde"] }
 stable_deref_trait = { version = "1" }
-syn = { version = "2", features = ["extra-traits", "fold", "full", "visit", "visit-mut"] }
+syn-7b89eefb6aaa9bf3 = { package = "syn", version = "3", features = ["extra-traits", "full", "visit-mut"] }
+syn-f595c2ba2a3f28df = { package = "syn", version = "2", features = ["extra-traits", "fold", "full", "visit", "visit-mut"] }
 thiserror = { version = "2" }
 tinystr = { version = "0.8", default-features = false, features = ["alloc", "serde", "zerovec"] }
 uncased = { version = "0.9" }
