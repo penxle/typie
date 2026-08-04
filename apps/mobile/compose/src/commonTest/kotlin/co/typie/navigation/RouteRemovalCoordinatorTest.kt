@@ -205,7 +205,7 @@ class RouteRemovalCoordinatorTest {
     val thrown = assertFailsWith<IllegalStateException> { coordinator.rollbackActiveSegment() }
 
     assertSame(firstFailure, thrown)
-    assertSame(secondFailure, thrown.suppressed.single())
+    assertSame(secondFailure, thrown.suppressedExceptions.single())
     assertEquals(1, firstToRollback.rollbacks)
     assertEquals(1, secondToRollback.rollbacks)
   }
@@ -231,7 +231,7 @@ class RouteRemovalCoordinatorTest {
       }
 
     assertSame(preparationFailure, thrown)
-    assertSame(rollbackFailure, thrown.suppressed.single())
+    assertSame(rollbackFailure, thrown.suppressedExceptions.single())
   }
 
   @Test

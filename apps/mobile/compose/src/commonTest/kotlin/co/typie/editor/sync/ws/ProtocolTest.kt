@@ -108,7 +108,7 @@ class ProtocolTest {
     val text = encoded.joinToString("") { (it.toInt() and 0xff).toString(16).padStart(2, '0') }
     check(
       !text.contains(
-        "sinceSeq".toByteArray().joinToString("") {
+        "sinceSeq".encodeToByteArray().joinToString("") {
           (it.toInt() and 0xff).toString(16).padStart(2, '0')
         }
       )

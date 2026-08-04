@@ -10,6 +10,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Runnable
 import kotlinx.coroutines.test.runTest
 
 private class FakeGraphIngest : GraphIngest {

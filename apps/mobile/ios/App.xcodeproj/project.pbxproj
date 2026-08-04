@@ -431,10 +431,10 @@
 /* Begin XCRemoteSwiftPackageReference section */
 		B62B10402F93A263001CF03A /* XCRemoteSwiftPackageReference "sentry-cocoa" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/getsentry/sentry-cocoa.git";
+			repositoryURL = "https://github.com/penxle/sentry-cocoa.git";
 			requirement = {
-				kind = exactVersion;
-				version = 8.58.2;
+				kind = revision;
+				revision = b9919fb12c5a344c36286bec053de580ef12f16c;
 			};
 		};
 		B63A87BE2F95335200781191 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {

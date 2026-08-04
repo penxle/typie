@@ -15,7 +15,9 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.ImeOptions
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.SetComposingRegionCommand
 import androidx.compose.ui.text.input.SetComposingTextCommand
+import androidx.compose.ui.text.input.SetSelectionCommand
 import androidx.compose.ui.text.input.TextEditingScope
 import androidx.compose.ui.text.input.TextEditorState
 import androidx.compose.ui.text.input.TextFieldValue
@@ -73,6 +75,9 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
         override val composition: TextRange?
           get() = value().composition
 
+        override val text: String
+          get() = value().text
+
         override val length: Int
           get() = value().text.length
 
@@ -119,6 +124,14 @@ internal class EditorDesktopTextEditingBatch : TextEditingScope {
 
   override fun deleteSurroundingTextInCodePoints(lengthBeforeCursor: Int, lengthAfterCursor: Int) {
     commands += DeleteSurroundingTextInCodePointsCommand(lengthBeforeCursor, lengthAfterCursor)
+  }
+
+  override fun setSelection(start: Int, end: Int) {
+    commands += SetSelectionCommand(start, end)
+  }
+
+  override fun setComposingRegion(start: Int, end: Int) {
+    commands += SetComposingRegionCommand(start, end)
   }
 
   fun drainCommands(): List<EditCommand> {

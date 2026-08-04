@@ -109,6 +109,9 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
         override val composition: TextRange?
           get() = value().composition
 
+        override val text: String
+          get() = value().text
+
         override val length: Int
           get() = value().text.length
 
