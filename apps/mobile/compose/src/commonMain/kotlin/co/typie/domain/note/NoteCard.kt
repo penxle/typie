@@ -426,7 +426,6 @@ private fun NoteCollapsedContent(
         modifier =
           Modifier.weight(1f)
             .padding(end = 12.dp, top = 12.dp, bottom = 12.dp)
-            .clip(AppShapes.rounded(AppShapes.md))
             .clickable { onExpand() }
             .pressScale(0.985f),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
