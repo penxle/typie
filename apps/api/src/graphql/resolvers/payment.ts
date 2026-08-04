@@ -39,7 +39,7 @@ import * as googleplay from '#/external/googleplay.ts';
 import * as portone from '#/external/portone.ts';
 import { verifyEasyPayBillingKey } from '#/utils/billing-key.ts';
 import { computeNextPeriodEnd, floorToHourKst } from '#/utils/billing-period.ts';
-import { deriveExpiresAtShim } from '#/utils/entitlement.ts';
+import { deriveExpiresAtShim, isSubscriptionLive } from '#/utils/entitlement.ts';
 import { fetchIapEnrollment, normalizeIapEnrollment, probeIapBoundContractTermination } from '#/utils/iap-enroll.ts';
 import { precheckIapEnroll } from '#/utils/iap-normalize.ts';
 import { applyNormalizedIapLocked } from '#/utils/iap-sync.ts';
@@ -362,17 +362,46 @@ builder.mutationFields((t) => ({
 
         const subscriptionRows = await tx
           .select({
+            id: Subscriptions.id,
             state: Subscriptions.state,
             planAvailability: Plans.availability,
+            startsAt: Subscriptions.startsAt,
+            currentPeriodStartsAt: Subscriptions.currentPeriodStartsAt,
             currentPeriodEndsAt: Subscriptions.currentPeriodEndsAt,
           })
           .from(Subscriptions)
           .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
           .where(and(eq(Subscriptions.userId, ctx.session.userId), ne(Subscriptions.state, SubscriptionState.EXPIRED)));
 
-        const action = resolveEnrollAction(subscriptionRows, dayjs());
+        const now = dayjs();
+        const action = resolveEnrollAction(subscriptionRows, now);
         if (action.kind === 'reject') {
           throw new TypieError({ code: 'subscription_already_exists' });
+        }
+
+        // 유예 소진 행은 liveness 가 비활성으로 판정해 여기까지 통과시킨다 — 열린 인보이스를 남긴 채 진행하면
+        // 늦은 성공 확정이 죽은 구독을 되살리므로(해지 전이와 같은 불변식) 같은 트랜잭션에서 상태와 함께 거둔다.
+        // IAP 행은 건드리지 않는다 — IAP 만료는 스토어 웹훅·재조정 소관이다.
+        const exhaustedGraceIds = subscriptionRows
+          .filter(
+            (row) =>
+              row.state === SubscriptionState.IN_GRACE_PERIOD &&
+              row.planAvailability !== PlanAvailability.IN_APP_PURCHASE &&
+              !isSubscriptionLive(row, now),
+          )
+          .map((row) => row.id);
+
+        if (exhaustedGraceIds.length > 0) {
+          await tx.update(Subscriptions).set({ state: SubscriptionState.EXPIRED }).where(inArray(Subscriptions.id, exhaustedGraceIds));
+          await tx
+            .update(PaymentInvoices)
+            .set({ state: PaymentInvoiceState.CANCELED })
+            .where(
+              and(
+                inArray(PaymentInvoices.subscriptionId, exhaustedGraceIds),
+                inArray(PaymentInvoices.state, [PaymentInvoiceState.UPCOMING, PaymentInvoiceState.OVERDUE]),
+              ),
+            );
         }
 
         const billingKey = await tx

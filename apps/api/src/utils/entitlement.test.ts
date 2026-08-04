@@ -6,6 +6,7 @@ import {
   deriveExpiresAtShim,
   deriveGraceDeadline,
   isSubscriptionEntitled,
+  isSubscriptionLive,
   resolveUserEntitlement,
   selectRepresentativeSubscription,
 } from './entitlement.ts';
@@ -31,6 +32,15 @@ test('ACTIVE는 기간이 지나도 허용 — 시각 비교 없음', () => {
 test('WILL_EXPIRE는 기간 내에만 허용', () => {
   assert.equal(isSubscriptionEntitled(row({ state: SubscriptionState.WILL_EXPIRE }), now), true);
   assert.equal(isSubscriptionEntitled(row({ state: SubscriptionState.WILL_EXPIRE, currentPeriodEndsAt: now }), now), false);
+});
+
+test('liveness 는 권한식과 같되 WILL_ACTIVATE 만 시각과 무관하게 제외한다 — 예약은 예약 기계의 소관', () => {
+  assert.equal(isSubscriptionLive(row({ state: SubscriptionState.WILL_ACTIVATE, startsAt: now.subtract(1, 'hour') }), now), false);
+  assert.equal(isSubscriptionEntitled(row({ state: SubscriptionState.WILL_ACTIVATE, startsAt: now.subtract(1, 'hour') }), now), true);
+
+  const graceEnds = { state: SubscriptionState.IN_GRACE_PERIOD, currentPeriodEndsAt: now.subtract(8, 'days') };
+  assert.equal(isSubscriptionLive(row(graceEnds), now), false);
+  assert.equal(isSubscriptionLive(row({ ...graceEnds, currentPeriodEndsAt: now.subtract(2, 'days') }), now), true);
 });
 
 test('정기 갱신 유예 마감 = 주기 종료 + 7일 (주기는 이전 주기에 머묾)', () => {

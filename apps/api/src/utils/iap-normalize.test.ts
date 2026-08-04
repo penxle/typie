@@ -1267,6 +1267,20 @@ test('등록 사전 판정: 살아있는 비-IAP·비-트라이얼 구독이 있
   assert.deepEqual(result, { allowed: false, reason: 'non-iap-subscription' });
 });
 
+test('등록 사전 판정: 유예 마감이 지난 빌링키 구독(종결 잡 지연)은 등록을 막지 않는다', () => {
+  const withPeriodEnd = (currentPeriodEndsAt: dayjs.Dayjs) =>
+    precheckIapEnroll({
+      rows: [enrollRow({ state: SubscriptionState.IN_GRACE_PERIOD, currentPeriodStartsAt: now.subtract(40, 'days'), currentPeriodEndsAt })],
+      binding: null,
+      store: InAppPurchaseStore.GOOGLE_PLAY,
+      iapPlanAvailable: true,
+      now,
+    });
+
+  assert.deepEqual(withPeriodEnd(now.subtract(2, 'days')), { allowed: false, reason: 'non-iap-subscription' });
+  assert.deepEqual(withPeriodEnd(now.subtract(8, 'days')), { allowed: true });
+});
+
 test('등록 사전 판정: 판매 중인 IAP 플랜이 없으면 거절한다', () => {
   const result = precheckIapEnroll({
     rows: [],

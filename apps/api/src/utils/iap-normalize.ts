@@ -1,6 +1,7 @@
 import { AutoRenewStatus, InAppOwnershipType, Status } from '@apple/app-store-server-library';
 import { PlanAvailability, PlanInterval, SubscriptionState } from '@typie/lib/enums';
 import dayjs from 'dayjs';
+import { isSubscriptionLive } from './entitlement.ts';
 import type { JWSRenewalInfoDecodedPayload, JWSTransactionDecodedPayload } from '@apple/app-store-server-library';
 import type { androidpublisher_v3 } from '@googleapis/androidpublisher';
 import type { InAppPurchaseStore } from '@typie/lib/enums';
@@ -593,13 +594,7 @@ export const precheckIapEnroll = ({
     return { allowed: false, reason: 'cross-store-binding' };
   }
 
-  // resolveEnrollAction과 동일한 liveness — 상태만 보면 해지 확정 잡 지연 동안 재가입이 차단된다.
-  const live = rows.filter(
-    (row) =>
-      row.state !== SubscriptionState.EXPIRED &&
-      row.state !== SubscriptionState.WILL_ACTIVATE &&
-      !(row.state === SubscriptionState.WILL_EXPIRE && !row.currentPeriodEndsAt.isAfter(now)),
-  );
+  const live = rows.filter((row) => isSubscriptionLive(row, now));
 
   if (live.some((row) => row.planAvailability !== PlanAvailability.IN_APP_PURCHASE && row.planAvailability !== PlanAvailability.TRIAL)) {
     return { allowed: false, reason: 'non-iap-subscription' };

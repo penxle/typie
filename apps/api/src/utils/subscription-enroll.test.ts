@@ -12,6 +12,8 @@ const past = now.subtract(1, 'hour');
 const row = (state: SubscriptionState, planAvailability: PlanAvailability, currentPeriodEndsAt: dayjs.Dayjs): EnrollSubscriptionRow => ({
   state,
   planAvailability,
+  startsAt: currentPeriodEndsAt.subtract(1, 'month'),
+  currentPeriodStartsAt: currentPeriodEndsAt.subtract(1, 'month'),
   currentPeriodEndsAt,
 });
 
@@ -39,10 +41,27 @@ test('유효 빌링키 구독이 있으면 거부', () => {
   assert.deepEqual(resolveEnrollAction([row(SubscriptionState.ACTIVE, PlanAvailability.BILLING_KEY, future)], now), { kind: 'reject' });
 });
 
-test('유예 중 구독이 있으면 거부(시간 경과와 무관)', () => {
+test('유예 중 구독은 마감 전이면 거부', () => {
   assert.deepEqual(resolveEnrollAction([row(SubscriptionState.IN_GRACE_PERIOD, PlanAvailability.BILLING_KEY, past)], now), {
     kind: 'reject',
   });
+});
+
+test('유예 마감이 지난 빌링키 구독(종결 잡 지연)은 즉시 결제 — 잠긴 유저의 재가입을 막지 않는다', () => {
+  assert.deepEqual(
+    resolveEnrollAction([row(SubscriptionState.IN_GRACE_PERIOD, PlanAvailability.BILLING_KEY, now.subtract(8, 'days'))], now),
+    { kind: 'immediate' },
+  );
+});
+
+test('유예 중 IAP 구독은 백스톱(31일) 전이면 거부, 지나면 즉시 결제', () => {
+  assert.deepEqual(resolveEnrollAction([row(SubscriptionState.IN_GRACE_PERIOD, PlanAvailability.IN_APP_PURCHASE, past)], now), {
+    kind: 'reject',
+  });
+  assert.deepEqual(
+    resolveEnrollAction([row(SubscriptionState.IN_GRACE_PERIOD, PlanAvailability.IN_APP_PURCHASE, now.subtract(32, 'days'))], now),
+    { kind: 'immediate' },
+  );
 });
 
 test('해지 예정 빌링키 구독이 만료 전이면 거부', () => {

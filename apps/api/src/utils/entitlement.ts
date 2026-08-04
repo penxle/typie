@@ -2,13 +2,17 @@ import { SUBSCRIPTION_GRACE_DAYS } from '@typie/lib/const';
 import { PlanAvailability, SubscriptionState } from '@typie/lib/enums';
 import type dayjs from 'dayjs';
 
-export type EntitlementSubscriptionRow = {
-  id: string;
+// 권한·liveness 판정에 필요한 최소 형태 — 판정 함수는 이 형태만 요구해 크론·게이트가 id·createdAt 없이도 먹일 수 있다.
+export type EntitlementJudgmentRow = {
   state: SubscriptionState;
   planAvailability: PlanAvailability;
   startsAt: dayjs.Dayjs;
   currentPeriodStartsAt: dayjs.Dayjs;
   currentPeriodEndsAt: dayjs.Dayjs;
+};
+
+export type EntitlementSubscriptionRow = EntitlementJudgmentRow & {
+  id: string;
   createdAt: dayjs.Dayjs;
 };
 
@@ -21,7 +25,7 @@ const laterOf = (a: dayjs.Dayjs, b: dayjs.Dayjs): dayjs.Dayjs => (a.isAfter(b) ?
 // IAP는 스토어 유예 마감을 저장하지 않으므로 주기 종료 + 고정 백스톱이다. 그 외 채널은
 // 미결제 주기의 시작(주기 컬럼 중 now 이하의 최댓값)이 유예 진입 시점이고, 거기서 7일이다.
 // 주기 컬럼이 둘 다 미래인 경우(전제 밖)는 fail-open 방향으로 시작 컬럼을 기준 삼는다.
-export const deriveGraceDeadline = (row: EntitlementSubscriptionRow, now: dayjs.Dayjs): dayjs.Dayjs => {
+export const deriveGraceDeadline = (row: EntitlementJudgmentRow, now: dayjs.Dayjs): dayjs.Dayjs => {
   if (row.planAvailability === PlanAvailability.IN_APP_PURCHASE) {
     return row.currentPeriodEndsAt.add(IAP_GRACE_BACKSTOP_DAYS, 'day');
   }
@@ -32,7 +36,7 @@ export const deriveGraceDeadline = (row: EntitlementSubscriptionRow, now: dayjs.
   return base.add(SUBSCRIPTION_GRACE_DAYS, 'day');
 };
 
-export const isSubscriptionEntitled = (row: EntitlementSubscriptionRow, now: dayjs.Dayjs): boolean => {
+export const isSubscriptionEntitled = (row: EntitlementJudgmentRow, now: dayjs.Dayjs): boolean => {
   switch (row.state) {
     case SubscriptionState.ACTIVE: {
       return true;
@@ -52,7 +56,13 @@ export const isSubscriptionEntitled = (row: EntitlementSubscriptionRow, now: day
   }
 };
 
-const deriveEffectiveDeadline = (row: EntitlementSubscriptionRow, now: dayjs.Dayjs): dayjs.Dayjs => {
+// 게이트 liveness — "이 행이 지금 등록·전이를 막는 살아 있는 구독인가"의 단일 판정. 권한식과 같은 식을 쓴다:
+// 저장 상태만 보면 확정 잡 지연(해지 매분, 유예 소진) 동안 잠긴 유저의 재가입이 차단된다. WILL_ACTIVATE 는
+// 시각과 무관하게 제외한다 — 예약의 대체·부활 판정은 예약 기계(retireReservation·전환 잡 CAS)의 소관이다.
+export const isSubscriptionLive = (row: EntitlementJudgmentRow, now: dayjs.Dayjs): boolean =>
+  row.state !== SubscriptionState.WILL_ACTIVATE && isSubscriptionEntitled(row, now);
+
+const deriveEffectiveDeadline = (row: EntitlementJudgmentRow, now: dayjs.Dayjs): dayjs.Dayjs => {
   if (row.state === SubscriptionState.IN_GRACE_PERIOD) {
     return deriveGraceDeadline(row, now);
   }
@@ -115,7 +125,7 @@ export const selectRepresentativeSubscription = <T extends EntitlementSubscripti
 };
 
 // 구 앱이 IN_GRACE_PERIOD에서 스스로 7일(빌링키)/31일(IAP)을 더하므로 여기서는 역산값을 낸다.
-export const deriveExpiresAtShim = (row: EntitlementSubscriptionRow, now: dayjs.Dayjs): dayjs.Dayjs => {
+export const deriveExpiresAtShim = (row: EntitlementJudgmentRow, now: dayjs.Dayjs): dayjs.Dayjs => {
   switch (row.state) {
     case SubscriptionState.ACTIVE: {
       return row.planAvailability === PlanAvailability.BILLING_KEY

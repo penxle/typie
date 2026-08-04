@@ -3,7 +3,17 @@ import { logger } from '@typie/lib';
 import { PaymentInvoiceState, PlanAvailability, SubscriptionState } from '@typie/lib/enums';
 import dayjs from 'dayjs';
 import { and, desc, eq, gt, inArray, isNull, lte, ne, or } from 'drizzle-orm';
-import { db, first, firstOrThrow, PaymentInvoices, Plans, Subscriptions, UserBillingKeys, UserInAppPurchases } from '#/db/index.ts';
+import {
+  db,
+  first,
+  firstOrThrow,
+  PaymentInvoices,
+  PaymentRecords,
+  Plans,
+  Subscriptions,
+  UserBillingKeys,
+  UserInAppPurchases,
+} from '#/db/index.ts';
 import * as portone from '#/external/portone.ts';
 import { computeNextPeriodEnd } from '#/utils/billing-period.ts';
 import { deriveGraceDeadline } from '#/utils/entitlement.ts';
@@ -44,18 +54,32 @@ export const SubscriptionBillingScanCron = defineCron('subscription:billing-scan
   }
 });
 
-// 재시도 전용 크론이다. 패턴을 매분으로 올리면 카드 거절을 반복 재청구하므로 정기 청구는 billing-scan 이 맡는다.
-export const SubscriptionRenewalCron = defineCron('subscription:renewal', '0 10 * * *', async () => {
+// 재시도 전용 크론이다. 페이스는 인보이스당 하루 1회로 유지하되(카드 거절 반복 재청구 금지), 시각은 고정 10시
+// 일괄 대신 유저별 위상(마지막 시도 + 24시간)으로 주간 창 안에 분산한다 — 일괄은 버스트를 만들고, 유예 마감
+// (주기 종료 시각 + 7일)과 위상이 어긋나 유저별 유효 시도 횟수가 들쭉했다. 시도 기록은 청구 트랜잭션 안에서
+// 커밋되므로(utils/payment.ts) 시도 직후 같은 인보이스는 즉시 부적격이 되고, jobId 디듀프가 잡이 큐·실행 중인
+// 동안의 재적재를 막는다 — 반복 청구는 이중으로 차단된다.
+export const SubscriptionRenewalCron = defineCron('subscription:renewal', '* 10-21 * * *', async () => {
   const now = dayjs();
 
   // 백필 재정렬로 서비스 시작이 미래가 된 인보이스는 아직 재시도 대상이 아니다.
   const overdueInvoices = await db
     .select({ id: PaymentInvoices.id })
     .from(PaymentInvoices)
-    .where(and(eq(PaymentInvoices.state, PaymentInvoiceState.OVERDUE), lte(PaymentInvoices.servicePeriodStartsAt, now)));
+    .leftJoin(
+      PaymentRecords,
+      and(eq(PaymentRecords.invoiceId, PaymentInvoices.id), gt(PaymentRecords.createdAt, now.subtract(24, 'hours'))),
+    )
+    .where(
+      and(
+        eq(PaymentInvoices.state, PaymentInvoiceState.OVERDUE),
+        lte(PaymentInvoices.servicePeriodStartsAt, now),
+        isNull(PaymentRecords.id),
+      ),
+    );
 
   for (const invoice of overdueInvoices) {
-    await enqueueJob('subscription:renewal:retry', invoice.id);
+    await enqueueJob('subscription:renewal:retry', invoice.id, { jobId: `renewal-retry-${invoice.id}` });
   }
 });
 
@@ -87,6 +111,38 @@ export const SubscriptionTransitionCron = defineCron('subscription:transition', 
 
   for (const subscription of cancelSubscriptions) {
     await enqueueJob('subscription:renewal:cancel', subscription.id, { jobId: `renewal-cancel-${subscription.id}` });
+  }
+
+  // 유예 소진 종결은 재청구 크론(일 1회)에서 분리해 다른 시각 전이와 같은 주기로 수렴시킨다 — 권한식은 마감
+  // 즉시 꺼지는데 상태가 다음 재청구까지 남으면 그 창 동안 표시·불변식이 사실과 어긋난다(게이트는 liveness 가 막는다).
+  // 마감 판정·전이는 재시도 잡이 락 안에서 다시 수행한다(마감 경과 시 PG 호출 없이 종결) — 여기서는 후보만 고른다.
+  // 마감식은 deriveGraceDeadline 단일 소스라, 여기서 경과로 본 행을 잡이 재청구로 판정하는 역전은 없다.
+  const graceInvoices = await db
+    .select({
+      id: PaymentInvoices.id,
+      state: Subscriptions.state,
+      planAvailability: Plans.availability,
+      startsAt: Subscriptions.startsAt,
+      currentPeriodStartsAt: Subscriptions.currentPeriodStartsAt,
+      currentPeriodEndsAt: Subscriptions.currentPeriodEndsAt,
+    })
+    .from(PaymentInvoices)
+    .innerJoin(Subscriptions, eq(PaymentInvoices.subscriptionId, Subscriptions.id))
+    .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
+    .where(
+      and(
+        eq(PaymentInvoices.state, PaymentInvoiceState.OVERDUE),
+        eq(Subscriptions.state, SubscriptionState.IN_GRACE_PERIOD),
+        ne(Plans.availability, PlanAvailability.IN_APP_PURCHASE),
+      ),
+    );
+
+  for (const invoice of graceInvoices) {
+    if (deriveGraceDeadline(invoice, now).isAfter(now)) {
+      continue;
+    }
+
+    await enqueueJob('subscription:renewal:retry', invoice.id, { jobId: `grace-expire-${invoice.id}` });
   }
 });
 
