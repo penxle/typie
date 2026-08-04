@@ -8,6 +8,7 @@ import dayjs from 'dayjs';
 import {
   discoverAppleSuccessor,
   extractIapRegistrationOwnership,
+  isGoogleTerminated,
   normalizeApple,
   normalizeGoogle,
   precheckIapEnroll,
@@ -693,6 +694,29 @@ test('구글 만료는 로컬 주기 종료 1일 이내면 보류, 경과·미�
     kind: 'expired',
     observed: { periodStartsAt: iso(now.subtract(10, 'days')), periodEndsAt: iso(now.add(20, 'days')), planKey: 'PL0FL1MAP' },
   });
+});
+
+test('구글 확정 종료 판정: EXPIRED 는 종료, CANCELED 는 만료 시각 경과 시에만 종료다', () => {
+  assert.equal(isGoogleTerminated(googlePurchase({ subscriptionState: 'SUBSCRIPTION_STATE_EXPIRED' }), now), true);
+
+  const canceledPast = googlePurchase({
+    subscriptionState: 'SUBSCRIPTION_STATE_CANCELED',
+    lineItems: [googleLineItem({ expiryTime: iso(now.subtract(3, 'days')) })],
+  });
+  assert.equal(isGoogleTerminated(canceledPast, now), true);
+
+  const canceledFuture = googlePurchase({ subscriptionState: 'SUBSCRIPTION_STATE_CANCELED' });
+  assert.equal(isGoogleTerminated(canceledFuture, now), false);
+
+  assert.equal(isGoogleTerminated(googlePurchase(), now), false);
+});
+
+test('구글 확정 종료 판정: 판정 불능은 종료 부정으로 접는다', () => {
+  const unselectable = googlePurchase({
+    subscriptionState: 'SUBSCRIPTION_STATE_CANCELED',
+    lineItems: [googleLineItem({ latestSuccessfulOrderId: undefined })],
+  });
+  assert.equal(isGoogleTerminated(unselectable, now), false);
 });
 
 test('구글 결제 대기는 추적 대상이 아니다', () => {

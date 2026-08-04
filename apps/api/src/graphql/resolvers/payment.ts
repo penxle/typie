@@ -40,7 +40,7 @@ import * as portone from '#/external/portone.ts';
 import { verifyEasyPayBillingKey } from '#/utils/billing-key.ts';
 import { computeNextPeriodEnd, floorToHourKst } from '#/utils/billing-period.ts';
 import { deriveExpiresAtShim } from '#/utils/entitlement.ts';
-import { fetchIapEnrollment, normalizeIapEnrollment } from '#/utils/iap-enroll.ts';
+import { fetchIapEnrollment, normalizeIapEnrollment, probeIapBoundContractTermination } from '#/utils/iap-enroll.ts';
 import { precheckIapEnroll } from '#/utils/iap-normalize.ts';
 import { applyNormalizedIapLocked } from '#/utils/iap-sync.ts';
 import { attemptInvoicePayment, enrichPaymentRecordReceipt, hasBillableUsageDuring } from '#/utils/index.ts';
@@ -905,15 +905,25 @@ builder.mutationFields((t) => ({
         }
 
         // 같은 스토어의 허용은 동일 토큰 재등록 또는 검증된 승계뿐이다 — 연결 없는 독립 토큰을 등록하면
-        // 유저당 1행인 바인딩이 기존 계약의 추적 주소를 잃는다.
+        // 유저당 1행인 바인딩이 기존 계약의 추적 주소를 잃는다. 단 기존 계약의 확정 종료를 스토어가 확인해
+        // 주면 잃을 추적이 없다 — 만료 후 재구독은 스토어가 승계 포인터를 싣지 않아 독립 토큰으로만 도착하므로,
+        // 이 재확인 없이는 죽은 바인딩이 정당한 재구독을 영구 거절한다.
         if (binding && binding.identifier !== input.data && !observation.successionSources.includes(binding.identifier)) {
-          await opsAlert('iap-independent-token-rejected', {
-            ...alertContext,
-            bindingId: binding.id,
-            boundIdentifier: binding.identifier,
-          });
+          const boundContract = await probeIapBoundContractTermination({ store: binding.store, identifier: binding.identifier, now });
 
-          throw new TypieError({ code: 'subscription_already_exists' });
+          if (boundContract.kind === 'lookup-failed') {
+            throw new Error(`in-app purchase bound contract lookup failed: ${boundContract.detail}`);
+          }
+
+          if (boundContract.kind === 'live') {
+            await opsAlert('iap-independent-token-rejected', {
+              ...alertContext,
+              bindingId: binding.id,
+              boundIdentifier: binding.identifier,
+            });
+
+            throw new TypieError({ code: 'subscription_already_exists' });
+          }
         }
 
         // 타 유저 predecessor 회수 — 한 스토어 계약이 두 타이피 유저의 권한으로 남지 않게 한다.

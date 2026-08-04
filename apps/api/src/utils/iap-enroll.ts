@@ -5,6 +5,7 @@ import * as googleplay from '#/external/googleplay.ts';
 import {
   extractIapRegistrationOwnership,
   isAppleTerminated,
+  isGoogleTerminated,
   mapUnsupportedStorePayloadReason,
   normalizeApple,
   normalizeGoogle,
@@ -170,6 +171,47 @@ export const fetchIapEnrollment = async ({ store, data }: { store: InAppPurchase
   }
 
   return await fetchGoogle(data);
+};
+
+export type IapBoundContractProbe = { kind: 'terminated' } | { kind: 'live' } | { kind: 'lookup-failed'; detail: string };
+
+// 독립 토큰 가드의 예외 판정: 바인딩이 가리키는 기존 계약의 확정 종료를 스토어에 재확인한다. DB 의 EXPIRED 를
+// 근거로 쓰지 않는 이유는 동기화 지연이다 — 살아 있는 계약의 바인딩을 풀면 그 계약이 추적에서 이탈한다.
+// 증거 기준은 승계 기제와 같다(스토어가 종결을 확인해 준 원천만).
+export const probeIapBoundContractTermination = async ({
+  store,
+  identifier,
+  now,
+}: {
+  store: InAppPurchaseStore;
+  identifier: string;
+  now: dayjs.Dayjs;
+}): Promise<IapBoundContractProbe> => {
+  if (store === InAppPurchaseStore.APP_STORE) {
+    const statuses = await appstore.getSubscriptionStatuses(identifier);
+    if (statuses.kind === 'error') {
+      return { kind: 'lookup-failed', detail: 'apple-lookup-failed' };
+    }
+
+    const selection = selectAppleStatusItem(statuses.items, identifier);
+    if (selection.kind === 'unknown') {
+      return { kind: 'lookup-failed', detail: selection.reason };
+    }
+
+    return isAppleTerminated(selection.item) ? { kind: 'terminated' } : { kind: 'live' };
+  }
+
+  const result = await googleplay.getSubscriptionV2(identifier);
+  // 410 은 토큰 영구 소멸(만료 후 보존 기간 경과 포함)이다 — 살아 있는 계약의 토큰은 소멸하지 않는다.
+  // 404 는 설정 오류일 수 있어 종료 증거로 쓰지 않는다(external/googleplay 참조).
+  if (result.kind === 'gone') {
+    return { kind: 'terminated' };
+  }
+  if (result.kind !== 'ok') {
+    return { kind: 'lookup-failed', detail: `google-${result.kind}` };
+  }
+
+  return isGoogleTerminated(result.purchase, now) ? { kind: 'terminated' } : { kind: 'live' };
 };
 
 const normalizeAppleEnrollment = async ({

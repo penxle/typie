@@ -431,6 +431,27 @@ const resolveGooglePeriod = ({
   return { kind: 'ok', periodStartsAt: resolveGoogleStartFromOfferPhase(item, startTime, expiry, interval), periodEndsAt: expiry };
 };
 
+// 스토어 확정 종료(google). 완충(defer)을 섞지 않는 이유는 isAppleTerminated 참조. CANCELED 는 EXPIRED 로
+// 뒤집히기 전이라도 만료 시각을 지났으면 종료다 — normalizeGoogle 의 만료 판정과 같은 식이다. 판정 불능
+// (항목 미선택·만료 시각 결손)은 종료 부정으로 접는다 — 소비처는 종료 증거를 요구하는 쪽이라 부정이 안전하다.
+export const isGoogleTerminated = (purchase: androidpublisher_v3.Schema$SubscriptionPurchaseV2, now: dayjs.Dayjs): boolean => {
+  const state = purchase.subscriptionState ?? null;
+  if (state === GOOGLE_STATE.EXPIRED) {
+    return true;
+  }
+  if (state !== GOOGLE_STATE.CANCELED) {
+    return false;
+  }
+
+  const selection = selectGoogleLineItem(purchase.lineItems);
+  if (selection.kind !== 'selected') {
+    return false;
+  }
+
+  const expiry = parseTimestamp(selection.item.expiryTime);
+  return !!expiry && !expiry.isAfter(now);
+};
+
 export const normalizeGoogle = ({
   purchase,
   prior,
