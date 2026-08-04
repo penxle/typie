@@ -46,6 +46,20 @@ internal fun MainTabPager(
 }
 
 @Composable
+internal fun MainTabPagerNavigationGuard(
+  state: PagerState,
+  navigationLocked: Boolean,
+  onInterrupt: () -> Unit,
+) {
+  LaunchedEffect(state.isScrollInProgress, navigationLocked) {
+    if (!state.isScrollInProgress || !navigationLocked) return@LaunchedEffect
+
+    onInterrupt()
+    state.requestScrollToPage(state.settledPage)
+  }
+}
+
+@Composable
 private fun rememberMainTabPagerUserScrollEnabled(requested: Boolean): Boolean {
   var enabledAfterFrame by remember { mutableStateOf(requested) }
 

@@ -9,6 +9,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -27,6 +28,8 @@ import androidx.compose.ui.unit.dp
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
 @OptIn(ExperimentalTestApi::class)
@@ -148,6 +151,37 @@ class MainTabPagerDesktopTest {
     assertEquals(Velocity.Zero, postFlingConsumed)
     assertEquals(0f, pagerState.currentPageOffsetFraction)
   }
+
+  @Test
+  fun `pager motion that starts after nested navigation is cancelled before another tab settles`() =
+    runComposeUiTest {
+      lateinit var pagerState: PagerState
+      lateinit var scrollJob: Job
+      lateinit var startScroll: () -> Unit
+
+      setContent {
+        pagerState = rememberPagerState(pageCount = { Tab.entries.size })
+        val scope = rememberCoroutineScope()
+        startScroll = {
+          scrollJob = scope.launch { pagerState.animateScrollToPage(Tab.Space.ordinal) }
+        }
+        MainTabPagerNavigationGuard(state = pagerState, navigationLocked = true, onInterrupt = {})
+        MainTabPager(
+          state = pagerState,
+          userScrollEnabled = true,
+          modifier = Modifier.size(width = 320.dp, height = 640.dp),
+        ) {
+          Box(Modifier.fillMaxSize())
+        }
+      }
+      waitForIdle()
+
+      runOnIdle { startScroll() }
+      waitUntil { scrollJob.isCompleted }
+
+      assertEquals(Tab.Home.ordinal, pagerState.settledPage)
+      assertEquals(0f, pagerState.currentPageOffsetFraction)
+    }
 
   @Test
   fun `child pager keeps an outward edge drag from the main pager`() = runComposeUiTest {

@@ -133,14 +133,11 @@ fun MainShell(content: @Composable (Route) -> Unit) {
 
   LaunchedEffect(chromeTab) { if (chromeTab != Tab.Home && !drawerAtRest) drawer.close() }
 
-  LaunchedEffect(settledNavigator.canPop, settledNavigator.isTransitioning) {
-    if (
-      pagerState.isScrollInProgress && (settledNavigator.canPop || settledNavigator.isTransitioning)
-    ) {
-      tabSelectionJob?.cancel()
-      pagerState.animateScrollToPage(pagerState.settledPage)
-    }
-  }
+  MainTabPagerNavigationGuard(
+    state = pagerState,
+    navigationLocked = settledNavigator.canPop || settledNavigator.isTransitioning,
+    onInterrupt = { tabSelectionJob?.cancel() },
+  )
 
   LaunchedEffect(siteId) {
     if (siteId == null) {
