@@ -12,8 +12,6 @@
   import BlendIcon from '~icons/lucide/blend';
   import CheckIcon from '~icons/lucide/check';
   import Dice5Icon from '~icons/lucide/dice-5';
-  import EyeIcon from '~icons/lucide/eye';
-  import EyeOffIcon from '~icons/lucide/eye-off';
   import GlobeIcon from '~icons/lucide/globe';
   import IdCardIcon from '~icons/lucide/id-card';
   import ImageIcon from '~icons/lucide/image';
@@ -27,7 +25,6 @@
   import { env } from '$env/dynamic/public';
   import { Img } from '$lib/components';
   import { uploadBlobAsImage } from '$lib/utils';
-  import { sanitizePasswordInput } from '$lib/utils/password';
   import { graphql } from '$mearie';
   import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
   import type { DashboardLayout_Share_Document_document$key } from '$mearie';
@@ -117,7 +114,6 @@
   let copied = $state(false);
   let timer: NodeJS.Timeout | undefined;
 
-  let showPassword = $state(false);
   let isRolling = $state(false);
   let thumbnailUploading = $state(false);
 
@@ -136,7 +132,7 @@
       availability: z.nativeEnum(EntityAvailability),
       visibility: z.nativeEnum(EntityVisibility),
       hasPassword: z.boolean(),
-      password: z.string().nullish(),
+      password: z.string().trim().nullish(),
       documentContentRating: z.nativeEnum(DocumentContentRating),
       allowReaction: z.boolean(),
       protectContent: z.boolean(),
@@ -203,14 +199,6 @@
     };
   });
 
-  const handlePasswordInput = (event: Event & { currentTarget: HTMLInputElement }) => {
-    const value = sanitizePasswordInput(event.currentTarget);
-
-    if (form.fields.password !== value) {
-      form.fields.password = value;
-    }
-  };
-
   const generateRandomPassword = () => {
     isRolling = true;
 
@@ -220,7 +208,6 @@
       password += digits.charAt(Math.floor(Math.random() * digits.length));
     }
     form.fields.password = password;
-    showPassword = true;
 
     setTimeout(() => {
       isRolling = false;
@@ -444,7 +431,7 @@
                 borderWidth: '1px',
                 borderRadius: '6px',
                 paddingLeft: '12px',
-                paddingRight: '56px',
+                paddingRight: '32px',
                 width: 'full',
                 height: '32px',
                 fontFamily: 'mono',
@@ -453,18 +440,16 @@
               })}
               autocomplete="off"
               data-1p-ignore
-              oncompositionend={handlePasswordInput}
-              oninput={handlePasswordInput}
               placeholder="비밀번호 입력"
-              type={showPassword ? 'text' : 'password'}
-              value={form.fields.password ?? ''}
+              type="text"
+              bind:value={form.fields.password}
             />
 
             <button
               class={center({
                 position: 'absolute',
                 top: '1/2',
-                right: '32px',
+                right: '8px',
                 size: '20px',
                 color: 'text.disabled',
                 userSelect: 'none',
@@ -487,24 +472,6 @@
                 icon={Dice5Icon}
                 size={16}
               />
-            </button>
-
-            <button
-              class={center({
-                position: 'absolute',
-                top: '1/2',
-                right: '8px',
-                size: '20px',
-                color: 'text.disabled',
-                userSelect: 'none',
-                translate: 'auto',
-                translateY: '-1/2',
-                _hover: { color: 'text.disabled' },
-              })}
-              onclick={() => (showPassword = !showPassword)}
-              type="button"
-            >
-              <Icon icon={showPassword ? EyeOffIcon : EyeIcon} size={16} />
             </button>
           </div>
         {/if}
