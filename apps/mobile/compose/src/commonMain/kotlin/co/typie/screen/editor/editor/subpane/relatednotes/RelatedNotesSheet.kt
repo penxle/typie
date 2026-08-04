@@ -194,6 +194,7 @@ internal fun RelatedNotesSheet(
       entityId = entityId,
       safeBottomInset = safeBottomInset,
       keyboardOcclusion = keyboardOcclusion,
+      onRequestSheetFocus = { requestFocus() },
       onDismiss = ::dismiss,
       sheetDragHandleModifier = Modifier.sheetDragHandle(),
       model = model,
@@ -210,6 +211,7 @@ private fun RelatedNotesSheetContent(
   entityId: String,
   safeBottomInset: Dp,
   keyboardOcclusion: Dp,
+  onRequestSheetFocus: () -> Unit,
   onDismiss: () -> Unit,
   sheetDragHandleModifier: Modifier,
   model: RelatedNotesViewModel,
@@ -265,7 +267,7 @@ private fun RelatedNotesSheetContent(
     model.updateFilterStatus(nextStatus)
   }
 
-  suspend fun handleCreateNote(request: NoteActionRequest, autoFocusContent: Boolean = false) {
+  suspend fun handleCreateNote(request: NoteActionRequest) {
     if (!noteActions.isCurrent(request)) return
     if (!SubscriptionService.gate(sheet, GatedAction.CreateNote)) {
       return
@@ -288,7 +290,7 @@ private fun RelatedNotesSheetContent(
           model.updateFilterStatus(NoteStatus.OPEN)
         }
         model.listState(NoteStatus.OPEN).markEntering(outcome.value)
-        noteEditState.open(note = outcome.value, autoFocusContent = autoFocusContent)
+        noteEditState.openNew(outcome.value)
         scrollStateFor(NoteStatus.OPEN).animateScrollToItem(0)
       }
 
@@ -304,7 +306,7 @@ private fun RelatedNotesSheetContent(
 
   fun handleShortcutCreateNote() {
     val request = noteActions.captureRequest() ?: return
-    scope.launch { handleCreateNote(request = request, autoFocusContent = true) }
+    scope.launch { handleCreateNote(request) }
   }
 
   suspend fun handleDeleteNote(note: NoteCard_note) {
@@ -538,6 +540,7 @@ private fun RelatedNotesSheetContent(
           }
         },
         onCreate = {
+          onRequestSheetFocus()
           noteActions.captureRequest()?.let { request ->
             scope.launch { handleCreateNote(request = request) }
           }

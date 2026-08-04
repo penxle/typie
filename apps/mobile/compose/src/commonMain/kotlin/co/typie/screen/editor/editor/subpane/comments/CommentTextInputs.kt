@@ -66,6 +66,7 @@ internal fun CommentComposer(
   onValueChange: (String) -> Unit,
   placeholder: String,
   submitting: Boolean,
+  autoFocus: Boolean = false,
   onFocusChange: (Boolean) -> Unit,
   onSubmit: (String) -> Unit,
 ) {
@@ -80,7 +81,7 @@ internal fun CommentComposer(
       shape = RoundedCornerShape(20.dp),
       maxLines = 5,
       contentPadding = PaddingValues(start = 14.dp, end = 44.dp, top = 10.dp, bottom = 10.dp),
-      autoFocus = false,
+      autoFocus = autoFocus,
       onFocusChange = onFocusChange,
     )
 

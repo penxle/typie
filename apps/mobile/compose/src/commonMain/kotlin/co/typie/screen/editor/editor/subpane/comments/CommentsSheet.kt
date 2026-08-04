@@ -145,6 +145,7 @@ internal fun CommentsSheet(
       onFreezeCurrentSelection = onFreezeCurrentSelection,
       ensureMutationSubscription = ensureMutationSubscription,
       onInputFocusChanged = onInputFocusChanged,
+      onRequestSheetFocus = { requestFocus() },
       onDismiss = ::dismiss,
       sheetDragHandleModifier = Modifier.sheetDragHandle(),
       model = model,
@@ -167,6 +168,7 @@ private fun CommentsSheetContent(
   onFreezeCurrentSelection: suspend () -> StableSelection?,
   ensureMutationSubscription: suspend () -> Boolean,
   onInputFocusChanged: (Boolean) -> Unit,
+  onRequestSheetFocus: () -> Unit,
   onDismiss: () -> Unit,
   sheetDragHandleModifier: Modifier,
   model: CommentsViewModel,
@@ -439,7 +441,10 @@ private fun CommentsSheetContent(
         createEnabled = createEnabled,
         onDismiss = onDismiss,
         onFilterSelect = { filter -> scope.launch { selectFilter(filter) } },
-        onCreate = { scope.launch { createVirtualThread(onFreezeCurrentSelection()) } },
+        onCreate = {
+          onRequestSheetFocus()
+          scope.launch { createVirtualThread(onFreezeCurrentSelection()) }
+        },
         modifier = sheetDragHandleModifier,
       )
     },

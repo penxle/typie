@@ -30,6 +30,26 @@ class NoteEditStateTest {
   }
 
   @Test
+  fun `opening an existing note does not request content autofocus`() = runTest {
+    val state = createNoteEditState()
+    val note = notesNote(id = "existing")
+
+    state.open(note)
+
+    assertFalse(state.shouldAutoFocusContent(siteId = note.site.id, noteId = note.id))
+  }
+
+  @Test
+  fun `opening a newly created note requests content autofocus`() = runTest {
+    val state = createNoteEditState()
+    val note = notesNote(id = "new")
+
+    state.openNew(note)
+
+    assertTrue(state.shouldAutoFocusContent(siteId = note.site.id, noteId = note.id))
+  }
+
+  @Test
   fun `debounced content save runs after delay`() = runTest {
     val state = createNoteEditState()
     val saved = mutableListOf<Pair<String, String>>()

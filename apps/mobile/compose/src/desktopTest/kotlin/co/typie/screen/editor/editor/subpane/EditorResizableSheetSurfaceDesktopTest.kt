@@ -19,6 +19,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ExperimentalTestApi
@@ -32,6 +33,7 @@ import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.test.swipeWithVelocity
 import androidx.compose.ui.unit.dp
 import co.typie.ext.ScrollGestureLockScope
+import co.typie.ext.clickable as typieClickable
 import co.typie.ext.verticalScroll
 import co.typie.ui.theme.LocalHazeState
 import dev.chrisbanes.haze.HazeState
@@ -246,12 +248,71 @@ class EditorResizableSheetSurfaceDesktopTest {
   }
 
   @Test
-  fun dragHandleTapObserverPreservesChildClick() = runComposeUiTest {
-    var childClicks = 0
+  fun blankDragHandleTapFocusesSheetOnlyAfterPointerUp() = runComposeUiTest {
+    var backgroundFocused = false
 
     setContent {
       ScrollGestureLockScope {
+        val backgroundFocusRequester = remember { FocusRequester() }
         Box(Modifier.size(width = 400.dp, height = 800.dp)) {
+          Box(
+            Modifier.fillMaxSize()
+              .focusRequester(backgroundFocusRequester)
+              .onFocusChanged { backgroundFocused = it.isFocused }
+              .focusable()
+          )
+          EditorResizableSheetSurface(
+            initialHeight = 360.dp,
+            minHeight = 240.dp,
+            dismissThreshold = 128.dp,
+            maxTopInset = 0.dp,
+            trustedImeBottomInset = 0.dp,
+            safeBottomInset = 0.dp,
+            editorFocused = false,
+            minKeyboardVisibleHeight = 0.dp,
+            onDismissed = {},
+            onGeometryChanged = {},
+          ) {
+            Box(
+              Modifier.testTag(BlankDragHandleTag)
+                .fillMaxWidth()
+                .height(EditorSubPaneHeaderRevealHeight)
+                .sheetDragHandle()
+            )
+          }
+        }
+        LaunchedEffect(Unit) { backgroundFocusRequester.requestFocus() }
+      }
+    }
+    waitForIdle()
+    assertTrue(backgroundFocused)
+
+    val handle = onNodeWithTag(BlankDragHandleTag)
+    handle.performTouchInput { down(center) }
+    waitForIdle()
+    assertTrue(backgroundFocused, "pointer down alone must not focus the sheet")
+
+    handle.performTouchInput { up() }
+    waitForIdle()
+    assertEquals(false, backgroundFocused)
+  }
+
+  @Test
+  fun dragHandleChildCanRequestSheetFocusWithoutLosingClick() = runComposeUiTest {
+    var childClicks = 0
+    var backgroundFocused = false
+    var backgroundFocusedAtChildClick: Boolean? = null
+
+    setContent {
+      ScrollGestureLockScope {
+        val backgroundFocusRequester = remember { FocusRequester() }
+        Box(Modifier.size(width = 400.dp, height = 800.dp)) {
+          Box(
+            Modifier.fillMaxSize()
+              .focusRequester(backgroundFocusRequester)
+              .onFocusChanged { backgroundFocused = it.isFocused }
+              .focusable()
+          )
           EditorResizableSheetSurface(
             initialHeight = 360.dp,
             minHeight = 240.dp,
@@ -266,30 +327,44 @@ class EditorResizableSheetSurfaceDesktopTest {
           ) {
             Box(Modifier.fillMaxWidth().height(EditorSubPaneHeaderRevealHeight).sheetDragHandle()) {
               Box(
-                Modifier.testTag(DragHandleChildButtonTag).size(44.dp).clickable {
+                Modifier.testTag(DragHandleChildButtonTag).size(44.dp).typieClickable {
+                  requestFocus()
+                  backgroundFocusedAtChildClick = backgroundFocused
                   childClicks += 1
                 }
               )
             }
           }
         }
+        LaunchedEffect(Unit) { backgroundFocusRequester.requestFocus() }
       }
     }
     waitForIdle()
+    assertTrue(backgroundFocused)
 
     onNodeWithTag(DragHandleChildButtonTag).performTouchInput { click(center) }
     waitForIdle()
 
     assertEquals(1, childClicks)
+    assertEquals(false, backgroundFocusedAtChildClick)
   }
 
   @Test
   fun draggingBottomPanelRevealResizesFromTemporaryHeight() = runComposeUiTest {
     var geometry: EditorResizableSheetGeometry? = null
+    var backgroundFocused = false
+    var childClicks = 0
 
     setContent {
       ScrollGestureLockScope {
+        val backgroundFocusRequester = remember { FocusRequester() }
         Box(Modifier.size(width = 400.dp, height = 800.dp)) {
+          Box(
+            Modifier.fillMaxSize()
+              .focusRequester(backgroundFocusRequester)
+              .onFocusChanged { backgroundFocused = it.isFocused }
+              .focusable()
+          )
           EditorResizableSheetSurface(
             initialHeight = 600.dp,
             minHeight = 240.dp,
@@ -307,24 +382,31 @@ class EditorResizableSheetSurfaceDesktopTest {
             onDismissed = {},
             onGeometryChanged = { geometry = it },
           ) {
-            Box(
-              Modifier.testTag(BottomPanelRevealDragHandleTag)
-                .fillMaxWidth()
-                .height(72.dp)
-                .sheetDragHandle()
-            )
+            Box(Modifier.fillMaxWidth().height(72.dp).sheetDragHandle()) {
+              Box(
+                Modifier.testTag(BottomPanelRevealDragHandleTag).fillMaxSize().typieClickable {
+                  childClicks += 1
+                }
+              )
+            }
           }
         }
+        LaunchedEffect(Unit) { backgroundFocusRequester.requestFocus() }
       }
     }
     waitForIdle()
     assertEquals(398f, checkNotNull(geometry).sheetHeight)
+    assertTrue(backgroundFocused)
 
     val handle = onNodeWithTag(BottomPanelRevealDragHandleTag)
     handle.performTouchInput { down(center) }
     try {
+      waitForIdle()
+      assertTrue(backgroundFocused, "pointer down alone must not focus the sheet")
+
       handle.performTouchInput { moveBy(Offset(x = 0f, y = -64f)) }
       waitForIdle()
+      assertEquals(false, backgroundFocused)
       val heightAfterDragStarted = checkNotNull(geometry).sheetHeight
       assertTrue(
         heightAfterDragStarted in 398f..490f,
@@ -340,6 +422,7 @@ class EditorResizableSheetSurfaceDesktopTest {
     }
 
     waitForIdle()
+    assertEquals(0, childClicks)
     assertTrue(checkNotNull(geometry).sheetHeight in 406f..510f)
   }
 
@@ -720,6 +803,7 @@ class EditorResizableSheetSurfaceDesktopTest {
 
   private companion object {
     const val BackgroundTag = "background"
+    const val BlankDragHandleTag = "blank-drag-handle"
     const val BottomPanelRevealDragHandleTag = "bottom-panel-reveal-drag-handle"
     const val BottomPanelRevealTag = "bottom-panel-reveal"
     const val DismissButtonTag = "dismiss-button"

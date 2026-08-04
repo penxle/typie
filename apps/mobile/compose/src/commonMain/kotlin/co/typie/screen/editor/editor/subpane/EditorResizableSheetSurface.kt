@@ -89,6 +89,8 @@ internal fun resolveKeyboardAwareSheetMinHeight(
 internal interface EditorResizableSheetSurfaceScope {
   val keyboardOcclusion: Dp
 
+  fun requestFocus()
+
   fun dismiss()
 
   fun Modifier.sheetDragHandle(): Modifier
@@ -336,6 +338,10 @@ internal fun EditorResizableSheetSurface(
       object : EditorResizableSheetSurfaceScope {
         override val keyboardOcclusion: Dp
           get() = effectiveKeyboardOcclusion
+
+        override fun requestFocus() {
+          sheetFocusRequester.requestFocus()
+        }
 
         override fun dismiss() {
           requestDismiss()

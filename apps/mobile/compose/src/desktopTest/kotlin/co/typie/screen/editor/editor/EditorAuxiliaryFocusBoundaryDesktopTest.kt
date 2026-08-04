@@ -20,6 +20,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.v2.runComposeUiTest
 import co.typie.editor.runtime.EditorUiState
 import co.typie.screen.editor.editor.subpane.comments.CommentComposer
+import co.typie.screen.editor.editor.subpane.comments.VirtualCommentThreadRow
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -37,6 +38,19 @@ class EditorAuxiliaryFocusBoundaryDesktopTest {
     advanceUntil(fixture, BlurBoundaryExpired)
 
     fixture.assertAuxiliaryFocusPrecedesBlurBoundary()
+  }
+
+  @Test
+  fun virtualCommentComposerTakesFocusWhenMounted() = runComposeUiTest {
+    val fixture = FocusBoundaryFixture()
+    var showVirtualComment by mutableStateOf(false)
+    mainClock.autoAdvance = false
+
+    setContent { FocusBoundaryContent(fixture, showVirtualComment = showVirtualComment) }
+    advanceUntil(fixture, "observed:true")
+
+    runOnIdle { showVirtualComment = true }
+    advanceUntil(fixture, "auxiliary:true")
   }
 
   private fun androidx.compose.ui.test.ComposeUiTest.advanceUntil(
@@ -68,7 +82,10 @@ private class FocusBoundaryFixture {
 }
 
 @Composable
-private fun FocusBoundaryContent(fixture: FocusBoundaryFixture) {
+private fun FocusBoundaryContent(
+  fixture: FocusBoundaryFixture,
+  showVirtualComment: Boolean = false,
+) {
   val uiState = remember { EditorUiState() }
   var observedEditorFocusOnce by remember { mutableStateOf(false) }
 
@@ -95,14 +112,25 @@ private fun FocusBoundaryContent(fixture: FocusBoundaryFixture) {
     }
   }
 
-  CommentComposer(
-    value = "",
-    onValueChange = {},
-    placeholder = "코멘트 작성...",
-    submitting = false,
-    onFocusChange = { focused -> fixture.events += "auxiliary:$focused" },
-    onSubmit = {},
-  )
+  if (showVirtualComment) {
+    VirtualCommentThreadRow(
+      location = null,
+      value = "",
+      submitting = false,
+      onValueChange = {},
+      onFocusChange = { focused -> fixture.events += "auxiliary:$focused" },
+      onSubmit = {},
+    )
+  } else {
+    CommentComposer(
+      value = "",
+      onValueChange = {},
+      placeholder = "코멘트 작성...",
+      submitting = false,
+      onFocusChange = { focused -> fixture.events += "auxiliary:$focused" },
+      onSubmit = {},
+    )
+  }
 
   LaunchedEffect(Unit) { fixture.editorFocusRequester.requestFocus() }
 }

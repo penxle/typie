@@ -198,6 +198,7 @@ internal fun VirtualCommentThreadRow(
       onValueChange = onValueChange,
       placeholder = "코멘트 추가...",
       submitting = submitting,
+      autoFocus = true,
       onFocusChange = onFocusChange,
       onSubmit = onSubmit,
     )

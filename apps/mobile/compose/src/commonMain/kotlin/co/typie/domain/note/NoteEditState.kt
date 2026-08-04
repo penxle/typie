@@ -35,7 +35,15 @@ internal class NoteEditState(private val scope: CoroutineScope) {
 
   private var activeForm: ActiveNoteFormState? by mutableStateOf(null)
 
-  fun open(note: NoteCard_note, autoFocusContent: Boolean = false) {
+  fun open(note: NoteCard_note) {
+    open(note = note, autoFocusContent = false)
+  }
+
+  fun openNew(note: NoteCard_note) {
+    open(note = note, autoFocusContent = true)
+  }
+
+  private fun open(note: NoteCard_note, autoFocusContent: Boolean) {
     val currentForm = activeForm
     if (currentForm?.noteId == note.id && currentForm.siteId == note.site.id) {
       currentForm.commitServerSnapshot(note)
