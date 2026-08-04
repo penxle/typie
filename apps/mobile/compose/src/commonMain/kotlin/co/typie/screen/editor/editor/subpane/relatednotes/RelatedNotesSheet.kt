@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -62,6 +61,7 @@ import co.typie.route.Route
 import co.typie.screen.editor.editor.subpane.EditorResizableSheetSurface
 import co.typie.screen.editor.editor.subpane.EditorSubPane
 import co.typie.screen.editor.editor.subpane.EditorSubPaneBarHeight
+import co.typie.screen.editor.editor.subpane.EditorSubPaneContentTopPadding
 import co.typie.screen.editor.editor.subpane.EditorSubPaneForegroundOcclusion
 import co.typie.screen.editor.editor.subpane.EditorSubPaneLayoutInfo
 import co.typie.screen.editor.editor.subpane.resolveResizableSubPaneVisibleAreaMode
@@ -529,6 +529,7 @@ private fun RelatedNotesSheetContent(
     bodyScroll = false,
     handleModifier = sheetDragHandleModifier,
     includeBottomInset = false,
+    overlayHeader = true,
     padding = SheetPadding(header = PaddingValues(horizontal = 16.dp), body = PaddingValues(0.dp)),
     header = {
       RelatedNotesSheetBar(
@@ -551,7 +552,7 @@ private fun RelatedNotesSheetContent(
   ) {
     Crossfade(
       targetState = model.filterStatus,
-      modifier = Modifier.fillMaxSize().padding(bottom = safeBottomInset + keyboardOcclusion),
+      modifier = Modifier.fillMaxSize(),
       animationSpec = tween(durationMillis = 200),
     ) { status ->
       val sceneScrollState = scrollStateFor(status)
@@ -628,8 +629,13 @@ private fun RelatedNotesSheetContent(
             contentEditable = SubscriptionService.entitlement.grantsAccess(),
             actions = listActions,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 16.dp),
-            footer = { Spacer(Modifier.height(RelatedNotesListBottomContentPadding)) },
+            contentPadding =
+              PaddingValues(
+                start = 16.dp,
+                top = EditorSubPaneContentTopPadding,
+                end = 16.dp,
+                bottom = safeBottomInset + keyboardOcclusion + RelatedNotesListBottomContentPadding,
+              ),
           )
         }
       }

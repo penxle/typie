@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.testTag
+import co.typie.ui.component.TypieProgressiveBlurEffect
 import co.typie.ui.component.topbar.LocalTopBarAnimationSource
 import co.typie.ui.component.topbar.TopBarDefaults
 import dev.chrisbanes.haze.ExperimentalHazeApi
@@ -63,7 +64,7 @@ internal fun NavigationTopBarBackdrop(
 
   val topPadding = TopBarDefaults.topPadding()
   val blurEffect = remember {
-    TypieTopBarProgressiveBlurEffect(
+    TypieProgressiveBlurEffect(
       blurRadius = TopBarDefaults.BlurRadius,
       progressiveBrush = navigationTopBarProgressiveBrush(Color.Black),
       fallbackProgressive = TopBarDefaults.hazeProgressive(),

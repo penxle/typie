@@ -1,4 +1,4 @@
-package co.typie.navigation
+package co.typie.ui.component
 
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.snapshots.Snapshot
@@ -38,14 +38,14 @@ import dev.chrisbanes.haze.isRuntimeShaderRenderEffectSupported
 import dev.chrisbanes.haze.then
 
 /**
- * Top-bar-only workaround for Haze's quantized progressive blur radius.
+ * Workaround for Haze's quantized progressive blur radius.
  *
  * Remove this effect when the adopted Haze version provides continuous fractional-radius
- * progressive blur and the Desktop regression passes with its built-in effect.
+ * progressive blur and the focused pixel regressions pass with its built-in effect.
  */
 @Stable
 @OptIn(ExperimentalHazeApi::class, InternalHazeApi::class)
-internal class TypieTopBarProgressiveBlurEffect(
+internal class TypieProgressiveBlurEffect(
   private val blurRadius: Dp,
   private val progressiveBrush: Brush,
   fallbackProgressive: HazeProgressive,
@@ -248,7 +248,7 @@ private fun createProgressiveBlurRenderEffect(
 
 private fun Brush.toShader(size: Size): Shader =
   requireNotNull((this as? ShaderBrush)?.createShader(size)) {
-    "Top bar progressive blur requires a ShaderBrush"
+    "Progressive blur requires a ShaderBrush"
   }
 
 // Adapted from Haze 2.0.0-alpha03's HazeBlurShaders under Apache-2.0.

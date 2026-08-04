@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -42,6 +41,7 @@ import co.typie.result.Result
 import co.typie.screen.editor.editor.subpane.EditorResizableSheetSurface
 import co.typie.screen.editor.editor.subpane.EditorSubPane
 import co.typie.screen.editor.editor.subpane.EditorSubPaneBarHeight
+import co.typie.screen.editor.editor.subpane.EditorSubPaneContentTopPadding
 import co.typie.screen.editor.editor.subpane.EditorSubPaneForegroundOcclusion
 import co.typie.screen.editor.editor.subpane.EditorSubPaneLayoutInfo
 import co.typie.screen.editor.editor.subpane.resolveResizableSubPaneVisibleAreaMode
@@ -433,6 +433,7 @@ private fun CommentsSheetContent(
     bodyScroll = false,
     handleModifier = sheetDragHandleModifier,
     includeBottomInset = false,
+    overlayHeader = true,
     padding = SheetPadding(header = PaddingValues(horizontal = 16.dp), body = PaddingValues(0.dp)),
     header = {
       CommentsSheetBar(
@@ -451,12 +452,20 @@ private fun CommentsSheetContent(
   ) {
     Crossfade(
       targetState = state.filter,
-      modifier = Modifier.fillMaxSize().padding(bottom = safeBottomInset + keyboardOcclusion),
+      modifier = Modifier.fillMaxSize(),
       animationSpec = tween(durationMillis = 200),
     ) { filter ->
       val threads = model.threads(filter)
       Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(horizontal = 16.dp),
+        modifier =
+          Modifier.fillMaxSize()
+            .verticalScroll(scrollState)
+            .padding(
+              start = 16.dp,
+              top = EditorSubPaneContentTopPadding,
+              end = 16.dp,
+              bottom = safeBottomInset + keyboardOcclusion + CommentsListBottomContentPadding,
+            ),
         verticalArrangement = Arrangement.spacedBy(10.dp),
       ) {
         when (val queryState = model.queryState(filter)) {
@@ -530,8 +539,6 @@ private fun CommentsSheetContent(
             )
           }
         }
-
-        Spacer(Modifier.height(CommentsListBottomContentPadding))
       }
     }
   }

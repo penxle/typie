@@ -1,13 +1,22 @@
 package co.typie.ui.component.sheet
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -17,6 +26,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
@@ -24,11 +34,14 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.unit.dp
 import co.typie.dev.DesktopDebugKeyboard
@@ -312,6 +325,73 @@ class SheetLayoutDesktopTest {
   }
 
   @Test
+  fun overlayHeaderKeepsFullBodyViewportWhileContentScrollsBehindIt() = runComposeUiTest {
+    setContent {
+      SheetLayoutTestTheme {
+        Box(Modifier.size(width = 400.dp, height = 320.dp)) { OverlayHeaderSheet() }
+      }
+    }
+    waitForIdle()
+
+    val layoutBounds = onNodeWithTag(OverlayLayoutTag).fetchSemanticsNode().boundsInRoot
+    val viewportBounds = onNodeWithTag(OverlayViewportTag).fetchSemanticsNode().boundsInRoot
+    val initialHeaderBounds = onNodeWithTag(OverlayHeaderTag).fetchSemanticsNode().boundsInRoot
+    val initialMarkerBounds =
+      onNodeWithTag(OverlayMarkerTag, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+
+    assertEquals(layoutBounds.top, viewportBounds.top, absoluteTolerance = 0.5f)
+    assertEquals(layoutBounds.bottom, viewportBounds.bottom, absoluteTolerance = 0.5f)
+    assertTrue(initialMarkerBounds.top >= initialHeaderBounds.bottom)
+
+    val scrollNode = onNodeWithTag(OverlayViewportTag)
+    scrollNode.performSemanticsAction(SemanticsActions.ScrollBy) { action ->
+      assertTrue(action(0f, 120f))
+    }
+    waitUntil(timeoutMillis = 5_000) { scrollNode.verticalScrollValue() > 0f }
+
+    val currentHeaderBounds = onNodeWithTag(OverlayHeaderTag).fetchSemanticsNode().boundsInRoot
+    val currentMarkerBounds =
+      onNodeWithTag(OverlayMarkerTag, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+    assertEquals(initialHeaderBounds.top, currentHeaderBounds.top, absoluteTolerance = 0.5f)
+    assertTrue(currentMarkerBounds.top < currentHeaderBounds.bottom)
+  }
+
+  @Test
+  fun overlayHeaderBlocksBodyClicksWhilePreservingControlsAndDrag() = runComposeUiTest {
+    var bodyClicks = 0
+    var headerClicks = 0
+    var draggedBy = 0f
+
+    setContent {
+      SheetLayoutTestTheme {
+        Box(Modifier.size(width = 400.dp, height = 320.dp)) {
+          OverlayHeaderSheet(
+            onBodyClick = { bodyClicks += 1 },
+            onHeaderClick = { headerClicks += 1 },
+            onDrag = { draggedBy += it },
+          )
+        }
+      }
+    }
+    waitForIdle()
+
+    onNodeWithTag(OverlayHeaderTag).performTouchInput {
+      click(Offset(x = width - 20f, y = center.y))
+    }
+    onNodeWithTag(OverlayHeaderControlTag).performClick()
+    onNodeWithTag(OverlayHandleTag).performTouchInput {
+      down(center)
+      moveBy(Offset(x = 0f, y = 48f))
+      up()
+    }
+    waitForIdle()
+
+    assertEquals(0, bodyClicks)
+    assertEquals(1, headerClicks)
+    assertTrue(draggedBy > 0f)
+  }
+
+  @Test
   fun shortSheetDoesNotScrollWhenFocusedFieldRemainsVisible() = runComposeUiTest {
     val sheet = Sheet()
     val requestFocus = mutableStateOf(false)
@@ -446,6 +526,47 @@ class SheetLayoutDesktopTest {
   }
 
   @Composable
+  private fun OverlayHeaderSheet(
+    onBodyClick: () -> Unit = {},
+    onHeaderClick: () -> Unit = {},
+    onDrag: (Float) -> Unit = {},
+  ) {
+    val scrollState = rememberScrollState()
+    val dragState = rememberDraggableState(onDelta = onDrag)
+
+    SheetLayout(
+      modifier = Modifier.testTag(OverlayLayoutTag).fillMaxSize(),
+      fillHeight = true,
+      bodyScroll = false,
+      includeBottomInset = false,
+      overlayHeader = true,
+      handleModifier =
+        Modifier.testTag(OverlayHandleTag)
+          .draggable(state = dragState, orientation = Orientation.Vertical),
+      padding =
+        SheetPadding(header = PaddingValues(horizontal = 16.dp), body = PaddingValues(0.dp)),
+      header = {
+        Box(Modifier.testTag(OverlayHeaderTag).fillMaxWidth().height(44.dp)) {
+          Box(
+            Modifier.testTag(OverlayHeaderControlTag).size(44.dp).clickable(onClick = onHeaderClick)
+          )
+        }
+      },
+    ) {
+      Column(
+        Modifier.testTag(OverlayViewportTag)
+          .fillMaxSize()
+          .verticalScroll(scrollState)
+          .clickable(onClick = onBodyClick)
+          .padding(top = 76.dp)
+      ) {
+        Box(Modifier.testTag(OverlayMarkerTag).fillMaxWidth().height(44.dp))
+        Spacer(Modifier.fillMaxWidth().height(800.dp))
+      }
+    }
+  }
+
+  @Composable
   context(_: SheetScope<Unit>)
   private fun ShortSheet(requestFocus: Boolean, onClearFocusChanged: (() -> Unit) -> Unit) {
     SheetLayout(
@@ -511,6 +632,12 @@ class SheetLayoutDesktopTest {
     const val FixedHeaderTag = "fixed-slots-sheet-header"
     const val FixedFooterTag = "fixed-slots-sheet-footer"
     const val BodyMarkerTag = "fixed-slots-sheet-body-marker"
+    const val OverlayLayoutTag = "overlay-header-sheet-layout"
+    const val OverlayViewportTag = "overlay-header-sheet-viewport"
+    const val OverlayHeaderTag = "overlay-header-sheet-header"
+    const val OverlayHeaderControlTag = "overlay-header-sheet-control"
+    const val OverlayHandleTag = "overlay-header-sheet-handle"
+    const val OverlayMarkerTag = "overlay-header-sheet-marker"
     const val ShortRootTag = "short-sheet-root"
     const val ShortLayoutTag = "short-sheet-layout"
     const val ShortFieldTag = "short-sheet-field"

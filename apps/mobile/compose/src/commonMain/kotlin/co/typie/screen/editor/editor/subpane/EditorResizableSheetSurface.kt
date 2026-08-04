@@ -58,6 +58,9 @@ internal data class EditorResizableSheetGeometry(
 
 private const val EditorSubPaneHazeZIndex = 1f
 internal val EditorSubPaneBarHeight = SheetBarDefaults.SlotWidth
+private val EditorSubPaneBodyTopSpacing = 12.dp
+internal val EditorSubPaneContentTopPadding =
+  SheetHandleContainerHeight + EditorSubPaneBarHeight + EditorSubPaneBodyTopSpacing
 private val EditorSubPaneHeaderBottomClearance = 4.dp
 internal val EditorSubPaneHeaderRevealHeight =
   SheetHandleContainerHeight + EditorSubPaneBarHeight + EditorSubPaneHeaderBottomClearance
