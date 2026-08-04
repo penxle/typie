@@ -8,13 +8,14 @@ import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.ProseRangeInstallOutcome
 import co.typie.editor.ffi.ProseTrackedRangeRegistration
 import co.typie.editor.ffi.TrackedRange
-import co.typie.editor.ffi.TrackedRangeEndpoints
 import co.typie.editor.ffi.TrackedRangeOp
 import co.typie.editor.ffi.Underline
 import co.typie.editor.ffi.UnderlineStyle
 
 internal const val SPELLCHECK_RANGE_GROUP = "spellcheck"
 internal const val ACTIVE_SPELLCHECK_RANGE_GROUP = "spellcheck-active"
+internal val SPELLCHECK_MEMBERSHIP_GROUPS =
+  setOf(SPELLCHECK_RANGE_GROUP, ACTIVE_SPELLCHECK_RANGE_GROUP)
 
 internal enum class SpellcheckRangeInstallResult {
   Ready,
@@ -148,14 +149,6 @@ internal suspend fun Editor.replaceSpellcheckRangeText(
     }
     ?.commandOutcomes
     ?.none { it is CommandOutcome.Rejected } == true
-
-internal val TrackedRangeEndpoints.isSpellcheckRange: Boolean
-  get() = group == SPELLCHECK_RANGE_GROUP || group == ACTIVE_SPELLCHECK_RANGE_GROUP
-
-internal fun List<TrackedRangeEndpoints>.spellcheckRangeEndpoints(): List<TrackedRangeEndpoints> =
-  filter {
-    it.isSpellcheckRange
-  }
 
 internal fun List<TrackedRange>.spellcheckRanges(): List<TrackedRange> = filter {
   it.group == SPELLCHECK_RANGE_GROUP || it.group == ACTIVE_SPELLCHECK_RANGE_GROUP

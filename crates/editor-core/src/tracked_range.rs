@@ -237,7 +237,7 @@ impl TrackedRangeRegistry {
         self.by_id.values()
     }
 
-    pub fn iter_group<'a>(&'a self, group: &'a str) -> impl Iterator<Item = &'a TrackedRange> + 'a {
+    pub fn iter_group<'a>(&'a self, group: &str) -> impl Iterator<Item = &'a TrackedRange> + 'a {
         self.by_group
             .get(group)
             .into_iter()

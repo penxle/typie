@@ -13,13 +13,14 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.editor.Editor
 import co.typie.editor.EditorState
-import co.typie.editor.ffi.Selection
 import co.typie.editor.scroll.EditorBringIntoViewBehavior
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.toPageRectsTarget
 import co.typie.graphql.AiFeedback_LiteraryAnalysisDocumentStream_Subscription
 import co.typie.graphql.Apollo
+import co.typie.screen.editor.editor.selectTrackedRangeMember
 import co.typie.screen.editor.editor.state.EditorOverlayOcclusion
+import co.typie.screen.editor.editor.trackedRangeMembershipIds
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastType
 import com.apollographql.apollo.api.Optional
@@ -58,7 +59,8 @@ internal fun rememberEditorAiFeedbackSession(
   val scope = rememberCoroutineScope()
   val toast = LocalToast.current
   var bottomOcclusion by remember(documentId) { mutableFloatStateOf(0f) }
-  var lastSelectionMappedToAiFeedback by remember(documentId) { mutableStateOf<Selection?>(null) }
+  var lastMembershipIdsMappedToAiFeedback by
+    remember(documentId) { mutableStateOf<List<String>?>(null) }
   var occlusionReleaseJob by remember(documentId) { mutableStateOf<Job?>(null) }
   var analysisJob by remember(documentId) { mutableStateOf<Job?>(null) }
   val model = documentId?.let { id ->
@@ -113,7 +115,6 @@ internal fun rememberEditorAiFeedbackSession(
       val analysisRunId = activeModel.prepareAnalysis(sourceText)
       activeEditor.installAiFeedbackDecorations()
       activeEditor.clearAiFeedbackRanges()
-      lastSelectionMappedToAiFeedback = activeEditor.appliedState.selection
       if (sourceText.trim().isBlank()) {
         activeModel.complete()
         setOverlayBottomOcclusion(0f)
@@ -151,9 +152,6 @@ internal fun rememberEditorAiFeedbackSession(
                   AiFeedbackRangeRegistration(id = raw.id, selection = selection)
                 )
                 activeModel.appendResult(raw.toAiFeedbackResult())
-                if (wasEmpty) {
-                  lastSelectionMappedToAiFeedback = activeEditor.appliedState.selection
-                }
                 updateCompactOverlayHeightForRange(activeModel.activeRangeId)
                 updateActiveRangeDecoration()
                 if (wasEmpty) {
@@ -227,7 +225,7 @@ internal fun rememberEditorAiFeedbackSession(
     occlusionReleaseJob?.cancel()
     occlusionReleaseJob = null
     bottomOcclusion = 0f
-    lastSelectionMappedToAiFeedback = null
+    lastMembershipIdsMappedToAiFeedback = null
   }
 
   DisposableEffect(editor) { onDispose { disposeEditor(editor) } }
@@ -267,32 +265,50 @@ internal fun rememberEditorAiFeedbackSession(
     updateActiveRangeDecoration()
   }
 
-  LaunchedEffect(active, editorState.selection) {
+  LaunchedEffect(
+    active,
+    editorState.selection,
+    editorState.trackedRanges,
+    editorState.trackedRangesContainingSelectionHead,
+    model?.results,
+  ) {
     val activeModel = model ?: return@LaunchedEffect
     if (!active) {
-      lastSelectionMappedToAiFeedback = null
+      lastMembershipIdsMappedToAiFeedback = null
       return@LaunchedEffect
     }
     val selection =
       editorState.selection
         ?: run {
-          lastSelectionMappedToAiFeedback = null
+          lastMembershipIdsMappedToAiFeedback = null
           return@LaunchedEffect
         }
     if (activeModel.results.isEmpty()) {
-      lastSelectionMappedToAiFeedback = selection
+      lastMembershipIdsMappedToAiFeedback = null
       return@LaunchedEffect
     }
-    if (selection == lastSelectionMappedToAiFeedback) return@LaunchedEffect
-    lastSelectionMappedToAiFeedback = selection
-    if (selection.anchor != selection.head) return@LaunchedEffect
+    if (selection.anchor != selection.head) {
+      lastMembershipIdsMappedToAiFeedback = null
+      return@LaunchedEffect
+    }
+
+    val resultIds = activeModel.results.mapTo(mutableSetOf()) { it.id }
+    val membershipIds =
+      editorState.trackedRangesContainingSelectionHead.trackedRangeMembershipIds(
+        allowedGroups = AI_FEEDBACK_MEMBERSHIP_GROUPS,
+        ownedIds = resultIds,
+      )
+    if (membershipIds == lastMembershipIdsMappedToAiFeedback) return@LaunchedEffect
+    lastMembershipIdsMappedToAiFeedback = membershipIds
 
     val rangeId =
       editorState.trackedRangesContainingSelectionHead
-        .aiFeedbackRangeEndpoints()
-        .firstOrNull()
+        .selectTrackedRangeMember(
+          allowedGroups = AI_FEEDBACK_MEMBERSHIP_GROUPS,
+          activeId = activeModel.activeRangeId,
+          ownedIds = resultIds,
+        )
         ?.id
-        ?.takeIf { id -> activeModel.results.any { it.id == id } }
     val previousActiveRangeId = activeModel.activeRangeId
     if (rangeId == null) {
       activeModel.activate(null)

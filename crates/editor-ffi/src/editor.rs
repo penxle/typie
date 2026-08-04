@@ -3213,6 +3213,48 @@ mod tests {
     }
 
     #[test]
+    fn ffi_tracked_ranges_containing_position_preserves_core_membership_order() {
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("abcde") } } }
+            selection: (p1, 0)
+        };
+        let editor = make_ffi_editor(initial);
+
+        for (id, from, to) in [("before", 0, 3), ("after", 3, 5)] {
+            editor
+                .enqueue_for_test(editor_core::Message::TrackedRange {
+                    op: editor_core::TrackedRangeOp::Add {
+                        id: id.into(),
+                        group: "comment".into(),
+                        selection: editor_state::Selection::new(
+                            editor_state::Position::new(p1, from),
+                            editor_state::Position::new(p1, to),
+                        ),
+                        metadata: String::new(),
+                        invalidate_on_text_change: false,
+                    },
+                })
+                .expect("enqueue tracked-range add");
+        }
+        let _ = editor.tick().expect("tick");
+
+        let matches = editor
+            .tracked_ranges_containing_position(
+                editor_state::Position::new(p1, 3),
+                Some("comment".into()),
+            )
+            .expect("ffi ok");
+        assert_eq!(
+            matches
+                .iter()
+                .map(|range| range.id.as_str())
+                .collect::<Vec<_>>(),
+            ["before", "after"],
+            "FFI must preserve Core's exact-end-first membership order"
+        );
+    }
+
+    #[test]
     fn ffi_spellcheck_tracked_range_text_matches_context() {
         let (initial, p1) = state! {
             doc { root { p1: paragraph { text("않녕하세요") } } }

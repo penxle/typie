@@ -15,6 +15,7 @@ import { isMutatingMessage } from './message-gate';
 import { canPublish, preparingPage, proofSatisfies, satisfiesWaiter } from './publication';
 import { fanOutResourceUpdate, register, snapshot, unregister } from './registry';
 import { probeEvent, probeRendered } from './surface-probe';
+import { selectTrackedRangeMember, semanticMembershipForStateChange, trackedRangeMembershipIds } from './tracked-range-membership';
 import { zoomDiffers } from './zoom';
 import type {
   BlockState,
@@ -46,6 +47,7 @@ import type {
   ThemeVariant,
   TickResult,
   TrackedRange,
+  TrackedRangeEndpoints,
   Viewport,
 } from '@typie/editor-ffi/browser';
 import type { ScrollViewport } from '@typie/ui/utils';
@@ -117,6 +119,11 @@ type PublishedFrame = Readonly<{
 }>;
 
 const HIDDEN_TICK = Symbol('hidden-tick');
+const SPELLCHECK_MEMBERSHIP_GROUPS = new Set(['spellcheck', 'spellcheck-active']);
+const AI_FEEDBACK_MEMBERSHIP_GROUPS = new Set(['ai-feedback', 'ai-feedback-active']);
+const COMMENT_MEMBERSHIP_GROUPS = new Set(['comment', 'comment-active']);
+const sameIds = (a: readonly string[] | null, b: readonly string[]): boolean =>
+  a !== null && a.length === b.length && a.every((id, index) => id === b[index]);
 
 export type PublishedBundle = Readonly<{
   snapshot: EditorSnapshot;
@@ -388,8 +395,10 @@ export class Editor {
   #gesture!: TouchGestureController;
 
   #spellcheckDecorationsInstalled = false;
+  #spellcheckMembershipIds: string[] | null = null;
 
   #aiFeedbackDecorationsInstalled = false;
+  #aiFeedbackMembershipIds: string[] | null = null;
 
   #commentDecorationsInstalled = false;
   // eslint-disable-next-line svelte/prefer-svelte-reactivity
@@ -564,7 +573,7 @@ export class Editor {
         revision,
         cursor: fields.has('cursor') ? core.cursor() : previous.cursor,
         placeholder: fields.has('placeholder') ? (core.placeholder() ?? undefined) : previous.placeholder,
-        selection: fields.has('selection') ? core.selection() : previous.selection,
+        selection: fields.has('selection') || fields.has('doc') ? core.selection() : previous.selection,
         selectionEndpoints:
           fields.has('selection') || fields.has('cursor') || fields.has('doc') || fields.has('page_sizes')
             ? core.selection_endpoints()
@@ -590,13 +599,9 @@ export class Editor {
   #installAppliedSideEffects(fields: ReadonlySet<StateField>): void {
     const snapshot = this.#applied;
 
-    if (fields.has('selection')) {
-      if (snapshot.selection === undefined) {
-        this.inputEl?.blur();
-        this.closeContextMenu();
-      }
-      this.#syncActiveSpellcheckErrorFromSelection();
-      this.#syncActiveAiFeedbackFromSelection();
+    if (fields.has('selection') && snapshot.selection === undefined) {
+      this.inputEl?.blur();
+      this.closeContextMenu();
     }
 
     if (fields.has('doc') || fields.has('selection')) this.characterCountsVersion++;
@@ -613,6 +618,22 @@ export class Editor {
       }
       this.aiFeedbacks = this.aiFeedbacks.filter((feedback) => rangeIds.has(feedback.id));
       if (this.activeAiFeedbackId !== null && !rangeIds.has(this.activeAiFeedbackId)) this.activeAiFeedbackId = null;
+    }
+
+    const hasMembershipConsumers = this.spellcheckErrors.length > 0 || this.aiFeedbacks.length > 0;
+    if (!hasMembershipConsumers || !snapshot.selection || !isSelectionCollapsed(snapshot.selection)) {
+      this.#spellcheckMembershipIds = null;
+      this.#aiFeedbackMembershipIds = null;
+    }
+
+    if (hasMembershipConsumers) {
+      const membership = semanticMembershipForStateChange(fields, snapshot.selection, (position) =>
+        this.#invokeCore((core) => core.tracked_ranges_containing_position(position, null)),
+      );
+      if (membership !== undefined) {
+        this.#syncActiveSpellcheckErrorFromMembership(membership);
+        this.#syncActiveAiFeedbackFromMembership(membership);
+      }
     }
 
     if (fields.has('root_attrs') || fields.has('page_sizes')) {
@@ -967,40 +988,31 @@ export class Editor {
     }
   }
 
-  #syncActiveSpellcheckErrorFromSelection(): void {
-    const cursor = this.#applied.cursor;
-    if (!cursor) return;
+  #syncActiveSpellcheckErrorFromMembership(membership: readonly TrackedRangeEndpoints[]): void {
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity
+    const ownedIds = new Set(this.spellcheckErrors.map((error) => error.id));
+    const membershipIds = trackedRangeMembershipIds(membership, SPELLCHECK_MEMBERSHIP_GROUPS, ownedIds);
+    if (sameIds(this.#spellcheckMembershipIds, membershipIds)) return;
+    this.#spellcheckMembershipIds = membershipIds;
+    const member = selectTrackedRangeMember(membership, SPELLCHECK_MEMBERSHIP_GROUPS, this.activeSpellcheckErrorId, ownedIds);
 
-    const cx = cursor.caret.x;
-    const cy = cursor.line.y + cursor.line.height / 2;
-    const pageIdx = cursor.page_idx;
-
-    const hit = this.#invokeCore(
-      (core) => core.tracked_ranges_at(pageIdx, cx, cy, 'spellcheck-active')[0] ?? core.tracked_ranges_at(pageIdx, cx, cy, 'spellcheck')[0],
-    );
-
-    if (hit) {
-      this.setActiveSpellcheckError(hit.id);
+    if (member) {
+      this.setActiveSpellcheckError(member.id);
     } else if (this.activeSpellcheckErrorId !== null) {
       this.setActiveSpellcheckError(null);
     }
   }
 
-  #syncActiveAiFeedbackFromSelection(): void {
-    const cursor = this.#applied.cursor;
-    if (!cursor) return;
+  #syncActiveAiFeedbackFromMembership(membership: readonly TrackedRangeEndpoints[]): void {
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity
+    const ownedIds = new Set(this.aiFeedbacks.map((feedback) => feedback.id));
+    const membershipIds = trackedRangeMembershipIds(membership, AI_FEEDBACK_MEMBERSHIP_GROUPS, ownedIds);
+    if (sameIds(this.#aiFeedbackMembershipIds, membershipIds)) return;
+    this.#aiFeedbackMembershipIds = membershipIds;
+    const member = selectTrackedRangeMember(membership, AI_FEEDBACK_MEMBERSHIP_GROUPS, this.activeAiFeedbackId, ownedIds);
 
-    const cx = cursor.caret.x;
-    const cy = cursor.line.y + cursor.line.height / 2;
-    const pageIdx = cursor.page_idx;
-
-    const hit = this.#invokeCore(
-      (core) =>
-        core.tracked_ranges_at(pageIdx, cx, cy, 'ai-feedback-active')[0] ?? core.tracked_ranges_at(pageIdx, cx, cy, 'ai-feedback')[0],
-    );
-
-    if (hit) {
-      this.setActiveAiFeedback(hit.id);
+    if (member) {
+      this.setActiveAiFeedback(member.id);
     } else if (this.activeAiFeedbackId !== null) {
       this.setActiveAiFeedback(null);
     }
@@ -2373,10 +2385,16 @@ export class Editor {
     return this.#applied.trackedRanges.some((x) => x.id === id);
   }
 
-  commentIdsAt(page: number, x: number, y: number): string[] {
-    return this.#invokeCore((core) => core.tracked_ranges_at(page, x, y, null))
-      .filter((hit) => this.#registeredCommentIds.has(hit.id))
-      .map((hit) => hit.id);
+  commentIdAt(page: number, x: number, y: number): string | null {
+    const selection = this.#applied.selection;
+    if (!selection || !isSelectionCollapsed(selection)) return null;
+
+    return this.#invokeCore((core) => {
+      // eslint-disable-next-line svelte/prefer-svelte-reactivity
+      const geometryHitIds = new Set(core.tracked_ranges_at(page, x, y, null).map((hit) => hit.id));
+      const membership = core.tracked_ranges_containing_position(selection.head, null).filter((range) => geometryHitIds.has(range.id));
+      return selectTrackedRangeMember(membership, COMMENT_MEMBERSHIP_GROUPS, this.activeCommentId, this.#registeredCommentIds)?.id ?? null;
+    });
   }
 
   setActiveComment(id: string | null): void {

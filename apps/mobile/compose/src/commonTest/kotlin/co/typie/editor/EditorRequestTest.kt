@@ -280,7 +280,7 @@ class EditorRequestTest {
     }
 
   @Test
-  fun snapshot_reads_tracked_ranges_only_when_state_field_changes() =
+  fun snapshot_refreshes_membership_when_ranges_or_document_change_under_stationary_cursor() =
     runTest(dispatcher) {
       val range =
         TrackedRange(
@@ -304,6 +304,7 @@ class EditorRequestTest {
           listOf(
             listOf(EditorEvent.StateChanged(listOf(StateField.TrackedRanges))),
             listOf(EditorEvent.StateChanged(listOf(StateField.Cursor))),
+            listOf(EditorEvent.StateChanged(listOf(StateField.Doc))),
           )
         )
       val fake =
@@ -327,6 +328,28 @@ class EditorRequestTest {
       assertEquals(1, fake.trackedRangesContainingPositionCallCount)
       assertEquals(listOf(range), editor.appliedState.trackedRanges)
       assertEquals(listOf(rangeEndpoints), editor.appliedState.trackedRangesContainingSelectionHead)
+
+      editor.update { enqueue(sampleMessage) }
+
+      assertEquals(1, fake.trackedRangesCallCount)
+      assertEquals(2, fake.trackedRangesContainingPositionCallCount)
+      assertEquals(listOf(rangeEndpoints), editor.appliedState.trackedRangesContainingSelectionHead)
+    }
+
+  @Test
+  fun snapshot_skips_membership_lookup_when_no_tracked_ranges_exist() =
+    runTest(dispatcher) {
+      val fake =
+        FakeFfiEditor(
+          onTick = { listOf(EditorEvent.StateChanged(listOf(StateField.TrackedRanges))) }
+        )
+      val editor = Editor(fake, this, dispatcher)
+
+      editor.update { enqueue(sampleMessage) }
+
+      assertEquals(1, fake.trackedRangesCallCount)
+      assertEquals(0, fake.trackedRangesContainingPositionCallCount)
+      assertEquals(emptyList(), editor.appliedState.trackedRangesContainingSelectionHead)
     }
 
   @Test

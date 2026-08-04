@@ -642,16 +642,17 @@ impl Editor {
         scored.into_iter().map(|(_, _, hit)| hit).collect()
     }
 
-    /// Returns located tracked ranges containing `position`, sorted by shortest range first.
+    /// Returns located tracked ranges whose closed interval contains `position`.
     ///
-    /// Containment is start-inclusive and end-exclusive. This lets a cursor at the
-    /// start of a range continue that range while keeping the cursor immediately
-    /// after the range outside it.
+    /// Exact end matches come first so the preceding range wins at a shared
+    /// end/start boundary. Remaining ties are sorted by shortest range, then ID.
+    /// This membership policy is independent of the range's insertion affinity:
+    /// including the end cursor here does not make later text part of the range.
     pub fn tracked_ranges_containing_position(
         &self,
         position: editor_state::Position,
         group: Option<&str>,
-    ) -> Vec<crate::tracked_range::TrackedRange> {
+    ) -> Vec<&crate::tracked_range::TrackedRange> {
         use crate::tracked_range::TrackedRange;
         use editor_state::ResolvedPositionFlatExt;
 
@@ -666,7 +667,7 @@ impl Editor {
             None => Box::new(self.tracked_ranges.iter()),
         };
 
-        let mut scored: Vec<(usize, String, TrackedRange)> = Vec::new();
+        let mut scored: Vec<(bool, usize, &TrackedRange)> = Vec::new();
         for range in iter {
             let Some(sel) = range.locate(&self.state) else {
                 continue;
@@ -679,12 +680,16 @@ impl Editor {
             let head = resolved.head().to_flat();
             let start = anchor.min(head);
             let end = anchor.max(head);
-            if start <= pos && pos < end {
-                scored.push((end - start, range.id.clone(), range.clone()));
+            if start < end && start <= pos && pos <= end {
+                scored.push((end != pos, end - start, range));
             }
         }
 
-        scored.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
+        scored.sort_by(|a, b| {
+            a.0.cmp(&b.0)
+                .then_with(|| a.1.cmp(&b.1))
+                .then_with(|| a.2.id.cmp(&b.2.id))
+        });
         scored.into_iter().map(|(_, _, range)| range).collect()
     }
 

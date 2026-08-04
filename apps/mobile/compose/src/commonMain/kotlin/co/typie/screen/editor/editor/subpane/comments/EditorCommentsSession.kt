@@ -16,6 +16,7 @@ import co.typie.editor.ffi.StableSelection
 import co.typie.editor.scroll.EditorBringIntoViewBehavior
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.toPageRectsTarget
+import co.typie.screen.editor.editor.selectTrackedRangeMember
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastType
 import kotlinx.coroutines.launch
@@ -101,26 +102,34 @@ internal fun rememberEditorCommentsSession(
       CommentsViewModel(entityId = entityId, documentId = id)
     }
   }
+  val openSelectionsById = model?.openSelectionsById.orEmpty()
 
   LaunchedEffect(editor) { editor?.installCommentDecorations() }
 
+  val activeThreadId = model?.threadState?.activeThreadId
   val selection = editorState.selection
   val selectionCollapsed = selection == null || selection.anchor == selection.head
-  val collapsedCommentRanges =
-    remember(editorState.trackedRangesContainingSelectionHead, selectionCollapsed) {
+  val collapsedCommentRange =
+    remember(
+      editorState.trackedRangesContainingSelectionHead,
+      selectionCollapsed,
+      activeThreadId,
+      openSelectionsById.keys,
+    ) {
       if (selection != null && selectionCollapsed) {
-        editorState.trackedRangesContainingSelectionHead.commentRangeEndpoints()
+        editorState.trackedRangesContainingSelectionHead.selectTrackedRangeMember(
+          allowedGroups = COMMENT_MEMBERSHIP_GROUPS,
+          activeId = activeThreadId,
+          ownedIds = openSelectionsById.keys,
+        )
       } else {
-        emptyList()
+        null
       }
     }
-  val collapsedCommentRangeIds = collapsedCommentRanges.mapTo(mutableSetOf()) { it.id }
   val collapsedSelectionHead = selection?.takeIf { selectionCollapsed }?.head
   val topBarCreateEnabled = model != null && selection != null && !selectionCollapsed
   val toolbarEnabled =
-    model != null &&
-      selection != null &&
-      (!selectionCollapsed || collapsedCommentRanges.isNotEmpty())
+    model != null && selection != null && (!selectionCollapsed || collapsedCommentRange != null)
 
   val trackedCommentRanges =
     remember(editorState.trackedRanges, sheetActive) {
@@ -137,7 +146,6 @@ internal fun rememberEditorCommentsSession(
   val trackedCommentRangeById =
     remember(trackedCommentRanges) { trackedCommentRanges.associateBy { it.id } }
   val visibleFilter = model?.threadState?.filter ?: CommentFilter.Open
-  val activeThreadId = model?.threadState?.activeThreadId
   var lastRequestedActiveThreadId by remember(editor) { mutableStateOf<String?>(null) }
   val activeThreadRange =
     remember(activeThreadId, trackedCommentRanges) {
@@ -171,7 +179,6 @@ internal fun rememberEditorCommentsSession(
       commentThreadLocation(range.text)
     }
   val composeSelection = model?.threadState?.virtualThread?.selection
-  val openSelectionsById = model?.openSelectionsById.orEmpty()
   val openSelectionDecodeFailureIds = model?.openSelectionDecodeFailureIds.orEmpty()
 
   LaunchedEffect(openSelectionDecodeFailureIds) {
@@ -210,7 +217,7 @@ internal fun rememberEditorCommentsSession(
     if (!requested) return@LaunchedEffect
     lastRequestedActiveThreadId = threadId
   }
-  LaunchedEffect(sheetActive, collapsedSelectionHead, collapsedCommentRangeIds) {
+  LaunchedEffect(sheetActive, collapsedSelectionHead, collapsedCommentRange?.id) {
     if (
       !sheetActive ||
         selection == null ||
@@ -221,7 +228,7 @@ internal fun rememberEditorCommentsSession(
       return@LaunchedEffect
     }
 
-    val threadId = collapsedCommentRanges.firstOrNull()?.id ?: return@LaunchedEffect
+    val threadId = collapsedCommentRange?.id ?: return@LaunchedEffect
     if (threadId != activeThreadId) {
       requestQueue.requestActiveThread(threadId)
     }
@@ -258,9 +265,7 @@ internal fun rememberEditorCommentsSession(
           }
         } else {
           openSheet()
-          collapsedCommentRanges.firstOrNull()?.let { range ->
-            requestQueue.requestActiveThread(range.id)
-          }
+          collapsedCommentRange?.let { range -> requestQueue.requestActiveThread(range.id) }
         }
       }
     },
@@ -269,9 +274,7 @@ internal fun rememberEditorCommentsSession(
       if (model != null) {
         openSheet()
         if (selection != null && selectionCollapsed) {
-          collapsedCommentRanges.firstOrNull()?.let { range ->
-            requestQueue.requestActiveThread(range.id)
-          }
+          collapsedCommentRange?.let { range -> requestQueue.requestActiveThread(range.id) }
         }
       }
     },

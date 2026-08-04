@@ -170,10 +170,8 @@ export const handleClick: EditorEventHandler<HTMLElement, MouseEvent> = (editor,
   const local = editor.clientToLocal(e.clientX, e.clientY);
   if (!local) return;
 
-  const ids = editor.commentIdsAt(local.page, local.x, local.y);
-  if (ids.length > 0) {
-    editor.commentClickHandler(ids[0]);
-  }
+  const id = editor.commentIdAt(local.page, local.x, local.y);
+  if (id !== null) editor.commentClickHandler(id);
 };
 
 export const handlePointerCancel: EditorEventHandler<HTMLElement, PointerEvent> = (editor, e) => {

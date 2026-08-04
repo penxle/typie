@@ -1375,13 +1375,12 @@ internal constructor(
         trackedRanges = trackedRanges,
         trackedRangesContainingSelectionHead =
           if (selection != null && selection.anchor == selection.head) {
-            if (
-              selectionChanged ||
-                changed(StateField.TrackedRanges) ||
-                documentChanged ||
-                renderInvalidated
-            ) {
-              inner.trackedRangesContainingPosition(selection.head, null)
+            if (selectionChanged || changed(StateField.TrackedRanges) || documentChanged) {
+              if (trackedRanges.isEmpty()) {
+                emptyList()
+              } else {
+                inner.trackedRangesContainingPosition(selection.head, null)
+              }
             } else {
               previous.trackedRangesContainingSelectionHead
             }

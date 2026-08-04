@@ -6,11 +6,12 @@ import co.typie.editor.ffi.DecorationStyle
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.TrackedRange
-import co.typie.editor.ffi.TrackedRangeEndpoints
 import co.typie.editor.ffi.TrackedRangeOp
 
 internal const val AI_FEEDBACK_RANGE_GROUP = "ai-feedback"
 internal const val ACTIVE_AI_FEEDBACK_RANGE_GROUP = "ai-feedback-active"
+internal val AI_FEEDBACK_MEMBERSHIP_GROUPS =
+  setOf(AI_FEEDBACK_RANGE_GROUP, ACTIVE_AI_FEEDBACK_RANGE_GROUP)
 
 internal data class AiFeedbackRangeRegistration(val id: String, val selection: Selection)
 
@@ -73,14 +74,6 @@ internal suspend fun Editor.removeAiFeedbackRange(id: String) {
 internal suspend fun Editor.removeAiFeedbackRanges(ids: Iterable<String>) {
   update { ids.forEach { id -> enqueue(Message.TrackedRange(TrackedRangeOp.Remove(id = id))) } }
 }
-
-internal val TrackedRangeEndpoints.isAiFeedbackRange: Boolean
-  get() = group == AI_FEEDBACK_RANGE_GROUP || group == ACTIVE_AI_FEEDBACK_RANGE_GROUP
-
-internal fun List<TrackedRangeEndpoints>.aiFeedbackRangeEndpoints(): List<TrackedRangeEndpoints> =
-  filter {
-    it.isAiFeedbackRange
-  }
 
 internal fun List<TrackedRange>.aiFeedbackRanges(): List<TrackedRange> = filter {
   it.group == AI_FEEDBACK_RANGE_GROUP || it.group == ACTIVE_AI_FEEDBACK_RANGE_GROUP

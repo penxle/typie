@@ -22,7 +22,9 @@ import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.editor.scroll.toPageRectsTarget
 import co.typie.editor.scroll.updateWithBringIntoView
+import co.typie.screen.editor.editor.selectTrackedRangeMember
 import co.typie.screen.editor.editor.state.EditorOverlayOcclusion
+import co.typie.screen.editor.editor.trackedRangeMembershipIds
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastType
 import kotlin.math.max
@@ -67,7 +69,8 @@ internal fun rememberEditorSpellcheckSession(
   val scope = rememberCoroutineScope()
   val toast = LocalToast.current
   var bottomOcclusion by remember(documentId) { mutableFloatStateOf(0f) }
-  var lastSelectionMappedToSpellcheck by remember(documentId) { mutableStateOf<Selection?>(null) }
+  var lastMembershipIdsMappedToSpellcheck by
+    remember(documentId) { mutableStateOf<List<String>?>(null) }
   var programmaticSelectionToSkip by remember(documentId) { mutableStateOf<Selection?>(null) }
   var occlusionReleaseJob by remember(documentId) { mutableStateOf<Job?>(null) }
   val model = documentId?.let { id ->
@@ -140,7 +143,6 @@ internal fun rememberEditorSpellcheckSession(
         }
       },
       onReady = { results ->
-        lastSelectionMappedToSpellcheck = activeEditor.appliedState.selection
         if (results.isEmpty()) {
           setOverlayBottomOcclusion(0f)
         } else {
@@ -191,7 +193,7 @@ internal fun rememberEditorSpellcheckSession(
     occlusionReleaseJob?.cancel()
     occlusionReleaseJob = null
     bottomOcclusion = 0f
-    lastSelectionMappedToSpellcheck = null
+    lastMembershipIdsMappedToSpellcheck = null
     programmaticSelectionToSkip = null
   }
 
@@ -235,7 +237,7 @@ internal fun rememberEditorSpellcheckSession(
     val activeModel = model ?: return@LaunchedEffect
     val activeEditor = editor ?: return@LaunchedEffect
     if (!active || activeModel.results.isEmpty()) {
-      lastSelectionMappedToSpellcheck = null
+      lastMembershipIdsMappedToSpellcheck = null
       return@LaunchedEffect
     }
 
@@ -252,30 +254,42 @@ internal fun rememberEditorSpellcheckSession(
     }
 
     if (!active || activeModel.results.isEmpty()) {
-      lastSelectionMappedToSpellcheck = null
+      lastMembershipIdsMappedToSpellcheck = null
       return@LaunchedEffect
     }
     val selection =
       editorState.selection
         ?: run {
-          lastSelectionMappedToSpellcheck = null
+          lastMembershipIdsMappedToSpellcheck = null
           return@LaunchedEffect
         }
-    if (selection == programmaticSelectionToSkip) {
-      programmaticSelectionToSkip = null
-      lastSelectionMappedToSpellcheck = selection
+    if (selection.anchor != selection.head) {
+      lastMembershipIdsMappedToSpellcheck = null
       return@LaunchedEffect
     }
-    if (selection == lastSelectionMappedToSpellcheck) return@LaunchedEffect
-    lastSelectionMappedToSpellcheck = selection
-    if (selection.anchor != selection.head) return@LaunchedEffect
+
+    val resultIds = activeModel.results.mapTo(mutableSetOf()) { it.id }
+    val membershipIds =
+      editorState.trackedRangesContainingSelectionHead.trackedRangeMembershipIds(
+        allowedGroups = SPELLCHECK_MEMBERSHIP_GROUPS,
+        ownedIds = resultIds,
+      )
+    if (selection == programmaticSelectionToSkip) {
+      programmaticSelectionToSkip = null
+      lastMembershipIdsMappedToSpellcheck = membershipIds
+      return@LaunchedEffect
+    }
+    if (membershipIds == lastMembershipIdsMappedToSpellcheck) return@LaunchedEffect
+    lastMembershipIdsMappedToSpellcheck = membershipIds
 
     val rangeId =
       editorState.trackedRangesContainingSelectionHead
-        .spellcheckRangeEndpoints()
-        .firstOrNull()
+        .selectTrackedRangeMember(
+          allowedGroups = SPELLCHECK_MEMBERSHIP_GROUPS,
+          activeId = activeModel.activeRangeId,
+          ownedIds = resultIds,
+        )
         ?.id
-        ?.takeIf { id -> activeModel.results.any { it.id == id } }
     val previousActiveRangeId = activeModel.activeRangeId
     if (rangeId == null) {
       activeModel.activate(null)
