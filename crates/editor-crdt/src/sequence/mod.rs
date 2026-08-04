@@ -837,6 +837,15 @@ impl BoundaryResolver {
             .gap_for_target(&self.index.tree, &self.index.lv_of, target)
     }
 
+    /// Tombstone-inclusive document index of a sequence insertion.
+    ///
+    /// Unlike a visible rank, this remains stable while the insertion is
+    /// deleted and therefore can order two persisted boundary anchors.
+    pub fn doc_index_of(&self, dot: Dot) -> Option<usize> {
+        let lv = *self.index.lv_of.get(&dot)?;
+        self.index.tree.doc_index_of_lv_checked(lv)
+    }
+
     /// Descending current visible positions of `del`'s still-visible targets,
     /// for redoing a deletion. See [`ResolveIndex::del_target_positions`].
     pub fn del_target_positions(&self, del: Dot) -> Vec<usize> {

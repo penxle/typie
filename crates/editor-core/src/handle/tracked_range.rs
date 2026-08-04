@@ -74,30 +74,11 @@ pub fn handle_tracked_range_op(editor: &mut Editor, op: TrackedRangeOp) -> Resul
             });
         }
         TrackedRangeOp::SetGroup { id, group } => {
-            // Re-anchor the range to its current resolved extent so a stale
-            // binding to a since-deleted boundary character is dropped; without
-            // this, a later insert at the collapsed boundary would be recaptured.
-            let recaptured = editor.tracked_ranges().get(&id).and_then(|range| {
-                let state = editor.state();
-                let located = range.locate(state)?;
-                let view = state.view();
-                let resolved = located.resolve(&view)?;
-                let blocks: Vec<editor_crdt::Dot> = editor_state::blocks_in_range(&resolved)
-                    .iter()
-                    .map(|b| b.id())
-                    .collect();
-                Some((StableSelection::capture(&located, &view), blocks))
-            });
-            let would_change = editor.tracked_ranges().get(&id).is_some_and(|range| {
-                range.group != group
-                    || recaptured
-                        .as_ref()
-                        .is_some_and(|(s, _)| s != &range.selection)
-            });
+            let would_change = editor
+                .tracked_ranges()
+                .get(&id)
+                .is_some_and(|range| range.group != group);
             commit_if_changed(editor, would_change, |reg| {
-                if let Some((selection, blocks)) = recaptured {
-                    reg.set_selection(&id, selection, blocks);
-                }
                 reg.set_group(&id, group);
             });
         }
@@ -721,6 +702,23 @@ mod tests {
             state,
             Message::TrackedRange {
                 op: TrackedRangeOp::Remove { id: "x".into() },
+            },
+        );
+    }
+
+    #[test]
+    fn set_group_nonexistent_preserves_state() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 1) -> (p1, 4)
+        };
+        assert_apply_preserves_state(
+            state,
+            Message::TrackedRange {
+                op: TrackedRangeOp::SetGroup {
+                    id: "missing".into(),
+                    group: "g2".into(),
+                },
             },
         );
     }

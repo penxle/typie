@@ -5,6 +5,7 @@ use editor_macros::ffi;
 use editor_model::DocView;
 use serde::{Deserialize, Serialize};
 
+use crate::bind::Bind;
 use crate::selection::Selection;
 use crate::stable_position::{StablePosition, StableResolveCtx};
 use crate::state::State;
@@ -70,6 +71,15 @@ impl StableSelection {
         if self.anchor == self.head {
             return Some(primary);
         }
+        if self.anchor.has_live_inline_child(ctx) && self.head.has_live_inline_child(ctx) {
+            return Some(primary);
+        }
+
+        if let Some(order) = self.anchor.cmp_inline_boundary(&self.head, ctx)
+            && order != Ordering::Equal
+        {
+            return Some(self.resolve_inline_range(ctx, primary, order));
+        }
 
         let Some(resolved) = primary.resolve(ctx.view()) else {
             return Some(primary);
@@ -85,6 +95,46 @@ impl StableSelection {
             },
             Ordering::Equal => primary,
         })
+    }
+
+    fn resolve_inline_range(
+        &self,
+        ctx: &StableResolveCtx,
+        primary: Selection,
+        order: Ordering,
+    ) -> Selection {
+        let (start, end, reversed) = match order {
+            Ordering::Less => (
+                self.anchor
+                    .inline_range_boundary_position(ctx, primary.anchor, Bind::Left),
+                self.head
+                    .inline_range_boundary_position(ctx, primary.head, Bind::Right),
+                false,
+            ),
+            Ordering::Greater => (
+                self.head
+                    .inline_range_boundary_position(ctx, primary.head, Bind::Left),
+                self.anchor
+                    .inline_range_boundary_position(ctx, primary.anchor, Bind::Right),
+                true,
+            ),
+            Ordering::Equal => return primary,
+        };
+        let (Some(start), Some(end)) = (start, end) else {
+            return primary;
+        };
+
+        let crosses = Selection::new(start, end)
+            .resolve(ctx.view())
+            .is_some_and(|resolved| resolved.anchor() > resolved.head());
+        if crosses {
+            return Selection::collapsed(end);
+        }
+        if reversed {
+            Selection::new(end, start)
+        } else {
+            Selection::new(start, end)
+        }
     }
 }
 
@@ -112,10 +162,10 @@ pub fn remap_selection(selection: Selection, source: &State, target: &State) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
+    use editor_crdt::{Changeset, Dot, InputEvent, ListOp, OpGraph, build_oplog};
     use editor_model::{
-        AliasLog, DocLogs, ModifierAttrLog, NodeAttrLog, NodeType, ProjectedDoc, SeqItem, SpanLog,
-        project_document,
+        AliasLog, DocLogs, EditOp, ModifierAttrLog, NodeAttrLog, NodeType, ProjectedDoc, SeqItem,
+        SpanLog, project_document,
     };
 
     use crate::Position;
@@ -396,6 +446,270 @@ mod tests {
             let restored = ss.resolve(&undel_ctx).expect("resolve after undel");
             proptest::prop_assert_eq!(restored.anchor, anchor);
             proptest::prop_assert_eq!(restored.head, head);
+        }
+    }
+
+    #[derive(Clone, Copy, Debug)]
+    enum DeletedInlineBoundaryCase {
+        Start,
+        End,
+        Full,
+    }
+
+    fn inline_state(text: &str) -> (crate::ProjectedState, Dot) {
+        let mut state = crate::ProjectedState::empty();
+        let paragraph = state.seq().entries[0].dot;
+        for (offset, ch) in text.chars().enumerate() {
+            state
+                .apply(EditOp::Seq(ListOp::Ins {
+                    pos: 1 + offset,
+                    item: SeqItem::Char(ch),
+                }))
+                .unwrap();
+        }
+        (state, paragraph)
+    }
+
+    fn directed_inline_selection(
+        paragraph: Dot,
+        start: usize,
+        end: usize,
+        reversed: bool,
+    ) -> Selection {
+        let start = Position::new(paragraph, start);
+        let end = Position::new(paragraph, end);
+        if reversed {
+            Selection::new(end, start)
+        } else {
+            Selection::new(start, end)
+        }
+    }
+
+    fn assert_owned_live_resolution(
+        stable: &StableSelection,
+        state: &crate::ProjectedState,
+        expected: Selection,
+    ) {
+        let view = state.view();
+        let owned = StableResolveCtx::new(&view, state.seq());
+        let live = StableResolveCtx::from_live(&view, state.seq_checkout());
+        assert_eq!(stable.resolve(&owned), Some(expected));
+        assert_eq!(stable.resolve(&live), Some(expected));
+    }
+
+    fn projected_client(actor: u64, base: &[Changeset<EditOp>]) -> crate::ProjectedState {
+        let mut graph = OpGraph::with_actor(actor);
+        for changeset in base {
+            graph
+                .receive_changeset_mut(changeset.clone())
+                .expect("shared base applies");
+        }
+        crate::ProjectedState::from_graph(graph).expect("shared base projects")
+    }
+
+    #[test]
+    fn deleted_inline_boundary_resolution_matches_owned_and_live() {
+        for case in [
+            DeletedInlineBoundaryCase::Start,
+            DeletedInlineBoundaryCase::End,
+            DeletedInlineBoundaryCase::Full,
+        ] {
+            for reversed in [false, true] {
+                let (mut state, paragraph) = inline_state("abcdef");
+                let stable = StableSelection::capture(
+                    &directed_inline_selection(paragraph, 1, 4, reversed),
+                    &state.view(),
+                );
+
+                let (expected_start, expected_end) = match case {
+                    DeletedInlineBoundaryCase::Start => {
+                        state
+                            .apply(EditOp::Seq(ListOp::Ins {
+                                pos: 3,
+                                item: SeqItem::Char('Y'),
+                            }))
+                            .unwrap();
+                        state
+                            .apply(EditOp::Seq(ListOp::Del { pos: 2, len: 1 }))
+                            .unwrap();
+                        state
+                            .apply(EditOp::Seq(ListOp::Ins {
+                                pos: 2,
+                                item: SeqItem::Char('X'),
+                            }))
+                            .unwrap();
+                        (2, 5)
+                    }
+                    DeletedInlineBoundaryCase::End => {
+                        state
+                            .apply(EditOp::Seq(ListOp::Ins {
+                                pos: 4,
+                                item: SeqItem::Char('Y'),
+                            }))
+                            .unwrap();
+                        state
+                            .apply(EditOp::Seq(ListOp::Del { pos: 5, len: 2 }))
+                            .unwrap();
+                        state
+                            .apply(EditOp::Seq(ListOp::Ins {
+                                pos: 5,
+                                item: SeqItem::Char('X'),
+                            }))
+                            .unwrap();
+                        (1, 4)
+                    }
+                    DeletedInlineBoundaryCase::Full => {
+                        state
+                            .apply(EditOp::Seq(ListOp::Del { pos: 2, len: 3 }))
+                            .unwrap();
+                        state
+                            .apply(EditOp::Seq(ListOp::Ins {
+                                pos: 2,
+                                item: SeqItem::Char('X'),
+                            }))
+                            .unwrap();
+                        (1, 1)
+                    }
+                };
+                let expected = directed_inline_selection(
+                    paragraph,
+                    expected_start,
+                    expected_end,
+                    reversed && expected_start != expected_end,
+                );
+                assert_owned_live_resolution(&stable, &state, expected);
+            }
+        }
+    }
+
+    #[test]
+    fn collapsed_selection_keeps_primary_resolution_after_its_child_is_deleted() {
+        let (mut state, paragraph) = inline_state("abcdef");
+        let stable = StableSelection::capture(
+            &Selection::collapsed(Position::new(paragraph, 2)),
+            &state.view(),
+        );
+        state
+            .apply(EditOp::Seq(ListOp::Del { pos: 2, len: 2 }))
+            .unwrap();
+        state
+            .apply(EditOp::Seq(ListOp::Ins {
+                pos: 2,
+                item: SeqItem::Char('X'),
+            }))
+            .unwrap();
+
+        let view = state.view();
+        for ctx in [
+            StableResolveCtx::new(&view, state.seq()),
+            StableResolveCtx::from_live(&view, state.seq_checkout()),
+        ] {
+            let primary = stable.anchor.resolve(&ctx).unwrap();
+            assert_eq!(stable.resolve(&ctx), Some(Selection::collapsed(primary)));
+        }
+    }
+
+    #[test]
+    fn missing_canonical_inline_end_candidate_preserves_primary_selection() {
+        let (mut state, paragraph) = inline_state("abcdef");
+        let stable = StableSelection::capture(
+            &directed_inline_selection(paragraph, 0, 3, false),
+            &state.view(),
+        );
+        state
+            .apply(EditOp::Seq(ListOp::Del { pos: 1, len: 3 }))
+            .unwrap();
+        state
+            .apply(EditOp::Seq(ListOp::Ins {
+                pos: 1,
+                item: SeqItem::Char('X'),
+            }))
+            .unwrap();
+
+        let view = state.view();
+        for ctx in [
+            StableResolveCtx::new(&view, state.seq()),
+            StableResolveCtx::from_live(&view, state.seq_checkout()),
+        ] {
+            let primary = Selection {
+                anchor: stable.anchor.resolve(&ctx).unwrap(),
+                head: stable.head.resolve(&ctx).unwrap(),
+            };
+            let end = stable
+                .head
+                .inline_range_boundary_position(&ctx, primary.head, Bind::Right);
+            assert_eq!(end, None);
+            assert_eq!(stable.resolve(&ctx), Some(primary));
+        }
+    }
+
+    #[test]
+    fn deletion_gap_excludes_an_insertion_the_delete_did_not_observe() {
+        let mut base_graph = OpGraph::with_actor(0);
+        base_graph
+            .add_mut(EditOp::Seq(ListOp::Ins {
+                pos: 0,
+                item: block(NodeType::Paragraph, vec![Dot::ROOT]),
+            }))
+            .unwrap();
+        for (offset, ch) in "abcdef".chars().enumerate() {
+            base_graph
+                .add_mut(EditOp::Seq(ListOp::Ins {
+                    pos: 1 + offset,
+                    item: SeqItem::Char(ch),
+                }))
+                .unwrap();
+        }
+        base_graph.commit_mut();
+        let base = base_graph.changesets_as_vec();
+        let paragraph = base[0].ops[0].id;
+
+        for reversed in [false, true] {
+            let base_state = projected_client(3, &base);
+            let stable = StableSelection::capture(
+                &directed_inline_selection(paragraph, 1, 4, reversed),
+                &base_state.view(),
+            );
+
+            let mut inserter = projected_client(1, &base);
+            inserter
+                .apply(EditOp::Seq(ListOp::Ins {
+                    pos: 4,
+                    item: SeqItem::Char('Z'),
+                }))
+                .unwrap();
+            inserter.commit();
+
+            let mut deleter = projected_client(2, &base);
+            deleter
+                .apply(EditOp::Seq(ListOp::Del { pos: 4, len: 2 }))
+                .unwrap();
+            deleter.commit();
+
+            let mut merged = projected_client(4, &base);
+            for changeset in inserter
+                .graph()
+                .changesets_as_vec()
+                .into_iter()
+                .chain(deleter.graph().changesets_as_vec())
+                .filter(|changeset| changeset.ops[0].id.actor != 0)
+            {
+                merged = merged.receive_changeset(changeset).unwrap();
+            }
+
+            assert!(
+                merged
+                    .view()
+                    .node(paragraph)
+                    .unwrap()
+                    .inline_text()
+                    .contains('Z')
+            );
+            assert_owned_live_resolution(
+                &stable,
+                &merged,
+                directed_inline_selection(paragraph, 1, 3, reversed),
+            );
         }
     }
 }

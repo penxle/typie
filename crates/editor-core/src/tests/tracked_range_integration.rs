@@ -41,6 +41,74 @@ fn located_text(editor: &Editor, id: &str) -> Option<String> {
     Some(resolved.collect_text())
 }
 
+fn directed_selection(
+    node: editor_crdt::Dot,
+    start: usize,
+    end: usize,
+    reversed: bool,
+) -> Selection {
+    let start = editor_state::Position::new(node, start);
+    let end = editor_state::Position::new(node, end);
+    if reversed {
+        Selection::new(end, start)
+    } else {
+        Selection::new(start, end)
+    }
+}
+
+fn set_selection(editor: &mut Editor, selection: Selection) {
+    editor.apply(Message::Selection {
+        op: SelectionOp::Set { selection },
+    });
+}
+
+fn insert_text(editor: &mut Editor, node: editor_crdt::Dot, offset: usize, text: &str) {
+    set_selection(
+        editor,
+        Selection::collapsed(editor_state::Position::new(node, offset)),
+    );
+    editor.apply(Message::Insertion {
+        op: InsertionOp::Text { text: text.into() },
+    });
+}
+
+fn delete_range(editor: &mut Editor, node: editor_crdt::Dot, start: usize, end: usize) {
+    set_selection(editor, directed_selection(node, start, end, false));
+    editor.apply(Message::Deletion {
+        op: DeletionOp::Selection,
+    });
+}
+
+fn run_deleted_end_history_with_group_transitions(
+    groups: &[&str],
+) -> (crate::tracked_range::TrackedRange, Option<String>) {
+    let (initial, p1) = state! {
+        doc { root { p1: paragraph { text("abcdef") } } }
+        selection: (p1, 0)
+    };
+    let mut editor = Editor::new_test(initial);
+    editor.apply(add_message(
+        "r",
+        "comment",
+        directed_selection(p1, 1, 4, false),
+    ));
+    insert_text(&mut editor, p1, 3, "Y");
+    delete_range(&mut editor, p1, 4, 6);
+    for group in groups {
+        editor.apply(Message::TrackedRange {
+            op: TrackedRangeOp::SetGroup {
+                id: "r".into(),
+                group: (*group).into(),
+            },
+        });
+    }
+    insert_text(&mut editor, p1, 4, "X");
+    (
+        editor.tracked_ranges().get("r").unwrap().clone(),
+        located_text(&editor, "r"),
+    )
+}
+
 #[test]
 fn range_position_shifts_when_text_inserted_before_it() {
     let (initial, p1) = state! {
@@ -905,6 +973,56 @@ fn frozen_range_survives_remote_pre_join_typing_join_and_seam_typing_in_one_tick
 }
 
 #[test]
+fn deleted_inline_boundary_has_the_same_result_when_history_arrives_in_one_remote_tick() {
+    for upper in [false, true] {
+        for reversed in [false, true] {
+            let (initial, p1) = state! {
+                doc { root { p1: paragraph { text("abcdef") } } }
+                selection: (p1, 0)
+            };
+            let stable = editor_state::StableSelection::capture(
+                &directed_selection(p1, 1, 4, reversed),
+                &initial.view(),
+            );
+            let mut peer = Editor::new_test(initial.clone());
+            let mut receiver = Editor::new_test(initial);
+            receiver.apply(Message::TrackedRange {
+                op: TrackedRangeOp::AddFrozen {
+                    id: "r".into(),
+                    group: "comment".into(),
+                    selection: stable,
+                    metadata: String::new(),
+                },
+            });
+
+            if upper {
+                insert_text(&mut peer, p1, 3, "Y");
+                delete_range(&mut peer, p1, 4, 6);
+                insert_text(&mut peer, p1, 4, "X");
+            } else {
+                insert_text(&mut peer, p1, 2, "Y");
+                delete_range(&mut peer, p1, 1, 2);
+                insert_text(&mut peer, p1, 1, "X");
+            }
+
+            let receiver_heads = receiver.current_heads().into_iter().collect();
+            let changesets = peer.missing_changesets_tolerant(&receiver_heads);
+            assert!(changesets.len() >= 3);
+            for changeset in changesets {
+                receiver.receive_remote_changeset(changeset);
+            }
+            receiver.tick().unwrap();
+
+            assert_eq!(
+                located_text(&receiver, "r").as_deref(),
+                Some(if upper { "bcY" } else { "Ycd" }),
+                "remote boundary result diverged (upper={upper}, reversed={reversed})"
+            );
+        }
+    }
+}
+
+#[test]
 fn range_shrinks_at_right_edge_after_covering_delete_and_undo() {
     let (initial, p1) = state! {
         doc { root { p1: paragraph { text("ㅁㄴㅇㅁㅁㅁㅁㄴㅁㅇ") } } }
@@ -1698,6 +1816,150 @@ fn redo_restores_inserted_text() {
         op: HistoryOp::Redo,
     });
     assert_eq!(editor.state().view().node(p1).unwrap().inline_text(), "ax");
+}
+
+#[test]
+fn deleted_inline_end_keeps_observed_interior_insert_and_excludes_later_gap_insert() {
+    for reversed in [false, true] {
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("abcdef") } } }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(add_message(
+            "r",
+            "comment",
+            directed_selection(p1, 1, 4, reversed),
+        ));
+
+        insert_text(&mut editor, p1, 3, "Y");
+        delete_range(&mut editor, p1, 4, 6);
+        assert_eq!(located_text(&editor, "r").as_deref(), Some("bcY"));
+
+        insert_text(&mut editor, p1, 4, "X");
+        assert_eq!(
+            located_text(&editor, "r").as_deref(),
+            Some("bcY"),
+            "later typing at a deleted upper boundary must stay outside (reversed={reversed})"
+        );
+    }
+}
+
+#[test]
+fn deleted_inline_start_keeps_observed_interior_insert_and_excludes_later_gap_insert() {
+    for reversed in [false, true] {
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("abcdef") } } }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(add_message(
+            "r",
+            "comment",
+            directed_selection(p1, 1, 4, reversed),
+        ));
+
+        insert_text(&mut editor, p1, 2, "Y");
+        delete_range(&mut editor, p1, 1, 2);
+        assert_eq!(located_text(&editor, "r").as_deref(), Some("Ycd"));
+
+        insert_text(&mut editor, p1, 1, "X");
+        assert_eq!(
+            located_text(&editor, "r").as_deref(),
+            Some("Ycd"),
+            "later typing at a deleted lower boundary must stay outside (reversed={reversed})"
+        );
+    }
+}
+
+#[test]
+fn fully_deleted_inline_range_stays_at_canonical_end_gap_through_typing_and_history() {
+    for reversed in [false, true] {
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("abcdef") } } }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.undo_history =
+            editor_state::undo::UndoHistory::new(editor_common::time::Duration::from_millis(0));
+        editor.apply(add_message(
+            "r",
+            "comment",
+            directed_selection(p1, 1, 4, reversed),
+        ));
+
+        delete_range(&mut editor, p1, 1, 4);
+        assert_eq!(restored_offsets(&editor, "r"), (1, 1));
+        assert!(is_unlocated(&editor, "r"));
+
+        insert_text(&mut editor, p1, 1, "X");
+        assert_eq!(restored_offsets(&editor, "r"), (1, 1));
+        assert!(is_unlocated(&editor, "r"));
+
+        insert_text(&mut editor, p1, 1, "Y");
+        assert_eq!(restored_offsets(&editor, "r"), (1, 1));
+        assert!(is_unlocated(&editor, "r"));
+
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+        assert_eq!(restored_offsets(&editor, "r"), (1, 1));
+        assert!(is_unlocated(&editor, "r"));
+
+        editor.apply(Message::History {
+            op: HistoryOp::Redo,
+        });
+        assert_eq!(restored_offsets(&editor, "r"), (1, 1));
+        assert!(is_unlocated(&editor, "r"));
+    }
+}
+
+#[test]
+fn set_group_only_changes_group_during_deleted_boundary_history() {
+    let (mut baseline, baseline_text) = run_deleted_end_history_with_group_transitions(&[]);
+    baseline.group = "normalized".into();
+    assert_eq!(baseline_text.as_deref(), Some("bcY"));
+
+    for groups in [&["active"][..], &["active", "hover", "selected"][..]] {
+        let (mut actual, actual_text) = run_deleted_end_history_with_group_transitions(groups);
+        actual.group = "normalized".into();
+        assert_eq!(
+            actual, baseline,
+            "0/1/multiple group transitions must preserve the tracked range payload"
+        );
+        assert_eq!(actual_text, baseline_text);
+    }
+}
+
+#[test]
+fn setting_the_same_group_does_not_recapture_a_deleted_boundary() {
+    let (initial, p1) = state! {
+        doc { root { p1: paragraph { text("abcdef") } } }
+        selection: (p1, 0)
+    };
+    let mut editor = Editor::new_test(initial);
+    editor.apply(add_message(
+        "r",
+        "comment",
+        directed_selection(p1, 1, 4, false),
+    ));
+    insert_text(&mut editor, p1, 3, "Y");
+    delete_range(&mut editor, p1, 4, 6);
+    let before = editor.tracked_ranges().get("r").unwrap().clone();
+
+    let events = editor.apply(Message::TrackedRange {
+        op: TrackedRangeOp::SetGroup {
+            id: "r".into(),
+            group: "comment".into(),
+        },
+    });
+
+    assert_eq!(editor.tracked_ranges().get("r"), Some(&before));
+    assert!(!events.iter().any(|event| matches!(
+        event,
+        crate::event::EditorEvent::StateChanged { fields }
+            if fields.contains(&crate::state_field::StateField::TrackedRanges)
+    )));
 }
 
 #[test]

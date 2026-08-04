@@ -259,6 +259,13 @@ impl StableResolver<'_> {
         }
     }
 
+    fn doc_index_of(&self, d: Dot) -> Option<usize> {
+        match self {
+            StableResolver::Owned(r) => r.doc_index_of(d),
+            StableResolver::Live(c) => c.doc_index_of(d),
+        }
+    }
+
     fn visible_deletion_survivor(&self, target: Dot, bias: Bias) -> Option<Dot> {
         let mut seen = HashSet::new();
         let mut current = target;
@@ -489,6 +496,23 @@ impl StablePosition {
         Some(self.resolve_in_host(ctx, host, next_child))
     }
 
+    pub(crate) fn has_live_inline_child(&self, ctx: &StableResolveCtx) -> bool {
+        let Some(child) = self.child.as_ref() else {
+            return false;
+        };
+        let is_live_inline = |dot| {
+            ctx.view
+                .block_of(dot)
+                .and_then(|host| ctx.view.node(host))
+                .is_some_and(|host| host.spec().is_textblock())
+        };
+        if is_live_inline(child.dot) {
+            return true;
+        }
+        let alias = ctx.alias(child.dot);
+        alias != child.dot && is_live_inline(alias)
+    }
+
     fn authored_host_at_offset_zero(&self) -> Option<Dot> {
         if self.child.is_some() {
             return None;
@@ -504,13 +528,67 @@ impl StablePosition {
         ctx: &StableResolveCtx,
         primary: Position,
     ) -> Position {
-        self.range_start_after_deleted_empty_host_candidate(ctx, primary)
+        self.inline_range_boundary_position(ctx, primary, Bind::Left)
+            .or_else(|| self.range_start_after_deleted_empty_host_candidate(ctx, primary))
             .unwrap_or(primary)
     }
 
     pub(crate) fn range_end_position(&self, ctx: &StableResolveCtx, primary: Position) -> Position {
-        self.range_end_after_deleted_host_candidate(ctx, primary)
+        self.inline_range_boundary_position(ctx, primary, Bind::Right)
+            .or_else(|| self.range_end_after_deleted_host_candidate(ctx, primary))
             .unwrap_or(primary)
+    }
+
+    /// Preserves `primary` when no inline correction is needed. `None` leaves
+    /// structural or whole-selection fallback policy to the caller.
+    pub(crate) fn inline_range_boundary_position(
+        &self,
+        ctx: &StableResolveCtx,
+        primary: Position,
+        expected_bind: Bind,
+    ) -> Option<Position> {
+        let child = self.child.as_ref()?;
+        if child.bind != expected_bind {
+            return Some(primary);
+        }
+        let dot = ctx.alias(child.dot);
+        if ctx.resolver.boundary(dot)?.visible {
+            return Some(primary);
+        }
+        let (host, _, _) = self.inline_boundary_key(ctx)?;
+        let bias = match expected_bind {
+            Bind::Left => Bias::After,
+            Bind::Right => Bias::Before,
+        };
+        let survivor = ctx.resolver.visible_deletion_survivor(dot, bias)?;
+        let candidate = self.resolve_child_parent_boundary(ctx, survivor, expected_bind)?;
+        (candidate.node == host && candidate.node == primary.node).then_some(candidate)
+    }
+
+    pub(crate) fn cmp_inline_boundary(
+        &self,
+        other: &StablePosition,
+        ctx: &StableResolveCtx,
+    ) -> Option<std::cmp::Ordering> {
+        let (host, index, side) = self.inline_boundary_key(ctx)?;
+        let (other_host, other_index, other_side) = other.inline_boundary_key(ctx)?;
+        (host == other_host).then(|| (index, side).cmp(&(other_index, other_side)))
+    }
+
+    fn inline_boundary_key(&self, ctx: &StableResolveCtx) -> Option<(Dot, usize, u8)> {
+        let child = self.child.as_ref()?;
+        let dot = ctx.alias(child.dot);
+        let host = ctx
+            .view
+            .block_of(dot)
+            .or_else(|| self.resolve_chain_host(ctx).map(|(host, _)| host.id()))?;
+        let host_view = ctx.view.node(host)?;
+        if !host_view.spec().is_textblock() {
+            return None;
+        }
+        let index = ctx.resolver.doc_index_of(dot)?;
+        let side = u8::from(child.bind == Bind::Right);
+        Some((host, index, side))
     }
 
     fn range_end_after_deleted_host_candidate(

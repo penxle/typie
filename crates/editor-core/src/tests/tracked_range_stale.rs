@@ -112,6 +112,37 @@ fn typing_at_range_boundaries_keeps_it() {
 }
 
 #[test]
+fn group_transitions_do_not_change_text_staleness() {
+    for groups in [
+        &[][..],
+        &["active"][..],
+        &["active", "hover", "selected"][..],
+    ] {
+        let (mut editor, p1) = hello_world_editor();
+        for group in groups {
+            editor.apply(Message::TrackedRange {
+                op: TrackedRangeOp::SetGroup {
+                    id: "r1".into(),
+                    group: (*group).into(),
+                },
+            });
+        }
+
+        set_cursor(&mut editor, p1, 2);
+        let events = editor.apply(Message::Insertion {
+            op: InsertionOp::Text { text: "X".into() },
+        });
+
+        assert!(!editor.tracked_ranges().contains("r1"));
+        assert_eq!(
+            stale_ids(&events),
+            vec!["r1".to_string()],
+            "0/1/multiple group transitions must preserve staleness (groups={groups:?})"
+        );
+    }
+}
+
+#[test]
 fn paragraph_split_outside_range_keeps_it() {
     let (mut editor, p1) = hello_world_editor();
     set_cursor(&mut editor, p1, 8);
