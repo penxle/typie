@@ -30,6 +30,7 @@ import co.typie.graphql.type.NoteStatus
 import co.typie.result.Result
 import co.typie.ui.component.popover.LocalPopoverOverlayState
 import co.typie.ui.component.popover.PopoverOverlayState
+import co.typie.ui.component.reorder.ReorderableLazyColumnState
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.Toast
 import co.typie.ui.theme.LightAppShadows
@@ -41,10 +42,83 @@ import co.typie.ui.theme.ResolvedThemeMode
 import dev.chrisbanes.haze.blur.HazeBlurStyle
 import dev.chrisbanes.haze.blur.LocalHazeBlurStyle
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalTestApi::class)
 class NoteListDesktopTest {
+  @Test
+  fun projectedNoteOrderDoesNotChangeThePhysicalListDuringDrag() = runComposeUiTest {
+    val first = notesNote(id = "first", content = "first-content", order = "100")
+    val second = notesNote(id = "second", content = "second-content", order = "200")
+    val items =
+      listOf(first, second).map { note ->
+        NoteListItem(
+          note = note,
+          isDeleting = false,
+          isChangingStatus = false,
+          isEntering = false,
+          isExiting = false,
+          isExitVisible = false,
+        )
+      }
+    lateinit var reorderState: ReorderableLazyColumnState<String>
+
+    setContent {
+      CompositionLocalProvider(
+        LocalAppColors provides LightColors,
+        LocalAppShadows provides LightAppShadows,
+        LocalThemeMode provides ResolvedThemeMode.Light,
+        LocalHazeBlurStyle provides
+          HazeBlurStyle(blurRadius = 20.dp, noiseFactor = 0f, colorEffects = listOf()),
+        LocalToast provides Toast(),
+      ) {
+        val scope = rememberCoroutineScope()
+        val editState = remember(scope) { NoteEditState(scope) }
+        reorderState =
+          rememberNoteListReorderState(items = items, scrollState = rememberLazyListState())
+        NoteList(
+          identity = NoteListIdentity(siteId = "site", status = NoteStatus.OPEN),
+          emptyMessage = "",
+          queryState = QueryState.Success(Unit),
+          items = items,
+          authoritativeNotes = listOf(first, second),
+          editState = editState,
+          onEnterAnimationFinished = {},
+          onExitAnimationFinished = {},
+          reorderState = reorderState,
+          noteColorOptions =
+            listOf(NoteColorOption(value = "gray", label = "그레이", stroke = Color.Gray)),
+          interactive = false,
+          onRetry = {},
+          actions = idleActions(),
+          modifier = Modifier.size(width = 400.dp, height = 500.dp),
+        )
+      }
+    }
+    waitForIdle()
+
+    runOnUiThread {
+      assertTrue(reorderState.orderState.beginDrag("first"))
+      assertTrue(reorderState.orderState.moveDraggedTo(1))
+    }
+    waitForIdle()
+
+    assertEquals(listOf("second", "first"), reorderState.keys)
+    assertEquals(listOf("first", "second"), reorderState.layoutKeys)
+    assertTrue(
+      onNodeWithText("first-content", useUnmergedTree = true)
+        .fetchSemanticsNode()
+        .boundsInRoot
+        .top <
+        onNodeWithText("second-content", useUnmergedTree = true)
+          .fetchSemanticsNode()
+          .boundsInRoot
+          .top
+    )
+    runOnUiThread { reorderState.orderState.cancelDrag() }
+  }
+
   @Test
   fun collapsedMetadataFitsWithinANarrowCard() = runComposeUiTest {
     val note =
@@ -333,4 +407,19 @@ class NoteListDesktopTest {
       )
     }
   }
+
+  private fun idleActions() =
+    NoteListActions(
+      onExpand = {},
+      onCollapse = {},
+      onCreateNote = {},
+      onContentChange = { _, _ -> },
+      onBlur = {},
+      onToggleStatus = {},
+      onColorChange = { _, _ -> },
+      onAddEntity = {},
+      onEntityClick = { _, _ -> },
+      onDelete = {},
+      onMoveNote = { _, _, _ -> Result.Ok("") },
+    )
 }

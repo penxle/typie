@@ -151,8 +151,8 @@ fun FolderScreen(entityId: String) {
   val reorderState =
     rememberReorderableLazyColumnState(keys = serverChildIds, lazyListState = scrollState)
   val displayChildren =
-    remember(serverChildren, reorderState.keys) {
-      displayEntityRows(serverChildren, reorderState.keys)
+    remember(serverChildren, reorderState.layoutKeys) {
+      displayEntityRows(serverChildren, reorderState.layoutKeys)
     }
   val selection = rememberEntityContainerSelection(displayChildren)
   val selectionState = selection.state

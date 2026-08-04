@@ -95,7 +95,7 @@ fun TextReplacementsScreen() {
     val keys = displayed.map { it.textReplacementId }
     val reorderState = rememberReorderableLazyColumnState(keys = keys, lazyListState = scrollState)
     val byId = remember(displayed) { displayed.associateBy { it.textReplacementId } }
-    val ordered = reorderState.keys.mapNotNull(byId::get)
+    val ordered = reorderState.layoutKeys.mapNotNull(byId::get)
     val toast = LocalToast.current
     val reorderEnabled = SubscriptionService.entitlement.grantsAccess()
 
@@ -139,15 +139,16 @@ fun TextReplacementsScreen() {
           CardSurface(modifier = Modifier.fillMaxWidth()) { EmptyStateMessage() }
         }
       } else {
-        itemsIndexed(items = ordered, key = { _, entry -> entry.textReplacementId }) { index, entry
-          ->
+        itemsIndexed(items = ordered, key = { _, entry -> entry.textReplacementId }) { _, entry ->
           val id = entry.textReplacementId
+          val projectedIndex = reorderState.keys.indexOf(id)
           val shape =
             RoundedCornerShape(
-              topStart = if (index == 0) AppShapes.md else 0.dp,
-              topEnd = if (index == 0) AppShapes.md else 0.dp,
-              bottomStart = if (index == ordered.lastIndex) AppShapes.md else 0.dp,
-              bottomEnd = if (index == ordered.lastIndex) AppShapes.md else 0.dp,
+              topStart = if (projectedIndex == 0) AppShapes.md else 0.dp,
+              topEnd = if (projectedIndex == 0) AppShapes.md else 0.dp,
+              bottomStart =
+                if (projectedIndex == reorderState.keys.lastIndex) AppShapes.md else 0.dp,
+              bottomEnd = if (projectedIndex == reorderState.keys.lastIndex) AppShapes.md else 0.dp,
             )
           CardSurface(
             modifier =
@@ -156,10 +157,10 @@ fun TextReplacementsScreen() {
             shape = shape,
           ) {
             Column(modifier = Modifier.fillMaxWidth()) {
-              if (index > 0) CardDivider(inset = 20.dp)
+              if (projectedIndex > 0) CardDivider(inset = 20.dp)
               CustomRow(
                 entry = entry,
-                order = index + 1,
+                order = projectedIndex + 1,
                 reorderState = reorderState,
                 reorderEnabled = reorderEnabled,
                 onEdit = {

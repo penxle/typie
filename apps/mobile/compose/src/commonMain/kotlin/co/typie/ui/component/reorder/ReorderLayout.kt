@@ -14,6 +14,12 @@ internal data class ReorderLayoutSnapshot<K : Any>(
   val viewportTop: Float,
   val viewportBottom: Float,
   val items: List<ReorderLayoutItem<K>>,
+  val itemSpacing: Float = 0f,
+)
+
+internal data class ReorderLayoutProjection<K : Any>(
+  val snapshot: ReorderLayoutSnapshot<K>,
+  val draggedSlotTop: Float?,
 )
 
 internal fun <K : Any> discoverReorderBlockOffset(
@@ -42,28 +48,103 @@ internal fun <K : Any> isCompatibleReorderSnapshot(
     displayedIndex != -1 && item.lazyIndex == blockOffset + displayedIndex
   }
 
-internal fun <K : Any> projectReorderSnapshotOntoDisplayedSlots(
-  displayedKeys: List<K>,
+internal fun <K : Any> reorderItemDisplacement(
+  layoutKeys: List<K>,
+  projectedKeys: List<K>,
+  draggedKey: K,
+  itemKey: K,
+  draggedHeight: Float,
+  itemSpacing: Float,
+): Float {
+  if (itemKey == draggedKey || draggedHeight <= 0f) return 0f
+  val startIndex = layoutKeys.indexOf(draggedKey)
+  val targetIndex = projectedKeys.indexOf(draggedKey)
+  val itemIndex = layoutKeys.indexOf(itemKey)
+  if (startIndex == -1 || targetIndex == -1 || itemIndex == -1) return 0f
+  val slotHeight = draggedHeight + itemSpacing
+  return when {
+    targetIndex < startIndex && itemIndex in targetIndex until startIndex -> slotHeight
+    targetIndex > startIndex && itemIndex in (startIndex + 1)..targetIndex -> -slotHeight
+    else -> 0f
+  }
+}
+
+internal fun <K : Any> projectReorderLayoutFromStableSource(
+  layoutKeys: List<K>,
+  projectedKeys: List<K>,
+  draggedKey: K,
+  draggedHeight: Float,
+  itemSpacing: Float,
   blockOffset: Int,
   snapshot: ReorderLayoutSnapshot<K>,
-): ReorderLayoutSnapshot<K> =
-  snapshot.copy(
-    items =
-      snapshot.items
-        .mapNotNull { item ->
-          val displayedIndex = item.lazyIndex - blockOffset
-          val displayedKey = displayedKeys.getOrNull(displayedIndex) ?: return@mapNotNull null
-          item.copy(key = displayedKey)
+): ReorderLayoutProjection<K> {
+  val startIndex = layoutKeys.indexOf(draggedKey)
+  val targetIndex = projectedKeys.indexOf(draggedKey)
+  if (startIndex == -1 || targetIndex == -1 || draggedHeight <= 0f) {
+    return ReorderLayoutProjection(snapshot = snapshot, draggedSlotTop = null)
+  }
+
+  val sourceItems =
+    snapshot.items
+      .filter { item ->
+        val sourceIndex = layoutKeys.indexOf(item.key)
+        sourceIndex != -1 && item.lazyIndex == blockOffset + sourceIndex
+      }
+      .groupBy(ReorderLayoutItem<K>::key)
+      .values
+      .map { candidates ->
+        candidates.maxBy { item ->
+          verticalOverlap(item.top, item.bottom, snapshot.viewportTop, snapshot.viewportBottom)
         }
-        .groupBy(ReorderLayoutItem<K>::lazyIndex)
-        .values
-        .map { candidates ->
-          candidates.maxBy { item ->
-            verticalOverlap(item.top, item.bottom, snapshot.viewportTop, snapshot.viewportBottom)
+      }
+  val sourceItemsByKey = sourceItems.associateBy(ReorderLayoutItem<K>::key)
+  val sourceItemsByIndex = sourceItems.associateBy { item -> layoutKeys.indexOf(item.key) }
+  val draggedDestinationTop =
+    when {
+      targetIndex < startIndex ->
+        sourceItemsByKey[layoutKeys[targetIndex]]?.top
+          ?: sourceItemsByIndex[targetIndex - 1]?.bottom?.plus(itemSpacing)
+      targetIndex > startIndex ->
+        sourceItemsByKey[layoutKeys[targetIndex]]?.bottom?.minus(draggedHeight)
+          ?: sourceItemsByIndex[targetIndex + 1]?.top?.minus(itemSpacing + draggedHeight)
+      else -> sourceItemsByKey[draggedKey]?.top
+    }
+
+  return ReorderLayoutProjection(
+    snapshot =
+      snapshot.copy(
+        items =
+          sourceItems.mapNotNull { item ->
+            val projectedIndex = projectedKeys.indexOf(item.key)
+            if (projectedIndex == -1) return@mapNotNull null
+            if (item.key == draggedKey) {
+              val slotTop = draggedDestinationTop ?: return@mapNotNull null
+              item.copy(
+                lazyIndex = blockOffset + projectedIndex,
+                top = slotTop,
+                bottom = slotTop + draggedHeight,
+              )
+            } else {
+              val displacement =
+                reorderItemDisplacement(
+                  layoutKeys = layoutKeys,
+                  projectedKeys = projectedKeys,
+                  draggedKey = draggedKey,
+                  itemKey = item.key,
+                  draggedHeight = draggedHeight,
+                  itemSpacing = itemSpacing,
+                )
+              item.copy(
+                lazyIndex = blockOffset + projectedIndex,
+                top = item.top + displacement,
+                bottom = item.bottom + displacement,
+              )
+            }
           }
-        }
-        .sortedBy(ReorderLayoutItem<K>::lazyIndex)
+      ),
+    draggedSlotTop = draggedDestinationTop,
   )
+}
 
 internal fun <K : Any> targetIndexForDrag(
   displayedKeys: List<K>,

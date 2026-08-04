@@ -52,6 +52,7 @@ import co.typie.ext.LocalScrollGestureLockState
 import co.typie.ext.ScrollGestureLockHandle
 import co.typie.ext.edgeAutoScroll
 import co.typie.ext.rememberEdgeAutoScrollController
+import kotlin.math.roundToInt
 import kotlin.time.TimeSource
 import kotlinx.coroutines.launch
 
@@ -60,6 +61,11 @@ private data class LazyLayoutObservation(
   val verticalScrollDirection: Int,
   val viewport: Rect?,
   val layoutInfo: LazyListLayoutInfo,
+)
+
+private data class ReorderReleasePresentation<K : Any>(
+  val siblingTargetOffsets: Map<K, Float>,
+  val layoutCommitPending: Boolean,
 )
 
 @Stable
@@ -80,6 +86,10 @@ internal constructor(
   private var observedDragging = orderState.isDragging
   private var endingDrag = false
   private var draggedVisualOffsetY by mutableFloatStateOf(0f)
+  private var draggedHeight by mutableFloatStateOf(0f)
+  private var itemSpacing by mutableFloatStateOf(0f)
+  private var dragSessionRevision by mutableLongStateOf(0L)
+  private var releasePresentation by mutableStateOf<ReorderReleasePresentation<K>?>(null)
   private val placedItemTops = mutableMapOf<K, Float>()
   private var draggedPlacedTopY: Float? = null
   private var draggedVisualOriginY: Float? = null
@@ -104,6 +114,12 @@ internal constructor(
     get() {
       orderEpoch
       return orderState.keys
+    }
+
+  val layoutKeys: List<K>
+    get() {
+      orderEpoch
+      return orderState.layoutKeys
     }
 
   val draggingKey: K?
@@ -137,8 +153,36 @@ internal constructor(
   internal fun draggedOffsetY(key: K): Float =
     if (orderState.isDragging(key)) draggedVisualOffsetY else 0f
 
+  internal val currentDragSessionRevision: Long
+    get() = dragSessionRevision
+
+  internal val suppressLazyPlacementAnimation: Boolean
+    get() = isDragging || releasePresentation?.layoutCommitPending == true
+
+  internal val isReleaseCommitPending: Boolean
+    get() = releasePresentation?.layoutCommitPending == true
+
+  internal fun releaseSiblingTargetOffsetY(key: K): Float =
+    releasePresentation?.siblingTargetOffsets?.get(key) ?: 0f
+
+  internal fun siblingTargetOffsetY(key: K): Float {
+    orderEpoch
+    val draggedKey = orderState.draggingKey ?: return 0f
+    return reorderItemDisplacement(
+      layoutKeys = orderState.layoutKeys,
+      projectedKeys = orderState.keys,
+      draggedKey = draggedKey,
+      itemKey = key,
+      draggedHeight = draggedHeight,
+      itemSpacing = itemSpacing,
+    )
+  }
+
   internal fun updateInputKeys(keys: List<K>) {
-    if (orderState.inputKeys != keys) placedItemTops.keys.retainAll(keys.toSet())
+    if (orderState.inputKeys != keys) {
+      val retainedKeys = keys.toSet()
+      placedItemTops.keys.retainAll(retainedKeys)
+    }
     val wasDragging = orderState.isDragging
     endingDrag = true
     try {
@@ -150,32 +194,44 @@ internal constructor(
   }
 
   internal fun publishLayout(layoutInfo: LazyListLayoutInfo, viewport: Rect, scrollDirection: Int) {
-    val displayedKeys = orderState.keys
+    val displayedKeys = orderState.layoutKeys
     val displayedKeyByValue = displayedKeys.associateBy { it as Any }
     val snapshot =
       ReorderLayoutSnapshot(
         viewportTop = viewport.top + layoutInfo.viewportStartOffset,
         viewportBottom = viewport.top + layoutInfo.viewportEndOffset,
+        itemSpacing = layoutInfo.mainAxisItemSpacing.toFloat(),
         items =
           layoutInfo.visibleItemsInfo.mapNotNull { item ->
             val key = displayedKeyByValue[item.key] ?: return@mapNotNull null
+            val top = viewport.top + item.offset
             ReorderLayoutItem(
               key = key,
               lazyIndex = item.index,
-              top = viewport.top + item.offset,
-              bottom = viewport.top + item.offset + item.size,
+              top = top,
+              bottom = top + item.size,
             )
           },
       )
     if (!orderState.isDragging) {
       latestIdleLayout = snapshot
       interaction.publishLayout(snapshot)
+      val currentReleasePresentation = releasePresentation
+      if (
+        currentReleasePresentation?.layoutCommitPending == true &&
+          discoverReorderBlockOffset(orderState.layoutKeys, snapshot) != null
+      ) {
+        releasePresentation = currentReleasePresentation.copy(layoutCommitPending = false)
+      }
       return
     }
 
+    itemSpacing = snapshot.itemSpacing
+
     val layoutProposal = interaction.publishLayout(snapshot, scrollDirection)
     val placementProposal =
-      interaction.draggedItemInPublishedLayout()?.let { draggedItem ->
+      interaction.draggedItemInCurrentSourceLayout()?.let { draggedItem ->
+        draggedHeight = draggedItem.height
         val placementOrderRevision = orderState.orderRevision
         interaction
           .updateDraggedSize(height = draggedItem.height, scrollDirection = scrollDirection)
@@ -203,6 +259,10 @@ internal constructor(
     ) {
       return false
     }
+    dragSessionRevision += 1
+    releasePresentation = null
+    draggedHeight = item.height
+    itemSpacing = latestIdleLayout?.itemSpacing ?: 0f
     draggedPlacementOrderRevision = orderState.orderRevision
     interaction.updateDraggedSize(height = item.height)
     draggedPlacedTopY = placedItemTops[key]
@@ -249,10 +309,21 @@ internal constructor(
 
   internal fun release() {
     if (!orderState.isDragging) return
+    val moved = orderState.keys != orderState.layoutKeys
+    val releaseOffsetY = releaseSettlingOffsetY(moved)
+    if (releaseOffsetY == null) {
+      cancel()
+      return
+    }
+    if (moved) {
+      prepareReleaseCommit()
+    } else {
+      releasePresentation = null
+    }
     val drop =
       try {
         endingDrag = true
-        interaction.release(releaseOffsetY = draggedVisualOffsetY)
+        interaction.release(releaseOffsetY = releaseOffsetY)
       } finally {
         endingDrag = false
       }
@@ -267,6 +338,7 @@ internal constructor(
     } finally {
       endingDrag = false
     }
+    releasePresentation = null
     finishDrag(drop = null)
   }
 
@@ -280,27 +352,54 @@ internal constructor(
     if (orderState.draggingKey != proposal.draggedKey) return
     if (orderState.orderRevision != proposal.sourceOrderRevision) return
 
-    val firstVisibleItem =
-      lazyListState.layoutInfo.visibleItemsInfo.firstOrNull {
-        it.index == lazyListState.firstVisibleItemIndex
-      }
-    if (firstVisibleItem != null) {
-      lazyListState.requestScrollToItem(
-        index = lazyListState.firstVisibleItemIndex,
-        scrollOffset = lazyListState.firstVisibleItemScrollOffset,
-      )
-    }
-
     if (!interaction.commitTarget(proposal)) return
     refreshDraggedVisualOffset()
     onTargetChanged?.invoke()
     if (hapticPolicy.shouldEmit(proposal.targetIndex, nowMillis())) onTargetHaptic?.invoke()
   }
 
+  private fun releaseSettlingOffsetY(moved: Boolean): Float? {
+    if (!moved) return draggedVisualOffsetY
+    val currentVisualTop =
+      interaction.draggedTopY(orderState.draggingKey)
+        ?: draggedPlacedTopY?.plus(draggedVisualOffsetY)
+    val destinationTop = interaction.draggedDestinationTopY()
+    if (currentVisualTop == null || destinationTop == null) return null
+    return currentVisualTop - destinationTop
+  }
+
+  private fun prepareReleaseCommit() {
+    val draggedKey = checkNotNull(orderState.draggingKey)
+    releasePresentation =
+      ReorderReleasePresentation(
+        siblingTargetOffsets =
+          orderState.layoutKeys.associateWith { key ->
+            reorderItemDisplacement(
+              layoutKeys = orderState.layoutKeys,
+              projectedKeys = orderState.keys,
+              draggedKey = draggedKey,
+              itemKey = key,
+              draggedHeight = draggedHeight,
+              itemSpacing = itemSpacing,
+            )
+          },
+        layoutCommitPending = true,
+      )
+    val viewportTop = viewport?.top
+    val projectedAnchor = interaction.projectedViewportAnchor()
+    if (viewportTop != null && projectedAnchor != null) {
+      lazyListState.requestScrollToItem(
+        index = projectedAnchor.lazyIndex,
+        scrollOffset = -(projectedAnchor.top - viewportTop).roundToInt(),
+      )
+    }
+  }
+
   private fun finishDrag(drop: ReorderDrop<K>?) {
     edgeAutoScrollController.pointer = null
     latestIdleLayout = null
     draggedVisualOffsetY = 0f
+    draggedHeight = 0f
     draggedPlacedTopY = null
     draggedVisualOriginY = null
     draggedPlacementOrderRevision = null
@@ -397,14 +496,55 @@ fun <K : Any> ReorderableLazyColumn(
 @Composable
 fun <K : Any> Modifier.reorderableItem(state: ReorderableLazyColumnState<K>, key: K): Modifier {
   val isDragging = state.isDragging(key)
+  val isAnyDragging = state.isDragging
   val settlingOffsetY = state.settlingOffsetY(key)
   val isSettling = settlingOffsetY != null
   val settlingAnim = remember(key, isSettling) { Animatable(settlingOffsetY ?: 0f) }
+  val dragSessionRevision = state.currentDragSessionRevision
+  val siblingTargetOffsetY = state.siblingTargetOffsetY(key)
+  val siblingAnim = remember(key, dragSessionRevision) { Animatable(0f) }
+  var siblingHandoffBaseOffsetY by
+    remember(key, dragSessionRevision) { mutableStateOf<Float?>(null) }
+  var siblingHandoffPending by remember(key, dragSessionRevision) { mutableStateOf(false) }
+  val isReleaseCommitPending = state.isReleaseCommitPending
+  val releaseSiblingTargetOffsetY = state.releaseSiblingTargetOffsetY(key)
+  val siblingHandoffBase = siblingHandoffBaseOffsetY
+  val siblingOffsetY =
+    when {
+      isAnyDragging && !isDragging -> siblingAnim.value
+      isReleaseCommitPending -> siblingAnim.value - releaseSiblingTargetOffsetY
+      siblingHandoffBase != null -> siblingAnim.value - siblingHandoffBase
+      siblingHandoffPending -> siblingAnim.value
+      else -> 0f
+    }
   val pinnableContainer = LocalPinnableContainer.current
+  val shouldPin = isDragging || isSettling
 
-  DisposableEffect(pinnableContainer, isDragging || isSettling) {
-    val pinnedHandle = if (isDragging || isSettling) pinnableContainer?.pin() else null
+  SideEffect {
+    if (isAnyDragging) {
+      siblingHandoffPending = true
+    }
+  }
+
+  DisposableEffect(pinnableContainer, shouldPin) {
+    val pinnedHandle = if (shouldPin) pinnableContainer?.pin() else null
     onDispose { pinnedHandle?.release() }
+  }
+
+  LaunchedEffect(key, dragSessionRevision, isAnyDragging, siblingTargetOffsetY) {
+    if (isAnyDragging) {
+      siblingHandoffBaseOffsetY = null
+      siblingAnim.animateTo(
+        targetValue = siblingTargetOffsetY,
+        animationSpec = ReorderSiblingSpring,
+      )
+      return@LaunchedEffect
+    }
+    val handoffBaseOffsetY = if (isReleaseCommitPending) releaseSiblingTargetOffsetY else 0f
+    siblingHandoffBaseOffsetY = handoffBaseOffsetY
+    siblingHandoffPending = false
+    siblingAnim.animateTo(targetValue = handoffBaseOffsetY, animationSpec = ReorderSiblingSpring)
+    siblingHandoffBaseOffsetY = null
   }
 
   LaunchedEffect(key, isSettling) {
@@ -416,7 +556,7 @@ fun <K : Any> Modifier.reorderableItem(state: ReorderableLazyColumnState<K>, key
     state.clearSettling(key)
   }
 
-  return this.zIndex(if (isDragging) 2f else 0f)
+  return this.zIndex(if (isDragging || isSettling) 2f else 0f)
     .onPlaced { coordinates ->
       state.updateItemPlacement(key = key, placedTop = coordinates.positionInWindow().y)
     }
@@ -424,7 +564,7 @@ fun <K : Any> Modifier.reorderableItem(state: ReorderableLazyColumnState<K>, key
       val placeable = measurable.measure(constraints)
       layout(placeable.width, placeable.height) {
         placeable.placeWithLayer(0, 0) {
-          translationY = settlingAnim.value + state.draggedOffsetY(key)
+          translationY = settlingAnim.value + state.draggedOffsetY(key) + siblingOffsetY
         }
       }
     }
@@ -437,7 +577,11 @@ fun <K : Any> LazyItemScope.reorderableAnimatedItem(
   modifier: Modifier = Modifier,
 ): Modifier {
   val placementSpec =
-    if (state.isDragging(key) || state.isSettling(key)) null else ReorderPlacementSpring
+    if (state.suppressLazyPlacementAnimation || state.isSettling(key)) {
+      null
+    } else {
+      ReorderPlacementSpring
+    }
   return modifier.animateItem(fadeInSpec = null, placementSpec = placementSpec, fadeOutSpec = null)
 }
 
@@ -542,6 +686,9 @@ fun <K : Any> Modifier.reorderableDragHandle(
 }
 
 private val ReorderReleaseSpring =
+  spring<Float>(dampingRatio = 0.9f, stiffness = Spring.StiffnessMedium)
+
+private val ReorderSiblingSpring =
   spring<Float>(dampingRatio = 0.9f, stiffness = Spring.StiffnessMedium)
 
 private val ReorderPlacementSpring =

@@ -20,30 +20,62 @@ class ReorderInteractionTest {
     assertEquals(listOf("b", "a", "c", "d"), interaction.orderState.keys)
 
     val secondProposal =
-      interaction.publishLayout(layoutSnapshot(item("b", 0, 0f, 50f), item("c", 2, 100f, 150f)))
+      interaction.publishLayout(
+        layoutSnapshot(item("a", 0, -50f, 0f), item("b", 1, 0f, 50f), item("c", 2, 50f, 100f))
+      )
     assertEquals(2, secondProposal?.targetIndex)
     assertTrue(interaction.commitTarget(requireNotNull(secondProposal)))
     assertEquals(listOf("b", "c", "a", "d"), interaction.orderState.keys)
+    assertEquals(listOf("a", "b", "c", "d"), interaction.orderState.layoutKeys)
   }
 
   @Test
-  fun `stale layout after order revision is ignored until matching layout arrives`() {
+  fun `stable source layout remains usable after order revision`() {
     val interaction = interaction(listOf("a", "b", "c"))
     val initial =
       layoutSnapshot(item("a", 1, 0f, 50f), item("b", 2, 50f, 100f), item("c", 3, 100f, 150f))
     interaction.publishLayout(initial)
     assertTrue(interaction.beginDrag("a", pointerY = 25f, pointerOffsetInItemY = 25f))
     interaction.updateDraggedSize(height = 50f)
-    val proposal = requireNotNull(interaction.updatePointer(pointerY = 130f))
+    val proposal = requireNotNull(interaction.updatePointer(pointerY = 80f))
     assertTrue(interaction.commitTarget(proposal))
 
-    assertNull(interaction.publishLayout(initial))
-    assertNull(interaction.updatePointer(pointerY = 131f))
+    interaction.publishLayout(initial)
 
-    val matching =
-      layoutSnapshot(item("b", 1, 0f, 50f), item("c", 2, 50f, 100f), item("a", 3, 100f, 150f))
-    interaction.publishLayout(matching)
+    assertEquals(50f, interaction.draggedItemInCurrentSourceLayout()?.height)
     assertTrue(interaction.orderState.isDragging)
+  }
+
+  @Test
+  fun `destination anchor follows scroll after its boundary item leaves the published layout`() {
+    val interaction = interaction(listOf("a", "b", "c", "d", "e"))
+    interaction.publishLayout(
+      layoutSnapshot(item("a", 0, 0f, 80f), item("b", 1, 80f, 120f), item("c", 2, 120f, 220f))
+    )
+    assertTrue(interaction.beginDrag("a", pointerY = 40f, pointerOffsetInItemY = 40f))
+    interaction.updateDraggedSize(height = 80f)
+    interaction.publishLayout(
+      layoutSnapshot(
+        item("a", 0, -100f, -20f),
+        item("b", 1, -20f, 20f),
+        item("c", 2, 20f, 120f),
+        item("d", 3, 120f, 160f),
+      )
+    )
+    val proposal = requireNotNull(interaction.updatePointer(pointerY = 110f))
+    assertEquals(3, proposal.targetIndex)
+    assertTrue(interaction.commitTarget(proposal))
+    assertEquals(80f, interaction.draggedDestinationTopY())
+
+    interaction.publishLayout(
+      layoutSnapshot(item("a", 0, -100f, -20f), item("b", 1, -20f, 20f), item("c", 2, 20f, 120f))
+    )
+    assertEquals(80f, interaction.draggedDestinationTopY())
+
+    interaction.publishLayout(
+      layoutSnapshot(item("a", 0, -110f, -30f), item("b", 1, -30f, 10f), item("c", 2, 10f, 110f))
+    )
+    assertEquals(70f, interaction.draggedDestinationTopY())
   }
 
   @Test

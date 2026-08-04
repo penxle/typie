@@ -43,6 +43,9 @@ internal class ReorderState<K : Any>(initialKeys: List<K> = emptyList()) {
   val keys: List<K>
     get() = _keys
 
+  val layoutKeys: List<K>
+    get() = activeDrag?.startKeys ?: _keys
+
   val draggingKey: K?
     get() = activeDrag?.key
 

@@ -610,7 +610,15 @@ private fun RelatedNotesSheetContent(
         rememberNoteListReorderState(items = listItems, scrollState = sceneScrollState)
 
       NoteEditorBringIntoViewScope {
-        Box(modifier = Modifier.fillMaxSize().reorderableViewport(state = reorderState)) {
+        Box(
+          modifier =
+            Modifier.fillMaxSize()
+              .reorderableViewport(
+                state = reorderState,
+                viewportTopInset = EditorSubPaneContentTopPadding,
+                viewportBottomInset = safeBottomInset + keyboardOcclusion,
+              )
+        ) {
           NoteList(
             identity =
               NoteListIdentity(siteId = model.siteId, status = status, entityId = entityId),

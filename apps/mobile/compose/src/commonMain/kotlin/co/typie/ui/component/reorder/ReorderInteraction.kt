@@ -1,5 +1,7 @@
 package co.typie.ui.component.reorder
 
+import kotlin.math.abs
+
 internal data class ReorderTargetProposal<K : Any>(
   val draggedKey: K,
   val sourceOrderRevision: Long,
@@ -13,6 +15,7 @@ internal class ReorderInteraction<K : Any>(val orderState: ReorderState<K>) {
   private var pointerY: Float? = null
   private var pointerOffsetInItemY = 0f
   private var draggedHeight: Float? = null
+  private var draggedSlotTopY: Float? = null
   private var direction = 0
 
   fun beginDrag(key: K, pointerY: Float, pointerOffsetInItemY: Float): Boolean {
@@ -26,6 +29,7 @@ internal class ReorderInteraction<K : Any>(val orderState: ReorderState<K>) {
     this.pointerY = pointerY
     this.pointerOffsetInItemY = pointerOffsetInItemY
     draggedHeight = null
+    draggedSlotTopY = layoutSnapshot?.items?.firstOrNull { it.key == key }?.top
     direction = 0
     return true
   }
@@ -57,23 +61,43 @@ internal class ReorderInteraction<K : Any>(val orderState: ReorderState<K>) {
     if (!orderState.isDragging) {
       layoutSnapshot = snapshot
       sourceSnapshot = snapshot
+      draggedSlotTopY = null
       blockOffset = discoverReorderBlockOffset(orderState.keys, snapshot)
       return null
     }
 
     val currentBlockOffset = blockOffset ?: return null
+    val previousSourceSnapshot = sourceSnapshot
+    val projection = projectSnapshot(snapshot, currentBlockOffset)
     sourceSnapshot = snapshot
-    layoutSnapshot =
-      projectReorderSnapshotOntoDisplayedSlots(
-        displayedKeys = orderState.keys,
-        blockOffset = currentBlockOffset,
-        snapshot = snapshot,
-      )
+    layoutSnapshot = projection.snapshot
+    updateDraggedSlotTop(
+      projectedSlotTop = projection.draggedSlotTop,
+      previousSourceSnapshot = previousSourceSnapshot,
+      currentSourceSnapshot = snapshot,
+    )
     return proposeTarget(scrollDirection)
   }
 
-  fun draggedItemInPublishedLayout(): ReorderLayoutItem<K>? =
-    layoutSnapshot?.items?.firstOrNull { it.key == orderState.draggingKey }
+  fun draggedItemInCurrentSourceLayout(): ReorderLayoutItem<K>? {
+    val draggedKey = orderState.draggingKey ?: return null
+    val layoutIndex = orderState.layoutKeys.indexOf(draggedKey)
+    val currentBlockOffset = blockOffset
+    if (layoutIndex == -1 || currentBlockOffset == null) return null
+    val expectedLazyIndex = currentBlockOffset + layoutIndex
+    return sourceSnapshot?.items?.firstOrNull { item ->
+      item.key == draggedKey && item.lazyIndex == expectedLazyIndex
+    }
+  }
+
+  fun draggedDestinationTopY(): Float? = draggedSlotTopY.takeIf { orderState.isDragging }
+
+  fun projectedViewportAnchor(): ReorderLayoutItem<K>? {
+    val snapshot = layoutSnapshot ?: return null
+    return snapshot.items
+      .filter { item -> item.bottom > snapshot.viewportTop && item.top < snapshot.viewportBottom }
+      .minByOrNull(ReorderLayoutItem<K>::top)
+  }
 
   fun commitTarget(proposal: ReorderTargetProposal<K>): Boolean {
     if (orderState.draggingKey != proposal.draggedKey) return false
@@ -81,18 +105,14 @@ internal class ReorderInteraction<K : Any>(val orderState: ReorderState<K>) {
     val changed = orderState.moveDraggedTo(proposal.targetIndex)
     if (changed) {
       val currentBlockOffset = blockOffset
-      layoutSnapshot =
+      val projection =
         if (currentBlockOffset == null) {
           null
         } else {
-          sourceSnapshot?.let { snapshot ->
-            projectReorderSnapshotOntoDisplayedSlots(
-              displayedKeys = orderState.keys,
-              blockOffset = currentBlockOffset,
-              snapshot = snapshot,
-            )
-          }
+          sourceSnapshot?.let { snapshot -> projectSnapshot(snapshot, currentBlockOffset) }
         }
+      layoutSnapshot = projection?.snapshot
+      projection?.draggedSlotTop?.let { draggedSlotTopY = it }
     }
     return changed
   }
@@ -153,9 +173,66 @@ internal class ReorderInteraction<K : Any>(val orderState: ReorderState<K>) {
     )
   }
 
+  private fun projectSnapshot(
+    snapshot: ReorderLayoutSnapshot<K>,
+    blockOffset: Int,
+  ): ReorderLayoutProjection<K> {
+    val draggedKey =
+      orderState.draggingKey
+        ?: return ReorderLayoutProjection(snapshot = snapshot, draggedSlotTop = null)
+    val currentHeight =
+      draggedHeight ?: return ReorderLayoutProjection(snapshot = snapshot, draggedSlotTop = null)
+    return projectReorderLayoutFromStableSource(
+      layoutKeys = orderState.layoutKeys,
+      projectedKeys = orderState.keys,
+      draggedKey = draggedKey,
+      draggedHeight = currentHeight,
+      itemSpacing = snapshot.itemSpacing,
+      blockOffset = blockOffset,
+      snapshot = snapshot,
+    )
+  }
+
+  private fun updateDraggedSlotTop(
+    projectedSlotTop: Float?,
+    previousSourceSnapshot: ReorderLayoutSnapshot<K>?,
+    currentSourceSnapshot: ReorderLayoutSnapshot<K>,
+  ) {
+    draggedSlotTopY =
+      projectedSlotTop
+        ?: draggedSlotTopY?.let { previousSlotTop ->
+          sourceLayoutTranslation(
+              previousSnapshot = previousSourceSnapshot,
+              currentSnapshot = currentSourceSnapshot,
+              referenceY = previousSlotTop,
+            )
+            ?.let(previousSlotTop::plus) ?: previousSlotTop
+        }
+  }
+
+  private fun sourceLayoutTranslation(
+    previousSnapshot: ReorderLayoutSnapshot<K>?,
+    currentSnapshot: ReorderLayoutSnapshot<K>,
+    referenceY: Float,
+  ): Float? =
+    previousSnapshot
+      ?.items
+      ?.mapNotNull { previousItem ->
+        currentSnapshot.items
+          .firstOrNull { currentItem ->
+            currentItem.key == previousItem.key && currentItem.lazyIndex == previousItem.lazyIndex
+          }
+          ?.let { currentItem ->
+            abs(previousItem.top - referenceY) to (currentItem.top - previousItem.top)
+          }
+      }
+      ?.minByOrNull { (distanceFromSlot) -> distanceFromSlot }
+      ?.second
+
   private fun clearDragInputs() {
     pointerY = null
     draggedHeight = null
+    draggedSlotTopY = null
     direction = 0
     layoutSnapshot = null
     sourceSnapshot = null

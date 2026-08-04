@@ -163,8 +163,8 @@ fun SpaceScreen() {
   val reorderState =
     rememberReorderableLazyColumnState(keys = serverEntityIds, lazyListState = scrollState)
   val displayEntities =
-    remember(serverEntities, reorderState.keys) {
-      displayEntityRows(serverEntities, reorderState.keys)
+    remember(serverEntities, reorderState.layoutKeys) {
+      displayEntityRows(serverEntities, reorderState.layoutKeys)
     }
   val selection = rememberEntityContainerSelection(displayEntities)
   val selectionState = selection.state

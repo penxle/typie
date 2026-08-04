@@ -85,7 +85,8 @@ fun EntityContainerListContent(
     }
 
     if (isReordering) {
-      itemsIndexed(items = items, key = { _, entity -> entity.id }) { index, entity ->
+      itemsIndexed(items = items, key = { _, entity -> entity.id }) { _, entity ->
+        val projectedIndex = reorderState.keys.indexOf(entity.id)
         val isDragging = reorderState.isDragging(entity.id)
         EntityContainerReorderRow(
           modifier =
@@ -93,8 +94,8 @@ fun EntityContainerListContent(
               .reorderableItem(state = reorderState, key = entity.id),
           item = entity,
           isDragging = isDragging,
-          isFirst = index == 0,
-          isLast = index == items.lastIndex,
+          isFirst = projectedIndex == 0,
+          isLast = projectedIndex == reorderState.keys.lastIndex,
           dragHandleModifier =
             Modifier.reorderableDragHandle(
               state = reorderState,

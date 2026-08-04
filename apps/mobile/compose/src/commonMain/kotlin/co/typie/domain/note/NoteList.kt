@@ -158,7 +158,7 @@ internal fun NoteList(
   val isLoading = queryState is QueryState.Loading
   val showErrorState = queryState is QueryState.Error
   val showEmptyState = queryState is QueryState.Success<*> && items.isEmpty()
-  val displayedItems = displayOrderedNoteItems(items, reorderState.keys)
+  val displayedItems = displayOrderedNoteItems(items, reorderState.layoutKeys)
 
   SideEffect { noteReorderState.sync(identity = identity, notes = authoritativeNotes) }
   DisposableEffect(noteReorderState) { onDispose(noteReorderState::dispose) }

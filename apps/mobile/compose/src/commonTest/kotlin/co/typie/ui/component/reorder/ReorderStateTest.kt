@@ -8,6 +8,20 @@ import kotlin.test.assertTrue
 
 class ReorderStateTest {
   @Test
+  fun `layout order stays at drag start until a moved release`() {
+    val state = ReorderState(listOf("a", "b", "c"))
+
+    assertTrue(state.beginDrag("c"))
+    assertTrue(state.moveDraggedTo(0))
+
+    assertEquals(listOf("c", "a", "b"), state.keys)
+    assertEquals(listOf("a", "b", "c"), state.layoutKeys)
+
+    assertEquals(0, state.endDrag(releaseOffsetY = 0f)?.toIndex)
+    assertEquals(listOf("c", "a", "b"), state.layoutKeys)
+  }
+
+  @Test
   fun `moving a drag to a different target returns one drop`() {
     val state = ReorderState(listOf("a", "b", "c"))
 

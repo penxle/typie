@@ -53,26 +53,161 @@ class ReorderLayoutTest {
   }
 
   @Test
-  fun `stale item keys are projected onto the current lazy slots`() {
-    val stale =
+  fun `stable source is projected downward with variable heights and spacing`() {
+    val source =
       layoutSnapshot(
-        item("a", lazyIndex = 1, top = -40f, bottom = 10f),
-        item("b", lazyIndex = 2, top = 10f, bottom = 60f),
-        item("c", lazyIndex = 3, top = 60f, bottom = 110f),
+        item("a", lazyIndex = 1, top = 0f, bottom = 40f),
+        item("b", lazyIndex = 2, top = 50f, bottom = 130f),
+        item("c", lazyIndex = 3, top = 140f, bottom = 170f),
       )
 
     assertEquals(
       layoutSnapshot(
-        item("b", lazyIndex = 1, top = -40f, bottom = 10f),
-        item("c", lazyIndex = 2, top = 10f, bottom = 60f),
-        item("a", lazyIndex = 3, top = 60f, bottom = 110f),
+        item("a", lazyIndex = 3, top = 130f, bottom = 170f),
+        item("b", lazyIndex = 1, top = 0f, bottom = 80f),
+        item("c", lazyIndex = 2, top = 90f, bottom = 120f),
       ),
-      projectReorderSnapshotOntoDisplayedSlots(
-        displayedKeys = listOf("b", "c", "a", "d"),
-        blockOffset = 1,
-        snapshot = stale,
+      projectReorderLayoutFromStableSource(
+          layoutKeys = listOf("a", "b", "c"),
+          projectedKeys = listOf("b", "c", "a"),
+          draggedKey = "a",
+          draggedHeight = 40f,
+          itemSpacing = 10f,
+          blockOffset = 1,
+          snapshot = source,
+        )
+        .snapshot,
+    )
+  }
+
+  @Test
+  fun `stable source is projected upward with variable heights and spacing`() {
+    val source =
+      layoutSnapshot(
+        item("a", lazyIndex = 0, top = 0f, bottom = 30f),
+        item("b", lazyIndex = 1, top = 40f, bottom = 100f),
+        item("c", lazyIndex = 2, top = 110f, bottom = 150f),
+        item("d", lazyIndex = 3, top = 160f, bottom = 230f),
+      )
+
+    assertEquals(
+      layoutSnapshot(
+        item("a", lazyIndex = 0, top = 0f, bottom = 30f),
+        item("b", lazyIndex = 2, top = 120f, bottom = 180f),
+        item("c", lazyIndex = 3, top = 190f, bottom = 230f),
+        item("d", lazyIndex = 1, top = 40f, bottom = 110f),
+      ),
+      projectReorderLayoutFromStableSource(
+          layoutKeys = listOf("a", "b", "c", "d"),
+          projectedKeys = listOf("a", "d", "b", "c"),
+          draggedKey = "d",
+          draggedHeight = 70f,
+          itemSpacing = 10f,
+          blockOffset = 0,
+          snapshot = source,
+        )
+        .snapshot,
+    )
+  }
+
+  @Test
+  fun `reversing to the source index clears sibling displacement`() {
+    assertEquals(
+      0f,
+      reorderItemDisplacement(
+        layoutKeys = listOf("a", "b", "c"),
+        projectedKeys = listOf("a", "b", "c"),
+        draggedKey = "c",
+        itemKey = "b",
+        draggedHeight = 80f,
+        itemSpacing = 12f,
       ),
     )
+  }
+
+  @Test
+  fun `dragged destination top follows the actual target slot height`() {
+    val source =
+      layoutSnapshot(
+        item("a", lazyIndex = 0, top = 0f, bottom = 40f),
+        item("b", lazyIndex = 1, top = 50f, bottom = 150f),
+      )
+
+    val projected =
+      projectReorderLayoutFromStableSource(
+          layoutKeys = listOf("a", "b"),
+          projectedKeys = listOf("b", "a"),
+          draggedKey = "a",
+          draggedHeight = 40f,
+          itemSpacing = 10f,
+          blockOffset = 0,
+          snapshot = source,
+        )
+        .snapshot
+
+    assertEquals(110f, projected.items.single { it.key == "a" }.top)
+  }
+
+  @Test
+  fun `upward destination just below the published range is extrapolated from its boundary`() {
+    val source =
+      ReorderLayoutSnapshot(
+        viewportTop = 0f,
+        viewportBottom = 160f,
+        itemSpacing = 10f,
+        items =
+          listOf(
+            item("a", lazyIndex = 0, top = 0f, bottom = 40f),
+            item("b", lazyIndex = 1, top = 50f, bottom = 90f),
+            item("c", lazyIndex = 2, top = 100f, bottom = 150f),
+            item("e", lazyIndex = 4, top = 300f, bottom = 350f),
+          ),
+      )
+
+    val projected =
+      projectReorderLayoutFromStableSource(
+          layoutKeys = listOf("a", "b", "c", "d", "e"),
+          projectedKeys = listOf("a", "b", "c", "e", "d"),
+          draggedKey = "e",
+          draggedHeight = 50f,
+          itemSpacing = 10f,
+          blockOffset = 0,
+          snapshot = source,
+        )
+        .snapshot
+
+    assertEquals(160f, projected.items.single { it.key == "e" }.top)
+  }
+
+  @Test
+  fun `downward destination just above the published range is extrapolated from its boundary`() {
+    val source =
+      ReorderLayoutSnapshot(
+        viewportTop = 100f,
+        viewportBottom = 260f,
+        itemSpacing = 10f,
+        items =
+          listOf(
+            item("a", lazyIndex = 0, top = -100f, bottom = -50f),
+            item("c", lazyIndex = 2, top = 100f, bottom = 140f),
+            item("d", lazyIndex = 3, top = 150f, bottom = 190f),
+            item("e", lazyIndex = 4, top = 200f, bottom = 240f),
+          ),
+      )
+
+    val projected =
+      projectReorderLayoutFromStableSource(
+          layoutKeys = listOf("a", "b", "c", "d", "e"),
+          projectedKeys = listOf("b", "a", "c", "d", "e"),
+          draggedKey = "a",
+          draggedHeight = 50f,
+          itemSpacing = 10f,
+          blockOffset = 0,
+          snapshot = source,
+        )
+        .snapshot
+
+    assertEquals(40f, projected.items.single { it.key == "a" }.top)
   }
 
   @Test
