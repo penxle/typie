@@ -522,14 +522,22 @@ impl Editor {
 
     pub fn character_counts(&self) -> (CharacterCount, CharacterCount) {
         let doc = self.state.view();
-        let doc_text = editor_state::flat_text(&doc, 0..editor_state::flat_size(&doc));
+        let doc_text = editor_state::doc_plain_text(&doc);
         let selection_text = Slice::extract(&self.state)
             .map(|s| s.to_text())
             .unwrap_or_default();
 
         let resource = self.resource.lock().unwrap();
-        let doc = count_text(&doc_text, resource.general_category());
-        let selection = count_text(&selection_text, resource.general_category());
+        let doc = count_text(
+            &doc_text,
+            &resource.segmenters().grapheme,
+            resource.general_category(),
+        );
+        let selection = count_text(
+            &selection_text,
+            &resource.segmenters().grapheme,
+            resource.general_category(),
+        );
         (doc, selection)
     }
 
@@ -3881,6 +3889,35 @@ mod tests {
         assert_eq!(sel.with_whitespace, 0);
         assert_eq!(sel.without_whitespace, 0);
         assert_eq!(sel.without_whitespace_and_punctuation, 0);
+    }
+
+    #[test]
+    fn character_counts_multiple_blocks_count_the_paragraph_separator() {
+        let (state, _p1) = state! {
+            doc { root {
+                p1: paragraph { text("ab") }
+                paragraph { text("cd") }
+            } }
+            selection: (p1, 0)
+        };
+        let editor = Editor::new_test(state);
+        let (doc, _) = editor.character_counts();
+        assert_eq!(doc.with_whitespace, 5);
+        assert_eq!(doc.without_whitespace, 4);
+        assert_eq!(doc.without_whitespace_and_punctuation, 4);
+    }
+
+    #[test]
+    fn character_counts_zwj_emoji_is_single_grapheme() {
+        let (state, _p1) = state! {
+            doc { root { p1: paragraph { text("👨\u{200D}👩\u{200D}👧\u{200D}👦") } } }
+            selection: (p1, 0)
+        };
+        let editor = Editor::new_test(state);
+        let (doc, _) = editor.character_counts();
+        assert_eq!(doc.with_whitespace, 1);
+        assert_eq!(doc.without_whitespace, 1);
+        assert_eq!(doc.without_whitespace_and_punctuation, 1);
     }
 
     #[test]

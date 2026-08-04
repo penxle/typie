@@ -84,6 +84,7 @@ mod tests {
     use editor_crdt::Dot;
     use editor_macros::state;
     use editor_model::{AtomLeaf, NodeType};
+    use editor_state::doc_plain_text;
     use editor_state::{Position, Selection};
 
     #[test]
@@ -249,6 +250,97 @@ mod tests {
         };
         let slice = Slice::extract(&s).unwrap();
         assert_eq!(slice.to_text(), "x y\tz");
+    }
+
+    #[test]
+    fn doc_plain_text_atoms_and_breaks() {
+        let mut b = DocBuilder::new();
+        let root = Dot::ROOT;
+        b.horizontal_rule(&[root]);
+        let p1 = b.block(NodeType::Paragraph, &[root]);
+        b.text("ab");
+        b.atom(AtomLeaf::HardBreak, &[]);
+        b.text("cd");
+        b.image(&[root]);
+        let _p2 = b.block(NodeType::Paragraph, &[root]);
+        b.text("e");
+        b.atom(AtomLeaf::Tab, &[]);
+        b.text("f");
+        let _empty = b.block(NodeType::Paragraph, &[root]);
+        let p4 = b.block(NodeType::Paragraph, &[root]);
+        b.text("g");
+        let s = b.finish(Some(Selection::new(
+            Position::new(p1, 0),
+            Position::new(p4, 1),
+        )));
+        assert_eq!(doc_plain_text(&s.view()), "ab\ncd\ne\tf\n\ng");
+    }
+
+    #[test]
+    fn doc_plain_text_matches_slice_to_text_for_full_selection() {
+        let mut b = DocBuilder::new();
+        let root = Dot::ROOT;
+        let p1 = b.block(NodeType::Paragraph, &[root]);
+        b.text("ab");
+        b.atom(AtomLeaf::HardBreak, &[]);
+        b.text("cd");
+        let _empty = b.block(NodeType::Paragraph, &[root]);
+        let p3 = b.block(NodeType::Paragraph, &[root]);
+        b.text("e");
+        b.atom(AtomLeaf::Tab, &[]);
+        b.text("f");
+        let s = b.finish(Some(Selection::new(
+            Position::new(p1, 0),
+            Position::new(p3, 3),
+        )));
+        let slice = Slice::extract(&s).unwrap();
+        assert_eq!(slice.to_text(), doc_plain_text(&s.view()));
+    }
+
+    #[test]
+    fn doc_plain_text_table_is_tsv() {
+        let (s, ..) = state! {
+            doc { r: root {
+                paragraph { text("x") }
+                table {
+                    table_row {
+                        table_cell { paragraph { text("a") } }
+                        table_cell { paragraph { text("b") } }
+                    }
+                    table_row {
+                        table_cell { paragraph { text("c") } }
+                        table_cell { paragraph { text("d") } }
+                    }
+                }
+                paragraph { text("y") }
+            } }
+            selection: (r, 0)
+        };
+        assert_eq!(doc_plain_text(&s.view()), "x\na\tb\nc\td\ny");
+    }
+
+    #[test]
+    fn doc_plain_text_cell_internal_tab_and_hard_break_flatten_to_space() {
+        let mut b = DocBuilder::new();
+        let root = Dot::ROOT;
+        let table = b.block(NodeType::Table, &[root]);
+        let row = b.block(NodeType::TableRow, &[root, table]);
+        let c00 = b.block(NodeType::TableCell, &[root, table, row]);
+        let _cp0 = b.block(NodeType::Paragraph, &[root, table, row, c00]);
+        b.text("x");
+        b.atom(AtomLeaf::Tab, &[]);
+        b.text("y");
+        let c01 = b.block(NodeType::TableCell, &[root, table, row]);
+        let _cp1 = b.block(NodeType::Paragraph, &[root, table, row, c01]);
+        b.text("x");
+        b.atom(AtomLeaf::HardBreak, &[]);
+        b.text("y");
+        let s = b.finish(None);
+        assert_eq!(
+            doc_plain_text(&s.view()),
+            "x y\tx y\n",
+            "each cell flattens its tab and hard break to a space; the trailing newline is the derived paragraph the root schema requires after a table"
+        );
     }
 
     fn cell_rect_sel(

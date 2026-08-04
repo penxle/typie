@@ -94,13 +94,25 @@ pub struct GraphWithAnchors {
 }
 
 #[cfg_attr(feature = "wasm", wasm_bindgen::prelude::wasm_bindgen)]
-pub struct EditorServer;
+pub struct EditorServer {
+    icu: editor_resource::IcuResources,
+}
 
 #[cfg_attr(feature = "wasm", editor_macros::ffi_export(wasm))]
 #[allow(dead_code)]
 impl EditorServer {
-    pub fn create() -> Owned<Self> {
-        into_owned(Self)
+    pub fn create(icu_data: Vec<u8>) -> EditorResult<Owned<Self>> {
+        let icu = editor_resource::IcuResources::from_icu_data(&icu_data)?;
+        Ok(into_owned(Self { icu }))
+    }
+
+    pub fn count_characters(&self, text: String) -> u32 {
+        editor_resource::count_text(
+            &text,
+            &self.icu.segmenters.grapheme,
+            &self.icu.general_category,
+        )
+        .with_whitespace
     }
 
     #[cfg(feature = "wasm-server")]
@@ -157,7 +169,7 @@ impl EditorServer {
         let state = editor_state::State::from_plain(&plain).map_err(|e| EditorError::General {
             msg: format!("{e:?}"),
         })?;
-        Ok(extract_text_from_view(&state.view()))
+        Ok(editor_state::doc_plain_text(&state.view()))
     }
 
     pub fn default_doc_with_preset(
@@ -277,7 +289,7 @@ impl EditorServer {
         let bundles = crate::graph::decode_length_prefixed(&packed_bundles)?;
 
         let mut state = editor_state::State::from_changesets(existing_cs, None)?;
-        let base_char_count = count_characters(&extract_text_from_view(&state.view()));
+        let base_char_count = doc_count(&self.icu, &state.view());
 
         let mut statuses: Vec<BundleStatus> = Vec::with_capacity(bundles.len());
         let mut char_counts: Vec<u32> = Vec::with_capacity(bundles.len());
@@ -296,7 +308,7 @@ impl EditorServer {
                 Err(_) => BundleStatus::Failed,
             };
             if status == BundleStatus::Applied {
-                last = count_characters(&extract_text_from_view(&state.view()));
+                last = doc_count(&self.icu, &state.view());
             }
             statuses.push(status);
             char_counts.push(last);
@@ -309,7 +321,7 @@ impl EditorServer {
             editor_codec::encode_dots(&heads).map_err(|e| FfiError::Serialization(e.to_string()))?
         };
         let plain = state.to_plain();
-        let text = extract_text_from_view(&state.view());
+        let text = editor_state::doc_plain_text(&state.view());
         let totality_violations = collect_zombie_dots(&state).len() as u32;
         let projection_degraded = state.projection_degraded();
 
@@ -585,7 +597,7 @@ impl EditorServer {
                 .into_graph_input();
         let state = crate::graph::build_state_tolerant(cs)?;
         let plain = state.to_plain();
-        let text = extract_text_from_view(&state.view());
+        let text = editor_state::doc_plain_text(&state.view());
         let projection_degraded = state.projection_degraded();
         Ok(Materialized {
             plain,
@@ -601,7 +613,7 @@ impl EditorServer {
                 .map_err(|e| FfiError::Deserialization(e.to_string()))?
                 .into_graph_input();
         let state = crate::graph::build_state_tolerant(cs)?;
-        Ok(extract_text_from_view(&state.view()))
+        Ok(editor_state::doc_plain_text(&state.view()))
     }
 
     /// Migration entry point: resolve a normalized v1 comment anchor against the
@@ -703,50 +715,19 @@ fn sweep_impl(
         .map_err(|e| FfiError::SweepFailed(e.to_string()))
 }
 
-fn extract_text_from_view(view: &editor_model::DocView<'_>) -> String {
-    fn walk(nv: editor_model::NodeView<'_>, out: &mut String) {
-        if nv.spec().is_leaf() {
-            return;
-        }
-        for child in nv.children() {
-            match child {
-                editor_model::ChildView::Block(b) => walk(b, out),
-                editor_model::ChildView::Leaf(l) => {
-                    if let Some(ch) = l.as_char() {
-                        out.push(ch);
-                    }
-                }
-            }
-        }
-        out.push('\n');
-    }
-    let mut out = String::new();
-    if let Some(root) = view.root() {
-        walk(root, &mut out);
-    }
-    out.trim_end_matches('\n').to_string()
+fn doc_count(icu: &editor_resource::IcuResources, view: &editor_model::DocView<'_>) -> u32 {
+    let text = editor_state::doc_plain_text(view);
+    editor_resource::count_text(&text, &icu.segmenters.grapheme, &icu.general_category)
+        .with_whitespace
 }
 
-/// Mirror of the API's `countCharacters`: drop zero-width spaces, collapse
-/// whitespace runs to a single space, trim, and count Unicode scalar values.
-fn count_characters(text: &str) -> u32 {
-    let mut collapsed = String::with_capacity(text.len());
-    let mut prev_ws = false;
-    for c in text.chars() {
-        if c == '\u{200B}' {
-            continue;
-        }
-        if c.is_whitespace() {
-            if !prev_ws {
-                collapsed.push(' ');
-            }
-            prev_ws = true;
-        } else {
-            collapsed.push(c);
-            prev_ws = false;
+#[cfg(test)]
+impl EditorServer {
+    pub(crate) fn new_test() -> Self {
+        Self {
+            icu: editor_resource::IcuResources::new_test(),
         }
     }
-    collapsed.trim().chars().count() as u32
 }
 
 use crate::doc_builder::build_default_doc;
@@ -810,7 +791,7 @@ mod tests {
                 payload: dummy_payload(),
             }],
         };
-        let server = EditorServer;
+        let server = EditorServer::new_test();
         let merged_bytes = server
             .apply(
                 enc_css(std::slice::from_ref(&cs_a)),
@@ -833,7 +814,7 @@ mod tests {
                 payload: dummy_payload(),
             }],
         };
-        let server = EditorServer;
+        let server = EditorServer::new_test();
         let merged_bytes = server
             .apply(
                 enc_css(std::slice::from_ref(&cs)),
@@ -855,7 +836,7 @@ mod tests {
                 payload: dummy_payload(),
             }],
         };
-        let server = EditorServer;
+        let server = EditorServer::new_test();
         // existing already has cs; new payload re-sends the same cs
         let merged_bytes = server
             .apply(
@@ -882,7 +863,7 @@ mod tests {
         };
         let parent_cs = Changeset::<EditOp> { ops: vec![parent] };
         let child_cs = Changeset::<EditOp> { ops: vec![child] };
-        let server = EditorServer;
+        let server = EditorServer::new_test();
         let result = server.apply(enc_css(&[]), enc_css(&[child_cs, parent_cs]));
         assert!(matches!(
             result,
@@ -904,7 +885,7 @@ mod tests {
         };
         let parent_cs = Changeset::<EditOp> { ops: vec![parent] };
         let child_cs = Changeset::<EditOp> { ops: vec![child] };
-        let server = EditorServer;
+        let server = EditorServer::new_test();
         let merged_bytes = server
             .apply(
                 enc_css(&[]),
@@ -930,7 +911,7 @@ mod tests {
         let cs = Changeset::<EditOp> {
             ops: vec![op1, op2],
         };
-        let server = EditorServer;
+        let server = EditorServer::new_test();
         let merged_bytes = server
             .apply(enc_css(&[]), enc_css(std::slice::from_ref(&cs)))
             .unwrap();
@@ -947,7 +928,7 @@ mod tests {
             payload: dummy_payload(),
         };
         let cs = Changeset::<EditOp> { ops: vec![bad] };
-        let server = EditorServer;
+        let server = EditorServer::new_test();
         let result = server.apply(enc_css(&[]), enc_css(&[cs]));
         assert!(matches!(
             result,
@@ -978,7 +959,7 @@ mod tests {
         let cs_bad = Changeset::<EditOp> {
             ops: vec![new_first, new_reuse],
         };
-        let server = EditorServer;
+        let server = EditorServer::new_test();
         let result = server.apply(enc_css(&[cs_a]), enc_css(&[cs_bad]));
         assert!(matches!(
             result,
@@ -1006,7 +987,7 @@ mod tests {
         // Remote peer knows cs_a but not cs_b
         let known_heads = vec![Dot::new(1, 0)];
 
-        let server = EditorServer;
+        let server = EditorServer::new_test();
         let missing_bytes = server
             .missing_for(
                 enc_css(&[cs_a.clone(), cs_b.clone()]),
@@ -1028,7 +1009,7 @@ mod tests {
                 payload: dummy_payload(),
             }],
         };
-        let server = EditorServer;
+        let server = EditorServer::new_test();
         let heads_bytes = server.heads(enc_css(std::slice::from_ref(&cs_a))).unwrap();
         let heads = dec_dots(&heads_bytes);
         assert_eq!(heads, vec![Dot::new(1, 0)]);
@@ -1045,14 +1026,19 @@ mod tests {
     }
 
     #[test]
-    fn count_characters_matches_normalization() {
-        assert_eq!(count_characters("hello"), 5);
-        assert_eq!(count_characters("a\u{200B}b"), 2); // zero-width space stripped
-        assert_eq!(count_characters("a  b"), 3); // whitespace run collapsed → "a b"
-        assert_eq!(count_characters("  trim  "), 4); // trimmed → "trim"
-        assert_eq!(count_characters("line1\nline2"), 11); // newline → space → "line1 line2"
-        assert_eq!(count_characters(""), 0);
-        assert_eq!(count_characters("   "), 0);
+    fn count_characters_literal_grapheme_semantics() {
+        let server = EditorServer::new_test();
+        assert_eq!(server.count_characters("a  b".into()), 4);
+        assert_eq!(server.count_characters(" abc ".into()), 5);
+        assert_eq!(server.count_characters("a\n\nb".into()), 4);
+        assert_eq!(
+            server.count_characters("👨\u{200D}👩\u{200D}👧\u{200D}👦".into()),
+            1
+        );
+        assert_eq!(
+            server.count_characters("\u{1112}\u{1161}\u{11AB}".into()),
+            1
+        );
     }
 
     #[test]
@@ -1071,7 +1057,7 @@ mod tests {
                 payload: dummy_payload(),
             }],
         };
-        let server = EditorServer;
+        let server = EditorServer::new_test();
         let existing = enc_css(std::slice::from_ref(&cs_a));
         let applied_bundle = enc_css(std::slice::from_ref(&cs_b));
         let malformed_bundle = vec![0xFF, 0x00, 0x01];
@@ -1115,7 +1101,7 @@ mod tests {
                 payload: dummy_payload(),
             }],
         };
-        let server = EditorServer;
+        let server = EditorServer::new_test();
         let existing = enc_css(std::slice::from_ref(&cs_a));
         let packed = pack(&[enc_css(std::slice::from_ref(&orphan_bundle))]);
 
@@ -1155,7 +1141,7 @@ mod tests {
                 },
             ],
         };
-        let server = EditorServer;
+        let server = EditorServer::new_test();
         let existing = enc_css(std::slice::from_ref(&cs_a));
         let packed = pack(&[enc_css(std::slice::from_ref(&partial_bundle))]);
 
@@ -1169,7 +1155,7 @@ mod tests {
 
     #[test]
     fn collect_fold_counts_no_totality_violations_when_dead_parent_marker_is_revived() {
-        let server = EditorServer;
+        let server = EditorServer::new_test();
         let existing = enc_css(&zombie_css());
         let result = server.collect_fold(existing, pack(&[])).unwrap();
         assert_eq!(
@@ -1211,7 +1197,7 @@ mod tests {
 
     #[test]
     fn collect_fold_reports_projection_degraded_when_the_budget_caps() {
-        let server = EditorServer;
+        let server = EditorServer::new_test();
         let existing = enc_css(&degraded_prone_css());
 
         let clean = server.collect_fold(existing.clone(), pack(&[])).unwrap();
@@ -1232,7 +1218,7 @@ mod tests {
 
     #[test]
     fn materialize_reports_projection_degraded_when_the_budget_caps() {
-        let server = EditorServer;
+        let server = EditorServer::new_test();
         let graph = enc_css(&degraded_prone_css());
         let materialized = {
             let _guard = editor_model::override_repair_budget(1);
@@ -1243,7 +1229,7 @@ mod tests {
 
     #[test]
     fn revert_refuses_a_degraded_target() {
-        let server = EditorServer;
+        let server = EditorServer::new_test();
         let graph = enc_css(&degraded_prone_css());
         let target = server.heads(graph.clone()).unwrap();
 
@@ -1283,10 +1269,85 @@ mod tests {
                 },
             ],
         };
-        let server = EditorServer;
+        let server = EditorServer::new_test();
         let existing = enc_css(std::slice::from_ref(&cs));
         let result = server.collect_fold(existing, pack(&[])).unwrap();
         assert_eq!(result.totality_violations, 0);
+    }
+
+    #[test]
+    fn collect_fold_counts_graphemes_of_the_extracted_document() {
+        let ins = |id: Dot, parents: Vec<Dot>, pos: usize, item: SeqItem| Op {
+            id,
+            parents,
+            payload: EditOp::Seq(ListOp::Ins { pos, item }),
+        };
+        let paragraph = || SeqItem::Block {
+            node_type: editor_model::NodeType::Paragraph,
+            parents: vec![Dot::ROOT],
+            attrs: vec![],
+        };
+        let d = |c| Dot::new(6, c);
+        let e = |c| Dot::new(7, c);
+
+        let existing = enc_css(&[Changeset::<EditOp> {
+            ops: vec![
+                ins(d(0), vec![], 0, paragraph()),
+                ins(d(1), vec![d(0)], 1, SeqItem::Char('a')),
+                ins(d(2), vec![d(1)], 2, SeqItem::Char('👨')),
+                ins(d(3), vec![d(2)], 3, SeqItem::Char('\u{200D}')),
+                ins(d(4), vec![d(3)], 4, SeqItem::Char('👩')),
+                ins(d(5), vec![d(4)], 5, SeqItem::Char('\u{200D}')),
+                ins(d(6), vec![d(5)], 6, SeqItem::Char('👧')),
+                ins(d(7), vec![d(6)], 7, SeqItem::Char('\u{200D}')),
+                ins(d(8), vec![d(7)], 8, SeqItem::Char('👦')),
+                ins(
+                    d(9),
+                    vec![d(8)],
+                    9,
+                    SeqItem::Atom(editor_model::AtomLeaf::Tab),
+                ),
+                ins(d(10), vec![d(9)], 10, SeqItem::Char('b')),
+                ins(d(11), vec![d(10)], 11, paragraph()),
+                ins(d(12), vec![d(11)], 12, SeqItem::Char('c')),
+                ins(
+                    d(13),
+                    vec![d(12)],
+                    13,
+                    SeqItem::Atom(editor_model::AtomLeaf::HardBreak),
+                ),
+                ins(d(14), vec![d(13)], 14, SeqItem::Char('d')),
+            ],
+        }]);
+        let bundle = enc_css(&[Changeset::<EditOp> {
+            ops: vec![
+                ins(e(0), vec![d(14)], 15, SeqItem::Char('\u{1112}')),
+                ins(e(1), vec![e(0)], 16, SeqItem::Char('\u{1161}')),
+                ins(e(2), vec![e(1)], 17, SeqItem::Char('\u{11AB}')),
+            ],
+        }]);
+
+        let server = EditorServer::new_test();
+        let result = server.collect_fold(existing, pack(&[bundle])).unwrap();
+
+        assert_eq!(result.statuses, vec![BundleStatus::Applied]);
+        assert_eq!(
+            result.base_char_count, 8,
+            "tab, hard break and the paragraph separator each count as one character, and the seven code points of the family emoji collapse into one"
+        );
+        assert_eq!(
+            result.text, "a👨\u{200D}👩\u{200D}👧\u{200D}👦\tb\nc\nd\u{1112}\u{1161}\u{11AB}",
+            "the counted text keeps tabs, hard breaks and paragraph separators"
+        );
+        assert_eq!(
+            result.char_counts,
+            vec![9],
+            "the appended syllable is three code points but one grapheme"
+        );
+        assert_eq!(
+            server.extract_text(result.plain.clone()).unwrap(),
+            result.text
+        );
     }
 
     #[test]
@@ -1312,7 +1373,7 @@ mod tests {
                 payload: dummy_payload(),
             }],
         };
-        let server = EditorServer;
+        let server = EditorServer::new_test();
         let stream = [
             enc_css(std::slice::from_ref(&cs_a)),
             enc_css(std::slice::from_ref(&cs_b)),
@@ -1379,7 +1440,7 @@ mod tests {
                 payload: dummy_payload(),
             }],
         };
-        let server = EditorServer;
+        let server = EditorServer::new_test();
 
         let mut graph = enc_css(std::slice::from_ref(&cs_a));
         let mut live = server.heads(graph.clone()).unwrap();
@@ -1422,7 +1483,7 @@ mod tests {
                 payload: payload_b,
             }],
         };
-        let server = EditorServer;
+        let server = EditorServer::new_test();
         let result = server.apply(enc_css(&[cs_v1]), enc_css(&[cs_v2]));
         assert!(matches!(
             result,
@@ -1433,7 +1494,7 @@ mod tests {
     #[cfg(feature = "wasm-server")]
     #[test]
     fn outline_text_to_svg_forwards_svg_document() {
-        let server = EditorServer;
+        let server = EditorServer::new_test();
         let svg = server
             .outline_text_to_svg(load_test_font(), "A".to_string())
             .unwrap();
@@ -1444,7 +1505,7 @@ mod tests {
     #[cfg(feature = "wasm-server")]
     #[test]
     fn outline_text_to_svg_rejects_invalid_font_data() {
-        let server = EditorServer;
+        let server = EditorServer::new_test();
         let result = server.outline_text_to_svg(vec![0, 1, 2, 3], "A".to_string());
         assert!(result.is_err());
     }
@@ -1468,7 +1529,7 @@ mod tests {
     fn extract_text_from_plain_doc() {
         let state = make_state_with_text("hello world");
         let plain = state.to_plain();
-        let server = EditorServer;
+        let server = EditorServer::new_test();
         let result = server.extract_text(plain).unwrap();
         assert_eq!(result, "hello world");
     }
@@ -1515,8 +1576,8 @@ mod tests {
             ),
         };
 
-        let state = editor_state::State::from_plain(&plain).unwrap();
-        assert_eq!(extract_text_from_view(&state.view()), "ab\ncd");
+        let server = EditorServer::new_test();
+        assert_eq!(server.extract_text(plain).unwrap(), "a\tb\nc\nd");
     }
 
     #[test]
@@ -1524,7 +1585,7 @@ mod tests {
         let state = make_state_with_text("round trip");
         let plain = state.to_plain();
 
-        let server = EditorServer;
+        let server = EditorServer::new_test();
         let graph_bytes = server.to_graph(plain).unwrap();
         let recovered = server.to_plain(graph_bytes).unwrap();
 
@@ -1563,7 +1624,7 @@ mod tests {
         .unwrap();
         let target_bytes = editor_codec::encode_dots(&target_heads).unwrap();
 
-        let server = EditorServer;
+        let server = EditorServer::new_test();
         let revert_bytes = server
             .revert(graph_bytes.clone(), target_bytes, Vec::new())
             .unwrap();
@@ -1595,9 +1656,9 @@ mod tests {
             editor_codec::ReencodableChangesets::from_local_ops(ps.graph().changesets_as_vec()),
         )
         .unwrap();
-        let heads_bytes = EditorServer.heads(graph_bytes.clone()).unwrap();
+        let heads_bytes = EditorServer::new_test().heads(graph_bytes.clone()).unwrap();
 
-        let server = EditorServer;
+        let server = EditorServer::new_test();
         let revert_bytes = server.revert(graph_bytes, heads_bytes, Vec::new()).unwrap();
         assert!(
             revert_bytes.is_empty(),
@@ -1653,7 +1714,7 @@ mod tests {
             .unwrap()
         };
 
-        let server = EditorServer;
+        let server = EditorServer::new_test();
         let once = server
             .apply(base_graph.clone(), new_cs_bytes.clone())
             .unwrap();
@@ -1711,7 +1772,7 @@ mod tests {
         .unwrap();
         let target_bytes = editor_codec::encode_dots(&target_heads).unwrap();
 
-        let server = EditorServer;
+        let server = EditorServer::new_test();
         let revert_bytes = server
             .revert(graph_bytes.clone(), target_bytes, Vec::new())
             .unwrap();
@@ -1766,7 +1827,7 @@ mod tests {
         .unwrap();
         let target_bytes = editor_codec::encode_dots(&target_heads).unwrap();
 
-        let server = EditorServer;
+        let server = EditorServer::new_test();
         let revert_bytes = server
             .revert(graph_bytes.clone(), target_bytes, vec![z.to_string()])
             .unwrap();
@@ -1967,7 +2028,7 @@ mod tests {
 
     #[test]
     fn resolve_v1_selection_reencodes_a_resolvable_anchor_as_v2() {
-        let server = EditorServer;
+        let server = EditorServer::new_test();
         let a = Dot::new(1, 1);
         let v1 = format!(
             r#"{{"anchor":{{"chain":["{root}"],"child":{{"dot":"{a}","bind":"right"}},"affinity":"upstream"}},"head":{{"chain":["{root}"],"child":{{"dot":"{a}","bind":"right"}},"affinity":"upstream"}}}}"#,
@@ -1984,7 +2045,7 @@ mod tests {
 
     #[test]
     fn resolve_v1_selection_flags_an_unresolvable_anchor_as_degraded() {
-        let server = EditorServer;
+        let server = EditorServer::new_test();
         // A child dot that appears nowhere in the sequence: the v1 reader collapses
         // it to the offset-0 fallback, which the migration must flag as degraded.
         let v1 = format!(

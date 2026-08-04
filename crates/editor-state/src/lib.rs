@@ -24,6 +24,7 @@ mod modifier_state;
 mod normalize;
 mod paragraph_break;
 mod pending_modifier;
+mod plain_text;
 mod position;
 mod projected_state;
 mod prose;
@@ -73,6 +74,7 @@ pub use paragraph_break::{
     before_or_same, closest_empty_paragraph_break_end_between, paragraph_break_at_end,
 };
 pub use pending_modifier::*;
+pub use plain_text::doc_plain_text;
 pub use position::{Position, ResolvedPosition, inline_leaf_dots_in_range};
 pub use projected_state::*;
 pub use prose::{ProseText, prose, prose_annotated};

@@ -61,3 +61,15 @@ impl TextSegmenters {
         }
     }
 }
+
+#[cfg(any(test, feature = "test-utils"))]
+impl IcuResources {
+    pub fn new_test() -> Self {
+        Self {
+            segmenters: Arc::new(TextSegmenters::new_test()),
+            general_category: Arc::new(
+                CodePointMapData::<GeneralCategory>::new().static_to_owned(),
+            ),
+        }
+    }
+}

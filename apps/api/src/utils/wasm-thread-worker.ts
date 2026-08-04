@@ -13,12 +13,14 @@ const port = parentPort;
 const wasmPath = new URL(import.meta.resolve!('@typie/editor-ffi/server/wasm'));
 const wasmModule = await WebAssembly.compile(readFileSync(wasmPath));
 const { EditorHost: EditorHostCtor, EditorServer } = await createInstance(wasmModule);
-const server = EditorServer.create();
 
 // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
 const icuDataPath = fileURLToPath(import.meta.resolve!('@typie/editor-ffi/server/icu.zst'));
+const icuData = new Uint8Array(readFileSync(icuDataPath));
+const server = EditorServer.create(icuData);
+
 let editorHost: EditorHost | null = null;
-const getEditorHost = (): EditorHost => (editorHost ??= EditorHostCtor.create(new Uint8Array(readFileSync(icuDataPath))));
+const getEditorHost = (): EditorHost => (editorHost ??= EditorHostCtor.create(icuData));
 
 const PROSE_VIEWPORT = { width: 800, height: 1000, scale_factor: 1 };
 

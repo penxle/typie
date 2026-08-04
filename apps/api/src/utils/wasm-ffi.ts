@@ -5,19 +5,19 @@ import type { EditorServer } from '@typie/editor-ffi/server';
 
 // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
 const WASM_PATH = fileURLToPath(import.meta.resolve!('@typie/editor-ffi/server/wasm'));
-//// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-// const ICU_DATA_PATH = fileURLToPath(import.meta.resolve!('@typie/editor-ffi/server/icu.zst'));
+// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+const ICU_DATA_PATH = fileURLToPath(import.meta.resolve!('@typie/editor-ffi/server/icu.zst'));
 
 const POOL_SIZE = Number(process.env.WASM_POOL_SIZE ?? 10);
 
-// let icuDataPromise: Promise<Uint8Array> | null = null;
-// function getIcuData(): Promise<Uint8Array> {
-//   return (icuDataPromise ??= readFile(ICU_DATA_PATH).then((buf) => new Uint8Array(buf)));
-// }
+let icuData: Uint8Array | null = null;
+async function getIcuData(): Promise<Uint8Array> {
+  return (icuData ??= new Uint8Array(await readFile(ICU_DATA_PATH)));
+}
 
 async function createHost(module: WebAssembly.Module): Promise<EditorServer> {
   const { EditorServer } = await createInstance(module);
-  return EditorServer.create();
+  return EditorServer.create(await getIcuData());
 }
 
 const available: EditorServer[] = [];

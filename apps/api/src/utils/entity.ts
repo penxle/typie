@@ -207,10 +207,6 @@ export const calculateBlobSizeFromAssetIds = async (imageIds: string[], fileIds:
   return totalSize;
 };
 
-export const countCharacters = (text: string) => {
-  return [...text.replaceAll('\u{200B}', '').replaceAll(/\s+/g, ' ').trim()].length;
-};
-
 export type DocLayoutMode =
   | {
       type: 'paginated';
@@ -318,14 +314,14 @@ export const buildFreshV2Content = async (documentId: string): Promise<FreshV2Co
   const converted = await wasmFfi.use((host) => {
     const plain = host.to_plain(mergedGraph);
     const graph = host.to_graph(plain);
-    return { plain, graph, heads: host.heads(graph), text: host.extract_text(plain) };
+    const text = host.extract_text(plain);
+    return { plain, graph, heads: host.heads(graph), text, characterCount: host.count_characters(text) };
   });
 
   const { imageIds, fileIds } = extractAssetIdsFromPlainDoc(converted.plain);
   const blobSize = await calculateBlobSizeFromAssetIds(imageIds, fileIds);
-  const characterCount = countCharacters(converted.text);
 
-  return { ...converted, characterCount, blobSize };
+  return { ...converted, blobSize };
 };
 
 export const insertFreshV2Content = async (tx: Transaction, documentId: string, content: FreshV2Content): Promise<void> => {

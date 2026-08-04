@@ -903,7 +903,8 @@ declare class EditorServer {
      */
     collect_fold(existing: Uint8Array, packed_bundles: Uint8Array): CollectResult;
     consolidate(stream: Uint8Array): ConsolidateResult;
-    static create(): EditorServer;
+    count_characters(text: string): number;
+    static create(icu_data: Uint8Array): EditorServer;
     default_doc_with_preset(root: PlainRootNode, modifiers: Modifier[]): PlainDoc;
     extract_text(doc: PlainDoc): string;
     get_font_codepoints(ttf_data: Uint8Array): Uint32Array;

@@ -2399,7 +2399,7 @@ mod tests {
     fn ffi_mixed_version_window_survives_capture_fold_and_reload() {
         use editor_core::{InsertionOp, Message};
 
-        use crate::server::{BundleStatus, CollectResult, EditorServer};
+        use crate::server::{BundleStatus, CollectResult};
 
         let (initial, ..) = state! {
             doc { root { p1: paragraph { text("") } } }
@@ -2507,7 +2507,7 @@ mod tests {
             "the second edit must be a causal descendant of the carrier"
         );
 
-        let server = EditorServer;
+        let server = crate::server::EditorServer::new_test();
         let mut packed = Vec::new();
         packed.extend_from_slice(&1u32.to_le_bytes());
         packed.extend_from_slice(&(drain.bytes.len() as u32).to_le_bytes());

@@ -56,7 +56,6 @@ import { isPrivateVisibilityOnlyInput } from '#/utils/documents-option-policy.ts
 import {
   buildFreshV2Content,
   calculateBlobSizeFromAssetIds,
-  countCharacters,
   derivePlainRootFromPreset,
   extractAssetIdsFromPlainDoc,
   extractPlainDocLayoutMode,
@@ -778,7 +777,7 @@ builder.mutationFields((t) => ({
           const text = host.extract_text(plain);
           const { imageIds, fileIds } = extractAssetIdsFromPlainDoc(plain);
           const blobSize = await calculateBlobSizeFromAssetIds(imageIds, fileIds);
-          const characterCount = countCharacters(text);
+          const characterCount = host.count_characters(text);
 
           await tx.insert(DocumentBundles).values({ documentId: document.id, seq: 1, payload: graph });
           await tx.insert(DocumentStates).values({
