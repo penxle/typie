@@ -1,5 +1,6 @@
 package co.typie.graphql
 
+import co.touchlab.kermit.Logger
 import co.typie.Konfig
 import co.typie.network.Http
 import com.apollographql.apollo.ApolloClient
@@ -15,13 +16,27 @@ import com.apollographql.cache.normalized.memory.MemoryCacheFactory
 import com.apollographql.cache.normalized.normalizedCache
 import com.apollographql.ktor.http.KtorHttpEngine
 import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.CancellationException
 
 private val subscriptionTransport: WebSocketNetworkTransport =
   WebSocketNetworkTransport.Builder()
     .serverUrl("${Konfig.WS_URL}/graphql")
     .webSocketEngine(KtorWebSocketEngine)
     .wsProtocol(
-      GraphQLWsProtocol(connectionPayload = { mapOf("session" to WebSocketSession.create()) })
+      GraphQLWsProtocol(
+        connectionPayload = {
+          try {
+            mapOf("session" to WebSocketSession.create())
+          } catch (e: CancellationException) {
+            throw e
+          } catch (e: Exception) {
+            // 여기서 던지면 Apollo 내부의 무보호 코루틴에서 미처리 예외로 앱이 죽는다. null이면
+            // 서버가 connection_init을 거부하고 정상 백오프 재시도로 흘러간다.
+            Logger.w(e) { "Apollo subscription: ticket fetch failed" }
+            null
+          }
+        }
+      )
     )
     .pingInterval(30.seconds)
     .build()
