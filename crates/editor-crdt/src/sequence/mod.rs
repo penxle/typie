@@ -1,5 +1,5 @@
-use crate::Dot;
 use crate::oplog::{ListOp, NYI, OpLog, item_width, lv_cmp};
+use crate::{Dot, FastMap, FastSet};
 use editor_common::content_tree::{ContentTree, Cursor, Leaf, Sum};
 use hashbrown::HashMap;
 use std::collections::BinaryHeap;
@@ -8,6 +8,68 @@ use std::collections::BinaryHeap;
 pub enum Bias {
     Before,
     After,
+}
+
+/// The visible insertions immediately outside a delete's target span in the
+/// delete's parent version. These dots are historical observations and may
+/// themselves be tombstones in the current checkout.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DeletionGap {
+    /// The insertion immediately before the deleted span, if any.
+    pub left: Option<Dot>,
+    /// The insertion immediately after the deleted span, if any.
+    pub right: Option<Dot>,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct DeleteRecord {
+    id: Dot,
+    gap: DeletionGap,
+}
+
+type DeleteRefs = smallvec::SmallVec<[usize; 1]>;
+
+#[derive(Clone, Debug, Default)]
+struct DeletionIndex {
+    records: FastMap<usize, DeleteRecord>,
+    by_target: FastMap<usize, DeleteRefs>,
+    inactive: FastSet<usize>,
+}
+
+impl DeletionIndex {
+    fn record_delete(&mut self, delete_lv: usize, id: Dot, gap: DeletionGap, targets: &[usize]) {
+        self.records.insert(delete_lv, DeleteRecord { id, gap });
+        for &target in targets {
+            let mut deletes = self.by_target.get(&target).cloned().unwrap_or_default();
+            deletes.push(delete_lv);
+            self.by_target.insert(target, deletes);
+        }
+    }
+
+    fn deactivate_delete(&mut self, delete_lv: usize) {
+        self.inactive.insert(delete_lv);
+    }
+
+    fn gap_for_target(
+        &self,
+        tree: &ContentTree<Run>,
+        lv_of: &crate::DotMap<usize>,
+        target: Dot,
+    ) -> Option<DeletionGap> {
+        let target_lv = *lv_of.get(&target)?;
+        tree.doc_index_of_lv_checked(target_lv)?;
+        self.by_target
+            .get(&target_lv)?
+            .iter()
+            .filter(|&&delete_lv| !self.inactive.contains(&delete_lv))
+            .filter_map(|&delete_lv| self.records.get(&delete_lv))
+            .min_by(|a, b| {
+                a.id.actor
+                    .cmp(&b.id.actor)
+                    .then(a.id.clock.cmp(&b.id.clock))
+            })
+            .map(|record| record.gap)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -110,6 +172,7 @@ struct Ctx {
     // path) shares the per-op delete-target lists by pointer instead of
     // deep-copying ~one (usually empty) allocation per op.
     del_targets: imbl::Vector<Vec<usize>>,
+    deletions: DeletionIndex,
     cur_version: Vec<usize>,
 }
 
@@ -238,6 +301,13 @@ fn batch_update_targets(tree: &mut ContentTree<Run>, targets: &[usize], f: impl 
     }
 }
 
+fn dot_at_cur_position(tree: &ContentTree<Run>, pos: usize) -> Option<Dot> {
+    let cursor = tree.cursor_at_cur_pos(pos + 1);
+    let (run, offset) = tree.prev_slot(&cursor)?;
+    debug_assert_eq!(run.cur, 0, "previous cur-position slot must be visible");
+    Some(Dot::new(run.start.actor, run.start.clock + offset as u64))
+}
+
 fn apply1<P: Clone>(ctx: &mut Ctx, log: &OpLog<P>, lv: usize, op: &ListOp<P>, dot: Dot) {
     match op {
         ListOp::Del { pos, len } => {
@@ -249,6 +319,14 @@ fn apply1<P: Clone>(ctx: &mut Ctx, log: &OpLog<P>, lv: usize, op: &ListOp<P>, do
             );
             let mut targets = Vec::with_capacity(len);
             if len > 0 {
+                let gap = DeletionGap {
+                    left: pos
+                        .checked_sub(1)
+                        .and_then(|position| dot_at_cur_position(&ctx.tree, position)),
+                    right: (pos + len < visible)
+                        .then(|| dot_at_cur_position(&ctx.tree, pos + len))
+                        .flatten(),
+                };
                 let mut c = ctx.tree.cursor_at_cur_pos(pos);
                 for _ in 0..len {
                     loop {
@@ -268,6 +346,7 @@ fn apply1<P: Clone>(ctx: &mut Ctx, log: &OpLog<P>, lv: usize, op: &ListOp<P>, do
                     targets.push(target_lv);
                     ctx.tree.step(&mut c);
                 }
+                ctx.deletions.record_delete(lv, dot, gap, &targets);
                 batch_update_targets(&mut ctx.tree, &targets, |it| {
                     it.cur += 1;
                     it.end += 1;
@@ -278,6 +357,7 @@ fn apply1<P: Clone>(ctx: &mut Ctx, log: &OpLog<P>, lv: usize, op: &ListOp<P>, do
         ListOp::Undel { del } => {
             let del = *del;
             let del_lv = *log.lv_of.get(&del).expect("undel references unknown del");
+            ctx.deletions.deactivate_delete(del_lv);
             let targets = ctx.del_targets[del_lv].clone();
             batch_update_targets(&mut ctx.tree, &targets, |it| {
                 assert!(it.cur >= 1 && it.end >= 1, "undel underflow");
@@ -432,6 +512,7 @@ impl Default for SeqCheckout {
             ctx: Ctx {
                 tree: ContentTree::new(),
                 del_targets: imbl::Vector::new(),
+                deletions: DeletionIndex::default(),
                 cur_version: Vec::new(),
             },
             lv_of: crate::DotMap::new(),
@@ -549,6 +630,16 @@ impl SeqCheckout {
         resolve_boundary_checked_in(&self.ctx.tree, &self.lv_of, id, bias)
     }
 
+    /// Returns the canonical active delete's parent-version gap for `target`.
+    ///
+    /// Returns `None` when `target` is not a sequence insertion or has no
+    /// active delete.
+    pub fn deletion_gap(&self, target: Dot) -> Option<DeletionGap> {
+        self.ctx
+            .deletions
+            .gap_for_target(&self.ctx.tree, &self.lv_of, target)
+    }
+
     pub fn doc_index_of(&self, dot: Dot) -> Option<usize> {
         let lv = *self.lv_of.get(&dot)?;
         self.ctx.tree.doc_index_of_lv_checked(lv)
@@ -611,6 +702,7 @@ impl SeqCheckout {
                 tree: self.ctx.tree,
                 lv_of: self.lv_of,
                 del_targets: self.ctx.del_targets,
+                deletions: self.ctx.deletions,
             },
         }
     }
@@ -635,6 +727,7 @@ pub(crate) fn checkout_with_index<P: Clone>(log: &OpLog<P>) -> (Vec<(Dot, P)>, R
         tree: c.ctx.tree,
         lv_of: c.lv_of,
         del_targets: c.ctx.del_targets,
+        deletions: c.ctx.deletions,
     };
     (snap, index)
 }
@@ -643,6 +736,7 @@ pub(crate) struct ResolveIndex {
     tree: ContentTree<Run>,
     lv_of: crate::DotMap<usize>,
     del_targets: imbl::Vector<Vec<usize>>,
+    deletions: DeletionIndex,
 }
 
 fn resolve_boundary_in(
@@ -731,6 +825,16 @@ impl BoundaryResolver {
 
     pub fn resolve_boundary_checked(&self, id: Dot, bias: Bias) -> Option<Boundary> {
         resolve_boundary_checked_in(&self.index.tree, &self.index.lv_of, id, bias)
+    }
+
+    /// Returns the canonical active delete's parent-version gap for `target`.
+    ///
+    /// Returns `None` when `target` is not a sequence insertion or has no
+    /// active delete.
+    pub fn deletion_gap(&self, target: Dot) -> Option<DeletionGap> {
+        self.index
+            .deletions
+            .gap_for_target(&self.index.tree, &self.index.lv_of, target)
     }
 
     /// Descending current visible positions of `del`'s still-visible targets,
@@ -879,6 +983,257 @@ mod tests {
     fn boundary_missing_dot_is_none() {
         let (r, _a, _b, _c) = abc_del_b_resolver();
         assert!(r.resolve_boundary(Dot::new(9, 9), Bias::After).is_none());
+    }
+
+    #[test]
+    fn deletion_gap_records_the_delete_parent_version_for_every_target() {
+        let a = Dot::new(1, 0);
+        let z = Dot::new(1, 1);
+        let b = Dot::new(1, 2);
+        let c = Dot::new(1, 3);
+        let d = Dot::new(1, 4);
+        let del_bc = Dot::new(1, 5);
+        let later = Dot::new(1, 6);
+        let ev = vec![
+            ins(1, 0, &[], 0, 'a'),
+            ins(1, 1, &[a], 1, 'Z'),
+            ins(1, 2, &[z], 2, 'b'),
+            ins(1, 3, &[b], 3, 'c'),
+            ins(1, 4, &[c], 4, 'd'),
+            del_range(1, 5, &[d], 2, 2),
+            ins(1, 6, &[del_bc], 2, 'X'),
+        ];
+        let log = build_oplog(&ev);
+        let expected = Some(DeletionGap {
+            left: Some(z),
+            right: Some(d),
+        });
+        let (_elems, cold) = checkout_with_resolver(&log);
+        let mut warm = SeqCheckout::new();
+        warm.apply_tail(&log);
+
+        assert_eq!(warm.deletion_gap(b), expected);
+        assert_eq!(warm.deletion_gap(c), expected);
+        assert_eq!(cold.deletion_gap(b), expected);
+        assert_eq!(cold.deletion_gap(c), expected);
+        assert_ne!(warm.deletion_gap(b).unwrap().left, Some(later));
+        assert_eq!(warm.deletion_gap(a), None);
+        assert_eq!(cold.deletion_gap(del_bc), None);
+    }
+
+    #[derive(Clone, Copy)]
+    struct OverlapDots {
+        target: Dot,
+        base_left: Dot,
+        base_right: Dot,
+        a_insert: Dot,
+        a_delete: Dot,
+        b_delete: Dot,
+        a_undel: Dot,
+        a_insert_2: Dot,
+        a_redo: Dot,
+    }
+
+    fn overlapping_delete_log(a_branch_first: bool) -> (OpLog<char>, OverlapDots) {
+        let mut log = OpLog::new();
+        let chars = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i'];
+        for (clock, ch) in chars.into_iter().enumerate() {
+            let parents = if clock == 0 {
+                Vec::new()
+            } else {
+                vec![Dot::new(0, clock as u64 - 1)]
+            };
+            log.push(ins(0, clock as u64, &parents, clock, ch));
+        }
+
+        let base_head = Dot::new(0, 8);
+        let dots = OverlapDots {
+            target: Dot::new(0, 4),
+            base_left: Dot::new(0, 3),
+            base_right: Dot::new(0, 5),
+            a_insert: Dot::new(1, 9),
+            a_delete: Dot::new(1, 10),
+            b_delete: Dot::new(2, 9),
+            a_undel: Dot::new(1, 11),
+            a_insert_2: Dot::new(1, 12),
+            a_redo: Dot::new(1, 13),
+        };
+        let a_insert = ins(1, 9, &[base_head], 4, 'Z');
+        let a_delete = del_at(1, 10, &[dots.a_insert], 5);
+        let b_delete = del_at(2, 9, &[base_head], 4);
+        if a_branch_first {
+            log.push(a_insert);
+            log.push(a_delete);
+            log.push(b_delete);
+        } else {
+            log.push(b_delete);
+            log.push(a_insert);
+            log.push(a_delete);
+        }
+        (log, dots)
+    }
+
+    fn append_a_undel(log: &mut OpLog<char>, dots: OverlapDots) {
+        log.push(undel(
+            dots.a_undel.actor,
+            dots.a_undel.clock,
+            &[dots.a_delete],
+            dots.a_delete,
+        ));
+    }
+
+    fn append_a_redo(log: &mut OpLog<char>, dots: OverlapDots) {
+        log.push(ins(
+            dots.a_insert_2.actor,
+            dots.a_insert_2.clock,
+            &[dots.a_undel],
+            5,
+            'W',
+        ));
+        log.push(del_at(
+            dots.a_redo.actor,
+            dots.a_redo.clock,
+            &[dots.a_insert_2],
+            6,
+        ));
+    }
+
+    #[test]
+    fn deletion_gap_uses_actor_first_active_delete_across_local_lv_orders() {
+        let (mut log_a_first, dots) = overlapping_delete_log(true);
+        let (mut log_b_first, other_dots) = overlapping_delete_log(false);
+        assert_eq!(dots.target, other_dots.target);
+        assert!(
+            dots.a_delete > dots.b_delete,
+            "Dot::Ord must prefer B so this fixture catches clock-first comparison"
+        );
+
+        let a_gap = Some(DeletionGap {
+            left: Some(dots.a_insert),
+            right: Some(dots.base_right),
+        });
+        let b_gap = Some(DeletionGap {
+            left: Some(dots.base_left),
+            right: Some(dots.base_right),
+        });
+        let redo_gap = Some(DeletionGap {
+            left: Some(dots.a_insert_2),
+            right: Some(dots.base_right),
+        });
+
+        let mut warm_a_first = SeqCheckout::new();
+        warm_a_first.apply_tail(&log_a_first);
+        let mut warm_b_first = SeqCheckout::new();
+        warm_b_first.apply_tail(&log_b_first);
+        assert_eq!(warm_a_first.deletion_gap(dots.target), a_gap);
+        assert_eq!(warm_b_first.deletion_gap(dots.target), a_gap);
+        assert_eq!(
+            checkout_with_resolver(&log_a_first)
+                .1
+                .deletion_gap(dots.target),
+            a_gap
+        );
+        assert_eq!(
+            checkout_with_resolver(&log_b_first)
+                .1
+                .deletion_gap(dots.target),
+            a_gap
+        );
+
+        append_a_undel(&mut log_a_first, dots);
+        append_a_undel(&mut log_b_first, dots);
+        warm_a_first.apply_tail(&log_a_first);
+        warm_b_first.apply_tail(&log_b_first);
+        assert_eq!(warm_a_first.deletion_gap(dots.target), b_gap);
+        assert_eq!(warm_b_first.deletion_gap(dots.target), b_gap);
+        assert_eq!(
+            checkout_with_resolver(&log_a_first)
+                .1
+                .deletion_gap(dots.target),
+            b_gap
+        );
+        assert_eq!(
+            checkout_with_resolver(&log_b_first)
+                .1
+                .deletion_gap(dots.target),
+            b_gap
+        );
+
+        append_a_redo(&mut log_a_first, dots);
+        append_a_redo(&mut log_b_first, dots);
+        warm_a_first.apply_tail(&log_a_first);
+        warm_b_first.apply_tail(&log_b_first);
+        assert_eq!(warm_a_first.deletion_gap(dots.target), redo_gap);
+        assert_eq!(warm_b_first.deletion_gap(dots.target), redo_gap);
+        assert_eq!(
+            checkout_with_resolver(&log_a_first)
+                .1
+                .deletion_gap(dots.target),
+            redo_gap
+        );
+        assert_eq!(
+            checkout_with_resolver(&log_b_first)
+                .1
+                .deletion_gap(dots.target),
+            redo_gap
+        );
+        assert_eq!(warm_a_first.deletion_gap(dots.a_delete), None);
+        assert_eq!(warm_a_first.deletion_gap(dots.a_undel), None);
+    }
+
+    #[test]
+    fn deletion_gap_handles_document_edges_zero_length_and_deleted_survivors() {
+        let a = Dot::new(1, 0);
+        let b = Dot::new(1, 1);
+        let c = Dot::new(1, 2);
+        let d = Dot::new(1, 3);
+        let del_d = Dot::new(1, 4);
+        let del_c = Dot::new(1, 5);
+        let del_a = Dot::new(1, 6);
+        let zero = Dot::new(1, 7);
+        let ev = vec![
+            ins(1, 0, &[], 0, 'a'),
+            ins(1, 1, &[a], 1, 'b'),
+            ins(1, 2, &[b], 2, 'c'),
+            ins(1, 3, &[c], 3, 'd'),
+            del_at(1, 4, &[d], 3),
+            del_at(1, 5, &[del_d], 2),
+            del_at(1, 6, &[del_c], 0),
+            del_range(1, 7, &[del_a], 0, 0),
+        ];
+        let log = build_oplog(&ev);
+        let mut warm = SeqCheckout::new();
+        warm.apply_tail(&log);
+        let cold = checkout_with_resolver(&log).1;
+
+        assert_eq!(
+            warm.deletion_gap(d),
+            Some(DeletionGap {
+                left: Some(c),
+                right: None,
+            })
+        );
+        assert_eq!(
+            warm.deletion_gap(c),
+            Some(DeletionGap {
+                left: Some(b),
+                right: None,
+            })
+        );
+        assert_eq!(
+            warm.deletion_gap(a),
+            Some(DeletionGap {
+                left: None,
+                right: Some(b),
+            })
+        );
+        assert_eq!(cold.deletion_gap(d), warm.deletion_gap(d));
+        assert_eq!(cold.deletion_gap(c), warm.deletion_gap(c));
+        assert_eq!(cold.deletion_gap(a), warm.deletion_gap(a));
+        assert_eq!(warm.deletion_gap(b), None);
+        assert_eq!(warm.deletion_gap(zero), None);
+        assert_eq!(warm.deletion_gap(Dot::new(9, 9)), None);
+        assert_eq!(warm.deletion_gap(Dot::synthetic(1)), None);
     }
 
     #[test]

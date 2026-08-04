@@ -1,9 +1,10 @@
 use editor_crdt::sequence::{
-    Bias, Boundary, BoundaryResolver, SeqCheckout, checkout_with_resolver,
+    Bias, Boundary, BoundaryResolver, DeletionGap, SeqCheckout, checkout_with_resolver,
 };
 use editor_crdt::{Dot, OpLog};
 use editor_macros::ffi;
 use editor_model::{ChildView, DocView, NodeType, NodeView, SeqItem};
+use hashbrown::HashSet;
 use serde::{Deserialize, Serialize};
 
 use crate::Position;
@@ -251,6 +252,32 @@ impl StableResolver<'_> {
         }
     }
 
+    fn deletion_gap(&self, d: Dot) -> Option<DeletionGap> {
+        match self {
+            StableResolver::Owned(r) => r.deletion_gap(d),
+            StableResolver::Live(c) => c.deletion_gap(d),
+        }
+    }
+
+    fn visible_deletion_survivor(&self, target: Dot, bias: Bias) -> Option<Dot> {
+        let mut seen = HashSet::new();
+        let mut current = target;
+        loop {
+            if !seen.insert(current) {
+                return None;
+            }
+            let gap = self.deletion_gap(current)?;
+            let survivor = match bias {
+                Bias::Before => gap.left,
+                Bias::After => gap.right,
+            }?;
+            if self.boundary(survivor)?.visible {
+                return Some(survivor);
+            }
+            current = survivor;
+        }
+    }
+
     /// Sequence position for any dot, visible or deleted — the ordering key used
     /// for a target anchor whose element may have been concurrently removed.
     fn position(&self, d: Dot) -> Option<usize> {
@@ -301,6 +328,10 @@ impl<'a> StableResolveCtx<'a> {
         self.view.alias_classes().resolve_with(d, |m| {
             self.view.node(m).is_some() || self.view.block_of(m).is_some()
         })
+    }
+
+    pub(crate) fn view(&self) -> &'a DocView<'a> {
+        self.view
     }
 }
 
@@ -456,6 +487,87 @@ impl StablePosition {
             return Some(pos);
         }
         Some(self.resolve_in_host(ctx, host, next_child))
+    }
+
+    fn authored_host_at_offset_zero(&self) -> Option<Dot> {
+        if self.child.is_some() {
+            return None;
+        }
+        match self.chain.last()? {
+            ChainSegment::Real { dot } => Some(*dot),
+            ChainSegment::Synthetic { .. } => None,
+        }
+    }
+
+    pub(crate) fn range_start_position(
+        &self,
+        ctx: &StableResolveCtx,
+        primary: Position,
+    ) -> Position {
+        self.range_start_after_deleted_empty_host_candidate(ctx, primary)
+            .unwrap_or(primary)
+    }
+
+    pub(crate) fn range_end_position(&self, ctx: &StableResolveCtx, primary: Position) -> Position {
+        self.range_end_after_deleted_host_candidate(ctx, primary)
+            .unwrap_or(primary)
+    }
+
+    fn range_end_after_deleted_host_candidate(
+        &self,
+        ctx: &StableResolveCtx,
+        primary: Position,
+    ) -> Option<Position> {
+        let terminal = self.authored_host_at_offset_zero()?;
+        if ctx.view.node(ctx.alias(terminal)).is_some() {
+            return None;
+        }
+
+        let survivor = ctx
+            .resolver
+            .visible_deletion_survivor(terminal, Bias::Before)?;
+        let survivor_position = self.position_at_deletion_survivor(ctx, survivor, Bind::Right)?;
+
+        let gap_host = ctx.view.node(primary.node)?;
+        let previous_index = primary.offset.checked_sub(1)?;
+        let containing = direct_child_containing(&gap_host, survivor_position.node, ctx)?;
+        (containing == previous_index).then_some(survivor_position)
+    }
+
+    fn range_start_after_deleted_empty_host_candidate(
+        &self,
+        ctx: &StableResolveCtx,
+        primary: Position,
+    ) -> Option<Position> {
+        let terminal = self.authored_host_at_offset_zero()?;
+        if ctx.view.node(ctx.alias(terminal)).is_some() {
+            return None;
+        }
+
+        let survivor = ctx
+            .resolver
+            .visible_deletion_survivor(terminal, Bias::After)?;
+        let survivor_position = self.position_at_deletion_survivor(ctx, survivor, Bind::Left)?;
+        let gap_host = ctx.view.node(primary.node)?;
+        let containing = direct_child_containing(&gap_host, survivor_position.node, ctx)?;
+        (containing == primary.offset).then_some(survivor_position)
+    }
+
+    fn position_at_deletion_survivor(
+        &self,
+        ctx: &StableResolveCtx,
+        survivor: Dot,
+        bind: Bind,
+    ) -> Option<Position> {
+        let survivor = ctx.alias(survivor);
+        if let Some(node) = ctx.view.node(survivor) {
+            return (node.node_type() == NodeType::Paragraph).then_some(Position {
+                node: node.id(),
+                offset: 0,
+                affinity: self.affinity,
+            });
+        }
+        self.resolve_child_parent_boundary(ctx, survivor, bind)
     }
 
     fn resolve_child_parent_boundary(

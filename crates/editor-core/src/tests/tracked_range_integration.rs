@@ -219,6 +219,692 @@ fn frozen_range_does_not_expand_when_text_inserted_at_left_boundary_at_paragraph
 }
 
 #[test]
+fn frozen_range_includes_preceding_paragraph_end_typing_but_excludes_paragraph_start_typing() {
+    let (initial, p1, p2) = state! {
+        doc {
+            root {
+                p1: paragraph { text("ab") }
+                p2: paragraph { text("cd") }
+            }
+        }
+        selection: (p1, 1) -> (p2, 0)
+    };
+    let selection = initial.selection.unwrap();
+    let frozen = editor_state::StableSelection::capture(&selection, &initial.view());
+    {
+        let view = initial.view();
+        let ctx =
+            editor_state::StableResolveCtx::from_live(&view, initial.projected.seq_checkout());
+        assert_eq!(
+            frozen.resolve(&ctx),
+            Some(selection),
+            "capture must preserve the exact endpoint while the document is unchanged"
+        );
+    }
+    let mut editor = Editor::new_test(initial);
+    editor.apply(Message::TrackedRange {
+        op: TrackedRangeOp::AddFrozen {
+            id: "r".into(),
+            group: "comment".into(),
+            selection: frozen,
+            metadata: String::new(),
+        },
+    });
+    assert_eq!(located_text(&editor, "r").as_deref(), Some("b"));
+
+    editor.apply(Message::Selection {
+        op: SelectionOp::Set {
+            selection: Selection::collapsed(editor_state::Position::new(p1, 2)),
+        },
+    });
+    editor.apply(Message::Insertion {
+        op: InsertionOp::Text { text: "X".into() },
+    });
+    assert_eq!(
+        located_text(&editor, "r").as_deref(),
+        Some("bX"),
+        "typing at the preceding paragraph end is inside a range ending at the next paragraph start"
+    );
+
+    editor.apply(Message::Selection {
+        op: SelectionOp::Set {
+            selection: Selection::collapsed(editor_state::Position::new(p2, 0)),
+        },
+    });
+    editor.apply(Message::Insertion {
+        op: InsertionOp::Text { text: "Y".into() },
+    });
+
+    assert_eq!(
+        located_text(&editor, "r").as_deref(),
+        Some("bX"),
+        "typing at a paragraph-start right boundary must stay outside a frozen comment range"
+    );
+}
+
+#[test]
+fn upstream_lower_endpoint_is_not_confused_with_paragraph_start_upper_endpoint() {
+    let (initial, p1, p2) = state! {
+        doc {
+            root {
+                p1: paragraph { text("ab") }
+                p2: paragraph { text("cd") }
+            }
+        }
+        selection: (p1, 0)
+    };
+    let selection = Selection::new(
+        editor_state::Position {
+            node: p1,
+            offset: 1,
+            affinity: editor_state::Affinity::Upstream,
+        },
+        editor_state::Position::new(p2, 0),
+    );
+    let frozen = editor_state::StableSelection::capture(&selection, &initial.view());
+    let mut editor = Editor::new_test(initial);
+    editor.apply(Message::TrackedRange {
+        op: TrackedRangeOp::AddFrozen {
+            id: "r".into(),
+            group: "comment".into(),
+            selection: frozen,
+            metadata: String::new(),
+        },
+    });
+
+    assert_eq!(
+        located_text(&editor, "r").as_deref(),
+        Some("b"),
+        "endpoint role must come from the selection, not an affinity/binding marker"
+    );
+}
+
+#[test]
+fn paragraph_start_upper_endpoint_follows_live_host_when_next_block_reorders() {
+    let (initial, _p1, p2) = state! {
+        doc {
+            root {
+                p1: paragraph { text("ab") }
+                p2: paragraph { text("cd") }
+            }
+        }
+        selection: (p1, 1) -> (p2, 0)
+    };
+    let root = initial.view().root().unwrap().id();
+    let frozen =
+        editor_state::StableSelection::capture(&initial.selection.unwrap(), &initial.view());
+    let mut editor = Editor::new_test(initial);
+    editor.apply(Message::TrackedRange {
+        op: TrackedRangeOp::AddFrozen {
+            id: "r".into(),
+            group: "comment".into(),
+            selection: frozen,
+            metadata: String::new(),
+        },
+    });
+
+    editor
+        .transact(|tr| {
+            tr.move_node(p2, root, 0)?;
+            Ok(())
+        })
+        .unwrap();
+
+    assert_eq!(
+        located_text(&editor, "r").as_deref(),
+        Some("cda"),
+        "a live primary endpoint must follow its paragraph instead of activating the join fallback"
+    );
+}
+
+#[test]
+fn frozen_range_ending_at_paragraph_start_does_not_expand_when_paragraph_joins_backward() {
+    let (initial, _p1, _p2, p3) = state! {
+        doc {
+            root {
+                p1: paragraph { text("ab") }
+                p2: paragraph { text("cd") }
+                p3: paragraph { text("ef") }
+            }
+        }
+        selection: (p1, 1) -> (p3, 0)
+    };
+    let frozen =
+        editor_state::StableSelection::capture(&initial.selection.unwrap(), &initial.view());
+    let mut editor = Editor::new_test(initial);
+    editor.apply(Message::TrackedRange {
+        op: TrackedRangeOp::AddFrozen {
+            id: "r".into(),
+            group: "comment".into(),
+            selection: frozen,
+            metadata: String::new(),
+        },
+    });
+    assert_eq!(located_text(&editor, "r").as_deref(), Some("bcd"));
+
+    editor.apply(Message::Selection {
+        op: SelectionOp::Set {
+            selection: Selection::collapsed(editor_state::Position::new(p3, 0)),
+        },
+    });
+    editor.apply(Message::Key {
+        event: KeyEvent {
+            key: Key::Backspace,
+            modifiers: InputModifiers::default(),
+        },
+    });
+    assert_eq!(
+        located_text(&editor, "r").as_deref(),
+        Some("bcd"),
+        "joining the endpoint paragraph backward must not pull that paragraph into the comment range"
+    );
+
+    editor.apply(Message::Insertion {
+        op: InsertionOp::Text { text: "X".into() },
+    });
+    assert_eq!(
+        located_text(&editor, "r").as_deref(),
+        Some("bcd"),
+        "typing at the join seam must stay outside the range"
+    );
+}
+
+#[test]
+fn reversed_frozen_range_stays_located_when_final_paragraph_joins_backward() {
+    let (initial, _p1, p2) = state! {
+        doc {
+            root {
+                p1: paragraph { text("abcd") }
+                p2: paragraph { text("ef") }
+            }
+        }
+        selection: (p2, 0) -> (p1, 1)
+    };
+    let frozen =
+        editor_state::StableSelection::capture(&initial.selection.unwrap(), &initial.view());
+    let mut editor = Editor::new_test(initial);
+    editor.apply(Message::TrackedRange {
+        op: TrackedRangeOp::AddFrozen {
+            id: "r".into(),
+            group: "comment".into(),
+            selection: frozen,
+            metadata: String::new(),
+        },
+    });
+    assert_eq!(located_text(&editor, "r").as_deref(), Some("bcd"));
+
+    editor.apply(Message::Selection {
+        op: SelectionOp::Set {
+            selection: Selection::collapsed(editor_state::Position::new(p2, 0)),
+        },
+    });
+    editor.apply(Message::Key {
+        event: KeyEvent {
+            key: Key::Backspace,
+            modifiers: InputModifiers::default(),
+        },
+    });
+    assert_eq!(
+        located_text(&editor, "r").as_deref(),
+        Some("bcd"),
+        "joining the final paragraph backward must not make a reversed comment range unlocatable"
+    );
+}
+
+#[test]
+fn frozen_range_ending_at_empty_paragraph_survives_backward_join() {
+    let (initial, _p1, p2) = state! {
+        doc {
+            root {
+                p1: paragraph { text("ab") }
+                p2: paragraph {}
+            }
+        }
+        selection: (p1, 1) -> (p2, 0)
+    };
+    let frozen =
+        editor_state::StableSelection::capture(&initial.selection.unwrap(), &initial.view());
+    let mut editor = Editor::new_test(initial);
+    editor.apply(Message::TrackedRange {
+        op: TrackedRangeOp::AddFrozen {
+            id: "r".into(),
+            group: "comment".into(),
+            selection: frozen,
+            metadata: String::new(),
+        },
+    });
+    assert_eq!(located_text(&editor, "r").as_deref(), Some("b"));
+
+    editor.apply(Message::Selection {
+        op: SelectionOp::Set {
+            selection: Selection::collapsed(editor_state::Position::new(p2, 0)),
+        },
+    });
+    editor.apply(Message::Key {
+        event: KeyEvent {
+            key: Key::Backspace,
+            modifiers: InputModifiers::default(),
+        },
+    });
+    assert_eq!(
+        located_text(&editor, "r").as_deref(),
+        Some("b"),
+        "removing an empty endpoint paragraph must not make the range disappear"
+    );
+
+    editor.apply(Message::Insertion {
+        op: InsertionOp::Text { text: "X".into() },
+    });
+    assert_eq!(
+        located_text(&editor, "r").as_deref(),
+        Some("b"),
+        "typing at the join seam must stay outside the range"
+    );
+}
+
+#[test]
+fn frozen_range_keeps_pre_join_empty_paragraph_typing_but_excludes_join_seam_typing() {
+    let (initial, _p0, p1, p2) = state! {
+        doc {
+            root {
+                p0: paragraph { text("ab") }
+                p1: paragraph {}
+                p2: paragraph { text("cd") }
+            }
+        }
+        selection: (p0, 1) -> (p2, 0)
+    };
+    let frozen =
+        editor_state::StableSelection::capture(&initial.selection.unwrap(), &initial.view());
+    let mut editor = Editor::new_test(initial);
+    editor.apply(Message::TrackedRange {
+        op: TrackedRangeOp::AddFrozen {
+            id: "r".into(),
+            group: "comment".into(),
+            selection: frozen,
+            metadata: String::new(),
+        },
+    });
+    assert_eq!(located_text(&editor, "r").as_deref(), Some("b"));
+
+    editor.apply(Message::Selection {
+        op: SelectionOp::Set {
+            selection: Selection::collapsed(editor_state::Position::new(p1, 0)),
+        },
+    });
+    editor.apply(Message::Insertion {
+        op: InsertionOp::Text { text: "Z".into() },
+    });
+    assert_eq!(
+        located_text(&editor, "r").as_deref(),
+        Some("bZ"),
+        "typing before the join is already inside the range"
+    );
+
+    editor.apply(Message::Selection {
+        op: SelectionOp::Set {
+            selection: Selection::collapsed(editor_state::Position::new(p2, 0)),
+        },
+    });
+    editor.apply(Message::Key {
+        event: KeyEvent {
+            key: Key::Backspace,
+            modifiers: InputModifiers::default(),
+        },
+    });
+    assert_eq!(
+        located_text(&editor, "r").as_deref(),
+        Some("bZ"),
+        "joining must preserve text that the delete observed inside the range"
+    );
+
+    editor.apply(Message::Insertion {
+        op: InsertionOp::Text { text: "X".into() },
+    });
+
+    assert_eq!(
+        located_text(&editor, "r").as_deref(),
+        Some("bZ"),
+        "typing at the join seam after the delete must stay outside the range"
+    );
+}
+
+#[test]
+fn reversed_frozen_range_keeps_pre_join_typing_but_excludes_join_seam_typing() {
+    let (initial, _p0, p1, p2) = state! {
+        doc {
+            root {
+                p0: paragraph { text("ab") }
+                p1: paragraph {}
+                p2: paragraph { text("cd") }
+            }
+        }
+        selection: (p2, 0) -> (p0, 1)
+    };
+    let frozen =
+        editor_state::StableSelection::capture(&initial.selection.unwrap(), &initial.view());
+    let mut editor = Editor::new_test(initial);
+    editor.apply(Message::TrackedRange {
+        op: TrackedRangeOp::AddFrozen {
+            id: "r".into(),
+            group: "comment".into(),
+            selection: frozen,
+            metadata: String::new(),
+        },
+    });
+
+    editor.apply(Message::Selection {
+        op: SelectionOp::Set {
+            selection: Selection::collapsed(editor_state::Position::new(p1, 0)),
+        },
+    });
+    editor.apply(Message::Insertion {
+        op: InsertionOp::Text { text: "Z".into() },
+    });
+    assert_eq!(located_text(&editor, "r").as_deref(), Some("bZ"));
+
+    editor.apply(Message::Selection {
+        op: SelectionOp::Set {
+            selection: Selection::collapsed(editor_state::Position::new(p2, 0)),
+        },
+    });
+    editor.apply(Message::Key {
+        event: KeyEvent {
+            key: Key::Backspace,
+            modifiers: InputModifiers::default(),
+        },
+    });
+    assert_eq!(located_text(&editor, "r").as_deref(), Some("bZ"));
+
+    editor.apply(Message::Insertion {
+        op: InsertionOp::Text { text: "X".into() },
+    });
+    assert_eq!(
+        located_text(&editor, "r").as_deref(),
+        Some("bZ"),
+        "reversed ranges must use the same physical delete-observed boundary"
+    );
+}
+
+#[test]
+fn frozen_range_follows_origin_past_removed_trailing_page_break() {
+    let (initial, _p1, p2) = state! {
+        doc {
+            root {
+                p1: paragraph { text("ab") page_break }
+                p2: paragraph { text("cd") }
+            }
+        }
+        selection: (p1, 1) -> (p2, 0)
+    };
+    let frozen =
+        editor_state::StableSelection::capture(&initial.selection.unwrap(), &initial.view());
+    let mut editor = Editor::new_test(initial);
+    editor.apply(Message::TrackedRange {
+        op: TrackedRangeOp::AddFrozen {
+            id: "r".into(),
+            group: "comment".into(),
+            selection: frozen,
+            metadata: String::new(),
+        },
+    });
+    assert_eq!(located_text(&editor, "r").as_deref(), Some("b"));
+
+    editor.apply(Message::Selection {
+        op: SelectionOp::Set {
+            selection: Selection::collapsed(editor_state::Position::new(p2, 0)),
+        },
+    });
+    editor.apply(Message::Key {
+        event: KeyEvent {
+            key: Key::Backspace,
+            modifiers: InputModifiers::default(),
+        },
+    });
+    editor.apply(Message::Insertion {
+        op: InsertionOp::Text { text: "X".into() },
+    });
+
+    assert_eq!(
+        located_text(&editor, "r").as_deref(),
+        Some("b"),
+        "origin lookup must cross the removed page-break marker and exclude seam typing"
+    );
+}
+
+#[test]
+fn empty_paragraph_start_lower_endpoint_excludes_later_seam_typing() {
+    let (initial, _p1, p2, _p3) = state! {
+        doc {
+            root {
+                p1: paragraph { text("ab") }
+                p2: paragraph {}
+                p3: paragraph { text("ef") }
+            }
+        }
+        selection: (p2, 0) -> (p3, 1)
+    };
+    let frozen =
+        editor_state::StableSelection::capture(&initial.selection.unwrap(), &initial.view());
+    let mut editor = Editor::new_test(initial);
+    editor.apply(Message::TrackedRange {
+        op: TrackedRangeOp::AddFrozen {
+            id: "r".into(),
+            group: "comment".into(),
+            selection: frozen,
+            metadata: String::new(),
+        },
+    });
+    assert_eq!(located_text(&editor, "r").as_deref(), Some("e"));
+
+    editor.apply(Message::Selection {
+        op: SelectionOp::Set {
+            selection: Selection::collapsed(editor_state::Position::new(p2, 0)),
+        },
+    });
+    editor.apply(Message::Key {
+        event: KeyEvent {
+            key: Key::Backspace,
+            modifiers: InputModifiers::default(),
+        },
+    });
+    editor.apply(Message::Insertion {
+        op: InsertionOp::Text { text: "X".into() },
+    });
+
+    assert_eq!(
+        located_text(&editor, "r").as_deref(),
+        Some("e"),
+        "an empty lower endpoint must remain right-associated when text is inserted at its deleted seam"
+    );
+}
+
+#[test]
+fn frozen_range_ending_at_empty_paragraph_survives_deleted_seam_child_before_backward_join() {
+    let (initial, p1, p2) = state! {
+        doc {
+            root {
+                p1: paragraph { text("abc") }
+                p2: paragraph {}
+            }
+        }
+        selection: (p1, 1) -> (p2, 0)
+    };
+    let frozen =
+        editor_state::StableSelection::capture(&initial.selection.unwrap(), &initial.view());
+    let mut editor = Editor::new_test(initial);
+    editor.apply(Message::TrackedRange {
+        op: TrackedRangeOp::AddFrozen {
+            id: "r".into(),
+            group: "comment".into(),
+            selection: frozen,
+            metadata: String::new(),
+        },
+    });
+    assert_eq!(located_text(&editor, "r").as_deref(), Some("bc"));
+
+    editor.apply(Message::Selection {
+        op: SelectionOp::Set {
+            selection: Selection::new(
+                editor_state::Position::new(p1, 2),
+                editor_state::Position::new(p1, 3),
+            ),
+        },
+    });
+    editor.apply(Message::Deletion {
+        op: DeletionOp::Selection,
+    });
+    assert_eq!(located_text(&editor, "r").as_deref(), Some("b"));
+
+    editor.apply(Message::Selection {
+        op: SelectionOp::Set {
+            selection: Selection::collapsed(editor_state::Position::new(p2, 0)),
+        },
+    });
+    editor.apply(Message::Key {
+        event: KeyEvent {
+            key: Key::Backspace,
+            modifiers: InputModifiers::default(),
+        },
+    });
+    editor.apply(Message::Insertion {
+        op: InsertionOp::Text { text: "X".into() },
+    });
+
+    assert_eq!(
+        located_text(&editor, "r").as_deref(),
+        Some("b"),
+        "later typing at the join seam must stay outside the range even if the old seam child was deleted"
+    );
+}
+
+#[test]
+fn frozen_range_follows_a_join_survivor_deleted_after_the_join() {
+    let (initial, p1, p2) = state! {
+        doc {
+            root {
+                p1: paragraph { text("abc") }
+                p2: paragraph {}
+            }
+        }
+        selection: (p1, 1) -> (p2, 0)
+    };
+    let frozen =
+        editor_state::StableSelection::capture(&initial.selection.unwrap(), &initial.view());
+    let mut editor = Editor::new_test(initial);
+    editor.apply(Message::TrackedRange {
+        op: TrackedRangeOp::AddFrozen {
+            id: "r".into(),
+            group: "comment".into(),
+            selection: frozen,
+            metadata: String::new(),
+        },
+    });
+    assert_eq!(located_text(&editor, "r").as_deref(), Some("bc"));
+
+    editor.apply(Message::Selection {
+        op: SelectionOp::Set {
+            selection: Selection::collapsed(editor_state::Position::new(p2, 0)),
+        },
+    });
+    editor.apply(Message::Key {
+        event: KeyEvent {
+            key: Key::Backspace,
+            modifiers: InputModifiers::default(),
+        },
+    });
+    assert_eq!(located_text(&editor, "r").as_deref(), Some("bc"));
+
+    editor.apply(Message::Selection {
+        op: SelectionOp::Set {
+            selection: Selection::new(
+                editor_state::Position::new(p1, 2),
+                editor_state::Position::new(p1, 3),
+            ),
+        },
+    });
+    editor.apply(Message::Deletion {
+        op: DeletionOp::Selection,
+    });
+    assert_eq!(located_text(&editor, "r").as_deref(), Some("b"));
+
+    editor.apply(Message::Insertion {
+        op: InsertionOp::Text { text: "X".into() },
+    });
+    assert_eq!(
+        located_text(&editor, "r").as_deref(),
+        Some("b"),
+        "the boundary must follow the deleted join survivor without including later typing"
+    );
+}
+
+#[test]
+fn frozen_range_survives_remote_pre_join_typing_join_and_seam_typing_in_one_tick() {
+    let (initial, _p0, p1, p2) = state! {
+        doc {
+            root {
+                p0: paragraph { text("ab") }
+                p1: paragraph {}
+                p2: paragraph { text("cd") }
+            }
+        }
+        selection: (p0, 1) -> (p2, 0)
+    };
+    let frozen =
+        editor_state::StableSelection::capture(&initial.selection.unwrap(), &initial.view());
+    let mut peer = Editor::new_test(initial.clone());
+    let mut receiver = Editor::new_test(initial);
+    receiver.apply(Message::TrackedRange {
+        op: TrackedRangeOp::AddFrozen {
+            id: "r".into(),
+            group: "comment".into(),
+            selection: frozen,
+            metadata: String::new(),
+        },
+    });
+
+    peer.apply(Message::Selection {
+        op: SelectionOp::Set {
+            selection: Selection::collapsed(editor_state::Position::new(p1, 0)),
+        },
+    });
+    peer.apply(Message::Insertion {
+        op: InsertionOp::Text { text: "Z".into() },
+    });
+    peer.apply(Message::Selection {
+        op: SelectionOp::Set {
+            selection: Selection::collapsed(editor_state::Position::new(p2, 0)),
+        },
+    });
+    peer.apply(Message::Key {
+        event: KeyEvent {
+            key: Key::Backspace,
+            modifiers: InputModifiers::default(),
+        },
+    });
+    peer.apply(Message::Insertion {
+        op: InsertionOp::Text { text: "X".into() },
+    });
+
+    let receiver_heads = receiver.current_heads().into_iter().collect();
+    let changesets = peer.missing_changesets_tolerant(&receiver_heads);
+    assert!(
+        changesets.len() >= 3,
+        "pre-join typing, join, and seam typing must arrive as a batch"
+    );
+    for changeset in changesets {
+        receiver.receive_remote_changeset(changeset);
+    }
+    receiver.tick().unwrap();
+
+    assert_eq!(
+        located_text(&receiver, "r").as_deref(),
+        Some("bZ"),
+        "the receiver must use delete-observed history without an intermediate recapture"
+    );
+}
+
+#[test]
 fn range_shrinks_at_right_edge_after_covering_delete_and_undo() {
     let (initial, p1) = state! {
         doc { root { p1: paragraph { text("ㅁㄴㅇㅁㅁㅁㅁㄴㅁㅇ") } } }

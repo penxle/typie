@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::sync::Arc;
 
 use editor_macros::ffi;
@@ -62,9 +63,28 @@ impl StableSelection {
     }
 
     pub fn resolve(&self, ctx: &StableResolveCtx) -> Option<Selection> {
-        let anchor = self.anchor.resolve(ctx)?;
-        let head = self.head.resolve(ctx)?;
-        Some(Selection { anchor, head })
+        let primary = Selection {
+            anchor: self.anchor.resolve(ctx)?,
+            head: self.head.resolve(ctx)?,
+        };
+        if self.anchor == self.head {
+            return Some(primary);
+        }
+
+        let Some(resolved) = primary.resolve(ctx.view()) else {
+            return Some(primary);
+        };
+        Some(match resolved.anchor().cmp(resolved.head()) {
+            Ordering::Less => Selection {
+                anchor: self.anchor.range_start_position(ctx, primary.anchor),
+                head: self.head.range_end_position(ctx, primary.head),
+            },
+            Ordering::Greater => Selection {
+                anchor: self.anchor.range_end_position(ctx, primary.anchor),
+                head: self.head.range_start_position(ctx, primary.head),
+            },
+            Ordering::Equal => primary,
+        })
     }
 }
 
