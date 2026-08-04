@@ -55,8 +55,9 @@ private fun rememberMainTabPagerUserScrollEnabled(requested: Boolean): Boolean {
     } else if (!enabledAfterFrame) {
       // Re-enabling the pager while a root pop disposes movable route content can invalidate the
       // pager subcomposition in the same frame and crash Compose Runtime with a missing endGroup.
-      // TODO: Remove this one-frame workaround after updating to Compose Multiplatform 1.12 or
-      // later and verifying the root-pop flows without it on iOS and JVM Desktop.
+      // TODO: Remove this one-frame workaround after upgrading to a Compose Multiplatform release
+      // where the root-pop flows no longer crash without it on iOS and JVM Desktop. The crash still
+      // reproduces on Compose Multiplatform 1.12.0-beta03.
       withFrameNanos {}
       enabledAfterFrame = true
     }
