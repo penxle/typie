@@ -3,17 +3,7 @@ import { logger } from '@typie/lib';
 import { PaymentInvoiceState, PlanAvailability, SubscriptionState } from '@typie/lib/enums';
 import dayjs from 'dayjs';
 import { and, desc, eq, gt, inArray, isNull, lte, ne, or } from 'drizzle-orm';
-import {
-  db,
-  first,
-  firstOrThrow,
-  PaymentInvoices,
-  PaymentRecords,
-  Plans,
-  Subscriptions,
-  UserBillingKeys,
-  UserInAppPurchases,
-} from '#/db/index.ts';
+import { db, first, firstOrThrow, PaymentInvoices, Plans, Subscriptions, UserBillingKeys, UserInAppPurchases } from '#/db/index.ts';
 import * as portone from '#/external/portone.ts';
 import { computeNextPeriodEnd } from '#/utils/billing-period.ts';
 import { deriveGraceDeadline } from '#/utils/entitlement.ts';
@@ -55,10 +45,12 @@ export const SubscriptionBillingScanCron = defineCron('subscription:billing-scan
 });
 
 // 재시도 전용 크론이다. 페이스는 인보이스당 하루 1회로 유지하되(카드 거절 반복 재청구 금지), 시각은 고정 10시
-// 일괄 대신 유저별 위상(마지막 시도 + 24시간)으로 주간 창 안에 분산한다 — 일괄은 버스트를 만들고, 유예 마감
-// (주기 종료 시각 + 7일)과 위상이 어긋나 유저별 유효 시도 횟수가 들쭉했다. 시도 기록은 청구 트랜잭션 안에서
-// 커밋되므로(utils/payment.ts) 시도 직후 같은 인보이스는 즉시 부적격이 되고, jobId 디듀프가 잡이 큐·실행 중인
-// 동안의 재적재를 막는다 — 반복 청구는 이중으로 차단된다.
+// 일괄 대신 유저별 위상(마지막 처리 + 24시간)으로 주간 창 안에 분산한다 — 일괄은 버스트를 만들고, 유예 마감
+// (주기 종료 시각 + 7일)과 위상이 어긋나 유저별 유효 시도 횟수가 들쭉했다. 페이싱 신호는 PaymentRecords 가
+// 아니라 lastAttemptedAt 스탬프다 — 기록은 승인 증거라 PG 미호출·비확정 경로(빌링키 결손, AlreadyPaid 회수
+// 비확정)에 남지 않아, 존재 검사로 페이스를 재면 그 경로들이 분 단위 재처리 루프가 된다. 스탬프는 청구
+// 트랜잭션 안에서 커밋되므로(attemptInvoicePayment 진입부) 처리 직후 같은 인보이스는 즉시 부적격이 되고,
+// jobId 디듀프가 잡이 큐·실행 중인 동안의 재적재를 막는다.
 export const SubscriptionRenewalCron = defineCron('subscription:renewal', '* 10-21 * * *', async () => {
   const now = dayjs();
 
@@ -66,15 +58,11 @@ export const SubscriptionRenewalCron = defineCron('subscription:renewal', '* 10-
   const overdueInvoices = await db
     .select({ id: PaymentInvoices.id })
     .from(PaymentInvoices)
-    .leftJoin(
-      PaymentRecords,
-      and(eq(PaymentRecords.invoiceId, PaymentInvoices.id), gt(PaymentRecords.createdAt, now.subtract(24, 'hours'))),
-    )
     .where(
       and(
         eq(PaymentInvoices.state, PaymentInvoiceState.OVERDUE),
         lte(PaymentInvoices.servicePeriodStartsAt, now),
-        isNull(PaymentRecords.id),
+        or(isNull(PaymentInvoices.lastAttemptedAt), lte(PaymentInvoices.lastAttemptedAt, now.subtract(24, 'hours'))),
       ),
     );
 

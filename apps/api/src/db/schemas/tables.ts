@@ -373,6 +373,9 @@ export const PaymentInvoices = pgTable(
     paymentKey: text('payment_key').notNull().unique(),
     servicePeriodStartsAt: datetime('service_period_starts_at').notNull(),
     servicePeriodEndsAt: datetime('service_period_ends_at').notNull(),
+    // 마지막 청구 처리 시각 — 성패·PaymentRecords 유무와 무관하게 attemptInvoicePayment 가 스탬프한다.
+    // 재시도 크론의 페이싱 신호: 기록은 승인 증거라 PG 미호출 경로에 남지 않아 존재 검사로는 페이스를 잴 수 없다.
+    lastAttemptedAt: datetime('last_attempted_at'),
     createdAt: datetime('created_at')
       .notNull()
       .default(sql`now()`),

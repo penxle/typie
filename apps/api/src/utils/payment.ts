@@ -181,6 +181,11 @@ export const attemptInvoicePayment = async (tx: Transaction, invoiceId: string):
     .for('no key update')
     .then(firstOrThrow);
 
+  // 성패·기록 유무와 무관한 처리 스탬프 — 재시도 크론의 페이싱 신호다. 아래 PG 미호출·비확정 경로들은
+  // PaymentRecords 를 남기지 않으므로(승인 증거 오염 방지) 기록 존재 검사로는 페이스를 잴 수 없고,
+  // 그 상태로 분 단위 스캔에 걸리면 같은 인보이스가 하루 종일 재처리된다.
+  await tx.update(PaymentInvoices).set({ lastAttemptedAt: dayjs() }).where(eq(PaymentInvoices.id, invoiceId));
+
   const paymentCredit = await tx
     .select({ amount: UserPaymentCredits.amount })
     .from(UserPaymentCredits)
