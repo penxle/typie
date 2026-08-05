@@ -164,6 +164,66 @@ fn raw_repair_transition(
     })
 }
 
+/// Memoized [`raw_repair_transition`] for one child-processing loop.
+///
+/// The transition is a pure function of the repair path, the node's direct
+/// child types, and this depth's wrap registrations, so one computed value
+/// stays valid while the loop advances over fitting children or recurses into
+/// them: recursion alters this node's child list only through the hoist/husk
+/// splices the loop itself performs, and the wraps it registers are keyed
+/// strictly deeper. Recomputing per child index instead re-scans the whole
+/// child list each time, which is quadratic per container.
+///
+/// Contract: every mutation of `node.children` must pass through
+/// [`Self::consume`] (acting on the cached decision) or [`Self::invalidate`]
+/// (any other splice). `consume` re-derives the transition in debug builds to
+/// prove the cache was not stale.
+#[derive(Default)]
+struct TransitionCursor {
+    cached: Option<Option<RepairTransition>>,
+}
+
+impl TransitionCursor {
+    /// The transition for the node's current children, memoized until the
+    /// next [`Self::consume`] / [`Self::invalidate`].
+    fn peek(
+        &mut self,
+        node: &RawNode,
+        path: &[NodeType],
+        ctx: &RepairCtx,
+    ) -> &Option<RepairTransition> {
+        self.cached
+            .get_or_insert_with(|| raw_repair_transition(node, path, ctx))
+    }
+
+    /// Take the transition out of the cache to act on it, leaving the cursor
+    /// invalidated for the mutation that follows.
+    fn consume(
+        &mut self,
+        node: &RawNode,
+        path: &[NodeType],
+        ctx: &RepairCtx,
+    ) -> Option<RepairTransition> {
+        match self.cached.take() {
+            Some(cached) => {
+                debug_assert_eq!(
+                    cached,
+                    raw_repair_transition(node, path, ctx),
+                    "repair-transition cache went stale: a child-list mutation bypassed the cursor"
+                );
+                cached
+            }
+            None => raw_repair_transition(node, path, ctx),
+        }
+    }
+
+    /// Forget the cached transition after a child-list mutation that did not
+    /// go through [`Self::consume`].
+    fn invalidate(&mut self) {
+        self.cached = None;
+    }
+}
+
 fn child_own_dot(c: &RawChild) -> Dot {
     match c {
         RawChild::Leaf { id, .. } => *id,
@@ -496,13 +556,16 @@ pub fn normalize_window_forest_with_stats(
     // Mirror `process_children` for the Root node WITHOUT its terminal
     // `complete_required` (Root completion is applied document-globally elsewhere).
     let mut path = vec![NodeType::Root];
+    let mut cursor = TransitionCursor::default();
     let mut i = 0;
     while i < root.children.len() {
         if ctx.capped {
             break;
         }
-        match raw_repair_transition(&root, &path, &ctx) {
-            Some(RepairTransition::Wrap { index, chain }) if index == i => {
+        match cursor.peek(&root, &path, &ctx) {
+            Some(RepairTransition::Wrap { index, chain }) if *index == i => {
+                let chain = chain.clone();
+                cursor.consume(&root, &path, &ctx);
                 wrap_child(&mut root, i, &chain, &path, &mut ctx);
                 // The scaffold now fits here; re-examine slot i (recursed next pass).
                 continue;
@@ -510,10 +573,12 @@ pub fn normalize_window_forest_with_stats(
             Some(RepairTransition::SplitHoist {
                 index,
                 retained_completion,
-            }) if index == i => {
+            }) if *index == i => {
                 // Root accepts every block type through WRAP, so a terminating
                 // SPLIT here is unreachable; keep the promoted forest as Root
                 // children rather than lose it (total).
+                let retained_completion = retained_completion.clone();
+                cursor.consume(&root, &path, &ctx);
                 let hoist = split_out(&mut root, i, &retained_completion, &path, &mut ctx);
                 root.children.splice(i + 1..i + 1, hoist);
                 i += 1;
@@ -527,6 +592,7 @@ pub fn normalize_window_forest_with_stats(
             Vec::new()
         };
         if !child_hoist.is_empty() {
+            cursor.invalidate();
             let husk_emptied =
                 matches!(&root.children[i], RawChild::Block(b) if first_real_dot_node(b).is_none());
             if husk_emptied {
@@ -560,20 +626,25 @@ pub fn normalize_window_forest_for(
     let mut path = ancestors.to_vec();
     path.push(container_type);
     let mut hoisted: Vec<RawChild> = Vec::new();
+    let mut cursor = TransitionCursor::default();
     let mut i = 0;
     while i < root.children.len() {
         if ctx.capped {
             break;
         }
-        match raw_repair_transition(&root, &path, &ctx) {
-            Some(RepairTransition::Wrap { index, chain }) if index == i => {
+        match cursor.peek(&root, &path, &ctx) {
+            Some(RepairTransition::Wrap { index, chain }) if *index == i => {
+                let chain = chain.clone();
+                cursor.consume(&root, &path, &ctx);
                 wrap_child(&mut root, i, &chain, &path, &mut ctx);
                 continue;
             }
             Some(RepairTransition::SplitHoist {
                 index,
                 retained_completion,
-            }) if index == i => {
+            }) if *index == i => {
+                let retained_completion = retained_completion.clone();
+                cursor.consume(&root, &path, &ctx);
                 hoisted = split_out(&mut root, i, &retained_completion, &path, &mut ctx);
                 break;
             }
@@ -585,6 +656,7 @@ pub fn normalize_window_forest_for(
             Vec::new()
         };
         if !child_hoist.is_empty() {
+            cursor.invalidate();
             let husk_emptied =
                 matches!(&root.children[i], RawChild::Block(b) if first_real_dot_node(b).is_none());
             if husk_emptied {
@@ -683,13 +755,16 @@ fn process_children(
     path: &mut Vec<NodeType>,
     ctx: &mut RepairCtx,
 ) -> Vec<RawChild> {
+    let mut cursor = TransitionCursor::default();
     let mut i = 0;
     while i < node.children.len() {
         if ctx.capped {
             return Vec::new();
         }
-        match raw_repair_transition(node, path, ctx) {
-            Some(RepairTransition::Wrap { index, chain }) if index == i => {
+        match cursor.peek(node, path, ctx) {
+            Some(RepairTransition::Wrap { index, chain }) if *index == i => {
+                let chain = chain.clone();
+                cursor.consume(node, path, ctx);
                 wrap_child(node, i, &chain, path, ctx);
                 // The scaffold now fits here; re-examine slot i (it will be
                 // recursed on the next pass).
@@ -698,7 +773,9 @@ fn process_children(
             Some(RepairTransition::SplitHoist {
                 index,
                 retained_completion,
-            }) if index == i => {
+            }) if *index == i => {
+                let retained_completion = retained_completion.clone();
+                cursor.consume(node, path, ctx);
                 return split_out(node, i, &retained_completion, path, ctx);
             }
             _ => {}
@@ -708,6 +785,7 @@ fn process_children(
             RawChild::Leaf { .. } => Vec::new(),
         };
         if !child_hoist.is_empty() {
+            cursor.invalidate();
             let husk_emptied =
                 matches!(&node.children[i], RawChild::Block(b) if first_real_dot_node(b).is_none());
             if husk_emptied {
@@ -718,7 +796,7 @@ fn process_children(
         }
         i += 1;
     }
-    if let Some(RepairTransition::Ready { completion }) = raw_repair_transition(node, path, ctx) {
+    if let Some(RepairTransition::Ready { completion }) = cursor.consume(node, path, ctx) {
         apply_completion(node, &completion);
     }
     Vec::new()
