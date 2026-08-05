@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.currentCompositeKeyHashCode
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key as compositionKey
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -33,10 +34,10 @@ private inline fun <S, reified T> rememberPersistedState(
 ): S {
   val resolvedKey = key ?: currentCompositeKeyHashCode.toString(36)
   val holder = viewModel<PositionHolder<T>>(key = resolvedKey) { PositionHolder(initial) }
-  val restoredInitial = remember { holder.position }
-  val state = factory(restoredInitial)
+  val restoredInitial = remember(resolvedKey) { holder.position }
+  val state = compositionKey(resolvedKey) { factory(restoredInitial) }
 
-  LaunchedEffect(state) { snapshotFlow { read(state) }.collect { holder.position = it } }
+  LaunchedEffect(state, holder) { snapshotFlow { read(state) }.collect { holder.position = it } }
 
   return state
 }
