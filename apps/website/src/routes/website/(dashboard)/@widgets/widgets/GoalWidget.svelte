@@ -157,11 +157,11 @@
       {@const today = dayjs.kst()}
       {@const due = entityGoal.goal.dueAt ? dayjs(entityGoal.goal.dueAt).kst() : null}
       <div class={flex({ flexDirection: 'column', gap: '4px' })}>
-        <div class={flex({ justifyContent: 'space-between', gap: '8px', fontSize: '13px' })}>
-          <span class={css({ color: 'text.faint' })}>{entityGoal.isFolder ? '폴더 목표' : '문서 목표'}</span>
+        <div class={flex({ justifyContent: 'space-between', flexWrap: 'wrap', columnGap: '8px', rowGap: '2px', fontSize: '13px' })}>
+          <span class={css({ color: 'text.faint', whiteSpace: 'nowrap' })}>{entityGoal.isFolder ? '폴더 목표' : '문서 목표'}</span>
 
-          <div class={flex({ alignItems: 'center', gap: '6px' })}>
-            <span class={css({ color: 'text.subtle' })}>{comma(entityGoal.current)} / {comma(target)}자</span>
+          <div class={flex({ alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap', columnGap: '6px', marginLeft: 'auto' })}>
+            <span class={css({ color: 'text.subtle', whiteSpace: 'nowrap' })}>{comma(entityGoal.current)} / {comma(target)}자</span>
 
             {#if due}
               {@const status = dueStatus(entityGoal.current, target, due, today, 'compact')}
@@ -188,7 +188,7 @@
         type="button"
       >
         <ProgressRing progress={dailyGoal.additions / dailyGoal.target} size={20} state={dailyGoal.achieved ? 'achieved' : 'under'} />
-        <span class={css({ fontSize: '13px', color: 'text.subtle' })}>
+        <span class={css({ fontSize: '13px', color: 'text.subtle', whiteSpace: 'nowrap' })}>
           오늘 {comma(dailyGoal.additions)} / {comma(dailyGoal.target)}자
         </span>
       </button>
