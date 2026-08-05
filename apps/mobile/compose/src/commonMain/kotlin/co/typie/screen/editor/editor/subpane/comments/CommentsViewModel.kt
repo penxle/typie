@@ -36,8 +36,8 @@ import co.typie.serialization.json
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.encodeToJsonElement
 
 @OptIn(ExperimentalUuidApi::class)
@@ -49,14 +49,8 @@ internal class CommentsViewModel(private val entityId: String, private val docum
   private val settledThreadsByFilter =
     mutableStateMapOf<CommentFilter, List<CommentsSheetThread_thread>>()
   private var pendingCreatedThread by mutableStateOf<CommentsSheetThread_thread?>(null)
-  private var openThreadSelections by mutableStateOf(CommentThreadSelections.Empty)
-  private var notifiedOpenSelectionDecodeFailureIds = emptySet<String>()
-
-  val openSelectionsById: Map<String, StableSelection>
-    get() = openThreadSelections.selectionsById
-
-  val openSelectionDecodeFailureIds: Set<String>
-    get() = openThreadSelections.failedThreadIds
+  val openSelectionsById: Map<String, JsonElement>
+    get() = openThreads().associate { thread -> thread.id to thread.selection }
 
   val openQuery =
     Apollo.watchQuery(scope = viewModelScope, resetOnChange = false) {
@@ -124,21 +118,6 @@ internal class CommentsViewModel(private val entityId: String, private val docum
       requested -> source
       else -> QueryState.Loading
     }
-  }
-
-  suspend fun openThreadLookupForSelection(selection: StableSelection): OpenThreadSelectionLookup {
-    awaitOpenThreadsLoadedForLookup()
-    if (openQuery.state is QueryState.Error) {
-      return OpenThreadSelectionLookup.Unavailable
-    }
-
-    syncOpenThreadSelections()
-    val threadSelections = openThreadSelections
-    val threadId =
-      threadSelections.selectionsById.entries.firstNotNullOfOrNull { (threadId, threadSelection) ->
-        if (threadSelection.sameRangeAs(selection)) threadId else null
-      }
-    return threadId?.let(OpenThreadSelectionLookup::Found) ?: OpenThreadSelectionLookup.NotFound
   }
 
   suspend fun createThread(
@@ -265,7 +244,6 @@ internal class CommentsViewModel(private val entityId: String, private val docum
       if (pendingThreadId != null && sortedThreads.any { it.id == pendingThreadId }) {
         pendingCreatedThread = null
       }
-      updateOpenThreadSelections(sortedThreads)
     }
 
     val ids = sortedThreads.mapTo(mutableSetOf()) { it.id }
@@ -324,26 +302,6 @@ internal class CommentsViewModel(private val entityId: String, private val docum
     }
   }
 
-  private suspend fun awaitOpenThreadsLoadedForLookup() {
-    if (openQuery.state == QueryState.Loading) {
-      snapshotFlow { openQuery.state }.first { it !is QueryState.Loading }
-    }
-  }
-
-  private fun syncOpenThreadSelections() {
-    updateOpenThreadSelections(threads(CommentFilter.Open))
-  }
-
-  private fun updateOpenThreadSelections(threads: List<CommentsSheetThread_thread>) {
-    val selections = decodeCommentThreadSelections(threads)
-    selections.failures
-      .filter { it.threadId !in notifiedOpenSelectionDecodeFailureIds }
-      .forEach(::notifyCommentSelectionDecodeFailure)
-
-    notifiedOpenSelectionDecodeFailureIds = selections.failedThreadIds
-    openThreadSelections = selections
-  }
-
   private fun sourceState(filter: CommentFilter): QueryState<*> =
     when (filter) {
       CommentFilter.Open -> openQuery.state
@@ -363,11 +321,3 @@ internal fun CommentsSheet_Resolved_Query.Data.threads(): List<CommentsSheetThre
 private fun List<CommentsSheetThread_thread>.sortedByServerOrder():
   List<CommentsSheetThread_thread> =
   sortedWith(compareBy<CommentsSheetThread_thread> { it.createdAt }.thenBy { it.id })
-
-internal sealed interface OpenThreadSelectionLookup {
-  data class Found(val threadId: String) : OpenThreadSelectionLookup
-
-  data object NotFound : OpenThreadSelectionLookup
-
-  data object Unavailable : OpenThreadSelectionLookup
-}

@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/sveltekit';
 import { debounce } from '@typie/ui/utils';
 import { createContext, tick, untrack } from 'svelte';
 import { SvelteMap } from 'svelte/reactivity';
@@ -140,6 +141,8 @@ type UpdateReceipt = {
   reject: (error: unknown) => void;
   request: EditorRequest;
 };
+
+type TryEnqueueResult = { type: 'enqueued' } | { type: 'ignored' } | { type: 'failed'; error: unknown };
 
 type PublicationWaiter = {
   revision: number;
@@ -521,6 +524,33 @@ export class Editor {
       if (!this.#creationActive) this.fail(err);
       throw err;
     }
+  }
+
+  #tryEnqueue(message: Message): TryEnqueueResult {
+    if (this.terminal) return { type: 'ignored' };
+    if (this.#admission) {
+      this.#admission.enqueue(message);
+      return { type: 'enqueued' };
+    }
+    if (this.readOnly && isMutatingMessage(message)) {
+      this.editBlockedHandler?.();
+      return { type: 'ignored' };
+    }
+    const result = this.#invokeCore((core): TryEnqueueResult => {
+      try {
+        core.enqueue_request([message]);
+        return { type: 'enqueued' };
+      } catch (err) {
+        return { type: 'failed', error: err };
+      }
+    });
+    if (result.type === 'enqueued') this.#requestWasmTick();
+    return result;
+  }
+
+  #reportError(error: unknown, message: string): void {
+    console.error(message, error);
+    Sentry.captureException(error);
   }
 
   #discardCore(): void {
@@ -1622,18 +1652,11 @@ export class Editor {
     return () => set.delete(callback as never);
   }
 
-  enqueue(message: Message) {
-    if (this.terminal) return;
-    if (this.#admission) {
-      this.#admission.enqueue(message);
-      return;
-    }
-    if (this.readOnly && isMutatingMessage(message)) {
-      this.editBlockedHandler?.();
-      return;
-    }
-    this.#invokeCore((core) => core.enqueue_request([message]));
-    this.#requestWasmTick();
+  enqueue(message: Message): void {
+    const result = this.#tryEnqueue(message);
+    if (result.type !== 'failed') return;
+    if (!this.#creationActive) this.fail(result.error);
+    throw result.error;
   }
 
   async update(build: (request: EditorRequest) => void): Promise<EditorUpdate | null> {
@@ -2453,8 +2476,16 @@ export class Editor {
 
   addFrozenComment(id: string, selection: StableSelection): void {
     if (this.#registeredCommentIds.has(id)) return;
+    const result = this.#tryEnqueue({
+      type: 'tracked_range',
+      op: { type: 'add_frozen', id, group: 'comment', selection, metadata: '' },
+    });
+    if (result.type === 'failed') {
+      this.#reportError(result.error, `Failed to add frozen comment: ${id}`);
+      return;
+    }
+    if (result.type === 'ignored') return;
     this.#registeredCommentIds.add(id);
-    this.enqueue({ type: 'tracked_range', op: { type: 'add_frozen', id, group: 'comment', selection, metadata: '' } });
   }
 
   setCommentComposeRange(selection: StableSelection | null): void {

@@ -1,7 +1,9 @@
 package co.typie.screen.editor.editor.subpane.comments
 
+import co.touchlab.kermit.Logger
 import co.typie.editor.Editor
 import co.typie.editor.EditorRequestScope
+import co.typie.editor.TryEnqueueResult
 import co.typie.editor.ffi.DecorationStyle
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.StableSelection
@@ -9,6 +11,10 @@ import co.typie.editor.ffi.TrackedRange
 import co.typie.editor.ffi.TrackedRangeOp
 import co.typie.editor.ffi.Underline
 import co.typie.editor.ffi.UnderlineStyle
+import co.typie.serialization.json
+import io.sentry.kotlin.multiplatform.Sentry
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.decodeFromJsonElement
 
 internal const val COMMENT_RANGE_GROUP = "comment"
 internal const val ACTIVE_COMMENT_RANGE_GROUP = "comment-active"
@@ -21,7 +27,7 @@ internal suspend fun Editor.installCommentDecorations() {
 }
 
 internal suspend fun Editor.syncCommentRanges(
-  selectionsById: Map<String, StableSelection>,
+  selectionsById: Map<String, JsonElement>,
   activeId: String?,
   currentRanges: List<TrackedRange>,
 ) {
@@ -33,21 +39,6 @@ internal suspend fun Editor.syncCommentRanges(
   update {
     (registeredIds - desiredIds).forEach { id ->
       enqueue(Message.TrackedRange(TrackedRangeOp.Remove(id = id)))
-    }
-
-    selectionsById.forEach { (id, selection) ->
-      if (id !in registeredIds) {
-        enqueue(
-          Message.TrackedRange(
-            TrackedRangeOp.AddFrozen(
-              id = id,
-              group =
-                if (id == activeCommentId) ACTIVE_COMMENT_RANGE_GROUP else COMMENT_RANGE_GROUP,
-              selection = selection,
-            )
-          )
-        )
-      }
     }
 
     trackedRanges
@@ -70,6 +61,31 @@ internal suspend fun Editor.syncCommentRanges(
         )
       )
     }
+  }
+
+  selectionsById.forEach { (id, selection) ->
+    if (id !in registeredIds) {
+      addFrozenComment(
+        id = id,
+        group = if (id == activeCommentId) ACTIVE_COMMENT_RANGE_GROUP else COMMENT_RANGE_GROUP,
+        selection = selection,
+      )
+    }
+  }
+}
+
+internal fun Editor.addFrozenComment(id: String, group: String, selection: JsonElement) {
+  val result = tryEnqueue {
+    Message.TrackedRange(
+      TrackedRangeOp.AddFrozen(
+        id = id,
+        group = group,
+        selection = json.decodeFromJsonElement<StableSelection>(selection),
+      )
+    )
+  }
+  if (result is TryEnqueueResult.Failed) {
+    reportError(result.error, "Failed to add frozen comment: $id")
   }
 }
 
@@ -144,4 +160,9 @@ private fun installCommentDecorations(scope: EditorRequestScope) {
       )
     )
   )
+}
+
+private fun reportError(error: Throwable, message: String) {
+  Logger.e(error) { message }
+  runCatching { Sentry.captureException(error) }
 }

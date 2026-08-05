@@ -5,8 +5,12 @@ import co.typie.editor.ffi.CommandRejection
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.ResourceUpdate
 import co.typie.editor.ffi.SystemEvent
+import co.typie.screen.editor.editor.subpane.comments.COMMENT_RANGE_GROUP
+import co.typie.screen.editor.editor.subpane.comments.addFrozenComment
+import co.typie.serialization.json
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -16,6 +20,9 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.encodeToJsonElement
+import kotlinx.serialization.json.put
 
 class EditorUpdateTest {
   private class FakeResourceUpdate : ResourceUpdate
@@ -71,6 +78,34 @@ class EditorUpdateTest {
       assertEquals(fake.enqueuedRequests.single().id, fake.tickThroughRequests.single())
       assertEquals(1L, update.revision)
       assertEquals(listOf(CommandOutcome.Applied), update.commandOutcomes)
+    }
+
+  @Test
+  fun malformedFrozenCommentDoesNotFailEditorOrBlockValidSibling() =
+    runTest(dispatcher) {
+      val fake = FakeFfiEditor()
+      val editor = Editor(fake, this, dispatcher)
+      val validSelection = assertNotNull(fake.freezeSelection(FakeFfiEditor.EmptySelection))
+
+      editor.addFrozenComment(
+        id = "malformed",
+        group = COMMENT_RANGE_GROUP,
+        selection = buildJsonObject { put("version", "invalid") },
+      )
+      editor.addFrozenComment(
+        id = "valid",
+        group = COMMENT_RANGE_GROUP,
+        selection = json.encodeToJsonElement(validSelection),
+      )
+
+      assertFalse(editor.terminal)
+      assertEquals(
+        listOf("valid"),
+        fake.enqueued.mapNotNull { message ->
+          val op = (message as? Message.TrackedRange)?.op
+          (op as? co.typie.editor.ffi.TrackedRangeOp.AddFrozen)?.id
+        },
+      )
     }
 
   @Test

@@ -179,13 +179,6 @@ internal fun rememberEditorCommentsSession(
       commentThreadLocation(range.text)
     }
   val composeSelection = model?.threadState?.virtualThread?.selection
-  val openSelectionDecodeFailureIds = model?.openSelectionDecodeFailureIds.orEmpty()
-
-  LaunchedEffect(openSelectionDecodeFailureIds) {
-    if (openSelectionDecodeFailureIds.isNotEmpty()) {
-      toast.show(ToastType.Error, "코멘트 위치 정보를 읽을 수 없어요.")
-    }
-  }
 
   LaunchedEffect(editor, openSelectionsById, activeThreadId) {
     val activeEditor = editor ?: return@LaunchedEffect

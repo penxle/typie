@@ -224,24 +224,7 @@ private fun CommentsSheetContent(
       return
     }
 
-    val lookup = model.openThreadLookupForSelection(selection)
-    if (lookup == OpenThreadSelectionLookup.Unavailable) {
-      toast.show(ToastType.Error, "기존 코멘트를 확인할 수 없어요.")
-      return
-    }
-
     afterDiscardingCommentInput {
-      when (lookup) {
-        is OpenThreadSelectionLookup.Found -> {
-          model.updateFilter(CommentFilter.Open)
-          state.clearVirtualThread()
-          state.activateThread(lookup.threadId)
-          return@afterDiscardingCommentInput
-        }
-        OpenThreadSelectionLookup.NotFound -> Unit
-        OpenThreadSelectionLookup.Unavailable -> Unit
-      }
-
       if (state.virtualThread != null) {
         state.clearVirtualThread()
       }

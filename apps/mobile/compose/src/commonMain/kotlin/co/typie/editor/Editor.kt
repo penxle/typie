@@ -83,6 +83,14 @@ private data class PendingRequest(
 
 internal data class PublishedBundle(val snapshot: EditorState, val frames: Map<Int, PresentedFrame>)
 
+internal sealed interface TryEnqueueResult {
+  data object Enqueued : TryEnqueueResult
+
+  data object Ignored : TryEnqueueResult
+
+  data class Failed(val error: Throwable) : TryEnqueueResult
+}
+
 private class SurfacePage(
   var target: SurfaceTarget,
   var session: SurfaceSessionHandle,
@@ -436,17 +444,25 @@ internal constructor(
     }
   }
 
-  fun enqueue(message: Message) {
-    if (terminal) return
-    val localEdit = localEdits.register() ?: return
+  internal fun tryEnqueue(buildMessage: () -> Message): TryEnqueueResult {
+    if (terminal) return TryEnqueueResult.Ignored
+    val localEdit = localEdits.register() ?: return TryEnqueueResult.Ignored
     try {
-      inner.enqueueRequest(listOf(message))
+      inner.enqueueRequest(listOf(buildMessage()))
       queuedLocalEdits.updatePersistent { it.adding(localEdit) }
       scheduleTick()
+      return TryEnqueueResult.Enqueued
     } catch (e: Throwable) {
       localEdit.fail(e)
-      fail(e)
-      throw e
+      return TryEnqueueResult.Failed(e)
+    }
+  }
+
+  fun enqueue(message: Message) {
+    val result = tryEnqueue { message }
+    if (result is TryEnqueueResult.Failed) {
+      fail(result.error)
+      throw result.error
     }
   }
 
