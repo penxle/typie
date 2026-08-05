@@ -40,7 +40,7 @@ export const globalCss = defineGlobalStyles({
     textRendering: 'optimizeLegibility',
 
     scrollbarWidth: 'thin',
-    scrollbarColor: '{colors.control.scrollbar.default} {colors.transparent}',
+    scrollbarColor: '{colors.surface.inverse/50} {colors.transparent}',
 
     WebkitTapHighlightColor: 'transparent',
   },
@@ -116,12 +116,16 @@ export const globalCss = defineGlobalStyles({
     borderStyle: 'solid',
     borderColor: '{colors.transparent}',
     borderRadius: 'full',
-    backgroundColor: '{colors.control.scrollbar.default}',
+    backgroundColor: '{colors.surface.inverse/50}',
     backgroundClip: 'content-box',
   },
 
   '::-webkit-scrollbar-thumb:hover': {
-    backgroundColor: '{colors.control.scrollbar.hover}',
+    backgroundColor: '{colors.surface.inverse/80}',
+  },
+
+  '::-webkit-scrollbar-thumb:active': {
+    backgroundColor: '{colors.surface.inverse/80}',
   },
 });
 

@@ -394,6 +394,27 @@ export const semanticColors = defineSemanticTokens.colors({
       _darkEspresso: '#3c3028',
     },
   },
+  'surface.inverse': {
+    value: {
+      base: '{colors.gray.900}',
+      _lightWhite: '{colors.gray.900}',
+      _lightSnow: '#1c2638',
+      _lightButter: '#33301a',
+      _lightPeach: '#3c2018',
+      _lightRose: '#371a2c',
+      _lightLavender: '#201a41',
+      _lightMint: '#1a3028',
+      _lightLatte: '#2e2517',
+      _darkBlack: '{colors.dark.gray.50}',
+      _darkCharcoal: '#e4e4e7',
+      _darkGraphite: '#e8e8eb',
+      _darkMidnight: '#dce0f4',
+      _darkNavy: '#d6dfec',
+      _darkObsidian: '#e3def6',
+      _darkStorm: '#d6dfec',
+      _darkEspresso: '#f0e4d8',
+    },
+  },
 
   'interactive.hover': {
     value: {

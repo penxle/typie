@@ -310,13 +310,13 @@
         transition: 'colors',
         backgroundColor: isDraggingThis
           ? isUserMode
-            ? 'surface.dark/80'
-            : 'surface.dark/45'
+            ? 'surface.inverse/80'
+            : 'surface.inverse/45'
           : isUserMode
-            ? 'surface.dark/50'
-            : 'surface.dark/22',
-        _hover: { backgroundColor: 'surface.dark/80' },
-        _active: { backgroundColor: 'surface.dark/80' },
+            ? 'surface.inverse/50'
+            : 'surface.inverse/22',
+        _hover: { backgroundColor: 'surface.inverse/80' },
+        _active: { backgroundColor: 'surface.inverse/80' },
       })}
       aria-valuemax={geometry.maxScroll}
       aria-valuemin={0}
