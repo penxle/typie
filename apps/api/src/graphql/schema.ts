@@ -9,6 +9,7 @@ import './resolvers/document-comment.ts';
 import './resolvers/entity.ts';
 import './resolvers/folder.ts';
 import './resolvers/font.ts';
+import './resolvers/goal.ts';
 import './resolvers/internal.ts';
 import './resolvers/llm.ts';
 import './resolvers/note.ts';

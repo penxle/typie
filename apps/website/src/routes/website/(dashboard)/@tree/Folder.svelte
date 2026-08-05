@@ -14,6 +14,7 @@
   import { graphql } from '$mearie';
   import EntityIcon from '../@context-menu/EntityIcon.svelte';
   import FolderMenu from '../@context-menu/FolderMenu.svelte';
+  import EntityGoalIndicator from '../@goal/EntityGoalIndicator.svelte';
   import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
   import EntitySelectionIndicator from './@selection/EntitySelectionIndicator.svelte';
   import MultiEntitiesMenu from './@selection/MultiEntitiesMenu.svelte';
@@ -34,6 +35,7 @@
       fragment DashboardLayout_EntityTree_Folder_folder on Folder {
         id
         name
+        characterCount
 
         entity {
           id
@@ -45,6 +47,13 @@
           iconColor
 
           ...EntityIcon_entity
+
+          goal {
+            id
+            targetCharacterCount
+            dueAt
+            createdAt
+          }
 
           lastChild {
             id
@@ -300,6 +309,19 @@
       >
         {folder.data.name}
       </span>
+
+      {#if folder.data.entity.goal}
+        <EntityGoalIndicator
+          current={folder.data.characterCount}
+          dueAt={folder.data.entity.goal.dueAt}
+          goalCreatedAt={folder.data.entity.goal.createdAt}
+          onclick={() => {
+            app.state.goalOpen = [folder.data.entity.id];
+            mixpanel.track('open_goal_modal', { via: 'tree_glyph' });
+          }}
+          targetCharacterCount={folder.data.entity.goal.targetCharacterCount}
+        />
+      {/if}
 
       <Menu placement="bottom-start">
         {#snippet button({ open })}

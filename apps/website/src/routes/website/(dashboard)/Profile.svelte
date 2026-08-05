@@ -28,6 +28,7 @@
   import ShieldUserIcon from '~icons/lucide/shield-user';
   import SmartphoneIcon from '~icons/lucide/smartphone';
   import SunIcon from '~icons/lucide/sun';
+  import TargetIcon from '~icons/lucide/target';
   import AppleIcon from '~icons/simple-icons/apple';
   import DiscordIcon from '~icons/simple-icons/discord';
   import GooglePlayIcon from '~icons/simple-icons/googleplay';
@@ -419,6 +420,31 @@
               <span>어드민</span>
             </a>
           {/if}
+
+          <button
+            class={flex({
+              alignItems: 'center',
+              gap: '8px',
+              paddingX: '8px',
+              paddingY: '6px',
+              borderRadius: '6px',
+              fontSize: '13px',
+              fontWeight: 'medium',
+              color: 'text.default',
+              transition: 'common',
+              cursor: 'pointer',
+              _hover: { backgroundColor: 'surface.muted' },
+            })}
+            onclick={() => {
+              close();
+              app.state.dailyGoalOpen = true;
+              mixpanel.track('open_daily_goal_modal', { via: 'profile_menu' });
+            }}
+            type="button"
+          >
+            <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={TargetIcon} size={14} />
+            <span>일일 목표</span>
+          </button>
 
           <button
             class={flex({

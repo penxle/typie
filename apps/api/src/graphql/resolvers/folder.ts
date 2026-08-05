@@ -53,28 +53,35 @@ Folder.implement({
     }),
 
     characterCount: t.int({
-      resolve: async (self) => {
-        const rows = await db.execute<{ total: number }>(
-          sql`
-            WITH RECURSIVE descendant_entities AS (
-              SELECT id
-              FROM ${Entities}
-              WHERE id = ${self.entityId}
-              UNION ALL
-              SELECT e.id
-              FROM ${Entities} e
-              JOIN descendant_entities de ON e.parent_id = de.id
-              WHERE e.state = ${EntityState.ACTIVE}
-            )
-            SELECT COALESCE(SUM(ds.character_count), 0) AS total
-            FROM descendant_entities de
-            JOIN ${Documents} d ON d.entity_id = de.id
-            JOIN ${DocumentStates} ds ON ds.document_id = d.id
-            JOIN ${Entities} e ON e.id = d.entity_id
-            WHERE e.state = ${EntityState.ACTIVE}
-          `,
-        );
-        return rows[0]?.total || 0;
+      resolve: async (self, _, ctx) => {
+        const loader = ctx.loader({
+          name: 'Folder.characterCount',
+          nullable: true,
+          load: async (entityIds: string[]) => {
+            return await db.execute<{ root_id: string; total: number }>(sql`
+              WITH RECURSIVE sq AS (
+                SELECT ${Entities.id} AS root_id, ${Entities.id} AS id
+                FROM ${Entities}
+                WHERE ${inArray(Entities.id, entityIds)}
+                UNION ALL
+                SELECT sq.root_id, ${Entities.id}
+                FROM ${Entities}
+                JOIN sq ON ${Entities.parentId} = sq.id
+                WHERE ${Entities.state} = ${EntityState.ACTIVE}
+              )
+              SELECT sq.root_id AS root_id, COALESCE(SUM(ds.character_count), 0) AS total
+              FROM sq
+              LEFT JOIN ${Documents} d ON d.entity_id = sq.id
+              LEFT JOIN ${Entities} e ON e.id = d.entity_id AND e.state = ${EntityState.ACTIVE}
+              LEFT JOIN ${DocumentStates} ds ON ds.document_id = d.id AND e.id IS NOT NULL
+              GROUP BY sq.root_id
+            `);
+          },
+          key: (row) => row?.root_id,
+        });
+
+        const row = await loader.load(self.entityId);
+        return row ? Number(row.total) : 0;
       },
     }),
 

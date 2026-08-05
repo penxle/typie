@@ -24,7 +24,7 @@ import { supportsPlanInterval } from '@typie/lib/plan';
 import { redeemCodeSchema, userSchema } from '@typie/lib/validation';
 import argon2 from 'argon2';
 import dayjs from 'dayjs';
-import { and, asc, desc, eq, getTableColumns, gt, gte, inArray, isNotNull, lt, ne, sql, sum } from 'drizzle-orm';
+import { and, asc, desc, eq, getTableColumns, gt, gte, inArray, isNotNull, lt, lte, ne, sql, sum } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import qs from 'query-string';
 import { redis } from '#/cache.ts';
@@ -47,6 +47,7 @@ import {
   TableCode,
   UserBillingKeys,
   UserDevices,
+  UserGoals,
   UserInAppPurchases,
   UserMarketingConsents,
   UserPaymentCredits,
@@ -69,6 +70,7 @@ import * as portone from '#/external/portone.ts';
 import { evaluateCouponCondition } from '#/utils/coupon.ts';
 import { getDocumentFontFamilies } from '#/utils/document.ts';
 import { resolveUserEntitlement, selectRepresentativeSubscription } from '#/utils/entitlement.ts';
+import { getEffectiveTarget } from '#/utils/goal.ts';
 import { precheckIapEnroll } from '#/utils/iap-normalize.ts';
 import { opsAlert } from '#/utils/ops-alert.ts';
 import { assertActiveSubscription } from '#/utils/plan.ts';
@@ -93,6 +95,8 @@ import {
   User,
   UserBillingKey,
   UserDevice,
+  UserGoal,
+  UserGoalHistory,
   UserPersonalIdentity,
   UserSingleSignOn,
   UserTrial,
@@ -314,6 +318,64 @@ User.implement({
 
         // 시작이 지난 예약은 대표 구독의 후보다 — 여기서도 내보내면 같은 행이 양쪽에 동시 노출된다.
         return rows.find((row) => row.state === SubscriptionState.WILL_ACTIVATE && row.startsAt.isAfter(now)) ?? null;
+      },
+    }),
+
+    goal: t.withAuth({ session: true }).field({
+      type: UserGoal,
+      nullable: true,
+      resolve: async (self) => {
+        const row = await db
+          .select({ id: UserGoals.id, targetCharacterCount: UserGoals.targetCharacterCount })
+          .from(UserGoals)
+          .where(and(eq(UserGoals.userId, self.id), lte(UserGoals.effectiveAt, dayjs.kst().startOf('day'))))
+          .orderBy(desc(UserGoals.effectiveAt))
+          .limit(1)
+          .then(first);
+
+        return row && row.targetCharacterCount !== null ? row.id : null;
+      },
+    }),
+
+    goalHistory: t.withAuth({ session: true }).field({
+      type: [UserGoalHistory],
+      resolve: async (self) => {
+        const startOfToday = dayjs.kst().startOf('day');
+        const startOfTomorrow = startOfToday.add(1, 'day');
+        const from = startOfTomorrow.subtract(365, 'days');
+
+        const goalRows = await db
+          .select({ targetCharacterCount: UserGoals.targetCharacterCount, effectiveAt: UserGoals.effectiveAt })
+          .from(UserGoals)
+          .where(and(eq(UserGoals.userId, self.id), lt(UserGoals.effectiveAt, startOfTomorrow)));
+
+        const documentDate = sql<string>`DATE(${DocumentCharacterCountChanges.bucket} AT TIME ZONE 'Asia/Seoul')`.mapWith(dayjs.kst);
+        const additionRows = await db
+          .select({ date: documentDate, additions: sum(DocumentCharacterCountChanges.additions).mapWith(Number) })
+          .from(DocumentCharacterCountChanges)
+          .where(
+            and(
+              eq(DocumentCharacterCountChanges.userId, self.id),
+              gte(DocumentCharacterCountChanges.bucket, from),
+              lt(DocumentCharacterCountChanges.bucket, startOfTomorrow),
+            ),
+          )
+          .groupBy(documentDate);
+
+        const additionsByDate = new Map(additionRows.map((row) => [row.date.format('YYYY-MM-DD'), row.additions]));
+
+        const result = [];
+        let cursor = from;
+        while (!cursor.isAfter(startOfToday)) {
+          const target = getEffectiveTarget(goalRows, cursor);
+          if (target !== null && target > 0) {
+            const additions = additionsByDate.get(cursor.format('YYYY-MM-DD')) ?? 0;
+            result.push({ date: cursor, targetCharacterCount: target, additions, achieved: additions >= target });
+          }
+          cursor = cursor.add(1, 'day');
+        }
+
+        return result;
       },
     }),
 

@@ -12,6 +12,7 @@
   import { graphql } from '$mearie';
   import DocumentPanelCharacterCount from './DocumentPanelCharacterCount.svelte';
   import DocumentPanelCharacterCountChange from './DocumentPanelCharacterCountChange.svelte';
+  import DocumentPanelGoal from './DocumentPanelGoal.svelte';
   import type { Editor } from '$lib/editor-ffi/editor.svelte';
   import type { DocumentPanelV2_Info_document$key, DocumentPanelV2_Info_user$key } from '$mearie';
 
@@ -42,6 +43,7 @@
         }
 
         ...DocumentPanelV2_Info_CharacterCountChange_document
+        ...DocumentPanelV2_Goal_document
       }
     `),
     () => document$key,
@@ -228,5 +230,7 @@
         <DocumentPanelCharacterCountChange document$key={document.data} />
       </div>
     </div>
+
+    <DocumentPanelGoal document$key={document.data} {editor} />
   </div>
 </div>

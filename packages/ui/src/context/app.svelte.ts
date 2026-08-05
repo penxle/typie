@@ -53,6 +53,8 @@ type AppState = {
   shareOpen: string[];
   exportOpen: string | null;
   statsOpen: boolean;
+  goalOpen: string[];
+  dailyGoalOpen: boolean;
   shortcutsOpen: boolean;
 
   subscribed: boolean;
@@ -103,6 +105,8 @@ export const setupAppContext = (userId: string) => {
     shareOpen: [],
     exportOpen: null,
     statsOpen: false,
+    goalOpen: [],
+    dailyGoalOpen: false,
     shortcutsOpen: false,
 
     subscribed: false,

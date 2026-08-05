@@ -7,9 +7,11 @@ import escape from 'escape-string-regexp';
 import { match } from 'ts-pattern';
 import {
   db,
+  DocumentHeads,
   Documents,
   DocumentStates,
   Entities,
+  EntityGoals,
   first,
   firstOrThrow,
   firstOrThrowWith,
@@ -24,6 +26,7 @@ import {
 import { env } from '#/env.ts';
 import { enqueueJob } from '#/mq/index.ts';
 import { pubsub } from '#/pubsub.ts';
+import { buildDailyHistory } from '#/utils/goal.ts';
 import { buildFreshV2Content, copyEntityRecursive, generateFractionalOrder } from '#/utils/index.ts';
 import { assertSitePermission } from '#/utils/permission.ts';
 import { assertActiveSubscription } from '#/utils/plan.ts';
@@ -31,7 +34,9 @@ import { enqueueSearchSyncForEntityIds } from '#/utils/search-index.ts';
 import { builder } from '../builder.ts';
 import {
   Entity,
+  EntityCharacterCountHistory,
   EntityContainer,
+  EntityGoal,
   EntityNode,
   EntityView,
   EntityViewNode,
@@ -200,6 +205,81 @@ Entity.implement({
         });
 
         return await loader.load(self.id);
+      },
+    }),
+
+    goal: t.field({
+      type: EntityGoal,
+      nullable: true,
+      resolve: async (self, _, ctx) => {
+        const loader = ctx.loader({
+          name: 'Entity.goal',
+          nullable: true,
+          load: async (ids: string[]) => {
+            return await db.select().from(EntityGoals).where(inArray(EntityGoals.entityId, ids));
+          },
+          key: (row) => row?.entityId,
+        });
+
+        return await loader.load(self.id);
+      },
+    }),
+
+    characterCountHistory: t.field({
+      type: [EntityCharacterCountHistory],
+      resolve: async (self) => {
+        const startOfTomorrow = dayjs.kst().startOf('day').add(1, 'day');
+        const from = startOfTomorrow.subtract(365, 'days');
+        const fromDate = from.format('YYYY-MM-DD');
+
+        const subtree = sql`
+          WITH RECURSIVE sq AS (
+            SELECT ${Entities.id}
+            FROM ${Entities}
+            WHERE ${eq(Entities.id, self.id)}
+            UNION ALL
+            SELECT ${Entities.id}
+            FROM ${Entities}
+            JOIN sq ON ${Entities.parentId} = sq.id
+            WHERE ${Entities.state} = ${EntityState.ACTIVE}
+          )
+        `;
+
+        const baselineRows = await db.execute<{ document_id: string; character_count: number }>(sql`
+          ${subtree}
+          SELECT DISTINCT ON (dh.document_id)
+            dh.document_id,
+            dh.character_count
+          FROM ${DocumentHeads} dh
+          JOIN ${Documents} d ON d.id = dh.document_id
+          JOIN sq ON d.entity_id = sq.id
+          WHERE dh.bucket < ${from.toISOString()}
+          ORDER BY dh.document_id, dh.bucket DESC
+        `);
+
+        const recentRows = await db.execute<{ document_id: string; date: string; character_count: number }>(sql`
+          ${subtree}
+          SELECT DISTINCT ON (dh.document_id, DATE(dh.bucket AT TIME ZONE 'Asia/Seoul'))
+            dh.document_id,
+            TO_CHAR(dh.bucket AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD') AS date,
+            dh.character_count
+          FROM ${DocumentHeads} dh
+          JOIN ${Documents} d ON d.id = dh.document_id
+          JOIN sq ON d.entity_id = sq.id
+          WHERE dh.bucket >= ${from.toISOString()}
+          ORDER BY dh.document_id, DATE(dh.bucket AT TIME ZONE 'Asia/Seoul'), dh.bucket DESC
+        `);
+
+        const today = dayjs.kst().format('YYYY-MM-DD');
+        const history = buildDailyHistory(
+          [
+            ...baselineRows.map((row) => ({ documentId: row.document_id, date: fromDate, characterCount: Number(row.character_count) })),
+            ...recentRows.map((row) => ({ documentId: row.document_id, date: row.date, characterCount: Number(row.character_count) })),
+          ],
+          today,
+        );
+
+        return history.map((point) => ({ date: dayjs.kst(point.date).startOf('day'), characterCount: point.characterCount }));
       },
     }),
 

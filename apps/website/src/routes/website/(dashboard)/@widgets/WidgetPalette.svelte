@@ -10,6 +10,7 @@
   import type {
     Editor_Widget_CharacterCountChangeWidget_document$key,
     Editor_Widget_DocumentRelatedNoteWidget_document$key,
+    Editor_Widget_GoalWidget_document$key,
   } from '$mearie';
   import type { RegisteredEditor } from '../[slug]/@pane/editor-registry.svelte';
   import type { WidgetType } from './widget-context.svelte';
@@ -17,7 +18,9 @@
   type Props = {
     open: boolean;
     editor?: RegisteredEditor;
-    document$key?: Editor_Widget_CharacterCountChangeWidget_document$key & Editor_Widget_DocumentRelatedNoteWidget_document$key;
+    document$key?: Editor_Widget_CharacterCountChangeWidget_document$key &
+      Editor_Widget_DocumentRelatedNoteWidget_document$key &
+      Editor_Widget_GoalWidget_document$key;
     addedWidgets?: WidgetType[];
     onDragStart: (e: PointerEvent, widgetType: WidgetType, target: HTMLElement) => void;
     onDragMove: (e: PointerEvent) => void;

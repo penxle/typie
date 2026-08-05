@@ -22,6 +22,7 @@
   import PencilIcon from '~icons/lucide/pencil-line';
   import ScissorsIcon from '~icons/lucide/scissors';
   import SquarePenIcon from '~icons/lucide/square-pen';
+  import TargetIcon from '~icons/lucide/target';
   import TrashIcon from '~icons/lucide/trash';
   import TriangleAlertIcon from '~icons/lucide/triangle-alert';
   import { goto } from '$app/navigation';
@@ -417,6 +418,16 @@
   }}
 >
   공유 및 게시
+</MenuItem>
+
+<MenuItem
+  icon={TargetIcon}
+  onclick={() => {
+    app.state.goalOpen = [entity.id];
+    mixpanel.track('open_goal_modal', { via });
+  }}
+>
+  목표
 </MenuItem>
 
 <MenuItem

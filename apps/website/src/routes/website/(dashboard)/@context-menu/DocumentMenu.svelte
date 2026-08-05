@@ -22,6 +22,7 @@
   import LayoutTemplateIcon from '~icons/lucide/layout-template';
   import Rows2Icon from '~icons/lucide/rows-2';
   import ScissorsIcon from '~icons/lucide/scissors';
+  import TargetIcon from '~icons/lucide/target';
   import TrashIcon from '~icons/lucide/trash';
   import { goto } from '$app/navigation';
   import { cache, unwrapError } from '$lib/graphql';
@@ -481,6 +482,16 @@
   }}
 >
   공유 및 게시
+</MenuItem>
+
+<MenuItem
+  icon={TargetIcon}
+  onclick={() => {
+    app.state.goalOpen = [entity.id];
+    mixpanel.track('open_goal_modal', { via });
+  }}
+>
+  목표
 </MenuItem>
 
 <MenuItem icon={CopyIcon} onclick={handleDuplicate}>복제</MenuItem>

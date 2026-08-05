@@ -276,6 +276,24 @@ export const Entities = pgTable(
   ],
 );
 
+export const EntityGoals = pgTable('entity_goals', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createDbId(TableCode.ENTITY_GOALS)),
+  entityId: text('entity_id')
+    .notNull()
+    .unique()
+    .references(() => Entities.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  targetCharacterCount: integer('target_character_count').notNull(),
+  dueAt: datetime('due_at'),
+  createdAt: datetime('created_at')
+    .notNull()
+    .default(sql`now()`),
+  updatedAt: datetime('updated_at')
+    .notNull()
+    .default(sql`now()`),
+});
+
 export const Images = pgTable('images', {
   id: text('id')
     .primaryKey()
@@ -1021,6 +1039,24 @@ export const UserPreferences = pgTable('user_preferences', {
     .notNull()
     .default(sql`now()`),
 });
+
+export const UserGoals = pgTable(
+  'user_goals',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.USER_GOALS)),
+    userId: text('user_id')
+      .notNull()
+      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    targetCharacterCount: integer('target_character_count'),
+    effectiveAt: datetime('effective_at').notNull(),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [uniqueIndex().on(t.userId, t.effectiveAt)],
+);
 
 export const UserPushNotificationTokens = pgTable(
   'user_push_notification_tokens',

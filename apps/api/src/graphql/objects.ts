@@ -59,6 +59,7 @@ export const DocumentState = createObjectRef('DocumentState', T.DocumentStates);
 export const DocumentHead = createObjectRef('DocumentHead', T.DocumentHeads);
 export const Embed = createObjectRef('Embed', T.Embeds);
 export const Entity = createObjectRef('Entity', T.Entities);
+export const EntityGoal = createObjectRef('EntityGoal', T.EntityGoals);
 export const File = createObjectRef('File', T.Files);
 export const Folder = createObjectRef('Folder', T.Folders);
 export const Font = createObjectRef('Font', T.Fonts);
@@ -83,6 +84,7 @@ export const UserDevice = createObjectRef('UserDevice', T.UserDevices);
 export const UserPersonalIdentity = createObjectRef('UserPersonalIdentity', T.UserPersonalIdentities);
 export const UserSingleSignOn = createObjectRef('UserSingleSignOn', T.UserSingleSignOns);
 export const UserTrial = createObjectRef('UserTrial', T.UserTrials);
+export const UserGoal = createObjectRef('UserGoal', T.UserGoals);
 export const Widget = createObjectRef('Widget', T.Widgets);
 
 export const DocumentView = createObjectRef('DocumentView', T.Documents);
@@ -111,6 +113,22 @@ export const CharacterCountChange = builder.simpleObject('CharacterCountChange',
     date: t.field({ type: 'DateTime' }),
     additions: t.int(),
     deletions: t.int(),
+  }),
+});
+
+export const EntityCharacterCountHistory = builder.simpleObject('EntityCharacterCountHistory', {
+  fields: (t) => ({
+    date: t.field({ type: 'DateTime' }),
+    characterCount: t.int(),
+  }),
+});
+
+export const UserGoalHistory = builder.simpleObject('UserGoalHistory', {
+  fields: (t) => ({
+    date: t.field({ type: 'DateTime' }),
+    targetCharacterCount: t.int(),
+    additions: t.int(),
+    achieved: t.boolean(),
   }),
 });
 

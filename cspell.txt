@@ -156,6 +156,7 @@ onexpand
 oniconhover
 onissueclick
 onrowhover
+onsaved
 onstatuschange
 onsubscribe
 oplog

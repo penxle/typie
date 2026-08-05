@@ -184,6 +184,10 @@ input DeleteEntitiesInput {
   entityIds: [ID!]!
 }
 
+input DeleteEntityGoalInput {
+  entityId: ID!
+}
+
 input DeleteFolderInput {
   folderId: ID!
 }
@@ -472,6 +476,7 @@ type Embed {
 type Entity implements IEntity {
   ancestors: [Entity!]!
   availability: EntityAvailability!
+  characterCountHistory: [EntityCharacterCountHistory!]!
   children: [Entity!]!
   container: EntityContainer!
   deletedAt: DateTime
@@ -479,6 +484,7 @@ type Entity implements IEntity {
   depth: Int!
   descendants: [Entity!]!
   firstChild: Entity
+  goal: EntityGoal
   icon: String!
   iconColor: String!
   id: ID!
@@ -504,7 +510,19 @@ enum EntityAvailability {
   UNLISTED
 }
 
+type EntityCharacterCountHistory {
+  characterCount: Int!
+  date: DateTime!
+}
+
 union EntityContainer = Entity | Site
+
+type EntityGoal {
+  createdAt: DateTime!
+  dueAt: DateTime
+  id: ID!
+  targetCharacterCount: Int!
+}
 
 union EntityNode = Document | Folder
 
@@ -811,11 +829,13 @@ type Mutation {
   deleteDocumentComment(input: DeleteDocumentCommentInput!): DocumentCommentThread!
   deleteDocumentCommentThread(input: DeleteDocumentCommentThreadInput!): DocumentCommentThread!
   deleteEntities(input: DeleteEntitiesInput!): [Entity!]!
+  deleteEntityGoal(input: DeleteEntityGoalInput!): Entity!
   deleteFolder(input: DeleteFolderInput!): Folder!
   deleteNote(input: DeleteNoteInput!): Note!
   deleteSite(input: DeleteSiteInput!): Site!
   deleteTextReplacement(input: DeleteTextReplacementInput!): TextReplacementNode!
   deleteUser: Boolean!
+  deleteUserGoal: User!
   deleteWidget(input: DeleteWidgetInput!): Widget!
   dumpLocalStorage(input: DumpLocalStorageInput!): User!
   duplicateDocument(input: DuplicateDocumentInput!): Document!
@@ -869,6 +889,7 @@ type Mutation {
   updateDocumentsOption(input: UpdateDocumentsOptionInput!): [Document!]!
   updateEmail(input: UpdateEmailInput!): Boolean!
   updateEntitiesIcon(input: UpdateEntitiesIconInput!): [Entity!]!
+  updateEntityGoal(input: UpdateEntityGoalInput!): Entity!
   updateEntityIcon(input: UpdateEntityIconInput!): Entity!
   updateFolderOption(input: UpdateFolderOptionInput!): Folder!
   updateFoldersOption(input: UpdateFoldersOptionInput!): [Folder!]!
@@ -880,6 +901,7 @@ type Mutation {
   updateSiteSlug(input: UpdateSiteSlugInput!): Site!
   updateTextReplacement(input: UpdateTextReplacementInput!): TextReplacementNode!
   updateUser(input: UpdateUserInput!): User!
+  updateUserGoal(input: UpdateUserGoalInput!): User!
   updateWidget(input: UpdateWidgetInput!): Widget!
   verifyPersonalIdentity(input: VerifyPersonalIdentityInput!): User!
   viewEntity(input: ViewEntityInput!): Entity!
@@ -1367,6 +1389,12 @@ input UpdateEntitiesIconInput {
   iconColor: String
 }
 
+input UpdateEntityGoalInput {
+  dueAt: DateTime
+  entityId: ID!
+  targetCharacterCount: Int!
+}
+
 input UpdateEntityIconInput {
   entityId: ID!
   icon: String!
@@ -1430,6 +1458,10 @@ input UpdateTextReplacementInput {
   textReplacementId: ID!
 }
 
+input UpdateUserGoalInput {
+  targetCharacterCount: Int!
+}
+
 input UpdateUserInput {
   avatarId: ID!
   name: String!
@@ -1455,6 +1487,8 @@ type User implements IUser {
   entitled: Boolean!
   entitledUntil: DateTime
   fontFamilies: [FontFamily!]!
+  goal: UserGoal
+  goalHistory: [UserGoalHistory!]!
   hadSubscription: Boolean!
   hasPassword: Boolean!
   id: ID!
@@ -1503,6 +1537,18 @@ enum UserDevicePlatform {
   ANDROID
   IOS
   WEB
+}
+
+type UserGoal {
+  id: ID!
+  targetCharacterCount: Int!
+}
+
+type UserGoalHistory {
+  achieved: Boolean!
+  additions: Int!
+  date: DateTime!
+  targetCharacterCount: Int!
 }
 
 type UserPersonalIdentity {

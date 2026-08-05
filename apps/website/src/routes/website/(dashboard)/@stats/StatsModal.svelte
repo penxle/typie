@@ -2,13 +2,15 @@
   import { createMutation, createQuery } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
-  import { Button, Icon, Modal } from '@typie/ui/components';
+  import { Button, Icon, Modal, ProgressRing } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { Toast } from '@typie/ui/notification';
   import { comma, downloadFromBase64 } from '@typie/ui/utils';
   import dayjs from 'dayjs';
+  import mixpanel from 'mixpanel-browser';
   import CopyIcon from '~icons/lucide/copy';
   import DownloadIcon from '~icons/lucide/download';
+  import { todayProgress } from '$lib/goal';
   import { graphql } from '$mearie';
   import ActivityChart from './ActivityChart.svelte';
   import ActivityGrid from './ActivityGrid.svelte';
@@ -30,6 +32,18 @@
 
           usage {
             totalCharacterCount
+          }
+
+          goal {
+            id
+            targetCharacterCount
+          }
+
+          goalHistory {
+            date
+            targetCharacterCount
+            additions
+            achieved
           }
 
           ...DashboardLayout_Stats_ActivityChart_user
@@ -278,6 +292,53 @@
               {/each}
             </div>
           </div>
+        {/if}
+      </div>
+
+      <div class={css(cardStyle)}>
+        {#if query.data.me.goal}
+          {@const goal = query.data.me.goal}
+          {@const progress = todayProgress(query.data.me.goalHistory, dayjs.kst())}
+
+          <div class={flex({ justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' })}>
+            <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>일일 목표</div>
+            <button
+              class={css({ fontSize: '12px', color: 'text.faint', cursor: 'pointer', _hover: { color: 'text.default' } })}
+              onclick={() => {
+                app.state.dailyGoalOpen = true;
+                mixpanel.track('open_daily_goal_modal', { via: 'stats_modal' });
+              }}
+              type="button"
+            >
+              자세히
+            </button>
+          </div>
+
+          <div class={flex({ alignItems: 'center', gap: '10px' })}>
+            <ProgressRing
+              progress={progress.additions / goal.targetCharacterCount}
+              size={28}
+              state={progress.achieved ? 'achieved' : 'under'}
+            />
+            <div class={css({ fontSize: '28px', fontWeight: 'bold', color: 'text.default', fontVariantNumeric: 'tabular-nums' })}>
+              {comma(progress.additions)}
+              <span class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.faint' })}>
+                / {comma(goal.targetCharacterCount)}자
+              </span>
+            </div>
+          </div>
+        {:else}
+          <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint', marginBottom: '12px' })}>일일 목표</div>
+          <button
+            class={css({ fontSize: '14px', color: 'text.faint', cursor: 'pointer', _hover: { color: 'text.default' } })}
+            onclick={() => {
+              app.state.dailyGoalOpen = true;
+              mixpanel.track('open_daily_goal_modal', { via: 'stats_modal' });
+            }}
+            type="button"
+          >
+            일일 목표 정하기
+          </button>
         {/if}
       </div>
 

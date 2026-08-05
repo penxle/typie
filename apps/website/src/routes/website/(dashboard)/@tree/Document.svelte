@@ -5,12 +5,14 @@
   import { contextMenu } from '@typie/ui/actions';
   import { Icon, Menu } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
+  import mixpanel from 'mixpanel-browser';
   import { untrack } from 'svelte';
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import FileIcon from '~icons/lucide/file';
   import { graphql } from '$mearie';
   import DocumentMenu from '../@context-menu/DocumentMenu.svelte';
   import EntityIcon from '../@context-menu/EntityIcon.svelte';
+  import EntityGoalIndicator from '../@goal/EntityGoalIndicator.svelte';
   import EntitySelectionIndicator from './@selection/EntitySelectionIndicator.svelte';
   import MultiEntitiesMenu from './@selection/MultiEntitiesMenu.svelte';
   import { getTreeContext } from './state.svelte';
@@ -44,6 +46,13 @@
           iconColor
 
           ...EntityIcon_entity
+
+          goal {
+            id
+            targetCharacterCount
+            dueAt
+            createdAt
+          }
 
           parent {
             id
@@ -153,6 +162,19 @@
   >
     {document.data.title}
   </span>
+
+  {#if document.data.entity.goal}
+    <EntityGoalIndicator
+      current={document.data.characterCount}
+      dueAt={document.data.entity.goal.dueAt}
+      goalCreatedAt={document.data.entity.goal.createdAt}
+      onclick={() => {
+        app.state.goalOpen = [document.data.entity.id];
+        mixpanel.track('open_goal_modal', { via: 'tree_glyph' });
+      }}
+      targetCharacterCount={document.data.entity.goal.targetCharacterCount}
+    />
+  {/if}
 
   <Menu placement="bottom-start">
     {#snippet button({ open })}

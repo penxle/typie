@@ -72,6 +72,7 @@
 
               ...Editor_Widget_CharacterCountChangeWidget_document
               ...Editor_Widget_DocumentRelatedNoteWidget_document
+              ...Editor_Widget_GoalWidget_document
             }
           }
         }

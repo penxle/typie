@@ -3,9 +3,10 @@
   import { DocumentType } from '@typie/lib/enums';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
-  import { Button, Helmet, Icon } from '@typie/ui/components';
+  import { Button, Helmet, Icon, ProgressRing } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { typewriter } from '@typie/ui/transitions';
+  import { comma } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
   import { onMount } from 'svelte';
@@ -17,6 +18,7 @@
   import XIcon from '~icons/lucide/x';
   import { goto } from '$app/navigation';
   import Logo from '$assets/logos/logo.svg?component';
+  import { todayProgress } from '$lib/goal';
   import { graphql } from '$mearie';
   import ActivityGrid from '../../@stats/ActivityGrid.svelte';
   import { SubscribeModal } from '../../@subscription/subscribe-modal.svelte';
@@ -45,6 +47,18 @@
 
           ...DashboardLayout_Stats_ActivityGrid_user
           ...HomePane_TrialBanner_user
+
+          goal {
+            id
+            targetCharacterCount
+          }
+
+          goalHistory {
+            date
+            targetCharacterCount
+            additions
+            achieved
+          }
 
           sites {
             id
@@ -332,6 +346,41 @@
             </Button>
           </div>
         {/if}
+
+        <div class={flex({ alignItems: 'center', gap: '12px', width: 'full' })}>
+          {#if query.data.me.goal}
+            {@const goal = query.data.me.goal}
+            {@const progress = todayProgress(query.data.me.goalHistory, dayjs.kst())}
+            <button
+              class={flex({ alignItems: 'center', gap: '8px', cursor: 'pointer' })}
+              onclick={() => {
+                app.state.dailyGoalOpen = true;
+                mixpanel.track('open_daily_goal_modal', { via: 'home_pane' });
+              }}
+              type="button"
+            >
+              <ProgressRing
+                progress={progress.additions / goal.targetCharacterCount}
+                size={24}
+                state={progress.achieved ? 'achieved' : 'under'}
+              />
+              <span class={css({ fontSize: '14px', color: 'text.subtle' })}>
+                오늘 {comma(progress.additions)} / {comma(goal.targetCharacterCount)}자
+              </span>
+            </button>
+          {:else}
+            <button
+              class={css({ fontSize: '14px', color: 'text.faint', cursor: 'pointer', _hover: { color: 'text.default' } })}
+              onclick={() => {
+                app.state.dailyGoalOpen = true;
+                mixpanel.track('open_daily_goal_modal', { via: 'home_pane' });
+              }}
+              type="button"
+            >
+              일일 목표 정하기
+            </button>
+          {/if}
+        </div>
 
         <div class={flex({ flexDirection: 'column', gap: '16px', width: 'full' })}>
           <h2 class={css({ fontSize: '18px', fontWeight: 'semibold', color: 'text.default' })}>최근 활동</h2>

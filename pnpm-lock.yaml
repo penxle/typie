@@ -510,11 +510,11 @@ importers:
         specifier: ^1.2.5
         version: 1.2.5
       '@mearie/core':
-        specifier: ^0.8.0
-        version: 0.8.0
+        specifier: ^0.8.1
+        version: 0.8.1
       '@mearie/svelte':
-        specifier: ^0.5.0
-        version: 0.5.0(svelte@5.56.8(@typescript-eslint/types@8.65.0))
+        specifier: ^0.5.1
+        version: 0.5.1(svelte@5.56.8(@typescript-eslint/types@8.65.0))
       '@number-flow/svelte':
         specifier: ^0.4.2
         version: 0.4.2(svelte@5.56.8(@typescript-eslint/types@8.65.0))
@@ -832,8 +832,8 @@ importers:
         specifier: ^1.2.121
         version: 1.2.121
       '@mearie/svelte':
-        specifier: ^0.5.0
-        version: 0.5.0(svelte@5.56.8(@typescript-eslint/types@8.65.0))
+        specifier: ^0.5.1
+        version: 0.5.1(svelte@5.56.8(@typescript-eslint/types@8.65.0))
       '@sveltejs/kit':
         specifier: ^2.70.2
         version: 2.70.2(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@7.2.0(svelte@5.56.8(@typescript-eslint/types@8.65.0))(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.6.1)(tsx@4.23.5)(yaml@2.9.0)))(svelte@5.56.8(@typescript-eslint/types@8.65.0))(typescript@6.0.3)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.6.1)(tsx@4.23.5)(yaml@2.9.0))
@@ -2843,8 +2843,8 @@ packages:
     resolution: {integrity: sha512-QA2PKdqZrsrmKw8r725bp2mJ7ub8W0WmdUPh88mAf1vp51eePdb7sNceDxYshyXyikTtY5JQ3aGIfkdKlfW1BQ==}
     engines: {bun: '>=1.2.0', deno: '>=2.2.0', node: '>=20.0.0'}
 
-  '@mearie/core@0.8.0':
-    resolution: {integrity: sha512-gxfzWyxR3uE5ToX+OX8c3hWPEKpcb1HrEI9wkkbUPepSgTZnn0+sIh+RwqsBccit+JQd8jM2WnpLsM0BfpjhNg==}
+  '@mearie/core@0.8.1':
+    resolution: {integrity: sha512-axVbb0E8J+jNCXRP+DBSjhcOTGHeyG/5DNmzPDGog5DZnpqV/lGFNLWWdRaZytQBx/wJvPRJv40blkN65kU+2Q==}
     engines: {bun: '>=1.2.0', deno: '>=2.2.0', node: '>=20.0.0'}
 
   '@mearie/native-darwin-arm64@0.5.0':
@@ -2887,8 +2887,8 @@ packages:
     resolution: {integrity: sha512-ubQ8QZKo0XMYUJcM4bzjFMJkEy6WyE4kZSrp/L36GOARP4j7T2IWSzvUEwUGyUr/aRu975CS3Wzfdw36NFIDGg==}
     engines: {bun: '>=1.2.0', deno: '>=2.2.0', node: '>=20.0.0'}
 
-  '@mearie/svelte@0.5.0':
-    resolution: {integrity: sha512-38RpQt5MKeP8gpN++3LIBOTKhZsgAg+M3FE9syR5jlwynoxqoT4qi36hE3W6nKSDnfIiuPz2ZOpZFXMreNY3Pw==}
+  '@mearie/svelte@0.5.1':
+    resolution: {integrity: sha512-Qh6gcfWENArJI1r2kxMyLS/WCXJkoeRQlVojRhd/gBIZfnHqftqTO9zvHXeQv8p8MOK0kpiYiqNeq000vPJ9Xg==}
     engines: {bun: '>=1.2.0', deno: '>=2.2.0', node: '>=20.0.0'}
     peerDependencies:
       svelte: ^5.0.0
@@ -10283,7 +10283,7 @@ snapshots:
       - jiti
       - magicast
 
-  '@mearie/core@0.8.0':
+  '@mearie/core@0.8.1':
     dependencies:
       '@mearie/shared': 0.5.0
 
@@ -10312,9 +10312,9 @@ snapshots:
 
   '@mearie/shared@0.5.0': {}
 
-  '@mearie/svelte@0.5.0(svelte@5.56.8(@typescript-eslint/types@8.65.0))':
+  '@mearie/svelte@0.5.1(svelte@5.56.8(@typescript-eslint/types@8.65.0))':
     dependencies:
-      '@mearie/core': 0.8.0
+      '@mearie/core': 0.8.1
       svelte: 5.56.8(@typescript-eslint/types@8.65.0)
 
   '@mearie/vite@0.1.8(dotenv@17.4.2)(jiti@2.6.1)':
