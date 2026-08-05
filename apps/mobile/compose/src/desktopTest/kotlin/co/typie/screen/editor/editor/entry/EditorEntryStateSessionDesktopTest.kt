@@ -4,12 +4,15 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.v2.runComposeUiTest
 import co.typie.editor.Editor
 import co.typie.editor.FakeFfiEditor
+import co.typie.editor.ffi.StableSelection
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import java.io.File
 import java.util.UUID
 import kotlin.test.Test
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -17,6 +20,57 @@ import kotlinx.coroutines.cancel
 
 @OptIn(ExperimentalTestApi::class)
 class EditorEntryStateSessionDesktopTest {
+  @Test
+  fun entryIsNotReadyUntilItsStoredBodySelectionRevealIsPresented() = runComposeUiTest {
+    configureRenderBufferLibrary()
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+    val fake = FakeFfiEditor()
+    val editor = Editor(fake, scope, Dispatchers.Unconfined)
+    val documentId = "entry-restore-test-${UUID.randomUUID()}"
+    val requests = EditorBringIntoViewRequests { editor.requestPublication() }
+    val saved =
+      StableSelection(
+        version = 2,
+        anchor = FakeFfiEditor.EmptyStablePosition,
+        head = FakeFfiEditor.EmptyStablePosition,
+      )
+    EditorEntryStateStore()
+      .save(
+        documentId,
+        StoredEditorEntryState(
+          target = EditorEntryTarget.Body,
+          bodySelection = saved,
+          updatedAt = 0,
+        ),
+      )
+    fake.applySnapshot(editor)
+    var entry: EditorEntryStateSession? = null
+
+    try {
+      setContent {
+        entry =
+          rememberEditorEntryStateSession(
+            documentId = documentId,
+            editor = editor,
+            editorFocused = false,
+            bringIntoViewRequests = requests,
+          )
+      }
+      waitUntil { requests.activateForVersion(editor.appliedRevision) != null }
+
+      assertFalse(requireNotNull(entry).presentationReady)
+
+      runOnIdle {
+        val request = requireNotNull(requests.activateForVersion(editor.appliedRevision))
+        assertTrue(requests.markPresented(editor.appliedRevision, request))
+      }
+      waitUntil { requireNotNull(entry).presentationReady }
+    } finally {
+      editor.dispose()
+      scope.cancel()
+    }
+  }
+
   @Test
   fun savesAppliedSelectionBeforeItIsPublished() = runComposeUiTest {
     configureRenderBufferLibrary()

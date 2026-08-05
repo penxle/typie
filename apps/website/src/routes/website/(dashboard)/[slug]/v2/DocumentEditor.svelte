@@ -875,32 +875,51 @@
     });
   });
 
-  function handleEditorReady() {
-    if (!documentId) return;
+  async function handleEditorReady() {
+    const currentDocumentId = documentId;
+    if (!currentDocumentId) return;
+    const editor = ctx.editor;
     editorReady = true;
-    onReady?.();
 
-    ctx.editor?.installCommentDecorations();
+    editor?.installCommentDecorations();
 
-    const saved = selectionsStore.current[documentId];
+    const saved = selectionsStore.current[currentDocumentId];
+    const savedSelection = saved?.selection;
 
-    if (saved?.selection) {
-      try {
-        ctx.editor?.enqueue({
-          type: 'selection',
-          op: {
-            type: 'set_frozen',
-            selection: saved.selection,
-          },
-        });
-        ctx.scroll?.scrollIntoView({ target: { type: 'current_selection_head' } });
-        if (focused) {
-          ctx.editor?.focus();
+    if (savedSelection) {
+      const restorePresentation = (() => {
+        try {
+          let presentation: Promise<void> | undefined;
+          editor?.updateNow((request) => {
+            request.enqueue({
+              type: 'selection',
+              op: {
+                type: 'set_frozen',
+                selection: savedSelection,
+              },
+            });
+            presentation = editor.scrollIntoView({ target: { type: 'current_selection_head' } });
+          });
+          return presentation;
+        } catch {
+          selectionsStore.current = { ...selectionsStore.current, [currentDocumentId]: { timestamp: Date.now() } };
+          return;
         }
-      } catch {
-        selectionsStore.current = { ...selectionsStore.current, [documentId]: { timestamp: Date.now() } };
+      })();
+      try {
+        await restorePresentation;
+      } catch (err) {
+        if (editor) handleEditorOperationError(editor, err);
       }
     }
+
+    if (destroyed || documentId !== currentDocumentId || ctx.editor !== editor || editor?.terminal) return;
+
+    if (savedSelection && focused && editor) {
+      editor.focus();
+    }
+
+    onReady?.();
 
     if (!focused) return;
 

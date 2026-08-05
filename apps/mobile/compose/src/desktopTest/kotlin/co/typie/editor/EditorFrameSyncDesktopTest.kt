@@ -4,8 +4,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.rememberScrollable2DState
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
@@ -29,12 +32,17 @@ import androidx.compose.ui.unit.dp
 import co.typie.editor.body.EditorBody
 import co.typie.editor.body.resolveEditorBodyGeometry
 import co.typie.editor.body.resolvePageContentTop
+import co.typie.editor.ext.isCollapsed
 import co.typie.editor.ffi.Key
 import co.typie.editor.ffi.KeyEvent
 import co.typie.editor.ffi.Message
+import co.typie.editor.ffi.PageRect
+import co.typie.editor.ffi.Rect as FfiRect
 import co.typie.editor.ffi.SelectionOp
+import co.typie.editor.ffi.SelectionPointUnit
 import co.typie.editor.interaction.EditorInteractionScope
 import co.typie.editor.interaction.LocalEditorInteractionScope
+import co.typie.editor.interaction.gestures.EditorSelectionHandleType
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.editor.runtime.LocalEditorUiState
 import co.typie.editor.scroll.EditorBringIntoViewTarget
@@ -43,9 +51,12 @@ import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
 import co.typie.editor.scroll.resolveEditorScrollIntent
 import co.typie.editor.scroll.updateNowWithBringIntoView
 import co.typie.editor.scroll.updateWithBringIntoView
+import co.typie.editor.surface.EditorSurfaceHost
 import co.typie.ext.ScrollGestureLockState
 import co.typie.screen.editor.editor.layout.EditorScreenLayout
 import co.typie.screen.editor.editor.layout.EditorViewportScrollReconcileMode
+import co.typie.screen.editor.editor.overlay.resolveSelectionHandleOverlayGeometry
+import co.typie.screen.editor.editor.overlay.resolveSelectionHandleOverlayPlacements
 import co.typie.screen.editor.editor.state.EditorScreenState
 import co.typie.ui.theme.LightAppShadows
 import co.typie.ui.theme.LightColors
@@ -63,7 +74,9 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import org.jetbrains.skia.EncodedImageFormat
 import org.jetbrains.skia.Image
 
@@ -250,6 +263,104 @@ class EditorFrameSyncDesktopTest {
   }
 
   @Test
+  fun firstVisibleContinuousSelectionDrawsHandlesWithoutVirtualizationReset() = runComposeUiTest {
+    val fixture =
+      FrameSyncFixture(continuous = true, initialDoc = continuousDocumentWithOffscreenTable())
+
+    try {
+      setFrameSyncContent(fixture)
+      waitUntil(timeoutMillis = 10_000) {
+        fixture.editor.publishedBundle?.frames?.isNotEmpty() == true
+      }
+
+      assertTrue(
+        fixture.editor.publishedState.pageSizes.size >= 4,
+        "TEST HARNESS: continuous document did not span four canvases: " +
+          fixture.editor.publishedState.pageSizes,
+      )
+
+      val startUpdate =
+        assertNotNull(
+          fixture.editor.updateNowWithBringIntoView(fixture.bringIntoViewRequests) {
+            enqueue(Message.Selection(SelectionOp.SetAt(page = 0, x = 0f, y = 0f)))
+            bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
+          }
+        )
+      waitUntil(timeoutMillis = 10_000) {
+        (fixture.editor.publishedRevision ?: -1L) >= startUpdate.revision &&
+          fixture.editor.publishedState.cursor?.pageIdx == 0
+      }
+      waitForIdle()
+
+      val cursor = assertNotNull(fixture.editor.publishedState.cursor)
+      val selectionUpdate =
+        assertNotNull(
+          fixture.editor.updateNowWithBringIntoView(fixture.bringIntoViewRequests) {
+            enqueue(
+              Message.Selection(
+                SelectionOp.SelectUnitAt(
+                  page = cursor.pageIdx,
+                  x = cursor.caret.x + 4f,
+                  y = cursor.caret.y + cursor.caret.height / 2f,
+                  unit = SelectionPointUnit.Word,
+                )
+              )
+            )
+            bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
+          }
+        )
+      waitUntil(timeoutMillis = 10_000) {
+        val state = fixture.editor.publishedState
+        (fixture.editor.publishedRevision ?: -1L) >= selectionUpdate.revision &&
+          !state.selection.isCollapsed() &&
+          state.selectionEndpoints != null
+      }
+      waitForIdle()
+
+      val bundle = assertNotNull(fixture.editor.publishedBundle)
+      assertTrue(bundle.frames.containsKey(0))
+      assertTrue(bundle.frames.size < bundle.snapshot.pageSizes.size)
+      val offscreenTable = assertNotNull(bundle.snapshot.tableOverlays.singleOrNull())
+      assertTrue(offscreenTable.pageIdx > 0)
+      assertFalse(bundle.frames.containsKey(offscreenTable.pageIdx))
+      val editorRect = assertNotNull(fixture.uiState.editorBoundsInContainer.toPxRect(1f))
+      val placements =
+        assertNotNull(
+          resolveSelectionHandleOverlayPlacements(
+            state = bundle.snapshot,
+            uiState = fixture.uiState,
+            editorRectInOverlay = editorRect,
+            density = 1f,
+          )
+        )
+      val pixels = onNodeWithTag(RootTag).captureToImage().toPixelMap()
+      for (placement in placements) {
+        val geometry = resolveSelectionHandleOverlayGeometry(placement, density = 1f)
+        val center =
+          geometry.touchTargetTopLeft +
+            geometry.paintTopLeftInTouchTarget +
+            Offset(
+              x = geometry.radiusPx,
+              y =
+                if (placement.type == EditorSelectionHandleType.From) {
+                  geometry.radiusPx
+                } else {
+                  geometry.stemHeightPx + geometry.radiusPx
+                },
+            )
+        assertEquals(
+          LightColors.textDefault,
+          pixels[center.x.roundToInt(), center.y.roundToInt()],
+          "selection handle was not drawn in the first visible frame at $center",
+        )
+      }
+    } finally {
+      fixture.continuationScheduler.runCurrent()
+      fixture.close()
+    }
+  }
+
+  @Test
   fun commandDocumentNavigationRevealsThePublishedCursor() = runComposeUiTest {
     val fixture = FrameSyncFixture()
 
@@ -274,8 +385,14 @@ class EditorFrameSyncDesktopTest {
         keyUp(ComposeKey.DirectionDown)
         keyUp(ComposeKey.MetaLeft)
       }
+      waitForIdle()
       fixture.continuationScheduler.runCurrent()
-      waitUntil(timeoutMillis = 10_000) { fixture.editor.publishedState.cursor?.pageIdx == 1 }
+      waitUntil(timeoutMillis = 10_000) {
+        fixture.continuationScheduler.runCurrent()
+        fixture.editor.publishedState.cursor?.pageIdx == 1
+      }
+      waitForIdle()
+      fixture.continuationScheduler.runCurrent()
       waitForIdle()
       val downState = fixture.editor.publishedState
       val expectedDown =
@@ -301,8 +418,12 @@ class EditorFrameSyncDesktopTest {
         keyUp(ComposeKey.DirectionUp)
         keyUp(ComposeKey.MetaLeft)
       }
+      waitForIdle()
       fixture.continuationScheduler.runCurrent()
-      waitUntil(timeoutMillis = 10_000) { fixture.editor.publishedState.cursor?.pageIdx == 0 }
+      waitUntil(timeoutMillis = 10_000) {
+        fixture.continuationScheduler.runCurrent()
+        fixture.editor.publishedState.cursor?.pageIdx == 0
+      }
       waitForIdle()
       val upState = fixture.editor.publishedState
       val expectedUp =
@@ -319,6 +440,315 @@ class EditorFrameSyncDesktopTest {
         abs(fixture.viewportState.scrollOffset.y - expectedUp.y) <= 0.5f,
         "Cmd+Up published cursor=${upState.cursor} at ${upState.version}, " +
           "but viewport=${fixture.viewportState.scrollOffset.y} expected=${expectedUp.y}",
+      )
+    } finally {
+      fixture.continuationScheduler.runCurrent()
+      fixture.close()
+    }
+  }
+
+  @Test
+  fun initialEntryRestorePublishesWithoutMountedEditorBounds() = runComposeUiTest {
+    val fixture = FrameSyncFixture()
+
+    try {
+      fixture.editor.updateNow {
+        repeat(LongDocumentParagraphCount) { enqueue(Message.Key(KeyEvent(Key.Enter))) }
+      }
+      assertTrue(fixture.editor.appliedState.pageSizes.size >= 3)
+      val saved =
+        assertNotNull(
+          runBlocking {
+            fixture.editor.freezeSelection(assertNotNull(fixture.editor.appliedState.selection))
+          }
+        )
+      fixture.editor.updateNow {
+        enqueue(Message.Selection(SelectionOp.SetAt(page = 0, x = PageMargin, y = PageMargin)))
+      }
+      val restore =
+        assertNotNull(
+          fixture.editor.updateNowWithBringIntoView(fixture.bringIntoViewRequests) {
+            enqueue(Message.Selection(SelectionOp.SetFrozen(saved)))
+            bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
+          }
+        )
+      assertFalse(fixture.uiState.editorBoundsInContainer.isValid)
+
+      setFrameSyncContent(fixture)
+      waitUntil(timeoutMillis = 10_000) {
+        val bundle = fixture.editor.publishedBundle ?: return@waitUntil false
+        val cursorPage = bundle.snapshot.cursor?.pageIdx ?: return@waitUntil false
+        bundle.snapshot.version >= restore.revision && bundle.frames.containsKey(cursorPage)
+      }
+      waitForIdle()
+
+      val firstRestoredFrame =
+        assertNotNull(
+          fixture.drawsAfter(0).firstOrNull { it.cursorNativeFrameRevision != null },
+          "the App presentation boundary never drew a framed entry presentation",
+        )
+      assertTrue(firstRestoredFrame.snapshot.version >= restore.revision)
+      assertEquals(restore.snapshot.selection, firstRestoredFrame.snapshot.selection)
+      assertEquals(
+        firstRestoredFrame.snapshot.version,
+        firstRestoredFrame.cursorNativeFrameRevision,
+      )
+      val expectedScroll =
+        assertNotNull(
+          resolveEditorScrollIntent(
+            frame = fixture.scrollFrame(firstRestoredFrame.snapshot),
+            target = EditorBringIntoViewTarget.CurrentSelectionHead,
+            currentScroll = 0f,
+          )
+            as? EditorScrollIntentResult.ScrollTo
+        )
+      assertTrue(
+        abs(firstRestoredFrame.scrollY - expectedScroll.y) <= 0.5f,
+        "first restored frame used scroll=${firstRestoredFrame.scrollY}, expected=${expectedScroll.y}",
+      )
+    } finally {
+      fixture.continuationScheduler.runCurrent()
+      fixture.close()
+    }
+  }
+
+  @Test
+  fun instantRevealUsesTheViewportOfTheAcceptingMeasure() = runComposeUiTest {
+    val initialHeight = 300f
+    val measuredHeight = 140f
+    val fixture = FrameSyncFixture(viewportHeight = initialHeight)
+    val rootHeight = mutableFloatStateOf(initialHeight)
+
+    try {
+      setFrameSyncContent(fixture, viewportHeight = { rootHeight.floatValue })
+      waitUntil(timeoutMillis = 10_000) {
+        fixture.editor.publishedBundle?.frames?.containsKey(0) == true
+      }
+
+      val target =
+        EditorBringIntoViewTarget.PageRects(
+          listOf(PageRect(pageIdx = 0, rect = FfiRect(x = 0f, y = 100f, width = 1f, height = 10f)))
+        )
+      assertEquals(
+        EditorScrollIntentResult.NoScroll,
+        resolveEditorScrollIntent(
+          frame = fixture.scrollFrame(fixture.editor.publishedState),
+          target = target,
+          currentScroll = 0f,
+        ),
+        "TEST HARNESS: target must be visible in the stale 300dp viewport",
+      )
+      assertTrue(
+        resolveEditorScrollIntent(
+          frame =
+            fixture
+              .scrollFrame(fixture.editor.publishedState)
+              .copy(
+                visibleArea =
+                  fixture.visibleArea.copy(
+                    viewport = fixture.visibleArea.viewport.copy(height = measuredHeight)
+                  )
+              ),
+          target = target,
+          currentScroll = 0f,
+        )
+          is EditorScrollIntentResult.ScrollTo,
+        "TEST HARNESS: target must require reveal in the accepting 140dp measure",
+      )
+
+      runOnIdle {
+        rootHeight.floatValue = measuredHeight
+        fixture.bringIntoViewRequests.requestForVersion(
+          target = target,
+          version = fixture.editor.appliedRevision,
+        )
+        fixture.editor.requestPublication()
+      }
+
+      waitUntil(timeoutMillis = 5_000) { fixture.viewportState.scrollOffset.y > 0f }
+    } finally {
+      fixture.continuationScheduler.runCurrent()
+      fixture.close()
+    }
+  }
+
+  @Test
+  fun unfocusedEntryRestorePublishesDestinationPixelsAndScrollInItsFirstFrame() = runComposeUiTest {
+    val fixture = FrameSyncFixture()
+
+    try {
+      setFrameSyncContent(fixture)
+      waitUntil(timeoutMillis = 10_000) {
+        fixture.editor.publishedBundle?.frames?.isNotEmpty() == true
+      }
+      fixture.moveToTwoPageEnd(this)
+      val saved =
+        assertNotNull(
+          runBlocking {
+            fixture.editor.freezeSelection(assertNotNull(fixture.editor.appliedState.selection))
+          }
+        )
+      fixture.resetLongDocumentStart(this)
+      assertFalse(fixture.uiState.focused)
+      val beforeScroll = fixture.viewportState.scrollOffset.y
+      val beforeDraw = fixture.latestDrawSequence()
+
+      val restore =
+        assertNotNull(
+          fixture.editor.updateNowWithBringIntoView(fixture.bringIntoViewRequests) {
+            enqueue(Message.Selection(SelectionOp.SetFrozen(saved)))
+            bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
+          }
+        )
+      val expectedScroll =
+        assertNotNull(
+          resolveEditorScrollIntent(
+            frame = fixture.scrollFrame(restore.snapshot),
+            target = EditorBringIntoViewTarget.CurrentSelectionHead,
+            currentScroll = beforeScroll,
+          )
+            as? EditorScrollIntentResult.ScrollTo
+        )
+
+      try {
+        waitUntil(timeoutMillis = 10_000) {
+          (fixture.editor.publishedRevision ?: -1L) >= restore.revision
+        }
+      } catch (error: Throwable) {
+        val editor = fixture.editor
+        throw AssertionError(
+          "entry restore did not present: restore=${restore.revision} " +
+            "applied=${editor.appliedState.version} published=${editor.publishedRevision} " +
+            "cursorPage=${editor.appliedState.cursor?.pageIdx} " +
+            "required=${editor.surfacePageRequirements} active=${editor.activeSurfacePages} " +
+            "publishedFrames=${editor.publishedBundle?.frames?.keys} " +
+            "pending=${fixture.bringIntoViewRequests.activateForVersion(editor.appliedState.version)} " +
+            "scroll=${fixture.viewportState.scrollOffset.y} " +
+            "content=${fixture.viewportState.contentSize} bounds=${fixture.uiState.editorBoundsInContainer}",
+          error,
+        )
+      }
+      fixture.forceNextDraw()
+      waitForIdle()
+
+      val firstRestoredFrame =
+        assertNotNull(
+          fixture.drawsAfter(beforeDraw).firstOrNull { it.snapshot.version >= restore.revision },
+          "the App presentation boundary never drew a framed restore presentation",
+        )
+      val cursor = assertNotNull(firstRestoredFrame.snapshot.cursor)
+      assertEquals(restore.revision, firstRestoredFrame.snapshot.version)
+      assertEquals(restore.revision, firstRestoredFrame.cursorNativeFrameRevision)
+      assertTrue(
+        abs(firstRestoredFrame.scrollY - expectedScroll.y) <= 0.5f,
+        "first restored frame used scroll=${firstRestoredFrame.scrollY}, expected=${expectedScroll.y}",
+      )
+      assertNotNull(fixture.editor.publishedBundle?.frames?.get(cursor.pageIdx))
+      assertFalse(fixture.uiState.focused)
+    } finally {
+      mainClock.autoAdvance = true
+      fixture.continuationScheduler.runCurrent()
+      fixture.close()
+    }
+  }
+
+  @Test
+  fun continuousEntryRestoreKeepsDestinationSurfaceUntilFirstPublication() = runComposeUiTest {
+    val fixture =
+      FrameSyncFixture(continuous = true, initialDoc = continuousDocumentWithOffscreenTable())
+    var restoreRevision: Long? = null
+    var preparationRevisionCount = 0
+
+    try {
+      setFrameSyncContent(
+        fixture = fixture,
+        onRequiredPagesChanged = { requiredPages ->
+          val requestedRevision = restoreRevision
+          if (
+            requestedRevision != null &&
+              2 in requiredPages &&
+              (fixture.editor.publishedRevision ?: -1L) < requestedRevision
+          ) {
+            preparationRevisionCount += 1
+            fixture.editor.updateNow {
+              enqueue(Message.Selection(SelectionOp.SetAt(page = 2, x = 0f, y = 0f)))
+            }
+          }
+        },
+      )
+      waitUntil(timeoutMillis = 10_000) {
+        fixture.editor.publishedBundle?.frames?.isNotEmpty() == true
+      }
+      assertTrue(fixture.editor.publishedState.pageSizes.size >= 4)
+
+      val destination =
+        assertNotNull(
+          fixture.editor.updateNow {
+            enqueue(Message.Selection(SelectionOp.SetAt(page = 2, x = 0f, y = 0f)))
+          }
+        )
+      assertEquals(2, destination.snapshot.cursor?.pageIdx)
+      val saved =
+        assertNotNull(
+          runBlocking {
+            fixture.editor.freezeSelection(assertNotNull(destination.snapshot.selection))
+          }
+        )
+
+      val start =
+        assertNotNull(
+          fixture.editor.updateNowWithBringIntoView(fixture.bringIntoViewRequests) {
+            enqueue(Message.Selection(SelectionOp.SetAt(page = 0, x = 0f, y = 0f)))
+            bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
+          }
+        )
+      waitUntil(timeoutMillis = 10_000) {
+        (fixture.editor.publishedRevision ?: -1L) >= start.revision
+      }
+      fixture.viewportState.scrollToY(0f, isAutoScroll = false)
+      waitForIdle()
+
+      val beforeDraw = fixture.latestDrawSequence()
+      val restore =
+        assertNotNull(
+          fixture.editor.updateNowWithBringIntoView(fixture.bringIntoViewRequests) {
+            enqueue(Message.Selection(SelectionOp.SetFrozen(saved)))
+            bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
+          }
+        )
+      restoreRevision = restore.revision
+      val expectedScroll =
+        assertNotNull(
+          resolveEditorScrollIntent(
+            frame = fixture.scrollFrame(restore.snapshot),
+            target = EditorBringIntoViewTarget.CurrentSelectionHead,
+            currentScroll = 0f,
+          )
+            as? EditorScrollIntentResult.ScrollTo
+        )
+
+      waitUntil(timeoutMillis = 3_000) {
+        val bundle = fixture.editor.publishedBundle ?: return@waitUntil false
+        bundle.snapshot.version >= restore.revision && bundle.frames.containsKey(2)
+      }
+      fixture.forceNextDraw()
+      waitForIdle()
+
+      assertTrue(preparationRevisionCount > 0, "TEST HARNESS: preparation did not advance")
+      val firstRestoredFrame =
+        assertNotNull(
+          fixture.drawsAfter(beforeDraw).firstOrNull { it.snapshot.version >= restore.revision },
+          "the App presentation boundary never drew the continuous entry restore",
+        )
+      assertTrue(firstRestoredFrame.snapshot.version >= restore.revision)
+      assertEquals(restore.snapshot.selection, firstRestoredFrame.snapshot.selection)
+      assertEquals(
+        firstRestoredFrame.snapshot.version,
+        firstRestoredFrame.cursorNativeFrameRevision,
+      )
+      assertTrue(
+        abs(firstRestoredFrame.scrollY - expectedScroll.y) <= 0.5f,
+        "first restored frame used scroll=${firstRestoredFrame.scrollY}, expected=${expectedScroll.y}",
       )
     } finally {
       fixture.continuationScheduler.runCurrent()
@@ -353,15 +783,24 @@ class EditorFrameSyncDesktopTest {
         }
       fixture.continuationScheduler.runCurrent()
 
-      waitUntil(timeoutMillis = 10_000) {
-        (fixture.editor.publishedRevision ?: beforeRevision) > beforeRevision
+      var displayFrames = 0
+      while (
+        (fixture.editor.publishedRevision ?: beforeRevision) <= beforeRevision &&
+          displayFrames < 120
+      ) {
+        fixture.forceNextDraw()
+        mainClock.advanceTimeByFrame()
+        waitForIdle()
+        displayFrames += 1
       }
+      assertTrue(
+        (fixture.editor.publishedRevision ?: beforeRevision) > beforeRevision,
+        "page-boundary Enter did not present within 120 display frames",
+      )
       val bundle = assertNotNull(fixture.editor.publishedBundle)
       val cursor = assertNotNull(bundle.snapshot.cursor)
       val cursorFrameInFirstPresentation = bundle.frames[cursor.pageIdx]
 
-      mainClock.advanceTimeByFrame()
-      waitForIdle()
       waitUntil(timeoutMillis = 10_000) {
         fixture.editor.publishedBundle?.frames?.get(cursor.pageIdx) != null
       }
@@ -591,20 +1030,31 @@ class EditorFrameSyncDesktopTest {
   ): CapturedDesktopFrame {
     val root = onNodeWithTag(RootTag)
     val draws = fixture.drawsAfter(beforeDraw)
-    assertTrue(
-      draws.isNotEmpty(),
-      "TEST HARNESS: phase=${phaseMillis}ms displayFrame=$displayFrame had no root draw " +
-        "after sequence $beforeDraw",
-    )
-    val presentation = draws.last()
+    val presentationBeforeCapture =
+      draws.lastOrNull()
+        ?: assertNotNull(
+          fixture.lastDrawnPresentation,
+          "TEST HARNESS: no coherent presentation exists before display frame $displayFrame",
+        )
     val rootBounds = root.fetchSemanticsNode().boundsInRoot
     val image = root.captureToImage()
-    val captureDraws = fixture.drawsAfter(presentation.sequence)
-    assertTrue(
-      captureDraws.isEmpty(),
-      "TEST HARNESS: captureToImage produced extra root draws after ${presentation.sequence}: " +
-        captureDraws.map(DrawnPresentation::sequence),
-    )
+    val captureDraws = fixture.drawsAfter(presentationBeforeCapture.sequence)
+    for (draw in draws + captureDraws) {
+      if (
+        draw.snapshot.cursor != null &&
+          (repeatKey == RepeatKey.Enter || repeatKey == RepeatKey.Backspace)
+      ) {
+        assertEquals(
+          draw.snapshot.version,
+          draw.cursorNativeFrameRevision,
+          "capture-triggered draw ${draw.sequence} mixed snapshot and native frame revisions",
+        )
+      }
+    }
+    // captureToImage may itself service an already-invalidated draw. Its pixels correspond
+    // to the last such draw, so compare them with that presentation rather than rejecting a
+    // coherent capture merely because the test API flushed pending work.
+    val presentation = captureDraws.lastOrNull() ?: presentationBeforeCapture
 
     val cursor = assertNotNull(presentation.snapshot.cursor)
     val bodyTop =
@@ -668,7 +1118,7 @@ class EditorFrameSyncDesktopTest {
           displayFrame = displayFrame,
           repeatKey = repeatKey,
           presentation = presentation,
-          drawPassCount = draws.size,
+          drawPassCount = draws.size + captureDraws.size,
           cursorDocumentY = cursorDocumentY,
           highlightDocumentY = highlightDocumentY,
           expectedCursorY = expectedCursorY,
@@ -871,6 +1321,8 @@ class EditorFrameSyncDesktopTest {
 
   private fun androidx.compose.ui.test.ComposeUiTest.setFrameSyncContent(
     fixture: FrameSyncFixture,
+    viewportHeight: () -> Float = { fixture.visibleArea.viewport.height },
+    onRequiredPagesChanged: (Set<Int>) -> Unit = {},
     onInputRequest: (PlatformTextInputMethodRequest) -> Unit = {},
   ) {
     setContent {
@@ -892,6 +1344,10 @@ class EditorFrameSyncDesktopTest {
             pageSizes = publishedState.pageSizes,
           )
         val forceDrawTick = fixture.forceDrawTick.intValue
+        LaunchedEffect(fixture.editor, onRequiredPagesChanged) {
+          snapshotFlow { fixture.editor.surfacePageRequirements }
+            .collect { onRequiredPagesChanged(it) }
+        }
         val scrollFrame = fixture.scrollFrame(publishedState)
         val viewportScrollableState = rememberScrollable2DState { delta ->
           val consumed = fixture.viewportState.consumePan(Offset(x = -delta.x, y = -delta.y))
@@ -925,8 +1381,15 @@ class EditorFrameSyncDesktopTest {
           LocalEditorBringIntoViewRequests provides fixture.bringIntoViewRequests,
           LocalEditorInteractionScope provides interactionScope,
         ) {
+          EditorSurfaceHost(
+            editor = fixture.editor,
+            scaleFactor = 1.0,
+            onDeactivate = fixture.bringIntoViewRequests::cancel,
+            onFailure = { throw it },
+          )
           EditorScreenLayout(
             state = remember { EditorScreenState(fixture.viewportState) },
+            editor = fixture.editor,
             scrollFrame = scrollFrame,
             visibleArea = fixture.visibleArea,
             viewportScrollableState = viewportScrollableState,
@@ -934,33 +1397,35 @@ class EditorFrameSyncDesktopTest {
             viewportScrollReconcileMode = EditorViewportScrollReconcileMode.Disabled,
             onMeasuredViewportSizeChange = {},
             header = {},
-            body = {
+            body = { presentedBundle ->
+              val presentedState = presentedBundle?.snapshot ?: EditorState.Initial
               EditorBody(
                 load = fixture.load,
-                publishedBundle = publishedBundle,
-                geometry = geometry,
+                publishedBundle = presentedBundle,
+                visibleArea = fixture.visibleArea,
                 layoutSpec = fixture.layoutSpec,
                 autoScrollPolicy = fixture.autoScrollPolicy,
                 editorInputEnabled = true,
                 suppressSoftwareKeyboard = true,
+                modifier =
+                  Modifier.drawWithContent {
+                    drawContent()
+                    val cursorPage = presentedState.cursor?.pageIdx
+                    fixture.recordDraw(
+                      snapshot = presentedState,
+                      scrollY = fixture.viewportState.scrollOffset.y,
+                      cursorNativeFrameRevision =
+                        cursorPage?.let { presentedBundle?.frames?.get(it)?.proof?.editorRevision },
+                      testDrawTick = forceDrawTick,
+                    )
+                  },
               )
             },
             toolbar = {},
             modifier =
-              Modifier.size(ViewportWidth.dp, ViewportHeight.dp)
+              Modifier.size(ViewportWidth.dp, viewportHeight().dp)
                 .background(LightColors.surfaceDefault)
-                .testTag(RootTag)
-                .drawWithContent {
-                  drawContent()
-                  val cursorPage = publishedState.cursor?.pageIdx
-                  fixture.recordDraw(
-                    snapshot = publishedState,
-                    scrollY = fixture.viewportState.scrollOffset.y,
-                    cursorNativeFrameRevision =
-                      cursorPage?.let { publishedBundle?.frames?.get(it)?.proof?.editorRevision },
-                    testDrawTick = forceDrawTick,
-                  )
-                },
+                .testTag(RootTag),
           )
         }
       }

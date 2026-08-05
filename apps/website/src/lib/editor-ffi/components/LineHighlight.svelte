@@ -2,21 +2,26 @@
   import { css } from '@typie/styled-system/css';
   import { getAppContext } from '@typie/ui/context';
   import { getEditorContext } from '../editor.svelte';
+  import { presentedPageElement } from '../geometry';
 
   const { editor } = getEditorContext();
   const app = getAppContext();
 
-  const show = $derived(!!editor?.focused && !!editor?.cursor);
+  const cursor = $derived.by(() => {
+    const current = editor?.cursor;
+    return current && editor && presentedPageElement(editor, current.page_idx) ? current : undefined;
+  });
+  const show = $derived(!!editor?.focused && !!cursor);
   // app is absent in the public viewer (no AppContext provider); fall back to off.
   const lineHighlightEnabled = $derived(app?.preference.current.lineHighlightEnabled ?? false);
 
   const isPaginated = $derived(editor?.rootAttrs?.layout_mode.type === 'paginated');
 
-  const container = $derived(editor?.cursor ? editor.pageEls[editor.cursor.page_idx] : undefined);
+  const container = $derived(cursor && editor ? presentedPageElement(editor, cursor.page_idx) : undefined);
 
-  const top = $derived(editor?.cursor ? editor.cursor.line.y : 0);
+  const top = $derived(cursor?.line.y ?? 0);
 
-  const height = $derived(editor?.cursor ? editor.cursor.line.height : 0);
+  const height = $derived(cursor?.line.height ?? 0);
 
   let element = $state<HTMLDivElement>();
 

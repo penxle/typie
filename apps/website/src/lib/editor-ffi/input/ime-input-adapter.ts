@@ -41,6 +41,7 @@ type DeferredCompositionEdit = {
 };
 
 const isCollapsedRange = (range: ImeRange): boolean => range.start === range.end;
+const isSameRange = (left: ImeRange, right: ImeRange): boolean => left.start === right.start && left.end === right.end;
 
 const readContextCompositionText = (context: ImeContext): string | null => {
   if (!context.composing) {
@@ -168,12 +169,13 @@ export class ImeInputAdapter {
     return deferred;
   }
 
-  #applyDeferredCompositionEdit(generation: number): void {
+  #applyDeferredCompositionEdit(generation: number): DeferredCompositionEdit | null {
     const deferred = this.#takeDeferredCompositionEdit(generation);
     if (!deferred) {
-      return;
+      return null;
     }
     this.#applyCompositionEdit(deferred.context, deferred.input, deferred.edit);
+    return deferred;
   }
 
   #observeCompositionTail(observation: CompositionTailObservation): CompositionTailEffect[] {
@@ -187,13 +189,14 @@ export class ImeInputAdapter {
     currentEdit?: { context: ImeContext; input: ImeTextInput; edit: ImeCompositionEdit },
   ): Extract<CompositionTailEffect, { type: 'commit_then_insert' }> | null {
     let commit: Extract<CompositionTailEffect, { type: 'commit_then_insert' }> | null = null;
+    let pendingCurrentEdit = currentEdit;
     for (const effect of effects) {
       switch (effect.type) {
         case 'apply_current_edit': {
-          if (!currentEdit) {
+          if (!pendingCurrentEdit) {
             throw new Error('Composition-tail resolution requires the current edit');
           }
-          this.#applyCompositionEdit(currentEdit.context, currentEdit.input, currentEdit.edit);
+          this.#applyCompositionEdit(pendingCurrentEdit.context, pendingCurrentEdit.input, pendingCurrentEdit.edit);
           break;
         }
         case 'defer_current_edit': {
@@ -204,7 +207,23 @@ export class ImeInputAdapter {
           break;
         }
         case 'apply_deferred_edit': {
-          this.#applyDeferredCompositionEdit(effect.generation);
+          const deferred = this.#applyDeferredCompositionEdit(effect.generation);
+          const context = this.#context;
+          // Both effects were resolved from the pre-deferred range. A following edit of the
+          // same composition must target the range produced by the deferred edit.
+          if (
+            deferred &&
+            pendingCurrentEdit &&
+            deferred.input === pendingCurrentEdit.input &&
+            isSameRange(deferred.edit.target, pendingCurrentEdit.edit.target) &&
+            context?.composing
+          ) {
+            pendingCurrentEdit = {
+              ...pendingCurrentEdit,
+              context,
+              edit: { ...pendingCurrentEdit.edit, target: context.composing },
+            };
+          }
           break;
         }
         case 'discard_deferred_edit': {

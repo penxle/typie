@@ -448,7 +448,7 @@ class EditorDocumentManipulationDesktopTest {
       waitForIdle()
 
       val extend =
-        fake.enqueued.filterIsInstance<Message.Selection>().single().op as SelectionOp.ExtendTo
+        fake.enqueued.filterIsInstance<Message.Selection>().last().op as SelectionOp.ExtendTo
       assertEquals(endpoints.toPosition, extend.anchor)
       assertEquals(10f, extend.headX)
       assertEquals(44f, extend.headY)
@@ -723,7 +723,7 @@ class EditorDocumentManipulationDesktopTest {
         waitForIdle()
 
         val extend =
-          fake.enqueued.filterIsInstance<Message.Selection>().single().op as SelectionOp.ExtendTo
+          fake.enqueued.filterIsInstance<Message.Selection>().last().op as SelectionOp.ExtendTo
         assertEquals(selection.anchor, extend.anchor)
         assertEquals(selection, extend.baseSelection)
         assertEquals(62f, extend.headX)
@@ -1000,6 +1000,9 @@ class EditorDocumentManipulationDesktopTest {
       waitUntil(timeoutMillis = 1_000L) {
         fake.enqueued.filterIsInstance<Message.Node>().isNotEmpty()
       }
+      waitUntil(timeoutMillis = 1_000L) {
+        interactionScope.controller.tableColumnResizePresentation.draft == null
+      }
 
       assertEquals(
         listOf(
@@ -1215,7 +1218,7 @@ class EditorDocumentManipulationDesktopTest {
       waitForIdle()
 
       val extend =
-        fake.enqueued.filterIsInstance<Message.Selection>().single().op as SelectionOp.ExtendTo
+        fake.enqueued.filterIsInstance<Message.Selection>().last().op as SelectionOp.ExtendTo
       assertEquals(selection.anchor, extend.anchor)
       assertEquals(100f, extend.headX)
       assertEquals(90f, extend.headY)
@@ -1269,6 +1272,15 @@ class EditorDocumentManipulationDesktopTest {
           contentSize = viewportContentSize,
         )
       }
+      editor.publicationVersion
+      SideEffect {
+        editor.requestSurfacePages(emptySet())
+        editor.publishIfReady(emptySet())?.let { bundle ->
+          if (editor.acceptPublication(bundle)) {
+            editor.completePresentation(bundle)
+          }
+        }
+      }
       SideEffect {
         onInteractionScope(interactionScope)
         interactionScope.update(
@@ -1285,7 +1297,7 @@ class EditorDocumentManipulationDesktopTest {
           onSelectionHaptic = {},
           onRequestSoftwareKeyboard = {},
         )
-        interactionScope.onEditorStateChanged(editor.publishedState)
+        interactionScope.onEditorStateChanged()
       }
 
       CompositionLocalProvider(
@@ -1324,8 +1336,18 @@ class EditorDocumentManipulationDesktopTest {
               geometry = interactionScope,
               presentation = interactionScope.controller.tableColumnResizePresentation,
             )
-            EditorTableCellSelectionOverlay(editor = editor, uiState = uiState, density = 1f)
-            EditorSelectionHandleOverlay(editor = editor, uiState = uiState, density = 1f)
+            EditorTableCellSelectionOverlay(
+              state = editor.publishedState,
+              uiState = uiState,
+              density = 1f,
+              pagePresented = { page -> editor.publishedBundle?.frames?.containsKey(page) == true },
+            )
+            EditorSelectionHandleOverlay(
+              state = editor.publishedState,
+              uiState = uiState,
+              density = 1f,
+              pagePresented = { page -> editor.publishedBundle?.frames?.containsKey(page) == true },
+            )
           }
         }
       }

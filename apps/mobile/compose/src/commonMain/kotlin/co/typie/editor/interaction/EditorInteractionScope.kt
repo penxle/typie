@@ -3,7 +3,6 @@ package co.typie.editor.interaction
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.geometry.Offset
 import co.typie.editor.Editor
-import co.typie.editor.EditorState
 import co.typie.editor.PagePoint
 import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.interaction.gestures.EditorConsecutiveTapMaxIntervalMillis
@@ -127,11 +126,9 @@ internal class EditorInteractionScope(
     semantics.viewportZoom.configure(viewportZoomConfig)
   }
 
-  fun onEditorStateChanged(state: EditorState) {
-    if (editor == null) {
-      return
-    }
-    controller.onEditorStateChanged(state)
+  fun onEditorStateChanged() {
+    val currentEditor = editor ?: return
+    controller.onEditorStateChanged(currentEditor.publishedState)
   }
 
   fun reset() {
@@ -185,6 +182,7 @@ internal class EditorInteractionScope(
 
   override fun resolvePoint(positionInNode: Offset): PagePoint? {
     val currentEditor = editor ?: return null
+    val currentBundle = currentEditor.publishedBundle ?: return null
     val currentUiState = uiState ?: return null
     if (density <= 0f) {
       return null
@@ -193,20 +191,22 @@ internal class EditorInteractionScope(
     val xDp = positionInNode.x / density
     val yDp = positionInNode.y / density
     return currentUiState
-      .resolveViewportTransform(pageSizes = currentEditor.publishedState.pageSizes)
+      .resolveViewportTransform(pageSizes = currentBundle.snapshot.pageSizes)
       .globalToLocal(x = xDp, y = yDp)
+      ?.takeIf { currentBundle.frames.containsKey(it.page) }
   }
 
   override fun resolvePagePosition(page: Int, x: Float, y: Float): Offset? {
     val currentEditor = editor ?: return null
+    val currentBundle = currentEditor.publishedBundle ?: return null
     val currentUiState = uiState ?: return null
-    if (density <= 0f) {
+    if (density <= 0f || !currentBundle.frames.containsKey(page)) {
       return null
     }
 
     val positionDp =
       currentUiState
-        .resolveViewportTransform(pageSizes = currentEditor.publishedState.pageSizes)
+        .resolveViewportTransform(pageSizes = currentBundle.snapshot.pageSizes)
         .localToGlobal(page = page, x = x, y = y) ?: return null
     return Offset(x = positionDp.x * density, y = positionDp.y * density)
   }

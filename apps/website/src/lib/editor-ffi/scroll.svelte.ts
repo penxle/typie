@@ -1,8 +1,9 @@
 import { getAppContext } from '@typie/ui/context';
-import { tick, untrack } from 'svelte';
+import { untrack } from 'svelte';
 import { CONTINUOUS_VIEW_PADDING } from './constants';
-import { pageRectsToClientRect, selectionHeadRect } from './geometry';
+import { selectionHeadRect } from './geometry';
 import {
+  resolveInstantRevealPreparationViewports,
   resolveKeepVisibleBottomPadding,
   resolveNearestScrollTop,
   resolveTypewriterBottomPadding,
@@ -10,7 +11,9 @@ import {
 } from './scroll';
 import type { PageRect } from '@typie/editor-ffi/browser';
 import type { Editor, EditorContext, EditorSnapshot } from './editor.svelte';
-import type { EditorVisibleArea } from './scroll';
+import type { EditorRequest } from './editor-update';
+import type { VerticalSpan } from './required-surface-pages';
+import type { EditorVisibleArea, RevealTargetSpan, ScrollContainerMetrics } from './scroll';
 
 export type EditorScrollRevealMode = 'nearest' | 'typewriter';
 
@@ -22,12 +25,18 @@ export type EditorScrollIntoViewOptions = {
   behavior?: ScrollBehavior;
 };
 
+export type EditorScrollIntentResult = { type: 'unresolved' } | { type: 'no_scroll' } | { type: 'scroll_to'; y: number };
+
 type TypewriterPreferences = {
   enabled: boolean;
   position: number | undefined;
 };
 
-type PendingScrollRequest = Required<EditorScrollIntoViewOptions>;
+export type EditorBringIntoViewRequest = Required<EditorScrollIntoViewOptions> & {
+  targetRevision: number | null;
+  presentation: Promise<void>;
+  completePresentation: () => void;
+};
 
 const DEFAULT_VISIBLE_AREA: EditorVisibleArea = {
   topInset: 0,
@@ -53,6 +62,18 @@ function sanitizeTypewriterPosition(position: number | undefined): number {
   return typeof position === 'number' && Number.isFinite(position) ? Math.max(0, Math.min(1, position)) : 0.5;
 }
 
+function createBringIntoViewRequest({ target, mode = 'nearest', behavior }: EditorScrollIntoViewOptions): EditorBringIntoViewRequest {
+  const { promise: presentation, resolve } = Promise.withResolvers<undefined>();
+  return {
+    target,
+    mode,
+    behavior: behavior ?? (target.type === 'tracked_item' ? 'smooth' : 'instant'),
+    targetRevision: null,
+    presentation,
+    completePresentation: () => resolve(undefined),
+  };
+}
+
 export function setupEditorScroll(ctx: EditorContext): void {
   const app = getAppContext();
 
@@ -72,7 +93,7 @@ export function setupEditorScroll(ctx: EditorContext): void {
       };
     });
     ctx.scroll = scope;
-    editor.registerScrollIntoView((options) => scope.scrollIntoView(options));
+    editor.registerScrollIntoView((options, request) => scope.scrollIntoView(options, request));
 
     return () => {
       editor.registerScrollIntoView(null);
@@ -86,20 +107,13 @@ export function setupEditorScroll(ctx: EditorContext): void {
   $effect(() => {
     const editor = ctx.editor;
     const scroll = ctx.scroll;
-    if (!editor || !scroll) return;
-
-    // Scroll targets are visible geometry and must use the canvas-matching publication.
-    void editor.publishedRevision;
-    void editor.viewport.height;
-
-    untrack(() => scroll.scheduleCommit());
+    if (editor?.terminal) scroll?.destroy();
   });
 }
 
 export class EditorScrollScope {
-  #pendingRequest: PendingScrollRequest | null = null;
+  #pendingRequest: EditorBringIntoViewRequest | null = null;
   #keepVisibleTarget = $state<EditorScrollIntoViewTarget | null>(null);
-  #commitQueued = false;
   #destroyed = false;
   readonly #editor: Editor;
   readonly #typewriterPreferences: () => TypewriterPreferences;
@@ -108,9 +122,21 @@ export class EditorScrollScope {
 
   bottomPadding = $derived.by(() => {
     void this.#editor.viewport.height;
-    const snapshot = this.#editor.published?.snapshot;
+    return this.bottomPaddingFor(this.#editor.published?.snapshot);
+  });
+
+  constructor(editor: Editor, typewriterPreferences: () => TypewriterPreferences) {
+    this.#editor = editor;
+    this.#typewriterPreferences = typewriterPreferences;
+  }
+
+  get pendingRequest(): EditorBringIntoViewRequest | null {
+    return this.#pendingRequest;
+  }
+
+  bottomPaddingFor(snapshot: EditorSnapshot | undefined): number {
     const rect = selectionHeadRect(snapshot);
-    const needsKeepVisiblePadding = rect !== undefined || this.#hasResolvedKeepVisibleTarget(snapshot);
+    const needsKeepVisiblePadding = rect !== null || this.#hasResolvedKeepVisibleTarget(snapshot);
     const minimumPadding = needsKeepVisiblePadding
       ? resolveKeepVisibleBottomPadding({ visibleArea: this.visibleArea })
       : this.visibleArea.bottomInset;
@@ -123,58 +149,10 @@ export class EditorScrollScope {
       return minimumPadding;
     }
 
-    return Math.max(minimumPadding, this.#typewriterBottomPaddingForRect(rect));
-  });
-
-  constructor(editor: Editor, typewriterPreferences: () => TypewriterPreferences) {
-    this.#editor = editor;
-    this.#typewriterPreferences = typewriterPreferences;
+    return Math.max(minimumPadding, this.#typewriterBottomPaddingForRect(rect, snapshot));
   }
 
-  async #commit(): Promise<void> {
-    try {
-      if (this.#destroyed || this.#editor.destroyed) return;
-
-      const request = this.#pendingRequest;
-      this.#pendingRequest = null;
-      if (!request) return;
-
-      // A synchronous update may request scrolling from inside its request builder.
-      // Wait until that request's applied revision has a matching visible publication.
-      await tick();
-      if (this.#destroyed || this.#editor.destroyed || this.#pendingRequest) return;
-      const requiredRevision = this.#editor.appliedRevision;
-      const publication = await this.#editor.awaitPublishedRevision(requiredRevision);
-      if (publication.type !== 'published') return;
-      if (this.#destroyed || this.#editor.destroyed || this.#pendingRequest) return;
-
-      const snapshot = this.#editor.published?.snapshot;
-      if (!snapshot || snapshot.revision < requiredRevision) return;
-      const rects = this.#resolveTargetRects(request.target, snapshot);
-      if (!rects) return;
-
-      const mode = request.mode === 'typewriter' && this.#typewriterPreferences().enabled ? 'typewriter' : 'nearest';
-      void this.bottomPadding;
-      await tick();
-      if (this.#destroyed || this.#editor.destroyed || this.#pendingRequest) return;
-
-      this.#applyCommit({
-        rects,
-        mode,
-        behavior: request.behavior,
-      });
-    } catch {
-      // Publication cancellation, disposal, and unavailable targets make this
-      // best-effort visual request obsolete.
-    } finally {
-      this.#commitQueued = false;
-      if (!this.#destroyed && !this.#editor.destroyed && this.#pendingRequest) {
-        this.scheduleCommit();
-      }
-    }
-  }
-
-  #resolveTargetRects(target: EditorScrollIntoViewTarget, snapshot: EditorSnapshot | undefined): PageRect[] | null {
+  resolveTargetRects(target: EditorScrollIntoViewTarget, snapshot: EditorSnapshot | undefined): PageRect[] | null {
     if (!snapshot) return null;
     switch (target.type) {
       case 'current_selection_head': {
@@ -188,39 +166,100 @@ export class EditorScrollScope {
     }
   }
 
-  #applyCommit({ rects, mode, behavior }: { rects: PageRect[]; mode: EditorScrollRevealMode; behavior: ScrollBehavior }): void {
-    const viewport = this.#editor.scrollViewport;
-    if (!viewport) return;
-
-    const viewportRect = viewport.getRect();
-    const targetRect = pageRectsToClientRect(this.#editor, rects);
-    if (!targetRect) return;
-
-    const scrollTop = viewport.getScrollTop();
-    const metrics = {
-      scrollTop,
-      clientHeight: viewportRect.bottom - viewportRect.top,
-      scrollHeight: viewport.getScrollHeight(),
-      targetTop: targetRect.top - viewportRect.top + scrollTop,
-      targetBottom: targetRect.bottom - viewportRect.top + scrollTop,
-      visibleArea: this.visibleArea,
-    };
-    const nextTop =
-      mode === 'typewriter'
-        ? resolveTypewriterScrollTop({ ...metrics, position: sanitizeTypewriterPosition(this.#typewriterPreferences().position) })
-        : resolveNearestScrollTop(metrics);
-
-    if (nextTop !== null) {
-      viewport.scrollTo({ top: nextTop, behavior });
+  applyPending(request: EditorBringIntoViewRequest, snapshot: EditorSnapshot, result: EditorScrollIntentResult): boolean {
+    if (this.#destroyed || this.#editor.destroyed || this.activateForRevision(snapshot.revision) !== request) return false;
+    switch (result.type) {
+      case 'unresolved': {
+        return false;
+      }
+      case 'no_scroll': {
+        break;
+      }
+      case 'scroll_to': {
+        const viewport = this.#editor.scrollViewport;
+        if (!viewport) return false;
+        viewport.scrollTo({ top: result.y, behavior: request.behavior });
+        break;
+      }
     }
+    return this.markPresented(snapshot.revision, request);
   }
 
+  declare(options: EditorScrollIntoViewOptions): EditorBringIntoViewRequest {
+    const request = createBringIntoViewRequest(options);
+    this.#pendingRequest?.completePresentation();
+    this.#pendingRequest = request;
+    this.#keepVisibleTarget = request.target;
+    this.#editor.requestPublication();
+    return request;
+  }
+
+  bind(request: EditorBringIntoViewRequest, revision: number): boolean {
+    if (this.#pendingRequest !== request) return false;
+    if (request.targetRevision !== null) return request.targetRevision === revision;
+    request.targetRevision = revision;
+    return this.#pendingRequest === request;
+  }
+
+  activateForRevision(revision: number): EditorBringIntoViewRequest | null {
+    const request = this.#pendingRequest;
+    if (!request || request.targetRevision === null) return null;
+    return revision >= request.targetRevision ? request : null;
+  }
+
+  discard(request: EditorBringIntoViewRequest): void {
+    if (this.#pendingRequest !== request) return;
+    this.#pendingRequest = null;
+    request.completePresentation();
+    this.#editor.requestPublication();
+  }
+
+  discardFailedForRevision(revision: number): void {
+    const request = this.activateForRevision(revision);
+    if (request) this.discard(request);
+  }
+
+  cancel(): void {
+    const request = this.#pendingRequest;
+    if (request) this.discard(request);
+  }
+
+  markPresented(revision: number, request: EditorBringIntoViewRequest): boolean {
+    if (this.activateForRevision(revision) !== request) return false;
+    this.#pendingRequest = null;
+    request.completePresentation();
+    this.#editor.requestPublication();
+    return true;
+  }
+
+  resolveScrollTop(request: EditorBringIntoViewRequest, metrics: ScrollContainerMetrics & RevealTargetSpan): number | null {
+    const mode = request.mode === 'typewriter' && this.#typewriterPreferences().enabled ? 'typewriter' : 'nearest';
+    return mode === 'typewriter'
+      ? resolveTypewriterScrollTop({
+          ...metrics,
+          visibleArea: this.visibleArea,
+          position: sanitizeTypewriterPosition(this.#typewriterPreferences().position),
+        })
+      : resolveNearestScrollTop({ ...metrics, visibleArea: this.visibleArea });
+  }
+
+  resolvePreparationViewports(request: EditorBringIntoViewRequest, metrics: ScrollContainerMetrics & RevealTargetSpan): VerticalSpan[] {
+    const mode = request.mode === 'typewriter' && this.#typewriterPreferences().enabled ? 'typewriter' : 'nearest';
+    return resolveInstantRevealPreparationViewports({
+      ...metrics,
+      mode,
+      visibleArea: this.visibleArea,
+      position: sanitizeTypewriterPosition(this.#typewriterPreferences().position),
+    });
+  }
+
+  // eslint-disable-next-line unicorn/consistent-class-member-order -- public scroll contract is grouped before private padding details
   #hasResolvedKeepVisibleTarget(snapshot: EditorSnapshot | undefined): boolean {
     const target = this.#keepVisibleTarget;
-    return target !== null && this.#resolveTargetRects(target, snapshot) !== null;
+    return target !== null && this.resolveTargetRects(target, snapshot) !== null;
   }
 
-  #typewriterBottomPaddingForRect(rect: PageRect): number {
+  #typewriterBottomPaddingForRect(rect: PageRect, snapshot: EditorSnapshot | undefined): number {
     const viewport = this.#editor.scrollViewport;
     if (!viewport) {
       return 0;
@@ -228,7 +267,7 @@ export class EditorScrollScope {
 
     const viewportRect = viewport.getRect();
     const zoom = this.#editor.safeDisplayZoom();
-    const layoutMode = this.#editor.rootAttrs?.layout_mode;
+    const layoutMode = snapshot?.rootAttrs?.layout_mode;
     const trailingBottomMargin = layoutMode?.type === 'paginated' ? layoutMode.page_margin_bottom * zoom : CONTINUOUS_VIEW_PADDING;
     return resolveTypewriterBottomPadding({
       clientHeight: viewportRect.bottom - viewportRect.top,
@@ -241,6 +280,7 @@ export class EditorScrollScope {
 
   destroy(): void {
     this.#destroyed = true;
+    this.#pendingRequest?.completePresentation();
     this.#pendingRequest = null;
   }
 
@@ -250,6 +290,7 @@ export class EditorScrollScope {
       return;
     }
     this.visibleArea = next;
+    this.#editor.requestPublication();
   }
 
   setBottomInset(bottomInset: number): void {
@@ -261,24 +302,25 @@ export class EditorScrollScope {
     });
   }
 
-  scrollIntoView({ target, mode = 'nearest', behavior }: EditorScrollIntoViewOptions): void {
+  scrollIntoView(
+    { target, mode = 'nearest', behavior }: EditorScrollIntoViewOptions,
+    admission?: EditorRequest,
+  ): Promise<void> | undefined {
     if (this.#destroyed) {
       return;
     }
 
-    this.#pendingRequest = {
-      target,
-      mode,
-      behavior: behavior ?? (target.type === 'tracked_item' ? 'smooth' : 'instant'),
-    };
-    this.#keepVisibleTarget = target;
-    this.scheduleCommit();
-  }
-
-  scheduleCommit(): void {
-    if (this.#destroyed || this.#editor.hasQueuedTick || this.#commitQueued || !this.#pendingRequest) return;
-    this.#commitQueued = true;
-
-    void this.#commit();
+    const request = this.declare({ target, mode, behavior });
+    if (admission) {
+      admission.beforePublish(
+        (update) => {
+          if (!this.bind(request, update.revision)) this.discard(request);
+        },
+        () => this.discard(request),
+      );
+    } else {
+      this.bind(request, this.#editor.appliedSnapshot.revision);
+    }
+    return request.presentation;
   }
 }

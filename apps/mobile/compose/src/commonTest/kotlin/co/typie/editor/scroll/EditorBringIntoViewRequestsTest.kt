@@ -4,9 +4,9 @@ import co.typie.editor.EditorState
 import co.typie.editor.ffi.PageRect
 import co.typie.editor.ffi.Rect as FfiRect
 import kotlin.test.Test
-import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class EditorBringIntoViewRequestsTest {
@@ -27,10 +27,19 @@ class EditorBringIntoViewRequestsTest {
     )
 
     assertNull(requests.activateForVersion(version = 10L))
-    assertEquals(
-      request(pageRectsTarget, behavior = EditorBringIntoViewBehavior.Smooth),
-      requests.activateForVersion(version = 11L),
-    )
+    val request = requests.activateForVersion(version = 11L)
+    assertTrue(request?.target == pageRectsTarget)
+    assertTrue(request?.behavior == EditorBringIntoViewBehavior.Smooth)
+  }
+
+  @Test
+  fun `standalone declaration wakes Host presentation reconciliation`() {
+    var wakes = 0
+    val requests = EditorBringIntoViewRequests(requestPresentation = { wakes += 1 })
+
+    requests.requestForVersion(EditorBringIntoViewTarget.CurrentSelectionHead, version = 1L)
+
+    assertTrue(wakes > 0)
   }
 
   @Test
@@ -42,178 +51,88 @@ class EditorBringIntoViewRequestsTest {
   }
 
   @Test
-  fun `bring-into-view target attaches to requested editor version only`() {
+  fun `semantic request remains eligible for a later satisfying revision`() {
     val requests = EditorBringIntoViewRequests()
-
-    requests.requestForVersion(
-      target = EditorBringIntoViewTarget.CurrentSelectionHead,
-      version = 11L,
-    )
+    val request =
+      requests.requestForVersion(
+        target = EditorBringIntoViewTarget.CurrentSelectionHead,
+        version = 11L,
+      )
 
     assertNull(requests.activateForVersion(version = 10L))
-    assertEquals(
-      request(EditorBringIntoViewTarget.CurrentSelectionHead),
-      requests.activateForVersion(version = 11L),
-    )
-    assertEquals(
-      request(EditorBringIntoViewTarget.CurrentSelectionHead),
-      requests.activateForVersion(version = 11L),
-    )
-
-    assertTrue(
-      requests.markApplied(
-        version = 11L,
-        request = request(EditorBringIntoViewTarget.CurrentSelectionHead),
-      )
-    )
-    assertFalse(
-      requests.markApplied(
-        version = 11L,
-        request = request(EditorBringIntoViewTarget.CurrentSelectionHead),
-      )
-    )
-    assertNull(requests.activateForVersion(version = 11L))
+    assertSame(request, requests.activateForVersion(version = 11L))
+    assertSame(request, requests.activateForVersion(version = 12L))
   }
 
   @Test
-  fun `new bring-into-view request does not cancel active target for current editor version`() {
+  fun `new declaration immediately supersedes the previous reveal`() {
     val requests = EditorBringIntoViewRequests()
+    val previous = requests.requestForVersion(EditorBringIntoViewTarget.CurrentSelectionHead, 1L)
+    val current = requests.requestForVersion(pageRectsTarget, 2L)
 
-    requests.requestForVersion(
-      target = EditorBringIntoViewTarget.CurrentSelectionHead,
-      version = 2L,
-    )
-    assertEquals(
-      request(EditorBringIntoViewTarget.CurrentSelectionHead),
-      requests.activateForVersion(version = 2L),
-    )
-
-    requests.requestForVersion(target = pageRectsTarget, version = 3L)
-
-    assertEquals(
-      request(EditorBringIntoViewTarget.CurrentSelectionHead),
-      requests.activateForVersion(version = 2L),
-    )
-    assertTrue(
-      requests.markApplied(
-        version = 2L,
-        request = request(EditorBringIntoViewTarget.CurrentSelectionHead),
-      )
-    )
-    assertNull(requests.activateForVersion(version = 2L))
-    assertEquals(request(pageRectsTarget), requests.activateForVersion(version = 3L))
+    assertTrue(previous.presentation.isCompleted)
+    assertSame(current, requests.activateForVersion(version = 2L))
   }
 
   @Test
-  fun `newer request does not replace previous request before previous target version is built`() {
+  fun `late binding cannot replace a newer declaration`() {
     val requests = EditorBringIntoViewRequests()
+    val previous = requests.declare(EditorBringIntoViewTarget.CurrentSelectionHead)
+    val current = requests.declare(pageRectsTarget)
 
-    requests.requestForVersion(
-      target = EditorBringIntoViewTarget.CurrentSelectionHead,
-      version = 259L,
-    )
-    assertNull(requests.activateForVersion(version = 258L))
-
-    requests.requestForVersion(target = pageRectsTarget, version = 260L)
-
-    assertEquals(
-      request(EditorBringIntoViewTarget.CurrentSelectionHead),
-      requests.activateForVersion(version = 259L),
-    )
-    assertTrue(
-      requests.markApplied(
-        version = 259L,
-        request = request(EditorBringIntoViewTarget.CurrentSelectionHead),
-      )
-    )
-
-    assertEquals(request(pageRectsTarget), requests.activateForVersion(version = 260L))
+    assertFalse(requests.bind(previous, version = 1L))
+    assertTrue(requests.bind(current, version = 2L))
+    assertSame(current, requests.activateForVersion(version = 2L))
   }
 
   @Test
-  fun `requests for consecutive editor versions attach to consecutive scroll frames`() {
+  fun `exact page rect request becomes obsolete when its revision is skipped`() {
     val requests = EditorBringIntoViewRequests()
+    val request = requests.requestForVersion(pageRectsTarget, version = 2L)
 
-    requests.requestForVersion(
-      target = EditorBringIntoViewTarget.CurrentSelectionHead,
-      version = 291L,
-    )
-    requests.requestForVersion(target = pageRectsTarget, version = 292L)
-
-    assertEquals(
-      request(EditorBringIntoViewTarget.CurrentSelectionHead),
-      requests.activateForVersion(version = 291L),
-    )
-    assertTrue(
-      requests.markApplied(
-        version = 291L,
-        request = request(EditorBringIntoViewTarget.CurrentSelectionHead),
-      )
-    )
-
-    assertEquals(request(pageRectsTarget), requests.activateForVersion(version = 292L))
+    assertNull(requests.activateForVersion(version = 3L))
+    assertFalse(request.presentation.isCompleted)
+    requests.discardObsoleteForVersion(version = 3L)
+    assertTrue(request.presentation.isCompleted)
   }
 
   @Test
-  fun `skipped editor versions collapse to latest eligible bring-into-view request`() {
+  fun `matching presentation completes and clears the current reveal`() {
     val requests = EditorBringIntoViewRequests()
+    val request = requests.requestForVersion(EditorBringIntoViewTarget.CurrentSelectionHead, 1L)
 
-    requests.requestForVersion(
-      target = EditorBringIntoViewTarget.CurrentSelectionHead,
-      version = 291L,
-    )
-    requests.requestForVersion(target = pageRectsTarget, version = 292L)
-
-    assertEquals(request(pageRectsTarget), requests.activateForVersion(version = 292L))
+    assertTrue(requests.markPresented(version = 1L, request = request))
+    assertTrue(request.presentation.isCompleted)
+    assertNull(requests.activateForVersion(version = 1L))
+    assertFalse(requests.markPresented(version = 1L, request = request))
   }
 
   @Test
-  fun `cancel clears active and queued bring-into-view targets`() {
+  fun `surface failure discards only a reveal eligible for the failed version`() {
     val requests = EditorBringIntoViewRequests()
+    val previous =
+      requests.requestForVersion(EditorBringIntoViewTarget.CurrentSelectionHead, version = 1L)
 
-    requests.requestForVersion(
-      target = EditorBringIntoViewTarget.CurrentSelectionHead,
-      version = 1L,
-    )
-    assertEquals(
-      request(EditorBringIntoViewTarget.CurrentSelectionHead),
-      requests.activateForVersion(version = 1L),
-    )
+    requests.discardFailedForVersion(version = 1L)
 
-    requests.requestForVersion(target = pageRectsTarget, version = 2L)
+    assertTrue(previous.presentation.isCompleted)
+
+    val current =
+      requests.requestForVersion(EditorBringIntoViewTarget.CurrentSelectionHead, version = 3L)
+    requests.discardFailedForVersion(version = 2L)
+
+    assertFalse(current.presentation.isCompleted)
+    assertSame(current, requests.activateForVersion(version = 3L))
+  }
+
+  @Test
+  fun `cancel completes and clears the current reveal`() {
+    val requests = EditorBringIntoViewRequests()
+    val request = requests.requestForVersion(EditorBringIntoViewTarget.CurrentSelectionHead, 1L)
+
     requests.cancel()
 
-    assertFalse(
-      requests.markApplied(
-        version = 1L,
-        request = request(EditorBringIntoViewTarget.CurrentSelectionHead),
-      )
-    )
+    assertTrue(request.presentation.isCompleted)
     assertNull(requests.activateForVersion(version = 1L))
-    assertNull(requests.activateForVersion(version = 2L))
   }
-
-  @Test
-  fun `activating same version does not consume active bring-into-view target`() {
-    val requests = EditorBringIntoViewRequests()
-
-    requests.requestForVersion(
-      target = EditorBringIntoViewTarget.CurrentSelectionHead,
-      version = 1L,
-    )
-
-    requests.activateForVersion(version = 1L)
-    requests.activateForVersion(version = 1L)
-
-    assertEquals(
-      request(EditorBringIntoViewTarget.CurrentSelectionHead),
-      requests.activateForVersion(version = 1L),
-    )
-  }
-
-  private fun request(
-    target: EditorBringIntoViewTarget,
-    behavior: EditorBringIntoViewBehavior = EditorBringIntoViewBehavior.Instant,
-  ): EditorBringIntoViewRequests.Request =
-    EditorBringIntoViewRequests.Request(target = target, behavior = behavior)
 }

@@ -1,5 +1,6 @@
 import { clamp } from '@typie/ui/utils';
 import { CURSOR_VISIBLE_MARGIN, TYPEWRITER_MIN_BOTTOM_PADDING } from './constants';
+import type { VerticalSpan } from './required-surface-pages';
 
 export type EditorVisibleArea = {
   topInset: number;
@@ -41,6 +42,15 @@ function nearlySameScroll(a: number, b: number): boolean {
   return Math.abs(a - b) <= 1;
 }
 
+function uniqueClampedScrollTops(scrollTops: readonly number[], maximumScrollTop: number): number[] {
+  const result: number[] = [];
+  for (const scrollTop of scrollTops) {
+    const clamped = clamp(finiteOrZero(scrollTop), 0, maximumScrollTop);
+    if (result.every((existing) => !nearlySameScroll(existing, clamped))) result.push(clamped);
+  }
+  return result;
+}
+
 export function resolveNearestScrollTop({
   scrollTop,
   clientHeight,
@@ -58,21 +68,34 @@ export function resolveNearestScrollTop({
   const safeMargin = Math.max(0, finiteOrZero(margin));
   const safeScrollTop = finiteOrZero(scrollTop);
   const safeClientHeight = Math.max(0, finiteOrZero(clientHeight));
+  const safeTargetTop = finiteOrZero(targetTop);
+  const safeTargetBottom = finiteOrZero(targetBottom);
   const rangeTop = area.topInset + safeMargin;
   const rangeBottom = safeClientHeight - area.bottomInset - safeMargin;
   if (rangeBottom <= rangeTop) {
-    return null;
+    const visibleTop = area.topInset;
+    const visibleBottom = safeClientHeight - area.bottomInset;
+    if (visibleBottom <= visibleTop) return null;
+
+    const targetTopInViewport = safeTargetTop - safeScrollTop;
+    const targetBottomInViewport = safeTargetBottom - safeScrollTop;
+    if (targetTopInViewport >= visibleTop && targetBottomInViewport <= visibleBottom) return null;
+
+    const targetCenter = safeTargetTop + (safeTargetBottom - safeTargetTop) / 2;
+    const visibleCenter = visibleTop + (visibleBottom - visibleTop) / 2;
+    const centered = clamp(targetCenter - visibleCenter, 0, resolveMaxScrollTop({ clientHeight, scrollHeight }));
+    return nearlySameScroll(centered, safeScrollTop) ? null : centered;
   }
 
   let nextTop: number | null = null;
-  const targetHeight = Math.max(0, finiteOrZero(targetBottom) - finiteOrZero(targetTop));
+  const targetHeight = Math.max(0, safeTargetBottom - safeTargetTop);
   const rangeHeight = rangeBottom - rangeTop;
   if (targetHeight > rangeHeight) {
-    nextTop = finiteOrZero(targetTop) - rangeTop;
-  } else if (targetBottom - safeScrollTop > rangeBottom) {
-    nextTop = finiteOrZero(targetBottom) - rangeBottom;
-  } else if (targetTop - safeScrollTop < rangeTop) {
-    nextTop = finiteOrZero(targetTop) - rangeTop;
+    nextTop = safeTargetTop - rangeTop;
+  } else if (safeTargetBottom - safeScrollTop > rangeBottom) {
+    nextTop = safeTargetBottom - rangeBottom;
+  } else if (safeTargetTop - safeScrollTop < rangeTop) {
+    nextTop = safeTargetTop - rangeTop;
   }
 
   if (nextTop === null) {
@@ -81,6 +104,77 @@ export function resolveNearestScrollTop({
 
   const clamped = clamp(nextTop, 0, resolveMaxScrollTop({ clientHeight, scrollHeight }));
   return nearlySameScroll(clamped, safeScrollTop) ? null : clamped;
+}
+
+export function resolveInstantRevealPreparationViewports({
+  mode,
+  scrollTop,
+  clientHeight,
+  scrollHeight,
+  targetTop,
+  targetBottom,
+  visibleArea,
+  margin = CURSOR_VISIBLE_MARGIN,
+  position = 0.5,
+}: ScrollContainerMetrics &
+  RevealTargetSpan & {
+    mode: 'nearest' | 'typewriter';
+    visibleArea?: EditorVisibleArea;
+    margin?: number;
+    position?: number;
+  }): VerticalSpan[] {
+  const safeClientHeight = Math.max(0, finiteOrZero(clientHeight));
+  if (safeClientHeight <= 0) return [];
+
+  const area = normalizeVisibleArea(visibleArea);
+  const safeScrollTop = finiteOrZero(scrollTop);
+  const safeTargetTop = finiteOrZero(targetTop);
+  const safeTargetBottom = finiteOrZero(targetBottom);
+  const maximumScrollTop = resolveMaxScrollTop({ clientHeight, scrollHeight });
+  let destinations: number[];
+
+  if (mode === 'typewriter') {
+    const usableHeight = Math.max(0, safeClientHeight - area.topInset - area.bottomInset);
+    if (usableHeight <= 0) return [];
+    destinations = [
+      resolveTypewriterScrollTop({
+        scrollTop: safeScrollTop,
+        clientHeight: safeClientHeight,
+        scrollHeight,
+        targetTop: safeTargetTop,
+        targetBottom: safeTargetBottom,
+        visibleArea: area,
+        position,
+      }) ?? safeScrollTop,
+    ];
+  } else {
+    const safeMargin = Math.max(0, finiteOrZero(margin));
+    const rangeTop = area.topInset + safeMargin;
+    const rangeBottom = safeClientHeight - area.bottomInset - safeMargin;
+    if (rangeBottom <= rangeTop) {
+      const visibleTop = area.topInset;
+      const visibleBottom = safeClientHeight - area.bottomInset;
+      if (visibleBottom <= visibleTop) return [];
+      const targetTopInViewport = safeTargetTop - safeScrollTop;
+      const targetBottomInViewport = safeTargetBottom - safeScrollTop;
+      destinations =
+        targetTopInViewport >= visibleTop && targetBottomInViewport <= visibleBottom
+          ? [safeScrollTop]
+          : [safeTargetTop + (safeTargetBottom - safeTargetTop) / 2 - (visibleTop + (visibleBottom - visibleTop) / 2)];
+    } else {
+      const targetHeight = Math.max(0, safeTargetBottom - safeTargetTop);
+      const targetTopInViewport = safeTargetTop - safeScrollTop;
+      const targetBottomInViewport = safeTargetBottom - safeScrollTop;
+      destinations = [];
+      if (targetHeight <= rangeBottom - rangeTop && targetTopInViewport >= rangeTop && targetBottomInViewport <= rangeBottom) {
+        destinations.push(safeScrollTop);
+      }
+      destinations.push(safeTargetTop - rangeTop);
+      if (targetHeight <= rangeBottom - rangeTop) destinations.push(safeTargetBottom - rangeBottom);
+    }
+  }
+
+  return uniqueClampedScrollTops(destinations, maximumScrollTop).map((top) => ({ top, bottom: top + safeClientHeight }));
 }
 
 export function resolveTypewriterScrollTop({

@@ -221,6 +221,7 @@ class EditorHitTestSnapshotTest {
       val editor = Editor(fake, scope, dispatcher, onError = { _, error -> reported += error })
       editor.activateVisualHost(Any())
       editor.attachSurface(0, 10L, 100.0, 100.0, 1.0, wakeDelivery = {})
+      editor.requestSurfacePages(setOf(0))
       advanceUntilIdle()
       editor.setImeSessionActive(true)
 

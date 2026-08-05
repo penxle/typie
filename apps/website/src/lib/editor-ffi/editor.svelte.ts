@@ -7,12 +7,12 @@ import { EditorAttachmentImporter } from './attachment-importer';
 import { IS_MAC } from './constants';
 import { EditorRequest, EditorUpdate } from './editor-update';
 import { fontDataMissingHandler } from './fonts';
-import { isSelectionCollapsed } from './geometry';
+import { isSelectionCollapsed, presentedPageElement } from './geometry';
 import { TouchGestureController } from './gesture.svelte';
 import { readClipboardRich, writeClipboardPayload } from './handlers/clipboard';
 import { encodeLengthPrefixedBlobs } from './length-prefix';
 import { isMutatingMessage } from './message-gate';
-import { canPublish, preparingPage, proofSatisfies, satisfiesWaiter } from './publication';
+import { proofSatisfies, satisfiesWaiter } from './publication';
 import { fanOutResourceUpdate, register, snapshot, unregister } from './registry';
 import { probeEvent, probeRendered } from './surface-probe';
 import { selectTrackedRangeMember, semanticMembershipForStateChange, trackedRangeMembershipIds } from './tracked-range-membership';
@@ -51,7 +51,9 @@ import type {
   Viewport,
 } from '@typie/editor-ffi/browser';
 import type { ScrollViewport } from '@typie/ui/utils';
+import type { EditorSurfaceHost } from './editor-surface-host.svelte';
 import type { EditorPublicationResult } from './editor-update';
+import type { FrameProof } from './publication';
 import type { EditorScrollIntoViewOptions, EditorScrollScope } from './scroll.svelte';
 import type {
   ArchivedAsset,
@@ -113,6 +115,7 @@ type ToolbarState = Readonly<{
 }>;
 
 type PublishedFrame = Readonly<{
+  revision: number;
   surfaceKey: number;
   frameKey: number;
   canvas: HTMLCanvasElement;
@@ -135,6 +138,7 @@ export type { EditorPublicationResult } from './editor-update';
 type UpdateReceipt = {
   resolve: (update: EditorUpdate) => void;
   reject: (error: unknown) => void;
+  request: EditorRequest;
 };
 
 type PublicationWaiter = {
@@ -159,7 +163,7 @@ type SurfaceTarget = {
   height: number;
   scaleFactor: number;
   requiredRevision: number | undefined;
-  proof: { revision: number; surfaceKey: number; frameKey: number } | undefined;
+  proof: FrameProof | undefined;
   failedRevision: number | undefined;
   available: boolean;
   replace: (() => void) | undefined;
@@ -168,6 +172,7 @@ type SurfaceTarget = {
 type VisualHost = {
   token: object;
   targets: Map<number, SurfaceTarget>;
+  onPublicationFailure: (revision: number) => void;
 };
 
 let wasmInitPromise: Promise<void> | null = null;
@@ -211,6 +216,7 @@ export class EditorContext {
   readonly attachmentImporter = new EditorAttachmentImporter(this);
   editor = $state<Editor>();
   scroll = $state<EditorScrollScope>();
+  surfaceHost = $state<EditorSurfaceHost>();
   liveEditor = $state<Editor>();
   fileAssets = $state(new SvelteMap<string, FileAsset>());
   // v1 chrome 호환 필드 — v2 sync 환경에선 갱신되지 않음
@@ -329,7 +335,7 @@ export class Editor {
   #admission: EditorRequest | undefined;
   #surfaceKey = 0;
   #visualHost: VisualHost | undefined;
-  #preparingPage = $state<number | undefined>(undefined);
+  #publishedHostToken: object | undefined;
   // eslint-disable-next-line svelte/prefer-svelte-reactivity
   #receipts = new Map<number, UpdateReceipt>();
   // eslint-disable-next-line svelte/prefer-svelte-reactivity
@@ -376,7 +382,7 @@ export class Editor {
   #focused = $state(false);
   #nativeDragAdmissionRetainsFocus = false;
   #effectCleanup: (() => void) | null = null;
-  #scrollIntoView: ((options: EditorScrollIntoViewOptions) => void) | null = null;
+  #scrollIntoView: ((options: EditorScrollIntoViewOptions, request: EditorRequest | undefined) => Promise<void> | undefined) | null = null;
 
   #pointerStyle = $state<PointerStyle>('default');
   #lastPointerClient: { x: number; y: number } | null = null;
@@ -427,6 +433,9 @@ export class Editor {
   };
 
   published = $state.raw<PublishedBundle>();
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- replaced atomically; the Set itself is never mutated
+  surfacePageRequirements = $state.raw<ReadonlySet<number>>(new Set());
+  publicationVersion = $state(0);
   documentRevision = $state(0);
   appliedImeRevision = $state(0);
   appliedSelectionRevision = $state(0);
@@ -657,6 +666,20 @@ export class Editor {
 
     if (fields.has('modifiers') || fields.has('block')) this.#toolbarSyncDirty = true;
     this.#applied = this.#materializeSnapshot(result.revision.value, fields);
+    const publicEvents = result.events.filter((event) => event.type !== 'state_changed' && event.type !== 'render_invalidated');
+
+    const completedReceipts: { receipt: UpdateReceipt; update: EditorUpdate }[] = [];
+    for (const outcome of result.request_outcomes) {
+      const receipt = this.#receipts.get(outcome.request_id.value);
+      if (!receipt) continue;
+      const update = new EditorUpdate(result.revision.value, this.#applied, outcome.command_outcomes, publicEvents, (signal) =>
+        this.#awaitPublished(result.revision.value, signal),
+      );
+      receipt.request.runBeforePublish(update);
+      this.#receipts.delete(outcome.request_id.value);
+      completedReceipts.push({ receipt, update });
+    }
+
     const replaceChangedTargets = fields.has('page_sizes') ? this.#reconcileSurfaceTargets() : [];
     this.#installAppliedSideEffects(fields);
 
@@ -668,21 +691,14 @@ export class Editor {
 
     for (const replace of replaceChangedTargets) replace();
     this.#renderRequiredTargets();
-    this.#publishIfReady();
+    this.#publicationChanged();
     if ([...(this.#visualHost?.targets.values() ?? [])].some((target) => !target.available)) {
       this.#rejectAllPublicationWaitersForSurface();
     }
 
-    const publicEvents = result.events.filter((event) => event.type !== 'state_changed' && event.type !== 'render_invalidated');
     for (const waiter of this.#appliedWaiters) waiter.resolve(result.revision.value);
     this.#appliedWaiters.clear();
-    for (const outcome of result.request_outcomes) {
-      const receipt = this.#receipts.get(outcome.request_id.value);
-      if (!receipt) continue;
-      this.#receipts.delete(outcome.request_id.value);
-      const update = new EditorUpdate(result.revision.value, this.#applied, outcome.command_outcomes, publicEvents, (signal) =>
-        this.#awaitPublished(result.revision.value, signal),
-      );
+    for (const { receipt, update } of completedReceipts) {
       receipt.resolve(update);
     }
     return publicEvents;
@@ -735,76 +751,23 @@ export class Editor {
       } else {
         target.failedRevision = requestedRevision;
         this.#rejectPublicationWaitersThrough(requestedRevision);
+        host.onPublicationFailure(requestedRevision);
       }
     }
   }
 
-  #publishIfReady(): void {
-    untrack(() => {
-      if (this.#preparingPage !== undefined && this.#preparingPage >= this.#applied.pageSizes.length) {
-        this.#preparingPage = undefined;
-      }
-      let targetSetChanged = false;
-      if (this.published !== undefined && this.#visualHost !== undefined) {
-        targetSetChanged = this.published.frames.size !== this.#visualHost.targets.size;
-        if (!targetSetChanged) {
-          for (const [page, target] of this.#visualHost.targets) {
-            if (this.published.frames.get(page)?.surfaceKey === target.key) continue;
-            targetSetChanged = true;
-            break;
-          }
-        }
-      }
-      const publishedRevision = this.published?.snapshot.revision;
-      this.#preparingPage ??= preparingPage({
-        hasPublishedFrames: (this.published?.frames.size ?? 0) > 0,
-        appliedRevision: this.#applied.revision,
-        publishedRevision,
-        appliedPageCount: this.#applied.pageSizes.length,
-        publishedPageCount: this.published?.snapshot.pageSizes.length ?? 0,
-        targets: this.#visualHost?.targets,
-      });
-      if (this.#preparingPage !== undefined && !this.#visualHost?.targets.has(this.#preparingPage)) return;
-      if (
-        canPublish(
-          this.#applied.revision,
-          this.published?.snapshot.revision,
-          this.#visualHost,
-          targetSetChanged,
-          (this.published?.frames.size ?? 0) > 0,
-        )
-      ) {
-        // eslint-disable-next-line svelte/prefer-svelte-reactivity
-        const frames = new Map<number, PublishedFrame>();
-        for (const target of this.#visualHost?.targets.values() ?? []) {
-          if (target.proof) {
-            frames.set(target.page, {
-              surfaceKey: target.key,
-              frameKey: target.proof.frameKey,
-              canvas: target.canvas,
-            });
-          }
-        }
+  #publicationChanged(): void {
+    this.publicationVersion += 1;
+  }
 
-        this.published = { snapshot: this.#applied, frames };
-        this.#preparingPage = undefined;
-        this.#pullToolbarStateIfReady();
-
-        for (const target of this.#visualHost?.targets.values() ?? []) {
-          target.requiredRevision = undefined;
-          target.failedRevision = undefined;
-        }
-      }
-
-      const published = this.published;
-      if (!published) return;
-      for (const waiter of this.#publicationWaiters) {
-        if (!this.isPublished(waiter.revision, { requireFrame: waiter.requireFrame })) continue;
-        this.#publicationWaiters.delete(waiter);
-        if (waiter.signal && waiter.onAbort) waiter.signal.removeEventListener('abort', waiter.onAbort);
-        waiter.resolve({ type: 'published', revision: published.snapshot.revision });
-      }
-    });
+  #completePublicationWaiters(bundle: PublishedBundle): void {
+    if (this.published !== bundle) return;
+    for (const waiter of this.#publicationWaiters) {
+      if (!this.isPublished(waiter.revision, { requireFrame: waiter.requireFrame })) continue;
+      this.#publicationWaiters.delete(waiter);
+      if (waiter.signal && waiter.onAbort) waiter.signal.removeEventListener('abort', waiter.onAbort);
+      waiter.resolve({ type: 'published', revision: bundle.snapshot.revision });
+    }
   }
 
   #pullToolbarStateIfReady(): void {
@@ -868,11 +831,13 @@ export class Editor {
     const reason = error ?? new Error('Editor operation failed');
     this.#failure = reason;
     this.#failed = true;
-    this.#preparingPage = undefined;
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- immutable empty snapshot
+    this.surfacePageRequirements = new Set();
     this.#stopRuntime();
     unregister(this);
     for (const receipt of this.#receipts.values()) {
       try {
+        receipt.request.discard();
         receipt.reject(reason);
       } catch {
         // Failure cleanup must continue even if an internal receipt hook throws.
@@ -1155,14 +1120,16 @@ export class Editor {
     this.#admission = request;
     try {
       build(request);
+    } catch (err) {
+      request.discard();
+      throw err;
     } finally {
       this.#admission = undefined;
     }
     if (!this.readOnly) return request;
 
-    const allowed = request.messages.filter((message) => !isMutatingMessage(message));
-    if (allowed.length !== request.messages.length) this.editBlockedHandler?.();
-    return new EditorRequest(allowed);
+    if (request.removeMessagesWhere(isMutatingMessage)) this.editBlockedHandler?.();
+    return request;
   }
 
   #refreshAppliedPageData(pages: Iterable<number>): void {
@@ -1308,9 +1275,12 @@ export class Editor {
 
   isPublished(revision: number, options?: { requireFrame?: boolean }): boolean {
     const published = this.published;
+    const host = this.#visualHost;
     return (
       published !== undefined &&
-      satisfiesWaiter(revision, published.snapshot.revision, published.frames, this.#visualHost, options?.requireFrame)
+      host !== undefined &&
+      this.#publishedHostToken === host.token &&
+      satisfiesWaiter(revision, published.snapshot.revision, published.frames, options?.requireFrame)
     );
   }
 
@@ -1436,7 +1406,11 @@ export class Editor {
     const payload = this.copySelection();
     if (!payload) return;
     await writeClipboardPayload(payload.html, payload.text);
-    this.enqueue({ type: 'clipboard', op: { type: 'cut' } });
+    if (this.readOnly || this.terminal) return;
+    this.updateNow(() => {
+      this.enqueue({ type: 'clipboard', op: { type: 'cut' } });
+      this.scrollIntoView({ target: { type: 'current_selection_head' }, mode: 'nearest' });
+    });
   }
 
   async requestPasteTextOnly(): Promise<void> {
@@ -1446,7 +1420,11 @@ export class Editor {
     }
     const result = await readClipboardRich();
     if (!result || result.text === '') return;
-    this.enqueue({ type: 'clipboard', op: { type: 'paste', html: undefined, text: result.text } });
+    if (this.readOnly || this.terminal) return;
+    this.updateNow(() => {
+      this.enqueue({ type: 'clipboard', op: { type: 'paste', html: undefined, text: result.text } });
+      this.scrollIntoView({ target: { type: 'current_selection_head' }, mode: 'typewriter' });
+    });
   }
 
   insertTemplateFragment(changesets: Uint8Array): void {
@@ -1504,10 +1482,6 @@ export class Editor {
     return this.published?.snapshot.revision;
   }
 
-  get preparingPage(): number | undefined {
-    return this.#preparingPage;
-  }
-
   awaitPublishedRevision(revision: number, options?: { requireFrame?: boolean }): Promise<EditorPublicationResult> {
     return this.#awaitPublished(revision, undefined, options?.requireFrame);
   }
@@ -1544,12 +1518,14 @@ export class Editor {
     return delta / this.safeDisplayZoom();
   }
 
-  registerScrollIntoView(handler: ((options: EditorScrollIntoViewOptions) => void) | null): void {
+  registerScrollIntoView(
+    handler: ((options: EditorScrollIntoViewOptions, request: EditorRequest | undefined) => Promise<void> | undefined) | null,
+  ): void {
     this.#scrollIntoView = handler;
   }
 
-  scrollIntoView(options: EditorScrollIntoViewOptions): void {
-    this.#scrollIntoView?.(options);
+  scrollIntoView(options: EditorScrollIntoViewOptions): Promise<void> | undefined {
+    return this.#scrollIntoView?.(options, this.#admission);
   }
 
   clientToLocal(clientX: number, clientY: number) {
@@ -1569,7 +1545,7 @@ export class Editor {
       else hi = mid;
     }
 
-    const el = this.pageEls[lo];
+    const el = presentedPageElement(this, lo);
     if (!el) return null;
     let rect = el.getBoundingClientRect();
     let localY = (clientY - rect.top) / zoom;
@@ -1695,11 +1671,21 @@ export class Editor {
     if (this.terminal) return null;
 
     const request = this.#buildRequest(build);
-    if (request.empty) return null;
+    if (request.empty) {
+      request.discard();
+      return null;
+    }
 
-    const requestId = this.#invokeCore((core) => core.enqueue_request([...request.messages]));
+    const requestId = (() => {
+      try {
+        return this.#invokeCore((core) => core.enqueue_request([...request.messages]));
+      } catch (err) {
+        request.discard();
+        throw err;
+      }
+    })();
     const promise = new Promise<EditorUpdate>((resolve, reject) => {
-      this.#receipts.set(requestId.value, { resolve, reject });
+      this.#receipts.set(requestId.value, { resolve, reject, request });
     });
     this.#requestWasmTick();
     return promise;
@@ -1713,14 +1699,20 @@ export class Editor {
     let update: EditorUpdate | undefined;
     let receiptFailure: { error: unknown } | undefined;
     let admitted = false;
+    let request: EditorRequest | undefined;
     this.#transitionActive = true;
     try {
-      const request = this.#buildRequest(build);
-      if (request.empty) return null;
+      const builtRequest = this.#buildRequest(build);
+      request = builtRequest;
+      if (builtRequest.empty) {
+        builtRequest.discard();
+        return null;
+      }
 
-      const requestId = this.#invokeCore((core) => core.enqueue_request([...request.messages]));
+      const requestId = this.#invokeCore((core) => core.enqueue_request([...builtRequest.messages]));
       admitted = true;
       this.#receipts.set(requestId.value, {
+        request: builtRequest,
         resolve: (value) => {
           update = value;
         },
@@ -1736,6 +1728,7 @@ export class Editor {
       if (receiptFailure) throw receiptFailure.error;
       if (!update) throw new Error(`tickThrough omitted request outcome ${requestId.value}`);
     } catch (err) {
+      request?.discard();
       if (admitted && !this.#creationActive) this.#fail(err);
       throw err;
     } finally {
@@ -1756,7 +1749,114 @@ export class Editor {
     this.#pullToolbarStateIfReady();
   }
 
-  activateVisualHost(): () => void {
+  requestSurfacePages(pages: ReadonlySet<number>): void {
+    if (this.terminal) return;
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- immutable value installed into raw reactive state
+    const valid = new Set([...pages].filter((page) => page >= 0 && page < this.#applied.pageSizes.length));
+    if (valid.size === this.surfacePageRequirements.size && [...valid].every((page) => this.surfacePageRequirements.has(page))) {
+      return;
+    }
+    const previous = this.surfacePageRequirements;
+    this.#refreshAppliedPageData([...valid].filter((page) => !previous.has(page)));
+    this.#removeAppliedPageData([...previous].filter((page) => !valid.has(page)));
+    this.surfacePageRequirements = valid;
+    this.#publicationChanged();
+  }
+
+  requestPublication(): void {
+    if (!this.terminal) this.publicationVersion += 1;
+  }
+
+  get activeSurfacePages(): ReadonlySet<number> {
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- immutable caller snapshot
+    return new Set(this.#visualHost?.targets.keys());
+  }
+
+  publishIfReady(requiredPages: ReadonlySet<number>): PublishedBundle | undefined {
+    const host = this.#visualHost;
+    if (
+      !host ||
+      requiredPages.size !== this.surfacePageRequirements.size ||
+      [...requiredPages].some((page) => !this.surfacePageRequirements.has(page))
+    ) {
+      return undefined;
+    }
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- immutable bundle snapshot
+    const frames = new Map<number, PublishedFrame>();
+    for (const page of requiredPages) {
+      const target = host.targets.get(page);
+      if (!target || !proofSatisfies(target) || !target.proof) return undefined;
+      frames.set(page, {
+        revision: target.proof.revision,
+        surfaceKey: target.key,
+        frameKey: target.proof.frameKey,
+        canvas: target.canvas,
+      });
+    }
+    const current = this.published;
+    if (
+      current?.snapshot === this.#applied &&
+      current.frames.size === frames.size &&
+      [...frames].every(([page, frame]) => {
+        const previous = current.frames.get(page);
+        return (
+          previous?.canvas === frame.canvas &&
+          previous.revision === frame.revision &&
+          previous.surfaceKey === frame.surfaceKey &&
+          previous.frameKey === frame.frameKey
+        );
+      })
+    ) {
+      return current;
+    }
+    return { snapshot: this.#applied, frames };
+  }
+
+  acceptPublication(bundle: PublishedBundle): boolean {
+    const host = this.#visualHost;
+    if (this.published === bundle && this.#publishedHostToken === host?.token) return true;
+    if (
+      !host ||
+      this.#applied !== bundle.snapshot ||
+      bundle.frames.size !== this.surfacePageRequirements.size ||
+      bundle.frames.keys().some((page) => !this.surfacePageRequirements.has(page))
+    ) {
+      return false;
+    }
+    for (const [page, frame] of bundle.frames) {
+      const target = host.targets.get(page);
+      if (
+        !target ||
+        target.canvas !== frame.canvas ||
+        target.key !== frame.surfaceKey ||
+        target.proof?.revision !== frame.revision ||
+        target.proof?.frameKey !== frame.frameKey ||
+        !proofSatisfies(target)
+      ) {
+        return false;
+      }
+    }
+    for (const page of bundle.frames.keys()) {
+      const target = host.targets.get(page);
+      if (!target) return false;
+      target.requiredRevision = undefined;
+      target.failedRevision = undefined;
+    }
+    this.published = bundle;
+    this.#publishedHostToken = host.token;
+    this.#pullToolbarStateIfReady();
+    return true;
+  }
+
+  completePresentation(bundle: PublishedBundle): void {
+    this.#completePublicationWaiters(bundle);
+  }
+
+  activateVisualHost(
+    onPublicationFailure: (revision: number) => void = () => {
+      // A visual Host may be activated without a reveal owner.
+    },
+  ): () => void {
     return untrack(() => {
       // eslint-disable-next-line @typescript-eslint/no-empty-function
       if (this.terminal) return () => {};
@@ -1764,17 +1864,19 @@ export class Editor {
 
       const token = {};
       // eslint-disable-next-line svelte/prefer-svelte-reactivity
-      this.#visualHost = { token, targets: new Map() };
-      this.#publishIfReady();
+      this.#visualHost = { token, targets: new Map(), onPublicationFailure };
+      this.#publicationChanged();
       return () => {
         untrack(() => {
           if (this.#visualHost?.token !== token) return;
           if (this.#coreAvailable) {
             for (const page of this.#visualHost.targets.keys()) this.#invokeCore((core) => core.detach_surface(page));
           }
-          this.#removeAppliedPageData(this.#visualHost.targets.keys());
+          this.#removeAppliedPageData(this.surfacePageRequirements);
           this.#visualHost = undefined;
-          this.#preparingPage = undefined;
+          this.#publishedHostToken = undefined;
+          // eslint-disable-next-line svelte/prefer-svelte-reactivity -- immutable empty snapshot
+          this.surfacePageRequirements = new Set();
           for (const waiter of this.#publicationWaiters) {
             if (waiter.signal && waiter.onAbort) waiter.signal.removeEventListener('abort', waiter.onAbort);
             waiter.resolve({ type: 'no_host' });
@@ -1833,9 +1935,8 @@ export class Editor {
         replace,
       };
       host.targets.set(page, target);
-      this.#refreshAppliedPageData([page]);
       this.#renderRequiredTargets();
-      this.#publishIfReady();
+      this.#publicationChanged();
       if (!target.available) this.#rejectAllPublicationWaitersForSurface();
       return backend;
     });
@@ -1848,8 +1949,7 @@ export class Editor {
       if (!target) return;
       this.#invokeCore((core) => core.detach_surface(page));
       this.#visualHost?.targets.delete(page);
-      this.#removeAppliedPageData([page]);
-      this.#publishIfReady();
+      this.#publicationChanged();
     });
   }
 
@@ -1868,7 +1968,7 @@ export class Editor {
       target.failedRevision = undefined;
       target.available = backend === 'cpu';
       this.#renderRequiredTargets();
-      this.#publishIfReady();
+      this.#publicationChanged();
       if (!target.available) this.#rejectAllPublicationWaitersForSurface();
     });
   }
@@ -1896,7 +1996,7 @@ export class Editor {
         target.available = backend === 'cpu';
       }
       this.#renderRequiredTargets();
-      this.#publishIfReady();
+      this.#publicationChanged();
       if ([...(this.#visualHost?.targets.values() ?? [])].some((target) => !target.available)) {
         this.#rejectAllPublicationWaitersForSurface();
       }
@@ -2464,13 +2564,15 @@ export class Editor {
   destroy(): void {
     if (this.#destroyed) return;
     this.#destroyed = true;
-
     unregister(this);
 
     this.#stopRuntime();
 
     const disposed = new Error('Editor is disposed');
-    for (const receipt of this.#receipts.values()) receipt.reject(disposed);
+    for (const receipt of this.#receipts.values()) {
+      receipt.request.discard();
+      receipt.reject(disposed);
+    }
     this.#receipts.clear();
     for (const waiter of this.#appliedWaiters) waiter.reject(disposed);
     this.#appliedWaiters.clear();
@@ -2480,7 +2582,8 @@ export class Editor {
     }
     this.#publicationWaiters.clear();
     this.#visualHost = undefined;
-    this.#preparingPage = undefined;
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- immutable empty snapshot
+    this.surfacePageRequirements = new Set();
     this.#listeners.clear();
     this.#contextMenuContributors.clear();
 

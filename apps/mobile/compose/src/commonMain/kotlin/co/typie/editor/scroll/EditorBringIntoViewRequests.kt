@@ -1,56 +1,27 @@
 package co.typie.editor.scroll
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import co.typie.editor.EditorState
+import kotlin.concurrent.atomics.AtomicLong
 import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import kotlinx.coroutines.CompletableDeferred
 
 @OptIn(ExperimentalAtomicApi::class)
-internal class EditorBringIntoViewRequests {
+internal class EditorBringIntoViewRequests(private val requestPresentation: () -> Unit = {}) {
   data class Request(
     val target: EditorBringIntoViewTarget,
     val behavior: EditorBringIntoViewBehavior = EditorBringIntoViewBehavior.Instant,
-  )
-
-  private data class PendingBringIntoViewTarget(
-    val request: Request,
-    val targetVersion: Long,
-    val order: Long,
-  )
-
-  private data class ActiveBringIntoViewTarget(val request: Request, val version: Long)
-
-  private data class State(
-    val pendingBringIntoViewTargets: List<PendingBringIntoViewTarget> = emptyList(),
-    val activeBringIntoViewTarget: ActiveBringIntoViewTarget? = null,
-    val nextRequestOrder: Long = 1L,
   ) {
-    fun latestEligiblePending(version: Long): PendingBringIntoViewTarget? =
-      pendingBringIntoViewTargets
-        .filter { version >= it.targetVersion }
-        .maxWithOrNull(
-          compareBy<PendingBringIntoViewTarget> { it.targetVersion }.thenBy { it.order }
-        )
-
-    fun withoutStaleActive(version: Long): State =
-      if (activeBringIntoViewTarget != null && activeBringIntoViewTarget.version != version) {
-        copy(activeBringIntoViewTarget = null)
-      } else {
-        this
-      }
-
-    fun withActive(pending: PendingBringIntoViewTarget, version: Long): State =
-      copy(
-        pendingBringIntoViewTargets =
-          pendingBringIntoViewTargets.filter { it.targetVersion > pending.targetVersion },
-        activeBringIntoViewTarget =
-          ActiveBringIntoViewTarget(request = pending.request, version = version),
-      )
+    internal val targetVersion = AtomicLong(UNBOUND_VERSION)
+    internal val presentation = CompletableDeferred<Unit>()
   }
 
-  private val state = AtomicReference(State())
+  private val pending = AtomicReference<Request?>(null)
 
   fun requestForState(
     state: EditorState,
@@ -69,71 +40,81 @@ internal class EditorBringIntoViewRequests {
     target: EditorBringIntoViewTarget,
     version: Long,
     behavior: EditorBringIntoViewBehavior = EditorBringIntoViewBehavior.Instant,
-  ) {
-    update { current ->
-      current.copy(
-        pendingBringIntoViewTargets =
-          current.pendingBringIntoViewTargets +
-            PendingBringIntoViewTarget(
-              request = Request(target = target, behavior = behavior),
-              targetVersion = version,
-              order = current.nextRequestOrder,
-            ),
-        nextRequestOrder = current.nextRequestOrder + 1L,
-      )
-    }
+  ): Request = declare(target, behavior).also { bind(it, version) }
+
+  fun declare(
+    target: EditorBringIntoViewTarget,
+    behavior: EditorBringIntoViewBehavior = EditorBringIntoViewBehavior.Instant,
+  ): Request {
+    val request = Request(target = target, behavior = behavior)
+    pending.exchange(request)?.presentation?.complete(Unit)
+    requestPresentation()
+    return request
+  }
+
+  fun bind(request: Request, version: Long): Boolean {
+    if (pending.load() !== request) return false
+    val current = request.targetVersion.load()
+    if (current != UNBOUND_VERSION) return current == version
+    val bound =
+      request.targetVersion.compareAndSet(UNBOUND_VERSION, version) && pending.load() === request
+    if (bound) requestPresentation()
+    return bound
   }
 
   fun cancel() {
-    update { current ->
-      if (
-        current.pendingBringIntoViewTargets.isEmpty() && current.activeBringIntoViewTarget == null
-      ) {
-        current
-      } else {
-        State(nextRequestOrder = current.nextRequestOrder)
-      }
+    pending.exchange(null)?.let { request ->
+      request.presentation.complete(Unit)
+      requestPresentation()
+    }
+  }
+
+  fun discard(request: Request) {
+    if (pending.compareAndSet(request, null)) {
+      request.presentation.complete(Unit)
+      requestPresentation()
     }
   }
 
   fun activateForVersion(version: Long): Request? {
-    while (true) {
-      val current = state.load()
-      current.activeBringIntoViewTarget?.let { active ->
-        if (active.version == version) {
-          return active.request
-        }
+    val request = pending.load() ?: return null
+    val targetVersion =
+      request.targetVersion.load().takeUnless { it == UNBOUND_VERSION } ?: return null
+    val eligible =
+      when (request.target) {
+        is EditorBringIntoViewTarget.PageRects -> version == targetVersion
+        EditorBringIntoViewTarget.CurrentSelectionHead -> version >= targetVersion
       }
+    return request.takeIf { eligible }
+  }
 
-      val base = current.withoutStaleActive(version)
-      val pending = base.latestEligiblePending(version)
-      val next = pending?.let { base.withActive(it, version) } ?: base
-      if (next === current || state.compareAndSet(current, next)) {
-        return pending?.request
-      }
+  fun discardObsoleteForVersion(version: Long) {
+    val request = pending.load() ?: return
+    val targetVersion = request.targetVersion.load().takeUnless { it == UNBOUND_VERSION } ?: return
+    if (request.target is EditorBringIntoViewTarget.PageRects && version > targetVersion) {
+      discard(request)
     }
   }
 
-  fun markApplied(version: Long, request: Request): Boolean {
-    while (true) {
-      val current = state.load()
-      val activeTarget = current.activeBringIntoViewTarget ?: return false
-      if (activeTarget.version != version || activeTarget.request != request) {
-        return false
-      }
-      val next = current.copy(activeBringIntoViewTarget = null)
-      if (state.compareAndSet(current, next)) {
-        return true
-      }
-    }
+  fun discardFailedForVersion(version: Long) {
+    activateForVersion(version)?.let(::discard)
   }
 
-  private inline fun update(transform: (State) -> State) {
-    while (true) {
-      val current = state.load()
-      val next = transform(current)
-      if (state.compareAndSet(current, next)) return
+  fun markPresented(version: Long, request: Request): Boolean {
+    if (activateForVersion(version) !== request || !pending.compareAndSet(request, null)) {
+      return false
     }
+    request.presentation.complete(Unit)
+    requestPresentation()
+    return true
+  }
+
+  suspend fun awaitPresentation(request: Request) {
+    request.presentation.await()
+  }
+
+  private companion object {
+    const val UNBOUND_VERSION = Long.MIN_VALUE
   }
 }
 
@@ -148,6 +129,11 @@ internal val LocalEditorBringIntoViewRequests =
   }
 
 @Composable
-internal fun rememberEditorBringIntoViewRequests(): EditorBringIntoViewRequests = remember {
-  EditorBringIntoViewRequests()
+internal fun rememberEditorBringIntoViewRequests(
+  requestPresentation: () -> Unit = {}
+): EditorBringIntoViewRequests {
+  val currentRequestPresentation = rememberUpdatedState(requestPresentation)
+  val requests = remember { EditorBringIntoViewRequests { currentRequestPresentation.value() } }
+  DisposableEffect(requests) { onDispose { requests.cancel() } }
+  return requests
 }

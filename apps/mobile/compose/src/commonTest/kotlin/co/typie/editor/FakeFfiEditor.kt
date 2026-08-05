@@ -195,7 +195,10 @@ internal class FakeFfiEditor(
   /** Applies and publishes the next fake snapshot through an active zero-target visual host. */
   fun publishSnapshot(editor: Editor): EditorUpdate {
     editor.activateVisualHost(this)
-    return applySnapshot(editor)
+    val update = applySnapshot(editor)
+    editor.requestSurfacePages(emptySet())
+    requireNotNull(editor.publishIfReady(emptySet())).let(editor::acceptPublication)
+    return update
   }
 
   fun attachSurfaceWithoutFrame(

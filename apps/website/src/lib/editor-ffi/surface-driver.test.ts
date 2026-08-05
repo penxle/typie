@@ -240,13 +240,30 @@ describe('surface-driver', () => {
     expect(h.isAttached()).toBe(false);
   });
 
-  it('releases the target, listeners, and displayed canvas when parked', () => {
+  it('releases an inactive target while retaining its published display backing', () => {
     const h = harness();
     h.driver.setActive(true);
+    h.canvases[0].pixels = 'published pixels';
     h.driver.syncPublished(h.canvases[0]);
+
     h.driver.setActive(false);
 
     expect(h.isAttached()).toBe(false);
+    expect(h.detachCount()).toBe(1);
+    expect(h.canvases[0]).toMatchObject({ pixels: 'published pixels', disposed: false, removed: false, listeners: 0 });
+    expect(h.driver.debug()).toMatchObject({ target: undefined, displayed: h.canvases[0], wantsLive: false });
+
+    h.driver.setActive(true);
+    expect(h.driver.debug()).toMatchObject({ target: h.canvases[1], displayed: h.canvases[0], wantsLive: true });
+  });
+
+  it('releases the target and displayed canvas when destroyed', () => {
+    const h = harness();
+    h.driver.setActive(true);
+    h.driver.syncPublished(h.canvases[0]);
+
+    h.driver.destroy();
+
     expect(h.driver.hasSurface()).toBe(false);
     expect(h.canvases[0]).toMatchObject({ disposed: true, removed: true, listeners: 0 });
     expect(h.driver.debug()).toMatchObject({ target: undefined, displayed: undefined, wantsLive: false });

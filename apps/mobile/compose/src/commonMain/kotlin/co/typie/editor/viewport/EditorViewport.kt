@@ -153,10 +153,15 @@ internal class EditorViewportState(initialScrollOffset: Offset = Offset.Zero) {
     return consumedDelta
   }
 
-  fun scrollToY(targetY: Float, isAutoScroll: Boolean = false) {
+  fun scrollToY(targetY: Float, isAutoScroll: Boolean = false, maximumScrollY: Float? = null) {
     invalidateRetainedTransformScrollTargetAfterTransform()
     pendingRestoredScrollOffset = null
-    val resolvedY = resolveScrollY(targetY)
+    val resolvedY =
+      when {
+        maximumScrollY?.isFinite() == true && maximumScrollY >= 0f && targetY.isFinite() ->
+          targetY.coerceIn(0f, maximumScrollY)
+        else -> resolveScrollY(targetY)
+      }
     if (scrollOffset.y == resolvedY) {
       return
     }

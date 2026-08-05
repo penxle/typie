@@ -313,7 +313,7 @@ export const handleKeyDown = (editor: Editor, e: KeyboardEvent & { currentTarget
       e.preventDefault();
       e.stopPropagation();
     }
-    return () => runBinding(editor, binding, e);
+    return () => editor.updateNow(() => runBinding(editor, binding, e));
   }
 
   if (e.key === 'Escape' && runEscapeStack()) {

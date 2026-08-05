@@ -8,6 +8,8 @@
   import { graphql } from '$mearie';
   import { CONTINUOUS_MIN_WIDTH, CONTINUOUS_VIEW_PADDING, PAGE_GAP } from '../constants';
   import { browserScaleFactor, getEditorContext } from '../editor.svelte';
+  import { setupEditorPublication } from '../editor-publication.svelte';
+  import { EditorSurfaceHost } from '../editor-surface-host.svelte';
   import { loadFonts } from '../fonts';
   import { handle } from '../handlers';
   import { handleContextMenu } from '../handlers/contextmenu';
@@ -59,14 +61,22 @@
   const ctx = getEditorContext();
   const theme = getThemeContext();
   setupEditorScroll(ctx);
+  setupEditorPublication(ctx);
   onDestroy(() => {
     if (ctx.editor) cancelPointerInteraction(ctx.editor);
   });
 
   $effect(() => {
     const editor = ctx.editor;
-    if (!editor) return;
-    return editor.activateVisualHost();
+    const scroll = ctx.scroll;
+    if (!editor || !scroll) return;
+    const host = new EditorSurfaceHost(editor, (revision) => scroll.discardFailedForRevision(revision));
+    ctx.surfaceHost = host;
+    return () => {
+      ctx.scroll?.cancel();
+      if (ctx.surfaceHost === host) ctx.surfaceHost = undefined;
+      host.destroy();
+    };
   });
 
   $effect(() => {
@@ -212,7 +222,15 @@
   });
 </script>
 
-<svelte:window onscroll={useWindowScroll ? () => ctx.editor?.refreshPointerStyle() : undefined} />
+<svelte:window
+  onscroll={useWindowScroll
+    ? () => {
+        ctx.editor?.refreshPointerStyle();
+        ctx.editor?.requestPublication();
+      }
+    : undefined}
+  onwheel={useWindowScroll ? () => ctx.scroll?.cancel() : undefined}
+/>
 
 <div
   class={css(
@@ -268,7 +286,11 @@
 
       return () => teardown();
     }}
-    onscroll={() => ctx.editor?.refreshPointerStyle()}
+    onscroll={() => {
+      ctx.editor?.refreshPointerStyle();
+      ctx.editor?.requestPublication();
+    }}
+    onwheel={() => ctx.scroll?.cancel()}
     bind:clientWidth
     bind:clientHeight
   >
@@ -341,7 +363,11 @@
           }}
           onlostpointercapture={handle(ctx.editor, handlePointerCaptureLost)}
           onpointercancel={handle(ctx.editor, handlePointerCancel)}
-          onpointerdown={handle(ctx.editor, handlePointerDown)}
+          onpointerdown={(event) => {
+            ctx.scroll?.cancel();
+            const editor = ctx.editor;
+            if (editor) handlePointerDown(editor, event);
+          }}
           onpointerleave={() => ctx.editor?.clearLinkHover()}
           onpointermove={handle(ctx.editor, handlePointerMove)}
           onpointerup={handle(ctx.editor, handlePointerUp)}
@@ -349,7 +375,7 @@
           tabindex={0}
           use:touchPanLock={ctx.editor.gesture.panLockActive}
         >
-          <EditorPages editor={ctx.editor} />
+          <EditorPages editor={ctx.editor} surfaceHost={ctx.surfaceHost} />
 
           <DocumentOverlayLayer />
 

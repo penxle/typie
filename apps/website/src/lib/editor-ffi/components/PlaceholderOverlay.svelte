@@ -5,13 +5,14 @@
   import { Icon } from '@typie/ui/components';
   import LayoutTemplateIcon from '~icons/lucide/layout-template';
   import { getEditorContext } from '../editor.svelte';
+  import { presentedPageElement } from '../geometry';
 
   const { editor } = getEditorContext();
 
   const PT_TO_PX = 96 / 72;
 
   const placeholder = $derived(editor?.placeholder);
-  const container = $derived(placeholder && editor ? editor.pageEls[placeholder.page_idx] : undefined);
+  const container = $derived(placeholder && editor ? presentedPageElement(editor, placeholder.page_idx) : undefined);
   const show = $derived(!!placeholder && !!container && !editor?.readOnly);
 
   const top = $derived(placeholder?.rect.y ?? 0);

@@ -213,6 +213,11 @@ internal class EditorInputNode(
   private val editor: Editor
     get() = session.editor
 
+  private fun presentedCursor(): CursorMetrics? {
+    val bundle = editor.publishedBundle ?: return null
+    return bundle.snapshot.cursor?.takeIf { bundle.frames.containsKey(it.pageIdx) }
+  }
+
   private var unsubscribeImeResync: (() -> Unit)? = null
   private var imeSessionGeneration = 0
 
@@ -377,9 +382,6 @@ internal class EditorInputNode(
         messages.forEach(::enqueue)
         bringIntoViewTarget?.let { target -> bringIntoView(target) }
       } ?: return null
-    // Keep the ordered key consumer behind visual publication so repeated input
-    // coalesces into the next batch instead of outrunning the displayed revision.
-    update.awaitPublished()
     return update.snapshot
   }
 
@@ -656,7 +658,7 @@ internal class EditorInputNode(
         coroutineScope.launch {
           val uninstallPlatformSessionEffects =
             platformInputBridge.installSessionEffects(
-              cursor = { editor.publishedState.cursor },
+              cursor = ::presentedCursor,
               viewportTransform = {
                 uiState.resolveViewportTransform(editor.publishedState.pageSizes)
               },
@@ -712,7 +714,7 @@ internal class EditorInputNode(
                       )
                     }
                   },
-                  focusedRectInRoot = { uiState.cursorRectInRoot(editor.publishedState.cursor) },
+                  focusedRectInRoot = { uiState.cursorRectInRoot(presentedCursor()) },
                   textFieldRectInRoot = uiState::editorRectInRoot,
                   textClippingRectInRoot = uiState::textClippingRectInRoot,
                   suppressSoftwareKeyboard = suppressSoftwareKeyboard,
@@ -747,7 +749,7 @@ internal class EditorInputNode(
                       // lands so pull-based sessions re-read the committed state.
                       publishedSelection = editor.publishedState.selection,
                       appliedSelection = editor.appliedState.selection,
-                      publishedCursor = editor.publishedState.cursor,
+                      publishedCursor = presentedCursor(),
                       appliedIme = editor.appliedState.ime,
                       paused = editor.imeNotificationsPaused,
                     )

@@ -96,6 +96,7 @@ import co.typie.editor.scroll.rememberEditorBringIntoViewRequests
 import co.typie.editor.scroll.resolveBringIntoViewTargetHeight
 import co.typie.editor.scroll.resolveEditorAutoScrollPolicy
 import co.typie.editor.scroll.updateWithBringIntoView
+import co.typie.editor.surface.EditorSurfaceHost
 import co.typie.editor.sync.ActiveDocumentEditingSessions
 import co.typie.editor.sync.ChangesetDeltaStore
 import co.typie.editor.sync.DocumentEditorLoad
@@ -412,7 +413,7 @@ fun EditorScreen(entityId: String) {
   LaunchedEffect(assetHydrator, assetQueryGeneration, externalAssetIds) {
     assetHydrator.resolve(externalAssetIds)
   }
-  val bringIntoViewRequests = rememberEditorBringIntoViewRequests()
+  val bringIntoViewRequests = rememberEditorBringIntoViewRequests { editor?.requestPublication() }
   val attachmentImporter =
     remember(runtime, externalElementState, bringIntoViewRequests) {
       DefaultEditorAttachmentImporter(
@@ -1584,7 +1585,6 @@ fun EditorScreen(entityId: String) {
         displayZoom = if (layoutSpec is EditorDocumentLayoutSpec.Paginated) displayZoom else 1f,
       )
     val publishedRevision = editor?.publishedRevision
-    val hasPublishedState = publishedRevision != null
     val editorGeometryValid =
       hasValidEditorGeometry(
         editorAttached = editor != null,
@@ -1597,15 +1597,16 @@ fun EditorScreen(entityId: String) {
         geometryValid = editorGeometryValid,
       )
     val editorReady =
-      canHideEditorLoadingSkeleton(
-        loading = loading,
-        geometryValid = editorGeometryValid,
-        sessionAttached = editorSessionAttached,
-        hasPublishedFrame = editor?.publishedBundle?.frames?.isNotEmpty() == true,
-      )
+      entryState.presentationReady &&
+        canHideEditorLoadingSkeleton(
+          loading = loading,
+          geometryValid = editorGeometryValid,
+          sessionAttached = editorSessionAttached,
+          hasInitialFrame = publishedBundle?.frames?.isNotEmpty() == true,
+        )
     val editorInteractionFocused = editorReady && uiState.focused && screenState.sceneInForeground
 
-    LaunchedEffect(editor, hasPublishedState, editorGeometryValid) {
+    LaunchedEffect(editor, publishedRevision, editorGeometryValid) {
       val attachedEditor = editor ?: return@LaunchedEffect
       if (editorGeometryInvalid && runtime.editor === attachedEditor) {
         runtime.reportError(
@@ -1706,7 +1707,7 @@ fun EditorScreen(entityId: String) {
           }
         },
       )
-      interactionScope.onEditorStateChanged(publishedEditorState)
+      interactionScope.onEditorStateChanged()
     }
     LaunchedEffect(screenState.viewportState, viewportScrollableState) {
       snapshotFlow { viewportScrollableState.isScrollInProgress }
@@ -1723,7 +1724,6 @@ fun EditorScreen(entityId: String) {
     LaunchedEffect(editorInteractionFocused) {
       if (!editorInteractionFocused) {
         uiState.contextMenu.hide()
-        bringIntoViewRequests.cancel()
       }
     }
 
@@ -1738,8 +1738,18 @@ fun EditorScreen(entityId: String) {
       LocalEditorInteractionScope provides interactionScope,
       LocalHazeState provides toolbarBackdropHazeState,
     ) {
+      runtime.session?.editor?.let { activeEditor ->
+        EditorSurfaceHost(
+          editor = activeEditor,
+          scaleFactor = density.toDouble() * zoomController.renderZoom.toDouble(),
+          onDeactivate = bringIntoViewRequests::cancel,
+          onPublicationFailure = bringIntoViewRequests::discardFailedForVersion,
+          onFailure = { error -> runtime.reportError(activeEditor, error) },
+        )
+      }
       EditorScreenLayout(
         state = screenState,
+        editor = runtime.editor,
         scrollFrame = scrollFrame,
         visibleArea = visibleArea,
         magnifierFocalPositionInRoot = magnifierFocalPositionInRoot,
@@ -1934,13 +1944,13 @@ fun EditorScreen(entityId: String) {
             }
           }
         },
-        body = {
+        body = { presentedBundle ->
           val editorLoad = editorLoadState
           if (editorLoad != null) {
             EditorBody(
               load = editorLoad,
-              publishedBundle = layoutPublishedBundle,
-              geometry = bodyGeometry,
+              publishedBundle = presentedBundle,
+              visibleArea = visibleArea,
               layoutSpec = layoutSpec,
               autoScrollPolicy = autoScrollPolicy,
               modifier = Modifier,
@@ -1950,13 +1960,13 @@ fun EditorScreen(entityId: String) {
                 !editorReady || editorSuppressesSoftwareKeyboard || !directEditingEnabled,
               showDebugBodyOverlay = devMode && model.debugBodyOverlayVisible,
               showDebugSurfaceOverlay = devMode && model.debugSurfaceOverlayVisible,
-              overlay = {
+              overlay = { presentedGeometry, presentedState ->
                 if (editorReady && !editorReadOnly) {
                   EditorDocumentPlaceholder(
-                    placeholder = publishedEditorState.placeholder,
-                    geometry = bodyGeometry,
+                    placeholder = presentedState.placeholder,
+                    geometry = presentedGeometry,
                     layoutSpec = layoutSpec,
-                    pageSizes = layoutPageSizes,
+                    pageSizes = presentedState.pageSizes,
                     displayZoom = displayZoom,
                     modifier = Modifier.fillMaxSize(),
                     onLoadTemplate = ::openTemplateSheet,

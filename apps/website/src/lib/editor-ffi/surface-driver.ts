@@ -71,21 +71,32 @@ export function createSurfaceDriver<C>(effects: SurfaceDriverEffects<C>) {
     }
   };
 
-  const park = () => {
-    if (ownsHostTarget) {
-      effects.detach();
-      ownsHostTarget = false;
+  const deactivate = () => {
+    wantsLive = false;
+    if (ownsHostTarget) effects.detach();
+    ownsHostTarget = false;
+    const current = target;
+    if (current) {
+      current.removeListeners();
+      target = undefined;
+      if (current.canvas !== displayed) {
+        effects.releaseCpuBacking(current.canvas);
+        effects.removeNode(current.canvas);
+      }
     }
-    if (target) disposeCanvas(target.canvas);
-    if (displayed) disposeCanvas(displayed);
     replacingUnavailableTarget = false;
+  };
+
+  const disposeAll = () => {
+    deactivate();
+    if (displayed) disposeCanvas(displayed);
   };
 
   return {
     setActive(active: boolean): void {
       wantsLive = active;
       if (!active) {
-        park();
+        deactivate();
       } else if (!target) {
         mount();
       }
@@ -141,7 +152,7 @@ export function createSurfaceDriver<C>(effects: SurfaceDriverEffects<C>) {
     },
     destroy(): void {
       wantsLive = false;
-      park();
+      disposeAll();
     },
     debug() {
       return { target: target?.canvas, displayed, wantsLive };

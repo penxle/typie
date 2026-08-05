@@ -18,8 +18,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
@@ -135,18 +133,6 @@ internal fun EditorView(
     val sessionActive = session != null
 
     if (session != null) {
-      val visualHostToken = remember(editor) { Any() }
-      DisposableEffect(editor, visualHostToken) {
-        val activated =
-          try {
-            editor.activateVisualHost(visualHostToken)
-            true
-          } catch (error: Throwable) {
-            if (!editor.terminal) throw error
-            false
-          }
-        onDispose { if (activated) editor.deactivateVisualHost(visualHostToken) }
-      }
       val focusManager = LocalFocusManager.current
       val publishedSelection = publishedBundle?.snapshot?.selection
       var previousSelection by remember(editor) { mutableStateOf(publishedSelection) }
@@ -211,21 +197,21 @@ internal fun EditorView(
       val publishedState = publishedBundle?.snapshot ?: EditorState.Initial
       val publishedVersion = publishedState.version
       val publishedPageCount = publishedState.pageSizes.size
-      val preparingPage = editor.preparingPage
-      val presentedPageCount = maxOf(publishedPageCount, (preparingPage ?: -1) + 1)
       Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        repeat(presentedPageCount) { index ->
-          val preparing = index >= publishedPageCount
-          val size =
-            publishedState.pageSizes.getOrNull(index)
-              ?: editor.appliedState.pageSizes.getOrNull(index)?.takeIf { preparingPage == index }
-              ?: return@repeat
-          val pageCursor = publishedState.cursor?.takeIf { sessionActive && it.pageIdx == index }
+        repeat(publishedPageCount) { index ->
+          val size = publishedState.pageSizes[index]
+          val publishedFrame = publishedBundle?.frames?.get(index)
+          val pagePresented = publishedFrame != null
+          val pageCursor =
+            publishedState.cursor?.takeIf { pagePresented && sessionActive && it.pageIdx == index }
           val pageExternalElements =
-            if (sessionActive) publishedState.externalElements.filter { it.pageIdx == index }
-            else emptyList()
+            if (pagePresented && sessionActive) {
+              publishedState.externalElements.filter { it.pageIdx == index }
+            } else {
+              emptyList()
+            }
           val pagePositionModifier =
-            if (!preparing && sessionActive) {
+            if (sessionActive) {
               Modifier.editorPagePositionTracker(
                 uiState = uiState,
                 page = index,
@@ -237,7 +223,6 @@ internal fun EditorView(
           Box(
             modifier =
               when {
-                preparing -> pagePositionModifier.withoutLayoutFootprint()
                 index < publishedPageCount - 1 -> pagePositionModifier.padding(bottom = pageSpacing)
                 else -> pagePositionModifier
               }
@@ -247,19 +232,19 @@ internal fun EditorView(
               width = size.width,
               height = size.height,
               publishedVersion = publishedVersion,
-              publishedFrame = publishedBundle?.frames?.get(index),
-              showChrome = showPageChrome && !preparing,
+              publishedFrame = publishedFrame,
+              showChrome = showPageChrome,
               debugBottomMarginHeight =
                 when (layoutSpec) {
                   is EditorDocumentLayoutSpec.Paginated -> layoutSpec.pageMarginBottom
                   is EditorDocumentLayoutSpec.Continuous -> 0f
                 },
-              showDebugOverlay = showDebugSurfaceOverlay && !preparing,
+              showDebugOverlay = showDebugSurfaceOverlay,
               backgroundOverlay = {
                 // Paginated line coordinates are page-local, so keep this in the page background
-                // layer below RenderCanvas content.
+                // layer below the published bitmap content.
                 if (
-                  !preparing && sessionActive && layoutSpec is EditorDocumentLayoutSpec.Paginated
+                  pagePresented && sessionActive && layoutSpec is EditorDocumentLayoutSpec.Paginated
                 ) {
                   EditorPageLineHighlightOverlay(
                     cursor = pageCursor,
@@ -271,7 +256,7 @@ internal fun EditorView(
                 }
               },
               foregroundOverlay = {
-                if (!preparing && sessionActive) {
+                if (pagePresented && sessionActive) {
                   EditorExternalElementOverlay(
                     elements = pageExternalElements,
                     displayZoom = displayZoom,
@@ -283,20 +268,12 @@ internal fun EditorView(
                   )
                 }
               },
-              modifier = if (preparing) Modifier.graphicsLayer(alpha = 0f) else Modifier,
             )
           }
         }
       }
     }
   }
-}
-
-private fun Modifier.withoutLayoutFootprint(): Modifier = layout { measurable, constraints ->
-  // Compose and measure the preparatory surface, but keep it out of document layout just like
-  // the web projection's absolutely positioned hidden page.
-  val placeable = measurable.measure(constraints.copy(minWidth = 0, minHeight = 0))
-  layout(width = 0, height = 0) { placeable.place(x = 0, y = 0) }
 }
 
 private data class EditorAttachEnvironment(

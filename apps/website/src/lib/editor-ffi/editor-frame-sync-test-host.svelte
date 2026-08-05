@@ -7,7 +7,7 @@
 
 <script lang="ts">
   import { setupAppContext } from '@typie/ui/context';
-  import { elementScrollViewport } from '@typie/ui/utils';
+  import { elementScrollViewport, windowScrollViewport } from '@typie/ui/utils';
   import { onDestroy, untrack } from 'svelte';
   import Caret from './components/Caret.svelte';
   import DocumentOverlayLayer from './components/DocumentOverlayLayer.svelte';
@@ -15,21 +15,36 @@
   import Input from './components/Input.svelte';
   import LineHighlight from './components/LineHighlight.svelte';
   import SelectionHandles from './components/SelectionHandles.svelte';
+  import EditorZoom from './components/ui/EditorZoom.svelte';
   import ViewportOverlay from './components/ViewportOverlay.svelte';
   import { PAGE_GAP } from './constants';
   import { setupEditorContext } from './editor.svelte';
+  import { setupEditorPublication } from './editor-publication.svelte';
+  import { EditorSurfaceHost } from './editor-surface-host.svelte';
   import { setupEditorScroll } from './scroll.svelte';
   import type { Editor } from './editor.svelte';
 
   type Props = {
     editor: Editor;
     onReady?: (harness: EditorFrameSyncTestHarness) => void;
+    onPublishedReady?: () => void;
     readOnly?: boolean;
     typewriterEnabled?: boolean;
+    useWindowScroll?: boolean;
     userId: string;
+    withZoom?: boolean;
   };
 
-  let { editor, onReady, readOnly = false, typewriterEnabled = false, userId }: Props = $props();
+  let {
+    editor,
+    onReady,
+    onPublishedReady,
+    readOnly = false,
+    typewriterEnabled = false,
+    useWindowScroll = false,
+    userId,
+    withZoom = false,
+  }: Props = $props();
 
   const app = setupAppContext(userId);
   app.preference.current = { ...app.preference.current, lineHighlightEnabled: true, typewriterEnabled };
@@ -37,16 +52,37 @@
   const ctx = setupEditorContext();
   ctx.editor = editor;
   setupEditorScroll(ctx);
+  setupEditorPublication(ctx);
 
   let extensionArea = $state<HTMLDivElement>();
   let scrollRoot = $state<HTMLDivElement>();
+  let viewportWidth = $state(360);
   let ready = false;
+  let publishedReady = false;
+  const isPaginated = $derived(editor.rootAttrs?.layout_mode.type === 'paginated');
+  const pageWidth = $derived(editor.pageSizes[0]?.width ?? 0);
 
   $effect(() => {
     editor.readOnly = readOnly;
   });
 
-  $effect(() => editor.activateVisualHost());
+  $effect(() => {
+    const revision = editor.appliedRevision;
+    if (publishedReady || !editor.isPublished(revision, { requireFrame: true })) return;
+    publishedReady = true;
+    untrack(() => onPublishedReady?.());
+  });
+
+  $effect(() => {
+    const scroll = ctx.scroll;
+    if (!scroll) return;
+    const host = new EditorSurfaceHost(editor, (revision) => scroll.discardFailedForRevision(revision));
+    ctx.surfaceHost = host;
+    return () => {
+      if (ctx.surfaceHost === host) ctx.surfaceHost = undefined;
+      host.destroy();
+    };
+  });
 
   $effect(() => {
     if (!extensionArea || !scrollRoot || ready) return;
@@ -64,27 +100,20 @@
   });
 </script>
 
-<div
-  bind:this={scrollRoot}
-  style="position: relative; width: 360px; height: 180px; overflow: auto;"
-  {@attach (el) => {
-    editor.scrollContainerEl = el;
-    editor.scrollViewport = elementScrollViewport(el);
-    editor.scrollRootEl = el;
-  }}
-  data-editor-scroll-root
->
+<svelte:window onscroll={useWindowScroll ? () => editor.requestPublication() : undefined} />
+
+{#snippet editorContent()}
   <div
     bind:this={extensionArea}
     style:padding-bottom={`${ctx.scroll?.bottomPadding ?? 0}px`}
-    style:row-gap={`${PAGE_GAP}px`}
+    style:row-gap={`${isPaginated ? PAGE_GAP * editor.displayZoom : 0}px`}
     style="position: relative; display: flex; flex-direction: column; align-items: center; min-width: max-content;"
     {@attach (el) => {
       editor.extensionAreaEl = el;
     }}
     data-editor-extension-area
   >
-    <EditorPages {editor} />
+    <EditorPages {editor} surfaceHost={ctx.surfaceHost} />
 
     <DocumentOverlayLayer />
     <Caret />
@@ -97,4 +126,27 @@
       {/if}
     </ViewportOverlay>
   </div>
+{/snippet}
+
+<div
+  bind:this={scrollRoot}
+  style:height={useWindowScroll ? '4000px' : '180px'}
+  style:overflow={useWindowScroll ? 'visible' : 'auto'}
+  style="position: relative; width: 360px; overflow-anchor: none;"
+  {@attach (el) => {
+    editor.scrollContainerEl = el;
+    editor.scrollViewport = useWindowScroll ? windowScrollViewport() : elementScrollViewport(el);
+    editor.scrollRootEl = useWindowScroll ? null : el;
+  }}
+  data-editor-scroll-root
+  onscroll={() => editor.requestPublication()}
+  bind:clientWidth={viewportWidth}
+>
+  {#if withZoom}
+    <EditorZoom active {editor} {isPaginated} {pageWidth} {viewportWidth}>
+      {@render editorContent()}
+    </EditorZoom>
+  {:else}
+    {@render editorContent()}
+  {/if}
 </div>

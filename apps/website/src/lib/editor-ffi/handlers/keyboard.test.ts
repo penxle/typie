@@ -9,6 +9,10 @@ const createEditor = (messages: Message[]) =>
       messages.push(message);
     }),
     scrollIntoView: vi.fn(),
+    updateNow: vi.fn((build: () => void) => {
+      build();
+      return null;
+    }),
   }) as unknown as Editor;
 
 type TestKeyboardEvent = KeyboardEvent & { currentTarget: HTMLTextAreaElement };
@@ -32,6 +36,18 @@ const composingEvent = (
 };
 
 describe('handleKeyDown', () => {
+  it('admits a hardware-key mutation and its reveal in one synchronous update', () => {
+    const messages: Message[] = [];
+    const editor = createEditor(messages);
+    const event = { ...composingEvent('Enter'), isComposing: false } as TestKeyboardEvent;
+
+    editor.updateNow(() => handleKeyDown(editor, event));
+
+    expect(editor.updateNow).toHaveBeenCalledOnce();
+    expect(messages).toEqual([{ type: 'key', event: { key: 'enter' } }]);
+    expect(editor.scrollIntoView).toHaveBeenCalledWith({ target: { type: 'current_selection_head' }, mode: 'typewriter' });
+  });
+
   it('leaves composing navigation to the native post-composition keydown', () => {
     const messages: Message[] = [];
     const editor = createEditor(messages);

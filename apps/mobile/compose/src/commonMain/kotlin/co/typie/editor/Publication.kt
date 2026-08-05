@@ -25,27 +25,16 @@ internal data class PresentedFrame(
   val proof: FrameProof,
 )
 
-/**
- * Pure publication rules. Mutable editor, target, waiter, and surface-operation facts stay in
- * [Editor]; this object only answers questions about those facts.
- */
 internal object Publication {
-  fun matchesTargets(
-    frames: Map<Int, PresentedFrame>,
-    targets: Collection<SurfaceTarget>,
-  ): Boolean =
-    frames.size == targets.size &&
-      targets.all { target -> frames[target.page]?.proof?.surfaceKey == target.key }
-
   fun satisfiesWaiter(
     requestedRevision: Long,
     publishedRevision: Long?,
     frames: Map<Int, PresentedFrame>,
-    targets: Collection<SurfaceTarget>,
+    requireFrame: Boolean = false,
   ): Boolean =
     publishedRevision != null &&
       publishedRevision >= requestedRevision &&
-      (matchesTargets(frames, targets) || (targets.isEmpty() && frames.isNotEmpty()))
+      (!requireFrame || frames.isNotEmpty())
 
   fun accepts(
     proof: FrameProof,
@@ -57,62 +46,7 @@ internal object Publication {
       proof.surfaceKey == target.key &&
       (requiredRevision == null || proof.editorRevision >= requiredRevision)
 
-  fun preparingPage(
-    hasVisualHost: Boolean,
-    hasPublishedFrames: Boolean,
-    appliedRevision: Long,
-    publishedRevision: Long?,
-    appliedPageCount: Int,
-    publishedPageCount: Int,
-    targetPages: Set<Int>,
-  ): Int? {
-    if (
-      !hasVisualHost ||
-        !hasPublishedFrames ||
-        publishedRevision == null ||
-        appliedRevision <= publishedRevision ||
-        appliedPageCount == 0
-    ) {
-      return null
-    }
-    if (targetPages.isEmpty()) return 0
-    return publishedPageCount.takeIf { appliedPageCount > publishedPageCount && it !in targetPages }
-  }
-
-  fun canPublish(
-    hasVisualHost: Boolean,
-    hasPublishedFrames: Boolean,
-    appliedRevision: Long,
-    publishedRevision: Long,
-    pages: Collection<PageFacts>,
-    targetsChanged: Boolean = false,
-  ): Boolean =
-    hasVisualHost &&
-      (!hasPublishedFrames || pages.isNotEmpty()) &&
-      appliedRevision >= publishedRevision &&
-      (appliedRevision > publishedRevision ||
-        pages.any { it.requiredRevision != null } ||
-        targetsChanged) &&
-      pages.all { page ->
-        page.requiredRevision == null ||
-          page.proof?.let {
-            accepts(
-              proof = it,
-              target = page.target,
-              requiredRevision = page.requiredRevision,
-              available = page.available,
-            )
-          } == true
-      }
-
   fun workRevision(appliedRevision: Long, requiredRevision: Long?): Long? = requiredRevision?.let {
     maxOf(appliedRevision, it)
   }
-
-  internal data class PageFacts(
-    val target: SurfaceTarget,
-    val requiredRevision: Long?,
-    val proof: FrameProof?,
-    val available: Boolean,
-  )
 }

@@ -8,7 +8,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.translate
-import co.typie.editor.Editor
+import co.typie.editor.EditorState
 import co.typie.editor.EditorViewportTransform
 import co.typie.editor.ext.isCollapsed
 import co.typie.editor.ffi.PageRect
@@ -17,17 +17,22 @@ import co.typie.editor.interaction.gestures.EditorSelectionHandleStemWidthDp
 import co.typie.editor.interaction.gestures.EditorSelectionHandleTouchTargetDp
 import co.typie.editor.interaction.gestures.EditorSelectionHandleType
 import co.typie.editor.interaction.gestures.resolveSelectionHandleGeometry
-import co.typie.editor.interaction.hasActiveTableCellSelection
+import co.typie.editor.interaction.resolveTableCellSelections
 import co.typie.editor.runtime.EditorUiState
 import co.typie.ui.theme.AppTheme
 
 @Composable
-internal fun EditorSelectionHandleOverlay(editor: Editor, uiState: EditorUiState, density: Float) {
-  if (editor.publishedState.selection.isCollapsed() || hasActiveTableCellSelection(editor)) {
+internal fun EditorSelectionHandleOverlay(
+  state: EditorState,
+  uiState: EditorUiState,
+  density: Float,
+  pagePresented: (Int) -> Boolean,
+) {
+  if (state.selection.isCollapsed() || resolveTableCellSelections(state).isNotEmpty()) {
     return
   }
 
-  if (editor.publishedState.selectionEndpoints == null) {
+  if (state.selectionEndpoints == null) {
     return
   }
 
@@ -37,10 +42,11 @@ internal fun EditorSelectionHandleOverlay(editor: Editor, uiState: EditorUiState
     val editorRect = uiState.editorBoundsInContainer.toPxRect(density) ?: return@Canvas
     val placements =
       resolveSelectionHandleOverlayPlacements(
-        editor = editor,
+        state = state,
         uiState = uiState,
         editorRectInOverlay = editorRect,
         density = density,
+        pagePresented = pagePresented,
       ) ?: return@Canvas
     placements.forEach { placement ->
       val geometry = resolveSelectionHandleOverlayGeometry(placement, density)
@@ -78,38 +84,43 @@ internal fun EditorSelectionHandleOverlay(editor: Editor, uiState: EditorUiState
 }
 
 internal fun resolveSelectionHandleOverlayPlacements(
-  editor: Editor,
+  state: EditorState,
   uiState: EditorUiState,
   editorRectInOverlay: Rect,
   density: Float,
+  pagePresented: (Int) -> Boolean = { true },
 ): List<EditorSelectionHandleOverlayPlacement>? {
   if (
-    density <= 0f ||
-      editor.publishedState.selection.isCollapsed() ||
-      hasActiveTableCellSelection(editor)
+    density <= 0f || state.selection.isCollapsed() || resolveTableCellSelections(state).isNotEmpty()
   ) {
     return null
   }
 
-  val endpoints = editor.publishedState.selectionEndpoints ?: return null
-  val transform = uiState.resolveViewportTransform(pageSizes = editor.publishedState.pageSizes)
-  val from =
-    resolveSelectionHandleOverlayPlacement(
-      type = EditorSelectionHandleType.From,
-      endpoint = endpoints.from,
-      transform = transform,
-      editorRectInOverlay = editorRectInOverlay,
-      density = density,
-    ) ?: return null
-  val to =
-    resolveSelectionHandleOverlayPlacement(
-      type = EditorSelectionHandleType.To,
-      endpoint = endpoints.to,
-      transform = transform,
-      editorRectInOverlay = editorRectInOverlay,
-      density = density,
-    ) ?: return null
-  return listOf(from, to)
+  val endpoints = state.selectionEndpoints ?: return null
+  val transform = uiState.resolveViewportTransform(pageSizes = state.pageSizes)
+  return buildList {
+      if (pagePresented(endpoints.from.pageIdx)) {
+        resolveSelectionHandleOverlayPlacement(
+            type = EditorSelectionHandleType.From,
+            endpoint = endpoints.from,
+            transform = transform,
+            editorRectInOverlay = editorRectInOverlay,
+            density = density,
+          )
+          ?.let(::add)
+      }
+      if (pagePresented(endpoints.to.pageIdx)) {
+        resolveSelectionHandleOverlayPlacement(
+            type = EditorSelectionHandleType.To,
+            endpoint = endpoints.to,
+            transform = transform,
+            editorRectInOverlay = editorRectInOverlay,
+            density = density,
+          )
+          ?.let(::add)
+      }
+    }
+    .takeIf { it.isNotEmpty() }
 }
 
 internal data class EditorSelectionHandleOverlayPlacement(

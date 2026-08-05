@@ -437,6 +437,29 @@ class EditorRequestTest {
     }
 
   @Test
+  fun update_discards_pending_request_before_reporting_terminal_failure() =
+    runTest(dispatcher) {
+      val boom = RuntimeException("boom")
+      val events = mutableListOf<String>()
+      val editor =
+        Editor(
+          inner = FakeFfiEditor(onTick = { throw boom }),
+          scope = this,
+          dispatcher = dispatcher,
+          onError = { _, _ -> events += "reported" },
+        )
+
+      assertFailsWith<RuntimeException> {
+        editor.update {
+          beforePublish(block = {}, onDiscard = { events += "discarded" })
+          enqueue(sampleMessage)
+        }
+      }
+
+      assertEquals(listOf("discarded", "reported"), events)
+    }
+
+  @Test
   fun update_is_rejected_after_local_transactions_quiesce() =
     runTest(dispatcher) {
       val fake = FakeFfiEditor()

@@ -43,7 +43,11 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
 
 @OptIn(ExperimentalTestApi::class)
-internal class FrameSyncFixture(continuous: Boolean = false) {
+internal class FrameSyncFixture(
+  continuous: Boolean = false,
+  initialDoc: PlainDoc? = null,
+  viewportHeight: Float = ViewportHeight,
+) {
   val continuationScheduler = TestCoroutineScheduler()
   private val continuationDispatcher = StandardTestDispatcher(continuationScheduler)
   val scope = CoroutineScope(SupervisorJob() + continuationDispatcher)
@@ -60,7 +64,7 @@ internal class FrameSyncFixture(continuous: Boolean = false) {
         pageMarginRight = PageMargin,
       )
     }
-  val visibleArea = EditorVisibleArea(viewport = Size(ViewportWidth, ViewportHeight))
+  val visibleArea = EditorVisibleArea(viewport = Size(ViewportWidth, viewportHeight))
   val autoScrollPolicy =
     resolveEditorAutoScrollPolicy(visibleArea = visibleArea, baseBottomSpace = PageMargin)
   val viewportState = EditorViewportState()
@@ -80,8 +84,9 @@ internal class FrameSyncFixture(continuous: Boolean = false) {
     editor =
       kotlinx.coroutines.runBlocking {
         Editor.createFromDoc(
-          doc = if (continuous) emptyContinuousDocument() else emptyPaginatedDocument(),
-          viewport = Viewport(ViewportWidth, ViewportHeight, 1.0),
+          doc =
+            initialDoc ?: if (continuous) emptyContinuousDocument() else emptyPaginatedDocument(),
+          viewport = Viewport(ViewportWidth, viewportHeight, 1.0),
           scope = scope,
           dispatcher = Dispatchers.Default.limitedParallelism(1),
         )
@@ -188,21 +193,19 @@ internal class FrameSyncFixture(continuous: Boolean = false) {
   }
 
   fun prepareLongDocument(test: androidx.compose.ui.test.ComposeUiTest) {
-    repeat(LongDocumentParagraphCount) {
-      val update =
-        assertNotNull(
-          editor.updateNowWithBringIntoView(bringIntoViewRequests) {
-            enqueue(Message.Key(KeyEvent(Key.Enter)))
-            bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
-          }
-        )
-      test.waitUntil(timeoutMillis = 10_000) {
-        val bundle = editor.publishedBundle ?: return@waitUntil false
-        val cursorPage = bundle.snapshot.cursor?.pageIdx ?: return@waitUntil false
-        bundle.snapshot.version >= update.revision && bundle.frames.containsKey(cursorPage)
-      }
-      test.waitForIdle()
+    val update =
+      assertNotNull(
+        editor.updateNowWithBringIntoView(bringIntoViewRequests) {
+          repeat(LongDocumentParagraphCount) { enqueue(Message.Key(KeyEvent(Key.Enter))) }
+          bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
+        }
+      )
+    test.waitUntil(timeoutMillis = 10_000) {
+      val bundle = editor.publishedBundle ?: return@waitUntil false
+      val cursorPage = bundle.snapshot.cursor?.pageIdx ?: return@waitUntil false
+      bundle.snapshot.version >= update.revision && bundle.frames.containsKey(cursorPage)
     }
+    test.waitForIdle()
     assertTrue(editor.publishedState.pageSizes.size >= 3)
 
     val startUpdate =
@@ -316,7 +319,7 @@ internal const val PixelBandHeightTolerance = 2
 internal const val ColorChannelTolerance = 2f / 255f
 internal val RepeatStartPhasesMillis = listOf(0L, 16L)
 private const val MaxBoundarySearchSteps = 32
-private const val LongDocumentParagraphCount = 24
+internal const val LongDocumentParagraphCount = 24
 
 private object UnusedGraphIngest : GraphIngest {
   override fun appendChunk(data: ByteArray) = error("unused")
@@ -346,6 +349,51 @@ private fun emptyPaginatedDocument(): PlainDoc =
 private fun emptyContinuousDocument(): PlainDoc =
   emptyDocument(LayoutMode.Continuous(maxWidth = PageWidth.toInt()))
 
+internal fun continuousDocumentWithOffscreenTable(): PlainDoc {
+  val document = emptyContinuousDocument()
+  return document.copy(
+    root =
+      document.root.copy(
+        children =
+          buildList {
+            add(paragraph("selectable word"))
+            repeat(80) { add(paragraph("")) }
+            add(
+              PlainNodeEntry(
+                node = PlainNode.Table(),
+                modifiers = emptyMap(),
+                children =
+                  listOf(
+                    PlainNodeEntry(
+                      node = PlainNode.TableRow,
+                      modifiers = emptyMap(),
+                      children =
+                        listOf(
+                          PlainNodeEntry(
+                            node = PlainNode.TableCell(colWidth = null, backgroundColor = null),
+                            modifiers = emptyMap(),
+                            children = listOf(paragraph("offscreen table")),
+                          )
+                        ),
+                    )
+                  ),
+              )
+            )
+          }
+      )
+  )
+}
+
+private fun paragraph(text: String): PlainNodeEntry =
+  PlainNodeEntry(
+    node = PlainNode.Paragraph,
+    modifiers = emptyMap(),
+    children =
+      listOf(
+        PlainNodeEntry(node = PlainNode.Text(text), modifiers = emptyMap(), children = emptyList())
+      ),
+  )
+
 private fun emptyDocument(layoutMode: LayoutMode): PlainDoc =
   PlainDoc(
     root =
@@ -363,21 +411,7 @@ private fun emptyDocument(layoutMode: LayoutMode): PlainDoc =
             ModifierType.ParagraphIndent to EditorModifier.ParagraphIndent(100),
             ModifierType.BlockGap to EditorModifier.BlockGap(100),
           ),
-        children =
-          listOf(
-            PlainNodeEntry(
-              node = PlainNode.Paragraph,
-              modifiers = emptyMap(),
-              children =
-                listOf(
-                  PlainNodeEntry(
-                    node = PlainNode.Text(""),
-                    modifiers = emptyMap(),
-                    children = emptyList(),
-                  )
-                ),
-            )
-          ),
+        children = listOf(paragraph("")),
       )
   )
 

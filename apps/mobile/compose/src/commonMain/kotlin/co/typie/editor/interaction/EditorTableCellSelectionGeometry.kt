@@ -3,6 +3,7 @@ package co.typie.editor.interaction
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import co.typie.editor.Editor
+import co.typie.editor.EditorState
 import co.typie.editor.PagePoint
 import co.typie.editor.ext.isCollapsed
 import co.typie.editor.ffi.LayoutMode
@@ -35,8 +36,12 @@ internal data class EditorTableCellSelection(
 )
 
 internal fun resolveTableCellSelections(editor: Editor): List<EditorTableCellSelection> {
-  val selectionCollapsed = editor.publishedState.selection.isCollapsed()
-  return editor.publishedState.tableOverlays.mapNotNull { overlay ->
+  return resolveTableCellSelections(editor.publishedState)
+}
+
+internal fun resolveTableCellSelections(state: EditorState): List<EditorTableCellSelection> {
+  val selectionCollapsed = state.selection.isCollapsed()
+  return state.tableOverlays.mapNotNull { overlay ->
     val range =
       resolveTableCellSelectionRange(overlay = overlay, selectionCollapsed = selectionCollapsed)
         ?: return@mapNotNull null

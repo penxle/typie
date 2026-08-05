@@ -44,8 +44,10 @@ export const handleCut: EditorEventHandler<ImeTextInput, ClipboardEvent> = (edit
     return;
   }
   e.preventDefault();
-  editor.enqueue({ type: 'clipboard', op: { type: 'cut' } });
-  editor.scrollIntoView({ target: { type: 'current_selection_head' }, mode: 'nearest' });
+  editor.updateNow(() => {
+    editor.enqueue({ type: 'clipboard', op: { type: 'cut' } });
+    editor.scrollIntoView({ target: { type: 'current_selection_head' }, mode: 'nearest' });
+  });
 };
 
 export const deferPasteShortcutDuringComposition = (
@@ -94,6 +96,10 @@ const readClipboardText = async (items: readonly ClipboardItem[]): Promise<{ htm
   return { html, text };
 };
 
+const scrollAfterPaste = (editor: Editor): void => {
+  editor.scrollIntoView({ target: { type: 'current_selection_head' }, mode: 'typewriter' });
+};
+
 const paste = (
   ctx: EditorContext,
   {
@@ -111,20 +117,24 @@ const paste = (
   if (!editor || editor.readOnly) return false;
 
   if (html?.trim()) {
-    editor.enqueue({ type: 'clipboard', op: { type: 'paste', html, text } });
+    editor.updateNow(() => {
+      editor.enqueue({ type: 'clipboard', op: { type: 'paste', html, text } });
+      scrollAfterPaste(editor);
+    });
     return true;
   }
   if (files.length > 0) {
-    return ctx.attachmentImporter.importAtSelection(files.map(toImportItem), { onFailure });
+    const imported = ctx.attachmentImporter.importAtSelection(files.map(toImportItem), { onFailure });
+    if (imported) scrollAfterPaste(editor);
+    return imported;
   }
   if (text === '') return false;
 
-  editor.enqueue({ type: 'clipboard', op: { type: 'paste', html: undefined, text } });
+  editor.updateNow(() => {
+    editor.enqueue({ type: 'clipboard', op: { type: 'paste', html: undefined, text } });
+    scrollAfterPaste(editor);
+  });
   return true;
-};
-
-const scrollAfterPaste = (editor: Editor): void => {
-  editor.scrollIntoView({ target: { type: 'current_selection_head' }, mode: 'typewriter' });
 };
 
 export const handlePaste = (
@@ -141,11 +151,7 @@ export const handlePaste = (
   if (text === '' && !html?.trim() && files.length === 0) return;
 
   e.preventDefault();
-  const editor = ctx.editor;
-  const pasted = paste(ctx, { html, text, files }, onFailure);
-  if (pasted && editor) {
-    scrollAfterPaste(editor);
-  }
+  paste(ctx, { html, text, files }, onFailure);
 };
 
 export const requestPaste = async (ctx: EditorContext, onFailure: AttachmentImportFailureHandler): Promise<void> => {
@@ -186,9 +192,7 @@ export const requestPaste = async (ctx: EditorContext, onFailure: AttachmentImpo
   }
 
   if (ctx.editor !== currentEditor || currentEditor.destroyed || currentEditor.readOnly) return;
-  if (paste(ctx, { html, text, files }, onFailure)) {
-    scrollAfterPaste(currentEditor);
-  }
+  paste(ctx, { html, text, files }, onFailure);
 };
 
 export const writeClipboardPayload = async (html: string, text: string): Promise<void> => {

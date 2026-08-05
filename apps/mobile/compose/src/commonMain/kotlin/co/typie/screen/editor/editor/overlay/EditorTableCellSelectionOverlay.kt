@@ -7,7 +7,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.drawscope.Stroke
-import co.typie.editor.Editor
+import co.typie.editor.EditorState
 import co.typie.editor.EditorViewportTransform
 import co.typie.editor.interaction.EditorTableCellSelection
 import co.typie.editor.interaction.EditorTableCellSelectionBorderWidthDp
@@ -19,11 +19,12 @@ import co.typie.ui.theme.AppTheme
 
 @Composable
 internal fun EditorTableCellSelectionOverlay(
-  editor: Editor,
+  state: EditorState,
   uiState: EditorUiState,
   density: Float,
+  pagePresented: (Int) -> Boolean,
 ) {
-  if (resolveTableCellSelections(editor).isEmpty()) {
+  if (resolveTableCellSelections(state).none { pagePresented(it.overlay.pageIdx) }) {
     return
   }
   val color = AppTheme.colors.textDefault
@@ -32,10 +33,11 @@ internal fun EditorTableCellSelectionOverlay(
     val editorRect = uiState.editorBoundsInContainer.toPxRect(density) ?: return@Canvas
     val placements =
       resolveTableCellSelectionOverlayPlacements(
-        editor = editor,
+        state = state,
         uiState = uiState,
         editorRectInOverlay = editorRect,
         density = density,
+        pagePresented = pagePresented,
       )
     placements.forEach { placement ->
       drawRect(
@@ -52,17 +54,19 @@ internal fun EditorTableCellSelectionOverlay(
 }
 
 internal fun resolveTableCellSelectionOverlayPlacements(
-  editor: Editor,
+  state: EditorState,
   uiState: EditorUiState,
   editorRectInOverlay: Rect,
   density: Float,
+  pagePresented: (Int) -> Boolean = { true },
 ): List<EditorTableCellSelectionOverlayPlacement> {
   if (density <= 0f) {
     return emptyList()
   }
 
-  val transform = uiState.resolveViewportTransform(pageSizes = editor.publishedState.pageSizes)
-  return resolveTableCellSelections(editor).mapNotNull { activeSelection ->
+  val transform = uiState.resolveViewportTransform(pageSizes = state.pageSizes)
+  return resolveTableCellSelections(state).mapNotNull { activeSelection ->
+    if (!pagePresented(activeSelection.overlay.pageIdx)) return@mapNotNull null
     val outline =
       resolveOutlineInOverlay(
         activeSelection = activeSelection,

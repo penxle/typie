@@ -52,7 +52,7 @@ class EditorTableCellSelectionOverlayTest {
 
       val placements =
         resolveTableCellSelectionOverlayPlacements(
-          editor = editor,
+          state = editor.publishedState,
           uiState = uiState,
           editorRectInOverlay = ComposeRect.Zero,
           density = 1f,
@@ -69,6 +69,17 @@ class EditorTableCellSelectionOverlayTest {
         placements[1].outline,
       )
       assertEquals(Offset(110f, 120f), placements[1].handleCenter)
+
+      assertEquals(
+        emptyList(),
+        resolveTableCellSelectionOverlayPlacements(
+          state = editor.publishedState,
+          uiState = uiState,
+          editorRectInOverlay = ComposeRect.Zero,
+          density = 1f,
+          pagePresented = { false },
+        ),
+      )
     }
 
   private fun tableOverlay(bounds: Rect, rows: List<TableOverlayRow>): TableOverlay =

@@ -46,8 +46,8 @@ internal fun canHideEditorLoadingSkeleton(
   loading: Boolean,
   geometryValid: Boolean,
   sessionAttached: Boolean,
-  hasPublishedFrame: Boolean,
-): Boolean = !loading && geometryValid && sessionAttached && hasPublishedFrame
+  hasInitialFrame: Boolean,
+): Boolean = !loading && geometryValid && sessionAttached && hasInitialFrame
 
 private fun Float.isPositiveFinite(): Boolean = isFinite() && this > 0f
 

@@ -3,10 +3,10 @@ import '../../app.css';
 import { mount, tick, unmount } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
-import { PAGE_GAP } from './constants';
+import { CURSOR_VISIBLE_MARGIN, PAGE_GAP } from './constants';
 import { Editor } from './editor.svelte';
 import EditorFrameSyncTestHost from './editor-frame-sync-test-host.svelte';
-import { pageRectToClientRect } from './geometry';
+import { pageRectsToClientRect, pageRectToClientRect, selectionHeadRect } from './geometry';
 import { computeSelectionHandleVisual } from './gesture.svelte';
 import type { PlainDoc, PlainNode, PlainNodeEntry } from '@typie/editor-ffi/browser';
 import type { EditorFrameSyncTestHarness } from './editor-frame-sync-test-host.svelte';
@@ -26,6 +26,29 @@ const MAXIMUM_PUBLICATION_STALL_MS = 250;
 const COORDINATE_TOLERANCE_PX = 1;
 const PERFORMANCE_PARAGRAPH_COUNT = 300;
 const PERFORMANCE_PARAGRAPH_TEXT = '0123456789'.repeat(10);
+
+class SilentIntersectionObserver implements IntersectionObserver {
+  readonly root = null;
+  readonly rootMargin = '0px';
+  readonly scrollMargin = '0px';
+  readonly thresholds = [0];
+
+  disconnect(): void {
+    return;
+  }
+
+  observe(): void {
+    return;
+  }
+
+  takeRecords(): IntersectionObserverEntry[] {
+    return [];
+  }
+
+  unobserve(): void {
+    return;
+  }
+}
 
 type RepeatKey = 'ArrowUp' | 'ArrowDown' | 'Enter' | 'Backspace';
 
@@ -47,6 +70,7 @@ type WebFrameSample = {
   actualHighlightY: number | null;
   caretOnCursorPage: boolean;
   highlightOnCursorPage: boolean;
+  selectionHeadVisible: boolean;
 };
 
 function matchingWebFrameSample(overrides: Partial<WebFrameSample> = {}): WebFrameSample {
@@ -68,6 +92,7 @@ function matchingWebFrameSample(overrides: Partial<WebFrameSample> = {}): WebFra
     actualHighlightY: 8,
     caretOnCursorPage: true,
     highlightOnCursorPage: true,
+    selectionHeadVisible: true,
     ...overrides,
   };
 }
@@ -135,8 +160,42 @@ function longDoc(): PlainDoc {
   };
 }
 
-async function mountEditor(plain: PlainDoc, options: { readOnly?: boolean; typewriterEnabled?: boolean } = {}) {
+function paginatedDocWithPageBreaks(pageCount: number, linkedLastPage?: { text: string; href: string }): PlainDoc {
+  const pageHeight = 221;
+  return {
+    root: entry(
+      {
+        type: 'root',
+        layout_mode: {
+          type: 'paginated',
+          page_width: PAGE_WIDTH,
+          page_height: pageHeight,
+          page_margin_top: PAGE_MARGIN,
+          page_margin_bottom: PAGE_MARGIN,
+          page_margin_left: PAGE_MARGIN,
+          page_margin_right: PAGE_MARGIN,
+        },
+      },
+      Array.from({ length: pageCount }, (_, page) => {
+        if (page < pageCount - 1) return entry({ type: 'paragraph' }, [entry({ type: 'page_break' })]);
+        if (!linkedLastPage) return entry({ type: 'paragraph' });
+        return entry({ type: 'paragraph' }, [
+          entry({ type: 'text', text: linkedLastPage.text }, [], { link: { type: 'link', href: linkedLastPage.href } } as never),
+        ]);
+      }),
+    ),
+  };
+}
+
+async function mountEditor(
+  plain: PlainDoc,
+  options: { readOnly?: boolean; typewriterEnabled?: boolean; withZoom?: boolean; displayZoom?: number } = {},
+) {
   editor = await Editor.createFromDoc(plain, { width: 360, height: 180, scale_factor: 1 });
+  if (options.displayZoom !== undefined) {
+    editor.displayZoom = options.displayZoom;
+    editor.setRenderZoom(options.displayZoom);
+  }
   const target = document.createElement('div');
   document.body.append(target);
   const harness = Promise.withResolvers<EditorFrameSyncTestHarness>();
@@ -148,6 +207,7 @@ async function mountEditor(plain: PlainDoc, options: { readOnly?: boolean; typew
       readOnly: options.readOnly,
       typewriterEnabled: options.typewriterEnabled,
       userId: `frame-sync-${crypto.randomUUID()}`,
+      withZoom: options.withZoom,
     },
   });
   const result = await harness.promise;
@@ -156,17 +216,52 @@ async function mountEditor(plain: PlainDoc, options: { readOnly?: boolean; typew
   return { editor, ...result };
 }
 
-function dispatchEditorKey(editor: Editor, key: RepeatKey) {
+async function mountEditorWithPublishedReady(plain: PlainDoc) {
+  editor = await Editor.createFromDoc(plain, { width: 360, height: 180, scale_factor: 1 });
+  const target = document.createElement('div');
+  document.body.append(target);
+  const mountedReady = Promise.withResolvers<EditorFrameSyncTestHarness>();
+  let publishedReady = false;
+  mounted = mount(EditorFrameSyncTestHost, {
+    target,
+    props: {
+      editor,
+      onReady: mountedReady.resolve,
+      onPublishedReady: () => {
+        publishedReady = true;
+      },
+      userId: `frame-sync-ready-${crypto.randomUUID()}`,
+    },
+  });
+  await mountedReady.promise;
+  return { editor, publishedReady: () => publishedReady };
+}
+
+function dispatchEditorKey(editor: Editor, key: RepeatKey, init: KeyboardEventInit = {}): number {
   const input = editor.inputEl;
   if (!input) throw new Error('Production editor input is not mounted');
   const beforeRevision = editor.appliedRevision;
-  input.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
-  if (editor.appliedRevision <= beforeRevision) throw new Error(`Expected ${key} to produce an update`);
+  input.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init }));
+  return beforeRevision;
 }
 
 async function pressEditorKey(editor: Editor, key: 'Enter' | 'Backspace') {
-  dispatchEditorKey(editor, key);
+  const beforeRevision = dispatchEditorKey(editor, key);
+  await expect.poll(() => editor.appliedRevision).toBeGreaterThan(beforeRevision);
   await tick();
+}
+
+function expectSelectionHeadVisible(editor: Editor, scrollRoot: HTMLElement, context: string): void {
+  const target = selectionHeadRect(editor.published?.snapshot);
+  const clientRect = target && pageRectToClientRect(editor, target);
+  const viewport = scrollRoot.getBoundingClientRect();
+  expect(clientRect, `${context}: the published selection head has no mounted client geometry`).not.toBeNull();
+  expect(
+    clientRect &&
+      clientRect.top >= viewport.top - COORDINATE_TOLERANCE_PX &&
+      clientRect.bottom <= viewport.bottom + COORDINATE_TOLERANCE_PX,
+    `${context}: selection head=${clientRect ? `${clientRect.top}..${clientRect.bottom}` : 'missing'} viewport=${viewport.top}..${viewport.bottom} scrollTop=${scrollRoot.scrollTop} scrollHeight=${scrollRoot.scrollHeight}`,
+  ).toBe(true);
 }
 
 function readWebFrameSample(
@@ -180,10 +275,12 @@ function readWebFrameSample(
   const cursor = published?.snapshot.cursor;
   if (!published || !cursor) throw new Error('Expected a published cursor');
 
-  const zoom = published.snapshot.rootAttrs?.layout_mode.type === 'paginated' ? editor.displayZoom : 1;
+  const paginated = published.snapshot.rootAttrs?.layout_mode.type === 'paginated';
+  const zoom = paginated ? editor.displayZoom : 1;
+  const pageGap = paginated ? PAGE_GAP * zoom : 0;
   const pageTop = published.snapshot.pageSizes
     .slice(0, cursor.page_idx)
-    .reduce((sum, pageSize) => sum + pageSize.height * zoom + PAGE_GAP * zoom, 0);
+    .reduce((sum, pageSize) => sum + pageSize.height * zoom + pageGap, 0);
   const rootTop = scrollRoot.getBoundingClientRect().top;
   const scrollTop = scrollRoot.scrollTop;
   const cursorDocumentY = pageTop + cursor.caret.y * zoom;
@@ -191,6 +288,9 @@ function readWebFrameSample(
   const caret = document.querySelector<HTMLElement>('[data-editor-caret]');
   const lineHighlight = document.querySelector<HTMLElement>('[data-editor-line-highlight]');
   const cursorPage = editor.pageEls[cursor.page_idx];
+  const cursorTop = caret?.getBoundingClientRect().top ?? null;
+  const cursorBottom = cursorTop === null ? null : cursorTop + cursor.caret.height * zoom;
+  const viewportBottom = rootTop + scrollRoot.clientHeight;
 
   return {
     phaseMs,
@@ -205,11 +305,16 @@ function readWebFrameSample(
     cursorDocumentY,
     highlightDocumentY,
     expectedCursorY: rootTop + cursorDocumentY - scrollTop,
-    actualCursorY: caret?.getBoundingClientRect().top ?? null,
+    actualCursorY: cursorTop,
     expectedHighlightY: rootTop + highlightDocumentY - scrollTop,
     actualHighlightY: lineHighlight?.getBoundingClientRect().top ?? null,
     caretOnCursorPage: caret?.parentElement === cursorPage,
     highlightOnCursorPage: lineHighlight?.parentElement === cursorPage,
+    selectionHeadVisible:
+      cursorTop !== null &&
+      cursorBottom !== null &&
+      cursorTop >= rootTop - COORDINATE_TOLERANCE_PX &&
+      cursorBottom <= viewportBottom + COORDINATE_TOLERANCE_PX,
   };
 }
 
@@ -228,7 +333,7 @@ function describeWebFrameMismatch(sample: WebFrameSample, previous?: WebFrameSam
   const cursorMismatch = sample.actualCursorY === null || Math.abs(sample.actualCursorY - sample.expectedCursorY) > COORDINATE_TOLERANCE_PX;
   const highlightMismatch =
     sample.actualHighlightY === null || Math.abs(sample.actualHighlightY - sample.expectedHighlightY) > COORDINATE_TOLERANCE_PX;
-  if (!nativePresentationMismatch && !cursorMismatch && !highlightMismatch) return;
+  if (!nativePresentationMismatch && !cursorMismatch && !highlightMismatch && sample.selectionHeadVisible) return;
 
   const cursorDocumentDelta = previous ? sample.cursorDocumentY - previous.cursorDocumentY : null;
   const highlightDocumentDelta = previous ? sample.highlightDocumentY - previous.highlightDocumentY : null;
@@ -246,6 +351,7 @@ function describeWebFrameMismatch(sample: WebFrameSample, previous?: WebFrameSam
     `phase=${sample.phaseMs}ms frame=${sample.frame} direction=${sample.direction} revision=${sample.revision}`,
     `scrollTop=${sample.scrollTop} cursorPage=${sample.cursorPage} hasNativeFrame=${sample.hasNativeFrame}`,
     `caretOnCursorPage=${sample.caretOnCursorPage} highlightOnCursorPage=${sample.highlightOnCursorPage}`,
+    `selectionHeadVisible=${sample.selectionHeadVisible}`,
     `cursor expected=${sample.expectedCursorY} actual=${sample.actualCursorY}`,
     `highlight expected=${sample.expectedHighlightY} actual=${sample.actualHighlightY}`,
     `delta cursorDocument=${cursorDocumentDelta} highlightDocument=${highlightDocumentDelta} scroll=${scrollDelta} ` +
@@ -298,7 +404,7 @@ async function driveWebRepeatPhase(
     const mismatch = describeWebFrameMismatch(sample, samples.at(-2));
     if (mismatch) {
       cancelled = true;
-      const screenshot = await page.screenshot({ element: scrollRoot, save: true });
+      const screenshot = await page.screenshot({ element: scrollRoot, save: true }).catch((err: unknown) => `unavailable (${String(err)})`);
       await input;
       throw new Error(`Web ${scenario} presentation mismatch; screenshot=${screenshot}\n${mismatch}`);
     }
@@ -363,6 +469,170 @@ function expectActualCanvas(editor: Editor, pageIndex: number, requirePaintedPix
 }
 
 describe('web editor frame synchronization', () => {
+  it('presents ordinary page overlays without waiting for IntersectionObserver delivery', async () => {
+    vi.stubGlobal('IntersectionObserver', SilentIntersectionObserver);
+    try {
+      const href = 'https://example.com/first-frame-overlay';
+      const { editor } = await mountEditor(paginatedDocWithPageBreaks(3, { text: 'linked pixels', href }));
+      const update = editor.updateNow((request) => {
+        request.enqueue({ type: 'selection', op: { type: 'set_at', page: 2, x: PAGE_MARGIN, y: PAGE_MARGIN } });
+        editor.scrollIntoView({ target: { type: 'current_selection_head' }, behavior: 'instant' });
+      });
+      expect(update).not.toBeNull();
+      if (!update) throw new Error('Expected the far-page reveal update');
+
+      let presented = false;
+      for (let frame = 0; frame < 60; frame += 1) {
+        await nextAnimationFrame();
+        if ((editor.published?.snapshot.revision ?? -1) < update.revision) continue;
+        expectActualCanvas(editor, 2);
+        expect(editor.pageEls[2]?.querySelector(`a[aria-label="${href}"]`)).not.toBeNull();
+        presented = true;
+        break;
+      }
+      expect(presented, 'the far-page reveal was not presented within 60 frames').toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('notifies the real ready gate after the first accepted frame', async () => {
+    const mountedEditor = await mountEditorWithPublishedReady(doc());
+
+    await expect.poll(() => mountedEditor.editor.isPublished(mountedEditor.editor.appliedRevision, { requireFrame: true })).toBe(true);
+
+    expect(mountedEditor.publishedReady()).toBe(true);
+  });
+
+  it('completes a pending reveal without removing the last frame after terminal surface failure', async () => {
+    const { editor } = await mountEditor(doc());
+    const canvas = document.querySelector<HTMLCanvasElement>('canvas[data-page-canvas="0"]');
+    expect(canvas).not.toBeNull();
+    let presentation: Promise<void> | undefined;
+
+    editor.updateNow((request) => {
+      request.enqueue({ type: 'selection', op: { type: 'set_at', page: 0, x: PAGE_MARGIN, y: PAGE_MARGIN } });
+      presentation = editor.scrollIntoView({ target: { type: 'current_selection_head' }, behavior: 'instant' });
+    });
+    editor.surfaceReplacementFailed(0);
+
+    await expect(presentation).resolves.toBeUndefined();
+    await tick();
+    expect(editor.terminal).toBe(true);
+    expect(canvas?.isConnected).toBe(true);
+  });
+
+  it('presents a restored selection at its revealed scroll position', async () => {
+    const { editor, scrollRoot } = await mountEditor(longDoc());
+    editor.updateNow((request) => request.enqueue({ type: 'selection', op: { type: 'set_at', page: 0, x: PAGE_MARGIN, y: 1_000_000 } }));
+    await waitForPresentation(editor);
+    const selection = editor.appliedSnapshot.selection;
+    const saved = selection && editor.freezeSelection(selection);
+    expect(saved).toBeDefined();
+    if (!saved) throw new Error('Expected a restorable selection');
+
+    await resetWebLongDocumentStart(editor, scrollRoot);
+    expect(scrollRoot.scrollTop).toBe(0);
+    let restorePresentation: Promise<void> | undefined;
+    const restore = editor.updateNow((request) => {
+      request.enqueue({ type: 'selection', op: { type: 'set_frozen', selection: saved } });
+      restorePresentation = editor.scrollIntoView({ target: { type: 'current_selection_head' } });
+    });
+    expect(restore).not.toBeNull();
+    if (!restore) throw new Error('Expected a restore update');
+    expect(restorePresentation).toBeDefined();
+
+    let restorePresented = false;
+    void restorePresentation?.then(() => {
+      restorePresented = true;
+    });
+    await Promise.resolve();
+    expect(restorePresented).toBe(false);
+
+    let firstRestoredFrame: WebFrameSample | undefined;
+    for (let frame = 0; frame < 60; frame += 1) {
+      await nextAnimationFrame();
+      const sample = readWebFrameSample(editor, scrollRoot, 0, frame, null);
+      expect(sample.hasNativeFrame).toBe(true);
+      expect(sample.caretOnCursorPage).toBe(true);
+      expect(sample.actualCursorY).toBeCloseTo(sample.expectedCursorY, 0);
+      if (sample.revision >= restore.revision) {
+        firstRestoredFrame = sample;
+        break;
+      }
+    }
+
+    expect(firstRestoredFrame, 'restored selection was not presented within 60 frames').toBeDefined();
+    await expect(restorePresentation).resolves.toBeUndefined();
+    expect(firstRestoredFrame?.scrollTop).toBeGreaterThan(0);
+    expect(firstRestoredFrame?.selectionHeadVisible).toBe(true);
+  });
+
+  it('smoothly reveals a spellcheck result after its page surface was virtualized', async () => {
+    const pageCount = 8;
+    const errorId = 'far-spellcheck-error';
+    const href = 'https://example.com/far-spellcheck';
+    const { editor, scrollRoot } = await mountEditor(paginatedDocWithPageBreaks(pageCount, { text: 'far typo', href }));
+
+    const farUpdate = editor.updateNow((request) => {
+      request.enqueue({ type: 'selection', op: { type: 'set_at', page: pageCount - 1, x: PAGE_MARGIN, y: PAGE_MARGIN } });
+      editor.scrollIntoView({ target: { type: 'current_selection_head' }, behavior: 'instant' });
+    });
+    expect(farUpdate).not.toBeNull();
+    if (!farUpdate) throw new Error('Expected the far-page selection update');
+    await waitForPresentation(editor, farUpdate.revision);
+
+    const selection = editor.appliedSnapshot.selection;
+    const errorSelection = selection && editor.modifierSpanSelection(selection.head, 'link');
+    expect(errorSelection).toBeDefined();
+    if (!errorSelection) throw new Error('Expected the linked text to produce a spellcheck range');
+
+    const resetUpdate = editor.updateNow((request) => {
+      request.enqueue({ type: 'selection', op: { type: 'set_at', page: 0, x: PAGE_MARGIN, y: PAGE_MARGIN } });
+      editor.scrollIntoView({ target: { type: 'current_selection_head' }, behavior: 'instant' });
+    });
+    expect(resetUpdate).not.toBeNull();
+    if (!resetUpdate) throw new Error('Expected the viewport reset update');
+    await waitForPresentation(editor, resetUpdate.revision);
+    await vi.waitFor(() => expect(editor.published?.frames.has(pageCount - 1)).toBe(false));
+    expect(scrollRoot.scrollTop).toBe(0);
+
+    editor.setSpellcheckErrors([
+      {
+        id: errorId,
+        selection: errorSelection,
+        context: 'far typo',
+        corrections: ['far type'],
+        explanation: '',
+      },
+    ]);
+    await expect.poll(() => editor.appliedSnapshot.trackedRanges.some((range) => range.id === errorId)).toBe(true);
+    await waitForPresentation(editor);
+
+    editor.setActiveSpellcheckError(errorId);
+
+    let revealed = false;
+    for (let frame = 0; frame < 240; frame += 1) {
+      await nextAnimationFrame();
+      const published = editor.published;
+      const range = published?.snapshot.trackedRanges.find((item) => item.id === errorId);
+      const targetRect = range && pageRectsToClientRect(editor, range.rects);
+      const viewportRect = scrollRoot.getBoundingClientRect();
+      if (
+        !targetRect ||
+        !published?.frames.has(pageCount - 1) ||
+        targetRect.top < viewportRect.top - COORDINATE_TOLERANCE_PX ||
+        targetRect.bottom > viewportRect.bottom + COORDINATE_TOLERANCE_PX
+      ) {
+        continue;
+      }
+      revealed = true;
+      break;
+    }
+    expect(revealed, 'the offscreen spellcheck result was not presented after its smooth reveal').toBe(true);
+    expectActualCanvas(editor, pageCount - 1);
+  });
+
   it('rejects a presentation without the cursor page native frame', () => {
     expect(describeWebFrameMismatch(matchingWebFrameSample({ hasNativeFrame: false }))).toBeDefined();
   });
@@ -453,6 +723,7 @@ describe('web editor frame synchronization', () => {
       scrollRoot.scrollTop,
       `scrollTop=${scrollRoot.scrollTop} clientHeight=${scrollRoot.clientHeight} scrollHeight=${scrollRoot.scrollHeight} cursor=${JSON.stringify(editor.published?.snapshot.cursor)}`,
     ).toBeGreaterThan(0);
+    expectSelectionHeadVisible(editor, scrollRoot, 'initial 1→2 page crossing');
 
     for (let cycle = 0; cycle < 3; cycle += 1) {
       await pressEditorKey(editor, 'Backspace');
@@ -467,8 +738,10 @@ describe('web editor frame synchronization', () => {
       expectActualCanvas(editor, 0, false);
 
       if (cycle === 0) {
+        const beforeRevision = editor.appliedRevision;
         dispatchEditorKey(editor, 'Enter');
         dispatchEditorKey(editor, 'Backspace');
+        await expect.poll(() => editor.appliedRevision).toBeGreaterThanOrEqual(beforeRevision + 2);
         expect(editor.appliedSnapshot.pageSizes).toHaveLength(1);
         await waitForPresentation(editor);
         expect(editor.published?.snapshot.pageSizes).toHaveLength(1);
@@ -485,10 +758,201 @@ describe('web editor frame synchronization', () => {
       await waitForPresentation(editor);
       expect(editor.published?.snapshot.pageSizes).toHaveLength(2);
       expectActualCanvas(editor, 1, false);
+      expectSelectionHeadVisible(editor, scrollRoot, `cycle ${cycle} 1→2 page crossing`);
     }
   });
 
-  it('keeps a hidden preparatory page out of the scroll extent until publication', async () => {
+  it('presents coalesced 1→3 growth and 3→1 shrink through the production input path', async () => {
+    const { editor, scrollRoot } = await mountEditor(doc());
+    editor.updateNow((request) => request.enqueue({ type: 'selection', op: { type: 'set_at', page: 0, x: PAGE_MARGIN, y: PAGE_MARGIN } }));
+    await waitForPresentation(editor);
+    editor.focus();
+    await tick();
+
+    for (let event = 0; event < 128 && editor.appliedSnapshot.pageSizes.length < 3; event += 1) {
+      dispatchEditorKey(editor, 'Enter');
+    }
+    expect(editor.appliedSnapshot.pageSizes).toHaveLength(3);
+    expect(editor.published?.snapshot.pageSizes).toHaveLength(1);
+    const growthRevision = editor.appliedRevision;
+
+    let growthFrame: WebFrameSample | undefined;
+    for (let frame = 0; frame < 60; frame += 1) {
+      await nextAnimationFrame();
+      const sample = readWebFrameSample(editor, scrollRoot, 0, frame, null);
+      const mismatch = describeWebFrameMismatch(sample);
+      expect(mismatch, mismatch).toBeUndefined();
+      if (sample.revision >= growthRevision) {
+        growthFrame = sample;
+        break;
+      }
+    }
+    expect(growthFrame, 'the coalesced 1→3 revision was not presented within 60 frames').toBeDefined();
+    expect(editor.published?.snapshot.pageSizes).toHaveLength(3);
+    expect(growthFrame?.cursorPage).toBe(2);
+    expectActualCanvas(editor, 2, false);
+    expectSelectionHeadVisible(editor, scrollRoot, 'coalesced 1→3 growth');
+
+    for (let event = 0; event < 128 && editor.appliedSnapshot.pageSizes.length > 1; event += 1) {
+      dispatchEditorKey(editor, 'Backspace');
+    }
+    expect(editor.appliedSnapshot.pageSizes).toHaveLength(1);
+    expect(editor.published?.snapshot.pageSizes).toHaveLength(3);
+    const shrinkRevision = editor.appliedRevision;
+
+    let shrinkFrame: WebFrameSample | undefined;
+    for (let frame = 0; frame < 60; frame += 1) {
+      await nextAnimationFrame();
+      const sample = readWebFrameSample(editor, scrollRoot, 0, frame, null);
+      const mismatch = describeWebFrameMismatch(sample);
+      expect(mismatch, mismatch).toBeUndefined();
+      if (sample.revision >= shrinkRevision) {
+        shrinkFrame = sample;
+        break;
+      }
+    }
+    expect(shrinkFrame, 'the coalesced 3→1 revision was not presented within 60 frames').toBeDefined();
+    expect(editor.published?.snapshot.pageSizes).toHaveLength(1);
+    expect(shrinkFrame?.cursorPage).toBe(0);
+    expectActualCanvas(editor, 0, false);
+    expect(document.querySelector('[data-page-canvas="1"]')).toBeNull();
+    expect(document.querySelector('[data-page-canvas="2"]')).toBeNull();
+  });
+
+  it('keeps typewriter reveal aligned for Enter edits within an existing paginated canvas', async () => {
+    const { editor, scrollRoot } = await mountEditor(doc(), { typewriterEnabled: true });
+    editor.updateNow((request) => request.enqueue({ type: 'selection', op: { type: 'set_at', page: 0, x: PAGE_MARGIN, y: PAGE_MARGIN } }));
+    await waitForPresentation(editor);
+    editor.focus();
+    await tick();
+
+    const samples = await driveWebRepeatPhase(
+      editor,
+      scrollRoot,
+      0,
+      Array.from({ length: EDIT_REPEAT_EVENTS_PER_LEG }, () => 'Enter'),
+      'same-canvas paginated Enter repeat',
+    );
+    expectWebFrameLiveness(samples, 0);
+    const stableExtentEdits = samples.filter(
+      (sample, index) =>
+        index > 0 &&
+        sample.revision > samples[index - 1].revision &&
+        sample.documentHeight === samples[index - 1].documentHeight &&
+        sample.scrollTop > 0,
+    );
+    expect(
+      stableExtentEdits.length,
+      'TEST HARNESS: no presented Enter edit stayed within an existing canvas after scrolling',
+    ).toBeGreaterThan(0);
+    const cursorHeight = (editor.published?.snapshot.cursor?.caret.height ?? 0) * editor.safeDisplayZoom();
+    const expectedCursorY = scrollRoot.getBoundingClientRect().top + (scrollRoot.clientHeight - cursorHeight) / 2;
+    for (const sample of stableExtentEdits) {
+      expect(
+        sample.actualCursorY !== null && Math.abs(sample.actualCursorY - expectedCursorY) <= COORDINATE_TOLERANCE_PX,
+        `frame ${sample.frame}: cursor=${sample.actualCursorY} expected typewriter position=${expectedCursorY} scrollTop=${sample.scrollTop}`,
+      ).toBe(true);
+    }
+  });
+
+  it('reveals a page break inserted while composing on its first published frame', async () => {
+    const { editor, scrollRoot } = await mountEditor(doc());
+    editor.updateNow((request) => request.enqueue({ type: 'selection', op: { type: 'set_at', page: 0, x: PAGE_MARGIN, y: PAGE_MARGIN } }));
+    await waitForPresentation(editor);
+    editor.focus();
+    await tick();
+
+    const input = editor.inputEl;
+    if (!input) throw new Error('Production editor input is not mounted');
+    input.dispatchEvent(new CompositionEvent('compositionstart', { data: '', bubbles: true }));
+    input.dispatchEvent(new CompositionEvent('compositionupdate', { data: '가', bubbles: true }));
+    input.dispatchEvent(
+      new InputEvent('beforeinput', {
+        inputType: 'insertCompositionText',
+        data: '가',
+        isComposing: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    input.value = '\u{2028}가\u{2029}';
+    input.setSelectionRange(2, 2);
+    input.dispatchEvent(new InputEvent('input', { inputType: 'insertCompositionText', data: '가', isComposing: true, bubbles: true }));
+
+    const beforeRevision = dispatchEditorKey(
+      editor,
+      'Enter',
+      navigator.platform.toUpperCase().includes('MAC') ? { metaKey: true, isComposing: true } : { ctrlKey: true, isComposing: true },
+    );
+    input.dispatchEvent(new CompositionEvent('compositionend', { data: '가', bubbles: true }));
+    expect(() => editor.ime(4096, 4096)).not.toThrow();
+    let firstInsertedFrame: WebFrameSample | undefined;
+    for (let frame = 0; frame < 60; frame += 1) {
+      await nextAnimationFrame();
+      const sample = readWebFrameSample(editor, scrollRoot, 0, frame, null);
+      const mismatch = describeWebFrameMismatch(sample);
+      expect(mismatch, mismatch).toBeUndefined();
+      if (sample.revision > beforeRevision) {
+        firstInsertedFrame = sample;
+        break;
+      }
+    }
+
+    expect(firstInsertedFrame, 'page-break revision was not presented within 60 frames').toBeDefined();
+    expect(editor.published?.snapshot.pageSizes).toHaveLength(2);
+    expect(firstInsertedFrame?.cursorPage).toBe(1);
+    expect(firstInsertedFrame?.scrollTop).toBeGreaterThan(0);
+    expectActualCanvas(editor, 1, false);
+  });
+
+  it('keeps the published texture visible through display and render zoom changes', async () => {
+    const { editor, scrollRoot } = await mountEditor(doc('linked pixels', 'https://example.com/zoom'), { withZoom: true });
+    editor.updateNow((request) => request.enqueue({ type: 'selection', op: { type: 'set_at', page: 0, x: PAGE_MARGIN, y: PAGE_MARGIN } }));
+    await waitForPresentation(editor);
+    editor.focus();
+    await tick();
+    const displayed = editor.published?.frames.get(0)?.canvas;
+    expect(displayed).toBeDefined();
+    expect(displayed?.isConnected).toBe(true);
+    expectActualCanvas(editor, 0);
+    const attachSurface = editor.attachSurface.bind(editor);
+    let injectedPresentation = false;
+    const attachSurfaceSpy = vi.spyOn(editor, 'attachSurface').mockImplementation((...args) => {
+      const result = attachSurface(...args);
+      if (!injectedPresentation && args[0] === 0) {
+        injectedPresentation = true;
+        editor.requestPublication();
+      }
+      return result;
+    });
+
+    for (let event = 0; event < 12; event += 1) {
+      scrollRoot.dispatchEvent(
+        new WheelEvent('wheel', {
+          deltaY: event < 9 ? 8 : -8,
+          metaKey: navigator.platform.toUpperCase().includes('MAC'),
+          ctrlKey: !navigator.platform.toUpperCase().includes('MAC'),
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+      await nextAnimationFrame();
+      expect(attachSurfaceSpy).not.toHaveBeenCalled();
+      expect(editor.published?.frames.get(0)?.canvas.isConnected).toBe(true);
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    for (let frame = 0; frame < 60 && editor.published?.frames.get(0)?.canvas === displayed; frame += 1) {
+      await nextAnimationFrame();
+      expect(editor.published?.frames.get(0)?.canvas.isConnected).toBe(true);
+    }
+    expect(editor.published?.frames.get(0)?.canvas).not.toBe(displayed);
+    expect(attachSurfaceSpy.mock.calls.filter(([page]) => page === 0)).toHaveLength(1);
+    expect(editor.published?.frames.get(0)?.canvas.isConnected).toBe(true);
+    expectActualCanvas(editor, 0);
+  });
+
+  it('prepares an appended page without mounting candidate geometry before publication', async () => {
     const { editor, extensionArea, scrollRoot } = await mountEditor(doc());
     editor.updateNow((request) => request.enqueue({ type: 'selection', op: { type: 'set_at', page: 0, x: PAGE_MARGIN, y: PAGE_MARGIN } }));
     await waitForPresentation(editor);
@@ -511,17 +975,16 @@ describe('web editor frame synchronization', () => {
     try {
       for (let i = 0; i < 32 && editor.appliedSnapshot.pageSizes.length === 1; i += 1) await pressEditorKey(editor, 'Enter');
       expect(editor.appliedSnapshot.pageSizes).toHaveLength(2);
-      await vi.waitFor(() => expect(editor.preparingPage).toBe(1));
+      await vi.waitFor(() => expect(editor.surfacePageRequirements.has(1)).toBe(true));
       const stalledPublished = editor.published;
       expect(stalledPublished?.snapshot.pageSizes).toHaveLength(1);
       if (!stalledPublished) throw new Error('Expected the previous publication during page preparation');
       await tick();
       await nextAnimationFrame();
 
-      const preparatoryPage = editor.pageEls[1]?.parentElement;
       const currentExtensionRect = extensionArea.getBoundingClientRect();
       const currentPageRect = editor.pageEls[0]?.getBoundingClientRect();
-      expect(preparatoryPage).toBeDefined();
+      expect(editor.pageEls[1]).toBeUndefined();
       expect(currentPageRect).toBeDefined();
       if (!currentPageRect) throw new Error('Expected the published page to remain mounted during preparation');
       expect(editor.published?.snapshot.revision).toBe(stalledPublished.snapshot.revision);
@@ -582,6 +1045,33 @@ describe('web editor frame synchronization', () => {
     expect(screenshot.startsWith('iVBOR')).toBe(true);
   });
 
+  it('hides document overlays and interaction when the published cursor page has no frame', async () => {
+    const href = 'https://example.com/frameless-page';
+    const { editor } = await mountEditor(doc('linked pixels', href));
+    editor.updateNow((request) => request.enqueue({ type: 'selection', op: { type: 'set_at', page: 0, x: PAGE_MARGIN, y: PAGE_MARGIN } }));
+    await waitForPresentation(editor);
+    editor.focus();
+    await tick();
+
+    const bundle = editor.published;
+    const pageElement = editor.pageEls[0];
+    expect(bundle).toBeDefined();
+    expect(pageElement).toBeDefined();
+    if (!bundle || !pageElement) throw new Error('Expected a framed published page');
+    const pageRect = pageElement.getBoundingClientRect();
+
+    editor.published = { snapshot: bundle.snapshot, frames: new Map() };
+    await tick();
+
+    const caret = document.querySelector<HTMLElement>('[data-editor-caret]');
+    const lineHighlight = document.querySelector<HTMLElement>('[data-editor-line-highlight]');
+    expect(getComputedStyle(caret as HTMLElement).visibility).toBe('hidden');
+    expect(getComputedStyle(lineHighlight as HTMLElement).display).toBe('none');
+    expect(editor.inputEl?.style.left).toBe('-9999px');
+    expect(pageElement.querySelector(`a[aria-label="${href}"]`)).toBeNull();
+    expect(editor.clientToLocal(pageRect.left + PAGE_MARGIN, pageRect.top + PAGE_MARGIN)).toBeNull();
+  });
+
   it('keeps non-vacuous fixed selection handles on the published page and scroll geometry', async () => {
     const href = 'https://example.com/selection-handles';
     const { editor, scrollRoot } = await mountEditor(doc('select this link', href), { readOnly: true });
@@ -619,6 +1109,13 @@ describe('web editor frame synchronization', () => {
       expect(Number.parseFloat(handle.style.left)).toBeCloseTo(visual.left);
       expect(Number.parseFloat(handle.style.top)).toBeCloseTo(visual.top);
     }
+
+    const bundle = editor.published;
+    if (!bundle) throw new Error('Expected a published selection bundle');
+    editor.published = { snapshot: bundle.snapshot, frames: new Map() };
+    await tick();
+    expect(document.querySelector('[data-selection-handle="from"]')).toBeNull();
+    expect(document.querySelector('[data-selection-handle="to"]')).toBeNull();
   });
 
   it('keeps cursor-guard bottom padding when typewriter mode is disabled', async () => {
@@ -627,5 +1124,29 @@ describe('web editor frame synchronization', () => {
     await waitForPresentation(editor);
 
     expect(Number.parseFloat(extensionArea.style.paddingBottom)).toBeGreaterThanOrEqual(60);
+  });
+
+  it('keeps the cursor guard stable after fractional page heights accumulate', async () => {
+    const pageCount = 32;
+    const { editor, scrollRoot } = await mountEditor(paginatedDocWithPageBreaks(pageCount), {
+      displayZoom: 0.75,
+      typewriterEnabled: false,
+    });
+    expect(editor.published?.snapshot.pageSizes).toHaveLength(pageCount);
+
+    const update = editor.updateNow((request) => {
+      request.enqueue({ type: 'selection', op: { type: 'set_at', page: pageCount - 1, x: PAGE_MARGIN, y: 1_000_000 } });
+      editor.scrollIntoView({ target: { type: 'current_selection_head' }, behavior: 'instant' });
+    });
+    expect(update).not.toBeNull();
+    if (!update) throw new Error('Expected the far-page reveal update');
+    await waitForPresentation(editor, update.revision);
+
+    const head = selectionHeadRect(editor.published?.snapshot);
+    const headRect = head && pageRectToClientRect(editor, head);
+    expect(headRect).not.toBeNull();
+    if (!headRect) throw new Error('Expected the presented selection head geometry');
+    const viewportRect = scrollRoot.getBoundingClientRect();
+    expect(viewportRect.bottom - headRect.bottom).toBeGreaterThanOrEqual(CURSOR_VISIBLE_MARGIN - COORDINATE_TOLERANCE_PX);
   });
 });

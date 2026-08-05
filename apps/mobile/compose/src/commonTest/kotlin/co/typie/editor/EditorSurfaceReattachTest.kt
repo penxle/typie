@@ -28,6 +28,7 @@ class EditorSurfaceReattachTest {
       val editor = Editor(fake, this, dispatcher, onError = { _, error -> reported += error })
       fake.applySnapshot(editor)
       editor.activateVisualHost(Any())
+      editor.requestSurfacePages(setOf(0))
 
       val escaped =
         runCatching { editor.surfaceDeliveryFailed(page = 0, session = null, error = failure) }
@@ -57,6 +58,7 @@ class EditorSurfaceReattachTest {
       try {
         var firstFrameKey: FrameKey? = null
         val firstSession = editor.attachSurface(0, 10L, 100.0, 100.0, 1.0) { firstFrameKey = it }
+        editor.requestSurfacePages(setOf(0))
         advanceUntilIdle()
         val firstBitmap =
           editor.deliverFrame(
@@ -65,6 +67,10 @@ class EditorSurfaceReattachTest {
             requireNotNull(firstFrameKey).value,
           )
         advanceUntilIdle()
+        requireNotNull(editor.publishIfReady(setOf(0))).let { bundle ->
+          assertTrue(editor.acceptPublication(bundle))
+          editor.completePresentation(bundle)
+        }
         val firstBundle = requireNotNull(editor.publishedBundle)
         val firstProof = requireNotNull(firstBundle.frames[0]?.proof)
 
@@ -108,6 +114,10 @@ class EditorSurfaceReattachTest {
             requireNotNull(replacementFrameKey).value,
           )
         advanceUntilIdle()
+        requireNotNull(editor.publishIfReady(setOf(0))).let { bundle ->
+          assertTrue(editor.acceptPublication(bundle))
+          editor.completePresentation(bundle)
+        }
 
         val replacementProof = requireNotNull(editor.publishedBundle?.frames?.get(0)?.proof)
         assertEquals(regrownRevision, editor.publishedRevision)

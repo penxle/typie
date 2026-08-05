@@ -1,6 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { getEditorContext } from '../editor.svelte';
+  import { presentedPageElement } from '../geometry';
   import { isCaretVisible } from './caret-visibility';
 
   const { editor } = getEditorContext();
@@ -8,7 +9,10 @@
   let element = $state<HTMLDivElement>();
   let point = $state<{ x: number; y: number } | null>(null);
 
-  const cursor = $derived(editor?.cursor);
+  const cursor = $derived.by(() => {
+    const current = editor?.cursor;
+    return current && editor && presentedPageElement(editor, current.page_idx) ? current : undefined;
+  });
   const visible = $derived(
     !!editor && isCaretVisible({ hasCursor: !!cursor, hasPoint: !!point, focused: editor.focused, readOnly: editor.readOnly }),
   );
@@ -26,7 +30,7 @@
       return;
     }
 
-    const pageEl = editor.pageEls[cursor.page_idx];
+    const pageEl = presentedPageElement(editor, cursor.page_idx);
     if (!pageEl) {
       point = null;
       return;

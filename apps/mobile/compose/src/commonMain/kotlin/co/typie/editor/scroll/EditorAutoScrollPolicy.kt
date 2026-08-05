@@ -165,7 +165,7 @@ internal fun resolveTypewriterScrollOffset(
   }
 }
 
-private fun resolveKeepVisibleRange(visibleArea: EditorVisibleArea): VerticalSpan {
+internal fun resolveKeepVisibleRange(visibleArea: EditorVisibleArea): VerticalSpan {
   val top = visibleArea.visibleViewportTop + CursorVisibleMargin
   val bottom = visibleArea.visibleViewportBottom - CursorVisibleMargin
   return if (bottom <= top) {

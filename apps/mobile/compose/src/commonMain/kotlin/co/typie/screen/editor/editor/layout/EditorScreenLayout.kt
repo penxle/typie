@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,6 +48,14 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import co.typie.editor.Editor
+import co.typie.editor.PublishedBundle
+import co.typie.editor.SurfacePageSpan
+import co.typie.editor.VerticalSpan
+import co.typie.editor.body.resolveEditorBodyGeometry
+import co.typie.editor.body.resolveMeasuredPageLength
+import co.typie.editor.body.resolvePageContentTop
+import co.typie.editor.body.resolvePagesContentHeight
 import co.typie.editor.ext.unclippedBoundsInRoot
 import co.typie.editor.interaction.EditorPlatformIndirectScaleBridge
 import co.typie.editor.interaction.EditorScreenPointerSequence
@@ -55,8 +64,10 @@ import co.typie.editor.interaction.editorInteractions
 import co.typie.editor.interaction.editorPlatformIndirectScale
 import co.typie.editor.interaction.isDirectDown
 import co.typie.editor.interaction.observeEditorScreenPointerSequence
+import co.typie.editor.requiredSurfacePages
 import co.typie.editor.runtime.LocalEditorUiState
 import co.typie.editor.scroll.EditorBringIntoViewBehavior
+import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.editor.scroll.EditorScrollFrame
 import co.typie.editor.scroll.EditorScrollIntentResult
@@ -64,6 +75,7 @@ import co.typie.editor.scroll.EditorVisibleArea
 import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
 import co.typie.editor.scroll.isEditorScrollTargetVisible
 import co.typie.editor.scroll.resolveEditorScrollIntent
+import co.typie.editor.scroll.resolveInstantRevealPreparationViewports
 import co.typie.editor.viewport.EditorViewportState
 import co.typie.ext.LocalScrollGestureLockState
 import co.typie.ext.ScrollGestureLockHandle
@@ -99,6 +111,12 @@ private enum class EditorScreenLayoutSlot {
 private const val EditorViewportScrollAnchorTolerance = 1f
 
 private object EditorViewportNestedScrollConnection : NestedScrollConnection
+
+private data class EditorSurfacePreparation(
+  val requiredPages: Set<Int>,
+  val scrollIntent: EditorScrollIntentResult?,
+  val maximumScrollY: Float,
+)
 
 private data object SharePointerInputWithSiblingsElement :
   ModifierNodeElement<SharePointerInputWithSiblingsNode>() {
@@ -176,6 +194,7 @@ internal enum class EditorViewportScrollReconcileMode {
 @Composable
 internal fun EditorScreenLayout(
   state: EditorScreenState,
+  editor: Editor? = null,
   scrollFrame: EditorScrollFrame,
   visibleArea: EditorVisibleArea,
   magnifierFocalPositionInRoot: Offset? = null,
@@ -189,7 +208,7 @@ internal fun EditorScreenLayout(
   onRequestEditing: (() -> Boolean)? = null,
   onMeasuredViewportSizeChange: (Size) -> Unit,
   header: @Composable () -> Unit,
-  body: @Composable () -> Unit,
+  body: @Composable (PublishedBundle?) -> Unit,
   viewportSurfaceOverlay: @Composable BoxScope.() -> Unit = {},
   viewportOverlay: @Composable BoxScope.() -> Unit = {},
   overlay: @Composable () -> Unit = {},
@@ -202,6 +221,24 @@ internal fun EditorScreenLayout(
   val platformIndirectScaleBridge = remember { EditorPlatformIndirectScaleBridge() }
   val viewConfiguration = LocalViewConfiguration.current
   val bringIntoViewRequests = LocalEditorBringIntoViewRequests.current
+  val appliedState = editor?.appliedState
+  val bringIntoViewRequest = appliedState?.let {
+    bringIntoViewRequests.activateForVersion(it.version)
+  }
+  if (appliedState != null && bringIntoViewRequest == null) {
+    SideEffect { bringIntoViewRequests.discardObsoleteForVersion(appliedState.version) }
+  }
+  val surfacePreparation = editor?.let {
+    resolveEditorSurfacePreparation(
+      editor = it,
+      scrollFrame = scrollFrame.copy(state = it.appliedState),
+      currentScroll = state.viewportState.scrollOffset.y,
+      bringIntoViewRequest = bringIntoViewRequest,
+    )
+  }
+  if (editor != null && surfacePreparation != null) {
+    SideEffect { editor.requestSurfacePages(surfacePreparation.requiredPages) }
+  }
   val interactionScope = LocalEditorInteractionScope.current
   val uiState = LocalEditorUiState.current
   val toolbarBackdropHazeState = LocalHazeState.current
@@ -300,7 +337,11 @@ internal fun EditorScreenLayout(
             active = magnifierPlacement != null,
           )
     ) { constraints ->
+      editor?.publicationVersion
       val viewportWidth = constraints.maxWidth / density.density
+      val measuredViewportSize = resolveSize(constraints.maxWidth, constraints.maxHeight)
+      val measuredVisibleArea = scrollFrame.visibleArea.copy(viewport = measuredViewportSize)
+      val measuredScrollFrame = scrollFrame.copy(visibleArea = measuredVisibleArea)
       val resolvedContentWidth =
         resolveEditorViewportContentWidth(
           viewportWidth = viewportWidth,
@@ -314,6 +355,43 @@ internal fun EditorScreenLayout(
           minHeight = viewportHeight,
           maxHeight = viewportHeight,
         )
+      val publishedBundle = editor?.publishedBundle
+      val currentAppliedState = editor?.appliedState
+      val currentRequest = currentAppliedState?.let {
+        bringIntoViewRequests.activateForVersion(it.version)
+      }
+      val currentPreparation =
+        if (editor != null && currentAppliedState != null) {
+          resolveEditorSurfacePreparation(
+            editor = editor,
+            scrollFrame = measuredScrollFrame.copy(state = currentAppliedState),
+            currentScroll = state.viewportState.scrollOffset.y,
+            bringIntoViewRequest = currentRequest,
+          )
+        } else {
+          null
+        }
+      val candidateBundle = currentPreparation?.let {
+        editor?.publishIfReady(requiredPages = it.requiredPages)
+      }
+      val acceptedBundle = candidateBundle?.takeIf { candidate ->
+        val acceptingEditor = editor ?: return@takeIf false
+        val latestState = acceptingEditor.appliedState
+        val latestRequest = bringIntoViewRequests.activateForVersion(latestState.version)
+        latestState === candidate.snapshot &&
+          latestRequest === currentRequest &&
+          currentPreparation ==
+            resolveEditorSurfacePreparation(
+              editor = acceptingEditor,
+              scrollFrame = measuredScrollFrame.copy(state = latestState),
+              currentScroll = state.viewportState.scrollOffset.y,
+              bringIntoViewRequest = latestRequest,
+            ) &&
+          acceptingEditor.acceptPublication(candidate)
+      }
+      val placedBundle = acceptedBundle ?: publishedBundle
+      val acceptedRequest = currentRequest.takeIf { acceptedBundle != null }
+      var requestToMarkPresented: EditorBringIntoViewRequests.Request? = null
       val viewportContentPlaceables =
         subcompose(EditorScreenLayoutSlot.ViewportContent) {
             Layout(
@@ -337,7 +415,7 @@ internal fun EditorScreenLayout(
                         translationX = -state.viewportState.scrollOffset.x * density.density
                       }
                   ) {
-                    body()
+                    body(placedBundle)
                   }
                 }
               },
@@ -348,8 +426,6 @@ internal fun EditorScreenLayout(
                   contentWidthPx = resolvedContentWidth.dp.roundToPx(),
                 )
               val placeable = measurables.single().measure(contentConstraints)
-              val measuredViewportSize =
-                resolveSize(viewportConstraints.maxWidth, viewportConstraints.maxHeight)
               val viewportSizeChanged =
                 state.viewportState.updateMeasuredBounds(
                   viewportSize = measuredViewportSize,
@@ -358,51 +434,60 @@ internal fun EditorScreenLayout(
               if (viewportSizeChanged) {
                 onMeasuredViewportSizeChange(measuredViewportSize)
               }
-              val scrollFrameVersion = scrollFrame.state.version
-              val bringIntoViewRequest =
-                bringIntoViewRequests.activateForVersion(version = scrollFrameVersion)
+
+              val acceptedPreparation = currentPreparation.takeIf { acceptedBundle != null }
+
+              val presentationScrollFrame =
+                measuredScrollFrame.copy(state = placedBundle?.snapshot ?: scrollFrame.state)
+              val scrollFrameVersion = presentationScrollFrame.state.version
+              val bringIntoViewRequest = acceptedRequest?.takeIf {
+                bringIntoViewRequests.activateForVersion(scrollFrameVersion) === it
+              }
+              var placementScrollY = state.viewportState.scrollOffset.y
+              val scrollIntentResult = bringIntoViewRequest?.let { request ->
+                acceptedPreparation?.scrollIntent
+                  ?: resolveEditorScrollIntent(
+                    frame = presentationScrollFrame,
+                    target = request.target,
+                    currentScroll = placementScrollY,
+                  )
+              }
               if (bringIntoViewRequest != null) {
-                val bringIntoViewTarget = bringIntoViewRequest.target
                 if (
                   state.viewportState.isTransforming ||
                     state.viewportState.isDirectManipulationInProgress
                 ) {
                   bringIntoViewRequests.cancel()
                 } else {
-                  when (
-                    val scrollIntentResult =
-                      resolveEditorScrollIntent(
-                        frame = scrollFrame,
-                        target = bringIntoViewTarget,
-                        currentScroll = state.viewportState.scrollOffset.y,
-                      )
-                  ) {
+                  when (scrollIntentResult) {
+                    null -> Unit
                     EditorScrollIntentResult.Unresolved -> Unit
-                    EditorScrollIntentResult.ConsumedWithoutScroll -> {
-                      bringIntoViewRequests.markApplied(
-                        version = scrollFrameVersion,
-                        request = bringIntoViewRequest,
-                      )
-                    }
+                    EditorScrollIntentResult.NoScroll ->
+                      requestToMarkPresented = bringIntoViewRequest
                     is EditorScrollIntentResult.ScrollTo -> {
-                      if (
-                        bringIntoViewRequests.markApplied(
-                          version = scrollFrameVersion,
-                          request = bringIntoViewRequest,
-                        )
-                      ) {
-                        smoothScrollJob?.cancel()
-                        smoothScrollJob =
-                          when (bringIntoViewRequest.behavior) {
-                            EditorBringIntoViewBehavior.Instant -> {
-                              state.viewportState.scrollToY(
-                                targetY = scrollIntentResult.y,
-                                isAutoScroll = true,
-                              )
-                              null
-                            }
+                      smoothScrollJob?.cancel()
+                      smoothScrollJob =
+                        when (bringIntoViewRequest.behavior) {
+                          EditorBringIntoViewBehavior.Instant -> {
+                            val maximumScrollY =
+                              acceptedPreparation?.maximumScrollY ?: state.viewportState.maxScrollY
+                            placementScrollY = scrollIntentResult.y.coerceIn(0f, maximumScrollY)
+                            state.viewportState.scrollToY(
+                              targetY = placementScrollY,
+                              isAutoScroll = true,
+                              maximumScrollY = maximumScrollY,
+                            )
+                            requestToMarkPresented = bringIntoViewRequest
+                            null
+                          }
 
-                            EditorBringIntoViewBehavior.Smooth ->
+                          EditorBringIntoViewBehavior.Smooth ->
+                            if (
+                              bringIntoViewRequests.markPresented(
+                                version = scrollFrameVersion,
+                                request = bringIntoViewRequest,
+                              )
+                            ) {
                               coroutineScope.launch {
                                 try {
                                   state.viewportState.animateScrollToY(
@@ -415,22 +500,26 @@ internal fun EditorScreenLayout(
                                   }
                                 }
                               }
-                          }
-                      }
+                            } else {
+                              null
+                            }
+                        }
                     }
                   }
                 }
               } else {
-                scrollReconcileState.reconcile(
-                  mode = viewportScrollReconcileMode,
-                  viewportState = state.viewportState,
-                  scrollFrame = scrollFrame,
-                  visibleArea = visibleArea,
-                )
+                val reconciled =
+                  scrollReconcileState.reconcile(
+                    mode = viewportScrollReconcileMode,
+                    viewportState = state.viewportState,
+                    scrollFrame = presentationScrollFrame,
+                    visibleArea = measuredVisibleArea,
+                  )
+                if (reconciled) placementScrollY = state.viewportState.scrollOffset.y
               }
 
               layout(width = viewportConstraints.maxWidth, height = viewportConstraints.maxHeight) {
-                val scrollY = (state.viewportState.scrollOffset.y * density.density).roundToInt()
+                val scrollY = (placementScrollY * density.density).roundToInt()
                 placeable.place(x = 0, y = -scrollY)
               }
             }
@@ -445,6 +534,13 @@ internal fun EditorScreenLayout(
       layout(width = constraints.maxWidth, height = constraints.maxHeight) {
         viewportContentPlaceables.forEach { it.place(x = 0, y = 0) }
         viewportSurfaceOverlayPlaceables.forEach { it.place(x = 0, y = 0) }
+        requestToMarkPresented?.let { request ->
+          bringIntoViewRequests.markPresented(
+            version = placedBundle?.snapshot?.version ?: scrollFrame.state.version,
+            request = request,
+          )
+        }
+        acceptedBundle?.let { bundle -> editor?.completePresentation(bundle) }
       }
     }
 
@@ -461,6 +557,134 @@ internal fun EditorScreenLayout(
       )
     }
   }
+}
+
+private fun resolveEditorSurfacePreparation(
+  editor: Editor,
+  scrollFrame: EditorScrollFrame,
+  currentScroll: Float,
+  bringIntoViewRequest: EditorBringIntoViewRequests.Request?,
+): EditorSurfacePreparation? {
+  val state = scrollFrame.state
+  val viewportHeight = scrollFrame.visibleArea.viewport.height
+  val bodyGeometry =
+    resolveEditorBodyGeometry(
+      visibleArea = scrollFrame.visibleArea,
+      layoutSpec = scrollFrame.layoutSpec,
+      pageSizes = state.pageSizes,
+      displayZoom = scrollFrame.displayZoom,
+    )
+  val editorTopInContainer = bodyGeometry.topSpacerHeight
+  val headerHeight = scrollFrame.headerHeight.takeIf(Float::isFinite) ?: 0f
+  val resolvedContentOrigin = headerHeight + editorTopInContainer
+  val pageSpans =
+    state.pageSizes.mapIndexedNotNull { page, size ->
+      val pageTop =
+        scrollFrame.layoutSpec.resolvePageContentTop(
+          page = page,
+          pageSizes = state.pageSizes,
+          displayZoom = scrollFrame.displayZoom,
+          density = scrollFrame.density,
+        ) ?: return@mapIndexedNotNull null
+      val top = resolvedContentOrigin + pageTop
+      SurfacePageSpan(
+        page = page,
+        top = top,
+        bottom =
+          top +
+            resolveMeasuredPageLength(
+              length = size.height,
+              displayZoom = scrollFrame.displayZoom,
+              density = scrollFrame.density,
+            ),
+      )
+    }
+  val pagesContentHeight =
+    scrollFrame.layoutSpec.resolvePagesContentHeight(
+      pageSizes = state.pageSizes,
+      displayZoom = scrollFrame.displayZoom,
+      density = scrollFrame.density,
+    )
+  val contentExtent =
+    headerHeight +
+      maxOf(
+        bodyGeometry.minimumBodyHeight,
+        bodyGeometry.topSpacerHeight +
+          pagesContentHeight +
+          scrollFrame.autoScrollPolicy.bottomPadding,
+      )
+  val currentViewport =
+    if (
+      currentScroll.isFinite() &&
+        currentScroll >= 0f &&
+        viewportHeight.isFinite() &&
+        viewportHeight > 0f
+    ) {
+      VerticalSpan(top = currentScroll, bottom = currentScroll + viewportHeight)
+    } else {
+      null
+    }
+  if (currentViewport == null) return null
+  val scrollIntent = bringIntoViewRequest?.let { request ->
+    resolveEditorScrollIntent(
+      frame = scrollFrame,
+      target = request.target,
+      currentScroll = currentScroll,
+      contentOriginY = resolvedContentOrigin,
+    )
+  }
+  val maximumScrollY = (contentExtent - viewportHeight).coerceAtLeast(0f)
+  val preparationViewports =
+    if (bringIntoViewRequest?.behavior == EditorBringIntoViewBehavior.Instant) {
+      resolveInstantRevealPreparationViewports(
+        frame = scrollFrame,
+        target = bringIntoViewRequest.target,
+        currentScroll = currentScroll,
+        contentOriginY = resolvedContentOrigin,
+        maximumScrollY = maximumScrollY,
+      )
+    } else {
+      emptyList()
+    }
+  val instantRevealUnresolved =
+    bringIntoViewRequest?.behavior == EditorBringIntoViewBehavior.Instant &&
+      scrollIntent == EditorScrollIntentResult.Unresolved
+  if (instantRevealUnresolved) return null
+  val requiredPages =
+    requiredSurfacePages(
+      pages = pageSpans,
+      currentViewport = currentViewport,
+      activePages = editor.activeSurfacePages,
+      preparationViewports = preparationViewports,
+    )
+  val exactViewport =
+    when {
+      bringIntoViewRequest?.behavior != EditorBringIntoViewBehavior.Instant -> currentViewport
+      scrollIntent is EditorScrollIntentResult.ScrollTo -> {
+        val top = scrollIntent.y.coerceIn(0f, maximumScrollY)
+        VerticalSpan(top = top, bottom = top + viewportHeight)
+      }
+      scrollIntent == EditorScrollIntentResult.NoScroll -> currentViewport
+      else -> null
+    }
+  val exactPages = exactViewport?.let { viewport ->
+    requiredSurfacePages(
+      pages = pageSpans,
+      currentViewport = viewport,
+      activePages = editor.activeSurfacePages,
+    )
+  }
+  if (bringIntoViewRequest?.behavior == EditorBringIntoViewBehavior.Instant) {
+    check(exactPages != null && requiredPages.containsAll(exactPages)) {
+      "Instant reveal destination requires unprepared surfaces: " +
+        "required=$requiredPages destination=$exactPages"
+    }
+  }
+  return EditorSurfacePreparation(
+    requiredPages = requiredPages,
+    scrollIntent = scrollIntent,
+    maximumScrollY = maximumScrollY,
+  )
 }
 
 @Composable
@@ -630,7 +854,7 @@ internal class EditorViewportScrollReconcileState {
         )
     ) {
       EditorScrollIntentResult.Unresolved,
-      EditorScrollIntentResult.ConsumedWithoutScroll -> {
+      EditorScrollIntentResult.NoScroll -> {
         lastObservedFrame = EditorViewportScrollReconcileFrame(viewportState, visibleArea)
         false
       }

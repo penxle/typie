@@ -1,6 +1,7 @@
 package co.typie.editor
 
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.focus.FocusManager
@@ -77,7 +78,7 @@ private data class PublicationWaiter(
 
 private data class PendingRequest(
   val completion: CompletableDeferred<EditorUpdate>?,
-  val beforePublish: ((EditorUpdate) -> Unit)?,
+  val request: CollectedEditorRequest,
 )
 
 internal data class PublishedBundle(val snapshot: EditorState, val frames: Map<Int, PresentedFrame>)
@@ -95,7 +96,24 @@ private class SurfacePage(
   var failedRevision: Long? = null,
 )
 
-private class VisualHost(val token: Any, val pages: MutableMap<Int, SurfacePage> = mutableMapOf())
+private class VisualHost(
+  val token: Any,
+  val onPublicationFailure: (Long) -> Unit,
+  val pages: MutableMap<Int, SurfacePage> = mutableMapOf(),
+)
+
+private data class SurfacePageSnapshot(
+  val target: SurfaceTarget,
+  val requiredRevision: Long?,
+  val frame: PresentedFrame?,
+  val available: Boolean,
+)
+
+private data class PublicationSource(
+  val snapshot: EditorState,
+  val hostToken: Any?,
+  val pages: Map<Int, SurfacePageSnapshot>,
+)
 
 @OptIn(ExperimentalAtomicApi::class)
 class Editor
@@ -122,7 +140,10 @@ internal constructor(
   val publishedRevision: Long?
     get() = published?.snapshot?.version
 
-  internal var preparingPage: Int? by mutableStateOf(null)
+  internal var surfacePageRequirements: Set<Int> by mutableStateOf(emptySet())
+    private set
+
+  internal var publicationVersion: Int by mutableIntStateOf(0)
     private set
 
   internal var inputRecorder: EditorInputRecorder? = null
@@ -144,6 +165,11 @@ internal constructor(
   private val nextSurfaceKey = AtomicLong(0L)
   private var visualHost: VisualHost? = null
   private var published: PublishedBundle? by mutableStateOf(null)
+  private var publishedHostToken: Any? = null
+  private val publicationSource =
+    AtomicReference(
+      PublicationSource(snapshot = EditorState.Initial, hostToken = null, pages = emptyMap())
+    )
   // Native buffer readers cannot wait for a tick that owns the Editor mutex.
   // Writers refresh this immutable derived view while holding that mutex.
   private val retainedFrameBitmaps:
@@ -165,6 +191,25 @@ internal constructor(
       failed = failed,
       notifyFailure = { error -> notifyFailure(error) },
     )
+
+  internal val activeSurfacePages: Set<Int>
+    get() = publicationSource.load().pages.keys
+
+  internal fun requestSurfacePages(pages: Set<Int>) {
+    val validPages =
+      pages.filterTo(mutableSetOf()) { page ->
+        page in appliedState.pageSizes.indices ||
+          (appliedState === EditorState.Initial && page in activeSurfacePages)
+      }
+    if (surfacePageRequirements == validPages) return
+    surfacePageRequirements = validPages
+    publicationVersion += 1
+    scope.launch(dispatcher) { mutex.withLock { if (!terminal) startSurfaceRenders() } }
+  }
+
+  internal fun requestPublication() {
+    publicationVersion += 1
+  }
 
   @PublishedApi
   internal val listeners:
@@ -222,22 +267,25 @@ internal constructor(
   suspend fun update(
     admit: () -> Boolean = { true },
     block: EditorRequestScope.() -> Unit,
-  ): EditorUpdate? = update(admit = admit, beforePublish = null, block = block)
-
-  internal suspend fun update(
-    admit: () -> Boolean,
-    beforePublish: ((EditorUpdate) -> Unit)?,
-    block: EditorRequestScope.() -> Unit,
   ): EditorUpdate? {
     if (terminal) return null
 
-    val messages = collectMessages(block)
-    if (messages.isEmpty()) return null
+    val request = collectRequest(block)
+    if (request.messages.isEmpty()) {
+      request.discard()
+      return null
+    }
 
     val receipt = CompletableDeferred<EditorUpdate>()
     val inheritedLocalEdit =
       currentCoroutineContext()[LocalEdit]?.takeIf { it.belongsTo(localEdits) }
-    val localEdit = inheritedLocalEdit ?: localEdits.register() ?: return null
+    val localEdit =
+      inheritedLocalEdit
+        ?: localEdits.register()
+        ?: run {
+          request.discard()
+          return null
+        }
     val ownsLocalEdit = inheritedLocalEdit == null
     var admitted = false
     val update =
@@ -247,13 +295,9 @@ internal constructor(
             mutex.withLock {
               ensureActive()
               if (!admit()) return@withLock false
-              val requestId = inner.enqueueRequest(messages)
+              val requestId = inner.enqueueRequest(request.messages)
+              registerPendingRequest(requestId = requestId, completion = receipt, request = request)
               admitted = true
-              registerPendingRequest(
-                requestId = requestId,
-                completion = receipt,
-                beforePublish = beforePublish,
-              )
               if (ownsLocalEdit) {
                 receipt.invokeOnCompletion { error ->
                   if (error == null) localEdit.complete() else localEdit.fail(error)
@@ -264,14 +308,17 @@ internal constructor(
             }
           }
         if (!accepted) {
+          request.discard()
           if (ownsLocalEdit) localEdit.complete()
           return null
         }
         receipt.await()
       } catch (e: CancellationException) {
+        if (!admitted) request.discard()
         if (ownsLocalEdit && !admitted) localEdit.fail(e)
         throw e
       } catch (e: Throwable) {
+        if (!admitted) request.discard()
         receipt.completeExceptionally(e)
         if (ownsLocalEdit && !admitted) localEdit.fail(e)
         fail(e)
@@ -281,11 +328,10 @@ internal constructor(
   }
 
   fun updateNow(block: EditorRequestScope.() -> Unit): EditorUpdate? =
-    updateNow(admit = { true }, beforePublish = null, block = block)
+    updateNow(admit = { true }, block = block)
 
   internal fun updateNow(
     admit: () -> Boolean,
-    beforePublish: ((EditorUpdate) -> Unit)? = null,
     block: EditorRequestScope.() -> Unit,
   ): EditorUpdate? {
     if (!syncInProgress.compareAndSet(expectedValue = false, newValue = true)) {
@@ -294,35 +340,44 @@ internal constructor(
     return try {
       if (terminal) return null
 
-      val messages = collectMessages(block)
-      if (messages.isEmpty()) return null
+      val request = collectRequest(block)
+      if (request.messages.isEmpty()) {
+        request.discard()
+        return null
+      }
 
-      val localEdit = localEdits.register() ?: return null
+      val localEdit =
+        localEdits.register()
+          ?: run {
+            request.discard()
+            return null
+          }
+      var admitted = false
       val result =
         try {
           runBlocking {
             mutex.withPriorityLock {
               ensureActive()
               if (!admit()) return@withPriorityLock null
-              val requestId = inner.enqueueRequest(messages)
-              registerPendingRequest(
-                requestId = requestId,
-                completion = null,
-                beforePublish = beforePublish,
-              )
+              val requestId = inner.enqueueRequest(request.messages)
+              registerPendingRequest(requestId = requestId, completion = null, request = request)
+              admitted = true
               val tick = inner.tickThrough(requestId)
               install(tick)
               updateFor(tick, requestId)
             }
           }
         } catch (e: CancellationException) {
+          if (!admitted) request.discard()
           localEdit.fail(e)
           throw e
         } catch (e: Throwable) {
+          if (!admitted) request.discard()
           localEdit.fail(e)
           fail(e)
           throw e
         }
+      if (result == null) request.discard()
       localEdit.complete()
       if (result != null) emit(result.events)
       result
@@ -331,14 +386,15 @@ internal constructor(
     }
   }
 
-  private fun collectMessages(block: EditorRequestScope.() -> Unit): List<Message> = buildList {
-    block(
-      object : EditorRequestScope {
-        override fun enqueue(message: Message) {
-          add(message)
-        }
-      }
-    )
+  private fun collectRequest(block: EditorRequestScope.() -> Unit): CollectedEditorRequest {
+    val request = CollectedEditorRequest()
+    try {
+      request.block()
+    } catch (error: Throwable) {
+      request.discard()
+      throw error
+    }
+    return request
   }
 
   // Materializing the snapshot ime window is O(selection + context) per call, so
@@ -518,11 +574,6 @@ internal constructor(
 
   private fun install(tick: TickResult) {
     readSnapshot(version = tick.revision.value, events = tick.events)
-    reconcileSurfaceTargets(
-      revision = tick.revision.value,
-      renderInvalidated = tick.events.any { it is EditorEvent.RenderInvalidated },
-    )
-    startSurfaceRenders()
 
     val events = publicEvents(tick.events)
     val completions = mutableListOf<Pair<CompletableDeferred<EditorUpdate>, EditorUpdate>>()
@@ -536,25 +587,26 @@ internal constructor(
           commandOutcomes = request.commandOutcomes,
           editor = this,
         )
-      pending.beforePublish?.invoke(update)
+      pending.request.runBeforePublish(update)
       pendingRequests.updatePersistent { it.removing(request.requestId.value) }
       pending.completion?.let { completion -> completions += completion to update }
     }
-    publishIfReady()
+    reconcileSurfaceTargets(
+      revision = tick.revision.value,
+      renderInvalidated = tick.events.any { it is EditorEvent.RenderInvalidated },
+    )
+    startSurfaceRenders()
+    publicationSourceChanged()
     completions.forEach { (completion, update) -> completion.complete(update) }
   }
 
   private fun registerPendingRequest(
     requestId: RequestId,
     completion: CompletableDeferred<EditorUpdate>?,
-    beforePublish: ((EditorUpdate) -> Unit)?,
+    request: CollectedEditorRequest,
   ) {
-    if (completion == null && beforePublish == null) return
     pendingRequests.updatePersistent {
-      it.putting(
-        requestId.value,
-        PendingRequest(completion = completion, beforePublish = beforePublish),
-      )
+      it.putting(requestId.value, PendingRequest(completion = completion, request = request))
     }
   }
 
@@ -643,11 +695,11 @@ internal constructor(
             val current = published
             if (
               current != null &&
+                publishedHostToken === host.token &&
                 Publication.satisfiesWaiter(
                   requestedRevision = revision,
                   publishedRevision = current.snapshot.version,
                   frames = current.frames,
-                  targets = host.pages.values.map { it.target },
                 )
             ) {
               Published(current.snapshot.version)
@@ -669,17 +721,103 @@ internal constructor(
     }
   }
 
-  internal fun activateVisualHost(token: Any) {
+  internal fun publishIfReady(requiredPages: Set<Int>): PublishedBundle? {
+    if (surfacePageRequirements != requiredPages) return null
+    val source = publicationSource.load()
+    if (source.hostToken == null) return null
+
+    val frames = mutableMapOf<Int, PresentedFrame>()
+    for (pageIndex in requiredPages) {
+      val page = source.pages[pageIndex] ?: return null
+      val frame = page.frame ?: return null
+      if (
+        !Publication.accepts(
+          proof = frame.proof,
+          target = page.target,
+          requiredRevision = page.requiredRevision,
+          available = page.available,
+        )
+      ) {
+        return null
+      }
+      frames[pageIndex] = frame
+    }
+    if (publicationSource.load() !== source || surfacePageRequirements != requiredPages) return null
+
+    val current = published
+    if (
+      current?.snapshot === source.snapshot &&
+        current.frames.size == frames.size &&
+        frames.all { (page, frame) -> current.frames[page] === frame }
+    ) {
+      return current
+    }
+
+    return PublishedBundle(snapshot = source.snapshot, frames = frames)
+  }
+
+  internal fun acceptPublication(bundle: PublishedBundle): Boolean = runBlocking {
+    mutex.withPriorityLock(escalationMillis = 0) {
+      if (published === bundle && publishedHostToken === visualHost?.token) {
+        return@withPriorityLock true
+      }
+      val host = visualHost
+      if (host == null) return@withPriorityLock false
+      if (appliedState !== bundle.snapshot) return@withPriorityLock false
+      if (bundle.frames.size != surfacePageRequirements.size) return@withPriorityLock false
+      for (pageIndex in surfacePageRequirements) {
+        val finishedFrame = bundle.frames[pageIndex] ?: return@withPriorityLock false
+        val page = host.pages[pageIndex] ?: return@withPriorityLock false
+        if (
+          page.frame !== finishedFrame ||
+            !Publication.accepts(
+              proof = finishedFrame.proof,
+              target = page.target,
+              requiredRevision = page.requiredRevision,
+              available = page.available,
+            )
+        ) {
+          return@withPriorityLock false
+        }
+      }
+      for ((pageIndex, finishedFrame) in bundle.frames) {
+        val page = host.pages[pageIndex] ?: continue
+        if (
+          page.frame === finishedFrame &&
+            Publication.accepts(
+              proof = finishedFrame.proof,
+              target = page.target,
+              requiredRevision = page.requiredRevision,
+              available = page.available,
+            )
+        ) {
+          page.requiredRevision = null
+          page.failedRevision = null
+        }
+      }
+      published = bundle
+      publishedHostToken = host.token
+      refreshPublicationSource()
+      refreshRetainedFrames()
+      true
+    }
+  }
+
+  internal fun completePresentation(bundle: PublishedBundle) {
+    completePublicationWaiters(bundle)
+  }
+
+  internal fun activateVisualHost(token: Any, onPublicationFailure: (Long) -> Unit = {}) {
     runBlocking {
       mutex.withPriorityLock {
         ensureActive()
         val current = visualHost
         when {
-          current == null -> visualHost = VisualHost(token)
+          current == null -> visualHost = VisualHost(token, onPublicationFailure)
           current.token === token -> return@withPriorityLock
           else -> error("Editor already has an active visual host")
         }
-        publishIfReady()
+        publicationSourceChanged()
       }
     }
   }
@@ -691,7 +829,9 @@ internal constructor(
       mutex.withPriorityLock(escalationMillis = 0) {
         if (visualHost?.token !== token) return@withPriorityLock
         visualHost = null
-        preparingPage = null
+        publishedHostToken = null
+        surfacePageRequirements = emptySet()
+        refreshPublicationSource()
         refreshRetainedFrames()
         publicationWaiters.exchange(persistentListOf()).forEach { it.completion.complete(NoHost) }
       }
@@ -720,7 +860,7 @@ internal constructor(
           requiredRevision = appliedState.version,
         )
       startSurfaceRenders()
-      publishIfReady()
+      publicationSourceChanged()
       session
     }
   }
@@ -738,6 +878,7 @@ internal constructor(
         if (page.session !== session) {
           return@withLock
         }
+        if (session.page !in surfacePageRequirements) return@withLock
         // The Compose effect is based on published geometry and may arrive after a
         // newer applied page size. Only its platform scale is current-independent.
         val currentConfiguration = configuration.withAppliedPageSize(session.page)
@@ -754,7 +895,7 @@ internal constructor(
         page.failedRevision = null
         surfaceDriver.resize(session, currentConfiguration)
         startSurfaceRenders()
-        publishIfReady()
+        publicationSourceChanged()
       }
     }
   }
@@ -773,7 +914,7 @@ internal constructor(
           val host = visualHost
           if (host?.pages?.get(session.page)?.session === session) {
             host.pages.remove(session.page)
-            publishIfReady()
+            publicationSourceChanged()
           }
         }
       } finally {
@@ -798,17 +939,18 @@ internal constructor(
         val expectedRevision = page.inFlightRevision ?: return@withLock
         val deliveredFrameKey = FrameKey(frameKey)
         if (expectedRevision != editorRevision || page.preparedFrameKey != deliveredFrameKey) {
-          page.inFlightRevision = null
-          page.inFlightSurfaceKey = null
-          page.preparedFrameKey = null
+          page.clearInFlightRender()
           startSurfaceRenders()
           return@withLock
         }
 
-        page.inFlightRevision = null
+        if (session.page !in surfacePageRequirements) {
+          page.clearInFlightRender()
+          return@withLock
+        }
+
         val surfaceKey = page.inFlightSurfaceKey
-        page.inFlightSurfaceKey = null
-        page.preparedFrameKey = null
+        page.clearInFlightRender()
         if (surfaceKey != page.target.key) {
           startSurfaceRenders()
           return@withLock
@@ -824,7 +966,7 @@ internal constructor(
                 frameKey = deliveredFrameKey,
               ),
           )
-        publishIfReady()
+        publicationSourceChanged()
         startSurfaceRenders()
       }
     }
@@ -840,11 +982,21 @@ internal constructor(
         if (terminal) return@withPriorityLock false
         if (session?.isRetired == true) return@withPriorityLock false
         val host = visualHost ?: return@withPriorityLock false
-        val currentSession = host.pages[page]?.session
+        val surfacePage = host.pages[page]
+        val currentSession = surfacePage?.session
         if (session == null) {
-          currentSession == null && appliedState.pageSizes.getOrNull(page) != null
+          currentSession == null &&
+            page in surfacePageRequirements &&
+            appliedState.pageSizes.getOrNull(page) != null
         } else {
-          currentSession === session
+          if (currentSession !== session) {
+            false
+          } else if (page !in surfacePageRequirements) {
+            surfacePage.clearInFlightRender()
+            false
+          } else {
+            true
+          }
         }
       }
       if (current) notifyFailure(error)
@@ -861,17 +1013,21 @@ internal constructor(
         val failedRevision = page.inFlightRevision ?: return@withLock
         if (page.preparedFrameKey != frameKey) return@withLock
 
-        page.inFlightRevision = null
+        if (session.page !in surfacePageRequirements) {
+          page.clearInFlightRender()
+          return@withLock
+        }
+
         val surfaceKey = page.inFlightSurfaceKey
-        page.inFlightSurfaceKey = null
-        page.preparedFrameKey = null
+        page.clearInFlightRender()
         if (surfaceKey != page.target.key) {
           startSurfaceRenders()
           return@withLock
         }
-        rejectFailedRevision(page, failedRevision)
         if (appliedState.version > failedRevision) {
           startSurfaceRenders()
+        } else {
+          rejectFailedRevision(page, failedRevision)
         }
       }
     }
@@ -892,10 +1048,13 @@ internal constructor(
           return@withLock false
         }
 
-        page.inFlightRevision = null
+        if (session.page !in surfacePageRequirements) {
+          page.clearInFlightRender()
+          return@withLock false
+        }
+
         val surfaceKey = page.inFlightSurfaceKey
-        page.inFlightSurfaceKey = null
-        page.preparedFrameKey = null
+        page.clearInFlightRender()
         if (surfaceKey != page.target.key) {
           startSurfaceRenders()
           return@withLock false
@@ -906,6 +1065,7 @@ internal constructor(
         page.frame = null
         page.available = false
         page.failedRevision = null
+        refreshPublicationSource()
         refreshRetainedFrames()
         val error = EditorSurfaceUnavailableException(session.page)
         publicationWaiters.exchange(persistentListOf()).forEach {
@@ -922,6 +1082,7 @@ internal constructor(
   private fun startSurfaceRenders() {
     val host = visualHost ?: return
     for (page in host.pages.values) {
+      if (page.target.page !in surfacePageRequirements) continue
       val required = page.requiredRevision ?: continue
       if (!page.available || page.inFlightRevision != null) continue
       val proof = page.frame?.proof
@@ -960,15 +1121,17 @@ internal constructor(
         ) {
           return@withLock
         }
+        if (session.page !in surfacePageRequirements) {
+          page.clearInFlightRender()
+          return@withLock
+        }
         if (page.target != target) {
-          page.inFlightRevision = null
-          page.inFlightSurfaceKey = null
+          page.clearInFlightRender()
           startSurfaceRenders()
           return@withLock
         }
         if (frameKey == null) {
-          page.inFlightRevision = null
-          page.inFlightSurfaceKey = null
+          page.clearInFlightRender()
           if (appliedState.version > revision) {
             startSurfaceRenders()
           } else {
@@ -983,10 +1146,9 @@ internal constructor(
             deliveredProof.surfaceKey == target.key &&
             deliveredProof.frameKey == frameKey
         ) {
-          page.inFlightRevision = null
-          page.inFlightSurfaceKey = null
+          page.clearInFlightRender()
           page.frame = deliveredFrame.copy(proof = deliveredProof.copy(editorRevision = revision))
-          publishIfReady()
+          publicationSourceChanged()
           startSurfaceRenders()
           return@withLock
         }
@@ -996,77 +1158,51 @@ internal constructor(
     }
   }
 
-  private fun publishIfReady() {
-    val host = visualHost
-    if (host == null) {
-      preparingPage = null
-      refreshRetainedFrames()
-      return
-    }
-    val pendingPage = preparingPage
-    if (pendingPage != null && pendingPage >= appliedState.pageSizes.size) {
-      preparingPage = null
-    }
-    val targets = host.pages.values.map { it.target }
-    val targetsChanged = published?.let { !Publication.matchesTargets(it.frames, targets) } ?: false
-    val pages =
-      host.pages.values.map { page ->
-        Publication.PageFacts(
-          target = page.target,
-          requiredRevision = page.requiredRevision,
-          proof = page.frame?.proof,
-          available = page.available,
-        )
-      }
-    val currentPublishedRevision = published?.snapshot?.version
-    if (preparingPage == null) {
-      preparingPage =
-        Publication.preparingPage(
-          hasVisualHost = true,
-          hasPublishedFrames = published?.frames?.isNotEmpty() == true,
-          appliedRevision = appliedState.version,
-          publishedRevision = currentPublishedRevision,
-          appliedPageCount = appliedState.pageSizes.size,
-          publishedPageCount = published?.snapshot?.pageSizes?.size ?: 0,
-          targetPages = host.pages.keys,
-        )
-    }
-    val pageBeingPrepared = preparingPage
-    if (pageBeingPrepared != null && pageBeingPrepared !in host.pages) return
-    val publishedRevision = currentPublishedRevision ?: 0L
-    if (
-      Publication.canPublish(
-        hasVisualHost = true,
-        hasPublishedFrames = published?.frames?.isNotEmpty() == true,
-        appliedRevision = appliedState.version,
-        publishedRevision = publishedRevision,
-        pages = pages,
-        targetsChanged = targetsChanged,
-      )
-    ) {
-      val frames =
-        host.pages.mapNotNull { (page, record) -> record.frame?.let { page to it } }.toMap()
-      published = PublishedBundle(snapshot = appliedState, frames = frames)
-      preparingPage = null
-      host.pages.values.forEach {
-        it.requiredRevision = null
-        it.failedRevision = null
-      }
-    }
+  private fun publicationSourceChanged() {
+    refreshPublicationSource()
     refreshRetainedFrames()
+  }
 
-    val current = published ?: return
+  private fun SurfacePage.clearInFlightRender() {
+    inFlightRevision = null
+    inFlightSurfaceKey = null
+    preparedFrameKey = null
+  }
+
+  private fun refreshPublicationSource() {
+    val host = visualHost
+    publicationSource.store(
+      PublicationSource(
+        snapshot = appliedState,
+        hostToken = host?.token,
+        pages =
+          host?.pages?.mapValues { (_, page) ->
+            SurfacePageSnapshot(
+              target = page.target,
+              requiredRevision = page.requiredRevision,
+              frame = page.frame,
+              available = page.available,
+            )
+          } ?: emptyMap(),
+      )
+    )
+    publicationVersion += 1
+  }
+
+  private fun completePublicationWaiters(bundle: PublishedBundle) {
+    if (published !== bundle) return
+    val host = visualHost ?: return
+    if (publishedHostToken !== host.token) return
     val completed =
       publicationWaiters.load().filter {
         Publication.satisfiesWaiter(
           requestedRevision = it.revision,
-          publishedRevision = current.snapshot.version,
-          frames = current.frames,
-          targets = targets,
+          publishedRevision = bundle.snapshot.version,
+          frames = bundle.frames,
         )
       }
     publicationWaiters.updatePersistent { it.removingAll(completed) }
-    val result = Published(current.snapshot.version)
+    val result = Published(bundle.snapshot.version)
     completed.forEach { it.completion.complete(result) }
   }
 
@@ -1089,10 +1225,12 @@ internal constructor(
 
   private fun rejectFailedRevision(page: SurfacePage, revision: Long) {
     page.failedRevision = maxOf(page.failedRevision ?: revision, revision)
+    refreshPublicationSource()
     val failed = publicationWaiters.load().filter { it.revision <= revision }
     publicationWaiters.updatePersistent { it.removingAll(failed) }
     val error = EditorSurfaceUnavailableException(page.target.page)
     failed.forEach { it.completion.completeExceptionally(error) }
+    visualHost?.onPublicationFailure?.invoke(revision)
   }
 
   fun inspectState(options: InspectStateOptions? = null): String =
@@ -1248,17 +1386,22 @@ internal constructor(
     listeners.store(persistentMapOf())
     surfaceDriver.dispose()
     scope.launch(dispatcher + NonCancellable, start = CoroutineStart.UNDISPATCHED) {
+      var requests: Collection<CollectedEditorRequest> = emptyList()
       var receipts: Collection<CompletableDeferred<EditorUpdate>> = emptyList()
       var waiters: List<PublicationWaiter> = emptyList()
       var edits: List<LocalEdit> = emptyList()
       mutex.withPriorityLock {
-        receipts = pendingRequests.exchange(persistentMapOf()).values.mapNotNull { it.completion }
+        val pending = pendingRequests.exchange(persistentMapOf()).values
+        requests = pending.map { it.request }
+        receipts = pending.mapNotNull { it.completion }
         waiters = publicationWaiters.exchange(persistentListOf())
         edits = queuedLocalEdits.exchange(persistentListOf())
         visualHost = null
-        preparingPage = null
+        surfacePageRequirements = emptySet()
+        refreshPublicationSource()
         retainedFrameBitmaps.store(persistentMapOf())
       }
+      requests.forEach(CollectedEditorRequest::discard)
       receipts.forEach { it.completeExceptionally(error) }
       waiters.forEach { it.completion.completeExceptionally(error) }
       edits.forEach(LocalEdit::complete)
@@ -1411,18 +1554,23 @@ internal constructor(
 
     EditorRegistry.unregisterAsync(this)
     scope.launch(dispatcher + NonCancellable, start = CoroutineStart.UNDISPATCHED) {
+      var requests: Collection<CollectedEditorRequest> = emptyList()
       var receipts: Collection<CompletableDeferred<EditorUpdate>> = emptyList()
       var waiters: List<PublicationWaiter> = emptyList()
       var edits: List<LocalEdit> = emptyList()
       mutex.withPriorityLock {
-        receipts = pendingRequests.exchange(persistentMapOf()).values.mapNotNull { it.completion }
+        val pending = pendingRequests.exchange(persistentMapOf()).values
+        requests = pending.map { it.request }
+        receipts = pending.mapNotNull { it.completion }
         waiters = publicationWaiters.exchange(persistentListOf())
         edits = queuedLocalEdits.exchange(persistentListOf())
-        preparingPage = null
+        surfacePageRequirements = emptySet()
+        refreshPublicationSource()
       }
       receipts.forEach { it.completeExceptionally(error) }
       waiters.forEach { it.completion.completeExceptionally(error) }
       edits.forEach { it.fail(error) }
+      requests.forEach(CollectedEditorRequest::discard)
       onError(this@Editor, error)
     }
   }

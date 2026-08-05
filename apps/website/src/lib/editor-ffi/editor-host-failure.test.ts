@@ -1,9 +1,9 @@
-import { mount, tick, unmount } from 'svelte';
+import { tick, untrack } from 'svelte';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Editor } from './editor.svelte';
 import { createTrackedEffect } from './editor-effect-harness.svelte';
-import PageLifecycleTestHost from './page-lifecycle-test-host.svelte';
 import { snapshot } from './registry';
+import { EditorScrollScope } from './scroll.svelte';
 import type { PlainRootNode, Size, TickResult, TrackedRange } from '@typie/editor-ffi/browser';
 
 const wasmHarness = vi.hoisted(() => ({
@@ -54,12 +54,18 @@ vi.mock('./components/TableOverlay.svelte', () => ({
 type FakeCore = ReturnType<typeof createCore>;
 type TerminalState = 'failed' | 'destroyed';
 
+const DefaultPageSizes: Size[] = [
+  { width: 100, height: 100 },
+  { width: 100, height: 100 },
+  { width: 100, height: 100 },
+];
+
 function createCore() {
   return {
     enqueue_request: vi.fn(() => ({ value: 1 })),
     tick_through: vi.fn<(requestId: { value: number }) => TickResult>((requestId) => ({
       revision: { value: 1 },
-      events: [],
+      events: [{ type: 'state_changed', fields: ['page_sizes'] }],
       request_outcomes: [{ request_id: requestId, command_outcomes: [{ type: 'applied' }] }],
     })),
     tick: vi.fn<() => TickResult | undefined>(() => void 0),
@@ -78,8 +84,8 @@ function createCore() {
     page_link_rects: vi.fn(() => []),
     table_overlays: vi.fn(() => []),
     link_rects: vi.fn(() => []),
-    page_sizes: vi.fn<() => Size[]>(() => []),
-    page_backing_sizes: vi.fn<() => Size[]>(() => []),
+    page_sizes: vi.fn<() => Size[]>(() => DefaultPageSizes),
+    page_backing_sizes: vi.fn<() => Size[]>(() => DefaultPageSizes),
     selection_endpoints: vi.fn(() => void 0),
     selection: vi.fn(() => void 0),
     tracked_ranges: vi.fn<() => TrackedRange[]>(() => []),
@@ -92,15 +98,65 @@ function createCore() {
   };
 }
 
-async function createEditor(core = createCore()): Promise<{ editor: Editor; core: FakeCore }> {
+async function createEditor(core = createCore(), installConsumer = true): Promise<{ editor: Editor; core: FakeCore }> {
   wasmHarness.createEditor.mockReturnValue(core);
   const editor = await Editor.createFromDoc({} as never, { width: 1, height: 1, scale_factor: 1 });
+  if (installConsumer) installPublicationConsumer(editor);
   return { editor, core };
+}
+
+function presentActiveSurfaces(editor: Editor): void {
+  untrack(() => {
+    const requiredPages = editor.activeSurfacePages;
+    editor.requestSurfacePages(requiredPages);
+    const bundle = editor.publishIfReady(requiredPages);
+    if (bundle && editor.acceptPublication(bundle)) editor.completePresentation(bundle);
+  });
+}
+
+function installPublicationConsumer(editor: Editor): void {
+  const activateVisualHost = editor.activateVisualHost.bind(editor);
+  vi.spyOn(editor, 'activateVisualHost').mockImplementation(() => {
+    const release = activateVisualHost();
+    presentActiveSurfaces(editor);
+    return release;
+  });
+
+  const attachSurface = editor.attachSurface.bind(editor);
+  vi.spyOn(editor, 'attachSurface').mockImplementation((...args) => {
+    const backend = attachSurface(...args);
+    presentActiveSurfaces(editor);
+    return backend;
+  });
+
+  const invalidateSurface = editor.invalidateSurface.bind(editor);
+  vi.spyOn(editor, 'invalidateSurface').mockImplementation((page) => {
+    invalidateSurface(page);
+    presentActiveSurfaces(editor);
+  });
+
+  const recoverSurfaces = editor.recoverSurfaces.bind(editor);
+  vi.spyOn(editor, 'recoverSurfaces').mockImplementation(() => {
+    recoverSurfaces();
+    presentActiveSurfaces(editor);
+  });
+
+  const resizeViewportNow = editor.resizeViewportNow.bind(editor);
+  vi.spyOn(editor, 'resizeViewportNow').mockImplementation((width, height, scaleFactor) => {
+    resizeViewportNow(width, height, scaleFactor);
+    presentActiveSurfaces(editor);
+  });
 }
 
 function enterTerminalState(editor: Editor, state: TerminalState): void {
   if (state === 'failed') editor.surfaceReplacementFailed(0);
   else editor.destroy();
+}
+
+function installScrollScope(editor: Editor): EditorScrollScope {
+  const scope = new EditorScrollScope(editor, () => ({ enabled: false, position: undefined }));
+  editor.registerScrollIntoView((options, request) => scope.scrollIntoView(options, request));
+  return scope;
 }
 
 async function expectPending(promise: Promise<unknown> | undefined): Promise<void> {
@@ -117,44 +173,6 @@ async function expectPending(promise: Promise<unknown> | undefined): Promise<voi
   expect(settled).toBe(false);
 }
 
-class OffscreenIntersectionObserver {
-  private readonly callback: IntersectionObserverCallback;
-
-  constructor(callback: IntersectionObserverCallback) {
-    this.callback = callback;
-  }
-
-  observe(target: Element): void {
-    this.callback([{ isIntersecting: false, target } as IntersectionObserverEntry], this as never);
-  }
-
-  unobserve(): void {
-    // Each test observer delivers its only entry synchronously.
-  }
-
-  disconnect(): void {
-    // Each test observer delivers its only entry synchronously.
-  }
-
-  takeRecords(): IntersectionObserverEntry[] {
-    return [];
-  }
-}
-
-class PassiveResizeObserver {
-  observe(): void {
-    // Root geometry is fixed for this lifecycle test.
-  }
-
-  unobserve(): void {
-    // Root geometry is fixed for this lifecycle test.
-  }
-
-  disconnect(): void {
-    // Root geometry is fixed for this lifecycle test.
-  }
-}
-
 describe('Editor guarded core invocation', () => {
   let frames: FrameRequestCallback[];
 
@@ -164,7 +182,10 @@ describe('Editor guarded core invocation', () => {
     wasmHarness.createEditor.mockReset();
     wasmHarness.setThemeVariant.mockReset().mockReturnValue(null);
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
-      frames.push(callback);
+      frames.push((time) => {
+        callback(time);
+        for (const editor of snapshot()) presentActiveSurfaces(editor);
+      });
       return frames.length;
     });
     vi.stubGlobal('cancelAnimationFrame', vi.fn());
@@ -214,6 +235,75 @@ describe('Editor guarded core invocation', () => {
     scheduledFrame?.(0);
     expect(core.tick).not.toHaveBeenCalled();
 
+    editor.destroy();
+  });
+
+  it('binds an admitted reveal before reconciling surfaces for the installed revision', async () => {
+    const { editor, core } = await createEditor();
+    const order: string[] = [];
+    const releaseHost = editor.activateVisualHost();
+    editor.attachSurface(0, document.createElement('canvas'), 100, 100, () => {
+      order.push('replace');
+    });
+    editor.registerScrollIntoView((_options, request) => {
+      request?.beforePublish(() => {
+        order.push('before-publish');
+      });
+    });
+    core.page_sizes.mockReturnValue([{ width: 100, height: 120 }, ...DefaultPageSizes.slice(1)]);
+    core.page_backing_sizes.mockReturnValue([{ width: 100, height: 120 }, ...DefaultPageSizes.slice(1)]);
+
+    editor.updateNow(() => {
+      editor.enqueue({ type: 'history', op: { type: 'undo' } });
+      editor.scrollIntoView({ target: { type: 'current_selection_head' } });
+    });
+
+    expect(order).toEqual(['before-publish', 'replace']);
+
+    editor.registerScrollIntoView(null);
+    releaseHost();
+    editor.destroy();
+  });
+
+  it('rejects an admitted async update when its before-publish callback fails', async () => {
+    const { editor, core } = await createEditor();
+    const error = new Error('before publish failed');
+    core.tick.mockReturnValue({
+      revision: { value: 2 },
+      events: [],
+      request_outcomes: [{ request_id: { value: 1 }, command_outcomes: [{ type: 'applied' }] }],
+    });
+
+    const update = editor.update((request) => {
+      request.enqueue({ type: 'history', op: { type: 'undo' } });
+      request.beforePublish(() => {
+        throw error;
+      });
+    });
+
+    frames.at(-1)?.(0);
+
+    await expect(update).rejects.toBe(error);
+    expect(editor.failure).toBe(error);
+  });
+
+  it('does not complete publication waiters until the accepted bundle is presented', async () => {
+    const { editor } = await createEditor(createCore(), false);
+    const releaseHost = editor.activateVisualHost();
+    const requiredPages = new Set([0]);
+    editor.requestSurfacePages(requiredPages);
+    editor.attachSurface(0, document.createElement('canvas'), 100, 100);
+    const bundle = editor.publishIfReady(requiredPages);
+    if (!bundle) throw new Error('Expected a publishable bundle');
+    const publication = editor.awaitPublishedRevision(bundle.snapshot.revision, { requireFrame: true });
+
+    expect(editor.acceptPublication(bundle)).toBe(true);
+    await expectPending(publication);
+
+    editor.completePresentation(bundle);
+    await expect(publication).resolves.toEqual({ type: 'published', revision: bundle.snapshot.revision });
+
+    releaseHost();
     editor.destroy();
   });
 
@@ -409,6 +499,34 @@ describe('Editor guarded core invocation', () => {
     expect(core.tick_through).not.toHaveBeenCalled();
   });
 
+  it('preserves request-bound reveal admission when read-only filtering keeps the selection update', async () => {
+    const { editor } = await createEditor();
+    const scroll = installScrollScope(editor);
+    editor.readOnly = true;
+
+    const update = editor.updateNow(() => {
+      editor.enqueue({ type: 'selection', op: { type: 'unset' } });
+      editor.scrollIntoView({ target: { type: 'current_selection_head' } });
+    });
+
+    expect(update).not.toBeNull();
+    expect(scroll.activateForRevision(update?.revision ?? -1)).toBe(scroll.pendingRequest);
+  });
+
+  it('discards an unbound reveal when read-only filtering rejects the whole update', async () => {
+    const { editor } = await createEditor();
+    const scroll = installScrollScope(editor);
+    editor.readOnly = true;
+
+    const update = editor.updateNow(() => {
+      editor.enqueue({ type: 'history', op: { type: 'undo' } });
+      editor.scrollIntoView({ target: { type: 'current_selection_head' } });
+    });
+
+    expect(update).toBeNull();
+    expect(scroll.pendingRequest).toBeNull();
+  });
+
   it('preserves an admitted updateNow failure before rejecting later admission', async () => {
     const { editor, core } = await createEditor();
     const error = new Error('tick through failed');
@@ -482,11 +600,10 @@ describe('Editor guarded core invocation', () => {
 
     const sameRevisionUpdate = editor.updateNow((request) => request.enqueue({ type: 'history', op: { type: 'undo' } }));
     const sameRevisionPublication = sameRevisionUpdate?.awaitPublished();
-    await expectPending(sameRevisionPublication);
+    await expect(sameRevisionPublication).resolves.toEqual({ type: 'published', revision: 1 });
 
     core.surface_backend.mockReturnValue('cpu');
     editor.attachSurface(0, document.createElement('canvas'), 100, 100);
-    await expect(sameRevisionPublication).resolves.toEqual({ type: 'published', revision: 1 });
 
     core.tick.mockReturnValue({
       revision: { value: 2 },
@@ -515,7 +632,8 @@ describe('Editor guarded core invocation', () => {
     expect(editor.publishedSurfaceCanvas(0)).toBeUndefined();
 
     const update = editor.updateNow((request) => request.enqueue({ type: 'history', op: { type: 'undo' } }));
-    const publication = update?.awaitPublished();
+    if (!update) throw new Error('Expected an editor update');
+    const publication = editor.awaitPublishedRevision(update.revision, { requireFrame: true });
     await expectPending(publication);
 
     core.surface_backend.mockReturnValue('cpu');
@@ -543,7 +661,7 @@ describe('Editor guarded core invocation', () => {
     editor.destroy();
   });
 
-  it('settles an existing ordinary waiter when the last mismatching target detaches', async () => {
+  it('keeps an accepted publication valid while the producer cohort changes', async () => {
     const { editor, core } = await createEditor();
     const releaseHost = editor.activateVisualHost();
 
@@ -555,16 +673,50 @@ describe('Editor guarded core invocation', () => {
       const publication = editor.awaitPublishedRevision(1);
       const framedPublication = editor.awaitPublishedRevision(1, { requireFrame: true });
 
-      editor.detachSurface(0);
+      await expect(publication).resolves.toEqual({ type: 'published', revision: 1 });
+      await expect(framedPublication).resolves.toEqual({ type: 'published', revision: 1 });
 
-      const pending = Symbol('pending');
-      const result = await Promise.race([publication, new Promise<typeof pending>((resolve) => queueMicrotask(() => resolve(pending)))]);
-      expect(result).toEqual({ type: 'published', revision: 1 });
-      await expectPending(framedPublication);
+      editor.detachSurface(0);
     } finally {
       releaseHost();
       editor.destroy();
     }
+  });
+
+  it('completes a request-bound reveal when its required surface revision fails', async () => {
+    const { editor, core } = await createEditor(createCore(), false);
+    const scroll = installScrollScope(editor);
+    const releaseHost = editor.activateVisualHost((revision) => scroll.discardFailedForRevision(revision));
+    const requiredPages = new Set([0]);
+    core.render_surface.mockReset().mockReturnValueOnce({ value: 1 }).mockReturnValueOnce(undefined);
+    editor.requestSurfacePages(requiredPages);
+    editor.attachSurface(0, document.createElement('canvas'), 100, 100);
+    const initial = editor.publishIfReady(requiredPages);
+    if (!initial) throw new Error('Expected the initial surface publication');
+    expect(editor.acceptPublication(initial)).toBe(true);
+    editor.completePresentation(initial);
+    core.tick_through.mockImplementation((requestId) => ({
+      revision: { value: 2 },
+      events: [{ type: 'render_invalidated' }],
+      request_outcomes: [{ request_id: requestId, command_outcomes: [{ type: 'applied' }] }],
+    }));
+
+    let presentation: Promise<void> | undefined;
+    editor.updateNow(() => {
+      editor.enqueue({ type: 'history', op: { type: 'undo' } });
+      presentation = editor.scrollIntoView({ target: { type: 'current_selection_head' } });
+    });
+    let settled = false;
+    void presentation?.then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+
+    expect(settled).toBe(true);
+    expect(scroll.pendingRequest).toBeNull();
+
+    releaseHost();
+    editor.destroy();
   });
 
   it('rejects a failed render revision once and retries only after applied advances', async () => {
@@ -605,6 +757,7 @@ describe('Editor guarded core invocation', () => {
 
     editor.enqueue({ type: 'history', op: { type: 'undo' } });
     frames.at(-1)?.(0);
+    await Promise.resolve();
     await Promise.resolve();
 
     expect(failedPublicationSettled).toBe(true);
@@ -726,7 +879,7 @@ describe('Editor guarded core invocation', () => {
     editor.destroy();
   });
 
-  it('waits for a replacement publication when registered after a target becomes unavailable', async () => {
+  it('returns the accepted publication when registered after a target becomes unavailable', async () => {
     const { editor, core } = await createEditor();
     const releaseHost = editor.activateVisualHost();
     editor.attachSurface(0, document.createElement('canvas'), 100, 100);
@@ -738,13 +891,11 @@ describe('Editor guarded core invocation', () => {
     await expect(waiterAtFailure).rejects.toMatchObject({ name: 'OperationError' });
 
     const replacementPublication = editor.awaitPublishedRevision(1);
-    await expectPending(replacementPublication);
+    await expect(replacementPublication).resolves.toEqual({ type: 'published', revision: 1 });
 
     core.surface_backend.mockReturnValue('cpu');
     core.render_surface.mockReturnValue({ value: 2 });
     editor.attachSurface(0, document.createElement('canvas'), 100, 100);
-
-    await expect(replacementPublication).resolves.toEqual({ type: 'published', revision: 1 });
 
     releaseHost();
     editor.destroy();
@@ -854,11 +1005,10 @@ describe('Editor guarded core invocation', () => {
     editor.invalidateSurface(0);
     const update = editor.updateNow((request) => request.enqueue({ type: 'history', op: { type: 'undo' } }));
     const publication = update?.awaitPublished();
-    await expectPending(publication);
+    await expect(publication).resolves.toEqual({ type: 'published', revision: 1 });
 
     core.surface_backend.mockReturnValue('cpu');
     editor.attachSurface(0, document.createElement('canvas'), 100, 100);
-    await expect(publication).resolves.toEqual({ type: 'published', revision: 1 });
     expect(editor.failure).toBeUndefined();
 
     releaseHost();
@@ -874,11 +1024,10 @@ describe('Editor guarded core invocation', () => {
     editor.recoverSurfaces();
     const update = editor.updateNow((request) => request.enqueue({ type: 'history', op: { type: 'undo' } }));
     const publication = update?.awaitPublished();
-    await expectPending(publication);
+    await expect(publication).resolves.toEqual({ type: 'published', revision: 1 });
 
     core.surface_backend.mockReturnValue('cpu');
     editor.attachSurface(0, document.createElement('canvas'), 100, 100);
-    await expect(publication).resolves.toEqual({ type: 'published', revision: 1 });
     expect(editor.failure).toBeUndefined();
 
     releaseHost();
@@ -916,7 +1065,7 @@ describe('Editor guarded core invocation', () => {
     expect(core.render_surface).toHaveBeenCalledTimes(1);
     expect(editor.appliedRevision).toBe(2);
     expect(editor.publishedRevision).toBe(1);
-    expect(editor.pageSizes).toEqual([]);
+    expect(editor.pageSizes).toEqual(DefaultPageSizes);
     expect(editor.publishedSurfaceCanvas(0)).toBe(canvas);
 
     releaseHost();
@@ -1015,6 +1164,7 @@ describe('Editor guarded core invocation', () => {
     }));
     wasmHarness.createEditor.mockReturnValue(core);
     const editor = await Editor.createFromDoc({} as never, { width: 320, height: 800, scale_factor: 1 });
+    installPublicationConsumer(editor);
     const releaseHost = editor.activateVisualHost();
 
     editor.resizeViewportNow(320, 800, 1);
@@ -1039,6 +1189,7 @@ describe('Editor guarded core invocation', () => {
     }));
     wasmHarness.createEditor.mockReturnValue(core);
     const editor = await Editor.createFromDoc({} as never, { width: 320, height: 800, scale_factor: 1 });
+    installPublicationConsumer(editor);
     const releaseFirstHost = editor.activateVisualHost();
 
     editor.resizeViewportNow(320, 800, 1);
@@ -1060,144 +1211,19 @@ describe('Editor guarded core invocation', () => {
     editor.destroy();
   });
 
-  it('requests a preparing surface when page shrink removes every active target', async () => {
-    const core = createCore();
-    core.page_sizes.mockReturnValue([
-      { width: 100, height: 100 },
-      { width: 100, height: 100 },
-    ]);
-    core.page_backing_sizes.mockReturnValue([
-      { width: 100, height: 100 },
-      { width: 100, height: 100 },
-    ]);
-    const { editor } = await createEditor(core);
-    const releaseHost = editor.activateVisualHost();
-    editor.attachSurface(1, document.createElement('canvas'), 100, 100);
-    expect(editor.publishedRevision).toBe(1);
+  it('accepts an empty publication for the current visual host after reactivation', async () => {
+    const { editor } = await createEditor();
+    const releaseFirstHost = editor.activateVisualHost();
 
-    core.page_sizes.mockReturnValue([{ width: 200, height: 300 }]);
-    core.page_backing_sizes.mockReturnValue([{ width: 200, height: 400 }]);
-    core.tick.mockReturnValue({
-      revision: { value: 2 },
-      events: [{ type: 'state_changed', fields: ['page_sizes'] }, { type: 'render_invalidated' }],
-      request_outcomes: [],
-    });
+    expect(editor.isPublished(editor.appliedRevision)).toBe(true);
 
-    editor.enqueue({ type: 'history', op: { type: 'undo' } });
-    frames.at(-1)?.(0);
+    releaseFirstHost();
+    const releaseSecondHost = editor.activateVisualHost();
 
-    expect(editor.appliedRevision).toBe(2);
-    expect(editor.publishedRevision).toBe(1);
-    expect(editor.preparingPage).toBe(0);
+    expect(editor.isPublished(editor.appliedRevision)).toBe(true);
 
-    editor.attachSurface(0, document.createElement('canvas'), 200, 400);
-
-    expect(editor.publishedRevision).toBe(2);
-    expect(editor.preparingPage).toBeUndefined();
-
-    releaseHost();
+    releaseSecondHost();
     editor.destroy();
-  });
-
-  it('keeps page preparation latched until proof and cancels it on terminal failure without dropping the published frame', async () => {
-    const core = createCore();
-    core.page_sizes.mockReturnValue([{ width: 100, height: 100 }]);
-    core.page_backing_sizes.mockReturnValue([{ width: 100, height: 100 }]);
-    const { editor } = await createEditor(core);
-    const releaseHost = editor.activateVisualHost();
-    const publishedCanvas = document.createElement('canvas');
-    editor.attachSurface(0, publishedCanvas, 100, 100);
-
-    editor.detachSurface(0);
-    core.page_sizes.mockReturnValue([{ width: 200, height: 300 }]);
-    core.page_backing_sizes.mockReturnValue([{ width: 200, height: 400 }]);
-    core.tick.mockReturnValue({
-      revision: { value: 2 },
-      events: [{ type: 'state_changed', fields: ['page_sizes'] }, { type: 'render_invalidated' }],
-      request_outcomes: [],
-    });
-    editor.enqueue({ type: 'history', op: { type: 'undo' } });
-    frames.at(-1)?.(0);
-    expect(editor.preparingPage).toBe(0);
-
-    core.render_surface.mockReturnValueOnce(undefined);
-    const preparingCanvas = document.createElement('canvas');
-    editor.attachSurface(0, preparingCanvas, 100, 100);
-    expect(core.attach_surface).toHaveBeenLastCalledWith(0, preparingCanvas, 200, 400, 1);
-    expect(editor.preparingPage).toBe(0);
-    expect(editor.publishedSurfaceCanvas(0)).toBe(publishedCanvas);
-
-    editor.surfaceReplacementFailed(0);
-    expect(editor.preparingPage).toBeUndefined();
-    expect(editor.publishedSurfaceCanvas(0)).toBe(publishedCanvas);
-
-    releaseHost();
-    editor.destroy();
-  });
-
-  it('completes a late publication wait after an offscreen prepared page publishes and detaches', async () => {
-    const core = createCore();
-    core.page_sizes.mockReturnValue([{ width: 100, height: 100 }]);
-    core.page_backing_sizes.mockReturnValue([{ width: 100, height: 100 }]);
-    const { editor } = await createEditor(core);
-    const releaseHost = editor.activateVisualHost();
-    const initialCanvas = document.createElement('canvas');
-    editor.attachSurface(0, initialCanvas, 100, 100);
-    editor.detachSurface(0);
-    core.attach_surface.mockClear();
-    core.detach_surface.mockClear();
-    core.render_surface.mockReset().mockReturnValue(undefined);
-
-    vi.stubGlobal('IntersectionObserver', OffscreenIntersectionObserver);
-    vi.stubGlobal('ResizeObserver', PassiveResizeObserver);
-    const rectSpy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
-      return this.dataset.pageLifecycleScrollRoot === undefined ? new DOMRect(0, 300, 200, 100) : new DOMRect(0, 0, 100, 100);
-    });
-    const target = document.createElement('div');
-    document.body.append(target);
-    const component = mount(PageLifecycleTestHost, { target, props: { editor } });
-
-    try {
-      await tick();
-      expect(core.attach_surface).not.toHaveBeenCalled();
-
-      core.page_sizes.mockReturnValue([{ width: 200, height: 300 }]);
-      core.page_backing_sizes.mockReturnValue([{ width: 200, height: 400 }]);
-      core.tick.mockReturnValue({
-        revision: { value: 2 },
-        events: [{ type: 'state_changed', fields: ['page_sizes'] }, { type: 'render_invalidated' }],
-        request_outcomes: [],
-      });
-      editor.enqueue({ type: 'history', op: { type: 'undo' } });
-      frames.at(-1)?.(0);
-      await tick();
-
-      expect(editor.preparingPage).toBe(0);
-      expect(core.attach_surface).toHaveBeenCalledExactlyOnceWith(0, expect.any(HTMLCanvasElement), 200, 400, 1);
-
-      core.render_surface.mockReturnValue({ value: 2 });
-      editor.invalidateSurface(0);
-      await tick();
-
-      expect(editor.publishedRevision).toBe(2);
-      expect(editor.preparingPage).toBeUndefined();
-      expect(core.detach_surface).toHaveBeenCalledExactlyOnceWith(0);
-
-      const pending = Symbol('pending');
-      const latePublication = await Promise.race([
-        editor.awaitPublishedRevision(2),
-        new Promise<typeof pending>((resolve) => queueMicrotask(() => resolve(pending))),
-      ]);
-      expect(latePublication).toEqual({ type: 'published', revision: 2 });
-      await expectPending(editor.awaitPublishedRevision(2, { requireFrame: true }));
-    } finally {
-      await unmount(component);
-      target.remove();
-      rectSpy.mockRestore();
-      releaseHost();
-      editor.destroy();
-      vi.unstubAllGlobals();
-    }
   });
 
   it('materializes table and link geometry only for active page targets', async () => {

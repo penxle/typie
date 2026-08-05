@@ -1103,7 +1103,7 @@ class EditorScreenLayoutDesktopTest {
           viewportScrollReconcileMode = EditorViewportScrollReconcileMode.Disabled,
           onMeasuredViewportSizeChange = { measuredViewportSize = it },
           header = {},
-          body = { Box(Modifier.fillMaxWidth().height(800.dp)) },
+          body = { _ -> Box(Modifier.fillMaxWidth().height(800.dp)) },
           toolbar = { Box(Modifier.fillMaxWidth().height(96.dp)) },
           modifier = Modifier.size(width = 320.dp, height = 640.dp),
         )
@@ -1150,7 +1150,7 @@ class EditorScreenLayoutDesktopTest {
           viewportScrollReconcileMode = EditorViewportScrollReconcileMode.Disabled,
           onMeasuredViewportSizeChange = {},
           header = {},
-          body = { Box(Modifier.fillMaxWidth().height(800.dp)) },
+          body = { _ -> Box(Modifier.fillMaxWidth().height(800.dp)) },
           toolbar = {
             Box(
               Modifier.fillMaxWidth().height(160.dp).testTag(ToolbarTag).pointerInput(Unit) {
@@ -1221,7 +1221,7 @@ class EditorScreenLayoutDesktopTest {
           viewportScrollReconcileMode = EditorViewportScrollReconcileMode.Disabled,
           onMeasuredViewportSizeChange = {},
           header = {},
-          body = { Box(Modifier.fillMaxWidth().height(800.dp)) },
+          body = { _ -> Box(Modifier.fillMaxWidth().height(800.dp)) },
           toolbar = {},
           modifier = Modifier.size(width = 320.dp, height = 640.dp).testTag(LayoutTag),
         )
@@ -1285,7 +1285,7 @@ class EditorScreenLayoutDesktopTest {
           viewportScrollReconcileMode = EditorViewportScrollReconcileMode.Disabled,
           onMeasuredViewportSizeChange = {},
           header = {},
-          body = { Box(Modifier.fillMaxWidth().height(800.dp)) },
+          body = { _ -> Box(Modifier.fillMaxWidth().height(800.dp)) },
           toolbar = {},
           subPane = {
             Box(
@@ -1356,7 +1356,7 @@ class EditorScreenLayoutDesktopTest {
           viewportScrollReconcileMode = EditorViewportScrollReconcileMode.Disabled,
           onMeasuredViewportSizeChange = {},
           header = {},
-          body = { Box(Modifier.fillMaxWidth().height(800.dp)) },
+          body = { _ -> Box(Modifier.fillMaxWidth().height(800.dp)) },
           toolbar = {},
           subPane = {
             Box(
@@ -1449,7 +1449,7 @@ class EditorScreenLayoutDesktopTest {
           viewportScrollReconcileMode = EditorViewportScrollReconcileMode.Disabled,
           onMeasuredViewportSizeChange = {},
           header = { Box(Modifier.fillMaxWidth().height(HeaderHeightPx.dp).testTag(HeaderTag)) },
-          body = { Box(Modifier.fillMaxWidth().height(800.dp).testTag(BodyTag)) },
+          body = { _ -> Box(Modifier.fillMaxWidth().height(800.dp).testTag(BodyTag)) },
           toolbar = {},
           modifier = Modifier.size(width = 320.dp, height = 640.dp).testTag(LayoutTag),
         )
@@ -1552,7 +1552,7 @@ class EditorScreenLayoutDesktopTest {
               }
             }
           },
-          body = {
+          body = { _ ->
             Box(
               Modifier.fillMaxWidth()
                 .height(HeaderFixtureBodyHeight.dp)
@@ -1603,7 +1603,7 @@ class EditorScreenLayoutDesktopTest {
           onRequestEditing = onRequestEditing,
           onMeasuredViewportSizeChange = {},
           header = {},
-          body = {
+          body = { _ ->
             Box(
               Modifier.fillMaxWidth()
                 .height(800.dp)

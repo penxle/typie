@@ -36,6 +36,7 @@ import co.typie.editor.ffi.NavigationOp
 import co.typie.editor.ffi.Size as EditorSize
 import co.typie.editor.ffi.StateField
 import co.typie.editor.runtime.EditorUiState
+import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
 import co.typie.editor.scroll.rememberEditorBringIntoViewRequests
 import co.typie.editor.sync.createTestDocumentEditingSession
@@ -92,6 +93,8 @@ class EditorInputEnabledDesktopTest {
       ) { frameKey ->
         readyFrameKeys += frameKey.value
       }
+    editor.requestSurfacePages(setOf(0))
+    var bringIntoViewRequests: EditorBringIntoViewRequests? = null
 
     fun deliverFrame(revision: Long) {
       scheduler.runCurrent()
@@ -104,6 +107,14 @@ class EditorInputEnabledDesktopTest {
         frameKey = frameKey,
       )
       scheduler.runCurrent()
+      editor.publishIfReady(setOf(0))?.let { bundle ->
+        check(editor.acceptPublication(bundle))
+        editor.completePresentation(bundle)
+      }
+      bringIntoViewRequests?.activateForVersion(revision)?.let { request ->
+        check(bringIntoViewRequests?.markPresented(revision, request) == true)
+      }
+      scheduler.runCurrent()
     }
 
     try {
@@ -112,7 +123,8 @@ class EditorInputEnabledDesktopTest {
 
       setContent {
         val focusRequester = remember { FocusRequester() }
-        val bringIntoViewRequests = rememberEditorBringIntoViewRequests()
+        val currentBringIntoViewRequests = rememberEditorBringIntoViewRequests()
+        bringIntoViewRequests = currentBringIntoViewRequests
         Box(
           Modifier.size(200.dp)
             .testTag(InputTag)
@@ -121,7 +133,7 @@ class EditorInputEnabledDesktopTest {
               session = session,
               uiState = EditorUiState(),
               platform = Platform.Desktop,
-              bringIntoViewRequests = bringIntoViewRequests,
+              bringIntoViewRequests = currentBringIntoViewRequests,
               enabled = true,
               suppressSoftwareKeyboard = true,
               clipboard = NoopClipboard,

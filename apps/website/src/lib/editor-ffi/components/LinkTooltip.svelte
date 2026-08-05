@@ -6,7 +6,7 @@
   import CopyIcon from '~icons/lucide/copy';
   import GlobeIcon from '~icons/lucide/globe';
   import { getEditorContext } from '../editor.svelte';
-  import { pageRectsToVirtualElement, selectionHeadRect } from '../geometry';
+  import { pageRectsToVirtualElement, presentedPageElement, selectionHeadRect } from '../geometry';
   import { openLinkEditorFromTooltip } from '../handlers/link';
   import { linkRectKey, pickLinkTooltipAnchorRect, resolveSelectionTarget } from './link-tooltip';
 
@@ -44,7 +44,7 @@
       // Anchor to the link's own first rect, independent of the pointer, so the
       // tooltip stays fixed while the mouse moves within the link.
       const anchorRect = pickLinkTooltipAnchorRect(activeHover.link.rects);
-      if (anchorRect) {
+      if (anchorRect && editor && presentedPageElement(editor, activeHover.page)) {
         return {
           link: activeHover.link,
           page: activeHover.page,
@@ -53,7 +53,8 @@
       }
     }
 
-    return keyboardTarget;
+    const target = keyboardTarget;
+    return target && editor && presentedPageElement(editor, target.page) ? target : undefined;
   });
 
   const { anchor, floating } = createFloatingActions({

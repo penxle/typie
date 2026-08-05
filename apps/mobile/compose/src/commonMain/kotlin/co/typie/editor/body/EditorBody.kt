@@ -24,6 +24,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import co.typie.editor.EditorState
 import co.typie.editor.EditorView
+import co.typie.editor.LocalEditorZoomController
 import co.typie.editor.PublishedBundle
 import co.typie.editor.ext.unclippedBoundsInRoot
 import co.typie.editor.interaction.LocalEditorInteractionScope
@@ -33,6 +34,7 @@ import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.editor.runtime.LocalEditorUiState
 import co.typie.editor.scroll.EditorAutoScrollPolicy
+import co.typie.editor.scroll.EditorVisibleArea
 import co.typie.editor.sync.DocumentEditorLoad
 import co.typie.screen.editor.editor.overlay.EditorSelectionHandleOverlay
 import co.typie.screen.editor.editor.overlay.EditorTableCellSelectionOverlay
@@ -47,7 +49,7 @@ private val DebugExtensionFillColor = Color(0x2200B8D4)
 internal fun EditorBody(
   load: DocumentEditorLoad,
   publishedBundle: PublishedBundle?,
-  geometry: EditorBodyGeometry,
+  visibleArea: EditorVisibleArea,
   layoutSpec: EditorDocumentLayoutSpec,
   autoScrollPolicy: EditorAutoScrollPolicy,
   modifier: Modifier = Modifier,
@@ -55,16 +57,25 @@ internal fun EditorBody(
   suppressSoftwareKeyboard: Boolean = false,
   showDebugBodyOverlay: Boolean = false,
   showDebugSurfaceOverlay: Boolean = false,
-  overlay: @Composable BoxScope.() -> Unit = {},
+  overlay: @Composable BoxScope.(EditorBodyGeometry, EditorState) -> Unit = { _, _ -> },
 ) {
   val density = LocalDensity.current
+  val displayZoom = LocalEditorZoomController.current.displayZoom
   val editor = LocalEditorRuntime.current.editor
   val uiState = LocalEditorUiState.current
   val interactionScope = LocalEditorInteractionScope.current
   var bodyContentHeight by remember { mutableFloatStateOf(0f) }
-  val publishedState = publishedBundle?.snapshot ?: EditorState.Initial
-  val pageSizes = publishedState.pageSizes
-  val cursor = publishedState.cursor
+  val presentedBundle = publishedBundle
+  val presentedState = presentedBundle?.snapshot ?: EditorState.Initial
+  val pageSizes = presentedState.pageSizes
+  val geometry =
+    resolveEditorBodyGeometry(
+      visibleArea = visibleArea,
+      layoutSpec = layoutSpec,
+      pageSizes = pageSizes,
+      displayZoom = displayZoom,
+    )
+  val cursor = presentedState.cursor
   val extensionAreaFillSpacerHeight =
     remember(geometry.minimumBodyHeight, bodyContentHeight) {
       resolveExtensionAreaFillSpacerHeight(
@@ -128,7 +139,7 @@ internal fun EditorBody(
             ) {
               EditorView(
                 load = load,
-                publishedBundle = publishedBundle,
+                publishedBundle = presentedBundle,
                 layoutSpec = layoutSpec,
                 viewportWidth = geometry.visibleBodySize.width,
                 viewportHeight = geometry.visibleBodySize.height,
@@ -171,15 +182,21 @@ internal fun EditorBody(
           resolvePlacement = interactionScope.controller::resolveTableColumnResizePlacement,
         )
         EditorTableCellSelectionOverlay(
-          editor = editor,
+          state = presentedState,
           uiState = uiState,
           density = density.density,
+          pagePresented = { page -> presentedBundle?.frames?.containsKey(page) == true },
         )
-        EditorSelectionHandleOverlay(editor = editor, uiState = uiState, density = density.density)
+        EditorSelectionHandleOverlay(
+          state = presentedState,
+          uiState = uiState,
+          density = density.density,
+          pagePresented = { page -> presentedBundle?.frames?.containsKey(page) == true },
+        )
       }
     }
 
-    Box(modifier = Modifier.fillMaxSize(), content = overlay)
+    Box(modifier = Modifier.fillMaxSize()) { overlay(geometry, presentedState) }
   }
 }
 

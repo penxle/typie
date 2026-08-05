@@ -24,8 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
@@ -36,7 +35,12 @@ import co.typie.editor.EditorState
 import co.typie.editor.EditorTapHint
 import co.typie.editor.EditorZoomController
 import co.typie.editor.LocalEditorZoomController
+import co.typie.editor.PublishedBundle
+import co.typie.editor.SurfacePageSpan
+import co.typie.editor.VerticalSpan
 import co.typie.editor.body.EditorDocumentLayoutSpec
+import co.typie.editor.body.resolveMeasuredPageLength
+import co.typie.editor.body.resolvePageContentTop
 import co.typie.editor.body.resolvePaginatedPageGap
 import co.typie.editor.body.toEditorDocumentLayoutSpec
 import co.typie.editor.currentEditorThemeVariant
@@ -52,6 +56,7 @@ import co.typie.editor.ffi.PlainNodeEntry
 import co.typie.editor.ffi.SelectionOp
 import co.typie.editor.ffi.SystemEvent
 import co.typie.editor.ffi.Viewport
+import co.typie.editor.requiredSurfacePages
 import co.typie.editor.runtime.EditorRuntime
 import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.runtime.LocalEditorRuntime
@@ -59,6 +64,7 @@ import co.typie.editor.runtime.LocalEditorUiState
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
 import co.typie.editor.surface.EditorPageSurface
+import co.typie.editor.surface.EditorSurfaceHost
 import co.typie.editor.surface.editorPagePositionTracker
 import co.typie.ext.clickable
 import co.typie.platform.PlatformModule
@@ -230,21 +236,41 @@ private fun EditorPreviewContent(
   val density = LocalDensity.current
   val themeVariant = currentEditorThemeVariant()
   val displayZoom = zoomController.displayZoom
+  val renderZoom = zoomController.renderZoom
   val editor = runtime.editor
 
-  if (editor != null) {
-    val visualHostToken = remember(editor) { Any() }
-    DisposableEffect(editor, visualHostToken) {
-      val activated =
-        try {
-          editor.activateVisualHost(visualHostToken)
-          true
-        } catch (error: Throwable) {
-          if (!editor.terminal) throw error
-          false
+  val requiredPages =
+    if (editor != null) {
+      val pageSpans =
+        editor.appliedState.pageSizes.mapIndexedNotNull { page, size ->
+          val top =
+            layoutSpec.resolvePageContentTop(
+              page = page,
+              pageSizes = editor.appliedState.pageSizes,
+              displayZoom = displayZoom,
+              density = density.density,
+            ) ?: return@mapIndexedNotNull null
+          SurfacePageSpan(
+            page = page,
+            top = top,
+            bottom = top + resolveMeasuredPageLength(size.height, displayZoom, density.density),
+          )
         }
-      onDispose { if (activated) editor.deactivateVisualHost(visualHostToken) }
+      requiredSurfacePages(
+        pages = pageSpans,
+        currentViewport = VerticalSpan(0f, viewportHeight),
+        activePages = editor.activeSurfacePages,
+      )
+    } else {
+      emptySet()
     }
+  if (editor != null) {
+    SideEffect { editor.requestSurfacePages(requiredPages) }
+    EditorSurfaceHost(
+      editor = editor,
+      scaleFactor = density.density.toDouble() * renderZoom.toDouble(),
+      onFailure = { error -> runtime.reportError(editor, error) },
+    )
   }
 
   LaunchedEffect(
@@ -304,8 +330,6 @@ private fun EditorPreviewContent(
     }
   }
 
-  val publishedBundle = editor?.publishedBundle
-  val publishedState = publishedBundle?.snapshot ?: EditorState.Initial
   val pageSpacing =
     when (layoutSpec) {
       is EditorDocumentLayoutSpec.Continuous -> 0.dp
@@ -316,54 +340,56 @@ private fun EditorPreviewContent(
       is EditorDocumentLayoutSpec.Continuous -> AppTheme.colors.surfaceDefault
       is EditorDocumentLayoutSpec.Paginated -> Color.Transparent
     }
-  EditorPreviewPageStack(
+  EditorPreviewPresentation(
+    editor = editor,
+    requiredPages = requiredPages,
     pageSpacing = pageSpacing,
     modifier = Modifier.fillMaxSize().clipToBounds().background(pageBackground),
-  ) {
+  ) { publishedBundle ->
+    val publishedState = publishedBundle?.snapshot ?: EditorState.Initial
     val publishedVersion = publishedState.version
     val publishedPageCount = publishedState.pageSizes.size
-    val preparingPage = editor?.preparingPage
-    val presentedPageCount = maxOf(publishedPageCount, (preparingPage ?: -1) + 1)
-    repeat(presentedPageCount) { index ->
-      val preparing = index >= publishedPageCount
-      val size =
-        publishedState.pageSizes.getOrNull(index)
-          ?: editor?.appliedState?.pageSizes?.getOrNull(index)?.takeIf { preparingPage == index }
-          ?: return@repeat
+    repeat(publishedPageCount) { index ->
+      val size = publishedState.pageSizes[index]
       EditorPageSurface(
         page = index,
         width = size.width,
         height = size.height,
         publishedVersion = publishedVersion,
         publishedFrame = publishedBundle?.frames?.get(index),
-        showChrome = layoutSpec is EditorDocumentLayoutSpec.Paginated && !preparing,
+        showChrome = layoutSpec is EditorDocumentLayoutSpec.Paginated,
         debugBottomMarginHeight =
           when (layoutSpec) {
             is EditorDocumentLayoutSpec.Paginated -> layoutSpec.pageMarginBottom
             is EditorDocumentLayoutSpec.Continuous -> 0f
           },
         modifier =
-          if (preparing) {
-            Modifier.graphicsLayer(alpha = 0f)
-          } else {
-            Modifier.editorPagePositionTracker(
-              uiState = uiState,
-              page = index,
-              density = density.density,
-            )
-          },
+          Modifier.editorPagePositionTracker(
+            uiState = uiState,
+            page = index,
+            density = density.density,
+          ),
       )
     }
   }
 }
 
 @Composable
-private fun EditorPreviewPageStack(
+private fun EditorPreviewPresentation(
+  editor: Editor?,
+  requiredPages: Set<Int>,
   pageSpacing: Dp,
   modifier: Modifier = Modifier,
-  content: @Composable () -> Unit,
+  content: @Composable (PublishedBundle?) -> Unit,
 ) {
-  Layout(content = content, modifier = modifier) { measurables, constraints ->
+  SubcomposeLayout(modifier = modifier) { constraints ->
+    editor?.publicationVersion
+    val candidate = editor?.publishIfReady(requiredPages)
+    var accepted: PublishedBundle? = null
+    val bundle =
+      if (candidate != null && editor.acceptPublication(candidate)) candidate.also { accepted = it }
+      else editor?.publishedBundle
+    val measurables = subcompose(Unit) { content(bundle) }
     val placeables = measurables.map { measurable ->
       measurable.measure(
         Constraints(
@@ -383,6 +409,7 @@ private fun EditorPreviewPageStack(
         placeable.placeRelative(x = x, y = y)
         y += placeable.height + spacingPx
       }
+      accepted?.let { bundle -> editor?.completePresentation(bundle) }
     }
   }
 }

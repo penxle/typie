@@ -61,7 +61,7 @@ class EditorLoadingSkeletonTest {
         loading = false,
         geometryValid = true,
         sessionAttached = true,
-        hasPublishedFrame = false,
+        hasInitialFrame = false,
       ),
     )
     assertEquals(
@@ -70,7 +70,7 @@ class EditorLoadingSkeletonTest {
         loading = false,
         geometryValid = true,
         sessionAttached = true,
-        hasPublishedFrame = true,
+        hasInitialFrame = true,
       ),
     )
   }

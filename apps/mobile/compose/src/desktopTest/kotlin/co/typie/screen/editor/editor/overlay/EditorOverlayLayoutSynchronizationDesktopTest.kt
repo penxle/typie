@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -23,6 +24,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import co.typie.editor.Editor
 import co.typie.editor.FakeFfiEditor
@@ -120,6 +122,24 @@ class EditorOverlayLayoutSynchronizationDesktopTest {
         scaleFactor = 1.0,
         wakeDelivery = {},
       )
+    editor.requestSurfacePages(setOf(1))
+    waitUntil(timeoutMillis = 5_000L) { fake.renderCalls.any { it.page == 1 } }
+    val renderedRevision = fake.renderCalls.last { it.page == 1 }.requestedRevision.value
+    editor.deliverFrame(
+      session = surface,
+      bitmap = ImageBitmap(width = 100, height = 100),
+      pixelSize = IntSize(width = 100, height = 100),
+      editorRevision = renderedRevision,
+      frameKey = 1L,
+    )
+    var initialBundle = editor.publishIfReady(setOf(1))
+    waitUntil(timeoutMillis = 5_000L) {
+      initialBundle = editor.publishIfReady(setOf(1))
+      initialBundle != null
+    }
+    val presentedBundle = requireNotNull(initialBundle)
+    check(editor.acceptPublication(presentedBundle))
+    editor.completePresentation(presentedBundle)
     var openedSelection: Selection? = null
 
     try {
@@ -413,7 +433,12 @@ class EditorOverlayLayoutSynchronizationDesktopTest {
                 .size(PageSizeAtZoomOne.dp * zoom.value)
                 .editorPagePositionTracker(uiState = uiState, page = 1, density = 1f)
             )
-            EditorSelectionHandleOverlay(editor = editor, uiState = uiState, density = 1f)
+            EditorSelectionHandleOverlay(
+              state = editor.publishedState,
+              uiState = uiState,
+              density = 1f,
+              pagePresented = { true },
+            )
           }
         }
       }
@@ -476,7 +501,12 @@ class EditorOverlayLayoutSynchronizationDesktopTest {
                 .size(PageSizeAtZoomOne.dp * zoom.value)
                 .editorPagePositionTracker(uiState = uiState, page = 1, density = 1f)
             )
-            EditorTableCellSelectionOverlay(editor = editor, uiState = uiState, density = 1f)
+            EditorTableCellSelectionOverlay(
+              state = editor.publishedState,
+              uiState = uiState,
+              density = 1f,
+              pagePresented = { true },
+            )
           }
         }
       }

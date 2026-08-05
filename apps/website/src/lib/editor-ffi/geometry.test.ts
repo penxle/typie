@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { boundingClientRect, isSelectionCollapsed, pageRectsToVirtualElement, selectionHeadRect } from './geometry';
+import { boundingClientRect, isSelectionCollapsed, pageRectsToVirtualElement, resolvePageSpans, selectionHeadRect } from './geometry';
 import type { Position } from '@typie/editor-ffi/browser';
 import type { Editor, EditorSnapshot } from './editor.svelte';
 
@@ -19,6 +19,23 @@ describe('boundingClientRect', () => {
 
   it('ignores non-finite rects', () => {
     expect(boundingClientRect([new DOMRect(NaN, 0, 10, 10)])).toBeNull();
+  });
+});
+
+describe('resolvePageSpans', () => {
+  it('accumulates the same device-scale-rounded height used by each page slot', () => {
+    expect(
+      resolvePageSpans([{ height: 221 }, { height: 221 }, { height: 221 }], {
+        origin: 10,
+        displayZoom: 0.75,
+        scaleFactor: 2,
+        pageGap: 9,
+      }),
+    ).toEqual([
+      { page: 0, top: 10, bottom: 176 },
+      { page: 1, top: 185, bottom: 351 },
+      { page: 2, top: 360, bottom: 526 },
+    ]);
   });
 });
 
@@ -79,5 +96,16 @@ describe('selectionHeadRect', () => {
 
     expect(selectionHeadRect(cursorSnapshot)).toEqual({ page_idx: 2, rect: cursorLine });
     expect(selectionHeadRect(undefined)).toBeNull();
+  });
+
+  it('uses the cursor line for a collapsed selection', () => {
+    const cursorLine = { x: 50, y: 60, width: 1, height: 12 };
+    const cursorSnapshot = {
+      ...snapshot(),
+      selection: { anchor, head: anchor },
+      cursor: { page_idx: 2, line: cursorLine },
+    } as EditorSnapshot;
+
+    expect(selectionHeadRect(cursorSnapshot)).toEqual({ page_idx: 2, rect: cursorLine });
   });
 });

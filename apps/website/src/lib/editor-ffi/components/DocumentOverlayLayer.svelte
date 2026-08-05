@@ -1,6 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { getEditorContext } from '../editor.svelte';
+  import { resolvePageSpans, roundToScale } from '../geometry';
   import TableOverlay from './TableOverlay.svelte';
 
   type PageAnchor = {
@@ -12,20 +13,18 @@
   const ctx = getEditorContext();
   const scaleFactor = $derived(ctx.editor?.scaleFactor ?? 1);
   const pageAnchors = $derived.by(() => {
-    const anchors: PageAnchor[] = [];
-    let top = 0;
-    for (const pageSize of ctx.editor?.pageSizes ?? []) {
-      const width = roundToScale(pageSize.width, scaleFactor);
-      const height = roundToScale(pageSize.height, scaleFactor);
-      anchors.push({ top, width, height });
-      top += height;
-    }
-    return anchors;
+    const pageSizes = ctx.editor?.pageSizes ?? [];
+    return resolvePageSpans(pageSizes, { scaleFactor }).map<PageAnchor>(({ page, top, bottom }) => ({
+      top,
+      width: roundToScale(pageSizes[page].width, scaleFactor),
+      height: bottom - top,
+    }));
   });
-
-  function roundToScale(value: number, scale: number): number {
-    return Math.round(value * scale) / scale;
-  }
+  const tableOverlays = $derived.by(() => {
+    const editor = ctx.editor;
+    const frames = editor?.published?.frames;
+    return frames ? editor.tableOverlays.filter((overlay) => frames.has(overlay.page_idx)) : [];
+  });
 </script>
 
 {#if ctx.editor?.rootAttrs?.layout_mode.type === 'continuous'}
@@ -36,7 +35,7 @@
       pointerEvents: 'none',
     })}
   >
-    {#each ctx.editor.tableOverlays as overlay (overlay.table_id)}
+    {#each tableOverlays as overlay (overlay.table_id)}
       {@const anchor = pageAnchors[overlay.page_idx]}
       {#if anchor}
         <div

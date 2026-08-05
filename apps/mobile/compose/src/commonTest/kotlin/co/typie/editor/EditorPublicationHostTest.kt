@@ -16,6 +16,7 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -40,6 +41,7 @@ class EditorPublicationHostTest {
       editor.activateVisualHost(Any())
       val first = editor.attachSurface(0, 10L, 100.0, 100.0, 1.0, wakeDelivery = {})
       val second = editor.attachSurface(1, 11L, 100.0, 100.0, 1.0, wakeDelivery = {})
+      editor.requestSurfacePages(setOf(0, 1))
       advanceUntilIdle()
       val publishedFirstBitmap = editor.deliverFrame(first, editorRevision = 0L, frameKey = 1L)
       editor.deliverFrame(second, editorRevision = 0L, frameKey = 2L)
@@ -77,6 +79,74 @@ class EditorPublicationHostTest {
     }
 
   @Test
+  fun acceptedPublicationDoesNotCompleteWaitersBeforePresentation() =
+    runTest(dispatcher) {
+      val fake =
+        FakeFfiEditor(
+          onTick = { listOf(EditorEvent.RenderInvalidated) },
+          pageSizesProvider = { listOf(Size(width = 100f, height = 100f)) },
+        )
+      val editor = Editor(fake, this, dispatcher)
+      editor.activateVisualHost(Any())
+      val session = editor.attachSurface(0, 10L, 100.0, 100.0, 1.0, wakeDelivery = {})
+      editor.requestSurfacePages(setOf(0))
+      advanceUntilIdle()
+      editor.deliverFrame(
+        session = session,
+        bitmap = ImageBitmap(width = 100, height = 100),
+        pixelSize = IntSize(width = 100, height = 100),
+        editorRevision = 0L,
+        frameKey = 1L,
+      )
+      advanceUntilIdle()
+      assertTrue(editor.acceptPublication(requireNotNull(editor.publishIfReady(setOf(0)))))
+
+      val update = requireNotNull(editor.updateNow { enqueue(message) })
+      val publication = async(start = CoroutineStart.UNDISPATCHED) { update.awaitPublished() }
+      advanceUntilIdle()
+      editor.deliverFrame(
+        session = session,
+        bitmap = ImageBitmap(width = 100, height = 100),
+        pixelSize = IntSize(width = 100, height = 100),
+        editorRevision = update.revision,
+        frameKey = 2L,
+      )
+      advanceUntilIdle()
+
+      val candidate = requireNotNull(editor.publishIfReady(setOf(0)))
+      assertTrue(editor.acceptPublication(candidate))
+      editor.requestPublication()
+      runCurrent()
+      assertFalse(
+        publication.isCompleted,
+        "acceptance and later Host wake-ups must not resume input before the candidate is placed",
+      )
+
+      editor.completePresentation(candidate)
+      runCurrent()
+      assertEquals(Published(update.revision), publication.await())
+    }
+
+  @Test
+  fun emptyPublicationBelongsToTheCurrentVisualHostAfterReactivation() =
+    runTest(dispatcher) {
+      val editor = Editor(FakeFfiEditor(), this, dispatcher)
+      val firstHost = Any()
+      editor.activateVisualHost(firstHost)
+      editor.requestSurfacePages(emptySet())
+      val first = requireNotNull(editor.publishIfReady(emptySet()))
+      assertTrue(editor.acceptPublication(first))
+
+      editor.deactivateVisualHost(firstHost)
+      advanceUntilIdle()
+      editor.activateVisualHost(Any())
+
+      val second = requireNotNull(editor.publishIfReady(emptySet()))
+      assertTrue(editor.acceptPublication(second))
+      assertEquals(Published(0L), editor.awaitPublished(0L))
+    }
+
+  @Test
   fun deliveredExactFrameKeyIsReusedForANewerRequiredRevision() =
     runTest(dispatcher) {
       val reusedFrameKey = FrameKey(7L)
@@ -90,12 +160,15 @@ class EditorPublicationHostTest {
       editor.activateVisualHost(Any())
       var wakeCount = 0
       val session = editor.attachSurface(0, 10L, 100.0, 100.0, 1.0) { wakeCount += 1 }
+      editor.requestSurfacePages(setOf(0))
       advanceUntilIdle()
       editor.deliverFrame(session, editorRevision = 0L, frameKey = reusedFrameKey.value)
       advanceUntilIdle()
 
       val update = requireNotNull(editor.update { enqueue(message) })
       val publication = async(start = CoroutineStart.UNDISPATCHED) { update.awaitPublished() }
+      advanceUntilIdle()
+      editor.presentActiveSurfaces()
       advanceUntilIdle()
 
       assertTrue(publication.isCompleted)
@@ -118,6 +191,7 @@ class EditorPublicationHostTest {
       editor.activateVisualHost(Any())
       var wakeCount = 0
       val session = editor.attachSurface(0, 10L, 100.0, 100.0, 1.0) { wakeCount += 1 }
+      editor.requestSurfacePages(setOf(0))
       advanceUntilIdle()
 
       assertEquals(listOf(0L), fake.renderCalls.map { it.requestedRevision.value })
@@ -156,6 +230,7 @@ class EditorPublicationHostTest {
       val editor = Editor(fake, this, dispatcher)
       editor.activateVisualHost(Any())
       val session = editor.attachSurface(0, 10L, 100.0, 100.0, 1.0, wakeDelivery = {})
+      editor.requestSurfacePages(setOf(0))
       advanceUntilIdle()
       editor.deliverFrame(session, editorRevision = 0L, frameKey = 1L)
       advanceUntilIdle()
@@ -187,6 +262,7 @@ class EditorPublicationHostTest {
       val editor = Editor(fake, this, dispatcher)
       editor.activateVisualHost(Any())
       val session = editor.attachSurface(0, 10L, 100.0, 100.0, 1.0, wakeDelivery = {})
+      editor.requestSurfacePages(setOf(0))
       advanceUntilIdle()
       val firstBitmap = editor.deliverFrame(session, editorRevision = 0L, frameKey = 1L)
       advanceUntilIdle()
@@ -209,6 +285,79 @@ class EditorPublicationHostTest {
     }
 
   @Test
+  fun publicationWaitsUntilInstalledPagesMatchTheRequiredPages() =
+    runTest(dispatcher) {
+      val fake = FakeFfiEditor(pageSizesProvider = { listOf(Size(width = 100f, height = 100f)) })
+      val editor = Editor(fake, this, dispatcher)
+      editor.activateVisualHost(Any())
+      editor.requestSurfacePages(setOf(0))
+      val session = editor.attachSurface(0, 10L, 100.0, 100.0, 1.0, wakeDelivery = {})
+      advanceUntilIdle()
+      editor.deliverFrame(session, editorRevision = 0L, frameKey = 1L)
+      advanceUntilIdle()
+
+      assertNull(editor.publishIfReady(requiredPages = setOf(1)))
+    }
+
+  @Test
+  fun requiredPagesAreClampedToTheAppliedPageRange() =
+    runTest(dispatcher) {
+      val fake = FakeFfiEditor(pageSizesProvider = { listOf(Size(width = 100f, height = 100f)) })
+      val editor = Editor(fake, this, dispatcher)
+      fake.applySnapshot(editor)
+      editor.activateVisualHost(Any())
+      editor.attachSurface(1, 10L, 100.0, 100.0, 1.0, wakeDelivery = {})
+      advanceUntilIdle()
+
+      editor.requestSurfacePages(setOf(1))
+
+      assertEquals(emptySet(), editor.surfacePageRequirements)
+    }
+
+  @Test
+  fun placedPublicationFinishesWhenTheViewportDropsAnExtraPage() =
+    runTest(dispatcher) {
+      val fake =
+        FakeFfiEditor(
+          pageSizesProvider = {
+            listOf(Size(width = 100f, height = 100f), Size(width = 100f, height = 100f))
+          }
+        )
+      val editor = Editor(fake, this, dispatcher)
+      editor.activateVisualHost(Any())
+      val first = editor.attachSurface(0, 10L, 100.0, 100.0, 1.0, wakeDelivery = {})
+      val second = editor.attachSurface(1, 11L, 100.0, 100.0, 1.0, wakeDelivery = {})
+      editor.requestSurfacePages(setOf(0, 1))
+      advanceUntilIdle()
+      editor.deliverFrame(
+        session = first,
+        bitmap = ImageBitmap(width = 100, height = 100),
+        pixelSize = IntSize(width = 100, height = 100),
+        editorRevision = 0L,
+        frameKey = 1L,
+      )
+      editor.deliverFrame(
+        session = second,
+        bitmap = ImageBitmap(width = 100, height = 100),
+        pixelSize = IntSize(width = 100, height = 100),
+        editorRevision = 0L,
+        frameKey = 2L,
+      )
+      advanceUntilIdle()
+
+      val placed = requireNotNull(editor.publishIfReady(setOf(0, 1)))
+      editor.acceptPublication(placed)
+
+      // Applying the instant reveal changes the viewport before the queued finish runs.
+      // The frame was already placed with both pages; page 0 is now merely extra.
+      editor.requestSurfacePages(setOf(1))
+      first.detach()
+      advanceUntilIdle()
+
+      assertSame(placed, editor.publishedBundle)
+    }
+
+  @Test
   fun targetReplacementsCoalesceBehindActualInFlightOperation() =
     runTest(dispatcher) {
       val fake = FakeFfiEditor()
@@ -216,6 +365,7 @@ class EditorPublicationHostTest {
       editor.activateVisualHost(Any())
       var wakeCount = 0
       val session = editor.attachSurface(0, 10L, 100.0, 100.0, 1.0) { wakeCount += 1 }
+      editor.requestSurfacePages(setOf(0))
       advanceUntilIdle()
 
       session.requestResize(SurfaceConfiguration(200.0, 100.0, 1.0))
@@ -240,29 +390,32 @@ class EditorPublicationHostTest {
     }
 
   @Test
-  fun sameRevisionReplacementMustPublishItsCurrentSurfaceBeforeAwaitCompletes() =
+  fun sameRevisionLateWaitUsesTheAcceptedBundleWhileItsReplacementIsPrepared() =
     runTest(dispatcher) {
       val fake = FakeFfiEditor(pageSizesProvider = { listOf(Size(width = 100f, height = 100f)) })
       val editor = Editor(fake, this, dispatcher)
       editor.activateVisualHost(Any())
       val session = editor.attachSurface(0, 10L, 100.0, 100.0, 1.0, wakeDelivery = {})
+      editor.requestSurfacePages(setOf(0))
       advanceUntilIdle()
       editor.deliverFrame(session, editorRevision = 0L, frameKey = 1L)
       advanceUntilIdle()
 
       val update = requireNotNull(editor.update { enqueue(message) })
+      editor.presentActiveSurfaces()
+      advanceUntilIdle()
       assertIs<Published>(update.awaitPublished())
 
       session.requestResize(SurfaceConfiguration(100.0, 100.0, 2.0))
       advanceUntilIdle()
       val publication = async(start = CoroutineStart.UNDISPATCHED) { update.awaitPublished() }
 
-      assertFalse(publication.isCompleted)
+      assertTrue(publication.isCompleted)
+      assertIs<Published>(publication.await())
 
       editor.deliverFrame(session, editorRevision = update.revision, frameKey = 2L)
       advanceUntilIdle()
 
-      assertIs<Published>(publication.await())
       assertEquals(
         FrameKey(2L),
         editor.publishedFrameAt(page = 0, revision = update.revision)?.frameKey,
@@ -270,34 +423,33 @@ class EditorPublicationHostTest {
     }
 
   @Test
-  fun pendingWaitCompletesWhenTheLastReplacementTargetDetaches() =
+  fun detachingAReplacementDoesNotInvalidateTheAcceptedBundleForLateWaiters() =
     runTest(dispatcher) {
       val fake = FakeFfiEditor(pageSizesProvider = { listOf(Size(width = 100f, height = 100f)) })
       val editor = Editor(fake, this, dispatcher)
       editor.activateVisualHost(Any())
       val session = editor.attachSurface(0, 10L, 100.0, 100.0, 1.0, wakeDelivery = {})
+      editor.requestSurfacePages(setOf(0))
       advanceUntilIdle()
       editor.deliverFrame(session, editorRevision = 0L, frameKey = 1L)
       advanceUntilIdle()
 
       val update = requireNotNull(editor.update { enqueue(message) })
+      editor.presentActiveSurfaces()
+      advanceUntilIdle()
       assertEquals(Published(update.revision), update.awaitPublished())
 
       session.requestResize(SurfaceConfiguration(width = 100.0, height = 100.0, scaleFactor = 2.0))
       advanceUntilIdle()
       val publication = async(start = CoroutineStart.UNDISPATCHED) { update.awaitPublished() }
-      assertFalse(publication.isCompleted)
+      assertTrue(publication.isCompleted)
+      assertEquals(Published(update.revision), publication.await())
 
       session.detach()
       advanceUntilIdle()
-
-      try {
-        assertTrue(publication.isCompleted)
-        assertEquals(Published(update.revision), publication.await())
-      } finally {
-        publication.cancel()
-        advanceUntilIdle()
-      }
+      editor.presentActiveSurfaces()
+      advanceUntilIdle()
+      assertEquals(Published(update.revision), update.awaitPublished())
     }
 
   @Test
@@ -311,6 +463,7 @@ class EditorPublicationHostTest {
       val editor = Editor(fake, this, dispatcher)
       editor.activateVisualHost(Any())
       val session = editor.attachSurface(0, 10L, 100.0, 100.0, 1.0, wakeDelivery = {})
+      editor.requestSurfacePages(setOf(0))
       advanceUntilIdle()
       editor.deliverFrame(session, editorRevision = 0L, frameKey = 1L)
       advanceUntilIdle()
@@ -363,6 +516,7 @@ class EditorPublicationHostTest {
       val editor = Editor(fake, this, dispatcher)
       editor.activateVisualHost(Any())
       val stale = editor.attachSurface(1, 10L, 100.0, 100.0, 1.0, wakeDelivery = {})
+      editor.requestSurfacePages(setOf(1))
       advanceUntilIdle()
       editor.deliverFrame(stale, editorRevision = 0L, frameKey = 1L)
       advanceUntilIdle()
@@ -374,8 +528,7 @@ class EditorPublicationHostTest {
 
       assertEquals(update.revision, editor.appliedRevision)
       assertEquals(0L, editor.publishedRevision)
-      assertEquals(0, editor.preparingPage)
-
+      editor.requestSurfacePages(setOf(0))
       var replacementFrameKey: FrameKey? = null
       val replacement =
         editor.attachSurface(0, 11L, 100.0, 100.0, 1.0) { frameKey ->
@@ -383,7 +536,6 @@ class EditorPublicationHostTest {
         }
       advanceUntilIdle()
       assertEquals(FakeFfiEditor.SurfaceAttachCall(0, 200.0, 300.0, 1.0), fake.attachCalls.last())
-      assertEquals(0, editor.preparingPage)
       editor.deliverFrame(
         replacement,
         editorRevision = update.revision,
@@ -392,9 +544,9 @@ class EditorPublicationHostTest {
       advanceUntilIdle()
 
       assertEquals(update.revision, editor.publishedRevision)
-      assertNull(editor.preparingPage)
-
       replacement.detach()
+      advanceUntilIdle()
+      editor.presentActiveSurfaces()
       advanceUntilIdle()
       val latePublication = async(start = CoroutineStart.UNDISPATCHED) { update.awaitPublished() }
       try {
@@ -419,6 +571,7 @@ class EditorPublicationHostTest {
       val editor = Editor(fake, this, dispatcher)
       editor.activateVisualHost(Any())
       val stale = editor.attachSurface(1, 10L, 100.0, 100.0, 1.0, wakeDelivery = {})
+      editor.requestSurfacePages(setOf(1))
       advanceUntilIdle()
       editor.deliverFrame(stale, editorRevision = 0L, frameKey = 1L)
       advanceUntilIdle()
@@ -427,12 +580,9 @@ class EditorPublicationHostTest {
       pageSizes = listOf(Size(width = 200f, height = 300f))
       requireNotNull(editor.update { enqueue(message) })
       advanceUntilIdle()
-      assertEquals(0, editor.preparingPage)
-
       editor.fail(IllegalStateException("test failure"))
       advanceUntilIdle()
 
-      assertNull(editor.preparingPage)
       assertSame(publishedBeforeFailure, editor.publishedBundle)
     }
 
@@ -448,6 +598,7 @@ class EditorPublicationHostTest {
       val editor = Editor(fake, this, dispatcher)
       editor.activateVisualHost(Any())
       val session = editor.attachSurface(0, 10L, 100.0, 100.0, 1.0, wakeDelivery = {})
+      editor.requestSurfacePages(setOf(0))
       advanceUntilIdle()
       editor.deliverFrame(session, editorRevision = 0L, frameKey = 1L)
       advanceUntilIdle()
@@ -483,6 +634,7 @@ class EditorPublicationHostTest {
       editor.activateVisualHost(Any())
 
       val session = editor.attachSurface(0, 10L, 100.0, 100.0, 1.0, wakeDelivery = {})
+      editor.requestSurfacePages(setOf(0))
       advanceUntilIdle()
       fake.resizeCalls.clear()
 
@@ -504,6 +656,7 @@ class EditorPublicationHostTest {
       editor.activateVisualHost(Any())
       var wakeCount = 0
       val session = editor.attachSurface(0, 10L, 100.0, 100.0, 1.0) { wakeCount += 1 }
+      editor.requestSurfacePages(setOf(0))
       advanceUntilIdle()
       assertEquals(1, fake.renderCount)
       assertEquals(0, wakeCount)
@@ -536,6 +689,7 @@ class EditorPublicationHostTest {
       editor.activateVisualHost(Any())
       var wakeCount = 0
       val session = editor.attachSurface(0, 10L, 100.0, 100.0, 1.0) { wakeCount += 1 }
+      editor.requestSurfacePages(setOf(0))
       advanceUntilIdle()
       assertEquals(1, fake.renderCount)
       assertEquals(0, wakeCount)
@@ -560,6 +714,7 @@ class EditorPublicationHostTest {
       val prepared = mutableListOf<FrameKey>()
       val session =
         editor.attachSurface(0, 10L, 100.0, 100.0, 1.0) { frameKey -> prepared += frameKey }
+      editor.requestSurfacePages(setOf(0))
       advanceUntilIdle()
 
       editor.deliverFrame(session, editorRevision = 0L, frameKey = 999L)
@@ -582,6 +737,7 @@ class EditorPublicationHostTest {
       var pendingFrameKey: FrameKey? = null
       val session =
         editor.attachSurface(0, 10L, 100.0, 100.0, 1.0) { frameKey -> pendingFrameKey = frameKey }
+      editor.requestSurfacePages(setOf(0))
       advanceUntilIdle()
       editor.deliverFrame(session, editorRevision = 0L, frameKey = 1L)
       advanceUntilIdle()
@@ -629,6 +785,7 @@ class EditorPublicationHostTest {
       var pendingFrameKey: FrameKey? = null
       val session =
         editor.attachSurface(0, 10L, 100.0, 100.0, 1.0) { frameKey -> pendingFrameKey = frameKey }
+      editor.requestSurfacePages(setOf(0))
       advanceUntilIdle()
       editor.deliverFrame(session, editorRevision = 0L, frameKey = 1L)
       advanceUntilIdle()
@@ -658,6 +815,7 @@ class EditorPublicationHostTest {
       editor.activateVisualHost(Any())
       var pendingFrameKey: FrameKey? = null
       val failedSession = editor.attachSurface(0, 10L, 100.0, 100.0, 1.0) { pendingFrameKey = it }
+      editor.requestSurfacePages(setOf(0))
       advanceUntilIdle()
       editor.deliverFrame(failedSession, editorRevision = 0L, frameKey = 1L)
       advanceUntilIdle()
@@ -703,6 +861,7 @@ class EditorPublicationHostTest {
       val editor = Editor(fake, this, dispatcher, onError = { _, error -> reported += error })
       editor.activateVisualHost(Any())
       val session = editor.attachSurface(0, 10L, 100.0, 100.0, 1.0, wakeDelivery = {})
+      editor.requestSurfacePages(setOf(0))
       advanceUntilIdle()
       editor.deliverFrame(session, editorRevision = 0L, frameKey = 1L)
       advanceUntilIdle()
@@ -743,6 +902,7 @@ class EditorPublicationHostTest {
       val host = Any()
       editor.activateVisualHost(host)
       val stale = editor.attachSurface(0, 10L, 100.0, 100.0, 1.0, wakeDelivery = {})
+      editor.requestSurfacePages(setOf(0))
       advanceUntilIdle()
       editor.attachSurface(0, 11L, 100.0, 100.0, 1.0, wakeDelivery = {})
       advanceUntilIdle()
@@ -767,6 +927,86 @@ class EditorPublicationHostTest {
 
       assertFalse(editor.terminal)
       assertTrue(reported.isEmpty())
+    }
+
+  @Test
+  fun lateFailureFromADroppedRequiredPageDoesNotRejectTheCurrentPublication() =
+    runTest(dispatcher) {
+      val reported = mutableListOf<Throwable>()
+      val fake =
+        FakeFfiEditor(
+          onTick = { listOf(EditorEvent.RenderInvalidated) },
+          pageSizesProvider = {
+            listOf(Size(width = 100f, height = 100f), Size(width = 100f, height = 100f))
+          },
+        )
+      val editor = Editor(fake, this, dispatcher, onError = { _, error -> reported += error })
+      editor.activateVisualHost(Any())
+      val prepared = mutableMapOf<Int, FrameKey>()
+      val first =
+        editor.attachSurface(0, 10L, 100.0, 100.0, 1.0) { frameKey -> prepared[0] = frameKey }
+      val dropped =
+        editor.attachSurface(1, 11L, 100.0, 100.0, 1.0) { frameKey -> prepared[1] = frameKey }
+      editor.requestSurfacePages(setOf(0, 1))
+      advanceUntilIdle()
+      editor.deliverFrame(first, editorRevision = 0L, frameKey = requireNotNull(prepared[0]).value)
+      editor.deliverFrame(
+        dropped,
+        editorRevision = 0L,
+        frameKey = requireNotNull(prepared[1]).value,
+      )
+      advanceUntilIdle()
+      editor.requestSurfacePages(setOf(0, 1))
+      val initial = requireNotNull(editor.publishIfReady(setOf(0, 1)))
+      assertTrue(editor.acceptPublication(initial))
+      editor.completePresentation(initial)
+
+      supervisorScope {
+        val update = requireNotNull(editor.update { enqueue(message) })
+        val publication = async(start = CoroutineStart.UNDISPATCHED) { update.awaitPublished() }
+        advanceUntilIdle()
+
+        editor.requestSurfacePages(setOf(0))
+        editor.deliverFrame(
+          session = first,
+          bitmap = ImageBitmap(width = 100, height = 100),
+          pixelSize = IntSize(width = 100, height = 100),
+          editorRevision = update.revision,
+          frameKey = requireNotNull(prepared[0]).value,
+        )
+        val resizeCount = fake.resizeCalls.size
+        dropped.requestResize(
+          SurfaceConfiguration(width = 200.0, height = 100.0, scaleFactor = 1.0)
+        )
+        editor.deliverFrame(
+          session = dropped,
+          bitmap = ImageBitmap(width = 100, height = 100),
+          pixelSize = IntSize(width = 100, height = 100),
+          editorRevision = update.revision,
+          frameKey = requireNotNull(prepared[1]).value,
+        )
+        editor.surfaceUnavailable(dropped, requireNotNull(prepared[1]))
+        editor.surfaceDeliveryFailed(
+          page = 1,
+          session = dropped,
+          error = IllegalStateException("late dropped-page delivery failed"),
+        )
+        advanceUntilIdle()
+
+        assertFalse(
+          editor.terminal,
+          "a page outside the current required cohort must not fail the Editor",
+        )
+        assertEquals(resizeCount, fake.resizeCalls.size)
+        assertTrue(reported.isEmpty())
+        val current = requireNotNull(editor.publishIfReady(setOf(0)))
+        assertTrue(editor.acceptPublication(current))
+        editor.completePresentation(current)
+        advanceUntilIdle()
+
+        assertEquals(Published(update.revision), publication.await())
+        assertEquals(setOf(0), editor.publishedBundle?.frames?.keys)
+      }
     }
 
   @Test
@@ -811,11 +1051,21 @@ private fun Editor.publishedFrameAt(page: Int, revision: Long): FrameProof? =
 private fun Editor.publishedFrame(page: Int): FrameProof? =
   publishedBundle?.frames?.get(page)?.proof
 
+private fun Editor.presentActiveSurfaces() {
+  val requiredPages = activeSurfacePages
+  requestSurfacePages(requiredPages)
+  publishIfReady(requiredPages)?.let { bundle ->
+    if (acceptPublication(bundle)) completePresentation(bundle)
+  }
+}
+
 private fun Editor.deliverFrame(
   session: SurfaceSessionHandle,
   editorRevision: Long,
   frameKey: Long,
 ): ImageBitmap {
+  val requiredPages = activeSurfacePages
+  requestSurfacePages(requiredPages)
   val bitmap = ImageBitmap(width = 100, height = 100)
   deliverFrame(
     session = session,
@@ -824,5 +1074,10 @@ private fun Editor.deliverFrame(
     editorRevision = editorRevision,
     frameKey = frameKey,
   )
+  scope.launch {
+    publishIfReady(requiredPages)?.let { bundle ->
+      if (acceptPublication(bundle)) completePresentation(bundle)
+    }
+  }
   return bitmap
 }

@@ -1,26 +1,27 @@
 <script lang="ts">
+  import DocumentEmbeds from './DocumentEmbeds.svelte';
   import Page from './Page.svelte';
   import type { Editor } from '../editor.svelte';
+  import type { EditorSurfaceHost } from '../editor-surface-host.svelte';
 
   type Props = {
     editor: Editor;
+    surfaceHost: EditorSurfaceHost | undefined;
   };
 
-  let { editor }: Props = $props();
-
-  const presentedPageCount = $derived(Math.max(editor.pageSizes.length, editor.preparingPage === undefined ? 0 : editor.preparingPage + 1));
+  let { editor, surfaceHost }: Props = $props();
 </script>
 
-{#each Array.from({ length: presentedPageCount }, (_value, index) => index) as page (page)}
-  {@const publishedPageCount = editor.pageSizes.length}
-  {@const size = editor.pageSizes[page] ?? editor.appliedSnapshot.pageSizes[page]}
-  {#if size}
-    <Page
-      backingHeight={editor.pageBackingSizes[page]?.height ?? editor.appliedSnapshot.pageBackingSizes[page]?.height ?? size.height}
-      height={size.height}
-      {page}
-      preparing={page >= publishedPageCount}
-      width={size.width}
-    />
+{#key editor}
+  {#if surfaceHost}
+    {#key surfaceHost}
+      {#each editor.pageSizes as size, page (page)}
+        {#if size}
+          <Page {editor} height={size.height} {page} {surfaceHost} width={size.width} />
+        {/if}
+      {/each}
+    {/key}
   {/if}
-{/each}
+
+  <DocumentEmbeds {editor} />
+{/key}

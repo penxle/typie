@@ -6,6 +6,7 @@ import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.ffi.PageRect
 import co.typie.editor.pageRectsToContentRect
 import co.typie.editor.runtime.EditorBoundsInContainer
+import kotlin.math.abs
 
 internal data class EditorScrollFrame(
   val state: EditorState,
@@ -27,7 +28,7 @@ internal sealed interface EditorBringIntoViewTarget {
 internal sealed interface EditorScrollIntentResult {
   data object Unresolved : EditorScrollIntentResult
 
-  data object ConsumedWithoutScroll : EditorScrollIntentResult
+  data object NoScroll : EditorScrollIntentResult
 
   data class ScrollTo(val y: Float) : EditorScrollIntentResult
 }
@@ -42,18 +43,33 @@ internal fun resolveEditorScrollIntent(
     return EditorScrollIntentResult.Unresolved
   }
 
+  return resolveEditorScrollIntent(
+    frame = frame,
+    target = target,
+    currentScroll = currentScroll,
+    contentOriginY = frame.headerHeight + editorBounds.y,
+  )
+}
+
+internal fun resolveEditorScrollIntent(
+  frame: EditorScrollFrame,
+  target: EditorBringIntoViewTarget,
+  currentScroll: Float,
+  contentOriginY: Float,
+): EditorScrollIntentResult {
+  if (!contentOriginY.isFinite()) return EditorScrollIntentResult.Unresolved
+
   val rect =
     resolveBringIntoViewTargetRect(
       state = frame.state,
       layoutSpec = frame.layoutSpec,
-      headerHeight = frame.headerHeight,
-      editorTopInContainer = editorBounds.y,
+      contentOriginY = contentOriginY,
       displayZoom = frame.displayZoom,
       density = frame.density,
       target = target,
     )
   if (rect == null) {
-    return EditorScrollIntentResult.ConsumedWithoutScroll
+    return EditorScrollIntentResult.NoScroll
   }
 
   val targetScroll =
@@ -65,10 +81,109 @@ internal fun resolveEditorScrollIntent(
       autoScrollPolicy = frame.autoScrollPolicy,
     )
   if (targetScroll == null) {
-    return EditorScrollIntentResult.ConsumedWithoutScroll
+    return EditorScrollIntentResult.NoScroll
   }
 
   return EditorScrollIntentResult.ScrollTo(targetScroll.coerceAtLeast(0f))
+}
+
+internal fun resolveInstantRevealPreparationViewports(
+  frame: EditorScrollFrame,
+  target: EditorBringIntoViewTarget,
+  currentScroll: Float,
+  contentOriginY: Float,
+  maximumScrollY: Float,
+): List<VerticalSpan> {
+  val rect =
+    resolveBringIntoViewTargetRect(
+      state = frame.state,
+      layoutSpec = frame.layoutSpec,
+      contentOriginY = contentOriginY,
+      displayZoom = frame.displayZoom,
+      density = frame.density,
+      target = target,
+    ) ?: return emptyList()
+  return resolveInstantRevealPreparationViewports(
+    currentScroll = currentScroll,
+    viewportHeight = frame.visibleArea.viewport.height,
+    maximumScrollY = maximumScrollY,
+    target = rect,
+    visibleArea = frame.visibleArea,
+    autoScrollPolicy = frame.autoScrollPolicy,
+  )
+}
+
+internal fun resolveInstantRevealPreparationViewports(
+  currentScroll: Float,
+  viewportHeight: Float,
+  maximumScrollY: Float,
+  target: VerticalSpan,
+  visibleArea: EditorVisibleArea,
+  autoScrollPolicy: EditorAutoScrollPolicy,
+): List<VerticalSpan> {
+  if (
+    !currentScroll.isFinite() ||
+      !viewportHeight.isFinite() ||
+      viewportHeight <= 0f ||
+      !maximumScrollY.isFinite() ||
+      maximumScrollY < 0f ||
+      !target.top.isFinite() ||
+      !target.bottom.isFinite() ||
+      !target.isValid
+  ) {
+    return emptyList()
+  }
+
+  val destinations =
+    when (autoScrollPolicy.mode) {
+      EditorAutoScrollMode.Typewriter ->
+        listOf(
+          resolveTypewriterScrollOffset(
+            currentScroll = currentScroll,
+            targetTopInContent = target.top,
+            targetBottomInContent = target.bottom,
+            visibleArea = visibleArea,
+            position = autoScrollPolicy.typewriterPosition,
+          ) ?: currentScroll
+        )
+
+      EditorAutoScrollMode.KeepCursorVisible -> {
+        val range = resolveKeepVisibleRange(visibleArea)
+        if (!range.isValid) {
+          listOf(
+            resolveKeepVisibleScrollOffset(
+              currentScroll = currentScroll,
+              targetTopInContent = target.top,
+              targetBottomInContent = target.bottom,
+              visibleArea = visibleArea,
+            ) ?: currentScroll
+          )
+        } else {
+          buildList {
+            if (
+              resolveKeepVisibleScrollOffset(
+                currentScroll = currentScroll,
+                targetTopInContent = target.top,
+                targetBottomInContent = target.bottom,
+                visibleArea = visibleArea,
+              ) == null
+            ) {
+              add(currentScroll)
+            }
+            add(target.top - range.top)
+            if (target.height <= range.height) add(target.bottom - range.bottom)
+          }
+        }
+      }
+    }
+
+  return buildList {
+    destinations.forEach { destination ->
+      val top = destination.coerceIn(0f, maximumScrollY)
+      if (none { abs(it.top - top) <= 1f })
+        add(VerticalSpan(top = top, bottom = top + viewportHeight))
+    }
+  }
 }
 
 internal fun isEditorScrollTargetVisible(
@@ -83,8 +198,7 @@ internal fun isEditorScrollTargetVisible(
     resolveBringIntoViewTargetRect(
       state = frame.state,
       layoutSpec = frame.layoutSpec,
-      headerHeight = frame.headerHeight,
-      editorTopInContainer = editorBounds.y,
+      contentOriginY = frame.headerHeight + editorBounds.y,
       displayZoom = frame.displayZoom,
       density = frame.density,
       target = target,
@@ -119,8 +233,7 @@ internal fun resolveBringIntoViewTargetHeight(
 private fun resolveBringIntoViewTargetRect(
   state: EditorState,
   layoutSpec: EditorDocumentLayoutSpec,
-  headerHeight: Float,
-  editorTopInContainer: Float,
+  contentOriginY: Float,
   displayZoom: Float,
   density: Float,
   target: EditorBringIntoViewTarget,
@@ -134,7 +247,7 @@ private fun resolveBringIntoViewTargetRect(
       pageSizes = state.pageSizes,
       displayZoom = displayZoom,
       density = density,
-      contentOriginY = headerHeight + editorTopInContainer,
+      contentOriginY = contentOriginY,
     ) ?: return null
   return VerticalSpan(top = contentRect.top, bottom = contentRect.bottom)
 }

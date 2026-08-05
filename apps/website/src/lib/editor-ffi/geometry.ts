@@ -2,6 +2,27 @@ import type { ReferenceElement } from '@floating-ui/dom';
 import type { PageRect, Selection } from '@typie/editor-ffi/browser';
 import type { Editor, EditorSnapshot } from './editor.svelte';
 
+export function roundToScale(value: number, scaleFactor: number): number {
+  return Math.round(value * scaleFactor) / scaleFactor;
+}
+
+export function resolvePageSpans(
+  pageSizes: readonly { height: number }[],
+  {
+    origin = 0,
+    displayZoom = 1,
+    scaleFactor = 1,
+    pageGap = 0,
+  }: { origin?: number; displayZoom?: number; scaleFactor?: number; pageGap?: number } = {},
+) {
+  let top = origin;
+  return pageSizes.map((size, page) => {
+    const span = { page, top, bottom: top + roundToScale(size.height * displayZoom, scaleFactor) };
+    top = span.bottom + pageGap;
+    return span;
+  });
+}
+
 export function isSelectionCollapsed(selection: Selection | undefined): boolean {
   return (
     selection === undefined ||
@@ -14,19 +35,24 @@ export function isSelectionCollapsed(selection: Selection | undefined): boolean 
 export function selectionHeadRect(snapshot: EditorSnapshot | undefined): PageRect | null {
   const selection = snapshot?.selection;
   const endpoints = snapshot?.selectionEndpoints;
-  if (!selection || !endpoints) {
+  if (!selection || isSelectionCollapsed(selection)) {
     const cursor = snapshot?.cursor;
     return cursor ? { page_idx: cursor.page_idx, rect: cursor.line } : null;
   }
+  if (!endpoints) return null;
 
   const head = selection.head;
   const to = endpoints.to_position;
   return head.node === to.node && head.offset === to.offset && head.affinity === to.affinity ? endpoints.to : endpoints.from;
 }
 
+export function presentedPageElement(editor: Editor, page: number): HTMLDivElement | undefined {
+  return editor.published?.frames.has(page) === true ? editor.pageEls[page] : undefined;
+}
+
 export function pageRectToClientRect(editor: Editor, { page_idx, rect }: PageRect): DOMRect | null {
   const zoom = editor.safeDisplayZoom();
-  const pageEl = editor.pageEls[page_idx];
+  const pageEl = presentedPageElement(editor, page_idx);
   if (!pageEl) return null;
 
   const pageRect = pageEl.getBoundingClientRect();

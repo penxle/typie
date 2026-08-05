@@ -149,4 +149,24 @@ describe('web IME text replacement', () => {
     await new Promise(requestAnimationFrame);
     expect(editor.proseText()).toBe('하하하 ');
   });
+
+  it('applies a deferred composition tail and its following edit in one input admission', async () => {
+    const { editor, input } = await mountEditor();
+    const events = imeEvents(input);
+
+    events.composition('compositionstart', '');
+    events.composition('compositionupdate', 'にほ');
+    events.beforeCompositionInput('にほ');
+    events.applyNativeInput('\u{2028}にほ\u{2029}', 3, 'insertCompositionText', 'にほ');
+
+    events.composingKeyDown('n');
+    events.composition('compositionupdate', 'にほn');
+    events.beforeCompositionInput('にほn');
+    events.applyNativeInput('\u{2028}にほn\u{2029}', 4, 'insertCompositionText', 'にほn');
+
+    events.applyNativeInput('\u{2028}にほん\u{2029}', 4, 'insertCompositionText', 'にほん');
+
+    await new Promise(requestAnimationFrame);
+    expect(editor.proseText()).toBe('にほん');
+  });
 });

@@ -2,14 +2,16 @@ package co.typie.editor.interaction
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.PointerInputChange
+import androidx.compose.ui.unit.IntSize
 import co.typie.editor.Editor
-import co.typie.editor.EditorState
 import co.typie.editor.FakeFfiEditor
 import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.ffi.Affinity
 import co.typie.editor.ffi.EditorEvent
+import co.typie.editor.ffi.FrameKey
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.Position
 import co.typie.editor.ffi.Selection
@@ -35,6 +37,97 @@ import kotlinx.coroutines.test.runTest
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class EditorInteractionScopeTest {
+  @Test
+  fun `geometry reads the bundle accepted after the latest scope update`() =
+    runTest(StandardTestDispatcher()) {
+      var pageSizes = listOf(Size(width = 100f, height = 100f))
+      val fake =
+        FakeFfiEditor(
+          pageSizesProvider = { pageSizes },
+          onTick = { listOf(EditorEvent.RenderInvalidated) },
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      editor.activateVisualHost(Any())
+      var firstFrameKey: FrameKey? = null
+      val firstSurface =
+        editor.attachSurface(
+          page = 0,
+          handle = 1L,
+          width = 100.0,
+          height = 100.0,
+          scaleFactor = 1.0,
+          wakeDelivery = { firstFrameKey = it },
+        )
+      editor.requestSurfacePages(setOf(0))
+      advanceUntilIdle()
+      editor.deliverFrame(
+        session = firstSurface,
+        bitmap = ImageBitmap(width = 100, height = 100),
+        pixelSize = IntSize(width = 100, height = 100),
+        editorRevision = 0L,
+        frameKey = assertNotNull(firstFrameKey).value,
+      )
+      advanceUntilIdle()
+      val firstBundle = assertNotNull(editor.publishIfReady(setOf(0)))
+      assertTrue(editor.acceptPublication(firstBundle))
+
+      val uiState =
+        EditorUiState().apply {
+          updateInteractionSurfaceBounds(
+            boundsInRoot = Rect(left = 0f, top = 0f, right = 100f, bottom = 220f),
+            density = 1f,
+          )
+          updateEditorBounds(
+            boundsInRoot = Rect(left = 0f, top = 0f, right = 100f, bottom = 220f),
+            density = 1f,
+          )
+          updatePageOffset(page = 0, offset = Offset.Zero)
+          updatePageOffset(page = 1, offset = Offset(x = 0f, y = 120f))
+        }
+      val scope = EditorInteractionScope(coroutineScope = this)
+      updateScope(scope = scope, editor = editor, editing = { true }, uiState = uiState)
+
+      pageSizes = listOf(Size(width = 100f, height = 100f), Size(width = 100f, height = 100f))
+      val update =
+        assertNotNull(
+          editor.updateNow {
+            enqueue(Message.Selection(SelectionOp.SetAt(page = 0, x = 0f, y = 0f)))
+          }
+        )
+      firstFrameKey = null
+      var secondFrameKey: FrameKey? = null
+      val secondSurface =
+        editor.attachSurface(
+          page = 1,
+          handle = 2L,
+          width = 100.0,
+          height = 100.0,
+          scaleFactor = 1.0,
+          wakeDelivery = { secondFrameKey = it },
+        )
+      editor.requestSurfacePages(setOf(0, 1))
+      advanceUntilIdle()
+      editor.deliverFrame(
+        session = firstSurface,
+        bitmap = ImageBitmap(width = 100, height = 100),
+        pixelSize = IntSize(width = 100, height = 100),
+        editorRevision = update.revision,
+        frameKey = assertNotNull(firstFrameKey).value,
+      )
+      editor.deliverFrame(
+        session = secondSurface,
+        bitmap = ImageBitmap(width = 100, height = 100),
+        pixelSize = IntSize(width = 100, height = 100),
+        editorRevision = update.revision,
+        frameKey = assertNotNull(secondFrameKey).value,
+      )
+      advanceUntilIdle()
+      val secondBundle = assertNotNull(editor.publishIfReady(setOf(0, 1)))
+      assertTrue(editor.acceptPublication(secondBundle))
+
+      assertNotNull(scope.resolvePagePosition(page = 1, x = 10f, y = 10f))
+    }
+
   @Test
   fun `reset cancels a pending tap sequence confirmation`() =
     runTest(StandardTestDispatcher()) {
@@ -267,7 +360,7 @@ class EditorInteractionScopeTest {
         onRequestSoftwareKeyboard = {},
       )
 
-      scope.onEditorStateChanged(EditorState.Initial)
+      scope.onEditorStateChanged()
     }
 
   @Test

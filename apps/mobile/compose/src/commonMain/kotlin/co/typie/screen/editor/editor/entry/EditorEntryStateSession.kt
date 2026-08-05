@@ -3,8 +3,11 @@ package co.typie.screen.editor.editor.entry
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import co.typie.editor.Editor
 import co.typie.editor.ffi.Message
@@ -20,14 +23,22 @@ import kotlinx.coroutines.flow.filterNotNull
 
 @Stable
 internal class EditorEntryStateSession(
-  private val markElementFocused: (EditorEntryTarget) -> Unit
+  initialPresentationReady: Boolean,
+  private val markElementFocused: (EditorEntryTarget) -> Unit,
 ) {
+  var presentationReady: Boolean by mutableStateOf(initialPresentationReady)
+    private set
+
   fun markTitleFocused() {
     markElementFocused(EditorEntryTarget.Title)
   }
 
   fun markSubtitleFocused() {
     markElementFocused(EditorEntryTarget.Subtitle)
+  }
+
+  internal fun markPresentationReady() {
+    presentationReady = true
   }
 }
 
@@ -41,20 +52,27 @@ internal fun rememberEditorEntryStateSession(
   val store = remember { EditorEntryStateStore() }
   val controller = remember { EditorEntryStateSessionController(store = store) }
   val currentEditorFocused = rememberUpdatedState(editorFocused)
-
-  LaunchedEffect(documentId, editor, bringIntoViewRequests) {
-    val activeDocumentId = documentId ?: return@LaunchedEffect
-    val activeEditor = editor ?: return@LaunchedEffect
-    val saved = store.load(activeDocumentId) ?: return@LaunchedEffect
-    if (saved.target != EditorEntryTarget.Body) {
-      return@LaunchedEffect
+  val saved = remember(documentId) { documentId?.let(store::load) }
+  val restoreSelection = saved?.bodySelection?.takeIf { saved.target == EditorEntryTarget.Body }
+  val session =
+    remember(documentId, editor, controller, restoreSelection) {
+      EditorEntryStateSession(initialPresentationReady = restoreSelection == null) { target ->
+        documentId?.let { activeDocumentId ->
+          controller.saveElementFocus(documentId = activeDocumentId, target = target)
+        }
+      }
     }
-    val selection = saved.bodySelection ?: return@LaunchedEffect
+
+  LaunchedEffect(documentId, editor, bringIntoViewRequests, restoreSelection, session) {
+    documentId ?: return@LaunchedEffect
+    val activeEditor = editor ?: return@LaunchedEffect
+    val selection = restoreSelection ?: return@LaunchedEffect
 
     activeEditor.updateWithBringIntoView(bringIntoViewRequests) {
       enqueue(Message.Selection(SelectionOp.SetFrozen(selection = selection)))
       bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
     }
+    session.markPresentationReady()
   }
 
   LaunchedEffect(documentId, editor) {
@@ -72,13 +90,7 @@ internal fun rememberEditorEntryStateSession(
       }
   }
 
-  return remember(documentId, controller) {
-    EditorEntryStateSession { target ->
-      documentId?.let { activeDocumentId ->
-        controller.saveElementFocus(documentId = activeDocumentId, target = target)
-      }
-    }
-  }
+  return session
 }
 
 private class EditorEntryStateSessionController(private val store: EditorEntryStateStore) {

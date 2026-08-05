@@ -1,7 +1,6 @@
 package co.typie.editor.render
 
 import android.graphics.Bitmap
-import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -10,10 +9,8 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.core.graphics.createBitmap
 import co.typie.editor.SurfaceConfiguration
@@ -26,11 +23,10 @@ import kotlinx.coroutines.flow.conflate
 private data class AndroidFrameBacking(val bitmap: Bitmap, val image: ImageBitmap)
 
 @Composable
-internal actual fun RenderCanvas(
-  modifier: Modifier,
+internal actual fun RenderFrameProducer(
   desiredPixelSize: IntSize,
   configuration: SurfaceConfiguration,
-  frame: ImageBitmap?,
+  displayedFrame: ImageBitmap?,
   retainedFrames: () -> List<ImageBitmap>,
   trigger: SharedFlow<FrameKey>,
   onAttach: (handle: Long) -> Unit,
@@ -42,7 +38,6 @@ internal actual fun RenderCanvas(
   onFailure: (Throwable) -> Unit,
 ) {
   var bufferHandle by remember { mutableLongStateOf(0L) }
-
   val currentOnAttach by rememberUpdatedState(onAttach)
   val currentOnDetach by rememberUpdatedState(onDetach)
   val currentOnResize by rememberUpdatedState(onResize)
@@ -50,7 +45,7 @@ internal actual fun RenderCanvas(
   val currentOnFrameUnavailable by rememberUpdatedState(onFrameUnavailable)
   val currentOnTargetUnavailable by rememberUpdatedState(onTargetUnavailable)
   val currentOnFailure by rememberUpdatedState(onFailure)
-  val currentFrame by rememberUpdatedState(frame)
+  val currentDisplayedFrame by rememberUpdatedState(displayedFrame)
   val currentRetainedFrames by rememberUpdatedState(retainedFrames)
 
   LaunchedEffect(desiredPixelSize, configuration) {
@@ -64,26 +59,12 @@ internal actual fun RenderCanvas(
         }
         bufferHandle = handle
         currentOnAttach(handle)
-        currentOnResize()
-      } else {
-        currentOnResize()
       }
-    } catch (e: CancellationException) {
-      throw e
-    } catch (e: Throwable) {
-      currentOnFailure(e)
-    }
-  }
-
-  Canvas(modifier = modifier) {
-    frame?.let {
-      drawImage(
-        image = it,
-        srcOffset = IntOffset.Zero,
-        srcSize = IntSize(it.width, it.height),
-        dstOffset = IntOffset.Zero,
-        dstSize = IntSize(it.width, it.height),
-      )
+      currentOnResize()
+    } catch (error: CancellationException) {
+      throw error
+    } catch (error: Throwable) {
+      currentOnFailure(error)
     }
   }
 
@@ -95,7 +76,6 @@ internal actual fun RenderCanvas(
     var cachedHeight = 0
     val cachedBackings = arrayOfNulls<AndroidFrameBacking>(4)
     var lastDeliveredFrame: ImageBitmap? = null
-
     trigger.conflate().collect { expected ->
       try {
         if (!RenderBuffer.beginRead(handle)) {
@@ -110,31 +90,24 @@ internal actual fun RenderCanvas(
         try {
           deliveredEditorRevision = RenderBuffer.getPinnedEditorRevision(handle)
           deliveredFrameKey = RenderBuffer.getPinnedFrameKey(handle)
-          val w = RenderBuffer.getPixelWidth(handle)
-          val h = RenderBuffer.getPixelHeight(handle)
-          val dataAddr = RenderBuffer.getDataPointer(handle)
-          if (w <= 0 || h <= 0 || dataAddr == 0L) {
+          val width = RenderBuffer.getPixelWidth(handle)
+          val height = RenderBuffer.getPixelHeight(handle)
+          val dataAddress = RenderBuffer.getDataPointer(handle)
+          if (width <= 0 || height <= 0 || dataAddress == 0L) {
             currentOnTargetUnavailable(expected)
             return@collect
           }
-
-          // ARGB_8888 stores bytes in R,G,B,A order in memory (despite the name) and is
-          // premultiplied by default. This matches CpuSink::read_back_rect_absolute's
-          // premultiplied RGBA8 output, so copyPixelsFromBuffer is a direct memcpy with
-          // no channel swap or un-premultiplication.
-          if (cachedWidth != w || cachedHeight != h) {
+          if (cachedWidth != width || cachedHeight != height) {
             cachedBackings.fill(null)
-            cachedWidth = w
-            cachedHeight = h
+            cachedWidth = width
+            cachedHeight = height
           }
-          // The published frame can remain visible while another page blocks publication.
-          // Never mutate it, or the latest frame handed to the parent, in place.
           val retained = currentRetainedFrames()
           val backingIndex =
             cachedBackings.indices.firstOrNull { index ->
               val candidate = cachedBackings[index]
               candidate == null ||
-                (candidate.image !== currentFrame &&
+                (candidate.image !== currentDisplayedFrame &&
                   candidate.image !== lastDeliveredFrame &&
                   retained.none { it === candidate.image })
             }
@@ -144,20 +117,19 @@ internal actual fun RenderCanvas(
               }
           val backing =
             cachedBackings[backingIndex]
-              ?: createBitmap(w, h).let { bitmap ->
-                AndroidFrameBacking(bitmap = bitmap, image = bitmap.asImageBitmap()).also {
+              ?: createBitmap(width, height).let { bitmap ->
+                AndroidFrameBacking(bitmap, bitmap.asImageBitmap()).also {
                   cachedBackings[backingIndex] = it
                 }
               }
           val byteCount = backing.bitmap.byteCount.toLong()
-          if (byteCount != w.toLong() * h * 4) {
+          if (byteCount != width.toLong() * height * 4) {
             currentOnTargetUnavailable(expected)
             return@collect
           }
-
-          backing.bitmap.copyPixelsFromBuffer(Pointer(dataAddr).getByteBuffer(0, byteCount))
+          backing.bitmap.copyPixelsFromBuffer(Pointer(dataAddress).getByteBuffer(0, byteCount))
           deliveredBacking = backing
-          deliveredSize = IntSize(w, h)
+          deliveredSize = IntSize(width, height)
         } finally {
           RenderBuffer.endRead(handle)
         }
@@ -165,13 +137,11 @@ internal actual fun RenderCanvas(
         val backing = deliveredBacking
         lastDeliveredFrame = backing.image
         currentOnFrame(backing.image, deliveredSize, deliveredEditorRevision, deliveredFrameKey)
-        if (expected.value != deliveredFrameKey) {
-          currentOnFrameUnavailable(expected)
-        }
-      } catch (e: CancellationException) {
-        throw e
-      } catch (e: Throwable) {
-        currentOnFailure(e)
+        if (expected.value != deliveredFrameKey) currentOnFrameUnavailable(expected)
+      } catch (error: CancellationException) {
+        throw error
+      } catch (error: Throwable) {
+        currentOnFailure(error)
       }
     }
   }
@@ -186,6 +156,9 @@ internal actual fun RenderCanvas(
     }
   }
 }
+
+internal actual fun skiaPixelAddress(pixelMap: Any): Long =
+  error("Skia pixel storage is unavailable on Android")
 
 internal actual fun readNativeInts(srcAddr: Long, count: Int): IntArray =
   Pointer(srcAddr).getIntArray(0, count)

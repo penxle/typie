@@ -56,6 +56,7 @@
   class={css({
     position: 'absolute',
     userSelect: 'none',
+    pointerEvents: 'auto',
     display: 'flex',
     justifyContent: 'center',
     visibility: reportedHeight === undefined ? 'hidden' : 'visible',

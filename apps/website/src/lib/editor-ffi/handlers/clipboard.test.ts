@@ -6,12 +6,25 @@ import type { AttachmentImportFailureHandler, AttachmentImportItem } from '../at
 type FakeEditor = {
   enqueue: ReturnType<typeof vi.fn<(message: Message) => void>>;
   scrollIntoView: ReturnType<typeof vi.fn>;
+  updateNow: ReturnType<typeof vi.fn<(build: () => void) => void>>;
 };
 
 const createContext = (importAccepted = true) => {
+  let updateActive = false;
+  const revealAdmissions: boolean[] = [];
   const editor: FakeEditor = {
     enqueue: vi.fn(),
-    scrollIntoView: vi.fn(),
+    scrollIntoView: vi.fn(() => {
+      revealAdmissions.push(updateActive);
+    }),
+    updateNow: vi.fn((build) => {
+      updateActive = true;
+      try {
+        build();
+      } finally {
+        updateActive = false;
+      }
+    }),
   };
   const importAtSelection = vi.fn<
     (items: readonly AttachmentImportItem[], options: { onFailure: AttachmentImportFailureHandler }) => boolean
@@ -23,6 +36,7 @@ const createContext = (importAccepted = true) => {
     },
     editor,
     importAtSelection,
+    revealAdmissions,
   };
 };
 
@@ -88,7 +102,7 @@ beforeEach(() => {
 describe('native paste arbitration', () => {
   it('prefers trim-non-empty HTML over ordered binary siblings and plain text', () => {
     const image = new File(['image'], 'image.png', { type: 'image/png' });
-    const { ctx, editor, importAtSelection } = createContext();
+    const { ctx, editor, importAtSelection, revealAdmissions } = createContext();
     const event = pasteEvent(
       clipboardData({
         html: '  <p>rich</p>  ',
@@ -107,12 +121,13 @@ describe('native paste arbitration', () => {
     expect(importAtSelection).not.toHaveBeenCalled();
     expect(event.preventDefault).toHaveBeenCalledOnce();
     expect(editor.scrollIntoView).toHaveBeenCalledOnce();
+    expect(revealAdmissions).toEqual([true]);
   });
 
   it('preserves DataTransferItem order and classifies SVG as image', () => {
     const svg = new File(['<svg/>'], 'diagram.svg', { type: 'image/svg+xml' });
     const pdf = new File(['pdf'], 'document.pdf', { type: 'application/pdf' });
-    const { ctx, importAtSelection } = createContext();
+    const { ctx, importAtSelection, revealAdmissions } = createContext();
     const onFailure = vi.fn();
     const event = pasteEvent(
       clipboardData({
@@ -132,6 +147,7 @@ describe('native paste arbitration', () => {
       { onFailure },
     );
     expect(event.preventDefault).toHaveBeenCalledOnce();
+    expect(revealAdmissions).toEqual([false]);
   });
 
   it('falls back to the complete clipboardData.files list when any file item is unavailable', () => {

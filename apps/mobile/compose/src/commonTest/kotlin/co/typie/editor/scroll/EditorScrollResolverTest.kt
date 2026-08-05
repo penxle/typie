@@ -72,6 +72,36 @@ class EditorScrollResolverTest {
   }
 
   @Test
+  fun `resolver accepts pure content origin before editor bounds are mounted`() {
+    val frame =
+      frame(
+          state =
+            state(
+              cursor =
+                CursorMetrics(
+                  pageIdx = 1,
+                  caret = FfiRect(0f, 100f, 0f, 20f),
+                  line = FfiRect(0f, 100f, 0f, 20f),
+                ),
+              pageSizes =
+                listOf(PageSize(width = 300f, height = 500f), PageSize(width = 300f, height = 500f)),
+            ),
+          layoutSpec = paginatedLayout(),
+        )
+        .copy(editorBounds = EditorBoundsInContainer())
+
+    val intent =
+      resolveEditorScrollIntent(
+        frame = frame,
+        target = EditorBringIntoViewTarget.CurrentSelectionHead,
+        currentScroll = 200f,
+        contentOriginY = 0f,
+      )
+
+    assertScrollTo(intent, 404f)
+  }
+
+  @Test
   fun `resolver ignores stale measured page offsets and uses layout-spec page geometry`() {
     val frame =
       frame(
@@ -188,7 +218,7 @@ class EditorScrollResolverTest {
         currentScroll = 200f,
       )
 
-    assertEquals(EditorScrollIntentResult.ConsumedWithoutScroll, intent)
+    assertEquals(EditorScrollIntentResult.NoScroll, intent)
   }
 
   @Test
