@@ -28,6 +28,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerInputChange
@@ -37,7 +38,6 @@ import androidx.compose.ui.input.pointer.positionChangeIgnoreConsumed
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.input.pointer.util.addPointerInputChange
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -292,7 +292,6 @@ fun NavigationStack(
   val backGestureZoneWidth by rememberUpdatedState(systemBackGestureZoneWidth())
   val popPointerVelocity = remember { NavigationPopPointerVelocity() }
   var predictiveBackActive by remember { mutableStateOf(false) }
-  val focusManager = LocalFocusManager.current
 
   fun canStartPopGesture(): Boolean =
     foregroundInteractive &&
@@ -550,7 +549,6 @@ fun NavigationStack(
       predictiveBackActive = false
       popNestedScroll.cancel()
       cancelPopDrag()
-      focusManager.clearFocus(force = true)
     }
   }
 
@@ -779,6 +777,7 @@ fun NavigationStack(
     Box(
       modifier
         .fillMaxSize()
+        .focusProperties { canFocus = foregroundInteractive }
         .onSizeChanged {
           containerWidth = it.width.toFloat()
           containerHeight = it.height.toFloat()

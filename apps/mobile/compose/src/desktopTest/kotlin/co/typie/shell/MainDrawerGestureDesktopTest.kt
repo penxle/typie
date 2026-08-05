@@ -1,7 +1,6 @@
 package co.typie.shell
 
 import androidx.compose.foundation.gestures.DraggableAnchors
-import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
@@ -192,15 +191,15 @@ class MainDrawerGestureDesktopTest {
   @Test
   fun `outward drag on the home main pager opens the drawer`() = runComposeUiTest {
     lateinit var drawer: Drawer
-    lateinit var pagerState: PagerState
+    lateinit var mainTabState: MainTabState
 
     setContent {
       drawer = rememberTestDrawer()
-      pagerState = rememberPagerState(pageCount = { Tab.entries.size })
+      mainTabState = rememberMainTabState()
       DrawerSwipeHost(drawer) {
         MainTabPager(
-          state = pagerState,
-          userScrollEnabled = true,
+          state = mainTabState,
+          gestureAdmissionAllowed = true,
           modifier = Modifier.fillMaxSize().testTag(PagerTag),
         ) {
           Box(Modifier.fillMaxSize())
@@ -214,32 +213,26 @@ class MainDrawerGestureDesktopTest {
       repeat(15) { moveBy(Offset(x = 12f, y = 0f), delayMillis = 16L) }
       up()
     }
-    waitUntil { !pagerState.isScrollInProgress && !drawer.state.isAnimationRunning }
+    waitUntil { !mainTabState.pagerState.isScrollInProgress && !drawer.state.isAnimationRunning }
 
     assertEquals(DrawerAnchor.Open, drawer.state.currentValue)
-    assertEquals(Tab.Home.ordinal, pagerState.settledPage)
+    assertEquals(Tab.Home, mainTabState.settledTab)
   }
 
   @Test
   fun `home to space drag settles after the home drawer becomes unavailable`() = runComposeUiTest {
     lateinit var drawer: Drawer
-    lateinit var pagerState: PagerState
+    lateinit var mainTabState: MainTabState
 
     setContent {
       drawer = rememberTestDrawer()
-      pagerState = rememberPagerState(pageCount = { Tab.entries.size })
-      val isDirectDrag by pagerState.interactionSource.collectIsDraggedAsState()
-      val settledTab = Tab.entries[pagerState.settledPage]
-      val chromeTab =
-        resolveMainTabChrome(
-          settledTab = settledTab,
-          targetTab = Tab.entries[pagerState.targetPage],
-          isDirectDrag = isDirectDrag,
-        )
+      mainTabState = rememberMainTabState()
+      val settledTab = mainTabState.settledTab
+      val chromeTab = mainTabChromeTab(settledTab, mainTabState.motion)
       DrawerSwipeHost(drawer = drawer, enabled = settledTab == Tab.Home && chromeTab == Tab.Home) {
         MainTabPager(
-          state = pagerState,
-          userScrollEnabled = true,
+          state = mainTabState,
+          gestureAdmissionAllowed = true,
           modifier = Modifier.fillMaxSize().testTag(PagerTag),
         ) {
           Box(Modifier.fillMaxSize())
@@ -253,25 +246,25 @@ class MainDrawerGestureDesktopTest {
       repeat(10) { moveBy(Offset(x = -20f, y = 0f), delayMillis = 16L) }
       up()
     }
-    waitUntil(timeoutMillis = 5_000L) { !pagerState.isScrollInProgress }
+    waitUntil(timeoutMillis = 5_000L) { mainTabState.motion == null }
 
-    assertEquals(Tab.Space.ordinal, pagerState.settledPage)
-    assertEquals(0f, pagerState.currentPageOffsetFraction, absoluteTolerance = 0.001f)
+    assertEquals(Tab.Space, mainTabState.settledTab)
+    assertEquals(0f, mainTabState.pagerState.currentPageOffsetFraction, absoluteTolerance = 0.001f)
   }
 
   @Test
   fun `claimed drawer drag never hands the reversed sequence to the main pager`() =
     runComposeUiTest {
       lateinit var drawer: Drawer
-      lateinit var pagerState: PagerState
+      lateinit var mainTabState: MainTabState
 
       setContent {
         drawer = rememberTestDrawer()
-        pagerState = rememberPagerState(pageCount = { Tab.entries.size })
+        mainTabState = rememberMainTabState()
         DrawerSwipeHost(drawer) {
           MainTabPager(
-            state = pagerState,
-            userScrollEnabled = true,
+            state = mainTabState,
+            gestureAdmissionAllowed = true,
             modifier = Modifier.fillMaxSize().testTag(PagerTag),
           ) {
             Box(Modifier.fillMaxSize())
@@ -286,24 +279,24 @@ class MainDrawerGestureDesktopTest {
         repeat(20) { moveBy(Offset(x = -12f, y = 0f), delayMillis = 16L) }
         up()
       }
-      waitUntil { !pagerState.isScrollInProgress && !drawer.state.isAnimationRunning }
+      waitUntil { !mainTabState.pagerState.isScrollInProgress && !drawer.state.isAnimationRunning }
 
       assertEquals(DrawerAnchor.Closed, drawer.state.currentValue)
-      assertEquals(Tab.Home.ordinal, pagerState.settledPage)
+      assertEquals(Tab.Home, mainTabState.settledTab)
     }
 
   @Test
   fun `mouse outward drag on the home main pager never opens the drawer`() = runComposeUiTest {
     lateinit var drawer: Drawer
-    lateinit var pagerState: PagerState
+    lateinit var mainTabState: MainTabState
 
     setContent {
       drawer = rememberTestDrawer()
-      pagerState = rememberPagerState(pageCount = { Tab.entries.size })
+      mainTabState = rememberMainTabState()
       DrawerSwipeHost(drawer) {
         MainTabPager(
-          state = pagerState,
-          userScrollEnabled = true,
+          state = mainTabState,
+          gestureAdmissionAllowed = true,
           modifier = Modifier.fillMaxSize().testTag(PagerTag),
         ) {
           Box(Modifier.fillMaxSize())
@@ -318,10 +311,10 @@ class MainDrawerGestureDesktopTest {
       moveBy(Offset(x = 180f, y = 0f), delayMillis = 16L)
       release()
     }
-    waitUntil { !pagerState.isScrollInProgress && !drawer.state.isAnimationRunning }
+    waitUntil { !mainTabState.pagerState.isScrollInProgress && !drawer.state.isAnimationRunning }
 
     assertEquals(DrawerAnchor.Closed, drawer.state.currentValue)
-    assertEquals(Tab.Home.ordinal, pagerState.settledPage)
+    assertEquals(Tab.Home, mainTabState.settledTab)
   }
 
   @Test

@@ -34,16 +34,29 @@ class MainTabPagerTest {
   fun `chrome stays settled during direct drag and follows committed target while settling`() {
     assertEquals(
       Tab.Home,
-      resolveMainTabChrome(settledTab = Tab.Home, targetTab = Tab.Space, isDirectDrag = true),
+      mainTabChromeTab(
+        settledTab = Tab.Home,
+        motion =
+          MainTabMotion(
+            origin = Tab.Home,
+            target = Tab.Space,
+            source = MainTabMotionSource.DirectDrag,
+          ),
+      ),
     )
     assertEquals(
       Tab.Space,
-      resolveMainTabChrome(settledTab = Tab.Home, targetTab = Tab.Space, isDirectDrag = false),
+      mainTabChromeTab(
+        settledTab = Tab.Home,
+        motion =
+          MainTabMotion(
+            origin = Tab.Home,
+            target = Tab.Space,
+            source = MainTabMotionSource.Committed,
+          ),
+      ),
     )
-    assertEquals(
-      Tab.Home,
-      resolveMainTabChrome(settledTab = Tab.Home, targetTab = Tab.Home, isDirectDrag = false),
-    )
+    assertEquals(Tab.Home, mainTabChromeTab(settledTab = Tab.Home, motion = null))
   }
 
   @Test
@@ -52,7 +65,7 @@ class MainTabPagerTest {
       canAdmitMainTabPagerGesture(
         navigatorCanPop = false,
         navigatorIsTransitioning = false,
-        pagerAtRest = true,
+        motion = null,
         drawerAtRest = true,
       )
     )
@@ -60,7 +73,7 @@ class MainTabPagerTest {
       canAdmitMainTabPagerGesture(
         navigatorCanPop = true,
         navigatorIsTransitioning = false,
-        pagerAtRest = true,
+        motion = null,
         drawerAtRest = true,
       )
     )
@@ -68,7 +81,7 @@ class MainTabPagerTest {
       canAdmitMainTabPagerGesture(
         navigatorCanPop = false,
         navigatorIsTransitioning = true,
-        pagerAtRest = true,
+        motion = null,
         drawerAtRest = true,
       )
     )
@@ -76,7 +89,12 @@ class MainTabPagerTest {
       canAdmitMainTabPagerGesture(
         navigatorCanPop = false,
         navigatorIsTransitioning = false,
-        pagerAtRest = false,
+        motion =
+          MainTabMotion(
+            origin = Tab.Home,
+            target = Tab.Space,
+            source = MainTabMotionSource.Committed,
+          ),
         drawerAtRest = true,
       )
     )
@@ -84,7 +102,7 @@ class MainTabPagerTest {
       canAdmitMainTabPagerGesture(
         navigatorCanPop = false,
         navigatorIsTransitioning = false,
-        pagerAtRest = true,
+        motion = null,
         drawerAtRest = false,
       )
     )

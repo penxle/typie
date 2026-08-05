@@ -1,9 +1,7 @@
 package co.typie.shell
 
-import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.pager.PagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -11,13 +9,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import co.typie.domain.note.NoteSync
 import co.typie.domain.note.NoteUpdate
@@ -39,37 +33,26 @@ import co.typie.ui.component.drawer.DrawerAnchor
 import co.typie.ui.component.drawer.LocalDrawer
 import co.typie.ui.component.topbar.TopBarState
 import kotlin.math.abs
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.launch
 
 @Composable
 fun MainShell(content: @Composable (Route) -> Unit) {
   val navState =
     rememberSaveable(saver = MainNavigationStateSaver) { MainNavigationState.initial() }
   val navigators = navState.navigators
-  val pagerState = remember {
-    PagerState(currentPage = navState.currentTab.ordinal) { Tab.entries.size }
-  }
-  val isDirectDrag by pagerState.interactionSource.collectIsDraggedAsState()
-  val settledTab = Tab.entries[pagerState.settledPage]
-  val targetTab = Tab.entries[pagerState.targetPage]
-  val chromeTab =
-    resolveMainTabChrome(
-      settledTab = settledTab,
-      targetTab = targetTab,
-      isDirectDrag = isDirectDrag,
-    )
+  val mainTabState = rememberMainTabState(initialTab = navState.currentTab)
+  val settledTab = mainTabState.settledTab
+  val motion = mainTabState.motion
+  val chromeTab = mainTabChromeTab(settledTab = settledTab, motion = motion)
   val chromeNavigator = navigators[chromeTab]!!
   val settledNavigator = navigators[settledTab]!!
+  val motionOwnerNavigator = navigators[motion?.origin ?: settledTab]!!
 
   val topBarState = remember { TopBarState() }
   val bottomBarState = remember { BottomBarState() }
   val backgroundTopBarStates = remember { Tab.entries.associateWith { TopBarState() } }
   val backgroundBottomBarStates = remember { Tab.entries.associateWith { BottomBarState() } }
   val drawer = remember { Drawer() }
-  val scope = rememberCoroutineScope()
 
   val drawerAtRest by
     remember(drawer) {
@@ -84,15 +67,13 @@ fun MainShell(content: @Composable (Route) -> Unit) {
           !drawer.isProgrammaticAnimating
       }
     }
-  val pagerAtRest = !pagerState.isScrollInProgress
   val mayAdmitNewPagerGesture =
     canAdmitMainTabPagerGesture(
       navigatorCanPop = settledNavigator.canPop,
       navigatorIsTransitioning = settledNavigator.isTransitioning,
-      pagerAtRest = pagerAtRest,
+      motion = motion,
       drawerAtRest = drawerAtRest,
     )
-  val pagerUserScrollEnabled = mayAdmitNewPagerGesture || pagerState.isScrollInProgress
   val drawerSwipeEnabled =
     settledTab == Tab.Home &&
       chromeTab == Tab.Home &&
@@ -105,39 +86,17 @@ fun MainShell(content: @Composable (Route) -> Unit) {
       canStart = { drawerAtRest },
     )
 
-  var tabSelectionJob by remember { mutableStateOf<Job?>(null) }
-  val latestIsDirectDrag by rememberUpdatedState(isDirectDrag)
   val latestDrawerAtRest by rememberUpdatedState(drawerAtRest)
   val selectTab =
-    remember(pagerState, drawer, scope) {
-      { tab: Tab ->
-        if (!latestIsDirectDrag) {
-          tabSelectionJob?.cancel()
-          tabSelectionJob = scope.launch {
-            if (!latestDrawerAtRest) drawer.close()
-            pagerState.animateScrollToPage(tab.ordinal)
-          }
-        }
-      }
+    remember(mainTabState, drawer) {
+      { tab: Tab -> mainTabState.selectTab(tab) { if (!latestDrawerAtRest) drawer.close() } }
     }
 
   val siteId = Preference.siteId
 
   DisposableEffect(Unit) { onDispose { navigators.values.forEach { it.clear() } } }
 
-  LaunchedEffect(pagerState) {
-    snapshotFlow { pagerState.settledPage }
-      .distinctUntilChanged()
-      .collect { page -> navState.currentTab = Tab.entries[page] }
-  }
-
   LaunchedEffect(chromeTab) { if (chromeTab != Tab.Home && !drawerAtRest) drawer.close() }
-
-  MainTabPagerNavigationGuard(
-    state = pagerState,
-    navigationLocked = settledNavigator.canPop || settledNavigator.isTransitioning,
-    onInterrupt = { tabSelectionJob?.cancel() },
-  )
 
   LaunchedEffect(siteId) {
     if (siteId == null) {
@@ -170,8 +129,8 @@ fun MainShell(content: @Composable (Route) -> Unit) {
     LocalTabState provides
       TabState(
         currentTab = chromeTab,
-        bodyPosition = pagerState.currentPage + pagerState.currentPageOffsetFraction,
-        isBodyMoving = pagerState.isScrollInProgress,
+        bodyPosition = mainTabState.bodyPosition,
+        isBodyMoving = motion != null,
         onSelectTab = selectTab,
       ),
     LocalDrawer provides drawer,
@@ -185,11 +144,13 @@ fun MainShell(content: @Composable (Route) -> Unit) {
         modifier = drawerSwipeModifier,
       ) {
         MainTabPager(
-          state = pagerState,
+          state = mainTabState,
           modifier = Modifier.fillMaxSize(),
-          userScrollEnabled = pagerUserScrollEnabled,
+          gestureAdmissionAllowed = mayAdmitNewPagerGesture,
+          navigationLocked = motionOwnerNavigator.canPop || motionOwnerNavigator.isTransitioning,
+          onSettledTab = { tab -> navState.currentTab = tab },
         ) { tab ->
-          val foregroundInteractive = tab == settledTab && pagerAtRest && drawerAtRest
+          val foregroundInteractive = tab == settledTab && motion == null && drawerAtRest
           NavigationStack(
             navigator = navigators[tab]!!,
             topBarState =
@@ -201,7 +162,7 @@ fun MainShell(content: @Composable (Route) -> Unit) {
           )
         }
       }
-      if (pagerState.isScrollInProgress) {
+      if (motion != null) {
         Box(Modifier.fillMaxSize().pointerIgnore())
       }
       MainDrawerOverlay(drawer)
@@ -210,10 +171,7 @@ fun MainShell(content: @Composable (Route) -> Unit) {
     }
   }
 
-  PlatformBackHandler(enabled = pagerState.isScrollInProgress) {
-    tabSelectionJob?.cancel()
-    scope.launch { pagerState.animateScrollToPage(pagerState.settledPage) }
-  }
+  PlatformBackHandler(enabled = motion != null) { mainTabState.cancelToOrigin() }
 }
 
 enum class Tab(val route: Route) {
