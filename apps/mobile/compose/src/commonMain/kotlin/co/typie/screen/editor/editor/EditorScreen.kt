@@ -333,11 +333,11 @@ fun EditorScreen(entityId: String) {
       assetHydrator.onQueryRefresh(generation = assetQueryGeneration, assets = assets)
     }
   }
-  LaunchedEffect(runtime.error) {
-    runtime.error ?: return@LaunchedEffect
+  LaunchedEffect(runtime.failure) {
+    runtime.failure ?: return@LaunchedEffect
     dialog.error(nav) {
       val failedLoad = editorLoadState
-      runtime.clearError()
+      runtime.clearFailure()
       editorLoadState = null
       if (syncActiveLoadState === failedLoad) syncActiveLoadState = null
       pendingChangesets.clear()
@@ -740,7 +740,7 @@ fun EditorScreen(entityId: String) {
         } catch (e: Throwable) {
           if (reloadRequest === request && runtime.session === request.session) {
             finishReloadRequest(request)
-            runtime.reportError(request.session, e)
+            runtime.fail(request.session, e)
           }
         }
       }
@@ -906,7 +906,7 @@ fun EditorScreen(entityId: String) {
                   pending = pending,
                   parentScope = scope,
                   onEditorError = { _, error ->
-                    scope.launch { if (editorLoadState === nextLoad) runtime.reportError(error) }
+                    scope.launch { if (editorLoadState === nextLoad) runtime.fail(error) }
                   },
                 )
 
@@ -924,7 +924,7 @@ fun EditorScreen(entityId: String) {
             } catch (e: CancellationException) {
               throw e
             } catch (e: Throwable) {
-              runtime.reportError(e)
+              runtime.fail(e)
             } finally {
               if (!installed) {
                 nextLoad?.close() ?: runCatching { outcome.handle.abort() }
@@ -933,7 +933,7 @@ fun EditorScreen(entityId: String) {
           }
           is DocumentGraphLoaderEvent.Failed -> {
             if (editorLoadState != null) {
-              runtime.reportError(SyncWsException(outcome.code, permanent = true))
+              runtime.fail(SyncWsException(outcome.code, permanent = true))
             } else {
               loaderFailedCode = outcome.code
             }
@@ -1617,10 +1617,7 @@ fun EditorScreen(entityId: String) {
     LaunchedEffect(editor, publishedRevision, editorGeometryValid) {
       val attachedEditor = editor ?: return@LaunchedEffect
       if (editorGeometryInvalid && runtime.editor === attachedEditor) {
-        runtime.reportError(
-          attachedEditor,
-          IllegalStateException("Attached editor has invalid geometry"),
-        )
+        runtime.fail(attachedEditor, IllegalStateException("Attached editor has invalid geometry"))
       }
     }
     LaunchedEffect(editor, editorReady) {
@@ -1759,7 +1756,7 @@ fun EditorScreen(entityId: String) {
           scaleFactor = density.toDouble() * zoomController.renderZoom.toDouble(),
           onDeactivate = bringIntoViewRequests::cancel,
           onPublicationFailure = bringIntoViewRequests::discardFailedForVersion,
-          onFailure = { error -> runtime.reportError(activeEditor, error) },
+          onFailure = { error -> runtime.fail(activeEditor, error) },
         )
       }
       EditorScreenLayout(
@@ -1854,7 +1851,7 @@ fun EditorScreen(entityId: String) {
           }
         },
         viewportSurfaceOverlay = {
-          if (!editorReady && runtime.error == null) {
+          if (!editorReady && runtime.failure == null) {
             EditorLoadingSkeleton(
               layoutSpec = layoutSpec,
               topInset = topInset,

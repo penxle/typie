@@ -29,7 +29,7 @@ class EditorRuntime(private val uiScope: CoroutineScope) {
   }
 
   private var attachment by mutableStateOf<Attachment?>(null)
-  private var failure by mutableStateOf<Failure?>(null)
+  private var failureState by mutableStateOf<Failure?>(null)
 
   val editor: Editor?
     get() = attachment?.editor
@@ -37,19 +37,19 @@ class EditorRuntime(private val uiScope: CoroutineScope) {
   internal val session: DocumentEditingSession?
     get() = (attachment as? DocumentSession)?.session
 
-  val error: Throwable?
-    get() = failure?.error
+  val failure: Throwable?
+    get() = failureState?.error
 
   // The editor is already disposed; retain it only to keep its last committed surfaces composed
-  // until the error is cleared.
+  // until the failure is cleared.
   internal val failedEditor: Editor?
-    get() = failure?.editor
+    get() = failureState?.editor
 
   val canCreateEditor: Boolean
-    get() = editor == null && error == null
+    get() = editor == null && failure == null
 
   fun attach(editor: Editor) {
-    if (error != null) {
+    if (failure != null) {
       editor.dispose()
       return
     }
@@ -61,7 +61,7 @@ class EditorRuntime(private val uiScope: CoroutineScope) {
   }
 
   internal fun attach(session: DocumentEditingSession) {
-    if (error != null) {
+    if (failure != null) {
       session.stop()
       session.editor.dispose()
       return
@@ -93,14 +93,14 @@ class EditorRuntime(private val uiScope: CoroutineScope) {
     dispose(current)
   }
 
-  fun reportError(error: Throwable) {
+  fun fail(error: Throwable) {
     if (error is CancellationException) {
       throw error
     }
-    uiScope.launch { fail(error) }
+    uiScope.launch { setFailed(error) }
   }
 
-  fun reportError(editor: Editor, error: Throwable) {
+  fun fail(editor: Editor, error: Throwable) {
     if (error is CancellationException) {
       throw error
     }
@@ -108,11 +108,11 @@ class EditorRuntime(private val uiScope: CoroutineScope) {
       if (this@EditorRuntime.editor !== editor) {
         return@launch
       }
-      fail(error)
+      setFailed(error)
     }
   }
 
-  internal fun reportError(session: DocumentEditingSession, error: Throwable) {
+  internal fun fail(session: DocumentEditingSession, error: Throwable) {
     if (error is CancellationException) {
       throw error
     }
@@ -120,19 +120,19 @@ class EditorRuntime(private val uiScope: CoroutineScope) {
       if (this@EditorRuntime.session !== session) {
         return@launch
       }
-      fail(error)
+      setFailed(error)
     }
   }
 
-  private fun fail(error: Throwable) {
-    if (this.error != null) {
+  private fun setFailed(error: Throwable) {
+    if (failure != null) {
       return
     }
 
     val detail = error.cause?.let { "$error; cause=$it" } ?: error.toString()
     Logger.e(error) { "Editor failed: $detail" }
     Sentry.captureException(error)
-    failure = Failure(error = error, editor = editor)
+    failureState = Failure(error = error, editor = editor)
     clear()
   }
 
@@ -141,8 +141,8 @@ class EditorRuntime(private val uiScope: CoroutineScope) {
     attachment?.editor?.dispose()
   }
 
-  fun clearError() {
-    failure = null
+  fun clearFailure() {
+    failureState = null
   }
 
   fun focus(): Boolean = editor?.focus() == true

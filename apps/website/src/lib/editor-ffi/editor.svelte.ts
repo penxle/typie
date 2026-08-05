@@ -231,7 +231,6 @@ export class EditorContext {
   attachmentDropTargetNodeId = $state<string | null>(null);
   findReplaceOpen = $state(false);
   linkEditorOpen = $state(false);
-  reportEditorFailure: ((error: unknown) => void) | undefined;
 }
 
 const [getEditorContext, setEditorContext] = createContext<EditorContext>();
@@ -423,7 +422,7 @@ export class Editor {
       const result = this.#invokeCore((core) => core.tick());
       if (result) publicEvents = this.#installTick(result);
     } catch (err) {
-      this.#fail(err);
+      this.fail(err);
     } finally {
       this.#transitionActive = false;
     }
@@ -519,7 +518,7 @@ export class Editor {
     try {
       return operation(this.#wasm);
     } catch (err) {
-      if (!this.#creationActive) this.#fail(err);
+      if (!this.#creationActive) this.fail(err);
       throw err;
     }
   }
@@ -824,36 +823,6 @@ export class Editor {
       waiter.reject(new DOMException('The editor surface target must be replaced.', 'OperationError'));
     }
     this.#publicationWaiters.clear();
-  }
-
-  #fail(error: unknown): void {
-    if (this.terminal) return;
-    const reason = error ?? new Error('Editor operation failed');
-    this.#failure = reason;
-    this.#failed = true;
-    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- immutable empty snapshot
-    this.surfacePageRequirements = new Set();
-    this.#stopRuntime();
-    unregister(this);
-    for (const receipt of this.#receipts.values()) {
-      try {
-        receipt.request.discard();
-        receipt.reject(reason);
-      } catch {
-        // Failure cleanup must continue even if an internal receipt hook throws.
-      }
-    }
-    this.#receipts.clear();
-    for (const waiter of this.#appliedWaiters) waiter.reject(reason);
-    this.#appliedWaiters.clear();
-    for (const waiter of this.#publicationWaiters) {
-      if (waiter.signal && waiter.onAbort) waiter.signal.removeEventListener('abort', waiter.onAbort);
-      waiter.reject(reason);
-    }
-    this.#publicationWaiters.clear();
-    this.#listeners.clear();
-    this.#contextMenuContributors.clear();
-    this.#discardCore();
   }
 
   #applyViewport(viewport: Viewport): void {
@@ -1729,7 +1698,7 @@ export class Editor {
       if (!update) throw new Error(`tickThrough omitted request outcome ${requestId.value}`);
     } catch (err) {
       request?.discard();
-      if (admitted && !this.#creationActive) this.#fail(err);
+      if (admitted && !this.#creationActive) this.fail(err);
       throw err;
     } finally {
       this.#transitionActive = false;
@@ -1973,8 +1942,38 @@ export class Editor {
     });
   }
 
+  fail(error: unknown): void {
+    if (this.terminal) return;
+    const reason = error ?? new Error('Editor operation failed');
+    this.#failure = reason;
+    this.#failed = true;
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- immutable empty snapshot
+    this.surfacePageRequirements = new Set();
+    this.#stopRuntime();
+    unregister(this);
+    for (const receipt of this.#receipts.values()) {
+      try {
+        receipt.request.discard();
+        receipt.reject(reason);
+      } catch {
+        // Failure cleanup must continue even if an internal receipt hook throws.
+      }
+    }
+    this.#receipts.clear();
+    for (const waiter of this.#appliedWaiters) waiter.reject(reason);
+    this.#appliedWaiters.clear();
+    for (const waiter of this.#publicationWaiters) {
+      if (waiter.signal && waiter.onAbort) waiter.signal.removeEventListener('abort', waiter.onAbort);
+      waiter.reject(reason);
+    }
+    this.#publicationWaiters.clear();
+    this.#listeners.clear();
+    this.#contextMenuContributors.clear();
+    this.#discardCore();
+  }
+
   surfaceReplacementFailed(page: number): void {
-    this.#fail(new Error(`Editor surface replacement failed for page ${page}`));
+    this.fail(new Error(`Editor surface replacement failed for page ${page}`));
   }
 
   publishedSurfaceCanvas(page: number): HTMLCanvasElement | undefined {

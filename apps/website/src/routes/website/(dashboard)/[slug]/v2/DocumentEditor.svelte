@@ -339,7 +339,7 @@
   let pendingRemoteEvents: RemoteChangesetEvent[] = [];
   let remoteChangesetPipeline: RemoteChangesetPipeline | undefined;
 
-  const reportEditorFailure = (error: unknown) => {
+  const failLiveEditor = (error: unknown) => {
     if (editorFailureReported) return;
     editorFailureReported = true;
     liveEditorFailed = true;
@@ -348,7 +348,15 @@
     pusher?.stop();
     onEditorFailed?.(error);
   };
-  ctx.reportEditorFailure = reportEditorFailure;
+
+  const handleEditorBoundaryError = (editor: Editor | undefined, error: unknown) => {
+    console.error(error);
+    if (editor) {
+      editor.fail(error);
+    } else {
+      failLiveEditor(error);
+    }
+  };
 
   const retryLiveEditor = () => {
     onEditorRetry?.();
@@ -358,7 +366,7 @@
     if (editor.destroyed) return;
     const failure = editor.failure;
     if (failure !== undefined) {
-      reportEditorFailure(failure);
+      failLiveEditor(failure);
       return;
     }
     if (!destroyed) console.error(error);
@@ -366,7 +374,7 @@
 
   $effect(() => {
     const failure = ctx.liveEditor?.failure;
-    if (failure !== undefined) reportEditorFailure(failure);
+    if (failure !== undefined) failLiveEditor(failure);
   });
 
   let resyncPrep: Promise<void> = Promise.resolve();
@@ -434,7 +442,7 @@
               createdEditor = liveEditor;
             } catch (err) {
               store.destroy();
-              reportEditorFailure(err);
+              failLiveEditor(err);
               return;
             }
 
@@ -475,7 +483,7 @@
             if (createdEditor?.failure === undefined) {
               console.error(err);
             } else {
-              reportEditorFailure(createdEditor.failure);
+              failLiveEditor(createdEditor.failure);
             }
             createdEditor?.destroy();
             createdStore?.destroy();
@@ -956,7 +964,6 @@
     const currentEditor = ctx.editor;
     const currentLiveEditor = ctx.liveEditor;
     const currentEditorStore = editorStore;
-    if (ctx.reportEditorFailure === reportEditorFailure) ctx.reportEditorFailure = undefined;
     channelUnsubscribe?.();
     channelUnsubscribe = null;
     pusher?.stop();
@@ -1266,114 +1273,117 @@
                   inert={editorSurfaceFailed}
                 >
                   {#key ctx.editor}
-                    <EditorComponent active={focused} document$key={document} onReady={handleEditorReady}>
-                      {#snippet header()}
-                        <div
-                          class={flex({
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            paddingTop: '60px',
-                            width: 'full',
-                            ...(ctx.editor?.rootAttrs?.layout_mode.type === 'paginated' && { paddingBottom: '20px' }),
-                          })}
-                        >
-                          <div class={flex({ flexDirection: 'column', flexShrink: '0', width: 'full' })}>
-                            <textarea
-                              bind:this={titleEl}
-                              class={css({ width: 'full', fontSize: '28px', fontWeight: 'bold', resize: 'none' })}
-                              autocapitalize="off"
-                              autocomplete="off"
-                              maxlength={100}
-                              onblur={() => {
-                                titleFocused = false;
-                                flushTitleUpdate();
-                              }}
-                              onfocus={() => {
-                                clearBodySelectionForHeaderFocus();
-                                titleFocused = true;
-                                if (documentId) {
-                                  selectionsStore.current = {
-                                    ...selectionsStore.current,
-                                    [documentId]: { type: 'element', element: 'title', timestamp: dayjs().valueOf() },
-                                  };
-                                }
-                              }}
-                              oninput={handleTitleChanged}
-                              onkeydown={(e) => {
-                                if (e.isComposing) {
-                                  return;
-                                }
+                    {@const editor = ctx.editor}
+                    <svelte:boundary onerror={(error) => handleEditorBoundaryError(editor, error)}>
+                      <EditorComponent active={focused} document$key={document} onReady={handleEditorReady}>
+                        {#snippet header()}
+                          <div
+                            class={flex({
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              paddingTop: '60px',
+                              width: 'full',
+                              ...(ctx.editor?.rootAttrs?.layout_mode.type === 'paginated' && { paddingBottom: '20px' }),
+                            })}
+                          >
+                            <div class={flex({ flexDirection: 'column', flexShrink: '0', width: 'full' })}>
+                              <textarea
+                                bind:this={titleEl}
+                                class={css({ width: 'full', fontSize: '28px', fontWeight: 'bold', resize: 'none' })}
+                                autocapitalize="off"
+                                autocomplete="off"
+                                maxlength={100}
+                                onblur={() => {
+                                  titleFocused = false;
+                                  flushTitleUpdate();
+                                }}
+                                onfocus={() => {
+                                  clearBodySelectionForHeaderFocus();
+                                  titleFocused = true;
+                                  if (documentId) {
+                                    selectionsStore.current = {
+                                      ...selectionsStore.current,
+                                      [documentId]: { type: 'element', element: 'title', timestamp: dayjs().valueOf() },
+                                    };
+                                  }
+                                }}
+                                oninput={handleTitleChanged}
+                                onkeydown={(e) => {
+                                  if (e.isComposing) {
+                                    return;
+                                  }
 
-                                if (e.key === 'Enter') {
-                                  e.preventDefault();
-                                  subtitleEl?.focus();
-                                }
-                              }}
-                              placeholder="제목을 입력하세요"
-                              rows={1}
-                              spellcheck="false"
-                              bind:value={localTitle}
-                              use:autosize
-                              use:headerVerticalNavigation={{ down: () => subtitleEl?.focus() }}></textarea>
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    subtitleEl?.focus();
+                                  }
+                                }}
+                                placeholder="제목을 입력하세요"
+                                rows={1}
+                                spellcheck="false"
+                                bind:value={localTitle}
+                                use:autosize
+                                use:headerVerticalNavigation={{ down: () => subtitleEl?.focus() }}></textarea>
 
-                            <textarea
-                              bind:this={subtitleEl}
-                              class={css({
-                                marginTop: '4px',
-                                width: 'full',
-                                fontSize: '16px',
-                                fontWeight: 'medium',
-                                overflow: 'hidden',
-                                resize: 'none',
-                              })}
-                              autocapitalize="off"
-                              autocomplete="off"
-                              maxlength={100}
-                              onblur={() => {
-                                subtitleFocused = false;
-                                flushSubtitleUpdate();
-                              }}
-                              onfocus={() => {
-                                clearBodySelectionForHeaderFocus();
-                                subtitleFocused = true;
-                                if (documentId) {
-                                  selectionsStore.current = {
-                                    ...selectionsStore.current,
-                                    [documentId]: { type: 'element', element: 'subtitle', timestamp: dayjs().valueOf() },
-                                  };
-                                }
-                              }}
-                              oninput={handleSubtitleChanged}
-                              onkeydown={(e) => {
-                                if (e.isComposing) {
-                                  return;
-                                }
+                              <textarea
+                                bind:this={subtitleEl}
+                                class={css({
+                                  marginTop: '4px',
+                                  width: 'full',
+                                  fontSize: '16px',
+                                  fontWeight: 'medium',
+                                  overflow: 'hidden',
+                                  resize: 'none',
+                                })}
+                                autocapitalize="off"
+                                autocomplete="off"
+                                maxlength={100}
+                                onblur={() => {
+                                  subtitleFocused = false;
+                                  flushSubtitleUpdate();
+                                }}
+                                onfocus={() => {
+                                  clearBodySelectionForHeaderFocus();
+                                  subtitleFocused = true;
+                                  if (documentId) {
+                                    selectionsStore.current = {
+                                      ...selectionsStore.current,
+                                      [documentId]: { type: 'element', element: 'subtitle', timestamp: dayjs().valueOf() },
+                                    };
+                                  }
+                                }}
+                                oninput={handleSubtitleChanged}
+                                onkeydown={(e) => {
+                                  if (e.isComposing) {
+                                    return;
+                                  }
 
-                                if (!localSubtitle && e.key === 'Backspace') {
-                                  e.preventDefault();
-                                  titleEl?.focus();
-                                }
+                                  if (!localSubtitle && e.key === 'Backspace') {
+                                    e.preventDefault();
+                                    titleEl?.focus();
+                                  }
 
-                                if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) {
-                                  e.preventDefault();
-                                  enterDocumentFromHeader();
-                                }
-                              }}
-                              placeholder="부제목을 입력하세요"
-                              rows={1}
-                              spellcheck="false"
-                              bind:value={localSubtitle}
-                              use:autosize
-                              use:headerVerticalNavigation={{ up: () => titleEl?.focus(), down: enterDocumentFromHeader }}></textarea>
+                                  if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) {
+                                    e.preventDefault();
+                                    enterDocumentFromHeader();
+                                  }
+                                }}
+                                placeholder="부제목을 입력하세요"
+                                rows={1}
+                                spellcheck="false"
+                                bind:value={localSubtitle}
+                                use:autosize
+                                use:headerVerticalNavigation={{ up: () => titleEl?.focus(), down: enterDocumentFromHeader }}></textarea>
 
-                            {#if ctx.editor?.rootAttrs?.layout_mode.type !== 'paginated'}
-                              <HorizontalDivider style={css.raw({ marginTop: '10px' })} />
-                            {/if}
+                              {#if ctx.editor?.rootAttrs?.layout_mode.type !== 'paginated'}
+                                <HorizontalDivider style={css.raw({ marginTop: '10px' })} />
+                              {/if}
+                            </div>
                           </div>
-                        </div>
-                      {/snippet}
-                      <CommentPopover />
-                    </EditorComponent>
+                        {/snippet}
+                        <CommentPopover />
+                      </EditorComponent>
+                    </svelte:boundary>
                   {/key}
                 </div>
                 {#if showFindReplace}

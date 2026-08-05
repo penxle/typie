@@ -269,7 +269,7 @@ private fun EditorPreviewContent(
     EditorSurfaceHost(
       editor = editor,
       scaleFactor = density.density.toDouble() * renderZoom.toDouble(),
-      onFailure = { error -> runtime.reportError(editor, error) },
+      onFailure = { error -> runtime.fail(editor, error) },
     )
   }
 
@@ -298,7 +298,7 @@ private fun EditorPreviewContent(
               viewport = viewport,
               themeVariant = themeVariant,
               scope = editorScope,
-              onError = { activeEditor, error -> runtime.reportError(activeEditor, error) },
+              onError = { activeEditor, error -> runtime.fail(activeEditor, error) },
             )
           EditorPreviewSource.Generated ->
             Editor.createFromDoc(
@@ -306,7 +306,7 @@ private fun EditorPreviewContent(
               viewport = viewport,
               themeVariant = themeVariant,
               scope = editorScope,
-              onError = { activeEditor, error -> runtime.reportError(activeEditor, error) },
+              onError = { activeEditor, error -> runtime.fail(activeEditor, error) },
             )
           EditorPreviewSource.AttachedEditor -> return@LaunchedEffect
         }

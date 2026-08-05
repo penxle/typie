@@ -263,7 +263,7 @@ fun DocumentBodySettingsScreen(entityId: String) {
           } catch (e: Throwable) {
             if (reloadRequest === request && settingsRuntime.session === request.session) {
               finishReloadRequest(request)
-              settingsRuntime.reportError(request.session, e)
+              settingsRuntime.fail(request.session, e)
             }
           }
         }
@@ -360,10 +360,10 @@ fun DocumentBodySettingsScreen(entityId: String) {
       }
     }
 
-    LaunchedEffect(settingsRuntime.error) {
-      settingsRuntime.error ?: return@LaunchedEffect
+    LaunchedEffect(settingsRuntime.failure) {
+      settingsRuntime.failure ?: return@LaunchedEffect
       dialog.error(nav) {
-        settingsRuntime.clearError()
+        settingsRuntime.clearFailure()
         load = null
         SyncWs.retryDocument(document.id)
       }
@@ -391,7 +391,7 @@ fun DocumentBodySettingsScreen(entityId: String) {
             themeVariant = editorThemeVariant,
             onError = { activeEditor, error ->
               if (settingsRuntime.editor === activeEditor) {
-                settingsRuntime.reportError(activeEditor, error)
+                settingsRuntime.fail(activeEditor, error)
               } else {
                 bootstrapFailure.compareAndSet(expectedValue = null, newValue = error)
               }
@@ -474,7 +474,7 @@ fun DocumentBodySettingsScreen(entityId: String) {
       } catch (e: CancellationException) {
         throw e
       } catch (e: Throwable) {
-        if (load === readyLoad) settingsRuntime.reportError(e)
+        if (load === readyLoad) settingsRuntime.fail(e)
       } finally {
         if (liveLoad === readyLoad) liveLoad = null
         val closingSession = session

@@ -147,7 +147,7 @@
     void applyHead(selectedHeadId);
   };
 
-  const reportTimelineFailure = (editor?: Editor): void => {
+  const failTimeline = (editor?: Editor): void => {
     if (destroyed) return;
     if (editor) {
       if (unusableTimelineEditors.has(editor)) return;
@@ -163,7 +163,7 @@
     onPreviewEditorRecovered?.();
   };
 
-  const reportTimelineRecovery = (): void => {
+  const handleTimelineRecovery = (): void => {
     if (previewFailed) sliderElement?.focus({ preventScroll: true });
     clearTimelineFailure();
   };
@@ -176,15 +176,15 @@
       .then((publication) => {
         if (destroyed || pendingTimelinePublication !== pending || timelineEditor !== editor) return;
         if (publication.type !== 'published') {
-          reportTimelineFailure(editor);
+          failTimeline(editor);
           return;
         }
         pendingTimelinePublication = undefined;
         shownHeadId = headId;
-        reportTimelineRecovery();
+        handleTimelineRecovery();
       })
       .catch(() => {
-        if (pendingTimelinePublication === pending && timelineEditor === editor) reportTimelineFailure(editor);
+        if (pendingTimelinePublication === pending && timelineEditor === editor) failTimeline(editor);
       });
   };
 
@@ -243,9 +243,7 @@
       plain = liveEditor.materializeAt(Uint8Array.fromBase64(head.heads), [...(query.data?.document.sweepTombstones ?? [])]);
     } catch {
       if (liveEditor.failure === undefined) {
-        reportTimelineFailure(currentTimelineEditor);
-      } else {
-        ctx.reportEditorFailure?.(liveEditor.failure);
+        failTimeline(currentTimelineEditor);
       }
       return;
     }
@@ -255,7 +253,7 @@
       try {
         currentTimelineEditor.setDoc(plain);
       } catch {
-        reportTimelineFailure(currentTimelineEditor);
+        failTimeline(currentTimelineEditor);
         return;
       }
       awaitTimelinePublication(currentTimelineEditor, headId, afterRevision);
@@ -268,7 +266,7 @@
       try {
         created = await Editor.createFromDoc(plain, liveEditor.viewport, theme.currentThemeVariant);
       } catch {
-        reportTimelineFailure();
+        failTimeline();
         return;
       }
       created.readOnly = true;
@@ -289,19 +287,19 @@
         const publication = await created.awaitPublishedRevision(publicationRevision, { requireFrame: true });
         if (destroyed || timelineEditor !== created) return;
         if (publication.type !== 'published') {
-          reportTimelineFailure(created);
+          failTimeline(created);
           return;
         }
       } catch {
         if (destroyed || timelineEditor !== created) return;
-        reportTimelineFailure(created);
+        failTimeline(created);
         return;
       }
 
       if (pendingHeadId === null || pendingHeadId === headId) {
         if (pendingHeadId === headId) pendingHeadId = null;
         shownHeadId = headId;
-        reportTimelineRecovery();
+        handleTimelineRecovery();
       }
     } finally {
       creatingTimeline = false;
@@ -316,7 +314,7 @@
 
   $effect(() => {
     const editor = timelineEditor;
-    if (editor?.failure !== undefined) reportTimelineFailure(editor);
+    if (editor?.failure !== undefined) failTimeline(editor);
   });
 
   $effect(() => {

@@ -121,7 +121,7 @@ internal fun EditorView(
         throw e
       } catch (e: Throwable) {
         if (currentLoad === load && !load.isClosed) {
-          runtime.reportError(e)
+          runtime.fail(e)
         }
       }
     }

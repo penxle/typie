@@ -93,40 +93,40 @@ class EditorRuntimeTest {
   }
 
   @Test
-  fun staleSessionErrorCannotClearReplacement() = runTest {
+  fun staleSessionFailureCannotClearReplacement() = runTest {
     val first = createSession(Editor(FakeFfiEditor(), this, StandardTestDispatcher(testScheduler)))
     val second = createSession(Editor(FakeFfiEditor(), this, StandardTestDispatcher(testScheduler)))
     val runtime = EditorRuntime(uiScope = this)
 
     runtime.attach(first)
-    runtime.reportError(first, IllegalStateException("stale reload failure"))
+    runtime.fail(first, IllegalStateException("stale reload failure"))
     runtime.attach(second)
     runCurrent()
 
     assertSame(second.editor, runtime.editor)
     assertSame(second, runtime.session)
-    assertNull(runtime.error)
+    assertNull(runtime.failure)
   }
 
   @Test
-  fun fatalErrorRetainsEditorWithoutKeepingItActive() = runTest {
+  fun fatalFailureRetainsEditorWithoutKeepingItActive() = runTest {
     val editor = Editor(FakeFfiEditor(), this, StandardTestDispatcher(testScheduler))
     val session = createSession(editor)
     val runtime = EditorRuntime(uiScope = this)
     val failure = IllegalStateException("fatal editor failure")
 
     runtime.attach(session)
-    runtime.reportError(session, failure)
+    runtime.fail(session, failure)
     runCurrent()
 
-    assertSame(failure, runtime.error)
+    assertSame(failure, runtime.failure)
     assertNull(runtime.editor)
     assertNull(runtime.session)
     assertSame(editor, runtime.failedEditor)
 
-    runtime.clearError()
+    runtime.clearFailure()
 
-    assertNull(runtime.error)
+    assertNull(runtime.failure)
     assertNull(runtime.failedEditor)
   }
 }
