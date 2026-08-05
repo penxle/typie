@@ -62,7 +62,7 @@ fun Screen(
   refetchOnMount: Boolean = true,
   background: Color = AppTheme.colors.surfaceCanvas,
   contentPadding: PaddingValues = PaddingValues(horizontal = 16.dp),
-  topBarContentPadding: Dp = TopBarDefaults.BlurFadeHeight + TopBarDefaults.ContentTopSpacing,
+  topBarContentPadding: Dp = TopBarDefaults.BackdropFadeHeight + TopBarDefaults.ContentTopSpacing,
   dismissFocusOnTapOutsideInput: Boolean = true,
   overlay: (@Composable BoxScope.() -> Unit)? = null,
   content: @Composable ScreenScope.(innerPadding: PaddingValues) -> Unit,

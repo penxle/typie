@@ -118,6 +118,7 @@ import co.typie.editor.viewport.consumeEditorViewportTouchPan
 import co.typie.ext.LocalScrollGestureLockState
 import co.typie.ext.ime
 import co.typie.graphql.QueryState
+import co.typie.navigation.LocalNavigationTopBarSampleRequester
 import co.typie.navigation.Nav
 import co.typie.navigation.NavigationResult
 import co.typie.navigation.PlatformBackHandler
@@ -207,6 +208,7 @@ import co.typie.ui.component.sheet.LocalSheet
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastType
 import co.typie.ui.component.topbar.ProvideTopBar
+import co.typie.ui.component.topbar.TopBarCenterAppearance
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.LocalHazeState
 import dev.chrisbanes.haze.HazeState
@@ -1241,10 +1243,12 @@ fun EditorScreen(entityId: String) {
     when {
       findReplace.active -> {
         ProvideTopBar(
+          backdropBlurEnabled = false,
           leading = { FindReplaceTopBarLeading(session = findReplace) },
           leadingKey = FindReplaceTopBarLeadingKey,
           center = { FindReplaceTopBarCenter(session = findReplace) },
           centerKey = FindReplaceTopBarCenterKey,
+          centerAppearance = TopBarCenterAppearance.ThemeSurface,
           trailing = { FindReplaceTopBarTrailing(session = findReplace) },
           trailingKey = FindReplaceTopBarTrailingKey,
           scrollOffset = null,
@@ -1252,10 +1256,12 @@ fun EditorScreen(entityId: String) {
       }
       spellcheck.active -> {
         ProvideTopBar(
+          backdropBlurEnabled = false,
           leading = { SpellcheckTopBarLeading(session = spellcheck) },
           leadingKey = SpellcheckTopBarLeadingKey,
           center = { SpellcheckTopBarCenter(session = spellcheck) },
           centerKey = SpellcheckTopBarCenterKey,
+          centerAppearance = TopBarCenterAppearance.ThemeSurface,
           trailing = { SpellcheckTopBarTrailing(session = spellcheck) },
           trailingKey = SpellcheckTopBarTrailingKey,
           scrollOffset = null,
@@ -1263,10 +1269,12 @@ fun EditorScreen(entityId: String) {
       }
       aiFeedback.active -> {
         ProvideTopBar(
+          backdropBlurEnabled = false,
           leading = { AiFeedbackTopBarLeading(session = aiFeedback) },
           leadingKey = AiFeedbackTopBarLeadingKey,
           center = { AiFeedbackTopBarCenter(session = aiFeedback) },
           centerKey = AiFeedbackTopBarCenterKey,
+          centerAppearance = TopBarCenterAppearance.ThemeSurface,
           trailing = { AiFeedbackTopBarTrailing(session = aiFeedback) },
           trailingKey = AiFeedbackTopBarTrailingKey,
           scrollOffset = null,
@@ -1708,6 +1716,13 @@ fun EditorScreen(entityId: String) {
         },
       )
       interactionScope.onEditorStateChanged()
+    }
+    val topBarSampleRequester = LocalNavigationTopBarSampleRequester.current
+    LaunchedEffect(screenState.viewportState, topBarSampleRequester) {
+      val sampleRequester = topBarSampleRequester ?: return@LaunchedEffect
+      snapshotFlow { screenState.viewportState.scrollOffset }
+        .drop(1)
+        .collect { sampleRequester.requestSample() }
     }
     LaunchedEffect(screenState.viewportState, viewportScrollableState) {
       snapshotFlow { viewportScrollableState.isScrollInProgress }

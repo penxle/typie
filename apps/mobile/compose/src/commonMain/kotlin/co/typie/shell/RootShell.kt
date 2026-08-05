@@ -34,6 +34,9 @@ import co.typie.domain.subscription.SubscriptionService
 import co.typie.editor.sync.ActiveDocumentEditingSessions
 import co.typie.editor.sync.orphanSweeper
 import co.typie.editor.sync.ws.SyncWs
+import co.typie.navigation.ApplyActiveNavigationStatusBarAppearance
+import co.typie.navigation.NavigationStatusBarAppearanceState
+import co.typie.navigation.ProvideNavigationStatusBarAppearanceOwner
 import co.typie.platform.appLifecycleService
 import co.typie.platform.connectivityService
 import co.typie.route.AuthRoutes
@@ -154,6 +157,7 @@ fun RootShell() {
   val sheet = remember { Sheet() }
   val dialog = remember { Dialog() }
   val popover = remember { PopoverOverlayState() }
+  val statusBarAppearanceState = remember { NavigationStatusBarAppearanceState() }
 
   // 등록 실패 안내는 루트에서 수집한다 — 미완료 트랜잭션 재시도는 화면 밖(앱 실행 시 복구)에서도 일어나므로
   // 구매 화면에서만 들으면 조용히 버려진다.
@@ -180,6 +184,11 @@ fun RootShell() {
       OnboardingService.state == OnboardingGateState.Show -> RootScreen.Onboarding
       else -> RootScreen.Main
     }
+  ApplyActiveNavigationStatusBarAppearance(
+    activeOwner = screen,
+    state = statusBarAppearanceState,
+    themeMode = AppTheme.themeMode,
+  )
 
   CompositionLocalProvider(
     LocalSheet provides sheet,
@@ -198,14 +207,16 @@ fun RootShell() {
         modifier =
           Modifier.background(AppTheme.colors.surfaceDefault).hazeSource(LocalHazeState.current),
       ) { target ->
-        when (target) {
-          RootScreen.Splash -> SplashScreen()
-          RootScreen.Maintenance -> MaintenanceScreen()
-          RootScreen.UpdateRequired -> UpdateRequiredScreen()
-          RootScreen.Auth -> AuthShell { route -> AuthRoutes(route) }
-          RootScreen.Onboarding ->
-            OnboardingShell { OnboardingScreen(onComplete = { OnboardingService.complete() }) }
-          RootScreen.Main -> MainShell { route -> MainRoutes(route) }
+        ProvideNavigationStatusBarAppearanceOwner(target, statusBarAppearanceState) {
+          when (target) {
+            RootScreen.Splash -> SplashScreen()
+            RootScreen.Maintenance -> MaintenanceScreen()
+            RootScreen.UpdateRequired -> UpdateRequiredScreen()
+            RootScreen.Auth -> AuthShell { route -> AuthRoutes(route) }
+            RootScreen.Onboarding ->
+              OnboardingShell { OnboardingScreen(onComplete = { OnboardingService.complete() }) }
+            RootScreen.Main -> MainShell { route -> MainRoutes(route) }
+          }
         }
       }
 

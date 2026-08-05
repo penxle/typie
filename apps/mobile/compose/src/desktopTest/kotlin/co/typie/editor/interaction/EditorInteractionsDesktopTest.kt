@@ -57,7 +57,7 @@ import co.typie.editor.viewport.EditorViewportState
 import co.typie.editor.viewport.consumeEditorViewportTouchPan
 import co.typie.ext.ScrollGestureLockState
 import co.typie.navigation.LocalNavigationPopNestedScroll
-import co.typie.navigation.NavigationStack
+import co.typie.navigation.NavigationStackTestHost
 import co.typie.navigation.Navigator
 import co.typie.navigation.navigationPopNestedScroll
 import co.typie.route.Route
@@ -1831,7 +1831,7 @@ class EditorInteractionsDesktopTest {
     setContent {
       effectiveTouchSlop =
         if (usePlatformTouchSlop) LocalViewConfiguration.current.touchSlop else 8f
-      NavigationStack(
+      NavigationStackTestHost(
         navigator = navigator,
         topBarState = remember { TopBarState() },
         modifier = Modifier.size(width = 320.dp, height = 640.dp),

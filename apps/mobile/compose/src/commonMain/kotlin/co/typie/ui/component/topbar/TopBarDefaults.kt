@@ -26,10 +26,9 @@ object TopBarDefaults {
   val RevealOffset: Dp = 44.dp
 
   val BlurRadius: Dp = 6.dp
-  val BlurFadeHeight: Dp = 16.dp
-  val FadeOpacity: Float = 0.8f
+  val BackdropFadeHeight: Dp = 16.dp
   val ContentTopSpacing: Dp = 8.dp
-  val BlurFadeEasing: Easing = SmootherstepEasing
+  val BackdropFadeEasing: Easing = SmootherstepEasing
 
   val RevealAnimationDuration: Int = 200
   val RevealFadeDuration: Int = 150
@@ -47,7 +46,7 @@ object TopBarDefaults {
 
   fun hazeProgressive(): HazeProgressive =
     HazeProgressive.verticalGradient(
-      easing = BlurFadeEasing,
+      easing = BackdropFadeEasing,
       startIntensity = 1f,
       endIntensity = 0f,
     )

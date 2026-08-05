@@ -2,8 +2,11 @@ package co.typie.navigation
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
+import co.typie.ui.theme.ResolvedThemeMode
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class NavigationTopBarBackdropTest {
   @Test
@@ -90,5 +93,70 @@ class NavigationTopBarBackdropTest {
       )
 
     assertEquals(Color.Green, style.background)
+  }
+
+  @Test
+  fun interactiveTransitionKeepsTheSourceAppearance() {
+    val sourceLuminance = NavigationTopBarContentLuminance.Dark
+    val destinationLuminance = NavigationTopBarContentLuminance.Bright
+
+    val appearance =
+      resolveNavigationTopBarTransitionAppearance(
+        themeMode = ResolvedThemeMode.Light,
+        committed = false,
+        sourceBlurEnabled = false,
+        sourceContentLuminance = sourceLuminance,
+        destinationBlurEnabled = true,
+        destinationContentLuminance = destinationLuminance,
+      )
+
+    assertFalse(appearance.blurEnabled)
+    assertEquals(sourceLuminance, appearance.contentLuminance)
+  }
+
+  @Test
+  fun committedTransitionUsesDestinationBlurAndVerifiedFade() {
+    val sourceLuminance = NavigationTopBarContentLuminance.Dark
+    val destinationLuminance = NavigationTopBarContentLuminance.Bright
+
+    val appearance =
+      resolveNavigationTopBarTransitionAppearance(
+        themeMode = ResolvedThemeMode.Light,
+        committed = true,
+        sourceBlurEnabled = false,
+        sourceContentLuminance = sourceLuminance,
+        destinationBlurEnabled = true,
+        destinationContentLuminance = destinationLuminance,
+      )
+
+    assertTrue(appearance.blurEnabled)
+    assertEquals(destinationLuminance, appearance.contentLuminance)
+  }
+
+  @Test
+  fun committedTransitionUsesTheThemeSafeFallbackForAnUnmeasuredDestination() {
+    val lightAppearance =
+      resolveNavigationTopBarTransitionAppearance(
+        themeMode = ResolvedThemeMode.Light,
+        committed = true,
+        sourceBlurEnabled = false,
+        sourceContentLuminance = NavigationTopBarContentLuminance.Dark,
+        destinationBlurEnabled = true,
+        destinationContentLuminance = null,
+      )
+    val darkAppearance =
+      resolveNavigationTopBarTransitionAppearance(
+        themeMode = ResolvedThemeMode.Dark,
+        committed = true,
+        sourceBlurEnabled = false,
+        sourceContentLuminance = NavigationTopBarContentLuminance.Bright,
+        destinationBlurEnabled = true,
+        destinationContentLuminance = null,
+      )
+
+    assertTrue(lightAppearance.blurEnabled)
+    assertEquals(NavigationTopBarContentLuminance.Bright, lightAppearance.contentLuminance)
+    assertTrue(darkAppearance.blurEnabled)
+    assertEquals(NavigationTopBarContentLuminance.Dark, darkAppearance.contentLuminance)
   }
 }

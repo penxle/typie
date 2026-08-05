@@ -99,6 +99,13 @@ class EditorScreenTopBarDesktopTest {
   }
 
   @Test
+  fun editorTopBarDisablesBackdropBlur() = runComposeUiTest {
+    val topBarState = setTopBarContent(editing = false)
+
+    assertFalse(topBarState.backdropBlurEnabled)
+  }
+
+  @Test
   fun debugToolsAppearOnlyWhenDebugMetadataIsSupplied() = runComposeUiTest {
     val actions = mutableStateListOf<EditorToolbarToolAction>()
     val overlayState = PopoverOverlayState()
@@ -161,10 +168,12 @@ class EditorScreenTopBarDesktopTest {
     debugOverlays: EditorToolbarDebugOverlays? = null,
     onToolAction: (EditorToolbarToolAction) -> Unit = {},
     onEnterReadingMode: suspend () -> Unit = {},
-  ) {
+  ): TopBarState {
+    lateinit var capturedTopBarState: TopBarState
     setContent {
       TopBarTestTheme {
         val topBarState = remember { TopBarState() }
+        capturedTopBarState = topBarState
         CompositionLocalProvider(
           Nav provides Navigator(Route.Home),
           LocalRoute provides Route.Editor("document-id"),
@@ -188,6 +197,7 @@ class EditorScreenTopBarDesktopTest {
       }
     }
     waitForIdle()
+    return capturedTopBarState
   }
 
   @Composable

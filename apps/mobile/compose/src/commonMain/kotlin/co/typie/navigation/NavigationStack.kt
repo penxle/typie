@@ -18,6 +18,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.ProvidedValue
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.movableContentOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -206,6 +207,7 @@ fun NavigationStack(
   foregroundInteractive: Boolean = true,
   content: @Composable (Route) -> Unit,
 ) {
+  val themeMode = AppTheme.themeMode
   val exitTopBarState = remember { TopBarState() }
   val exitBottomBarState = remember { bottomBarState?.let { BottomBarState() } }
 
@@ -280,6 +282,9 @@ fun NavigationStack(
 
   val progress = remember { Animatable(0f) }
   val topBarBackdropHazeState = remember { HazeState() }
+  val topBarSampleRequests = remember { NavigationTopBarSampleRequests() }
+  val topBarLuminanceCache =
+    remember(themeMode) { mutableStateMapOf<Route, NavigationTopBarContentLuminance>() }
 
   val popNestedScroll = remember { NavigationPopNestedScroll() }
   val navigationPopActivationDistance =
@@ -304,6 +309,7 @@ fun NavigationStack(
       exitTopBarState.clearRoute(removedRoute)
       bottomBarState?.clearRoute(removedRoute)
       exitBottomBarState?.clearRoute(removedRoute)
+      topBarLuminanceCache.remove(removedRoute)
     }
   }
 
@@ -647,6 +653,52 @@ fun NavigationStack(
     }
   }
 
+  val transitionCommitted =
+    when (animState) {
+      AnimState.Push,
+      AnimState.Pop,
+      AnimState.PopGestureCommitted -> true
+      AnimState.Dragging -> navigator.popRequested
+      AnimState.Idle -> false
+    }
+  val destinationRoute =
+    when (animState) {
+      AnimState.Push -> navigator.current
+      AnimState.Pop,
+      AnimState.PopGestureCommitted -> behindRoute ?: navigator.current
+      AnimState.Dragging -> behindRoute.takeIf { transitionCommitted }
+      AnimState.Idle -> null
+    }
+  val sourceContentLuminance =
+    topBarLuminanceCache[visibleRoute] ?: defaultNavigationTopBarContentLuminance(themeMode)
+  val topBarTransitionAppearance =
+    if (animState == AnimState.Idle) {
+      NavigationTopBarTransitionAppearance(
+        blurEnabled = topBarState.backdropBlurEnabled,
+        contentLuminance = sourceContentLuminance,
+      )
+    } else {
+      resolveNavigationTopBarTransitionAppearance(
+        themeMode = themeMode,
+        committed = transitionCommitted,
+        sourceBlurEnabled =
+          if (transitionCommitted) {
+            exitTopBarState.backdropBlurEnabled
+          } else {
+            topBarState.backdropBlurEnabled
+          },
+        sourceContentLuminance = sourceContentLuminance,
+        destinationBlurEnabled = topBarState.backdropBlurEnabled,
+        destinationContentLuminance = destinationRoute?.let { topBarLuminanceCache[it] },
+      )
+    }
+  val topBarLuminanceStyle =
+    navigationTopBarLuminanceStyle(
+      themeMode = themeMode,
+      contentLuminance = topBarTransitionAppearance.contentLuminance,
+    )
+  topBarState.adaptiveForegroundStyle = topBarLuminanceStyle.foregroundStyle
+
   val animationProviders =
     buildList<ProvidedValue<*>> {
       add(Nav provides navigator)
@@ -655,6 +707,7 @@ fun NavigationStack(
       )
       add(LocalNavigationForegroundInteractive provides foregroundInteractive)
       add(LocalTopBarAnimationSource provides topBarState)
+      add(LocalNavigationTopBarSampleRequester provides topBarSampleRequests)
       bottomBarState?.let { add(LocalBottomBarAnimationSource provides it) }
     }
   CompositionLocalProvider(*animationProviders.toTypedArray()) {
@@ -985,6 +1038,25 @@ fun NavigationStack(
         if (behindBackdropPresence > 0f || mainBackdropPresence > 0f) {
           NavigationTopBarBackdrop(
             hazeState = topBarBackdropHazeState,
+            blurEnabled = topBarTransitionAppearance.blurEnabled,
+            sampleRequests = topBarSampleRequests.flow,
+            luminanceMode =
+              if (presentationAnimState == AnimState.Idle && foregroundInteractive) {
+                NavigationTopBarLuminanceMode.Live(mainRoute)
+              } else {
+                NavigationTopBarLuminanceMode.Frozen(topBarTransitionAppearance.contentLuminance)
+              },
+            onMeasuredContentLuminance = { measurement ->
+              if (
+                presentationAnimState == AnimState.Idle &&
+                  foregroundInteractive &&
+                  measurement.token.owner == mainRoute &&
+                  measurement.token.themeMode == themeMode
+              ) {
+                topBarLuminanceCache[mainRoute] = measurement.contentLuminance
+              }
+            },
+            themeMode = themeMode,
             style = {
               val p = progress.value
               val mainWeight =

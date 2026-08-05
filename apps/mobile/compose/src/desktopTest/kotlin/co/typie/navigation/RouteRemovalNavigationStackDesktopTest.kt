@@ -59,7 +59,7 @@ class RouteRemovalNavigationStackDesktopTest {
     )
 
     setContent {
-      NavigationStack(
+      NavigationStackTestHost(
         navigator = navigator,
         topBarState = remember { TopBarState() },
         modifier = Modifier.size(width = 320.dp, height = 640.dp),
@@ -114,7 +114,7 @@ class RouteRemovalNavigationStackDesktopTest {
     )
 
     setContent {
-      NavigationStack(
+      NavigationStackTestHost(
         navigator = navigator,
         topBarState = remember { TopBarState() },
         modifier = Modifier.size(width = 320.dp, height = 640.dp),
@@ -176,7 +176,7 @@ class RouteRemovalNavigationStackDesktopTest {
     )
 
     setContent {
-      NavigationStack(
+      NavigationStackTestHost(
         navigator = navigator,
         topBarState = remember { TopBarState() },
         modifier = Modifier.size(width = 320.dp, height = 640.dp),
@@ -215,7 +215,7 @@ class RouteRemovalNavigationStackDesktopTest {
     val route = Route.Folder("unguarded")
 
     setContent {
-      NavigationStack(
+      NavigationStackTestHost(
         navigator = navigator,
         topBarState = remember { TopBarState() },
         modifier = Modifier.size(width = 320.dp, height = 640.dp),
@@ -258,7 +258,7 @@ class RouteRemovalNavigationStackDesktopTest {
     val navigator = Navigator(Route.Home)
 
     setContent {
-      NavigationStack(
+      NavigationStackTestHost(
         navigator = navigator,
         topBarState = remember { TopBarState() },
         modifier = Modifier.size(width = 320.dp, height = 640.dp),
@@ -322,7 +322,7 @@ class RouteRemovalNavigationStackDesktopTest {
     )
 
     setContent {
-      NavigationStack(
+      NavigationStackTestHost(
         navigator = navigator,
         topBarState = remember { TopBarState() },
         modifier = Modifier.size(width = 320.dp, height = 640.dp),
@@ -390,7 +390,7 @@ class RouteRemovalNavigationStackDesktopTest {
     )
 
     setContent {
-      NavigationStack(
+      NavigationStackTestHost(
         navigator = navigator,
         topBarState = remember { TopBarState() },
         modifier = Modifier.size(width = 320.dp, height = 640.dp),
@@ -448,7 +448,7 @@ class RouteRemovalNavigationStackDesktopTest {
     )
 
     setContent {
-      NavigationStack(
+      NavigationStackTestHost(
         navigator = navigator,
         topBarState = remember { TopBarState() },
         modifier = Modifier.size(width = 320.dp, height = 640.dp),
@@ -505,7 +505,7 @@ class RouteRemovalNavigationStackDesktopTest {
     )
 
     setContent {
-      NavigationStack(
+      NavigationStackTestHost(
         navigator = navigator,
         topBarState = remember { TopBarState() },
         modifier = Modifier.size(width = 320.dp, height = 640.dp),
@@ -562,7 +562,7 @@ class RouteRemovalNavigationStackDesktopTest {
     var removalResult: Result<NavigationResult>? = null
 
     setContent {
-      NavigationStack(
+      NavigationStackTestHost(
         navigator = navigator,
         topBarState = remember { TopBarState() },
         modifier = Modifier.size(width = 320.dp, height = 640.dp),
@@ -627,7 +627,7 @@ class RouteRemovalNavigationStackDesktopTest {
       )
 
       setContent {
-        NavigationStack(
+        NavigationStackTestHost(
           navigator = navigator,
           topBarState = remember { TopBarState() },
           modifier = Modifier.size(width = 320.dp, height = 640.dp),
@@ -680,7 +680,7 @@ class RouteRemovalNavigationStackDesktopTest {
       )
 
       setContent {
-        NavigationStack(
+        NavigationStackTestHost(
           navigator = navigator,
           topBarState = remember { TopBarState() },
           modifier = Modifier.size(width = 320.dp, height = 640.dp),

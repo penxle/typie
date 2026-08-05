@@ -44,6 +44,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import co.typie.datetime.format
+import co.typie.navigation.LocalNavigationStatusBarAppearanceController
+import co.typie.navigation.NavigationStatusBarAppearanceController
 import co.typie.ui.theme.AppTheme
 import java.awt.MouseInfo
 import java.awt.Point
@@ -73,6 +75,7 @@ private val BezelScreenEdge = Color(0xFF000000) // screen-to-frame seam
 @Composable
 actual fun SystemChrome(content: @Composable () -> Unit) {
   val r = ScreenCornerRadius
+  val statusBarAppearanceController = remember { NavigationStatusBarAppearanceController() }
   val keyboardController = remember {
     object : SoftwareKeyboardController {
       override fun show() {
@@ -85,7 +88,10 @@ actual fun SystemChrome(content: @Composable () -> Unit) {
     }
   }
 
-  CompositionLocalProvider(LocalSoftwareKeyboardController provides keyboardController) {
+  CompositionLocalProvider(
+    LocalSoftwareKeyboardController provides keyboardController,
+    LocalNavigationStatusBarAppearanceController provides statusBarAppearanceController,
+  ) {
     Box(Modifier.fillMaxSize()) {
       // Content fills the full window so the Compose root lines up with the window
       // origin, matching iOS/Android. The bezel is a decorative overlay drawn on top
@@ -97,9 +103,11 @@ actual fun SystemChrome(content: @Composable () -> Unit) {
             .padding(start = BezelThickness, end = BezelThickness, bottom = BezelThickness)
         )
         StatusBar(
-          Modifier.fillMaxWidth()
-            .align(Alignment.TopStart)
-            .padding(start = BezelThickness, top = BezelThickness, end = BezelThickness)
+          useLightForeground = statusBarAppearanceController.useLightForeground,
+          modifier =
+            Modifier.fillMaxWidth()
+              .align(Alignment.TopStart)
+              .padding(start = BezelThickness, top = BezelThickness, end = BezelThickness),
         )
         HomeIndicator(Modifier.align(Alignment.BottomCenter).padding(bottom = BezelThickness))
       }
@@ -152,8 +160,13 @@ actual fun SystemChrome(content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun StatusBar(modifier: Modifier = Modifier) {
-  val contentColor = AppTheme.colors.textDefault
+private fun StatusBar(useLightForeground: Boolean?, modifier: Modifier = Modifier) {
+  val contentColor =
+    when (useLightForeground) {
+      true -> Color.White
+      false -> Color.Black
+      null -> AppTheme.colors.textDefault
+    }
   var time by remember { mutableStateOf(Clock.System.now().format("HH:mm")) }
 
   LaunchedEffect(Unit) {

@@ -18,13 +18,16 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
     let window = UIWindow(windowScene: windowScene)
     let shortcutRegistry = NativeShortcutRegistry()
+    let statusBarAppearanceController = NavigationStatusBarAppearanceController()
     let composeController = MainViewControllerKt.MainViewController(
-      shortcutRegistry: shortcutRegistry
+      shortcutRegistry: shortcutRegistry,
+      statusBarAppearanceController: statusBarAppearanceController
     )
     composeController.view.backgroundColor = .systemBackground
     let controller = ShortcutHostingViewController(
       content: composeController,
-      shortcutRegistry: shortcutRegistry
+      shortcutRegistry: shortcutRegistry,
+      statusBarAppearanceController: statusBarAppearanceController
     )
     window.backgroundColor = .systemBackground
     window.rootViewController = controller

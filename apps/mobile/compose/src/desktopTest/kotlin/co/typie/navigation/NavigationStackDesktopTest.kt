@@ -71,7 +71,7 @@ class NavigationStackDesktopTest {
     val navigator = Navigator(Route.Home)
 
     setContent {
-      NavigationStack(
+      NavigationStackTestHost(
         navigator = navigator,
         topBarState = remember { TopBarState() },
         modifier = Modifier.size(width = 320.dp, height = 640.dp),
@@ -97,7 +97,7 @@ class NavigationStackDesktopTest {
     var surfaceDownCount = 0
 
     setContent {
-      NavigationStack(
+      NavigationStackTestHost(
         navigator = navigator,
         topBarState = remember { TopBarState() },
         modifier = Modifier.size(width = 320.dp, height = 640.dp),
@@ -154,7 +154,7 @@ class NavigationStackDesktopTest {
     val observedBottomBars = mutableMapOf<Route, BottomBarState?>()
 
     setContent {
-      NavigationStack(
+      NavigationStackTestHost(
         navigator = navigator,
         topBarState = topBarState,
         bottomBarState = bottomBarState,
@@ -221,7 +221,7 @@ class NavigationStackDesktopTest {
 
     setContent {
       platformTouchSlop = LocalViewConfiguration.current.touchSlop
-      NavigationStack(
+      NavigationStackTestHost(
         navigator = navigator,
         topBarState = remember { TopBarState() },
         modifier = Modifier.size(width = 320.dp, height = 640.dp),
@@ -270,7 +270,7 @@ class NavigationStackDesktopTest {
         onDispose { observerHandle?.dispose() }
       }
       platformTouchSlop = LocalViewConfiguration.current.touchSlop
-      NavigationStack(
+      NavigationStackTestHost(
         navigator = navigator,
         topBarState = topBarState,
         modifier = Modifier.size(width = 320.dp, height = 640.dp),
@@ -314,7 +314,7 @@ class NavigationStackDesktopTest {
     var routeDownCount = 0
 
     setContent {
-      NavigationStack(
+      NavigationStackTestHost(
         navigator = navigator,
         topBarState = remember { TopBarState() },
         foregroundInteractive = foregroundInteractive,
@@ -359,7 +359,7 @@ class NavigationStackDesktopTest {
 
     setContent {
       platformTouchSlop = LocalViewConfiguration.current.touchSlop
-      NavigationStack(
+      NavigationStackTestHost(
         navigator = navigator,
         topBarState = topBarState,
         modifier = Modifier.size(width = 320.dp, height = 640.dp),
@@ -413,7 +413,7 @@ class NavigationStackDesktopTest {
 
     setContent {
       platformTouchSlop = LocalViewConfiguration.current.touchSlop
-      NavigationStack(
+      NavigationStackTestHost(
         navigator = navigator,
         topBarState = remember { TopBarState() },
         modifier = Modifier.size(width = 320.dp, height = 640.dp),
@@ -513,7 +513,7 @@ class NavigationStackDesktopTest {
 
     setContent {
       platformTouchSlop = LocalViewConfiguration.current.touchSlop
-      NavigationStack(
+      NavigationStackTestHost(
         navigator = navigator,
         topBarState = remember { TopBarState() },
         modifier = Modifier.size(width = 320.dp, height = 640.dp),
@@ -559,7 +559,7 @@ class NavigationStackDesktopTest {
 
     setContent {
       platformTouchSlop = LocalViewConfiguration.current.touchSlop
-      NavigationStack(
+      NavigationStackTestHost(
         navigator = navigator,
         topBarState = remember { TopBarState() },
         modifier = Modifier.size(width = 320.dp, height = 640.dp),
@@ -680,7 +680,7 @@ class NavigationStackDesktopTest {
     lateinit var compositionScope: CoroutineScope
 
     setContent {
-      NavigationStack(
+      NavigationStackTestHost(
         navigator = navigator,
         topBarState = remember { TopBarState() },
         modifier = Modifier.size(width = 320.dp, height = 640.dp),
@@ -755,7 +755,7 @@ class NavigationStackDesktopTest {
 
     setContent {
       activationDistancePx = LocalViewConfiguration.current.touchSlop * 3f
-      NavigationStack(
+      NavigationStackTestHost(
         navigator = navigator,
         topBarState = remember { TopBarState() },
         modifier = Modifier.size(width = 320.dp, height = 640.dp),
@@ -811,7 +811,7 @@ class NavigationStackDesktopTest {
     val editorRoute = Route.Editor("document-id")
 
     setContent {
-      NavigationStack(
+      NavigationStackTestHost(
         navigator = navigator,
         topBarState = remember { TopBarState() },
         modifier = Modifier.size(width = 320.dp, height = 640.dp),
@@ -857,7 +857,7 @@ class NavigationStackDesktopTest {
     val editorRoute = Route.Editor("document-id")
 
     setContent {
-      NavigationStack(
+      NavigationStackTestHost(
         navigator = navigator,
         topBarState = remember { TopBarState() },
         modifier = Modifier.size(width = 320.dp, height = 640.dp),

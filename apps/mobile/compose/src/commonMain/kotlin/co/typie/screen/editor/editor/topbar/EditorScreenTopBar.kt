@@ -32,6 +32,7 @@ internal fun EditorScreenTopBar(
 ) {
   if (editing) {
     ProvideTopBar(
+      backdropBlurEnabled = false,
       center = { documentButton(Modifier.fillMaxWidth()) },
       trailing = { EditorEditingTopBarTrailing(onEnterReadingMode) },
       trailingKey = EditingTopBarTrailingKey,
@@ -39,6 +40,7 @@ internal fun EditorScreenTopBar(
     )
   } else {
     ProvideTopBar(
+      backdropBlurEnabled = false,
       center = {
         documentButton(Modifier.fillMaxWidth().padding(end = ReadingTopBarExtraEndClearance))
       },

@@ -66,7 +66,7 @@ class EditorRouteRemovalNavigationStackDesktopTest {
     )
 
     setContent {
-      NavigationStack(
+      NavigationStackTestHost(
         navigator = navigator,
         topBarState = remember { TopBarState() },
         modifier = Modifier.size(width = 320.dp, height = 640.dp),

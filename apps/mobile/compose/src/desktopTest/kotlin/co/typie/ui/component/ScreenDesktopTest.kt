@@ -17,7 +17,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import co.typie.navigation.NavigationStack
+import co.typie.navigation.NavigationStackTestHost
 import co.typie.navigation.Navigator
 import co.typie.route.Route
 import co.typie.ui.component.dialog.Dialog
@@ -76,7 +76,7 @@ class ScreenDesktopTest {
       expectedTopPadding =
         TopBarDefaults.topPadding() +
           TopBarDefaults.Height +
-          TopBarDefaults.BlurFadeHeight +
+          TopBarDefaults.BackdropFadeHeight +
           TopBarDefaults.ContentTopSpacing
       CompositionLocalProvider(
         LocalDialog provides Dialog(),
@@ -161,7 +161,7 @@ class ScreenDesktopTest {
 
     setContent {
       CompositionLocalProvider(LocalDialog provides Dialog()) {
-        NavigationStack(
+        NavigationStackTestHost(
           navigator = navigator,
           topBarState = TopBarState(),
           modifier = Modifier.size(width = 320.dp, height = 640.dp),

@@ -16,10 +16,21 @@ enum class NavDirection {
   Switch,
 }
 
+internal enum class TopBarForegroundStyle {
+  Dark,
+  Light,
+}
+
+enum class TopBarCenterAppearance {
+  ThemeSurface,
+  AdaptiveTransparent,
+}
+
 @Stable
 class TopBarState {
   internal val leadingEntries = mutableStateMapOf<Any, @Composable () -> Unit>()
   internal val centerEntries = mutableStateMapOf<Any, @Composable () -> Unit>()
+  internal val centerAppearances = mutableStateMapOf<Any, TopBarCenterAppearance>()
   internal val trailingEntries = mutableStateMapOf<Any, @Composable () -> Unit>()
   internal val customEntries = mutableStateMapOf<Any, @Composable () -> Unit>()
   internal val leadingOwners = mutableMapOf<Any, Any>()
@@ -49,6 +60,8 @@ class TopBarState {
   var scrollOffset: (() -> Int)? by mutableStateOf(null)
   var visible: Boolean by mutableStateOf(true)
   var enabled: Boolean by mutableStateOf(false)
+  var backdropBlurEnabled: Boolean by mutableStateOf(true)
+  internal var adaptiveForegroundStyle: TopBarForegroundStyle? by mutableStateOf(null)
   var navDirection: NavDirection by mutableStateOf(NavDirection.Switch)
   var animatedAlpha: Float by mutableStateOf(0f)
   var animatedTranslationY: Float by mutableStateOf(0f)
@@ -66,10 +79,16 @@ class TopBarState {
   fun setCenter(
     key: Any,
     content: (@Composable () -> Unit)?,
+    appearance: TopBarCenterAppearance = TopBarCenterAppearance.AdaptiveTransparent,
     owner: Any? = null,
     instance: Any? = null,
   ) {
     setEntry(centerEntries, centerOwners, centerInstances, key, content, owner, instance)
+    if (content != null) {
+      centerAppearances[key] = appearance
+    } else {
+      centerAppearances.remove(key)
+    }
     centerKey = key
   }
 
@@ -86,6 +105,8 @@ class TopBarState {
   fun reset() {
     visible = false
     scrollOffset = null
+    backdropBlurEnabled = true
+    adaptiveForegroundStyle = null
   }
 
   fun clearRoute(key: Any) {
@@ -104,6 +125,7 @@ class TopBarState {
       owners = centerOwners,
       instances = centerInstances,
       onCurrentKeyCleared = { centerKey = it },
+      onEntryRemoved = centerAppearances::remove,
     )
     clearOwnedEntries(
       route = key,
@@ -158,6 +180,7 @@ class TopBarState {
     owners: MutableMap<Any, Any>,
     instances: MutableMap<Any, Any>,
     onCurrentKeyCleared: (Any) -> Unit,
+    onEntryRemoved: (Any) -> Unit = {},
   ) {
     val keysToRemove = linkedSetOf(route)
     owners.entries
@@ -168,6 +191,7 @@ class TopBarState {
       entries.remove(entryKey)
       owners.remove(entryKey)
       instances.remove(entryKey)
+      onEntryRemoved(entryKey)
     }
 
     if (currentKey in keysToRemove) {
@@ -208,10 +232,12 @@ internal fun resolveTopBarEntryKey(explicitKey: Any?, routeKey: Any?, fallbackKe
 @Composable
 fun ProvideTopBar(
   enabled: Boolean = true,
+  backdropBlurEnabled: Boolean = true,
   leading: (@Composable () -> Unit)? = { TopBarBackButton() },
   leadingKey: Any = TopBarState.DefaultLeadingKey,
   center: (@Composable () -> Unit)? = null,
   centerKey: Any? = null,
+  centerAppearance: TopBarCenterAppearance = TopBarCenterAppearance.AdaptiveTransparent,
   trailing: (@Composable () -> Unit)? = null,
   trailingKey: Any? = null,
   scrollOffset: (() -> Int)? = null,
@@ -231,6 +257,7 @@ fun ProvideTopBar(
   @Suppress("UNUSED_EXPRESSION") state.centerKey
 
   state.enabled = enabled
+  state.backdropBlurEnabled = backdropBlurEnabled
   if (enabled) {
     val entryInstance = remember { Any() }
     val routeKey =
@@ -251,7 +278,7 @@ fun ProvideTopBar(
     val resolvedCustomKey = resolveTopBarEntryKey(customKey, routeKey, fallbackEntryKey)
 
     state.setLeading(resolvedLeadingKey, leading, owner, entryInstance)
-    state.setCenter(resolvedCenterKey, center, owner, entryInstance)
+    state.setCenter(resolvedCenterKey, center, centerAppearance, owner, entryInstance)
     state.setTrailing(resolvedTrailingKey, trailing, owner, entryInstance)
     state.scrollOffset = scrollOffset
     state.visible = visible

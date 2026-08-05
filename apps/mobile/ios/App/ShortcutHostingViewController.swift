@@ -4,10 +4,16 @@ import UIKit
 final class ShortcutHostingViewController: UIViewController {
   private let content: UIViewController
   private let shortcutRegistry: NativeShortcutRegistry
+  private let statusBarAppearanceController: NavigationStatusBarAppearanceController
 
-  init(content: UIViewController, shortcutRegistry: NativeShortcutRegistry) {
+  init(
+    content: UIViewController,
+    shortcutRegistry: NativeShortcutRegistry,
+    statusBarAppearanceController: NavigationStatusBarAppearanceController
+  ) {
     self.content = content
     self.shortcutRegistry = shortcutRegistry
+    self.statusBarAppearanceController = statusBarAppearanceController
     super.init(nibName: nil, bundle: nil)
   }
 
@@ -25,8 +31,8 @@ final class ShortcutHostingViewController: UIViewController {
     content.didMove(toParent: self)
   }
 
-  override var childForStatusBarStyle: UIViewController? {
-    content
+  override var preferredStatusBarStyle: UIStatusBarStyle {
+    statusBarAppearanceController.useLightForeground ? .lightContent : .darkContent
   }
 
   override var childForStatusBarHidden: UIViewController? {

@@ -3,8 +3,10 @@ package co.typie.ui.component.topbar
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.EaseOut
 import androidx.compose.animation.core.EaseOutCubic
+import androidx.compose.animation.core.EaseOutQuint
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
@@ -24,6 +26,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -40,6 +43,12 @@ import androidx.compose.ui.unit.dp
 import co.typie.ext.safeDrawingHorizontalPadding
 import co.typie.ext.toDp
 import co.typie.ext.toPx
+import co.typie.ui.theme.DarkColors
+import co.typie.ui.theme.LocalAppColors
+import co.typie.ui.theme.LocalThemeMode
+import co.typie.ui.theme.ResolvedThemeMode
+
+private const val TOP_BAR_CENTER_PALETTE_ANIMATION_DURATION_MILLIS = 900
 
 @Composable
 fun TopBar(state: TopBarState, modifier: Modifier = Modifier, onTap: (() -> Unit)? = null) {
@@ -141,7 +150,18 @@ fun TopBar(state: TopBarState, modifier: Modifier = Modifier, onTap: (() -> Unit
                   revealed = !hasScrollReveal || centerRevealed
                 }
 
-                TopBarCenterReveal(visible = revealed) { state.centerEntries[entryKey]?.invoke() }
+                TopBarCenterReveal(visible = revealed) {
+                  val content = state.centerEntries[entryKey]
+                  if (
+                    state.centerAppearances[entryKey] == TopBarCenterAppearance.AdaptiveTransparent
+                  ) {
+                    ProvideTopBarCenterPalette(foregroundStyle = state.adaptiveForegroundStyle) {
+                      content?.invoke()
+                    }
+                  } else {
+                    content?.invoke()
+                  }
+                }
               }
             }
           }
@@ -205,6 +225,52 @@ fun TopBar(state: TopBarState, modifier: Modifier = Modifier, onTap: (() -> Unit
       }
     }
   }
+}
+
+@Composable
+private fun ProvideTopBarCenterPalette(
+  foregroundStyle: TopBarForegroundStyle?,
+  content: @Composable () -> Unit,
+) {
+  val baseColors = LocalAppColors.current
+  val inverted =
+    LocalThemeMode.current == ResolvedThemeMode.Light &&
+      foregroundStyle == TopBarForegroundStyle.Light
+  val targetColors = if (inverted) DarkColors else baseColors
+  val textDefault by
+    animateColorAsState(
+      targetValue = targetColors.textDefault,
+      animationSpec =
+        tween(
+          durationMillis = TOP_BAR_CENTER_PALETTE_ANIMATION_DURATION_MILLIS,
+          easing = EaseOutQuint,
+        ),
+      label = "top-bar-center-text-default",
+    )
+  val textMuted by
+    animateColorAsState(
+      targetValue = targetColors.textMuted,
+      animationSpec =
+        tween(
+          durationMillis = TOP_BAR_CENTER_PALETTE_ANIMATION_DURATION_MILLIS,
+          easing = EaseOutQuint,
+        ),
+      label = "top-bar-center-text-muted",
+    )
+  val textHint by
+    animateColorAsState(
+      targetValue = targetColors.textHint,
+      animationSpec =
+        tween(
+          durationMillis = TOP_BAR_CENTER_PALETTE_ANIMATION_DURATION_MILLIS,
+          easing = EaseOutQuint,
+        ),
+      label = "top-bar-center-text-hint",
+    )
+  val centerColors =
+    baseColors.copy(textDefault = textDefault, textMuted = textMuted, textHint = textHint)
+
+  CompositionLocalProvider(LocalAppColors provides centerColors, content = content)
 }
 
 @Composable
