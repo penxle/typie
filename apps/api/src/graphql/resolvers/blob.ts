@@ -13,6 +13,7 @@ import { rgbaToThumbHash } from 'thumbhash';
 import { db, Files, first, firstOrThrow, FontFamilies, FontNames, Fonts, Images, TableCode, validateDbId } from '#/db/index.ts';
 import { stack } from '#/env.ts';
 import * as aws from '#/external/aws.ts';
+import { convertAnimatedWebpToMp4, exceedsAnimatedImageBudget } from '#/utils/animated-webp.ts';
 import { compressZstd } from '#/utils/compression.ts';
 import { isUnsupportedFontFormat, processFont } from '#/utils/font.ts';
 import { assertActiveSubscription } from '#/utils/plan.ts';
@@ -270,7 +271,16 @@ builder.mutationFields((t) => ({
           const outputPath = path.join(tempDir, 'output.mp4');
 
           await fs.writeFile(inputPath, buffer);
-          await convertToMp4(inputPath, outputPath);
+
+          if (animatedInfo.format === 'webp') {
+            const metadata = await sharp(buffer, { limitInputPixels: false }).metadata();
+            if (exceedsAnimatedImageBudget(metadata)) {
+              throw new TypieError({ code: 'animated_image_too_large' });
+            }
+            await convertAnimatedWebpToMp4(inputPath, outputPath);
+          } else {
+            await convertToMp4(inputPath, outputPath);
+          }
 
           const videoMeta = await getVideoMetadata(outputPath);
           const mp4Buffer = await fs.readFile(outputPath);

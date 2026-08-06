@@ -53,6 +53,8 @@ COPY --from=prod-deps /app/ .
 COPY --from=build /app/ .
 RUN curl -fsSL "https://github.com/penxle/vendor/releases/download/sharp/v0.34.5/sharp-debian.tar.xz" \
     | tar xJf - -C apps/api/
+RUN curl -fsSL "https://github.com/penxle/vendor/releases/download/webp-anim-frames/v1.5.0/webp-anim-frames-debian.tar.xz" \
+    | tar xJf - -C /usr/local/bin/
 
 ENTRYPOINT ["tini", "--"]
 CMD ["node", "--import", "./apps/api/src/instrumentation.ts", "apps/api/src/main.ts"]
