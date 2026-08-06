@@ -91,11 +91,16 @@
     }
   };
 
+  // 원고 파일이 여럿일 때만 경로를 붙인다 — 단일 원고 실행에서는 군더더기다.
+  const manuscriptFiles = $derived(
+    new Set(data.ledgers.flatMap((l) => l.tools.map((t) => ('file' in t ? t.file : undefined)).filter((f) => f !== undefined))),
+  );
+  const filePrefix = (t: ToolRecord) => (manuscriptFiles.size > 1 && 'file' in t && t.file ? `${t.file} ` : '');
   const toolLine = (t: ToolRecord) =>
     t.tool === 'read'
-      ? `[턴${t.turn}] read ${t.start}~${t.end}`
+      ? `[턴${t.turn}] read ${filePrefix(t)}${t.start}~${t.end}`
       : t.tool === 'grep'
-        ? `[턴${t.turn}] grep '${t.pattern}' → ${t.total}건`
+        ? `[턴${t.turn}] grep ${filePrefix(t)}'${t.pattern}' → ${t.total}건`
         : `[턴${t.turn}] search '${t.query}' → ${t.hits}건`;
 
   const statCardClass = css({ backgroundColor: 'surface.subtle', borderRadius: '10px', padding: '12px' });
@@ -302,9 +307,74 @@
             <p class={css({ fontSize: '12px', fontWeight: 'bold', marginBottom: '6px' })}>
               {ledger.label}
               <span class={css({ fontWeight: 'normal', color: 'text.faint' })}>
-                · 도구 {ledger.tools.length} · 이벤트 {ledger.events.length}
+                · 도구 {ledger.tools.length} · 이벤트 {ledger.events.length}{#if ledger.turns.length > 0}&nbsp;· 턴 {ledger.turns
+                    .length}{/if}
               </span>
             </p>
+            {#if ledger.turns.length > 0}
+              <details class={css({ marginBottom: '6px' })}>
+                <summary class={css({ fontSize: '12px', color: 'text.subtle', cursor: 'pointer', _hover: { color: 'text.default' } })}>
+                  턴 기록 펼치기
+                </summary>
+                <div class={flex({ direction: 'column', gap: '8px', marginTop: '6px' })}>
+                  {#each ledger.turns as t (`${t.stage}-${t.turn}`)}
+                    <div class={css({ paddingLeft: '8px', borderLeftWidth: '2px', borderColor: 'border.default' })}>
+                      <p class={css({ fontSize: '11px', color: 'text.faint', fontFamily: 'mono' })}>{t.stage} #{t.turn}</p>
+                      {#if t.thinking}
+                        <p
+                          class={css({
+                            fontSize: '12px',
+                            lineHeight: '[1.7]',
+                            whiteSpace: 'pre-wrap',
+                            overflowWrap: 'anywhere',
+                            color: 'text.faint',
+                          })}
+                        >
+                          {t.thinking}
+                        </p>
+                      {/if}
+                      {#if t.text}
+                        <p class={css({ fontSize: '12px', lineHeight: '[1.7]', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' })}>
+                          {t.text}
+                        </p>
+                      {/if}
+                      {#if t.submissions.length > 0}
+                        <pre
+                          class={css({
+                            fontSize: '11px',
+                            fontFamily: 'mono',
+                            whiteSpace: 'pre-wrap',
+                            overflowWrap: 'anywhere',
+                            color: 'text.subtle',
+                            marginTop: '2px',
+                          })}>{t.submissions.join('\n')}</pre>
+                      {/if}
+                    </div>
+                  {/each}
+                </div>
+              </details>
+            {/if}
+            {#if ledger.scratchFiles.length > 0}
+              <details class={css({ marginBottom: '6px' })}>
+                <summary class={css({ fontSize: '12px', color: 'text.subtle', cursor: 'pointer', _hover: { color: 'text.default' } })}>
+                  작업 메모 {ledger.scratchFiles.length}개
+                </summary>
+                <div class={flex({ direction: 'column', gap: '8px', marginTop: '6px' })}>
+                  {#each ledger.scratchFiles as f (f.path)}
+                    <div class={css({ paddingLeft: '8px', borderLeftWidth: '2px', borderColor: 'border.default' })}>
+                      <p class={css({ fontSize: '11px', color: 'text.faint', fontFamily: 'mono' })}>{f.path}</p>
+                      <pre
+                        class={css({
+                          fontSize: '12px',
+                          whiteSpace: 'pre-wrap',
+                          overflowWrap: 'anywhere',
+                          color: 'text.subtle',
+                        })}>{f.content}</pre>
+                    </div>
+                  {/each}
+                </div>
+              </details>
+            {/if}
             {#if ledger.tools.length > 0}
               <pre
                 class={css({

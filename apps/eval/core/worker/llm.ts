@@ -1,6 +1,8 @@
 import { schemaViolations } from '../tool-schema.ts';
+import { callToolCompat, isAnthropicModel } from './compat.ts';
 import type Anthropic from '@anthropic-ai/sdk';
 import type { PhasePrompt, Usage } from '../contracts.ts';
+import type { LlmClients } from './compat.ts';
 
 // 스텝의 wall-clock에는 플랫폼 상한이 없다(제한되는 것은 스텝당 CPU 시간이며 LLM 응답 대기는
 // 여기 들어가지 않는다). 그러니 이 값은 순전히 우리가 "이쯤이면 죽은 호출"이라고 보는 선이다.
@@ -37,14 +39,18 @@ export type CallOptions = { conventions?: string | null; manuscript?: string | n
 // 뒤따라 읽을 호출이 있을 때만 캐싱한다. 쓰기는 입력가의 1.25배라, 호출이 하나뿐인 단계에
 // 걸면 회수 없이 프리미엄만 문다. 규약을 messages가 아니라 system에 두는 이유는 tool_choice가
 // 달라져도 system 계층 캐시는 살아남기 때문이다 — 예열 호출이 가능해진다.
+// 원고도 한 문서의 모든 호출이 공유한다. 검증이 비쌌던 이유가 이걸 접두부에 두지 않고
+// 호출마다 새로 보낸 것이었다 — 그 몫이 그 단계 비용의 3분의 2였다.
+const systemTexts = (prompt: PhasePrompt, options: CallOptions): string[] => {
+  const texts = [prompt.system];
+  if (options.conventions) texts.push(options.conventions);
+  if (options.manuscript) texts.push(`<원고>\n${options.manuscript}\n</원고>`);
+  return texts;
+};
+
 const systemBlocks = (prompt: PhasePrompt, options: CallOptions): Anthropic.TextBlockParam[] => {
   const mark = options.cache ? ({ cache_control: { type: 'ephemeral' } } as const) : {};
-  const blocks: Anthropic.TextBlockParam[] = [{ type: 'text', text: prompt.system, ...mark }];
-  if (options.conventions) blocks.push({ type: 'text', text: options.conventions, ...mark });
-  // 원고도 한 문서의 모든 호출이 공유한다. 검증이 비쌌던 이유가 이걸 접두부에 두지 않고
-  // 호출마다 새로 보낸 것이었다 — 그 몫이 그 단계 비용의 3분의 2였다.
-  if (options.manuscript) blocks.push({ type: 'text', text: `<원고>\n${options.manuscript}\n</원고>`, ...mark });
-  return blocks;
+  return systemTexts(prompt, options).map((text) => ({ type: 'text', text, ...mark }));
 };
 
 const baseParams = (prompt: PhasePrompt, tool: Anthropic.Messages.Tool, options: CallOptions) => {
@@ -53,6 +59,8 @@ const baseParams = (prompt: PhasePrompt, tool: Anthropic.Messages.Tool, options:
     max_tokens: MAX_OUTPUT_TOKENS,
     tools: [tool],
     system: systemBlocks(prompt, options),
+    // 5계열 기본 display가 omitted라 thinking 본문이 빈 채로 온다 — 요약을 받는다(비용 동일).
+    thinking: { type: 'adaptive', display: 'summarized' } as never,
   };
   return prompt.effort ? { ...params, output_config: { effort: prompt.effort as never } } : params;
 };
@@ -90,13 +98,17 @@ export const warmPrefix = async (
 };
 
 export const callTool = async <T>(
-  client: Anthropic,
+  clients: LlmClients,
   prompt: PhasePrompt,
   tool: Anthropic.Messages.Tool,
   userContent: string,
   usage: Usage,
   options: CallOptions = {},
 ): Promise<T> => {
+  // compat 경로는 캐시 표시가 없으므로 options.cache는 자연히 무의미해진다.
+  if (!isAnthropicModel(prompt.model))
+    return callToolCompat<T>(clients.compat, prompt, tool, systemTexts(prompt, options), userContent, usage);
+
   const messages: Anthropic.MessageParam[] = [{ role: 'user', content: userContent }];
   const params = { ...baseParams(prompt, tool, options), tool_choice: { type: 'tool' as const, name: tool.name }, stream: true as const };
 
@@ -104,7 +116,7 @@ export const callTool = async <T>(
   // 지적해 다시 받는다 — 검사기를 남겨 두면 계약이 깨졌을 때 조용히 지나가지 않는다.
   let violations: string[] = [];
   for (let attempt = 0; attempt < 2; attempt++) {
-    const message = await client.messages.stream({ ...params, messages }, SKIP_CACHE).finalMessage();
+    const message = await clients.anthropic.messages.stream({ ...params, messages }, SKIP_CACHE).finalMessage();
 
     usage.calls += 1;
     // input_tokens는 캐시에 걸리지 않은 나머지다. 전체 입력은 세 값의 합이며, 쓰기와 읽기는

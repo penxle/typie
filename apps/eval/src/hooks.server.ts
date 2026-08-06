@@ -18,6 +18,11 @@ export const handle: Handle = async ({ event, resolve }) => {
     error(auth.status, 'unauthorized');
   }
 
+  // 공개 경로는 locals.email이 비어 있다 — 공개 경로 아래 라우트는 email을 읽지 않아야 한다.
+  if (auth.kind === 'public') {
+    return resolve(event);
+  }
+
   event.locals.email = auth.email;
 
   return resolve(event);

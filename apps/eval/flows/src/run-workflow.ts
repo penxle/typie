@@ -31,11 +31,18 @@ export class RunWorkflow extends WorkflowEntrypoint<FlowEnv, RunParams> {
 
       const prompts = resolvePrompts(manifest, set.content);
       await db.update(Runs).set({ status: 'running', error: null, startedAt: new Date() }).where(eq(Runs.id, runId));
-      return { generationId: set.generationId, content: document.content, documentId: document.id, prompts } as never;
+      return {
+        generationId: set.generationId,
+        content: document.content,
+        documentId: document.id,
+        refId: document.refId,
+        prompts,
+      } as never;
     })) as unknown as {
       generationId: string;
       content: string;
       documentId: string;
+      refId: string;
       prompts: Record<string, { system: string; model: string; effort: string | null }>;
     };
 
@@ -45,7 +52,7 @@ export class RunWorkflow extends WorkflowEntrypoint<FlowEnv, RunParams> {
         step,
         env: this.env,
         runId,
-        document: { id: resolved.documentId, content: resolved.content },
+        document: { id: resolved.documentId, refId: resolved.refId, content: resolved.content },
         prompts: resolved.prompts,
       });
       const { items } = await RUNNERS[resolved.generationId](ctx);

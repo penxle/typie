@@ -48,13 +48,19 @@ export const load: PageServerLoad = async ({ params, platform }) => {
     .filter((row) => row.key.startsWith('ledger/'))
     .map((row) => {
       const stage = row.key.slice('ledger/'.length);
-      const value = row.value as { tools?: unknown; events?: unknown };
+      const value = row.value as { tools?: unknown; events?: unknown; turns?: unknown; scratchFiles?: unknown };
       return {
         stage,
         at: row.createdAt.getTime(),
         label: manifest?.phases.find((p) => p.key === stage)?.label ?? stage,
         tools: Array.isArray(value.tools) ? (value.tools as ToolRecord[]) : [],
         events: Array.isArray(value.events) ? (value.events as { turn?: number; kind: string; detail: string }[]) : [],
+        // 턴 기록은 이 기능 도입 이후의 실행에만 있다 — 없으면 빈 배열로 두고 화면이 접는다.
+        turns: Array.isArray(value.turns)
+          ? (value.turns as { stage: string; turn: number; thinking?: string; text: string; submissions: string[] }[])
+          : [],
+        // 스테이지 완료 시점의 scratch/ 스냅샷 — 파일시스템 전환 이후의 실행에만 있다.
+        scratchFiles: Array.isArray(value.scratchFiles) ? (value.scratchFiles as { path: string; content: string }[]) : [],
       };
     })
     .toSorted((a, b) => a.at - b.at);

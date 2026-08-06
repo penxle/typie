@@ -1,4 +1,4 @@
-import { and, eq, inArray } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { Documents, inChunks, Judgments, PromptSets, Runs, Tasks } from '../../../core/db.ts';
 import { generationById } from '../../../core/registry.ts';
@@ -48,19 +48,6 @@ export const spawnRuns = async (
   // 실행과 헷갈리게 두지 않는다.
   if (docs.length !== input.documentIds.length) {
     return { error: `문서를 찾을 수 없습니다: ${input.documentIds.filter((id) => docs.every((d) => d.id !== id)).join(', ')}` };
-  }
-
-  // 연타·동시 요청 방어. 같은 세트로 이미 돌고 있는 문서를 다시 걸면 같은 결과에 두 번
-  // 과금된다 — 클라이언트 버튼 상태는 요청이 날아가는 동안의 연타를 못 막으므로 서버가
-  // 최종 관문이다. 완료·실패한 실행의 재실행은 retryRun의 몫이라 여기서 막지 않는다.
-  const active = await inChunks(input.documentIds, (chunk) =>
-    db
-      .select({ documentId: Runs.documentId })
-      .from(Runs)
-      .where(and(eq(Runs.promptSetId, input.promptSetId), inArray(Runs.documentId, chunk), inArray(Runs.status, ['pending', 'running']))),
-  );
-  if (active.length > 0) {
-    return { error: `이 세트로 이미 실행 중인 문서가 ${active.length}건 있습니다 — 완료를 기다리거나 취소 후 다시 시도하세요` };
   }
 
   const spawned: string[] = [];

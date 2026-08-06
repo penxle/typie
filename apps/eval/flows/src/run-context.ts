@@ -37,7 +37,7 @@ export const createRunContext = (deps: {
   step: WorkflowStep;
   env: RunEnv;
   runId: string;
-  document: { id: string; content: string };
+  document: { id: string; refId: string; content: string };
   prompts: Record<string, PhasePrompt>;
 }): RunContext => {
   let current = 'unknown';
