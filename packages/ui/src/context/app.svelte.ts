@@ -54,7 +54,7 @@ type AppState = {
   exportOpen: string | null;
   statsOpen: boolean;
   goalOpen: string[];
-  dailyGoalOpen: boolean;
+  userGoalOpen: boolean;
   shortcutsOpen: boolean;
 
   subscribed: boolean;
@@ -106,7 +106,7 @@ export const setupAppContext = (userId: string) => {
     exportOpen: null,
     statsOpen: false,
     goalOpen: [],
-    dailyGoalOpen: false,
+    userGoalOpen: false,
     shortcutsOpen: false,
 
     subscribed: false,

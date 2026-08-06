@@ -437,8 +437,8 @@
             })}
             onclick={() => {
               close();
-              app.state.dailyGoalOpen = true;
-              mixpanel.track('open_daily_goal_modal', { via: 'profile_menu' });
+              app.state.userGoalOpen = true;
+              mixpanel.track('open_user_goal_modal', { via: 'profile_menu' });
             }}
             type="button"
           >

@@ -5,15 +5,15 @@
   import { comma } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import { graphql } from '$mearie';
-  import type { DashboardLayout_DailyGoalTrendChart_user$key } from '$mearie';
+  import type { DashboardLayout_UserGoalTrendChart_user$key } from '$mearie';
 
-  type Props = { user$key: DashboardLayout_DailyGoalTrendChart_user$key };
+  type Props = { user$key: DashboardLayout_UserGoalTrendChart_user$key };
 
   let { user$key }: Props = $props();
 
   const user = createFragment(
     graphql(`
-      fragment DashboardLayout_DailyGoalTrendChart_user on User {
+      fragment DashboardLayout_UserGoalTrendChart_user on User {
         id
 
         goal {

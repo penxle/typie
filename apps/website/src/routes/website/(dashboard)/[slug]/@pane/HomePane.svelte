@@ -354,8 +354,8 @@
             <button
               class={flex({ alignItems: 'center', gap: '8px', cursor: 'pointer' })}
               onclick={() => {
-                app.state.dailyGoalOpen = true;
-                mixpanel.track('open_daily_goal_modal', { via: 'home_pane' });
+                app.state.userGoalOpen = true;
+                mixpanel.track('open_user_goal_modal', { via: 'home_pane' });
               }}
               type="button"
             >
@@ -372,8 +372,8 @@
             <button
               class={css({ fontSize: '14px', color: 'text.faint', cursor: 'pointer', _hover: { color: 'text.default' } })}
               onclick={() => {
-                app.state.dailyGoalOpen = true;
-                mixpanel.track('open_daily_goal_modal', { via: 'home_pane' });
+                app.state.userGoalOpen = true;
+                mixpanel.track('open_user_goal_modal', { via: 'home_pane' });
               }}
               type="button"
             >

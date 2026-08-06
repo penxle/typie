@@ -305,8 +305,8 @@
             <button
               class={css({ fontSize: '12px', color: 'text.faint', cursor: 'pointer', _hover: { color: 'text.default' } })}
               onclick={() => {
-                app.state.dailyGoalOpen = true;
-                mixpanel.track('open_daily_goal_modal', { via: 'stats_modal' });
+                app.state.userGoalOpen = true;
+                mixpanel.track('open_user_goal_modal', { via: 'stats_modal' });
               }}
               type="button"
             >
@@ -332,8 +332,8 @@
           <button
             class={css({ fontSize: '14px', color: 'text.faint', cursor: 'pointer', _hover: { color: 'text.default' } })}
             onclick={() => {
-              app.state.dailyGoalOpen = true;
-              mixpanel.track('open_daily_goal_modal', { via: 'stats_modal' });
+              app.state.userGoalOpen = true;
+              mixpanel.track('open_user_goal_modal', { via: 'stats_modal' });
             }}
             type="button"
           >

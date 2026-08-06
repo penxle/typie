@@ -11,15 +11,15 @@
   import { streaks, todayProgress } from '$lib/goal';
   import { formatCommaInput, parseCommaInput } from '$lib/number-input';
   import { graphql } from '$mearie';
-  import DailyGoalDots from './DailyGoalDots.svelte';
-  import DailyGoalHistoryTable from './DailyGoalHistoryTable.svelte';
-  import DailyGoalTrendChart from './DailyGoalTrendChart.svelte';
+  import UserGoalDots from './UserGoalDots.svelte';
+  import UserGoalHistoryTable from './UserGoalHistoryTable.svelte';
+  import UserGoalTrendChart from './UserGoalTrendChart.svelte';
 
   const app = getAppContext();
 
   const query = createQuery(
     graphql(`
-      query DashboardLayout_DailyGoalModal_Query {
+      query DashboardLayout_UserGoalModal_Query {
         me @required {
           id
 
@@ -35,19 +35,19 @@
             achieved
           }
 
-          ...DashboardLayout_DailyGoalDots_user
-          ...DashboardLayout_DailyGoalTrendChart_user
-          ...DashboardLayout_DailyGoalHistoryTable_user
+          ...DashboardLayout_UserGoalDots_user
+          ...DashboardLayout_UserGoalTrendChart_user
+          ...DashboardLayout_UserGoalHistoryTable_user
         }
       }
     `),
     undefined,
-    () => ({ skip: !app.state.dailyGoalOpen }),
+    () => ({ skip: !app.state.userGoalOpen }),
   );
 
   const me = $derived(query.data?.me);
   const goal = $derived(me?.goal);
-  const loaded = $derived(app.state.dailyGoalOpen && !!query.data);
+  const loaded = $derived(app.state.userGoalOpen && !!query.data);
 
   let input = $state('');
   let editing = $state(false);
@@ -58,7 +58,7 @@
   };
 
   $effect(() => {
-    if (!app.state.dailyGoalOpen) {
+    if (!app.state.userGoalOpen) {
       seeded = false;
       return;
     }
@@ -74,7 +74,7 @@
 
   const [updateUserGoal] = createMutation(
     graphql(`
-      mutation DashboardLayout_DailyGoalModal_UpdateUserGoal_Mutation($input: UpdateUserGoalInput!) {
+      mutation DashboardLayout_UserGoalModal_UpdateUserGoal_Mutation($input: UpdateUserGoalInput!) {
         updateUserGoal(input: $input) {
           id
 
@@ -96,7 +96,7 @@
 
   const [deleteUserGoal] = createMutation(
     graphql(`
-      mutation DashboardLayout_DailyGoalModal_DeleteUserGoal_Mutation {
+      mutation DashboardLayout_UserGoalModal_DeleteUserGoal_Mutation {
         deleteUserGoal {
           id
 
@@ -192,9 +192,9 @@
   style={css.raw({ gap: '20px', maxWidth: '640px', padding: '24px' })}
   loading={!loaded}
   onclose={() => {
-    app.state.dailyGoalOpen = false;
+    app.state.userGoalOpen = false;
   }}
-  open={app.state.dailyGoalOpen}
+  open={app.state.userGoalOpen}
 >
   <div class={css({ fontSize: '17px', fontWeight: 'semibold', color: 'text.default' })}>일일 목표</div>
 
@@ -253,7 +253,7 @@
               backgroundColor: 'surface.muted',
             })}
           >
-            <span class={css({ fontSize: '14px', fontWeight: 'semibold', color: 'text.default' })}>연속 {streak.current}일</span>
+            <span class={css({ fontSize: '14px', fontWeight: 'semibold', color: 'text.default' })}>달성 연속 {streak.current}일</span>
             <span class={css({ fontSize: '12px', color: 'text.faint' })}>최고 기록 {streak.best}일</span>
           </div>
 
@@ -271,17 +271,17 @@
           <div class={flex({ position: 'absolute', inset: '0', flexDirection: 'column', gap: '16px', overflowY: 'auto' })}>
             <div class={flex({ flexDirection: 'column', gap: '8px' })}>
               <div class={css({ fontSize: '11px', color: 'text.faint' })}>달성 · 최근 16주</div>
-              <DailyGoalDots user$key={me} />
+              <UserGoalDots user$key={me} />
             </div>
 
             <div class={flex({ flexDirection: 'column', gap: '8px' })}>
               <div class={css({ fontSize: '11px', color: 'text.faint' })}>일별 글자 수 · 최근 4주</div>
-              <DailyGoalTrendChart user$key={me} />
+              <UserGoalTrendChart user$key={me} />
             </div>
 
             <div class={flex({ flexDirection: 'column', gap: '8px' })}>
               <div class={css({ fontSize: '11px', color: 'text.faint' })}>일별 기록</div>
-              <DailyGoalHistoryTable user$key={me} />
+              <UserGoalHistoryTable user$key={me} />
             </div>
           </div>
         </div>

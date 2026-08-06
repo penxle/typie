@@ -109,7 +109,7 @@
     return pickGoalSource(doc.entity, localCount ?? doc.characterCount);
   });
 
-  const dailyGoal = $derived.by(() => {
+  const userGoal = $derived.by(() => {
     const me = meQuery.data?.me;
     if (!me?.goal) return null;
     return { target: me.goal.targetCharacterCount, ...todayProgress(me.goalHistory, dayjs.kst()) };
@@ -117,7 +117,7 @@
 
   const collapsedSummary = $derived.by(() => {
     if (entityGoal) return Math.round((entityGoal.current / entityGoal.goal.targetCharacterCount) * 100);
-    if (dailyGoal) return Math.round((dailyGoal.additions / dailyGoal.target) * 100);
+    if (userGoal) return Math.round((userGoal.additions / userGoal.target) * 100);
     return null;
   });
 </script>
@@ -178,23 +178,23 @@
       </div>
     {/if}
 
-    {#if dailyGoal}
+    {#if userGoal}
       <button
         class={flex({ alignItems: 'center', gap: '8px', cursor: 'pointer' })}
         onclick={() => {
-          app.state.dailyGoalOpen = true;
-          mixpanel.track('open_daily_goal_modal', { via: 'goal_widget' });
+          app.state.userGoalOpen = true;
+          mixpanel.track('open_user_goal_modal', { via: 'goal_widget' });
         }}
         type="button"
       >
-        <ProgressRing progress={dailyGoal.additions / dailyGoal.target} size={20} state={dailyGoal.achieved ? 'achieved' : 'under'} />
+        <ProgressRing progress={userGoal.additions / userGoal.target} size={20} state={userGoal.achieved ? 'achieved' : 'under'} />
         <span class={css({ fontSize: '13px', color: 'text.subtle', whiteSpace: 'nowrap' })}>
-          오늘 {comma(dailyGoal.additions)} / {comma(dailyGoal.target)}자
+          오늘 {comma(userGoal.additions)} / {comma(userGoal.target)}자
         </span>
       </button>
     {/if}
 
-    {#if !entityGoal && !dailyGoal && !meQuery.loading}
+    {#if !entityGoal && !userGoal && !meQuery.loading}
       <span class={css({ fontSize: '13px', color: 'text.faint' })}>설정된 목표가 없어요</span>
     {/if}
   </div>

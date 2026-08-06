@@ -27,8 +27,8 @@
   import { setupPaneGroup } from './[slug]/@pane/context.svelte';
   import { setupEditorRegistry } from './[slug]/@pane/editor-registry.svelte';
   import DocumentExportModal from './@context-menu/DocumentExportModal.svelte';
-  import DailyGoalModal from './@goal/DailyGoalModal.svelte';
   import GoalModal from './@goal/GoalModal.svelte';
+  import UserGoalModal from './@goal/UserGoalModal.svelte';
   import Notes from './@notes/Notes.svelte';
   import PreferenceModal from './@preference/PreferenceModal.svelte';
   import ShareModal from './@share/ShareModal.svelte';
@@ -504,7 +504,7 @@
 <DocumentExportModal user$key={query.data.me} />
 <ShareModal />
 <GoalModal />
-<DailyGoalModal />
+<UserGoalModal />
 <StatsModal />
 <TrashModal siteId={currentSite.id} />
 <Shortcuts query$key={query.data} />
