@@ -37,6 +37,7 @@ import {
 import { env } from '#/env.ts';
 import * as googleplay from '#/external/googleplay.ts';
 import * as portone from '#/external/portone.ts';
+import { enqueueJob } from '#/mq/index.ts';
 import { verifyEasyPayBillingKey } from '#/utils/billing-key.ts';
 import { computeNextPeriodEnd, floorToHourKst } from '#/utils/billing-period.ts';
 import { deriveExpiresAtShim, isSubscriptionLive } from '#/utils/entitlement.ts';
@@ -776,7 +777,7 @@ builder.mutationFields((t) => ({
       const compareUserId = (a: string, b: string) => (a < b ? -1 : 1);
       const lockUserIds = [...new Set([ownerUserId, ...capturedBindings.map((row) => row.userId)])].toSorted(compareUserId);
 
-      const { subscription, acknowledge } = await db.transaction(async (tx) => {
+      const { subscription, acknowledge, bindingId } = await db.transaction(async (tx) => {
         for (const userId of lockUserIds) {
           await lockUserSubscriptionState(tx, userId);
         }
@@ -1158,7 +1159,7 @@ builder.mutationFields((t) => ({
           .where(eq(Subscriptions.id, lockedBinding.subscriptionId))
           .then(firstOrThrow);
 
-        return { subscription, acknowledge };
+        return { subscription, acknowledge, bindingId: lockedBinding.id };
       });
 
       // 승인은 커밋 후 의무다 — 롤백된 트랜잭션의 토큰을 승인하지 않는다.
@@ -1169,6 +1170,8 @@ builder.mutationFields((t) => ({
           await opsAlert('google-acknowledge-failed', { ...acknowledge, error: err instanceof Error ? err.message : String(err) });
         }
       }
+
+      await enqueueJob('iap:ingest', { bindingId });
 
       // 소유자에게 등록은 반영됐지만 호출 세션의 것이 아니다 — 반환형이 Subscription 이라 그대로 돌려주면 타 유저
       // 데이터가 샌다. 클라이언트는 이 코드에서 트랜잭션을 종료한다(등록이 반영됐으므로 결제는 유실되지 않는다).

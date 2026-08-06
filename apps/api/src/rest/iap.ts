@@ -174,7 +174,7 @@ const loadLockedSuccession = async (tx: Transaction, captured: SuccessionBinding
 };
 
 type SuccessionOutcome =
-  | { kind: 'applied'; acknowledge: IapAcknowledgeDuty | null }
+  | { kind: 'applied'; acknowledge: IapAcknowledgeDuty | null; bindingId: string }
   | { kind: 'bound'; bindingId: string }
   | { kind: 'changed' }
   | {
@@ -347,7 +347,7 @@ const adoptUnboundAppleNotification = async ({
       newIdentifier: originalTransactionId,
     });
 
-    return { kind: 'applied', acknowledge };
+    return { kind: 'applied', acknowledge, bindingId: locked.binding.id };
   });
 };
 
@@ -414,6 +414,7 @@ iap.post('/appstore', async (c) => {
 
   if (outcome.kind === 'applied') {
     await settleAcknowledge(outcome.acknowledge);
+    await enqueueJob('iap:ingest', { bindingId: outcome.bindingId });
   } else if (outcome.kind === 'bound') {
     await enqueueJob('iap:sync', { bindingId: outcome.bindingId });
   } else if (outcome.kind === 'conflict') {
@@ -535,7 +536,7 @@ const adoptUnboundGoogleNotification = async ({
       newIdentifier: purchaseToken,
     });
 
-    return { kind: 'applied', acknowledge };
+    return { kind: 'applied', acknowledge, bindingId: locked.binding.id };
   });
 };
 
@@ -677,6 +678,7 @@ iap.post('/googleplay', async (c) => {
 
   if (outcome.kind === 'applied') {
     await settleAcknowledge(outcome.acknowledge);
+    await enqueueJob('iap:ingest', { bindingId: outcome.bindingId });
   } else if (outcome.kind === 'bound' || outcome.kind === 'not-adopted') {
     await enqueueJob('iap:sync', { bindingId: outcome.bindingId });
   } else if (outcome.kind === 'foreign') {

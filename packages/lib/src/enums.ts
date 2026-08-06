@@ -61,6 +61,12 @@ export const FontFamilyState = {
   ARCHIVED: 'ARCHIVED',
 } as const;
 
+export type InAppPurchaseRecordState = keyof typeof InAppPurchaseRecordState;
+export const InAppPurchaseRecordState = {
+  PAID: 'PAID',
+  REFUNDED: 'REFUNDED',
+} as const;
+
 export type InAppPurchaseStore = keyof typeof InAppPurchaseStore;
 export const InAppPurchaseStore = {
   APP_STORE: 'APP_STORE',

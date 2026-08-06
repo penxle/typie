@@ -13,6 +13,7 @@ import {
 } from './email.ts';
 import { DocumentIndexJob, FolderIndexJob } from './search.ts';
 import {
+  IapIngestJob,
   IapSyncJob,
   SubscriptionBillingScanCron,
   SubscriptionReconcileInAppPurchaseCron,
@@ -37,6 +38,7 @@ export const jobs = [
   SubscriptionRenewalPlanChangeJob,
   SubscriptionRenewalCancelJob,
   SubscriptionReconcileInAppPurchaseJob,
+  IapIngestJob,
   IapSyncJob,
   SendSubscriptionGracePeriodEmailJob,
   SendSubscriptionExpiringEmailJob,

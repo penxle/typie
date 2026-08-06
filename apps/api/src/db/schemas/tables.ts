@@ -1,5 +1,5 @@
 import { eq, sql } from 'drizzle-orm';
-import { bigint, boolean, foreignKey, index, integer, jsonb, pgTable, text, unique, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { bigint, boolean, foreignKey, index, integer, jsonb, numeric, pgTable, text, unique, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { TableCode } from './codes.ts';
 import * as E from './enums.ts';
 import { createDbId } from './id.ts';
@@ -414,6 +414,35 @@ export const PaymentRecords = pgTable(
       .on(t.invoiceId)
       .where(eq(t.outcome, sql`'SUCCESS'`)),
   ],
+);
+
+export const InAppPurchaseRecords = pgTable(
+  'in_app_purchase_records',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.IN_APP_PURCHASE_RECORDS)),
+    store: E._InAppPurchaseStore('store').notNull(),
+    identifier: text('identifier').notNull(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    productId: text('product_id'),
+    state: E._InAppPurchaseRecordState('state').notNull(),
+    amount: numeric('amount').notNull(),
+    currency: text('currency').notNull(),
+    refundedAmount: numeric('refunded_amount'),
+    purchasedAt: datetime('purchased_at').notNull(),
+    refundedAt: datetime('refunded_at'),
+    data: jsonb('data').notNull(),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: datetime('updated_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [unique().on(t.store, t.identifier), index().on(t.userId)],
 );
 
 export const Plans = pgTable('plans', {

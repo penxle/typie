@@ -720,6 +720,11 @@ type Impersonation {
   user: User!
 }
 
+enum InAppPurchaseRecordState {
+  PAID
+  REFUNDED
+}
+
 enum InAppPurchaseStore {
   APP_STORE
   GOOGLE_PLAY

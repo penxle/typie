@@ -14,6 +14,7 @@ export const _EntityType = createPgEnum('_entity_type', E.EntityType);
 export const _EntityVisibility = createPgEnum('_entity_visibility', E.EntityVisibility);
 export const _FontState = createPgEnum('_font_state', E.FontState);
 export const _FontFamilyState = createPgEnum('_font_family_state', E.FontFamilyState);
+export const _InAppPurchaseRecordState = createPgEnum('_in_app_purchase_record_state', E.InAppPurchaseRecordState);
 export const _InAppPurchaseStore = createPgEnum('_in_app_purchase_store', E.InAppPurchaseStore);
 export const _NoteStatus = createPgEnum('_note_status', E.NoteStatus);
 export const _NoteState = createPgEnum('_note_state', E.NoteState);

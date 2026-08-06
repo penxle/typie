@@ -7,6 +7,7 @@ import { db, first, firstOrThrow, PaymentInvoices, Plans, Subscriptions, UserBil
 import * as portone from '#/external/portone.ts';
 import { computeNextPeriodEnd } from '#/utils/billing-period.ts';
 import { deriveGraceDeadline } from '#/utils/entitlement.ts';
+import { ingestIapPayments } from '#/utils/iap-ingest.ts';
 import { syncIapBinding } from '#/utils/iap-sync.ts';
 import { attemptInvoicePayment, enrichPaymentRecordReceipt, hasBillableUsageDuring } from '#/utils/index.ts';
 import { opsAlertOnce } from '#/utils/ops-alert.ts';
@@ -673,6 +674,8 @@ export const IapSyncJob = defineJob('iap:sync', async (payload: { bindingId: str
   if (outcome.kind === 'deferred') {
     throw new Error(`iap sync deferred: ${payload.bindingId}`);
   }
+
+  await enqueueJob('iap:ingest', { bindingId: payload.bindingId });
 });
 
 export const SubscriptionReconcileInAppPurchaseCron = defineCron('subscription:reconcile-iap', '0 4 * * *', async () => {
@@ -711,4 +714,12 @@ export const SubscriptionReconcileInAppPurchaseJob = defineJob('subscription:rec
   if (outcome.kind === 'deferred') {
     throw new Error(`iap sync deferred: ${binding.id}`);
   }
+
+  await enqueueJob('iap:ingest', { bindingId: binding.id });
+});
+
+// 결제 기록 적재는 상태 동기화와 분리된 잡이다 — 스토어 이력 재수집이라 멱등이고, 실패해도
+// 다음 sync 연쇄·일일 재조정이 재수집한다. 스토어 조회 실패는 collect 가 throw 해 BullMQ 재시도를 탄다.
+export const IapIngestJob = defineJob('iap:ingest', async (payload: { bindingId: string }) => {
+  await ingestIapPayments({ bindingId: payload.bindingId });
 });

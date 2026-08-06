@@ -25,6 +25,7 @@ export const TableCode = {
   FONT_FAMILIES: 'FNTF',
   FONT_NAMES: 'FNTN',
   IMAGES: 'IMG',
+  IN_APP_PURCHASE_RECORDS: 'IAPR',
   LLM_ANALYSIS_RUNS: 'LAR',
   LLM_CALL_USAGE: 'LCU',
   NOTES: 'N',

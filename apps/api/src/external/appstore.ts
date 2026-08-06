@@ -1,7 +1,13 @@
-import { AppStoreServerAPIClient, Environment, SignedDataVerifier, Status } from '@apple/app-store-server-library';
+import {
+  AppStoreServerAPIClient,
+  Environment,
+  GetTransactionHistoryVersion,
+  SignedDataVerifier,
+  Status,
+} from '@apple/app-store-server-library';
 import ky from 'ky';
 import { env } from '#/env.ts';
-import type { ConsumptionRequest } from '@apple/app-store-server-library';
+import type { ConsumptionRequest, JWSTransactionDecodedPayload } from '@apple/app-store-server-library';
 import type { AppleStatusItem } from '#/utils/iap-normalize.ts';
 
 const certificateUrls = [
@@ -152,6 +158,50 @@ export const getSubscriptionStatuses = async (anyTransactionId: string): Promise
       }
 
       return { kind: 'ok', items };
+    } catch {
+      if (responded) {
+        return { kind: 'error' };
+      }
+      // 이 환경 조회 실패 — 다음 환경 시도
+    }
+  }
+
+  return { kind: 'error' };
+};
+
+export type AppleTransactionHistoryResult = { kind: 'ok'; transactions: JWSTransactionDecodedPayload[] } | { kind: 'error' };
+
+const TRANSACTION_HISTORY_PAGE_LIMIT = 50;
+
+// 결제 기록 적재용 전체 이력. V2 는 상태·상품 타입 무관 전 트랜잭션을 반환한다(V1 은 deprecated, 완료된 소모품 누락).
+export const getTransactionHistory = async (anyTransactionId: string): Promise<AppleTransactionHistoryResult> => {
+  for (const environment of environments) {
+    const client = clients[environment];
+    const verifier = verifiers[environment];
+
+    // 응답 수신 이후의 예외는 조회 실패가 아니라 서명 검증 실패다 — 다음 환경으로 넘기지 않고 error 로 구분한다
+    // (getSubscriptionStatuses 의 responded 패턴과 동형).
+    let responded = false;
+    try {
+      const transactions: JWSTransactionDecodedPayload[] = [];
+      let revision: string | null = null;
+
+      for (let page = 0; page < TRANSACTION_HISTORY_PAGE_LIMIT; page++) {
+        const response = await client.getTransactionHistory(anyTransactionId, revision, {}, GetTransactionHistoryVersion.V2);
+        responded = true;
+
+        for (const signedTransaction of response.signedTransactions ?? []) {
+          transactions.push(await verifier.verifyAndDecodeTransaction(signedTransaction));
+        }
+
+        revision = response.revision ?? null;
+        if (!response.hasMore) {
+          return { kind: 'ok', transactions };
+        }
+      }
+
+      // 페이지 캡 도달 — 부분 이력을 전체로 오인하지 않는다.
+      return { kind: 'error' };
     } catch {
       if (responded) {
         return { kind: 'error' };

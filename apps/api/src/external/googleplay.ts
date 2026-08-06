@@ -57,6 +57,30 @@ export const getSubscriptionV2 = async (purchaseToken: string): Promise<GoogleSu
   }
 };
 
+export type GoogleOrderResult = { kind: 'ok'; order: androidpublisher_v3.Schema$Order } | { kind: 'not-found' } | { kind: 'error' };
+
+// 열거한 주문 체인의 개별 조회 — 존재하지 않는 접미사는 not-found 로 흡수한다
+// (batchget 은 주문 ID 하나라도 없으면 전체 요청이 실패해 쓰지 않는다).
+export const getOrder = async (orderId: string): Promise<GoogleOrderResult> => {
+  try {
+    const response = await client.orders.get({
+      packageName: env.GOOGLE_PLAY_PACKAGE_NAME,
+      orderId,
+    });
+
+    return { kind: 'ok', order: response.data };
+  } catch (err_) {
+    const err = err_ as { status?: unknown; response?: { status?: unknown } } | null | undefined;
+    const status = err?.response?.status ?? err?.status;
+
+    if (status === 404 || status === 410) {
+      return { kind: 'not-found' };
+    }
+
+    return { kind: 'error' };
+  }
+};
+
 export const acknowledgeSubscription = async ({
   productId,
   purchaseToken,
