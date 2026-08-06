@@ -16,6 +16,8 @@ enum class DateTimeStyle {
   FULL,
 }
 
+val WeekdayNames = listOf("일", "월", "화", "수", "목", "금", "토")
+
 fun Instant.formatKoreanDate(): String = format("yyyy년 MM월 dd일")
 
 fun Instant.timeAgo(now: Instant = Clock.System.now()): String {

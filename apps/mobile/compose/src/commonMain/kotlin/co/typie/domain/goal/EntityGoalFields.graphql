@@ -1,0 +1,6 @@
+fragment EntityGoalFields_goal on EntityGoal {
+  id
+  targetCharacterCount
+  dueAt
+  createdAt
+}

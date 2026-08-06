@@ -56,12 +56,17 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.lerp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import co.typie.datetime.kstToday
 import co.typie.datetime.timeAgo
 import co.typie.domain.entity.EntityIcon
 import co.typie.domain.entity.EntityRow
 import co.typie.domain.entity.formatDocumentTitle
 import co.typie.domain.entity.formatEntityExcerpt
 import co.typie.domain.entity.parentFolderMeta
+import co.typie.domain.goal.GoalColorState
+import co.typie.domain.goal.UserGoalDay
+import co.typie.domain.goal.toUserGoalDays
+import co.typie.domain.goal.todayProgress
 import co.typie.domain.subscription.GatedAction
 import co.typie.domain.subscription.SubscriptionService
 import co.typie.domain.subscription.TrialRemainingChip
@@ -92,6 +97,7 @@ import co.typie.shell.MainDrawerTriggerLeadingKey
 import co.typie.shell.Tab
 import co.typie.shell.mainTabPagerChildHorizontalGesture
 import co.typie.ui.component.Divider
+import co.typie.ui.component.ProgressRing
 import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
 import co.typie.ui.component.bottombar.BottomBarAction
@@ -123,6 +129,9 @@ import kotlinx.coroutines.launch
 private val ContinueWritingPinHeight: Dp = 56.dp
 private val ContinueWritingPinGap: Dp = 12.dp
 private val HomeSearchBarHeight: Dp = 48.dp
+private val HomeSectionGap: Dp = 28.dp
+private val UserGoalRowGap: Dp = 12.dp
+private val UserGoalRowTapPadding: Dp = 12.dp
 private const val ContinueWritingPinDragFadeStrength = 0.6f
 
 @Composable
@@ -169,6 +178,10 @@ fun HomeScreen() {
     }
 
   val continueWritingDoc = model.continueWritingDocument
+
+  val goalFields = model.query.data.me.userGoalFields_user
+  val goalTarget = goalFields.goal?.targetCharacterCount?.toLong()
+  val goalHistory = remember(goalFields.goalHistory) { goalFields.goalHistory.toUserGoalDays() }
 
   val createDocument: suspend () -> Unit = {
     if (!model.isCreatingDocument && SubscriptionService.gate(sheet, GatedAction.CreateDocument)) {
@@ -220,6 +233,8 @@ fun HomeScreen() {
         continueDocs = continueDocs,
         recentDocs = recentDocs,
         siteName = model.query.data.site.name,
+        goalTarget = goalTarget,
+        goalHistory = goalHistory,
         contentPadding =
           innerPadding +
             PaddingValues(
@@ -247,6 +262,8 @@ private fun FilledHome(
   continueDocs: List<HomeScreen_ContinueWriting_document>,
   recentDocs: List<HomeScreen_RecentDocumentRow_document>,
   siteName: String,
+  goalTarget: Long?,
+  goalHistory: List<UserGoalDay>,
   contentPadding: PaddingValues,
 ) {
   val nav = Nav.current
@@ -275,14 +292,56 @@ private fun FilledHome(
       }
     }
 
+    if (goalTarget != null) {
+      Spacer(Modifier.height(UserGoalRowGap - UserGoalRowTapPadding))
+      UserGoalRow(target = goalTarget, history = goalHistory)
+    }
+
+    val firstSectionGap =
+      if (goalTarget != null) HomeSectionGap - UserGoalRowTapPadding else HomeSectionGap
+
     if (active.isNotEmpty()) {
-      Spacer(Modifier.height(28.dp))
+      Spacer(Modifier.height(firstSectionGap))
       ContinueWritingSection(docs = active)
     }
 
     if (rest.isNotEmpty()) {
-      Spacer(Modifier.height(28.dp))
+      Spacer(Modifier.height(if (active.isEmpty()) firstSectionGap else HomeSectionGap))
       RecentDocumentsSection(docs = rest)
+    }
+  }
+}
+
+@Composable
+private fun UserGoalRow(target: Long, history: List<UserGoalDay>) {
+  val nav = Nav.current
+
+  val today = remember { kstToday() }
+  val progress = remember(history, today) { todayProgress(history, today) }
+
+  InteractionScope {
+    Row(
+      modifier =
+        Modifier.padding(horizontal = 16.dp)
+          .clickable(onClick = { nav.navigate(Route.UserGoal) })
+          .pressScale()
+          .padding(vertical = UserGoalRowTapPadding),
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+      ProgressRing(
+        progress = progress.additions.toFloat() / target.toFloat(),
+        state = if (progress.achieved) GoalColorState.Achieved else GoalColorState.Under,
+        size = 20.dp,
+      )
+
+      Text(
+        "오늘 ${progress.additions.comma} / ${target.comma}자",
+        style = AppTheme.typography.caption,
+        color = AppTheme.colors.textMuted,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+      )
     }
   }
 }

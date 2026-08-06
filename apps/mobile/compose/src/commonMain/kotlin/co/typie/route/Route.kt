@@ -58,6 +58,10 @@ sealed interface Route {
 
   @Serializable data object SpaceSettings : Route
 
+  @Serializable data object UserGoal : Route
+
+  @Serializable data class EntityGoal(val entityId: String) : Route
+
   @Serializable data class Trash(val entityId: String? = null) : Route
 
   @Serializable data class Folder(val entityId: String) : Route
@@ -89,13 +93,17 @@ fun Route.transitionStyleTo(route: Route): RouteTransitionStyle =
     (this is Route.Document && route is Route.DocumentBodySettings) ||
       (this is Route.DocumentBodySettings && route is Route.Document) -> RouteTransitionStyle.Slide
 
-    this is Route.Document ||
-      route is Route.Document ||
-      this is Route.FolderDetails ||
-      route is Route.FolderDetails -> RouteTransitionStyle.VerticalSlide
+    isVerticalSlidePresentation() || route.isVerticalSlidePresentation() ->
+      RouteTransitionStyle.VerticalSlide
 
     else -> RouteTransitionStyle.Slide
   }
+
+private fun Route.isVerticalSlidePresentation(): Boolean =
+  this is Route.Document ||
+    this is Route.FolderDetails ||
+    this is Route.EntityGoal ||
+    this is Route.UserGoal
 
 val Route.keepAlive: Boolean
   get() =

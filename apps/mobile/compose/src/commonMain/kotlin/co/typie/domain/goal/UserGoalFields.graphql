@@ -1,0 +1,13 @@
+fragment UserGoalFields_user on User {
+  goal {
+    id
+    targetCharacterCount
+  }
+
+  goalHistory {
+    date
+    targetCharacterCount
+    additions
+    achieved
+  }
+}
