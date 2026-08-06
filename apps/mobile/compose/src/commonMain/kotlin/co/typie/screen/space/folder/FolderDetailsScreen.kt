@@ -16,6 +16,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,6 +47,11 @@ import co.typie.domain.entity.formatFolderName
 import co.typie.domain.entity.isRowEntity
 import co.typie.domain.entitytransfer.EntityClipboardService
 import co.typie.domain.entitytransfer.toTransferSource
+import co.typie.domain.goal.GoalMetricContent
+import co.typie.domain.goal.GoalSource
+import co.typie.domain.goal.goalMetricLabel
+import co.typie.domain.goal.goalMetricValue
+import co.typie.domain.goal.toEntityGoalData
 import co.typie.domain.subscription.GatedAction
 import co.typie.domain.subscription.SubscriptionService
 import co.typie.domain.subscription.gate
@@ -60,6 +70,7 @@ import co.typie.route.Route
 import co.typie.storage.Preference
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardRow
+import co.typie.ui.component.ExpandableMetric
 import co.typie.ui.component.ResponsiveContainerDefaults
 import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
@@ -103,6 +114,7 @@ fun FolderDetailsScreen(entityId: String) {
   val folderDetails = details.folder
   val folderTitle = folder?.let { formatFolderName(it.name) } ?: "폴더"
   val visibility = entityVisibilityPresentation(details)
+  var goalExpanded by rememberSaveable(entityId) { mutableStateOf(false) }
 
   suspend fun popFolderAndMatchingContentIfPresent(): Boolean {
     val previousRoute = nav.previous
@@ -183,6 +195,17 @@ fun FolderDetailsScreen(entityId: String) {
   Screen(loadable = model.query, background = AppTheme.colors.surfaceCanvas) { innerPadding ->
     val resolvedFolder = folder ?: return@Screen
     val characterCount = folderDetails?.characterCount ?: 0
+    val goalSource =
+      remember(entity.goal, characterCount, entityId) {
+        entity.goal?.entityGoalFields_goal?.toEntityGoalData()?.let { goal ->
+          GoalSource(
+            goal = goal,
+            current = characterCount.toLong(),
+            isFolder = false,
+            entityId = entityId,
+          )
+        }
+      }
 
     val renameFolder: suspend () -> Unit = {
       if (!loading && SubscriptionService.gate(sheet, GatedAction.RenameEntity)) {
@@ -318,10 +341,27 @@ fun FolderDetailsScreen(entityId: String) {
       Spacer(Modifier.height(8.dp))
       FolderInfoRow(label = "글자 수", value = "${characterCount.comma}자")
 
+      Spacer(Modifier.height(18.dp))
+
+      CardDivider(inset = 0.dp)
+      ExpandableMetric(
+        icon = Lucide.Target,
+        label = goalMetricLabel(goalSource),
+        value = goalMetricValue(goalSource),
+        valueColor =
+          if (goalSource == null) AppTheme.colors.textHint else AppTheme.colors.textMuted,
+        expanded = goalExpanded,
+        onToggle = { goalExpanded = !goalExpanded },
+      ) {
+        GoalMetricContent(
+          source = goalSource,
+          onOpenGoal = { nav.navigate(Route.EntityGoal(goalSource?.entityId ?: entityId)) },
+        )
+      }
+
       Box(
         modifier =
           Modifier.fillMaxWidth()
-            .padding(top = 18.dp)
             .bleedPadding(PaddingValues(horizontal = 32.dp))
             .height(12.dp)
             .background(AppTheme.colors.surfaceInset)

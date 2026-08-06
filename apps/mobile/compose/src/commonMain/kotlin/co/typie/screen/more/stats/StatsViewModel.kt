@@ -108,5 +108,7 @@ private fun placeholderData() =
       documentCount = 0
       usage = buildUserUsage { totalCharacterCount = 0 }
       characterCountChanges = emptyList()
+      goal = null
+      goalHistory = emptyList()
     }
   }

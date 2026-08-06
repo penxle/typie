@@ -6,9 +6,11 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -28,6 +30,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import co.typie.datetime.timeAgo
+import co.typie.domain.goal.EntityGoalGlyph
+import co.typie.graphql.fragment.EntityGoalGlyph_entity
 import co.typie.graphql.fragment.EntityRow_entity
 import co.typie.icons.Lucide
 import co.typie.ui.component.CardDivider
@@ -53,6 +57,7 @@ fun EntityContainerListContent(
   reorderState: ReorderableLazyColumnState<String>,
   selectionState: EntityContainerSelectionState = EntityContainerSelectionState(),
   dimmedItemIds: Set<String> = emptySet(),
+  goalGlyphs: Map<String, EntityGoalGlyph_entity> = emptyMap(),
   bottomSpacerHeight: Dp = EntityBottomOverlayDefaults.DefaultBottomSpacerHeight,
   viewportTopInset: Dp = 0.dp,
   viewportBottomInset: Dp = 0.dp,
@@ -93,6 +98,7 @@ fun EntityContainerListContent(
             reorderableAnimatedItem(state = reorderState, key = entity.id)
               .reorderableItem(state = reorderState, key = entity.id),
           item = entity,
+          goal = goalGlyphs[entity.id],
           isDragging = isDragging,
           isFirst = projectedIndex == 0,
           isLast = projectedIndex == reorderState.keys.lastIndex,
@@ -122,6 +128,7 @@ fun EntityContainerListContent(
       itemsIndexed(items = items, key = { _, entity -> entity.id }) { index, entity ->
         EntityContainerNormalRow(
           entity = entity,
+          goal = goalGlyphs[entity.id],
           isFirst = index == 0,
           isLast = index == items.lastIndex,
           selected = entity.id in selectionState.selectedIds,
@@ -154,6 +161,7 @@ fun EntityContainerListContent(
 @Composable
 private fun EntityContainerNormalRow(
   entity: EntityRow_entity,
+  goal: EntityGoalGlyph_entity?,
   isFirst: Boolean,
   isLast: Boolean,
   selected: Boolean,
@@ -174,6 +182,7 @@ private fun EntityContainerNormalRow(
       if (!isFirst) CardDivider()
       EntityContainerItemRow(
         entity = entity,
+        goal = goal,
         selected = selected,
         showSelectionControls = showSelectionControls,
         opacity = opacity,
@@ -190,10 +199,13 @@ private const val EntityContainerEmptyKey = "entity-container-empty"
 
 private const val EntityContainerBottomSpacerKey = "entity-container-bottom-spacer"
 
+private val EntityGoalGlyphGap = 8.dp
+
 @Composable
 private fun EntityContainerReorderRow(
   modifier: Modifier,
   item: EntityRow_entity,
+  goal: EntityGoalGlyph_entity?,
   isDragging: Boolean,
   isFirst: Boolean,
   isLast: Boolean,
@@ -273,6 +285,7 @@ private fun EntityContainerReorderRow(
         EntityContainerItemRow(
           modifier = Modifier.fillMaxWidth(),
           entity = item,
+          goal = goal,
           interactive = false,
           leading = { EntityContainerReorderGrip() },
           onClick = {},
@@ -300,6 +313,7 @@ private fun EntityContainerReorderGrip(modifier: Modifier = Modifier) {
 @Composable
 private fun EntityContainerItemRow(
   entity: EntityRow_entity,
+  goal: EntityGoalGlyph_entity?,
   modifier: Modifier = Modifier,
   enabled: Boolean = true,
   interactive: Boolean = enabled,
@@ -327,6 +341,20 @@ private fun EntityContainerItemRow(
     trailing =
       when {
         showSelectionControls -> null
+        goal != null && entity.folder != null -> {
+          {
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(EntityGoalGlyphGap),
+            ) {
+              EntityGoalGlyph(goal)
+              EntityRowChevron()
+            }
+          }
+        }
+        goal != null -> {
+          { EntityGoalGlyph(goal) }
+        }
         entity.folder != null -> {
           { EntityRowChevron() }
         }

@@ -1,0 +1,50 @@
+query EntityGoalScreen_Query($entityId: ID!) {
+  entity(entityId: $entityId) @catch(to: THROW) {
+    id
+
+    goal {
+      ...EntityGoalFields_goal
+    }
+
+    characterCountHistory {
+      date
+      characterCount
+    }
+
+    node {
+      __typename
+
+      ... on Document {
+        id
+        title
+        characterCount
+      }
+
+      ... on Folder {
+        id
+        name
+        characterCount
+      }
+    }
+  }
+}
+
+mutation EntityGoalScreen_UpdateEntityGoal_Mutation($input: UpdateEntityGoalInput!) {
+  updateEntityGoal(input: $input) {
+    id
+
+    goal {
+      ...EntityGoalFields_goal
+    }
+  }
+}
+
+mutation EntityGoalScreen_DeleteEntityGoal_Mutation($input: DeleteEntityGoalInput!) {
+  deleteEntityGoal(input: $input) {
+    id
+
+    goal {
+      ...EntityGoalFields_goal
+    }
+  }
+}

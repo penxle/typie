@@ -159,6 +159,15 @@ fun SpaceScreen() {
         .mapNotNull { entity -> entity.entityRow_entity.takeIf { it.isRowEntity() } }
         .sortedBy { it.order }
     }
+  val goalGlyphs =
+    remember(site?.entities) {
+      site
+        ?.entities
+        .orEmpty()
+        .map { it.entityGoalGlyph_entity }
+        .filter { it.goal != null }
+        .associateBy { it.id }
+    }
   val serverEntityIds = remember(serverEntities) { serverEntities.map { it.id } }
   val reorderState =
     rememberReorderableLazyColumnState(keys = serverEntityIds, lazyListState = scrollState)
@@ -395,6 +404,7 @@ fun SpaceScreen() {
       reorderState = reorderState,
       selectionState = selectionState,
       dimmedItemIds = cutDimmedItemIds,
+      goalGlyphs = goalGlyphs,
       bottomSpacerHeight = overlayState.reservedBottomSpacerHeight,
       viewportTopInset = topBarOcclusion,
       viewportBottomInset = reorderViewportBottomInset,
@@ -459,6 +469,10 @@ fun SpaceScreen() {
                     EntityAction.OpenExternal -> uriHandler.openUri(entity.url)
 
                     EntityAction.Share -> presentDocumentShare(listOf(entity.id))
+
+                    EntityAction.Goal -> {
+                      presenterScope.launch { nav.navigate(Route.EntityGoal(entity.id)) }
+                    }
 
                     EntityAction.Move -> {
                       presenterScope.launch {
@@ -570,6 +584,10 @@ fun SpaceScreen() {
                     EntityAction.OpenExternal -> uriHandler.openUri(entity.url)
 
                     EntityAction.Share -> presentFolderShare(listOf(entity.id))
+
+                    EntityAction.Goal -> {
+                      presenterScope.launch { nav.navigate(Route.EntityGoal(entity.id)) }
+                    }
 
                     EntityAction.Move -> {
                       presenterScope.launch {
