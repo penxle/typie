@@ -38,6 +38,8 @@ internal actual fun rememberEditorKeyboardState(
   )
 }
 
+internal actual fun endInputMethodComposition() = Unit
+
 internal fun resolveDesktopEditorKeyboardState(
   hardwareKeyboardConnected: Boolean,
   imeBottom: Dp,

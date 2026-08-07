@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import co.typie.editor.Editor
 import co.typie.editor.FakeFfiEditor
 import co.typie.editor.ffi.Break
+import co.typie.editor.ffi.CommandOutcome
 import co.typie.editor.ffi.Direction
 import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.FlatImeOp
@@ -196,7 +197,18 @@ class EditorInputEnabledDesktopTest {
   fun navigationAndShortcutsCommitCompositionBeforeDispatch() = runComposeUiTest {
     val composingIme =
       Ime(text = "한", windowStart = 0, selection = ImeRange(1, 1), composing = ImeRange(0, 1))
-    val fake = FakeFfiEditor(imeProvider = { _, _ -> composingIme })
+    var currentIme: Ime? = composingIme
+    val fake =
+      FakeFfiEditor(
+        onTick = { listOf(EditorEvent.StateChanged(listOf(StateField.Ime))) },
+        imeProvider = { _, _ -> currentIme },
+      )
+    fake.commandOutcomesProvider = { _, messages ->
+      if (messages.any { it == Message.TextInput(listOf(FlatImeOp.CommitAsIs)) }) {
+        currentIme = composingIme.copy(composing = null)
+      }
+      List(messages.size) { CommandOutcome.Applied }
+    }
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val editor = Editor(fake, scope)
     val session = createTestDocumentEditingSession(editor, scope)
@@ -256,6 +268,7 @@ class EditorInputEnabledDesktopTest {
 
       bringIntoViewRequests.cancel()
       editor.refreshImeSnapshot()
+      currentIme = composingIme
       fake.enqueued.clear()
       observedRevealPolicy = null
       onNodeWithTag(InputTag).performKeyInput {
@@ -275,6 +288,7 @@ class EditorInputEnabledDesktopTest {
 
       bringIntoViewRequests.cancel()
       editor.refreshImeSnapshot()
+      currentIme = composingIme
       fake.enqueued.clear()
       onNodeWithTag(InputTag).performKeyInput {
         keyDown(Key.MetaLeft)
