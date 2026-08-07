@@ -51,8 +51,11 @@
 
   const ctx = setupEditorContext();
   ctx.editor = editor;
+
+  let surfaceHost = $state<EditorSurfaceHost>();
+
   setupEditorScroll(ctx);
-  setupEditorPublication(ctx);
+  setupEditorPublication(ctx, () => surfaceHost);
 
   let extensionArea = $state<HTMLDivElement>();
   let scrollRoot = $state<HTMLDivElement>();
@@ -77,9 +80,9 @@
     const scroll = ctx.scroll;
     if (!scroll) return;
     const host = new EditorSurfaceHost(editor, (revision) => scroll.discardFailedForRevision(revision));
-    ctx.surfaceHost = host;
+    surfaceHost = host;
     return () => {
-      if (ctx.surfaceHost === host) ctx.surfaceHost = undefined;
+      surfaceHost = undefined;
       host.destroy();
     };
   });
@@ -113,7 +116,7 @@
     }}
     data-editor-extension-area
   >
-    <EditorPages {editor} surfaceHost={ctx.surfaceHost} />
+    <EditorPages {editor} {surfaceHost} />
 
     <DocumentOverlayLayer />
     <Caret />

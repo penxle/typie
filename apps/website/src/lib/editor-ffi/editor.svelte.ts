@@ -52,7 +52,6 @@ import type {
   Viewport,
 } from '@typie/editor-ffi/browser';
 import type { ScrollViewport } from '@typie/ui/utils';
-import type { EditorSurfaceHost } from './editor-surface-host.svelte';
 import type { EditorPublicationResult } from './editor-update';
 import type { FrameProof } from './publication';
 import type { EditorScrollIntoViewOptions, EditorScrollScope } from './scroll.svelte';
@@ -219,7 +218,6 @@ export class EditorContext {
   readonly attachmentImporter = new EditorAttachmentImporter(this);
   editor = $state<Editor>();
   scroll = $state<EditorScrollScope>();
-  surfaceHost = $state<EditorSurfaceHost>();
   liveEditor = $state<Editor>();
   fileAssets = $state(new SvelteMap<string, FileAsset>());
   // v1 chrome 호환 필드 — v2 sync 환경에선 갱신되지 않음

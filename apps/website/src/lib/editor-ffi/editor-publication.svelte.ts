@@ -14,13 +14,13 @@ type EditorSurfacePreparation = {
   scrollIntent: EditorScrollIntentResult | null;
 };
 
-export function setupEditorPublication(ctx: EditorContext): void {
+export function setupEditorPublication(ctx: EditorContext, getSurfaceHost: () => EditorSurfaceHost | undefined): void {
   let generation = 0;
 
   $effect.pre(() => {
     const editor = ctx.editor;
     const scroll = ctx.scroll;
-    const surfaceHost = ctx.surfaceHost;
+    const surfaceHost = getSurfaceHost();
     if (!editor || !scroll || !surfaceHost) return;
 
     void editor.publicationVersion;

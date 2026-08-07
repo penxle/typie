@@ -60,8 +60,13 @@
 
   const ctx = getEditorContext();
   const theme = getThemeContext();
+
+  // 이 View 인스턴스가 소유한다. 공유 컨텍스트에 두면 {#key ctx.editor}로 View가 교체될 때
+  // 새 인스턴스가 옛 인스턴스의 host를 읽어버린다 (새 브랜치 생성이 옛 브랜치 파괴보다 먼저다).
+  let surfaceHost = $state<EditorSurfaceHost>();
+
   setupEditorScroll(ctx);
-  setupEditorPublication(ctx);
+  setupEditorPublication(ctx, () => surfaceHost);
   onDestroy(() => {
     if (ctx.editor) cancelPointerInteraction(ctx.editor);
   });
@@ -71,10 +76,10 @@
     const scroll = ctx.scroll;
     if (!editor || !scroll) return;
     const host = new EditorSurfaceHost(editor, (revision) => scroll.discardFailedForRevision(revision));
-    ctx.surfaceHost = host;
+    surfaceHost = host;
     return () => {
       ctx.scroll?.cancel();
-      if (ctx.surfaceHost === host) ctx.surfaceHost = undefined;
+      surfaceHost = undefined;
       host.destroy();
     };
   });
@@ -375,7 +380,7 @@
           tabindex={0}
           use:touchPanLock={ctx.editor.gesture.panLockActive}
         >
-          <EditorPages editor={ctx.editor} surfaceHost={ctx.surfaceHost} />
+          <EditorPages editor={ctx.editor} {surfaceHost} />
 
           <DocumentOverlayLayer />
 

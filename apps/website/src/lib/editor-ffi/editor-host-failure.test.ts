@@ -11,6 +11,8 @@ const wasmHarness = vi.hoisted(() => ({
   setThemeVariant: vi.fn(() => null),
 }));
 
+vi.mock('@sentry/sveltekit', () => ({ captureException: vi.fn() }));
+
 vi.mock('$env/dynamic/public', () => ({ env: {} }));
 
 vi.mock('$lib/wasm-ffi.svelte', () => ({
