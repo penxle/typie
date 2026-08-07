@@ -110,40 +110,41 @@ internal class IOSClipboard : Clipboard {
     val snapshot =
       withContext(Dispatchers.Main) {
         runCatching {
-          val pasteboard = UIPasteboard.generalPasteboard
-          val html =
-            pasteboard
-              .valueForPasteboardType(UTI_HTML)
-              .asPasteboardString()
-              ?.takeIf(String::isNotEmpty)
-              ?: pasteboard
-                .dataForPasteboardType(UTI_HTML)
-                ?.decodeUtf8()
+            val pasteboard = UIPasteboard.generalPasteboard
+            val html =
+              pasteboard
+                .valueForPasteboardType(UTI_HTML)
+                .asPasteboardString()
                 ?.takeIf(String::isNotEmpty)
-          if (html != null) {
-            return@runCatching IOSPasteboardSnapshot(
-              html = html,
-              text = pasteboard.string,
-              items = emptyList(),
-              providers = emptyList(),
+                ?: pasteboard
+                  .dataForPasteboardType(UTI_HTML)
+                  ?.decodeUtf8()
+                  ?.takeIf(String::isNotEmpty)
+            if (html != null) {
+              return@runCatching IOSPasteboardSnapshot(
+                html = html,
+                text = pasteboard.string,
+                items = emptyList(),
+                providers = emptyList(),
+              )
+            }
+
+            val pasteboardItems =
+              pasteboard.items.mapNotNull { it as? Map<*, *> }.map { it.toMap() }
+            IOSPasteboardSnapshot(
+              html = null,
+              text =
+                pasteboardItems.firstNotNullOfOrNull { item ->
+                  item[UTI_PLAIN_TEXT].asPasteboardString()
+                } ?: pasteboard.string,
+              items = pasteboardItems,
+              providers =
+                pasteboard.itemProviders
+                  .filterIsInstance<NSItemProvider>()
+                  .takeIf { it.size == pasteboardItems.size }
+                  .orEmpty(),
             )
           }
-
-          val pasteboardItems = pasteboard.items.mapNotNull { it as? Map<*, *> }.map { it.toMap() }
-          IOSPasteboardSnapshot(
-            html = null,
-            text =
-              pasteboardItems.firstNotNullOfOrNull { item ->
-                item[UTI_PLAIN_TEXT].asPasteboardString()
-              } ?: pasteboard.string,
-            items = pasteboardItems,
-            providers =
-              pasteboard.itemProviders
-                .filterIsInstance<NSItemProvider>()
-                .takeIf { it.size == pasteboardItems.size }
-                .orEmpty(),
-          )
-        }
           .getOrNull()
       } ?: return null
 
@@ -499,47 +500,35 @@ internal class IOSShare : Share {
   ): Boolean =
     withContext(Dispatchers.Main) {
       runCatching {
-          val item: Any =
-            if (mimeType.startsWith("image/")) {
-              bytes.toUIImage()
-            } else {
-              val root = NSTemporaryDirectory() + "share/"
-              val directory = root + NSUUID().UUIDString + "/"
-              val directoryCreated =
-                NSFileManager.defaultManager.createDirectoryAtPath(
-                  path = directory,
-                  withIntermediateDirectories = true,
-                  attributes = null,
-                  error = null,
-                )
-              if (!directoryCreated) return@runCatching false
+          val root = NSTemporaryDirectory() + "share/"
+          val directory = root + NSUUID().UUIDString + "/"
+          val directoryCreated =
+            NSFileManager.defaultManager.createDirectoryAtPath(
+              path = directory,
+              withIntermediateDirectories = true,
+              attributes = null,
+              error = null,
+            )
+          if (!directoryCreated) return@runCatching false
 
-              sweepShareCache(root)
+          sweepShareCache(root)
 
-              val path = directory + sanitizeShareFilename(filename)
-              val written = bytes.toNSData().writeToFile(path, atomically = true)
-              if (!written) return@runCatching false
+          val path = directory + sanitizeShareFilename(filename)
+          val written = bytes.toNSData().writeToFile(path, atomically = true)
+          if (!written) return@runCatching false
 
-              NSURL.fileURLWithPath(path)
-            }
-
-          presentShareSheet(listOf(item), anchor)
-          true
+          presentShareSheet(listOf(NSURL.fileURLWithPath(path)), anchor)
         }
         .getOrDefault(false)
     }
 
   override suspend fun share(text: String, anchor: ShareAnchor?): Boolean =
     withContext(Dispatchers.Main) {
-      runCatching {
-          presentShareSheet(listOf(text), anchor)
-          true
-        }
-        .getOrDefault(false)
+      runCatching { presentShareSheet(listOf(text), anchor) }.getOrDefault(false)
     }
 
-  private fun presentShareSheet(items: List<Any>, anchor: ShareAnchor?) {
-    val controller = topViewController() ?: return
+  private fun presentShareSheet(items: List<Any>, anchor: ShareAnchor?): Boolean {
+    val controller = topViewController() ?: return false
     val sourceView = controller.view
     val activityVC = UIActivityViewController(activityItems = items, applicationActivities = null)
     activityVC.popoverPresentationController?.let { popover ->
@@ -559,6 +548,7 @@ internal class IOSShare : Share {
       }
     }
     controller.presentViewController(activityVC, animated = true, completion = null)
+    return true
   }
 
   private fun topViewController(): UIViewController? {

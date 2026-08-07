@@ -99,6 +99,7 @@ internal data class EditorFileAsset(
 internal data class EditorImageAsset(
   override val id: String,
   val url: String,
+  val originalUrl: String,
   val width: Int,
   val height: Int,
   val ratio: Double,

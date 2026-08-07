@@ -69,6 +69,7 @@ fragment EditorExternalAsset_asset on DocumentAsset {
   ... on Image {
     id
     url
+    originalUrl
     width
     height
     ratio
@@ -127,6 +128,7 @@ mutation EditorScreen_PersistBlobAsImage_Mutation($input: PersistBlobAsImageInpu
   persistBlobAsImage(input: $input) {
     id
     url
+    originalUrl
     width
     height
     ratio

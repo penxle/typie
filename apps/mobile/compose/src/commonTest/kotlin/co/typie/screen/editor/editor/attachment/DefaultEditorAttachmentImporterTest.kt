@@ -343,6 +343,7 @@ class DefaultEditorAttachmentImporterTest {
               EditorImageAsset(
                 id = "asset-${file.filename.removeSuffix(".png")}",
                 url = "https://example.com/${file.filename}",
+                originalUrl = "https://example.com/original/${file.filename}",
                 width = 10,
                 height = 5,
                 ratio = 2.0,
@@ -440,6 +441,7 @@ class DefaultEditorAttachmentImporterTest {
               EditorImageAsset(
                 id = "asset-${file.filename.removeSuffix(".png")}",
                 url = "https://example.com/${file.filename}",
+                originalUrl = "https://example.com/original/${file.filename}",
                 width = 10,
                 height = 5,
                 ratio = 2.0,
@@ -1248,6 +1250,7 @@ class DefaultEditorAttachmentImporterTest {
       EditorImageAsset(
         id = "asset-image",
         url = "https://example.com/image.png",
+        originalUrl = "https://example.com/original/image.png",
         width = 10,
         height = 5,
         ratio = 2.0,

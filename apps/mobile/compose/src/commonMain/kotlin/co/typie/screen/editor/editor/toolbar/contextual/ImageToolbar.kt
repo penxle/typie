@@ -1,10 +1,13 @@
 package co.typie.screen.editor.editor.toolbar.contextual
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import co.typie.editor.DocumentEditingSession
 import co.typie.editor.external.LocalEditorExternalElementState
 import co.typie.editor.ffi.Message
@@ -12,12 +15,17 @@ import co.typie.editor.ffi.NodeOp
 import co.typie.editor.ffi.PlainNode
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.icons.Lucide
+import co.typie.network.Http
 import co.typie.platform.FilePickerResult
 import co.typie.platform.FilePickerSelectionMode
 import co.typie.platform.IncomingContentItem
+import co.typie.platform.Platform
+import co.typie.platform.PlatformModule
 import co.typie.platform.rememberFilePicker
+import co.typie.platform.rememberShareAnchor
 import co.typie.screen.editor.editor.attachment.EditorAttachmentDestination
 import co.typie.screen.editor.editor.attachment.LocalEditorAttachmentImporter
+import co.typie.screen.editor.editor.attachment.downloadEditorAttachment
 import co.typie.screen.editor.editor.toolbar.EditorToolbarButton
 import co.typie.screen.editor.editor.toolbar.EditorToolbarPage
 import co.typie.screen.editor.editor.toolbar.EditorToolbarPageKey
@@ -26,6 +34,7 @@ import co.typie.screen.editor.editor.toolbar.EditorToolbarRow
 import co.typie.screen.editor.editor.toolbar.EditorToolbarSecondary
 import co.typie.screen.editor.editor.toolbar.EditorToolbarSessionState
 import co.typie.ui.component.toast.LocalToast
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 
@@ -145,12 +154,17 @@ private fun EditorImageToolbar(
   pickImage: (nodeId: String) -> Unit,
   modifier: Modifier = Modifier,
 ) {
+  val toast = LocalToast.current
+  val uriHandler = LocalUriHandler.current
+  val coroutineScope = rememberCoroutineScope()
+  val shareAnchor = rememberShareAnchor()
   val externalElementState = LocalEditorExternalElementState.current
   val imageState = externalElementState.images
   val imageId = image?.id
   val readyAsset = imageId?.let(imageState.assets::get)
   val uploading = nodeId?.let { imageState.uploads.containsKey(it) } == true
   val hasImage = imageId != null || uploading
+  var downloadInProgress by remember(readyAsset?.id) { mutableStateOf(false) }
 
   EditorToolbarRow(scope = scope, modifier = modifier) {
     if (!hasImage) {
@@ -168,6 +182,55 @@ private fun EditorImageToolbar(
         contentDescription = "이미지 폭 조정",
         selected = selected,
         onClick = { scope.toggleSecondaryToolbar(resizeSecondary) },
+      )
+    }
+    if (readyAsset != null) {
+      EditorToolbarButton(
+        icon = Lucide.Download,
+        contentDescription = "이미지 다운로드",
+        enabled = !downloadInProgress,
+        modifier = shareAnchor.modifier,
+        onClick = {
+          if (PlatformModule.platform == Platform.Desktop) {
+            uriHandler.openUri(readyAsset.originalUrl)
+          } else if (!downloadInProgress) {
+            downloadInProgress = true
+            coroutineScope.launch {
+              try {
+                val downloaded =
+                  try {
+                    Http.downloadEditorAttachment(
+                      url = readyAsset.originalUrl,
+                      defaultFilenameStem = "image",
+                    )
+                  } catch (error: CancellationException) {
+                    throw error
+                  } catch (_: Throwable) {
+                    toast.error("이미지를 내려받을 수 없어요.")
+                    return@launch
+                  }
+                val shared =
+                  try {
+                    PlatformModule.share.share(
+                      bytes = downloaded.bytes,
+                      filename = downloaded.filename,
+                      mimeType = downloaded.mimeType,
+                      anchor = shareAnchor.value,
+                    )
+                  } catch (error: CancellationException) {
+                    throw error
+                  } catch (_: Throwable) {
+                    false
+                  }
+                if (!shared) {
+                  toast.error("이미지를 내보낼 수 없어요.")
+                }
+              } finally {
+                downloadInProgress = false
+              }
+            }
+          }
+        },
       )
     }
     EditorToolbarButton(

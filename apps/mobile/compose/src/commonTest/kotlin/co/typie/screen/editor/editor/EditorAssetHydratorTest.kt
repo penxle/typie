@@ -337,6 +337,7 @@ class EditorAssetHydratorTest {
     EditorImageAsset(
       id = id,
       url = "https://example.com/$id",
+      originalUrl = "https://example.com/original/$id",
       width = 100,
       height = 50,
       ratio = 2.0,

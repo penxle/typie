@@ -1,9 +1,11 @@
 package co.typie.screen.editor.editor.toolbar.contextual
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import co.typie.editor.DocumentEditingSession
@@ -13,12 +15,17 @@ import co.typie.editor.ffi.NodeOp
 import co.typie.editor.ffi.PlainNode
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.icons.Lucide
+import co.typie.network.Http
 import co.typie.platform.FilePickerResult
 import co.typie.platform.FilePickerSelectionMode
 import co.typie.platform.IncomingContentItem
+import co.typie.platform.Platform
+import co.typie.platform.PlatformModule
 import co.typie.platform.rememberFilePicker
+import co.typie.platform.rememberShareAnchor
 import co.typie.screen.editor.editor.attachment.EditorAttachmentDestination
 import co.typie.screen.editor.editor.attachment.LocalEditorAttachmentImporter
+import co.typie.screen.editor.editor.attachment.downloadEditorAttachment
 import co.typie.screen.editor.editor.toolbar.EditorToolbarButton
 import co.typie.screen.editor.editor.toolbar.EditorToolbarPage
 import co.typie.screen.editor.editor.toolbar.EditorToolbarPageKey
@@ -26,6 +33,7 @@ import co.typie.screen.editor.editor.toolbar.EditorToolbarPageScope
 import co.typie.screen.editor.editor.toolbar.EditorToolbarRow
 import co.typie.screen.editor.editor.toolbar.EditorToolbarSessionState
 import co.typie.ui.component.toast.LocalToast
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 
@@ -145,13 +153,17 @@ private fun EditorFileToolbar(
   pickFile: (nodeId: String) -> Unit,
   modifier: Modifier = Modifier,
 ) {
+  val toast = LocalToast.current
   val uriHandler = LocalUriHandler.current
+  val coroutineScope = rememberCoroutineScope()
+  val shareAnchor = rememberShareAnchor()
   val externalElementState = LocalEditorExternalElementState.current
   val fileState = externalElementState.files
   val fileId = file?.id
   val asset = fileId?.let(fileState.assets::get)
   val uploading = nodeId?.let { fileState.uploads.containsKey(it) } == true
   val hasFile = fileId != null || uploading
+  var downloadInProgress by remember(asset?.id) { mutableStateOf(false) }
 
   EditorToolbarRow(scope = scope, modifier = modifier) {
     if (!hasFile) {
@@ -165,7 +177,46 @@ private fun EditorFileToolbar(
       EditorToolbarButton(
         icon = Lucide.Download,
         contentDescription = "파일 다운로드",
-        onClick = { uriHandler.openUri(asset.url) },
+        enabled = !downloadInProgress,
+        modifier = shareAnchor.modifier,
+        onClick = {
+          if (PlatformModule.platform == Platform.Desktop) {
+            uriHandler.openUri(asset.url)
+          } else if (!downloadInProgress) {
+            downloadInProgress = true
+            coroutineScope.launch {
+              try {
+                val downloaded =
+                  try {
+                    Http.downloadEditorAttachment(url = asset.url, fallbackFilename = asset.name)
+                  } catch (error: CancellationException) {
+                    throw error
+                  } catch (_: Throwable) {
+                    toast.error("파일을 내려받을 수 없어요.")
+                    return@launch
+                  }
+                val shared =
+                  try {
+                    PlatformModule.share.share(
+                      bytes = downloaded.bytes,
+                      filename = downloaded.filename,
+                      mimeType = downloaded.mimeType,
+                      anchor = shareAnchor.value,
+                    )
+                  } catch (error: CancellationException) {
+                    throw error
+                  } catch (_: Throwable) {
+                    false
+                  }
+                if (!shared) {
+                  toast.error("파일을 내보낼 수 없어요.")
+                }
+              } finally {
+                downloadInProgress = false
+              }
+            }
+          }
+        },
       )
     }
     EditorToolbarButton(

@@ -16,6 +16,7 @@ internal fun EditorExternalAsset_asset.toEditorExternalAsset(): EditorExternalAs
         EditorImageAsset(
           id = image.id,
           url = image.url,
+          originalUrl = image.originalUrl,
           width = image.width,
           height = image.height,
           ratio = image.ratio,
@@ -44,6 +45,7 @@ internal fun PersistBlobAsImage.toEditorImageAsset(): EditorImageAsset =
   EditorImageAsset(
     id = id,
     url = url,
+    originalUrl = originalUrl,
     width = width,
     height = height,
     ratio = ratio,
