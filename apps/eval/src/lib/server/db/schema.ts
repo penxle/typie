@@ -34,6 +34,7 @@ export const Reviews = sqliteTable(
     result: text('result', { mode: 'json' }),
     error: text('error'),
     events: text('events', { mode: 'json' }),
+    modelConfig: text('model_config', { mode: 'json' }),
   },
   (t) => [primaryKey({ columns: [t.sessionId, t.round] })],
 );

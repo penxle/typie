@@ -226,11 +226,20 @@ const THINK_MIN_SECONDS = 5;
 // 같은 동사의 연속만 ×N으로 접는다 — 검색(질의어)과 작성(자 수)은 항목마다 고유한 값이 있어 접지 않는다.
 const FOLDABLE = new Set<ToolVerb>(['read-manuscript', 'read-note', 'grep', 'edit']);
 
+// 시간 문구 — 60초를 넘으면 분·초로 갈아탄다("100초"는 사람의 자가 아니다). 라이브 카운터와 기록 캡슐이
+// 같은 함수를 써서 흐르던 숫자가 그대로 기록으로 굳는다.
+export const durationLabel = (seconds: number): string => {
+  if (seconds < 60) return `${seconds}초`;
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return rest === 0 ? `${minutes}분` : `${minutes}분 ${rest}초`;
+};
+
 // 캡슐 문구 — 활동을 사용자 어휘로 옮긴다. 결정을 한곳에 모아 바깥 피드와 검수 카드가 같은 말을 쓴다.
 // 문구 체계: 기록(여기)은 완료형 축약(…음/…함), 라이브 꼬리는 해요체 진행형 + " · 값"(StageTimeline) —
 // 진행 화면의 두 어휘 층이고, 층 안에서는 형태를 섞지 않는다.
 export const capsuleLabel = (item: CapsuleItem): string => {
-  if (item.kind === 'think') return item.seconds < 60 ? `${item.seconds}초 생각함` : `${Math.round(item.seconds / 60)}분 생각함`;
+  if (item.kind === 'think') return `${durationLabel(item.seconds)} 생각함`;
   const times = item.count > 1 ? ` ×${item.count}` : '';
   if (item.verb === 'read-manuscript') return `원고 읽음${times}`;
   if (item.verb === 'read-note') return `노트 읽음${times}`;

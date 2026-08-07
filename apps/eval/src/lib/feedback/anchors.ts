@@ -1,10 +1,11 @@
 import { computeSegments } from './highlight.ts';
 import type { Anchor } from './types.ts';
 
-export type MarkKind = 'critique' | 'proofread' | 'closed';
+export type MarkKind = 'critique' | 'proofread' | 'closed' | 'strength';
 
-// 마크 파생에 필요한 최소 형태 — load가 내려주는 스레드 행이 그대로 들어맞는다.
-export type MarkThread = { id: string; pass: 'critique' | 'proofread'; state: string; anchors: Anchor[] };
+// 마크 파생에 필요한 최소 형태 — load가 내려주는 스레드 행이 그대로 들어맞는다. 잘 작동하는 대목(strength)도
+// 같은 파이프라인을 탄다 — id만 'strength.N' 네임스페이스로 갈라지고 나머지 형상·동작은 지적과 동일하다.
+export type MarkThread = { id: string; pass: 'critique' | 'proofread' | 'strength'; state: string; anchors: Anchor[] };
 
 // 본문 표기는 레일로 통일됐다(오너 결정) — 세그먼트는 앵커 길이를 가리지 않고 구간 소속만 싣는다.
 // 스팬은 레일 측정 좌표와 활성 하이라이트만 담당하고, 평시 본문은 무표기다.
@@ -64,14 +65,8 @@ export const markParagraphs = (content: string, threads: MarkThread[]): MarkSegm
   return paragraphs.map((pieces) => trimEdges(pieces)).filter((pieces) => pieces.length > 0);
 };
 
-// 인용과 위치가 같은 앵커를 보게 하는 판정. limit은 원문 길이이며, 원문을 모르는 자리에서는 상한만 뺀다.
+// 인용이 볼 앵커의 판정 — limit은 원문 길이다.
 const isValid = (anchor: Anchor, limit: number): boolean => anchor.start >= 0 && anchor.end <= limit && anchor.start < anchor.end;
-
-export const anchorPosition = (anchors: Anchor[]): string => {
-  const first = anchors.find((anchor) => isValid(anchor, Infinity));
-  if (!first) return '위치 없음';
-  return `${(Math.round(first.start / 100) * 100).toLocaleString('ko-KR')}자 부근`;
-};
 
 // 인용 블록 — 긴 구간은 전문 대신 머리·꼬리만 잇는다(수천 자 앵커가 카드를 삼키지 않게). head·tail이
 // 구간을 이미 다 덮는 짧은 앵커는 원문 그대로 쓴다 — 생략할 중간이 없는데 이어 붙이면 글자가 겹친다.

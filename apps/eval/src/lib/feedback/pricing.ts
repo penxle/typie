@@ -26,6 +26,9 @@ export const DEFAULT_PRICE_TABLE: PriceTable = {
     'google-vertex-ai/google/gemini-3.6-flash': { input: 1.5, output: 7.5, cacheRead: 0.15 },
     'google-vertex-ai/google/gemini-3.5-flash': { input: 1.5, output: 9, cacheRead: 0.15 },
     'google-vertex-ai/google/gemini-3.5-flash-lite': { input: 0.3, output: 2.5, cacheRead: 0.03 },
+    // prism gemini 드라이버(google-ai-studio 경유)의 fold 키 — 단가는 위 vertex 행과 동일(2026-08-08 재확인)
+    'gemini/gemini-3.6-flash': { input: 1.5, output: 7.5, cacheRead: 0.15 },
+    'gemini/gemini-3.5-flash-lite': { input: 0.3, output: 2.5, cacheRead: 0.03 },
     'openai/gpt-5.6-sol': { input: 5, output: 30, cacheRead: 0.5 },
     'openai/gpt-5.6-terra': { input: 2.5, output: 15, cacheRead: 0.25 },
     'openai/gpt-5.6-luna': { input: 1, output: 6, cacheRead: 0.1 },

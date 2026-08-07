@@ -101,6 +101,20 @@ describe('buildStartRows', () => {
     expect(rows.version.charCount).toBe(2);
     expect(rows.version.content).toBe(content);
   });
+
+  it('buildStartRows가 modelConfig 스냅샷을 싣는다', () => {
+    const rows = buildStartRows({
+      refId: 'D0TEST01',
+      email: 't@x.io',
+      title: '제목',
+      content: '본문',
+      prismSessionId: 'ev-x',
+      now: new Date(0),
+      overrides: { review: { model: 'claude-sonnet-5', effort: 'xhigh' } },
+    });
+    expect(rows.review.modelConfig.review).toEqual({ model: 'claude-sonnet-5', effort: 'xhigh', overridden: true });
+    expect(rows.review.modelConfig.research).toEqual({ model: 'claude-opus-5', effort: 'xhigh', overridden: false });
+  });
 });
 
 describe('startFeedbackSession', () => {
@@ -121,6 +135,30 @@ describe('startFeedbackSession', () => {
     expect(body.sessionId).toBe(inserts[2].row.prismSessionId);
     expect(body.input).toEqual({ manuscriptPath: 'manuscript/v1.txt' });
     expect(body.files).toEqual([{ path: 'manuscript/v1.txt', content: '본문' }]);
+  });
+
+  it('오버라이드가 있으면 /workflows input에 sparse로 실린다', async () => {
+    const spy = route({});
+    const { db } = createDbStub();
+
+    await startFeedbackSession(db, env, {
+      refId: 'D0TEST01',
+      email: 't@x.io',
+      overrides: { proofread: { model: 'gpt-5.6-luna', effort: 'low' } },
+    });
+
+    const body = JSON.parse(spy.mock.calls.find(([url]) => String(url).endsWith('/workflows'))?.[1]?.body as string);
+    expect(body.input.overrides).toEqual({ proofread: { model: 'gpt-5.6-luna', effort: 'low' } });
+  });
+
+  it('무오버라이드면 input에 overrides 키가 없다', async () => {
+    const spy = route({});
+    const { db } = createDbStub();
+
+    await startFeedbackSession(db, env, { refId: 'D0TEST01', email: 't@x.io' });
+
+    const body = JSON.parse(spy.mock.calls.find(([url]) => String(url).endsWith('/workflows'))?.[1]?.body as string);
+    expect('overrides' in body.input).toBe(false);
   });
 
   it('반입 반려는 사용자 문면 그대로 돌리고 아무 행도 쓰지 않는다', async () => {
