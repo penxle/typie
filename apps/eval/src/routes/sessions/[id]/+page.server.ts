@@ -4,9 +4,10 @@ import { nanoid } from 'nanoid';
 import { canClose, canReopen } from '$lib/feedback/threads.ts';
 import { isAdmin } from '$lib/server/auth.ts';
 import { createDb, FeedbackSessions, ManuscriptVersions, Reactions, Reviews, ThreadComments, Threads } from '$lib/server/db/index.ts';
-import { projectIfTerminal } from '$lib/server/project.ts';
+import { projectIfTerminal, seedEvents } from '$lib/server/project.ts';
 import { requestCancel } from '$lib/server/reviews.ts';
 import type { SseEvent } from '$lib/feedback/sse.ts';
+import type { ModelConfig } from '$lib/feedback/tiers.ts';
 import type { Anchor, FeedbackResult } from '$lib/feedback/types.ts';
 import type { Db } from '$lib/server/db/index.ts';
 import type { Actions, PageServerLoad } from './$types';
@@ -37,12 +38,14 @@ export const load: PageServerLoad = async ({ params, locals, platform }) => {
   const db = createDb(env.DB);
 
   const session = await ownedSession(db, env, params.id, locals.email);
+  const admin = isAdmin(env, locals.email);
 
   // Phase 1은 세션당 리뷰가 round 1 하나뿐이다.
   const [loaded] = await db.select().from(Reviews).where(eq(Reviews.sessionId, params.id)).limit(1);
   if (!loaded) error(404, 'not found');
 
   let review = loaded;
+  let liveEvents: SseEvent[] | null = null;
   if (loaded.status === 'running') {
     try {
       await projectIfTerminal(db, env, loaded);
@@ -53,6 +56,15 @@ export const load: PageServerLoad = async ({ params, locals, platform }) => {
     }
     const [projected] = await db.select().from(Reviews).where(eq(Reviews.sessionId, params.id)).limit(1);
     if (projected) review = projected;
+    if (review.status === 'running') {
+      try {
+        // 첫 화면 시드 — 없으면 클라이언트가 재생을 화면에서 재연해, 새로고침마다 과거 기록이 빨리감기로 보인다.
+        liveEvents = await seedEvents(env, review.prismSessionId);
+      } catch (err) {
+        // 시드 실패도 화면을 막지 않는다 — 클라이언트 SSE 재생이 처음부터 채운다.
+        console.error('event snapshot failed', review.prismSessionId, err);
+      }
+    }
   }
 
   const [version] = await db
@@ -95,8 +107,9 @@ export const load: PageServerLoad = async ({ params, locals, platform }) => {
       error: review.error,
       // 두 json 컬럼의 생산자는 사영뿐이다 — 쓴 타입 그대로 좁힌다(project.ts:84-97).
       result: review.result as FeedbackResult | null,
-      // 스냅샷은 실패·취소 타임라인의 원천이다. 완료 화면은 쓰지 않으므로 싣지 않는다(과정 보기는 자기 라우트에서 읽는다).
-      events: review.status === 'completed' ? null : (review.events as SseEvent[] | null),
+      // 스냅샷은 실패·취소 타임라인과 실행 중 첫 화면의 원천이다. 완료 화면은 쓰지 않으므로 싣지 않는다
+      // (과정 보기는 자기 라우트에서 읽는다). 실행 중은 방금 걷은 백로그가, 종결은 사영된 events가 원천이다.
+      events: review.status === 'completed' ? null : (liveEvents ?? (review.events as SseEvent[] | null)),
     },
     threads: threads.map((thread) => ({
       id: thread.id,
@@ -110,6 +123,9 @@ export const load: PageServerLoad = async ({ params, locals, platform }) => {
     comments: comments.map((comment) => ({ ...comment, createdAt: comment.createdAt.getTime() })),
     reaction: reaction ? { value: reaction.value, note: reaction.note } : null,
     email: locals.email,
+    isAdmin: admin,
+    // admin에게만 — 테스터 응답에는 데이터 자체를 싣지 않는다
+    modelConfig: admin ? ((review.modelConfig as ModelConfig | null) ?? null) : null,
   };
 };
 

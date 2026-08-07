@@ -1,20 +1,23 @@
 <script lang="ts">
-  import { css, cva } from '@typie/styled-system/css';
+  import { css, cva, cx } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Icon } from '@typie/ui/components';
-  import { tick } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import { fade } from 'svelte/transition';
   import IconCheck from '~icons/lucide/check';
   import IconChevronDown from '~icons/lucide/chevron-down';
   import IconChevronUp from '~icons/lucide/chevron-up';
   import IconCircleAlert from '~icons/lucide/circle-alert';
   import IconCircleSlash from '~icons/lucide/circle-slash';
-  import { capsuleLabel, groupFeed, minutesBetween } from '$lib/feedback/live.ts';
+  import { DrainFleet } from '$lib/feedback/drain-fleet.ts';
+  import { capsuleLabel, durationLabel, groupFeed, minutesBetween } from '$lib/feedback/live.ts';
   import { nestedRound, STAGES } from '$lib/feedback/stages.ts';
+  import { Typewriter } from '$lib/feedback/typewriter.ts';
   import NestedReviewCard from './NestedReviewCard.svelte';
   import type { TurnLive } from '$lib/feedback/delta.ts';
   import type { FeedEntry, FeedGroup, LiveState, StageStatus, StageTiming } from '$lib/feedback/live.ts';
   import type { StageKey } from '$lib/feedback/stages.ts';
+  import type { Token } from '$lib/feedback/typewriter.ts';
 
   // 종결 리뷰를 다시 그리는 과정 화면에는 흐르는 턴이 없으므로 turnLive는 선택 프롭이다.
   type Props = {
@@ -25,6 +28,8 @@
     turnLive?: TurnLive | null;
   };
   const { live, status, now, error = null, turnLive = null }: Props = $props();
+
+  // ── 카드 상태 판정 ──────────────────────────────────────────────────────────────────────────────
 
   // 종결 리뷰는 마지막으로 돌던 스테이지에 종결 사유를 얹는다 — 완료는 그 자리를 닫고, 실패·취소는 멈춘 자리로 남긴다.
   const markOf = (state: StageStatus): StageStatus | 'failed' | 'canceled' => {
@@ -53,187 +58,116 @@
     return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
   };
 
-  // 스크롤 연출은 라이브 도착에만 건다 — 첫 페인트의 스냅샷 재생분까지 부드럽게 흐르면 화면이 출렁인다.
-  let animated = $state(false);
-  $effect(() => {
-    requestAnimationFrame(() => requestAnimationFrame(() => (animated = true)));
-  });
+  // ── 스트리밍 엔진 배선 ──────────────────────────────────────────────────────────────────────────
+  // 페이싱 수리는 전부 Typewriter(lib/feedback/typewriter.ts)의 몫이고, 여기는 배선만 한다:
+  // 어느 텍스트를 따라가고(retarget), 봉인 때 무엇을 드레이너로 넘기며(핸드오프), 프레임을 언제 돌리는가.
+  // 엔진은 비반응이라 frame 틱 하나가 화면 반응성을 씌운다 — 경계가 움직인 프레임에만 오른다.
 
   // 라이브 줄 = 흐르는 턴의 조각을 이어붙인 문장. 이어붙일 원본이 깨졌으면 거짓 문장을 그리느니 아무것도 그리지 않는다.
   const liveText = $derived(turnLive === null || turnLive.textBroken ? '' : turnLive.text);
 
-  // 수신과 표시의 분리 — 조각은 코얼레싱 창(200ms)과 모델의 생각 공백 탓에 뭉치로 도착한다. 도착 리듬을
-  // 그대로 재생하면 화면이 우르르-멈춤-우르르로 끊기므로, 공개 커서를 rAF 루프가 백로그 비례 속도로 민다.
-  // 밀린 양을 TARGET_LATENCY_MS에 걸쳐 소진하는 속도를 목표로 ADAPT_MS 시정수로 이징한다 — 뭉치는 완만한
-  // 가속으로 번역되고, 상류가 어떤 리듬으로 주든 고정 속도 튜닝이 필요 없다. 상류가 IDLE_GRACE_MS 넘게
-  // 조용하면 소진 지평을 SETTLE_LATENCY_MS로 줄여 꼬리를 마저 흘린다 — 문장 사이의 멈춤은 자연스러운
-  // 쉼으로 남기되, 봉인 때 안 보여준 꼬리가 한꺼번에 쏟아지는 것은 줄인다.
-  const TARGET_LATENCY_MS = 550;
-  const SETTLE_LATENCY_MS = 250;
-  const IDLE_GRACE_MS = 450;
-  const ADAPT_MS = 300;
-  const MIN_CPS = 15; // 잔량이 남은 동안 기는 최저 속도 — 상류가 침묵해도 꼬리가 뚝 멎지 않는다
-  const MAX_CPS = 700;
-  // 합류 스냅샷(첫 프레임에 누적 전체)은 애니메이션 대상이 아니다 — 시작부터 이만큼 밀려 있으면 점프한다.
-  const JOIN_LAG = 400;
-  // 진행 중에는 점프하지 않는다 — 몰아 도착한 뭉치는 점프가 아니라 가속으로 소화한다(점프가 곧 "한꺼번에
-  // 우르르"다). 이 상한은 숨은 탭 복귀처럼 rAF가 서 있던 동안 쌓인 병리적 백로그만 자른다.
-  const HARD_LAG = 2500;
+  // 봉인 드레인 함대(lib/feedback/drain-fleet.ts) — 봉인된 마지막 발화의 꼬리를 자연 속도로 마저 흘리고,
+  // 완주 후 링거(읽을 시간)까지 지나야 걷힌다. 그동안 그 확정 라인은 잠시 숨긴다(두 벌로 서면 이중 표시다).
+  // stage·round는 렌더 라우팅 몫 — 드레인 중에 스테이지가 넘어가도 꼬리는 제 카드·제 라운드에서 흐르고,
+  // 카드 경계에서는 두 카드가 동시에 활성일 수 있다(의도된 동작).
   const MAX_FRAME_MS = 100; // 멈췄던 프레임이 몰아치는 dt 폭주 방지
 
-  let revealedBoundary = $state(0); // 단어 경계로 스냅된 공개 길이 — 렌더는 이 값만 본다
-  let plainUntil = $state(0); // 점프로 한꺼번에 공개된 앞부분 — 페이드 없이 평문으로 선다
-  let revealed = 0; // 글자 단위 공개 커서(비반응 — 프레임마다 움직인다)
-  let rate = MIN_CPS;
-  let budget = 0;
-  let lastTime = 0;
-  let lastGrowth = 0; // 마지막으로 새 텍스트가 닿은 시각 — 유휴 판정(IDLE_GRACE)의 기준
-  let prevTarget = 0;
-  let prevText = '';
+  const fleet = new DrainFleet();
+  let liveTw = new Typewriter('stream');
+  let frame = $state(0);
   let liveKey = '';
-  let raf = 0;
-
-  // 봉인 드레이너 — 확정은 마지막 조각과 거의 동시에 닿아, 라이브 줄을 그 자리에서 버리면 못 보여준 꼬리가
-  // 확정 줄로 한꺼번에 나타난다. 봉인 순간 방금 확정된 라인을 넘겨받아 전용 커서로 꼬리까지 흘리고, 그동안
-  // 그 확정 라인은 잠시 숨긴다(두 벌로 서면 그게 곧 이중 표시다). 라이브 페이서와 커서를 나눠 갖는 이유:
-  // 다음 턴·다음 스테이지가 아무리 빨리 시작해도 꼬리는 제 카드·제 라운드에서 끝까지 흐른다.
-  let drain = $state<{ lineId: number; text: string; stage: StageKey | null; round: number | null } | null>(null);
-  let drainBoundary = $state(0);
-  let drainPlain = 0; // 드레인 시작 시점까지는 이미 보인 부분 — 페이드 없이 그대로 선다
-  let drainRevealed = 0;
-  let drainRate = MIN_CPS;
-  let drainBudget = 0;
-
-  // 공개 커서가 단어 안에 서면 그 단어의 시작으로 물린다 — 단어는 통째로만 나타난다(페이드 단위). 버퍼 끝의
-  // 미완 단어도 잡아둔다: 코얼레싱 창은 단어 중간에서도 끊기므로, 끝까지 왔다고 단어가 끝난 것이 아니다.
-  const snapToWord = (text: string, cursor: number): number => {
-    if (cursor < text.length && /\s/.test(text[cursor])) return cursor;
-    const partial = /\S+$/.exec(text.slice(0, cursor));
-    return partial === null ? cursor : cursor - partial[0].length;
-  };
-
-  const jumpTo = (length: number) => {
-    revealed = length;
-    revealedBoundary = length;
-    plainUntil = length;
-    budget = 0;
-  };
 
   $effect.pre(() => {
     const key = turnLive === null ? '' : `${turnLive.agent.id}:${turnLive.turn}:${turnLive.attempt}`;
     const text = liveText;
+    const at = performance.now();
     if (key !== liveKey) {
-      const previous = prevText;
       liveKey = key;
       if (key === '') {
-        // 방금 확정된 라인이 라이브 줄의 연장선일 때만 드레이너에 넘긴다 — 내용 대조가 안 되면 그대로 접는다.
-        const line = live.activity.at(-1);
-        const matches = line !== undefined && previous.length > 0 && (line.text.startsWith(previous) || previous.startsWith(line.text));
-        if (matches && revealedBoundary < line.text.length) {
-          drain = { lineId: line.id, text: line.text, stage: line.stage, round: nestedRound(line.step) };
-          drainRevealed = revealedBoundary;
-          drainBoundary = revealedBoundary;
-          drainPlain = revealedBoundary;
-          drainRate = Math.max(rate, MIN_CPS); // 라이브의 속도를 물려받아 흐름이 이어진다
-          drainBudget = 0;
-        }
+        // untrack: 이 효과의 의존은 "따라갈 턴"뿐이다 — 봉인 순간의 피드 열람이 의존으로 등록되면 무관한
+        // 갱신마다 재실행된다.
+        untrack(() => {
+          const line = live.activity.at(-1);
+          if (line !== undefined) {
+            fleet.seal(
+              { id: line.id, text: line.text, stage: line.stage, round: nestedRound(line.step) },
+              liveTw.text,
+              liveTw.boundary,
+              liveTw.rate,
+              at,
+            );
+          }
+        });
       }
-      rate = MIN_CPS;
-      prevTarget = 0;
-      jumpTo(0);
+      liveTw = new Typewriter('stream'); // 턴마다 새 기계 — 이월할 상태가 없다
     }
-    prevText = text;
-    // 축소는 스냅샷 덮어쓰기(내용 교체)라 그대로 점프한다. 그 외 점프는 합류·병리 백로그뿐 — 진행 중 뭉치는
-    // pace 루프가 가속으로 소화한다.
-    if (text.length < revealed || (revealed === 0 && text.length > JOIN_LAG) || text.length - revealed > HARD_LAG) {
-      jumpTo(text.length);
-    }
+    liveTw.retarget(text, at);
+    // untrack: `frame += 1`은 자기 값을 읽으며 쓰는 자기 의존이라 효과가 스스로를 무한 재트리거한다
+    // (effect_update_depth_exceeded). 읽기를 추적 밖으로 빼 쓰기 전용으로 만든다.
+    untrack(() => (frame += 1)); // 봉인·리셋·점프도 다음 페인트에 바로 선다
   });
 
-  const pace = (time: number) => {
-    if (turnLive === null && drain === null) return;
-    const dt = Math.min(time - lastTime, MAX_FRAME_MS);
-    lastTime = time;
+  const fleetActive = $derived.by(() => {
+    void frame;
+    return fleet.active;
+  });
+  const liveActive = $derived(turnLive !== null || fleetActive);
 
-    if (turnLive !== null) {
-      const target = liveText.length;
-      if (target > prevTarget) {
-        lastGrowth = time;
-        prevTarget = target;
-      }
-      const pending = target - revealed;
-      if (pending > 0) {
-        const horizon = time - lastGrowth > IDLE_GRACE_MS ? SETTLE_LATENCY_MS : TARGET_LATENCY_MS;
-        const desired = (pending / horizon) * 1000;
-        rate += (desired - rate) * (1 - Math.exp(-dt / ADAPT_MS));
-        budget += (Math.min(MAX_CPS, Math.max(MIN_CPS, rate)) * dt) / 1000;
-        const step = Math.floor(budget);
-        if (step > 0) {
-          budget -= step;
-          revealed = Math.min(target, revealed + step);
-          const snapped = snapToWord(liveText, revealed);
-          if (snapped > revealedBoundary) revealedBoundary = snapped;
-        }
-      } else {
-        // 조용한 동안 속도를 바닥으로 되돌린다 — 다음 뭉치가 지난 뭉치의 속도로 첫 프레임부터 쏟아지지 않게.
-        rate += (MIN_CPS - rate) * (1 - Math.exp(-dt / ADAPT_MS));
-        budget = 0;
-      }
-      // 끝 단어 보류는 코얼레싱 창 사이(200ms)의 중간 절단만 가리는 장치다 — 유휴가 그보다 길면 버퍼 끝은
-      // 완성된 문장이므로 보류를 푼다: 도구 입력이 흐르는 내내 직전 문장의 꼬리를 인질로 잡지 않는다.
-      if (revealedBoundary < revealed && time - lastGrowth > IDLE_GRACE_MS) revealedBoundary = revealed;
-    }
-
-    // 드레이너 — 넘겨받은 확정 전문을 settle 지평으로 마저 흘린다. 라이브와 커서가 달라 새 턴이 시작돼도
-    // 서로를 방해하지 않는다. 전문이라 더 올 것이 없으니 단어 보류 없이 글자 단위로 흐른다(타이핑 질감).
-    if (drain !== null) {
-      const target = drain.text.length;
-      const pending = target - drainRevealed;
-      const desired = (pending / SETTLE_LATENCY_MS) * 1000;
-      drainRate += (desired - drainRate) * (1 - Math.exp(-dt / ADAPT_MS));
-      drainBudget += (Math.min(MAX_CPS, Math.max(MIN_CPS, drainRate)) * dt) / 1000;
-      const step = Math.floor(drainBudget);
-      if (step > 0) {
-        drainBudget -= step;
-        drainRevealed = Math.min(target, drainRevealed + step);
-        if (drainRevealed > drainBoundary) drainBoundary = drainRevealed;
-      }
-      if (drainBoundary >= target) drain = null; // 꼬리까지 흘렸다 — 확정 줄이 제자리로 돌아온다
-    }
-
-    raf = requestAnimationFrame(pace);
-  };
-
-  const liveActive = $derived(turnLive !== null || drain !== null);
+  // 루프 수명은 이 효과가 통째로 소유한다 — 콜백 안에서 상태를 검사해 자멸하는 조기 return을 두지 않는다
+  // (루프가 죽은 채 드레인이 남으면 화면이 문장 중간에서 얼어붙는다). disposed 플래그와 지역 id로 티어다운
+  // 경합도 차단한다. 함대가 비고 턴도 없으면 fleetActive가 꺼져 여기 티어다운이 루프를 걷는다.
   $effect(() => {
     if (!liveActive) return;
-    lastTime = performance.now();
-    raf = requestAnimationFrame(pace);
-    return () => cancelAnimationFrame(raf);
+    let disposed = false;
+    let last = performance.now();
+    let id = requestAnimationFrame(function loop(time) {
+      if (disposed) return;
+      const dt = Math.min(time - last, MAX_FRAME_MS);
+      last = time;
+      let changed = turnLive !== null && liveTw.advance(time, dt);
+      changed = fleet.advance(time, dt) || changed;
+      if (changed) frame += 1; // rAF 콜백은 추적 문맥이 아니라 자기 의존이 생기지 않는다
+      id = requestAnimationFrame(loop);
+    });
+    return () => {
+      disposed = true;
+      cancelAnimationFrame(id);
+    };
   });
 
-  // 단어만 스팬에 담고 공백은 밖에 둔다 — 페이드 단위가 단어이고, 스팬이 평문과 같은 inline이라 줄바꿈도
-  // 평문과 동일하다(확정 평문으로 바뀌는 순간의 레이아웃 시프트 방지 — keyframes.ts reveal 참조).
-  type LiveToken = { start: number; text: string; animated: boolean };
+  const liveTokens = $derived.by((): Token[] => {
+    void frame;
+    return liveTw.tokens();
+  });
 
-  const tokenize = (text: string, plainBefore: number): LiveToken[] => {
-    const tokens: LiveToken[] = [];
-    let start = 0;
-    for (const part of text.split(/(\s+)/)) {
-      if (part.length > 0) tokens.push({ start, text: part, animated: part.trim().length > 0 && start >= plainBefore });
-      start += part.length;
+  type DrainView = { lineId: number; stage: StageKey | null; round: number | null; tokens: Token[] };
+  const drainViews = $derived.by((): DrainView[] => {
+    void frame;
+    return fleet.slots.map((slot) => ({ lineId: slot.lineId, stage: slot.stage, round: slot.round, tokens: slot.tw.tokens() }));
+  });
+
+  // 드레인 중인 라인은 확정 평문 대신 드레이너의 토큰으로 "그 자리에서" 그린다 — 자리를 옮기면(피드 끝 등)
+  // 나중 커서 항목(검수 카드·캡슐)이 위로 갔다가 드레인이 끝날 때 순서가 되돌아오는 점프가 생긴다.
+  const drainedIds = $derived.by(() => {
+    void frame;
+    return fleet.lineIds();
+  });
+
+  const lastLineIdOf = (feed: FeedEntry[]): number | null => {
+    for (let index = feed.length - 1; index >= 0; index -= 1) {
+      const entry = feed[index];
+      if (entry.kind === 'line') return entry.line.id;
     }
-    return tokens;
+    return null;
   };
 
-  const liveTokens = $derived(tokenize(liveText.slice(0, revealedBoundary), plainUntil));
-  // 드레인 시작 전에 이미 보였던 앞부분은 평문으로 선다 — 라이브 줄에서 드레인 줄로 갈아타는 순간이 눈에 안 띈다.
-  const drainTokens = $derived(drain === null ? [] : tokenize(drain.text.slice(0, drainBoundary), drainPlain));
+  // ── 라이브 꼬리(헤일로 행) ──────────────────────────────────────────────────────────────────────
+  // 공백을 메우는 존재다 — 다른 것(흐르는 발화·새 캡슐)이 진행을 보여주는 동안에는 서지 않는다. 쓰기 카운터만
+  // 예외로 즉시 선다: 쓰는 동안에는 화면에 움직이는 것이 이것뿐이다. 생각 경과는 "마지막으로 화면에 무언가 선
+  // 순간"부터 센다 — 기록의 생각 틈(이벤트 사이 간격)과 같은 자라, 숫자가 리셋되는 순간마다 화면에 실제로 새
+  // 항목이 서고, 오래 생각한 숫자는 그대로 캡슐의 "N초 생각함"으로 굳는다. 턴 경계로 리셋하지 않는 이유이기도
+  // 하다 — 보이지 않는 사건으로 숫자가 튀면 고장처럼 읽힌다.
 
-  // 라이브 꼬리 — 지금 하는 활동 하나만 선다. 쓰기는 델타 카운트로 직접 보이고, 그 외에는 "마지막으로 화면에
-  // 무언가 선 순간"부터의 경과를 생각으로 센다. 기록의 생각 틈(이벤트 사이 간격)과 같은 자를 쓰므로 숫자가
-  // 리셋되는 순간마다 화면에 실제로 새 항목이 서고, 오래 생각한 숫자는 그대로 캡슐의 "N초 생각"으로 굳는다.
-  // 턴 경계로 리셋하지 않는 이유이기도 하다 — 보이지 않는 사건으로 숫자가 튀면 고장처럼 읽힌다.
   let writeLive = $state<{ chars: number } | null>(null);
   let lastToolChars: number | null = null;
   let activityKey = '';
@@ -272,12 +206,29 @@
     return () => clearInterval(timer);
   });
 
-  // 헤일로 행은 공백을 메우는 존재다 — 다른 것(흐르는 발화·새 캡슐)이 진행을 보여주는 동안에는 서지 않는다.
-  // null = 숨김. 쓰기 카운터만 예외로 즉시 선다: 쓰는 동안에는 화면에 움직이는 것이 이것뿐이다.
   const liveTail = $derived.by((): string | null => {
     if (writeLive !== null) return `노트를 쓰고 있어요 · ${writeLive.chars.toLocaleString('ko-KR')}자`;
     const seconds = Math.max(0, Math.floor((nowTick - lastBeat) / 1000));
-    return seconds >= 2 ? `생각하는 중이에요 · ${seconds}초` : null;
+    return seconds >= 2 ? `생각하는 중이에요 · ${durationLabel(seconds)}` : null;
+  });
+
+  // ── 스크롤 추종 ────────────────────────────────────────────────────────────────────────────────
+
+  // 스크롤 연출은 라이브 도착에만 건다 — 첫 페인트의 스냅샷 재생분까지 부드럽게 흐르면 화면이 출렁인다.
+  let animated = $state(false);
+  $effect(() => {
+    requestAnimationFrame(() => requestAnimationFrame(() => (animated = true)));
+  });
+
+  // 재생 따라잡기 동안은 카드 전환을 끄고 최종 상태로 바로 선다 — 재접속은 로그를 처음부터 이벤트 단위로
+  // 다시 받으므로, 그 몇백 ms를 전환과 함께 재생하면 첫 카드가 열렸다 닫히는 과거사 빨리감기가 보인다.
+  // 따라잡기의 끝은 도착이 뜸해진 순간(250ms 무이벤트)으로 근사한다.
+  let settled = $state(false);
+  $effect(() => {
+    void live.cursor;
+    if (untrack(() => settled)) return;
+    const timer = setTimeout(() => (settled = true), 250);
+    return () => clearTimeout(timer);
   });
 
   // 기록 영역 바닥 추종 — 사용자가 위로 스크롤해 둔 동안에는 멈추고, 바닥 근처(≤8px)로 돌아오면 재개한다.
@@ -303,21 +254,24 @@
     void live.activity;
     const el = feedEl;
     if (!el || !stick) return;
-    const smooth = animated;
+    const smooth = animated && settled;
     void tick().then(() => el.scrollTo({ top: el.scrollHeight, behavior: smooth ? 'smooth' : 'auto' }));
   });
-  // 라이브 줄이 자라도 바닥을 따라간다 — 자라는 줄이 접힌 자리에 숨으면 타이핑이 보이지 않는다. 추종은 즉시
-  // 스크롤로 한다: 단어마다 smooth 애니메이션을 겹쳐 걸면 그 겹침 자체가 덜컥임이 된다.
+  // 라이브·드레인 줄이 자라도 바닥을 따라간다 — 자라는 줄이 접힌 자리에 숨으면 타이핑이 보이지 않는다. 추종은
+  // 즉시 스크롤로 한다: 단어마다 smooth 애니메이션을 겹쳐 걸면 그 겹침 자체가 덜컥임이 된다.
   $effect(() => {
-    void liveTokens;
-    void drainTokens;
+    void frame;
     void liveTail;
     const el = feedEl;
     if (!el || !stick) return;
     void tick().then(() => el.scrollTo({ top: el.scrollHeight, behavior: 'auto' }));
   });
 
+  // ── 스타일 ─────────────────────────────────────────────────────────────────────────────────────
+
   const listClass = flex({ direction: 'column', gap: '6px' });
+  // 따라잡기 중에는 하위 전체의 CSS 전환을 죽인다 — 애니메이션(shimmer·breathe)은 상태 재생과 무관하니 살린다.
+  const settlingClass = css({ '& *': { transition: '[none !important]' } });
 
   // 진행 중 카드의 1px 그라데이션 링 — 카드 뒤에 깔리고, 완료 시 페이드아웃(480ms)한다.
   const glowRecipe = cva({
@@ -437,14 +391,18 @@
     },
   });
 
-  // 본문 개폐 — 시작(pending→running)은 240ms 늦게 펼치고, 완료 접힘은 160ms 늦게 접는다.
+  // 본문 개폐 — 완료 페이지 스레드 카드와 같은 문법(ThreadCard revealRecipe): grid-rows 0fr↔1fr을
+  // 0.25s·cubic-bezier(0.2,0,0,1) 한 곡선으로 돌리고 지연을 두지 않는다. 닫히는 카드의 수축과 열리는
+  // 카드의 성장이 같은 창에서 상보적으로 달려 목록 높이가 한 번에 변한다 — 지연을 섞으면 위상이 어긋난
+  // 두 높이 변화가 겹쳐 목록이 두 번 출렁인다. visibility는 접힌 콘텐츠의 포커스·클릭을 막는 용도로,
+  // 전환 목록에 실어 닫히는 동안에는 보이게 둔다.
   const revealRecipe = cva({
-    base: { display: 'grid', transition: '[grid-template-rows 0.32s ease-in-out, visibility 0.32s]' },
+    base: { display: 'grid', transition: '[grid-template-rows 0.25s cubic-bezier(0.2, 0, 0, 1), visibility 0.25s]' },
     variants: {
       open: {
-        feed: { gridTemplateRows: '[1fr]', visibility: 'visible', transitionDelay: '[0.24s]' },
-        history: { gridTemplateRows: '[1fr]', visibility: 'visible' },
-        closed: { gridTemplateRows: '[0fr]', visibility: 'hidden', transitionDelay: '[0.16s]' },
+        feed: { gridTemplateRows: '[1fr]' },
+        history: { gridTemplateRows: '[1fr]' },
+        closed: { gridTemplateRows: '[0fr]', visibility: 'hidden' },
       },
     },
   });
@@ -462,45 +420,28 @@
   // 헤일로의 블러 글로우도 overflow 경계에 잘리지 않는다. 스크롤바는 관례대로 숨긴다(NoteEntitySearchModal 참조).
   const feedShellClass = css({ borderTopWidth: '1px', borderColor: 'border.subtle' });
   const feedClass = css({
-    height: '180px',
+    height: '320px',
     paddingX: '14px',
     paddingTop: '10px',
     paddingBottom: '12px',
     overflowX: 'hidden',
     overflowY: 'auto',
-    overscrollBehavior: 'contain',
     scrollbarWidth: 'none',
   });
 
   // 완료 카드의 펼친 기록도 같은 상자에 담아 길이를 붙든다 — 다만 짧은 기록에 빈 공간을 만들지 않게 상한만 잡는다.
   const historyFeedClass = css({
-    maxHeight: '180px',
+    maxHeight: '320px',
     paddingX: '14px',
     paddingTop: '10px',
     paddingBottom: '12px',
     overflowX: 'hidden',
     overflowY: 'auto',
-    overscrollBehavior: 'contain',
     scrollbarWidth: 'none',
   });
 
   // 활동 캡슐 — 발화 사이에 남는 그 구간의 작업 요약. 발화보다 한 급 눌러(11px·disabled) 발화가 주인공으로 남는다.
   const capsuleClass = css({ paddingY: '2px', fontSize: '11px', lineHeight: '[1.7]', color: 'text.disabled' });
-
-  const lastLineIdOf = (feed: FeedEntry[]): number | null => {
-    for (let index = feed.length - 1; index >= 0; index -= 1) {
-      const entry = feed[index];
-      if (entry.kind === 'line') return entry.line.id;
-    }
-    return null;
-  };
-
-  // 드레인 중인 라인은 드레이너가 대신 그리는 동안 잠시 숨긴다.
-  const visibleFeed = (feed: FeedEntry[]): FeedEntry[] => {
-    const active = drain;
-    if (active === null) return feed;
-    return feed.filter((entry) => entry.kind !== 'line' || entry.line.id !== active.lineId);
-  };
 
   // 발화는 여러 줄로 온다 — 빈 줄(\n\n)까지 원문 그대로 눕히고 자르지 않는다.
   const feedLineRecipe = cva({
@@ -514,7 +455,9 @@
     variants: {
       latest: {
         true: { fontWeight: 'semibold', color: 'text.default' },
-        false: { color: 'text.faint' },
+        // 지나간 발화도 읽는 본문이다 — faint는 훑기엔 옅어서 subtle로 세운다(ThreadCard 본문과 같은 급).
+        // 활동 캡슐(disabled)과의 위계는 그대로 남는다.
+        false: { color: 'text.subtle' },
       },
     },
   });
@@ -540,7 +483,7 @@
     fontSize: '11px',
     lineHeight: '[1.55]',
     whiteSpace: 'pre-wrap',
-    color: 'text.faint',
+    color: 'text.subtle', // 피드의 지나간 발화와 같은 급 — 완료 후에도 읽는 본문이다
   });
   const historyTimeClass = css({ flex: 'none', fontSize: '10px', color: 'text.disabled' });
 
@@ -556,26 +499,31 @@
   });
 </script>
 
-{#snippet drainStream()}
-  {#if drainTokens.length > 0}
+{#snippet streamLine(tokens: Token[])}
+  {#if tokens.length > 0}
     <div class={css(feedLineRecipe.raw({ latest: true }))}>
-      {#each drainTokens as token (token.start)}
+      {#each tokens as token (token.start)}
         <span class={token.animated ? wordClass : undefined}>{token.text}</span>
       {/each}
     </div>
   {/if}
 {/snippet}
 
-{#snippet liveStream()}
-  {#if liveTokens.length > 0}
-    <div class={css(feedLineRecipe.raw({ latest: true }))}>
-      {#each liveTokens as token (token.start)}
-        <span class={token.animated ? wordClass : undefined}>{token.text}</span>
-      {/each}
-    </div>
+<!-- 드레인 중인 라인의 제자리 대체 — 확정 평문이 설 자리에서 드레이너의 토큰이 흐른다. -->
+{#snippet ghostLine(lineId: number)}
+  {@const view = drainViews.find((entry) => entry.lineId === lineId)}
+  {#if view !== undefined}
+    {@render streamLine(view.tokens)}
   {/if}
+{/snippet}
 
-  {#if liveTail !== null}
+<!-- empty = 이 카드에 아직 아무것도 없다(호출부가 제 피드 기준으로 판정). 첫 신호가 오기 전의 빈
+     상자는 어색하므로 헤일로가 "준비하고 있어요"로 즉시 서고, 발화·카운터가 오면 그 자리를 넘긴다. -->
+{#snippet liveStream(empty: boolean)}
+  {@const tail = liveTail ?? (empty && liveTokens.length === 0 ? '준비하고 있어요' : null)}
+  {@render streamLine(liveTokens)}
+
+  {#if tail !== null}
     <div class={flex({ align: 'center', gap: '8px', height: '24px', flex: 'none' })} transition:fade={{ duration: 200 }}>
       <span class={css({ position: 'relative', size: '14px', flex: 'none' })}>
         <span
@@ -599,7 +547,7 @@
         ></span>
         <span class={css({ position: 'absolute', inset: '3px', borderRadius: 'full', backgroundColor: 'surface.default' })}></span>
       </span>
-      <span class={shimmerTextClass}>{liveTail}</span>
+      <span class={shimmerTextClass}>{tail}</span>
     </div>
   {/if}
 {/snippet}
@@ -623,16 +571,16 @@
   </div>
 {/snippet}
 
-<ol class={listClass}>
+<ol class={cx(listClass, settled ? undefined : settlingClass)}>
   {#each STAGES as stage, index (stage.key)}
     <!-- 드레이너가 이 스테이지에서 도는 동안은 done 전환을 보류한다 — 마지막 발화가 다 흐르기 전에 카드가
          접히면 꼬리가 잘린다. 접힘·글로우 소멸·요약 등장은 드레인이 끝난 다음 박자에 온다. -->
     {@const rawMark = markOf(live.stages[stage.key])}
-    {@const mark = rawMark === 'done' && drain?.stage === stage.key ? 'running' : rawMark}
+    {@const cardDrains = drainViews.filter((view) => view.stage === stage.key)}
+    {@const mark = rawMark === 'done' && cardDrains.length > 0 ? 'running' : rawMark}
     {@const lines = live.activity.filter((line) => line.stage === stage.key)}
     <!-- 드레인과 라이브는 커서가 달라 다른 카드(또는 같은 카드의 위아래)에서 동시에 흐를 수 있다 — 각자
          제 스테이지·제 라운드에만 선다. -->
-    {@const cardDrain = drain !== null && drain.stage === stage.key ? drain : null}
     {@const liveHere = mark === 'running' && live.currentStage === stage.key}
     {@const liveRound = liveHere ? nestedRound(live.currentStep) : null}
     {@const groups = groupFeed(live, stage.key)}
@@ -722,15 +670,18 @@
                 <div bind:this={feedEl} class={feedClass} onscroll={onFeedScroll}>
                   {#each groups as group (group.key)}
                     {#if group.kind === 'line'}
-                      {#if group.line.id !== drain?.lineId}
+                      {#if drainedIds.has(group.line.id)}
+                        {@render ghostLine(group.line.id)}
+                      {:else}
                         <div class={css(feedLineRecipe.raw({ latest: group.line.id === latestId }))}>{group.line.text}</div>
                       {/if}
                     {:else if group.kind === 'capsule'}
                       <div class={capsuleClass}>{group.items.map(capsuleLabel).join(' · ')}</div>
                     {:else}
                       <NestedReviewCard
-                        feed={visibleFeed(group.feed)}
-                        ghost={cardDrain !== null && group.round === cardDrain.round ? drainStream : null}
+                        drained={drainedIds}
+                        feed={group.feed}
+                        {ghostLine}
                         latest={lastLineIdOf(group.feed) === latestId}
                         live={liveHere && group.round === liveRound ? liveStream : null}
                         round={group.round}
@@ -739,13 +690,8 @@
                     {/if}
                   {/each}
 
-                  <!-- 드레인 줄이 라이브 줄보다 먼저(위에) 선다 — 시간 순서 그대로다. 라운드 안에서 돌던 것은
-                       각자 제 카드로 옮겨 간다. -->
-                  {#if cardDrain !== null && cardDrain.round === null}
-                    {@render drainStream()}
-                  {/if}
                   {#if liveHere && liveRound === null}
-                    {@render liveStream()}
+                    {@render liveStream(groups.length === 0 && cardDrains.length === 0)}
                   {/if}
                 </div>
               {:else if mark === 'failed' || mark === 'canceled'}
