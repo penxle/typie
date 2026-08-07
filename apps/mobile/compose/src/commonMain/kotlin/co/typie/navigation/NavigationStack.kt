@@ -507,7 +507,6 @@ fun NavigationStack(
     behindRoute = prev
     animState = AnimState.Dragging
     predictiveBackActive = true
-    softwareKeyboardInteraction.start()
     progress.snapTo(0f)
     return true
   }
