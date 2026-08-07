@@ -36,6 +36,7 @@ import co.typie.editor.ffi.NavigationOp
 import co.typie.editor.ffi.Size as EditorSize
 import co.typie.editor.ffi.StateField
 import co.typie.editor.runtime.EditorUiState
+import co.typie.editor.scroll.EditorBringIntoViewPolicy
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
 import co.typie.editor.scroll.rememberEditorBringIntoViewRequests
@@ -199,6 +200,13 @@ class EditorInputEnabledDesktopTest {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val editor = Editor(fake, scope)
     val session = createTestDocumentEditingSession(editor, scope)
+    var observedRevealPolicy: EditorBringIntoViewPolicy? = null
+    lateinit var bringIntoViewRequests: EditorBringIntoViewRequests
+    bringIntoViewRequests = EditorBringIntoViewRequests {
+      bringIntoViewRequests.activateForVersion(Long.MAX_VALUE)?.let { request ->
+        observedRevealPolicy = request.policy
+      }
+    }
 
     try {
       editor.setImeSessionActive(true)
@@ -206,7 +214,6 @@ class EditorInputEnabledDesktopTest {
 
       setContent {
         val focusRequester = remember { FocusRequester() }
-        val bringIntoViewRequests = rememberEditorBringIntoViewRequests()
         Box(
           Modifier.size(200.dp)
             .testTag(InputTag)
@@ -247,8 +254,10 @@ class EditorInputEnabledDesktopTest {
         },
       )
 
+      bringIntoViewRequests.cancel()
       editor.refreshImeSnapshot()
       fake.enqueued.clear()
+      observedRevealPolicy = null
       onNodeWithTag(InputTag).performKeyInput {
         keyDown(Key.DirectionLeft)
         keyUp(Key.DirectionLeft)
@@ -256,11 +265,15 @@ class EditorInputEnabledDesktopTest {
       val moveLeft =
         Message.Navigation(NavigationOp.Move(Movement.Grapheme(Direction.Backward), extend = false))
       waitUntil(timeoutMillis = 5_000) { fake.enqueued.any { it == moveLeft } }
+      waitUntil(timeoutMillis = 5_000) {
+        observedRevealPolicy == EditorBringIntoViewPolicy.Typewriter
+      }
       assertEquals(
         listOf(Message.TextInput(listOf(FlatImeOp.CommitAsIs)), moveLeft),
         fake.enqueued.filter { it is Message.TextInput || it == moveLeft },
       )
 
+      bringIntoViewRequests.cancel()
       editor.refreshImeSnapshot()
       fake.enqueued.clear()
       onNodeWithTag(InputTag).performKeyInput {

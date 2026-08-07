@@ -20,6 +20,7 @@ import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.NodeAttr
 import co.typie.editor.ffi.NodeOp
 import co.typie.editor.ffi.PlainNode
+import co.typie.editor.scroll.EditorBringIntoViewPolicy
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.platform.IncomingContentItem
@@ -199,6 +200,7 @@ internal class DefaultEditorAttachmentImporter(
       bringIntoViewRequests.requestForVersion(
         target = EditorBringIntoViewTarget.CurrentSelectionHead,
         version = update.revision,
+        policy = EditorBringIntoViewPolicy.Typewriter,
       )
       val matches =
         update.events.filterIsInstance<EditorEvent.AttachmentPlaceholdersInserted>().filter {
@@ -289,6 +291,7 @@ internal class DefaultEditorAttachmentImporter(
           bringIntoViewRequests.requestForVersion(
             target = EditorBringIntoViewTarget.CurrentSelectionHead,
             version = update.revision,
+            policy = EditorBringIntoViewPolicy.CursorGuard,
           )
           update.commandOutcomes.none { it is CommandOutcome.Rejected }
         }

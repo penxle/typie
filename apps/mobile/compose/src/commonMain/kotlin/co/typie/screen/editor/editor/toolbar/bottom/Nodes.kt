@@ -43,6 +43,7 @@ import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.PlainNode
 import co.typie.editor.ffi.Selection
 import co.typie.editor.runtime.LocalEditorRuntime
+import co.typie.editor.scroll.EditorBringIntoViewPolicy
 import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
 import co.typie.editor.scroll.updateWithBringIntoView
@@ -110,7 +111,10 @@ internal fun BottomToolbarNodes(
                 currentEditor.scope.launch(context) {
                   currentEditor.updateWithBringIntoView(bringIntoViewRequests) {
                     enqueue(action.message)
-                    bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
+                    bringIntoView(
+                      EditorBringIntoViewTarget.CurrentSelectionHead,
+                      policy = EditorBringIntoViewPolicy.Typewriter,
+                    )
                   }
                 }
               }

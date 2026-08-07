@@ -7,34 +7,42 @@ import co.typie.editor.beforePublish
 import co.typie.editor.ffi.Message
 
 internal interface EditorBringIntoViewUpdateScope : EditorRequestScope {
-  fun bringIntoView(target: EditorBringIntoViewTarget)
+  fun bringIntoView(target: EditorBringIntoViewTarget, policy: EditorBringIntoViewPolicy)
 }
+
+private data class EditorBringIntoViewUpdate(
+  val target: EditorBringIntoViewTarget,
+  val policy: EditorBringIntoViewPolicy,
+)
 
 private fun EditorRequestScope.applyBringIntoViewUpdate(
   block: EditorBringIntoViewUpdateScope.() -> Unit
-): EditorBringIntoViewTarget? {
+): EditorBringIntoViewUpdate? {
   val request = this
-  var selectedTarget: EditorBringIntoViewTarget? = null
+  var selectedUpdate: EditorBringIntoViewUpdate? = null
   block(
     object : EditorBringIntoViewUpdateScope {
       override fun enqueue(message: Message) {
         request.enqueue(message)
       }
 
-      override fun bringIntoView(target: EditorBringIntoViewTarget) {
-        selectedTarget = target
+      override fun bringIntoView(
+        target: EditorBringIntoViewTarget,
+        policy: EditorBringIntoViewPolicy,
+      ) {
+        selectedUpdate = EditorBringIntoViewUpdate(target = target, policy = policy)
       }
     }
   )
-  return selectedTarget
+  return selectedUpdate
 }
 
 internal fun Editor.updateNowWithBringIntoView(
   bringIntoViewRequests: EditorBringIntoViewRequests,
   block: EditorBringIntoViewUpdateScope.() -> Unit,
 ): EditorUpdate? = updateNow {
-  applyBringIntoViewUpdate(block)?.let { target ->
-    val request = bringIntoViewRequests.declare(target)
+  applyBringIntoViewUpdate(block)?.let { reveal ->
+    val request = bringIntoViewRequests.declare(target = reveal.target, policy = reveal.policy)
     beforePublish(
       block = { applied -> bringIntoViewRequests.bind(request, applied.revision) },
       onDiscard = { bringIntoViewRequests.discard(request) },
@@ -50,8 +58,9 @@ internal suspend fun Editor.updateWithBringIntoView(
   var reveal: EditorBringIntoViewRequests.Request? = null
   val update =
     update(admit = admit) {
-      applyBringIntoViewUpdate(block)?.let { target ->
-        val request = bringIntoViewRequests.declare(target)
+      applyBringIntoViewUpdate(block)?.let { requested ->
+        val request =
+          bringIntoViewRequests.declare(target = requested.target, policy = requested.policy)
         reveal = request
         beforePublish(
           block = { applied -> bringIntoViewRequests.bind(request, applied.revision) },

@@ -4,6 +4,8 @@ import androidx.compose.ui.geometry.Size
 import co.typie.editor.VerticalSpan
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 private const val FloatTolerance = 0.01f
 
@@ -35,7 +37,7 @@ class EditorAutoScrollPolicyTest {
   }
 
   @Test
-  fun `keep-visible policy scrolls up only after the cursor enters the visible viewport guard`() {
+  fun `keep-visible policy ignores a one-pixel guard correction`() {
     val offset =
       resolveKeepVisibleScrollOffset(
         currentScroll = 240f,
@@ -44,7 +46,7 @@ class EditorAutoScrollPolicyTest {
         visibleArea = testVisibleArea(),
       )
 
-    assertEquals(239f, offset)
+    assertEquals(null, offset)
   }
 
   @Test
@@ -66,7 +68,7 @@ class EditorAutoScrollPolicyTest {
   }
 
   @Test
-  fun `keep-visible policy aligns oversized target top to the guarded visible area`() {
+  fun `keep-visible policy aligns oversized target below viewport bottom to lower guard`() {
     val offset =
       resolveKeepVisibleScrollOffset(
         currentScroll = 300f,
@@ -75,11 +77,87 @@ class EditorAutoScrollPolicyTest {
         visibleArea = testVisibleArea(),
       )
 
-    assertEquals(860f, offset)
+    assertEquals(960f, offset)
   }
 
   @Test
-  fun `resolved policy keeps keep-visible mode active when typewriter is disabled`() {
+  fun `keep-visible policy does not scroll when oversized target covers guarded visible area`() {
+    val offset =
+      resolveKeepVisibleScrollOffset(
+        currentScroll = 300f,
+        targetTopInContent = 200f,
+        targetBottomInContent = 1200f,
+        visibleArea = testVisibleArea(),
+      )
+
+    assertEquals(null, offset)
+  }
+
+  @Test
+  fun `keep-visible policy does not scroll when oversized target meets either guard edge`() {
+    assertEquals(
+      null,
+      resolveKeepVisibleScrollOffset(
+        currentScroll = 300f,
+        targetTopInContent = 440f,
+        targetBottomInContent = 1200f,
+        visibleArea = testVisibleArea(),
+      ),
+    )
+    assertEquals(
+      null,
+      resolveKeepVisibleScrollOffset(
+        currentScroll = 300f,
+        targetTopInContent = 0f,
+        targetBottomInContent = 1040f,
+        visibleArea = testVisibleArea(),
+      ),
+    )
+  }
+
+  @Test
+  fun `keep-visible policy aligns oversized target to violated edge within old slack`() {
+    val offset =
+      resolveKeepVisibleScrollOffset(
+        currentScroll = 300f,
+        targetTopInContent = 460f,
+        targetBottomInContent = 1200f,
+        visibleArea = testVisibleArea(),
+      )
+
+    assertEquals(460f, offset)
+  }
+
+  @Test
+  fun `keep-visible policy clamps oversized target at document edge`() {
+    val offset =
+      resolveKeepVisibleScrollOffset(
+        currentScroll = 10f,
+        targetTopInContent = 0f,
+        targetBottomInContent = 251f,
+        visibleArea =
+          EditorVisibleArea(viewport = Size(width = 720f, height = 400f), topInset = 30f),
+        maximumScrollY = 400f,
+      )
+
+    assertEquals(0f, offset)
+  }
+
+  @Test
+  fun `keep-visible policy aligns oversized target above viewport top to upper guard`() {
+    val offset =
+      resolveKeepVisibleScrollOffset(
+        currentScroll = 1000f,
+        targetTopInContent = 500f,
+        targetBottomInContent = 1200f,
+        visibleArea = testVisibleArea(),
+      )
+
+    assertEquals(360f, offset)
+  }
+
+  @Test
+  fun `resolved policy keeps typewriter inactive when the preference is disabled`() {
     val policy =
       resolveEditorAutoScrollPolicy(
         visibleArea =
@@ -94,9 +172,18 @@ class EditorAutoScrollPolicyTest {
         targetLineHeight = 20f,
       )
 
-    assertEquals(EditorAutoScrollMode.KeepCursorVisible, policy.mode)
+    assertFalse(policy.typewriterActive)
     assertEquals(0.5f, policy.typewriterPosition, FloatTolerance)
-    assertEquals(VerticalSpan(top = 180f, bottom = 740f), policy.keepVisibleRange)
+    assertEquals(
+      VerticalSpan(top = 180f, bottom = 740f),
+      resolveKeepVisibleRange(
+        EditorVisibleArea(
+          viewport = Size(width = 720f, height = 900f),
+          topInset = 120f,
+          imeInset = 100f,
+        )
+      ),
+    )
     assertEquals(450f, requireNotNull(policy.targetTop), FloatTolerance)
     assertEquals(470f, requireNotNull(policy.targetBottom), FloatTolerance)
     assertEquals(140f, policy.bottomPadding, FloatTolerance)
@@ -117,7 +204,35 @@ class EditorAutoScrollPolicyTest {
   }
 
   @Test
-  fun `resolved policy switches to typewriter mode when enabled`() {
+  fun `typewriter policy falls back to lower cursor guard for oversized target below viewport`() {
+    val offset =
+      resolveTypewriterScrollOffset(
+        currentScroll = 300f,
+        targetTopInContent = 1000f,
+        targetBottomInContent = 1700f,
+        visibleArea = testVisibleArea(),
+        position = 0.5f,
+      )
+
+    assertEquals(960f, requireNotNull(offset), FloatTolerance)
+  }
+
+  @Test
+  fun `typewriter policy keeps viewport when oversized target spans both guard edges`() {
+    val offset =
+      resolveTypewriterScrollOffset(
+        currentScroll = 300f,
+        targetTopInContent = 200f,
+        targetBottomInContent = 1200f,
+        visibleArea = testVisibleArea(),
+        position = 0.5f,
+      )
+
+    assertEquals(null, offset)
+  }
+
+  @Test
+  fun `resolved policy activates typewriter when enabled`() {
     val policy =
       resolveEditorAutoScrollPolicy(
         visibleArea = testVisibleArea(),
@@ -127,7 +242,7 @@ class EditorAutoScrollPolicyTest {
         targetLineHeight = 32f,
       )
 
-    assertEquals(EditorAutoScrollMode.Typewriter, policy.mode)
+    assertTrue(policy.typewriterActive)
     assertEquals(0.25f, policy.typewriterPosition, FloatTolerance)
     assertEquals(252f, requireNotNull(policy.targetTop), FloatTolerance)
     assertEquals(284f, requireNotNull(policy.targetBottom), FloatTolerance)
@@ -145,7 +260,7 @@ class EditorAutoScrollPolicyTest {
         targetLineHeight = 32f,
       )
 
-    assertEquals(EditorAutoScrollMode.Typewriter, policy.mode)
+    assertTrue(policy.typewriterActive)
     assertEquals(596f, policy.bottomPadding, FloatTolerance)
   }
 
@@ -165,7 +280,7 @@ class EditorAutoScrollPolicyTest {
         targetLineHeight = 32f,
       )
 
-    assertEquals(EditorAutoScrollMode.Typewriter, policy.mode)
+    assertTrue(policy.typewriterActive)
     assertEquals(440f, policy.bottomPadding, FloatTolerance)
   }
 
@@ -180,7 +295,7 @@ class EditorAutoScrollPolicyTest {
         targetLineHeight = 32f,
       )
 
-    assertEquals(EditorAutoScrollMode.Typewriter, policy.mode)
+    assertTrue(policy.typewriterActive)
     assertEquals(48f, policy.bottomPadding, FloatTolerance)
   }
 
@@ -193,7 +308,7 @@ class EditorAutoScrollPolicyTest {
         baseBottomSpace = 40f,
       )
 
-    assertEquals(EditorAutoScrollMode.KeepCursorVisible, policy.mode)
+    assertFalse(policy.typewriterActive)
     assertEquals(20f, policy.bottomPadding, FloatTolerance)
   }
 
@@ -206,7 +321,7 @@ class EditorAutoScrollPolicyTest {
         pageBottomRevealPadding = 100f,
       )
 
-    assertEquals(EditorAutoScrollMode.KeepCursorVisible, policy.mode)
+    assertFalse(policy.typewriterActive)
     assertEquals(100f, policy.bottomPadding, FloatTolerance)
   }
 
@@ -229,7 +344,16 @@ class EditorAutoScrollPolicyTest {
         baseBottomSpace = 20f,
       )
 
-    assertEquals(VerticalSpan(top = 140f, bottom = 660f), policy.keepVisibleRange)
+    assertEquals(
+      VerticalSpan(top = 140f, bottom = 660f),
+      resolveKeepVisibleRange(
+        EditorVisibleArea(
+          viewport = Size(width = 720f, height = 900f),
+          topInset = 80f,
+          bottomOcclusionInset = 180f,
+        )
+      ),
+    )
     assertEquals(300f, policy.bottomPadding, FloatTolerance)
   }
 

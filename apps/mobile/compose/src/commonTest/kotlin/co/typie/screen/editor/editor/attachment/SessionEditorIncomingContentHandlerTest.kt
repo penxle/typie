@@ -4,6 +4,7 @@ import co.typie.editor.Editor
 import co.typie.editor.FakeFfiEditor
 import co.typie.editor.ffi.ClipboardOp
 import co.typie.editor.ffi.Message
+import co.typie.editor.scroll.EditorBringIntoViewPolicy
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.sync.createTestDocumentEditingSession
 import co.typie.platform.Clipboard
@@ -27,6 +28,7 @@ class SessionEditorIncomingContentHandlerTest {
     val fake = FakeFfiEditor()
     val editor = Editor(fake, this)
     val session = createTestDocumentEditingSession(editor, this)
+    val bringIntoViewRequests = EditorBringIntoViewRequests()
     val handler =
       SessionEditorIncomingContentHandler(
         importer =
@@ -34,7 +36,7 @@ class SessionEditorIncomingContentHandlerTest {
             importCalls += 1
             true
           },
-        bringIntoViewRequests = EditorBringIntoViewRequests(),
+        bringIntoViewRequests = bringIntoViewRequests,
         isSessionCurrent = { it === session },
         onAttachmentError = {},
       )
@@ -52,6 +54,10 @@ class SessionEditorIncomingContentHandlerTest {
       )
 
     assertTrue(handled)
+    assertEquals(
+      EditorBringIntoViewPolicy.Typewriter,
+      bringIntoViewRequests.activateForVersion(editor.appliedState.version)?.policy,
+    )
     assertEquals(0, importCalls)
     assertTrue(released)
     assertTrue(

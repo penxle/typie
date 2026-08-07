@@ -17,12 +17,55 @@ internal data class EditorScrollFrame(
   val headerHeight: Float,
   val density: Float,
   val editorBounds: EditorBoundsInContainer,
-)
+) {
+  fun withState(state: EditorState): EditorScrollFrame {
+    return copy(
+      state = state,
+      autoScrollPolicy =
+        autoScrollPolicy.resolveForState(
+          state = state,
+          visibleArea = visibleArea,
+          layoutSpec = layoutSpec,
+          displayZoom = displayZoom,
+          density = density,
+        ),
+    )
+  }
+}
+
+internal fun EditorAutoScrollPolicy.resolveForState(
+  state: EditorState,
+  visibleArea: EditorVisibleArea,
+  layoutSpec: EditorDocumentLayoutSpec,
+  displayZoom: Float,
+  density: Float,
+): EditorAutoScrollPolicy {
+  val targetLineHeight =
+    resolveBringIntoViewTargetHeight(
+      state = state,
+      layoutSpec = layoutSpec,
+      target = EditorBringIntoViewTarget.CurrentSelectionHead,
+      displayZoom = displayZoom,
+      density = density,
+    )
+  return resolveForState(
+    visibleArea = visibleArea,
+    typewriterActive = targetLineHeight != null,
+    targetLineHeight = targetLineHeight ?: 0f,
+  )
+}
 
 internal sealed interface EditorBringIntoViewTarget {
   data object CurrentSelectionHead : EditorBringIntoViewTarget
 
   data class PageRects(val rects: List<PageRect>) : EditorBringIntoViewTarget
+}
+
+internal enum class EditorBringIntoViewPolicy {
+  CursorGuard,
+  PointerCursorGuard,
+  Typewriter,
+  ResultReveal,
 }
 
 internal sealed interface EditorScrollIntentResult {
@@ -36,7 +79,9 @@ internal sealed interface EditorScrollIntentResult {
 internal fun resolveEditorScrollIntent(
   frame: EditorScrollFrame,
   target: EditorBringIntoViewTarget,
+  policy: EditorBringIntoViewPolicy,
   currentScroll: Float,
+  maximumScrollY: Float = Float.POSITIVE_INFINITY,
 ): EditorScrollIntentResult {
   val editorBounds = frame.editorBounds
   if (!editorBounds.isValid) {
@@ -46,16 +91,20 @@ internal fun resolveEditorScrollIntent(
   return resolveEditorScrollIntent(
     frame = frame,
     target = target,
+    policy = policy,
     currentScroll = currentScroll,
     contentOriginY = frame.headerHeight + editorBounds.y,
+    maximumScrollY = maximumScrollY,
   )
 }
 
 internal fun resolveEditorScrollIntent(
   frame: EditorScrollFrame,
   target: EditorBringIntoViewTarget,
+  policy: EditorBringIntoViewPolicy,
   currentScroll: Float,
   contentOriginY: Float,
+  maximumScrollY: Float = Float.POSITIVE_INFINITY,
 ): EditorScrollIntentResult {
   if (!contentOriginY.isFinite()) return EditorScrollIntentResult.Unresolved
 
@@ -74,22 +123,30 @@ internal fun resolveEditorScrollIntent(
 
   val targetScroll =
     resolveBringIntoViewTargetOffset(
-      mode = frame.autoScrollPolicy.mode,
+      policy = frame.resolvePolicy(target = target, requestedPolicy = policy),
       currentScroll = currentScroll,
       rect = rect,
       visibleArea = frame.visibleArea,
       autoScrollPolicy = frame.autoScrollPolicy,
+      maximumScrollY = maximumScrollY,
+      oversizedMinimumVisibleHeight =
+        if (policy == EditorBringIntoViewPolicy.PointerCursorGuard) {
+          CursorVisibleMargin
+        } else {
+          null
+        },
     )
   if (targetScroll == null) {
     return EditorScrollIntentResult.NoScroll
   }
 
-  return EditorScrollIntentResult.ScrollTo(targetScroll.coerceAtLeast(0f))
+  return EditorScrollIntentResult.ScrollTo(targetScroll)
 }
 
 internal fun resolveInstantRevealPreparationViewports(
   frame: EditorScrollFrame,
   target: EditorBringIntoViewTarget,
+  policy: EditorBringIntoViewPolicy,
   currentScroll: Float,
   contentOriginY: Float,
   maximumScrollY: Float,
@@ -110,6 +167,13 @@ internal fun resolveInstantRevealPreparationViewports(
     target = rect,
     visibleArea = frame.visibleArea,
     autoScrollPolicy = frame.autoScrollPolicy,
+    policy = frame.resolvePolicy(target = target, requestedPolicy = policy),
+    oversizedMinimumVisibleHeight =
+      if (policy == EditorBringIntoViewPolicy.PointerCursorGuard) {
+        CursorVisibleMargin
+      } else {
+        null
+      },
   )
 }
 
@@ -120,6 +184,8 @@ internal fun resolveInstantRevealPreparationViewports(
   target: VerticalSpan,
   visibleArea: EditorVisibleArea,
   autoScrollPolicy: EditorAutoScrollPolicy,
+  policy: EditorBringIntoViewPolicy,
+  oversizedMinimumVisibleHeight: Float? = null,
 ): List<VerticalSpan> {
   if (
     !currentScroll.isFinite() ||
@@ -129,14 +195,24 @@ internal fun resolveInstantRevealPreparationViewports(
       maximumScrollY < 0f ||
       !target.top.isFinite() ||
       !target.bottom.isFinite() ||
-      !target.isValid
+      target.bottom < target.top
   ) {
     return emptyList()
   }
 
+  val keepVisibleRange = resolveKeepVisibleRange(visibleArea)
+  val preparationPolicy =
+    if (
+      policy == EditorBringIntoViewPolicy.Typewriter &&
+        (!keepVisibleRange.isValid || target.height > keepVisibleRange.height)
+    ) {
+      EditorBringIntoViewPolicy.CursorGuard
+    } else {
+      policy
+    }
   val destinations =
-    when (autoScrollPolicy.mode) {
-      EditorAutoScrollMode.Typewriter ->
+    when (preparationPolicy) {
+      EditorBringIntoViewPolicy.Typewriter ->
         listOf(
           resolveTypewriterScrollOffset(
             currentScroll = currentScroll,
@@ -144,11 +220,14 @@ internal fun resolveInstantRevealPreparationViewports(
             targetBottomInContent = target.bottom,
             visibleArea = visibleArea,
             position = autoScrollPolicy.typewriterPosition,
+            maximumScrollY = maximumScrollY,
           ) ?: currentScroll
         )
 
-      EditorAutoScrollMode.KeepCursorVisible -> {
-        val range = resolveKeepVisibleRange(visibleArea)
+      EditorBringIntoViewPolicy.CursorGuard,
+      EditorBringIntoViewPolicy.PointerCursorGuard,
+      EditorBringIntoViewPolicy.ResultReveal -> {
+        val range = keepVisibleRange
         if (!range.isValid) {
           listOf(
             resolveKeepVisibleScrollOffset(
@@ -156,22 +235,37 @@ internal fun resolveInstantRevealPreparationViewports(
               targetTopInContent = target.top,
               targetBottomInContent = target.bottom,
               visibleArea = visibleArea,
+              maximumScrollY = maximumScrollY,
             ) ?: currentScroll
           )
         } else {
           buildList {
-            if (
-              resolveKeepVisibleScrollOffset(
-                currentScroll = currentScroll,
-                targetTopInContent = target.top,
-                targetBottomInContent = target.bottom,
-                visibleArea = visibleArea,
-              ) == null
-            ) {
-              add(currentScroll)
+            if (target.height > range.height) {
+              if (oversizedMinimumVisibleHeight == null) {
+                add(currentScroll)
+                add(target.top - range.top)
+                add(target.bottom - range.bottom)
+              } else {
+                val minimumVisibleHeight = oversizedMinimumVisibleHeight.coerceIn(0f, range.height)
+                add(currentScroll)
+                add(target.top - (range.bottom - minimumVisibleHeight))
+                add(target.bottom - (range.top + minimumVisibleHeight))
+              }
+            } else {
+              val targetScroll =
+                resolveKeepVisibleScrollOffset(
+                  currentScroll = currentScroll,
+                  targetTopInContent = target.top,
+                  targetBottomInContent = target.bottom,
+                  visibleArea = visibleArea,
+                  maximumScrollY = maximumScrollY,
+                )
+              if (targetScroll == null) {
+                add(currentScroll)
+              }
+              add(target.top - range.top)
+              add(target.bottom - range.bottom)
             }
-            add(target.top - range.top)
-            if (target.height <= range.height) add(target.bottom - range.bottom)
           }
         }
       }
@@ -262,6 +356,18 @@ private fun resolveBringIntoViewTargetPageRects(
     is EditorBringIntoViewTarget.PageRects -> target.rects.takeIf { it.isNotEmpty() }
   }
 
+private fun EditorScrollFrame.resolvePolicy(
+  target: EditorBringIntoViewTarget,
+  requestedPolicy: EditorBringIntoViewPolicy,
+): EditorBringIntoViewPolicy =
+  when {
+    requestedPolicy == EditorBringIntoViewPolicy.Typewriter &&
+      target == EditorBringIntoViewTarget.CurrentSelectionHead &&
+      autoScrollPolicy.typewriterActive -> EditorBringIntoViewPolicy.Typewriter
+    requestedPolicy == EditorBringIntoViewPolicy.Typewriter -> EditorBringIntoViewPolicy.CursorGuard
+    else -> requestedPolicy
+  }
+
 internal fun List<PageRect>.toPageRectsTarget(): EditorBringIntoViewTarget.PageRects? =
   takeIf { it.isNotEmpty() }?.let(EditorBringIntoViewTarget::PageRects)
 
@@ -286,27 +392,42 @@ private fun resolveCurrentSelectionHeadPageRect(state: EditorState): PageRect? {
 }
 
 private fun resolveBringIntoViewTargetOffset(
-  mode: EditorAutoScrollMode,
+  policy: EditorBringIntoViewPolicy,
   currentScroll: Float,
   rect: VerticalSpan,
   visibleArea: EditorVisibleArea,
   autoScrollPolicy: EditorAutoScrollPolicy,
+  maximumScrollY: Float,
+  oversizedMinimumVisibleHeight: Float?,
 ): Float? =
-  when (mode) {
-    EditorAutoScrollMode.KeepCursorVisible ->
+  when (policy) {
+    EditorBringIntoViewPolicy.CursorGuard,
+    EditorBringIntoViewPolicy.PointerCursorGuard ->
       resolveKeepVisibleScrollOffset(
         currentScroll = currentScroll,
         targetTopInContent = rect.top,
         targetBottomInContent = rect.bottom,
         visibleArea = visibleArea,
+        maximumScrollY = maximumScrollY,
+        oversizedMinimumVisibleHeight = oversizedMinimumVisibleHeight,
       )
 
-    EditorAutoScrollMode.Typewriter ->
+    EditorBringIntoViewPolicy.Typewriter ->
       resolveTypewriterScrollOffset(
         currentScroll = currentScroll,
         targetTopInContent = rect.top,
         targetBottomInContent = rect.bottom,
         visibleArea = visibleArea,
         position = autoScrollPolicy.typewriterPosition,
+        maximumScrollY = maximumScrollY,
+      )
+
+    EditorBringIntoViewPolicy.ResultReveal ->
+      resolveResultRevealScrollOffset(
+        currentScroll = currentScroll,
+        targetTopInContent = rect.top,
+        targetBottomInContent = rect.bottom,
+        visibleArea = visibleArea,
+        maximumScrollY = maximumScrollY,
       )
   }

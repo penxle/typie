@@ -17,7 +17,7 @@ import co.typie.editor.EditorState
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.SelectionOp
-import co.typie.editor.scroll.EditorBringIntoViewBehavior
+import co.typie.editor.scroll.EditorBringIntoViewPolicy
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.editor.scroll.toPageRectsTarget
@@ -88,7 +88,7 @@ internal fun rememberEditorSpellcheckSession(
     if (id == null) return
     bringIntoViewRequests.requestForState(
       state = activeEditor.appliedState,
-      behavior = EditorBringIntoViewBehavior.Smooth,
+      policy = EditorBringIntoViewPolicy.ResultReveal,
     ) {
       trackedRanges.firstOrNull { it.id == id }?.rects?.toPageRectsTarget()
     }
@@ -414,7 +414,10 @@ internal fun rememberEditorSpellcheckSession(
                   SelectionOp.Set(Selection(anchor = range.anchor, head = range.head))
                 )
               )
-              bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
+              bringIntoView(
+                EditorBringIntoViewTarget.CurrentSelectionHead,
+                policy = EditorBringIntoViewPolicy.CursorGuard,
+              )
             }
           if (update == null) return@launch
           model?.activate(null)

@@ -10,6 +10,7 @@ import co.typie.editor.interaction.gestures.EditorLongPressDispatchDelayMillis
 import co.typie.editor.interaction.gestures.EditorTapDispatchDelayMillis
 import co.typie.editor.interaction.semantics.EditorViewportZoomSemanticConfig
 import co.typie.editor.runtime.EditorUiState
+import co.typie.editor.scroll.EditorBringIntoViewPolicy
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.editor.scroll.EditorVisibleArea
@@ -327,10 +328,11 @@ internal class EditorInteractionScope(
     onSelectionHaptic?.invoke()
   }
 
-  override fun requestCurrentSelectionHead(version: Long) {
+  override fun requestPointerSelectionHead(version: Long) {
     bringIntoViewRequests?.requestForVersion(
       target = EditorBringIntoViewTarget.CurrentSelectionHead,
       version = version,
+      policy = EditorBringIntoViewPolicy.PointerCursorGuard,
     )
   }
 

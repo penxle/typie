@@ -45,7 +45,7 @@ describe('handleKeyDown', () => {
 
     expect(editor.updateNow).toHaveBeenCalledOnce();
     expect(messages).toEqual([{ type: 'key', event: { key: 'enter' } }]);
-    expect(editor.scrollIntoView).toHaveBeenCalledWith({ target: { type: 'current_selection_head' }, mode: 'typewriter' });
+    expect(editor.scrollIntoView).toHaveBeenCalledWith({ target: { type: 'current_selection_head' }, policy: 'typewriter' });
   });
 
   it('leaves composing navigation to the native post-composition keydown', () => {

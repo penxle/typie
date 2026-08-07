@@ -157,7 +157,10 @@ describe('pointer native drag admission', () => {
 
     expect(editor.endNativeDragAdmission).toHaveBeenCalledWith({ restoreFocus: true });
     expect(editor.enqueue).toHaveBeenCalledWith({ type: 'selection', op: { type: 'set_at', page: 0, x: 10, y: 20 } });
-    expect(editor.scrollIntoView).toHaveBeenCalledWith({ target: { type: 'current_selection_head' }, mode: 'nearest' });
+    expect(editor.scrollIntoView).toHaveBeenCalledWith({
+      target: { type: 'current_selection_head' },
+      policy: 'pointer_cursor_guard',
+    });
     expect(editor.updateNow).toHaveBeenCalledTimes(1);
   });
 
@@ -224,7 +227,10 @@ describe('pointer native drag admission', () => {
     expect(target.setPointerCapture).toHaveBeenCalledWith(1);
     expect(target.releasePointerCapture).toHaveBeenCalledWith(1);
     expect(editor.enqueue).toHaveBeenCalledWith({ type: 'selection', op: { type: 'set_at', page: 0, x: 10, y: 20 } });
-    expect(editor.scrollIntoView).toHaveBeenCalledWith({ target: { type: 'current_selection_head' }, mode: 'nearest' });
+    expect(editor.scrollIntoView).toHaveBeenCalledWith({
+      target: { type: 'current_selection_head' },
+      policy: 'pointer_cursor_guard',
+    });
   });
 
   it('promotes a rapid third click inside the selected word to paragraph selection', () => {

@@ -11,6 +11,7 @@ import co.typie.editor.ffi.SelectionOp
 import co.typie.editor.input.LocalEditorIncomingContentHandler
 import co.typie.editor.runtime.EditorContextMenuState
 import co.typie.editor.runtime.LocalEditorRuntime
+import co.typie.editor.scroll.EditorBringIntoViewPolicy
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.editor.scroll.updateWithBringIntoView
@@ -63,7 +64,7 @@ internal fun rememberEditorContextMenuActions(
               editor
                 .updateWithBringIntoView(bringIntoViewRequests) {
                   enqueue(Message.Selection(SelectionOp.Expand(unit)))
-                  bringIntoView(bringIntoViewTarget)
+                  bringIntoView(bringIntoViewTarget, policy = EditorBringIntoViewPolicy.CursorGuard)
                 }
                 ?.snapshot
             }
@@ -87,7 +88,10 @@ internal fun rememberEditorContextMenuActions(
           if (clipboard.copyRichText(html = payload.html, text = payload.text)) {
             editor.updateWithBringIntoView(bringIntoViewRequests) {
               enqueue(Message.Clipboard(ClipboardOp.Cut))
-              bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
+              bringIntoView(
+                EditorBringIntoViewTarget.CurrentSelectionHead,
+                policy = EditorBringIntoViewPolicy.CursorGuard,
+              )
             }
           }
         }

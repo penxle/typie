@@ -6,6 +6,7 @@ import co.typie.editor.ffi.CommandOutcome
 import co.typie.editor.ffi.FlatImeOp
 import co.typie.editor.ffi.Message
 import co.typie.editor.input.EditorIncomingContentHandler
+import co.typie.editor.scroll.EditorBringIntoViewPolicy
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.platform.Clipboard
@@ -109,6 +110,7 @@ internal class SessionEditorIncomingContentHandler(
           bringIntoViewRequests.requestForVersion(
             target = EditorBringIntoViewTarget.CurrentSelectionHead,
             version = update.revision,
+            policy = EditorBringIntoViewPolicy.Typewriter,
           )
           update.commandOutcomes.none { it is CommandOutcome.Rejected }
         }

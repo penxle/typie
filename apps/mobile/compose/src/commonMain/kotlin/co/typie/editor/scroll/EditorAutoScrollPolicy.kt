@@ -6,22 +6,24 @@ import kotlin.math.abs
 internal const val CursorVisibleMargin = 60f
 private const val TypewriterMinBottomPadding = 48f
 
-internal enum class EditorAutoScrollMode {
-  KeepCursorVisible,
-  Typewriter,
-}
-
 internal data class EditorAutoScrollPolicy(
-  val mode: EditorAutoScrollMode,
+  val typewriterActive: Boolean,
   val typewriterPosition: Float,
-  val keepVisibleRange: VerticalSpan,
   val targetTop: Float?,
   val targetLineHeight: Float,
   val bottomPadding: Float,
+  val configuration: EditorAutoScrollPolicyConfiguration,
 ) {
   val targetBottom: Float?
     get() = targetTop?.plus(targetLineHeight)
 }
+
+internal data class EditorAutoScrollPolicyConfiguration(
+  val bottomScrollReserveArea: EditorVisibleArea,
+  val baseBottomSpace: Float,
+  val pageBottomRevealPadding: Float,
+  val typewriterEnabled: Boolean,
+)
 
 internal fun resolveEditorAutoScrollPolicy(
   visibleArea: EditorVisibleArea,
@@ -29,11 +31,12 @@ internal fun resolveEditorAutoScrollPolicy(
   baseBottomSpace: Float = 0f,
   pageBottomRevealPadding: Float = 0f,
   typewriterEnabled: Boolean = false,
+  typewriterActive: Boolean = typewriterEnabled,
   typewriterPosition: Float = 0.5f,
   targetLineHeight: Float = 0f,
 ): EditorAutoScrollPolicy {
+  val useTypewriter = typewriterEnabled && typewriterActive
   val resolvedTypewriterPosition = typewriterPosition.coerceIn(0f, 1f)
-  val keepVisibleRange = resolveKeepVisibleRange(visibleArea)
   val resolvedTargetLineHeight = targetLineHeight.coerceAtLeast(0f)
   val targetTop =
     resolveScrollTargetTop(
@@ -47,7 +50,7 @@ internal fun resolveEditorAutoScrollPolicy(
       baseBottomSpace = baseBottomSpace,
     )
   val modeBottomPadding =
-    if (typewriterEnabled) {
+    if (useTypewriter) {
       resolveTypewriterBottomPadding(
         visibleArea = bottomScrollReserveArea,
         baseBottomSpace = baseBottomSpace,
@@ -59,23 +62,45 @@ internal fun resolveEditorAutoScrollPolicy(
     }
 
   return EditorAutoScrollPolicy(
-    mode =
-      if (typewriterEnabled) EditorAutoScrollMode.Typewriter
-      else EditorAutoScrollMode.KeepCursorVisible,
+    typewriterActive = useTypewriter,
     typewriterPosition = resolvedTypewriterPosition,
-    keepVisibleRange = keepVisibleRange,
     targetTop = targetTop,
     targetLineHeight = resolvedTargetLineHeight,
     bottomPadding =
       maxOf(keepVisibleBottomPadding, modeBottomPadding, pageBottomRevealPadding.coerceAtLeast(0f)),
+    configuration =
+      EditorAutoScrollPolicyConfiguration(
+        bottomScrollReserveArea = bottomScrollReserveArea,
+        baseBottomSpace = baseBottomSpace,
+        pageBottomRevealPadding = pageBottomRevealPadding,
+        typewriterEnabled = typewriterEnabled,
+      ),
   )
 }
+
+internal fun EditorAutoScrollPolicy.resolveForState(
+  visibleArea: EditorVisibleArea,
+  typewriterActive: Boolean,
+  targetLineHeight: Float,
+): EditorAutoScrollPolicy =
+  resolveEditorAutoScrollPolicy(
+    visibleArea = visibleArea,
+    bottomScrollReserveArea = configuration.bottomScrollReserveArea,
+    baseBottomSpace = configuration.baseBottomSpace,
+    pageBottomRevealPadding = configuration.pageBottomRevealPadding,
+    typewriterEnabled = configuration.typewriterEnabled,
+    typewriterActive = typewriterActive,
+    typewriterPosition = typewriterPosition,
+    targetLineHeight = targetLineHeight,
+  )
 
 internal fun resolveEditorScrollOffset(
   currentScroll: Float,
   targetTopInContent: Float,
   targetBottomInContent: Float,
   range: VerticalSpan,
+  maximumScrollY: Float = Float.POSITIVE_INFINITY,
+  oversizedMinimumVisibleHeight: Float? = null,
 ): Float? {
   if (!range.isValid) {
     return null
@@ -85,12 +110,56 @@ internal fun resolveEditorScrollOffset(
   val targetBottomInViewport = targetBottomInContent - currentScroll
   val targetHeight = (targetBottomInContent - targetTopInContent).coerceAtLeast(0f)
 
-  return when {
-    targetHeight > range.height -> targetTopInContent - range.top
-    targetBottomInViewport > range.bottom -> targetBottomInContent - range.bottom
-    targetTopInViewport < range.top -> targetTopInContent - range.top
-    else -> null
+  if (targetHeight > range.height) {
+    if (oversizedMinimumVisibleHeight != null) {
+      val minimumVisibleHeight = oversizedMinimumVisibleHeight.coerceIn(0f, range.height)
+      val visibleHeight =
+        (minOf(targetBottomInViewport, range.bottom) - maxOf(targetTopInViewport, range.top))
+          .coerceAtLeast(0f)
+      if (visibleHeight >= minimumVisibleHeight) {
+        return null
+      }
+
+      val targetScroll =
+        when {
+          targetTopInViewport > range.top ->
+            targetTopInContent - (range.bottom - minimumVisibleHeight)
+          targetBottomInViewport < range.bottom ->
+            targetBottomInContent - (range.top + minimumVisibleHeight)
+          else -> null
+        } ?: return null
+      return resolveFeasibleScrollOffset(
+        targetScroll = targetScroll,
+        currentScroll = currentScroll,
+        maximumScrollY = maximumScrollY,
+      )
+    }
+
+    val targetScroll =
+      when {
+        targetTopInViewport <= range.top && targetBottomInViewport >= range.bottom -> null
+        targetBottomInViewport > range.bottom -> targetBottomInContent - range.bottom
+        targetTopInViewport < range.top -> targetTopInContent - range.top
+        else -> null
+      } ?: return null
+    return resolveFeasibleScrollOffset(
+      targetScroll = targetScroll,
+      currentScroll = currentScroll,
+      maximumScrollY = maximumScrollY,
+    )
   }
+
+  val targetScroll =
+    when {
+      targetBottomInViewport > range.bottom -> targetBottomInContent - range.bottom
+      targetTopInViewport < range.top -> targetTopInContent - range.top
+      else -> null
+    } ?: return null
+  return resolveFeasibleScrollOffset(
+    targetScroll = targetScroll,
+    currentScroll = currentScroll,
+    maximumScrollY = maximumScrollY,
+  )
 }
 
 internal fun resolveKeepVisibleScrollOffset(
@@ -98,6 +167,8 @@ internal fun resolveKeepVisibleScrollOffset(
   targetTopInContent: Float,
   targetBottomInContent: Float,
   visibleArea: EditorVisibleArea,
+  maximumScrollY: Float = Float.POSITIVE_INFINITY,
+  oversizedMinimumVisibleHeight: Float? = null,
 ): Float? {
   val keepVisibleRange = resolveKeepVisibleRange(visibleArea)
   if (!keepVisibleRange.isValid) {
@@ -106,6 +177,7 @@ internal fun resolveKeepVisibleScrollOffset(
       targetTopInContent = targetTopInContent,
       targetBottomInContent = targetBottomInContent,
       visibleArea = visibleArea,
+      maximumScrollY = maximumScrollY,
     )
   }
 
@@ -114,6 +186,44 @@ internal fun resolveKeepVisibleScrollOffset(
     targetTopInContent = targetTopInContent,
     targetBottomInContent = targetBottomInContent,
     range = keepVisibleRange,
+    maximumScrollY = maximumScrollY,
+    oversizedMinimumVisibleHeight = oversizedMinimumVisibleHeight,
+  )
+}
+
+internal fun resolveResultRevealScrollOffset(
+  currentScroll: Float,
+  targetTopInContent: Float,
+  targetBottomInContent: Float,
+  visibleArea: EditorVisibleArea,
+  maximumScrollY: Float = Float.POSITIVE_INFINITY,
+): Float? {
+  val keepVisibleRange = resolveKeepVisibleRange(visibleArea)
+  if (!keepVisibleRange.isValid) {
+    return resolveCenteredVisibleScrollOffset(
+      currentScroll = currentScroll,
+      targetTopInContent = targetTopInContent,
+      targetBottomInContent = targetBottomInContent,
+      visibleArea = visibleArea,
+      maximumScrollY = maximumScrollY,
+    )
+  }
+
+  val targetHeight = (targetBottomInContent - targetTopInContent).coerceAtLeast(0f)
+  if (targetHeight <= keepVisibleRange.height) {
+    return resolveEditorScrollOffset(
+      currentScroll = currentScroll,
+      targetTopInContent = targetTopInContent,
+      targetBottomInContent = targetBottomInContent,
+      range = keepVisibleRange,
+      maximumScrollY = maximumScrollY,
+    )
+  }
+
+  return resolveFeasibleScrollOffset(
+    targetScroll = targetTopInContent - keepVisibleRange.top,
+    currentScroll = currentScroll,
+    maximumScrollY = maximumScrollY,
   )
 }
 
@@ -122,6 +232,7 @@ private fun resolveCenteredVisibleScrollOffset(
   targetTopInContent: Float,
   targetBottomInContent: Float,
   visibleArea: EditorVisibleArea,
+  maximumScrollY: Float,
 ): Float? {
   val visibleTop = visibleArea.visibleViewportTop
   val visibleBottom = visibleArea.visibleViewportBottom
@@ -136,11 +247,11 @@ private fun resolveCenteredVisibleScrollOffset(
   val targetCenter = targetTopInContent + (targetBottomInContent - targetTopInContent) / 2f
   val visibleCenter = visibleTop + (visibleBottom - visibleTop) / 2f
   val targetScroll = targetCenter - visibleCenter
-  return if (abs(targetScroll - currentScroll) <= 1f) {
-    null
-  } else {
-    targetScroll
-  }
+  return resolveFeasibleScrollOffset(
+    targetScroll = targetScroll,
+    currentScroll = currentScroll,
+    maximumScrollY = maximumScrollY,
+  )
 }
 
 internal fun resolveTypewriterScrollOffset(
@@ -149,8 +260,19 @@ internal fun resolveTypewriterScrollOffset(
   targetBottomInContent: Float,
   visibleArea: EditorVisibleArea,
   position: Float,
+  maximumScrollY: Float = Float.POSITIVE_INFINITY,
 ): Float? {
   val targetHeight = (targetBottomInContent - targetTopInContent).coerceAtLeast(0f)
+  val keepVisibleRange = resolveKeepVisibleRange(visibleArea)
+  if (!keepVisibleRange.isValid || targetHeight > keepVisibleRange.height) {
+    return resolveKeepVisibleScrollOffset(
+      currentScroll = currentScroll,
+      targetTopInContent = targetTopInContent,
+      targetBottomInContent = targetBottomInContent,
+      visibleArea = visibleArea,
+      maximumScrollY = maximumScrollY,
+    )
+  }
   val targetTopInViewport =
     resolveScrollTargetTop(
       visibleArea = visibleArea,
@@ -158,11 +280,20 @@ internal fun resolveTypewriterScrollOffset(
       targetHeight = targetHeight,
     ) ?: return null
   val targetScroll = targetTopInContent - targetTopInViewport
-  return if (abs(targetScroll - currentScroll) <= 1f) {
-    null
-  } else {
-    targetScroll
-  }
+  return resolveFeasibleScrollOffset(
+    targetScroll = targetScroll,
+    currentScroll = currentScroll,
+    maximumScrollY = maximumScrollY,
+  )
+}
+
+private fun resolveFeasibleScrollOffset(
+  targetScroll: Float,
+  currentScroll: Float,
+  maximumScrollY: Float,
+): Float? {
+  val feasibleScroll = targetScroll.coerceIn(0f, maximumScrollY)
+  return feasibleScroll.takeUnless { abs(it - currentScroll) <= 1f }
 }
 
 internal fun resolveKeepVisibleRange(visibleArea: EditorVisibleArea): VerticalSpan {

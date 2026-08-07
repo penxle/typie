@@ -21,7 +21,7 @@ class EditorBringIntoViewRequestsTest {
     val state = EditorState.Initial.copy(version = 11L, selectionHitRects = pageRectsTarget.rects)
 
     assertTrue(
-      requests.requestForState(state, behavior = EditorBringIntoViewBehavior.Smooth) {
+      requests.requestForState(state, policy = EditorBringIntoViewPolicy.ResultReveal) {
         selectionHitRects.toPageRectsTarget()
       }
     )
@@ -29,6 +29,21 @@ class EditorBringIntoViewRequestsTest {
     assertNull(requests.activateForVersion(version = 10L))
     val request = requests.activateForVersion(version = 11L)
     assertTrue(request?.target == pageRectsTarget)
+    assertTrue(request?.policy == EditorBringIntoViewPolicy.ResultReveal)
+    assertTrue(request?.behavior == EditorBringIntoViewBehavior.Smooth)
+  }
+
+  @Test
+  fun `result reveal derives smooth behavior`() {
+    val requests = EditorBringIntoViewRequests()
+
+    requests.requestForVersion(
+      target = pageRectsTarget,
+      version = 11L,
+      policy = EditorBringIntoViewPolicy.ResultReveal,
+    )
+
+    val request = requests.activateForVersion(version = 11L)
     assertTrue(request?.behavior == EditorBringIntoViewBehavior.Smooth)
   }
 
@@ -37,7 +52,11 @@ class EditorBringIntoViewRequestsTest {
     var wakes = 0
     val requests = EditorBringIntoViewRequests(requestPresentation = { wakes += 1 })
 
-    requests.requestForVersion(EditorBringIntoViewTarget.CurrentSelectionHead, version = 1L)
+    requests.requestForVersion(
+      EditorBringIntoViewTarget.CurrentSelectionHead,
+      version = 1L,
+      policy = EditorBringIntoViewPolicy.CursorGuard,
+    )
 
     assertTrue(wakes > 0)
   }
@@ -46,7 +65,14 @@ class EditorBringIntoViewRequestsTest {
   fun `state-based request reports when state has no target`() {
     val requests = EditorBringIntoViewRequests()
 
-    assertFalse(requests.requestForState(EditorState.Initial) { null })
+    assertFalse(
+      requests.requestForState(
+        EditorState.Initial,
+        policy = EditorBringIntoViewPolicy.CursorGuard,
+      ) {
+        null
+      }
+    )
     assertNull(requests.activateForVersion(version = EditorState.Initial.version))
   }
 
@@ -57,6 +83,7 @@ class EditorBringIntoViewRequestsTest {
       requests.requestForVersion(
         target = EditorBringIntoViewTarget.CurrentSelectionHead,
         version = 11L,
+        policy = EditorBringIntoViewPolicy.CursorGuard,
       )
 
     assertNull(requests.activateForVersion(version = 10L))
@@ -67,8 +94,14 @@ class EditorBringIntoViewRequestsTest {
   @Test
   fun `new declaration immediately supersedes the previous reveal`() {
     val requests = EditorBringIntoViewRequests()
-    val previous = requests.requestForVersion(EditorBringIntoViewTarget.CurrentSelectionHead, 1L)
-    val current = requests.requestForVersion(pageRectsTarget, 2L)
+    val previous =
+      requests.requestForVersion(
+        EditorBringIntoViewTarget.CurrentSelectionHead,
+        1L,
+        EditorBringIntoViewPolicy.CursorGuard,
+      )
+    val current =
+      requests.requestForVersion(pageRectsTarget, 2L, EditorBringIntoViewPolicy.ResultReveal)
 
     assertTrue(previous.presentation.isCompleted)
     assertSame(current, requests.activateForVersion(version = 2L))
@@ -77,8 +110,12 @@ class EditorBringIntoViewRequestsTest {
   @Test
   fun `late binding cannot replace a newer declaration`() {
     val requests = EditorBringIntoViewRequests()
-    val previous = requests.declare(EditorBringIntoViewTarget.CurrentSelectionHead)
-    val current = requests.declare(pageRectsTarget)
+    val previous =
+      requests.declare(
+        EditorBringIntoViewTarget.CurrentSelectionHead,
+        EditorBringIntoViewPolicy.CursorGuard,
+      )
+    val current = requests.declare(pageRectsTarget, EditorBringIntoViewPolicy.ResultReveal)
 
     assertFalse(requests.bind(previous, version = 1L))
     assertTrue(requests.bind(current, version = 2L))
@@ -88,7 +125,12 @@ class EditorBringIntoViewRequestsTest {
   @Test
   fun `exact page rect request becomes obsolete when its revision is skipped`() {
     val requests = EditorBringIntoViewRequests()
-    val request = requests.requestForVersion(pageRectsTarget, version = 2L)
+    val request =
+      requests.requestForVersion(
+        pageRectsTarget,
+        version = 2L,
+        policy = EditorBringIntoViewPolicy.ResultReveal,
+      )
 
     assertNull(requests.activateForVersion(version = 3L))
     assertFalse(request.presentation.isCompleted)
@@ -97,9 +139,51 @@ class EditorBringIntoViewRequestsTest {
   }
 
   @Test
+  fun `pointer selection request is exact and becomes obsolete when its revision is skipped`() {
+    val requests = EditorBringIntoViewRequests()
+    val request =
+      requests.requestForVersion(
+        EditorBringIntoViewTarget.CurrentSelectionHead,
+        version = 2L,
+        policy = EditorBringIntoViewPolicy.PointerCursorGuard,
+      )
+
+    assertNull(requests.activateForVersion(version = 1L))
+    assertSame(request, requests.activateForVersion(version = 2L))
+    assertNull(requests.activateForVersion(version = 3L))
+    requests.discardObsoleteForVersion(version = 3L)
+    assertTrue(request.presentation.isCompleted)
+  }
+
+  @Test
+  fun `new request supersedes an exact pointer selection reveal`() {
+    val requests = EditorBringIntoViewRequests()
+    val pointer =
+      requests.requestForVersion(
+        EditorBringIntoViewTarget.CurrentSelectionHead,
+        version = 2L,
+        policy = EditorBringIntoViewPolicy.PointerCursorGuard,
+      )
+    val current =
+      requests.requestForVersion(
+        EditorBringIntoViewTarget.CurrentSelectionHead,
+        version = 3L,
+        policy = EditorBringIntoViewPolicy.CursorGuard,
+      )
+
+    assertTrue(pointer.presentation.isCompleted)
+    assertSame(current, requests.activateForVersion(version = 3L))
+  }
+
+  @Test
   fun `matching presentation completes and clears the current reveal`() {
     val requests = EditorBringIntoViewRequests()
-    val request = requests.requestForVersion(EditorBringIntoViewTarget.CurrentSelectionHead, 1L)
+    val request =
+      requests.requestForVersion(
+        EditorBringIntoViewTarget.CurrentSelectionHead,
+        1L,
+        EditorBringIntoViewPolicy.CursorGuard,
+      )
 
     assertTrue(requests.markPresented(version = 1L, request = request))
     assertTrue(request.presentation.isCompleted)
@@ -111,14 +195,22 @@ class EditorBringIntoViewRequestsTest {
   fun `surface failure discards only a reveal eligible for the failed version`() {
     val requests = EditorBringIntoViewRequests()
     val previous =
-      requests.requestForVersion(EditorBringIntoViewTarget.CurrentSelectionHead, version = 1L)
+      requests.requestForVersion(
+        EditorBringIntoViewTarget.CurrentSelectionHead,
+        version = 1L,
+        policy = EditorBringIntoViewPolicy.CursorGuard,
+      )
 
     requests.discardFailedForVersion(version = 1L)
 
     assertTrue(previous.presentation.isCompleted)
 
     val current =
-      requests.requestForVersion(EditorBringIntoViewTarget.CurrentSelectionHead, version = 3L)
+      requests.requestForVersion(
+        EditorBringIntoViewTarget.CurrentSelectionHead,
+        version = 3L,
+        policy = EditorBringIntoViewPolicy.CursorGuard,
+      )
     requests.discardFailedForVersion(version = 2L)
 
     assertFalse(current.presentation.isCompleted)
@@ -128,7 +220,12 @@ class EditorBringIntoViewRequestsTest {
   @Test
   fun `cancel completes and clears the current reveal`() {
     val requests = EditorBringIntoViewRequests()
-    val request = requests.requestForVersion(EditorBringIntoViewTarget.CurrentSelectionHead, 1L)
+    val request =
+      requests.requestForVersion(
+        EditorBringIntoViewTarget.CurrentSelectionHead,
+        1L,
+        EditorBringIntoViewPolicy.CursorGuard,
+      )
 
     requests.cancel()
 

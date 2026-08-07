@@ -13,7 +13,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.editor.Editor
 import co.typie.editor.EditorState
 import co.typie.editor.ffi.StableSelection
-import co.typie.editor.scroll.EditorBringIntoViewBehavior
+import co.typie.editor.scroll.EditorBringIntoViewPolicy
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.toPageRectsTarget
 import co.typie.screen.editor.editor.selectTrackedRangeMember
@@ -203,7 +203,7 @@ internal fun rememberEditorCommentsSession(
     val requested =
       bringIntoViewRequests.requestForState(
         state = editorState,
-        behavior = EditorBringIntoViewBehavior.Smooth,
+        policy = EditorBringIntoViewPolicy.ResultReveal,
       ) {
         trackedRanges.firstOrNull { it.id == threadId }?.rects?.toPageRectsTarget()
       }

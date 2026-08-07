@@ -2,6 +2,7 @@ package co.typie.editor.scroll
 
 import androidx.compose.ui.geometry.Size
 import co.typie.editor.EditorState
+import co.typie.editor.VerticalSpan
 import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.ffi.Affinity
 import co.typie.editor.ffi.CursorMetrics
@@ -15,6 +16,7 @@ import co.typie.editor.runtime.EditorBoundsInContainer
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 class EditorScrollResolverTest {
   @Test
@@ -37,10 +39,68 @@ class EditorScrollResolverTest {
       resolveEditorScrollIntent(
         frame = frame,
         target = EditorBringIntoViewTarget.CurrentSelectionHead,
+        policy = EditorBringIntoViewPolicy.CursorGuard,
         currentScroll = 200f,
       )
 
     assertScrollTo(intent, 360f)
+  }
+
+  @Test
+  fun `resolver returns no scroll when fitting cursor guard target clamps to current offset`() {
+    val frame =
+      frame(
+        state =
+          state(
+            cursor =
+              CursorMetrics(
+                pageIdx = 0,
+                caret = FfiRect(0f, 580f, 0f, 20f),
+                line = FfiRect(0f, 580f, 0f, 20f),
+              ),
+            pageSizes = listOf(PageSize(width = 300f, height = 620f)),
+          )
+      )
+
+    val intent =
+      resolveEditorScrollIntent(
+        frame = frame,
+        target = EditorBringIntoViewTarget.CurrentSelectionHead,
+        policy = EditorBringIntoViewPolicy.CursorGuard,
+        currentScroll = 0f,
+        maximumScrollY = 0f,
+      )
+
+    assertEquals(EditorScrollIntentResult.NoScroll, intent)
+  }
+
+  @Test
+  fun `resolver returns no scroll when typewriter target clamps to current offset`() {
+    val frame =
+      frame(
+        state =
+          state(
+            cursor =
+              CursorMetrics(
+                pageIdx = 0,
+                caret = FfiRect(0f, 580f, 0f, 20f),
+                line = FfiRect(0f, 580f, 0f, 20f),
+              ),
+            pageSizes = listOf(PageSize(width = 300f, height = 620f)),
+          ),
+        typewriterEnabled = true,
+      )
+
+    val intent =
+      resolveEditorScrollIntent(
+        frame = frame,
+        target = EditorBringIntoViewTarget.CurrentSelectionHead,
+        policy = EditorBringIntoViewPolicy.Typewriter,
+        currentScroll = 0f,
+        maximumScrollY = 0f,
+      )
+
+    assertEquals(EditorScrollIntentResult.NoScroll, intent)
   }
 
   @Test
@@ -65,6 +125,7 @@ class EditorScrollResolverTest {
       resolveEditorScrollIntent(
         frame = frame,
         target = EditorBringIntoViewTarget.CurrentSelectionHead,
+        policy = EditorBringIntoViewPolicy.CursorGuard,
         currentScroll = 200f,
       )
 
@@ -94,6 +155,7 @@ class EditorScrollResolverTest {
       resolveEditorScrollIntent(
         frame = frame,
         target = EditorBringIntoViewTarget.CurrentSelectionHead,
+        policy = EditorBringIntoViewPolicy.CursorGuard,
         currentScroll = 200f,
         contentOriginY = 0f,
       )
@@ -123,6 +185,7 @@ class EditorScrollResolverTest {
       resolveEditorScrollIntent(
         frame = frame,
         target = EditorBringIntoViewTarget.CurrentSelectionHead,
+        policy = EditorBringIntoViewPolicy.CursorGuard,
         currentScroll = 200f,
       )
 
@@ -151,6 +214,7 @@ class EditorScrollResolverTest {
       resolveEditorScrollIntent(
         frame = frame,
         target = EditorBringIntoViewTarget.CurrentSelectionHead,
+        policy = EditorBringIntoViewPolicy.CursorGuard,
         currentScroll = 0f,
       )
 
@@ -158,7 +222,7 @@ class EditorScrollResolverTest {
   }
 
   @Test
-  fun `selection head target resolves from selection endpoint instead of collapsed cursor line`() {
+  fun `typewriter follows the endpoint matching a keyboard-extended range head`() {
     val anchor = position(offset = 1)
     val head = position(offset = 8)
     val frame =
@@ -180,17 +244,248 @@ class EditorScrollResolverTest {
                 toPosition = head,
               ),
             pageSizes = listOf(PageSize(width = 300f, height = 620f)),
-          )
+          ),
+        typewriterEnabled = true,
       )
 
     val intent =
       resolveEditorScrollIntent(
         frame = frame,
         target = EditorBringIntoViewTarget.CurrentSelectionHead,
+        policy = EditorBringIntoViewPolicy.Typewriter,
         currentScroll = 200f,
       )
 
-    assertScrollTo(intent, 360f)
+    assertScrollTo(intent, 440f)
+  }
+
+  @Test
+  fun `typewriter mode follows a collapsed current selection caret`() {
+    val cursor =
+      CursorMetrics(
+        pageIdx = 0,
+        caret = FfiRect(0f, 500f, 0f, 20f),
+        line = FfiRect(0f, 500f, 0f, 20f),
+      )
+    val collapsedState =
+      state(cursor = cursor, pageSizes = listOf(PageSize(width = 300f, height = 900f)))
+    val frame = frame(state = collapsedState, typewriterEnabled = true)
+
+    assertScrollTo(
+      resolveEditorScrollIntent(
+        frame = frame,
+        target = EditorBringIntoViewTarget.CurrentSelectionHead,
+        policy = EditorBringIntoViewPolicy.Typewriter,
+        currentScroll = 0f,
+      ),
+      360f,
+    )
+  }
+
+  @Test
+  fun `candidate unit selection geometry drives typewriter reveal and padding`() {
+    val publishedState =
+      state(
+        cursor =
+          CursorMetrics(
+            pageIdx = 0,
+            caret = FfiRect(0f, 500f, 0f, 20f),
+            line = FfiRect(0f, 500f, 0f, 20f),
+          ),
+        pageSizes = listOf(PageSize(width = 300f, height = 900f)),
+      )
+    val publishedFrame = frame(state = publishedState, typewriterEnabled = true)
+
+    val anchor = position(offset = 0)
+    val head = position(offset = 1)
+    val unitSelectionState =
+      state(
+        cursor = null,
+        selection = Selection(anchor = anchor, head = head),
+        selectionEndpoints =
+          SelectionEndpoints(
+            from = PageRect(pageIdx = 0, rect = FfiRect(0f, 500f, 0f, 40f)),
+            to = PageRect(pageIdx = 0, rect = FfiRect(0f, 500f, 0f, 40f)),
+            fromPosition = anchor,
+            toPosition = head,
+          ),
+        pageSizes = listOf(PageSize(width = 300f, height = 900f)),
+      )
+    val unitSelectionFrame = publishedFrame.withState(unitSelectionState)
+
+    assertTrue(unitSelectionFrame.autoScrollPolicy.typewriterActive)
+    assertEquals(130f, unitSelectionFrame.autoScrollPolicy.bottomPadding)
+    assertScrollTo(
+      resolveEditorScrollIntent(
+        frame = unitSelectionFrame,
+        target = EditorBringIntoViewTarget.CurrentSelectionHead,
+        policy = EditorBringIntoViewPolicy.Typewriter,
+        currentScroll = 0f,
+      ),
+      370f,
+    )
+    assertEquals(
+      listOf(VerticalSpan(top = 370f, bottom = 670f)),
+      resolveInstantRevealPreparationViewports(
+        frame = unitSelectionFrame,
+        target = EditorBringIntoViewTarget.CurrentSelectionHead,
+        policy = EditorBringIntoViewPolicy.Typewriter,
+        currentScroll = 0f,
+        contentOriginY = 0f,
+        maximumScrollY = 600f,
+      ),
+    )
+  }
+
+  @Test
+  fun `typewriter mode does not apply to page rect targets`() {
+    val frame =
+      frame(
+        state =
+          state(
+            cursor =
+              CursorMetrics(
+                pageIdx = 0,
+                caret = FfiRect(0f, 500f, 0f, 20f),
+                line = FfiRect(0f, 500f, 0f, 20f),
+              ),
+            pageSizes = listOf(PageSize(width = 300f, height = 900f)),
+          ),
+        typewriterEnabled = true,
+      )
+
+    val target =
+      EditorBringIntoViewTarget.PageRects(
+        listOf(PageRect(pageIdx = 0, rect = FfiRect(0f, 500f, 0f, 20f)))
+      )
+
+    assertScrollTo(
+      resolveEditorScrollIntent(
+        frame = frame,
+        target = target,
+        policy = EditorBringIntoViewPolicy.Typewriter,
+        currentScroll = 0f,
+      ),
+      280f,
+    )
+    assertEquals(
+      listOf(VerticalSpan(top = 440f, bottom = 740f), VerticalSpan(top = 280f, bottom = 580f)),
+      resolveInstantRevealPreparationViewports(
+        frame = frame,
+        target = target,
+        policy = EditorBringIntoViewPolicy.Typewriter,
+        currentScroll = 0f,
+        contentOriginY = 0f,
+        maximumScrollY = 600f,
+      ),
+    )
+  }
+
+  @Test
+  fun `pointer policy applies the cursor guard to a compact selection head`() {
+    val frame =
+      frame(
+        state =
+          state(
+            cursor =
+              CursorMetrics(
+                pageIdx = 0,
+                caret = FfiRect(0f, 250f, 0f, 20f),
+                line = FfiRect(0f, 250f, 0f, 20f),
+              ),
+            pageSizes = listOf(PageSize(width = 300f, height = 900f)),
+          )
+      )
+
+    assertScrollTo(
+      resolveEditorScrollIntent(
+        frame = frame,
+        target = EditorBringIntoViewTarget.CurrentSelectionHead,
+        policy = EditorBringIntoViewPolicy.PointerCursorGuard,
+        currentScroll = 0f,
+      ),
+      30f,
+    )
+    assertTrue(
+      resolveInstantRevealPreparationViewports(
+          frame = frame,
+          target = EditorBringIntoViewTarget.CurrentSelectionHead,
+          policy = EditorBringIntoViewPolicy.PointerCursorGuard,
+          currentScroll = 0f,
+          contentOriginY = 0f,
+          maximumScrollY = 600f,
+        )
+        .contains(VerticalSpan(top = 30f, bottom = 330f))
+    )
+  }
+
+  @Test
+  fun `pointer policy keeps an oversized selection when one cursor margin is visible inside the guard`() {
+    val frame = frame(state = unitSelectionState(FfiRect(0f, 180f, 0f, 500f)))
+
+    assertEquals(
+      EditorScrollIntentResult.NoScroll,
+      resolveEditorScrollIntent(
+        frame = frame,
+        target = EditorBringIntoViewTarget.CurrentSelectionHead,
+        policy = EditorBringIntoViewPolicy.PointerCursorGuard,
+        currentScroll = 0f,
+      ),
+    )
+  }
+
+  @Test
+  fun `pointer policy reveals one cursor margin of an oversized selection entering from below`() {
+    val frame = frame(state = unitSelectionState(FfiRect(0f, 210f, 0f, 500f)))
+    val target = EditorBringIntoViewTarget.CurrentSelectionHead
+
+    assertScrollTo(
+      resolveEditorScrollIntent(
+        frame = frame,
+        target = target,
+        policy = EditorBringIntoViewPolicy.PointerCursorGuard,
+        currentScroll = 0f,
+      ),
+      30f,
+    )
+    assertTrue(
+      resolveInstantRevealPreparationViewports(
+          frame = frame,
+          target = target,
+          policy = EditorBringIntoViewPolicy.PointerCursorGuard,
+          currentScroll = 0f,
+          contentOriginY = 0f,
+          maximumScrollY = 600f,
+        )
+        .contains(VerticalSpan(top = 30f, bottom = 330f))
+    )
+  }
+
+  @Test
+  fun `pointer policy reveals one cursor margin of an oversized selection entering from above`() {
+    val frame = frame(state = unitSelectionState(FfiRect(0f, 0f, 0f, 500f)))
+    val target = EditorBringIntoViewTarget.CurrentSelectionHead
+
+    assertScrollTo(
+      resolveEditorScrollIntent(
+        frame = frame,
+        target = target,
+        policy = EditorBringIntoViewPolicy.PointerCursorGuard,
+        currentScroll = 410f,
+      ),
+      380f,
+    )
+    assertTrue(
+      resolveInstantRevealPreparationViewports(
+          frame = frame,
+          target = target,
+          policy = EditorBringIntoViewPolicy.PointerCursorGuard,
+          currentScroll = 410f,
+          contentOriginY = 0f,
+          maximumScrollY = 600f,
+        )
+        .contains(VerticalSpan(top = 380f, bottom = 680f))
+    )
   }
 
   @Test
@@ -215,6 +510,7 @@ class EditorScrollResolverTest {
       resolveEditorScrollIntent(
         frame = frame,
         target = EditorBringIntoViewTarget.CurrentSelectionHead,
+        policy = EditorBringIntoViewPolicy.CursorGuard,
         currentScroll = 200f,
       )
 
@@ -246,6 +542,35 @@ class EditorScrollResolverTest {
               PageRect(pageIdx = 1, rect = FfiRect(x = 0f, y = 20f, width = 40f, height = 20f)),
             )
           ),
+        policy = EditorBringIntoViewPolicy.ResultReveal,
+        currentScroll = 0f,
+      )
+
+    assertScrollTo(intent, 440f)
+  }
+
+  @Test
+  fun `page rects result reveal top-aligns an oversized target below the viewport`() {
+    val frame =
+      frame(
+        state =
+          state(
+            cursor = null,
+            selection = null,
+            pageSizes = listOf(PageSize(width = 300f, height = 1000f)),
+          )
+      )
+
+    val intent =
+      resolveEditorScrollIntent(
+        frame = frame,
+        target =
+          EditorBringIntoViewTarget.PageRects(
+            listOf(
+              PageRect(pageIdx = 0, rect = FfiRect(x = 0f, y = 500f, width = 40f, height = 400f))
+            )
+          ),
+        policy = EditorBringIntoViewPolicy.ResultReveal,
         currentScroll = 0f,
       )
 
@@ -333,6 +658,7 @@ class EditorScrollResolverTest {
     state: EditorState,
     layoutSpec: EditorDocumentLayoutSpec = EditorDocumentLayoutSpec.Continuous(maxWidth = 300f),
     density: Float = 1f,
+    typewriterEnabled: Boolean = false,
   ): EditorScrollFrame {
     val visibleArea = EditorVisibleArea(viewport = Size(width = 300f, height = 300f))
     return EditorScrollFrame(
@@ -340,10 +666,33 @@ class EditorScrollResolverTest {
       layoutSpec = layoutSpec,
       displayZoom = 1f,
       visibleArea = visibleArea,
-      autoScrollPolicy = resolveEditorAutoScrollPolicy(visibleArea = visibleArea),
+      autoScrollPolicy =
+        resolveEditorAutoScrollPolicy(
+          visibleArea = visibleArea,
+          typewriterEnabled = typewriterEnabled,
+          typewriterActive = typewriterEnabled,
+          targetLineHeight = 20f,
+        ),
       headerHeight = 0f,
       density = density,
       editorBounds = EditorBoundsInContainer(x = 0f, y = 0f, width = 300f, height = 1000f),
+    )
+  }
+
+  private fun unitSelectionState(rect: FfiRect): EditorState {
+    val anchor = position(offset = 0)
+    val head = position(offset = 1)
+    return state(
+      cursor = null,
+      selection = Selection(anchor = anchor, head = head),
+      selectionEndpoints =
+        SelectionEndpoints(
+          from = PageRect(pageIdx = 0, rect = rect),
+          to = PageRect(pageIdx = 0, rect = rect),
+          fromPosition = anchor,
+          toPosition = head,
+        ),
+      pageSizes = listOf(PageSize(width = 300f, height = 900f)),
     )
   }
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { requiredSurfacePages } from './required-surface-pages';
-import { resolveInstantRevealPreparationViewports, resolveNearestScrollTop, resolveTypewriterScrollTop } from './scroll';
+import { resolveGuardedScrollTop, resolveInstantRevealPreparationViewports, resolveTypewriterScrollTop } from './scroll';
 import type { SurfacePageSpan, VerticalSpan } from './required-surface-pages';
 
 const pages = (...boundaries: number[]): SurfacePageSpan[] =>
@@ -161,11 +161,11 @@ describe('requiredSurfacePages', () => {
       visibleArea: { topInset: 10, bottomInset: 20 },
     };
     const preparation = resolveInstantRevealPreparationViewports({
-      mode: 'nearest',
+      mode: 'cursor_guard',
       scrollTop: 350,
       ...metrics,
     });
-    const exactDestinations = [0, 350, 800].map((scrollTop) => resolveNearestScrollTop({ scrollTop, ...metrics }) ?? scrollTop);
+    const exactDestinations = [0, 350, 800].map((scrollTop) => resolveGuardedScrollTop({ scrollTop, ...metrics }) ?? scrollTop);
 
     for (const scrollTop of exactDestinations) {
       expect(preparation).toContainEqual({ top: scrollTop, bottom: scrollTop + metrics.clientHeight });
@@ -180,19 +180,17 @@ describe('requiredSurfacePages', () => {
       targetBottom: 1100,
       visibleArea: { topInset: 20, bottomInset: 30 },
     };
-    const preparation = resolveInstantRevealPreparationViewports({ mode: 'nearest', scrollTop: 0, ...metrics });
-
     for (const scrollTop of [0, 600, 1500]) {
-      const destination = resolveNearestScrollTop({ scrollTop, ...metrics });
-      expect(destination).not.toBeNull();
-      expect(preparation).toContainEqual({ top: destination, bottom: Number(destination) + metrics.clientHeight });
+      const preparation = resolveInstantRevealPreparationViewports({ mode: 'cursor_guard', scrollTop, ...metrics });
+      const destination = resolveGuardedScrollTop({ scrollTop, ...metrics }) ?? scrollTop;
+      expect(preparation).toContainEqual({ top: destination, bottom: destination + metrics.clientHeight });
     }
   });
 
   it('instant preparation uses production clamp centered fallback and typewriter alignment', () => {
     expect(
       resolveInstantRevealPreparationViewports({
-        mode: 'nearest',
+        mode: 'cursor_guard',
         scrollTop: 200,
         clientHeight: 400,
         scrollHeight: 650,
@@ -210,9 +208,9 @@ describe('requiredSurfacePages', () => {
       targetBottom: 520,
       visibleArea: { topInset: 70, bottomInset: 70 },
     };
-    const centeredDestination = resolveNearestScrollTop(centeredMetrics);
+    const centeredDestination = resolveGuardedScrollTop(centeredMetrics);
     expect(centeredDestination).not.toBeNull();
-    expect(resolveInstantRevealPreparationViewports({ mode: 'nearest', ...centeredMetrics })).toEqual([
+    expect(resolveInstantRevealPreparationViewports({ mode: 'cursor_guard', ...centeredMetrics })).toEqual([
       { top: centeredDestination, bottom: Number(centeredDestination) + centeredMetrics.clientHeight },
     ]);
 
@@ -227,6 +225,36 @@ describe('requiredSurfacePages', () => {
     const typewriterDestination = resolveTypewriterScrollTop(typewriterMetrics);
     expect(resolveInstantRevealPreparationViewports({ mode: 'typewriter', ...typewriterMetrics })).toEqual([
       { top: typewriterDestination, bottom: Number(typewriterDestination) + typewriterMetrics.clientHeight },
+    ]);
+
+    const oversizedTypewriterMetrics = {
+      mode: 'typewriter' as const,
+      scrollTop: 0,
+      clientHeight: 400,
+      scrollHeight: 2000,
+      targetTop: 600,
+      targetBottom: 1100,
+      visibleArea: { topInset: 20, bottomInset: 30 },
+      position: 0.5,
+    };
+    expect(resolveTypewriterScrollTop(oversizedTypewriterMetrics)).toBe(790);
+    expect(resolveInstantRevealPreparationViewports(oversizedTypewriterMetrics)).toEqual([
+      { top: 0, bottom: 400 },
+      { top: 520, bottom: 920 },
+      { top: 790, bottom: 1190 },
+    ]);
+
+    const documentEdgeMetrics = {
+      ...oversizedTypewriterMetrics,
+      scrollTop: 800,
+      targetTop: 10,
+      targetBottom: 500,
+    };
+    expect(resolveTypewriterScrollTop(documentEdgeMetrics)).toBe(0);
+    expect(resolveInstantRevealPreparationViewports(documentEdgeMetrics)).toEqual([
+      { top: 800, bottom: 1200 },
+      { top: 0, bottom: 400 },
+      { top: 190, bottom: 590 },
     ]);
   });
 

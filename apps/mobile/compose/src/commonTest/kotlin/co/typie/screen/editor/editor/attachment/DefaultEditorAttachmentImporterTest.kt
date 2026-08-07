@@ -24,6 +24,7 @@ import co.typie.editor.ffi.NodeOp
 import co.typie.editor.ffi.PlainNode
 import co.typie.editor.ffi.Rect
 import co.typie.editor.ffi.StateField
+import co.typie.editor.scroll.EditorBringIntoViewPolicy
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.editor.sync.createTestDocumentEditingSession
@@ -214,7 +215,10 @@ class DefaultEditorAttachmentImporterTest {
     assertTrue(state.images.uploads.containsKey(nodeId))
     assertFalse(released)
     assertEquals(
-      EditorBringIntoViewRequests.Request(EditorBringIntoViewTarget.CurrentSelectionHead),
+      EditorBringIntoViewRequests.Request(
+        target = EditorBringIntoViewTarget.CurrentSelectionHead,
+        policy = EditorBringIntoViewPolicy.Typewriter,
+      ),
       bringIntoViewRequests.activateForVersion(editor.appliedState.version),
     )
 
@@ -225,6 +229,10 @@ class DefaultEditorAttachmentImporterTest {
 
     assertEquals(listOf(1), callbackInvocations)
     assertTrue(released)
+    assertEquals(
+      EditorBringIntoViewPolicy.CursorGuard,
+      bringIntoViewRequests.activateForVersion(editor.appliedState.version)?.policy,
+    )
   }
 
   @Test

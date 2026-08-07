@@ -1,6 +1,7 @@
 package co.typie.editor
 
 import androidx.compose.ui.geometry.Size
+import co.typie.editor.scroll.EditorBringIntoViewPolicy
 import co.typie.editor.scroll.EditorVisibleArea
 import co.typie.editor.scroll.resolveEditorAutoScrollPolicy
 import co.typie.editor.scroll.resolveInstantRevealPreparationViewports
@@ -224,6 +225,7 @@ class RequiredSurfacePagesTest {
         target = target,
         visibleArea = visibleArea,
         autoScrollPolicy = resolveEditorAutoScrollPolicy(visibleArea),
+        policy = EditorBringIntoViewPolicy.CursorGuard,
       )
 
     val exactDestinations =
@@ -253,26 +255,24 @@ class RequiredSurfacePagesTest {
         bottomOcclusionInset = 30f,
       )
     val target = VerticalSpan(top = 600f, bottom = 1_100f)
-    val preparation =
-      resolveInstantRevealPreparationViewports(
-        currentScroll = 0f,
-        viewportHeight = visibleArea.viewport.height,
-        maximumScrollY = 1_600f,
-        target = target,
-        visibleArea = visibleArea,
-        autoScrollPolicy = resolveEditorAutoScrollPolicy(visibleArea),
-      )
-
     for (currentScroll in listOf(0f, 600f, 1_500f)) {
-      val destination =
-        requireNotNull(
-          resolveKeepVisibleScrollOffset(
-            currentScroll = currentScroll,
-            targetTopInContent = target.top,
-            targetBottomInContent = target.bottom,
-            visibleArea = visibleArea,
-          )
+      val preparation =
+        resolveInstantRevealPreparationViewports(
+          currentScroll = currentScroll,
+          viewportHeight = visibleArea.viewport.height,
+          maximumScrollY = 1_600f,
+          target = target,
+          visibleArea = visibleArea,
+          autoScrollPolicy = resolveEditorAutoScrollPolicy(visibleArea),
+          policy = EditorBringIntoViewPolicy.CursorGuard,
         )
+      val destination =
+        resolveKeepVisibleScrollOffset(
+          currentScroll = currentScroll,
+          targetTopInContent = target.top,
+          targetBottomInContent = target.bottom,
+          visibleArea = visibleArea,
+        ) ?: currentScroll
       assertTrue(
         VerticalSpan(destination, destination + visibleArea.viewport.height) in preparation,
         "destination=$destination preparation=$preparation",
@@ -302,6 +302,7 @@ class RequiredSurfacePagesTest {
               bottomOcclusionInset = 20f,
             )
           ),
+        policy = EditorBringIntoViewPolicy.CursorGuard,
       )
     assertEquals(setOf(VerticalSpan(250f, 650f)), clamped.toSet())
 
@@ -320,6 +321,7 @@ class RequiredSurfacePagesTest {
         target = centeredTarget,
         visibleArea = narrowVisibleArea,
         autoScrollPolicy = resolveEditorAutoScrollPolicy(narrowVisibleArea),
+        policy = EditorBringIntoViewPolicy.CursorGuard,
       )
     val centeredDestination =
       requireNotNull(
@@ -347,6 +349,7 @@ class RequiredSurfacePagesTest {
             typewriterEnabled = true,
             typewriterPosition = 0.5f,
           ),
+        policy = EditorBringIntoViewPolicy.Typewriter,
       )
     val typewriterDestination =
       requireNotNull(
@@ -361,6 +364,68 @@ class RequiredSurfacePagesTest {
     assertEquals(
       listOf(VerticalSpan(typewriterDestination, typewriterDestination + 400f)),
       typewriter,
+    )
+
+    val oversizedTypewriterTarget = VerticalSpan(top = 600f, bottom = 1_100f)
+    val oversizedTypewriter =
+      resolveInstantRevealPreparationViewports(
+        currentScroll = 0f,
+        viewportHeight = 400f,
+        maximumScrollY = 1_600f,
+        target = oversizedTypewriterTarget,
+        visibleArea =
+          EditorVisibleArea(
+            viewport = Size(width = 800f, height = 400f),
+            topInset = 20f,
+            bottomOcclusionInset = 30f,
+          ),
+        autoScrollPolicy =
+          resolveEditorAutoScrollPolicy(
+            visibleArea =
+              EditorVisibleArea(
+                viewport = Size(width = 800f, height = 400f),
+                topInset = 20f,
+                bottomOcclusionInset = 30f,
+              ),
+            typewriterEnabled = true,
+            typewriterPosition = 0.5f,
+          ),
+        policy = EditorBringIntoViewPolicy.Typewriter,
+      )
+    assertEquals(
+      listOf(VerticalSpan(0f, 400f), VerticalSpan(520f, 920f), VerticalSpan(790f, 1_190f)),
+      oversizedTypewriter,
+    )
+
+    val documentEdgeTarget = VerticalSpan(top = 10f, bottom = 500f)
+    val documentEdge =
+      resolveInstantRevealPreparationViewports(
+        currentScroll = 800f,
+        viewportHeight = 400f,
+        maximumScrollY = 1_600f,
+        target = documentEdgeTarget,
+        visibleArea =
+          EditorVisibleArea(
+            viewport = Size(width = 800f, height = 400f),
+            topInset = 20f,
+            bottomOcclusionInset = 30f,
+          ),
+        autoScrollPolicy =
+          resolveEditorAutoScrollPolicy(
+            visibleArea =
+              EditorVisibleArea(
+                viewport = Size(width = 800f, height = 400f),
+                topInset = 20f,
+                bottomOcclusionInset = 30f,
+              ),
+            typewriterEnabled = true,
+            typewriterPosition = 0.5f,
+          ),
+        policy = EditorBringIntoViewPolicy.Typewriter,
+      )
+    assertEquals(
+      listOf(VerticalSpan(800f, 1_200f), VerticalSpan(0f, 400f), VerticalSpan(190f, 590f)),
+      documentEdge,
     )
   }
 
@@ -383,6 +448,7 @@ class RequiredSurfacePagesTest {
               typewriterEnabled = true,
               typewriterPosition = 0.5f,
             ),
+          policy = EditorBringIntoViewPolicy.Typewriter,
         )
       }
     val prepared =

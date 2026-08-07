@@ -257,7 +257,7 @@ describe('Editor guarded core invocation', () => {
 
     editor.updateNow(() => {
       editor.enqueue({ type: 'history', op: { type: 'undo' } });
-      editor.scrollIntoView({ target: { type: 'current_selection_head' } });
+      editor.scrollIntoView({ target: { type: 'current_selection_head' }, policy: 'cursor_guard' });
     });
 
     expect(order).toEqual(['before-publish', 'replace']);
@@ -508,7 +508,7 @@ describe('Editor guarded core invocation', () => {
 
     const update = editor.updateNow(() => {
       editor.enqueue({ type: 'selection', op: { type: 'unset' } });
-      editor.scrollIntoView({ target: { type: 'current_selection_head' } });
+      editor.scrollIntoView({ target: { type: 'current_selection_head' }, policy: 'cursor_guard' });
     });
 
     expect(update).not.toBeNull();
@@ -522,7 +522,7 @@ describe('Editor guarded core invocation', () => {
 
     const update = editor.updateNow(() => {
       editor.enqueue({ type: 'history', op: { type: 'undo' } });
-      editor.scrollIntoView({ target: { type: 'current_selection_head' } });
+      editor.scrollIntoView({ target: { type: 'current_selection_head' }, policy: 'cursor_guard' });
     });
 
     expect(update).toBeNull();
@@ -706,7 +706,7 @@ describe('Editor guarded core invocation', () => {
     let presentation: Promise<void> | undefined;
     editor.updateNow(() => {
       editor.enqueue({ type: 'history', op: { type: 'undo' } });
-      presentation = editor.scrollIntoView({ target: { type: 'current_selection_head' } });
+      presentation = editor.scrollIntoView({ target: { type: 'current_selection_head' }, policy: 'cursor_guard' });
     });
     let settled = false;
     void presentation?.then(() => {

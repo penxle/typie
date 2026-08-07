@@ -23,10 +23,10 @@ import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.SelectionExpansionUnit
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.editor.runtime.LocalEditorUiState
-import co.typie.editor.scroll.EditorAutoScrollMode
 import co.typie.editor.scroll.EditorAutoScrollPolicy
 import co.typie.editor.scroll.EditorVisibleArea
 import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
+import co.typie.editor.scroll.resolveKeepVisibleRange
 import co.typie.editor.viewport.EditorViewportState
 import co.typie.screen.editor.editor.subpane.EditorTableAxisActionsTarget
 import kotlin.math.roundToInt
@@ -71,18 +71,15 @@ internal fun EditorScreenOverlayHost(
       DebugViewportLine(y = visibleArea.visibleViewportTop, color = Color(0xFF00C853))
       DebugViewportLine(y = visibleArea.visibleViewportBottom, color = Color(0xFF00C853))
 
-      when (autoScrollPolicy.mode) {
-        EditorAutoScrollMode.KeepCursorVisible -> {
-          DebugViewportLine(y = autoScrollPolicy.keepVisibleRange.top, color = Color(0xFFFFAB00))
-          DebugViewportLine(y = autoScrollPolicy.keepVisibleRange.bottom, color = Color(0xFFFFAB00))
-        }
-
-        EditorAutoScrollMode.Typewriter -> {
-          autoScrollPolicy.targetTop?.let { DebugViewportLine(y = it, color = Color(0xFFFFAB00)) }
-          autoScrollPolicy.targetBottom
-            ?.takeIf { autoScrollPolicy.targetLineHeight > 0f }
-            ?.let { DebugViewportLine(y = it, color = Color(0xFFFFAB00)) }
-        }
+      if (autoScrollPolicy.typewriterActive) {
+        autoScrollPolicy.targetTop?.let { DebugViewportLine(y = it, color = Color(0xFFFFAB00)) }
+        autoScrollPolicy.targetBottom
+          ?.takeIf { autoScrollPolicy.targetLineHeight > 0f }
+          ?.let { DebugViewportLine(y = it, color = Color(0xFFFFAB00)) }
+      } else {
+        val keepVisibleRange = resolveKeepVisibleRange(visibleArea)
+        DebugViewportLine(y = keepVisibleRange.top, color = Color(0xFFFFAB00))
+        DebugViewportLine(y = keepVisibleRange.bottom, color = Color(0xFFFFAB00))
       }
     }
 

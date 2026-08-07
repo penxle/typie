@@ -223,7 +223,7 @@
     } else {
       const rect = selectionHeadRect(snapshot);
       activeAnchor = rect ? anchorFromPageRects([rect]) : null;
-      ctx.scroll?.scrollIntoView({ target: { type: 'current_selection_head' } });
+      ctx.scroll?.scrollIntoView({ target: { type: 'current_selection_head' }, policy: 'cursor_guard' });
     }
   }
 
@@ -255,7 +255,7 @@
     }
     activeThreadId = id;
     activeAnchor = anchor;
-    ctx.scroll?.scrollIntoView({ target: { type: 'tracked_item', id } });
+    ctx.scroll?.scrollIntoView({ target: { type: 'tracked_item', id }, policy: 'result_reveal' });
   }
 
   function takeFocusReturnSession(): FocusReturnSession | null {

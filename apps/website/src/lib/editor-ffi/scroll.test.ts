@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
+  resolveGuardedScrollTop,
   resolveKeepVisibleBottomPadding,
-  resolveNearestScrollTop,
   resolveTypewriterBottomPadding,
   resolveTypewriterScrollTop,
 } from './scroll';
 
-describe('resolveNearestScrollTop', () => {
+describe('resolveGuardedScrollTop', () => {
   it('keeps the target inside the guarded visible area with insets', () => {
     expect(
-      resolveNearestScrollTop({
+      resolveGuardedScrollTop({
         scrollTop: 100,
         clientHeight: 400,
         scrollHeight: 1000,
@@ -20,7 +20,7 @@ describe('resolveNearestScrollTop', () => {
     ).toBe(130);
 
     expect(
-      resolveNearestScrollTop({
+      resolveGuardedScrollTop({
         scrollTop: 100,
         clientHeight: 400,
         scrollHeight: 1000,
@@ -33,7 +33,7 @@ describe('resolveNearestScrollTop', () => {
 
   it('returns null when the target is already visible', () => {
     expect(
-      resolveNearestScrollTop({
+      resolveGuardedScrollTop({
         scrollTop: 100,
         clientHeight: 400,
         scrollHeight: 1000,
@@ -43,9 +43,9 @@ describe('resolveNearestScrollTop', () => {
     ).toBeNull();
   });
 
-  it('aligns an oversized target top to the guarded visible area', () => {
+  it('aligns an oversized target below the viewport bottom to the lower cursor guard', () => {
     expect(
-      resolveNearestScrollTop({
+      resolveGuardedScrollTop({
         scrollTop: 300,
         clientHeight: 400,
         scrollHeight: 2000,
@@ -53,7 +53,71 @@ describe('resolveNearestScrollTop', () => {
         targetBottom: 1500,
         visibleArea: { topInset: 10, bottomInset: 20 },
       }),
-    ).toBe(930);
+    ).toBe(1180);
+  });
+
+  it('does not scroll when an oversized target already covers the guarded visible area', () => {
+    expect(
+      resolveGuardedScrollTop({
+        scrollTop: 300,
+        clientHeight: 400,
+        scrollHeight: 2000,
+        targetTop: 250,
+        targetBottom: 800,
+        visibleArea: { topInset: 10, bottomInset: 20 },
+      }),
+    ).toBeNull();
+  });
+
+  it('does not scroll when an oversized target exactly meets either guard edge and covers the other', () => {
+    const metrics = {
+      scrollTop: 300,
+      clientHeight: 400,
+      scrollHeight: 2000,
+      visibleArea: { topInset: 10, bottomInset: 20 },
+    };
+
+    expect(resolveGuardedScrollTop({ ...metrics, targetTop: 370, targetBottom: 800 })).toBeNull();
+    expect(resolveGuardedScrollTop({ ...metrics, targetTop: 100, targetBottom: 620 })).toBeNull();
+  });
+
+  it('aligns an oversized target to the violated guard edge even within the old slack', () => {
+    expect(
+      resolveGuardedScrollTop({
+        scrollTop: 300,
+        clientHeight: 400,
+        scrollHeight: 2000,
+        targetTop: 390,
+        targetBottom: 900,
+        visibleArea: { topInset: 10, bottomInset: 20 },
+      }),
+    ).toBe(580);
+  });
+
+  it('clamps an oversized cursor reveal at the document edge', () => {
+    expect(
+      resolveGuardedScrollTop({
+        scrollTop: 10,
+        clientHeight: 400,
+        scrollHeight: 800,
+        targetTop: 0,
+        targetBottom: 251,
+        visibleArea: { topInset: 30, bottomInset: 0 },
+      }),
+    ).toBe(0);
+  });
+
+  it('aligns an oversized target above the viewport top to the upper cursor guard', () => {
+    expect(
+      resolveGuardedScrollTop({
+        scrollTop: 300,
+        clientHeight: 400,
+        scrollHeight: 2000,
+        targetTop: 0,
+        targetBottom: 400,
+        visibleArea: { topInset: 10, bottomInset: 20 },
+      }),
+    ).toBe(0);
   });
 });
 
@@ -83,6 +147,34 @@ describe('resolveTypewriterScrollTop', () => {
         position: 0.5,
       }),
     ).toBe(1500);
+  });
+
+  it('falls back to the lower cursor guard for an oversized target below the viewport', () => {
+    expect(
+      resolveTypewriterScrollTop({
+        scrollTop: 300,
+        clientHeight: 400,
+        scrollHeight: 2000,
+        targetTop: 1000,
+        targetBottom: 1500,
+        visibleArea: { topInset: 10, bottomInset: 20 },
+        position: 0.5,
+      }),
+    ).toBe(1180);
+  });
+
+  it('keeps the viewport when an oversized target spans both cursor guard edges', () => {
+    expect(
+      resolveTypewriterScrollTop({
+        scrollTop: 300,
+        clientHeight: 400,
+        scrollHeight: 2000,
+        targetTop: 250,
+        targetBottom: 800,
+        visibleArea: { topInset: 10, bottomInset: 20 },
+        position: 0.5,
+      }),
+    ).toBeNull();
   });
 });
 

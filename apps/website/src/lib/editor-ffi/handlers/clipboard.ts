@@ -46,7 +46,7 @@ export const handleCut: EditorEventHandler<ImeTextInput, ClipboardEvent> = (edit
   e.preventDefault();
   editor.updateNow(() => {
     editor.enqueue({ type: 'clipboard', op: { type: 'cut' } });
-    editor.scrollIntoView({ target: { type: 'current_selection_head' }, mode: 'nearest' });
+    editor.scrollIntoView({ target: { type: 'current_selection_head' }, policy: 'cursor_guard' });
   });
 };
 
@@ -97,7 +97,7 @@ const readClipboardText = async (items: readonly ClipboardItem[]): Promise<{ htm
 };
 
 const scrollAfterPaste = (editor: Editor): void => {
-  editor.scrollIntoView({ target: { type: 'current_selection_head' }, mode: 'typewriter' });
+  editor.scrollIntoView({ target: { type: 'current_selection_head' }, policy: 'typewriter' });
 };
 
 const paste = (

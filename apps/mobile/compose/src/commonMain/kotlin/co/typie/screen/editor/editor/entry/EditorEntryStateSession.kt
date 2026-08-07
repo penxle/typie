@@ -13,6 +13,7 @@ import co.typie.editor.Editor
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.SelectionOp
 import co.typie.editor.ffi.StableSelection
+import co.typie.editor.scroll.EditorBringIntoViewPolicy
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.editor.scroll.updateWithBringIntoView
@@ -70,7 +71,10 @@ internal fun rememberEditorEntryStateSession(
 
     activeEditor.updateWithBringIntoView(bringIntoViewRequests) {
       enqueue(Message.Selection(SelectionOp.SetFrozen(selection = selection)))
-      bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
+      bringIntoView(
+        EditorBringIntoViewTarget.CurrentSelectionHead,
+        policy = EditorBringIntoViewPolicy.CursorGuard,
+      )
     }
     session.markPresentationReady()
   }

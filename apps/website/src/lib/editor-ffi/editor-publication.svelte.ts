@@ -49,6 +49,7 @@ function reconcilePublication(
 ): void {
   if (editor.terminal) return;
 
+  scroll.discardObsoleteForRevision(editor.appliedSnapshot.revision);
   const preparation = resolveEditorSurfacePreparation(editor, scroll);
   if (!preparation) return;
   editor.requestSurfacePages(preparation.requiredPages);
@@ -135,15 +136,19 @@ function resolveEditorSurfacePreparation(
   const target = targetRects ? resolveTargetSpan(targetRects, pageSpans, zoom) : null;
   const preparationViewports =
     target && pendingRequest?.behavior === 'instant'
-      ? scroll.resolvePreparationViewports(pendingRequest, {
-          scrollTop,
-          clientHeight,
-          scrollHeight,
-          targetTop: target.targetTop,
-          targetBottom: target.targetBottom,
-        })
+      ? scroll.resolvePreparationViewports(
+          pendingRequest,
+          {
+            scrollTop,
+            clientHeight,
+            scrollHeight,
+            targetTop: target.targetTop,
+            targetBottom: target.targetBottom,
+          },
+          snapshot,
+        )
       : [];
-  const scrollIntent = resolveScrollIntent(pendingRequest, targetRects, target, scroll, {
+  const scrollIntent = resolveScrollIntent(pendingRequest, targetRects, target, snapshot, scroll, {
     scrollTop,
     clientHeight,
     scrollHeight,
@@ -181,6 +186,7 @@ function resolveScrollIntent(
   request: EditorBringIntoViewRequest | null,
   targetRects: ReturnType<NonNullable<EditorContext['scroll']>['resolveTargetRects']>,
   target: RevealTargetSpan | null,
+  snapshot: EditorSnapshot,
   scroll: NonNullable<EditorContext['scroll']>,
   metrics: Pick<ScrollContainerMetrics, 'scrollTop' | 'clientHeight' | 'scrollHeight'>,
 ): EditorScrollIntentResult | null {
@@ -188,7 +194,7 @@ function resolveScrollIntent(
   if (targetRects === null) return { type: 'no_scroll' };
   if (target === null) return { type: 'unresolved' };
 
-  const y = scroll.resolveScrollTop(request, { ...metrics, ...target });
+  const y = scroll.resolveScrollTop(request, { ...metrics, ...target }, snapshot);
   return y === null ? { type: 'no_scroll' } : { type: 'scroll_to', y };
 }
 

@@ -21,6 +21,7 @@ import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.NodeOp
 import co.typie.editor.ffi.PlainNode
 import co.typie.editor.runtime.LocalEditorRuntime
+import co.typie.editor.scroll.EditorBringIntoViewPolicy
 import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
 import co.typie.editor.scroll.updateWithBringIntoView
@@ -113,7 +114,10 @@ private fun EditorEmbedToolbar(
                           )
                         )
                       )
-                      bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
+                      bringIntoView(
+                        EditorBringIntoViewTarget.CurrentSelectionHead,
+                        policy = EditorBringIntoViewPolicy.CursorGuard,
+                      )
                     }
                   checkNotNull(update) { "Editor embed attrs were not admitted" }
                 },

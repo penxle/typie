@@ -67,6 +67,7 @@ import co.typie.editor.interaction.observeEditorScreenPointerSequence
 import co.typie.editor.requiredSurfacePages
 import co.typie.editor.runtime.LocalEditorUiState
 import co.typie.editor.scroll.EditorBringIntoViewBehavior
+import co.typie.editor.scroll.EditorBringIntoViewPolicy
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.editor.scroll.EditorScrollFrame
@@ -231,7 +232,7 @@ internal fun EditorScreenLayout(
   val surfacePreparation = editor?.let {
     resolveEditorSurfacePreparation(
       editor = it,
-      scrollFrame = scrollFrame.copy(state = it.appliedState),
+      scrollFrame = scrollFrame.withState(it.appliedState),
       currentScroll = state.viewportState.scrollOffset.y,
       bringIntoViewRequest = bringIntoViewRequest,
     )
@@ -364,7 +365,7 @@ internal fun EditorScreenLayout(
         if (editor != null && currentAppliedState != null) {
           resolveEditorSurfacePreparation(
             editor = editor,
-            scrollFrame = measuredScrollFrame.copy(state = currentAppliedState),
+            scrollFrame = measuredScrollFrame.withState(currentAppliedState),
             currentScroll = state.viewportState.scrollOffset.y,
             bringIntoViewRequest = currentRequest,
           )
@@ -383,7 +384,7 @@ internal fun EditorScreenLayout(
           currentPreparation ==
             resolveEditorSurfacePreparation(
               editor = acceptingEditor,
-              scrollFrame = measuredScrollFrame.copy(state = latestState),
+              scrollFrame = measuredScrollFrame.withState(latestState),
               currentScroll = state.viewportState.scrollOffset.y,
               bringIntoViewRequest = latestRequest,
             ) &&
@@ -438,7 +439,7 @@ internal fun EditorScreenLayout(
               val acceptedPreparation = currentPreparation.takeIf { acceptedBundle != null }
 
               val presentationScrollFrame =
-                measuredScrollFrame.copy(state = placedBundle?.snapshot ?: scrollFrame.state)
+                measuredScrollFrame.withState(placedBundle?.snapshot ?: scrollFrame.state)
               val scrollFrameVersion = presentationScrollFrame.state.version
               val bringIntoViewRequest = acceptedRequest?.takeIf {
                 bringIntoViewRequests.activateForVersion(scrollFrameVersion) === it
@@ -449,7 +450,9 @@ internal fun EditorScreenLayout(
                   ?: resolveEditorScrollIntent(
                     frame = presentationScrollFrame,
                     target = request.target,
+                    policy = request.policy,
                     currentScroll = placementScrollY,
+                    maximumScrollY = state.viewportState.maxScrollY,
                   )
               }
               if (bringIntoViewRequest != null) {
@@ -625,20 +628,23 @@ private fun resolveEditorSurfacePreparation(
       null
     }
   if (currentViewport == null) return null
+  val maximumScrollY = (contentExtent - viewportHeight).coerceAtLeast(0f)
   val scrollIntent = bringIntoViewRequest?.let { request ->
     resolveEditorScrollIntent(
       frame = scrollFrame,
       target = request.target,
+      policy = request.policy,
       currentScroll = currentScroll,
       contentOriginY = resolvedContentOrigin,
+      maximumScrollY = maximumScrollY,
     )
   }
-  val maximumScrollY = (contentExtent - viewportHeight).coerceAtLeast(0f)
   val preparationViewports =
     if (bringIntoViewRequest?.behavior == EditorBringIntoViewBehavior.Instant) {
       resolveInstantRevealPreparationViewports(
         frame = scrollFrame,
         target = bringIntoViewRequest.target,
+        policy = bringIntoViewRequest.policy,
         currentScroll = currentScroll,
         contentOriginY = resolvedContentOrigin,
         maximumScrollY = maximumScrollY,
@@ -850,7 +856,9 @@ internal class EditorViewportScrollReconcileState {
         resolveEditorScrollIntent(
           frame = scrollFrame,
           target = EditorBringIntoViewTarget.CurrentSelectionHead,
+          policy = EditorBringIntoViewPolicy.Typewriter,
           currentScroll = viewportState.scrollOffset.y,
+          maximumScrollY = viewportState.maxScrollY,
         )
     ) {
       EditorScrollIntentResult.Unresolved,

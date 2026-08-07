@@ -51,7 +51,7 @@ function uniqueClampedScrollTops(scrollTops: readonly number[], maximumScrollTop
   return result;
 }
 
-export function resolveNearestScrollTop({
+export function resolveGuardedScrollTop({
   scrollTop,
   clientHeight,
   scrollHeight,
@@ -59,10 +59,14 @@ export function resolveNearestScrollTop({
   targetBottom,
   visibleArea,
   margin = CURSOR_VISIBLE_MARGIN,
+  oversizedAlignment = 'cursor_guard',
+  oversizedMinimumVisibleHeight,
 }: ScrollContainerMetrics &
   RevealTargetSpan & {
     visibleArea?: EditorVisibleArea;
     margin?: number;
+    oversizedAlignment?: 'cursor_guard' | 'start';
+    oversizedMinimumVisibleHeight?: number;
   }): number | null {
   const area = normalizeVisibleArea(visibleArea);
   const safeMargin = Math.max(0, finiteOrZero(margin));
@@ -91,7 +95,30 @@ export function resolveNearestScrollTop({
   const targetHeight = Math.max(0, safeTargetBottom - safeTargetTop);
   const rangeHeight = rangeBottom - rangeTop;
   if (targetHeight > rangeHeight) {
-    nextTop = safeTargetTop - rangeTop;
+    if (oversizedAlignment === 'start') {
+      nextTop = safeTargetTop - rangeTop;
+    } else if (oversizedMinimumVisibleHeight === undefined) {
+      if (safeTargetTop - safeScrollTop <= rangeTop && safeTargetBottom - safeScrollTop >= rangeBottom) {
+        return null;
+      }
+      if (safeTargetBottom - safeScrollTop > rangeBottom) {
+        nextTop = safeTargetBottom - rangeBottom;
+      } else if (safeTargetTop - safeScrollTop < rangeTop) {
+        nextTop = safeTargetTop - rangeTop;
+      }
+    } else {
+      const targetTopInViewport = safeTargetTop - safeScrollTop;
+      const targetBottomInViewport = safeTargetBottom - safeScrollTop;
+      const minimumVisibleHeight = Math.min(rangeHeight, Math.max(0, finiteOrZero(oversizedMinimumVisibleHeight)));
+      const visibleHeight = Math.max(0, Math.min(targetBottomInViewport, rangeBottom) - Math.max(targetTopInViewport, rangeTop));
+      if (visibleHeight >= minimumVisibleHeight) return null;
+
+      if (targetTopInViewport > rangeTop) {
+        nextTop = safeTargetTop - (rangeBottom - minimumVisibleHeight);
+      } else if (targetBottomInViewport < rangeBottom) {
+        nextTop = safeTargetBottom - (rangeTop + minimumVisibleHeight);
+      }
+    }
   } else if (safeTargetBottom - safeScrollTop > rangeBottom) {
     nextTop = safeTargetBottom - rangeBottom;
   } else if (safeTargetTop - safeScrollTop < rangeTop) {
@@ -116,12 +143,14 @@ export function resolveInstantRevealPreparationViewports({
   visibleArea,
   margin = CURSOR_VISIBLE_MARGIN,
   position = 0.5,
+  oversizedMinimumVisibleHeight,
 }: ScrollContainerMetrics &
   RevealTargetSpan & {
-    mode: 'nearest' | 'typewriter';
+    mode: 'cursor_guard' | 'typewriter';
     visibleArea?: EditorVisibleArea;
     margin?: number;
     position?: number;
+    oversizedMinimumVisibleHeight?: number;
   }): VerticalSpan[] {
   const safeClientHeight = Math.max(0, finiteOrZero(clientHeight));
   if (safeClientHeight <= 0) return [];
@@ -133,7 +162,13 @@ export function resolveInstantRevealPreparationViewports({
   const maximumScrollTop = resolveMaxScrollTop({ clientHeight, scrollHeight });
   let destinations: number[];
 
-  if (mode === 'typewriter') {
+  const safeMargin = Math.max(0, finiteOrZero(margin));
+  const rangeTop = area.topInset + safeMargin;
+  const rangeBottom = safeClientHeight - area.bottomInset - safeMargin;
+  const targetHeight = Math.max(0, safeTargetBottom - safeTargetTop);
+  const useTypewriter = mode === 'typewriter' && targetHeight <= Math.max(0, rangeBottom - rangeTop);
+
+  if (useTypewriter) {
     const usableHeight = Math.max(0, safeClientHeight - area.topInset - area.bottomInset);
     if (usableHeight <= 0) return [];
     destinations = [
@@ -148,9 +183,6 @@ export function resolveInstantRevealPreparationViewports({
       }) ?? safeScrollTop,
     ];
   } else {
-    const safeMargin = Math.max(0, finiteOrZero(margin));
-    const rangeTop = area.topInset + safeMargin;
-    const rangeBottom = safeClientHeight - area.bottomInset - safeMargin;
     if (rangeBottom <= rangeTop) {
       const visibleTop = area.topInset;
       const visibleBottom = safeClientHeight - area.bottomInset;
@@ -166,11 +198,21 @@ export function resolveInstantRevealPreparationViewports({
       const targetTopInViewport = safeTargetTop - safeScrollTop;
       const targetBottomInViewport = safeTargetBottom - safeScrollTop;
       destinations = [];
-      if (targetHeight <= rangeBottom - rangeTop && targetTopInViewport >= rangeTop && targetBottomInViewport <= rangeBottom) {
-        destinations.push(safeScrollTop);
+      if (targetHeight > rangeBottom - rangeTop) {
+        if (oversizedMinimumVisibleHeight === undefined) {
+          destinations.push(safeScrollTop, safeTargetTop - rangeTop, safeTargetBottom - rangeBottom);
+        } else {
+          const minimumVisibleHeight = Math.min(rangeBottom - rangeTop, Math.max(0, finiteOrZero(oversizedMinimumVisibleHeight)));
+          destinations.push(
+            safeScrollTop,
+            safeTargetTop - (rangeBottom - minimumVisibleHeight),
+            safeTargetBottom - (rangeTop + minimumVisibleHeight),
+          );
+        }
+      } else {
+        if (targetTopInViewport >= rangeTop && targetBottomInViewport <= rangeBottom) destinations.push(safeScrollTop);
+        destinations.push(safeTargetTop - rangeTop, safeTargetBottom - rangeBottom);
       }
-      destinations.push(safeTargetTop - rangeTop);
-      if (targetHeight <= rangeBottom - rangeTop) destinations.push(safeTargetBottom - rangeBottom);
     }
   }
 
@@ -198,6 +240,17 @@ export function resolveTypewriterScrollTop({
   }
 
   const targetHeight = Math.max(0, finiteOrZero(targetBottom) - finiteOrZero(targetTop));
+  const guardedHeight = Math.max(0, usableHeight - CURSOR_VISIBLE_MARGIN * 2);
+  if (targetHeight > guardedHeight) {
+    return resolveGuardedScrollTop({
+      scrollTop,
+      clientHeight,
+      scrollHeight,
+      targetTop,
+      targetBottom,
+      visibleArea: area,
+    });
+  }
   const clampedPosition = clamp(finiteOrZero(position), 0, 1);
   const targetTopInViewport = area.topInset + Math.max(0, usableHeight - targetHeight) * clampedPosition;
   const clamped = clamp(finiteOrZero(targetTop) - targetTopInViewport, 0, resolveMaxScrollTop({ clientHeight, scrollHeight }));

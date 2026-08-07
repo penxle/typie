@@ -661,6 +661,54 @@ class EditorInteractionControllerTest {
     }
 
   @Test
+  fun `single tap requests the interaction anchor for a committed range version`() =
+    runTest(StandardTestDispatcher()) {
+      val collapsedSelection =
+        Selection(
+          anchor = Position("text", 0, Affinity.Downstream),
+          head = Position("text", 0, Affinity.Downstream),
+        )
+      val nodeSelection =
+        Selection(
+          anchor = Position("node", 0, Affinity.Downstream),
+          head = Position("node", 1, Affinity.Downstream),
+        )
+      var currentSelection = collapsedSelection
+      var commitNodeSelection = false
+      val fake =
+        FakeFfiEditor(
+          cursorProvider = { cursorAt(x = 10f) },
+          selectionProvider = { currentSelection },
+          onTick = {
+            if (commitNodeSelection) {
+              currentSelection = nodeSelection
+            }
+            listOf(EditorEvent.StateChanged(listOf(StateField.Selection)))
+          },
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      fake.publishSnapshot(editor)
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+          platformProvider = { Platform.Android },
+        )
+      controller.updateTapSlop(8f)
+      val start = Offset(10f, 20f)
+
+      commitNodeSelection = true
+      controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
+      controller.onTapTimer(nowMillis = 250L)
+      advanceUntilIdle()
+
+      assertEquals(listOf(2L), host.requestedBringIntoViewVersions)
+    }
+
+  @Test
   fun `ios single tap that creates range selection opens context menu after commit`() =
     runTest(StandardTestDispatcher()) {
       val collapsedSelection =
@@ -4547,7 +4595,7 @@ class EditorInteractionControllerTest {
 
     override fun performSelectionHaptic() = Unit
 
-    override fun requestCurrentSelectionHead(version: Long) {
+    override fun requestPointerSelectionHead(version: Long) {
       requestedBringIntoViewVersions += version
     }
   }

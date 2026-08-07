@@ -37,6 +37,7 @@ import co.typie.editor.EditorState
 import co.typie.editor.ffi.FlatImeOp
 import co.typie.editor.ffi.Message
 import co.typie.editor.runtime.LocalEditorRuntime
+import co.typie.editor.scroll.EditorBringIntoViewPolicy
 import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
 import co.typie.editor.scroll.updateWithBringIntoView
@@ -253,7 +254,10 @@ internal fun EditorToolbarHost(
               enqueue(Message.TextInput(listOf(FlatImeOp.CommitAsIs)))
             }
             messages.forEach(::enqueue)
-            bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
+            bringIntoView(
+              EditorBringIntoViewTarget.CurrentSelectionHead,
+              policy = EditorBringIntoViewPolicy.CursorGuard,
+            )
           }
         if (update == null) {
           Logger.e { "Editor toolbar messages were not admitted" }

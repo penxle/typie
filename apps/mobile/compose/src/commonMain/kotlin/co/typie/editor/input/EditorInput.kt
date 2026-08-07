@@ -38,6 +38,7 @@ import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.Selection
 import co.typie.editor.matchesKeyBinding
 import co.typie.editor.runtime.EditorUiState
+import co.typie.editor.scroll.EditorBringIntoViewPolicy
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.editor.scroll.updateNowWithBringIntoView
@@ -268,7 +269,9 @@ internal class EditorInputNode(
       sessionEditor.scope.launch(context) {
         sessionEditor.updateWithBringIntoView(bringIntoViewRequests) {
           messages.forEach(::enqueue)
-          bringIntoViewTarget?.let { target -> bringIntoView(target) }
+          bringIntoViewTarget?.let { target ->
+            bringIntoView(target, policy = EditorBringIntoViewPolicy.Typewriter)
+          }
         }
       }
     }
@@ -380,7 +383,9 @@ internal class EditorInputNode(
     val update =
       editor.updateWithBringIntoView(bringIntoViewRequests) {
         messages.forEach(::enqueue)
-        bringIntoViewTarget?.let { target -> bringIntoView(target) }
+        bringIntoViewTarget?.let { target ->
+          bringIntoView(target, policy = EditorBringIntoViewPolicy.Typewriter)
+        }
       } ?: return null
     return update.snapshot
   }
@@ -394,7 +399,9 @@ internal class EditorInputNode(
       .runInputCallback {
         editor.updateNowWithBringIntoView(bringIntoViewRequests) {
           messages.forEach(::enqueue)
-          bringIntoViewTarget?.let { target -> bringIntoView(target) }
+          bringIntoViewTarget?.let { target ->
+            bringIntoView(target, policy = EditorBringIntoViewPolicy.Typewriter)
+          }
         }
       }
       ?.snapshot

@@ -13,7 +13,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.editor.Editor
 import co.typie.editor.EditorState
-import co.typie.editor.scroll.EditorBringIntoViewBehavior
+import co.typie.editor.scroll.EditorBringIntoViewPolicy
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.toPageRectsTarget
 import co.typie.graphql.AiFeedback_LiteraryAnalysisDocumentStream_Subscription
@@ -77,7 +77,7 @@ internal fun rememberEditorAiFeedbackSession(
     if (id == null) return
     bringIntoViewRequests.requestForState(
       state = activeEditor.appliedState,
-      behavior = EditorBringIntoViewBehavior.Smooth,
+      policy = EditorBringIntoViewPolicy.ResultReveal,
     ) {
       trackedRanges.firstOrNull { it.id == id }?.rects?.toPageRectsTarget()
     }

@@ -2052,7 +2052,7 @@ class EditorInteractionsDesktopTest {
 
     override fun performSelectionHaptic() = Unit
 
-    override fun requestCurrentSelectionHead(version: Long) = Unit
+    override fun requestPointerSelectionHead(version: Long) = Unit
   }
 
   private companion object {

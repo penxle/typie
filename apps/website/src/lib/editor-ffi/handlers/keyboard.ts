@@ -24,7 +24,7 @@ const macOnly = () => isMac;
 
 const currentSelectionHeadTypewriterReveal = (): EditorScrollIntoViewOptions => ({
   target: { type: 'current_selection_head' },
-  mode: 'typewriter',
+  policy: 'typewriter',
 });
 
 const withCurrentSelectionHeadReveal = (bindings: KeyBinding[]): KeyBinding[] =>

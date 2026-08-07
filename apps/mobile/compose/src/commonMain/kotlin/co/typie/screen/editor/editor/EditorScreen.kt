@@ -89,12 +89,14 @@ import co.typie.editor.runtime.EditorRuntime
 import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.editor.runtime.LocalEditorUiState
+import co.typie.editor.scroll.EditorBringIntoViewPolicy
 import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.editor.scroll.EditorScrollFrame
 import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
 import co.typie.editor.scroll.rememberEditorBringIntoViewRequests
 import co.typie.editor.scroll.resolveBringIntoViewTargetHeight
 import co.typie.editor.scroll.resolveEditorAutoScrollPolicy
+import co.typie.editor.scroll.resolveForState
 import co.typie.editor.scroll.updateWithBringIntoView
 import co.typie.editor.surface.EditorSurfaceHost
 import co.typie.editor.sync.ActiveDocumentEditingSessions
@@ -1477,7 +1479,7 @@ fun EditorScreen(entityId: String) {
         target = EditorBringIntoViewTarget.CurrentSelectionHead,
         displayZoom = displayZoom,
         density = density,
-      ) ?: 0f
+      )
     val subPaneLayoutInfo = subPaneState.layoutInfo
     val subPaneBottomOcclusion = resolveSubPaneBottomOcclusion(subPaneLayoutInfo)
     val editorInputBottomOcclusion =
@@ -1581,8 +1583,9 @@ fun EditorScreen(entityId: String) {
         baseBottomSpace = layoutSpec.resolveBaseBottomSpace(displayZoom),
         pageBottomRevealPadding = pageBottomRevealPadding,
         typewriterEnabled = typewriterEnabled,
+        typewriterActive = typewriterTargetLineHeight != null,
         typewriterPosition = typewriterPosition,
-        targetLineHeight = typewriterTargetLineHeight,
+        targetLineHeight = typewriterTargetLineHeight ?: 0f,
       )
     val bodyTrackWidth = bodyGeometry.pageColumnWidth.coerceAtLeast(0f)
     val headerGeometry =
@@ -1945,7 +1948,10 @@ fun EditorScreen(entityId: String) {
                       activeEditor.scope.launch(context) {
                         activeEditor.updateWithBringIntoView(bringIntoViewRequests) {
                           enqueue(Message.Clipboard(ClipboardOp.RepasteAsText))
-                          bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
+                          bringIntoView(
+                            EditorBringIntoViewTarget.CurrentSelectionHead,
+                            policy = EditorBringIntoViewPolicy.Typewriter,
+                          )
                         }
                       }
                     }
@@ -1959,12 +1965,20 @@ fun EditorScreen(entityId: String) {
         body = { presentedBundle ->
           val editorLoad = editorLoadState
           if (editorLoad != null) {
+            val presentedAutoScrollPolicy =
+              autoScrollPolicy.resolveForState(
+                state = presentedBundle?.snapshot ?: publishedEditorState,
+                visibleArea = visibleArea,
+                layoutSpec = layoutSpec,
+                displayZoom = displayZoom,
+                density = density,
+              )
             EditorBody(
               load = editorLoad,
               publishedBundle = presentedBundle,
               visibleArea = visibleArea,
               layoutSpec = layoutSpec,
-              autoScrollPolicy = autoScrollPolicy,
+              autoScrollPolicy = presentedAutoScrollPolicy,
               modifier = Modifier,
               editorInputEnabled =
                 editorReady && editorInputEnabledByToolbar && directEditingEnabled,

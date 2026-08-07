@@ -38,11 +38,15 @@ class EditorUpdateWithBringIntoViewTest {
       val updateDeferred = async {
         editor.updateWithBringIntoView(requests) {
           enqueue(Message.System(SystemEvent.Initialize))
-          bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
+          bringIntoView(
+            EditorBringIntoViewTarget.CurrentSelectionHead,
+            policy = EditorBringIntoViewPolicy.CursorGuard,
+          )
         }
       }
       testScheduler.runCurrent()
       val request = assertNotNull(requests.activateForVersion(version = 1L))
+      assertEquals(EditorBringIntoViewPolicy.CursorGuard, request.policy)
       assertTrue(requests.markPresented(version = 1L, request = request))
       val update = assertNotNull(updateDeferred.await())
 
@@ -62,17 +66,19 @@ class EditorUpdateWithBringIntoViewTest {
         assertNotNull(
           editor.updateNowWithBringIntoView(requests) {
             enqueue(Message.System(SystemEvent.Initialize))
-            bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
+            bringIntoView(
+              EditorBringIntoViewTarget.CurrentSelectionHead,
+              policy = EditorBringIntoViewPolicy.Typewriter,
+            )
           }
         )
 
       assertEquals(1L, update.revision)
       assertEquals(1L, update.snapshot.version)
       assertNull(requests.activateForVersion(version = 0L))
-      assertTrue(
-        requests.activateForVersion(version = 1L)?.target ==
-          EditorBringIntoViewTarget.CurrentSelectionHead
-      )
+      val request = assertNotNull(requests.activateForVersion(version = 1L))
+      assertTrue(request.target == EditorBringIntoViewTarget.CurrentSelectionHead)
+      assertEquals(EditorBringIntoViewPolicy.Typewriter, request.policy)
     }
 
   @Test
@@ -88,7 +94,10 @@ class EditorUpdateWithBringIntoViewTest {
           admit = { throw kotlinx.coroutines.CancellationException("not admitted") },
         ) {
           enqueue(Message.System(SystemEvent.Initialize))
-          bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
+          bringIntoView(
+            EditorBringIntoViewTarget.CurrentSelectionHead,
+            policy = EditorBringIntoViewPolicy.CursorGuard,
+          )
         }
       }
 
@@ -106,7 +115,10 @@ class EditorUpdateWithBringIntoViewTest {
         launch(start = CoroutineStart.LAZY) {
           editor.updateWithBringIntoView(requests) {
             enqueue(Message.System(SystemEvent.Initialize))
-            bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
+            bringIntoView(
+              EditorBringIntoViewTarget.CurrentSelectionHead,
+              policy = EditorBringIntoViewPolicy.CursorGuard,
+            )
           }
         }
       caller.start()
@@ -145,7 +157,10 @@ class EditorUpdateWithBringIntoViewTest {
       val first = async {
         editor.updateWithBringIntoView(requests) {
           enqueue(Message.System(SystemEvent.Initialize))
-          bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
+          bringIntoView(
+            EditorBringIntoViewTarget.CurrentSelectionHead,
+            policy = EditorBringIntoViewPolicy.CursorGuard,
+          )
         }
       }
       testScheduler.runCurrent()
@@ -160,7 +175,10 @@ class EditorUpdateWithBringIntoViewTest {
       val second = async {
         editor.updateWithBringIntoView(requests) {
           enqueue(Message.System(SystemEvent.Initialize))
-          bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
+          bringIntoView(
+            EditorBringIntoViewTarget.CurrentSelectionHead,
+            policy = EditorBringIntoViewPolicy.CursorGuard,
+          )
         }
       }
       testScheduler.runCurrent()
@@ -195,7 +213,10 @@ class EditorUpdateWithBringIntoViewTest {
       val first = async {
         editor.updateWithBringIntoView(requests) {
           enqueue(Message.System(SystemEvent.Initialize))
-          bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
+          bringIntoView(
+            EditorBringIntoViewTarget.CurrentSelectionHead,
+            policy = EditorBringIntoViewPolicy.CursorGuard,
+          )
         }
       }
       testScheduler.runCurrent()

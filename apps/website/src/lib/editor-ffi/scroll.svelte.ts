@@ -1,11 +1,11 @@
 import { getAppContext } from '@typie/ui/context';
 import { untrack } from 'svelte';
-import { CONTINUOUS_VIEW_PADDING } from './constants';
+import { CONTINUOUS_VIEW_PADDING, CURSOR_VISIBLE_MARGIN } from './constants';
 import { selectionHeadRect } from './geometry';
 import {
+  resolveGuardedScrollTop,
   resolveInstantRevealPreparationViewports,
   resolveKeepVisibleBottomPadding,
-  resolveNearestScrollTop,
   resolveTypewriterBottomPadding,
   resolveTypewriterScrollTop,
 } from './scroll';
@@ -15,14 +15,14 @@ import type { EditorRequest } from './editor-update';
 import type { VerticalSpan } from './required-surface-pages';
 import type { EditorVisibleArea, RevealTargetSpan, ScrollContainerMetrics } from './scroll';
 
-export type EditorScrollRevealMode = 'nearest' | 'typewriter';
+export type EditorScrollRevealPolicy = 'cursor_guard' | 'pointer_cursor_guard' | 'typewriter' | 'result_reveal';
+type ResolvedEditorScrollRevealPolicy = Exclude<EditorScrollRevealPolicy, 'pointer_cursor_guard'>;
 
 export type EditorScrollIntoViewTarget = { type: 'current_selection_head' } | { type: 'tracked_item'; id: string };
 
 export type EditorScrollIntoViewOptions = {
   target: EditorScrollIntoViewTarget;
-  mode?: EditorScrollRevealMode;
-  behavior?: ScrollBehavior;
+  policy: EditorScrollRevealPolicy;
 };
 
 export type EditorScrollIntentResult = { type: 'unresolved' } | { type: 'no_scroll' } | { type: 'scroll_to'; y: number };
@@ -32,7 +32,8 @@ type TypewriterPreferences = {
   position: number | undefined;
 };
 
-export type EditorBringIntoViewRequest = Required<EditorScrollIntoViewOptions> & {
+export type EditorBringIntoViewRequest = EditorScrollIntoViewOptions & {
+  behavior: ScrollBehavior;
   targetRevision: number | null;
   presentation: Promise<void>;
   completePresentation: () => void;
@@ -62,12 +63,12 @@ function sanitizeTypewriterPosition(position: number | undefined): number {
   return typeof position === 'number' && Number.isFinite(position) ? Math.max(0, Math.min(1, position)) : 0.5;
 }
 
-function createBringIntoViewRequest({ target, mode = 'nearest', behavior }: EditorScrollIntoViewOptions): EditorBringIntoViewRequest {
+function createBringIntoViewRequest({ target, policy }: EditorScrollIntoViewOptions): EditorBringIntoViewRequest {
   const { promise: presentation, resolve } = Promise.withResolvers<undefined>();
   return {
     target,
-    mode,
-    behavior: behavior ?? (target.type === 'tracked_item' ? 'smooth' : 'instant'),
+    policy,
+    behavior: policy === 'result_reveal' ? 'smooth' : 'instant',
     targetRevision: null,
     presentation,
     completePresentation: () => resolve(undefined),
@@ -189,7 +190,7 @@ export class EditorScrollScope {
     const request = createBringIntoViewRequest(options);
     this.#pendingRequest?.completePresentation();
     this.#pendingRequest = request;
-    this.#keepVisibleTarget = request.target;
+    this.#keepVisibleTarget = request.policy === 'pointer_cursor_guard' ? null : request.target;
     this.#editor.requestPublication();
     return request;
   }
@@ -204,7 +205,15 @@ export class EditorScrollScope {
   activateForRevision(revision: number): EditorBringIntoViewRequest | null {
     const request = this.#pendingRequest;
     if (!request || request.targetRevision === null) return null;
-    return revision >= request.targetRevision ? request : null;
+    const eligible = request.policy === 'pointer_cursor_guard' ? revision === request.targetRevision : revision >= request.targetRevision;
+    return eligible ? request : null;
+  }
+
+  discardObsoleteForRevision(revision: number): void {
+    const request = this.#pendingRequest;
+    if (request?.policy === 'pointer_cursor_guard' && request.targetRevision !== null && revision > request.targetRevision) {
+      this.discard(request);
+    }
   }
 
   discard(request: EditorBringIntoViewRequest): void {
@@ -232,28 +241,64 @@ export class EditorScrollScope {
     return true;
   }
 
-  resolveScrollTop(request: EditorBringIntoViewRequest, metrics: ScrollContainerMetrics & RevealTargetSpan): number | null {
-    const mode = request.mode === 'typewriter' && this.#typewriterPreferences().enabled ? 'typewriter' : 'nearest';
-    return mode === 'typewriter'
-      ? resolveTypewriterScrollTop({
+  resolveScrollTop(
+    request: EditorBringIntoViewRequest,
+    metrics: ScrollContainerMetrics & RevealTargetSpan,
+    snapshot: EditorSnapshot,
+  ): number | null {
+    const policy = this.#resolvePolicy(request, snapshot);
+    switch (policy) {
+      case 'typewriter': {
+        return resolveTypewriterScrollTop({
           ...metrics,
           visibleArea: this.visibleArea,
           position: sanitizeTypewriterPosition(this.#typewriterPreferences().position),
-        })
-      : resolveNearestScrollTop({ ...metrics, visibleArea: this.visibleArea });
+        });
+      }
+      case 'result_reveal': {
+        return resolveGuardedScrollTop({
+          ...metrics,
+          visibleArea: this.visibleArea,
+          oversizedAlignment: 'start',
+        });
+      }
+      case 'cursor_guard': {
+        return resolveGuardedScrollTop({
+          ...metrics,
+          visibleArea: this.visibleArea,
+          oversizedMinimumVisibleHeight: request.policy === 'pointer_cursor_guard' ? CURSOR_VISIBLE_MARGIN : undefined,
+        });
+      }
+    }
   }
 
-  resolvePreparationViewports(request: EditorBringIntoViewRequest, metrics: ScrollContainerMetrics & RevealTargetSpan): VerticalSpan[] {
-    const mode = request.mode === 'typewriter' && this.#typewriterPreferences().enabled ? 'typewriter' : 'nearest';
+  resolvePreparationViewports(
+    request: EditorBringIntoViewRequest,
+    metrics: ScrollContainerMetrics & RevealTargetSpan,
+    snapshot: EditorSnapshot,
+  ): VerticalSpan[] {
+    if (request.behavior !== 'instant') return [];
+    const policy = this.#resolvePolicy(request, snapshot);
     return resolveInstantRevealPreparationViewports({
       ...metrics,
-      mode,
+      mode: policy === 'typewriter' ? 'typewriter' : 'cursor_guard',
       visibleArea: this.visibleArea,
+      oversizedMinimumVisibleHeight: request.policy === 'pointer_cursor_guard' ? CURSOR_VISIBLE_MARGIN : undefined,
       position: sanitizeTypewriterPosition(this.#typewriterPreferences().position),
     });
   }
 
-  // eslint-disable-next-line unicorn/consistent-class-member-order -- public scroll contract is grouped before private padding details
+  // eslint-disable-next-line unicorn/consistent-class-member-order -- public scroll contract is grouped before private policy details
+  #resolvePolicy(request: EditorBringIntoViewRequest, snapshot: EditorSnapshot): ResolvedEditorScrollRevealPolicy {
+    if (request.policy === 'pointer_cursor_guard') return 'cursor_guard';
+    if (request.policy !== 'typewriter') return request.policy;
+    return request.target.type === 'current_selection_head' &&
+      this.#typewriterPreferences().enabled &&
+      this.resolveTargetRects(request.target, snapshot) !== null
+      ? 'typewriter'
+      : 'cursor_guard';
+  }
+
   #hasResolvedKeepVisibleTarget(snapshot: EditorSnapshot | undefined): boolean {
     const target = this.#keepVisibleTarget;
     return target !== null && this.resolveTargetRects(target, snapshot) !== null;
@@ -302,15 +347,12 @@ export class EditorScrollScope {
     });
   }
 
-  scrollIntoView(
-    { target, mode = 'nearest', behavior }: EditorScrollIntoViewOptions,
-    admission?: EditorRequest,
-  ): Promise<void> | undefined {
+  scrollIntoView({ target, policy }: EditorScrollIntoViewOptions, admission?: EditorRequest): Promise<void> | undefined {
     if (this.#destroyed) {
       return;
     }
 
-    const request = this.declare({ target, mode, behavior });
+    const request = this.declare({ target, policy });
     if (admission) {
       admission.beforePublish(
         (update) => {

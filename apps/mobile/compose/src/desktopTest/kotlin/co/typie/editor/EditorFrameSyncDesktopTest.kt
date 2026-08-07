@@ -45,6 +45,7 @@ import co.typie.editor.interaction.LocalEditorInteractionScope
 import co.typie.editor.interaction.gestures.EditorSelectionHandleType
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.editor.runtime.LocalEditorUiState
+import co.typie.editor.scroll.EditorBringIntoViewPolicy
 import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.editor.scroll.EditorScrollIntentResult
 import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
@@ -283,7 +284,10 @@ class EditorFrameSyncDesktopTest {
         assertNotNull(
           fixture.editor.updateNowWithBringIntoView(fixture.bringIntoViewRequests) {
             enqueue(Message.Selection(SelectionOp.SetAt(page = 0, x = 0f, y = 0f)))
-            bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
+            bringIntoView(
+              EditorBringIntoViewTarget.CurrentSelectionHead,
+              policy = EditorBringIntoViewPolicy.CursorGuard,
+            )
           }
         )
       waitUntil(timeoutMillis = 10_000) {
@@ -306,7 +310,10 @@ class EditorFrameSyncDesktopTest {
                 )
               )
             )
-            bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
+            bringIntoView(
+              EditorBringIntoViewTarget.CurrentSelectionHead,
+              policy = EditorBringIntoViewPolicy.CursorGuard,
+            )
           }
         )
       waitUntil(timeoutMillis = 10_000) {
@@ -400,6 +407,7 @@ class EditorFrameSyncDesktopTest {
           resolveEditorScrollIntent(
             frame = fixture.scrollFrame(downState),
             target = EditorBringIntoViewTarget.CurrentSelectionHead,
+            policy = EditorBringIntoViewPolicy.Typewriter,
             currentScroll = beforeDown,
           )
             as? EditorScrollIntentResult.ScrollTo,
@@ -431,6 +439,7 @@ class EditorFrameSyncDesktopTest {
           resolveEditorScrollIntent(
             frame = fixture.scrollFrame(upState),
             target = EditorBringIntoViewTarget.CurrentSelectionHead,
+            policy = EditorBringIntoViewPolicy.Typewriter,
             currentScroll = beforeUp,
           )
             as? EditorScrollIntentResult.ScrollTo,
@@ -469,7 +478,10 @@ class EditorFrameSyncDesktopTest {
         assertNotNull(
           fixture.editor.updateNowWithBringIntoView(fixture.bringIntoViewRequests) {
             enqueue(Message.Selection(SelectionOp.SetFrozen(saved)))
-            bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
+            bringIntoView(
+              EditorBringIntoViewTarget.CurrentSelectionHead,
+              policy = EditorBringIntoViewPolicy.CursorGuard,
+            )
           }
         )
       assertFalse(fixture.uiState.editorBoundsInContainer.isValid)
@@ -498,6 +510,7 @@ class EditorFrameSyncDesktopTest {
           resolveEditorScrollIntent(
             frame = fixture.scrollFrame(firstRestoredFrame.snapshot),
             target = EditorBringIntoViewTarget.CurrentSelectionHead,
+            policy = EditorBringIntoViewPolicy.CursorGuard,
             currentScroll = 0f,
           )
             as? EditorScrollIntentResult.ScrollTo
@@ -534,6 +547,7 @@ class EditorFrameSyncDesktopTest {
         resolveEditorScrollIntent(
           frame = fixture.scrollFrame(fixture.editor.publishedState),
           target = target,
+          policy = EditorBringIntoViewPolicy.CursorGuard,
           currentScroll = 0f,
         ),
         "TEST HARNESS: target must be visible in the stale 300dp viewport",
@@ -550,6 +564,7 @@ class EditorFrameSyncDesktopTest {
                   )
               ),
           target = target,
+          policy = EditorBringIntoViewPolicy.CursorGuard,
           currentScroll = 0f,
         )
           is EditorScrollIntentResult.ScrollTo,
@@ -561,6 +576,7 @@ class EditorFrameSyncDesktopTest {
         fixture.bringIntoViewRequests.requestForVersion(
           target = target,
           version = fixture.editor.appliedRevision,
+          policy = EditorBringIntoViewPolicy.CursorGuard,
         )
         fixture.editor.requestPublication()
       }
@@ -597,7 +613,10 @@ class EditorFrameSyncDesktopTest {
         assertNotNull(
           fixture.editor.updateNowWithBringIntoView(fixture.bringIntoViewRequests) {
             enqueue(Message.Selection(SelectionOp.SetFrozen(saved)))
-            bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
+            bringIntoView(
+              EditorBringIntoViewTarget.CurrentSelectionHead,
+              policy = EditorBringIntoViewPolicy.CursorGuard,
+            )
           }
         )
       val expectedScroll =
@@ -605,6 +624,7 @@ class EditorFrameSyncDesktopTest {
           resolveEditorScrollIntent(
             frame = fixture.scrollFrame(restore.snapshot),
             target = EditorBringIntoViewTarget.CurrentSelectionHead,
+            policy = EditorBringIntoViewPolicy.CursorGuard,
             currentScroll = beforeScroll,
           )
             as? EditorScrollIntentResult.ScrollTo
@@ -699,7 +719,10 @@ class EditorFrameSyncDesktopTest {
         assertNotNull(
           fixture.editor.updateNowWithBringIntoView(fixture.bringIntoViewRequests) {
             enqueue(Message.Selection(SelectionOp.SetAt(page = 0, x = 0f, y = 0f)))
-            bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
+            bringIntoView(
+              EditorBringIntoViewTarget.CurrentSelectionHead,
+              policy = EditorBringIntoViewPolicy.CursorGuard,
+            )
           }
         )
       waitUntil(timeoutMillis = 10_000) {
@@ -713,7 +736,10 @@ class EditorFrameSyncDesktopTest {
         assertNotNull(
           fixture.editor.updateNowWithBringIntoView(fixture.bringIntoViewRequests) {
             enqueue(Message.Selection(SelectionOp.SetFrozen(saved)))
-            bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
+            bringIntoView(
+              EditorBringIntoViewTarget.CurrentSelectionHead,
+              policy = EditorBringIntoViewPolicy.CursorGuard,
+            )
           }
         )
       restoreRevision = restore.revision
@@ -722,6 +748,7 @@ class EditorFrameSyncDesktopTest {
           resolveEditorScrollIntent(
             frame = fixture.scrollFrame(restore.snapshot),
             target = EditorBringIntoViewTarget.CurrentSelectionHead,
+            policy = EditorBringIntoViewPolicy.CursorGuard,
             currentScroll = 0f,
           )
             as? EditorScrollIntentResult.ScrollTo
@@ -778,7 +805,10 @@ class EditorFrameSyncDesktopTest {
         fixture.scope.launch {
           fixture.editor.updateWithBringIntoView(fixture.bringIntoViewRequests) {
             enqueue(Message.Key(KeyEvent(Key.Enter)))
-            bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
+            bringIntoView(
+              EditorBringIntoViewTarget.CurrentSelectionHead,
+              policy = EditorBringIntoViewPolicy.Typewriter,
+            )
           }
         }
       fixture.continuationScheduler.runCurrent()
@@ -824,6 +854,7 @@ class EditorFrameSyncDesktopTest {
           resolveEditorScrollIntent(
             frame = scrollFrame,
             target = EditorBringIntoViewTarget.CurrentSelectionHead,
+            policy = EditorBringIntoViewPolicy.Typewriter,
             currentScroll = beforeScroll,
           )
             as? EditorScrollIntentResult.ScrollTo,
@@ -852,7 +883,10 @@ class EditorFrameSyncDesktopTest {
           assertNotNull(
             fixture.editor.updateNowWithBringIntoView(fixture.bringIntoViewRequests) {
               enqueue(Message.Key(KeyEvent(Key.Backspace)))
-              bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
+              bringIntoView(
+                EditorBringIntoViewTarget.CurrentSelectionHead,
+                policy = EditorBringIntoViewPolicy.Typewriter,
+              )
             }
           )
         assertEquals(
@@ -881,7 +915,10 @@ class EditorFrameSyncDesktopTest {
             assertNotNull(
               fixture.editor.updateNowWithBringIntoView(fixture.bringIntoViewRequests) {
                 enqueue(Message.Key(KeyEvent(Key.Enter)))
-                bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
+                bringIntoView(
+                  EditorBringIntoViewTarget.CurrentSelectionHead,
+                  policy = EditorBringIntoViewPolicy.Typewriter,
+                )
               }
             )
           assertEquals(2, burstEnter.snapshot.pageSizes.size)
@@ -889,7 +926,10 @@ class EditorFrameSyncDesktopTest {
             assertNotNull(
               fixture.editor.updateNowWithBringIntoView(fixture.bringIntoViewRequests) {
                 enqueue(Message.Key(KeyEvent(Key.Backspace)))
-                bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
+                bringIntoView(
+                  EditorBringIntoViewTarget.CurrentSelectionHead,
+                  policy = EditorBringIntoViewPolicy.Typewriter,
+                )
               }
             )
           assertEquals(1, burstBackspace.snapshot.pageSizes.size)
@@ -905,7 +945,10 @@ class EditorFrameSyncDesktopTest {
           assertNotNull(
             fixture.editor.updateNowWithBringIntoView(fixture.bringIntoViewRequests) {
               enqueue(Message.Key(KeyEvent(Key.Enter)))
-              bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
+              bringIntoView(
+                EditorBringIntoViewTarget.CurrentSelectionHead,
+                policy = EditorBringIntoViewPolicy.Typewriter,
+              )
             }
           )
         val growing = assertNotNull(fixture.editor.publishedBundle)

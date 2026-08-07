@@ -26,7 +26,7 @@
       enqueued = true;
     }
     if (enqueued) {
-      editor.scrollIntoView({ target: { type: 'current_selection_head' }, mode: 'typewriter' });
+      editor.scrollIntoView({ target: { type: 'current_selection_head' }, policy: 'typewriter' });
     }
   };
 

@@ -21,6 +21,7 @@ import co.typie.editor.ffi.SelectionOp
 import co.typie.editor.ffi.Viewport
 import co.typie.editor.runtime.EditorRuntime
 import co.typie.editor.runtime.EditorUiState
+import co.typie.editor.scroll.EditorBringIntoViewPolicy
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.editor.scroll.EditorScrollFrame
@@ -161,7 +162,10 @@ internal class FrameSyncFixture(
         assertNotNull(
           editor.updateNowWithBringIntoView(bringIntoViewRequests) {
             enqueue(Message.Key(KeyEvent(Key.Enter)))
-            bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
+            bringIntoView(
+              EditorBringIntoViewTarget.CurrentSelectionHead,
+              policy = EditorBringIntoViewPolicy.Typewriter,
+            )
           }
         )
       test.waitUntil(timeoutMillis = 10_000) {
@@ -173,7 +177,10 @@ internal class FrameSyncFixture(
           assertNotNull(
             editor.updateNowWithBringIntoView(bringIntoViewRequests) {
               enqueue(Message.Key(KeyEvent(Key.Backspace)))
-              bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
+              bringIntoView(
+                EditorBringIntoViewTarget.CurrentSelectionHead,
+                policy = EditorBringIntoViewPolicy.Typewriter,
+              )
             }
           )
         test.waitUntil(timeoutMillis = 10_000) {
@@ -197,7 +204,10 @@ internal class FrameSyncFixture(
       assertNotNull(
         editor.updateNowWithBringIntoView(bringIntoViewRequests) {
           repeat(LongDocumentParagraphCount) { enqueue(Message.Key(KeyEvent(Key.Enter))) }
-          bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
+          bringIntoView(
+            EditorBringIntoViewTarget.CurrentSelectionHead,
+            policy = EditorBringIntoViewPolicy.Typewriter,
+          )
         }
       )
     test.waitUntil(timeoutMillis = 10_000) {
@@ -212,7 +222,10 @@ internal class FrameSyncFixture(
       assertNotNull(
         editor.updateNowWithBringIntoView(bringIntoViewRequests) {
           enqueue(Message.Selection(SelectionOp.SetAt(page = 0, x = PageMargin, y = PageMargin)))
-          bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
+          bringIntoView(
+            EditorBringIntoViewTarget.CurrentSelectionHead,
+            policy = EditorBringIntoViewPolicy.CursorGuard,
+          )
         }
       )
     test.waitUntil(timeoutMillis = 10_000) {
@@ -249,7 +262,10 @@ internal class FrameSyncFixture(
       assertNotNull(
         editor.updateNowWithBringIntoView(bringIntoViewRequests) {
           enqueue(Message.Key(KeyEvent(Key.Enter)))
-          bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
+          bringIntoView(
+            EditorBringIntoViewTarget.CurrentSelectionHead,
+            policy = EditorBringIntoViewPolicy.Typewriter,
+          )
         }
       )
     test.waitUntil(timeoutMillis = 10_000) {

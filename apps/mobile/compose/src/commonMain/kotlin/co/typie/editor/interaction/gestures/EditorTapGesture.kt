@@ -737,7 +737,7 @@ private fun EditorTapGesture.dispatchSelectionTap(
         !snapshot.selection.isCollapsed() -> {
           if (!hitExistingSelectionAtTap) {
             showContextMenuAfterPublication = true
-            context.effects.requestCurrentSelectionHead(version = snapshot.version)
+            context.effects.requestPointerSelectionHead(version = snapshot.version)
           }
         }
         isSameCursorTap(previousCursor, snapshot) -> {
@@ -745,7 +745,7 @@ private fun EditorTapGesture.dispatchSelectionTap(
         }
         else -> {
           if (snapshot.cursor != null) {
-            context.effects.requestCurrentSelectionHead(version = snapshot.version)
+            context.effects.requestPointerSelectionHead(version = snapshot.version)
           }
         }
       }

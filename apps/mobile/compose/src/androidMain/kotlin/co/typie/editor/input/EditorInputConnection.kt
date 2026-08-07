@@ -21,6 +21,7 @@ import co.typie.editor.ffi.FlatImeOp
 import co.typie.editor.ffi.Key
 import co.typie.editor.ffi.KeyEvent as FfiKeyEvent
 import co.typie.editor.ffi.Message
+import co.typie.editor.scroll.EditorBringIntoViewPolicy
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.editor.scroll.updateNowWithBringIntoView
@@ -85,7 +86,10 @@ internal class EditorInputConnection(
           for (message in messages) {
             enqueue(message)
           }
-          bringIntoView(EditorBringIntoViewTarget.CurrentSelectionHead)
+          bringIntoView(
+            EditorBringIntoViewTarget.CurrentSelectionHead,
+            policy = EditorBringIntoViewPolicy.Typewriter,
+          )
         }
       }
       recorder?.record { seq, t ->

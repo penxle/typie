@@ -476,7 +476,7 @@ describe('web editor frame synchronization', () => {
       const { editor } = await mountEditor(paginatedDocWithPageBreaks(3, { text: 'linked pixels', href }));
       const update = editor.updateNow((request) => {
         request.enqueue({ type: 'selection', op: { type: 'set_at', page: 2, x: PAGE_MARGIN, y: PAGE_MARGIN } });
-        editor.scrollIntoView({ target: { type: 'current_selection_head' }, behavior: 'instant' });
+        editor.scrollIntoView({ target: { type: 'current_selection_head' }, policy: 'cursor_guard' });
       });
       expect(update).not.toBeNull();
       if (!update) throw new Error('Expected the far-page reveal update');
@@ -512,7 +512,7 @@ describe('web editor frame synchronization', () => {
 
     editor.updateNow((request) => {
       request.enqueue({ type: 'selection', op: { type: 'set_at', page: 0, x: PAGE_MARGIN, y: PAGE_MARGIN } });
-      presentation = editor.scrollIntoView({ target: { type: 'current_selection_head' }, behavior: 'instant' });
+      presentation = editor.scrollIntoView({ target: { type: 'current_selection_head' }, policy: 'cursor_guard' });
     });
     editor.surfaceReplacementFailed(0);
 
@@ -536,7 +536,7 @@ describe('web editor frame synchronization', () => {
     let restorePresentation: Promise<void> | undefined;
     const restore = editor.updateNow((request) => {
       request.enqueue({ type: 'selection', op: { type: 'set_frozen', selection: saved } });
-      restorePresentation = editor.scrollIntoView({ target: { type: 'current_selection_head' } });
+      restorePresentation = editor.scrollIntoView({ target: { type: 'current_selection_head' }, policy: 'cursor_guard' });
     });
     expect(restore).not.toBeNull();
     if (!restore) throw new Error('Expected a restore update');
@@ -576,7 +576,7 @@ describe('web editor frame synchronization', () => {
 
     const farUpdate = editor.updateNow((request) => {
       request.enqueue({ type: 'selection', op: { type: 'set_at', page: pageCount - 1, x: PAGE_MARGIN, y: PAGE_MARGIN } });
-      editor.scrollIntoView({ target: { type: 'current_selection_head' }, behavior: 'instant' });
+      editor.scrollIntoView({ target: { type: 'current_selection_head' }, policy: 'cursor_guard' });
     });
     expect(farUpdate).not.toBeNull();
     if (!farUpdate) throw new Error('Expected the far-page selection update');
@@ -589,7 +589,7 @@ describe('web editor frame synchronization', () => {
 
     const resetUpdate = editor.updateNow((request) => {
       request.enqueue({ type: 'selection', op: { type: 'set_at', page: 0, x: PAGE_MARGIN, y: PAGE_MARGIN } });
-      editor.scrollIntoView({ target: { type: 'current_selection_head' }, behavior: 'instant' });
+      editor.scrollIntoView({ target: { type: 'current_selection_head' }, policy: 'cursor_guard' });
     });
     expect(resetUpdate).not.toBeNull();
     if (!resetUpdate) throw new Error('Expected the viewport reset update');
@@ -1086,7 +1086,7 @@ describe('web editor frame synchronization', () => {
 
     scrollRoot.scrollTop = 24;
     scrollRoot.dispatchEvent(new Event('scroll'));
-    editor.scrollIntoView({ target: { type: 'current_selection_head' }, mode: 'nearest', behavior: 'instant' });
+    editor.scrollIntoView({ target: { type: 'current_selection_head' }, policy: 'cursor_guard' });
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
     const endpoints = editor.selectionEndpoints();
@@ -1136,7 +1136,7 @@ describe('web editor frame synchronization', () => {
 
     const update = editor.updateNow((request) => {
       request.enqueue({ type: 'selection', op: { type: 'set_at', page: pageCount - 1, x: PAGE_MARGIN, y: 1_000_000 } });
-      editor.scrollIntoView({ target: { type: 'current_selection_head' }, behavior: 'instant' });
+      editor.scrollIntoView({ target: { type: 'current_selection_head' }, policy: 'cursor_guard' });
     });
     expect(update).not.toBeNull();
     if (!update) throw new Error('Expected the far-page reveal update');

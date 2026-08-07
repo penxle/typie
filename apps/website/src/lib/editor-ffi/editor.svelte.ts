@@ -927,7 +927,7 @@ export class Editor {
     if (idx === undefined) return;
     const match = this.#searchMatches[idx];
     if (!match) return;
-    this.scrollIntoView({ target: { type: 'tracked_item', id: match.id } });
+    this.scrollIntoView({ target: { type: 'tracked_item', id: match.id }, policy: 'result_reveal' });
   }
 
   #handleSearchReplaceResult(id: string, outcome: string): void {
@@ -1406,7 +1406,7 @@ export class Editor {
     if (this.readOnly || this.terminal) return;
     this.updateNow(() => {
       this.enqueue({ type: 'clipboard', op: { type: 'cut' } });
-      this.scrollIntoView({ target: { type: 'current_selection_head' }, mode: 'nearest' });
+      this.scrollIntoView({ target: { type: 'current_selection_head' }, policy: 'cursor_guard' });
     });
   }
 
@@ -1420,7 +1420,7 @@ export class Editor {
     if (this.readOnly || this.terminal) return;
     this.updateNow(() => {
       this.enqueue({ type: 'clipboard', op: { type: 'paste', html: undefined, text: result.text } });
-      this.scrollIntoView({ target: { type: 'current_selection_head' }, mode: 'typewriter' });
+      this.scrollIntoView({ target: { type: 'current_selection_head' }, policy: 'typewriter' });
     });
   }
 
@@ -2362,7 +2362,7 @@ export class Editor {
         this.activeSpellcheckErrorId = null;
         return;
       }
-      this.scrollIntoView({ target: { type: 'tracked_item', id } });
+      this.scrollIntoView({ target: { type: 'tracked_item', id }, policy: 'result_reveal' });
     }
   }
 
@@ -2539,7 +2539,7 @@ export class Editor {
     if (id !== null) {
       const ok = move(id, 'comment-active');
       if (ok) {
-        this.scrollIntoView({ target: { type: 'tracked_item', id } });
+        this.scrollIntoView({ target: { type: 'tracked_item', id }, policy: 'result_reveal' });
       } else {
         this.activeCommentId = null;
       }
@@ -2572,7 +2572,7 @@ export class Editor {
         this.activeAiFeedbackId = null;
         return;
       }
-      this.scrollIntoView({ target: { type: 'tracked_item', id } });
+      this.scrollIntoView({ target: { type: 'tracked_item', id }, policy: 'result_reveal' });
     }
   }
 

@@ -13,10 +13,13 @@ import kotlinx.coroutines.CompletableDeferred
 
 @OptIn(ExperimentalAtomicApi::class)
 internal class EditorBringIntoViewRequests(private val requestPresentation: () -> Unit = {}) {
-  data class Request(
-    val target: EditorBringIntoViewTarget,
-    val behavior: EditorBringIntoViewBehavior = EditorBringIntoViewBehavior.Instant,
-  ) {
+  data class Request(val target: EditorBringIntoViewTarget, val policy: EditorBringIntoViewPolicy) {
+    val behavior: EditorBringIntoViewBehavior =
+      if (policy == EditorBringIntoViewPolicy.ResultReveal) {
+        EditorBringIntoViewBehavior.Smooth
+      } else {
+        EditorBringIntoViewBehavior.Instant
+      }
     internal val targetVersion = AtomicLong(UNBOUND_VERSION)
     internal val presentation = CompletableDeferred<Unit>()
   }
@@ -25,13 +28,13 @@ internal class EditorBringIntoViewRequests(private val requestPresentation: () -
 
   fun requestForState(
     state: EditorState,
-    behavior: EditorBringIntoViewBehavior = EditorBringIntoViewBehavior.Instant,
+    policy: EditorBringIntoViewPolicy,
     target: EditorState.() -> EditorBringIntoViewTarget?,
   ): Boolean {
     requestForVersion(
       target = state.target() ?: return false,
       version = state.version,
-      behavior = behavior,
+      policy = policy,
     )
     return true
   }
@@ -39,14 +42,11 @@ internal class EditorBringIntoViewRequests(private val requestPresentation: () -
   fun requestForVersion(
     target: EditorBringIntoViewTarget,
     version: Long,
-    behavior: EditorBringIntoViewBehavior = EditorBringIntoViewBehavior.Instant,
-  ): Request = declare(target, behavior).also { bind(it, version) }
+    policy: EditorBringIntoViewPolicy,
+  ): Request = declare(target = target, policy = policy).also { bind(it, version) }
 
-  fun declare(
-    target: EditorBringIntoViewTarget,
-    behavior: EditorBringIntoViewBehavior = EditorBringIntoViewBehavior.Instant,
-  ): Request {
-    val request = Request(target = target, behavior = behavior)
+  fun declare(target: EditorBringIntoViewTarget, policy: EditorBringIntoViewPolicy): Request {
+    val request = Request(target = target, policy = policy)
     pending.exchange(request)?.presentation?.complete(Unit)
     requestPresentation()
     return request
@@ -81,9 +81,13 @@ internal class EditorBringIntoViewRequests(private val requestPresentation: () -
     val targetVersion =
       request.targetVersion.load().takeUnless { it == UNBOUND_VERSION } ?: return null
     val eligible =
-      when (request.target) {
-        is EditorBringIntoViewTarget.PageRects -> version == targetVersion
-        EditorBringIntoViewTarget.CurrentSelectionHead -> version >= targetVersion
+      if (
+        request.target is EditorBringIntoViewTarget.PageRects ||
+          request.policy == EditorBringIntoViewPolicy.PointerCursorGuard
+      ) {
+        version == targetVersion
+      } else {
+        version >= targetVersion
       }
     return request.takeIf { eligible }
   }
@@ -91,7 +95,10 @@ internal class EditorBringIntoViewRequests(private val requestPresentation: () -
   fun discardObsoleteForVersion(version: Long) {
     val request = pending.load() ?: return
     val targetVersion = request.targetVersion.load().takeUnless { it == UNBOUND_VERSION } ?: return
-    if (request.target is EditorBringIntoViewTarget.PageRects && version > targetVersion) {
+    if (
+      (request.target is EditorBringIntoViewTarget.PageRects ||
+        request.policy == EditorBringIntoViewPolicy.PointerCursorGuard) && version > targetVersion
+    ) {
       discard(request)
     }
   }
