@@ -8,7 +8,7 @@ const makeChannel = (deps: FakeSyncDeps, documentId = 'D1', clientId = 'c1', use
   return { sent, channel: new DocumentChannel({ deps, send, documentId, clientId, userId }) };
 };
 
-test('신규 attach: attach-ack → 청크 → snapshot-end(collectedSeq) → tail 순서', async () => {
+test('신규 attach: snapshot baseline보다 새 stream의 첫 seq가 커도 tail을 이어 보낸다', async () => {
   const deps = new FakeSyncDeps();
   deps.seedBundles('D1', [
     { id: 'B1', seq: 1, payload: Uint8Array.of(1, 1) },
@@ -16,6 +16,7 @@ test('신규 attach: attach-ack → 청크 → snapshot-end(collectedSeq) → ta
   ]);
   deps.collectedSeq.set('D1', '5-0');
   deps.seedStream('D1', [{ seq: '6-0', changeset: Uint8Array.of(6) }]);
+  deps.oldestRetained.set('D1', '6-0');
   deps.liveHeads.set('D1', Uint8Array.of(0xaa));
   deps.durableHeadsMap.set('D1', Uint8Array.of(0xdd));
 
@@ -36,6 +37,29 @@ test('신규 attach: attach-ack → 청크 → snapshot-end(collectedSeq) → ta
   assert.equal(tail.seq, '6-0');
   assert.deepEqual(tail.bundles, [Uint8Array.of(6)]);
   channel.stop();
+});
+
+test('snapshot 전송 중 collectedSeq가 전진했다면 잘린 tail을 reload한다', async () => {
+  const deps = new FakeSyncDeps();
+  deps.collectedSeq.set('D1', '5-0');
+  deps.seedBundles('D1', [{ id: 'B1', seq: 1, payload: Uint8Array.of(1) }]);
+  deps.seedStream('D1', [{ seq: '6-0', changeset: Uint8Array.of(6) }]);
+  deps.oldestRetained.set('D1', '6-0');
+  const originalRead = deps.readBundlesAfter;
+  deps.readBundlesAfter = async (documentId, afterSeq, limit) => {
+    const rows = await originalRead(documentId, afterSeq, limit);
+    deps.collectedSeq.set('D1', '6-0');
+    return rows;
+  };
+
+  const { sent, channel } = makeChannel(deps);
+  await channel.start();
+
+  assert.deepEqual(
+    sent.map((m) => m.t),
+    ['attach-ack', 'snapshot-chunk', 'snapshot-end', 'reload'],
+  );
+  assert.equal(channel.stopped, true);
 });
 
 test('collectedSeq는 bundle 행 읽기 전에 확정된다', async () => {

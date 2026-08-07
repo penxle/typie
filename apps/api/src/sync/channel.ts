@@ -122,7 +122,7 @@ export class DocumentChannel {
     if (this.stopped) return;
     const { heads, durableHeads } = await this.#readHeads();
     await this.#send({ t: 'snapshot-end', documentId: this.#documentId, seq: collectedSeq ?? '', heads, durableHeads });
-    await this.#sendTail(collectedSeq);
+    await this.#sendTail(collectedSeq, 'snapshot');
   }
 
   async #sendRowChunks(row: BundleRow, startOffset: number): Promise<void> {
@@ -164,10 +164,10 @@ export class DocumentChannel {
         return;
       }
     }
-    await this.#sendTail(cursor);
+    await this.#sendTail(cursor, 'resume');
   }
 
-  async #sendTail(sinceSeq: string | null): Promise<void> {
+  async #sendTail(sinceSeq: string | null, mode: 'snapshot' | 'resume'): Promise<void> {
     const reload = async (): Promise<void> => {
       await this.#send({ t: 'reload', documentId: this.#documentId });
       this.stop();
@@ -199,8 +199,14 @@ export class DocumentChannel {
     while (!done) {
       const page = await this.#deps.readStreamBatch(this.#documentId, cursor, TAIL_BATCH_ENTRIES);
       if (cursor !== null && (await this.#deps.isStreamTruncated(this.#documentId, cursor))) {
-        await reload();
-        return;
+        // A full snapshot already covers its captured durable frontier. If collect has not
+        // advanced, a newer first stream entry starts a fresh tail rather than proving a gap.
+        const snapshotBaselineStillCurrent =
+          mode === 'snapshot' && cursor === sinceSeq && (await this.#deps.getCollectedSeq(this.#documentId)) === sinceSeq;
+        if (!snapshotBaselineStillCurrent) {
+          await reload();
+          return;
+        }
       }
       if (page.length === 0) break;
       for (const entry of page) {
