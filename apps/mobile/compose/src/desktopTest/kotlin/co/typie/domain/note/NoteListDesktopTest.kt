@@ -43,10 +43,37 @@ import dev.chrisbanes.haze.blur.HazeBlurStyle
 import dev.chrisbanes.haze.blur.LocalHazeBlurStyle
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalTestApi::class)
 class NoteListDesktopTest {
+  @Test
+  fun newlyCreatedNoteAutofocusIsNotRepeatedAfterPresentationReturns() = runComposeUiTest {
+    val note = notesNote(id = "new")
+    var presentationVisible by mutableStateOf(true)
+    val observedAutofocus = mutableListOf<Boolean>()
+
+    setContent {
+      val scope = rememberCoroutineScope()
+      val editState = remember(scope) { NoteEditState(scope).also { it.openNew(note) } }
+
+      if (presentationVisible) {
+        WithNoteEditPresentation(note = note, editState = editState) { presentation ->
+          SideEffect { observedAutofocus += presentation.autoFocusContent }
+        }
+      }
+    }
+    waitUntil { observedAutofocus.any { it } }
+
+    runOnIdle { presentationVisible = false }
+    waitForIdle()
+    runOnIdle { presentationVisible = true }
+    waitForIdle()
+
+    assertFalse(observedAutofocus.last())
+  }
+
   @Test
   fun projectedNoteOrderDoesNotChangeThePhysicalListDuringDrag() = runComposeUiTest {
     val first = notesNote(id = "first", content = "first-content", order = "100")

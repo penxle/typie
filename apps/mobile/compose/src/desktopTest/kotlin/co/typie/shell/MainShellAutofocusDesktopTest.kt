@@ -24,6 +24,10 @@ import co.typie.dev.DesktopDebugKeyboard
 import co.typie.navigation.LocalNavigationForegroundInteractive
 import co.typie.navigation.Nav
 import co.typie.navigation.Navigator
+import co.typie.platform.LocalSoftwareKeyboardPresentationController
+import co.typie.platform.SoftwareKeyboardPresentationController
+import co.typie.platform.SoftwareKeyboardPresentationDriver
+import co.typie.platform.SoftwareKeyboardPresentationEndpoint
 import co.typie.route.Route
 import co.typie.screen.more.feedback.FeedbackForm
 import co.typie.screen.settings.updateprofile.UpdateProfileForm
@@ -46,72 +50,83 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalTestApi::class)
 class MainShellAutofocusDesktopTest {
   @Test
-  fun `main tab motion retains source focus and rejects background focus until settle`() =
-    runComposeUiTest {
-      configureEditorFfiLibrary()
-      var selectTab: ((Tab) -> Unit)? = null
-      var currentTab = Tab.Home
-      var isBodyMoving = false
-      var sourceFocused = false
-      var backgroundFocusRequester: FocusRequester? = null
+  fun `main tab motion retains source focus until keyboard hide is accepted`() = runComposeUiTest {
+    configureEditorFfiLibrary()
+    val keyboardDriver = DeferredMainShellKeyboardDriver()
+    val keyboardController = SoftwareKeyboardPresentationController { keyboardDriver }
+    var selectTab: ((Tab) -> Unit)? = null
+    var currentTab = Tab.Home
+    var isBodyMoving = false
+    var sourceFocused = false
+    var backgroundFocusRequester: FocusRequester? = null
 
-      setContent {
-        val sheet = remember { Sheet() }
-        val dialog = remember { Dialog() }
-        CompositionLocalProvider(
-          LocalThemeMode provides ResolvedThemeMode.Light,
-          LocalSheet provides sheet,
-          LocalDialog provides dialog,
-        ) {
-          MainShell { route ->
-            val tabState = LocalTabState.current
-            SideEffect {
-              selectTab = tabState.onSelectTab
-              currentTab = tabState.currentTab
-              isBodyMoving = tabState.isBodyMoving
+    setContent {
+      val sheet = remember { Sheet() }
+      val dialog = remember { Dialog() }
+      CompositionLocalProvider(
+        LocalThemeMode provides ResolvedThemeMode.Light,
+        LocalSheet provides sheet,
+        LocalDialog provides dialog,
+        LocalSoftwareKeyboardPresentationController provides keyboardController,
+      ) {
+        MainShell { route ->
+          val tabState = LocalTabState.current
+          SideEffect {
+            selectTab = tabState.onSelectTab
+            currentTab = tabState.currentTab
+            isBodyMoving = tabState.isBodyMoving
+          }
+
+          when (route) {
+            Route.Home -> {
+              val focusRequester = remember { FocusRequester() }
+              BasicTextField(
+                value = "",
+                onValueChange = {},
+                modifier =
+                  Modifier.fillMaxSize().focusRequester(focusRequester).onFocusChanged {
+                    sourceFocused = it.isFocused
+                  },
+              )
+              LaunchedEffect(Unit) { focusRequester.requestFocus() }
             }
 
-            when (route) {
-              Route.Home -> {
-                val focusRequester = remember { FocusRequester() }
-                BasicTextField(
-                  value = "",
-                  onValueChange = {},
-                  modifier =
-                    Modifier.fillMaxSize().focusRequester(focusRequester).onFocusChanged {
-                      sourceFocused = it.isFocused
-                    },
-                )
-                LaunchedEffect(Unit) { focusRequester.requestFocus() }
-              }
-
-              Route.Space -> {
-                val focusRequester = remember { FocusRequester() }
-                SideEffect { backgroundFocusRequester = focusRequester }
-                Box(Modifier.fillMaxSize().focusRequester(focusRequester).focusable())
-              }
-
-              else -> Unit
+            Route.Space -> {
+              val focusRequester = remember { FocusRequester() }
+              SideEffect { backgroundFocusRequester = focusRequester }
+              Box(Modifier.fillMaxSize().focusRequester(focusRequester).focusable())
             }
+
+            else -> Unit
           }
         }
       }
-      waitUntil { sourceFocused && selectTab != null }
-
-      mainClock.autoAdvance = false
-      runOnIdle { requireNotNull(selectTab).invoke(Tab.Space) }
-      repeat(8) { mainClock.advanceTimeByFrame() }
-      runOnIdle {
-        assertTrue(isBodyMoving)
-        assertTrue(sourceFocused)
-        assertFalse(requireNotNull(backgroundFocusRequester).requestFocus())
-        assertTrue(sourceFocused)
-      }
-
-      mainClock.autoAdvance = true
-      waitUntil(timeoutMillis = 5_000L) { currentTab == Tab.Space && !isBodyMoving }
-      runOnIdle { assertFalse(sourceFocused) }
     }
+    waitUntil { sourceFocused && selectTab != null }
+
+    mainClock.autoAdvance = false
+    runOnIdle { requireNotNull(selectTab).invoke(Tab.Space) }
+    repeat(8) { mainClock.advanceTimeByFrame() }
+    runOnIdle {
+      assertTrue(isBodyMoving)
+      assertTrue(sourceFocused)
+      assertFalse(requireNotNull(backgroundFocusRequester).requestFocus())
+      assertTrue(sourceFocused)
+    }
+
+    mainClock.autoAdvance = true
+    waitUntil(timeoutMillis = 5_000L) { currentTab == Tab.Space && !isBodyMoving }
+    waitUntil { keyboardDriver.endpoints == listOf(SoftwareKeyboardPresentationEndpoint.Hidden) }
+    runOnIdle {
+      assertTrue(sourceFocused)
+      assertFalse(requireNotNull(backgroundFocusRequester).requestFocus())
+      assertEquals(1f, keyboardDriver.progress.last())
+    }
+
+    runOnIdle { keyboardDriver.acceptEndpoint() }
+    waitUntil { !sourceFocused }
+    runOnIdle { assertTrue(requireNotNull(backgroundFocusRequester).requestFocus()) }
+  }
 
   @Test
   fun `feedback autofocus keeps the software keyboard visible inside main shell`() =
@@ -289,4 +304,26 @@ class MainShellAutofocusDesktopTest {
   private companion object {
     const val KeyboardStabilityNanos = 250_000_000L
   }
+}
+
+private class DeferredMainShellKeyboardDriver : SoftwareKeyboardPresentationDriver {
+  val progress = mutableListOf<Float>()
+  val endpoints = mutableListOf<SoftwareKeyboardPresentationEndpoint>()
+  private var endpointAcceptance: (() -> Unit)? = null
+
+  override fun updateHiddenProgress(progress: Float) {
+    this.progress += progress
+  }
+
+  override fun finish(endpoint: SoftwareKeyboardPresentationEndpoint, onAccepted: () -> Unit) {
+    endpoints += endpoint
+    endpointAcceptance = onAccepted
+  }
+
+  fun acceptEndpoint() {
+    endpointAcceptance?.invoke()
+    endpointAcceptance = null
+  }
+
+  override fun dispose() = Unit
 }

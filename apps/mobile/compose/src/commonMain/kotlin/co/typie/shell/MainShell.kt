@@ -151,7 +151,7 @@ fun MainShell(content: @Composable (Route) -> Unit) {
           onSettledTab = { tab -> navState.currentTab = tab },
         ) { tab ->
           val foregroundInteractive = tab == settledTab && motion == null && drawerAtRest
-          val foregroundFocusEnabled = tab == settledTab && drawerAtRest
+          val foregroundFocusEnabled = tab == mainTabState.focusEnabledTab && drawerAtRest
           NavigationStack(
             navigator = navigators[tab]!!,
             topBarState =
