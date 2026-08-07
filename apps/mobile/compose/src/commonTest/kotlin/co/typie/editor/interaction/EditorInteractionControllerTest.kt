@@ -149,6 +149,17 @@ private fun Editor.deliverLatestFrame(fake: FakeFfiEditor, surface: SurfaceSessi
   )
 }
 
+private fun EditorInteractionController.presentAppliedState(
+  editor: Editor,
+  requiredPages: Set<Int> = emptySet(),
+) {
+  editor.requestSurfacePages(requiredPages)
+  val bundle = requireNotNull(editor.publishIfReady(requiredPages))
+  check(editor.acceptPublication(bundle))
+  editor.completePresentation(bundle)
+  onEditorStateChanged(bundle.snapshot)
+}
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class EditorInteractionControllerTest {
   @Test
@@ -642,6 +653,7 @@ class EditorInteractionControllerTest {
       controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
       controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 40L)
       advanceUntilIdle()
+      controller.presentAppliedState(editor)
 
       assertTrue(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
       assertTrue(host.focused)
@@ -692,6 +704,7 @@ class EditorInteractionControllerTest {
       controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
       controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 40L)
       advanceUntilIdle()
+      controller.presentAppliedState(editor)
 
       assertTrue(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
       assertTrue(host.focused)
@@ -1138,6 +1151,7 @@ class EditorInteractionControllerTest {
       controller.onPointerDown(pointerId = 3L, position = start, nowMillis = 280L)
       controller.onPointerUp(pointerId = 3L, position = start, nowMillis = 320L)
       advanceUntilIdle()
+      controller.presentAppliedState(editor)
 
       assertEquals(
         listOf(
@@ -1187,6 +1201,7 @@ class EditorInteractionControllerTest {
       controller.onPointerDown(pointerId = 3L, position = start, nowMillis = 200L)
       controller.onPointerUp(pointerId = 3L, position = start, nowMillis = 240L)
       advanceUntilIdle()
+      controller.presentAppliedState(editor)
 
       assertEquals(
         SelectionOp.SelectUnitAt(page = 0, x = 10f, y = 20f, unit = SelectionPointUnit.Paragraph),
@@ -1699,7 +1714,7 @@ class EditorInteractionControllerTest {
       assertFalse(host.uiState.contextMenu.visible)
 
       advanceUntilIdle()
-      controller.onEditorStateChanged(editor.publishedState)
+      controller.presentAppliedState(editor)
 
       assertEquals(appliedSelection, editor.publishedState.selection)
       assertTrue(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
@@ -2379,7 +2394,7 @@ class EditorInteractionControllerTest {
       assertFalse(host.uiState.contextMenu.visible)
 
       advanceUntilIdle()
-      controller.onEditorStateChanged(editor.publishedState)
+      controller.presentAppliedState(editor)
 
       assertEquals(selection, editor.publishedState.selection)
       assertTrue(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
@@ -3001,6 +3016,7 @@ class EditorInteractionControllerTest {
           nowMillis = 56L,
         )
       )
+      controller.presentAppliedState(editor)
       assertEquals(
         listOf(
           Message.Node(NodeOp.Table(id = "table", op = TableOp.SetColumnWidths(listOf(0.6f, 0.4f))))
@@ -3332,6 +3348,7 @@ class EditorInteractionControllerTest {
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
       fake.applySnapshot(editor)
       val surface = fake.attachSurfaceWithoutFrame(editor)
+      editor.requestSurfacePages(setOf(0))
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -3346,6 +3363,7 @@ class EditorInteractionControllerTest {
       advanceUntilIdle()
       editor.deliverLatestFrame(fake = fake, surface = surface)
       advanceUntilIdle()
+      controller.presentAppliedState(editor, requiredPages = setOf(0))
 
       controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
       controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 40L)
@@ -3364,7 +3382,7 @@ class EditorInteractionControllerTest {
       advanceUntilIdle()
       editor.deliverLatestFrame(fake = fake, surface = surface)
       advanceUntilIdle()
-      controller.onEditorStateChanged(editor.publishedState)
+      controller.presentAppliedState(editor, requiredPages = setOf(0))
 
       assertEquals(draggedSelection, editor.publishedState.selection)
       assertTrue(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
@@ -3585,7 +3603,7 @@ class EditorInteractionControllerTest {
 
       assertTrue(controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 700L))
       advanceUntilIdle()
-      controller.onEditorStateChanged(editor.publishedState)
+      controller.presentAppliedState(editor)
       assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
       assertNull(controller.magnifierPosition)
       assertTrue(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
@@ -3633,6 +3651,7 @@ class EditorInteractionControllerTest {
 
       currentSelection = wordSelection
       advanceUntilIdle()
+      controller.presentAppliedState(editor)
 
       assertTrue(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
     }
@@ -3682,6 +3701,7 @@ class EditorInteractionControllerTest {
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
       fake.applySnapshot(editor)
       val surface = fake.attachSurfaceWithoutFrame(editor)
+      editor.requestSurfacePages(setOf(0))
       val host = TestHost(this)
       val controller =
         EditorInteractionController(
@@ -3697,6 +3717,7 @@ class EditorInteractionControllerTest {
       advanceUntilIdle()
       editor.deliverLatestFrame(fake = fake, surface = surface)
       advanceUntilIdle()
+      controller.presentAppliedState(editor, requiredPages = setOf(0))
 
       controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
       assertTrue(controller.onLongPressTimer(pointerId = 1L, position = start, nowMillis = 500L))
@@ -3725,7 +3746,7 @@ class EditorInteractionControllerTest {
       advanceUntilIdle()
       editor.deliverLatestFrame(fake = fake, surface = surface)
       advanceUntilIdle()
-      controller.onEditorStateChanged(editor.publishedState)
+      controller.presentAppliedState(editor, requiredPages = setOf(0))
 
       assertEquals(draggedSelection, editor.publishedState.selection)
       assertTrue(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
@@ -4137,6 +4158,7 @@ class EditorInteractionControllerTest {
       controller.onTapTimer(nowMillis = 250L)
       controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 300L)
       advanceUntilIdle()
+      controller.presentAppliedState(editor)
 
       assertTrue(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
 
@@ -4258,6 +4280,7 @@ class EditorInteractionControllerTest {
       controller.onTapTimer(nowMillis = 250L)
       controller.onPointerUp(pointerId = 1L, position = start, nowMillis = 300L)
       advanceUntilIdle()
+      controller.presentAppliedState(editor)
 
       assertTrue(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
 
