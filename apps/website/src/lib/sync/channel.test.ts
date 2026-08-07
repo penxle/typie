@@ -40,6 +40,7 @@ const subscriber = () => {
     onChangesets: (event) => events.push(`changesets:${event.seq}`),
     onReload: () => events.push('reload'),
     onPermanentError: (code) => events.push(`error:${code}`),
+    onHeadIsolated: (event) => events.push(`isolated:${event.headId}:${event.excluded}`),
   };
   return { sub, events, snapshot: () => snapshot, snapshotSeq: () => snapshotSeq };
 };
@@ -182,6 +183,20 @@ describe('DocumentChannels', () => {
     await handshake(sockets[1]);
     await vi.waitFor(() => expect(sockets[1].lastOf('attach')).toBeDefined());
     expect(sockets[1].lastOf('attach')?.sinceSeq).toBe('6-0');
+  });
+
+  test('head-isolated 수신 시 구독자 콜백이 호출된다', async () => {
+    const { channels, sockets } = setup();
+    const s = subscriber();
+    channels.subscribe('D1', s.sub);
+    await vi.waitFor(() => expect(sockets.length).toBe(1));
+    await handshake(sockets[0]);
+    await vi.waitFor(() => expect(sockets[0].lastOf('attach')).toBeDefined());
+    sockets[0].serverSend({ t: 'attach-ack', documentId: 'D1' });
+
+    sockets[0].serverSend({ t: 'head-isolated', documentId: 'D1', headId: 'H1', excluded: true });
+
+    await vi.waitFor(() => expect(s.events).toContain('isolated:H1:true'));
   });
 
   test('발신자용 빈 changesets 알림(bundles: [])도 sinceSeq를 전진시킨다', async () => {

@@ -505,6 +505,13 @@
       onPermanentError: (code) => {
         console.error(`document sync permanently failed: ${code}`);
       },
+      onHeadIsolated: (event) => {
+        if (event.excluded) {
+          Tip.show('stats.bulk-edit-excluded', '대량 편집이 통계에서 자동으로 제외되었어요.', {
+            description: '환경설정에서 자동 제외를 끄거나, 타임라인에서 항목별로 포함 여부를 바꿀 수 있어요.',
+          });
+        }
+      },
     });
   });
 

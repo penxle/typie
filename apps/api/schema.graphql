@@ -328,11 +328,19 @@ type DocumentFontFamily {
 }
 
 type DocumentHead {
+  additions: Int
   characterCount: Int!
   contributors: [User!]!
+  deletions: Int
+  excluded: Boolean
   heads: Binary!
   id: ID!
   updatedAt: DateTime!
+}
+
+enum DocumentHeadKind {
+  ISOLATED
+  NORMAL
 }
 
 type DocumentLiteraryAnalysisPayload {
@@ -890,6 +898,7 @@ type Mutation {
   updateBootstrap(input: UpdateBootstrapInput!): JSON!
   updateDocument(input: UpdateDocumentInput!): Document!
   updateDocumentComment(input: UpdateDocumentCommentInput!): DocumentCommentThread!
+  updateDocumentHeadExclusion(input: UpdateDocumentHeadExclusionInput!): DocumentHead!
   updateDocumentType(input: UpdateDocumentTypeInput!): Document!
   updateDocumentsOption(input: UpdateDocumentsOptionInput!): [Document!]!
   updateEmail(input: UpdateEmailInput!): Boolean!
@@ -1359,6 +1368,11 @@ input UpdateDocumentCommentInput {
   clientId: String!
   commentId: ID!
   content: String!
+}
+
+input UpdateDocumentHeadExclusionInput {
+  excluded: Boolean!
+  headId: ID!
 }
 
 input UpdateDocumentInput {

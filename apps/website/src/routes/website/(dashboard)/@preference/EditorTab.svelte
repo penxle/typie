@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createFragment } from '@mearie/svelte';
+  import { createFragment, createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Slider, Switch } from '@typie/ui/components';
@@ -7,6 +7,7 @@
   import mixpanel from 'mixpanel-browser';
   import { SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
   import { graphql } from '$mearie';
+  import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
   import type { DashboardLayout_PreferenceModal_EditorTab_user$key } from '$mearie';
 
   type Props = {
@@ -15,17 +16,30 @@
 
   let { user$key }: Props = $props();
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const user = createFragment(
     graphql(`
       fragment DashboardLayout_PreferenceModal_EditorTab_user on User {
         id
+        preferences
       }
     `),
     () => user$key,
   );
 
+  const [updatePreferences] = createMutation(
+    graphql(`
+      mutation DashboardLayout_PreferenceModal_EditorTab_UpdatePreferences_Mutation($input: UpdatePreferencesInput!) {
+        updatePreferences(input: $input) {
+          id
+          preferences
+        }
+      }
+    `),
+  );
+
   const app = getAppContext();
+
+  const autoExcludeBulkEdits = $derived(user.data.preferences.autoExcludeBulkEdits !== false);
 </script>
 
 <div class={flex({ direction: 'column', gap: '40px', maxWidth: '640px' })}>
@@ -139,6 +153,38 @@
               });
             }}
             bind:checked={app.preference.current.autoSurroundEnabled}
+          />
+        {/snippet}
+      </SettingsRow>
+    </SettingsCard>
+  </div>
+
+  <!-- Statistics Settings Section -->
+  <div>
+    <h2 class={css({ fontSize: '16px', fontWeight: 'semibold', color: 'text.default', marginBottom: '24px' })}>통계</h2>
+
+    <SettingsCard>
+      <SettingsRow>
+        {#snippet label()}
+          대량 편집 통계 자동 제외
+        {/snippet}
+        {#snippet description()}
+          붙여넣기처럼 한 번에 큰 변경이 생기면 글자 수 통계에서 자동으로 제외해요. 타임라인에서 항목별로 바꿀 수 있어요.
+        {/snippet}
+        {#snippet value()}
+          <Switch
+            checked={autoExcludeBulkEdits}
+            onclick={(e) => {
+              e.preventDefault();
+
+              if (!SubscribeModal.gate('preferences_editor')) {
+                return;
+              }
+
+              const enabled = !autoExcludeBulkEdits;
+              mixpanel.track('toggle_auto_exclude_bulk_edits', { enabled });
+              void updatePreferences({ input: { value: { autoExcludeBulkEdits: enabled } } });
+            }}
           />
         {/snippet}
       </SettingsRow>

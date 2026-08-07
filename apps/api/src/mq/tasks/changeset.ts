@@ -2,7 +2,7 @@ import * as Sentry from '@sentry/node';
 import { logger } from '@typie/lib';
 import { DocumentBundleKind } from '@typie/lib/enums';
 import dayjs from 'dayjs';
-import { and, asc, count, eq, lte, max, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, lte, max, sql } from 'drizzle-orm';
 import { redis } from '#/cache.ts';
 import {
   db,
@@ -15,7 +15,9 @@ import {
   DocumentStates,
   DocumentSweeps,
   Entities,
+  first,
   firstOrThrow,
+  UserPreferences,
 } from '#/db/index.ts';
 import { Lock } from '#/lock.ts';
 import { pubsub } from '#/pubsub.ts';
@@ -29,6 +31,7 @@ import {
   trimStream,
 } from '#/utils/changeset.ts';
 import { calculateBlobSizeFromAssetIds, extractAssetIdsFromPlainDoc } from '#/utils/entity.ts';
+import { planHeadWrites } from '#/utils/head-segmentation.ts';
 import { SYSTEM_USER_ID } from '#/utils/system-actor.ts';
 import { wasmThread } from '#/utils/wasm-thread.ts';
 import { clearSweepDue, scheduleSweepDue, sweepDocument, sweepDueKey } from '#/utils/zombie-sweep.ts';
@@ -71,6 +74,7 @@ export const DocumentChangesetsCollectJob = defineJob('document:changesets:colle
   let stale = false;
   let shouldConsolidate = false;
   let totalityViolations = 0;
+  const isolatedEvents: { headId: string; userId: string; excluded: boolean }[] = [];
 
   try {
     const collected = await redis.get(collectedKey(documentId));
@@ -84,8 +88,6 @@ export const DocumentChangesetsCollectJob = defineJob('document:changesets:colle
     const existing = await loadBundleStream(documentId);
 
     const failed: { userId: string; deviceId: string; payload: Uint8Array; error: string }[] = [];
-    const perUserDelta = new Map<string, number>();
-    const contributorIds = new Set<string>();
 
     // One State build for the whole batch (amortized) with per-bundle character
     // counts — replaces the per-entry `from_changesets` rebuild that made collect
@@ -106,16 +108,20 @@ export const DocumentChangesetsCollectJob = defineJob('document:changesets:colle
     }
     totalityViolations = fold.totality_violations;
 
+    const foldedEntries = entries.map((entry, i) => ({
+      userId: entry.userId,
+      applied: fold.statuses[i] === 'applied',
+      charCount: fold.char_counts[i],
+      grossInsertions: fold.gross_insertions[i],
+      grossDeletions: fold.gross_deletions[i],
+      heads: fold.entry_heads[i],
+    }));
+
     let mergedChanged = false;
-    let prevCharacterCount = fold.base_char_count;
     for (const [i, entry] of entries.entries()) {
       const status = fold.statuses[i];
-      const charCount = fold.char_counts[i];
       if (status === 'applied') {
-        perUserDelta.set(entry.userId, (perUserDelta.get(entry.userId) ?? 0) + (charCount - prevCharacterCount));
-        prevCharacterCount = charCount;
         if (entry.userId !== SYSTEM_USER_ID) {
-          contributorIds.add(entry.userId);
           userVisibleChanged = true;
         }
         mergedChanged = true;
@@ -210,49 +216,117 @@ export const DocumentChangesetsCollectJob = defineJob('document:changesets:colle
           updated = true;
           persistedHeads = result.heads;
 
-          for (const [userId, net] of perUserDelta) {
-            if (net === 0) {
-              continue;
+          const headBucketAt = headBucket(updatedAt);
+
+          const latestHeadRow = await tx
+            .select({ id: DocumentHeads.id, kind: DocumentHeads.kind, bucket: DocumentHeads.bucket })
+            .from(DocumentHeads)
+            .where(eq(DocumentHeads.documentId, documentId))
+            .orderBy(desc(DocumentHeads.updatedAt), sql`${DocumentHeads.seq} DESC NULLS LAST`)
+            .limit(1)
+            .then(first);
+
+          const hasExcludedContributor = latestHeadRow
+            ? (await tx.$count(
+                DocumentHeadContributors,
+                and(eq(DocumentHeadContributors.headId, latestHeadRow.id), eq(DocumentHeadContributors.excluded, true)),
+              )) > 0
+            : false;
+
+          const writes = planHeadWrites({
+            entries: foldedEntries,
+            baseCharCount: fold.base_char_count,
+            latestHead: latestHeadRow
+              ? { id: latestHeadRow.id, kind: latestHeadRow.kind, bucketMs: latestHeadRow.bucket.valueOf(), hasExcludedContributor }
+              : null,
+            bucketMs: headBucketAt.valueOf(),
+            systemUserId: SYSTEM_USER_ID,
+          });
+
+          const isolatedAuthorIds = [...new Set(writes.flatMap((w) => (w.isolatedAuthorId ? [w.isolatedAuthorId] : [])))];
+          const prefRows =
+            isolatedAuthorIds.length > 0
+              ? await tx
+                  .select({ userId: UserPreferences.userId, value: UserPreferences.value })
+                  .from(UserPreferences)
+                  .where(inArray(UserPreferences.userId, isolatedAuthorIds))
+              : [];
+          const autoExclude = new Map(prefRows.map((row) => [row.userId, row.value.autoExcludeBulkEdits !== false]));
+
+          let headSeq = await tx
+            .select({ max: max(DocumentHeads.seq) })
+            .from(DocumentHeads)
+            .where(eq(DocumentHeads.documentId, documentId))
+            .then((rows) => rows[0]?.max ?? 0);
+
+          for (const write of writes) {
+            let headId: string;
+            if (write.action === 'update' && write.headId) {
+              headId = write.headId;
+              await tx
+                .update(DocumentHeads)
+                .set({ heads: write.heads, characterCount: write.characterCount, updatedAt })
+                .where(eq(DocumentHeads.id, write.headId));
+            } else {
+              headSeq += 1;
+              const row = await tx
+                .insert(DocumentHeads)
+                .values({
+                  documentId,
+                  bucket: headBucketAt,
+                  seq: headSeq,
+                  kind: write.kind,
+                  heads: write.heads,
+                  characterCount: write.characterCount,
+                  updatedAt,
+                })
+                .returning({ id: DocumentHeads.id })
+                .then(firstOrThrow);
+              headId = row.id;
             }
 
-            await tx
-              .insert(DocumentCharacterCountChanges)
-              .values({
-                documentId,
-                userId,
-                bucket: updatedAt.startOf('hour'),
-                additions: Math.max(net, 0),
-                deletions: Math.max(-net, 0),
-              })
-              .onConflictDoUpdate({
-                target: [
-                  DocumentCharacterCountChanges.userId,
-                  DocumentCharacterCountChanges.documentId,
-                  DocumentCharacterCountChanges.bucket,
-                ],
-                set: {
-                  additions: net > 0 ? sql`${DocumentCharacterCountChanges.additions} + ${net}` : undefined,
-                  deletions: net < 0 ? sql`${DocumentCharacterCountChanges.deletions} + ${-net}` : undefined,
-                },
-              });
-          }
+            const excludedByPref = write.isolatedAuthorId ? (autoExclude.get(write.isolatedAuthorId) ?? true) : false;
 
-          const headBucketAt = headBucket(updatedAt);
-          const headRow = await tx
-            .insert(DocumentHeads)
-            .values({ documentId, bucket: headBucketAt, heads: result.heads, characterCount })
-            .onConflictDoUpdate({
-              target: [DocumentHeads.documentId, DocumentHeads.bucket],
-              set: { heads: result.heads, characterCount, updatedAt },
-            })
-            .returning({ id: DocumentHeads.id })
-            .then(firstOrThrow);
+            for (const userId of write.contributorUserIds) {
+              const delta = write.contributions.find((c) => c.userId === userId);
+              await tx
+                .insert(DocumentHeadContributors)
+                .values({
+                  headId,
+                  userId,
+                  additions: delta?.additions ?? 0,
+                  deletions: delta?.deletions ?? 0,
+                  excluded: excludedByPref,
+                })
+                .onConflictDoUpdate({
+                  target: [DocumentHeadContributors.headId, DocumentHeadContributors.userId],
+                  set: {
+                    additions: sql`COALESCE(${DocumentHeadContributors.additions}, 0) + ${delta?.additions ?? 0}`,
+                    deletions: sql`COALESCE(${DocumentHeadContributors.deletions}, 0) + ${delta?.deletions ?? 0}`,
+                  },
+                });
+            }
 
-          for (const userId of contributorIds) {
-            await tx
-              .insert(DocumentHeadContributors)
-              .values({ headId: headRow.id, userId })
-              .onConflictDoNothing({ target: [DocumentHeadContributors.headId, DocumentHeadContributors.userId] });
+            for (const { userId, additions, deletions } of write.contributions) {
+              await tx
+                .insert(DocumentCharacterCountChanges)
+                .values({ documentId, userId, bucket: updatedAt.startOf('hour'), additions, deletions })
+                .onConflictDoUpdate({
+                  target: [
+                    DocumentCharacterCountChanges.userId,
+                    DocumentCharacterCountChanges.documentId,
+                    DocumentCharacterCountChanges.bucket,
+                  ],
+                  set: {
+                    additions: additions > 0 ? sql`${DocumentCharacterCountChanges.additions} + ${additions}` : undefined,
+                    deletions: deletions > 0 ? sql`${DocumentCharacterCountChanges.deletions} + ${deletions}` : undefined,
+                  },
+                });
+            }
+
+            if (write.isolatedAuthorId) {
+              isolatedEvents.push({ headId, userId: write.isolatedAuthorId, excluded: excludedByPref });
+            }
           }
         }
 
@@ -337,6 +411,15 @@ export const DocumentChangesetsCollectJob = defineJob('document:changesets:colle
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       durableHeads: persistedHeads!.toBase64(),
     });
+
+    for (const event of isolatedEvents) {
+      pubsub.publish('document:changesets', documentId, {
+        kind: 'head-isolated',
+        userId: event.userId,
+        headId: event.headId,
+        excluded: event.excluded,
+      });
+    }
 
     // User-facing side effects skip system-only sweeps: zombies are invisible, so
     // re-index / preview / recency / usage notifications would be no-ops that a

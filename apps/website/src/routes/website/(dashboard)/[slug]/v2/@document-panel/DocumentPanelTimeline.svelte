@@ -3,20 +3,24 @@
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex, wrap } from '@typie/styled-system/patterns';
   import { createFloatingActions, pointerCapture, portal, tooltip } from '@typie/ui/actions';
-  import { Icon, RingSpinner } from '@typie/ui/components';
-  import { getThemeContext } from '@typie/ui/context';
+  import { Icon, Menu, MenuItem, RingSpinner } from '@typie/ui/components';
+  import { getAppContext, getThemeContext } from '@typie/ui/context';
   import { Toast } from '@typie/ui/notification';
   import { clamp, debounce, throttle } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
   import { onMount, tick } from 'svelte';
   import { fly } from 'svelte/transition';
+  import BarChart3Icon from '~icons/lucide/bar-chart-3';
   import ClockRewindIcon from '~icons/lucide/clock-arrow-up';
   import IconClockFading from '~icons/lucide/clock-fading';
+  import EllipsisIcon from '~icons/lucide/ellipsis';
   import MinusIcon from '~icons/lucide/minus';
   import PlusIcon from '~icons/lucide/plus';
+  import BarChart3OffIcon from '~icons/typie/bar-chart-3-off';
   import { Img } from '$lib/components';
   import { Editor, getEditorContext } from '$lib/editor-ffi/editor.svelte';
+  import { cache } from '$lib/graphql';
   import { graphql } from '$mearie';
   import { SubscribeModal } from '../../../@subscription/subscribe-modal.svelte';
   import { getPane, getPaneGroup } from '../../@pane/context.svelte';
@@ -61,7 +65,9 @@
             id
             heads
             updatedAt
-            characterCount
+            excluded
+            additions
+            deletions
 
             contributors {
               id
@@ -89,6 +95,18 @@
     `),
   );
 
+  const [updateDocumentHeadExclusion] = createMutation(
+    graphql(`
+      mutation Editor_DocumentPanelV2Timeline_UpdateDocumentHeadExclusion($input: UpdateDocumentHeadExclusionInput!) {
+        updateDocumentHeadExclusion(input: $input) {
+          id
+          excluded
+        }
+      }
+    `),
+  );
+
+  const app = getAppContext();
   const ctx = getEditorContext();
   const theme = getThemeContext();
   const pane = getPane();
@@ -392,8 +410,7 @@
     }
   };
 
-  const restore = async () => {
-    const head = shownHead;
+  const restore = async (head: (typeof headsAsc)[number] | null) => {
     if (!head || restoring) return;
 
     if (!SubscribeModal.gate('document_revert')) {
@@ -415,6 +432,25 @@
     focusReturn.restore();
     Toast.success(`${dayjs(head.updatedAt).formatAsSmart()} 시점으로 복원되었습니다`);
     mixpanel.track('document_timeline_restore');
+  };
+
+  const toggleExclusion = async (headId: string, excluded: boolean) => {
+    if (!SubscribeModal.gate('document_head_exclusion')) {
+      return;
+    }
+
+    try {
+      await updateDocumentHeadExclusion({ input: { headId, excluded: !excluded } });
+    } catch {
+      Toast.error('통계 제외 설정에 실패했어요. 잠시 후 다시 시도해 주세요.');
+      return;
+    }
+
+    cache.invalidate(
+      { __typename: 'User', id: app.userId, $field: 'characterCountChanges' },
+      { __typename: 'User', id: app.userId, $field: 'goalHistory' },
+      { __typename: 'Document', id: document.data.id, $field: 'characterCountChange' },
+    );
   };
 </script>
 
@@ -478,84 +514,137 @@
             {#each group.heads as head (head.id)}
               {@const isSelected = selectedHeadId === head.id}
               {@const time = dayjs(head.updatedAt)}
-              {@const headIndex = headsAsc.findIndex((h) => h.id === head.id)}
-              {@const prevHead = headIndex > 0 ? headsAsc[headIndex - 1] : null}
-              {@const charDiff = prevHead ? head.characterCount - prevHead.characterCount : head.characterCount}
-              <button
-                class={css({
-                  display: 'flex',
+              {@const excluded = head.excluded ?? null}
+              <div
+                class={flex({
                   alignItems: 'center',
-                  gap: '12px',
-                  paddingY: '10px',
-                  paddingX: '14px',
                   backgroundColor: isSelected ? 'surface.muted' : 'transparent',
                   borderLeftWidth: '3px',
                   borderLeftColor: isSelected ? 'accent.brand.default' : 'transparent',
-                  cursor: 'pointer',
                   transition: 'all',
                   transitionDuration: '150ms',
                   _hover: { backgroundColor: isSelected ? 'surface.muted' : 'surface.subtle' },
                 })}
-                data-panel-timeline-head={head.id}
-                onclick={() => selectHead(head.id, 'immediate')}
-                type="button"
               >
-                <Icon
-                  style={css.raw({ flexShrink: '0', color: isSelected ? 'accent.brand.default' : 'text.subtle' })}
-                  icon={ClockRewindIcon}
-                  size={14}
-                />
+                <button
+                  class={css({
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    flex: '1',
+                    minWidth: '0',
+                    paddingY: '10px',
+                    paddingX: '14px',
+                    cursor: 'pointer',
+                  })}
+                  data-panel-timeline-head={head.id}
+                  onclick={() => selectHead(head.id, 'immediate')}
+                  type="button"
+                >
+                  <Icon
+                    style={css.raw({ flexShrink: '0', color: isSelected ? 'accent.brand.default' : 'text.subtle' })}
+                    icon={ClockRewindIcon}
+                    size={14}
+                  />
 
-                <div class={flex({ flexDirection: 'column', align: 'start', gap: '2px', flex: '1' })}>
-                  <div class={flex({ alignItems: 'center', gap: '8px' })}>
-                    <div class={css({ fontSize: '13px', fontWeight: isSelected ? 'medium' : 'normal', color: 'text.default' })}>
-                      {time.format('H시 mm분 ss초')}
-                    </div>
-                    {#if charDiff !== 0}
-                      <div class={center()} in:fly={{ y: 10, duration: 150 }}>
-                        <Icon
-                          style={css.raw({ size: '10px', color: charDiff > 0 ? 'text.success' : 'text.danger' })}
-                          icon={charDiff > 0 ? PlusIcon : MinusIcon}
-                        />
-                        <span class={css({ fontSize: '11px', fontWeight: 'medium', color: charDiff > 0 ? 'text.success' : 'text.danger' })}>
-                          {Math.abs(charDiff).toLocaleString()}
-                        </span>
+                  <div class={flex({ flexDirection: 'column', align: 'start', gap: '2px', flex: '1', minWidth: '0' })}>
+                    <div class={flex({ alignItems: 'center', gap: '8px', minWidth: '0', overflow: 'hidden', whiteSpace: 'nowrap' })}>
+                      <div
+                        class={css({
+                          flexShrink: '0',
+                          fontSize: '13px',
+                          fontWeight: isSelected ? 'medium' : 'normal',
+                          color: 'text.default',
+                        })}
+                      >
+                        {time.format('H시 mm분 ss초')}
                       </div>
-                    {/if}
-                  </div>
-                  <div class={flex({ alignItems: 'center', gap: '6px' })}>
-                    <div class={css({ fontSize: '11px', color: 'text.subtle' })}>
-                      {time.fromNow()}
+                      {#if excluded === true}
+                        <div
+                          class={center({ flexShrink: '0' })}
+                          aria-label="통계 제외됨"
+                          use:tooltip={{ message: '통계 제외됨', placement: 'top' }}
+                        >
+                          <Icon style={css.raw({ color: 'text.faint' })} icon={BarChart3OffIcon} size={12} />
+                        </div>
+                      {/if}
                     </div>
-                    {#if head.contributors.length > 0}
-                      <div class={flex({ alignItems: 'center' })}>
-                        {#each head.contributors.slice(0, 3) as contributor (contributor.id)}
-                          <div
-                            class={css({
-                              flexShrink: '0',
-                              width: '14px',
-                              height: '14px',
-                              aspectRatio: '1/1',
-                              overflow: 'hidden',
-                              borderRadius: 'full',
-                              marginLeft: '-3px',
-                              borderWidth: '1px',
-                              borderColor: 'surface.default',
-                            })}
-                          >
-                            <Img
-                              style={css.raw({ size: 'full', objectFit: 'cover' })}
-                              alt={contributor.name}
-                              image$key={contributor.avatar}
-                              size={16}
-                            />
-                          </div>
-                        {/each}
+                    <div class={flex({ alignItems: 'center', gap: '6px', minWidth: '0', overflow: 'hidden', whiteSpace: 'nowrap' })}>
+                      <div class={css({ flexShrink: '0', fontSize: '11px', color: 'text.subtle' })}>
+                        {time.fromNow()}
                       </div>
-                    {/if}
+                      {#if head.additions}
+                        <div class={center({ flexShrink: '0' })} in:fly={{ y: 10, duration: 150 }}>
+                          <Icon style={css.raw({ size: '10px', color: 'text.success' })} icon={PlusIcon} />
+                          <span class={css({ fontSize: '11px', fontWeight: 'medium', color: 'text.success' })}>
+                            {head.additions.toLocaleString()}
+                          </span>
+                        </div>
+                      {/if}
+                      {#if head.deletions}
+                        <div class={center({ flexShrink: '0' })} in:fly={{ y: 10, duration: 150 }}>
+                          <Icon style={css.raw({ size: '10px', color: 'text.danger' })} icon={MinusIcon} />
+                          <span class={css({ fontSize: '11px', fontWeight: 'medium', color: 'text.danger' })}>
+                            {head.deletions.toLocaleString()}
+                          </span>
+                        </div>
+                      {/if}
+                      {#if head.contributors.length > 0}
+                        <div class={flex({ alignItems: 'center', minWidth: '0', overflow: 'hidden' })}>
+                          {#each head.contributors.slice(0, 3) as contributor (contributor.id)}
+                            <div
+                              class={css({
+                                flexShrink: '0',
+                                width: '14px',
+                                height: '14px',
+                                aspectRatio: '1/1',
+                                overflow: 'hidden',
+                                borderRadius: 'full',
+                                marginLeft: '-3px',
+                                borderWidth: '1px',
+                                borderColor: 'surface.default',
+                              })}
+                            >
+                              <Img
+                                style={css.raw({ size: 'full', objectFit: 'cover' })}
+                                alt={contributor.name}
+                                image$key={contributor.avatar}
+                                size={16}
+                              />
+                            </div>
+                          {/each}
+                        </div>
+                      {/if}
+                    </div>
                   </div>
-                </div>
-              </button>
+                </button>
+
+                <Menu style={css.raw({ flexShrink: '0', marginRight: '14px', marginLeft: '4px' })} placement="bottom-end">
+                  {#snippet button({ open })}
+                    <div
+                      class={center({
+                        borderRadius: '4px',
+                        size: '20px',
+                        color: 'text.faint',
+                        transition: 'common',
+                        _hover: { backgroundColor: 'interactive.hover' },
+                        _pressed: { backgroundColor: 'interactive.hover', color: 'text.subtle' },
+                      })}
+                      aria-pressed={open}
+                    >
+                      <Icon icon={EllipsisIcon} size={14} />
+                    </div>
+                  {/snippet}
+
+                  <MenuItem icon={IconClockFading} onclick={() => restore(head)}>이 버전으로 복원</MenuItem>
+
+                  {#if excluded !== null}
+                    <MenuItem icon={BarChart3Icon} onclick={() => toggleExclusion(head.id, excluded)}>
+                      {excluded ? '통계에 포함' : '통계에서 제외'}
+                    </MenuItem>
+                  {/if}
+                </Menu>
+              </div>
             {/each}
           </div>
         {/each}
@@ -750,7 +839,7 @@
           })}
           aria-busy={restoring}
           disabled={restoring}
-          onclick={restore}
+          onclick={() => restore(shownHead)}
           type="button"
           use:tooltip={{ message: '이 시점으로 문서를 복원하고 타임라인에 새로 추가합니다', placement: 'top' }}
         >

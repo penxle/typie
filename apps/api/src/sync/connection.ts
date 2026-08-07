@@ -161,6 +161,8 @@ export class SyncConnection {
       send: (m) => this.#send(m),
       documentId: message.documentId,
       clientId: this.#clientId,
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- session set before attach
+      userId: this.#session!.userId,
       onOverload: () => this.#close(CLOSE_BACKPRESSURE, 'live buffer overflow'),
     });
     this.#channels.set(message.documentId, channel);

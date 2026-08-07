@@ -3,9 +3,9 @@ import test from 'node:test';
 import { DocumentChannel, SNAPSHOT_CHUNK_BYTES } from './channel.ts';
 import { collectSend, FakeSyncDeps } from './testing.ts';
 
-const makeChannel = (deps: FakeSyncDeps, documentId = 'D1', clientId = 'c1') => {
+const makeChannel = (deps: FakeSyncDeps, documentId = 'D1', clientId = 'c1', userId = 'u1') => {
   const { sent, send } = collectSend();
-  return { sent, channel: new DocumentChannel({ deps, send, documentId, clientId }) };
+  return { sent, channel: new DocumentChannel({ deps, send, documentId, clientId, userId }) };
 };
 
 test('신규 attach: attach-ack → 청크 → snapshot-end(collectedSeq) → tail 순서', async () => {
@@ -140,6 +140,27 @@ test('live 전환 후 이벤트는 즉시 전달된다', async () => {
   const last = sent.at(-1);
   if (last?.t !== 'changesets') return assert.fail();
   assert.equal(last.seq, '7-0');
+  channel.stop();
+});
+
+test('head-isolated 이벤트는 live 상태에서 해당 유저에게만 전달된다', async () => {
+  const deps = new FakeSyncDeps();
+  const { sent, channel } = makeChannel(deps);
+  await channel.start();
+
+  deps.publishChangesets('D1', { kind: 'head-isolated', userId: 'u1', headId: 'H1', excluded: true });
+  deps.publishChangesets('D1', { kind: 'head-isolated', userId: 'u2', headId: 'H2', excluded: true });
+
+  const deadline = Date.now() + 1000;
+  while (Date.now() < deadline && sent.every((m) => m.t !== 'head-isolated')) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+
+  const isolated = sent.filter((m) => m.t === 'head-isolated');
+  assert.equal(isolated.length, 1);
+  if (isolated[0].t !== 'head-isolated') return assert.fail();
+  assert.equal(isolated[0].headId, 'H1');
+  assert.equal(isolated[0].excluded, true);
   channel.stop();
 });
 
@@ -498,7 +519,14 @@ test('live 버퍼 상한 초과 시 onOverload 호출 후 채널 stop', async ()
   };
   const { send } = collectSend();
   let overloaded = false;
-  const channel = new DocumentChannel({ deps, send, documentId: 'D1', clientId: 'c1', onOverload: () => (overloaded = true) });
+  const channel = new DocumentChannel({
+    deps,
+    send,
+    documentId: 'D1',
+    clientId: 'c1',
+    userId: 'u1',
+    onOverload: () => (overloaded = true),
+  });
   const started = channel.start();
   await tick();
   const big = 'a'.repeat(3 * 1024 * 1024);
@@ -522,7 +550,14 @@ test('echo 이벤트는 live 버퍼에 계수되지 않는다', async () => {
   };
   const { send } = collectSend();
   let overloaded = false;
-  const channel = new DocumentChannel({ deps, send, documentId: 'D1', clientId: 'me', onOverload: () => (overloaded = true) });
+  const channel = new DocumentChannel({
+    deps,
+    send,
+    documentId: 'D1',
+    clientId: 'me',
+    userId: 'u1',
+    onOverload: () => (overloaded = true),
+  });
   const started = channel.start();
   await tick();
   const big = 'a'.repeat(3 * 1024 * 1024);
@@ -543,7 +578,7 @@ test('attach-ack 전송 중 stop이 와도 구독이 누수되지 않는다', as
   const send = async () => {
     await gate;
   };
-  const channel = new DocumentChannel({ deps, send, documentId: 'D1', clientId: 'c1' });
+  const channel = new DocumentChannel({ deps, send, documentId: 'D1', clientId: 'c1', userId: 'u1' });
   const started = channel.start();
   channel.stop();
   release();

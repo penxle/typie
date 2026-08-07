@@ -70,6 +70,7 @@ import * as portone from '#/external/portone.ts';
 import { evaluateCouponCondition } from '#/utils/coupon.ts';
 import { getDocumentFontFamilies } from '#/utils/document.ts';
 import { resolveUserEntitlement, selectRepresentativeSubscription } from '#/utils/entitlement.ts';
+import { getExcludedDeltasByDate } from '#/utils/excluded-stats.ts';
 import { getEffectiveTarget } from '#/utils/goal.ts';
 import { precheckIapEnroll } from '#/utils/iap-normalize.ts';
 import { opsAlert } from '#/utils/ops-alert.ts';
@@ -364,12 +365,15 @@ User.implement({
 
         const additionsByDate = new Map(additionRows.map((row) => [row.date.format('YYYY-MM-DD'), row.additions]));
 
+        const excludedByDate = await getExcludedDeltasByDate({ userId: self.id, from, to: startOfTomorrow });
+
         const result = [];
         let cursor = from;
         while (!cursor.isAfter(startOfToday)) {
           const target = getEffectiveTarget(goalRows, cursor);
           if (target !== null && target > 0) {
-            const additions = additionsByDate.get(cursor.format('YYYY-MM-DD')) ?? 0;
+            const key = cursor.format('YYYY-MM-DD');
+            const additions = (additionsByDate.get(key) ?? 0) - (excludedByDate.get(key)?.additions ?? 0);
             result.push({ date: cursor, targetCharacterCount: target, additions, achieved: additions >= target });
           }
           cursor = cursor.add(1, 'day');
@@ -386,7 +390,13 @@ User.implement({
 
         const documentDate = sql<string>`DATE(${DocumentCharacterCountChanges.bucket} AT TIME ZONE 'Asia/Seoul')`.mapWith(dayjs.kst);
 
-        return db
+        const excludedByDate = await getExcludedDeltasByDate({
+          userId: self.id,
+          from: startOfTomorrow.subtract(365, 'days'),
+          to: startOfTomorrow,
+        });
+
+        const rows = await db
           .select({
             date: documentDate,
             additions: sum(DocumentCharacterCountChanges.additions).mapWith(Number),
@@ -402,6 +412,16 @@ User.implement({
           )
           .groupBy(documentDate)
           .orderBy(documentDate);
+
+        return rows.map((row) => {
+          const excluded = excludedByDate.get(row.date.format('YYYY-MM-DD'));
+
+          return {
+            ...row,
+            additions: row.additions - (excluded?.additions ?? 0),
+            deletions: row.deletions - (excluded?.deletions ?? 0),
+          };
+        });
       },
     }),
 

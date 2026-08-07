@@ -14,7 +14,7 @@ import {
 import { NotFoundError, TypieError } from '@typie/lib/errors';
 import dayjs from 'dayjs';
 import dedent from 'dedent';
-import { and, asc, count, desc, eq, gt, gte, inArray, isNull, lt, sum } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, gte, inArray, isNull, lt, sql, sum } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { match } from 'ts-pattern';
 import { redis } from '#/cache.ts';
@@ -61,6 +61,7 @@ import {
   extractPlainDocLayoutMode,
   insertFreshV2Content,
 } from '#/utils/entity.ts';
+import { getExcludedDeltasByDate } from '#/utils/excluded-stats.ts';
 import { generateFractionalOrder, generatePermalink, generateSlug, getKoreanAge } from '#/utils/index.ts';
 import { assertSitePermission } from '#/utils/permission.ts';
 import { assertActiveSubscription, hasActiveSubscription } from '#/utils/plan.ts';
@@ -85,7 +86,7 @@ import {
 } from '../objects.ts';
 import { resolveDocumentAssetsByIds } from './document-assets-by-ids.ts';
 import type { PlainDoc } from '@typie/editor-ffi/server';
-import type { Context } from '#/context.ts';
+import type { Context, SessionContext } from '#/context.ts';
 import type { TemplatePreset } from '#/utils/entity.ts';
 
 const DocumentAsset = builder.loadableUnion('DocumentAsset', {
@@ -351,10 +352,18 @@ Document.implement({
           )
           .then(firstOrThrow);
 
+        const excludedByDate = await getExcludedDeltasByDate({
+          userId: ctx.session.userId,
+          from: startOfDay,
+          to: startOfDay.add(1, 'day'),
+          documentId: document.id,
+        });
+        const excluded = excludedByDate.get(startOfDay.format('YYYY-MM-DD'));
+
         return {
           date: startOfDay,
-          additions: change.additions ?? 0,
-          deletions: change.deletions ?? 0,
+          additions: (change.additions ?? 0) - (excluded?.additions ?? 0),
+          deletions: (change.deletions ?? 0) - (excluded?.deletions ?? 0),
         };
       },
     }),
@@ -364,7 +373,11 @@ Document.implement({
     heads: t.field({
       type: [DocumentHead],
       resolve: async (self) =>
-        db.select().from(DocumentHeads).where(eq(DocumentHeads.documentId, self.id)).orderBy(desc(DocumentHeads.updatedAt)),
+        db
+          .select()
+          .from(DocumentHeads)
+          .where(eq(DocumentHeads.documentId, self.id))
+          .orderBy(desc(DocumentHeads.updatedAt), sql`${DocumentHeads.seq} DESC NULLS LAST`),
     }),
 
     sweepTombstones: t.stringList({
@@ -621,6 +634,27 @@ DocumentReaction.implement({
   }),
 });
 
+async function loadViewerContribution(ctx: Context & SessionContext, headId: string) {
+  const loader = ctx.loader({
+    name: 'DocumentHead.viewerContribution',
+    nullable: true,
+    load: async (ids: string[]) => {
+      return await db
+        .select({
+          headId: DocumentHeadContributors.headId,
+          excluded: DocumentHeadContributors.excluded,
+          additions: DocumentHeadContributors.additions,
+          deletions: DocumentHeadContributors.deletions,
+        })
+        .from(DocumentHeadContributors)
+        .where(and(inArray(DocumentHeadContributors.headId, ids), eq(DocumentHeadContributors.userId, ctx.session.userId)));
+    },
+    key: (row) => row?.headId,
+  });
+
+  return await loader.load(headId);
+}
+
 DocumentHead.implement({
   isTypeOf: isTypeOf(TableCode.DOCUMENT_HEADS),
   fields: (t) => ({
@@ -645,6 +679,33 @@ DocumentHead.implement({
 
         const rows = await loader.load(self.id);
         return rows.map((row) => row.user);
+      },
+    }),
+
+    excluded: t.withAuth({ session: true }).field({
+      type: 'Boolean',
+      nullable: true,
+      resolve: async (self, _, ctx) => {
+        const row = await loadViewerContribution(ctx, self.id);
+        return row && row.additions !== null ? row.excluded : null;
+      },
+    }),
+
+    additions: t.withAuth({ session: true }).field({
+      type: 'Int',
+      nullable: true,
+      resolve: async (self, _, ctx) => {
+        const row = await loadViewerContribution(ctx, self.id);
+        return row?.additions ?? null;
+      },
+    }),
+
+    deletions: t.withAuth({ session: true }).field({
+      type: 'Int',
+      nullable: true,
+      resolve: async (self, _, ctx) => {
+        const row = await loadViewerContribution(ctx, self.id);
+        return row?.deletions ?? null;
       },
     }),
   }),
@@ -1230,6 +1291,35 @@ builder.mutationFields((t) => ({
       await enqueueJob('document:changesets:collect', input.documentId);
 
       return { heads };
+    },
+  }),
+
+  updateDocumentHeadExclusion: t.withAuth({ session: true }).fieldWithInput({
+    type: DocumentHead,
+    input: {
+      headId: t.input.id({ validate: validateDbId(TableCode.DOCUMENT_HEADS) }),
+      excluded: t.input.boolean(),
+    },
+    resolve: async (_, { input }, ctx) => {
+      await assertActiveSubscription({ userId: ctx.session.userId });
+
+      const row = await db
+        .select({ id: DocumentHeadContributors.id, additions: DocumentHeadContributors.additions })
+        .from(DocumentHeadContributors)
+        .where(and(eq(DocumentHeadContributors.headId, input.headId), eq(DocumentHeadContributors.userId, ctx.session.userId)))
+        .then(first);
+
+      if (!row) {
+        throw new TypieError({ code: 'not_contributed' });
+      }
+
+      if (row.additions === null) {
+        throw new TypieError({ code: 'head_delta_unavailable' });
+      }
+
+      await db.update(DocumentHeadContributors).set({ excluded: input.excluded }).where(eq(DocumentHeadContributors.id, row.id));
+
+      return input.headId;
     },
   }),
 

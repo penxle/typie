@@ -157,6 +157,12 @@ export const DocumentBundleKind = {
   BASELINE: 'BASELINE',
 } as const;
 
+export type DocumentHeadKind = keyof typeof DocumentHeadKind;
+export const DocumentHeadKind = {
+  NORMAL: 'NORMAL',
+  ISOLATED: 'ISOLATED',
+} as const;
+
 export type DocumentType = keyof typeof DocumentType;
 export const DocumentType = {
   NORMAL: 'NORMAL',

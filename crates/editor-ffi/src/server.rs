@@ -52,6 +52,10 @@ pub struct CollectResult {
     // (for per-user attribution — unchanged for `duplicate`/`failed`).
     pub statuses: Vec<BundleStatus>,
     pub char_counts: Vec<u32>,
+    #[cfg_attr(feature = "wasm", tsify(type = "Uint8Array[]"))]
+    pub entry_heads: Vec<serde_bytes::ByteBuf>,
+    pub gross_insertions: Vec<u32>,
+    pub gross_deletions: Vec<u32>,
     pub base_char_count: u32,
     pub plain: editor_model::PlainDoc,
     pub text: String,
@@ -282,60 +286,9 @@ impl EditorServer {
         existing: Vec<u8>,
         packed_bundles: Vec<u8>,
     ) -> EditorResult<Complex<CollectResult>> {
-        let existing_cs: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
-            editor_codec::decode_changeset_stream(&existing[..])
-                .map_err(|e| FfiError::Deserialization(e.to_string()))?
-                .into_graph_input();
-        let bundles = crate::graph::decode_length_prefixed(&packed_bundles)?;
-
-        let mut state = editor_state::State::from_changesets(existing_cs, None)?;
-        let base_char_count = doc_count(&self.icu, &state.view());
-
-        let mut statuses: Vec<BundleStatus> = Vec::with_capacity(bundles.len());
-        let mut char_counts: Vec<u32> = Vec::with_capacity(bundles.len());
-        let mut last = base_char_count;
-
-        for bundle in bundles {
-            let status = match editor_codec::decode_changeset_stream(&bundle[..]) {
-                Ok(decoded) => match state.receive_remote_changesets(decoded.into_graph_input()) {
-                    Ok((next, ops)) if !ops.is_empty() => {
-                        state = next;
-                        BundleStatus::Applied
-                    }
-                    Ok(_) => BundleStatus::Duplicate,
-                    Err(_) => BundleStatus::Failed,
-                },
-                Err(_) => BundleStatus::Failed,
-            };
-            if status == BundleStatus::Applied {
-                last = doc_count(&self.icu, &state.view());
-            }
-            statuses.push(status);
-            char_counts.push(last);
-        }
-
-        let heads: Vec<editor_crdt::Dot> = state.graph().current_heads().copied().collect();
-        let heads = if heads.is_empty() {
-            Vec::new()
-        } else {
-            editor_codec::encode_dots(&heads).map_err(|e| FfiError::Serialization(e.to_string()))?
-        };
-        let plain = state.to_plain();
-        let text = editor_state::doc_plain_text(&state.view());
-        let totality_violations = collect_zombie_dots(&state).len() as u32;
-        let projection_degraded = state.projection_degraded();
-
-        Ok(CollectResult {
-            heads,
-            statuses,
-            char_counts,
-            base_char_count,
-            plain,
-            text,
-            totality_violations,
-            projection_degraded,
-        }
-        .into_ffi()?)
+        Ok(self
+            .collect_fold_inner(existing, packed_bundles)?
+            .into_ffi()?)
     }
 
     pub fn consolidate(&self, stream: Vec<u8>) -> EditorResult<Complex<ConsolidateResult>> {
@@ -639,6 +592,110 @@ impl EditorServer {
             degraded,
         }
         .into_ffi()?)
+    }
+}
+
+impl EditorServer {
+    fn collect_fold_inner(
+        &self,
+        existing: Vec<u8>,
+        packed_bundles: Vec<u8>,
+    ) -> EditorResult<CollectResult> {
+        let existing_cs: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
+            editor_codec::decode_changeset_stream(&existing[..])
+                .map_err(|e| FfiError::Deserialization(e.to_string()))?
+                .into_graph_input();
+        let bundles = crate::graph::decode_length_prefixed(&packed_bundles)?;
+
+        let mut state = editor_state::State::from_changesets(existing_cs, None)?;
+        let base_char_count = doc_count(&self.icu, &state.view());
+
+        let mut statuses: Vec<BundleStatus> = Vec::with_capacity(bundles.len());
+        let mut char_counts: Vec<u32> = Vec::with_capacity(bundles.len());
+        let mut entry_heads: Vec<serde_bytes::ByteBuf> = Vec::with_capacity(bundles.len());
+        let mut gross_insertions: Vec<u32> = Vec::with_capacity(bundles.len());
+        let mut gross_deletions: Vec<u32> = Vec::with_capacity(bundles.len());
+        let mut last = base_char_count;
+
+        let encode_heads = |state: &editor_state::State| -> EditorResult<Vec<u8>> {
+            let heads: Vec<editor_crdt::Dot> = state.graph().current_heads().copied().collect();
+            if heads.is_empty() {
+                return Ok(Vec::new());
+            }
+            let bytes = editor_codec::encode_dots(&heads)
+                .map_err(|e| FfiError::Serialization(e.to_string()))?;
+            Ok(bytes)
+        };
+
+        let mut last_heads = encode_heads(&state)?;
+
+        for bundle in bundles {
+            let mut ins = 0u32;
+            let mut del = 0u32;
+            let status = match editor_codec::decode_changeset_stream(&bundle[..]) {
+                Ok(decoded) => match state.receive_remote_changesets(decoded.into_graph_input()) {
+                    Ok((next, ops)) if !ops.is_empty() => {
+                        state = next;
+                        for op in &ops {
+                            match &op.payload {
+                                editor_model::EditOp::Seq(editor_crdt::ListOp::Ins {
+                                    item: editor_model::SeqItem::Char(_),
+                                    ..
+                                }) => ins += 1,
+                                editor_model::EditOp::Seq(editor_crdt::ListOp::Del {
+                                    len, ..
+                                }) => del += *len as u32,
+                                editor_model::EditOp::Seq(editor_crdt::ListOp::Undel {
+                                    del: target,
+                                }) => {
+                                    if let Some(target_op) = state.graph().get(target)
+                                        && let editor_model::EditOp::Seq(editor_crdt::ListOp::Del {
+                                            len,
+                                            ..
+                                        }) = &target_op.payload
+                                    {
+                                        ins += *len as u32;
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
+                        BundleStatus::Applied
+                    }
+                    Ok(_) => BundleStatus::Duplicate,
+                    Err(_) => BundleStatus::Failed,
+                },
+                Err(_) => BundleStatus::Failed,
+            };
+            if status == BundleStatus::Applied {
+                last = doc_count(&self.icu, &state.view());
+                last_heads = encode_heads(&state)?;
+            }
+            statuses.push(status);
+            char_counts.push(last);
+            entry_heads.push(serde_bytes::ByteBuf::from(last_heads.clone()));
+            gross_insertions.push(ins);
+            gross_deletions.push(del);
+        }
+
+        let plain = state.to_plain();
+        let text = editor_state::doc_plain_text(&state.view());
+        let totality_violations = collect_zombie_dots(&state).len() as u32;
+        let projection_degraded = state.projection_degraded();
+
+        Ok(CollectResult {
+            heads: last_heads,
+            statuses,
+            char_counts,
+            entry_heads,
+            gross_insertions,
+            gross_deletions,
+            base_char_count,
+            plain,
+            text,
+            totality_violations,
+            projection_degraded,
+        })
     }
 }
 
@@ -1151,6 +1208,163 @@ mod tests {
             result.char_counts[0], result.base_char_count,
             "a rejected bundle must not move the character count"
         );
+    }
+
+    fn seq_char(actor: u64, counter: u64, parents: &[Dot], pos: usize, ch: char) -> Op<EditOp> {
+        Op {
+            id: Dot::new(actor, counter),
+            parents: parents.to_vec(),
+            payload: EditOp::Seq(ListOp::Ins {
+                pos,
+                item: SeqItem::Char(ch),
+            }),
+        }
+    }
+
+    #[test]
+    fn collect_fold_reports_per_entry_heads_and_gross() {
+        let server = EditorServer::new_test();
+        let para = Op {
+            id: Dot::new(1, 0),
+            parents: vec![],
+            payload: EditOp::Seq(ListOp::Ins {
+                pos: 0,
+                item: SeqItem::Block {
+                    node_type: editor_model::NodeType::Paragraph,
+                    parents: vec![Dot::ROOT],
+                    attrs: vec![],
+                },
+            }),
+        };
+        let a = seq_char(1, 1, &[para.id], 1, 'a');
+        let b = seq_char(1, 2, &[a.id], 2, 'b');
+        let b_id = b.id;
+        let del_id = Dot::new(1, 3);
+        let del = Op {
+            id: del_id,
+            parents: vec![b_id],
+            payload: EditOp::Seq(ListOp::Del { pos: 1, len: 2 }),
+        };
+        let bundle1 = enc_css(&[Changeset {
+            ops: vec![para, a, b],
+        }]);
+        let bundle2 = enc_css(&[Changeset { ops: vec![del] }]);
+        let dup = bundle2.clone();
+
+        let result = server
+            .collect_fold_inner(Vec::new(), pack(&[bundle1, bundle2, dup]))
+            .unwrap();
+
+        assert_eq!(result.gross_insertions, vec![2, 0, 0]);
+        assert_eq!(result.gross_deletions, vec![0, 2, 0]);
+        assert_eq!(result.entry_heads.len(), 3);
+        assert_eq!(dec_dots(&result.entry_heads[0]), vec![b_id]);
+        assert_eq!(dec_dots(&result.entry_heads[1]), vec![del_id]);
+        assert_eq!(result.entry_heads[2], result.entry_heads[1]);
+        assert_eq!(result.entry_heads[2], result.heads);
+    }
+
+    #[test]
+    fn collect_fold_counts_undel_restore_as_gross_insertion() {
+        let server = EditorServer::new_test();
+        let para = Op {
+            id: Dot::new(1, 0),
+            parents: vec![],
+            payload: EditOp::Seq(ListOp::Ins {
+                pos: 0,
+                item: SeqItem::Block {
+                    node_type: editor_model::NodeType::Paragraph,
+                    parents: vec![Dot::ROOT],
+                    attrs: vec![],
+                },
+            }),
+        };
+        let a = seq_char(1, 1, &[para.id], 1, 'a');
+        let b = seq_char(1, 2, &[a.id], 2, 'b');
+        let c = seq_char(1, 3, &[b.id], 3, 'c');
+        let c_id = c.id;
+        let del_id = Dot::new(1, 4);
+        let del = Op {
+            id: del_id,
+            parents: vec![c_id],
+            payload: EditOp::Seq(ListOp::Del { pos: 1, len: 2 }),
+        };
+        let undel = Op {
+            id: Dot::new(1, 5),
+            parents: vec![del_id],
+            payload: EditOp::Seq(ListOp::Undel { del: del_id }),
+        };
+        let bundle1 = enc_css(&[Changeset {
+            ops: vec![para, a, b, c],
+        }]);
+        let bundle2 = enc_css(&[Changeset { ops: vec![del] }]);
+        let bundle3 = enc_css(&[Changeset { ops: vec![undel] }]);
+
+        let result = server
+            .collect_fold_inner(Vec::new(), pack(&[bundle1, bundle2, bundle3]))
+            .unwrap();
+
+        assert_eq!(
+            result.statuses,
+            vec![
+                BundleStatus::Applied,
+                BundleStatus::Applied,
+                BundleStatus::Applied,
+            ]
+        );
+        assert_eq!(result.gross_insertions, vec![3, 0, 2]);
+        assert_eq!(result.gross_deletions, vec![0, 2, 0]);
+        assert_eq!(result.char_counts, vec![3, 1, 3]);
+    }
+
+    #[test]
+    fn collect_fold_counts_undel_paired_with_its_del_in_one_bundle() {
+        let server = EditorServer::new_test();
+        let para = Op {
+            id: Dot::new(1, 0),
+            parents: vec![],
+            payload: EditOp::Seq(ListOp::Ins {
+                pos: 0,
+                item: SeqItem::Block {
+                    node_type: editor_model::NodeType::Paragraph,
+                    parents: vec![Dot::ROOT],
+                    attrs: vec![],
+                },
+            }),
+        };
+        let a = seq_char(1, 1, &[para.id], 1, 'a');
+        let b = seq_char(1, 2, &[a.id], 2, 'b');
+        let c = seq_char(1, 3, &[b.id], 3, 'c');
+        let c_id = c.id;
+        let del_id = Dot::new(1, 4);
+        let del = Op {
+            id: del_id,
+            parents: vec![c_id],
+            payload: EditOp::Seq(ListOp::Del { pos: 1, len: 2 }),
+        };
+        let undel = Op {
+            id: Dot::new(1, 5),
+            parents: vec![del_id],
+            payload: EditOp::Seq(ListOp::Undel { del: del_id }),
+        };
+        let bundle1 = enc_css(&[Changeset {
+            ops: vec![para, a, b, c],
+        }]);
+        let paired = enc_css(&[Changeset {
+            ops: vec![del, undel],
+        }]);
+
+        let result = server
+            .collect_fold_inner(Vec::new(), pack(&[bundle1, paired]))
+            .unwrap();
+
+        assert_eq!(
+            result.statuses,
+            vec![BundleStatus::Applied, BundleStatus::Applied]
+        );
+        assert_eq!(result.gross_insertions, vec![3, 2]);
+        assert_eq!(result.gross_deletions, vec![0, 2]);
+        assert_eq!(result.char_counts, vec![3, 3]);
     }
 
     #[test]

@@ -13,22 +13,26 @@ export type ChannelCursor = { sinceSeq?: string; snapshotCursor?: SnapshotCursor
 
 type SendFn = (message: ServerMessage) => Promise<void>;
 
+type BundleEvent = Extract<ChangesetEvent, { target: string }>;
+
 export class DocumentChannel {
   #deps: SyncDeps;
   #sendFn: SendFn;
   #documentId: string;
   #clientId: string;
+  #userId: string;
   #phase: 'loading' | 'live' | 'stopped' = 'loading';
-  #buffer: ChangesetEvent[] = [];
+  #buffer: BundleEvent[] = [];
   #bufferBytes = 0;
   #subscription: ChangesetSubscription | null = null;
   #onOverload: () => void;
 
-  constructor(options: { deps: SyncDeps; send: SendFn; documentId: string; clientId: string; onOverload?: () => void }) {
+  constructor(options: { deps: SyncDeps; send: SendFn; documentId: string; clientId: string; userId: string; onOverload?: () => void }) {
     this.#deps = options.deps;
     this.#sendFn = options.send;
     this.#documentId = options.documentId;
     this.#clientId = options.clientId;
+    this.#userId = options.userId;
     // eslint-disable-next-line @typescript-eslint/no-empty-function -- optional callback default no-op
     this.#onOverload = options.onOverload ?? (() => {});
   }
@@ -41,6 +45,12 @@ export class DocumentChannel {
   async #runPump(subscription: ChangesetSubscription): Promise<void> {
     for await (const event of subscription) {
       if (this.#phase === 'stopped') return;
+      if ('kind' in event) {
+        if (this.#phase === 'live' && event.userId === this.#userId) {
+          await this.#send({ t: 'head-isolated', documentId: this.#documentId, headId: event.headId, excluded: event.excluded });
+        }
+        continue;
+      }
       if (this.#phase === 'live') {
         await this.#emitEvent(event);
       } else {
@@ -62,7 +72,7 @@ export class DocumentChannel {
     return target === this.#clientId;
   }
 
-  async #emitEvent(event: ChangesetEvent): Promise<void> {
+  async #emitEvent(event: BundleEvent): Promise<void> {
     if (!this.#accepts(event.target)) return;
     await this.#send({
       t: 'changesets',

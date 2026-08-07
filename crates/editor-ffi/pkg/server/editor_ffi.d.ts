@@ -165,6 +165,9 @@ export interface CollectResult {
     heads: Uint8Array;
     statuses: BundleStatus[];
     char_counts: number[];
+    entry_heads: Uint8Array[];
+    gross_insertions: number[];
+    gross_deletions: number[];
     base_char_count: number;
     plain: PlainDoc;
     text: string;

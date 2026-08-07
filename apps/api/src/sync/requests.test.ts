@@ -19,6 +19,7 @@ test('push: append → advance → publish(!clientId 본문) + publish(clientId 
 
   assert.equal(deps.published.length, 2);
   const [body, notify] = deps.published;
+  if ('kind' in body.event || 'kind' in notify.event) return assert.fail();
   assert.equal(body.event.target, '!me');
   assert.deepEqual(
     body.event.changesets.map((c) => Uint8Array.fromBase64(c)),

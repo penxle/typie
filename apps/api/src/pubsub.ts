@@ -8,7 +8,9 @@ export const NOTE_UPDATE_KINDS = ['CREATED', 'UPDATED', 'DELETED'] as const;
 export const pubsub = createPubSub<{
   'document:changesets': [
     documentId: string,
-    payload: { target: string; seq: string; changesets: string[]; heads: string; durableHeads: string },
+    payload:
+      | { target: string; seq: string; changesets: string[]; heads: string; durableHeads: string }
+      | { kind: 'head-isolated'; userId: string; headId: string; excluded: boolean },
   ];
   'document:comment': [documentId: string, payload: { threadId: string; originClientId: string }];
   'note:update': [siteId: string, payload: { kind: (typeof NOTE_UPDATE_KINDS)[number]; noteId: string; originClientId?: string }];

@@ -534,6 +534,8 @@ export const DocumentHeads = pgTable(
     bucket: datetime('bucket').notNull(),
     heads: bytea('heads').notNull(),
     characterCount: integer('character_count').notNull().default(0),
+    kind: E._DocumentHeadKind('kind').notNull().default('NORMAL'),
+    seq: integer('seq').notNull(),
     createdAt: datetime('created_at')
       .notNull()
       .default(sql`now()`),
@@ -541,7 +543,7 @@ export const DocumentHeads = pgTable(
       .notNull()
       .default(sql`now()`),
   },
-  (t) => [uniqueIndex().on(t.documentId, t.bucket), index().on(t.documentId, t.createdAt)],
+  (t) => [uniqueIndex().on(t.documentId, t.seq), index().on(t.documentId, t.bucket), index().on(t.documentId, t.createdAt)],
 );
 
 export const DocumentHeadContributors = pgTable(
@@ -556,11 +558,19 @@ export const DocumentHeadContributors = pgTable(
     userId: text('user_id')
       .notNull()
       .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    additions: integer('additions'),
+    deletions: integer('deletions'),
+    excluded: boolean('excluded').notNull().default(false),
     createdAt: datetime('created_at')
       .notNull()
       .default(sql`now()`),
   },
-  (t) => [unique().on(t.headId, t.userId)],
+  (t) => [
+    unique().on(t.headId, t.userId),
+    index()
+      .on(t.userId)
+      .where(sql`excluded`),
+  ],
 );
 
 export const DocumentCommentThreads = pgTable(

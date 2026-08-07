@@ -254,7 +254,7 @@ Entity.implement({
           JOIN ${Documents} d ON d.id = dh.document_id
           JOIN sq ON d.entity_id = sq.id
           WHERE dh.bucket < ${from.toISOString()}
-          ORDER BY dh.document_id, dh.bucket DESC
+          ORDER BY dh.document_id, dh.bucket DESC, dh.seq DESC NULLS LAST
         `);
 
         const recentRows = await db.execute<{ document_id: string; date: string; character_count: number }>(sql`
@@ -267,7 +267,7 @@ Entity.implement({
           JOIN ${Documents} d ON d.id = dh.document_id
           JOIN sq ON d.entity_id = sq.id
           WHERE dh.bucket >= ${from.toISOString()}
-          ORDER BY dh.document_id, DATE(dh.bucket AT TIME ZONE 'Asia/Seoul'), dh.bucket DESC
+          ORDER BY dh.document_id, DATE(dh.bucket AT TIME ZONE 'Asia/Seoul'), dh.bucket DESC, dh.seq DESC NULLS LAST
         `);
 
         const today = dayjs.kst().format('YYYY-MM-DD');

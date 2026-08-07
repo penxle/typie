@@ -32,6 +32,7 @@ export type ServerMessage =
   | { t: 'snapshot-end'; documentId: string; seq: string; heads: Uint8Array; durableHeads: Uint8Array }
   | { t: 'changesets'; documentId: string; seq: string; bundles: Uint8Array[]; heads: Uint8Array; durableHeads: Uint8Array }
   | { t: 'reload'; documentId: string }
+  | { t: 'head-isolated'; documentId: string; headId: string; excluded: boolean }
   | { t: 'push-ack'; id: string; heads: Uint8Array; durableHeads: Uint8Array }
   | { t: 'pull-ack'; id: string; changesets: Uint8Array[]; seq: string; heads: Uint8Array; durableHeads: Uint8Array; needsReload: boolean }
   | { t: 'error'; scope: 'connection' | 'document' | 'request'; documentId?: string; id?: string; code: string; permanent: boolean };
@@ -44,6 +45,7 @@ const SERVER_MESSAGE_TYPES = new Set([
   'snapshot-end',
   'changesets',
   'reload',
+  'head-isolated',
   'push-ack',
   'pull-ack',
   'error',

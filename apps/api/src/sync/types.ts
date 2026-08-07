@@ -6,7 +6,9 @@ export type BundleRow = { id: string; seq: number; payload: Uint8Array };
 
 export type StreamEntry = { seq: string; changeset: Uint8Array };
 
-export type ChangesetEvent = { target: string; seq: string; changesets: string[]; heads: string; durableHeads: string };
+export type ChangesetEvent =
+  | { target: string; seq: string; changesets: string[]; heads: string; durableHeads: string }
+  | { kind: 'head-isolated'; userId: string; headId: string; excluded: boolean };
 
 export type ChangesetSubscription = {
   [Symbol.asyncIterator]: () => AsyncIterator<ChangesetEvent>;

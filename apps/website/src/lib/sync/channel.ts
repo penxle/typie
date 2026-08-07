@@ -8,6 +8,7 @@ export type ChannelSubscriber = {
   // Resync started — a fresh onSnapshot follows; capture and tear down local state.
   onReload: () => void;
   onPermanentError: (code: string) => void;
+  onHeadIsolated?: (event: { headId: string; excluded: boolean }) => void;
 };
 
 type SubscriberState = { subscriber: ChannelSubscriber; loading: boolean; lastSeq: string | null };
@@ -193,6 +194,12 @@ export class DocumentChannels {
             heads: message.heads,
             durableHeads: message.durableHeads,
           });
+        }
+        return;
+      }
+      case 'head-isolated': {
+        for (const state of channel.subscribers) {
+          state.subscriber.onHeadIsolated?.({ headId: message.headId, excluded: message.excluded });
         }
         return;
       }

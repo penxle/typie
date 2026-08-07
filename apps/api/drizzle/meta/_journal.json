@@ -743,6 +743,20 @@
       "when": 1785963707116,
       "tag": "0105_in-app-purchase-records",
       "breakpoints": false
+    },
+    {
+      "idx": 106,
+      "version": "7",
+      "when": 1786052774290,
+      "tag": "0106_document-head-isolation",
+      "breakpoints": false
+    },
+    {
+      "idx": 107,
+      "version": "7",
+      "when": 1786055792966,
+      "tag": "0107_document-head-constraints",
+      "breakpoints": false
     }
   ]
 }
