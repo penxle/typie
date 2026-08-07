@@ -13,8 +13,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.editor.Editor
 import co.typie.editor.EditorState
 import co.typie.editor.ffi.StableSelection
+import co.typie.editor.ffi.TrackedRange
 import co.typie.editor.scroll.EditorBringIntoViewPolicy
 import co.typie.editor.scroll.EditorBringIntoViewRequests
+import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.editor.scroll.toPageRectsTarget
 import co.typie.screen.editor.editor.selectTrackedRangeMember
 import co.typie.ui.component.toast.LocalToast
@@ -147,9 +149,9 @@ internal fun rememberEditorCommentsSession(
     remember(trackedCommentRanges) { trackedCommentRanges.associateBy { it.id } }
   val visibleFilter = model?.threadState?.filter ?: CommentFilter.Open
   var lastRequestedActiveThreadId by remember(editor) { mutableStateOf<String?>(null) }
-  val activeThreadRange =
+  val activeThreadScrollTarget =
     remember(activeThreadId, trackedCommentRanges) {
-      trackedCommentRanges.firstOrNull { it.id == activeThreadId }
+      trackedCommentRanges.commentThreadScrollTarget(activeThreadId)
     }
   val visibleThreads =
     if (sheetActive && visibleFilter == CommentFilter.Open) {
@@ -189,13 +191,13 @@ internal fun rememberEditorCommentsSession(
     )
   }
   LaunchedEffect(editor, composeSelection) { editor?.setCommentComposeRange(composeSelection) }
-  LaunchedEffect(editor, activeThreadId, activeThreadRange) {
+  LaunchedEffect(editor, activeThreadId, activeThreadScrollTarget) {
     val threadId = activeThreadId
     if (threadId == null) {
       lastRequestedActiveThreadId = null
       return@LaunchedEffect
     }
-    if (activeThreadRange == null) return@LaunchedEffect
+    if (activeThreadScrollTarget == null) return@LaunchedEffect
     if (lastRequestedActiveThreadId == threadId) {
       return@LaunchedEffect
     }
@@ -205,7 +207,7 @@ internal fun rememberEditorCommentsSession(
         state = editorState,
         policy = EditorBringIntoViewPolicy.ResultReveal,
       ) {
-        trackedRanges.firstOrNull { it.id == threadId }?.rects?.toPageRectsTarget()
+        trackedRanges.commentThreadScrollTarget(threadId)
       }
     if (!requested) return@LaunchedEffect
     lastRequestedActiveThreadId = threadId
@@ -273,4 +275,13 @@ internal fun rememberEditorCommentsSession(
     },
     onDiscardVirtualThreadRequested = requestQueue::requestDiscardVirtualThread,
   )
+}
+
+internal fun List<TrackedRange>.commentThreadScrollTarget(
+  threadId: String?
+): EditorBringIntoViewTarget? {
+  if (threadId == null) return null
+  return this.firstOrNull { it.id == threadId && it.group == ACTIVE_COMMENT_RANGE_GROUP }
+    ?.rects
+    ?.toPageRectsTarget()
 }
