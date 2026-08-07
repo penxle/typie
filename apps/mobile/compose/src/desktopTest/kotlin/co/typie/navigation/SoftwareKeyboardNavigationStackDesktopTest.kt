@@ -293,39 +293,6 @@ class SoftwareKeyboardNavigationStackDesktopTest {
             }
           },
         )
-      routeNode.performTouchInput {
-        down(Offset(x = 10f, y = center.y))
-        moveBy(Offset(x = activationDistancePx + 320f, y = 0f), delayMillis = 600L)
-      }
-      waitUntil {
-        onAllNodes(hasTestTag(KEYBOARD_TAG)).fetchSemanticsNodes().isEmpty() && imeBottomPx == 0f
-      }
-      assertTrue(keyboardPresentationController.interactionState.unresolved)
-      assertEquals(
-        SoftwareKeyboardInteractionResolution.Shown,
-        keyboardPresentationController.interactionState.lastResolution,
-      )
-
-      routeNode.performTouchInput { up() }
-      waitUntil {
-        rollbackCount == 1 &&
-          navigator.current == editorRoute &&
-          !navigator.isTransitioning &&
-          abs(
-            onNodeWithTag(KEYBOARD_TAG).fetchSemanticsNode().boundsInRoot.height -
-              fullKeyboardHeight
-          ) < GEOMETRY_TOLERANCE_PX
-      }
-
-      assertEquals(fullImeBottom, imeBottomPx, absoluteTolerance = GEOMETRY_TOLERANCE_PX)
-      assertTrue(DesktopDebugKeyboard.visible)
-      assertEquals(
-        SoftwareKeyboardInteractionResolution.Shown,
-        keyboardPresentationController.interactionState.lastResolution,
-      )
-      unregisterInterceptor.invoke()
-      unregisterInterceptor = null
-
       mainClock.autoAdvance = false
       routeNode.performTouchInput {
         down(Offset(x = 10f, y = center.y))
@@ -337,7 +304,70 @@ class SoftwareKeyboardNavigationStackDesktopTest {
 
       var previousKeyboardHeight =
         onNodeWithTag(KEYBOARD_TAG).fetchSemanticsNode().boundsInRoot.height
+      assertTrue(previousKeyboardHeight > GEOMETRY_TOLERANCE_PX)
+      assertTrue(keyboardPresentationController.interactionState.unresolved)
+      assertEquals(
+        SoftwareKeyboardInteractionResolution.Shown,
+        keyboardPresentationController.interactionState.lastResolution,
+      )
+
       routeNode.performTouchInput { up() }
+      waitForIdle()
+      assertEquals(
+        previousKeyboardHeight,
+        onNodeWithTag(KEYBOARD_TAG).fetchSemanticsNode().boundsInRoot.height,
+        absoluteTolerance = GEOMETRY_TOLERANCE_PX,
+      )
+      repeat(60) { frame ->
+        mainClock.advanceTimeByFrame()
+        waitForIdle()
+        val currentKeyboardHeight =
+          onAllNodes(hasTestTag(KEYBOARD_TAG))
+            .fetchSemanticsNodes()
+            .firstOrNull()
+            ?.boundsInRoot
+            ?.height ?: 0f
+        assertTrue(
+          currentKeyboardHeight <= previousKeyboardHeight + GEOMETRY_TOLERANCE_PX,
+          "Keyboard rose from $previousKeyboardHeight to $currentKeyboardHeight after committed release at frame $frame",
+        )
+        previousKeyboardHeight = currentKeyboardHeight
+      }
+
+      assertEquals(1, rollbackCount)
+      assertEquals(editorRoute, navigator.current)
+      assertFalse(navigator.isTransitioning)
+      onNodeWithTag(KEYBOARD_TAG).assertDoesNotExist()
+      assertEquals(0f, imeBottomPx)
+      assertFalse(DesktopDebugKeyboard.visible)
+      assertEquals(
+        SoftwareKeyboardInteractionResolution.Hidden,
+        keyboardPresentationController.interactionState.lastResolution,
+      )
+      unregisterInterceptor.invoke()
+      unregisterInterceptor = null
+
+      runOnIdle { DesktopDebugKeyboard.showKeyboard() }
+      repeat(20) {
+        mainClock.advanceTimeByFrame()
+        waitForIdle()
+      }
+      routeNode.performTouchInput {
+        down(Offset(x = 10f, y = center.y))
+        moveBy(Offset(x = activationDistancePx + 256f, y = 0f), delayMillis = 600L)
+      }
+      mainClock.advanceTimeByFrame()
+      mainClock.advanceTimeByFrame()
+      waitForIdle()
+
+      previousKeyboardHeight = onNodeWithTag(KEYBOARD_TAG).fetchSemanticsNode().boundsInRoot.height
+      routeNode.performTouchInput { up() }
+      waitForIdle()
+      assertEquals(
+        previousKeyboardHeight,
+        onNodeWithTag(KEYBOARD_TAG).fetchSemanticsNode().boundsInRoot.height,
+        absoluteTolerance = GEOMETRY_TOLERANCE_PX,
+      )
 
       repeat(60) { frame ->
         mainClock.advanceTimeByFrame()
