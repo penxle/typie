@@ -23,6 +23,7 @@ import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import swiftPMImport.co.typie.compose.EditorFloatingCursorBridge
+import swiftPMImport.co.typie.compose.EditorKeyboardBridge
 import swiftPMImport.co.typie.compose.EditorTextInputTraitsBridge
 
 internal actual class EditorPlatformInputBridge actual constructor() {
@@ -40,7 +41,9 @@ internal actual class EditorPlatformInputBridge actual constructor() {
 
   actual fun bindInputSession(session: PlatformTextInputSessionScope) = Unit
 
-  actual fun resetPlatformInputBeforeBindingDispatch() = Unit
+  actual fun resetPlatformInputBeforeBindingDispatch() {
+    EditorKeyboardBridge.endInputMethodComposition()
+  }
 
   actual fun onPreKeyEvent(
     event: KeyEvent,

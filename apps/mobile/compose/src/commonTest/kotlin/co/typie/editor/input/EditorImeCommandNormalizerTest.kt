@@ -21,14 +21,11 @@ import kotlin.test.assertEquals
 
 class EditorImeCommandNormalizerTest {
   @Test
-  fun `commit text normalizes to composition replacement and commit`() {
+  fun `commit text without active preedit replaces selection`() {
     val messages =
       EditorImeCommandNormalizer.normalize(listOf(CommitTextCommand("a", 1)), ime = null)
 
-    assertEquals(
-      listOf(Message.TextInput(listOf(FlatImeOp.Compose("a"), FlatImeOp.CommitAsIs))),
-      messages,
-    )
+    assertEquals(listOf(Message.TextInput(listOf(FlatImeOp.ReplaceSelection("a")))), messages)
   }
 
   @Test
@@ -65,8 +62,7 @@ class EditorImeCommandNormalizerTest {
             FlatImeOp.Compose("안녕하세요"),
             FlatImeOp.CommitAsIs,
             FlatImeOp.ClearComposition,
-            FlatImeOp.Compose(" "),
-            FlatImeOp.CommitAsIs,
+            FlatImeOp.ReplaceSelection(" "),
           )
         )
       ),
@@ -89,9 +85,9 @@ class EditorImeCommandNormalizerTest {
 
     assertEquals(
       listOf(
-        Message.TextInput(listOf(FlatImeOp.Compose("foo"), FlatImeOp.CommitAsIs)),
+        Message.TextInput(listOf(FlatImeOp.ReplaceSelection("foo"))),
         Message.Key(KeyEvent(Key.Enter)),
-        Message.TextInput(listOf(FlatImeOp.Compose("bar"), FlatImeOp.CommitAsIs)),
+        Message.TextInput(listOf(FlatImeOp.ReplaceSelection("bar"))),
       ),
       messages,
     )
@@ -104,10 +100,10 @@ class EditorImeCommandNormalizerTest {
 
     assertEquals(
       listOf(
-        Message.TextInput(listOf(FlatImeOp.Compose("a"), FlatImeOp.CommitAsIs)),
+        Message.TextInput(listOf(FlatImeOp.ReplaceSelection("a"))),
         Message.Key(KeyEvent(Key.Enter)),
         Message.Key(KeyEvent(Key.Enter)),
-        Message.TextInput(listOf(FlatImeOp.Compose("b"), FlatImeOp.CommitAsIs)),
+        Message.TextInput(listOf(FlatImeOp.ReplaceSelection("b"))),
       ),
       messages,
     )
@@ -124,7 +120,7 @@ class EditorImeCommandNormalizerTest {
       listOf(
         Message.TextInput(listOf(FlatImeOp.Compose(""), FlatImeOp.CommitAsIs)),
         Message.Key(KeyEvent(Key.Enter)),
-        Message.TextInput(listOf(FlatImeOp.Compose("foo"), FlatImeOp.CommitAsIs)),
+        Message.TextInput(listOf(FlatImeOp.ReplaceSelection("foo"))),
       ),
       messages,
     )
@@ -159,11 +155,7 @@ class EditorImeCommandNormalizerTest {
       )
 
     assertEquals(
-      listOf(
-        Message.TextInput(
-          listOf(FlatImeOp.CommitAsIs, FlatImeOp.Compose(" "), FlatImeOp.CommitAsIs)
-        )
-      ),
+      listOf(Message.TextInput(listOf(FlatImeOp.CommitAsIs, FlatImeOp.ReplaceSelection(" ")))),
       messages,
     )
   }
@@ -244,12 +236,9 @@ class EditorImeCommandNormalizerTest {
         Message.TextInput(
           listOf(
             FlatImeOp.SetSelection(4563, 4565),
-            FlatImeOp.Compose(""),
-            FlatImeOp.CommitAsIs,
-            FlatImeOp.Compose("ㅎ"),
-            FlatImeOp.CommitAsIs,
-            FlatImeOp.Compose("아"),
-            FlatImeOp.CommitAsIs,
+            FlatImeOp.ReplaceSelection(""),
+            FlatImeOp.ReplaceSelection("ㅎ"),
+            FlatImeOp.ReplaceSelection("아"),
           )
         )
       ),
@@ -269,9 +258,7 @@ class EditorImeCommandNormalizerTest {
 
     assertEquals(
       listOf(
-        Message.TextInput(
-          listOf(FlatImeOp.SetSelection(11, 12), FlatImeOp.Compose("x"), FlatImeOp.CommitAsIs)
-        )
+        Message.TextInput(listOf(FlatImeOp.SetSelection(11, 12), FlatImeOp.ReplaceSelection("x")))
       ),
       messages,
     )
@@ -336,10 +323,7 @@ class EditorImeCommandNormalizerTest {
         ime = null,
       )
 
-    assertEquals(
-      listOf(Message.TextInput(listOf(FlatImeOp.Compose("x"), FlatImeOp.CommitAsIs))),
-      messages,
-    )
+    assertEquals(listOf(Message.TextInput(listOf(FlatImeOp.ReplaceSelection("x")))), messages)
   }
 
   @Test

@@ -8,6 +8,7 @@ val githubPackagesUser =
   providers.gradleProperty("gpr.user").orElse(providers.environmentVariable("GITHUB_ACTOR"))
 val githubPackagesToken =
   providers.gradleProperty("gpr.key").orElse(providers.environmentVariable("GITHUB_TOKEN"))
+val composePatchesRepository = providers.gradleProperty("composePatchesRepository").orNull
 
 pluginManagement {
   repositories {
@@ -27,13 +28,17 @@ dependencyResolutionManagement {
   repositories {
     exclusiveContent {
       forRepository {
-        maven("https://maven.pkg.github.com/penxle/compose-patches") {
-          name = "GitHubPackages"
-          // Local builds read these from ~/.gradle/gradle.properties; CI can provide the
-          // environment fallbacks above.
-          credentials {
-            username = githubPackagesUser.orNull
-            password = githubPackagesToken.orNull
+        if (composePatchesRepository != null) {
+          maven(composePatchesRepository) { name = "ComposePatchesLocal" }
+        } else {
+          maven("https://maven.pkg.github.com/penxle/compose-patches") {
+            name = "GitHubPackages"
+            // Local builds read these from ~/.gradle/gradle.properties; CI can provide the
+            // environment fallbacks above.
+            credentials {
+              username = githubPackagesUser.orNull
+              password = githubPackagesToken.orNull
+            }
           }
         }
       }

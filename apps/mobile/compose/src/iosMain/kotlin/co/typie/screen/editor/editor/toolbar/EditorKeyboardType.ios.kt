@@ -206,5 +206,9 @@ internal actual fun rememberEditorKeyboardState(
   )
 }
 
+internal actual fun endInputMethodComposition() {
+  EditorKeyboardBridge.endInputMethodComposition()
+}
+
 private fun isEditorHardwareKeyboardConnected(): Boolean =
   EditorKeyboardBridge.isInHardwareKeyboardMode()

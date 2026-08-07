@@ -1,5 +1,6 @@
 import Foundation
 import GameController
+import ObjectiveC.runtime
 import UIKit
 
 @MainActor @objcMembers public final class EditorKeyboardBridge: NSObject {
@@ -9,6 +10,31 @@ import UIKit
     }
 
     return GCKeyboard.coalesced != nil
+  }
+
+  public static func endInputMethodComposition() -> Bool {
+    guard let keyboard = activeKeyboard() else {
+      return false
+    }
+
+    let selector = NSSelectorFromString("acceptAutocorrectionAndEndComposition")
+    guard
+      keyboard.responds(to: selector),
+      let method = class_getInstanceMethod(type(of: keyboard), selector),
+      method_getNumberOfArguments(method) == 2
+    else {
+      return false
+    }
+    let returnType = method_copyReturnType(method)
+    defer { free(returnType) }
+    guard String(cString: returnType) == "v" else {
+      return false
+    }
+
+    typealias VoidMethod = @convention(c) (AnyObject, Selector) -> Void
+    let function = unsafeBitCast(method_getImplementation(method), to: VoidMethod.self)
+    function(keyboard, selector)
+    return true
   }
 
   public static func isImeFrameVisible(notification: Notification) -> Bool {
@@ -34,12 +60,7 @@ import UIKit
   }
 
   private static func detectHardwareKeyboardModeFromUIKeyboardImpl() -> Bool? {
-    guard
-      let cls = NSClassFromString("UIKeyboardImpl") as? NSObject.Type,
-      let instance =
-        cls.perform(NSSelectorFromString("activeInstance"))?
-        .takeUnretainedValue() as? NSObject
-    else {
+    guard let instance = activeKeyboard() else {
       return nil
     }
 
@@ -52,6 +73,18 @@ import UIKit
     let methodImplementation = instance.method(for: selector)
     let function = unsafeBitCast(methodImplementation, to: BoolMethod.self)
     return function(instance, selector)
+  }
+
+  private static func activeKeyboard() -> NSObject? {
+    guard let cls = NSClassFromString("UIKeyboardImpl") as? NSObject.Type else {
+      return nil
+    }
+
+    let selector = NSSelectorFromString("activeInstance")
+    guard cls.responds(to: selector) else {
+      return nil
+    }
+    return cls.perform(selector)?.takeUnretainedValue() as? NSObject
   }
 
   private static func keyboardVisibleHeight(from keyboardFrame: CGRect) -> Double {

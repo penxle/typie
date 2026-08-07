@@ -247,6 +247,10 @@ internal fun EditorToolbarHost(
 
     val session = runtime.session ?: return
     session.submit { editor, context ->
+      // The iOS Korean keyboard can retain composition state without exposing a marked range.
+      // End that native state before changing the editor; doing this after the toolbar update is
+      // too late because the keyboard has already associated the preceding text with the new style.
+      endInputMethodComposition()
       editor.scope.launch(context) {
         val update =
           editor.updateWithBringIntoView(bringIntoViewRequests) {

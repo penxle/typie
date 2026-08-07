@@ -54,8 +54,14 @@ internal object EditorImeCommandNormalizer {
             messages += Message.Key(KeyEvent(Key.Enter))
           }
           if (segment.isNotEmpty() || index == 0) {
-            ops += FlatImeOp.Compose(segment)
-            ops += FlatImeOp.CommitAsIs
+            // commitText replaces an active preedit, but otherwise it is a committed
+            // selection replacement and must stay inside the native edit transaction.
+            if (hasActiveComposition) {
+              ops += FlatImeOp.Compose(segment)
+              ops += FlatImeOp.CommitAsIs
+            } else {
+              ops += FlatImeOp.ReplaceSelection(segment)
+            }
             hasActiveComposition = false
           }
         }

@@ -182,6 +182,8 @@ internal expect fun rememberEditorKeyboardState(
   isEditorInputSessionActive: () -> Boolean
 ): EditorKeyboardState
 
+internal expect fun endInputMethodComposition()
+
 internal fun isImeVisible(imeBottom: Dp, safeBottomInset: Dp): Boolean = imeBottom > safeBottomInset
 
 internal fun trustedImeBottomInset(rawImeBottom: Dp, keyboardState: EditorKeyboardState): Dp {

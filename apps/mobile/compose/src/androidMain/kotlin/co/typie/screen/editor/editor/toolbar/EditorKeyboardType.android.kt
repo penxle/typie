@@ -95,6 +95,8 @@ internal actual fun rememberEditorKeyboardState(
   )
 }
 
+internal actual fun endInputMethodComposition() = Unit
+
 private fun isExternalKeyboardAttached(): Boolean =
   InputDevice.getDeviceIds().any { deviceId ->
     val device = InputDevice.getDevice(deviceId)
