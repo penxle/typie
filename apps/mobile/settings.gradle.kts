@@ -4,6 +4,11 @@ rootProject.name = "typie"
 
 enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 
+val githubPackagesUser =
+  providers.gradleProperty("gpr.user").orElse(providers.environmentVariable("GITHUB_ACTOR"))
+val githubPackagesToken =
+  providers.gradleProperty("gpr.key").orElse(providers.environmentVariable("GITHUB_TOKEN"))
+
 pluginManagement {
   repositories {
     mavenCentral()
@@ -20,6 +25,23 @@ pluginManagement {
 
 dependencyResolutionManagement {
   repositories {
+    exclusiveContent {
+      forRepository {
+        maven("https://maven.pkg.github.com/penxle/compose-patches") {
+          name = "GitHubPackages"
+          // Local builds read these from ~/.gradle/gradle.properties; CI can provide the
+          // environment fallbacks above.
+          credentials {
+            username = githubPackagesUser.orNull
+            password = githubPackagesToken.orNull
+          }
+        }
+      }
+      filter {
+        includeVersion("org.jetbrains.compose.ui", "ui-iosarm64", "1.12.0-beta03")
+        includeVersion("org.jetbrains.compose.ui", "ui-iossimulatorarm64", "1.12.0-beta03")
+      }
+    }
     mavenCentral()
     google {
       mavenContent {

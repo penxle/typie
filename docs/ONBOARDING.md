@@ -669,6 +669,30 @@ ICU 리소스를 사용한다.
 | Android | Firebase Messaging, Play Billing, Google/Kakao/Naver 로그인 |
 | iOS     | Swift Package bridge, Sentry, push notification             |
 
+#### GitHub Packages 인증
+
+`apps/mobile`의 Gradle 빌드는 GitHub Packages에 배포된 일부 Maven 의존성을
+사용한다. GitHub Packages는 공개 패키지를 내려받을 때도 인증을 요구하므로, 모바일
+빌드 전에 각자 GitHub personal access token (classic)을 준비해야 한다.
+
+1. GitHub에서 `read:packages` 권한이 있는 personal access token (classic)을
+   생성한다.
+2. `~/.gradle/gradle.properties`에 다음 값을 추가한다.
+
+   ```properties
+   gpr.user=<GitHub 사용자명>
+   gpr.key=<personal access token>
+   ```
+
+#### Compose 패치 사용
+
+[`penxle/compose-patches`](https://github.com/penxle/compose-patches)에 게시된 패치를 사용할 때는 `apps/mobile/settings.gradle.kts`의
+`exclusiveContent`에 다음을 반영한다.
+
+- Maven 저장소는 `https://maven.pkg.github.com/penxle/compose-patches`를 사용한다.
+- 패치의 `release.json`에 선언된 각 publication에 대해 최상위 `version`과 `group`, `artifact`를
+  `includeVersion(group, artifact, version)`으로 추가한다.
+
 ### apps/literoom
 
 S3 Object Lambda 핸들러다. Sharp로 원본을 조회하고 리사이즈, WebP/PNG 변환을
