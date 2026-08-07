@@ -68,6 +68,8 @@ query HomeScreen_Query($siteId: ID!) {
       ...Img_image
     }
 
+    ...UserGoalFields_user
+
     recentlyViewedEntities(siteId: $siteId) {
       id
       type

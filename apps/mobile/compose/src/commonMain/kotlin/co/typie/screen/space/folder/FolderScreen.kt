@@ -147,6 +147,15 @@ fun FolderScreen(entityId: String) {
         .mapNotNull { child -> child.entityRow_entity.takeIf { it.isRowEntity() } }
         .sortedBy { it.order }
     }
+  val goalGlyphs =
+    remember(root?.children) {
+      root
+        ?.children
+        .orEmpty()
+        .map { it.entityGoalGlyph_entity }
+        .filter { it.goal != null }
+        .associateBy { it.id }
+    }
   val serverChildIds = remember(serverChildren) { serverChildren.map { it.id } }
   val reorderState =
     rememberReorderableLazyColumnState(keys = serverChildIds, lazyListState = scrollState)
@@ -431,6 +440,7 @@ fun FolderScreen(entityId: String) {
       reorderState = reorderState,
       selectionState = selectionState,
       dimmedItemIds = cutDimmedItemIds,
+      goalGlyphs = goalGlyphs,
       bottomSpacerHeight = overlayState.reservedBottomSpacerHeight,
       viewportTopInset = topBarOcclusion,
       viewportBottomInset = reorderViewportBottomInset,
@@ -485,6 +495,10 @@ fun FolderScreen(entityId: String) {
                     EntityAction.OpenExternal -> uriHandler.openUri(entity.url)
 
                     EntityAction.Share -> presentDocumentShare(listOf(entity.id))
+
+                    EntityAction.Goal -> {
+                      presenterScope.launch { nav.navigate(Route.EntityGoal(entity.id)) }
+                    }
 
                     EntityAction.Move -> {
                       presenterScope.launch {
@@ -594,6 +608,10 @@ fun FolderScreen(entityId: String) {
                     EntityAction.OpenExternal -> uriHandler.openUri(entity.url)
 
                     EntityAction.Share -> presentFolderShare(listOf(entity.id))
+
+                    EntityAction.Goal -> {
+                      presenterScope.launch { nav.navigate(Route.EntityGoal(entity.id)) }
+                    }
 
                     EntityAction.Move -> {
                       presenterScope.launch {

@@ -1,0 +1,28 @@
+query UserGoalScreen_Query {
+  me @catch(to: THROW) {
+    id
+
+    ...UserGoalFields_user
+
+    characterCountChanges {
+      date
+      additions
+    }
+  }
+}
+
+mutation UserGoalScreen_UpdateUserGoal_Mutation($input: UpdateUserGoalInput!) {
+  updateUserGoal(input: $input) {
+    id
+
+    ...UserGoalFields_user
+  }
+}
+
+mutation UserGoalScreen_DeleteUserGoal_Mutation {
+  deleteUserGoal {
+    id
+
+    ...UserGoalFields_user
+  }
+}

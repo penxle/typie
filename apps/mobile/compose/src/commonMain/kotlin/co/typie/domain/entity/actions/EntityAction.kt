@@ -12,6 +12,8 @@ internal sealed interface EntityAction {
 
   data object Share : EntityAction
 
+  data object Goal : EntityAction
+
   data object Move : EntityAction
 
   data object Copy : EntityAction
@@ -62,6 +64,7 @@ internal fun entityItemActionSections(): List<EntityActionSection> {
             action = EntityAction.OpenExternal,
           ),
           EntityActionMenuItem(icon = Lucide.Blend, label = "공유 및 게시", action = EntityAction.Share),
+          EntityActionMenuItem(icon = Lucide.Target, label = "목표", action = EntityAction.Goal),
         )
     ),
     EntityActionSection(
