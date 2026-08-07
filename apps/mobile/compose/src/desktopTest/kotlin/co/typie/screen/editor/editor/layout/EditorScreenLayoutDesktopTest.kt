@@ -841,7 +841,7 @@ class EditorScreenLayoutDesktopTest {
     waitForIdle()
 
     onNodeWithTag(LayoutTag).performMouseInput {
-      moveTo(Offset(x = TestViewportSize.width - 20f, y = 32f))
+      moveTo(Offset(x = TestViewportSize.width - ExpectedScrollbarHitWidth - 1f, y = 32f))
       press()
       release()
     }
@@ -852,7 +852,7 @@ class EditorScreenLayoutDesktopTest {
   }
 
   @Test
-  fun scrollbarCoreTouchAxisDragClaimsAfterSlop() = runComposeUiTest {
+  fun scrollbarHitAreaTouchAxisDragClaimsAfterSlop() = runComposeUiTest {
     val fixture = ViewportOverlayFixture()
     setViewportOverlayContent(
       fixture = fixture,
@@ -872,8 +872,8 @@ class EditorScreenLayoutDesktopTest {
         minThumbSize = ExpectedScrollbarMinThumbSize,
         leadingInset = fixture.visibleArea.topOcclusion,
         trailingInset = fixture.visibleArea.bottomOcclusion,
-        leadingPadding = ExpectedScrollbarTrackPadding,
-        trailingPadding = ExpectedScrollbarTrackPadding,
+        leadingPadding = ExpectedScrollbarEdgePadding,
+        trailingPadding = ExpectedScrollbarEdgePadding,
       )
     val expectedScroll =
       resolveEditorViewportScrollbarScrollPositionFromDrag(
@@ -885,9 +885,11 @@ class EditorScreenLayoutDesktopTest {
         contentLength = fixture.viewportState.contentSize.height,
       )
     onNodeWithTag(LayoutTag).performTouchInput {
-      down(Offset(x = TestViewportSize.width - 6f, y = 32f))
+      down(Offset(x = TestViewportSize.width - ExpectedScrollbarHitWidth + 1f, y = 32f))
       advanceEventTime(16L)
-      moveTo(Offset(x = TestViewportSize.width - 6f, y = 32f + dragDelta))
+      moveTo(
+        Offset(x = TestViewportSize.width - ExpectedScrollbarHitWidth + 1f, y = 32f + dragDelta)
+      )
       up()
     }
     waitForIdle()
@@ -910,9 +912,9 @@ class EditorScreenLayoutDesktopTest {
 
     val initialScroll = fixture.viewportState.scrollOffset.y
     onNodeWithTag(LayoutTag).performTouchInput {
-      down(Offset(x = TestViewportSize.width - 20f, y = 32f))
+      down(Offset(x = TestViewportSize.width - ExpectedScrollbarHitWidth - 1f, y = 32f))
       advanceEventTime(16L)
-      moveTo(Offset(x = TestViewportSize.width - 20f, y = 72f))
+      moveTo(Offset(x = TestViewportSize.width - ExpectedScrollbarHitWidth - 1f, y = 72f))
       up()
     }
     waitForIdle()
@@ -935,9 +937,9 @@ class EditorScreenLayoutDesktopTest {
 
     val initialScroll = fixture.viewportState.scrollOffset.y
     onNodeWithTag(LayoutTag).performTouchInput {
-      down(Offset(x = TestViewportSize.width - 20f, y = 32f))
+      down(Offset(x = TestViewportSize.width - ExpectedScrollbarHitWidth - 1f, y = 32f))
       advanceEventTime(EditorScrollbarPressAndHoldDurationMillis)
-      moveTo(Offset(x = TestViewportSize.width - 20f, y = 72f))
+      moveTo(Offset(x = TestViewportSize.width - ExpectedScrollbarHitWidth - 1f, y = 72f))
       up()
     }
     waitForIdle()
@@ -1017,9 +1019,9 @@ class EditorScreenLayoutDesktopTest {
 
     val initialScroll = fixture.viewportState.scrollOffset.y
     onNodeWithTag(LayoutTag).performMouseInput {
-      moveTo(Offset(x = TestViewportSize.width - 20f, y = 32f))
+      moveTo(Offset(x = TestViewportSize.width - ExpectedScrollbarHitWidth - 1f, y = 32f))
       press()
-      moveTo(Offset(x = TestViewportSize.width - 20f, y = 72f))
+      moveTo(Offset(x = TestViewportSize.width - ExpectedScrollbarHitWidth - 1f, y = 72f))
       release()
     }
     waitForIdle()
@@ -1042,10 +1044,10 @@ class EditorScreenLayoutDesktopTest {
 
     val initialScroll = fixture.viewportState.scrollOffset.y
     onNodeWithTag(LayoutTag).performMouseInput {
-      moveTo(Offset(x = TestViewportSize.width - 20f, y = 32f))
+      moveTo(Offset(x = TestViewportSize.width - ExpectedScrollbarHitWidth - 1f, y = 32f))
       press()
       advanceEventTime(EditorScrollbarPressAndHoldDurationMillis)
-      moveTo(Offset(x = TestViewportSize.width - 20f, y = 72f))
+      moveTo(Offset(x = TestViewportSize.width - ExpectedScrollbarHitWidth - 1f, y = 72f))
       release()
     }
     waitForIdle()
@@ -1870,7 +1872,8 @@ class EditorScreenLayoutDesktopTest {
     const val HeaderHeightPx = 96f
     const val HeaderText = "Header title"
     const val ExpectedScrollbarMinThumbSize = 30f
-    const val ExpectedScrollbarTrackPadding = 2f
+    const val ExpectedScrollbarEdgePadding = 2f
+    const val ExpectedScrollbarHitWidth = 20f
     val ControlPointerMove = Offset(x = 40f, y = 40f)
     val ControlPointerStart = Offset(x = 80f, y = 40f)
     val EditorPointerMove = Offset(x = 300f, y = HeaderHeightPx + 140f)

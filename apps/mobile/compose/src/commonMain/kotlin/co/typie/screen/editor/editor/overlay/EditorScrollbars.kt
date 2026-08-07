@@ -69,10 +69,11 @@ import kotlinx.coroutines.withTimeoutOrNull
 private const val ScrollbarOpacityAnimationMs = 300
 private const val ScrollbarThumbAnimationMs = 250
 private const val ScrollbarMinThumbSize = 30f
-private const val ScrollbarTrackPadding = 2f
-private const val ScrollbarTrackWidth = 12f
+private const val ScrollbarEdgePadding = 2f
+private const val ScrollbarHitWidth = 20f
 private const val ScrollbarThumbWidth = 6f
 private const val ScrollbarActiveThumbWidth = 10f
+private const val ScrollbarThumbLaneWidth = ScrollbarActiveThumbWidth + ScrollbarEdgePadding
 private const val ScrollbarHideDelayMs = 1500L
 private const val ScrollbarIndicatorHideDelayMs = 300L
 private const val ScrollbarIndicatorHeight = 24f
@@ -142,7 +143,7 @@ private fun resolveEditorScrollbarLayoutMetrics(
   scrollOffset: Offset,
   visibleArea: EditorVisibleArea,
 ): EditorScrollbarLayoutMetrics {
-  fun vertical(reserveHorizontalTrack: Boolean): EditorViewportScrollbarMetrics =
+  fun vertical(reserveHorizontalScrollbar: Boolean): EditorViewportScrollbarMetrics =
     resolveEditorViewportScrollbarMetrics(
       viewportLength = viewportSize.height,
       contentLength = contentSize.height,
@@ -150,50 +151,52 @@ private fun resolveEditorScrollbarLayoutMetrics(
       minThumbSize = ScrollbarMinThumbSize,
       leadingInset = visibleArea.topOcclusion,
       trailingInset = visibleArea.bottomOcclusion,
-      leadingPadding = ScrollbarTrackPadding,
+      leadingPadding = ScrollbarEdgePadding,
       trailingPadding =
-        ScrollbarTrackPadding + if (reserveHorizontalTrack) ScrollbarTrackWidth else 0f,
+        ScrollbarEdgePadding + if (reserveHorizontalScrollbar) ScrollbarThumbLaneWidth else 0f,
     )
 
-  fun horizontal(reserveVerticalTrack: Boolean): EditorViewportScrollbarMetrics =
+  fun horizontal(reserveVerticalScrollbar: Boolean): EditorViewportScrollbarMetrics =
     resolveEditorViewportScrollbarMetrics(
       viewportLength = viewportSize.width,
       contentLength = contentSize.width,
       scrollPosition = scrollOffset.x,
       minThumbSize = ScrollbarMinThumbSize,
-      leadingPadding = ScrollbarTrackPadding,
+      leadingPadding = ScrollbarEdgePadding,
       trailingPadding =
-        ScrollbarTrackPadding + if (reserveVerticalTrack) ScrollbarTrackWidth else 0f,
+        ScrollbarEdgePadding + if (reserveVerticalScrollbar) ScrollbarThumbLaneWidth else 0f,
     )
 
-  val verticalWithoutCrossTrack = vertical(reserveHorizontalTrack = false)
-  val horizontalWithoutCrossTrack = horizontal(reserveVerticalTrack = false)
+  val verticalWithoutHorizontalScrollbar = vertical(reserveHorizontalScrollbar = false)
+  val horizontalWithoutVerticalScrollbar = horizontal(reserveVerticalScrollbar = false)
   val (vertical, horizontal) =
     when {
-      !verticalWithoutCrossTrack.isVisible && !horizontalWithoutCrossTrack.isVisible ->
-        verticalWithoutCrossTrack to horizontalWithoutCrossTrack
+      !verticalWithoutHorizontalScrollbar.isVisible &&
+        !horizontalWithoutVerticalScrollbar.isVisible ->
+        verticalWithoutHorizontalScrollbar to horizontalWithoutVerticalScrollbar
 
-      !verticalWithoutCrossTrack.isVisible ->
-        vertical(reserveHorizontalTrack = true) to horizontalWithoutCrossTrack
+      !verticalWithoutHorizontalScrollbar.isVisible ->
+        vertical(reserveHorizontalScrollbar = true) to horizontalWithoutVerticalScrollbar
 
-      !horizontalWithoutCrossTrack.isVisible ->
-        verticalWithoutCrossTrack to horizontal(reserveVerticalTrack = true)
+      !horizontalWithoutVerticalScrollbar.isVisible ->
+        verticalWithoutHorizontalScrollbar to horizontal(reserveVerticalScrollbar = true)
 
       else -> {
-        val verticalWithCrossTrack = vertical(reserveHorizontalTrack = true)
-        val horizontalWithCrossTrack = horizontal(reserveVerticalTrack = true)
+        val verticalWithHorizontalScrollbar = vertical(reserveHorizontalScrollbar = true)
+        val horizontalWithVerticalScrollbar = horizontal(reserveVerticalScrollbar = true)
         when {
-          verticalWithCrossTrack.isVisible && horizontalWithCrossTrack.isVisible ->
-            verticalWithCrossTrack to horizontalWithCrossTrack
+          verticalWithHorizontalScrollbar.isVisible && horizontalWithVerticalScrollbar.isVisible ->
+            verticalWithHorizontalScrollbar to horizontalWithVerticalScrollbar
 
-          verticalWithCrossTrack.isVisible -> verticalWithoutCrossTrack to horizontalWithCrossTrack
+          verticalWithHorizontalScrollbar.isVisible ->
+            verticalWithoutHorizontalScrollbar to horizontalWithVerticalScrollbar
 
-          horizontalWithCrossTrack.isVisible ->
-            verticalWithCrossTrack to horizontalWithoutCrossTrack
+          horizontalWithVerticalScrollbar.isVisible ->
+            verticalWithHorizontalScrollbar to horizontalWithoutVerticalScrollbar
 
-          // Both axes cannot fit while reserving each other. Keep the vertical track, which is the
-          // primary document-scrolling axis, and hide the horizontal one.
-          else -> verticalWithoutCrossTrack to horizontalWithCrossTrack
+          // Both axes cannot fit while reserving each other. Keep the vertical scrollbar, which is
+          // the primary document-scrolling axis, and hide the horizontal one.
+          else -> verticalWithoutHorizontalScrollbar to horizontalWithVerticalScrollbar
         }
       }
     }
@@ -499,10 +502,10 @@ internal fun EditorScrollbarIndicatorLayout(
       if (verticalMetrics.isVisible) {
         val top =
           visibleArea.topOcclusion +
-            ScrollbarTrackPadding +
+            ScrollbarEdgePadding +
             verticalMetrics.thumbOffset +
             verticalMetrics.thumbSize / 2f - ScrollbarIndicatorHeight / 2f
-        val right = ScrollbarTrackPadding + ScrollbarActiveThumbWidth + ScrollbarIndicatorGap
+        val right = ScrollbarThumbLaneWidth + ScrollbarIndicatorGap
         val x =
           (Dp(layoutMetrics.viewportSize.width - right).roundToPx() - placeable.width)
             .coerceAtLeast(0)
@@ -530,8 +533,8 @@ private fun EditorScrollbarThumb(
   val latestVisibleArea = rememberUpdatedState(visibleArea)
   val latestTryClaimDirectDrag = rememberUpdatedState(tryClaimDirectDrag)
   val latestOnDragChanged = rememberUpdatedState(onDragChanged)
-  val trackWidth = ScrollbarTrackWidth.dp
-  val trackPadding = ScrollbarTrackPadding.dp
+  val thumbLaneWidth = ScrollbarThumbLaneWidth.dp
+  val edgePadding = ScrollbarEdgePadding.dp
   val animatedThumbThickness by
     animateDpAsState(
       targetValue = Dp(resolveEditorScrollbarThumbThickness(isDragging)),
@@ -586,9 +589,9 @@ private fun EditorScrollbarThumb(
         Box(
           modifier =
             Modifier.align(Alignment.CenterEnd)
-              .width(trackWidth)
+              .width(thumbLaneWidth)
               .fillMaxHeight()
-              .padding(end = trackPadding),
+              .padding(end = edgePadding),
           contentAlignment = Alignment.CenterEnd,
         ) {
           EditorScrollbarThumbBody(
@@ -601,8 +604,8 @@ private fun EditorScrollbarThumb(
           modifier =
             Modifier.align(Alignment.BottomCenter)
               .fillMaxWidth()
-              .height(trackWidth)
-              .padding(bottom = trackPadding),
+              .height(thumbLaneWidth)
+              .padding(bottom = edgePadding),
           contentAlignment = Alignment.BottomCenter,
         ) {
           EditorScrollbarThumbBody(
@@ -626,7 +629,7 @@ internal fun EditorScrollbarThumbLayout(
   Layout(modifier = modifier, content = content) { measurables, constraints ->
     val layoutMetrics = resolveEditorScrollbarLayoutMetrics(viewportState, visibleArea)
     val axisMetrics = if (!horizontal) layoutMetrics.vertical else layoutMetrics.horizontal
-    val hitThickness = Dp(ScrollbarTrackWidth).roundToPx()
+    val hitThickness = Dp(ScrollbarHitWidth).roundToPx()
     val thumbLength = Dp(axisMetrics.thumbSize).roundToPx()
     val childConstraints =
       if (!horizontal) {
@@ -640,21 +643,17 @@ internal fun EditorScrollbarThumbLayout(
       if (axisMetrics.isVisible) {
         val x =
           if (!horizontal) {
-            Dp(layoutMetrics.viewportSize.width - ScrollbarTrackWidth).roundToPx().coerceAtLeast(0)
+            Dp(layoutMetrics.viewportSize.width - ScrollbarHitWidth).roundToPx().coerceAtLeast(0)
           } else {
-            Dp(ScrollbarTrackPadding + axisMetrics.thumbOffset).roundToPx().coerceAtLeast(0)
+            Dp(ScrollbarEdgePadding + axisMetrics.thumbOffset).roundToPx().coerceAtLeast(0)
           }
         val y =
           if (!horizontal) {
-            Dp(visibleArea.topOcclusion + ScrollbarTrackPadding + axisMetrics.thumbOffset)
+            Dp(visibleArea.topOcclusion + ScrollbarEdgePadding + axisMetrics.thumbOffset)
               .roundToPx()
               .coerceAtLeast(0)
           } else {
-            Dp(
-                layoutMetrics.viewportSize.height -
-                  visibleArea.bottomOcclusion -
-                  ScrollbarTrackWidth
-              )
+            Dp(layoutMetrics.viewportSize.height - visibleArea.bottomOcclusion - ScrollbarHitWidth)
               .roundToPx()
               .coerceAtLeast(0)
           }

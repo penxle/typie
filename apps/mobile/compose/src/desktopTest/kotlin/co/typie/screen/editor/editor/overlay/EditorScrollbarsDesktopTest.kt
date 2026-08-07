@@ -74,7 +74,9 @@ class EditorScrollbarsDesktopTest {
 
     assertTrue(zoomedPlacements.isNotEmpty())
     zoomedPlacements.forEach { placement ->
+      assertEquals(80f, placement.left, absoluteTolerance = 0.01f)
       assertEquals(34f, placement.top, absoluteTolerance = 0.01f)
+      assertEquals(20f, placement.width, absoluteTolerance = 0.01f)
       assertEquals(32f, placement.height, absoluteTolerance = 0.01f)
     }
   }
@@ -134,12 +136,16 @@ class EditorScrollbarsDesktopTest {
     assertTrue(verticalPlacements.isNotEmpty())
     assertTrue(horizontalPlacements.isNotEmpty())
     verticalPlacements.forEach { placement ->
+      assertEquals(80f, placement.left, absoluteTolerance = 0.01f)
       assertEquals(2f, placement.top, absoluteTolerance = 0.01f)
+      assertEquals(20f, placement.width, absoluteTolerance = 0.01f)
       assertEquals(42f, placement.height, absoluteTolerance = 0.01f)
     }
     horizontalPlacements.forEach { placement ->
       assertEquals(2f, placement.left, absoluteTolerance = 0.01f)
+      assertEquals(80f, placement.top, absoluteTolerance = 0.01f)
       assertEquals(42f, placement.width, absoluteTolerance = 0.01f)
+      assertEquals(20f, placement.height, absoluteTolerance = 0.01f)
     }
 
     runOnIdle { contentSize.value = Size(width = 100f, height = 100f) }
