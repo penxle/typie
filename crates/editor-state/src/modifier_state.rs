@@ -8,7 +8,7 @@ use editor_model::{
 };
 use strum::IntoEnumIterator;
 
-use crate::modifier_resolution::caret_modifiers;
+use crate::modifier_resolution::resolve_caret_modifiers;
 use crate::pending_modifier::PendingModifier;
 use crate::projected_state::ProjectedState;
 use crate::selection::ResolvedSelection;
@@ -377,7 +377,7 @@ pub fn resolve_modifier_state(
     let rs = sel.resolve(&view)?;
     let cell_background_color = cell_background_color_for_selection(&view, sel, &rs);
     let mut out = if rs.is_collapsed() {
-        let caret = caret_modifiers(state, &sel.head, pending);
+        let caret = resolve_caret_modifiers(state, &sel.head, pending);
         let modifiers = if let Some(node) = view.node(sel.head.node)
             && Schema::node_spec(node.node_type()).is_textblock()
         {
