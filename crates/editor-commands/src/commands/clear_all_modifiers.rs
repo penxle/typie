@@ -6,7 +6,7 @@ use editor_state::{PendingModifier, PendingModifiers};
 use editor_transaction::Transaction;
 
 use crate::CommandResult;
-use crate::helpers::clear_all_modifiers_range;
+use crate::helpers::{clear_all_modifiers_range, companion_unset};
 
 pub fn clear_all_modifiers(tr: &mut Transaction) -> CommandResult {
     let Some(selection) = tr.selection() else {
@@ -40,12 +40,30 @@ fn clear_all_modifiers_collapsed(tr: &mut Transaction) -> CommandResult {
         .expect("entry caller guaranteed selection")
         .head;
 
-    let mut types: BTreeSet<ModifierType> = {
+    let (block_id, block_carry_types, own_types) = {
         let view = tr.view();
-        caret_own_text_types(&view, pos.node, pos.offset)
+        let block = view
+            .node(pos.node)
+            .and_then(|n| n.ancestors().find(|a| a.spec().is_textblock()));
+        let id = block.as_ref().map(|b| b.id());
+        let carry: Vec<_> = block
             .into_iter()
-            .collect()
+            .flat_map(|b| b.carry_modifiers().into_keys())
+            .filter(|t| t.is_carry_kind())
+            .collect();
+        let own = caret_own_text_types(&view, pos.node, pos.offset);
+        (id, carry, own)
     };
+
+    let had_carry = !block_carry_types.is_empty();
+    if let Some(id) = block_id {
+        for &ty in &block_carry_types {
+            companion_unset(tr, &[id], ty)?;
+        }
+    }
+
+    let mut types: BTreeSet<ModifierType> =
+        own_types.into_iter().chain(block_carry_types).collect();
 
     for pm in tr.pending_modifiers() {
         match pm {
@@ -60,7 +78,7 @@ fn clear_all_modifiers_collapsed(tr: &mut Transaction) -> CommandResult {
     }
 
     if types.is_empty() {
-        return Ok(false);
+        return Ok(had_carry);
     }
 
     let mut pending: PendingModifiers = tr
@@ -418,6 +436,21 @@ mod tests {
         assert!(
             actual.projected.carry_modifiers(p1).is_empty(),
             "clear-all at the paragraph end wipes every carry-kind record"
+        );
+    }
+
+    #[test]
+    fn collapsed_clears_paragraph_carry_modifiers_in_empty_paragraph() {
+        let (initial, p1) = state! {
+            doc { root {
+                p1: paragraph carry([font_size(2400), bold]) {}
+            } }
+            selection: (p1, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| clear_all_modifiers(&mut tr));
+        assert!(
+            actual.projected.carry_modifiers(p1).is_empty(),
+            "collapsed clear-all on an empty paragraph must wipe paragraph carry modifiers"
         );
     }
 }

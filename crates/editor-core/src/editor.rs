@@ -4350,6 +4350,46 @@ mod tests {
     }
 
     #[test]
+    fn empty_paragraph_clear_all_modifiers_clears_carry_font_size() {
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph carry([font_size(2400)]) {} } }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: crate::message::SystemEvent::Initialize,
+        });
+
+        let big_caret = editor
+            .view()
+            .cursor_metrics(&editor.state, &Position::new(p1, 0))
+            .expect("cursor metrics at 24pt empty paragraph")
+            .caret;
+
+        editor.apply(Message::Modifier {
+            op: ModifierOp::ClearAll,
+        });
+
+        assert!(
+            editor.state().projected.carry_modifiers(p1).is_empty(),
+            "carry modifiers on p1 must be wiped after ClearAll"
+        );
+
+        let cleared_caret = editor
+            .view()
+            .cursor_metrics(&editor.state, &Position::new(p1, 0))
+            .expect("cursor metrics after ClearAll")
+            .caret;
+
+        assert!(
+            cleared_caret.height < big_caret.height,
+            "caret height must return to default size after ClearAll: big={}, cleared={}",
+            big_caret.height,
+            cleared_caret.height
+        );
+    }
+
+    #[test]
     fn dnd_over_text_sets_drop_indicator_and_invalidates_render() {
         let (initial, p1) = state! {
             doc { root { p1: paragraph { text("hello") } } }
