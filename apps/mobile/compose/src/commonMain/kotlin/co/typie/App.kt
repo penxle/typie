@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import co.typie.dev.SystemChrome
 import co.typie.ext.ScrollGestureLockScope
 import co.typie.network.Http
+import co.typie.platform.ProvideSoftwareKeyboardPresentation
 import co.typie.shell.RootShell
 import co.typie.ui.theme.AppTheme
 import coil3.ImageLoader
@@ -27,5 +28,7 @@ fun App() {
       .build()
   }
 
-  AppTheme { SystemChrome { ScrollGestureLockScope { RootShell() } } }
+  AppTheme {
+    ProvideSoftwareKeyboardPresentation { SystemChrome { ScrollGestureLockScope { RootShell() } } }
+  }
 }

@@ -12,6 +12,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.dp
+import co.typie.platform.LocalSoftwareKeyboardPresentationController
 import platform.Foundation.NSNotificationCenter
 import platform.Foundation.NSOperationQueue
 import platform.GameController.GCKeyboardDidConnectNotification
@@ -29,6 +30,9 @@ internal actual fun rememberEditorKeyboardState(
 ): EditorKeyboardState {
   val editorInputSessionActive = isEditorInputSessionActive()
   val currentEditorInputSessionActive by rememberUpdatedState(editorInputSessionActive)
+  val keyboardInteractionResolver = remember { EditorKeyboardInteractionResolver() }
+  val keyboardInteractionState =
+    LocalSoftwareKeyboardPresentationController.current.interactionState
   val imeHideOwnershipTracker = remember { EditorImeHideOwnershipTracker() }
   var hardwareKeyboardMode by remember { mutableStateOf(isEditorHardwareKeyboardConnected()) }
   var imeFrameVisible by remember { mutableStateOf(false) }
@@ -184,17 +188,21 @@ internal actual fun rememberEditorKeyboardState(
     }
   }
 
-  return EditorKeyboardState(
-    type =
-      if (hardwareKeyboardMode) {
-        EditorKeyboardType.Hardware
-      } else {
-        EditorKeyboardType.Software
-      },
-    imeFrameVisible = imeFrameVisible,
-    imeHideEventVersion = imeHideEventVersion,
-    imeHideEventOwner = imeHideEventOwner,
-    presentation = presentation,
+  return keyboardInteractionResolver.resolve(
+    nativeState =
+      EditorKeyboardState(
+        type =
+          if (hardwareKeyboardMode) {
+            EditorKeyboardType.Hardware
+          } else {
+            EditorKeyboardType.Software
+          },
+        imeFrameVisible = imeFrameVisible,
+        imeHideEventVersion = imeHideEventVersion,
+        imeHideEventOwner = imeHideEventOwner,
+        presentation = presentation,
+      ),
+    interactionState = keyboardInteractionState,
   )
 }
 

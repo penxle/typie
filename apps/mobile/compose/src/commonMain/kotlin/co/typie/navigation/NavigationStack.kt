@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.ProvidedValue
 import androidx.compose.runtime.getValue
@@ -49,6 +50,7 @@ import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import co.touchlab.kermit.Logger
 import co.typie.ext.pointerIgnore
+import co.typie.platform.LocalSoftwareKeyboardPresentationController
 import co.typie.platform.isTouchDragPointer
 import co.typie.route.Route
 import co.typie.route.RouteTransitionStyle
@@ -281,6 +283,15 @@ fun NavigationStack(
   var transitionStyle by remember { mutableStateOf(RouteTransitionStyle.Slide) }
 
   val progress = remember { Animatable(0f) }
+  val softwareKeyboardPresentationController = LocalSoftwareKeyboardPresentationController.current
+  val softwareKeyboardInteraction =
+    remember(softwareKeyboardPresentationController) {
+      NavigationSoftwareKeyboardInteraction(softwareKeyboardPresentationController)
+    }
+  DisposableEffect(softwareKeyboardInteraction) { onDispose(softwareKeyboardInteraction::dispose) }
+  LaunchedEffect(softwareKeyboardInteraction) {
+    snapshotFlow { progress.value }.collect(softwareKeyboardInteraction::updateHiddenProgress)
+  }
   val topBarBackdropHazeState = remember { HazeState() }
   val topBarSampleRequests = remember { NavigationTopBarSampleRequests() }
   val topBarLuminanceCache =
@@ -314,13 +325,15 @@ fun NavigationStack(
 
   suspend fun settleAtCurrentRoute() {
     progress.snapTo(0f)
+    softwareKeyboardInteraction.restore()
     visibleRoute = navigator.current
     behindRoute = null
     animState = AnimState.Idle
   }
 
-  fun commitRemovalTo(target: Route) {
+  suspend fun commitRemovalTo(target: Route) {
     val removedRoutes = navigator.performPopTo(target)
+    softwareKeyboardInteraction.hideAndAwaitResolution()
     visibleRoute = navigator.current
     behindRoute = null
     animState = AnimState.Idle
@@ -465,6 +478,7 @@ fun NavigationStack(
     transitionStyle = visibleRoute.transitionStyleTo(prev)
     behindRoute = prev
     animState = AnimState.Dragging
+    softwareKeyboardInteraction.start()
     scope.launch { progress.snapTo(0f) }
   }
 
@@ -475,6 +489,7 @@ fun NavigationStack(
     behindRoute = prev
     animState = AnimState.Dragging
     predictiveBackActive = true
+    softwareKeyboardInteraction.start()
     progress.snapTo(0f)
     return true
   }
@@ -520,8 +535,7 @@ fun NavigationStack(
         commitPopDrag()
       } else {
         progress.animateTo(0f, spring(stiffness = StiffnessMediumLow))
-        behindRoute = null
-        animState = AnimState.Idle
+        settleAtCurrentRoute()
       }
     }
   }
@@ -530,8 +544,7 @@ fun NavigationStack(
     if (animState != AnimState.Dragging) return
     scope.launch {
       progress.animateTo(0f, spring(stiffness = StiffnessMediumLow))
-      behindRoute = null
-      animState = AnimState.Idle
+      settleAtCurrentRoute()
     }
   }
 
@@ -585,6 +598,7 @@ fun NavigationStack(
                 // Server deletion already succeeded. Do not strand the deleted document because
                 // presentation failed; finish the exact prepared removal without another prompt.
                 val removedRoutes = navigator.performPopTo(targetRoute)
+                softwareKeyboardInteraction.hideAndAwaitResolution()
                 settleAtCurrentRoute()
                 clearRemovedRoutes(removedRoutes)
                 navigator.consumePopRequest()

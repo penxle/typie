@@ -4,6 +4,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import co.typie.ext.trustedImeBottomInset as trustedSettledImeBottomInset
+import co.typie.platform.SoftwareKeyboardInteractionResolution
+import co.typie.platform.SoftwareKeyboardInteractionState
 
 internal enum class EditorKeyboardType {
   Software,
@@ -80,6 +82,99 @@ internal class EditorImeHideOwnershipTracker {
       EditorKeyboardPresentation.Hiding,
       EditorKeyboardPresentation.Hidden -> beginHide()
     }
+}
+
+internal class EditorKeyboardInteractionResolver {
+  private var lastSemanticState: EditorKeyboardState? = null
+  private var retainedInteraction: RetainedKeyboardInteraction? = null
+  private var nativeHideVersionOffset = 0
+
+  fun resolve(
+    nativeState: EditorKeyboardState,
+    interactionState: SoftwareKeyboardInteractionState,
+  ): EditorKeyboardState {
+    val normalizedNativeState = nativeState.withNormalizedHideVersion()
+    val activeInteractionId = interactionState.activeInteractionId
+    if (activeInteractionId != null) {
+      if (retainedInteraction?.interactionId != activeInteractionId) {
+        lastSemanticState
+          ?.takeIf { it.presentation is EditorKeyboardPresentation.Shown }
+          ?.let {
+            retainedInteraction =
+              RetainedKeyboardInteraction(
+                interactionId = activeInteractionId,
+                resolutionVersion = interactionState.resolutionVersion,
+                semanticState = it,
+              )
+          }
+      }
+      return retainOrRecord(normalizedNativeState)
+    }
+
+    val retained = retainedInteraction
+    if (retained != null && interactionState.resolutionVersion > retained.resolutionVersion) {
+      return when (interactionState.lastResolution) {
+        SoftwareKeyboardInteractionResolution.Shown -> {
+          if (nativeState.presentation is EditorKeyboardPresentation.Shown) {
+            nativeHideVersionOffset =
+              (nativeState.imeHideEventVersion - retained.semanticState.imeHideEventVersion)
+                .coerceAtLeast(0)
+            retainedInteraction = null
+            record(
+              nativeState.copy(imeHideEventVersion = retained.semanticState.imeHideEventVersion)
+            )
+          } else {
+            retainOrRecord(normalizedNativeState)
+          }
+        }
+        SoftwareKeyboardInteractionResolution.Hidden -> {
+          if (
+            nativeState.presentation == EditorKeyboardPresentation.Hiding ||
+              nativeState.presentation == EditorKeyboardPresentation.Hidden
+          ) {
+            retainedInteraction = null
+            record(normalizedNativeState)
+          } else {
+            retainOrRecord(normalizedNativeState)
+          }
+        }
+        SoftwareKeyboardInteractionResolution.Aborted -> {
+          retainedInteraction = null
+          record(normalizedNativeState)
+        }
+        null -> retainOrRecord(normalizedNativeState)
+      }
+    }
+
+    return record(normalizedNativeState)
+  }
+
+  private fun retainOrRecord(nativeState: EditorKeyboardState): EditorKeyboardState =
+    record(retainedInteraction?.semanticState?.retainOver(nativeState) ?: nativeState)
+
+  private fun record(state: EditorKeyboardState): EditorKeyboardState {
+    lastSemanticState = state
+    return state
+  }
+
+  private fun EditorKeyboardState.withNormalizedHideVersion(): EditorKeyboardState =
+    copy(imeHideEventVersion = (imeHideEventVersion - nativeHideVersionOffset).coerceAtLeast(0))
+
+  private fun EditorKeyboardState.retainOver(
+    nativeState: EditorKeyboardState
+  ): EditorKeyboardState =
+    nativeState.copy(
+      imeFrameVisible = imeFrameVisible,
+      imeHideEventVersion = imeHideEventVersion,
+      imeHideEventOwner = imeHideEventOwner,
+      presentation = presentation,
+    )
+
+  private data class RetainedKeyboardInteraction(
+    val interactionId: Long,
+    val resolutionVersion: Long,
+    val semanticState: EditorKeyboardState,
+  )
 }
 
 @Composable

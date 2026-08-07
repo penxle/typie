@@ -1,0 +1,11 @@
+package co.typie.platform
+
+import androidx.compose.runtime.Composable
+import co.typie.dev.DesktopDebugKeyboard
+
+private val DesktopSoftwareKeyboardPresentationDriverFactory =
+  SoftwareKeyboardPresentationDriverFactory(DesktopDebugKeyboard::acquirePresentationDriver)
+
+@Composable
+internal actual fun rememberSoftwareKeyboardPresentationDriverFactory():
+  SoftwareKeyboardPresentationDriverFactory = DesktopSoftwareKeyboardPresentationDriverFactory

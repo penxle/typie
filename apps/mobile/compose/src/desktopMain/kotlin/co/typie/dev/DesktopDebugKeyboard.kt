@@ -2,7 +2,8 @@ package co.typie.dev
 
 // cspell:ignore smol floof awoo
 
-import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -27,6 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -34,6 +36,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,6 +52,9 @@ import co.typie.ext.LocalInteractionSource
 import co.typie.ext.TextInputClient
 import co.typie.ext.TextInputKey
 import co.typie.ext.pressScale
+import co.typie.platform.LocalSoftwareKeyboardPresentationController
+import co.typie.platform.SoftwareKeyboardPresentationDriver
+import co.typie.platform.SoftwareKeyboardPresentationEndpoint
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import java.awt.Component
@@ -145,6 +151,18 @@ private val DesktopDebugKeyboardKoreanFixtures =
     listOf("ㅉ", "쪼", "쫀", "쫀ㄷ", "쫀드", "쫀득", "쫀득ㅈ", "쫀득제", "쫀득젤", "쫀득젤ㄹ", "쫀득젤리", "쫀득젤리♡"),
   )
 
+private val LocalDesktopDebugKeyboardPresentedHeight =
+  staticCompositionLocalOf<Dp> { error("ProvideDesktopDebugKeyboardPresentation is missing") }
+
+@Composable
+internal fun ProvideDesktopDebugKeyboardPresentation(content: @Composable () -> Unit) {
+  val presentedHeight = DesktopDebugKeyboard.rememberPresentedHeight()
+  CompositionLocalProvider(
+    LocalDesktopDebugKeyboardPresentedHeight provides presentedHeight,
+    content = content,
+  )
+}
+
 internal object DesktopDebugKeyboard {
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Swing)
   private val focusedOwners = linkedSetOf<Any>()
@@ -164,6 +182,9 @@ internal object DesktopDebugKeyboard {
   private var koreanFixtureBankIndex by mutableStateOf(0)
   private var koreanFixtureStepIndex by mutableStateOf(0)
   private var activeFixtureLanguage: Boolean? by mutableStateOf(null)
+  private var isPresentationFullyShown = false
+  private var presentationDriverToken: Any? = null
+  private var presentationDriverInvalidation: (() -> Unit)? = null
 
   var hardwareKeyboardConnected by mutableStateOf(false)
     private set
@@ -185,7 +206,7 @@ internal object DesktopDebugKeyboard {
         updateRecentClient(clients.getValue(owner))
       }
       if (focusGained && !hardwareKeyboardConnected) {
-        isVisible = true
+        setKeyboardSurfaceVisible(true)
       }
       return
     }
@@ -230,21 +251,21 @@ internal object DesktopDebugKeyboard {
 
   @Composable
   fun asWindowInsets(baseInsets: WindowInsets, bottomOffset: Dp = 0.dp): WindowInsets {
-    val animatedHeight = animatedHeight()
+    val presentedHeight = presentedHeight()
     return baseInsets.union(
-      WindowInsets(bottom = resolveDesktopDebugKeyboardInsetHeight(animatedHeight, bottomOffset))
+      WindowInsets(bottom = resolveDesktopDebugKeyboardInsetHeight(presentedHeight, bottomOffset))
     )
   }
 
   @Composable
   fun Overlay(modifier: Modifier = Modifier) {
-    val animatedHeight = animatedHeight()
-    if (animatedHeight <= 0.dp) return
+    val presentedHeight = presentedHeight()
+    if (presentedHeight <= 0.dp) return
 
     Box(
       modifier
         .fillMaxWidth()
-        .height(animatedHeight)
+        .height(presentedHeight)
         .pointerInput(Unit) {
           awaitEachGesture {
             awaitFirstDown(requireUnconsumed = false)
@@ -341,7 +362,7 @@ internal object DesktopDebugKeyboard {
   internal fun hideKeyboardSurface() {
     resetFixtureProgress()
     hideJob?.cancel()
-    isVisible = false
+    setKeyboardSurfaceVisible(false)
   }
 
   internal fun dismissInput() {
@@ -357,14 +378,14 @@ internal object DesktopDebugKeyboard {
     hideJob?.cancel()
     activeOwner = owner
     updateRecentClient(client)
-    isVisible = true
+    setKeyboardSurfaceVisible(true)
   }
 
   private fun beginPointerInteraction() {
     isPointerInteracting = true
     hideJob?.cancel()
     if (!hardwareKeyboardConnected) {
-      isVisible = true
+      setKeyboardSurfaceVisible(true)
     }
   }
 
@@ -535,7 +556,7 @@ internal object DesktopDebugKeyboard {
     val client = rememberedClient() ?: return
     hideJob?.cancel()
     if (!hardwareKeyboardConnected) {
-      isVisible = true
+      setKeyboardSurfaceVisible(true)
     }
     client.requestFocus()
     scope.launch {
@@ -551,19 +572,96 @@ internal object DesktopDebugKeyboard {
       if (!isPointerInteracting && focusedOwners.isEmpty()) {
         clearRecentClient()
         resetFixtureProgress()
-        isVisible = false
+        setKeyboardSurfaceVisible(false)
       }
     }
   }
 
   @Composable
-  private fun animatedHeight(): Dp {
-    val animatedHeight by
-      animateDpAsState(
-        targetValue = if (isVisible) height else 0.dp,
-        animationSpec = tween(durationMillis = DesktopDebugKeyboardAnimationDurationMillis),
-      )
-    return animatedHeight
+  internal fun rememberPresentedHeight(): Dp {
+    val interactionState = LocalSoftwareKeyboardPresentationController.current.interactionState
+    val heightAnimation = remember {
+      Animatable(initialValue = if (isVisible) height else 0.dp, typeConverter = Dp.VectorConverter)
+    }
+    LaunchedEffect(
+      isVisible,
+      height,
+      interactionState.activeInteractionId,
+      interactionState.hiddenProgress,
+    ) {
+      isPresentationFullyShown = false
+      if (interactionState.unresolved) {
+        heightAnimation.snapTo(height * (1f - interactionState.hiddenProgress))
+        isPresentationFullyShown = isVisible && interactionState.hiddenProgress == 0f
+      } else {
+        heightAnimation.animateTo(
+          targetValue = if (isVisible) height else 0.dp,
+          animationSpec = tween(durationMillis = DesktopDebugKeyboardAnimationDurationMillis),
+        )
+        isPresentationFullyShown = isVisible && heightAnimation.value == height
+      }
+    }
+    DisposableEffect(Unit) { onDispose { isPresentationFullyShown = false } }
+    return heightAnimation.value
+  }
+
+  internal fun acquirePresentationDriver(
+    onInvalidated: () -> Unit
+  ): SoftwareKeyboardPresentationDriver? {
+    if (!isPresentationReady() || !hasFocusedClient() || presentationDriverToken != null) {
+      return null
+    }
+
+    val token = Any()
+    presentationDriverToken = token
+    presentationDriverInvalidation = onInvalidated
+    return object : SoftwareKeyboardPresentationDriver {
+      override fun updateHiddenProgress(progress: Float) = Unit
+
+      override fun finish(endpoint: SoftwareKeyboardPresentationEndpoint, onAccepted: () -> Unit) {
+        if (presentationDriverToken !== token) return
+        presentationDriverToken = null
+        presentationDriverInvalidation = null
+        when (endpoint) {
+          SoftwareKeyboardPresentationEndpoint.Shown -> isVisible = true
+          SoftwareKeyboardPresentationEndpoint.Hidden -> {
+            resetFixtureProgress()
+            hideJob?.cancel()
+            isPresentationFullyShown = false
+            isVisible = false
+          }
+        }
+        onAccepted()
+      }
+
+      override fun dispose() {
+        if (presentationDriverToken !== token) return
+        presentationDriverToken = null
+        presentationDriverInvalidation = null
+      }
+    }
+  }
+
+  @Composable private fun presentedHeight(): Dp = LocalDesktopDebugKeyboardPresentedHeight.current
+
+  private fun setKeyboardSurfaceVisible(visible: Boolean) {
+    if (isVisible == visible) return
+    invalidatePresentationDriver()
+    isPresentationFullyShown = false
+    isVisible = visible
+  }
+
+  private fun hasFocusedClient(): Boolean = focusedOwners.any { clients.containsKey(it) }
+
+  private fun isPresentationReady(): Boolean =
+    isVisible && isPresentationFullyShown && !hardwareKeyboardConnected
+
+  private fun invalidatePresentationDriver() {
+    if (presentationDriverToken == null) return
+    val onInvalidated = presentationDriverInvalidation
+    presentationDriverToken = null
+    presentationDriverInvalidation = null
+    onInvalidated?.invoke()
   }
 
   @Composable

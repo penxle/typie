@@ -20,6 +20,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import co.typie.platform.LocalSoftwareKeyboardPresentationController
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -29,6 +30,9 @@ internal actual fun rememberEditorKeyboardState(
   val configuration = LocalConfiguration.current
   val context = LocalContext.current
   val density = LocalDensity.current
+  val keyboardInteractionResolver = remember { EditorKeyboardInteractionResolver() }
+  val keyboardInteractionState =
+    LocalSoftwareKeyboardPresentationController.current.interactionState
   val imeBottom = WindowInsets.ime.getBottom(density)
   val imeAnimationSourceBottom = WindowInsets.imeAnimationSource.getBottom(density)
   val imeAnimationTargetBottom = WindowInsets.imeAnimationTarget.getBottom(density)
@@ -73,17 +77,21 @@ internal actual fun rememberEditorKeyboardState(
     externalKeyboardAttached = isExternalKeyboardAttached()
     onDispose { inputManager.unregisterInputDeviceListener(listener) }
   }
-  return EditorKeyboardState(
-    type =
-      if (hardwareKeyboardVisible) {
-        EditorKeyboardType.Hardware
-      } else {
-        EditorKeyboardType.Software
-      },
-    imeFrameVisible = imeBottom > 0 || imeAnimationTargetBottom > 0,
-    imeHideEventOwner = imeHideEventOwner,
-    presentation = presentation,
-    hardwareKeyboardAttached = hardwareKeyboardVisible || externalKeyboardAttached,
+  return keyboardInteractionResolver.resolve(
+    nativeState =
+      EditorKeyboardState(
+        type =
+          if (hardwareKeyboardVisible) {
+            EditorKeyboardType.Hardware
+          } else {
+            EditorKeyboardType.Software
+          },
+        imeFrameVisible = imeBottom > 0 || imeAnimationTargetBottom > 0,
+        imeHideEventOwner = imeHideEventOwner,
+        presentation = presentation,
+        hardwareKeyboardAttached = hardwareKeyboardVisible || externalKeyboardAttached,
+      ),
+    interactionState = keyboardInteractionState,
   )
 }
 

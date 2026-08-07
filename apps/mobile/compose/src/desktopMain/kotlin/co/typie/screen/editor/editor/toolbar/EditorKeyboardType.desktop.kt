@@ -8,12 +8,16 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import co.typie.dev.DesktopDebugKeyboard
 import co.typie.ext.ime
+import co.typie.platform.LocalSoftwareKeyboardPresentationController
 
 @Composable
 internal actual fun rememberEditorKeyboardState(
   isEditorInputSessionActive: () -> Boolean
 ): EditorKeyboardState {
   val density = LocalDensity.current
+  val keyboardInteractionResolver = remember { EditorKeyboardInteractionResolver() }
+  val keyboardInteractionState =
+    LocalSoftwareKeyboardPresentationController.current.interactionState
   val imeBottom = with(density) { WindowInsets.ime.getBottom(this).toDp() }
   val imeHideOwnershipTracker = remember { EditorImeHideOwnershipTracker() }
   val state =
@@ -21,12 +25,16 @@ internal actual fun rememberEditorKeyboardState(
       hardwareKeyboardConnected = DesktopDebugKeyboard.hardwareKeyboardConnected,
       imeBottom = imeBottom,
     )
-  return state.copy(
-    imeHideEventOwner =
-      imeHideOwnershipTracker.observe(
-        presentation = state.presentation,
-        editorInputSessionActive = isEditorInputSessionActive(),
-      )
+  return keyboardInteractionResolver.resolve(
+    nativeState =
+      state.copy(
+        imeHideEventOwner =
+          imeHideOwnershipTracker.observe(
+            presentation = state.presentation,
+            editorInputSessionActive = isEditorInputSessionActive(),
+          )
+      ),
+    interactionState = keyboardInteractionState,
   )
 }
 
