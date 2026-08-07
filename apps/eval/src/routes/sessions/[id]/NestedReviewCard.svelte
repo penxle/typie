@@ -9,24 +9,27 @@
 
   // 계획 왕복은 스테이지를 넘지 않는다 — 바깥 카드와 같은 문법(제목 줄 + 발화·캡슐 기록 + 개폐)을 축소해 한 겹
   // 안에 둔다. 통과·보완 같은 판정은 여기서 추론하지 않는다 — 화면에 서는 것은 모델의 발화와 활동 자취뿐이다.
-  // live는 바깥에서 그리던 라이브 줄+활동 행을, ghost는 봉인 드레이너의 꼬리 줄을 그대로 넘겨받는 자리다.
+  // live는 바깥에서 그리던 라이브 줄+활동 행을 그대로 넘겨받는 자리다. drained에 든 라인은 확정 평문 대신
+  // ghostLine(드레이너의 토큰)으로 "그 자리에서" 그린다 — 자리를 옮기면 드레인이 끝날 때 순서가 점프한다.
   type Props = {
     round: number;
     feed: FeedEntry[];
     spent?: string | null;
     latest?: boolean;
-    live?: Snippet | null;
-    ghost?: Snippet | null;
+    live?: Snippet<[boolean]> | null; // 인자 = 이 카드가 비어 있는가(빈 카드의 "준비하고 있어요" 판정)
+    drained?: Set<number>;
+    ghostLine?: Snippet<[number]> | null; // 인자 = 라인 id — 드레인 중인 라인의 제자리 대체 렌더
   };
 
-  const { round, feed, spent = null, latest = false, live = null, ghost = null }: Props = $props();
+  const { round, feed, spent = null, latest = false, live = null, drained = new Set(), ghostLine = null }: Props = $props();
 
   let expanded = $state(false);
 
   const lines = $derived(feed.filter((entry): entry is Extract<FeedEntry, { kind: 'line' }> => entry.kind === 'line'));
 
   // 돌고 있는 동안(드레인 포함)에는 전량 흐르고, 끝나면 마지막 발화 한 줄만 영수증으로 남는다(펼치면 캡슐까지 전량).
-  const active = $derived(live !== null || ghost !== null);
+  const draining = $derived(lines.some((entry) => drained.has(entry.line.id)));
+  const active = $derived(live !== null || draining);
   const shown = $derived(!active && !expanded ? lines.slice(-1) : feed);
   const toggleable = $derived(!active && (feed.length > 1 || (feed.length === 1 && feed[0].kind !== 'line')));
 
@@ -97,7 +100,7 @@
     variants: {
       latest: {
         true: { fontWeight: 'semibold', color: 'text.default' },
-        false: { color: 'text.faint' },
+        false: { color: 'text.subtle' }, // 바깥 피드의 지나간 발화와 같은 급(StageTimeline feedLineRecipe)
       },
     },
   });
@@ -130,17 +133,18 @@
     <div class={bodyClass}>
       {#each shown as entry (entry.key)}
         {#if entry.kind === 'line'}
-          <div class={css(lineRecipe.raw({ latest: latest && entry.line.id === lastLineId }))}>{entry.line.text}</div>
+          {#if ghostLine !== null && drained.has(entry.line.id)}
+            {@render ghostLine(entry.line.id)}
+          {:else}
+            <div class={css(lineRecipe.raw({ latest: latest && entry.line.id === lastLineId }))}>{entry.line.text}</div>
+          {/if}
         {:else}
           <div class={capsuleClass}>{entry.items.map(capsuleLabel).join(' · ')}</div>
         {/if}
       {/each}
 
-      {#if ghost !== null}
-        {@render ghost()}
-      {/if}
       {#if live !== null}
-        {@render live()}
+        {@render live(feed.length === 0)}
       {/if}
     </div>
   {/if}

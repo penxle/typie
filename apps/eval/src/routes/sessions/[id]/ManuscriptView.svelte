@@ -3,7 +3,8 @@
   import { flex } from '@typie/styled-system/patterns';
   import { tick } from 'svelte';
   import { kindOf, markParagraphs } from '$lib/feedback/anchors.ts';
-  import type { MarkKind, MarkSegment } from '$lib/feedback/anchors.ts';
+  import type { MarkKind, MarkSegment, MarkThread } from '$lib/feedback/anchors.ts';
+  import type { Anchor } from '$lib/feedback/types.ts';
   import type { PageData } from './$types';
 
   type Thread = PageData['threads'][number];
@@ -12,13 +13,30 @@
     title: string;
     content: string;
     threads: Thread[];
+    strengths: (Anchor & { body: string | null })[];
     activeId: string | null;
     onActivate: (threadId: string) => void;
   };
 
-  const { title, content, threads, activeId, onActivate }: Props = $props();
+  const { title, content, threads, strengths, activeId, onActivate }: Props = $props();
 
-  const paragraphs = $derived(markParagraphs(content, threads));
+  // 잘 작동하는 대목도 지적과 같은 문법으로 원고에 선다(오너 결정) — 스팬·레일·번호 칩·클릭 활성화를
+  // 그대로 타되, id는 'strength.N' 네임스페이스로 스레드와 갈라지고 표기 계열만 긍정(초록)이다.
+  // 번호는 각자 제 목록 안에서 센다 — 지적 번호는 카드와, 강점 번호는 패널의 나열 순서와 짝이다.
+  type Markable = MarkThread & { number: number };
+
+  const marks = $derived<Markable[]>([
+    ...threads.map((thread) => ({ ...thread, number: thread.issueIndex + 1 })),
+    ...strengths.map((strength, index) => ({
+      id: `strength.${index}`,
+      pass: 'strength' as const,
+      state: 'open',
+      anchors: [{ start: strength.start, end: strength.end, head: strength.head, tail: strength.tail }],
+      number: index + 1,
+    })),
+  ]);
+
+  const paragraphs = $derived(markParagraphs(content, marks));
 
   // 지적 표기는 앵커 길이 불문 레일 하나다 — 본문을 칠하는 대신 원고 왼쪽 전용 거터에 세로 레일을 세운다.
   // 거터는 레이아웃에 실제로 확보한 공간이다(루트 paddingLeft) — 레인이 쌓여도 본문·카드를 침범하지 않는다.
@@ -53,9 +71,9 @@
     if (!containerEl) return;
     const base = containerEl.getBoundingClientRect().top;
     const next: Rail[] = [];
-    // 앵커 길이 불문 전 스레드가 레일이다(오너 결정) — 스팬이 없는 스레드(앵커 없음·해석 불가)만 빠진다.
-    for (const thread of threads) {
-      const spans = containerEl.querySelectorAll(`[data-thread-range~="${thread.id}"]`);
+    // 앵커 길이 불문 전 마크가 레일이다(오너 결정) — 스팬이 없는 마크(앵커 없음·해석 불가)만 빠진다.
+    for (const mark of marks) {
+      const spans = containerEl.querySelectorAll(`[data-thread-range~="${mark.id}"]`);
       if (spans.length === 0) continue;
       let top = Infinity;
       let bottom = -Infinity;
@@ -65,9 +83,9 @@
         bottom = Math.max(bottom, rect.bottom);
       }
       next.push({
-        id: thread.id,
-        kind: kindOf(thread),
-        number: thread.issueIndex + 1,
+        id: mark.id,
+        kind: kindOf(mark),
+        number: mark.number,
         top: top - base,
         height: Math.max(RAIL_MIN_HEIGHT, bottom - top),
         lane: 0,
@@ -135,7 +153,7 @@
   };
 
   $effect(() => {
-    void threads;
+    void marks;
     void tick().then(measureRails);
   });
 
@@ -147,15 +165,20 @@
   });
 
   // 본문은 평시 무표기다 — 클릭면은 레일이 맡고, 스팬은 레일·카드 배치의 측정 좌표와 활성 하이라이트만 담당한다.
-  // 표기 색은 활성 카드 보더와 같은 브랜드 하나로 통일(오너 결정) — 레일·번호 칩·하이라이트가 전부 같은 색이다.
-  // 전환(base)은 소속 스팬에 상시 얹는다 — 활성 클래스와 함께 떼면 해제 방향이 전환 없이 툭 꺼진다.
-  // 하이라이트는 본문 가독을 해치면 안 된다 — 시맨틱 subtle(brand.100/900)보다 한 단계 옅은 원시 팔레트
-  // 양끝 단계(50/950)를 양 테마로 직접 짝지어 쓴다(더 옅은 시맨틱 토큰이 없다).
+  // 표기 색은 활성 카드 보더와 같은 브랜드 하나로 통일(오너 결정) — 레일·번호 칩·하이라이트가 전부 같은 색이고,
+  // 강점만 긍정(초록) 계열로 갈린다. 전환(base)은 소속 스팬에 상시 얹는다 — 활성 클래스와 함께 떼면 해제
+  // 방향이 전환 없이 툭 꺼진다. 하이라이트는 본문 가독을 해치면 안 된다 — 시맨틱 subtle(100/900)보다 한 단계
+  // 옅은 원시 팔레트 양끝 단계(50/950)를 양 테마로 직접 짝지어 쓴다(더 옅은 시맨틱 토큰이 없다).
   const spanRecipe = cva({
     base: { borderRadius: '2px', transition: '[background-color 0.25s cubic-bezier(0.2, 0, 0, 1)]' },
     variants: {
-      active: { true: { backgroundColor: 'brand.50', _dark: { backgroundColor: 'dark.brand.950' } }, false: {} },
+      active: { true: {}, false: {} },
+      tone: { issue: {}, strength: {} },
     },
+    compoundVariants: [
+      { active: true, tone: 'issue', css: { backgroundColor: 'brand.50', _dark: { backgroundColor: 'dark.brand.950' } } },
+      { active: true, tone: 'strength', css: { backgroundColor: 'green.50', _dark: { backgroundColor: 'dark.green.950' } } },
+    ],
   });
 
   const pieceAttrs = (piece: MarkSegment) => {
@@ -163,7 +186,7 @@
     const active = activeId !== null && piece.threadIds.includes(activeId);
     return {
       'data-thread-range': piece.threadIds.join(' '),
-      class: css(spanRecipe.raw({ active })),
+      class: css(spanRecipe.raw({ active, tone: activeId?.startsWith('strength.') ? 'strength' : 'issue' })),
     };
   };
 
@@ -175,7 +198,8 @@
     textIndent: '[1em]',
   });
 
-  // 계열 색 구분은 뺀다(오너 결정) — 열린 지적은 전부 브랜드, 닫힌 지적만 회색.
+  // 계열 색 구분은 뺀다(오너 결정) — 열린 지적은 전부 브랜드, 닫힌 지적만 회색. 강점은 별개 범주라
+  // 긍정(초록) 계열을 받는다(오너 결정) — 지적 패스 간 구분 금지와 어긋나지 않는다.
   const railRecipe = cva({
     base: {
       position: 'absolute',
@@ -191,12 +215,14 @@
       tone: {
         open: { backgroundColor: 'accent.brand.default' },
         closed: { backgroundColor: 'border.strong' },
+        strength: { backgroundColor: 'accent.success.default' },
       },
       active: { true: { width: '5px', opacity: '100' }, false: {} },
     },
   });
 
   // 카드 헤더의 번호 칩과 같은 시각 언어 — 양쪽에 같은 번호가 보이는 것이 연결 어포던스다.
+  // 강점 칩의 반대편 짝은 카드가 아니라 총평 패널의 나열이다.
   const railChipRecipe = cva({
     base: {
       position: 'absolute',
@@ -214,6 +240,7 @@
       tone: {
         open: { backgroundColor: 'accent.brand.subtle', color: 'text.brand' },
         closed: { backgroundColor: 'surface.muted', color: 'text.faint' },
+        strength: { backgroundColor: 'accent.success.subtle', color: 'text.success' },
       },
       active: { true: {}, false: {} },
     },
@@ -221,10 +248,14 @@
     compoundVariants: [
       { tone: 'open', active: true, css: { backgroundColor: 'accent.brand.default', color: 'text.bright' } },
       { tone: 'closed', active: true, css: { backgroundColor: 'border.strong', color: 'text.bright' } },
+      { tone: 'strength', active: true, css: { backgroundColor: 'accent.success.default', color: 'text.bright' } },
     ],
   });
 
   const axisOf = (threadId: string) => threads.find((thread) => thread.id === threadId)?.axis ?? '피드백';
+
+  const labelOf = (rail: Rail) =>
+    rail.kind === 'strength' ? `잘 작동하는 대목 ${rail.number}` : `피드백 ${rail.number}: ${axisOf(rail.id)}`;
 </script>
 
 <!-- 본문 폭 640은 유지하고 왼쪽에 레일 거터(100px)를 더한다 — paddingLeft와 RAIL_GUTTER는 같은 값이어야 한다. -->
@@ -240,14 +271,14 @@
   </div>
 
   {#each rails as rail (rail.id)}
-    {@const tone = rail.kind === 'closed' ? 'closed' : 'open'}
+    {@const tone = rail.kind === 'closed' ? 'closed' : rail.kind === 'strength' ? 'strength' : 'open'}
     {@const active = activeId === rail.id}
     <button
       style:top={`${rail.top}px`}
       style:height={`${rail.height}px`}
       style:left={`${railLeft(rail.lane, active)}px`}
       class={css(railRecipe.raw({ tone, active }))}
-      aria-label={`피드백 ${rail.number}: ${axisOf(rail.id)}`}
+      aria-label={labelOf(rail)}
       onclick={() => onActivate(rail.id)}
       type="button"
     ></button>
@@ -255,7 +286,7 @@
       style:top={`${rail.chipTop}px`}
       style:left={`${rail.chipLeft}px`}
       class={css(railChipRecipe.raw({ tone, active }))}
-      aria-label={`피드백 ${rail.number}: ${axisOf(rail.id)}`}
+      aria-label={labelOf(rail)}
       onclick={() => onActivate(rail.id)}
       type="button"
     >

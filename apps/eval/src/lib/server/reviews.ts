@@ -2,10 +2,12 @@
 
 import { and, eq } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
+import { buildModelConfig } from '../feedback/tiers.ts';
 import { FeedbackSessions, ManuscriptVersions, Reviews } from './db/index.ts';
 import { fetchManuscript } from './ingest.ts';
 import { createInternalApi } from './internal-api.ts';
 import { cancelRun, newPrismSessionId, startWorkflow } from './prism.ts';
+import type { TierOverrides } from '../feedback/tiers.ts';
 import type { Db } from './db/index.ts';
 
 type Env = App.Platform['env'];
@@ -20,6 +22,7 @@ export const buildStartRows = (input: {
   content: string;
   prismSessionId: string;
   now: Date;
+  overrides?: TierOverrides;
 }) => {
   const sessionId = nanoid();
   return {
@@ -38,6 +41,7 @@ export const buildStartRows = (input: {
       status: 'running' as const,
       manuscriptVersion: 1,
       startedAt: input.now,
+      modelConfig: buildModelConfig(input.overrides),
     },
   };
 };
@@ -45,7 +49,7 @@ export const buildStartRows = (input: {
 export const startFeedbackSession = async (
   db: Db,
   env: Env,
-  input: { refId: string; email: string },
+  input: { refId: string; email: string; overrides?: TierOverrides },
 ): Promise<{ sessionId: string } | { error: string }> => {
   const api = createInternalApi(env.INTERNAL_API_BASE, env.INTERNAL_API_KEY);
   const manuscript = await fetchManuscript(api, input.refId);
@@ -61,7 +65,11 @@ export const startFeedbackSession = async (
   try {
     await startWorkflow(env, {
       sessionId: rows.review.prismSessionId,
-      input: { manuscriptPath: 'manuscript/v1.txt' },
+      input: {
+        manuscriptPath: 'manuscript/v1.txt',
+        // sparse — 무오버라이드 리뷰는 prism 기본값을 따른다(키 자체를 싣지 않는다)
+        ...(input.overrides && Object.keys(input.overrides).length > 0 && { overrides: input.overrides }),
+      },
       files: [{ path: 'manuscript/v1.txt', content: manuscript.content }],
     });
   } catch (err) {

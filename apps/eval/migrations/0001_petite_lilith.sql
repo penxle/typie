@@ -1,0 +1,1 @@
+ALTER TABLE `reviews` ADD `model_config` text;

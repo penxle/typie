@@ -3,7 +3,14 @@ import { nestedRound, STAGES, stepStage, TERMINAL_EVENTS } from './stages.ts';
 
 describe('stage mapping', () => {
   it('여섯 스테이지의 순서와 라벨이 고정된다', () => {
-    expect(STAGES.map((s) => s.label)).toEqual(['원고 살펴보기', '계획 세우기', '작품 읽기', '문장 살피기', '피드백 다듬기', '총평 쓰기']);
+    expect(STAGES.map((s) => s.label)).toEqual([
+      '원고 살펴보기',
+      '계획 세우기',
+      '짚을 곳 찾기',
+      '문장 살피기',
+      '전할 말 고르기',
+      '마무리 글 쓰기',
+    ]);
   });
 
   it('step 이름 접두를 표시 스테이지로 매핑한다', () => {

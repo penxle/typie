@@ -3,7 +3,7 @@
 
   import { css, cva } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
-  import { Button, Helmet, Icon } from '@typie/ui/components';
+  import { Button, Helmet, Icon, Modal } from '@typie/ui/components';
   import { Dialog, Toast } from '@typie/ui/notification';
   import { tick } from 'svelte';
   import IconChevronLeft from '~icons/lucide/chevron-left';
@@ -13,8 +13,10 @@
   import { applyDelta, sealTurn, startTurn } from '$lib/feedback/delta.ts';
   import { applyEvent, initialLive } from '$lib/feedback/live.ts';
   import { TERMINAL_EVENTS } from '$lib/feedback/stages.ts';
+  import { AGENTS } from '$lib/feedback/tiers.ts';
+  import ConclusionDrawer from './ConclusionDrawer.svelte';
+  import ConclusionPanel from './ConclusionPanel.svelte';
   import ManuscriptView from './ManuscriptView.svelte';
-  import OverviewBand from './OverviewBand.svelte';
   import RunningPanel from './RunningPanel.svelte';
   import ThreadColumn from './ThreadColumn.svelte';
   import type { SubmitFunction } from '@sveltejs/kit';
@@ -58,31 +60,80 @@
 
   const conclusion = $derived(data.review.result?.conclusion ?? null);
 
-  let live = $state(initialLive([]));
+  // 전 섹션이 비면 패널·드로어 자체를 두지 않는다 — 빈 편지를 세우는 것보다 없는 편이 낫다.
+  const conclusionEmpty = $derived(
+    conclusion === null ||
+      (conclusion.strengths.length === 0 &&
+        conclusion.clearances.length === 0 &&
+        conclusion.patterns.length === 0 &&
+        conclusion.priorities.length === 0 &&
+        (conclusion.understanding ?? '').trim().length === 0),
+  );
+
+  // 첫 페인트가 곧 현재 상태다 — 로드가 걷어 온 이벤트 스냅샷으로 시드하고, SSE는 그 커서부터 잇는다.
+  // 빈 시드로 시작해 재생을 화면에서 재연하면 새로고침마다 과거 기록이 빨리감기로 보인다.
+  // 초기값 캡처는 의도다: 시드는 마운트 1회의 몫이고, 이후는 SSE(실행 중)·아래 효과(종결)가 최신을 소유한다.
+  // svelte-ignore state_referenced_locally
+  let live = $state(initialLive(data.review.events ?? []));
   // 흐르는 턴의 조각은 리듀서 밖에 둔다 — 로그가 아니라 휘발 프레임이라 재생도 커서도 없고, 턴이 확정되면 사라진다.
   let turnLive = $state<TurnLive | null>(null);
   let cancelForm = $state<HTMLFormElement>();
   let canceling = $state(false);
 
-  let bandOpen = $state(false);
+  let drawerOpen = $state(false);
   let activeId = $state<string | null>(null);
+  let modelConfigOpen = $state(false);
+
+  // 회차 첫 방문만 드로어가 열린 채 진입한다(오너 결정) — 정독은 첫 만남의 의식이고, 이후 방문은 상주 패널이
+  // 잇는다. 3컬럼이 먼저 그려진 뒤 400ms 뒤에 열어 어디서 열렸는지가 보인다(모션 명세). 기억은 열어 본
+  // 사실이 아니라 자동 확장을 소모했다는 표식이라 열자마자 적는다.
+  $effect(() => {
+    if (conclusionEmpty || data.review.status !== 'completed') return;
+    const key = `conclusion-read:${data.session.id}:${data.review.round}`;
+    let seen = true;
+    try {
+      seen = localStorage.getItem(key) !== null;
+      localStorage.setItem(key, '1');
+    } catch {
+      // 접근이 차단된 환경(테마 토글과 같은 처지)은 자동 확장 없이 지나간다.
+    }
+    if (seen) return;
+    const timer = setTimeout(() => (drawerOpen = true), 400);
+    return () => clearTimeout(timer);
+  });
 
   // 활성 전환은 반대편만 스크롤한다 — 원고와 카드가 같은 스크롤 통에 있어 둘 다 옮기면 서로를 밀어낸다.
-  const activate = async (threadId: string | null, from: 'manuscript' | 'thread' | 'jump') => {
-    activeId = threadId;
-    if (threadId === null) return;
+  // 강점(strength.N)은 카드가 없다 — 반대편은 원고의 초록 하이라이트이고, 원고에서 출발한 활성은
+  // 패널이 제 몸을 스크롤한다(ConclusionPanel의 칩 연동).
+  const activate = async (id: string | null, from: 'manuscript' | 'thread' | 'jump') => {
+    activeId = id;
+    if (id === null) return;
     await tick();
-    // 스레드 id에는 점이 들어간다 — id 선택자는 이스케이프가 필요하므로 양쪽 다 속성 선택자로 집는다.
-    const target =
-      from === 'thread'
-        ? document.querySelector(`[data-thread-range~="${threadId}"]`)
-        : document.querySelector(`[data-thread-card="${threadId}"]`);
+    // 스레드 id에는 점이 들어간다 — id 선택자는 이스케이프가 필요하므로 전부 속성 선택자로 집는다.
+    const target = id.startsWith('strength.')
+      ? from === 'manuscript'
+        ? null
+        : document.querySelector(`[data-thread-range~="${id}"]`)
+      : from === 'thread'
+        ? document.querySelector(`[data-thread-range~="${id}"]`)
+        : document.querySelector(`[data-thread-card="${id}"]`);
     target?.scrollIntoView({ behavior: 'smooth', block: from === 'jump' ? 'center' : 'nearest' });
   };
 
-  const jump = async (threadId: string) => {
-    bandOpen = false;
-    await activate(threadId, 'jump');
+  const jump = async (id: string) => {
+    drawerOpen = false;
+    await activate(id, 'jump');
+  };
+
+  const closeDrawer = () => {
+    drawerOpen = false;
+    // 닫힘 직후 포커스는 패널의 확대 버튼으로 복귀한다(모션 명세) — 좁은 폭에서는 스트립이 그 자리다.
+    for (const el of document.querySelectorAll<HTMLElement>('[data-drawer-return]')) {
+      if (el.offsetParent !== null) {
+        el.focus();
+        break;
+      }
+    }
   };
 
   // 경과·소요의 기준 시각은 run.started의 봉투 시각이다. 스냅샷도 라이브도 같은 축을 쓰고, 없으면 DB 시작 시각으로 떨어진다.
@@ -101,6 +152,7 @@
     let source: EventSource | null = null;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let stopped = false;
+    let lastSeenAt = Date.now();
 
     // data 라인은 항상 한 줄 JSON이다 — 델타는 그 자체가 프레임이고, 로그 이벤트는 {seq,kind,data,createdAt} 봉투다.
     const parseFrame = (raw: string): unknown => {
@@ -119,19 +171,32 @@
       return data && typeof data === 'object' ? (data as Record<string, unknown>) : {};
     };
 
-    const handle = (event: MessageEvent, name: string) => {
+    // 이벤트는 프레임 단위로 묶어 한 번에 접는다(fold) — 리듀서는 싸지만 렌더(6개 스테이지 groupFeed 재계산·
+    // 스크롤 연출)는 비싸서, 건당 한 번씩 그리면 시드 없는 재생·긴 재접속에서 로그 길이만큼 화면 재연이 늘어진다.
+    // 배치 안에서도 적용 순서는 도착 순서 그대로다.
+    let batch: { name: string; event: MessageEvent }[] = [];
+    let flushScheduled = false;
+
+    const flushBatch = () => {
+      flushScheduled = false;
+      const events = batch;
+      batch = [];
+      if (stopped || events.length === 0) return;
       // 판정은 sticky 상태가 아니라 전이다 — 사영이 실패해 running으로 재로드되면 재접속 재생의 첫 프레임이
       // 다시 terminal을 보게 되고, 상태로 판정하면 invalidateAll이 무유계로 재발화한다. 재발화가 없어도
       // 다음 자연 로드가 사영을 재시도한다.
       const wasTerminal = live.terminal;
-      const wasCursor = live.cursor;
-      live = applyEvent(live, { id: eventId(event.lastEventId), event: name, data: event.data });
-      // 조각은 확정된 턴을 넘어 살아남지 않는다 — 확정 텍스트 위에 옛 조각이 겹쳐 보이면 그것이 곧 거짓말이다.
-      if (name === 'turn.completed' || TERMINAL_EVENTS.has(name)) turnLive = sealTurn(turnLive, payloadOf(event.data));
-      // 턴의 시작도 조각의 유통기한이다. 재생분은 제외한다 — 직접 다시 여는 재접속은 Last-Event-ID 없이 붙어
-      // 로그를 처음부터 다시 받으므로(events/+server.ts:24), 그 옛 turn.started가 지금 흐르는 턴을 지우면 안
-      // 된다. 판별은 리듀서와 같은 잣대인 커서 전진으로 한다.
-      if (name === 'turn.started' && live.cursor > wasCursor) turnLive = startTurn(turnLive, payloadOf(event.data));
+      let next = live;
+      for (const { name, event } of events) {
+        const wasCursor = next.cursor;
+        next = applyEvent(next, { id: eventId(event.lastEventId), event: name, data: event.data });
+        // 조각은 확정된 턴을 넘어 살아남지 않는다 — 확정 텍스트 위에 옛 조각이 겹쳐 보이면 그것이 곧 거짓말이다.
+        if (name === 'turn.completed' || TERMINAL_EVENTS.has(name)) turnLive = sealTurn(turnLive, payloadOf(event.data));
+        // 턴의 시작도 조각의 유통기한이다. 재생분은 제외한다 — 재생은 커서 이전 id로 도착하므로, 판별은
+        // 리듀서와 같은 잣대인 커서 전진으로 한다.
+        if (name === 'turn.started' && next.cursor > wasCursor) turnLive = startTurn(turnLive, payloadOf(event.data));
+      }
+      live = next;
       if (wasTerminal || !live.terminal) return;
       stopped = true;
       clearTimeout(timer);
@@ -139,9 +204,18 @@
       void invalidateAll(); // 이 재로드가 지연 사영을 트리거해 완료 화면으로 전환된다
     };
 
+    const handle = (event: MessageEvent, name: string) => {
+      lastSeenAt = Date.now();
+      batch.push({ name, event });
+      if (flushScheduled) return;
+      flushScheduled = true;
+      requestAnimationFrame(flushBatch);
+    };
+
     const connect = () => {
       if (stopped) return;
-      const opened = new EventSource(url);
+      // 시드된 커서부터 잇는다 — 자동 재접속은 Last-Event-ID 헤더가 우선하므로(relay.resolveCursor) 무해하다.
+      const opened = new EventSource(`${url}?lastEventId=${live.cursor}`);
       source = opened;
 
       // 확립된 스트림의 종료는 EventSource가 Last-Event-ID를 들고 스스로 다시 잇는다. 하지만 연결 시점의
@@ -158,14 +232,32 @@
 
       // 델타는 id가 없어 커서를 건드리지 않는다 — 유실이 계약이라 놓친 조각은 뒤따르는 확정 텍스트가 바로잡는다.
       opened.addEventListener('turn.delta', (event) => {
+        lastSeenAt = Date.now();
         turnLive = applyDelta(turnLive, parseFrame((event as MessageEvent).data));
       });
+
+      // 하트비트(15초 주기, prism sse.ts)는 생존 신호다 — 워치독의 기준 시각만 갱신한다.
+      opened.addEventListener('heartbeat', () => {
+        lastSeenAt = Date.now();
+      });
     };
+
+    // 절반 열림(half-open) 워치독 — 연결만 살고 데이터가 끊긴 스트림은 EventSource가 스스로 알아채지 못해
+    // 화면이 문장 중간에서 조용히 얼어붙는다(오류 이벤트 없음). 하트비트가 두 번 넘게 유실되면 끊긴 것으로
+    // 보고 닫은 뒤 즉시 다시 연다 — 재생이 놓친 구간을 이어붙인다.
+    const STALL_MS = 40_000;
+    const watchdog = setInterval(() => {
+      if (stopped || Date.now() - lastSeenAt < STALL_MS) return;
+      lastSeenAt = Date.now();
+      source?.close();
+      connect();
+    }, 10_000);
 
     connect();
     return () => {
       stopped = true;
       clearTimeout(timer);
+      clearInterval(watchdog);
       source?.close();
     };
   });
@@ -284,6 +376,9 @@
           과정 보기
         </a>
       {/if}
+      {#if data.isAdmin}
+        <Button onclick={() => (modelConfigOpen = true)} size="sm" type="button" variant="secondary">모델 구성</Button>
+      {/if}
       {#if data.review.status === 'running'}
         <form bind:this={cancelForm} action="?/cancel" method="post" use:enhance={submitCancel}>
           <Button disabled={canceling} loading={canceling} onclick={confirmCancel} size="sm" type="button" variant="secondary">
@@ -296,47 +391,68 @@
   </header>
 
   {#if data.review.status === 'completed'}
-    <div class={css({ flexGrow: '1', minHeight: '0', overflowY: 'auto' })}>
-      {#if conclusion}
-        <OverviewBand
+    <div class={flex({ flexGrow: '1', minHeight: '0' })}>
+      {#if conclusion && !conclusionEmpty}
+        <ConclusionPanel
+          {activeId}
           {conclusion}
-          onJump={jump}
-          onToggle={() => (bandOpen = !bandOpen)}
-          open={bandOpen}
+          content={data.version.content}
+          onActivate={(id) => activate(id, 'jump')}
+          onExpand={() => (drawerOpen = true)}
           reaction={data.reaction}
           threads={data.threads}
         />
       {/if}
 
-      <div
-        class={flex({
-          gap: '28px',
-          width: 'full',
-          maxWidth: '1184px',
-          marginX: 'auto',
-          paddingX: '24px',
-          paddingTop: '44px',
-          paddingBottom: '48px',
-        })}
-      >
-        <ManuscriptView
-          {activeId}
-          content={data.version.content}
-          onActivate={(threadId) => activate(threadId, 'manuscript')}
-          threads={data.threads}
-          {title}
-        />
+      <div class={css({ flexGrow: '1', minWidth: '0', overflowY: 'auto' })} data-completed-scroll>
+        <div
+          class={flex({
+            gap: '28px',
+            width: 'full',
+            maxWidth: '1184px',
+            marginX: 'auto',
+            paddingX: '24px',
+            paddingTop: '44px',
+            paddingBottom: '48px',
+          })}
+        >
+          <ManuscriptView
+            {activeId}
+            content={data.version.content}
+            onActivate={(id) => activate(id, 'manuscript')}
+            strengths={conclusion?.strengths ?? []}
+            threads={data.threads}
+            {title}
+          />
 
-        <ThreadColumn
-          {activeId}
-          comments={data.comments}
-          content={data.version.content}
-          onActivate={(threadId) => activate(threadId, 'thread')}
-          patterns={conclusion?.patterns ?? []}
-          threads={data.threads}
-        />
+          <ThreadColumn
+            {activeId}
+            comments={data.comments}
+            content={data.version.content}
+            onActivate={(threadId) => activate(threadId, 'thread')}
+            patterns={conclusion?.patterns ?? []}
+            priorities={conclusion?.priorities ?? []}
+            threads={data.threads}
+          />
+        </div>
       </div>
     </div>
+
+    {#if conclusion && !conclusionEmpty}
+      <ConclusionDrawer
+        {activeId}
+        {conclusion}
+        content={data.version.content}
+        finishedAt={data.review.finishedAt}
+        onActivate={jump}
+        onClose={closeDrawer}
+        open={drawerOpen}
+        reaction={data.reaction}
+        round={data.review.round}
+        threads={data.threads}
+        {title}
+      />
+    {/if}
   {:else}
     <div class={flex({ flexGrow: '1', minHeight: '0' })}>
       <div class={css({ flexGrow: '1', minWidth: '0', overflowY: 'auto' })}>
@@ -364,3 +480,28 @@
     </div>
   {/if}
 </div>
+
+{#if data.isAdmin}
+  <Modal style={css.raw({ padding: '20px', width: '420px' })} bind:open={modelConfigOpen}>
+    <h2 class={css({ fontSize: '14px', fontWeight: 'semibold', marginBottom: '10px' })}>이 리뷰의 모델 구성</h2>
+    {#if data.modelConfig}
+      <div class={css({ display: 'flex', flexDirection: 'column', gap: '6px' })}>
+        {#each AGENTS as agent (agent)}
+          {@const entry = data.modelConfig[agent]}
+          <div class={flex({ align: 'center', gap: '8px', fontSize: '12px' })}>
+            <span class={css({ width: '80px', fontFamily: 'mono', color: 'text.subtle' })}>{agent}</span>
+            <span class={css({ fontFamily: 'mono', fontWeight: entry.overridden ? 'semibold' : 'normal' })}>
+              {entry.model} · {entry.effort}
+            </span>
+            {#if entry.overridden}
+              <span class={css({ fontSize: '11px', color: 'text.brand' })}>변경됨</span>
+            {/if}
+          </div>
+        {/each}
+      </div>
+      <p class={css({ marginTop: '10px', fontSize: '11px', color: 'text.faint' })}>기본값 표시는 리뷰 시작 시점 기준이에요.</p>
+    {:else}
+      <p class={css({ fontSize: '12px', color: 'text.faint' })}>구성 기록이 없어요 — 이 기능이 생기기 전에 시작된 리뷰예요.</p>
+    {/if}
+  </Modal>
+{/if}

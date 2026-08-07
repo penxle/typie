@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { anchorPosition, anchorQuote, markParagraphs, markSegments } from './anchors.ts';
+import { anchorQuote, markParagraphs, markSegments } from './anchors.ts';
 
 const thread = (id: string, start: number, end: number, pass: 'critique' | 'proofread', state = 'open') =>
   ({ id, pass, state, anchors: [{ start, end, head: '', tail: '' }] }) as never;
@@ -84,22 +84,5 @@ describe('anchorQuote', () => {
 
   it('head나 tail이 비면 접지 않고 원문 구간을 그대로 쓴다', () => {
     expect(anchorQuote('가나다라마바사', [{ start: 0, end: 7, head: '', tail: '' }])).toBe('가나다라마바사');
-  });
-});
-
-describe('anchorPosition', () => {
-  it('첫 앵커 시작을 반올림해 표기한다', () => {
-    expect(anchorPosition([{ start: 4812, end: 4900, head: '', tail: '' }])).toBe('4,800자 부근');
-    expect(anchorPosition([])).toBe('위치 없음');
-  });
-
-  it('무효한 첫 앵커는 건너뛰고 인용과 같은 앵커를 가리킨다', () => {
-    expect(
-      anchorPosition([
-        { start: 900, end: 100, head: '', tail: '' },
-        { start: 4812, end: 4900, head: '', tail: '' },
-      ]),
-    ).toBe('4,800자 부근');
-    expect(anchorPosition([{ start: -1, end: 100, head: '', tail: '' }])).toBe('위치 없음');
   });
 });

@@ -17,11 +17,12 @@
     comments: Comment[];
     quote: string;
     pattern: { theme: string; count: number } | null;
+    priority: { rank: number; total: number; body: string } | null;
     expanded: boolean;
     onToggle: () => void;
   };
 
-  const { thread, comments, quote, pattern, expanded, onToggle }: Props = $props();
+  const { thread, comments, quote, pattern, priority, expanded, onToggle }: Props = $props();
 
   const closed = $derived(thread.state === 'closed');
   const snippet = $derived(thread.body ?? '');
@@ -144,6 +145,20 @@
 
   const revealInnerClass = css({ overflow: 'hidden', minHeight: '0' });
 
+  // 총평이 이 지적을 어디에 놓았는지의 콜아웃 — 순서(급함)와 습관(같은 결)이 같은 급으로 나란히 선다.
+  const calloutClass = css({
+    marginTop: '10px',
+    paddingX: '10px',
+    paddingY: '7px',
+    borderWidth: '1px',
+    borderColor: 'border.subtle',
+    borderRadius: '6px',
+    backgroundColor: 'surface.subtle',
+    fontSize: '11px',
+    lineHeight: '[1.55]',
+    color: 'text.faint',
+  });
+
   // 접힌 카드는 어디를 눌러도 열린다 — 헤더 버튼이 접근성 조작면이고, 이 핸들러는 포인터 편의다.
   // 내부 조작 요소에서 시작한 클릭은 제외하고, 펼친 카드는 본문 드래그·선택을 방해하지 않게 닫지 않는다.
   const openFromCard = (event: MouseEvent) => {
@@ -259,22 +274,16 @@
       {/if}
 
       {#if pattern}
-        <p
-          class={css({
-            marginTop: '10px',
-            paddingX: '10px',
-            paddingY: '7px',
-            borderWidth: '1px',
-            borderColor: 'border.subtle',
-            borderRadius: '6px',
-            backgroundColor: 'surface.subtle',
-            fontSize: '11px',
-            lineHeight: '[1.55]',
-            color: 'text.faint',
-          })}
-        >
+        <p class={calloutClass}>
           <span class={css({ fontWeight: 'bold', color: 'text.subtle' })}>반복되는 습관</span>
           · {pattern.theme} — 원고 전체에서 {pattern.count}건이 같은 결이에요
+        </p>
+      {/if}
+
+      {#if priority}
+        <p class={calloutClass}>
+          <span class={css({ fontWeight: 'bold', color: 'text.subtle' })}>손보실 순서</span>
+          · 전체 {priority.total}단계 중 {priority.rank}번째 — {priority.body}
         </p>
       {/if}
 
