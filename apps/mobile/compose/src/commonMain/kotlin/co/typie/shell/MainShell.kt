@@ -151,6 +151,7 @@ fun MainShell(content: @Composable (Route) -> Unit) {
           onSettledTab = { tab -> navState.currentTab = tab },
         ) { tab ->
           val foregroundInteractive = tab == settledTab && motion == null && drawerAtRest
+          val foregroundFocusEnabled = tab == settledTab && drawerAtRest
           NavigationStack(
             navigator = navigators[tab]!!,
             topBarState =
@@ -158,6 +159,7 @@ fun MainShell(content: @Composable (Route) -> Unit) {
             bottomBarState =
               if (tab == chromeTab) bottomBarState else backgroundBottomBarStates.getValue(tab),
             foregroundInteractive = foregroundInteractive,
+            foregroundFocusEnabled = foregroundFocusEnabled,
             content = content,
           )
         }

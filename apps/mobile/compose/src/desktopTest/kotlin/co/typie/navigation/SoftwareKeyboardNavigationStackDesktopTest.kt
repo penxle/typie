@@ -44,6 +44,72 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalTestApi::class)
 class SoftwareKeyboardNavigationStackDesktopTest {
   @Test
+  fun committedSearchBackSwipeDoesNotRewindKeyboardProgressAfterRelease() = runComposeUiTest {
+    val navigator = Navigator(Route.Home)
+    val driver = ImmediateProgressDriver()
+    val controller = SoftwareKeyboardPresentationController { driver }
+    var activationDistancePx = 0f
+
+    setContent {
+      CompositionLocalProvider(
+        LocalAppColors provides LightColors,
+        LocalSoftwareKeyboardPresentationController provides controller,
+      ) {
+        activationDistancePx =
+          LocalViewConfiguration.current.touchSlop * NAVIGATION_POP_ACTIVATION_SLOP_MULTIPLIER
+        NavigationStackTestHost(
+          navigator = navigator,
+          topBarState = remember { TopBarState() },
+          modifier = Modifier.size(width = 320.dp, height = 640.dp),
+        ) { route ->
+          Box(
+            Modifier.fillMaxSize()
+              .testTag(if (route == Route.Search) SEARCH_ROUTE_TAG else HOME_ROUTE_TAG)
+          )
+        }
+        LaunchedEffect(Unit) { navigator.navigate(Route.Search) }
+      }
+    }
+    waitUntil { navigator.current == Route.Search && !navigator.isTransitioning }
+
+    val routeNode = onNodeWithTag(SEARCH_ROUTE_TAG)
+    mainClock.autoAdvance = false
+    try {
+      routeNode.performTouchInput {
+        down(Offset(x = 10f, y = center.y))
+        moveBy(Offset(x = activationDistancePx + 256f, y = 0f), delayMillis = 600L)
+      }
+      mainClock.advanceTimeByFrame()
+      mainClock.advanceTimeByFrame()
+      waitForIdle()
+
+      var observedProgressCount = driver.progress.size
+      var previousProgress = driver.progress.last()
+      assertTrue(previousProgress > 0.7f)
+
+      routeNode.performTouchInput { up() }
+      repeat(60) { frame ->
+        mainClock.advanceTimeByFrame()
+        waitForIdle()
+        driver.progress.drop(observedProgressCount).forEach { currentProgress ->
+          assertTrue(
+            currentProgress + PROGRESS_TOLERANCE >= previousProgress,
+            "Keyboard progress rewound from $previousProgress to $currentProgress after release at frame $frame",
+          )
+          previousProgress = currentProgress
+        }
+        observedProgressCount = driver.progress.size
+      }
+
+      assertEquals(Route.Home, navigator.current)
+      assertFalse(navigator.isTransitioning)
+      assertEquals(SoftwareKeyboardPresentationEndpoint.Hidden, driver.endpoint)
+    } finally {
+      mainClock.autoAdvance = true
+    }
+  }
+
+  @Test
   fun committedRouteRetainsItsOutgoingCompositionUntilHiddenResolves() = runComposeUiTest {
     val navigator = Navigator(Route.Home)
     val editorRoute = Route.Editor("software-keyboard-async-resolution")
@@ -312,6 +378,23 @@ class SoftwareKeyboardNavigationStackDesktopTest {
   }
 }
 
+private class ImmediateProgressDriver : SoftwareKeyboardPresentationDriver {
+  val progress = mutableListOf<Float>()
+  var endpoint: SoftwareKeyboardPresentationEndpoint? = null
+    private set
+
+  override fun updateHiddenProgress(progress: Float) {
+    this.progress += progress
+  }
+
+  override fun finish(endpoint: SoftwareKeyboardPresentationEndpoint, onAccepted: () -> Unit) {
+    this.endpoint = endpoint
+    onAccepted()
+  }
+
+  override fun dispose() = Unit
+}
+
 private class DeferredEndpointDriver : SoftwareKeyboardPresentationDriver {
   var endpoint: SoftwareKeyboardPresentationEndpoint? = null
     private set
@@ -339,9 +422,11 @@ private class KeyboardTestClient : TextInputClient {
 }
 
 private const val NAVIGATION_POP_ACTIVATION_SLOP_MULTIPLIER = 3f
+private const val PROGRESS_TOLERANCE = 0.0001f
 private val DESKTOP_IME_BOTTOM_OFFSET = 12.dp
 private const val GEOMETRY_TOLERANCE_PX = 1.5f
 private const val ROOT_TAG = "software-keyboard-navigation-root"
 private const val KEYBOARD_TAG = "software-keyboard-navigation-keyboard"
 private const val EDITOR_ROUTE_TAG = "software-keyboard-navigation-editor"
+private const val SEARCH_ROUTE_TAG = "software-keyboard-navigation-search"
 private const val HOME_ROUTE_TAG = "software-keyboard-navigation-home"

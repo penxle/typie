@@ -4,14 +4,17 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.hasSetTextAction
@@ -42,6 +45,74 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalTestApi::class)
 class MainShellAutofocusDesktopTest {
+  @Test
+  fun `main tab motion retains source focus and rejects background focus until settle`() =
+    runComposeUiTest {
+      configureEditorFfiLibrary()
+      var selectTab: ((Tab) -> Unit)? = null
+      var currentTab = Tab.Home
+      var isBodyMoving = false
+      var sourceFocused = false
+      var backgroundFocusRequester: FocusRequester? = null
+
+      setContent {
+        val sheet = remember { Sheet() }
+        val dialog = remember { Dialog() }
+        CompositionLocalProvider(
+          LocalThemeMode provides ResolvedThemeMode.Light,
+          LocalSheet provides sheet,
+          LocalDialog provides dialog,
+        ) {
+          MainShell { route ->
+            val tabState = LocalTabState.current
+            SideEffect {
+              selectTab = tabState.onSelectTab
+              currentTab = tabState.currentTab
+              isBodyMoving = tabState.isBodyMoving
+            }
+
+            when (route) {
+              Route.Home -> {
+                val focusRequester = remember { FocusRequester() }
+                BasicTextField(
+                  value = "",
+                  onValueChange = {},
+                  modifier =
+                    Modifier.fillMaxSize().focusRequester(focusRequester).onFocusChanged {
+                      sourceFocused = it.isFocused
+                    },
+                )
+                LaunchedEffect(Unit) { focusRequester.requestFocus() }
+              }
+
+              Route.Space -> {
+                val focusRequester = remember { FocusRequester() }
+                SideEffect { backgroundFocusRequester = focusRequester }
+                Box(Modifier.fillMaxSize().focusRequester(focusRequester).focusable())
+              }
+
+              else -> Unit
+            }
+          }
+        }
+      }
+      waitUntil { sourceFocused && selectTab != null }
+
+      mainClock.autoAdvance = false
+      runOnIdle { requireNotNull(selectTab).invoke(Tab.Space) }
+      repeat(8) { mainClock.advanceTimeByFrame() }
+      runOnIdle {
+        assertTrue(isBodyMoving)
+        assertTrue(sourceFocused)
+        assertFalse(requireNotNull(backgroundFocusRequester).requestFocus())
+        assertTrue(sourceFocused)
+      }
+
+      mainClock.autoAdvance = true
+      waitUntil(timeoutMillis = 5_000L) { currentTab == Tab.Space && !isBodyMoving }
+      runOnIdle { assertFalse(sourceFocused) }
+    }
+
   @Test
   fun `feedback autofocus keeps the software keyboard visible inside main shell`() =
     assertNestedFormAutofocus(Route.Feedback)

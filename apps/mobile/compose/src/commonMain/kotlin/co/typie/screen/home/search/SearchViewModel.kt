@@ -19,6 +19,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class SearchViewModel : ViewModel() {
+  internal var initialFocusRequestPending = true
+    private set
+
   var inputKeyword by mutableStateOf("")
     private set
 
@@ -43,6 +46,10 @@ class SearchViewModel : ViewModel() {
     ) {
       SearchScreen_Search_Query(siteId = Preference.siteId!!, query = activeKeyword)
     }
+
+  internal fun consumeInitialFocusRequest() {
+    initialFocusRequestPending = false
+  }
 
   fun setKeyword(keyword: String) {
     inputKeyword = keyword

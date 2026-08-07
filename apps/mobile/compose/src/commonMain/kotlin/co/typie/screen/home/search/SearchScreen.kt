@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -64,6 +65,8 @@ fun SearchScreen() {
   val model = viewModel { SearchViewModel() }
   val scrollState = rememberScrollState()
   val placeholder = "${model.query.data.site.name.truncate(10)}에서 검색..."
+  val autoFocus = model.initialFocusRequestPending
+  SideEffect { if (autoFocus) model.consumeInitialFocusRequest() }
 
   ProvideTopBar()
 
@@ -80,6 +83,7 @@ fun SearchScreen() {
         placeholder = placeholder,
         onValueChange = { model.setKeyword(it) },
         onSubmit = { model.submitKeyword() },
+        autoFocus = autoFocus,
         modifier = Modifier.fillMaxWidth(),
       )
 
@@ -150,6 +154,7 @@ private fun SearchInputField(
   placeholder: String,
   onValueChange: (String) -> Unit,
   onSubmit: () -> Unit,
+  autoFocus: Boolean,
   modifier: Modifier = Modifier,
 ) {
   TextField(
@@ -159,7 +164,7 @@ private fun SearchInputField(
     modifier = modifier,
     labelPosition = LabelPosition.None,
     placeholder = placeholder,
-    autoFocus = true,
+    autoFocus = autoFocus,
     imeAction = ImeAction.Search,
     platformImeOptions = nativeTextInputPlatformImeOptions(),
     onImeAction = onSubmit,

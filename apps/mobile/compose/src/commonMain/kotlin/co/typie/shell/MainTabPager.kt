@@ -22,7 +22,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.Velocity
+import co.typie.platform.LocalSoftwareKeyboardPresentationController
+import co.typie.platform.SoftwareKeyboardPresentationEndpoint
+import co.typie.platform.SoftwareKeyboardPresentationSession
 import kotlin.math.abs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -248,6 +252,8 @@ internal fun MainTabPager(
   content: @Composable (Tab) -> Unit,
 ) {
   val pagerState = state.pagerState
+  val focusManager = LocalFocusManager.current
+  val softwareKeyboardPresentationController = LocalSoftwareKeyboardPresentationController.current
   val isDirectDrag by pagerState.interactionSource.collectIsDraggedAsState()
   val latestGestureAdmissionAllowed by rememberUpdatedState(gestureAdmissionAllowed)
   val latestOnSettledTab by rememberUpdatedState(onSettledTab)
@@ -271,6 +277,41 @@ internal fun MainTabPager(
       .collect { (_, raw) ->
         state.reconcileRawPager(raw)?.let { settledTab -> latestOnSettledTab(settledTab) }
       }
+  }
+
+  LaunchedEffect(state, softwareKeyboardPresentationController, focusManager) {
+    var origin: Tab? = null
+    var keyboardSession: SoftwareKeyboardPresentationSession? = null
+
+    try {
+      snapshotFlow { Triple(state.motion, state.bodyPosition, state.settledTab) }
+        .collect { (motion, bodyPosition, settledTab) ->
+          if (motion != null) {
+            if (origin == null) {
+              origin = motion.origin
+              keyboardSession = softwareKeyboardPresentationController.acquire()
+            }
+            val activeOrigin = origin ?: return@collect
+            keyboardSession?.updateHiddenProgress(
+              abs(bodyPosition - activeOrigin.ordinal).coerceIn(0f, 1f)
+            )
+            return@collect
+          }
+
+          val activeOrigin = origin ?: return@collect
+          val activeKeyboardSession = keyboardSession
+          origin = null
+          keyboardSession = null
+          if (settledTab == activeOrigin) {
+            activeKeyboardSession?.finish(SoftwareKeyboardPresentationEndpoint.Shown)
+          } else {
+            activeKeyboardSession?.finish(SoftwareKeyboardPresentationEndpoint.Hidden)
+            focusManager.clearFocus(force = true)
+          }
+        }
+    } finally {
+      keyboardSession?.dispose()
+    }
   }
 
   LaunchedEffect(navigationLocked, state.motion?.origin, state.motion != null) {

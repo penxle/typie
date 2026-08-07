@@ -207,6 +207,7 @@ fun NavigationStack(
   bottomBarState: BottomBarState? = null,
   modifier: Modifier = Modifier,
   foregroundInteractive: Boolean = true,
+  foregroundFocusEnabled: Boolean = foregroundInteractive,
   content: @Composable (Route) -> Unit,
 ) {
   val themeMode = AppTheme.themeMode
@@ -442,6 +443,9 @@ fun NavigationStack(
         val animatesSeparately = delayed || transitionStyle == RouteTransitionStyle.Fade
         if (animatesSeparately) {
           exitAnimation.cancelAndJoin()
+          if (transitionStyle == RouteTransitionStyle.Fade) {
+            softwareKeyboardInteraction.continueFromHiddenProgress(progress.value)
+          }
           if (!animateRemovalTo(target)) {
             return@coroutineScope performProgressiveRemoval(target)
           }
@@ -791,7 +795,7 @@ fun NavigationStack(
     Box(
       modifier
         .fillMaxSize()
-        .focusProperties { canFocus = foregroundInteractive }
+        .focusProperties { canFocus = foregroundFocusEnabled }
         .onSizeChanged {
           containerWidth = it.width.toFloat()
           containerHeight = it.height.toFloat()

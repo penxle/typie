@@ -30,6 +30,33 @@ class NavigationSoftwareKeyboardInteractionTest {
   }
 
   @Test
+  fun separateVisualTransitionContinuesFromTheReleasedKeyboardProgress() {
+    val factory = RecordingDriverFactory()
+    val interaction =
+      NavigationSoftwareKeyboardInteraction(SoftwareKeyboardPresentationController(factory))
+
+    interaction.start()
+    interaction.updateHiddenProgress(0.8f)
+    interaction.continueFromHiddenProgress(0.8f)
+    interaction.updateHiddenProgress(0f)
+    interaction.updateHiddenProgress(0.5f)
+    interaction.updateHiddenProgress(1f)
+
+    val firstDriver = requireNotNull(factory.driver)
+    assertEquals(4, firstDriver.progress.size)
+    listOf(0.8f, 0.8f, 0.9f, 1f).zip(firstDriver.progress).forEach { (expected, actual) ->
+      assertEquals(expected, actual, absoluteTolerance = 0.0001f)
+    }
+
+    interaction.restore()
+    firstDriver.acceptEndpoint()
+    interaction.start()
+    interaction.updateHiddenProgress(0.25f)
+
+    assertEquals(listOf(0.25f), requireNotNull(factory.driver).progress)
+  }
+
+  @Test
   fun restoreRemovesOnlyNavigationContributionAndRevealsTheRemainingProgress() {
     val factory = RecordingDriverFactory()
     val controller = SoftwareKeyboardPresentationController(factory)
