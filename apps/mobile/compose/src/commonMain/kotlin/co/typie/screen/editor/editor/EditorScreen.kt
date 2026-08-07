@@ -119,6 +119,7 @@ import co.typie.editor.sync.ws.replacementSnapshotInFlight
 import co.typie.editor.viewport.consumeEditorViewportTouchPan
 import co.typie.ext.LocalScrollGestureLockState
 import co.typie.ext.ime
+import co.typie.ext.rememberTextInputState
 import co.typie.graphql.QueryState
 import co.typie.navigation.LocalNavigationTopBarSampleRequester
 import co.typie.navigation.Nav
@@ -1244,11 +1245,17 @@ fun EditorScreen(entityId: String) {
 
     when {
       findReplace.active -> {
+        val findInputState =
+          rememberTextInputState(
+            value = findReplace.findText,
+            onValueChange = findReplace.updateFindText,
+            onDismiss = {},
+          )
         ProvideTopBar(
           backdropBlurEnabled = false,
           leading = { FindReplaceTopBarLeading(session = findReplace) },
           leadingKey = FindReplaceTopBarLeadingKey,
-          center = { FindReplaceTopBarCenter(session = findReplace) },
+          center = { FindReplaceTopBarCenter(session = findReplace, inputState = findInputState) },
           centerKey = FindReplaceTopBarCenterKey,
           centerAppearance = TopBarCenterAppearance.ThemeSurface,
           trailing = { FindReplaceTopBarTrailing(session = findReplace) },
