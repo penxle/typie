@@ -1,46 +1,74 @@
 import { error, fail, redirect } from '@sveltejs/kit';
-import { and, eq } from 'drizzle-orm';
-import { claimTask, isEvaluator } from '$lib/server/assign.ts';
-import { isAdmin } from '$lib/server/auth.ts';
-import { activeRounds } from '$lib/server/rounds.ts';
-import { createDb, Evaluators, Judgments, Tasks } from '../../core/db.ts';
+import { and, desc, eq } from 'drizzle-orm';
+import { createDb, FeedbackSessions, Reviews } from '$lib/server/db/index.ts';
+import { fetchManuscript } from '$lib/server/ingest.ts';
+import { createInternalApi } from '$lib/server/internal-api.ts';
+import { countChars, startFeedbackSession } from '$lib/server/reviews.ts';
 import type { Actions, PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ platform, locals }) => {
+const IMPORT_FAILED = '문서를 불러오지 못했어요. 잠시 후 다시 시도해 주세요';
+
+export const load: PageServerLoad = async ({ locals, platform }) => {
   if (!platform) error(500, 'platform unavailable');
   const db = createDb(platform.env.DB);
 
-  const [consent] = await db.select().from(Evaluators).where(eq(Evaluators.email, locals.email));
-  if (!consent) redirect(302, '/consent');
+  // 세션과 round 1 리뷰는 한 batch(암묵 트랜잭션)로 함께 들어간다 — 리뷰 없는 세션은 없으므로 inner join이 목록을 잃지 않는다.
+  const sessions = await db
+    .select({
+      id: FeedbackSessions.id,
+      refId: FeedbackSessions.refId,
+      title: FeedbackSessions.title,
+      createdAt: FeedbackSessions.createdAt,
+      status: Reviews.status,
+    })
+    .from(FeedbackSessions)
+    .innerJoin(Reviews, and(eq(Reviews.sessionId, FeedbackSessions.id), eq(Reviews.round, 1)))
+    .where(eq(FeedbackSessions.testerEmail, locals.email))
+    .orderBy(desc(FeedbackSessions.createdAt));
 
-  // 받아 놓고 아직 제출하지 않은 것들. draft로 좁히지 않으면 제출한 태스크가 계속 "이어서 하기"로
-  // 남아 새 배정을 막는다.
-  const drafts = await db
-    .select({ taskId: Judgments.taskId, roundId: Tasks.roundId })
-    .from(Judgments)
-    .innerJoin(Tasks, eq(Tasks.id, Judgments.taskId))
-    .where(and(eq(Judgments.evaluatorEmail, locals.email), eq(Judgments.draft, true)));
-
-  return {
-    email: locals.email,
-    isAdmin: isAdmin(platform.env, locals.email),
-    evaluating: consent.evaluating,
-    rounds: await activeRounds(db, locals.email),
-    drafts,
-  };
+  return { sessions: sessions.map((session) => ({ ...session, createdAt: session.createdAt.getTime() })) };
 };
 
 export const actions: Actions = {
-  claim: async ({ request, platform, locals }) => {
+  // 확인 단계 — 반입만 하고 아무 행도 쓰지 않는다. 오입력은 여기서 제목으로 걸러진다.
+  preview: async ({ platform, request }) => {
     if (!platform) error(500, 'platform unavailable');
-    const db = createDb(platform.env.DB);
-    const form = await request.formData();
-    // 자격이 없어도 오류 화면을 띄우지 않는다 — 버튼이 보이지 않아야 하는 상태이므로 안내만 남긴다.
-    if (!(await isEvaluator(db, locals.email))) return fail(403, { message: '아직 평가자로 등록되지 않았습니다' });
 
-    const roundId = String(form.get('roundId') ?? '');
-    const taskId = await claimTask(db, roundId, locals.email);
-    if (!taskId) redirect(303, '/?empty=1');
-    redirect(303, `/tasks/${taskId}`);
+    const form = await request.formData();
+    const documentId = String(form.get('documentId') ?? '').trim();
+    if (!documentId) return fail(400, { error: '문서 ID를 입력해 주세요' });
+
+    const api = createInternalApi(platform.env.INTERNAL_API_BASE, platform.env.INTERNAL_API_KEY);
+    let manuscript;
+    try {
+      manuscript = await fetchManuscript(api, documentId);
+    } catch {
+      return fail(502, { error: IMPORT_FAILED });
+    }
+    if ('error' in manuscript) return fail(400, { error: manuscript.error });
+
+    // 글자 수는 이 반입본 기준이다 — 시작은 문서를 다시 반입하므로 그 사이 편집분은 반영되지 않는다.
+    return { preview: { refId: documentId, title: manuscript.title, charCount: countChars(manuscript.content) } };
+  },
+
+  start: async ({ locals, platform, request }) => {
+    if (!platform) error(500, 'platform unavailable');
+
+    const form = await request.formData();
+    const documentId = String(form.get('documentId') ?? '').trim();
+    if (!documentId) return fail(400, { error: '문서 ID를 입력해 주세요' });
+
+    const db = createDb(platform.env.DB);
+    // 확인 단계의 반입을 재사용하지 않는다 — 확인과 시작 사이에 문서가 바뀌었으면 최신본이 리뷰 대상이다.
+    let result;
+    try {
+      result = await startFeedbackSession(db, platform.env, { refId: documentId, email: locals.email });
+    } catch {
+      return fail(502, { error: IMPORT_FAILED });
+    }
+    if ('error' in result) return fail(400, { error: result.error });
+
+    // redirect는 throw다 — try 밖에 두어야 catch가 삼키지 않는다.
+    redirect(303, `/sessions/${result.sessionId}`);
   },
 };

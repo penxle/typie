@@ -6,6 +6,10 @@ workers_dev = false
 
 routes = [{ pattern = "eval.penxle.io", custom_domain = true }]
 
+[vars]
+INTERNAL_API_BASE = "https://api.typie.co"
+PRISM_API_ORIGIN = "https://prism-api.penxle.io"
+
 [assets]
 binding = "ASSETS"
 directory = ".svelte-kit/cloudflare"
@@ -16,18 +20,6 @@ invocation_logs = true
 
 [[d1_databases]]
 binding = "DB"
-database_name = "typie-eval"
-database_id = "b747f2cb-559e-4e62-b789-9475a83221e1"
+database_name = "typie-eval-beta"
+database_id = "80e31c0b-81c4-487c-afb2-c66763c7cfc4"
 migrations_dir = "migrations"
-
-[[workflows]]
-binding = "SAMPLING"
-name = "eval-sampling"
-class_name = "SamplingWorkflow"
-script_name = "typie-eval-flows"
-
-[[workflows]]
-binding = "RUN"
-name = "eval-run"
-class_name = "RunWorkflow"
-script_name = "typie-eval-flows"

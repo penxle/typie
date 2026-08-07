@@ -1,231 +1,266 @@
 <script lang="ts">
-  import { css } from '@typie/styled-system/css';
+  import { css, cva } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
-  import { Helmet } from '@typie/ui/components';
+  import { Button, Helmet, TextInput, TimeAgo } from '@typie/ui/components';
   import { enhance } from '$app/forms';
-  import { page } from '$app/state';
   import ThemeToggle from '$lib/components/ThemeToggle.svelte';
-  import type { PageData } from './$types';
+  import type { ActionData, PageData, SubmitFunction } from './$types';
 
-  type Props = { data: PageData; form: { message?: string } | null };
+  type Props = { data: PageData; form: ActionData };
   const { data, form }: Props = $props();
 
-  let claiming = $state<string | null>(null);
+  let documentId = $state('');
+  let previewing = $state(false);
+  let starting = $state(false);
+  // 확인 카드와 오류는 이 화면이 들고 있는다 — 시작이 실패해도 카드가 남아 바로 다시 누를 수 있고,
+  // 단계를 되돌릴 때 직전 오류를 걷을 수 있다. 초기값을 form에서 받아 JS 없는 왕복·하이드레이션 전에도 성립시킨다.
+  // svelte-ignore state_referenced_locally
+  let preview = $state<{ refId: string; title: string | null; charCount: number } | null>(form?.preview ?? null);
+  // svelte-ignore state_referenced_locally
+  let error = $state<string | null>(form?.error ?? null);
 
-  const finished = $derived(page.url.searchParams.has('finished'));
-  const empty = $derived(page.url.searchParams.has('empty'));
-  const claimable = $derived(data.rounds.reduce((sum, round) => sum + round.claimable, 0));
+  const submitPreview: SubmitFunction = ({ cancel }) => {
+    if (previewing) {
+      cancel();
+      return;
+    }
+    previewing = true;
+    // update()가 거부하면 잠금이 영구화된다 — 해제는 성패와 무관하게 한다.
+    return async ({ result, update }) => {
+      try {
+        preview = result.type === 'success' ? (result.data?.preview ?? null) : null;
+        error = result.type === 'failure' ? (result.data?.error ?? null) : null;
+        // reset은 입력값을 지운다 — 확인 카드를 접고 돌아왔을 때 문서 ID가 남아 있어야 한다.
+        await update({ reset: false });
+      } finally {
+        previewing = false;
+      }
+    };
+  };
 
-  const headerLinkClass = css({
-    flexShrink: '0',
-    paddingX: '10px',
-    paddingY: '6px',
-    borderWidth: '1px',
-    borderColor: 'border.default',
-    borderRadius: '6px',
-    fontSize: '13px',
-    color: 'text.faint',
-    transition: '[background-color 0.15s ease, color 0.15s ease]',
-    _hover: { backgroundColor: 'surface.default', color: 'text.default' },
+  const submitStart: SubmitFunction = ({ cancel }) => {
+    if (starting) {
+      cancel();
+      return;
+    }
+    starting = true;
+    return async ({ result, update }) => {
+      try {
+        error = result.type === 'failure' ? (result.data?.error ?? null) : null;
+        await update({ reset: false });
+      } finally {
+        starting = false;
+      }
+    };
+  };
+
+  // 입력 단계로 돌아갈 때 확인 단계에서 난 오류는 함께 걷는다 — 단계가 바뀌면 그 오류의 맥락도 사라진다.
+  const backToInput = () => {
+    preview = null;
+    error = null;
+  };
+
+  const STATUS_LABELS = { running: '진행 중', completed: '완료', failed: '실패', canceled: '중단됨' };
+
+  const badgeRecipe = cva({
+    base: {
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: '5px',
+      flexShrink: '0',
+      paddingX: '9px',
+      paddingY: '3px',
+      borderRadius: 'full',
+      fontSize: '11px',
+      fontWeight: 'semibold',
+    },
+    variants: {
+      status: {
+        running: { backgroundColor: 'accent.brand.subtle', color: 'text.brand' },
+        completed: { backgroundColor: 'accent.success.subtle', color: 'text.success' },
+        failed: { backgroundColor: 'accent.danger.subtle', color: 'text.danger' },
+        canceled: { backgroundColor: 'surface.muted', color: 'text.faint' },
+      },
+    },
   });
 </script>
 
-<Helmet title="평가 큐" trailing="타이피 평가" />
+<Helmet title="AI 피드백 베타" />
 
-<main class={css({ minHeight: '[100dvh]', backgroundColor: 'surface.subtle' })}>
-  <div class={css({ maxWidth: '560px', marginX: 'auto', paddingY: '64px', paddingX: '20px' })}>
-    <header class={flex({ align: 'flex-start', justify: 'space-between', gap: '16px', marginBottom: '24px' })}>
-      <div>
-        <h1 class={css({ fontSize: '22px', fontWeight: 'bold' })}>문학 피드백 평가</h1>
-        <p class={css({ marginTop: '4px', fontSize: '14px', color: 'text.subtle' })}>{data.email}</p>
-      </div>
-      <div class={flex({ align: 'center', gap: '8px', flexShrink: '0' })}>
-        <ThemeToggle />
-        {#if data.isAdmin}
-          <a class={headerLinkClass} href="/admin">어드민</a>
-        {/if}
-        <a class={headerLinkClass} data-sveltekit-reload href="/cdn-cgi/access/logout">로그아웃</a>
-      </div>
-    </header>
+<main class={css({ display: 'flex', flexDirection: 'column', minHeight: '[100dvh]', backgroundColor: 'surface.subtle' })}>
+  <header
+    class={flex({
+      align: 'center',
+      gap: '10px',
+      flex: 'none',
+      height: '48px',
+      paddingX: '20px',
+      borderBottomWidth: '1px',
+      borderColor: 'border.default',
+      backgroundColor: 'surface.default',
+    })}
+  >
+    <h1 class={css({ fontSize: '14px', fontWeight: 'semibold' })}>AI 피드백 베타</h1>
+    <div class={css({ marginLeft: 'auto' })}>
+      <ThemeToggle />
+    </div>
+  </header>
 
-    {#if (finished || empty) && claimable === 0 && data.drafts.length === 0}
-      <section
-        class={css({
-          backgroundColor: 'accent.success.subtle',
-          borderRadius: '12px',
-          padding: '24px',
-          marginBottom: '16px',
-          textAlign: 'center',
-        })}
-      >
-        <p class={css({ fontSize: '16px', fontWeight: 'bold', color: 'text.success' })}>모든 평가를 마쳤습니다. 감사합니다!</p>
-        <p class={css({ marginTop: '4px', fontSize: '13px', color: 'text.subtle' })}>새 평가가 배정되면 이 화면에 다시 나타납니다.</p>
-      </section>
-    {/if}
+  <div class={css({ width: 'full', maxWidth: '640px', marginX: 'auto', paddingX: '20px', paddingY: '32px' })}>
+    <section
+      class={css({
+        padding: '20px',
+        borderWidth: '1px',
+        borderColor: 'border.default',
+        borderRadius: '10px',
+        backgroundColor: 'surface.default',
+        boxShadow: 'card',
+      })}
+    >
+      <h2 class={css({ fontSize: '13px', fontWeight: 'semibold' })}>새 피드백 받기</h2>
 
-    {#if form?.message}
-      <p
-        class={css({
-          marginBottom: '16px',
-          paddingX: '14px',
-          paddingY: '12px',
-          borderRadius: '10px',
-          backgroundColor: 'accent.danger.subtle',
-          fontSize: '13px',
-          color: 'text.danger',
-        })}
-      >
-        {form.message}
-      </p>
-    {/if}
+      {#if preview}
+        <form class={css({ marginTop: '12px' })} action="?/start" method="post" use:enhance={submitStart}>
+          <input name="documentId" type="hidden" value={preview.refId} />
 
-    {#if !data.evaluating}
-      <section
-        class={css({
-          backgroundColor: 'surface.default',
-          borderWidth: '1px',
-          borderColor: 'border.default',
-          borderRadius: '12px',
-          padding: '24px',
-          boxShadow: 'small',
-        })}
-      >
-        <p class={css({ fontSize: '14px', color: 'text.subtle' })}>
-          동의는 접수됐습니다. 관리자가 명단에 올리면 이 화면에서 평가를 시작할 수 있습니다.
-        </p>
-      </section>
-    {:else if data.rounds.length === 0}
-      <section
-        class={css({
-          backgroundColor: 'surface.default',
-          borderWidth: '1px',
-          borderColor: 'border.default',
-          borderRadius: '12px',
-          padding: '24px',
-          boxShadow: 'small',
-        })}
-      >
-        <p class={css({ fontSize: '14px', color: 'text.subtle' })}>열려 있는 라운드가 없습니다. 새 라운드가 열리면 여기에 표시됩니다.</p>
-      </section>
-    {:else}
-      {#each data.rounds as round (round.id)}
-        <section
+          <div
+            class={css({
+              paddingX: '14px',
+              paddingY: '12px',
+              borderWidth: '1px',
+              borderColor: 'border.default',
+              borderRadius: '8px',
+              backgroundColor: 'surface.subtle',
+            })}
+          >
+            <p class={css({ fontSize: '12px', color: 'text.faint' })}>이 문서가 맞나요?</p>
+            <p
+              class={css({
+                marginTop: '4px',
+                fontSize: '14px',
+                fontWeight: 'semibold',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              })}
+            >
+              {preview.title || '제목 없음'}
+            </p>
+            <p class={css({ marginTop: '4px', fontSize: '12px', color: 'text.faint' })}>
+              {preview.charCount.toLocaleString('ko-KR')}자 · 불러온 본문 기준
+            </p>
+            <p class={css({ marginTop: '4px', fontFamily: 'mono', fontSize: '11px', letterSpacing: '0', color: 'text.faint' })}>
+              {preview.refId}
+            </p>
+          </div>
+
+          <div class={flex({ align: 'center', gap: '8px', marginTop: '12px' })}>
+            <Button disabled={starting} loading={starting} size="lg" type="submit">이 문서로 리뷰 시작</Button>
+            <Button disabled={starting} onclick={backToInput} size="lg" type="button" variant="secondary">다른 문서 선택</Button>
+          </div>
+
+          {#if error}
+            <p class={css({ marginTop: '10px', fontSize: '12px', color: 'text.danger' })}>{error}</p>
+          {/if}
+        </form>
+      {:else}
+        <form class={css({ marginTop: '12px' })} action="?/preview" method="post" use:enhance={submitPreview}>
+          <div class={flex({ align: 'center', gap: '8px' })}>
+            <TextInput name="documentId" style={css.raw({ flexGrow: '1' })} placeholder="타이피 문서 ID" bind:value={documentId} />
+            <Button disabled={previewing || documentId.trim().length === 0} loading={previewing} size="lg" type="submit">문서 확인</Button>
+          </div>
+
+          <p class={css({ marginTop: '10px', fontSize: '12px', color: 'text.faint' })}>
+            문서 ID는 타이피에서 문서를 우클릭해 '문서 ID 복사'로 얻을 수 있어요
+          </p>
+
+          {#if error}
+            <p class={css({ marginTop: '6px', fontSize: '12px', color: 'text.danger' })}>{error}</p>
+          {/if}
+        </form>
+      {/if}
+    </section>
+
+    <section class={css({ marginTop: '28px' })}>
+      <h2 class={css({ marginBottom: '10px', fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>내 피드백 세션</h2>
+
+      {#if data.sessions.length === 0}
+        <p
           class={css({
-            backgroundColor: 'surface.default',
+            paddingX: '20px',
+            paddingY: '36px',
             borderWidth: '1px',
             borderColor: 'border.default',
-            borderRadius: '12px',
-            padding: '24px',
-            boxShadow: 'small',
-            marginBottom: '16px',
+            borderRadius: '10px',
+            backgroundColor: 'surface.default',
+            boxShadow: 'card',
+            textAlign: 'center',
+            fontSize: '13px',
+            color: 'text.faint',
           })}
         >
-          <h2 class={css({ fontSize: '16px', fontWeight: 'bold', marginBottom: '14px' })}>{round.label}</h2>
-          <div class={flex({ align: 'baseline', gap: '8px' })}>
-            <span class={css({ fontSize: '32px', fontWeight: 'bold', fontVariantNumeric: 'tabular-nums' })}>{round.mine}</span>
-            <span class={css({ fontSize: '14px', color: 'text.subtle' })}>건 평가 완료</span>
-            <span class={css({ marginLeft: 'auto', fontSize: '13px', color: 'text.faint', fontVariantNumeric: 'tabular-nums' })}>
-              {#if round.claimable > 0}
-                새로 시작할 수 있는 평가 {round.claimable}건
-              {:else}
-                새로 받을 평가 없음
-              {/if}
-            </span>
-          </div>
-          <div
-            class={css({ marginTop: '12px', height: '6px', borderRadius: 'full', backgroundColor: 'surface.muted', overflow: 'hidden' })}
-          >
-            <div
-              style:width={`${round.total === 0 ? 0 : Math.round((round.done / round.total) * 100)}%`}
-              class={css({ height: 'full', backgroundColor: 'accent.brand.default' })}
-            ></div>
-          </div>
-          <p class={css({ marginTop: '6px', fontSize: '12px', color: 'text.faint' })}>
-            전체 진행 {round.done} / {round.total} — 평가자 전원의 평가를 합한 라운드 전체 수로, 내 할당량이 아닙니다.
-          </p>
+          아직 피드백 세션이 없어요. 문서 ID로 첫 피드백을 받아 보세요.
+        </p>
+      {:else}
+        <ul class={flex({ direction: 'column', gap: '8px' })}>
+          {#each data.sessions as session (session.id)}
+            <li>
+              <a
+                class={css({
+                  display: 'block',
+                  paddingX: '16px',
+                  paddingY: '14px',
+                  borderWidth: '1px',
+                  borderColor: 'border.default',
+                  borderRadius: '10px',
+                  backgroundColor: 'surface.default',
+                  boxShadow: 'card',
+                  transition: '[border-color 0.15s ease, background-color 0.15s ease]',
+                  _hover: { borderColor: 'border.strong', backgroundColor: 'surface.subtle' },
+                })}
+                href={`/sessions/${session.id}`}
+              >
+                <div class={flex({ align: 'center', gap: '8px' })}>
+                  <span
+                    class={css({
+                      flexGrow: '1',
+                      minWidth: '0',
+                      fontSize: '14px',
+                      fontWeight: 'semibold',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    })}
+                  >
+                    {session.title || '제목 없음'}
+                  </span>
 
-          <form
-            action="?/claim"
-            method="post"
-            use:enhance={() => {
-              claiming = round.id;
-              return async ({ update }) => {
-                await update();
-                claiming = null;
-              };
-            }}
-          >
-            <input name="roundId" type="hidden" value={round.id} />
-            <button
-              class={css({
-                width: 'full',
-                marginTop: '20px',
-                paddingY: '12px',
-                borderRadius: '10px',
-                backgroundColor: 'accent.brand.default',
-                color: 'text.bright',
-                fontSize: '15px',
-                fontWeight: 'bold',
-                cursor: 'pointer',
-                transition: '[background-color 0.15s ease]',
-                _disabled: { backgroundColor: 'interactive.disabled', cursor: 'not-allowed' },
-                ['&:hover:not(:disabled)']: { backgroundColor: 'accent.brand.hover' },
-              })}
-              disabled={claiming !== null || round.claimable === 0 || data.drafts.length > 0}
-              type="submit"
-            >
-              {#if data.drafts.length > 0}
-                작성 중인 평가를 먼저 마무리해 주세요
-              {:else if round.claimable === 0}
-                시작할 새 평가가 없습니다
-              {:else if claiming === round.id}
-                배정 중…
-              {:else}
-                다음 평가 시작
-              {/if}
-            </button>
-          </form>
-          <p class={css({ marginTop: '10px', fontSize: '12px', color: 'text.faint', textAlign: 'center' })}>
-            {#if round.claimable > 0}
-              {#if round.manuscript}
-                이 라운드의 원고는 {round.manuscript.min.toLocaleString()}~{round.manuscript.max.toLocaleString()}자(평균 {round.manuscript.avg.toLocaleString()}자)입니다.
-              {/if}
-            {:else if data.drafts.length > 0}
-              새로 배정받을 평가는 없습니다. 아래 작성 중인 평가를 마무리해 주세요.
-            {:else}
-              내 몫의 평가를 모두 마쳤습니다. 남은 평가는 다른 평가자에게 배정되어 있으며, 새 평가가 열리면 여기에 다시 표시됩니다.
-            {/if}
-          </p>
-        </section>
-      {/each}
-    {/if}
+                  <span class={css(badgeRecipe.raw({ status: session.status }))}>
+                    {#if session.status === 'running'}
+                      <span
+                        class={css({
+                          width: '5px',
+                          height: '5px',
+                          borderRadius: 'full',
+                          backgroundColor: 'accent.brand.default',
+                          animation: 'pulse 1.6s ease-in-out infinite',
+                        })}
+                      ></span>
+                    {/if}
+                    {STATUS_LABELS[session.status]}
+                  </span>
+                </div>
 
-    {#if data.drafts.length > 0}
-      <section class={css({ marginTop: '16px' })}>
-        <h2 class={css({ fontSize: '13px', fontWeight: 'bold', color: 'text.subtle', marginBottom: '8px' })}>작성 중인 평가</h2>
-        <div class={flex({ direction: 'column', gap: '8px' })}>
-          {#each data.drafts as draft (draft.taskId)}
-            <a
-              class={flex({
-                align: 'center',
-                justify: 'space-between',
-                padding: '14px',
-                borderWidth: '1px',
-                borderColor: 'border.default',
-                borderRadius: '10px',
-                backgroundColor: 'surface.default',
-                fontSize: '14px',
-                transition: '[border-color 0.15s ease, box-shadow 0.15s ease]',
-                _hover: { borderColor: 'border.strong', boxShadow: 'small' },
-              })}
-              href={`/tasks/${draft.taskId}`}
-            >
-              <span>임시 저장된 평가 이어서 하기</span>
-              <span class={css({ fontSize: '12px', color: 'text.faint' })}>→</span>
-            </a>
+                <div class={flex({ align: 'center', gap: '6px', marginTop: '6px', fontSize: '12px', color: 'text.faint' })}>
+                  <TimeAgo timestamp={session.createdAt} />
+                  <span>·</span>
+                  <span class={css({ fontFamily: 'mono', fontSize: '11px', letterSpacing: '0' })}>{session.refId}</span>
+                </div>
+              </a>
+            </li>
           {/each}
-        </div>
-      </section>
-    {/if}
+        </ul>
+      {/if}
+    </section>
   </div>
 </main>

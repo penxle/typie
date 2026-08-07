@@ -6,7 +6,7 @@
   "scripts": {
     "build": "vite build",
     "codegen": "svelte-kit sync && panda codegen",
-    "db:migrate": "wrangler d1 migrations apply typie-eval --remote",
+    "db:migrate": "wrangler d1 migrations apply typie-eval-beta --remote",
     "deploy": "vite build && wrangler deploy",
     "dev": "vite dev",
     "lint:eslint": "eslint --max-warnings 0 .",
@@ -14,7 +14,6 @@
     "test": "vitest run"
   },
   "devDependencies": {
-    "@anthropic-ai/sdk": "^0.115.0",
     "@cloudflare/workers-types": "^5.20260801.1",
     "@iconify-json/lucide": "^1.2.121",
     "@pandacss/dev": "^1.12.0",
@@ -29,7 +28,6 @@
     "drizzle-kit": "^0.31.10",
     "drizzle-orm": "^0.45.2",
     "nanoid": "^6.0.0",
-    "openai": "^7.3.0",
     "svelte": "^5.56.8",
     "svelte-check": "^4.7.4",
     "typescript": "^6.0.3",

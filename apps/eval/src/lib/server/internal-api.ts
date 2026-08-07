@@ -1,7 +1,7 @@
 // 실서비스에서 원고 본문을 가져오는 유일한 경로. 코퍼스에 저장되는 본문은 이 프로즈다 —
 // document_states의 평문과 달라서, 다른 경로를 쓰면 세대가 코퍼스와 다른 형태의 글을 읽는다.
 export type InternalApi = {
-  extract: (documentIds: string[]) => Promise<{ documentId: string; prose: string | null }[]>;
+  extract: (documentIds: string[]) => Promise<{ documentId: string; prose: string | null; title: string | null }[]>;
 };
 
 // extract는 요청당 5건이 상한이다.
@@ -20,7 +20,7 @@ export const createInternalApi = (base: string, key: string): InternalApi => {
 
   return {
     extract: async (documentIds) => {
-      const results: { documentId: string; prose: string | null }[] = [];
+      const results: { documentId: string; prose: string | null; title: string | null }[] = [];
       for (const batch of chunk(documentIds, EXTRACT_BATCH)) {
         const response = await fetch(`${base}/internal/corpus/extract`, {
           method: 'POST',
@@ -30,8 +30,9 @@ export const createInternalApi = (base: string, key: string): InternalApi => {
         if (!response.ok) {
           throw new Error(`corpus extract failed: ${response.status}`);
         }
-        const body = (await response.json()) as { results: { documentId: string; prose: string | null }[] };
-        results.push(...body.results);
+        // title은 뒤에 붙은 필드다 — api가 아직 구 배포면 없는 채로 온다.
+        const body = (await response.json()) as { results: { documentId: string; prose: string | null; title?: string | null }[] };
+        results.push(...body.results.map((row) => ({ documentId: row.documentId, prose: row.prose, title: row.title ?? null })));
       }
       return results;
     },

@@ -1,6 +1,5 @@
 packages:
   - apps/*
-  - apps/eval/flows
   - crates/*
   - packages/*
   - assets

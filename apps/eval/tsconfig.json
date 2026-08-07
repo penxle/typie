@@ -9,11 +9,7 @@
     "drizzle.config.ts",
     "src/**/*.js",
     "src/**/*.ts",
-    "src/**/*.svelte",
-    "core/**/*.ts",
-    "generations/**/*.ts",
-    "generations/**/*.svelte",
-    "scripts/**/*.ts"
+    "src/**/*.svelte"
   ],
-  "exclude": ["node_modules/**", "flows/**", "core/worker/**", "generations/*/run/**"]
+  "exclude": ["node_modules/**"]
 }

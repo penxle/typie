@@ -158,7 +158,13 @@ internal.post('/corpus/extract', async (c) => {
     return c.json({ error: 'invalid payload' }, 400);
   }
 
-  const results: { documentId: string; prose: string | null }[] = [];
+  const titleRows = await dbr
+    .select({ id: Documents.id, title: Documents.title })
+    .from(Documents)
+    .where(inArray(Documents.id, parsed.data.documentIds));
+  const titles = new Map(titleRows.map((row) => [row.id, row.title]));
+
+  const results: { documentId: string; prose: string | null; title: string | null }[] = [];
   for (const documentId of parsed.data.documentIds) {
     try {
       const bundles = await dbr
@@ -169,7 +175,7 @@ internal.post('/corpus/extract', async (c) => {
 
       const total = bundles.reduce((n, row) => n + row.payload.length, 0);
       if (total === 0) {
-        results.push({ documentId, prose: null });
+        results.push({ documentId, prose: null, title: titles.get(documentId) ?? null });
         continue;
       }
 
@@ -181,10 +187,10 @@ internal.post('/corpus/extract', async (c) => {
       }
 
       const { result } = await wasmThread.extractProse(graph);
-      results.push({ documentId, prose: result });
+      results.push({ documentId, prose: result, title: titles.get(documentId) ?? null });
     } catch (err) {
       console.error(String(err));
-      results.push({ documentId, prose: null });
+      results.push({ documentId, prose: null, title: titles.get(documentId) ?? null });
     }
   }
 
