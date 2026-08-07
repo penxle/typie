@@ -7,6 +7,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusState
 import androidx.compose.ui.text.TextRange
@@ -58,7 +59,9 @@ internal constructor(private val binding: TextInputBinding, initialValue: TextFi
   fun update(value: String, onValueChange: (String) -> Unit, onDismiss: () -> Unit) {
     currentOnValueChange = onValueChange
     currentOnDismiss = onDismiss
-    this.value = syncTextInputValue(currentValue = this.value, text = value)
+    this.value = Snapshot.withoutReadObservation {
+      syncTextInputValue(currentValue = this.value, text = value)
+    }
   }
 
   fun onValueChange(value: TextFieldValue) {
