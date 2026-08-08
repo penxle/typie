@@ -495,6 +495,11 @@ export interface ResolvedV1Selection {
     degraded: boolean;
 }
 
+export interface ResolvedViewportAnchor {
+    point: ViewportAnchorPoint;
+    rect: PageRect | undefined;
+}
+
 export interface Revision {
     value: number;
 }
@@ -628,6 +633,12 @@ export interface Viewport {
     width: number;
     height: number;
     scale_factor: number;
+}
+
+export interface ViewportAnchorPoint {
+    page_idx: number;
+    x: number;
+    y: number;
 }
 
 export type Alignment = "left" | "center" | "right" | "justify";
@@ -790,12 +801,20 @@ export type UnderlineStyle = "solid" | "dashed" | "wavy";
 
 export type ViewOp = { type: "toggle_fold"; id: Dot };
 
+export type ViewportAnchor = { type: "position"; stable: StableSelection; original_node: Dot; geometry: ViewportAnchorPositionGeometry } | { type: "node"; node: Dot; offset_x: number; offset_y: number };
+
+export type ViewportAnchorPositionGeometry = { type: "cursor_line" } | { type: "selection_endpoint" } | { type: "point"; offset_x: number; offset_y: number };
+
+export type ViewportAnchorResolution = { type: "resolved"; geometry: ResolvedViewportAnchor } | { type: "unavailable" } | { type: "deleted" };
+
 
 declare class Editor {
     private constructor();
     free(): void;
     [Symbol.dispose](): void;
     block_state(): BlockState | undefined;
+    capture_selection_viewport_anchor(revision: Revision): ViewportAnchor | undefined;
+    capture_viewport_anchor_at(revision: Revision, point: ViewportAnchorPoint): ViewportAnchor | undefined;
     /**
      * The `id` of every local changeset (its first op's `actor:clock`), read straight
      * from the graph — `O(#changesets)`. Callers that only need the id set must use
@@ -848,6 +867,9 @@ declare class Editor {
     prose_to_selection_annotated(start: number, end: number): Selection | undefined;
     receive_remote_changeset(payload: Uint8Array): void;
     receive_resource_update(update: ResourceUpdate): void;
+    release_viewport_anchor_presentation(revision: Revision): void;
+    resolve_viewport_anchor(revision: Revision, anchor: ViewportAnchor): ViewportAnchorResolution;
+    retain_viewport_anchor_presentation(revision: Revision): boolean;
     root_attrs(): PlainRootNode;
     root_modifiers(): Modifier[];
     selection(): Selection | undefined;

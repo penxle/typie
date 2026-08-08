@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { canDeleteComment, canManageThread, canUpdateComment, isRootComment, reconcileComments } from './comments';
+import {
+  canDeleteComment,
+  canManageThread,
+  canUpdateComment,
+  isRootComment,
+  reconcileComments,
+  resolveCommentAnchorRects,
+} from './comments';
 
 describe('reconcileComments', () => {
   it('adds desired-not-registered and removes registered-not-desired', () => {
@@ -42,5 +49,18 @@ describe('permission helpers', () => {
     expect(canManageThread({ user: { id: me } }, me, false)).toBe(true);
     expect(canManageThread({ user: { id: stranger } }, me, true)).toBe(true);
     expect(canManageThread({ user: { id: stranger } }, me, false)).toBe(false);
+  });
+});
+
+describe('comment anchor source', () => {
+  it('resolves a tracked comment from each latest published snapshot', () => {
+    const anchor = { type: 'tracked_item' as const, id: 'thread' };
+    const initial = { page_idx: 0, rect: { x: 0, y: 100, width: 10, height: 20 } };
+    const reconciled = { page_idx: 0, rect: { x: 0, y: 180, width: 10, height: 20 } };
+    let current = [initial];
+
+    expect(resolveCommentAnchorRects(anchor, () => current)).toEqual([initial]);
+    current = [reconciled];
+    expect(resolveCommentAnchorRects(anchor, () => current)).toEqual([reconciled]);
   });
 });

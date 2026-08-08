@@ -51,6 +51,9 @@ import co.typie.editor.ffi.TrackedRange
 import co.typie.editor.ffi.TrackedRangeEndpoints
 import co.typie.editor.ffi.TrackedRangeHit
 import co.typie.editor.ffi.Tri
+import co.typie.editor.ffi.ViewportAnchor
+import co.typie.editor.ffi.ViewportAnchorPoint
+import co.typie.editor.ffi.ViewportAnchorResolution
 
 internal class FakeFfiEditor(
   var onTick: () -> List<EditorEvent> = { emptyList() },
@@ -91,6 +94,17 @@ internal class FakeFfiEditor(
   var selectionHitRectsProvider: () -> List<PageRect> = { emptyList() },
   var cursorHitRectsProvider: () -> List<PageRect> = { emptyList() },
   var interactiveRegionsProvider: () -> List<InteractiveRegion> = { emptyList() },
+  var retainViewportAnchorPresentationProvider: (Revision) -> Boolean = { true },
+  var releaseViewportAnchorPresentationProvider: (Revision) -> Unit = {},
+  var captureSelectionViewportAnchorProvider: (Revision) -> ViewportAnchor? = { null },
+  var captureViewportAnchorAtProvider: (Revision, ViewportAnchorPoint) -> ViewportAnchor? =
+    { _, _ ->
+      null
+    },
+  var resolveViewportAnchorProvider: (Revision, ViewportAnchor) -> ViewportAnchorResolution =
+    { _, _ ->
+      ViewportAnchorResolution.Unavailable
+    },
   var copySelectionProvider: () -> ClipboardPayload? = { null },
   var selectionEndpointsProvider: () -> SelectionEndpoints? = { null },
   var trackedRangesProvider: (String?) -> List<TrackedRange> = { emptyList() },
@@ -256,6 +270,25 @@ internal class FakeFfiEditor(
     repeat(index + 1) { pendingEntries.removeAt(0) }
     return tickResult(entries.requests(), onTick())
   }
+
+  override fun retainViewportAnchorPresentation(revision: Revision): Boolean =
+    retainViewportAnchorPresentationProvider(revision)
+
+  override fun releaseViewportAnchorPresentation(revision: Revision) =
+    releaseViewportAnchorPresentationProvider(revision)
+
+  override fun captureSelectionViewportAnchor(revision: Revision): ViewportAnchor? =
+    captureSelectionViewportAnchorProvider(revision)
+
+  override fun captureViewportAnchorAt(
+    revision: Revision,
+    point: ViewportAnchorPoint,
+  ): ViewportAnchor? = captureViewportAnchorAtProvider(revision, point)
+
+  override fun resolveViewportAnchor(
+    revision: Revision,
+    anchor: ViewportAnchor,
+  ): ViewportAnchorResolution = resolveViewportAnchorProvider(revision, anchor)
 
   override fun cursor(): CursorMetrics? = cursorProvider()
 

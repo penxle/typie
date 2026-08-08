@@ -240,7 +240,10 @@ fn selection_rect_endpoints(rects: &[SelectionRect]) -> Option<(PageRect, PageRe
     ))
 }
 
-fn selection_endpoint_for_position(layout_index: &LayoutIndex, pos: &Position) -> Option<PageRect> {
+pub(super) fn selection_endpoint_for_position(
+    layout_index: &LayoutIndex,
+    pos: &Position,
+) -> Option<PageRect> {
     let entry = layout_index.entry_for_position(pos)?;
     match entry.content(layout_index)? {
         LayoutContent::Line(line) => line_endpoint(layout_index, entry, line, pos),

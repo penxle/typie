@@ -1,7 +1,7 @@
 import { getAppContext } from '@typie/ui/context';
 import { untrack } from 'svelte';
-import { CONTINUOUS_VIEW_PADDING, CURSOR_VISIBLE_MARGIN } from './constants';
-import { selectionHeadRect } from './geometry';
+import { CONTINUOUS_VIEW_PADDING, CURSOR_VISIBLE_MARGIN, PAGE_GAP } from './constants';
+import { pageRectsToRevealTargetSpan, resolvePageSpans, selectionHeadRect } from './geometry';
 import {
   resolveGuardedScrollTop,
   resolveInstantRevealPreparationViewports,
@@ -9,11 +9,13 @@ import {
   resolveTypewriterBottomPadding,
   resolveTypewriterScrollTop,
 } from './scroll';
+import { EditorViewportAnchorState, resolveViewportAnchorGeometry, viewportCenterAnchorPoint } from './viewport-anchor';
 import type { PageRect } from '@typie/editor-ffi/browser';
 import type { Editor, EditorContext, EditorSnapshot } from './editor.svelte';
 import type { EditorRequest } from './editor-update';
 import type { VerticalSpan } from './required-surface-pages';
 import type { EditorVisibleArea, RevealTargetSpan, ScrollContainerMetrics } from './scroll';
+import type { EditorViewportAnchorGeometry, EditorViewportAnchorLayout, EditorViewportAnchorRevealOrigin } from './viewport-anchor';
 
 export type EditorScrollRevealPolicy = 'cursor_guard' | 'pointer_cursor_guard' | 'typewriter' | 'result_reveal';
 type ResolvedEditorScrollRevealPolicy = Exclude<EditorScrollRevealPolicy, 'pointer_cursor_guard'>;
@@ -26,6 +28,9 @@ export type EditorScrollIntoViewOptions = {
 };
 
 export type EditorScrollIntentResult = { type: 'unresolved' } | { type: 'no_scroll' } | { type: 'scroll_to'; y: number };
+
+export type EditorViewportAnchorPublication =
+  { type: 'ready'; geometry: EditorViewportAnchorGeometry | null; targetScrollTop: number | null } | { type: 'unavailable' };
 
 type TypewriterPreferences = {
   enabled: boolean;
@@ -116,8 +121,13 @@ export class EditorScrollScope {
   #pendingRequest: EditorBringIntoViewRequest | null = null;
   #keepVisibleTarget = $state<EditorScrollIntoViewTarget | null>(null);
   #destroyed = false;
+  #expectedScrollTop: number | null = null;
+  #smoothRequest: EditorBringIntoViewRequest | null = null;
+  #smoothTargetY: number | null = null;
+  #smoothSettleTimer: ReturnType<typeof setTimeout> | null = null;
   readonly #editor: Editor;
   readonly #typewriterPreferences: () => TypewriterPreferences;
+  readonly #viewportAnchor = new EditorViewportAnchorState();
 
   visibleArea = $state<EditorVisibleArea>(DEFAULT_VISIBLE_AREA);
 
@@ -161,7 +171,7 @@ export class EditorScrollScope {
         return rect ? [rect] : null;
       }
       case 'tracked_item': {
-        const range = snapshot.trackedRanges.find((item) => item.id === target.id);
+        const range = this.#editor.trackedRangeForSnapshot(target.id, snapshot);
         return range && range.rects.length > 0 ? range.rects : null;
       }
     }
@@ -174,20 +184,38 @@ export class EditorScrollScope {
         return false;
       }
       case 'no_scroll': {
-        break;
+        const revealOrigin = this.#selectionRevealOrigin(request, this.#editor.scrollViewport?.getScrollTop());
+        const presented = this.markPresented(snapshot.revision, request);
+        if (presented) this.#attachSelectionOrCenter(false, revealOrigin);
+        return presented;
       }
       case 'scroll_to': {
         const viewport = this.#editor.scrollViewport;
         if (!viewport) return false;
+        if (request.behavior === 'smooth') {
+          if (this.#smoothRequest === request && this.#smoothTargetY !== null && Math.abs(this.#smoothTargetY - result.y) <= 1) {
+            return true;
+          }
+          this.#smoothRequest = request;
+          this.#smoothTargetY = result.y;
+          this.#attachViewportCenter();
+          viewport.scrollTo({ top: result.y, behavior: request.behavior });
+          this.#scheduleSmoothSettle();
+          return true;
+        }
+        const revealOrigin = this.#selectionRevealOrigin(request, viewport.getScrollTop());
         viewport.scrollTo({ top: result.y, behavior: request.behavior });
-        break;
+        this.#expectedScrollTop = result.y;
+        const presented = this.markPresented(snapshot.revision, request);
+        if (presented) this.#attachSelectionOrCenter(false, revealOrigin);
+        return presented;
       }
     }
-    return this.markPresented(snapshot.revision, request);
   }
 
   declare(options: EditorScrollIntoViewOptions): EditorBringIntoViewRequest {
     const request = createBringIntoViewRequest(options);
+    this.#clearSmoothReveal();
     this.#pendingRequest?.completePresentation();
     this.#pendingRequest = request;
     this.#keepVisibleTarget = request.policy === 'pointer_cursor_guard' ? null : request.target;
@@ -218,6 +246,7 @@ export class EditorScrollScope {
 
   discard(request: EditorBringIntoViewRequest): void {
     if (this.#pendingRequest !== request) return;
+    if (this.#smoothRequest === request) this.#clearSmoothReveal();
     this.#pendingRequest = null;
     request.completePresentation();
     this.#editor.requestPublication();
@@ -241,8 +270,158 @@ export class EditorScrollScope {
     return true;
   }
 
+  prepareViewportAnchorPublication(snapshot: EditorSnapshot): EditorViewportAnchorPublication {
+    const viewport = this.#editor.scrollViewport;
+    if (!viewport) return { type: 'ready', geometry: null, targetScrollTop: null };
+    if (this.#smoothRequest) this.#attachViewportCenter();
+    else this.#ensureViewportAnchor();
+
+    const identity = this.#viewportAnchor.identity;
+    if (!identity) return { type: 'ready', geometry: null, targetScrollTop: null };
+    let resolution = this.#editor.resolveViewportAnchor(snapshot.revision, identity);
+    if (resolution.type === 'unavailable') return { type: 'unavailable' };
+    if (resolution.type === 'deleted') {
+      this.#attachViewportCenter();
+      const fallback = this.#viewportAnchor.identity;
+      if (!fallback) return { type: 'ready', geometry: null, targetScrollTop: null };
+      resolution = this.#editor.resolveViewportAnchor(snapshot.revision, fallback);
+      if (resolution.type === 'unavailable') return { type: 'unavailable' };
+      if (resolution.type === 'deleted') {
+        this.#viewportAnchor.clear();
+        return { type: 'ready', geometry: null, targetScrollTop: null };
+      }
+    }
+
+    const metrics = this.#viewportMetrics(snapshot);
+    if (!metrics) return { type: 'unavailable' };
+    const geometry = resolveViewportAnchorGeometry(resolution.geometry, metrics.layout);
+    if (!geometry) return { type: 'unavailable' };
+    return {
+      type: 'ready',
+      geometry,
+      targetScrollTop: this.#viewportAnchor.publicationRevealScroll(
+        geometry,
+        metrics.scrollTop,
+        metrics.clientHeight,
+        metrics.scrollHeight,
+        this.visibleArea,
+        (origin) => {
+          const rects = this.resolveTargetRects(origin.target, snapshot);
+          const target = rects && pageRectsToRevealTargetSpan(rects, metrics.layout.pages, metrics.layout.zoom);
+          if (!target) return null;
+          return (
+            this.resolveScrollTop(
+              origin,
+              {
+                scrollTop: origin.scrollTop,
+                clientHeight: metrics.clientHeight,
+                scrollHeight: metrics.scrollHeight,
+                ...target,
+              },
+              snapshot,
+            ) ?? origin.scrollTop
+          );
+        },
+      ),
+    };
+  }
+
+  applyViewportAnchorPublication(publication: EditorViewportAnchorPublication): void {
+    if (publication.type !== 'ready') return;
+    if (!publication.geometry || publication.targetScrollTop === null) {
+      this.#ensureViewportAnchor();
+      return;
+    }
+    const viewport = this.#editor.scrollViewport;
+    if (!viewport) return;
+    const viewportRect = viewport.getRect();
+    const clientHeight = viewportRect.bottom - viewportRect.top;
+    const maximumScrollTop = Math.max(0, viewport.getScrollHeight() - clientHeight);
+    const target = Math.max(0, Math.min(publication.targetScrollTop, maximumScrollTop));
+    if (Math.abs(viewport.getScrollTop() - target) > 1) {
+      if (this.#smoothRequest) this.#smoothTargetY = null;
+      this.#expectedScrollTop = target;
+      viewport.scrollTo({ top: target, behavior: 'instant' });
+    }
+    this.#viewportAnchor.acceptGeometry(publication.geometry, viewport.getScrollTop());
+  }
+
+  observeViewportScroll(): void {
+    const viewport = this.#editor.scrollViewport;
+    if (!viewport) return;
+    const scrollTop = viewport.getScrollTop();
+    if (this.#expectedScrollTop !== null && Math.abs(scrollTop - this.#expectedScrollTop) <= 1) {
+      this.#expectedScrollTop = null;
+      return;
+    }
+    this.#expectedScrollTop = null;
+    if (this.#smoothRequest) {
+      this.#attachViewportCenter();
+      this.#scheduleSmoothSettle();
+      return;
+    }
+    this.#viewportAnchor.finishRevealConvergence();
+
+    const metrics = this.#viewportMetrics(this.#editor.published?.snapshot);
+    const preferred = this.#resolvePreferredSelectionAnchor();
+    if (
+      preferred &&
+      metrics &&
+      this.#viewportAnchor.tryReactivatePreferredSelection(preferred, metrics.scrollTop, metrics.clientHeight, this.visibleArea)
+    ) {
+      return;
+    }
+
+    const current = this.#resolveCurrentAnchor();
+    if (
+      current &&
+      metrics &&
+      this.#viewportAnchor.canRetainAfterDirectScroll(current, metrics.scrollTop, metrics.clientHeight, this.visibleArea)
+    ) {
+      this.#viewportAnchor.acceptGeometry(current, metrics.scrollTop);
+    } else {
+      this.#attachViewportCenter();
+    }
+  }
+
+  reconcileViewportResize(): void {
+    if (this.#smoothRequest) {
+      this.#attachViewportCenter();
+      return;
+    }
+    const geometry = this.#resolveCurrentAnchor();
+    const metrics = this.#viewportMetrics(this.#editor.published?.snapshot);
+    if (!geometry || !metrics) {
+      this.#ensureViewportAnchor();
+      return;
+    }
+    const target = this.#viewportAnchor.resizeScroll(
+      geometry,
+      metrics.scrollTop,
+      metrics.clientHeight,
+      metrics.scrollHeight,
+      this.visibleArea,
+    );
+    if (Math.abs(target - metrics.scrollTop) <= 1) return;
+    this.#expectedScrollTop = target;
+    this.#editor.scrollViewport?.scrollTo({ top: target, behavior: 'instant' });
+    this.#viewportAnchor.acceptGeometry(geometry, target);
+  }
+
+  settleSmoothReveal(): void {
+    const request = this.#smoothRequest;
+    if (!request) return;
+    const target = this.#smoothTargetY;
+    const scrollTop = this.#editor.scrollViewport?.getScrollTop();
+    if (target === null || scrollTop === undefined || Math.abs(scrollTop - target) > 1) return;
+    this.#clearSmoothReveal();
+    if (this.markPresented(this.#editor.publishedRevision ?? this.#editor.appliedRevision, request)) {
+      this.#attachSelectionOrCenter(false);
+    }
+  }
+
   resolveScrollTop(
-    request: EditorBringIntoViewRequest,
+    request: Pick<EditorBringIntoViewRequest, 'target' | 'policy'>,
     metrics: ScrollContainerMetrics & RevealTargetSpan,
     snapshot: EditorSnapshot,
   ): number | null {
@@ -289,7 +468,10 @@ export class EditorScrollScope {
   }
 
   // eslint-disable-next-line unicorn/consistent-class-member-order -- public scroll contract is grouped before private policy details
-  #resolvePolicy(request: EditorBringIntoViewRequest, snapshot: EditorSnapshot): ResolvedEditorScrollRevealPolicy {
+  #resolvePolicy(
+    request: Pick<EditorBringIntoViewRequest, 'target' | 'policy'>,
+    snapshot: EditorSnapshot,
+  ): ResolvedEditorScrollRevealPolicy {
     if (request.policy === 'pointer_cursor_guard') return 'cursor_guard';
     if (request.policy !== 'typewriter') return request.policy;
     return request.target.type === 'current_selection_head' &&
@@ -325,6 +507,7 @@ export class EditorScrollScope {
 
   destroy(): void {
     this.#destroyed = true;
+    this.#clearSmoothReveal();
     this.#pendingRequest?.completePresentation();
     this.#pendingRequest = null;
   }
@@ -335,6 +518,7 @@ export class EditorScrollScope {
       return;
     }
     this.visibleArea = next;
+    this.reconcileViewportResize();
     this.#editor.requestPublication();
   }
 
@@ -364,5 +548,133 @@ export class EditorScrollScope {
       this.bind(request, this.#editor.appliedSnapshot.revision);
     }
     return request.presentation;
+  }
+
+  #ensureViewportAnchor(): void {
+    if (this.#viewportAnchor.identity) return;
+    this.#attachSelectionOrCenter();
+  }
+
+  #attachSelectionOrCenter(requireGuard = true, revealOrigin?: EditorViewportAnchorRevealOrigin): void {
+    const snapshot = this.#editor.published?.snapshot;
+    const metrics = this.#viewportMetrics(snapshot);
+    if (!snapshot || !metrics) return;
+    const identity = this.#editor.captureSelectionViewportAnchor(snapshot.revision);
+    if (identity) {
+      const resolution = this.#editor.resolveViewportAnchor(snapshot.revision, identity);
+      if (resolution.type === 'resolved') {
+        const geometry = resolveViewportAnchorGeometry(resolution.geometry, metrics.layout);
+        if (
+          geometry &&
+          (!requireGuard ||
+            this.#viewportAnchor.canRetainAfterDirectScroll(geometry, metrics.scrollTop, metrics.clientHeight, this.visibleArea))
+        ) {
+          this.#viewportAnchor.attachSelection(identity, geometry, metrics.scrollTop, revealOrigin);
+          return;
+        }
+      }
+    }
+    this.#attachViewportCenter();
+  }
+
+  #attachViewportCenter(): void {
+    const snapshot = this.#editor.published?.snapshot;
+    const metrics = this.#viewportMetrics(snapshot);
+    if (!snapshot || !metrics) return;
+    const viewportRect = this.#editor.scrollViewport?.getRect();
+    const topInset = Math.max(0, this.visibleArea.topInset);
+    const visibleHeight = Math.max(0, metrics.clientHeight - topInset - Math.max(0, this.visibleArea.bottomInset));
+    const local = viewportRect
+      ? this.#editor.clientToLocal(
+          viewportRect.left + (viewportRect.right - viewportRect.left) / 2,
+          viewportRect.top + topInset + visibleHeight / 2,
+        )
+      : null;
+    const point = local
+      ? { page_idx: local.page, x: local.x, y: local.y }
+      : viewportCenterAnchorPoint(snapshot, metrics.layout, metrics.scrollTop, metrics.clientHeight, this.visibleArea);
+    if (!point) return;
+    const identity = this.#editor.captureViewportAnchorAt(snapshot.revision, point);
+    if (!identity) return;
+    const resolution = this.#editor.resolveViewportAnchor(snapshot.revision, identity);
+    if (resolution.type !== 'resolved') return;
+    const geometry = resolveViewportAnchorGeometry(resolution.geometry, metrics.layout);
+    if (geometry) this.#viewportAnchor.attachViewport(identity, geometry, metrics.scrollTop);
+  }
+
+  #selectionRevealOrigin(request: EditorBringIntoViewRequest, scrollTop: number | undefined): EditorViewportAnchorRevealOrigin | undefined {
+    return scrollTop !== undefined && Number.isFinite(scrollTop) && request.target.type === 'current_selection_head'
+      ? { scrollTop, target: request.target, policy: request.policy }
+      : undefined;
+  }
+
+  #resolvePreferredSelectionAnchor(): EditorViewportAnchorGeometry | null {
+    const snapshot = this.#editor.published?.snapshot;
+    const identity = this.#viewportAnchor.preferredSelectionIdentity;
+    if (!snapshot || !identity) return null;
+    const resolution = this.#editor.resolveViewportAnchor(snapshot.revision, identity);
+    if (resolution.type === 'deleted') {
+      this.#viewportAnchor.clearPreferredSelection();
+      return null;
+    }
+    if (resolution.type !== 'resolved') return null;
+    const metrics = this.#viewportMetrics(snapshot);
+    return metrics ? resolveViewportAnchorGeometry(resolution.geometry, metrics.layout) : null;
+  }
+
+  #resolveCurrentAnchor(): EditorViewportAnchorGeometry | null {
+    const snapshot = this.#editor.published?.snapshot;
+    const identity = this.#viewportAnchor.identity;
+    if (!snapshot || !identity) return null;
+    const resolution = this.#editor.resolveViewportAnchor(snapshot.revision, identity);
+    if (resolution.type !== 'resolved') return null;
+    const metrics = this.#viewportMetrics(snapshot);
+    return metrics ? resolveViewportAnchorGeometry(resolution.geometry, metrics.layout) : null;
+  }
+
+  #viewportMetrics(snapshot: EditorSnapshot | undefined): {
+    layout: EditorViewportAnchorLayout;
+    scrollTop: number;
+    clientHeight: number;
+    scrollHeight: number;
+    maximumScrollTop: number;
+  } | null {
+    const viewport = this.#editor.scrollViewport;
+    if (!snapshot || !viewport) return null;
+    const viewportRect = viewport.getRect();
+    const clientHeight = viewportRect.bottom - viewportRect.top;
+    const scrollTop = viewport.getScrollTop();
+    if (!Number.isFinite(scrollTop) || !Number.isFinite(clientHeight) || clientHeight <= 0) return null;
+    const zoom = snapshot.rootAttrs?.layout_mode.type === 'paginated' ? this.#editor.safeDisplayZoom() : 1;
+    const origin = this.#editor.extensionAreaEl
+      ? this.#editor.extensionAreaEl.getBoundingClientRect().top - viewportRect.top + scrollTop
+      : 0;
+    const pages = resolvePageSpans(snapshot.pageSizes, {
+      origin,
+      displayZoom: zoom,
+      scaleFactor: this.#editor.scaleFactor,
+      pageGap: snapshot.rootAttrs?.layout_mode.type === 'paginated' ? PAGE_GAP * zoom : 0,
+    });
+    const predictedExtent = pages.at(-1)?.bottom ?? origin;
+    const scrollHeight = Math.max(viewport.getScrollHeight(), predictedExtent + this.bottomPaddingFor(snapshot), clientHeight);
+    return {
+      layout: { pages, zoom },
+      scrollTop,
+      clientHeight,
+      scrollHeight,
+      maximumScrollTop: Math.max(0, scrollHeight - clientHeight),
+    };
+  }
+
+  #scheduleSmoothSettle(): void {
+    if (this.#smoothSettleTimer !== null) clearTimeout(this.#smoothSettleTimer);
+    this.#smoothSettleTimer = setTimeout(() => this.settleSmoothReveal(), 120);
+  }
+
+  #clearSmoothReveal(): void {
+    if (this.#smoothSettleTimer !== null) clearTimeout(this.#smoothSettleTimer);
+    this.#smoothSettleTimer = null;
+    this.#smoothRequest = null;
+    this.#smoothTargetY = null;
   }
 }

@@ -14,7 +14,7 @@ use editor_state::{
 use editor_transaction::{Effect, HistoryMeta, MergeKind, StepError, Transaction};
 use editor_view::{GapPhantom, PageRect, PendingOverlay, View, Viewport};
 use hashbrown::{HashMap, HashSet};
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::sync::{Arc, Mutex};
 use strum::IntoEnumIterator;
 
@@ -277,6 +277,7 @@ pub struct Editor {
     queue: VecDeque<QueueEntry>,
     next_request_id: u64,
     revision: Revision,
+    viewport_anchor_presentations: BTreeMap<Revision, editor_view::ViewportAnchorPresentation>,
     #[cfg(test)]
     resource_apply_count: usize,
     pending_events: Vec<EditorEvent>,
@@ -331,6 +332,7 @@ impl Editor {
             queue: VecDeque::new(),
             next_request_id: 1,
             revision: Revision::INITIAL,
+            viewport_anchor_presentations: BTreeMap::new(),
             #[cfg(test)]
             resource_apply_count: 0,
             pending_events: Vec::new(),
@@ -480,6 +482,66 @@ impl Editor {
 
     pub fn view(&self) -> &View {
         &self.view
+    }
+
+    pub fn retain_viewport_anchor_presentation(&mut self, revision: Revision) -> bool {
+        if self.viewport_anchor_presentations.contains_key(&revision) {
+            return true;
+        }
+        if revision != self.revision || self.viewport_anchor_presentations.len() >= 2 {
+            return false;
+        }
+        let Some(presentation) = self.view.capture_viewport_anchor_presentation() else {
+            return false;
+        };
+        self.viewport_anchor_presentations
+            .insert(revision, presentation);
+        true
+    }
+
+    pub fn release_viewport_anchor_presentation(&mut self, revision: Revision) {
+        self.viewport_anchor_presentations.remove(&revision);
+    }
+
+    pub fn capture_selection_viewport_anchor(
+        &self,
+        revision: Revision,
+    ) -> Option<editor_view::ViewportAnchor> {
+        if let Some(presentation) = self.viewport_anchor_presentations.get(&revision) {
+            return presentation.capture_selection_head();
+        }
+        if revision != self.revision {
+            return None;
+        }
+        self.view.capture_selection_viewport_anchor()
+    }
+
+    pub fn capture_viewport_anchor_at(
+        &self,
+        revision: Revision,
+        point: editor_view::ViewportAnchorPoint,
+    ) -> Option<editor_view::ViewportAnchor> {
+        if let Some(presentation) = self.viewport_anchor_presentations.get(&revision) {
+            return presentation.capture_page_point(point);
+        }
+        if revision != self.revision {
+            return None;
+        }
+        self.view.capture_viewport_anchor_at(point)
+    }
+
+    pub fn resolve_viewport_anchor(
+        &self,
+        revision: Revision,
+        anchor: &editor_view::ViewportAnchor,
+    ) -> editor_view::ViewportAnchorResolution {
+        if let Some(presentation) = self.viewport_anchor_presentations.get(&revision) {
+            return presentation.resolve(anchor);
+        }
+        if revision != self.revision {
+            return editor_view::ViewportAnchorResolution::Unavailable;
+        }
+        self.view.resolve_viewport_anchor(anchor)
     }
 
     pub fn modifier_state(&self) -> Option<ModifierState> {
@@ -2269,6 +2331,7 @@ impl Editor {
             queue: VecDeque::new(),
             next_request_id: 1,
             revision: Revision::INITIAL,
+            viewport_anchor_presentations: BTreeMap::new(),
             #[cfg(test)]
             resource_apply_count: 0,
             pending_events: Vec::new(),
@@ -2377,6 +2440,45 @@ mod tests {
         let cold = editor_state::ProjectedState::from_graph(state.projected.graph().clone())
             .expect("cold projection");
         assert_eq!(state.projected.projected(), cold.projected());
+    }
+
+    #[test]
+    fn viewport_anchor_can_be_captured_from_retained_displayed_revision_after_core_advances() {
+        let (state, image, _paragraph) = state! {
+            doc {
+                root {
+                    image: image
+                    paragraph: paragraph { text("after") }
+                }
+            }
+            selection: (paragraph, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        let displayed_revision = editor.revision();
+        assert!(editor.retain_viewport_anchor_presentation(displayed_revision));
+
+        editor.apply(Message::System {
+            event: SystemEvent::SetExternalHeight {
+                node_id: image,
+                height: 200.0,
+            },
+        });
+        let current_revision = editor.revision();
+        assert!(current_revision > displayed_revision);
+
+        let anchor = editor
+            .capture_selection_viewport_anchor(displayed_revision)
+            .expect("retained displayed revision must remain queryable");
+        let old_geometry = editor.resolve_viewport_anchor(displayed_revision, &anchor);
+        let new_geometry = editor.resolve_viewport_anchor(current_revision, &anchor);
+
+        let editor_view::ViewportAnchorResolution::Resolved { geometry: old } = old_geometry else {
+            panic!("retained anchor must resolve in its displayed presentation");
+        };
+        let editor_view::ViewportAnchorResolution::Resolved { geometry: new } = new_geometry else {
+            panic!("retained anchor must resolve in the current presentation");
+        };
+        assert!(new.point.y > old.point.y);
     }
 
     // A frame's worth of IME composition traffic arrives as several consecutive

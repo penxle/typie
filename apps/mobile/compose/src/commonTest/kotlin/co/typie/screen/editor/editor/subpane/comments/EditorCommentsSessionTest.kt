@@ -9,6 +9,7 @@ import co.typie.editor.scroll.toPageRectsTarget
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class EditorCommentsSessionTest {
   private val rects =
@@ -24,6 +25,17 @@ class EditorCommentsSessionTest {
       rects.toPageRectsTarget(),
       listOf(activeRange).commentThreadScrollTarget(activeRange.id),
     )
+  }
+
+  @Test
+  fun `activating the same comment thread again records a new reveal intent`() {
+    val state = CommentThreadState()
+
+    state.activateThread("comment-1")
+    val firstActivation = state.activationRevision
+    state.activateThread("comment-1")
+
+    assertTrue(state.activationRevision > firstActivation)
   }
 
   private fun commentRange(group: String): TrackedRange =

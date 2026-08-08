@@ -67,17 +67,16 @@ import co.typie.editor.interaction.observeEditorScreenPointerSequence
 import co.typie.editor.requiredSurfacePages
 import co.typie.editor.runtime.LocalEditorUiState
 import co.typie.editor.scroll.EditorBringIntoViewBehavior
-import co.typie.editor.scroll.EditorBringIntoViewPolicy
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.editor.scroll.EditorScrollFrame
 import co.typie.editor.scroll.EditorScrollIntentResult
 import co.typie.editor.scroll.EditorVisibleArea
 import co.typie.editor.scroll.LocalEditorBringIntoViewRequests
-import co.typie.editor.scroll.isEditorScrollTargetVisible
 import co.typie.editor.scroll.resolveEditorScrollIntent
 import co.typie.editor.scroll.resolveInstantRevealPreparationViewports
-import co.typie.editor.viewport.EditorViewportState
+import co.typie.editor.viewport.EditorViewportAnchorRevealOrigin
+import co.typie.editor.viewport.EditorViewportAnchorState
 import co.typie.ext.LocalScrollGestureLockState
 import co.typie.ext.ScrollGestureLockHandle
 import co.typie.navigation.LocalNavigationPopNestedScroll
@@ -109,15 +108,26 @@ private enum class EditorScreenLayoutSlot {
   SubPane,
 }
 
-private const val EditorViewportScrollAnchorTolerance = 1f
-
 private object EditorViewportNestedScrollConnection : NestedScrollConnection
 
-private data class EditorSurfacePreparation(
+internal data class EditorSurfacePreparation(
   val requiredPages: Set<Int>,
   val scrollIntent: EditorScrollIntentResult?,
   val maximumScrollY: Float,
+  val contentOriginY: Float,
+  val anchorPublication: EditorViewportAnchorPublication.Ready? = null,
 )
+
+private data class EditorViewportAnchorPresentation(
+  val editor: Editor,
+  val bundle: PublishedBundle,
+  val frame: EditorScrollFrame,
+  val visibleArea: EditorVisibleArea,
+)
+
+private class EditorViewportAnchorPresentationRef {
+  var current: EditorViewportAnchorPresentation? = null
+}
 
 private data object SharePointerInputWithSiblingsElement :
   ModifierNodeElement<SharePointerInputWithSiblingsNode>() {
@@ -188,8 +198,7 @@ internal fun Modifier.viewportDirectControl(): Modifier = this then ViewportDire
 
 internal enum class EditorViewportScrollReconcileMode {
   Disabled,
-  KeepVisibleAnchor,
-  RevealSelectionHead,
+  Enabled,
 }
 
 @Composable
@@ -226,15 +235,18 @@ internal fun EditorScreenLayout(
   val bringIntoViewRequest = appliedState?.let {
     bringIntoViewRequests.activateForVersion(it.version)
   }
+  val viewportAnchorState = remember { EditorViewportAnchorState() }
   if (appliedState != null && bringIntoViewRequest == null) {
     SideEffect { bringIntoViewRequests.discardObsoleteForVersion(appliedState.version) }
   }
   val surfacePreparation = editor?.let {
-    resolveEditorSurfacePreparation(
+    resolveAnchoredEditorSurfacePreparation(
       editor = it,
       scrollFrame = scrollFrame.withState(it.appliedState),
       currentScroll = state.viewportState.scrollOffset.y,
       bringIntoViewRequest = bringIntoViewRequest,
+      anchorState = viewportAnchorState,
+      publishedBundle = it.publishedBundle,
     )
   }
   if (editor != null && surfacePreparation != null) {
@@ -247,9 +259,11 @@ internal fun EditorScreenLayout(
   val viewportNestedScrollDispatcher = remember { NestedScrollDispatcher() }
   val screenPointerSequence = remember { EditorScreenPointerSequence() }
   val viewportFlingBehavior = ScrollableDefaults.flingBehavior()
-  val scrollReconcileState = remember { EditorViewportScrollReconcileState() }
+  val viewportAnchorPresentationRef = remember { EditorViewportAnchorPresentationRef() }
   val coroutineScope = rememberCoroutineScope()
   var smoothScrollJob by remember { mutableStateOf<Job?>(null) }
+  var smoothScrollRequest by remember { mutableStateOf<EditorBringIntoViewRequests.Request?>(null) }
+  var smoothScrollTargetY by remember { mutableStateOf<Float?>(null) }
   var layoutBoundsInRoot by remember { mutableStateOf<Rect?>(null) }
   if (isCurrentNavigationRoute) {
     DisposableEffect(navigationPopNestedScroll, viewportScrollableState) {
@@ -272,6 +286,9 @@ internal fun EditorScreenLayout(
     if (state.viewportState.isTransforming || state.viewportState.isDirectManipulationInProgress) {
       smoothScrollJob?.cancel()
       smoothScrollJob = null
+      smoothScrollTargetY = null
+      smoothScrollRequest?.let(bringIntoViewRequests::discard)
+      smoothScrollRequest = null
     }
   }
   val magnifierPlacement = layoutBoundsInRoot?.let { bounds ->
@@ -363,11 +380,13 @@ internal fun EditorScreenLayout(
       }
       val currentPreparation =
         if (editor != null && currentAppliedState != null) {
-          resolveEditorSurfacePreparation(
+          resolveAnchoredEditorSurfacePreparation(
             editor = editor,
             scrollFrame = measuredScrollFrame.withState(currentAppliedState),
             currentScroll = state.viewportState.scrollOffset.y,
             bringIntoViewRequest = currentRequest,
+            anchorState = viewportAnchorState,
+            publishedBundle = publishedBundle,
           )
         } else {
           null
@@ -375,20 +394,38 @@ internal fun EditorScreenLayout(
       val candidateBundle = currentPreparation?.let {
         editor?.publishIfReady(requiredPages = it.requiredPages)
       }
-      val acceptedBundle = candidateBundle?.takeIf { candidate ->
-        val acceptingEditor = editor ?: return@takeIf false
+      val acceptedBundle = candidateBundle?.let { candidate ->
+        val acceptingEditor = editor ?: return@let null
         val latestState = acceptingEditor.appliedState
         val latestRequest = bringIntoViewRequests.activateForVersion(latestState.version)
-        latestState === candidate.snapshot &&
-          latestRequest === currentRequest &&
-          currentPreparation ==
-            resolveEditorSurfacePreparation(
-              editor = acceptingEditor,
-              scrollFrame = measuredScrollFrame.withState(latestState),
-              currentScroll = state.viewportState.scrollOffset.y,
-              bringIntoViewRequest = latestRequest,
-            ) &&
-          acceptingEditor.acceptPublication(candidate)
+        val stillCurrent =
+          latestState === candidate.snapshot &&
+            latestRequest === currentRequest &&
+            currentPreparation ==
+              resolveAnchoredEditorSurfacePreparation(
+                editor = acceptingEditor,
+                scrollFrame = measuredScrollFrame.withState(latestState),
+                currentScroll = state.viewportState.scrollOffset.y,
+                bringIntoViewRequest = latestRequest,
+                anchorState = viewportAnchorState,
+                publishedBundle = publishedBundle,
+              )
+        if (!stillCurrent) return@let null
+
+        val anchorPublication = currentPreparation.anchorPublication ?: return@let null
+        if (!acceptingEditor.acceptPublication(candidate)) {
+          return@let null
+        }
+
+        state.viewportState.scrollToY(
+          targetY = anchorPublication.scrollY,
+          isAutoScroll = true,
+          maximumScrollY = currentPreparation.maximumScrollY,
+        )
+        anchorPublication.geometry?.let { geometry ->
+          viewportAnchorState.acceptGeometry(geometry, state.viewportState.scrollOffset.y)
+        }
+        candidate
       }
       val placedBundle = acceptedBundle ?: publishedBundle
       val acceptedRequest = currentRequest.takeIf { acceptedBundle != null }
@@ -440,11 +477,24 @@ internal fun EditorScreenLayout(
 
               val presentationScrollFrame =
                 measuredScrollFrame.withState(placedBundle?.snapshot ?: scrollFrame.state)
+              viewportAnchorPresentationRef.current =
+                if (editor != null && placedBundle != null) {
+                  EditorViewportAnchorPresentation(
+                    editor = editor,
+                    bundle = placedBundle,
+                    frame = presentationScrollFrame,
+                    visibleArea = measuredVisibleArea,
+                  )
+                } else {
+                  null
+                }
               val scrollFrameVersion = presentationScrollFrame.state.version
               val bringIntoViewRequest = acceptedRequest?.takeIf {
                 bringIntoViewRequests.activateForVersion(scrollFrameVersion) === it
               }
               var placementScrollY = state.viewportState.scrollOffset.y
+              var handoffViewportAnchorToSelection = false
+              var handoffSelectionRevealOrigin: EditorViewportAnchorRevealOrigin? = null
               val scrollIntentResult = bringIntoViewRequest?.let { request ->
                 acceptedPreparation?.scrollIntent
                   ?: resolveEditorScrollIntent(
@@ -465,61 +515,133 @@ internal fun EditorScreenLayout(
                   when (scrollIntentResult) {
                     null -> Unit
                     EditorScrollIntentResult.Unresolved -> Unit
-                    EditorScrollIntentResult.NoScroll ->
-                      requestToMarkPresented = bringIntoViewRequest
-                    is EditorScrollIntentResult.ScrollTo -> {
+                    EditorScrollIntentResult.NoScroll -> {
                       smoothScrollJob?.cancel()
-                      smoothScrollJob =
-                        when (bringIntoViewRequest.behavior) {
-                          EditorBringIntoViewBehavior.Instant -> {
-                            val maximumScrollY =
-                              acceptedPreparation?.maximumScrollY ?: state.viewportState.maxScrollY
-                            placementScrollY = scrollIntentResult.y.coerceIn(0f, maximumScrollY)
-                            state.viewportState.scrollToY(
-                              targetY = placementScrollY,
-                              isAutoScroll = true,
-                              maximumScrollY = maximumScrollY,
-                            )
-                            requestToMarkPresented = bringIntoViewRequest
-                            null
-                          }
-
-                          EditorBringIntoViewBehavior.Smooth ->
-                            if (
-                              bringIntoViewRequests.markPresented(
-                                version = scrollFrameVersion,
-                                request = bringIntoViewRequest,
+                      smoothScrollJob = null
+                      smoothScrollTargetY = null
+                      smoothScrollRequest = null
+                      requestToMarkPresented = bringIntoViewRequest
+                      handoffViewportAnchorToSelection = true
+                      if (
+                        bringIntoViewRequest.target ==
+                          EditorBringIntoViewTarget.CurrentSelectionHead
+                      ) {
+                        handoffSelectionRevealOrigin =
+                          EditorViewportAnchorRevealOrigin(
+                            scrollY = placementScrollY,
+                            target = bringIntoViewRequest.target,
+                            policy = bringIntoViewRequest.policy,
+                          )
+                      }
+                    }
+                    is EditorScrollIntentResult.ScrollTo -> {
+                      when (bringIntoViewRequest.behavior) {
+                        EditorBringIntoViewBehavior.Instant -> {
+                          val revealOriginScrollY = placementScrollY
+                          smoothScrollJob?.cancel()
+                          smoothScrollJob = null
+                          smoothScrollTargetY = null
+                          smoothScrollRequest = null
+                          val maximumScrollY =
+                            acceptedPreparation?.maximumScrollY ?: state.viewportState.maxScrollY
+                          placementScrollY = scrollIntentResult.y.coerceIn(0f, maximumScrollY)
+                          state.viewportState.scrollToY(
+                            targetY = placementScrollY,
+                            isAutoScroll = true,
+                            maximumScrollY = maximumScrollY,
+                          )
+                          requestToMarkPresented = bringIntoViewRequest
+                          handoffViewportAnchorToSelection = true
+                          if (
+                            bringIntoViewRequest.target ==
+                              EditorBringIntoViewTarget.CurrentSelectionHead
+                          ) {
+                            handoffSelectionRevealOrigin =
+                              EditorViewportAnchorRevealOrigin(
+                                scrollY = revealOriginScrollY,
+                                target = bringIntoViewRequest.target,
+                                policy = bringIntoViewRequest.policy,
                               )
-                            ) {
-                              coroutineScope.launch {
-                                try {
-                                  state.viewportState.animateScrollToY(
-                                    targetY = scrollIntentResult.y,
-                                    isAutoScroll = true,
-                                  )
-                                } finally {
-                                  if (smoothScrollJob == coroutineContext[Job]) {
-                                    smoothScrollJob = null
+                          }
+                        }
+
+                        EditorBringIntoViewBehavior.Smooth -> {
+                          val targetY = scrollIntentResult.y
+                          val alreadyAnimating =
+                            smoothScrollRequest === bringIntoViewRequest &&
+                              smoothScrollJob?.isActive == true &&
+                              smoothScrollTargetY?.let { abs(it - targetY) <= 1f } == true
+                          if (!alreadyAnimating) {
+                            smoothScrollJob?.cancel()
+                            smoothScrollRequest = bringIntoViewRequest
+                            smoothScrollTargetY = targetY
+                            editor?.let { activeEditor ->
+                              attachViewportCenterAnchor(
+                                editor = activeEditor,
+                                anchorState = viewportAnchorState,
+                                revision = scrollFrameVersion,
+                                frame = presentationScrollFrame,
+                                scrollY = state.viewportState.scrollOffset.y,
+                              )
+                            }
+                            smoothScrollJob = coroutineScope.launch {
+                              var completed = false
+                              try {
+                                state.viewportState.animateScrollToY(
+                                  targetY = targetY,
+                                  isAutoScroll = true,
+                                )
+                                completed = true
+                              } finally {
+                                if (smoothScrollJob == coroutineContext[Job]) {
+                                  smoothScrollJob = null
+                                  smoothScrollTargetY = null
+                                  smoothScrollRequest = null
+                                  val activePresentation = viewportAnchorPresentationRef.current
+                                  if (
+                                    completed &&
+                                      activePresentation != null &&
+                                      bringIntoViewRequests.markPresented(
+                                        version = activePresentation.bundle.snapshot.version,
+                                        request = bringIntoViewRequest,
+                                      )
+                                  ) {
+                                    attachSelectionViewportAnchor(
+                                      editor = activePresentation.editor,
+                                      anchorState = viewportAnchorState,
+                                      revision = activePresentation.bundle.snapshot.version,
+                                      frame = activePresentation.frame,
+                                      scrollY = state.viewportState.scrollOffset.y,
+                                      visibleArea = activePresentation.visibleArea,
+                                      requireGuard = false,
+                                    )
                                   }
                                 }
                               }
-                            } else {
-                              null
                             }
+                          }
                         }
+                      }
                     }
                   }
                 }
               } else {
-                val reconciled =
-                  scrollReconcileState.reconcile(
-                    mode = viewportScrollReconcileMode,
-                    viewportState = state.viewportState,
-                    scrollFrame = presentationScrollFrame,
-                    visibleArea = measuredVisibleArea,
-                  )
-                if (reconciled) placementScrollY = state.viewportState.scrollOffset.y
+                placementScrollY = state.viewportState.scrollOffset.y
               }
+
+              reconcileViewportAnchorObservation(
+                editor = editor,
+                anchorState = viewportAnchorState,
+                bundle = placedBundle,
+                frame = presentationScrollFrame,
+                viewportState = state.viewportState,
+                visibleArea = measuredVisibleArea,
+                mode = viewportScrollReconcileMode,
+                smoothRevealActive = smoothScrollJob != null,
+                handoffToSelection = handoffViewportAnchorToSelection,
+                selectionRevealOrigin = handoffSelectionRevealOrigin,
+              )
+              placementScrollY = state.viewportState.scrollOffset.y
 
               layout(width = viewportConstraints.maxWidth, height = viewportConstraints.maxHeight) {
                 val scrollY = (placementScrollY * density.density).roundToInt()
@@ -547,10 +669,10 @@ internal fun EditorScreenLayout(
       }
     }
 
-    NavigationForeground(sharePointerInputWithSiblings = true) {
+    NavigationForeground(sharePointerInputWithSiblings = true, matchHostBounds = true) {
       EditorViewportOverlayLayout(viewportOverlay)
     }
-    NavigationForeground {
+    NavigationForeground(matchHostBounds = true) {
       EditorScreenForegroundLayout(
         overlay = overlay,
         toolbar = toolbar,
@@ -562,7 +684,46 @@ internal fun EditorScreenLayout(
   }
 }
 
-private fun resolveEditorSurfacePreparation(
+internal fun resolveAnchoredEditorSurfacePreparation(
+  editor: Editor,
+  scrollFrame: EditorScrollFrame,
+  currentScroll: Float,
+  bringIntoViewRequest: EditorBringIntoViewRequests.Request?,
+  anchorState: EditorViewportAnchorState,
+  publishedBundle: PublishedBundle?,
+): EditorSurfacePreparation? {
+  val initial =
+    resolveEditorSurfacePreparation(
+      editor = editor,
+      scrollFrame = scrollFrame,
+      currentScroll = currentScroll,
+      bringIntoViewRequest = bringIntoViewRequest,
+    ) ?: return null
+  val anchorPublication =
+    reconcileViewportAnchorPublication(
+      editor = editor,
+      anchorState = anchorState,
+      publishedBundle = publishedBundle,
+      candidateState = scrollFrame.state,
+      measuredScrollFrame = scrollFrame,
+      currentScrollY = currentScroll,
+      maximumScrollY = initial.maximumScrollY,
+      contentOriginY = initial.contentOriginY,
+    )
+      as? EditorViewportAnchorPublication.Ready ?: return null
+  if (anchorPublication.scrollY == currentScroll) {
+    return initial.copy(anchorPublication = anchorPublication)
+  }
+  return resolveEditorSurfacePreparation(
+      editor = editor,
+      scrollFrame = scrollFrame,
+      currentScroll = anchorPublication.scrollY,
+      bringIntoViewRequest = bringIntoViewRequest,
+    )
+    ?.copy(anchorPublication = anchorPublication)
+}
+
+internal fun resolveEditorSurfacePreparation(
   editor: Editor,
   scrollFrame: EditorScrollFrame,
   currentScroll: Float,
@@ -690,6 +851,7 @@ private fun resolveEditorSurfacePreparation(
     requiredPages = requiredPages,
     scrollIntent = scrollIntent,
     maximumScrollY = maximumScrollY,
+    contentOriginY = resolvedContentOrigin,
   )
 }
 
@@ -757,169 +919,6 @@ private fun EditorScreenForegroundLayout(
       toolbarPlaceables.forEach { it.place(x = 0, y = constraints.maxHeight - it.height) }
     }
   }
-}
-
-internal class EditorViewportScrollReconcileState {
-  private var lastObservedFrame: EditorViewportScrollReconcileFrame? = null
-
-  fun reset() {
-    lastObservedFrame = null
-  }
-
-  fun reconcile(
-    mode: EditorViewportScrollReconcileMode,
-    viewportState: EditorViewportState,
-    scrollFrame: EditorScrollFrame,
-    visibleArea: EditorVisibleArea,
-  ): Boolean {
-    if (mode == EditorViewportScrollReconcileMode.Disabled) {
-      reset()
-      return false
-    }
-    if (viewportState.isTransforming || viewportState.isDirectManipulationInProgress) {
-      return false
-    }
-
-    val frame = EditorViewportScrollReconcileFrame(viewportState, visibleArea)
-    val previousFrame = lastObservedFrame
-    if (previousFrame == null) {
-      lastObservedFrame = frame
-      return false
-    }
-    if (previousFrame.hasSameVisibleViewport(frame)) {
-      lastObservedFrame = frame
-      return false
-    }
-
-    return when (mode) {
-      EditorViewportScrollReconcileMode.Disabled -> false
-      EditorViewportScrollReconcileMode.KeepVisibleAnchor ->
-        reconcileKeepVisibleAnchor(
-          previousFrame = previousFrame,
-          frame = frame,
-          viewportState = viewportState,
-          scrollFrame = scrollFrame,
-          visibleArea = visibleArea,
-        )
-      EditorViewportScrollReconcileMode.RevealSelectionHead ->
-        reconcileSelectionHeadReveal(
-          scrollFrame = scrollFrame,
-          viewportState = viewportState,
-          visibleArea = visibleArea,
-        )
-    }
-  }
-
-  private fun reconcileKeepVisibleAnchor(
-    previousFrame: EditorViewportScrollReconcileFrame,
-    frame: EditorViewportScrollReconcileFrame,
-    viewportState: EditorViewportState,
-    scrollFrame: EditorScrollFrame,
-    visibleArea: EditorVisibleArea,
-  ): Boolean {
-    // visible area가 바뀌기 전 selection head가 이미 보이던 상태라면, 화면 중앙을 보존하지
-    // 않고 selection head가 새 keep-visible 범위 안에 남도록만 보정한다.
-    val wasSelectionVisible =
-      isEditorScrollTargetVisible(
-        frame = scrollFrame,
-        target = EditorBringIntoViewTarget.CurrentSelectionHead,
-        currentScroll = previousFrame.scrollY,
-        visibleArea = previousFrame.visibleArea,
-      )
-    if (wasSelectionVisible == true) {
-      return reconcileSelectionHeadReveal(
-        scrollFrame = scrollFrame,
-        viewportState = viewportState,
-        visibleArea = visibleArea,
-      )
-    }
-
-    val anchor = previousFrame.anchor
-    val targetY = previousFrame.documentY(anchor) - frame.viewportY(anchor)
-    if (abs(targetY - viewportState.scrollOffset.y) <= EditorViewportScrollAnchorTolerance) {
-      lastObservedFrame = frame
-      return false
-    }
-
-    viewportState.scrollToY(targetY = targetY, isAutoScroll = true)
-    lastObservedFrame = EditorViewportScrollReconcileFrame(viewportState, visibleArea)
-    return true
-  }
-
-  private fun reconcileSelectionHeadReveal(
-    scrollFrame: EditorScrollFrame,
-    viewportState: EditorViewportState,
-    visibleArea: EditorVisibleArea,
-  ): Boolean {
-    return when (
-      val scrollIntentResult =
-        resolveEditorScrollIntent(
-          frame = scrollFrame,
-          target = EditorBringIntoViewTarget.CurrentSelectionHead,
-          policy = EditorBringIntoViewPolicy.Typewriter,
-          currentScroll = viewportState.scrollOffset.y,
-          maximumScrollY = viewportState.maxScrollY,
-        )
-    ) {
-      EditorScrollIntentResult.Unresolved,
-      EditorScrollIntentResult.NoScroll -> {
-        lastObservedFrame = EditorViewportScrollReconcileFrame(viewportState, visibleArea)
-        false
-      }
-      is EditorScrollIntentResult.ScrollTo -> {
-        viewportState.scrollToY(targetY = scrollIntentResult.y, isAutoScroll = true)
-        lastObservedFrame = EditorViewportScrollReconcileFrame(viewportState, visibleArea)
-        true
-      }
-    }
-  }
-}
-
-private enum class EditorViewportScrollAnchor {
-  Top,
-  Center,
-  Bottom,
-}
-
-private data class EditorViewportScrollReconcileFrame(
-  val scrollY: Float,
-  val maxScrollY: Float,
-  val visibleArea: EditorVisibleArea,
-  val visibleViewportTop: Float,
-  val visibleViewportBottom: Float,
-) {
-  constructor(
-    viewportState: EditorViewportState,
-    visibleArea: EditorVisibleArea,
-  ) : this(
-    scrollY = viewportState.scrollOffset.y,
-    maxScrollY = viewportState.maxScrollY,
-    visibleArea = visibleArea,
-    visibleViewportTop = visibleArea.visibleViewportTop,
-    visibleViewportBottom = visibleArea.visibleViewportBottom,
-  )
-
-  val anchor: EditorViewportScrollAnchor
-    get() =
-      when {
-        scrollY <= EditorViewportScrollAnchorTolerance -> EditorViewportScrollAnchor.Top
-        maxScrollY - scrollY <= EditorViewportScrollAnchorTolerance ->
-          EditorViewportScrollAnchor.Bottom
-        else -> EditorViewportScrollAnchor.Center
-      }
-
-  fun hasSameVisibleViewport(other: EditorViewportScrollReconcileFrame): Boolean =
-    visibleViewportTop == other.visibleViewportTop &&
-      visibleViewportBottom == other.visibleViewportBottom
-
-  fun documentY(anchor: EditorViewportScrollAnchor): Float = scrollY + viewportY(anchor)
-
-  fun viewportY(anchor: EditorViewportScrollAnchor): Float =
-    when (anchor) {
-      EditorViewportScrollAnchor.Top -> visibleViewportTop
-      EditorViewportScrollAnchor.Center -> (visibleViewportTop + visibleViewportBottom) / 2f
-      EditorViewportScrollAnchor.Bottom -> visibleViewportBottom
-    }
 }
 
 internal fun resolveEditorViewportContentWidth(
