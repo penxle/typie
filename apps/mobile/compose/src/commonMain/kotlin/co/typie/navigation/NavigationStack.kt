@@ -72,6 +72,7 @@ import dev.chrisbanes.haze.hazeSource
 import kotlin.math.abs
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
@@ -324,24 +325,32 @@ fun NavigationStack(
     }
   }
 
-  suspend fun settleAtCurrentRoute() {
+  suspend fun settleAtCurrentRoute(restoreKeyboard: Boolean = true) {
     progress.snapTo(0f)
-    softwareKeyboardInteraction.restore()
+    if (restoreKeyboard) softwareKeyboardInteraction.restore()
     visibleRoute = navigator.current
     behindRoute = null
     animState = AnimState.Idle
   }
 
-  suspend fun commitRemovalTo(target: Route) {
+  suspend fun commitRemovalTo(target: Route, committedKeyboardHide: Deferred<Unit>? = null) {
     val removedRoutes = navigator.performPopTo(target)
-    softwareKeyboardInteraction.hideAndAwaitResolution()
+    if (committedKeyboardHide == null) {
+      softwareKeyboardInteraction.hideAndAwaitResolution()
+    } else {
+      committedKeyboardHide.await()
+    }
     visibleRoute = navigator.current
     behindRoute = null
     animState = AnimState.Idle
     clearRemovedRoutes(removedRoutes)
   }
 
-  suspend fun animateRemovalTo(target: Route, verifyPreparedSegment: Boolean = true): Boolean {
+  suspend fun animateRemovalTo(
+    target: Route,
+    verifyPreparedSegment: Boolean = true,
+    committedKeyboardHide: Deferred<Unit>? = null,
+  ): Boolean {
     val requiresTransition = target != navigator.current
     val continuesPopGesture =
       animState == AnimState.PopGestureCommitted &&
@@ -351,7 +360,7 @@ fun NavigationStack(
       if (animState == AnimState.PopGestureCommitted) {
         progress.animateTo(0f, spring(stiffness = StiffnessMediumLow))
       }
-      settleAtCurrentRoute()
+      settleAtCurrentRoute(restoreKeyboard = committedKeyboardHide == null)
     } else {
       transitionStyle = visibleRoute.transitionStyleTo(target)
       behindRoute = target
@@ -366,12 +375,12 @@ fun NavigationStack(
 
     if (verifyPreparedSegment && !navigator.routeRemovals.activeSegmentIsCurrent()) {
       navigator.routeRemovals.rollbackActiveSegment()
-      settleAtCurrentRoute()
+      settleAtCurrentRoute(restoreKeyboard = committedKeyboardHide == null)
       return false
     }
 
     if (!requiresTransition) return true
-    commitRemovalTo(target)
+    commitRemovalTo(target, committedKeyboardHide)
     return true
   }
 
@@ -408,11 +417,16 @@ fun NavigationStack(
       async(start = CoroutineStart.UNDISPATCHED) {
         progress.animateTo(1f, spring(stiffness = StiffnessMediumLow))
       }
+    val committedKeyboardHide =
+      async(start = CoroutineStart.UNDISPATCHED) {
+        softwareKeyboardInteraction.hideAndAwaitResolution()
+        Unit
+      }
 
     suspend fun settleGestureAtCurrentRoute() {
       exitAnimation.cancelAndJoin()
       progress.animateTo(0f, spring(stiffness = StiffnessMediumLow))
-      settleAtCurrentRoute()
+      settleAtCurrentRoute(restoreKeyboard = false)
     }
 
     suspend fun rollbackGestureAndRetry(): NavigationResult {
@@ -421,6 +435,7 @@ fun NavigationStack(
       } finally {
         settleGestureAtCurrentRoute()
       }
+      committedKeyboardHide.await()
       return performProgressiveRemoval(target)
     }
 
@@ -443,10 +458,8 @@ fun NavigationStack(
         val animatesSeparately = delayed || transitionStyle == RouteTransitionStyle.Fade
         if (animatesSeparately) {
           exitAnimation.cancelAndJoin()
-          if (transitionStyle == RouteTransitionStyle.Fade) {
-            softwareKeyboardInteraction.continueFromHiddenProgress(progress.value)
-          }
-          if (!animateRemovalTo(target)) {
+          if (!animateRemovalTo(target, committedKeyboardHide = committedKeyboardHide)) {
+            committedKeyboardHide.await()
             return@coroutineScope performProgressiveRemoval(target)
           }
         } else {
@@ -456,7 +469,7 @@ fun NavigationStack(
           return@coroutineScope rollbackGestureAndRetry()
         }
 
-        if (!animatesSeparately) commitRemovalTo(target)
+        if (!animatesSeparately) commitRemovalTo(target, committedKeyboardHide)
         navigator.routeRemovals.commitSegment()
         return@coroutineScope NavigationResult.ReachedTarget
       }
@@ -470,6 +483,7 @@ fun NavigationStack(
       navigator.routeRemovals.resolveBlockedRoute()?.let {
         return@coroutineScope it
       }
+      committedKeyboardHide.await()
       performProgressiveRemoval(target)
     } catch (throwable: Throwable) {
       withContext(NonCancellable) { settleGestureAtCurrentRoute() }
@@ -603,7 +617,7 @@ fun NavigationStack(
                 // presentation failed; finish the exact prepared removal without another prompt.
                 val removedRoutes = navigator.performPopTo(targetRoute)
                 softwareKeyboardInteraction.hideAndAwaitResolution()
-                settleAtCurrentRoute()
+                settleAtCurrentRoute(restoreKeyboard = false)
                 clearRemovedRoutes(removedRoutes)
                 navigator.consumePopRequest()
                 navigator.completeTransition()
@@ -617,7 +631,9 @@ fun NavigationStack(
                   }
                 val settleFailure =
                   try {
-                    settleAtCurrentRoute()
+                    settleAtCurrentRoute(
+                      restoreKeyboard = currentAnimState != AnimState.PopGestureCommitted
+                    )
                     null
                   } catch (throwable: Throwable) {
                     throwable
