@@ -156,6 +156,10 @@ internal class NoteEditState(private val scope: CoroutineScope) {
   fun shouldAutoFocusContent(siteId: String, noteId: String): Boolean =
     activeFormFor(siteId = siteId, noteId = noteId)?.autoFocusContent == true
 
+  fun consumeAutoFocusContent(siteId: String, noteId: String) {
+    activeFormFor(siteId = siteId, noteId = noteId)?.consumeAutoFocusContent()
+  }
+
   fun cancelPendingSaves(siteId: String, noteId: String) {
     activeFormFor(siteId = siteId, noteId = noteId)?.cancelPendingSaves()
   }
@@ -189,11 +193,14 @@ internal enum class NoteSaveOutcome {
 private class ActiveNoteFormState(
   private val scope: CoroutineScope,
   note: NoteCard_note,
-  val autoFocusContent: Boolean,
+  autoFocusContent: Boolean,
   private val onSaveFailed: () -> Unit,
 ) {
   val noteId: String = note.id
   val siteId: String = note.site.id
+
+  var autoFocusContent by mutableStateOf(autoFocusContent)
+    private set
 
   var serverSnapshot by mutableStateOf(note)
     private set
@@ -227,6 +234,10 @@ private class ActiveNoteFormState(
         showSaving -> NoteSaveStatus.SAVING
         else -> NoteSaveStatus.NONE
       }
+
+  fun consumeAutoFocusContent() {
+    autoFocusContent = false
+  }
 
   val isContentDirty: Boolean
     get() = contentEdit.desired != null

@@ -31,6 +31,7 @@ import kotlin.math.abs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 internal enum class MainTabMotionSource {
@@ -50,6 +51,9 @@ internal class MainTabState(initialTab: Tab, private val scope: CoroutineScope) 
   var motion by mutableStateOf<MainTabMotion?>(null)
     private set
 
+  var focusEnabledTab by mutableStateOf(initialTab)
+    private set
+
   val bodyPosition: Float
     get() =
       if (motion == null) {
@@ -65,6 +69,10 @@ internal class MainTabState(initialTab: Tab, private val scope: CoroutineScope) 
   private var activeMotionSessionId: Long? = null
   private var activeMotionObservedScroll = false
   private var returningToOrigin = false
+
+  fun enableFocusFor(tab: Tab) {
+    focusEnabledTab = tab
+  }
 
   fun selectTab(tab: Tab, beforeTransition: suspend () -> Unit = {}) {
     if (motion?.source == MainTabMotionSource.DirectDrag) return
@@ -305,8 +313,15 @@ internal fun MainTabPager(
           if (settledTab == activeOrigin) {
             activeKeyboardSession?.finish(SoftwareKeyboardPresentationEndpoint.Shown)
           } else {
-            activeKeyboardSession?.finish(SoftwareKeyboardPresentationEndpoint.Hidden)
+            activeKeyboardSession?.let { session ->
+              val interactionId = session.interactionId
+              session.updateHiddenProgress(1f)
+              session.finish(SoftwareKeyboardPresentationEndpoint.Hidden)
+              snapshotFlow { softwareKeyboardPresentationController.interactionState }
+                .first { it.activeInteractionId != interactionId }
+            }
             focusManager.clearFocus(force = true)
+            state.enableFocusFor(state.settledTab)
           }
         }
     } finally {
