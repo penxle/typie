@@ -99,8 +99,10 @@ describe('formatKrw', () => {
 });
 
 describe('DEFAULT_PRICE_TABLE', () => {
-  it('승계한 모델 11종과 환율을 그대로 들고 있다', () => {
-    expect(Object.keys(DEFAULT_PRICE_TABLE.models)).toHaveLength(11);
+  it('승계 11종 + prism gemini 키 2종과 환율을 그대로 들고 있다', () => {
+    expect(Object.keys(DEFAULT_PRICE_TABLE.models)).toHaveLength(13);
+    expect(DEFAULT_PRICE_TABLE.models['gemini/gemini-3.6-flash']).toEqual({ input: 1.5, output: 7.5, cacheRead: 0.15 });
+    expect(DEFAULT_PRICE_TABLE.models['gemini/gemini-3.5-flash-lite']).toEqual({ input: 0.3, output: 2.5, cacheRead: 0.03 });
     expect(DEFAULT_PRICE_TABLE.usdKrw).toBe(1480);
   });
 });

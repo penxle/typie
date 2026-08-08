@@ -183,6 +183,7 @@ repaste
 resizer
 resizers
 resvg
+retarget
 retriable
 rgba
 ridi
@@ -257,6 +258,7 @@ xcontext
 xcworkspace
 xexpect
 xexplicit
+xhigh
 xlarge
 xrange
 xrevrange

@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm';
 import { createSseParser } from '../feedback/sse.ts';
 import { Reviews, Threads } from './db/index.ts';
-import { getSession, openEvents } from './prism.ts';
+import { fetchEventLog, getSession, openEvents } from './prism.ts';
 import type { SseEvent } from '../feedback/sse.ts';
 import type { Anchor, FeedbackResult } from '../feedback/types.ts';
 import type { Db } from './db/index.ts';
@@ -71,6 +71,20 @@ export const collectEvents = async (
     }
   }
   return events;
+};
+
+// 실행 중 세션의 첫 화면 시드 — 이벤트 로그 스냅샷(JSON)을 클라이언트 SseEvent 형태로 옮긴다. data는
+// 클라이언트 리듀서가 SSE data 라인과 같은 봉투({seq,kind,data,createdAt} 문자열)를 기대하므로 행 전체를
+// 다시 직렬화한다(live.ts decode 참조). 시드 없이 재생을 화면에서 재연하면 새로고침마다 과거 기록이 전환과
+// 함께 빨리감기로 보인다.
+export const seedEvents = async (env: PrismEnv, prismSessionId: string): Promise<SseEvent[]> => {
+  const rows = await fetchEventLog(env, prismSessionId);
+  return rows.map((row) => {
+    // thinking 전문은 리듀서가 읽지 않는 최대 중량 필드다(xhigh 추론이라 턴당 수 KB) — 시드에서 떨궈
+    // 첫 로드 페이로드를 줄인다. 필드 형태는 남긴다(null): 소비자가 부재와 미지원을 구별할 일이 없게.
+    const data = 'thinking' in row.data ? { ...row.data, thinking: null } : row.data;
+    return { id: row.seq, event: row.kind, data: JSON.stringify({ ...row, data }) };
+  });
 };
 
 // 멱등 순서: threads 먼저(onConflictDoNothing — 재시도 안전), reviews 조건부 갱신을 마지막에.

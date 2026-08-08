@@ -1,9 +1,11 @@
 <script lang="ts">
   import { css, cva } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
-  import { Button, Helmet, TextInput, TimeAgo } from '@typie/ui/components';
+  import { Button, Helmet, Select, TextInput, TimeAgo } from '@typie/ui/components';
   import { enhance } from '$app/forms';
   import ThemeToggle from '$lib/components/ThemeToggle.svelte';
+  import { AGENT_DEFAULTS, AGENTS, MODELS } from '$lib/feedback/tiers.ts';
+  import type { AgentName, TierModel } from '$lib/feedback/tiers.ts';
   import type { ActionData, PageData, SubmitFunction } from './$types';
 
   type Props = { data: PageData; form: ActionData };
@@ -53,6 +55,25 @@
       }
     };
   };
+
+  let tiersOpen = $state(false);
+  let tiers = $state(
+    Object.fromEntries(AGENTS.map((agent) => [agent, { ...AGENT_DEFAULTS[agent] }])) as Record<
+      AgentName,
+      { model: TierModel; effort: string }
+    >,
+  );
+
+  const modelItems = Object.keys(MODELS).map((model) => ({ label: model, value: model as TierModel }));
+  const effortItems = (model: TierModel) =>
+    (MODELS[model].efforts as readonly string[]).map((effort) => ({ label: effort, value: effort }));
+  const setModel = (agent: AgentName, model: TierModel) => {
+    tiers[agent].model = model;
+    // 모델 교체로 현재 effort가 무효해지면 전 모델 공통인 high로 되돌린다
+    if (!(MODELS[model].efforts as readonly string[]).includes(tiers[agent].effort)) tiers[agent].effort = 'high';
+  };
+  const isOverridden = (agent: AgentName) =>
+    tiers[agent].model !== AGENT_DEFAULTS[agent].model || tiers[agent].effort !== AGENT_DEFAULTS[agent].effort;
 
   // 입력 단계로 돌아갈 때 확인 단계에서 난 오류는 함께 걷는다 — 단계가 바뀌면 그 오류의 맥락도 사라진다.
   const backToInput = () => {
@@ -153,6 +174,46 @@
               {preview.refId}
             </p>
           </div>
+
+          {#if data.isAdmin}
+            {#each AGENTS as agent (agent)}
+              {#if isOverridden(agent)}
+                <input name={`tier.${agent}.model`} type="hidden" value={tiers[agent].model} />
+                <input name={`tier.${agent}.effort`} type="hidden" value={tiers[agent].effort} />
+              {/if}
+            {/each}
+            <div
+              class={css({ marginTop: '12px', borderWidth: '1px', borderColor: 'border.default', borderRadius: '8px', padding: '10px' })}
+            >
+              <button
+                class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.subtle', _hover: { color: 'text.default' } })}
+                onclick={() => (tiersOpen = !tiersOpen)}
+                type="button"
+              >
+                티어 설정 {tiersOpen ? '접기' : '펼치기'}
+              </button>
+              {#if tiersOpen}
+                <div class={css({ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' })}>
+                  {#each AGENTS as agent (agent)}
+                    <div class={flex({ align: 'center', gap: '8px' })}>
+                      <span class={css({ width: '80px', fontSize: '12px', fontFamily: 'mono', color: 'text.subtle' })}>{agent}</span>
+                      <Select items={modelItems} onselect={(model) => setModel(agent, model)} value={tiers[agent].model} />
+                      <Select
+                        items={effortItems(tiers[agent].model)}
+                        onselect={(effort) => {
+                          tiers[agent].effort = effort;
+                        }}
+                        value={tiers[agent].effort}
+                      />
+                      {#if isOverridden(agent)}
+                        <span class={css({ fontSize: '11px', color: 'text.brand' })}>변경됨</span>
+                      {/if}
+                    </div>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+          {/if}
 
           <div class={flex({ align: 'center', gap: '8px', marginTop: '12px' })}>
             <Button disabled={starting} loading={starting} size="lg" type="submit">이 문서로 리뷰 시작</Button>

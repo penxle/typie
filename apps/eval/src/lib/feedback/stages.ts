@@ -3,10 +3,10 @@ export type StageKey = 'research' | 'plan' | 'critique' | 'proofread' | 'rephras
 export const STAGES: { key: StageKey; label: string }[] = [
   { key: 'research', label: '원고 살펴보기' },
   { key: 'plan', label: '계획 세우기' },
-  { key: 'critique', label: '작품 읽기' },
+  { key: 'critique', label: '짚을 곳 찾기' },
   { key: 'proofread', label: '문장 살피기' },
-  { key: 'rephrase', label: '피드백 다듬기' },
-  { key: 'conclude', label: '총평 쓰기' },
+  { key: 'rephrase', label: '전할 말 고르기' },
+  { key: 'conclude', label: '마무리 글 쓰기' },
 ];
 
 const PREFIXES: [string, StageKey | null][] = [

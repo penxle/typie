@@ -58,7 +58,7 @@
         <span class={css({ fontSize: '13px', fontWeight: 'bold' })}>
           여섯 단계 중 {ORDINALS[position]} 번째 · {STAGES[position].label}
         </span>
-        <span class={css({ marginLeft: 'auto', flex: 'none', fontSize: '11px', color: 'text.disabled' })}>{minutes}분 · 보통 30~50분</span>
+        <span class={css({ marginLeft: 'auto', flex: 'none', fontSize: '11px', color: 'text.disabled' })}>{minutes}분 · 보통 40~60분</span>
       </div>
 
       <div class={css({ height: '3px', marginTop: '9px', borderRadius: '2px', backgroundColor: 'surface.muted', overflow: 'hidden' })}>

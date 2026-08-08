@@ -1,3 +1,4 @@
+import type { TierOverrides } from '../feedback/tiers.ts';
 import type { PrismRun, PrismSessionView } from '../feedback/types.ts';
 
 type PrismEnv = { PRISM_API_ORIGIN: string; PRISM_API_TOKEN: string };
@@ -32,7 +33,11 @@ const call = async (env: PrismEnv, path: string, init?: RequestInit): Promise<Re
 
 export const startWorkflow = async (
   env: PrismEnv,
-  opts: { sessionId: string; input: { manuscriptPath: string }; files: { path: string; content: string }[] },
+  opts: {
+    sessionId: string;
+    input: { manuscriptPath: string; overrides?: TierOverrides };
+    files: { path: string; content: string }[];
+  },
 ): Promise<void> => {
   await call(env, '/workflows', {
     method: 'POST',
@@ -63,3 +68,11 @@ export const cancelRun = async (env: PrismEnv, id: string): Promise<void> => {
 
 export const openEvents = (env: PrismEnv, id: string, lastEventId: number): Promise<Response> =>
   call(env, `/sessions/${id}/events?lastEventId=${lastEventId}`);
+
+// 이벤트 로그의 정지 사진 — SSE 재생과 같은 행을 JSON으로 한 번에 받는다(실행 중 세션의 첫 화면 시드용).
+export type PrismLogEvent = { seq: number; kind: string; data: Record<string, unknown>; createdAt: number };
+
+export const fetchEventLog = async (env: PrismEnv, id: string): Promise<PrismLogEvent[]> => {
+  const res = await call(env, `/sessions/${id}/log`);
+  return ((await res.json()) as { events: PrismLogEvent[] }).events;
+};

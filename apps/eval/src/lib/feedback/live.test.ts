@@ -327,6 +327,22 @@ describe('feed grouping', () => {
     ]);
   });
 
+  it('생각 시간은 60초를 넘으면 분·초로 갈아탄다', () => {
+    const s = initialLive([
+      ev(1, 'step.started', { step: 'research-0' }, 0),
+      talk(2, '원고를 읽었어요', 10_000),
+      talk(3, '구성을 정리했어요', 110_000),
+      talk(4, '이제 노트를 쓸게요', 230_000),
+    ]);
+    expect(shape(groupFeed(s, 'research'))).toEqual([
+      '원고를 읽었어요',
+      '[1분 40초 생각함]',
+      '구성을 정리했어요',
+      '[2분 생각함]',
+      '이제 노트를 쓸게요',
+    ]);
+  });
+
   it('검수 라운드 안의 도구 자취는 그 카드 안에 캡슐로 선다', () => {
     const s = initialLive([
       ev(1, 'step.started', { step: 'plan-review-1-0' }, 1000),
