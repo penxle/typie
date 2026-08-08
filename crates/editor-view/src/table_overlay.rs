@@ -588,7 +588,7 @@ mod tests {
             content: LayoutContent::Box(LayoutBox {
                 node,
                 style: empty_box_style(),
-                children,
+                children: children.into(),
                 attachment: None,
                 scope: false,
             }),

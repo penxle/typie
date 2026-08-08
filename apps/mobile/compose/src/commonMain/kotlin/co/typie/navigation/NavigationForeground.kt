@@ -85,9 +85,15 @@ internal class NavigationForegroundRegistry {
                 Modifier
               }
             )
-            .onGloballyPositioned { coordinates ->
-              hostBoundsInRoot = coordinates.unclippedBoundsInRoot()
-            },
+            .then(
+              if (entry.matchHostBounds) {
+                Modifier
+              } else {
+                Modifier.onGloballyPositioned { coordinates ->
+                  hostBoundsInRoot = coordinates.unclippedBoundsInRoot()
+                }
+              }
+            ),
         content = {
           CompositionLocalProvider(entry.context) {
             CompositionLocalProvider(
@@ -101,19 +107,23 @@ internal class NavigationForegroundRegistry {
           }
         },
       ) { measurables, constraints ->
-        val hostBounds = hostBoundsInRoot
         val contentBounds =
-          if (sourceBoundsInRoot != null && hostBounds != null) {
-            Rect(
-              left = sourceBoundsInRoot.left - hostBounds.left,
-              top = sourceBoundsInRoot.top - hostBounds.top,
-              right = sourceBoundsInRoot.right - hostBounds.left,
-              bottom = sourceBoundsInRoot.bottom - hostBounds.top,
-            )
+          if (entry.matchHostBounds) {
+            Rect(0f, 0f, constraints.maxWidth.toFloat(), constraints.maxHeight.toFloat())
           } else {
-            // This can hide the foreground for its first frame, but avoids briefly drawing and
-            // hit-testing it at the host bounds before the declaration bounds are known.
-            Rect.Zero
+            val hostBounds = hostBoundsInRoot
+            if (sourceBoundsInRoot != null && hostBounds != null) {
+              Rect(
+                left = sourceBoundsInRoot.left - hostBounds.left,
+                top = sourceBoundsInRoot.top - hostBounds.top,
+                right = sourceBoundsInRoot.right - hostBounds.left,
+                bottom = sourceBoundsInRoot.bottom - hostBounds.top,
+              )
+            } else {
+              // This can hide the foreground for its first frame, but avoids briefly drawing and
+              // hit-testing it at the host bounds before the declaration bounds are known.
+              Rect.Zero
+            }
           }
         val contentConstraints =
           Constraints.fixed(
@@ -136,9 +146,11 @@ internal class NavigationForegroundEntry(
   val content: @Composable () -> Unit,
   context: CompositionLocalContext,
   sharePointerInputWithSiblings: Boolean,
+  matchHostBounds: Boolean,
 ) {
   var context by mutableStateOf(context)
   var sharePointerInputWithSiblings by mutableStateOf(sharePointerInputWithSiblings)
+  var matchHostBounds by mutableStateOf(matchHostBounds)
   var sourceBoundsInRoot by mutableStateOf<Rect?>(null)
 }
 
@@ -152,6 +164,7 @@ private val LocalNavigationForegroundRegistry =
 @Composable
 internal fun NavigationForeground(
   sharePointerInputWithSiblings: Boolean = false,
+  matchHostBounds: Boolean = false,
   content: @Composable () -> Unit,
 ) {
   val registry = LocalNavigationForegroundRegistry.current
@@ -170,20 +183,29 @@ internal fun NavigationForeground(
         content = movableContent,
         context = context,
         sharePointerInputWithSiblings = sharePointerInputWithSiblings,
+        matchHostBounds = matchHostBounds,
       )
     }
   if (entry.context != context) {
     entry.context = context
   }
   entry.sharePointerInputWithSiblings = sharePointerInputWithSiblings
+  entry.matchHostBounds = matchHostBounds
   registry.register(entry)
 
   DisposableEffect(registry, entry) { onDispose { registry.unregister(entry) } }
 
   Box(
-    Modifier.fillMaxSize().onGloballyPositioned { coordinates ->
-      entry.sourceBoundsInRoot = coordinates.unclippedBoundsInRoot()
-    }
+    Modifier.fillMaxSize()
+      .then(
+        if (matchHostBounds) {
+          Modifier
+        } else {
+          Modifier.onGloballyPositioned { coordinates ->
+            entry.sourceBoundsInRoot = coordinates.unclippedBoundsInRoot()
+          }
+        }
+      )
   )
 }
 

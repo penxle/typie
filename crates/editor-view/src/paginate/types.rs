@@ -49,9 +49,43 @@ pub struct ChildAttachment {
 pub(crate) struct LayoutBox {
     pub node: Dot,
     pub style: BoxStyle,
-    pub children: Vec<LayoutNode>,
+    pub children: LayoutChildren,
     pub attachment: Option<ChildAttachment>,
     pub scope: bool,
+}
+
+/// Copy-on-write child storage keeps displayed presentation snapshots cheap
+/// while content-only edits replace just the affected ancestor paths.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub(crate) struct LayoutChildren(Arc<Vec<LayoutNode>>);
+
+impl LayoutChildren {
+    pub(crate) fn get_mut(&mut self, index: usize) -> Option<&mut LayoutNode> {
+        Arc::make_mut(&mut self.0).get_mut(index)
+    }
+}
+
+impl From<Vec<LayoutNode>> for LayoutChildren {
+    fn from(children: Vec<LayoutNode>) -> Self {
+        Self(Arc::new(children))
+    }
+}
+
+impl std::ops::Deref for LayoutChildren {
+    type Target = [LayoutNode];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<'a> IntoIterator for &'a LayoutChildren {
+    type Item = &'a LayoutNode;
+    type IntoIter = std::slice::Iter<'a, LayoutNode>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
 }
 
 /// A positioned line. Shares the measured payload (glyph runs, ruby, tab
@@ -123,7 +157,8 @@ mod tests {
                     children: vec![LayoutNode {
                         rect: rect(),
                         content: LayoutContent::Line(line),
-                    }],
+                    }]
+                    .into(),
                     attachment: None,
                     scope: false,
                 }),
@@ -139,6 +174,20 @@ mod tests {
         };
         assert_eq!(l.node, Dot::new(1, 1));
         assert_eq!(l.offset_range, Some(0..1));
+    }
+
+    #[test]
+    fn cloned_layout_children_share_storage_until_mutated() {
+        let original = LayoutChildren::from(vec![LayoutNode {
+            rect: rect(),
+            content: LayoutContent::Spacing(SpacingKind::Fill),
+        }]);
+        let mut cloned = original.clone();
+
+        assert!(Arc::ptr_eq(&original.0, &cloned.0));
+        cloned.get_mut(0).unwrap().rect.x = 5.0;
+        assert_eq!(original[0].rect.x, 0.0);
+        assert_eq!(cloned[0].rect.x, 5.0);
     }
 
     #[test]

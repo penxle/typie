@@ -295,7 +295,7 @@ impl Paginator {
             content: LayoutContent::Box(LayoutBox {
                 node: measured.node,
                 style: measured.style.clone(),
-                children,
+                children: children.into(),
                 attachment: None,
                 scope: measured.scope,
             }),
@@ -349,7 +349,7 @@ impl Paginator {
             content: LayoutContent::Box(LayoutBox {
                 node: measured.node,
                 style: measured.style.clone(),
-                children,
+                children: children.into(),
                 attachment: None,
                 scope: measured.scope,
             }),
@@ -626,7 +626,7 @@ fn place_node_at(
                 content: LayoutContent::Box(LayoutBox {
                     node: b.node,
                     style: b.style.clone(),
-                    children,
+                    children: children.into(),
                     attachment,
                     scope: b.scope,
                 }),

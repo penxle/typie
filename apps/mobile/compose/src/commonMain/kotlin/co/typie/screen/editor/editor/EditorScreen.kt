@@ -1665,14 +1665,10 @@ fun EditorScreen(entityId: String) {
       )
     val viewportScrollReconcileMode =
       when {
-        !editorReady -> EditorViewportScrollReconcileMode.Disabled
         !screenState.sceneInForeground -> EditorViewportScrollReconcileMode.Disabled
         !interactionScope.controller.interactionMode.allowsViewportScrollReconcile ->
           EditorViewportScrollReconcileMode.Disabled
-        subPaneLayoutInfo != null -> EditorViewportScrollReconcileMode.KeepVisibleAnchor
-        !uiState.focused -> EditorViewportScrollReconcileMode.Disabled
-        imeAppearing -> EditorViewportScrollReconcileMode.RevealSelectionHead
-        else -> EditorViewportScrollReconcileMode.KeepVisibleAnchor
+        else -> EditorViewportScrollReconcileMode.Enabled
       }
     val magnifierFocalPositionInRoot =
       interactionScope.controller.magnifierPosition?.let { position ->

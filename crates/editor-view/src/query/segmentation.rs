@@ -504,11 +504,13 @@ mod tests {
                             children: vec![LayoutNode {
                                 rect: line_rect,
                                 content: LayoutContent::Line(line),
-                            }],
+                            }]
+                            .into(),
                             attachment: None,
                             scope: false,
                         }),
-                    }],
+                    }]
+                    .into(),
                     attachment: None,
                     scope: false,
                 }),

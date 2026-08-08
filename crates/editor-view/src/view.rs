@@ -412,6 +412,42 @@ impl View {
         self.layout_state.as_ref()
     }
 
+    pub fn capture_viewport_anchor_presentation(
+        &self,
+    ) -> Option<crate::query::viewport_anchor::ViewportAnchorPresentation> {
+        let layout = self.layout.as_ref()?;
+        let state = self.layout_state.clone()?;
+        let layout_index = layout.layout_index.clone();
+        Some(crate::query::viewport_anchor::ViewportAnchorPresentation::new(state, layout_index))
+    }
+
+    pub fn capture_selection_viewport_anchor(
+        &self,
+    ) -> Option<crate::query::viewport_anchor::CapturedViewportAnchor> {
+        let layout = self.layout.as_ref()?;
+        let state = self.layout_state.as_ref()?;
+        crate::query::viewport_anchor::capture_selection_head(state, &layout.layout_index)
+    }
+
+    pub fn capture_viewport_anchor_at(
+        &self,
+        point: crate::query::viewport_anchor::ViewportAnchorPoint,
+    ) -> Option<crate::query::viewport_anchor::CapturedViewportAnchor> {
+        let layout = self.layout.as_ref()?;
+        let state = self.layout_state.as_ref()?;
+        crate::query::viewport_anchor::capture_page_point(state, &layout.layout_index, point)
+    }
+
+    pub fn resolve_viewport_anchor(
+        &self,
+        anchor: &crate::query::viewport_anchor::ViewportAnchor,
+    ) -> crate::query::viewport_anchor::ViewportAnchorResolution {
+        let (Some(layout), Some(state)) = (self.layout.as_ref(), self.layout_state.as_ref()) else {
+            return crate::query::viewport_anchor::ViewportAnchorResolution::Unavailable;
+        };
+        crate::query::viewport_anchor::resolve(state, &layout.layout_index, anchor)
+    }
+
     /// Returns whether the retained geometry was built from the current document
     /// and its layout-affecting transient state. Selection differences are
     /// intentionally excluded; their layout effects are represented by the

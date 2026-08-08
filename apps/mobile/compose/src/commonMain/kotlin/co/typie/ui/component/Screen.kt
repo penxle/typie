@@ -159,7 +159,9 @@ fun Screen(
     }
 
     overlay?.let { overlayContent ->
-      NavigationForeground { Box(Modifier.fillMaxSize(), content = overlayContent) }
+      NavigationForeground(matchHostBounds = true) {
+        Box(Modifier.fillMaxSize(), content = overlayContent)
+      }
     }
   }
 }

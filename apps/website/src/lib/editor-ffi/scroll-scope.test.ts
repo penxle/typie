@@ -11,6 +11,10 @@ const trackedSnapshot = (id: string, rect: PageRect): EditorSnapshot =>
     selectionEndpoints: undefined,
     cursor: undefined,
     trackedRanges: [{ id, rects: [rect] }],
+    pageSizes: [
+      { width: 600, height: 1200 },
+      { width: 600, height: 1200 },
+    ],
     rootAttrs: undefined,
   }) as EditorSnapshot;
 
@@ -68,7 +72,10 @@ describe('EditorRequest', () => {
 
 function setup(snapshot: EditorSnapshot, typewriter?: { enabled: boolean; position: number | undefined }) {
   const typewriterPreferences = typewriter ?? { enabled: false, position: undefined };
-  const scrollTo = vi.fn();
+  let scrollTop = 0;
+  const scrollTo = vi.fn((options: ScrollToOptions) => {
+    if (options.behavior === 'instant' && options.top !== undefined) scrollTop = options.top;
+  });
   const requestPublication = vi.fn();
   const editor = {
     destroyed: false,
@@ -81,6 +88,9 @@ function setup(snapshot: EditorSnapshot, typewriter?: { enabled: boolean; positi
       ]),
     },
     viewport: { height: 400 },
+    scaleFactor: 1,
+    appliedRevision: snapshot.revision,
+    publishedRevision: snapshot.revision,
     pageEls: {
       0: {
         getBoundingClientRect: () => new DOMRect(0, 0, 600, 1200),
@@ -88,16 +98,23 @@ function setup(snapshot: EditorSnapshot, typewriter?: { enabled: boolean; positi
     },
     scrollViewport: {
       getRect: () => new DOMRect(0, 0, 600, 400),
-      getScrollTop: () => 0,
+      getScrollTop: () => scrollTop,
       getScrollHeight: () => 1200,
       scrollTo,
     },
     safeDisplayZoom: () => 1,
+    clientToLocal: vi.fn(() => null),
+    captureSelectionViewportAnchor: vi.fn(() => void 0),
+    captureViewportAnchorAt: vi.fn(() => void 0),
+    trackedRangeForSnapshot: vi.fn((id: string, candidate: EditorSnapshot) => candidate.trackedRanges.find((range) => range.id === id)),
     requestPublication,
   } as unknown as Editor;
   return {
     editor,
     requestPublication,
+    setScrollTop: (value: number) => {
+      scrollTop = value;
+    },
     scrollTo,
     scope: new EditorScrollScope(editor, () => typewriterPreferences),
   };
@@ -322,7 +339,7 @@ describe('EditorScrollScope', () => {
       page_idx: 0,
       rect: { x: 0, y: 900, width: 1, height: 20 },
     });
-    const { scope } = setup(snapshot);
+    const { scope, setScrollTop } = setup(snapshot);
 
     const presentation = scope.scrollIntoView({ target: { type: 'tracked_item', id: 'target' }, policy: 'result_reveal' });
     const request = scope.pendingRequest;
@@ -338,6 +355,9 @@ describe('EditorScrollScope', () => {
     expect(presented).toBe(false);
 
     expect(scope.applyPending(request, snapshot, { type: 'scroll_to', y: 580 })).toBe(true);
+    expect(scope.pendingRequest).toBe(request);
+    setScrollTop(580);
+    scope.settleSmoothReveal();
     await expect(presentation).resolves.toBeUndefined();
   });
 
@@ -354,6 +374,24 @@ describe('EditorScrollScope', () => {
     const selection = scope.declare({ target: { type: 'current_selection_head' }, policy: 'cursor_guard' });
     expect(scope.bind(selection, 7)).toBe(true);
     expect(scope.activateForRevision(8)).toBe(selection);
+  });
+
+  it('uses live tracked geometry when document edits only move the range', () => {
+    const staleRect = {
+      page_idx: 1,
+      rect: { x: 0, y: 100, width: 1, height: 20 },
+    };
+    const liveRect = {
+      page_idx: 3,
+      rect: { x: 0, y: 100, width: 1, height: 20 },
+    };
+    const snapshot = trackedSnapshot('target', staleRect);
+    const { editor, scope } = setup(snapshot);
+    const range = snapshot.trackedRanges[0];
+    if (!range) throw new Error('Expected a tracked range');
+    editor.trackedRangeForSnapshot = vi.fn(() => ({ ...range, rects: [liveRect] }));
+
+    expect(scope.resolveTargetRects({ type: 'tracked_item', id: 'target' }, snapshot)).toEqual([liveRect]);
   });
 
   it('completes a superseded reveal without applying it', async () => {
@@ -390,6 +428,24 @@ describe('EditorScrollScope', () => {
     expect(requestPublication).toHaveBeenCalledOnce();
   });
 
+  it('interrupts the native smooth scroll when direct manipulation cancels its reveal', () => {
+    const snapshot = trackedSnapshot('target', {
+      page_idx: 0,
+      rect: { x: 0, y: 900, width: 1, height: 20 },
+    });
+    const { scope, scrollTo, setScrollTop } = setup(snapshot);
+    scope.scrollIntoView({ target: { type: 'tracked_item', id: 'target' }, policy: 'result_reveal' });
+    const request = scope.pendingRequest;
+    if (!request) throw new Error('Expected a pending reveal');
+    expect(scope.applyPending(request, snapshot, { type: 'scroll_to', y: 580 })).toBe(true);
+
+    setScrollTop(250);
+    scope.cancel();
+
+    expect(scrollTo).toHaveBeenNthCalledWith(1, { top: 580, behavior: 'smooth' });
+    expect(scrollTo).toHaveBeenNthCalledWith(2, { top: 250, behavior: 'instant' });
+  });
+
   it('keeps the existing latest-request-wins reveal contract', () => {
     const snapshot = trackedSnapshot('new', {
       page_idx: 0,
@@ -411,7 +467,7 @@ describe('EditorScrollScope', () => {
       page_idx: 0,
       rect: { x: 0, y: 900, width: 1, height: 20 },
     });
-    const { requestPublication, scope, scrollTo } = setup(snapshot);
+    const { requestPublication, scope, scrollTo, setScrollTop } = setup(snapshot);
 
     scope.scrollIntoView({ target: { type: 'tracked_item', id: 'old' }, policy: 'result_reveal' });
     const old = scope.pendingRequest;
@@ -422,7 +478,14 @@ describe('EditorScrollScope', () => {
 
     expect(scope.applyPending(old, snapshot, { type: 'scroll_to', y: 100 })).toBe(false);
     expect(scope.applyPending(current, snapshot, { type: 'scroll_to', y: 580 })).toBe(true);
+    expect(scope.applyPending(current, snapshot, { type: 'scroll_to', y: 580 })).toBe(true);
     expect(scrollTo).toHaveBeenCalledExactlyOnceWith({ top: 580, behavior: 'smooth' });
+    expect(scope.applyPending(current, snapshot, { type: 'scroll_to', y: 640 })).toBe(true);
+    expect(scrollTo).toHaveBeenNthCalledWith(2, { top: 640, behavior: 'smooth' });
+    expect(scope.pendingRequest).toBe(current);
+    expect(requestPublication).not.toHaveBeenCalled();
+    setScrollTop(640);
+    scope.settleSmoothReveal();
     expect(scope.pendingRequest).toBeNull();
     expect(requestPublication).toHaveBeenCalledOnce();
   });
@@ -506,12 +569,174 @@ describe('EditorScrollScope', () => {
     expect(scrollTo).toHaveBeenCalledExactlyOnceWith({ top: 280, behavior: 'instant' });
   });
 
+  it('converges a provisional selection reveal to the destination for its measured geometry', () => {
+    const provisional = selectionSnapshot(false, {
+      page_idx: 0,
+      rect: { x: 0, y: 500, width: 1, height: 1 },
+    });
+    const measured = {
+      ...selectionSnapshot(false, {
+        page_idx: 0,
+        rect: { x: 0, y: 500, width: 1, height: 500 },
+      }),
+      revision: 2,
+    } as EditorSnapshot;
+    const { editor, scope } = setup(provisional);
+    const anchor = { type: 'node' as const, node: '1:1', offset_x: 0, offset_y: 0 };
+    editor.captureSelectionViewportAnchor = vi.fn(() => ({
+      identity: anchor,
+      geometry: {
+        point: { page_idx: 0, x: 0, y: 500.5 },
+        rect: { page_idx: 0, rect: { x: 0, y: 500, width: 1, height: 1 } },
+      },
+    }));
+    editor.resolveViewportAnchor = vi.fn((revision) => ({
+      type: 'resolved' as const,
+      geometry: {
+        point: { page_idx: 0, x: 0, y: revision === provisional.revision ? 500.5 : 750 },
+        rect: {
+          page_idx: 0,
+          rect: { x: 0, y: 500, width: 1, height: revision === provisional.revision ? 1 : 500 },
+        },
+      },
+    }));
+
+    scope.scrollIntoView({ target: { type: 'current_selection_head' }, policy: 'cursor_guard' });
+    const request = scope.pendingRequest;
+    if (!request) throw new Error('Expected a scroll request');
+    expect(scope.applyPending(request, provisional, { type: 'scroll_to', y: 161 })).toBe(true);
+
+    expect(scope.prepareViewportAnchorPublication(measured)).toMatchObject({
+      type: 'ready',
+      targetScrollTop: 660,
+    });
+  });
+
+  it('keeps a retained content anchor exactly attached when candidate geometry moves above it', () => {
+    const current = selectionSnapshot(true, {
+      page_idx: 0,
+      rect: { x: 0, y: 190, width: 1, height: 20 },
+    });
+    const candidate = { ...current, revision: 2 };
+    const { editor, scope } = setup(current);
+    const anchor = { type: 'node' as const, node: '1:1', offset_x: 0, offset_y: 0 };
+    let scrollTop = 100;
+    const scrollTo = vi.fn((options: ScrollToOptions) => {
+      scrollTop = options.top ?? scrollTop;
+    });
+    editor.scrollViewport = {
+      ...editor.scrollViewport,
+      getScrollTop: () => scrollTop,
+      scrollTo,
+    } as NonNullable<Editor['scrollViewport']>;
+    editor.captureSelectionViewportAnchor = vi.fn(() => ({
+      identity: anchor,
+      geometry: {
+        point: { page_idx: 0, x: 0, y: 200 },
+        rect: { page_idx: 0, rect: { x: 0, y: 190, width: 1, height: 20 } },
+      },
+    }));
+    editor.resolveViewportAnchor = vi.fn((revision) => ({
+      type: 'resolved' as const,
+      geometry: {
+        point: { page_idx: 0, x: 0, y: revision === 1 ? 200 : 320 },
+        rect: { page_idx: 0, rect: { x: 0, y: revision === 1 ? 190 : 310, width: 1, height: 20 } },
+      },
+    }));
+
+    const publication = scope.prepareViewportAnchorPublication(candidate);
+
+    expect(publication).toMatchObject({ type: 'ready', targetScrollTop: 220 });
+    scope.applyViewportAnchorPublication(publication);
+    expect(scrollTo).toHaveBeenCalledExactlyOnceWith({ top: 220, behavior: 'instant' });
+    expect(scrollTop).toBe(220);
+  });
+
+  it('does not withhold a publication when a live anchor has no candidate geometry', () => {
+    const current = selectionSnapshot(true, {
+      page_idx: 0,
+      rect: { x: 0, y: 190, width: 1, height: 20 },
+    });
+    const candidate = { ...current, revision: 2 };
+    const { editor, scope } = setup(current);
+    const selection = { type: 'node' as const, node: '1:1', offset_x: 0, offset_y: 0 };
+    const viewport = { type: 'node' as const, node: '2:1', offset_x: 0, offset_y: 0 };
+    const capturedGeometry = {
+      point: { page_idx: 0, x: 0, y: 200 },
+      rect: { page_idx: 0, rect: { x: 0, y: 190, width: 1, height: 20 } },
+    };
+    editor.captureSelectionViewportAnchor = vi.fn(() => ({ identity: selection, geometry: capturedGeometry }));
+    editor.captureViewportAnchorAt = vi.fn(() => ({ identity: viewport, geometry: capturedGeometry }));
+    editor.resolveViewportAnchor = vi.fn((revision) =>
+      revision === current.revision ? { type: 'resolved' as const, geometry: capturedGeometry } : { type: 'not_laid_out' as const },
+    );
+
+    expect(scope.prepareViewportAnchorPublication(current).type).toBe('ready');
+    expect(scope.prepareViewportAnchorPublication(candidate)).toEqual({
+      type: 'ready',
+      geometry: null,
+      targetScrollTop: null,
+    });
+  });
+
+  it('restarts an interrupted native smooth reveal and ignores settle before reaching the target', () => {
+    const snapshot = trackedSnapshot('target', {
+      page_idx: 0,
+      rect: { x: 0, y: 900, width: 1, height: 20 },
+    });
+    const { scope, scrollTo, setScrollTop } = setup(snapshot);
+    scope.scrollIntoView({ target: { type: 'tracked_item', id: 'target' }, policy: 'result_reveal' });
+    const request = scope.pendingRequest;
+    if (!request) throw new Error('Expected a pending reveal');
+
+    expect(scope.applyPending(request, snapshot, { type: 'scroll_to', y: 580 })).toBe(true);
+    scope.applyViewportAnchorPublication({
+      type: 'ready',
+      geometry: { pointY: 320 },
+      targetScrollTop: 220,
+    });
+    expect(scope.applyPending(request, snapshot, { type: 'scroll_to', y: 580 })).toBe(true);
+
+    expect(scrollTo).toHaveBeenNthCalledWith(1, { top: 580, behavior: 'smooth' });
+    expect(scrollTo).toHaveBeenNthCalledWith(2, { top: 220, behavior: 'instant' });
+    expect(scrollTo).toHaveBeenNthCalledWith(3, { top: 580, behavior: 'smooth' });
+    scope.settleSmoothReveal();
+    expect(scope.pendingRequest).toBe(request);
+
+    setScrollTop(580);
+    scope.settleSmoothReveal();
+    expect(scope.pendingRequest).toBeNull();
+  });
+
+  it('interrupts native smooth scrolling when a later publication resolves the reveal as no-op', () => {
+    const snapshot = trackedSnapshot('target', {
+      page_idx: 0,
+      rect: { x: 0, y: 900, width: 1, height: 20 },
+    });
+    const { scope, scrollTo } = setup(snapshot);
+    scope.scrollIntoView({ target: { type: 'tracked_item', id: 'target' }, policy: 'result_reveal' });
+    const request = scope.pendingRequest;
+    if (!request) throw new Error('Expected a pending reveal');
+
+    expect(scope.applyPending(request, snapshot, { type: 'scroll_to', y: 580 })).toBe(true);
+    scope.applyViewportAnchorPublication({
+      type: 'ready',
+      geometry: { pointY: 320 },
+      targetScrollTop: 220,
+    });
+    expect(scope.applyPending(request, snapshot, { type: 'no_scroll' })).toBe(true);
+
+    expect(scrollTo).toHaveBeenNthCalledWith(1, { top: 580, behavior: 'smooth' });
+    expect(scrollTo).toHaveBeenNthCalledWith(2, { top: 220, behavior: 'instant' });
+    expect(scrollTo).toHaveBeenNthCalledWith(3, { top: 220, behavior: 'instant' });
+  });
+
   it('starts a smooth reveal without requiring a frame for the target page', () => {
     const snapshot = trackedSnapshot('target', {
       page_idx: 1,
       rect: { x: 0, y: 100, width: 1, height: 20 },
     });
-    const { editor, scope, scrollTo } = setup(snapshot);
+    const { editor, scope, scrollTo, setScrollTop } = setup(snapshot);
 
     scope.scrollIntoView({ target: { type: 'tracked_item', id: 'target' }, policy: 'result_reveal' });
     const request = scope.pendingRequest;
@@ -524,8 +749,11 @@ describe('EditorScrollScope', () => {
     editor.pageEls[1] = undefined;
 
     expect(scope.applyPending(request, snapshot, { type: 'scroll_to', y: 900 })).toBe(true);
-    expect(scope.pendingRequest).toBeNull();
+    expect(scope.pendingRequest).toBe(request);
     expect(scrollTo).toHaveBeenCalledExactlyOnceWith({ top: 900, behavior: 'smooth' });
+    setScrollTop(900);
+    scope.settleSmoothReveal();
+    expect(scope.pendingRequest).toBeNull();
   });
 
   it('completes an eligible reveal as a no-op when the matching snapshot has no target', async () => {

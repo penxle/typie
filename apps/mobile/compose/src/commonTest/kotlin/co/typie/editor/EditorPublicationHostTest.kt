@@ -128,6 +128,42 @@ class EditorPublicationHostTest {
     }
 
   @Test
+  fun failedViewportAnchorPresentationReplacementLeavesTheCandidateReady() =
+    runTest(dispatcher) {
+      val replacementRevisions = mutableListOf<Long>()
+      val fake =
+        FakeFfiEditor(
+          onTick = { listOf(EditorEvent.RenderInvalidated) },
+          pageSizesProvider = { listOf(Size(width = 100f, height = 100f)) },
+          replaceViewportAnchorPresentationProvider = { revision ->
+            replacementRevisions += revision.value
+            revision.value == 0L
+          },
+        )
+      val editor = Editor(fake, this, dispatcher)
+      editor.activateVisualHost(Any())
+      val session = editor.attachSurface(0, 10L, 100.0, 100.0, 1.0, wakeDelivery = {})
+      editor.requestSurfacePages(setOf(0))
+      advanceUntilIdle()
+      editor.deliverFrame(session, editorRevision = 0L, frameKey = 1L)
+      advanceUntilIdle()
+      val initial = requireNotNull(editor.publishIfReady(setOf(0)))
+      assertTrue(editor.acceptPublication(initial))
+
+      val update = requireNotNull(editor.update { enqueue(message) })
+      advanceUntilIdle()
+      editor.deliverFrame(session, editorRevision = update.revision, frameKey = 2L)
+      advanceUntilIdle()
+      val candidate = requireNotNull(editor.publishIfReady(setOf(0)))
+
+      assertFalse(editor.acceptPublication(candidate))
+      assertEquals(0L, editor.publishedRevision)
+      assertEquals(update.revision, editor.publishIfReady(setOf(0))?.snapshot?.version)
+      assertEquals(0L, replacementRevisions.first())
+      assertTrue(replacementRevisions.drop(1).all { it == update.revision })
+    }
+
+  @Test
   fun emptyPublicationBelongsToTheCurrentVisualHostAfterReactivation() =
     runTest(dispatcher) {
       val editor = Editor(FakeFfiEditor(), this, dispatcher)

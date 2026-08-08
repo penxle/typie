@@ -1,6 +1,6 @@
 import { flushSync, untrack } from 'svelte';
 import { PAGE_GAP } from './constants';
-import { resolvePageSpans } from './geometry';
+import { pageRectsToRevealTargetSpan, resolvePageSpans } from './geometry';
 import { requiredSurfacePages } from './required-surface-pages';
 import { zoomDiffers } from './zoom';
 import type { EditorContext, EditorSnapshot, PublishedBundle } from './editor.svelte';
@@ -8,7 +8,7 @@ import type { EditorSurfaceHost } from './editor-surface-host.svelte';
 import type { RevealTargetSpan, ScrollContainerMetrics } from './scroll';
 import type { EditorBringIntoViewRequest, EditorScrollIntentResult } from './scroll.svelte';
 
-type EditorSurfacePreparation = {
+export type EditorSurfacePreparation = {
   requiredPages: Set<number>;
   pendingRequest: EditorBringIntoViewRequest | null;
   scrollIntent: EditorScrollIntentResult | null;
@@ -50,7 +50,9 @@ function reconcilePublication(
   if (editor.terminal) return;
 
   scroll.discardObsoleteForRevision(editor.appliedSnapshot.revision);
-  const preparation = resolveEditorSurfacePreparation(editor, scroll);
+  const anchorPublication = scroll.prepareViewportAnchorPublication(editor.appliedSnapshot);
+  if (anchorPublication.type === 'unavailable') return;
+  const preparation = resolveEditorSurfacePreparation(editor, scroll, anchorPublication.targetScrollTop ?? undefined);
   if (!preparation) return;
   editor.requestSurfacePages(preparation.requiredPages);
   surfaceHost.reconcile(preparation.requiredPages);
@@ -64,7 +66,12 @@ function reconcilePublication(
   // following microtask, then revalidate and finish every visible change without yielding.
   queueMicrotask(() => {
     if (!publicationStillCurrent(editor, scroll, bundle, preparation.pendingRequest, isCurrent)) return;
-    const finalPreparation = resolveEditorSurfacePreparation(editor, scroll);
+    const finalAnchorPublication = scroll.prepareViewportAnchorPublication(bundle.snapshot);
+    if (finalAnchorPublication.type === 'unavailable') {
+      editor.requestPublication();
+      return;
+    }
+    const finalPreparation = resolveEditorSurfacePreparation(editor, scroll, finalAnchorPublication.targetScrollTop ?? undefined);
     if (
       !finalPreparation ||
       (finalPreparation.pendingRequest?.behavior === 'instant' && finalPreparation.scrollIntent?.type === 'unresolved') ||
@@ -77,6 +84,7 @@ function reconcilePublication(
     if (!editor.acceptPublication(bundle)) return;
 
     flushSync();
+    scroll.applyViewportAnchorPublication(finalAnchorPublication);
     surfaceHost.syncPublished(bundle);
     if (finalPreparation.pendingRequest && finalPreparation.scrollIntent) {
       const applied = scroll.applyPending(finalPreparation.pendingRequest, bundle.snapshot, finalPreparation.scrollIntent);
@@ -105,9 +113,10 @@ function publicationStillCurrent(
   );
 }
 
-function resolveEditorSurfacePreparation(
+export function resolveEditorSurfacePreparation(
   editor: NonNullable<EditorContext['editor']>,
   scroll: NonNullable<EditorContext['scroll']>,
+  currentScrollTop?: number,
 ): EditorSurfacePreparation | null {
   const viewport = editor.scrollViewport;
   if (!viewport) return null;
@@ -115,7 +124,7 @@ function resolveEditorSurfacePreparation(
   const snapshot = editor.appliedSnapshot;
   const viewportRect = viewport.getRect();
   const clientHeight = viewportRect.bottom - viewportRect.top;
-  const scrollTop = viewport.getScrollTop();
+  const scrollTop = currentScrollTop ?? viewport.getScrollTop();
   if (!Number.isFinite(scrollTop) || scrollTop < 0 || !Number.isFinite(clientHeight) || clientHeight <= 0) return null;
 
   const zoom = displayZoom(snapshot, editor.displayZoom);
@@ -133,7 +142,7 @@ function resolveEditorSurfacePreparation(
 
   const pendingRequest = scroll.activateForRevision(snapshot.revision);
   const targetRects = pendingRequest ? scroll.resolveTargetRects(pendingRequest.target, snapshot) : null;
-  const target = targetRects ? resolveTargetSpan(targetRects, pageSpans, zoom) : null;
+  const target = targetRects ? pageRectsToRevealTargetSpan(targetRects, pageSpans, zoom) : null;
   const preparationViewports =
     target && pendingRequest?.behavior === 'instant'
       ? scroll.resolvePreparationViewports(
@@ -200,22 +209,6 @@ function resolveScrollIntent(
 
 function samePages(a: ReadonlySet<number>, b: ReadonlySet<number>): boolean {
   return a.size === b.size && [...a].every((page) => b.has(page));
-}
-
-function resolveTargetSpan(
-  rects: ReturnType<NonNullable<EditorContext['scroll']>['resolveTargetRects']>,
-  pages: ReturnType<typeof resolvePageSpans>,
-  zoom: number,
-): RevealTargetSpan | null {
-  let targetTop = Infinity;
-  let targetBottom = -Infinity;
-  for (const rect of rects ?? []) {
-    const page = pages[rect.page_idx];
-    if (!page) continue;
-    targetTop = Math.min(targetTop, page.top + rect.rect.y * zoom);
-    targetBottom = Math.max(targetBottom, page.top + (rect.rect.y + rect.rect.height) * zoom);
-  }
-  return targetTop === Infinity ? null : { targetTop, targetBottom };
 }
 
 function displayZoom(snapshot: EditorSnapshot, zoom: number): number {

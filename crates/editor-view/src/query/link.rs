@@ -174,7 +174,7 @@ mod tests {
                     decorations: vec![],
                     monolithic: false,
                 },
-                children,
+                children: children.into(),
                 attachment: None,
                 scope: false,
             }),

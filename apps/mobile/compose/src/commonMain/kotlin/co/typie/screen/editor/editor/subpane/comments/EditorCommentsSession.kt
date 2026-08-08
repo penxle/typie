@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -148,7 +149,8 @@ internal fun rememberEditorCommentsSession(
   val trackedCommentRangeById =
     remember(trackedCommentRanges) { trackedCommentRanges.associateBy { it.id } }
   val visibleFilter = model?.threadState?.filter ?: CommentFilter.Open
-  var lastRequestedActiveThreadId by remember(editor) { mutableStateOf<String?>(null) }
+  val activeThreadActivationRevision = model?.threadState?.activationRevision ?: 0
+  var lastRequestedActivationRevision by remember(editor) { mutableIntStateOf(-1) }
   val activeThreadScrollTarget =
     remember(activeThreadId, trackedCommentRanges) {
       trackedCommentRanges.commentThreadScrollTarget(activeThreadId)
@@ -191,26 +193,25 @@ internal fun rememberEditorCommentsSession(
     )
   }
   LaunchedEffect(editor, composeSelection) { editor?.setCommentComposeRange(composeSelection) }
-  LaunchedEffect(editor, activeThreadId, activeThreadScrollTarget) {
+  LaunchedEffect(editor, activeThreadId, activeThreadActivationRevision, activeThreadScrollTarget) {
     val threadId = activeThreadId
     if (threadId == null) {
-      lastRequestedActiveThreadId = null
+      lastRequestedActivationRevision = -1
       return@LaunchedEffect
     }
     if (activeThreadScrollTarget == null) return@LaunchedEffect
-    if (lastRequestedActiveThreadId == threadId) {
+    if (lastRequestedActivationRevision == activeThreadActivationRevision) {
       return@LaunchedEffect
     }
-    if (editor == null) return@LaunchedEffect
-    val requested =
-      bringIntoViewRequests.requestForState(
-        state = editorState,
-        policy = EditorBringIntoViewPolicy.ResultReveal,
-      ) {
-        trackedRanges.commentThreadScrollTarget(threadId)
-      }
-    if (!requested) return@LaunchedEffect
-    lastRequestedActiveThreadId = threadId
+    val activeEditor = editor ?: return@LaunchedEffect
+    val (snapshot, range) = activeEditor.trackedRangeSnapshot(threadId)
+    val target = listOfNotNull(range).commentThreadScrollTarget(threadId) ?: return@LaunchedEffect
+    bringIntoViewRequests.requestForVersion(
+      target = target,
+      version = snapshot.version,
+      policy = EditorBringIntoViewPolicy.ResultReveal,
+    )
+    lastRequestedActivationRevision = activeThreadActivationRevision
   }
   LaunchedEffect(sheetActive, collapsedSelectionHead, collapsedCommentRange?.id) {
     if (
