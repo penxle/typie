@@ -129,6 +129,57 @@ class MainShellAutofocusDesktopTest {
   }
 
   @Test
+  fun `explicit tab selection switches away from a nested navigation stack`() = runComposeUiTest {
+    configureEditorFfiLibrary()
+    var originNavigator: Navigator? = null
+    var navigationScope: CoroutineScope? = null
+    var selectTab: ((Tab) -> Unit)? = null
+    var currentTab = Tab.Home
+    var isBodyMoving = false
+
+    setContent {
+      val sheet = remember { Sheet() }
+      val dialog = remember { Dialog() }
+      val scope = rememberCoroutineScope()
+      SideEffect { navigationScope = scope }
+      CompositionLocalProvider(
+        LocalThemeMode provides ResolvedThemeMode.Light,
+        LocalSheet provides sheet,
+        LocalDialog provides dialog,
+      ) {
+        MainShell { route ->
+          val tabState = LocalTabState.current
+          val nav = Nav.current
+          SideEffect {
+            selectTab = tabState.onSelectTab
+            currentTab = tabState.currentTab
+            isBodyMoving = tabState.isBodyMoving
+            if (route == Route.Home) originNavigator = nav
+          }
+          Box(Modifier.fillMaxSize())
+        }
+      }
+    }
+    waitUntil { originNavigator != null && navigationScope != null && selectTab != null }
+
+    runOnIdle {
+      val navigator = requireNotNull(originNavigator)
+      requireNotNull(navigationScope).launch { navigator.navigate(Route.More) }
+    }
+    waitUntil(timeoutMillis = 5_000L) {
+      originNavigator?.let { it.current == Route.More && !it.isTransitioning } == true
+    }
+
+    runOnIdle { requireNotNull(selectTab).invoke(Tab.Space) }
+    waitUntil(timeoutMillis = 5_000L) { currentTab == Tab.Space && !isBodyMoving }
+
+    runOnIdle {
+      assertEquals(Tab.Space, currentTab)
+      assertEquals(Route.More, requireNotNull(originNavigator).current)
+    }
+  }
+
+  @Test
   fun `feedback autofocus keeps the software keyboard visible inside main shell`() =
     assertNestedFormAutofocus(Route.Feedback)
 
