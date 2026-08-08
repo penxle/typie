@@ -44,12 +44,13 @@ fn inherited_over(
 
 /// Effective inline modifiers a caret at `pos` would carry (no pending overrides).
 pub fn resolve_effective_modifiers_at(state: &State, pos: &Position) -> Vec<Modifier> {
-    caret_modifiers(&state.projected, pos, &[])
+    resolve_caret_modifiers(&state.projected, pos, &[])
         .into_values()
         .collect()
 }
 
-pub(crate) fn caret_modifiers(
+/// Modifiers that would apply to text inserted at `pos`.
+pub fn resolve_caret_modifiers(
     state: &ProjectedState,
     pos: &Position,
     pending: &[PendingModifier],
@@ -151,7 +152,7 @@ mod tests {
     }
 
     fn caret(state: &ProjectedState, node: Dot, offset: usize) -> BTreeMap<ModifierType, Modifier> {
-        caret_modifiers(state, &Position::new(node, offset), &[])
+        resolve_caret_modifiers(state, &Position::new(node, offset), &[])
     }
 
     #[test]
@@ -198,7 +199,7 @@ mod tests {
     #[test]
     fn pending_overlay_applies() {
         let (state, _root, p, _) = new_para(&[SeqItem::Char('a')]);
-        let out = caret_modifiers(
+        let out = resolve_caret_modifiers(
             &state,
             &Position::new(p, 1),
             &[PendingModifier::Set {
@@ -211,7 +212,7 @@ mod tests {
     #[test]
     fn empty_paragraph_pending_overlay_applies() {
         let (state, _root, p, _) = new_para(&[]);
-        let out = caret_modifiers(
+        let out = resolve_caret_modifiers(
             &state,
             &Position::new(p, 0),
             &[PendingModifier::Set {
@@ -225,7 +226,7 @@ mod tests {
     fn pending_unset_keeps_inherited_value_alive() {
         let (mut state, root, p, _) = new_para(&[]);
         set_block_mod(&mut state, root, Modifier::FontWeight { value: 700 });
-        let out = caret_modifiers(
+        let out = resolve_caret_modifiers(
             &state,
             &Position::new(p, 0),
             &[PendingModifier::Unset {
@@ -437,7 +438,7 @@ mod tests {
         let (mut state, _root, p, leaves) = new_para(&[SeqItem::Char('a')]);
         set_span(&mut state, leaves[0], Modifier::Bold);
         for offset in 0..=1 {
-            let up = caret_modifiers(
+            let up = resolve_caret_modifiers(
                 &state,
                 &Position {
                     node: p,
@@ -446,7 +447,7 @@ mod tests {
                 },
                 &[],
             );
-            let down = caret_modifiers(
+            let down = resolve_caret_modifiers(
                 &state,
                 &Position {
                     node: p,
@@ -478,7 +479,7 @@ mod tests {
             for offset in 0..=chars.len() {
                 for affinity in [Affinity::Downstream, Affinity::Upstream] {
                     let pos = Position { node: p, offset, affinity };
-                    let _ = caret_modifiers(&state, &pos, &[]);
+                    let _ = resolve_caret_modifiers(&state, &pos, &[]);
                 }
             }
         }

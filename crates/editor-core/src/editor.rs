@@ -2342,8 +2342,9 @@ mod tests {
     use editor_crdt::{Changeset, Dot, ListOp, Op};
     use editor_macros::state;
     use editor_model::{
-        ChildView, EditOp, LayoutMode, Modifier, ModifierType, Node, NodeType, PlainDoc, PlainNode,
-        PlainNodeEntry, PlainParagraphNode, PlainRootNode, PlainTextNode, SeqItem,
+        ChildView, EditOp, LayoutMode, Modifier, ModifierAttrOp, ModifierType, Node, NodeType,
+        PlainDoc, PlainNode, PlainNodeEntry, PlainParagraphNode, PlainRootNode, PlainTextNode,
+        SeqItem,
     };
     use editor_resource::{ResourceSource, prepare_font_base, prepare_font_chunk, prepare_fonts};
     use editor_state::{
@@ -4350,6 +4351,43 @@ mod tests {
     }
 
     #[test]
+    fn empty_paragraph_pending_font_size_updates_cursor_metrics() {
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph {} } }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: crate::message::SystemEvent::Initialize,
+        });
+
+        let initial_caret = editor
+            .view()
+            .cursor_metrics(&editor.state, &Position::new(p1, 0))
+            .expect("cursor metrics at initial empty paragraph")
+            .caret;
+
+        editor.apply(Message::Modifier {
+            op: ModifierOp::Set {
+                modifier: editor_model::Modifier::FontSize { value: 3600 },
+            },
+        });
+
+        let updated_caret = editor
+            .view()
+            .cursor_metrics(&editor.state, &Position::new(p1, 0))
+            .expect("cursor metrics after pending font_size 36pt")
+            .caret;
+
+        assert!(
+            updated_caret.height > initial_caret.height,
+            "empty paragraph caret height must increase after pending font size 36pt: initial={}, updated={}",
+            initial_caret.height,
+            updated_caret.height
+        );
+    }
+
+    #[test]
     fn empty_paragraph_clear_all_modifiers_clears_carry_font_size() {
         let (initial, p1) = state! {
             doc { root { p1: paragraph carry([font_size(2400)]) {} } }
@@ -6346,6 +6384,40 @@ mod tests {
             .expect("empty document placeholder");
         assert_eq!(metrics.font_size, Some(2400));
         assert_eq!(metrics.letter_spacing, Some(8));
+    }
+
+    #[test]
+    fn placeholder_metrics_follow_empty_paragraph_carry() {
+        let (mut initial, p1) = state! {
+            doc { root { p1: paragraph { text("") } } }
+            selection: (p1, 0)
+        };
+        initial
+            .projected_mut()
+            .apply(EditOp::NodeCarry(ModifierAttrOp::SetModifier {
+                target: p1,
+                modifier: Modifier::FontSize { value: 2400 },
+            }))
+            .expect("carry font size applies");
+        let mut editor = Editor::new_test(initial);
+
+        let metrics = editor
+            .view()
+            .placeholder_metrics(editor.state())
+            .expect("empty document placeholder");
+        assert_eq!(metrics.font_size, Some(2400));
+
+        editor.apply(Message::Modifier {
+            op: ModifierOp::Set {
+                modifier: Modifier::FontSize { value: 1200 },
+            },
+        });
+
+        let metrics = editor
+            .view()
+            .placeholder_metrics(editor.state())
+            .expect("empty document placeholder");
+        assert_eq!(metrics.font_size, Some(1200));
     }
 
     #[test]
