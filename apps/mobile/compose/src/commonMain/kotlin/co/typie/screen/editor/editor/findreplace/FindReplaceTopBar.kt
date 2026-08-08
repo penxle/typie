@@ -30,7 +30,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import co.typie.ext.rememberTextInputState
+import co.typie.ext.TextInputState
 import co.typie.ext.textInputFocusable
 import co.typie.icons.Lucide
 import co.typie.ui.component.Text
@@ -58,14 +58,10 @@ internal fun FindReplaceTopBarLeading(session: EditorFindReplaceSession) {
 }
 
 @Composable
-internal fun FindReplaceTopBarCenter(session: EditorFindReplaceSession) {
-  val inputState =
-    rememberTextInputState(
-      value = session.findText,
-      onValueChange = session.updateFindText,
-      onDismiss = {},
-    )
-
+internal fun FindReplaceTopBarCenter(
+  session: EditorFindReplaceSession,
+  inputState: TextInputState,
+) {
   LaunchedEffect(session.active, session.searchInputFocusRequest) {
     if (session.active) {
       inputState.requestFocus()
