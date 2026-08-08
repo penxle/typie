@@ -186,16 +186,17 @@
     };
   });
 
-  const anchorFromPageRects = (rects: PageRect[]): CommentAnchor | null => (rects.length > 0 ? { rects } : null);
+  const anchorFromPageRects = (rects: PageRect[]): CommentAnchor | null => (rects.length > 0 ? { type: 'page_rects', rects } : null);
 
   const publishedTrackedRangeRects = (id: string): PageRect[] | null => {
-    const range = editor?.published?.snapshot.trackedRanges.find((item) => item.id === id);
+    const snapshot = editor?.published?.snapshot;
+    const range = snapshot ? editor?.trackedRangeForSnapshot(id, snapshot) : undefined;
     return range && range.rects.length > 0 ? range.rects : null;
   };
 
   const anchorForThread = (id: string): CommentAnchor | null => {
     const rects = publishedTrackedRangeRects(id);
-    return rects ? anchorFromPageRects(rects) : null;
+    return rects ? { type: 'tracked_item', id } : null;
   };
 
   function isLocatable(id: string): boolean {
@@ -219,7 +220,10 @@
 
     // TODO: compose range를 active anchor로 쓰고, compose range로 scrollIntoView 하기
     if (snapshot.cursor) {
-      activeAnchor = { rects: [{ page_idx: snapshot.cursor.page_idx, rect: snapshot.cursor.caret }] };
+      activeAnchor = {
+        type: 'page_rects',
+        rects: [{ page_idx: snapshot.cursor.page_idx, rect: snapshot.cursor.caret }],
+      };
     } else {
       const rect = selectionHeadRect(snapshot);
       activeAnchor = rect ? anchorFromPageRects([rect]) : null;
@@ -248,7 +252,7 @@
     }
     composing = false;
     const rects = publishedTrackedRangeRects(id);
-    const anchor = rects ? anchorFromPageRects(rects) : null;
+    const anchor = rects ? ({ type: 'tracked_item', id } satisfies CommentAnchor) : null;
     if (!anchor) {
       Toast.error('원문에서 위치를 찾을 수 없는 코멘트예요');
       return;

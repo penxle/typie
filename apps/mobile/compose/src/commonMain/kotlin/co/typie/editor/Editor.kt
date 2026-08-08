@@ -24,6 +24,7 @@ import co.typie.editor.ffi.ProseTrackedRangeRegistration
 import co.typie.editor.ffi.Rect
 import co.typie.editor.ffi.RequestId
 import co.typie.editor.ffi.ResourceUpdate
+import co.typie.editor.ffi.Revision
 import co.typie.editor.ffi.SearchOptions
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.StableSelection
@@ -34,6 +35,9 @@ import co.typie.editor.ffi.TickResult
 import co.typie.editor.ffi.TrackedRange
 import co.typie.editor.ffi.TrackedRangeOp
 import co.typie.editor.ffi.Viewport
+import co.typie.editor.ffi.ViewportAnchor
+import co.typie.editor.ffi.ViewportAnchorPoint
+import co.typie.editor.ffi.ViewportAnchorResolution
 import co.typie.editor.input.EditorInputRecorder
 import co.typie.editor.sync.MissingBytes
 import co.typie.editor.sync.PartitionedBytes
@@ -499,6 +503,11 @@ internal constructor(
   suspend fun trackedRange(id: String): TrackedRange? =
     readInner(defaultValue = { null }) { it.trackedRange(id) }
 
+  internal suspend fun trackedRangeSnapshot(id: String): Pair<EditorState, TrackedRange?> =
+    readInner(defaultValue = { appliedState to null }) { inner ->
+      appliedState to inner.trackedRange(id)
+    }
+
   internal suspend fun replaceTrackedRangeGroupsFromProse(
     expectedText: String,
     groups: List<String>,
@@ -796,23 +805,24 @@ internal constructor(
           return@withPriorityLock false
         }
       }
-      for ((pageIndex, finishedFrame) in bundle.frames) {
-        val page = host.pages[pageIndex] ?: continue
-        if (
-          page.frame === finishedFrame &&
-            Publication.accepts(
-              proof = finishedFrame.proof,
-              target = page.target,
-              requiredRevision = page.requiredRevision,
-              available = page.available,
-            )
-        ) {
-          page.requiredRevision = null
-          page.failedRevision = null
-        }
+      val previousRevision = published?.snapshot?.version
+      val nextRevision = bundle.snapshot.version
+      if (
+        previousRevision != nextRevision &&
+          !inner.retainViewportAnchorPresentation(Revision(nextRevision))
+      ) {
+        return@withPriorityLock false
+      }
+      for (pageIndex in surfacePageRequirements) {
+        val page = host.pages.getValue(pageIndex)
+        page.requiredRevision = null
+        page.failedRevision = null
       }
       published = bundle
       publishedHostToken = host.token
+      if (previousRevision != null && previousRevision != nextRevision) {
+        inner.releaseViewportAnchorPresentation(Revision(previousRevision))
+      }
       refreshPublicationSource()
       refreshRetainedFrames()
       true
@@ -821,6 +831,33 @@ internal constructor(
 
   internal fun completePresentation(bundle: PublishedBundle) {
     completePublicationWaiters(bundle)
+  }
+
+  internal fun captureSelectionViewportAnchor(revision: Long): ViewportAnchor? = runBlocking {
+    mutex.withPriorityLock(escalationMillis = 0) {
+      ensureActive()
+      inner.captureSelectionViewportAnchor(Revision(revision))
+    }
+  }
+
+  internal fun captureViewportAnchorAt(
+    revision: Long,
+    point: ViewportAnchorPoint,
+  ): ViewportAnchor? = runBlocking {
+    mutex.withPriorityLock(escalationMillis = 0) {
+      ensureActive()
+      inner.captureViewportAnchorAt(Revision(revision), point)
+    }
+  }
+
+  internal fun resolveViewportAnchor(
+    revision: Long,
+    anchor: ViewportAnchor,
+  ): ViewportAnchorResolution = runBlocking {
+    mutex.withPriorityLock(escalationMillis = 0) {
+      ensureActive()
+      inner.resolveViewportAnchor(Revision(revision), anchor)
+    }
   }
 
   internal fun activateVisualHost(token: Any, onPublicationFailure: (Long) -> Unit = {}) {

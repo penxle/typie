@@ -208,6 +208,7 @@
     if (!scrollContainer || dragAxis !== null || !e.isPrimary || e.button !== 0) return null;
     e.preventDefault();
     e.stopPropagation();
+    ctx.scroll?.cancel();
 
     dragAxis = axis;
     markUserScroll();
@@ -247,6 +248,7 @@
     if (!scrollContainer || e.target !== e.currentTarget || !e.isPrimary || e.button !== 0) return;
     e.preventDefault();
     e.stopPropagation();
+    ctx.scroll?.cancel();
     markUserScroll();
     show('user');
 

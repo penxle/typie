@@ -1,6 +1,7 @@
 import type { ReferenceElement } from '@floating-ui/dom';
 import type { PageRect, Selection } from '@typie/editor-ffi/browser';
 import type { Editor, EditorSnapshot } from './editor.svelte';
+import type { RevealTargetSpan } from './scroll';
 
 export function roundToScale(value: number, scaleFactor: number): number {
   return Math.round(value * scaleFactor) / scaleFactor;
@@ -21,6 +22,22 @@ export function resolvePageSpans(
     top = span.bottom + pageGap;
     return span;
   });
+}
+
+export function pageRectsToRevealTargetSpan(
+  rects: readonly PageRect[],
+  pages: readonly { top: number }[],
+  zoom: number,
+): RevealTargetSpan | null {
+  let targetTop = Infinity;
+  let targetBottom = -Infinity;
+  for (const { page_idx, rect } of rects) {
+    const page = pages[page_idx];
+    if (!page) continue;
+    targetTop = Math.min(targetTop, page.top + rect.y * zoom);
+    targetBottom = Math.max(targetBottom, page.top + (rect.y + rect.height) * zoom);
+  }
+  return targetTop === Infinity ? null : { targetTop, targetBottom };
 }
 
 export function isSelectionCollapsed(selection: Selection | undefined): boolean {
@@ -101,7 +118,19 @@ export function pageRectsToClientRect(editor: Editor, rects: PageRect[]): DOMRec
 
 export function pageRectsToVirtualElement(editor: Editor, rects: PageRect[]): ReferenceElement {
   return {
-    getBoundingClientRect: () => pageRectsToClientRect(editor, rects) ?? new DOMRect(),
-    getClientRects: () => pageRectsToClientRects(editor, rects),
+    getBoundingClientRect: () => boundingClientRect(pageRectsToLayoutClientRects(editor, rects)) ?? new DOMRect(),
+    getClientRects: () => pageRectsToLayoutClientRects(editor, rects),
   };
+}
+
+function pageRectsToLayoutClientRects(editor: Editor, rects: PageRect[]): DOMRect[] {
+  const zoom = editor.safeDisplayZoom();
+  const out: DOMRect[] = [];
+  for (const { page_idx, rect } of rects) {
+    const pageEl = editor.pageEls[page_idx];
+    if (!pageEl) continue;
+    const pageRect = pageEl.getBoundingClientRect();
+    out.push(new DOMRect(pageRect.left + rect.x * zoom, pageRect.top + rect.y * zoom, rect.width * zoom, rect.height * zoom));
+  }
+  return out;
 }

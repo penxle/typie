@@ -2,6 +2,7 @@ package co.typie.screen.editor.editor.subpane.comments
 
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import co.typie.editor.ffi.StableSelection
@@ -41,6 +42,9 @@ internal class CommentThreadState {
   var activeThreadId by mutableStateOf<String?>(null)
     private set
 
+  var activationRevision by mutableIntStateOf(0)
+    private set
+
   private var draft by mutableStateOf<CommentDraft?>(null)
 
   val virtualThread: VirtualCommentThread?
@@ -73,6 +77,7 @@ internal class CommentThreadState {
       clearThreadDraft()
     }
     activeThreadId = threadId
+    activationRevision += 1
     if (threadId != null && draft is CommentDraft.Virtual) {
       draft = null
     }

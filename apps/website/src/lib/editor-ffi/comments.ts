@@ -1,4 +1,16 @@
+import type { PageRect } from '@typie/editor-ffi/browser';
+
 export type CommentReconcileResult = { toAdd: string[]; toRemove: string[] };
+export type CommentAnchor = { type: 'page_rects'; rects: PageRect[] } | { type: 'tracked_item'; id: string };
+
+export function resolveCommentAnchorRects(
+  anchor: CommentAnchor,
+  resolveTrackedRects: (id: string) => PageRect[] | undefined,
+): PageRect[] | null {
+  if (anchor.type === 'page_rects') return anchor.rects.length > 0 ? anchor.rects : null;
+  const rects = resolveTrackedRects(anchor.id);
+  return rects && rects.length > 0 ? rects : null;
+}
 
 export function reconcileComments(registered: string[], desired: string[]): CommentReconcileResult {
   const reg = new Set(registered);
