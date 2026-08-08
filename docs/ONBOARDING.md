@@ -693,6 +693,23 @@ ICU 리소스를 사용한다.
 - 패치의 `release.json`에 선언된 각 publication에 대해 최상위 `version`과 `group`, `artifact`를
   `includeVersion(group, artifact, version)`으로 추가한다.
 
+패치 내용이 바뀌면 같은 Maven 버전의 publication을 교체하므로, 해당 모듈은 `changing`으로
+취급하고 changing module의 캐시 TTL을 0초로 설정한다. 그렇지 않으면 Gradle이 교체 전 artifact를
+계속 사용할 수 있다.
+
+```kotlin
+configurations.configureEach {
+  resolutionStrategy.cacheChangingModulesFor(0, "seconds")
+}
+
+dependencies {
+  components {
+    withModule("org.jetbrains.compose.ui:ui-iosarm64") { isChanging = true }
+    withModule("org.jetbrains.compose.ui:ui-iossimulatorarm64") { isChanging = true }
+  }
+}
+```
+
 ### apps/literoom
 
 S3 Object Lambda 핸들러다. Sharp로 원본을 조회하고 리사이즈, WebP/PNG 변환을
