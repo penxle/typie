@@ -160,7 +160,9 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
           }
         }
       scope.block()
-      onEditCommand(commands)
+      if (commands.isNotEmpty()) {
+        onEditCommand(commands)
+      }
     }
   }
 }

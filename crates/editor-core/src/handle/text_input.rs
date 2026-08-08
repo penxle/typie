@@ -843,6 +843,17 @@ fn flat_ime_ops_form_plain_backspace(editor: &Editor, ops: &[FlatImeOp]) -> bool
         .is_some_and(|prev| prev.to_flat() == change.replace_start)
 }
 
+fn flat_ime_ops_have_direct_backspace_shape(ops: &[FlatImeOp]) -> bool {
+    match ops {
+        [FlatImeOp::DeleteSurrounding { .. }] | [FlatImeOp::DeleteSurroundingUtf16 { .. }] => true,
+        [
+            FlatImeOp::SetSelection { .. },
+            FlatImeOp::ReplaceSelection { text },
+        ] => text.is_empty(),
+        _ => false,
+    }
+}
+
 pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(), EditorError> {
     for segment in ops.split_inclusive(|op| matches!(op, FlatImeOp::CommitAsIs)) {
         handle_flat_ime_segment(editor, segment)?;
@@ -852,9 +863,11 @@ pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(
 
 fn handle_flat_ime_segment(editor: &mut Editor, ops: &[FlatImeOp]) -> Result<(), EditorError> {
     let mut delete_paint = editor.ime_delete_paint.take();
+    let plain_backspace = flat_ime_ops_form_plain_backspace(editor, ops);
+    let standalone_backspace = plain_backspace && flat_ime_ops_have_direct_backspace_shape(ops);
 
     if matches!(editor.last_history_tag(), Some(HistoryTag::AutoReplacement))
-        && flat_ime_ops_form_plain_backspace(editor, ops)
+        && plain_backspace
         && editor.try_undo_auto_replacement()
     {
         if !editor.state().pending_modifiers.is_empty() {
@@ -978,7 +991,11 @@ fn handle_flat_ime_segment(editor: &mut Editor, ops: &[FlatImeOp]) -> Result<(),
 
         let sidecar_before = editor.composition_paint.clone();
 
-        let next_delete_paint = if !del.is_empty()
+        // A standalone backspace is a completed user action. Only retain the
+        // deleted paint when an IME rewrite batch temporarily removes text and
+        // may continue that rewrite in the next request.
+        let next_delete_paint = if !standalone_backspace
+            && !del.is_empty()
             && text_change.insert.is_empty()
             && !del.iter().any(|c| is_token(*c))
             && result.comp.is_none()
@@ -4551,7 +4568,7 @@ mod tests {
     }
 
     #[test]
-    fn ime_split_messages_delete_then_insert_preserves_deleted_paint() {
+    fn ime_separate_delete_and_insert_do_not_preserve_deleted_paint() {
         let (state, p1) = state! {
             doc { root { p1: paragraph { text("가") } } }
             selection: (p1, 1)
@@ -4572,7 +4589,36 @@ mod tests {
         editor.apply(Message::TextInput {
             ops: vec![FlatImeOp::ReplaceSelection { text: "아".into() }],
         });
-        assert_eq!(paint_at(&editor, p1, 1), vec![Modifier::Bold], "아 bold");
+        assert_eq!(paint_at(&editor, p1, 1), vec![], "아 unstyled");
+    }
+
+    #[test]
+    fn committed_backspace_does_not_carry_consumed_pending_paint_to_the_next_input() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("..") } } }
+            selection: (p1, 2)
+            pending_modifiers: [bold]
+        };
+        let mut editor = Editor::new_test(state);
+
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::ReplaceSelection { text: "하".into() }],
+        });
+        assert_eq!(paint_at(&editor, p1, 2), vec![Modifier::Bold]);
+        assert!(editor.state().pending_modifiers.is_empty());
+
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::DeleteSurrounding {
+                before: 1,
+                after: 0,
+            }],
+        });
+        assert!(editor.state().pending_modifiers.is_empty());
+
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::ReplaceSelection { text: "하".into() }],
+        });
+        assert_eq!(paint_at(&editor, p1, 2), vec![]);
     }
 
     #[test]
@@ -4622,7 +4668,7 @@ mod tests {
     }
 
     #[test]
-    fn ime_split_delete_paint_invalidated_by_intervening_message() {
+    fn ime_separate_delete_and_insert_remain_unstyled_with_intervening_message() {
         let (state, p1) = state! {
             doc { root { p1: paragraph { text("가") } } }
             selection: (p1, 1)
@@ -4838,7 +4884,7 @@ mod tests {
     }
 
     #[test]
-    fn ime_split_messages_recompose_sole_char_preserves_deleted_paint() {
+    fn ime_separate_delete_and_insert_of_sole_char_use_empty_paragraph_paint() {
         let (state, p1) = state! {
             doc { root { p1: paragraph {} } }
             selection: (p1, 0)
