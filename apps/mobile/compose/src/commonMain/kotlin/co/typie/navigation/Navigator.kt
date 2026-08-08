@@ -52,7 +52,7 @@ class Navigator(startRoute: Route) {
   val popRequested: Boolean
     get() = pendingPopTarget != null
 
-  private var transitionCompletion: CompletableDeferred<NavigationResult>? = null
+  private var transitionCompletion: CompletableDeferred<NavigationResult>? by mutableStateOf(null)
 
   val isTransitioning: Boolean
     get() = transitionCompletion?.isActive == true || removalLeaseActive
