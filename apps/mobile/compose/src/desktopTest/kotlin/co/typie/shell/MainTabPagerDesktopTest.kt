@@ -58,9 +58,10 @@ import kotlinx.coroutines.runBlocking
 @OptIn(ExperimentalTestApi::class)
 class MainTabPagerDesktopTest {
   @Test
-  fun `focused nested route can pop to root inside the pager`() = runComposeUiTest {
+  fun `focused nested route pop restores pager gesture admission`() = runComposeUiTest {
     val navigator = Navigator(listOf(Route.Home, Route.SpaceSettings))
     val focusRequester = FocusRequester()
+    lateinit var mainTabState: MainTabState
     lateinit var pop: () -> Unit
     var inputFocused = false
     var outgoingAttached = false
@@ -70,9 +71,9 @@ class MainTabPagerDesktopTest {
       val scope = rememberCoroutineScope()
       pop = { scope.launch { navigator.pop() } }
       MainTabPager(
-        state = rememberMainTabState(),
+        state = rememberMainTabState().also { mainTabState = it },
         gestureAdmissionAllowed = !navigator.canPop && !navigator.isTransitioning,
-        modifier = Modifier.size(width = 320.dp, height = 640.dp),
+        modifier = Modifier.size(width = 320.dp, height = 640.dp).testTag(PagerTag),
       ) { tab ->
         if (tab == Tab.Home) {
           NavigationStackTestHost(
@@ -121,6 +122,14 @@ class MainTabPagerDesktopTest {
     }
     assertTrue(destinationAppliedWhileOutgoingAttached)
     assertFalse(outgoingAttached)
+
+    onNodeWithTag(PagerTag).performTouchInput {
+      down(center)
+      repeat(10) { moveBy(Offset(x = -20f, y = 0f), delayMillis = 16L) }
+      up()
+    }
+    waitUntil(timeoutMillis = 5_000L) { mainTabState.motion == null }
+    assertEquals(Tab.Space, mainTabState.settledTab)
   }
 
   @Test
