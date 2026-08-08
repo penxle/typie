@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -36,12 +37,17 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
+import co.typie.navigation.NavigationStackTestHost
+import co.typie.navigation.Navigator
 import co.typie.platform.LocalSoftwareKeyboardPresentationController
 import co.typie.platform.SoftwareKeyboardPresentationController
 import co.typie.platform.SoftwareKeyboardPresentationDriver
 import co.typie.platform.SoftwareKeyboardPresentationEndpoint
+import co.typie.route.Route
+import co.typie.ui.component.topbar.TopBarState
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CompletableDeferred
@@ -51,6 +57,72 @@ import kotlinx.coroutines.runBlocking
 
 @OptIn(ExperimentalTestApi::class)
 class MainTabPagerDesktopTest {
+  @Test
+  fun `focused nested route can pop to root inside the pager`() = runComposeUiTest {
+    val navigator = Navigator(listOf(Route.Home, Route.SpaceSettings))
+    val focusRequester = FocusRequester()
+    lateinit var pop: () -> Unit
+    var inputFocused = false
+    var outgoingAttached = false
+    var destinationAppliedWhileOutgoingAttached = false
+
+    setContent {
+      val scope = rememberCoroutineScope()
+      pop = { scope.launch { navigator.pop() } }
+      MainTabPager(
+        state = rememberMainTabState(),
+        gestureAdmissionAllowed = !navigator.canPop && !navigator.isTransitioning,
+        modifier = Modifier.size(width = 320.dp, height = 640.dp),
+      ) { tab ->
+        if (tab == Tab.Home) {
+          NavigationStackTestHost(
+            navigator = navigator,
+            topBarState = remember { TopBarState() },
+            modifier = Modifier.fillMaxSize(),
+          ) { route ->
+            if (route == Route.SpaceSettings) {
+              DisposableEffect(route) {
+                outgoingAttached = true
+                onDispose { outgoingAttached = false }
+              }
+              BasicTextField(
+                value = "",
+                onValueChange = {},
+                modifier =
+                  Modifier.fillMaxSize().focusRequester(focusRequester).onFocusChanged {
+                    inputFocused = it.isFocused
+                  },
+              )
+              LaunchedEffect(route) { focusRequester.requestFocus() }
+            } else {
+              SideEffect {
+                if (
+                  navigator.current == Route.Home && navigator.isTransitioning && outgoingAttached
+                ) {
+                  destinationAppliedWhileOutgoingAttached = true
+                }
+              }
+              Box(Modifier.fillMaxSize())
+            }
+          }
+        } else {
+          Box(Modifier.fillMaxSize())
+        }
+      }
+    }
+    waitUntil(timeoutMillis = 5_000L) {
+      navigator.current == Route.SpaceSettings && !navigator.isTransitioning
+    }
+    waitUntil { inputFocused }
+
+    runOnIdle { pop() }
+    waitUntil(timeoutMillis = 5_000L) {
+      navigator.current == Route.Home && !navigator.isTransitioning
+    }
+    assertTrue(destinationAppliedWhileOutgoingAttached)
+    assertFalse(outgoingAttached)
+  }
+
   @Test
   fun `committed tab swipe clears focus only after keyboard hide is accepted`() = runComposeUiTest {
     lateinit var state: MainTabState

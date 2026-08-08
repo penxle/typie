@@ -168,13 +168,16 @@ class Navigator(startRoute: Route) {
     val removedRoutes = mutableListOf<Route>()
     while (_stack.size > index + 1) {
       val removed = _stack.removeAt(_stack.lastIndex)
-      viewModelStores.remove(removed)?.clear()
       removedRoutes += removed
     }
     if (removedRoutes.isNotEmpty()) {
       lastOperation = NavOperation.Pop
     }
     return removedRoutes
+  }
+
+  internal fun clearViewModelStoresFor(routes: List<Route>) {
+    routes.forEach { route -> viewModelStores.remove(route)?.clear() }
   }
 
   suspend fun popTo(route: Route): NavigationResult {

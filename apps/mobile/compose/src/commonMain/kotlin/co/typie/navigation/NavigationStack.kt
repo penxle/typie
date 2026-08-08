@@ -17,6 +17,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.ProvidedValue
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.movableContentOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -71,6 +72,7 @@ import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import kotlin.math.abs
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.NonCancellable
@@ -221,6 +223,8 @@ fun NavigationStack(
   // compound key가 달라져 viewModel/rememberSaveable 키가 꼬인다.)
   val latestContent by rememberUpdatedState(content)
   val routeScenes = remember { mutableMapOf<Route, NavigationRouteScene>() }
+  var retainedRemovedRoutes by remember { mutableStateOf(emptyList<Route>()) }
+  var sceneApplyConfirmation by remember { mutableStateOf<CompletableDeferred<Unit>?>(null) }
   val routeSceneFor: (Route) -> NavigationRouteScene = { route ->
     routeScenes.getOrPut(route) {
       val owner =
@@ -267,11 +271,8 @@ fun NavigationStack(
       )
     }
 
-  // 백스택에서 제거된 라우트의 movable 캐시 정리
-  LaunchedEffect(Unit) {
-    snapshotFlow { navigator.stack.toSet() }
-      .collect { active -> routeScenes.keys.retainAll(active) }
-  }
+  val currentSceneApplyConfirmation = sceneApplyConfirmation
+  SideEffect { currentSceneApplyConfirmation?.complete(Unit) }
 
   val scope = rememberCoroutineScope()
   var containerWidth by remember { mutableStateOf(0f) }
@@ -325,6 +326,44 @@ fun NavigationStack(
     }
   }
 
+  suspend fun updateScenesAndAwaitApply(update: () -> Unit) {
+    val confirmation = CompletableDeferred<Unit>()
+    sceneApplyConfirmation = confirmation
+    update()
+    confirmation.await()
+  }
+
+  suspend fun settleAfterRemoval(removedRoutes: List<Route>) {
+    if (removedRoutes.isEmpty()) {
+      progress.snapTo(0f)
+      visibleRoute = navigator.current
+      behindRoute = null
+      animState = AnimState.Idle
+      return
+    }
+
+    // Moving the destination scene from behind to main while releasing the outgoing movable
+    // content in the same pager subcomposition can corrupt Compose Runtime's change list. First
+    // move both scenes to their settled slots, then release the outgoing scene in a separately
+    // applied composition.
+    // TODO: Re-test without this handoff after upgrading to a Compose Runtime that includes
+    // https://github.com/androidx/androidx/commit/215b08ffba30e9369e91460e1d726d646558e556.
+    // Remove it only after the focused pager regression test and the iOS keyboard repro both pass.
+    val presentedRemovedRoutes = removedRoutes.filter { it == visibleRoute || it.keepAlive }
+    updateScenesAndAwaitApply {
+      retainedRemovedRoutes = presentedRemovedRoutes
+      visibleRoute = navigator.current
+      behindRoute = null
+      animState = AnimState.Idle
+    }
+    updateScenesAndAwaitApply { retainedRemovedRoutes = emptyList() }
+    sceneApplyConfirmation = null
+
+    removedRoutes.forEach(routeScenes::remove)
+    navigator.clearViewModelStoresFor(removedRoutes)
+    clearRemovedRoutes(removedRoutes)
+  }
+
   suspend fun settleAtCurrentRoute(restoreKeyboard: Boolean = true) {
     progress.snapTo(0f)
     if (restoreKeyboard) softwareKeyboardInteraction.restore()
@@ -340,10 +379,7 @@ fun NavigationStack(
     } else {
       committedKeyboardHide.await()
     }
-    visibleRoute = navigator.current
-    behindRoute = null
-    animState = AnimState.Idle
-    clearRemovedRoutes(removedRoutes)
+    settleAfterRemoval(removedRoutes)
   }
 
   suspend fun animateRemovalTo(
@@ -616,8 +652,7 @@ fun NavigationStack(
                 // presentation failed; finish the exact prepared removal without another prompt.
                 val removedRoutes = navigator.performPopTo(targetRoute)
                 softwareKeyboardInteraction.hideAndAwaitResolution()
-                settleAtCurrentRoute(restoreKeyboard = false)
-                clearRemovedRoutes(removedRoutes)
+                settleAfterRemoval(removedRoutes)
                 navigator.consumePopRequest()
                 navigator.completeTransition()
               } else {
@@ -859,9 +894,9 @@ fun NavigationStack(
             }
           }
       ) {
-        navigator.stack.forEach { route ->
+        (navigator.stack + retainedRemovedRoutes).distinct().forEach { route ->
           if (route == mainRoute || route == behindRoute) return@forEach
-          if (!route.keepAlive) return@forEach
+          if (!route.keepAlive && route !in retainedRemovedRoutes) return@forEach
           Box(Modifier.fillMaxSize()) {
             presentRouteSurface(route, null, null)
             presentRouteForeground(route, null, null, Modifier.fillMaxSize())
