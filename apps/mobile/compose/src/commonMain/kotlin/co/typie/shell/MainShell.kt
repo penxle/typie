@@ -74,6 +74,10 @@ fun MainShell(content: @Composable (Route) -> Unit) {
       motion = motion,
       drawerAtRest = drawerAtRest,
     )
+  // A stable nested route blocks pager gestures, not explicit bottom-bar selection.
+  val navigationLocksActiveMotion =
+    motionOwnerNavigator.isTransitioning ||
+      (motion?.source == MainTabMotionSource.DirectDrag && motionOwnerNavigator.canPop)
   val drawerSwipeEnabled =
     settledTab == Tab.Home &&
       chromeTab == Tab.Home &&
@@ -147,7 +151,7 @@ fun MainShell(content: @Composable (Route) -> Unit) {
           state = mainTabState,
           modifier = Modifier.fillMaxSize(),
           gestureAdmissionAllowed = mayAdmitNewPagerGesture,
-          navigationLocked = motionOwnerNavigator.canPop || motionOwnerNavigator.isTransitioning,
+          navigationLocked = navigationLocksActiveMotion,
           onSettledTab = { tab -> navState.currentTab = tab },
         ) { tab ->
           val foregroundInteractive = tab == settledTab && motion == null && drawerAtRest
