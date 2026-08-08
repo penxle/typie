@@ -87,6 +87,12 @@ internal fun WithNoteEditPresentation(
 ) {
   val siteId = note.site.id
   val noteId = note.id
+  val autoFocusContent = editState.shouldAutoFocusContent(siteId = siteId, noteId = noteId)
+  SideEffect {
+    if (autoFocusContent) {
+      editState.consumeAutoFocusContent(siteId = siteId, noteId = noteId)
+    }
+  }
   content(
     NoteEditPresentation(
       note = editState.overlay(note),
@@ -97,7 +103,7 @@ internal fun WithNoteEditPresentation(
       saveStatus = editState.saveStatus(siteId = siteId, noteId = noteId),
       hasPendingColor = editState.hasPendingColor(siteId = siteId, noteId = noteId),
       isDirty = editState.isDirty(siteId = siteId, noteId = noteId),
-      autoFocusContent = editState.shouldAutoFocusContent(siteId = siteId, noteId = noteId),
+      autoFocusContent = autoFocusContent,
     )
   )
 }

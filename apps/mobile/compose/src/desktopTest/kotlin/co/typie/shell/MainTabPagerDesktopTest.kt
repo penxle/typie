@@ -42,7 +42,6 @@ import co.typie.platform.SoftwareKeyboardPresentationDriver
 import co.typie.platform.SoftwareKeyboardPresentationEndpoint
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CompletableDeferred
@@ -53,58 +52,96 @@ import kotlinx.coroutines.runBlocking
 @OptIn(ExperimentalTestApi::class)
 class MainTabPagerDesktopTest {
   @Test
-  fun `committed tab swipe hides the keyboard and clears focus only after settle`() =
-    runComposeUiTest {
-      lateinit var state: MainTabState
-      val focusRequester = FocusRequester()
-      val keyboardDriver = RecordingMainTabKeyboardDriver()
-      val controller = SoftwareKeyboardPresentationController { keyboardDriver }
-      var inputFocused = false
+  fun `committed tab swipe clears focus only after keyboard hide is accepted`() = runComposeUiTest {
+    lateinit var state: MainTabState
+    val focusRequester = FocusRequester()
+    val keyboardDriver = DeferredMainTabKeyboardDriver()
+    val controller = SoftwareKeyboardPresentationController { keyboardDriver }
+    var inputFocused = false
 
-      setContent {
-        CompositionLocalProvider(LocalSoftwareKeyboardPresentationController provides controller) {
-          Box(Modifier.size(width = 320.dp, height = 640.dp)) {
-            MainTabPager(
-              state = rememberMainTabState().also { state = it },
-              gestureAdmissionAllowed = true,
-              modifier = Modifier.fillMaxSize().testTag(PagerTag),
-            ) {
-              Box(Modifier.fillMaxSize())
-            }
-            BasicTextField(
-              value = "",
-              onValueChange = {},
-              modifier =
-                Modifier.size(1.dp).focusRequester(focusRequester).onFocusChanged {
-                  inputFocused = it.isFocused
-                },
-            )
-            LaunchedEffect(Unit) { focusRequester.requestFocus() }
+    setContent {
+      CompositionLocalProvider(LocalSoftwareKeyboardPresentationController provides controller) {
+        Box(Modifier.size(width = 320.dp, height = 640.dp)) {
+          MainTabPager(
+            state = rememberMainTabState().also { state = it },
+            gestureAdmissionAllowed = true,
+            modifier = Modifier.fillMaxSize().testTag(PagerTag),
+          ) {
+            Box(Modifier.fillMaxSize())
           }
+          BasicTextField(
+            value = "",
+            onValueChange = {},
+            modifier =
+              Modifier.size(1.dp).focusRequester(focusRequester).onFocusChanged {
+                inputFocused = it.isFocused
+              },
+          )
+          LaunchedEffect(Unit) { focusRequester.requestFocus() }
         }
       }
-      waitUntil { inputFocused }
+    }
+    waitUntil { inputFocused }
 
-      onNodeWithTag(PagerTag).performTouchInput {
-        down(center)
-        repeat(10) { moveBy(Offset(x = -20f, y = 0f), delayMillis = 16L) }
-      }
-      waitUntil { state.motion?.source == MainTabMotionSource.DirectDrag }
-      runOnIdle {
-        assertTrue(inputFocused)
-        assertTrue(keyboardDriver.endpoints.isEmpty())
-        assertTrue(keyboardDriver.progress.any { it > 0f })
-        assertTrue(keyboardDriver.progress.all { it in 0f..1f })
-      }
+    onNodeWithTag(PagerTag).performTouchInput {
+      down(center)
+      repeat(10) { moveBy(Offset(x = -20f, y = 0f), delayMillis = 16L) }
+    }
+    waitUntil { state.motion?.source == MainTabMotionSource.DirectDrag }
+    runOnIdle {
+      assertTrue(inputFocused)
+      assertTrue(keyboardDriver.endpoints.isEmpty())
+      assertTrue(keyboardDriver.progress.any { it > 0f })
+      assertTrue(keyboardDriver.progress.all { it in 0f..1f })
+    }
 
-      onNodeWithTag(PagerTag).performTouchInput { up() }
-      waitUntil(timeoutMillis = 5_000L) { state.motion == null && state.settledTab == Tab.Space }
+    onNodeWithTag(PagerTag).performTouchInput { up() }
+    waitUntil(timeoutMillis = 5_000L) { state.motion == null && state.settledTab == Tab.Space }
+    waitUntil { keyboardDriver.endpoints == listOf(SoftwareKeyboardPresentationEndpoint.Hidden) }
 
-      runOnIdle {
-        assertFalse(inputFocused)
-        assertEquals(listOf(SoftwareKeyboardPresentationEndpoint.Hidden), keyboardDriver.endpoints)
+    runOnIdle {
+      assertTrue(inputFocused)
+      assertEquals(1f, keyboardDriver.progress.last())
+    }
+    runOnIdle { keyboardDriver.acceptEndpoint() }
+    waitUntil { !inputFocused }
+  }
+
+  @Test
+  fun `delayed keyboard hide enables focus for the latest settled tab`() = runComposeUiTest {
+    lateinit var state: MainTabState
+    val keyboardDriver = DeferredMainTabKeyboardDriver()
+    val controller = SoftwareKeyboardPresentationController { keyboardDriver }
+
+    setContent {
+      CompositionLocalProvider(LocalSoftwareKeyboardPresentationController provides controller) {
+        MainTabPager(
+          state = rememberMainTabState().also { state = it },
+          gestureAdmissionAllowed = true,
+          modifier = Modifier.size(width = 320.dp, height = 640.dp),
+        ) {
+          Box(Modifier.fillMaxSize())
+        }
       }
     }
+    waitForIdle()
+
+    runOnIdle { state.selectTab(Tab.Space) }
+    waitUntil(timeoutMillis = 5_000L) { state.motion == null && state.settledTab == Tab.Space }
+    waitUntil { keyboardDriver.endpoints == listOf(SoftwareKeyboardPresentationEndpoint.Hidden) }
+    runOnIdle { assertEquals(Tab.Home, state.focusEnabledTab) }
+
+    runOnIdle { state.selectTab(Tab.Notes) }
+    waitUntil(timeoutMillis = 5_000L) { state.motion == null && state.settledTab == Tab.Notes }
+    runOnIdle {
+      assertEquals(Tab.Home, state.focusEnabledTab)
+      assertEquals(listOf(SoftwareKeyboardPresentationEndpoint.Hidden), keyboardDriver.endpoints)
+    }
+
+    runOnIdle { keyboardDriver.acceptEndpoint() }
+    waitUntil { state.focusEnabledTab != Tab.Home }
+    runOnIdle { assertEquals(Tab.Notes, state.focusEnabledTab) }
+  }
 
   @Test
   fun `cancelled tab swipe restores the keyboard without clearing focus`() = runComposeUiTest {
@@ -546,6 +583,28 @@ private class RecordingMainTabKeyboardDriver : SoftwareKeyboardPresentationDrive
   override fun finish(endpoint: SoftwareKeyboardPresentationEndpoint, onAccepted: () -> Unit) {
     endpoints += endpoint
     onAccepted()
+  }
+
+  override fun dispose() = Unit
+}
+
+private class DeferredMainTabKeyboardDriver : SoftwareKeyboardPresentationDriver {
+  val progress = mutableListOf<Float>()
+  val endpoints = mutableListOf<SoftwareKeyboardPresentationEndpoint>()
+  private var endpointAcceptance: (() -> Unit)? = null
+
+  override fun updateHiddenProgress(progress: Float) {
+    this.progress += progress
+  }
+
+  override fun finish(endpoint: SoftwareKeyboardPresentationEndpoint, onAccepted: () -> Unit) {
+    endpoints += endpoint
+    endpointAcceptance = onAccepted
+  }
+
+  fun acceptEndpoint() {
+    endpointAcceptance?.invoke()
+    endpointAcceptance = null
   }
 
   override fun dispose() = Unit
