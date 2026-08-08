@@ -126,6 +126,7 @@ import co.typie.navigation.Nav
 import co.typie.navigation.NavigationResult
 import co.typie.navigation.PlatformBackHandler
 import co.typie.navigation.RouteRemovalDecision
+import co.typie.platform.LocalSoftwareKeyboardPresentationController
 import co.typie.platform.PlatformModule
 import co.typie.platform.connectivityService
 import co.typie.route.Route
@@ -256,6 +257,7 @@ internal fun openEditorAuxiliarySubPane(
 @Composable
 fun EditorScreen(entityId: String) {
   val nav = Nav.current
+  val softwareKeyboardPresentationController = LocalSoftwareKeyboardPresentationController.current
   val dialog = LocalDialog.current
   val sheet = LocalSheet.current
   val popoverOverlayState = LocalPopoverOverlayState.current
@@ -777,17 +779,21 @@ fun EditorScreen(entityId: String) {
   }
 
   val leaveInterceptor =
-    remember(activeEditor, editingSession, dialog, toast) {
+    remember(activeEditor, editingSession, dialog, toast, softwareKeyboardPresentationController) {
       activeEditor?.let { editor ->
         val session = editingSession?.takeIf { it.editor === editor } ?: return@remember null
         var restoreFocusAfterRollback = false
         EditorRouteLeaveInterceptor(
           finalizeInput = {
             restoreFocusAfterRollback = uiState.focused
-            runtime.blur()
-            uiState.updateFocus(false)
+            val retainPlatformFocus =
+              softwareKeyboardPresentationController.interactionState.unresolved
+            if (!retainPlatformFocus) {
+              runtime.blur()
+              uiState.updateFocus(false)
+            }
             editor.updateNow { enqueue(Message.System(SystemEvent.SetFocused(false))) }
-            runtime.deactivateScene()
+            if (!retainPlatformFocus) runtime.deactivateScene()
           },
           restoreInput = {
             val shouldRestoreFocus = restoreFocusAfterRollback
@@ -797,7 +803,9 @@ fun EditorScreen(entityId: String) {
                 nav.current == Route.Editor(entityId) &&
                 runtime.editor === editor
             ) {
-              runtime.focus()
+              if (runtime.focus()) {
+                editor.updateNow { enqueue(Message.System(SystemEvent.SetFocused(true))) }
+              }
             }
           },
           beginStop = session::beginStop,
