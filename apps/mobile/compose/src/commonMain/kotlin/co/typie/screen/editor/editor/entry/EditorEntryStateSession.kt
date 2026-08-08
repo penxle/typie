@@ -20,7 +20,6 @@ import co.typie.editor.scroll.updateWithBringIntoView
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.filterNotNull
 
 @Stable
 internal class EditorEntryStateSession(
@@ -82,15 +81,24 @@ internal fun rememberEditorEntryStateSession(
   LaunchedEffect(documentId, editor) {
     val activeDocumentId = documentId ?: return@LaunchedEffect
     val activeEditor = editor ?: return@LaunchedEffect
+    var wasFocused = currentEditorFocused.value
+    var baselineSelection =
+      if (wasFocused) {
+        null
+      } else {
+        activeEditor.appliedState.selection
+      }
 
-    snapshotFlow { activeEditor.appliedState.selection }
-      .filterNotNull()
-      .collect {
-        if (!currentEditorFocused.value) {
-          return@collect
+    snapshotFlow { currentEditorFocused.value to activeEditor.appliedState.selection }
+      .collect { (focused, selection) ->
+        if (focused && selection != null && selection != baselineSelection) {
+          controller.saveBodySelection(documentId = activeDocumentId, editor = activeEditor)
         }
 
-        controller.saveBodySelection(documentId = activeDocumentId, editor = activeEditor)
+        if (focused || wasFocused) {
+          baselineSelection = selection
+        }
+        wasFocused = focused
       }
   }
 

@@ -1,9 +1,13 @@
 package co.typie.screen.editor.editor.entry
 
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.v2.runComposeUiTest
 import co.typie.editor.Editor
 import co.typie.editor.FakeFfiEditor
+import co.typie.editor.ffi.Affinity
+import co.typie.editor.ffi.Position
+import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.StableSelection
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import java.io.File
@@ -96,6 +100,77 @@ class EditorEntryStateSessionDesktopTest {
 
       val saved = EditorEntryStateStore().load(documentId)
       assertNotNull(saved?.bodySelection)
+    } finally {
+      editor.dispose()
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun savesSelectionChangedWhileUnfocusedWhenEditorBecomesFocused() = runComposeUiTest {
+    configureRenderBufferLibrary()
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+    val fake = FakeFfiEditor()
+    val editor = Editor(fake, scope, Dispatchers.Unconfined)
+    val documentId = "entry-reading-selection-test-${UUID.randomUUID()}"
+    val editorFocused = mutableStateOf(false)
+
+    try {
+      fake.applySnapshot(editor)
+      setContent {
+        rememberEditorEntryStateSession(
+          documentId = documentId,
+          editor = editor,
+          editorFocused = editorFocused.value,
+          bringIntoViewRequests = EditorBringIntoViewRequests(),
+        )
+      }
+      waitForIdle()
+
+      runOnIdle {
+        val position = Position(node = "text", offset = 1, affinity = Affinity.Downstream)
+        fake.selectionProvider = { Selection(anchor = position, head = position) }
+        fake.applySnapshot(editor)
+      }
+      waitForIdle()
+      assertNull(EditorEntryStateStore().load(documentId))
+
+      runOnIdle { editorFocused.value = true }
+      waitForIdle()
+
+      val saved = EditorEntryStateStore().load(documentId)
+      assertNotNull(saved?.bodySelection)
+    } finally {
+      editor.dispose()
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun doesNotSaveUnchangedSelectionWhenEditorBecomesFocused() = runComposeUiTest {
+    configureRenderBufferLibrary()
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+    val fake = FakeFfiEditor()
+    val editor = Editor(fake, scope, Dispatchers.Unconfined)
+    val documentId = "entry-unchanged-selection-test-${UUID.randomUUID()}"
+    val editorFocused = mutableStateOf(false)
+
+    try {
+      fake.applySnapshot(editor)
+      setContent {
+        rememberEditorEntryStateSession(
+          documentId = documentId,
+          editor = editor,
+          editorFocused = editorFocused.value,
+          bringIntoViewRequests = EditorBringIntoViewRequests(),
+        )
+      }
+      waitForIdle()
+
+      runOnIdle { editorFocused.value = true }
+      waitForIdle()
+
+      assertNull(EditorEntryStateStore().load(documentId))
     } finally {
       editor.dispose()
       scope.cancel()
