@@ -394,6 +394,22 @@ mod tests {
     }
 
     #[test]
+    fn clear_all_collapsed_on_empty_paragraph_clears_paragraph_carry() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph carry([font_size(2400), bold]) {} } }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::Modifier {
+            op: ModifierOp::ClearAll,
+        });
+        assert!(
+            editor.state().projected.carry_modifiers(p1).is_empty(),
+            "ClearAll in collapsed empty paragraph must clear paragraph carry modifiers"
+        );
+    }
+
+    #[test]
     fn toggle_italic_via_message() {
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("hello") } } }
