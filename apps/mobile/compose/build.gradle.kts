@@ -85,6 +85,15 @@ if (isAndroidStudioXcodeFrameworkBuild) {
   }
 }
 
+configurations.configureEach { resolutionStrategy.cacheChangingModulesFor(0, "seconds") }
+
+dependencies {
+  components {
+    withModule("org.jetbrains.compose.ui:ui-iosarm64") { isChanging = true }
+    withModule("org.jetbrains.compose.ui:ui-iossimulatorarm64") { isChanging = true }
+  }
+}
+
 kotlin {
   applyDefaultHierarchyTemplate {
     common {
