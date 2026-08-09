@@ -5,6 +5,7 @@ import { isAdmin } from '$lib/server/auth.ts';
 import { createDb, FeedbackSessions, Reviews } from '$lib/server/db/index.ts';
 import { fetchManuscript } from '$lib/server/ingest.ts';
 import { createInternalApi } from '$lib/server/internal-api.ts';
+import { hasPendingQuestion } from '$lib/server/prism.ts';
 import { countChars, startFeedbackSession } from '$lib/server/reviews.ts';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -22,16 +23,40 @@ export const load: PageServerLoad = async ({ locals, platform }) => {
       title: FeedbackSessions.title,
       createdAt: FeedbackSessions.createdAt,
       status: Reviews.status,
+      tier: Reviews.tier,
+      prismWorkflowId: Reviews.prismWorkflowId,
     })
     .from(FeedbackSessions)
     .innerJoin(Reviews, and(eq(Reviews.sessionId, FeedbackSessions.id), eq(Reviews.round, 1)))
     .where(eq(FeedbackSessions.testerEmail, locals.email))
     .orderBy(desc(FeedbackSessions.createdAt));
 
-  return {
-    sessions: sessions.map((session) => ({ ...session, createdAt: session.createdAt.getTime() })),
-    isAdmin: isAdmin(platform.env, locals.email),
-  };
+  // 진행 중 리뷰만 물어본다 — 종결한 리뷰에는 답할 수 있는 질문이 없다. prismWorkflowId는 조회에만 쓰고
+  // 응답에는 싣지 않는다(명시 사영).
+  // tier는 반대로 전원에게 싣는다 — 상세·과정 화면이 티어별 단계를 그리는 데 필수라 admin 게이트를 걸지 않는다.
+  const withPending = await Promise.all(
+    sessions.map(async (session) => {
+      let pendingQuestion = false;
+      if (session.status === 'running') {
+        try {
+          pendingQuestion = await hasPendingQuestion(platform.env, session.prismWorkflowId);
+        } catch {
+          // 배지는 안내일 뿐이다 — 조회 실패로 목록을 막지 않는다.
+        }
+      }
+      return {
+        id: session.id,
+        refId: session.refId,
+        title: session.title,
+        createdAt: session.createdAt.getTime(),
+        status: session.status,
+        tier: session.tier,
+        pendingQuestion,
+      };
+    }),
+  );
+
+  return { sessions: withPending, isAdmin: isAdmin(platform.env, locals.email) };
 };
 
 export const actions: Actions = {
@@ -63,13 +88,17 @@ export const actions: Actions = {
     const documentId = String(form.get('documentId') ?? '').trim();
     if (!documentId) return fail(400, { error: '문서 ID를 입력해 주세요' });
 
+    // 에이전트 이름의 문자 집합은 여기서 판정하지 않는다 — 걷어서 넘기고, 미지 키는 resolveTierSubmission이
+    // 명시 400으로 반려한다. 이름 형태로 거르면 새 이름이 무음으로 사라진다.
     const raw: Record<string, { model?: string; effort?: string }> = Object.create(null);
     for (const [key, value] of form.entries()) {
-      const match = key.match(/^tier\.([a-z]+)\.(model|effort)$/);
+      const match = key.match(/^tier\.([^.]+)\.(model|effort)$/);
       if (!match) continue;
       (raw[match[1]] ??= {})[match[2] as 'model' | 'effort'] = String(value);
     }
-    const submission = resolveTierSubmission(raw, isAdmin(platform.env, locals.email));
+    // 티어 미제출·빈 값은 high — 운영자만 쓰는 선택기라 테스터 폼에는 필드가 없다.
+    const tier = String(form.get('tier') ?? '') || 'high';
+    const submission = resolveTierSubmission(tier, raw, isAdmin(platform.env, locals.email));
     if ('error' in submission) return fail(400, { error: submission.error });
 
     const db = createDb(platform.env.DB);
@@ -79,6 +108,7 @@ export const actions: Actions = {
       result = await startFeedbackSession(db, platform.env, {
         refId: documentId,
         email: locals.email,
+        tier: submission.tier,
         overrides: submission.overrides,
       });
     } catch {

@@ -1,6 +1,7 @@
 /* eslint-disable unicorn/no-return-array-push -- the parser's push() returns parsed events */
 import { describe, expect, it } from 'vitest';
-import { createSseParser } from './sse.ts';
+import { CONSUMED_EVENTS } from './live.ts';
+import { createSseParser, EVENT_NAMES } from './sse.ts';
 
 describe('sse parser', () => {
   it('프레임을 id·event·data로 파싱한다', () => {
@@ -31,5 +32,13 @@ describe('sse parser', () => {
   it('id 없는 프레임은 id null로 통과시킨다', () => {
     const p = createSseParser();
     expect(p.push('event: turn.delta\ndata: {}\n\n')).toEqual([{ id: null, event: 'turn.delta', data: '{}' }]);
+  });
+});
+
+// EventSource는 구독한 이름만 리스너에 흘린다 — 리듀서가 소화하는 kind가 구독 목록에서 빠지면 프레임이 아예
+// 닿지 않아 화면만 조용히 서지 않는다(리듀서 테스트는 전부 통과한 채로).
+describe('구독 목록', () => {
+  it('리듀서가 소화하는 kind를 모두 구독한다', () => {
+    expect(EVENT_NAMES).toEqual(expect.arrayContaining([...CONSUMED_EVENTS]));
   });
 });

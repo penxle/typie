@@ -11,6 +11,7 @@
   // 안에 둔다. 통과·보완 같은 판정은 여기서 추론하지 않는다 — 화면에 서는 것은 모델의 발화와 활동 자취뿐이다.
   // live는 바깥에서 그리던 라이브 줄+활동 행을 그대로 넘겨받는 자리다. drained에 든 라인은 확정 평문 대신
   // ghostLine(드레이너의 토큰)으로 "그 자리에서" 그린다 — 자리를 옮기면 드레인이 끝날 때 순서가 점프한다.
+  // question은 질문 카드의 조판을 바깥과 공유하는 자리다 — 답변 문면·제출 배선을 카드마다 다시 들이지 않는다.
   type Props = {
     round: number;
     feed: FeedEntry[];
@@ -19,9 +20,19 @@
     live?: Snippet<[boolean]> | null; // 인자 = 이 카드가 비어 있는가(빈 카드의 "준비하고 있어요" 판정)
     drained?: Set<number>;
     ghostLine?: Snippet<[number]> | null; // 인자 = 라인 id — 드레인 중인 라인의 제자리 대체 렌더
+    question?: Snippet<[Extract<FeedEntry, { kind: 'question' }>]> | null;
   };
 
-  const { round, feed, spent = null, latest = false, live = null, drained = new Set(), ghostLine = null }: Props = $props();
+  const {
+    round,
+    feed,
+    spent = null,
+    latest = false,
+    live = null,
+    drained = new Set(),
+    ghostLine = null,
+    question = null,
+  }: Props = $props();
 
   let expanded = $state(false);
 
@@ -138,6 +149,8 @@
           {:else}
             <div class={css(lineRecipe.raw({ latest: latest && entry.line.id === lastLineId }))}>{entry.line.text}</div>
           {/if}
+        {:else if entry.kind === 'question'}
+          {@render question?.(entry)}
         {:else}
           <div class={capsuleClass}>{entry.items.map(capsuleLabel).join(' · ')}</div>
         {/if}

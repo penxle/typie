@@ -7,7 +7,7 @@
   import { anchorQuote } from '$lib/feedback/anchors.ts';
   import IssueChips from './IssueChips.svelte';
   import ReviewReaction from './ReviewReaction.svelte';
-  import type { FeedbackResult } from '$lib/feedback/types.ts';
+  import type { FeedbackConclusion } from '$lib/feedback/types.ts';
   import type { PageData } from './$types';
 
   type Thread = PageData['threads'][number];
@@ -17,7 +17,7 @@
   // 어포던스다. 뒤의 3컬럼은 리플로우하지 않는다(오버레이). 칩·인용 클릭은 드로어를 닫으며 그 자리로 간다.
   type Props = {
     open: boolean;
-    conclusion: FeedbackResult['conclusion'];
+    conclusion: FeedbackConclusion;
     threads: Thread[];
     content: string;
     title: string;

@@ -1,10 +1,13 @@
 <script lang="ts">
   import { css, cva } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
+  import { autosize } from '@typie/ui/actions';
   import { Icon, TimeAgo } from '@typie/ui/components';
   import { Dialog, Toast } from '@typie/ui/notification';
   import IconArrowUp from '~icons/lucide/arrow-up';
   import IconCircleCheck from '~icons/lucide/circle-check';
+  import IconThumbsDown from '~icons/lucide/thumbs-down';
+  import IconThumbsUp from '~icons/lucide/thumbs-up';
   import { enhance } from '$app/forms';
   import type { SubmitFunction } from '@sveltejs/kit';
   import type { PageData } from './$types';
@@ -31,10 +34,13 @@
   const authorLabel = (comment: Comment) => (comment.author === 'ai' ? 'AI' : '나');
 
   // 더블클릭이 댓글 2행·자기 유발 409를 만든다 — 왕복 중인 폼은 제출을 취소하고 조작면을 잠근다.
-  let busy = $state<'reply' | 'close' | 'reopen' | 'delete' | null>(null);
+  let busy = $state<'reply' | 'close' | 'reopen' | 'delete' | 'react' | null>(null);
+
+  // form.reset()은 input 이벤트를 쏘지 않아 autosize가 못 본다 — 값을 상태로 들고 성공 시 비워서 재계산을 태운다.
+  let replyBody = $state('');
 
   const submit =
-    (kind: 'reply' | 'close' | 'reopen' | 'delete'): SubmitFunction =>
+    (kind: 'reply' | 'close' | 'reopen' | 'delete' | 'react'): SubmitFunction =>
     ({ cancel }) => {
       if (busy !== null) {
         cancel();
@@ -46,12 +52,20 @@
         try {
           if (result.type === 'failure') Toast.error(String(result.data?.error ?? '요청을 처리하지 못했어요'));
           else if (result.type === 'error') Toast.error('요청을 처리하지 못했어요');
+          else if (kind === 'reply') replyBody = '';
           await update();
         } finally {
           busy = null;
         }
       };
     };
+
+  const handleReplyKeydown = (e: KeyboardEvent & { currentTarget: EventTarget & HTMLTextAreaElement }) => {
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+      e.preventDefault();
+      e.currentTarget.form?.requestSubmit();
+    }
+  };
 
   // 패딩은 전 상태 동일 — 열림·닫힘 전환에서 안쪽 내용이 밀리면 안 된다. 강조는 보더 색·그림자가 담당한다.
   // 활성 전환 duration·이징은 화면 전체 공통(0.25s · 카드 이동과 같은 곡선) — 요소마다 다르면 어긋나 보인다.
@@ -145,6 +159,46 @@
 
   const revealInnerClass = css({ overflow: 'hidden', minHeight: '0' });
 
+  // 카드 반응 칩 — 리뷰 반응(ReviewReaction thumbRecipe)과 같은 시각 언어다. 취사선택 표시라
+  // 선택된 버튼의 재클릭은 해제로 간다(formaction — 서버는 설정·해제를 추론 없이 나눠 받는다).
+  const reactionThumbRecipe = cva({
+    base: {
+      display: 'inline-flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      size: '26px',
+      borderWidth: '1px',
+      borderRadius: '6px',
+      cursor: 'pointer',
+      transition: '[background-color 0.15s ease, border-color 0.15s ease]',
+      _disabled: { color: 'text.disabled', cursor: 'not-allowed' },
+    },
+    variants: {
+      selected: {
+        true: { borderColor: 'border.brand', backgroundColor: 'accent.brand.subtle', color: 'text.brand' },
+        false: { borderColor: 'border.default', backgroundColor: 'surface.default', color: 'text.faint', _hover: { color: 'text.subtle' } },
+      },
+    },
+  });
+
+  // 헤더의 반응 표식 — 조작면이 아니라 남긴 반응의 현황이다. 번호 칩과 같은 16px 칩 언어를 쓴다.
+  const reactionMarkRecipe = cva({
+    base: {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      flex: 'none',
+      size: '16px',
+      borderRadius: '5px',
+    },
+    variants: {
+      value: {
+        up: { backgroundColor: 'accent.brand.subtle', color: 'text.brand' },
+        down: { backgroundColor: 'surface.muted', color: 'text.faint' },
+      },
+    },
+  });
+
   // 총평이 이 지적을 어디에 놓았는지의 콜아웃 — 순서(급함)와 습관(같은 결)이 같은 급으로 나란히 선다.
   const calloutClass = css({
     marginTop: '10px',
@@ -203,6 +257,11 @@
     <span class={flex({ align: 'center', gap: '6px', flex: 'none', marginLeft: 'auto' })}>
       {#if meta}
         <span class={css({ fontSize: '11px', color: 'text.faint', whiteSpace: 'nowrap' })}>{meta}</span>
+      {/if}
+      {#if thread.reaction}
+        <span class={css(reactionMarkRecipe.raw({ value: thread.reaction }))}>
+          <Icon icon={thread.reaction === 'up' ? IconThumbsUp : IconThumbsDown} size={10} />
+        </span>
       {/if}
       {#if closed}
         <span
@@ -324,17 +383,61 @@
                 </form>
               {/if}
             </div>
-            <p class={css({ marginTop: '2px', fontSize: '12px', lineHeight: '[1.55]', color: 'text.subtle' })}>{comment.body}</p>
+            <p class={css({ marginTop: '2px', fontSize: '12px', lineHeight: '[1.55]', color: 'text.subtle', whiteSpace: 'pre-wrap' })}>
+              {comment.body}
+            </p>
           </div>
         </div>
       {/each}
+
+      <!-- 반응은 스레드 상태와 독립이다 — 닫힌 스레드에서도 남기고 바꿀 수 있다. -->
+      <form
+        class={flex({
+          align: 'center',
+          gap: '6px',
+          marginTop: '11px',
+          paddingTop: '11px',
+          borderTopWidth: '1px',
+          borderColor: 'border.subtle',
+        })}
+        action="?/reactThread"
+        method="post"
+        use:enhance={submit('react')}
+      >
+        <input name="threadId" type="hidden" value={thread.id} />
+        <span class={css({ flexGrow: '1', minWidth: '0', fontSize: '11px', color: 'text.faint' })}>이 피드백 어땠나요?</span>
+        <button
+          name="value"
+          class={css(reactionThumbRecipe.raw({ selected: thread.reaction === 'up' }))}
+          aria-label="좋았어요"
+          aria-pressed={thread.reaction === 'up'}
+          disabled={busy !== null}
+          formaction={thread.reaction === 'up' ? '?/unreactThread' : undefined}
+          type="submit"
+          value="up"
+        >
+          <Icon icon={IconThumbsUp} size={12} />
+        </button>
+        <button
+          name="value"
+          class={css(reactionThumbRecipe.raw({ selected: thread.reaction === 'down' }))}
+          aria-label="아쉬웠어요"
+          aria-pressed={thread.reaction === 'down'}
+          disabled={busy !== null}
+          formaction={thread.reaction === 'down' ? '?/unreactThread' : undefined}
+          type="submit"
+          value="down"
+        >
+          <Icon icon={IconThumbsDown} size={12} />
+        </button>
+      </form>
 
       {#if !closed}
         <form action="?/reply" method="post" use:enhance={submit('reply')}>
           <input name="threadId" type="hidden" value={thread.id} />
           <div
             class={flex({
-              align: 'center',
+              align: 'flex-end',
               gap: '6px',
               marginTop: '10px',
               paddingLeft: '10px',
@@ -346,21 +449,26 @@
               backgroundColor: 'surface.subtle',
             })}
           >
-            <input
+            <textarea
               name="body"
               class={css({
                 flexGrow: '1',
                 minWidth: '0',
-                height: '26px',
+                paddingY: '4px',
+                maxHeight: '120px',
                 fontSize: '12px',
+                lineHeight: '[1.5]',
                 backgroundColor: 'transparent',
+                resize: 'none',
                 _placeholder: { color: 'text.faint' },
                 _disabled: { color: 'text.disabled', cursor: 'not-allowed' },
               })}
               disabled={busy !== null}
+              onkeydown={handleReplyKeydown}
               placeholder="답글은 다음 리뷰에 반영돼요"
-              type="text"
-            />
+              rows={1}
+              bind:value={replyBody}
+              use:autosize={{ value: replyBody }}></textarea>
             <button
               class={flex({
                 align: 'center',

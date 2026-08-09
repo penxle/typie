@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import { isAdmin } from '$lib/server/auth.ts';
 import { createDb, FeedbackSessions, Reviews } from '$lib/server/db/index.ts';
 import type { SseEvent } from '$lib/feedback/sse.ts';
+import type { ReviewQuestionRecord } from '$lib/feedback/types.ts';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ params, locals, platform }) => {
@@ -28,10 +29,13 @@ export const load: PageServerLoad = async ({ params, locals, platform }) => {
     review: {
       round: review.round,
       status: review.status,
+      tier: review.tier,
       startedAt: review.startedAt.getTime(),
       finishedAt: review.finishedAt?.getTime() ?? null,
       error: review.error,
       events,
+      // 카드는 events 재생이 세운다 — 기록은 재생으로 복원할 수 없는 답변 문면만 공급한다(project.ts).
+      questions: review.questions as ReviewQuestionRecord[] | null,
     },
   };
 };

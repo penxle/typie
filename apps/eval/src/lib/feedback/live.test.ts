@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { applyEvent, capsuleLabel, groupFeed, initialLive } from './live.ts';
-import type { FeedEntry, FeedGroup } from './live.ts';
+import { applyEvent, capsuleLabel, groupFeed, initialLive, questionPausedMs } from './live.ts';
+import type { FeedEntry, FeedGroup, QuestionEntry } from './live.ts';
 import type { SseEvent } from './sse.ts';
 
-// prism SSE의 data는 이벤트 본문이 아니라 {seq,kind,data,createdAt} 봉투다(prism/src/session/sse.ts:49).
+// prism SSE의 data는 이벤트 본문이 아니라 {seq,kind,data,createdAt} 봉투다(prism core/sse.ts의 eventFrame).
 const ev = (id: number, event: string, data: object, createdAt = 0): SseEvent => ({
   id,
   event,
@@ -12,10 +12,47 @@ const ev = (id: number, event: string, data: object, createdAt = 0): SseEvent =>
 
 const AG = { id: 'agent-1', name: 'reviewer' };
 
+// ask-user의 입력 전문은 JSON 문자열로 실린다(prism core/tool-dispatch.ts의 parkExternalToolCall) — 봉투 제약이
+// 아니라 이미 나간 와이어 계약이 문자열이기 때문이다(live.ts의 parseAskUser가 그 계약의 소비자다). 파킹이
+// 구체화한 질문 전문이 실리고, 해소(tool.called)의 사영에는 경로만 남는다(prism tools/standard.ts의 ask-user observe).
+const ASK_INPUT = JSON.stringify({
+  questions: [
+    {
+      question: '결말은 의도된 처리인가요?',
+      hint: '답에 따라 비평 방향이 달라져요.',
+      multi: false,
+      options: [{ label: '의도한 열린 결말' }, { label: '퇴고 중 미완' }],
+    },
+  ],
+});
+
+const asked = (id: number, agentId = 'agent-a', at = 1000 + id) =>
+  ev(
+    id,
+    'tool.requested',
+    { agent: { id: agentId, name: 'plan' }, turn: 3, attempt: 1, tool: 'ask-user', toolCallId: 'call_1', input: ASK_INPUT },
+    at,
+  );
+
+const answered = (id: number, agentId = 'agent-a', ok = true, at = 1000 + id) =>
+  ev(
+    id,
+    'tool.called',
+    {
+      agent: { id: agentId, name: 'plan' },
+      turn: 3,
+      attempt: 1,
+      tool: 'ask-user',
+      input: { path: 'scratch/plan-high/questions-1.yaml' },
+      ok,
+    },
+    at,
+  );
+
 describe('live reducer', () => {
   it('step 이벤트로 스테이지 상태를 전이한다', () => {
     let s = initialLive([]);
-    s = applyEvent(s, ev(1, 'run.started', { run: 1 }));
+    s = applyEvent(s, ev(1, 'workflow.started', {}));
     s = applyEvent(s, ev(2, 'step.started', { step: 'research-0' }));
     expect(s.stages.research).toBe('running');
     s = applyEvent(s, ev(3, 'step.completed', { step: 'research-0' }));
@@ -95,6 +132,29 @@ describe('live reducer', () => {
     expect(s.marks[3]).toMatchObject({ query: null, chars: 3819 });
   });
 
+  it('scratch/ 경로의 읽기·쓰기·고침은 임시 노트 동사로 갈린다', () => {
+    let s = initialLive([ev(1, 'step.started', { step: 'research-0' }, 1000)]);
+    const SCRATCH = 'scratch/research-high/questions-1.yaml';
+    s = applyEvent(
+      s,
+      ev(2, 'tool.called', { agent: AG, turn: 1, attempt: 1, tool: 'write', input: { path: SCRATCH, chars: 812 }, ok: true }, 2000),
+    );
+    s = applyEvent(s, ev(3, 'tool.called', { agent: AG, turn: 2, attempt: 1, tool: 'read', input: { path: SCRATCH }, ok: true }, 3000));
+    s = applyEvent(
+      s,
+      ev(
+        4,
+        'tool.called',
+        { agent: AG, turn: 3, attempt: 1, tool: 'edit', input: { path: SCRATCH, oldBytes: 10, newBytes: 12 }, ok: true },
+        4000,
+      ),
+    );
+    expect(s.marks.map((mark) => mark.verb)).toEqual(['write-scratch', 'read-scratch', 'edit-scratch']);
+    expect(capsuleLabel({ kind: 'tool', verb: 'write-scratch', query: null, chars: 812, count: 1 })).toBe('임시 노트 812자 작성함');
+    expect(capsuleLabel({ kind: 'tool', verb: 'read-scratch', query: null, chars: null, count: 2 })).toBe('임시 노트 읽음 ×2');
+    expect(capsuleLabel({ kind: 'tool', verb: 'edit-scratch', query: null, chars: null, count: 1 })).toBe('임시 노트 고침');
+  });
+
   it('plan-review 스텝의 발화는 그 스텝에 귀속된다', () => {
     let s = initialLive([ev(1, 'step.started', { step: 'plan-0' }), ev(2, 'step.started', { step: 'plan-review-1' })]);
     s = applyEvent(
@@ -141,7 +201,7 @@ describe('live reducer', () => {
 
   it('스테이지별 firstAt·lastAt을 봉투 시각으로 추적한다', () => {
     const s = initialLive([
-      ev(1, 'run.started', { run: 1 }, 1000),
+      ev(1, 'workflow.started', {}, 1000),
       ev(2, 'step.started', { step: 'research-0' }, 2000),
       ev(3, 'tool.called', { agent: AG, turn: 1, attempt: 1, tool: 'read', ok: true }, 5000),
       ev(4, 'step.started', { step: 'plan-0' }, 9000),
@@ -153,42 +213,21 @@ describe('live reducer', () => {
   });
 
   it('터미널 이벤트를 관측하면 terminal이 선다', () => {
-    const s = applyEvent(initialLive([]), ev(9, 'run.completed', { run: 1 }));
+    const s = applyEvent(initialLive([]), ev(9, 'workflow.completed', { result: '{}' }));
     expect(s.terminal).toBe(true);
-    expect(applyEvent(initialLive([]), ev(9, 'run.failed', { run: 1, reason: 'boom' })).terminal).toBe(true);
-    expect(applyEvent(initialLive([]), ev(9, 'run.canceled', { run: 1 })).terminal).toBe(true);
+    expect(applyEvent(initialLive([]), ev(9, 'workflow.failed', { reason: 'boom' })).terminal).toBe(true);
+    expect(applyEvent(initialLive([]), ev(9, 'workflow.canceled', {})).terminal).toBe(true);
   });
 
-  it('run.completed는 진행 중이던 스테이지를 닫고, 실패·취소는 멈춘 자리를 남긴다', () => {
+  it('workflow.completed는 진행 중이던 스테이지를 닫고, 실패·취소는 멈춘 자리를 남긴다', () => {
     const seeded = initialLive([ev(1, 'step.started', { step: 'conclude-0' }, 4000)]);
 
-    const completed = applyEvent(seeded, ev(2, 'run.completed', { run: 1 }, 7000));
+    const completed = applyEvent(seeded, ev(2, 'workflow.completed', { result: '{}' }, 7000));
     expect(completed.stages.conclude).toBe('done');
     expect(completed.timing.conclude).toEqual({ firstAt: 4000, lastAt: 7000 });
 
-    expect(applyEvent(seeded, ev(2, 'run.failed', { run: 1, reason: 'boom' })).stages.conclude).toBe('running');
-    expect(applyEvent(seeded, ev(2, 'run.canceled', { run: 1 })).stages.conclude).toBe('running');
-  });
-
-  it('자식 run의 종결은 루트를 닫지 않는다 — agent가 실린 종결은 커서만 민다', () => {
-    // 중계된 자식 이벤트에는 agent가 찍히고(prism propagation.ts:287), 루트 자신의 종결에는 없다(terminal.ts:82-84).
-    const seeded = initialLive([ev(1, 'step.started', { step: 'plan-review-2-0' }, 1000)]);
-
-    const child = applyEvent(seeded, ev(2, 'run.completed', { run: 1, agent: AG }, 8000));
-    expect(child.terminal).toBe(false);
-    expect(child.stages.plan).toBe('running');
-    expect(child.nestedSpans[2]?.lastAt).toBe(1000);
-    expect(child.timing.plan).toEqual({ firstAt: 1000, lastAt: 1000 });
-    expect(child.cursor).toBe(2);
-
-    expect(applyEvent(seeded, ev(2, 'run.failed', { run: 1, reason: 'boom', agent: AG }, 8000)).terminal).toBe(false);
-    expect(applyEvent(seeded, ev(2, 'run.canceled', { run: 1, agent: AG }, 8000)).terminal).toBe(false);
-
-    // 루트의 종결은 자식 종결을 지나온 뒤에도 그대로 닫는다.
-    const root = applyEvent(child, ev(3, 'run.completed', { run: 1 }, 9000));
-    expect(root.terminal).toBe(true);
-    expect(root.stages.plan).toBe('done');
-    expect(root.nestedSpans[2]?.lastAt).toBe(9000);
+    expect(applyEvent(seeded, ev(2, 'workflow.failed', { reason: 'boom' })).stages.conclude).toBe('running');
+    expect(applyEvent(seeded, ev(2, 'workflow.canceled', {})).stages.conclude).toBe('running');
   });
 
   it('커서는 마지막 id를 따른다', () => {
@@ -224,8 +263,8 @@ describe('live reducer', () => {
   it('종결 이벤트는 돌던 검수 라운드를 그 시각으로 닫는다', () => {
     const seeded = initialLive([ev(1, 'step.started', { step: 'plan-0' }, 1000), ev(2, 'step.started', { step: 'plan-review-2-0' }, 2000)]);
     expect(seeded.nestedSpans[2]).toEqual({ id: 2, stage: 'plan', firstAt: 2000, lastAt: 2000 });
-    expect(applyEvent(seeded, ev(3, 'run.failed', { run: 1, reason: 'boom' }, 8000)).nestedSpans[2]?.lastAt).toBe(8000);
-    expect(applyEvent(seeded, ev(3, 'run.completed', { run: 1 }, 9000)).nestedSpans[2]?.lastAt).toBe(9000);
+    expect(applyEvent(seeded, ev(3, 'workflow.failed', { reason: 'boom' }, 8000)).nestedSpans[2]?.lastAt).toBe(8000);
+    expect(applyEvent(seeded, ev(3, 'workflow.completed', { result: '{}' }, 9000)).nestedSpans[2]?.lastAt).toBe(9000);
   });
 
   it('시각 없는 봉투로 열린 라운드도 자취는 남는다 — 시간만 비어 있다', () => {
@@ -238,10 +277,158 @@ describe('live reducer', () => {
   });
 });
 
+describe('질문 상태 기계', () => {
+  it('tool.requested가 pending 엔트리를 세우고 스테이지·스텝에 귀속한다', () => {
+    const s = initialLive([ev(1, 'step.started', { step: 'plan-0' }, 1000), asked(2)]);
+    expect(s.questions).toHaveLength(1);
+    const entry = s.questions[0];
+    expect(entry).toMatchObject({
+      agentId: 'agent-a',
+      agentName: 'plan',
+      toolCallId: 'call_1',
+      stage: 'plan',
+      step: 'plan-0',
+      status: 'pending',
+    });
+    expect(entry.questions[0]).toMatchObject({
+      question: '결말은 의도된 처리인가요?',
+      hint: '답에 따라 비평 방향이 달라져요.',
+      multi: false,
+    });
+    expect(entry.questions[0].options).toHaveLength(2);
+  });
+
+  it('같은 agent의 ask-user tool.called가 pending을 answered로 굳힌다 — ok:false여도', () => {
+    for (const ok of [true, false]) {
+      const s = initialLive([ev(1, 'step.started', { step: 'plan-0' }, 1000), asked(2), answered(3, 'agent-a', ok)]);
+      expect(s.questions[0].status).toBe('answered');
+    }
+  });
+
+  it('타 agent·타 도구의 tool.called는 pending을 건드리지 않는다', () => {
+    const other = ev(
+      3,
+      'tool.called',
+      { agent: { id: 'agent-b', name: 'plan' }, turn: 1, attempt: 1, tool: 'read', input: { path: 'manuscript/01.txt' }, ok: true },
+      3000,
+    );
+    const s = initialLive([ev(1, 'step.started', { step: 'plan-0' }, 1000), asked(2), other, answered(4, 'agent-b')]);
+    expect(s.questions[0].status).toBe('pending');
+  });
+
+  it('requested 없는 ok:false tool.called(파킹 전 검증 실패)는 무시된다', () => {
+    const s = initialLive([ev(1, 'step.started', { step: 'plan-0' }, 1000), answered(2, 'agent-a', false)]);
+    expect(s.questions).toHaveLength(0);
+  });
+
+  it('루트 종결이 pending을 closed로 굳힌다', () => {
+    const seeded = initialLive([ev(1, 'step.started', { step: 'plan-0' }, 1000), asked(2)]);
+    expect(applyEvent(seeded, ev(3, 'workflow.canceled', {}, 3000)).questions[0].status).toBe('closed');
+    expect(applyEvent(seeded, ev(3, 'workflow.failed', { reason: 'boom' }, 3000)).questions[0].status).toBe('closed');
+    expect(applyEvent(seeded, ev(3, 'workflow.completed', { result: '{}' }, 3000)).questions[0].status).toBe('closed');
+  });
+
+  it('순차 질문의 기록이 배열로 보존된다 — research 답변 후 plan 질문', () => {
+    const s = initialLive([
+      ev(1, 'step.started', { step: 'research-0' }, 1000),
+      asked(2, 'agent-r'),
+      answered(3, 'agent-r'),
+      ev(4, 'step.started', { step: 'plan-0' }, 4000),
+      asked(5, 'agent-p'),
+    ]);
+    expect(s.questions.map((q) => q.status)).toEqual(['answered', 'pending']);
+    expect(s.questions.map((q) => q.stage)).toEqual(['research', 'plan']);
+  });
+
+  it('깨진 input은 엔트리를 만들지 않는다', () => {
+    const broken = ev(
+      2,
+      'tool.requested',
+      { agent: { id: 'agent-a', name: 'plan' }, turn: 1, attempt: 1, tool: 'ask-user', toolCallId: 'call_1', input: '{broken' },
+      2000,
+    );
+    expect(initialLive([ev(1, 'step.started', { step: 'plan-0' }, 1000), broken]).questions).toHaveLength(0);
+  });
+
+  it('빈 문면(hint·question·label)도 엔트리를 세운다 — 카드가 없으면 파킹된 run은 답할 길이 없다', () => {
+    const bare = ev(
+      2,
+      'tool.requested',
+      {
+        agent: { id: 'agent-a', name: 'plan' },
+        turn: 1,
+        attempt: 1,
+        tool: 'ask-user',
+        toolCallId: 'call_1',
+        input: JSON.stringify({
+          questions: [{ question: '', hint: '', multi: false, options: [{ label: '' }, { label: '퇴고 중 미완', description: '' }] }],
+        }),
+      },
+      2000,
+    );
+    const s = initialLive([ev(1, 'step.started', { step: 'plan-0' }, 1000), bare]);
+    expect(s.questions).toHaveLength(1);
+    expect(s.questions[0].questions[0]).toMatchObject({ question: '', hint: '', multi: false });
+    expect(s.questions[0].questions[0].options).toEqual([{ label: '' }, { label: '퇴고 중 미완' }]);
+  });
+
+  it('구조가 어긋난 질문은 여전히 엔트리를 만들지 않는다', () => {
+    const malformed = (questions: unknown) =>
+      ev(
+        2,
+        'tool.requested',
+        {
+          agent: { id: 'agent-a', name: 'plan' },
+          turn: 1,
+          attempt: 1,
+          tool: 'ask-user',
+          toolCallId: 'call_1',
+          input: JSON.stringify({ questions }),
+        },
+        2000,
+      );
+    const seed = ev(1, 'step.started', { step: 'plan-0' }, 1000);
+    expect(initialLive([seed, malformed([{ question: '물음', hint: '힌트', multi: 'no', options: [] }])]).questions).toHaveLength(0);
+    expect(initialLive([seed, malformed([{ question: '물음', hint: '힌트', multi: false, options: '없음' }])]).questions).toHaveLength(0);
+    expect(
+      initialLive([seed, malformed([{ question: '물음', hint: '힌트', multi: false, options: [{ label: 3 }] }])]).questions,
+    ).toHaveLength(0);
+    expect(initialLive([seed, malformed([])]).questions).toHaveLength(0);
+  });
+
+  it('ask-user 아닌 도구의 tool.requested는 질문이 아니다', () => {
+    const parked = ev(
+      2,
+      'tool.requested',
+      {
+        agent: { id: 'agent-a', name: 'plan' },
+        turn: 1,
+        attempt: 1,
+        tool: 'read',
+        toolCallId: 'call_2',
+        input: '{"path":"manuscript/01.txt"}',
+      },
+      2000,
+    );
+    expect(initialLive([ev(1, 'step.started', { step: 'plan-0' }, 1000), parked]).questions).toHaveLength(0);
+  });
+
+  it('재생 복원 동형성 — 같은 이벤트열은 같은 상태를 만든다', () => {
+    const events = [ev(1, 'step.started', { step: 'plan-0' }, 1000), asked(2), answered(3)];
+    const replayed = initialLive(events);
+    let incremental = initialLive([]);
+    for (const event of events) incremental = applyEvent(incremental, event);
+    expect(incremental.questions).toEqual(replayed.questions);
+  });
+});
+
 // 카드 구조는 상태에서만 나온다 — 같은 이벤트를 다시 접으면 같은 모양이 다시 선다(재생·새로고침 동형).
 describe('feed grouping', () => {
-  const entryShape = (entry: FeedEntry) =>
-    entry.kind === 'line' ? entry.line.text : `[${entry.items.map((item) => capsuleLabel(item)).join('·')}]`;
+  const entryShape = (entry: FeedEntry) => {
+    if (entry.kind === 'line') return entry.line.text;
+    if (entry.kind === 'question') return `질문${entry.entry.questions.length}`;
+    return `[${entry.items.map((item) => capsuleLabel(item)).join('·')}]`;
+  };
   const shape = (groups: FeedGroup[]) =>
     groups.map((group) => (group.kind === 'nested' ? `검수${group.round}(${group.feed.map(entryShape).join('|')})` : entryShape(group)));
 
@@ -283,6 +470,29 @@ describe('feed grouping', () => {
     ]);
   });
 
+  it('질문은 제 커서 자리에 카드로 선다 — 라운드 안이면 그 카드 안이다', () => {
+    const s = initialLive([
+      ev(1, 'step.started', { step: 'plan-0' }, 1000),
+      talk(2, '계획을 세우기 전에 하나 여쭐게요', 2000),
+      asked(3, 'agent-a', 3000),
+      talk(4, '답을 받아 계획을 적었어요', 4000),
+      ev(5, 'step.started', { step: 'plan-review-1-0' }, 5000),
+      asked(6, 'agent-a', 6000),
+    ]);
+    expect(shape(groupFeed(s, 'plan'))).toEqual(['계획을 세우기 전에 하나 여쭐게요', '질문1', '답을 받아 계획을 적었어요', '검수1(질문1)']);
+  });
+
+  it('질문을 기다린 시간은 생각으로 세지 않는다 — 사람이 기다린 틈이다', () => {
+    const s = initialLive([
+      ev(1, 'step.started', { step: 'plan-0' }, 0),
+      talk(2, '하나 여쭐게요', 10_000),
+      asked(3, 'agent-a', 12_000),
+      talk(4, '답을 받아 계획을 적었어요', 732_000),
+      tool(5, 'write', { path: 'artifacts/plan.yaml', chars: 1200 }, 733_000),
+    ]);
+    expect(shape(groupFeed(s, 'plan'))).toEqual(['하나 여쭐게요', '질문1', '답을 받아 계획을 적었어요', '[노트 1,200자 작성함]']);
+  });
+
   it('라운드 자취는 제 스테이지 밖으로 새지 않는다', () => {
     const s = initialLive([
       ev(1, 'step.started', { step: 'plan-review-1-0' }, 1000),
@@ -305,9 +515,9 @@ describe('feed grouping', () => {
     ]);
     expect(shape(groupFeed(s, 'research'))).toEqual([
       '원고부터 읽어볼게요',
-      '[원고 읽음 ×2·45초 생각함·원고 읽음]',
+      '[원고 읽음 ×3·45초 생각함]',
       '이제 노트를 정리할게요',
-      '[39초 생각함·노트 3,819자 작성함]',
+      '[노트 3,819자 작성함·39초 생각함]',
     ]);
   });
 
@@ -359,5 +569,59 @@ describe('feed grouping', () => {
       ev(3, 'step.started', { step: 'plan-review-2-0' }, 3000),
     ];
     expect(groupFeed(initialLive(events), 'plan')).toEqual(groupFeed(initialLive(events), 'plan'));
+  });
+});
+
+describe('question paused time', () => {
+  const frame = (id: number, kind: string, data: Record<string, unknown>, at: number): SseEvent => ({
+    id,
+    event: kind,
+    data: JSON.stringify({ seq: id, kind, data, createdAt: at }),
+  });
+  const input = JSON.stringify({
+    questions: [{ question: 'Q?', hint: 'h', multi: false, options: [{ label: '가' }, { label: '나' }] }],
+  });
+  const agent = { id: 'agent-a', name: 'plan' };
+  const asked = (id: number, at: number) =>
+    frame(id, 'tool.requested', { agent, turn: 1, attempt: 1, tool: 'ask-user', toolCallId: 'call_1', input }, at);
+
+  const entry = (at: number | null, settledAt: number | null): QuestionEntry => ({
+    id: 1,
+    agentId: 'agent-a',
+    agentName: 'plan',
+    toolCallId: 'call_1',
+    questions: [],
+    stage: 'plan',
+    step: 'plan-0',
+    at,
+    settledAt,
+    status: settledAt === null ? 'pending' : 'answered',
+  });
+
+  it('해소·종결이 settledAt을 이벤트 시각으로 굳힌다', () => {
+    const base = [frame(1, 'step.started', { step: 'plan-0' }, 1000), asked(2, 2000)];
+    const resolved = initialLive([
+      ...base,
+      frame(3, 'tool.called', { agent, turn: 1, attempt: 1, tool: 'ask-user', input: { questions: ['Q?'] }, ok: true }, 62_000),
+    ]);
+    expect(resolved.questions[0]).toMatchObject({ status: 'answered', at: 2000, settledAt: 62_000 });
+
+    const closed = initialLive([...base, frame(3, 'workflow.canceled', {}, 32_000)]);
+    expect(closed.questions[0]).toMatchObject({ status: 'closed', settledAt: 32_000 });
+  });
+
+  it('파킹 구간 합산 — 해소분은 구간대로, 미해소는 now까지, at 없는 엔트리는 건너뛴다', () => {
+    expect(questionPausedMs([entry(1000, 61_000)], 100_000)).toBe(60_000);
+    expect(questionPausedMs([entry(1000, null)], 31_000)).toBe(30_000);
+    expect(questionPausedMs([entry(null, null)], 31_000)).toBe(0);
+    expect(questionPausedMs([entry(1000, 61_000), entry(70_000, null)], 80_000)).toBe(70_000);
+  });
+
+  it('창 겹침만 센다 — 창 밖 구간은 0, 걸친 구간은 잘라 센다', () => {
+    const q = [entry(10_000, 70_000)];
+    expect(questionPausedMs(q, 100_000, { from: 20_000, to: 50_000 })).toBe(30_000);
+    expect(questionPausedMs(q, 100_000, { from: 80_000, to: 90_000 })).toBe(0);
+    expect(questionPausedMs(q, 100_000, { from: 0, to: 10_000 })).toBe(0);
+    expect(questionPausedMs(q, 100_000, { from: 40_000 })).toBe(30_000);
   });
 });

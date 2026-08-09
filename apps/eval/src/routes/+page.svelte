@@ -4,8 +4,8 @@
   import { Button, Helmet, Select, TextInput, TimeAgo } from '@typie/ui/components';
   import { enhance } from '$app/forms';
   import ThemeToggle from '$lib/components/ThemeToggle.svelte';
-  import { AGENT_DEFAULTS, AGENTS, MODELS } from '$lib/feedback/tiers.ts';
-  import type { AgentName, TierModel } from '$lib/feedback/tiers.ts';
+  import { AGENT_DEFAULTS, MODELS, TIER_AGENTS, TIER_NAMES } from '$lib/feedback/tiers.ts';
+  import type { AgentName, TierModel, TierName } from '$lib/feedback/tiers.ts';
   import type { ActionData, PageData, SubmitFunction } from './$types';
 
   type Props = { data: PageData; form: ActionData };
@@ -56,14 +56,23 @@
     };
   };
 
-  let tiersOpen = $state(false);
-  let tiers = $state(
-    Object.fromEntries(AGENTS.map((agent) => [agent, { ...AGENT_DEFAULTS[agent] }])) as Record<
+  const freshTiers = () =>
+    Object.fromEntries(Object.entries(AGENT_DEFAULTS).map(([agent, pair]) => [agent, { ...pair }])) as Record<
       AgentName,
       { model: TierModel; effort: string }
-    >,
-  );
+    >;
 
+  let tiersOpen = $state(false);
+  let tier = $state<TierName>('high');
+  let tiers = $state(freshTiers());
+
+  // 티어를 바꾸면 오버라이드는 새 티어의 기본값에서 다시 시작한다 — 행 목록도 값도 티어에 종속이다.
+  const selectTier = (next: TierName) => {
+    tier = next;
+    tiers = freshTiers();
+  };
+
+  const tierItems = TIER_NAMES.map((name) => ({ label: name, value: name }));
   const modelItems = Object.keys(MODELS).map((model) => ({ label: model, value: model as TierModel }));
   const effortItems = (model: TierModel) =>
     (MODELS[model].efforts as readonly string[]).map((effort) => ({ label: effort, value: effort }));
@@ -83,6 +92,20 @@
 
   const STATUS_LABELS = { running: '진행 중', completed: '완료', failed: '실패', canceled: '중단됨' };
 
+  // 운영자 전용 표식이라 상태 배지보다 한 급 눌러 세운다 — 코드 명칭을 그대로 쓰는 자리라 mono다.
+  const tierBadgeClass = css({
+    flexShrink: '0',
+    paddingX: '8px',
+    paddingY: '2px',
+    borderRadius: 'full',
+    backgroundColor: 'surface.muted',
+    fontFamily: 'mono',
+    fontSize: '10px',
+    letterSpacing: '0',
+    fontWeight: 'semibold',
+    color: 'text.faint',
+  });
+
   const badgeRecipe = cva({
     base: {
       display: 'inline-flex',
@@ -98,6 +121,8 @@
     variants: {
       status: {
         running: { backgroundColor: 'accent.brand.subtle', color: 'text.brand' },
+        // 답을 기다리는 동안은 사람의 차례다 — 같은 브랜드 틴트에 서되 진행 중의 맥동은 걷는다.
+        waiting: { backgroundColor: 'accent.brand.subtle', color: 'text.brand' },
         completed: { backgroundColor: 'accent.success.subtle', color: 'text.success' },
         failed: { backgroundColor: 'accent.danger.subtle', color: 'text.danger' },
         canceled: { backgroundColor: 'surface.muted', color: 'text.faint' },
@@ -128,6 +153,41 @@
   </header>
 
   <div class={css({ width: 'full', maxWidth: '640px', marginX: 'auto', paddingX: '20px', paddingY: '32px' })}>
+    <section
+      class={css({
+        marginBottom: '16px',
+        padding: '20px',
+        borderWidth: '1px',
+        borderColor: 'border.default',
+        borderRadius: '10px',
+        backgroundColor: 'surface.default',
+        boxShadow: 'card',
+      })}
+    >
+      <h2 class={css({ fontSize: '13px', fontWeight: 'semibold' })}>베타 테스트 안내</h2>
+      <p class={css({ marginTop: '10px', fontSize: '13px', lineHeight: '[1.6]', color: 'text.default', fontWeight: 'semibold' })}>
+        본인의 원고로 피드백을 받아보며 실제 앱 흐름을 직접 체험해 주세요. 쓰면서 신경 쓰인 부분과 피드백의 전반적인 퀄리티를 봐주시는 것이
+        주 과제입니다.
+      </p>
+      <ul class={flex({ direction: 'column', gap: '8px', marginTop: '12px' })}>
+        {#each ['진행 중 작가님께 질문이 올 수 있어요. 답을 주셔야 다음 단계로 넘어갑니다 — 질문은 앞 두 단계에서만 오고, 한 편에 60~90분 정도 걸립니다.', '완료되면 총평 화면 최하단의 반응과 피드백별 반응·답글을 남겨주세요. 재리뷰 기능은 준비 중이라 답글까지만 남겨주시면 됩니다.', '분량·완성도와 무관하게 3~5편, 다양한 원고로 시도해 주세요. 시도에 상한은 없지만 과한 오남용만 자제해 주세요.', '신경 쓰인 부분과 의견은 채널로 자유롭게 보내주시고, 공개하기 민감한 내용은 finn에게 DM으로 보내주세요.'] as line (line)}
+          <li class={flex({ gap: '10px' })}>
+            <span
+              class={css({
+                flexShrink: '0',
+                width: '4px',
+                height: '4px',
+                marginTop: '8px',
+                borderRadius: 'full',
+                backgroundColor: 'text.faint',
+              })}
+            ></span>
+            <span class={css({ fontSize: '13px', lineHeight: '[1.6]', color: 'text.subtle' })}>{line}</span>
+          </li>
+        {/each}
+      </ul>
+    </section>
+
     <section
       class={css({
         padding: '20px',
@@ -176,7 +236,8 @@
           </div>
 
           {#if data.isAdmin}
-            {#each AGENTS as agent (agent)}
+            <input name="tier" type="hidden" value={tier} />
+            {#each TIER_AGENTS[tier] as agent (agent)}
               {#if isOverridden(agent)}
                 <input name={`tier.${agent}.model`} type="hidden" value={tiers[agent].model} />
                 <input name={`tier.${agent}.effort`} type="hidden" value={tiers[agent].effort} />
@@ -185,31 +246,55 @@
             <div
               class={css({ marginTop: '12px', borderWidth: '1px', borderColor: 'border.default', borderRadius: '8px', padding: '10px' })}
             >
-              <button
-                class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.subtle', _hover: { color: 'text.default' } })}
-                onclick={() => (tiersOpen = !tiersOpen)}
-                type="button"
-              >
-                티어 설정 {tiersOpen ? '접기' : '펼치기'}
-              </button>
+              <div class={flex({ align: 'center', gap: '8px' })}>
+                <button
+                  class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.subtle', _hover: { color: 'text.default' } })}
+                  onclick={() => (tiersOpen = !tiersOpen)}
+                  type="button"
+                >
+                  티어 설정 {tiersOpen ? '접기' : '펼치기'}
+                </button>
+                {#if !tiersOpen}
+                  <span class={tierBadgeClass}>{tier}</span>
+                {/if}
+              </div>
               {#if tiersOpen}
-                <div class={css({ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' })}>
-                  {#each AGENTS as agent (agent)}
-                    <div class={flex({ align: 'center', gap: '8px' })}>
-                      <span class={css({ width: '80px', fontSize: '12px', fontFamily: 'mono', color: 'text.subtle' })}>{agent}</span>
-                      <Select items={modelItems} onselect={(model) => setModel(agent, model)} value={tiers[agent].model} />
-                      <Select
-                        items={effortItems(tiers[agent].model)}
-                        onselect={(effort) => {
-                          tiers[agent].effort = effort;
-                        }}
-                        value={tiers[agent].effort}
-                      />
-                      {#if isOverridden(agent)}
-                        <span class={css({ fontSize: '11px', color: 'text.brand' })}>변경됨</span>
-                      {/if}
-                    </div>
-                  {/each}
+                <div class={flex({ direction: 'column', gap: '8px', marginTop: '8px' })}>
+                  <div class={flex({ align: 'center', gap: '8px' })}>
+                    <span class={css({ width: '108px', fontSize: '12px', color: 'text.subtle' })}>티어</span>
+                    <Select items={tierItems} onselect={selectTier} value={tier} />
+                  </div>
+
+                  <div
+                    class={flex({
+                      direction: 'column',
+                      gap: '6px',
+                      paddingTop: '8px',
+                      borderTopWidth: '1px',
+                      borderColor: 'border.subtle',
+                    })}
+                  >
+                    {#each TIER_AGENTS[tier] as agent (agent)}
+                      <div class={flex({ align: 'center', gap: '8px' })}>
+                        <span
+                          class={css({ width: '108px', fontSize: '12px', fontFamily: 'mono', letterSpacing: '0', color: 'text.subtle' })}
+                        >
+                          {agent}
+                        </span>
+                        <Select items={modelItems} onselect={(model) => setModel(agent, model)} value={tiers[agent].model} />
+                        <Select
+                          items={effortItems(tiers[agent].model)}
+                          onselect={(effort) => {
+                            tiers[agent].effort = effort;
+                          }}
+                          value={tiers[agent].effort}
+                        />
+                        {#if isOverridden(agent)}
+                          <span class={css({ fontSize: '11px', color: 'text.brand' })}>변경됨</span>
+                        {/if}
+                      </div>
+                    {/each}
+                  </div>
                 </div>
               {/if}
             </div>
@@ -296,20 +381,28 @@
                     {session.title || '제목 없음'}
                   </span>
 
-                  <span class={css(badgeRecipe.raw({ status: session.status }))}>
-                    {#if session.status === 'running'}
-                      <span
-                        class={css({
-                          width: '5px',
-                          height: '5px',
-                          borderRadius: 'full',
-                          backgroundColor: 'accent.brand.default',
-                          animation: 'pulse 1.6s ease-in-out infinite',
-                        })}
-                      ></span>
-                    {/if}
-                    {STATUS_LABELS[session.status]}
-                  </span>
+                  {#if data.isAdmin}
+                    <span class={tierBadgeClass}>{session.tier}</span>
+                  {/if}
+
+                  {#if session.status === 'running' && session.pendingQuestion}
+                    <span class={css(badgeRecipe.raw({ status: 'waiting' }))}>질문 대기 중</span>
+                  {:else}
+                    <span class={css(badgeRecipe.raw({ status: session.status }))}>
+                      {#if session.status === 'running'}
+                        <span
+                          class={css({
+                            width: '5px',
+                            height: '5px',
+                            borderRadius: 'full',
+                            backgroundColor: 'accent.brand.default',
+                            animation: 'pulse 1.6s ease-in-out infinite',
+                          })}
+                        ></span>
+                      {/if}
+                      {STATUS_LABELS[session.status]}
+                    </span>
+                  {/if}
                 </div>
 
                 <div class={flex({ align: 'center', gap: '6px', marginTop: '6px', fontSize: '12px', color: 'text.faint' })}>

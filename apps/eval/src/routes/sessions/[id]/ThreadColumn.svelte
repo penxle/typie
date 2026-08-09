@@ -6,7 +6,7 @@
   import IconChevronUp from '~icons/lucide/chevron-up';
   import { anchorQuote } from '$lib/feedback/anchors.ts';
   import ThreadCard from './ThreadCard.svelte';
-  import type { FeedbackResult } from '$lib/feedback/types.ts';
+  import type { FeedbackConclusion } from '$lib/feedback/types.ts';
   import type { PageData } from './$types';
 
   type Thread = PageData['threads'][number];
@@ -15,8 +15,8 @@
     threads: Thread[];
     comments: PageData['comments'];
     content: string;
-    patterns: FeedbackResult['conclusion']['patterns'];
-    priorities: FeedbackResult['conclusion']['priorities'];
+    patterns: FeedbackConclusion['patterns'];
+    priorities: FeedbackConclusion['priorities'];
     activeId: string | null;
     onActivate: (threadId: string | null) => void;
   };

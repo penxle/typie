@@ -5,15 +5,16 @@
   import { flex } from '@typie/styled-system/patterns';
   import { Button, Helmet, Icon, Modal, Tooltip } from '@typie/ui/components';
   import { Dialog, Toast } from '@typie/ui/notification';
-  import { tick } from 'svelte';
+  import { tick, untrack } from 'svelte';
+  import { SvelteMap, SvelteSet } from 'svelte/reactivity';
   import IconChevronLeft from '~icons/lucide/chevron-left';
   import { enhance } from '$app/forms';
   import { invalidateAll } from '$app/navigation';
   import ThemeToggle from '$lib/components/ThemeToggle.svelte';
   import { applyDelta, sealTurn, startTurn } from '$lib/feedback/delta.ts';
   import { applyEvent, initialLive } from '$lib/feedback/live.ts';
+  import { EVENT_NAMES } from '$lib/feedback/sse.ts';
   import { TERMINAL_EVENTS } from '$lib/feedback/stages.ts';
-  import { AGENTS } from '$lib/feedback/tiers.ts';
   import ConclusionDrawer from './ConclusionDrawer.svelte';
   import ConclusionPanel from './ConclusionPanel.svelte';
   import ManuscriptView from './ManuscriptView.svelte';
@@ -26,19 +27,6 @@
   type Props = { data: PageData };
   const { data }: Props = $props();
 
-  // EventSource는 named event만 리스너에 흘린다 — 이 9종이 로그 이벤트 어휘 전부다. 휘발 프레임 turn.delta는
-  // 로그에 남지 않아(id 없음) 커서·리듀서 밖 경로로 따로 받는다.
-  const EVENT_NAMES = [
-    'run.started',
-    'step.started',
-    'step.completed',
-    'turn.started',
-    'turn.completed',
-    'tool.called',
-    'run.completed',
-    'run.failed',
-    'run.canceled',
-  ];
   const RETRY_MS = 10_000;
 
   const STATUS_LABELS = { running: '진행 중', completed: '리뷰 완료', failed: '실패', canceled: '중단됨' };
@@ -70,6 +58,9 @@
         (conclusion.understanding ?? '').trim().length === 0),
   );
 
+  // low 티어는 마무리 글 단계 자체가 없다 — 빈 총평 폴백에 기대지 않고 여기서 명시로 걷는다.
+  const conclusionShown = $derived(data.review.tier !== 'low' && !conclusionEmpty);
+
   // 첫 페인트가 곧 현재 상태다 — 로드가 걷어 온 이벤트 스냅샷으로 시드하고, SSE는 그 커서부터 잇는다.
   // 빈 시드로 시작해 재생을 화면에서 재연하면 새로고침마다 과거 기록이 빨리감기로 보인다.
   // 초기값 캡처는 의도다: 시드는 마운트 1회의 몫이고, 이후는 SSE(실행 중)·아래 효과(종결)가 최신을 소유한다.
@@ -80,6 +71,86 @@
   let cancelForm = $state<HTMLFormElement>();
   let canceling = $state(false);
 
+  // 질문 대기는 탭 제목으로도 알린다 — 다른 탭에 가 있는 작가가 리뷰가 멈춘 것을 알 수 있는 유일한 신호다.
+  // 스피너는 백그라운드 탭에서 인터벌이 ~1s로 스로틀되어 느리게 돌지만, 제목이 움직인다는 사실만으로 족하다.
+  const TAB_SPINNER = ['⠋', '⠙', '⠸', '⠴', '⠦', '⠇'];
+  const hasPendingQuestion = $derived(live.questions.some((question) => question.status === 'pending'));
+  let spin = $state(0);
+  $effect(() => {
+    if (!hasPendingQuestion) return;
+    const timer = setInterval(() => (spin = (spin + 1) % TAB_SPINNER.length), 600);
+    return () => clearInterval(timer);
+  });
+  const tabTitle = $derived(hasPendingQuestion ? `${TAB_SPINNER[spin]} 질문이 있어요` : data.session.title || '제목 없음');
+
+  // 브라우저 알림 — 권한이 있고 시선이 떠나 있을 때만 낸다(보고 있는 화면엔 카드·탭 제목이 이미 있다).
+  // 권한 요청은 RunningPanel의 [알림 켜기] 제스처 몫이고, 여기는 granted를 읽기만 한다.
+  const canNotify = () =>
+    typeof Notification !== 'undefined' && Notification.permission === 'granted' && (document.hidden || !document.hasFocus());
+
+  // 알림 생성은 미지원 환경(Android Chrome 등)에서 던진다 — 알림은 부가 신호라 조용히 접는다.
+  const showNotification = (text: string, body: string, tag: string): Notification | null => {
+    try {
+      const notification = new Notification(text, { body, tag });
+      notification.addEventListener('click', () => {
+        window.focus();
+        notification.close();
+      });
+      return notification;
+    } catch {
+      return null;
+    }
+  };
+
+  // 질문당 1회 — 재접속 재생이 같은 pending을 다시 보여도 재발화하지 않는다. 떠 있는 알림은 해소되면 닫는다.
+  const askNotified = new SvelteSet<string>();
+  const askShown = new SvelteMap<string, Notification>();
+  $effect(() => {
+    for (const question of live.questions) {
+      if (question.status === 'pending' && !askNotified.has(question.toolCallId)) {
+        askNotified.add(question.toolCallId);
+        if (!canNotify()) continue;
+        const first = question.questions[0]?.question ?? '';
+        const body = question.questions.length > 1 ? `${first} 외 ${question.questions.length - 1}개` : first;
+        const notification = showNotification(`질문이 있어요 — ${title}`, body, `ask:${data.session.id}:${question.toolCallId}`);
+        if (notification) askShown.set(question.toolCallId, notification);
+      }
+      if (question.status !== 'pending') {
+        askShown.get(question.toolCallId)?.close();
+        askShown.delete(question.toolCallId);
+      }
+    }
+  });
+
+  // 완료 알림은 이 방문에서 실행 중이던 리뷰가 완료로 굳는 전이만 잡는다 — 끝난 리뷰의 재방문은 알리지 않는다.
+  // 실패·중단은 알리지 않는다(오너 승인 범위 = 질문·완료).
+  // 초기값 캡처는 의도다 — 전이 판정의 기준점은 마운트 시점의 상태다.
+  // svelte-ignore state_referenced_locally
+  const wasRunning = data.review.status === 'running';
+  let doneNotified = false;
+  $effect(() => {
+    if (!wasRunning || doneNotified || data.review.status !== 'completed') return;
+    doneNotified = true;
+    if (!canNotify()) return;
+    showNotification(`리뷰가 끝났어요 — ${title}`, '결과가 정리돼 있어요.', `done:${data.session.id}`);
+  });
+
+  // 관전 탭의 답변 문면 — 해소 이벤트(tool.called)에는 답이 실리지 않는다(원장에만 있다). answered로 굳었는데
+  // 문면이 없는 엔트리를 보면 로드를 재실행해 원장에서 당긴다. 엔트리당 1회 가드 — 조회가 실패해도 재발화하지
+  // 않고(무유계 재발화 경계 — 아래 종결 invalidate와 같은 이유), 다음 자연 로드가 재시도한다.
+  const answerRefreshed = new SvelteSet<string>();
+  $effect(() => {
+    const missing = live.questions.find(
+      (question) =>
+        question.status === 'answered' &&
+        !Object.hasOwn(data.askAnswers ?? {}, question.toolCallId) &&
+        !answerRefreshed.has(question.toolCallId),
+    );
+    if (!missing) return;
+    answerRefreshed.add(missing.toolCallId);
+    void invalidateAll();
+  });
+
   let drawerOpen = $state(false);
   let activeId = $state<string | null>(null);
   let modelConfigOpen = $state(false);
@@ -88,7 +159,7 @@
   // 잇는다. 3컬럼이 먼저 그려진 뒤 400ms 뒤에 열어 어디서 열렸는지가 보인다(모션 명세). 기억은 열어 본
   // 사실이 아니라 자동 확장을 소모했다는 표식이라 열자마자 적는다.
   $effect(() => {
-    if (conclusionEmpty || data.review.status !== 'completed') return;
+    if (!conclusionShown || data.review.status !== 'completed') return;
     const key = `conclusion-read:${data.session.id}:${data.review.round}`;
     let seen = true;
     try {
@@ -136,7 +207,7 @@
     }
   };
 
-  // 경과·소요의 기준 시각은 run.started의 봉투 시각이다. 스냅샷도 라이브도 같은 축을 쓰고, 없으면 DB 시작 시각으로 떨어진다.
+  // 경과·소요의 기준 시각은 workflow.started의 봉투 시각이다. 스냅샷도 라이브도 같은 축을 쓰고, 없으면 DB 시작 시각으로 떨어진다.
   const originAt = $derived(live.startedAt ?? data.review.startedAt);
 
   // 종결 리뷰의 타임라인 원천은 사영된 이벤트 스냅샷이다. 실행 중이면 아래 SSE 재생이 같은 상태를 채운다.
@@ -209,13 +280,18 @@
       batch.push({ name, event });
       if (flushScheduled) return;
       flushScheduled = true;
+      // rAF는 숨은 탭에서 멎는다 — 그대로면 백그라운드에서 질문·종결이 접히지 않아 탭 제목도 알림도 침묵한다.
+      // 타이머를 나란히 걸어 어느 쪽이든 먼저 접게 한다(뒤에 온 쪽은 빈 배치를 보고 그냥 돌아간다).
       requestAnimationFrame(flushBatch);
+      setTimeout(flushBatch, 300);
     };
 
     const connect = () => {
       if (stopped) return;
       // 시드된 커서부터 잇는다 — 자동 재접속은 Last-Event-ID 헤더가 우선하므로(relay.resolveCursor) 무해하다.
-      const opened = new EventSource(`${url}?lastEventId=${live.cursor}`);
+      // 커서 읽기는 untrack — 첫 connect는 effect 본문의 동기 호출이라, 그대로 읽으면 커서가 effect 의존성에
+      // 들어가 배치마다 연결을 끊고 다시 연다.
+      const opened = new EventSource(`${url}?lastEventId=${untrack(() => live.cursor)}`);
       source = opened;
 
       // 확립된 스트림의 종료는 EventSource가 Last-Event-ID를 들고 스스로 다시 잇는다. 하지만 연결 시점의
@@ -283,6 +359,20 @@
     };
   };
 
+  // 운영자 전용 표식이라 상태 배지보다 한 급 눌러 세운다 — 코드 명칭을 그대로 쓰는 자리라 mono다.
+  const tierBadgeClass = css({
+    flexShrink: '0',
+    paddingX: '8px',
+    paddingY: '2px',
+    borderRadius: 'full',
+    backgroundColor: 'surface.muted',
+    fontFamily: 'mono',
+    fontSize: '10px',
+    letterSpacing: '0',
+    fontWeight: 'semibold',
+    color: 'text.faint',
+  });
+
   const badgeRecipe = cva({
     base: {
       display: 'inline-flex',
@@ -306,7 +396,7 @@
   });
 </script>
 
-<Helmet {title} />
+<Helmet title={tabTitle} />
 
 <div class={flex({ direction: 'column', height: '[100dvh]', backgroundColor: 'surface.default' })}>
   <header
@@ -357,27 +447,11 @@
 
     <div class={flex({ align: 'center', gap: '8px', marginLeft: 'auto' })}>
       {#if data.isAdmin}
+        <span class={tierBadgeClass}>{data.review.tier}</span>
         <Button onclick={() => (modelConfigOpen = true)} size="sm" type="button" variant="secondary">모델 구성</Button>
       {/if}
       {#if data.review.status === 'completed'}
-        <a
-          class={css({
-            paddingX: '14px',
-            paddingY: '7px',
-            borderWidth: '1px',
-            borderColor: 'border.default',
-            borderRadius: '6px',
-            backgroundColor: 'surface.default',
-            fontSize: '12px',
-            fontWeight: 'medium',
-            color: 'text.subtle',
-            boxShadow: 'small',
-            _hover: { borderColor: 'border.strong' },
-          })}
-          href={`/sessions/${data.session.id}/process`}
-        >
-          과정 보기
-        </a>
+        <Button href={`/sessions/${data.session.id}/process`} size="sm" type="link" variant="secondary">과정 보기</Button>
       {/if}
       {#if data.review.status === 'running'}
         <form bind:this={cancelForm} action="?/cancel" method="post" use:enhance={submitCancel}>
@@ -397,7 +471,7 @@
 
   {#if data.review.status === 'completed'}
     <div class={flex({ flexGrow: '1', minHeight: '0' })}>
-      {#if conclusion && !conclusionEmpty}
+      {#if conclusion && conclusionShown}
         <ConclusionPanel
           {activeId}
           {conclusion}
@@ -443,7 +517,7 @@
       </div>
     </div>
 
-    {#if conclusion && !conclusionEmpty}
+    {#if conclusion && conclusionShown}
       <ConclusionDrawer
         {activeId}
         {conclusion}
@@ -481,21 +555,33 @@
         </div>
       </div>
 
-      <RunningPanel error={data.review.error} {live} startedAt={originAt} status={data.review.status} {turnLive} />
+      <RunningPanel
+        askAnswers={data.askAnswers}
+        error={data.review.error}
+        {live}
+        startedAt={originAt}
+        status={data.review.status}
+        tier={data.review.tier}
+        {turnLive}
+      />
     </div>
   {/if}
 </div>
 
 {#if data.isAdmin}
   <Modal style={css.raw({ padding: '20px', width: '420px' })} bind:open={modelConfigOpen}>
-    <h2 class={css({ fontSize: '14px', fontWeight: 'semibold', marginBottom: '10px' })}>이 리뷰의 모델 구성</h2>
+    <div class={flex({ align: 'center', gap: '8px', marginBottom: '10px' })}>
+      <h2 class={css({ fontSize: '14px', fontWeight: 'semibold' })}>이 리뷰의 모델 구성</h2>
+      <span class={tierBadgeClass}>{data.review.tier}</span>
+    </div>
     {#if data.modelConfig}
       <div class={css({ display: 'flex', flexDirection: 'column', gap: '6px' })}>
-        {#each AGENTS as agent (agent)}
-          {@const entry = data.modelConfig[agent]}
+        <!-- 스냅샷 자체를 순회한다 — 티어 목록으로 거르면 구 이름으로 저장된 옛 리뷰가 빈 표가 된다. 신규 행은
+             buildModelConfig가 TIER_AGENTS 순서로 넣으므로 표시 순서는 같다. -->
+        {#each Object.entries(data.modelConfig) as [agent, entry] (agent)}
           <div class={flex({ align: 'center', gap: '8px', fontSize: '12px' })}>
-            <span class={css({ width: '80px', fontFamily: 'mono', color: 'text.subtle' })}>{agent}</span>
-            <span class={css({ fontFamily: 'mono', fontWeight: entry.overridden ? 'semibold' : 'normal' })}>
+            <span class={css({ width: '108px', fontFamily: 'mono', letterSpacing: '0', color: 'text.subtle' })}>{agent}</span>
+            <span class={css({ fontFamily: 'mono', letterSpacing: '0', fontWeight: entry.overridden ? 'semibold' : 'normal' })}>
               {entry.model} · {entry.effort}
             </span>
             {#if entry.overridden}

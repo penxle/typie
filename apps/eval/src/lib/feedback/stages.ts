@@ -1,3 +1,5 @@
+import type { TierName } from './tiers.ts';
+
 export type StageKey = 'research' | 'plan' | 'critique' | 'proofread' | 'rephrase' | 'conclude';
 
 export const STAGES: { key: StageKey; label: string }[] = [
@@ -8,6 +10,16 @@ export const STAGES: { key: StageKey; label: string }[] = [
   { key: 'rephrase', label: '전할 말 고르기' },
   { key: 'conclude', label: '마무리 글 쓰기' },
 ];
+
+// 티어마다 도는 단계가 다르다 — 그 티어에 에이전트가 없는 단계는 대기 카드로도 세우지 않는다.
+export const TIER_STAGES: Record<TierName, StageKey[]> = {
+  high: ['research', 'plan', 'critique', 'proofread', 'rephrase', 'conclude'],
+  medium: ['research', 'critique', 'proofread', 'rephrase', 'conclude'],
+  low: ['critique', 'proofread', 'rephrase'],
+};
+
+export const stagesFor = (tier: TierName): { key: StageKey; label: string }[] =>
+  STAGES.filter((stage) => TIER_STAGES[tier].includes(stage.key));
 
 const PREFIXES: [string, StageKey | null][] = [
   ['manuscript', null],
@@ -37,4 +49,4 @@ export const nestedRound = (step: string | null): number | null => {
   return match === null ? null : Number(match[1]);
 };
 
-export const TERMINAL_EVENTS = new Set<string>(['run.completed', 'run.failed', 'run.canceled']);
+export const TERMINAL_EVENTS = new Set<string>(['workflow.completed', 'workflow.failed', 'workflow.canceled']);

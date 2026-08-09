@@ -5,6 +5,7 @@
   import IconChevronLeft from '~icons/lucide/chevron-left';
   import ThemeToggle from '$lib/components/ThemeToggle.svelte';
   import { initialLive, minutesBetween } from '$lib/feedback/live.ts';
+  import { askAnswerIndex } from '$lib/feedback/questions.ts';
   import StageTimeline from '../StageTimeline.svelte';
   import type { PageData } from './$types';
 
@@ -15,6 +16,9 @@
 
   // 스냅샷은 이미 종결된 리뷰의 전량 재생분이다 — 한 번 접으면 더 들어올 이벤트가 없다.
   const live = $derived(initialLive(data.review.events));
+
+  // 답변 문면은 재생에 없다 — 사영이 원장에서 걷어 굳힌 기록에서 되짚어 카드에 싣는다.
+  const askAnswers = $derived(askAnswerIndex(data.review.questions));
 
   const endedAt = $derived(data.review.finishedAt ?? data.review.startedAt);
 
@@ -115,7 +119,7 @@
         </div>
       {/if}
 
-      <StageTimeline {live} now={endedAt} status={data.review.status} />
+      <StageTimeline {askAnswers} {live} now={endedAt} status={data.review.status} tier={data.review.tier} />
     </div>
   </div>
 </div>

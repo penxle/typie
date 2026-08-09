@@ -10,24 +10,31 @@
   import IconCircleAlert from '~icons/lucide/circle-alert';
   import IconCircleSlash from '~icons/lucide/circle-slash';
   import { DrainFleet } from '$lib/feedback/drain-fleet.ts';
-  import { capsuleLabel, durationLabel, groupFeed, minutesBetween } from '$lib/feedback/live.ts';
-  import { nestedRound, STAGES } from '$lib/feedback/stages.ts';
+  import { capsuleLabel, durationLabel, groupFeed, minutesBetween, questionPausedMs } from '$lib/feedback/live.ts';
+  import { nestedRound, stagesFor } from '$lib/feedback/stages.ts';
   import { Typewriter } from '$lib/feedback/typewriter.ts';
   import NestedReviewCard from './NestedReviewCard.svelte';
+  import QuestionCard from './QuestionCard.svelte';
   import type { TurnLive } from '$lib/feedback/delta.ts';
-  import type { FeedEntry, FeedGroup, LiveState, StageStatus, StageTiming } from '$lib/feedback/live.ts';
+  import type { AskAnswer, FeedEntry, FeedGroup, LiveState, StageStatus, StageTiming } from '$lib/feedback/live.ts';
   import type { StageKey } from '$lib/feedback/stages.ts';
+  import type { TierName } from '$lib/feedback/tiers.ts';
   import type { Token } from '$lib/feedback/typewriter.ts';
 
-  // 종결 리뷰를 다시 그리는 과정 화면에는 흐르는 턴이 없으므로 turnLive는 선택 프롭이다.
+  // 종결 리뷰를 다시 그리는 과정 화면에는 흐르는 턴이 없으므로 turnLive는 선택 프롭이다. 답변 문면도 마찬가지다 —
+  // 원장에서 걷어 오는 것은 실행 중 화면의 몫이고, 없으면 답변함 카드가 문면 없이 선다.
   type Props = {
     live: LiveState;
     status: 'running' | 'completed' | 'failed' | 'canceled';
     now: number;
+    tier: TierName;
     error?: string | null;
     turnLive?: TurnLive | null;
+    askAnswers?: Record<string, AskAnswer[]> | null;
   };
-  const { live, status, now, error = null, turnLive = null }: Props = $props();
+  const { live, status, now, tier, error = null, turnLive = null, askAnswers = null }: Props = $props();
+
+  const stages = $derived(stagesFor(tier));
 
   // ── 카드 상태 판정 ──────────────────────────────────────────────────────────────────────────────
 
@@ -39,16 +46,23 @@
 
   let expanded = $state<Record<string, boolean>>({});
 
+  // 시간 표시 셋 다 파킹 구간을 뺀다 — 질문 대기는 리뷰의 진행이 아니다. 감산은 창 겹침(questionPausedMs)이고,
+  // 시점 이동(firstAt + paused)으로 적용해 minutesBetween의 바닥(0) 처리를 그대로 쓴다.
   const spent = (timing: StageTiming) => {
     if (timing.firstAt === null || timing.lastAt === null) return null;
-    return timing.lastAt - timing.firstAt < 60_000 ? '1분 미만' : `${minutesBetween(timing.firstAt, timing.lastAt)}분`;
+    const paused = questionPausedMs(live.questions, now, { from: timing.firstAt, to: timing.lastAt });
+    return timing.lastAt - timing.firstAt - paused < 60_000 ? '1분 미만' : `${minutesBetween(timing.firstAt + paused, timing.lastAt)}분`;
   };
 
-  const running = (timing: StageTiming) => (timing.firstAt === null ? null : `${minutesBetween(timing.firstAt, now)}분째`);
+  const running = (timing: StageTiming) =>
+    timing.firstAt === null
+      ? null
+      : `${minutesBetween(timing.firstAt + questionPausedMs(live.questions, now, { from: timing.firstAt }), now)}분째`;
 
   const stalled = (timing: StageTiming) => {
     if (timing.firstAt === null || timing.lastAt === null) return '멈췄어요';
-    const minutes = minutesBetween(timing.firstAt, timing.lastAt);
+    const paused = questionPausedMs(live.questions, now, { from: timing.firstAt, to: timing.lastAt });
+    const minutes = minutesBetween(timing.firstAt + paused, timing.lastAt);
     return minutes < 1 ? '멈췄어요' : `${minutes}분 만에 멈췄어요`;
   };
 
@@ -169,6 +183,7 @@
   // 하다 — 보이지 않는 사건으로 숫자가 튀면 고장처럼 읽힌다.
 
   let writeLive = $state<{ chars: number } | null>(null);
+  let askLive = $state(false);
   let lastToolChars: number | null = null;
   let activityKey = '';
 
@@ -177,6 +192,7 @@
     if (key !== activityKey) {
       activityKey = key;
       writeLive = null;
+      askLive = false;
       lastToolChars = null;
     }
     if (turnLive === null) return;
@@ -187,15 +203,32 @@
     if (input !== null && (input.tool === 'write' || input.tool === 'edit') && input.chars !== previous) {
       writeLive = { chars: input.chars };
     }
+    // 질문 인자가 흐르는 동안은 카운터 대신 문면으로 알린다 — 초·글자 수 없이(오너 지정).
+    if (input !== null && input.tool === 'ask-user' && input.chars !== previous) {
+      askLive = true;
+    }
   });
 
   // 박자 = 발화 라인·캡슐 자취의 도착, 그리고 흐르는 발화의 성장. 발화가 흐르는 동안은 박자가 계속 리셋되어
   // 카운터가 0에 머문다 — 말하는 중에 "N초째 생각"이 오르는 어긋남을 막는다.
+  // 파킹 판정 — 대기 중의 경과는 모델의 생각이 아니라 작가의 답 대기라 꼬리 카운터의 재료가 아니다.
+  const awaitingAnswer = $derived(live.questions.some((question) => question.status === 'pending'));
+
+  // 고정 320px 피드는 긴 질문 카드를 자른다 — 질문을 읽으러 올렸다가 답하러 내려오는 스크롤 왕복을 없애기 위해,
+  // pending 카드가 서 있는 동안만 그 높이 + 여분으로 피드를 임시 확장한다(측정은 카드 실높이 bind).
+  let pendingCardHeight = $state(0);
+  const QUESTION_FEED_SLACK = 72;
+  const feedHeight = $derived(
+    awaitingAnswer && pendingCardHeight > 0 ? `${Math.max(320, pendingCardHeight + QUESTION_FEED_SLACK)}px` : undefined,
+  );
+
   let lastBeat = $state(Date.now());
   $effect.pre(() => {
     void live.activity.length;
     void live.marks.length;
     void liveText;
+    // 질문의 등장·해소도 박자다 — 리셋하지 않으면 답변 직후 파킹 시간 전체가 "생각하는 중"으로 이월된다
+    void awaitingAnswer;
     lastBeat = Date.now();
   });
 
@@ -207,6 +240,8 @@
   });
 
   const liveTail = $derived.by((): string | null => {
+    if (awaitingAnswer) return null; // 대기 상태의 문면은 패널(답변 대기 중)과 카드가 담당한다
+    if (askLive) return '질문을 드리는 중이에요';
     if (writeLive !== null) return `노트를 쓰고 있어요 · ${writeLive.chars.toLocaleString('ko-KR')}자`;
     const seconds = Math.max(0, Math.floor((nowTick - lastBeat) / 1000));
     return seconds >= 2 ? `생각하는 중이에요 · ${durationLabel(seconds)}` : null;
@@ -265,6 +300,23 @@
     const el = feedEl;
     if (!el || !stick) return;
     void tick().then(() => el.scrollTo({ top: el.scrollHeight, behavior: 'auto' }));
+  });
+  // 피드 높이 변경(질문 카드 확장·복귀·카드 안 입력칸 토글)도 바닥을 붙든다 — 컨테이너가 줄면 scrollTop이
+  // 그대로라 뷰포트 바닥이 위로 올라가 마지막 줄이 잘린다. 높이는 전환 없이 스냅한다: 콘텐츠는 즉시 크는데
+  // 컨테이너만 천천히 따라가면 그 구간 내내 콘텐츠·컨테이너·핀이 경합해 점프-재추종이 보인다. 스냅이라
+  // 핀도 몇 프레임이면 수렴한다(bind 측정이 페인트 뒤에 오는 프레임 어긋남만 흡수).
+  $effect(() => {
+    void feedHeight;
+    const el = feedEl;
+    if (!el || !stick) return;
+    let raf = 0;
+    const started = performance.now();
+    const pin = (now: number) => {
+      el.scrollTop = el.scrollHeight;
+      if (now - started < 120) raf = requestAnimationFrame(pin);
+    };
+    raf = requestAnimationFrame(pin);
+    return () => cancelAnimationFrame(raf);
   });
 
   // ── 스타일 ─────────────────────────────────────────────────────────────────────────────────────
@@ -552,6 +604,20 @@
   {/if}
 {/snippet}
 
+<!-- 질문 카드는 피드의 한 항목이다 — 최상위와 라운드 카드 안이 같은 조판을 쓰도록 한 자리에 두고 스니펫으로
+     내려보낸다. 카드가 제 초안·스텝을 들고 있어 수명은 질문 엔트리에 묶여야 한다 — 자리마다 each 키가 질문 id라,
+     엔트리가 갈리면 새 인스턴스가 서고 같은 엔트리인 동안(제출 후 상태 전환 포함)은 살아 있다. -->
+{#snippet questionCard(entry: Extract<FeedEntry, { kind: 'question' }>)}
+  {#if entry.entry.status === 'pending'}
+    <!-- pending 카드만 실높이를 잰다 — 피드 임시 확장의 입력이고, pending은 한 번에 하나뿐이라 단일 상태로 족하다 -->
+    <div bind:clientHeight={pendingCardHeight}>
+      <QuestionCard answers={askAnswers?.[entry.entry.toolCallId] ?? null} entry={entry.entry} />
+    </div>
+  {:else}
+    <QuestionCard answers={askAnswers?.[entry.entry.toolCallId] ?? null} entry={entry.entry} />
+  {/if}
+{/snippet}
+
 {#snippet historyLines(groups: FeedGroup[])}
   <div class={flex({ direction: 'column', gap: '7px' })}>
     {#each groups as group (group.key)}
@@ -564,15 +630,22 @@
         </div>
       {:else if group.kind === 'capsule'}
         <div class={capsuleClass}>{group.items.map(capsuleLabel).join(' · ')}</div>
+      {:else if group.kind === 'question'}
+        {@render questionCard(group)}
       {:else}
-        <NestedReviewCard feed={group.feed} round={group.round} spent={group.span === null ? null : spent(group.span)} />
+        <NestedReviewCard
+          feed={group.feed}
+          question={questionCard}
+          round={group.round}
+          spent={group.span === null ? null : spent(group.span)}
+        />
       {/if}
     {/each}
   </div>
 {/snippet}
 
 <ol class={cx(listClass, settled ? undefined : settlingClass)}>
-  {#each STAGES as stage, index (stage.key)}
+  {#each stages as stage, index (stage.key)}
     <!-- 드레이너가 이 스테이지에서 도는 동안은 done 전환을 보류한다 — 마지막 발화가 다 흐르기 전에 카드가
          접히면 꼬리가 잘린다. 접힘·글로우 소멸·요약 등장은 드레인이 끝난 다음 박자에 온다. -->
     {@const rawMark = markOf(live.stages[stage.key])}
@@ -588,7 +661,7 @@
     {@const toggleable = mark === 'done' && groups.length > 0}
     {@const open = mark === 'done' && toggleable && (expanded[stage.key] ?? false)}
     {@const bodyOpen = mark === 'running' ? 'feed' : mark === 'failed' || mark === 'canceled' || open ? 'history' : 'closed'}
-    {@const firstPending = STAGES.findIndex((entry) => live.stages[entry.key] === 'pending')}
+    {@const firstPending = stages.findIndex((entry) => live.stages[entry.key] === 'pending')}
     {@const depth = mark === 'pending' && firstPending !== -1 ? Math.min(index - firstPending, 2) : 0}
 
     <li class={css(slotRecipe.raw({ depth: depth as 0 | 1 | 2 }))}>
@@ -667,7 +740,7 @@
             <div class={mark === 'failed' || mark === 'canceled' ? bodyClass : feedShellClass}>
               {#if mark === 'running'}
                 {@const latestId = liveTokens.length === 0 ? (lines.at(-1)?.id ?? null) : null}
-                <div bind:this={feedEl} class={feedClass} onscroll={onFeedScroll}>
+                <div bind:this={feedEl} style:height={feedHeight} class={feedClass} onscroll={onFeedScroll}>
                   {#each groups as group (group.key)}
                     {#if group.kind === 'line'}
                       {#if drainedIds.has(group.line.id)}
@@ -677,6 +750,8 @@
                       {/if}
                     {:else if group.kind === 'capsule'}
                       <div class={capsuleClass}>{group.items.map(capsuleLabel).join(' · ')}</div>
+                    {:else if group.kind === 'question'}
+                      {@render questionCard(group)}
                     {:else}
                       <NestedReviewCard
                         drained={drainedIds}
@@ -684,6 +759,7 @@
                         {ghostLine}
                         latest={lastLineIdOf(group.feed) === latestId}
                         live={liveHere && group.round === liveRound ? liveStream : null}
+                        question={questionCard}
                         round={group.round}
                         spent={group.span === null ? null : spent(group.span)}
                       />
