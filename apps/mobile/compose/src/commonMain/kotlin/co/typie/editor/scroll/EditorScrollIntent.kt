@@ -65,7 +65,7 @@ internal enum class EditorBringIntoViewPolicy {
   CursorGuard,
   PointerCursorGuard,
   Typewriter,
-  ResultReveal,
+  Reveal,
 }
 
 internal sealed interface EditorScrollIntentResult {
@@ -226,7 +226,7 @@ internal fun resolveInstantRevealPreparationViewports(
 
       EditorBringIntoViewPolicy.CursorGuard,
       EditorBringIntoViewPolicy.PointerCursorGuard,
-      EditorBringIntoViewPolicy.ResultReveal -> {
+      EditorBringIntoViewPolicy.Reveal -> {
         val range = keepVisibleRange
         if (!range.isValid) {
           listOf(
@@ -422,8 +422,8 @@ private fun resolveBringIntoViewTargetOffset(
         maximumScrollY = maximumScrollY,
       )
 
-    EditorBringIntoViewPolicy.ResultReveal ->
-      resolveResultRevealScrollOffset(
+    EditorBringIntoViewPolicy.Reveal ->
+      resolveRevealScrollOffset(
         currentScroll = currentScroll,
         targetTopInContent = rect.top,
         targetBottomInContent = rect.bottom,

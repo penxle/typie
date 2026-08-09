@@ -15,6 +15,7 @@ import co.typie.editor.Editor
 import co.typie.editor.EditorState
 import co.typie.editor.ffi.StableSelection
 import co.typie.editor.ffi.TrackedRange
+import co.typie.editor.scroll.EditorBringIntoViewBehavior
 import co.typie.editor.scroll.EditorBringIntoViewPolicy
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.EditorBringIntoViewTarget
@@ -209,7 +210,8 @@ internal fun rememberEditorCommentsSession(
     bringIntoViewRequests.requestForVersion(
       target = target,
       version = snapshot.version,
-      policy = EditorBringIntoViewPolicy.ResultReveal,
+      policy = EditorBringIntoViewPolicy.Reveal,
+      behavior = EditorBringIntoViewBehavior.Smooth,
     )
     lastRequestedActivationRevision = activeThreadActivationRevision
   }

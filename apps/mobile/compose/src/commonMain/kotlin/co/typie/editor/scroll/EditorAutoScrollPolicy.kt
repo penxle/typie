@@ -191,7 +191,7 @@ internal fun resolveKeepVisibleScrollOffset(
   )
 }
 
-internal fun resolveResultRevealScrollOffset(
+internal fun resolveRevealScrollOffset(
   currentScroll: Float,
   targetTopInContent: Float,
   targetBottomInContent: Float,

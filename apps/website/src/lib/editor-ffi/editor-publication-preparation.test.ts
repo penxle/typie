@@ -47,7 +47,7 @@ describe('editor publication preparation', () => {
       },
     } as unknown as Editor;
     const scroll = new EditorScrollScope(editor, () => ({ enabled: false, position: undefined }));
-    scroll.scrollIntoView({ target: { type: 'tracked_item', id: 'target' }, policy: 'result_reveal' });
+    scroll.scrollIntoView({ target: { type: 'tracked_item', id: 'target' }, policy: 'reveal' });
     const preparation = resolveEditorSurfacePreparation(editor, scroll, 2100);
 
     expect(preparation?.scrollIntent).toEqual({ type: 'scroll_to', y: 2040 });

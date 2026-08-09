@@ -536,7 +536,7 @@ describe('web editor frame synchronization', () => {
     let restorePresentation: Promise<void> | undefined;
     const restore = editor.updateNow((request) => {
       request.enqueue({ type: 'selection', op: { type: 'set_frozen', selection: saved } });
-      restorePresentation = editor.scrollIntoView({ target: { type: 'current_selection_head' }, policy: 'cursor_guard' });
+      restorePresentation = editor.scrollIntoView({ target: { type: 'current_selection_head' }, policy: 'reveal' });
     });
     expect(restore).not.toBeNull();
     if (!restore) throw new Error('Expected a restore update');

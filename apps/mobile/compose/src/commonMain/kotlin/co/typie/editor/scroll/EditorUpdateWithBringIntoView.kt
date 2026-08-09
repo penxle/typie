@@ -7,12 +7,17 @@ import co.typie.editor.beforePublish
 import co.typie.editor.ffi.Message
 
 internal interface EditorBringIntoViewUpdateScope : EditorRequestScope {
-  fun bringIntoView(target: EditorBringIntoViewTarget, policy: EditorBringIntoViewPolicy)
+  fun bringIntoView(
+    target: EditorBringIntoViewTarget,
+    policy: EditorBringIntoViewPolicy,
+    behavior: EditorBringIntoViewBehavior = EditorBringIntoViewBehavior.Instant,
+  )
 }
 
 private data class EditorBringIntoViewUpdate(
   val target: EditorBringIntoViewTarget,
   val policy: EditorBringIntoViewPolicy,
+  val behavior: EditorBringIntoViewBehavior,
 )
 
 private fun EditorRequestScope.applyBringIntoViewUpdate(
@@ -29,8 +34,10 @@ private fun EditorRequestScope.applyBringIntoViewUpdate(
       override fun bringIntoView(
         target: EditorBringIntoViewTarget,
         policy: EditorBringIntoViewPolicy,
+        behavior: EditorBringIntoViewBehavior,
       ) {
-        selectedUpdate = EditorBringIntoViewUpdate(target = target, policy = policy)
+        selectedUpdate =
+          EditorBringIntoViewUpdate(target = target, policy = policy, behavior = behavior)
       }
     }
   )
@@ -42,7 +49,12 @@ internal fun Editor.updateNowWithBringIntoView(
   block: EditorBringIntoViewUpdateScope.() -> Unit,
 ): EditorUpdate? = updateNow {
   applyBringIntoViewUpdate(block)?.let { reveal ->
-    val request = bringIntoViewRequests.declare(target = reveal.target, policy = reveal.policy)
+    val request =
+      bringIntoViewRequests.declare(
+        target = reveal.target,
+        policy = reveal.policy,
+        behavior = reveal.behavior,
+      )
     beforePublish(
       block = { applied -> bringIntoViewRequests.bind(request, applied.revision) },
       onDiscard = { bringIntoViewRequests.discard(request) },
@@ -60,7 +72,11 @@ internal suspend fun Editor.updateWithBringIntoView(
     update(admit = admit) {
       applyBringIntoViewUpdate(block)?.let { requested ->
         val request =
-          bringIntoViewRequests.declare(target = requested.target, policy = requested.policy)
+          bringIntoViewRequests.declare(
+            target = requested.target,
+            policy = requested.policy,
+            behavior = requested.behavior,
+          )
         reveal = request
         beforePublish(
           block = { applied -> bringIntoViewRequests.bind(request, applied.revision) },

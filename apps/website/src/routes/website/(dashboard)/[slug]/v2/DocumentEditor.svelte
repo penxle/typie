@@ -913,7 +913,7 @@
                 selection: savedSelection,
               },
             });
-            presentation = editor.scrollIntoView({ target: { type: 'current_selection_head' }, policy: 'cursor_guard' });
+            presentation = editor.scrollIntoView({ target: { type: 'current_selection_head' }, policy: 'reveal' });
           });
           return presentation;
         } catch {

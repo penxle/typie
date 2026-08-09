@@ -72,7 +72,7 @@ internal fun rememberEditorEntryStateSession(
       enqueue(Message.Selection(SelectionOp.SetFrozen(selection = selection)))
       bringIntoView(
         EditorBringIntoViewTarget.CurrentSelectionHead,
-        policy = EditorBringIntoViewPolicy.CursorGuard,
+        policy = EditorBringIntoViewPolicy.Reveal,
       )
     }
     session.markPresentationReady()

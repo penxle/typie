@@ -196,7 +196,7 @@ describe('EditorScrollScope', () => {
       rect: { x: 0, y: 1000, width: 1, height: 500 },
     });
     const { scope } = setup(snapshot);
-    const request = scope.declare({ target: { type: 'tracked_item', id: 'target' }, policy: 'result_reveal' });
+    const request = scope.declare({ target: { type: 'tracked_item', id: 'target' }, policy: 'reveal' });
 
     expect(
       scope.resolveScrollTop(
@@ -207,7 +207,7 @@ describe('EditorScrollScope', () => {
     ).toBe(940);
   });
 
-  it('derives smooth behavior for tracked result reveals', () => {
+  it('defaults request behavior to instant independently from the reveal policy', () => {
     const snapshot = trackedSnapshot('target', {
       page_idx: 0,
       rect: { x: 0, y: 1000, width: 1, height: 500 },
@@ -216,7 +216,23 @@ describe('EditorScrollScope', () => {
 
     const request = scope.declare({
       target: { type: 'tracked_item', id: 'target' },
-      policy: 'result_reveal',
+      policy: 'reveal',
+    });
+
+    expect(request.behavior).toBe('instant');
+  });
+
+  it('accepts smooth behavior independently from the reveal policy', () => {
+    const snapshot = trackedSnapshot('target', {
+      page_idx: 0,
+      rect: { x: 0, y: 1000, width: 1, height: 500 },
+    });
+    const { scope } = setup(snapshot);
+
+    const request = scope.declare({
+      target: { type: 'tracked_item', id: 'target' },
+      policy: 'reveal',
+      behavior: 'smooth',
     });
 
     expect(request.behavior).toBe('smooth');
@@ -309,7 +325,7 @@ describe('EditorScrollScope', () => {
       rect: { x: 0, y: 900, width: 1, height: 20 },
     });
     const { scope } = setup(snapshot);
-    const request = scope.declare({ target: { type: 'tracked_item', id: 'target' }, policy: 'result_reveal' });
+    const request = scope.declare({ target: { type: 'tracked_item', id: 'target' }, policy: 'reveal' });
 
     expect(scope.activateForRevision(7)).toBeNull();
     expect(scope.bind(request, 7)).toBe(true);
@@ -341,7 +357,11 @@ describe('EditorScrollScope', () => {
     });
     const { scope, setScrollTop } = setup(snapshot);
 
-    const presentation = scope.scrollIntoView({ target: { type: 'tracked_item', id: 'target' }, policy: 'result_reveal' });
+    const presentation = scope.scrollIntoView({
+      target: { type: 'tracked_item', id: 'target' },
+      policy: 'reveal',
+      behavior: 'smooth',
+    });
     const request = scope.pendingRequest;
     if (!request) throw new Error('Expected a pending reveal');
 
@@ -367,7 +387,7 @@ describe('EditorScrollScope', () => {
       rect: { x: 0, y: 900, width: 1, height: 20 },
     });
     const { scope } = setup(snapshot);
-    const tracked = scope.declare({ target: { type: 'tracked_item', id: 'target' }, policy: 'result_reveal' });
+    const tracked = scope.declare({ target: { type: 'tracked_item', id: 'target' }, policy: 'reveal' });
     expect(scope.bind(tracked, 7)).toBe(true);
     expect(scope.activateForRevision(8)).toBe(tracked);
 
@@ -406,7 +426,7 @@ describe('EditorScrollScope', () => {
     });
     const oldPresentation = old.presentation;
 
-    scope.declare({ target: { type: 'tracked_item', id: 'new' }, policy: 'result_reveal' });
+    scope.declare({ target: { type: 'tracked_item', id: 'new' }, policy: 'reveal' });
 
     await expect(oldPresentation).resolves.toBeUndefined();
   });
@@ -417,7 +437,7 @@ describe('EditorScrollScope', () => {
       rect: { x: 0, y: 900, width: 1, height: 20 },
     });
     const { requestPublication, scope } = setup(snapshot);
-    const request = scope.declare({ target: { type: 'tracked_item', id: 'target' }, policy: 'result_reveal' });
+    const request = scope.declare({ target: { type: 'tracked_item', id: 'target' }, policy: 'reveal' });
     const presentation = request.presentation;
     requestPublication.mockClear();
 
@@ -434,7 +454,7 @@ describe('EditorScrollScope', () => {
       rect: { x: 0, y: 900, width: 1, height: 20 },
     });
     const { scope, scrollTo, setScrollTop } = setup(snapshot);
-    scope.scrollIntoView({ target: { type: 'tracked_item', id: 'target' }, policy: 'result_reveal' });
+    scope.scrollIntoView({ target: { type: 'tracked_item', id: 'target' }, policy: 'reveal', behavior: 'smooth' });
     const request = scope.pendingRequest;
     if (!request) throw new Error('Expected a pending reveal');
     expect(scope.applyPending(request, snapshot, { type: 'scroll_to', y: 580 })).toBe(true);
@@ -453,9 +473,9 @@ describe('EditorScrollScope', () => {
     });
     const { requestPublication, scope } = setup(snapshot);
 
-    scope.scrollIntoView({ target: { type: 'tracked_item', id: 'old' }, policy: 'result_reveal' });
+    scope.scrollIntoView({ target: { type: 'tracked_item', id: 'old' }, policy: 'reveal', behavior: 'smooth' });
     const old = scope.pendingRequest;
-    scope.scrollIntoView({ target: { type: 'tracked_item', id: 'new' }, policy: 'result_reveal' });
+    scope.scrollIntoView({ target: { type: 'tracked_item', id: 'new' }, policy: 'reveal', behavior: 'smooth' });
 
     expect(scope.pendingRequest?.target).toEqual({ type: 'tracked_item', id: 'new' });
     expect(requestPublication).toHaveBeenCalledTimes(2);
@@ -469,9 +489,9 @@ describe('EditorScrollScope', () => {
     });
     const { requestPublication, scope, scrollTo, setScrollTop } = setup(snapshot);
 
-    scope.scrollIntoView({ target: { type: 'tracked_item', id: 'old' }, policy: 'result_reveal' });
+    scope.scrollIntoView({ target: { type: 'tracked_item', id: 'old' }, policy: 'reveal', behavior: 'smooth' });
     const old = scope.pendingRequest;
-    scope.scrollIntoView({ target: { type: 'tracked_item', id: 'new' }, policy: 'result_reveal' });
+    scope.scrollIntoView({ target: { type: 'tracked_item', id: 'new' }, policy: 'reveal', behavior: 'smooth' });
     const current = scope.pendingRequest;
     if (!old || !current) throw new Error('Expected both scroll requests');
     requestPublication.mockClear();
@@ -685,7 +705,7 @@ describe('EditorScrollScope', () => {
       rect: { x: 0, y: 900, width: 1, height: 20 },
     });
     const { scope, scrollTo, setScrollTop } = setup(snapshot);
-    scope.scrollIntoView({ target: { type: 'tracked_item', id: 'target' }, policy: 'result_reveal' });
+    scope.scrollIntoView({ target: { type: 'tracked_item', id: 'target' }, policy: 'reveal', behavior: 'smooth' });
     const request = scope.pendingRequest;
     if (!request) throw new Error('Expected a pending reveal');
 
@@ -714,7 +734,7 @@ describe('EditorScrollScope', () => {
       rect: { x: 0, y: 900, width: 1, height: 20 },
     });
     const { scope, scrollTo } = setup(snapshot);
-    scope.scrollIntoView({ target: { type: 'tracked_item', id: 'target' }, policy: 'result_reveal' });
+    scope.scrollIntoView({ target: { type: 'tracked_item', id: 'target' }, policy: 'reveal', behavior: 'smooth' });
     const request = scope.pendingRequest;
     if (!request) throw new Error('Expected a pending reveal');
 
@@ -738,7 +758,7 @@ describe('EditorScrollScope', () => {
     });
     const { editor, scope, scrollTo, setScrollTop } = setup(snapshot);
 
-    scope.scrollIntoView({ target: { type: 'tracked_item', id: 'target' }, policy: 'result_reveal' });
+    scope.scrollIntoView({ target: { type: 'tracked_item', id: 'target' }, policy: 'reveal', behavior: 'smooth' });
     const request = scope.pendingRequest;
     if (!request) throw new Error('Expected a scroll request');
 
@@ -763,7 +783,7 @@ describe('EditorScrollScope', () => {
     });
     const { scope, scrollTo } = setup(snapshot);
 
-    scope.scrollIntoView({ target: { type: 'tracked_item', id: 'missing' }, policy: 'result_reveal' });
+    scope.scrollIntoView({ target: { type: 'tracked_item', id: 'missing' }, policy: 'reveal' });
     const request = scope.pendingRequest;
     if (!request) throw new Error('Expected a scroll request');
     const presentation = request.presentation;
