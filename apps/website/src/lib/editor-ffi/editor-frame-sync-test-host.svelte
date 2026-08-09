@@ -103,7 +103,14 @@
   });
 </script>
 
-<svelte:window onscroll={useWindowScroll ? () => editor.requestPublication() : undefined} />
+<svelte:window
+  onscroll={useWindowScroll
+    ? () => {
+        ctx.scroll?.observeViewportScroll();
+        editor.requestPublication();
+      }
+    : undefined}
+/>
 
 {#snippet editorContent()}
   <div

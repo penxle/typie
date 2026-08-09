@@ -2,6 +2,7 @@ import { flushSync, untrack } from 'svelte';
 import { PAGE_GAP } from './constants';
 import { pageRectsToRevealTargetSpan, resolvePageSpans } from './geometry';
 import { requiredSurfacePages } from './required-surface-pages';
+import { isInstantReveal } from './scroll.svelte';
 import { zoomDiffers } from './zoom';
 import type { EditorContext, EditorSnapshot, PublishedBundle } from './editor.svelte';
 import type { EditorSurfaceHost } from './editor-surface-host.svelte';
@@ -57,7 +58,7 @@ function reconcilePublication(
   editor.requestSurfacePages(preparation.requiredPages);
   surfaceHost.reconcile(preparation.requiredPages);
   surfaceHost.syncPublished();
-  if (preparation.pendingRequest?.behavior === 'instant' && preparation.scrollIntent?.type === 'unresolved') return;
+  if (isInstantReveal(preparation.pendingRequest) && preparation.scrollIntent?.type === 'unresolved') return;
 
   const bundle = editor.publishIfReady(preparation.requiredPages);
   if (!bundle) return;
@@ -74,7 +75,7 @@ function reconcilePublication(
     const finalPreparation = resolveEditorSurfacePreparation(editor, scroll, finalAnchorPublication.targetScrollTop ?? undefined);
     if (
       !finalPreparation ||
-      (finalPreparation.pendingRequest?.behavior === 'instant' && finalPreparation.scrollIntent?.type === 'unresolved') ||
+      (isInstantReveal(finalPreparation.pendingRequest) && finalPreparation.scrollIntent?.type === 'unresolved') ||
       finalPreparation.pendingRequest !== preparation.pendingRequest ||
       !samePages(finalPreparation.requiredPages, preparation.requiredPages)
     ) {
@@ -88,7 +89,7 @@ function reconcilePublication(
     surfaceHost.syncPublished(bundle);
     if (finalPreparation.pendingRequest && finalPreparation.scrollIntent) {
       const applied = scroll.applyPending(finalPreparation.pendingRequest, bundle.snapshot, finalPreparation.scrollIntent);
-      if (!applied && finalPreparation.pendingRequest.behavior === 'instant') {
+      if (!applied && isInstantReveal(finalPreparation.pendingRequest)) {
         editor.requestPublication();
         return;
       }
@@ -124,11 +125,12 @@ export function resolveEditorSurfacePreparation(
   const snapshot = editor.appliedSnapshot;
   const viewportRect = viewport.getRect();
   const clientHeight = viewportRect.bottom - viewportRect.top;
-  const scrollTop = currentScrollTop ?? viewport.getScrollTop();
+  const actualScrollTop = viewport.getScrollTop();
+  const scrollTop = currentScrollTop ?? actualScrollTop;
   if (!Number.isFinite(scrollTop) || scrollTop < 0 || !Number.isFinite(clientHeight) || clientHeight <= 0) return null;
 
   const zoom = displayZoom(snapshot, editor.displayZoom);
-  const origin = editor.extensionAreaEl ? editor.extensionAreaEl.getBoundingClientRect().top - viewportRect.top + scrollTop : 0;
+  const origin = editor.extensionAreaEl ? editor.extensionAreaEl.getBoundingClientRect().top - viewportRect.top + actualScrollTop : 0;
   const pageSpans = resolvePageSpans(snapshot.pageSizes, {
     origin,
     displayZoom: zoom,
@@ -138,17 +140,20 @@ export function resolveEditorSurfacePreparation(
   const bottomPadding = scroll.bottomPaddingFor(snapshot);
   const predictedExtent = pageSpans.at(-1)?.bottom ?? origin;
   const scrollHeight = Math.max(predictedExtent + bottomPadding, clientHeight);
-  const currentViewport = { top: scrollTop, bottom: scrollTop + clientHeight };
+  const maximumScrollTop = Math.max(0, scrollHeight - clientHeight);
+  const planningScrollTop = editor.scrollRootEl ? Math.max(0, Math.min(scrollTop, maximumScrollTop)) : scrollTop;
+  const currentViewport = { top: planningScrollTop, bottom: planningScrollTop + clientHeight };
 
   const pendingRequest = scroll.activateForRevision(snapshot.revision);
   const targetRects = pendingRequest ? scroll.resolveTargetRects(pendingRequest.target, snapshot) : null;
   const target = targetRects ? pageRectsToRevealTargetSpan(targetRects, pageSpans, zoom) : null;
+  const instantReveal = isInstantReveal(pendingRequest);
   const preparationViewports =
-    target && pendingRequest?.behavior === 'instant'
+    target && pendingRequest && instantReveal
       ? scroll.resolvePreparationViewports(
           pendingRequest,
           {
-            scrollTop,
+            scrollTop: planningScrollTop,
             clientHeight,
             scrollHeight,
             targetTop: target.targetTop,
@@ -158,7 +163,7 @@ export function resolveEditorSurfacePreparation(
         )
       : [];
   const scrollIntent = resolveScrollIntent(pendingRequest, targetRects, target, snapshot, scroll, {
-    scrollTop,
+    scrollTop: planningScrollTop,
     clientHeight,
     scrollHeight,
   });
@@ -168,7 +173,7 @@ export function resolveEditorSurfacePreparation(
     activePages: editor.activeSurfacePages,
     preparationViewports,
   });
-  if (pendingRequest?.behavior === 'instant') {
+  if (instantReveal) {
     const exactViewport =
       scrollIntent?.type === 'scroll_to' ? { top: scrollIntent.y, bottom: scrollIntent.y + clientHeight } : currentViewport;
     const exactPages = requiredSurfacePages({

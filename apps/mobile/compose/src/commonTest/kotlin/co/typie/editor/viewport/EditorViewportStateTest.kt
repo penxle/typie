@@ -6,7 +6,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
-import kotlinx.coroutines.test.runTest
 
 class EditorViewportStateTest {
   @Test
@@ -297,7 +296,7 @@ class EditorViewportStateTest {
   }
 
   @Test
-  fun `unchanged animated scroll intent invalidates retained zoom target`() = runTest {
+  fun `unchanged scroll intent invalidates retained zoom target`() {
     val state = EditorViewportState()
     state.updateMeasuredBounds(
       viewportSize = Size(width = 100f, height = 100f),
@@ -310,7 +309,7 @@ class EditorViewportStateTest {
     )
     state.endTransform()
 
-    state.animateScrollToY(targetY = 100f)
+    state.scrollToY(targetY = 100f)
     state.updateMeasuredBounds(
       viewportSize = Size(width = 100f, height = 100f),
       contentSize = Size(width = 400f, height = 400f),

@@ -16,6 +16,7 @@ import co.typie.editor.ffi.ViewportAnchor
 import co.typie.editor.ffi.ViewportAnchorPoint
 import co.typie.editor.ffi.ViewportAnchorResolution
 import co.typie.editor.runtime.EditorBoundsInContainer
+import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.editor.scroll.EditorScrollFrame
 import co.typie.editor.scroll.EditorVisibleArea
 import co.typie.editor.scroll.resolveEditorAutoScrollPolicy
@@ -75,6 +76,38 @@ class EditorViewportAnchorReconcilerTest {
     assertEquals(viewportAnchor, anchorState.identity)
     assertEquals(Offset(x = 0f, y = 250f), viewportState.scrollOffset)
   }
+
+  @Test
+  fun `non-selection reveal keeps the viewport anchor when selection is outside the guard`() =
+    runTest {
+      val visibleArea = visibleArea()
+      val frame = frame(visibleArea)
+      val anchorState = EditorViewportAnchorState()
+      val viewportState = viewportState(scrollY = 350f)
+      val editor = editor(selectionY = 50f)
+
+      reconcile(editor, anchorState, frame, viewportState, visibleArea)
+      assertEquals(viewportAnchor, anchorState.identity)
+
+      reconcileViewportAnchorObservation(
+        editor = editor,
+        anchorState = anchorState,
+        bundle = PublishedBundle(snapshot = frame.state, frames = emptyMap()),
+        frame = frame,
+        viewportState = viewportState,
+        visibleArea = visibleArea,
+        mode = EditorViewportScrollReconcileMode.Enabled,
+        smoothRevealActive = false,
+        handoffTarget =
+          EditorBringIntoViewTarget.PageRects(
+            listOf(PageRect(pageIdx = 0, rect = Rect(0f, 500f, 1f, 20f)))
+          ),
+        selectionRevealOrigin = null,
+        contentOriginY = 0f,
+      )
+
+      assertEquals(viewportAnchor, anchorState.identity)
+    }
 
   @Test
   fun `scroll observed during transform is reconciled after the transform ends`() = runTest {
@@ -166,7 +199,7 @@ class EditorViewportAnchorReconcilerTest {
       visibleArea = visibleArea,
       mode = EditorViewportScrollReconcileMode.Enabled,
       smoothRevealActive = false,
-      handoffToSelection = false,
+      handoffTarget = null,
       selectionRevealOrigin = null,
       contentOriginY = 40f,
     )
@@ -180,7 +213,7 @@ class EditorViewportAnchorReconcilerTest {
       visibleArea = visibleArea,
       mode = EditorViewportScrollReconcileMode.Enabled,
       smoothRevealActive = false,
-      handoffToSelection = false,
+      handoffTarget = null,
       selectionRevealOrigin = null,
       contentOriginY = 40f,
     )
@@ -221,7 +254,7 @@ class EditorViewportAnchorReconcilerTest {
       visibleArea = visibleArea,
       mode = EditorViewportScrollReconcileMode.Enabled,
       smoothRevealActive = smoothRevealActive,
-      handoffToSelection = false,
+      handoffTarget = null,
       selectionRevealOrigin = null,
       contentOriginY = 0f,
     )

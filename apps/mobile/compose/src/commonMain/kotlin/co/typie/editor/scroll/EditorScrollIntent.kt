@@ -58,6 +58,8 @@ internal fun EditorAutoScrollPolicy.resolveForState(
 internal sealed interface EditorBringIntoViewTarget {
   data object CurrentSelectionHead : EditorBringIntoViewTarget
 
+  data class TrackedItem(val id: String) : EditorBringIntoViewTarget
+
   data class PageRects(val rects: List<PageRect>) : EditorBringIntoViewTarget
 }
 
@@ -353,6 +355,8 @@ private fun resolveBringIntoViewTargetPageRects(
   when (target) {
     EditorBringIntoViewTarget.CurrentSelectionHead ->
       resolveCurrentSelectionHeadPageRect(state)?.let(::listOf)
+    is EditorBringIntoViewTarget.TrackedItem ->
+      state.trackedRanges.firstOrNull { it.id == target.id }?.rects?.takeIf { it.isNotEmpty() }
     is EditorBringIntoViewTarget.PageRects -> target.rects.takeIf { it.isNotEmpty() }
   }
 

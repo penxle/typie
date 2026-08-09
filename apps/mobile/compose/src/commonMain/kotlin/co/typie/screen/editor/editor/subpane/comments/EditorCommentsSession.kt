@@ -19,7 +19,6 @@ import co.typie.editor.scroll.EditorBringIntoViewBehavior
 import co.typie.editor.scroll.EditorBringIntoViewPolicy
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.EditorBringIntoViewTarget
-import co.typie.editor.scroll.toPageRectsTarget
 import co.typie.screen.editor.editor.selectTrackedRangeMember
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastType
@@ -204,12 +203,10 @@ internal fun rememberEditorCommentsSession(
     if (lastRequestedActivationRevision == activeThreadActivationRevision) {
       return@LaunchedEffect
     }
-    val activeEditor = editor ?: return@LaunchedEffect
-    val (snapshot, range) = activeEditor.trackedRangeSnapshot(threadId)
-    val target = listOfNotNull(range).commentThreadScrollTarget(threadId) ?: return@LaunchedEffect
+    if (editor == null) return@LaunchedEffect
     bringIntoViewRequests.requestForVersion(
-      target = target,
-      version = snapshot.version,
+      target = activeThreadScrollTarget,
+      version = editorState.version,
       policy = EditorBringIntoViewPolicy.Reveal,
       behavior = EditorBringIntoViewBehavior.Smooth,
     )
@@ -284,7 +281,8 @@ internal fun List<TrackedRange>.commentThreadScrollTarget(
   threadId: String?
 ): EditorBringIntoViewTarget? {
   if (threadId == null) return null
-  return this.firstOrNull { it.id == threadId && it.group == ACTIVE_COMMENT_RANGE_GROUP }
-    ?.rects
-    ?.toPageRectsTarget()
+  return this.firstOrNull {
+      it.id == threadId && it.group == ACTIVE_COMMENT_RANGE_GROUP && it.rects.isNotEmpty()
+    }
+    ?.let { EditorBringIntoViewTarget.TrackedItem(it.id) }
 }

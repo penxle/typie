@@ -238,7 +238,6 @@
         ctx.editor?.requestPublication();
       }
     : undefined}
-  onscrollend={useWindowScroll ? () => ctx.scroll?.settleSmoothReveal() : undefined}
   onwheel={useWindowScroll ? () => ctx.scroll?.cancel() : undefined}
 />
 
@@ -303,7 +302,6 @@
       ctx.scroll?.observeViewportScroll();
       ctx.editor?.requestPublication();
     }}
-    onscrollend={() => ctx.scroll?.settleSmoothReveal()}
     onwheel={() => ctx.scroll?.cancel()}
     bind:clientWidth
     bind:clientHeight

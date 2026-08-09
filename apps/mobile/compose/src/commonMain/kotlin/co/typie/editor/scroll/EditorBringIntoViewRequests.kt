@@ -24,6 +24,9 @@ internal class EditorBringIntoViewRequests(private val requestPresentation: () -
 
   private val pending = AtomicReference<Request?>(null)
 
+  val pendingRequest: Request?
+    get() = pending.load()
+
   fun requestForState(
     state: EditorState,
     policy: EditorBringIntoViewPolicy,

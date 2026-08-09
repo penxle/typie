@@ -33,7 +33,9 @@ import co.typie.editor.viewport.EditorViewportAnchorRevealOrigin
 import co.typie.editor.viewport.EditorViewportAnchorState
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
+import kotlin.test.assertTrue
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 
@@ -196,6 +198,74 @@ class EditorSurfacePreparationTest {
     assertEquals(measuredInitially?.scrollIntent, corrected?.scrollIntent)
     assertEquals(measuredInitially?.maximumScrollY, corrected?.maximumScrollY)
   }
+
+  @Test
+  fun `disabled smooth motion prepares the destination like an instant reveal`() = runTest {
+    val editor = Editor(FakeFfiEditor(), this, StandardTestDispatcher(testScheduler))
+    val frame = frame()
+    val request =
+      EditorBringIntoViewRequests.Request(
+        target =
+          EditorBringIntoViewTarget.PageRects(
+            listOf(PageRect(pageIdx = 2, rect = Rect(x = 0f, y = 100f, width = 1f, height = 20f)))
+          ),
+        policy = EditorBringIntoViewPolicy.Reveal,
+        behavior = EditorBringIntoViewBehavior.Smooth,
+      )
+
+    val animated =
+      resolveEditorSurfacePreparation(
+        editor = editor,
+        scrollFrame = frame,
+        currentScroll = 0f,
+        bringIntoViewRequest = request,
+        smoothScrollEnabled = true,
+      )
+    val reducedMotion =
+      resolveEditorSurfacePreparation(
+        editor = editor,
+        scrollFrame = frame,
+        currentScroll = 0f,
+        bringIntoViewRequest = request,
+        smoothScrollEnabled = false,
+      )
+
+    assertFalse(2 in animated!!.requiredPages)
+    assertTrue(2 in reducedMotion!!.requiredPages)
+  }
+
+  @Test
+  fun `surface planning clamps to a candidate document shorter than the current scroll`() =
+    runTest {
+      val editor = Editor(FakeFfiEditor(), this, StandardTestDispatcher(testScheduler))
+      val baseFrame = frame()
+      val candidateFrame =
+        baseFrame.copy(
+          state =
+            baseFrame.state.copy(
+              version = 2L,
+              pageSizes = listOf(PageSize(width = 600f, height = 1_000f)),
+            )
+        )
+
+      val preparation =
+        resolveAnchoredEditorSurfacePreparation(
+          editor = editor,
+          scrollFrame = candidateFrame,
+          currentScrollOffset = Offset(x = 0f, y = 90_000f),
+          bringIntoViewRequest = null,
+          anchorState = EditorViewportAnchorState(),
+          publishedBundle =
+            PublishedBundle(snapshot = baseFrame.state.copy(version = 1L), frames = emptyMap()),
+        )
+
+      val resolved = requireNotNull(preparation)
+      assertEquals(setOf(0), resolved.requiredPages)
+      assertEquals(
+        EditorViewportAnchorPublication.Ready(scrollY = resolved.maximumScrollY, geometry = null),
+        resolved.anchorPublication,
+      )
+    }
 
   private fun frame(): EditorScrollFrame {
     val visibleArea = EditorVisibleArea(viewport = Size(width = 600f, height = 400f))

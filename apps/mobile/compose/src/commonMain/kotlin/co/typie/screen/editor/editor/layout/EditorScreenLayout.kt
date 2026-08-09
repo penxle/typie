@@ -19,6 +19,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.MotionDurationScale
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -92,12 +93,9 @@ import co.typie.screen.editor.editor.overlay.resolveEditorMagnifierPlacement
 import co.typie.screen.editor.editor.state.EditorScreenState
 import co.typie.ui.theme.LocalHazeState
 import dev.chrisbanes.haze.hazeSource
-import kotlin.coroutines.coroutineContext
-import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CoroutineStart
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 private enum class EditorScreenLayoutSlot {
@@ -233,6 +231,12 @@ internal fun EditorScreenLayout(
   val platformIndirectScaleBridge = remember { EditorPlatformIndirectScaleBridge() }
   val viewConfiguration = LocalViewConfiguration.current
   val bringIntoViewRequests = LocalEditorBringIntoViewRequests.current
+  val coroutineScope = rememberCoroutineScope()
+  val smoothScrollEnabled =
+    coroutineScope.coroutineContext[MotionDurationScale]
+      ?.scaleFactor
+      ?.takeIf { it.isFinite() }
+      ?.let { it > 0f } ?: true
   val appliedState = editor?.appliedState
   val bringIntoViewRequest = appliedState?.let {
     bringIntoViewRequests.activateForVersion(it.version)
@@ -249,6 +253,7 @@ internal fun EditorScreenLayout(
       bringIntoViewRequest = bringIntoViewRequest,
       anchorState = viewportAnchorState,
       publishedBundle = it.publishedBundle,
+      smoothScrollEnabled = smoothScrollEnabled,
     )
   }
   if (editor != null && surfacePreparation != null) {
@@ -262,10 +267,10 @@ internal fun EditorScreenLayout(
   val screenPointerSequence = remember { EditorScreenPointerSequence() }
   val viewportFlingBehavior = ScrollableDefaults.flingBehavior()
   val viewportAnchorPresentationRef = remember { EditorViewportAnchorPresentationRef() }
-  val coroutineScope = rememberCoroutineScope()
-  var smoothScrollJob by remember { mutableStateOf<Job?>(null) }
-  var smoothScrollRequest by remember { mutableStateOf<EditorBringIntoViewRequests.Request?>(null) }
-  var smoothScrollTargetY by remember { mutableStateOf<Float?>(null) }
+  val smoothScrollSession =
+    remember(coroutineScope, state.viewportState, bringIntoViewRequests) {
+      EditorSmoothScrollSession(coroutineScope, state.viewportState, bringIntoViewRequests)
+    }
   var layoutBoundsInRoot by remember { mutableStateOf<Rect?>(null) }
   if (isCurrentNavigationRoute) {
     DisposableEffect(navigationPopNestedScroll, viewportScrollableState) {
@@ -286,11 +291,7 @@ internal fun EditorScreenLayout(
     state.viewportState.isDirectManipulationInProgress,
   ) {
     if (state.viewportState.isTransforming || state.viewportState.isDirectManipulationInProgress) {
-      smoothScrollJob?.cancel()
-      smoothScrollJob = null
-      smoothScrollTargetY = null
-      smoothScrollRequest?.let(bringIntoViewRequests::discard)
-      smoothScrollRequest = null
+      smoothScrollSession.stop()?.let(bringIntoViewRequests::discard)
     }
   }
   val magnifierPlacement = layoutBoundsInRoot?.let { bounds ->
@@ -389,6 +390,7 @@ internal fun EditorScreenLayout(
             bringIntoViewRequest = currentRequest,
             anchorState = viewportAnchorState,
             publishedBundle = publishedBundle,
+            smoothScrollEnabled = smoothScrollEnabled,
           )
         } else {
           null
@@ -411,6 +413,7 @@ internal fun EditorScreenLayout(
                 bringIntoViewRequest = latestRequest,
                 anchorState = viewportAnchorState,
                 publishedBundle = publishedBundle,
+                smoothScrollEnabled = smoothScrollEnabled,
               )
         if (!stillCurrent) return@let null
 
@@ -419,11 +422,13 @@ internal fun EditorScreenLayout(
           return@let null
         }
 
+        val previousScrollY = state.viewportState.scrollOffset.y
         state.viewportState.scrollToY(
           targetY = anchorPublication.scrollY,
           isAutoScroll = true,
           maximumScrollY = currentPreparation.maximumScrollY,
         )
+        smoothScrollSession.translate(state.viewportState.scrollOffset.y - previousScrollY)
         anchorPublication.geometry?.let { geometry ->
           viewportAnchorState.acceptGeometry(geometry, state.viewportState.scrollOffset.y)
         }
@@ -499,7 +504,7 @@ internal fun EditorScreenLayout(
                 bringIntoViewRequests.activateForVersion(scrollFrameVersion) === it
               }
               var placementScrollY = state.viewportState.scrollOffset.y
-              var handoffViewportAnchorToSelection = false
+              var viewportAnchorHandoffTarget: EditorBringIntoViewTarget? = null
               var handoffSelectionRevealOrigin: EditorViewportAnchorRevealOrigin? = null
               val scrollIntentResult = bringIntoViewRequest?.let { request ->
                 acceptedPreparation?.scrollIntent
@@ -523,12 +528,12 @@ internal fun EditorScreenLayout(
                     null -> Unit
                     EditorScrollIntentResult.Unresolved -> Unit
                     EditorScrollIntentResult.NoScroll -> {
-                      smoothScrollJob?.cancel()
-                      smoothScrollJob = null
-                      smoothScrollTargetY = null
-                      smoothScrollRequest = null
+                      if (!smoothScrollSession.finishIfNearTarget(bringIntoViewRequest)) {
+                        smoothScrollSession.stop()
+                      }
+                      placementScrollY = state.viewportState.scrollOffset.y
                       requestToMarkPresented = bringIntoViewRequest
-                      handoffViewportAnchorToSelection = true
+                      viewportAnchorHandoffTarget = bringIntoViewRequest.target
                       if (
                         bringIntoViewRequest.target ==
                           EditorBringIntoViewTarget.CurrentSelectionHead
@@ -542,13 +547,16 @@ internal fun EditorScreenLayout(
                       }
                     }
                     is EditorScrollIntentResult.ScrollTo -> {
-                      when (bringIntoViewRequest.behavior) {
+                      val effectiveBehavior =
+                        if (smoothScrollEnabled) {
+                          bringIntoViewRequest.behavior
+                        } else {
+                          EditorBringIntoViewBehavior.Instant
+                        }
+                      when (effectiveBehavior) {
                         EditorBringIntoViewBehavior.Instant -> {
                           val revealOriginScrollY = placementScrollY
-                          smoothScrollJob?.cancel()
-                          smoothScrollJob = null
-                          smoothScrollTargetY = null
-                          smoothScrollRequest = null
+                          smoothScrollSession.stop()
                           val maximumScrollY =
                             acceptedPreparation?.maximumScrollY ?: state.viewportState.maxScrollY
                           placementScrollY = scrollIntentResult.y.coerceIn(0f, maximumScrollY)
@@ -558,7 +566,7 @@ internal fun EditorScreenLayout(
                             maximumScrollY = maximumScrollY,
                           )
                           requestToMarkPresented = bringIntoViewRequest
-                          handoffViewportAnchorToSelection = true
+                          viewportAnchorHandoffTarget = bringIntoViewRequest.target
                           if (
                             bringIntoViewRequest.target ==
                               EditorBringIntoViewTarget.CurrentSelectionHead
@@ -573,15 +581,48 @@ internal fun EditorScreenLayout(
                         }
 
                         EditorBringIntoViewBehavior.Smooth -> {
-                          val targetY = scrollIntentResult.y
-                          val alreadyAnimating =
-                            smoothScrollRequest === bringIntoViewRequest &&
-                              smoothScrollJob?.isActive == true &&
-                              smoothScrollTargetY?.let { abs(it - targetY) <= 1f } == true
-                          if (!alreadyAnimating) {
-                            smoothScrollJob?.cancel()
-                            smoothScrollRequest = bringIntoViewRequest
-                            smoothScrollTargetY = targetY
+                          val maximumScrollY =
+                            acceptedPreparation?.maximumScrollY ?: state.viewportState.maxScrollY
+                          val smoothScrollUpdate =
+                            smoothScrollSession.retarget(
+                              request = bringIntoViewRequest,
+                              targetY = scrollIntentResult.y,
+                              viewportHeight = state.viewportState.viewportSize.height,
+                              maximumScrollY = maximumScrollY,
+                            ) { completedRequest ->
+                              val activePresentation = viewportAnchorPresentationRef.current
+                              if (
+                                activePresentation != null &&
+                                  activePresentation.bundle.snapshot !==
+                                    activePresentation.editor.appliedState
+                              ) {
+                                activePresentation.editor.requestPublication()
+                                false
+                              } else {
+                                if (
+                                  activePresentation != null &&
+                                    bringIntoViewRequests.markPresented(
+                                      version = activePresentation.bundle.snapshot.version,
+                                      request = completedRequest,
+                                    )
+                                ) {
+                                  attachSelectionViewportAnchor(
+                                    editor = activePresentation.editor,
+                                    anchorState = viewportAnchorState,
+                                    revision = activePresentation.bundle.snapshot.version,
+                                    frame = activePresentation.frame,
+                                    scrollY = state.viewportState.scrollOffset.y,
+                                    visibleArea = activePresentation.visibleArea,
+                                    requireGuard =
+                                      completedRequest.target !=
+                                        EditorBringIntoViewTarget.CurrentSelectionHead,
+                                    contentOriginY = activePresentation.contentOriginY,
+                                  )
+                                }
+                                true
+                              }
+                            }
+                          if (smoothScrollUpdate == EditorSmoothScrollUpdate.Changed) {
                             editor?.let { activeEditor ->
                               attachViewportCenterAnchor(
                                 editor = activeEditor,
@@ -592,42 +633,10 @@ internal fun EditorScreenLayout(
                                 contentOriginY = presentationContentOriginY,
                               )
                             }
-                            smoothScrollJob = coroutineScope.launch {
-                              var completed = false
-                              try {
-                                state.viewportState.animateScrollToY(
-                                  targetY = targetY,
-                                  isAutoScroll = true,
-                                )
-                                completed = true
-                              } finally {
-                                if (smoothScrollJob == coroutineContext[Job]) {
-                                  smoothScrollJob = null
-                                  smoothScrollTargetY = null
-                                  smoothScrollRequest = null
-                                  val activePresentation = viewportAnchorPresentationRef.current
-                                  if (
-                                    completed &&
-                                      activePresentation != null &&
-                                      bringIntoViewRequests.markPresented(
-                                        version = activePresentation.bundle.snapshot.version,
-                                        request = bringIntoViewRequest,
-                                      )
-                                  ) {
-                                    attachSelectionViewportAnchor(
-                                      editor = activePresentation.editor,
-                                      anchorState = viewportAnchorState,
-                                      revision = activePresentation.bundle.snapshot.version,
-                                      frame = activePresentation.frame,
-                                      scrollY = state.viewportState.scrollOffset.y,
-                                      visibleArea = activePresentation.visibleArea,
-                                      requireGuard = false,
-                                      contentOriginY = activePresentation.contentOriginY,
-                                    )
-                                  }
-                                }
-                              }
-                            }
+                          }
+                          if (smoothScrollUpdate == EditorSmoothScrollUpdate.Finished) {
+                            requestToMarkPresented = bringIntoViewRequest
+                            viewportAnchorHandoffTarget = bringIntoViewRequest.target
                           }
                         }
                       }
@@ -646,8 +655,8 @@ internal fun EditorScreenLayout(
                 viewportState = state.viewportState,
                 visibleArea = measuredVisibleArea,
                 mode = viewportScrollReconcileMode,
-                smoothRevealActive = smoothScrollJob != null,
-                handoffToSelection = handoffViewportAnchorToSelection,
+                smoothRevealActive = smoothScrollSession.active,
+                handoffTarget = viewportAnchorHandoffTarget,
                 selectionRevealOrigin = handoffSelectionRevealOrigin,
                 contentOriginY = presentationContentOriginY,
               )
@@ -701,6 +710,7 @@ internal fun resolveAnchoredEditorSurfacePreparation(
   bringIntoViewRequest: EditorBringIntoViewRequests.Request?,
   anchorState: EditorViewportAnchorState,
   publishedBundle: PublishedBundle?,
+  smoothScrollEnabled: Boolean = true,
 ): EditorSurfacePreparation? {
   val initial =
     resolveEditorSurfacePreparation(
@@ -708,6 +718,7 @@ internal fun resolveAnchoredEditorSurfacePreparation(
       scrollFrame = scrollFrame,
       currentScroll = currentScrollOffset.y,
       bringIntoViewRequest = bringIntoViewRequest,
+      smoothScrollEnabled = smoothScrollEnabled,
     ) ?: return null
   val anchorPublication =
     reconcileViewportAnchorPublication(
@@ -729,6 +740,7 @@ internal fun resolveAnchoredEditorSurfacePreparation(
       scrollFrame = scrollFrame,
       currentScroll = anchorPublication.scrollY,
       bringIntoViewRequest = bringIntoViewRequest,
+      smoothScrollEnabled = smoothScrollEnabled,
     )
     ?.copy(anchorPublication = anchorPublication)
 }
@@ -738,6 +750,7 @@ internal fun resolveEditorSurfacePreparation(
   scrollFrame: EditorScrollFrame,
   currentScroll: Float,
   bringIntoViewRequest: EditorBringIntoViewRequests.Request?,
+  smoothScrollEnabled: Boolean = true,
 ): EditorSurfacePreparation? {
   val state = scrollFrame.state
   val viewportHeight = scrollFrame.visibleArea.viewport.height
@@ -749,7 +762,7 @@ internal fun resolveEditorSurfacePreparation(
       displayZoom = scrollFrame.displayZoom,
     )
   val headerHeight = scrollFrame.headerHeight.takeIf(Float::isFinite) ?: 0f
-  val resolvedContentOrigin = resolveViewportAnchorContentOriginY(scrollFrame)
+  val resolvedContentOrigin = headerHeight + bodyGeometry.topSpacerHeight
   val pageSpans =
     state.pageSizes.mapIndexedNotNull { page, size ->
       val pageTop =
@@ -786,45 +799,38 @@ internal fun resolveEditorSurfacePreparation(
           pagesContentHeight +
           scrollFrame.autoScrollPolicy.bottomPadding,
       )
-  val currentViewport =
-    if (
-      currentScroll.isFinite() &&
-        currentScroll >= 0f &&
-        viewportHeight.isFinite() &&
-        viewportHeight > 0f
-    ) {
-      VerticalSpan(top = currentScroll, bottom = currentScroll + viewportHeight)
-    } else {
-      null
-    }
-  if (currentViewport == null) return null
+  if (!currentScroll.isFinite() || !viewportHeight.isFinite() || viewportHeight <= 0f) return null
   val maximumScrollY = (contentExtent - viewportHeight).coerceAtLeast(0f)
+  val planningScrollY = currentScroll.coerceIn(0f, maximumScrollY)
+  val currentViewport =
+    VerticalSpan(top = planningScrollY, bottom = planningScrollY + viewportHeight)
   val scrollIntent = bringIntoViewRequest?.let { request ->
     resolveEditorScrollIntent(
       frame = scrollFrame,
       target = request.target,
       policy = request.policy,
-      currentScroll = currentScroll,
+      currentScroll = planningScrollY,
       contentOriginY = resolvedContentOrigin,
       maximumScrollY = maximumScrollY,
     )
   }
+  val instantReveal =
+    bringIntoViewRequest != null &&
+      (bringIntoViewRequest.behavior == EditorBringIntoViewBehavior.Instant || !smoothScrollEnabled)
   val preparationViewports =
-    if (bringIntoViewRequest?.behavior == EditorBringIntoViewBehavior.Instant) {
+    if (instantReveal) {
       resolveInstantRevealPreparationViewports(
         frame = scrollFrame,
         target = bringIntoViewRequest.target,
         policy = bringIntoViewRequest.policy,
-        currentScroll = currentScroll,
+        currentScroll = planningScrollY,
         contentOriginY = resolvedContentOrigin,
         maximumScrollY = maximumScrollY,
       )
     } else {
       emptyList()
     }
-  val instantRevealUnresolved =
-    bringIntoViewRequest?.behavior == EditorBringIntoViewBehavior.Instant &&
-      scrollIntent == EditorScrollIntentResult.Unresolved
+  val instantRevealUnresolved = instantReveal && scrollIntent == EditorScrollIntentResult.Unresolved
   if (instantRevealUnresolved) return null
   val requiredPages =
     requiredSurfacePages(
@@ -835,7 +841,7 @@ internal fun resolveEditorSurfacePreparation(
     )
   val exactViewport =
     when {
-      bringIntoViewRequest?.behavior != EditorBringIntoViewBehavior.Instant -> currentViewport
+      !instantReveal -> currentViewport
       scrollIntent is EditorScrollIntentResult.ScrollTo -> {
         val top = scrollIntent.y.coerceIn(0f, maximumScrollY)
         VerticalSpan(top = top, bottom = top + viewportHeight)
@@ -850,7 +856,7 @@ internal fun resolveEditorSurfacePreparation(
       activePages = editor.activeSurfacePages,
     )
   }
-  if (bringIntoViewRequest?.behavior == EditorBringIntoViewBehavior.Instant) {
+  if (instantReveal) {
     check(exactPages != null && requiredPages.containsAll(exactPages)) {
       "Instant reveal destination requires unprepared surfaces: " +
         "required=$requiredPages destination=$exactPages"
