@@ -87,18 +87,19 @@ internal class EditorFocusReturnSession(
 
   suspend fun restore() {
     val captured = state as? State.Captured ?: return
+    if (isRestorable(captured.context) && captured.context.editor.currentSelection() != null) {
+      state = State.Idle
+      captured.stableSelection.cancel()
+      focusBestEffort(captured.context)
+      return
+    }
+
     awaitFocusBoundary()
     if (state !== captured) return
 
     state = State.Idle
     if (!isRestorable(captured.context)) {
       captured.stableSelection.cancel()
-      return
-    }
-
-    if (captured.context.editor.currentSelection() != null) {
-      captured.stableSelection.cancel()
-      focusBestEffort(captured.context)
       return
     }
 
