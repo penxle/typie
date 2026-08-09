@@ -359,6 +359,12 @@ fun NavigationStack(
     }
   }
 
+  fun releaseRemovedRouteResources(removedRoutes: List<Route>) {
+    removedRoutes.forEach(routeScenes::remove)
+    navigator.clearViewModelStoresFor(removedRoutes)
+    clearRemovedRoutes(removedRoutes)
+  }
+
   suspend fun updateScenesAndAwaitApply(update: () -> Unit) {
     val confirmation = CompletableDeferred<Unit>()
     sceneApplyConfirmation = confirmation
@@ -379,22 +385,22 @@ fun NavigationStack(
     // content in the same pager subcomposition can corrupt Compose Runtime's change list. First
     // move both scenes to their settled slots, then release the outgoing scene in a separately
     // applied composition.
-    // TODO: Re-test without this handoff after upgrading to a Compose Runtime that includes
-    // https://github.com/androidx/androidx/commit/215b08ffba30e9369e91460e1d726d646558e556.
-    // Remove it only after the focused pager regression test and the iOS keyboard repro both pass.
-    val presentedRemovedRoutes = removedRoutes.filter { it == visibleRoute || it.keepAlive }
-    updateScenesAndAwaitApply {
-      retainedRemovedRoutes = presentedRemovedRoutes
-      visibleRoute = navigator.current
-      behindRoute = null
-      animState = AnimState.Idle
+    // TODO: Re-test without this handoff after the next Compose Runtime upgrade. Remove it only
+    // after the focused pager regression test and the iOS keyboard repro both pass.
+    try {
+      val presentedRemovedRoutes = removedRoutes.filter { it == visibleRoute || it.keepAlive }
+      updateScenesAndAwaitApply {
+        retainedRemovedRoutes = presentedRemovedRoutes
+        visibleRoute = navigator.current
+        behindRoute = null
+        animState = AnimState.Idle
+      }
+      updateScenesAndAwaitApply { retainedRemovedRoutes = emptyList() }
+    } finally {
+      sceneApplyConfirmation = null
+      retainedRemovedRoutes = emptyList()
+      releaseRemovedRouteResources(removedRoutes)
     }
-    updateScenesAndAwaitApply { retainedRemovedRoutes = emptyList() }
-    sceneApplyConfirmation = null
-
-    removedRoutes.forEach(routeScenes::remove)
-    navigator.clearViewModelStoresFor(removedRoutes)
-    clearRemovedRoutes(removedRoutes)
   }
 
   suspend fun settleAtCurrentRoute(restoreKeyboard: Boolean = true) {
@@ -676,16 +682,32 @@ fun NavigationStack(
             navigator.consumePopRequest()
             navigator.completeTransition(result = result)
           } catch (e: Throwable) {
-            withContext(NonCancellable) {
-              if (navigator.peekRemovalPolicy() == RouteRemovalPolicy.BypassInterceptors) {
-                // Server deletion already succeeded. Do not strand the deleted document because
-                // presentation failed; finish the exact prepared removal without another prompt.
-                val removedRoutes = navigator.performPopTo(targetRoute)
-                softwareKeyboardInteraction.hideAndAwaitResolution()
-                settleAfterRemoval(removedRoutes)
+            if (navigator.peekRemovalPolicy() == RouteRemovalPolicy.BypassInterceptors) {
+              // Server deletion already succeeded. Do not strand the deleted document because
+              // presentation failed; finish the exact prepared removal without another prompt.
+              val removedRoutes = navigator.performPopTo(targetRoute)
+              var cancellation = e as? CancellationException
+              try {
+                // A cancelled effect is leaving composition, so no future SideEffect can confirm
+                // a scene handoff. The synchronous finally block below is sufficient in that case.
+                if (cancellation == null) {
+                  softwareKeyboardInteraction.hideAndAwaitResolution()
+                  settleAfterRemoval(removedRoutes)
+                }
+              } catch (rescueFailure: Throwable) {
+                if (rescueFailure is CancellationException) {
+                  cancellation = rescueFailure
+                } else if (rescueFailure !== e) {
+                  e.addSuppressed(rescueFailure)
+                }
+              } finally {
+                releaseRemovedRouteResources(removedRoutes)
                 navigator.consumePopRequest()
                 navigator.completeTransition()
-              } else {
+              }
+              cancellation?.let { throw it }
+            } else {
+              withContext(NonCancellable) {
                 val rollbackFailure =
                   try {
                     navigator.routeRemovals.rollbackActiveSegment()
@@ -708,8 +730,8 @@ fun NavigationStack(
                 navigator.consumePopRequest()
                 navigator.completeTransition(e)
               }
+              if (e is CancellationException) throw e
             }
-            if (e is CancellationException) throw e
           }
         }
       }
