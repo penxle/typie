@@ -6,8 +6,8 @@ import { buildModelConfig } from '../feedback/tiers.ts';
 import { FeedbackSessions, ManuscriptVersions, Reviews } from './db/index.ts';
 import { fetchManuscript } from './ingest.ts';
 import { createInternalApi } from './internal-api.ts';
-import { cancelRun, newPrismSessionId, startWorkflow } from './prism.ts';
-import type { TierOverrides } from '../feedback/tiers.ts';
+import { cancelWorkflow, newPrismWorkflowId, startWorkflow } from './prism.ts';
+import type { TierName, TierOverrides } from '../feedback/tiers.ts';
 import type { Db } from './db/index.ts';
 
 type Env = App.Platform['env'];
@@ -20,11 +20,14 @@ export const buildStartRows = (input: {
   email: string;
   title: string | null;
   content: string;
-  prismSessionId: string;
+  prismWorkflowId: string;
   now: Date;
+  tier?: TierName;
   overrides?: TierOverrides;
 }) => {
   const sessionId = nanoid();
+  // 티어 확정은 여기 한 곳이다 — 행에 저장하는 값과 워크플로 이름이 갈라지지 않는다.
+  const tier = input.tier ?? 'high';
   return {
     session: { id: sessionId, refId: input.refId, title: input.title, testerEmail: input.email, createdAt: input.now },
     version: {
@@ -37,11 +40,12 @@ export const buildStartRows = (input: {
     review: {
       sessionId,
       round: 1,
-      prismSessionId: input.prismSessionId,
+      prismWorkflowId: input.prismWorkflowId,
       status: 'running' as const,
       manuscriptVersion: 1,
       startedAt: input.now,
-      modelConfig: buildModelConfig(input.overrides),
+      tier,
+      modelConfig: buildModelConfig(tier, input.overrides),
     },
   };
 };
@@ -49,13 +53,13 @@ export const buildStartRows = (input: {
 export const startFeedbackSession = async (
   db: Db,
   env: Env,
-  input: { refId: string; email: string; overrides?: TierOverrides },
+  input: { refId: string; email: string; tier?: TierName; overrides?: TierOverrides },
 ): Promise<{ sessionId: string } | { error: string }> => {
   const api = createInternalApi(env.INTERNAL_API_BASE, env.INTERNAL_API_KEY);
   const manuscript = await fetchManuscript(api, input.refId);
   if ('error' in manuscript) return manuscript;
 
-  const rows = buildStartRows({ ...input, ...manuscript, prismSessionId: newPrismSessionId(), now: new Date() });
+  const rows = buildStartRows({ ...input, ...manuscript, prismWorkflowId: newPrismWorkflowId(), now: new Date() });
   await db.batch([
     db.insert(FeedbackSessions).values(rows.session),
     db.insert(ManuscriptVersions).values(rows.version),
@@ -64,7 +68,8 @@ export const startFeedbackSession = async (
 
   try {
     await startWorkflow(env, {
-      sessionId: rows.review.prismSessionId,
+      workflowId: rows.review.prismWorkflowId,
+      workflow: rows.review.tier,
       input: {
         manuscriptPath: 'manuscript/v1.txt',
         // sparse — 무오버라이드 리뷰는 prism 기본값을 따른다(키 자체를 싣지 않는다)
@@ -82,6 +87,6 @@ export const startFeedbackSession = async (
   return { sessionId: rows.session.id };
 };
 
-export const requestCancel = async (env: Env, prismSessionId: string): Promise<void> => {
-  await cancelRun(env, prismSessionId);
+export const requestCancel = async (env: Env, prismWorkflowId: string): Promise<void> => {
+  await cancelWorkflow(env, prismWorkflowId);
 };

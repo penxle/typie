@@ -10,7 +10,7 @@
   import { anchorQuote } from '$lib/feedback/anchors.ts';
   import IssueChips from './IssueChips.svelte';
   import ReviewReaction from './ReviewReaction.svelte';
-  import type { FeedbackResult } from '$lib/feedback/types.ts';
+  import type { FeedbackConclusion } from '$lib/feedback/types.ts';
   import type { PageData } from './$types';
 
   type Thread = PageData['threads'][number];
@@ -21,7 +21,7 @@
   // 상태는 예시였다). 폭이 모자라면(패널 300 + 원고 740 + 카드 최소폭이 안 들어가는 ~1360px 미만)
   // 스트립으로 접히고, 정독은 드로어가 맡는다.
   type Props = {
-    conclusion: FeedbackResult['conclusion'];
+    conclusion: FeedbackConclusion;
     threads: Thread[];
     content: string;
     activeId: string | null;

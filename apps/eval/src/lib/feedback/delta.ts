@@ -1,5 +1,5 @@
 // 델타는 로그에 남지 않는 휘발 프레임이다 — id 라인이 없어 커서를 오염시키지 않고, 유실도 계약상 허용된다
-// (prism/src/session/sse.ts:62-66). 그래서 이 상태는 지금 흐르는 턴 하나만 들고 있고, 확정 텍스트는 뒤이어
+// (prism core/sse.ts의 deltaFrame). 그래서 이 상태는 지금 흐르는 턴 하나만 들고 있고, 확정 텍스트는 뒤이어
 // 오는 turn.completed가 되돌려준다 — 델타를 통째로 놓쳐도 화면의 진실은 그쪽에서 복구된다.
 export type TurnLive = {
   agent: { id: string; name: string };
@@ -31,7 +31,7 @@ export const applyDelta = (current: TurnLive | null, frame: unknown): TurnLive |
   const channel = str(frame.channel);
   if (agent === null || turn === null || attempt === null || channel === null) return current;
 
-  // 가리키는 턴이 바뀌면 이전 상태는 통째로 버린다 — 허브의 버퍼 리셋과 같은 잣대다(prism sse.ts:238).
+  // 가리키는 턴이 바뀌면 이전 상태는 통째로 버린다 — 허브의 버퍼 리셋과 같은 잣대다(prism core/sse.ts의 SseHub.publishDelta).
   const same = current !== null && current.agent.id === agent.id && current.turn === turn && current.attempt === attempt;
   const base: TurnLive = same ? current : { agent, turn, attempt, text: '', textBroken: false, thinkingChars: 0, toolInput: null };
 
@@ -53,7 +53,7 @@ export const applyDelta = (current: TurnLive | null, frame: unknown): TurnLive |
   if (channel !== 'text') return current;
 
   // 턴 중간의 offset 0은 gap이 아니라 스냅샷이다 — 허브는 진행 중인 턴에 (재)접속한 소비자에게 누적 전체를
-  // offset 0으로 다시 내고, 소비자는 겹침 없이 덮어쓴다(prism/src/session/sse.ts:349). 허브 offset은
+  // offset 0으로 다시 내고, 소비자는 겹침 없이 덮어쓴다(prism/src/core/sse.ts의 재접속 스냅샷). 허브 offset은
   // (agent, turn, attempt) 안에서 단조라 중간의 0은 스냅샷일 수밖에 없다. 파손 채널은 스냅샷에서 빠지므로,
   // 스냅샷이 닿았다는 것 자체가 이어붙일 원본이 성했다는 뜻이다 — 파손 표시도 함께 걷는다.
   if (offset === 0) return { ...base, text: piece, textBroken: false };
@@ -66,8 +66,8 @@ export const applyDelta = (current: TurnLive | null, frame: unknown): TurnLive |
 };
 
 // 봉인 = 이 상태가 가리키던 스트림이 끝났다. turn.completed는 (에이전트, 턴)이 맞을 때만 지운다 — 다른
-// 에이전트나 앞선 턴의 확정이 지금 흐르는 턴을 지우면 안 된다. run 종결은 그 두 필드를 싣지 않으므로
-// (prism/src/session/terminal.ts:82-84) 무조건 지운다 — 진행 중인 턴 없음의 권위 신호다.
+// 에이전트나 앞선 턴의 확정이 지금 흐르는 턴을 지우면 안 된다. 봉인 트리거인 workflow 종결은 그 두 필드를
+// 싣지 않으므로(prism core/terminal.ts의 commitTerminalWithin — 루트 종결은 미스탬프) 무조건 지운다 — 진행 중인 턴 없음의 권위 신호다.
 export const sealTurn = (current: TurnLive | null, data: { turn?: unknown; agent?: unknown }): TurnLive | null => {
   if (current === null) return null;
   const agent = agentOf(data.agent);

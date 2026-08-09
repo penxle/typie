@@ -46,7 +46,7 @@ export const load: PageServerLoad = async ({ platform }) => {
       status: row.status,
       startedAt: kstStamp(row.startedAt),
       finishedAt: row.finishedAt === null ? null : kstStamp(row.finishedAt),
-      // usage의 생산자는 사영뿐이다 — 쓴 타입 그대로 좁힌다(project.ts:92-97).
+      // usage의 생산자는 사영뿐이다 — 쓴 타입 그대로 좁힌다(project.ts의 projectIfTerminal).
       usage: sumUsage(row.usage as RunUsage | null),
       // 원가는 토큰과 같은 원본에서 낸다 — usage가 있는데 cost가 null이면 단가 미설정 모델이 섞였다는 뜻이다.
       cost: sumCost(row.usage as RunUsage | null),

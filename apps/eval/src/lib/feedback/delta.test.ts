@@ -4,7 +4,7 @@ import { applyDelta, sealTurn, startTurn } from './delta.ts';
 const AG = { id: 'agent-1', name: 'reviewer' };
 const OTHER = { id: 'agent-2', name: 'proofreader' };
 
-// 델타 프레임에는 봉투가 없다 — data 라인이 곧 프레임이다(prism/src/session/sse.ts:66).
+// 델타 프레임에는 봉투가 없다 — data 라인이 곧 프레임이다(prism core/sse.ts의 deltaFrame).
 const piece = (over: Record<string, unknown>) => ({ agent: AG, turn: 1, attempt: 1, channel: 'text', offset: 0, text: '', ...over });
 const count = (over: Record<string, unknown>) => ({ agent: AG, turn: 1, attempt: 1, channel: 'thinking', chars: 0, ...over });
 
@@ -24,7 +24,7 @@ describe('turn delta state', () => {
   });
 
   it('진행 중인 턴에 닿은 offset 0 조각은 이어 붙이지 않고 덮어쓴다', () => {
-    // 허브는 (재)접속한 소비자에게 그 턴의 누적 전체를 offset 0으로 다시 낸다(prism/src/session/sse.ts:349).
+    // 허브는 (재)접속한 소비자에게 그 턴의 누적 전체를 offset 0으로 다시 낸다(prism/src/core/sse.ts의 재접속 스냅샷).
     const flowing = feed([piece({ text: '앞부분' }), piece({ offset: 3, text: '뒷부분' })]);
     expect(flowing).toMatchObject({ text: '앞부분뒷부분' });
     expect(applyDelta(flowing, piece({ text: '앞부분뒷부분더 왔다' }))).toMatchObject({ text: '앞부분뒷부분더 왔다', textBroken: false });

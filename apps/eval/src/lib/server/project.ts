@@ -1,13 +1,15 @@
 import { and, eq } from 'drizzle-orm';
+import { initialLive } from '../feedback/live.ts';
 import { createSseParser } from '../feedback/sse.ts';
 import { Reviews, Threads } from './db/index.ts';
-import { fetchEventLog, getSession, openEvents } from './prism.ts';
+import { fetchEventLog, getWorkflow, openEvents } from './prism.ts';
+import { collectAskAnswers } from './questions.ts';
 import type { SseEvent } from '../feedback/sse.ts';
-import type { Anchor, FeedbackResult } from '../feedback/types.ts';
+import type { Anchor, FeedbackResult, ReviewQuestionRecord } from '../feedback/types.ts';
 import type { Db } from './db/index.ts';
 
 type PrismEnv = { PRISM_API_ORIGIN: string; PRISM_API_TOKEN: string };
-type ReviewRef = { sessionId: string; round: number; prismSessionId: string };
+type ReviewRef = { sessionId: string; round: number; prismWorkflowId: string };
 
 export type ThreadRow = {
   id: string;
@@ -44,10 +46,10 @@ const IDLE_LIMIT_MS = 45_000;
 
 export const collectEvents = async (
   env: PrismEnv,
-  prismSessionId: string,
+  prismWorkflowId: string,
   open: (env: PrismEnv, id: string, cursor: number) => Promise<Response> = openEvents,
 ): Promise<SseEvent[]> => {
-  const res = await open(env, prismSessionId, 0);
+  const res = await open(env, prismWorkflowId, 0);
   if (!res.body) throw new Error('event replay has no body');
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
@@ -77,8 +79,8 @@ export const collectEvents = async (
 // 클라이언트 리듀서가 SSE data 라인과 같은 봉투({seq,kind,data,createdAt} 문자열)를 기대하므로 행 전체를
 // 다시 직렬화한다(live.ts decode 참조). 시드 없이 재생을 화면에서 재연하면 새로고침마다 과거 기록이 전환과
 // 함께 빨리감기로 보인다.
-export const seedEvents = async (env: PrismEnv, prismSessionId: string): Promise<SseEvent[]> => {
-  const rows = await fetchEventLog(env, prismSessionId);
+export const seedEvents = async (env: PrismEnv, prismWorkflowId: string): Promise<SseEvent[]> => {
+  const rows = await fetchEventLog(env, prismWorkflowId);
   return rows.map((row) => {
     // thinking 전문은 리듀서가 읽지 않는 최대 중량 필드다(xhigh 추론이라 턴당 수 KB) — 시드에서 떨궈
     // 첫 로드 페이로드를 줄인다. 필드 형태는 남긴다(null): 소비자가 부재와 미지원을 구별할 일이 없게.
@@ -90,13 +92,31 @@ export const seedEvents = async (env: PrismEnv, prismSessionId: string): Promise
 // 멱등 순서: threads 먼저(onConflictDoNothing — 재시도 안전), reviews 조건부 갱신을 마지막에.
 // 중간에 죽으면 review가 running으로 남아 다음 로드가 처음부터 다시 사영한다.
 export const projectIfTerminal = async (db: Db, env: PrismEnv, review: ReviewRef): Promise<'running' | 'projected'> => {
-  const view = await getSession(env, review.prismSessionId);
-  const run = view.runs[0];
-  if (!run || run.status === 'running') return 'running';
+  const { workflow } = await getWorkflow(env, review.prismWorkflowId);
+  if (workflow.status === 'running') return 'running';
 
-  const events = await collectEvents(env, review.prismSessionId);
-  if (run.status === 'completed' && run.result) {
-    const rows = threadsFromResult(review.sessionId, review.round, run.result);
+  const events = await collectEvents(env, review.prismWorkflowId);
+
+  // 사영은 종결 후 1회라, 답변 문면(이벤트에 없고 prism 원장에만 있다)을 여기서 당겨 두면 원장 리텐션과 무관하게
+  // 기록이 완결된다. 원장 조회 실패는 던진다 — 반쪽 기록을 굳히면 다시 채울 자리가 없고, 던지면 사영이 통째로
+  // 미뤄져 호출부의 관용 처분(sessions/[id]/+page.server.ts의 load — projectIfTerminal try/catch)이 다음 로드에 재시도한다.
+  const asked = initialLive(events).questions;
+  let questions: ReviewQuestionRecord[] | null = null;
+  if (asked.length > 0) {
+    const answers = await collectAskAnswers(env, events);
+    questions = asked.map((entry) => ({
+      agentName: entry.agentName,
+      toolCallId: entry.toolCallId,
+      stage: entry.stage,
+      at: entry.at,
+      status: entry.status === 'answered' ? 'answered' : 'closed',
+      questions: entry.questions,
+      answers: answers[entry.toolCallId] ?? null,
+    }));
+  }
+
+  if (workflow.status === 'completed' && workflow.result) {
+    const rows = threadsFromResult(review.sessionId, review.round, workflow.result);
     for (const row of rows) {
       await db.insert(Threads).values(row).onConflictDoNothing();
     }
@@ -104,12 +124,19 @@ export const projectIfTerminal = async (db: Db, env: PrismEnv, review: ReviewRef
   await db
     .update(Reviews)
     .set({
-      status: run.status,
-      usage: run.usage,
-      result: run.result,
-      error: run.error,
+      status: workflow.status,
+      // 판별자를 벗겨 굳힌다 — DB 행은 판별자 없는 단일 형태(RunUsage)다. 종결 응답에 live(settled: false)가
+      // 오는 경우는 없지만, 배포 겹침 창에서 도착하더라도 폴드는 그대로 싣고 complete만 꺾는다 — live 폴드는
+      // 회계의 하한이라 버리면 무음 유실이 되고, 남기면 최소한 하한이 보인다.
+      usage:
+        workflow.usage === null
+          ? null
+          : { complete: workflow.usage.settled ? workflow.usage.complete : false, folds: workflow.usage.folds },
+      result: workflow.result,
+      error: workflow.error,
       events,
-      finishedAt: run.finishedAt === null ? new Date() : new Date(run.finishedAt),
+      questions,
+      finishedAt: workflow.finishedAt === null ? new Date() : new Date(workflow.finishedAt),
     })
     .where(and(eq(Reviews.sessionId, review.sessionId), eq(Reviews.round, review.round), eq(Reviews.status, 'running')));
   return 'projected';

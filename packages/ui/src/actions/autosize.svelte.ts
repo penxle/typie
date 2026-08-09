@@ -28,6 +28,10 @@ export const autosize: Action<HTMLTextAreaElement, AutosizeParams | undefined> =
     const height = element.scrollHeight;
     element.style.height = `${height}px`;
 
+    // NOTE: max-height에 캡되면 내부 스크롤을 연다 — overflow hidden 고정이면 캡 너머 내용에 닿을 수 없음
+    const maxHeight = Number.parseFloat(getComputedStyle(element).maxHeight);
+    element.style.overflowY = Number.isFinite(maxHeight) && height > maxHeight ? 'auto' : 'hidden';
+
     if (cacheKey) {
       heightCache.set(cacheKey, height);
     }

@@ -22,7 +22,7 @@ export const GET: RequestHandler = async ({ params, locals, platform, request, u
   if (!review || review.status !== 'running') error(409, 'not running');
 
   const cursor = resolveCursor(request.headers.get('last-event-id'), url.searchParams.get('lastEventId'));
-  const upstream = await openEvents(env, review.prismSessionId, cursor);
+  const upstream = await openEvents(env, review.prismWorkflowId, cursor);
   if (!upstream.body) error(502, 'upstream body missing');
 
   return new Response(watchdogPipe(upstream.body, IDLE_LIMIT_MS), {
