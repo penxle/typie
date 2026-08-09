@@ -835,9 +835,18 @@ impl Editor {
             })?
             .to_flat();
         let (sel_start, sel_end) = (anchor_flat.min(head_flat), anchor_flat.max(head_flat));
+        // Text input materializes a gap before replaying IME ops, so the host
+        // must receive the gap's real offset instead of an adjacent text offset.
+        let collapsed_insertable =
+            sel_start == sel_end && is_flat_offset_insertable(&doc, sel_start);
+        let at_gap_cursor = !collapsed_insertable
+            && sel.is_collapsed()
+            && editor_state::gap_cursor_at(&sel.head, &doc).is_some();
         // ime() runs on every cursor move; the collapsed caret is the dominant
         // case, so avoid walking the same offset twice.
-        let (sel_start, sel_end) = if sel_start == sel_end {
+        let (sel_start, sel_end) = if collapsed_insertable || at_gap_cursor {
+            (sel_start, sel_end)
+        } else if sel_start == sel_end {
             let s = nearest_insertable_flat(&doc, doc_size, sel_start);
             (s, s)
         } else {
@@ -3609,6 +3618,95 @@ mod tests {
         assert_eq!(ctx.text, "\u{2028}hello world\u{2029}");
         assert_eq!(ctx.selection.start, 3);
         assert_eq!(ctx.selection.end, 9);
+    }
+
+    #[test]
+    fn input_context_preserves_leading_gap_cursor_offset() {
+        let (state, ..) = state! {
+            doc { r: root { image paragraph { text("b") } } }
+            selection: (r, 0, <)
+        };
+        let mut editor = Editor::new_test(state);
+
+        let ctx = editor.ime(usize::MAX, usize::MAX).unwrap().unwrap();
+
+        assert_eq!(ctx.selection.start, 0);
+        assert_eq!(ctx.selection.end, 0);
+    }
+
+    #[test]
+    fn input_context_preserves_between_monolithic_gap_cursor_offset() {
+        let (state, ..) = state! {
+            doc { r: root {
+                fold { fold_title { text("A") } fold_content { paragraph { text("x") } } }
+                fold { fold_title { text("B") } fold_content { paragraph { text("y") } } }
+                paragraph {}
+            } }
+            selection: (r, 1)
+        };
+        let mut editor = Editor::new_test(state);
+
+        let ctx = editor.ime(usize::MAX, usize::MAX).unwrap().unwrap();
+
+        assert_eq!(ctx.selection.start, 10);
+        assert_eq!(ctx.selection.end, 10);
+    }
+
+    #[test]
+    fn web_text_input_from_reported_leading_gap_materializes_and_inserts() {
+        let (state, ..) = state! {
+            doc { r: root { image paragraph { text("b") } } }
+            selection: (r, 0, <)
+        };
+        let mut editor = Editor::new_test(state);
+        let ctx = editor.ime(usize::MAX, usize::MAX).unwrap().unwrap();
+
+        editor.apply(Message::TextInput {
+            ops: vec![
+                FlatImeOp::SetSelection {
+                    start: ctx.selection.start,
+                    end: ctx.selection.end,
+                },
+                FlatImeOp::ReplaceSelection { text: "a".into() },
+            ],
+        });
+
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("a") } image paragraph { text("b") } } }
+            selection: (p1, 1)
+        };
+        editor_state::assert_state_eq!(editor.state(), &expected);
+        assert_eq!(editor.state().composition, None);
+    }
+
+    #[test]
+    fn web_composition_from_reported_leading_gap_materializes_and_composes() {
+        let (state, ..) = state! {
+            doc { r: root { image paragraph { text("b") } } }
+            selection: (r, 0, <)
+        };
+        let mut editor = Editor::new_test(state);
+        let ctx = editor.ime(usize::MAX, usize::MAX).unwrap().unwrap();
+
+        editor.apply(Message::TextInput {
+            ops: vec![
+                FlatImeOp::SetComposition {
+                    start: ctx.selection.start,
+                    end: ctx.selection.end,
+                },
+                FlatImeOp::Compose { text: "ㅎ".into() },
+            ],
+        });
+
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph { text("ㅎ") } image paragraph { text("b") } } }
+            selection: (p1, 1)
+        };
+        editor_state::assert_state_eq!(editor.state(), &expected);
+        assert_eq!(
+            editor.state().composition,
+            Some(Composition { start: 1, end: 2 })
+        );
     }
 
     #[test]
