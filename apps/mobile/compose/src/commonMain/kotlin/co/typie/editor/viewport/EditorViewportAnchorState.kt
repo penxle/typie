@@ -44,6 +44,8 @@ internal class EditorViewportAnchorState {
     preferredSelection = null
   }
 
+  fun needsSelectionAdoption(identity: ViewportAnchor): Boolean = preferredSelection != identity
+
   fun consumeScrollChange(revision: Int): Boolean {
     val previous = observedScrollRevision
     observedScrollRevision = revision
@@ -80,6 +82,21 @@ internal class EditorViewportAnchorState {
     scrollY: Float,
   ) {
     attachActive(identity, geometry, scrollY)
+  }
+
+  fun adoptSelection(
+    identity: ViewportAnchor,
+    geometry: EditorViewportAnchorGeometry,
+    scrollY: Float,
+    visibleArea: EditorVisibleArea,
+    preserveActiveAnchor: Boolean,
+  ) {
+    if (!needsSelectionAdoption(identity)) return
+    val activate =
+      !preserveActiveAnchor &&
+        (active != null || canRetainAfterDirectScroll(geometry, scrollY, visibleArea))
+    preferredSelection = identity
+    if (activate) attachActive(identity, geometry, scrollY)
   }
 
   fun clearPreferredSelection() {

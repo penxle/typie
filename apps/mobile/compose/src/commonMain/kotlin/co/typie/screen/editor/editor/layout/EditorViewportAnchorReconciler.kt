@@ -34,67 +34,65 @@ internal fun reconcileViewportAnchorPublication(
   currentScrollOffset: Offset,
   maximumScrollY: Float,
   contentOriginY: Float,
+  smoothRevealActive: Boolean = false,
 ): EditorViewportAnchorPublication {
   val currentScrollY = currentScrollOffset.y
-  if (publishedBundle == null || publishedBundle.snapshot.version == candidateState.version) {
-    return EditorViewportAnchorPublication.Ready(
+  val candidateFrame = measuredScrollFrame.withState(candidateState)
+  val selectionCapture = editor.captureSelectionViewportAnchor(candidateState.version)
+  if (selectionCapture == null && candidateState.selection != null) {
+    return EditorViewportAnchorPublication.Withhold
+  }
+  if (selectionCapture != null && anchorState.needsSelectionAdoption(selectionCapture.identity)) {
+    val geometry =
+      selectionCapture.geometry.toEditorViewportAnchorGeometry(
+        frame = candidateFrame,
+        contentOriginY = contentOriginY,
+      ) ?: return EditorViewportAnchorPublication.Withhold
+    anchorState.adoptSelection(
+      identity = selectionCapture.identity,
+      geometry = geometry,
+      scrollY = currentScrollY,
+      visibleArea = candidateFrame.visibleArea,
+      preserveActiveAnchor = smoothRevealActive,
+    )
+  } else if (candidateState.selection == null && anchorState.preferredSelectionIdentity != null) {
+    if (!smoothRevealActive) {
+      val publishedState = publishedBundle?.snapshot ?: candidateState
+      val publishedFrame = candidateFrame.withState(publishedState)
+      attachViewportCenterAnchor(
+        editor = editor,
+        anchorState = anchorState,
+        revision = publishedState.version,
+        frame = publishedFrame,
+        scrollOffset = currentScrollOffset,
+        contentOriginY = resolveViewportAnchorContentOriginY(publishedFrame),
+      ) ?: return EditorViewportAnchorPublication.Withhold
+    }
+    anchorState.clearPreferredSelection()
+  }
+  val unanchoredPublication =
+    EditorViewportAnchorPublication.Ready(
       scrollY = currentScrollY.coerceIn(0f, maximumScrollY),
       geometry = null,
     )
+  if (publishedBundle == null || publishedBundle.snapshot.version == candidateState.version) {
+    return unanchoredPublication
   }
-  var identity =
-    anchorState.identity
-      ?: return EditorViewportAnchorPublication.Ready(
-        scrollY = currentScrollY.coerceIn(0f, maximumScrollY),
-        geometry = null,
-      )
-  val candidateFrame = measuredScrollFrame.withState(candidateState)
-
-  var resolution = editor.resolveViewportAnchor(candidateState.version, identity)
-  if (
-    resolution is ViewportAnchorResolution.Deleted ||
-      resolution is ViewportAnchorResolution.NotLaidOut
-  ) {
-    val publishedFrame = measuredScrollFrame.withState(publishedBundle.snapshot)
-    val publishedContentOriginY = resolveViewportAnchorContentOriginY(publishedFrame)
-    val centerPoint =
-      viewportCenterAnchorPoint(publishedFrame, currentScrollOffset, publishedContentOriginY)
-    val fallback = centerPoint?.let {
-      editor.captureViewportAnchorAt(publishedBundle.snapshot.version, it)
-    }
-    if (fallback == null) {
-      anchorState.clear()
-      return EditorViewportAnchorPublication.Ready(
-        scrollY = currentScrollY.coerceIn(0f, maximumScrollY),
-        geometry = null,
-      )
-    }
-    val oldGeometry =
-      fallback.geometry.toEditorViewportAnchorGeometry(
-        frame = publishedFrame,
-        contentOriginY = publishedContentOriginY,
-      )
-    if (oldGeometry == null) {
-      anchorState.clear()
-      return EditorViewportAnchorPublication.Ready(
-        scrollY = currentScrollY.coerceIn(0f, maximumScrollY),
-        geometry = null,
-      )
-    }
-    anchorState.attach(fallback.identity, oldGeometry, currentScrollY)
-    identity = fallback.identity
-    resolution = editor.resolveViewportAnchor(candidateState.version, identity)
-  }
+  val resolution =
+    resolveCandidateViewportAnchor(
+      editor = editor,
+      anchorState = anchorState,
+      publishedBundle = publishedBundle,
+      candidateFrame = candidateFrame,
+      currentScrollOffset = currentScrollOffset,
+    ) ?: return unanchoredPublication
 
   return when (resolution) {
     ViewportAnchorResolution.Unavailable -> EditorViewportAnchorPublication.Withhold
     ViewportAnchorResolution.Deleted,
     ViewportAnchorResolution.NotLaidOut -> {
       anchorState.clear()
-      EditorViewportAnchorPublication.Ready(
-        scrollY = currentScrollY.coerceIn(0f, maximumScrollY),
-        geometry = null,
-      )
+      unanchoredPublication
     }
     is ViewportAnchorResolution.Resolved -> {
       val geometry =
@@ -131,6 +129,44 @@ internal fun reconcileViewportAnchorPublication(
       )
     }
   }
+}
+
+private fun resolveCandidateViewportAnchor(
+  editor: Editor,
+  anchorState: EditorViewportAnchorState,
+  publishedBundle: PublishedBundle,
+  candidateFrame: EditorScrollFrame,
+  currentScrollOffset: Offset,
+): ViewportAnchorResolution? {
+  val identity = anchorState.identity ?: return null
+  val resolution = editor.resolveViewportAnchor(candidateFrame.state.version, identity)
+  if (
+    resolution !is ViewportAnchorResolution.Deleted &&
+      resolution !is ViewportAnchorResolution.NotLaidOut
+  ) {
+    return resolution
+  }
+
+  val publishedFrame = candidateFrame.withState(publishedBundle.snapshot)
+  val publishedContentOriginY = resolveViewportAnchorContentOriginY(publishedFrame)
+  val centerPoint =
+    viewportCenterAnchorPoint(publishedFrame, currentScrollOffset, publishedContentOriginY)
+  val fallback = centerPoint?.let {
+    editor.captureViewportAnchorAt(publishedBundle.snapshot.version, it)
+  }
+  val oldGeometry =
+    fallback
+      ?.geometry
+      ?.toEditorViewportAnchorGeometry(
+        frame = publishedFrame,
+        contentOriginY = publishedContentOriginY,
+      )
+  if (fallback == null || oldGeometry == null) {
+    anchorState.clear()
+    return null
+  }
+  anchorState.attach(fallback.identity, oldGeometry, currentScrollOffset.y)
+  return editor.resolveViewportAnchor(candidateFrame.state.version, fallback.identity)
 }
 
 internal fun reconcileViewportAnchorObservation(
@@ -181,12 +217,12 @@ internal fun reconcileViewportAnchorObservation(
         contentOriginY = contentOriginY,
       )
         ?: attachViewportCenterAnchor(
-          editor,
-          anchorState,
-          revision,
-          presentationFrame,
-          viewportState.scrollOffset,
-          contentOriginY,
+          editor = editor,
+          anchorState = anchorState,
+          revision = revision,
+          frame = presentationFrame,
+          scrollOffset = viewportState.scrollOffset,
+          contentOriginY = contentOriginY,
         )
     } else {
       null

@@ -339,7 +339,8 @@ class EditorScrollResolverTest {
   }
 
   @Test
-  fun `typewriter mode does not apply to page rect targets`() {
+  fun `typewriter mode does not apply to tracked item targets`() {
+    val target = EditorBringIntoViewTarget.TrackedItem("comment-1")
     val frame =
       frame(
         state =
@@ -351,13 +352,9 @@ class EditorScrollResolverTest {
                 line = FfiRect(0f, 500f, 0f, 20f),
               ),
             pageSizes = listOf(PageSize(width = 300f, height = 900f)),
+            trackedRanges = listOf(trackedRange(id = target.id, y = 500f)),
           ),
         typewriterEnabled = true,
-      )
-
-    val target =
-      EditorBringIntoViewTarget.PageRects(
-        listOf(PageRect(pageIdx = 0, rect = FfiRect(0f, 500f, 0f, 20f)))
       )
 
     assertScrollTo(
@@ -519,7 +516,14 @@ class EditorScrollResolverTest {
   }
 
   @Test
-  fun `page rects target reveals the vertical union across pages`() {
+  fun `tracked item target reveals the vertical union across pages`() {
+    val target = EditorBringIntoViewTarget.TrackedItem("comment-1")
+    val rects =
+      listOf(
+        PageRect(pageIdx = 0, rect = FfiRect(x = 0f, y = 500f, width = 40f, height = 20f)),
+        PageRect(pageIdx = 0, rect = FfiRect(x = 0f, y = 580f, width = 40f, height = 20f)),
+        PageRect(pageIdx = 1, rect = FfiRect(x = 0f, y = 20f, width = 40f, height = 20f)),
+      )
     val frame =
       frame(
         state =
@@ -528,6 +532,7 @@ class EditorScrollResolverTest {
             selection = null,
             pageSizes =
               listOf(PageSize(width = 300f, height = 620f), PageSize(width = 300f, height = 620f)),
+            trackedRanges = listOf(trackedRange(id = target.id, rects = rects)),
           ),
         layoutSpec = paginatedLayout(),
       )
@@ -535,14 +540,7 @@ class EditorScrollResolverTest {
     val intent =
       resolveEditorScrollIntent(
         frame = frame,
-        target =
-          EditorBringIntoViewTarget.PageRects(
-            listOf(
-              PageRect(pageIdx = 0, rect = FfiRect(x = 0f, y = 500f, width = 40f, height = 20f)),
-              PageRect(pageIdx = 0, rect = FfiRect(x = 0f, y = 580f, width = 40f, height = 20f)),
-              PageRect(pageIdx = 1, rect = FfiRect(x = 0f, y = 20f, width = 40f, height = 20f)),
-            )
-          ),
+        target = target,
         policy = EditorBringIntoViewPolicy.Reveal,
         currentScroll = 0f,
       )
@@ -576,7 +574,8 @@ class EditorScrollResolverTest {
   }
 
   @Test
-  fun `page rects reveal top-aligns an oversized target below the viewport`() {
+  fun `tracked item reveal top-aligns an oversized target below the viewport`() {
+    val target = EditorBringIntoViewTarget.TrackedItem("comment-1")
     val frame =
       frame(
         state =
@@ -584,18 +583,26 @@ class EditorScrollResolverTest {
             cursor = null,
             selection = null,
             pageSizes = listOf(PageSize(width = 300f, height = 1000f)),
+            trackedRanges =
+              listOf(
+                trackedRange(
+                  id = target.id,
+                  rects =
+                    listOf(
+                      PageRect(
+                        pageIdx = 0,
+                        rect = FfiRect(x = 0f, y = 500f, width = 40f, height = 400f),
+                      )
+                    ),
+                )
+              ),
           )
       )
 
     val intent =
       resolveEditorScrollIntent(
         frame = frame,
-        target =
-          EditorBringIntoViewTarget.PageRects(
-            listOf(
-              PageRect(pageIdx = 0, rect = FfiRect(x = 0f, y = 500f, width = 40f, height = 400f))
-            )
-          ),
+        target = target,
         policy = EditorBringIntoViewPolicy.Reveal,
         currentScroll = 0f,
       )
@@ -631,7 +638,14 @@ class EditorScrollResolverTest {
   }
 
   @Test
-  fun `page rects target height resolves from the vertical union across pages`() {
+  fun `tracked item target height resolves from the vertical union across pages`() {
+    val target = EditorBringIntoViewTarget.TrackedItem("comment-1")
+    val rects =
+      listOf(
+        PageRect(pageIdx = 0, rect = FfiRect(x = 0f, y = 500f, width = 40f, height = 20f)),
+        PageRect(pageIdx = 0, rect = FfiRect(x = 0f, y = 580f, width = 40f, height = 20f)),
+        PageRect(pageIdx = 1, rect = FfiRect(x = 0f, y = 20f, width = 40f, height = 20f)),
+      )
     val height =
       resolveBringIntoViewTargetHeight(
         state =
@@ -640,16 +654,10 @@ class EditorScrollResolverTest {
             selection = null,
             pageSizes =
               listOf(PageSize(width = 300f, height = 620f), PageSize(width = 300f, height = 620f)),
+            trackedRanges = listOf(trackedRange(id = target.id, rects = rects)),
           ),
         layoutSpec = paginatedLayout(),
-        target =
-          EditorBringIntoViewTarget.PageRects(
-            listOf(
-              PageRect(pageIdx = 0, rect = FfiRect(x = 0f, y = 500f, width = 40f, height = 20f)),
-              PageRect(pageIdx = 0, rect = FfiRect(x = 0f, y = 580f, width = 40f, height = 20f)),
-              PageRect(pageIdx = 1, rect = FfiRect(x = 0f, y = 20f, width = 40f, height = 20f)),
-            )
-          ),
+        target = target,
         displayZoom = 1f,
       )
 
@@ -743,13 +751,16 @@ class EditorScrollResolverTest {
   }
 
   private fun trackedRange(id: String, y: Float): TrackedRange =
+    trackedRange(id = id, rects = listOf(PageRect(pageIdx = 0, rect = FfiRect(0f, y, 40f, 20f))))
+
+  private fun trackedRange(id: String, rects: List<PageRect>): TrackedRange =
     TrackedRange(
       id = id,
       group = "comment-active",
       anchor = position(offset = 0),
       head = position(offset = 1),
       metadata = "",
-      rects = listOf(PageRect(pageIdx = 0, rect = FfiRect(0f, y, 40f, 20f))),
+      rects = rects,
       text = "comment",
     )
 }

@@ -525,6 +525,29 @@ private fun EditorTapGesture.dispatchReadingTap(
   doubleTapDrag: EditorDoubleTapDragSession,
   context: EditorGestureContext,
 ): Boolean {
+  if (clickCount == 1) {
+    if (!context.readOnly && !context.doubleTapToEditEnabled) {
+      return dispatchReadingActivation(
+        position = position,
+        inputModifiers = inputModifiers,
+        shouldOpenContextMenu = shouldOpenContextMenu,
+        doubleTapDrag = doubleTapDrag,
+        context = context,
+      )
+    }
+    return dispatchSelectionTap(
+      position = position,
+      clickCount = clickCount,
+      inputModifiers = inputModifiers,
+      shouldOpenContextMenu = shouldOpenContextMenu,
+      doubleTapDrag = doubleTapDrag,
+      context = context,
+      expectedEditing = false,
+      preserveExistingSelectionOnSingleTap = false,
+      beforeLaunch = {},
+    )
+  }
+
   val point =
     context.geometry.resolvePoint(positionInNode = position)
       ?: run {
@@ -552,48 +575,8 @@ private fun EditorTapGesture.dispatchReadingTap(
     }
     EditorInteractiveTapResult.None -> Unit
   }
-  if (clickCount != 1) {
-    clearTapHistory()
-    return false
-  }
-  if (!context.readOnly && !context.doubleTapToEditEnabled) {
-    return dispatchReadingActivation(
-      position = position,
-      inputModifiers = inputModifiers,
-      shouldOpenContextMenu = shouldOpenContextMenu,
-      doubleTapDrag = doubleTapDrag,
-      context = context,
-    )
-  }
-
-  val generation =
-    beginPendingPresentation(
-      editor = editor,
-      expectedEditing = false,
-      tapCount = clickCount,
-      showReadingHint = true,
-      context = context,
-    )
-  var appliedSnapshot: EditorState? = null
-  context.semantics.pointSelection.launchCursorMove(
-    editor = editor,
-    point = point,
-    onApplied = { snapshot -> appliedSnapshot = snapshot },
-    afterDispatch = { dispatched ->
-      val snapshot = appliedSnapshot
-      if (dispatched && snapshot != null) {
-        markPendingSelectionApplied(
-          generation = generation,
-          snapshot = snapshot,
-          showContextMenu = shouldOpenContextMenu && !snapshot.selection.isCollapsed(),
-          context = context,
-        )
-      } else {
-        cancelPendingPresentation(context = context)
-      }
-    },
-  )
-  return true
+  clearTapHistory()
+  return false
 }
 
 private fun EditorTapGesture.dispatchReadingActivation(
@@ -694,7 +677,7 @@ private fun EditorTapGesture.dispatchSelectionTap(
       editor = editor,
       expectedEditing = expectedEditing,
       tapCount = clickCount,
-      showReadingHint = false,
+      showReadingHint = !expectedEditing && clickCount == 1,
       context = context,
     )
   val wasFocused = context.isFocused
@@ -734,6 +717,9 @@ private fun EditorTapGesture.dispatchSelectionTap(
     appliedSnapshot = snapshot
     if (clickCount == 1) {
       when {
+        !expectedEditing -> {
+          showContextMenuAfterPublication = !snapshot.selection.isCollapsed()
+        }
         !snapshot.selection.isCollapsed() -> {
           if (!hitExistingSelectionAtTap) {
             showContextMenuAfterPublication = true

@@ -5,7 +5,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
-import co.typie.editor.EditorState
 import kotlin.concurrent.atomics.AtomicLong
 import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
@@ -26,21 +25,6 @@ internal class EditorBringIntoViewRequests(private val requestPresentation: () -
 
   val pendingRequest: Request?
     get() = pending.load()
-
-  fun requestForState(
-    state: EditorState,
-    policy: EditorBringIntoViewPolicy,
-    behavior: EditorBringIntoViewBehavior = EditorBringIntoViewBehavior.Instant,
-    target: EditorState.() -> EditorBringIntoViewTarget?,
-  ): Boolean {
-    requestForVersion(
-      target = state.target() ?: return false,
-      version = state.version,
-      policy = policy,
-      behavior = behavior,
-    )
-    return true
-  }
 
   fun requestForVersion(
     target: EditorBringIntoViewTarget,
@@ -89,27 +73,7 @@ internal class EditorBringIntoViewRequests(private val requestPresentation: () -
     val request = pending.load() ?: return null
     val targetVersion =
       request.targetVersion.load().takeUnless { it == UNBOUND_VERSION } ?: return null
-    val eligible =
-      if (
-        request.target is EditorBringIntoViewTarget.PageRects ||
-          request.policy == EditorBringIntoViewPolicy.PointerCursorGuard
-      ) {
-        version == targetVersion
-      } else {
-        version >= targetVersion
-      }
-    return request.takeIf { eligible }
-  }
-
-  fun discardObsoleteForVersion(version: Long) {
-    val request = pending.load() ?: return
-    val targetVersion = request.targetVersion.load().takeUnless { it == UNBOUND_VERSION } ?: return
-    if (
-      (request.target is EditorBringIntoViewTarget.PageRects ||
-        request.policy == EditorBringIntoViewPolicy.PointerCursorGuard) && version > targetVersion
-    ) {
-      discard(request)
-    }
+    return request.takeIf { version >= targetVersion }
   }
 
   fun discardFailedForVersion(version: Long) {

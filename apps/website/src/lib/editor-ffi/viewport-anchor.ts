@@ -1,4 +1,5 @@
 import { clamp } from '@typie/ui/utils';
+import stringify from 'fast-json-stable-stringify';
 import { CURSOR_VISIBLE_MARGIN } from './constants';
 import { resolveGuardedScrollTop } from './scroll';
 import type { ResolvedViewportAnchor, ViewportAnchor, ViewportAnchorPoint } from '@typie/editor-ffi/browser';
@@ -61,6 +62,10 @@ export class EditorViewportAnchorState {
     this.#preferredSelection = null;
   }
 
+  needsSelectionAdoption(identity: ViewportAnchor): boolean {
+    return this.#preferredSelection === null || stringify(this.#preferredSelection) !== stringify(identity);
+  }
+
   attach(identity: ViewportAnchor, geometry: EditorViewportAnchorGeometry, scrollTop: number): void {
     this.#attachActive(identity, geometry, scrollTop);
   }
@@ -77,6 +82,21 @@ export class EditorViewportAnchorState {
 
   attachViewport(identity: ViewportAnchor, geometry: EditorViewportAnchorGeometry, scrollTop: number): void {
     this.#attachActive(identity, geometry, scrollTop);
+  }
+
+  adoptSelection(
+    identity: ViewportAnchor,
+    geometry: EditorViewportAnchorGeometry,
+    scrollTop: number,
+    clientHeight: number,
+    visibleArea: EditorVisibleArea,
+    preserveActiveAnchor: boolean,
+  ): void {
+    if (!this.needsSelectionAdoption(identity)) return;
+    const activate =
+      !preserveActiveAnchor && (this.#active !== null || this.canRetainAfterDirectScroll(geometry, scrollTop, clientHeight, visibleArea));
+    this.#preferredSelection = identity;
+    if (activate) this.#attachActive(identity, geometry, scrollTop);
   }
 
   clearPreferredSelection(): void {

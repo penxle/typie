@@ -50,7 +50,6 @@ function reconcilePublication(
 ): void {
   if (editor.terminal) return;
 
-  scroll.discardObsoleteForRevision(editor.appliedSnapshot.revision);
   const anchorPublication = scroll.prepareViewportAnchorPublication(editor.appliedSnapshot);
   if (anchorPublication.type === 'unavailable') return;
   const preparation = resolveEditorSurfacePreparation(editor, scroll, anchorPublication.targetScrollTop ?? undefined);

@@ -9,6 +9,7 @@ import co.typie.editor.PublishedBundle
 import co.typie.editor.VerticalSpan
 import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.ffi.Affinity
+import co.typie.editor.ffi.CapturedViewportAnchor
 import co.typie.editor.ffi.PageRect
 import co.typie.editor.ffi.Position
 import co.typie.editor.ffi.Rect
@@ -16,6 +17,7 @@ import co.typie.editor.ffi.ResolvedViewportAnchor
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.SelectionEndpoints
 import co.typie.editor.ffi.Size as PageSize
+import co.typie.editor.ffi.TrackedRange
 import co.typie.editor.ffi.ViewportAnchor
 import co.typie.editor.ffi.ViewportAnchorPoint
 import co.typie.editor.ffi.ViewportAnchorResolution
@@ -81,6 +83,16 @@ class EditorSurfacePreparationTest {
     val editor =
       Editor(
         FakeFfiEditor(
+          captureSelectionViewportAnchorProvider = {
+            CapturedViewportAnchor(
+              identity = identity,
+              geometry =
+                ResolvedViewportAnchor(
+                  point = ViewportAnchorPoint(pageIdx = 2, x = 0f, y = 250f),
+                  rect = measuredRect,
+                ),
+            )
+          },
           resolveViewportAnchorProvider = { _, _ ->
             ViewportAnchorResolution.Resolved(
               ResolvedViewportAnchor(
@@ -88,7 +100,7 @@ class EditorSurfacePreparationTest {
                 rect = measuredRect,
               )
             )
-          }
+          },
         ),
         this,
         StandardTestDispatcher(testScheduler),
@@ -149,13 +161,11 @@ class EditorSurfacePreparationTest {
         this,
         StandardTestDispatcher(testScheduler),
       )
-    val frame = frame()
+    val target = EditorBringIntoViewTarget.TrackedItem("comment-1")
+    val frame = frameWithTrackedItem(target.id)
     val request =
       EditorBringIntoViewRequests.Request(
-        target =
-          EditorBringIntoViewTarget.PageRects(
-            listOf(PageRect(pageIdx = 2, rect = Rect(x = 0f, y = 100f, width = 1f, height = 20f)))
-          ),
+        target = target,
         policy = EditorBringIntoViewPolicy.Reveal,
         behavior = EditorBringIntoViewBehavior.Instant,
       )
@@ -202,13 +212,11 @@ class EditorSurfacePreparationTest {
   @Test
   fun `disabled smooth motion prepares the destination like an instant reveal`() = runTest {
     val editor = Editor(FakeFfiEditor(), this, StandardTestDispatcher(testScheduler))
-    val frame = frame()
+    val target = EditorBringIntoViewTarget.TrackedItem("comment-1")
+    val frame = frameWithTrackedItem(target.id)
     val request =
       EditorBringIntoViewRequests.Request(
-        target =
-          EditorBringIntoViewTarget.PageRects(
-            listOf(PageRect(pageIdx = 2, rect = Rect(x = 0f, y = 100f, width = 1f, height = 20f)))
-          ),
+        target = target,
         policy = EditorBringIntoViewPolicy.Reveal,
         behavior = EditorBringIntoViewBehavior.Smooth,
       )
@@ -288,6 +296,32 @@ class EditorSurfacePreparationTest {
       headerHeight = 0f,
       density = 1f,
       editorBounds = EditorBoundsInContainer(x = 0f, y = 0f, width = 600f, height = 4_000f),
+    )
+  }
+
+  private fun frameWithTrackedItem(id: String): EditorScrollFrame {
+    val frame = frame()
+    val anchor = Position(node = "1:1", offset = 0, affinity = Affinity.Downstream)
+    val head = Position(node = "1:1", offset = 1, affinity = Affinity.Downstream)
+    return frame.copy(
+      state =
+        frame.state.copy(
+          trackedRanges =
+            listOf(
+              TrackedRange(
+                id = id,
+                group = "comment-active",
+                anchor = anchor,
+                head = head,
+                metadata = "",
+                rects =
+                  listOf(
+                    PageRect(pageIdx = 2, rect = Rect(x = 0f, y = 100f, width = 1f, height = 20f))
+                  ),
+                text = "comment",
+              )
+            )
+        )
     )
   }
 }

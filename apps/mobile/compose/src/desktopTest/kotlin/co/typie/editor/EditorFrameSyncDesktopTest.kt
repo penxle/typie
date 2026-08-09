@@ -36,8 +36,6 @@ import co.typie.editor.ext.isCollapsed
 import co.typie.editor.ffi.Key
 import co.typie.editor.ffi.KeyEvent
 import co.typie.editor.ffi.Message
-import co.typie.editor.ffi.PageRect
-import co.typie.editor.ffi.Rect as FfiRect
 import co.typie.editor.ffi.SelectionOp
 import co.typie.editor.ffi.SelectionPointUnit
 import co.typie.editor.interaction.EditorInteractionScope
@@ -538,10 +536,17 @@ class EditorFrameSyncDesktopTest {
         fixture.editor.publishedBundle?.frames?.containsKey(0) == true
       }
 
-      val target =
-        EditorBringIntoViewTarget.PageRects(
-          listOf(PageRect(pageIdx = 0, rect = FfiRect(x = 0f, y = 100f, width = 1f, height = 10f)))
+      val cursorUpdate = runOnIdle {
+        assertNotNull(
+          fixture.editor.updateNow { repeat(2) { enqueue(Message.Key(KeyEvent(Key.Enter))) } }
         )
+      }
+      waitUntil(timeoutMillis = 10_000) {
+        (fixture.editor.publishedRevision ?: -1L) >= cursorUpdate.revision
+      }
+      waitForIdle()
+
+      val target = EditorBringIntoViewTarget.CurrentSelectionHead
       assertEquals(
         EditorScrollIntentResult.NoScroll,
         resolveEditorScrollIntent(
