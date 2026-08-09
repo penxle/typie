@@ -12,6 +12,7 @@ import co.typie.editor.ffi.Rect as FfiRect
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.SelectionEndpoints
 import co.typie.editor.ffi.Size as PageSize
+import co.typie.editor.ffi.TrackedRange
 import co.typie.editor.runtime.EditorBoundsInContainer
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -550,6 +551,31 @@ class EditorScrollResolverTest {
   }
 
   @Test
+  fun `tracked item target resolves geometry from the candidate state`() {
+    val target = EditorBringIntoViewTarget.TrackedItem("comment-1")
+    val frame =
+      frame(
+        state =
+          state(
+            cursor = null,
+            selection = null,
+            pageSizes = listOf(PageSize(width = 300f, height = 900f)),
+            trackedRanges = listOf(trackedRange(id = target.id, y = 500f)),
+          )
+      )
+
+    assertScrollTo(
+      resolveEditorScrollIntent(
+        frame = frame,
+        target = target,
+        policy = EditorBringIntoViewPolicy.Reveal,
+        currentScroll = 0f,
+      ),
+      280f,
+    )
+  }
+
+  @Test
   fun `page rects reveal top-aligns an oversized target below the viewport`() {
     val frame =
       frame(
@@ -641,6 +667,7 @@ class EditorScrollResolverTest {
     pageSizes: List<PageSize>,
     selection: Selection? = cursor?.let { collapsedSelection() },
     selectionEndpoints: SelectionEndpoints? = null,
+    trackedRanges: List<TrackedRange> = emptyList(),
   ): EditorState =
     EditorState(
       version = 1L,
@@ -652,6 +679,7 @@ class EditorScrollResolverTest {
       rootAttrs = null,
       rootModifiers = null,
       ime = null,
+      trackedRanges = trackedRanges,
     )
 
   private fun frame(
@@ -713,4 +741,15 @@ class EditorScrollResolverTest {
     val position = position(offset = 0)
     return Selection(anchor = position, head = position)
   }
+
+  private fun trackedRange(id: String, y: Float): TrackedRange =
+    TrackedRange(
+      id = id,
+      group = "comment-active",
+      anchor = position(offset = 0),
+      head = position(offset = 1),
+      metadata = "",
+      rects = listOf(PageRect(pageIdx = 0, rect = FfiRect(0f, y, 40f, 20f))),
+      text = "comment",
+    )
 }

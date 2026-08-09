@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EditorRequest, EditorUpdate } from './editor-update';
 import { EditorScrollScope } from './scroll.svelte';
 import type { PageRect } from '@typie/editor-ffi/browser';
@@ -72,6 +72,15 @@ describe('EditorRequest', () => {
 
 function setup(snapshot: EditorSnapshot, typewriter?: { enabled: boolean; position: number | undefined }) {
   const typewriterPreferences = typewriter ?? { enabled: false, position: undefined };
+  let animationTime = 0;
+  let nextAnimationFrameId = 1;
+  const animationFrames = new Map<number, FrameRequestCallback>();
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+    const id = nextAnimationFrameId++;
+    animationFrames.set(id, callback);
+    return id;
+  });
+  vi.stubGlobal('cancelAnimationFrame', (id: number) => animationFrames.delete(id));
   let scrollTop = 0;
   const scrollTo = vi.fn((options: ScrollToOptions) => {
     if (options.behavior === 'instant' && options.top !== undefined) scrollTop = options.top;
@@ -110,7 +119,15 @@ function setup(snapshot: EditorSnapshot, typewriter?: { enabled: boolean; positi
     requestPublication,
   } as unknown as Editor;
   return {
+    advanceAnimation: (milliseconds = 16) => {
+      animationTime += milliseconds;
+      const callbacks = [...animationFrames.values()];
+      animationFrames.clear();
+      for (const callback of callbacks) callback(animationTime);
+    },
+    animationFrameCount: () => animationFrames.size,
     editor,
+    getScrollTop: () => scrollTop,
     requestPublication,
     setScrollTop: (value: number) => {
       scrollTop = value;
@@ -119,6 +136,10 @@ function setup(snapshot: EditorSnapshot, typewriter?: { enabled: boolean; positi
     scope: new EditorScrollScope(editor, () => typewriterPreferences),
   };
 }
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe('EditorScrollScope', () => {
   const revealMetrics = {
@@ -238,6 +259,27 @@ describe('EditorScrollScope', () => {
     expect(request.behavior).toBe('smooth');
   });
 
+  it('applies a smooth request immediately when reduced motion is preferred', () => {
+    const snapshot = trackedSnapshot('target', {
+      page_idx: 0,
+      rect: { x: 0, y: 900, width: 1, height: 20 },
+    });
+    const { animationFrameCount, scope, scrollTo } = setup(snapshot);
+    vi.stubGlobal('matchMedia', () => ({ matches: true }));
+    const request = scope.declare({
+      target: { type: 'tracked_item', id: 'target' },
+      policy: 'reveal',
+      behavior: 'smooth',
+    });
+    scope.bind(request, snapshot.revision);
+
+    expect(scope.resolvePreparationViewports(request, revealMetrics, snapshot)).not.toEqual([]);
+    expect(scope.applyPending(request, snapshot, { type: 'scroll_to', y: 580 })).toBe(true);
+    expect(scrollTo).toHaveBeenCalledExactlyOnceWith({ top: 580, behavior: 'instant' });
+    expect(animationFrameCount()).toBe(0);
+    expect(scope.pendingRequest).toBeNull();
+  });
+
   it('applies the cursor guard to a compact pointer selection head', () => {
     const rect = { page_idx: 0, rect: { x: 0, y: 350, width: 1, height: 20 } };
     const snapshot = selectionSnapshot(true, rect);
@@ -355,7 +397,7 @@ describe('EditorScrollScope', () => {
       page_idx: 0,
       rect: { x: 0, y: 900, width: 1, height: 20 },
     });
-    const { scope, setScrollTop } = setup(snapshot);
+    const { advanceAnimation, animationFrameCount, scope } = setup(snapshot);
 
     const presentation = scope.scrollIntoView({
       target: { type: 'tracked_item', id: 'target' },
@@ -376,8 +418,7 @@ describe('EditorScrollScope', () => {
 
     expect(scope.applyPending(request, snapshot, { type: 'scroll_to', y: 580 })).toBe(true);
     expect(scope.pendingRequest).toBe(request);
-    setScrollTop(580);
-    scope.settleSmoothReveal();
+    for (let frame = 0; frame < 100 && animationFrameCount() > 0; frame++) advanceAnimation();
     await expect(presentation).resolves.toBeUndefined();
   });
 
@@ -448,22 +489,26 @@ describe('EditorScrollScope', () => {
     expect(requestPublication).toHaveBeenCalledOnce();
   });
 
-  it('interrupts the native smooth scroll when direct manipulation cancels its reveal', () => {
+  it('cancels the custom smooth scroll when direct manipulation takes control', () => {
     const snapshot = trackedSnapshot('target', {
       page_idx: 0,
       rect: { x: 0, y: 900, width: 1, height: 20 },
     });
-    const { scope, scrollTo, setScrollTop } = setup(snapshot);
+    const { advanceAnimation, animationFrameCount, scope, scrollTo } = setup(snapshot);
     scope.scrollIntoView({ target: { type: 'tracked_item', id: 'target' }, policy: 'reveal', behavior: 'smooth' });
     const request = scope.pendingRequest;
     if (!request) throw new Error('Expected a pending reveal');
     expect(scope.applyPending(request, snapshot, { type: 'scroll_to', y: 580 })).toBe(true);
 
-    setScrollTop(250);
+    advanceAnimation();
+    advanceAnimation();
+    const callsBeforeCancel = scrollTo.mock.calls.length;
     scope.cancel();
+    advanceAnimation();
 
-    expect(scrollTo).toHaveBeenNthCalledWith(1, { top: 580, behavior: 'smooth' });
-    expect(scrollTo).toHaveBeenNthCalledWith(2, { top: 250, behavior: 'instant' });
+    expect(animationFrameCount()).toBe(0);
+    expect(scrollTo).toHaveBeenCalledTimes(callsBeforeCancel);
+    expect(scrollTo.mock.calls.every(([options]) => options.behavior === 'instant')).toBe(true);
   });
 
   it('keeps the existing latest-request-wins reveal contract', () => {
@@ -487,7 +532,7 @@ describe('EditorScrollScope', () => {
       page_idx: 0,
       rect: { x: 0, y: 900, width: 1, height: 20 },
     });
-    const { requestPublication, scope, scrollTo, setScrollTop } = setup(snapshot);
+    const { advanceAnimation, animationFrameCount, requestPublication, scope, scrollTo } = setup(snapshot);
 
     scope.scrollIntoView({ target: { type: 'tracked_item', id: 'old' }, policy: 'reveal', behavior: 'smooth' });
     const old = scope.pendingRequest;
@@ -499,15 +544,38 @@ describe('EditorScrollScope', () => {
     expect(scope.applyPending(old, snapshot, { type: 'scroll_to', y: 100 })).toBe(false);
     expect(scope.applyPending(current, snapshot, { type: 'scroll_to', y: 580 })).toBe(true);
     expect(scope.applyPending(current, snapshot, { type: 'scroll_to', y: 580 })).toBe(true);
-    expect(scrollTo).toHaveBeenCalledExactlyOnceWith({ top: 580, behavior: 'smooth' });
+    expect(scrollTo).not.toHaveBeenCalled();
+    expect(animationFrameCount()).toBe(1);
     expect(scope.applyPending(current, snapshot, { type: 'scroll_to', y: 640 })).toBe(true);
-    expect(scrollTo).toHaveBeenNthCalledWith(2, { top: 640, behavior: 'smooth' });
     expect(scope.pendingRequest).toBe(current);
     expect(requestPublication).not.toHaveBeenCalled();
-    setScrollTop(640);
-    scope.settleSmoothReveal();
+    for (let frame = 0; frame < 100 && animationFrameCount() > 0; frame++) advanceAnimation();
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 640, behavior: 'instant' });
     expect(scope.pendingRequest).toBeNull();
     expect(requestPublication).toHaveBeenCalledOnce();
+  });
+
+  it('does not reshape an in-flight motion when the same target is published again', () => {
+    const snapshot = trackedSnapshot('target', {
+      page_idx: 0,
+      rect: { x: 0, y: 900, width: 1, height: 20 },
+    });
+    const run = (republish: boolean) => {
+      const { advanceAnimation, getScrollTop, scope } = setup(snapshot);
+      const request = scope.declare({
+        target: { type: 'tracked_item', id: 'target' },
+        policy: 'reveal',
+        behavior: 'smooth',
+      });
+      scope.bind(request, snapshot.revision);
+      scope.applyPending(request, snapshot, { type: 'scroll_to', y: 580 });
+      for (let frame = 0; frame < 8; frame++) advanceAnimation();
+      if (republish) scope.applyPending(request, snapshot, { type: 'scroll_to', y: 580 });
+      advanceAnimation();
+      return getScrollTop();
+    };
+
+    expect(run(true)).toBeCloseTo(run(false), 8);
   });
 
   it('applies a preverified instant destination without mounted page geometry', () => {
@@ -699,17 +767,62 @@ describe('EditorScrollScope', () => {
     });
   });
 
-  it('restarts an interrupted native smooth reveal and ignores settle before reaching the target', () => {
+  it('clamps an unanchored publication to the candidate scroll extent', () => {
+    const current = trackedSnapshot('target', {
+      page_idx: 1,
+      rect: { x: 0, y: 100, width: 1, height: 20 },
+    });
+    const candidate = {
+      ...current,
+      revision: 2,
+      pageSizes: [{ width: 600, height: 300 }],
+    } as EditorSnapshot;
+    const { editor, getScrollTop, scope, scrollTo, setScrollTop } = setup(current);
+    editor.scrollRootEl = {} as HTMLElement;
+    setScrollTop(800);
+
+    const publication = scope.prepareViewportAnchorPublication(candidate);
+
+    expect(publication).toEqual({ type: 'ready', geometry: null, targetScrollTop: 0 });
+    scope.applyViewportAnchorPublication(publication);
+    expect(scrollTo).toHaveBeenCalledExactlyOnceWith({ top: 0, behavior: 'instant' });
+    expect(getScrollTop()).toBe(0);
+  });
+
+  it('does not clamp an unanchored publication to the editor extent in a window scroller', () => {
+    const current = trackedSnapshot('target', {
+      page_idx: 1,
+      rect: { x: 0, y: 100, width: 1, height: 20 },
+    });
+    const candidate = {
+      ...current,
+      revision: 2,
+      pageSizes: [{ width: 600, height: 300 }],
+    } as EditorSnapshot;
+    const { editor, scope, setScrollTop } = setup(current);
+    editor.scrollRootEl = null;
+    setScrollTop(800);
+
+    expect(scope.prepareViewportAnchorPublication(candidate)).toEqual({
+      type: 'ready',
+      geometry: null,
+      targetScrollTop: null,
+    });
+  });
+
+  it('translates an in-flight smooth reveal across viewport-anchor reconciliation', () => {
     const snapshot = trackedSnapshot('target', {
       page_idx: 0,
       rect: { x: 0, y: 900, width: 1, height: 20 },
     });
-    const { scope, scrollTo, setScrollTop } = setup(snapshot);
+    const { advanceAnimation, animationFrameCount, scope, scrollTo } = setup(snapshot);
     scope.scrollIntoView({ target: { type: 'tracked_item', id: 'target' }, policy: 'reveal', behavior: 'smooth' });
     const request = scope.pendingRequest;
     if (!request) throw new Error('Expected a pending reveal');
 
     expect(scope.applyPending(request, snapshot, { type: 'scroll_to', y: 580 })).toBe(true);
+    advanceAnimation();
+    advanceAnimation();
     scope.applyViewportAnchorPublication({
       type: 'ready',
       geometry: { pointY: 320 },
@@ -717,18 +830,46 @@ describe('EditorScrollScope', () => {
     });
     expect(scope.applyPending(request, snapshot, { type: 'scroll_to', y: 580 })).toBe(true);
 
-    expect(scrollTo).toHaveBeenNthCalledWith(1, { top: 580, behavior: 'smooth' });
-    expect(scrollTo).toHaveBeenNthCalledWith(2, { top: 220, behavior: 'instant' });
-    expect(scrollTo).toHaveBeenNthCalledWith(3, { top: 580, behavior: 'smooth' });
-    scope.settleSmoothReveal();
-    expect(scope.pendingRequest).toBe(request);
-
-    setScrollTop(580);
-    scope.settleSmoothReveal();
+    expect(scrollTo).toHaveBeenCalledWith({ top: 220, behavior: 'instant' });
+    for (let frame = 0; frame < 100 && animationFrameCount() > 0; frame++) advanceAnimation();
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 580, behavior: 'instant' });
     expect(scope.pendingRequest).toBeNull();
   });
 
-  it('interrupts native smooth scrolling when a later publication resolves the reveal as no-op', () => {
+  it('keeps a smooth reveal pending until the latest applied geometry is published', async () => {
+    const snapshot = trackedSnapshot('target', {
+      page_idx: 0,
+      rect: { x: 0, y: 900, width: 1, height: 20 },
+    });
+    const { advanceAnimation, animationFrameCount, editor, requestPublication, scope, scrollTo } = setup(snapshot);
+    scope.scrollIntoView({ target: { type: 'tracked_item', id: 'target' }, policy: 'reveal', behavior: 'smooth' });
+    const request = scope.pendingRequest;
+    if (!request) throw new Error('Expected a pending reveal');
+    const presentation = request.presentation;
+
+    expect(scope.applyPending(request, snapshot, { type: 'scroll_to', y: 580 })).toBe(true);
+    const candidate = { ...snapshot, revision: 2 } as EditorSnapshot;
+    Object.assign(editor, { appliedSnapshot: candidate, appliedRevision: candidate.revision });
+
+    for (let frame = 0; frame < 100 && animationFrameCount() > 0; frame++) advanceAnimation();
+
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 580, behavior: 'instant' });
+    expect(scope.pendingRequest).toBe(request);
+    expect(requestPublication).toHaveBeenCalled();
+
+    Object.assign(editor, {
+      published: { snapshot: candidate, frames: editor.published?.frames ?? new Map() },
+      publishedRevision: candidate.revision,
+    });
+    expect(scope.applyPending(request, candidate, { type: 'scroll_to', y: 780 })).toBe(true);
+    for (let frame = 0; frame < 100 && animationFrameCount() > 0; frame++) advanceAnimation();
+
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 780, behavior: 'instant' });
+    expect(scope.pendingRequest).toBeNull();
+    await expect(presentation).resolves.toBeUndefined();
+  });
+
+  it('finishes an in-flight smooth reveal when a later publication resolves it as no-op', () => {
     const snapshot = trackedSnapshot('target', {
       page_idx: 0,
       rect: { x: 0, y: 900, width: 1, height: 20 },
@@ -746,9 +887,70 @@ describe('EditorScrollScope', () => {
     });
     expect(scope.applyPending(request, snapshot, { type: 'no_scroll' })).toBe(true);
 
-    expect(scrollTo).toHaveBeenNthCalledWith(1, { top: 580, behavior: 'smooth' });
-    expect(scrollTo).toHaveBeenNthCalledWith(2, { top: 220, behavior: 'instant' });
-    expect(scrollTo).toHaveBeenNthCalledWith(3, { top: 220, behavior: 'instant' });
+    expect(scrollTo).toHaveBeenCalledExactlyOnceWith({ top: 220, behavior: 'instant' });
+    expect(scope.pendingRequest).toBeNull();
+  });
+
+  it('keeps a non-selection reveal anchored near its destination after the visible area shrinks', () => {
+    const selectionRect = {
+      page_idx: 0,
+      rect: { x: 0, y: 90, width: 1, height: 20 },
+    };
+    const targetRect = {
+      page_idx: 0,
+      rect: { x: 0, y: 900, width: 1, height: 20 },
+    };
+    const snapshot = {
+      ...selectionSnapshot(true, selectionRect),
+      trackedRanges: [{ id: 'target', rects: [targetRect] }],
+    } as EditorSnapshot;
+    const { editor, getScrollTop, scope, scrollTo } = setup(snapshot);
+    const selection = { type: 'node' as const, node: 'selection', offset_x: 0, offset_y: 0 };
+    const viewport = { type: 'node' as const, node: 'viewport', offset_x: 0, offset_y: 0 };
+    const selectionGeometry = {
+      point: { page_idx: 0, x: 0, y: 100 },
+      rect: selectionRect,
+    };
+    const viewportGeometry = {
+      point: { page_idx: 0, x: 0, y: 700 },
+      rect: undefined,
+    };
+    editor.captureSelectionViewportAnchor = vi.fn(() => ({ identity: selection, geometry: selectionGeometry }));
+    editor.captureViewportAnchorAt = vi.fn(() => ({ identity: viewport, geometry: viewportGeometry }));
+    editor.resolveViewportAnchor = vi.fn((_revision, identity) => ({
+      type: 'resolved' as const,
+      geometry: identity === selection ? selectionGeometry : viewportGeometry,
+    }));
+
+    scope.scrollIntoView({ target: { type: 'tracked_item', id: 'target' }, policy: 'reveal' });
+    const request = scope.pendingRequest;
+    if (!request) throw new Error('Expected a scroll request');
+    expect(scope.applyPending(request, snapshot, { type: 'scroll_to', y: 580 })).toBe(true);
+    scrollTo.mockClear();
+
+    scope.visibleArea = { topInset: 0, bottomInset: 100 };
+    scope.reconcileViewportResize();
+
+    expect(scrollTo).not.toHaveBeenCalled();
+    expect(getScrollTop()).toBe(580);
+  });
+
+  it('snaps an in-flight smooth reveal to its target when a no-op publication is within scroll tolerance', () => {
+    const snapshot = trackedSnapshot('target', {
+      page_idx: 0,
+      rect: { x: 0, y: 900, width: 1, height: 20 },
+    });
+    const { scope, scrollTo, setScrollTop } = setup(snapshot);
+    scope.scrollIntoView({ target: { type: 'tracked_item', id: 'target' }, policy: 'reveal', behavior: 'smooth' });
+    const request = scope.pendingRequest;
+    if (!request) throw new Error('Expected a pending reveal');
+
+    expect(scope.applyPending(request, snapshot, { type: 'scroll_to', y: 580 })).toBe(true);
+    setScrollTop(579.25);
+    expect(scope.applyPending(request, snapshot, { type: 'no_scroll' })).toBe(true);
+
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 580, behavior: 'instant' });
+    expect(scope.pendingRequest).toBeNull();
   });
 
   it('starts a smooth reveal without requiring a frame for the target page', () => {
@@ -756,7 +958,7 @@ describe('EditorScrollScope', () => {
       page_idx: 1,
       rect: { x: 0, y: 100, width: 1, height: 20 },
     });
-    const { editor, scope, scrollTo, setScrollTop } = setup(snapshot);
+    const { advanceAnimation, animationFrameCount, editor, scope, scrollTo } = setup(snapshot);
 
     scope.scrollIntoView({ target: { type: 'tracked_item', id: 'target' }, policy: 'reveal', behavior: 'smooth' });
     const request = scope.pendingRequest;
@@ -770,9 +972,9 @@ describe('EditorScrollScope', () => {
 
     expect(scope.applyPending(request, snapshot, { type: 'scroll_to', y: 900 })).toBe(true);
     expect(scope.pendingRequest).toBe(request);
-    expect(scrollTo).toHaveBeenCalledExactlyOnceWith({ top: 900, behavior: 'smooth' });
-    setScrollTop(900);
-    scope.settleSmoothReveal();
+    expect(scrollTo).not.toHaveBeenCalled();
+    for (let frame = 0; frame < 100 && animationFrameCount() > 0; frame++) advanceAnimation();
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 800, behavior: 'instant' });
     expect(scope.pendingRequest).toBeNull();
   });
 

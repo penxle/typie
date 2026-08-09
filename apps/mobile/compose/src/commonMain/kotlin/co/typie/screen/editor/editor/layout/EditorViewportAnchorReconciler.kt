@@ -5,6 +5,7 @@ import co.typie.editor.Editor
 import co.typie.editor.EditorState
 import co.typie.editor.PublishedBundle
 import co.typie.editor.ffi.ViewportAnchorResolution
+import co.typie.editor.scroll.EditorBringIntoViewTarget
 import co.typie.editor.scroll.EditorScrollFrame
 import co.typie.editor.scroll.EditorScrollIntentResult
 import co.typie.editor.scroll.EditorVisibleArea
@@ -36,11 +37,17 @@ internal fun reconcileViewportAnchorPublication(
 ): EditorViewportAnchorPublication {
   val currentScrollY = currentScrollOffset.y
   if (publishedBundle == null || publishedBundle.snapshot.version == candidateState.version) {
-    return EditorViewportAnchorPublication.Ready(scrollY = currentScrollY, geometry = null)
+    return EditorViewportAnchorPublication.Ready(
+      scrollY = currentScrollY.coerceIn(0f, maximumScrollY),
+      geometry = null,
+    )
   }
   var identity =
     anchorState.identity
-      ?: return EditorViewportAnchorPublication.Ready(scrollY = currentScrollY, geometry = null)
+      ?: return EditorViewportAnchorPublication.Ready(
+        scrollY = currentScrollY.coerceIn(0f, maximumScrollY),
+        geometry = null,
+      )
   val candidateFrame = measuredScrollFrame.withState(candidateState)
 
   var resolution = editor.resolveViewportAnchor(candidateState.version, identity)
@@ -135,7 +142,7 @@ internal fun reconcileViewportAnchorObservation(
   visibleArea: EditorVisibleArea,
   mode: EditorViewportScrollReconcileMode,
   smoothRevealActive: Boolean,
-  handoffToSelection: Boolean,
+  handoffTarget: EditorBringIntoViewTarget?,
   selectionRevealOrigin: EditorViewportAnchorRevealOrigin?,
   contentOriginY: Float,
 ) {
@@ -150,7 +157,7 @@ internal fun reconcileViewportAnchorObservation(
   val revision = bundle.snapshot.version
   val presentationFrame = frame.withState(bundle.snapshot)
   var geometry =
-    if (handoffToSelection) {
+    if (handoffTarget != null) {
       attachSelectionViewportAnchor(
         editor = editor,
         anchorState = anchorState,
@@ -158,7 +165,7 @@ internal fun reconcileViewportAnchorObservation(
         frame = presentationFrame,
         scrollY = viewportState.scrollOffset.y,
         visibleArea = visibleArea,
-        requireGuard = false,
+        requireGuard = handoffTarget != EditorBringIntoViewTarget.CurrentSelectionHead,
         revealOrigin = selectionRevealOrigin,
         contentOriginY = contentOriginY,
       )
@@ -186,12 +193,15 @@ internal fun reconcileViewportAnchorObservation(
     }
 
   if (
-    scrollChanged && !handoffToSelection && !smoothRevealActive && !viewportState.lastScrollWasAuto
+    scrollChanged &&
+      handoffTarget == null &&
+      !smoothRevealActive &&
+      !viewportState.lastScrollWasAuto
   ) {
     anchorState.finishRevealConvergence()
   }
   if (smoothRevealActive) {
-    if (scrollChanged && !handoffToSelection) {
+    if (scrollChanged && handoffTarget == null) {
       attachViewportCenterAnchor(
         editor,
         anchorState,
@@ -214,7 +224,7 @@ internal fun reconcileViewportAnchorObservation(
         presentationFrame,
         contentOriginY,
       )
-  if (scrollChanged && !handoffToSelection) {
+  if (scrollChanged && handoffTarget == null) {
     val preferredSelectionGeometry =
       if (!viewportState.lastScrollWasAuto) {
         resolvePreferredSelectionViewportAnchorGeometry(

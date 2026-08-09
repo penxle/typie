@@ -9,6 +9,7 @@ import {
   resolveTypewriterBottomPadding,
   resolveTypewriterScrollTop,
 } from './scroll';
+import { SmoothScrollMotion } from './smooth-scroll-motion';
 import { EditorViewportAnchorState, resolveViewportAnchorGeometry, viewportCenterAnchorPoint } from './viewport-anchor';
 import type { PageRect } from '@typie/editor-ffi/browser';
 import type { Editor, EditorContext, EditorSnapshot } from './editor.svelte';
@@ -70,6 +71,14 @@ function sanitizeTypewriterPosition(position: number | undefined): number {
   return typeof position === 'number' && Number.isFinite(position) ? Math.max(0, Math.min(1, position)) : 0.5;
 }
 
+function prefersReducedMotion(): boolean {
+  return globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+}
+
+export function isInstantReveal(request: Pick<EditorBringIntoViewRequest, 'behavior'> | null): boolean {
+  return request !== null && (request.behavior === 'instant' || (request.behavior === 'smooth' && prefersReducedMotion()));
+}
+
 function createBringIntoViewRequest({ target, policy, behavior = 'instant' }: EditorScrollIntoViewOptions): EditorBringIntoViewRequest {
   const { promise: presentation, resolve } = Promise.withResolvers<undefined>();
   return {
@@ -125,8 +134,9 @@ export class EditorScrollScope {
   #destroyed = false;
   #expectedScrollTop: number | null = null;
   #smoothRequest: EditorBringIntoViewRequest | null = null;
-  #smoothTargetY: number | null = null;
-  #smoothSettleTimer: ReturnType<typeof setTimeout> | null = null;
+  #smoothMotion: SmoothScrollMotion | null = null;
+  #smoothAnimationFrame: number | null = null;
+  #smoothAnimationTime: number | null = null;
   readonly #editor: Editor;
   readonly #typewriterPreferences: () => TypewriterPreferences;
   readonly #viewportAnchor = new EditorViewportAnchorState();
@@ -186,31 +196,30 @@ export class EditorScrollScope {
         return false;
       }
       case 'no_scroll': {
+        const smoothTarget = this.#smoothRequest === request ? this.#smoothMotion?.snapshot().target : undefined;
+        const scrollTop = this.#editor.scrollViewport?.getScrollTop();
+        if (smoothTarget !== undefined && scrollTop !== undefined && Math.abs(smoothTarget - scrollTop) <= 1) {
+          this.#finishSmoothReveal();
+          return true;
+        }
         this.#interruptSmoothReveal();
         const revealOrigin = this.#selectionRevealOrigin(request, this.#editor.scrollViewport?.getScrollTop());
         const presented = this.markPresented(snapshot.revision, request);
-        if (presented) this.#attachSelectionOrCenter(false, revealOrigin);
+        if (presented) this.#attachSelectionOrCenter(request.target.type !== 'current_selection_head', revealOrigin);
         return presented;
       }
       case 'scroll_to': {
         const viewport = this.#editor.scrollViewport;
         if (!viewport) return false;
-        if (request.behavior === 'smooth') {
-          if (this.#smoothRequest === request && this.#smoothTargetY !== null && Math.abs(this.#smoothTargetY - result.y) <= 1) {
-            return true;
-          }
-          this.#smoothRequest = request;
-          this.#smoothTargetY = result.y;
-          this.#attachViewportCenter();
-          viewport.scrollTo({ top: result.y, behavior: request.behavior });
-          this.#scheduleSmoothSettle();
-          return true;
+        if (!isInstantReveal(request)) {
+          return this.#applySmoothReveal(request, snapshot, result.y);
         }
+        this.#interruptSmoothReveal();
         const revealOrigin = this.#selectionRevealOrigin(request, viewport.getScrollTop());
-        viewport.scrollTo({ top: result.y, behavior: request.behavior });
-        this.#expectedScrollTop = result.y;
+        viewport.scrollTo({ top: result.y, behavior: 'instant' });
+        this.#expectedScrollTop = viewport.getScrollTop();
         const presented = this.markPresented(snapshot.revision, request);
-        if (presented) this.#attachSelectionOrCenter(false, revealOrigin);
+        if (presented) this.#attachSelectionOrCenter(request.target.type !== 'current_selection_head', revealOrigin);
         return presented;
       }
     }
@@ -218,7 +227,8 @@ export class EditorScrollScope {
 
   declare(options: EditorScrollIntoViewOptions): EditorBringIntoViewRequest {
     const request = createBringIntoViewRequest(options);
-    this.#interruptSmoothReveal();
+    if (options.behavior === 'smooth' && this.#smoothMotion) this.#pauseSmoothReveal();
+    else this.#interruptSmoothReveal();
     this.#pendingRequest?.completePresentation();
     this.#pendingRequest = request;
     this.#keepVisibleTarget = request.policy === 'pointer_cursor_guard' ? null : request.target;
@@ -249,7 +259,7 @@ export class EditorScrollScope {
 
   discard(request: EditorBringIntoViewRequest): void {
     if (this.#pendingRequest !== request) return;
-    if (this.#smoothRequest === request) this.#interruptSmoothReveal();
+    this.#interruptSmoothReveal();
     this.#pendingRequest = null;
     request.completePresentation();
     this.#editor.requestPublication();
@@ -276,75 +286,93 @@ export class EditorScrollScope {
   prepareViewportAnchorPublication(snapshot: EditorSnapshot): EditorViewportAnchorPublication {
     const viewport = this.#editor.scrollViewport;
     if (!viewport) return { type: 'ready', geometry: null, targetScrollTop: null };
-    if (this.#smoothRequest) this.#attachViewportCenter();
+    if (this.#smoothMotion) this.#attachViewportCenter();
     else this.#ensureViewportAnchor();
 
+    const metrics = this.#viewportMetrics(snapshot, true);
+    if (!metrics) return { type: 'unavailable' };
+    const clampedScrollTop = Math.max(0, Math.min(metrics.scrollTop, metrics.maximumScrollTop));
+    const fallbackPublication = (): EditorViewportAnchorPublication => ({
+      type: 'ready',
+      geometry: null,
+      targetScrollTop: clampedScrollTop === metrics.scrollTop ? null : clampedScrollTop,
+    });
+
     const identity = this.#viewportAnchor.identity;
-    if (!identity) return { type: 'ready', geometry: null, targetScrollTop: null };
+    if (!identity) return fallbackPublication();
     let resolution = this.#editor.resolveViewportAnchor(snapshot.revision, identity);
     if (resolution.type === 'unavailable') return { type: 'unavailable' };
     if (resolution.type === 'deleted' || resolution.type === 'not_laid_out') {
       this.#attachViewportCenter();
       const fallback = this.#viewportAnchor.identity;
-      if (!fallback) return { type: 'ready', geometry: null, targetScrollTop: null };
+      if (!fallback) return fallbackPublication();
       resolution = this.#editor.resolveViewportAnchor(snapshot.revision, fallback);
       if (resolution.type === 'unavailable') return { type: 'unavailable' };
       if (resolution.type === 'deleted' || resolution.type === 'not_laid_out') {
         this.#viewportAnchor.clear();
-        return { type: 'ready', geometry: null, targetScrollTop: null };
+        return fallbackPublication();
       }
     }
 
-    const metrics = this.#viewportMetrics(snapshot);
-    if (!metrics) return { type: 'unavailable' };
     const geometry = resolveViewportAnchorGeometry(resolution.geometry, metrics.layout);
     if (!geometry) return { type: 'unavailable' };
+    const targetScrollTop = this.#viewportAnchor.publicationRevealScroll(
+      geometry,
+      metrics.scrollTop,
+      metrics.clientHeight,
+      metrics.scrollHeight,
+      this.visibleArea,
+      (origin) => {
+        const rects = this.resolveTargetRects(origin.target, snapshot);
+        const target = rects && pageRectsToRevealTargetSpan(rects, metrics.layout.pages, metrics.layout.zoom);
+        if (!target) return null;
+        return (
+          this.resolveScrollTop(
+            origin,
+            {
+              scrollTop: origin.scrollTop,
+              clientHeight: metrics.clientHeight,
+              scrollHeight: metrics.scrollHeight,
+              ...target,
+            },
+            snapshot,
+          ) ?? origin.scrollTop
+        );
+      },
+    );
     return {
       type: 'ready',
       geometry,
-      targetScrollTop: this.#viewportAnchor.publicationRevealScroll(
-        geometry,
-        metrics.scrollTop,
-        metrics.clientHeight,
-        metrics.scrollHeight,
-        this.visibleArea,
-        (origin) => {
-          const rects = this.resolveTargetRects(origin.target, snapshot);
-          const target = rects && pageRectsToRevealTargetSpan(rects, metrics.layout.pages, metrics.layout.zoom);
-          if (!target) return null;
-          return (
-            this.resolveScrollTop(
-              origin,
-              {
-                scrollTop: origin.scrollTop,
-                clientHeight: metrics.clientHeight,
-                scrollHeight: metrics.scrollHeight,
-                ...target,
-              },
-              snapshot,
-            ) ?? origin.scrollTop
-          );
-        },
-      ),
+      targetScrollTop,
     };
   }
 
   applyViewportAnchorPublication(publication: EditorViewportAnchorPublication): void {
     if (publication.type !== 'ready') return;
-    if (!publication.geometry || publication.targetScrollTop === null) {
-      this.#ensureViewportAnchor();
+    const viewport = this.#editor.scrollViewport;
+    if (publication.targetScrollTop === null) {
+      if (viewport && publication.geometry) {
+        this.#viewportAnchor.acceptGeometry(publication.geometry, viewport.getScrollTop());
+      } else {
+        this.#ensureViewportAnchor();
+      }
       return;
     }
-    const viewport = this.#editor.scrollViewport;
     if (!viewport) return;
     const viewportRect = viewport.getRect();
     const clientHeight = viewportRect.bottom - viewportRect.top;
     const maximumScrollTop = Math.max(0, viewport.getScrollHeight() - clientHeight);
     const target = Math.max(0, Math.min(publication.targetScrollTop, maximumScrollTop));
-    if (Math.abs(viewport.getScrollTop() - target) > 1) {
-      if (this.#smoothRequest) this.#smoothTargetY = null;
-      this.#expectedScrollTop = target;
+    const previousScrollTop = viewport.getScrollTop();
+    if (Math.abs(previousScrollTop - target) > 1) {
       viewport.scrollTo({ top: target, behavior: 'instant' });
+      const actualScrollTop = viewport.getScrollTop();
+      this.#expectedScrollTop = actualScrollTop;
+      this.#smoothMotion?.translate(actualScrollTop - previousScrollTop);
+    }
+    if (!publication.geometry) {
+      this.#ensureViewportAnchor();
+      return;
     }
     this.#viewportAnchor.acceptGeometry(publication.geometry, viewport.getScrollTop());
   }
@@ -358,11 +386,7 @@ export class EditorScrollScope {
       return;
     }
     this.#expectedScrollTop = null;
-    if (this.#smoothRequest) {
-      this.#attachViewportCenter();
-      this.#scheduleSmoothSettle();
-      return;
-    }
+    if (this.#smoothMotion) this.cancel();
     this.#viewportAnchor.finishRevealConvergence();
 
     const metrics = this.#viewportMetrics(this.#editor.published?.snapshot);
@@ -388,7 +412,14 @@ export class EditorScrollScope {
   }
 
   reconcileViewportResize(): void {
-    if (this.#smoothRequest) {
+    if (this.#smoothMotion) {
+      const viewport = this.#editor.scrollViewport;
+      const rect = viewport?.getRect();
+      const viewportHeight = rect ? rect.bottom - rect.top : 0;
+      if (viewportHeight > 0) {
+        const target = this.#smoothMotion.snapshot().target;
+        this.#smoothMotion.retarget(target, viewportHeight);
+      }
       this.#attachViewportCenter();
       return;
     }
@@ -409,18 +440,6 @@ export class EditorScrollScope {
     this.#expectedScrollTop = target;
     this.#editor.scrollViewport?.scrollTo({ top: target, behavior: 'instant' });
     this.#viewportAnchor.acceptGeometry(geometry, target);
-  }
-
-  settleSmoothReveal(): void {
-    const request = this.#smoothRequest;
-    if (!request) return;
-    const target = this.#smoothTargetY;
-    const scrollTop = this.#editor.scrollViewport?.getScrollTop();
-    if (target === null || scrollTop === undefined || Math.abs(scrollTop - target) > 1) return;
-    this.#clearSmoothReveal();
-    if (this.markPresented(this.#editor.publishedRevision ?? this.#editor.appliedRevision, request)) {
-      this.#attachSelectionOrCenter(false);
-    }
   }
 
   resolveScrollTop(
@@ -459,7 +478,7 @@ export class EditorScrollScope {
     metrics: ScrollContainerMetrics & RevealTargetSpan,
     snapshot: EditorSnapshot,
   ): VerticalSpan[] {
-    if (request.behavior !== 'instant') return [];
+    if (!isInstantReveal(request)) return [];
     const policy = this.#resolvePolicy(request, snapshot);
     return resolveInstantRevealPreparationViewports({
       ...metrics,
@@ -630,7 +649,10 @@ export class EditorScrollScope {
     return metrics ? resolveViewportAnchorGeometry(resolution.geometry, metrics.layout) : null;
   }
 
-  #viewportMetrics(snapshot: EditorSnapshot | undefined): {
+  #viewportMetrics(
+    snapshot: EditorSnapshot | undefined,
+    candidateExtent = false,
+  ): {
     layout: EditorViewportAnchorLayout;
     scrollTop: number;
     clientHeight: number;
@@ -654,7 +676,9 @@ export class EditorScrollScope {
       pageGap: snapshot.rootAttrs?.layout_mode.type === 'paginated' ? PAGE_GAP * zoom : 0,
     });
     const predictedExtent = pages.at(-1)?.bottom ?? origin;
-    const scrollHeight = Math.max(viewport.getScrollHeight(), predictedExtent + this.bottomPaddingFor(snapshot), clientHeight);
+    const candidateScrollHeight = Math.max(predictedExtent + this.bottomPaddingFor(snapshot), clientHeight);
+    const scrollHeight =
+      candidateExtent && this.#editor.scrollRootEl ? candidateScrollHeight : Math.max(viewport.getScrollHeight(), candidateScrollHeight);
     return {
       layout: { pages, zoom },
       scrollTop,
@@ -664,29 +688,116 @@ export class EditorScrollScope {
     };
   }
 
-  #scheduleSmoothSettle(): void {
-    if (this.#smoothSettleTimer !== null) clearTimeout(this.#smoothSettleTimer);
-    this.#smoothSettleTimer = setTimeout(() => this.settleSmoothReveal(), 120);
+  #applySmoothReveal(request: EditorBringIntoViewRequest, snapshot: EditorSnapshot, target: number): boolean {
+    const viewport = this.#editor.scrollViewport;
+    const metrics = this.#viewportMetrics(snapshot);
+    if (!viewport || !metrics) return false;
+    const clampedTarget = Math.max(0, Math.min(target, metrics.maximumScrollTop));
+    const previous = this.#smoothMotion?.snapshot();
+    const direction = Math.sign(clampedTarget - metrics.scrollTop);
+    const previousDirection = previous ? Math.sign(previous.target - previous.position) : 0;
+    if (this.#smoothRequest === request && previous?.target === clampedTarget) {
+      if (this.#smoothMotion?.finished) this.#finishSmoothReveal();
+      else this.#scheduleSmoothAnimationFrame();
+      return true;
+    }
+    if (
+      !this.#smoothMotion ||
+      (direction !== 0 && previousDirection !== 0 && direction !== previousDirection && this.#smoothRequest !== request)
+    ) {
+      this.#smoothMotion = SmoothScrollMotion.start({
+        position: metrics.scrollTop,
+        target: clampedTarget,
+        viewportHeight: metrics.clientHeight,
+      });
+    } else {
+      this.#smoothMotion.synchronizeBounds(metrics.scrollTop, metrics.maximumScrollTop, metrics.clientHeight);
+      this.#smoothMotion.retarget(clampedTarget, metrics.clientHeight);
+    }
+    this.#smoothRequest = request;
+    this.#attachViewportCenter();
+    if (this.#smoothMotion.finished) {
+      this.#finishSmoothReveal();
+    } else {
+      this.#scheduleSmoothAnimationFrame();
+    }
+    return true;
+  }
+
+  #scheduleSmoothAnimationFrame(): void {
+    if (this.#smoothAnimationFrame !== null) return;
+    this.#smoothAnimationFrame = requestAnimationFrame((time) => this.#advanceSmoothReveal(time));
+  }
+
+  #advanceSmoothReveal(time: number): void {
+    this.#smoothAnimationFrame = null;
+    const request = this.#smoothRequest;
+    const motion = this.#smoothMotion;
+    const viewport = this.#editor.scrollViewport;
+    if (!request || !motion || !viewport) return;
+    const previousTime = this.#smoothAnimationTime;
+    this.#smoothAnimationTime = time;
+    if (previousTime === null) {
+      this.#scheduleSmoothAnimationFrame();
+      return;
+    }
+
+    const rect = viewport.getRect();
+    const viewportHeight = rect.bottom - rect.top;
+    const maximumScrollTop = Math.max(0, viewport.getScrollHeight() - viewportHeight);
+    const current = viewport.getScrollTop();
+    const snapshot = motion.snapshot();
+    if (Math.abs(current - snapshot.position) > 1 || snapshot.target < 0 || snapshot.target > maximumScrollTop) {
+      motion.synchronizeBounds(current, maximumScrollTop, viewportHeight);
+    }
+    const next = motion.advance((time - previousTime) / 1000);
+    this.#expectedScrollTop = next.position;
+    viewport.scrollTo({ top: next.position, behavior: 'instant' });
+    const actual = viewport.getScrollTop();
+    if (Math.abs(actual - next.position) > 1) {
+      this.#expectedScrollTop = actual;
+      motion.synchronizeBounds(actual, maximumScrollTop, viewportHeight);
+    }
+    if (motion.finished) this.#finishSmoothReveal();
+    else this.#scheduleSmoothAnimationFrame();
+  }
+
+  #finishSmoothReveal(): void {
+    const request = this.#smoothRequest;
+    const motion = this.#smoothMotion;
+    const viewport = this.#editor.scrollViewport;
+    if (!request || !motion || !viewport) return;
+    const target = motion.snapshot().target;
+    if (Math.abs(viewport.getScrollTop() - target) > 0.5) {
+      viewport.scrollTo({ top: target, behavior: 'instant' });
+      this.#expectedScrollTop = viewport.getScrollTop();
+    }
+    const publicationCurrent = this.#editor.published?.snapshot === this.#editor.appliedSnapshot;
+    if (!publicationCurrent) {
+      this.#smoothAnimationTime = null;
+      this.#editor.requestPublication();
+      return;
+    }
+    this.#clearSmoothReveal();
+    if (this.markPresented(this.#editor.publishedRevision ?? this.#editor.appliedRevision, request)) {
+      this.#attachSelectionOrCenter(request.target.type !== 'current_selection_head');
+    }
+  }
+
+  #pauseSmoothReveal(): void {
+    if (this.#smoothAnimationFrame !== null) cancelAnimationFrame(this.#smoothAnimationFrame);
+    this.#smoothAnimationFrame = null;
+    this.#smoothAnimationTime = null;
+    this.#smoothRequest = null;
   }
 
   #clearSmoothReveal(): void {
-    if (this.#smoothSettleTimer !== null) clearTimeout(this.#smoothSettleTimer);
-    this.#smoothSettleTimer = null;
-    this.#smoothRequest = null;
-    this.#smoothTargetY = null;
+    this.#pauseSmoothReveal();
+    this.#smoothMotion = null;
   }
 
   #interruptSmoothReveal(): void {
-    if (!this.#smoothRequest) {
-      this.#clearSmoothReveal();
-      return;
-    }
-    const viewport = this.#editor.scrollViewport;
-    const scrollTop = viewport?.getScrollTop();
-    if (viewport && scrollTop !== undefined && Number.isFinite(scrollTop)) {
-      this.#expectedScrollTop = scrollTop;
-      viewport.scrollTo({ top: scrollTop, behavior: 'instant' });
-    }
+    this.#smoothMotion?.cancel();
     this.#clearSmoothReveal();
   }
 }

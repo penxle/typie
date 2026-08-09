@@ -1,8 +1,5 @@
 package co.typie.editor.viewport
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.EaseOutCubic
-import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
@@ -29,9 +26,6 @@ import kotlin.math.max
 
 private const val EditorViewportWheelPanScale = 10f
 private const val EditorViewportWheelZoomScale = 10f
-private const val EditorViewportSmoothScrollDurationMillis = 260
-private val EditorViewportSmoothScrollSpec =
-  tween<Float>(durationMillis = EditorViewportSmoothScrollDurationMillis, easing = EaseOutCubic)
 
 private class ViewportPositionHolder(initial: Offset) : ViewModel() {
   var position by mutableStateOf(initial)
@@ -171,21 +165,6 @@ internal class EditorViewportState(initialScrollOffset: Offset = Offset.Zero) {
       isAutoScroll = isAutoScroll,
       emitScrollEvent = true,
     )
-  }
-
-  suspend fun animateScrollToY(targetY: Float, isAutoScroll: Boolean = false) {
-    invalidateRetainedTransformScrollTargetAfterTransform()
-    pendingRestoredScrollOffset = null
-    val resolvedY = resolveScrollY(targetY)
-    if (scrollOffset.y == resolvedY) {
-      return
-    }
-
-    val animation = Animatable(scrollOffset.y)
-    animation.animateTo(resolvedY, EditorViewportSmoothScrollSpec) {
-      scrollToY(targetY = value, isAutoScroll = isAutoScroll)
-    }
-    scrollToY(targetY = resolvedY, isAutoScroll = isAutoScroll)
   }
 
   fun scrollTo(offset: Offset, isAutoScroll: Boolean = false) {

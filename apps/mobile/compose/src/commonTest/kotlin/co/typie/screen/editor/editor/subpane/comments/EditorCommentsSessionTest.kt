@@ -5,7 +5,7 @@ import co.typie.editor.ffi.PageRect
 import co.typie.editor.ffi.Position
 import co.typie.editor.ffi.Rect
 import co.typie.editor.ffi.TrackedRange
-import co.typie.editor.scroll.toPageRectsTarget
+import co.typie.editor.scroll.EditorBringIntoViewTarget
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -22,8 +22,11 @@ class EditorCommentsSessionTest {
 
     assertNull(listOf(inactiveRange).commentThreadScrollTarget(inactiveRange.id))
     assertEquals(
-      rects.toPageRectsTarget(),
+      EditorBringIntoViewTarget.TrackedItem(activeRange.id),
       listOf(activeRange).commentThreadScrollTarget(activeRange.id),
+    )
+    assertNull(
+      listOf(activeRange.copy(rects = emptyList())).commentThreadScrollTarget(activeRange.id)
     )
   }
 

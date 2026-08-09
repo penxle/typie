@@ -187,6 +187,34 @@ function paginatedDocWithPageBreaks(pageCount: number, linkedLastPage?: { text: 
   };
 }
 
+function paginatedDocWithLinkedPage(pageCount: number, linkedPage: number, text: string, href: string): PlainDoc {
+  const pageHeight = 221;
+  return {
+    root: entry(
+      {
+        type: 'root',
+        layout_mode: {
+          type: 'paginated',
+          page_width: PAGE_WIDTH,
+          page_height: pageHeight,
+          page_margin_top: PAGE_MARGIN,
+          page_margin_bottom: PAGE_MARGIN,
+          page_margin_left: PAGE_MARGIN,
+          page_margin_right: PAGE_MARGIN,
+        },
+      },
+      Array.from({ length: pageCount }, (_, page) => {
+        const children: PlainNodeEntry[] = [];
+        if (page === linkedPage) {
+          children.push(entry({ type: 'text', text }, [], { link: { type: 'link', href } } as never));
+        }
+        if (page < pageCount - 1) children.push(entry({ type: 'page_break' }));
+        return entry({ type: 'paragraph' }, children);
+      }),
+    ),
+  };
+}
+
 async function mountEditor(
   plain: PlainDoc,
   options: { readOnly?: boolean; typewriterEnabled?: boolean; withZoom?: boolean; displayZoom?: number } = {},
@@ -457,6 +485,77 @@ async function waitForPresentation(editor: Editor, revision = editor.appliedRevi
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 }
 
+async function prepareTrackedItemSmoothReveal(pageCount: number, targetPage: number) {
+  const errorId = `smooth-target-${crypto.randomUUID()}`;
+  const text = 'tracked target';
+  const href = `https://example.com/${errorId}`;
+  const harness = await mountEditor(paginatedDocWithLinkedPage(pageCount, targetPage, text, href));
+  const { editor, scrollRoot } = harness;
+
+  const targetUpdate = editor.updateNow((request) => {
+    request.enqueue({ type: 'selection', op: { type: 'set_at', page: targetPage, x: PAGE_MARGIN, y: PAGE_MARGIN } });
+  });
+  expect(targetUpdate).not.toBeNull();
+  if (!targetUpdate) throw new Error('Expected the tracked-target selection update');
+  await waitForPresentation(editor, targetUpdate.revision);
+
+  const selection = editor.appliedSnapshot.selection;
+  const targetSelection = selection && editor.modifierSpanSelection(selection.head, 'link');
+  expect(targetSelection).toBeDefined();
+  if (!targetSelection) throw new Error('Expected the linked target selection');
+  editor.setSpellcheckErrors([{ id: errorId, selection: targetSelection, context: text, corrections: [], explanation: '' }]);
+  await expect.poll(() => editor.appliedSnapshot.trackedRanges.some((range) => range.id === errorId)).toBe(true);
+  await waitForPresentation(editor);
+
+  let startPresentation: Promise<void> | undefined;
+  const startUpdate = editor.updateNow((request) => {
+    request.enqueue({ type: 'selection', op: { type: 'set_at', page: pageCount - 1, x: PAGE_MARGIN, y: PAGE_MARGIN } });
+    startPresentation = editor.scrollIntoView({ target: { type: 'current_selection_head' }, policy: 'cursor_guard', behavior: 'instant' });
+  });
+  expect(startUpdate).not.toBeNull();
+  expect(startPresentation).toBeDefined();
+  if (!startUpdate || !startPresentation) throw new Error('Expected the smooth-reveal start-position presentation');
+  await startPresentation;
+  expect(scrollRoot.scrollTop).toBeGreaterThan(0);
+
+  const unrelatedSelectionUpdate = editor.updateNow((request) => {
+    request.enqueue({ type: 'selection', op: { type: 'set_at', page: targetPage + 10, x: PAGE_MARGIN, y: PAGE_MARGIN } });
+  });
+  expect(unrelatedSelectionUpdate).not.toBeNull();
+  if (!unrelatedSelectionUpdate) throw new Error('Expected the unrelated selection update');
+  await waitForPresentation(editor, unrelatedSelectionUpdate.revision);
+
+  const presentation = editor.scrollIntoView({ target: { type: 'tracked_item', id: errorId }, policy: 'reveal', behavior: 'smooth' });
+  expect(presentation).toBeDefined();
+  if (!presentation) throw new Error('Expected the smooth reveal presentation');
+  return { editor, errorId, presentation, scrollRoot };
+}
+
+function insertPagesBeforeTrackedTarget(editor: Editor, count = 1): number {
+  const selection = editor.appliedSnapshot.selection;
+  const savedSelection = selection && editor.freezeSelection(selection);
+  expect(savedSelection).toBeDefined();
+  if (!savedSelection) throw new Error('Expected a stable selection before the preceding page insertion');
+  const update = editor.updateNow((request) => {
+    request.enqueue({ type: 'selection', op: { type: 'set_at', page: 0, x: PAGE_MARGIN, y: PAGE_MARGIN } });
+    for (let index = 0; index < count; index += 1) {
+      request.enqueue({ type: 'insertion', op: { type: 'break', kind: 'page' } });
+    }
+    request.enqueue({ type: 'selection', op: { type: 'set_frozen', selection: savedSelection } });
+  });
+  expect(update).not.toBeNull();
+  if (!update) throw new Error('Expected the preceding page insertion');
+  return update.revision;
+}
+
+function trackedTargetScrollTop(editor: Editor, id: string): number | null {
+  const snapshot = editor.published?.snapshot;
+  const rect = snapshot && editor.trackedRangeForSnapshot(id, snapshot)?.rects[0];
+  if (!snapshot || !rect) return null;
+  const pageTop = snapshot.pageSizes.slice(0, rect.page_idx).reduce((sum, page) => sum + page.height + PAGE_GAP, 0);
+  return pageTop + rect.rect.y - CURSOR_VISIBLE_MARGIN;
+}
+
 function expectActualCanvas(editor: Editor, pageIndex: number, requirePaintedPixels = true) {
   const frame = editor.published?.frames.get(pageIndex);
   const canvas = document.querySelector<HTMLCanvasElement>(`canvas[data-page-canvas="${pageIndex}"]`);
@@ -631,6 +730,90 @@ describe('web editor frame synchronization', () => {
     }
     expect(revealed, 'the offscreen spellcheck result was not presented after its smooth reveal').toBe(true);
     expectActualCanvas(editor, pageCount - 1);
+  });
+
+  it('keeps an in-flight smooth reveal advancing while preceding page edits are published', async () => {
+    const { editor, errorId, presentation, scrollRoot } = await prepareTrackedItemSmoothReveal(32, 10);
+    let completed = false;
+    void presentation.then(() => {
+      completed = true;
+    });
+    const initialScrollTop = scrollRoot.scrollTop;
+    await expect.poll(() => Math.abs(scrollRoot.scrollTop - initialScrollTop)).toBeGreaterThan(0.25);
+    const initialTargetScrollTop = trackedTargetScrollTop(editor, errorId);
+    expect(initialTargetScrollTop).not.toBeNull();
+    if (initialTargetScrollTop === null) throw new Error('Expected initial tracked target geometry');
+    let previousDistance = scrollRoot.scrollTop - initialTargetScrollTop;
+    let consecutiveStationaryFrames = 0;
+    let maximumStationaryFrames = 0;
+    let insertedPages = 0;
+    const samples: {
+      frame: number;
+      capturedAtMs: number;
+      scrollTop: number;
+      targetScrollTop: number | null;
+      distance: number | null;
+      revision: number;
+    }[] = [];
+
+    for (let frame = 0; !completed && frame < 240; frame += 1) {
+      if (frame === 2) {
+        insertPagesBeforeTrackedTarget(editor, 20);
+        insertedPages = 20;
+      }
+      const capturedAtMs = await nextAnimationFrame();
+      const targetScrollTop = trackedTargetScrollTop(editor, errorId);
+      const currentScrollTop = scrollRoot.scrollTop;
+      const distance = targetScrollTop === null ? null : currentScrollTop - targetScrollTop;
+      samples.push({
+        frame,
+        capturedAtMs,
+        scrollTop: currentScrollTop,
+        targetScrollTop,
+        distance,
+        revision: editor.publishedRevision ?? -1,
+      });
+      if (distance !== null && distance > 20) {
+        consecutiveStationaryFrames = Math.abs(distance - previousDistance) <= 0.25 ? consecutiveStationaryFrames + 1 : 0;
+        maximumStationaryFrames = Math.max(maximumStationaryFrames, consecutiveStationaryFrames);
+        previousDistance = distance;
+      }
+    }
+
+    expect(insertedPages).toBe(20);
+    expect(completed, 'smooth reveal did not complete after preceding page edits').toBe(true);
+    expect(
+      maximumStationaryFrames,
+      `smooth reveal visibly stalled between animation frames: ${JSON.stringify(samples.slice(-20))}`,
+    ).toBeLessThanOrEqual(1);
+  });
+
+  it('converges to the final tracked geometry when preceding page edits arrive near completion', async () => {
+    const { editor, errorId, presentation, scrollRoot } = await prepareTrackedItemSmoothReveal(32, 10);
+    let completed = false;
+    void presentation.then(() => {
+      completed = true;
+    });
+    let insertedPages = false;
+
+    for (let frame = 0; !completed && frame < 240; frame += 1) {
+      await nextAnimationFrame();
+      const targetScrollTop = trackedTargetScrollTop(editor, errorId);
+      if (!insertedPages && targetScrollTop !== null && scrollRoot.scrollTop - targetScrollTop < scrollRoot.clientHeight) {
+        insertPagesBeforeTrackedTarget(editor, 20);
+        insertedPages = true;
+      }
+    }
+
+    expect(insertedPages, 'TEST HARNESS: preceding edits were not inserted near completion').toBe(true);
+    expect(completed, 'smooth reveal did not complete after the near-finish edits').toBe(true);
+
+    const finalEditRevision = insertPagesBeforeTrackedTarget(editor);
+    await waitForPresentation(editor, finalEditRevision);
+    const finalTargetScrollTop = trackedTargetScrollTop(editor, errorId);
+    expect(finalTargetScrollTop).not.toBeNull();
+    if (finalTargetScrollTop === null) throw new Error('Expected final tracked target geometry');
+    expect(scrollRoot.scrollTop).toBeCloseTo(finalTargetScrollTop, 0);
   });
 
   it('rejects a presentation without the cursor page native frame', () => {

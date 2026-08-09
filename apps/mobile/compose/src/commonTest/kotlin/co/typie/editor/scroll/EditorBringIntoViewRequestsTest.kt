@@ -111,6 +111,22 @@ class EditorBringIntoViewRequestsTest {
   }
 
   @Test
+  fun `tracked item request remains eligible when a later revision provides its geometry`() {
+    val requests = EditorBringIntoViewRequests()
+    val request =
+      requests.requestForVersion(
+        target = EditorBringIntoViewTarget.TrackedItem("comment-1"),
+        version = 11L,
+        policy = EditorBringIntoViewPolicy.Reveal,
+      )
+
+    requests.discardObsoleteForVersion(version = 12L)
+
+    assertSame(request, requests.activateForVersion(version = 12L))
+    assertFalse(request.presentation.isCompleted)
+  }
+
+  @Test
   fun `new declaration immediately supersedes the previous reveal`() {
     val requests = EditorBringIntoViewRequests()
     val previous =
