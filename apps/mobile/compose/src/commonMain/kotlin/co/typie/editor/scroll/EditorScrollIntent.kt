@@ -59,8 +59,6 @@ internal sealed interface EditorBringIntoViewTarget {
   data object CurrentSelectionHead : EditorBringIntoViewTarget
 
   data class TrackedItem(val id: String) : EditorBringIntoViewTarget
-
-  data class PageRects(val rects: List<PageRect>) : EditorBringIntoViewTarget
 }
 
 internal enum class EditorBringIntoViewPolicy {
@@ -357,7 +355,6 @@ private fun resolveBringIntoViewTargetPageRects(
       resolveCurrentSelectionHeadPageRect(state)?.let(::listOf)
     is EditorBringIntoViewTarget.TrackedItem ->
       state.trackedRanges.firstOrNull { it.id == target.id }?.rects?.takeIf { it.isNotEmpty() }
-    is EditorBringIntoViewTarget.PageRects -> target.rects.takeIf { it.isNotEmpty() }
   }
 
 private fun EditorScrollFrame.resolvePolicy(
@@ -371,9 +368,6 @@ private fun EditorScrollFrame.resolvePolicy(
     requestedPolicy == EditorBringIntoViewPolicy.Typewriter -> EditorBringIntoViewPolicy.CursorGuard
     else -> requestedPolicy
   }
-
-internal fun List<PageRect>.toPageRectsTarget(): EditorBringIntoViewTarget.PageRects? =
-  takeIf { it.isNotEmpty() }?.let(EditorBringIntoViewTarget::PageRects)
 
 private fun resolveCollapsedSelectionHeadPageRect(state: EditorState): PageRect? {
   val cursor = state.cursor ?: return null

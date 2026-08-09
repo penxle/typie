@@ -117,7 +117,9 @@ export const handlePointerDown: EditorEventHandler<HTMLElement, PointerEvent> = 
       }
     });
     interactionSelection = update?.snapshot.selection;
-    editor.scrollIntoView({ target: { type: 'current_selection_head' }, policy: 'pointer_cursor_guard' });
+    if (!editor.readOnly) {
+      editor.scrollIntoView({ target: { type: 'current_selection_head' }, policy: 'pointer_cursor_guard' });
+    }
   }
   state.markPointerDown(e.pointerId, !nativeDragCandidate, { page, x, y }, count, modifiers, nativeDragCandidate, interactionSelection);
   if (!nativeDragCandidate) {
@@ -374,7 +376,9 @@ class PointerState {
           op: { type: 'set_at', page: session.down.page, x: session.down.x, y: session.down.y },
         }),
       );
-      editor.scrollIntoView({ target: { type: 'current_selection_head' }, policy: 'pointer_cursor_guard' });
+      if (!editor.readOnly) {
+        editor.scrollIntoView({ target: { type: 'current_selection_head' }, policy: 'pointer_cursor_guard' });
+      }
     }
     this.#edgeAutoScroll.stop();
     this.#session = null;

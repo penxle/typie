@@ -88,4 +88,22 @@ describe('EditorViewportAnchorState', () => {
     expect(state.tryReactivatePreferredSelection({ pointY: 200 }, 100, 300, visibleArea)).toBe(false);
     expect(state.identity).toBe(viewportIdentity);
   });
+
+  it('compares selection adoption by stable anchor identity', () => {
+    const state = new EditorViewportAnchorState();
+    state.attachSelection(identity, { pointY: 200 }, 100);
+
+    expect(state.needsSelectionAdoption({ ...identity })).toBe(false);
+    expect(state.needsSelectionAdoption(viewportIdentity)).toBe(true);
+  });
+
+  it('updates the preferred selection without replacing the active viewport anchor', () => {
+    const state = new EditorViewportAnchorState();
+    state.attachViewport(viewportIdentity, { pointY: 500 }, 350);
+
+    state.adoptSelection(identity, { pointY: 200 }, 350, 300, visibleArea, true);
+
+    expect(state.identity).toBe(viewportIdentity);
+    expect(state.preferredSelectionIdentity).toBe(identity);
+  });
 });

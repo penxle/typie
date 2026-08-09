@@ -1,8 +1,5 @@
 package co.typie.editor.scroll
 
-import co.typie.editor.EditorState
-import co.typie.editor.ffi.PageRect
-import co.typie.editor.ffi.Rect as FfiRect
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
@@ -10,39 +7,14 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class EditorBringIntoViewRequestsTest {
-  private val pageRectsTarget =
-    EditorBringIntoViewTarget.PageRects(
-      listOf(PageRect(pageIdx = 0, rect = FfiRect(x = 0f, y = 10f, width = 20f, height = 30f)))
-    )
-
-  @Test
-  fun `state-based request derives target and version from the same state`() {
-    val requests = EditorBringIntoViewRequests()
-    val state = EditorState.Initial.copy(version = 11L, selectionHitRects = pageRectsTarget.rects)
-
-    assertTrue(
-      requests.requestForState(
-        state,
-        policy = EditorBringIntoViewPolicy.Reveal,
-        behavior = EditorBringIntoViewBehavior.Smooth,
-      ) {
-        selectionHitRects.toPageRectsTarget()
-      }
-    )
-
-    assertNull(requests.activateForVersion(version = 10L))
-    val request = requests.activateForVersion(version = 11L)
-    assertTrue(request?.target == pageRectsTarget)
-    assertTrue(request?.policy == EditorBringIntoViewPolicy.Reveal)
-    assertTrue(request?.behavior == EditorBringIntoViewBehavior.Smooth)
-  }
+  private val trackedItemTarget = EditorBringIntoViewTarget.TrackedItem("comment-1")
 
   @Test
   fun `request behavior defaults to instant independently from reveal policy`() {
     val requests = EditorBringIntoViewRequests()
 
     requests.requestForVersion(
-      target = pageRectsTarget,
+      target = trackedItemTarget,
       version = 11L,
       policy = EditorBringIntoViewPolicy.Reveal,
     )
@@ -56,7 +28,7 @@ class EditorBringIntoViewRequestsTest {
     val requests = EditorBringIntoViewRequests()
 
     requests.requestForVersion(
-      target = pageRectsTarget,
+      target = trackedItemTarget,
       version = 11L,
       policy = EditorBringIntoViewPolicy.Reveal,
       behavior = EditorBringIntoViewBehavior.Smooth,
@@ -78,21 +50,6 @@ class EditorBringIntoViewRequestsTest {
     )
 
     assertTrue(wakes > 0)
-  }
-
-  @Test
-  fun `state-based request reports when state has no target`() {
-    val requests = EditorBringIntoViewRequests()
-
-    assertFalse(
-      requests.requestForState(
-        EditorState.Initial,
-        policy = EditorBringIntoViewPolicy.CursorGuard,
-      ) {
-        null
-      }
-    )
-    assertNull(requests.activateForVersion(version = EditorState.Initial.version))
   }
 
   @Test
@@ -120,8 +77,6 @@ class EditorBringIntoViewRequestsTest {
         policy = EditorBringIntoViewPolicy.Reveal,
       )
 
-    requests.discardObsoleteForVersion(version = 12L)
-
     assertSame(request, requests.activateForVersion(version = 12L))
     assertFalse(request.presentation.isCompleted)
   }
@@ -135,7 +90,8 @@ class EditorBringIntoViewRequestsTest {
         1L,
         EditorBringIntoViewPolicy.CursorGuard,
       )
-    val current = requests.requestForVersion(pageRectsTarget, 2L, EditorBringIntoViewPolicy.Reveal)
+    val current =
+      requests.requestForVersion(trackedItemTarget, 2L, EditorBringIntoViewPolicy.Reveal)
 
     assertTrue(previous.presentation.isCompleted)
     assertSame(current, requests.activateForVersion(version = 2L))
@@ -149,7 +105,7 @@ class EditorBringIntoViewRequestsTest {
         EditorBringIntoViewTarget.CurrentSelectionHead,
         EditorBringIntoViewPolicy.CursorGuard,
       )
-    val current = requests.declare(pageRectsTarget, EditorBringIntoViewPolicy.Reveal)
+    val current = requests.declare(trackedItemTarget, EditorBringIntoViewPolicy.Reveal)
 
     assertFalse(requests.bind(previous, version = 1L))
     assertTrue(requests.bind(current, version = 2L))
@@ -157,23 +113,7 @@ class EditorBringIntoViewRequestsTest {
   }
 
   @Test
-  fun `exact page rect request becomes obsolete when its revision is skipped`() {
-    val requests = EditorBringIntoViewRequests()
-    val request =
-      requests.requestForVersion(
-        pageRectsTarget,
-        version = 2L,
-        policy = EditorBringIntoViewPolicy.Reveal,
-      )
-
-    assertNull(requests.activateForVersion(version = 3L))
-    assertFalse(request.presentation.isCompleted)
-    requests.discardObsoleteForVersion(version = 3L)
-    assertTrue(request.presentation.isCompleted)
-  }
-
-  @Test
-  fun `pointer selection request is exact and becomes obsolete when its revision is skipped`() {
+  fun `pointer selection request remains eligible when a later revision provides geometry`() {
     val requests = EditorBringIntoViewRequests()
     val request =
       requests.requestForVersion(
@@ -184,13 +124,12 @@ class EditorBringIntoViewRequestsTest {
 
     assertNull(requests.activateForVersion(version = 1L))
     assertSame(request, requests.activateForVersion(version = 2L))
-    assertNull(requests.activateForVersion(version = 3L))
-    requests.discardObsoleteForVersion(version = 3L)
-    assertTrue(request.presentation.isCompleted)
+    assertSame(request, requests.activateForVersion(version = 3L))
+    assertFalse(request.presentation.isCompleted)
   }
 
   @Test
-  fun `new request supersedes an exact pointer selection reveal`() {
+  fun `new request supersedes a pending pointer selection reveal`() {
     val requests = EditorBringIntoViewRequests()
     val pointer =
       requests.requestForVersion(

@@ -233,6 +233,17 @@ describe('pointer native drag admission', () => {
     });
   });
 
+  it('updates a read-only mouse selection without requesting pointer guard reveal', () => {
+    const editor = createEditor({ readOnly: true });
+    const target = createPointerTarget({ captured: true });
+
+    handlePointerDown(editor, createPointerEvent({ target }));
+    handlePointerUp(editor, createPointerEvent({ target }));
+
+    expect(editor.enqueue).toHaveBeenCalledWith({ type: 'selection', op: { type: 'set_at', page: 0, x: 10, y: 20 } });
+    expect(editor.scrollIntoView).not.toHaveBeenCalled();
+  });
+
   it('promotes a rapid third click inside the selected word to paragraph selection', () => {
     const editor = createEditor();
     const target = createPointerTarget({ captured: true });

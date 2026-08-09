@@ -11,7 +11,7 @@ import {
 } from './scroll';
 import { SmoothScrollMotion } from './smooth-scroll-motion';
 import { EditorViewportAnchorState, resolveViewportAnchorGeometry, viewportCenterAnchorPoint } from './viewport-anchor';
-import type { PageRect } from '@typie/editor-ffi/browser';
+import type { PageRect, ViewportAnchorResolution } from '@typie/editor-ffi/browser';
 import type { Editor, EditorContext, EditorSnapshot } from './editor.svelte';
 import type { EditorRequest } from './editor-update';
 import type { VerticalSpan } from './required-surface-pages';
@@ -246,15 +246,7 @@ export class EditorScrollScope {
   activateForRevision(revision: number): EditorBringIntoViewRequest | null {
     const request = this.#pendingRequest;
     if (!request || request.targetRevision === null) return null;
-    const eligible = request.policy === 'pointer_cursor_guard' ? revision === request.targetRevision : revision >= request.targetRevision;
-    return eligible ? request : null;
-  }
-
-  discardObsoleteForRevision(revision: number): void {
-    const request = this.#pendingRequest;
-    if (request?.policy === 'pointer_cursor_guard' && request.targetRevision !== null && revision > request.targetRevision) {
-      this.discard(request);
-    }
+    return revision >= request.targetRevision ? request : null;
   }
 
   discard(request: EditorBringIntoViewRequest): void {
@@ -286,6 +278,25 @@ export class EditorScrollScope {
   prepareViewportAnchorPublication(snapshot: EditorSnapshot): EditorViewportAnchorPublication {
     const viewport = this.#editor.scrollViewport;
     if (!viewport) return { type: 'ready', geometry: null, targetScrollTop: null };
+    const selectionCapture = this.#editor.captureSelectionViewportAnchor(snapshot.revision);
+    if (!selectionCapture && snapshot.selection) return { type: 'unavailable' };
+    if (selectionCapture && this.#viewportAnchor.needsSelectionAdoption(selectionCapture.identity)) {
+      const selectionMetrics = this.#viewportMetrics(snapshot, true);
+      if (!selectionMetrics) return { type: 'unavailable' };
+      const selectionGeometry = resolveViewportAnchorGeometry(selectionCapture.geometry, selectionMetrics.layout);
+      if (!selectionGeometry) return { type: 'unavailable' };
+      this.#viewportAnchor.adoptSelection(
+        selectionCapture.identity,
+        selectionGeometry,
+        selectionMetrics.scrollTop,
+        selectionMetrics.clientHeight,
+        this.visibleArea,
+        this.#smoothMotion !== null,
+      );
+    } else if (!snapshot.selection && this.#viewportAnchor.preferredSelectionIdentity) {
+      if (!this.#smoothMotion && !this.#attachViewportCenter()) return { type: 'unavailable' };
+      this.#viewportAnchor.clearPreferredSelection();
+    }
     if (this.#smoothMotion) this.#attachViewportCenter();
     else this.#ensureViewportAnchor();
 
@@ -298,20 +309,12 @@ export class EditorScrollScope {
       targetScrollTop: clampedScrollTop === metrics.scrollTop ? null : clampedScrollTop,
     });
 
-    const identity = this.#viewportAnchor.identity;
-    if (!identity) return fallbackPublication();
-    let resolution = this.#editor.resolveViewportAnchor(snapshot.revision, identity);
+    const resolution = this.#resolveCandidateViewportAnchor(snapshot);
+    if (!resolution) return fallbackPublication();
     if (resolution.type === 'unavailable') return { type: 'unavailable' };
     if (resolution.type === 'deleted' || resolution.type === 'not_laid_out') {
-      this.#attachViewportCenter();
-      const fallback = this.#viewportAnchor.identity;
-      if (!fallback) return fallbackPublication();
-      resolution = this.#editor.resolveViewportAnchor(snapshot.revision, fallback);
-      if (resolution.type === 'unavailable') return { type: 'unavailable' };
-      if (resolution.type === 'deleted' || resolution.type === 'not_laid_out') {
-        this.#viewportAnchor.clear();
-        return fallbackPublication();
-      }
+      this.#viewportAnchor.clear();
+      return fallbackPublication();
     }
 
     const geometry = resolveViewportAnchorGeometry(resolution.geometry, metrics.layout);
@@ -490,6 +493,17 @@ export class EditorScrollScope {
   }
 
   // eslint-disable-next-line unicorn/consistent-class-member-order -- public scroll contract is grouped before private policy details
+  #resolveCandidateViewportAnchor(snapshot: EditorSnapshot): ViewportAnchorResolution | null {
+    const identity = this.#viewportAnchor.identity;
+    if (!identity) return null;
+    const resolution = this.#editor.resolveViewportAnchor(snapshot.revision, identity);
+    if (resolution.type !== 'deleted' && resolution.type !== 'not_laid_out') return resolution;
+
+    this.#attachViewportCenter();
+    const fallback = this.#viewportAnchor.identity;
+    return fallback ? this.#editor.resolveViewportAnchor(snapshot.revision, fallback) : null;
+  }
+
   #resolvePolicy(
     request: Pick<EditorBringIntoViewRequest, 'target' | 'policy'>,
     snapshot: EditorSnapshot,
@@ -596,10 +610,10 @@ export class EditorScrollScope {
     this.#attachViewportCenter();
   }
 
-  #attachViewportCenter(): void {
+  #attachViewportCenter(): boolean {
     const snapshot = this.#editor.published?.snapshot;
     const metrics = this.#viewportMetrics(snapshot);
-    if (!snapshot || !metrics) return;
+    if (!snapshot || !metrics) return false;
     const viewportRect = this.#editor.scrollViewport?.getRect();
     const topInset = Math.max(0, this.visibleArea.topInset);
     const visibleHeight = Math.max(0, metrics.clientHeight - topInset - Math.max(0, this.visibleArea.bottomInset));
@@ -612,11 +626,13 @@ export class EditorScrollScope {
     const point = local
       ? { page_idx: local.page, x: local.x, y: local.y }
       : viewportCenterAnchorPoint(snapshot, metrics.layout, metrics.scrollTop, metrics.clientHeight, this.visibleArea);
-    if (!point) return;
+    if (!point) return false;
     const capture = this.#editor.captureViewportAnchorAt(snapshot.revision, point);
-    if (!capture) return;
+    if (!capture) return false;
     const geometry = resolveViewportAnchorGeometry(capture.geometry, metrics.layout);
-    if (geometry) this.#viewportAnchor.attachViewport(capture.identity, geometry, metrics.scrollTop);
+    if (!geometry) return false;
+    this.#viewportAnchor.attachViewport(capture.identity, geometry, metrics.scrollTop);
+    return true;
   }
 
   #selectionRevealOrigin(request: EditorBringIntoViewRequest, scrollTop: number | undefined): EditorViewportAnchorRevealOrigin | undefined {

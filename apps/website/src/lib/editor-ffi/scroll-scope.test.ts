@@ -341,7 +341,7 @@ describe('EditorScrollScope', () => {
     expect(scope.resolvePreparationViewports(request, metrics, snapshot)).toContainEqual({ top: 380, bottom: 780 });
   });
 
-  it('treats pointer selection reveals as exact-revision requests and discards skipped revisions', async () => {
+  it('keeps pointer selection reveals eligible across later revisions', () => {
     const snapshot = trackedSnapshot('target', {
       page_idx: 0,
       rect: { x: 0, y: 0, width: 1, height: 20 },
@@ -355,10 +355,8 @@ describe('EditorScrollScope', () => {
 
     expect(scope.activateForRevision(6)).toBeNull();
     expect(scope.activateForRevision(7)).toBe(request);
-    expect(scope.activateForRevision(8)).toBeNull();
-    scope.discardObsoleteForRevision(8);
-    await expect(request.presentation).resolves.toBeUndefined();
-    expect(scope.pendingRequest).toBeNull();
+    expect(scope.activateForRevision(8)).toBe(request);
+    expect(scope.pendingRequest).toBe(request);
   });
 
   it('keeps a declared reveal ineligible until the installing revision binds it', () => {
@@ -738,6 +736,157 @@ describe('EditorScrollScope', () => {
     scope.applyViewportAnchorPublication(publication);
     expect(scrollTo).toHaveBeenCalledExactlyOnceWith({ top: 220, behavior: 'instant' });
     expect(scrollTop).toBe(220);
+  });
+
+  it('attaches a changed selection without scrolling then guards it after the viewport shrinks', () => {
+    const initial = selectionSnapshot(true, {
+      page_idx: 0,
+      rect: { x: 0, y: 90, width: 1, height: 20 },
+    });
+    const nextPosition = { node: 'text', offset: 1, affinity: 'downstream' as const };
+    const nextRect = { page_idx: 0, rect: { x: 0, y: 340, width: 1, height: 20 } };
+    const next = {
+      ...selectionSnapshot(true, nextRect),
+      revision: 2,
+      selection: { anchor: nextPosition, head: nextPosition },
+      selectionEndpoints: {
+        from: nextRect,
+        to: nextRect,
+        from_position: nextPosition,
+        to_position: nextPosition,
+      },
+    } as EditorSnapshot;
+    const { editor, getScrollTop, scope, scrollTo } = setup(initial);
+    const initialAnchor = { type: 'node' as const, node: 'selection-1', offset_x: 0, offset_y: 0 };
+    const nextAnchor = { type: 'node' as const, node: 'selection-2', offset_x: 0, offset_y: 0 };
+    const initialGeometry = {
+      point: { page_idx: 0, x: 0, y: 100 },
+      rect: { page_idx: 0, rect: { x: 0, y: 90, width: 1, height: 20 } },
+    };
+    const nextGeometry = {
+      point: { page_idx: 0, x: 0, y: 350 },
+      rect: nextRect,
+    };
+    let capture = { identity: initialAnchor, geometry: initialGeometry };
+    editor.captureSelectionViewportAnchor = vi.fn(() => capture);
+    editor.resolveViewportAnchor = vi.fn((_revision, identity) => ({
+      type: 'resolved' as const,
+      geometry: identity === initialAnchor ? initialGeometry : nextGeometry,
+    }));
+
+    expect(scope.prepareViewportAnchorPublication(initial).type).toBe('ready');
+    capture = { identity: nextAnchor, geometry: nextGeometry };
+    Object.assign(editor, {
+      published: { snapshot: next, frames: editor.published?.frames ?? new Map() },
+      publishedRevision: next.revision,
+    });
+
+    const publication = scope.prepareViewportAnchorPublication(next);
+    scope.applyViewportAnchorPublication(publication);
+
+    expect(scrollTo).not.toHaveBeenCalled();
+    expect(getScrollTop()).toBe(0);
+
+    scope.setVisibleArea({ topInset: 0, bottomInset: 100 });
+
+    expect(scrollTo).toHaveBeenCalledExactlyOnceWith({ top: 120, behavior: 'instant' });
+    expect(getScrollTop()).toBe(120);
+  });
+
+  it('keeps the viewport center active for an initial selection outside the guard', () => {
+    const initial = selectionSnapshot(true, {
+      page_idx: 0,
+      rect: { x: 0, y: 490, width: 1, height: 20 },
+    });
+    const { editor, scope } = setup(initial);
+    const selection = { type: 'node' as const, node: 'selection', offset_x: 0, offset_y: 0 };
+    const viewport = { type: 'node' as const, node: 'viewport', offset_x: 0, offset_y: 0 };
+    const selectionGeometry = {
+      point: { page_idx: 0, x: 0, y: 500 },
+      rect: { page_idx: 0, rect: { x: 0, y: 490, width: 1, height: 20 } },
+    };
+    const viewportGeometry = { point: { page_idx: 0, x: 0, y: 200 }, rect: undefined };
+    editor.captureSelectionViewportAnchor = vi.fn(() => ({ identity: selection, geometry: selectionGeometry }));
+    editor.captureViewportAnchorAt = vi.fn(() => ({ identity: viewport, geometry: viewportGeometry }));
+    editor.resolveViewportAnchor = vi.fn((_revision, identity) => ({
+      type: 'resolved' as const,
+      geometry: identity.node === selection.node ? selectionGeometry : viewportGeometry,
+    }));
+
+    expect(scope.prepareViewportAnchorPublication(initial)).toEqual({
+      type: 'ready',
+      geometry: { pointY: 200 },
+      targetScrollTop: 0,
+    });
+  });
+
+  it('adopts the viewport center without scrolling when selection is removed', () => {
+    const initial = selectionSnapshot(true, {
+      page_idx: 0,
+      rect: { x: 0, y: 90, width: 1, height: 20 },
+    });
+    const candidate = {
+      ...initial,
+      revision: 2,
+      cursor: undefined,
+      selection: undefined,
+      selectionEndpoints: undefined,
+    } as EditorSnapshot;
+    const { editor, scope, scrollTo } = setup(initial);
+    const selection = { type: 'node' as const, node: 'selection', offset_x: 0, offset_y: 0 };
+    const viewport = { type: 'node' as const, node: 'viewport', offset_x: 0, offset_y: 0 };
+    const selectionGeometry = {
+      point: { page_idx: 0, x: 0, y: 100 },
+      rect: { page_idx: 0, rect: { x: 0, y: 90, width: 1, height: 20 } },
+    };
+    const viewportGeometry = { point: { page_idx: 0, x: 0, y: 500 }, rect: undefined };
+    let capture: { identity: typeof selection; geometry: typeof selectionGeometry } | undefined = {
+      identity: selection,
+      geometry: selectionGeometry,
+    };
+    editor.captureSelectionViewportAnchor = vi.fn(() => capture);
+    editor.captureViewportAnchorAt = vi.fn(() => ({ identity: viewport, geometry: viewportGeometry }));
+    editor.resolveViewportAnchor = vi.fn((_revision, identity) => ({
+      type: 'resolved' as const,
+      geometry: identity.node === selection.node ? selectionGeometry : viewportGeometry,
+    }));
+
+    expect(scope.prepareViewportAnchorPublication(initial).type).toBe('ready');
+    capture = undefined;
+
+    expect(scope.prepareViewportAnchorPublication(candidate)).toEqual({
+      type: 'ready',
+      geometry: { pointY: 500 },
+      targetScrollTop: 0,
+    });
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+
+  it('keeps existing anchors and withholds publication while candidate selection geometry is unavailable', () => {
+    const initial = selectionSnapshot(true, {
+      page_idx: 0,
+      rect: { x: 0, y: 90, width: 1, height: 20 },
+    });
+    const candidate = { ...initial, revision: 2 } as EditorSnapshot;
+    const { editor, scope } = setup(initial);
+    const selection = { type: 'node' as const, node: 'selection', offset_x: 0, offset_y: 0 };
+    const geometry = {
+      point: { page_idx: 0, x: 0, y: 100 },
+      rect: { page_idx: 0, rect: { x: 0, y: 90, width: 1, height: 20 } },
+    };
+    let capture: { identity: typeof selection; geometry: typeof geometry } | undefined = { identity: selection, geometry };
+    editor.captureSelectionViewportAnchor = vi.fn(() => capture);
+    editor.resolveViewportAnchor = vi.fn(() => ({ type: 'resolved' as const, geometry }));
+
+    expect(scope.prepareViewportAnchorPublication(initial).type).toBe('ready');
+    capture = undefined;
+
+    expect(scope.prepareViewportAnchorPublication(candidate)).toEqual({ type: 'unavailable' });
+    capture = { identity: { ...selection }, geometry };
+    expect(scope.prepareViewportAnchorPublication(initial)).toMatchObject({
+      type: 'ready',
+      geometry: { pointY: 100 },
+    });
   });
 
   it('does not withhold a publication when a live anchor has no candidate geometry', () => {

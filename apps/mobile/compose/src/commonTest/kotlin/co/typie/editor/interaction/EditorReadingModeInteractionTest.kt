@@ -43,6 +43,19 @@ import kotlinx.coroutines.test.runTest
 @OptIn(ExperimentalCoroutinesApi::class)
 class EditorReadingModeInteractionTest {
   @Test
+  fun `reading single tap does not request pointer guard for the applied selection`() =
+    runTest(StandardTestDispatcher()) {
+      val fixture = fixture()
+      fixture.fake.publishSnapshot(fixture.editor)
+
+      fixture.controller.down(pointerId = 1L, nowMillis = 0L)
+      fixture.controller.up(pointerId = 1L, nowMillis = 40L)
+      runCurrent()
+
+      assertEquals(emptyList(), fixture.effects.pointerSelectionHeadVersions)
+    }
+
+  @Test
   fun `reading single tap waits through the consecutive tap window before hint`() =
     runTest(StandardTestDispatcher()) {
       val fixture = fixture()
@@ -292,7 +305,7 @@ class EditorReadingModeInteractionTest {
     }
 
   @Test
-  fun `reading activation ignores Shift and places a collapsed cursor`() =
+  fun `reading Shift tap extends selection before editing activation places a collapsed cursor`() =
     runTest(StandardTestDispatcher()) {
       val fixture = fixture()
       fixture.fake.publishSnapshot(fixture.editor)
@@ -314,7 +327,16 @@ class EditorReadingModeInteractionTest {
 
       assertEquals(
         listOf<Message>(
-          Message.Selection(SelectionOp.SetAt(page = 0, x = 10f, y = 20f)),
+          Message.Selection(
+            SelectionOp.ExtendTo(
+              anchor = FakeFfiEditor.EmptySelection.anchor,
+              headPage = 0,
+              headX = 10f,
+              headY = 20f,
+              baseSelection = null,
+              allowCollapse = true,
+            )
+          ),
           Message.Selection(SelectionOp.SetAt(page = 0, x = 10f, y = 20f)),
         ),
         fixture.fake.enqueued,
@@ -642,6 +664,7 @@ class EditorReadingModeInteractionTest {
     var editingRequestCount = 0
     var focusRequestCount = 0
     var softwareKeyboardRequestCount = 0
+    val pointerSelectionHeadVersions = mutableListOf<Long>()
     private var tapSequenceConfirmationJob: Job? = null
 
     override fun containsDocumentInteraction(positionInRoot: Offset): Boolean = true
@@ -711,7 +734,9 @@ class EditorReadingModeInteractionTest {
 
     override fun performSelectionHaptic() = Unit
 
-    override fun requestPointerSelectionHead(version: Long) = Unit
+    override fun requestPointerSelectionHead(version: Long) {
+      pointerSelectionHeadVersions += version
+    }
   }
 }
 

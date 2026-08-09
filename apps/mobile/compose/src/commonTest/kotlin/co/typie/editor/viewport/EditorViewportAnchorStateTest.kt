@@ -201,6 +201,33 @@ class EditorViewportAnchorStateTest {
     assertEquals(viewportIdentity, state.identity)
   }
 
+  @Test
+  fun `selection adoption compares stable anchor identity`() {
+    val state = EditorViewportAnchorState()
+    state.attachSelection(identity, geometry(pointY = 200f), scrollY = 100f)
+
+    assertFalse(state.needsSelectionAdoption(identity))
+    assertTrue(state.needsSelectionAdoption(viewportIdentity))
+  }
+
+  @Test
+  fun `preferred selection can change without replacing the active viewport anchor`() {
+    val state = EditorViewportAnchorState()
+    val visibleArea = EditorVisibleArea(viewport = Size(width = 300f, height = 300f))
+    state.attachViewport(viewportIdentity, geometry(pointY = 500f), scrollY = 350f)
+
+    state.adoptSelection(
+      identity = identity,
+      geometry = geometry(pointY = 200f),
+      scrollY = 350f,
+      visibleArea = visibleArea,
+      preserveActiveAnchor = true,
+    )
+
+    assertEquals(viewportIdentity, state.identity)
+    assertEquals(identity, state.preferredSelectionIdentity)
+  }
+
   private fun geometry(
     pointY: Float,
     top: Float? = null,

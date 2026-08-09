@@ -232,6 +232,10 @@ internal fun EditorScreenLayout(
   val viewConfiguration = LocalViewConfiguration.current
   val bringIntoViewRequests = LocalEditorBringIntoViewRequests.current
   val coroutineScope = rememberCoroutineScope()
+  val smoothScrollSession =
+    remember(coroutineScope, state.viewportState, bringIntoViewRequests) {
+      EditorSmoothScrollSession(coroutineScope, state.viewportState, bringIntoViewRequests)
+    }
   val smoothScrollEnabled =
     coroutineScope.coroutineContext[MotionDurationScale]
       ?.scaleFactor
@@ -242,9 +246,6 @@ internal fun EditorScreenLayout(
     bringIntoViewRequests.activateForVersion(it.version)
   }
   val viewportAnchorState = remember { EditorViewportAnchorState() }
-  if (appliedState != null && bringIntoViewRequest == null) {
-    SideEffect { bringIntoViewRequests.discardObsoleteForVersion(appliedState.version) }
-  }
   val surfacePreparation = editor?.let {
     resolveAnchoredEditorSurfacePreparation(
       editor = it,
@@ -254,6 +255,7 @@ internal fun EditorScreenLayout(
       anchorState = viewportAnchorState,
       publishedBundle = it.publishedBundle,
       smoothScrollEnabled = smoothScrollEnabled,
+      smoothRevealActive = smoothScrollSession.active,
     )
   }
   if (editor != null && surfacePreparation != null) {
@@ -267,10 +269,6 @@ internal fun EditorScreenLayout(
   val screenPointerSequence = remember { EditorScreenPointerSequence() }
   val viewportFlingBehavior = ScrollableDefaults.flingBehavior()
   val viewportAnchorPresentationRef = remember { EditorViewportAnchorPresentationRef() }
-  val smoothScrollSession =
-    remember(coroutineScope, state.viewportState, bringIntoViewRequests) {
-      EditorSmoothScrollSession(coroutineScope, state.viewportState, bringIntoViewRequests)
-    }
   var layoutBoundsInRoot by remember { mutableStateOf<Rect?>(null) }
   if (isCurrentNavigationRoute) {
     DisposableEffect(navigationPopNestedScroll, viewportScrollableState) {
@@ -391,6 +389,7 @@ internal fun EditorScreenLayout(
             anchorState = viewportAnchorState,
             publishedBundle = publishedBundle,
             smoothScrollEnabled = smoothScrollEnabled,
+            smoothRevealActive = smoothScrollSession.active,
           )
         } else {
           null
@@ -414,6 +413,7 @@ internal fun EditorScreenLayout(
                 anchorState = viewportAnchorState,
                 publishedBundle = publishedBundle,
                 smoothScrollEnabled = smoothScrollEnabled,
+                smoothRevealActive = smoothScrollSession.active,
               )
         if (!stillCurrent) return@let null
 
@@ -711,6 +711,7 @@ internal fun resolveAnchoredEditorSurfacePreparation(
   anchorState: EditorViewportAnchorState,
   publishedBundle: PublishedBundle?,
   smoothScrollEnabled: Boolean = true,
+  smoothRevealActive: Boolean = false,
 ): EditorSurfacePreparation? {
   val initial =
     resolveEditorSurfacePreparation(
@@ -730,6 +731,7 @@ internal fun resolveAnchoredEditorSurfacePreparation(
       currentScrollOffset = currentScrollOffset,
       maximumScrollY = initial.maximumScrollY,
       contentOriginY = initial.contentOriginY,
+      smoothRevealActive = smoothRevealActive,
     )
       as? EditorViewportAnchorPublication.Ready ?: return null
   if (anchorPublication.scrollY == currentScrollOffset.y) {
