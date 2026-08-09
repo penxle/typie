@@ -1,11 +1,11 @@
 use editor_common::DecorationStyle;
 use editor_crdt::Dot;
-use editor_state::PendingModifiers;
+use editor_state::{PendingModifiers, Position};
 use hashbrown::HashMap;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct PendingOverlay {
-    pub node_id: Dot,
+    pub position: Position,
     pub modifiers: PendingModifiers,
 }
 
@@ -71,13 +71,13 @@ mod tests {
     fn pending_overlay_equality() {
         let n = Dot::new(1, 1);
         let a = PendingOverlay {
-            node_id: n,
+            position: Position::new(n, 0),
             modifiers: vec![PendingModifier::Set {
                 modifier: Modifier::Bold,
             }],
         };
         let b = PendingOverlay {
-            node_id: n,
+            position: Position::new(n, 0),
             modifiers: vec![PendingModifier::Set {
                 modifier: Modifier::Bold,
             }],

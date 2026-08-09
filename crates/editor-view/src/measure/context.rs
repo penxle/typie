@@ -1,4 +1,5 @@
-use crate::view_state::GapPhantom;
+use crate::measure::text::measure::LineStrutExpansion;
+use crate::view_state::{GapPhantom, PendingOverlay};
 use editor_crdt::Dot;
 use hashbrown::HashMap;
 
@@ -7,7 +8,8 @@ pub(crate) struct MeasureContext {
     pub fold_states: HashMap<Dot, bool>,
     pub external_heights: HashMap<Dot, f32>,
     pub gap_phantom: Option<GapPhantom>,
-    pub pending_overlay: Option<(Dot, editor_state::PendingModifiers)>,
+    pub pending_overlay: Option<PendingOverlay>,
+    pub pending_caret_expansion: Option<LineStrutExpansion>,
 }
 
 impl MeasureContext {
@@ -29,8 +31,19 @@ impl MeasureContext {
     pub fn pending_for(&self, node: &Dot) -> Option<&editor_state::PendingModifiers> {
         self.pending_overlay
             .as_ref()
-            .filter(|(id, _)| id == node)
-            .map(|(_, m)| m)
+            .filter(|overlay| &overlay.position.node == node)
+            .map(|overlay| &overlay.modifiers)
+    }
+
+    pub fn pending_caret_for(
+        &self,
+        node: &Dot,
+    ) -> Option<(&editor_state::Position, &LineStrutExpansion)> {
+        let overlay = self
+            .pending_overlay
+            .as_ref()
+            .filter(|overlay| &overlay.position.node == node)?;
+        Some((&overlay.position, self.pending_caret_expansion.as_ref()?))
     }
 }
 
@@ -42,10 +55,8 @@ pub(crate) fn measure_context(vs: &crate::view_state::ViewState) -> MeasureConte
             parent: gp.parent,
             index: gp.index,
         }),
-        pending_overlay: vs
-            .pending_overlay
-            .as_ref()
-            .map(|ps| (ps.node_id, ps.modifiers.clone())),
+        pending_overlay: vs.pending_overlay.clone(),
+        pending_caret_expansion: None,
     }
 }
 
@@ -109,7 +120,10 @@ mod tests {
             modifier: Modifier::Bold,
         }];
         let ctx = MeasureContext {
-            pending_overlay: Some((a, modifiers.clone())),
+            pending_overlay: Some(PendingOverlay {
+                position: editor_state::Position::new(a, 0),
+                modifiers: modifiers.clone(),
+            }),
             ..Default::default()
         };
         assert_eq!(ctx.pending_for(&a), Some(&modifiers));
@@ -131,7 +145,7 @@ mod tests {
             index: 1,
         });
         vs.pending_overlay = Some(PendingOverlay {
-            node_id: p1,
+            position: editor_state::Position::new(p1, 0),
             modifiers: modifiers.clone(),
         });
 
@@ -146,6 +160,12 @@ mod tests {
                 index: 1
             })
         );
-        assert_eq!(ctx.pending_overlay, Some((p1, modifiers)));
+        assert_eq!(
+            ctx.pending_overlay,
+            Some(PendingOverlay {
+                position: editor_state::Position::new(p1, 0),
+                modifiers,
+            })
+        );
     }
 }

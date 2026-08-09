@@ -63,6 +63,7 @@ pub(crate) fn measure_paragraph_block(
         align,
         indent,
         pending,
+        ctx.pending_caret_for(&node.id()),
         Some(&mut measurer.seg_cache),
         resource,
     );
@@ -114,6 +115,7 @@ mod tests {
     use editor_resource::Resource;
 
     use crate::measure::context::MeasureContext;
+    use crate::view_state::PendingOverlay;
 
     use super::*;
 
@@ -447,7 +449,10 @@ mod tests {
             modifier: Modifier::FontSize { value: 9600 },
         }];
         let ctx_pending = MeasureContext {
-            pending_overlay: Some((para_id, big)),
+            pending_overlay: Some(PendingOverlay {
+                position: editor_state::Position::new(para_id, 0),
+                modifiers: big,
+            }),
             ..Default::default()
         };
         let r_pending =
@@ -482,7 +487,10 @@ mod tests {
             modifier: Modifier::FontSize { value: 9600 },
         }];
         let ctx_pending = MeasureContext {
-            pending_overlay: Some((para_id, big)),
+            pending_overlay: Some(PendingOverlay {
+                position: editor_state::Position::new(para_id, 0),
+                modifiers: big,
+            }),
             ..Default::default()
         };
         let r_pending =

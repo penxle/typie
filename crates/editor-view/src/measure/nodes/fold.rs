@@ -49,6 +49,7 @@ pub(crate) fn measure_fold_title(
         Alignment::Left,
         0.0,
         ctx.pending_for(&node.id()),
+        ctx.pending_caret_for(&node.id()),
         None,
         resource,
     );
@@ -186,6 +187,7 @@ mod tests {
     use crate::measure::context::MeasureContext;
     use crate::measure::text::measure::measure_paragraph;
     use crate::style::DecorationData;
+    use crate::view_state::PendingOverlay;
 
     use super::*;
     use crate::measure::types::MeasuredContent;
@@ -368,6 +370,7 @@ mod tests {
             inner_width,
             Alignment::Left,
             0.0,
+            None,
             None,
             None,
             &mut res,
@@ -636,7 +639,10 @@ mod tests {
             modifier: Modifier::FontSize { value: 9600 },
         }];
         let ctx_pending = MeasureContext {
-            pending_overlay: Some((title_id, big)),
+            pending_overlay: Some(PendingOverlay {
+                position: editor_state::Position::new(title_id, 0),
+                modifiers: big,
+            }),
             ..Default::default()
         };
         let h_pending =

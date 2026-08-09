@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::measure::text::measure::MeasuredLine;
+use crate::measure::text::measure::{LineStrutExpansion, MeasuredLine};
 use crate::measure::types::{MeasuredBox, MeasuredContent, MeasuredNode};
 
 pub(crate) struct FirstLineInfo {
@@ -27,12 +27,6 @@ pub(crate) fn first_line_info(node: &MeasuredNode) -> Option<FirstLineInfo> {
         }
         _ => None,
     }
-}
-
-pub(crate) struct LineStrutExpansion {
-    pub ascent: f32,
-    pub descent: f32,
-    pub min_line_height: f32,
 }
 
 pub(crate) struct ExpandedFirstLine {
@@ -100,9 +94,8 @@ fn expand_line(
     expansion: &LineStrutExpansion,
 ) -> MeasuredNode {
     if line.is_phantom {
-        // The ONE deliberate H1 exception: the phantom wrapper is forced to
-        // zero height (matching old `line_geometry.rs:105`), so it bypasses
-        // `from_line` (which would copy `line.height` and pollute the SumTree).
+        // Phantom wrappers stay zero-height; `from_line` would copy the line's
+        // intrinsic height into the layout tree.
         return MeasuredNode {
             width,
             height: 0.0,
@@ -112,50 +105,10 @@ fn expand_line(
 
     let new_ascent = line.ascent.max(expansion.ascent);
     let new_descent = line.descent.max(expansion.descent);
-    let content_height = new_ascent + new_descent;
     let new_height = old_height.max(expansion.min_line_height);
-    let leading = new_height - content_height;
-    let new_baseline = leading / 2.0 + new_ascent;
-    let delta = new_baseline - line.baseline;
-
-    let mut glyph_runs = line.glyph_runs.clone();
-    if delta != 0.0 {
-        for run in &mut glyph_runs {
-            for g in &mut run.glyphs {
-                g.y += delta;
-            }
-        }
-    }
-    let mut ruby_annotations = line.ruby_annotations.clone();
-    if delta != 0.0 {
-        for ann in &mut ruby_annotations {
-            ann.baseline_y += delta;
-            for run in &mut ann.glyph_runs {
-                for g in &mut run.glyphs {
-                    g.y += delta;
-                }
-            }
-        }
-    }
-
     MeasuredNode::from_line(
         width,
-        MeasuredLine {
-            node: line.node,
-            height: new_height,
-            baseline: new_baseline,
-            ascent: new_ascent,
-            descent: new_descent,
-            cursor_ascent: line.cursor_ascent,
-            cursor_descent: line.cursor_descent,
-            glyph_runs,
-            ruby_annotations,
-            empty_caret_x: line.empty_caret_x,
-            offset_range: line.offset_range.clone(),
-            tab_gaps: line.tab_gaps.clone(),
-            is_phantom: line.is_phantom,
-            content_edge_x: line.content_edge_x,
-        },
+        line.with_vertical_metrics(new_ascent, new_descent, new_height),
     )
 }
 

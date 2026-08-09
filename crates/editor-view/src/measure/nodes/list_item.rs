@@ -14,10 +14,11 @@ use crate::measure::text::strut::compute_strut;
 use crate::style::{Alignment, Decoration, DecorationData};
 
 use super::dispatch::measure_child;
-use super::line_geometry::{LineStrutExpansion, expand_first_line, first_line_info};
+use super::line_geometry::{expand_first_line, first_line_info};
 use crate::measure::Measurer;
 use crate::measure::container::layout_padded;
 use crate::measure::context::MeasureContext;
+use crate::measure::text::measure::LineStrutExpansion;
 use crate::measure::types::{MeasuredContent, MeasuredNode};
 
 const MARKER_RECT_MIN_RATIO: f32 = 1.25;

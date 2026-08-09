@@ -4,11 +4,17 @@ use editor_common::{EdgeInsets, Movement};
 use editor_crdt::Dot;
 use editor_model::{LayoutMode, Node, NodeView};
 use editor_resource::Resource;
-use editor_state::{LayoutDirty, Position, ResolvedSelection, Selection, StablePosition, State};
+use editor_state::{
+    LayoutDirty, Position, ResolvedSelection, Selection, StablePosition, State,
+    resolve_caret_modifiers,
+};
 
 use crate::measure::Measurer;
-use crate::measure::context::measure_context;
+use crate::measure::context::{MeasureContext, measure_context};
 use crate::measure::nodes::dispatch::content_remeasurement_target;
+use crate::measure::text::measure::LineStrutExpansion;
+use crate::measure::text::resolve::style_from_effective_modifiers;
+use crate::measure::text::strut::compute_strut;
 use crate::measure::types::MeasuredTree;
 use crate::page::LayoutPage;
 use crate::page_fragment::{PageFragmentTree, build_page_fragment_tree};
@@ -23,6 +29,29 @@ use crate::viewport::Viewport;
 
 const CONTINUOUS_MARGIN_X: f32 = 20.0;
 const CONTINUOUS_CONTENT_CAP: f32 = 1024.0;
+
+fn measure_context_with_pending_caret(
+    view_state: &ViewState,
+    state: &State,
+    resource: &mut Resource,
+) -> MeasureContext {
+    let mut context = measure_context(view_state);
+    context.pending_caret_expansion = view_state.pending_overlay.as_ref().and_then(|pending| {
+        let modifiers =
+            resolve_caret_modifiers(&state.projected, &pending.position, &pending.modifiers)
+                .into_values()
+                .collect::<Vec<_>>();
+        let style = style_from_effective_modifiers(&modifiers);
+        let strut = compute_strut(resource, &style)?;
+        Some(LineStrutExpansion {
+            ascent: strut.ascent,
+            descent: strut.descent,
+            min_line_height: (style.font_size * style.line_height)
+                .max(strut.ascent + strut.descent),
+        })
+    });
+    context
+}
 
 pub struct View {
     resource: Arc<Mutex<Resource>>,
@@ -81,8 +110,11 @@ impl View {
         let mut dirty = dirty;
         if pending_changed {
             for id in [
-                self.view_state.pending_overlay.as_ref().map(|p| p.node_id),
-                new_pending_overlay.as_ref().map(|p| p.node_id),
+                self.view_state
+                    .pending_overlay
+                    .as_ref()
+                    .map(|p| p.position.node),
+                new_pending_overlay.as_ref().map(|p| p.position.node),
             ]
             .into_iter()
             .flatten()
@@ -188,7 +220,10 @@ impl View {
         }
         let continuous = matches!(Self::doc_layout_mode(state), LayoutMode::Continuous { .. });
         let view = state.view();
-        let ctx = measure_context(&self.view_state);
+        let ctx = {
+            let mut resource = self.resource.lock().unwrap();
+            measure_context_with_pending_caret(&self.view_state, state, &mut resource)
+        };
 
         struct SpliceSeed {
             dot: Dot,
@@ -495,9 +530,9 @@ impl View {
             self.layout = None;
             return;
         };
-        let ctx = measure_context(&self.view_state);
         let measured = {
             let mut resource = self.resource.lock().unwrap();
+            let ctx = measure_context_with_pending_caret(&self.view_state, state, &mut resource);
             let root_arc = self
                 .measurer
                 .measure(&root, content_width, &ctx, &mut resource);
@@ -729,9 +764,22 @@ impl View {
         crate::query::navigation::position_at_preferred_x_in(&result.layout_index, &node, at_end, x)
     }
 
-    pub fn cursor_metrics(&self, _state: &State, pos: &Position) -> Option<CursorMetrics> {
+    pub fn cursor_metrics(&self, state: &State, pos: &Position) -> Option<CursorMetrics> {
         let result = self.layout.as_ref()?;
-        crate::query::cursor::cursor_metrics(&result.layout_index, pos, None)
+        let pending = state
+            .selection
+            .as_ref()
+            .filter(|selection| selection.is_collapsed() && selection.head == *pos)
+            .map_or(&[][..], |_| state.pending_modifiers.as_slice());
+        let modifiers = resolve_caret_modifiers(&state.projected, pos, pending)
+            .into_values()
+            .collect::<Vec<_>>();
+        let style = style_from_effective_modifiers(&modifiers);
+        let metrics_override = {
+            let mut resource = self.resource.lock().unwrap();
+            compute_strut(&mut resource, &style).map(|strut| (strut.ascent, strut.descent))
+        };
+        crate::query::cursor::cursor_metrics(&result.layout_index, pos, metrics_override)
     }
 
     pub fn placeholder_metrics(
@@ -1074,17 +1122,19 @@ impl View {
 mod invalidation_tests {
     use std::sync::{Arc, Mutex};
 
-    use editor_crdt::{Dot, ListOp};
+    use editor_crdt::{Dot, ListOp, OpGraph};
     use editor_model::{
         CalloutNodeAttr, CalloutVariant, EditOp, Modifier, ModifierAttrOp, NodeAttr, NodeAttrOp,
         NodeType, SeqItem, TableNodeAttr,
     };
     use editor_resource::Resource;
-    use editor_state::{LayoutDirty, Position, ProjectedState, Selection, State};
+    use editor_state::{LayoutDirty, PendingModifier, Position, ProjectedState, Selection, State};
 
     use super::View;
     use crate::measure::context::measure_context;
     use crate::measure::types::MeasuredNode;
+    use crate::paginate::types::LayoutContent;
+    use crate::view_state::PendingOverlay;
     use crate::viewport::Viewport;
 
     fn seq_block(pos: usize, node_type: NodeType, parents: Vec<Dot>) -> EditOp {
@@ -1120,6 +1170,19 @@ mod invalidation_tests {
         let mut resource = view.resource.lock().unwrap();
         view.measurer
             .measure(&nv, content_width, &ctx, &mut resource)
+    }
+
+    fn layout_with_pending_font_size(view: &mut View, state: &State, position: Position) {
+        view.layout(state);
+        assert!(view.reconcile(
+            state,
+            LayoutDirty::empty(),
+            Some(PendingOverlay {
+                position,
+                modifiers: state.pending_modifiers.clone(),
+            }),
+            None,
+        ));
     }
 
     #[test]
@@ -1452,6 +1515,167 @@ mod invalidation_tests {
                 "empty paragraph cache must be evicted and re-measured after root font-size change"
             );
         }
+    }
+
+    #[test]
+    fn pending_caret_expands_real_line_before_trailing_phantom() {
+        let mut graph = OpGraph::<EditOp>::with_actor(1);
+        let paragraph = graph
+            .add_mut(seq_block(0, NodeType::Paragraph, vec![Dot::ROOT]))
+            .unwrap()
+            .id;
+        graph.add_mut(seq_char(1, 'a')).unwrap();
+        graph.add_mut(seq_char(2, ' ')).unwrap();
+        graph.commit_mut();
+
+        let position = Position::new(paragraph, 2);
+        let mut state = State::new(
+            ProjectedState::from_graph(graph).unwrap(),
+            Some(Selection::collapsed(position)),
+        );
+        state.pending_modifiers = vec![PendingModifier::Set {
+            modifier: Modifier::FontSize { value: 9600 },
+        }];
+
+        let mut view = make_view(41.0);
+        layout_with_pending_font_size(&mut view, &state, position);
+
+        let cursor = view
+            .cursor_metrics(&state, &position)
+            .expect("paragraph-end cursor metrics");
+        assert!(
+            cursor.line.height >= cursor.caret.height
+                && cursor.caret.y >= cursor.line.y
+                && cursor.caret.bottom() <= cursor.line.bottom(),
+            "the real cursor line must contain the pending caret even when a trailing phantom exists: line={:?}, caret={:?}",
+            cursor.line,
+            cursor.caret,
+        );
+    }
+
+    #[test]
+    fn pending_caret_expands_list_marker_geometry_with_first_line() {
+        let mut graph = OpGraph::<EditOp>::with_actor(1);
+        let root = Dot::ROOT;
+        let list = graph
+            .add_mut(seq_block(0, NodeType::BulletList, vec![root]))
+            .unwrap()
+            .id;
+        let item = graph
+            .add_mut(seq_block(1, NodeType::ListItem, vec![root, list]))
+            .unwrap()
+            .id;
+        let paragraph = graph
+            .add_mut(seq_block(2, NodeType::Paragraph, vec![root, list, item]))
+            .unwrap()
+            .id;
+        graph.add_mut(seq_char(3, 'a')).unwrap();
+        graph
+            .add_mut(seq_block(4, NodeType::Paragraph, vec![root]))
+            .unwrap();
+        graph.commit_mut();
+
+        let position = Position::new(paragraph, 1);
+        let mut state = State::new(
+            ProjectedState::from_graph(graph).unwrap(),
+            Some(Selection::collapsed(position)),
+        );
+        state.pending_modifiers = vec![PendingModifier::Set {
+            modifier: Modifier::FontSize { value: 9600 },
+        }];
+
+        let mut view = make_view(800.0);
+        layout_with_pending_font_size(&mut view, &state, position);
+
+        let cursor = view
+            .cursor_metrics(&state, &position)
+            .expect("list-item cursor metrics");
+        let layout = view.layout.as_ref().expect("layout");
+        let item_entry = layout
+            .layout_index
+            .box_entry(&item)
+            .expect("list-item layout entry");
+        let LayoutContent::Box(item_box) = item_entry
+            .content(&layout.layout_index)
+            .expect("list-item layout node")
+        else {
+            panic!("list item must be a box");
+        };
+        let marker = item_box
+            .style
+            .decorations
+            .first()
+            .expect("list marker decoration");
+
+        assert!(
+            (marker.rect.height - cursor.line.height).abs() < 0.01,
+            "list marker geometry must use the final expanded first-line height: marker={}, line={}",
+            marker.rect.height,
+            cursor.line.height,
+        );
+    }
+
+    #[test]
+    fn pending_caret_expands_fold_icon_geometry_with_title_line() {
+        let mut graph = OpGraph::<EditOp>::with_actor(1);
+        let root = Dot::ROOT;
+        let fold = graph
+            .add_mut(seq_block(0, NodeType::Fold, vec![root]))
+            .unwrap()
+            .id;
+        let title = graph
+            .add_mut(seq_block(1, NodeType::FoldTitle, vec![root, fold]))
+            .unwrap()
+            .id;
+        graph.add_mut(seq_char(2, 'a')).unwrap();
+        graph
+            .add_mut(seq_block(3, NodeType::Paragraph, vec![root]))
+            .unwrap();
+        graph.commit_mut();
+
+        let position = Position::new(title, 1);
+        let mut state = State::new(
+            ProjectedState::from_graph(graph).unwrap(),
+            Some(Selection::collapsed(position)),
+        );
+        state.pending_modifiers = vec![PendingModifier::Set {
+            modifier: Modifier::FontSize { value: 9600 },
+        }];
+
+        let mut view = make_view(800.0);
+        layout_with_pending_font_size(&mut view, &state, position);
+
+        let cursor = view
+            .cursor_metrics(&state, &position)
+            .expect("fold-title cursor metrics");
+        let layout = view.layout.as_ref().expect("layout");
+        let title_entry = layout
+            .layout_index
+            .box_entry(&title)
+            .expect("fold-title layout entry");
+        let title_rect = layout
+            .layout_index
+            .page_rect(title_entry.rect)
+            .expect("fold title page rect")
+            .rect;
+        let LayoutContent::Box(title_box) = title_entry
+            .content(&layout.layout_index)
+            .expect("fold-title layout node")
+        else {
+            panic!("fold title must be a box");
+        };
+        let icon = title_box
+            .style
+            .decorations
+            .first()
+            .expect("fold icon decoration");
+        let icon_center = title_rect.y + icon.rect.y + icon.rect.height / 2.0;
+        let line_center = cursor.line.y + cursor.line.height / 2.0;
+
+        assert!(
+            (icon_center - line_center).abs() < 0.01,
+            "fold icon must be centered on the final expanded title line: icon_center={icon_center}, line_center={line_center}",
+        );
     }
 }
 
