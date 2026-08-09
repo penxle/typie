@@ -15,28 +15,15 @@ use crate::selection::ResolvedSelection;
 use crate::selection::Selection;
 use crate::traversal;
 
-fn modifier_for_caret_state(
-    caret: &BTreeMap<ModifierType, Modifier>,
-    textblock: &NodeView,
-    ty: ModifierType,
-) -> Option<Modifier> {
-    modifier_for_caret_map(
-        caret,
-        textblock.node_type(),
-        &textblock_type_path(textblock),
-        textblock.effective(),
-        ty,
-    )
-}
-
 fn modifier_for_caret_map(
     caret: &BTreeMap<ModifierType, Modifier>,
     block_type: NodeType,
     block_path: &[NodeType],
+    text_path: &[NodeType],
     block_effective: &BTreeMap<ModifierType, Modifier>,
     ty: ModifierType,
 ) -> Option<Modifier> {
-    if !modifier_applies_for(block_type, block_path, ty) {
+    if !modifier_applies_for(block_type, block_path, text_path, ty) {
         return None;
     }
     if let Some(modifier) = caret.get(&ty) {
@@ -51,16 +38,18 @@ fn modifier_for_caret_map(
     .or(Some(default))
 }
 
-fn modifier_applies_for(block_type: NodeType, block_path: &[NodeType], ty: ModifierType) -> bool {
+fn modifier_applies_for(
+    block_type: NodeType,
+    block_path: &[NodeType],
+    text_path: &[NodeType],
+    ty: ModifierType,
+) -> bool {
     let target = &Schema::modifier_spec(ty).target;
     let targets = target.rightmost_node_types();
     if targets.contains(&block_type) && target.matches(block_path) {
         return true;
     }
-    targets.contains(&NodeType::Text)
-        && Schema::node_spec(block_type)
-            .content
-            .matches(NodeType::Text)
+    targets.contains(&NodeType::Text) && target.matches(text_path)
 }
 
 fn virtual_paragraph_toolbar(
@@ -85,6 +74,8 @@ fn virtual_paragraph_toolbar(
 
     let mut para_path: Vec<NodeType> = container_path.iter().map(|(t, _)| *t).collect();
     para_path.push(NodeType::Paragraph);
+    let mut text_path = para_path.clone();
+    text_path.push(NodeType::Text);
 
     let empty_caret: BTreeMap<ModifierType, Modifier> = BTreeMap::new();
     let mut out = BTreeMap::new();
@@ -93,6 +84,7 @@ fn virtual_paragraph_toolbar(
             &empty_caret,
             NodeType::Paragraph,
             &para_path,
+            &text_path,
             &para_effective,
             ty,
         ) {
@@ -121,12 +113,19 @@ fn carry_virtual_leaves<'a>(
         let carry = state.carry_modifiers(b_dot);
         let block_type = b.node_type();
         let block_path = textblock_type_path(&b);
+        let mut text_path = block_path.clone();
+        text_path.push(NodeType::Text);
         let block_effective = b.effective();
         let mut eff = BTreeMap::new();
         for ty in ModifierType::iter().filter(|t| t.is_carry_kind()) {
-            if let Some(m) =
-                modifier_for_caret_map(&carry, block_type, &block_path, block_effective, ty)
-            {
+            if let Some(m) = modifier_for_caret_map(
+                &carry,
+                block_type,
+                &block_path,
+                &text_path,
+                block_effective,
+                ty,
+            ) {
                 eff.insert(ty, m);
             }
         }
@@ -381,9 +380,19 @@ pub fn resolve_modifier_state(
         let modifiers = if let Some(node) = view.node(sel.head.node)
             && Schema::node_spec(node.node_type()).is_textblock()
         {
+            let block_path = textblock_type_path(&node);
+            let mut text_path = block_path.clone();
+            text_path.push(NodeType::Text);
             let mut modifiers = BTreeMap::new();
             for ty in ModifierType::iter() {
-                if let Some(modifier) = modifier_for_caret_state(&caret, &node, ty) {
+                if let Some(modifier) = modifier_for_caret_map(
+                    &caret,
+                    node.node_type(),
+                    &block_path,
+                    &text_path,
+                    node.effective(),
+                    ty,
+                ) {
                     modifiers.insert(ty, modifier);
                 }
             }
@@ -880,17 +889,26 @@ mod tests {
     }
 
     #[test]
-    fn collapsed_fold_title_does_not_report_line_height_default() {
+    fn collapsed_fold_title_reports_text_formatting_as_unavailable() {
         let (state, title) = fold_title_state();
         let s = collapsed(title, 0);
         let ms = resolve_modifier_state(&state, &s, &[]).unwrap();
+
+        assert_eq!(ms.bold, Tri::Absent);
+        assert_eq!(ms.italic, Tri::Absent);
+        assert_eq!(ms.underline, Tri::Absent);
+        assert_eq!(ms.strikethrough, Tri::Absent);
+        assert_eq!(ms.font_size, Tri::Absent);
+        assert_eq!(ms.font_family, Tri::Absent);
+        assert_eq!(ms.font_weight, Tri::Absent);
+        assert_eq!(ms.text_color, Tri::Absent);
+        assert_eq!(ms.background_color, Tri::Absent);
+        assert_eq!(ms.letter_spacing, Tri::Absent);
+        assert_eq!(ms.link, Tri::Absent);
+        assert_eq!(ms.ruby, Tri::Absent);
         assert_eq!(ms.line_height, Tri::Absent);
-        assert_eq!(
-            ms.font_weight,
-            Tri::Uniform {
-                value: editor_model::FontWeightValue { value: 500 }
-            }
-        );
+        assert_eq!(ms.alignment, Tri::Absent);
+        assert_eq!(ms.effective_bold, Tri::Absent);
     }
 
     // §4.2: collapsed inherits — caret in para under root[font_size] → font_size Uniform

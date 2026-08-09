@@ -8,8 +8,9 @@ use editor_model::{
 };
 use editor_resource::{Resource, find_bold_target, find_unbold_target, match_weight};
 use editor_state::{
-    PendingModifiers, Position, ProjectedState, ResolvedSelection, Selection, apply_pending,
-    continuation_at, leaf_groups_in_range, leaf_spans_in_range, resolve_modifier_state_in_range,
+    LeafGroup, PendingModifiers, Position, ProjectedState, ResolvedSelection, Selection,
+    continuation_at, leaf_groups_in_range, modifier_applies_to_textblock_child,
+    resolve_caret_modifiers, resolve_modifier_state_in_range,
 };
 use editor_transaction::Transaction;
 use strum::IntoEnumIterator;
@@ -25,9 +26,9 @@ pub(crate) fn resolve_effective_modifiers(
     offset: usize,
     pending_modifiers: &PendingModifiers,
 ) -> Vec<Modifier> {
-    let mut out = continuation_at(state, block, offset);
-    apply_pending(&mut out, pending_modifiers);
-    out.into_values().collect()
+    resolve_caret_modifiers(state, &Position::new(block, offset), pending_modifiers)
+        .into_values()
+        .collect()
 }
 
 /// Inheritable modifiers provided by ancestors (self excluded), per type.
@@ -258,6 +259,73 @@ pub(crate) fn validate_edit(
     Ok(true)
 }
 
+fn leaf_group_applicability(
+    view: &DocView,
+    groups: &[LeafGroup<'_>],
+    modifier_type: ModifierType,
+) -> Vec<bool> {
+    let mut cache: hashbrown::HashMap<(Dot, NodeType), bool> = hashbrown::HashMap::new();
+    groups
+        .iter()
+        .map(|group| {
+            *cache
+                .entry((group.host, group.leaf_type))
+                .or_insert_with(|| {
+                    modifier_applies_to_textblock_child(
+                        view,
+                        group.host,
+                        group.leaf_type,
+                        modifier_type,
+                    )
+                })
+        })
+        .collect()
+}
+
+fn leaf_spans_for_applicability(
+    view: &DocView,
+    groups: &[LeafGroup<'_>],
+    applicability: &[bool],
+    is_cell_rect: bool,
+) -> Vec<(Dot, Dot)> {
+    debug_assert_eq!(groups.len(), applicability.len());
+    let mut spans = Vec::new();
+    let mut current: Option<(Option<Dot>, Dot, Dot)> = None;
+
+    for (group, applies) in groups.iter().zip(applicability) {
+        if !applies {
+            if let Some((_, first, last)) = current.take() {
+                spans.push((first, last));
+            }
+            continue;
+        }
+
+        let partition = is_cell_rect.then(|| {
+            view.node(group.host)
+                .and_then(|host| {
+                    host.ancestors()
+                        .find(|node| node.node_type() == NodeType::TableCell)
+                })
+                .map_or(group.host, |cell| cell.id())
+        });
+        match &mut current {
+            Some((current_partition, _, last)) if *current_partition == partition => {
+                *last = group.last;
+            }
+            _ => {
+                if let Some((_, first, last)) = current.take() {
+                    spans.push((first, last));
+                }
+                current = Some((partition, group.first, group.last));
+            }
+        }
+    }
+    if let Some((_, first, last)) = current {
+        spans.push((first, last));
+    }
+    spans
+}
+
 pub(crate) fn edit_modifier_range(
     tr: &mut Transaction,
     selection: Selection,
@@ -269,7 +337,14 @@ pub(crate) fn edit_modifier_range(
         let rs = selection
             .resolve(&view)
             .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
-        let spans = leaf_spans_in_range(&rs);
+        let groups = leaf_groups_in_range(&rs);
+        let applicability = leaf_group_applicability(&view, &groups, modifier_type);
+        let spans = leaf_spans_for_applicability(
+            &view,
+            &groups,
+            &applicability,
+            rs.as_cell_rect().is_some(),
+        );
         let present = spans.first().and_then(|&(first, _)| {
             view.leaf_state_by_dot_slow(first)
                 .and_then(|st| st.eff.get(&modifier_type).cloned())
@@ -386,10 +461,14 @@ pub(crate) fn set_font_family_range(
                 .as_ref()
                 == Some(&family)
         };
+        let leaf_groups = leaf_groups_in_range(&rs);
+        let applicability = leaf_group_applicability(&view, &leaf_groups, ModifierType::FontFamily);
         let groups = coalesce_group_runs(
-            leaf_groups_in_range(&rs)
-                .into_iter()
-                .map(|g| {
+            leaf_groups
+                .iter()
+                .zip(&applicability)
+                .filter(|(_, applies)| **applies)
+                .map(|(g, _)| {
                     let all_leaf = view
                         .node(g.host)
                         .is_some_and(|n| n.leaf_child_count() == n.child_count());
@@ -520,10 +599,14 @@ pub(crate) fn set_modifier_range_text(
                 .as_ref()
                 == Some(modifier)
         };
+        let leaf_groups = leaf_groups_in_range(&rs);
+        let applicability = leaf_group_applicability(&view, &leaf_groups, modifier_type);
         let groups: Vec<(Dot, Dot, bool)> = coalesce_group_runs(
-            leaf_groups_in_range(&rs)
+            leaf_groups
                 .iter()
-                .map(|g| {
+                .zip(&applicability)
+                .filter(|(_, applies)| **applies)
+                .map(|(g, _)| {
                     let all_leaf = view
                         .node(g.host)
                         .is_some_and(|n| n.leaf_child_count() == n.child_count());
@@ -580,8 +663,8 @@ pub(crate) fn block_family(view: &DocView, elem: Dot) -> Option<String> {
     }
 }
 
-pub(crate) fn range_has_heavy_weight(rs: &ResolvedSelection) -> bool {
-    leaf_groups_in_range(rs).iter().any(|g| {
+fn groups_have_heavy_weight(groups: &[&LeafGroup<'_>]) -> bool {
+    groups.iter().any(|g| {
         matches!(
             g.effective.get(&ModifierType::FontWeight),
             Some(Modifier::FontWeight { value }) if *value >= 700
@@ -589,24 +672,20 @@ pub(crate) fn range_has_heavy_weight(rs: &ResolvedSelection) -> bool {
     })
 }
 
-fn leaf_uniform_font_weight(rs: &ResolvedSelection) -> Option<u16> {
-    let mut it = leaf_groups_in_range(rs)
-        .into_iter()
-        .map(|g| font_weight(g.effective));
+fn leaf_uniform_font_weight(groups: &[&LeafGroup<'_>]) -> Option<u16> {
+    let mut it = groups.iter().map(|g| font_weight(g.effective));
     let first = it.next()?;
     it.all(|w| w == first).then_some(first)
 }
 
-fn leaf_uniform_font_family(rs: &ResolvedSelection) -> Option<String> {
+fn leaf_uniform_font_family(groups: &[&LeafGroup<'_>]) -> Option<String> {
     let family = |effective: &BTreeMap<ModifierType, Modifier>| match effective
         .get(&ModifierType::FontFamily)
     {
         Some(Modifier::FontFamily { value }) => value.clone(),
         _ => DEFAULT_FONT_FAMILY.to_string(),
     };
-    let mut it = leaf_groups_in_range(rs)
-        .into_iter()
-        .map(|g| family(g.effective));
+    let mut it = groups.iter().map(|g| family(g.effective));
     let first = it.next()?;
     it.all(|f| f == first).then_some(first)
 }
@@ -647,7 +726,20 @@ pub(crate) fn toggle_bold_range(
         let rs = selection
             .resolve(&view)
             .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
-        let spans = leaf_spans_in_range(&rs);
+        let groups = leaf_groups_in_range(&rs);
+        let applicability = leaf_group_applicability(&view, &groups, ModifierType::Bold);
+        let spans = leaf_spans_for_applicability(
+            &view,
+            &groups,
+            &applicability,
+            rs.as_cell_rect().is_some(),
+        );
+        let applicable_groups: Vec<&LeafGroup<'_>> = groups
+            .iter()
+            .zip(&applicability)
+            .filter(|(_, applies)| **applies)
+            .map(|(group, _)| group)
+            .collect();
         let end_touched: Vec<Dot> = end_touched_textblocks(&view, &rs)
             .into_iter()
             .filter(|&b| block_accepts_carry_kind(&view, b, ModifierType::Bold))
@@ -657,16 +749,15 @@ pub(crate) fn toggle_bold_range(
             Tri::Uniform { .. }
         );
         let leaf_ctx = (!spans.is_empty()).then(|| {
-            let from_block = rs.from().node();
+            let from_block = applicable_groups[0].host;
             let inherited_weight = block_weight(&view, from_block).unwrap_or(DEFAULT_FONT_WEIGHT);
-            let current_weight = leaf_uniform_font_weight(&rs).unwrap_or(inherited_weight);
-            let font_family = leaf_uniform_font_family(&rs).unwrap_or_else(|| {
+            let current_weight =
+                leaf_uniform_font_weight(&applicable_groups).unwrap_or(inherited_weight);
+            let font_family = leaf_uniform_font_family(&applicable_groups).unwrap_or_else(|| {
                 block_family(&view, from_block).unwrap_or_else(|| DEFAULT_FONT_FAMILY.to_string())
             });
-            let synthetic_bold = leaf_groups_in_range(&rs)
-                .iter()
-                .any(|g| has_bold(g.effective));
-            let weight_bold = range_has_heavy_weight(&rs);
+            let synthetic_bold = applicable_groups.iter().any(|g| has_bold(g.effective));
+            let weight_bold = groups_have_heavy_weight(&applicable_groups);
             (
                 current_weight,
                 font_family,
@@ -777,7 +868,14 @@ pub(crate) fn toggle_modifier_range(
         let rs = selection
             .resolve(&view)
             .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
-        let spans = leaf_spans_in_range(&rs);
+        let groups = leaf_groups_in_range(&rs);
+        let applicability = leaf_group_applicability(&view, &groups, modifier_type);
+        let spans = leaf_spans_for_applicability(
+            &view,
+            &groups,
+            &applicability,
+            rs.as_cell_rect().is_some(),
+        );
         let all_have =
             range_has_modifier(&resolve_modifier_state_in_range(state, &rs), modifier_type);
         let end_touched: Vec<_> = end_touched_textblocks(&view, &rs)
@@ -808,16 +906,31 @@ pub(crate) fn toggle_modifier_range(
 }
 
 type CarryBlocksByKind = Vec<(ModifierType, Vec<Dot>)>;
+type TextSpansByKind = Vec<(ModifierType, Vec<(Dot, Dot)>)>;
 
 pub(crate) fn clear_all_modifiers_range(
     tr: &mut Transaction,
     selection: Selection,
 ) -> CommandResult {
-    let (spans, companion_by_kind): (Vec<(Dot, Dot)>, CarryBlocksByKind) = {
+    let (spans_by_kind, companion_by_kind): (TextSpansByKind, CarryBlocksByKind) = {
         let view = tr.view();
         let rs = selection
             .resolve(&view)
             .ok_or(CommandError::Corrupted("cannot resolve selection".into()))?;
+        let groups = leaf_groups_in_range(&rs);
+        let spans_by_kind = ModifierType::iter()
+            .filter(|ty| ty.is_text_applicable())
+            .map(|ty| {
+                let applicability = leaf_group_applicability(&view, &groups, ty);
+                let spans = leaf_spans_for_applicability(
+                    &view,
+                    &groups,
+                    &applicability,
+                    rs.as_cell_rect().is_some(),
+                );
+                (ty, spans)
+            })
+            .collect();
         let et = end_touched_textblocks(&view, &rs);
         let companion_by_kind = ModifierType::iter()
             .filter(|t| t.is_carry_kind())
@@ -830,12 +943,14 @@ pub(crate) fn clear_all_modifiers_range(
                 (ty, blocks)
             })
             .collect();
-        (leaf_spans_in_range(&rs), companion_by_kind)
+        (spans_by_kind, companion_by_kind)
     };
 
-    for &(first, last) in &spans {
-        for ty in ModifierType::iter().filter(|&t| t.is_text_applicable()) {
-            tr.remove_span_modifier(first, last, placeholder_modifier(ty))?;
+    let mut touched_any_span = false;
+    for (ty, spans) in &spans_by_kind {
+        touched_any_span |= !spans.is_empty();
+        for &(first, last) in spans {
+            tr.remove_span_modifier(first, last, placeholder_modifier(*ty))?;
         }
     }
 
@@ -845,7 +960,7 @@ pub(crate) fn clear_all_modifiers_range(
         companion_unset(tr, blocks, *ty)?;
     }
 
-    if spans.is_empty() && !touched_any_carry {
+    if !touched_any_span && !touched_any_carry {
         return Ok(false);
     }
     Ok(true)

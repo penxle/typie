@@ -49,7 +49,7 @@
     {onpointerdown}
     type="button"
     use:tooltip={{
-      message: disabled ? '(준비중)' : undefined,
+      message: undefined,
       delay: 200,
       arrow: false,
     }}
@@ -84,7 +84,7 @@
     {onpointerdown}
     type="button"
     use:tooltip={{
-      message: disabled ? `${label} (준비중)` : label,
+      message: label,
       keys,
       delay: 200,
       arrow: false,
@@ -118,7 +118,7 @@
     {onpointerdown}
     type="button"
     use:tooltip={{
-      message: disabled ? `${label} (준비중)` : label,
+      message: label,
       keys,
       delay: 1000,
       arrow: false,

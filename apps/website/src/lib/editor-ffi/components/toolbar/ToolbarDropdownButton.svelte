@@ -62,6 +62,7 @@
   });
 
   const open = () => {
+    if (disabled) return;
     opened = true;
     onOpenChange?.(true);
   };
@@ -70,6 +71,10 @@
     opened = false;
     onOpenChange?.(false);
   };
+
+  $effect(() => {
+    if (disabled && opened) close();
+  });
 
   const handleEscape = () => {
     close();

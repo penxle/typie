@@ -14,9 +14,10 @@
   type Props = {
     fontFamilies?: readonly FontFamily[];
     onUploadClick?: () => void;
+    disabled?: boolean;
   };
 
-  let { fontFamilies = [], onUploadClick }: Props = $props();
+  let { fontFamilies = [], onUploadClick, disabled = false }: Props = $props();
 
   const ctx = getEditorContext();
 
@@ -72,6 +73,7 @@
 
 <SearchableDropdown
   style={css.raw({ width: '120px' })}
+  {disabled}
   extraItems={onUploadClick
     ? [
         {

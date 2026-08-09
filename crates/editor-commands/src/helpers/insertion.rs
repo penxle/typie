@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use editor_common::StrExt;
 use editor_crdt::Dot;
@@ -6,7 +6,9 @@ use editor_model::{
     ChildView, Modifier, ModifierType, Node, NodeType, PlainHardBreakNode, PlainNode,
     PlainPageBreakNode, PlainTabNode, PlainTextNode, Subtree,
 };
-use editor_state::{Affinity, PendingModifiers, Position, Selection};
+use editor_state::{
+    Affinity, PendingModifiers, Position, Selection, modifier_applies_to_textblock_child,
+};
 use editor_transaction::{Step, Transaction};
 
 use crate::helpers::resolve_effective_modifiers;
@@ -156,23 +158,37 @@ fn apply_inline_modifiers_run(
     is_char: bool,
     desired: &[Modifier],
 ) -> Result<(), CommandError> {
-    let applicable = |ty: ModifierType| -> bool {
-        ty.is_text_applicable()
-            && (is_char || !matches!(ty, ModifierType::Link | ModifierType::Ruby))
-    };
-
-    let desired_map: BTreeMap<ModifierType, Modifier> = desired
-        .iter()
-        .filter(|m| applicable(m.as_type()))
-        .map(|m| (m.as_type(), m.clone()))
-        .collect();
-
-    let actual: BTreeMap<ModifierType, Modifier> = {
+    let (desired_map, actual, applicable_types) = {
         let view = tr.state().view();
-        match view.leaf_state_by_dot_slow(first) {
+        let Some(leaf) = view.leaf(first) else {
+            return Ok(());
+        };
+        let Some(host) = leaf.parent() else {
+            return Ok(());
+        };
+        let applies = |ty: ModifierType| {
+            modifier_applies_to_textblock_child(&view, host.id(), leaf.node_type(), ty)
+                && (is_char || !matches!(ty, ModifierType::Link | ModifierType::Ruby))
+        };
+        let desired_map: BTreeMap<ModifierType, Modifier> = desired
+            .iter()
+            .filter(|modifier| {
+                applies(modifier.as_type())
+                    && host.effective().get(&modifier.as_type()) != Some(*modifier)
+            })
+            .map(|modifier| (modifier.as_type(), modifier.clone()))
+            .collect();
+        let actual = match view.leaf_state_by_dot_slow(first) {
             Some(st) => st.own.iter().map(|(t, o)| (*t, o.value.clone())).collect(),
             None => BTreeMap::new(),
-        }
+        };
+        let applicable_types: BTreeSet<ModifierType> = desired_map
+            .keys()
+            .chain(actual.keys())
+            .copied()
+            .filter(|ty| applies(*ty))
+            .collect();
+        (desired_map, actual, applicable_types)
     };
 
     for (ty, m) in &desired_map {
@@ -181,7 +197,7 @@ fn apply_inline_modifiers_run(
         }
     }
     for (ty, m) in &actual {
-        if !desired_map.contains_key(ty) && ty.is_text_applicable() {
+        if !desired_map.contains_key(ty) && applicable_types.contains(ty) {
             tr.remove_span_modifier(first, last, m.clone())?;
         }
     }

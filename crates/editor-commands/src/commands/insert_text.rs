@@ -14,6 +14,8 @@ pub fn insert_text(tr: &mut Transaction, text: &str) -> CommandResult {
 #[cfg(test)]
 mod tests {
     use editor_macros::state;
+    use editor_model::Modifier;
+    use editor_transaction::Step;
 
     use super::*;
     use crate::CommandError;
@@ -134,6 +136,29 @@ mod tests {
             selection: (p1, 6, <)
         };
         assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn typing_in_fold_title_ignores_unsupported_pending() {
+        let (initial, ..) = state! {
+            doc { root { fold {
+                ft: fold_title { text("Title") }
+                fold_content { paragraph {} }
+            } } }
+            selection: (ft, 5)
+            pending_modifiers: [font_size(3600)]
+        };
+
+        let (actual, steps, ..) = transact!(initial, |tr| insert_text(&mut tr, "!"));
+
+        assert!(actual.pending_modifiers.is_empty());
+        assert!(!steps.iter().any(|record| matches!(
+            &record.step,
+            Step::AddSpanModifier {
+                modifier: Modifier::FontSize { value: 3600 },
+                ..
+            }
+        )));
     }
 
     #[test]

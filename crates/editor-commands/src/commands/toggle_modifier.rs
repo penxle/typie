@@ -1,6 +1,7 @@
 use editor_model::{Modifier, ModifierType};
-use editor_state::resolve_modifier_state;
-use editor_state::{PendingModifier, PendingModifiers};
+use editor_state::{
+    PendingModifier, PendingModifiers, modifier_can_apply_to_inserted_text, resolve_modifier_state,
+};
 use editor_transaction::Transaction;
 
 use crate::helpers::{modifier_from_unit_type, range_has_modifier, toggle_modifier_range};
@@ -30,6 +31,9 @@ fn toggle_modifier_collapsed(
         let view = tr.view();
         view.node(pos.node)
             .ok_or(CommandError::NodeNotFound(pos.node))?;
+        if !modifier_can_apply_to_inserted_text(&view, &pos, modifier_type) {
+            return Ok(false);
+        }
     }
 
     let has_modifier = {
@@ -88,6 +92,35 @@ mod tests {
             pending_modifiers: [italic]
         };
         assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn collapsed_fold_title_toggle_italic_is_noop() {
+        let (initial, ..) = state! {
+            doc { root { fold {
+                ft: fold_title { text("Title") }
+                fold_content { paragraph {} }
+            } } }
+            selection: (ft, 2)
+        };
+
+        let (actual, ..) =
+            transact_fail!(initial, |tr| toggle_modifier(&mut tr, ModifierType::Italic));
+
+        assert!(actual.pending_modifiers.is_empty());
+    }
+
+    #[test]
+    fn fold_title_range_toggle_italic_is_noop() {
+        let (initial, ..) = state! {
+            doc { root { fold {
+                ft: fold_title { text("Title") }
+                fold_content { paragraph {} }
+            } } }
+            selection: (ft, 0) -> (ft, 5)
+        };
+
+        transact_fail!(initial, |tr| toggle_modifier(&mut tr, ModifierType::Italic));
     }
 
     #[test]

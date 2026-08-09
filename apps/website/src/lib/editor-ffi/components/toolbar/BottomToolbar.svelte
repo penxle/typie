@@ -70,6 +70,28 @@
     return { active: false, indeterminate: false };
   };
 
+  const textFormattingDisabled = $derived.by(() => {
+    const state = ctx.editor?.modifierState;
+    if (!state) return false;
+    return [
+      state.bold,
+      state.italic,
+      state.underline,
+      state.strikethrough,
+      state.font_size,
+      state.font_family,
+      state.font_weight,
+      state.text_color,
+      state.background_color,
+      state.letter_spacing,
+      state.link,
+      state.ruby,
+    ].every((tri) => tri.type === 'absent');
+  });
+
+  const alignmentDisabled = $derived(ctx.editor?.modifierState?.alignment?.type === 'absent');
+  const lineHeightDisabled = $derived(ctx.editor?.modifierState?.line_height?.type === 'absent');
+
   const currentTextColor = $derived(
     ctx.editor?.modifierState?.text_color?.type === 'uniform'
       ? ctx.editor.modifierState.text_color.value.value
@@ -188,6 +210,7 @@
   <div class={flex({ alignItems: 'center', gap: '4px' })}>
     <ToolbarDropdownButton
       chevron
+      disabled={textFormattingDisabled}
       label={isTextColorMixed ? '글씨 색: 여러 색' : '글씨 색'}
       onEscape={() => ctx.editor?.focus()}
       placement="bottom-start"
@@ -233,6 +256,7 @@
 
     <ToolbarDropdownButton
       chevron
+      disabled={textFormattingDisabled}
       label={isTextBackgroundColorMixed ? '배경색: 여러 색' : '배경색'}
       onEscape={() => ctx.editor?.focus()}
       placement="bottom-start"
@@ -282,9 +306,9 @@
       {/snippet}
     </ToolbarDropdownButton>
 
-    <ToolbarFontFamily {fontFamilies} onUploadClick={onFontUploadClick} />
-    <ToolbarFontWeight {fontFamilies} />
-    <ToolbarFontSize />
+    <ToolbarFontFamily disabled={textFormattingDisabled} {fontFamilies} onUploadClick={onFontUploadClick} />
+    <ToolbarFontWeight disabled={textFormattingDisabled} {fontFamilies} />
+    <ToolbarFontSize disabled={textFormattingDisabled} />
   </div>
 
   <VerticalDivider style={css.raw({ height: '12px' })} />
@@ -292,6 +316,7 @@
   <div class={flex({ alignItems: 'center', gap: '4px' })}>
     <ToolbarButton
       active={boldS.active}
+      disabled={textFormattingDisabled}
       icon={BoldIcon}
       keys={['Mod', 'B']}
       label="굵게"
@@ -301,6 +326,7 @@
 
     <ToolbarButton
       active={italicS.active}
+      disabled={textFormattingDisabled}
       icon={ItalicIcon}
       keys={['Mod', 'I']}
       label="기울임"
@@ -310,6 +336,7 @@
 
     <ToolbarButton
       active={strikethroughS.active}
+      disabled={textFormattingDisabled}
       icon={StrikethroughIcon}
       keys={['Mod', 'Shift', 'S']}
       label="취소선"
@@ -319,6 +346,7 @@
 
     <ToolbarButton
       active={underlineS.active}
+      disabled={textFormattingDisabled}
       icon={UnderlineIcon}
       keys={['Mod', 'U']}
       label="밑줄"
@@ -332,7 +360,7 @@
   <div class={flex({ alignItems: 'center', gap: '4px' })}>
     <ToolbarDropdownButton
       active={isLinkActive}
-      disabled={isLinkMixed || (isCollapsed && !isLinkActive)}
+      disabled={textFormattingDisabled || isLinkMixed || (isCollapsed && !isLinkActive)}
       label="링크"
       onEscape={() => ctx.editor?.focus()}
       onOpenChange={(opened) => {
@@ -353,7 +381,7 @@
 
     <ToolbarDropdownButton
       active={isRubyActive}
-      disabled={isRubyMixed || (isCollapsed && !isRubyActive)}
+      disabled={textFormattingDisabled || isRubyMixed || (isCollapsed && !isRubyActive)}
       label="루비"
       onEscape={() => ctx.editor?.focus()}
       onOpenChange={(opened) => {
@@ -383,7 +411,7 @@
   <VerticalDivider style={css.raw({ height: '12px' })} />
 
   <div class={flex({ alignItems: 'center', gap: '4px' })}>
-    <ToolbarDropdownButton label="문단 정렬" onEscape={() => ctx.editor?.focus()} size="small">
+    <ToolbarDropdownButton disabled={alignmentDisabled} label="문단 정렬" onEscape={() => ctx.editor?.focus()} size="small">
       {#snippet anchor()}
         <ToolbarIcon icon={values.textAlign.find((a) => a.value === currentTextAlign)?.icon ?? values.textAlign[0].icon} />
       {/snippet}
@@ -406,7 +434,7 @@
       {/snippet}
     </ToolbarDropdownButton>
 
-    <ToolbarDropdownButton label="문단 행간" onEscape={() => ctx.editor?.focus()} size="small">
+    <ToolbarDropdownButton disabled={lineHeightDisabled} label="문단 행간" onEscape={() => ctx.editor?.focus()} size="small">
       {#snippet anchor()}
         <ToolbarIcon icon={LineHeightIcon} />
       {/snippet}
@@ -429,7 +457,7 @@
       {/snippet}
     </ToolbarDropdownButton>
 
-    <ToolbarDropdownButton label="문단 자간" onEscape={() => ctx.editor?.focus()} size="small">
+    <ToolbarDropdownButton disabled={textFormattingDisabled} label="문단 자간" onEscape={() => ctx.editor?.focus()} size="small">
       {#snippet anchor()}
         <ToolbarIcon icon={LetterSpacingIcon} />
       {/snippet}
@@ -456,6 +484,7 @@
   <VerticalDivider style={css.raw({ height: '12px' })} />
 
   <ToolbarButton
+    disabled={textFormattingDisabled}
     icon={RemoveFormattingIcon}
     keys={['Mod', '\\']}
     label="서식 지우기"

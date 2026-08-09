@@ -9,6 +9,12 @@
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { values } from '$lib/editor-ffi/values';
 
+  type Props = {
+    disabled?: boolean;
+  };
+
+  let { disabled = false }: Props = $props();
+
   const ctx = getEditorContext();
 
   let anchorElement: HTMLDivElement | undefined = $state();
@@ -43,12 +49,17 @@
   });
 
   const open = () => {
+    if (disabled) return;
     opened = true;
   };
 
   const close = () => {
     opened = false;
   };
+
+  $effect(() => {
+    if (disabled) close();
+  });
 
   const handleFocus = () => {
     isFocused = true;
@@ -140,7 +151,7 @@
   };
 </script>
 
-<div class={css({ position: 'relative', width: '50px' })}>
+<div class={css({ position: 'relative', width: '50px', opacity: disabled ? '50' : '100', pointerEvents: disabled ? 'none' : 'auto' })}>
   <div
     bind:this={anchorElement}
     class={css({
@@ -172,6 +183,7 @@
         border: 'none',
         outline: 'none',
       })}
+      {disabled}
       onblur={handleBlur}
       onfocus={handleFocus}
       onkeydown={handleKeydown}
@@ -186,6 +198,7 @@
         pointerEvents: opened ? 'auto' : 'none',
         cursor: 'pointer',
       })}
+      {disabled}
       onclick={() => {
         applyFontSize(true);
         inputElement?.blur();
