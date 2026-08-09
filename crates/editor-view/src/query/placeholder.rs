@@ -35,8 +35,8 @@ pub(crate) fn placeholder_metrics(
     let nv = view.root()?.child_blocks().next()?;
     let elem_id = nv.id();
     let pending_modifiers = pending_overlay
-        .filter(|style| style.node_id == elem_id)
-        .map(|style| &style.modifiers);
+        .filter(|overlay| overlay.position.node == elem_id)
+        .map(|overlay| &overlay.modifiers);
     let modifiers = resolve_caret_modifiers(
         &state.projected,
         &Position::new(elem_id, 0),

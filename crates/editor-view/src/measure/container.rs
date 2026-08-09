@@ -8,7 +8,7 @@ use editor_model::{
 use editor_resource::Resource;
 
 use crate::measure::PageBreakPolicy;
-use crate::measure::text::measure::build_strut_only_line;
+use crate::measure::text::measure::{build_strut_only_line, expand_line_for_caret};
 use crate::measure::text::resolve::style_from_effective_modifiers;
 use crate::style::{BorderMode, BoxStyle, Direction};
 use editor_common::EdgeInsets;
@@ -65,12 +65,13 @@ fn make_gap_phantom_block(
     node: &NodeView,
     width: f32,
     index: usize,
+    ctx: &MeasureContext,
     resource: &mut Resource,
 ) -> (Arc<MeasuredNode>, f32) {
     let base_style =
         style_from_effective_modifiers(&node.effective().values().cloned().collect::<Vec<_>>());
     let indent = phantom_indent(node);
-    let line = build_strut_only_line(
+    let mut line = build_strut_only_line(
         node.id(),
         &base_style,
         width,
@@ -79,6 +80,11 @@ fn make_gap_phantom_block(
         index..index,
         resource,
     );
+    if let Some((position, expansion)) = ctx.pending_caret_for(&node.id())
+        && position.offset == index
+    {
+        line = expand_line_for_caret(&line, expansion);
+    }
     (
         Arc::new(MeasuredNode::from_line(width, line)),
         resolve_gap_after(node.effective()),
@@ -104,14 +110,16 @@ pub(crate) fn layout_vertical<'a>(
     let n_children = children.len();
     for (i, child) in children.into_iter().enumerate() {
         if gap_phantom_index == Some(i) {
-            blocks.push(make_gap_phantom_block(node, width, i, resource));
+            blocks.push(make_gap_phantom_block(node, width, i, ctx, resource));
         }
         let gap_after = resolve_gap_after(child_effective(node, i, &child));
         let m = measure_child(child, width, ctx, resource);
         blocks.push((m, gap_after));
     }
     if gap_phantom_index == Some(n_children) {
-        blocks.push(make_gap_phantom_block(node, width, n_children, resource));
+        blocks.push(make_gap_phantom_block(
+            node, width, n_children, ctx, resource,
+        ));
     }
 
     let mut result = Vec::with_capacity(blocks.len() * 2);

@@ -661,22 +661,7 @@ fn position_matches_node(node: &LayoutNode, pos: &Position) -> bool {
 }
 
 fn position_matches_line(line: &LayoutLine, pos: &Position) -> bool {
-    if line.node != pos.node {
-        return false;
-    }
-    if let Some(range) = &line.offset_range
-        && pos.offset >= range.start
-        && pos.offset <= range.end
-    {
-        return true;
-    }
-    line.glyph_runs
-        .iter()
-        .any(|run| pos.offset >= run.offset_range.start && pos.offset <= run.offset_range.end)
-        || line
-            .tab_gaps
-            .iter()
-            .any(|gap| pos.offset >= gap.offset_index && pos.offset <= gap.offset_index + 1)
+    line.contains_position(pos)
 }
 
 fn position_attaches_to_child(pos: &Position, parent: &Dot, index: usize) -> bool {

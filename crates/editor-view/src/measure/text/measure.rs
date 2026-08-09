@@ -12,6 +12,7 @@ use std::sync::Arc;
 use editor_crdt::Dot;
 use editor_model::{Alignment, ChildView, Modifier, NodeView};
 use editor_resource::Resource;
+use editor_state::{Affinity, Position};
 
 use crate::glyph_run::RubyAnnotation;
 
@@ -58,6 +59,92 @@ pub(crate) struct MeasuredLine {
     pub tab_gaps: Vec<TabGap>,
     pub is_phantom: bool,
     pub content_edge_x: Option<f32>,
+}
+
+impl MeasuredLine {
+    pub(crate) fn contains_position(&self, pos: &Position) -> bool {
+        if self.node != pos.node {
+            return false;
+        }
+        if let Some(range) = &self.offset_range
+            && pos.offset >= range.start
+            && pos.offset <= range.end
+        {
+            return true;
+        }
+        self.glyph_runs
+            .iter()
+            .any(|run| pos.offset >= run.offset_range.start && pos.offset <= run.offset_range.end)
+            || self
+                .tab_gaps
+                .iter()
+                .any(|gap| pos.offset >= gap.offset_index && pos.offset <= gap.offset_index + 1)
+    }
+
+    pub(crate) fn with_vertical_metrics(&self, ascent: f32, descent: f32, height: f32) -> Self {
+        let leading = height - (ascent + descent);
+        let baseline = leading / 2.0 + ascent;
+        let delta = baseline - self.baseline;
+
+        let mut line = self.clone();
+        line.height = height;
+        line.baseline = baseline;
+        line.ascent = ascent;
+        line.descent = descent;
+        if delta != 0.0 {
+            for run in &mut line.glyph_runs {
+                for glyph in &mut run.glyphs {
+                    glyph.y += delta;
+                }
+            }
+            for annotation in &mut line.ruby_annotations {
+                annotation.baseline_y += delta;
+                for run in &mut annotation.glyph_runs {
+                    for glyph in &mut run.glyphs {
+                        glyph.y += delta;
+                    }
+                }
+            }
+        }
+        line
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct LineStrutExpansion {
+    pub ascent: f32,
+    pub descent: f32,
+    pub min_line_height: f32,
+}
+
+pub(crate) fn expand_line_for_caret(
+    line: &MeasuredLine,
+    expansion: &LineStrutExpansion,
+) -> MeasuredLine {
+    let ascent = line.ascent.max(expansion.ascent);
+    let descent = line.descent.max(expansion.descent);
+    let height = line
+        .height
+        .max(expansion.min_line_height)
+        .max(ascent + descent);
+    line.with_vertical_metrics(ascent, descent, height)
+}
+
+fn expand_line_at_position(
+    lines: &mut [MeasuredLine],
+    position: &Position,
+    expansion: &LineStrutExpansion,
+) -> bool {
+    let matches = |line: &MeasuredLine| !line.is_phantom && line.contains_position(position);
+    let index = match position.affinity {
+        Affinity::Upstream => lines.iter().position(matches),
+        Affinity::Downstream => lines.iter().rposition(matches),
+    };
+    let Some(index) = index else {
+        return false;
+    };
+    lines[index] = expand_line_for_caret(&lines[index], expansion);
+    true
 }
 
 pub(crate) fn build_strut_only_line(
@@ -295,6 +382,7 @@ pub(crate) fn measure_paragraph(
     align: Alignment,
     indent: f32,
     pending: Option<&editor_state::PendingModifiers>,
+    pending_caret: Option<(&Position, &LineStrutExpansion)>,
     mut seg_cache: Option<&mut SegmentCache>,
     resource: &mut Resource,
 ) -> (Vec<MeasuredLine>, f32) {
@@ -391,6 +479,10 @@ pub(crate) fn measure_paragraph(
     }
     if let Some(cache) = seg_cache {
         cache.prune(node_id, segments.len());
+    }
+
+    if let Some((position, expansion)) = pending_caret {
+        expand_line_at_position(&mut lines, position, expansion);
     }
 
     let total_height: f32 = lines.iter().map(|l| l.height).sum();
@@ -495,7 +587,16 @@ mod tests {
         let view = DocView::new(&pd);
         let para = view.root().unwrap().child_blocks().next().unwrap();
         let mut res = Resource::new_test();
-        measure_paragraph(&para, width, Alignment::Left, 0.0, None, None, &mut res)
+        measure_paragraph(
+            &para,
+            width,
+            Alignment::Left,
+            0.0,
+            None,
+            None,
+            None,
+            &mut res,
+        )
     }
 
     fn glyph_runs(lines: &[MeasuredLine]) -> Vec<&GlyphRun> {
@@ -520,8 +621,17 @@ mod tests {
         let para = view.root().unwrap().child_blocks().next().unwrap();
         let mut res = Resource::new_test();
 
-        let uncached =
-            measure_paragraph(&para, 200.0, Alignment::Left, 0.0, None, None, &mut res).0;
+        let uncached = measure_paragraph(
+            &para,
+            200.0,
+            Alignment::Left,
+            0.0,
+            None,
+            None,
+            None,
+            &mut res,
+        )
+        .0;
 
         let mut cache = SegmentCache::default();
         // First pass populates the cache (all segments measured + stored relative).
@@ -530,6 +640,7 @@ mod tests {
             200.0,
             Alignment::Left,
             0.0,
+            None,
             None,
             Some(&mut cache),
             &mut res,
@@ -541,6 +652,7 @@ mod tests {
             200.0,
             Alignment::Left,
             0.0,
+            None,
             None,
             Some(&mut cache),
             &mut res,
@@ -591,6 +703,7 @@ mod tests {
             Alignment::Left,
             0.0,
             None,
+            None,
             Some(&mut cache),
             &mut res,
         );
@@ -605,6 +718,7 @@ mod tests {
             0.0,
             None,
             None,
+            None,
             &mut res,
         )
         .0;
@@ -613,6 +727,7 @@ mod tests {
             200.0,
             Alignment::Left,
             0.0,
+            None,
             None,
             Some(&mut cache),
             &mut res,
@@ -779,7 +894,16 @@ mod tests {
         let view = DocView::new(&pd);
         let para = view.root().unwrap().child_blocks().next().unwrap();
         let mut res = Resource::new_test();
-        measure_paragraph(&para, width, Alignment::Left, 0.0, pending, None, &mut res)
+        measure_paragraph(
+            &para,
+            width,
+            Alignment::Left,
+            0.0,
+            pending,
+            None,
+            None,
+            &mut res,
+        )
     }
 
     fn font_size_span(spans: SpanLog, op_seq: u64, target: Dot, value: u32) -> SpanLog {
@@ -1043,6 +1167,115 @@ mod tests {
         assert!(
             (h1 - h0).abs() < 0.01,
             "pending must not apply to a paragraph with Char leaves (h0={h0}, h1={h1})"
+        );
+    }
+
+    fn geometry_line(
+        n: u64,
+        height: f32,
+        ascent: f32,
+        descent: f32,
+        offset_range: Range<usize>,
+        is_phantom: bool,
+    ) -> MeasuredLine {
+        MeasuredLine {
+            node: Dot::new(1, n),
+            height,
+            baseline: ascent,
+            ascent,
+            descent,
+            cursor_ascent: ascent,
+            cursor_descent: descent,
+            glyph_runs: vec![],
+            ruby_annotations: vec![],
+            empty_caret_x: 0.0,
+            offset_range: Some(offset_range),
+            tab_gaps: vec![],
+            is_phantom,
+            content_edge_x: None,
+        }
+    }
+
+    #[test]
+    fn caret_expansion_skips_matching_trailing_phantom() {
+        let real = geometry_line(8, 10.0, 8.0, 2.0, 0..2, false);
+        let phantom = geometry_line(8, 0.0, 0.0, 0.0, 2..2, true);
+        let mut lines = vec![real, phantom];
+        let expansion = LineStrutExpansion {
+            ascent: 20.0,
+            descent: 5.0,
+            min_line_height: 25.0,
+        };
+
+        assert!(expand_line_at_position(
+            &mut lines,
+            &Position::new(Dot::new(1, 8), 2),
+            &expansion,
+        ));
+        assert_eq!(lines[0].height, 25.0, "the real line must expand");
+        assert_eq!(lines[1].height, 0.0, "the phantom must stay zero-height");
+    }
+
+    #[test]
+    fn caret_expansion_respects_soft_wrap_affinity() {
+        fn lines() -> Vec<MeasuredLine> {
+            vec![
+                geometry_line(9, 10.0, 8.0, 2.0, 0..1, false),
+                geometry_line(9, 10.0, 8.0, 2.0, 1..2, false),
+            ]
+        }
+
+        let expansion = LineStrutExpansion {
+            ascent: 20.0,
+            descent: 5.0,
+            min_line_height: 25.0,
+        };
+        let mut upstream = lines();
+        assert!(expand_line_at_position(
+            &mut upstream,
+            &Position {
+                node: Dot::new(1, 9),
+                offset: 1,
+                affinity: Affinity::Upstream,
+            },
+            &expansion,
+        ));
+        assert_eq!((upstream[0].height, upstream[1].height), (25.0, 10.0));
+
+        let mut downstream = lines();
+        assert!(expand_line_at_position(
+            &mut downstream,
+            &Position {
+                node: Dot::new(1, 9),
+                offset: 1,
+                affinity: Affinity::Downstream,
+            },
+            &expansion,
+        ));
+        assert_eq!((downstream[0].height, downstream[1].height), (10.0, 25.0));
+    }
+
+    #[test]
+    fn caret_expansion_contains_opposing_ascent_and_descent() {
+        let line = geometry_line(10, 20.0, 18.0, 2.0, 0..1, false);
+        let mut lines = vec![line];
+        let expansion = LineStrutExpansion {
+            ascent: 2.0,
+            descent: 18.0,
+            min_line_height: 20.0,
+        };
+
+        assert!(expand_line_at_position(
+            &mut lines,
+            &Position::new(Dot::new(1, 10), 0),
+            &expansion,
+        ));
+        assert!(
+            lines[0].height >= lines[0].ascent + lines[0].descent,
+            "caret expansion must contain the merged ascent and descent: height={}, ascent={}, descent={}",
+            lines[0].height,
+            lines[0].ascent,
+            lines[0].descent,
         );
     }
 }

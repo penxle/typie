@@ -35,22 +35,24 @@ use editor_state::undo::{RecordMerge, TransientState, UndoEntry, UndoHistory};
 
 fn normalize_pending_overlay(state: &State) -> Option<PendingOverlay> {
     let modifiers = state.pending_modifiers.clone();
-
     if modifiers.is_empty() {
         return None;
     }
     let selection = state.selection.as_ref()?;
-    let view = state.view();
-    let textblock = view
-        .node(selection.head.node)?
-        .ancestors()
-        .find(|n| n.spec().is_textblock())?;
-    let is_empty = textblock.children().next().is_none();
-    if !is_empty {
+    if !selection.is_collapsed() {
         return None;
     }
+    let view = state.view();
+    let node = view.node(selection.head.node)?;
+    let position = node
+        .ancestors()
+        .find(|ancestor| ancestor.spec().is_textblock())
+        .map_or(selection.head, |textblock| Position {
+            node: textblock.id(),
+            ..selection.head
+        });
     Some(PendingOverlay {
-        node_id: textblock.id(),
+        position,
         modifiers,
     })
 }
@@ -2597,8 +2599,8 @@ mod tests {
     }
 
     #[test]
-    fn normalize_non_empty_paragraph_returns_none() {
-        let (state, _p1) = state! {
+    fn normalize_non_empty_paragraph_returns_caret_overlay() {
+        let (state, p1) = state! {
             doc { root { p1: paragraph { text("hi") } } }
             selection: (p1, 0)
         };
@@ -2606,7 +2608,14 @@ mod tests {
             modifier: Modifier::Bold,
         }];
         let s = with_pending(state, pending);
-        assert!(normalize_pending_overlay(&s).is_none());
+        let overlay = normalize_pending_overlay(&s).expect("caret overlay");
+        assert_eq!(overlay.position, Position::new(p1, 0));
+        assert_eq!(
+            overlay.modifiers,
+            vec![PendingModifier::Set {
+                modifier: Modifier::Bold
+            }]
+        );
     }
 
     #[test]
@@ -2620,21 +2629,8 @@ mod tests {
         }];
         let s = with_pending(state, pending.clone());
         let ps = normalize_pending_overlay(&s).expect("Some");
-        assert_eq!(ps.node_id, p1);
+        assert_eq!(ps.position, Position::new(p1, 0));
         assert_eq!(ps.modifiers, pending);
-    }
-
-    #[test]
-    fn normalize_head_on_text_child_ascends_to_textblock() {
-        let (state, _p1) = state! {
-            doc { root { p1: paragraph { text("hi") } } }
-            selection: (p1, 0)
-        };
-        let pending: PendingModifiers = vec![PendingModifier::Set {
-            modifier: Modifier::Bold,
-        }];
-        let s = with_pending(state, pending);
-        assert!(normalize_pending_overlay(&s).is_none());
     }
 
     fn zombie_css() -> Vec<Changeset<EditOp>> {
@@ -4497,6 +4493,180 @@ mod tests {
     }
 
     #[test]
+    fn pending_font_size_affects_only_active_caret_metrics() {
+        let (initial, p1, p2) = state! {
+            doc { root {
+                p1: paragraph { text("a") }
+                p2: paragraph { text("b") [font_size(2400)] }
+            } }
+            selection: (p1, 1)
+            pending_modifiers: [font_size(3600)]
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: crate::message::SystemEvent::Initialize,
+        });
+
+        let active_caret = editor
+            .view()
+            .cursor_metrics(&editor.state, &Position::new(p1, 1))
+            .expect("active cursor metrics after pending font_size 36pt")
+            .caret;
+        let other_caret = editor
+            .view()
+            .cursor_metrics(&editor.state, &Position::new(p2, 1))
+            .expect("non-active cursor metrics at 24pt text")
+            .caret;
+
+        assert!(
+            active_caret.height > other_caret.height,
+            "36pt pending must affect only the active caret, not a queried 24pt position: active={}, other={}",
+            active_caret.height,
+            other_caret.height
+        );
+    }
+
+    #[test]
+    fn pending_font_size_expands_active_line_layout() {
+        let (initial, p1, p2) = state! {
+            doc { root {
+                p1: paragraph { text("a") }
+                p2: paragraph { text("b") }
+            } }
+            selection: (p1, 1)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: crate::message::SystemEvent::Initialize,
+        });
+
+        let before_active = editor
+            .view()
+            .cursor_metrics(&editor.state, &Position::new(p1, 1))
+            .expect("active cursor before pending font size");
+        let before_next = editor
+            .view()
+            .cursor_metrics(&editor.state, &Position::new(p2, 0))
+            .expect("next paragraph cursor before pending font size");
+
+        editor.apply(Message::Modifier {
+            op: ModifierOp::Set {
+                modifier: Modifier::FontSize { value: 9600 },
+            },
+        });
+
+        let after_active = editor
+            .view()
+            .cursor_metrics(&editor.state, &Position::new(p1, 1))
+            .expect("active cursor after pending font size 96pt");
+        let after_next = editor
+            .view()
+            .cursor_metrics(&editor.state, &Position::new(p2, 0))
+            .expect("next paragraph cursor after pending font size");
+
+        assert!(
+            after_active.line.height >= after_active.caret.height,
+            "active line must contain the pending caret: line={}, caret={}",
+            after_active.line.height,
+            after_active.caret.height
+        );
+        assert!(
+            after_active.caret.y >= after_active.line.y
+                && after_active.caret.bottom() <= after_active.line.bottom(),
+            "pending caret must stay inside the active line: line={:?}, caret={:?}",
+            after_active.line,
+            after_active.caret
+        );
+        assert!(
+            after_active.line.height > before_active.line.height,
+            "active line must grow for the pending font size: before={}, after={}",
+            before_active.line.height,
+            after_active.line.height
+        );
+        assert!(
+            after_next.line.y > before_next.line.y,
+            "following content must move below the expanded active line: before={}, after={}",
+            before_next.line.y,
+            after_next.line.y
+        );
+    }
+
+    #[test]
+    fn non_empty_clear_all_updates_active_caret_metrics() {
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("a") [font_size(3600)] } } }
+            selection: (p1, 1)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: crate::message::SystemEvent::Initialize,
+        });
+
+        let big_caret = editor
+            .view()
+            .cursor_metrics(&editor.state, &Position::new(p1, 1))
+            .expect("cursor metrics at the end of 36pt text")
+            .caret;
+
+        editor.apply(Message::Modifier {
+            op: ModifierOp::ClearAll,
+        });
+
+        let view = editor.state().view();
+        let leaf_state = view
+            .node(p1)
+            .and_then(|node| node.leaf_state_at(0))
+            .expect("existing text leaf after ClearAll");
+        assert_eq!(
+            leaf_state
+                .own
+                .get(&ModifierType::FontSize)
+                .map(|own| &own.value),
+            Some(&Modifier::FontSize { value: 3600 }),
+            "collapsed ClearAll must not change existing text"
+        );
+
+        let cleared_caret = editor
+            .view()
+            .cursor_metrics(&editor.state, &Position::new(p1, 1))
+            .expect("cursor metrics after ClearAll")
+            .caret;
+        assert!(
+            cleared_caret.height < big_caret.height,
+            "caret must return to the resolved default size after ClearAll: big={}, cleared={}",
+            big_caret.height,
+            cleared_caret.height
+        );
+    }
+
+    #[test]
+    fn non_empty_clear_all_publishes_cursor_state_field() {
+        let (initial, _p1) = state! {
+            doc { root { p1: paragraph { text("a") [font_size(3600)] } } }
+            selection: (p1, 1)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: crate::message::SystemEvent::Initialize,
+        });
+
+        let events = editor.apply(Message::Modifier {
+            op: ModifierOp::ClearAll,
+        });
+
+        assert!(
+            events.iter().any(|event| {
+                matches!(
+                    event,
+                    EditorEvent::StateChanged { fields }
+                        if fields.contains(&StateField::Cursor)
+                )
+            }),
+            "pending-only ClearAll must tell hosts to re-query the cursor"
+        );
+    }
+
+    #[test]
     fn empty_paragraph_clear_all_modifiers_clears_carry_font_size() {
         let (initial, p1) = state! {
             doc { root { p1: paragraph carry([font_size(2400)]) {} } }
@@ -5590,6 +5760,48 @@ mod tests {
                 .cursor_metrics(st2, &st2.selection.expect("selection exists in test").head)
                 .is_some(),
             "normal caret still valid after leaving the gap (phantom space recovered)"
+        );
+    }
+
+    #[test]
+    fn gap_caret_pending_font_size_expands_line_and_publishes_cursor_state_field() {
+        let (initial, _root, _p1) = state! {
+            doc { root: root { image p1: paragraph { text("b") } } }
+            selection: (root, 0, <)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: crate::message::SystemEvent::Initialize,
+        });
+
+        let events = editor.apply(Message::Modifier {
+            op: ModifierOp::Set {
+                modifier: Modifier::FontSize { value: 9600 },
+            },
+        });
+        let position = editor.state.selection.expect("gap selection").head;
+        let cursor = editor
+            .view()
+            .cursor_metrics(&editor.state, &position)
+            .expect("gap cursor metrics after pending font size");
+
+        assert!(
+            cursor.line.height >= cursor.caret.height
+                && cursor.caret.y >= cursor.line.y
+                && cursor.caret.bottom() <= cursor.line.bottom(),
+            "gap line must contain the pending caret: line={:?}, caret={:?}",
+            cursor.line,
+            cursor.caret,
+        );
+        assert!(
+            events.iter().any(|event| {
+                matches!(
+                    event,
+                    EditorEvent::StateChanged { fields }
+                        if fields.contains(&StateField::Cursor)
+                )
+            }),
+            "gap pending style change must tell hosts to re-query the cursor",
         );
     }
 
