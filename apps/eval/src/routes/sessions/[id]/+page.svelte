@@ -3,7 +3,7 @@
 
   import { css, cva } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
-  import { Button, Helmet, Icon, Modal } from '@typie/ui/components';
+  import { Button, Helmet, Icon, Modal, Tooltip } from '@typie/ui/components';
   import { Dialog, Toast } from '@typie/ui/notification';
   import { tick } from 'svelte';
   import IconChevronLeft from '~icons/lucide/chevron-left';
@@ -356,6 +356,9 @@
     </span>
 
     <div class={flex({ align: 'center', gap: '8px', marginLeft: 'auto' })}>
+      {#if data.isAdmin}
+        <Button onclick={() => (modelConfigOpen = true)} size="sm" type="button" variant="secondary">모델 구성</Button>
+      {/if}
       {#if data.review.status === 'completed'}
         <a
           class={css({
@@ -376,15 +379,17 @@
           과정 보기
         </a>
       {/if}
-      {#if data.isAdmin}
-        <Button onclick={() => (modelConfigOpen = true)} size="sm" type="button" variant="secondary">모델 구성</Button>
-      {/if}
       {#if data.review.status === 'running'}
         <form bind:this={cancelForm} action="?/cancel" method="post" use:enhance={submitCancel}>
           <Button disabled={canceling} loading={canceling} onclick={confirmCancel} size="sm" type="button" variant="secondary">
             리뷰 중단
           </Button>
         </form>
+      {/if}
+      {#if data.review.status === 'completed'}
+        <Tooltip message="아직 리뷰 다시 요청하기는 지원하지 않아요">
+          <Button disabled size="sm" type="button">리뷰 다시 요청하기</Button>
+        </Tooltip>
       {/if}
       <ThemeToggle />
     </div>
