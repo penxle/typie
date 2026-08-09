@@ -1,7 +1,9 @@
 package co.typie.ext
 
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
@@ -50,10 +52,16 @@ fun Modifier.navigationBarsPadding(): Modifier = windowInsetsPadding(WindowInset
 
 @Composable
 fun Modifier.navigationBarsOrImePadding(): Modifier {
-  val navigationBarsBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-  val imeBottom = rememberTrustedImeBottomInset()
-  return windowInsetsPadding(WindowInsets(bottom = maxOf(navigationBarsBottom, imeBottom)))
+  return navigationBarsOrImePadding(
+    navigationBars = WindowInsets.navigationBars,
+    ime = rememberTrustedImeInsets(),
+  )
 }
+
+internal fun Modifier.navigationBarsOrImePadding(
+  navigationBars: WindowInsets,
+  ime: WindowInsets,
+): Modifier = windowInsetsPadding(navigationBars.union(ime).only(WindowInsetsSides.Bottom))
 
 @Composable
 fun Modifier.safeDrawingHorizontalPadding(): Modifier {
