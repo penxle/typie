@@ -48,6 +48,7 @@
   const open = $derived(comments.composing || comments.activeThreadId !== null);
   const thread = $derived(threadFragment.data);
   const anchor = $derived(comments.activeAnchor);
+  const surface = $derived(editor?.scrollContainerEl);
   const virtualAnchor = $derived.by(() => {
     if (!editor || !anchor) return null;
     const snapshot = editor.published?.snapshot;
@@ -120,8 +121,8 @@
   });
 </script>
 
-{#if open && virtualAnchor}
-  <CommentPopoverCard onclickoutside={() => tryClose(comments.closeFromOutside)} reference={virtualAnchor}>
+{#if open && virtualAnchor && surface}
+  <CommentPopoverCard boundary={surface} onclickoutside={() => tryClose(comments.closeFromOutside)} reference={virtualAnchor}>
     {#if comments.composing}
       <CommentComposer
         autofocus
