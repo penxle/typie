@@ -1874,16 +1874,32 @@ impl Editor {
     pub(crate) fn toggle_fold(&mut self, id: Dot) -> bool {
         let did_change = self.view.toggle_fold(&self.state, id);
         if did_change {
-            self.push_event(EditorEvent::StateChanged {
-                fields: vec![
-                    StateField::Cursor,
-                    StateField::PageSizes,
-                    StateField::ExternalElements,
-                ],
-            });
-            self.invalidate_render();
+            self.fold_layout_changed();
         }
         did_change
+    }
+
+    pub(crate) fn expand_folds(&mut self, ids: impl IntoIterator<Item = Dot>) -> bool {
+        let did_change = self.view.expand_folds(&self.state, ids);
+        if did_change {
+            self.fold_layout_changed();
+        }
+        did_change
+    }
+
+    fn fold_layout_changed(&mut self) {
+        self.push_event(EditorEvent::StateChanged {
+            fields: vec![
+                StateField::Cursor,
+                StateField::PageSizes,
+                StateField::ExternalElements,
+                StateField::TableOverlays,
+                StateField::LinkRects,
+                StateField::TrackedRanges,
+                StateField::Placeholder,
+            ],
+        });
+        self.invalidate_render();
     }
 
     pub(crate) fn set_fold_expanded(&mut self, id: Dot, expanded: bool) -> bool {

@@ -1,6 +1,6 @@
 use editor_crdt::Dot;
 use editor_model::{DocView, Node};
-use editor_state::{Position, Selection};
+use editor_state::{Position, Selection, StableResolveCtx};
 use editor_transaction::HistoryMeta;
 
 use crate::editor::Editor;
@@ -31,7 +31,44 @@ pub fn handle_view_op(editor: &mut Editor, op: ViewOp) -> Result<(), EditorError
             editor.toggle_fold(id);
             Ok(())
         }
+        ViewOp::ExpandFoldsForTrackedRange { id } => {
+            let folds = folds_containing_tracked_range(editor, &id);
+            editor.expand_folds(folds);
+            Ok(())
+        }
     }
+}
+
+fn folds_containing_tracked_range(editor: &Editor, id: &str) -> Vec<Dot> {
+    let Some(range) = editor.tracked_ranges().get(id) else {
+        return Vec::new();
+    };
+    if range.locate(editor.state()).is_none() {
+        return Vec::new();
+    }
+    let doc = editor.state().view();
+    let ctx = StableResolveCtx::from_live(&doc, editor.state().projected.seq_checkout());
+    let Some(selection) = range.selection.resolve(&ctx) else {
+        return Vec::new();
+    };
+    let mut folds = Vec::new();
+    for position in [selection.anchor, selection.head] {
+        let Some(node) = doc.node(position.node) else {
+            continue;
+        };
+        for ancestor in node.ancestors() {
+            if !matches!(ancestor.node(), Node::FoldContent(_)) {
+                continue;
+            }
+            let Some(fold) = ancestor.parent() else {
+                continue;
+            };
+            if matches!(fold.node(), Node::Fold(_)) && !folds.contains(&fold.id()) {
+                folds.push(fold.id());
+            }
+        }
+    }
+    folds
 }
 
 // Legacy parity: collapse hides fold-content, so a caret/anchor inside it is
@@ -97,6 +134,18 @@ mod tests {
         );
     }
 
+    fn add_tracked_range(editor: &mut Editor, id: &str, selection: Selection) {
+        editor.apply(Message::TrackedRange {
+            op: TrackedRangeOp::Add {
+                id: id.into(),
+                group: "test".into(),
+                selection,
+                metadata: String::new(),
+                invalidate_on_text_change: false,
+            },
+        });
+    }
+
     #[test]
     fn fold_defaults_to_collapsed_on_load() {
         let (initial, f1, ..) = state! {
@@ -114,6 +163,170 @@ mod tests {
         });
 
         assert!(!editor.fold_expanded(f1), "folds load collapsed by default");
+    }
+
+    #[test]
+    fn expand_folds_for_tracked_range_opens_containing_fold_content() {
+        let (initial, outer, _outer_title, inner, p1) = state! {
+            doc { root {
+                outer: fold {
+                    outer_title: fold_title { text("Outer") }
+                    fold_content {
+                        inner: fold {
+                            fold_title { text("Inner") }
+                            fold_content { p1: paragraph { text("Body") } }
+                        }
+                    }
+                }
+            } }
+            selection: (outer_title, 0)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
+        add_tracked_range(
+            &mut editor,
+            "range",
+            Selection::new(Position::new(p1, 0), Position::new(p1, 4)),
+        );
+        set_pending_format(&mut editor);
+        let selection_before = editor.state().selection;
+        let history_undos_before = editor.history_undos_len();
+        let history_redos_before = editor.history_redos_len();
+
+        let events = editor.apply(Message::View {
+            op: ViewOp::ExpandFoldsForTrackedRange { id: "range".into() },
+        });
+
+        assert!(editor.fold_expanded(outer));
+        assert!(editor.fold_expanded(inner));
+        assert_eq!(editor.state().selection, selection_before);
+        assert!(!editor.state().pending_modifiers.is_empty());
+        assert_eq!(editor.history_undos_len(), history_undos_before);
+        assert_eq!(editor.history_redos_len(), history_redos_before);
+        let expected_fields = [
+            StateField::Cursor,
+            StateField::PageSizes,
+            StateField::ExternalElements,
+            StateField::TableOverlays,
+            StateField::LinkRects,
+            StateField::TrackedRanges,
+        ];
+        assert!(events.iter().any(|event| matches!(
+            event,
+            EditorEvent::StateChanged { fields }
+                if expected_fields.iter().all(|field| fields.contains(field))
+        )));
+        assert!(
+            events
+                .iter()
+                .any(|event| matches!(event, EditorEvent::RenderInvalidated))
+        );
+
+        let repeated_events = editor.apply(Message::View {
+            op: ViewOp::ExpandFoldsForTrackedRange { id: "range".into() },
+        });
+        assert!(repeated_events.is_empty());
+        assert_eq!(editor.history_undos_len(), history_undos_before);
+        assert_eq!(editor.history_redos_len(), history_redos_before);
+    }
+
+    #[test]
+    fn expand_folds_for_tracked_range_opens_sibling_endpoint_folds_only() {
+        let (initial, first, _first_title, p1, second, p2, unrelated) = state! {
+            doc { root {
+                first: fold {
+                    first_title: fold_title { text("First") }
+                    fold_content { p1: paragraph { text("One") } }
+                }
+                second: fold {
+                    fold_title { text("Second") }
+                    fold_content { p2: paragraph { text("Two") } }
+                }
+                unrelated: fold {
+                    fold_title { text("Unrelated") }
+                    fold_content { paragraph { text("Other") } }
+                }
+            } }
+            selection: (first_title, 0)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
+        add_tracked_range(
+            &mut editor,
+            "spanning-range",
+            Selection::new(Position::new(p1, 0), Position::new(p2, 3)),
+        );
+
+        editor.apply(Message::View {
+            op: ViewOp::ExpandFoldsForTrackedRange {
+                id: "spanning-range".into(),
+            },
+        });
+
+        assert!(editor.fold_expanded(first));
+        assert!(editor.fold_expanded(second));
+        assert!(!editor.fold_expanded(unrelated));
+    }
+
+    #[test]
+    fn expand_folds_for_tracked_range_does_not_open_fold_for_title() {
+        let (initial, f1, ft1, ..) = state! {
+            doc { root {
+                f1: fold {
+                    ft1: fold_title { text("Title") }
+                    fold_content { paragraph { text("Body") } }
+                }
+            } }
+            selection: (ft1, 0)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
+        add_tracked_range(
+            &mut editor,
+            "title-range",
+            Selection::new(Position::new(ft1, 0), Position::new(ft1, 5)),
+        );
+
+        let events = editor.apply(Message::View {
+            op: ViewOp::ExpandFoldsForTrackedRange {
+                id: "title-range".into(),
+            },
+        });
+
+        assert!(!editor.fold_expanded(f1));
+        assert!(events.is_empty());
+    }
+
+    #[test]
+    fn expand_folds_for_missing_tracked_range_is_noop() {
+        let (initial, f1, ..) = state! {
+            doc { root {
+                f1: fold {
+                    ft1: fold_title { text("Title") }
+                    fold_content { paragraph { text("Body") } }
+                }
+            } }
+            selection: (ft1, 0)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
+
+        let events = editor.apply(Message::View {
+            op: ViewOp::ExpandFoldsForTrackedRange {
+                id: "missing".into(),
+            },
+        });
+
+        assert!(!editor.fold_expanded(f1));
+        assert!(events.is_empty());
     }
 
     #[test]

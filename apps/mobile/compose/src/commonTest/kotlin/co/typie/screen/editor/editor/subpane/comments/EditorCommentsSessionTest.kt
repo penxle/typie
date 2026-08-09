@@ -25,8 +25,9 @@ class EditorCommentsSessionTest {
       EditorBringIntoViewTarget.TrackedItem(activeRange.id),
       listOf(activeRange).commentThreadScrollTarget(activeRange.id),
     )
-    assertNull(
-      listOf(activeRange.copy(rects = emptyList())).commentThreadScrollTarget(activeRange.id)
+    assertEquals(
+      EditorBringIntoViewTarget.TrackedItem(activeRange.id),
+      listOf(activeRange.copy(rects = emptyList())).commentThreadScrollTarget(activeRange.id),
     )
   }
 

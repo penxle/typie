@@ -934,7 +934,7 @@ export class Editor {
     if (idx === undefined) return;
     const match = this.#searchMatches[idx];
     if (!match) return;
-    this.scrollIntoView({ target: { type: 'tracked_item', id: match.id }, policy: 'reveal', behavior: 'smooth' });
+    this.revealTrackedItem(match.id);
   }
 
   #handleSearchReplaceResult(id: string, outcome: string): void {
@@ -1558,6 +1558,15 @@ export class Editor {
 
   scrollIntoView(options: EditorScrollIntoViewOptions): Promise<void> | undefined {
     return this.#scrollIntoView?.(options, this.#admission);
+  }
+
+  revealTrackedItem(id: string): Promise<void> | undefined {
+    let presentation: Promise<void> | undefined;
+    void this.update((request) => {
+      request.enqueue({ type: 'view', op: { type: 'expand_folds_for_tracked_range', id } });
+      presentation = this.scrollIntoView({ target: { type: 'tracked_item', id }, policy: 'reveal', behavior: 'smooth' });
+    }).catch((err: unknown) => this.fail(err));
+    return presentation;
   }
 
   clientToLocal(clientX: number, clientY: number) {
@@ -2405,7 +2414,7 @@ export class Editor {
         this.activeSpellcheckErrorId = null;
         return;
       }
-      this.scrollIntoView({ target: { type: 'tracked_item', id }, policy: 'reveal', behavior: 'smooth' });
+      this.revealTrackedItem(id);
     }
   }
 
@@ -2582,7 +2591,7 @@ export class Editor {
     if (id !== null) {
       const ok = move(id, 'comment-active');
       if (ok) {
-        this.scrollIntoView({ target: { type: 'tracked_item', id }, policy: 'reveal', behavior: 'smooth' });
+        this.revealTrackedItem(id);
       } else {
         this.activeCommentId = null;
       }
@@ -2615,7 +2624,7 @@ export class Editor {
         this.activeAiFeedbackId = null;
         return;
       }
-      this.scrollIntoView({ target: { type: 'tracked_item', id }, policy: 'reveal', behavior: 'smooth' });
+      this.revealTrackedItem(id);
     }
   }
 

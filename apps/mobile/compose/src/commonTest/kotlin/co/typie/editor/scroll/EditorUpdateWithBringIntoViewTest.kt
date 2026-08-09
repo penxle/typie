@@ -10,6 +10,7 @@ import co.typie.editor.ffi.FrameKey
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.Size
 import co.typie.editor.ffi.SystemEvent
+import co.typie.editor.ffi.ViewOp
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -28,6 +29,26 @@ import kotlinx.coroutines.test.runTest
 
 class EditorUpdateWithBringIntoViewTest {
   private val dispatcher = StandardTestDispatcher()
+
+  @Test
+  fun `tracked item reveal expands folds and binds semantic target to the same version`() =
+    runTest(dispatcher) {
+      val requests = EditorBringIntoViewRequests()
+      val fake = FakeFfiEditor()
+      val editor = Editor(fake, this, dispatcher)
+
+      val update = assertNotNull(editor.revealTrackedItem(requests, id = "match-1"))
+
+      assertEquals(
+        listOf<Message>(Message.View(ViewOp.ExpandFoldsForTrackedRange(id = "match-1"))),
+        fake.enqueued,
+      )
+      assertEquals(1L, update.revision)
+      val request = assertNotNull(requests.activateForVersion(version = update.revision))
+      assertEquals(EditorBringIntoViewTarget.TrackedItem("match-1"), request.target)
+      assertEquals(EditorBringIntoViewPolicy.Reveal, request.policy)
+      assertEquals(EditorBringIntoViewBehavior.Smooth, request.behavior)
+    }
 
   @Test
   fun `update bringIntoView attaches to applied editor version`() =

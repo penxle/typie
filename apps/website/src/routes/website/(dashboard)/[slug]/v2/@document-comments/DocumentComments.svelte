@@ -188,16 +188,7 @@
 
   const anchorFromPageRects = (rects: PageRect[]): CommentAnchor | null => (rects.length > 0 ? { type: 'page_rects', rects } : null);
 
-  const publishedTrackedRangeRects = (id: string): PageRect[] | null => {
-    const snapshot = editor?.published?.snapshot;
-    const range = snapshot ? editor?.trackedRangeForSnapshot(id, snapshot) : undefined;
-    return range && range.rects.length > 0 ? range.rects : null;
-  };
-
-  const anchorForThread = (id: string): CommentAnchor | null => {
-    const rects = publishedTrackedRangeRects(id);
-    return rects ? { type: 'tracked_item', id } : null;
-  };
+  const anchorForThread = (id: string): CommentAnchor | null => (isLocatable(id) ? { type: 'tracked_item', id } : null);
 
   function isLocatable(id: string): boolean {
     return editor?.isCommentLocatable(id) ?? false;
@@ -251,15 +242,10 @@
       return;
     }
     composing = false;
-    const rects = publishedTrackedRangeRects(id);
-    const anchor = rects ? ({ type: 'tracked_item', id } satisfies CommentAnchor) : null;
-    if (!anchor) {
-      Toast.error('원문에서 위치를 찾을 수 없는 코멘트예요');
-      return;
-    }
+    const wasActive = activeThreadId === id;
     activeThreadId = id;
-    activeAnchor = anchor;
-    ctx.scroll?.scrollIntoView({ target: { type: 'tracked_item', id }, policy: 'reveal', behavior: 'smooth' });
+    activeAnchor = { type: 'tracked_item', id };
+    if (wasActive) editor.revealTrackedItem(id);
   }
 
   function takeFocusReturnSession(): FocusReturnSession | null {

@@ -804,7 +804,7 @@ export type Tri<T> = { type: "absent" } | { type: "uniform"; value: T } | { type
 
 export type UnderlineStyle = "solid" | "dashed" | "wavy";
 
-export type ViewOp = { type: "toggle_fold"; id: Dot };
+export type ViewOp = { type: "toggle_fold"; id: Dot } | { type: "expand_folds_for_tracked_range"; id: string };
 
 export type ViewportAnchor = { type: "position"; stable: StableSelection; original_node: Dot; geometry: ViewportAnchorPositionGeometry } | { type: "node"; node: Dot; offset_x: number; offset_y: number };
 
