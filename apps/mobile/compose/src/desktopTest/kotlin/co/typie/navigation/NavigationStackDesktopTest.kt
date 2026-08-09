@@ -91,6 +91,32 @@ class NavigationStackDesktopTest {
   }
 
   @Test
+  fun navigationForegroundCanMatchRouteHostBounds() = runComposeUiTest {
+    val navigator = Navigator(Route.Home)
+
+    setContent {
+      NavigationStackTestHost(
+        navigator = navigator,
+        topBarState = remember { TopBarState() },
+        modifier = Modifier.size(width = 320.dp, height = 640.dp),
+      ) { route ->
+        Box(Modifier.fillMaxSize().testTag("surface-$route"))
+        Box(Modifier.fillMaxSize().padding(horizontal = 12.dp)) {
+          NavigationForeground(matchHostBounds = true) {
+            Box(Modifier.fillMaxSize().testTag("foreground-$route"))
+          }
+        }
+      }
+    }
+    waitForIdle()
+
+    assertEquals(
+      onNodeWithTag("surface-${Route.Home}").fetchSemanticsNode().boundsInRoot,
+      onNodeWithTag("foreground-${Route.Home}").fetchSemanticsNode().boundsInRoot,
+    )
+  }
+
+  @Test
   fun navigationForegroundCanSharePointerInputWithRouteSurface() = runComposeUiTest {
     val navigator = Navigator(Route.Home)
     val editorRoute = Route.Editor("document-id")

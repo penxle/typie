@@ -4,17 +4,16 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.imeAnimationTarget
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.remember
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal actual fun rememberTrustedImeBottomInset() =
-  with(LocalDensity.current) {
-    val rawImeBottom = WindowInsets.ime.getBottom(this).toDp()
-    val animationTargetBottom = WindowInsets.imeAnimationTarget.getBottom(this).toDp()
-    trustedImeBottomInset(
-      rawImeBottom = rawImeBottom,
-      settledImeBottom = animationTargetBottom.takeIf { it > 0.dp },
-    )
+internal actual fun rememberTrustedImeInsets(): WindowInsets {
+  val rawImeInsets = WindowInsets.ime
+  val animationTargetInsets = WindowInsets.imeAnimationTarget
+  return remember(rawImeInsets, animationTargetInsets) {
+    trustedImeInsets(rawImeInsets) { density ->
+      animationTargetInsets.getBottom(density).takeIf { it > 0 }
+    }
   }
+}

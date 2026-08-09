@@ -1,6 +1,7 @@
 package co.typie.navigation
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring.StiffnessMediumLow
 import androidx.compose.animation.core.spring
@@ -73,6 +74,7 @@ import dev.chrisbanes.haze.hazeSource
 import kotlin.math.abs
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.NonCancellable
@@ -88,6 +90,37 @@ private enum class AnimState {
   Pop,
   Dragging,
   PopGestureCommitted,
+}
+
+private class NavigationTransitionProgress(private val onProgress: (Float) -> Unit) {
+  private val animatable = Animatable(0f)
+  private var requestedValue = 0f
+
+  val value: Float
+    get() = animatable.value
+
+  suspend fun snapTo(targetValue: Float) {
+    requestedValue = targetValue
+    onProgress(targetValue)
+    animatable.snapTo(targetValue)
+  }
+
+  fun launchSnapTo(scope: CoroutineScope, targetValue: Float) {
+    requestedValue = targetValue
+    onProgress(targetValue)
+    scope.launch { animatable.snapTo(targetValue) }
+  }
+
+  fun launchDragBy(scope: CoroutineScope, delta: Float) {
+    launchSnapTo(scope, (requestedValue + delta).coerceIn(0f, 1f))
+  }
+
+  suspend fun animateTo(targetValue: Float, animationSpec: AnimationSpec<Float>) {
+    animatable.animateTo(targetValue, animationSpec) {
+      requestedValue = value
+      onProgress(value)
+    }
+  }
 }
 
 private class NavigationRouteScene(
@@ -285,16 +318,16 @@ fun NavigationStack(
   var behindRoute by remember { mutableStateOf<Route?>(null) }
   var transitionStyle by remember { mutableStateOf(RouteTransitionStyle.Slide) }
 
-  val progress = remember { Animatable(0f) }
   val softwareKeyboardPresentationController = LocalSoftwareKeyboardPresentationController.current
   val softwareKeyboardInteraction =
     remember(softwareKeyboardPresentationController) {
       NavigationSoftwareKeyboardInteraction(softwareKeyboardPresentationController)
     }
+  val progress =
+    remember(softwareKeyboardInteraction) {
+      NavigationTransitionProgress(softwareKeyboardInteraction::updateHiddenProgress)
+    }
   DisposableEffect(softwareKeyboardInteraction) { onDispose(softwareKeyboardInteraction::dispose) }
-  LaunchedEffect(softwareKeyboardInteraction) {
-    snapshotFlow { progress.value }.collect(softwareKeyboardInteraction::updateHiddenProgress)
-  }
   val topBarBackdropHazeState = remember { HazeState() }
   val topBarSampleRequests = remember { NavigationTopBarSampleRequests() }
   val topBarLuminanceCache =
@@ -533,7 +566,7 @@ fun NavigationStack(
     behindRoute = prev
     animState = AnimState.Dragging
     softwareKeyboardInteraction.start()
-    scope.launch { progress.snapTo(0f) }
+    progress.launchSnapTo(scope, 0f)
   }
 
   suspend fun startPredictiveBackDrag(): Boolean {
@@ -548,10 +581,7 @@ fun NavigationStack(
   }
 
   fun updatePopDrag(dragAmount: Float) {
-    scope.launch {
-      val newValue = (progress.value + dragAmount / containerWidth).coerceIn(0f, 1f)
-      progress.snapTo(newValue)
-    }
+    progress.launchDragBy(scope, dragAmount / containerWidth)
   }
 
   suspend fun commitPopDrag() {

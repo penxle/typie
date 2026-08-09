@@ -44,6 +44,51 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalTestApi::class)
 class SoftwareKeyboardNavigationStackDesktopTest {
   @Test
+  fun backSwipeDeliversKeyboardProgressBeforeTheNextPresentedFrame() = runComposeUiTest {
+    val navigator = Navigator(Route.Home)
+    val driver = ImmediateProgressDriver()
+    val controller = SoftwareKeyboardPresentationController { driver }
+    var activationDistancePx = 0f
+
+    setContent {
+      CompositionLocalProvider(
+        LocalAppColors provides LightColors,
+        LocalSoftwareKeyboardPresentationController provides controller,
+      ) {
+        activationDistancePx =
+          LocalViewConfiguration.current.touchSlop * NAVIGATION_POP_ACTIVATION_SLOP_MULTIPLIER
+        NavigationStackTestHost(
+          navigator = navigator,
+          topBarState = remember { TopBarState() },
+          modifier = Modifier.size(width = 320.dp, height = 640.dp),
+        ) { route ->
+          Box(
+            Modifier.fillMaxSize()
+              .testTag(if (route == Route.Search) SEARCH_ROUTE_TAG else HOME_ROUTE_TAG)
+          )
+        }
+        LaunchedEffect(Unit) { navigator.navigate(Route.Search) }
+      }
+    }
+    waitUntil { navigator.current == Route.Search && !navigator.isTransitioning }
+
+    mainClock.autoAdvance = false
+    try {
+      onNodeWithTag(SEARCH_ROUTE_TAG).performTouchInput {
+        down(Offset(x = 10f, y = center.y))
+        moveBy(Offset(x = activationDistancePx + 80f, y = 0f), delayMillis = 16L)
+      }
+
+      assertTrue(
+        driver.progress.lastOrNull()?.let { it > 0f } == true,
+        "Keyboard progress must be delivered before Compose presents the matching drag frame",
+      )
+    } finally {
+      mainClock.autoAdvance = true
+    }
+  }
+
+  @Test
   fun committedSearchBackSwipeDoesNotRewindKeyboardProgressAfterRelease() = runComposeUiTest {
     val navigator = Navigator(Route.Home)
     val driver = ImmediateProgressDriver()

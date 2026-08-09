@@ -59,6 +59,10 @@ import UIKit
     return keyboardVisibleHeight(from: keyboardFrame)
   }
 
+  public static func isSoftwareKeyboardPresentationFrame(notification: Notification) -> Bool {
+    notification.object is SoftwareKeyboardPresentationBridge
+  }
+
   private static func detectHardwareKeyboardModeFromUIKeyboardImpl() -> Bool? {
     guard let instance = activeKeyboard() else {
       return nil
