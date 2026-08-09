@@ -107,8 +107,9 @@ class EditorFocusReturnSessionTest {
   }
 
   @Test
-  fun currentSelectionWinsWithoutWaitingForOrApplyingCapture() = runTest {
+  fun currentSelectionFocusesWithoutWaitingForRestoreBoundaryOrCapture() = runTest {
     val editor = testEditor(selection("eligible"))
+    val restoreBoundary = CompletableDeferred<Unit>()
     val freezeGate = CompletableDeferred<StableSelection?>()
     var applyRequests = 0
     var focusRequests = 0
@@ -118,16 +119,23 @@ class EditorFocusReturnSessionTest {
         freezeSelection = { _, _ -> freezeGate.await() },
         applySelection = { _, _ -> applyRequests += 1 },
         focusEditor = { focusRequests += 1 },
-        awaitFocusBoundary = {},
+        awaitFocusBoundary = restoreBoundary::await,
       )
 
     capture(session, editor)
     editor.setSelection(selection("current"))
-    session.restore()
+    val restore = launch { session.restore() }
+    runCurrent()
 
-    assertEquals(0, applyRequests)
-    assertEquals(1, focusRequests)
-    assertFalse(freezeGate.isCompleted)
+    try {
+      assertEquals(0, applyRequests)
+      assertEquals(1, focusRequests)
+      assertFalse(freezeGate.isCompleted)
+      assertTrue(restore.isCompleted)
+    } finally {
+      restoreBoundary.complete(Unit)
+      restore.join()
+    }
   }
 
   @Test
