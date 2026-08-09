@@ -18,13 +18,13 @@ export const MODELS = {
 export type TierModel = keyof typeof MODELS;
 
 export const AGENT_DEFAULTS: Record<AgentName, { model: TierModel; effort: string }> = {
-  research: { model: 'claude-opus-5', effort: 'xhigh' },
-  plan: { model: 'claude-opus-5', effort: 'medium' },
-  review: { model: 'gpt-5.6-sol', effort: 'high' },
+  research: { model: 'gpt-5.6-sol', effort: 'xhigh' },
+  plan: { model: 'claude-opus-5', effort: 'xhigh' },
+  review: { model: 'gpt-5.6-sol', effort: 'xhigh' },
   critique: { model: 'claude-opus-5', effort: 'xhigh' },
   proofread: { model: 'claude-opus-5', effort: 'xhigh' },
-  rephrase: { model: 'claude-opus-5', effort: 'medium' },
-  conclude: { model: 'claude-opus-5', effort: 'medium' },
+  rephrase: { model: 'claude-opus-5', effort: 'xhigh' },
+  conclude: { model: 'claude-opus-5', effort: 'xhigh' },
 };
 
 export type TierOverrides = Partial<Record<AgentName, { model: TierModel; effort: string }>>;

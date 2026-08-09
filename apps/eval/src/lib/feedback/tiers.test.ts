@@ -4,7 +4,7 @@ import { AGENT_DEFAULTS, buildModelConfig, resolveTierSubmission } from './tiers
 describe('buildModelConfig', () => {
   it('무오버라이드는 전 에이전트 기본값에 overridden:false다', () => {
     const config = buildModelConfig(undefined);
-    expect(config.research).toEqual({ model: 'claude-opus-5', effort: 'xhigh', overridden: false });
+    expect(config.research).toEqual({ model: 'gpt-5.6-sol', effort: 'xhigh', overridden: false });
     expect(Object.values(config)).toHaveLength(7);
     expect(Object.values(config).every((entry) => !entry.overridden)).toBe(true);
   });
@@ -40,7 +40,7 @@ describe('resolveTierSubmission', () => {
   });
 
   it('기본값과 같은 명시 선택은 no-op이다', () => {
-    expect(resolveTierSubmission({ review: { model: 'gpt-5.6-sol', effort: 'high' } }, true)).toEqual({ overrides: {} });
+    expect(resolveTierSubmission({ review: { model: 'gpt-5.6-sol', effort: 'xhigh' } }, true)).toEqual({ overrides: {} });
   });
 
   it('유효 오버라이드를 수용한다', () => {

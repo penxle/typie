@@ -113,7 +113,7 @@ describe('buildStartRows', () => {
       overrides: { review: { model: 'claude-sonnet-5', effort: 'xhigh' } },
     });
     expect(rows.review.modelConfig.review).toEqual({ model: 'claude-sonnet-5', effort: 'xhigh', overridden: true });
-    expect(rows.review.modelConfig.research).toEqual({ model: 'claude-opus-5', effort: 'xhigh', overridden: false });
+    expect(rows.review.modelConfig.research).toEqual({ model: 'gpt-5.6-sol', effort: 'xhigh', overridden: false });
   });
 });
 
