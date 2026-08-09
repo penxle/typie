@@ -37,8 +37,12 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
+import co.typie.navigation.NavigationResult
 import co.typie.navigation.NavigationStackTestHost
 import co.typie.navigation.Navigator
+import co.typie.navigation.RouteRemovalDecision
+import co.typie.navigation.RouteRemovalInterceptor
+import co.typie.navigation.RouteRemovalPreparation
 import co.typie.platform.LocalSoftwareKeyboardPresentationController
 import co.typie.platform.SoftwareKeyboardPresentationController
 import co.typie.platform.SoftwareKeyboardPresentationDriver
@@ -48,6 +52,7 @@ import co.typie.ui.component.topbar.TopBarState
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotSame
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CompletableDeferred
@@ -130,6 +135,133 @@ class MainTabPagerDesktopTest {
     }
     waitUntil(timeoutMillis = 5_000L) { mainTabState.motion == null }
     assertEquals(Tab.Space, mainTabState.settledTab)
+  }
+
+  @Test
+  fun `disposing navigation stack during scene handoff clears removed route store`() =
+    runComposeUiTest {
+      val navigator = Navigator(listOf(Route.Home, Route.SpaceSettings))
+      val removedRouteStore = navigator.viewModelStoreFor(Route.SpaceSettings)
+      lateinit var pop: () -> Unit
+      var showNavigationStack by mutableStateOf(true)
+      var outgoingAttached = false
+
+      setContent {
+        val scope = rememberCoroutineScope()
+        pop = { scope.launch { runCatching { navigator.pop() } } }
+        MainTabPager(
+          state = rememberMainTabState(),
+          gestureAdmissionAllowed = !navigator.canPop && !navigator.isTransitioning,
+          modifier = Modifier.size(width = 320.dp, height = 640.dp),
+        ) { tab ->
+          if (tab == Tab.Home && showNavigationStack) {
+            NavigationStackTestHost(
+              navigator = navigator,
+              topBarState = remember { TopBarState() },
+              modifier = Modifier.fillMaxSize(),
+            ) { route ->
+              if (route == Route.SpaceSettings) {
+                DisposableEffect(route) {
+                  outgoingAttached = true
+                  onDispose { outgoingAttached = false }
+                }
+              } else {
+                SideEffect {
+                  if (navigator.current == Route.Home && outgoingAttached) {
+                    showNavigationStack = false
+                  }
+                }
+              }
+              Box(Modifier.fillMaxSize())
+            }
+          } else {
+            Box(Modifier.fillMaxSize())
+          }
+        }
+      }
+      waitUntil { outgoingAttached }
+
+      runOnIdle { pop() }
+      waitUntil(timeoutMillis = 5_000L) { !showNavigationStack }
+      waitUntil(timeoutMillis = 5_000L) { !navigator.isTransitioning }
+
+      assertEquals(Route.Home, navigator.current)
+      assertNotSame(removedRouteStore, navigator.viewModelStoreFor(Route.SpaceSettings))
+    }
+
+  @Test
+  fun `disposing navigation stack during bypass removal completes transition`() = runComposeUiTest {
+    val editorRoute = Route.Editor("editor")
+    val documentRoute = Route.Document("document")
+    val navigator = Navigator(listOf(Route.Home, editorRoute, documentRoute))
+    lateinit var removeDocument: () -> Unit
+    var showNavigationStack by mutableStateOf(true)
+    var removalResult: Result<NavigationResult>? = null
+
+    navigator.routeRemovals.register(
+      editorRoute,
+      object : RouteRemovalInterceptor {
+        override suspend fun prepare(onDelayed: (suspend () -> Unit)?): RouteRemovalPreparation =
+          RouteRemovalPreparation.Ready
+
+        override suspend fun resolveDecision(): RouteRemovalDecision =
+          error("Ready removal must not require a decision")
+
+        override suspend fun rollback() = Unit
+      },
+    )
+
+    setContent {
+      val scope = rememberCoroutineScope()
+      removeDocument = {
+        scope.launch {
+          val prepared = checkNotNull(navigator.prepareAdjacentRemoval(documentRoute, editorRoute))
+          removalResult = runCatching { navigator.commitAdjacentRemoval(prepared) }
+        }
+      }
+      MainTabPager(
+        state = rememberMainTabState(),
+        gestureAdmissionAllowed = !navigator.canPop && !navigator.isTransitioning,
+        modifier = Modifier.size(width = 320.dp, height = 640.dp),
+      ) { tab ->
+        if (tab == Tab.Home && showNavigationStack) {
+          NavigationStackTestHost(
+            navigator = navigator,
+            topBarState = remember { TopBarState() },
+            modifier = Modifier.fillMaxSize(),
+          ) { route ->
+            Box(
+              Modifier.fillMaxSize()
+                .testTag(
+                  if (route == documentRoute) BypassOutgoingRouteTag else "bypass-background"
+                )
+            )
+          }
+        } else {
+          Box(Modifier.fillMaxSize())
+        }
+      }
+    }
+    val outgoingRoute = onNodeWithTag(BypassOutgoingRouteTag)
+    outgoingRoute.fetchSemanticsNode()
+
+    try {
+      mainClock.autoAdvance = false
+      runOnIdle { removeDocument() }
+      waitUntil(timeoutMillis = 5_000L) { navigator.popRequested }
+      mainClock.advanceTimeByFrame()
+      mainClock.advanceTimeBy(200L)
+      assertTrue(outgoingRoute.fetchSemanticsNode().boundsInRoot.top > 0f)
+      runOnIdle { showNavigationStack = false }
+      mainClock.advanceTimeByFrame()
+    } finally {
+      mainClock.autoAdvance = true
+    }
+    waitUntil(timeoutMillis = 5_000L) { !navigator.isTransitioning }
+    waitUntil(timeoutMillis = 5_000L) { removalResult != null }
+
+    assertEquals(Route.Home, navigator.current)
+    assertEquals(NavigationResult.ReachedTarget, removalResult?.getOrThrow())
   }
 
   @Test
@@ -646,6 +778,7 @@ class MainTabPagerDesktopTest {
   }
 
   private companion object {
+    const val BypassOutgoingRouteTag = "bypass-outgoing-route"
     const val ChromeTag = "main-tab-fixed-chrome"
     const val ChildPagerTag = "main-tab-child-pager"
     const val PagerTag = "main-tab-pager"
