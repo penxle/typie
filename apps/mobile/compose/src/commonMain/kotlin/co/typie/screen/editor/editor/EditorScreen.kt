@@ -450,10 +450,6 @@ fun EditorScreen(entityId: String) {
       editorFocused = uiState.focused,
       bringIntoViewRequests = bringIntoViewRequests,
     )
-  fun clearBodySelectionForHeaderFocus() {
-    val activeEditor = runtime.editor ?: return
-    activeEditor.enqueue(Message.Selection(SelectionOp.Unset))
-  }
   suspend fun ensureEditorMutationSubscription(): Boolean {
     return SubscriptionService.gate(sheet = sheet, action = GatedAction.Generic)
   }
@@ -1841,11 +1837,11 @@ fun EditorScreen(entityId: String) {
               onTitleChange = model::updateTitleDraft,
               onSubtitleChange = model::updateSubtitleDraft,
               onTitleFocused = {
-                clearBodySelectionForHeaderFocus()
+                runtime.editor?.updateNow { enqueue(Message.Selection(SelectionOp.Unset)) }
                 entryState.markTitleFocused()
               },
               onSubtitleFocused = {
-                clearBodySelectionForHeaderFocus()
+                runtime.editor?.updateNow { enqueue(Message.Selection(SelectionOp.Unset)) }
                 entryState.markSubtitleFocused()
               },
               onHeightChanged = screenState::updateHeaderHeight,
