@@ -350,6 +350,23 @@ mod tests {
     }
 
     #[test]
+    fn enter_at_leading_gap_materializes_without_splitting() {
+        let (state, ..) = state! {
+            doc { r: root { image paragraph { text("b") } } }
+            selection: (r, 0, <)
+        };
+        let mut editor = Editor::new_test(state);
+
+        editor.apply(key(Key::Enter));
+
+        let (expected, ..) = state! {
+            doc { root { p1: paragraph {} image paragraph { text("b") } } }
+            selection: (p1, 0)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
     fn enter_in_empty_blockquote_after_image_before_text_paragraph() {
         let (state, ..) = state! {
             doc {
