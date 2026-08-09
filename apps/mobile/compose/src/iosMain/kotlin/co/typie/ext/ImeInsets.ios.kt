@@ -76,6 +76,7 @@ internal actual fun rememberTrustedImeInsets(): WindowInsets {
         queue = NSOperationQueue.mainQueue,
       ) {
         settledImeBottom = null
+        presentationImeBottom = null
       }
     val didHideObserver =
       center.addObserverForName(

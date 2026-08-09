@@ -1315,6 +1315,7 @@ fun EditorScreen(entityId: String) {
                     var delivered = false
                     try {
                       DocumentCharacterCountSnapshots.put(entityId, activeEditor?.characterCounts())
+                      keyboardController?.hide()
                       screenState.prepareToLeaveEditorScene(
                         runtime = runtime,
                         uiState = uiState,
