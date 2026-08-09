@@ -2,7 +2,8 @@ use editor_common::Tri;
 use editor_model::{DEFAULT_FONT_WEIGHT, Modifier, ModifierType};
 use editor_resource::Resource;
 use editor_state::{
-    PendingModifier, PendingModifiers, caret_provided_and_override, resolve_modifier_state,
+    PendingModifier, PendingModifiers, caret_provided_and_override,
+    modifier_can_apply_to_inserted_text, resolve_modifier_state,
 };
 use editor_transaction::Transaction;
 
@@ -36,6 +37,15 @@ fn set_collapsed(
 ) -> CommandResult {
     let selection = tr.selection().expect("entry caller guaranteed selection");
     let pos = selection.head;
+
+    {
+        let view = tr.view();
+        view.node(pos.node)
+            .ok_or(CommandError::NodeNotFound(pos.node))?;
+        if !modifier_can_apply_to_inserted_text(&view, &pos, ModifierType::FontFamily) {
+            return Ok(false);
+        }
+    }
 
     let (provided_family, explicit_family, old_weight, old_bold, inherited_weight) = {
         let ms = resolve_modifier_state(&tr.state().projected, &selection, tr.pending_modifiers())
@@ -151,6 +161,44 @@ mod tests {
             .set_fonts(prepare_fonts(families))
             .expect("font families must change resources");
         Resource::from_snapshot(source.snapshot())
+    }
+
+    #[test]
+    fn collapsed_fold_title_set_font_family_is_noop() {
+        let resource = make_resource([("Other", vec![400, 700])]);
+        let (initial, ..) = state! {
+            doc { root { fold {
+                ft: fold_title { text("Title") }
+                fold_content { paragraph {} }
+            } } }
+            selection: (ft, 2)
+        };
+
+        let (actual, ..) = transact_fail!(initial, |tr| set_font_family(
+            &mut tr,
+            "Other".to_string(),
+            &resource
+        ));
+
+        assert!(actual.pending_modifiers.is_empty());
+    }
+
+    #[test]
+    fn fold_title_range_set_font_family_is_noop() {
+        let resource = make_resource([("Other", vec![400, 700])]);
+        let (initial, ..) = state! {
+            doc { root { fold {
+                ft: fold_title { text("Title") }
+                fold_content { paragraph {} }
+            } } }
+            selection: (ft, 0) -> (ft, 5)
+        };
+
+        transact_fail!(initial, |tr| set_font_family(
+            &mut tr,
+            "Other".to_string(),
+            &resource
+        ));
     }
 
     #[test]

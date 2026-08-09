@@ -563,7 +563,7 @@ class ToolbarContextTest {
       resolveEditorToolbarContext(
         editorState(
           selection = collapsedSelection(),
-          modifierState = modifierState(inlineText = true),
+          modifierState = modifierState(inlineText = false),
           blockState =
             blockState(
               ancestors =
@@ -576,10 +576,7 @@ class ToolbarContextTest {
         )
       )
 
-    assertEquals(
-      listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Text, EditorToolbarPageKey.Fold),
-      context.pageKeys,
-    )
+    assertEquals(listOf(EditorToolbarPageKey.Main, EditorToolbarPageKey.Fold), context.pageKeys)
     assertEquals(null, context.autoTargetPageKey)
     assertEquals(null, context.autoTargetKey)
     assertEquals("fold", context.foldTargetId)

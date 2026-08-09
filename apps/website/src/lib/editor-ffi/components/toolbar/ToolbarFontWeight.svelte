@@ -13,9 +13,10 @@
 
   type Props = {
     fontFamilies?: readonly FontFamily[];
+    disabled?: boolean;
   };
 
-  let { fontFamilies = [] }: Props = $props();
+  let { fontFamilies = [], disabled = false }: Props = $props();
 
   const ctx = getEditorContext();
 
@@ -62,6 +63,7 @@
 
 <SearchableDropdown
   style={css.raw({ width: '100px' })}
+  {disabled}
   getLabel={(value) => fontWeightValueLabel(currentFontFamilyAndFonts.fonts, values.fontWeight, value)}
   items={weightItems}
   label="폰트 굵기"

@@ -1,6 +1,8 @@
 use editor_crdt::Dot;
 use editor_model::{ChildView, DocView, Modifier, ModifierType};
-use editor_state::{PendingModifier, PendingModifiers, Position};
+use editor_state::{
+    PendingModifier, PendingModifiers, Position, modifier_can_apply_to_inserted_text,
+};
 use editor_transaction::Transaction;
 
 use crate::CommandResult;
@@ -85,6 +87,17 @@ fn edit_modifier_collapsed(
     modifier_type: ModifierType,
     modifier: Option<Modifier>,
 ) -> CommandResult {
+    let pos = tr
+        .selection()
+        .expect("entry caller guaranteed selection")
+        .head;
+    {
+        let view = tr.view();
+        if !modifier_can_apply_to_inserted_text(&view, &pos, modifier_type) {
+            return Ok(false);
+        }
+    }
+
     if !matches!(modifier_type, ModifierType::Link | ModifierType::Ruby) {
         let mut pending: PendingModifiers = tr
             .pending_modifiers()
@@ -99,11 +112,6 @@ fn edit_modifier_collapsed(
         tr.set_pending_modifiers(pending)?;
         return Ok(true);
     }
-
-    let pos: Position = tr
-        .selection()
-        .expect("entry caller guaranteed selection")
-        .head;
 
     let span = {
         let view = tr.view();
@@ -350,6 +358,46 @@ mod tests {
             pending_modifiers: [!background_color]
         };
         assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn collapsed_fold_title_edit_background_color_is_noop() {
+        let (initial, ..) = state! {
+            doc { root { fold {
+                ft: fold_title { text("Title") }
+                fold_content { paragraph {} }
+            } } }
+            selection: (ft, 2)
+        };
+
+        let (actual, ..) = transact_fail!(initial, |tr| edit_modifier(
+            &mut tr,
+            ModifierType::BackgroundColor,
+            Some(Modifier::BackgroundColor {
+                value: "red".to_string()
+            })
+        ));
+
+        assert!(actual.pending_modifiers.is_empty());
+    }
+
+    #[test]
+    fn fold_title_range_edit_background_color_is_noop() {
+        let (initial, ..) = state! {
+            doc { root { fold {
+                ft: fold_title { text("Title") }
+                fold_content { paragraph {} }
+            } } }
+            selection: (ft, 0) -> (ft, 5)
+        };
+
+        transact_fail!(initial, |tr| edit_modifier(
+            &mut tr,
+            ModifierType::BackgroundColor,
+            Some(Modifier::BackgroundColor {
+                value: "red".to_string()
+            })
+        ));
     }
 
     #[test]

@@ -1,6 +1,9 @@
 use editor_crdt::Dot;
 use editor_model::Modifier;
-use editor_state::{PendingModifier, PendingModifiers, caret_provided_and_override};
+use editor_state::{
+    PendingModifier, PendingModifiers, caret_provided_and_override,
+    modifier_can_apply_to_inserted_text,
+};
 use editor_transaction::Transaction;
 
 use crate::helpers::{
@@ -49,6 +52,9 @@ fn set_modifier_collapsed_text(tr: &mut Transaction, modifier: &Modifier) -> Com
         let view = tr.view();
         view.node(pos.node)
             .ok_or(CommandError::NodeNotFound(pos.node))?;
+        if !modifier_can_apply_to_inserted_text(&view, &pos, modifier_type) {
+            return Ok(false);
+        }
         caret_provided_and_override(&tr.state().projected, pos.node, pos.offset, modifier_type)
     };
 
@@ -269,6 +275,40 @@ mod tests {
             pending_modifiers: [font_size(2400)]
         };
         assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn collapsed_fold_title_set_font_size_is_noop() {
+        let (initial, ..) = state! {
+            doc { root { fold {
+                ft: fold_title { text("Title") }
+                fold_content { paragraph {} }
+            } } }
+            selection: (ft, 2)
+        };
+
+        let (actual, ..) = transact_fail!(initial, |tr| set_modifier(
+            &mut tr,
+            Modifier::FontSize { value: 2400 }
+        ));
+
+        assert!(actual.pending_modifiers.is_empty());
+    }
+
+    #[test]
+    fn fold_title_range_set_font_size_is_noop() {
+        let (initial, ..) = state! {
+            doc { root { fold {
+                ft: fold_title { text("Title") }
+                fold_content { paragraph {} }
+            } } }
+            selection: (ft, 0) -> (ft, 5)
+        };
+
+        transact_fail!(initial, |tr| set_modifier(
+            &mut tr,
+            Modifier::FontSize { value: 2400 }
+        ));
     }
 
     #[test]

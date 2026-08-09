@@ -64,7 +64,10 @@ pub use flat::{flat_size_walk_probe, from_flat_walk_probe, to_flat_walk_probe};
 pub use gap_cursor::{GapCursor, as_gap_cursor, gap_cursor_at};
 pub use layout_dirty::LayoutDirty;
 pub use load_builder::BuildError;
-pub use modifier_resolution::{resolve_caret_modifiers, resolve_effective_modifiers_at};
+pub use modifier_resolution::{
+    modifier_applies_to_textblock_child, modifier_can_apply_to_inserted_text,
+    resolve_caret_modifiers, resolve_effective_modifiers_at,
+};
 pub use modifier_span::resolve_modifier_span_selection;
 pub use modifier_state::{resolve_modifier_state, resolve_modifier_state_in_range};
 pub use normalize::{

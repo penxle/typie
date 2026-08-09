@@ -94,6 +94,7 @@
   });
 
   const open = () => {
+    if (disabled) return;
     if (anchorElement) {
       anchorWidth = anchorElement.getBoundingClientRect().width;
     }
@@ -103,6 +104,10 @@
   const close = () => {
     opened = false;
   };
+
+  $effect(() => {
+    if (disabled) close();
+  });
 
   const handleFocus = () => {
     isFocused = true;
@@ -200,6 +205,7 @@
       alignItems: 'center',
       borderRadius: '4px',
       height: '24px',
+      opacity: disabled ? '50' : '100',
       _hover: {
         backgroundColor: 'surface.muted',
       },
@@ -245,6 +251,7 @@
       pointerEvents: opened ? 'auto' : 'none',
       cursor: 'pointer',
     })}
+    {disabled}
     onclick={() => {
       inputElement?.blur();
       close();

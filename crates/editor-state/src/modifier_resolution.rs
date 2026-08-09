@@ -3,14 +3,43 @@ use std::collections::BTreeMap;
 
 use editor_crdt::Dot;
 use editor_model::{
-    EffectiveSources, Modifier, ModifierType, NodeType, NodeView, Schema, resolve_effective,
+    DocView, EffectiveSources, Modifier, ModifierType, NodeType, NodeView, Schema,
+    resolve_effective,
 };
 
 use crate::Position;
-use crate::continuation::{apply_pending, continuation_at};
+use crate::continuation::continuation_at;
+use crate::gap_cursor::gap_cursor_at;
 use crate::pending_modifier::PendingModifier;
 use crate::projected_state::ProjectedState;
 use crate::state::State;
+
+pub(crate) fn modifier_target_matches_path(
+    path: &[NodeType],
+    target_type: NodeType,
+    ty: ModifierType,
+) -> bool {
+    let target = &Schema::modifier_spec(ty).target;
+    target.rightmost_node_types().contains(&target_type) && target.matches(path)
+}
+
+pub fn modifier_applies_to_textblock_child(
+    view: &DocView,
+    textblock: Dot,
+    child_type: NodeType,
+    ty: ModifierType,
+) -> bool {
+    let Some(host) = view
+        .node(textblock)
+        .filter(|node| node.spec().is_textblock())
+    else {
+        return false;
+    };
+    let mut path: Vec<NodeType> = host.ancestors().map(|node| node.node_type()).collect();
+    path.reverse();
+    path.push(child_type);
+    modifier_target_matches_path(&path, child_type, ty)
+}
 
 fn parents_path(host: &NodeView) -> Vec<(NodeType, Option<Dot>)> {
     let mut v: Vec<(NodeType, Option<Dot>)> = host
@@ -49,6 +78,52 @@ pub fn resolve_effective_modifiers_at(state: &State, pos: &Position) -> Vec<Modi
         .collect()
 }
 
+/// Whether a modifier can target text inserted at `pos`. A gap cursor is
+/// evaluated as its virtual paragraph.
+pub fn modifier_can_apply_to_inserted_text(
+    view: &DocView,
+    pos: &Position,
+    ty: ModifierType,
+) -> bool {
+    let Some(host) = view.node(pos.node) else {
+        return false;
+    };
+
+    if host.spec().is_textblock() {
+        return modifier_applies_to_textblock_child(view, host.id(), NodeType::Text, ty);
+    }
+
+    if gap_cursor_at(pos, view).is_none() {
+        return false;
+    }
+
+    let mut path: Vec<NodeType> = host.ancestors().map(|node| node.node_type()).collect();
+    path.reverse();
+    path.extend([NodeType::Paragraph, NodeType::Text]);
+    modifier_target_matches_path(&path, NodeType::Text, ty)
+}
+
+fn apply_pending_at_position(
+    out: &mut BTreeMap<ModifierType, Modifier>,
+    pending: &[PendingModifier],
+    view: &DocView,
+    pos: &Position,
+) {
+    for pending in pending {
+        if !modifier_can_apply_to_inserted_text(view, pos, pending.as_type()) {
+            continue;
+        }
+        match pending {
+            PendingModifier::Set { modifier } => {
+                out.insert(modifier.as_type(), modifier.clone());
+            }
+            PendingModifier::Unset { ty } => {
+                out.remove(ty);
+            }
+        }
+    }
+}
+
 /// Modifiers that would apply to text inserted at `pos`.
 pub fn resolve_caret_modifiers(
     state: &ProjectedState,
@@ -62,12 +137,12 @@ pub fn resolve_caret_modifiers(
 
     if !Schema::node_spec(host.node_type()).is_textblock() {
         let mut out = inherited_over(&parents_path(&host), state);
-        apply_pending(&mut out, pending);
+        apply_pending_at_position(&mut out, pending, &view, pos);
         return out;
     }
 
     let mut out = continuation_at(state, pos.node, pos.offset);
-    apply_pending(&mut out, pending);
+    apply_pending_at_position(&mut out, pending, &view, pos);
     for (ty, m) in inherited_over(&self_path(&host), state) {
         out.entry(ty).or_insert(m);
     }
@@ -430,6 +505,28 @@ mod tests {
             out.get(&ModifierType::FontWeight),
             Some(&Modifier::FontWeight { value: 500 }),
             "the FoldTitle implicit weight wins over the root record"
+        );
+    }
+
+    #[test]
+    fn foldtitle_ignores_unsupported_pending_but_keeps_implicit_style() {
+        let (state, title) = fold_title_state();
+        let out = resolve_caret_modifiers(
+            &state,
+            &Position::new(title, 0),
+            &[PendingModifier::Set {
+                modifier: Modifier::FontSize { value: 3600 },
+            }],
+        );
+
+        assert_ne!(
+            out.get(&ModifierType::FontSize),
+            Some(&Modifier::FontSize { value: 3600 })
+        );
+        assert_eq!(
+            out.get(&ModifierType::FontWeight),
+            Some(&Modifier::FontWeight { value: 500 }),
+            "fixed FoldTitle paint remains available to caret geometry"
         );
     }
 

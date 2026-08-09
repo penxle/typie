@@ -1,11 +1,10 @@
 use editor_crdt::Dot;
-use editor_model::{ChildView, DocView, ModifierType, NodeType, Schema};
+use editor_model::{ChildView, DocView, ModifierType, NodeType};
 
+use crate::modifier_resolution::modifier_target_matches_path;
 use crate::position::Position;
 use crate::selection::ResolvedSelection;
 use crate::traversal::{blocks_in_range, leaves_in_block_range};
-
-const CHARLIKE_SLOTS: [NodeType; 3] = [NodeType::Text, NodeType::Tab, NodeType::HardBreak];
 
 pub fn block_accepts_carry_kind(view: &DocView, block: Dot, ty: ModifierType) -> bool {
     let Some(node) = view.node(block) else {
@@ -14,14 +13,17 @@ pub fn block_accepts_carry_kind(view: &DocView, block: Dot, ty: ModifierType) ->
     if !node.spec().is_textblock() {
         return false;
     }
-    let mut base: Vec<NodeType> = node.ancestors().map(|a| a.node_type()).collect();
-    base.reverse();
-    let target = &Schema::modifier_spec(ty).target;
-    CHARLIKE_SLOTS.iter().any(|&slot| {
-        let mut path = base.clone();
-        path.push(slot);
-        target.matches(&path)
-    })
+    let mut path: Vec<NodeType> = node.ancestors().map(|a| a.node_type()).collect();
+    path.reverse();
+    for child_type in [NodeType::Text, NodeType::Tab, NodeType::HardBreak] {
+        path.push(child_type);
+        let applies = modifier_target_matches_path(&path, child_type, ty);
+        path.pop();
+        if applies {
+            return true;
+        }
+    }
+    false
 }
 
 pub fn end_touched_textblocks(view: &DocView, rs: &ResolvedSelection) -> Vec<Dot> {

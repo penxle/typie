@@ -2,8 +2,9 @@ use std::collections::BTreeSet;
 
 use editor_crdt::Dot;
 use editor_model::{DocView, ModifierType};
-use editor_state::{PendingModifier, PendingModifiers};
+use editor_state::{PendingModifier, PendingModifiers, modifier_can_apply_to_inserted_text};
 use editor_transaction::Transaction;
+use strum::IntoEnumIterator;
 
 use crate::CommandResult;
 use crate::helpers::{clear_all_modifiers_range, companion_unset};
@@ -40,8 +41,12 @@ fn clear_all_modifiers_collapsed(tr: &mut Transaction) -> CommandResult {
         .expect("entry caller guaranteed selection")
         .head;
 
-    let (block_id, block_carry_types, own_types) = {
+    let (block_id, block_carry_types, own_types, applicable_types) = {
         let view = tr.view();
+        let applicable: BTreeSet<ModifierType> = ModifierType::iter()
+            .filter(|ty| ty.is_carry_kind())
+            .filter(|&ty| modifier_can_apply_to_inserted_text(&view, &pos, ty))
+            .collect();
         let block = view
             .node(pos.node)
             .and_then(|n| n.ancestors().find(|a| a.spec().is_textblock()));
@@ -49,10 +54,13 @@ fn clear_all_modifiers_collapsed(tr: &mut Transaction) -> CommandResult {
         let carry: Vec<_> = block
             .into_iter()
             .flat_map(|b| b.carry_modifiers().into_keys())
-            .filter(|t| t.is_carry_kind())
+            .filter(|ty| applicable.contains(ty))
             .collect();
-        let own = caret_own_text_types(&view, pos.node, pos.offset);
-        (id, carry, own)
+        let own: Vec<ModifierType> = caret_own_text_types(&view, pos.node, pos.offset)
+            .into_iter()
+            .filter(|ty| applicable.contains(ty))
+            .collect();
+        (id, carry, own, applicable)
     };
 
     let had_carry = !block_carry_types.is_empty();
@@ -66,6 +74,9 @@ fn clear_all_modifiers_collapsed(tr: &mut Transaction) -> CommandResult {
         own_types.into_iter().chain(block_carry_types).collect();
 
     for pm in tr.pending_modifiers() {
+        if !applicable_types.contains(&pm.as_type()) {
+            continue;
+        }
         match pm {
             PendingModifier::Set { modifier } if modifier.as_type().is_carry_kind() => {
                 types.insert(modifier.as_type());
@@ -347,6 +358,33 @@ mod tests {
             }
             selection: (p1, 2)
         };
+        transact_fail!(initial, |tr| clear_all_modifiers(&mut tr));
+    }
+
+    #[test]
+    fn collapsed_fold_title_with_unsupported_pending_is_noop() {
+        let (initial, ..) = state! {
+            doc { root { fold {
+                ft: fold_title { text("Title") }
+                fold_content { paragraph {} }
+            } } }
+            selection: (ft, 2)
+            pending_modifiers: [font_size(3600)]
+        };
+
+        transact_fail!(initial, |tr| clear_all_modifiers(&mut tr));
+    }
+
+    #[test]
+    fn fold_title_range_clear_all_is_noop() {
+        let (initial, ..) = state! {
+            doc { root { fold {
+                ft: fold_title { text("Title") }
+                fold_content { paragraph {} }
+            } } }
+            selection: (ft, 0) -> (ft, 5)
+        };
+
         transact_fail!(initial, |tr| clear_all_modifiers(&mut tr));
     }
 

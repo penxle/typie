@@ -1,8 +1,9 @@
 use editor_common::Tri;
 use editor_model::{DEFAULT_FONT_WEIGHT, Modifier, ModifierType};
 use editor_resource::{Resource, find_bold_target, find_unbold_target};
-use editor_state::resolve_modifier_state;
-use editor_state::{PendingModifier, PendingModifiers};
+use editor_state::{
+    PendingModifier, PendingModifiers, modifier_can_apply_to_inserted_text, resolve_modifier_state,
+};
 use editor_transaction::Transaction;
 
 use crate::helpers::{block_weight, toggle_bold_range};
@@ -23,6 +24,15 @@ pub fn toggle_bold(tr: &mut Transaction, resource: &Resource) -> CommandResult {
 fn toggle_bold_collapsed(tr: &mut Transaction, resource: &Resource) -> CommandResult {
     let selection = tr.selection().expect("entry caller guaranteed selection");
     let pos = selection.head;
+
+    {
+        let view = tr.view();
+        view.node(pos.node)
+            .ok_or(CommandError::NodeNotFound(pos.node))?;
+        if !modifier_can_apply_to_inserted_text(&view, &pos, ModifierType::Bold) {
+            return Ok(false);
+        }
+    }
 
     let (current_weight, font_family, is_bold, synthetic_bold, weight_bold) = {
         let ms = resolve_modifier_state(&tr.state().projected, &selection, tr.pending_modifiers())
@@ -167,6 +177,36 @@ mod tests {
         let mut tr = editor_transaction::Transaction::new(&initial);
         let result = toggle_bold(&mut tr, &resource);
         assert!(matches!(result, Ok(false)));
+    }
+
+    #[test]
+    fn collapsed_fold_title_toggle_bold_is_noop() {
+        let resource = make_resource([("Pretendard", vec![400, 700])]);
+        let (initial, ..) = state! {
+            doc { root { fold {
+                ft: fold_title { text("Title") }
+                fold_content { paragraph {} }
+            } } }
+            selection: (ft, 2)
+        };
+
+        let (actual, ..) = transact_fail!(initial, |tr| toggle_bold(&mut tr, &resource));
+
+        assert!(actual.pending_modifiers.is_empty());
+    }
+
+    #[test]
+    fn fold_title_range_toggle_bold_is_noop() {
+        let resource = make_resource([("Pretendard", vec![400, 700])]);
+        let (initial, ..) = state! {
+            doc { root { fold {
+                ft: fold_title { text("Title") }
+                fold_content { paragraph {} }
+            } } }
+            selection: (ft, 0) -> (ft, 5)
+        };
+
+        transact_fail!(initial, |tr| toggle_bold(&mut tr, &resource));
     }
 
     #[test]
