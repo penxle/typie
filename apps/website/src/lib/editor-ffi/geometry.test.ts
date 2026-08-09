@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { boundingClientRect, isSelectionCollapsed, pageRectsToVirtualElement, resolvePageSpans, selectionHeadRect } from './geometry';
+import {
+  boundingClientRect,
+  isSelectionCollapsed,
+  pageRectsToRevealTargetSpan,
+  pageRectsToVirtualElement,
+  resolvePageSpans,
+  selectionHeadRect,
+} from './geometry';
 import type { Position } from '@typie/editor-ffi/browser';
 import type { Editor, EditorSnapshot } from './editor.svelte';
 
@@ -39,6 +46,27 @@ describe('resolvePageSpans', () => {
   });
 });
 
+describe('pageRectsToRevealTargetSpan', () => {
+  it('combines valid page-local rects into one zoomed document span', () => {
+    const pages = [
+      { page: 0, top: 100, bottom: 300 },
+      { page: 1, top: 320, bottom: 520 },
+    ];
+
+    expect(
+      pageRectsToRevealTargetSpan(
+        [
+          { page_idx: 0, rect: { x: 0, y: 20, width: 10, height: 10 } },
+          { page_idx: 1, rect: { x: 0, y: 40, width: 10, height: 20 } },
+          { page_idx: 2, rect: { x: 0, y: 0, width: 10, height: 10 } },
+        ],
+        pages,
+        2,
+      ),
+    ).toEqual({ targetTop: 140, targetBottom: 440 });
+  });
+});
+
 describe('pageRectsToVirtualElement', () => {
   it('keeps an empty bounding rect fallback for empty virtual elements', () => {
     const editor = { pageEls: [], safeDisplayZoom: () => 1 } as unknown as Editor;
@@ -48,6 +76,23 @@ describe('pageRectsToVirtualElement', () => {
     expect(rect.width).toBe(0);
     expect(rect.height).toBe(0);
     expect([...(virtualElement.getClientRects?.() ?? [])]).toEqual([]);
+  });
+
+  it('uses accepted page layout geometry without requiring an active surface frame', () => {
+    const editor = {
+      published: { frames: new Map() },
+      pageEls: {
+        2: { getBoundingClientRect: () => new DOMRect(40, 2000, 600, 800) },
+      },
+      safeDisplayZoom: () => 1,
+    } as unknown as Editor;
+    const virtualElement = pageRectsToVirtualElement(editor, [{ page_idx: 2, rect: { x: 20, y: 100, width: 40, height: 30 } }]);
+
+    const rect = virtualElement.getBoundingClientRect();
+    expect(rect.left).toBe(60);
+    expect(rect.top).toBe(2100);
+    expect(rect.width).toBe(40);
+    expect(rect.height).toBe(30);
   });
 });
 

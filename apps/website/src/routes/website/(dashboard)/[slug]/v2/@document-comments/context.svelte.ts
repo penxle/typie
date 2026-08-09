@@ -1,8 +1,8 @@
 import { getContext, setContext } from 'svelte';
-import type { PageRect } from '@typie/editor-ffi/browser';
+import type { CommentAnchor } from '$lib/editor-ffi/comments';
 import type { CommentComposerV2_user$key, CommentPopoverV2_thread$key, DocumentPanelV2CommentItem_thread$key } from '$mearie';
 
-export type CommentAnchor = { rects: PageRect[] };
+export type { CommentAnchor } from '$lib/editor-ffi/comments';
 
 export type CommentThread = DocumentPanelV2CommentItem_thread$key & CommentPopoverV2_thread$key & { id: string; selection: unknown };
 

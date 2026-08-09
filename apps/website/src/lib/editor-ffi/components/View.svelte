@@ -202,6 +202,7 @@
         viewportEditor = editor;
         editor.resizeViewportNow(effectiveWidth, height, viewportScaleFactor);
       }
+      ctx.scroll?.reconcileViewportResize();
     });
 
     if (!readyFired && editor.isPublished(editor.appliedRevision, { requireFrame: true })) {
@@ -228,12 +229,16 @@
 </script>
 
 <svelte:window
+  onkeydowncapture={useWindowScroll ? () => ctx.scroll?.cancel() : undefined}
+  onpointerdowncapture={useWindowScroll ? () => ctx.scroll?.cancel() : undefined}
   onscroll={useWindowScroll
     ? () => {
         ctx.editor?.refreshPointerStyle();
+        ctx.scroll?.observeViewportScroll();
         ctx.editor?.requestPublication();
       }
     : undefined}
+  onscrollend={useWindowScroll ? () => ctx.scroll?.settleSmoothReveal() : undefined}
   onwheel={useWindowScroll ? () => ctx.scroll?.cancel() : undefined}
 />
 
@@ -291,10 +296,14 @@
 
       return () => teardown();
     }}
+    onkeydowncapture={() => ctx.scroll?.cancel()}
+    onpointerdowncapture={() => ctx.scroll?.cancel()}
     onscroll={() => {
       ctx.editor?.refreshPointerStyle();
+      ctx.scroll?.observeViewportScroll();
       ctx.editor?.requestPublication();
     }}
+    onscrollend={() => ctx.scroll?.settleSmoothReveal()}
     onwheel={() => ctx.scroll?.cancel()}
     bind:clientWidth
     bind:clientHeight

@@ -20,6 +20,7 @@ import { selectTrackedRangeMember, semanticMembershipForStateChange, trackedRang
 import { zoomDiffers } from './zoom';
 import type {
   BlockState,
+  CapturedViewportAnchor,
   ClipboardPayload,
   CursorMetrics,
   Editor as WasmEditor,
@@ -50,6 +51,9 @@ import type {
   TrackedRange,
   TrackedRangeEndpoints,
   Viewport,
+  ViewportAnchor,
+  ViewportAnchorPoint,
+  ViewportAnchorResolution,
 } from '@typie/editor-ffi/browser';
 import type { ScrollViewport } from '@typie/ui/utils';
 import type { EditorPublicationResult } from './editor-update';
@@ -360,6 +364,9 @@ export class Editor {
     rootModifiers: [],
     trackedRanges: [],
   });
+  // Snapshot trackedRanges preserve semantic registry changes, while their rects can move on
+  // unrelated document edits. Resolve only active consumers and retain their revision geometry.
+  #resolvedTrackedRanges = new WeakMap<EditorSnapshot, Map<string, TrackedRange | undefined>>();
 
   #viewport = $state<Viewport>({ width: 0, height: 0, scale_factor: 1 });
   #appliedViewport: Viewport = { width: 0, height: 0, scale_factor: 1 };
@@ -1475,6 +1482,22 @@ export class Editor {
     return this.#applied;
   }
 
+  trackedRangeForSnapshot(id: string, snapshot: EditorSnapshot): TrackedRange | undefined {
+    let resolved = this.#resolvedTrackedRanges.get(snapshot);
+    if (resolved?.has(id)) return resolved.get(id);
+    if (snapshot === this.#applied) {
+      const range = this.#invokeCore((core) => core.tracked_range(id));
+      if (!resolved) {
+        // eslint-disable-next-line svelte/prefer-svelte-reactivity
+        resolved = new Map();
+        this.#resolvedTrackedRanges.set(snapshot, resolved);
+      }
+      resolved.set(id, range);
+      return range;
+    }
+    return snapshot.trackedRanges.find((range) => range.id === id);
+  }
+
   get publishedRevision(): number | undefined {
     return this.published?.snapshot.revision;
   }
@@ -1509,6 +1532,18 @@ export class Editor {
   safeDisplayZoom(): number {
     const zoom = this.rootAttrs?.layout_mode.type === 'paginated' ? this.displayZoom : 1;
     return Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
+  }
+
+  captureSelectionViewportAnchor(revision: number): CapturedViewportAnchor | undefined {
+    return this.#invokeCore((core) => core.capture_selection_viewport_anchor({ value: revision }));
+  }
+
+  captureViewportAnchorAt(revision: number, point: ViewportAnchorPoint): CapturedViewportAnchor | undefined {
+    return this.#invokeCore((core) => core.capture_viewport_anchor_at({ value: revision }, point));
+  }
+
+  resolveViewportAnchor(revision: number, anchor: ViewportAnchor): ViewportAnchorResolution {
+    return this.#invokeCore((core) => core.resolve_viewport_anchor({ value: revision }, anchor));
   }
 
   clientDeltaToLocalDelta(delta: number): number {
@@ -1813,6 +1848,7 @@ export class Editor {
     ) {
       return false;
     }
+    const targets: SurfaceTarget[] = [];
     for (const [page, frame] of bundle.frames) {
       const target = host.targets.get(page);
       if (
@@ -1825,10 +1861,17 @@ export class Editor {
       ) {
         return false;
       }
+      targets.push(target);
     }
-    for (const page of bundle.frames.keys()) {
-      const target = host.targets.get(page);
-      if (!target) return false;
+    const previousRevision = this.published?.snapshot.revision;
+    const nextRevision = bundle.snapshot.revision;
+    if (
+      previousRevision !== nextRevision &&
+      !this.#invokeCore((core) => core.replace_viewport_anchor_presentation({ value: nextRevision }))
+    ) {
+      return false;
+    }
+    for (const target of targets) {
       target.requiredRevision = undefined;
       target.failedRevision = undefined;
     }

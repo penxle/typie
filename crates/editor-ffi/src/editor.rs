@@ -330,6 +330,57 @@ impl Editor {
         self.with_tick(|inner| Ok(inner.editor.tick_through(request_id)?.into_ffi()?))
     }
 
+    pub fn replace_viewport_anchor_presentation(
+        &self,
+        revision: Complex<editor_core::Revision>,
+    ) -> EditorResult<bool> {
+        let revision = revision.from_ffi()?;
+        self.with_inner(|inner| Ok(inner.editor.replace_viewport_anchor_presentation(revision)))
+    }
+
+    pub fn capture_selection_viewport_anchor(
+        &self,
+        revision: Complex<editor_core::Revision>,
+    ) -> EditorResult<Option<Complex<editor_view::CapturedViewportAnchor>>> {
+        let revision = revision.from_ffi()?;
+        self.with_inner(|inner| {
+            Ok(inner
+                .editor
+                .capture_selection_viewport_anchor(revision)
+                .into_ffi()?)
+        })
+    }
+
+    pub fn capture_viewport_anchor_at(
+        &self,
+        revision: Complex<editor_core::Revision>,
+        point: Complex<editor_view::ViewportAnchorPoint>,
+    ) -> EditorResult<Option<Complex<editor_view::CapturedViewportAnchor>>> {
+        let revision = revision.from_ffi()?;
+        let point = point.from_ffi()?;
+        self.with_inner(|inner| {
+            Ok(inner
+                .editor
+                .capture_viewport_anchor_at(revision, point)
+                .into_ffi()?)
+        })
+    }
+
+    pub fn resolve_viewport_anchor(
+        &self,
+        revision: Complex<editor_core::Revision>,
+        anchor: Complex<editor_view::ViewportAnchor>,
+    ) -> EditorResult<Complex<editor_view::ViewportAnchorResolution>> {
+        let revision = revision.from_ffi()?;
+        let anchor = anchor.from_ffi()?;
+        self.with_inner(|inner| {
+            Ok(inner
+                .editor
+                .resolve_viewport_anchor(revision, &anchor)
+                .into_ffi()?)
+        })
+    }
+
     pub fn cursor(&self) -> EditorResult<Option<Complex<editor_view::CursorMetrics>>> {
         self.with_inner(|inner| {
             let state = inner.editor.state();
@@ -1235,6 +1286,34 @@ mod tests {
 
     fn local_theme(editor: &Editor) -> editor_resource::ThemeVariant {
         local_resource(editor).lock().unwrap().theme().variant()
+    }
+
+    #[test]
+    fn viewport_anchor_contract_round_trips_through_ffi() {
+        let (state, _paragraph) = state! {
+            doc { root { paragraph: paragraph { text("anchor") } } }
+            selection: (paragraph, 3)
+        };
+        let editor = make_ffi_editor(state);
+        let revision = editor.inner.lock().unwrap().editor.revision();
+
+        assert!(
+            editor
+                .replace_viewport_anchor_presentation(revision)
+                .unwrap()
+        );
+        let capture = editor
+            .capture_selection_viewport_anchor(revision)
+            .unwrap()
+            .expect("selection anchor must cross the FFI boundary");
+        let resolution = editor
+            .resolve_viewport_anchor(revision, capture.identity)
+            .unwrap();
+
+        assert!(matches!(
+            resolution,
+            editor_view::ViewportAnchorResolution::Resolved { .. }
+        ));
     }
 
     #[test]

@@ -5,23 +5,38 @@ use editor_state::Position;
 use hashbrown::HashMap;
 use rstar::{AABB, RTree, RTreeObject};
 use smallvec::SmallVec;
+use std::sync::{Arc, OnceLock};
 
 use crate::page::{LayoutPage, PageRect};
 use crate::paginate::types::{LayoutContent, LayoutLine, LayoutNode, LayoutTree, SpacingKind};
 
 type LayoutEntryId = usize;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct LayoutIndex {
     tree: LayoutTree,
+    data: Arc<LayoutIndexData>,
+}
+
+#[derive(Debug)]
+pub(crate) struct LayoutIndexData {
     pages: Vec<LayoutPage>,
     entries: Vec<LayoutEntry>,
     boxes_by_node_id: HashMap<Dot, LayoutEntryId>,
+    atoms_by_node_id: HashMap<Dot, LayoutEntryId>,
     scope_by_node: HashMap<Dot, LayoutEntryId>,
     entries_by_node: HashMap<Dot, Vec<LayoutEntryId>>,
     spatial_entries: Vec<SpatialEntry>,
     entries_by_page: Vec<Vec<LayoutEntryId>>,
-    rtree: std::sync::OnceLock<RTree<SpatialEntry>>,
+    rtree: OnceLock<RTree<SpatialEntry>>,
+}
+
+impl std::ops::Deref for LayoutIndex {
+    type Target = LayoutIndexData;
+
+    fn deref(&self) -> &Self::Target {
+        &self.data
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -50,6 +65,7 @@ struct LayoutIndexBuilder<'a> {
     pages: &'a [LayoutPage],
     entries: Vec<LayoutEntry>,
     boxes_by_node_id: HashMap<Dot, LayoutEntryId>,
+    atoms_by_node_id: HashMap<Dot, LayoutEntryId>,
     scope_by_node: HashMap<Dot, LayoutEntryId>,
     entries_by_node: HashMap<Dot, Vec<LayoutEntryId>>,
     ancestors: Vec<Dot>,
@@ -64,6 +80,7 @@ impl LayoutIndex {
             pages,
             entries: Vec::new(),
             boxes_by_node_id: HashMap::new(),
+            atoms_by_node_id: HashMap::new(),
             scope_by_node: HashMap::new(),
             entries_by_node: HashMap::new(),
             ancestors: Vec::new(),
@@ -74,14 +91,17 @@ impl LayoutIndex {
         builder.build_node(&tree.root);
         Self {
             tree,
-            pages: pages.to_vec(),
-            entries: builder.entries,
-            boxes_by_node_id: builder.boxes_by_node_id,
-            scope_by_node: builder.scope_by_node,
-            entries_by_node: builder.entries_by_node,
-            spatial_entries: builder.spatial,
-            entries_by_page: builder.entries_by_page,
-            rtree: std::sync::OnceLock::new(),
+            data: Arc::new(LayoutIndexData {
+                pages: pages.to_vec(),
+                entries: builder.entries,
+                boxes_by_node_id: builder.boxes_by_node_id,
+                atoms_by_node_id: builder.atoms_by_node_id,
+                scope_by_node: builder.scope_by_node,
+                entries_by_node: builder.entries_by_node,
+                spatial_entries: builder.spatial,
+                entries_by_page: builder.entries_by_page,
+                rtree: OnceLock::new(),
+            }),
         }
     }
 
@@ -389,6 +409,13 @@ impl LayoutIndex {
             .flat_map(|ids| ids.iter().map(|&id| &self.entries[id]))
     }
 
+    pub(crate) fn entry_for_content_node(&self, node: &Dot) -> Option<&LayoutEntry> {
+        self.boxes_by_node_id
+            .get(node)
+            .or_else(|| self.atoms_by_node_id.get(node))
+            .map(|&entry_id| &self.entries[entry_id])
+    }
+
     pub(crate) fn direct_child_entries<'a>(
         &'a self,
         node: &'a Dot,
@@ -516,6 +543,7 @@ impl LayoutIndexBuilder<'_> {
             }
             LayoutContent::Atom(atom) => {
                 let id = self.add_entry(node.rect);
+                self.atoms_by_node_id.insert(atom.node, id);
                 self.register_match_node(atom.attachment.parent, id);
             }
         }
@@ -755,6 +783,14 @@ mod tests {
         (root_id, index)
     }
 
+    #[test]
+    fn clone_reuses_derived_index_data() {
+        let (_root, index) = build_index(&logs(&[]), 200.0);
+        let cloned = index.clone();
+
+        assert!(Arc::ptr_eq(&index.data, &cloned.data));
+    }
+
     fn para_doc(text: &str, width: f32) -> (DocLogs, Dot, Dot, LayoutIndex) {
         let root = Dot::ROOT;
         let para = Dot::new(1, 1);
@@ -854,7 +890,8 @@ mod tests {
                     children: vec![LayoutNode {
                         rect,
                         content: LayoutContent::Line(line),
-                    }],
+                    }]
+                    .into(),
                     attachment: None,
                     scope: false,
                 }),

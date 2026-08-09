@@ -91,6 +91,7 @@ function createCore() {
     selection_endpoints: vi.fn(() => void 0),
     selection: vi.fn(() => void 0),
     tracked_ranges: vi.fn<() => TrackedRange[]>(() => []),
+    replace_viewport_anchor_presentation: vi.fn(() => true),
     root_attrs: vi.fn<() => PlainRootNode>(() => ({}) as PlainRootNode),
     cursor: vi.fn(() => void 0),
     root_modifiers: vi.fn(() => []),

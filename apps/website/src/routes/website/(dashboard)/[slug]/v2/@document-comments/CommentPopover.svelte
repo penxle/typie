@@ -10,7 +10,7 @@
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import Trash2Icon from '~icons/lucide/trash-2';
   import XIcon from '~icons/lucide/x';
-  import { canDeleteComment, canManageThread, canUpdateComment, isRootComment } from '$lib/editor-ffi/comments';
+  import { canDeleteComment, canManageThread, canUpdateComment, isRootComment, resolveCommentAnchorRects } from '$lib/editor-ffi/comments';
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { pageRectsToVirtualElement } from '$lib/editor-ffi/geometry';
   import { graphql } from '$mearie';
@@ -49,8 +49,10 @@
   const thread = $derived(threadFragment.data);
   const anchor = $derived(comments.activeAnchor);
   const virtualAnchor = $derived.by(() => {
-    if (!editor || !anchor || anchor.rects.length === 0) return null;
-    return pageRectsToVirtualElement(editor, anchor.rects);
+    if (!editor || !anchor) return null;
+    const snapshot = editor.published?.snapshot;
+    const rects = resolveCommentAnchorRects(anchor, (id) => (snapshot ? editor.trackedRangeForSnapshot(id, snapshot)?.rects : undefined));
+    return rects ? pageRectsToVirtualElement(editor, rects) : null;
   });
 
   let composerDirty = $state(false);

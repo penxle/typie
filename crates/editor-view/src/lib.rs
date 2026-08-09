@@ -29,6 +29,10 @@ pub use paginate::types::ChildAttachment;
 pub use query::interactive::{InteractiveHit, InteractiveRegion};
 pub use query::link::LinkRect;
 pub use query::selection::SelectionEndpoints;
+pub use query::viewport_anchor::{
+    CapturedViewportAnchor, ResolvedViewportAnchor, ViewportAnchor, ViewportAnchorPoint,
+    ViewportAnchorPositionGeometry, ViewportAnchorPresentation, ViewportAnchorResolution,
+};
 pub use query::*;
 pub use table_overlay::TableOverlay;
 pub use view::*;

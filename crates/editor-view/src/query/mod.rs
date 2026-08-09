@@ -14,6 +14,7 @@ pub(crate) mod placeholder;
 pub(crate) mod pointer_style;
 pub(crate) mod segmentation;
 pub(crate) mod selection;
+pub(crate) mod viewport_anchor;
 pub(crate) mod visit;
 
 pub use composition::CompositionRect;

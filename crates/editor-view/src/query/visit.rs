@@ -119,7 +119,7 @@ mod tests {
             content: LayoutContent::Box(LayoutBox {
                 node,
                 style: empty_box_style(),
-                children,
+                children: children.into(),
                 attachment: None,
                 scope: false,
             }),
@@ -287,7 +287,7 @@ mod tests {
             content: LayoutContent::Box(LayoutBox {
                 node: root_id,
                 style,
-                children: vec![line_node(line_id, 10.0, 20.0)],
+                children: vec![line_node(line_id, 10.0, 20.0)].into(),
                 attachment: None,
                 scope: false,
             }),
