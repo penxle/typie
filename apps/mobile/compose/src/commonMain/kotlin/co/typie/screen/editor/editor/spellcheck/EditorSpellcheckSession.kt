@@ -17,11 +17,10 @@ import co.typie.editor.EditorState
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.SelectionOp
-import co.typie.editor.scroll.EditorBringIntoViewBehavior
 import co.typie.editor.scroll.EditorBringIntoViewPolicy
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.EditorBringIntoViewTarget
-import co.typie.editor.scroll.toPageRectsTarget
+import co.typie.editor.scroll.revealTrackedItem
 import co.typie.editor.scroll.updateWithBringIntoView
 import co.typie.screen.editor.editor.selectTrackedRangeMember
 import co.typie.screen.editor.editor.state.EditorOverlayOcclusion
@@ -84,16 +83,10 @@ internal fun rememberEditorSpellcheckSession(
     bottomOcclusion = value.coerceAtLeast(0f)
   }
 
-  fun requestRangeIntoView(id: String?) {
+  suspend fun requestRangeIntoView(id: String?) {
     val activeEditor = editor ?: return
     if (id == null) return
-    bringIntoViewRequests.requestForState(
-      state = activeEditor.appliedState,
-      policy = EditorBringIntoViewPolicy.Reveal,
-      behavior = EditorBringIntoViewBehavior.Smooth,
-    ) {
-      trackedRanges.firstOrNull { it.id == id }?.rects?.toPageRectsTarget()
-    }
+    activeEditor.revealTrackedItem(bringIntoViewRequests, id)
   }
 
   suspend fun updateActiveRangeDecoration() {
@@ -150,7 +143,7 @@ internal fun rememberEditorSpellcheckSession(
         } else {
           updateCompactOverlayHeightForRange(activeModel.activeRangeId)
         }
-        requestRangeIntoView(activeModel.activeRangeId)
+        scope.launch { requestRangeIntoView(activeModel.activeRangeId) }
         if (results.isEmpty()) {
           toast.show(ToastType.Success, "맞춤법 오류가 없습니다.")
         }

@@ -14,9 +14,8 @@ import co.typie.editor.DocumentEditingSession
 import co.typie.editor.Editor
 import co.typie.editor.EditorState
 import co.typie.editor.ext.isCollapsed
-import co.typie.editor.scroll.EditorBringIntoViewBehavior
-import co.typie.editor.scroll.EditorBringIntoViewPolicy
 import co.typie.editor.scroll.EditorBringIntoViewRequests
+import co.typie.editor.scroll.revealTrackedItem
 import co.typie.storage.Preference
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastType
@@ -383,17 +382,11 @@ private class FindReplaceSessionController {
     )
   }
 
-  private fun requestActiveRangeIntoView(
+  private suspend fun requestActiveRangeIntoView(
     editor: Editor,
     bringIntoViewRequests: EditorBringIntoViewRequests,
   ) {
-    bringIntoViewRequests.requestForState(
-      state = editor.appliedState,
-      policy = EditorBringIntoViewPolicy.Reveal,
-      behavior = EditorBringIntoViewBehavior.Smooth,
-    ) {
-      trackedRanges.searchMatchScrollTarget(activeMatchId())
-    }
+    activeMatchId()?.let { id -> editor.revealTrackedItem(bringIntoViewRequests, id) }
   }
 }
 

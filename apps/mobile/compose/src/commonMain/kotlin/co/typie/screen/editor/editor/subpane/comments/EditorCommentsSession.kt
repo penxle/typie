@@ -15,10 +15,9 @@ import co.typie.editor.Editor
 import co.typie.editor.EditorState
 import co.typie.editor.ffi.StableSelection
 import co.typie.editor.ffi.TrackedRange
-import co.typie.editor.scroll.EditorBringIntoViewBehavior
-import co.typie.editor.scroll.EditorBringIntoViewPolicy
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.EditorBringIntoViewTarget
+import co.typie.editor.scroll.revealTrackedItem
 import co.typie.screen.editor.editor.selectTrackedRangeMember
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastType
@@ -204,13 +203,9 @@ internal fun rememberEditorCommentsSession(
       return@LaunchedEffect
     }
     if (editor == null) return@LaunchedEffect
-    bringIntoViewRequests.requestForVersion(
-      target = activeThreadScrollTarget,
-      version = editorState.version,
-      policy = EditorBringIntoViewPolicy.Reveal,
-      behavior = EditorBringIntoViewBehavior.Smooth,
-    )
-    lastRequestedActivationRevision = activeThreadActivationRevision
+    if (editor.revealTrackedItem(bringIntoViewRequests, activeThreadScrollTarget.id) != null) {
+      lastRequestedActivationRevision = activeThreadActivationRevision
+    }
   }
   LaunchedEffect(sheetActive, collapsedSelectionHead, collapsedCommentRange?.id) {
     if (
@@ -279,10 +274,8 @@ internal fun rememberEditorCommentsSession(
 
 internal fun List<TrackedRange>.commentThreadScrollTarget(
   threadId: String?
-): EditorBringIntoViewTarget? {
+): EditorBringIntoViewTarget.TrackedItem? {
   if (threadId == null) return null
-  return this.firstOrNull {
-      it.id == threadId && it.group == ACTIVE_COMMENT_RANGE_GROUP && it.rects.isNotEmpty()
-    }
+  return this.firstOrNull { it.id == threadId && it.group == ACTIVE_COMMENT_RANGE_GROUP }
     ?.let { EditorBringIntoViewTarget.TrackedItem(it.id) }
 }

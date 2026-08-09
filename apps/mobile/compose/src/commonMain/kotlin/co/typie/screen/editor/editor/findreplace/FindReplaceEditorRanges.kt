@@ -7,8 +7,6 @@ import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.TrackedRange
 import co.typie.editor.ffi.TrackedRangeOp
-import co.typie.editor.scroll.EditorBringIntoViewTarget
-import co.typie.editor.scroll.toPageRectsTarget
 
 internal const val SEARCH_MATCH_RANGE_GROUP = "search-match"
 internal const val ACTIVE_SEARCH_MATCH_RANGE_GROUP = "search-match-active"
@@ -158,8 +156,3 @@ internal suspend fun Editor.replaceAllFindReplaceRanges(
     }
     ?.commandOutcomes
     ?.none { it is CommandOutcome.Rejected } == true
-
-internal fun List<TrackedRange>.searchMatchScrollTarget(id: String?): EditorBringIntoViewTarget? {
-  if (id == null) return null
-  return searchMatchRanges().firstOrNull { it.id == id }?.rects?.toPageRectsTarget()
-}

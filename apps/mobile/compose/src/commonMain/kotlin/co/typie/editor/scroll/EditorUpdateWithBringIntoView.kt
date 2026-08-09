@@ -5,6 +5,7 @@ import co.typie.editor.EditorRequestScope
 import co.typie.editor.EditorUpdate
 import co.typie.editor.beforePublish
 import co.typie.editor.ffi.Message
+import co.typie.editor.ffi.ViewOp
 
 internal interface EditorBringIntoViewUpdateScope : EditorRequestScope {
   fun bringIntoView(
@@ -92,3 +93,16 @@ internal suspend fun Editor.updateWithBringIntoView(
     ?.let { bringIntoViewRequests.awaitPresentation(it) }
   return update
 }
+
+internal suspend fun Editor.revealTrackedItem(
+  bringIntoViewRequests: EditorBringIntoViewRequests,
+  id: String,
+): EditorUpdate? =
+  updateWithBringIntoView(bringIntoViewRequests) {
+    enqueue(Message.View(ViewOp.ExpandFoldsForTrackedRange(id)))
+    bringIntoView(
+      target = EditorBringIntoViewTarget.TrackedItem(id),
+      policy = EditorBringIntoViewPolicy.Reveal,
+      behavior = EditorBringIntoViewBehavior.Smooth,
+    )
+  }

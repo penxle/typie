@@ -13,10 +13,8 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.editor.Editor
 import co.typie.editor.EditorState
-import co.typie.editor.scroll.EditorBringIntoViewBehavior
-import co.typie.editor.scroll.EditorBringIntoViewPolicy
 import co.typie.editor.scroll.EditorBringIntoViewRequests
-import co.typie.editor.scroll.toPageRectsTarget
+import co.typie.editor.scroll.revealTrackedItem
 import co.typie.graphql.AiFeedback_LiteraryAnalysisDocumentStream_Subscription
 import co.typie.graphql.Apollo
 import co.typie.screen.editor.editor.selectTrackedRangeMember
@@ -73,16 +71,10 @@ internal fun rememberEditorAiFeedbackSession(
     bottomOcclusion = value.coerceAtLeast(0f)
   }
 
-  fun requestRangeIntoView(id: String?) {
+  suspend fun requestRangeIntoView(id: String?) {
     val activeEditor = editor ?: return
     if (id == null) return
-    bringIntoViewRequests.requestForState(
-      state = activeEditor.appliedState,
-      policy = EditorBringIntoViewPolicy.Reveal,
-      behavior = EditorBringIntoViewBehavior.Smooth,
-    ) {
-      trackedRanges.firstOrNull { it.id == id }?.rects?.toPageRectsTarget()
-    }
+    activeEditor.revealTrackedItem(bringIntoViewRequests, id)
   }
 
   suspend fun updateActiveRangeDecoration() {

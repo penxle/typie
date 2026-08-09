@@ -1057,6 +1057,34 @@ impl View {
         true
     }
 
+    pub fn expand_folds(&mut self, state: &State, nodes: impl IntoIterator<Item = Dot>) -> bool {
+        let mut changed = Vec::new();
+        {
+            let view = state.view();
+            for node in nodes {
+                if changed.contains(&node)
+                    || self.view_state.fold_expanded(node)
+                    || !view
+                        .node(node)
+                        .is_some_and(|node_view| matches!(node_view.node(), Node::Fold(_)))
+                {
+                    continue;
+                }
+                changed.push(node);
+            }
+        }
+        if changed.is_empty() {
+            return false;
+        }
+        for node in changed {
+            self.view_state.fold_states.insert(node, true);
+            self.evict_measure_for(state, node);
+        }
+        self.compute(state);
+        self.view_state.preferred_x = None;
+        true
+    }
+
     pub fn clear_preferred_x(&mut self) {
         self.view_state.preferred_x = None;
     }

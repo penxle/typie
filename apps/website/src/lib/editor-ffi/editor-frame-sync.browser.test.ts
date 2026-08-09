@@ -160,6 +160,29 @@ function longDoc(): PlainDoc {
   };
 }
 
+function foldedTrackedRangeDoc(targetText: string): PlainDoc {
+  return {
+    root: entry(
+      { type: 'root', layout_mode: { type: 'continuous', max_width: PAGE_WIDTH } },
+      [
+        ...Array.from({ length: 12 }, (_, index) =>
+          entry({ type: 'paragraph' }, [entry({ type: 'text', text: `preceding paragraph ${index}` })]),
+        ),
+        entry({ type: 'fold' }, [
+          entry({ type: 'fold_title' }, [entry({ type: 'text', text: 'Collapsed section' })]),
+          entry({ type: 'fold_content' }, [entry({ type: 'paragraph' }, [entry({ type: 'text', text: targetText })])]),
+        ]),
+        entry({ type: 'paragraph' }),
+      ],
+      {
+        block_gap: { type: 'block_gap', value: 80 },
+        font_size: { type: 'font_size', value: 1000 },
+        line_height: { type: 'line_height', value: 150 },
+      } as never,
+    ),
+  };
+}
+
 function paginatedDocWithPageBreaks(pageCount: number, linkedLastPage?: { text: string; href: string }): PlainDoc {
   const pageHeight = 221;
   return {
@@ -568,6 +591,40 @@ function expectActualCanvas(editor: Editor, pageIndex: number, requirePaintedPix
 }
 
 describe('web editor frame synchronization', () => {
+  it.each([
+    { mode: 'editable', readOnly: false },
+    { mode: 'read-only', readOnly: true },
+  ])('expands a collapsed fold before revealing a tracked item in $mode mode', async ({ readOnly }) => {
+    const errorId = `folded-error-${crypto.randomUUID()}`;
+    const targetText = 'folded tracked target';
+    const { editor, scrollRoot } = await mountEditor(foldedTrackedRangeDoc(targetText), { readOnly });
+    const prose = editor.proseText();
+    const start = prose.indexOf(targetText);
+    expect(start).toBeGreaterThanOrEqual(0);
+    const selection = editor.proseToSelection(start, start + targetText.length);
+    expect(selection).toBeDefined();
+    if (!selection) throw new Error('Expected the folded prose target to resolve');
+
+    editor.setSpellcheckErrors([{ id: errorId, selection, context: targetText, corrections: [], explanation: '' }]);
+    await expect.poll(() => editor.appliedSnapshot.trackedRanges.some((range) => range.id === errorId)).toBe(true);
+    await waitForPresentation(editor);
+    expect(editor.trackedRangeForSnapshot(errorId, editor.appliedSnapshot)?.rects).toEqual([]);
+
+    editor.setActiveSpellcheckError(errorId);
+
+    await expect.poll(() => editor.trackedRangeForSnapshot(errorId, editor.appliedSnapshot)?.rects.length ?? 0).toBeGreaterThan(0);
+    await waitForPresentation(editor);
+    await vi.waitFor(() => {
+      const published = editor.published;
+      const range = published && editor.trackedRangeForSnapshot(errorId, published.snapshot);
+      const targetRect = range && pageRectsToClientRect(editor, range.rects);
+      const viewport = scrollRoot.getBoundingClientRect();
+      expect(targetRect).not.toBeNull();
+      expect(targetRect?.top).toBeGreaterThanOrEqual(viewport.top - COORDINATE_TOLERANCE_PX);
+      expect(targetRect?.bottom).toBeLessThanOrEqual(viewport.bottom + COORDINATE_TOLERANCE_PX);
+    });
+  });
+
   it('presents ordinary page overlays without waiting for IntersectionObserver delivery', async () => {
     vi.stubGlobal('IntersectionObserver', SilentIntersectionObserver);
     try {
