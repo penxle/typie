@@ -1,13 +1,103 @@
-import { arrow, autoUpdate, computePosition, flip, offset, shift } from '@floating-ui/dom';
+import { arrow, autoUpdate, computePosition, detectOverflow, flip, offset, shift } from '@floating-ui/dom';
 import { on } from 'svelte/events';
 import { match } from 'ts-pattern';
-import type { FloatingElement, Middleware, OffsetOptions, Placement, ReferenceElement } from '@floating-ui/dom';
+import type {
+  Derivable,
+  DetectOverflowOptions,
+  FloatingElement,
+  Middleware,
+  MiddlewareState,
+  OffsetOptions,
+  Placement,
+  Rect,
+  ReferenceElement,
+  SideObject,
+} from '@floating-ui/dom';
 import type { Action } from 'svelte/action';
 
 export type ReferenceAction = Action<ReferenceElement>;
 export type FloatingAction = Action<FloatingElement, { appendTo?: Element | null } | undefined>;
 export type ArrowAction = Action<HTMLElement>;
 export type UpdatePosition = () => Promise<void>;
+
+type PlacementRect = Pick<Rect, 'x' | 'y' | 'width' | 'height'>;
+type PlacementSize = Pick<Rect, 'width' | 'height'>;
+
+type CenteredFallbackInput = {
+  reference: PlacementRect;
+  floating: PlacementSize;
+  clippingRect: PlacementRect;
+  gap: number;
+};
+
+type CenterWhenReferenceDoesNotFitOptions = {
+  gap: number;
+  overflow?: DetectOverflowOptions | Derivable<DetectOverflowOptions>;
+};
+
+type CenterWhenReferenceDoesNotFitMiddleware = {
+  captureReferenceBounds: Middleware;
+  centerWhenNeitherSideFits: Middleware;
+};
+
+const REFERENCE_BOUNDS_MIDDLEWARE = 'referenceBoundsForCenteredFallback';
+
+export function resolveFloatingCenteredFallback({
+  reference,
+  floating,
+  clippingRect,
+  gap,
+}: CenteredFallbackInput): { x: number; y: number } | null {
+  const requiredSideSpace = floating.height + gap;
+  const fitsAbove = reference.y - clippingRect.y >= requiredSideSpace;
+  const fitsBelow = clippingRect.y + clippingRect.height - (reference.y + reference.height) >= requiredSideSpace;
+  if (fitsAbove || fitsBelow) return null;
+
+  return {
+    x: Math.max(clippingRect.x, clippingRect.x + (clippingRect.width - floating.width) / 2),
+    y: Math.max(clippingRect.y, clippingRect.y + (clippingRect.height - floating.height) / 2),
+  };
+}
+
+function clippingRectFromOverflow(state: MiddlewareState, overflow: SideObject): PlacementRect {
+  return {
+    x: state.x + overflow.left,
+    y: state.y + overflow.top,
+    width: state.rects.floating.width - overflow.left - overflow.right,
+    height: state.rects.floating.height - overflow.top - overflow.bottom,
+  };
+}
+
+export function createCenterWhenReferenceDoesNotFitMiddleware({
+  gap,
+  overflow: overflowOptions,
+}: CenterWhenReferenceDoesNotFitOptions): CenterWhenReferenceDoesNotFitMiddleware {
+  return {
+    captureReferenceBounds: {
+      name: REFERENCE_BOUNDS_MIDDLEWARE,
+      async fn({ elements, platform, strategy }) {
+        const rects = await platform.getElementRects({ reference: elements.reference, floating: elements.floating, strategy });
+        return { data: { reference: rects.reference } };
+      },
+    },
+    centerWhenNeitherSideFits: {
+      name: 'centerWhenReferenceDoesNotFit',
+      async fn(state) {
+        const reference = (state.middlewareData[REFERENCE_BOUNDS_MIDDLEWARE] as { reference?: PlacementRect } | undefined)?.reference;
+        if (!reference) return {};
+
+        const overflow = await detectOverflow(state, overflowOptions);
+        const position = resolveFloatingCenteredFallback({
+          reference,
+          floating: state.rects.floating,
+          clippingRect: clippingRectFromOverflow(state, overflow),
+          gap,
+        });
+        return position ?? {};
+      },
+    },
+  };
+}
 
 type CreateFloatingActionsOptions = {
   placement: Placement;

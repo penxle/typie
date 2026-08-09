@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { hide, inline, shift, size } from '@floating-ui/dom';
+  import { flip, hide, inline, shift, size } from '@floating-ui/dom';
   import { flex } from '@typie/styled-system/patterns';
-  import { createFloatingActions } from '@typie/ui/actions';
+  import { createCenterWhenReferenceDoesNotFitMiddleware, createFloatingActions } from '@typie/ui/actions';
   import { Icon } from '@typie/ui/components';
   import { Toast } from '@typie/ui/notification';
   import ArrowRightIcon from '~icons/lucide/arrow-right';
@@ -26,12 +26,23 @@
   });
 
   const scroller = $derived(editor.scrollContainerEl);
+  const centeredFallback = createCenterWhenReferenceDoesNotFitMiddleware({
+    gap: 4,
+    overflow: () => ({ boundary: scroller ?? undefined, padding: 8 }),
+  });
 
   const { anchor, floating } = createFloatingActions({
     placement: 'top',
     offset: 4,
     middleware: [
+      centeredFallback.captureReferenceBounds,
       inline(),
+      flip({
+        get boundary() {
+          return scroller ?? undefined;
+        },
+        padding: 8,
+      }),
       shift({
         get boundary() {
           return scroller ?? undefined;
@@ -49,6 +60,7 @@
           });
         },
       }),
+      centeredFallback.centerWhenNeitherSideFits,
       hide({
         strategy: 'escaped',
         get boundary() {
