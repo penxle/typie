@@ -24,6 +24,7 @@ import co.typie.editor.ffi.NodeOp
 import co.typie.editor.ffi.PlainNode
 import co.typie.editor.ffi.Rect
 import co.typie.editor.ffi.StateField
+import co.typie.editor.scroll.EditorBringIntoViewBehavior
 import co.typie.editor.scroll.EditorBringIntoViewPolicy
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.EditorBringIntoViewTarget
@@ -218,6 +219,7 @@ class DefaultEditorAttachmentImporterTest {
       EditorBringIntoViewRequests.Request(
         target = EditorBringIntoViewTarget.CurrentSelectionHead,
         policy = EditorBringIntoViewPolicy.Typewriter,
+        behavior = EditorBringIntoViewBehavior.Instant,
       ),
       bringIntoViewRequests.activateForVersion(editor.appliedState.version),
     )

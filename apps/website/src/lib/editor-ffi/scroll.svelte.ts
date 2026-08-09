@@ -17,14 +17,16 @@ import type { VerticalSpan } from './required-surface-pages';
 import type { EditorVisibleArea, RevealTargetSpan, ScrollContainerMetrics } from './scroll';
 import type { EditorViewportAnchorGeometry, EditorViewportAnchorLayout, EditorViewportAnchorRevealOrigin } from './viewport-anchor';
 
-export type EditorScrollRevealPolicy = 'cursor_guard' | 'pointer_cursor_guard' | 'typewriter' | 'result_reveal';
+export type EditorScrollRevealPolicy = 'cursor_guard' | 'pointer_cursor_guard' | 'typewriter' | 'reveal';
 type ResolvedEditorScrollRevealPolicy = Exclude<EditorScrollRevealPolicy, 'pointer_cursor_guard'>;
+export type EditorScrollBehavior = 'instant' | 'smooth';
 
 export type EditorScrollIntoViewTarget = { type: 'current_selection_head' } | { type: 'tracked_item'; id: string };
 
 export type EditorScrollIntoViewOptions = {
   target: EditorScrollIntoViewTarget;
   policy: EditorScrollRevealPolicy;
+  behavior?: EditorScrollBehavior;
 };
 
 export type EditorScrollIntentResult = { type: 'unresolved' } | { type: 'no_scroll' } | { type: 'scroll_to'; y: number };
@@ -38,7 +40,7 @@ type TypewriterPreferences = {
 };
 
 export type EditorBringIntoViewRequest = EditorScrollIntoViewOptions & {
-  behavior: ScrollBehavior;
+  behavior: EditorScrollBehavior;
   targetRevision: number | null;
   presentation: Promise<void>;
   completePresentation: () => void;
@@ -68,12 +70,12 @@ function sanitizeTypewriterPosition(position: number | undefined): number {
   return typeof position === 'number' && Number.isFinite(position) ? Math.max(0, Math.min(1, position)) : 0.5;
 }
 
-function createBringIntoViewRequest({ target, policy }: EditorScrollIntoViewOptions): EditorBringIntoViewRequest {
+function createBringIntoViewRequest({ target, policy, behavior = 'instant' }: EditorScrollIntoViewOptions): EditorBringIntoViewRequest {
   const { promise: presentation, resolve } = Promise.withResolvers<undefined>();
   return {
     target,
     policy,
-    behavior: policy === 'result_reveal' ? 'smooth' : 'instant',
+    behavior,
     targetRevision: null,
     presentation,
     completePresentation: () => resolve(undefined),
@@ -435,7 +437,7 @@ export class EditorScrollScope {
           position: sanitizeTypewriterPosition(this.#typewriterPreferences().position),
         });
       }
-      case 'result_reveal': {
+      case 'reveal': {
         return resolveGuardedScrollTop({
           ...metrics,
           visibleArea: this.visibleArea,
@@ -532,12 +534,12 @@ export class EditorScrollScope {
     });
   }
 
-  scrollIntoView({ target, policy }: EditorScrollIntoViewOptions, admission?: EditorRequest): Promise<void> | undefined {
+  scrollIntoView(options: EditorScrollIntoViewOptions, admission?: EditorRequest): Promise<void> | undefined {
     if (this.#destroyed) {
       return;
     }
 
-    const request = this.declare({ target, policy });
+    const request = this.declare(options);
     if (admission) {
       admission.beforePublish(
         (update) => {

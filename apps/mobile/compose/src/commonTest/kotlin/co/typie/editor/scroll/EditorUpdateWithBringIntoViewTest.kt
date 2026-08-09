@@ -69,6 +69,7 @@ class EditorUpdateWithBringIntoViewTest {
             bringIntoView(
               EditorBringIntoViewTarget.CurrentSelectionHead,
               policy = EditorBringIntoViewPolicy.Typewriter,
+              behavior = EditorBringIntoViewBehavior.Smooth,
             )
           }
         )
@@ -79,6 +80,7 @@ class EditorUpdateWithBringIntoViewTest {
       val request = assertNotNull(requests.activateForVersion(version = 1L))
       assertTrue(request.target == EditorBringIntoViewTarget.CurrentSelectionHead)
       assertEquals(EditorBringIntoViewPolicy.Typewriter, request.policy)
+      assertEquals(EditorBringIntoViewBehavior.Smooth, request.behavior)
     }
 
   @Test

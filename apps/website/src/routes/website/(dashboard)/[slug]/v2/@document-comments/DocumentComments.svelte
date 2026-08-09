@@ -259,7 +259,7 @@
     }
     activeThreadId = id;
     activeAnchor = anchor;
-    ctx.scroll?.scrollIntoView({ target: { type: 'tracked_item', id }, policy: 'result_reveal' });
+    ctx.scroll?.scrollIntoView({ target: { type: 'tracked_item', id }, policy: 'reveal', behavior: 'smooth' });
   }
 
   function takeFocusReturnSession(): FocusReturnSession | null {

@@ -20,6 +20,7 @@ import co.typie.editor.ffi.ViewportAnchor
 import co.typie.editor.ffi.ViewportAnchorPoint
 import co.typie.editor.ffi.ViewportAnchorResolution
 import co.typie.editor.runtime.EditorBoundsInContainer
+import co.typie.editor.scroll.EditorBringIntoViewBehavior
 import co.typie.editor.scroll.EditorBringIntoViewPolicy
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.EditorBringIntoViewTarget
@@ -60,7 +61,12 @@ class EditorSurfacePreparationTest {
     val measuredFrame = selectionFrame(version = 2L, rect = measuredRect)
     val target = EditorBringIntoViewTarget.CurrentSelectionHead
     val policy = EditorBringIntoViewPolicy.CursorGuard
-    val request = EditorBringIntoViewRequests.Request(target = target, policy = policy)
+    val request =
+      EditorBringIntoViewRequests.Request(
+        target = target,
+        policy = policy,
+        behavior = EditorBringIntoViewBehavior.Instant,
+      )
     val provisionalScroll =
       (resolveEditorSurfacePreparation(
             editor = Editor(FakeFfiEditor(), this, StandardTestDispatcher(testScheduler)),
@@ -148,7 +154,8 @@ class EditorSurfacePreparationTest {
           EditorBringIntoViewTarget.PageRects(
             listOf(PageRect(pageIdx = 2, rect = Rect(x = 0f, y = 100f, width = 1f, height = 20f)))
           ),
-        policy = EditorBringIntoViewPolicy.ResultReveal,
+        policy = EditorBringIntoViewPolicy.Reveal,
+        behavior = EditorBringIntoViewBehavior.Instant,
       )
 
     val uncorrected =

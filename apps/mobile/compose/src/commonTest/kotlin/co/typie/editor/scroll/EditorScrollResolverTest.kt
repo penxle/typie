@@ -542,7 +542,7 @@ class EditorScrollResolverTest {
               PageRect(pageIdx = 1, rect = FfiRect(x = 0f, y = 20f, width = 40f, height = 20f)),
             )
           ),
-        policy = EditorBringIntoViewPolicy.ResultReveal,
+        policy = EditorBringIntoViewPolicy.Reveal,
         currentScroll = 0f,
       )
 
@@ -550,7 +550,7 @@ class EditorScrollResolverTest {
   }
 
   @Test
-  fun `page rects result reveal top-aligns an oversized target below the viewport`() {
+  fun `page rects reveal top-aligns an oversized target below the viewport`() {
     val frame =
       frame(
         state =
@@ -570,7 +570,7 @@ class EditorScrollResolverTest {
               PageRect(pageIdx = 0, rect = FfiRect(x = 0f, y = 500f, width = 40f, height = 400f))
             )
           ),
-        policy = EditorBringIntoViewPolicy.ResultReveal,
+        policy = EditorBringIntoViewPolicy.Reveal,
         currentScroll = 0f,
       )
 

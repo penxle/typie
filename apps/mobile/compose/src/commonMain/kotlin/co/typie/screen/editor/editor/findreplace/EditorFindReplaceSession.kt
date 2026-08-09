@@ -14,6 +14,7 @@ import co.typie.editor.DocumentEditingSession
 import co.typie.editor.Editor
 import co.typie.editor.EditorState
 import co.typie.editor.ext.isCollapsed
+import co.typie.editor.scroll.EditorBringIntoViewBehavior
 import co.typie.editor.scroll.EditorBringIntoViewPolicy
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.storage.Preference
@@ -388,7 +389,8 @@ private class FindReplaceSessionController {
   ) {
     bringIntoViewRequests.requestForState(
       state = editor.appliedState,
-      policy = EditorBringIntoViewPolicy.ResultReveal,
+      policy = EditorBringIntoViewPolicy.Reveal,
+      behavior = EditorBringIntoViewBehavior.Smooth,
     ) {
       trackedRanges.searchMatchScrollTarget(activeMatchId())
     }

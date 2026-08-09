@@ -21,7 +21,11 @@ class EditorBringIntoViewRequestsTest {
     val state = EditorState.Initial.copy(version = 11L, selectionHitRects = pageRectsTarget.rects)
 
     assertTrue(
-      requests.requestForState(state, policy = EditorBringIntoViewPolicy.ResultReveal) {
+      requests.requestForState(
+        state,
+        policy = EditorBringIntoViewPolicy.Reveal,
+        behavior = EditorBringIntoViewBehavior.Smooth,
+      ) {
         selectionHitRects.toPageRectsTarget()
       }
     )
@@ -29,18 +33,33 @@ class EditorBringIntoViewRequestsTest {
     assertNull(requests.activateForVersion(version = 10L))
     val request = requests.activateForVersion(version = 11L)
     assertTrue(request?.target == pageRectsTarget)
-    assertTrue(request?.policy == EditorBringIntoViewPolicy.ResultReveal)
+    assertTrue(request?.policy == EditorBringIntoViewPolicy.Reveal)
     assertTrue(request?.behavior == EditorBringIntoViewBehavior.Smooth)
   }
 
   @Test
-  fun `result reveal derives smooth behavior`() {
+  fun `request behavior defaults to instant independently from reveal policy`() {
     val requests = EditorBringIntoViewRequests()
 
     requests.requestForVersion(
       target = pageRectsTarget,
       version = 11L,
-      policy = EditorBringIntoViewPolicy.ResultReveal,
+      policy = EditorBringIntoViewPolicy.Reveal,
+    )
+
+    val request = requests.activateForVersion(version = 11L)
+    assertTrue(request?.behavior == EditorBringIntoViewBehavior.Instant)
+  }
+
+  @Test
+  fun `request accepts smooth behavior independently from reveal policy`() {
+    val requests = EditorBringIntoViewRequests()
+
+    requests.requestForVersion(
+      target = pageRectsTarget,
+      version = 11L,
+      policy = EditorBringIntoViewPolicy.Reveal,
+      behavior = EditorBringIntoViewBehavior.Smooth,
     )
 
     val request = requests.activateForVersion(version = 11L)
@@ -100,8 +119,7 @@ class EditorBringIntoViewRequestsTest {
         1L,
         EditorBringIntoViewPolicy.CursorGuard,
       )
-    val current =
-      requests.requestForVersion(pageRectsTarget, 2L, EditorBringIntoViewPolicy.ResultReveal)
+    val current = requests.requestForVersion(pageRectsTarget, 2L, EditorBringIntoViewPolicy.Reveal)
 
     assertTrue(previous.presentation.isCompleted)
     assertSame(current, requests.activateForVersion(version = 2L))
@@ -115,7 +133,7 @@ class EditorBringIntoViewRequestsTest {
         EditorBringIntoViewTarget.CurrentSelectionHead,
         EditorBringIntoViewPolicy.CursorGuard,
       )
-    val current = requests.declare(pageRectsTarget, EditorBringIntoViewPolicy.ResultReveal)
+    val current = requests.declare(pageRectsTarget, EditorBringIntoViewPolicy.Reveal)
 
     assertFalse(requests.bind(previous, version = 1L))
     assertTrue(requests.bind(current, version = 2L))
@@ -129,7 +147,7 @@ class EditorBringIntoViewRequestsTest {
       requests.requestForVersion(
         pageRectsTarget,
         version = 2L,
-        policy = EditorBringIntoViewPolicy.ResultReveal,
+        policy = EditorBringIntoViewPolicy.Reveal,
       )
 
     assertNull(requests.activateForVersion(version = 3L))
