@@ -22,14 +22,29 @@
     pattern: { theme: string; count: number } | null;
     priority: { rank: number; total: number; body: string } | null;
     expanded: boolean;
+    locked: boolean;
+    // 표시 회차 — 재열기 가능 여부(이번 회차 닫힘)의 판정 축이다.
+    round: number;
+    // 마지막 리뷰에서 새로 생긴 피드백 — 이전 회차 카드가 존재하는 세션에서만 컬럼이 켠다(첫 리뷰는 전부
+    // 신규라 뱃지가 소음이 된다).
+    isNew?: boolean;
     onToggle: () => void;
   };
 
-  const { thread, comments, quote, pattern, priority, expanded, onToggle }: Props = $props();
+  const { thread, comments, quote, pattern, priority, expanded, locked, round, isNew = false, onToggle }: Props = $props();
 
+  // 닫힘(작가가 접음)·해소·철회(재리뷰 처분)는 조작면과 흐림 처리를 공유한다 — 되돌리기는 닫힘만의 몫이다.
+  const settled = $derived(thread.state !== 'open');
   const closed = $derived(thread.state === 'closed');
+  // 다시 열기는 이번 회차에 닫은 카드만 — 과거 회차 닫힘의 재열기는 "이동은 재리뷰 시에만" 규칙 위반이고,
+  // 옛 좌표 스레드가 열린 모드로 와 마크가 어긋난 자리에 그어진다.
+  const reopenable = $derived(closed && thread.reviewRound === round);
   const snippet = $derived(thread.body ?? '');
-  const meta = $derived(comments.length > 0 ? `댓글 ${comments.length}` : '');
+  // 빈 본문 코멘트는 그리지 않는다 — 아바타와 시각만 남은 껍데기 줄이 대화에 끼어들면 안 된다.
+  const shownComments = $derived(comments.filter((comment) => comment.body.trim().length > 0));
+  const meta = $derived(shownComments.length > 0 ? `댓글 ${shownComments.length}` : '');
+
+  const STATE_LABELS = { closed: '닫힘', resolved: '해소됨', withdrawn: '철회됨' };
 
   const authorLabel = (comment: Comment) => (comment.author === 'ai' ? 'AI' : '나');
 
@@ -82,8 +97,8 @@
       tone: {
         active: { borderColor: 'border.brand', backgroundColor: 'surface.default', boxShadow: 'medium' },
         open: { borderColor: 'border.default', backgroundColor: 'surface.default', boxShadow: 'small' },
-        closed: { borderColor: 'border.subtle', backgroundColor: 'surface.subtle' },
-        closedActive: { borderColor: 'border.subtle', backgroundColor: 'surface.subtle' },
+        settled: { borderColor: 'border.subtle', backgroundColor: 'surface.subtle' },
+        settledActive: { borderColor: 'border.subtle', backgroundColor: 'surface.subtle' },
       },
       clickable: { true: { cursor: 'pointer' }, false: {} },
     },
@@ -106,15 +121,66 @@
     variants: {
       tone: {
         open: { backgroundColor: 'accent.brand.subtle', color: 'text.brand' },
-        closed: { backgroundColor: 'surface.muted', color: 'text.faint' },
+        settled: { backgroundColor: 'surface.muted', color: 'text.faint' },
       },
       active: { true: {}, false: {} },
     },
     // 활성 반전도 계열을 따른다 — 레일 칩(ManuscriptView railChipRecipe)과 같은 규칙이다.
     compoundVariants: [
       { tone: 'open', active: true, css: { backgroundColor: 'accent.brand.default', color: 'text.bright' } },
-      { tone: 'closed', active: true, css: { backgroundColor: 'border.strong', color: 'text.bright' } },
+      { tone: 'settled', active: true, css: { backgroundColor: 'border.strong', color: 'text.bright' } },
     ],
+  });
+
+  // 헤더 칩의 공통 치수 — 상태 칩과 회차 뱃지가 같은 형태로 나란히 선다.
+  const chipBase = css.raw({
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    flex: 'none',
+    paddingX: '8px',
+    paddingY: '2px',
+    borderWidth: '1px',
+    borderRadius: 'full',
+    fontSize: '11px',
+    fontWeight: 'semibold',
+  });
+
+  // 신규 뱃지 — 마지막 리뷰에서 새로 생긴 피드백의 표지다. 몇 회차 출신인지는 표기하지 않는다(중요 정보가
+  // 아니다 — 오너 확정). 상태 칩과 무게가 갈리도록 테두리 없는 소형 태그로, 축 라벨 오른쪽에 붙는다.
+  const newBadgeClass = css({
+    flex: 'none',
+    paddingX: '5px',
+    paddingY: '1px',
+    borderRadius: '4px',
+    backgroundColor: 'accent.brand.subtle',
+    fontSize: '10px',
+    fontWeight: 'semibold',
+    color: 'text.brand',
+  });
+
+  // 상태 칩 — 세 상태가 같은 치수·형태·회색조를 쓴다. 해소도 튀지 않는다: 종결 상태끼리 무게가 갈릴 이유가
+  // 없다(오너 확정 — 강조는 신규 뱃지의 몫이다).
+  const stateChipRecipe = cva({
+    base: chipBase,
+    variants: {
+      state: {
+        closed: { borderColor: 'border.default', backgroundColor: 'surface.muted', color: 'text.subtle' },
+        resolved: { borderColor: 'border.default', backgroundColor: 'surface.muted', color: 'text.subtle' },
+        withdrawn: { borderColor: 'border.default', backgroundColor: 'surface.muted', color: 'text.subtle' },
+      },
+    },
+  });
+
+  const stateDotRecipe = cva({
+    base: { size: '5px', flex: 'none', borderRadius: 'full' },
+    variants: {
+      state: {
+        closed: { backgroundColor: 'text.faint' },
+        resolved: { backgroundColor: 'text.faint' },
+        withdrawn: { backgroundColor: 'text.faint' },
+      },
+    },
   });
 
   const quietLinkClass = css({
@@ -136,7 +202,7 @@
     _disabled: { color: 'text.disabled', cursor: 'not-allowed' },
   });
 
-  const tone = $derived(closed ? (expanded ? 'closedActive' : 'closed') : expanded ? 'active' : 'open');
+  const tone = $derived(settled ? (expanded ? 'settledActive' : 'settled') : expanded ? 'active' : 'open');
 
   // 펼침·접힘 콘텐츠는 grid-rows(0fr↔1fr)로 높이를 애니메이션한다 — 높이가 즉시 바뀌면 이웃 카드가
   // 밀려나기 전에 먼저 겹친다(카드 이동과 같은 0.25s·이징이라 성장과 밀림이 맞물린다). visibility는
@@ -239,21 +305,24 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class={css(cardRecipe.raw({ tone, clickable: !expanded }))} data-thread-card={thread.id} onclick={openFromCard}>
   <button class={flex({ align: 'center', gap: '6px', width: 'full', cursor: 'pointer' })} onclick={onToggle} type="button">
-    <span class={css(numberChipRecipe.raw({ tone: closed ? 'closed' : 'open', active: expanded }))}>{thread.issueIndex + 1}</span>
+    <span class={css(numberChipRecipe.raw({ tone: settled ? 'settled' : 'open', active: expanded }))}>{thread.issueIndex + 1}</span>
     <span
       class={css({
         minWidth: '0',
         fontSize: '13px',
         fontWeight: expanded ? 'bold' : 'semibold',
-        color: closed ? 'text.faint' : 'text.default',
+        color: settled ? 'text.faint' : 'text.default',
         textAlign: 'left',
         whiteSpace: 'nowrap',
         overflow: 'hidden',
         textOverflow: 'ellipsis',
       })}
     >
-      {thread.axis}
+      {thread.trait}
     </span>
+    {#if isNew}
+      <span class={newBadgeClass}>신규</span>
+    {/if}
     <span class={flex({ align: 'center', gap: '6px', flex: 'none', marginLeft: 'auto' })}>
       {#if meta}
         <span class={css({ fontSize: '11px', color: 'text.faint', whiteSpace: 'nowrap' })}>{meta}</span>
@@ -263,31 +332,16 @@
           <Icon icon={thread.reaction === 'up' ? IconThumbsUp : IconThumbsDown} size={10} />
         </span>
       {/if}
-      {#if closed}
-        <span
-          class={flex({
-            align: 'center',
-            gap: '4px',
-            flex: 'none',
-            paddingX: '8px',
-            paddingY: '2px',
-            borderWidth: '1px',
-            borderColor: 'border.default',
-            borderRadius: 'full',
-            backgroundColor: 'surface.muted',
-            fontSize: '11px',
-            fontWeight: 'semibold',
-            color: 'text.subtle',
-          })}
-        >
-          <span class={css({ size: '5px', flex: 'none', borderRadius: 'full', backgroundColor: 'text.faint' })}></span>
-          닫힘
+      {#if thread.state !== 'open'}
+        <span class={css(stateChipRecipe.raw({ state: thread.state }))}>
+          <span class={css(stateDotRecipe.raw({ state: thread.state }))}></span>
+          {STATE_LABELS[thread.state]}
         </span>
       {/if}
     </span>
   </button>
 
-  {#if !closed}
+  {#if !settled}
     <div class={css(revealRecipe.raw({ shown: !expanded }))}>
       <div class={revealInnerClass} data-reveal="snippet">
         <p
@@ -346,7 +400,7 @@
         </p>
       {/if}
 
-      {#each comments as comment (comment.id)}
+      {#each shownComments as comment (comment.id)}
         <div class={flex({ gap: '8px', marginTop: '11px', paddingTop: '11px', borderTopWidth: '1px', borderColor: 'border.subtle' })}>
           <span
             class={flex({
@@ -377,7 +431,12 @@
                   use:enhance={submit('delete')}
                 >
                   <input name="commentId" type="hidden" value={comment.id} />
-                  <button class={deleteLinkClass} disabled={busy !== null} onclick={() => confirmDelete(comment.id)} type="button">
+                  <button
+                    class={deleteLinkClass}
+                    disabled={busy !== null || locked}
+                    onclick={() => confirmDelete(comment.id)}
+                    type="button"
+                  >
                     지우기
                   </button>
                 </form>
@@ -432,63 +491,69 @@
         </button>
       </form>
 
-      {#if !closed}
-        <form action="?/reply" method="post" use:enhance={submit('reply')}>
-          <input name="threadId" type="hidden" value={thread.id} />
-          <div
-            class={flex({
-              align: 'flex-end',
-              gap: '6px',
-              marginTop: '10px',
-              paddingLeft: '10px',
-              paddingRight: '4px',
-              paddingY: '4px',
-              borderWidth: '1px',
-              borderColor: 'border.default',
-              borderRadius: '6px',
-              backgroundColor: 'surface.subtle',
-            })}
-          >
-            <textarea
-              name="body"
-              class={css({
-                flexGrow: '1',
-                minWidth: '0',
-                paddingY: '4px',
-                maxHeight: '120px',
-                fontSize: '12px',
-                lineHeight: '[1.5]',
-                backgroundColor: 'transparent',
-                resize: 'none',
-                _placeholder: { color: 'text.faint' },
-                _disabled: { color: 'text.disabled', cursor: 'not-allowed' },
-              })}
-              disabled={busy !== null}
-              onkeydown={handleReplyKeydown}
-              placeholder="답글은 다음 리뷰에 반영돼요"
-              rows={1}
-              bind:value={replyBody}
-              use:autosize={{ value: replyBody }}></textarea>
-            <button
+      {#if !settled}
+        {#if locked}
+          <p class={css({ marginTop: '10px', fontSize: '12px', lineHeight: '[1.6]', color: 'text.faint' })}>
+            리뷰가 진행되는 동안에는 스레드가 잠겨 있어요
+          </p>
+        {:else}
+          <form action="?/reply" method="post" use:enhance={submit('reply')}>
+            <input name="threadId" type="hidden" value={thread.id} />
+            <div
               class={flex({
-                align: 'center',
-                justify: 'center',
-                flex: 'none',
-                size: '24px',
-                borderRadius: 'full',
-                backgroundColor: 'accent.brand.default',
-                color: 'text.bright',
-                cursor: 'pointer',
-                _disabled: { backgroundColor: 'interactive.disabled', color: 'text.disabled', cursor: 'not-allowed' },
+                align: 'flex-end',
+                gap: '6px',
+                marginTop: '10px',
+                paddingLeft: '10px',
+                paddingRight: '4px',
+                paddingY: '4px',
+                borderWidth: '1px',
+                borderColor: 'border.default',
+                borderRadius: '6px',
+                backgroundColor: 'surface.subtle',
               })}
-              aria-label="답글 남기기"
-              disabled={busy !== null}
-              type="submit"
             >
-              <Icon icon={IconArrowUp} size={12} />
-            </button>
-          </div>
-        </form>
+              <textarea
+                name="body"
+                class={css({
+                  flexGrow: '1',
+                  minWidth: '0',
+                  paddingY: '4px',
+                  maxHeight: '120px',
+                  fontSize: '12px',
+                  lineHeight: '[1.5]',
+                  backgroundColor: 'transparent',
+                  resize: 'none',
+                  _placeholder: { color: 'text.faint' },
+                  _disabled: { color: 'text.disabled', cursor: 'not-allowed' },
+                })}
+                disabled={busy !== null}
+                onkeydown={handleReplyKeydown}
+                placeholder="답글은 다음 리뷰에 반영돼요"
+                rows={1}
+                bind:value={replyBody}
+                use:autosize={{ value: replyBody }}></textarea>
+              <button
+                class={flex({
+                  align: 'center',
+                  justify: 'center',
+                  flex: 'none',
+                  size: '24px',
+                  borderRadius: 'full',
+                  backgroundColor: 'accent.brand.default',
+                  color: 'text.bright',
+                  cursor: 'pointer',
+                  _disabled: { backgroundColor: 'interactive.disabled', color: 'text.disabled', cursor: 'not-allowed' },
+                })}
+                aria-label="답글 남기기"
+                disabled={busy !== null}
+                type="submit"
+              >
+                <Icon icon={IconArrowUp} size={12} />
+              </button>
+            </div>
+          </form>
+        {/if}
 
         <form
           class={flex({
@@ -526,7 +591,7 @@
               _hover: { borderColor: 'border.strong' },
               _disabled: { color: 'text.disabled', cursor: 'not-allowed' },
             })}
-            disabled={busy !== null}
+            disabled={busy !== null || locked}
             type="submit"
           >
             <span class={css({ display: 'inline-flex', color: 'text.success' })}>
@@ -551,10 +616,12 @@
       })}
     >
       <span class={css({ fontSize: '11px', color: 'text.faint' })}>닫힌 스레드는 다음 회차에서 다시 짚지 않아요</span>
-      <form class={css({ marginLeft: 'auto' })} action="?/reopen" method="post" use:enhance={submit('reopen')}>
-        <input name="threadId" type="hidden" value={thread.id} />
-        <button class={quietLinkClass} disabled={busy !== null} type="submit">다시 열기</button>
-      </form>
+      {#if reopenable}
+        <form class={css({ marginLeft: 'auto' })} action="?/reopen" method="post" use:enhance={submit('reopen')}>
+          <input name="threadId" type="hidden" value={thread.id} />
+          <button class={quietLinkClass} disabled={busy !== null || locked} type="submit">다시 열기</button>
+        </form>
+      {/if}
     </div>
   {/if}
 </div>

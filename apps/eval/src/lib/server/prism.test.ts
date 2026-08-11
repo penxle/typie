@@ -25,7 +25,7 @@ describe('prism client', () => {
     await startWorkflow(env, {
       workflowId: 'ev-x',
       workflow: 'medium',
-      input: { manuscriptPath: 'manuscript/v1.txt' },
+      input: { manuscriptPath: 'manuscript/v1.txt', meta: { title: '제목', subtitle: null } },
       files: [{ path: 'manuscript/v1.txt', content: '본문' }],
     });
     const [url, init] = spy.mock.calls[0];
@@ -38,7 +38,7 @@ describe('prism client', () => {
       workflowId: 'ev-x',
       app: 'feedback',
       workflow: 'medium',
-      input: { manuscriptPath: 'manuscript/v1.txt' },
+      input: { manuscriptPath: 'manuscript/v1.txt', meta: { title: '제목', subtitle: null } },
       files: [{ path: 'manuscript/v1.txt', content: '본문' }],
     });
   });

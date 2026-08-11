@@ -5,9 +5,11 @@
   import { MediaQuery } from 'svelte/reactivity';
   import IconX from '~icons/lucide/x';
   import { anchorQuote } from '$lib/feedback/anchors.ts';
+  import { VERDICT_POINTS, verdictLabel } from '$lib/feedback/verdicts.ts';
   import IssueChips from './IssueChips.svelte';
   import ReviewReaction from './ReviewReaction.svelte';
-  import type { FeedbackConclusion } from '$lib/feedback/types.ts';
+  import type { FeedbackConclusion, FeedbackResult } from '$lib/feedback/types.ts';
+  import type { Verdict } from '$lib/feedback/verdicts.ts';
   import type { PageData } from './$types';
 
   type Thread = PageData['threads'][number];
@@ -18,10 +20,16 @@
   type Props = {
     open: boolean;
     conclusion: FeedbackConclusion;
-    threads: Thread[];
+    // 특질 판정 — 결과의 최상위 필드라 총평과 따로 온다. 기준표를 세우는 티어에만 실린다.
+    verdicts: Verdict[];
+    // 격상 — 자리 잡은(3점) 관점의 다음 단계 제안. 결함이 아니라 지적 스레드가 없고 총평에만 선다.
+    elevations: NonNullable<FeedbackResult['elevations']>;
+    // 머리글의 피드백 수도 칩 연동도 전부 표시 회차 축이다 — 편지가 이 회차의 것이라 세션 누계를 섞지 않는다.
+    conclusionThreads: Thread[];
     content: string;
     title: string;
-    round: number;
+    // 표시 회차 서수 — 실패·중단을 건너뛴 번호라(displayRoundNumbers) 내부 round와 다를 수 있다.
+    roundNumber: number;
     finishedAt: number | null;
     activeId: string | null;
     reaction: PageData['reaction'];
@@ -29,11 +37,27 @@
     onActivate: (id: string) => void;
   };
 
-  const { open, conclusion, threads, content, title, round, finishedAt, activeId, reaction, onClose, onActivate }: Props = $props();
+  const {
+    open,
+    conclusion,
+    verdicts,
+    elevations,
+    conclusionThreads,
+    content,
+    title,
+    roundNumber,
+    finishedAt,
+    activeId,
+    reaction,
+    onClose,
+    onActivate,
+  }: Props = $props();
 
   const reducedMotion = new MediaQuery('(prefers-reduced-motion: reduce)', false);
 
   const understandingLines = $derived((conclusion.understanding ?? '').split('\n').filter((line) => line.trim().length > 0));
+  // 진전 서술은 재리뷰 회차에만 온다 — 1회차·구 데이터는 필드가 없어 섹션 자체가 서지 않는다.
+  const progressLines = $derived((conclusion.progress ?? '').split('\n').filter((line) => line.trim().length > 0));
 
   const dateLabel = $derived(
     finishedAt === null
@@ -52,8 +76,11 @@
   const sectionKeys = $derived(
     (
       [
+        progressLines.length > 0 ? 'progress' : null,
         conclusion.strengths.length > 0 ? 'strengths' : null,
-        conclusion.clearances.length > 0 ? 'clearances' : null,
+        verdicts.length > 0 ? 'verdicts' : null,
+        elevations.length > 0 ? 'elevations' : null,
+        (conclusion.clearances?.length ?? 0) > 0 ? 'clearances' : null,
         conclusion.patterns.length > 0 ? 'patterns' : null,
         conclusion.priorities.length > 0 ? 'priorities' : null,
       ] as const
@@ -141,6 +168,15 @@
   const sectionCaptionClass = css({ fontSize: '11px', color: 'text.faint' });
   const proseClass = css({ fontFamily: 'RIDIBatang', fontSize: '16px', lineHeight: '[2.05]', color: 'text.default' });
   const noteClass = css({ marginTop: '6px', fontSize: '12px', lineHeight: '[1.75]', color: 'text.faint' });
+
+  // 판정 눈금 — 네 칸 중 채운 만큼이 그 관점이 서 있는 자리다. 색으로 좋고 나쁨을 칠하지 않는다(먹색 채움뿐):
+  // 낮은 자리에 경고색을 두면 편지가 성적표로 읽힌다. 정독 자리에만 세우고 좁은 패널은 낱말로만 간다.
+  const stepRecipe = cva({
+    base: { width: '16px', height: '3px', borderRadius: 'full' },
+    variants: {
+      filled: { true: { backgroundColor: 'text.default' }, false: { backgroundColor: 'border.default' } },
+    },
+  });
 </script>
 
 <svelte:window onkeydown={onKeydown} />
@@ -199,7 +235,7 @@
       <span class={css({ flex: 'none', fontSize: '11px', fontWeight: 'bold', color: 'text.brand', letterSpacing: '[0.09em]' })}>
         편집자의 총평
       </span>
-      <span class={css({ fontSize: '11px', color: 'text.faint' })}>AI 리뷰 {round}회차 · 피드백 {threads.length}개</span>
+      <span class={css({ fontSize: '11px', color: 'text.faint' })}>AI 리뷰 {roundNumber}회차 · 피드백 {conclusionThreads.length}개</span>
       <button
         class={flex({
           align: 'center',
@@ -268,6 +304,18 @@
           </div>
         {/if}
 
+        {#if progressLines.length > 0}
+          <div class={sectionHeadClass}>
+            <span class={sectionNumberClass}>{numberFor('progress')}</span>
+            <span class={sectionTitleClass}>지난 리뷰와 달라진 점</span>
+          </div>
+          <div class={flex({ direction: 'column', gap: '22px', marginTop: '22px' })}>
+            {#each progressLines as line, index (index)}
+              <p class={proseClass}>{line}</p>
+            {/each}
+          </div>
+        {/if}
+
         {#if conclusion.strengths.length > 0}
           <div class={sectionHeadClass}>
             <span class={sectionNumberClass}>{numberFor('strengths')}</span>
@@ -302,16 +350,77 @@
           </div>
         {/if}
 
-        {#if conclusion.clearances.length > 0}
+        {#if verdicts.length > 0}
+          <div class={sectionHeadClass}>
+            <span class={sectionNumberClass}>{numberFor('verdicts')}</span>
+            <span class={sectionTitleClass}>관점마다 서 있는 자리</span>
+            <span class={sectionCaptionClass}>{verdicts.length}가지 — 이 작품에서 특히 중요하게 본 관점들이에요</span>
+          </div>
+          <div class={flex({ direction: 'column', gap: '18px', marginTop: '22px' })}>
+            {#each verdicts as verdict, index (index)}
+              {@const level = verdictLabel(verdict.point)}
+              <div>
+                <div class={flex({ align: 'center', gap: '10px' })}>
+                  <span class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.default' })}>{verdict.trait}</span>
+                  <div class={flex({ align: 'center', gap: '3px' })} aria-hidden="true">
+                    {#each VERDICT_POINTS as point (point)}
+                      <span class={css(stepRecipe.raw({ filled: point <= verdict.point }))}></span>
+                    {/each}
+                  </div>
+                  {#if level}
+                    <span class={css({ fontSize: '11px', color: 'text.faint' })}>{level}</span>
+                  {/if}
+                </div>
+                {#if verdict.note}
+                  <p class={noteClass}>{verdict.note}</p>
+                {/if}
+              </div>
+            {/each}
+          </div>
+        {/if}
+
+        {#if elevations.length > 0}
+          <div class={sectionHeadClass}>
+            <span class={sectionNumberClass}>{numberFor('elevations')}</span>
+            <span class={sectionTitleClass}>한 걸음 더 가 볼 자리</span>
+            <span class={sectionCaptionClass}>{elevations.length}곳 — 고칠 곳이 아니라, 잘 서 있는 자리에서 해 볼 수 있는 제안이에요</span>
+          </div>
+          <div class={flex({ direction: 'column', gap: '26px', marginTop: '22px' })}>
+            {#each elevations as elevation, index (index)}
+              {@const quote = anchorQuote(content, elevation.anchors)}
+              <div>
+                <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.default' })}>{elevation.trait}</div>
+                {#if quote.length > 0}
+                  <div
+                    class={css({
+                      marginTop: '8px',
+                      fontFamily: 'RIDIBatang',
+                      fontSize: '14px',
+                      lineHeight: '[1.85]',
+                      color: 'text.subtle',
+                    })}
+                  >
+                    「{quote}」
+                  </div>
+                {/if}
+                {#if elevation.body}
+                  <p class={noteClass}>{elevation.body}</p>
+                {/if}
+              </div>
+            {/each}
+          </div>
+        {/if}
+
+        {#if (conclusion.clearances?.length ?? 0) > 0}
           <div class={sectionHeadClass}>
             <span class={sectionNumberClass}>{numberFor('clearances')}</span>
             <span class={sectionTitleClass}>살펴봤지만 짚지 않은 관점</span>
-            <span class={sectionCaptionClass}>{conclusion.clearances.length}가지 — 따져 본 뒤 짚지 않기로 한 자리예요</span>
+            <span class={sectionCaptionClass}>{conclusion.clearances?.length ?? 0}가지 — 따져 본 뒤 짚지 않기로 한 자리예요</span>
           </div>
           <div class={flex({ direction: 'column', gap: '18px', marginTop: '22px' })}>
-            {#each conclusion.clearances as clearance, index (index)}
+            {#each conclusion.clearances ?? [] as clearance, index (index)}
               <div>
-                <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.default' })}>{clearance.axis}</div>
+                <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.default' })}>{clearance.trait}</div>
                 <p class={noteClass}>{clearance.note}</p>
               </div>
             {/each}
@@ -322,7 +431,7 @@
           <div class={sectionHeadClass}>
             <span class={sectionNumberClass}>{numberFor('patterns')}</span>
             <span class={sectionTitleClass}>반복해서 나타나는 습관</span>
-            <span class={sectionCaptionClass}>{conclusion.patterns.length}가지 — 지적들을 묶어 보면 같은 결이에요</span>
+            <span class={sectionCaptionClass}>{conclusion.patterns.length}가지 — 짚은 곳들을 묶어 보면 같은 결이에요</span>
           </div>
           <div class={flex({ direction: 'column', gap: '24px', marginTop: '22px' })}>
             {#each conclusion.patterns as pattern, index (index)}
@@ -331,7 +440,7 @@
                   <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.default' })}>{pattern.theme}</div>
                 {/if}
                 <p class={noteClass}>{pattern.body}</p>
-                <IssueChips {activeId} issues={pattern.issues} {onActivate} {threads} />
+                <IssueChips {activeId} issues={pattern.issues} {onActivate} threads={conclusionThreads} />
               </div>
             {/each}
           </div>
@@ -365,7 +474,7 @@
                 </span>
                 <div class={css({ flexGrow: '1', minWidth: '0' })}>
                   <p class={css({ fontSize: '13px', lineHeight: '[1.75]', color: 'text.subtle' })}>{priority.body}</p>
-                  <IssueChips {activeId} issues={priority.issues} {onActivate} {threads} />
+                  <IssueChips {activeId} issues={priority.issues} {onActivate} threads={conclusionThreads} />
                 </div>
               </div>
             {/each}

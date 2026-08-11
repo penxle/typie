@@ -1,6 +1,7 @@
 import type { AskAnswer } from '../feedback/live.ts';
-import type { TierName, TierOverrides } from '../feedback/tiers.ts';
-import type { PrismWorkflow, PrismWorkflowView } from '../feedback/types.ts';
+import type { PriceTable } from '../feedback/pricing.ts';
+import type { AppCatalog, TierName, TierOverrides } from '../feedback/tiers.ts';
+import type { ManuscriptMeta, PreviousInput, PrismWorkflow, PrismWorkflowView } from '../feedback/types.ts';
 
 type PrismEnv = { PRISM_API_ORIGIN: string; PRISM_API_TOKEN: string };
 
@@ -32,12 +33,34 @@ const call = async (env: PrismEnv, path: string, init?: RequestInit): Promise<Re
   return res;
 };
 
+// 앱 카탈로그 — 시작 폼 옵션·제출 검증·스냅샷 조립의 재료다. 무캐시(오너 결정 2026-08-13): 시작은 드문
+// 이벤트라 매번 걷고, 실패 시 폴백 없이 시작만 막는다(열람 화면은 이 표면과 무관하다).
+export const fetchCatalog = async (env: PrismEnv): Promise<AppCatalog> => {
+  const res = await call(env, '/apps/feedback/catalog');
+  return (await res.json()) as AppCatalog;
+};
+
+// 모델 단가표 — 정본은 prism이고(prism src/pricing.ts) 이 라우트는 그 상수를 그대로 싣는다. 원가 표시는
+// 부가 정보라 수신 실패가 화면을 막지 않는다: null을 돌려 전 비용이 미상(—)으로 강등된다(pricing.ts의 표
+// 부재 처리). 무캐시 — 열람마다 걷는다(베타 규모라 호출 비용이 사소하고, 스테일 캐시 기제를 두지 않는다).
+// 무음이면 강등 반복을 화면의 —로만 알 수 있으므로 로그는 남긴다(wrangler tail로 관측).
+export const fetchPriceTable = async (env: PrismEnv): Promise<PriceTable | null> => {
+  try {
+    const res = await call(env, '/pricing');
+    return (await res.json()) as PriceTable;
+  } catch (err) {
+    console.error('price table fetch failed', err);
+    return null;
+  }
+};
+
 export const startWorkflow = async (
   env: PrismEnv,
   opts: {
     workflowId: string;
     workflow: TierName;
-    input: { manuscriptPath: string; overrides?: TierOverrides };
+    // previous가 실리면 재리뷰다 — 워크플로 이름은 그대로고 이 키의 유무가 모드를 가른다.
+    input: { manuscriptPath: string; meta: ManuscriptMeta; overrides?: TierOverrides; previous?: PreviousInput };
     files: { path: string; content: string }[];
   },
 ): Promise<void> => {
@@ -45,6 +68,11 @@ export const startWorkflow = async (
     method: 'POST',
     body: JSON.stringify({ workflowId: opts.workflowId, app: 'feedback', workflow: opts.workflow, input: opts.input, files: opts.files }),
   });
+};
+
+export const fetchWorkflowFile = async (env: PrismEnv, id: string, path: string): Promise<string | null> => {
+  const res = await call(env, `/workflows/${id}/files/${path}`);
+  return ((await res.json()) as { content: string | null }).content;
 };
 
 // 와이어의 result는 JSON "문자열"이다(prism core/workflow.ts의 driveWorkflow가 JSON.stringify해 종결한다).
@@ -72,6 +100,12 @@ export const getWorkflow = async (env: PrismEnv, id: string): Promise<PrismWorkf
 
 export const cancelWorkflow = async (env: PrismEnv, id: string): Promise<void> => {
   await call(env, `/workflows/${id}/cancel`, { method: 'POST' });
+};
+
+// 실패 종결 워크플로의 부분 재개 — 완료 스텝은 재생되고 실패 invocation만 새 run으로 이어진다(prism core/do.ts
+// retryWorkflow). 전제 위반은 retry-rejected·retry-unsettled(409)로, 워크플로 부재는 404로 돌아온다.
+export const retryWorkflow = async (env: PrismEnv, id: string): Promise<void> => {
+  await call(env, `/workflows/${id}/retry`, { method: 'POST' });
 };
 
 export const openEvents = (env: PrismEnv, id: string, lastEventId: number): Promise<Response> =>

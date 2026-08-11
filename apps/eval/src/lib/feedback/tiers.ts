@@ -1,80 +1,63 @@
-// prism src/apps/feedback/tiers.ts(모델 허용 목록)·prompts.ts(에이전트 15종과 기본값)·workflows/(티어별 에이전트
-// 구성)의 미러 — 검증 정본은 prism이다. prism 쪽 값이 바뀌면 이 파일을 함께 갱신한다. 티어 이름은 prism
-// 워크플로 이름과 같은 문자열이라, 여기 목록이 곧 시작 가능한 워크플로 목록이다. 무오버라이드 리뷰의
-// modelConfig는 "시작 시점에 이 상수가 알던 기본값"의 스냅샷이라, 동기화가 깨진 기간엔 기본값 표시가 실제와
-// 어긋날 수 있다(오버라이드 항목은 저장=전송=실행이라 항상 정확).
+// 모델 허용 목록·에이전트 기본값·티어별 에이전트 구성의 정본은 prism이고, eval은 시작 시점마다 카탈로그
+// 표면(GET /apps/feedback/catalog — fetchCatalog)을 걷어 쓴다. 정적 미러는 폐기됐다(오너 결정 2026-08-13) —
+// 이 파일에 남는 것은 화면 어휘(티어 이름)와 카탈로그를 재료로 쓰는 조립·검증 헬퍼뿐이다.
+// 티어 이름이 로컬 상수로 남는 이유: 단계 카드·라벨(stages.ts TIER_STAGES)이 티어를 화면 지식으로 알아야
+// 해서, prism에 티어가 늘어도 화면 작업 없이는 노출할 수 없다 — 카탈로그에 없는 티어는 시작 검증이 거른다.
 export const TIER_NAMES = ['high', 'medium', 'low'] as const;
 export type TierName = (typeof TIER_NAMES)[number];
 
-export type AgentName =
-  | 'research-high'
-  | 'plan-high'
-  | 'review-high'
-  | 'critique-high'
-  | 'proofread-high'
-  | 'rephrase-high'
-  | 'conclude-high'
-  | 'research-medium'
-  | 'critique-medium'
-  | 'proofread-medium'
-  | 'rephrase-medium'
-  | 'conclude-medium'
-  | 'critique-low'
-  | 'proofread-low'
-  | 'rephrase-low';
-
-export const TIER_AGENTS: Record<TierName, readonly AgentName[]> = {
-  high: ['research-high', 'plan-high', 'review-high', 'critique-high', 'proofread-high', 'rephrase-high', 'conclude-high'],
-  medium: ['research-medium', 'critique-medium', 'proofread-medium', 'rephrase-medium', 'conclude-medium'],
-  low: ['critique-low', 'proofread-low', 'rephrase-low'],
+// 카탈로그 표면의 형태 — prism surface/entrypoint.ts AppCatalog의 사영이다.
+export type AppCatalog = {
+  models: Record<string, { provider: string; efforts: string[] }>;
+  agents: Record<string, { provider: string; model: string; effort: string | null }>;
+  workflows: Record<string, { agents: string[] }>;
 };
 
-export const MODELS = {
-  'claude-fable-5': { provider: 'anthropic', efforts: ['low', 'medium', 'high', 'xhigh', 'max'] },
-  'claude-opus-5': { provider: 'anthropic', efforts: ['low', 'medium', 'high', 'xhigh', 'max'] },
-  'claude-sonnet-5': { provider: 'anthropic', efforts: ['low', 'medium', 'high', 'xhigh', 'max'] },
-  'gpt-5.6-sol': { provider: 'openai', efforts: ['none', 'low', 'medium', 'high', 'xhigh', 'max'] },
-  'gpt-5.6-terra': { provider: 'openai', efforts: ['none', 'low', 'medium', 'high', 'xhigh', 'max'] },
-  'gpt-5.6-luna': { provider: 'openai', efforts: ['none', 'low', 'medium', 'high', 'xhigh', 'max'] },
-  'gemini-3.6-flash': { provider: 'gemini', efforts: ['minimal', 'low', 'medium', 'high'] },
-  'gemini-3.5-flash-lite': { provider: 'gemini', efforts: ['minimal', 'low', 'medium', 'high'] },
-} as const;
-export type TierModel = keyof typeof MODELS;
+// 오버라이드 와이어는 provider까지 명시하는 3장이다(prism workflows/shared.ts override와 한 짝) — eval이
+// 카탈로그에서 provider를 채워 보내고, prism은 역추론 없이 3장 그대로 검증·소비한다.
+export type TierOverrides = Partial<Record<string, { provider: string; model: string; effort: string }>>;
 
-export const AGENT_DEFAULTS: Record<AgentName, { model: TierModel; effort: string }> = {
-  'research-high': { model: 'claude-opus-5', effort: 'xhigh' },
-  'plan-high': { model: 'claude-opus-5', effort: 'xhigh' },
-  'review-high': { model: 'gpt-5.6-sol', effort: 'xhigh' },
-  'critique-high': { model: 'claude-opus-5', effort: 'xhigh' },
-  'proofread-high': { model: 'claude-opus-5', effort: 'xhigh' },
-  'rephrase-high': { model: 'claude-opus-5', effort: 'xhigh' },
-  'conclude-high': { model: 'claude-opus-5', effort: 'xhigh' },
-  'research-medium': { model: 'claude-sonnet-5', effort: 'medium' },
-  'critique-medium': { model: 'claude-sonnet-5', effort: 'high' },
-  'proofread-medium': { model: 'claude-sonnet-5', effort: 'high' },
-  'rephrase-medium': { model: 'claude-sonnet-5', effort: 'medium' },
-  'conclude-medium': { model: 'claude-sonnet-5', effort: 'medium' },
-  'critique-low': { model: 'gemini-3.6-flash', effort: 'high' },
-  'proofread-low': { model: 'gemini-3.6-flash', effort: 'high' },
-  'rephrase-low': { model: 'gemini-3.6-flash', effort: 'high' },
-};
-
-export type TierOverrides = Partial<Record<AgentName, { model: TierModel; effort: string }>>;
-export type ModelConfig = Partial<Record<AgentName, { model: string; effort: string; overridden: boolean }>>;
+// 시작 시점 스냅샷 — 카탈로그 컷오버(2026-08-13)부터 provider가 실린다. 그 전 스냅샷에는 없으므로
+// 소비자(비용 합성·재리뷰 승계)는 부재를 미상·카탈로그 폴백으로 다룬다.
+export type ModelConfig = Partial<Record<string, { provider?: string; model: string; effort: string; overridden: boolean }>>;
 
 // 시작 시점의 전체 유효 구성 스냅샷 — 모달 표시의 데이터 원천. 모든 시작이 한 경로로 이걸 저장한다.
-// 그 티어에 속한 에이전트만 담으므로 다른 티어의 오버라이드는 자연히 빠진다.
-export const buildModelConfig = (tier: TierName, overrides: TierOverrides | undefined): ModelConfig =>
+// 행 목록과 순서는 카탈로그의 워크플로 구동 목록이 정한다(표시 순서 겸용).
+export const buildModelConfig = (catalog: AppCatalog, tier: TierName, overrides: TierOverrides | undefined): ModelConfig =>
   Object.fromEntries(
-    TIER_AGENTS[tier].map((agent) => {
+    (catalog.workflows[tier]?.agents ?? []).map((agent) => {
       const override = overrides?.[agent];
-      return [agent, override ? { ...override, overridden: true } : { ...AGENT_DEFAULTS[agent], overridden: false }];
+      if (override) return [agent, { ...override, overridden: true }];
+      const defaults = catalog.agents[agent];
+      return [
+        agent,
+        { provider: defaults?.provider ?? '', model: defaults?.model ?? '', effort: defaults?.effort ?? '', overridden: false },
+      ];
     }),
   );
 
+// buildModelConfig의 역 — 재리뷰가 지난 회차의 오버라이드를 승계할 때 스냅샷에서 되돌린다. overridden 항목만
+// 모으므로 스냅샷 시점의 기본값은 따라오지 않는다(기본값은 새 시작 시점의 카탈로그가 다시 정한다).
+// 컷오버 전 스냅샷에는 provider가 없다 — 현재 카탈로그에서 채우고, 못 채우면(모델이 목록에서 빠짐) 빈
+// provider로 두어 prism 시작 검증이 명시 반려한다. 부분 승계로 변인을 섞는 것보다 명시 실패가 낫다.
+export const overridesFromConfig = (catalog: AppCatalog, config: ModelConfig | null): TierOverrides => {
+  const overrides: TierOverrides = {};
+  for (const [agent, entry] of Object.entries(config ?? {})) {
+    if (!entry?.overridden) continue;
+    overrides[agent] = {
+      provider: entry.provider ?? catalog.models[entry.model]?.provider ?? '',
+      model: entry.model,
+      effort: entry.effort,
+    };
+  }
+  return overrides;
+};
+
 // 폼 제출 판정 — high 무오버라이드는 누구나 통과, 그 밖의 티어 선택이나 오버라이드 항목은 admin만. 기본값과
-// 같은 명시 선택은 no-op으로 떨군다. 값 검증은 select UI와 무관하게 서버가 다시 한다(위조 제출 방어).
+// 같은 명시 선택은 no-op으로 떨군다. 값 검증은 select UI와 무관하게 서버가 카탈로그로 다시 하고(위조 제출
+// 방어), prism이 시작 입력 검증으로 또 한 번 한다.
 export const resolveTierSubmission = (
+  catalog: AppCatalog,
   tier: string,
   raw: Record<string, { model?: string; effort?: string }>,
   admin: boolean,
@@ -83,19 +66,19 @@ export const resolveTierSubmission = (
   const tierName = tier as TierName;
   const entries = Object.entries(raw);
   if (!admin && (tierName !== 'high' || entries.length > 0)) return { error: '티어 설정은 운영자만 쓸 수 있어요' };
-  const agents = TIER_AGENTS[tierName] as readonly string[];
+  const workflow = catalog.workflows[tierName];
+  if (!workflow) return { error: `카탈로그에 없는 티어예요: ${tier}` };
   const overrides: TierOverrides = {};
   for (const [agent, pair] of entries) {
-    if (!agents.includes(agent)) return { error: `이 티어에 없는 에이전트예요: ${agent}` };
+    if (!workflow.agents.includes(agent)) return { error: `이 티어에 없는 에이전트예요: ${agent}` };
     const model = pair.model ?? '';
-    if (!Object.hasOwn(MODELS, model)) return { error: `알 수 없는 모델이에요: ${model}` };
+    const listed = catalog.models[model];
+    if (!listed) return { error: `알 수 없는 모델이에요: ${model}` };
     const effort = pair.effort ?? '';
-    if (!(MODELS[model as TierModel].efforts as readonly string[]).includes(effort)) {
-      return { error: `${model}에서 쓸 수 없는 effort예요: ${effort}` };
-    }
-    const agentName = agent as AgentName;
-    if (AGENT_DEFAULTS[agentName].model === model && AGENT_DEFAULTS[agentName].effort === effort) continue;
-    overrides[agentName] = { model: model as TierModel, effort };
+    if (!listed.efforts.includes(effort)) return { error: `${model}에서 쓸 수 없는 effort예요: ${effort}` };
+    const defaults = catalog.agents[agent];
+    if (defaults && defaults.model === model && defaults.effort === effort) continue;
+    overrides[agent] = { provider: listed.provider, model, effort };
   }
   return { tier: tierName, overrides };
 };

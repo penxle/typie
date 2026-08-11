@@ -161,12 +161,12 @@ internal.post('/corpus/extract', async (c) => {
   }
 
   const titleRows = await dbr
-    .select({ id: Documents.id, title: Documents.title })
+    .select({ id: Documents.id, title: Documents.title, subtitle: Documents.subtitle })
     .from(Documents)
     .where(inArray(Documents.id, parsed.data.documentIds));
-  const titles = new Map(titleRows.map((row) => [row.id, row.title]));
+  const heads = new Map(titleRows.map((row) => [row.id, { title: row.title, subtitle: row.subtitle }]));
 
-  const results: { documentId: string; prose: string | null; title: string | null }[] = [];
+  const results: { documentId: string; prose: string | null; title: string | null; subtitle: string | null }[] = [];
   for (const documentId of parsed.data.documentIds) {
     try {
       const bundles = await dbr
@@ -177,7 +177,12 @@ internal.post('/corpus/extract', async (c) => {
 
       const total = bundles.reduce((n, row) => n + row.payload.length, 0);
       if (total === 0) {
-        results.push({ documentId, prose: null, title: titles.get(documentId) ?? null });
+        results.push({
+          documentId,
+          prose: null,
+          title: heads.get(documentId)?.title ?? null,
+          subtitle: heads.get(documentId)?.subtitle ?? null,
+        });
         continue;
       }
 
@@ -189,10 +194,20 @@ internal.post('/corpus/extract', async (c) => {
       }
 
       const { result } = await wasmThread.extractProse(graph);
-      results.push({ documentId, prose: result, title: titles.get(documentId) ?? null });
+      results.push({
+        documentId,
+        prose: result,
+        title: heads.get(documentId)?.title ?? null,
+        subtitle: heads.get(documentId)?.subtitle ?? null,
+      });
     } catch (err) {
       console.error(String(err));
-      results.push({ documentId, prose: null, title: titles.get(documentId) ?? null });
+      results.push({
+        documentId,
+        prose: null,
+        title: heads.get(documentId)?.title ?? null,
+        subtitle: heads.get(documentId)?.subtitle ?? null,
+      });
     }
   }
 

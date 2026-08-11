@@ -1,11 +1,11 @@
 import { and, eq } from 'drizzle-orm';
 import { initialLive } from '../feedback/live.ts';
 import { createSseParser } from '../feedback/sse.ts';
-import { Reviews, Threads } from './db/index.ts';
+import { Reviews, ThreadComments, Threads } from './db/index.ts';
 import { fetchEventLog, getWorkflow, openEvents } from './prism.ts';
 import { collectAskAnswers } from './questions.ts';
 import type { SseEvent } from '../feedback/sse.ts';
-import type { Anchor, FeedbackResult, ReviewQuestionRecord } from '../feedback/types.ts';
+import type { Anchor, FeedbackResult, Pass, ReviewQuestionRecord, ThreadDisposition } from '../feedback/types.ts';
 import type { Db } from './db/index.ts';
 
 type PrismEnv = { PRISM_API_ORIGIN: string; PRISM_API_TOKEN: string };
@@ -16,8 +16,9 @@ export type ThreadRow = {
   sessionId: string;
   reviewRound: number;
   issueIndex: number;
-  axis: string;
-  pass: 'critique' | 'proofread';
+  issueId: string | null;
+  trait: string;
+  pass: Pass;
   body: string | null;
   anchors: Anchor[];
   state: 'open';
@@ -26,19 +27,72 @@ export type ThreadRow = {
 
 export const threadId = (sessionId: string, round: number, issueIndex: number): string => `${sessionId}.${round}.${issueIndex}`;
 
+// thread 표지가 없는 이슈만 새 스레드가 된다 — 표지 이슈는 지난 회차 스레드의 계속이라 행을 만들지 않고
+// carriedIssues의 갱신 경로를 탄다.
 export const threadsFromResult = (sessionId: string, round: number, result: FeedbackResult): ThreadRow[] =>
-  result.issues.map((issue, index) => ({
-    id: threadId(sessionId, round, index),
-    sessionId,
-    reviewRound: round,
-    issueIndex: index,
-    axis: issue.axis,
-    pass: issue.pass,
-    body: issue.body,
-    anchors: issue.anchors,
-    state: 'open',
-    stateChangedAt: null,
-  }));
+  result.issues.flatMap((issue, index) =>
+    issue.thread === undefined
+      ? [
+          {
+            id: threadId(sessionId, round, index),
+            sessionId,
+            reviewRound: round,
+            issueIndex: index,
+            issueId: issue.id ?? null,
+            trait: issue.trait,
+            pass: issue.pass,
+            body: issue.body,
+            anchors: issue.anchors,
+            state: 'open' as const,
+            stateChangedAt: null,
+          },
+        ]
+      : [],
+  );
+
+// 계속되는(kept) 지적 — 기존 스레드를 이번 회차 번호 공간에 다시 앉힐 좌표다. 앵커는 prism이 새 원고에서
+// 확정한 값이라 재탐색하지 않는다.
+export const carriedIssues = (result: FeedbackResult): { threadId: string; issueIndex: number; anchors: Anchor[] }[] =>
+  result.issues.flatMap((issue, index) =>
+    issue.thread === undefined ? [] : [{ threadId: issue.thread, issueIndex: index, anchors: issue.anchors }],
+  );
+
+// 재리뷰 처분을 승계 스레드에 사영한다. 전이·코멘트 모두 재적용에 안전해야 한다 — 사영은 종결 후 화면 로드가
+// 부르고, 중간에 죽으면 다음 로드가 처음부터 다시 사영한다. 전이는 open 조건부라 두 번째 적용이 닿지 않고,
+// 코멘트는 결정적 id + onConflictDoNothing으로 한 행에 머문다.
+export const applyDispositions = async (db: Db, sessionId: string, round: number, dispositions: ThreadDisposition[]): Promise<void> => {
+  for (const disposition of dispositions) {
+    // 닫힌 스레드는 처분도 코멘트도 받지 않는다 — 잠금이 리뷰 중 닫기를 막으니 정상 경로에선 만날 일이 없고,
+    // 이상 상태로 닫혀 있다면 테스터가 끝낸 대화 위에 뒤늦은 처분을 얹지 않는 쪽이 옳다.
+    const [current] = await db
+      .select({ state: Threads.state })
+      .from(Threads)
+      .where(and(eq(Threads.id, disposition.threadId), eq(Threads.sessionId, sessionId)))
+      .limit(1);
+    if (!current || current.state === 'closed') continue;
+
+    const openOnly = and(eq(Threads.id, disposition.threadId), eq(Threads.sessionId, sessionId), eq(Threads.state, 'open'));
+    // kept는 열린 채로 남고 전이가 없다 — 회차·번호·앵커 갱신은 승계 이슈(carriedIssues) 경로가 담당한다.
+    if (disposition.verdict !== 'kept') {
+      await db.update(Threads).set({ state: disposition.verdict, stateChangedAt: new Date() }).where(openOnly);
+    }
+
+    // 코멘트 없는 처분(새 답글 없이 이어지는 kept)은 스레드가 잇는 것으로 충분하다 — 빈 댓글 행을 만들지 않는다.
+    if (!disposition.comment) continue;
+
+    await db
+      .insert(ThreadComments)
+      .values({
+        id: `${disposition.threadId}.ai.${round}`,
+        threadId: disposition.threadId,
+        author: 'ai',
+        body: disposition.comment,
+        reviewRound: round,
+        createdAt: new Date(),
+      })
+      .onConflictDoNothing();
+  }
+};
 
 // 종결 세션의 events는 재생 후 EOF다. 무한 스트림 방어로 프레임 간 45초 무수신이면 포기하고 던진다 —
 // 사영 실패는 다음 화면 로드가 재시도한다.
@@ -115,10 +169,22 @@ export const projectIfTerminal = async (db: Db, env: PrismEnv, review: ReviewRef
     }));
   }
 
-  if (workflow.status === 'completed' && workflow.result) {
+  // 거부 종결(kind: 'rejected')은 지적·처분이 없다 — 스레드를 만들지 않고 아래에서 행만 굳힌다.
+  // 판별은 kind === 'rejected'로만 한다(구 결과에는 키가 없다 — 부재는 정상 결과).
+  if (workflow.status === 'completed' && workflow.result && workflow.result.kind !== 'rejected') {
     const rows = threadsFromResult(review.sessionId, review.round, workflow.result);
     for (const row of rows) {
       await db.insert(Threads).values(row).onConflictDoNothing();
+    }
+    // 계속되는 스레드를 이번 회차 번호 공간에 앉힌다 — 갱신값이 결정적이라 재적용도 같은 값이다(멱등).
+    for (const carried of carriedIssues(workflow.result)) {
+      await db
+        .update(Threads)
+        .set({ reviewRound: review.round, issueIndex: carried.issueIndex, anchors: carried.anchors })
+        .where(and(eq(Threads.id, carried.threadId), eq(Threads.sessionId, review.sessionId), eq(Threads.state, 'open')));
+    }
+    if (workflow.result.dispositions) {
+      await applyDispositions(db, review.sessionId, review.round, workflow.result.dispositions);
     }
   }
   await db

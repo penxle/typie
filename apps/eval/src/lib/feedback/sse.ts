@@ -14,6 +14,7 @@ export const EVENT_NAMES = [
   'workflow.completed',
   'workflow.failed',
   'workflow.canceled',
+  'workflow.retried',
 ];
 
 export const createSseParser = (): { push(chunk: string): SseEvent[] } => {

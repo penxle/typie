@@ -3,6 +3,7 @@
   import { flex } from '@typie/styled-system/patterns';
   import { tick } from 'svelte';
   import { kindOf, markParagraphs } from '$lib/feedback/anchors.ts';
+  import { hasCurrentAnchors } from '$lib/feedback/threads.ts';
   import type { MarkKind, MarkSegment, MarkThread } from '$lib/feedback/anchors.ts';
   import type { Anchor } from '$lib/feedback/types.ts';
   import type { PageData } from './$types';
@@ -15,18 +16,24 @@
     threads: Thread[];
     strengths: (Anchor & { body: string | null })[];
     activeId: string | null;
+    // 표시 회차 — 앵커가 이 원고 기준인 스레드만 가리는 축이다(hasCurrentAnchors).
+    round: number;
     onActivate: (threadId: string) => void;
   };
 
-  const { title, content, threads, strengths, activeId, onActivate }: Props = $props();
+  const { title, content, threads, strengths, activeId, round, onActivate }: Props = $props();
 
   // 잘 작동하는 대목도 지적과 같은 문법으로 원고에 선다(오너 결정) — 스팬·레일·번호 칩·클릭 활성화를
   // 그대로 타되, id는 'strength.N' 네임스페이스로 스레드와 갈라지고 표기 계열만 긍정(초록)이다.
   // 번호는 각자 제 목록 안에서 센다 — 지적 번호는 카드와, 강점 번호는 패널의 나열 순서와 짝이다.
   type Markable = MarkThread & { number: number };
 
+  // 앵커가 지난 회차 원고 기준인 스레드는 원고에 서지 않는다 — 좌표가 지금 원고에서는 엉뚱한 자리를 가리킨다.
+  // 카드 목록에는 그대로 남고, 마크가 없는 스레드는 컬럼 끝에 쌓인다(ThreadColumn).
+  const anchored = $derived(threads.filter((thread) => hasCurrentAnchors(thread, round)));
+
   const marks = $derived<Markable[]>([
-    ...threads.map((thread) => ({ ...thread, number: thread.issueIndex + 1 })),
+    ...anchored.map((thread) => ({ ...thread, number: thread.issueIndex + 1 })),
     ...strengths.map((strength, index) => ({
       id: `strength.${index}`,
       pass: 'strength' as const,
@@ -252,10 +259,10 @@
     ],
   });
 
-  const axisOf = (threadId: string) => threads.find((thread) => thread.id === threadId)?.axis ?? '피드백';
+  const traitOf = (threadId: string) => threads.find((thread) => thread.id === threadId)?.trait ?? '피드백';
 
   const labelOf = (rail: Rail) =>
-    rail.kind === 'strength' ? `잘 작동하는 대목 ${rail.number}` : `피드백 ${rail.number}: ${axisOf(rail.id)}`;
+    rail.kind === 'strength' ? `잘 작동하는 대목 ${rail.number}` : `피드백 ${rail.number}: ${traitOf(rail.id)}`;
 </script>
 
 <!-- 본문 폭 640은 유지하고 왼쪽에 레일 거터(100px)를 더한다 — paddingLeft와 RAIL_GUTTER는 같은 값이어야 한다. -->
