@@ -32,6 +32,8 @@ export const promptUpdateSchema = z.object({
   toolDescriptions: z.record(z.string(), z.unknown()),
 });
 
+export const pushSchema = z.object({ documentId: z.string().min(1), title: z.string().min(1), body: z.string().min(1) });
+
 // cspell:disable-next-line
 const PROMPT_IDS = ['PRMT0SUMMARIZE', 'PRMT0META', 'PRMT0ANALYZE'];
 
@@ -195,4 +197,26 @@ internal.post('/corpus/extract', async (c) => {
   }
 
   return c.json({ results });
+});
+
+internal.post('/push', async (c) => {
+  const parsed = pushSchema.safeParse(await c.req.json());
+  if (!parsed.success) {
+    return c.json({ error: 'invalid payload' }, 400);
+  }
+
+  const authors = await dbr
+    .select({ userId: Entities.userId })
+    .from(Documents)
+    .innerJoin(Entities, eq(Entities.id, Documents.entityId))
+    .where(eq(Documents.id, parsed.data.documentId));
+  if (authors.length === 0) {
+    return c.json({ error: 'not found' }, 404);
+  }
+
+  // 정적 import 금지 — firebase.ts는 모듈 로드 시 initializeApp을 실행해, GOOGLE_SERVICE_ACCOUNT 없는
+  // 환경(테스트의 import 체인)이 즉사한다. 첫 호출 시점으로 초기화를 미룬다.
+  const { sendPushNotification } = await import('#/external/firebase.ts');
+  const sent = await sendPushNotification({ userId: authors[0].userId, title: parsed.data.title, body: parsed.data.body });
+  return c.json({ ok: true, sent });
 });

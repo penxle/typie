@@ -4,10 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "vite build",
+    "build": "vite build && node scripts/wrap-worker.mjs",
     "codegen": "svelte-kit sync && panda codegen",
     "db:migrate": "wrangler d1 migrations apply typie-eval-beta --remote",
-    "deploy": "vite build && wrangler deploy",
+    "deploy": "vite build && node scripts/wrap-worker.mjs && wrangler deploy",
     "dev": "vite dev",
     "lint:eslint": "eslint --max-warnings 0 .",
     "lint:svelte": "svelte-check --fail-on-warnings",

@@ -14,6 +14,9 @@ PRISM_API_ORIGIN = "https://prism-api.penxle.io"
 binding = "ASSETS"
 directory = ".svelte-kit/cloudflare"
 
+[triggers]
+crons = ["* * * * *"]
+
 [observability.logs]
 enabled = true
 invocation_logs = true

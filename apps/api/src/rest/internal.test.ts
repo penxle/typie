@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { hangulRatio, promptUpdateSchema, verifyInternalKey } from './internal.ts';
+import { hangulRatio, promptUpdateSchema, pushSchema, verifyInternalKey } from './internal.ts';
 
 test('verifyInternalKey: 정확한 Bearer 키만 통과', () => {
   assert.equal(verifyInternalKey('Bearer secret-key', 'secret-key'), true);
@@ -26,4 +26,14 @@ test('promptUpdateSchema: 유효 페이로드 통과, effort null 허용', () =>
 
 test('promptUpdateSchema: systemPrompt 누락 거부', () => {
   assert.throws(() => promptUpdateSchema.parse({ model: 'm', effort: null, toolDescriptions: {} }));
+});
+
+test('pushSchema: 유효 페이로드 통과', () => {
+  const payload = { documentId: 'D1', title: '질문이 있어요', body: '본문' };
+  assert.deepEqual(pushSchema.parse(payload), payload);
+});
+
+test('pushSchema: 빈 필드 거부', () => {
+  assert.throws(() => pushSchema.parse({ documentId: '', title: 't', body: 'b' }));
+  assert.throws(() => pushSchema.parse({ documentId: 'D1', title: 't' }));
 });

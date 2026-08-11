@@ -4,6 +4,7 @@ import type { InternalApi } from './internal-api.ts';
 
 const api = (prose: string | null, title: string | null): InternalApi => ({
   extract: (ids) => Promise.resolve(ids.map((documentId) => ({ documentId, prose, title }))),
+  sendPush: () => Promise.resolve(true),
 });
 
 describe('fetchManuscript', () => {

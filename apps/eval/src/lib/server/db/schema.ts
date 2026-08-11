@@ -78,3 +78,8 @@ export const Reactions = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.sessionId, t.reviewRound] })],
 );
+
+export const PushLog = sqliteTable('push_log', {
+  key: text('key').primaryKey(),
+  pushedAt: integer('pushed_at', { mode: 'timestamp_ms' }).notNull(),
+});
