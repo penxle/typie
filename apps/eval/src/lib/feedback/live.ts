@@ -10,6 +10,9 @@ export type ActivityLine = { id: number; text: string; stage: StageKey | null; s
 
 export type StageTiming = { firstAt: number | null; lastAt: number | null };
 
+// 턴 확정에 동봉된 usage의 에이전트별 누적 — 비용 축은 pricing.ts의 4축이라 thinkingTokens는 접지 않는다.
+export type AgentUsage = { turns: number; inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number };
+
 // 검수 라운드는 발화 없이 지나갈 수 있다 — 기계적으로 끝낸 왕복에서는 모델이 입을 열지 않는다. 발화만으로 화면을
 // 세우면 그런 라운드는 흔적 없이 사라지므로, 턴과 별개로 스텝 자체의 자취를 라운드마다 접어 둔다. id는 발화 라인과
 // 같은 커서라(둘 다 이벤트 순번) 두 흐름을 한 줄에 세울 수 있다.
@@ -50,19 +53,18 @@ export type QuestionEntry = {
   status: 'pending' | 'answered' | 'closed';
 };
 
-// 질문 대기는 리뷰의 진행이 아니다 — 주어진 창과 겹치는 파킹 구간의 합을 잰다(진행 시간 표시의 감산항).
+// 파킹 구간의 공통 형태 — 질문 대기(QuestionEntry)와 실패~재개 공백(pauses)이 같은 축으로 감산된다.
+export type PauseSpan = { at: number | null; settledAt: number | null };
+
+// 파킹은 리뷰의 진행이 아니다 — 주어진 창과 겹치는 파킹 구간의 합을 잰다(진행 시간 표시의 감산항).
 // 미해소 구간은 now까지 진행 중으로 치고, at을 잃은 엔트리는 잴 수 없어 건너뛴다. 창 귀속에 스테이지 필터가
-// 없어도 되는 근거는 파이프라인 직렬성이다: 질문 구간은 정확히 한 스테이지·라운드의 창 안에 놓인다.
-export const questionPausedMs = (
-  questions: QuestionEntry[],
-  now: number,
-  window?: { from?: number | null; to?: number | null },
-): number => {
+// 없어도 되는 근거는 파이프라인 직렬성이다: 파킹 구간은 정확히 한 스테이지·라운드의 창 안에 놓인다.
+export const pausedMs = (spans: PauseSpan[], now: number, window?: { from?: number | null; to?: number | null }): number => {
   let total = 0;
-  for (const question of questions) {
-    if (question.at === null) continue;
-    const start = window?.from == null ? question.at : Math.max(question.at, window.from);
-    const end = Math.min(question.settledAt ?? now, window?.to ?? now);
+  for (const span of spans) {
+    if (span.at === null) continue;
+    const start = window?.from == null ? span.at : Math.max(span.at, window.from);
+    const end = Math.min(span.settledAt ?? now, window?.to ?? now);
     if (end > start) total += end - start;
   }
   return total;
@@ -75,9 +77,14 @@ export type LiveState = {
   marks: ToolMark[];
   questions: QuestionEntry[];
   nestedSpans: Record<number, NestedSpan>;
+  usage: Record<string, AgentUsage>;
   currentStage: StageKey | null;
   currentStep: string | null;
   startedAt: number | null;
+  // 실패~재개의 닫힌 구간들 — 진행 시간 표시가 질문 대기와 같은 축으로 감산한다. failedAt은 아직 재개가
+  // 오지 않은 실패의 시각 표지다(재개 없이 끝나면 열린 구간은 세우지 않는다 — 종결 화면에 진행 시간이 없다).
+  pauses: { at: number; settledAt: number }[];
+  failedAt: number | null;
   terminal: boolean;
   cursor: number;
 };
@@ -94,6 +101,7 @@ export const CONSUMED_EVENTS = [
   'workflow.completed',
   'workflow.failed',
   'workflow.canceled',
+  'workflow.retried',
 ] as const;
 
 type ConsumedEvent = (typeof CONSUMED_EVENTS)[number];
@@ -185,6 +193,31 @@ const touchRound = (
 
 export const minutesBetween = (from: number, to: number): number => Math.max(0, Math.floor((to - from) / 60_000));
 
+// turn.completed data의 agent·usage(prism core/loop.ts)를 접는다. usage가 없거나(벤더 미보고) 수치가 어긋난
+// 이벤트는 누적하지 않는다 — 틀린 수를 더하는 것보다 빠뜨리는 편이 낫고, 표시가 하한임은 화면이 밝힌다.
+const accumulateUsage = (usage: Record<string, AgentUsage>, payload: Record<string, unknown> | null): Record<string, AgentUsage> => {
+  if (!isRecord(payload?.agent) || !isRecord(payload.usage)) return usage;
+  const agent = str(payload.agent.name);
+  const inputTokens = int(payload.usage.inputTokens);
+  const outputTokens = int(payload.usage.outputTokens);
+  const cacheReadTokens = int(payload.usage.cacheReadTokens);
+  const cacheWriteTokens = int(payload.usage.cacheWriteTokens);
+  if (agent === null || inputTokens === null || outputTokens === null || cacheReadTokens === null || cacheWriteTokens === null) {
+    return usage;
+  }
+  const prev = usage[agent] ?? { turns: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
+  return {
+    ...usage,
+    [agent]: {
+      turns: prev.turns + 1,
+      inputTokens: prev.inputTokens + inputTokens,
+      outputTokens: prev.outputTokens + outputTokens,
+      cacheReadTokens: prev.cacheReadTokens + cacheReadTokens,
+      cacheWriteTokens: prev.cacheWriteTokens + cacheWriteTokens,
+    },
+  };
+};
+
 // 도구 이름·대상 경로 → 화면 동사. 실패한 호출(ok !== true)은 캡슐감이 아니다 — 재시도 루프가 ×N을 부풀린다.
 const markVerb = (payload: Record<string, unknown> | null): ToolVerb | null => {
   if (payload?.ok !== true) return null;
@@ -215,11 +248,14 @@ export const applyEvent = (state: LiveState, event: SseEvent): LiveState => {
   // 턴 확정 텍스트가 발화 피드의 유일한 원천이다 — workflow 종결이 아니므로 터미널 판정보다 앞에서 걸러낸다.
   // 도구만 부르고 끝난 턴은 text가 null이고 아무것도 남기지 않는다 — 그 사이의 진행 시각은 tool.called이 이미 찍었다.
   if (kind === 'turn.completed') {
+    // usage 누적은 발화 필터보다 앞이다 — 도구만 부르고 끝난 턴(text null)도 과금은 확정됐다.
+    const usage = accumulateUsage(state.usage, payload);
     const text = str(payload?.text);
-    if (text === null) return { ...state, cursor };
+    if (text === null) return { ...state, usage, cursor };
     const timing = state.currentStage === null ? state.timing : touch(state.timing, state.currentStage, at);
     return {
       ...state,
+      usage,
       activity: append(state.activity, { id: cursor, text, stage: state.currentStage, step: state.currentStep, at }),
       timing,
       cursor,
@@ -250,8 +286,10 @@ export const applyEvent = (state: LiveState, event: SseEvent): LiveState => {
     // 돌던 라운드는 어느 종결이든 그 시각에서 끝난다 — 스테이지와 달리 멈춘 자리를 되살릴 여지가 없다.
     const round = nestedRound(state.currentStep);
     const nestedSpans = round === null || stage === null ? state.nestedSpans : touchRound(state.nestedSpans, round, stage, cursor, at);
+    // 실패 시각은 재개가 닫을 파킹 구간의 시작점이다 — 시각을 잃은 봉투는 감산을 포기한다(잘못 재기보다 안 재기).
+    const failedAt = kind === 'workflow.failed' ? at : state.failedAt;
     if (stage === null || kind !== 'workflow.completed' || state.stages[stage] !== 'running') {
-      return { ...state, questions, nestedSpans, terminal: true, cursor };
+      return { ...state, questions, nestedSpans, failedAt, terminal: true, cursor };
     }
     return {
       ...state,
@@ -259,9 +297,18 @@ export const applyEvent = (state: LiveState, event: SseEvent): LiveState => {
       timing: touch(state.timing, stage, at),
       questions,
       nestedSpans,
+      failedAt,
       terminal: true,
       cursor,
     };
+  }
+
+  // 재개는 실패 종결의 되돌림이다(prism core/do.ts retryWorkflow의 workflow.retried) — 실패로 굳은 terminal을
+  // 풀어야 종결 전이 감지가 다음 종결에서 다시 발화한다. 실패~재개 구간은 리뷰가 돈 시간이 아니라 파킹으로
+  // 접는다(질문 대기와 같은 감산 축). 멈춘 스테이지는 실패가 닫지 않았으므로 그대로 이어진다.
+  if (kind === 'workflow.retried') {
+    const pauses = at !== null && state.failedAt !== null ? [...state.pauses, { at: state.failedAt, settledAt: at }] : state.pauses;
+    return { ...state, pauses, failedAt: null, terminal: false, cursor };
   }
 
   if (kind === 'step.started') {
@@ -514,9 +561,12 @@ export const initialLive = (events: SseEvent[]): LiveState => {
     marks: [],
     questions: [],
     nestedSpans: {},
+    usage: {},
     currentStage: null,
     currentStep: null,
     startedAt: null,
+    pauses: [],
+    failedAt: null,
     terminal: false,
     cursor: 0,
   };

@@ -2,14 +2,18 @@ import { describe, expect, it } from 'vitest';
 import { fetchManuscript } from './ingest.ts';
 import type { InternalApi } from './internal-api.ts';
 
-const api = (prose: string | null, title: string | null): InternalApi => ({
-  extract: (ids) => Promise.resolve(ids.map((documentId) => ({ documentId, prose, title }))),
+const api = (prose: string | null, title: string | null, subtitle: string | null = null): InternalApi => ({
+  extract: (ids) => Promise.resolve(ids.map((documentId) => ({ documentId, prose, title, subtitle }))),
   sendPush: () => Promise.resolve(true),
 });
 
 describe('fetchManuscript', () => {
-  it('prose와 title을 돌려준다', async () => {
-    await expect(fetchManuscript(api('본문입니다', '제목'), 'D0TEST01')).resolves.toEqual({ content: '본문입니다', title: '제목' });
+  it('prose·title·subtitle을 돌려준다', async () => {
+    await expect(fetchManuscript(api('본문입니다', '제목', '부제'), 'D0TEST01')).resolves.toEqual({
+      content: '본문입니다',
+      title: '제목',
+      subtitle: '부제',
+    });
   });
 
   it('prose가 없으면 사용자 문면으로 반려한다', async () => {

@@ -1,10 +1,13 @@
 <script lang="ts">
   import { css, cva } from '@typie/styled-system/css';
+  import { flex } from '@typie/styled-system/patterns';
   import { Icon } from '@typie/ui/components';
   import { tick, untrack } from 'svelte';
   import IconChevronDown from '~icons/lucide/chevron-down';
   import IconChevronUp from '~icons/lucide/chevron-up';
   import { anchorQuote } from '$lib/feedback/anchors.ts';
+  import { issueRefsInclude } from '$lib/feedback/conclusion.ts';
+  import { hasCurrentAnchors, settledGroups } from '$lib/feedback/threads.ts';
   import ThreadCard from './ThreadCard.svelte';
   import type { FeedbackConclusion } from '$lib/feedback/types.ts';
   import type { PageData } from './$types';
@@ -18,15 +21,48 @@
     patterns: FeedbackConclusion['patterns'];
     priorities: FeedbackConclusion['priorities'];
     activeId: string | null;
+    locked: boolean;
+    // 표시 회차 — 총평 콜아웃이 제 회차 스레드에만 붙도록 가르는 축이다(카드 목록 자체는 전 회차를 싣는다).
+    round: number;
     onActivate: (threadId: string | null) => void;
   };
 
-  const { threads, comments, content, patterns, priorities, activeId, onActivate }: Props = $props();
+  const { threads, comments, content, patterns, priorities, activeId, locked, round, onActivate }: Props = $props();
 
   const commentsOf = (threadId: string) => comments.filter((comment) => comment.threadId === threadId);
 
-  // 여백 코멘트 배치 — 카드는 자기 앵커(원고의 첫 마크)와 같은 높이에 붙는다. 겹치면 아래로 밀리고,
-  // 활성 카드는 자기 앵커 높이에 정확히 고정된 채 위쪽 카드들이 위로 물러난다. 마크가 없는 스레드는 끝에 쌓인다.
+  // 모드 분할 — 열린 모드는 현 원고 앵커 보유 전원(open + 이번 회차에 닫은 것), 해결된 모드는 과거 회차의
+  // 닫힘·철회·해소. 이동은 재리뷰 사영(reviewRound 갱신·처분 전이)에서만 일어난다.
+  const openThreads = $derived(threads.filter((thread) => hasCurrentAnchors(thread, round)));
+  const settledThreads = $derived(threads.filter((thread) => !hasCurrentAnchors(thread, round)));
+  const groups = $derived(settledGroups(settledThreads));
+  let mode = $state<'open' | 'settled'>('open');
+
+  // 신규 뱃지는 이전 회차 카드가 존재하는 세션에서만 켠다 — 첫 리뷰는 전부 신규라 뱃지가 소음이 된다.
+  const hasHistory = $derived(threads.some((thread) => thread.bornRound !== round));
+
+  // 활성 카드가 다른 모드에 있으면 모드가 따라 전환한다 — 해결된 탭에서 본문 레일을 눌렀을 때(마크는 열린
+  // 모드 스레드에만 있다) 아무 일도 안 일어나면 안 된다. +page activate의 스크롤은 전환 전 프레임이라 카드를
+  // 못 찾으므로, 렌더를 기다려 여기서 다시 스크롤한다. strength 마크 등 스레드 밖 id는 건드리지 않는다.
+  $effect(() => {
+    const id = activeId;
+    if (id === null) return;
+    untrack(() => {
+      const next = openThreads.some((thread) => thread.id === id)
+        ? 'open'
+        : settledThreads.some((thread) => thread.id === id)
+          ? 'settled'
+          : null;
+      if (next === null || next === mode) return;
+      mode = next;
+      void tick().then(() =>
+        document.querySelector(`[data-thread-card="${id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }),
+      );
+    });
+  });
+
+  // 여백 코멘트 배치(열린 모드) — 카드는 자기 앵커(원고의 첫 마크)와 같은 높이에 붙는다. 겹치면 아래로 밀리고,
+  // 활성 카드는 자기 앵커 높이에 정확히 고정된 채 위쪽 카드들이 위로 물러난다.
   const GAP = 12;
 
   let columnEl = $state<HTMLDivElement>();
@@ -55,15 +91,16 @@
   };
 
   const relayout = () => {
-    if (!columnEl) return;
+    if (mode !== 'open' || !columnEl) return;
     const columnTop = columnEl.getBoundingClientRect().top;
     const minTop = 0;
     const entries: { id: string; desired: number; height: number }[] = [];
-    for (const thread of threads) {
+    for (const thread of openThreads) {
       const el = cardEls[thread.id];
       if (!el) continue;
       // 구간 스팬은 data-thread-range에 id 여러 개를 실으므로 ~= 로 집는다(+page.svelte activate와 같은 선택자).
       const mark = document.querySelector(`[data-thread-range~="${thread.id}"]`);
+      // 열린 모드 카드는 전원 현 원고 앵커가 있다 — Infinity는 마크가 아직 그려지기 전 프레임의 방어 폴백이다.
       const desired = mark ? Math.max(minTop, mark.getBoundingClientRect().top - columnTop) : Infinity;
       entries.push({ id: thread.id, desired, height: heightOverrides[thread.id] ?? el.offsetHeight });
     }
@@ -81,11 +118,13 @@
     };
 
     const activeAt = entries.findIndex((entry) => entry.id === activeId);
-    if (activeAt === -1) {
+    // 상향 양보는 앵커 높이가 잡힌 활성 카드만의 규칙이다 — 폴백(Infinity) 카드를 기준으로 위 카드들을 물리면
+    // 기준점이 컬럼 상단이 되어 위쪽 전부가 top 0에 포개진다. 이 경우는 활성 없음과 같은 흐름 배치로 둔다.
+    if (activeAt === -1 || !Number.isFinite(entries[activeAt].desired)) {
       layoutDown(0, minTop);
     } else {
       const active = entries[activeAt];
-      const activeTop = Number.isFinite(active.desired) ? active.desired : minTop;
+      const activeTop = active.desired;
       next[active.id] = activeTop;
       let ceiling = activeTop;
       for (let i = activeAt - 1; i >= 0; i--) {
@@ -127,7 +166,7 @@
     const scrollRect = scrollEl.getBoundingClientRect();
     let above = 0;
     let below = 0;
-    for (const thread of threads) {
+    for (const thread of openThreads) {
       const el = cardEls[thread.id];
       if (!el || tops[thread.id] === undefined) continue;
       const rect = el.getBoundingClientRect();
@@ -157,7 +196,7 @@
     const scrollRect = scrollEl.getBoundingClientRect();
     let target: HTMLDivElement | null = null;
     let best = direction === 'up' ? -Infinity : Infinity;
-    for (const thread of threads) {
+    for (const thread of openThreads) {
       const el = cardEls[thread.id];
       if (!el || tops[thread.id] === undefined) continue;
       const rect = el.getBoundingClientRect();
@@ -175,7 +214,8 @@
   $effect(() => () => clearTimeout(edgeTimer));
 
   $effect(() => {
-    void threads;
+    void openThreads;
+    void mode;
     void tick().then(relayout);
   });
 
@@ -306,82 +346,155 @@
     whiteSpace: 'nowrap',
   });
 
+  // 모드 토글 — 해결된 스레드가 있을 때만 선다(1회차 세션은 지금과 같은 화면). 스타일은 카드 상태 칩과
+  // 같은 시맨틱 토큰 계열이다.
+  const toggleRowClass = flex({
+    align: 'center',
+    gap: '4px',
+    padding: '3px',
+    borderWidth: '1px',
+    borderColor: 'border.default',
+    borderRadius: '8px',
+    backgroundColor: 'surface.muted',
+    width: 'fit',
+  });
+  const toggleButtonRecipe = cva({
+    base: { paddingX: '10px', paddingY: '4px', borderRadius: '6px', fontSize: '12px', color: 'text.faint', cursor: 'pointer' },
+    variants: {
+      selected: { true: { backgroundColor: 'surface.default', color: 'text.default', fontWeight: 'medium' }, false: {} },
+    },
+  });
+  const groupHeaderClass = flex({ align: 'center', gap: '8px', paddingX: '8px', marginTop: '8px' });
+
+  // 총평의 issues 참조가 번호면 표시 회차 result.issues의 인덱스다 — 회차마다 0부터 다시 세므로, 승계 스레드는
+  // 번호가 같아도 남의 회차 것이라 콜아웃을 받지 않는다(id 참조는 신원이라 겹치지 않지만 축은 그대로 둔다).
+  const ofThisRound = (thread: Thread) => thread.reviewRound === round;
+
   // 반복 패턴 박스는 이 지적을 품은 패턴에서만 뜬다 — theme이 비면 문면이 성립하지 않아 접는다.
-  const patternOf = (issueIndex: number) => {
-    const owner = patterns.find((pattern) => pattern.theme && pattern.issues.includes(issueIndex));
+  const patternOf = (thread: Thread) => {
+    if (!ofThisRound(thread)) return null;
+    const owner = patterns.find((pattern) => pattern.theme && issueRefsInclude(pattern.issues, thread));
     return owner?.theme ? { theme: owner.theme, count: owner.issues.length } : null;
   };
 
   // 손보실 순서 박스 — 이 지적을 참조하는 첫 단계의 순번과 그 단계의 본문이다(여러 단계에 실리면 가장 급한 쪽).
-  const priorityOf = (issueIndex: number) => {
-    const at = priorities.findIndex((priority) => priority.issues.includes(issueIndex));
+  const priorityOf = (thread: Thread) => {
+    if (!ofThisRound(thread)) return null;
+    const at = priorities.findIndex((priority) => issueRefsInclude(priority.issues, thread));
     return at === -1 ? null : { rank: at + 1, total: priorities.length, body: priorities[at].body };
   };
 </script>
 
-<div bind:this={columnEl} class={css({ flexGrow: '1', minWidth: '0', position: 'relative' })}>
-  <div class={css(edgeLineRecipe.raw({ edge: 'top' }))}>
-    <button class={css(edgeRowRecipe.raw({ shown: hiddenAbove > 0 }))} onclick={() => jumpEdge('up')} type="button">
-      <div class={edgeBlurOuterClass}></div>
-      <div class={edgeBlurInnerClass}></div>
-      <span class={edgeLineSegClass}></span>
-      <span class={edgeTextClass}>
-        <Icon icon={IconChevronUp} size={10} />
-        위로 피드백 {labelAbove}개
-      </span>
-      <span class={edgeLineSegClass}></span>
-    </button>
-  </div>
-
-  {#each threads as thread (thread.id)}
-    <div
-      bind:this={cardEls[thread.id]}
-      style:top={`${tops[thread.id] ?? 0}px`}
-      class={css(wrapperRecipe.raw({ positioned: tops[thread.id] !== undefined, animated }))}
-    >
-      <ThreadCard
-        comments={commentsOf(thread.id)}
-        expanded={activeId === thread.id}
-        onToggle={() => onActivate(activeId === thread.id ? null : thread.id)}
-        pattern={patternOf(thread.issueIndex)}
-        priority={priorityOf(thread.issueIndex)}
-        quote={anchorQuote(content, thread.anchors)}
-        {thread}
-      />
+<!-- 세로 flex + 안쪽 컬럼 flexGrow — 가장자리 인디케이터(sticky)의 컨테이닝 블록이 행 전체 높이(원고만큼)로
+     늘어나야 한다. 콘텐츠 높이에 머물면 카드 컬럼이 원고보다 짧을 때 스크롤 말미에 sticky가 컨테이너 바닥에
+     눌려 마지막 카드 밑으로 딸려 올라간다(실측). -->
+<div class={css({ display: 'flex', flexDirection: 'column', flexGrow: '1', minWidth: '0' })}>
+  {#if settledThreads.length > 0}
+    <div class={toggleRowClass}>
+      <button class={css(toggleButtonRecipe.raw({ selected: mode === 'open' }))} onclick={() => (mode = 'open')} type="button">
+        열린 피드백 {openThreads.length}
+      </button>
+      <button class={css(toggleButtonRecipe.raw({ selected: mode === 'settled' }))} onclick={() => (mode = 'settled')} type="button">
+        해결된 피드백 {settledThreads.length}
+      </button>
     </div>
-  {/each}
-
-  {#if threads.length === 0}
-    <p
-      class={css({
-        marginTop: '44px',
-        paddingX: '16px',
-        paddingY: '36px',
-        borderWidth: '1px',
-        borderColor: 'border.subtle',
-        borderRadius: '10px',
-        backgroundColor: 'surface.subtle',
-        textAlign: 'center',
-        fontSize: '12px',
-        color: 'text.faint',
-      })}
-    >
-      이번 리뷰에서는 짚은 곳이 없어요
-    </p>
   {/if}
 
-  <div style:height={`${spacerHeight}px`}></div>
+  {#if mode === 'open'}
+    <div bind:this={columnEl} class={css({ position: 'relative', flexGrow: '1' })}>
+      <div class={css(edgeLineRecipe.raw({ edge: 'top' }))}>
+        <button class={css(edgeRowRecipe.raw({ shown: hiddenAbove > 0 }))} onclick={() => jumpEdge('up')} type="button">
+          <div class={edgeBlurOuterClass}></div>
+          <div class={edgeBlurInnerClass}></div>
+          <span class={edgeLineSegClass}></span>
+          <span class={edgeTextClass}>
+            <Icon icon={IconChevronUp} size={10} />
+            위로 피드백 {labelAbove}개
+          </span>
+          <span class={edgeLineSegClass}></span>
+        </button>
+      </div>
 
-  <div class={css(edgeLineRecipe.raw({ edge: 'bottom' }))}>
-    <button class={css(edgeRowRecipe.raw({ shown: hiddenBelow > 0 }))} onclick={() => jumpEdge('down')} type="button">
-      <div class={edgeBlurOuterClass}></div>
-      <div class={edgeBlurInnerClass}></div>
-      <span class={edgeLineSegClass}></span>
-      <span class={edgeTextClass}>
-        <Icon icon={IconChevronDown} size={10} />
-        아래로 피드백 {labelBelow}개
-      </span>
-      <span class={edgeLineSegClass}></span>
-    </button>
-  </div>
+      {#each openThreads as thread (thread.id)}
+        <div
+          bind:this={cardEls[thread.id]}
+          style:top={`${tops[thread.id] ?? 0}px`}
+          class={css(wrapperRecipe.raw({ positioned: tops[thread.id] !== undefined, animated }))}
+        >
+          <ThreadCard
+            comments={commentsOf(thread.id)}
+            expanded={activeId === thread.id}
+            isNew={hasHistory && thread.bornRound === round}
+            {locked}
+            onToggle={() => onActivate(activeId === thread.id ? null : thread.id)}
+            pattern={patternOf(thread)}
+            priority={priorityOf(thread)}
+            quote={anchorQuote(content, thread.anchors)}
+            {round}
+            {thread}
+          />
+        </div>
+      {/each}
+
+      {#if openThreads.length === 0}
+        <p
+          class={css({
+            marginTop: '44px',
+            paddingX: '16px',
+            paddingY: '36px',
+            borderWidth: '1px',
+            borderColor: 'border.subtle',
+            borderRadius: '10px',
+            backgroundColor: 'surface.subtle',
+            textAlign: 'center',
+            fontSize: '12px',
+            color: 'text.faint',
+          })}
+        >
+          {threads.length === 0 ? '이번 리뷰에서는 짚은 곳이 없어요' : '열린 피드백이 없어요'}
+        </p>
+      {/if}
+
+      <div style:height={`${spacerHeight}px`}></div>
+
+      <div class={css(edgeLineRecipe.raw({ edge: 'bottom' }))}>
+        <button class={css(edgeRowRecipe.raw({ shown: hiddenBelow > 0 }))} onclick={() => jumpEdge('down')} type="button">
+          <div class={edgeBlurOuterClass}></div>
+          <div class={edgeBlurInnerClass}></div>
+          <span class={edgeLineSegClass}></span>
+          <span class={edgeTextClass}>
+            <Icon icon={IconChevronDown} size={10} />
+            아래로 피드백 {labelBelow}개
+          </span>
+          <span class={edgeLineSegClass}></span>
+        </button>
+      </div>
+    </div>
+  {:else}
+    <!-- 해결된 모드 — 앵커링 없는 흐름 스택. 가장자리 어포던스는 없다: 위에서부터 차곡차곡이라 점프의 의미가 없다. -->
+    <div class={flex({ direction: 'column', gap: '10px', marginTop: '12px' })}>
+      {#each groups as group (group.number ?? -1)}
+        <div class={groupHeaderClass}>
+          <span class={edgeLineSegClass}></span>
+          <span class={css({ flex: 'none', fontSize: '11px', color: 'text.faint' })}>
+            {group.number === null ? '회차 미상' : `${group.number}회차에서 정리됨`} · {group.threads.length}건
+          </span>
+          <span class={edgeLineSegClass}></span>
+        </div>
+        {#each group.threads as thread (thread.id)}
+          <ThreadCard
+            comments={commentsOf(thread.id)}
+            expanded={activeId === thread.id}
+            {locked}
+            onToggle={() => onActivate(activeId === thread.id ? null : thread.id)}
+            pattern={null}
+            priority={null}
+            quote={thread.originalQuote}
+            {round}
+            {thread}
+          />
+        {/each}
+      {/each}
+    </div>
+  {/if}
 </div>

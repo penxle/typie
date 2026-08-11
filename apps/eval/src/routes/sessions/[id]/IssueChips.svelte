@@ -1,16 +1,19 @@
 <script lang="ts">
   import { css, cva } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
+  import { threadsOfIssueRefs } from '$lib/feedback/conclusion.ts';
+  import type { IssueRef } from '$lib/feedback/conclusion.ts';
   import type { PageData } from './$types';
 
   type Thread = PageData['threads'][number];
 
-  // 총평의 issues 인덱스를 지적 칩 줄로 편다 — 패널과 드로어가 같은 문법을 쓴다. 칩은 필(pill) 하나이고
+  // 총평의 issues 참조를 지적 칩 줄로 편다 — 패널과 드로어가 같은 문법을 쓴다. 칩은 필(pill) 하나이고
   // 안에 축 라벨과 피드백 번호가 함께 산다(오너 결정 — 위치 텍스트 자리를 번호가 이어받았다). 번호는
   // 레일·카드와 같은 번호라 세 자리를 잇는 어포던스이고, 활성 카드의 칩은 필 전체가 색 반전된다.
   // data-conclusion-mark는 패널의 칩 연동 스크롤이 집는 좌표다.
   type Props = {
-    issues: number[];
+    // 참조는 번호(구 결과·번호로 세는 티어)와 id(지적을 id로 다루는 티어) 양쪽으로 온다 — 대조는 헬퍼가 맡는다.
+    issues: IssueRef[];
     threads: Thread[];
     activeId: string | null;
     onActivate: (threadId: string) => void;
@@ -18,9 +21,7 @@
 
   const { issues, threads, activeId, onActivate }: Props = $props();
 
-  const byIssue = $derived(new Map(threads.map((thread) => [thread.issueIndex, thread])));
-  // 인덱스가 중복으로 오면 키가 겹쳐 each가 터진다 — 모델 산출물이라 중복을 가정하고 접는다.
-  const chips = $derived([...new Set(issues)].flatMap((index) => byIssue.get(index) ?? []));
+  const chips = $derived(threadsOfIssueRefs(issues, threads));
 
   // 색 규칙은 레일·카드 번호 칩과 한 몸이다: open은 브랜드, 닫힌 스레드는 회색조, 활성 반전도 계열을 따른다.
   const chipRecipe = cva({
@@ -70,7 +71,7 @@
         type="button"
       >
         <span class={numberClass}>{thread.issueIndex + 1} ·</span>
-        {thread.axis}
+        {thread.trait}
       </button>
     {/each}
   </div>

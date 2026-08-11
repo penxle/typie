@@ -1,11 +1,11 @@
 import { computeSegments } from './highlight.ts';
 import type { Anchor } from './types.ts';
 
-export type MarkKind = 'critique' | 'proofread' | 'closed' | 'strength';
+export type MarkKind = 'judgment' | 'stylistic' | 'closed' | 'strength';
 
 // 마크 파생에 필요한 최소 형태 — load가 내려주는 스레드 행이 그대로 들어맞는다. 잘 작동하는 대목(strength)도
 // 같은 파이프라인을 탄다 — id만 'strength.N' 네임스페이스로 갈라지고 나머지 형상·동작은 지적과 동일하다.
-export type MarkThread = { id: string; pass: 'critique' | 'proofread' | 'strength'; state: string; anchors: Anchor[] };
+export type MarkThread = { id: string; pass: 'judgment' | 'stylistic' | 'strength'; state: string; anchors: Anchor[] };
 
 // 본문 표기는 레일로 통일됐다(오너 결정) — 세그먼트는 앵커 길이를 가리지 않고 구간 소속만 싣는다.
 // 스팬은 레일 측정 좌표와 활성 하이라이트만 담당하고, 평시 본문은 무표기다.

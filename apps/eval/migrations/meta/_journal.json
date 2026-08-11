@@ -50,6 +50,34 @@
       "when": 1786418769021,
       "tag": "0006_normal_nighthawk",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1786541258689,
+      "tag": "0007_rename_axis_to_trait",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1786641695777,
+      "tag": "0008_adorable_scream",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1786713621055,
+      "tag": "0009_talented_monster_badoon",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1786718900606,
+      "tag": "0010_backfill_manuscript_titles",
+      "breakpoints": true
     }
   ]
 }

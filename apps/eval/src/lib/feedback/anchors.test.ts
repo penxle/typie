@@ -1,27 +1,27 @@
 import { describe, expect, it } from 'vitest';
 import { anchorQuote, markParagraphs, markSegments } from './anchors.ts';
 
-const thread = (id: string, start: number, end: number, pass: 'critique' | 'proofread', state = 'open') =>
+const thread = (id: string, start: number, end: number, pass: 'judgment' | 'stylistic', state = 'open') =>
   ({ id, pass, state, anchors: [{ start, end, head: '', tail: '' }] }) as never;
 
 describe('markSegments', () => {
   it('스레드 소속을 세그먼트로 분해한다 — 앵커 길이와 무관하게 같은 형상이다', () => {
-    const segs = markSegments('가나다라마바사', [thread('t1', 1, 3, 'critique'), thread('t2', 2, 5, 'proofread', 'closed')]);
+    const segs = markSegments('가나다라마바사', [thread('t1', 1, 3, 'judgment'), thread('t2', 2, 5, 'stylistic', 'closed')]);
     expect(segs.map((s) => s.text).join('')).toBe('가나다라마바사');
     const hit = segs.find((s) => s.text === '다');
     expect(hit?.threadIds).toEqual(['t1', 't2']);
   });
 
   it('앵커 없는 스레드는 소속을 만들지 않는다', () => {
-    const segs = markSegments('가나다', [{ id: 't1', pass: 'critique', state: 'open', anchors: [] } as never]);
+    const segs = markSegments('가나다', [{ id: 't1', pass: 'judgment', state: 'open', anchors: [] } as never]);
     expect(segs).toEqual([{ text: '가나다', threadIds: [] }]);
   });
 
   it('긴 앵커와 짧은 앵커가 겹친 조각은 양쪽 소속을 모두 싣는다', () => {
     const content = `머리 ${'가'.repeat(50)} 꼬리`;
     const segs = markSegments(content, [
-      { id: 'long', pass: 'critique', state: 'open', anchors: [{ start: 0, end: content.length, head: '머리', tail: '꼬리' }] } as never,
-      thread('short', 5, 9, 'proofread'),
+      { id: 'long', pass: 'judgment', state: 'open', anchors: [{ start: 0, end: content.length, head: '머리', tail: '꼬리' }] } as never,
+      thread('short', 5, 9, 'stylistic'),
     ]);
     const hit = segs.find((s) => s.text === '가가가가');
     expect(hit?.threadIds).toEqual(['long', 'short']);
@@ -31,7 +31,7 @@ describe('markSegments', () => {
     const segs = markSegments('가나다라마', [
       {
         id: 't1',
-        pass: 'proofread',
+        pass: 'stylistic',
         state: 'open',
         anchors: [
           { start: 0, end: 4, head: '', tail: '' },
@@ -46,7 +46,7 @@ describe('markSegments', () => {
 
 describe('markParagraphs', () => {
   it('개행으로 문단을 가르고 빈 문단을 버린다', () => {
-    const paragraphs = markParagraphs('가나\n\n다라', [thread('t1', 1, 5, 'critique')]);
+    const paragraphs = markParagraphs('가나\n\n다라', [thread('t1', 1, 5, 'judgment')]);
     expect(paragraphs.map((pieces) => pieces.map((piece) => piece.text).join(''))).toEqual(['가나', '다라']);
     expect(paragraphs[0].map((piece) => piece.threadIds)).toEqual([[], ['t1']]);
     expect(paragraphs[1].map((piece) => piece.threadIds)).toEqual([['t1'], []]);

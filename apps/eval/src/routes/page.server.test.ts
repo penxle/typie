@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fetchCatalog } from '$lib/server/prism.ts';
 import { startFeedbackSession } from '$lib/server/reviews.ts';
 import { actions } from './+page.server.ts';
+import type { AppCatalog } from '$lib/feedback/tiers.ts';
 
 // 시작 액션의 관심사는 폼 → 티어 판정 → 시작 인자다. 반입·D1은 이 경계 밖이라 대역으로 세운다.
 vi.mock('$lib/server/reviews.ts', async (importOriginal) => ({
@@ -12,6 +14,30 @@ vi.mock('$lib/server/db/index.ts', async (importOriginal) => ({
   ...(await importOriginal<typeof import('$lib/server/db/index.ts')>()),
   createDb: () => ({}),
 }));
+
+// 카탈로그도 경계 밖(prism API)이라 대역이다 — 검증·조립 재료로만 관통한다.
+vi.mock('$lib/server/prism.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('$lib/server/prism.ts')>()),
+  fetchCatalog: vi.fn(),
+}));
+
+const CATALOG = {
+  models: {
+    'claude-opus-5': { provider: 'anthropic', efforts: ['low', 'medium', 'high', 'xhigh', 'max'] },
+    'claude-sonnet-5': { provider: 'anthropic', efforts: ['low', 'medium', 'high', 'xhigh', 'max'] },
+    'gpt-5.6-luna': { provider: 'openai', efforts: ['none', 'low', 'medium', 'high', 'xhigh', 'max'] },
+    'gemini-3.6-flash': { provider: 'gemini', efforts: ['minimal', 'low', 'medium', 'high'] },
+  },
+  agents: {
+    'rephrase-medium': { provider: 'anthropic', model: 'claude-sonnet-5', effort: 'medium' },
+    'critique-low': { provider: 'gemini', model: 'gemini-3.6-flash', effort: 'high' },
+  },
+  workflows: {
+    high: { agents: ['description-high', 'judgment-high'] },
+    medium: { agents: ['research-medium', 'rephrase-medium'] },
+    low: { agents: ['critique-low'] },
+  },
+} satisfies AppCatalog;
 
 type StartEvent = Parameters<(typeof actions)['start']>[0];
 
@@ -29,9 +55,13 @@ const run = (fields: Record<string, string>, email = 'admin@x.io') => {
   return Promise.resolve(actions.start(event)).catch((err: unknown) => err);
 };
 
+const catalogued = vi.mocked(fetchCatalog);
+
 beforeEach(() => {
   started.mockReset();
   started.mockResolvedValue({ sessionId: 's1' });
+  catalogued.mockReset();
+  catalogued.mockResolvedValue(CATALOG);
 });
 
 describe('start 액션의 티어 관통', () => {
@@ -39,7 +69,7 @@ describe('start 액션의 티어 관통', () => {
     const outcome = await run({ documentId: 'D0TEST01' }, 't@x.io');
 
     expect(started).toHaveBeenCalledTimes(1);
-    expect(started.mock.calls[0][2]).toEqual({ refId: 'D0TEST01', email: 't@x.io', tier: 'high', overrides: {} });
+    expect(started.mock.calls[0][2]).toEqual({ refId: 'D0TEST01', email: 't@x.io', catalog: CATALOG, tier: 'high', overrides: {} });
     expect(outcome).toMatchObject({ status: 303, location: '/sessions/s1' });
   });
 
@@ -65,7 +95,7 @@ describe('start 액션의 티어 관통', () => {
 
     expect(started.mock.calls[0][2]).toMatchObject({
       tier: 'medium',
-      overrides: { 'rephrase-medium': { model: 'gpt-5.6-luna', effort: 'low' } },
+      overrides: { 'rephrase-medium': { provider: 'openai', model: 'gpt-5.6-luna', effort: 'low' } },
     });
   });
 
@@ -92,6 +122,15 @@ describe('start 액션의 티어 관통', () => {
     const outcome = await run({ documentId: 'D0TEST01', tier: 'extreme' });
 
     expect(outcome).toMatchObject({ status: 400 });
+    expect(started).not.toHaveBeenCalled();
+  });
+
+  it('카탈로그를 못 걷으면 502로 명시 실패하고 아무것도 시작하지 않는다 — 폴백 없음', async () => {
+    catalogued.mockRejectedValue(new Error('down'));
+
+    const outcome = await run({ documentId: 'D0TEST01' }, 't@x.io');
+
+    expect(outcome).toMatchObject({ status: 502 });
     expect(started).not.toHaveBeenCalled();
   });
 });

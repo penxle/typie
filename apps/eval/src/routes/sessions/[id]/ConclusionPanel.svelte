@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { css, cva } from '@typie/styled-system/css';
+  import { css, cva, cx } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Icon } from '@typie/ui/components';
   import { untrack } from 'svelte';
@@ -8,13 +8,16 @@
   import IconChevronRight from '~icons/lucide/chevron-right';
   import IconMaximize2 from '~icons/lucide/maximize-2';
   import { anchorQuote } from '$lib/feedback/anchors.ts';
+  import { issueRefsInclude } from '$lib/feedback/conclusion.ts';
+  import { verdictLabel } from '$lib/feedback/verdicts.ts';
   import IssueChips from './IssueChips.svelte';
   import ReviewReaction from './ReviewReaction.svelte';
-  import type { FeedbackConclusion } from '$lib/feedback/types.ts';
+  import type { FeedbackConclusion, FeedbackResult } from '$lib/feedback/types.ts';
+  import type { Verdict } from '$lib/feedback/verdicts.ts';
   import type { PageData } from './$types';
 
   type Thread = PageData['threads'][number];
-  type SectionKey = 'understanding' | 'strengths' | 'clearances' | 'patterns' | 'priorities';
+  type SectionKey = 'understanding' | 'progress' | 'strengths' | 'verdicts' | 'elevations' | 'clearances' | 'patterns' | 'priorities';
 
   // 총평의 상주 자리 — 원고·카드와 나란히 서서 오가며 읽는 좌측 패널이다. 다섯 섹션 전부 아코디언이고
   // 펼치면 드로어와 같은 전문이 좁은 폭으로 흐른다(요약본 아님). 기본은 전부 펼침(오너 결정 — 목업의 개폐
@@ -22,6 +25,11 @@
   // 스트립으로 접히고, 정독은 드로어가 맡는다.
   type Props = {
     conclusion: FeedbackConclusion;
+    // 특질 판정 — 결과의 최상위 필드라 총평과 따로 온다. 기준표를 세우는 티어에만 실린다.
+    verdicts: Verdict[];
+    // 격상 — 자리 잡은(3점) 관점의 다음 단계 제안. 결함이 아니라 지적 스레드가 없고 총평에만 선다.
+    elevations: NonNullable<FeedbackResult['elevations']>;
+    // 총평 연동에만 쓰는 목록이라 표시 회차가 만든 스레드만 온다(+page.svelte conclusionThreads) — 칩·활성 대조가 전부 이 축이다.
     threads: Thread[];
     content: string;
     activeId: string | null;
@@ -30,11 +38,13 @@
     onExpand: () => void;
   };
 
-  const { conclusion, threads, content, activeId, reaction, onActivate, onExpand }: Props = $props();
+  const { conclusion, verdicts, elevations, threads, content, activeId, reaction, onActivate, onExpand }: Props = $props();
 
   const narrow = new MediaQuery('(max-width: 1359px)', false);
 
   const understandingLines = $derived((conclusion.understanding ?? '').split('\n').filter((line) => line.trim().length > 0));
+  // 진전 서술은 재리뷰 회차에만 온다 — 1회차·구 데이터는 필드가 없어 섹션 자체가 서지 않는다.
+  const progressLines = $derived((conclusion.progress ?? '').split('\n').filter((line) => line.trim().length > 0));
 
   // 인용은 카드의 인용 블록과 같은 규칙으로 자른다(anchorQuote). 앵커가 원문과 안 맞으면 발췌를 그대로 잇는다 —
   // 원고에 설 자리(스팬)가 없으니 클릭 연동도 함께 접는다.
@@ -47,24 +57,32 @@
 
   let expanded = $state<Record<SectionKey, boolean>>({
     understanding: true,
+    progress: true,
     strengths: true,
+    verdicts: true,
+    elevations: true,
     clearances: true,
     patterns: true,
     priorities: true,
   });
 
   // 칩 연동 — 활성 카드(또는 강점)를 참조하는 자리가 접힌 섹션에 숨어 있으면 펼치고, 펼침(250ms)이 끝난 뒤
-  // 그 자리로 스크롤한다. 하이라이트는 칩·항목 자신의 activeId 대조가 담당한다(칩 단위만 — 오너 결정).
+  // 그 자리로 스크롤한다. 같은 스레드의 칩은 습관·순서 여러 항목에 설 수 있어 첫 매치로 점프하지 않는다 —
+  // nearest의 뜻(보이면 안 움직임)을 매치 전체로 넓혀, 이미 보이는 자리(클릭한 칩 자신 포함)가 있으면 그대로
+  // 두고 없을 때만 스크롤이 가장 적게 드는 자리를 집는다. 하이라이트는 칩·항목 자신의 activeId 대조가
+  // 담당한다(칩 단위만 — 오너 결정).
   let bodyEl = $state<HTMLDivElement>();
   let scrollTimer: ReturnType<typeof setTimeout> | undefined;
 
-  const activeIssue = $derived.by(() => {
+  // 참조 대조는 스레드 자체로 한다 — 번호(구 결과)와 id(지적을 id로 다루는 티어)가 양쪽 다 오므로 인덱스 하나로
+  // 좁힐 수 없다(issueRefsInclude).
+  const activeThread = $derived.by(() => {
     if (activeId === null || activeId.startsWith('strength.')) return null;
-    return threads.find((thread) => thread.id === activeId)?.issueIndex ?? null;
+    return threads.find((thread) => thread.id === activeId) ?? null;
   });
 
-  const patternsHaveActive = $derived(activeIssue !== null && conclusion.patterns.some((entry) => entry.issues.includes(activeIssue)));
-  const prioritiesHaveActive = $derived(activeIssue !== null && conclusion.priorities.some((entry) => entry.issues.includes(activeIssue)));
+  const patternsHaveActive = $derived(conclusion.patterns.some((entry) => issueRefsInclude(entry.issues, activeThread)));
+  const prioritiesHaveActive = $derived(conclusion.priorities.some((entry) => issueRefsInclude(entry.issues, activeThread)));
 
   $effect(() => {
     const id = activeId;
@@ -76,15 +94,27 @@
       } else {
         const thread = threads.find((entry) => entry.id === id);
         if (!thread) return;
-        const inPatterns = conclusion.patterns.some((pattern) => pattern.issues.includes(thread.issueIndex));
-        const inPriorities = conclusion.priorities.some((priority) => priority.issues.includes(thread.issueIndex));
+        const inPatterns = conclusion.patterns.some((pattern) => issueRefsInclude(pattern.issues, thread));
+        const inPriorities = conclusion.priorities.some((priority) => issueRefsInclude(priority.issues, thread));
         if (!inPatterns && !inPriorities) return;
         if (inPatterns) expanded.patterns = true;
         if (inPriorities) expanded.priorities = true;
       }
       clearTimeout(scrollTimer);
       scrollTimer = setTimeout(() => {
-        bodyEl?.querySelector(`[data-conclusion-mark~="${id}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        if (!bodyEl) return;
+        const viewport = bodyEl.getBoundingClientRect();
+        let target: Element | null = null;
+        let best = Infinity;
+        for (const mark of bodyEl.querySelectorAll(`[data-conclusion-mark~="${id}"]`)) {
+          const rect = mark.getBoundingClientRect();
+          const distance = Math.max(0, viewport.top - rect.top, rect.bottom - viewport.bottom);
+          if (distance < best) {
+            best = distance;
+            target = mark;
+          }
+        }
+        if (target && best > 0) target.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       }, 260);
     });
   });
@@ -153,6 +183,8 @@
   });
 
   const themeClass = css({ fontSize: '12px', fontWeight: 'semibold', color: 'text.default', lineHeight: '[1.5]' });
+  // 좁은 상주 패널에서는 판정을 낱말로만 세운다 — 눈금은 정독 자리(드로어)의 몫이다.
+  const levelClass = css({ flex: 'none', fontSize: '11px', color: 'text.faint' });
   const noteClass = css({ marginTop: '3px', fontSize: '12px', lineHeight: '[1.7]', color: 'text.faint' });
 </script>
 
@@ -283,6 +315,21 @@
         </div>
       {/if}
 
+      {#if progressLines.length > 0}
+        <div class={css({ borderBottomWidth: '1px', borderColor: 'border.subtle' })}>
+          {@render sectionHead('지난 리뷰와 달라진 점', null, 'progress')}
+          <div class={css(revealRecipe.raw({ shown: expanded.progress }))}>
+            <div class={revealInnerClass}>
+              <div class={css({ display: 'flex', flexDirection: 'column', gap: '10px', paddingX: '14px', paddingBottom: '16px' })}>
+                {#each progressLines as line, index (index)}
+                  <p class={css({ fontSize: '12px', lineHeight: '[1.75]', color: 'text.subtle' })}>{line}</p>
+                {/each}
+              </div>
+            </div>
+          </div>
+        </div>
+      {/if}
+
       {#if conclusion.strengths.length > 0}
         <div class={css({ borderBottomWidth: '1px', borderColor: 'border.subtle' })}>
           {@render sectionHead('잘 작동하는 대목', conclusion.strengths.length, 'strengths')}
@@ -315,15 +362,61 @@
         </div>
       {/if}
 
-      {#if conclusion.clearances.length > 0}
+      {#if verdicts.length > 0}
         <div class={css({ borderBottomWidth: '1px', borderColor: 'border.subtle' })}>
-          {@render sectionHead('살펴봤지만 짚지 않은 관점', conclusion.clearances.length, 'clearances')}
+          {@render sectionHead('관점마다 서 있는 자리', verdicts.length, 'verdicts')}
+          <div class={css(revealRecipe.raw({ shown: expanded.verdicts }))}>
+            <div class={revealInnerClass}>
+              <div class={sectionBodyClass}>
+                {#each verdicts as verdict, index (index)}
+                  {@const level = verdictLabel(verdict.point)}
+                  <div>
+                    <div class={flex({ align: 'baseline', gap: '6px' })}>
+                      <span class={cx(css({ flexGrow: '1', minWidth: '0' }), themeClass)}>{verdict.trait}</span>
+                      {#if level}
+                        <span class={levelClass}>{level}</span>
+                      {/if}
+                    </div>
+                    {#if verdict.note}
+                      <p class={noteClass}>{verdict.note}</p>
+                    {/if}
+                  </div>
+                {/each}
+              </div>
+            </div>
+          </div>
+        </div>
+      {/if}
+
+      {#if elevations.length > 0}
+        <div class={css({ borderBottomWidth: '1px', borderColor: 'border.subtle' })}>
+          {@render sectionHead('한 걸음 더 가 볼 자리', elevations.length, 'elevations')}
+          <div class={css(revealRecipe.raw({ shown: expanded.elevations }))}>
+            <div class={revealInnerClass}>
+              <div class={sectionBodyClass}>
+                {#each elevations as elevation, index (index)}
+                  <div>
+                    <div class={themeClass}>{elevation.trait}</div>
+                    {#if elevation.body}
+                      <p class={noteClass}>{elevation.body}</p>
+                    {/if}
+                  </div>
+                {/each}
+              </div>
+            </div>
+          </div>
+        </div>
+      {/if}
+
+      {#if (conclusion.clearances?.length ?? 0) > 0}
+        <div class={css({ borderBottomWidth: '1px', borderColor: 'border.subtle' })}>
+          {@render sectionHead('살펴봤지만 짚지 않은 관점', conclusion.clearances?.length ?? 0, 'clearances')}
           <div class={css(revealRecipe.raw({ shown: expanded.clearances }))}>
             <div class={revealInnerClass}>
               <div class={sectionBodyClass}>
-                {#each conclusion.clearances as clearance, index (index)}
+                {#each conclusion.clearances ?? [] as clearance, index (index)}
                   <div>
-                    <div class={themeClass}>{clearance.axis}</div>
+                    <div class={themeClass}>{clearance.trait}</div>
                     <p class={noteClass}>{clearance.note}</p>
                   </div>
                 {/each}
@@ -340,11 +433,7 @@
             <div class={revealInnerClass}>
               <div class={sectionBodyClass}>
                 {#each conclusion.patterns as pattern, index (index)}
-                  <div
-                    class={css(
-                      itemRecipe.raw({ dimmed: patternsHaveActive && activeIssue !== null && !pattern.issues.includes(activeIssue) }),
-                    )}
-                  >
+                  <div class={css(itemRecipe.raw({ dimmed: patternsHaveActive && !issueRefsInclude(pattern.issues, activeThread) }))}>
                     {#if pattern.theme}
                       <div class={themeClass}>{pattern.theme}</div>
                     {/if}
@@ -366,10 +455,10 @@
               <div class={css({ display: 'flex', flexDirection: 'column', gap: '13px', paddingX: '14px', paddingBottom: '16px' })}>
                 {#each conclusion.priorities as priority, index (index)}
                   <div
-                    class={css(
-                      itemRecipe.raw({ dimmed: prioritiesHaveActive && activeIssue !== null && !priority.issues.includes(activeIssue) }),
-                      { display: 'flex', gap: '9px' },
-                    )}
+                    class={css(itemRecipe.raw({ dimmed: prioritiesHaveActive && !issueRefsInclude(priority.issues, activeThread) }), {
+                      display: 'flex',
+                      gap: '9px',
+                    })}
                   >
                     <span
                       class={flex({

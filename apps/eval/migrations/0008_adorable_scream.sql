@@ -1,0 +1,1 @@
+ALTER TABLE `threads` ADD `issue_id` text;

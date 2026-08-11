@@ -1,5 +1,6 @@
 import { error, redirect } from '@sveltejs/kit';
-import { eq } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
+import { displayRoundNumbers, isRejectedResult, pickRounds } from '$lib/feedback/rounds.ts';
 import { isAdmin } from '$lib/server/auth.ts';
 import { createDb, FeedbackSessions, Reviews } from '$lib/server/db/index.ts';
 import type { SseEvent } from '$lib/feedback/sse.ts';
@@ -15,9 +16,11 @@ export const load: PageServerLoad = async ({ params, locals, platform }) => {
   if (!session) error(404, 'not found');
   if (session.testerEmail !== locals.email && !isAdmin(env, locals.email)) error(403, 'forbidden');
 
-  // Phase 1은 세션당 리뷰가 round 1 하나뿐이다.
-  const [review] = await db.select().from(Reviews).where(eq(Reviews.sessionId, params.id)).limit(1);
-  if (!review) error(404, 'not found');
+  // 과정 보기가 여는 회차는 결과 화면이 여는 회차다 — 표시 회차 규칙은 pickRounds 한 곳이 정한다.
+  const rows = await db.select().from(Reviews).where(eq(Reviews.sessionId, params.id)).orderBy(asc(Reviews.round));
+  if (rows.length === 0) error(404, 'not found');
+  const rounds = rows.map((row) => ({ ...row, rejected: isRejectedResult(row.result) }));
+  const review = pickRounds(rounds).display;
 
   // 과정의 원천은 사영된 이벤트 스냅샷 하나뿐이다 — 아직 없으면 세션 화면이 사영을 돌린다.
   if (review.status === 'running') redirect(303, `/sessions/${params.id}`);
@@ -28,6 +31,12 @@ export const load: PageServerLoad = async ({ params, locals, platform }) => {
     session: { id: session.id, title: session.title },
     review: {
       round: review.round,
+      // 표시 회차 서수 — 실패·중단을 건너뛴 번호. 표시 회차가 실패인 경우는 1회차부터 실패한 세션뿐이라
+      // 내부 번호가 곧 서수다(세션 화면과 같은 폴백).
+      roundNumber:
+        review.status === 'failed' || review.status === 'canceled' || review.rejected
+          ? review.round
+          : displayRoundNumbers(rounds)[review.round],
       status: review.status,
       tier: review.tier,
       startedAt: review.startedAt.getTime(),

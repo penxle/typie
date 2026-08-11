@@ -2,10 +2,11 @@
   import { css, cva } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Button, Helmet, Select, TextInput, TimeAgo } from '@typie/ui/components';
+  import { untrack } from 'svelte';
   import { enhance } from '$app/forms';
   import ThemeToggle from '$lib/components/ThemeToggle.svelte';
-  import { AGENT_DEFAULTS, MODELS, TIER_AGENTS, TIER_NAMES } from '$lib/feedback/tiers.ts';
-  import type { AgentName, TierModel, TierName } from '$lib/feedback/tiers.ts';
+  import { TIER_NAMES } from '$lib/feedback/tiers.ts';
+  import type { TierName } from '$lib/feedback/tiers.ts';
   import type { ActionData, PageData, SubmitFunction } from './$types';
 
   type Props = { data: PageData; form: ActionData };
@@ -56,33 +57,51 @@
     };
   };
 
-  const freshTiers = () =>
-    Object.fromEntries(Object.entries(AGENT_DEFAULTS).map(([agent, pair]) => [agent, { ...pair }])) as Record<
-      AgentName,
-      { model: TierModel; effort: string }
-    >;
+  // 옵션·기본값의 원천은 load가 걷어 온 prism 카탈로그다(정적 미러 폐기) — 못 걷었으면 null이라 티어 설정
+  // 상자 자체가 서지 않고, 시작은 액션의 재조회가 판정한다.
+  const catalog = $derived(data.catalog);
+  const tierAgents = (name: TierName): string[] => catalog?.workflows[name]?.agents ?? [];
+
+  const freshTiers = (name: TierName) =>
+    Object.fromEntries(
+      tierAgents(name).map((agent) => [
+        agent,
+        { model: catalog?.agents[agent]?.model ?? '', effort: catalog?.agents[agent]?.effort ?? '' },
+      ]),
+    );
 
   let tiersOpen = $state(false);
   let tier = $state<TierName>('high');
-  let tiers = $state(freshTiers());
+  let tiers = $state<Record<string, { model: string; effort: string }>>({});
+  // 기본값 시드는 카탈로그 도착에 맞춰 깐다 — 행 집합이 같으면 다시 깔지 않아 재로드가 만지던 값을 지우지 않는다.
+  $effect.pre(() => {
+    void catalog;
+    const agents = tierAgents(untrack(() => tier));
+    const current = untrack(() => tiers);
+    if (agents.length === Object.keys(current).length && agents.every((agent) => current[agent] !== undefined)) return;
+    tiers = freshTiers(untrack(() => tier));
+  });
 
   // 티어를 바꾸면 오버라이드는 새 티어의 기본값에서 다시 시작한다 — 행 목록도 값도 티어에 종속이다.
   const selectTier = (next: TierName) => {
     tier = next;
-    tiers = freshTiers();
+    tiers = freshTiers(next);
   };
 
-  const tierItems = TIER_NAMES.map((name) => ({ label: name, value: name }));
-  const modelItems = Object.keys(MODELS).map((model) => ({ label: model, value: model as TierModel }));
-  const effortItems = (model: TierModel) =>
-    (MODELS[model].efforts as readonly string[]).map((effort) => ({ label: effort, value: effort }));
-  const setModel = (agent: AgentName, model: TierModel) => {
+  // 티어 이름은 화면 어휘라 로컬 상수에서 오되, 카탈로그가 모르는 티어는 세우지 않는다.
+  const tierItems = $derived(TIER_NAMES.filter((name) => catalog?.workflows[name]).map((name) => ({ label: name, value: name })));
+  const modelItems = $derived(Object.keys(catalog?.models ?? {}).map((model) => ({ label: model, value: model })));
+  const effortItems = (model: string) => (catalog?.models[model]?.efforts ?? []).map((effort) => ({ label: effort, value: effort }));
+  const setModel = (agent: string, model: string) => {
     tiers[agent].model = model;
-    // 모델 교체로 현재 effort가 무효해지면 전 모델 공통인 high로 되돌린다
-    if (!(MODELS[model].efforts as readonly string[]).includes(tiers[agent].effort)) tiers[agent].effort = 'high';
+    // 모델 교체로 현재 effort가 무효해지면 새 모델 유효 목록의 첫 값으로 되돌린다(오너 결정 2026-08-12 —
+    // 종전 'high' 고정 폴백은 근거 없는 특별취급인 데다 deepseek(['medium'])에서는 그 자체가 무효값이었다).
+    const efforts = catalog?.models[model]?.efforts ?? [];
+    if (!efforts.includes(tiers[agent].effort)) tiers[agent].effort = efforts[0] ?? tiers[agent].effort;
   };
-  const isOverridden = (agent: AgentName) =>
-    tiers[agent].model !== AGENT_DEFAULTS[agent].model || tiers[agent].effort !== AGENT_DEFAULTS[agent].effort;
+  const isOverridden = (agent: string) =>
+    tiers[agent] !== undefined &&
+    (tiers[agent].model !== catalog?.agents[agent]?.model || tiers[agent].effort !== (catalog?.agents[agent]?.effort ?? ''));
 
   // 입력 단계로 돌아갈 때 확인 단계에서 난 오류는 함께 걷는다 — 단계가 바뀌면 그 오류의 맥락도 사라진다.
   const backToInput = () => {
@@ -170,7 +189,7 @@
         주 과제입니다.
       </p>
       <ul class={flex({ direction: 'column', gap: '8px', marginTop: '12px' })}>
-        {#each ['진행 중 작가님께 질문이 올 수 있어요. 답을 주셔야 다음 단계로 넘어갑니다 — 질문은 앞 두 단계에서만 오고, 한 편에 60~90분 정도 걸립니다.', '완료되면 총평 화면 최하단의 반응과 피드백별 반응·답글을 남겨주세요. 재리뷰 기능은 준비 중이라 답글까지만 남겨주시면 됩니다.', '분량·완성도와 무관하게 3~5편, 다양한 원고로 시도해 주세요. 시도에 상한은 없지만 과한 오남용만 자제해 주세요.', '신경 쓰인 부분과 의견은 채널로 자유롭게 보내주시고, 공개하기 민감한 내용은 finn에게 DM으로 보내주세요.'] as line (line)}
+        {#each ['진행 중 작가님께 질문이 올 수 있어요. 답을 주셔야 다음 단계로 넘어갑니다 — 질문은 앞 두 단계에서만 오고, 한 편에 60~90분 정도 걸립니다.', '완료되면 총평 화면 최하단의 반응과 피드백별 반응·답글을 남겨주세요. 원고를 고친 뒤 "리뷰 다시 요청하기"를 누르면 답글과 새 원고를 반영한 재리뷰를 받아볼 수 있어요.', '분량·완성도와 무관하게 3~5편, 다양한 원고로 시도해 주세요. 시도에 상한은 없지만 과한 오남용만 자제해 주세요.', '신경 쓰인 부분과 의견은 채널로 자유롭게 보내주시고, 공개하기 민감한 내용은 finn에게 DM으로 보내주세요.'] as line (line)}
           <li class={flex({ gap: '10px' })}>
             <span
               class={css({
@@ -235,9 +254,9 @@
             </p>
           </div>
 
-          {#if data.isAdmin}
+          {#if data.isAdmin && catalog}
             <input name="tier" type="hidden" value={tier} />
-            {#each TIER_AGENTS[tier] as agent (agent)}
+            {#each tierAgents(tier) as agent (agent)}
               {#if isOverridden(agent)}
                 <input name={`tier.${agent}.model`} type="hidden" value={tiers[agent].model} />
                 <input name={`tier.${agent}.effort`} type="hidden" value={tiers[agent].effort} />
@@ -261,7 +280,7 @@
               {#if tiersOpen}
                 <div class={flex({ direction: 'column', gap: '8px', marginTop: '8px' })}>
                   <div class={flex({ align: 'center', gap: '8px' })}>
-                    <span class={css({ width: '108px', fontSize: '12px', color: 'text.subtle' })}>티어</span>
+                    <span class={css({ width: '150px', flexShrink: '0', fontSize: '12px', color: 'text.subtle' })}>티어</span>
                     <Select items={tierItems} onselect={selectTier} value={tier} />
                   </div>
 
@@ -274,10 +293,17 @@
                       borderColor: 'border.subtle',
                     })}
                   >
-                    {#each TIER_AGENTS[tier] as agent (agent)}
+                    {#each tierAgents(tier) as agent (agent)}
                       <div class={flex({ align: 'center', gap: '8px' })}>
                         <span
-                          class={css({ width: '108px', fontSize: '12px', fontFamily: 'mono', letterSpacing: '0', color: 'text.subtle' })}
+                          class={css({
+                            width: '150px',
+                            flexShrink: '0',
+                            fontSize: '12px',
+                            fontFamily: 'mono',
+                            letterSpacing: '0',
+                            color: 'text.subtle',
+                          })}
                         >
                           {agent}
                         </span>

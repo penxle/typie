@@ -10,7 +10,7 @@
   import IconCircleAlert from '~icons/lucide/circle-alert';
   import IconCircleSlash from '~icons/lucide/circle-slash';
   import { DrainFleet } from '$lib/feedback/drain-fleet.ts';
-  import { capsuleLabel, durationLabel, groupFeed, minutesBetween, questionPausedMs } from '$lib/feedback/live.ts';
+  import { capsuleLabel, durationLabel, groupFeed, minutesBetween, pausedMs } from '$lib/feedback/live.ts';
   import { nestedRound, stagesFor } from '$lib/feedback/stages.ts';
   import { Typewriter } from '$lib/feedback/typewriter.ts';
   import NestedReviewCard from './NestedReviewCard.svelte';
@@ -31,8 +31,20 @@
     error?: string | null;
     turnLive?: TurnLive | null;
     askAnswers?: Record<string, AskAnswer[]> | null;
+    streamStale?: boolean;
+    lastDeltaAt?: number;
   };
-  const { live, status, now, tier, error = null, turnLive = null, askAnswers = null }: Props = $props();
+  const {
+    live,
+    status,
+    now,
+    tier,
+    error = null,
+    turnLive = null,
+    askAnswers = null,
+    streamStale = false,
+    lastDeltaAt = 0,
+  }: Props = $props();
 
   const stages = $derived(stagesFor(tier));
 
@@ -46,22 +58,22 @@
 
   let expanded = $state<Record<string, boolean>>({});
 
-  // 시간 표시 셋 다 파킹 구간을 뺀다 — 질문 대기는 리뷰의 진행이 아니다. 감산은 창 겹침(questionPausedMs)이고,
+  // 시간 표시 셋 다 파킹 구간을 뺀다 — 질문 대기·실패~재개 공백은 리뷰의 진행이 아니다. 감산은 창 겹침(pausedMs)이고,
   // 시점 이동(firstAt + paused)으로 적용해 minutesBetween의 바닥(0) 처리를 그대로 쓴다.
+  const pauseSpans = $derived([...live.questions, ...live.pauses]);
+
   const spent = (timing: StageTiming) => {
     if (timing.firstAt === null || timing.lastAt === null) return null;
-    const paused = questionPausedMs(live.questions, now, { from: timing.firstAt, to: timing.lastAt });
+    const paused = pausedMs(pauseSpans, now, { from: timing.firstAt, to: timing.lastAt });
     return timing.lastAt - timing.firstAt - paused < 60_000 ? '1분 미만' : `${minutesBetween(timing.firstAt + paused, timing.lastAt)}분`;
   };
 
   const running = (timing: StageTiming) =>
-    timing.firstAt === null
-      ? null
-      : `${minutesBetween(timing.firstAt + questionPausedMs(live.questions, now, { from: timing.firstAt }), now)}분째`;
+    timing.firstAt === null ? null : `${minutesBetween(timing.firstAt + pausedMs(pauseSpans, now, { from: timing.firstAt }), now)}분째`;
 
   const stalled = (timing: StageTiming) => {
     if (timing.firstAt === null || timing.lastAt === null) return '멈췄어요';
-    const paused = questionPausedMs(live.questions, now, { from: timing.firstAt, to: timing.lastAt });
+    const paused = pausedMs(pauseSpans, now, { from: timing.firstAt, to: timing.lastAt });
     const minutes = minutesBetween(timing.firstAt + paused, timing.lastAt);
     return minutes < 1 ? '멈췄어요' : `${minutes}분 만에 멈췄어요`;
   };
@@ -239,12 +251,20 @@
     return () => clearInterval(timer);
   });
 
+  // 델타 신선도 창 — 건강한 사고는 벤더 델타가 수 초 간격으로 계속 온다(스트림 침묵 실측 최대 ~9초).
+  // 이 창을 넘도록 델타가 없으면 "생각"이라 부를 근거가 없다 — 지연의 말로 갈아탄다.
+  const DELTA_FRESH_MS = 30_000;
+
   const liveTail = $derived.by((): string | null => {
     if (awaitingAnswer) return null; // 대기 상태의 문면은 패널(답변 대기 중)과 카드가 담당한다
+    // 두절이 최우선이다 — 끊긴 스트림 위의 조각(쓰기 카운터·질문 문면)은 멎은 유물이라 그대로 세우면 거짓말이 된다
+    if (streamStale) return '연결이 끊겨 다시 연결하는 중이에요';
     if (askLive) return '질문을 드리는 중이에요';
     if (writeLive !== null) return `노트를 쓰고 있어요 · ${writeLive.chars.toLocaleString('ko-KR')}자`;
     const seconds = Math.max(0, Math.floor((nowTick - lastBeat) / 1000));
-    return seconds >= 2 ? `생각하는 중이에요 · ${durationLabel(seconds)}` : null;
+    if (seconds < 2) return null;
+    const deltaFresh = nowTick - lastDeltaAt < DELTA_FRESH_MS;
+    return deltaFresh ? `생각하는 중이에요 · ${durationLabel(seconds)}` : `응답이 늦어지고 있어요 · ${durationLabel(seconds)}`;
   });
 
   // ── 스크롤 추종 ────────────────────────────────────────────────────────────────────────────────
@@ -268,38 +288,53 @@
 
   // 기록 영역 바닥 추종 — 사용자가 위로 스크롤해 둔 동안에는 멈추고, 바닥 근처(≤8px)로 돌아오면 재개한다.
   // 추종 자체도 scroll 이벤트를 내므로 방향으로 가른다: 위로 움직였을 때만 사용자 개입이다.
-  let feedEl = $state<HTMLDivElement>();
-  let stick = true;
-  let lastScrollTop = 0;
-  const onFeedScroll = () => {
-    if (!feedEl) return;
-    const top = feedEl.scrollTop;
-    const atBottom = feedEl.scrollHeight - top - feedEl.clientHeight <= 8;
-    if (top < lastScrollTop) stick = atBottom;
-    else if (atBottom) stick = true;
-    lastScrollTop = top;
+  // 추종 상태는 스테이지 키별로 산다 — 카드 경계에서는 드레인 카드와 새 카드의 피드가 동시에 서고 둘 다
+  // 제 텍스트가 자란다(위 함대 주석). 단일 전역 요소로는 나중에 바인딩된 새 카드만 따라가, 이전 카드의
+  // 마지막 발화가 꼬리를 흘리다 말고 화면 밖에서 잘린다.
+  let feedEls = $state<Record<string, HTMLDivElement | null>>({});
+  const feedFollows: Record<string, { stick: boolean; lastTop: number }> = {};
+  const followOf = (key: string) => (feedFollows[key] ??= { stick: true, lastTop: 0 });
+
+  const onFeedScroll = (key: string) => {
+    const el = feedEls[key];
+    if (!el) return;
+    const follow = followOf(key);
+    const top = el.scrollTop;
+    const atBottom = el.scrollHeight - top - el.clientHeight <= 8;
+    if (top < follow.lastTop) follow.stick = atBottom;
+    else if (atBottom) follow.stick = true;
+    follow.lastTop = top;
   };
+
+  // 추종 대상 = 지금 서 있는 피드 전부(개입한 피드는 제외). 바닥에 있는 쪽에는 재스크롤이 no-op이라 무해하다.
+  const eachStuckFeed = (scroll: (el: HTMLDivElement) => void) => {
+    for (const [key, el] of Object.entries(feedEls)) {
+      if (el && followOf(key).stick) scroll(el);
+    }
+  };
+
+  // 피드가 새로 열리면(카드 전환·재리뷰) 이전 개입은 잊고 바닥에서 시작한다 — 요소 교체가 그 신호다.
+  let prevFeedEls: Record<string, HTMLDivElement | null> = {};
   $effect(() => {
-    // 스테이지가 넘어가 기록 영역이 새로 열리면 이전 개입은 잊는다.
-    if (!feedEl) return;
-    stick = true;
-    lastScrollTop = 0;
+    for (const [key, el] of Object.entries(feedEls)) {
+      if (!el || el === prevFeedEls[key]) continue;
+      feedFollows[key] = { stick: true, lastTop: 0 };
+      el.scrollTo({ top: el.scrollHeight, behavior: 'auto' });
+    }
+    prevFeedEls = { ...feedEls };
   });
+
   $effect(() => {
     void live.activity;
-    const el = feedEl;
-    if (!el || !stick) return;
     const smooth = animated && settled;
-    void tick().then(() => el.scrollTo({ top: el.scrollHeight, behavior: smooth ? 'smooth' : 'auto' }));
+    void tick().then(() => eachStuckFeed((el) => el.scrollTo({ top: el.scrollHeight, behavior: smooth ? 'smooth' : 'auto' })));
   });
   // 라이브·드레인 줄이 자라도 바닥을 따라간다 — 자라는 줄이 접힌 자리에 숨으면 타이핑이 보이지 않는다. 추종은
   // 즉시 스크롤로 한다: 단어마다 smooth 애니메이션을 겹쳐 걸면 그 겹침 자체가 덜컥임이 된다.
   $effect(() => {
     void frame;
     void liveTail;
-    const el = feedEl;
-    if (!el || !stick) return;
-    void tick().then(() => el.scrollTo({ top: el.scrollHeight, behavior: 'auto' }));
+    void tick().then(() => eachStuckFeed((el) => el.scrollTo({ top: el.scrollHeight, behavior: 'auto' })));
   });
   // 피드 높이 변경(질문 카드 확장·복귀·카드 안 입력칸 토글)도 바닥을 붙든다 — 컨테이너가 줄면 scrollTop이
   // 그대로라 뷰포트 바닥이 위로 올라가 마지막 줄이 잘린다. 높이는 전환 없이 스냅한다: 콘텐츠는 즉시 크는데
@@ -307,12 +342,10 @@
   // 핀도 몇 프레임이면 수렴한다(bind 측정이 페인트 뒤에 오는 프레임 어긋남만 흡수).
   $effect(() => {
     void feedHeight;
-    const el = feedEl;
-    if (!el || !stick) return;
     let raf = 0;
     const started = performance.now();
     const pin = (now: number) => {
-      el.scrollTop = el.scrollHeight;
+      eachStuckFeed((el) => (el.scrollTop = el.scrollHeight));
       if (now - started < 120) raf = requestAnimationFrame(pin);
     };
     raf = requestAnimationFrame(pin);
@@ -740,7 +773,7 @@
             <div class={mark === 'failed' || mark === 'canceled' ? bodyClass : feedShellClass}>
               {#if mark === 'running'}
                 {@const latestId = liveTokens.length === 0 ? (lines.at(-1)?.id ?? null) : null}
-                <div bind:this={feedEl} style:height={feedHeight} class={feedClass} onscroll={onFeedScroll}>
+                <div bind:this={feedEls[stage.key]} style:height={feedHeight} class={feedClass} onscroll={() => onFeedScroll(stage.key)}>
                   {#each groups as group (group.key)}
                     {#if group.kind === 'line'}
                       {#if drainedIds.has(group.line.id)}

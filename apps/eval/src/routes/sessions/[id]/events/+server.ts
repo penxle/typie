@@ -1,5 +1,5 @@
 import { error } from '@sveltejs/kit';
-import { eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import { isAdmin } from '$lib/server/auth.ts';
 import { createDb, FeedbackSessions, Reviews } from '$lib/server/db/index.ts';
 import { openEvents } from '$lib/server/prism.ts';
@@ -17,9 +17,15 @@ export const GET: RequestHandler = async ({ params, locals, platform, request, u
   if (!session) error(404, 'not found');
   if (session.testerEmail !== locals.email && !isAdmin(env, locals.email)) error(403, 'forbidden');
 
-  // Phase 1은 세션당 리뷰가 round 1 하나뿐이라 round 조건 없이도 유일하다.
-  const [review] = await db.select().from(Reviews).where(eq(Reviews.sessionId, params.id)).limit(1);
-  if (!review || review.status !== 'running') error(409, 'not running');
+  // 스트림이 겨누는 것은 지금 도는 회차다 — 세션에 running은 최대 하나뿐이라 회차를 따로 받지 않는다
+  // (중단·답변 액션의 runningReview와 같은 잣대). 회차 조건 없이 집으면 재리뷰 회차에서 옛 회차를 물어 409가 된다.
+  const [review] = await db
+    .select()
+    .from(Reviews)
+    .where(and(eq(Reviews.sessionId, params.id), eq(Reviews.status, 'running')))
+    .orderBy(desc(Reviews.round))
+    .limit(1);
+  if (!review) error(409, 'not running');
 
   const cursor = resolveCursor(request.headers.get('last-event-id'), url.searchParams.get('lastEventId'));
   const upstream = await openEvents(env, review.prismWorkflowId, cursor);

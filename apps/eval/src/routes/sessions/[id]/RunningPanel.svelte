@@ -3,7 +3,7 @@
   import { flex } from '@typie/styled-system/patterns';
   import { Button, Icon } from '@typie/ui/components';
   import IconCircleCheck from '~icons/lucide/circle-check';
-  import { minutesBetween, questionPausedMs } from '$lib/feedback/live.ts';
+  import { minutesBetween, pausedMs } from '$lib/feedback/live.ts';
   import { stagesFor } from '$lib/feedback/stages.ts';
   import StageTimeline from './StageTimeline.svelte';
   import type { TurnLive } from '$lib/feedback/delta.ts';
@@ -18,11 +18,27 @@
     error: string | null;
     turnLive: TurnLive | null;
     askAnswers: Record<string, AskAnswer[]> | null;
+    streamStale?: boolean;
+    lastDeltaAt?: number;
+    resuming?: boolean;
+    onResume?: (() => void) | null;
   };
-  const { live, status, startedAt, tier, error, turnLive, askAnswers }: Props = $props();
+  const {
+    live,
+    status,
+    startedAt,
+    tier,
+    error,
+    turnLive,
+    askAnswers,
+    streamStale = false,
+    lastDeltaAt = 0,
+    resuming = false,
+    onResume = null,
+  }: Props = $props();
 
-  const ORDINALS = ['첫', '두', '세', '네', '다섯', '여섯'];
-  const COUNTS = ['한', '두', '세', '네', '다섯', '여섯'];
+  const ORDINALS = ['첫', '두', '세', '네', '다섯', '여섯', '일곱'];
+  const COUNTS = ['한', '두', '세', '네', '다섯', '여섯', '일곱'];
 
   const stages = $derived(stagesFor(tier));
 
@@ -40,8 +56,8 @@
       stages.findIndex((stage) => stage.key === live.currentStage),
     ),
   );
-  // 질문 대기는 진행이 아니다 — 파킹 구간을 시점 이동으로 빼면 대기 중에는 카운터가 멈춘 것처럼 선다
-  const minutes = $derived(minutesBetween(startedAt + questionPausedMs(live.questions, now), now));
+  // 질문 대기·실패~재개 공백은 진행이 아니다 — 파킹 구간을 시점 이동으로 빼면 대기 중에는 카운터가 멈춘 것처럼 선다
+  const minutes = $derived(minutesBetween(startedAt + pausedMs([...live.questions, ...live.pauses], now), now));
 
   // 진행 바 채움 — 완료 스테이지 1칸, 진행 중 스테이지는 반 칸으로 셈한다.
   const fill = $derived.by(() => {
@@ -148,11 +164,22 @@
           {error}
         </p>
       {/if}
-      <p class={css({ marginTop: '8px', fontSize: '12px', lineHeight: '[1.6]', color: 'text.faint' })}>
-        홈에서 새 세션으로 다시 시도할 수 있어요
-        <br />
-        다시 시도하면 새 리뷰가 처음부터 실행돼요
-      </p>
+      {#if status === 'failed' && onResume}
+        <div class={css({ marginTop: '10px' })}>
+          <Button disabled={resuming} loading={resuming} onclick={onResume} size="sm" type="button">멈춘 단계부터 다시 시도</Button>
+        </div>
+        <p class={css({ marginTop: '8px', fontSize: '12px', lineHeight: '[1.6]', color: 'text.faint' })}>
+          지금까지 진행한 내용은 남아 있어요 — 멈춘 단계부터 이어서 다시 시도해요
+          <br />
+          계속 실패하면 홈에서 새 세션으로 처음부터 시작해 주세요
+        </p>
+      {:else}
+        <p class={css({ marginTop: '8px', fontSize: '12px', lineHeight: '[1.6]', color: 'text.faint' })}>
+          홈에서 새 세션으로 다시 시도할 수 있어요
+          <br />
+          다시 시도하면 새 리뷰가 처음부터 실행돼요
+        </p>
+      {/if}
     </div>
   {/if}
 
@@ -168,7 +195,7 @@
       paddingBottom: '14px',
     })}
   >
-    <StageTimeline {askAnswers} {error} {live} {now} {status} {tier} {turnLive} />
+    <StageTimeline {askAnswers} {error} {lastDeltaAt} {live} {now} {status} {streamStale} {tier} {turnLive} />
   </div>
 
   {#if status === 'running'}

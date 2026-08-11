@@ -69,10 +69,10 @@
     </span>
     <span class={css({ flex: 'none', fontSize: '12px', color: 'text.faint' })}>/</span>
     <span class={css({ flex: 'none', fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>
-      리뷰 {data.review.round}회차 과정
+      리뷰 {data.review.roundNumber}회차 과정
     </span>
 
-    <div class={flex({ align: 'center', gap: '10px', marginLeft: 'auto' })}>
+    <div class={flex({ align: 'center', gap: '8px', marginLeft: 'auto' })}>
       {#if duration}
         <span class={css({ flex: 'none', fontSize: '12px', color: 'text.faint' })}>소요 {duration}</span>
       {/if}
