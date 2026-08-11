@@ -1,7 +1,8 @@
-// 실서비스에서 원고 본문을 가져오는 유일한 경로. 코퍼스에 저장되는 본문은 이 프로즈다 —
-// document_states의 평문과 달라서, 다른 경로를 쓰면 세대가 코퍼스와 다른 형태의 글을 읽는다.
 export type InternalApi = {
+  // 실서비스에서 원고 본문을 가져오는 유일한 경로. 코퍼스에 저장되는 본문은 이 프로즈다 —
+  // document_states의 평문과 달라서, 다른 경로를 쓰면 세대가 코퍼스와 다른 형태의 글을 읽는다.
   extract: (documentIds: string[]) => Promise<{ documentId: string; prose: string | null; title: string | null }[]>;
+  sendPush: (documentId: string, title: string, body: string) => Promise<boolean>;
 };
 
 // extract는 요청당 5건이 상한이다.
@@ -35,6 +36,14 @@ export const createInternalApi = (base: string, key: string): InternalApi => {
         results.push(...body.results.map((row) => ({ documentId: row.documentId, prose: row.prose, title: row.title ?? null })));
       }
       return results;
+    },
+    sendPush: async (documentId, title, body) => {
+      const response = await fetch(`${base}/internal/push`, {
+        method: 'POST',
+        headers: { ...headers, 'content-type': 'application/json' },
+        body: JSON.stringify({ documentId, title, body }),
+      });
+      return response.ok;
     },
   };
 };

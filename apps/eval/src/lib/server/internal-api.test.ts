@@ -37,3 +37,23 @@ describe('createInternalApi.extract', () => {
     expect(rows).toEqual([{ documentId: 'D1', prose: '본문', title: null }]);
   });
 });
+
+describe('createInternalApi.sendPush', () => {
+  it('push 페이로드·인증 헤더를 싣고 2xx면 true', async () => {
+    const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({ ok: true, sent: true }));
+
+    const ok = await createInternalApi('https://api.test', 'tk').sendPush('D1', '제목', '본문');
+
+    expect(ok).toBe(true);
+    expect(spy.mock.calls[0][0]).toBe('https://api.test/internal/push');
+    const init = spy.mock.calls[0][1];
+    expect(JSON.parse(init?.body as string)).toEqual({ documentId: 'D1', title: '제목', body: '본문' });
+    expect((init?.headers as Record<string, string>).authorization).toBe('Bearer tk');
+  });
+
+  it('비 2xx는 false — 던지지 않는다', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{"error":"not found"}', { status: 404 }));
+
+    expect(await createInternalApi('https://api.test', 'tk').sendPush('D1', '제목', '본문')).toBe(false);
+  });
+});

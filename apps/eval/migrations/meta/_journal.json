@@ -43,6 +43,13 @@
       "when": 1786404774474,
       "tag": "0005_minor_garia",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1786418769021,
+      "tag": "0006_normal_nighthawk",
+      "breakpoints": true
     }
   ]
 }
