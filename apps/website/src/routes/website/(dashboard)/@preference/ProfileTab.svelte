@@ -143,6 +143,19 @@
   };
 
   let updateEmailOpen = $state(false);
+
+  const handleClearCache = () => {
+    Dialog.confirm({
+      title: '캐시 지우기',
+      message: '시스템 캐시를 삭제할까요? 이 작업은 되돌릴 수 없어요.',
+      action: 'danger',
+      actionLabel: '삭제',
+      actionHandler: () => {
+        localStorage.removeItem('typie:selections:v4');
+        Toast.success('시스템 캐시를 삭제했어요.');
+      },
+    });
+  };
 </script>
 
 <div class={flex({ direction: 'column', gap: '40px', maxWidth: '640px' })}>
@@ -340,6 +353,20 @@
           <div class={css({ fontSize: '12px', fontFamily: 'mono', color: 'text.subtle', letterSpacing: '[0]' })}>
             {user.data.id}
           </div>
+        {/snippet}
+      </SettingsRow>
+
+      <SettingsDivider />
+
+      <SettingsRow>
+        {#snippet label()}
+          캐시 지우기
+        {/snippet}
+        {#snippet description()}
+          시스템 캐시를 삭제해요.
+        {/snippet}
+        {#snippet value()}
+          <Button onclick={handleClearCache} size="sm" variant="secondary">지우기</Button>
         {/snippet}
       </SettingsRow>
     </SettingsCard>
