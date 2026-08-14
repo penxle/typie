@@ -27,6 +27,50 @@ afterEach(() => {
 });
 
 describe('editor publication preparation', () => {
+  it('completes a current-selection reveal when the candidate has no selection geometry', async () => {
+    const position = { node: 'hidden', offset: 0, affinity: 'downstream' as const };
+    const candidate = snapshot({
+      selection: { anchor: position, head: position },
+      pageSizes: [{ width: 600, height: 1000 }],
+    });
+    const editor = {
+      destroyed: false,
+      appliedSnapshot: candidate,
+      appliedRevision: candidate.revision,
+      publishedRevision: candidate.revision,
+      published: { snapshot: candidate, frames: new Map([[0, {}]]) },
+      viewport: { height: 400 },
+      scaleFactor: 1,
+      displayZoom: 1,
+      activeSurfacePages: new Set<number>(),
+      extensionAreaEl: {
+        getBoundingClientRect: () => new DOMRect(0, 0, 600, 1000),
+      },
+      scrollViewport: {
+        getRect: () => new DOMRect(0, 0, 600, 400),
+        getScrollTop: () => 0,
+        getScrollHeight: () => 1000,
+        scrollTo: vi.fn(),
+      },
+      requestPublication: vi.fn(),
+      safeDisplayZoom: () => 1,
+      clientToLocal: vi.fn(() => null),
+      captureSelectionViewportAnchor: vi.fn(() => void 0),
+      captureViewportAnchorAt: vi.fn(() => void 0),
+    } as unknown as Editor;
+    const scroll = new EditorScrollScope(editor, () => ({ enabled: false, position: undefined }));
+    const presentation = scroll.scrollIntoView({ target: { type: 'current_selection_head' }, policy: 'reveal' });
+
+    expect(scroll.prepareViewportAnchorPublication(candidate).type).toBe('ready');
+    const preparation = resolveEditorSurfacePreparation(editor, scroll);
+    expect(preparation?.scrollIntent).toEqual({ type: 'no_scroll' });
+    const request = preparation?.pendingRequest;
+    expect(request).not.toBeNull();
+    if (!request || !preparation?.scrollIntent) throw new Error('Expected a pending no-scroll reveal');
+    expect(scroll.applyPending(request, candidate, preparation.scrollIntent)).toBe(true);
+    await expect(presentation).resolves.toBeUndefined();
+  });
+
   it('plans surfaces and reveal from the anchor-corrected candidate scroll', () => {
     const candidate = snapshot({
       revision: 1,

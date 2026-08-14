@@ -183,6 +183,22 @@ function foldedTrackedRangeDoc(targetText: string): PlainDoc {
   };
 }
 
+function nestedFoldedSelectionDoc(targetText: string): PlainDoc {
+  return {
+    root: entry({ type: 'root', layout_mode: { type: 'continuous', max_width: PAGE_WIDTH } }, [
+      entry({ type: 'fold' }, [
+        entry({ type: 'fold_title' }, [entry({ type: 'text', text: 'Outer fold' })]),
+        entry({ type: 'fold_content' }, [
+          entry({ type: 'fold' }, [
+            entry({ type: 'fold_title' }, [entry({ type: 'text', text: 'Inner fold' })]),
+            entry({ type: 'fold_content' }, [entry({ type: 'paragraph' }, [entry({ type: 'text', text: targetText })])]),
+          ]),
+        ]),
+      ]),
+    ]),
+  };
+}
+
 function paginatedDocWithPageBreaks(pageCount: number, linkedLastPage?: { text: string; href: string }): PlainDoc {
   const pageHeight = 221;
   return {
@@ -722,6 +738,39 @@ describe('web editor frame synchronization', () => {
     await expect(restorePresentation).resolves.toBeUndefined();
     expect(firstRestoredFrame?.scrollTop).toBeGreaterThan(0);
     expect(firstRestoredFrame?.selectionHeadVisible).toBe(true);
+  });
+
+  it('expands nested folds before presenting a restored selection', async () => {
+    const targetText = 'restored folded caret';
+    const { editor } = await mountEditor(nestedFoldedSelectionDoc(targetText));
+    const caretOffset = editor.proseText().indexOf(targetText) + targetText.length;
+    expect(caretOffset).toBeGreaterThan(targetText.length - 1);
+    const selection = editor.proseToSelection(caretOffset, caretOffset);
+    const saved = selection && editor.freezeSelection(selection);
+    expect(saved).toBeDefined();
+    if (!saved) throw new Error('Expected a restorable folded selection');
+
+    const hiddenRestore = editor.updateNow((request) => {
+      request.enqueue({ type: 'selection', op: { type: 'set_frozen', selection: saved } });
+    });
+    expect(hiddenRestore).not.toBeNull();
+    if (!hiddenRestore) throw new Error('Expected a hidden-selection restore update');
+    await waitForPresentation(editor, hiddenRestore.revision);
+    expect(editor.appliedSnapshot.selection).toBeDefined();
+    expect(selectionHeadRect(editor.appliedSnapshot)).toBeNull();
+
+    let restorePresentation: Promise<void> | undefined;
+    const restore = editor.updateNow((request) => {
+      request.enqueue({ type: 'selection', op: { type: 'set_frozen', selection: saved } });
+      request.enqueue({ type: 'view', op: { type: 'expand_folds_for_selection' } });
+      restorePresentation = editor.scrollIntoView({ target: { type: 'current_selection_head' }, policy: 'reveal' });
+    });
+    expect(restore).not.toBeNull();
+    if (!restore) throw new Error('Expected a folded restore update');
+
+    await expect.poll(() => selectionHeadRect(editor.appliedSnapshot)).not.toBeNull();
+    await expect(restorePresentation).resolves.toBeUndefined();
+    expect(editor.publishedRevision).toBeGreaterThanOrEqual(restore.revision);
   });
 
   it('smoothly reveals a spellcheck result after its page surface was virtualized', async () => {

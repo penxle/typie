@@ -31,6 +31,15 @@ pub fn handle_view_op(editor: &mut Editor, op: ViewOp) -> Result<(), EditorError
             editor.toggle_fold(id);
             Ok(())
         }
+        ViewOp::ExpandFoldsForSelection => {
+            let folds = editor
+                .state()
+                .selection
+                .map(|selection| folds_containing_selection(&editor.state().view(), selection))
+                .unwrap_or_default();
+            editor.expand_folds(folds);
+            Ok(())
+        }
         ViewOp::ExpandFoldsForTrackedRange { id } => {
             let folds = folds_containing_tracked_range(editor, &id);
             editor.expand_folds(folds);
@@ -51,6 +60,10 @@ fn folds_containing_tracked_range(editor: &Editor, id: &str) -> Vec<Dot> {
     let Some(selection) = range.selection.resolve(&ctx) else {
         return Vec::new();
     };
+    folds_containing_selection(&doc, selection)
+}
+
+fn folds_containing_selection(doc: &DocView, selection: Selection) -> Vec<Dot> {
     let mut folds = Vec::new();
     for position in [selection.anchor, selection.head] {
         let Some(node) = doc.node(position.node) else {
@@ -163,6 +176,45 @@ mod tests {
         });
 
         assert!(!editor.fold_expanded(f1), "folds load collapsed by default");
+    }
+
+    #[test]
+    fn expand_folds_for_selection_opens_nested_folds_for_restored_selection() {
+        let (initial, outer, _outer_title, inner, p1) = state! {
+            doc { root {
+                outer: fold {
+                    outer_title: fold_title { text("Outer") }
+                    fold_content {
+                        inner: fold {
+                            fold_title { text("Inner") }
+                            fold_content { p1: paragraph { text("Body") } }
+                        }
+                    }
+                }
+            } }
+            selection: (outer_title, 0)
+        };
+        let target = Selection::collapsed(Position::new(p1, 2));
+        let frozen = editor_state::StableSelection::capture(&target, &initial.view());
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
+        editor.apply(Message::Selection {
+            op: SelectionOp::SetFrozen { selection: frozen },
+        });
+
+        assert_eq!(editor.state().selection, Some(target));
+        assert!(!editor.fold_expanded(outer));
+        assert!(!editor.fold_expanded(inner));
+
+        editor.apply(Message::View {
+            op: ViewOp::ExpandFoldsForSelection,
+        });
+
+        assert!(editor.fold_expanded(outer));
+        assert!(editor.fold_expanded(inner));
+        assert_eq!(editor.state().selection, Some(target));
     }
 
     #[test]

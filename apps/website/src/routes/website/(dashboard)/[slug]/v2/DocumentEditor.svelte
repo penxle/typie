@@ -913,6 +913,7 @@
                 selection: savedSelection,
               },
             });
+            request.enqueue({ type: 'view', op: { type: 'expand_folds_for_selection' } });
             presentation = editor.scrollIntoView({ target: { type: 'current_selection_head' }, policy: 'reveal' });
           });
           return presentation;
