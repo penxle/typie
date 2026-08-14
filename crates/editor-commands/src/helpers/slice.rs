@@ -1840,6 +1840,17 @@ impl TextblockSplicePlan {
             });
         }
 
+        let last_output_node = nodes.len() - 1;
+        if self.final_caret_at_right_boundary {
+            // An empty open end authors a paragraph boundary but no inline unit.
+            // Bind the split right only as the caret endpoint; the inserted
+            // range still ends at the last authored output above.
+            nodes.push(SliceOutputNodeSpec {
+                source: SliceOutputSource::SplitRight,
+                node_type: self.textblock_type,
+            });
+        }
+
         let last_inserted_merged = self
             .inserted_blocks
             .len()
@@ -1863,7 +1874,7 @@ impl TextblockSplicePlan {
         } else {
             SliceOutputRelation::After
         };
-        let head_affinity = if self.merge_end {
+        let head_affinity = if self.merge_end && !self.final_caret_at_right_boundary {
             inline_output_end_affinity(&self.blocks.last()?.children)
         } else if !self.inserted_blocks.is_empty() {
             Affinity::Upstream
@@ -1881,6 +1892,14 @@ impl TextblockSplicePlan {
             },
             head_affinity,
         )?;
+        if self.final_caret_at_right_boundary {
+            output.caret = SliceOutputPositionSpec {
+                node: output.nodes.len() - 1,
+                relation: SliceOutputRelation::Start,
+                affinity: Affinity::Downstream,
+            };
+            output.head.node = last_output_node;
+        }
         if self.join_start
             && self.inserted_blocks.is_empty()
             && !self.merge_end
@@ -2033,8 +2052,8 @@ pub(crate) fn plan_textblock_splice_target(
     let unjoined_ends_with_page_break = inserted_blocks
         .last()
         .is_some_and(|fragment| paragraph_ends_with_page_break(fragment));
-    let final_caret_at_right_boundary =
-        split_emits && inserted_blocks.is_empty() && !join_start_emits && !merge_end_emits;
+    let final_caret_at_right_boundary = (merge_end && !merge_end_emits)
+        || (split_emits && inserted_blocks.is_empty() && !join_start_emits && !merge_end_emits);
     let insert_at = textblock_index + usize::from(has_left);
     let left = if has_left {
         Some(ExistingBlock {
