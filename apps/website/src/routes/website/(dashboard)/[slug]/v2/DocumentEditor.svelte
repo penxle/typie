@@ -916,8 +916,9 @@
             presentation = editor.scrollIntoView({ target: { type: 'current_selection_head' }, policy: 'reveal' });
           });
           return presentation;
-        } catch {
+        } catch (err) {
           selectionsStore.current = { ...selectionsStore.current, [currentDocumentId]: { timestamp: Date.now() } };
+          if (editor) handleEditorOperationError(editor, err);
           return;
         }
       })();
