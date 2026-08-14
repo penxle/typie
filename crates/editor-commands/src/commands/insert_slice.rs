@@ -1065,6 +1065,38 @@ mod tests {
     }
 
     #[test]
+    fn insert_plain_text_ending_in_newline_places_caret_at_right_paragraph_start() {
+        let (initial, ..) = state! {
+            doc { root { target: paragraph { text("ab") } } }
+            selection: (target, 1)
+        };
+        let (actual, steps, ..) = transact!(initial, |tr| insert_slice(
+            &mut tr,
+            Slice::from_text("X\n"),
+            SliceProvenance::Plain
+        ));
+        let view = actual.view();
+        let paragraphs = view
+            .root()
+            .expect("root exists")
+            .child_blocks()
+            .map(|block| block.id())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            paragraphs
+                .iter()
+                .map(|id| view.node(*id).unwrap().inline_text())
+                .collect::<Vec<_>>(),
+            ["aX", "b"]
+        );
+        assert_eq!(
+            actual.selection,
+            Some(Selection::collapsed(Position::new(paragraphs[1], 0)))
+        );
+        assert_eq!(split_step_count(&steps), 1);
+    }
+
+    #[test]
     fn insert_paragraph_break_slice_at_paragraph_start_preserves_boundary() {
         let (initial, ..) = state! {
             doc { root { target: paragraph { text("x") } } }
