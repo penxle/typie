@@ -436,55 +436,54 @@ class EditorViewportAnchorReconcilerTest {
   }
 
   @Test
-  fun `unresolved candidate selection keeps the existing anchors and withholds publication`() =
-    runTest {
-      val visibleArea = visibleArea()
-      val initialFrame =
-        frame(visibleArea).let { frame ->
-          frame.copy(
-            state =
-              frame.state.copy(
-                selection =
-                  Selection(
-                    anchor = Position("text", 0, Affinity.Downstream),
-                    head = Position("text", 0, Affinity.Downstream),
-                  )
-              )
-          )
-        }
-      val candidateFrame = initialFrame.copy(state = initialFrame.state.copy(version = 2L))
-      val anchorState =
-        EditorViewportAnchorState().apply {
-          attachSelection(selectionAnchor, anchorGeometry(200f), scrollY = 100f)
-        }
-      val editor =
-        Editor(
-          FakeFfiEditor(
-            captureSelectionViewportAnchorProvider = { null },
-            resolveViewportAnchorProvider = { _, _ ->
-              ViewportAnchorResolution.Resolved(selectionGeometry(200f))
-            },
-          ),
-          this,
-          StandardTestDispatcher(testScheduler),
+  fun `unresolved candidate selection keeps the existing anchors and publishes`() = runTest {
+    val visibleArea = visibleArea()
+    val initialFrame =
+      frame(visibleArea).let { frame ->
+        frame.copy(
+          state =
+            frame.state.copy(
+              selection =
+                Selection(
+                  anchor = Position("text", 0, Affinity.Downstream),
+                  head = Position("text", 0, Affinity.Downstream),
+                )
+            )
         )
+      }
+    val candidateFrame = initialFrame.copy(state = initialFrame.state.copy(version = 2L))
+    val anchorState =
+      EditorViewportAnchorState().apply {
+        attachSelection(selectionAnchor, anchorGeometry(200f), scrollY = 100f)
+      }
+    val editor =
+      Editor(
+        FakeFfiEditor(
+          captureSelectionViewportAnchorProvider = { null },
+          resolveViewportAnchorProvider = { _, _ ->
+            ViewportAnchorResolution.Resolved(selectionGeometry(200f))
+          },
+        ),
+        this,
+        StandardTestDispatcher(testScheduler),
+      )
 
-      val publication =
-        reconcileViewportAnchorPublication(
-          editor = editor,
-          anchorState = anchorState,
-          publishedBundle = PublishedBundle(snapshot = initialFrame.state, frames = emptyMap()),
-          candidateState = candidateFrame.state,
-          measuredScrollFrame = candidateFrame,
-          currentScrollOffset = Offset(x = 0f, y = 100f),
-          maximumScrollY = 600f,
-          contentOriginY = 0f,
-        )
+    val publication =
+      reconcileViewportAnchorPublication(
+        editor = editor,
+        anchorState = anchorState,
+        publishedBundle = PublishedBundle(snapshot = initialFrame.state, frames = emptyMap()),
+        candidateState = candidateFrame.state,
+        measuredScrollFrame = candidateFrame,
+        currentScrollOffset = Offset(x = 0f, y = 100f),
+        maximumScrollY = 600f,
+        contentOriginY = 0f,
+      )
 
-      assertEquals(EditorViewportAnchorPublication.Withhold, publication)
-      assertEquals(selectionAnchor, anchorState.identity)
-      assertEquals(selectionAnchor, anchorState.preferredSelectionIdentity)
-    }
+    assertTrue(publication is EditorViewportAnchorPublication.Ready)
+    assertEquals(selectionAnchor, anchorState.identity)
+    assertEquals(selectionAnchor, anchorState.preferredSelectionIdentity)
+  }
 
   private fun reconcile(
     editor: Editor,

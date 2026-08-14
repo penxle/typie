@@ -303,6 +303,7 @@ pub enum ListOp {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ViewOp {
     ToggleFold { id: Dot },
+    ExpandFoldsForSelection,
     ExpandFoldsForTrackedRange { id: String },
 }
 

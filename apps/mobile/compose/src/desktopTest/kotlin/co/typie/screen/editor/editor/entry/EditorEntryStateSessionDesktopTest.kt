@@ -6,13 +6,17 @@ import androidx.compose.ui.test.v2.runComposeUiTest
 import co.typie.editor.Editor
 import co.typie.editor.FakeFfiEditor
 import co.typie.editor.ffi.Affinity
+import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.Position
 import co.typie.editor.ffi.Selection
+import co.typie.editor.ffi.SelectionOp
 import co.typie.editor.ffi.StableSelection
+import co.typie.editor.ffi.ViewOp
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import java.io.File
 import java.util.UUID
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -63,6 +67,13 @@ class EditorEntryStateSessionDesktopTest {
       waitUntil { requests.activateForVersion(editor.appliedRevision) != null }
 
       assertFalse(requireNotNull(entry).presentationReady)
+      assertEquals(
+        listOf(
+          Message.Selection(SelectionOp.SetFrozen(selection = saved)),
+          Message.View(ViewOp.ExpandFoldsForSelection),
+        ),
+        fake.enqueued,
+      )
 
       runOnIdle {
         val request = requireNotNull(requests.activateForVersion(editor.appliedRevision))

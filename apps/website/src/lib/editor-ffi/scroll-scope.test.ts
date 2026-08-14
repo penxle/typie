@@ -862,7 +862,7 @@ describe('EditorScrollScope', () => {
     expect(scrollTo).not.toHaveBeenCalled();
   });
 
-  it('keeps existing anchors and withholds publication while candidate selection geometry is unavailable', () => {
+  it('keeps existing anchors and publishes while candidate selection geometry is unavailable', () => {
     const initial = selectionSnapshot(true, {
       page_idx: 0,
       rect: { x: 0, y: 90, width: 1, height: 20 },
@@ -881,7 +881,7 @@ describe('EditorScrollScope', () => {
     expect(scope.prepareViewportAnchorPublication(initial).type).toBe('ready');
     capture = undefined;
 
-    expect(scope.prepareViewportAnchorPublication(candidate)).toEqual({ type: 'unavailable' });
+    expect(scope.prepareViewportAnchorPublication(candidate).type).toBe('ready');
     capture = { identity: { ...selection }, geometry };
     expect(scope.prepareViewportAnchorPublication(initial)).toMatchObject({
       type: 'ready',

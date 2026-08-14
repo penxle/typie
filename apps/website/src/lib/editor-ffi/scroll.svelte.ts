@@ -279,7 +279,6 @@ export class EditorScrollScope {
     const viewport = this.#editor.scrollViewport;
     if (!viewport) return { type: 'ready', geometry: null, targetScrollTop: null };
     const selectionCapture = this.#editor.captureSelectionViewportAnchor(snapshot.revision);
-    if (!selectionCapture && snapshot.selection) return { type: 'unavailable' };
     if (selectionCapture && this.#viewportAnchor.needsSelectionAdoption(selectionCapture.identity)) {
       const selectionMetrics = this.#viewportMetrics(snapshot, true);
       if (!selectionMetrics) return { type: 'unavailable' };

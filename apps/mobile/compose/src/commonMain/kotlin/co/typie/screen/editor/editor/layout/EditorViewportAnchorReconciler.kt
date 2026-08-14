@@ -39,9 +39,6 @@ internal fun reconcileViewportAnchorPublication(
   val currentScrollY = currentScrollOffset.y
   val candidateFrame = measuredScrollFrame.withState(candidateState)
   val selectionCapture = editor.captureSelectionViewportAnchor(candidateState.version)
-  if (selectionCapture == null && candidateState.selection != null) {
-    return EditorViewportAnchorPublication.Withhold
-  }
   if (selectionCapture != null && anchorState.needsSelectionAdoption(selectionCapture.identity)) {
     val geometry =
       selectionCapture.geometry.toEditorViewportAnchorGeometry(
