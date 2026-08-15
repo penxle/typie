@@ -111,8 +111,23 @@ describe('start 액션의 티어 관통', () => {
     expect(started).not.toHaveBeenCalled();
   });
 
-  it('운영자가 아닌 티어 선택은 400으로 막고 아무것도 시작하지 않는다', async () => {
-    const outcome = await run({ documentId: 'D0TEST01', tier: 'low' }, 't@x.io');
+  it('운영자가 아닌 low 선택도 그대로 시작 인자에 실린다', async () => {
+    await run({ documentId: 'D0TEST01', tier: 'low' }, 't@x.io');
+
+    expect(started.mock.calls[0][2]).toMatchObject({ tier: 'low' });
+  });
+
+  it('운영자가 아닌 medium 선택도 그대로 시작 인자에 실린다', async () => {
+    await run({ documentId: 'D0TEST01', tier: 'medium' }, 't@x.io');
+
+    expect(started.mock.calls[0][2]).toMatchObject({ tier: 'medium' });
+  });
+
+  it('운영자가 아닌 오버라이드 제출은 400으로 막고 아무것도 시작하지 않는다', async () => {
+    const outcome = await run(
+      { documentId: 'D0TEST01', tier: 'medium', 'tier.rephrase-medium.model': 'gpt-5.6-luna', 'tier.rephrase-medium.effort': 'low' },
+      't@x.io',
+    );
 
     expect(outcome).toMatchObject({ status: 400 });
     expect(started).not.toHaveBeenCalled();

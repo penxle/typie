@@ -395,7 +395,7 @@
         열린 피드백 {openThreads.length}
       </button>
       <button class={css(toggleButtonRecipe.raw({ selected: mode === 'settled' }))} onclick={() => (mode = 'settled')} type="button">
-        해결된 피드백 {settledThreads.length}
+        지난 피드백 {settledThreads.length}
       </button>
     </div>
   {/if}
@@ -477,7 +477,7 @@
         <div class={groupHeaderClass}>
           <span class={edgeLineSegClass}></span>
           <span class={css({ flex: 'none', fontSize: '11px', color: 'text.faint' })}>
-            {group.number === null ? '회차 미상' : `${group.number}회차에서 정리됨`} · {group.threads.length}건
+            {group.number === null ? '이전 리뷰에서 정리됨' : `${group.number}회차 리뷰에서 정리됨`} · {group.threads.length}개
           </span>
           <span class={edgeLineSegClass}></span>
         </div>

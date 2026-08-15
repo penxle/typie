@@ -11,13 +11,14 @@
   import { issueRefsInclude } from '$lib/feedback/conclusion.ts';
   import { verdictLabel } from '$lib/feedback/verdicts.ts';
   import IssueChips from './IssueChips.svelte';
+  import Paragraphs from './Paragraphs.svelte';
   import ReviewReaction from './ReviewReaction.svelte';
   import type { FeedbackConclusion, FeedbackResult } from '$lib/feedback/types.ts';
   import type { Verdict } from '$lib/feedback/verdicts.ts';
   import type { PageData } from './$types';
 
   type Thread = PageData['threads'][number];
-  type SectionKey = 'understanding' | 'progress' | 'strengths' | 'verdicts' | 'elevations' | 'clearances' | 'patterns' | 'priorities';
+  type SectionKey = 'understanding' | 'progress' | 'strengths' | 'verdicts' | 'elevations' | 'patterns' | 'priorities';
 
   // 총평의 상주 자리 — 원고·카드와 나란히 서서 오가며 읽는 좌측 패널이다. 다섯 섹션 전부 아코디언이고
   // 펼치면 드로어와 같은 전문이 좁은 폭으로 흐른다(요약본 아님). 기본은 전부 펼침(오너 결정 — 목업의 개폐
@@ -46,9 +47,12 @@
   // 진전 서술은 재리뷰 회차에만 온다 — 1회차·구 데이터는 필드가 없어 섹션 자체가 서지 않는다.
   const progressLines = $derived((conclusion.progress ?? '').split('\n').filter((line) => line.trim().length > 0));
 
+  // 강점은 의미 진술 티어(high)의 총평에만 선다 — 없는 티어(medium)는 빈 목록으로 접어 섹션이 서지 않게 한다.
+  const strengths = $derived(conclusion.strengths ?? []);
+
   // 인용은 카드의 인용 블록과 같은 규칙으로 자른다(anchorQuote). 앵커가 원문과 안 맞으면 발췌를 그대로 잇는다 —
   // 원고에 설 자리(스팬)가 없으니 클릭 연동도 함께 접는다.
-  const quoteOf = (strength: (typeof conclusion.strengths)[number]) => {
+  const quoteOf = (strength: (typeof strengths)[number]) => {
     const quote = anchorQuote(content, [strength]);
     if (quote.length > 0) return { text: quote, linked: true };
     const fallback = strength.head === strength.tail ? strength.head : `${strength.head} ⋯ ${strength.tail}`;
@@ -61,7 +65,6 @@
     strengths: true,
     verdicts: true,
     elevations: true,
-    clearances: true,
     patterns: true,
     priorities: true,
   });
@@ -89,7 +92,7 @@
     if (id === null) return;
     untrack(() => {
       if (id.startsWith('strength.')) {
-        if (conclusion.strengths.length === 0) return;
+        if (strengths.length === 0) return;
         expanded.strengths = true;
       } else {
         const thread = threads.find((entry) => entry.id === id);
@@ -317,7 +320,7 @@
 
       {#if progressLines.length > 0}
         <div class={css({ borderBottomWidth: '1px', borderColor: 'border.subtle' })}>
-          {@render sectionHead('지난 리뷰와 달라진 점', null, 'progress')}
+          {@render sectionHead('지난 리뷰에서 나아진 점', null, 'progress')}
           <div class={css(revealRecipe.raw({ shown: expanded.progress }))}>
             <div class={revealInnerClass}>
               <div class={css({ display: 'flex', flexDirection: 'column', gap: '10px', paddingX: '14px', paddingBottom: '16px' })}>
@@ -330,13 +333,13 @@
         </div>
       {/if}
 
-      {#if conclusion.strengths.length > 0}
+      {#if strengths.length > 0}
         <div class={css({ borderBottomWidth: '1px', borderColor: 'border.subtle' })}>
-          {@render sectionHead('잘 작동하는 대목', conclusion.strengths.length, 'strengths')}
+          {@render sectionHead('읽는 사람에게 잘 닿은 대목', strengths.length, 'strengths')}
           <div class={css(revealRecipe.raw({ shown: expanded.strengths }))}>
             <div class={revealInnerClass}>
               <div class={sectionBodyClass}>
-                {#each conclusion.strengths as strength, index (index)}
+                {#each strengths as strength, index (index)}
                   {@const quote = quoteOf(strength)}
                   {@const id = `strength.${index}`}
                   <div class={css(itemRecipe.raw({ dimmed: activeId?.startsWith('strength.') === true && activeId !== id }))}>
@@ -352,7 +355,10 @@
                       </span>
                     </button>
                     {#if strength.body}
-                      <p class={css({ marginTop: '5px', fontSize: '11px', lineHeight: '[1.65]', color: 'text.faint' })}>{strength.body}</p>
+                      <Paragraphs
+                        class={css({ marginTop: '5px', fontSize: '11px', lineHeight: '[1.65]', color: 'text.faint' })}
+                        text={strength.body}
+                      />
                     {/if}
                   </div>
                 {/each}
@@ -364,7 +370,7 @@
 
       {#if verdicts.length > 0}
         <div class={css({ borderBottomWidth: '1px', borderColor: 'border.subtle' })}>
-          {@render sectionHead('관점마다 서 있는 자리', verdicts.length, 'verdicts')}
+          {@render sectionHead('관점마다 어디까지 왔는지', verdicts.length, 'verdicts')}
           <div class={css(revealRecipe.raw({ shown: expanded.verdicts }))}>
             <div class={revealInnerClass}>
               <div class={sectionBodyClass}>
@@ -378,7 +384,7 @@
                       {/if}
                     </div>
                     {#if verdict.note}
-                      <p class={noteClass}>{verdict.note}</p>
+                      <Paragraphs class={noteClass} text={verdict.note} />
                     {/if}
                   </div>
                 {/each}
@@ -398,26 +404,8 @@
                   <div>
                     <div class={themeClass}>{elevation.trait}</div>
                     {#if elevation.body}
-                      <p class={noteClass}>{elevation.body}</p>
+                      <Paragraphs class={noteClass} text={elevation.body} />
                     {/if}
-                  </div>
-                {/each}
-              </div>
-            </div>
-          </div>
-        </div>
-      {/if}
-
-      {#if (conclusion.clearances?.length ?? 0) > 0}
-        <div class={css({ borderBottomWidth: '1px', borderColor: 'border.subtle' })}>
-          {@render sectionHead('살펴봤지만 짚지 않은 관점', conclusion.clearances?.length ?? 0, 'clearances')}
-          <div class={css(revealRecipe.raw({ shown: expanded.clearances }))}>
-            <div class={revealInnerClass}>
-              <div class={sectionBodyClass}>
-                {#each conclusion.clearances ?? [] as clearance, index (index)}
-                  <div>
-                    <div class={themeClass}>{clearance.trait}</div>
-                    <p class={noteClass}>{clearance.note}</p>
                   </div>
                 {/each}
               </div>
@@ -437,7 +425,7 @@
                     {#if pattern.theme}
                       <div class={themeClass}>{pattern.theme}</div>
                     {/if}
-                    <p class={noteClass}>{pattern.body}</p>
+                    <Paragraphs class={noteClass} text={pattern.body} />
                     <IssueChips {activeId} issues={pattern.issues} {onActivate} {threads} />
                   </div>
                 {/each}
@@ -478,7 +466,7 @@
                       {index + 1}
                     </span>
                     <div class={css({ flexGrow: '1', minWidth: '0' })}>
-                      <p class={css({ fontSize: '12px', lineHeight: '[1.7]', color: 'text.subtle' })}>{priority.body}</p>
+                      <Paragraphs class={css({ fontSize: '12px', lineHeight: '[1.7]', color: 'text.subtle' })} text={priority.body} />
                       <IssueChips {activeId} issues={priority.issues} {onActivate} {threads} />
                     </div>
                   </div>

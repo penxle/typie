@@ -1,3 +1,4 @@
+import { REREVIEW_TIERS } from './tiers.ts';
 import type { FeedbackRejection } from './types.ts';
 
 // rejected는 결과가 거부(kind: 'rejected')로 종결된 완료 회차의 표지다 — status는 completed 그대로라
@@ -26,7 +27,11 @@ export const pickRounds = <T extends RoundView>(
   const failedLatest = (latest.status === 'failed' || latest.status === 'canceled') && display.round !== latest.round ? latest : null;
   const rejectedLatest = latest.status === 'completed' && latest.rejected && display.round !== latest.round ? latest : null;
   // 거부 회차는 재검토의 기반이 될 산출물이 없다 — 본체가 거부인 세션은 새 세션 시작이 경로다.
-  const canRereview = runningLatest === null && display.status === 'completed' && !display.rejected && display.tier === 'high';
+  const canRereview =
+    runningLatest === null &&
+    display.status === 'completed' &&
+    !display.rejected &&
+    (REREVIEW_TIERS as readonly string[]).includes(display.tier);
   return { display, runningLatest, failedLatest, rejectedLatest, canRereview };
 };
 

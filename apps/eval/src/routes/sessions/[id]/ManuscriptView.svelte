@@ -12,6 +12,7 @@
 
   type Props = {
     title: string;
+    subtitle: string | null;
     content: string;
     threads: Thread[];
     strengths: (Anchor & { body: string | null })[];
@@ -21,7 +22,7 @@
     onActivate: (threadId: string) => void;
   };
 
-  const { title, content, threads, strengths, activeId, round, onActivate }: Props = $props();
+  const { title, subtitle, content, threads, strengths, activeId, round, onActivate }: Props = $props();
 
   // 잘 작동하는 대목도 지적과 같은 문법으로 원고에 선다(오너 결정) — 스팬·레일·번호 칩·클릭 활성화를
   // 그대로 타되, id는 'strength.N' 네임스페이스로 스레드와 갈라지고 표기 계열만 긍정(초록)이다.
@@ -262,12 +263,17 @@
   const traitOf = (threadId: string) => threads.find((thread) => thread.id === threadId)?.trait ?? '피드백';
 
   const labelOf = (rail: Rail) =>
-    rail.kind === 'strength' ? `잘 작동하는 대목 ${rail.number}` : `피드백 ${rail.number}: ${traitOf(rail.id)}`;
+    rail.kind === 'strength' ? `읽는 사람에게 잘 닿은 대목 ${rail.number}` : `피드백 ${rail.number}: ${traitOf(rail.id)}`;
 </script>
 
 <!-- 본문 폭 640은 유지하고 왼쪽에 레일 거터(100px)를 더한다 — paddingLeft와 RAIL_GUTTER는 같은 값이어야 한다. -->
 <div bind:this={containerEl} class={css({ position: 'relative', width: '740px', flex: 'none', paddingLeft: '100px' })}>
-  <h1 class={css({ marginBottom: '40px', fontFamily: 'RIDIBatang', fontSize: '24px' })}>{title}</h1>
+  <div class={css({ marginBottom: '40px' })}>
+    <h1 class={css({ fontFamily: 'RIDIBatang', fontSize: '24px' })}>{title}</h1>
+    {#if subtitle}
+      <p class={css({ marginTop: '10px', fontFamily: 'RIDIBatang', fontSize: '18px', color: 'text.faint' })}>{subtitle}</p>
+    {/if}
+  </div>
 
   <div class={flex({ direction: 'column', gap: '16px' })}>
     {#each paragraphs as pieces, index (index)}

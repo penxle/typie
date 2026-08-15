@@ -3,8 +3,19 @@
 // 이 파일에 남는 것은 화면 어휘(티어 이름)와 카탈로그를 재료로 쓰는 조립·검증 헬퍼뿐이다.
 // 티어 이름이 로컬 상수로 남는 이유: 단계 카드·라벨(stages.ts TIER_STAGES)이 티어를 화면 지식으로 알아야
 // 해서, prism에 티어가 늘어도 화면 작업 없이는 노출할 수 없다 — 카탈로그에 없는 티어는 시작 검증이 거른다.
-export const TIER_NAMES = ['high', 'medium', 'low'] as const;
+// 올림차순(low→high) — 티어 세그먼트의 표시 순서를 겸한다.
+export const TIER_NAMES = ['low', 'medium', 'high'] as const;
 export type TierName = (typeof TIER_NAMES)[number];
+
+// non-admin에게 여는 티어 — 전 티어(medium은 재설계 준비 완료로 2026-08-17 개방, 오너 결정). 남는 운영자 전용은
+// 티어가 아니라 모델·effort 오버라이드다. 오름차순 — 티어 세그먼트의 표시 순서를 겸한다.
+export const PUBLIC_TIERS = ['low', 'medium', 'high'] as const satisfies readonly TierName[];
+
+// 재리뷰를 여는 티어 — 전 티어. medium의 previous 지원은 prism 재설계(prism plans/2026-08-17-feedback-medium.md)로
+// 도착하는 선행 지원이다 — 그 배포 전의 medium 세션(구 구성)은 구세션 가드(연속성 시드 부재)가 행을 세우기
+// 전에 명시 반려하므로 미리 열어도 실패 회차가 쌓이지 않는다.
+export const REREVIEW_TIERS = ['high', 'medium', 'low'] as const satisfies readonly TierName[];
+export type RereviewTier = (typeof REREVIEW_TIERS)[number];
 
 // 카탈로그 표면의 형태 — prism surface/entrypoint.ts AppCatalog의 사영이다.
 export type AppCatalog = {
@@ -53,9 +64,9 @@ export const overridesFromConfig = (catalog: AppCatalog, config: ModelConfig | n
   return overrides;
 };
 
-// 폼 제출 판정 — high 무오버라이드는 누구나 통과, 그 밖의 티어 선택이나 오버라이드 항목은 admin만. 기본값과
-// 같은 명시 선택은 no-op으로 떨군다. 값 검증은 select UI와 무관하게 서버가 카탈로그로 다시 하고(위조 제출
-// 방어), prism이 시작 입력 검증으로 또 한 번 한다.
+// 폼 제출 판정 — PUBLIC_TIERS 무오버라이드는 누구나 통과, 그 밖의 티어 선택이나 오버라이드 항목은 admin만.
+// 기본값과 같은 명시 선택은 no-op으로 떨군다. 값 검증은 select UI와 무관하게 서버가 카탈로그로 다시 하고
+// (위조 제출 방어), prism이 시작 입력 검증으로 또 한 번 한다.
 export const resolveTierSubmission = (
   catalog: AppCatalog,
   tier: string,
@@ -65,7 +76,9 @@ export const resolveTierSubmission = (
   if (!(TIER_NAMES as readonly string[]).includes(tier)) return { error: `알 수 없는 티어예요: ${tier}` };
   const tierName = tier as TierName;
   const entries = Object.entries(raw);
-  if (!admin && (tierName !== 'high' || entries.length > 0)) return { error: '티어 설정은 운영자만 쓸 수 있어요' };
+  if (!admin && (!(PUBLIC_TIERS as readonly TierName[]).includes(tierName) || entries.length > 0)) {
+    return { error: '티어 설정은 운영자만 쓸 수 있어요' };
+  }
   const workflow = catalog.workflows[tierName];
   if (!workflow) return { error: `카탈로그에 없는 티어예요: ${tier}` };
   const overrides: TierOverrides = {};

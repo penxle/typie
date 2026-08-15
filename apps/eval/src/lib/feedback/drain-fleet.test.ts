@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DrainFleet, LINGER_MS } from './drain-fleet.ts';
 
-const line = (id: number, text: string) => ({ id, text, stage: 'research' as const, round: null });
+const line = (id: number, text: string) => ({ id, text, stage: 'description' as const, round: null });
 
 // 16ms 프레임으로 from~to(ms)를 결정적으로 돌린다.
 const run = (fleet: DrainFleet, from: number, to: number) => {

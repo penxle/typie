@@ -43,8 +43,9 @@ describe('pickRounds', () => {
     expect(pickRounds([round(1, 'completed'), round(2, 'completed'), round(3, 'completed')]).display.round).toBe(3);
   });
 
-  it('high가 아니면 재리뷰 불가', () => {
-    expect(pickRounds([round(1, 'completed', 'medium')]).canRereview).toBe(false);
+  it('재리뷰는 전 티어에 열린다 — 구 구성 세션의 차단은 구세션 가드의 몫이다', () => {
+    expect(pickRounds([round(1, 'completed', 'low')]).canRereview).toBe(true);
+    expect(pickRounds([round(1, 'completed', 'medium')]).canRereview).toBe(true);
   });
 
   it('재검토 거부 — 이전 완료 회차를 표시하고 거부를 배너로, 재리뷰는 여전히 가능', () => {
