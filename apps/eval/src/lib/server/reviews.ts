@@ -17,7 +17,7 @@ import {
   startWorkflow,
 } from './prism.ts';
 import type { BatchItem } from 'drizzle-orm/batch';
-import type { AppCatalog, ModelConfig, TierName, TierOverrides } from '../feedback/tiers.ts';
+import type { AppCatalog, ModelConfig, RereviewTier, TierName, TierOverrides } from '../feedback/tiers.ts';
 import type { Anchor, ManuscriptMeta, Pass, PreviousInput, PreviousThread } from '../feedback/types.ts';
 import type { Db } from './db/index.ts';
 
@@ -184,13 +184,22 @@ export const startRereview = async (db: Db, env: Env, sessionId: string): Promis
   const picked = pickRounds(rounds.map((row) => ({ ...row, rejected: isRejectedResult(row.result) })));
   if (!picked.canRereview) return { error: '지금은 리뷰를 다시 요청할 수 없어요' };
   const base = picked.display;
+  // canRereview가 REREVIEW_TIERS 밖 티어를 이미 걸렀다 — 이 캐스트는 그 판정의 좁히기다.
+  const tier = base.tier as RereviewTier;
 
-  // 구세션 가드 — 재검토는 지난 회차의 산출물을 시드로 이어 쓴다. 파이프라인이 바뀌기 전의 세션에는 그 산출물이
-  // 아예 없어 이어 쓸 것이 없다. 행을 세우기 전에 끊는다: 세우고 실패로 귀속하면 화면에 재개 가능한 실패로 서서
-  // 같은 반려를 반복한다. 프로브는 연속성 시드다 — 파이프라인의 마지막 스텝이 쓰는 파일이라 이것의 실재가
-  // 곧 신 파이프라인 완주의 판별이고, 구 프로덕션도 중간 배포판도 한 번에 걸러진다.
+  // 구세션 가드 — 재검토는 지난 회차의 맥락을 이어 쓴다. 파이프라인이 바뀌기 전의 세션에는 이어 쓸 기반이
+  // 없다. 행을 세우기 전에 끊는다: 세우고 실패로 귀속하면 화면에 재개 가능한 실패로 서서 같은 반려를 반복한다.
+  // 프로브는 티어별 신 파이프라인 완주의 판별 파일이다 — high·medium은 마지막 스텝이 쓰는 연속성 시드
+  // (구 research 구성 medium에는 없어, previous를 모르는 구 prism이 떠 있는 동안의 medium 재리뷰도 여기서
+  // 반려된다), low는 판정 산출물(구 critique 구성 low에는 없고, 그 세션의 스레드는 pass 어휘가 달라 prism
+  // 시작 검증에도 걸린다).
+  const GUARD_FILES: Record<RereviewTier, string> = {
+    high: 'artifacts/continuity.yaml',
+    medium: 'artifacts/continuity.yaml',
+    low: 'artifacts/judgment.yaml',
+  };
   try {
-    if ((await fetchWorkflowFile(env, base.prismWorkflowId, 'artifacts/continuity.yaml')) === null) {
+    if ((await fetchWorkflowFile(env, base.prismWorkflowId, GUARD_FILES[tier])) === null) {
       return { error: '이 세션은 이전 버전 리뷰라 다시 요청할 수 없어요. 새 피드백으로 시작해 주세요' };
     }
   } catch {
@@ -241,8 +250,8 @@ export const startRereview = async (db: Db, env: Env, sessionId: string): Promis
       status: 'running' as const,
       manuscriptVersion: nextVersion,
       startedAt: now,
-      tier: 'high' as const,
-      modelConfig: buildModelConfig(catalog, 'high', overrides),
+      tier,
+      modelConfig: buildModelConfig(catalog, tier, overrides),
     }),
   ];
   if (!sameInput) {
@@ -306,23 +315,29 @@ export const startRereview = async (db: Db, env: Env, sessionId: string): Promis
       meta: { title: previousVersion.title, subtitle: previousVersion.subtitle },
     });
 
-    // 이전 회차 산출물 — 하나라도 없으면 시작 실패(prism의 prepare 스텝도 재검하지만 여기서 먼저 끊는다).
-    // 자기 이전 산출물을 edit로 고쳐 내는 스테이지 전부가 원래 경로 그대로 실린다. delivery.yaml은 싣지
+    // 이전 회차 산출물 시딩 — 자기 이전 산출물을 edit로 고쳐 내는 스테이지 전부가 원래 경로 그대로 실리고,
+    // 하나라도 없으면 시작 실패(prism의 prepare 스텝도 재검하지만 여기서 먼저 끊는다). delivery.yaml은 싣지
     // 않는다 — prism의 프로그램 소비가 없고, 시드가 자리에 서면 delivery가 지난 총평을 통독·edit 재작성해
-    // 턴이 폭증한다(2026-08-14 비용 감사, 스펙 §3).
-    const ARTIFACTS = [
+    // 턴이 폭증한다(2026-08-14 비용 감사, 스펙 §3). medium은 high의 감산이라 기술 5종만 싣고 해석·기준표·판정
+    // 시드가 빠지며(prism plans/2026-08-17-feedback-medium.md Task 8), low의 재검토가 소비하는 이전 맥락은
+    // previous 입력(스레드는 프로그램이 previous/threads.yaml로 렌더)과 이전 원고 파일뿐이라 시딩이 없다.
+    const DESCRIPTION_ARTIFACTS = [
       'artifacts/movements.yaml',
       'artifacts/narration.yaml',
       'artifacts/audience.yaml',
       'artifacts/condition.yaml',
       'artifacts/experience.yaml',
-      'artifacts/interpretation.yaml',
-      'artifacts/rubric.yaml',
-      'artifacts/judgment.yaml',
     ];
+    const TIER_ARTIFACTS: Record<RereviewTier, string[]> = {
+      high: [...DESCRIPTION_ARTIFACTS, 'artifacts/interpretation.yaml', 'artifacts/rubric.yaml', 'artifacts/judgment.yaml'],
+      medium: DESCRIPTION_ARTIFACTS,
+      low: [],
+    };
+    const ARTIFACTS = TIER_ARTIFACTS[tier];
     // 연속성 시드만 에이전트 비가시 경로로 옮겨 싣는다 — 프로그램이 병합한 완전본(승계 격상·범위 밖 기록의
-    // 처분)이라 에이전트 산출물에는 없고, 컨텍스트에 서면 지난 지적의 전사 압력이 되살아난다.
-    const PROGRAM_SEEDS = [{ from: 'artifacts/continuity.yaml', to: 'previous/continuity.yaml' }];
+    // 처분)이라 에이전트 산출물에는 없고, 컨텍스트에 서면 지난 지적의 전사 압력이 되살아난다. low는 연속성
+    // 산출 자체가 없다.
+    const PROGRAM_SEEDS = tier === 'low' ? [] : [{ from: 'artifacts/continuity.yaml', to: 'previous/continuity.yaml' }];
     const files: { path: string; content: string }[] = [];
     for (const path of ARTIFACTS) {
       const content = await fetchWorkflowFile(env, base.prismWorkflowId, path);
@@ -341,7 +356,7 @@ export const startRereview = async (db: Db, env: Env, sessionId: string): Promis
 
     await startWorkflow(env, {
       workflowId: prismWorkflowId,
-      workflow: 'high',
+      workflow: tier,
       // sparse — 승계할 오버라이드가 없으면 키 자체를 싣지 않는다(startFeedbackSession과 같은 관례).
       input: {
         manuscriptPath,

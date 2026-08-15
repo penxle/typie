@@ -3,7 +3,7 @@ import { agentStage, nestedRound, STAGES, stagesFor, stepStage, TERMINAL_EVENTS,
 import { TIER_NAMES } from './tiers.ts';
 
 describe('stage mapping', () => {
-  it('스테이지의 순서와 라벨이 고정된다 — 공통 선두 분류에 high 일곱과 medium·low 다섯', () => {
+  it('스테이지의 순서와 라벨이 고정된다 — 공통 선두 분류에 high 여섯(medium·low는 그 부분열)', () => {
     expect(STAGES.map((s) => s.label)).toEqual([
       '원고 가늠하기',
       '작품 읽기',
@@ -12,11 +12,6 @@ describe('stage mapping', () => {
       '짚을 곳 찾기',
       '문장 살피기',
       '전할 말 정리하기',
-      '원고 살펴보기',
-      '짚을 곳 찾기',
-      '문장 살피기',
-      '전할 말 고르기',
-      '마무리 글 쓰기',
     ]);
   });
 
@@ -37,14 +32,15 @@ describe('stage mapping', () => {
     expect(stepStage('stylistic-0')).toBe('stylistic');
     expect(stepStage('findings')).toBe('delivery');
     expect(stepStage('delivery-0')).toBe('delivery');
-    // medium·low
-    expect(stepStage('research-0')).toBe('research');
-    expect(stepStage('critique-2')).toBe('critique');
-    expect(stepStage('proofread-0')).toBe('proofread');
-    expect(stepStage('remarks')).toBe('rephrase');
-    expect(stepStage('rephrase-0')).toBe('rephrase');
-    expect(stepStage('tally')).toBe('conclude');
-    expect(stepStage('conclude-1')).toBe('conclude');
+    // 판정·문면·전달 스텝은 전 티어가 이름을 공유한다. 프로그램 스텝(전처리·처분·연속성)은 어느 단계에도 귀속되지 않는다
+    expect(stepStage('prepare')).toBeNull();
+    expect(stepStage('previous-threads')).toBeNull();
+    expect(stepStage('dispositions')).toBeNull();
+    expect(stepStage('continuity')).toBeNull();
+    // 구 medium 구성(research→conclude)은 철거됐다 — 그 구성으로 굳은 세션의 스텝은 어느 단계에도 서지 않는다
+    expect(stepStage('research-0')).toBeNull();
+    expect(stepStage('critique-2')).toBeNull();
+    expect(stepStage('conclude-1')).toBeNull();
   });
 
   it('에이전트 이름을 스테이지로 귀속한다', () => {
@@ -55,9 +51,12 @@ describe('stage mapping', () => {
     expect(agentStage('judgment-high')).toBe('judgment');
     expect(agentStage('stylistic-high')).toBe('stylistic');
     expect(agentStage('delivery-high')).toBe('delivery');
-    expect(agentStage('critique-low')).toBe('critique');
-    expect(agentStage('proofread-medium')).toBe('proofread');
-    expect(agentStage('rephrase-medium')).toBe('rephrase');
+    expect(agentStage('judgment-low')).toBe('judgment');
+    expect(agentStage('stylistic-low')).toBe('stylistic');
+    expect(agentStage('delivery-low-followup')).toBe('delivery');
+    expect(agentStage('description-medium')).toBe('description');
+    expect(agentStage('judgment-medium-followup')).toBe('judgment');
+    expect(agentStage('proofread-medium')).toBeNull();
     expect(agentStage('manuscript')).toBeNull();
   });
 
@@ -77,25 +76,18 @@ describe('stage mapping', () => {
 describe('tier stages', () => {
   it('티어별 표시 스테이지가 고정된다', () => {
     expect(TIER_STAGES.high).toEqual(['classify', 'description', 'interpretation', 'rubric', 'judgment', 'stylistic', 'delivery']);
-    expect(TIER_STAGES.medium).toEqual(['classify', 'research', 'critique', 'proofread', 'rephrase', 'conclude']);
-    expect(TIER_STAGES.low).toEqual(['classify', 'critique', 'proofread', 'rephrase']);
+    expect(TIER_STAGES.medium).toEqual(['classify', 'description', 'judgment', 'stylistic', 'delivery']);
+    expect(TIER_STAGES.low).toEqual(['classify', 'judgment', 'stylistic', 'delivery']);
   });
 
   it('stagesFor는 STAGES의 순서와 라벨을 유지한 채 걸러 낸다', () => {
     expect(stagesFor('high').map((stage) => stage.key)).toEqual(TIER_STAGES.high);
-    expect(stagesFor('medium').map((stage) => stage.key)).toEqual([
-      'classify',
-      'research',
-      'critique',
-      'proofread',
-      'rephrase',
-      'conclude',
-    ]);
+    expect(stagesFor('medium').map((stage) => stage.key)).toEqual(['classify', 'description', 'judgment', 'stylistic', 'delivery']);
     expect(stagesFor('low')).toEqual([
       { key: 'classify', label: '원고 가늠하기' },
-      { key: 'critique', label: '짚을 곳 찾기' },
-      { key: 'proofread', label: '문장 살피기' },
-      { key: 'rephrase', label: '전할 말 고르기' },
+      { key: 'judgment', label: '짚을 곳 찾기' },
+      { key: 'stylistic', label: '문장 살피기' },
+      { key: 'delivery', label: '전할 말 정리하기' },
     ]);
   });
 

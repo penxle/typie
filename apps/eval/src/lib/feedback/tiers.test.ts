@@ -104,12 +104,15 @@ describe('resolveTierSubmission', () => {
     expect(resolveTierSubmission(partial, 'medium', {}, true)).toEqual({ error: '카탈로그에 없는 티어예요: medium' });
   });
 
-  it('non-admin은 high 무오버라이드만 통과한다', () => {
+  it('non-admin은 전 티어 무오버라이드만 통과한다 — 오버라이드 항목은 운영자 전용', () => {
     expect(resolveTierSubmission(CATALOG, 'high', {}, false)).toEqual({ tier: 'high', overrides: {} });
-    expect(resolveTierSubmission(CATALOG, 'medium', {}, false)).toEqual({ error: '티어 설정은 운영자만 쓸 수 있어요' });
-    expect(resolveTierSubmission(CATALOG, 'low', {}, false)).toHaveProperty('error');
+    expect(resolveTierSubmission(CATALOG, 'medium', {}, false)).toEqual({ tier: 'medium', overrides: {} });
+    expect(resolveTierSubmission(CATALOG, 'low', {}, false)).toEqual({ tier: 'low', overrides: {} });
     expect(
       resolveTierSubmission(CATALOG, 'high', { 'calibration-high': { model: 'claude-sonnet-5', effort: 'xhigh' } }, false),
+    ).toHaveProperty('error');
+    expect(
+      resolveTierSubmission(CATALOG, 'low', { 'critique-low': { model: 'gemini-3.5-flash-lite', effort: 'minimal' } }, false),
     ).toHaveProperty('error');
   });
 

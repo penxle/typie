@@ -366,11 +366,11 @@ describe('buildPreviousContext', () => {
 
 describe('startRereview 구세션 가드', () => {
   // 가드가 반려하는 경로는 회차 목록 하나만 읽고 끝난다 — 행을 세우는 문장이 조립되면 이 스텁이 붙잡는다.
-  const createGuardDbStub = () => {
+  const createGuardDbStub = (row: Record<string, unknown> = completedRound) => {
     const inserts: unknown[] = [];
     const batches: unknown[][] = [];
     const db = {
-      select: () => ({ from: () => ({ where: () => ({ orderBy: () => Promise.resolve([completedRound]) }) }) }),
+      select: () => ({ from: () => ({ where: () => ({ orderBy: () => Promise.resolve([row]) }) }) }),
       insert: (table: unknown) => ({
         values: (row: Record<string, unknown>) => {
           inserts.push({ table, row });
@@ -407,6 +407,30 @@ describe('startRereview 구세션 가드', () => {
     expect(inserts).toHaveLength(0);
     expect(batches).toHaveLength(0);
     // 가드가 카탈로그·원고 반입보다 앞이라 반려에 딸린 왕복이 없다
+    expect(spy.mock.calls.map(([url]) => String(url))).toEqual(['https://prism.test/workflows/ev-x/files/artifacts/continuity.yaml']);
+  });
+
+  it('low의 판별 파일은 판정 산출물이다 — 구 구성 low 세션은 같은 문구로 반려된다', async () => {
+    const spy = route({ file: () => Promise.resolve(Response.json({ content: null })) });
+    const { db, inserts, batches } = createGuardDbStub({ ...completedRound, tier: 'low' });
+
+    const outcome = await startRereview(db, env, 's1');
+
+    expect(outcome).toEqual({ error: '이 세션은 이전 버전 리뷰라 다시 요청할 수 없어요. 새 피드백으로 시작해 주세요' });
+    expect(inserts).toHaveLength(0);
+    expect(batches).toHaveLength(0);
+    expect(spy.mock.calls.map(([url]) => String(url))).toEqual(['https://prism.test/workflows/ev-x/files/artifacts/judgment.yaml']);
+  });
+
+  it('medium의 판별 파일은 high와 같은 연속성 시드다 — 구 구성 medium 세션은 같은 문구로 반려된다', async () => {
+    const spy = route({ file: () => Promise.resolve(Response.json({ content: null })) });
+    const { db, inserts, batches } = createGuardDbStub({ ...completedRound, tier: 'medium' });
+
+    const outcome = await startRereview(db, env, 's1');
+
+    expect(outcome).toEqual({ error: '이 세션은 이전 버전 리뷰라 다시 요청할 수 없어요. 새 피드백으로 시작해 주세요' });
+    expect(inserts).toHaveLength(0);
+    expect(batches).toHaveLength(0);
     expect(spy.mock.calls.map(([url]) => String(url))).toEqual(['https://prism.test/workflows/ev-x/files/artifacts/continuity.yaml']);
   });
 

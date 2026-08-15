@@ -7,6 +7,7 @@
   import { anchorQuote } from '$lib/feedback/anchors.ts';
   import { VERDICT_POINTS, verdictLabel } from '$lib/feedback/verdicts.ts';
   import IssueChips from './IssueChips.svelte';
+  import Paragraphs from './Paragraphs.svelte';
   import ReviewReaction from './ReviewReaction.svelte';
   import type { FeedbackConclusion, FeedbackResult } from '$lib/feedback/types.ts';
   import type { Verdict } from '$lib/feedback/verdicts.ts';
@@ -65,7 +66,10 @@
       : new Intl.DateTimeFormat('ko-KR', { month: 'long', day: 'numeric', timeZone: 'Asia/Seoul' }).format(finishedAt),
   );
 
-  const quoteOf = (strength: (typeof conclusion.strengths)[number]) => {
+  // 강점은 의미 진술 티어(high)의 총평에만 선다 — 없는 티어(medium)는 빈 목록으로 접어 섹션이 서지 않게 한다.
+  const strengths = $derived(conclusion.strengths ?? []);
+
+  const quoteOf = (strength: (typeof strengths)[number]) => {
     const quote = anchorQuote(content, [strength]);
     if (quote.length > 0) return { text: quote, linked: true };
     const fallback = strength.head === strength.tail ? strength.head : `${strength.head} ⋯ ${strength.tail}`;
@@ -77,10 +81,9 @@
     (
       [
         progressLines.length > 0 ? 'progress' : null,
-        conclusion.strengths.length > 0 ? 'strengths' : null,
+        strengths.length > 0 ? 'strengths' : null,
         verdicts.length > 0 ? 'verdicts' : null,
         elevations.length > 0 ? 'elevations' : null,
-        (conclusion.clearances?.length ?? 0) > 0 ? 'clearances' : null,
         conclusion.patterns.length > 0 ? 'patterns' : null,
         conclusion.priorities.length > 0 ? 'priorities' : null,
       ] as const
@@ -307,7 +310,7 @@
         {#if progressLines.length > 0}
           <div class={sectionHeadClass}>
             <span class={sectionNumberClass}>{numberFor('progress')}</span>
-            <span class={sectionTitleClass}>지난 리뷰와 달라진 점</span>
+            <span class={sectionTitleClass}>지난 리뷰에서 나아진 점</span>
           </div>
           <div class={flex({ direction: 'column', gap: '22px', marginTop: '22px' })}>
             {#each progressLines as line, index (index)}
@@ -316,14 +319,14 @@
           </div>
         {/if}
 
-        {#if conclusion.strengths.length > 0}
+        {#if strengths.length > 0}
           <div class={sectionHeadClass}>
             <span class={sectionNumberClass}>{numberFor('strengths')}</span>
-            <span class={sectionTitleClass}>잘 작동하는 대목</span>
-            <span class={sectionCaptionClass}>{conclusion.strengths.length}곳 — 다음 원고에서도 믿고 쓰셔도 좋은 힘이에요</span>
+            <span class={sectionTitleClass}>읽는 사람에게 잘 닿은 대목</span>
+            <span class={sectionCaptionClass}>{strengths.length}곳 — 다음 원고에서도 믿고 쓰셔도 좋은 힘이에요</span>
           </div>
           <div class={flex({ direction: 'column', gap: '26px', marginTop: '22px' })}>
-            {#each conclusion.strengths as strength, index (index)}
+            {#each strengths as strength, index (index)}
               {@const quote = quoteOf(strength)}
               <div>
                 <button
@@ -343,7 +346,10 @@
                   「{quote.text}」
                 </button>
                 {#if strength.body}
-                  <p class={css({ marginTop: '8px', fontSize: '12px', lineHeight: '[1.75]', color: 'text.faint' })}>{strength.body}</p>
+                  <Paragraphs
+                    class={css({ marginTop: '8px', fontSize: '12px', lineHeight: '[1.75]', color: 'text.faint' })}
+                    text={strength.body}
+                  />
                 {/if}
               </div>
             {/each}
@@ -353,7 +359,7 @@
         {#if verdicts.length > 0}
           <div class={sectionHeadClass}>
             <span class={sectionNumberClass}>{numberFor('verdicts')}</span>
-            <span class={sectionTitleClass}>관점마다 서 있는 자리</span>
+            <span class={sectionTitleClass}>관점마다 어디까지 왔는지</span>
             <span class={sectionCaptionClass}>{verdicts.length}가지 — 이 작품에서 특히 중요하게 본 관점들이에요</span>
           </div>
           <div class={flex({ direction: 'column', gap: '18px', marginTop: '22px' })}>
@@ -372,7 +378,7 @@
                   {/if}
                 </div>
                 {#if verdict.note}
-                  <p class={noteClass}>{verdict.note}</p>
+                  <Paragraphs class={noteClass} text={verdict.note} />
                 {/if}
               </div>
             {/each}
@@ -383,7 +389,9 @@
           <div class={sectionHeadClass}>
             <span class={sectionNumberClass}>{numberFor('elevations')}</span>
             <span class={sectionTitleClass}>한 걸음 더 가 볼 자리</span>
-            <span class={sectionCaptionClass}>{elevations.length}곳 — 고칠 곳이 아니라, 잘 서 있는 자리에서 해 볼 수 있는 제안이에요</span>
+            <span class={sectionCaptionClass}>
+              {elevations.length}곳 — 고칠 곳이 아니라, 이미 잘 되고 있는 곳에서 해 볼 수 있는 제안이에요
+            </span>
           </div>
           <div class={flex({ direction: 'column', gap: '26px', marginTop: '22px' })}>
             {#each elevations as elevation, index (index)}
@@ -404,24 +412,8 @@
                   </div>
                 {/if}
                 {#if elevation.body}
-                  <p class={noteClass}>{elevation.body}</p>
+                  <Paragraphs class={noteClass} text={elevation.body} />
                 {/if}
-              </div>
-            {/each}
-          </div>
-        {/if}
-
-        {#if (conclusion.clearances?.length ?? 0) > 0}
-          <div class={sectionHeadClass}>
-            <span class={sectionNumberClass}>{numberFor('clearances')}</span>
-            <span class={sectionTitleClass}>살펴봤지만 짚지 않은 관점</span>
-            <span class={sectionCaptionClass}>{conclusion.clearances?.length ?? 0}가지 — 따져 본 뒤 짚지 않기로 한 자리예요</span>
-          </div>
-          <div class={flex({ direction: 'column', gap: '18px', marginTop: '22px' })}>
-            {#each conclusion.clearances ?? [] as clearance, index (index)}
-              <div>
-                <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.default' })}>{clearance.trait}</div>
-                <p class={noteClass}>{clearance.note}</p>
               </div>
             {/each}
           </div>
@@ -431,7 +423,7 @@
           <div class={sectionHeadClass}>
             <span class={sectionNumberClass}>{numberFor('patterns')}</span>
             <span class={sectionTitleClass}>반복해서 나타나는 습관</span>
-            <span class={sectionCaptionClass}>{conclusion.patterns.length}가지 — 짚은 곳들을 묶어 보면 같은 결이에요</span>
+            <span class={sectionCaptionClass}>{conclusion.patterns.length}가지 — 하나를 고치면 여러 곳이 함께 풀려요</span>
           </div>
           <div class={flex({ direction: 'column', gap: '24px', marginTop: '22px' })}>
             {#each conclusion.patterns as pattern, index (index)}
@@ -439,7 +431,7 @@
                 {#if pattern.theme}
                   <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.default' })}>{pattern.theme}</div>
                 {/if}
-                <p class={noteClass}>{pattern.body}</p>
+                <Paragraphs class={noteClass} text={pattern.body} />
                 <IssueChips {activeId} issues={pattern.issues} {onActivate} threads={conclusionThreads} />
               </div>
             {/each}
@@ -450,7 +442,7 @@
           <div class={sectionHeadClass}>
             <span class={sectionNumberClass}>{numberFor('priorities')}</span>
             <span class={sectionTitleClass}>손보실 순서</span>
-            <span class={sectionCaptionClass}>{conclusion.priorities.length}단계 — 위에서부터 차례로 보시길 권해요</span>
+            <span class={sectionCaptionClass}>{conclusion.priorities.length}가지 — 먼저 고치면 뒤가 쉬워지는 순서예요</span>
           </div>
           <div class={flex({ direction: 'column', gap: '22px', marginTop: '22px' })}>
             {#each conclusion.priorities as priority, index (index)}
@@ -473,7 +465,7 @@
                   {index + 1}
                 </span>
                 <div class={css({ flexGrow: '1', minWidth: '0' })}>
-                  <p class={css({ fontSize: '13px', lineHeight: '[1.75]', color: 'text.subtle' })}>{priority.body}</p>
+                  <Paragraphs class={css({ fontSize: '13px', lineHeight: '[1.75]', color: 'text.subtle' })} text={priority.body} />
                   <IssueChips {activeId} issues={priority.issues} {onActivate} threads={conclusionThreads} />
                 </div>
               </div>

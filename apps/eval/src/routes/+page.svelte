@@ -1,11 +1,12 @@
 <script lang="ts">
   import { css, cva } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
-  import { Button, Helmet, Select, TextInput, TimeAgo } from '@typie/ui/components';
+  import { Button, Helmet, Icon, SegmentButtons, Select, TextInput, TimeAgo } from '@typie/ui/components';
   import { untrack } from 'svelte';
+  import IconClock from '~icons/lucide/clock';
   import { enhance } from '$app/forms';
   import ThemeToggle from '$lib/components/ThemeToggle.svelte';
-  import { TIER_NAMES } from '$lib/feedback/tiers.ts';
+  import { PUBLIC_TIERS } from '$lib/feedback/tiers.ts';
   import type { TierName } from '$lib/feedback/tiers.ts';
   import type { ActionData, PageData, SubmitFunction } from './$types';
 
@@ -18,7 +19,7 @@
   // 확인 카드와 오류는 이 화면이 들고 있는다 — 시작이 실패해도 카드가 남아 바로 다시 누를 수 있고,
   // 단계를 되돌릴 때 직전 오류를 걷을 수 있다. 초기값을 form에서 받아 JS 없는 왕복·하이드레이션 전에도 성립시킨다.
   // svelte-ignore state_referenced_locally
-  let preview = $state<{ refId: string; title: string | null; charCount: number } | null>(form?.preview ?? null);
+  let preview = $state<{ refId: string; title: string | null; subtitle: string | null; charCount: number } | null>(form?.preview ?? null);
   // svelte-ignore state_referenced_locally
   let error = $state<string | null>(form?.error ?? null);
 
@@ -57,7 +58,7 @@
     };
   };
 
-  // 옵션·기본값의 원천은 load가 걷어 온 prism 카탈로그다(정적 미러 폐기) — 못 걷었으면 null이라 티어 설정
+  // 옵션·기본값의 원천은 load가 걷어 온 prism 카탈로그다(정적 미러 폐기) — 못 걷었으면 null이라 모델 설정
   // 상자 자체가 서지 않고, 시작은 액션의 재조회가 판정한다.
   const catalog = $derived(data.catalog);
   const tierAgents = (name: TierName): string[] => catalog?.workflows[name]?.agents ?? [];
@@ -88,8 +89,9 @@
     tiers = freshTiers(next);
   };
 
-  // 티어 이름은 화면 어휘라 로컬 상수에서 오되, 카탈로그가 모르는 티어는 세우지 않는다.
-  const tierItems = $derived(TIER_NAMES.filter((name) => catalog?.workflows[name]).map((name) => ({ label: name, value: name })));
+  // 티어 세그먼트는 전원 공통의 정적 목록이다(PUBLIC_TIERS) — 카탈로그 실패에도 서고, 카탈로그에 없는 티어는
+  // 시작 액션의 재조회가 명시 400으로 거른다.
+  const tierItems: { label: string; value: TierName }[] = PUBLIC_TIERS.map((name) => ({ label: name, value: name }));
   const modelItems = $derived(Object.keys(catalog?.models ?? {}).map((model) => ({ label: model, value: model })));
   const effortItems = (model: string) => (catalog?.models[model]?.efforts ?? []).map((effort) => ({ label: effort, value: effort }));
   const setModel = (agent: string, model: string) => {
@@ -111,7 +113,14 @@
 
   const STATUS_LABELS = { running: '진행 중', completed: '완료', failed: '실패', canceled: '중단됨' };
 
-  // 운영자 전용 표식이라 상태 배지보다 한 급 눌러 세운다 — 코드 명칭을 그대로 쓰는 자리라 mono다.
+  // 티어별 소요 안내 — 세그먼트 옆에서 선택을 따라간다.
+  const TIER_DURATIONS: Record<TierName, string> = {
+    low: '3 ~ 5분',
+    medium: '20 ~ 30분',
+    high: '60 ~ 90분',
+  };
+
+  // 상태 배지보다 한 급 눌러 세운다 — 코드 명칭을 그대로 쓰는 자리라 mono다(코드명 노출은 오너 결정 2026-08-17).
   const tierBadgeClass = css({
     flexShrink: '0',
     paddingX: '8px',
@@ -189,7 +198,7 @@
         주 과제입니다.
       </p>
       <ul class={flex({ direction: 'column', gap: '8px', marginTop: '12px' })}>
-        {#each ['진행 중 작가님께 질문이 올 수 있어요. 답을 주셔야 다음 단계로 넘어갑니다 — 질문은 앞 두 단계에서만 오고, 한 편에 60~90분 정도 걸립니다.', '완료되면 총평 화면 최하단의 반응과 피드백별 반응·답글을 남겨주세요. 원고를 고친 뒤 "리뷰 다시 요청하기"를 누르면 답글과 새 원고를 반영한 재리뷰를 받아볼 수 있어요.', '분량·완성도와 무관하게 3~5편, 다양한 원고로 시도해 주세요. 시도에 상한은 없지만 과한 오남용만 자제해 주세요.', '신경 쓰인 부분과 의견은 채널로 자유롭게 보내주시고, 공개하기 민감한 내용은 finn에게 DM으로 보내주세요.'] as line (line)}
+        {#each ['진행 중 작가님께 질문이 올 수 있어요. 답을 주셔야 다음 단계로 넘어갑니다.', '완료되면 총평 화면 최하단의 반응과 피드백별 반응·답글을 남겨주세요. 원고를 고친 뒤 "리뷰 다시 요청하기"를 누르면 답글과 새 원고를 반영한 재리뷰를 받아볼 수 있어요.', '분량·완성도와 무관하게 3~5편, 다양한 원고로 시도해 주세요. 시도에 상한은 없지만 과한 오남용만 자제해 주세요.', '신경 쓰인 부분과 의견은 채널로 자유롭게 보내주시고, 공개하기 민감한 내용은 finn에게 DM으로 보내주세요.'] as line (line)}
           <li class={flex({ gap: '10px' })}>
             <span
               class={css({
@@ -246,6 +255,20 @@
             >
               {preview.title || '제목 없음'}
             </p>
+            {#if preview.subtitle}
+              <p
+                class={css({
+                  marginTop: '2px',
+                  fontSize: '12px',
+                  color: 'text.subtle',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                })}
+              >
+                {preview.subtitle}
+              </p>
+            {/if}
             <p class={css({ marginTop: '4px', fontSize: '12px', color: 'text.faint' })}>
               {preview.charCount.toLocaleString('ko-KR')}자 · 불러온 본문 기준
             </p>
@@ -254,8 +277,16 @@
             </p>
           </div>
 
+          <input name="tier" type="hidden" value={tier} />
+          <div class={flex({ align: 'center', justify: 'flex-end', gap: '10px', marginTop: '12px' })}>
+            <span class={flex({ align: 'center', gap: '4px', fontSize: '12px', color: 'text.subtle' })}>
+              <Icon icon={IconClock} size={12} />
+              소요 시간: {TIER_DURATIONS[tier]}
+            </span>
+            <SegmentButtons style={css.raw({ width: '200px' })} items={tierItems} onselect={selectTier} size="sm" value={tier} />
+          </div>
+
           {#if data.isAdmin && catalog}
-            <input name="tier" type="hidden" value={tier} />
             {#each tierAgents(tier) as agent (agent)}
               {#if isOverridden(agent)}
                 <input name={`tier.${agent}.model`} type="hidden" value={tiers[agent].model} />
@@ -271,56 +302,38 @@
                   onclick={() => (tiersOpen = !tiersOpen)}
                   type="button"
                 >
-                  티어 설정 {tiersOpen ? '접기' : '펼치기'}
+                  모델 설정 {tiersOpen ? '접기' : '펼치기'}
                 </button>
-                {#if !tiersOpen}
-                  <span class={tierBadgeClass}>{tier}</span>
-                {/if}
               </div>
               {#if tiersOpen}
-                <div class={flex({ direction: 'column', gap: '8px', marginTop: '8px' })}>
-                  <div class={flex({ align: 'center', gap: '8px' })}>
-                    <span class={css({ width: '150px', flexShrink: '0', fontSize: '12px', color: 'text.subtle' })}>티어</span>
-                    <Select items={tierItems} onselect={selectTier} value={tier} />
-                  </div>
-
-                  <div
-                    class={flex({
-                      direction: 'column',
-                      gap: '6px',
-                      paddingTop: '8px',
-                      borderTopWidth: '1px',
-                      borderColor: 'border.subtle',
-                    })}
-                  >
-                    {#each tierAgents(tier) as agent (agent)}
-                      <div class={flex({ align: 'center', gap: '8px' })}>
-                        <span
-                          class={css({
-                            width: '150px',
-                            flexShrink: '0',
-                            fontSize: '12px',
-                            fontFamily: 'mono',
-                            letterSpacing: '0',
-                            color: 'text.subtle',
-                          })}
-                        >
-                          {agent}
-                        </span>
-                        <Select items={modelItems} onselect={(model) => setModel(agent, model)} value={tiers[agent].model} />
-                        <Select
-                          items={effortItems(tiers[agent].model)}
-                          onselect={(effort) => {
-                            tiers[agent].effort = effort;
-                          }}
-                          value={tiers[agent].effort}
-                        />
-                        {#if isOverridden(agent)}
-                          <span class={css({ fontSize: '11px', color: 'text.brand' })}>변경됨</span>
-                        {/if}
-                      </div>
-                    {/each}
-                  </div>
+                <div class={flex({ direction: 'column', gap: '6px', marginTop: '8px' })}>
+                  {#each tierAgents(tier) as agent (agent)}
+                    <div class={flex({ align: 'center', gap: '8px' })}>
+                      <span
+                        class={css({
+                          width: '150px',
+                          flexShrink: '0',
+                          fontSize: '12px',
+                          fontFamily: 'mono',
+                          letterSpacing: '0',
+                          color: 'text.subtle',
+                        })}
+                      >
+                        {agent}
+                      </span>
+                      <Select items={modelItems} onselect={(model) => setModel(agent, model)} value={tiers[agent].model} />
+                      <Select
+                        items={effortItems(tiers[agent].model)}
+                        onselect={(effort) => {
+                          tiers[agent].effort = effort;
+                        }}
+                        value={tiers[agent].effort}
+                      />
+                      {#if isOverridden(agent)}
+                        <span class={css({ fontSize: '11px', color: 'text.brand' })}>변경됨</span>
+                      {/if}
+                    </div>
+                  {/each}
                 </div>
               {/if}
             </div>
@@ -343,7 +356,7 @@
           </div>
 
           <p class={css({ marginTop: '10px', fontSize: '12px', color: 'text.faint' })}>
-            문서 ID는 타이피에서 문서를 우클릭해 '문서 ID 복사'로 얻을 수 있어요
+            문서 ID는 타이피 웹 대시보드의 왼쪽 사이드바에서 해당 문서를 우클릭한 뒤, 메뉴 맨 아래의 '문서 ID 복사'를 누르면 복사돼요
           </p>
 
           {#if error}
@@ -407,9 +420,7 @@
                     {session.title || '제목 없음'}
                   </span>
 
-                  {#if data.isAdmin}
-                    <span class={tierBadgeClass}>{session.tier}</span>
-                  {/if}
+                  <span class={tierBadgeClass}>{session.tier}</span>
 
                   {#if session.status === 'running' && session.pendingQuestion}
                     <span class={css(badgeRecipe.raw({ status: 'waiting' }))}>질문 대기 중</span>

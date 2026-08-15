@@ -1,19 +1,10 @@
 import type { TierName } from './tiers.ts';
 
-// high는 판정 최후 파이프라인, medium·low는 기존 구성이다 — 두 집합의 합이 이 앱이 그릴 수 있는 단계다.
-export type StageKey =
-  | 'classify'
-  | 'description'
-  | 'interpretation'
-  | 'rubric'
-  | 'judgment'
-  | 'stylistic'
-  | 'delivery'
-  | 'research'
-  | 'critique'
-  | 'proofread'
-  | 'rephrase'
-  | 'conclude';
+// 전 티어가 판정 최후 파이프라인의 변주다 — high가 원형, medium은 해석·기준표가 빠진 감산(정적 기준표),
+// low는 상류 준비 없이 판정·문면·전달만 도는 감산이다. 구 medium 구성(research→conclude)은 prism 재설계
+// (2026-08-17)로 철거됐고 이 앱도 그 어휘를 함께 지운다 — 구 구성으로 굳은 세션의 과정 화면은 단계 카드가
+// 서지 않는다(high plan 컷오버와 같은 수용).
+export type StageKey = 'classify' | 'description' | 'interpretation' | 'rubric' | 'judgment' | 'stylistic' | 'delivery';
 
 export const STAGES: { key: StageKey; label: string }[] = [
   // 사전 분류 — 전 티어 공통 선두. 거부 판정이면 여기서 워크플로가 종결된다.
@@ -24,18 +15,13 @@ export const STAGES: { key: StageKey; label: string }[] = [
   { key: 'judgment', label: '짚을 곳 찾기' },
   { key: 'stylistic', label: '문장 살피기' },
   { key: 'delivery', label: '전할 말 정리하기' },
-  { key: 'research', label: '원고 살펴보기' },
-  { key: 'critique', label: '짚을 곳 찾기' },
-  { key: 'proofread', label: '문장 살피기' },
-  { key: 'rephrase', label: '전할 말 고르기' },
-  { key: 'conclude', label: '마무리 글 쓰기' },
 ];
 
 // 티어마다 도는 단계가 다르다 — 그 티어에 에이전트가 없는 단계는 대기 카드로도 세우지 않는다.
 export const TIER_STAGES: Record<TierName, StageKey[]> = {
   high: ['classify', 'description', 'interpretation', 'rubric', 'judgment', 'stylistic', 'delivery'],
-  medium: ['classify', 'research', 'critique', 'proofread', 'rephrase', 'conclude'],
-  low: ['classify', 'critique', 'proofread', 'rephrase'],
+  medium: ['classify', 'description', 'judgment', 'stylistic', 'delivery'],
+  low: ['classify', 'judgment', 'stylistic', 'delivery'],
 };
 
 export const stagesFor = (tier: TierName): { key: StageKey; label: string }[] =>
@@ -56,13 +42,6 @@ const PREFIXES: [string, StageKey | null][] = [
   ['stylistic', 'stylistic'],
   ['findings', 'delivery'],
   ['delivery', 'delivery'],
-  ['research', 'research'],
-  ['critique', 'critique'],
-  ['proofread', 'proofread'],
-  ['remarks', 'rephrase'],
-  ['rephrase', 'rephrase'],
-  ['tally', 'conclude'],
-  ['conclude', 'conclude'],
 ];
 
 export const stepStage = (stepName: string): StageKey | null => {
@@ -72,8 +51,8 @@ export const stepStage = (stepName: string): StageKey | null => {
   return null;
 };
 
-// 에이전트 이름 → 스테이지. 어휘는 prism 에이전트 이름({stage}-{tier}, 계획 점검만 review-{tier})이고 재리뷰는
-// -followup 접미가 붙는다(prism src/apps/feedback/followup.ts:26) — 접두 매칭이라 접미는 자연 흡수된다.
+// 에이전트 이름 → 스테이지. 어휘는 prism 에이전트 이름({stage}-{tier})이고 재리뷰는 -followup 접미가 붙는다
+// (prism src/apps/feedback/followup.ts) — 접두 매칭이라 접미는 자연 흡수된다.
 const AGENT_PREFIXES: [string, StageKey][] = [
   ['classify', 'classify'],
   ['description', 'description'],
@@ -83,11 +62,6 @@ const AGENT_PREFIXES: [string, StageKey][] = [
   ['judgment', 'judgment'],
   ['stylistic', 'stylistic'],
   ['delivery', 'delivery'],
-  ['research', 'research'],
-  ['critique', 'critique'],
-  ['proofread', 'proofread'],
-  ['rephrase', 'rephrase'],
-  ['conclude', 'conclude'],
 ];
 
 export const agentStage = (agentName: string): StageKey | null => {

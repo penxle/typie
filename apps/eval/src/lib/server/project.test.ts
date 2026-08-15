@@ -21,7 +21,7 @@ const result: FeedbackResult = {
     { trait: '인물의 동기', pass: 'judgment', body: '지적 문면', anchors: [{ start: 10, end: 20, head: '머리', tail: '꼬리' }] },
     { trait: '문장 결', pass: 'stylistic', body: null, anchors: [] },
   ],
-  conclusion: { understanding: null, strengths: [], clearances: [], patterns: [], priorities: [] },
+  conclusion: { understanding: null, strengths: [], patterns: [], priorities: [] },
 };
 
 describe('threadsFromResult', () => {

@@ -16,6 +16,7 @@
   import { EVENT_NAMES } from '$lib/feedback/sse.ts';
   import { synthesizeFolds, usageLowerBound } from '$lib/feedback/stage-cost.ts';
   import { TERMINAL_EVENTS } from '$lib/feedback/stages.ts';
+  import ArtifactsModal from './ArtifactsModal.svelte';
   import ConclusionDrawer from './ConclusionDrawer.svelte';
   import ConclusionPanel from './ConclusionPanel.svelte';
   import DiagnosticsModal from './DiagnosticsModal.svelte';
@@ -50,6 +51,8 @@
   );
 
   const conclusion = $derived(data.review.result?.conclusion ?? null);
+  // 강점은 의미 진술 티어(high)의 총평에만 선다 — 없는 티어(medium)는 빈 목록으로 접어 절이 서지 않게 한다.
+  const strengths = $derived(conclusion?.strengths ?? []);
   // 판정은 결과의 최상위 필드다 — 기준표를 세우는 티어에만 실리므로 없으면 절 자체가 서지 않는다.
   const verdicts = $derived(data.review.result?.verdicts ?? []);
   // 격상도 결과의 최상위 필드다 — 결함이 아니라 다음 단계의 제안이라 지적 스레드를 만들지 않고 총평에만 선다.
@@ -62,10 +65,9 @@
   // 전 섹션이 비면 패널·드로어 자체를 두지 않는다 — 빈 편지를 세우는 것보다 없는 편이 낫다.
   const conclusionEmpty = $derived(
     conclusion === null ||
-      (conclusion.strengths.length === 0 &&
+      (strengths.length === 0 &&
         verdicts.length === 0 &&
         elevations.length === 0 &&
-        (conclusion.clearances?.length ?? 0) === 0 &&
         conclusion.patterns.length === 0 &&
         conclusion.priorities.length === 0 &&
         (conclusion.understanding ?? '').trim().length === 0 &&
@@ -185,6 +187,11 @@
   let activeId = $state<string | null>(null);
   let infoOpen = $state(false);
   let diagnosticsOpen = $state(false);
+  let artifactsOpen = $state(false);
+
+  // 산출물 모달은 high 파이프라인의 정상 완료 회차에만 선다 — 정리 UI가 그 티어의 계약을 미러하고(다른 티어는 같은
+  // 이름의 파일도 형태가 다르다), 거부 종결은 판정 산출물 자체가 없다. 엔드포인트도 같은 조건으로 409를 낸다.
+  const artifactsAvailable = $derived(data.review.status === 'completed' && !data.review.rejection && data.review.tier === 'high');
 
   // 실행 중 비용은 턴 누적 + modelConfig 스냅샷의 합성이다(스펙 §3.1) — admin이 아니면 계산 자체를 하지 않는다.
   const costFolds = $derived(data.isAdmin ? synthesizeFolds(live.usage, data.modelConfig) : []);
@@ -474,7 +481,7 @@
     };
   };
 
-  // 운영자 전용 표식이라 상태 배지보다 한 급 눌러 세운다 — 코드 명칭을 그대로 쓰는 자리라 mono다.
+  // 상태 배지보다 한 급 눌러 세운다 — 코드 명칭을 그대로 쓰는 자리라 mono다(코드명 노출은 오너 결정 2026-08-17).
   const tierBadgeClass = css({
     flexShrink: '0',
     paddingX: '8px',
@@ -561,12 +568,15 @@
     </span>
 
     <div class={flex({ align: 'center', gap: '8px', marginLeft: 'auto' })}>
+      <span class={tierBadgeClass}>{data.review.tier}</span>
       {#if data.isAdmin}
-        <span class={tierBadgeClass}>{data.review.tier}</span>
         <Button onclick={() => (infoOpen = true)} size="sm" type="button" variant="secondary">정보</Button>
         {#if data.review.status !== 'running'}
           <Button onclick={() => (diagnosticsOpen = true)} size="sm" type="button" variant="secondary">진단</Button>
         {/if}
+      {/if}
+      {#if artifactsAvailable}
+        <Button onclick={() => (artifactsOpen = true)} size="sm" type="button" variant="secondary">산출물 보기</Button>
       {/if}
       {#if data.review.status === 'completed'}
         <Button href={`/sessions/${data.session.id}/process`} size="sm" type="link" variant="secondary">과정 보기</Button>
@@ -700,7 +710,8 @@
             content={data.version.content}
             onActivate={(id) => activate(id, 'manuscript')}
             round={data.review.round}
-            strengths={conclusion?.strengths ?? []}
+            {strengths}
+            subtitle={data.version.subtitle}
             threads={data.threads}
             {title}
           />
@@ -741,7 +752,14 @@
     <div class={flex({ flexGrow: '1', minHeight: '0' })}>
       <div class={css({ flexGrow: '1', minWidth: '0', overflowY: 'auto' })}>
         <div class={css({ width: 'full', maxWidth: '620px', marginX: 'auto', paddingX: '32px', paddingY: '52px' })}>
-          <h1 class={css({ marginBottom: '40px', fontFamily: 'RIDIBatang', fontSize: '24px' })}>{title}</h1>
+          <div class={css({ marginBottom: '40px' })}>
+            <h1 class={css({ fontFamily: 'RIDIBatang', fontSize: '24px' })}>{title}</h1>
+            {#if data.version.subtitle}
+              <p class={css({ marginTop: '10px', fontFamily: 'RIDIBatang', fontSize: '18px', color: 'text.faint' })}>
+                {data.version.subtitle}
+              </p>
+            {/if}
+          </div>
           <div class={flex({ direction: 'column', gap: '16px' })}>
             {#each paragraphs as paragraph, index (index)}
               <p
@@ -776,6 +794,10 @@
     </div>
   {/if}
 </div>
+
+{#if artifactsAvailable}
+  <ArtifactsModal roundNumber={data.review.roundNumber} sessionId={data.session.id} bind:open={artifactsOpen} />
+{/if}
 
 {#if data.isAdmin}
   <InfoModal

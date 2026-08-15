@@ -12,16 +12,16 @@ export type Anchor = { start: number; end: number; head: string; tail: string };
 export type Pass = 'judgment' | 'stylistic';
 
 // id는 이슈의 신원이다 — 배열 위치와 달리 조립이 바뀌어도 흔들리지 않아 총평이 이것으로 지적을 가리킨다.
-// 지적을 id로 다루지 않는 티어(medium·low)와 id 도입 전에 굳은 결과에는 자리 자체가 없다.
+// 전 티어가 id를 싣는다 — kind:'feedback' 티어(high·medium)는 총평 참조의 축이고, kind:'issues' 티어(low)는
+// 스레드 연결의 축이다. id 도입 전에 굳은 결과에만 자리가 없다.
 export type FeedbackIssue = { id?: string; trait: string; pass: Pass; body: string | null; anchors: Anchor[]; thread?: string };
 
 export type FeedbackConclusion = {
   understanding: string | null;
   // 진전 서술은 재리뷰 회차에만 있다 — 1회차 결과에는 키 자체가 서지 않는다.
   progress?: string | null;
-  strengths: (Anchor & { body: string | null })[];
-  // 무혐의는 판정점이 없는 티어의 것이다 — 특질마다 판정이 서는 티어에서는 verdicts가 그 자리를 대신한다.
-  clearances?: { trait: string; note: string }[];
+  // 의미 진술 티어(high)에만 선다 — 생산자(해석 단계)가 없는 티어(medium)의 총평에는 자리 자체가 서지 않는다.
+  strengths?: (Anchor & { body: string | null })[];
   // 참조의 형태는 티어마다 갈린다 — 지적을 번호로 세는 티어는 번호를, id로 다루는 티어는 이슈의 id를 싣는다.
   // 저장된 구 결과는 영구히 번호다(굳은 JSON을 다시 쓰지 않는다).
   patterns: { theme: string | null; body: string; issues: number[] | string[] }[];

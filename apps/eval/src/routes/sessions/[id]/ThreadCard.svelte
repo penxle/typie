@@ -9,6 +9,7 @@
   import IconThumbsDown from '~icons/lucide/thumbs-down';
   import IconThumbsUp from '~icons/lucide/thumbs-up';
   import { enhance } from '$app/forms';
+  import Paragraphs from './Paragraphs.svelte';
   import type { SubmitFunction } from '@sveltejs/kit';
   import type { PageData } from './$types';
 
@@ -44,7 +45,7 @@
   const shownComments = $derived(comments.filter((comment) => comment.body.trim().length > 0));
   const meta = $derived(shownComments.length > 0 ? `댓글 ${shownComments.length}` : '');
 
-  const STATE_LABELS = { closed: '닫힘', resolved: '해소됨', withdrawn: '철회됨' };
+  const STATE_LABELS = { closed: '닫음', resolved: '해결됨', withdrawn: '거둠' };
 
   const authorLabel = (comment: Comment) => (comment.author === 'ai' ? 'AI' : '나');
 
@@ -383,20 +384,20 @@
       {/if}
 
       {#if thread.body}
-        <p class={css({ marginTop: '9px', fontSize: '13px', lineHeight: '[1.65]', color: 'text.subtle' })}>{thread.body}</p>
+        <Paragraphs class={css({ marginTop: '9px', fontSize: '13px', lineHeight: '[1.65]', color: 'text.subtle' })} text={thread.body} />
       {/if}
 
       {#if pattern}
         <p class={calloutClass}>
           <span class={css({ fontWeight: 'bold', color: 'text.subtle' })}>반복되는 습관</span>
-          · {pattern.theme} — 원고 전체에서 {pattern.count}건이 같은 결이에요
+          · {pattern.theme} — 원고의 {pattern.count}곳에서 같은 습관이 보여요
         </p>
       {/if}
 
       {#if priority}
         <p class={calloutClass}>
           <span class={css({ fontWeight: 'bold', color: 'text.subtle' })}>손보실 순서</span>
-          · 전체 {priority.total}단계 중 {priority.rank}번째 — {priority.body}
+          · {priority.total}가지 중 {priority.rank}번째 — {priority.body}
         </p>
       {/if}
 
@@ -494,7 +495,7 @@
       {#if !settled}
         {#if locked}
           <p class={css({ marginTop: '10px', fontSize: '12px', lineHeight: '[1.6]', color: 'text.faint' })}>
-            리뷰가 진행되는 동안에는 스레드가 잠겨 있어요
+            리뷰가 진행되는 동안에는 답글을 남길 수 없어요
           </p>
         {:else}
           <form action="?/reply" method="post" use:enhance={submit('reply')}>
@@ -570,7 +571,7 @@
         >
           <input name="threadId" type="hidden" value={thread.id} />
           <span class={css({ flexGrow: '1', minWidth: '0', fontSize: '11px', color: 'text.faint', textAlign: 'right' })}>
-            다음 회차부터 다시 짚지 않아요 · 되돌릴 수 있어요
+            다음 리뷰부터 다시 짚지 않아요 · 되돌릴 수 있어요
           </span>
           <button
             class={flex({
@@ -597,7 +598,7 @@
             <span class={css({ display: 'inline-flex', color: 'text.success' })}>
               <Icon icon={IconCircleCheck} size={12} />
             </span>
-            스레드 닫기
+            피드백 닫기
           </button>
         </form>
       {/if}
@@ -615,7 +616,7 @@
         borderColor: 'border.subtle',
       })}
     >
-      <span class={css({ fontSize: '11px', color: 'text.faint' })}>닫힌 스레드는 다음 회차에서 다시 짚지 않아요</span>
+      <span class={css({ fontSize: '11px', color: 'text.faint' })}>닫은 피드백은 다음 리뷰에서 다시 짚지 않아요</span>
       {#if reopenable}
         <form class={css({ marginLeft: 'auto' })} action="?/reopen" method="post" use:enhance={submit('reopen')}>
           <input name="threadId" type="hidden" value={thread.id} />

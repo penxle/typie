@@ -194,7 +194,7 @@ export const load: PageServerLoad = async ({ params, locals, platform }) => {
 
   return {
     session: { id: session.id, refId: session.refId, title: session.title },
-    version: { version: version.version, content: version.content, charCount: version.charCount },
+    version: { version: version.version, content: version.content, subtitle: version.subtitle, charCount: version.charCount },
     review: {
       round: review.round,
       roundNumber,

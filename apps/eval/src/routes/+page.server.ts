@@ -89,8 +89,10 @@ export const load: PageServerLoad = async ({ locals, platform }) => {
 
   const admin = isAdmin(platform.env, locals.email);
 
-  // 티어 설정 폼의 옵션 재료 — admin에게만 걷는다(테스터 폼에는 티어 필드 자체가 없다). 실패는 목록 열람을
-  // 막지 않고 null로 눕는다 — 화면은 티어 설정 상자를 접고, 시작 자체는 액션의 재조회가 다시 판정한다.
+  // 카탈로그는 admin 모델 오버라이드 셀렉트의 옵션 재료라 admin에게만 걷는다 — 티어 세그먼트는 전원 공통의
+  // 정적 렌더(PUBLIC_TIERS)라 카탈로그가 필요 없고, 카탈로그에 없는 티어는 액션의 재조회가 명시 400으로
+  // 거른다. 실패는 목록 열람을 막지 않고 null로 눕는다 — 화면은 모델 설정 상자를 접고, 시작 자체는 액션의
+  // 재조회가 다시 판정한다.
   let catalog: AppCatalog | null = null;
   if (admin) {
     try {
@@ -122,7 +124,9 @@ export const actions: Actions = {
     if ('error' in manuscript) return fail(400, { error: manuscript.error });
 
     // 글자 수는 이 반입본 기준이다 — 시작은 문서를 다시 반입하므로 그 사이 편집분은 반영되지 않는다.
-    return { preview: { refId: documentId, title: manuscript.title, charCount: countChars(manuscript.content) } };
+    return {
+      preview: { refId: documentId, title: manuscript.title, subtitle: manuscript.subtitle, charCount: countChars(manuscript.content) },
+    };
   },
 
   start: async ({ locals, platform, request }) => {
@@ -140,7 +144,7 @@ export const actions: Actions = {
       if (!match) continue;
       (raw[match[1]] ??= {})[match[2] as 'model' | 'effort'] = String(value);
     }
-    // 티어 미제출·빈 값은 high — 운영자만 쓰는 선택기라 테스터 폼에는 필드가 없다.
+    // 티어 미제출·빈 값은 high로 굳는다 — 허용 집합 판정은 resolveTierSubmission의 몫이다.
     const tier = String(form.get('tier') ?? '') || 'high';
 
     // 제출 검증과 스냅샷 조립의 재료를 한 번에 걷는다 — 폴백 없음(오너 결정): 못 걷으면 시작만 명시로 막힌다.
