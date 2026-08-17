@@ -194,7 +194,7 @@
 
           <StatCard
             data={query.data.stats.usersNew.data}
-            description="오늘 새로 합류한 사용자"
+            description="최근 24시간 동안 합류한 사용자"
             title="신규 가입"
             type="daily"
             value={formatWithUnit(query.data.stats.usersNew.current, '명')}
@@ -202,15 +202,15 @@
 
           <StatCard
             data={query.data.stats.charactersDaily.data}
-            description="오늘 하루 동안 쓰인 글자"
-            title="오늘의 글자 수"
+            description="최근 24시간 동안 쓰인 글자"
+            title="24시간 글자 수"
             type="daily"
             value={formatWithUnit(query.data.stats.charactersDaily.current, '자')}
           />
 
           <StatCard
             data={query.data.stats.usersActive.data}
-            description="오늘 글을 쓴 사용자"
+            description="최근 24시간 동안 글을 쓴 사용자"
             title="일일 활성 사용자"
             type="daily"
             value={formatWithUnit(query.data.stats.usersActive.current, '명')}
@@ -218,7 +218,7 @@
 
           <StatCard
             data={query.data.stats.subscriptionsRevenue.data}
-            description="이번 달 구독 매출"
+            description="현재 구독 기준 월 환산 매출"
             title="월 매출 (MRR)"
             type="accumulative"
             value={formatWithUnit(query.data.stats.subscriptionsRevenue.current, '원')}

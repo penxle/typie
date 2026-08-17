@@ -361,7 +361,7 @@
               {(activeWritersQuery.data?.activeWritersCount ?? 0).toLocaleString()}
             </strong>
           {/if}
-          명이 지금 글 쓰는 중
+          명이 이번 주 글 쓰는 중
         </span>
       </div>
     </div>

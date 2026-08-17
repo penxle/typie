@@ -3,6 +3,7 @@ import dayjs from 'dayjs';
 import { sql } from 'drizzle-orm';
 import { redis } from '#/cache.ts';
 import { dbr, DocumentCharacterCountChanges, Documents, Entities, Plans, Sites, Subscriptions, Users } from '#/db/index.ts';
+import { SYSTEM_USER_ID } from '#/utils/system-actor.ts';
 import { builder } from '../builder.ts';
 
 // 유료 구독 모집단 — TRIAL·MANUAL(LIFETIME)과 주기 없는 플랜은 매출·활성 집계에서 제외한다.
@@ -15,10 +16,11 @@ const paidSubscriptions = sql`
       ${Subscriptions.startsAt} AS starts_at,
       ${Subscriptions.currentPeriodStartsAt} AS current_period_starts_at,
       ${Subscriptions.currentPeriodEndsAt} AS current_period_ends_at,
+      ${Subscriptions.createdAt} AS created_at,
       ${Plans.availability} AS availability,
       CASE
-        WHEN ${Plans.interval} = 'MONTHLY' THEN ${Plans.fee}
-        WHEN ${Plans.interval} = 'YEARLY' THEN ${Plans.fee} / 12
+        WHEN ${Plans.interval} = 'MONTHLY' THEN ${Plans.fee}::numeric
+        WHEN ${Plans.interval} = 'YEARLY' THEN ${Plans.fee} / 12.0
         ELSE 0
       END AS monthly_fee
     FROM ${Subscriptions}
@@ -29,22 +31,42 @@ const paidSubscriptions = sql`
   )
 `;
 
-// 권한 판정식을 재투영 날짜(date_series.date)에 그대로 옮긴 술어. 단순 기간 비교로 접으면
-// 전환 유예가 미래 주기 종료까지 활성으로 남는다. 유예 마감은 판정식의 파생 규칙 그대로
-// 채널 분기한다 — IAP 는 주기 종료 + 31일 백스톱, 그 외는 그날 이하 주기 컬럼 최대값 + 7일.
+// 각 날짜의 경계·판정 인스턴트 = 그날 KST 24:00. date 연산만 거치므로 세션 타임존과 무관하다.
+const kstDayEnd = sql`((date_series.date + 1)::timestamp AT TIME ZONE 'Asia/Seoul')`;
+
+// 권한 판정식(isSubscriptionEntitled·deriveGraceDeadline)에 now := 그날 KST 24:00 을 대입한 술어.
+// 단순 기간 비교로 접으면 전환 유예가 미래 주기 종료까지 활성으로 남는다. 유예 마감은 판정식의 파생 규칙 그대로
+// 채널 분기한다 — IAP 는 주기 종료 + 31일 백스톱, 그 외는 판정 시점 이하 주기 컬럼 최대값(없으면 시작 컬럼) + 7일.
 const entitledOnDate = sql`
-  s.starts_at <= (date_series.date + interval '1 day')
+  s.starts_at <= ${kstDayEnd}
   AND (
     s.state = 'ACTIVE'
-    OR (s.state = 'WILL_EXPIRE' AND s.current_period_ends_at > date_series.date)
+    OR (s.state = 'WILL_EXPIRE' AND s.current_period_ends_at > ${kstDayEnd})
     OR (s.state = 'IN_GRACE_PERIOD' AND CASE
           WHEN s.availability = 'IN_APP_PURCHASE' THEN s.current_period_ends_at + interval '31 days'
           ELSE COALESCE(GREATEST(
-            CASE WHEN s.current_period_starts_at <= date_series.date THEN s.current_period_starts_at END,
-            CASE WHEN s.current_period_ends_at <= date_series.date THEN s.current_period_ends_at END
+            CASE WHEN s.current_period_starts_at <= ${kstDayEnd} THEN s.current_period_starts_at END,
+            CASE WHEN s.current_period_ends_at <= ${kstDayEnd} THEN s.current_period_ends_at END
           ), s.current_period_starts_at) + interval '7 days'
-        END > date_series.date)
-    OR (s.state = 'WILL_ACTIVATE' AND s.starts_at <= date_series.date)
+        END > ${kstDayEnd})
+    OR (s.state = 'WILL_ACTIVATE' AND s.starts_at <= ${kstDayEnd})
+  )
+`;
+
+// 가입 트랜잭션에서 복사된 템플릿 문서(사이트와 같은 tx 라 now() 동일)와 시스템 액터의 정리 기여는 사용자 활동이 아니다.
+const validChanges = sql`
+  valid_changes AS (
+    SELECT
+      ${DocumentCharacterCountChanges.userId} AS user_id,
+      ${DocumentCharacterCountChanges.bucket} AS bucket,
+      ${DocumentCharacterCountChanges.additions} AS additions
+    FROM ${DocumentCharacterCountChanges}
+    INNER JOIN ${Documents} ON ${DocumentCharacterCountChanges.documentId} = ${Documents.id}
+    INNER JOIN ${Entities} ON ${Documents.entityId} = ${Entities.id}
+    INNER JOIN ${Sites} ON ${Entities.siteId} = ${Sites.id}
+    WHERE ${Entities.createdAt} != ${Sites.createdAt}
+      AND ${DocumentCharacterCountChanges.userId} != ${SYSTEM_USER_ID}
+      AND (${DocumentCharacterCountChanges.additions} > 0 OR ${DocumentCharacterCountChanges.deletions} > 0)
   )
 `;
 
@@ -52,30 +74,35 @@ builder.queryField('stats', (t) =>
   t.field({
     type: 'JSON',
     resolve: async () => {
-      const cacheKey = 'stats:v2';
+      const cacheKey = 'stats:v3';
 
       const cached = await redis.get(cacheKey);
       if (cached) {
         return JSON.parse(cached);
       }
 
+      // 상태 이력이 없으므로 모든 지표의 과거 구간은 현재 상태의 재투영이다 — 탈퇴·만료·전이·삭제가 과거 관측치를 소급 변경한다.
       const current = dayjs();
       const now = current.toISOString();
-      const thirtyDaysAgo = current.subtract(30, 'days').toISOString();
       const twentyFourHoursAgo = current.subtract(24, 'hours').toISOString();
-      const fortyEightHoursAgo = current.subtract(48, 'hours').toISOString();
+      const seriesEnd = current.kst().format('YYYY-MM-DD');
+      const seriesStart = current.kst().subtract(30, 'days').format('YYYY-MM-DD');
+
+      const dateSeries = sql`
+        date_series AS (
+          SELECT generate_series(${seriesStart}::date, ${seriesEnd}::date, interval '1 day')::date AS date
+        )
+      `;
 
       // User metrics
       const getUsersTotal = () =>
         dbr.execute(sql`
-          WITH date_series AS (
-            SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
-          )
-          SELECT 
+          WITH ${dateSeries}
+          SELECT
             date_series.date::text as date,
-            COALESCE(COUNT(${Users.id}), 0)::int as value
+            COUNT(${Users.id})::int as value
           FROM date_series
-          LEFT JOIN ${Users} ON ${Users.createdAt} < (date_series.date + interval '1 day') 
+          LEFT JOIN ${Users} ON ${Users.createdAt} < ${kstDayEnd}
             AND ${Users.state} = ${UserState.ACTIVE}
           GROUP BY date_series.date
           ORDER BY date_series.date
@@ -83,32 +110,20 @@ builder.queryField('stats', (t) =>
 
       const getUsersNew = () =>
         dbr.execute(sql`
-          WITH date_series AS (
-            SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
-          ),
-          current_period AS (
+          WITH ${dateSeries},
+          current_window AS (
             SELECT COUNT(${Users.id})::int as count
             FROM ${Users}
             WHERE ${Users.createdAt} >= ${twentyFourHoursAgo}
               AND ${Users.createdAt} < ${now}
               AND ${Users.state} = ${UserState.ACTIVE}
-          ),
-          previous_period AS (
-            SELECT COUNT(${Users.id})::int as count
-            FROM ${Users}
-            WHERE ${Users.createdAt} >= ${fortyEightHoursAgo}
-              AND ${Users.createdAt} < ${twentyFourHoursAgo}
-              AND ${Users.state} = ${UserState.ACTIVE}
           )
-          SELECT 
+          SELECT
             date_series.date::text as date,
-            CASE 
-              WHEN date_series.date = CURRENT_DATE - INTERVAL '1 day' THEN COALESCE((SELECT count FROM previous_period), 0)
-              WHEN date_series.date = CURRENT_DATE THEN COALESCE((SELECT count FROM current_period), 0)
-              ELSE COALESCE(COUNT(${Users.id}), 0)
-            END::int as value
+            COUNT(${Users.id})::int as value,
+            (SELECT count FROM current_window) as current
           FROM date_series
-          LEFT JOIN ${Users} ON DATE(${Users.createdAt}) = date_series.date 
+          LEFT JOIN ${Users} ON DATE(${Users.createdAt} AT TIME ZONE 'Asia/Seoul') = date_series.date
             AND ${Users.state} = ${UserState.ACTIVE}
           GROUP BY date_series.date
           ORDER BY date_series.date
@@ -116,68 +131,58 @@ builder.queryField('stats', (t) =>
 
       const getUsersActive = () =>
         dbr.execute(sql`
-          WITH date_series AS (
-            SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
-          ),
-          valid_user_activities AS (
-            SELECT ${DocumentCharacterCountChanges.userId} AS user_id, ${DocumentCharacterCountChanges.bucket} AS bucket
-            FROM ${DocumentCharacterCountChanges}
-            INNER JOIN ${Documents} ON ${DocumentCharacterCountChanges.documentId} = ${Documents.id}
-            INNER JOIN ${Entities} ON ${Documents.entityId} = ${Entities.id}
-            INNER JOIN ${Sites} ON ${Entities.siteId} = ${Sites.id}
-            WHERE ${Entities.createdAt} != ${Sites.createdAt}
-          ),
-          current_period AS (
+          WITH ${dateSeries},
+          ${validChanges},
+          current_window AS (
             SELECT COUNT(DISTINCT user_id)::int as count
-            FROM valid_user_activities
+            FROM valid_changes
             WHERE bucket >= ${twentyFourHoursAgo}
               AND bucket < ${now}
-          ),
-          previous_period AS (
-            SELECT COUNT(DISTINCT user_id)::int as count
-            FROM valid_user_activities
-            WHERE bucket >= ${fortyEightHoursAgo}
-              AND bucket < ${twentyFourHoursAgo}
           )
-          SELECT 
+          SELECT
             date_series.date::text as date,
-            CASE 
-              WHEN date_series.date = CURRENT_DATE - INTERVAL '1 day' THEN COALESCE((SELECT count FROM previous_period), 0)
-              WHEN date_series.date = CURRENT_DATE THEN COALESCE((SELECT count FROM current_period), 0)
-              ELSE COALESCE(COUNT(DISTINCT vua.user_id), 0)
-            END::int as value
+            COUNT(DISTINCT vc.user_id)::int as value,
+            (SELECT count FROM current_window) as current
           FROM date_series
-          LEFT JOIN valid_user_activities vua ON DATE(vua.bucket) = date_series.date
+          LEFT JOIN valid_changes vc ON DATE(vc.bucket AT TIME ZONE 'Asia/Seoul') = date_series.date
           GROUP BY date_series.date
           ORDER BY date_series.date
         `);
 
       // Subscription metrics
-      // 상태 이력이 없으므로 과거 구간도 현재 상태의 재투영이다 — 이후의 환불·전이가 과거 관측치를 소급 변경한다.
+      // 한 유저의 entitled 행이 겹치는 전환 창(해지 예약·유예 + 시작 경과 예약)에서 이중 합산을 막기 위해
+      // 유저당 대표 1건만 합산한다 — 선택 규칙은 selectRepresentativeSubscription 과 동일(ACTIVE 우선, 최신 생성).
       const getSubscriptionsRevenue = () =>
         dbr.execute(sql`
-          WITH date_series AS (
-            SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
-          ),
-          ${paidSubscriptions}
+          WITH ${dateSeries},
+          ${paidSubscriptions},
+          entitled AS (
+            SELECT
+              date_series.date AS date,
+              s.monthly_fee AS monthly_fee,
+              row_number() OVER (
+                PARTITION BY date_series.date, s.user_id
+                ORDER BY (s.state = 'ACTIVE') DESC, s.created_at DESC
+              ) AS user_rank
+            FROM date_series
+            LEFT JOIN paid_subscriptions s ON ${entitledOnDate}
+          )
           SELECT
-            date_series.date::text as date,
-            COALESCE(SUM(s.monthly_fee), 0)::int as value
-          FROM date_series
-          LEFT JOIN paid_subscriptions s ON ${entitledOnDate}
-          GROUP BY date_series.date
-          ORDER BY date_series.date
+            entitled.date::text as date,
+            ROUND(COALESCE(SUM(entitled.monthly_fee), 0))::int as value
+          FROM entitled
+          WHERE entitled.user_rank = 1
+          GROUP BY entitled.date
+          ORDER BY entitled.date
         `);
 
       const getSubscriptionsActive = () =>
         dbr.execute(sql`
-          WITH date_series AS (
-            SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
-          ),
+          WITH ${dateSeries},
           ${paidSubscriptions}
           SELECT
             date_series.date::text as date,
-            COALESCE(COUNT(DISTINCT s.user_id), 0)::int as value
+            COUNT(DISTINCT s.user_id)::int as value
           FROM date_series
           LEFT JOIN paid_subscriptions s ON ${entitledOnDate}
           GROUP BY date_series.date
@@ -185,84 +190,57 @@ builder.queryField('stats', (t) =>
         `);
 
       // Document metrics
+      // 삭제·영구삭제된 문서도 포함한다 — "지금까지 만들어진 문서 수"라는 라이프타임 지표다.
       const getDocumentsTotal = () =>
         dbr.execute(sql`
-          WITH date_series AS (
-            SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
-          ),
+          WITH ${dateSeries},
           real_documents AS (
-            SELECT DISTINCT ${Documents.id}, ${Documents.createdAt} AS created_at
+            SELECT ${Documents.id} AS id, ${Documents.createdAt} AS created_at
             FROM ${Documents}
-            INNER JOIN ${Entities} ON ${Documents.entityId} = ${Entities.id}
-            INNER JOIN ${Sites} ON ${Entities.siteId} = ${Sites.id}
-            WHERE ${Entities.createdAt} != ${Sites.createdAt}
-          )
-          SELECT 
-            date_series.date::text as date,
-            COALESCE(COUNT(rd.id), 0)::int as value
-          FROM date_series
-          LEFT JOIN real_documents rd ON rd.created_at < (date_series.date + interval '1 day')
-          GROUP BY date_series.date
-          ORDER BY date_series.date
-        `);
-
-      // Character metrics
-      const getCharactersInput = () =>
-        dbr.execute(sql`
-          WITH date_series AS (
-            SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
-          ),
-          valid_character_changes AS (
-            SELECT ${DocumentCharacterCountChanges.bucket} AS bucket, ${DocumentCharacterCountChanges.additions} AS additions
-            FROM ${DocumentCharacterCountChanges}
-            INNER JOIN ${Documents} ON ${DocumentCharacterCountChanges.documentId} = ${Documents.id}
             INNER JOIN ${Entities} ON ${Documents.entityId} = ${Entities.id}
             INNER JOIN ${Sites} ON ${Entities.siteId} = ${Sites.id}
             WHERE ${Entities.createdAt} != ${Sites.createdAt}
           )
           SELECT
             date_series.date::text as date,
-            COALESCE(SUM(vcc.additions), 0)::int as value
+            COUNT(rd.id)::int as value
           FROM date_series
-          LEFT JOIN valid_character_changes vcc ON vcc.bucket < (date_series.date + interval '1 day')
+          LEFT JOIN real_documents rd ON rd.created_at < ${kstDayEnd}
+          GROUP BY date_series.date
+          ORDER BY date_series.date
+        `);
+
+      // Character metrics
+      // additions 는 세그먼트 단위 순증 코얼레싱 값이라 그로스 타이핑보다 작다. 누적 합은 int4 상한을 넘을 수 있어 bigint 로 낸다.
+      const getCharactersInput = () =>
+        dbr.execute(sql`
+          WITH ${dateSeries},
+          ${validChanges}
+          SELECT
+            date_series.date::text as date,
+            COALESCE(SUM(vc.additions), 0)::bigint as value
+          FROM date_series
+          LEFT JOIN valid_changes vc ON vc.bucket < ${kstDayEnd}
           GROUP BY date_series.date
           ORDER BY date_series.date
         `);
 
       const getCharactersDaily = () =>
         dbr.execute(sql`
-          WITH date_series AS (
-            SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
-          ),
-          valid_character_changes AS (
-            SELECT ${DocumentCharacterCountChanges.bucket} AS bucket, ${DocumentCharacterCountChanges.additions} AS additions
-            FROM ${DocumentCharacterCountChanges}
-            INNER JOIN ${Documents} ON ${DocumentCharacterCountChanges.documentId} = ${Documents.id}
-            INNER JOIN ${Entities} ON ${Documents.entityId} = ${Entities.id}
-            INNER JOIN ${Sites} ON ${Entities.siteId} = ${Sites.id}
-            WHERE ${Entities.createdAt} != ${Sites.createdAt}
-          ),
-          current_period AS (
-            SELECT SUM(additions)::int as total
-            FROM valid_character_changes
+          WITH ${dateSeries},
+          ${validChanges},
+          current_window AS (
+            SELECT COALESCE(SUM(additions), 0)::bigint as total
+            FROM valid_changes
             WHERE bucket >= ${twentyFourHoursAgo}
               AND bucket < ${now}
-          ),
-          previous_period AS (
-            SELECT SUM(additions)::int as total
-            FROM valid_character_changes
-            WHERE bucket >= ${fortyEightHoursAgo}
-              AND bucket < ${twentyFourHoursAgo}
           )
-          SELECT 
+          SELECT
             date_series.date::text as date,
-            CASE 
-              WHEN date_series.date = CURRENT_DATE - INTERVAL '1 day' THEN COALESCE((SELECT total FROM previous_period), 0)
-              WHEN date_series.date = CURRENT_DATE THEN COALESCE((SELECT total FROM current_period), 0)
-              ELSE COALESCE(SUM(vcc.additions), 0)
-            END::int as value
+            COALESCE(SUM(vc.additions), 0)::bigint as value,
+            (SELECT total FROM current_window) as current
           FROM date_series
-          LEFT JOIN valid_character_changes vcc ON DATE(vcc.bucket) = date_series.date
+          LEFT JOIN valid_changes vc ON DATE(vc.bucket AT TIME ZONE 'Asia/Seoul') = date_series.date
           GROUP BY date_series.date
           ORDER BY date_series.date
         `);
@@ -270,15 +248,13 @@ builder.queryField('stats', (t) =>
       // System metrics
       const getSystemServiceDays = () =>
         dbr.execute(sql`
-          WITH service_launch AS (
-            SELECT MIN(${Users.createdAt})::date as launch_date
+          WITH ${dateSeries},
+          service_launch AS (
+            SELECT MIN(DATE(${Users.createdAt} AT TIME ZONE 'Asia/Seoul')) as launch_date
             FROM ${Users}
             WHERE ${Users.state} = ${UserState.ACTIVE}
-          ),
-          date_series AS (
-            SELECT generate_series(${thirtyDaysAgo}, ${now}, interval '1 day')::date AS date
           )
-          SELECT 
+          SELECT
             date_series.date::text as date,
             (date_series.date - sl.launch_date + 1)::int as value
           FROM date_series
@@ -317,11 +293,21 @@ builder.queryField('stats', (t) =>
         return { data, current: data.at(-1)?.value ?? 0 };
       };
 
+      // 일별 지표의 current 는 시리즈 마지막 점(진행 중인 달력일)이 아니라 롤링 24시간 값이다.
+      const transformToWindowedData = (rows: Record<string, unknown>[]) => {
+        const data = rows.map((row) => ({
+          date: String(row.date),
+          value: Number(row.value),
+        }));
+
+        return { data, current: Number(rows.at(-1)?.current ?? 0) };
+      };
+
       const result = {
         // User metrics
         usersTotal: transformToData(usersTotal),
-        usersNew: transformToData(usersNew),
-        usersActive: transformToData(usersActive),
+        usersNew: transformToWindowedData(usersNew),
+        usersActive: transformToWindowedData(usersActive),
 
         // Subscription metrics
         subscriptionsRevenue: transformToData(subscriptionsRevenue),
@@ -332,7 +318,7 @@ builder.queryField('stats', (t) =>
 
         // Character metrics
         charactersInput: transformToData(charactersInput),
-        charactersDaily: transformToData(charactersDaily),
+        charactersDaily: transformToWindowedData(charactersDaily),
 
         // System metrics
         systemServiceDays: transformToData(systemServiceDays),
