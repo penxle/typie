@@ -102,6 +102,7 @@ inview
 ipaddr
 ivec
 jaccard
+jsign
 kakao
 kakaokompassauth
 kakaopay
@@ -237,6 +238,7 @@ tlsv
 tmpl
 tnum
 tnode
+tsmode
 tsup
 twips
 typie

@@ -36,6 +36,11 @@ win:
     - target: nsis
       arch: [x64]
   artifactName: ${productName}-${version}-win-${arch}.${ext}
+  cscLink: ''
+  signtoolOptions:
+    sign: scripts/sign-windows.mjs
+    signingHashAlgorithms: [sha256]
+    publisherName: 'CN=PENXLE COMPANY, O=PENXLE COMPANY, L=Gangnam-gu, S=Seoul, C=KR'
 nsis:
   oneClick: true
   include: resources/installer.nsh

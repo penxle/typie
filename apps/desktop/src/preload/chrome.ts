@@ -10,7 +10,6 @@ contextBridge.exposeInMainWorld('shell', {
   moveTab: (id: string, toIndex: number) => ipcRenderer.send('tabs:move', id, toIndex),
   popupMenu: () => ipcRenderer.send('menu:popup'),
   restartToUpdate: () => ipcRenderer.send('update:restart'),
-  dismissUpdate: () => ipcRenderer.send('update:dismiss'),
   onTabsState: (callback: (state: unknown) => void) => {
     const listener = (_event: unknown, state: unknown) => callback(state);
     ipcRenderer.on('tabs:state', listener);
@@ -21,8 +20,8 @@ contextBridge.exposeInMainWorld('shell', {
     ipcRenderer.on('theme', listener);
     return () => ipcRenderer.removeListener('theme', listener);
   },
-  onUpdateReady: (callback: (version: string) => void) => {
-    const listener = (_event: unknown, version: string) => callback(version);
+  onUpdateReady: (callback: () => void) => {
+    const listener = () => callback();
     ipcRenderer.on('update:ready', listener);
     return () => ipcRenderer.removeListener('update:ready', listener);
   },

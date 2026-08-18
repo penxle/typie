@@ -14,6 +14,7 @@ export type MenuActions = {
   activateTab: (index: number) => void;
   activateLastTab: () => void;
   checkForUpdates: () => void;
+  restartToUpdate: () => void;
   openWebsite: () => void;
   toggleDevTools: () => void;
   crashActiveTab: () => void;
@@ -21,7 +22,12 @@ export type MenuActions = {
 
 const isMac = process.platform === 'darwin';
 
-export const buildMenu = (actions: MenuActions, options: { devTools: boolean }) => {
+export const buildMenu = (actions: MenuActions, options: { devTools: boolean; updateReady: boolean }) => {
+  const updateItems: MenuItemConstructorOptions[] = [
+    { label: '업데이트 확인…', click: actions.checkForUpdates },
+    ...(options.updateReady ? [{ label: '재시작하여 업데이트', click: actions.restartToUpdate }] : []),
+  ];
+
   const tabItems: MenuItemConstructorOptions[] = [
     ...Array.from({ length: 8 }, (_, i) => ({
       label: `탭 ${i + 1}`,
@@ -38,7 +44,7 @@ export const buildMenu = (actions: MenuActions, options: { devTools: boolean }) 
             label: '타이피',
             submenu: [
               { role: 'about' as const, label: '타이피에 관하여' },
-              { label: '업데이트 확인…', click: actions.checkForUpdates },
+              ...updateItems,
               { type: 'separator' as const },
               { role: 'services' as const, label: '서비스' },
               { type: 'separator' as const },
@@ -59,13 +65,7 @@ export const buildMenu = (actions: MenuActions, options: { devTools: boolean }) 
         { type: 'separator' },
         { label: '탭 닫기', accelerator: 'CmdOrCtrl+W', click: actions.closeTab },
         { label: '창 닫기', accelerator: 'CmdOrCtrl+Shift+W', click: actions.closeWindow },
-        ...(isMac
-          ? []
-          : [
-              { type: 'separator' as const },
-              { label: '업데이트 확인…', click: actions.checkForUpdates },
-              { role: 'quit' as const, label: '종료' },
-            ]),
+        ...(isMac ? [] : [{ type: 'separator' as const }, ...updateItems, { role: 'quit' as const, label: '종료' }]),
       ],
     },
     {

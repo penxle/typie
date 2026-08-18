@@ -16,11 +16,31 @@ package:
     MODE={{mode}} pnpm run build
     CSC_IDENTITY_AUTO_DISCOVERY=false pnpm exec electron-builder --mac --win --publish never -c.mac.notarize=false
 
-# Release: build, sign, notarize, upload to S3, copy fixed names, invalidate CloudFront
-release:
-    rm -rf release
+[private]
+build:
     pnpm --filter @typie/styled-system codegen && pnpm run codegen
     MODE={{mode}} doppler run -c {{mode}} -- pnpm run build
+
+[private]
+upload platform yml +fixed:
+    doppler run -c {{mode}} -- sh -c '\
+      set -e; \
+      : "${CLOUDFRONT_DISTRIBUTION_ID:?CLOUDFRONT_DISTRIBUTION_ID is required}"; \
+      VERSION=$(node -p "require(\"./package.json\").version"); \
+      aws s3 cp release/ s3://typie-releases/desktop/ --recursive --exclude "*" --include "Typie-$VERSION-{{platform}}-*" --exclude "*/*" \
+        --cache-control "public, max-age=31536000, immutable"; \
+      aws s3 cp release/{{yml}} s3://typie-releases/desktop/{{yml}} --cache-control no-cache; \
+      PATHS="/desktop/{{yml}}"; \
+      for f in {{fixed}}; do \
+        aws s3 cp s3://typie-releases/desktop/Typie-$VERSION-$f s3://typie-releases/desktop/Typie-$f \
+          --metadata-directive REPLACE --cache-control max-age=300; \
+        PATHS="$PATHS /desktop/Typie-$f"; \
+      done; \
+      aws cloudfront create-invalidation --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" --paths $PATHS'
+
+# Release macOS: build, sign (Developer ID), notarize, upload to S3, copy fixed names, invalidate CloudFront
+mac: build && (upload "mac" "latest-mac.yml" "mac-arm64.dmg" "mac-x64.dmg")
+    rm -rf release/*mac* release/latest-mac.yml
     doppler run -c {{mode}} -- sh -c '\
       set -e; \
       : "${APPLE_API_KEY:?APPLE_API_KEY (.p8 content or path) is required}"; \
@@ -33,18 +53,21 @@ release:
         chmod 600 "$KEY_DIR/AuthKey_$APPLE_API_KEY_ID.p8"; \
         export APPLE_API_KEY="$KEY_DIR/AuthKey_$APPLE_API_KEY_ID.p8"; \
       fi; \
-      pnpm exec electron-builder --mac --win --publish never'
+      pnpm exec electron-builder --mac --publish never'
+
+# Release Windows: build, sign (Azure Artifact Signing via jsign), upload to S3, copy fixed name, invalidate CloudFront
+win: build && (upload "win" "latest.yml" "win-x64.exe")
+    rm -rf release/*win* release/latest.yml
     doppler run -c {{mode}} -- sh -c '\
       set -e; \
-      : "${CLOUDFRONT_DISTRIBUTION_ID:?CLOUDFRONT_DISTRIBUTION_ID is required}"; \
-      VERSION=$(node -p "require(\"./package.json\").version"); \
-      aws s3 cp release/ s3://typie-releases/desktop/ --recursive --exclude "*" \
-        --include "*.dmg" --include "*.zip" --include "*.exe" --include "*.blockmap" --exclude "*/*" \
-        --cache-control "public, max-age=31536000, immutable"; \
-      aws s3 cp release/ s3://typie-releases/desktop/ --recursive --exclude "*" --include "latest*.yml" --cache-control no-cache; \
-      for f in mac-arm64.dmg mac-x64.dmg win-x64.exe; do \
-        aws s3 cp s3://typie-releases/desktop/Typie-$VERSION-$f s3://typie-releases/desktop/Typie-$f \
-          --metadata-directive REPLACE --cache-control max-age=300; \
-      done; \
-      aws cloudfront create-invalidation --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" \
-        --paths "/desktop/latest*.yml" "/desktop/Typie-mac-arm64.dmg" "/desktop/Typie-mac-x64.dmg" "/desktop/Typie-win-x64.exe"'
+      : "${AZURE_TENANT_ID:?AZURE_TENANT_ID is required}"; \
+      : "${AZURE_CLIENT_ID:?AZURE_CLIENT_ID is required}"; \
+      : "${AZURE_CLIENT_SECRET:?AZURE_CLIENT_SECRET is required}"; \
+      : "${AZURE_SIGNING_ENDPOINT:?AZURE_SIGNING_ENDPOINT is required}"; \
+      : "${AZURE_SIGNING_ACCOUNT:?AZURE_SIGNING_ACCOUNT is required}"; \
+      : "${AZURE_SIGNING_PROFILE:?AZURE_SIGNING_PROFILE is required}"; \
+      command -v jsign >/dev/null || { echo "jsign is required (brew install jsign)" >&2; exit 1; }; \
+      pnpm exec electron-builder --win --publish never'
+
+# Release both platforms
+release: mac win
