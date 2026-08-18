@@ -1,0 +1,50 @@
+mode := "prod"
+
+# Show available recipes
+[private]
+default:
+    @just --list
+
+# Run the app locally
+dev:
+    pnpm run dev:desktop
+
+# Build an unsigned local package (no upload)
+package:
+    rm -rf release
+    pnpm --filter @typie/styled-system codegen && pnpm run codegen
+    MODE={{mode}} pnpm run build
+    CSC_IDENTITY_AUTO_DISCOVERY=false pnpm exec electron-builder --mac --win --publish never -c.mac.notarize=false
+
+# Release: build, sign, notarize, upload to S3, copy fixed names, invalidate CloudFront
+release:
+    rm -rf release
+    pnpm --filter @typie/styled-system codegen && pnpm run codegen
+    MODE={{mode}} doppler run -c {{mode}} -- pnpm run build
+    doppler run -c {{mode}} -- sh -c '\
+      set -e; \
+      : "${APPLE_API_KEY:?APPLE_API_KEY (.p8 content or path) is required}"; \
+      : "${APPLE_API_KEY_ID:?APPLE_API_KEY_ID is required}"; \
+      : "${APPLE_API_ISSUER:?APPLE_API_ISSUER is required}"; \
+      if [ ! -f "$APPLE_API_KEY" ]; then \
+        KEY_DIR=$(mktemp -d); \
+        trap "rm -rf \"$KEY_DIR\"" EXIT; \
+        printf "%s\n" "$APPLE_API_KEY" > "$KEY_DIR/AuthKey_$APPLE_API_KEY_ID.p8"; \
+        chmod 600 "$KEY_DIR/AuthKey_$APPLE_API_KEY_ID.p8"; \
+        export APPLE_API_KEY="$KEY_DIR/AuthKey_$APPLE_API_KEY_ID.p8"; \
+      fi; \
+      pnpm exec electron-builder --mac --win --publish never'
+    doppler run -c {{mode}} -- sh -c '\
+      set -e; \
+      : "${CLOUDFRONT_DISTRIBUTION_ID:?CLOUDFRONT_DISTRIBUTION_ID is required}"; \
+      VERSION=$(node -p "require(\"./package.json\").version"); \
+      aws s3 cp release/ s3://typie-releases/desktop/ --recursive --exclude "*" \
+        --include "*.dmg" --include "*.zip" --include "*.exe" --include "*.blockmap" --exclude "*/*" \
+        --cache-control "public, max-age=31536000, immutable"; \
+      aws s3 cp release/ s3://typie-releases/desktop/ --recursive --exclude "*" --include "latest*.yml" --cache-control no-cache; \
+      for f in mac-arm64.dmg mac-x64.dmg win-x64.exe; do \
+        aws s3 cp s3://typie-releases/desktop/Typie-$VERSION-$f s3://typie-releases/desktop/Typie-$f \
+          --metadata-directive REPLACE --cache-control max-age=300; \
+      done; \
+      aws cloudfront create-invalidation --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" \
+        --paths "/desktop/latest*.yml" "/desktop/Typie-mac-arm64.dmg" "/desktop/Typie-mac-x64.dmg" "/desktop/Typie-win-x64.exe"'

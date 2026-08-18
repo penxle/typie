@@ -1,0 +1,39 @@
+{
+  "name": "@typie/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "타이피 데스크톱 앱",
+  "author": "PENXLE COMPANY",
+  "type": "module",
+  "main": "dist/main/index.js",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "codegen": "panda codegen",
+    "dev:desktop": "node scripts/dev.mjs",
+    "lint:eslint": "eslint --max-warnings 0 .",
+    "lint:svelte": "svelte-check --fail-on-warnings",
+    "lint:typecheck": "tsc"
+  },
+  "dependencies": {
+    "@sentry/electron": "^7.16.0"
+  },
+  "devDependencies": {
+    "@iconify-json/lucide": "^1.2.121",
+    "@pandacss/dev": "^1.12.0",
+    "@pandacss/preset-base": "^1.12.0",
+    "@sveltejs/vite-plugin-svelte": "^7.2.0",
+    "@types/node": "^26.1.2",
+    "@typie/lib": "workspace:*",
+    "@typie/styled-system": "workspace:*",
+    "@typie/tsconfig": "workspace:*",
+    "@typie/ui": "workspace:*",
+    "electron": "^43.4.0",
+    "electron-builder": "^26.15.3",
+    "electron-updater": "^6.8.9",
+    "svelte": "^5.56.8",
+    "svelte-check": "^4.7.4",
+    "typescript": "^6.0.3",
+    "unplugin-icons": "^23.0.1",
+    "vite": "^8.2.0"
+  }
+}

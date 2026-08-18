@@ -29,4 +29,8 @@ declare global {
       shallowRoute?: string;
     }
   }
+
+  interface Window {
+    typieDesktop?: import('@typie/lib/desktop').TypieDesktopBridge;
+  }
 }

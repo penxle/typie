@@ -109,6 +109,7 @@ lbipam
 lerp
 libx
 llen
+lproj
 lpush
 lrange
 ltrim
@@ -210,11 +211,11 @@ smembers
 squircle
 srandmember
 srem
+srgb
 sslmode
 stakater
 stibee
 talosctl
-tauri
 tini
 tlsv
 tmpl

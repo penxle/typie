@@ -83,7 +83,7 @@ WASM(브라우저, Node 서버)과 UniFFI(Android, iOS) 양쪽으로 빌드된�
 ```
 typie/
 ├── apps/         배포 단위 (서비스와 클라이언트)
-│   └── desktop/  Tauri 실험용 셸
+│   └── desktop/  Electron 데스크톱 앱
 ├── packages/     TypeScript, Svelte 공용 라이브러리
 ├── crates/       Rust 에디터 엔진 (editor-* 15개)
 ├── assets/       폰트, 아이콘, 테마
@@ -101,12 +101,10 @@ typie/
 | `apps/website`  | SvelteKit SSR과 클라이언트, GraphQL BFF        |
 | `apps/api`      | Hono 기반 GraphQL/REST/WS 통합 게이트웨이      |
 | `apps/mobile`   | Kotlin Multiplatform과 Compose, UniFFI 사용    |
+| `apps/desktop`  | Electron 데스크톱 앱 (원격 typie.co를 탭으로)  |
 | `apps/bmo`      | Slack 멘션을 Lambda worker로 라우팅하는 운영봇 |
 | `apps/literoom` | S3 Object Lambda 이미지 변환 (Sharp)           |
 | `apps/caddy`    | `:4100`, `:4200`, `:4300`을 `:4000`으로 프록시 |
-
-> `apps/desktop`은 실험용 Tauri 셸로 신규 작업 대상이 아니다.
-> 상세는 [레거시](#레거시) 참조.
 
 ### packages — 여러 앱이 공유하는 라이브러리
 
@@ -626,7 +624,7 @@ pnpm run lint:prettier  # 포맷 검사
 ## 각 앱의 내부 구조
 
 이 섹션은 전체를 정독할 필요는 없다. 작업 대상 앱이 정해지면 해당 하위 섹션을
-참조한다. `apps/desktop`은 [레거시](#레거시)에서 별도로 설명한다.
+참조한다.
 
 ### apps/website
 
@@ -709,6 +707,21 @@ dependencies {
   }
 }
 ```
+
+### apps/desktop
+
+Electron 데스크톱 앱이다. 원격 typie.co를 탭당 `WebContentsView`로 로드하는 껍데기이며,
+설계는 `docs/superpowers/specs/2026-08-18-desktop-app-design.md`를 따른다.
+
+| 항목     | 값                                                                                          |
+| -------- | ------------------------------------------------------------------------------------------- |
+| 개발     | `pnpm --filter @typie/desktop dev` (local 환경 기본, `ENVIRONMENT=dev\|prod`로 백엔드 교체) |
+| dev 포트 | `5300` (렌더러 dev 서버)                                                                    |
+| 릴리즈   | `apps/desktop/justfile` `just release` (오너 로컬)                                          |
+
+> `crates/editor-ffi`의 `just desktop` 레시피는 이 앱이 아니라 `apps/mobile` KMP의
+> desktop 타깃(모바일 앱 개발용 native)을 빌드한다. 이름이 비슷해서 자주
+> 혼동되므로 주의한다.
 
 ### apps/literoom
 
@@ -983,23 +996,6 @@ backfill이 끼는 마이그레이션은 단독 PR로 분리해서 리뷰한다.
 ## 레거시
 
 저장소에 남아 있지만 신규 작업 대상이 아닌 영역이다.
-
-### `apps/desktop`
-
-Tauri 2가 SvelteKit static build를 감싼 실험용 데스크톱 셸이다. 현재 제품 개발
-흐름에서는 사용하지 않는다.
-
-| 항목       | 값                                                                        |
-| ---------- | ------------------------------------------------------------------------- |
-| 식별자     | `co.typie` (제품명 `Typie`)                                               |
-| dev 포트   | `5100`                                                                    |
-| 딥링크     | `typie://`                                                                |
-| 플러그인   | single-instance, deep-link, dialog, http, opener, process, store, updater |
-| macOS 동작 | 창 닫기 시 종료 대신 hide                                                 |
-
-> `crates/editor-ffi`의 `just desktop` 레시피는 이 앱이 아니라 `apps/mobile` KMP의
-> desktop 타깃(모바일 앱 개발용 native)을 빌드한다. 이름이 비슷해서 자주
-> 혼동되므로 주의한다.
 
 ### Rust nightly 관련 안내 (모두 레거시)
 

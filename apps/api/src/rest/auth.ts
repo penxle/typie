@@ -8,7 +8,7 @@ import * as jose from 'jose';
 import { nanoid } from 'nanoid';
 import qs from 'query-string';
 import { redis } from '#/cache.ts';
-import { db, first, UserSessions } from '#/db/index.ts';
+import { db, first, Images, Users, UserSessions } from '#/db/index.ts';
 import { env } from '#/env.ts';
 import { jwk, privateKey, publicKey } from '#/utils/index.ts';
 import type { Env } from '#/context.ts';
@@ -72,6 +72,22 @@ auth.get('/authorize', async (c) => {
       .then(first);
 
     if (session) {
+      if (prompt === 'consent') {
+        return c.redirect(
+          qs.stringifyUrl({
+            url: `${env.AUTH_URL}/consent`,
+            query: {
+              client_id,
+              redirect_uri,
+              scope,
+              state,
+              code_challenge,
+              code_challenge_method,
+            },
+          }),
+        );
+      }
+
       const code = nanoid(32);
 
       const authCode: AuthorizationCode = {
@@ -116,6 +132,9 @@ auth.get('/authorize', async (c) => {
       query: {
         redirect_uri,
         state,
+        code_challenge,
+        code_challenge_method,
+        prompt,
       },
     }),
   );
@@ -219,6 +238,28 @@ auth.post('/token', async (c) => {
   return c.json({ error: 'unsupported_grant_type', error_description: 'Only authorization_code grant type is supported.' }, 400);
 });
 
+auth.get('/session', async (c) => {
+  const token = getCookie(c, 'typie-st');
+  if (!token) {
+    return c.json({ error: 'unauthorized' }, 401);
+  }
+
+  const session = await db
+    .select({ name: Users.name, email: Users.email, avatarPath: Images.path })
+    .from(UserSessions)
+    .innerJoin(Users, eq(Users.id, UserSessions.userId))
+    .innerJoin(Images, eq(Images.id, Users.avatarId))
+    .where(and(eq(UserSessions.token, token), gt(UserSessions.expiresAt, dayjs())))
+    .then(first);
+
+  if (!session) {
+    return c.json({ error: 'unauthorized' }, 401);
+  }
+
+  c.header('Cache-Control', 'no-store');
+  return c.json({ name: session.name, email: session.email, avatarUrl: `https://typie.net/images/${session.avatarPath}` });
+});
+
 auth.get('/userinfo', async (c) => {
   const authorization = c.req.header('Authorization');
   const accessToken = authorization?.match(/^Bearer\s+(.+)$/)?.[1];
@@ -293,7 +334,8 @@ const validateClient = ({ clientId, clientSecret, redirectUri }: ValidateClientP
   const url = new URL(redirectUri);
   if (
     ((url.origin === env.WEBSITE_URL || pattern.test(url.origin)) && url.pathname === '/authorize') ||
-    (url.protocol === 'typie' && url.pathname === '/auth/callback')
+    (url.protocol === 'typie' && url.pathname === '/auth/callback') ||
+    (url.hostname === '127.0.0.1' && url.pathname === '/callback')
   ) {
     return true;
   }

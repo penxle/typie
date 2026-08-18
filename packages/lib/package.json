@@ -9,6 +9,7 @@
     "./postcss": "./src/postcss/index.js",
     "./svelte": "./src/svelte/index.ts",
     "./const": "./src/const.ts",
+    "./desktop": "./src/desktop.ts",
     "./enums": "./src/enums.ts",
     "./errors": "./src/errors.ts",
     "./plan": "./src/plan.ts",

@@ -1,0 +1,45 @@
+# cspell:ignore asar
+
+appId: co.typie.desktop
+productName: Typie
+directories:
+  output: release
+  buildResources: resources
+files:
+  - dist/**
+  - package.json
+asar: true
+electronLanguages:
+  - ko
+  - en
+afterPack: scripts/after-pack.mjs
+publish:
+  provider: generic
+  url: https://download.typie.net/desktop/
+mac:
+  category: public.app-category.productivity
+  icon: resources/Icon.icon
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+    - target: zip
+      arch: [arm64, x64]
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  notarize: true
+  artifactName: ${productName}-${version}-mac-${arch}.${ext}
+  extendInfo:
+    LSHasLocalizedDisplayName: true
+win:
+  icon: resources/icon.png
+  target:
+    - target: nsis
+      arch: [x64]
+  artifactName: ${productName}-${version}-win-${arch}.${ext}
+nsis:
+  oneClick: true
+  include: resources/installer.nsh
+  perMachine: false
+  shortcutName: 타이피
+  uninstallDisplayName: 타이피
+  language: '1042'

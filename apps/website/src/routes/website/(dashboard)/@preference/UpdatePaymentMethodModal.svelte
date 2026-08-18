@@ -12,7 +12,9 @@
   import mixpanel from 'mixpanel-browser';
   import { untrack } from 'svelte';
   import { z } from 'zod';
+  import { env } from '$env/dynamic/public';
   import { fb } from '$lib/analytics';
+  import { desktop } from '$lib/desktop';
   import { cache } from '$lib/graphql';
   import { requestKakaoPayBillingKey } from '$lib/portone';
   import { graphql } from '$mearie';
@@ -115,6 +117,12 @@
       }
 
       if (method === BillingKeyType.KAKAOPAY) {
+        if (desktop) {
+          await desktop.openExternal(`${env.PUBLIC_WEBSITE_URL}/initial?open=preference/billing`);
+          Toast.success('브라우저에서 결제를 진행해요.');
+          return;
+        }
+
         const result = await requestKakaoPayBillingKey({ userId: user.data.id });
 
         if (result.status === 'canceled') {
