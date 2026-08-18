@@ -8,6 +8,7 @@ export const IPC = {
   themeChanged: 'theme:changed',
   menuPopup: 'menu:popup',
   authLogin: 'auth:login',
+  authCancel: 'auth:cancel',
   authError: 'auth:error',
   pageRetry: 'page:retry',
   contextMenu: 'contextmenu:request',

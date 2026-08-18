@@ -14,7 +14,8 @@ declare global {
     popupMenu?: () => void;
     onTabsState?: (callback: (state: TabsStatePayload) => void) => () => void;
     onTheme?: (callback: (theme: ThemePayload) => void) => () => void;
-    login?: () => void;
+    login?: () => Promise<string | undefined>;
+    cancelLogin?: () => void;
     retry?: () => void;
     onAuthError?: (callback: (message: string) => void) => () => void;
     onUpdateReady?: (callback: (version: string) => void) => () => void;

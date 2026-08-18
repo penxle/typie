@@ -95,7 +95,7 @@ const showLoggedIn = () => {
 
 const createWindow = () => {
   store.load();
-  windowManager = new WindowManager(sanitizeWindowState(store.data.window), osTheme());
+  windowManager = new WindowManager(sanitizeWindowState(store.data.window), osTheme(), { version: app.getVersion(), env: env.name });
   policy = new NavigationPolicy(env, {
     onLoginRequired: showLoginKeepingTabs,
     onLogout: () => auth.logout().catch(() => null),
@@ -164,7 +164,8 @@ ipcMain.on(IPC.themeChanged, (event, theme: ThemePayload) => {
     windowManager?.setTheme(theme.theme);
   }
 });
-ipcMain.on(IPC.authLogin, () => auth.startLogin().catch(() => null));
+ipcMain.handle(IPC.authLogin, () => auth.startLogin());
+ipcMain.on(IPC.authCancel, () => auth.cancelLogin());
 ipcMain.on(IPC.tabsNew, () => tabManager?.create(`${env.websiteUrl}/`));
 ipcMain.on(IPC.tabsClose, (_event, id: string) => tabManager?.close(id));
 ipcMain.on(IPC.tabsActivate, (_event, id: string) => tabManager?.activate(id));

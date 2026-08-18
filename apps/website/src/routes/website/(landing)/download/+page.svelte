@@ -1,26 +1,93 @@
 <script lang="ts">
+  import { APP_STORE_URL, PLAY_STORE_URL } from '@typie/lib/const';
   import { css, cx } from '@typie/styled-system/css';
   import { flex, grid } from '@typie/styled-system/patterns';
   import { Helmet, Icon } from '@typie/ui/components';
+  import { onMount } from 'svelte';
+  import ArrowUpRightIcon from '~icons/lucide/arrow-up-right';
   import DownloadIcon from '~icons/lucide/download';
+  import AppleIcon from '~icons/simple-icons/apple';
+  import AppStoreIcon from '~icons/simple-icons/appstore';
+  import GooglePlayIcon from '~icons/simple-icons/googleplay';
+  import WindowsIcon from '~icons/simple-icons/windows';
   import { inview } from '../(index)/inview';
+  import type { Component } from 'svelte';
 
-  const downloads = [
-    { platform: 'macOS', variant: 'Apple Silicon', url: 'https://download.typie.net/desktop/Typie-mac-arm64.dmg' },
-    { platform: 'macOS', variant: 'Intel', url: 'https://download.typie.net/desktop/Typie-mac-x64.dmg' },
-    { platform: 'Windows', variant: '64비트', url: 'https://download.typie.net/desktop/Typie-win-x64.exe' },
+  type Download = { id: string; icon: Component; platform: string; detail: string; url: string; external?: boolean };
+
+  const desktop: Download[] = [
+    {
+      id: 'mac-arm64',
+      icon: AppleIcon,
+      platform: 'macOS',
+      detail: 'Apple Silicon · .dmg',
+      url: 'https://download.typie.net/desktop/Typie-mac-arm64.dmg',
+    },
+    {
+      id: 'mac-x64',
+      icon: AppleIcon,
+      platform: 'macOS',
+      detail: 'Intel · .dmg',
+      url: 'https://download.typie.net/desktop/Typie-mac-x64.dmg',
+    },
+    {
+      id: 'win-x64',
+      icon: WindowsIcon,
+      platform: 'Windows',
+      detail: 'x64 · .exe',
+      url: 'https://download.typie.net/desktop/Typie-win-x64.exe',
+    },
   ];
+
+  const mobile: Download[] = [
+    { id: 'ios', icon: AppStoreIcon, platform: 'iOS', detail: 'App Store', url: APP_STORE_URL, external: true },
+    { id: 'android', icon: GooglePlayIcon, platform: 'Android', detail: 'Google Play', url: PLAY_STORE_URL, external: true },
+  ];
+
+  let detected = $state<'mac' | 'windows' | 'ios' | 'android' | null>(null);
+
+  onMount(() => {
+    const ua = navigator.userAgent;
+    if (/iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) detected = 'ios';
+    else if (/Android/.test(ua)) detected = 'android';
+    else if (/Macintosh/.test(ua)) detected = 'mac';
+    else if (/Windows/.test(ua)) detected = 'windows';
+  });
+
+  const primaryByPlatform = {
+    mac: { item: desktop[0], label: 'macOS용 다운로드', note: 'Apple Silicon 기준 · Intel Mac은 아래에서 선택하세요' },
+    windows: { item: desktop[2], label: 'Windows용 다운로드', note: 'Windows 10 이상 · x64' },
+    ios: { item: mobile[0], label: 'App Store에서 받기', note: 'iPhone · iPad' },
+    android: { item: mobile[1], label: 'Google Play에서 받기', note: 'Android' },
+  } as const;
+
+  const primary = $derived(detected ? primaryByPlatform[detected] : null);
+
+  const revealClass = css({
+    opacity: '0',
+    transform: 'translate3d(0, 24px, 0)',
+    transition: '[opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1), transform 0.8s cubic-bezier(0.16, 1, 0.3, 1)]',
+    '&.in-view': { opacity: '100', transform: 'translate3d(0, 0, 0)' },
+  });
+
+  const rowClass = cx(
+    'group',
+    flex({
+      alignItems: 'center',
+      gap: '16px',
+      paddingX: { sm: '20px', lg: '24px' },
+      paddingY: '18px',
+      color: 'dark.gray.100',
+      transition: '[background-color 0.2s ease-out]',
+      _hover: { backgroundColor: 'dark.gray.900' },
+      '& + &': { borderTopWidth: '1px', borderTopColor: 'dark.gray.800' },
+    }),
+  );
 </script>
 
-<Helmet description="타이피 데스크톱 앱을 내려받아 글쓰기에 더 깊이 몰입하세요." title="타이피 데스크톱 앱" />
+<Helmet description="타이피 데스크톱 앱과 모바일 앱을 내려받으세요." title="다운로드" />
 
-<div
-  class={css({
-    position: 'relative',
-    minHeight: '[100vh]',
-    backgroundColor: 'dark.gray.950',
-  })}
->
+<div class={css({ position: 'relative', minHeight: '[100vh]', backgroundColor: 'dark.gray.950' })}>
   <div
     class={css({
       position: 'absolute',
@@ -34,19 +101,15 @@
   ></div>
 
   <section
-    class={css({
-      position: 'relative',
-      paddingTop: { sm: '100px', lg: '140px' },
-      paddingBottom: { sm: '60px', lg: '80px' },
-      paddingX: { sm: '24px', lg: '80px' },
-      opacity: '0',
-      transform: 'translate3d(0, 28px, 0)',
-      transition: '[opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1), transform 0.8s cubic-bezier(0.16, 1, 0.3, 1)]',
-      '&.in-view': {
-        opacity: '100',
-        transform: 'translate3d(0, 0, 0)',
-      },
-    })}
+    class={cx(
+      css({
+        position: 'relative',
+        paddingTop: { sm: '100px', lg: '140px' },
+        paddingBottom: { sm: '48px', lg: '64px' },
+        paddingX: { sm: '24px', lg: '80px' },
+      }),
+      revealClass,
+    )}
     {@attach inview}
   >
     <div class={css({ maxWidth: '[1200px]', marginX: 'auto' })}>
@@ -75,89 +138,91 @@
           marginBottom: '20px',
         })}
       >
-        타이피 데스크톱 앱
+        타이피 다운로드
       </h1>
 
-      <p
-        class={css({
-          fontSize: { sm: '16px', lg: '18px' },
-          color: 'dark.gray.400',
-          lineHeight: '[1.65]',
-          maxWidth: '[480px]',
-        })}
-      >
-        브라우저를 벗어나, 글쓰기만 남은 창에서.
+      <p class={css({ fontSize: { sm: '16px', lg: '18px' }, color: 'dark.gray.400', lineHeight: '[1.65]', maxWidth: '[480px]' })}>
+        데스크톱과 모바일, 어디서든 이어 쓰세요.
       </p>
-    </div>
-  </section>
 
-  <section
-    class={css({
-      position: 'relative',
-      paddingBottom: { sm: '80px', lg: '120px' },
-      paddingX: { sm: '24px', lg: '80px' },
-    })}
-  >
-    <div class={css({ maxWidth: '[1200px]', marginX: 'auto' })}>
-      <div
-        class={cx(
-          grid({ columns: { sm: 1, md: 3 }, gap: { sm: '16px', lg: '20px' } }),
-          css({
-            opacity: '0',
-            transform: 'translate3d(0, 20px, 0)',
-            transition: '[opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.15s, transform 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.15s]',
-            '&.in-view': {
-              opacity: '100',
-              transform: 'translate3d(0, 0, 0)',
-            },
-          }),
-        )}
-        {@attach inview}
-      >
-        {#each downloads as download (download.url)}
+      {#if primary}
+        <div
+          class={css({
+            display: 'flex',
+            flexDirection: { sm: 'column', lg: 'row' },
+            alignItems: { sm: 'flex-start', lg: 'center' },
+            gap: { sm: '16px', lg: '24px' },
+            marginTop: { sm: '32px', lg: '40px' },
+          })}
+        >
           <a
             class={cx(
               'group',
-              flex({
+              css({
+                display: 'inline-flex',
                 alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: '16px',
-                paddingX: { sm: '24px', lg: '28px' },
-                paddingY: { sm: '24px', lg: '28px' },
-                backgroundColor: 'dark.gray.900',
-                borderWidth: '1px',
-                borderColor: 'dark.gray.800',
-                transition: '[all 0.2s ease-out]',
-                _hover: {
-                  borderColor: 'dark.gray.700',
-                  backgroundColor: 'dark.gray.900/80',
-                },
+                gap: '10px',
+                paddingX: '28px',
+                paddingY: '16px',
+                fontSize: '15px',
+                fontWeight: 'semibold',
+                color: 'dark.gray.950',
+                backgroundColor: 'dark.brand.300',
+                transition: '[background-color 0.2s ease-out]',
+                _hover: { backgroundColor: 'dark.brand.200' },
               }),
             )}
-            href={download.url}
-            rel="noopener"
+            href={primary.item.url}
+            rel={primary.item.external ? 'noopener noreferrer' : 'noopener'}
+            target={primary.item.external ? '_blank' : undefined}
           >
-            <div class={flex({ flexDirection: 'column', gap: '4px' })}>
-              <span class={css({ fontSize: '16px', fontWeight: 'medium', color: 'dark.gray.100' })}>{download.platform}</span>
-              <span class={css({ fontSize: '13px', fontFamily: 'mono', color: 'dark.gray.500' })}>{download.variant}</span>
-            </div>
-
-            <Icon
-              style={css.raw({
-                color: 'dark.gray.500',
-                transition: '[color 0.2s ease-out]',
-                _groupHover: { color: 'dark.brand.300' },
-              })}
-              icon={DownloadIcon}
-              size={20}
-            />
+            <Icon icon={primary.item.external ? ArrowUpRightIcon : DownloadIcon} size={18} />
+            {primary.label}
           </a>
-        {/each}
-      </div>
+          <span class={css({ fontSize: '13px', color: 'dark.gray.500' })}>{primary.note}</span>
+        </div>
+      {/if}
+    </div>
+  </section>
 
-      <p class={css({ marginTop: '24px', fontSize: '13px', color: 'dark.gray.500' })}>
-        macOS 11 이상, Windows 10 이상에서 사용할 수 있어요.
-      </p>
+  <section class={css({ position: 'relative', paddingBottom: { sm: '80px', lg: '120px' }, paddingX: { sm: '24px', lg: '80px' } })}>
+    <div
+      class={cx(
+        grid({ columns: { sm: 1, lg: 2 }, gap: { sm: '32px', lg: '20px' } }),
+        css({ maxWidth: '[1200px]', marginX: 'auto' }),
+        revealClass,
+        css({ transitionDelay: '[0.15s]' }),
+      )}
+      {@attach inview}
+    >
+      {#each [{ title: '데스크톱', note: 'macOS 11 이상 · Windows 10 이상', items: desktop }, { title: '모바일', note: 'iOS · Android', items: mobile }] as group (group.title)}
+        <div class={flex({ flexDirection: 'column', gap: '12px' })}>
+          <div class={flex({ alignItems: 'baseline', justifyContent: 'space-between', paddingX: '4px' })}>
+            <h2 class={css({ fontSize: '15px', fontWeight: 'medium', color: 'dark.gray.100' })}>{group.title}</h2>
+            <span class={css({ fontSize: '12px', color: 'dark.gray.500' })}>{group.note}</span>
+          </div>
+          <div class={css({ borderWidth: '1px', borderColor: 'dark.gray.800', backgroundColor: 'dark.gray.950' })}>
+            {#each group.items as item (item.id)}
+              <a
+                class={rowClass}
+                href={item.url}
+                rel={item.external ? 'noopener noreferrer' : 'noopener'}
+                target={item.external ? '_blank' : undefined}
+              >
+                <Icon style={css.raw({ color: 'dark.gray.400', flexShrink: '0' })} icon={item.icon} size={20} />
+                <span class={css({ fontSize: '15px', fontWeight: 'medium' })}>{item.platform}</span>
+                <span class={css({ fontSize: '13px', fontFamily: 'mono', color: 'dark.gray.500' })}>{item.detail}</span>
+                <span class={css({ flex: '1' })}></span>
+                <Icon
+                  style={css.raw({ color: 'dark.gray.500', transition: '[color 0.2s ease-out]', _groupHover: { color: 'dark.brand.300' } })}
+                  icon={item.external ? ArrowUpRightIcon : DownloadIcon}
+                  size={18}
+                />
+              </a>
+            {/each}
+          </div>
+        </div>
+      {/each}
     </div>
   </section>
 </div>

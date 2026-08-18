@@ -96,6 +96,10 @@ export class AuthService extends EventEmitter<{ authenticated: []; 'logged-out':
     this.#pending = null;
   }
 
+  cancelLogin() {
+    this.#cancelPending();
+  }
+
   async hasSession() {
     const cookies = await session.defaultSession.cookies.get({ url: this.#env.websiteUrl, name: COOKIE_NAME });
     return cookies.length > 0;
@@ -137,6 +141,7 @@ export class AuthService extends EventEmitter<{ authenticated: []; 'logged-out':
     url.searchParams.set('prompt', 'consent');
     url.searchParams.set('state', serializeOAuthState({ nonce }));
     await shell.openExternal(url.href);
+    return url.href;
   }
 
   async logout() {

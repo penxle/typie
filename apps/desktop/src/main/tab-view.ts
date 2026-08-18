@@ -24,7 +24,9 @@ export const createTabView = (handlers: TabViewHandlers) => {
   const wc = view.webContents;
   wc.setVisualZoomLevelLimits(1, 1);
   wc.on('page-title-updated', (_event, title) => handlers.onTitle(title));
-  wc.on('did-start-loading', () => handlers.onLoading(true));
+  wc.on('did-start-navigation', (details) => {
+    if (details.isMainFrame && !details.isSameDocument) handlers.onLoading(true);
+  });
   wc.on('did-stop-loading', () => handlers.onLoading(false));
   wc.on('did-navigate', (_event, url) => handlers.onUrl(url));
   wc.on('did-navigate-in-page', (_event, url, isMainFrame) => {

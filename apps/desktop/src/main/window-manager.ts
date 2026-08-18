@@ -36,10 +36,12 @@ export class WindowManager {
   #login: WebContentsView | null = null;
   #loginAttached = false;
 
+  #loginQuery: Record<string, string>;
   readonly window: BaseWindow;
   readonly chrome: WebContentsView;
 
-  constructor(state: WindowState, theme: Theme) {
+  constructor(state: WindowState, theme: Theme, loginQuery: Record<string, string>) {
+    this.#loginQuery = loginQuery;
     const { background, symbol } = themeColors(theme);
     this.window = new BaseWindow({
       width: state.bounds?.width ?? 1280,
@@ -121,7 +123,7 @@ export class WindowManager {
         webPreferences: { preload: preloadPath('page'), sandbox: true, contextIsolation: true },
       });
       this.#login.webContents
-        .loadURL(rendererUrl('login', { theme: nativeTheme.shouldUseDarkColors ? 'dark' : 'light' }))
+        .loadURL(rendererUrl('login', { ...this.#loginQuery, theme: nativeTheme.shouldUseDarkColors ? 'dark' : 'light' }))
         .catch(() => null);
     }
     this.setChromeVisible(false);

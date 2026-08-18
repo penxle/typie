@@ -202,7 +202,7 @@
     _focusVisible: { boxShadow: '[0 0 0 2px {colors.accent.brand.default}]' },
   });
 
-  const iconButtonClass = css({
+  const iconButtonStyle = css.raw({
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -217,6 +217,9 @@
     _active: { transform: 'scale(0.95)' },
     _focusVisible: { boxShadow: '[0 0 0 2px {colors.accent.brand.default}]' },
   });
+
+  const iconButtonClass = css(iconButtonStyle);
+  const newTabClass = css(iconButtonStyle, { marginLeft: '6px' });
 </script>
 
 <div
@@ -226,7 +229,7 @@
     display: 'flex',
     alignItems: 'stretch',
     height: '[40px]',
-    paddingLeft: isMac ? '[80px]' : '[8px]',
+    paddingLeft: isMac ? '[96px]' : '[8px]',
     paddingRight: isMac ? '[8px]' : '[140px]',
     backgroundColor: 'surface.subtle',
     userSelect: 'none',
@@ -283,9 +286,9 @@
       >
         <span
           class={css({ flex: '1', minWidth: '0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' })}
-          title={tab.loading ? undefined : tab.title || '타이피'}
+          title={tab.title || undefined}
         >
-          {tab.loading ? '불러오는 중…' : tab.title || '타이피'}
+          {tab.title || (tab.loading ? '불러오는 중…' : '타이피')}
         </span>
         <button
           class={['close', closeClass]}
@@ -307,7 +310,7 @@
   <button
     style:-webkit-app-region="no-drag"
     style:visibility={drag?.active ? 'hidden' : undefined}
-    class={[iconButtonClass, css({ marginLeft: '6px' })]}
+    class={newTabClass}
     aria-label="새 탭"
     onclick={() => {
       pendingPointerAdd = true;
