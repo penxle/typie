@@ -174,7 +174,7 @@ ipcMain.on(IPC.menuPopup, () => {
   if (menu && windowManager) menu.popup({ window: windowManager.window });
 });
 ipcMain.on(IPC.pageRetry, (event) => tabManager?.retry(event.sender));
-ipcMain.on(IPC.updateRestart, () => updater.restart());
+ipcMain.on(IPC.updateRestart, () => void updater.confirmRestart(windowManager?.window));
 ipcMain.on(IPC.contextMenu, (event, request: ContextMenuRequest) => {
   if (windowManager && event.sender === tabManager?.activeTab?.view.webContents) showContextMenu(windowManager.window, request);
 });
@@ -183,20 +183,7 @@ ipcMain.handle(IPC.bridgeOpenExternal, (_event, url: string) => {
   if (kind === 'external' || kind === 'website' || kind === 'auth-other') return shell.openExternal(url);
 });
 
-updater.on('ready', (version) => chromeWebContents()?.send(IPC.updateReady, version));
-
-auth.on('authenticated', showLoggedIn);
-auth.on('logged-out', showLoggedOut);
-auth.on('error', (message) => {
-  const login = windowManager?.loginWebContents;
-  if (!login || login.isDestroyed()) return;
-  login.send(IPC.authError, message);
-});
-
-// eslint-disable-next-line unicorn/prefer-top-level-await
-app.whenReady().then(() => {
-  if (!singleInstance) return;
-  console.log(`[typie] env=${env.name} website=${env.websiteUrl}`);
+const applyMenu = () => {
   menu = buildMenu(
     {
       newTab: () => tabManager?.create(`${env.websiteUrl}/`),
@@ -210,14 +197,35 @@ app.whenReady().then(() => {
       prevTab: () => tabManager?.prev(),
       activateTab: (index) => tabManager?.activateIndex(index),
       activateLastTab: () => tabManager?.activateLast(),
-      checkForUpdates: () => void updater.checkManually(),
+      checkForUpdates: () => void updater.checkManually(windowManager?.window),
+      restartToUpdate: () => void updater.confirmRestart(windowManager?.window),
       openWebsite: () => shell.openExternal(env.websiteUrl),
       toggleDevTools: () => tabManager?.activeTab?.view.webContents.toggleDevTools(),
       crashActiveTab: () => tabManager?.activeTab?.view.webContents.forcefullyCrashRenderer(),
     },
-    { devTools: !app.isPackaged },
+    { devTools: !app.isPackaged, updateReady: updater.ready },
   );
   Menu.setApplicationMenu(menu);
+};
+
+updater.on('ready', () => {
+  chromeWebContents()?.send(IPC.updateReady);
+  applyMenu();
+});
+
+auth.on('authenticated', showLoggedIn);
+auth.on('logged-out', showLoggedOut);
+auth.on('error', (message) => {
+  const login = windowManager?.loginWebContents;
+  if (!login || login.isDestroyed()) return;
+  login.send(IPC.authError, message);
+});
+
+// eslint-disable-next-line unicorn/prefer-top-level-await
+app.whenReady().then(() => {
+  if (!singleInstance) return;
+  console.log(`[typie] env=${env.name} website=${env.websiteUrl}`);
+  applyMenu();
   session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
     callback(['clipboard-read', 'clipboard-sanitized-write', 'notifications', 'fullscreen'].includes(permission));
   });
