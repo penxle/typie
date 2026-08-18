@@ -2,23 +2,24 @@ import { EventEmitter } from 'node:events';
 import { captureException } from '@sentry/electron/main';
 import { dialog } from 'electron';
 import { autoUpdater } from 'electron-updater';
+import type { BaseWindow } from 'electron';
 
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const INITIAL_DELAY_MS = 10 * 1000;
 
 // eslint-disable-next-line unicorn/prefer-event-target
-export class Updater extends EventEmitter<{ ready: [string] }> {
+export class Updater extends EventEmitter<{ ready: [] }> {
   #enabled: boolean;
-  #readyVersion: string | null = null;
+  #ready = false;
 
   constructor(enabled: boolean) {
     super();
     this.#enabled = enabled;
     autoUpdater.autoDownload = true;
     autoUpdater.autoInstallOnAppQuit = true;
-    autoUpdater.on('update-downloaded', (info) => {
-      this.#readyVersion = info.version;
-      this.emit('ready', info.version);
+    autoUpdater.on('update-downloaded', () => {
+      this.#ready = true;
+      this.emit('ready');
     });
     autoUpdater.on('error', (err) => {
       console.warn('[updater]', err.message);
@@ -30,26 +31,24 @@ export class Updater extends EventEmitter<{ ready: [string] }> {
     autoUpdater.checkForUpdates().catch(() => null);
   }
 
+  get ready() {
+    return this.#ready;
+  }
+
   start() {
     if (!this.#enabled) return;
     setTimeout(() => this.#check(), INITIAL_DELAY_MS);
     setInterval(() => this.#check(), CHECK_INTERVAL_MS);
   }
 
-  async checkManually() {
+  async checkManually(window?: BaseWindow) {
     if (!this.#enabled) {
       await dialog.showMessageBox({ type: 'info', message: '개발 빌드에서는 업데이트를 확인하지 않아요.', buttons: ['확인'] });
       return;
     }
 
-    if (this.#readyVersion) {
-      const { response } = await dialog.showMessageBox({
-        type: 'info',
-        message: `새 버전 ${this.#readyVersion}이 준비됐어요.`,
-        buttons: ['지금 재시작', '나중에'],
-        cancelId: 1,
-      });
-      if (response === 0) this.restart();
+    if (this.#ready) {
+      await this.confirmRestart(window);
       return;
     }
 
@@ -58,10 +57,7 @@ export class Updater extends EventEmitter<{ ready: [string] }> {
       const available = result?.isUpdateAvailable ?? false;
       await dialog.showMessageBox({
         type: 'info',
-        message:
-          available && result
-            ? `새 버전 ${result.updateInfo.version}을 내려받고 있어요. 준비되면 알려드릴게요.`
-            : '현재 최신 버전을 이용하고 있어요.',
+        message: available ? '새 버전을 내려받고 있어요. 준비되면 알려드릴게요.' : '현재 최신 버전을 이용하고 있어요.',
         buttons: ['확인'],
       });
     } catch (err) {
@@ -75,7 +71,18 @@ export class Updater extends EventEmitter<{ ready: [string] }> {
     }
   }
 
-  restart() {
-    autoUpdater.quitAndInstall();
+  async confirmRestart(window?: BaseWindow) {
+    if (!this.#ready) return;
+    const options = {
+      type: 'info' as const,
+      message: '새 버전으로 업데이트할까요?',
+      detail: '타이피가 다시 시작되고, 열려 있던 탭은 그대로 복원돼요.',
+      buttons: ['다시 시작', '나중에'],
+      defaultId: 0,
+      cancelId: 1,
+    };
+    const { response } =
+      window && !window.isDestroyed() ? await dialog.showMessageBox(window, options) : await dialog.showMessageBox(options);
+    if (response === 0) autoUpdater.quitAndInstall();
   }
 }

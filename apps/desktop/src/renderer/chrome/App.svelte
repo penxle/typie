@@ -1,13 +1,13 @@
 <script lang="ts">
-  // cspell:ignore ondismiss onrestart
+  // cspell:ignore onrestart
 
   import { onMount } from 'svelte';
   import TabStrip from './TabStrip.svelte';
-  import UpdateBanner from './UpdateBanner.svelte';
+  import UpdateButton from './UpdateButton.svelte';
 
   let tabs = $state<TabState[]>([]);
   let activeId = $state<string | null>(null);
-  let updateVersion = $state<string | null>(null);
+  let updateReady = $state(false);
 
   onMount(() => {
     const offTabs = window.shell.onTabsState?.((state) => {
@@ -19,8 +19,8 @@
       document.documentElement.dataset.variantLight = theme.variantLight;
       document.documentElement.dataset.variantDark = theme.variantDark;
     });
-    const offUpdate = window.shell.onUpdateReady?.((version) => {
-      updateVersion = version;
+    const offUpdate = window.shell.onUpdateReady?.(() => {
+      updateReady = true;
     });
     return () => {
       offTabs?.();
@@ -31,14 +31,7 @@
 </script>
 
 <TabStrip {activeId} {tabs}>
-  {#if updateVersion}
-    <UpdateBanner
-      ondismiss={() => {
-        updateVersion = null;
-        window.shell.dismissUpdate?.();
-      }}
-      onrestart={() => window.shell.restartToUpdate?.()}
-      version={updateVersion}
-    />
+  {#if updateReady}
+    <UpdateButton onrestart={() => window.shell.restartToUpdate?.()} />
   {/if}
 </TabStrip>

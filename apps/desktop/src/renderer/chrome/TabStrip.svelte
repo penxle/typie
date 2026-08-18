@@ -323,17 +323,19 @@
 
   <div class={css({ flex: '1' })}></div>
 
-  {@render children?.()}
+  <div class={css({ display: 'flex', alignItems: 'center', gap: '4px' })}>
+    {@render children?.()}
 
-  {#if !isMac}
-    <button
-      style:-webkit-app-region="no-drag"
-      class={iconButtonClass}
-      aria-label="메뉴"
-      onclick={() => window.shell.popupMenu?.()}
-      type="button"
-    >
-      <EllipsisIcon class={css({ size: '16px' })} />
-    </button>
-  {/if}
+    {#if !isMac}
+      <button
+        style:-webkit-app-region="no-drag"
+        class={iconButtonClass}
+        aria-label="메뉴"
+        onclick={() => window.shell.popupMenu?.()}
+        type="button"
+      >
+        <EllipsisIcon class={css({ size: '16px' })} />
+      </button>
+    {/if}
+  </div>
 </div>
