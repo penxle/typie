@@ -10,9 +10,10 @@ import type { WindowManager } from './window-manager';
 export type TabState = { id: string; title: string; url: string; loading: boolean };
 export type TabsStatePayload = { tabs: TabState[]; activeId: string | null };
 
-type Tab = TabState & { view: WebContentsView };
+type Tab = TabState & { view: WebContentsView; titleGrace?: ReturnType<typeof setTimeout> };
 
 const RECENTLY_CLOSED_LIMIT = 10;
+const TITLE_GRACE_MS = 1500;
 
 export class TabManager {
   #tabs: Tab[] = [];
@@ -40,6 +41,26 @@ export class TabManager {
     tab.view.webContents
       .loadURL(rendererUrl(page, { ...query, theme: nativeTheme.shouldUseDarkColors ? 'dark' : 'light' }))
       .catch(() => null);
+  }
+
+  #setTitle(id: string, title: string) {
+    const tab = this.#tabs.find((t) => t.id === id);
+    if (!tab) return;
+    clearTimeout(tab.titleGrace);
+    tab.titleGrace = undefined;
+    this.#update(id, { title });
+  }
+
+  #setLoading(id: string, loading: boolean) {
+    const tab = this.#tabs.find((t) => t.id === id);
+    if (!tab) return;
+    clearTimeout(tab.titleGrace);
+    tab.titleGrace = undefined;
+    if (loading || tab.title) {
+      this.#update(id, { loading });
+      return;
+    }
+    tab.titleGrace = setTimeout(() => this.#update(id, { loading: false }), TITLE_GRACE_MS);
   }
 
   #update(id: string, patch: Partial<TabState>) {
@@ -73,12 +94,12 @@ export class TabManager {
     const id = randomUUID();
     const tab: Tab = {
       id,
-      title: '타이피',
+      title: '',
       url,
       loading: true,
       view: createTabView({
-        onTitle: (title) => this.#update(id, { title }),
-        onLoading: (loading) => this.#update(id, { loading }),
+        onTitle: (title) => this.#setTitle(id, title),
+        onLoading: (loading) => this.#setLoading(id, loading),
         onUrl: (nextUrl) => {
           if (this.#policy.classify(nextUrl) === 'website') this.#update(id, { url: nextUrl });
         },
@@ -129,6 +150,7 @@ export class TabManager {
     const index = this.#tabs.findIndex((t) => t.id === id);
     if (index === -1) return;
     const [tab] = this.#tabs.splice(index, 1);
+    clearTimeout(tab.titleGrace);
     if (this.#activeId === id) {
       this.#windowManager.detach(tab.view);
       this.#activeId = null;
@@ -148,6 +170,7 @@ export class TabManager {
 
   closeAll() {
     for (const tab of this.#tabs) {
+      clearTimeout(tab.titleGrace);
       if (tab.id === this.#activeId) this.#windowManager.detach(tab.view);
       if (!tab.view.webContents.isDestroyed()) tab.view.webContents.close();
     }
