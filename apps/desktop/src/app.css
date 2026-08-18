@@ -1,9 +1,0 @@
-@layer reset, base, ui, tokens, recipes, utilities;
-
-@import url(@typie/ui/styles.css) layer(ui);
-
-body {
-  overflow: hidden;
-  user-select: none;
-  -webkit-user-select: none;
-}

@@ -21,6 +21,8 @@ jobs:
   lint:
     name: Lint
     runs-on: arc-p-4x
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: 1
     strategy:
       fail-fast: false
       matrix:

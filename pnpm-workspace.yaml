@@ -10,6 +10,7 @@ allowBuilds:
   '@sentry/cli': false
   argon2: true
   cbor-extract: false
+  electron-winstaller: false
   es5-ext: false
   esbuild: true
   msgpackr-extract: false

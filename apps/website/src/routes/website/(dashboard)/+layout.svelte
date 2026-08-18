@@ -12,13 +12,14 @@
   import mixpanel from 'mixpanel-browser';
   import qs from 'query-string';
   import { onMount, untrack } from 'svelte';
-  import { goto } from '$app/navigation';
-  import { updated } from '$app/state';
+  import { goto, pushState, replaceState } from '$app/navigation';
+  import { page, updated } from '$app/state';
   import Logo from '$assets/logos/logo.svg?component';
   import { env } from '$env/dynamic/public';
   import { pollBootstrapAssertion } from '$lib/bootstrap';
   import { EnvironmentBanner } from '$lib/components';
   import { AdminImpersonateBanner } from '$lib/components/admin';
+  import { desktop } from '$lib/desktop';
   import { fanOutResourceUpdate } from '$lib/editor-ffi/registry';
   import { hydrateQuery } from '$lib/graphql';
   import { isLegacyTrial, shouldShowOnboarding } from '$lib/subscription-logic';
@@ -236,7 +237,12 @@
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+    const offFocus = desktop?.on('focus', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      offFocus?.();
+    };
   });
 
   let onboardingModalOpen = $state(false);
@@ -310,6 +316,24 @@
   });
 
   onMount(pollBootstrapAssertion);
+
+  onMount(() => {
+    const open = page.url.searchParams.get('open');
+
+    if (!open) {
+      return;
+    }
+
+    const url = new URL(page.url);
+    url.searchParams.delete('open');
+    replaceState(url, {});
+
+    if (open === 'subscribe') {
+      SubscribeModalState.show('desktop_open_param');
+    } else if (open.startsWith('preference/')) {
+      pushState('', { shallowRoute: `/${open}` });
+    }
+  });
 
   onMount(() => {
     if (shouldShowOnboarding({ createdAt: query.data.me.createdAt, preferences: query.data.me.preferences, now: dayjs() })) {

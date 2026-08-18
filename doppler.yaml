@@ -3,6 +3,10 @@ setup:
     project: api
     config: dev_local
 
+  - path: apps/desktop
+    project: desktop
+    config: dev_local
+
   - path: apps/mobile
     project: mobile
     config: dev_local

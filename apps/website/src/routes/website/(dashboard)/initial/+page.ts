@@ -30,18 +30,18 @@ export const load = async (event) => {
   );
 
   if (query.data.me.preferences.initialPage === 'home') {
-    redirect(302, '/home');
+    redirect(302, `/home${event.url.search}`);
   }
 
   const recentEntity = query.data.me.recentlyViewedEntities[0];
   if (recentEntity) {
-    redirect(302, `/${recentEntity.slug}`);
+    redirect(302, `/${recentEntity.slug}${event.url.search}`);
   }
 
   const firstEntity = query.data.me.sites[0].firstEntity;
   if (firstEntity) {
-    redirect(302, `/${firstEntity.slug}`);
+    redirect(302, `/${firstEntity.slug}${event.url.search}`);
   }
 
-  redirect(302, '/home');
+  redirect(302, `/home${event.url.search}`);
 };

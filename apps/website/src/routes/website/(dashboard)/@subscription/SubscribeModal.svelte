@@ -12,6 +12,7 @@
   import { Button, Icon, Modal } from '@typie/ui/components';
   import { PLAN_FEATURES } from '@typie/ui/constants';
   import { createForm, FormError } from '@typie/ui/form';
+  import { Toast } from '@typie/ui/notification';
   import { comma } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
@@ -22,7 +23,9 @@
   import LockIcon from '~icons/lucide/lock';
   import MoonIcon from '~icons/lucide/moon';
   import KakaoPayLogo from '$assets/icons/kakaopay.svg?component';
+  import { env } from '$env/dynamic/public';
   import { fb } from '$lib/analytics';
+  import { desktop } from '$lib/desktop';
   import { cache } from '$lib/graphql';
   import { requestKakaoPayBillingKey } from '$lib/portone';
   import { graphql } from '$mearie';
@@ -213,6 +216,12 @@
 
       if (!useExistingBillingKey) {
         if (method === BillingKeyType.KAKAOPAY) {
+          if (desktop) {
+            await desktop.openExternal(`${env.PUBLIC_WEBSITE_URL}/initial?open=subscribe`);
+            Toast.success('브라우저에서 결제를 진행해요.');
+            return;
+          }
+
           const result = await requestKakaoPayBillingKey({ userId: user.data.id });
 
           if (result.status === 'canceled') {

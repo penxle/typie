@@ -1,3 +1,7 @@
 {
-  "extends": ["@typie/tsconfig", "./.svelte-kit/tsconfig.json"]
+  "extends": "@typie/tsconfig",
+  "compilerOptions": {
+    "types": ["node", "vite/client", "unplugin-icons/types/svelte"]
+  },
+  "include": ["src/**/*.ts", "src/**/*.svelte", "src/**/*.d.ts", "vite.*.config.ts", "panda.config.ts", "scripts/**/*.mjs"]
 }

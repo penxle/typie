@@ -47,7 +47,8 @@ export const POST: RequestHandler = async ({ request, cookies, getClientAddress 
             ? 'iOS'
             : 'Web';
 
-  const deviceName = `${browser} on ${os}`;
+  const desktopMatch = /Typie\/(\S+)/.exec(userAgent);
+  const deviceName = desktopMatch ? `Typie Desktop on ${os}` : `${browser} on ${os}`;
 
   const response = await fetch(`${env.PRIVATE_API_URL}/graphql`, {
     method: 'POST',

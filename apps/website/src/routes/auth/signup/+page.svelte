@@ -64,6 +64,9 @@
           state: serializeOAuthState({
             redirect_uri: page.url.searchParams.get('redirect_uri') || `${env.PUBLIC_WEBSITE_URL}/authorize`,
             state: page.url.searchParams.get('state') || serializeOAuthState({ redirect_uri: env.PUBLIC_WEBSITE_URL }),
+            code_challenge: page.url.searchParams.get('code_challenge') ?? undefined,
+            code_challenge_method: page.url.searchParams.get('code_challenge_method') ?? undefined,
+            prompt: page.url.searchParams.get('prompt') ?? undefined,
           }),
           marketingAgreed: data.marketingAgreed ?? false,
           referralCode: page.url.searchParams.get('r'),
