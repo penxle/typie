@@ -17,6 +17,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
+import kotlinx.coroutines.async
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 
@@ -30,15 +32,18 @@ class FindReplaceEditorRangesTest {
       val fake = FakeFfiEditor()
       val editor = Editor(fake, this, dispatcher)
 
-      editor.setActiveFindReplaceRangeAndReveal(
-        activeId = "match-2",
-        currentRanges =
-          listOf(
-            trackedRange(id = "match-1", group = ACTIVE_SEARCH_MATCH_RANGE_GROUP, start = 0),
-            trackedRange(id = "match-2", group = SEARCH_MATCH_RANGE_GROUP, start = 10),
-          ),
-        bringIntoViewRequests = bringIntoViewRequests,
-      )
+      val update = async {
+        editor.setActiveFindReplaceRangeAndReveal(
+          activeId = "match-2",
+          currentRanges =
+            listOf(
+              trackedRange(id = "match-1", group = ACTIVE_SEARCH_MATCH_RANGE_GROUP, start = 0),
+              trackedRange(id = "match-2", group = SEARCH_MATCH_RANGE_GROUP, start = 10),
+            ),
+          bringIntoViewRequests = bringIntoViewRequests,
+        )
+      }
+      testScheduler.runCurrent()
 
       assertSingleRequest(
         fake,
@@ -57,7 +62,9 @@ class FindReplaceEditorRangesTest {
       val reveal = assertNotNull(bringIntoViewRequests.activateForVersion(version = appliedVersion))
       assertEquals(EditorBringIntoViewTarget.TrackedItem("match-2"), reveal.target)
       assertEquals(EditorBringIntoViewPolicy.Reveal, reveal.policy)
-      assertEquals(EditorBringIntoViewBehavior.Smooth, reveal.behavior)
+      assertEquals(EditorBringIntoViewBehavior.Instant, reveal.behavior)
+      assertTrue(bringIntoViewRequests.markPresented(version = appliedVersion, request = reveal))
+      update.await()
     }
 
   @Test
@@ -69,11 +76,14 @@ class FindReplaceEditorRangesTest {
       val first = registration(id = "match-1", start = 0)
       val second = registration(id = "match-2", start = 10)
 
-      editor.setFindReplaceRangesAndReveal(
-        items = listOf(first, second),
-        activeId = second.id,
-        bringIntoViewRequests = bringIntoViewRequests,
-      )
+      val update = async {
+        editor.setFindReplaceRangesAndReveal(
+          items = listOf(first, second),
+          activeId = second.id,
+          bringIntoViewRequests = bringIntoViewRequests,
+        )
+      }
+      testScheduler.runCurrent()
 
       assertSingleRequest(
         fake,
@@ -102,7 +112,9 @@ class FindReplaceEditorRangesTest {
       val reveal = assertNotNull(bringIntoViewRequests.activateForVersion(version = appliedVersion))
       assertEquals(EditorBringIntoViewTarget.TrackedItem(second.id), reveal.target)
       assertEquals(EditorBringIntoViewPolicy.Reveal, reveal.policy)
-      assertEquals(EditorBringIntoViewBehavior.Smooth, reveal.behavior)
+      assertEquals(EditorBringIntoViewBehavior.Instant, reveal.behavior)
+      assertTrue(bringIntoViewRequests.markPresented(version = appliedVersion, request = reveal))
+      update.await()
     }
 
   @Test

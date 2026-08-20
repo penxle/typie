@@ -58,7 +58,7 @@ import type {
 import type { ScrollViewport } from '@typie/ui/utils';
 import type { EditorPublicationResult } from './editor-update';
 import type { FrameProof } from './publication';
-import type { EditorScrollIntoViewOptions, EditorScrollScope } from './scroll.svelte';
+import type { EditorScrollBehavior, EditorScrollIntoViewOptions, EditorScrollScope } from './scroll.svelte';
 import type {
   ArchivedAsset,
   ContextMenuContributor,
@@ -936,7 +936,7 @@ export class Editor {
     if (idx === undefined) return;
     const match = this.#searchMatches[idx];
     if (!match) return;
-    this.revealTrackedItem(match.id);
+    this.revealTrackedItem(match.id, 'instant');
   }
 
   #handleSearchReplaceResult(id: string, outcome: string): void {
@@ -1562,11 +1562,11 @@ export class Editor {
     return this.#scrollIntoView?.(options, this.#admission);
   }
 
-  revealTrackedItem(id: string): Promise<void> | undefined {
+  revealTrackedItem(id: string, behavior: EditorScrollBehavior = 'smooth'): Promise<void> | undefined {
     let presentation: Promise<void> | undefined;
     void this.update((request) => {
       request.enqueue({ type: 'view', op: { type: 'expand_folds_for_tracked_range', id } });
-      presentation = this.scrollIntoView({ target: { type: 'tracked_item', id }, policy: 'reveal', behavior: 'smooth' });
+      presentation = this.scrollIntoView({ target: { type: 'tracked_item', id }, policy: 'reveal', behavior });
     }).catch((err: unknown) => this.fail(err));
     return presentation;
   }

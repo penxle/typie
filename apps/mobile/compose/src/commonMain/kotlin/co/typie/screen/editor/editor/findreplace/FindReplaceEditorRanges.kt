@@ -91,7 +91,7 @@ internal suspend fun Editor.setFindReplaceRangesAndReveal(
       bringIntoView(
         target = EditorBringIntoViewTarget.TrackedItem(id),
         policy = EditorBringIntoViewPolicy.Reveal,
-        behavior = EditorBringIntoViewBehavior.Smooth,
+        behavior = EditorBringIntoViewBehavior.Instant,
       )
     }
   }
@@ -108,7 +108,7 @@ internal suspend fun Editor.setActiveFindReplaceRangeAndReveal(
     bringIntoView(
       target = EditorBringIntoViewTarget.TrackedItem(activeId),
       policy = EditorBringIntoViewPolicy.Reveal,
-      behavior = EditorBringIntoViewBehavior.Smooth,
+      behavior = EditorBringIntoViewBehavior.Instant,
     )
   }
 }
