@@ -664,14 +664,14 @@ export class Editor {
     }
 
     const hasMembershipConsumers = this.spellcheckErrors.length > 0 || this.aiFeedbacks.length > 0;
-    if (!hasMembershipConsumers || !snapshot.selection || !isSelectionCollapsed(snapshot.selection)) {
+    if (!hasMembershipConsumers || !snapshot.selection) {
       this.#spellcheckMembershipIds = null;
       this.#aiFeedbackMembershipIds = null;
     }
 
     if (hasMembershipConsumers) {
-      const membership = semanticMembershipForStateChange(fields, snapshot.selection, (position) =>
-        this.#invokeCore((core) => core.tracked_ranges_containing_position(position, null)),
+      const membership = semanticMembershipForStateChange(fields, snapshot.selection, (selection) =>
+        this.#invokeCore((core) => core.tracked_ranges_containing_selection(selection, null)),
       );
       if (membership !== undefined) {
         this.#syncActiveSpellcheckErrorFromMembership(membership);
@@ -2567,12 +2567,12 @@ export class Editor {
 
   commentIdAt(page: number, x: number, y: number): string | null {
     const selection = this.#applied.selection;
-    if (!selection || !isSelectionCollapsed(selection)) return null;
+    if (!selection) return null;
 
     return this.#invokeCore((core) => {
       // eslint-disable-next-line svelte/prefer-svelte-reactivity
       const geometryHitIds = new Set(core.tracked_ranges_at(page, x, y, null).map((hit) => hit.id));
-      const membership = core.tracked_ranges_containing_position(selection.head, null).filter((range) => geometryHitIds.has(range.id));
+      const membership = core.tracked_ranges_containing_selection(selection, null).filter((range) => geometryHitIds.has(range.id));
       return selectTrackedRangeMember(membership, COMMENT_MEMBERSHIP_GROUPS, this.activeCommentId, this.#registeredCommentIds)?.id ?? null;
     });
   }

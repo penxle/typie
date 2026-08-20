@@ -37,7 +37,7 @@ data class EditorState(
   val ime: Ime?,
   val lastHistoryTag: HistoryTag? = null,
   val trackedRanges: List<TrackedRange> = emptyList(),
-  val trackedRangesContainingSelectionHead: List<TrackedRangeEndpoints> = emptyList(),
+  val trackedRangesContainingSelection: List<TrackedRangeEndpoints> = emptyList(),
   val selectionHitRects: List<PageRect> = emptyList(),
   val cursorHitRects: List<PageRect> = emptyList(),
   val interactiveRegions: List<InteractiveRegion> = emptyList(),

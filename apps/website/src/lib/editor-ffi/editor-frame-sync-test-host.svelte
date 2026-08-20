@@ -6,7 +6,7 @@
 </script>
 
 <script lang="ts">
-  import { setupAppContext } from '@typie/ui/context';
+  import { setupAppContext, setupThemeContext } from '@typie/ui/context';
   import { elementScrollViewport, windowScrollViewport } from '@typie/ui/utils';
   import { onDestroy, untrack } from 'svelte';
   import Caret from './components/Caret.svelte';
@@ -22,12 +22,14 @@
   import { setupEditorPublication } from './editor-publication.svelte';
   import { EditorSurfaceHost } from './editor-surface-host.svelte';
   import { setupEditorScroll } from './scroll.svelte';
+  import type { MouseEventHandler } from 'svelte/elements';
   import type { Editor } from './editor.svelte';
 
   type Props = {
     editor: Editor;
     onReady?: (harness: EditorFrameSyncTestHarness) => void;
     onPublishedReady?: () => void;
+    onclick?: MouseEventHandler<HTMLDivElement>;
     readOnly?: boolean;
     typewriterEnabled?: boolean;
     useWindowScroll?: boolean;
@@ -39,6 +41,7 @@
     editor,
     onReady,
     onPublishedReady,
+    onclick,
     readOnly = false,
     typewriterEnabled = false,
     useWindowScroll = false,
@@ -47,6 +50,7 @@
   }: Props = $props();
 
   const app = setupAppContext(userId);
+  setupThemeContext();
   app.preference.current = { ...app.preference.current, lineHighlightEnabled: true, typewriterEnabled };
 
   const ctx = setupEditorContext();
@@ -113,6 +117,8 @@
 />
 
 {#snippet editorContent()}
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     bind:this={extensionArea}
     style:padding-bottom={`${ctx.scroll?.bottomPadding ?? 0}px`}
@@ -122,6 +128,7 @@
       editor.extensionAreaEl = el;
     }}
     data-editor-extension-area
+    {onclick}
   >
     <EditorPages {editor} {surfaceHost} />
 

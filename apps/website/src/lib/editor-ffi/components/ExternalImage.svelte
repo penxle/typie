@@ -301,8 +301,11 @@
         style={css.raw({ width: 'full', borderRadius: '4px' }, !canEdit && { cursor: 'zoom-in' })}
         alt="본문 이미지"
         aria-label={canEdit ? undefined : '이미지 확대 보기'}
-        onclick={() => {
-          if (!canEdit) enlarged = true;
+        onclick={(event) => {
+          if (canEdit) return;
+
+          event.stopPropagation();
+          enlarged = true;
         }}
         onkeydown={(event) => {
           if (canEdit || !(event.key === 'Enter' || event.key === ' ')) {

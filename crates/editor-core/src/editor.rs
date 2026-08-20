@@ -2,18 +2,20 @@ use editor_clipboard::Slice;
 use editor_commands::CommandError;
 use editor_common::{HistoryTag, Movement, time::Duration};
 use editor_crdt::{Changeset, CrdtError, Dot, Op};
-use editor_model::{EditOp, ModifierState, ModifierType, PlainDoc, PlainNode};
+use editor_model::{EditOp, ModifierState, ModifierType, NodeView, PlainDoc, PlainNode};
 use editor_renderer::{Mark, MarkData, RenderSink, Renderer, damage::IRect};
 #[cfg(any(test, feature = "test-utils"))]
 use editor_resource::ThemeVariant;
 use editor_resource::{CharacterCount, Resource, count_text};
 use editor_state::{
-    LayoutDirty, Position, ResolvedPosition, ResolvedPositionFlatExt, Selection, StableSelection,
-    State, closest_empty_paragraph_break_end_between, farther_endpoint, is_unit_node_selection,
+    CellRect, LayoutDirty, Position, ResolvedPosition, ResolvedPositionFlatExt, ResolvedSelection,
+    Selection, StableSelection, State, closest_empty_paragraph_break_end_between, farther_endpoint,
+    is_unit_node_selection,
 };
 use editor_transaction::{Effect, HistoryMeta, MergeKind, StepError, Transaction};
 use editor_view::{GapPhantom, PageRect, PendingOverlay, View, Viewport};
 use hashbrown::{HashMap, HashSet};
+use std::cell::OnceCell;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use strum::IntoEnumIterator;
@@ -55,6 +57,86 @@ fn normalize_pending_overlay(state: &State) -> Option<PendingOverlay> {
         position,
         modifiers,
     })
+}
+
+fn same_position_slot(a: &ResolvedPosition<'_>, b: &ResolvedPosition<'_>) -> bool {
+    a.node() == b.node() && a.offset() == b.offset()
+}
+
+fn cell_rect_contains_rect(outer: &CellRect<'_>, inner: &CellRect<'_>) -> bool {
+    outer.table_id() == inner.table_id()
+        && outer.rows().start() <= inner.rows().start()
+        && inner.rows().end() <= outer.rows().end()
+        && outer.cols().start() <= inner.cols().start()
+        && inner.cols().end() <= outer.cols().end()
+}
+
+fn cell_rect_contains_position(
+    rect: &CellRect<'_>,
+    outer: &ResolvedSelection<'_>,
+    inner: &ResolvedSelection<'_>,
+) -> bool {
+    let position = inner.head();
+    if same_position_slot(position, outer.anchor()) || same_position_slot(position, outer.head()) {
+        return true;
+    }
+
+    let Some(node) = inner.view().node(position.node()) else {
+        return false;
+    };
+    rect.covers(&node)
+}
+
+fn cell_rect_contains_flat_selection(
+    rect: &CellRect<'_>,
+    outer: &ResolvedSelection<'_>,
+    inner: &ResolvedSelection<'_>,
+) -> bool {
+    if inner.is_collapsed() {
+        return cell_rect_contains_position(rect, outer, inner);
+    }
+    let anchor_cell = editor_state::enclosing_table_cell(inner.view(), inner.anchor().node());
+    let head_cell = editor_state::enclosing_table_cell(inner.view(), inner.head().node());
+    let Some(cell_id) = anchor_cell.filter(|cell| Some(*cell) == head_cell) else {
+        return false;
+    };
+    let Some(cell) = inner.view().node(cell_id) else {
+        return false;
+    };
+    rect.covers(&cell)
+}
+
+fn resolved_selection_contains<'a>(
+    outer: &ResolvedSelection<'a>,
+    inner: &ResolvedSelection<'a>,
+    inner_rect: Option<&CellRect<'a>>,
+    inner_cells: &OnceCell<Vec<NodeView<'a>>>,
+) -> bool {
+    match (outer.as_cell_rect(), inner_rect) {
+        (Some(outer), Some(inner)) => cell_rect_contains_rect(&outer, inner),
+        (Some(rect), None) => cell_rect_contains_flat_selection(&rect, outer, inner),
+        (None, Some(rect)) => inner_cells
+            .get_or_init(|| rect.cells())
+            .iter()
+            .all(|cell| outer.contains_subtree(cell)),
+        (None, None) => {
+            let outer_start = outer.from().to_flat();
+            let outer_end = outer.to().to_flat();
+            let inner_start = inner.from().to_flat();
+            let inner_end = inner.to().to_flat();
+            outer_start < outer_end && outer_start <= inner_start && inner_end <= outer_end
+        }
+    }
+}
+
+fn resolved_selections_match(a: &ResolvedSelection<'_>, b: &ResolvedSelection<'_>) -> bool {
+    match (a.as_cell_rect(), b.as_cell_rect()) {
+        (Some(a), Some(b)) => cell_rect_contains_rect(&a, &b) && cell_rect_contains_rect(&b, &a),
+        (None, None) => {
+            a.from().to_flat() == b.from().to_flat() && a.to().to_flat() == b.to().to_flat()
+        }
+        _ => false,
+    }
 }
 
 fn normalize_gap_phantom(state: &State) -> Option<GapPhantom> {
@@ -719,25 +801,29 @@ impl Editor {
         scored.into_iter().map(|(_, _, hit)| hit).collect()
     }
 
-    /// Returns located tracked ranges whose closed interval contains `position`.
+    /// Returns located tracked ranges that fully contain `selection`.
     ///
-    /// Exact end matches come first so the preceding range wins at a shared
-    /// end/start boundary. Remaining ties are sorted by shortest range, then ID.
-    /// This membership policy is independent of the range's insertion affinity:
-    /// including the end cursor here does not make later text part of the range.
-    pub fn tracked_ranges_containing_position(
+    /// Collapsed selections keep the closed-boundary policy: exact end matches
+    /// come first so the preceding range wins at a shared end/start boundary.
+    /// Non-collapsed selections prefer an exact match. Remaining ties are sorted
+    /// by the tracked range's resolved document span, then ID. Cell rectangles
+    /// compare their selected cells rather than their flattened endpoint interval.
+    /// Endpoint membership remains independent of insertion affinity.
+    pub fn tracked_ranges_containing_selection(
         &self,
-        position: editor_state::Position,
+        selection: Selection,
         group: Option<&str>,
     ) -> Vec<&crate::tracked_range::TrackedRange> {
         use crate::tracked_range::TrackedRange;
-        use editor_state::ResolvedPositionFlatExt;
 
         let doc = self.state.view();
-        let Some(pos) = position.resolve(&doc) else {
+        let Some(query) = selection.resolve(&doc) else {
             return Vec::new();
         };
-        let pos = pos.to_flat();
+        let query_rect = query.as_cell_rect();
+        let query_cells = OnceCell::new();
+        let collapsed = query.is_collapsed();
+        let query_end = query.to().to_flat();
 
         let iter: Box<dyn Iterator<Item = &TrackedRange>> = match group {
             Some(g) => Box::new(self.tracked_ranges.iter_group(g)),
@@ -753,12 +839,15 @@ impl Editor {
                 continue;
             };
 
-            let anchor = resolved.anchor().to_flat();
-            let head = resolved.head().to_flat();
-            let start = anchor.min(head);
-            let end = anchor.max(head);
-            if start < end && start <= pos && pos <= end {
-                scored.push((end != pos, end - start, range));
+            if resolved_selection_contains(&resolved, &query, query_rect.as_ref(), &query_cells) {
+                let start = resolved.from().to_flat();
+                let end = resolved.to().to_flat();
+                let preferred = if collapsed {
+                    end == query_end
+                } else {
+                    resolved_selections_match(&resolved, &query)
+                };
+                scored.push((!preferred, end - start, range));
             }
         }
 

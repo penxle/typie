@@ -167,7 +167,6 @@ export const handlePointerUp: EditorEventHandler<HTMLElement, PointerEvent> = (e
 
 export const handleClick: EditorEventHandler<HTMLElement, MouseEvent> = (editor, e) => {
   if (e.button !== 0 || !editor.commentClickHandler) return;
-  if (!editor.isSelectionCollapsed) return;
 
   const local = editor.clientToLocal(e.clientX, e.clientY);
   if (!local) return;

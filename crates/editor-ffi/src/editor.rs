@@ -915,20 +915,20 @@ impl Editor {
         })
     }
 
-    pub fn tracked_ranges_containing_position(
+    pub fn tracked_ranges_containing_selection(
         &self,
-        position: Complex<editor_state::Position>,
+        selection: Complex<editor_state::Selection>,
         group: Option<String>,
     ) -> EditorResult<Vec<Complex<TrackedRangeEndpoints>>> {
         self.with_inner(|inner| {
-            let position = position.from_ffi()?;
+            let selection = selection.from_ffi()?;
             let state = inner.editor.state();
             let ranges = inner
                 .editor
-                .tracked_ranges_containing_position(position, group.as_deref());
+                .tracked_ranges_containing_selection(selection, group.as_deref());
             let result: Vec<TrackedRangeEndpoints> = ranges
                 .iter()
-                .filter_map(|r| public_tracked_range_endpoints(state, r))
+                .filter_map(|range| public_tracked_range_endpoints(state, range))
                 .collect();
             Ok(result.into_ffi()?)
         })
@@ -3292,7 +3292,7 @@ mod tests {
     }
 
     #[test]
-    fn ffi_tracked_ranges_containing_position_preserves_core_membership_order() {
+    fn ffi_tracked_ranges_containing_collapsed_selection_preserves_core_membership_order() {
         let (initial, p1) = state! {
             doc { root { p1: paragraph { text("abcde") } } }
             selection: (p1, 0)
@@ -3318,8 +3318,8 @@ mod tests {
         let _ = editor.tick().expect("tick");
 
         let matches = editor
-            .tracked_ranges_containing_position(
-                editor_state::Position::new(p1, 3),
+            .tracked_ranges_containing_selection(
+                editor_state::Selection::collapsed(editor_state::Position::new(p1, 3)),
                 Some("comment".into()),
             )
             .expect("ffi ok");
@@ -3330,6 +3330,39 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["before", "after"],
             "FFI must preserve Core's exact-end-first membership order"
+        );
+    }
+
+    #[test]
+    fn ffi_tracked_ranges_containing_selection_includes_image_atom_selection() {
+        let (initial, _root) = state! {
+            doc { root: root { image } }
+            selection: (root, 0, >) -> (root, 1, <)
+        };
+        let selection = initial.selection.expect("image selection");
+        let editor = make_ffi_editor(initial);
+        editor
+            .enqueue_for_test(editor_core::Message::TrackedRange {
+                op: editor_core::TrackedRangeOp::Add {
+                    id: "image-comment".into(),
+                    group: "comment".into(),
+                    selection,
+                    metadata: String::new(),
+                    invalidate_on_text_change: false,
+                },
+            })
+            .expect("enqueue tracked-range add");
+        let _ = editor.tick().expect("tick");
+
+        let matches = editor
+            .tracked_ranges_containing_selection(selection, Some("comment".into()))
+            .expect("ffi ok");
+        assert_eq!(
+            matches
+                .iter()
+                .map(|range| range.id.as_str())
+                .collect::<Vec<_>>(),
+            ["image-comment"]
         );
     }
 
