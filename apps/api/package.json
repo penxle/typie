@@ -44,6 +44,7 @@
     "@typie/assets": "workspace:*",
     "@typie/editor-ffi": "workspace:*",
     "@typie/lib": "workspace:*",
+    "@typie/prism": "workspace:*",
     "@typie/tsconfig": "workspace:*",
     "apple-signin-auth": "^2.1.0",
     "argon2": "^0.45.1",
@@ -56,6 +57,7 @@
     "drizzle-orm": "^0.45.2",
     "es-hangul": "^2.4.0",
     "escape-string-regexp": "^5.0.0",
+    "eventsource-parser": "^4.0.0",
     "execa": "^10.0.1",
     "fast-json-stable-stringify": "^2.1.0",
     "fast-xml-parser": "^5.10.1",
@@ -92,6 +94,7 @@
     "ts-pattern": "^5.9.0",
     "twemoji": "^14.0.2",
     "typescript": "^6.0.3",
+    "undici": "^8.9.0",
     "uuid": "^14.0.1",
     "ws": "^8.21.1",
     "zod": "^4.4.3"

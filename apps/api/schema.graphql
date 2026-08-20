@@ -36,6 +36,10 @@ input ArchiveFontInput {
   fontId: ID!
 }
 
+input ArchivePrismSessionInput {
+  sessionId: ID!
+}
+
 input AuthorizeSignUpEmailInput {
   code: String!
 }
@@ -58,6 +62,10 @@ scalar Binary
 interface Blob {
   id: ID!
   size: BigInt!
+}
+
+input CancelPrismRunInput {
+  sessionId: ID!
 }
 
 type CharacterCountChange {
@@ -195,6 +203,10 @@ input DeleteFolderInput {
 input DeleteNoteInput {
   clientId: String
   noteId: ID!
+}
+
+input DeletePrismSessionInput {
+  sessionId: ID!
 }
 
 input DeleteSiteInput {
@@ -820,9 +832,11 @@ type Mutation {
   adminStopImpersonation: Boolean!
   archiveFont(input: ArchiveFontInput!): Font!
   archiveFontFamily(input: ArchiveFontFamilyInput!): FontFamily!
+  archivePrismSession(input: ArchivePrismSessionInput!): PrismSession!
   authorizeSignUpEmail(input: AuthorizeSignUpEmailInput!): String!
   authorizeSingleSignOn(input: AuthorizeSingleSignOnInput!): String!
   cancelPlanChange: Subscription_!
+  cancelPrismRun(input: CancelPrismRunInput!): PrismSession!
   cancelSubscriptionCancellation: Subscription_!
   checkSpellingDocument(input: CheckSpellingDocumentInput!): [DocumentSpellingError!]!
   checkSpellingDocumentV2(input: CheckSpellingDocumentV2Input!): [DocumentSpellingErrorV2!]!
@@ -845,6 +859,7 @@ type Mutation {
   deleteEntityGoal(input: DeleteEntityGoalInput!): Entity!
   deleteFolder(input: DeleteFolderInput!): Folder!
   deleteNote(input: DeleteNoteInput!): Note!
+  deletePrismSession(input: DeletePrismSessionInput!): PrismSession!
   deleteSite(input: DeleteSiteInput!): Site!
   deleteTextReplacement(input: DeleteTextReplacementInput!): TextReplacementNode!
   deleteUser: Boolean!
@@ -875,6 +890,7 @@ type Mutation {
   registerPushNotificationToken(input: RegisterPushNotificationTokenInput!): Boolean!
   removeNoteEntity(input: RemoveNoteEntityInput!): Note!
   renameFolder(input: RenameFolderInput!): Folder!
+  renamePrismSession(input: RenamePrismSessionInput!): PrismSession!
   reportDocument(input: ReportDocumentInput!): Boolean!
   resetPassword(input: ResetPasswordInput!): Boolean!
   resetPreferences: User!
@@ -885,11 +901,13 @@ type Mutation {
   scheduleSubscriptionCancellation: Subscription_!
   sendEmailUpdateEmail(input: SendEmailUpdateEmailInput!): Boolean!
   sendPasswordResetEmail(input: SendPasswordResetEmailInput!): Boolean!
+  sendPrismMessage(input: SendPrismMessageInput!): SendPrismMessageResult!
   sendSignUpEmail(input: SendSignUpEmailInput!): Boolean!
   submitFeedback(input: SubmitFeedbackInput!): Boolean!
   subscribeOrChangePlanWithInAppPurchase(input: SubscribeOrChangePlanWithInAppPurchaseInput!): Subscription_!
   subscribePlanWithBillingKey(input: SubscribePlanWithBillingKeyInput!): Subscription_!
   subscribePlanWithTrial: Subscription_!
+  unarchivePrismSession(input: UnarchivePrismSessionInput!): PrismSession!
   unfurlEmbed(input: UnfurlEmbedInput!): Embed!
   unlockDocumentView(input: UnlockDocumentViewInput!): DocumentView!
   unresolveDocumentCommentThread(input: UnresolveDocumentCommentThreadInput!): DocumentCommentThread!
@@ -1045,6 +1063,14 @@ enum PreorderPaymentState {
   PENDING
 }
 
+type PrismSession {
+  archivedAt: DateTime
+  createdAt: DateTime!
+  id: ID!
+  title: String
+  updatedAt: DateTime!
+}
+
 input PurgeEntitiesInput {
   entityIds: [ID!]!
 }
@@ -1070,6 +1096,7 @@ type Query {
   note(noteId: ID!): Note!
   notes(entityId: ID, siteId: ID, status: NoteStatus): [Note!]!
   permalink(permalink: String!): Permalink!
+  prismSessionLog(cursor: Int! = 0, sessionId: ID!): [JSON!]!
   randomName: String!
   redirect(from: String!, type: RedirectType!): Redirect
   search(ancestorEntityId: ID, query: String!, siteId: ID!): SearchResult!
@@ -1124,6 +1151,11 @@ input RemoveNoteEntityInput {
 input RenameFolderInput {
   folderId: ID!
   name: String!
+}
+
+input RenamePrismSessionInput {
+  sessionId: ID!
+  title: String!
 }
 
 input ReportDocumentInput {
@@ -1192,6 +1224,16 @@ input SendEmailUpdateEmailInput {
 
 input SendPasswordResetEmailInput {
   email: String!
+}
+
+input SendPrismMessageInput {
+  message: String!
+  sessionId: ID
+}
+
+type SendPrismMessageResult {
+  runSeq: Int!
+  session: PrismSession!
 }
 
 input SendSignUpEmailInput {
@@ -1283,6 +1325,7 @@ type Subscription {
   literaryAnalysisDocumentStream(mappings: [DocumentTextMappingInput!]!, text: String!): DocumentLiteraryAnalysisPayload!
   literaryAnalysisDocumentStreamV2(documentId: ID, text: String!): DocumentLiteraryAnalysisPayloadV2!
   noteUpdateStream(clientId: String!, siteId: ID!): NoteUpdateStreamPayload!
+  prismSessionEvents(cursor: Int, sessionId: ID!): JSON!
   siteUpdateStream(siteId: ID!): SiteUpdateStreamPayload!
   siteUsageUpdateStream(siteId: ID!): Site!
   userUsageUpdateStream(userId: ID!): User!
@@ -1333,6 +1376,10 @@ type TextReplacementPreference {
 enum TextReplacementState {
   ACTIVE
   DISABLED
+}
+
+input UnarchivePrismSessionInput {
+  sessionId: ID!
 }
 
 input UnfurlEmbedInput {
@@ -1518,6 +1565,8 @@ type User implements IUser {
   paymentInvoices: [PaymentInvoice!]!
   personalIdentity: UserPersonalIdentity
   preferences: JSON!
+  prismAccess: Boolean!
+  prismSessions(includeArchived: Boolean! = false): [PrismSession!]!
   recentlyViewedEntities(siteId: ID): [Entity!]!
   referral: Referral
   referrals: [Referral!]!

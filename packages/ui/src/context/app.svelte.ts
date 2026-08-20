@@ -9,6 +9,9 @@ export type AppPreference = {
 
   panelWidth: number;
 
+  prismPanelOpen: boolean;
+  prismPanelWidth: number;
+
   toolbarStyle: 'compact' | 'classic';
 
   trashHeight: number;
@@ -56,6 +59,7 @@ type AppState = {
   goalOpen: string[];
   userGoalOpen: boolean;
   shortcutsOpen: boolean;
+  prismAccess: boolean;
 
   subscribed: boolean;
 
@@ -108,6 +112,7 @@ export const setupAppContext = (userId: string) => {
     goalOpen: [],
     userGoalOpen: false,
     shortcutsOpen: false,
+    prismAccess: false,
 
     subscribed: false,
 
@@ -134,6 +139,9 @@ export const setupAppContext = (userId: string) => {
 
       hasOpenedPanelOnce: false,
       panelWidth: 250,
+
+      prismPanelOpen: false,
+      prismPanelWidth: 420,
 
       toolbarStyle: 'compact',
 

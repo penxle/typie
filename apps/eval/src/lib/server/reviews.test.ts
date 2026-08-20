@@ -90,15 +90,24 @@ const extractOk = () =>
 const route = (handlers: {
   extract?: () => Promise<Response>;
   workflows?: () => Promise<Response>;
+  seeds?: () => Promise<Response>;
   retry?: () => Promise<Response>;
   file?: () => Promise<Response>;
   catalog?: () => Promise<Response>;
 }) =>
-  vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+  vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
     const url = String(input);
     if (url.endsWith('/internal/corpus/extract')) return (handlers.extract ?? extractOk)();
     if (url.endsWith('/apps/feedback/catalog')) return (handlers.catalog ?? (() => Promise.resolve(Response.json(CATALOG))))();
     if (url.endsWith('/workflows')) return (handlers.workflows ?? (() => Promise.resolve(Response.json({}))))();
+    // 적재(PUT /seeds) — 기본 응답은 요청 files의 digest를 되돌린다(prism과 같은 형태) — start의 staged 매니페스트가 이 값을 싣는다
+    if (url.endsWith('/seeds')) {
+      if (handlers.seeds) return handlers.seeds();
+      const files = (JSON.parse(String(init?.body)) as { files: { path: string; content: string }[] }).files;
+      return Promise.resolve(
+        Response.json({ staged: files.map((f) => ({ path: f.path, bytes: f.content.length, sha256: 'f'.repeat(64) })) }),
+      );
+    }
     if (url.endsWith('/cancel')) return Promise.resolve(Response.json({}));
     if (url.endsWith('/retry')) return (handlers.retry ?? (() => Promise.resolve(Response.json({}))))();
     if (url.includes('/files/')) return (handlers.file ?? (() => Promise.resolve(Response.json({ content: '' }))))();
@@ -463,7 +472,13 @@ describe('startFeedbackSession', () => {
     const body = JSON.parse(spy.mock.calls.find(([url]) => String(url).endsWith('/workflows'))?.[1]?.body as string);
     expect(body.workflowId).toBe(inserts[2].row.prismWorkflowId);
     expect(body.input).toEqual({ manuscriptPath: 'manuscript/v1.txt', meta: { title: '제목', subtitle: '부제' } });
-    expect(body.files).toEqual([{ path: 'manuscript/v1.txt', content: '본문' }]);
+    // 시드는 start 바디가 아니라 선적재(PUT /seeds)로 실리고, start에는 매니페스트만 남는다(prism 스펙 §4)
+    const seedsBody = JSON.parse(spy.mock.calls.find(([url]) => String(url).endsWith('/seeds'))?.[1]?.body as string) as {
+      files: unknown[];
+    };
+    expect(seedsBody.files).toEqual([{ path: 'manuscript/v1.txt', content: '본문' }]);
+    expect((body.staged as { path: string }[]).map((f) => f.path)).toEqual(['manuscript/v1.txt']);
+    expect('files' in body).toBe(false);
     // 티어 무지정은 high — 행·워크플로 이름이 같은 값을 가리킨다
     expect(inserts[2].row.tier).toBe('high');
     expect(body.workflow).toBe('high');

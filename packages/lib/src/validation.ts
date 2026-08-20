@@ -8,6 +8,14 @@ export const userSchema = {
   name: z.string().trim().min(1, '이름을 입력해주세요').max(20, '이름은 20자를 넘을 수 없어요'),
 };
 
+export const prismSchema = {
+  title: z
+    .string({ error: '대화 제목을 입력해 주세요' })
+    .trim()
+    .min(1, { message: '대화 제목을 입력해 주세요' })
+    .max(100, { message: '대화 제목은 100글자를 넘을 수 없어요' }),
+};
+
 export const siteSchema = {
   slug: z
     .string({ error: '스페이스 주소를 입력해 주세요' })

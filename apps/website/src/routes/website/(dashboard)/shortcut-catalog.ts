@@ -132,6 +132,7 @@ export const shortcutCategories: ShortcutCategory[] = [
         sequences: [{ keys: ['mod', 'shift', 'M'] }],
         cheatsheet: {},
       },
+      { id: 'toggle-prism-panel', label: 'AI 패널 열기/닫기', sequences: [{ keys: ['mod', 'E'] }], cheatsheet: {} },
       { id: 'page-zoom-in', label: '페이지 확대', sequences: [{ keys: ['mod', '+'] }], cheatsheet: {} },
       { id: 'page-zoom-out', label: '페이지 축소', sequences: [{ keys: ['mod', '-'] }], cheatsheet: {} },
       { id: 'page-zoom-reset', label: '페이지 배율 100%', sequences: [{ keys: ['mod', '0'] }], cheatsheet: {} },

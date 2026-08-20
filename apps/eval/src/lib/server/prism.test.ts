@@ -11,6 +11,7 @@ import {
   openEvents,
   PrismApiError,
   resolveAskUser,
+  stageSeeds,
   startWorkflow,
 } from './prism.ts';
 
@@ -20,27 +21,55 @@ const stub = (status: number, body: unknown) => vi.spyOn(globalThis, 'fetch').mo
 afterEach(() => vi.restoreAllMocks());
 
 describe('prism client', () => {
-  it('startWorkflow는 계약 형태 그대로 보낸다', async () => {
-    const spy = stub(200, {});
+  it('startWorkflow는 적재(PUT /seeds) 후 매니페스트로 시작한다', async () => {
+    const digest = { path: 'manuscript/v1.txt', bytes: 6, sha256: 'a'.repeat(64) };
+    const spy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(Response.json({ staged: [digest] }, { status: 200 }))
+      .mockResolvedValueOnce(Response.json({}, { status: 200 }));
     await startWorkflow(env, {
       workflowId: 'ev-x',
       workflow: 'medium',
       input: { manuscriptPath: 'manuscript/v1.txt', meta: { title: '제목', subtitle: null } },
       files: [{ path: 'manuscript/v1.txt', content: '본문' }],
     });
-    const [url, init] = spy.mock.calls[0];
+    expect(spy).toHaveBeenCalledTimes(2);
+    const [putUrl, putInit] = spy.mock.calls[0];
+    expect(putUrl).toBe('https://prism.test/workflows/ev-x/seeds');
+    expect(putInit?.method).toBe('PUT');
+    expect(putInit?.headers).toMatchObject({ authorization: 'Bearer tk', 'content-type': 'application/json' });
+    expect(JSON.parse(putInit?.body as string)).toEqual({ files: [{ path: 'manuscript/v1.txt', content: '본문' }] });
+    const [url, init] = spy.mock.calls[1];
     expect(url).toBe('https://prism.test/workflows');
     expect(init?.method).toBe('POST');
-    expect(init?.headers).toMatchObject({ authorization: 'Bearer tk', 'content-type': 'application/json' });
     const body = JSON.parse(init?.body as string);
-    // workflow는 호출자가 정한다 — 티어 이름이 곧 워크플로 이름이다
+    // workflow는 호출자가 정한다 — 티어 이름이 곧 워크플로 이름이다. files 대신 적재 매니페스트(staged)가 실린다.
     expect(body).toEqual({
       workflowId: 'ev-x',
       app: 'feedback',
       workflow: 'medium',
       input: { manuscriptPath: 'manuscript/v1.txt', meta: { title: '제목', subtitle: null } },
-      files: [{ path: 'manuscript/v1.txt', content: '본문' }],
+      staged: [digest],
     });
+  });
+
+  it('stageSeeds는 예산 초과에서 묶음을 가르고 매니페스트를 합친다', async () => {
+    const d = (path: string) => ({ path, bytes: 1, sha256: 'b'.repeat(64) });
+    const spy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(Response.json({ staged: [d('a.txt'), d('b.txt')] }, { status: 200 }))
+      .mockResolvedValueOnce(Response.json({ staged: [d('c.txt')] }, { status: 200 }));
+    // 비용 모델은 (path+content 유닛)×2+64 — 예산 500이면 두 개까지 한 묶음, 셋째에서 갈린다
+    const files = [
+      { path: 'a.txt', content: 'x'.repeat(50) },
+      { path: 'b.txt', content: 'x'.repeat(50) },
+      { path: 'c.txt', content: 'x'.repeat(50) },
+    ];
+    const staged = await stageSeeds(env, 'ev-y', files, 500);
+    expect(spy).toHaveBeenCalledTimes(2);
+    expect((JSON.parse(spy.mock.calls[0][1]?.body as string) as { files: unknown[] }).files).toHaveLength(2);
+    expect((JSON.parse(spy.mock.calls[1][1]?.body as string) as { files: unknown[] }).files).toHaveLength(1);
+    expect(staged.map((s) => s.path)).toEqual(['a.txt', 'b.txt', 'c.txt']);
   });
 
   it('cancelWorkflow는 바디 없이 보낸다', async () => {

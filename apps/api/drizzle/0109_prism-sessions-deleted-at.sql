@@ -1,0 +1,1 @@
+ALTER TABLE "prism_sessions" ADD COLUMN "deleted_at" timestamp with time zone;

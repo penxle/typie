@@ -1,0 +1,23 @@
+{
+  "name": "@typie/prism",
+  "version": "0.0.1",
+  "private": true,
+  "sideEffects": false,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint:eslint": "eslint --max-warnings 0 .",
+    "lint:typecheck": "tsc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@typie/tsconfig": "workspace:*",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10"
+  }
+}

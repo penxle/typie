@@ -16,6 +16,7 @@
   import FolderPlusIcon from '~icons/lucide/folder-plus';
   import GripVerticalIcon from '~icons/lucide/grip-vertical';
   import HomeIcon from '~icons/lucide/home';
+  import PyramidIcon from '~icons/lucide/pyramid';
   import SearchIcon from '~icons/lucide/search';
   import SquarePenIcon from '~icons/lucide/square-pen';
   import StickyNoteIcon from '~icons/lucide/sticky-note';
@@ -25,6 +26,7 @@
   import { SubscribeModal } from './@subscription/subscribe-modal.svelte';
   import TrialWidget from './@subscription/TrialWidget.svelte';
   import EntityTree from './@tree/EntityTree.svelte';
+  import FeedbackPopover from './FeedbackPopover.svelte';
   import Profile from './Profile.svelte';
   import SpaceMenu from './SpaceMenu.svelte';
   import type { DashboardLayout_Sidebar_user$key } from '$mearie';
@@ -558,6 +560,33 @@
           <span>J</span>
         </div>
       </button>
+
+      {#if app.state.prismAccess}
+        <button
+          class={flex({
+            alignItems: 'center',
+            gap: '8px',
+            paddingX: '8px',
+            paddingY: '5px',
+            borderRadius: '6px',
+            transition: 'common',
+            _supportHover: { backgroundColor: 'surface.muted' },
+          })}
+          onclick={() => (app.preference.current.prismPanelOpen = !app.preference.current.prismPanelOpen)}
+          type="button"
+        >
+          <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={PyramidIcon} size={16} />
+          <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.muted' })}>PRISM</span>
+          <div class={flex({ alignItems: 'center', marginLeft: 'auto', color: 'text.faint', fontSize: '11px' })}>
+            {#if navigator.platform.includes('Mac')}
+              <Icon style={css.raw({ marginRight: '2px' })} icon={CommandIcon} size={10} />
+            {:else}
+              <span>Ctrl+</span>
+            {/if}
+            <span>E</span>
+          </div>
+        </button>
+      {/if}
     </div>
 
     <div class={flex({ flexDirection: 'column', gap: '1px', paddingX: '12px', marginTop: '8px' })}>
@@ -690,6 +719,10 @@
     </div>
 
     <TrialWidget user$key={user.data} />
+
+    <div class={css({ paddingX: '12px', paddingTop: '4px' })}>
+      <FeedbackPopover />
+    </div>
 
     <!-- 프로필 -->
     <Profile user$key={user.data} bind:open={profileOpen} />

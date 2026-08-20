@@ -45,6 +45,7 @@
     "@typie/assets": "workspace:*",
     "@typie/editor-ffi": "workspace:*",
     "@typie/lib": "workspace:*",
+    "@typie/prism": "workspace:*",
     "@typie/styled-system": "workspace:*",
     "@typie/tsconfig": "workspace:*",
     "@typie/ui": "workspace:*",
