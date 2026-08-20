@@ -7,16 +7,16 @@ use editor_transaction::Transaction;
 use crate::CommandResult;
 use crate::commands::{apply_cell_fill_plan, apply_table_grid_plan};
 use crate::helpers::{
-    LinearJoinExecution, SliceInsertionTarget, SliceOutputPositionSpec, SliceOutputRelation,
+    LinearJoinExecution, SliceInsertionTarget, SliceOutputRelation,
     apply_cross_range_removal_without_join, apply_linear_deletion_plan, block_parent_and_index,
     install_planned_selection, materialize_planned_endpoint, materialize_planned_selection,
-    remap_linear_deletion_plan, split_block_wrapper_before_child,
+    remap_linear_deletion_plan, resolve_live_slice_output_dot, split_block_wrapper_before_child,
 };
 use crate::judgments::{
-    AppliedSliceInsertion, FitOutcome, JoinedReplacementPlan, LinearFinalSelection, LinearFitPlan,
-    LinearMutation, PlannedBoundaryInsertion, PlannedBranchInsertion, PlannedBranchNode,
-    PlannedBranchSplit, PlannedJoin, PlannedOutputKey, RangePlacement, SliceFitPlan,
-    SliceFitPlanKind, apply_slice_insertion_plan, fit_slice,
+    AppliedSliceInsertion, BoundSliceOutputPosition, FitOutcome, JoinedReplacementPlan,
+    LinearFinalSelection, LinearFitPlan, LinearMutation, PlannedBoundaryInsertion,
+    PlannedBranchInsertion, PlannedBranchNode, PlannedBranchSplit, PlannedJoin, PlannedOutputKey,
+    RangePlacement, SliceFitPlan, SliceFitPlanKind, apply_slice_insertion_plan, fit_slice,
 };
 use crate::types::SliceProvenance;
 
@@ -161,11 +161,8 @@ fn apply_linear_fit_plan(
                     ));
                 }
                 let left = apply_boundary_insertion(tr, left, provenance)?;
-                validate_applied_insertion(tr, &left)?;
                 let right = apply_boundary_insertion(tr, right, provenance)?;
-                validate_applied_insertion(tr, &right)?;
-                let middle = apply_branch_insertion(tr, middle, provenance)?;
-                validate_applied_insertion(tr, &middle)?;
+                apply_branch_insertion(tr, middle, provenance)?;
                 if applied_insertion
                     .replace(AppliedLinearInsertion::SeparatedOpenEdges { left, right })
                     .is_some()
@@ -209,20 +206,18 @@ fn apply_linear_fit_plan(
             })?;
             match applied {
                 AppliedLinearInsertion::Single(applied) => {
-                    let caret =
-                        resolve_planned_output_position(tr, &applied, applied.output.caret)?;
+                    let caret = resolve_bound_output_position(tr, &applied.caret)?;
                     let inserted = Selection::new(
-                        resolve_planned_output_position(tr, &applied, applied.output.anchor)?,
-                        resolve_planned_output_position(tr, &applied, applied.output.head)?,
+                        resolve_bound_output_position(tr, &applied.anchor)?,
+                        resolve_bound_output_position(tr, &applied.head)?,
                     );
-                    validate_observed_insertion_selection(tr, &applied, caret, inserted)?;
                     (caret, inserted)
                 }
                 AppliedLinearInsertion::SeparatedOpenEdges { left, right } => {
-                    let caret = resolve_planned_output_position(tr, &right, right.output.caret)?;
+                    let caret = resolve_bound_output_position(tr, &right.caret)?;
                     let inserted = Selection::new(
-                        resolve_planned_output_position(tr, &left, left.output.anchor)?,
-                        resolve_planned_output_position(tr, &right, right.output.head)?,
+                        resolve_bound_output_position(tr, &left.anchor)?,
+                        resolve_bound_output_position(tr, &right.head)?,
                     );
                     (caret, inserted)
                 }
@@ -312,82 +307,17 @@ fn resolve_final_position(
         })
 }
 
-fn validate_observed_insertion_selection(
+fn resolve_bound_output_position(
     tr: &Transaction,
-    applied: &AppliedSliceInsertion,
-    caret: Position,
-    inserted: Selection,
-) -> Result<(), crate::CommandError> {
-    validate_observed_selection(
-        tr,
-        caret,
-        inserted,
-        applied.observed_caret,
-        applied.observed_inserted,
-    )
-}
-
-fn validate_applied_insertion(
-    tr: &Transaction,
-    applied: &AppliedSliceInsertion,
-) -> Result<(), crate::CommandError> {
-    let caret = resolve_planned_output_position(tr, applied, applied.output.caret)?;
-    let inserted = Selection::new(
-        resolve_planned_output_position(tr, applied, applied.output.anchor)?,
-        resolve_planned_output_position(tr, applied, applied.output.head)?,
-    );
-    validate_observed_insertion_selection(tr, applied, caret, inserted)
-}
-
-fn validate_observed_selection(
-    tr: &Transaction,
-    caret: Position,
-    inserted: Selection,
-    observed_caret: Position,
-    observed_inserted: Selection,
-) -> Result<(), crate::CommandError> {
-    let view = tr.view();
-    let normalize = |selection: Selection| selection.normalize(&view).unwrap_or(selection);
-    let planned_caret = normalize(Selection::collapsed(caret));
-    let observed_caret = normalize(Selection::collapsed(resolve_final_position(
-        tr,
-        observed_caret,
-    )?));
-    if planned_caret != observed_caret {
-        return Err(crate::CommandError::Corrupted(format!(
-            "Slice executor produced a different caret than the planned output: planned={planned_caret:?}, observed={observed_caret:?}"
-        )));
-    }
-    let planned_inserted = normalize(inserted);
-    let observed_inserted = normalize(Selection::new(
-        resolve_final_position(tr, observed_inserted.anchor)?,
-        resolve_final_position(tr, observed_inserted.head)?,
-    ));
-    if planned_inserted != observed_inserted {
-        return Err(crate::CommandError::Corrupted(format!(
-            "Slice executor produced a different inserted range than the planned output: planned={planned_inserted:?}, observed={observed_inserted:?}"
-        )));
-    }
-    Ok(())
-}
-
-fn resolve_planned_output_position(
-    tr: &Transaction,
-    applied: &AppliedSliceInsertion,
-    planned: SliceOutputPositionSpec,
+    bound: &BoundSliceOutputPosition,
 ) -> Result<Position, crate::CommandError> {
-    let dot = applied.nodes.get(planned.node).copied().ok_or_else(|| {
-        crate::CommandError::Corrupted(
-            "Slice final selection referenced an unavailable planned output node".into(),
-        )
-    })?;
-    let dot = resolve_live_output_dot(tr, dot).ok_or_else(|| {
+    let view = tr.view();
+    let dot = resolve_live_slice_output_dot(&view, bound.dot).ok_or_else(|| {
         crate::CommandError::Corrupted(
             "Slice final selection output node no longer resolves".into(),
         )
     })?;
-    let view = tr.view();
-    let mut position = match planned.relation {
+    let mut position = match bound.relation {
         SliceOutputRelation::Before | SliceOutputRelation::After => {
             let (parent, index) = output_parent_and_index(&view, dot).ok_or_else(|| {
                 crate::CommandError::Corrupted(
@@ -396,7 +326,7 @@ fn resolve_planned_output_position(
             })?;
             Position::new(
                 parent,
-                index + usize::from(matches!(planned.relation, SliceOutputRelation::After)),
+                index + usize::from(matches!(bound.relation, SliceOutputRelation::After)),
             )
         }
         SliceOutputRelation::AfterTerminalPageBreak => {
@@ -458,19 +388,8 @@ fn resolve_planned_output_position(
             }
         }
     };
-    position.affinity = planned.affinity;
+    position.affinity = bound.affinity;
     Ok(position)
-}
-
-fn resolve_live_output_dot(tr: &Transaction, dot: editor_crdt::Dot) -> Option<editor_crdt::Dot> {
-    let view = tr.view();
-    if view.node(dot).is_some() || view.block_of(dot).is_some() {
-        return Some(dot);
-    }
-    let resolved = view.alias_classes().resolve_with(dot, |candidate| {
-        view.node(candidate).is_some() || view.block_of(candidate).is_some()
-    });
-    (view.node(resolved).is_some() || view.block_of(resolved).is_some()).then_some(resolved)
 }
 
 fn output_parent_and_index(
@@ -675,12 +594,12 @@ mod tests {
     use editor_crdt::{Dot, ListOp, sequence::Bias as SeqBias};
     use editor_macros::state;
     use editor_model::{
-        Alignment, ChildView, EditOp, Fragment, Modifier, NodeType, PlainBlockquoteNode,
-        PlainHorizontalRuleNode, PlainListItemNode, PlainNode, PlainOrderedListNode,
-        PlainPageBreakNode, PlainParagraphNode, PlainTextNode, SeqItem,
+        AliasOp, AliasRun, Alignment, ChildView, EditOp, Fragment, Modifier, NodeType,
+        PlainBlockquoteNode, PlainHorizontalRuleNode, PlainListItemNode, PlainNode,
+        PlainOrderedListNode, PlainPageBreakNode, PlainParagraphNode, PlainTextNode, SeqItem,
     };
     use editor_resource::Resource;
-    use editor_state::{Position, Selection, State};
+    use editor_state::{Affinity, Position, Selection, State};
     use editor_transaction::Step;
 
     use super::*;
@@ -742,6 +661,61 @@ mod tests {
             open_start: 1,
             open_end: 1,
         }
+    }
+
+    #[test]
+    fn bound_output_position_resolves_canonical_live_alias() {
+        let (initial, paragraph) = state! {
+            doc { root { paragraph: paragraph { text("abc") } } }
+            selection: (paragraph, 0)
+        };
+        let chars = initial
+            .view()
+            .node(paragraph)
+            .expect("paragraph")
+            .children()
+            .filter_map(|child| match child {
+                ChildView::Leaf(leaf) => Some(leaf.dot()),
+                ChildView::Block(_) => None,
+            })
+            .collect::<Vec<_>>();
+        let [raw, first_live, canonical_live] = chars.as_slice() else {
+            panic!("expected three inline leaves");
+        };
+
+        let mut deletion = Transaction::new(&initial);
+        deletion.remove_text(paragraph, 0, 1).unwrap();
+        let (mut state, ..) = deletion.commit();
+        for live in [first_live, canonical_live] {
+            state
+                .projected_mut()
+                .apply(EditOp::Alias(AliasOp {
+                    pairs: vec![AliasRun {
+                        old_start: *raw,
+                        len: 1,
+                        new_start: *live,
+                    }],
+                }))
+                .unwrap();
+        }
+
+        let tr = Transaction::new(&state);
+        assert_eq!(
+            resolve_bound_output_position(
+                &tr,
+                &BoundSliceOutputPosition {
+                    dot: *raw,
+                    relation: SliceOutputRelation::After,
+                    affinity: Affinity::Downstream,
+                },
+            )
+            .unwrap(),
+            Position {
+                node: paragraph,
+                offset: 2,
+                affinity: Affinity::Downstream,
+            }
+        );
     }
 
     #[test]
@@ -910,48 +884,6 @@ mod tests {
             steps.is_empty(),
             "the failed output resolution must be atomic"
         );
-    }
-
-    #[test]
-    fn fitted_insertion_rejects_a_corrupted_output_source_path_before_mutation() {
-        let (initial, _p) = state! {
-            doc { root { p: paragraph { text("abc") } } }
-            selection: (p, 1)
-        };
-        let FitOutcome::Plan(mut plan) = fit_slice(
-            &initial,
-            initial.selection.expect("selection"),
-            Slice::new(
-                vec![Fragment::leaf(PlainNode::Text(PlainTextNode {
-                    text: "X".into(),
-                }))],
-                0,
-                0,
-            ),
-        )
-        .unwrap() else {
-            panic!("inline insertion must fit");
-        };
-        let SliceFitPlanKind::Linear(LinearFitPlan {
-            mutation: LinearMutation::PointInsertion { insertion },
-            ..
-        }) = &mut plan.kind
-        else {
-            panic!("expected a point insertion plan");
-        };
-        let crate::judgments::SliceInsertionPlan::DirectInline { output, .. } = insertion else {
-            panic!("expected direct inline insertion");
-        };
-        output.nodes[0].source = crate::helpers::SliceOutputSource::InlineSlot { index: 99 };
-
-        let mut tr = Transaction::new(&initial);
-        assert!(
-            apply_fitted_slice(&mut tr, plan, SliceProvenance::Formatted).is_err(),
-            "a planned output key detached from its source slot must be rejected"
-        );
-        let (actual, steps, ..) = tr.commit();
-        assert_state_eq!(&actual, &initial);
-        assert!(steps.is_empty(), "the stale output plan must be atomic");
     }
 
     #[test]
@@ -2163,7 +2095,7 @@ mod tests {
 
     #[test]
     fn open_edges_are_inserted_before_a_middle_list_merges_their_containers() {
-        let (initial, _left, _right) = state! {
+        let (initial, left, right) = state! {
             doc { root {
                 ordered_list {
                     list_item { left: paragraph { text("AB") } }
@@ -2186,9 +2118,49 @@ mod tests {
             1,
         );
 
+        let FitOutcome::Plan(plan) =
+            fit_slice(&initial, initial.selection.expect("selection"), slice).unwrap()
+        else {
+            panic!("separated open edges must produce a fitted plan");
+        };
         let mut tr = Transaction::new(&initial);
-        assert!(insert_slice(&mut tr, slice, SliceProvenance::Formatted).unwrap());
+        let inserted = apply_fitted_slice(&mut tr, plan, SliceProvenance::Formatted).unwrap();
         let (actual, _, recorded, ..) = tr.commit();
+        let right_survivor = {
+            let view = actual.view();
+            view.alias_classes()
+                .members_of(right)
+                .into_iter()
+                .flatten()
+                .copied()
+                .find(|dot| view.node(*dot).is_some())
+                .expect("right alias must survive the list merge")
+        };
+
+        assert_ne!(right_survivor, right);
+        assert_eq!(
+            inserted,
+            Selection::new(
+                Position {
+                    node: left,
+                    offset: 1,
+                    affinity: Affinity::Upstream,
+                },
+                Position {
+                    node: right_survivor,
+                    offset: 1,
+                    affinity: Affinity::Upstream,
+                },
+            )
+        );
+        assert_eq!(
+            actual.selection,
+            Some(Selection::collapsed(Position {
+                node: right_survivor,
+                offset: 1,
+                affinity: Affinity::Downstream,
+            }))
+        );
 
         {
             let view = actual.view();

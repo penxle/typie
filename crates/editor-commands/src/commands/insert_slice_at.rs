@@ -183,18 +183,21 @@ mod tests {
         }
     }
 
-    fn open_bullet_list_slice(text: &str, open_start: u32, open_end: u32) -> Slice {
+    fn bullet_list_slice(texts: &[&str], open_start: u32, open_end: u32) -> Slice {
         Slice {
             content: vec![Fragment {
                 node: PlainNode::BulletList(PlainBulletListNode::default()),
                 modifiers: vec![],
                 carry: vec![],
-                children: vec![Fragment {
-                    node: PlainNode::ListItem(PlainListItemNode::default()),
-                    modifiers: vec![],
-                    carry: vec![],
-                    children: vec![paragraph_fragment(text)],
-                }],
+                children: texts
+                    .iter()
+                    .map(|text| Fragment {
+                        node: PlainNode::ListItem(PlainListItemNode::default()),
+                        modifiers: vec![],
+                        carry: vec![],
+                        children: vec![paragraph_fragment(text)],
+                    })
+                    .collect(),
             }],
             open_start,
             open_end,
@@ -535,6 +538,144 @@ mod tests {
     }
 
     #[test]
+    fn insert_slice_at_direct_inline_returns_inserted_range() {
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("ab") } } }
+            selection: none
+        };
+
+        let mut tr = Transaction::new(&initial);
+        let inserted = insert_slice_at(
+            &mut tr,
+            Position::new(p1, 1),
+            Slice::new(
+                vec![Fragment::leaf(PlainNode::Text(PlainTextNode {
+                    text: "X".into(),
+                }))],
+                0,
+                0,
+            ),
+            SliceProvenance::Plain,
+        )
+        .expect("insert succeeds")
+        .expect("slice inserted");
+        let (actual, ..) = tr.commit();
+
+        assert_eq!(actual.view().node(p1).unwrap().inline_text(), "aXb");
+        assert_eq!(
+            inserted,
+            Selection::new(
+                Position {
+                    node: p1,
+                    offset: 1,
+                    affinity: Affinity::Downstream,
+                },
+                Position {
+                    node: p1,
+                    offset: 2,
+                    affinity: Affinity::Downstream,
+                },
+            )
+        );
+    }
+
+    #[test]
+    fn insert_plain_text_ending_in_newline_returns_only_authored_text_range() {
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("ab") } } }
+            selection: none
+        };
+
+        let mut tr = Transaction::new(&initial);
+        let inserted = insert_slice_at(
+            &mut tr,
+            Position::new(p1, 1),
+            Slice::from_text("X\n"),
+            SliceProvenance::Plain,
+        )
+        .expect("insert succeeds")
+        .expect("slice inserted");
+        let (actual, ..) = tr.commit();
+
+        let view = actual.view();
+        let paragraphs = view
+            .root()
+            .expect("root exists")
+            .child_blocks()
+            .collect::<Vec<_>>();
+        assert_eq!(
+            paragraphs
+                .iter()
+                .map(|paragraph| paragraph.inline_text())
+                .collect::<Vec<_>>(),
+            ["aX", "b"]
+        );
+        assert_eq!(
+            inserted,
+            Selection::new(
+                Position {
+                    node: paragraphs[0].id(),
+                    offset: 1,
+                    affinity: Affinity::Upstream,
+                },
+                Position {
+                    node: paragraphs[0].id(),
+                    offset: 2,
+                    affinity: Affinity::Upstream,
+                },
+            )
+        );
+    }
+
+    #[test]
+    fn insert_newline_only_returns_the_authored_paragraph_boundary() {
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("ab") } } }
+            selection: none
+        };
+
+        let mut tr = Transaction::new(&initial);
+        let inserted = insert_slice_at(
+            &mut tr,
+            Position::new(p1, 1),
+            Slice::from_text("\n"),
+            SliceProvenance::Plain,
+        )
+        .expect("insert succeeds")
+        .expect("slice inserted");
+        let (actual, ..) = tr.commit();
+
+        let view = actual.view();
+        let paragraphs = view
+            .root()
+            .expect("root exists")
+            .child_blocks()
+            .collect::<Vec<_>>();
+        assert_eq!(
+            paragraphs
+                .iter()
+                .map(|paragraph| paragraph.inline_text())
+                .collect::<Vec<_>>(),
+            ["a", "b"]
+        );
+        assert_eq!(
+            inserted,
+            Selection::new(
+                Position {
+                    node: paragraphs[0].id(),
+                    offset: 1,
+                    affinity: Affinity::Upstream,
+                },
+                Position {
+                    node: paragraphs[1].id(),
+                    offset: 0,
+                    affinity: Affinity::Downstream,
+                },
+            )
+        );
+    }
+
+    #[test]
     fn insert_open_list_context_merges_items_at_list_boundary() {
         let (initial, list) = state! {
             doc { root {
@@ -551,11 +692,26 @@ mod tests {
         let inserted = insert_slice_at(
             &mut tr,
             Position::new(list, 1),
-            open_bullet_list_slice("B", 1, 1),
+            bullet_list_slice(&["B"], 1, 1),
             SliceProvenance::Formatted,
         )
-        .expect("command succeeds");
-        assert!(inserted.is_some());
+        .expect("command succeeds")
+        .expect("slice inserted");
+        assert_eq!(
+            inserted,
+            Selection::new(
+                Position {
+                    node: list,
+                    offset: 1,
+                    affinity: Affinity::Downstream,
+                },
+                Position {
+                    node: list,
+                    offset: 2,
+                    affinity: Affinity::Upstream,
+                },
+            )
+        );
         let (actual, ..) = tr.commit();
 
         let view = actual.view();
@@ -565,14 +721,126 @@ mod tests {
     }
 
     #[test]
-    fn closed_list_between_adjacent_lists_uses_the_planned_earlier_kind_merges() {
+    fn insert_slice_at_open_ancestor_splice_returns_inserted_range() {
+        let (initial, target) = state! {
+            doc { root {
+                blockquote { target: paragraph { text("ab") } }
+                paragraph {}
+            } }
+            selection: none
+        };
+        let slice = Slice {
+            content: vec![Fragment {
+                node: NodeType::Blockquote.into_node().to_plain(),
+                modifiers: vec![],
+                carry: vec![],
+                children: vec![paragraph_fragment("X")],
+            }],
+            open_start: 2,
+            open_end: 2,
+        };
+
+        let mut tr = Transaction::new(&initial);
+        let inserted = insert_slice_at(
+            &mut tr,
+            Position::new(target, 1),
+            slice,
+            SliceProvenance::Formatted,
+        )
+        .expect("insert succeeds")
+        .expect("slice inserted");
+        let (actual, ..) = tr.commit();
+
+        assert_eq!(actual.view().node(target).unwrap().inline_text(), "aXb");
+        assert_eq!(
+            inserted,
+            Selection::new(
+                Position {
+                    node: target,
+                    offset: 1,
+                    affinity: Affinity::Upstream,
+                },
+                Position {
+                    node: target,
+                    offset: 2,
+                    affinity: Affinity::Downstream,
+                },
+            )
+        );
+    }
+
+    #[test]
+    fn insert_slice_at_open_ancestor_splice_returns_multi_edge_range() {
+        let (initial, target) = state! {
+            doc { root {
+                blockquote { target: paragraph { text("xy") } }
+                paragraph {}
+            } }
+            selection: none
+        };
+        let slice = Slice {
+            content: vec![Fragment {
+                node: NodeType::Blockquote.into_node().to_plain(),
+                modifiers: vec![],
+                carry: vec![],
+                children: vec![paragraph_fragment("A"), paragraph_fragment("B")],
+            }],
+            open_start: 2,
+            open_end: 2,
+        };
+
+        let mut tr = Transaction::new(&initial);
+        let inserted = insert_slice_at(
+            &mut tr,
+            Position::new(target, 1),
+            slice,
+            SliceProvenance::Formatted,
+        )
+        .expect("insert succeeds")
+        .expect("slice inserted");
+        let (actual, ..) = tr.commit();
+        let view = actual.view();
+        let paragraphs = view
+            .node(target)
+            .expect("first paragraph remains")
+            .parent()
+            .expect("blockquote remains")
+            .child_blocks()
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            paragraphs
+                .iter()
+                .map(|paragraph| paragraph.inline_text())
+                .collect::<Vec<_>>(),
+            ["xA", "By"]
+        );
+        assert_eq!(
+            inserted,
+            Selection::new(
+                Position {
+                    node: paragraphs[0].id(),
+                    offset: 1,
+                    affinity: Affinity::Upstream,
+                },
+                Position {
+                    node: paragraphs[1].id(),
+                    offset: 1,
+                    affinity: Affinity::Downstream,
+                },
+            )
+        );
+    }
+
+    #[test]
+    fn multi_item_closed_list_between_adjacent_lists_returns_the_inserted_range() {
         let (initial, root, earlier) = state! {
             doc { root: root {
                 earlier: ordered_list {
                     list_item { paragraph { text("A") } }
                 }
                 bullet_list {
-                    list_item { paragraph { text("C") } }
+                    list_item { paragraph { text("D") } }
                 }
                 paragraph {}
             } }
@@ -583,7 +851,7 @@ mod tests {
         let inserted = insert_slice_at(
             &mut tr,
             Position::new(root, 1),
-            open_bullet_list_slice("B", 0, 0),
+            bullet_list_slice(&["B", "C"], 0, 0),
             SliceProvenance::Formatted,
         )
         .expect("command succeeds");
@@ -597,7 +865,7 @@ mod tests {
                 },
                 Position {
                     node: earlier,
-                    offset: 2,
+                    offset: 3,
                     affinity: Affinity::Upstream,
                 },
             ))
@@ -619,7 +887,7 @@ mod tests {
         assert_eq!(lists.len(), 1);
         assert_eq!(lists[0].id(), earlier);
         assert_eq!(lists[0].node_type(), NodeType::OrderedList);
-        assert_eq!(list_item_texts(&view, earlier), ["A", "B", "C"]);
+        assert_eq!(list_item_texts(&view, earlier), ["A", "B", "C", "D"]);
     }
 
     #[test]
@@ -638,7 +906,7 @@ mod tests {
         let inserted = insert_slice_at(
             &mut tr,
             Position::new(empty, 0),
-            open_bullet_list_slice("B", 0, 0),
+            bullet_list_slice(&["B"], 0, 0),
             SliceProvenance::Formatted,
         )
         .expect("command succeeds")
@@ -693,7 +961,7 @@ mod tests {
             insert_slice_at(
                 &mut tr,
                 Position::new(list, 1),
-                open_bullet_list_slice("B", 3, 0),
+                bullet_list_slice(&["B"], 3, 0),
                 SliceProvenance::Formatted,
             )
             .expect("command succeeds")
@@ -719,7 +987,7 @@ mod tests {
             insert_slice_at(
                 &mut tr,
                 Position::new(list, 1),
-                open_bullet_list_slice("B", 0, 3),
+                bullet_list_slice(&["B"], 0, 3),
                 SliceProvenance::Formatted,
             )
             .expect("command succeeds")
