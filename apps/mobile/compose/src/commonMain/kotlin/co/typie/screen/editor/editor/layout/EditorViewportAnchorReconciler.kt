@@ -257,7 +257,9 @@ internal fun reconcileViewportAnchorObservation(
         presentationFrame,
         contentOriginY,
       )
-  if (scrollChanged && handoffTarget == null) {
+  if (scrollChanged && handoffTarget != null) {
+    geometry?.let { anchorState.acceptGeometry(it, viewportState.scrollOffset.y) }
+  } else if (scrollChanged) {
     val preferredSelectionGeometry =
       if (!viewportState.lastScrollWasAuto) {
         resolvePreferredSelectionViewportAnchorGeometry(

@@ -102,10 +102,12 @@ internal class EditorSmoothScrollSession(
 
   fun finishIfNearTarget(request: EditorBringIntoViewRequests.Request): Boolean {
     val target = motion?.snapshot()?.target ?: return false
-    if (this.request !== request || abs(target - viewportState.scrollOffset.y) > 1.0) {
+    val current = viewportState.scrollOffset.y
+    val sameRequest = this.request === request
+    val nearTarget = abs(target - current) <= 1.0
+    if (!sameRequest || !nearTarget) {
       return false
     }
-    viewportState.scrollToY(targetY = target.toFloat(), isAutoScroll = true)
     stop()
     return true
   }

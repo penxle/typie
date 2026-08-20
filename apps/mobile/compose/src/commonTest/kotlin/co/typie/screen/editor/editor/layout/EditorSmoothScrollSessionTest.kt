@@ -23,7 +23,7 @@ import kotlinx.coroutines.test.runTest
 @OptIn(ExperimentalCoroutinesApi::class)
 class EditorSmoothScrollSessionTest {
   @Test
-  fun `no-op near the active target finishes at the exact target`() =
+  fun `no-op near the active target finishes at the current position`() =
     runTest(StandardTestDispatcher()) {
       val frameClock = BroadcastFrameClock()
       val viewportState = viewportState()
@@ -47,7 +47,7 @@ class EditorSmoothScrollSessionTest {
       viewportState.scrollToY(targetY = 579.25f, isAutoScroll = true)
 
       assertTrue(session.finishIfNearTarget(request))
-      assertEquals(580f, viewportState.scrollOffset.y)
+      assertEquals(579.25f, viewportState.scrollOffset.y)
       assertFalse(session.active)
     }
 

@@ -894,7 +894,7 @@ describe('web editor frame synchronization', () => {
     ).toBeLessThanOrEqual(1);
   });
 
-  it('converges to the final tracked geometry when preceding page edits arrive near completion', async () => {
+  it('converges within scroll tolerance when preceding page edits arrive near completion', async () => {
     const { editor, errorId, presentation, scrollRoot } = await prepareTrackedItemSmoothReveal(32, 10);
     let completed = false;
     void presentation.then(() => {
@@ -919,7 +919,7 @@ describe('web editor frame synchronization', () => {
     const finalTargetScrollTop = trackedTargetScrollTop(editor, errorId);
     expect(finalTargetScrollTop).not.toBeNull();
     if (finalTargetScrollTop === null) throw new Error('Expected final tracked target geometry');
-    expect(scrollRoot.scrollTop).toBeCloseTo(finalTargetScrollTop, 0);
+    expect(Math.abs(scrollRoot.scrollTop - finalTargetScrollTop)).toBeLessThanOrEqual(1);
   });
 
   it('rejects a presentation without the cursor page native frame', () => {

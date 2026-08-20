@@ -196,12 +196,6 @@ export class EditorScrollScope {
         return false;
       }
       case 'no_scroll': {
-        const smoothTarget = this.#smoothRequest === request ? this.#smoothMotion?.snapshot().target : undefined;
-        const scrollTop = this.#editor.scrollViewport?.getScrollTop();
-        if (smoothTarget !== undefined && scrollTop !== undefined && Math.abs(smoothTarget - scrollTop) <= 1) {
-          this.#finishSmoothReveal();
-          return true;
-        }
         this.#interruptSmoothReveal();
         const revealOrigin = this.#selectionRevealOrigin(request, this.#editor.scrollViewport?.getScrollTop());
         const presented = this.markPresented(snapshot.revision, request);
