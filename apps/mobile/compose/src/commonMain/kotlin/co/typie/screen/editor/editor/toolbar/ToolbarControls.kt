@@ -302,11 +302,11 @@ internal fun Modifier.emitPressInteractions(interactionSource: MutableInteractio
 
 @Composable
 internal fun Modifier.toolbarVerticalSwipeGestures(
-  onPointerSessionStart: () -> Unit,
-  onSwipeUp: () -> Unit,
+  onPointerSessionStart: () -> Unit = {},
+  onSwipeUp: () -> Unit = {},
   onSwipeDown: () -> Unit,
-  onSwipeDownProgress: (ToolbarDismissSwipeProgress) -> Unit,
-  onSwipeDownCancelled: () -> Unit,
+  onSwipeDownProgress: (ToolbarDismissSwipeProgress) -> Unit = {},
+  onSwipeDownCancelled: () -> Unit = {},
 ): Modifier {
   val latestOnPointerSessionStart = rememberUpdatedState(onPointerSessionStart)
   val latestOnSwipeUp = rememberUpdatedState(onSwipeUp)

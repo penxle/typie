@@ -1583,6 +1583,195 @@ class EditorToolbarPagesDesktopTest {
   }
 
   @Test
+  fun primaryDismissDragMovesVisibleToolbarStackTogether() = runComposeUiTest {
+    mainClock.autoAdvance = false
+    var density = 0f
+    setContent {
+      density = LocalDensity.current.density
+      ToolbarTestContent(textScrollState = rememberScrollState(), secondaryToolbarVisible = true)
+    }
+    mainClock.advanceTimeByFrame()
+    val initialPrimaryTop = pageTop(MainPageTag)
+    val initialSecondaryTop = pageTop(SecondaryToolbarTag)
+    val initialIndicatorTop = indicatorTop()
+
+    startToolbarVerticalDrag(37.dp)
+    mainClock.advanceTimeBy(500)
+
+    val expectedOffset = 16f * density
+    assertNear(
+      initialPrimaryTop + expectedOffset,
+      pageTop(MainPageTag),
+      "primary drag should move the primary toolbar",
+    )
+    assertNear(
+      initialSecondaryTop + expectedOffset,
+      pageTop(SecondaryToolbarTag),
+      "primary drag should move the secondary toolbar",
+    )
+    assertNear(
+      initialIndicatorTop + expectedOffset,
+      indicatorTop(),
+      "primary drag should move the indicator",
+    )
+
+    releaseToolbarVerticalDrag()
+    mainClock.autoAdvance = true
+    waitForIdle()
+  }
+
+  @Test
+  fun secondaryContentKeepsFinalHeightWhileStackSlotExpands() = runComposeUiTest {
+    mainClock.autoAdvance = false
+    lateinit var secondaryToolbarVisible: MutableState<Boolean>
+    var density = 0f
+    setContent {
+      secondaryToolbarVisible = remember { mutableStateOf(false) }
+      density = LocalDensity.current.density
+      ToolbarTestContent(
+        textScrollState = rememberScrollState(),
+        secondaryToolbarVisible = secondaryToolbarVisible.value,
+      )
+    }
+    mainClock.advanceTimeByFrame()
+
+    runOnIdle { secondaryToolbarVisible.value = true }
+    mainClock.advanceTimeByFrame()
+    mainClock.advanceTimeBy(ToolbarSecondaryVisibilityMillis.toLong() / 2)
+
+    val secondaryHeight =
+      onNodeWithTag(SecondaryToolbarTag).fetchSemanticsNode().boundsInRoot.height
+    assertNear(
+      ToolbarSecondaryHeight.value * density,
+      secondaryHeight,
+      "secondary content should be measured at its final height during stack expansion",
+    )
+
+    mainClock.autoAdvance = true
+    waitForIdle()
+  }
+
+  @Test
+  fun secondaryExitMovesIndicatorDuringTransition() = runComposeUiTest {
+    mainClock.autoAdvance = false
+    lateinit var secondaryToolbarVisible: MutableState<Boolean>
+    var density = 0f
+    setContent {
+      secondaryToolbarVisible = remember { mutableStateOf(true) }
+      density = LocalDensity.current.density
+      ToolbarTestContent(
+        textScrollState = rememberScrollState(),
+        secondaryToolbarVisible = secondaryToolbarVisible.value,
+        toolbarLayoutHeightOverride = ToolbarStackHeight + ToolbarSecondaryStackHeight,
+      )
+    }
+    mainClock.advanceTimeBy(ToolbarSecondaryVisibilityMillis.toLong() * 2)
+    val initialIndicatorTop = indicatorTop()
+
+    runOnIdle { secondaryToolbarVisible.value = false }
+    mainClock.advanceTimeByFrame()
+    mainClock.advanceTimeBy(ToolbarSecondaryVisibilityMillis.toLong() / 2)
+
+    val indicatorTopDuringExit = indicatorTop()
+    val finalIndicatorTop = initialIndicatorTop + ToolbarSecondaryStackHeight.value * density
+    assertTrue(
+      indicatorTopDuringExit > initialIndicatorTop + 2f,
+      "indicator should start moving down while the secondary toolbar exits",
+    )
+    assertTrue(
+      indicatorTopDuringExit < finalIndicatorTop - 2f,
+      "indicator should still be moving during the secondary toolbar exit",
+    )
+
+    mainClock.autoAdvance = true
+    waitForIdle()
+  }
+
+  @Test
+  fun secondaryDismissDragDoesNotMoveToolbarStack() = runComposeUiTest {
+    mainClock.autoAdvance = false
+    setContent {
+      ToolbarTestContent(textScrollState = rememberScrollState(), secondaryToolbarVisible = true)
+    }
+    mainClock.advanceTimeByFrame()
+    val initialPrimaryTop = pageTop(MainPageTag)
+    val initialSecondaryTop = pageTop(SecondaryToolbarTag)
+    val initialIndicatorTop = indicatorTop()
+
+    startSecondaryToolbarVerticalDrag(37.dp)
+    mainClock.advanceTimeBy(500)
+
+    assertNear(
+      initialPrimaryTop,
+      pageTop(MainPageTag),
+      "secondary drag should not move the primary toolbar",
+    )
+    assertNear(
+      initialSecondaryTop,
+      pageTop(SecondaryToolbarTag),
+      "secondary drag should not move the secondary toolbar",
+    )
+    assertNear(initialIndicatorTop, indicatorTop(), "secondary drag should not move the indicator")
+
+    releaseSecondaryToolbarVerticalDrag()
+    mainClock.autoAdvance = true
+    waitForIdle()
+  }
+
+  @Test
+  fun secondarySwipeDownClearsOnlySecondaryToolbar() = runComposeUiTest {
+    var secondaryClears = 0
+    var toolbarDismissals = 0
+    var keyboardDismissals = 0
+    val haptics = mutableListOf<HapticFeedbackType>()
+    val hapticFeedback =
+      object : HapticFeedback {
+        override fun performHapticFeedback(hapticFeedbackType: HapticFeedbackType) {
+          haptics += hapticFeedbackType
+        }
+      }
+    setContent {
+      ToolbarTestContent(
+        textScrollState = rememberScrollState(),
+        secondaryToolbarVisible = true,
+        onSecondaryToolbarClear = { secondaryClears++ },
+        onToolbarDismissRequest = { toolbarDismissals++ },
+        onKeyboardDismissRequest = { keyboardDismissals++ },
+        hapticFeedback = hapticFeedback,
+      )
+    }
+    waitForIdle()
+
+    swipeSecondaryToolbarDown(40.dp)
+
+    assertEquals(1, secondaryClears)
+    assertEquals(0, toolbarDismissals)
+    assertEquals(0, keyboardDismissals)
+    assertEquals(emptyList(), haptics)
+    assertNear(0f, pageLeft(MainPageTag), "primary toolbar should remain visible")
+  }
+
+  @Test
+  fun secondarySwipeDownBelowActivationThresholdDoesNotClearSecondaryToolbar() = runComposeUiTest {
+    var secondaryClears = 0
+    var toolbarDismissals = 0
+    setContent {
+      ToolbarTestContent(
+        textScrollState = rememberScrollState(),
+        secondaryToolbarVisible = true,
+        onSecondaryToolbarClear = { secondaryClears++ },
+        onToolbarDismissRequest = { toolbarDismissals++ },
+      )
+    }
+    waitForIdle()
+
+    swipeSecondaryToolbarDown(35.dp)
+
+    assertEquals(0, secondaryClears)
+    assertEquals(0, toolbarDismissals)
+  }
+
+  @Test
   fun swipeUpFromToolbarButtonRevealsIndicatorWithoutClickingButton() = runComposeUiTest {
     lateinit var pagerState: ToolbarPagerState
     var toolbarButtonClicks = 0
@@ -1940,6 +2129,30 @@ class EditorToolbarPagesDesktopTest {
     waitForIdle()
   }
 
+  private fun ComposeUiTest.startSecondaryToolbarVerticalDrag(distance: Dp) {
+    onNodeWithTag(SecondaryToolbarTag).performTouchInput {
+      down(center)
+      moveTo(center + Offset(x = 0f, y = distance.toPx()))
+    }
+    waitForIdle()
+  }
+
+  private fun ComposeUiTest.releaseSecondaryToolbarVerticalDrag() {
+    onNodeWithTag(SecondaryToolbarTag).performTouchInput { up() }
+    waitForIdle()
+  }
+
+  private fun ComposeUiTest.swipeSecondaryToolbarDown(distance: Dp) {
+    onNodeWithTag(SecondaryToolbarTag).performTouchInput {
+      swipe(
+        start = center,
+        end = center + Offset(x = 0f, y = distance.toPx()),
+        durationMillis = 120,
+      )
+    }
+    waitForIdle()
+  }
+
   private fun ComposeUiTest.tapToolbarIndicatorPage(pageIndex: Int, pageCount: Int) {
     onNodeWithTag(ToolbarTag).performTouchInput {
       val itemPx = ToolbarIndicatorItemSize.toPx()
@@ -2041,6 +2254,9 @@ class EditorToolbarPagesDesktopTest {
   private fun SemanticsNodeInteractionsProvider.pageTop(tag: String): Float =
     onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.top
 
+  private fun SemanticsNodeInteractionsProvider.indicatorTop(): Float =
+    onNodeWithContentDescription("메인 툴바").fetchSemanticsNode().boundsInRoot.top
+
   private fun assertNear(expected: Float, actual: Float, message: String) {
     assertTrue(abs(expected - actual) <= 2f, "$message. expected=$expected actual=$actual")
   }
@@ -2056,10 +2272,12 @@ class EditorToolbarPagesDesktopTest {
     textItemWidth: Dp = 80.dp,
     onToolbarDismissRequest: () -> Unit = {},
     onKeyboardDismissRequest: () -> Unit = {},
+    onSecondaryToolbarClear: () -> Unit = {},
     onMainButtonClick: () -> Unit = {},
     ancestorModifier: Modifier = Modifier,
     includeBottomGapInTouchArea: Boolean = false,
     secondaryToolbarVisible: Boolean = false,
+    toolbarLayoutHeightOverride: Dp? = null,
     hapticFeedback: HapticFeedback? = null,
   ) {
     val pages =
@@ -2072,9 +2290,10 @@ class EditorToolbarPagesDesktopTest {
     val commandScope = rememberCoroutineScope()
     val bottomTouchGapHeight = if (includeBottomGapInTouchArea) ToolbarBottomPadding else 0.dp
     val toolbarLayoutHeight =
-      ToolbarStackHeight +
-        bottomTouchGapHeight +
-        if (secondaryToolbarVisible) ToolbarSecondaryStackHeight else 0.dp
+      toolbarLayoutHeightOverride
+        ?: (ToolbarStackHeight +
+          bottomTouchGapHeight +
+          if (secondaryToolbarVisible) ToolbarSecondaryStackHeight else 0.dp)
     ToolbarTestTheme(hapticFeedback = hapticFeedback) {
       Box(ancestorModifier) {
         Box(Modifier.width(360.dp).height(toolbarLayoutHeight).testTag(ToolbarTag)) {
@@ -2092,6 +2311,7 @@ class EditorToolbarPagesDesktopTest {
               onKeyboardDismissRequest = onKeyboardDismissRequest,
               onToolbarDismissRequest = onToolbarDismissRequest,
               onBottomPanelToggle = { _, _ -> },
+              onSecondaryToolbarClear = onSecondaryToolbarClear,
               secondaryToolbarVisible = secondaryToolbarVisible,
               secondaryToolbar = {
                 Box(
