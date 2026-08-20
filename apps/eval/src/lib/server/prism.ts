@@ -54,6 +54,49 @@ export const fetchPriceTable = async (env: PrismEnv): Promise<PriceTable | null>
   }
 };
 
+type SeedFile = { path: string; content: string };
+type SeedDigest = { path: string; bytes: number; sha256: string };
+
+// 시드 묶음 1회의 와이어 예산 — prism API 워커는 PUT /seeds 바디를 표면 RPC 1회(직렬화 32MiB 한도)로
+// 나른다. 와이어는 V8 직렬화라 비Latin-1 문자가 하나라도 섞인 문자열이 UTF-16 유닛당 2바이트로 실리는
+// 것이 최악이다(prism core/wire.ts 실측, 스펙 2026-08-20-r2-offload §2) — 유닛×2 합산이 이 예산 아래면
+// 내용과 무관하게 안전하다. 24MiB는 32MiB 대비 봉투·경로 오버헤드를 덮는 여유폭이다.
+const SEED_BATCH_BUDGET_BYTES = 24 * 1024 * 1024;
+
+const seedWireCost = (f: SeedFile): number => (f.path.length + f.content.length) * 2 + 64;
+
+// 총합 무제한 시딩 — 파일을 예산 이하 묶음으로 선적재하고 start에는 매니페스트(digest)만 싣는다(prism 스펙
+// §4: inline files는 start RPC 1회에 전부 실려 32MiB 와이어가 총합 상한이 된다 — 원고 수십~수백 개 시딩 대응).
+// 소형/대형 이중 경로를 두지 않고 항상 적재한다 — 시작은 드문 이벤트라 왕복 1회 추가가 사소하고, 큰 시딩에서만
+// 밟히는 별도 경로를 남기지 않는다. budget 인자는 테스트 전용(분할 경계를 작은 값으로 재현).
+export const stageSeeds = async (
+  env: PrismEnv,
+  workflowId: string,
+  files: SeedFile[],
+  budget: number = SEED_BATCH_BUDGET_BYTES,
+): Promise<SeedDigest[]> => {
+  const staged: SeedDigest[] = [];
+  let batch: SeedFile[] = [];
+  let cost = 0;
+  const flush = async (): Promise<void> => {
+    if (batch.length === 0) return;
+    const res = await call(env, `/workflows/${workflowId}/seeds`, { method: 'PUT', body: JSON.stringify({ files: batch }) });
+    staged.push(...((await res.json()) as { staged: SeedDigest[] }).staged);
+    batch = [];
+    cost = 0;
+  };
+  for (const file of files) {
+    const c = seedWireCost(file);
+    // 예산을 넘기면 앞 묶음을 먼저 보낸다 — 단일 파일이 예산을 넘는 경우는 혼자 한 묶음이 된다(스펙 전제:
+    // 단일 파일 ≤ 32MiB 와이어).
+    if (batch.length > 0 && cost + c > budget) await flush();
+    batch.push(file);
+    cost += c;
+  }
+  await flush();
+  return staged;
+};
+
 export const startWorkflow = async (
   env: PrismEnv,
   opts: {
@@ -61,12 +104,15 @@ export const startWorkflow = async (
     workflow: TierName;
     // previous가 실리면 재리뷰다 — 워크플로 이름은 그대로고 이 키의 유무가 모드를 가른다.
     input: { manuscriptPath: string; meta: ManuscriptMeta; overrides?: TierOverrides; previous?: PreviousInput };
-    files: { path: string; content: string }[];
+    files: SeedFile[];
   },
 ): Promise<void> => {
+  // 적재 → 매니페스트 start. 도중 실패하면 그대로 던진다 — 호출부(reviews.ts)가 회차를 failed로 귀속하고,
+  // 재시도는 새 workflowId로 시작하므로 남은 적재분(고아 staging)은 무해하다(prism 스펙 §4-4).
+  const staged = await stageSeeds(env, opts.workflowId, opts.files);
   await call(env, '/workflows', {
     method: 'POST',
-    body: JSON.stringify({ workflowId: opts.workflowId, app: 'feedback', workflow: opts.workflow, input: opts.input, files: opts.files }),
+    body: JSON.stringify({ workflowId: opts.workflowId, app: 'feedback', workflow: opts.workflow, input: opts.input, staged }),
   });
 };
 

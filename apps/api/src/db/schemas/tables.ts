@@ -1216,3 +1216,26 @@ export const Widgets = pgTable(
   },
   (t) => [unique().on(t.userId, t.order), unique().on(t.userId, t.name)],
 );
+
+export const PrismSessions = pgTable(
+  'prism_sessions',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.PRISM_SESSIONS)),
+    userId: text('user_id')
+      .notNull()
+      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    prismAgentId: text('prism_agent_id').notNull().unique(),
+    title: text('title'),
+    archivedAt: datetime('archived_at'),
+    deletedAt: datetime('deleted_at'),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: datetime('updated_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [index().on(t.userId, t.updatedAt)],
+);

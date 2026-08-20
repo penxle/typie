@@ -40,7 +40,6 @@
   import { setupDocumentPanelFocusReturn } from './@document-panel/focus-return.svelte';
   import DocumentFindReplace from './DocumentFindReplace.svelte';
   import DocumentTemplateModal from './DocumentTemplateModal.svelte';
-  import FeedbackPopover from './FeedbackPopover.svelte';
   import { headerVerticalNavigation } from './header-vertical-navigation';
   import SpellcheckPopover from './SpellcheckPopover.svelte';
   import { GapBuffer } from './sync/gap-buffer';
@@ -1084,7 +1083,6 @@
             </button>
           {/if}
 
-          <FeedbackPopover />
           {#if ctx.editor}
             <SpellcheckPopover editor={ctx.editor} />
           {/if}

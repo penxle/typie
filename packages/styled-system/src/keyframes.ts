@@ -25,6 +25,10 @@ export const keyframes = defineKeyframes({
     from: { transform: 'rotate(0deg)' },
     to: { transform: 'rotate(360deg)' },
   },
+  'rise-in': {
+    from: { opacity: '0', transform: 'translateY(4px)' },
+    to: { opacity: '100', transform: 'translateY(0)' },
+  },
   shimmer: {
     from: { backgroundPosition: '200% 0' },
     to: { backgroundPosition: '-200% 0' },

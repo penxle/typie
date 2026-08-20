@@ -69,6 +69,7 @@ export const Note = createObjectRef('Note', T.Notes);
 export const PaymentInvoice = createObjectRef('PaymentInvoice', T.PaymentInvoices);
 export const PaymentRecord = createObjectRef('PaymentRecord', T.PaymentRecords);
 export const Plan = createObjectRef('Plan', T.Plans);
+export const PrismSession = createObjectRef('PrismSession', T.PrismSessions);
 export const DocumentReaction = createObjectRef('DocumentReaction', T.DocumentReactions);
 export const DocumentCommentThread = createObjectRef('DocumentCommentThread', T.DocumentCommentThreads);
 export const DocumentComment = createObjectRef('DocumentComment', T.DocumentComments);

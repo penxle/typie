@@ -119,6 +119,9 @@ importers:
       '@typie/lib':
         specifier: workspace:*
         version: link:../../packages/lib
+      '@typie/prism':
+        specifier: workspace:*
+        version: link:../../packages/prism
       '@typie/tsconfig':
         specifier: workspace:*
         version: link:../../packages/tsconfig
@@ -155,6 +158,9 @@ importers:
       escape-string-regexp:
         specifier: ^5.0.0
         version: 5.0.0
+      eventsource-parser:
+        specifier: ^4.0.0
+        version: 4.0.0
       execa:
         specifier: ^10.0.1
         version: 10.0.1
@@ -263,6 +269,9 @@ importers:
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
+      undici:
+        specifier: ^8.9.0
+        version: 8.9.0
       uuid:
         specifier: ^14.0.1
         version: 14.0.1
@@ -605,6 +614,9 @@ importers:
       '@typie/lib':
         specifier: workspace:*
         version: link:../../packages/lib
+      '@typie/prism':
+        specifier: workspace:*
+        version: link:../../packages/prism
       '@typie/styled-system':
         specifier: workspace:*
         version: link:../../packages/styled-system
@@ -837,6 +849,22 @@ importers:
       typescript-eslint:
         specifier: ^8.65.0
         version: 8.65.0(eslint@10.8.0(jiti@2.6.1)(supports-color@10.2.2))(supports-color@10.2.2)(typescript@6.0.3)
+
+  packages/prism:
+    dependencies:
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@typie/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.10
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@26.1.2)(@vitest/browser-playwright@4.1.10)(jsdom@30.0.1(@noble/hashes@2.2.0))(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.6.1)(tsx@4.23.5)(yaml@2.9.0))
 
   packages/styled-system:
     dependencies:
@@ -5905,6 +5933,10 @@ packages:
   eventsource-parser@3.1.0:
     resolution: {integrity: sha512-kJezFj9YFAMLeORyi7aCLxLbD5/qWMQnoMVlVPyHIll7lgRJCc3JVln9Vgl9nwQi0YkMnhdGTMNn7CkRRAptMg==}
     engines: {node: '>=18.0.0'}
+
+  eventsource-parser@4.0.0:
+    resolution: {integrity: sha512-aIpvYxbqTx4KYWw73KpCt1Rh22tEAJ144F1qR76CT3Ex+LNMEPKf5HFrK5Yz9fMP1EVT0GrfA35VZvWQhMPuSQ==}
+    engines: {node: '>=22.12'}
 
   eventsource@3.0.7:
     resolution: {integrity: sha512-CRT1WTyuQoD771GW56XEZFQ/ZoSfWid1alKGDYMmkt2yl8UXrVR4pspqWNEcqKvVIzg6PAltWjxcSSPrboA4iA==}
@@ -14269,6 +14301,8 @@ snapshots:
   eventemitter3@5.0.4: {}
 
   eventsource-parser@3.1.0: {}
+
+  eventsource-parser@4.0.0: {}
 
   eventsource@3.0.7:
     dependencies:

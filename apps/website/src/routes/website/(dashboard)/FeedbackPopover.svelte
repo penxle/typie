@@ -18,7 +18,7 @@
 
   const [submitFeedback] = createMutation(
     graphql(`
-      mutation FeedbackPopoverV2_SubmitFeedback_Mutation($input: SubmitFeedbackInput!) {
+      mutation DashboardLayout_FeedbackPopover_SubmitFeedback_Mutation($input: SubmitFeedbackInput!) {
         submitFeedback(input: $input)
       }
     `),
@@ -70,32 +70,26 @@
 <Popover
   style={flex.raw({
     alignItems: 'center',
-    gap: '4px',
+    gap: '8px',
+    width: 'full',
     paddingX: '8px',
-    paddingY: '4px',
-    borderRadius: '4px',
-    borderWidth: '1px',
-    borderColor: 'border.default',
-    fontSize: '11px',
-    fontWeight: 'semibold',
-    whiteSpace: 'nowrap',
-    color: 'text.subtle',
-    backgroundColor: 'transparent',
+    paddingY: '5px',
+    borderRadius: '6px',
     cursor: 'pointer',
     transition: 'common',
-    _hover: { backgroundColor: 'surface.muted' },
+    _supportHover: { backgroundColor: 'surface.muted' },
   })}
   contentStyle={css.raw({ padding: '12px', width: '300px' })}
   onopen={async () => {
     await tick();
     textareaEl?.focus();
   }}
-  placement="bottom-end"
+  placement="right-end"
   bind:open={popoverOpen}
 >
   {#snippet trigger()}
-    <Icon icon={MessageSquareIcon} size={12} />
-    <span>의견 보내기</span>
+    <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={MessageSquareIcon} size={16} />
+    <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.muted' })}>의견 보내기</span>
   {/snippet}
   <div class={flex({ flexDirection: 'column', gap: '8px' })}>
     <div class={css({ position: 'relative' })}>

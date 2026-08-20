@@ -32,6 +32,7 @@
   import UserGoalModal from './@goal/UserGoalModal.svelte';
   import Notes from './@notes/Notes.svelte';
   import PreferenceModal from './@preference/PreferenceModal.svelte';
+  import PrismPanel from './@prism/PrismPanel.svelte';
   import ShareModal from './@share/ShareModal.svelte';
   import SiteSettingsModal from './@site-settings/SiteSettingsModal.svelte';
   import StatsModal from './@stats/StatsModal.svelte';
@@ -176,6 +177,7 @@
 
   $effect(() => {
     app.state.subscribed = query.data.me.entitled;
+    app.state.prismAccess = query.data.me.prismAccess;
   });
 
   $effect(() => {
@@ -517,6 +519,8 @@
       >
         {@render children()}
       </div>
+
+      <PrismPanel user$key={query.data.me} />
     </div>
   </div>
 {/if}

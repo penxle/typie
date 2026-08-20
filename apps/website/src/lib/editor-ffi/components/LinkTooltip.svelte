@@ -175,7 +175,7 @@
           color: 'text.subtle',
         })}
       >
-        <Icon style={css.raw({ color: 'var(--colors-text-faint)' })} icon={GlobeIcon} size={12} />
+        <Icon style={css.raw({ color: 'text.faint' })} icon={GlobeIcon} size={12} />
         <span
           class={css({
             display: 'block',

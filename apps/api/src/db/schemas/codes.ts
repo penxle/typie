@@ -35,6 +35,7 @@ export const TableCode = {
   PLANS: 'PL',
   PREORDER_PAYMENTS: 'PP',
   PREORDER_USERS: 'PU',
+  PRISM_SESSIONS: 'PRSS',
   PROMPTS: 'PRMT',
   REDIRECTS: 'RDR',
   REFERRALS: 'RFR',

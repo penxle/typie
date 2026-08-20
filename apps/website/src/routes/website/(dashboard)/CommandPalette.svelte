@@ -17,6 +17,7 @@
   import CornerDownLeftIcon from '~icons/lucide/corner-down-left';
   import FolderIcon from '~icons/lucide/folder';
   import Maximize2Icon from '~icons/lucide/maximize-2';
+  import PyramidIcon from '~icons/lucide/pyramid';
   import SearchIcon from '~icons/lucide/search';
   import SettingsIcon from '~icons/lucide/settings';
   import SquarePenIcon from '~icons/lucide/square-pen';
@@ -219,6 +220,18 @@
         }
       },
     },
+    ...(app.state.prismAccess
+      ? [
+          {
+            name: app.preference.current.prismPanelOpen ? 'AI 패널 닫기' : 'AI 패널 열기',
+            aliases: ['ai', 'assistant'],
+            icon: PyramidIcon,
+            action: () => {
+              app.preference.current.prismPanelOpen = !app.preference.current.prismPanelOpen;
+            },
+          },
+        ]
+      : []),
     {
       name: '설정 열기',
       aliases: [],
