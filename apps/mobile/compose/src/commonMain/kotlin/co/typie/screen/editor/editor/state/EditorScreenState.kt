@@ -42,7 +42,9 @@ internal class EditorScreenState internal constructor(val viewportState: EditorV
     sceneInForeground = isForeground
     if (!isForeground) {
       uiState.updateFocus(false)
-      runtime.editor?.enqueue(Message.System(SystemEvent.SetFocused(false)))
+      runtime.editor?.let { editor ->
+        editor.runCallback { editor.enqueue(Message.System(SystemEvent.SetFocused(false))) }
+      }
       runtime.deactivateScene()
     }
   }
@@ -53,7 +55,9 @@ internal class EditorScreenState internal constructor(val viewportState: EditorV
     flushDrafts: suspend () -> Unit,
   ) {
     uiState.updateFocus(false)
-    runtime.editor?.enqueue(Message.System(SystemEvent.SetFocused(false)))
+    runtime.editor?.let { editor ->
+      editor.runCallback { editor.enqueue(Message.System(SystemEvent.SetFocused(false))) }
+    }
     runtime.deactivateScene()
     flushDrafts()
     withFrameNanos {}

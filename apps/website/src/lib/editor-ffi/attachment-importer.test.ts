@@ -43,7 +43,9 @@ const external = (node: string, kind: AttachmentPlaceholderKind, id?: string) =>
 
 class FakeEditor {
   destroyed = false;
+  failed = false;
   readOnly = false;
+  failure: unknown = undefined;
   externalElements: ReturnType<typeof external>[] = [];
   inflightImages = new Map<string, InflightImage>();
   inflightFiles = new Map<string, InflightFile>();
@@ -52,6 +54,16 @@ class FakeEditor {
   focus = vi.fn();
   updateEventsImpl: () => EditorEvent[] = () => [];
   updateOutcomesImpl: () => CommandOutcome[] = () => [{ type: 'applied' }];
+
+  get terminal() {
+    return this.destroyed || this.failed;
+  }
+
+  fail(error: unknown): void {
+    if (this.terminal) return;
+    this.failure = error;
+    this.failed = true;
+  }
 
   get appliedSnapshot() {
     return { externalElements: this.externalElements };
@@ -183,14 +195,29 @@ describe('attachment receipt mapping', () => {
     });
   });
 
+  it('rejects no matching receipt without failing the editor', () => {
+    const { editor, importer } = createImporter();
+    const onFailure = vi.fn();
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(vi.fn());
+    editor.updateEventsImpl = () => [receipt('unrelated-request', ['unrelated-node'])];
+
+    const accepted = importer.importAtSelection(
+      [
+        { file: file('a.png', 'image/png'), kind: 'image' },
+        { file: file('b.png', 'image/png'), kind: 'image' },
+      ],
+      { onFailure },
+    );
+
+    expect(accepted).toBe(false);
+    expect(editor.terminal).toBe(false);
+    expect(editor.inflightImages.size).toBe(0);
+    expect(upload.uploadImageFile).not.toHaveBeenCalled();
+    expect(onFailure).not.toHaveBeenCalled();
+    expect(consoleError).toHaveBeenCalledExactlyOnceWith(expect.stringContaining('no matching receipt'), expect.any(String));
+  });
+
   it.each([
-    [
-      'no matching receipt',
-      (editor: FakeEditor) => {
-        editor.updateEventsImpl = () => [receipt('unrelated-request', ['unrelated-node'])];
-      },
-      'no matching receipt',
-    ],
     [
       'duplicate matching receipts',
       (editor: FakeEditor) => {
@@ -214,10 +241,9 @@ describe('attachment receipt mapping', () => {
       },
       'duplicate node IDs',
     ],
-  ])('rejects %s without reserving or reporting an upload failure', (_name, configure, diagnostic) => {
+  ])('fails the editor on %s without reserving or reporting an upload failure', (_name, configure, diagnostic) => {
     const { editor, importer } = createImporter();
     const onFailure = vi.fn();
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(vi.fn());
     configure(editor);
 
     const accepted = importer.importAtSelection(
@@ -229,11 +255,11 @@ describe('attachment receipt mapping', () => {
     );
 
     expect(accepted).toBe(false);
+    expect(editor.terminal).toBe(true);
+    expect(editor.failure).toEqual(expect.objectContaining({ message: expect.stringContaining(diagnostic) }));
     expect(editor.inflightImages.size).toBe(0);
     expect(upload.uploadImageFile).not.toHaveBeenCalled();
     expect(onFailure).not.toHaveBeenCalled();
-    expect(consoleError).toHaveBeenCalledOnce();
-    expect(consoleError.mock.calls[0]?.[0]).toEqual(expect.stringContaining(diagnostic));
   });
 
   it('rejects an exact placeholder request outcome even if a matching receipt is present', () => {
@@ -367,9 +393,27 @@ describe('attachment receipt mapping', () => {
     ).toEqual(['existing', 'tail-node']);
   });
 
-  it('rejects a drop receipt that places the reuse candidate anywhere except first', () => {
+  it('fails the editor when a receipt reuses the existing destination for another item', () => {
     const { editor, importer } = createImporter();
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(vi.fn());
+    editor.externalElements.push(external('existing', 'image'));
+    installReceipt(editor, ['existing']);
+
+    const accepted = importer.importAtSelection(
+      [
+        { file: file('first.png', 'image/png'), kind: 'image' },
+        { file: file('second.png', 'image/png'), kind: 'image' },
+      ],
+      { existingNodeId: 'existing', onFailure: vi.fn() },
+    );
+
+    expect(accepted).toBe(false);
+    expect(editor.terminal).toBe(true);
+    expect(editor.failure).toEqual(expect.objectContaining({ message: expect.stringContaining('existing destination node ID') }));
+    expect(editor.inflightImages.size).toBe(0);
+  });
+
+  it('fails the editor when a drop receipt places the reuse candidate anywhere except first', () => {
+    const { editor, importer } = createImporter();
     editor.externalElements.push(external('candidate', 'image'));
     editor.updateEventsImpl = () => {
       const { requestId } = latestRequestFrom(editor);
@@ -386,9 +430,9 @@ describe('attachment receipt mapping', () => {
     );
 
     expect(accepted).toBe(false);
+    expect(editor.terminal).toBe(true);
+    expect(editor.failure).toEqual(expect.objectContaining({ message: expect.stringContaining('reuse candidate') }));
     expect(editor.inflightImages.size + editor.inflightFiles.size).toBe(0);
-    expect(consoleError).toHaveBeenCalledOnce();
-    expect(consoleError.mock.calls[0]?.[0]).toEqual(expect.stringContaining('reuse candidate'));
   });
 
   it.each([
@@ -576,6 +620,7 @@ describe('attachment target lifecycle', () => {
   it.each([
     ['editor replacement', (ctx: FakeContext) => (ctx.editor = new FakeEditor())],
     ['destroy', (_ctx: FakeContext, editor: FakeEditor) => (editor.destroyed = true)],
+    ['failure', (_ctx: FakeContext, editor: FakeEditor) => editor.fail(new Error('failed'))],
     ['read-only transition', (_ctx: FakeContext, editor: FakeEditor) => (editor.readOnly = true)],
     ['node deletion', (_ctx: FakeContext, editor: FakeEditor) => (editor.externalElements = [])],
     ['undo removal', (_ctx: FakeContext, editor: FakeEditor) => (editor.externalElements = [])],

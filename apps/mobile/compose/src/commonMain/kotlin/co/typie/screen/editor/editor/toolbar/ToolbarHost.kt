@@ -197,7 +197,7 @@ internal fun EditorToolbarHost(
       // End that native state before changing the editor; doing this after the toolbar update is
       // too late because the keyboard has already associated the preceding text with the new style.
       endInputMethodComposition()
-      editor.scope.launch(context) {
+      editor.launchEffect(context = context) {
         val update =
           editor.updateWithBringIntoView(bringIntoViewRequests) {
             if (editor.appliedState.ime?.composing != null) {

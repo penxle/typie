@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import co.typie.editor.EditorSurfaceUnavailableException
 import co.typie.editor.external.EditorImageResizeDraft
 import co.typie.editor.external.IMAGE_MAX_PROPORTION
 import co.typie.editor.external.IMAGE_MIN_PROPORTION
@@ -41,13 +42,9 @@ import co.typie.screen.editor.editor.toolbar.ToolbarSecondaryContentStartInset
 import co.typie.ui.component.Slider
 import co.typie.ui.component.Text
 import co.typie.ui.theme.AppTheme
-import kotlin.coroutines.coroutineContext
 import kotlin.math.roundToInt
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.job
-import kotlinx.coroutines.launch
 
 private val ImageResizeToolbarItemGap = 8.dp
 private val ImageResizeToolbarEndPadding = 12.dp
@@ -176,21 +173,16 @@ internal fun ImageResizeSecondaryToolbar(
         boundsWidth = stableBoundsWidth,
         originalWidth = stableOriginalWidth,
       )
-    val update =
-      try {
-        editor.updateNow {
-          enqueue(
-            Message.Node(
-              NodeOp.SetAttr(id = nodeId, attr = NodeAttr.Image(ImageNodeAttr.Proportion(next)))
-            )
+    val update = editor.runCallback {
+      editor.updateNow {
+        enqueue(
+          Message.Node(
+            NodeOp.SetAttr(id = nodeId, attr = NodeAttr.Image(ImageNodeAttr.Proportion(next)))
           )
-          enqueue(Message.System(SystemEvent.SetExternalHeight(nodeId, finalHeight)))
-        }
-      } catch (error: Throwable) {
-        clearDraft()
-        if (!editor.terminal) throw error
-        return
+        )
+        enqueue(Message.System(SystemEvent.SetExternalHeight(nodeId, finalHeight)))
       }
+    }
     if (
       update == null || update.commandOutcomes.any { outcome -> outcome is CommandOutcome.Rejected }
     ) {
@@ -199,20 +191,19 @@ internal fun ImageResizeSecondaryToolbar(
     }
 
     val waitJob =
-      coroutineScope.launch(start = CoroutineStart.LAZY) {
+      editor.launchEffect(coroutineScope = coroutineScope, start = CoroutineStart.LAZY) {
         try {
-          update.awaitPublished()
-        } catch (e: CancellationException) {
-          throw e
-        } catch (_: Throwable) {
-          // The Editor already owns failure reporting; this job only owns the draft handoff.
-        } finally {
-          if (publicationWaitJob === coroutineContext.job) {
-            publicationWaitJob = null
-            clearDraft()
-          }
+          update.awaitPublishedInEffect()
+        } catch (_: EditorSurfaceUnavailableException) {
+          // A replacement surface can publish a newer revision; this draft is no longer needed.
         }
       }
+    waitJob.invokeOnCompletion {
+      if (publicationWaitJob === waitJob) {
+        publicationWaitJob = null
+        clearDraft()
+      }
+    }
     publicationWaitJob = waitJob
     waitJob.start()
   }

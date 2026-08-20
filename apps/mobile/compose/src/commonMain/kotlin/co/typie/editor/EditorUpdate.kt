@@ -11,7 +11,15 @@ internal constructor(
   val commandOutcomes: List<CommandOutcome>,
   private val editor: Editor,
 ) {
-  suspend fun awaitPublished(): EditorPublicationResult = editor.awaitPublished(revision)
+  suspend fun awaitPublished(): EditorPublicationResult =
+    try {
+      awaitPublishedInEffect()
+    } catch (signal: EditorFailureSignal) {
+      throw signal.failure
+    }
+
+  internal suspend fun awaitPublishedInEffect(): EditorPublicationResult =
+    editor.awaitPublished(revision)
 }
 
 sealed interface EditorPublicationResult

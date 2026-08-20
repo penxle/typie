@@ -13,6 +13,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.editor.Editor
 import co.typie.editor.EditorState
+import co.typie.editor.launchEditorEffect
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.revealTrackedItem
 import co.typie.graphql.AiFeedback_LiteraryAnalysisDocumentStream_Subscription
@@ -104,93 +105,96 @@ internal fun rememberEditorAiFeedbackSession(
     val activeEditor = editor ?: return
 
     analysisJob?.cancel()
-    analysisJob = scope.launch {
-      val sourceText = activeEditor.proseTextAnnotated()
-      val analysisRunId = activeModel.prepareAnalysis(sourceText)
-      activeEditor.installAiFeedbackDecorations()
-      activeEditor.clearAiFeedbackRanges()
-      if (sourceText.trim().isBlank()) {
-        activeModel.complete()
-        setOverlayBottomOcclusion(0f)
-        toast.show(ToastType.Success, "피드백이 없습니다.")
-        return@launch
-      }
+    analysisJob =
+      activeEditor.launchEffect(coroutineScope = scope) {
+        val sourceText = activeEditor.proseTextAnnotated()
+        val analysisRunId = activeModel.prepareAnalysis(sourceText)
+        activeEditor.installAiFeedbackDecorations()
+        activeEditor.clearAiFeedbackRanges()
+        if (sourceText.trim().isBlank()) {
+          activeModel.complete()
+          setOverlayBottomOcclusion(0f)
+          toast.show(ToastType.Success, "피드백이 없습니다.")
+          return@launchEffect
+        }
 
-      try {
-        Apollo.subscription(
-            AiFeedback_LiteraryAnalysisDocumentStream_Subscription(
-              text = sourceText,
-              documentId = Optional.presentIfNotNull(documentId),
+        try {
+          Apollo.subscription(
+              AiFeedback_LiteraryAnalysisDocumentStream_Subscription(
+                text = sourceText,
+                documentId = Optional.presentIfNotNull(documentId),
+              )
             )
-          )
-          .toFlow()
-          .collect { response ->
-            if (!activeModel.isCurrentAnalysisRun(analysisRunId)) return@collect
-            if (activeModel.isPendingAnalysisStale(sourceText, activeEditor.proseTextAnnotated())) {
-              cancelAnalysisState(clearRanges = true)
-              if (activeModel.active) {
-                toast.show(ToastType.Success, "내용이 수정되어 분석이 취소됐어요.")
-              }
-              return@collect
-            }
-
-            val payload = response.data?.literaryAnalysisDocumentStreamV2 ?: return@collect
-            when (payload.type) {
-              "feedback" -> {
-                val raw = payload.feedback?.toRawAiFeedbackResult() ?: return@collect
-                if (activeModel.results.any { it.id == raw.id }) return@collect
-                val selection =
-                  activeEditor.proseToSelectionAnnotated(raw.start, raw.end) ?: return@collect
-                val wasEmpty = activeModel.results.isEmpty()
-                activeEditor.addAiFeedbackRange(
-                  AiFeedbackRangeRegistration(id = raw.id, selection = selection)
-                )
-                activeModel.appendResult(raw.toAiFeedbackResult())
-                updateCompactOverlayHeightForRange(activeModel.activeRangeId)
-                updateActiveRangeDecoration()
-                if (wasEmpty) {
-                  requestRangeIntoView(activeModel.activeRangeId)
-                }
-              }
-              "progress" -> {
-                activeModel.updateProgress(payload.progress?.toAiFeedbackProgress())
-              }
-              "complete" -> {
-                activeModel.complete()
-                val completedJob = analysisJob
-                analysisJob = null
-                completedJob?.cancel()
-                if (activeModel.results.isEmpty()) {
-                  setOverlayBottomOcclusion(0f)
-                  toast.show(ToastType.Success, "피드백이 없습니다.")
-                }
-              }
-              "error" -> {
-                activeModel.fail()
-                val failedJob = analysisJob
-                analysisJob = null
-                failedJob?.cancel()
+            .toFlow()
+            .collect { response ->
+              if (!activeModel.isCurrentAnalysisRun(analysisRunId)) return@collect
+              if (
+                activeModel.isPendingAnalysisStale(sourceText, activeEditor.proseTextAnnotated())
+              ) {
+                cancelAnalysisState(clearRanges = true)
                 if (activeModel.active) {
-                  toast.show(ToastType.Error, "분석에 실패했어요.")
+                  toast.show(ToastType.Success, "내용이 수정되어 분석이 취소됐어요.")
+                }
+                return@collect
+              }
+
+              val payload = response.data?.literaryAnalysisDocumentStreamV2 ?: return@collect
+              when (payload.type) {
+                "feedback" -> {
+                  val raw = payload.feedback?.toRawAiFeedbackResult() ?: return@collect
+                  if (activeModel.results.any { it.id == raw.id }) return@collect
+                  val selection =
+                    activeEditor.proseToSelectionAnnotated(raw.start, raw.end) ?: return@collect
+                  val wasEmpty = activeModel.results.isEmpty()
+                  activeEditor.addAiFeedbackRange(
+                    AiFeedbackRangeRegistration(id = raw.id, selection = selection)
+                  )
+                  activeModel.appendResult(raw.toAiFeedbackResult())
+                  updateCompactOverlayHeightForRange(activeModel.activeRangeId)
+                  updateActiveRangeDecoration()
+                  if (wasEmpty) {
+                    requestRangeIntoView(activeModel.activeRangeId)
+                  }
+                }
+                "progress" -> {
+                  activeModel.updateProgress(payload.progress?.toAiFeedbackProgress())
+                }
+                "complete" -> {
+                  activeModel.complete()
+                  val completedJob = analysisJob
+                  analysisJob = null
+                  completedJob?.cancel()
+                  if (activeModel.results.isEmpty()) {
+                    setOverlayBottomOcclusion(0f)
+                    toast.show(ToastType.Success, "피드백이 없습니다.")
+                  }
+                }
+                "error" -> {
+                  activeModel.fail()
+                  val failedJob = analysisJob
+                  analysisJob = null
+                  failedJob?.cancel()
+                  if (activeModel.active) {
+                    toast.show(ToastType.Error, "분석에 실패했어요.")
+                  }
                 }
               }
             }
+        } catch (e: CancellationException) {
+          throw e
+        } catch (e: Exception) {
+          if (activeModel.isCurrentAnalysisRun(analysisRunId)) {
+            activeModel.fail()
+            if (activeModel.active) {
+              toast.show(ToastType.Error, "분석에 실패했어요.")
+            }
           }
-      } catch (e: CancellationException) {
-        throw e
-      } catch (e: Exception) {
-        if (activeModel.isCurrentAnalysisRun(analysisRunId)) {
-          activeModel.fail()
-          if (activeModel.active) {
-            toast.show(ToastType.Error, "분석에 실패했어요.")
+        } finally {
+          if (analysisJob == coroutineContext[Job]) {
+            analysisJob = null
           }
-        }
-      } finally {
-        if (analysisJob == coroutineContext[Job]) {
-          analysisJob = null
         }
       }
-    }
   }
 
   fun close() {
@@ -226,7 +230,7 @@ internal fun rememberEditorAiFeedbackSession(
 
   LaunchedEffect(active, editor) {
     if (active) {
-      editor?.installAiFeedbackDecorations()
+      editor?.runEffect { editor.installAiFeedbackDecorations() }
     }
   }
 
@@ -235,10 +239,12 @@ internal fun rememberEditorAiFeedbackSession(
     val expectedText = activeModel.pendingAnalysisText ?: return@LaunchedEffect
     val activeEditor = editor ?: return@LaunchedEffect
     if (!active || !activeModel.loading) return@LaunchedEffect
-    if (activeEditor.proseTextAnnotated() == expectedText) return@LaunchedEffect
+    activeEditor.runEffect effect@{
+      if (activeEditor.proseTextAnnotated() == expectedText) return@effect
 
-    cancelAnalysisState(clearRanges = true)
-    toast.show(ToastType.Success, "내용이 수정되어 분석이 취소됐어요.")
+      cancelAnalysisState(clearRanges = true)
+      toast.show(ToastType.Success, "내용이 수정되어 분석이 취소됐어요.")
+    }
   }
 
   LaunchedEffect(active, editorState.trackedRanges, model?.results) {
@@ -246,17 +252,21 @@ internal fun rememberEditorAiFeedbackSession(
     val activeEditor = editor ?: return@LaunchedEffect
     if (!active || activeModel.results.isEmpty()) return@LaunchedEffect
 
-    val removedIds =
-      activeModel.cleanupMissingRanges(
-        liveIds =
-          activeEditor.appliedState.trackedRanges.aiFeedbackRanges().mapTo(mutableSetOf()) { it.id }
-      )
-    if (removedIds.isEmpty()) return@LaunchedEffect
+    activeEditor.runEffect effect@{
+      val removedIds =
+        activeModel.cleanupMissingRanges(
+          liveIds =
+            activeEditor.appliedState.trackedRanges.aiFeedbackRanges().mapTo(mutableSetOf()) {
+              it.id
+            }
+        )
+      if (removedIds.isEmpty()) return@effect
 
-    if (activeModel.results.isNotEmpty()) {
-      updateCompactOverlayHeightForRange(activeModel.activeRangeId)
+      if (activeModel.results.isNotEmpty()) {
+        updateCompactOverlayHeightForRange(activeModel.activeRangeId)
+      }
+      updateActiveRangeDecoration()
     }
-    updateActiveRangeDecoration()
   }
 
   LaunchedEffect(
@@ -267,6 +277,7 @@ internal fun rememberEditorAiFeedbackSession(
     model?.results,
   ) {
     val activeModel = model ?: return@LaunchedEffect
+    val activeEditor = editor ?: return@LaunchedEffect
     if (!active) {
       lastMembershipIdsMappedToAiFeedback = null
       return@LaunchedEffect
@@ -279,34 +290,35 @@ internal fun rememberEditorAiFeedbackSession(
       lastMembershipIdsMappedToAiFeedback = null
       return@LaunchedEffect
     }
-
-    val resultIds = activeModel.results.mapTo(mutableSetOf()) { it.id }
-    val membershipIds =
-      editorState.trackedRangesContainingSelection.trackedRangeMembershipIds(
-        allowedGroups = AI_FEEDBACK_MEMBERSHIP_GROUPS,
-        ownedIds = resultIds,
-      )
-    if (membershipIds == lastMembershipIdsMappedToAiFeedback) return@LaunchedEffect
-    lastMembershipIdsMappedToAiFeedback = membershipIds
-
-    val rangeId =
-      editorState.trackedRangesContainingSelection
-        .selectTrackedRangeMember(
+    activeEditor.runEffect effect@{
+      val resultIds = activeModel.results.mapTo(mutableSetOf()) { it.id }
+      val membershipIds =
+        editorState.trackedRangesContainingSelection.trackedRangeMembershipIds(
           allowedGroups = AI_FEEDBACK_MEMBERSHIP_GROUPS,
-          activeId = activeModel.activeRangeId,
           ownedIds = resultIds,
         )
-        ?.id
-    val previousActiveRangeId = activeModel.activeRangeId
-    if (rangeId == null) {
-      activeModel.activate(null)
-    } else {
-      activeModel.activate(rangeId)
-    }
-    updateCompactOverlayHeightForRange(activeModel.activeRangeId)
-    updateActiveRangeDecoration()
-    if (rangeId != null && rangeId != previousActiveRangeId) {
-      requestRangeIntoView(rangeId)
+      if (membershipIds == lastMembershipIdsMappedToAiFeedback) return@effect
+      lastMembershipIdsMappedToAiFeedback = membershipIds
+
+      val rangeId =
+        editorState.trackedRangesContainingSelection
+          .selectTrackedRangeMember(
+            allowedGroups = AI_FEEDBACK_MEMBERSHIP_GROUPS,
+            activeId = activeModel.activeRangeId,
+            ownedIds = resultIds,
+          )
+          ?.id
+      val previousActiveRangeId = activeModel.activeRangeId
+      if (rangeId == null) {
+        activeModel.activate(null)
+      } else {
+        activeModel.activate(rangeId)
+      }
+      updateCompactOverlayHeightForRange(activeModel.activeRangeId)
+      updateActiveRangeDecoration()
+      if (rangeId != null && rangeId != previousActiveRangeId) {
+        requestRangeIntoView(rangeId)
+      }
     }
   }
 
@@ -330,13 +342,13 @@ internal fun rememberEditorAiFeedbackSession(
           close()
           return@open
         }
-        scope.launch {
-          if (editor == null) return@launch
-          if (!ensureSubscription()) return@launch
-          if (!ensureAiOptIn()) return@launch
+        scope.launchEditorEffect(editor) {
+          if (editor == null) return@launchEditorEffect
+          if (!ensureSubscription()) return@launchEditorEffect
+          if (!ensureAiOptIn()) return@launchEditorEffect
           if (activeModel.active) {
             close()
-            return@launch
+            return@launchEditorEffect
           }
           occlusionReleaseJob?.cancel()
           occlusionReleaseJob = null
@@ -349,9 +361,9 @@ internal fun rememberEditorAiFeedbackSession(
     rerun = rerun@{
         val activeModel = model ?: return@rerun
         if (!activeModel.active || activeModel.loading) return@rerun
-        scope.launch {
-          if (!ensureSubscription()) return@launch
-          if (!activeModel.active || activeModel.loading) return@launch
+        scope.launchEditorEffect(editor) {
+          if (!ensureSubscription()) return@launchEditorEffect
+          if (!activeModel.active || activeModel.loading) return@launchEditorEffect
           activeModel.updateExpanded(false)
           runAnalysis()
         }
@@ -359,7 +371,7 @@ internal fun rememberEditorAiFeedbackSession(
     activateResult = { id ->
       model?.activate(id)
       updateCompactOverlayHeightForRange(model?.activeRangeId)
-      scope.launch {
+      scope.launchEditorEffect(editor) {
         updateActiveRangeDecoration()
         requestRangeIntoView(id)
       }
@@ -367,7 +379,7 @@ internal fun rememberEditorAiFeedbackSession(
     showCurrentResult = { id -> model?.setCurrent(id) },
     ignore = ignore@{ id ->
         val activeEditor = editor ?: return@ignore
-        scope.launch {
+        scope.launchEditorEffect(activeEditor) {
           activeEditor.removeAiFeedbackRange(id)
           val nextId = model?.remove(id, activateReplacement = true)
           if (nextId != null) {

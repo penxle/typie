@@ -14,11 +14,11 @@ import co.typie.editor.DocumentEditingSession
 import co.typie.editor.Editor
 import co.typie.editor.EditorState
 import co.typie.editor.ext.isCollapsed
+import co.typie.editor.launchEditorEffect
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.storage.Preference
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastType
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -72,7 +72,7 @@ internal fun rememberEditorFindReplaceSession(
 
   LaunchedEffect(state.active, editor) {
     if (state.active) {
-      editor?.installFindReplaceDecorations()
+      editor?.runEffect { editor.installFindReplaceDecorations() }
     }
   }
 
@@ -83,11 +83,22 @@ internal fun rememberEditorFindReplaceSession(
     state.findText,
     matchWholeWord,
   ) {
-    state.runSearch(
-      editor = editor,
-      matchWholeWord = matchWholeWord,
-      bringIntoViewRequests = bringIntoViewRequests,
-    )
+    val activeEditor = editor
+    if (activeEditor == null) {
+      state.runSearch(
+        editor = null,
+        matchWholeWord = matchWholeWord,
+        bringIntoViewRequests = bringIntoViewRequests,
+      )
+    } else {
+      activeEditor.runEffect {
+        state.runSearch(
+          editor = activeEditor,
+          matchWholeWord = matchWholeWord,
+          bringIntoViewRequests = bringIntoViewRequests,
+        )
+      }
+    }
   }
 
   return EditorFindReplaceSession(
@@ -98,18 +109,18 @@ internal fun rememberEditorFindReplaceSession(
     matchCount = state.matches.size,
     activeMatchNumber = state.activeIndex?.let { it + 1 },
     searchInputFocusRequest = state.searchInputFocusRequest,
-    onOpen = { scope.launch { state.open(editor) } },
-    close = { scope.launch { state.close(editor) } },
+    onOpen = { scope.launchEditorEffect(editor) { state.open(editor) } },
+    close = { scope.launchEditorEffect(editor) { state.close(editor) } },
     updateFindText = state::updateFindText,
     updateReplaceText = state::updateReplaceText,
     updateMatchWholeWord = { enabled -> Preference.searchMatchWholeWord = enabled },
     findPrevious = {
-      scope.launch {
+      scope.launchEditorEffect(editor) {
         state.findBy(offset = -1, editor = editor, bringIntoViewRequests = bringIntoViewRequests)
       }
     },
     findNext = {
-      scope.launch {
+      scope.launchEditorEffect(editor) {
         state.findBy(offset = 1, editor = editor, bringIntoViewRequests = bringIntoViewRequests)
       }
     },
@@ -120,11 +131,13 @@ internal fun rememberEditorFindReplaceSession(
           return@replace
         }
         if (!state.canReplaceActive()) return@replace
-        scope.launch {
-          if (!ensureSubscription()) return@launch
-          if (!state.canReplaceActive() || !onEditingIntent(activeSession.editor)) return@launch
+        scope.launchEditorEffect(activeSession.editor) {
+          if (!ensureSubscription()) return@launchEditorEffect
+          if (!state.canReplaceActive() || !onEditingIntent(activeSession.editor)) {
+            return@launchEditorEffect
+          }
           activeSession.submit { activeEditor, context ->
-            activeEditor.scope.launch(context) {
+            activeEditor.launchEffect(context = context) {
               state.replaceActive(
                 editor = activeEditor,
                 admitMutation = { admitMutation(activeSession) },
@@ -141,11 +154,13 @@ internal fun rememberEditorFindReplaceSession(
           return@replaceAll
         }
         if (!state.canReplaceAll()) return@replaceAll
-        scope.launch {
-          if (!ensureSubscription()) return@launch
-          if (!state.canReplaceAll() || !onEditingIntent(activeSession.editor)) return@launch
+        scope.launchEditorEffect(activeSession.editor) {
+          if (!ensureSubscription()) return@launchEditorEffect
+          if (!state.canReplaceAll() || !onEditingIntent(activeSession.editor)) {
+            return@launchEditorEffect
+          }
           activeSession.submit { activeEditor, context ->
-            activeEditor.scope.launch(context) {
+            activeEditor.launchEffect(context = context) {
               state.replaceAllMatches(
                 editor = activeEditor,
                 admitMutation = { admitMutation(activeSession) },

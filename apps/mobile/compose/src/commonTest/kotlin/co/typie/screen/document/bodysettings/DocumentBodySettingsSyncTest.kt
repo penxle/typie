@@ -29,7 +29,10 @@ import co.typie.ui.component.editorsettings.toEditorStyleSettings
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -157,6 +160,31 @@ class DocumentBodySettingsSyncTest {
 
     pipeline?.stop()
     editor.dispose()
+  }
+
+  @Test
+  fun failedBootstrapApplyDoesNotStartLiveOrAdvanceBaseline() = runTest {
+    val initialBaseline =
+      DocumentSyncBaseline(seq = "1-0", heads = byteArrayOf(1), durableHeads = byteArrayOf(1))
+    val load = DocumentBodySettingsLoad(graph = byteArrayOf(0), baseline = initialBaseline)
+    val failure = IllegalStateException("remote apply failed")
+    var started = false
+    assertTrue(load.queue(changesetsEvent(seq = "2-0", value = 2)))
+
+    val thrown =
+      assertFailsWith<IllegalStateException> {
+        load.activate(apply = { throw failure }, startLive = { started = true })
+      }
+
+    assertSame(failure, thrown)
+    assertFalse(started)
+
+    var recoveredBaseline: DocumentSyncBaseline? = null
+    load.activate(apply = {}, startLive = { recoveredBaseline = it })
+
+    assertEquals("1-0", recoveredBaseline?.seq)
+    assertContentEquals(byteArrayOf(1), recoveredBaseline?.heads)
+    assertContentEquals(byteArrayOf(1), recoveredBaseline?.durableHeads)
   }
 
   @Test

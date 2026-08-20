@@ -21,7 +21,6 @@ import co.typie.editor.scroll.revealTrackedItem
 import co.typie.screen.editor.editor.selectTrackedRangeMember
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastType
-import kotlinx.coroutines.launch
 
 internal class EditorCommentsSession(
   val model: CommentsViewModel?,
@@ -106,7 +105,7 @@ internal fun rememberEditorCommentsSession(
   }
   val openSelectionsById = model?.openSelectionsById.orEmpty()
 
-  LaunchedEffect(editor) { editor?.installCommentDecorations() }
+  LaunchedEffect(editor) { editor?.runEffect { editor.installCommentDecorations() } }
 
   val activeThreadId = model?.threadState?.activeThreadId
   val selection = editorState.selection
@@ -184,13 +183,17 @@ internal fun rememberEditorCommentsSession(
 
   LaunchedEffect(editor, openSelectionsById, activeThreadId) {
     val activeEditor = editor ?: return@LaunchedEffect
-    activeEditor.syncCommentRanges(
-      selectionsById = openSelectionsById,
-      activeId = activeThreadId,
-      currentRanges = editorState.trackedRanges,
-    )
+    activeEditor.runEffect {
+      activeEditor.syncCommentRanges(
+        selectionsById = openSelectionsById,
+        activeId = activeThreadId,
+        currentRanges = editorState.trackedRanges,
+      )
+    }
   }
-  LaunchedEffect(editor, composeSelection) { editor?.setCommentComposeRange(composeSelection) }
+  LaunchedEffect(editor, composeSelection) {
+    editor?.runEffect { editor.setCommentComposeRange(composeSelection) }
+  }
   LaunchedEffect(editor, activeThreadId, activeThreadActivationRevision, activeThreadScrollTarget) {
     val threadId = activeThreadId
     if (threadId == null) {
@@ -201,9 +204,13 @@ internal fun rememberEditorCommentsSession(
     if (lastRequestedActivationRevision == activeThreadActivationRevision) {
       return@LaunchedEffect
     }
-    if (editor == null) return@LaunchedEffect
-    if (editor.revealTrackedItem(bringIntoViewRequests, activeThreadScrollTarget.id) != null) {
-      lastRequestedActivationRevision = activeThreadActivationRevision
+    val activeEditor = editor ?: return@LaunchedEffect
+    activeEditor.runEffect {
+      if (
+        activeEditor.revealTrackedItem(bringIntoViewRequests, activeThreadScrollTarget.id) != null
+      ) {
+        lastRequestedActivationRevision = activeThreadActivationRevision
+      }
     }
   }
   LaunchedEffect(sheetActive, selection, selectedCommentRange?.id) {
@@ -231,9 +238,13 @@ internal fun rememberEditorCommentsSession(
     threadLocationById = threadLocationById,
     composeLocation = composeLocation,
     virtualThreadGuardVisible = sheetActive && model?.threadState?.hasDirtyVirtualThread == true,
-    freezeCurrentSelection = {
-      editorState.selection?.let { currentSelection -> editor?.freezeSelection(currentSelection) }
-    },
+    freezeCurrentSelection = freezeCurrentSelection@{
+        val activeEditor = editor ?: return@freezeCurrentSelection null
+        val currentSelection = editorState.selection ?: return@freezeCurrentSelection null
+        var frozenSelection: StableSelection? = null
+        activeEditor.runEffect { frozenSelection = activeEditor.freezeSelection(currentSelection) }
+        frozenSelection
+      },
     ensureMutationSubscription = ensureMutationSubscription,
     onInputFocusChanged = { focused -> inputFocused = focused },
     requestFromTextToolbar = {
@@ -242,7 +253,7 @@ internal fun rememberEditorCommentsSession(
       val currentSelection = editorState.selection
       if (currentSelection != null && activeEditor != null) {
         if (currentSelection.anchor != currentSelection.head) {
-          scope.launch {
+          activeEditor.launchEffect(coroutineScope = scope) {
             val frozenSelection = activeEditor.freezeSelection(currentSelection)
             if (frozenSelection == null) {
               toast.show(ToastType.Error, "선택 영역에 코멘트를 달 수 없어요.")

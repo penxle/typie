@@ -14,6 +14,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
@@ -128,6 +129,68 @@ class EditorPublicationHostTest {
     }
 
   @Test
+  fun terminal_failure_is_contained_while_an_editor_effect_waits_for_publication() =
+    runTest(dispatcher) {
+      val failure = IllegalStateException("publication failed")
+      val reported = mutableListOf<Throwable>()
+      val editor =
+        Editor(
+          inner = FakeFfiEditor(),
+          scope = this,
+          dispatcher = dispatcher,
+          onError = { _, error -> reported += error },
+        )
+      editor.activateVisualHost(Any())
+
+      supervisorScope {
+        val effect =
+          async(start = CoroutineStart.UNDISPATCHED) {
+            editor.runEffect { editor.awaitPublished(revision = 1L) }
+          }
+        assertFalse(effect.isCompleted)
+
+        editor.fail(failure)
+        runCurrent()
+
+        assertTrue(effect.isCompleted)
+        assertFalse(effect.await())
+      }
+      assertSame(failure, reported.single())
+    }
+
+  @Test
+  fun terminal_failure_is_contained_before_an_editor_effect_starts_waiting_for_publication() =
+    runTest(dispatcher) {
+      val failure = IllegalStateException("publication failed")
+      val reported = mutableListOf<Throwable>()
+      val editor =
+        Editor(
+          inner = FakeFfiEditor(),
+          scope = this,
+          dispatcher = dispatcher,
+          onError = { _, error -> reported += error },
+        )
+      val started = CompletableDeferred<Unit>()
+      val proceed = CompletableDeferred<Unit>()
+
+      val effect =
+        async(start = CoroutineStart.UNDISPATCHED) {
+          editor.runEffect {
+            started.complete(Unit)
+            proceed.await()
+            editor.awaitPublished(revision = 1L)
+          }
+        }
+      started.await()
+      editor.fail(failure)
+      proceed.complete(Unit)
+      runCurrent()
+
+      assertFalse(effect.await())
+      assertSame(failure, reported.single())
+    }
+
+  @Test
   fun failedViewportAnchorPresentationReplacementLeavesTheCandidateReady() =
     runTest(dispatcher) {
       val replacementRevisions = mutableListOf<Long>()
@@ -161,6 +224,45 @@ class EditorPublicationHostTest {
       assertEquals(update.revision, editor.publishIfReady(setOf(0))?.snapshot?.version)
       assertEquals(0L, replacementRevisions.first())
       assertTrue(replacementRevisions.drop(1).all { it == update.revision })
+    }
+
+  @Test
+  fun viewportAnchorPresentationReplacementContainsNativeFailure() =
+    runTest(dispatcher) {
+      val failure = IllegalStateException("replacement failed")
+      var failReplacement = false
+      val reported = mutableListOf<Throwable>()
+      val fake =
+        FakeFfiEditor(
+          onTick = { listOf(EditorEvent.RenderInvalidated) },
+          pageSizesProvider = { listOf(Size(width = 100f, height = 100f)) },
+          replaceViewportAnchorPresentationProvider = { revision ->
+            if (failReplacement) throw failure
+            revision.value == 0L
+          },
+        )
+      val editor = Editor(fake, this, dispatcher, onError = { _, error -> reported += error })
+      editor.activateVisualHost(Any())
+      val session = editor.attachSurface(0, 10L, 100.0, 100.0, 1.0, wakeDelivery = {})
+      editor.requestSurfacePages(setOf(0))
+      advanceUntilIdle()
+      editor.deliverFrame(session, editorRevision = 0L, frameKey = 1L)
+      advanceUntilIdle()
+      assertTrue(editor.acceptPublication(requireNotNull(editor.publishIfReady(setOf(0)))))
+
+      val update = requireNotNull(editor.update { enqueue(message) })
+      advanceUntilIdle()
+      editor.deliverFrame(session, editorRevision = update.revision, frameKey = 2L)
+      advanceUntilIdle()
+      val candidate = requireNotNull(editor.publishIfReady(setOf(0)))
+      failReplacement = true
+
+      assertFalse(editor.acceptPublication(candidate))
+      advanceUntilIdle()
+
+      assertTrue(editor.terminal)
+      assertSame(failure, reported.single())
+      assertEquals(0L, editor.publishedRevision)
     }
 
   @Test

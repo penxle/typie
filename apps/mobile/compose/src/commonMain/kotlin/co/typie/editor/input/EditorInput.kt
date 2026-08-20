@@ -96,16 +96,6 @@ internal expect suspend fun PlatformTextInputSessionScope.createEditorInputReque
 
 internal expect fun requiresEditorInputSessionRestartForSoftwareKeyboardSuppression(): Boolean
 
-internal inline fun <T> Editor.runInputCallback(block: () -> T): T? {
-  if (terminal) return null
-  return try {
-    block()
-  } catch (error: Throwable) {
-    if (!terminal) throw error
-    null
-  }
-}
-
 internal fun rebindImeResync(
   previous: (() -> Unit)?,
   target: Editor,
@@ -266,7 +256,7 @@ internal class EditorInputNode(
   ) {
     if (messages.isEmpty()) return
     submit { sessionEditor, context ->
-      sessionEditor.scope.launch(context) {
+      sessionEditor.launchEffect(context = context) {
         sessionEditor.updateWithBringIntoView(bringIntoViewRequests) {
           messages.forEach(::enqueue)
           bringIntoViewTarget?.let { target ->
@@ -302,14 +292,14 @@ internal class EditorInputNode(
         val completion = coalescer.submitOrdered {
           incomingContentHandler.handleClipboard(capturedSession, clipboard, action.mode)
         }
-        coroutineScope.launch { completion.await() }
+        editor.launchEffect(coroutineScope = coroutineScope) { completion.await() }
       }
       is EditorKeyBindingAction.Messages -> {
         if (action.coalescible) {
           submit { _, localEdit -> coalescer.submit(binding, clipboard, localEdit) }
         } else {
           val completion = coalescer.submit(binding, clipboard)
-          coroutineScope.launch { completion.await() }
+          editor.launchEffect(coroutineScope = coroutineScope) { completion.await() }
         }
       }
     }
@@ -343,7 +333,10 @@ internal class EditorInputNode(
         // actions are safe to resolve and register immediately; stateful or clipboard actions
         // resolve inside the ordered queue so their side effects cannot overtake paste.
         if (action.coalescible) {
-          coroutineScope.launch(start = CoroutineStart.UNDISPATCHED) {
+          editor.launchEffect(
+            coroutineScope = coroutineScope,
+            start = CoroutineStart.UNDISPATCHED,
+          ) {
             val messages = action.messages(editor, clipboard)
             platformInputBridge.dispatchAppOwnedKeyMessages(messages, preState) {
               var postState: EditorState? = null
@@ -369,7 +362,7 @@ internal class EditorInputNode(
               )
             }
           }
-          coroutineScope.launch { completion.await() }
+          editor.launchEffect(coroutineScope = coroutineScope) { completion.await() }
         }
       }
     }
@@ -396,7 +389,7 @@ internal class EditorInputNode(
   ): EditorState? {
     if (messages.isEmpty()) return null
     return editor
-      .runInputCallback {
+      .runCallback {
         editor.updateNowWithBringIntoView(bringIntoViewRequests) {
           messages.forEach(::enqueue)
           bringIntoViewTarget?.let { target ->
@@ -662,7 +655,7 @@ internal class EditorInputNode(
     registerTextInputClient(this, if (sessionEnabled) textInputClient else null)
     focusedJob =
       if (sessionEnabled) {
-        coroutineScope.launch {
+        editor.launchEffect(coroutineScope = coroutineScope) {
           val uninstallPlatformSessionEffects =
             platformInputBridge.installSessionEffects(
               cursor = ::presentedCursor,
@@ -732,8 +725,8 @@ internal class EditorInputNode(
                       false
                     } else {
                       val commandStartSession = session
-                      coroutineScope
-                        .launch {
+                      editor
+                        .launchEffect(coroutineScope = coroutineScope) {
                           incomingContentHandler.handleCandidates(commandStartSession, candidates)
                         }
                         .invokeOnCompletion { candidates.close() }

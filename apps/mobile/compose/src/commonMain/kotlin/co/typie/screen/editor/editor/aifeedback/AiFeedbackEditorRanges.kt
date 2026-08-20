@@ -20,8 +20,10 @@ internal suspend fun Editor.installAiFeedbackDecorations() {
 }
 
 internal fun Editor.clearAiFeedbackRanges() {
-  enqueue(Message.TrackedRange(TrackedRangeOp.ClearGroup(group = AI_FEEDBACK_RANGE_GROUP)))
-  enqueue(Message.TrackedRange(TrackedRangeOp.ClearGroup(group = ACTIVE_AI_FEEDBACK_RANGE_GROUP)))
+  runCallback {
+    enqueue(Message.TrackedRange(TrackedRangeOp.ClearGroup(group = AI_FEEDBACK_RANGE_GROUP)))
+    enqueue(Message.TrackedRange(TrackedRangeOp.ClearGroup(group = ACTIVE_AI_FEEDBACK_RANGE_GROUP)))
+  }
 }
 
 internal suspend fun Editor.addAiFeedbackRange(item: AiFeedbackRangeRegistration) {

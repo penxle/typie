@@ -71,6 +71,7 @@ import co.typie.platform.PlatformModule
 import co.typie.ui.theme.AppTheme
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
 
@@ -139,13 +140,15 @@ internal fun EditorPreview(
 
     // The settings preview is layout-first on purpose: the frame resizes immediately
     // and the previous text stays visible scaled until the re-render lands.
-    editor.updateNow {
-      if (editor.appliedState.rootAttrs?.layoutMode != layoutMode) {
-        enqueueRootLayoutMode(layoutMode)
+    editor.runEffect {
+      editor.updateNow {
+        if (editor.appliedState.rootAttrs?.layoutMode != layoutMode) {
+          enqueueRootLayoutMode(layoutMode)
+        }
+        changedModifiers.forEach { modifier -> enqueueRootModifier(modifier) }
+        enqueue(Message.Selection(SelectionOp.Unset))
+        enqueue(Message.System(SystemEvent.SetFocused(false)))
       }
-      changedModifiers.forEach { modifier -> enqueueRootModifier(modifier) }
-      enqueue(Message.Selection(SelectionOp.Unset))
-      enqueue(Message.System(SystemEvent.SetFocused(false)))
     }
   }
 
@@ -238,6 +241,7 @@ private fun EditorPreviewContent(
   val displayZoom = zoomController.displayZoom
   val renderZoom = zoomController.renderZoom
   val editor = runtime.editor
+  val failure = runtime.failure
 
   val requiredPages =
     if (editor != null) {
@@ -276,12 +280,14 @@ private fun EditorPreviewContent(
   LaunchedEffect(
     runtime,
     editor,
+    failure,
     sourceKey,
     viewportWidth,
     viewportHeight,
     density.density,
     themeVariant,
   ) {
+    if (failure != null) return@LaunchedEffect
     val viewport =
       Viewport(
         width = viewportWidth,
@@ -291,41 +297,50 @@ private fun EditorPreviewContent(
     val activeEditor = runtime.editor
     if (activeEditor == null) {
       val nextEditor =
-        when (source) {
-          is EditorPreviewSource.Graph ->
-            Editor.create(
-              graph = source.bytes,
-              viewport = viewport,
-              themeVariant = themeVariant,
-              scope = editorScope,
-              onError = { activeEditor, error -> runtime.fail(activeEditor, error) },
-            )
-          EditorPreviewSource.Generated ->
-            Editor.createFromDoc(
-              doc = doc,
-              viewport = viewport,
-              themeVariant = themeVariant,
-              scope = editorScope,
-              onError = { activeEditor, error -> runtime.fail(activeEditor, error) },
-            )
-          EditorPreviewSource.AttachedEditor -> return@LaunchedEffect
+        try {
+          when (source) {
+            is EditorPreviewSource.Graph ->
+              Editor.create(
+                graph = source.bytes,
+                viewport = viewport,
+                themeVariant = themeVariant,
+                scope = editorScope,
+                onError = { activeEditor, error -> runtime.fail(activeEditor, error) },
+              )
+            EditorPreviewSource.Generated ->
+              Editor.createFromDoc(
+                doc = doc,
+                viewport = viewport,
+                themeVariant = themeVariant,
+                scope = editorScope,
+                onError = { activeEditor, error -> runtime.fail(activeEditor, error) },
+              )
+            EditorPreviewSource.AttachedEditor -> return@LaunchedEffect
+          }
+        } catch (error: CancellationException) {
+          throw error
+        } catch (error: Throwable) {
+          runtime.fail(error)
+          return@LaunchedEffect
         }
       runtime.attach(nextEditor)
     } else {
       EditorRegistry.commitResourceUpdate {
         PlatformModule.editorHost.setThemeVariant(themeVariant)
       }
-      activeEditor.updateNow {
-        enqueue(
-          Message.System(
-            SystemEvent.Resize(
-              width = viewport.width,
-              height = viewport.height,
-              scaleFactor = viewport.scaleFactor,
+      activeEditor.runEffect {
+        activeEditor.updateNow {
+          enqueue(
+            Message.System(
+              SystemEvent.Resize(
+                width = viewport.width,
+                height = viewport.height,
+                scaleFactor = viewport.scaleFactor,
+              )
             )
           )
-        )
-        enqueue(Message.System(SystemEvent.SetFocused(false)))
+          enqueue(Message.System(SystemEvent.SetFocused(false)))
+        }
       }
     }
   }

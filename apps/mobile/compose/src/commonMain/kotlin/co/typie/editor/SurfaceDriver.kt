@@ -92,7 +92,7 @@ internal class SurfaceDriver(
   private val scope: CoroutineScope,
   private val dispatcher: CoroutineDispatcher,
   private val disposed: AtomicBoolean,
-  private val failed: AtomicBoolean,
+  private val failure: AtomicReference<Throwable?>,
   private val notifyFailure: (Throwable) -> Unit,
 ) {
   private val nextSessionId = AtomicLong(0L)
@@ -112,7 +112,7 @@ internal class SurfaceDriver(
   ): SurfaceSessionHandle {
     val session =
       SurfaceSessionHandle(editor = editor, id = nextSessionId.addAndFetch(1), page = page)
-    if (disposed.load() || failed.load()) return session
+    if (disposed.load() || failure.load() != null) return session
 
     sessions.updatePersistent { it.putting(page, session.id) }
     enqueue(AttachSurface(session, handle, configuration))
@@ -120,13 +120,13 @@ internal class SurfaceDriver(
   }
 
   fun resize(session: SurfaceSessionHandle, configuration: SurfaceConfiguration) {
-    if (!isCurrent(session) || disposed.load() || failed.load()) return
+    if (!isCurrent(session) || disposed.load() || failure.load() != null) return
     enqueue(ResizeSurface(session, configuration))
   }
 
   fun render(session: SurfaceSessionHandle, revision: Long, complete: (FrameKey?) -> Unit) {
     val command = RenderSurface(session, revision, complete)
-    if (!isCurrent(session) || disposed.load() || failed.load()) {
+    if (!isCurrent(session) || disposed.load() || failure.load() != null) {
       completeRender(command, null)
       return
     }
@@ -148,7 +148,7 @@ internal class SurfaceDriver(
   }
 
   private fun enqueue(command: SurfaceCommand): Boolean {
-    if ((disposed.load() || failed.load()) && command !is DetachSurface) return false
+    if ((disposed.load() || failure.load() != null) && command !is DetachSurface) return false
     commands.updatePersistent { it.adding(command) }
     schedule()
     return true
@@ -179,7 +179,7 @@ internal class SurfaceDriver(
   }
 
   private fun run(command: SurfaceCommand, attached: MutableMap<Int, Long>) {
-    if ((disposed.load() || failed.load()) && command !is DetachSurface) {
+    if ((disposed.load() || failure.load() != null) && command !is DetachSurface) {
       if (command is RenderSurface) completeRender(command, null)
       return
     }

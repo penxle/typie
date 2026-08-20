@@ -262,7 +262,7 @@ internal data class EditorTableAxisSelectorOverlayPlacement(
 )
 
 private fun Editor.sendTableAxisOp(selector: EditorTableAxisSelector, op: TableOp) {
-  updateNow { enqueue(selector.tableMessage(op)) }
+  runCallback { updateNow { enqueue(selector.tableMessage(op)) } }
 }
 
 private fun EditorTableAxisSelector.tableMessage(op: TableOp): Message =

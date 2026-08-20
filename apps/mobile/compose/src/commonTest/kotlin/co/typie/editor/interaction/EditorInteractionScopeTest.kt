@@ -28,6 +28,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -37,6 +38,31 @@ import kotlinx.coroutines.test.runTest
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class EditorInteractionScopeTest {
+  @Test
+  fun `interaction effect contains an editor-owned failure`() =
+    runTest(StandardTestDispatcher()) {
+      val failure = IllegalStateException("interaction failed")
+      val reported = mutableListOf<Throwable>()
+      val editor =
+        Editor(
+          inner = FakeFfiEditor(beforeEnqueueRequest = { throw failure }),
+          scope = this,
+          dispatcher = StandardTestDispatcher(testScheduler),
+          onError = { _, error -> reported += error },
+        )
+      val scope = EditorInteractionScope(coroutineScope = this)
+      updateScope(scope = scope, editor = editor, editing = { true })
+
+      scope.launchInteraction {
+        editor.update { enqueue(Message.Selection(SelectionOp.SetAt(page = 0, x = 0f, y = 0f))) }
+      }
+      advanceUntilIdle()
+
+      assertTrue(editor.terminal)
+      val reportedFailure = reported.single()
+      assertSame(failure, reportedFailure.cause ?: reportedFailure)
+    }
+
   @Test
   fun `geometry reads the bundle accepted after the latest scope update`() =
     runTest(StandardTestDispatcher()) {
@@ -235,6 +261,27 @@ class EditorInteractionScopeTest {
         )
       val editor =
         Editor(fake, this, StandardTestDispatcher(testScheduler)).also { fake.publishSnapshot(it) }
+      var frameKey: FrameKey? = null
+      val surface =
+        editor.attachSurface(
+          page = 0,
+          handle = 1L,
+          width = 400.0,
+          height = 700.0,
+          scaleFactor = 1.0,
+          wakeDelivery = { frameKey = it },
+        )
+      editor.requestSurfacePages(setOf(0))
+      advanceUntilIdle()
+      editor.deliverFrame(
+        session = surface,
+        bitmap = ImageBitmap(width = 400, height = 700),
+        pixelSize = IntSize(width = 400, height = 700),
+        editorRevision = editor.appliedState.version,
+        frameKey = assertNotNull(frameKey).value,
+      )
+      advanceUntilIdle()
+      assertTrue(editor.acceptPublication(assertNotNull(editor.publishIfReady(setOf(0)))))
       val uiState =
         EditorUiState().apply {
           updateInteractionSurfaceBounds(
@@ -280,6 +327,8 @@ class EditorInteractionScopeTest {
         position = Offset(10f, 20f),
       )
       advanceUntilIdle()
+      assertTrue(editor.acceptPublication(assertNotNull(editor.publishIfReady(setOf(0)))))
+      scope.onEditorStateChanged()
 
       assertTrue(editing)
       assertEquals(

@@ -33,7 +33,6 @@ import co.typie.platform.IncomingContentItem
 import co.typie.platform.PickedFile
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -808,6 +807,61 @@ class DefaultEditorAttachmentImporterTest {
   }
 
   @Test
+  fun editorFailureAfterUploadPreventsCacheAndCommitAndClearsOwnership() = runTest {
+    var released = false
+    val nodeId = "image-node"
+    lateinit var fake: FakeFfiEditor
+    fake =
+      FakeFfiEditor(
+        onTick = {
+          listOf(
+            EditorEvent.StateChanged(fields = listOf(StateField.ExternalElements)),
+            EditorEvent.AttachmentPlaceholdersInserted(
+              requestId = requestedPlaceholderId(fake),
+              nodeIds = listOf(nodeId),
+            ),
+          )
+        },
+        externalElementsProvider = { listOf(emptyImageElement(nodeId)) },
+      )
+    val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+    val session = createTestDocumentEditingSession(editor, this)
+    val state = EditorExternalElementState()
+    val importer =
+      DefaultEditorAttachmentImporter(
+        externalElementState = state,
+        bringIntoViewRequests = EditorBringIntoViewRequests(),
+        persistence =
+          object : EditorAttachmentPersistence by FakePersistence {
+            override suspend fun persistImage(file: PickedFile): EditorImageAsset {
+              editor.fail(IllegalStateException("editor failed"))
+              return FakePersistence.persistImage(file)
+            }
+          },
+        isSessionCurrent = { it === session },
+        backgroundScope = this,
+      )
+
+    val callbackInvocations = mutableListOf<Int>()
+    val accepted =
+      importer.import(
+        session = session,
+        items = listOf(imageItem { released = true }),
+        destination = EditorAttachmentDestination.CurrentSelection,
+        onCompleted = { importedCount -> callbackInvocations += importedCount },
+      )
+
+    assertTrue(accepted)
+    advanceUntilIdle()
+    assertTrue(editor.terminal)
+    assertEquals(listOf(0), callbackInvocations)
+    assertTrue(released)
+    assertNull(state.images.uploads[nodeId])
+    assertTrue(state.images.assets.isEmpty())
+    assertFalse(fake.enqueued.any { it is Message.Node })
+  }
+
+  @Test
   fun placeholderRemovedDuringUploadPreventsCommitAndClosesFile() = runTest {
     var placeholderExists = true
     var placeholderRequestHandled = false
@@ -964,18 +1018,117 @@ class DefaultEditorAttachmentImporterTest {
 
   @Test
   fun duplicatePlaceholderResultsFailEditorExactlyOnceAndCloseFiles() = runTest {
-    assertTerminalPlaceholderInvariant(
+    assertPlaceholderMappingRejected(
       itemCount = 1,
       nodeIdResults = listOf(listOf("first-node"), listOf("second-node")),
+      terminal = true,
     )
   }
 
   @Test
   fun placeholderCountMismatchFailsEditorExactlyOnceAndClosesFiles() = runTest {
-    assertTerminalPlaceholderInvariant(
+    assertPlaceholderMappingRejected(
       itemCount = 2,
       nodeIdResults = listOf(listOf("only-one-node")),
+      terminal = true,
     )
+  }
+
+  @Test
+  fun duplicatePlaceholderNodeIdsFailEditorExactlyOnceAndCloseFiles() = runTest {
+    assertPlaceholderMappingRejected(
+      itemCount = 2,
+      nodeIdResults = listOf(listOf("same-node", "same-node")),
+      terminal = true,
+    )
+  }
+
+  @Test
+  fun unavailablePlaceholderRejectsImportBeforePendingOrPersistence() = runTest {
+    assertPlaceholderMappingRejected(itemCount = 1, nodeIdResults = listOf(listOf("missing-node")))
+  }
+
+  @Test
+  fun wrongKindPlaceholderRejectsImportBeforePendingOrPersistence() = runTest {
+    val nodeId = "file-node"
+    assertPlaceholderMappingRejected(
+      itemCount = 1,
+      nodeIdResults = listOf(listOf(nodeId)),
+      externalElementsProvider = { listOf(emptyFileElement(nodeId)) },
+    )
+  }
+
+  @Test
+  fun receiptCannotReuseExistingPlaceholderForAnotherItem() = runTest {
+    val existingNodeId = "existing-node"
+    var releasedCount = 0
+    var persistenceCount = 0
+    val reported = mutableListOf<Throwable>()
+    lateinit var fake: FakeFfiEditor
+    fake =
+      FakeFfiEditor(
+        onTick = {
+          if (fake.placeholderRequests().isEmpty()) {
+            emptyList()
+          } else {
+            listOf(
+              EditorEvent.AttachmentPlaceholdersInserted(
+                requestId = requestedPlaceholderId(fake),
+                nodeIds = listOf(existingNodeId),
+              )
+            )
+          }
+        },
+        externalElementsProvider = { listOf(emptyImageElement(existingNodeId)) },
+      )
+    val editor =
+      Editor(
+        fake,
+        this,
+        StandardTestDispatcher(testScheduler),
+        onError = { _, error -> reported += error },
+      )
+    fake.applySnapshot(editor)
+    val session = createTestDocumentEditingSession(editor, this)
+    val state = EditorExternalElementState()
+    val importer =
+      DefaultEditorAttachmentImporter(
+        externalElementState = state,
+        bringIntoViewRequests = EditorBringIntoViewRequests(),
+        persistence =
+          object : EditorAttachmentPersistence by FakePersistence {
+            override suspend fun persistImage(file: PickedFile): EditorImageAsset {
+              persistenceCount += 1
+              return FakePersistence.persistImage(file)
+            }
+          },
+        isSessionCurrent = { it === session },
+        backgroundScope = this,
+      )
+    val callbackInvocations = mutableListOf<Int>()
+
+    val accepted =
+      importer.import(
+        session = session,
+        items =
+          List(2) { index -> imageItem(filename = "image-$index.png") { releasedCount += 1 } },
+        destination =
+          EditorAttachmentDestination.ExistingPlaceholder(
+            nodeId = existingNodeId,
+            expectedKind = IncomingContentItem.Kind.Image,
+          ),
+        onCompleted = { importedCount -> callbackInvocations += importedCount },
+      )
+    advanceUntilIdle()
+
+    assertFalse(accepted)
+    assertTrue(editor.terminal)
+    assertEquals(1, reported.size)
+    assertTrue(reported.single() is IllegalStateException)
+    assertTrue(state.images.uploads.isEmpty())
+    assertEquals(0, persistenceCount)
+    assertEquals(2, releasedCount)
+    assertEquals(listOf(0), callbackInvocations)
   }
 
   @Test
@@ -1118,9 +1271,11 @@ class DefaultEditorAttachmentImporterTest {
     }
   }
 
-  private suspend fun TestScope.assertTerminalPlaceholderInvariant(
+  private suspend fun TestScope.assertPlaceholderMappingRejected(
     itemCount: Int,
     nodeIdResults: List<List<String>>,
+    externalElementsProvider: () -> List<ExternalElement> = { emptyList() },
+    terminal: Boolean = false,
   ) {
     var releasedCount = 0
     var persistenceCount = 0
@@ -1132,14 +1287,16 @@ class DefaultEditorAttachmentImporterTest {
           if (fake.placeholderRequests().isEmpty()) {
             emptyList()
           } else {
-            nodeIdResults.map { nodeIds ->
-              EditorEvent.AttachmentPlaceholdersInserted(
-                requestId = requestedPlaceholderId(fake),
-                nodeIds = nodeIds,
-              )
-            }
+            listOf(EditorEvent.StateChanged(fields = listOf(StateField.ExternalElements))) +
+              nodeIdResults.map { nodeIds ->
+                EditorEvent.AttachmentPlaceholdersInserted(
+                  requestId = requestedPlaceholderId(fake),
+                  nodeIds = nodeIds,
+                )
+              }
           }
-        }
+        },
+        externalElementsProvider = externalElementsProvider,
       )
     val dispatcher = StandardTestDispatcher(testScheduler)
     val editorScope = CoroutineScope(SupervisorJob() + dispatcher)
@@ -1160,29 +1317,34 @@ class DefaultEditorAttachmentImporterTest {
         backgroundScope = this,
       )
 
-    lateinit var thrown: IllegalStateException
+    val callbackInvocations = mutableListOf<Int>()
     try {
-      thrown =
-        assertFailsWith<IllegalStateException> {
-          importer.import(
-            session = session,
-            items =
-              List(itemCount) { index ->
-                imageItem(filename = "image-$index.png") { releasedCount += 1 }
-              },
-            destination = EditorAttachmentDestination.CurrentSelection,
-            onCompleted = {},
-          )
-        }
+      val accepted =
+        importer.import(
+          session = session,
+          items =
+            List(itemCount) { index ->
+              imageItem(filename = "image-$index.png") { releasedCount += 1 }
+            },
+          destination = EditorAttachmentDestination.CurrentSelection,
+          onCompleted = { importedCount -> callbackInvocations += importedCount },
+        )
+      advanceUntilIdle()
+
+      assertFalse(accepted)
+      assertEquals(terminal, editor.terminal)
+      if (terminal) {
+        assertEquals(1, reported.size)
+        assertTrue(reported.single() is IllegalStateException)
+      } else {
+        assertTrue(reported.isEmpty())
+      }
+      assertEquals(0, persistenceCount)
+      assertEquals(itemCount, releasedCount)
+      assertEquals(listOf(0), callbackInvocations)
     } finally {
       editorScope.cancel()
     }
-
-    assertTrue(editor.terminal)
-    assertEquals(1, reported.size)
-    assertTrue(thrown === reported.single())
-    assertEquals(0, persistenceCount)
-    assertEquals(itemCount, releasedCount)
   }
 
   private fun requestedPlaceholderId(fake: FakeFfiEditor?): String {

@@ -702,6 +702,7 @@ export class Editor {
     this.#applied = this.#materializeSnapshot(result.revision.value, fields);
     const publicEvents = result.events.filter((event) => event.type !== 'state_changed' && event.type !== 'render_invalidated');
 
+    const completedReceiptIds: number[] = [];
     const completedReceipts: { receipt: UpdateReceipt; update: EditorUpdate }[] = [];
     for (const outcome of result.request_outcomes) {
       const receipt = this.#receipts.get(outcome.request_id.value);
@@ -710,7 +711,7 @@ export class Editor {
         this.#awaitPublished(result.revision.value, signal),
       );
       receipt.request.runBeforePublish(update);
-      this.#receipts.delete(outcome.request_id.value);
+      completedReceiptIds.push(outcome.request_id.value);
       completedReceipts.push({ receipt, update });
     }
 
@@ -732,6 +733,7 @@ export class Editor {
 
     for (const waiter of this.#appliedWaiters) waiter.resolve(result.revision.value);
     this.#appliedWaiters.clear();
+    for (const requestId of completedReceiptIds) this.#receipts.delete(requestId);
     for (const { receipt, update } of completedReceipts) {
       receipt.resolve(update);
     }
@@ -1125,7 +1127,7 @@ export class Editor {
     try {
       build(request);
     } catch (err) {
-      request.discard();
+      request.discardAfterFailure(err);
       throw err;
     } finally {
       this.#admission = undefined;
@@ -1714,7 +1716,7 @@ export class Editor {
       try {
         return this.#invokeCore((core) => core.enqueue_request([...request.messages]));
       } catch (err) {
-        request.discard();
+        request.discardAfterFailure(err);
         throw err;
       }
     })();
@@ -1762,7 +1764,7 @@ export class Editor {
       if (receiptFailure) throw receiptFailure.error;
       if (!update) throw new Error(`tickThrough omitted request outcome ${requestId.value}`);
     } catch (err) {
-      request?.discard();
+      request?.discardAfterFailure(err);
       if (admitted && !this.#creationActive) this.fail(err);
       throw err;
     } finally {
@@ -2020,17 +2022,18 @@ export class Editor {
     const reason = error ?? new Error('Editor operation failed');
     this.#failure = reason;
     this.#failed = true;
+    try {
+      Sentry.captureException(reason);
+    } catch {
+      // Telemetry must not interrupt terminal cleanup.
+    }
     // eslint-disable-next-line svelte/prefer-svelte-reactivity -- immutable empty snapshot
     this.surfacePageRequirements = new Set();
     this.#stopRuntime();
     unregister(this);
     for (const receipt of this.#receipts.values()) {
-      try {
-        receipt.request.discard();
-        receipt.reject(reason);
-      } catch {
-        // Failure cleanup must continue even if an internal receipt hook throws.
-      }
+      receipt.request.discardAfterFailure(reason);
+      receipt.reject(reason);
     }
     this.#receipts.clear();
     for (const waiter of this.#appliedWaiters) waiter.reject(reason);
@@ -2650,7 +2653,7 @@ export class Editor {
 
     const disposed = new Error('Editor is disposed');
     for (const receipt of this.#receipts.values()) {
-      receipt.request.discard();
+      receipt.request.discardAfterFailure(disposed);
       receipt.reject(disposed);
     }
     this.#receipts.clear();

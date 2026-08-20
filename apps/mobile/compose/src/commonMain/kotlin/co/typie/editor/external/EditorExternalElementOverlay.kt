@@ -87,7 +87,9 @@ private fun EditorExternalElement(element: ExternalElement, displayZoom: Float) 
           return@onSizeChanged
         }
         reportedHeight = height
-        editor.enqueue(Message.System(SystemEvent.SetExternalHeight(element.node, height)))
+        editor.runCallback {
+          editor.enqueue(Message.System(SystemEvent.SetExternalHeight(element.node, height)))
+        }
       }
   ) {
     context(renderScope) {

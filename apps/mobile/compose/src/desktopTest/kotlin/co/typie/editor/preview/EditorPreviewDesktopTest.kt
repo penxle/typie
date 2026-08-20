@@ -28,6 +28,8 @@ import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
@@ -37,6 +39,52 @@ import kotlinx.coroutines.cancel
 
 @OptIn(ExperimentalTestApi::class)
 class EditorPreviewDesktopTest {
+  @Test
+  fun graphPreviewRoutesInitializationFailureToItsRuntime() = runComposeUiTest {
+    configureRenderBufferLibrary()
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+    val runtime = EditorRuntime(scope)
+    val liveEditor = Editor(FakeFfiEditor(), scope, Dispatchers.Unconfined)
+    val liveRuntime = EditorRuntime(scope).apply { attach(liveEditor) }
+
+    try {
+      setContent {
+        CompositionLocalProvider(
+          LocalDensity provides Density(1f),
+          LocalThemeMode provides ResolvedThemeMode.Light,
+        ) {
+          EditorPreview(
+            layoutMode = A4Layout,
+            runtime = runtime,
+            modifier = Modifier.size(100.dp),
+            shape = RoundedCornerShape(0.dp),
+            source = EditorPreviewSource.Graph(byteArrayOf(0)),
+          )
+        }
+      }
+
+      waitUntil(timeoutMillis = 10_000) { runtime.failure != null }
+
+      runOnIdle {
+        assertNotNull(runtime.failure)
+        assertNull(runtime.editor)
+        assertNull(liveRuntime.failure)
+        assertSame(liveEditor, liveRuntime.editor)
+      }
+
+      val firstFailure = runtime.failure
+      runOnIdle { runtime.clearFailure() }
+      waitUntil(timeoutMillis = 10_000) {
+        runtime.failure != null && runtime.failure !== firstFailure
+      }
+    } finally {
+      runtime.clear()
+      runtime.clearFailure()
+      liveRuntime.clear()
+      scope.cancel()
+    }
+  }
+
   @Test
   fun pageSizeAndBodySizeChangesPublishCoherentPreviewFrames() = runComposeUiTest {
     configureRenderBufferLibrary()

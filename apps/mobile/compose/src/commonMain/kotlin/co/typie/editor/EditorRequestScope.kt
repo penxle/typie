@@ -29,7 +29,7 @@ internal class CollectedEditorRequest : EditorRequestScope {
     try {
       block?.invoke(update)
     } catch (error: Throwable) {
-      onDiscard?.invoke()
+      runCleanupPreservingFailure(error) { onDiscard?.invoke() }
       throw error
     }
   }
@@ -39,6 +39,19 @@ internal class CollectedEditorRequest : EditorRequestScope {
     beforePublish = null
     discardBeforePublish = null
     onDiscard?.invoke()
+  }
+
+  fun discardAfterFailure(error: Throwable) {
+    runCleanupPreservingFailure(error, ::discard)
+  }
+}
+
+private inline fun runCleanupPreservingFailure(error: Throwable, cleanup: () -> Unit) {
+  val failure = error.unwrapEditorFailureSignal()
+  try {
+    cleanup()
+  } catch (cleanupFailure: Throwable) {
+    if (cleanupFailure !== failure) failure.addSuppressed(cleanupFailure)
   }
 }
 

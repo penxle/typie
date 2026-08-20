@@ -1,15 +1,20 @@
 package co.typie.editor.sync
 
+import co.typie.editor.Editor
+import co.typie.editor.FakeFfiEditor
 import co.typie.editor.sync.ws.SyncWsException
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
@@ -227,6 +232,84 @@ class RemoteChangesetPipelineTest {
     assertContentEquals(enc(9), sink.confirmed.last())
     assertContentEquals(enc(4), sink.durable.last())
     pipeline.stop()
+  }
+
+  @Test
+  fun failedEditorApplyDoesNotAdvanceCursorOrHeads() = runTest {
+    val failure = IllegalStateException("remote apply failed")
+    val reported = mutableListOf<Throwable>()
+    val editor =
+      Editor(
+        inner = FakeFfiEditor(receiveRemoteChangesetProvider = { throw failure }),
+        scope = this,
+        dispatcher = StandardTestDispatcher(testScheduler),
+        onError = { _, error -> reported += error },
+      )
+    val transport = FakeTransport()
+    val sink = RecordingHeadsSink()
+    val pipeline =
+      RemoteChangesetPipeline(
+        editor = editor.asSyncEditor(),
+        headsSink = sink,
+        transport = transport,
+        initialSeq = "s1",
+        scope = CoroutineScope(coroutineContext),
+        onNeedsReload = {},
+      )
+    transport.pullResult =
+      PullResult(
+        changesets = listOf(enc(7)),
+        seq = "s2",
+        heads = enc(7),
+        durableHeads = enc(3),
+        needsReload = false,
+      )
+
+    pipeline.refetchFromServer()
+    runCurrent()
+
+    assertSame(failure, reported.single())
+    assertTrue(sink.confirmed.isEmpty())
+    assertTrue(sink.durable.isEmpty())
+
+    transport.pullResult =
+      PullResult(
+        changesets = emptyList(),
+        seq = "",
+        heads = enc(),
+        durableHeads = enc(),
+        needsReload = true,
+      )
+    pipeline.refetchFromServer()
+
+    assertEquals(listOf<String?>("s1", "s1"), transport.pullCalls)
+  }
+
+  @Test
+  fun editorBatchBoundaryContainsFailureAndStops() = runTest {
+    val failure = IllegalStateException("remote apply failed")
+    val reported = mutableListOf<Throwable>()
+    var attempts = 0
+    val editor =
+      Editor(
+        inner =
+          FakeFfiEditor(
+            receiveRemoteChangesetProvider = {
+              attempts += 1
+              throw failure
+            }
+          ),
+        scope = this,
+        dispatcher = StandardTestDispatcher(testScheduler),
+        onError = { _, error -> reported += error },
+      )
+
+    val completed = editor.applyRemoteChangesets(listOf(enc(1), enc(2)))
+    runCurrent()
+
+    assertFalse(completed)
+    assertEquals(1, attempts)
+    assertSame(failure, reported.single())
   }
 
   @Test

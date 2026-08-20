@@ -62,7 +62,6 @@ import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
-import kotlinx.coroutines.launch
 
 @Composable
 internal fun BottomToolbarNodes(
@@ -108,7 +107,7 @@ internal fun BottomToolbarNodes(
             is EditorToolbarNodeInsertAction.SendMessage -> {
               val session = runtime.session ?: return@NodeInsertTile
               session.submit { currentEditor, context ->
-                currentEditor.scope.launch(context) {
+                currentEditor.launchEffect(context = context) {
                   currentEditor.updateWithBringIntoView(bringIntoViewRequests) {
                     enqueue(action.message)
                     bringIntoView(

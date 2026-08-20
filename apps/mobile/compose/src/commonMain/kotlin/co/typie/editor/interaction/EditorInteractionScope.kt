@@ -9,6 +9,7 @@ import co.typie.editor.interaction.gestures.EditorConsecutiveTapMaxIntervalMilli
 import co.typie.editor.interaction.gestures.EditorLongPressDispatchDelayMillis
 import co.typie.editor.interaction.gestures.EditorTapDispatchDelayMillis
 import co.typie.editor.interaction.semantics.EditorViewportZoomSemanticConfig
+import co.typie.editor.launchEditorEffect
 import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.scroll.EditorBringIntoViewPolicy
 import co.typie.editor.scroll.EditorBringIntoViewRequests
@@ -135,7 +136,11 @@ internal class EditorInteractionScope(
   fun reset() {
     cancelTapDispatch()
     cancelLongPressDispatch()
-    controller.reset()
+    if (uiState == null) {
+      cancelTapSequenceConfirmation()
+    } else {
+      controller.reset()
+    }
     releaseScrollGestureLock()
     editor = null
     bringIntoViewRequests = null
@@ -299,7 +304,7 @@ internal class EditorInteractionScope(
   }
 
   override fun launchInteraction(block: suspend () -> Unit) {
-    coroutineScope.launch { block() }
+    coroutineScope.launchEditorEffect(editor) { block() }
   }
 
   override fun requestEditing(editor: Editor): Boolean = onRequestEditing?.invoke(editor) == true

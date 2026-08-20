@@ -107,8 +107,8 @@ internal fun rememberEditorImagePicker(
         }
       }
       var importStarted = false
-      scope
-        .launch(start = CoroutineStart.UNDISPATCHED) {
+      session.editor
+        .launchEffect(coroutineScope = scope, start = CoroutineStart.UNDISPATCHED) {
           importStarted = true
           importer.import(
             session = session,

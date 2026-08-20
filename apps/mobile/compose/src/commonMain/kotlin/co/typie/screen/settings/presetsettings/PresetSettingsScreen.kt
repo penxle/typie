@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
@@ -30,12 +31,14 @@ import co.typie.editor.runtime.EditorRuntime
 import co.typie.ext.imePadding
 import co.typie.ext.verticalScroll
 import co.typie.icons.Lucide
+import co.typie.navigation.Nav
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
 import co.typie.ui.component.dialog.DialogResult
 import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.dialog.confirm
+import co.typie.ui.component.dialog.error
 import co.typie.ui.component.editorsettings.EditorSettingsFontSection
 import co.typie.ui.component.editorsettings.EditorSettingsLayoutSection
 import co.typie.ui.component.editorsettings.EditorSettingsSectionDivider
@@ -55,6 +58,8 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun PresetSettingsScreen() {
+  val nav = Nav.current
+  val dialog = LocalDialog.current
   val model = viewModel { PresetSettingsViewModel() }
   val scope = rememberCoroutineScope()
   val scrollState = rememberScrollState()
@@ -110,6 +115,11 @@ fun PresetSettingsScreen() {
     val previewShape = RoundedCornerShape(bottomStart = AppShapes.xl, bottomEnd = AppShapes.xl)
     val style = model.preset.toEditorStyleSettings()
     val previewRuntime = remember { EditorRuntime(uiScope = scope) }
+
+    LaunchedEffect(previewRuntime.failure) {
+      previewRuntime.failure ?: return@LaunchedEffect
+      dialog.error(nav) { previewRuntime.clearFailure() }
+    }
 
     Box(
       modifier =
