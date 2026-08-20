@@ -6,7 +6,8 @@ use editor_model::{ChildView, DocView, Fragment, content_placement};
 use editor_state::{Position, Selection};
 
 use super::{
-    PlacementOutcome, SliceInsertionPlan, place_slice_at_frontier, place_slice_at_position,
+    PlacementOutcome, SliceInsertionKind, SliceInsertionPlan, place_slice_at_frontier,
+    place_slice_at_position,
 };
 use crate::CommandError;
 use crate::helpers::{
@@ -288,9 +289,11 @@ impl<'a, 'doc> OriginalRangeFrontiers<'a, 'doc> {
             parent,
             splits,
             right_boundary,
-            insertion: SliceInsertionPlan::BlockBoundary {
-                blocks,
-                list_merges,
+            insertion: SliceInsertionPlan {
+                kind: SliceInsertionKind::BlockBoundary {
+                    blocks,
+                    list_merges,
+                },
                 output,
             },
         }))
@@ -485,8 +488,9 @@ fn fit_at_preserved_branch_boundary(
             };
             if block_boundary_fragments(slice, node.node_type()).is_some()
                 && can_split_from_lca_to(view, lca, candidate)
-                && let PlacementOutcome::Placed(SliceInsertionPlan::BlockBoundary {
-                    blocks, ..
+                && let PlacementOutcome::Placed(SliceInsertionPlan {
+                    kind: SliceInsertionKind::BlockBoundary { blocks, .. },
+                    ..
                 }) = place_slice_at_position(view, Position::new(candidate, 0), slice.clone())
             {
                 break (candidate, blocks);

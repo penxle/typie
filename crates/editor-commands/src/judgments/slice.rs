@@ -1,21 +1,24 @@
 use editor_clipboard::Slice;
+use editor_crdt::Dot;
 use editor_model::{DocView, Fragment};
-use editor_state::{Position, Selection};
+use editor_state::{Affinity, Position};
 use editor_transaction::Transaction;
 
 use crate::CommandError;
 use crate::helpers::{
     ExistingBlock, HoistBoundaryStep, HoistInitialBoundary, HoistedBlockInsertionPlan,
     OpenAncestorSplice, SliceInsertionExecution, SliceInsertionOutputPlan, SliceInsertionTarget,
-    SliceInsertionTargetShape, SliceOutputSource, TextblockSplicePlan, block_boundary_fragments,
-    build_inline_mode, fit_slice_for_textblock_target_parent, fragments_are_inline,
-    fragments_fit_parent, inline_fragments_fit_target, insert_blocks_at_block_boundary,
+    SliceInsertionTargetShape, SliceOutputPositionSpec, SliceOutputRelation, SliceOutputSource,
+    TextblockSplicePlan, block_boundary_fragments, build_inline_mode,
+    fit_slice_for_textblock_target_parent, fragments_are_inline, fragments_fit_parent,
+    inline_fragments_fit_target, insert_blocks_at_block_boundary,
     insert_blocks_in_textblock_at_position, insert_content_as_inline_at_position,
     insert_hoisted_blocks_at_position, insert_open_ancestor_splice_at_position,
     is_insertable_inline_fragment, is_supported_inline_fragment, materialize_repair_position,
     open_ancestor_splice_for_target, open_ancestor_splice_is_complete_no_output,
     open_inline_content_for_target, plan_textblock_splice_target, planned_block_output,
-    planned_inline_output, planned_open_splice_output, top_level_fragments,
+    planned_inline_output, planned_open_splice_output, resolve_live_slice_output_dot,
+    top_level_fragments,
 };
 use crate::types::SliceProvenance;
 
@@ -33,32 +36,31 @@ pub(crate) use linear_fitter::{
 };
 pub(crate) use table_fitter::{CellFillPlan, TableFinalSelection, TableGridPlan};
 
-pub(crate) enum SliceInsertionPlan {
+pub(crate) struct SliceInsertionPlan {
+    kind: SliceInsertionKind,
+    output: SliceInsertionOutputPlan,
+}
+
+enum SliceInsertionKind {
     DirectInline {
         fragments: Vec<Fragment>,
-        output: SliceInsertionOutputPlan,
     },
     SpliceOpenAncestors {
         destination: Vec<editor_crdt::Dot>,
         source: Fragment,
-        output: SliceInsertionOutputPlan,
     },
     SpliceBlocks {
         plan: TextblockSplicePlan,
-        output: SliceInsertionOutputPlan,
     },
     HoistBlocks {
         plan: HoistedBlockInsertionPlan,
-        output: SliceInsertionOutputPlan,
     },
     OpenInline {
         fragments: Vec<Fragment>,
-        output: SliceInsertionOutputPlan,
     },
     BlockBoundary {
         blocks: Vec<Fragment>,
         list_merges: Vec<crate::helpers::PlannedListMerge>,
-        output: SliceInsertionOutputPlan,
     },
 }
 
@@ -124,7 +126,10 @@ fn try_place_slice_at_frontier(
                 && fragments.iter().any(is_insertable_inline_fragment)
             {
                 let output = planned_inline_output(&fragments, target.position().affinity)?;
-                return Some(SliceInsertionPlan::DirectInline { fragments, output });
+                return Some(SliceInsertionPlan {
+                    kind: SliceInsertionKind::DirectInline { fragments },
+                    output,
+                });
             }
         }
 
@@ -153,9 +158,11 @@ fn try_place_slice_at_frontier(
             }
             splice.source = fitted.pop().expect("cardinality checked");
             let output = planned_open_splice_output(&splice)?;
-            return Some(SliceInsertionPlan::SpliceOpenAncestors {
-                destination: splice.destination,
-                source: splice.source,
+            return Some(SliceInsertionPlan {
+                kind: SliceInsertionKind::SpliceOpenAncestors {
+                    destination: splice.destination,
+                    source: splice.source,
+                },
                 output,
             });
         }
@@ -203,11 +210,17 @@ fn try_place_slice_at_frontier(
             .and_then(|candidate| plan_textblock_splice_target(target, candidate))
         {
             let output = plan.planned_output()?;
-            return Some(SliceInsertionPlan::SpliceBlocks { plan, output });
+            return Some(SliceInsertionPlan {
+                kind: SliceInsertionKind::SpliceBlocks { plan },
+                output,
+            });
         }
         if let Some(plan) = plan_hoisted_block_insertion(target, &slice) {
             let output = planned_block_output(&plan.blocks, &plan.list_merges)?;
-            return Some(SliceInsertionPlan::HoistBlocks { plan, output });
+            return Some(SliceInsertionPlan {
+                kind: SliceInsertionKind::HoistBlocks { plan },
+                output,
+            });
         }
 
         let candidate = parent_fitted.as_ref().unwrap_or(&slice);
@@ -227,7 +240,10 @@ fn try_place_slice_at_frontier(
                 return None;
             }
             let output = planned_inline_output(&fragments, target.position().affinity)?;
-            return Some(SliceInsertionPlan::OpenInline { fragments, output });
+            return Some(SliceInsertionPlan {
+                kind: SliceInsertionKind::OpenInline { fragments },
+                output,
+            });
         }
         None
     } else {
@@ -268,9 +284,11 @@ fn try_place_slice_at_frontier(
             });
         let list_merges = crate::helpers::plan_adjacent_list_merges(left, &blocks, right)?;
         let output = planned_block_output(&blocks, &list_merges)?;
-        Some(SliceInsertionPlan::BlockBoundary {
-            blocks,
-            list_merges,
+        Some(SliceInsertionPlan {
+            kind: SliceInsertionKind::BlockBoundary {
+                blocks,
+                list_merges,
+            },
             output,
         })
     }
@@ -455,10 +473,16 @@ fn placement_is_complete_no_output(target: &SliceInsertionTarget, slice: &Slice)
 }
 
 pub(crate) struct AppliedSliceInsertion {
-    pub(crate) nodes: Vec<editor_crdt::Dot>,
-    pub(crate) output: SliceInsertionOutputPlan,
-    pub(crate) observed_caret: Position,
-    pub(crate) observed_inserted: Selection,
+    pub(crate) caret: BoundSliceOutputPosition,
+    pub(crate) anchor: BoundSliceOutputPosition,
+    pub(crate) head: BoundSliceOutputPosition,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct BoundSliceOutputPosition {
+    pub(crate) dot: Dot,
+    pub(crate) relation: SliceOutputRelation,
+    pub(crate) affinity: Affinity,
 }
 
 pub(crate) fn apply_slice_insertion_plan(
@@ -467,29 +491,18 @@ pub(crate) fn apply_slice_insertion_plan(
     plan: SliceInsertionPlan,
     provenance: SliceProvenance,
 ) -> Result<AppliedSliceInsertion, CommandError> {
-    let (output, execution) = match plan {
-        SliceInsertionPlan::DirectInline { fragments, output } => {
-            ensure_output_plan(
-                &output,
-                planned_inline_output(&fragments, position.affinity),
-            )?;
+    let SliceInsertionPlan { kind, output } = plan;
+    let execution = match kind {
+        SliceInsertionKind::DirectInline { fragments }
+        | SliceInsertionKind::OpenInline { fragments } => {
             let position = materialize_repair_position(tr, position)?;
             let mode = build_inline_mode(tr, &position, provenance)?;
-            let execution = insert_content_as_inline_at_position(tr, position, fragments, &mode)?;
-            (output, execution)
+            insert_content_as_inline_at_position(tr, position, fragments, &mode)?
         }
-        SliceInsertionPlan::SpliceOpenAncestors {
+        SliceInsertionKind::SpliceOpenAncestors {
             destination,
             source,
-            output,
         } => {
-            ensure_output_plan(
-                &output,
-                planned_open_splice_output(&OpenAncestorSplice {
-                    destination: destination.clone(),
-                    source: source.clone(),
-                }),
-            )?;
             let mut inserted = None;
             tr.batch::<_, CommandError>(|tr| {
                 let position = materialize_repair_position(tr, position)?;
@@ -505,10 +518,9 @@ pub(crate) fn apply_slice_insertion_plan(
                 )?;
                 Ok(())
             })?;
-            (output, inserted)
+            inserted
         }
-        SliceInsertionPlan::SpliceBlocks { plan, output } => {
-            ensure_output_plan(&output, plan.planned_output())?;
+        SliceInsertionKind::SpliceBlocks { plan } => {
             let mut inserted = None;
             tr.batch::<_, CommandError>(|tr| {
                 let position = materialize_repair_position(tr, position)?;
@@ -516,53 +528,23 @@ pub(crate) fn apply_slice_insertion_plan(
                 inserted = insert_blocks_in_textblock_at_position(tr, position, &plan, &mode)?;
                 Ok(())
             })?;
-            (output, inserted)
+            inserted
         }
-        SliceInsertionPlan::HoistBlocks { plan, output } => {
-            ensure_output_plan(
-                &output,
-                planned_block_output(&plan.blocks, &plan.list_merges),
-            )?;
-            let execution = insert_hoisted_blocks_at_position(tr, position, plan)?;
-            (output, execution)
+        SliceInsertionKind::HoistBlocks { plan } => {
+            insert_hoisted_blocks_at_position(tr, position, plan)?
         }
-        SliceInsertionPlan::OpenInline { fragments, output } => {
-            ensure_output_plan(
-                &output,
-                planned_inline_output(&fragments, position.affinity),
-            )?;
-            let position = materialize_repair_position(tr, position)?;
-            let mode = build_inline_mode(tr, &position, provenance)?;
-            let execution = insert_content_as_inline_at_position(tr, position, fragments, &mode)?;
-            (output, execution)
-        }
-        SliceInsertionPlan::BlockBoundary {
+        SliceInsertionKind::BlockBoundary {
             blocks,
             list_merges,
-            output,
         } => {
-            ensure_output_plan(&output, planned_block_output(&blocks, &list_merges))?;
             let position = materialize_repair_position(tr, position)?;
-            let execution = insert_blocks_at_block_boundary(tr, position, blocks, list_merges)?;
-            (output, execution)
+            insert_blocks_at_block_boundary(tr, position, blocks, list_merges)?
         }
     };
     let execution = execution.ok_or_else(|| {
-        CommandError::Corrupted("planned Slice insertion produced no inserted selection".into())
+        CommandError::Corrupted("planned Slice insertion produced no insertion output".into())
     })?;
     bind_planned_output_nodes(tr, &output, execution)
-}
-
-fn ensure_output_plan(
-    actual: &SliceInsertionOutputPlan,
-    expected: Option<SliceInsertionOutputPlan>,
-) -> Result<(), CommandError> {
-    if expected.as_ref() != Some(actual) {
-        return Err(CommandError::Corrupted(
-            "Slice insertion output no longer matches its planned source path".into(),
-        ));
-    }
-    Ok(())
 }
 
 fn bind_planned_output_nodes(
@@ -570,77 +552,100 @@ fn bind_planned_output_nodes(
     output: &SliceInsertionOutputPlan,
     execution: SliceInsertionExecution,
 ) -> Result<AppliedSliceInsertion, CommandError> {
-    let observed_caret = tr
-        .selection()
-        .filter(|selection| selection.is_collapsed())
-        .map(|selection| selection.head)
-        .ok_or_else(|| {
-            CommandError::Corrupted("planned Slice insertion produced no final caret".into())
-        })?;
-    let observed_inserted = execution.inserted;
-    let mut units = execution.units.into_iter();
-    let mut nodes = Vec::with_capacity(output.nodes.len());
+    let SliceInsertionExecution {
+        outputs,
+        split_left,
+        split_right,
+    } = execution;
+    let mut outputs = outputs.into_iter();
+    let mut caret = None;
+    let mut anchor = None;
+    let mut head = None;
     for spec in &output.nodes {
         let dot = match &spec.source {
-            SliceOutputSource::SplitLeft => execution.split_left,
-            SliceOutputSource::SplitRight => execution.split_right,
-            _ => units.next(),
+            SliceOutputSource::SplitLeft => split_left,
+            SliceOutputSource::SplitRight => split_right,
+            source => {
+                let output = outputs.next().ok_or_else(|| {
+                    CommandError::Corrupted(
+                        "planned Slice output node was not bound by its insertion action".into(),
+                    )
+                })?;
+                if &output.source != source {
+                    return Err(CommandError::Corrupted(
+                        "authored Slice output came from a different source path".into(),
+                    ));
+                }
+                Some(output.dot)
+            }
         }
         .ok_or_else(|| {
             CommandError::Corrupted(
                 "planned Slice output node was not bound by its insertion action".into(),
             )
         })?;
-        let (dot, actual_type) =
-            resolve_output_node(tr, dot).ok_or(CommandError::NodeNotFound(dot))?;
+        let actual_type =
+            resolve_output_node_type(tr, dot).ok_or(CommandError::NodeNotFound(dot))?;
         if actual_type != spec.node_type {
             return Err(CommandError::Corrupted(
                 "planned Slice output node has a different type".into(),
             ));
         }
-        nodes.push(dot);
+        bind_planned_output_position(&mut caret, &output.caret, &spec.source, dot)?;
+        bind_planned_output_position(&mut anchor, &output.anchor, &spec.source, dot)?;
+        bind_planned_output_position(&mut head, &output.head, &spec.source, dot)?;
     }
-    if units.next().is_some() {
+    if outputs.next().is_some() {
         return Err(CommandError::Corrupted(
             "Slice insertion authored an undeclared output node".into(),
         ));
     }
+    let require_bound = |position: Option<BoundSliceOutputPosition>| {
+        position.ok_or_else(|| {
+            CommandError::Corrupted(
+                "planned Slice endpoint was not bound by its insertion action".into(),
+            )
+        })
+    };
     Ok(AppliedSliceInsertion {
-        nodes,
-        output: output.clone(),
-        observed_caret,
-        observed_inserted,
+        caret: require_bound(caret)?,
+        anchor: require_bound(anchor)?,
+        head: require_bound(head)?,
     })
 }
 
-fn resolve_output_node(
+fn bind_planned_output_position(
+    bound: &mut Option<BoundSliceOutputPosition>,
+    planned: &SliceOutputPositionSpec,
+    source: &SliceOutputSource,
+    dot: Dot,
+) -> Result<(), CommandError> {
+    if source != &planned.source {
+        return Ok(());
+    }
+    if bound.is_some() {
+        return Err(CommandError::Corrupted(
+            "planned Slice endpoint was bound more than once".into(),
+        ));
+    }
+    *bound = Some(BoundSliceOutputPosition {
+        dot,
+        relation: planned.relation,
+        affinity: planned.affinity,
+    });
+    Ok(())
+}
+
+fn resolve_output_node_type(
     tr: &Transaction,
     dot: editor_crdt::Dot,
-) -> Option<(editor_crdt::Dot, editor_model::NodeType)> {
+) -> Option<editor_model::NodeType> {
     let view = tr.view();
-    if let Some(node) = view.node(dot) {
-        return Some((dot, node.node_type()));
-    }
-    let live = view
-        .alias_classes()
-        .members_of(dot)
-        .into_iter()
-        .flatten()
-        .copied()
-        .find(|member| view.node(*member).is_some() || view.block_of(*member).is_some())
-        .unwrap_or(dot);
+    let live = resolve_live_slice_output_dot(&view, dot)?;
     if let Some(node) = view.node(live) {
-        return Some((live, node.node_type()));
+        return Some(node.node_type());
     }
-    let parent = view.block_of(live)?;
-    let node_type = view
-        .node(parent)?
-        .children()
-        .find_map(|child| match child {
-            editor_model::ChildView::Leaf(leaf) if leaf.dot() == live => Some(leaf.node_type()),
-            _ => None,
-        })?;
-    Some((live, node_type))
+    view.leaf(live).map(|leaf| leaf.node_type())
 }
 
 #[cfg(test)]
@@ -648,10 +653,10 @@ mod tests {
     use editor_clipboard::Slice;
     use editor_macros::state;
     use editor_model::{
-        Fragment, PlainBulletListNode, PlainHorizontalRuleNode, PlainListItemNode, PlainNode,
-        PlainParagraphNode, PlainTextNode,
+        AliasOp, AliasRun, ChildView, EditOp, Fragment, PlainBulletListNode,
+        PlainHorizontalRuleNode, PlainListItemNode, PlainNode, PlainParagraphNode, PlainTextNode,
     };
-    use editor_state::{Affinity, Position};
+    use editor_state::{Affinity, Position, Selection};
 
     use super::*;
 
@@ -693,12 +698,106 @@ mod tests {
             FitOutcome::Plan(SliceFitPlan {
                 kind: SliceFitPlanKind::Linear(LinearFitPlan {
                     mutation: LinearMutation::PointInsertion {
-                        insertion: SliceInsertionPlan::DirectInline { .. },
+                        insertion: SliceInsertionPlan {
+                            kind: SliceInsertionKind::DirectInline { .. },
+                            ..
+                        },
                     },
                     ..
                 })
             })
         ));
+    }
+
+    #[test]
+    fn binding_rejects_reordered_same_type_inline_outputs() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("ab") } } }
+            selection: (p1, 1)
+        };
+        let position = Position::new(p1, 1);
+        let fragments = text_slice("XY").content;
+        let output = planned_inline_output(&fragments, position.affinity).unwrap();
+        let mut tr = Transaction::new(&state);
+        let mode = build_inline_mode(&mut tr, &position, SliceProvenance::Formatted).unwrap();
+        let mut execution =
+            insert_content_as_inline_at_position(&mut tr, position, fragments, &mode)
+                .unwrap()
+                .unwrap();
+        execution.outputs.swap(0, 1);
+
+        assert!(matches!(
+            bind_planned_output_nodes(&tr, &output, execution),
+            Err(CommandError::Corrupted(_))
+        ));
+    }
+
+    #[test]
+    fn binding_preserves_raw_output_identity_until_final_resolution() {
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("abc") } } }
+            selection: (p1, 0)
+        };
+        let chars = initial
+            .view()
+            .node(p1)
+            .expect("paragraph")
+            .children()
+            .filter_map(|child| match child {
+                ChildView::Leaf(leaf) => Some(leaf.dot()),
+                ChildView::Block(_) => None,
+            })
+            .collect::<Vec<_>>();
+        let [raw, first_live, final_live] = chars.as_slice() else {
+            panic!("expected three inline leaves");
+        };
+
+        let mut deletion = Transaction::new(&initial);
+        deletion.remove_text(p1, 0, 1).unwrap();
+        let (mut state, ..) = deletion.commit();
+        for live in [first_live, final_live] {
+            state
+                .projected_mut()
+                .apply(EditOp::Alias(AliasOp {
+                    pairs: vec![AliasRun {
+                        old_start: *raw,
+                        len: 1,
+                        new_start: *live,
+                    }],
+                }))
+                .unwrap();
+        }
+
+        let tr = Transaction::new(&state);
+        let view = tr.view();
+        assert_eq!(
+            view.alias_classes().resolve_with(*raw, |candidate| {
+                view.node(candidate).is_some() || view.block_of(candidate).is_some()
+            }),
+            *final_live,
+            "the fixture must have more than one live alias"
+        );
+        let output = planned_inline_output(&text_slice("x").content, Affinity::Downstream)
+            .expect("one inline output");
+        let execution = SliceInsertionExecution {
+            outputs: vec![crate::helpers::SliceOutputBinding {
+                source: SliceOutputSource::InlineSlot { index: 0 },
+                dot: *raw,
+            }],
+            split_left: None,
+            split_right: None,
+        };
+
+        let applied = bind_planned_output_nodes(&tr, &output, execution).unwrap();
+        assert_eq!(applied.caret.dot, *raw);
+        assert_eq!(applied.anchor.dot, *raw);
+        assert_eq!(applied.head.dot, *raw);
+        for bound in [&applied.caret, &applied.anchor, &applied.head] {
+            assert_eq!(
+                resolve_live_slice_output_dot(&view, bound.dot),
+                Some(*final_live)
+            );
+        }
     }
 
     #[test]
@@ -763,7 +862,10 @@ mod tests {
                 | FitOutcome::Plan(SliceFitPlan {
                     kind: SliceFitPlanKind::Linear(LinearFitPlan {
                         mutation: LinearMutation::PointInsertion {
-                            insertion: SliceInsertionPlan::OpenInline { .. },
+                            insertion: SliceInsertionPlan {
+                                kind: SliceInsertionKind::OpenInline { .. },
+                                ..
+                            },
                         },
                         ..
                     })

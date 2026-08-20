@@ -4,14 +4,13 @@ use editor_model::{
     ChildView, DocView, Fragment, Modifier, NodeType, PlainNode, PlainParagraphNode, Schema,
     Subtree, content_placement,
 };
-use editor_state::{Affinity, Position, Selection, StableSelection, first_cursor_position};
+use editor_state::{Affinity, Position, Selection, first_cursor_position};
 use editor_transaction::{Transaction, fulfill, minimal_subtree};
 
 use super::{
     apply_inline_modifiers, child_node_type, consume_pending_modifiers, insert_hard_break_at_caret,
     insert_tab_at_caret, insert_text_at_caret, is_list_type, merge_adjacent_list_pair,
-    next_sibling, resolve_effective_modifiers, resolve_selection_after_adjacent_list_merge,
-    restore_selection_after_adjacent_list_merge,
+    next_sibling, resolve_effective_modifiers,
 };
 use crate::types::SliceProvenance;
 use crate::{CommandError, CommandResult};
@@ -341,7 +340,6 @@ pub(crate) struct OpenAncestorSplice {
     pub source: Fragment,
 }
 
-#[derive(Clone, PartialEq, Eq)]
 pub(crate) struct SliceInsertionOutputPlan {
     pub(crate) nodes: Vec<SliceOutputNodeSpec>,
     pub(crate) caret: SliceOutputPositionSpec,
@@ -349,13 +347,12 @@ pub(crate) struct SliceInsertionOutputPlan {
     pub(crate) head: SliceOutputPositionSpec,
 }
 
-#[derive(Clone, PartialEq, Eq)]
 pub(crate) struct SliceOutputNodeSpec {
     pub(crate) source: SliceOutputSource,
     pub(crate) node_type: NodeType,
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SliceOutputSource {
     InlineSlot {
         index: usize,
@@ -366,24 +363,29 @@ pub(crate) enum SliceOutputSource {
     TextblockStartInline {
         index: usize,
     },
-    TextblockBlockPath {
+    TextblockBlock {
         block_index: usize,
-        child_path: Vec<usize>,
+    },
+    TextblockListItem {
+        block_index: usize,
+        child_index: usize,
     },
     TextblockEndInline {
         index: usize,
     },
-    BlockPath {
+    Block {
         block_index: usize,
-        child_path: Vec<usize>,
+    },
+    BlockListItem {
+        block_index: usize,
+        child_index: usize,
     },
     SplitLeft,
     SplitRight,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct SliceOutputPositionSpec {
-    pub(crate) node: usize,
+    pub(crate) source: SliceOutputSource,
     pub(crate) relation: SliceOutputRelation,
     pub(crate) affinity: Affinity,
 }
@@ -395,6 +397,15 @@ pub(crate) enum SliceOutputRelation {
     AfterTerminalPageBreak,
     Start,
     End,
+}
+
+pub(crate) fn resolve_live_slice_output_dot(view: &DocView, dot: Dot) -> Option<Dot> {
+    let is_live = |candidate| view.node(candidate).is_some() || view.block_of(candidate).is_some();
+    if is_live(dot) {
+        return Some(dot);
+    }
+    let resolved = view.alias_classes().resolve_with(dot, is_live);
+    is_live(resolved).then_some(resolved)
 }
 
 pub(crate) fn planned_inline_output(
@@ -532,21 +543,22 @@ fn output_plan_for_units(
     anchor_affinity: Affinity,
     head_affinity: Affinity,
 ) -> Option<SliceInsertionOutputPlan> {
-    let last = nodes.len().checked_sub(1)?;
+    let first = nodes.first()?.source;
+    let last = nodes.last()?.source;
     Some(SliceInsertionOutputPlan {
         nodes,
         caret: SliceOutputPositionSpec {
-            node: last,
+            source: last,
             relation: caret_relation,
             affinity: caret_affinity,
         },
         anchor: SliceOutputPositionSpec {
-            node: 0,
+            source: first,
             relation: SliceOutputRelation::Before,
             affinity: anchor_affinity,
         },
         head: SliceOutputPositionSpec {
-            node: last,
+            source: last,
             relation: SliceOutputRelation::After,
             affinity: head_affinity,
         },
@@ -579,30 +591,29 @@ fn planned_block_output_nodes(
 ) -> Vec<SliceOutputNodeSpec> {
     let mut output = Vec::new();
     for (block_index, block) in blocks.iter().enumerate() {
-        let source = |child_path| {
-            if textblock {
-                SliceOutputSource::TextblockBlockPath {
-                    block_index,
-                    child_path,
-                }
-            } else {
-                SliceOutputSource::BlockPath {
-                    block_index,
-                    child_path,
-                }
-            }
+        let source = |child_index| match (textblock, child_index) {
+            (true, None) => SliceOutputSource::TextblockBlock { block_index },
+            (true, Some(child_index)) => SliceOutputSource::TextblockListItem {
+                block_index,
+                child_index,
+            },
+            (false, None) => SliceOutputSource::Block { block_index },
+            (false, Some(child_index)) => SliceOutputSource::BlockListItem {
+                block_index,
+                child_index,
+            },
         };
         if inserted_member_is_merged(list_merges, block_index) && is_list_type(block.node.as_type())
         {
             output.extend(block.children.iter().enumerate().map(|(index, child)| {
                 SliceOutputNodeSpec {
-                    source: source(vec![index]),
+                    source: source(Some(index)),
                     node_type: child.node.as_type(),
                 }
             }));
         } else {
             output.push(SliceOutputNodeSpec {
-                source: source(Vec::new()),
+                source: source(None),
                 node_type: block.node.as_type(),
             });
         }
@@ -922,32 +933,43 @@ pub(crate) fn insert_content_as_inline_at_position(
     fragments: Vec<Fragment>,
     mode: &InlineMode,
 ) -> Result<Option<SliceInsertionExecution>, CommandError> {
-    if fragments.is_empty() {
+    let mut outputs = Vec::new();
+    if !append_inline_outputs_at_position(tr, position, &fragments, mode, &mut outputs, |index| {
+        SliceOutputSource::InlineSlot { index }
+    })? {
         return Ok(None);
     }
+    Ok(Some(SliceInsertionExecution {
+        outputs,
+        split_left: None,
+        split_right: None,
+    }))
+}
 
+fn append_inline_outputs_at_position(
+    tr: &mut Transaction,
+    position: Position,
+    fragments: &[Fragment],
+    mode: &InlineMode,
+    outputs: &mut Vec<SliceOutputBinding>,
+    source: impl FnMut(usize) -> SliceOutputSource,
+) -> Result<bool, CommandError> {
     tr.set_selection(Some(Selection::collapsed(position)))?;
     let start = tr
         .selection()
         .expect("selection preserved through mutations")
         .head;
-    let inserted = insert_inline_fragments(tr, &fragments, mode)?;
-    if !inserted {
-        return Ok(None);
+    if !insert_inline_fragments(tr, fragments, mode)? {
+        return Ok(false);
     }
     let mut end = tr
         .selection()
         .expect("selection preserved through mutations")
         .head;
+    append_output_bindings_between(tr, start, end, outputs, source)?;
     end.affinity = Affinity::Downstream;
     tr.set_selection(Some(Selection::collapsed(end)))?;
-    let units = output_units_between(tr, start, end)?;
-    Ok(Some(SliceInsertionExecution {
-        inserted: Selection::new(start, end),
-        units,
-        split_left: None,
-        split_right: None,
-    }))
+    Ok(true)
 }
 
 pub(crate) fn insert_blocks_in_textblock_at_position(
@@ -971,14 +993,9 @@ pub(crate) fn insert_open_ancestor_splice_at_position(
         return Ok(None);
     }
 
-    let start = Position {
-        node: *splice.destination.last().unwrap(),
-        offset: position.offset,
-        affinity: Affinity::Upstream,
-    };
     let left = splice.destination;
     let mut right = left.clone();
-    let mut output_units = Vec::new();
+    let mut outputs = Vec::new();
     tr.batch::<_, CommandError>(|tr| {
         let deepest = depth - 1;
         tr.split_node(left[deepest], position.offset)?;
@@ -995,7 +1012,6 @@ pub(crate) fn insert_open_ancestor_splice_at_position(
             }
         }
 
-        let mut inserted = InsertedRange::default();
         let source_children = &splice.source.children;
         match source_children.as_slice() {
             [] => {
@@ -1004,39 +1020,19 @@ pub(crate) fn insert_open_ancestor_splice_at_position(
                 ));
             }
             [only] => {
-                join_open_fragment_both(tr, &left[1..], &right[1..], only, mode, &mut inserted)?;
+                join_open_fragment_both(tr, &left[1..], &right[1..], only, mode, &mut outputs)?;
             }
             [first, middle @ .., last] => {
-                append_open_fragment(tr, &left[1..], first, mode, &mut inserted)?;
-                insert_fragments_after(tr, left[0], left[1], middle, mode, &mut inserted)?;
-                prepend_open_fragment(tr, &right[1..], last, mode, &mut inserted)?;
+                append_open_fragment(tr, &left[1..], first, mode, &mut outputs)?;
+                insert_fragments_after(tr, left[0], left[1], middle, mode, &mut outputs)?;
+                prepend_open_fragment(tr, &right[1..], last, mode, &mut outputs)?;
             }
         }
-
-        let mut end = inserted
-            .end
-            .clone()
-            .and_then(|endpoint| resolve_inserted_range_endpoint(tr, endpoint))
-            .ok_or_else(|| {
-                CommandError::Corrupted(
-                    "open-ancestor Slice plan produced no inserted endpoint".into(),
-                )
-            })?;
-        end.affinity = Affinity::Downstream;
-        output_units = inserted.units.clone();
-        tr.set_selection(Some(Selection::collapsed(end)))?;
         Ok(())
     })?;
 
-    let end = tr
-        .selection()
-        .map(|selection| selection.head)
-        .ok_or_else(|| {
-            CommandError::Corrupted("open-ancestor Slice plan produced no final caret".into())
-        })?;
     Ok(Some(SliceInsertionExecution {
-        inserted: Selection::new(start, end),
-        units: output_units,
+        outputs,
         split_left: None,
         split_right: None,
     }))
@@ -1293,7 +1289,7 @@ fn join_open_fragment_both(
     right: &[Dot],
     source: &Fragment,
     mode: &InlineMode,
-    inserted: &mut InsertedRange,
+    inserted: &mut Vec<SliceOutputBinding>,
 ) -> Result<(), CommandError> {
     let (&left_node, &right_node) = left
         .first()
@@ -1330,7 +1326,7 @@ fn append_open_fragment(
     destination: &[Dot],
     source: &Fragment,
     mode: &InlineMode,
-    inserted: &mut InsertedRange,
+    inserted: &mut Vec<SliceOutputBinding>,
 ) -> Result<(), CommandError> {
     let &node = destination
         .first()
@@ -1351,7 +1347,7 @@ fn prepend_open_fragment(
     destination: &[Dot],
     source: &Fragment,
     mode: &InlineMode,
-    inserted: &mut InsertedRange,
+    inserted: &mut Vec<SliceOutputBinding>,
 ) -> Result<(), CommandError> {
     let &node = destination
         .first()
@@ -1380,19 +1376,16 @@ fn insert_inline_at_edge(
     fragments: &[Fragment],
     at_start: bool,
     mode: &InlineMode,
-    inserted: &mut InsertedRange,
+    inserted: &mut Vec<SliceOutputBinding>,
 ) -> Result<(), CommandError> {
     let position = if at_start {
         position_at_start_of_block(tr, block)?
     } else {
         position_at_end_of_block(tr, block)?
     };
-    if let Some(execution) =
-        insert_content_as_inline_at_position(tr, position, fragments.to_vec(), mode)?
-    {
-        inserted.include_position_range(execution.inserted.anchor, execution.inserted.head);
-        inserted.units.extend(execution.units);
-    }
+    append_inline_outputs_at_position(tr, position, fragments, mode, inserted, |index| {
+        SliceOutputSource::OpenSpliceUnit { index }
+    })?;
     Ok(())
 }
 
@@ -1402,7 +1395,7 @@ fn insert_fragments_after(
     child: Dot,
     fragments: &[Fragment],
     mode: &InlineMode,
-    inserted: &mut InsertedRange,
+    inserted: &mut Vec<SliceOutputBinding>,
 ) -> Result<(), CommandError> {
     if fragments.is_empty() {
         return Ok(());
@@ -1427,7 +1420,7 @@ fn insert_fragments_before(
     child: Dot,
     fragments: &[Fragment],
     mode: &InlineMode,
-    inserted: &mut InsertedRange,
+    inserted: &mut Vec<SliceOutputBinding>,
 ) -> Result<(), CommandError> {
     if fragments.is_empty() {
         return Ok(());
@@ -1451,7 +1444,7 @@ fn insert_fragments_at_end(
     parent: Dot,
     fragments: &[Fragment],
     mode: &InlineMode,
-    inserted: &mut InsertedRange,
+    inserted: &mut Vec<SliceOutputBinding>,
 ) -> Result<(), CommandError> {
     if fragments.is_empty() {
         return Ok(());
@@ -1471,13 +1464,18 @@ fn insert_closed_fragments(
     index: usize,
     fragments: &[Fragment],
     mode: &InlineMode,
-    inserted: &mut InsertedRange,
+    inserted: &mut Vec<SliceOutputBinding>,
 ) -> Result<(), CommandError> {
     for (offset, fragment) in fragments.iter().enumerate() {
         let inserted_id =
             tr.insert_subtree(parent, index + offset, fragment.clone().into_subtree())?;
         if let Some(inserted_id) = inserted_id {
-            inserted.include_block(inserted_id);
+            inserted.push(SliceOutputBinding {
+                source: SliceOutputSource::OpenSpliceUnit {
+                    index: inserted.len(),
+                },
+                dot: inserted_id,
+            });
             paint_inserted_subtree(tr, inserted_id, mode)?;
         }
     }
@@ -1559,108 +1557,24 @@ pub(crate) fn is_insertable_inline_fragment(fragment: &Fragment) -> bool {
     }
 }
 
-#[derive(Clone)]
-enum InsertedRangeEndpoint {
-    Position(Position),
-    BeforeBlock(Dot),
-    AfterBlock(Dot),
+pub(crate) struct SliceOutputBinding {
+    pub(crate) source: SliceOutputSource,
+    pub(crate) dot: Dot,
 }
 
 pub(crate) struct SliceInsertionExecution {
-    pub(crate) inserted: Selection,
-    pub(crate) units: Vec<Dot>,
+    pub(crate) outputs: Vec<SliceOutputBinding>,
     pub(crate) split_left: Option<Dot>,
     pub(crate) split_right: Option<Dot>,
 }
 
-#[derive(Default)]
-struct InsertedRange {
-    start: Option<InsertedRangeEndpoint>,
-    end: Option<InsertedRangeEndpoint>,
-    blocks: Vec<Dot>,
-    units: Vec<Dot>,
-}
-
-impl InsertedRange {
-    fn prepend_position(&mut self, start: Position) {
-        self.start = Some(InsertedRangeEndpoint::Position(start));
-    }
-
-    fn include_position_range(&mut self, start: Position, end: Position) {
-        self.start
-            .get_or_insert(InsertedRangeEndpoint::Position(start));
-        self.end = Some(InsertedRangeEndpoint::Position(end));
-    }
-
-    fn include_block(&mut self, block_id: Dot) {
-        self.start
-            .get_or_insert(InsertedRangeEndpoint::BeforeBlock(block_id));
-        self.end = Some(InsertedRangeEndpoint::AfterBlock(block_id));
-        self.blocks.push(block_id);
-        self.units.push(block_id);
-    }
-
-    fn selection(&self, tr: &Transaction) -> Result<Option<Selection>, CommandError> {
-        let mut endpoints = Vec::new();
-        if let Some(start) = self.start.clone() {
-            endpoints.push(resolve_inserted_range_endpoint(tr, start).ok_or_else(|| {
-                CommandError::Corrupted("planned Slice start output no longer resolves".into())
-            })?);
-        }
-        if let Some(end) = self.end.clone() {
-            endpoints.push(resolve_inserted_range_endpoint(tr, end).ok_or_else(|| {
-                CommandError::Corrupted("planned Slice end output no longer resolves".into())
-            })?);
-        }
-        for block in &self.blocks {
-            endpoints.push(
-                resolve_inserted_range_endpoint(tr, InsertedRangeEndpoint::BeforeBlock(*block))
-                    .ok_or_else(|| {
-                        CommandError::Corrupted(
-                            "planned Slice block-start output no longer resolves".into(),
-                        )
-                    })?,
-            );
-            endpoints.push(
-                resolve_inserted_range_endpoint(tr, InsertedRangeEndpoint::AfterBlock(*block))
-                    .ok_or_else(|| {
-                        CommandError::Corrupted(
-                            "planned Slice block-end output no longer resolves".into(),
-                        )
-                    })?,
-            );
-        }
-
-        let view = tr.state().view();
-        let resolved = endpoints
-            .iter()
-            .map(|position| {
-                position.resolve(&view).ok_or_else(|| {
-                    CommandError::Corrupted(
-                        "planned Slice output position no longer resolves".into(),
-                    )
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        let Some(start) = resolved.iter().min().map(|position| position.position()) else {
-            return Ok(None);
-        };
-        let end = resolved
-            .iter()
-            .max()
-            .map(|position| position.position())
-            .ok_or_else(|| {
-                CommandError::Corrupted("planned Slice output range has no end".into())
-            })?;
-        Ok(Some(Selection::new(start, end)))
-    }
-}
-
-fn output_units_between(
+fn append_output_bindings_between(
     tr: &Transaction,
     start: Position,
     end: Position,
-) -> Result<Vec<Dot>, CommandError> {
+    outputs: &mut Vec<SliceOutputBinding>,
+    mut source: impl FnMut(usize) -> SliceOutputSource,
+) -> Result<(), CommandError> {
     if start.node != end.node || start.offset > end.offset {
         return Err(CommandError::Corrupted(
             "inline Slice output escaped its planned textblock".into(),
@@ -1670,21 +1584,30 @@ fn output_units_between(
     let node = view
         .node(start.node)
         .ok_or(CommandError::NodeNotFound(start.node))?;
-    let units = node
-        .children()
-        .skip(start.offset)
-        .take(end.offset - start.offset)
-        .map(|child| match child {
-            ChildView::Block(block) => block.id(),
-            ChildView::Leaf(leaf) => leaf.dot(),
-        })
-        .collect::<Vec<_>>();
-    if units.len() != end.offset - start.offset {
+    if end.offset > node.child_count() {
         return Err(CommandError::Corrupted(
             "inline Slice output produced a different child span".into(),
         ));
     }
-    Ok(units)
+    let expected_count = end.offset - start.offset;
+    let first_output_index = outputs.len();
+    outputs.reserve(expected_count);
+    for (index, child) in node
+        .children()
+        .skip(start.offset)
+        .take(expected_count)
+        .enumerate()
+    {
+        let dot = match child {
+            ChildView::Block(block) => block.id(),
+            ChildView::Leaf(leaf) => leaf.dot(),
+        };
+        outputs.push(SliceOutputBinding {
+            source: source(first_output_index + index),
+            dot,
+        });
+    }
+    Ok(())
 }
 
 /// Elem id at child slot `index` of `container` when it is an addressable block
@@ -1823,24 +1746,25 @@ impl TextblockSplicePlan {
                     },
                 ],
                 caret: SliceOutputPositionSpec {
-                    node: 1,
+                    source: SliceOutputSource::SplitRight,
                     relation: SliceOutputRelation::Start,
                     affinity: Affinity::Downstream,
                 },
                 anchor: SliceOutputPositionSpec {
-                    node: 0,
+                    source: SliceOutputSource::SplitLeft,
                     relation: SliceOutputRelation::End,
                     affinity: Affinity::Upstream,
                 },
                 head: SliceOutputPositionSpec {
-                    node: 1,
+                    source: SliceOutputSource::SplitRight,
                     relation: SliceOutputRelation::Start,
                     affinity: Affinity::Downstream,
                 },
             });
         }
 
-        let last_output_node = nodes.len() - 1;
+        let first_output = nodes.first()?.source;
+        let last_authored_output = nodes.last()?.source;
         if self.final_caret_at_right_boundary {
             // An empty open end authors a paragraph boundary but no inline unit.
             // Bind the split right only as the caret endpoint; the inserted
@@ -1881,26 +1805,20 @@ impl TextblockSplicePlan {
         } else {
             inline_output_end_affinity(&self.blocks.first()?.children)
         };
-        let mut output = output_plan_for_units(
-            nodes,
-            caret_relation,
-            Affinity::Downstream,
-            if self.join_start {
-                Affinity::Upstream
-            } else {
-                Affinity::Downstream
-            },
-            head_affinity,
-        )?;
-        if self.final_caret_at_right_boundary {
-            output.caret = SliceOutputPositionSpec {
-                node: output.nodes.len() - 1,
+        let caret = if self.final_caret_at_right_boundary {
+            SliceOutputPositionSpec {
+                source: SliceOutputSource::SplitRight,
                 relation: SliceOutputRelation::Start,
                 affinity: Affinity::Downstream,
-            };
-            output.head.node = last_output_node;
-        }
-        if self.join_start
+            }
+        } else {
+            SliceOutputPositionSpec {
+                source: last_authored_output,
+                relation: caret_relation,
+                affinity: Affinity::Downstream,
+            }
+        };
+        let head_relation = if self.join_start
             && self.inserted_blocks.is_empty()
             && !self.merge_end
             && self
@@ -1908,9 +1826,28 @@ impl TextblockSplicePlan {
                 .first()
                 .is_some_and(|block| paragraph_ends_with_page_break(block))
         {
-            output.head.relation = SliceOutputRelation::AfterTerminalPageBreak;
-        }
-        Some(output)
+            SliceOutputRelation::AfterTerminalPageBreak
+        } else {
+            SliceOutputRelation::After
+        };
+        Some(SliceInsertionOutputPlan {
+            nodes,
+            caret,
+            anchor: SliceOutputPositionSpec {
+                source: first_output,
+                relation: SliceOutputRelation::Before,
+                affinity: if self.join_start {
+                    Affinity::Upstream
+                } else {
+                    Affinity::Downstream
+                },
+            },
+            head: SliceOutputPositionSpec {
+                source: last_authored_output,
+                relation: head_relation,
+                affinity: head_affinity,
+            },
+        })
     }
 }
 
@@ -2166,9 +2103,7 @@ fn insert_blocks_in_textblock(
         tr.remove_subtree(textblock_id)?;
     }
 
-    let mut last_caret: Option<Position> = None;
-    let mut inserted_range = InsertedRange::default();
-    let mut terminal_page_break_start: Option<Position> = None;
+    let mut start_outputs = Vec::new();
 
     if plan.join_start {
         let left_id = left_id.expect("merge start requires left destination content");
@@ -2179,24 +2114,16 @@ fn insert_blocks_in_textblock(
             .is_some_and(|fragment| fragment.node.as_type() == NodeType::PageBreak)
             .then(|| &inline[..inline.len() - 1])
             .unwrap_or(&inline);
-        tr.set_selection(Some(Selection::collapsed(position_at_end_of_block(
-            tr, left_id,
-        )?)))?;
-        let start = tr
-            .selection()
-            .expect("selection preserved through mutations")
-            .head;
-        let inserted = insert_inline_fragments(tr, insertable_inline, mode)?;
+        let position = position_at_end_of_block(tr, left_id)?;
+        append_inline_outputs_at_position(
+            tr,
+            position,
+            insertable_inline,
+            mode,
+            &mut start_outputs,
+            |index| SliceOutputSource::TextblockStartInline { index },
+        )?;
         let inserted_page_break = insert_terminal_page_break_from_edge(tr, left_id, &inline)?;
-        let end = tr
-            .selection()
-            .expect("selection preserved through mutations")
-            .head;
-        if start.offset < end.offset {
-            inserted_range
-                .units
-                .extend(output_units_between(tr, start, end)?);
-        }
         if inserted_page_break {
             let page_break = tr
                 .view()
@@ -2213,19 +2140,18 @@ fn insert_blocks_in_textblock(
                         "planned terminal PageBreak output was not authored".into(),
                     )
                 })?;
-            inserted_range.units.push(page_break);
-            terminal_page_break_start = Some(start);
-            last_caret = Some(end);
-        } else if inserted {
-            inserted_range.include_position_range(start, end);
-            last_caret = Some(end);
+            start_outputs.push(SliceOutputBinding {
+                source: SliceOutputSource::TextblockStartInline {
+                    index: start_outputs.len(),
+                },
+                dot: page_break,
+            });
         }
     }
 
     if plan.merge_destinations {
         let left_id = left_id.expect("destination merge requires left content");
         tr.merge_node(left_id)?;
-        last_caret = tr.selection().map(|s| s.head);
     }
 
     let mut inserted_blocks = Vec::with_capacity(unjoined_count);
@@ -2240,42 +2166,26 @@ fn insert_blocks_in_textblock(
             tr.insert_subtree(container_id, block_index, fragment.clone().into_subtree())?
         {
             inserted_blocks.push(inserted_id);
-            inserted_range.include_block(inserted_id);
             if let Some(paint) = mode.plain_paint() {
                 paint_block_uniformly(tr, inserted_id, paint)?;
             }
-            // Block-level atoms have no inner caret. Their planned end slot is
-            // the boundary immediately after the authored atom.
-            last_caret = Some(position_at_end_of_block(tr, inserted_id).or_else(|_| {
-                resolve_inserted_range_endpoint(tr, InsertedRangeEndpoint::AfterBlock(inserted_id))
-                    .ok_or(CommandError::NodeNotFound(inserted_id))
-            })?);
         }
     }
 
+    let mut end_outputs = Vec::new();
     if plan.merge_end {
         let right_id = right_id.expect("merge end requires right destination content");
         let last = blocks.last().unwrap();
         let inline = last.children.to_vec();
-        tr.set_selection(Some(Selection::collapsed(position_at_start_of_block(
-            tr, right_id,
-        )?)))?;
-        let start = tr
-            .selection()
-            .expect("selection preserved through mutations")
-            .head;
-        let inserted = insert_inline_fragments(tr, &inline, mode)?;
-        let end = tr
-            .selection()
-            .expect("selection preserved through mutations")
-            .head;
-        if inserted {
-            inserted_range.include_position_range(start, end);
-            inserted_range
-                .units
-                .extend(output_units_between(tr, start, end)?);
-        }
-        last_caret = Some(end);
+        let position = position_at_start_of_block(tr, right_id)?;
+        append_inline_outputs_at_position(
+            tr,
+            position,
+            &inline,
+            mode,
+            &mut end_outputs,
+            |index| SliceOutputSource::TextblockEndInline { index },
+        )?;
         if let Some(paint) = mode.plain_paint() {
             tr.replace_carry(right_id, carry_from_paint(paint))?;
         }
@@ -2289,84 +2199,30 @@ fn insert_blocks_in_textblock(
     };
     tr.apply_steps(steps)?;
 
-    if !plan.merge_end && plan.unjoined_ends_with_page_break {
-        let following_id = block_child_id(tr, container_id, plan.insert_at + unjoined_count)
-            .ok_or_else(|| CommandError::Corrupted("PageBreak has no following block".into()))?;
-        last_caret = Some(position_at_start_of_block(tr, following_id)?);
-    }
-
-    if let Some(start) = terminal_page_break_start {
-        if inserted_range.end.is_some() {
-            inserted_range.prepend_position(start);
-        } else {
-            let following_id =
-                block_child_id(tr, container_id, plan.insert_at).ok_or_else(|| {
-                    CommandError::Corrupted("PageBreak has no following block".into())
-                })?;
-            let end = position_at_start_of_block(tr, following_id)?;
-            inserted_range.include_position_range(start, end);
-            last_caret = Some(end);
-        }
-    }
-
-    let mut final_pos = match (last_caret, plan.final_caret_at_right_boundary) {
-        (_, true) => position_at_start_of_block(
-            tr,
-            right_id.ok_or_else(|| {
-                CommandError::Corrupted(
-                    "planned textblock split lost its right caret boundary".into(),
-                )
-            })?,
-        )?,
-        (Some(position), false) => position,
-        (None, false) => {
-            return Err(CommandError::Corrupted(
-                "textblock Slice plan produced a different final caret".into(),
-            ));
-        }
-    };
-    final_pos.affinity = Affinity::Downstream;
-    let explicit_inserted_selection = inserted_range.selection(tr)?;
-    let split_boundary_selection =
-        if plan.has_left && plan.has_right && explicit_inserted_selection.is_none() {
-            match (left_id, right_id) {
-                (Some(left_id), Some(right_id)) => Some(Selection::new(
-                    position_at_end_of_block(tr, left_id)?,
-                    position_at_start_of_block(tr, right_id)?,
-                )),
-                _ => {
-                    return Err(CommandError::Corrupted(
-                        "planned textblock split lost a surviving boundary".into(),
-                    ));
-                }
-            }
-        } else {
-            None
-        };
-    let inserted_selection = explicit_inserted_selection
-        .or(split_boundary_selection)
-        .ok_or_else(|| {
-            CommandError::Corrupted("textblock Slice plan produced no inserted selection".into())
-        })?;
-    let output_units = expand_planned_list_output_units(
+    let mut outputs = start_outputs;
+    outputs.extend(block_output_bindings(
         tr,
-        &inserted_range.units,
         &inserted_blocks,
         &plan.list_merges,
-    )?;
-    tr.set_selection(Some(Selection::collapsed(final_pos)))?;
-    let inserted_selection = apply_planned_list_merges(
+        |block_index, child_index| match child_index {
+            Some(child_index) => SliceOutputSource::TextblockListItem {
+                block_index,
+                child_index,
+            },
+            None => SliceOutputSource::TextblockBlock { block_index },
+        },
+    )?);
+    outputs.extend(end_outputs);
+    apply_planned_list_merges(
         tr,
         container_id,
         plan.insert_at,
         &inserted_blocks,
         &plan.list_merges,
-        inserted_selection,
     )?;
 
     Ok(Some(SliceInsertionExecution {
-        inserted: inserted_selection,
-        units: output_units,
+        outputs,
         split_left: left_id,
         split_right: right_id,
     }))
@@ -2404,7 +2260,6 @@ pub(crate) fn insert_blocks_at_block_boundary(
     let container_id = position.node;
     let base_index = position.offset;
     let block_count = blocks.len();
-    let terminal_page_break = blocks.last().is_some_and(paragraph_ends_with_page_break);
     let mut inserted: Vec<Dot> = Vec::with_capacity(block_count);
     tr.batch(|tr| {
         // Normalization between the sequential inserts can synthesize scaffold
@@ -2463,7 +2318,7 @@ pub(crate) fn insert_blocks_at_block_boundary(
         .ok_or_else(|| {
             CommandError::Corrupted("planned block Slice end output no longer resolves".into())
         })?;
-    let span = last_inserted_index
+    last_inserted_index
         .checked_sub(first_inserted_index)
         .and_then(|distance| distance.checked_add(1))
         .filter(|span| *span == inserted.len())
@@ -2474,37 +2329,19 @@ pub(crate) fn insert_blocks_at_block_boundary(
         })?;
     let start_index = first_inserted_index;
 
-    let mut final_pos = if terminal_page_break {
-        let following =
-            block_child_id(tr, container_id, last_inserted_index + 1).ok_or_else(|| {
-                CommandError::Corrupted("planned PageBreak output has no following block".into())
-            })?;
-        position_at_start_of_block(tr, following)?
-    } else {
-        let last = *inserted
-            .last()
-            .ok_or_else(|| CommandError::Corrupted("planned block Slice output is empty".into()))?;
-        position_at_end_of_block(tr, last).or_else(|_| {
-            resolve_inserted_range_endpoint(tr, InsertedRangeEndpoint::AfterBlock(last))
-                .ok_or(CommandError::NodeNotFound(last))
-        })?
-    };
-    final_pos.affinity = Affinity::Downstream;
-    tr.set_selection(Some(Selection::collapsed(final_pos)))?;
-
-    let inserted_selection = selection_over_inserted_blocks(container_id, start_index, span);
-    let output_units = expand_planned_list_output_units(tr, &inserted, &inserted, &list_merges)?;
-    let inserted_selection = apply_planned_list_merges(
-        tr,
-        container_id,
-        start_index,
-        &inserted,
-        &list_merges,
-        inserted_selection,
-    )?;
+    let outputs =
+        block_output_bindings(tr, &inserted, &list_merges, |block_index, child_index| {
+            match child_index {
+                Some(child_index) => SliceOutputSource::BlockListItem {
+                    block_index,
+                    child_index,
+                },
+                None => SliceOutputSource::Block { block_index },
+            }
+        })?;
+    apply_planned_list_merges(tr, container_id, start_index, &inserted, &list_merges)?;
     Ok(Some(SliceInsertionExecution {
-        inserted: inserted_selection,
-        units: output_units,
+        outputs,
         split_left: None,
         split_right: None,
     }))
@@ -2516,8 +2353,7 @@ fn apply_planned_list_merges(
     start_index: usize,
     inserted: &[Dot],
     merges: &[PlannedListMerge],
-    mut inserted_selection: Selection,
-) -> Result<Selection, CommandError> {
+) -> Result<(), CommandError> {
     let left = start_index
         .checked_sub(1)
         .and_then(|index| block_child_id(tr, container_id, index));
@@ -2555,29 +2391,17 @@ fn apply_planned_list_merges(
             }
             (earlier_id, later_id)
         };
-        let selection = tr.selection();
-        let stable = selection.map(|selection| StableSelection::capture(&selection, &tr.view()));
-        let inserted_stable = StableSelection::capture(&inserted_selection, &tr.view());
-        let merged_lists = merge_adjacent_list_pair(tr, pair.0, pair.1)?;
-        if let Some((selection, stable)) = selection.zip(stable) {
-            restore_selection_after_adjacent_list_merge(tr, selection, stable, &merged_lists)?;
-        }
-        inserted_selection = resolve_selection_after_adjacent_list_merge(
-            tr,
-            inserted_selection,
-            inserted_stable,
-            &merged_lists,
-        )?;
+        merge_adjacent_list_pair(tr, pair.0, pair.1)?;
     }
-    Ok(inserted_selection)
+    Ok(())
 }
 
-fn expand_planned_list_output_units(
+fn block_output_bindings(
     tr: &Transaction,
-    units: &[Dot],
     inserted: &[Dot],
     merges: &[PlannedListMerge],
-) -> Result<Vec<Dot>, CommandError> {
+    mut source: impl FnMut(usize, Option<usize>) -> SliceOutputSource,
+) -> Result<Vec<SliceOutputBinding>, CommandError> {
     let mut merged_inserted = vec![false; inserted.len()];
     for planned in merges {
         for member in [planned.earlier, planned.later] {
@@ -2594,31 +2418,30 @@ fn expand_planned_list_output_units(
 
     let view = tr.view();
     let mut output = Vec::new();
-    for unit in units {
-        let Some(index) = inserted.iter().position(|inserted| inserted == unit) else {
-            output.push(*unit);
-            continue;
-        };
-        if !merged_inserted[index] {
-            output.push(*unit);
+    for (block_index, &unit) in inserted.iter().enumerate() {
+        if !merged_inserted[block_index] {
+            output.push(SliceOutputBinding {
+                source: source(block_index, None),
+                dot: unit,
+            });
             continue;
         }
-        let list = view.node(*unit).ok_or(CommandError::NodeNotFound(*unit))?;
+        let list = view.node(unit).ok_or(CommandError::NodeNotFound(unit))?;
         if !is_list_type(list.node_type()) {
             return Err(CommandError::Corrupted(
                 "planned list merge output is not a list".into(),
             ));
         }
-        let items = list
-            .child_blocks()
-            .map(|item| item.id())
-            .collect::<Vec<_>>();
-        if items.is_empty() {
+        let mut items = list.child_blocks().enumerate().peekable();
+        if items.peek().is_none() {
             return Err(CommandError::Corrupted(
                 "planned list merge output contains no list item".into(),
             ));
         }
-        output.extend(items);
+        output.extend(items.map(|(child_index, item)| SliceOutputBinding {
+            source: source(block_index, Some(child_index)),
+            dot: item.id(),
+        }));
     }
     Ok(output)
 }
@@ -2720,48 +2543,6 @@ fn open_fragments_for_parent(
             }
             candidates.extend(&last.children);
             open_end -= 1;
-        }
-    }
-}
-
-fn selection_over_inserted_blocks(
-    container_id: Dot,
-    start_index: usize,
-    block_count: usize,
-) -> Selection {
-    Selection::new(
-        Position {
-            node: container_id,
-            offset: start_index,
-            affinity: Affinity::Downstream,
-        },
-        Position {
-            node: container_id,
-            offset: start_index + block_count,
-            affinity: Affinity::Upstream,
-        },
-    )
-}
-
-fn resolve_inserted_range_endpoint(
-    tr: &Transaction,
-    endpoint: InsertedRangeEndpoint,
-) -> Option<Position> {
-    match endpoint {
-        InsertedRangeEndpoint::Position(position) => Some(position),
-        InsertedRangeEndpoint::BeforeBlock(ref id) | InsertedRangeEndpoint::AfterBlock(ref id) => {
-            let view = tr.state().view();
-            let (parent_id, index) = block_parent_and_index(&view, *id)?;
-            let (offset, affinity) = match endpoint {
-                InsertedRangeEndpoint::BeforeBlock(_) => (index, Affinity::Downstream),
-                InsertedRangeEndpoint::AfterBlock(_) => (index + 1, Affinity::Upstream),
-                InsertedRangeEndpoint::Position(_) => unreachable!(),
-            };
-            Some(Position {
-                node: parent_id,
-                offset,
-                affinity,
-            })
         }
     }
 }
