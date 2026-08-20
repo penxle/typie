@@ -607,6 +607,39 @@ function expectActualCanvas(editor: Editor, pageIndex: number, requirePaintedPix
 }
 
 describe('web editor frame synchronization', () => {
+  it('reveals search matches instantly while preserving smooth tracked-item reveals by default', async () => {
+    const { editor } = await mountEditor(doc('match between match'));
+    const reveals: Parameters<Editor['scrollIntoView']>[0][] = [];
+    editor.registerScrollIntoView((options) => {
+      reveals.push(options);
+      return Promise.resolve();
+    });
+
+    editor.search('match');
+    await expect.poll(() => reveals.length).toBe(1);
+
+    editor.findNext();
+    await expect.poll(() => reveals.length).toBe(2);
+
+    editor.findPrevious();
+    await expect.poll(() => reveals.length).toBe(3);
+
+    editor.replace('replacement');
+    await expect.poll(() => editor.searchMatches.length).toBe(1);
+    await expect.poll(() => reveals.length).toBe(4);
+
+    editor.revealTrackedItem('search-match:1');
+    await expect.poll(() => reveals.length).toBe(5);
+
+    expect(reveals).toEqual([
+      { target: { type: 'tracked_item', id: 'search-match:0' }, policy: 'reveal', behavior: 'instant' },
+      { target: { type: 'tracked_item', id: 'search-match:1' }, policy: 'reveal', behavior: 'instant' },
+      { target: { type: 'tracked_item', id: 'search-match:0' }, policy: 'reveal', behavior: 'instant' },
+      { target: { type: 'tracked_item', id: 'search-match:1' }, policy: 'reveal', behavior: 'instant' },
+      { target: { type: 'tracked_item', id: 'search-match:1' }, policy: 'reveal', behavior: 'smooth' },
+    ]);
+  });
+
   it.each([
     { mode: 'editable', readOnly: false },
     { mode: 'read-only', readOnly: true },
