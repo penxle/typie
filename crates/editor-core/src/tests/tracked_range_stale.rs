@@ -274,7 +274,7 @@ fn prose_installed_sensitive_ranges_report_stale() {
 
 #[test]
 fn only_ranges_in_edited_block_are_stale_checked() {
-    let (initial, p1, p2) = state! {
+    let (initial, _p1, p2) = state! {
         doc { root {
             p1: paragraph { text("hello world" ) }
             p2: paragraph { text("lorem ipsum") }
