@@ -1568,16 +1568,16 @@ internal constructor(
             previous.lastHistoryTag
           },
         trackedRanges = trackedRanges,
-        trackedRangesContainingSelectionHead =
-          if (selection != null && selection.anchor == selection.head) {
+        trackedRangesContainingSelection =
+          if (selection != null) {
             if (selectionChanged || changed(StateField.TrackedRanges) || documentChanged) {
               if (trackedRanges.isEmpty()) {
                 emptyList()
               } else {
-                inner.trackedRangesContainingPosition(selection.head, null)
+                inner.trackedRangesContainingSelection(selection, null)
               }
             } else {
-              previous.trackedRangesContainingSelectionHead
+              previous.trackedRangesContainingSelection
             }
           } else {
             emptyList()

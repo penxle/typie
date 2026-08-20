@@ -226,7 +226,7 @@ internal fun rememberEditorSpellcheckSession(
     active,
     editorState.selection,
     editorState.trackedRanges,
-    editorState.trackedRangesContainingSelectionHead,
+    editorState.trackedRangesContainingSelection,
     model?.results,
   ) {
     val activeModel = model ?: return@LaunchedEffect
@@ -258,14 +258,10 @@ internal fun rememberEditorSpellcheckSession(
           lastMembershipIdsMappedToSpellcheck = null
           return@LaunchedEffect
         }
-    if (selection.anchor != selection.head) {
-      lastMembershipIdsMappedToSpellcheck = null
-      return@LaunchedEffect
-    }
 
     val resultIds = activeModel.results.mapTo(mutableSetOf()) { it.id }
     val membershipIds =
-      editorState.trackedRangesContainingSelectionHead.trackedRangeMembershipIds(
+      editorState.trackedRangesContainingSelection.trackedRangeMembershipIds(
         allowedGroups = SPELLCHECK_MEMBERSHIP_GROUPS,
         ownedIds = resultIds,
       )
@@ -278,7 +274,7 @@ internal fun rememberEditorSpellcheckSession(
     lastMembershipIdsMappedToSpellcheck = membershipIds
 
     val rangeId =
-      editorState.trackedRangesContainingSelectionHead
+      editorState.trackedRangesContainingSelection
         .selectTrackedRangeMember(
           allowedGroups = SPELLCHECK_MEMBERSHIP_GROUPS,
           activeId = activeModel.activeRangeId,

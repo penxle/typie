@@ -108,7 +108,8 @@ internal class FakeFfiEditor(
   var copySelectionProvider: () -> ClipboardPayload? = { null },
   var selectionEndpointsProvider: () -> SelectionEndpoints? = { null },
   var trackedRangesProvider: (String?) -> List<TrackedRange> = { emptyList() },
-  var trackedRangesContainingPositionProvider: (Position, String?) -> List<TrackedRangeEndpoints> =
+  var trackedRangesContainingSelectionProvider:
+    (Selection, String?) -> List<TrackedRangeEndpoints> =
     { _, _ ->
       emptyList()
     },
@@ -165,7 +166,7 @@ internal class FakeFfiEditor(
   val resizeCalls = mutableListOf<SurfaceResizeCall>()
   val surfaceEvents = mutableListOf<String>()
   var trackedRangesCallCount: Int = 0
-  var trackedRangesContainingPositionCallCount: Int = 0
+  var trackedRangesContainingSelectionCallCount: Int = 0
   var placeholderCallCount: Int = 0
   val insertedTemplateFragments = mutableListOf<ByteArray>()
   val attached = mutableSetOf<Int>()
@@ -462,12 +463,12 @@ internal class FakeFfiEditor(
     return trackedRangesProvider(group)
   }
 
-  override fun trackedRangesContainingPosition(
-    position: Position,
+  override fun trackedRangesContainingSelection(
+    selection: Selection,
     group: String?,
   ): List<TrackedRangeEndpoints> {
-    trackedRangesContainingPositionCallCount += 1
-    return trackedRangesContainingPositionProvider(position, group)
+    trackedRangesContainingSelectionCallCount += 1
+    return trackedRangesContainingSelectionProvider(selection, group)
   }
 
   override fun exportPageVector(page: Int, scaleFactor: Double): ByteArray = ByteArray(0)

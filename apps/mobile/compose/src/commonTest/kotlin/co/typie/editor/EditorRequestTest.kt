@@ -11,6 +11,7 @@ import co.typie.editor.ffi.Position
 import co.typie.editor.ffi.ProseRangeInstallOutcome
 import co.typie.editor.ffi.ProseTrackedRangeRegistration
 import co.typie.editor.ffi.Rect
+import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.StateField
 import co.typie.editor.ffi.SystemEvent
 import co.typie.editor.ffi.TrackedRange
@@ -280,8 +281,13 @@ class EditorRequestTest {
     }
 
   @Test
-  fun snapshot_refreshes_membership_when_ranges_or_document_change_under_stationary_cursor() =
+  fun snapshot_refreshes_membership_when_ranges_or_document_change_under_stationary_selection() =
     runTest(dispatcher) {
+      val selection =
+        Selection(
+          anchor = Position(node = "text", offset = 1, affinity = Affinity.Downstream),
+          head = Position(node = "text", offset = 3, affinity = Affinity.Downstream),
+        )
       val range =
         TrackedRange(
           id = "comment-1",
@@ -310,30 +316,34 @@ class EditorRequestTest {
       val fake =
         FakeFfiEditor(
           onTick = { events.removeFirst() },
+          selectionProvider = { selection },
           trackedRangesProvider = { listOf(range) },
-          trackedRangesContainingPositionProvider = { _, _ -> listOf(rangeEndpoints) },
+          trackedRangesContainingSelectionProvider = { queriedSelection, _ ->
+            assertEquals(selection, queriedSelection)
+            listOf(rangeEndpoints)
+          },
         )
       val editor = Editor(fake, this, dispatcher)
 
       editor.update { enqueue(sampleMessage) }
 
       assertEquals(1, fake.trackedRangesCallCount)
-      assertEquals(1, fake.trackedRangesContainingPositionCallCount)
+      assertEquals(1, fake.trackedRangesContainingSelectionCallCount)
       assertEquals(listOf(range), editor.appliedState.trackedRanges)
-      assertEquals(listOf(rangeEndpoints), editor.appliedState.trackedRangesContainingSelectionHead)
+      assertEquals(listOf(rangeEndpoints), editor.appliedState.trackedRangesContainingSelection)
 
       editor.update { enqueue(sampleMessage) }
 
       assertEquals(1, fake.trackedRangesCallCount)
-      assertEquals(1, fake.trackedRangesContainingPositionCallCount)
+      assertEquals(1, fake.trackedRangesContainingSelectionCallCount)
       assertEquals(listOf(range), editor.appliedState.trackedRanges)
-      assertEquals(listOf(rangeEndpoints), editor.appliedState.trackedRangesContainingSelectionHead)
+      assertEquals(listOf(rangeEndpoints), editor.appliedState.trackedRangesContainingSelection)
 
       editor.update { enqueue(sampleMessage) }
 
       assertEquals(1, fake.trackedRangesCallCount)
-      assertEquals(2, fake.trackedRangesContainingPositionCallCount)
-      assertEquals(listOf(rangeEndpoints), editor.appliedState.trackedRangesContainingSelectionHead)
+      assertEquals(2, fake.trackedRangesContainingSelectionCallCount)
+      assertEquals(listOf(rangeEndpoints), editor.appliedState.trackedRangesContainingSelection)
     }
 
   @Test
@@ -348,8 +358,8 @@ class EditorRequestTest {
       editor.update { enqueue(sampleMessage) }
 
       assertEquals(1, fake.trackedRangesCallCount)
-      assertEquals(0, fake.trackedRangesContainingPositionCallCount)
-      assertEquals(emptyList(), editor.appliedState.trackedRangesContainingSelectionHead)
+      assertEquals(0, fake.trackedRangesContainingSelectionCallCount)
+      assertEquals(emptyList(), editor.appliedState.trackedRangesContainingSelection)
     }
 
   @Test

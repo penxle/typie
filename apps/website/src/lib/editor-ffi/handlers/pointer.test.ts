@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   cancelPointerInteraction,
+  handleClick,
   handlePointerCaptureLost,
   handlePointerDown,
   handlePointerMove,
@@ -123,6 +124,8 @@ const createEditor = ({
       handlePointerCancel: vi.fn(),
     },
     updatePointerHover: vi.fn(),
+    commentClickHandler: vi.fn(),
+    commentIdAt: vi.fn(() => 'comment-1'),
   };
   return editor as unknown as Editor & {
     enqueue: ReturnType<typeof vi.fn>;
@@ -131,8 +134,21 @@ const createEditor = ({
     selectionHitTest: ReturnType<typeof vi.fn>;
     suspendToolbarSync: ReturnType<typeof vi.fn>;
     resumeToolbarSync: ReturnType<typeof vi.fn>;
+    commentClickHandler: ReturnType<typeof vi.fn>;
+    commentIdAt: ReturnType<typeof vi.fn>;
   };
 };
+
+describe('comment pointer activation', () => {
+  it('checks comment membership for a non-collapsed selection', () => {
+    const editor = createEditor({ isSelectionCollapsed: false, selection: rangeSelection, appliedSelection: rangeSelection });
+
+    handleClick(editor, createPointerEvent() as unknown as MouseEvent & { currentTarget: HTMLElement });
+
+    expect(editor.commentIdAt).toHaveBeenCalledWith(0, 10, 20);
+    expect(editor.commentClickHandler).toHaveBeenCalledWith('comment-1');
+  });
+});
 
 describe('pointer native drag admission', () => {
   it('admits native drag on a selected range without capturing pointer and collapses on click release', () => {

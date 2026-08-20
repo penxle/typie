@@ -263,7 +263,7 @@ internal fun rememberEditorAiFeedbackSession(
     active,
     editorState.selection,
     editorState.trackedRanges,
-    editorState.trackedRangesContainingSelectionHead,
+    editorState.trackedRangesContainingSelection,
     model?.results,
   ) {
     val activeModel = model ?: return@LaunchedEffect
@@ -271,24 +271,18 @@ internal fun rememberEditorAiFeedbackSession(
       lastMembershipIdsMappedToAiFeedback = null
       return@LaunchedEffect
     }
-    val selection =
-      editorState.selection
-        ?: run {
-          lastMembershipIdsMappedToAiFeedback = null
-          return@LaunchedEffect
-        }
-    if (activeModel.results.isEmpty()) {
+    if (editorState.selection == null) {
       lastMembershipIdsMappedToAiFeedback = null
       return@LaunchedEffect
     }
-    if (selection.anchor != selection.head) {
+    if (activeModel.results.isEmpty()) {
       lastMembershipIdsMappedToAiFeedback = null
       return@LaunchedEffect
     }
 
     val resultIds = activeModel.results.mapTo(mutableSetOf()) { it.id }
     val membershipIds =
-      editorState.trackedRangesContainingSelectionHead.trackedRangeMembershipIds(
+      editorState.trackedRangesContainingSelection.trackedRangeMembershipIds(
         allowedGroups = AI_FEEDBACK_MEMBERSHIP_GROUPS,
         ownedIds = resultIds,
       )
@@ -296,7 +290,7 @@ internal fun rememberEditorAiFeedbackSession(
     lastMembershipIdsMappedToAiFeedback = membershipIds
 
     val rangeId =
-      editorState.trackedRangesContainingSelectionHead
+      editorState.trackedRangesContainingSelection
         .selectTrackedRangeMember(
           allowedGroups = AI_FEEDBACK_MEMBERSHIP_GROUPS,
           activeId = activeModel.activeRangeId,

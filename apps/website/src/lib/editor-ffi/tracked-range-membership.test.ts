@@ -15,16 +15,30 @@ describe('tracked range membership', () => {
   it.each<StateField>(['selection', 'doc', 'tracked_ranges'])('%s change refreshes membership under a stationary cursor', (field) => {
     const query = vi.fn(() => [member('a', 'comment')]);
 
-    expect(semanticMembershipForStateChange(new Set([field]), collapsed(3), query)).toEqual([member('a', 'comment')]);
-    expect(query).toHaveBeenCalledWith(position(3));
+    const selection = collapsed(3);
+    expect(semanticMembershipForStateChange(new Set([field]), selection, query)).toEqual([member('a', 'comment')]);
+    expect(query).toHaveBeenCalledWith(selection);
   });
 
-  it('does not query for layout-only changes or non-collapsed selections', () => {
+  it('queries membership for non-collapsed selections', () => {
     const query = vi.fn(() => [member('a', 'comment')]);
     const expanded: Selection = { anchor: position(1), head: position(2) };
 
+    expect(semanticMembershipForStateChange(new Set<StateField>(['selection']), expanded, query)).toEqual([member('a', 'comment')]);
+    expect(query).toHaveBeenCalledWith(expanded);
+  });
+
+  it('does not query when the selection is unavailable', () => {
+    const query = vi.fn(() => [member('a', 'comment')]);
+
+    expect(semanticMembershipForStateChange(new Set<StateField>(['selection']), undefined, query)).toBeUndefined();
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  it('does not query for layout-only changes', () => {
+    const query = vi.fn(() => [member('a', 'comment')]);
+
     expect(semanticMembershipForStateChange(new Set<StateField>(['page_sizes', 'cursor']), collapsed(1), query)).toBeUndefined();
-    expect(semanticMembershipForStateChange(new Set<StateField>(['selection']), expanded, query)).toBeUndefined();
     expect(query).not.toHaveBeenCalled();
   });
 

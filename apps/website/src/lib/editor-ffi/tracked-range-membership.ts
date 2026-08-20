@@ -1,18 +1,16 @@
-import type { Position, Selection, StateField, TrackedRangeEndpoints } from '@typie/editor-ffi/browser';
+import type { Selection, StateField, TrackedRangeEndpoints } from '@typie/editor-ffi/browser';
 
-type MembershipQuery = (position: Position) => TrackedRangeEndpoints[];
+type MembershipQuery = (selection: Selection) => TrackedRangeEndpoints[];
 
-const samePosition = (a: Position, b: Position): boolean => a.node === b.node && a.offset === b.offset && a.affinity === b.affinity;
-
-/** 문서 의미가 바뀔 때만 collapsed cursor의 Core membership을 다시 읽는다. */
+/** 문서 의미가 바뀔 때만 현재 selection의 Core membership을 다시 읽는다. */
 export const semanticMembershipForStateChange = (
   fields: ReadonlySet<StateField>,
   selection: Selection | undefined,
   query: MembershipQuery,
 ): TrackedRangeEndpoints[] | undefined => {
   if (!fields.has('selection') && !fields.has('doc') && !fields.has('tracked_ranges')) return undefined;
-  if (!selection || !samePosition(selection.anchor, selection.head)) return undefined;
-  return query(selection.head);
+  if (!selection) return undefined;
+  return query(selection);
 };
 
 const featureMembers = (

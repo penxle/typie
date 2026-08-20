@@ -111,15 +111,15 @@ internal fun rememberEditorCommentsSession(
   val activeThreadId = model?.threadState?.activeThreadId
   val selection = editorState.selection
   val selectionCollapsed = selection == null || selection.anchor == selection.head
-  val collapsedCommentRange =
+  val selectedCommentRange =
     remember(
-      editorState.trackedRangesContainingSelectionHead,
-      selectionCollapsed,
+      editorState.trackedRangesContainingSelection,
+      selection,
       activeThreadId,
       openSelectionsById.keys,
     ) {
-      if (selection != null && selectionCollapsed) {
-        editorState.trackedRangesContainingSelectionHead.selectTrackedRangeMember(
+      if (selection != null) {
+        editorState.trackedRangesContainingSelection.selectTrackedRangeMember(
           allowedGroups = COMMENT_MEMBERSHIP_GROUPS,
           activeId = activeThreadId,
           ownedIds = openSelectionsById.keys,
@@ -128,10 +128,9 @@ internal fun rememberEditorCommentsSession(
         null
       }
     }
-  val collapsedSelectionHead = selection?.takeIf { selectionCollapsed }?.head
   val topBarCreateEnabled = model != null && selection != null && !selectionCollapsed
   val toolbarEnabled =
-    model != null && selection != null && (!selectionCollapsed || collapsedCommentRange != null)
+    model != null && selection != null && (!selectionCollapsed || selectedCommentRange != null)
 
   val trackedCommentRanges =
     remember(editorState.trackedRanges, sheetActive) {
@@ -207,18 +206,17 @@ internal fun rememberEditorCommentsSession(
       lastRequestedActivationRevision = activeThreadActivationRevision
     }
   }
-  LaunchedEffect(sheetActive, collapsedSelectionHead, collapsedCommentRange?.id) {
+  LaunchedEffect(sheetActive, selection, selectedCommentRange?.id) {
     if (
       !sheetActive ||
         selection == null ||
-        !selectionCollapsed ||
         inputFocused ||
         model?.threadState?.hasUnsavedInput == true
     ) {
       return@LaunchedEffect
     }
 
-    val threadId = collapsedCommentRange?.id ?: return@LaunchedEffect
+    val threadId = selectedCommentRange?.id ?: return@LaunchedEffect
     if (threadId != activeThreadId) {
       requestQueue.requestActiveThread(threadId)
     }
@@ -255,7 +253,7 @@ internal fun rememberEditorCommentsSession(
           }
         } else {
           openSheet()
-          collapsedCommentRange?.let { range -> requestQueue.requestActiveThread(range.id) }
+          selectedCommentRange?.let { range -> requestQueue.requestActiveThread(range.id) }
         }
       }
     },
@@ -263,8 +261,8 @@ internal fun rememberEditorCommentsSession(
       hideContextMenu()
       if (model != null) {
         openSheet()
-        if (selection != null && selectionCollapsed) {
-          collapsedCommentRange?.let { range -> requestQueue.requestActiveThread(range.id) }
+        if (selection != null) {
+          selectedCommentRange?.let { range -> requestQueue.requestActiveThread(range.id) }
         }
       }
     },

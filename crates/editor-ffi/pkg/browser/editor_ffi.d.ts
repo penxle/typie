@@ -835,7 +835,7 @@ declare class Editor {
     tracked_range(id: string): TrackedRange | undefined;
     tracked_ranges(group?: string | null): TrackedRange[];
     tracked_ranges_at(page: number, x: number, y: number, group?: string | null): TrackedRangeHit[];
-    tracked_ranges_containing_position(position: Position, group?: string | null): TrackedRangeEndpoints[];
+    tracked_ranges_containing_selection(selection: Selection, group?: string | null): TrackedRangeEndpoints[];
 }
 
 declare class EditorHost {
