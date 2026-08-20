@@ -1,6 +1,5 @@
 package co.typie.screen.editor.editor.toolbar
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.animateDpAsState
@@ -20,6 +19,8 @@ import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -44,6 +45,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.IntOffset
@@ -158,10 +160,11 @@ internal fun EditorToolbarPages(
   val toolbarStackHeight by
     animateDpAsState(
       targetValue =
-        ToolbarStackHeight + if (secondaryToolbarInLayout) ToolbarSecondaryStackHeight else 0.dp,
+        ToolbarStackHeight + if (secondaryToolbarVisible) ToolbarSecondaryStackHeight else 0.dp,
       animationSpec = tween(ToolbarSecondaryVisibilityMillis),
       label = "EditorToolbarStackHeight",
     )
+  val secondaryToolbarSlotHeight = (toolbarStackHeight - ToolbarStackHeight).coerceAtLeast(0.dp)
   SideEffect { onSecondaryToolbarInLayoutChange(secondaryToolbarInLayout) }
   DisposableEffect(Unit) { onDispose { onSecondaryToolbarInLayoutChange(false) } }
   val bottomTouchPadding = if (includeBottomGapInTouchArea) ToolbarBottomPadding else 0.dp
@@ -176,20 +179,31 @@ internal fun EditorToolbarPages(
     val hardStopActivationEpsilonPx = with(density) { ToolbarHardStopActivationEpsilon.toPx() }
     val swipeVelocityThresholdPx = with(density) { ToolbarSwipeVelocityThreshold.toPx() }
     var outerEdgeDrag by remember { mutableStateOf(ToolbarOuterEdgeDrag()) }
-    var dismissSwipeProgress by remember { mutableStateOf<ToolbarDismissSwipeProgress?>(null) }
-    var dismissSwipeArmedProgress by remember { mutableStateOf(Animatable(0f)) }
-    val dismissSwipeArmedAnimationJob = remember { mutableStateOf<Job?>(null) }
-    val dismissSwipeFollowOffset =
-      dismissSwipeProgress?.distancePx?.times(ToolbarDismissSwipeFollowFraction) ?: 0f
-    val dismissSwipeDragOffset =
-      dismissSwipeFollowOffset +
-        (dismissSwipeArmedOffsetPx - dismissSwipeFollowOffset) * dismissSwipeArmedProgress.value
-    val dismissSwipeVisualOffset by
+    var primaryDismissSwipeProgress by remember {
+      mutableStateOf<ToolbarDismissSwipeProgress?>(null)
+    }
+    var primaryDismissSwipeArmedProgress by remember { mutableStateOf(Animatable(0f)) }
+    val primaryDismissSwipeArmedAnimationJob = remember { mutableStateOf<Job?>(null) }
+    val primaryDismissSwipeFollowOffset =
+      primaryDismissSwipeProgress?.distancePx?.times(ToolbarDismissSwipeFollowFraction) ?: 0f
+    val primaryDismissSwipeDragOffset =
+      primaryDismissSwipeFollowOffset +
+        (dismissSwipeArmedOffsetPx - primaryDismissSwipeFollowOffset) *
+          primaryDismissSwipeArmedProgress.value
+    val primaryDismissSwipeAnimatedOffset by
       animateFloatAsState(
-        targetValue = if (dismissSwipeProgress != null) dismissSwipeDragOffset else 0f,
-        animationSpec = if (dismissSwipeProgress != null) snap() else ToolbarOverscrollSpring,
-        label = "EditorToolbarDismissSwipeOffset",
+        targetValue =
+          if (primaryDismissSwipeProgress != null) primaryDismissSwipeDragOffset else 0f,
+        animationSpec =
+          if (primaryDismissSwipeProgress != null) snap() else ToolbarOverscrollSpring,
+        label = "EditorToolbarPrimaryDismissSwipeOffset",
       )
+    val primaryDismissSwipeVisualOffset =
+      if (primaryDismissSwipeProgress != null) {
+        primaryDismissSwipeDragOffset
+      } else {
+        primaryDismissSwipeAnimatedOffset
+      }
     val outerEdgeVisualOffset =
       animateFloatAsState(
         targetValue = if (pagerState.pointerScrollGestureActive) outerEdgeDrag.offset else 0f,
@@ -602,222 +616,265 @@ internal fun EditorToolbarPages(
         label = "editor-toolbar-indicator-alpha",
       )
 
-    if (pageCount > 1) {
-      EditorToolbarIndicatorPill(
-        pages = pages,
-        pageProgress = indicatorProgress,
-        animateBackground = pagerState.indicatorInteracting && !pagerState.indicatorDragging,
-        currentPageIndex = currentPageIndex,
-        modifier =
-          Modifier.align(Alignment.TopCenter)
-            .alpha(indicatorAlpha)
-            .then(
-              if (indicatorAlpha > 0.01f) {
-                Modifier.toolbarIndicatorGestures(
-                    pageCount = pageCount,
-                    currentPageIndex = currentPageIndex,
-                    onIndicatorProgress = { progress ->
-                      pagerState.indicatorDragProgress = progress
-                    },
-                    onIndicatorDraggingChange = { dragging ->
-                      pagerState.indicatorDragging = dragging
-                    },
-                    onPageSelected = { page -> navigateToPageIndex(page) },
-                    onInteractionActiveChange = { active ->
-                      pagerState.indicatorInteracting = active
-                      if (!active) {
-                        pagerState.indicatorDragProgress = null
-                        pagerState.indicatorDragging = false
-                      }
-                      pagerState.indicatorPulse++
-                    },
-                  )
-                  .preserveEditorFocusOnToolbarInteraction()
-              } else {
-                Modifier
-              }
-            ),
-      )
-    }
-
-    AnimatedVisibility(
-      visibleState = secondaryToolbarTransition,
-      enter =
-        fadeIn(
-          animationSpec =
-            tween(
-              durationMillis = ToolbarSecondaryVisibilityMillis,
-              delayMillis = ToolbarSecondaryVisibilityMillis,
-            )
-        ),
-      exit = fadeOut(animationSpec = tween(ToolbarSecondaryVisibilityMillis)),
+    Column(
       modifier =
         Modifier.align(Alignment.BottomCenter)
-          .padding(bottom = ToolbarHeight + ToolbarSecondaryGap + bottomTouchPadding)
-          .fillMaxWidth(),
+          .fillMaxWidth()
+          .height(toolbarStackHeight + bottomTouchPadding),
+      horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-      secondaryToolbar()
-    }
-
-    InteractionScope {
-      val toolbarInteractionSource =
-        LocalInteractionSource.current ?: remember { MutableInteractionSource() }
-      val toolbarSurfaceColor = AppTheme.colors.surfaceDefault
-      val toolbarPagerInputModifier =
-        Modifier.emitPressInteractions(toolbarInteractionSource)
-          .trackToolbarScrollGestureStart(
-            onStart = {
-              outerEdgeDrag = ToolbarOuterEdgeDrag(offset = outerEdgeVisualOffset.value)
-              pagerState.pointerScrollGestureActive = true
-              pagerState.scrollGestureStartPosition = pagerState.scrollPosition
-            },
-            onEnd = { pagerState.pointerScrollGestureActive = false },
-          )
-          .scrollable(
-            state = scrollableState,
-            orientation = Orientation.Horizontal,
-            enabled = pageDistance > 0f && pageCount > 1,
-            flingBehavior = flingBehavior,
-            interactionSource = toolbarInteractionSource,
-          )
-          .preserveEditorFocusOnToolbarInteraction()
       Box(
-        modifier =
-          Modifier.align(Alignment.BottomCenter)
-            .fillMaxWidth()
-            .height(ToolbarHeight + bottomTouchPadding)
-            .toolbarVerticalSwipeGestures(
-              onPointerSessionStart = {
-                dismissSwipeArmedAnimationJob.value?.cancel()
-                dismissSwipeArmedAnimationJob.value = null
-                dismissSwipeProgress = null
-                dismissSwipeArmedProgress = Animatable(0f)
-              },
-              onSwipeUp = {
-                if (pageCount > 1) {
-                  pagerState.indicatorPulse++
-                }
-              },
-              onSwipeDown = {
-                dismissSwipeProgress = null
-                onToolbarDismissRequest()
-              },
-              onSwipeDownProgress = { progress ->
-                val armedChanged = (dismissSwipeProgress?.armed == true) != progress.armed
-                dismissSwipeProgress = progress
-                if (armedChanged) {
-                  dismissSwipeArmedAnimationJob.value?.cancel()
-                  val armedProgress = dismissSwipeArmedProgress
-                  dismissSwipeArmedAnimationJob.value = scope.launch {
-                    armedProgress.animateTo(
-                      targetValue = if (progress.armed) 1f else 0f,
-                      animationSpec = ToolbarDismissSwipeThresholdSpring,
-                    )
-                  }
-                  if (progress.armed) {
-                    hapticFeedback.performHapticFeedback(
-                      HapticFeedbackType.GestureThresholdActivate
-                    )
-                  }
-                }
-              },
-              onSwipeDownCancelled = { dismissSwipeProgress = null },
-            )
+        modifier = Modifier.fillMaxWidth().height(ToolbarIndicatorHeight),
+        contentAlignment = Alignment.TopCenter,
       ) {
-        Box(
-          modifier =
-            Modifier.align(Alignment.TopCenter)
-              .fillMaxWidth()
-              .height(ToolbarHeight)
-              .graphicsLayer { translationY = dismissSwipeVisualOffset }
-              .shadow(AppTheme.shadows.sm, ToolbarCapsuleShape)
-              .pressScale(ToolbarCapsulePressedScale)
-              .clip(ToolbarCapsuleShape)
-              .hazeEffect(hazeState) {
-                blurEffect {
-                  backgroundColor = toolbarSurfaceColor
-                  blurRadius = ToolbarBackdropBlurRadius
-                }
-              }
-              .border(ToolbarBorderWidth, AppTheme.colors.borderEmphasis, ToolbarCapsuleShape)
-        ) {
-          EditorToolbarSurfaceBackground(shape = ToolbarCapsuleShape)
+        if (pageCount > 1) {
+          EditorToolbarIndicatorPill(
+            pages = pages,
+            pageProgress = indicatorProgress,
+            animateBackground = pagerState.indicatorInteracting && !pagerState.indicatorDragging,
+            currentPageIndex = currentPageIndex,
+            modifier =
+              Modifier.graphicsLayer { translationY = primaryDismissSwipeVisualOffset }
+                .alpha(indicatorAlpha)
+                .then(
+                  if (indicatorAlpha > 0.01f) {
+                    Modifier.toolbarIndicatorGestures(
+                        pageCount = pageCount,
+                        currentPageIndex = currentPageIndex,
+                        onIndicatorProgress = { progress ->
+                          pagerState.indicatorDragProgress = progress
+                        },
+                        onIndicatorDraggingChange = { dragging ->
+                          pagerState.indicatorDragging = dragging
+                        },
+                        onPageSelected = { page -> navigateToPageIndex(page) },
+                        onInteractionActiveChange = { active ->
+                          pagerState.indicatorInteracting = active
+                          if (!active) {
+                            pagerState.indicatorDragProgress = null
+                            pagerState.indicatorDragging = false
+                          }
+                          pagerState.indicatorPulse++
+                        },
+                      )
+                      .preserveEditorFocusOnToolbarInteraction()
+                  } else {
+                    Modifier
+                  }
+                ),
+          )
+        }
+      }
 
+      Spacer(Modifier.height(ToolbarIndicatorGap))
+
+      Box(
+        Modifier.fillMaxWidth().layout { measurable, constraints ->
+          val contentHeight = ToolbarSecondaryStackHeight.roundToPx()
+          val slotHeight = secondaryToolbarSlotHeight.roundToPx().coerceIn(0, contentHeight)
+          // Keep asynchronous content on final constraints while only the stack slot expands.
+          val placeable =
+            measurable.measure(
+              constraints.copy(minHeight = contentHeight, maxHeight = contentHeight)
+            )
+
+          layout(placeable.width, slotHeight) {
+            placeable.placeRelative(x = 0, y = slotHeight - contentHeight)
+          }
+        }
+      ) {
+        androidx.compose.animation.AnimatedVisibility(
+          visibleState = secondaryToolbarTransition,
+          enter =
+            fadeIn(
+              animationSpec =
+                tween(
+                  durationMillis = ToolbarSecondaryVisibilityMillis,
+                  delayMillis = ToolbarSecondaryVisibilityMillis,
+                )
+            ),
+          exit = fadeOut(animationSpec = tween(ToolbarSecondaryVisibilityMillis)),
+          modifier =
+            Modifier.align(Alignment.BottomCenter).offset(y = -ToolbarSecondaryGap).fillMaxWidth(),
+        ) {
           Box(
-            modifier = Modifier.matchParentSize().clipToBounds().then(toolbarPagerInputModifier)
+            modifier =
+              Modifier.fillMaxWidth()
+                .height(ToolbarSecondaryHeight)
+                .toolbarVerticalSwipeGestures(onSwipeDown = onSecondaryToolbarClear)
           ) {
             Box(
               modifier =
                 Modifier.fillMaxSize().graphicsLayer {
-                  translationX = pagerState.hardStopVisualOffset.value + outerEdgeVisualOffset.value
+                  translationY = primaryDismissSwipeVisualOffset
                 }
             ) {
-              pages.forEachIndexed { index, page ->
-                val pageScope =
-                  EditorToolbarPageScope(
-                    toolbarScope = page.toolbarScope,
-                    activeBottomPanel = activeBottomPanel,
-                    activeSecondaryToolbar = activeSecondaryToolbar,
-                    commandScope = commandScope,
-                    hasNextPage = index < lastPageIndex,
-                    navigateToPage = ::navigateToPage,
-                    onSecondaryToolbarToggle = onSecondaryToolbarToggle,
-                    clearSecondaryToolbar = onSecondaryToolbarClear,
-                    onBottomPanelToggle = onBottomPanelToggle,
-                    sendMessage = onEditorMessage,
-                    performToolAction = onToolAction,
-                  )
+              secondaryToolbar()
+            }
+          }
+        }
+      }
 
-                Box(
-                  modifier =
-                    Modifier.fillMaxSize().offset {
-                      val pageOffset = pageMetrics.pageOffsetFor(index, visualScrollPosition)
-                      IntOffset(x = pageOffset.roundToInt(), y = 0)
+      InteractionScope {
+        val toolbarInteractionSource =
+          LocalInteractionSource.current ?: remember { MutableInteractionSource() }
+        val toolbarSurfaceColor = AppTheme.colors.surfaceDefault
+        val toolbarPagerInputModifier =
+          Modifier.emitPressInteractions(toolbarInteractionSource)
+            .trackToolbarScrollGestureStart(
+              onStart = {
+                outerEdgeDrag = ToolbarOuterEdgeDrag(offset = outerEdgeVisualOffset.value)
+                pagerState.pointerScrollGestureActive = true
+                pagerState.scrollGestureStartPosition = pagerState.scrollPosition
+              },
+              onEnd = { pagerState.pointerScrollGestureActive = false },
+            )
+            .scrollable(
+              state = scrollableState,
+              orientation = Orientation.Horizontal,
+              enabled = pageDistance > 0f && pageCount > 1,
+              flingBehavior = flingBehavior,
+              interactionSource = toolbarInteractionSource,
+            )
+            .preserveEditorFocusOnToolbarInteraction()
+        Box(
+          modifier =
+            Modifier.fillMaxWidth()
+              .height(ToolbarHeight + bottomTouchPadding)
+              .toolbarVerticalSwipeGestures(
+                onPointerSessionStart = {
+                  primaryDismissSwipeArmedAnimationJob.value?.cancel()
+                  primaryDismissSwipeArmedAnimationJob.value = null
+                  primaryDismissSwipeProgress = null
+                  primaryDismissSwipeArmedProgress = Animatable(0f)
+                },
+                onSwipeUp = {
+                  if (pageCount > 1) {
+                    pagerState.indicatorPulse++
+                  }
+                },
+                onSwipeDown = {
+                  primaryDismissSwipeProgress = null
+                  onToolbarDismissRequest()
+                },
+                onSwipeDownProgress = { progress ->
+                  val armedChanged = (primaryDismissSwipeProgress?.armed == true) != progress.armed
+                  primaryDismissSwipeProgress = progress
+                  if (armedChanged) {
+                    primaryDismissSwipeArmedAnimationJob.value?.cancel()
+                    val armedProgress = primaryDismissSwipeArmedProgress
+                    primaryDismissSwipeArmedAnimationJob.value = scope.launch {
+                      armedProgress.animateTo(
+                        targetValue = if (progress.armed) 1f else 0f,
+                        animationSpec = ToolbarDismissSwipeThresholdSpring,
+                      )
                     }
-                ) {
-                  page.content(pageScope)
+                    if (progress.armed) {
+                      hapticFeedback.performHapticFeedback(
+                        HapticFeedbackType.GestureThresholdActivate
+                      )
+                    }
+                  }
+                },
+                onSwipeDownCancelled = { primaryDismissSwipeProgress = null },
+              )
+        ) {
+          Box(
+            modifier =
+              Modifier.align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .height(ToolbarHeight)
+                .graphicsLayer { translationY = primaryDismissSwipeVisualOffset }
+                .shadow(AppTheme.shadows.sm, ToolbarCapsuleShape)
+                .pressScale(ToolbarCapsulePressedScale)
+                .clip(ToolbarCapsuleShape)
+                .hazeEffect(hazeState) {
+                  blurEffect {
+                    backgroundColor = toolbarSurfaceColor
+                    blurRadius = ToolbarBackdropBlurRadius
+                  }
+                }
+                .border(ToolbarBorderWidth, AppTheme.colors.borderEmphasis, ToolbarCapsuleShape)
+          ) {
+            EditorToolbarSurfaceBackground(shape = ToolbarCapsuleShape)
+
+            Box(
+              modifier = Modifier.matchParentSize().clipToBounds().then(toolbarPagerInputModifier)
+            ) {
+              Box(
+                modifier =
+                  Modifier.fillMaxSize().graphicsLayer {
+                    translationX =
+                      pagerState.hardStopVisualOffset.value + outerEdgeVisualOffset.value
+                  }
+              ) {
+                pages.forEachIndexed { index, page ->
+                  val pageScope =
+                    EditorToolbarPageScope(
+                      toolbarScope = page.toolbarScope,
+                      activeBottomPanel = activeBottomPanel,
+                      activeSecondaryToolbar = activeSecondaryToolbar,
+                      commandScope = commandScope,
+                      hasNextPage = index < lastPageIndex,
+                      navigateToPage = ::navigateToPage,
+                      onSecondaryToolbarToggle = onSecondaryToolbarToggle,
+                      clearSecondaryToolbar = onSecondaryToolbarClear,
+                      onBottomPanelToggle = onBottomPanelToggle,
+                      sendMessage = onEditorMessage,
+                      performToolAction = onToolAction,
+                    )
+
+                  Box(
+                    modifier =
+                      Modifier.fillMaxSize().offset {
+                        val pageOffset = pageMetrics.pageOffsetFor(index, visualScrollPosition)
+                        IntOffset(x = pageOffset.roundToInt(), y = 0)
+                      }
+                  ) {
+                    page.content(pageScope)
+                  }
                 }
               }
             }
+
+            InteractionScope {
+              EditorToolbarIconButton(
+                icon =
+                  when (fixedAction) {
+                    ToolbarFixedAction.ClosePanel -> Lucide.CircleX
+                    ToolbarFixedAction.HideToolbar -> Lucide.ChevronDown
+                    ToolbarFixedAction.DismissInput -> Lucide.KeyboardOff
+                  },
+                contentDescription =
+                  when (fixedAction) {
+                    ToolbarFixedAction.ClosePanel -> "하단 패널 닫기"
+                    ToolbarFixedAction.HideToolbar -> "툴바 숨기기"
+                    ToolbarFixedAction.DismissInput -> if (editorFocused) "에디터 포커스 해제" else "키보드 닫기"
+                  },
+                onClick = onKeyboardDismissRequest,
+                shape = ToolbarFixedActionShape,
+                fixedActionSurface = true,
+                inheritInteractionSource = true,
+                crossfadeIcon = true,
+                modifier =
+                  Modifier.align(Alignment.CenterEnd)
+                    .width(ToolbarFixedActionWidth)
+                    .fillMaxHeight()
+                    .padding(ToolbarFixedActionPadding)
+                    .pressScale(ToolbarFixedActionPressedScale),
+              )
+            }
           }
 
-          InteractionScope {
-            EditorToolbarIconButton(
-              icon =
-                when (fixedAction) {
-                  ToolbarFixedAction.ClosePanel -> Lucide.CircleX
-                  ToolbarFixedAction.HideToolbar -> Lucide.ChevronDown
-                  ToolbarFixedAction.DismissInput -> Lucide.KeyboardOff
-                },
-              contentDescription =
-                when (fixedAction) {
-                  ToolbarFixedAction.ClosePanel -> "하단 패널 닫기"
-                  ToolbarFixedAction.HideToolbar -> "툴바 숨기기"
-                  ToolbarFixedAction.DismissInput -> if (editorFocused) "에디터 포커스 해제" else "키보드 닫기"
-                },
-              onClick = onKeyboardDismissRequest,
-              shape = ToolbarFixedActionShape,
-              fixedActionSurface = true,
-              inheritInteractionSource = true,
-              crossfadeIcon = true,
+          if (includeBottomGapInTouchArea) {
+            Box(
               modifier =
-                Modifier.align(Alignment.CenterEnd)
-                  .width(ToolbarFixedActionWidth)
-                  .fillMaxHeight()
-                  .padding(ToolbarFixedActionPadding)
-                  .pressScale(ToolbarFixedActionPressedScale),
+                Modifier.align(Alignment.BottomCenter)
+                  .fillMaxWidth()
+                  .height(bottomTouchPadding)
+                  .then(toolbarPagerInputModifier)
             )
           }
-        }
-
-        if (includeBottomGapInTouchArea) {
-          Box(
-            modifier =
-              Modifier.align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .height(bottomTouchPadding)
-                .then(toolbarPagerInputModifier)
-          )
         }
       }
     }
