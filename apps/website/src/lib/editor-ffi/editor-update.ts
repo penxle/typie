@@ -35,7 +35,7 @@ export class EditorRequest {
     try {
       block?.(update);
     } catch (err) {
-      onDiscard?.();
+      runCleanupPreservingFailure(err, () => onDiscard?.());
       throw err;
     }
   }
@@ -47,6 +47,10 @@ export class EditorRequest {
     onDiscard?.();
   }
 
+  discardAfterFailure(error: unknown): void {
+    runCleanupPreservingFailure(error, () => this.discard());
+  }
+
   removeMessagesWhere(predicate: (message: Message) => boolean): boolean {
     const retained = this.#messages.filter((message) => !predicate(message));
     if (retained.length === this.#messages.length) return false;
@@ -56,6 +60,19 @@ export class EditorRequest {
 
   get empty(): boolean {
     return this.#messages.length === 0;
+  }
+}
+
+function runCleanupPreservingFailure(error: unknown, cleanup: () => void): void {
+  try {
+    cleanup();
+  } catch (err) {
+    if (err === error) return;
+    try {
+      console.error('Editor request cleanup failed:', err);
+    } catch {
+      // Cleanup reporting must not replace the original failure.
+    }
   }
 }
 

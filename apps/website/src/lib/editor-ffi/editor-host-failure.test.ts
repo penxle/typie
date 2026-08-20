@@ -11,7 +11,9 @@ const wasmHarness = vi.hoisted(() => ({
   setThemeVariant: vi.fn(() => null),
 }));
 
-vi.mock('@sentry/sveltekit', () => ({ captureException: vi.fn() }));
+const sentryHarness = vi.hoisted(() => ({ captureException: vi.fn() }));
+
+vi.mock('@sentry/sveltekit', () => sentryHarness);
 
 vi.mock('$env/dynamic/public', () => ({ env: {} }));
 
@@ -184,6 +186,7 @@ describe('Editor guarded core invocation', () => {
     frames = [];
     wasmHarness.createEditor.mockReset();
     wasmHarness.setThemeVariant.mockReset().mockReturnValue(null);
+    sentryHarness.captureException.mockReset();
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
       frames.push((time) => {
         callback(time);
@@ -205,6 +208,31 @@ describe('Editor guarded core invocation', () => {
     await expect(Editor.createFromDoc({} as never, { width: 1, height: 1, scale_factor: 1 })).rejects.toBe(error);
 
     expect(core.free).toHaveBeenCalledTimes(1);
+    expect(snapshot()).toEqual([]);
+  });
+
+  it('reports the first terminal failure exactly once', async () => {
+    const { editor } = await createEditor();
+    const failure = new Error('terminal failure');
+
+    editor.fail(failure);
+    editor.fail(new Error('later failure'));
+
+    expect(sentryHarness.captureException).toHaveBeenCalledOnce();
+    expect(sentryHarness.captureException).toHaveBeenCalledWith(failure);
+  });
+
+  it('still contains the editor when terminal failure reporting throws', async () => {
+    const { editor, core } = await createEditor();
+    const failure = new Error('terminal failure');
+    sentryHarness.captureException.mockImplementationOnce(() => {
+      throw new Error('reporting failed');
+    });
+
+    editor.fail(failure);
+
+    expect(editor.failure).toBe(failure);
+    expect(core.free).toHaveBeenCalledOnce();
     expect(snapshot()).toEqual([]);
   });
 
@@ -271,6 +299,8 @@ describe('Editor guarded core invocation', () => {
   it('rejects an admitted async update when its before-publish callback fails', async () => {
     const { editor, core } = await createEditor();
     const error = new Error('before publish failed');
+    const cleanupFailure = new Error('before publish cleanup failed');
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(vi.fn());
     core.tick.mockReturnValue({
       revision: { value: 2 },
       events: [],
@@ -279,15 +309,100 @@ describe('Editor guarded core invocation', () => {
 
     const update = editor.update((request) => {
       request.enqueue({ type: 'history', op: { type: 'undo' } });
-      request.beforePublish(() => {
-        throw error;
-      });
+      request.beforePublish(
+        () => {
+          throw error;
+        },
+        () => {
+          throw cleanupFailure;
+        },
+      );
     });
 
     frames.at(-1)?.(0);
 
     await expect(update).rejects.toBe(error);
     expect(editor.failure).toBe(error);
+    expect(consoleError).toHaveBeenCalledWith('Editor request cleanup failed:', cleanupFailure);
+  });
+
+  it('rejects every request from a tick when a later before-publish callback fails', async () => {
+    const { editor, core } = await createEditor();
+    const error = new Error('later before publish failed');
+    core.enqueue_request.mockReturnValueOnce({ value: 1 }).mockReturnValueOnce({ value: 2 });
+    core.tick.mockReturnValue({
+      revision: { value: 2 },
+      events: [],
+      request_outcomes: [
+        { request_id: { value: 1 }, command_outcomes: [{ type: 'applied' }] },
+        { request_id: { value: 2 }, command_outcomes: [{ type: 'applied' }] },
+      ],
+    });
+
+    const first = editor.update((request) => {
+      request.enqueue({ type: 'history', op: { type: 'undo' } });
+    });
+    const second = editor.update((request) => {
+      request.enqueue({ type: 'history', op: { type: 'undo' } });
+      request.beforePublish(() => {
+        throw error;
+      });
+    });
+    const assertions = Promise.all([expect(first).rejects.toBe(error), expect(second).rejects.toBe(error)]);
+
+    frames.at(-1)?.(0);
+
+    await assertions;
+    expect(editor.failure).toBe(error);
+  });
+
+  it('rejects a terminal receipt even when its discard hook fails', async () => {
+    const { editor } = await createEditor();
+    const failure = new Error('terminal failure');
+    const cleanupFailure = new Error('discard failed');
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {
+      throw new Error('cleanup reporting failed');
+    });
+    const update = editor.update((request) => {
+      request.enqueue({ type: 'history', op: { type: 'undo' } });
+      request.beforePublish(vi.fn(), () => {
+        throw cleanupFailure;
+      });
+    });
+    const rejection = expect(update).rejects.toBe(failure);
+
+    editor.fail(failure);
+
+    await rejection;
+    expect(editor.failure).toBe(failure);
+    expect(consoleError).toHaveBeenCalledWith('Editor request cleanup failed:', cleanupFailure);
+  });
+
+  it('keeps an admitted receipt pending until surface reconciliation completes', async () => {
+    const { editor, core } = await createEditor();
+    const error = new Error('surface replacement failed');
+    const releaseHost = editor.activateVisualHost();
+    editor.attachSurface(0, document.createElement('canvas'), 100, 100, () => {
+      throw error;
+    });
+    core.page_sizes.mockReturnValue([{ width: 100, height: 120 }, ...DefaultPageSizes.slice(1)]);
+    core.page_backing_sizes.mockReturnValue([{ width: 100, height: 120 }, ...DefaultPageSizes.slice(1)]);
+    core.tick.mockReturnValue({
+      revision: { value: 2 },
+      events: [{ type: 'state_changed', fields: ['page_sizes'] }],
+      request_outcomes: [{ request_id: { value: 1 }, command_outcomes: [{ type: 'applied' }] }],
+    });
+
+    const update = editor.update((request) => {
+      request.enqueue({ type: 'history', op: { type: 'undo' } });
+    });
+    const rejection = expect(update).rejects.toBe(error);
+
+    frames.at(-1)?.(0);
+
+    await rejection;
+    expect(editor.failure).toBe(error);
+    releaseHost();
   });
 
   it('does not complete publication waiters until the accepted bundle is presented', async () => {

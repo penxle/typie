@@ -17,6 +17,7 @@ import co.typie.editor.EditorState
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.SelectionOp
+import co.typie.editor.launchEditorEffect
 import co.typie.editor.scroll.EditorBringIntoViewPolicy
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.EditorBringIntoViewTarget
@@ -143,7 +144,9 @@ internal fun rememberEditorSpellcheckSession(
         } else {
           updateCompactOverlayHeightForRange(activeModel.activeRangeId)
         }
-        scope.launch { requestRangeIntoView(activeModel.activeRangeId) }
+        activeEditor.launchEffect(coroutineScope = scope) {
+          requestRangeIntoView(activeModel.activeRangeId)
+        }
         if (results.isEmpty()) {
           toast.show(ToastType.Success, "맞춤법 오류가 없습니다.")
         }
@@ -159,7 +162,7 @@ internal fun rememberEditorSpellcheckSession(
 
   fun scheduleRangeClear(activeEditor: Editor?, activeModel: SpellcheckViewModel?) {
     if (activeEditor == null || activeModel == null) return
-    activeEditor.scope.launch {
+    activeEditor.launchEffect {
       activeEditor.clearSpellcheckRanges(admit = activeModel::hasNoActiveRun)
     }
   }
@@ -196,7 +199,7 @@ internal fun rememberEditorSpellcheckSession(
 
   LaunchedEffect(active, editor) {
     if (active) {
-      editor?.installSpellcheckDecorations()
+      editor?.runEffect { editor.installSpellcheckDecorations() }
     }
   }
 
@@ -205,20 +208,22 @@ internal fun rememberEditorSpellcheckSession(
     val pendingCheck = activeModel.pendingCheck ?: return@LaunchedEffect
     val activeEditor = editor ?: return@LaunchedEffect
     if (!active || !activeModel.loading) return@LaunchedEffect
-    if (activeEditor.proseText() == pendingCheck.sourceText) return@LaunchedEffect
+    activeEditor.runEffect effect@{
+      if (activeEditor.proseText() == pendingCheck.sourceText) return@effect
 
-    val run = pendingCheck.run
-    if (!activeModel.cancelCheck(run)) return@LaunchedEffect
-    try {
-      val cleared =
-        withContext(NonCancellable) {
-          activeEditor.clearSpellcheckRanges(admit = { activeModel.ownsCleanup(run) })
+      val run = pendingCheck.run
+      if (!activeModel.cancelCheck(run)) return@effect
+      try {
+        val cleared =
+          withContext(NonCancellable) {
+            activeEditor.clearSpellcheckRanges(admit = { activeModel.ownsCleanup(run) })
+          }
+        if (cleared && activeModel.ownsCleanup(run) && activeModel.active) {
+          toast.show(ToastType.Success, "내용이 수정되어 맞춤법 검사가 취소됐어요.")
         }
-      if (cleared && activeModel.ownsCleanup(run) && activeModel.active) {
-        toast.show(ToastType.Success, "내용이 수정되어 맞춤법 검사가 취소됐어요.")
+      } finally {
+        activeModel.finishCleanup(run)
       }
-    } finally {
-      activeModel.finishCleanup(run)
     }
   }
 
@@ -236,61 +241,62 @@ internal fun rememberEditorSpellcheckSession(
       return@LaunchedEffect
     }
 
-    val cleanup =
-      activeModel.cleanupStale(
-        activeEditor.appliedState.trackedRanges.spellcheckRanges().associate { it.id to it.text }
-      )
-    if (cleanup.isNotEmpty()) {
-      activeEditor.removeSpellcheckRanges(cleanup)
-      if (activeModel.results.isNotEmpty()) {
-        updateCompactOverlayHeightForRange(activeModel.activeRangeId)
-      }
-      updateActiveRangeDecoration()
-    }
-
-    if (!active || activeModel.results.isEmpty()) {
-      lastMembershipIdsMappedToSpellcheck = null
-      return@LaunchedEffect
-    }
-    val selection =
-      editorState.selection
-        ?: run {
-          lastMembershipIdsMappedToSpellcheck = null
-          return@LaunchedEffect
+    activeEditor.runEffect effect@{
+      val cleanup =
+        activeModel.cleanupStale(
+          activeEditor.appliedState.trackedRanges.spellcheckRanges().associate { it.id to it.text }
+        )
+      if (cleanup.isNotEmpty()) {
+        activeEditor.removeSpellcheckRanges(cleanup)
+        if (activeModel.results.isNotEmpty()) {
+          updateCompactOverlayHeightForRange(activeModel.activeRangeId)
         }
+        updateActiveRangeDecoration()
+      }
 
-    val resultIds = activeModel.results.mapTo(mutableSetOf()) { it.id }
-    val membershipIds =
-      editorState.trackedRangesContainingSelection.trackedRangeMembershipIds(
-        allowedGroups = SPELLCHECK_MEMBERSHIP_GROUPS,
-        ownedIds = resultIds,
-      )
-    if (selection == programmaticSelectionToSkip) {
-      programmaticSelectionToSkip = null
-      lastMembershipIdsMappedToSpellcheck = membershipIds
-      return@LaunchedEffect
-    }
-    if (membershipIds == lastMembershipIdsMappedToSpellcheck) return@LaunchedEffect
-    lastMembershipIdsMappedToSpellcheck = membershipIds
-
-    val rangeId =
-      editorState.trackedRangesContainingSelection
-        .selectTrackedRangeMember(
+      if (!active || activeModel.results.isEmpty()) {
+        lastMembershipIdsMappedToSpellcheck = null
+        return@effect
+      }
+      val selection =
+        editorState.selection
+          ?: run {
+            lastMembershipIdsMappedToSpellcheck = null
+            return@effect
+          }
+      val resultIds = activeModel.results.mapTo(mutableSetOf()) { it.id }
+      val membershipIds =
+        editorState.trackedRangesContainingSelection.trackedRangeMembershipIds(
           allowedGroups = SPELLCHECK_MEMBERSHIP_GROUPS,
-          activeId = activeModel.activeRangeId,
           ownedIds = resultIds,
         )
-        ?.id
-    val previousActiveRangeId = activeModel.activeRangeId
-    if (rangeId == null) {
-      activeModel.activate(null)
-    } else {
-      activeModel.activate(rangeId)
-    }
-    updateCompactOverlayHeightForRange(activeModel.activeRangeId)
-    updateActiveRangeDecoration()
-    if (rangeId != null && rangeId != previousActiveRangeId) {
-      requestRangeIntoView(rangeId)
+      if (selection == programmaticSelectionToSkip) {
+        programmaticSelectionToSkip = null
+        lastMembershipIdsMappedToSpellcheck = membershipIds
+        return@effect
+      }
+      if (membershipIds == lastMembershipIdsMappedToSpellcheck) return@effect
+      lastMembershipIdsMappedToSpellcheck = membershipIds
+
+      val rangeId =
+        editorState.trackedRangesContainingSelection
+          .selectTrackedRangeMember(
+            allowedGroups = SPELLCHECK_MEMBERSHIP_GROUPS,
+            activeId = activeModel.activeRangeId,
+            ownedIds = resultIds,
+          )
+          ?.id
+      val previousActiveRangeId = activeModel.activeRangeId
+      if (rangeId == null) {
+        activeModel.activate(null)
+      } else {
+        activeModel.activate(rangeId)
+      }
+      updateCompactOverlayHeightForRange(activeModel.activeRangeId)
+      updateActiveRangeDecoration()
+      if (rangeId != null && rangeId != previousActiveRangeId) {
+        requestRangeIntoView(rangeId)
+      }
     }
   }
 
@@ -314,12 +320,12 @@ internal fun rememberEditorSpellcheckSession(
           close()
           return@open
         }
-        scope.launch {
-          if (editor == null) return@launch
-          if (!ensureSubscription()) return@launch
+        scope.launchEditorEffect(editor) {
+          if (editor == null) return@launchEditorEffect
+          if (!ensureSubscription()) return@launchEditorEffect
           if (activeModel.active) {
             close()
-            return@launch
+            return@launchEditorEffect
           }
           occlusionReleaseJob?.cancel()
           occlusionReleaseJob = null
@@ -333,9 +339,9 @@ internal fun rememberEditorSpellcheckSession(
     rerun = rerun@{
         val activeModel = model ?: return@rerun
         if (!activeModel.active || activeModel.loading) return@rerun
-        scope.launch {
-          if (!ensureSubscription()) return@launch
-          if (!activeModel.active || activeModel.loading) return@launch
+        scope.launchEditorEffect(editor) {
+          if (!ensureSubscription()) return@launchEditorEffect
+          if (!activeModel.active || activeModel.loading) return@launchEditorEffect
           activeModel.updateExpanded(false)
           runCheck()
         }
@@ -343,7 +349,7 @@ internal fun rememberEditorSpellcheckSession(
     activateResult = { id ->
       model?.activate(id)
       updateCompactOverlayHeightForRange(model?.activeRangeId)
-      scope.launch {
+      scope.launchEditorEffect(editor) {
         updateActiveRangeDecoration()
         requestRangeIntoView(id)
       }
@@ -357,12 +363,12 @@ internal fun rememberEditorSpellcheckSession(
           return@applySuggestion
         }
 
-        scope.launch {
-          if (activeSession.editor.trackedRange(id) == null) return@launch
-          if (!ensureSubscription()) return@launch
-          if (!onEditingIntent(activeSession.editor)) return@launch
+        scope.launchEditorEffect(activeSession.editor) {
+          if (activeSession.editor.trackedRange(id) == null) return@launchEditorEffect
+          if (!ensureSubscription()) return@launchEditorEffect
+          if (!onEditingIntent(activeSession.editor)) return@launchEditorEffect
           activeSession.submit { activeEditor, context ->
-            activeEditor.scope.launch(context) {
+            activeEditor.launchEffect(context = context) {
               val replaced =
                 activeEditor.replaceSpellcheckRangeText(
                   id = id,
@@ -386,15 +392,15 @@ internal fun rememberEditorSpellcheckSession(
     directEdit = directEdit@{ id ->
         val activeSession = editingSession ?: return@directEdit
         val activeEditor = activeSession.editor
-        scope.launch {
-          val range = activeEditor.trackedRange(id) ?: return@launch
+        scope.launchEditorEffect(activeEditor) {
+          val range = activeEditor.trackedRange(id) ?: return@launchEditorEffect
           if (documentLocked) {
             toast.show(ToastType.Error, "잠긴 문서는 편집할 수 없어요.")
-            return@launch
+            return@launchEditorEffect
           }
 
-          if (!ensureSubscription()) return@launch
-          if (!onEditingIntent(activeEditor)) return@launch
+          if (!ensureSubscription()) return@launchEditorEffect
+          if (!onEditingIntent(activeEditor)) return@launchEditorEffect
           val update =
             activeEditor.updateWithBringIntoView(
               bringIntoViewRequests = bringIntoViewRequests,
@@ -410,7 +416,7 @@ internal fun rememberEditorSpellcheckSession(
                 policy = EditorBringIntoViewPolicy.CursorGuard,
               )
             }
-          if (update == null) return@launch
+          if (update == null) return@launchEditorEffect
           model?.activate(null)
           updateCompactOverlayHeightForRange(null)
           model?.updateExpanded(false)
@@ -422,7 +428,7 @@ internal fun rememberEditorSpellcheckSession(
       },
     ignore = ignore@{ id ->
         val activeEditor = editor ?: return@ignore
-        scope.launch {
+        scope.launchEditorEffect(activeEditor) {
           activeEditor.removeSpellcheckRange(id)
           val nextId = model?.remove(id, activateReplacement = true)
           if (nextId != null) {
@@ -438,7 +444,7 @@ internal fun rememberEditorSpellcheckSession(
         val ids =
           activeModel.results.filter { it.context == context }.mapTo(mutableSetOf()) { it.id }
         val activeEditor = editor ?: return@ignoreSame
-        scope.launch {
+        scope.launchEditorEffect(activeEditor) {
           activeEditor.removeSpellcheckRanges(ids)
           val nextId = activeModel.removeByContext(context, activateReplacement = true)
           if (nextId != null) {

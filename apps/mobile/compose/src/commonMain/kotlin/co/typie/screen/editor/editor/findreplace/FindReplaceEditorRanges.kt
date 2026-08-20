@@ -64,8 +64,12 @@ internal suspend fun Editor.installFindReplaceDecorations() {
 }
 
 internal fun Editor.clearFindReplaceRanges() {
-  enqueue(Message.TrackedRange(TrackedRangeOp.ClearGroup(group = SEARCH_MATCH_RANGE_GROUP)))
-  enqueue(Message.TrackedRange(TrackedRangeOp.ClearGroup(group = ACTIVE_SEARCH_MATCH_RANGE_GROUP)))
+  runCallback {
+    enqueue(Message.TrackedRange(TrackedRangeOp.ClearGroup(group = SEARCH_MATCH_RANGE_GROUP)))
+    enqueue(
+      Message.TrackedRange(TrackedRangeOp.ClearGroup(group = ACTIVE_SEARCH_MATCH_RANGE_GROUP))
+    )
+  }
 }
 
 internal suspend fun Editor.setFindReplaceRanges(

@@ -100,12 +100,8 @@ internal fun EditorSubPaneHost(
         onAction = tableAction@{ message ->
             if (!editorMutationEnabled) return@tableAction
             val currentEditor = editor ?: return@tableAction
-            try {
-              currentEditor.updateNow { enqueue(message) }
-            } catch (error: Throwable) {
-              if (!currentEditor.terminal) throw error
-              return@tableAction
-            }
+            currentEditor.runCallback { currentEditor.updateNow { enqueue(message) } }
+              ?: return@tableAction
             currentEditor.focus()
           },
         onDismissStarted = state::beginDismiss,

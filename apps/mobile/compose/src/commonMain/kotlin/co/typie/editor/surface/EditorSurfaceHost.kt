@@ -33,13 +33,10 @@ internal fun EditorSurfaceHost(
   val hostLifetime = remember(editor) { Any() }
   DisposableEffect(editor, hostLifetime) {
     val active =
-      try {
+      editor.runCallback {
         editor.activateVisualHost(hostLifetime, onPublicationFailure)
         true
-      } catch (error: Throwable) {
-        if (!editor.terminal) throw error
-        false
-      }
+      } ?: false
     onDispose {
       if (active) editor.deactivateVisualHost(hostLifetime)
       onDeactivate()

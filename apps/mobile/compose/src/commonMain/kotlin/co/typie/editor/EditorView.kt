@@ -97,17 +97,20 @@ internal fun EditorView(
               PlatformModule.editorHost.setThemeVariant(target.themeVariant)
             }
           }
-          editor.update {
-            enqueue(
-              Message.System(
-                SystemEvent.Resize(
-                  width = target.width,
-                  height = target.height,
-                  scaleFactor = target.scaleFactor,
+          val resizeApplied = editor.runEffect {
+            editor.update {
+              enqueue(
+                Message.System(
+                  SystemEvent.Resize(
+                    width = target.width,
+                    height = target.height,
+                    scaleFactor = target.scaleFactor,
+                  )
                 )
               )
-            )
+            }
           }
+          if (!resizeApplied) return@LaunchedEffect
           if (shouldUpdateTheme) editorThemeVariant = target.themeVariant
           if (currentLoad !== load || load.isClosed) return@LaunchedEffect
           if (currentEnvironment != target) continue
@@ -168,7 +171,9 @@ internal fun EditorView(
         Modifier.focusRequester(editor.focusRequester)
           .onFocusChanged {
             uiState.updateFocus(it.isFocused)
-            editor.enqueue(Message.System(SystemEvent.SetFocused(it.isFocused)))
+            editor.runCallback {
+              editor.enqueue(Message.System(SystemEvent.SetFocused(it.isFocused)))
+            }
           }
           .editorInput(
             enabled = editorInputEnabled,

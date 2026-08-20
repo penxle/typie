@@ -111,10 +111,12 @@ internal class EditorPointSelectionSemantic(private val effects: EditorInteracti
     )
 
   fun enqueueCursorMove(editor: Editor, point: PagePoint): Boolean {
-    editor.enqueue(
-      Message.Selection(SelectionOp.SetAt(page = point.page, x = point.x, y = point.y))
-    )
-    return true
+    return editor.runCallback {
+      editor.enqueue(
+        Message.Selection(SelectionOp.SetAt(page = point.page, x = point.x, y = point.y))
+      )
+      true
+    } ?: false
   }
 
   private suspend fun dispatchSelection(

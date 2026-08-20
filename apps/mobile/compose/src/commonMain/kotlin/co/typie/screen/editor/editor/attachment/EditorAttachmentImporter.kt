@@ -3,6 +3,7 @@
 package co.typie.screen.editor.editor.attachment
 
 import androidx.compose.runtime.compositionLocalOf
+import co.touchlab.kermit.Logger
 import co.typie.editor.DocumentEditingSession
 import co.typie.editor.Editor
 import co.typie.editor.external.EditorExternalAsset
@@ -207,31 +208,47 @@ internal class DefaultEditorAttachmentImporter(
           it.requestId == requestId
         }
       if (matches.isEmpty()) {
+        Logger.e { "Attachment placeholder request emitted no matching receipt: $requestId" }
         return emptyList()
       }
       if (matches.size != 1) {
-        val error =
-          IllegalStateException(
-            "Expected exactly one attachment placeholder result for $requestId, got ${matches.size}"
-          )
-        editor.fail(error)
-        throw error
+        return failPlaceholderReceiptInvariant(
+          editor,
+          "Attachment placeholder request emitted duplicate matching receipts: " +
+            "requestId=$requestId, receiptCount=${matches.size}",
+        )
       }
       val nodeIds = matches.single().nodeIds
       if (remaining.size != nodeIds.size) {
-        val error =
-          IllegalStateException(
-            "Expected ${remaining.size} attachment placeholders, got ${nodeIds.size}"
-          )
-        editor.fail(error)
-        throw error
+        return failPlaceholderReceiptInvariant(
+          editor,
+          "Attachment placeholder receipt count mismatch: " +
+            "expected=${remaining.size}, actual=${nodeIds.size}",
+        )
       }
       targets += nodeIds.zip(remaining)
     }
 
-    return targets.map { (nodeId, preparedItem) ->
+    val mapped = targets.map { (nodeId, preparedItem) ->
       Target(nodeId, preparedItem.item, preparedItem.pending)
     }
+    if (mapped.map(Target::nodeId).distinct().size != mapped.size) {
+      return failPlaceholderReceiptInvariant(
+        editor,
+        "Attachment placeholder receipt contains duplicate mapped node IDs",
+      )
+    }
+    if (mapped.any { target -> !isAvailablePlaceholder(editor, target.nodeId, target.item.kind) }) {
+      Logger.e { "Attachment placeholder receipt contains an unavailable target" }
+      return emptyList()
+    }
+    return mapped
+  }
+
+  private fun failPlaceholderReceiptInvariant(editor: Editor, message: String): List<Target> {
+    val error = IllegalStateException(message)
+    editor.fail(error)
+    return emptyList()
   }
 
   private suspend fun uploadTarget(
@@ -341,6 +358,7 @@ internal class DefaultEditorAttachmentImporter(
 
   private fun isCurrent(session: DocumentEditingSession, editor: Editor, target: Target): Boolean =
     isSessionCurrent(session) &&
+      !editor.terminal &&
       pendingMatches(target) &&
       isEmptyPlaceholder(editor, target.nodeId, target.item.kind)
 

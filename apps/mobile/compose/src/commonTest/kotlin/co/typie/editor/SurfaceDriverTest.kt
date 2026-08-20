@@ -3,6 +3,7 @@ package co.typie.editor
 import co.typie.editor.ffi.FrameKey
 import co.typie.editor.ffi.Revision
 import kotlin.concurrent.atomics.AtomicBoolean
+import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -125,6 +126,29 @@ class SurfaceDriverTest {
     }
 
   @Test
+  fun failureRejectsNewSurfaceWorkButStillAllowsDetach() =
+    runTest(dispatcher) {
+      val fake = FakeFfiEditor()
+      val editor = Editor(fake, this, dispatcher)
+      val failure = AtomicReference<Throwable?>(null)
+      val driver = driver(fake, failure = failure)
+      val session = driver.attach(editor, page = 0, handle = 1L, configuration = configuration)
+      advanceUntilIdle()
+      val completions = mutableListOf<FrameKey?>()
+
+      failure.store(IllegalStateException("editor failed"))
+      driver.resize(session, SurfaceConfiguration(1.0, 1.0, 1.0))
+      driver.render(session, revision = 1L) { completions += it }
+      driver.detach(session)
+      advanceUntilIdle()
+
+      assertEquals(listOf<FrameKey?>(null), completions)
+      assertEquals(emptyList(), fake.resizeCalls)
+      assertEquals(emptyList(), fake.renderCalls)
+      assertEquals(listOf("attach:0:1", "detach:0"), fake.surfaceEvents)
+    }
+
+  @Test
   fun cancelledOwnerScopeStillCompletesDetachOnce() =
     runTest(dispatcher) {
       val fake = FakeFfiEditor()
@@ -171,6 +195,7 @@ class SurfaceDriverTest {
     fake: FakeFfiEditor,
     failures: MutableList<Throwable> = mutableListOf(),
     disposed: AtomicBoolean = AtomicBoolean(false),
+    failure: AtomicReference<Throwable?> = AtomicReference(null),
     scope: CoroutineScope = CoroutineScope(dispatcher),
   ): SurfaceDriver =
     SurfaceDriver(
@@ -178,7 +203,7 @@ class SurfaceDriverTest {
       scope = scope,
       dispatcher = dispatcher,
       disposed = disposed,
-      failed = AtomicBoolean(false),
+      failure = failure,
       notifyFailure = { failures += it },
     )
 }

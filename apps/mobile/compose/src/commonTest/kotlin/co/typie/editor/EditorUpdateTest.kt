@@ -15,9 +15,11 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertSame
+import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.buildJsonObject
@@ -109,6 +111,27 @@ class EditorUpdateTest {
     }
 
   @Test
+  fun frozenCommentNativeAdmissionFailureDoesNotFailEditor() =
+    runTest(dispatcher) {
+      val failure = IllegalStateException("admission failed")
+      val fake = FakeFfiEditor(beforeEnqueueRequest = { throw failure })
+      val reported = mutableListOf<Throwable>()
+      val editor = Editor(fake, this, dispatcher, onError = { _, error -> reported += error })
+      val selection = assertNotNull(fake.freezeSelection(FakeFfiEditor.EmptySelection))
+
+      editor.addFrozenComment(
+        id = "comment",
+        group = COMMENT_RANGE_GROUP,
+        selection = json.encodeToJsonElement(selection),
+      )
+      advanceUntilIdle()
+
+      assertFalse(editor.terminal)
+      assertEquals(emptyList(), reported)
+      assertEquals(emptyList(), fake.enqueued)
+    }
+
+  @Test
   fun tickThroughLeavesLaterResourceWorkQueued() {
     val fake = FakeFfiEditor()
     val requestId = fake.enqueueRequest(listOf(message))
@@ -152,7 +175,9 @@ class EditorUpdateTest {
       val withHost =
         async(start = CoroutineStart.UNDISPATCHED) { editor.update { enqueue(message) } }
       runCurrent()
-      val publication = requireNotNull(withHost.await()).awaitPublished()
+      val update = requireNotNull(withHost.await())
+      assertTrue(editor.acceptPublication(requireNotNull(editor.publishIfReady(emptySet()))))
+      val publication = update.awaitPublished()
 
       val published = assertIs<Published>(publication)
       assertEquals(2L, published.revision)

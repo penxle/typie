@@ -2,15 +2,22 @@ package co.typie.screen.editor.editor.state
 
 import androidx.compose.runtime.BroadcastFrameClock
 import androidx.compose.ui.geometry.Size
+import co.typie.editor.Editor
+import co.typie.editor.FakeFfiEditor
 import co.typie.editor.runtime.EditorRuntime
 import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.viewport.EditorViewportState
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertSame
+import kotlin.test.assertTrue
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 
@@ -57,6 +64,32 @@ class EditorScreenStateTest {
   }
 
   @Test
+  fun `leaving the foreground contains an editor admission failure at the scene callback`() =
+    runTest {
+      val failure = IllegalStateException("admission failed")
+      val runtime = EditorRuntime(uiScope = this)
+      val editor =
+        Editor(
+          inner = FakeFfiEditor(beforeEnqueueRequest = { throw failure }),
+          scope = this,
+          dispatcher = StandardTestDispatcher(testScheduler),
+          onError = { activeEditor, error -> runtime.fail(activeEditor, error) },
+        )
+      runtime.attach(editor)
+      val state = EditorScreenState(viewportState = EditorViewportState())
+
+      state.updateSceneForeground(
+        isForeground = false,
+        runtime = runtime,
+        uiState = EditorUiState(),
+      )
+      advanceUntilIdle()
+
+      assertFalse(state.sceneInForeground)
+      assertSame(failure, runtime.failure)
+    }
+
+  @Test
   fun `prepareToLeaveEditorScene waits for header flush before returning`() = runTest {
     val state = EditorScreenState(viewportState = EditorViewportState())
     val runtime = EditorRuntime(uiScope = this)
@@ -87,4 +120,38 @@ class EditorScreenStateTest {
 
     leaveJob.join()
   }
+
+  @Test
+  fun `preparing to leave contains an editor admission failure and still flushes the header`() =
+    runTest {
+      val failure = IllegalStateException("admission failed")
+      val runtime = EditorRuntime(uiScope = this)
+      val editor =
+        Editor(
+          inner = FakeFfiEditor(beforeEnqueueRequest = { throw failure }),
+          scope = this,
+          dispatcher = StandardTestDispatcher(testScheduler),
+          onError = { activeEditor, error -> runtime.fail(activeEditor, error) },
+        )
+      runtime.attach(editor)
+      val state = EditorScreenState(viewportState = EditorViewportState())
+      val frameClock = BroadcastFrameClock()
+      var flushed = false
+
+      val leaveJob =
+        launch(frameClock) {
+          state.prepareToLeaveEditorScene(
+            runtime = runtime,
+            uiState = EditorUiState(),
+            flushDrafts = { flushed = true },
+          )
+        }
+      runCurrent()
+      frameClock.sendFrame(0L)
+      advanceUntilIdle()
+
+      assertTrue(flushed)
+      assertSame(failure, runtime.failure)
+      leaveJob.join()
+    }
 }

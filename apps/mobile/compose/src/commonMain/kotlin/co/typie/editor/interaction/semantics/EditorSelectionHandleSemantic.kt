@@ -22,7 +22,7 @@ internal class EditorSelectionHandleSemantic(
     val op =
       point.selectionHandleExtensionOp(anchor = anchor, baseSelection = baseSelection)
         ?: return null
-    editor.enqueue(Message.Selection(op))
+    editor.runCallback { editor.enqueue(Message.Selection(op)) } ?: return null
     return op
   }
 

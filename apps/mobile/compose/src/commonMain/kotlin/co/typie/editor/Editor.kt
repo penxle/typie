@@ -51,6 +51,7 @@ import kotlin.concurrent.atomics.AtomicLong
 import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.reflect.KClass
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.PersistentMap
@@ -95,6 +96,20 @@ internal sealed interface TryEnqueueResult {
 
   data class Failed(val error: Throwable) : TryEnqueueResult
 }
+
+// Carries editor failure ownership explicitly across suspend boundaries. The payload also keeps
+// coroutine exception recovery from turning this control signal into an indistinguishable copy of
+// the underlying failure on JVM.
+internal class EditorFailureSignal(val failure: Throwable) :
+  RuntimeException(failure.message, failure)
+
+internal fun Throwable.unwrapEditorFailureSignal(): Throwable =
+  (this as? EditorFailureSignal)?.failure ?: this
+
+internal fun CoroutineScope.launchEditorEffect(
+  editor: Editor?,
+  block: suspend CoroutineScope.() -> Unit,
+): Job = editor?.launchEffect(coroutineScope = this, block = block) ?: launch(block = block)
 
 private class SurfacePage(
   var target: SurfaceTarget,
@@ -167,11 +182,14 @@ internal constructor(
   internal var imeNotificationsPaused: Boolean by mutableStateOf(false)
 
   val terminal: Boolean
-    get() = disposed.load() || failed.load()
+    get() = disposed.load() || failure.load() != null
+
+  internal val terminalFailure: Throwable?
+    get() = failure.load()
 
   private val mutex = PriorityMutex()
   private val disposed: AtomicBoolean = AtomicBoolean(false)
-  private val failed: AtomicBoolean = AtomicBoolean(false)
+  private val failure: AtomicReference<Throwable?> = AtomicReference(null)
   private val imeSessionActive: AtomicBoolean = AtomicBoolean(false)
   private val syncInProgress: AtomicBoolean = AtomicBoolean(false)
   private val localEdits = EditorLocalEditCoordinator()
@@ -201,7 +219,7 @@ internal constructor(
       scope = scope,
       dispatcher = dispatcher,
       disposed = disposed,
-      failed = failed,
+      failure = failure,
       notifyFailure = { error -> notifyFailure(error) },
     )
 
@@ -306,9 +324,22 @@ internal constructor(
         val accepted =
           withContext(dispatcher) {
             mutex.withLock {
-              ensureActive()
+              try {
+                ensureActive()
+              } catch (e: CancellationException) {
+                throw e
+              } catch (e: Throwable) {
+                throw claimEffectFailure(e)
+              }
               if (!admit()) return@withLock false
-              val requestId = inner.enqueueRequest(request.messages)
+              val requestId =
+                try {
+                  inner.enqueueRequest(request.messages)
+                } catch (e: CancellationException) {
+                  throw e
+                } catch (e: Throwable) {
+                  throw claimEffectFailure(e)
+                }
               registerPendingRequest(requestId = requestId, completion = receipt, request = request)
               admitted = true
               if (ownsLocalEdit) {
@@ -327,15 +358,15 @@ internal constructor(
         }
         receipt.await()
       } catch (e: CancellationException) {
-        if (!admitted) request.discard()
+        if (!admitted) request.discardAfterFailure(e)
         if (ownsLocalEdit && !admitted) localEdit.fail(e)
         throw e
       } catch (e: Throwable) {
-        if (!admitted) request.discard()
+        if (!admitted) request.discardAfterFailure(e)
         receipt.completeExceptionally(e)
         if (ownsLocalEdit && !admitted) localEdit.fail(e)
-        fail(e)
-        throw e
+        val admittedFailure = if (admitted) failure.load() else null
+        throw admittedFailure?.let(::EditorFailureSignal) ?: claimEffectFailure(e)
       }
     return update
   }
@@ -381,11 +412,11 @@ internal constructor(
             }
           }
         } catch (e: CancellationException) {
-          if (!admitted) request.discard()
+          if (!admitted) request.discardAfterFailure(e)
           localEdit.fail(e)
           throw e
         } catch (e: Throwable) {
-          if (!admitted) request.discard()
+          if (!admitted) request.discardAfterFailure(e)
           localEdit.fail(e)
           fail(e)
           throw e
@@ -404,7 +435,7 @@ internal constructor(
     try {
       request.block()
     } catch (error: Throwable) {
-      request.discard()
+      request.discardAfterFailure(error)
       throw error
     }
     return request
@@ -423,11 +454,11 @@ internal constructor(
   internal fun deactivateImeSession() {
     if (!imeSessionActive.load()) return
     try {
-      updateNow(admit = { appliedState.ime?.composing != null }) {
-        enqueue(Message.TextInput(listOf(FlatImeOp.CommitAsIs)))
+      runCallback {
+        updateNow(admit = { appliedState.ime?.composing != null }) {
+          enqueue(Message.TextInput(listOf(FlatImeOp.CommitAsIs)))
+        }
       }
-    } catch (error: Throwable) {
-      if (!terminal) throw error
     } finally {
       setImeSessionActive(false)
     }
@@ -436,15 +467,11 @@ internal constructor(
   // IME materialization is a Host read preference, not a core mutation. It keeps
   // the same applied revision instead of creating an empty barrier tick.
   internal suspend fun refreshImeSnapshot() {
-    withSuspendFailureNotification {
-      withContext(dispatcher) {
-        mutex.withLock {
-          if (terminal || !imeSessionActive.load()) return@withLock
-          val ime = inner.ime(IME_SNAPSHOT_WINDOW, IME_SNAPSHOT_WINDOW)
-          if (appliedState.ime != ime) {
-            appliedState = appliedState.copy(ime = ime)
-          }
-        }
+    invokeCore {
+      if (!imeSessionActive.load()) return@invokeCore
+      val ime = inner.ime(IME_SNAPSHOT_WINDOW, IME_SNAPSHOT_WINDOW)
+      if (appliedState.ime != ime) {
+        appliedState = appliedState.copy(ime = ime)
       }
     }
   }
@@ -462,6 +489,43 @@ internal constructor(
       return TryEnqueueResult.Failed(e)
     }
   }
+
+  internal inline fun <T> runCallback(block: () -> T): T? {
+    if (terminal) return null
+    return try {
+      block()
+    } catch (error: CancellationException) {
+      throw error
+    } catch (error: Throwable) {
+      // Synchronous UI callback boundaries contain only failures the editor has already claimed.
+      if (failure.load() !== error) throw error
+      null
+    }
+  }
+
+  internal suspend fun runEffect(block: suspend () -> Unit): Boolean {
+    if (terminal) return false
+    return try {
+      block()
+      !terminal
+    } catch (error: CancellationException) {
+      throw error
+    } catch (error: Throwable) {
+      val claimed = failure.load()
+      when {
+        claimed === error -> false
+        error is EditorFailureSignal && claimed === error.failure -> false
+        else -> throw error
+      }
+    }
+  }
+
+  internal fun launchEffect(
+    coroutineScope: CoroutineScope = scope,
+    context: CoroutineContext = EmptyCoroutineContext,
+    start: CoroutineStart = CoroutineStart.DEFAULT,
+    block: suspend CoroutineScope.() -> Unit,
+  ): Job = coroutineScope.launch(context, start) { runEffect { block() } }
 
   fun enqueue(message: Message) {
     val result = tryEnqueue { message }
@@ -482,30 +546,30 @@ internal constructor(
     }
   }
 
-  suspend fun freezeSelection(selection: Selection): StableSelection? =
-    readInner(defaultValue = { null }) { it.freezeSelection(selection) }
+  suspend fun freezeSelection(selection: Selection): StableSelection? = invokeCore {
+    inner.freezeSelection(selection)
+  }
 
-  suspend fun findMatches(query: String, matchWholeWord: Boolean): List<Selection> =
-    readInner(defaultValue = { emptyList() }) {
-      it.findMatches(query, SearchOptions(matchWholeWord = matchWholeWord))
-    }
+  suspend fun findMatches(query: String, matchWholeWord: Boolean): List<Selection> = invokeCore {
+    inner.findMatches(query, SearchOptions(matchWholeWord = matchWholeWord))
+  }
 
-  suspend fun proseText(): String = readInner(defaultValue = { "" }) { it.proseText() }
+  suspend fun proseText(): String = invokeCore { inner.proseText() }
 
-  suspend fun proseToSelection(start: Int, end: Int): Selection? =
-    readInner(defaultValue = { null }) { it.proseToSelection(start, end) }
+  suspend fun proseToSelection(start: Int, end: Int): Selection? = invokeCore {
+    inner.proseToSelection(start, end)
+  }
 
-  suspend fun proseTextAnnotated(): String =
-    readInner(defaultValue = { "" }) { it.proseTextAnnotated() }
+  suspend fun proseTextAnnotated(): String = invokeCore { inner.proseTextAnnotated() }
 
-  suspend fun proseToSelectionAnnotated(start: Int, end: Int): Selection? =
-    readInner(defaultValue = { null }) { it.proseToSelectionAnnotated(start, end) }
+  suspend fun proseToSelectionAnnotated(start: Int, end: Int): Selection? = invokeCore {
+    inner.proseToSelectionAnnotated(start, end)
+  }
 
-  suspend fun trackedRange(id: String): TrackedRange? =
-    readInner(defaultValue = { null }) { it.trackedRange(id) }
+  suspend fun trackedRange(id: String): TrackedRange? = invokeCore { inner.trackedRange(id) }
 
   internal suspend fun trackedRangeSnapshot(id: String): Pair<EditorState, TrackedRange?> =
-    readInner(defaultValue = { appliedState to null }) { inner ->
+    invokeCore {
       appliedState to inner.trackedRange(id)
     }
 
@@ -602,6 +666,7 @@ internal constructor(
     readSnapshot(version = tick.revision.value, events = tick.events)
 
     val events = publicEvents(tick.events)
+    val completedRequestIds = mutableListOf<Long>()
     val completions = mutableListOf<Pair<CompletableDeferred<EditorUpdate>, EditorUpdate>>()
     for (request in tick.requestOutcomes) {
       val pending = pendingRequests.load()[request.requestId.value] ?: continue
@@ -614,7 +679,7 @@ internal constructor(
           editor = this,
         )
       pending.request.runBeforePublish(update)
-      pendingRequests.updatePersistent { it.removing(request.requestId.value) }
+      completedRequestIds += request.requestId.value
       pending.completion?.let { completion -> completions += completion to update }
     }
     reconcileSurfaceTargets(
@@ -623,6 +688,9 @@ internal constructor(
     )
     startSurfaceRenders()
     publicationSourceChanged()
+    pendingRequests.updatePersistent { requests ->
+      completedRequestIds.fold(requests) { current, requestId -> current.removing(requestId) }
+    }
     completions.forEach { (completion, update) -> completion.complete(update) }
   }
 
@@ -713,7 +781,13 @@ internal constructor(
     val immediate =
       withContext(dispatcher) {
         mutex.withLock {
-          ensureActive()
+          try {
+            ensureActive()
+          } catch (e: CancellationException) {
+            throw e
+          } catch (e: Throwable) {
+            throw claimEffectFailure(e)
+          }
           val host = visualHost
           if (host == null) {
             NoHost
@@ -782,48 +856,54 @@ internal constructor(
     return PublishedBundle(snapshot = source.snapshot, frames = frames)
   }
 
-  internal fun acceptPublication(bundle: PublishedBundle): Boolean = runBlocking {
-    mutex.withPriorityLock(escalationMillis = 0) {
-      if (published === bundle && publishedHostToken === visualHost?.token) {
-        return@withPriorityLock true
-      }
-      val host = visualHost
-      if (host == null) return@withPriorityLock false
-      if (appliedState !== bundle.snapshot) return@withPriorityLock false
-      if (bundle.frames.size != surfacePageRequirements.size) return@withPriorityLock false
-      for (pageIndex in surfacePageRequirements) {
-        val finishedFrame = bundle.frames[pageIndex] ?: return@withPriorityLock false
-        val page = host.pages[pageIndex] ?: return@withPriorityLock false
-        if (
-          page.frame !== finishedFrame ||
-            !Publication.accepts(
-              proof = finishedFrame.proof,
-              target = page.target,
-              requiredRevision = page.requiredRevision,
-              available = page.available,
-            )
-        ) {
-          return@withPriorityLock false
+  internal fun acceptPublication(bundle: PublishedBundle): Boolean {
+    if (terminal) return false
+    return withFailureFallback(defaultValue = { false }) {
+      runBlocking {
+        mutex.withPriorityLock(escalationMillis = 0) {
+          if (terminal) return@withPriorityLock false
+          if (published === bundle && publishedHostToken === visualHost?.token) {
+            return@withPriorityLock true
+          }
+          val host = visualHost
+          if (host == null) return@withPriorityLock false
+          if (appliedState !== bundle.snapshot) return@withPriorityLock false
+          if (bundle.frames.size != surfacePageRequirements.size) return@withPriorityLock false
+          for (pageIndex in surfacePageRequirements) {
+            val finishedFrame = bundle.frames[pageIndex] ?: return@withPriorityLock false
+            val page = host.pages[pageIndex] ?: return@withPriorityLock false
+            if (
+              page.frame !== finishedFrame ||
+                !Publication.accepts(
+                  proof = finishedFrame.proof,
+                  target = page.target,
+                  requiredRevision = page.requiredRevision,
+                  available = page.available,
+                )
+            ) {
+              return@withPriorityLock false
+            }
+          }
+          val previousRevision = published?.snapshot?.version
+          val nextRevision = bundle.snapshot.version
+          if (
+            previousRevision != nextRevision &&
+              !inner.replaceViewportAnchorPresentation(Revision(nextRevision))
+          ) {
+            return@withPriorityLock false
+          }
+          for (pageIndex in surfacePageRequirements) {
+            val page = host.pages.getValue(pageIndex)
+            page.requiredRevision = null
+            page.failedRevision = null
+          }
+          published = bundle
+          publishedHostToken = host.token
+          refreshPublicationSource()
+          refreshRetainedFrames()
+          true
         }
       }
-      val previousRevision = published?.snapshot?.version
-      val nextRevision = bundle.snapshot.version
-      if (
-        previousRevision != nextRevision &&
-          !inner.replaceViewportAnchorPresentation(Revision(nextRevision))
-      ) {
-        return@withPriorityLock false
-      }
-      for (pageIndex in surfacePageRequirements) {
-        val page = host.pages.getValue(pageIndex)
-        page.requiredRevision = null
-        page.failedRevision = null
-      }
-      published = bundle
-      publishedHostToken = host.token
-      refreshPublicationSource()
-      refreshRetainedFrames()
-      true
     }
   }
 
@@ -831,31 +911,45 @@ internal constructor(
     completePublicationWaiters(bundle)
   }
 
-  internal fun captureSelectionViewportAnchor(revision: Long): CapturedViewportAnchor? =
-    runBlocking {
-      mutex.withPriorityLock(escalationMillis = 0) {
-        ensureActive()
-        inner.captureSelectionViewportAnchor(Revision(revision))
+  internal fun captureSelectionViewportAnchor(revision: Long): CapturedViewportAnchor? {
+    if (terminal) return null
+    return withFailureFallback(defaultValue = { null }) {
+      runBlocking {
+        mutex.withPriorityLock(escalationMillis = 0) {
+          if (terminal) return@withPriorityLock null
+          inner.captureSelectionViewportAnchor(Revision(revision))
+        }
       }
     }
+  }
 
   internal fun captureViewportAnchorAt(
     revision: Long,
     point: ViewportAnchorPoint,
-  ): CapturedViewportAnchor? = runBlocking {
-    mutex.withPriorityLock(escalationMillis = 0) {
-      ensureActive()
-      inner.captureViewportAnchorAt(Revision(revision), point)
+  ): CapturedViewportAnchor? {
+    if (terminal) return null
+    return withFailureFallback(defaultValue = { null }) {
+      runBlocking {
+        mutex.withPriorityLock(escalationMillis = 0) {
+          if (terminal) return@withPriorityLock null
+          inner.captureViewportAnchorAt(Revision(revision), point)
+        }
+      }
     }
   }
 
   internal fun resolveViewportAnchor(
     revision: Long,
     anchor: ViewportAnchor,
-  ): ViewportAnchorResolution = runBlocking {
-    mutex.withPriorityLock(escalationMillis = 0) {
-      ensureActive()
-      inner.resolveViewportAnchor(Revision(revision), anchor)
+  ): ViewportAnchorResolution {
+    if (terminal) return ViewportAnchorResolution.Unavailable
+    return withFailureFallback(defaultValue = { ViewportAnchorResolution.Unavailable }) {
+      runBlocking {
+        mutex.withPriorityLock(escalationMillis = 0) {
+          if (terminal) return@withPriorityLock ViewportAnchorResolution.Unavailable
+          inner.resolveViewportAnchor(Revision(revision), anchor)
+        }
+      }
     }
   }
 
@@ -1286,19 +1380,19 @@ internal constructor(
   }
 
   fun inspectState(options: InspectStateOptions? = null): String =
-    withFailureNotification(defaultValue = { "" }) {
+    withFailureFallback(defaultValue = { "" }) {
       ensureActive()
       inner.inspectState(options)
     }
 
   fun inspectStateAsMacro(): String =
-    withFailureNotification(defaultValue = { "" }) {
+    withFailureFallback(defaultValue = { "" }) {
       ensureActive()
       inner.inspectStateAsMacro()
     }
 
   fun inspectSelectionAsSliceMacro(): String? =
-    withFailureNotification(defaultValue = { null }) {
+    withFailureFallback(defaultValue = { null }) {
       ensureActive()
       inner.inspectSelectionAsSliceMacro()
     }
@@ -1324,7 +1418,7 @@ internal constructor(
     px >= x && px <= x + width && py >= y && py <= y + height
 
   suspend fun characterCounts(): CharacterCounts? =
-    withSuspendFailureNotification(defaultValue = { null }) {
+    withSuspendFailureFallback(defaultValue = { null }) {
       withContext(dispatcher) {
         mutex.withLock {
           if (terminal) {
@@ -1337,7 +1431,7 @@ internal constructor(
     }
 
   suspend fun copySelection(): ClipboardPayload? =
-    withSuspendFailureNotification(defaultValue = { null }) {
+    withSuspendFailureFallback(defaultValue = { null }) {
       withContext(dispatcher) {
         mutex.withLock {
           if (terminal) {
@@ -1387,19 +1481,17 @@ internal constructor(
     }
 
   internal suspend fun receiveRemoteChangeset(payload: ByteArray) {
-    withSuspendFailureNotification {
-      val events =
-        withContext(dispatcher) {
-          mutex.withLock {
-            ensureActive()
-            inner.receiveRemoteChangeset(payload)
-            val tick = inner.tick() ?: return@withLock emptyList()
-            install(tick)
-            publicEvents(tick.events)
-          }
-        }
-      emit(events)
+    val events = invokeCore {
+      inner.receiveRemoteChangeset(payload)
+      val tick = inner.tick() ?: return@invokeCore emptyList()
+      install(tick)
+      publicEvents(tick.events)
     }
+    emit(events)
+  }
+
+  internal suspend fun applyRemoteChangesets(payloads: Iterable<ByteArray>): Boolean = runEffect {
+    payloads.forEach { payload -> if (payload.isNotEmpty()) receiveRemoteChangeset(payload) }
   }
 
   suspend fun insertTemplateFragment(changesets: ByteArray): Boolean =
@@ -1594,7 +1686,7 @@ internal constructor(
     if (disposed.load()) {
       throw CancellationException("Editor disposed")
     }
-    check(!failed.load()) { "Editor failed" }
+    failure.load()?.let { throw it }
   }
 
   internal fun fail(error: Throwable) {
@@ -1602,7 +1694,7 @@ internal constructor(
       throw error
     }
     if (disposed.load()) return
-    if (!failed.compareAndSet(expectedValue = false, newValue = true)) return
+    if (!failure.compareAndSet(expectedValue = null, newValue = error)) return
 
     EditorRegistry.unregisterAsync(this)
     scope.launch(dispatcher + NonCancellable, start = CoroutineStart.UNDISPATCHED) {
@@ -1620,16 +1712,21 @@ internal constructor(
         refreshPublicationSource()
       }
       receipts.forEach { it.completeExceptionally(error) }
-      waiters.forEach { it.completion.completeExceptionally(error) }
+      waiters.forEach { it.completion.completeExceptionally(EditorFailureSignal(error)) }
       edits.forEach { it.fail(error) }
-      requests.forEach(CollectedEditorRequest::discard)
+      requests.forEach { it.discardAfterFailure(error) }
       onError(this@Editor, error)
     }
   }
 
   private fun notifyFailure(error: Throwable) = fail(error)
 
-  private fun <T> withFailureNotification(defaultValue: () -> T, block: () -> T): T =
+  private fun claimEffectFailure(error: Throwable): Throwable {
+    fail(error)
+    return if (failure.load() === error) EditorFailureSignal(error) else error
+  }
+
+  private fun <T> withFailureFallback(defaultValue: () -> T, block: () -> T): T =
     try {
       block()
     } catch (e: CancellationException) {
@@ -1639,45 +1736,21 @@ internal constructor(
       defaultValue()
     }
 
-  private suspend fun <T> readInner(
-    defaultValue: () -> T,
-    block: (co.typie.editor.ffi.Editor) -> T,
-  ): T =
-    withSuspendFailureNotification(defaultValue) {
-      withContext(dispatcher) {
-        mutex.withLock {
-          ensureActive()
-          block(inner)
-        }
-      }
-    }
-
   private suspend fun <T> invokeCore(block: () -> T): T =
-    try {
-      withContext(dispatcher) {
-        mutex.withLock {
+    withContext(dispatcher) {
+      mutex.withLock {
+        try {
           ensureActive()
           block()
+        } catch (e: CancellationException) {
+          throw e
+        } catch (e: Throwable) {
+          throw claimEffectFailure(e)
         }
       }
-    } catch (e: CancellationException) {
-      throw e
-    } catch (e: Throwable) {
-      fail(e)
-      throw e
     }
 
-  private suspend fun withSuspendFailureNotification(block: suspend () -> Unit) {
-    try {
-      block()
-    } catch (e: CancellationException) {
-      throw e
-    } catch (e: Throwable) {
-      notifyFailure(e)
-    }
-  }
-
-  private suspend fun <T> withSuspendFailureNotification(
+  private suspend fun <T> withSuspendFailureFallback(
     defaultValue: () -> T,
     block: suspend () -> T,
   ): T =
@@ -1770,7 +1843,16 @@ internal constructor(
               EditorRegistry.commitResourceUpdate {
                 PlatformModule.editorHost.setThemeVariant(themeVariant)
               }
-              checkNotNull(editor.update { enqueue(Message.System(SystemEvent.Initialize)) })
+              val update =
+                try {
+                  editor.update { enqueue(Message.System(SystemEvent.Initialize)) }
+                } catch (signal: EditorFailureSignal) {
+                  throw signal.failure
+                }
+              if (update == null) {
+                throw editor.failure.load()
+                  ?: IllegalStateException("Editor initialization was not applied")
+              }
               initialized.store(true)
             } finally {
               if (!initialized.load()) {

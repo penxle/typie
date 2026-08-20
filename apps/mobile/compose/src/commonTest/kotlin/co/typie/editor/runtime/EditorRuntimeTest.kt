@@ -2,6 +2,7 @@ package co.typie.editor.runtime
 
 import co.typie.editor.DocumentEditingSession
 import co.typie.editor.Editor
+import co.typie.editor.EditorFailureSignal
 import co.typie.editor.FakeFfiEditor
 import co.typie.editor.sync.createTestDocumentEditingSession
 import kotlin.test.Test
@@ -128,5 +129,16 @@ class EditorRuntimeTest {
 
     assertNull(runtime.failure)
     assertNull(runtime.failedEditor)
+  }
+
+  @Test
+  fun editorFailureSignalPublishesItsOriginalFailure() = runTest {
+    val runtime = EditorRuntime(uiScope = this)
+    val failure = IllegalStateException("fatal editor failure")
+
+    runtime.fail(EditorFailureSignal(failure))
+    runCurrent()
+
+    assertSame(failure, runtime.failure)
   }
 }

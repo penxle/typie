@@ -369,6 +369,11 @@ fun DocumentBodySettingsScreen(entityId: String) {
       }
     }
 
+    LaunchedEffect(previewRuntime.failure) {
+      previewRuntime.failure ?: return@LaunchedEffect
+      dialog.error(nav) { previewRuntime.clearFailure() }
+    }
+
     LaunchedEffect(load, document.id, channel) {
       val readyLoad = load ?: return@LaunchedEffect
       if (!settingsRuntime.canCreateEditor) return@LaunchedEffect
@@ -409,9 +414,9 @@ fun DocumentBodySettingsScreen(entityId: String) {
         lateinit var createdSession: DocumentEditingSession
         readyLoad.activate(
           apply = { event ->
-            for (bundle in event.bundles) {
-              if (bundle.isNotEmpty()) createdEditor.receiveRemoteChangeset(bundle)
-              bootstrapFailure.load()?.let { throw it }
+            if (!createdEditor.applyRemoteChangesets(event.bundles)) {
+              throw createdEditor.terminalFailure
+                ?: CancellationException("Editor disposed while applying remote changesets")
             }
           },
           startLive = { baseline ->
@@ -586,7 +591,7 @@ fun DocumentBodySettingsScreen(entityId: String) {
       if (!controlsEnabled) return
       val activeSession = settingsRuntime.session ?: return
       activeSession.submit { activeEditor, context ->
-        activeEditor.scope.launch(context) {
+        activeEditor.launchEffect(context = context) {
           model
             .applyAndRelayBodySettings(editor = activeEditor, block = block)
             .withDefaultExceptionHandler(toast)

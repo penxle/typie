@@ -18,7 +18,6 @@ import co.typie.editor.scroll.updateWithBringIntoView
 import co.typie.platform.Clipboard
 import co.typie.platform.IncomingContentMode
 import co.typie.platform.PlatformModule
-import kotlinx.coroutines.launch
 
 internal data class EditorContextMenuActions(
   val showCopyCutActions: Boolean,
@@ -56,7 +55,7 @@ internal fun rememberEditorContextMenuActions(
   ) {
     val expandSelection =
       { unit: SelectionExpansionUnit, bringIntoViewTarget: EditorBringIntoViewTarget? ->
-        editor.scope.launch {
+        editor.launchEffect {
           val appliedState =
             if (bringIntoViewTarget == null) {
               editor.update { enqueue(Message.Selection(SelectionOp.Expand(unit))) }?.snapshot
@@ -78,13 +77,13 @@ internal fun rememberEditorContextMenuActions(
       showCopyCutActions = !selection.isCollapsed(),
       availableExpansionUnits = availableExpansionUnits,
       onCopy = {
-        editor.scope.launch {
+        editor.launchEffect {
           editor.copySelection()?.let { clipboard.copyRichText(html = it.html, text = it.text) }
         }
       },
       onCut = {
-        editor.scope.launch {
-          val payload = editor.copySelection() ?: return@launch
+        editor.launchEffect {
+          val payload = editor.copySelection() ?: return@launchEffect
           if (clipboard.copyRichText(html = payload.html, text = payload.text)) {
             editor.updateWithBringIntoView(bringIntoViewRequests) {
               enqueue(Message.Clipboard(ClipboardOp.Cut))
@@ -99,7 +98,7 @@ internal fun rememberEditorContextMenuActions(
       onPaste = {
         val session = runtime.session?.takeIf { it.editor === editor }
         if (session != null) {
-          editor.scope.launch {
+          editor.launchEffect {
             incomingContentHandler.handleClipboard(session, clipboard, IncomingContentMode.Rich)
           }
         }

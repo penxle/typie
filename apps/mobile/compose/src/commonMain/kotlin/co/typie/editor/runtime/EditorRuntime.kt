@@ -8,6 +8,7 @@ import androidx.compose.runtime.setValue
 import co.touchlab.kermit.Logger
 import co.typie.editor.DocumentEditingSession
 import co.typie.editor.Editor
+import co.typie.editor.unwrapEditorFailureSignal
 import io.sentry.kotlin.multiplatform.Sentry
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -94,44 +95,45 @@ class EditorRuntime(private val uiScope: CoroutineScope) {
   }
 
   fun fail(error: Throwable) {
-    if (error is CancellationException) {
-      throw error
-    }
-    uiScope.launch { setFailed(error) }
+    val failure = failureSource(error)
+    uiScope.launch { setFailed(failure) }
   }
 
   fun fail(editor: Editor, error: Throwable) {
-    if (error is CancellationException) {
-      throw error
-    }
+    val failure = failureSource(error)
     uiScope.launch {
       if (this@EditorRuntime.editor !== editor) {
         return@launch
       }
-      setFailed(error)
+      setFailed(failure)
     }
   }
 
   internal fun fail(session: DocumentEditingSession, error: Throwable) {
-    if (error is CancellationException) {
-      throw error
-    }
+    val failure = failureSource(error)
     uiScope.launch {
       if (this@EditorRuntime.session !== session) {
         return@launch
       }
-      setFailed(error)
+      setFailed(failure)
     }
   }
+
+  private fun failureSource(error: Throwable): Throwable =
+    error.unwrapEditorFailureSignal().also { failure ->
+      if (failure is CancellationException) throw failure
+    }
 
   private fun setFailed(error: Throwable) {
     if (failure != null) {
       return
     }
 
-    val detail = error.cause?.let { "$error; cause=$it" } ?: error.toString()
-    Logger.e(error) { "Editor failed: $detail" }
-    Sentry.captureException(error)
+    runCatching {
+      val detail = error.cause?.let { "$error; cause=$it" } ?: error.toString()
+      Logger.e(error) { "Editor failed: $detail" }
+    }
+    runCatching { Sentry.captureException(error) }
     failureState = Failure(error = error, editor = editor)
     clear()
   }

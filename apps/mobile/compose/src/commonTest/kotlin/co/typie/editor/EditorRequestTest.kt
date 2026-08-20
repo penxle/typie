@@ -23,6 +23,7 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -440,7 +441,9 @@ class EditorRequestTest {
 
       val thrown = assertFailsWith<RuntimeException> { editor.update { enqueue(sampleMessage) } }
 
-      assertEquals(boom.message, thrown.message)
+      // JVM coroutine stack-trace recovery may copy the exception while retaining the source as
+      // its cause; Kotlin/Native propagates the source directly.
+      assertSame(boom, thrown.cause ?: thrown)
       assertEquals(1, reported.size)
       assertTrue(reported.single() === boom)
       assertEquals(EditorState.Initial, editor.appliedState)
@@ -467,6 +470,128 @@ class EditorRequestTest {
       }
 
       assertEquals(listOf("discarded", "reported"), events)
+    }
+
+  @Test
+  fun update_reports_the_original_failure_when_discard_cleanup_throws() =
+    runTest(dispatcher) {
+      val failure = RuntimeException("tick failed")
+      val cleanupFailure = RuntimeException("discard failed")
+      val reported = mutableListOf<Throwable>()
+      val editor =
+        Editor(
+          inner = FakeFfiEditor(onTick = { throw failure }),
+          scope = this,
+          dispatcher = dispatcher,
+          onError = { _, error -> reported += error },
+        )
+
+      assertFailsWith<RuntimeException> {
+        editor.update {
+          beforePublish(block = {}, onDiscard = { throw cleanupFailure })
+          enqueue(sampleMessage)
+        }
+      }
+
+      assertSame(failure, reported.single())
+      assertSame(cleanupFailure, failure.suppressedExceptions.single())
+    }
+
+  @Test
+  fun updateNow_reports_the_admission_failure_when_discard_cleanup_throws() =
+    runTest(dispatcher) {
+      val failure = RuntimeException("admission failed")
+      val cleanupFailure = RuntimeException("discard failed")
+      val reported = mutableListOf<Throwable>()
+      val editor =
+        Editor(
+          inner = FakeFfiEditor(beforeEnqueueRequest = { throw failure }),
+          scope = this,
+          dispatcher = dispatcher,
+          onError = { _, error -> reported += error },
+        )
+
+      val thrown =
+        assertFailsWith<RuntimeException> {
+          editor.updateNow {
+            beforePublish(block = {}, onDiscard = { throw cleanupFailure })
+            enqueue(sampleMessage)
+          }
+        }
+
+      assertSame(failure, thrown)
+      assertTrue(editor.terminal)
+      assertSame(failure, reported.single())
+      assertSame(cleanupFailure, failure.suppressedExceptions.single())
+    }
+
+  @Test
+  fun updateNow_reports_the_beforePublish_failure_when_discard_cleanup_throws() =
+    runTest(dispatcher) {
+      val failure = RuntimeException("beforePublish failed")
+      val cleanupFailure = RuntimeException("discard failed")
+      val reported = mutableListOf<Throwable>()
+      val editor =
+        Editor(
+          inner = FakeFfiEditor(),
+          scope = this,
+          dispatcher = dispatcher,
+          onError = { _, error -> reported += error },
+        )
+
+      val thrown =
+        assertFailsWith<RuntimeException> {
+          editor.updateNow {
+            beforePublish(block = { throw failure }, onDiscard = { throw cleanupFailure })
+            enqueue(sampleMessage)
+          }
+        }
+
+      assertSame(failure, thrown)
+      assertTrue(editor.terminal)
+      assertSame(failure, reported.single())
+      assertSame(cleanupFailure, failure.suppressedExceptions.single())
+    }
+
+  @Test
+  fun beforePublish_failure_completes_every_request_from_the_same_tick() =
+    runTest(dispatcher) {
+      val failure = RuntimeException("beforePublish failed")
+      val reported = mutableListOf<Throwable>()
+      val editor =
+        Editor(
+          inner = FakeFfiEditor(),
+          scope = this,
+          dispatcher = dispatcher,
+          onError = { _, error -> reported += error },
+        )
+
+      val first =
+        async(start = CoroutineStart.UNDISPATCHED) {
+          runCatching {
+            editor.update {
+              beforePublish(block = {}, onDiscard = {})
+              enqueue(sampleMessage)
+            }
+          }
+        }
+      val second =
+        async(start = CoroutineStart.UNDISPATCHED) {
+          runCatching {
+            editor.update {
+              beforePublish(block = { throw failure }, onDiscard = {})
+              enqueue(sampleMessage)
+            }
+          }
+        }
+
+      dispatcher.scheduler.runCurrent()
+
+      assertTrue(first.isCompleted)
+      assertTrue(second.isCompleted)
+      assertTrue(first.await().isFailure)
+      assertTrue(second.await().isFailure)
+      assertSame(failure, reported.single())
     }
 
   @Test
@@ -603,7 +728,7 @@ class EditorRequestTest {
     }
 
   @Test
-  fun updateNow_reports_tick_exception_without_applying() =
+  fun updateNow_reports_and_propagates_tick_exception_without_applying() =
     runTest(dispatcher) {
       val boom = IllegalStateException("boom")
       val fake = FakeFfiEditor(onTick = { throw boom })
@@ -844,6 +969,25 @@ class EditorRequestTest {
       dispatcher.scheduler.advanceUntilIdle()
       assertEquals(1, fake.tickCount)
       assertEquals(listOf(sampleMessage), fake.enqueued)
+    }
+
+  @Test
+  fun enqueue_reports_and_propagates_native_admission_failure() =
+    runTest(dispatcher) {
+      val failure = IllegalStateException("admission failed")
+      val fake = FakeFfiEditor(beforeEnqueueRequest = { throw failure })
+      val reported = mutableListOf<Throwable>()
+      val editor = Editor(fake, this, dispatcher, onError = { _, error -> reported += error })
+
+      val thrown = assertFailsWith<IllegalStateException> { editor.enqueue(sampleMessage) }
+      dispatcher.scheduler.advanceUntilIdle()
+
+      assertTrue(thrown === failure)
+      assertTrue(editor.terminal)
+      assertEquals(1, reported.size)
+      assertTrue(reported.single() === failure)
+      assertEquals(emptyList(), fake.enqueued)
+      assertEquals(0, fake.tickCount)
     }
 
   @Test

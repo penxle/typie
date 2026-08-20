@@ -102,14 +102,14 @@ class FindReplaceTopBarDesktopTest {
       waitForIdle()
 
       onNodeWithText("kr 뀨♡", useUnmergedTree = true).performTouchInput { click() }
-      waitForIdle()
+      waitUntil(timeoutMillis = 5_000L) { pendingFindText != null }
       runOnIdle {
         findText = checkNotNull(pendingFindText)
         pendingFindText = null
       }
       waitForIdle()
       onNodeWithText("kr 뀨♡", useUnmergedTree = true).performTouchInput { click() }
-      waitForIdle()
+      waitUntil(timeoutMillis = 5_000L) { pendingFindText == "아" }
 
       onNode(hasSetTextAction(), useUnmergedTree = true).assertTextEquals("아")
     } finally {

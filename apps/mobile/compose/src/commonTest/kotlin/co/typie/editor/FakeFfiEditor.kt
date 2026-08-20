@@ -106,6 +106,7 @@ internal class FakeFfiEditor(
       ViewportAnchorResolution.Unavailable
     },
   var copySelectionProvider: () -> ClipboardPayload? = { null },
+  var proseTextAnnotatedProvider: () -> String = { "" },
   var selectionEndpointsProvider: () -> SelectionEndpoints? = { null },
   var trackedRangesProvider: (String?) -> List<TrackedRange> = { emptyList() },
   var trackedRangesContainingSelectionProvider:
@@ -484,7 +485,7 @@ internal class FakeFfiEditor(
 
   override fun proseToSelection(start: Int, end: Int): Selection? = null
 
-  override fun proseTextAnnotated(): String = ""
+  override fun proseTextAnnotated(): String = proseTextAnnotatedProvider()
 
   override fun proseToSelectionAnnotated(start: Int, end: Int): Selection? = null
 

@@ -81,7 +81,7 @@ internal class EditorInputConnection(
     ImeEditBatch(isSessionCurrent) { messages ->
       val recorder = editor.inputRecorder
       val imeBefore = if (recorder == null) null else editor.appliedState.ime
-      val update = editor.runInputCallback {
+      val update = editor.runCallback {
         editor.updateNowWithBringIntoView(bringIntoViewRequests) {
           for (message in messages) {
             enqueue(message)

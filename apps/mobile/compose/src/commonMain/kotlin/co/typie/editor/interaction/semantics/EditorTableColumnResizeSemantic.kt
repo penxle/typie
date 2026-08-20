@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import co.typie.editor.Editor
+import co.typie.editor.EditorSurfaceUnavailableException
 import co.typie.editor.EditorUpdate
 import co.typie.editor.ffi.CommandOutcome
 import co.typie.editor.ffi.Message
@@ -16,15 +17,11 @@ import co.typie.editor.interaction.EditorInteractionGeometry
 import co.typie.editor.interaction.EditorTableCellSelection
 import co.typie.editor.interaction.EditorTableCellSelectionHandleTouchTargetDp
 import co.typie.editor.interaction.resolveActiveTableCellSelection
-import kotlin.coroutines.coroutineContext
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.roundToInt
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.job
-import kotlinx.coroutines.launch
 
 private const val TableColumnResizeTouchWidthDp = 24f
 private const val TableColumnResizeMinColumnWidth = 40f
@@ -116,14 +113,7 @@ internal class EditorTableColumnResizeSemantic {
       return
     }
     draft = finished
-    val update =
-      try {
-        currentEditor.commitTableResize(finished)
-      } catch (error: Throwable) {
-        clear()
-        if (!currentEditor.terminal) throw error
-        return
-      }
+    val update = currentEditor.runCallback { currentEditor.commitTableResize(finished) }
     if (
       update == null || update.commandOutcomes.any { outcome -> outcome is CommandOutcome.Rejected }
     ) {
@@ -132,20 +122,19 @@ internal class EditorTableColumnResizeSemantic {
     }
 
     val waitJob =
-      currentEditor.scope.launch(start = CoroutineStart.LAZY) {
+      currentEditor.launchEffect(start = CoroutineStart.LAZY) {
         try {
-          update.awaitPublished()
-        } catch (e: CancellationException) {
-          throw e
-        } catch (_: Throwable) {
-          // The Editor already owns failure reporting; this job only owns the draft handoff.
-        } finally {
-          if (publicationWaitJob === coroutineContext.job) {
-            publicationWaitJob = null
-            clear()
-          }
+          update.awaitPublishedInEffect()
+        } catch (_: EditorSurfaceUnavailableException) {
+          // A replacement surface can publish a newer revision; this draft is no longer needed.
         }
       }
+    waitJob.invokeOnCompletion {
+      if (publicationWaitJob === waitJob) {
+        publicationWaitJob = null
+        clear()
+      }
+    }
     publicationWaitJob = waitJob
     waitJob.start()
   }

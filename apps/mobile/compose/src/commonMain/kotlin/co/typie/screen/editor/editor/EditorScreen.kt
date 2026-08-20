@@ -228,6 +228,7 @@ import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
@@ -571,21 +572,26 @@ fun EditorScreen(entityId: String) {
           nav.current == Route.Editor(entityId) &&
           screenState.sceneInForeground
       }
-      val finalized =
+      var finalized = false
+      val completed =
         if (activeEditor == null) {
+          finalized = true
           true
         } else {
-          activeEditor
-            .update(admit = transitionCurrent) {
-              if (activeEditor.appliedState.ime?.composing != null) {
-                enqueue(Message.TextInput(listOf(FlatImeOp.CommitAsIs)))
-              }
-              enqueue(Message.System(SystemEvent.SetFocused(false)))
-            }
-            ?.commandOutcomes
-            ?.none { it is CommandOutcome.Rejected } == true
+          activeEditor.runEffect {
+            finalized =
+              activeEditor
+                .update(admit = transitionCurrent) {
+                  if (activeEditor.appliedState.ime?.composing != null) {
+                    enqueue(Message.TextInput(listOf(FlatImeOp.CommitAsIs)))
+                  }
+                  enqueue(Message.System(SystemEvent.SetFocused(false)))
+                }
+                ?.commandOutcomes
+                ?.none { it is CommandOutcome.Rejected } == true
+          }
         }
-      if (!finalized || !transitionCurrent()) return
+      if (!completed || !finalized || !transitionCurrent()) return
       model.flushDrafts()
 
       if (!transitionCurrent()) return
@@ -629,12 +635,12 @@ fun EditorScreen(entityId: String) {
   }
   LaunchedEffect(entityId, editor) {
     val activeEditor = editor ?: return@LaunchedEffect
-    EditorLocalChangesetBus.consume(entityId).forEach { activeEditor.receiveRemoteChangeset(it) }
+    activeEditor.applyRemoteChangesets(EditorLocalChangesetBus.consume(entityId))
   }
   LaunchedEffect(entityId, runtime) {
-    EditorLocalChangesetBus.notifications(entityId).collectLatest {
-      val activeEditor = runtime.editor ?: return@collectLatest
-      EditorLocalChangesetBus.consume(entityId).forEach { activeEditor.receiveRemoteChangeset(it) }
+    EditorLocalChangesetBus.notifications(entityId).collect {
+      val activeEditor = runtime.editor ?: return@collect
+      activeEditor.applyRemoteChangesets(EditorLocalChangesetBus.consume(entityId))
     }
   }
 
@@ -987,8 +993,9 @@ fun EditorScreen(entityId: String) {
         if (queued.isEmpty()) break
 
         for (event in queued) {
-          for (bundle in event.bundles) {
-            if (bundle.isNotEmpty()) readyEditor.receiveRemoteChangeset(bundle)
+          if (!readyEditor.applyRemoteChangesets(event.bundles)) {
+            readyEditor.terminalFailure?.let(runtime::fail)
+            return@LaunchedEffect
           }
           effectiveBaseline =
             effectiveBaseline.copy(
@@ -1549,16 +1556,20 @@ fun EditorScreen(entityId: String) {
           currentEditorReadOnly == expectedEditorReadOnly &&
           !currentDirectEditingEnabled
       }
-      val cleaned =
-        activeEditor
-          .update(admit = cleanupCurrent) {
-            if (activeEditor.appliedState.ime?.composing != null) {
-              enqueue(Message.TextInput(listOf(FlatImeOp.CommitAsIs)))
+      var cleaned = false
+      val cleanupCompleted = activeEditor.runEffect {
+        cleaned =
+          activeEditor
+            .update(admit = cleanupCurrent) {
+              if (activeEditor.appliedState.ime?.composing != null) {
+                enqueue(Message.TextInput(listOf(FlatImeOp.CommitAsIs)))
+              }
+              enqueue(Message.System(SystemEvent.SetFocused(false)))
             }
-            enqueue(Message.System(SystemEvent.SetFocused(false)))
-          }
-          ?.commandOutcomes
-          ?.none { it is CommandOutcome.Rejected } == true
+            ?.commandOutcomes
+            ?.none { it is CommandOutcome.Rejected } == true
+      }
+      if (!cleanupCompleted) return@LaunchedEffect
       if (!cleaned || !cleanupCurrent()) return@LaunchedEffect
       if (!uiState.focused) return@LaunchedEffect
       interactionScope.controller.cancel()
@@ -1801,7 +1812,7 @@ fun EditorScreen(entityId: String) {
         onMeasuredViewportSizeChange = { viewport ->
           val editor = runtime.editor
           if (editor != null && viewport.width > 0f && viewport.height > 0f) {
-            scope.launch {
+            editor.launchEffect(coroutineScope = scope) {
               editor.update {
                 enqueue(
                   Message.System(
@@ -1837,11 +1848,19 @@ fun EditorScreen(entityId: String) {
               onTitleChange = model::updateTitleDraft,
               onSubtitleChange = model::updateSubtitleDraft,
               onTitleFocused = {
-                runtime.editor?.updateNow { enqueue(Message.Selection(SelectionOp.Unset)) }
+                runtime.editor?.let { activeEditor ->
+                  activeEditor.runCallback {
+                    activeEditor.updateNow { enqueue(Message.Selection(SelectionOp.Unset)) }
+                  }
+                }
                 entryState.markTitleFocused()
               },
               onSubtitleFocused = {
-                runtime.editor?.updateNow { enqueue(Message.Selection(SelectionOp.Unset)) }
+                runtime.editor?.let { activeEditor ->
+                  activeEditor.runCallback {
+                    activeEditor.updateNow { enqueue(Message.Selection(SelectionOp.Unset)) }
+                  }
+                }
                 entryState.markSubtitleFocused()
               },
               onHeightChanged = screenState::updateHeaderHeight,
@@ -1953,7 +1972,7 @@ fun EditorScreen(entityId: String) {
                 onRepasteAsText = repasteAsText@{
                     if (!directEditingEnabled) return@repasteAsText
                     activeSession.submit { activeEditor, context ->
-                      activeEditor.scope.launch(context) {
+                      activeEditor.launchEffect(context = context) {
                         activeEditor.updateWithBringIntoView(bringIntoViewRequests) {
                           enqueue(Message.Clipboard(ClipboardOp.RepasteAsText))
                           bringIntoView(
@@ -2094,7 +2113,7 @@ internal fun enterDocumentStartFromHeader(
 ) {
   requestEditorFocus()
   val activeEditor = editor ?: return
-  scope.launch {
+  activeEditor.launchEffect(coroutineScope = scope) {
     activeEditor.update {
       enqueue(
         Message.Navigation(NavigationOp.Move(Movement.Document(Direction.Backward), extend = false))

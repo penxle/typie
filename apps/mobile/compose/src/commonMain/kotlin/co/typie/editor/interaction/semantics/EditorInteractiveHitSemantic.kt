@@ -28,18 +28,22 @@ internal class EditorInteractiveHitSemantic {
         if (onText) {
           EditorInteractiveTapResult.None
         } else {
-          editor.enqueue(Message.View(ViewOp.ToggleFold(id = hit.id)))
-          EditorInteractiveTapResult.HandledViewAction
+          editor.runCallback {
+            editor.enqueue(Message.View(ViewOp.ToggleFold(id = hit.id)))
+            EditorInteractiveTapResult.HandledViewAction
+          } ?: EditorInteractiveTapResult.None
         }
       }
       is InteractiveHit.CalloutIcon -> {
         if (editing && !readOnly) {
-          editor.enqueue(
-            Message.Node(
-              NodeOp.SetAttrs(id = hit.id, attrs = PlainNode.Callout(variant = hit.nextVariant))
+          editor.runCallback {
+            editor.enqueue(
+              Message.Node(
+                NodeOp.SetAttrs(id = hit.id, attrs = PlainNode.Callout(variant = hit.nextVariant))
+              )
             )
-          )
-          EditorInteractiveTapResult.HandledViewAction
+            EditorInteractiveTapResult.HandledViewAction
+          } ?: EditorInteractiveTapResult.None
         } else {
           EditorInteractiveTapResult.BlockedMutation
         }

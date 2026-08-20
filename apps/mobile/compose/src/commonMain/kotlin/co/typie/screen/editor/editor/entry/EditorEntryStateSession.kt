@@ -69,15 +69,17 @@ internal fun rememberEditorEntryStateSession(
     val activeEditor = editor ?: return@LaunchedEffect
     val selection = restoreSelection ?: return@LaunchedEffect
 
-    activeEditor.updateWithBringIntoView(bringIntoViewRequests) {
-      enqueue(Message.Selection(SelectionOp.SetFrozen(selection = selection)))
-      enqueue(Message.View(ViewOp.ExpandFoldsForSelection))
-      bringIntoView(
-        EditorBringIntoViewTarget.CurrentSelectionHead,
-        policy = EditorBringIntoViewPolicy.Reveal,
-      )
+    activeEditor.runEffect {
+      activeEditor.updateWithBringIntoView(bringIntoViewRequests) {
+        enqueue(Message.Selection(SelectionOp.SetFrozen(selection = selection)))
+        enqueue(Message.View(ViewOp.ExpandFoldsForSelection))
+        bringIntoView(
+          EditorBringIntoViewTarget.CurrentSelectionHead,
+          policy = EditorBringIntoViewPolicy.Reveal,
+        )
+      }
+      session.markPresentationReady()
     }
-    session.markPresentationReady()
   }
 
   LaunchedEffect(documentId, editor) {
@@ -94,7 +96,9 @@ internal fun rememberEditorEntryStateSession(
     snapshotFlow { currentEditorFocused.value to activeEditor.appliedState.selection }
       .collect { (focused, selection) ->
         if (focused && selection != null && selection != baselineSelection) {
-          controller.saveBodySelection(documentId = activeDocumentId, editor = activeEditor)
+          activeEditor.runEffect {
+            controller.saveBodySelection(documentId = activeDocumentId, editor = activeEditor)
+          }
         }
 
         if (focused || wasFocused) {

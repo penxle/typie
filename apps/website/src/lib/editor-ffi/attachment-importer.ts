@@ -39,7 +39,7 @@ export class EditorAttachmentImporter {
   }
 
   #isEditorCurrent(editor: Editor): boolean {
-    return this.#ctx.editor === editor && !editor.destroyed && !editor.readOnly;
+    return this.#ctx.editor === editor && !editor.terminal && !editor.readOnly;
   }
 
   #isAvailable(editor: Editor, nodeId: string, kind: AttachmentPlaceholderKind): boolean {
@@ -53,6 +53,10 @@ export class EditorAttachmentImporter {
 
   #pendingMap(editor: Editor, kind: AttachmentPlaceholderKind): Editor['inflightImages'] | Editor['inflightFiles'] {
     return kind === 'image' ? editor.inflightImages : editor.inflightFiles;
+  }
+
+  #failReceiptInvariant(editor: Editor, message: string): void {
+    editor.fail(new Error(message));
   }
 
   #collectReceipt(editor: Editor, requestId: string, enqueue: () => void): string[] | undefined {
@@ -75,25 +79,25 @@ export class EditorAttachmentImporter {
       return undefined;
     }
     if (matches.length > 1) {
-      console.error('Attachment placeholder request emitted duplicate matching receipts.', {
-        requestId,
-        receiptCount: matches.length,
-      });
+      this.#failReceiptInvariant(
+        editor,
+        `Attachment placeholder request emitted duplicate matching receipts: requestId=${requestId}, receiptCount=${matches.length}`,
+      );
       return undefined;
     }
     return matches[0];
   }
 
-  #isExactMapping(nodeIds: readonly string[], expectedCount: number): boolean {
+  #isExactMapping(editor: Editor, nodeIds: readonly string[], expectedCount: number): boolean {
     if (nodeIds.length !== expectedCount) {
-      console.error('Attachment placeholder receipt count mismatch.', {
-        expectedCount,
-        actualCount: nodeIds.length,
-      });
+      this.#failReceiptInvariant(
+        editor,
+        `Attachment placeholder receipt count mismatch: expected=${expectedCount}, actual=${nodeIds.length}`,
+      );
       return false;
     }
     if (new Set(nodeIds).size !== expectedCount) {
-      console.error('Attachment placeholder receipt contains duplicate node IDs.', nodeIds);
+      this.#failReceiptInvariant(editor, 'Attachment placeholder receipt contains duplicate node IDs');
       return false;
     }
     return true;
@@ -279,12 +283,9 @@ export class EditorAttachmentImporter {
           },
         });
       });
-      if (!nodeIds || !this.#isExactMapping(nodeIds, tail.length)) return false;
+      if (!nodeIds || !this.#isExactMapping(editor, nodeIds, tail.length)) return false;
       if (existingNodeId !== undefined && nodeIds.includes(existingNodeId)) {
-        console.error('Attachment placeholder receipt contains the existing destination node ID.', {
-          existingNodeId,
-          nodeIds,
-        });
+        this.#failReceiptInvariant(editor, 'Attachment placeholder receipt contains the existing destination node ID');
         return false;
       }
       for (const [index, item] of tail.entries()) {
@@ -339,12 +340,9 @@ export class EditorAttachmentImporter {
         },
       });
     });
-    if (!nodeIds || !this.#isExactMapping(nodeIds, items.length)) return false;
+    if (!nodeIds || !this.#isExactMapping(editor, nodeIds, items.length)) return false;
     if (reuseCandidate && nodeIds.indexOf(reuseCandidate) > 0) {
-      console.error('Attachment placeholder receipt placed the reuse candidate after the first item.', {
-        reuseNodeId: reuseCandidate,
-        nodeIds,
-      });
+      this.#failReceiptInvariant(editor, 'Attachment placeholder receipt placed the reuse candidate after the first item');
       return false;
     }
 
