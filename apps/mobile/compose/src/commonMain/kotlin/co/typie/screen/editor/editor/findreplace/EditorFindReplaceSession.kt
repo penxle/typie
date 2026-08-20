@@ -15,7 +15,6 @@ import co.typie.editor.Editor
 import co.typie.editor.EditorState
 import co.typie.editor.ext.isCollapsed
 import co.typie.editor.scroll.EditorBringIntoViewRequests
-import co.typie.editor.scroll.revealTrackedItem
 import co.typie.storage.Preference
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastType
@@ -256,15 +255,21 @@ private class FindReplaceSessionController {
         previousIndex = previousIndex,
         searchInputChanged = searchInputChanged,
       )
+    val registrations = nextMatches.map {
+      FindReplaceRangeRegistration(id = it.id, selection = it.selection)
+    }
+    val activeId = nextActiveIndex?.let { nextMatches.getOrNull(it)?.id }
 
     matches = nextMatches
     activeIndex = nextActiveIndex
-    activeEditor.setFindReplaceRanges(
-      nextMatches.map { FindReplaceRangeRegistration(id = it.id, selection = it.selection) }
-    )
-    updateActiveRangeDecoration(activeEditor)
     if (searchInputChanged || force) {
-      requestActiveRangeIntoView(activeEditor, bringIntoViewRequests)
+      activeEditor.setFindReplaceRangesAndReveal(
+        items = registrations,
+        activeId = activeId,
+        bringIntoViewRequests = bringIntoViewRequests,
+      )
+    } else {
+      activeEditor.setFindReplaceRanges(items = registrations, activeId = activeId)
     }
   }
 
@@ -277,10 +282,12 @@ private class FindReplaceSessionController {
       if (matches.isEmpty()) return
       val currentIndex = activeIndex ?: 0
       activeIndex = (currentIndex + offset + matches.size) % matches.size
-      editor?.let {
-        updateActiveRangeDecoration(it)
-        requestActiveRangeIntoView(it, bringIntoViewRequests)
-      }
+      val activeId = activeMatchId() ?: return@withLock
+      editor?.setActiveFindReplaceRangeAndReveal(
+        activeId = activeId,
+        currentRanges = editor.appliedState.trackedRanges,
+        bringIntoViewRequests = bringIntoViewRequests,
+      )
     }
   }
 
@@ -374,20 +381,6 @@ private class FindReplaceSessionController {
       searchInputChanged || previousIndex == null -> 0
       else -> previousIndex.coerceIn(0, nextMatches.lastIndex)
     }
-
-  private suspend fun updateActiveRangeDecoration(editor: Editor) {
-    editor.setActiveFindReplaceRange(
-      activeId = activeMatchId(),
-      currentRanges = editor.appliedState.trackedRanges,
-    )
-  }
-
-  private suspend fun requestActiveRangeIntoView(
-    editor: Editor,
-    bringIntoViewRequests: EditorBringIntoViewRequests,
-  ) {
-    activeMatchId()?.let { id -> editor.revealTrackedItem(bringIntoViewRequests, id) }
-  }
 }
 
 private fun String.toSingleLineText(): String = replace('\r', ' ').replace('\n', ' ')

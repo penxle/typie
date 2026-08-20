@@ -1084,12 +1084,12 @@ describe('EditorScrollScope', () => {
     expect(getScrollTop()).toBe(580);
   });
 
-  it('snaps an in-flight smooth reveal to its target when a no-op publication is within scroll tolerance', () => {
+  it('finishes an in-flight smooth reveal at its current position when a no-op publication is within scroll tolerance', () => {
     const snapshot = trackedSnapshot('target', {
       page_idx: 0,
       rect: { x: 0, y: 900, width: 1, height: 20 },
     });
-    const { scope, scrollTo, setScrollTop } = setup(snapshot);
+    const { getScrollTop, scope, scrollTo, setScrollTop } = setup(snapshot);
     scope.scrollIntoView({ target: { type: 'tracked_item', id: 'target' }, policy: 'reveal', behavior: 'smooth' });
     const request = scope.pendingRequest;
     if (!request) throw new Error('Expected a pending reveal');
@@ -1098,7 +1098,8 @@ describe('EditorScrollScope', () => {
     setScrollTop(579.25);
     expect(scope.applyPending(request, snapshot, { type: 'no_scroll' })).toBe(true);
 
-    expect(scrollTo).toHaveBeenLastCalledWith({ top: 580, behavior: 'instant' });
+    expect(getScrollTop()).toBe(579.25);
+    expect(scrollTo).not.toHaveBeenCalled();
     expect(scope.pendingRequest).toBeNull();
   });
 

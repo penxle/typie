@@ -114,6 +114,73 @@ class EditorViewportAnchorReconcilerTest {
     }
 
   @Test
+  fun `non-selection reveal handoff keeps the achieved scroll through the next publication`() =
+    runTest {
+      val visibleArea = visibleArea()
+      val initialFrame =
+        frame(visibleArea).let { frame ->
+          frame.copy(
+            state =
+              frame.state.copy(
+                selection =
+                  Selection(
+                    anchor = Position("text", 0, Affinity.Downstream),
+                    head = Position("text", 0, Affinity.Downstream),
+                  )
+              )
+          )
+        }
+      val candidateFrame = initialFrame.copy(state = initialFrame.state.copy(version = 2L))
+      val anchorState =
+        EditorViewportAnchorState().apply {
+          attachSelection(selectionAnchor, anchorGeometry(240f), scrollY = 100f)
+        }
+      val viewportState = viewportState(scrollY = 350f)
+      val editor = editor(selectionY = 200f)
+
+      attachViewportCenterAnchor(
+        editor = editor,
+        anchorState = anchorState,
+        revision = initialFrame.state.version,
+        frame = initialFrame,
+        scrollOffset = viewportState.scrollOffset,
+        contentOriginY = 0f,
+      )
+      anchorState.consumeScrollChange(viewportState.lastScrollRevision)
+      anchorState.consumeVisibleAreaChange(visibleArea)
+
+      viewportState.scrollToY(targetY = 349.75f, isAutoScroll = true)
+      reconcileViewportAnchorObservation(
+        editor = editor,
+        anchorState = anchorState,
+        bundle = PublishedBundle(snapshot = initialFrame.state, frames = emptyMap()),
+        frame = initialFrame,
+        viewportState = viewportState,
+        visibleArea = visibleArea,
+        mode = EditorViewportScrollReconcileMode.Enabled,
+        smoothRevealActive = false,
+        handoffTarget = EditorBringIntoViewTarget.TrackedItem("search-match:1"),
+        selectionRevealOrigin = null,
+        contentOriginY = 0f,
+      )
+
+      val publication =
+        reconcileViewportAnchorPublication(
+          editor = editor,
+          anchorState = anchorState,
+          publishedBundle = PublishedBundle(snapshot = initialFrame.state, frames = emptyMap()),
+          candidateState = candidateFrame.state,
+          measuredScrollFrame = candidateFrame,
+          currentScrollOffset = viewportState.scrollOffset,
+          maximumScrollY = viewportState.maxScrollY,
+          contentOriginY = 0f,
+        )
+          as EditorViewportAnchorPublication.Ready
+
+      assertEquals(349.75f, publication.scrollY)
+    }
+
+  @Test
   fun `scroll observed during transform is reconciled after the transform ends`() = runTest {
     val visibleArea = visibleArea()
     val frame = frame(visibleArea)
