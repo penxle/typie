@@ -18,9 +18,8 @@ declare global {
     cancelLogin?: () => void;
     retry?: () => void;
     onAuthError?: (callback: (message: string) => void) => () => void;
-    onUpdateReady?: (callback: (version: string) => void) => () => void;
+    onUpdateReady?: (callback: () => void) => () => void;
     restartToUpdate?: () => void;
-    dismissUpdate?: () => void;
   };
 
   interface Window {

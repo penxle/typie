@@ -16,5 +16,4 @@ export const IPC = {
   bridgeFocus: 'bridge:focus',
   updateReady: 'update:ready',
   updateRestart: 'update:restart',
-  updateDismiss: 'update:dismiss',
 } as const;
