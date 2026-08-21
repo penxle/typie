@@ -1,7 +1,7 @@
 import type { AskAnswer } from '../feedback/live.ts';
 import type { PriceTable } from '../feedback/pricing.ts';
-import type { AppCatalog, TierName, TierOverrides } from '../feedback/tiers.ts';
-import type { ManuscriptMeta, PreviousInput, PrismWorkflow, PrismWorkflowView } from '../feedback/types.ts';
+import type { AppCatalog, TierName } from '../feedback/tiers.ts';
+import type { PrismWorkflow, PrismWorkflowView, WorkflowInput } from '../feedback/types.ts';
 
 type PrismEnv = { PRISM_API_ORIGIN: string; PRISM_API_TOKEN: string };
 
@@ -103,7 +103,7 @@ export const startWorkflow = async (
     workflowId: string;
     workflow: TierName;
     // previous가 실리면 재리뷰다 — 워크플로 이름은 그대로고 이 키의 유무가 모드를 가른다.
-    input: { manuscriptPath: string; meta: ManuscriptMeta; overrides?: TierOverrides; previous?: PreviousInput };
+    input: WorkflowInput;
     files: SeedFile[];
   },
 ): Promise<void> => {
@@ -130,7 +130,7 @@ export const getWorkflow = async (env: PrismEnv, id: string): Promise<PrismWorkf
   const res = await call(env, `/workflows/${id}`);
   const raw = (await res.json()) as { workflow: WireWorkflow };
   const wf = raw.workflow;
-  // 명시 사영 — 와이어 행(14열)에는 caller·input 등 화면이 몰라야 할 열이 실려 온다. 전개로 옮기면 타입 밖
+  // 명시 사영 — 와이어 행에는 caller·input 등 화면이 몰라야 할 열이 실려 온다. 전개로 옮기면 타입 밖
   // 필드가 런타임 객체에 남아 이후 소비처로 조용히 새므로, 이 경계가 통과시키는 것을 전부 열거한다.
   return {
     workflow: {
@@ -154,16 +154,9 @@ export const retryWorkflow = async (env: PrismEnv, id: string): Promise<void> =>
   await call(env, `/workflows/${id}/retry`, { method: 'POST' });
 };
 
+// 읽기 계약은 get + /events 둘뿐이다(prism docs/events.md §1) — 재생(커서 다음부터)·sync·라이브가 한 스트림이다.
 export const openEvents = (env: PrismEnv, id: string, lastEventId: number): Promise<Response> =>
   call(env, `/workflows/${id}/events?lastEventId=${lastEventId}`);
-
-// 이벤트 로그의 정지 사진 — SSE 재생과 같은 행을 JSON으로 한 번에 받는다(실행 중 세션의 첫 화면 시드용).
-export type PrismLogEvent = { seq: number; kind: string; data: Record<string, unknown>; createdAt: number };
-
-export const fetchEventLog = async (env: PrismEnv, id: string): Promise<PrismLogEvent[]> => {
-  const res = await call(env, `/workflows/${id}/log`);
-  return ((await res.json()) as { events: PrismLogEvent[] }).events;
-};
 
 // 두 세그먼트는 폼에서 온 클라이언트 입력이다 — 날것으로 보간하면 URL 파서의 dot-segment 정규화로 ../ 순회가
 // 성립해, 호출부의 워크플로 소속 가드를 통과한 뒤 남의 에이전트 해소 경로로 요청이 나간다.
@@ -172,19 +165,27 @@ export const resolveAskUser = async (env: PrismEnv, agentId: string, toolCallId:
   await call(env, path, { method: 'POST', body: JSON.stringify({ result: { answers } }) });
 };
 
+// 구동 행의 대상은 agent·workflow로 갈린다(prism core/do.ts InvocationView의 targetKind) — 이 앱이 겨누는 것은
+// ask-user를 기다릴 수 있는 자식 agent뿐이라 workflow 대상은 걸러 명시 사영한다.
 export const getWorkflowInvocations = async (
   env: PrismEnv,
   workflowId: string,
 ): Promise<{ agentId: string; agentName: string; status: string }[]> => {
   const res = await call(env, `/workflows/${workflowId}`);
-  const raw = (await res.json()) as { invocations: { agentId: string; agentName: string; status: string }[] };
-  return raw.invocations.map((i) => ({ agentId: i.agentId, agentName: i.agentName, status: i.status }));
+  const raw = (await res.json()) as { invocations: { targetKind: string; targetId: string; targetName: string; status: string }[] };
+  return raw.invocations
+    .filter((i) => i.targetKind === 'agent')
+    .map((i) => ({ agentId: i.targetId, agentName: i.targetName, status: i.status }));
 };
 
-export const getAgentPendingTool = async (env: PrismEnv, agentId: string): Promise<{ toolCallId: string; tool: string } | null> => {
+// get 뷰의 pending(§7) — data는 tool.requested.data와 같은 값(ask-user의 {questions})이라 로그 재생 없이 질문을 본다.
+export const getAgentPendingTool = async (
+  env: PrismEnv,
+  agentId: string,
+): Promise<{ toolCallId: string; tool: string; data: unknown } | null> => {
   const res = await call(env, `/agents/${agentId}`);
-  const raw = (await res.json()) as { pending: { toolCallId: string; tool: string } | null };
-  return raw.pending === null ? null : { toolCallId: raw.pending.toolCallId, tool: raw.pending.tool };
+  const raw = (await res.json()) as { pending: { toolCallId: string; tool: string; data?: unknown } | null };
+  return raw.pending === null ? null : { toolCallId: raw.pending.toolCallId, tool: raw.pending.tool, data: raw.pending.data ?? null };
 };
 
 // 목록 배지용 2홉 — 파이프라인이 직렬이라 running invocation은 통상 1개다(베타 규모 전제로 순차 조회).
@@ -196,16 +197,4 @@ export const hasPendingQuestion = async (env: PrismEnv, workflowId: string): Pro
     if (pending?.tool === 'ask-user') return true;
   }
   return false;
-};
-
-// ask-user 성공 해소만 원장에 실리므로(도구 오류 문면 커밋은 data가 없다) 필터가 곧 해소 이력이다.
-export const getAgentAskCalls = async (env: PrismEnv, agentId: string): Promise<AskAnswer[][]> => {
-  const res = await call(env, `/agents/${agentId}/calls`);
-  const raw = (await res.json()) as { calls: { tool: string; data: unknown }[] };
-  return raw.calls
-    .filter(
-      (c) =>
-        c.tool === 'ask-user' && c.data !== null && typeof c.data === 'object' && Array.isArray((c.data as { answers?: unknown }).answers),
-    )
-    .map((c) => (c.data as { answers: AskAnswer[] }).answers);
 };

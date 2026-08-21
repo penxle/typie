@@ -2,9 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PushLog, Reviews } from './db/index.ts';
 import { createInternalApi } from './internal-api.ts';
 import { getAgentPendingTool, getWorkflow, getWorkflowInvocations } from './prism.ts';
-import { seedEvents } from './project.ts';
 import { askBody, pollAndPush } from './push-poll.ts';
-import type { SseEvent } from '../feedback/sse.ts';
 import type { Db } from './db/index.ts';
 
 vi.mock('./prism.ts', () => ({
@@ -12,7 +10,6 @@ vi.mock('./prism.ts', () => ({
   getWorkflowInvocations: vi.fn(),
   getAgentPendingTool: vi.fn(),
 }));
-vi.mock('./project.ts', () => ({ seedEvents: vi.fn() }));
 vi.mock('./internal-api.ts', () => ({ createInternalApi: vi.fn() }));
 
 beforeEach(() => vi.clearAllMocks());
@@ -66,32 +63,13 @@ const review = (over: Partial<ReviewRow> = {}): ReviewRow => ({
 
 const workflow = (status: string) => ({ workflow: { status, error: null, startedAt: 0, finishedAt: null, result: null, usage: null } });
 
-// live.test.ts의 asked() 픽스처와 같은 봉투 — data는 {seq,kind,data,createdAt} JSON 문자열이고
-// ask-user input은 이중 JSON 문자열이다. 문항은 hint·multi·options까지 전부 있어야 파싱된다(live.ts parseAskUser).
-const askEvents = (toolCallId: string, texts: string[]): SseEvent[] => {
-  const questions = texts.map((question) => ({ question, hint: '', multi: false, options: [] }));
-  return [
-    { id: 1, event: 'workflow.started', data: JSON.stringify({ seq: 1, kind: 'workflow.started', data: {}, createdAt: 0 }) },
-    { id: 2, event: 'step.started', data: JSON.stringify({ seq: 2, kind: 'step.started', data: { step: 'plan-0' }, createdAt: 1 }) },
-    {
-      id: 3,
-      event: 'tool.requested',
-      data: JSON.stringify({
-        seq: 3,
-        kind: 'tool.requested',
-        data: {
-          agent: { id: 'agent-a', name: 'plan' },
-          turn: 1,
-          attempt: 1,
-          tool: 'ask-user',
-          toolCallId,
-          input: JSON.stringify({ questions }),
-        },
-        createdAt: 2,
-      }),
-    },
-  ];
-};
+// get 뷰의 pending.data는 tool.requested.data와 같은 값이다(prism docs/events.md §7) — 문항은 hint·multi·options까지
+// 전부 있어야 파싱된다(live.ts parseAskQuestions).
+const pendingAsk = (toolCallId: string, texts: string[]) => ({
+  toolCallId,
+  tool: 'ask-user',
+  data: { questions: texts.map((question) => ({ question, hint: '', multi: false, options: [] })) },
+});
 
 describe('askBody', () => {
   it('한 문항은 문항 그대로, 다문항은 외 N개', () => {
@@ -127,12 +105,11 @@ describe('pollAndPush', () => {
     expect(inserted).toEqual([]);
   });
 
-  it('pending ask-user는 로그에서 문면을 찾아 발송한다', async () => {
+  it('pending ask-user는 get 뷰의 문면으로 발송한다', async () => {
     const push = pushMock();
     vi.mocked(getWorkflow).mockResolvedValue(workflow('running') as never);
     vi.mocked(getWorkflowInvocations).mockResolvedValue([{ agentId: 'agent-a', agentName: 'plan', status: 'running' }]);
-    vi.mocked(getAgentPendingTool).mockResolvedValue({ toolCallId: 'call_1', tool: 'ask-user' });
-    vi.mocked(seedEvents).mockResolvedValue(askEvents('call_1', ['결말은 의도인가요?']));
+    vi.mocked(getAgentPendingTool).mockResolvedValue(pendingAsk('call_1', ['결말은 의도인가요?']));
     const { db, inserted } = createDbStub([review({ title: null })]);
 
     expect(await pollAndPush(db, env)).toEqual(['ask:call_1']);
@@ -140,12 +117,23 @@ describe('pollAndPush', () => {
     expect(inserted).toEqual(['ask:call_1']);
   });
 
-  it('로그에 아직 없는 pending은 건너뛴다 — 다음 분 재시도', async () => {
+  it('이미 기록된 ask 키는 재발송하지 않는다', async () => {
     const push = pushMock();
     vi.mocked(getWorkflow).mockResolvedValue(workflow('running') as never);
     vi.mocked(getWorkflowInvocations).mockResolvedValue([{ agentId: 'agent-a', agentName: 'plan', status: 'running' }]);
-    vi.mocked(getAgentPendingTool).mockResolvedValue({ toolCallId: 'call_9', tool: 'ask-user' });
-    vi.mocked(seedEvents).mockResolvedValue(askEvents('call_1', ['Q']));
+    vi.mocked(getAgentPendingTool).mockResolvedValue(pendingAsk('call_1', ['Q']));
+    const { db, inserted } = createDbStub([review()], ['ask:call_1']);
+
+    expect(await pollAndPush(db, env)).toEqual([]);
+    expect(push).not.toHaveBeenCalled();
+    expect(inserted).toEqual([]);
+  });
+
+  it('문면을 읽을 수 없는 pending은 건너뛴다 — 다음 분 재시도', async () => {
+    const push = pushMock();
+    vi.mocked(getWorkflow).mockResolvedValue(workflow('running') as never);
+    vi.mocked(getWorkflowInvocations).mockResolvedValue([{ agentId: 'agent-a', agentName: 'plan', status: 'running' }]);
+    vi.mocked(getAgentPendingTool).mockResolvedValue({ toolCallId: 'call_9', tool: 'ask-user', data: null });
     const { db, inserted } = createDbStub([review()]);
 
     expect(await pollAndPush(db, env)).toEqual([]);

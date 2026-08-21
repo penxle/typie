@@ -3,7 +3,7 @@ import { and, desc, eq } from 'drizzle-orm';
 import { isAdmin } from '$lib/server/auth.ts';
 import { createDb, FeedbackSessions, Reviews } from '$lib/server/db/index.ts';
 import { openEvents } from '$lib/server/prism.ts';
-import { resolveCursor, watchdogPipe } from '$lib/server/relay.ts';
+import { projectPipe, resolveCursor, watchdogPipe } from '$lib/server/relay.ts';
 import type { RequestHandler } from './$types';
 
 const IDLE_LIMIT_MS = 45_000;
@@ -31,7 +31,8 @@ export const GET: RequestHandler = async ({ params, locals, platform, request, u
   const upstream = await openEvents(env, review.prismWorkflowId, cursor);
   if (!upstream.body) error(502, 'upstream body missing');
 
-  return new Response(watchdogPipe(upstream.body, IDLE_LIMIT_MS), {
+  // 워치독이 업스트림 바이트를 보고, 사영은 그 뒤에서 프레임을 화면 형태로 줄인다(relay.ts projectPipe).
+  return new Response(projectPipe(watchdogPipe(upstream.body, IDLE_LIMIT_MS)), {
     headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' },
   });
 };

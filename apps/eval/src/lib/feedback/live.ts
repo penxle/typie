@@ -1,11 +1,12 @@
 import { nestedRound, STAGES, stepStage, TERMINAL_EVENTS } from './stages.ts';
+import type { FrameContext } from './frames.ts';
 import type { SseEvent } from './sse.ts';
 import type { StageKey } from './stages.ts';
 
 export type StageStatus = 'pending' | 'running' | 'done';
 
-// 활동 라인은 모델이 턴을 확정하며 남긴 발화다(prism core/loop.ts의 driveAgentRun — turn.completed 이벤트
-// data에 text가 실린다). 도구 호출은 라인을 만들지 않고, 기술 요약(경로·좌표)도 화면에 싣지 않는다.
+// 활동 라인은 모델이 턴을 확정하며 남긴 발화다(turn.completed data의 text — prism docs/events.md §6.2).
+// 도구 호출은 라인을 만들지 않고, 기술 요약(경로·좌표)도 화면에 싣지 않는다.
 export type ActivityLine = { id: number; text: string; stage: StageKey | null; step: string | null; at: number | null };
 
 export type StageTiming = { firstAt: number | null; lastAt: number | null };
@@ -18,9 +19,8 @@ export type AgentUsage = { turns: number; inputTokens: number; outputTokens: num
 // 같은 커서라(둘 다 이벤트 순번) 두 흐름을 한 줄에 세울 수 있다.
 export type NestedSpan = { id: number; stage: StageKey; firstAt: number | null; lastAt: number | null };
 
-// 도구 호출의 자취 — tool.called의 관측 사영(prism core/tool-dispatch.ts의 toolCalledData)에서 화면이 쓸 것만
-// 추린다. read는 대상 경로로 원고/노트를 가르고, 실패한 호출과 좌표성 낮은 도구(list)는 남기지 않는다 —
-// 캡슐은 활동의 요약이지 감사 로그가 아니다.
+// 도구 호출의 자취 — tool.executed(§6.3)에서 화면이 쓸 것만 추린다. read는 대상 경로로 원고/노트를 가르고,
+// 실패한 호출과 좌표성 낮은 도구(list)는 남기지 않는다 — 캡슐은 활동의 요약이지 감사 로그가 아니다.
 export type ToolVerb =
   'read-manuscript' | 'read-note' | 'read-scratch' | 'grep' | 'search' | 'write' | 'write-scratch' | 'edit' | 'edit-scratch';
 export type ToolMark = {
@@ -38,7 +38,7 @@ export type AskQuestion = { question: string; hint: string; multi: boolean; opti
 export type AskAnswer = { question: string; choice: string[] };
 
 // 작가에게 물은 기록 — pending은 파이프라인 직렬성 덕에 한 시점 ≤ 1이지만, 기록은 배열이다:
-// research가 묻고 답한 뒤 plan이 또 물을 수 있고 answered 카드는 각자의 자리에 남아야 한다.
+// 앞 단계가 묻고 답한 뒤 뒤 단계가 또 물을 수 있고 answered 카드는 각자의 자리에 남아야 한다.
 export type QuestionEntry = {
   id: number;
   agentId: string;
@@ -51,6 +51,8 @@ export type QuestionEntry = {
   // 대기가 끝난 시각(해소·종결의 이벤트 시각) — [at, settledAt]이 파킹 구간이고, 진행 시간 표시가 이 구간을 뺀다
   settledAt: number | null;
   status: 'pending' | 'answered' | 'closed';
+  // 해소 이벤트(tool.resolved)가 실은 제출 원본 — 답을 못 받고 끝났거나 형태가 어긋나면 null
+  answers: AskAnswer[] | null;
 };
 
 // 파킹 구간의 공통 형태 — 질문 대기(QuestionEntry)와 실패~재개 공백(pauses)이 같은 축으로 감산된다.
@@ -90,14 +92,15 @@ export type LiveState = {
 };
 
 // 리듀서가 소화하는 kind 전부 — 분기는 이 목록에서 좁힌 이름으로만 하므로 목록 밖 이름으로 분기하면 타입이 막는다.
-// 화면이 구독하는 이름(sse.ts EVENT_NAMES)이 이 목록을 덮어야 프레임이 리스너에 닿는다 — 결속은 sse.test.ts.
+// 사영(frames.ts PROJECTED_KINDS)·구독(sse.ts EVENT_NAMES)이 이 목록을 덮어야 프레임이 리듀서에 닿는다 — 결속은 sse.test.ts.
 export const CONSUMED_EVENTS = [
   'workflow.started',
   'step.started',
   'step.completed',
   'turn.completed',
   'tool.requested',
-  'tool.called',
+  'tool.executed',
+  'tool.resolved',
   'workflow.completed',
   'workflow.failed',
   'workflow.canceled',
@@ -116,43 +119,33 @@ const isRecord = (value: unknown): value is Record<string, unknown> => typeof va
 const str = (value: unknown): string | null => (typeof value === 'string' && value.length > 0 ? value : null);
 const int = (value: unknown): number | null => (typeof value === 'number' && Number.isFinite(value) ? value : null);
 
-// prism SSE의 data 라인은 이벤트 본문이 아니라 {seq,kind,data,createdAt} 봉투다 — createdAt이 UI 시간 표시의
-// 원 시각이고(재생분에 수신 시각은 오답), 본문은 한 겹 안에 있다. prism core/sse.ts의 eventFrame.
-const decode = (raw: string): { payload: Record<string, unknown> | null; at: number | null } => {
+type Decoded = { payload: Record<string, unknown> | null; context: FrameContext; at: number | null };
+
+// SSE data 라인은 이벤트 본문이 아니라 {seq,kind,occurredAt,loggedAt,context,data} 봉투다(prism docs/events.md §3).
+// 좌표(스텝·에이전트·도구 호출)는 context에만 있고 data에는 없다(§4) — occurredAt이 UI 시간 표시의 원 시각이다
+// (재생분에 수신 시각은 오답). 릴레이·시드·저장이 같은 봉투 형태를 사영해 넘긴다(frames.ts).
+const decode = (raw: string): Decoded => {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    return { payload: null, at: null };
+    return { payload: null, context: {}, at: null };
   }
-  if (!isRecord(parsed)) return { payload: null, at: null };
-  return { payload: isRecord(parsed.data) ? parsed.data : null, at: int(parsed.createdAt) };
+  if (!isRecord(parsed)) return { payload: null, context: {}, at: null };
+  return {
+    payload: isRecord(parsed.data) ? parsed.data : null,
+    context: isRecord(parsed.context) ? (parsed.context as FrameContext) : {},
+    at: int(parsed.occurredAt),
+  };
 };
 
-// tool.requested의 input은 JSON 문자열이다(prism core/tool-dispatch.ts의 parkExternalToolCall). 봉투가 중첩을
-// 못 담아서가 아니다 — prism의 이벤트 data는 임의 JSON이다. 이미 나간 와이어 계약이 문자열이고 그 계약의
-// 소비자가 바로 이 파일(아래 JSON.parse)이라 형태가 그대로다. 구조가 어긋난 이벤트는 엔트리를 만들지 않는다 —
-// 화면이 깨진 질문을 세우는 것보다 안 세우는 것이 낫다. 다만 문면(question·hint·label)은 빈 문자열도 받는다:
-// 스키마가 허용하는 값이라 여기서 떨어뜨리면 파킹된 run이 카드 없이 무한 대기한다. 빈 문면을 어떻게 보일지는
-// 표시 계층의 몫이다.
-const parseAskUser = (
-  payload: Record<string, unknown> | null,
-): Omit<QuestionEntry, 'id' | 'stage' | 'step' | 'at' | 'settledAt' | 'status'> | null => {
-  if (payload?.tool !== 'ask-user' || !isRecord(payload.agent)) return null;
-  const agentId = str(payload.agent.id);
-  const agentName = str(payload.agent.name);
-  const toolCallId = str(payload.toolCallId);
-  const raw = str(payload.input);
-  if (agentId === null || agentName === null || toolCallId === null || raw === null) return null;
-  let input: unknown;
-  try {
-    input = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-  if (!isRecord(input) || !Array.isArray(input.questions)) return null;
+// 질문 페이로드 — tool.requested의 data(호스트로 나가는 요청 {questions}, §6.3)이자 get 뷰 pending.data(§7)다.
+// 구조가 어긋나면 null — 화면이 깨진 질문을 세우는 것보다 안 세우는 것이 낫다. 다만 문면(question·hint·label)은
+// 빈 문자열도 받는다: 스키마가 허용하는 값이라 여기서 떨어뜨리면 파킹된 run이 카드 없이 무한 대기한다.
+export const parseAskQuestions = (data: unknown): AskQuestion[] | null => {
+  if (!isRecord(data) || !Array.isArray(data.questions)) return null;
   const questions: AskQuestion[] = [];
-  for (const q of input.questions) {
+  for (const q of data.questions) {
     if (!isRecord(q)) return null;
     const { question, hint } = q;
     if (typeof question !== 'string' || typeof hint !== 'string' || typeof q.multi !== 'boolean' || !Array.isArray(q.options)) return null;
@@ -165,7 +158,32 @@ const parseAskUser = (
     }
     questions.push({ question, hint, multi: q.multi, options });
   }
-  return questions.length === 0 ? null : { agentId, agentName, toolCallId, questions };
+  return questions.length === 0 ? null : questions;
+};
+
+const parseAskUser = (
+  context: FrameContext,
+  payload: Record<string, unknown> | null,
+): Omit<QuestionEntry, 'id' | 'stage' | 'step' | 'at' | 'settledAt' | 'status' | 'answers'> | null => {
+  if (payload?.tool !== 'ask-user' || context.agent === undefined) return null;
+  const agentId = str(context.agent.id);
+  const agentName = str(context.agent.name);
+  const toolCallId = str(context.toolCallId);
+  if (agentId === null || agentName === null || toolCallId === null) return null;
+  const questions = parseAskQuestions(payload.data);
+  return questions === null ? null : { agentId, agentName, toolCallId, questions };
+};
+
+// 해소 원본(tool.resolved.data = {answers}) — 형태가 어긋나면 null(대기의 끝은 그대로 굳고 문면만 비운다).
+const parseAskAnswers = (data: unknown): AskAnswer[] | null => {
+  if (!isRecord(data) || !Array.isArray(data.answers)) return null;
+  const answers: AskAnswer[] = [];
+  for (const a of data.answers) {
+    if (!isRecord(a) || typeof a.question !== 'string' || !Array.isArray(a.choice)) return null;
+    if (a.choice.some((c) => typeof c !== 'string')) return null;
+    answers.push({ question: a.question, choice: a.choice as string[] });
+  }
+  return answers;
 };
 
 const append = (activity: ActivityLine[], line: ActivityLine): ActivityLine[] => [...activity, line].slice(-ACTIVITY_LIMIT);
@@ -193,11 +211,15 @@ const touchRound = (
 
 export const minutesBetween = (from: number, to: number): number => Math.max(0, Math.floor((to - from) / 60_000));
 
-// turn.completed data의 agent·usage(prism core/loop.ts)를 접는다. usage가 없거나(벤더 미보고) 수치가 어긋난
+// turn.completed의 usage(§6.2)를 봉투 좌표의 에이전트로 접는다. usage가 없거나(벤더 미보고) 수치가 어긋난
 // 이벤트는 누적하지 않는다 — 틀린 수를 더하는 것보다 빠뜨리는 편이 낫고, 표시가 하한임은 화면이 밝힌다.
-const accumulateUsage = (usage: Record<string, AgentUsage>, payload: Record<string, unknown> | null): Record<string, AgentUsage> => {
-  if (!isRecord(payload?.agent) || !isRecord(payload.usage)) return usage;
-  const agent = str(payload.agent.name);
+const accumulateUsage = (
+  usage: Record<string, AgentUsage>,
+  context: FrameContext,
+  payload: Record<string, unknown> | null,
+): Record<string, AgentUsage> => {
+  if (context.agent === undefined || !isRecord(payload?.usage)) return usage;
+  const agent = str(context.agent.name);
   const inputTokens = int(payload.usage.inputTokens);
   const outputTokens = int(payload.usage.outputTokens);
   const cacheReadTokens = int(payload.usage.cacheReadTokens);
@@ -236,20 +258,24 @@ const markVerb = (payload: Record<string, unknown> | null): ToolVerb | null => {
   return null;
 };
 
+// write의 자수 — 사영(frames.ts)은 content 길이를 chars로 남기고, 사영 전 봉투는 content 원문을 싣는다.
+const writeChars = (input: Record<string, unknown> | null): number | null =>
+  int(input?.chars) ?? (typeof input?.content === 'string' ? input.content.length : null);
+
 export const applyEvent = (state: LiveState, event: SseEvent): LiveState => {
   if (event.id !== null && event.id <= state.cursor) return state;
   const cursor = event.id ?? state.cursor;
-  const { payload, at } = decode(event.data);
+  const { payload, context, at } = decode(event.data);
   const kind = consumedKind(event.event);
   if (kind === null) return { ...state, cursor };
 
   if (kind === 'workflow.started') return { ...state, startedAt: state.startedAt ?? at, cursor };
 
   // 턴 확정 텍스트가 발화 피드의 유일한 원천이다 — workflow 종결이 아니므로 터미널 판정보다 앞에서 걸러낸다.
-  // 도구만 부르고 끝난 턴은 text가 null이고 아무것도 남기지 않는다 — 그 사이의 진행 시각은 tool.called이 이미 찍었다.
+  // 도구만 부르고 끝난 턴은 text가 null이고 아무것도 남기지 않는다 — 그 사이의 진행 시각은 tool.executed가 이미 찍었다.
   if (kind === 'turn.completed') {
     // usage 누적은 발화 필터보다 앞이다 — 도구만 부르고 끝난 턴(text null)도 과금은 확정됐다.
-    const usage = accumulateUsage(state.usage, payload);
+    const usage = accumulateUsage(state.usage, context, payload);
     const text = str(payload?.text);
     if (text === null) return { ...state, usage, cursor };
     const timing = state.currentStage === null ? state.timing : touch(state.timing, state.currentStage, at);
@@ -264,14 +290,23 @@ export const applyEvent = (state: LiveState, event: SseEvent): LiveState => {
 
   // 파킹은 화면에 질문 카드를 세우는 유일한 신호다 — 종결 판정보다 앞에서 걸러낸다.
   if (kind === 'tool.requested') {
-    const parsed = parseAskUser(payload);
+    const parsed = parseAskUser(context, payload);
     if (parsed === null) return { ...state, cursor };
     const timing = state.currentStage === null ? state.timing : touch(state.timing, state.currentStage, at);
     return {
       ...state,
       questions: [
         ...state.questions,
-        { id: cursor, ...parsed, stage: state.currentStage, step: state.currentStep, at, settledAt: null, status: 'pending' },
+        {
+          id: cursor,
+          ...parsed,
+          stage: state.currentStage,
+          step: state.currentStep,
+          at,
+          settledAt: null,
+          status: 'pending',
+          answers: null,
+        },
       ],
       timing,
       cursor,
@@ -303,16 +338,16 @@ export const applyEvent = (state: LiveState, event: SseEvent): LiveState => {
     };
   }
 
-  // 재개는 실패 종결의 되돌림이다(prism core/do.ts retryWorkflow의 workflow.retried) — 실패로 굳은 terminal을
-  // 풀어야 종결 전이 감지가 다음 종결에서 다시 발화한다. 실패~재개 구간은 리뷰가 돈 시간이 아니라 파킹으로
-  // 접는다(질문 대기와 같은 감산 축). 멈춘 스테이지는 실패가 닫지 않았으므로 그대로 이어진다.
+  // 재개는 실패 종결의 되돌림이다(workflow.retried — §6.4) — 실패로 굳은 terminal을 풀어야 종결 전이 감지가 다음
+  // 종결에서 다시 발화한다. 실패~재개 구간은 리뷰가 돈 시간이 아니라 파킹으로 접는다(질문 대기와 같은 감산 축).
+  // 멈춘 스테이지는 실패가 닫지 않았으므로 그대로 이어진다.
   if (kind === 'workflow.retried') {
     const pauses = at !== null && state.failedAt !== null ? [...state.pauses, { at: state.failedAt, settledAt: at }] : state.pauses;
     return { ...state, pauses, failedAt: null, terminal: false, cursor };
   }
 
   if (kind === 'step.started') {
-    const step = str(payload?.step);
+    const step = str(context.step);
     const stage = step === null ? null : stepStage(step);
     if (step === null || stage === null) return { ...state, cursor };
 
@@ -338,31 +373,33 @@ export const applyEvent = (state: LiveState, event: SseEvent): LiveState => {
     const round = nestedRound(step);
     if (round !== null) nestedSpans = touchRound(nestedSpans, round, stage, cursor, at);
 
-    // 스텝 이름은 발화의 귀속처다 — 같은 스테이지 안에서 갈라지는 계획 왕복은 스테이지가 아니라 스텝으로만 구분된다.
+    // 스텝 이름은 발화의 귀속처다 — 같은 스테이지 안에서 갈라지는 검수 왕복은 스테이지가 아니라 스텝으로만 구분된다.
     return { ...state, stages, timing, nestedSpans, currentStage: stage, currentStep: step, cursor };
   }
 
   if (kind === 'step.completed') {
-    const step = str(payload?.step);
+    const step = str(context.step);
     const stage = step === null ? null : stepStage(step);
     if (stage === null) return { ...state, cursor };
     return { ...state, timing: touch(state.timing, stage, at), cursor };
   }
 
-  // 해소 이벤트에는 toolCallId가 없다 — agent 일치 + pending ≤ 1 불변식으로 짝을 찾는다. ok:false(해소 체인의
-  // 오류 문면 커밋)도 대기의 끝이므로 굳힌다; requested 없이 오는 파킹 전 검증 실패의 ok:false는 pending 부재로
-  // 자연 무시된다.
-  if (kind === 'tool.called' && str(payload?.tool) === 'ask-user') {
-    const agentId = isRecord(payload?.agent) ? str(payload.agent.id) : null;
-    if (agentId === null || state.questions.every((q) => q.status !== 'pending' || q.agentId !== agentId)) return { ...state, cursor };
+  // 해소는 파킹을 낳은 호출의 toolCallId로 짝짓는다(§6.3 — 같은 좌표). ok:false(해소 체인의 오류 문면 커밋)도
+  // 대기의 끝이므로 굳힌다. 짝 없는 해소는 무시된다.
+  if (kind === 'tool.resolved') {
+    const toolCallId = str(context.toolCallId);
+    if (toolCallId === null || state.questions.every((q) => q.status !== 'pending' || q.toolCallId !== toolCallId)) {
+      return { ...state, cursor };
+    }
+    const answers = parseAskAnswers(payload?.data);
     const questions = state.questions.map((q) =>
-      q.status === 'pending' && q.agentId === agentId ? { ...q, status: 'answered' as const, settledAt: at } : q,
+      q.status === 'pending' && q.toolCallId === toolCallId ? { ...q, status: 'answered' as const, settledAt: at, answers } : q,
     );
     const timing = state.currentStage === null ? state.timing : touch(state.timing, state.currentStage, at);
     return { ...state, questions, timing, cursor };
   }
 
-  if (kind === 'tool.called') {
+  if (kind === 'tool.executed') {
     // 호출은 발화가 아니라 활동이다 — 라인 대신 캡슐 자취와 진행 시각을 남긴다.
     if (state.currentStage === null) return { ...state, cursor };
     const timing = touch(state.timing, state.currentStage, at);
@@ -373,7 +410,7 @@ export const applyEvent = (state: LiveState, event: SseEvent): LiveState => {
       id: cursor,
       verb,
       query: verb === 'search' ? str(input?.query) : null,
-      chars: verb === 'write' ? int(input?.chars) : null,
+      chars: verb === 'write' ? writeChars(input) : null,
       stage: state.currentStage,
       step: state.currentStep,
       at,

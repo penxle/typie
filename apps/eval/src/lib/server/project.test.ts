@@ -2,18 +2,25 @@ import { getTableColumns } from 'drizzle-orm';
 import { SQLiteSyncDialect } from 'drizzle-orm/sqlite-core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Reviews, ThreadComments, Threads } from './db/index.ts';
-import { getAgentAskCalls, getWorkflow, openEvents } from './prism.ts';
-import { applyDispositions, carriedIssues, collectEvents, projectIfTerminal, threadId, threadsFromResult } from './project.ts';
+import { getWorkflow, openEvents } from './prism.ts';
+import { applyDispositions, carriedIssues, projectIfTerminal, replayEvents, threadId, threadsFromResult } from './project.ts';
 import type { Column, SQL, Table } from 'drizzle-orm';
 import type { FeedbackResult, PrismWorkflow, ThreadDisposition } from '../feedback/types.ts';
 import type { Db } from './db/index.ts';
 
 vi.mock('./prism.ts', () => ({
-  fetchEventLog: vi.fn(),
-  getAgentAskCalls: vi.fn(),
   getWorkflow: vi.fn(),
   openEvents: vi.fn(),
 }));
+
+const env = { PRISM_API_ORIGIN: 'https://prism.test', PRISM_API_TOKEN: 'tk' };
+
+// 프레임 본문은 {seq,kind,occurredAt,loggedAt,context,data} 봉투다(prism docs/events.md §3) — 좌표는 context에만 있다.
+const frame = (id: number, kind: string, data: Record<string, unknown> = {}, context: Record<string, unknown> = {}) =>
+  `id: ${id}\nevent: ${kind}\ndata: ${JSON.stringify({ seq: id, kind, occurredAt: 1000 + id, loggedAt: 1000 + id, context, data })}\n\n`;
+
+const SYNC = 'event: sync\ndata: {"seq":9}\n\n';
+const HEARTBEAT = 'event: heartbeat\ndata: {}\n\n';
 
 const result: FeedbackResult = {
   version: 1,
@@ -87,18 +94,53 @@ describe('승계 이슈(thread 표지)', () => {
   });
 });
 
-describe('collectEvents', () => {
-  it('재생 스트림을 EOF까지 소비해 id 프레임만 수집한다', async () => {
-    const body = new ReadableStream<Uint8Array>({
+describe('replayEvents', () => {
+  const stream = (chunks: string[], onCancel?: () => void) =>
+    new ReadableStream<Uint8Array>({
       start(c) {
-        c.enqueue(new TextEncoder().encode('id: 1\nevent: workflow.started\ndata: {}\n\n: hb\n\nevent: turn.delta\ndata: {}\n\n'));
-        c.enqueue(new TextEncoder().encode('id: 2\nevent: workflow.completed\ndata: {"result":"{}"}\n\n'));
+        for (const chunk of chunks) c.enqueue(new TextEncoder().encode(chunk));
         c.close();
       },
+      cancel: onCancel,
     });
-    const env = { PRISM_API_ORIGIN: 'x', PRISM_API_TOKEN: 'x' };
-    const events = await collectEvents(env, 'ev-x', () => Promise.resolve(new Response(body)));
+
+  it('재생 스트림의 id 프레임을 사영해 모으고, 프로토콜 프레임은 건너뛴다', async () => {
+    const body = stream([
+      frame(1, 'workflow.started', { app: 'feedback', input: { big: true } }) + HEARTBEAT + 'event: turn.delta\ndata: {}\n\n',
+      frame(2, 'workflow.completed', { result: { huge: 1 } }),
+    ]);
+    const events = await replayEvents(env, 'ev-x', () => Promise.resolve(new Response(body)));
     expect(events.map((e) => e.event)).toEqual(['workflow.started', 'workflow.completed']);
+    // 저장되는 것은 사영된 봉투다 — 종결 result는 get 뷰가 정본이라 data에 남지 않는다
+    expect(JSON.parse(events[1].data)).toEqual({ seq: 2, kind: 'workflow.completed', occurredAt: 1002, context: {}, data: {} });
+  });
+
+  it('sync에서 멈추고 업스트림을 취소한다 — 실행 중 환경의 라이브 구간은 받지 않는다', async () => {
+    let canceled = false;
+    const body = new ReadableStream<Uint8Array>({
+      start(c) {
+        c.enqueue(new TextEncoder().encode(frame(1, 'workflow.started') + SYNC + frame(2, 'step.started', {}, { step: 'manuscript' })));
+        // 닫지 않는다 — 라이브 구간이 열린 스트림이다
+      },
+      cancel() {
+        canceled = true;
+      },
+    });
+    const events = await replayEvents(env, 'ev-x', () => Promise.resolve(new Response(body)));
+    expect(events.map((e) => e.event)).toEqual(['workflow.started']);
+    expect(canceled).toBe(true);
+  });
+
+  it('사영 밖 kind(자식 run·invocation)와 구세대 행은 떨어진다', async () => {
+    const body = stream([
+      frame(1, 'workflow.started') +
+        frame(2, 'invocation.started', { ordinal: 1 }, { step: 'x', invocation: 'inv_1' }) +
+        frame(3, 'run.started', { message: 'm' }, { agent: { id: 'a', name: 'n' }, run: 1 }) +
+        `id: 4\nevent: tool.called\ndata: ${JSON.stringify({ seq: 4, kind: 'tool.called', occurredAt: 1, loggedAt: 1, context: null, data: {} })}\n\n` +
+        frame(5, 'workflow.completed'),
+    ]);
+    const events = await replayEvents(env, 'ev-x', () => Promise.resolve(new Response(body)));
+    expect(events.map((e) => e.id)).toEqual([1, 5]);
   });
 });
 
@@ -217,7 +259,6 @@ const threadRow = (id: string, over: Row = {}): Row => ({
   ...over,
 });
 
-const env = { PRISM_API_ORIGIN: 'https://prism.test', PRISM_API_TOKEN: 'tk' };
 const review = { sessionId: 's1', round: 1, prismWorkflowId: 'ev-x' };
 
 const workflow = (over: Partial<PrismWorkflow>): PrismWorkflow => ({
@@ -240,32 +281,27 @@ const sse = (text: string) =>
     }),
   );
 
-const replay = () => sse('id: 1\nevent: workflow.started\ndata: {}\n\nid: 2\nevent: workflow.completed\ndata: {}\n\n');
+const replay = () => sse(frame(1, 'workflow.started') + frame(2, 'workflow.completed') + SYNC);
 
-// 질문 재생분 — 프레임 본문은 {seq,kind,data,createdAt} 봉투다(questions.test.ts의 wrap과 같은 형태).
-const frame = (id: number, kind: string, data: Record<string, unknown>) =>
-  `id: ${id}\nevent: ${kind}\ndata: ${JSON.stringify({ seq: id, kind, data, createdAt: 1000 + id })}\n\n`;
-
-const ASK_INPUT = JSON.stringify({ questions: [{ question: 'Q?', hint: '고르세요', multi: false, options: [{ label: '가' }] }] });
+const ASK_DATA = { questions: [{ question: 'Q?', hint: '고르세요', multi: false, options: [{ label: '가' }] }] };
+const ASK_ANSWERS = [{ question: 'Q?', choice: ['가'] }];
+const askCtx = { agent: { id: 'agent_a', name: 'rubric' }, run: 1, turn: 1, attempt: 1, toolCallId: 'call_1' };
 
 const requested = (id: number) =>
-  frame(id, 'tool.requested', {
-    agent: { id: 'agent_a', name: 'rubric' },
-    tool: 'ask-user',
-    toolCallId: 'call_1',
-    input: ASK_INPUT,
-  });
+  frame(id, 'tool.requested', { tool: 'ask-user', input: { path: 'scratch/q.yaml' }, data: ASK_DATA }, askCtx);
 
-const called = (id: number) =>
-  frame(id, 'tool.called', { agent: { id: 'agent_a', name: 'rubric' }, tool: 'ask-user', input: {}, ok: true });
+// 해소의 data는 제출 원본 — 답변 문면의 유일한 원천이다(원장 표면은 없다)
+const resolvedFrame = (id: number) =>
+  frame(id, 'tool.resolved', { tool: 'ask-user', input: {}, output: 'Q?\n→ 가', ok: true, data: { answers: ASK_ANSWERS } }, askCtx);
 
 const askReplay = (resolved: boolean) =>
   sse(
-    frame(1, 'workflow.started', {}) +
-      frame(2, 'step.started', { step: 'rubric-0' }) +
+    frame(1, 'workflow.started') +
+      frame(2, 'step.started', {}, { step: 'rubric-0' }) +
       requested(3) +
-      (resolved ? called(4) : '') +
-      frame(5, 'workflow.completed', {}),
+      (resolved ? resolvedFrame(4) : '') +
+      frame(5, 'workflow.completed') +
+      SYNC,
   );
 
 describe('applyDispositions', () => {
@@ -427,10 +463,9 @@ describe('projectIfTerminal', () => {
     expect(updates[0].values.finishedAt).toBeInstanceOf(Date);
   });
 
-  it('사영이 질문 기록을 questions 컬럼으로 영속한다', async () => {
+  it('사영이 질문 기록을 questions 컬럼으로 영속한다 — 답변은 해소 이벤트에서 온다', async () => {
     vi.mocked(getWorkflow).mockResolvedValue({ workflow: workflow({ status: 'completed', result }) });
     vi.mocked(openEvents).mockImplementation(() => Promise.resolve(askReplay(true)));
-    vi.mocked(getAgentAskCalls).mockResolvedValue([[{ question: 'Q?', choice: ['가'] }]]);
     const { db, updates } = createDbStub();
 
     expect(await projectIfTerminal(db, env, review)).toBe('projected');
@@ -454,7 +489,6 @@ describe('projectIfTerminal', () => {
 
     expect(await projectIfTerminal(db, env, review)).toBe('projected');
     expect(updates[0].values.questions).toEqual([expect.objectContaining({ toolCallId: 'call_1', status: 'closed', answers: null })]);
-    expect(vi.mocked(getAgentAskCalls)).not.toHaveBeenCalled();
   });
 
   it('질문 없는 실행은 questions가 null이다', async () => {
@@ -463,7 +497,6 @@ describe('projectIfTerminal', () => {
 
     expect(await projectIfTerminal(db, env, review)).toBe('projected');
     expect(updates[0].values.questions).toBeNull();
-    expect(vi.mocked(getAgentAskCalls)).not.toHaveBeenCalled();
   });
 
   it('재리뷰 결과의 처분을 승계 스레드에 사영한다', async () => {

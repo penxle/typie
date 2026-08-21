@@ -2,19 +2,17 @@ import { error, fail } from '@sveltejs/kit';
 import { and, asc, desc, eq } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { anchorQuote } from '$lib/feedback/anchors.ts';
-import { askAnswerIndex } from '$lib/feedback/questions.ts';
 import { displayRoundNumbers, isRejectedResult, pickRounds, rejectionOf, settledRoundOf } from '$lib/feedback/rounds.ts';
 import { canClose, canReopen, hasCurrentAnchors } from '$lib/feedback/threads.ts';
 import { isAdmin } from '$lib/server/auth.ts';
 import { createDb, FeedbackSessions, ManuscriptVersions, Reactions, Reviews, ThreadComments, Threads } from '$lib/server/db/index.ts';
 import { fetchPriceTable, getWorkflowInvocations, PrismApiError, resolveAskUser } from '$lib/server/prism.ts';
-import { projectIfTerminal, seedEvents } from '$lib/server/project.ts';
-import { collectAskAnswers } from '$lib/server/questions.ts';
+import { projectIfTerminal, replayEvents } from '$lib/server/project.ts';
 import { requestCancel, resumeReview, startRereview } from '$lib/server/reviews.ts';
 import type { AskAnswer } from '$lib/feedback/live.ts';
 import type { SseEvent } from '$lib/feedback/sse.ts';
 import type { ModelConfig } from '$lib/feedback/tiers.ts';
-import type { Anchor, FeedbackResult, ReviewQuestionRecord, RunUsage } from '$lib/feedback/types.ts';
+import type { Anchor, FeedbackResult, RunUsage } from '$lib/feedback/types.ts';
 import type { Db } from '$lib/server/db/index.ts';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -82,7 +80,6 @@ export const load: PageServerLoad = async ({ params, locals, platform }) => {
   let latestRounds = withRejected(rounds);
   let picked = pickRounds(latestRounds);
   let liveEvents: SseEvent[] | null = null;
-  let askAnswers: Record<string, AskAnswer[]> | null = null;
   if (picked.runningLatest) {
     try {
       await projectIfTerminal(db, env, picked.runningLatest);
@@ -99,19 +96,10 @@ export const load: PageServerLoad = async ({ params, locals, platform }) => {
     if (picked.display.status === 'running') {
       try {
         // 첫 화면 시드 — 없으면 클라이언트가 재생을 화면에서 재연해, 새로고침마다 과거 기록이 빨리감기로 보인다.
-        liveEvents = await seedEvents(env, picked.display.prismWorkflowId);
+        liveEvents = await replayEvents(env, picked.display.prismWorkflowId);
       } catch (err) {
         // 시드 실패도 화면을 막지 않는다 — 클라이언트 SSE 재생이 처음부터 채운다.
         console.error('event snapshot failed', picked.display.prismWorkflowId, err);
-      }
-      if (liveEvents !== null) {
-        try {
-          // 답한 질문의 문면은 이벤트에 없다 — 원장에서 걷어 카드에 실어 준다. 종결 리뷰는 사영이 담당한다.
-          askAnswers = await collectAskAnswers(env, liveEvents);
-        } catch (err) {
-          // 답변 조회 실패도 화면을 막지 않는다 — 답변함 카드가 문면 없이 서고 다음 로드가 재시도한다.
-          console.error('ask answers fetch failed', picked.display.prismWorkflowId, err);
-        }
       }
     }
   }
@@ -124,10 +112,6 @@ export const load: PageServerLoad = async ({ params, locals, platform }) => {
   // 거부 표시 회차(정상 완료가 없는 세션)도 서수가 없다 — 실패와 같은 내부 번호 폴백을 쓴다.
   const roundNumber =
     review.status === 'failed' || review.status === 'canceled' || review.rejected ? review.round : roundNumbers[review.round];
-
-  // 종결 리뷰의 답변 문면은 원장이 아니라 사영 기록이 원천이다(project.ts) — 실패·취소로 끝난 리뷰도 타임라인을
-  // 그리므로 여기서 실어야 answered 카드가 문면 없이 서지 않는다(완료 화면은 타임라인을 그리지 않는다).
-  if (review.status !== 'running') askAnswers = askAnswerIndex(review.questions as ReviewQuestionRecord[] | null);
 
   const [version] = await db
     .select()
@@ -217,8 +201,6 @@ export const load: PageServerLoad = async ({ params, locals, platform }) => {
       // (과정 보기는 자기 라우트에서 읽는다). 실행 중은 방금 걷은 백로그가, 종결은 사영된 events가 원천이다.
       events: review.status === 'completed' ? null : (liveEvents ?? (review.events as SseEvent[] | null)),
     },
-    // 답한 질문 카드가 보여 줄 답변 — toolCallId로 색인한다. 실행 중에만 걷는다(종결 리뷰는 사영이 원천).
-    askAnswers,
     threads: threads.map((thread) => {
       // 발생 회차 — 스레드 id({세션}.{회차}.{번호})가 탄생 시점을 보존한다(세션 id는 nanoid라 '.'이 없다).
       // reviewRound는 kept 승계마다 갱신되는 "마지막으로 앉은 회차"라 발생 표지로 쓸 수 없다. 소비처는

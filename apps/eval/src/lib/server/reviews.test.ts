@@ -270,12 +270,13 @@ describe('buildPreviousContext', () => {
         thread('t.1.2', 'resolved', { body: '시점이 흔들린다' }),
         thread('t.1.3', 'withdrawn', { body: '표현이 반복된다' }),
       ],
-      manuscriptPath: 'manuscript/v1.txt',
+      manuscript: { title: '제목', subtitle: null, path: 'manuscript/v1.txt' },
       baseStartedAt: new Date(500),
-      meta: { title: '제목', subtitle: null },
     });
-    expect(context.manuscriptPath).toBe('manuscript/v1.txt');
-    expect(context.meta).toEqual({ title: '제목', subtitle: null });
+    // 평탄 형태 — prism PREVIOUS는 MANUSCRIPT_INPUT(title·subtitle·path) + threads다
+    expect(context).toMatchObject({ title: '제목', subtitle: null, path: 'manuscript/v1.txt' });
+    expect('manuscriptPath' in context).toBe(false);
+    expect('meta' in context).toBe(false);
     expect(context.threads.map((t) => [t.id, t.state])).toEqual([
       ['t.1.0', 'open'],
       ['t.1.1', 'closed'],
@@ -291,9 +292,8 @@ describe('buildPreviousContext', () => {
           comments: [{ author: 'tester', body: '의도한 전환입니다', createdAt: new Date(1000) }],
         }),
       ],
-      manuscriptPath: 'manuscript/v1.txt',
+      manuscript: { title: '제목', subtitle: null, path: 'manuscript/v1.txt' },
       baseStartedAt: new Date(500),
-      meta: { title: '제목', subtitle: null },
     });
     // toEqual은 여분 키를 잡아낸다 — prism의 PREVIOUS는 전 object가 additionalProperties: false다.
     expect(context.threads).toEqual([
@@ -312,9 +312,8 @@ describe('buildPreviousContext', () => {
   it('본문 없는 스레드는 빈 문자열로 선다 — 스키마의 body는 required string이다', () => {
     const context = buildPreviousContext({
       threads: [thread('t.1.0', 'open', { body: null })],
-      manuscriptPath: 'manuscript/v1.txt',
+      manuscript: { title: '제목', subtitle: null, path: 'manuscript/v1.txt' },
       baseStartedAt: new Date(500),
-      meta: { title: '제목', subtitle: null },
     });
     expect(context.threads[0].body).toBe('');
   });
@@ -330,9 +329,8 @@ describe('buildPreviousContext', () => {
           ],
         }),
       ],
-      manuscriptPath: 'manuscript/v1.txt',
+      manuscript: { title: '제목', subtitle: null, path: 'manuscript/v1.txt' },
       baseStartedAt: new Date(500),
-      meta: { title: '제목', subtitle: null },
     });
     expect(context.threads[0].replies).toEqual([
       { body: '지난 회차 전', fresh: false },
@@ -351,9 +349,8 @@ describe('buildPreviousContext', () => {
           ],
         }),
       ],
-      manuscriptPath: 'manuscript/v1.txt',
+      manuscript: { title: '제목', subtitle: null, path: 'manuscript/v1.txt' },
       baseStartedAt: new Date(500),
-      meta: { title: '제목', subtitle: null },
     });
     expect(context.threads[0].replies).toEqual([{ body: '작가의 반론', fresh: true }]);
   });
@@ -361,9 +358,8 @@ describe('buildPreviousContext', () => {
   it('이슈 id는 있으면 회송하고 없으면 키 자체가 서지 않는다', () => {
     const context = buildPreviousContext({
       threads: [thread('t.1.0', 'open', { issueId: 'i.abc' }), thread('t.1.1', 'open'), thread('t.1.2', 'open', { issueId: '' })],
-      manuscriptPath: 'manuscript/v1.txt',
+      manuscript: { title: '제목', subtitle: null, path: 'manuscript/v1.txt' },
       baseStartedAt: new Date(500),
-      meta: { title: '제목', subtitle: null },
     });
     expect(context.threads[0].issue).toBe('i.abc');
     // 스키마의 issue는 min(1) optional이다 — 빈 값은 키를 세우는 대신 생략한다(undefined도 직렬화 금지).
@@ -471,7 +467,7 @@ describe('startFeedbackSession', () => {
 
     const body = JSON.parse(spy.mock.calls.find(([url]) => String(url).endsWith('/workflows'))?.[1]?.body as string);
     expect(body.workflowId).toBe(inserts[2].row.prismWorkflowId);
-    expect(body.input).toEqual({ manuscriptPath: 'manuscript/v1.txt', meta: { title: '제목', subtitle: '부제' } });
+    expect(body.input).toEqual({ title: '제목', subtitle: '부제', path: 'manuscript/v1.txt' });
     // 시드는 start 바디가 아니라 선적재(PUT /seeds)로 실리고, start에는 매니페스트만 남는다(prism 스펙 §4)
     const seedsBody = JSON.parse(spy.mock.calls.find(([url]) => String(url).endsWith('/seeds'))?.[1]?.body as string) as {
       files: unknown[];
@@ -513,16 +509,18 @@ describe('startFeedbackSession', () => {
     expect(body.input.overrides).toEqual({ 'rephrase-medium': { provider: 'openai', model: 'gpt-5.6-luna', effort: 'low' } });
   });
 
-  it('제목·부제가 input.meta로 실린다', async () => {
+  it('제목·부제가 input 최상위에 평탄하게 실린다(prism MANUSCRIPT_INPUT)', async () => {
     const spy = route({});
     const { db } = createDbStub();
 
     await startFeedbackSession(db, env, { refId: 'D0TEST01', email: 't@x.io', catalog: CATALOG });
 
     const body = JSON.parse(spy.mock.calls.find(([url]) => String(url).endsWith('/workflows'))?.[1]?.body as string) as {
-      input: { meta: unknown };
+      input: Record<string, unknown>;
     };
-    expect(body.input.meta).toEqual({ title: '제목', subtitle: '부제' });
+    expect(body.input).toMatchObject({ title: '제목', subtitle: '부제', path: 'manuscript/v1.txt' });
+    expect('meta' in body.input).toBe(false);
+    expect('manuscriptPath' in body.input).toBe(false);
   });
 
   it('무오버라이드면 input에 overrides 키가 없다', async () => {
@@ -729,7 +727,7 @@ describe('startRereview 제목·부제', () => {
     return { db: db as unknown as Db, inserts, updates, batches };
   };
 
-  it('제목만 바뀐 재검토도 새 버전이 서고, previous.meta는 구 행의 NULL 그대로 실린다', async () => {
+  it('제목만 바뀐 재검토도 새 버전이 서고, previous의 제목·부제는 구 행의 NULL 그대로 실린다', async () => {
     const spy = route({ file: () => Promise.resolve(Response.json({ content: 'seed' })) });
     // select 순서: 회차 목록 → 세션 → 최신 버전 → 스레드 → 코멘트 → base 버전
     const { db, inserts, updates, batches } = createRereviewDbStub([[round1], [session1], [version1], [], [], [version1]]);
@@ -743,12 +741,10 @@ describe('startRereview 제목·부제', () => {
     expect(updates).toContainEqual({ table: FeedbackSessions, values: { title: '제목' } });
 
     const body = JSON.parse(spy.mock.calls.find(([url]) => String(url).endsWith('/workflows'))?.[1]?.body as string) as {
-      input: { manuscriptPath: string; meta: unknown; previous: { manuscriptPath: string; meta: unknown } };
+      input: { title: string | null; subtitle: string | null; path: string; previous: Record<string, unknown> };
     };
-    expect(body.input.manuscriptPath).toBe('manuscript/v2.txt');
-    expect(body.input.meta).toEqual({ title: '제목', subtitle: '부제' });
-    expect(body.input.previous.manuscriptPath).toBe('manuscript/v1.txt');
-    expect(body.input.previous.meta).toEqual({ title: null, subtitle: null });
+    expect(body.input).toMatchObject({ title: '제목', subtitle: '부제', path: 'manuscript/v2.txt' });
+    expect(body.input.previous).toMatchObject({ title: null, subtitle: null, path: 'manuscript/v1.txt' });
   });
 
   it('본문·제목·부제가 전건 동일하면 버전을 재사용한다', async () => {
@@ -763,13 +759,13 @@ describe('startRereview 제목·부제', () => {
 
     // 버전을 재사용하면 신·구 원고가 같은 경로를 가리킨다 — prism은 이 동일성으로 무변경 재리뷰를 가른다.
     const body = JSON.parse(spy.mock.calls.find(([url]) => String(url).endsWith('/workflows'))?.[1]?.body as string) as {
-      input: { manuscriptPath: string; previous: { manuscriptPath: string } };
+      input: { path: string; previous: { path: string } };
     };
-    expect(body.input.manuscriptPath).toBe('manuscript/v1.txt');
-    expect(body.input.previous.manuscriptPath).toBe('manuscript/v1.txt');
+    expect(body.input.path).toBe('manuscript/v1.txt');
+    expect(body.input.previous.path).toBe('manuscript/v1.txt');
   });
 
-  it('본문만 바뀌어도 새 버전이 서고, previous.meta는 base 행의 값 그대로 실린다', async () => {
+  it('본문만 바뀌어도 새 버전이 서고, previous의 제목·부제는 base 행의 값 그대로 실린다', async () => {
     const spy = route({
       extract: () =>
         Promise.resolve(Response.json({ results: [{ documentId: 'D0TEST01', prose: '새 본문', title: '제목', subtitle: '부제' }] })),
@@ -785,10 +781,9 @@ describe('startRereview 제목·부제', () => {
     expect(versionRow).toMatchObject({ version: 2, content: '새 본문', title: '제목', subtitle: '부제' });
 
     const body = JSON.parse(spy.mock.calls.find(([url]) => String(url).endsWith('/workflows'))?.[1]?.body as string) as {
-      input: { manuscriptPath: string; previous: { manuscriptPath: string; meta: unknown } };
+      input: { path: string; previous: Record<string, unknown> };
     };
-    expect(body.input.manuscriptPath).toBe('manuscript/v2.txt');
-    expect(body.input.previous.manuscriptPath).toBe('manuscript/v1.txt');
-    expect(body.input.previous.meta).toEqual({ title: '제목', subtitle: '부제' });
+    expect(body.input.path).toBe('manuscript/v2.txt');
+    expect(body.input.previous).toMatchObject({ title: '제목', subtitle: '부제', path: 'manuscript/v1.txt' });
   });
 });

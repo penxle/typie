@@ -1,8 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   cancelWorkflow,
-  fetchEventLog,
-  getAgentAskCalls,
   getAgentPendingTool,
   getWorkflow,
   getWorkflowInvocations,
@@ -30,7 +28,7 @@ describe('prism client', () => {
     await startWorkflow(env, {
       workflowId: 'ev-x',
       workflow: 'medium',
-      input: { manuscriptPath: 'manuscript/v1.txt', meta: { title: '제목', subtitle: null } },
+      input: { title: '제목', subtitle: null, path: 'manuscript/v1.txt' },
       files: [{ path: 'manuscript/v1.txt', content: '본문' }],
     });
     expect(spy).toHaveBeenCalledTimes(2);
@@ -48,7 +46,7 @@ describe('prism client', () => {
       workflowId: 'ev-x',
       app: 'feedback',
       workflow: 'medium',
-      input: { manuscriptPath: 'manuscript/v1.txt', meta: { title: '제목', subtitle: null } },
+      input: { title: '제목', subtitle: null, path: 'manuscript/v1.txt' },
       staged: [digest],
     });
   });
@@ -122,7 +120,7 @@ describe('prism client', () => {
         finishedAt: 2,
         // 와이어 잉여 열 — 명시 사영이 떨궈야 한다(caller·input이 화면 계층으로 새는 것의 방벽)
         caller: 'caller-x',
-        input: '{"manuscriptPath":"m"}',
+        input: '{"title":null,"subtitle":null,"path":"m"}',
       },
     });
     const view = await getWorkflow(env, 'ev-x');
@@ -143,12 +141,6 @@ describe('prism client', () => {
     });
     const view = await getWorkflow(env, 'ev-x');
     expect(view.workflow).toEqual({ status: 'running', result: null, usage: null, error: null, startedAt: 1, finishedAt: null });
-  });
-
-  it('fetchEventLog는 로그 경로를 친다', async () => {
-    const spy = stub(200, { events: [] });
-    await fetchEventLog(env, 'ev-x');
-    expect(spy.mock.calls[0][0]).toBe('https://prism.test/workflows/ev-x/log');
   });
 
   it('오류 응답은 {error:code}를 PrismApiError로 판별한다', async () => {
@@ -201,42 +193,29 @@ describe('ask-user 표면', () => {
     expect(caught).toMatchObject({ code: 'no-pending-tool', status: 409 });
   });
 
-  it('getWorkflowInvocations가 invocations만 명시 사영한다', async () => {
+  it('getWorkflowInvocations가 agent 대상 구동만 명시 사영한다 — 대상 열은 targetKind/targetId/targetName이다', async () => {
     const spy = stub(200, {
       workflow: {},
       steps: [],
-      invocations: [{ invocationId: 'i1', agentId: 'agent_a', agentName: 'plan', status: 'running', descriptorHash: 'x' }],
+      invocations: [
+        { invocationId: 'i1', targetKind: 'agent', targetId: 'agent_a', targetName: 'plan', status: 'running', mode: 'invoke', retries: 0 },
+        { invocationId: 'i2', targetKind: 'workflow', targetId: 'workflow_x', targetName: 'child', status: 'running' },
+      ],
     });
     expect(await getWorkflowInvocations(env, 'ev-x')).toEqual([{ agentId: 'agent_a', agentName: 'plan', status: 'running' }]);
     expect(spy.mock.calls[0][0]).toBe('https://prism.test/workflows/ev-x');
   });
 
-  it('getAgentPendingTool이 pending을 좁혀 돌려준다', async () => {
-    const spy = stub(200, { agent: {}, runs: [], pending: { toolCallId: 'call_1', tool: 'ask-user', input: {} } });
-    expect(await getAgentPendingTool(env, 'agent_a')).toEqual({ toolCallId: 'call_1', tool: 'ask-user' });
+  it('getAgentPendingTool이 pending을 좁혀 돌려준다 — data는 질문 페이로드다(tool.requested.data와 같은 값)', async () => {
+    const data = { questions: [] };
+    const spy = stub(200, { agent: {}, runs: [], pending: { toolCallId: 'call_1', tool: 'ask-user', input: { path: 'q.yaml' }, data } });
+    expect(await getAgentPendingTool(env, 'agent_a')).toEqual({ toolCallId: 'call_1', tool: 'ask-user', data });
     expect(spy.mock.calls[0][0]).toBe('https://prism.test/agents/agent_a');
   });
 
   it('getAgentPendingTool은 대기가 없으면 null이다', async () => {
     stub(200, { agent: {}, runs: [], pending: null });
     expect(await getAgentPendingTool(env, 'agent_a')).toBeNull();
-  });
-
-  it('getAgentAskCalls가 ask-user 성공 해소의 answers만 시간순으로 모은다', async () => {
-    const spy = stub(200, {
-      calls: [
-        { tool: 'read', input: { path: 'a' }, data: null },
-        { tool: 'ask-user', input: { questions: [] }, data: { answers: [{ question: 'q1', choice: ['a'] }] } },
-        // 오류 문면 커밋 — 해소가 아니라 대기의 실패라 answers가 없다
-        { tool: 'ask-user', input: { questions: [] }, data: null },
-        { tool: 'ask-user', input: { questions: [] }, data: { answers: [{ question: 'q2', choice: ['b', '직접 쓴 답'] }] } },
-      ],
-    });
-    expect(await getAgentAskCalls(env, 'agent_a')).toEqual([
-      [{ question: 'q1', choice: ['a'] }],
-      [{ question: 'q2', choice: ['b', '직접 쓴 답'] }],
-    ]);
-    expect(spy.mock.calls[0][0]).toBe('https://prism.test/agents/agent_a/calls');
   });
 });
 
@@ -250,13 +229,13 @@ describe('hasPendingQuestion', () => {
           : Response.json({
               workflow: {},
               steps: [],
-              invocations: [{ invocationId: 'i1', agentId: 'agent_a', agentName: 'plan', status }],
+              invocations: [{ invocationId: 'i1', targetKind: 'agent', targetId: 'agent_a', targetName: 'plan', status }],
             }),
       ),
     );
 
   it('running invocation의 agent가 ask-user를 기다리면 true다', async () => {
-    stubHops({ toolCallId: 'call_1', tool: 'ask-user', input: {} });
+    stubHops({ toolCallId: 'call_1', tool: 'ask-user', input: {}, data: {} });
     expect(await hasPendingQuestion(env, 'ev-x')).toBe(true);
   });
 
@@ -266,12 +245,12 @@ describe('hasPendingQuestion', () => {
   });
 
   it('타 도구 대기는 질문이 아니다', async () => {
-    stubHops({ toolCallId: 'call_1', tool: 'read', input: {} });
+    stubHops({ toolCallId: 'call_1', tool: 'read', input: {}, data: {} });
     expect(await hasPendingQuestion(env, 'ev-x')).toBe(false);
   });
 
   it('종결한 invocation의 agent는 조회하지 않는다', async () => {
-    const spy = stubHops({ toolCallId: 'call_1', tool: 'ask-user', input: {} }, 'completed');
+    const spy = stubHops({ toolCallId: 'call_1', tool: 'ask-user', input: {}, data: {} }, 'completed');
     expect(await hasPendingQuestion(env, 'ev-x')).toBe(false);
     expect(spy.mock.calls.every(([url]) => !String(url).includes('/agents/'))).toBe(true);
   });

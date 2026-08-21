@@ -17,8 +17,8 @@
   // 스냅샷은 이미 종결된 리뷰의 전량 재생분이다 — 한 번 접으면 더 들어올 이벤트가 없다.
   const live = $derived(initialLive(data.review.events));
 
-  // 답변 문면은 재생에 없다 — 사영이 원장에서 걷어 굳힌 기록에서 되짚어 카드에 싣는다.
-  const askAnswers = $derived(askAnswerIndex(data.review.questions));
+  // 답변 문면은 해소 이벤트(tool.resolved)가 실어 재생이 되살린다 — 세션 화면과 같은 원천이다.
+  const askAnswers = $derived(askAnswerIndex(live.questions));
 
   const endedAt = $derived(data.review.finishedAt ?? data.review.startedAt);
 
