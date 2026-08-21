@@ -2,8 +2,6 @@ import { parseMarkdown } from './markdown.ts';
 import { Pacer } from './pacer.ts';
 import type { BlockNode } from './markdown.ts';
 
-// Pacer의 Svelte 어댑터 — 페이서 상태를 $state로 비추고, 공개 경계까지의 마크다운 트리를 파생한다.
-// instant는 reduced-motion용: 페이싱 없이 도착 즉시 전량 공개(무페이드).
 export class PacedText {
   #pacer: Pacer;
   #instant: boolean;
@@ -28,6 +26,11 @@ export class PacedText {
 
   retarget(text: string): void {
     this.#pacer.retarget(text);
+    this.#sync();
+  }
+
+  skip(): void {
+    this.#pacer.skip();
     this.#sync();
   }
 

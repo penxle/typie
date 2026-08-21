@@ -3,7 +3,7 @@ import { env } from '#/env.ts';
 import { createPrismClient } from './prism-core.ts';
 import { createPrismHttp } from './prism-http.ts';
 
-export { activeRun, newAgentId, PrismApiError, sessionTitleFrom } from './prism-core.ts';
+export { activeRun, newAgentId, PrismApiError } from './prism-core.ts';
 
 const log = logger.getChild('prism');
 

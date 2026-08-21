@@ -424,7 +424,10 @@ export const wasmThread = {
   consolidate: (stream: Uint8Array) =>
     getPool().withThread((thread) => thread.call('consolidate', [stream])) as Promise<{ result: ConsolidateResult; execMs: number }>,
   extractProse: (graph: Uint8Array) =>
-    getPool().withThread((thread) => thread.call('extract_prose', [graph])) as Promise<{ result: string | null; execMs: number }>,
+    getPool().withThread((thread) => thread.call('extract_prose', [graph])) as Promise<{
+      result: { text: string | null; characterCount: number };
+      execMs: number;
+    }>,
 };
 
 export const shutdownWasmThreadPool = () => {

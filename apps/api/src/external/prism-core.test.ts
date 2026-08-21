@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { activeRun, createPrismClient, mapPrismError, PrismApiError, sessionTitleFrom } from './prism-core.ts';
+import { activeRun, createPrismClient, mapPrismError, PrismApiError } from './prism-core.ts';
 
 type Init = { method?: string; body?: unknown; headers?: Record<string, string> };
 const fakeHttp = (handler: (path: string, init?: Init) => { status: number; json?: unknown; stream?: string }) => {
@@ -23,12 +23,6 @@ const fakeHttp = (handler: (path: string, init?: Init) => { status: number; json
     },
   };
 };
-
-test('sessionTitleFrom: 개행을 공백으로, 40자 절단, 빈 문자열은 null', () => {
-  assert.equal(sessionTitleFrom('  안녕\n하세요  '), '안녕 하세요');
-  assert.equal(sessionTitleFrom('가'.repeat(50)), '가'.repeat(40));
-  assert.equal(sessionTitleFrom(' '.repeat(3)), null);
-});
 
 test('activeRun: running인 마지막 run', () => {
   assert.deepEqual(
@@ -93,4 +87,109 @@ test('openAgentEvents는 Last-Event-ID 헤더로 커서를 싣고, readAgentEven
   assert.equal(http.calls[0].init?.headers?.['last-event-id'], '7');
   assert.equal(result.sync, 1);
   assert.equal(result.events[0].kind, 'run.started');
+});
+
+test('writeAgentFiles는 PUT /agents/:id/files에 files를 싣고 written을 돌려준다', async () => {
+  const http = fakeHttp(() => ({ status: 200, json: { written: [{ path: 'manuscript/v1.txt', bytes: 3, sha256: 'abc' }] } }));
+  const result = await createPrismClient(http).writeAgentFiles('typie-x', [{ path: 'manuscript/v1.txt', content: '원고' }]);
+  assert.deepEqual(result.written, [{ path: 'manuscript/v1.txt', bytes: 3, sha256: 'abc' }]);
+  assert.equal(http.calls[0].path, '/agents/typie-x/files');
+  assert.equal(http.calls[0].init?.method, 'PUT');
+  assert.deepEqual(http.calls[0].init?.body, { files: [{ path: 'manuscript/v1.txt', content: '원고' }] });
+});
+
+test('resolveTool은 두 세그먼트를 인코딩해 POST …/tools/:toolCallId/result {result}를 보낸다', async () => {
+  const http = fakeHttp(() => ({ status: 200, json: {} }));
+  await createPrismClient(http).resolveTool('typie-x', 'call/1', { decision: 'declined' });
+  assert.equal(http.calls[0].path, '/agents/typie-x/tools/call%2F1/result');
+  assert.equal(http.calls[0].init?.method, 'POST');
+  assert.deepEqual(http.calls[0].init?.body, { result: { decision: 'declined' } });
+});
+
+test('getWorkflow는 GET /workflows/:id를 WorkflowState로 좁히고, cancelWorkflow는 POST …/cancel', async () => {
+  const http = fakeHttp((path) =>
+    path.endsWith('/cancel')
+      ? { status: 200, json: {} }
+      : {
+          status: 200,
+          json: {
+            workflow: {
+              id: 'workflow_1',
+              app: 'app_1',
+              workflow: 'high',
+              ref: 'PRRR1',
+              status: 'running',
+              result: null,
+              error: null,
+              usage: null,
+              startedAt: 1,
+              finishedAt: null,
+              input: '{}',
+              caller: 'x',
+            },
+            invocations: [
+              { invocationId: 'i1', targetKind: 'agent', targetId: 'agent_1', originRunSeq: null, status: 'running', step: 'judgment-1' },
+            ],
+            steps: [],
+          },
+        },
+  );
+  const client = createPrismClient(http);
+  const state = await client.getWorkflow('workflow_1');
+  assert.equal(http.calls[0].path, '/workflows/workflow_1');
+  assert.equal(http.calls[0].init?.method, undefined);
+  assert.equal(state.workflow.app, 'app_1');
+  assert.equal(state.workflow.workflow, 'high');
+  assert.equal(state.workflow.ref, 'PRRR1');
+  assert.deepEqual(state.invocations, [
+    { invocationId: 'i1', targetKind: 'agent', targetId: 'agent_1', originRunSeq: null, status: 'running' },
+  ]);
+  await client.cancelWorkflow('workflow_1');
+  assert.equal(http.calls[1].path, '/workflows/workflow_1/cancel');
+  assert.equal(http.calls[1].init?.method, 'POST');
+});
+
+test('openWorkflowEvents는 Last-Event-ID 헤더로 워크플로 로그를 연다', async () => {
+  const http = fakeHttp(() => ({ status: 200, stream: 'event: sync\ndata: {"seq":0}\n\n' }));
+  await createPrismClient(http).openWorkflowEvents('workflow_1', 5, new AbortController().signal);
+  assert.equal(http.calls[0].path, '/workflows/workflow_1/events');
+  assert.equal(http.calls[0].init?.headers?.['last-event-id'], '5');
+});
+
+test('getCatalog는 chat agent의 commands를 배열로 펴고, commands 키가 없으면 null', async () => {
+  const http = fakeHttp(() => ({
+    status: 200,
+    json: {
+      models: {},
+      agents: {
+        chat: { provider: 'p', model: 'm', effort: null, commands: { 리뷰: { description: '리뷰를 시작해요', argumentHint: null } } },
+      },
+      workflows: {},
+    },
+  }));
+  assert.deepEqual(await createPrismClient(http).getCatalog(), {
+    commands: [{ name: '리뷰', description: '리뷰를 시작해요', argumentHint: null }],
+  });
+  assert.equal(http.calls[0].path, '/apps/assistant/catalog');
+  assert.equal(http.calls[0].init?.method, undefined);
+
+  const old = createPrismClient(
+    fakeHttp(() => ({ status: 200, json: { models: {}, agents: { chat: { provider: 'p', model: 'm', effort: null } }, workflows: {} } })),
+  );
+  assert.deepEqual(await old.getCatalog(), { commands: null });
+
+  assert.deepEqual(await createPrismClient(fakeHttp(() => ({ status: 200, json: { agents: {} } }))).getCatalog(), { commands: null });
+
+  assert.deepEqual(await createPrismClient(fakeHttp(() => ({ status: 200, json: { agents: { chat: { commands: {} } } } }))).getCatalog(), {
+    commands: [],
+  });
+
+  await assert.rejects(
+    createPrismClient(fakeHttp(() => ({ status: 404, json: { error: 'not-found' } }))).getCatalog(),
+    (err: unknown) => err instanceof PrismApiError && err.code === 'not-found',
+  );
+  await assert.rejects(
+    createPrismClient(fakeHttp(() => ({ status: 200, json: { nope: 1 } }))).getCatalog(),
+    (err: unknown) => err instanceof PrismApiError && err.code === 'malformed-response',
+  );
 });

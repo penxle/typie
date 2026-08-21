@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { StreamFrameSchema } from './wire.ts';
+import { AgentStateSchema, StreamFrameSchema, WorkflowStateSchema } from './wire.ts';
 
 describe('StreamFrameSchema', () => {
   it('프레임 4종을 판별한다', () => {
@@ -51,5 +51,96 @@ describe('StreamFrameSchema', () => {
         }),
       }).success,
     ).toBe(false);
+  });
+});
+
+const fold = {
+  provider: 'anthropic',
+  agent: 'chat',
+  model: 'claude-opus-5',
+  effort: null,
+  turns: 3,
+  inputTokens: 100,
+  outputTokens: 20,
+  cacheReadTokens: 4000,
+  cacheWriteTokens: 0,
+  thinkingTokens: 5,
+};
+
+describe('AgentStateSchema·WorkflowStateSchema', () => {
+  it('AgentState.invocations는 요약 5열만 남기고 나머지는 벗긴다', () => {
+    const parsed = AgentStateSchema.parse({
+      runs: [],
+      pending: null,
+      invocations: [
+        { invocationId: 'i1', targetKind: 'workflow', targetId: 'workflow_1', originRunSeq: 3, status: 'running', result: 'x' },
+      ],
+    });
+    expect(parsed.invocations).toEqual([
+      { invocationId: 'i1', targetKind: 'workflow', targetId: 'workflow_1', originRunSeq: 3, status: 'running' },
+    ]);
+  });
+
+  it('WorkflowState는 app·이름·ref·status·result 문자열·usage 판별자를 읽는다', () => {
+    const parsed = WorkflowStateSchema.parse({
+      workflow: {
+        id: 'workflow_1',
+        app: 'app_1',
+        workflow: 'high',
+        ref: 'PRRR1',
+        status: 'completed',
+        result: '{"kind":"issues"}',
+        error: null,
+        usage: { settled: true, complete: true, folds: [fold] },
+        startedAt: 1,
+        finishedAt: 2,
+        input: '{}',
+      },
+      invocations: [],
+    });
+    expect(parsed.workflow.app).toBe('app_1');
+    expect(parsed.workflow.workflow).toBe('high');
+    expect(parsed.workflow.ref).toBe('PRRR1');
+    expect(parsed.workflow.usage).toEqual({ settled: true, complete: true, folds: [fold] });
+  });
+
+  it('usage fold의 열이 빠지면 파싱이 실패한다', () => {
+    const broken = { ...fold, turns: undefined };
+    const result = WorkflowStateSchema.safeParse({
+      workflow: {
+        id: 'workflow_1',
+        app: 'app_1',
+        workflow: 'high',
+        ref: null,
+        status: 'completed',
+        result: null,
+        error: null,
+        usage: { settled: false, folds: [broken] },
+        startedAt: 1,
+        finishedAt: 2,
+      },
+      invocations: [],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('WorkflowState의 app·이름은 굳기 전 워크플로를 위해 null을 받는다', () => {
+    const parsed = WorkflowStateSchema.parse({
+      workflow: {
+        id: 'workflow_1',
+        app: null,
+        workflow: null,
+        ref: null,
+        status: 'running',
+        result: null,
+        error: null,
+        usage: null,
+        startedAt: 1,
+        finishedAt: null,
+      },
+      invocations: [],
+    });
+    expect(parsed.workflow.app).toBeNull();
+    expect(parsed.workflow.workflow).toBeNull();
   });
 });

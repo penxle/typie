@@ -70,9 +70,57 @@ export type StreamFrame = z.infer<typeof StreamFrameSchema>;
 
 export const RunSummarySchema = z.object({ runSeq: z.number(), status: z.string() });
 export type RunSummary = z.infer<typeof RunSummarySchema>;
+
+export const InvocationSummarySchema = z.object({
+  invocationId: z.string(),
+  targetKind: z.string(),
+  targetId: z.string(),
+  originRunSeq: z.number().nullable(),
+  status: z.string(),
+});
+export type InvocationSummary = z.infer<typeof InvocationSummarySchema>;
+
+export const UsageFoldSchema = z.object({
+  provider: z.string(),
+  agent: z.string(),
+  model: z.string(),
+  effort: z.string().nullable(),
+  turns: z.number(),
+  inputTokens: z.number(),
+  outputTokens: z.number(),
+  cacheReadTokens: z.number(),
+  cacheWriteTokens: z.number(),
+  thinkingTokens: z.number().nullable(),
+});
+export type UsageFold = z.infer<typeof UsageFoldSchema>;
+
+export type RunUsage = { complete: boolean; folds: UsageFold[] };
+
+export const WorkflowUsageSchema = z.union([
+  z.object({ settled: z.literal(true), complete: z.boolean(), folds: z.array(UsageFoldSchema) }),
+  z.object({ settled: z.literal(false), folds: z.array(UsageFoldSchema) }),
+]);
+
+export const WorkflowStateSchema = z.object({
+  workflow: z.object({
+    id: z.string(),
+    app: z.string().nullable(),
+    workflow: z.string().nullable(),
+    ref: z.string().nullable(),
+    status: z.string(),
+    result: z.string().nullable(),
+    error: z.string().nullable(),
+    usage: WorkflowUsageSchema.nullable(),
+    startedAt: z.number(),
+    finishedAt: z.number().nullable(),
+  }),
+  invocations: z.array(InvocationSummarySchema),
+});
+export type WorkflowState = z.infer<typeof WorkflowStateSchema>;
+
 export const AgentStateSchema = z.object({
   runs: z.array(RunSummarySchema),
   pending: z.object({ toolCallId: z.string(), tool: z.string(), input: z.unknown(), data: z.unknown() }).nullable(),
-  invocations: z.array(z.unknown()),
+  invocations: z.array(InvocationSummarySchema),
 });
 export type AgentState = z.infer<typeof AgentStateSchema>;

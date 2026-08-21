@@ -4,6 +4,7 @@ import type { Transcript } from './lib/conversation.ts';
 
 export type PrismChatDeps = {
   loadLog: (sessionId: string) => Promise<ProjectedStreamFrame[]>;
+  loadWorkflowLog: (workflowId: string) => Promise<ProjectedStreamFrame[]>;
   send: (sessionId: string | null, message: string) => Promise<{ sessionId: string; runSeq: number }>;
   cancel: (sessionId: string) => Promise<void>;
 };
@@ -15,12 +16,8 @@ export const createPrismChat = (deps: PrismChatDeps) => {
   let sessionId = $state<string | null>(null);
   let seedCursor = $state(0);
   let pending = $state<string | null>(null);
-  // 실제 세션 전환마다 증가한다(같은 세션 no-op·첫 전송의 id 부여는 제외) — 패널이 이 값으로 트랜스크립트를
-  // 리마운트해 추종·스크롤 상태를 새 대화 기준으로 되돌린다.
   let loadGen = $state(0);
 
-  // 같은 세션이 이미 정상 로드돼 있으면 no-op — 전송이 방금 만든 세션의 재시드(화면 리셋 깜빡임)를
-  // 막고, 패널 재열림 복구는 구독이 seedCursor부터 재생하는 것으로 충분하다(중복은 커서 게이트가 무시).
   const load = async (id: string | null) => {
     if (id !== null && id === sessionId && error === null) {
       return;
@@ -50,6 +47,22 @@ export const createPrismChat = (deps: PrismChatDeps) => {
       for (const frame of frames) {
         next = applyFrame(next, frame);
       }
+
+      const running = next.messages.flatMap((message) =>
+        message.role === 'workflow' && message.status === 'running' ? [message.workflowId] : [],
+      );
+      const logs = await Promise.allSettled(running.map((workflowId) => deps.loadWorkflowLog(workflowId)));
+      if (gen !== loadGen) {
+        return;
+      }
+
+      for (const log of logs) {
+        if (log.status !== 'fulfilled') continue;
+        for (const frame of log.value) {
+          next = applyFrame(next, frame);
+        }
+      }
+
       transcript = next;
       seedCursor = next.cursor;
       if (next.messages.length > 0) {
@@ -78,9 +91,6 @@ export const createPrismChat = (deps: PrismChatDeps) => {
     get error() {
       return error;
     },
-    set error(value: string | null) {
-      error = value;
-    },
     get sessionId() {
       return sessionId;
     },
@@ -94,7 +104,21 @@ export const createPrismChat = (deps: PrismChatDeps) => {
       return loadGen;
     },
     load,
+    async loadWorkflow(workflowId: string) {
+      const gen = loadGen;
+      const frames = await deps.loadWorkflowLog(workflowId);
+      if (gen !== loadGen) {
+        return;
+      }
+
+      let next = transcript;
+      for (const frame of frames) {
+        next = applyFrame(next, frame);
+      }
+      transcript = next;
+    },
     receive(frame: ProjectedStreamFrame) {
+      error = null;
       transcript = applyFrame(transcript, frame);
       if (frame.type === 'event' && frame.event.kind === 'run.started') {
         pending = null;

@@ -4,11 +4,12 @@
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { pointerCapture } from '@typie/ui/actions';
-  import { Icon, Menu, MenuItem } from '@typie/ui/components';
+  import { Button, Icon, Menu, MenuItem } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { Dialog, Toast } from '@typie/ui/notification';
   import { clamp } from '@typie/ui/utils';
   import { tick, untrack } from 'svelte';
+  import { fade } from 'svelte/transition';
   import ArchiveIcon from '~icons/lucide/archive';
   import ArchiveRestoreIcon from '~icons/lucide/archive-restore';
   import EllipsisIcon from '~icons/lucide/ellipsis';
@@ -20,17 +21,26 @@
   import XIcon from '~icons/lucide/x';
   import { cache } from '$lib/graphql';
   import { unwrapError } from '$lib/graphql/error';
+  import { getOpenDocuments } from '$lib/prism/open-documents.svelte';
   import { graphql } from '$mearie';
+  import { AutoResolver } from './lib/auto-resolve.svelte.ts';
+  import { backoffDelay } from './lib/backoff.ts';
+  import { pendingRootRequests, runningWorkflows } from './lib/conversation.ts';
+  import { fadeIn, fadeOut } from './lib/motion.ts';
   import { sessionLabel } from './lib/session-groups.ts';
   import { createPrismChat } from './prism-chat.svelte';
-  import { fetchSessionLog, toFrame } from './prism-data';
+  import { fetchSessionLog, fetchWorkflowLog, toFrame } from './prism-data';
   import { PRISM_PANEL_MAX, PRISM_PANEL_MIN } from './prism-panel.ts';
   import { createPrismSessionState } from './prism-session.svelte';
   import PrismComposer from './PrismComposer.svelte';
   import PrismGateCard from './PrismGateCard.svelte';
   import PrismSessionList from './PrismSessionList.svelte';
   import PrismTranscript from './PrismTranscript.svelte';
+  import { startChips } from './start-chips.ts';
+  import { clientResolvers } from './tools/index.ts';
+  import { workflowApps } from './workflows/index.ts';
   import type { DashboardLayout_PrismPanel_user$key } from '$mearie';
+  import type { WorkflowMessage } from './lib/conversation.ts';
 
   type Props = {
     user$key: DashboardLayout_PrismPanel_user$key;
@@ -45,6 +55,12 @@
       fragment DashboardLayout_PrismPanel_user on User {
         id
         preferences
+
+        prismCommands {
+          name
+          description
+          argumentHint
+        }
 
         prismSessions(includeArchived: true) {
           id
@@ -127,11 +143,22 @@
     `),
   );
 
+  const [resolvePrismTool] = createMutation(
+    graphql(`
+      mutation DashboardLayout_PrismPanel_ResolveTool_Mutation($input: ResolvePrismToolInput!) {
+        resolvePrismTool(input: $input) {
+          id
+        }
+      }
+    `),
+  );
+
   const selected = createPrismSessionState(user.data.id);
   const sessions = $derived(user.data.prismSessions);
 
   const chat = createPrismChat({
     loadLog: fetchSessionLog,
+    loadWorkflowLog: fetchWorkflowLog,
     send: async (sessionId, message) => {
       const resp = await sendPrismMessage({ input: { sessionId: sessionId ?? undefined, message } });
       return { sessionId: resp.sendPrismMessage.session.id, runSeq: resp.sendPrismMessage.runSeq };
@@ -141,13 +168,118 @@
     },
   });
 
+  const openDocuments = getOpenDocuments();
+
+  const blocked = $derived(pendingRootRequests(chat.transcript).some((request) => clientResolvers[request.tool] === undefined));
+
+  const commands = $derived(
+    user.data.prismCommands?.map((command) => ({
+      name: command.name,
+      description: command.description,
+      argumentHint: command.argumentHint ?? null,
+    })) ?? null,
+  );
+
+  const activeWorkflow = $derived(runningWorkflows(chat.transcript).at(-1) ?? null);
+  const workflowCopy = $derived(activeWorkflow === null ? null : (workflowApps[activeWorkflow.app]?.composer ?? null));
+  const awaitingAnswer = $derived(
+    activeWorkflow !== null &&
+      chat.transcript.messages.some(
+        (m) => m.role === 'tool-request' && m.workflowId === activeWorkflow.workflowId && m.status === 'pending',
+      ),
+  );
+  const composerStatus = $derived.by(() => {
+    if (activeWorkflow === null) return null;
+    if (workflowCopy === null) return { text: awaitingAnswer ? '위 질문에 답하면 작업이 이어져요' : '작업이 진행 중이에요', stop: null };
+    return { text: awaitingAnswer ? workflowCopy.waiting : workflowCopy.running, stop: workflowCopy.stop };
+  });
+
+  const resolveTool = async (agentId: string, toolCallId: string, input: unknown) => {
+    const sessionId = chat.sessionId;
+    if (sessionId === null) {
+      throw new Error('prism session is not ready');
+    }
+
+    const root = agentId.length === 0 || agentId === chat.transcript.agentId;
+    await resolvePrismTool({ input: { sessionId, agentId: root ? undefined : agentId, toolCallId, input } });
+  };
+
+  const autoResolver = new AutoResolver({
+    resolve: async (toolCallId) => {
+      const request = pendingRootRequests(chat.transcript).find((entry) => entry.toolCallId === toolCallId);
+      const resolver = request === undefined ? undefined : clientResolvers[request.tool];
+      if (request === undefined || resolver === undefined) {
+        return;
+      }
+
+      await resolveTool(request.agentId, toolCallId, resolver({ openDocuments }));
+    },
+    settled: (err) => {
+      const error = unwrapError(err);
+      return error instanceof TypieError && error.code === 'prism_tool_settled';
+    },
+  });
+
+  $effect(() => {
+    void chat.generation;
+    return () => {
+      autoResolver.reset();
+      resetReconnect();
+    };
+  });
+
+  $effect(() => {
+    const sessionId = chat.sessionId;
+    const requests = pendingRootRequests(chat.transcript).filter((request) => clientResolvers[request.tool] !== undefined);
+    if (sessionId === null || chat.loading) {
+      return;
+    }
+
+    untrack(() => {
+      autoResolver.retain(requests.map((request) => request.toolCallId));
+      for (const request of requests) {
+        autoResolver.request(request.toolCallId);
+      }
+    });
+  });
+
   let composer = $state<PrismComposer>();
+  let draft = $state('');
+  const chipsVisible = $derived(
+    chat.transcript.messages.length === 0 && !chat.transcript.live && chat.pending === null && draft.length === 0,
+  );
+  const chipClass = css({
+    display: 'flex',
+    alignItems: 'center',
+    gap: '5px',
+    height: '28px',
+    paddingX: '12px',
+    borderRadius: 'full',
+    fontSize: '12px',
+    fontWeight: 'medium',
+    color: 'text.subtle',
+    backgroundColor: 'surface.muted',
+    transition: '[background-color 150ms ease]',
+    _hover: { backgroundColor: 'interactive.hover' },
+  });
   let listOpen = $state(false);
   const currentSession = $derived(sessions.find((session) => session.id === selected.current) ?? null);
   const currentTitle = $derived(currentSession ? sessionLabel(currentSession) : '새 대화');
 
-  // 세션 액션은 헤더(현재 세션)와 목록(임의 세션) 두 진입점이 같은 것을 공유한다
-  // 낙관적 갱신(mearie optimisticResponse) — 응답 전까지 목록·헤더가 이전 값으로 되돌아가는 깜빡임을 없앤다
+  let seenTitle: string | null = null;
+
+  $effect(() => {
+    const title = chat.transcript.title;
+    if (title === seenTitle) {
+      return;
+    }
+
+    seenTitle = title;
+    if (title !== null && untrack(() => currentSession?.title) !== title) {
+      cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'prismSessions' });
+    }
+  });
+
   const archiveSession = async (id: string) => {
     try {
       await archivePrismSession(
@@ -209,12 +341,9 @@
     });
   };
 
-  // 헤더 제목 인라인 편집 — 목록의 편집과 같은 키 규칙(Enter 확정·Esc 취소·blur 확정)
   let titleEditing = $state(false);
   let titleDraft = $state('');
   let titleInput = $state<HTMLInputElement>();
-  // 메뉴는 닫히며 포커스를 트리거로 되돌린다(focus-trap returnFocus) — 바로 입력을 띄우면 그 복귀가 blur 확정을
-  // 발동시켜 즉시 닫힌다. 편집은 메뉴의 닫힘 전환이 끝난 뒤(ontransitionend) 시작한다.
   let pendingTitleEdit = false;
 
   const startTitleEdit = async () => {
@@ -268,11 +397,69 @@
       return;
     }
 
-    // load는 chat 내부 $state(generation·sessionId 등)를 읽고 쓰므로 추적 밖에서 부른다 — 추적하면
-    // generation 증가가 이 effect를 다시 깨워 새 세션(id null)에서 무한 루프가 된다.
     const id = selected.current;
     untrack(() => void chat.load(id));
   });
+
+  const RECONNECT_MS = [1000, 3000, 10_000, 30_000];
+
+  let subscribeCursor = $state(0);
+  let subscribeWorkflows = $state<{ workflowId: string; cursor: number }[]>([]);
+  let reconnecting = $state(false);
+  let reconnectFailed = $state(false);
+  let reconnectAttempts = 0;
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  let armedAt = Date.now();
+
+  const workflowCursors = () =>
+    chat.transcript.messages
+      .filter((message): message is WorkflowMessage => message.role === 'workflow' && message.status === 'running')
+      .map((message) => ({ workflowId: message.workflowId, cursor: message.cursor }));
+
+  $effect(() => {
+    void chat.seedCursor;
+    untrack(() => {
+      subscribeCursor = chat.transcript.cursor;
+      subscribeWorkflows = workflowCursors();
+    });
+  });
+
+  const clearReconnectTimer = () => {
+    if (reconnectTimer !== null) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+  };
+
+  const resetReconnect = () => {
+    clearReconnectTimer();
+    reconnectAttempts = 0;
+    armedAt = Date.now();
+    reconnecting = false;
+    reconnectFailed = false;
+  };
+
+  const scheduleReconnect = () => {
+    clearReconnectTimer();
+    const established = Date.now() - armedAt >= (RECONNECT_MS.at(-1) ?? 0);
+    reconnectAttempts = established ? 1 : reconnectAttempts + 1;
+
+    const delay = backoffDelay(RECONNECT_MS, reconnectAttempts);
+    if (delay === null) {
+      reconnecting = false;
+      reconnectFailed = true;
+      return;
+    }
+
+    reconnecting = true;
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      subscribeCursor = chat.transcript.cursor;
+      subscribeWorkflows = workflowCursors();
+      armedAt = Date.now();
+      reconnecting = false;
+    }, delay);
+  };
 
   let betaGate = $state<'prism_beta_required' | null>(null);
   const aiOptIn = $derived((user.data.preferences.aiOptIn as boolean | undefined) ?? false);
@@ -280,14 +467,24 @@
 
   createSubscription(
     graphql(`
-      subscription DashboardLayout_PrismPanel_Events_Subscription($sessionId: ID!, $cursor: Int) {
-        prismSessionEvents(cursor: $cursor, sessionId: $sessionId)
+      subscription DashboardLayout_PrismPanel_Events_Subscription($sessionId: ID!, $cursor: Int, $workflows: [PrismWorkflowCursorInput!]) {
+        prismSessionEvents(cursor: $cursor, sessionId: $sessionId, workflows: $workflows)
       }
     `),
-    () => ({ sessionId: chat.sessionId ?? '', cursor: chat.seedCursor }),
+    () => ({ sessionId: chat.sessionId ?? '', cursor: subscribeCursor, workflows: subscribeWorkflows }),
     () => ({
-      skip: chat.sessionId === null || !app.state.prismAccess || !app.preference.current.prismPanelOpen || chat.loading,
+      skip:
+        chat.sessionId === null ||
+        !app.state.prismAccess ||
+        !app.preference.current.prismPanelOpen ||
+        chat.loading ||
+        reconnecting ||
+        reconnectFailed,
       onData: (data) => {
+        if (reconnectAttempts !== 0 || reconnecting || reconnectFailed) {
+          resetReconnect();
+        }
+
         chat.receive(toFrame(data.prismSessionEvents));
       },
       onError: (err) => {
@@ -297,7 +494,7 @@
           return;
         }
 
-        chat.error = '실시간 연결이 끊겼어요. 패널을 닫았다 다시 열면 이어져요';
+        scheduleReconnect();
       },
     }),
   );
@@ -320,12 +517,44 @@
         betaGate = 'prism_beta_required';
       } else if (code === 'prism_run_active') {
         Toast.error('답변이 끝난 뒤에 보낼 수 있어요');
+      } else if (code === 'prism_unknown_command') {
+        Toast.error('등록되지 않은 명령이에요');
       } else {
         Toast.error('메시지를 보내지 못했어요. 잠시 후 다시 시도해 주세요');
       }
 
       throw err;
     }
+  };
+
+  const onQuickSend = (text: string) => onSend(text).catch(() => null);
+
+  const cancelRun = async () => {
+    try {
+      await chat.stop();
+      return true;
+    } catch {
+      Toast.error('중단하지 못했어요. 잠시 후 다시 시도해 주세요');
+      return false;
+    }
+  };
+
+  const onStop = async () => {
+    if (activeWorkflow !== null) {
+      Dialog.confirm({
+        title: workflowCopy?.confirmTitle ?? '진행 중인 작업을 중단할까요?',
+        message: workflowCopy?.confirmMessage ?? '진행 중인 작업이 멈춰요. 다시 하려면 새로 시작해야 해요.',
+        action: 'danger',
+        actionLabel: '중단',
+        actionHandler: async () => {
+          if (!(await cancelRun())) return false;
+        },
+      });
+
+      return;
+    }
+
+    await cancelRun();
   };
 
   type ResizeSession = {
@@ -593,26 +822,66 @@
         {/if}
 
         {#key chat.generation}
-          <PrismTranscript loading={chat.loading} pending={chat.pending} transcript={chat.transcript} />
+          <PrismTranscript
+            failedIds={autoResolver.failedIds}
+            loading={chat.loading}
+            onLoadTrace={(workflowId) => chat.loadWorkflow(workflowId)}
+            onResolve={resolveTool}
+            onRetry={(toolCallId) => autoResolver.retry(toolCallId)}
+            pending={chat.pending}
+            {reconnecting}
+            sessionId={chat.sessionId}
+            transcript={chat.transcript}
+          />
         {/key}
 
         {#if chat.error}
-          <div class={css({ paddingX: '14px', paddingBottom: '8px', fontSize: '11px', color: 'text.danger' })}>{chat.error}</div>
+          <div class={flex({ alignItems: 'center', gap: '8px', paddingX: '14px', paddingBottom: '8px' })} in:fade={fadeIn}>
+            <span class={css({ fontSize: '11px', color: 'text.danger' })}>{chat.error}</span>
+            <Button onclick={() => void chat.load(selected.current)} size="sm" variant="secondary">다시 불러오기</Button>
+          </div>
+        {:else if reconnecting}
+          <div
+            class={css({ paddingX: '14px', paddingBottom: '8px', fontSize: '11px', color: 'text.subtle' })}
+            in:fade={fadeIn}
+            out:fade={fadeOut}
+          >
+            다시 연결하는 중…
+          </div>
+        {:else if reconnectFailed}
+          <div class={flex({ alignItems: 'center', gap: '8px', paddingX: '14px', paddingBottom: '8px' })} in:fade={fadeIn}>
+            <span class={css({ fontSize: '11px', color: 'text.danger' })}>실시간 연결이 끊겼어요</span>
+            <Button onclick={resetReconnect} size="sm" variant="secondary">다시 연결</Button>
+          </div>
         {/if}
 
-        <PrismComposer
-          bind:this={composer}
-          disabled={false}
-          {onSend}
-          onStop={async () => {
-            try {
-              await chat.stop();
-            } catch {
-              Toast.error('중단하지 못했어요. 잠시 후 다시 시도해 주세요');
-            }
-          }}
-          running={chat.transcript.run === 'running'}
-        />
+        {#if !chat.loading}
+          {#if chipsVisible}
+            <div class={css({ paddingX: '12px', paddingBottom: '24px' })}>
+              <p class={css({ marginBottom: '6px', fontSize: '13px', fontWeight: 'semibold', color: 'text.faint' })}>제안</p>
+              <div class={flex({ gap: '6px' })}>
+                {#each startChips as chip (chip.insert)}
+                  <button class={chipClass} onclick={() => onQuickSend(chip.insert)} type="button">
+                    <Icon icon={chip.icon} size={14} />
+                    {chip.label}
+                  </button>
+                {/each}
+              </div>
+            </div>
+          {/if}
+
+          <PrismComposer
+            bind:this={composer}
+            {blocked}
+            {commands}
+            disabled={false}
+            {onSend}
+            {onStop}
+            running={chat.transcript.run === 'running'}
+            status={composerStatus}
+            bind:text={draft}
+          />
+        {/if}
       {/if}
     </div>
   </aside>

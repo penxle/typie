@@ -884,6 +884,7 @@ type Mutation {
   persistBlobAsFont(input: PersistBlobAsFontInput!): Font!
   persistBlobAsImage(input: PersistBlobAsImageInput!): Image!
   purgeEntities(input: PurgeEntitiesInput!): Site!
+  reactPrismReviewRound(input: ReactPrismReviewRoundInput!): PrismReviewRound!
   recordSurvey(input: RecordSurveyInput!): User!
   recoverEntity(input: RecoverEntityInput!): Entity!
   redeemCreditCode(input: RedeemCreditCodeInput!): User!
@@ -895,6 +896,7 @@ type Mutation {
   resetPassword(input: ResetPasswordInput!): Boolean!
   resetPreferences: User!
   resolveDocumentCommentThread(input: ResolveDocumentCommentThreadInput!): DocumentCommentThread!
+  resolvePrismTool(input: ResolvePrismToolInput!): PrismSession!
   revertDocument(input: RevertDocumentInput!): RevertDocumentPayload!
   revokeUserDevice(input: RevokeUserDeviceInput!): UserDevice!
   schedulePlanChange(input: SchedulePlanChangeInput!): Subscription_!
@@ -1063,12 +1065,91 @@ enum PreorderPaymentState {
   PENDING
 }
 
+type PrismCommand {
+  argumentHint: String
+  description: String!
+  name: String!
+}
+
+enum PrismReaction {
+  DOWN
+  UP
+}
+
+type PrismReviewConclusionSummary {
+  elevationsCount: Int!
+  patternsCount: Int!
+  prioritiesCount: Int!
+  progress: String
+  strengthsCount: Int!
+  understanding: String
+  verdictsCount: Int!
+}
+
+type PrismReviewRejection {
+  message: String!
+}
+
+type PrismReviewRound {
+  conclusion: PrismReviewConclusionSummary
+  createdAt: DateTime!
+  document: Document!
+  documentId: ID!
+  id: ID!
+  issueCount: Int!
+  ordinal: Int!
+  reaction: PrismReaction
+  reactionNote: String
+  rejection: PrismReviewRejection
+  round: Int!
+  state: PrismReviewRoundState!
+  tier: PrismReviewTier!
+  workflow: PrismWorkflow
+}
+
+enum PrismReviewRoundState {
+  CANCELED
+  COMPLETED
+  FAILED
+  PENDING
+  RUNNING
+}
+
+enum PrismReviewTier {
+  HIGH
+  LOW
+  MEDIUM
+}
+
 type PrismSession {
   archivedAt: DateTime
   createdAt: DateTime!
   id: ID!
+  reviewRounds: [PrismReviewRound!]!
   title: String
   updatedAt: DateTime!
+}
+
+type PrismWorkflow {
+  app: String!
+  finishedAt: DateTime
+  id: ID!
+  name: String!
+  prismWorkflowId: String!
+  startedAt: DateTime!
+  state: PrismWorkflowState!
+}
+
+input PrismWorkflowCursorInput {
+  cursor: Int!
+  workflowId: String!
+}
+
+enum PrismWorkflowState {
+  CANCELED
+  COMPLETED
+  FAILED
+  RUNNING
 }
 
 input PurgeEntitiesInput {
@@ -1096,7 +1177,10 @@ type Query {
   note(noteId: ID!): Note!
   notes(entityId: ID, siteId: ID, status: NoteStatus): [Note!]!
   permalink(permalink: String!): Permalink!
+  prismReviewRound(roundId: ID!): PrismReviewRound!
+  prismSession(sessionId: ID!): PrismSession!
   prismSessionLog(cursor: Int! = 0, sessionId: ID!): [JSON!]!
+  prismWorkflowLog(workflowId: String!): [JSON!]!
   randomName: String!
   redirect(from: String!, type: RedirectType!): Redirect
   search(ancestorEntityId: ID, query: String!, siteId: ID!): SearchResult!
@@ -1106,6 +1190,12 @@ type Query {
   stats: JSON!
   userView(id: ID!): UserView!
   widgets: [Widget!]!
+}
+
+input ReactPrismReviewRoundInput {
+  note: String
+  roundId: ID!
+  value: PrismReaction
 }
 
 input RecordSurveyInput {
@@ -1171,6 +1261,13 @@ input ResetPasswordInput {
 input ResolveDocumentCommentThreadInput {
   clientId: String!
   threadId: ID!
+}
+
+input ResolvePrismToolInput {
+  agentId: String
+  input: JSON!
+  sessionId: ID!
+  toolCallId: String!
 }
 
 input RevertDocumentInput {
@@ -1325,7 +1422,7 @@ type Subscription {
   literaryAnalysisDocumentStream(mappings: [DocumentTextMappingInput!]!, text: String!): DocumentLiteraryAnalysisPayload!
   literaryAnalysisDocumentStreamV2(documentId: ID, text: String!): DocumentLiteraryAnalysisPayloadV2!
   noteUpdateStream(clientId: String!, siteId: ID!): NoteUpdateStreamPayload!
-  prismSessionEvents(cursor: Int, sessionId: ID!): JSON!
+  prismSessionEvents(cursor: Int, sessionId: ID!, workflows: [PrismWorkflowCursorInput!]): JSON!
   siteUpdateStream(siteId: ID!): SiteUpdateStreamPayload!
   siteUsageUpdateStream(siteId: ID!): Site!
   userUsageUpdateStream(userId: ID!): User!
@@ -1566,6 +1663,7 @@ type User implements IUser {
   personalIdentity: UserPersonalIdentity
   preferences: JSON!
   prismAccess: Boolean!
+  prismCommands: [PrismCommand!]
   prismSessions(includeArchived: Boolean! = false): [PrismSession!]!
   recentlyViewedEntities(siteId: ID): [Entity!]!
   referral: Referral

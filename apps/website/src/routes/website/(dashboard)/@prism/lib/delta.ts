@@ -7,6 +7,8 @@ export type TurnLive = {
   textBroken: boolean;
   thinkingChars: number;
   toolInput: { name: string } | null;
+  last: 'text' | 'thinking' | 'tool.input';
+  seeded: boolean;
 };
 
 const sameTurn = (a: TurnContext, b: { agent?: { id: string }; run?: number; turn?: number; attempt?: number }): boolean =>
@@ -15,13 +17,13 @@ const sameTurn = (a: TurnContext, b: { agent?: { id: string }; run?: number; tur
 export const applyDelta = (current: TurnLive | null, delta: ProjectedDeltaFrame): TurnLive => {
   const base: TurnLive =
     current !== null && sameTurn(current.context, delta.context)
-      ? current
-      : { context: delta.context, text: '', textBroken: false, thinkingChars: 0, toolInput: null };
+      ? { ...current, last: delta.channel }
+      : { context: delta.context, text: '', textBroken: false, thinkingChars: 0, toolInput: null, last: delta.channel, seeded: false };
   return match(delta)
     .with({ channel: 'thinking' }, ({ chars }) => ({ ...base, thinkingChars: chars }))
     .with({ channel: 'tool.input' }, ({ tool }) => ({ ...base, toolInput: { name: tool.name } }))
     .with({ channel: 'text' }, ({ offset, data }) => {
-      if (offset === 0) return { ...base, text: data, textBroken: false };
+      if (offset === 0) return { ...base, text: data, textBroken: false, seeded: delta.seed === true };
       if (base.textBroken) return base;
       if (offset !== base.text.length) return { ...base, textBroken: true };
       return { ...base, text: base.text + data };

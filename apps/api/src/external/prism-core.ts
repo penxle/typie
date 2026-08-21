@@ -1,7 +1,7 @@
-import { AgentStateSchema } from '@typie/prism';
+import { AgentStateSchema, WorkflowStateSchema } from '@typie/prism';
 import { z } from 'zod';
 import { readUntilSync } from './prism-stream.ts';
-import type { AgentState, EventFrame, RunSummary } from '@typie/prism';
+import type { AgentState, EventFrame, RunSummary, WorkflowState } from '@typie/prism';
 
 export class PrismApiError extends Error {
   readonly code: string;
@@ -17,11 +17,6 @@ export class PrismApiError extends Error {
 export const PRISM_CONVERSATION = { app: 'assistant', agent: 'chat' } as const;
 
 export const newAgentId = (): string => `typie-${crypto.randomUUID()}`;
-
-export const sessionTitleFrom = (message: string): string | null => {
-  const title = message.replaceAll(/\s+/g, ' ').trim().slice(0, 40);
-  return title.length === 0 ? null : title;
-};
 
 export const activeRun = (runs: RunSummary[]): RunSummary | null => runs.findLast((run) => run.status === 'running') ?? null;
 
@@ -52,15 +47,29 @@ const jsonOf = async <S extends z.ZodType>(res: { status: number; json(): Promis
 };
 
 const agentPath = (agentId: string) => `/agents/${encodeURIComponent(agentId)}`;
+const workflowPath = (workflowId: string) => `/workflows/${encodeURIComponent(workflowId)}`;
+
+const WrittenSchema = z.object({ written: z.array(z.object({ path: z.string(), bytes: z.number(), sha256: z.string() })) });
+
+export type PrismCommand = { name: string; description: string; argumentHint: string | null };
+
+const CatalogSchema = z.object({
+  agents: z.record(
+    z.string(),
+    z.object({ commands: z.record(z.string(), z.object({ description: z.string(), argumentHint: z.string().nullable() })).optional() }),
+  ),
+});
 
 export const createPrismClient = (http: PrismHttp) => {
-  const openAgentEvents = async (agentId: string, cursor: number, signal: AbortSignal): Promise<ReadableStream<Uint8Array>> => {
-    const res = await expectOk(
-      await http.request(`${agentPath(agentId)}/events`, { signal, stream: true, headers: { 'last-event-id': String(cursor) } }),
-    );
+  const openEvents = async (path: string, cursor: number, signal: AbortSignal): Promise<ReadableStream<Uint8Array>> => {
+    const res = await expectOk(await http.request(path, { signal, stream: true, headers: { 'last-event-id': String(cursor) } }));
     if (!res.body) throw new PrismApiError('internal', res.status);
     return res.body;
   };
+  const openAgentEvents = (agentId: string, cursor: number, signal: AbortSignal): Promise<ReadableStream<Uint8Array>> =>
+    openEvents(`${agentPath(agentId)}/events`, cursor, signal);
+  const openWorkflowEvents = (workflowId: string, cursor: number, signal: AbortSignal): Promise<ReadableStream<Uint8Array>> =>
+    openEvents(`${workflowPath(workflowId)}/events`, cursor, signal);
   return {
     async invokeAgent(opts: {
       agentId: string;
@@ -86,9 +95,40 @@ export const createPrismClient = (http: PrismHttp) => {
     async getAgent(agentId: string): Promise<AgentState> {
       return jsonOf(await expectOk(await http.request(agentPath(agentId))), AgentStateSchema);
     },
+    async writeAgentFiles(agentId: string, files: { path: string; content: string }[]): Promise<z.output<typeof WrittenSchema>> {
+      const res = await expectOk(await http.request(`${agentPath(agentId)}/files`, { method: 'PUT', body: { files } }));
+      return jsonOf(res, WrittenSchema);
+    },
+    async resolveTool(agentId: string, toolCallId: string, result: unknown): Promise<void> {
+      await expectOk(
+        await http.request(`${agentPath(agentId)}/tools/${encodeURIComponent(toolCallId)}/result`, { method: 'POST', body: { result } }),
+      );
+    },
+    async getWorkflow(workflowId: string): Promise<WorkflowState> {
+      return jsonOf(await expectOk(await http.request(workflowPath(workflowId))), WorkflowStateSchema);
+    },
+    async cancelWorkflow(workflowId: string): Promise<void> {
+      await expectOk(await http.request(`${workflowPath(workflowId)}/cancel`, { method: 'POST' }));
+    },
+    async getCatalog(): Promise<{ commands: PrismCommand[] | null }> {
+      const catalog = await jsonOf(await expectOk(await http.request(`/apps/${PRISM_CONVERSATION.app}/catalog`)), CatalogSchema);
+      const commands = catalog.agents[PRISM_CONVERSATION.agent]?.commands;
+      if (commands === undefined) return { commands: null };
+      return {
+        commands: Object.entries(commands).map(([name, def]) => ({ name, description: def.description, argumentHint: def.argumentHint })),
+      };
+    },
     openAgentEvents,
+    openWorkflowEvents,
     async readAgentEventsUntilSync(agentId: string, cursor: number, signal: AbortSignal): Promise<{ events: EventFrame[]; sync: number }> {
       return readUntilSync(await openAgentEvents(agentId, cursor, signal), signal);
+    },
+    async readWorkflowEventsUntilSync(
+      workflowId: string,
+      cursor: number,
+      signal: AbortSignal,
+    ): Promise<{ events: EventFrame[]; sync: number }> {
+      return readUntilSync(await openWorkflowEvents(workflowId, cursor, signal), signal);
     },
   };
 };
