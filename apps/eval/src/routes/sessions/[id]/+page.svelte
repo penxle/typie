@@ -13,6 +13,7 @@
   import ThemeToggle from '$lib/components/ThemeToggle.svelte';
   import { applyDelta, sealTurn, startTurn } from '$lib/feedback/delta.ts';
   import { applyEvent, initialLive } from '$lib/feedback/live.ts';
+  import { askAnswerIndex } from '$lib/feedback/questions.ts';
   import { EVENT_NAMES } from '$lib/feedback/sse.ts';
   import { synthesizeFolds, usageLowerBound } from '$lib/feedback/stage-cost.ts';
   import { TERMINAL_EVENTS } from '$lib/feedback/stages.ts';
@@ -167,21 +168,8 @@
     showNotification(`리뷰가 끝났어요 — ${title}`, '결과가 정리돼 있어요.', `done:${data.session.id}`);
   });
 
-  // 관전 탭의 답변 문면 — 해소 이벤트(tool.called)에는 답이 실리지 않는다(원장에만 있다). answered로 굳었는데
-  // 문면이 없는 엔트리를 보면 로드를 재실행해 원장에서 당긴다. 엔트리당 1회 가드 — 조회가 실패해도 재발화하지
-  // 않고(무유계 재발화 경계 — 아래 종결 invalidate와 같은 이유), 다음 자연 로드가 재시도한다.
-  const answerRefreshed = new SvelteSet<string>();
-  $effect(() => {
-    const missing = live.questions.find(
-      (question) =>
-        question.status === 'answered' &&
-        !Object.hasOwn(data.askAnswers ?? {}, question.toolCallId) &&
-        !answerRefreshed.has(question.toolCallId),
-    );
-    if (!missing) return;
-    answerRefreshed.add(missing.toolCallId);
-    void invalidateAll();
-  });
+  // 답변 문면은 해소 이벤트(tool.resolved)가 실어 리듀서 엔트리에 남는다 — 실행 중(SSE)·종결(사영된 events) 모두 같은 원천이다.
+  const askAnswers = $derived(askAnswerIndex(live.questions));
 
   let drawerOpen = $state(false);
   let activeId = $state<string | null>(null);
@@ -272,7 +260,7 @@
     let lastSeenAt = Date.now();
     let lastProgressAt = Date.now();
 
-    // data 라인은 항상 한 줄 JSON이다 — 델타는 그 자체가 프레임이고, 로그 이벤트는 {seq,kind,data,createdAt} 봉투다.
+    // data 라인은 항상 한 줄 JSON이다 — 델타는 그 자체가 프레임이고, 로그 이벤트는 {seq,kind,occurredAt,context,data} 봉투다.
     const parseFrame = (raw: string): unknown => {
       try {
         return JSON.parse(raw);
@@ -281,12 +269,11 @@
       }
     };
 
-    // 봉인 판정은 리듀서 밖 경로라 봉투를 여기서 한 겹 벗긴다. 못 벗기면 빈 본문으로 본다 — 어느 턴의
-    // 확정인지 모르는 채 조각을 남겨 두는 것보다 지우는 편이 안전하다(확정 텍스트가 곧 뒤따른다).
-    const payloadOf = (raw: string): { turn?: unknown; agent?: unknown } => {
+    // 봉인·시작 판정은 리듀서 밖 경로라 봉투의 좌표(context)를 여기서 꺼낸다. 못 꺼내면 빈 좌표로 본다 — 어느
+    // 턴의 확정인지 모르는 채 조각을 남겨 두는 것보다 지우는 편이 안전하다(확정 텍스트가 곧 뒤따른다).
+    const contextOf = (raw: string): unknown => {
       const envelope = parseFrame(raw);
-      const data = envelope && typeof envelope === 'object' ? (envelope as Record<string, unknown>).data : null;
-      return data && typeof data === 'object' ? (data as Record<string, unknown>) : {};
+      return envelope && typeof envelope === 'object' ? ((envelope as Record<string, unknown>).context ?? {}) : {};
     };
 
     // 이벤트는 프레임 단위로 묶어 한 번에 접는다(fold) — 리듀서는 싸지만 렌더(6개 스테이지 groupFeed 재계산·
@@ -309,10 +296,10 @@
         const wasCursor = next.cursor;
         next = applyEvent(next, { id: eventId(event.lastEventId), event: name, data: event.data });
         // 조각은 확정된 턴을 넘어 살아남지 않는다 — 확정 텍스트 위에 옛 조각이 겹쳐 보이면 그것이 곧 거짓말이다.
-        if (name === 'turn.completed' || TERMINAL_EVENTS.has(name)) turnLive = sealTurn(turnLive, payloadOf(event.data));
+        if (name === 'turn.completed' || TERMINAL_EVENTS.has(name)) turnLive = sealTurn(turnLive, contextOf(event.data));
         // 턴의 시작도 조각의 유통기한이다. 재생분은 제외한다 — 재생은 커서 이전 id로 도착하므로, 판별은
         // 리듀서와 같은 잣대인 커서 전진으로 한다.
-        if (name === 'turn.started' && next.cursor > wasCursor) turnLive = startTurn(turnLive, payloadOf(event.data));
+        if (name === 'turn.started' && next.cursor > wasCursor) turnLive = startTurn(turnLive, contextOf(event.data));
       }
       live = next;
       if (wasTerminal || !live.terminal) return;
@@ -779,7 +766,7 @@
       </div>
 
       <RunningPanel
-        askAnswers={data.askAnswers}
+        {askAnswers}
         error={data.review.error}
         {lastDeltaAt}
         {live}

@@ -1,5 +1,4 @@
 import type { AskAnswer, AskQuestion } from './live.ts';
-import type { ReviewQuestionRecord } from './types.ts';
 
 export type DraftAnswer = { choices: string[]; other: string; otherOn: boolean };
 
@@ -17,11 +16,10 @@ export const isAnswered = (draft: DraftAnswer): boolean => draft.choices.length 
 
 export const answeredAll = (drafts: DraftAnswer[]): boolean => drafts.every(isAnswered);
 
-// 종결 리뷰에서 카드가 읽을 답변 색인 — 답변 문면은 재생에 없고 사영 기록에만 남으므로(types.ts) 거기서 되짚는다.
-// 답을 못 받고 끝난 질문(closed)은 색인에 넣지 않아, 답변 없음이 한 가지 부재로만 카드에 닿는다. 종결 화면 두 곳
-// (세션 타임라인·과정)이 같은 규칙을 쓰도록 파생을 여기 한 곳에 둔다.
-export const askAnswerIndex = (records: ReviewQuestionRecord[] | null): Record<string, AskAnswer[]> =>
-  Object.fromEntries((records ?? []).flatMap((record) => (record.answers === null ? [] : [[record.toolCallId, record.answers] as const])));
+// 카드가 읽을 답변 색인 — 답변 문면은 해소 이벤트(tool.resolved)가 실어 리듀서 엔트리에 남는다(live.ts). 답을 못
+// 받고 끝난 질문은 색인에 넣지 않아, 답변 없음이 한 가지 부재로만 카드에 닿는다. 실행 중·종결 화면이 같은 규칙을 쓴다.
+export const askAnswerIndex = (entries: { toolCallId: string; answers: AskAnswer[] | null }[] | null): Record<string, AskAnswer[]> =>
+  Object.fromEntries((entries ?? []).flatMap((entry) => (entry.answers === null ? [] : [[entry.toolCallId, entry.answers] as const])));
 
 export const buildAnswers = (questions: AskQuestion[], drafts: DraftAnswer[]): AskAnswer[] =>
   questions.map((question, i) => {

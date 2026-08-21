@@ -1,9 +1,8 @@
 import { eq } from 'drizzle-orm';
-import { initialLive } from '../feedback/live.ts';
+import { parseAskQuestions } from '../feedback/live.ts';
 import { FeedbackSessions, PushLog, Reviews } from './db/index.ts';
 import { createInternalApi } from './internal-api.ts';
 import { getAgentPendingTool, getWorkflow, getWorkflowInvocations } from './prism.ts';
-import { seedEvents } from './project.ts';
 import type { AskQuestion } from '../feedback/live.ts';
 import type { Db } from './db/index.ts';
 
@@ -67,12 +66,11 @@ export const pollAndPush = async (db: Db, env: PollEnv): Promise<string[]> => {
         if (pending?.tool !== 'ask-user') continue;
         const key = `ask:${pending.toolCallId}`;
         if (seen.has(key)) continue;
-        // 문면은 이벤트 로그에만 있다(getAgentPendingTool은 toolCallId뿐) — 미발송 신규 질문일 때만 당긴다.
-        const entry = initialLive(await seedEvents(env, row.prismWorkflowId)).questions.find(
-          (question) => question.toolCallId === pending.toolCallId && question.status === 'pending',
-        );
-        if (!entry) continue;
-        await send(key, row.refId, `질문이 있어요 — ${title}`, `${askBody(entry.questions)}\n${CHECK_NOTICE}`);
+        // 문면은 get 뷰의 pending.data에 있다(tool.requested.data와 같은 값 — prism docs/events.md §7). 형태가 어긋나면
+        // 이번 분은 건너뛴다.
+        const questions = parseAskQuestions(pending.data);
+        if (questions === null) continue;
+        await send(key, row.refId, `질문이 있어요 — ${title}`, `${askBody(questions)}\n${CHECK_NOTICE}`);
       }
     } catch (err) {
       console.error(`push-poll ${row.sessionId}#${row.round}: ${String(err)}`);

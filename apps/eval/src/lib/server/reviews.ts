@@ -18,7 +18,7 @@ import {
 } from './prism.ts';
 import type { BatchItem } from 'drizzle-orm/batch';
 import type { AppCatalog, ModelConfig, RereviewTier, TierName, TierOverrides } from '../feedback/tiers.ts';
-import type { Anchor, ManuscriptMeta, Pass, PreviousInput, PreviousThread } from '../feedback/types.ts';
+import type { Anchor, ManuscriptInput, Pass, PreviousInput, PreviousThread } from '../feedback/types.ts';
 import type { Db } from './db/index.ts';
 
 type Env = App.Platform['env'];
@@ -86,8 +86,9 @@ export const startFeedbackSession = async (
       workflowId: rows.review.prismWorkflowId,
       workflow: rows.review.tier,
       input: {
-        manuscriptPath: 'manuscript/v1.txt',
-        meta: { title: manuscript.title, subtitle: manuscript.subtitle },
+        title: manuscript.title,
+        subtitle: manuscript.subtitle,
+        path: 'manuscript/v1.txt',
         // sparse — 무오버라이드 리뷰는 prism 기본값을 따른다(키 자체를 싣지 않는다)
         ...(input.overrides && Object.keys(input.overrides).length > 0 && { overrides: input.overrides }),
       },
@@ -153,14 +154,15 @@ export const buildPreviousContext = (input: {
     issueId: string | null;
     comments: { author: 'tester' | 'ai'; body: string; createdAt: Date }[];
   }[];
-  manuscriptPath: string;
+  // 이전 원고의 제목·부제·경로 — 현재 원고 입력과 같은 평탄 형태다(prism followup.ts PREVIOUS = MANUSCRIPT_INPUT + threads).
+  manuscript: ManuscriptInput;
   // base 회차가 입력을 읽은 시각 — 이보다 뒤의 답글이 "지난 리뷰가 응답하지 않은 새 답글"이다. prism은 시각을
   // 모르므로 판별은 여기서 끝내고 표지만 넘긴다.
   baseStartedAt: Date;
-  meta: ManuscriptMeta;
 }): PreviousInput => ({
-  manuscriptPath: input.manuscriptPath,
-  meta: { title: input.meta.title, subtitle: input.meta.subtitle },
+  title: input.manuscript.title,
+  subtitle: input.manuscript.subtitle,
+  path: input.manuscript.path,
   threads: input.threads.map((thread) => ({
     id: thread.id,
     pass: thread.pass,
@@ -310,9 +312,8 @@ export const startRereview = async (db: Db, env: Env, sessionId: string): Promis
         issueId: thread.issueId,
         comments: commentsOf.get(thread.id) ?? [],
       })),
-      manuscriptPath: previousManuscriptPath,
+      manuscript: { title: previousVersion.title, subtitle: previousVersion.subtitle, path: previousManuscriptPath },
       baseStartedAt: base.startedAt,
-      meta: { title: previousVersion.title, subtitle: previousVersion.subtitle },
     });
 
     // 이전 회차 산출물 시딩 — 자기 이전 산출물을 edit로 고쳐 내는 스테이지 전부가 원래 경로 그대로 실리고,
@@ -359,8 +360,9 @@ export const startRereview = async (db: Db, env: Env, sessionId: string): Promis
       workflow: tier,
       // sparse — 승계할 오버라이드가 없으면 키 자체를 싣지 않는다(startFeedbackSession과 같은 관례).
       input: {
-        manuscriptPath,
-        meta: { title: manuscript.title, subtitle: manuscript.subtitle },
+        title: manuscript.title,
+        subtitle: manuscript.subtitle,
+        path: manuscriptPath,
         previous,
         ...(Object.keys(overrides).length > 0 && { overrides }),
       },

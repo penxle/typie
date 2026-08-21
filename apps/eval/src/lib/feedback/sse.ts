@@ -1,21 +1,10 @@
+import { PROJECTED_KINDS, projectFrame } from './frames.ts';
+
 export type SseEvent = { id: number | null; event: string; data: string };
 
-// EventSource는 named event만 리스너에 흘린다 — 세션 화면이 구독하는 로그 이벤트 전부다. 자식 run.*·invocation.*은
-// 리듀서에 소비처가 없어 받지 않는다(Last-Event-ID는 리스너와 무관하게 갱신된다). 휘발 프레임 turn.delta는 로그에
-// 남지 않아(id 없음) 커서·리듀서 밖 경로로 따로 받는다. turn.started는 리듀서가 아니라 흐르는 턴 조각이 쓴다.
-export const EVENT_NAMES = [
-  'workflow.started',
-  'step.started',
-  'step.completed',
-  'turn.started',
-  'turn.completed',
-  'tool.requested',
-  'tool.called',
-  'workflow.completed',
-  'workflow.failed',
-  'workflow.canceled',
-  'workflow.retried',
-];
+// EventSource는 named event만 리스너에 흘린다 — 릴레이가 사영해 내보내는 kind 전부다. 자식 run.*·invocation.*은
+// 릴레이에서 떨어진다. 휘발 프레임 turn.delta는 로그에 남지 않아(id 없음) 커서·리듀서 밖 경로로 따로 받는다.
+export const EVENT_NAMES: readonly string[] = PROJECTED_KINDS;
 
 export const createSseParser = (): { push(chunk: string): SseEvent[] } => {
   let buffer = '';
@@ -41,3 +30,20 @@ export const createSseParser = (): { push(chunk: string): SseEvent[] } => {
     },
   };
 };
+
+// 로그 이벤트(id 있음)는 봉투를 사영하고, id 없는 프로토콜 프레임(sync·heartbeat·turn.delta)은 그대로 통과시킨다.
+// 사영 밖 kind·깨진 봉투는 null — 릴레이·시드·저장이 같은 판정으로 떨군다.
+export const projectEvent = (event: SseEvent): SseEvent | null => {
+  if (event.id === null) return event;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(event.data);
+  } catch {
+    return null;
+  }
+  const frame = projectFrame(parsed);
+  return frame === null ? null : { id: event.id, event: event.event, data: JSON.stringify(frame) };
+};
+
+export const serializeEvent = (event: SseEvent): string =>
+  `${event.id === null ? '' : `id: ${event.id}\n`}event: ${event.event}\ndata: ${event.data}\n\n`;

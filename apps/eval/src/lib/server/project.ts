@@ -1,9 +1,8 @@
 import { and, eq } from 'drizzle-orm';
 import { initialLive } from '../feedback/live.ts';
-import { createSseParser } from '../feedback/sse.ts';
+import { createSseParser, projectEvent } from '../feedback/sse.ts';
 import { Reviews, ThreadComments, Threads } from './db/index.ts';
-import { fetchEventLog, getWorkflow, openEvents } from './prism.ts';
-import { collectAskAnswers } from './questions.ts';
+import { getWorkflow, openEvents } from './prism.ts';
 import type { SseEvent } from '../feedback/sse.ts';
 import type { Anchor, FeedbackResult, Pass, ReviewQuestionRecord, ThreadDisposition } from '../feedback/types.ts';
 import type { Db } from './db/index.ts';
@@ -94,11 +93,14 @@ export const applyDispositions = async (db: Db, sessionId: string, round: number
   }
 };
 
-// 종결 세션의 events는 재생 후 EOF다. 무한 스트림 방어로 프레임 간 45초 무수신이면 포기하고 던진다 —
-// 사영 실패는 다음 화면 로드가 재시도한다.
+// 재생은 sync 프레임까지다(prism docs/events.md §2.2 — 재생분이 비어도 정확히 1회). 종결 환경은 sync 뒤 EOF지만
+// 실행 중 환경은 라이브로 이어지므로 sync에서 닫는다. 무한 스트림 방어로 프레임 간 45초 무수신이면 포기하고 던진다 —
+// 사영·시드 실패는 다음 화면 로드가 재시도한다.
 const IDLE_LIMIT_MS = 45_000;
 
-export const collectEvents = async (
+// 처음부터 sync까지의 로그 이벤트를 화면 형태(frames.ts 사영)로 걷는다 — 실행 중 세션의 첫 화면 시드이자 종결 사영의
+// 재료다. 사영 밖 kind·구세대 행은 여기서 떨어진다(저장 경계의 D1 행 한도 2MB가 전문 이벤트를 담지 못한다).
+export const replayEvents = async (
   env: PrismEnv,
   prismWorkflowId: string,
   open: (env: PrismEnv, id: string, cursor: number) => Promise<Response> = openEvents,
@@ -109,6 +111,7 @@ export const collectEvents = async (
   const decoder = new TextDecoder();
   const parser = createSseParser();
   const events: SseEvent[] = [];
+  let synced = false;
   for (;;) {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const idle = new Promise<'idle'>((resolve) => {
@@ -123,24 +126,21 @@ export const collectEvents = async (
     if (outcome.done) break;
     // eslint-disable-next-line unicorn/no-return-array-push -- the parser's push() returns parsed events
     for (const event of parser.push(decoder.decode(outcome.value, { stream: true }))) {
-      if (event.id !== null) events.push(event);
+      if (event.event === 'sync') {
+        synced = true;
+        break;
+      }
+      if (event.id === null) continue;
+      const projected = projectEvent(event);
+      if (projected !== null) events.push(projected);
+    }
+    if (synced) {
+      // eslint-disable-next-line @typescript-eslint/no-empty-function -- 라이브 구간은 받지 않는다; 취소 실패는 삼킨다
+      await reader.cancel().catch(() => {});
+      break;
     }
   }
   return events;
-};
-
-// 실행 중 세션의 첫 화면 시드 — 이벤트 로그 스냅샷(JSON)을 클라이언트 SseEvent 형태로 옮긴다. data는
-// 클라이언트 리듀서가 SSE data 라인과 같은 봉투({seq,kind,data,createdAt} 문자열)를 기대하므로 행 전체를
-// 다시 직렬화한다(live.ts decode 참조). 시드 없이 재생을 화면에서 재연하면 새로고침마다 과거 기록이 전환과
-// 함께 빨리감기로 보인다.
-export const seedEvents = async (env: PrismEnv, prismWorkflowId: string): Promise<SseEvent[]> => {
-  const rows = await fetchEventLog(env, prismWorkflowId);
-  return rows.map((row) => {
-    // thinking 전문은 리듀서가 읽지 않는 최대 중량 필드다(xhigh 추론이라 턴당 수 KB) — 시드에서 떨궈
-    // 첫 로드 페이로드를 줄인다. 필드 형태는 남긴다(null): 소비자가 부재와 미지원을 구별할 일이 없게.
-    const data = 'thinking' in row.data ? { ...row.data, thinking: null } : row.data;
-    return { id: row.seq, event: row.kind, data: JSON.stringify({ ...row, data }) };
-  });
 };
 
 // 멱등 순서: threads 먼저(onConflictDoNothing — 재시도 안전), reviews 조건부 갱신을 마지막에.
@@ -149,25 +149,23 @@ export const projectIfTerminal = async (db: Db, env: PrismEnv, review: ReviewRef
   const { workflow } = await getWorkflow(env, review.prismWorkflowId);
   if (workflow.status === 'running') return 'running';
 
-  const events = await collectEvents(env, review.prismWorkflowId);
+  const events = await replayEvents(env, review.prismWorkflowId);
 
-  // 사영은 종결 후 1회라, 답변 문면(이벤트에 없고 prism 원장에만 있다)을 여기서 당겨 두면 원장 리텐션과 무관하게
-  // 기록이 완결된다. 원장 조회 실패는 던진다 — 반쪽 기록을 굳히면 다시 채울 자리가 없고, 던지면 사영이 통째로
-  // 미뤄져 호출부의 관용 처분(sessions/[id]/+page.server.ts의 load — projectIfTerminal try/catch)이 다음 로드에 재시도한다.
+  // 질문 기록 — 문면·답변 모두 이벤트에 있다(tool.requested.data·tool.resolved.data). 카드는 events 재생이 세우므로
+  // 이 기록은 자족적 요약이다.
   const asked = initialLive(events).questions;
-  let questions: ReviewQuestionRecord[] | null = null;
-  if (asked.length > 0) {
-    const answers = await collectAskAnswers(env, events);
-    questions = asked.map((entry) => ({
-      agentName: entry.agentName,
-      toolCallId: entry.toolCallId,
-      stage: entry.stage,
-      at: entry.at,
-      status: entry.status === 'answered' ? 'answered' : 'closed',
-      questions: entry.questions,
-      answers: answers[entry.toolCallId] ?? null,
-    }));
-  }
+  const questions: ReviewQuestionRecord[] | null =
+    asked.length === 0
+      ? null
+      : asked.map((entry) => ({
+          agentName: entry.agentName,
+          toolCallId: entry.toolCallId,
+          stage: entry.stage,
+          at: entry.at,
+          status: entry.status === 'answered' ? 'answered' : 'closed',
+          questions: entry.questions,
+          answers: entry.answers,
+        }));
 
   // 거부 종결(kind: 'rejected')은 지적·처분이 없다 — 스레드를 만들지 않고 아래에서 행만 굳힌다.
   // 판별은 kind === 'rejected'로만 한다(구 결과에는 키가 없다 — 부재는 정상 결과).

@@ -46,7 +46,7 @@
   const submitAnswer: SubmitFunction = () => {
     sending = true;
     failure = null;
-    // 보낸 답은 서버가 받아준 그 자리에서 굳힌다 — 해소 이벤트(tool.called)가 SSE로 돌아오기까지의 틈에 카드가
+    // 보낸 답은 서버가 받아준 그 자리에서 굳힌다 — 해소 이벤트(tool.resolved)가 SSE로 돌아오기까지의 틈에 카드가
     // 대기 상태로 남으면 같은 답을 두 번 보내게 된다. entry.status가 뒤늦게 answered로 바뀌어도 화면이 읽는
     // shown = submitted ?? answers는 그대로 성립한다.
     const built = buildAnswers(entry.questions, drafts);
