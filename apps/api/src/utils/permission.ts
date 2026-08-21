@@ -41,6 +41,25 @@ export const assertSitePermission = async ({ userId, siteId }: AssertSitePermiss
   }
 };
 
+type AssertDocumentPermissionParams = {
+  userId: string | undefined;
+  documentId: string;
+};
+export const assertDocumentPermission = async ({ userId, documentId }: AssertDocumentPermissionParams) => {
+  const row = await db
+    .select({ siteId: Entities.siteId, state: Entities.state })
+    .from(Documents)
+    .innerJoin(Entities, eq(Documents.entityId, Entities.id))
+    .where(eq(Documents.id, documentId))
+    .then(first);
+
+  if (!row || row.state !== EntityState.ACTIVE) {
+    throw new TypieError({ code: 'not_found', status: 404 });
+  }
+
+  await assertSitePermission({ userId, siteId: row.siteId });
+};
+
 type AssertDocumentCommentAccessParams = {
   userId: string | undefined;
   documentId: string;

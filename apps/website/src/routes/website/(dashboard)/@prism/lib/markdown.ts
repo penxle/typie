@@ -1,12 +1,6 @@
 import { Lexer } from 'marked';
 import type { Token, Tokens } from 'marked';
 
-// marked lexer 토큰을 렌더 트리로 바꾼다. 각 노드의 key는 원문 절대 오프셋이다 — 라이브 중 앞 텍스트는
-// 불변이므로 key가 안정적이고(스팬 재마운트 없음 = 페이드는 새 단어에서만), 단어의 start를 페이서의
-// plain 경계와 비교해 점프분 무페이드를 판정한다. 델리미터·마커의 프리픽스 폭은 자식 오프셋에 반영하지
-// 않고 컨테이너 종료 시 cursor를 raw 길이로 보정한다 — 오프셋이 실제보다 앞으로 치우칠 수 있으나
-// 페이드 판정용 근사로 충분하고, 오차는 컨테이너 단위로 격리된다.
-
 export type InlineNode =
   | { kind: 'word'; key: number; text: string }
   | { kind: 'space'; key: number; text: string }

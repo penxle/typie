@@ -196,7 +196,7 @@ internal.post('/corpus/extract', async (c) => {
       const { result } = await wasmThread.extractProse(graph);
       results.push({
         documentId,
-        prose: result,
+        prose: result.text,
         title: heads.get(documentId)?.title ?? null,
         subtitle: heads.get(documentId)?.subtitle ?? null,
       });
@@ -232,6 +232,6 @@ internal.post('/push', async (c) => {
   // 정적 import 금지 — firebase.ts는 모듈 로드 시 initializeApp을 실행해, GOOGLE_SERVICE_ACCOUNT 없는
   // 환경(테스트의 import 체인)이 즉사한다. 첫 호출 시점으로 초기화를 미룬다.
   const { sendPushNotification } = await import('#/external/firebase.ts');
-  const sent = await sendPushNotification({ userId: authors[0].userId, title: parsed.data.title, body: parsed.data.body });
-  return c.json({ ok: true, sent });
+  const delivery = await sendPushNotification({ userId: authors[0].userId, title: parsed.data.title, body: parsed.data.body });
+  return c.json({ ok: true, sent: delivery === 'sent' });
 });

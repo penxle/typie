@@ -2,10 +2,8 @@ import dayjs from 'dayjs';
 
 export type SessionGroup<T> = { key: string; label: string; sessions: T[] };
 
-export const sessionLabel = (session: { title?: string | null }): string => session.title ?? '제목 없는 대화';
+export const sessionLabel = (session: { title?: string | null }): string => session.title ?? '새 대화';
 
-// 최근성 그룹(오너 결정: 기준은 updatedAt = 마지막 대화 시각). 최근일수록 상대 라벨, 오래될수록 절대 라벨로
-// 전환한다 — 사람이 대화를 떠올리는 방식과 같다("어제 그거", "지난주쯤", "6월에").
 export const groupSessionsByRecency = <T extends { updatedAt: string }>(sessions: readonly T[], now = dayjs()): SessionGroup<T>[] => {
   const today = now.startOf('day');
   const yesterday = today.subtract(1, 'day');

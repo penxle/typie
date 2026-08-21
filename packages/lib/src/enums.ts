@@ -271,3 +271,33 @@ export const LlmCallState = {
   FAILED: 'FAILED',
   ABORTED: 'ABORTED',
 } as const;
+
+export type PrismWorkflowState = keyof typeof PrismWorkflowState;
+export const PrismWorkflowState = {
+  RUNNING: 'RUNNING',
+  COMPLETED: 'COMPLETED',
+  FAILED: 'FAILED',
+  CANCELED: 'CANCELED',
+} as const;
+
+export type PrismReviewRoundState = keyof typeof PrismReviewRoundState;
+export const PrismReviewRoundState = {
+  PENDING: 'PENDING',
+  RUNNING: 'RUNNING',
+  COMPLETED: 'COMPLETED',
+  FAILED: 'FAILED',
+  CANCELED: 'CANCELED',
+} as const;
+
+export type PrismReviewTier = keyof typeof PrismReviewTier;
+export const PrismReviewTier = {
+  LOW: 'LOW',
+  MEDIUM: 'MEDIUM',
+  HIGH: 'HIGH',
+} as const;
+
+export type PrismReaction = keyof typeof PrismReaction;
+export const PrismReaction = {
+  UP: 'UP',
+  DOWN: 'DOWN',
+} as const;

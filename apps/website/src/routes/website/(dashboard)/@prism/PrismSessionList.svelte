@@ -37,7 +37,6 @@
   let searchEl = $state<HTMLInputElement>();
   let editEl = $state<HTMLInputElement>();
   let listEl = $state<HTMLElement>();
-  // 메뉴 닫힘의 포커스 복귀(focus-trap returnFocus)가 인라인 입력의 blur 확정을 발동시키므로, 편집은 닫힘 전환 뒤에 시작한다
   let pendingEdit: Session | null = null;
 
   const labelOf = sessionLabel;
@@ -49,7 +48,6 @@
     groupSessionsByRecency(matched.filter((session) => session.archivedAt != null)).flatMap((group) => group.sessions),
   );
   const showArchived = $derived(archived.length > 0 && (archivedOpen || searching));
-  // 키보드 이동 대상 — 화면에 보이는 순서 그대로(활성 그룹 → 펼쳐진 보관됨)
   const visible = $derived([...groups.flatMap((group) => group.sessions), ...(showArchived ? archived : [])]);
   const indexOf = (id: string) => visible.findIndex((session) => session.id === id);
 
@@ -83,7 +81,6 @@
     } else if (event.key === 'Enter') {
       if (target !== searchEl) return;
       event.preventDefault();
-      // 강조가 없으면 첫 결과 — 검색 후 Enter 한 번으로 여는 팔레트 관례
       const session = visible[Math.max(0, highlight)];
       if (session) onSelect(session.id);
     } else if (event.key === 'Escape') {

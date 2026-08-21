@@ -4,6 +4,7 @@ import { TableCode } from './codes.ts';
 import * as E from './enums.ts';
 import { createDbId } from './id.ts';
 import { bytea, datetime } from './types.ts';
+import type { ReviewOutcome, RunUsage } from '@typie/prism';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import type { CouponCondition, PlanRules } from './json.ts';
 
@@ -689,6 +690,108 @@ export const PreorderUsers = pgTable('preorder_users', {
     .default(sql`now()`),
 });
 
+export const PrismSessions = pgTable(
+  'prism_sessions',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.PRISM_SESSIONS)),
+    userId: text('user_id')
+      .notNull()
+      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    prismAgentId: text('prism_agent_id').notNull().unique(),
+    openRunSeq: integer('open_run_seq'),
+    title: text('title'),
+    archivedAt: datetime('archived_at'),
+    deletedAt: datetime('deleted_at'),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: datetime('updated_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [index().on(t.userId, t.updatedAt)],
+);
+
+export const PrismWorkflows = pgTable(
+  'prism_workflows',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.PRISM_WORKFLOWS)),
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => PrismSessions.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    prismWorkflowId: text('prism_workflow_id').notNull().unique(),
+    app: text('app').notNull(),
+    name: text('name').notNull(),
+    ref: text('ref'),
+    state: E._PrismWorkflowState('state').notNull().default('RUNNING'),
+    startedAt: datetime('started_at')
+      .notNull()
+      .default(sql`now()`),
+    finishedAt: datetime('finished_at'),
+    usage: jsonb('usage').$type<RunUsage>(),
+    error: text('error'),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [index().on(t.sessionId), index().on(t.state)],
+);
+
+export const PrismReviewDocumentVersions = pgTable(
+  'prism_review_document_versions',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.PRISM_REVIEW_DOCUMENT_VERSIONS)),
+    documentId: text('document_id')
+      .notNull()
+      .references(() => Documents.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    version: integer('version').notNull(),
+    title: text('title'),
+    subtitle: text('subtitle'),
+    content: text('content').notNull(),
+    characterCount: integer('character_count').notNull(),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [unique().on(t.documentId, t.version)],
+);
+
+export const PrismReviewRounds = pgTable(
+  'prism_review_rounds',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.PRISM_REVIEW_ROUNDS)),
+    documentId: text('document_id')
+      .notNull()
+      .references(() => Documents.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    round: integer('round').notNull(),
+    sessionId: text('session_id').references(() => PrismSessions.id, { onUpdate: 'cascade', onDelete: 'set null' }),
+    prismRunSeq: integer('prism_run_seq').notNull(),
+    workflowId: text('workflow_id')
+      .unique()
+      .references(() => PrismWorkflows.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    closedAt: datetime('closed_at'),
+    tier: E._PrismReviewTier('tier').notNull(),
+    documentVersionId: text('document_version_id')
+      .notNull()
+      .references(() => PrismReviewDocumentVersions.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    result: jsonb('result').$type<ReviewOutcome>(),
+    reaction: E._PrismReaction('reaction'),
+    reactionNote: text('reaction_note'),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [unique().on(t.documentId, t.round), index().on(t.sessionId)],
+);
+
 export const Prompts = pgTable('prompts', {
   id: text('id').primaryKey(),
   model: text('model').notNull(),
@@ -1215,27 +1318,4 @@ export const Widgets = pgTable(
       .default(sql`now()`),
   },
   (t) => [unique().on(t.userId, t.order), unique().on(t.userId, t.name)],
-);
-
-export const PrismSessions = pgTable(
-  'prism_sessions',
-  {
-    id: text('id')
-      .primaryKey()
-      .$defaultFn(() => createDbId(TableCode.PRISM_SESSIONS)),
-    userId: text('user_id')
-      .notNull()
-      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-    prismAgentId: text('prism_agent_id').notNull().unique(),
-    title: text('title'),
-    archivedAt: datetime('archived_at'),
-    deletedAt: datetime('deleted_at'),
-    createdAt: datetime('created_at')
-      .notNull()
-      .default(sql`now()`),
-    updatedAt: datetime('updated_at')
-      .notNull()
-      .default(sql`now()`),
-  },
-  (t) => [index().on(t.userId, t.updatedAt)],
 );

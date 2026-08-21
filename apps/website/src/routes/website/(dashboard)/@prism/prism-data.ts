@@ -14,3 +14,14 @@ export const fetchSessionLog = async (sessionId: string): Promise<ProjectedStrea
   const data = await mearieClient.query(logQuery, { sessionId }, { fetchPolicy: 'network-only' });
   return data.prismSessionLog.map(toFrame);
 };
+
+const workflowLogQuery = graphql(`
+  query DashboardLayout_PrismPanel_WorkflowLog_Query($workflowId: String!) {
+    prismWorkflowLog(workflowId: $workflowId)
+  }
+`);
+
+export const fetchWorkflowLog = async (workflowId: string): Promise<ProjectedStreamFrame[]> => {
+  const data = await mearieClient.query(workflowLogQuery, { workflowId }, { fetchPolicy: 'network-only' });
+  return data.prismWorkflowLog.map(toFrame);
+};

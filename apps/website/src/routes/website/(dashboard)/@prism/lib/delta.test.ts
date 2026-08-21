@@ -10,22 +10,31 @@ describe('applyDelta', () => {
     live = applyDelta(live, { context: ctx, channel: 'text', offset: 2, data: '하세요' });
     expect(live.text).toBe('안녕하세요');
     live = applyDelta(live, { context: ctx, channel: 'text', offset: 0, data: '다시' });
-    expect(live).toMatchObject({ text: '다시', textBroken: false });
+    expect(live).toMatchObject({ text: '다시', textBroken: false, last: 'text' });
+  });
+  it('합류 재전송(seed) 스냅샷은 seeded를 표시하고 이후 증분에도 유지되며, 새 스냅샷이 오면 해제된다', () => {
+    let live = applyDelta(null, { context: ctx, channel: 'text', offset: 0, data: '누적 전문', seed: true });
+    expect(live.seeded).toBe(true);
+    live = applyDelta(live, { context: ctx, channel: 'text', offset: 5, data: ' 이어짐' });
+    expect(live).toMatchObject({ text: '누적 전문 이어짐', seeded: true });
+    live = applyDelta(live, { context: ctx, channel: 'text', offset: 0, data: '새 턴' });
+    expect(live.seeded).toBe(false);
   });
   it('offset이 건너뛰면 textBroken — 이후 조각은 무시, 스냅샷만 되살린다', () => {
     let live = applyDelta(null, { context: ctx, channel: 'text', offset: 0, data: '가' });
     live = applyDelta(live, { context: ctx, channel: 'text', offset: 5, data: '나' });
-    expect(live).toMatchObject({ text: '가', textBroken: true });
+    expect(live).toMatchObject({ text: '가', textBroken: true, last: 'text' });
     live = applyDelta(live, { context: ctx, channel: 'text', offset: 2, data: '다' });
     expect(live.text).toBe('가');
     live = applyDelta(live, { context: ctx, channel: 'text', offset: 0, data: '전체' });
-    expect(live).toMatchObject({ text: '전체', textBroken: false });
+    expect(live).toMatchObject({ text: '전체', textBroken: false, last: 'text' });
   });
   it('thinking은 누적 글자 수, tool.input은 도구 이름을 받는다', () => {
     let live = applyDelta(null, { context: ctx, channel: 'thinking', chars: 12 });
-    expect(live.thinkingChars).toBe(12);
+    expect(live).toMatchObject({ thinkingChars: 12, last: 'thinking' });
     live = applyDelta(live, { context: ctx, channel: 'tool.input', tool: { id: null, name: 'read' } });
     expect(live.toolInput).toEqual({ name: 'read' });
+    expect(live.last).toBe('tool.input');
   });
   it('다른 (agent,run,turn,attempt)의 조각은 상태를 통째로 갈아 끼운다', () => {
     const live = applyDelta(applyDelta(null, { context: ctx, channel: 'text', offset: 0, data: '가' }), {
@@ -34,7 +43,13 @@ describe('applyDelta', () => {
       offset: 0,
       data: '나',
     });
-    expect(live).toMatchObject({ context: { turn: 3 }, text: '나' });
+    expect(live).toMatchObject({ context: { turn: 3 }, text: '나', last: 'text' });
+  });
+  it('쓰기 뒤 thinking이 오면 last가 thinking이 되고 쓰인 글은 남는다', () => {
+    let live = applyDelta(null, { context: ctx, channel: 'text', offset: 0, data: '안녕' });
+    expect(live.last).toBe('text');
+    live = applyDelta(live, { context: ctx, channel: 'thinking', chars: 3 });
+    expect(live).toMatchObject({ text: '안녕', thinkingChars: 3, last: 'thinking' });
   });
 });
 

@@ -24,16 +24,18 @@ const getEditorHost = (): EditorHost => (editorHost ??= EditorHostCtor.create(ic
 
 const PROSE_VIEWPORT = { width: 800, height: 1000, scale_factor: 1 };
 
-const extractProse = (editorHost: EditorHost, graph: Uint8Array): string | null => {
+const extractProse = (editorHost: EditorHost, graph: Uint8Array): { text: string | null; characterCount: number } => {
+  const characterCount = server.count_characters(server.extract_text(server.to_plain(graph)));
+
   let editor;
   try {
     editor = editorHost.create_editor_from_graph(graph, PROSE_VIEWPORT);
   } catch (err) {
-    if (String(err).toLowerCase().includes('no initial cursor position')) return null;
+    if (String(err).toLowerCase().includes('no initial cursor position')) return { text: null, characterCount };
     throw err;
   }
   try {
-    return editor.prose_text_annotated();
+    return { text: editor.prose_text_annotated(), characterCount };
   } finally {
     editor.free();
   }

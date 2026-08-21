@@ -2,7 +2,9 @@
   import { createFragment } from '@mearie/svelte';
   import { tick } from 'svelte';
   import { setupEditorContext } from '$lib/editor-ffi/editor.svelte';
+  import { getOpenDocuments } from '$lib/prism/open-documents.svelte';
   import { graphql } from '$mearie';
+  import { getPane } from '../@pane/context.svelte';
   import DocumentEditor from './DocumentEditor.svelte';
   import type { DocumentV2_query$key } from '$mearie';
 
@@ -82,11 +84,30 @@
 
   const ctx = setupEditorContext();
 
+  const openDocuments = getOpenDocuments();
+  const pane = getPane();
+
   const entity = $derived(query.data.entity);
   const documentId = $derived(entity?.node.__typename === 'Document' ? entity.node.id : null);
 
   $effect(() => {
     ctx.documentId = documentId;
+  });
+
+  $effect(() => {
+    const node = entity?.node;
+    if (!node || node.__typename !== 'Document') return;
+
+    const paneKey = `${pane.id}:${node.id}`;
+    openDocuments.upsert(paneKey, {
+      id: node.id,
+      title: node.nullableTitle ?? null,
+      subtitle: node.subtitle ?? null,
+      active: focused,
+      charCount: ctx.editor?.characterCounts.docWithWhitespace || node.characterCount,
+    });
+
+    return () => openDocuments.remove(paneKey);
   });
 
   let mounted = $state(true);

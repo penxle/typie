@@ -1,31 +1,48 @@
 import * as Sentry from '@sentry/node';
 import { logger } from '@typie/lib';
+import { PrismWorkflowState } from '@typie/lib/enums';
 import { TypieError } from '@typie/lib/errors';
 import { prismSchema } from '@typie/lib/validation';
 import dayjs from 'dayjs';
 import { and, desc, eq, isNull } from 'drizzle-orm';
 import { Repeater } from 'graphql-yoga';
 import { nanoid } from 'nanoid';
-import { db, first, firstOrThrow, PrismSessions, TableCode, validateDbId } from '#/db/index.ts';
+import { db, first, firstOrThrow, PrismSessions, PrismWorkflows, TableCode, validateDbId } from '#/db/index.ts';
 import { env } from '#/env.ts';
-import { activeRun, newAgentId, prism, PrismApiError, sessionTitleFrom } from '#/external/prism.ts';
+import { activeRun, newAgentId, prism, PrismApiError } from '#/external/prism.ts';
 import { pumpSse } from '#/external/prism-stream.ts';
 import { assertPrismAccess } from '#/utils/prism-access.ts';
 import { parseAllowlist } from '#/utils/prism-access-core.ts';
+import { prismCommands } from '#/utils/prism-catalog.ts';
 import { projectFrame } from '#/utils/prism-events.ts';
+import { routeSessionFrame } from '#/utils/prism-session-stream.ts';
+import { prismTools } from '#/utils/prism-tools.ts';
+import { cancelSessionWorkflows, closeRun, linkWorkflow, settleWorkflow, titleSession } from '#/utils/prism-workflows.ts';
+import { isRunningChildAgent } from '#/utils/prism-workflows-core.ts';
 import { builder } from '../builder.ts';
-import { PrismSession, User } from '../objects.ts';
-import type { ProjectedStreamFrame } from '@typie/prism';
+import { PrismSession, PrismWorkflow, User } from '../objects.ts';
+import type { ProjectedStreamFrame, StreamFrame } from '@typie/prism';
+import type { PrismWorkflowRow } from '#/utils/prism-apps.ts';
+import type { ProjectedScope } from '#/utils/prism-events.ts';
 
 const log = logger.getChild('prism');
 
 const IDLE_MS = 45_000;
 const RECONNECT_DELAY_MS = 1000;
 
+const PrismWorkflowCursorInput = builder.inputType('PrismWorkflowCursorInput', {
+  fields: (t) => ({
+    workflowId: t.string(),
+    cursor: t.int(),
+  }),
+});
+
 const toTypieError = (err: unknown): TypieError => {
   if (err instanceof PrismApiError) {
     log.warn('prism-api rejected: {code} ({status})', { code: err.code, status: err.status });
     if (err.code === 'run-active') return new TypieError({ code: 'prism_run_active', status: 409 });
+    if (err.code === 'no-pending-tool') return new TypieError({ code: 'prism_tool_settled', status: 409 });
+    if (err.code === 'unknown-command') return new TypieError({ code: 'prism_unknown_command', status: 409 });
     if (err.status >= 500 || err.code === 'internal' || err.code === 'malformed-response')
       return new TypieError({ code: 'prism_unavailable', status: 502 });
     return new TypieError({ code: `prism_rejected:${err.code}`, status: err.status });
@@ -35,11 +52,11 @@ const toTypieError = (err: unknown): TypieError => {
   return new TypieError({ code: 'prism_unavailable', status: 502 });
 };
 
-const prismError = (err: unknown): never => {
+export const prismError = (err: unknown): never => {
   throw toTypieError(err);
 };
 
-const ownedSession = async (sessionId: string, userId: string) => {
+export const ownedSession = async (sessionId: string, userId: string) => {
   const session = await db
     .select()
     .from(PrismSessions)
@@ -48,6 +65,14 @@ const ownedSession = async (sessionId: string, userId: string) => {
   if (!session) throw new TypieError({ code: 'not_found', status: 404 });
   return session;
 };
+
+const PrismCommand = builder.simpleObject('PrismCommand', {
+  fields: (t) => ({
+    name: t.string(),
+    description: t.string(),
+    argumentHint: t.string({ nullable: true }),
+  }),
+});
 
 PrismSession.implement({
   fields: (t) => ({
@@ -59,9 +84,30 @@ PrismSession.implement({
   }),
 });
 
+PrismWorkflow.implement({
+  fields: (t) => ({
+    id: t.exposeID('id'),
+    prismWorkflowId: t.exposeString('prismWorkflowId'),
+    app: t.exposeString('app'),
+    name: t.exposeString('name'),
+    state: t.expose('state', { type: PrismWorkflowState }),
+    startedAt: t.expose('startedAt', { type: 'DateTime' }),
+    finishedAt: t.expose('finishedAt', { type: 'DateTime', nullable: true }),
+  }),
+});
+
 builder.objectFields(User, (t) => ({
   prismAccess: t.boolean({
     resolve: (self, _, ctx) => ctx.session?.userId === self.id && parseAllowlist(env.PRISM_BETA_USER_IDS).includes(self.id),
+  }),
+
+  prismCommands: t.field({
+    type: [PrismCommand],
+    nullable: true,
+    resolve: async (self, _, ctx) => {
+      if (ctx.session?.userId !== self.id || !parseAllowlist(env.PRISM_BETA_USER_IDS).includes(self.id)) return null;
+      return prismCommands();
+    },
   }),
 
   prismSessions: t.field({
@@ -85,6 +131,12 @@ builder.objectFields(User, (t) => ({
 }));
 
 builder.queryFields((t) => ({
+  prismSession: t.withAuth({ session: true }).field({
+    type: PrismSession,
+    args: { sessionId: t.arg.id({ validate: validateDbId(TableCode.PRISM_SESSIONS) }) },
+    resolve: (_, args, ctx) => ownedSession(args.sessionId, ctx.session.userId),
+  }),
+
   prismSessionLog: t.withAuth({ session: true }).field({
     type: ['JSON'],
     args: {
@@ -96,8 +148,32 @@ builder.queryFields((t) => ({
       const { events, sync } = await prism
         .readAgentEventsUntilSync(session.prismAgentId, args.cursor, new AbortController().signal)
         .catch(prismError);
-      const projected = events.map((event) => projectFrame({ type: 'event', event })).filter((frame) => frame !== null);
+      const titled = events
+        .map((event) => routeSessionFrame({ type: 'event', event }))
+        .findLast((route): route is { kind: 'titled'; title: string } => route?.kind === 'titled');
+      if (titled && titled.title !== session.title) await titleSession(session.id, titled.title);
+      const projected = events
+        .map((event) => projectFrame({ type: 'event', event }, { source: 'SESSION' }))
+        .filter((frame) => frame !== null);
       return [...projected, { type: 'sync', seq: sync } satisfies ProjectedStreamFrame];
+    },
+  }),
+
+  prismWorkflowLog: t.withAuth({ session: true }).field({
+    type: ['JSON'],
+    args: {
+      workflowId: t.arg.string(),
+    },
+    resolve: async (_, args, ctx) => {
+      const workflow = await db.select().from(PrismWorkflows).where(eq(PrismWorkflows.prismWorkflowId, args.workflowId)).then(first);
+      if (!workflow) throw new TypieError({ code: 'not_found', status: 404 });
+      await ownedSession(workflow.sessionId, ctx.session.userId);
+      const { events } = await prism
+        .readWorkflowEventsUntilSync(workflow.prismWorkflowId, 0, new AbortController().signal)
+        .catch(prismError);
+      return events
+        .map((event) => projectFrame({ type: 'event', event }, { source: 'WORKFLOW', workflowId: workflow.prismWorkflowId }))
+        .filter((frame): frame is ProjectedStreamFrame => frame !== null);
     },
   }),
 }));
@@ -121,9 +197,10 @@ builder.mutationFields((t) => ({
       if (input.sessionId) {
         const session = await ownedSession(input.sessionId, ctx.session.userId);
         const { runSeq } = await prism.resumeAgent(session.prismAgentId, { message, key }).catch(prismError);
+        if (session.openRunSeq !== null && session.openRunSeq !== runSeq) await closeRun(session.id, session.openRunSeq);
         const updated = await db
           .update(PrismSessions)
-          .set({ updatedAt: dayjs() })
+          .set({ updatedAt: dayjs(), openRunSeq: runSeq })
           .where(eq(PrismSessions.id, session.id))
           .returning()
           .then(firstOrThrow);
@@ -133,10 +210,79 @@ builder.mutationFields((t) => ({
       const { runSeq } = await prism.invokeAgent({ agentId, message, key, metadata: { userId: ctx.session.userId } }).catch(prismError);
       const session = await db
         .insert(PrismSessions)
-        .values({ userId: ctx.session.userId, prismAgentId: agentId, title: sessionTitleFrom(message) })
+        .values({ userId: ctx.session.userId, prismAgentId: agentId, openRunSeq: runSeq })
         .returning()
         .then(firstOrThrow);
       return { session, runSeq };
+    },
+  }),
+
+  resolvePrismTool: t.withAuth({ session: true }).fieldWithInput({
+    type: PrismSession,
+    input: {
+      sessionId: t.input.id({ validate: validateDbId(TableCode.PRISM_SESSIONS) }),
+      agentId: t.input.string({ required: false }),
+      toolCallId: t.input.string(),
+      input: t.input.field({ type: 'JSON' }),
+    },
+    resolve: async (_, { input }, ctx) => {
+      await assertPrismAccess({ userId: ctx.session.userId });
+      const session = await ownedSession(input.sessionId, ctx.session.userId);
+
+      let agentId = session.prismAgentId;
+      if (input.agentId && input.agentId !== session.prismAgentId) {
+        const rows = await db
+          .select({ prismWorkflowId: PrismWorkflows.prismWorkflowId })
+          .from(PrismWorkflows)
+          .where(and(eq(PrismWorkflows.sessionId, session.id), eq(PrismWorkflows.state, 'RUNNING')));
+
+        let allowed = false;
+        let looked = false;
+        let lookupError: unknown = null;
+        for (const row of rows) {
+          try {
+            const { invocations } = await prism.getWorkflow(row.prismWorkflowId);
+            looked = true;
+            if (isRunningChildAgent(invocations, input.agentId)) {
+              allowed = true;
+              break;
+            }
+          } catch (err) {
+            lookupError = err;
+            log.warn('workflow lookup failed for {id}: {*}', { id: row.prismWorkflowId, error: err });
+          }
+        }
+        if (!allowed && !looked && lookupError !== null) prismError(lookupError);
+        if (!allowed) throw new TypieError({ code: 'not_found', status: 404 });
+        agentId = input.agentId;
+      }
+
+      const agent = await prism.getAgent(agentId).catch(prismError);
+      if (!agent.pending || agent.pending.toolCallId !== input.toolCallId) {
+        throw new TypieError({ code: 'prism_tool_settled', status: 409 });
+      }
+
+      const handler = prismTools[agent.pending.tool];
+      let result = input.input;
+      if (handler) {
+        try {
+          result = await handler({ userId: ctx.session.userId, session, toolCallId: input.toolCallId, agent }, input.input);
+        } catch (err) {
+          if (err instanceof TypieError) throw err;
+          prismError(err);
+        }
+      }
+
+      await prism.resolveTool(agentId, input.toolCallId, result).catch(prismError);
+
+      const running = agentId === session.prismAgentId ? activeRun(agent.runs) : null;
+
+      return db
+        .update(PrismSessions)
+        .set(running ? { updatedAt: dayjs(), openRunSeq: running.runSeq } : { updatedAt: dayjs() })
+        .where(eq(PrismSessions.id, session.id))
+        .returning()
+        .then(firstOrThrow);
     },
   }),
 
@@ -146,6 +292,7 @@ builder.mutationFields((t) => ({
     resolve: async (_, { input }, ctx) => {
       await assertPrismAccess({ userId: ctx.session.userId });
       const session = await ownedSession(input.sessionId, ctx.session.userId);
+      await cancelSessionWorkflows(session.id);
       const agent = await prism.getAgent(session.prismAgentId).catch(prismError);
       const running = activeRun(agent.runs);
       if (running) await prism.cancelAgentRun(session.prismAgentId, running.runSeq).catch(prismError);
@@ -176,7 +323,6 @@ builder.mutationFields((t) => ({
     },
   }),
 
-  // 개명은 updatedAt을 건드리지 않는다 — 목록 정렬·그룹은 "마지막 대화" 기준이고 제목 정리는 대화가 아니다.
   renamePrismSession: t.withAuth({ session: true }).fieldWithInput({
     type: PrismSession,
     input: {
@@ -194,15 +340,15 @@ builder.mutationFields((t) => ({
     },
   }),
 
-  // soft delete(오너 결정) — 행은 남고 목록·소유 검사에서만 사라진다. prism 측 에이전트 DO는 건드리지 않는다.
   deletePrismSession: t.withAuth({ session: true }).fieldWithInput({
     type: PrismSession,
     input: { sessionId: t.input.id({ validate: validateDbId(TableCode.PRISM_SESSIONS) }) },
     resolve: async (_, { input }, ctx) => {
-      await ownedSession(input.sessionId, ctx.session.userId);
+      const session = await ownedSession(input.sessionId, ctx.session.userId);
+      await cancelSessionWorkflows(session.id);
       return db
         .update(PrismSessions)
-        .set({ deletedAt: dayjs() })
+        .set({ deletedAt: dayjs(), openRunSeq: null })
         .where(eq(PrismSessions.id, input.sessionId))
         .returning()
         .then(firstOrThrow);
@@ -216,35 +362,141 @@ builder.subscriptionFields((t) => ({
     args: {
       sessionId: t.arg.id({ validate: validateDbId(TableCode.PRISM_SESSIONS) }),
       cursor: t.arg.int({ required: false }),
+      workflows: t.arg({ type: [PrismWorkflowCursorInput], required: false }),
     },
     subscribe: async (_, args, ctx) => {
       const session = await ownedSession(args.sessionId, ctx.session.userId);
+      const workflowCursors = new Map((args.workflows ?? []).map((workflow) => [workflow.workflowId, workflow.cursor]));
       return new Repeater<ProjectedStreamFrame>(async (push, stop) => {
         const controller = new AbortController();
         void stop.then(() => controller.abort());
-        let cursor = args.cursor ?? 0;
-        try {
+        const attached = new Set<string>();
+        const pumps: Promise<void>[] = [];
+
+        const pumpUpstream = async (opts: {
+          open: (cursor: number) => Promise<ReadableStream<Uint8Array>>;
+          scope: ProjectedScope;
+          cursor: number;
+          onFrame: (frame: StreamFrame) => Promise<void>;
+          isTerminal: () => boolean;
+        }) => {
+          let cursor = opts.cursor;
           while (!controller.signal.aborted) {
             try {
-              const stream = await prism.openAgentEvents(session.prismAgentId, cursor, controller.signal);
+              const stream = await opts.open(cursor);
+              let seeding = false;
+              const seeded = new Set<string>();
               const outcome = await pumpSse({
                 stream,
                 idleMs: IDLE_MS,
                 signal: controller.signal,
                 onFrame: async (frame) => {
-                  if (frame.type === 'event') cursor = frame.event.seq;
-                  const projected = projectFrame(frame);
+                  if (frame.type === 'event') {
+                    cursor = frame.event.seq;
+                    seeding = false;
+                  } else if (frame.type === 'sync') {
+                    seeding = true;
+                    seeded.clear();
+                  }
+                  await opts.onFrame(frame);
+                  let projected = projectFrame(frame, opts.scope);
+                  if (seeding && frame.type === 'delta' && projected?.type === 'delta') {
+                    const wire = frame.delta;
+                    const key = `${wire.context.agent.id}|${wire.channel}|${wire.channel === 'tool.input' ? (wire.tool.id ?? wire.tool.name) : ''}`;
+                    if (seeded.has(key)) {
+                      seeding = false;
+                    } else {
+                      seeded.add(key);
+                      projected = { ...projected, delta: { ...projected.delta, seed: true } };
+                    }
+                  }
                   if (projected !== null) await push(projected);
                 },
               });
-              if (outcome === 'aborted') break;
+              if (outcome === 'aborted') return;
+              if (outcome === 'closed') {
+                if (opts.isTerminal()) return;
+                log.warn('prism stream closed before terminal, reconnecting: {source} {workflowId} (seq {cursor})', {
+                  source: opts.scope.source,
+                  workflowId: opts.scope.source === 'WORKFLOW' ? opts.scope.workflowId : null,
+                  cursor,
+                });
+              }
             } catch (err) {
-              if (controller.signal.aborted) break;
+              if (controller.signal.aborted) return;
               if (!(err instanceof PrismApiError) || err.status < 500) throw err;
               log.warn('prism stream reconnect after upstream failure: {code} ({status})', { code: err.code, status: err.status });
             }
             await new Promise((resolve) => setTimeout(resolve, RECONNECT_DELAY_MS));
           }
+        };
+
+        const attachWorkflow = (row: PrismWorkflowRow) => {
+          const workflowId = row.prismWorkflowId;
+          if (attached.has(workflowId)) return;
+          attached.add(workflowId);
+          let terminalSeen = false;
+          pumps.push(
+            pumpUpstream({
+              open: (cursor) => prism.openWorkflowEvents(workflowId, cursor, controller.signal),
+              scope: { source: 'WORKFLOW', workflowId },
+              cursor: workflowCursors.get(workflowId) ?? 0,
+              isTerminal: () => terminalSeen,
+              onFrame: async (frame) => {
+                if (routeSessionFrame(frame)?.kind === 'workflow-terminal') {
+                  terminalSeen = true;
+                  await prism
+                    .getWorkflow(workflowId)
+                    .then((state) => settleWorkflow(row, state))
+                    .catch((err) => log.error('prism workflow settle failed {workflowId} {*}', { workflowId, error: err }));
+                }
+              },
+            }).catch((err) => {
+              if (controller.signal.aborted) return;
+              log.error('prism workflow stream stopped: {workflowId} {*}', { workflowId, error: err });
+            }),
+          );
+        };
+
+        try {
+          const running = await db
+            .select()
+            .from(PrismWorkflows)
+            .where(and(eq(PrismWorkflows.sessionId, session.id), eq(PrismWorkflows.state, 'RUNNING')));
+          for (const row of running) {
+            attachWorkflow(row);
+          }
+
+          await pumpUpstream({
+            open: (cursor) => prism.openAgentEvents(session.prismAgentId, cursor, controller.signal),
+            scope: { source: 'SESSION' },
+            cursor: args.cursor ?? 0,
+            isTerminal: () => false,
+            onFrame: async (frame) => {
+              const route = routeSessionFrame(frame);
+              if (route?.kind === 'workflow-started') {
+                try {
+                  const row = await linkWorkflow(session.id, route.workflowId);
+                  if (row.sessionId !== session.id) {
+                    log.warn('prism workflow belongs to another session: {workflowId}', { workflowId: route.workflowId });
+                    return;
+                  }
+                  attachWorkflow(row);
+                } catch (err) {
+                  log.warn('prism workflow attach failed: {workflowId} {*}', { workflowId: route.workflowId, error: err });
+                }
+              } else if (route?.kind === 'invocation-retried' && frame.type === 'event') {
+                log.warn('prism invocation retried, not reattaching (seq {seq})', { seq: frame.event.seq });
+              } else if (route?.kind === 'run-terminal') {
+                await closeRun(session.id, route.runSeq).catch((err) =>
+                  log.warn('prism close-run failed: {runSeq} {*}', { runSeq: route.runSeq, error: err }),
+                );
+              } else if (route?.kind === 'titled') {
+                await titleSession(session.id, route.title).catch((err) => log.warn('prism title failed: {*}', { error: err }));
+              }
+            },
+          });
+          await Promise.all(pumps);
           stop();
         } catch (err) {
           if (controller.signal.aborted) stop();

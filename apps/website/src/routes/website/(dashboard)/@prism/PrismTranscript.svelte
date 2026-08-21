@@ -3,20 +3,94 @@
   import { flex } from '@typie/styled-system/patterns';
   import { Icon } from '@typie/ui/components';
   import { tick, untrack } from 'svelte';
+  import { fade } from 'svelte/transition';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import PyramidIcon from '~icons/lucide/pyramid';
+  import { fadeIn, rise } from './lib/motion.ts';
   import { PacedText } from './lib/paced-text.svelte.ts';
+  import { foldToolCalls } from './lib/tool-calls.ts';
   import PrismMarkdown from './PrismMarkdown.svelte';
   import PrismMessage from './PrismMessage.svelte';
-  import type { Transcript } from './lib/conversation.ts';
+  import PrismSpinner from './PrismSpinner.svelte';
+  import PrismToolCalls from './PrismToolCalls.svelte';
+  import PrismToolRequest from './PrismToolRequest.svelte';
+  import PrismWorkflow from './PrismWorkflow.svelte';
+  import { toolCallLabels, toolCards } from './tools/index.ts';
+  import type { Transcript, TranscriptMessage } from './lib/conversation.ts';
 
   type Props = {
     transcript: Transcript;
     loading: boolean;
     pending: string | null;
+    sessionId: string | null;
+    failedIds: ReadonlySet<string>;
+    reconnecting: boolean;
+    onResolve: (agentId: string, toolCallId: string, input: unknown) => Promise<void>;
+    onRetry: (toolCallId: string) => void;
+    onLoadTrace: (workflowId: string) => Promise<void>;
   };
 
-  let { transcript, loading, pending }: Props = $props();
+  let { transcript, loading, pending, sessionId, failedIds, reconnecting, onResolve, onRetry, onLoadTrace }: Props = $props();
+
+  const foldable = (message: TranscriptMessage) =>
+    (message.role === 'tool' && message.phase === 'executed' && message.ok !== false) ||
+    (message.role === 'tool-request' &&
+      message.workflowId === undefined &&
+      toolCards[message.tool] === undefined &&
+      message.status !== 'pending');
+
+  const labelOf = (message: TranscriptMessage) =>
+    message.role === 'tool' || message.role === 'tool-request'
+      ? (toolCallLabels[message.role === 'tool' ? message.name : message.tool] ?? null)
+      : null;
+
+  const dropped = (message: TranscriptMessage) =>
+    (message.role === 'tool-request' && message.workflowId !== undefined) || (message.role === 'tool' && !foldable(message));
+
+  const entries = $derived(
+    foldToolCalls(
+      transcript.messages.filter((message) => !dropped(message)),
+      foldable,
+      labelOf,
+    ),
+  );
+
+  let settled = $state(false);
+
+  $effect(() => {
+    if (loading) {
+      return;
+    }
+
+    void tick().then(() => (settled = true));
+  });
+
+  const entryClass = flex({ flexDirection: 'column' });
+
+  const LATE_MS = 30_000;
+
+  let lastBeat = $state(Date.now());
+  let nowTick = $state(Date.now());
+
+  $effect.pre(() => {
+    void transcript.cursor;
+    void transcript.live;
+    void pending;
+    lastBeat = Date.now();
+  });
+
+  const ticking = $derived(pending !== null || transcript.turn === 'active');
+
+  $effect(() => {
+    if (!ticking) {
+      return;
+    }
+
+    const id = setInterval(() => (nowTick = Date.now()), 1000);
+    return () => clearInterval(id);
+  });
+
+  const late = $derived(nowTick - lastBeat >= LATE_MS);
 
   const MAX_FRAME_MS = 100;
 
@@ -45,6 +119,11 @@
 
         liveKey = key;
         live = key === '' ? null : newPaced();
+
+        if (live !== null && turn?.seeded) {
+          live.retarget(turn.textBroken ? '' : turn.text);
+          live.skip();
+        }
       });
     }
 
@@ -80,7 +159,6 @@
       }
       if (settled) drains = drains.filter(({ paced }) => !paced.done);
 
-      // 추종 스크롤 스무딩 — 콘텐츠는 줄 단위로 자라므로 즉시 붙이면 줄바꿈마다 튄다.
       if (follow && container) {
         const target = container.scrollHeight - container.clientHeight;
         const gap = target - container.scrollTop;
@@ -119,7 +197,7 @@
     void tick().then(() => element.scrollTo({ top: element.scrollHeight }));
   });
 
-  const shimmer = css({
+  const shimmerClass = css({
     width: '[fit-content]',
     color: '[transparent]',
     backgroundImage: '[linear-gradient(90deg, token(colors.text.faint) 30%, token(colors.text.default) 50%, token(colors.text.faint) 70%)]',
@@ -129,9 +207,6 @@
     _motionReduce: { animation: 'none', color: 'text.faint', backgroundImage: 'none' },
   });
 
-  // 해제는 방향으로 판정한다 — 추종 스크롤은 항상 아래로만 움직이므로, scrollTop 감소는 사용자가
-  // 위로 올렸다는 뜻이다(콘텐츠 축소로 인한 클램프 감소는 바닥 밀착이라 gap 조건이 거른다).
-  // 재추종은 사용자가 실제 바닥에 닿았을 때만 — 근처 문턱으로 미리 낚아채면 스냅으로 느껴진다.
   let lastTop = 0;
 
   const onScroll = () => {
@@ -162,12 +237,21 @@
   };
 
   $effect(() => {
-    if (!container || !content) return;
-    const observer = new ResizeObserver(updateOverflow);
-    observer.observe(container);
+    const scroller = container;
+    if (!scroller || !content) return;
+    const observer = new ResizeObserver(() => {
+      if (follow && !active) {
+        scroller.scrollTop = scroller.scrollHeight - scroller.clientHeight;
+      }
+      updateOverflow();
+    });
+    observer.observe(scroller);
     observer.observe(content);
     return () => observer.disconnect();
   });
+
+  const liveRowStyle = flex.raw({ alignItems: 'center', minHeight: '20px' });
+  const lateRowClass = css(liveRowStyle, { gap: '8px', fontSize: '12px', color: 'text.faint' });
 
   const maskImage = $derived.by(() => {
     if (!overflowTop && !overflowBottom) return;
@@ -176,6 +260,19 @@
     return `linear-gradient(to bottom, ${from}, ${to})`;
   });
 </script>
+
+{#snippet waiting(label: string)}
+  {#if late}
+    <div class={lateRowClass} in:fade={fadeIn}>
+      <PrismSpinner label="응답이 늦어지고 있어요" />
+      <span>응답이 늦어지고 있어요</span>
+    </div>
+  {:else}
+    <div class={css(liveRowStyle)} in:fade={fadeIn}>
+      <PrismSpinner {label} />
+    </div>
+  {/if}
+{/snippet}
 
 <div class={flex({ position: 'relative', flexDirection: 'column', flexGrow: '1', minHeight: '0' })}>
   <div
@@ -209,13 +306,36 @@
         </div>
       {/if}
 
-      {#each transcript.messages as message (message.key)}
-        {@const drain = drainOf(message.key)}
-        {#if drain}
-          <PrismMarkdown blocks={drain.paced.blocks} plain={drain.paced.plain} />
-        {:else}
-          <PrismMessage {message} />
-        {/if}
+      {#each entries as entry (entry.key)}
+        {@const drain = drainOf(entry.key)}
+        <div class={entryClass} in:rise={{ skip: !settled || entry.role === 'user' || entry.role === 'assistant' }}>
+          {#if entry.role === 'tool-calls'}
+            <PrismToolCalls count={entry.count} rows={entry.rows} />
+          {:else if drain}
+            <PrismMarkdown blocks={drain.paced.blocks} plain={drain.paced.plain} />
+          {:else if entry.role === 'tool-request'}
+            <PrismToolRequest {failedIds} message={entry} {onRetry} resolve={onResolve} {transcript} />
+          {:else if entry.role === 'run-failed'}
+            <div class={css({ alignSelf: 'center', fontSize: '11px', color: 'text.danger' })}>
+              응답을 마치지 못했어요 — 다시 보내 주세요
+            </div>
+          {:else if entry.role === 'workflow'}
+            {#if sessionId !== null}
+              <PrismWorkflow
+                {failedIds}
+                loadTrace={onLoadTrace}
+                message={entry}
+                {onRetry}
+                {reconnecting}
+                resolve={onResolve}
+                {sessionId}
+                {transcript}
+              />
+            {/if}
+          {:else}
+            <PrismMessage message={entry} />
+          {/if}
+        </div>
       {/each}
 
       {#if pending !== null}
@@ -240,33 +360,27 @@
       {/if}
 
       {#if pending !== null && !transcript.live && transcript.run !== 'running'}
-        <div class={css({ fontSize: '14px' })}>
-          <span class={shimmer}>생각하는 중…</span>
-        </div>
+        {@render waiting('보내는 중')}
       {/if}
 
       {#if transcript.live && live}
-        {#if live.boundary === 0 && transcript.live.toolInput}
-          <div class={css({ fontSize: '14px' })}>
-            <span class={shimmer}>{transcript.live.toolInput.name} 준비 중…</span>
+        {#if live.boundary === 0 && transcript.live.last === 'tool.input' && transcript.live.toolInput}
+          <div class={css(liveRowStyle)} in:fade={fadeIn}>
+            <PrismSpinner label="도구를 준비하는 중" />
           </div>
-        {:else if live.boundary === 0 && transcript.live.thinkingChars > 0}
-          <div class={css({ fontSize: '14px' })}>
-            <span class={shimmer}>생각하는 중…</span>
+        {:else if live.boundary === 0 && transcript.live.last === 'thinking' && transcript.live.thinkingChars > 0}
+          <div class={css(liveRowStyle, { fontSize: '14px' })} in:fade={fadeIn}>
+            <span class={shimmerClass}>생각하는 중…</span>
           </div>
         {:else if live.boundary > 0}
           <PrismMarkdown blocks={live.blocks} plain={live.plain} />
+        {:else}
+          <div class={css(liveRowStyle)} in:fade={fadeIn}>
+            <PrismSpinner label="응답을 기다리는 중" />
+          </div>
         {/if}
-      {:else if transcript.run === 'running'}
-        <div class={css({ fontSize: '14px' })}>
-          <span class={shimmer}>{transcript.retrying ? '다시 시도하는 중…' : '생각하는 중…'}</span>
-        </div>
-      {/if}
-
-      {#if transcript.run === 'failed'}
-        <div class={css({ alignSelf: 'center', fontSize: '11px', color: 'text.danger' })}>응답을 마치지 못했어요 — 다시 보내 주세요</div>
-      {:else if transcript.run === 'canceled'}
-        <div class={css({ alignSelf: 'center', fontSize: '11px', color: 'text.faint' })}>중단됨</div>
+      {:else if transcript.turn === 'active'}
+        {@render waiting(transcript.retrying ? '다시 시도하는 중' : '응답을 기다리는 중')}
       {/if}
     </div>
   </div>

@@ -33,6 +33,10 @@ export const keyframes = defineKeyframes({
     from: { backgroundPosition: '200% 0' },
     to: { backgroundPosition: '-200% 0' },
   },
+  'prism-spin': {
+    from: { transform: 'rotateY(0deg)' },
+    to: { transform: 'rotateY(360deg)' },
+  },
   breathe: {
     '0%, 100%': { transform: 'scale(0.94)', opacity: '85' },
     '50%': { transform: 'scale(1.05)', opacity: '100' },

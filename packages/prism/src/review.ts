@@ -1,0 +1,72 @@
+import { z } from 'zod';
+
+export const PRISM_REVIEW_TIERS = ['low', 'medium', 'high'] as const;
+export type PrismReviewTierName = (typeof PRISM_REVIEW_TIERS)[number];
+
+export type ReviewRange = { start: number; end: number };
+export type Anchor = ReviewRange & { head: string; tail: string };
+export type Pass = 'judgment' | 'stylistic';
+export type ReviewVerdict = 'resolved' | 'kept' | 'withdrawn';
+
+export type ReviewIssue = { id?: string; trait: string; pass: Pass; body: string | null; anchors: Anchor[]; thread?: string };
+
+export type ReviewThreadDisposition = {
+  threadId: string;
+  verdict: ReviewVerdict;
+  comment: string | null;
+};
+
+export type ReviewDiagnostics = {
+  dropped: { trait: string; count: number }[];
+  gaps: (string | null)[];
+  scope?: { changed: number; affected: number; out: number };
+  withheld: {
+    kind: string;
+    head: string;
+    reading: string | null;
+    disposition: 'explained' | 'withheld';
+    note: string | null;
+  }[];
+};
+
+export type ReviewResult = {
+  version: 1;
+  kind: 'feedback';
+  issues: ReviewIssue[];
+  conclusion: {
+    understanding: string | null;
+    progress?: string | null;
+    strengths?: (Anchor & { body: string | null })[];
+    patterns: { theme: string | null; body: string; issues: string[] }[];
+    priorities: { body: string; issues: string[] }[];
+  };
+  dispositions?: ReviewThreadDisposition[];
+  verdicts?: { trait: string; point: number; note: string | null }[];
+  elevations?: { trait: string; body: string; anchors: Anchor[] }[];
+  diagnostics?: ReviewDiagnostics;
+};
+
+export type IssuesResult = { version: 1; kind: 'issues'; issues: ReviewIssue[]; dispositions?: ReviewThreadDisposition[] };
+
+export type ReviewRejectionCategory = 'diary' | 'practical' | 'non-text' | 'non-korean' | 'unprocessable' | 'unclassifiable';
+
+export type ReviewRejection = {
+  version: 1;
+  kind: 'rejected';
+  rejected: { category: ReviewRejectionCategory; message: string; basis: string | null };
+};
+
+export type ReviewOutcome = ReviewResult | IssuesResult | ReviewRejection;
+
+export const ConfirmHintSchema = z.object({ documentId: z.string().optional(), tier: z.enum(PRISM_REVIEW_TIERS).optional() });
+export type ConfirmHint = z.infer<typeof ConfirmHintSchema>;
+
+export const ConfirmDecisionSchema = z.discriminatedUnion('decision', [
+  z.object({
+    decision: z.literal('confirmed'),
+    key: z.string(),
+    tier: z.enum(PRISM_REVIEW_TIERS),
+    document: z.object({ title: z.string().nullable(), subtitle: z.string().nullable(), path: z.string() }),
+  }),
+  z.object({ decision: z.literal('declined') }),
+]);

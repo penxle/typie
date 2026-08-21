@@ -22,6 +22,7 @@
   import { desktop } from '$lib/desktop';
   import { fanOutResourceUpdate } from '$lib/editor-ffi/registry';
   import { hydrateQuery } from '$lib/graphql';
+  import { setupOpenDocuments } from '$lib/prism/open-documents.svelte';
   import { isLegacyTrial, shouldShowOnboarding } from '$lib/subscription-logic';
   import { initWasm } from '$lib/wasm-ffi.svelte';
   import { graphql } from '$mearie';
@@ -151,6 +152,7 @@
   });
 
   setupEditorRegistry();
+  setupOpenDocuments();
 
   $effect(() => {
     if (!app.preference.current.currentSiteId) {
