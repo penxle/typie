@@ -82,6 +82,24 @@ describe('applyFrame', () => {
     expect(t.messages.at(-1)).toMatchObject({ role: 'assistant', text: '안녕하세요', toolCalls: [{ id: 'c1', name: 'read' }], at: 1002 });
   });
 
+  it('델타가 흘러온 턴의 assistant 메시지는 streamed로 표시된다', () => {
+    let t = reduce([ev(1, 'run.started', run, { message: 'a' })]);
+    t = applyFrame(t, { type: 'delta', delta: { context: turn, channel: 'text', offset: 0, data: '안녕하' } });
+    t = applyFrame(t, { type: 'delta', delta: { context: turn, channel: 'text', offset: 3, data: '세요' } });
+    t = applyFrame(t, ev(2, 'turn.completed', turn, { text: '안녕하세요', toolCalls: [] }));
+    expect(t.messages.at(-1)).toMatchObject({ role: 'assistant', streamed: true });
+  });
+
+  it('델타 없이 닫힌 턴과 seed로 받은 턴은 streamed가 아니다', () => {
+    const noDelta = reduce([ev(1, 'run.started', run, { message: 'a' }), ev(2, 'turn.completed', turn, { text: '안녕', toolCalls: [] })]);
+    expect(noDelta.messages.at(-1)).toMatchObject({ role: 'assistant', streamed: false });
+
+    let seeded = reduce([ev(1, 'run.started', run, { message: 'a' })]);
+    seeded = applyFrame(seeded, { type: 'delta', delta: { context: turn, channel: 'text', offset: 0, data: '안녕', seed: true } });
+    seeded = applyFrame(seeded, ev(2, 'turn.completed', turn, { text: '안녕', toolCalls: [] }));
+    expect(seeded.messages.at(-1)).toMatchObject({ role: 'assistant', streamed: false });
+  });
+
   it('텍스트도 toolCalls도 없는 turn.completed는 메시지를 만들지 않는다', () => {
     const t = reduce([ev(1, 'run.started', run, { message: 'a' }), ev(2, 'turn.completed', turn, { text: null, toolCalls: [] })]);
     expect(t.messages).toHaveLength(1);

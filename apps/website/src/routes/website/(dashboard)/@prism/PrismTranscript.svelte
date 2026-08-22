@@ -106,8 +106,11 @@
   let follow = $state(true);
   let chase = $state(false);
 
+  let anchored = false;
+
   const chaseBottom = (element: HTMLElement) => {
-    if (reduceMotion) {
+    if (reduceMotion || !anchored) {
+      anchored = !loading;
       element.scrollTop = element.scrollHeight - element.clientHeight;
       return;
     }
@@ -125,11 +128,16 @@
 
     if (key !== liveKey) {
       untrack(() => {
-        if (live !== null && key === '') {
+        if (key === '') {
           const sealed = transcript.messages.at(-1);
-          if (sealed?.role === 'assistant' && sealed.text !== null && live.boundary > 0) {
-            live.finalize(sealed.text);
-            if (!live.done) drains = [...drains, { key: sealed.key, paced: live }];
+          // 프레임이 뭉쳐 도착하면 live가 만들어지기 전에 턴이 닫힌다 — 실시간 여부는 모델이 기록한 streamed로 판정한다.
+          if (sealed?.role === 'assistant' && sealed.text !== null && (live?.boundary ?? 0) > 0) {
+            live?.finalize(sealed.text);
+            if (live !== null && !live.done) drains = [...drains, { key: sealed.key, paced: live }];
+          } else if (sealed?.role === 'assistant' && sealed.text !== null && sealed.streamed) {
+            const paced = live ?? newPaced();
+            paced.finalize(sealed.text);
+            if (!paced.done) drains = [...drains, { key: sealed.key, paced }];
           }
         }
 
@@ -152,6 +160,17 @@
   });
 
   const active = $derived(live !== null || drains.length > 0);
+  const draining = $derived(drains.some((entry) => !entry.paced.done));
+
+  // 배출이 끝나기 전에 뒤 블록을 세우면 표시 순서가 역전되고, 자라는 텍스트가 그 블록을 밀어낸다.
+  const gated = $derived.by(() => {
+    const pending = entries.findIndex((entry) => {
+      const drain = drains.find((entry_) => entry_.key === entry.key);
+      return drain !== undefined && !drain.paced.done;
+    });
+
+    return pending === -1 ? entries : entries.slice(0, pending + 1);
+  });
 
   $effect(() => {
     if (!active && !chase) {
@@ -351,7 +370,7 @@
         ></div>
       {/if}
 
-      {#each entries as entry (entry.key)}
+      {#each gated as entry (entry.key)}
         {@const drain = drainOf(entry.key)}
         <div
           class={entryClass}
@@ -407,7 +426,7 @@
         </div>
       {/if}
 
-      {#if transcript.live && live && live.boundary > 0}
+      {#if transcript.live && live && live.boundary > 0 && !draining}
         <PrismMarkdown blocks={live.blocks} plain={live.plain} />
       {/if}
 

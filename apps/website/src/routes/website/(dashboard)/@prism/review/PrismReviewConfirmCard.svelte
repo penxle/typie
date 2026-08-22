@@ -175,7 +175,9 @@
       <span class={ellipsisClass}>{chosenTitle || (decided ? '제목 없음' : '—')}</span>
     </div>
   {:else if documents.length === 0}
-    <p class={css({ color: 'text.subtle', marginBottom: '10px' })}>열린 문서가 없어요 — 문서를 열고 다시 골라 주세요</p>
+    <div class={css(readonlyOptionStyle, { marginBottom: '12px', color: 'text.faint', borderColor: 'border.subtle' })}>
+      <span class={ellipsisClass}>열린 문서가 없어요</span>
+    </div>
   {:else}
     <Menu
       style={css.raw(optionStyle, { marginBottom: '12px', borderColor: 'border.subtle', _expanded: { borderColor: 'border.strong' } })}
