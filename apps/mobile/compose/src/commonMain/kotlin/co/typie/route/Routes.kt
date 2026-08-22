@@ -5,6 +5,8 @@ import co.typie.screen.auth.login.LoginScreen
 import co.typie.screen.document.bodysettings.DocumentBodySettingsScreen
 import co.typie.screen.document.document.DocumentScreen
 import co.typie.screen.editor.editor.EditorScreen
+import co.typie.screen.goal.entity.EntityGoalScreen
+import co.typie.screen.goal.user.UserGoalScreen
 import co.typie.screen.home.home.HomeScreen
 import co.typie.screen.home.search.SearchScreen
 import co.typie.screen.more.feedback.FeedbackScreen
@@ -67,6 +69,8 @@ fun MainRoutes(route: Route) {
     is Route.UpdateProfile -> UpdateProfileScreen()
     is Route.UpdatePassword -> UpdatePasswordScreen()
     is Route.SpaceSettings -> SpaceSettingsScreen()
+    is Route.UserGoal -> UserGoalScreen()
+    is Route.EntityGoal -> EntityGoalScreen(entityId = route.entityId)
     is Route.Trash -> TrashScreen(entityId = route.entityId)
     is Route.Folder -> FolderScreen(entityId = route.entityId)
     is Route.FolderDetails -> FolderDetailsScreen(entityId = route.entityId)

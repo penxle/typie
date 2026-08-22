@@ -172,6 +172,7 @@ private fun placeholderData() =
       iconColor = "gray"
       visibility = EntityVisibility.PRIVATE
       availability = EntityAvailability.PRIVATE
+      goal = null
       site = buildSite {
         id = "placeholder-site"
         name = text(4..8)

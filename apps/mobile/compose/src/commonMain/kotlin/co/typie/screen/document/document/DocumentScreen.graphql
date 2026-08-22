@@ -8,6 +8,27 @@ query DocumentScreen_Query($entityId: ID!) {
     ...EntityIcon_entity
     ...EntityBreadcrumb_entity
 
+    goal {
+      ...EntityGoalFields_goal
+    }
+
+    ancestors {
+      id
+
+      goal {
+        ...EntityGoalFields_goal
+      }
+
+      node {
+        __typename
+
+        ... on Folder {
+          id
+          characterCount
+        }
+      }
+    }
+
     node {
       __typename
 

@@ -2,6 +2,10 @@ query FolderScreen_Query($entityId: ID!) {
   entity(entityId: $entityId) @catch(to: THROW) {
     ...EntityDetails_entity
 
+    goal {
+      ...EntityGoalFields_goal
+    }
+
     site {
       id
       name
@@ -9,6 +13,7 @@ query FolderScreen_Query($entityId: ID!) {
 
     children {
       ...EntityRow_entity
+      ...EntityGoalGlyph_entity
     }
   }
 }

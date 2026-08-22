@@ -272,6 +272,7 @@ private fun placeholderData() =
       iconColor = "gray"
       visibility = EntityVisibility.PRIVATE
       availability = EntityAvailability.PRIVATE
+      goal = null
       ancestors = emptyList()
       children = emptyList()
       site = buildSite {

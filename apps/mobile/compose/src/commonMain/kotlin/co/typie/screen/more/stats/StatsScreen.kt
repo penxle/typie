@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -21,17 +22,30 @@ import androidx.compose.ui.layout.FirstBaseline
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import co.typie.datetime.WeekdayNames
+import co.typie.datetime.kstToday
+import co.typie.domain.goal.GoalColorState
+import co.typie.domain.goal.UserGoalDay
+import co.typie.domain.goal.streaks
+import co.typie.domain.goal.toUserGoalDays
+import co.typie.domain.goal.todayProgress
 import co.typie.domain.stats.ActivityGrid
+import co.typie.ext.InteractionScope
+import co.typie.ext.clickable
 import co.typie.ext.comma
+import co.typie.ext.pressScale
 import co.typie.ext.verticalScroll
 import co.typie.icons.Lucide
+import co.typie.navigation.Nav
 import co.typie.platform.FileSystemSaveLocation
 import co.typie.platform.FileSystemSaveResult
 import co.typie.platform.PlatformModule
 import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
+import co.typie.route.Route
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardSurface
+import co.typie.ui.component.ProgressRing
 import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
 import co.typie.ui.component.popover.PopoverMenu
@@ -47,9 +61,14 @@ import kotlinx.coroutines.launch
 fun StatsScreen() {
   val model = viewModel { StatsViewModel() }
   val toast = LocalToast.current
+  val nav = Nav.current
 
   val scope = rememberCoroutineScope()
   val scrollState = rememberScrollState()
+
+  val goalFields = model.query.data.me.userGoalFields_user
+  val goalTarget = goalFields.goal?.targetCharacterCount?.toLong()
+  val goalHistory = remember(goalFields.goalHistory) { goalFields.goalHistory.toUserGoalDays() }
 
   ProvideTopBar(
     center = { Text("나의 글쓰기 통계", style = AppTheme.typography.title) },
@@ -91,6 +110,12 @@ fun StatsScreen() {
           modifier = Modifier.weight(1f),
         )
       }
+
+      UserGoalCard(
+        target = goalTarget,
+        history = goalHistory,
+        onNavigate = { nav.navigate(Route.UserGoal) },
+      )
 
       StreakCard(activity = model.activity)
 
@@ -201,6 +226,75 @@ private fun SummaryCard(label: String, value: String, unit: String, modifier: Mo
           color = AppTheme.colors.textMuted,
           modifier = Modifier.alignBy(FirstBaseline),
         )
+      }
+    }
+  }
+}
+
+@Composable
+private fun UserGoalCard(
+  target: Long?,
+  history: List<UserGoalDay>,
+  onNavigate: suspend () -> Unit,
+) {
+  val today = remember { kstToday() }
+
+  InteractionScope {
+    CardSurface(modifier = Modifier.fillMaxWidth()) {
+      Column(
+        modifier =
+          Modifier.fillMaxWidth().clickable(onClick = onNavigate).pressScale().padding(16.dp)
+      ) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+          Text("일일 목표", style = AppTheme.typography.caption, color = AppTheme.colors.textMuted)
+
+          if (target != null) {
+            Spacer(Modifier.weight(1f))
+
+            Text("자세히", style = AppTheme.typography.micro, color = AppTheme.colors.textMuted)
+          }
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        if (target == null) {
+          Text(
+            "일일 목표 정하기",
+            style = AppTheme.typography.action,
+            color = AppTheme.colors.textDefault,
+          )
+        } else {
+          val progress = remember(history, today) { todayProgress(history, today) }
+          val streak = remember(history, today) { streaks(history, today) }
+
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+          ) {
+            ProgressRing(
+              progress = progress.additions.toFloat() / target.toFloat(),
+              state = if (progress.achieved) GoalColorState.Achieved else GoalColorState.Under,
+              size = 28.dp,
+            )
+
+            Text(
+              "오늘 ${progress.additions.comma} / ${target.comma}자",
+              modifier = Modifier.weight(1f),
+              style = AppTheme.typography.action,
+              color = AppTheme.colors.textDefault,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis,
+            )
+
+            Text(
+              "달성 연속 ${streak.current}일",
+              style = AppTheme.typography.caption,
+              color = AppTheme.colors.textMuted,
+              maxLines = 1,
+            )
+          }
+        }
       }
     }
   }
@@ -338,5 +432,3 @@ private fun WeekdayCard(activity: ActivityData) {
     }
   }
 }
-
-val WeekdayNames = listOf("일", "월", "화", "수", "목", "금", "토")

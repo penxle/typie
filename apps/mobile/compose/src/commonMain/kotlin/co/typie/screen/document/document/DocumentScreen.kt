@@ -1,12 +1,5 @@
 package co.typie.screen.document.document
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.EaseOutCubic
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,7 +24,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
@@ -53,6 +45,11 @@ import co.typie.domain.entity.EntityMoveStops
 import co.typie.domain.entity.formatDocumentTitle
 import co.typie.domain.entitytransfer.EntityClipboardService
 import co.typie.domain.entitytransfer.EntityTransferSource
+import co.typie.domain.goal.GoalMetricContent
+import co.typie.domain.goal.goalMetricLabel
+import co.typie.domain.goal.goalMetricValue
+import co.typie.domain.goal.pickGoalSource
+import co.typie.domain.goal.toEntityGoalData
 import co.typie.domain.subscription.GatedAction
 import co.typie.domain.subscription.SubscriptionService
 import co.typie.domain.subscription.gate
@@ -78,6 +75,7 @@ import co.typie.route.Route
 import co.typie.storage.Preference
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardRow
+import co.typie.ui.component.ExpandableMetric
 import co.typie.ui.component.ResponsiveContainerDefaults
 import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
@@ -101,8 +99,6 @@ import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 
-private const val DocumentExpandableMetricAnimationDurationMillis = 220
-
 @Composable
 fun DocumentScreen(entityId: String) {
   val nav = Nav.current
@@ -123,6 +119,7 @@ fun DocumentScreen(entityId: String) {
   val document = entity.node.onDocument
   var characterCountExpanded by rememberSaveable(entityId) { mutableStateOf(false) }
   var todayRecordExpanded by rememberSaveable(entityId) { mutableStateOf(false) }
+  var goalExpanded by rememberSaveable(entityId) { mutableStateOf(false) }
   var documentLockUpdateInFlight by remember(entityId) { mutableStateOf(false) }
 
   fun currentTransferSource(): EntityTransferSource.Document? {
@@ -232,6 +229,16 @@ fun DocumentScreen(entityId: String) {
         counts = model.characterCounts,
         fallbackWithWhitespace = document.characterCount,
       )
+    val goalCurrent = (model.characterCounts?.docWithWhitespace ?: document.characterCount).toLong()
+    val goalSource =
+      remember(entity.id, entity.goal, entity.ancestors, goalCurrent) {
+        pickGoalSource(
+          entityId = entity.id,
+          ownGoal = entity.goal?.entityGoalFields_goal?.toEntityGoalData(),
+          ownCurrent = goalCurrent,
+          ancestors = entity.ancestors.toGoalSourceCandidates(),
+        )
+      }
 
     val openIconPicker: suspend () -> Unit = {
       if (!loading && SubscriptionService.gate(sheet, GatedAction.ChangeIcon)) {
@@ -457,7 +464,7 @@ fun DocumentScreen(entityId: String) {
       Spacer(Modifier.height(18.dp))
 
       DocumentInfoDivider()
-      DocumentExpandableMetric(
+      ExpandableMetric(
         icon = Lucide.Type,
         label = "글자 수",
         value =
@@ -476,7 +483,7 @@ fun DocumentScreen(entityId: String) {
         }
       }
       DocumentInfoDivider()
-      DocumentExpandableMetric(
+      ExpandableMetric(
         icon = Lucide.Goal,
         label = "오늘의 기록",
         value = formatCharacterDelta(netChange),
@@ -505,6 +512,23 @@ fun DocumentScreen(entityId: String) {
           label = "지운 글자",
           value = "${deletions.comma}자",
           valueColor = AppTheme.colors.textMuted,
+        )
+      }
+      DocumentInfoDivider()
+      ExpandableMetric(
+        icon = Lucide.Target,
+        label = goalMetricLabel(goalSource),
+        value = goalMetricValue(goalSource),
+        valueColor =
+          if (goalSource == null) AppTheme.colors.textHint else AppTheme.colors.textMuted,
+        expanded = goalExpanded,
+        onToggle = { goalExpanded = !goalExpanded },
+      ) {
+        GoalMetricContent(
+          source = goalSource,
+          onOpenGoal = {
+            nav.navigate(Route.EntityGoal(goalSource?.entityId ?: entity.id))
+          },
         )
       }
 
@@ -623,107 +647,6 @@ private fun DocumentInfoRow(
         maxLines = 2,
         overflow = TextOverflow.Ellipsis,
       )
-    }
-  }
-}
-
-@Composable
-private fun DocumentExpandableMetric(
-  icon: IconData,
-  label: String,
-  value: String,
-  expanded: Boolean,
-  onToggle: () -> Unit,
-  modifier: Modifier = Modifier,
-  valueColor: Color = AppTheme.colors.textMuted,
-  valueIcon: IconData? = null,
-  content: @Composable () -> Unit,
-) {
-  InteractionScope {
-    Column(
-      modifier =
-        modifier.fillMaxWidth().clickable { onToggle() }.pressScale().padding(vertical = 16.dp)
-    ) {
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-      ) {
-        Row(
-          modifier = Modifier.weight(1f),
-          horizontalArrangement = Arrangement.spacedBy(4.dp),
-          verticalAlignment = Alignment.CenterVertically,
-        ) {
-          Icon(icon = icon, modifier = Modifier.size(14.dp), tint = AppTheme.colors.textHint)
-          Text(
-            text = label,
-            style = AppTheme.typography.action,
-            color = AppTheme.colors.textDefault,
-          )
-          Icon(
-            icon = Lucide.ChevronRight,
-            modifier = Modifier.size(15.dp).rotate(if (expanded) 90f else 0f),
-            tint = AppTheme.colors.textHint,
-          )
-        }
-
-        AnimatedVisibility(
-          visible = !expanded,
-          enter =
-            fadeIn(
-              animationSpec =
-                tween(DocumentExpandableMetricAnimationDurationMillis, easing = EaseOutCubic)
-            ),
-          exit =
-            fadeOut(
-              animationSpec =
-                tween(DocumentExpandableMetricAnimationDurationMillis, easing = EaseOutCubic)
-            ),
-        ) {
-          Row(
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-          ) {
-            if (valueIcon != null) {
-              Icon(icon = valueIcon, modifier = Modifier.size(14.dp), tint = valueColor)
-            }
-
-            Text(
-              text = value,
-              style = AppTheme.typography.action.copy(fontWeight = FontWeight.W500),
-              color = valueColor,
-              maxLines = 1,
-              overflow = TextOverflow.Ellipsis,
-            )
-          }
-        }
-      }
-
-      AnimatedVisibility(
-        visible = expanded,
-        enter =
-          fadeIn(
-            animationSpec =
-              tween(DocumentExpandableMetricAnimationDurationMillis, easing = EaseOutCubic)
-          ) +
-            expandVertically(
-              animationSpec =
-                tween(DocumentExpandableMetricAnimationDurationMillis, easing = EaseOutCubic),
-              expandFrom = Alignment.Top,
-            ),
-        exit =
-          fadeOut(
-            animationSpec =
-              tween(DocumentExpandableMetricAnimationDurationMillis, easing = EaseOutCubic)
-          ) +
-            shrinkVertically(
-              animationSpec =
-                tween(DocumentExpandableMetricAnimationDurationMillis, easing = EaseOutCubic),
-              shrinkTowards = Alignment.Top,
-            ),
-      ) {
-        Column(modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) { content() }
-      }
     }
   }
 }
