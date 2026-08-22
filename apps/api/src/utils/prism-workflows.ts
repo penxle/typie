@@ -13,26 +13,25 @@ const log = logger.getChild('prism');
 const selectByPrismId = (prismWorkflowId: string) =>
   db.select().from(PrismWorkflows).where(eq(PrismWorkflows.prismWorkflowId, prismWorkflowId));
 
-export const linkWorkflow = async (sessionId: string, prismWorkflowId: string): Promise<PrismWorkflowRow> => {
-  const existing = await selectByPrismId(prismWorkflowId).then(first);
-  if (existing) return existing;
+export type WorkflowDescriptor = {
+  prismWorkflowId: string;
+  app: string;
+  name: string;
+  ref: string | null;
+  startedAt: number;
+};
 
-  const { workflow } = await prism.getWorkflow(prismWorkflowId);
-  const { app, workflow: name } = workflow;
-  if (app === null || name === null) {
-    throw new Error(`prism workflow ${prismWorkflowId} has no app or name`);
-  }
-
+const insertLink = async (sessionId: string, descriptor: WorkflowDescriptor): Promise<PrismWorkflowRow> => {
   const inserted = await db.transaction(async (tx) => {
     const row = await tx
       .insert(PrismWorkflows)
       .values({
         sessionId,
-        prismWorkflowId,
-        app,
-        name,
-        ref: workflow.ref,
-        startedAt: dayjs(workflow.startedAt),
+        prismWorkflowId: descriptor.prismWorkflowId,
+        app: descriptor.app,
+        name: descriptor.name,
+        ref: descriptor.ref,
+        startedAt: dayjs(descriptor.startedAt),
       })
       .onConflictDoNothing({ target: PrismWorkflows.prismWorkflowId })
       .returning()
@@ -43,9 +42,32 @@ export const linkWorkflow = async (sessionId: string, prismWorkflowId: string): 
     return row;
   });
 
-  if (!inserted) return selectByPrismId(prismWorkflowId).then(firstOrThrow);
+  if (!inserted) return selectByPrismId(descriptor.prismWorkflowId).then(firstOrThrow);
 
   return inserted;
+};
+
+// invocation.started가 실어 온 서술 그대로 링크한다 — prism에 되묻지 않는 이유가 이 함수의 존재 이유다:
+// 그 이벤트는 대상이 주소 가능해진 뒤 발행되지만, 로그 재생은 그 앞(할당 직후 죽음)도 본다.
+export const linkWorkflowFromEvent = async (sessionId: string, descriptor: WorkflowDescriptor): Promise<PrismWorkflowRow> => {
+  const existing = await selectByPrismId(descriptor.prismWorkflowId).then(first);
+  if (existing) return existing;
+
+  return insertLink(sessionId, descriptor);
+};
+
+// 이벤트를 놓친 경로(크론 발견·워크플로 로그 자가 수리)의 링크 — 그 시점엔 워크플로가 이미 존재한다.
+export const linkWorkflow = async (sessionId: string, prismWorkflowId: string): Promise<PrismWorkflowRow> => {
+  const existing = await selectByPrismId(prismWorkflowId).then(first);
+  if (existing) return existing;
+
+  const { workflow } = await prism.getWorkflow(prismWorkflowId);
+  const { app, workflow: name } = workflow;
+  if (app === null || name === null) {
+    throw new Error(`prism workflow ${prismWorkflowId} has no app or name`);
+  }
+
+  return insertLink(sessionId, { prismWorkflowId, app, name, ref: workflow.ref, startedAt: workflow.startedAt });
 };
 
 export const settleWorkflow = async (workflow: PrismWorkflowRow, state: WorkflowState): Promise<void> => {

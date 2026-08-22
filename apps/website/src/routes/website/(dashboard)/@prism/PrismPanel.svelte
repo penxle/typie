@@ -19,7 +19,7 @@
   import PyramidIcon from '~icons/lucide/pyramid';
   import TrashIcon from '~icons/lucide/trash-2';
   import XIcon from '~icons/lucide/x';
-  import { cache } from '$lib/graphql';
+  import { cache, wsStatus } from '$lib/graphql';
   import { unwrapError } from '$lib/graphql/error';
   import { getOpenDocuments } from '$lib/prism/open-documents.svelte';
   import { graphql } from '$mearie';
@@ -401,6 +401,7 @@
   });
 
   const RECONNECT_MS = [1000, 3000, 10_000, 30_000];
+  const SOCKET_DOWN_GRACE_MS = 1500;
 
   let subscribeCursor = $state(0);
   let subscribeWorkflows = $state<{ workflowId: string; cursor: number }[]>([]);
@@ -408,7 +409,6 @@
   let reconnectFailed = $state(false);
   let reconnectAttempts = 0;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  let armedAt = Date.now();
 
   const workflowCursors = () =>
     chat.transcript.messages
@@ -434,15 +434,13 @@
   const resetReconnect = () => {
     clearReconnectTimer();
     reconnectAttempts = 0;
-    armedAt = Date.now();
     reconnecting = false;
     reconnectFailed = false;
   };
 
   const scheduleReconnect = () => {
     clearReconnectTimer();
-    const established = Date.now() - armedAt >= (RECONNECT_MS.at(-1) ?? 0);
-    reconnectAttempts = established ? 1 : reconnectAttempts + 1;
+    reconnectAttempts += 1;
 
     const delay = backoffDelay(RECONNECT_MS, reconnectAttempts);
     if (delay === null) {
@@ -456,7 +454,6 @@
       reconnectTimer = null;
       subscribeCursor = chat.transcript.cursor;
       subscribeWorkflows = workflowCursors();
-      armedAt = Date.now();
       reconnecting = false;
     }, delay);
   };
@@ -464,6 +461,30 @@
   let betaGate = $state<'prism_beta_required' | null>(null);
   const aiOptIn = $derived((user.data.preferences.aiOptIn as boolean | undefined) ?? false);
   const gate = $derived(betaGate ?? (app.state.subscribed ? (aiOptIn ? null : 'ai_opt_in_required') : 'subscription_required'));
+
+  const subscriptionSkipped = $derived(
+    chat.sessionId === null ||
+      !app.state.prismAccess ||
+      !app.preference.current.prismPanelOpen ||
+      chat.loading ||
+      reconnecting ||
+      reconnectFailed,
+  );
+
+  const socketDown = $derived(!subscriptionSkipped && wsStatus.current !== 'connected');
+  let socketDownSettled = $state(false);
+
+  $effect(() => {
+    if (!socketDown) {
+      socketDownSettled = false;
+      return;
+    }
+
+    const id = setTimeout(() => (socketDownSettled = true), SOCKET_DOWN_GRACE_MS);
+    return () => clearTimeout(id);
+  });
+
+  const disconnected = $derived(reconnecting || socketDownSettled);
 
   createSubscription(
     graphql(`
@@ -473,13 +494,7 @@
     `),
     () => ({ sessionId: chat.sessionId ?? '', cursor: subscribeCursor, workflows: subscribeWorkflows }),
     () => ({
-      skip:
-        chat.sessionId === null ||
-        !app.state.prismAccess ||
-        !app.preference.current.prismPanelOpen ||
-        chat.loading ||
-        reconnecting ||
-        reconnectFailed,
+      skip: subscriptionSkipped,
       onData: (data) => {
         if (reconnectAttempts !== 0 || reconnecting || reconnectFailed) {
           resetReconnect();
@@ -844,7 +859,7 @@
             onResolve={resolveTool}
             onRetry={(toolCallId) => autoResolver.retry(toolCallId)}
             pending={chat.pending}
-            {reconnecting}
+            reconnecting={disconnected}
             sessionId={chat.sessionId}
             transcript={chat.transcript}
           />
@@ -855,7 +870,7 @@
             <span class={css({ fontSize: '11px', color: 'text.danger' })}>{chat.error}</span>
             <Button onclick={() => void chat.load(selected.current)} size="sm" variant="secondary">다시 불러오기</Button>
           </div>
-        {:else if reconnecting}
+        {:else if disconnected}
           <div
             class={css({ paddingX: '14px', paddingBottom: '8px', fontSize: '11px', color: 'text.subtle' })}
             in:fade={fadeIn}
