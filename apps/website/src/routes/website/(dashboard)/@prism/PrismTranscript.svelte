@@ -246,20 +246,26 @@
 
   type WaitState = { label: string; text: string | null } | null;
 
+  const RECONNECTING_WAIT = { label: '다시 연결하는 중', text: '다시 연결하는 중' };
+
   const waitState = $derived.by<WaitState>(() => {
     const turn = transcript.live;
 
     if (turn && live) {
       if (live.boundary > 0) return null;
+      if (reconnecting) return RECONNECTING_WAIT;
       if (late) return { label: '응답이 늦어지고 있어요', text: '응답이 늦어지고 있어요' };
       if (turn.last === 'thinking' && turn.thinkingChars > 0) return { label: '생각하는 중', text: '생각하는 중' };
       if (turn.last === 'tool.input' && turn.toolInput) return { label: '도구를 준비하는 중', text: null };
       return { label: '응답을 기다리는 중', text: null };
     }
 
-    if (late && (pending !== null || transcript.turn === 'active')) {
-      return { label: '응답이 늦어지고 있어요', text: '응답이 늦어지고 있어요' };
+    if (pending === null && transcript.turn !== 'active') {
+      return null;
     }
+
+    if (reconnecting) return RECONNECTING_WAIT;
+    if (late) return { label: '응답이 늦어지고 있어요', text: '응답이 늦어지고 있어요' };
 
     if (pending !== null && transcript.run !== 'running') return { label: '보내는 중', text: null };
     if (transcript.turn === 'active') return { label: transcript.retrying ? '다시 시도하는 중' : '응답을 기다리는 중', text: null };

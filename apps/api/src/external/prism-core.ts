@@ -62,7 +62,15 @@ const CatalogSchema = z.object({
 
 export const createPrismClient = (http: PrismHttp) => {
   const openEvents = async (path: string, cursor: number, signal: AbortSignal): Promise<ReadableStream<Uint8Array>> => {
-    const res = await expectOk(await http.request(path, { signal, stream: true, headers: { 'last-event-id': String(cursor) } }));
+    // 전송 실패도 status를 갖는 사실로 사영한다 — 소비자(구독 펌프)가 재시도 여부를 status 하나로 판정하고,
+    // 연결 한 번 튄 것이 분류 불가 예외가 되어 펌프를 영구 종료시키지 않게 한다.
+    const opened = await http
+      .request(path, { signal, stream: true, headers: { 'last-event-id': String(cursor) } })
+      .catch((err: unknown) => {
+        if (err instanceof PrismApiError) throw err;
+        throw new PrismApiError('transport', 503);
+      });
+    const res = await expectOk(opened);
     if (!res.body) throw new PrismApiError('internal', res.status);
     return res.body;
   };

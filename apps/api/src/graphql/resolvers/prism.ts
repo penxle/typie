@@ -18,7 +18,15 @@ import { prismCommands } from '#/utils/prism-catalog.ts';
 import { projectFrame } from '#/utils/prism-events.ts';
 import { routeSessionFrame } from '#/utils/prism-session-stream.ts';
 import { prismTools } from '#/utils/prism-tools.ts';
-import { cancelActiveRun, cancelSessionWorkflows, closeRun, linkWorkflow, settleWorkflow, titleSession } from '#/utils/prism-workflows.ts';
+import {
+  cancelActiveRun,
+  cancelSessionWorkflows,
+  closeRun,
+  linkWorkflow,
+  linkWorkflowFromEvent,
+  settleWorkflow,
+  titleSession,
+} from '#/utils/prism-workflows.ts';
 import { isRunningChildAgent } from '#/utils/prism-workflows-core.ts';
 import { builder } from '../builder.ts';
 import { PrismSession, PrismWorkflow, User } from '../objects.ts';
@@ -30,6 +38,7 @@ const log = logger.getChild('prism');
 
 const IDLE_MS = 45_000;
 const RECONNECT_DELAY_MS = 1000;
+const ABSENT_MAX_DELAY_MS = 30_000;
 
 const PrismWorkflowCursorInput = builder.inputType('PrismWorkflowCursorInput', {
   fields: (t) => ({
@@ -410,9 +419,12 @@ builder.subscriptionFields((t) => ({
           isTerminal: () => boolean;
         }) => {
           let cursor = opts.cursor;
+          let absent = 0;
           while (!controller.signal.aborted) {
+            let delay = RECONNECT_DELAY_MS;
             try {
               const stream = await opts.open(cursor);
+              absent = 0;
               let seeding = false;
               const seeded = new Set<string>();
               const outcome = await pumpSse({
@@ -453,10 +465,24 @@ builder.subscriptionFields((t) => ({
               }
             } catch (err) {
               if (controller.signal.aborted) return;
-              if (!(err instanceof PrismApiError) || err.status < 500) throw err;
-              log.warn('prism stream reconnect after upstream failure: {code} ({status})', { code: err.code, status: err.status });
+              if (!(err instanceof PrismApiError)) throw err;
+              if (err.status === 404) {
+                // 아직 없는 대상 — 할당 직후 죽은 구동의 로그를 재생하면 그 사이 기동 전 창을 본다(재실행이 기동한다).
+                // 영영 안 생기는 대상(재실행이 오지 않는 고아)에 붙어 초당 폴링이 되지 않도록 간격을 늘린다.
+                absent += 1;
+                delay = Math.min(RECONNECT_DELAY_MS * 2 ** (absent - 1), ABSENT_MAX_DELAY_MS);
+                log.warn('prism stream target not there yet: {source} {workflowId} (retry in {delay}ms)', {
+                  source: opts.scope.source,
+                  workflowId: opts.scope.source === 'WORKFLOW' ? opts.scope.workflowId : null,
+                  delay,
+                });
+              } else if (err.status >= 500) {
+                log.warn('prism stream reconnect after upstream failure: {code} ({status})', { code: err.code, status: err.status });
+              } else {
+                throw err;
+              }
             }
-            await new Promise((resolve) => setTimeout(resolve, RECONNECT_DELAY_MS));
+            await new Promise((resolve) => setTimeout(resolve, delay));
           }
         };
 
@@ -505,7 +531,13 @@ builder.subscriptionFields((t) => ({
               const route = routeSessionFrame(frame);
               if (route?.kind === 'workflow-started') {
                 try {
-                  const row = await linkWorkflow(session.id, route.workflowId);
+                  const row = await linkWorkflowFromEvent(session.id, {
+                    prismWorkflowId: route.workflowId,
+                    app: route.app,
+                    name: route.name,
+                    ref: route.ref,
+                    startedAt: route.startedAt,
+                  });
                   if (row.sessionId !== session.id) {
                     log.warn('prism workflow belongs to another session: {workflowId}', { workflowId: route.workflowId });
                     return;

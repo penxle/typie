@@ -10,7 +10,12 @@ import { useError } from './plugins/error.ts';
 import { useLogger } from './plugins/logger.ts';
 import { useRateLimit } from './plugins/rate-limit.ts';
 import { schema } from './schema.ts';
+import type { WebSocket } from 'ws';
 import type { Env, ServerContext, UserContext } from '#/context.ts';
+
+const HEARTBEAT_INTERVAL_MS = 30_000;
+const HEARTBEAT_MAX_MISSES = 2;
+const MAINTENANCE_INTERVAL_MS = 60_000;
 
 export const graphql = new Hono<Env>();
 
@@ -116,6 +121,7 @@ graphql.get(
     let handleMessage: ((data: string) => Promise<void>) | undefined;
     let handleClose: ((code?: number, reason?: string) => Promise<void>) | undefined;
     let bootstrapInterval: ReturnType<typeof setInterval> | undefined;
+    let heartbeatInterval: ReturnType<typeof setInterval> | undefined;
 
     return {
       onOpen: (_, ws) => {
@@ -136,10 +142,29 @@ graphql.get(
           if (maintenance) {
             ws.close(1001, 'Service under maintenance');
           }
-        }, 60_000);
+        }, MAINTENANCE_INTERVAL_MS);
+
+        const socket = ws.raw as WebSocket | undefined;
+        if (socket) {
+          let missedPongs = 0;
+          socket.on('pong', () => {
+            missedPongs = 0;
+          });
+
+          heartbeatInterval = setInterval(() => {
+            if (missedPongs >= HEARTBEAT_MAX_MISSES) {
+              socket.terminate();
+              return;
+            }
+
+            missedPongs += 1;
+            socket.ping();
+          }, HEARTBEAT_INTERVAL_MS);
+        }
       },
       onClose: async (event) => {
         clearInterval(bootstrapInterval);
+        clearInterval(heartbeatInterval);
         await handleClose?.(event.code, event.reason);
       },
       onMessage: async (event, ws) => {

@@ -38,12 +38,32 @@
 
   let busy = $state(false);
   let textarea = $state<HTMLTextAreaElement>();
+  let slashDismissed = $state(false);
+  let slashHighlight = $state(0);
+  let slashListEl = $state<HTMLElement>();
 
   export const focus = () => textarea?.focus();
 
-  const slashOpen = $derived(text.startsWith('/') && !/\s/.test(text) && commands !== null && commands.length > 0);
+  const slashOpen = $derived(!slashDismissed && text.startsWith('/') && !/\s/.test(text) && commands !== null && commands.length > 0);
   const slashHits = $derived(commands === null ? [] : commandsMatching(commands, text.slice(1)));
+  const slashVisible = $derived(slashOpen && slashHits.length > 0);
+  const slashIndex = $derived(slashHits.length === 0 ? -1 : Math.min(slashHighlight, slashHits.length - 1));
   const unknownCommand = $derived(commandGate(text.trim(), commands) === 'unknown');
+
+  $effect(() => {
+    void slashHits;
+    slashHighlight = 0;
+  });
+
+  $effect(() => {
+    if (slashIndex < 0) return;
+    slashListEl?.querySelector(`[data-index="${slashIndex}"]`)?.scrollIntoView({ block: 'nearest' });
+  });
+
+  const moveHighlight = (delta: number) => {
+    if (slashHits.length === 0) return;
+    slashHighlight = Math.min(slashHits.length - 1, Math.max(0, slashIndex + delta));
+  };
 
   const submit = async () => {
     const value = text.trim();
@@ -67,8 +87,12 @@
     }
   };
 
+  const commandText = (command: PrismCommand) => `/${command.name}${command.argumentHint === null ? '' : ' '}`;
+
   const adoptCommand = (command: PrismCommand) => {
-    text = `/${command.name}${command.argumentHint === null ? '' : ' '}`;
+    text = commandText(command);
+    slashDismissed = true;
+    textarea?.focus();
   };
 
   const onKeydown = (e: KeyboardEvent) => {
@@ -76,26 +100,44 @@
       return;
     }
 
-    if (slashOpen && !e.shiftKey && e.key === 'Tab' && slashHits.length > 0) {
+    if (slashVisible && e.key === 'Escape') {
       e.preventDefault();
-      adoptCommand(slashHits[0]);
+      e.stopPropagation();
+      slashDismissed = true;
+      return;
+    }
+
+    if (slashVisible && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+      e.preventDefault();
+      moveHighlight(e.key === 'ArrowDown' ? 1 : -1);
+      return;
+    }
+
+    if (slashVisible && !e.shiftKey && e.key === 'Tab') {
+      e.preventDefault();
+      adoptCommand(slashHits[slashIndex]);
       return;
     }
 
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      if (slashOpen && unknownCommand && slashHits.length > 0) {
-        adoptCommand(slashHits[0]);
-        return;
+      if (slashVisible) {
+        const target = slashHits[slashIndex];
+        if (commandText(target) !== text) {
+          adoptCommand(target);
+          return;
+        }
       }
+      slashDismissed = true;
       void submit();
     }
   };
 </script>
 
 <div class={css({ position: 'relative', paddingX: '12px', paddingBottom: '8px' })}>
-  {#if status === null && slashOpen && slashHits.length > 0}
+  {#if status === null && slashVisible}
     <div
+      bind:this={slashListEl}
       class={css({
         position: 'absolute',
         bottom: '[100%]',
@@ -108,9 +150,12 @@
         backgroundColor: 'surface.default',
         boxShadow: 'menu',
         padding: '4px',
+        maxHeight: '240px',
+        overflowY: 'auto',
       })}
+      role="listbox"
     >
-      {#each slashHits as command (command.name)}
+      {#each slashHits as command, index (command.name)}
         <button
           class={flex({
             width: 'full',
@@ -119,9 +164,14 @@
             paddingY: '6px',
             borderRadius: '6px',
             fontSize: '12px',
-            _hover: { backgroundColor: 'surface.muted' },
+            '&[data-highlighted="true"]': { backgroundColor: 'surface.muted' },
           })}
+          aria-selected={index === slashIndex}
+          data-highlighted={index === slashIndex}
+          data-index={index}
           onclick={() => adoptCommand(command)}
+          onpointermove={() => (slashHighlight = index)}
+          role="option"
           type="button"
         >
           <span class={css({ fontWeight: 'semibold' })}>/{command.name}</span>
@@ -202,6 +252,7 @@
           _disabled: { opacity: '50' },
         })}
         disabled={disabled || blocked}
+        oninput={() => (slashDismissed = false)}
         onkeydown={onKeydown}
         placeholder="메시지를 입력하세요"
         rows={1}
