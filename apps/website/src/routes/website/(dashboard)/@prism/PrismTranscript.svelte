@@ -3,17 +3,16 @@
   import { flex } from '@typie/styled-system/patterns';
   import { Icon } from '@typie/ui/components';
   import { tick, untrack } from 'svelte';
-  import { fade } from 'svelte/transition';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import PyramidIcon from '~icons/lucide/pyramid';
-  import { fadeIn, rise } from './lib/motion.ts';
+  import { pop, rise } from './lib/motion.ts';
   import { PacedText } from './lib/paced-text.svelte.ts';
   import { foldToolCalls } from './lib/tool-calls.ts';
   import PrismMarkdown from './PrismMarkdown.svelte';
   import PrismMessage from './PrismMessage.svelte';
-  import PrismSpinner from './PrismSpinner.svelte';
   import PrismToolCalls from './PrismToolCalls.svelte';
   import PrismToolRequest from './PrismToolRequest.svelte';
+  import PrismWaitRow from './PrismWaitRow.svelte';
   import PrismWorkflow from './PrismWorkflow.svelte';
   import { toolCallLabels, toolCards } from './tools/index.ts';
   import type { Transcript, TranscriptMessage } from './lib/conversation.ts';
@@ -197,16 +196,6 @@
     void tick().then(() => element.scrollTo({ top: element.scrollHeight }));
   });
 
-  const shimmerClass = css({
-    width: '[fit-content]',
-    color: '[transparent]',
-    backgroundImage: '[linear-gradient(90deg, token(colors.text.faint) 30%, token(colors.text.default) 50%, token(colors.text.faint) 70%)]',
-    backgroundSize: '[200% 100%]',
-    backgroundClip: 'text',
-    animation: '[shimmer 1.8s linear infinite]',
-    _motionReduce: { animation: 'none', color: 'text.faint', backgroundImage: 'none' },
-  });
-
   let lastTop = 0;
 
   const onScroll = () => {
@@ -250,8 +239,44 @@
     return () => observer.disconnect();
   });
 
-  const liveRowStyle = flex.raw({ alignItems: 'center', minHeight: '20px' });
-  const lateRowClass = css(liveRowStyle, { gap: '8px', fontSize: '12px', color: 'text.faint' });
+  type WaitState = { label: string; text: string | null } | null;
+
+  const waitState = $derived.by<WaitState>(() => {
+    const turn = transcript.live;
+
+    if (turn && live) {
+      if (live.boundary > 0) return null;
+      if (late) return { label: '응답이 늦어지고 있어요', text: '응답이 늦어지고 있어요' };
+      if (turn.last === 'thinking' && turn.thinkingChars > 0) return { label: '생각하는 중', text: '생각하는 중' };
+      if (turn.last === 'tool.input' && turn.toolInput) return { label: '도구를 준비하는 중', text: null };
+      return { label: '응답을 기다리는 중', text: null };
+    }
+
+    if (late && (pending !== null || transcript.turn === 'active')) {
+      return { label: '응답이 늦어지고 있어요', text: '응답이 늦어지고 있어요' };
+    }
+
+    if (pending !== null && transcript.run !== 'running') return { label: '보내는 중', text: null };
+    if (transcript.turn === 'active') return { label: transcript.retrying ? '다시 시도하는 중' : '응답을 기다리는 중', text: null };
+
+    return null;
+  });
+
+  const WAIT_DEBOUNCE_MS = 1000;
+  const rawWaitText = $derived(waitState?.text ?? null);
+  let waitText = $state<string | null>(null);
+
+  $effect(() => {
+    const next = rawWaitText;
+    waitText = null;
+
+    if (next === null) {
+      return;
+    }
+
+    const id = setTimeout(() => (waitText = next), WAIT_DEBOUNCE_MS);
+    return () => clearTimeout(id);
+  });
 
   const maskImage = $derived.by(() => {
     if (!overflowTop && !overflowBottom) return;
@@ -260,19 +285,6 @@
     return `linear-gradient(to bottom, ${from}, ${to})`;
   });
 </script>
-
-{#snippet waiting(label: string)}
-  {#if late}
-    <div class={lateRowClass} in:fade={fadeIn}>
-      <PrismSpinner label="응답이 늦어지고 있어요" />
-      <span>응답이 늦어지고 있어요</span>
-    </div>
-  {:else}
-    <div class={css(liveRowStyle)} in:fade={fadeIn}>
-      <PrismSpinner {label} />
-    </div>
-  {/if}
-{/snippet}
 
 <div class={flex({ position: 'relative', flexDirection: 'column', flexGrow: '1', minHeight: '0' })}>
   <div
@@ -359,28 +371,12 @@
         </div>
       {/if}
 
-      {#if pending !== null && !transcript.live && transcript.run !== 'running'}
-        {@render waiting('보내는 중')}
+      {#if transcript.live && live && live.boundary > 0}
+        <PrismMarkdown blocks={live.blocks} plain={live.plain} />
       {/if}
 
-      {#if transcript.live && live}
-        {#if live.boundary === 0 && transcript.live.last === 'tool.input' && transcript.live.toolInput}
-          <div class={css(liveRowStyle)} in:fade={fadeIn}>
-            <PrismSpinner label="도구를 준비하는 중" />
-          </div>
-        {:else if live.boundary === 0 && transcript.live.last === 'thinking' && transcript.live.thinkingChars > 0}
-          <div class={css(liveRowStyle, { fontSize: '14px' })} in:fade={fadeIn}>
-            <span class={shimmerClass}>생각하는 중…</span>
-          </div>
-        {:else if live.boundary > 0}
-          <PrismMarkdown blocks={live.blocks} plain={live.plain} />
-        {:else}
-          <div class={css(liveRowStyle)} in:fade={fadeIn}>
-            <PrismSpinner label="응답을 기다리는 중" />
-          </div>
-        {/if}
-      {:else if transcript.turn === 'active'}
-        {@render waiting(transcript.retrying ? '다시 시도하는 중' : '응답을 기다리는 중')}
+      {#if waitState !== null}
+        <PrismWaitRow label={waitState.label} text={waitText} />
       {/if}
     </div>
   </div>
@@ -398,10 +394,8 @@
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        animation: '[rise-in 200ms cubic-bezier(0.23, 1, 0.32, 1) both]',
         transition: '[transform 160ms cubic-bezier(0.23, 1, 0.32, 1)]',
         _active: { transform: 'scale(0.97)' },
-        _motionReduce: { animation: 'none' },
       })}
       aria-label="아래로"
       onclick={() => {
@@ -409,6 +403,8 @@
         container?.scrollTo({ top: container.scrollHeight, behavior: reduceMotion ? 'auto' : 'smooth' });
       }}
       type="button"
+      in:pop
+      out:pop={{ out: true }}
     >
       <Icon icon={ChevronDownIcon} size={16} />
     </button>

@@ -1,5 +1,5 @@
 import { quintOut } from 'svelte/easing';
-import { fade, fly, slide } from 'svelte/transition';
+import { fade, fly, scale, slide } from 'svelte/transition';
 import type { TransitionConfig } from 'svelte/transition';
 
 export const MOTION = { quick: 100, state: 150, enter: 200, expand: 200 } as const;
@@ -16,6 +16,9 @@ export const rise = (node: Element, { skip = false, delay = 0 }: { skip?: boolea
 
 export const shift = (node: Element, { dir }: { dir: number }): TransitionConfig =>
   reducedMotion() ? fade(node, fadeIn) : fly(node, { x: 8 * Math.sign(dir), duration: MOTION.enter, easing: quintOut });
+
+export const pop = (node: Element, { out = false }: { out?: boolean } = {}): TransitionConfig =>
+  reducedMotion() ? fade(node, out ? fadeOut : fadeIn) : scale(node, { start: 0.8, duration: out ? MOTION.enter : 250, easing: quintOut });
 
 const EXPAND_SPEED = 1.6;
 const EXPAND_MAX = 400;
