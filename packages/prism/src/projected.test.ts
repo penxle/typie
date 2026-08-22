@@ -46,7 +46,7 @@ describe('tool data registry', () => {
       decision: 'confirmed',
       key: 'r1',
       tier: 'medium',
-      document: { title: 't', subtitle: null, path: 'manuscript/r1.md' },
+      document: { id: 'D0DOC1', title: 't', subtitle: null, path: 'manuscript/r1.md' },
     };
     expect(ProjectedEventSchema.parse({ kind: 'tool.resolved', data: { tool: 'confirm-review', ok: true, data: confirmed } }).data).toEqual(
       {

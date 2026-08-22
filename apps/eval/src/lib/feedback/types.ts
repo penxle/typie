@@ -86,8 +86,9 @@ export type PreviousThread = {
 };
 
 // 원고 입력의 공통 형태 — prism workflows/shared.ts MANUSCRIPT_INPUT의 미러. 세 워크플로 input과 previous가 같은
-// 세 필드를 쓴다(2026-08-21 평탄화 — manuscriptPath·meta 분리 폐지). 제목·부제는 필수(무제목이면 null 값).
-export type ManuscriptInput = { title: string | null; subtitle: string | null; path: string };
+// 네 필드를 쓴다(2026-08-21 평탄화 — manuscriptPath·meta 분리 폐지). 제목·부제는 필수(무제목이면 null 값).
+// id는 원고의 신원(typie Document.id — eval에서는 세션의 refId)이다.
+export type ManuscriptInput = { id: string; title: string | null; subtitle: string | null; path: string };
 
 export type PreviousInput = ManuscriptInput & { threads: PreviousThread[] };
 

@@ -144,7 +144,7 @@ test('SESSION: agent.created는 data를 통째로 벗기고, tool.requested/reso
         decision: 'confirmed',
         key: 'PRRR1',
         tier: 'high',
-        document: { title: 't', subtitle: null, path: 'manuscript/PRRR1.md' },
+        document: { id: 'D0DOC1', title: 't', subtitle: null, path: 'manuscript/PRRR1.md' },
         extra: 1,
       },
       duration: 1,
@@ -154,7 +154,12 @@ test('SESSION: agent.created는 data를 통째로 벗기고, tool.requested/reso
   assert.deepEqual(resolved?.type === 'event' ? resolved.event.data : null, {
     tool: 'confirm-review',
     ok: true,
-    data: { decision: 'confirmed', key: 'PRRR1', tier: 'high', document: { title: 't', subtitle: null, path: 'manuscript/PRRR1.md' } },
+    data: {
+      decision: 'confirmed',
+      key: 'PRRR1',
+      tier: 'high',
+      document: { id: 'D0DOC1', title: 't', subtitle: null, path: 'manuscript/PRRR1.md' },
+    },
   });
 
   const started = projectFrame(

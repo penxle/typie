@@ -270,11 +270,11 @@ describe('buildPreviousContext', () => {
         thread('t.1.2', 'resolved', { body: '시점이 흔들린다' }),
         thread('t.1.3', 'withdrawn', { body: '표현이 반복된다' }),
       ],
-      manuscript: { title: '제목', subtitle: null, path: 'manuscript/v1.txt' },
+      manuscript: { id: 'D0TEST01', title: '제목', subtitle: null, path: 'manuscript/v1.txt' },
       baseStartedAt: new Date(500),
     });
-    // 평탄 형태 — prism PREVIOUS는 MANUSCRIPT_INPUT(title·subtitle·path) + threads다
-    expect(context).toMatchObject({ title: '제목', subtitle: null, path: 'manuscript/v1.txt' });
+    // 평탄 형태 — prism PREVIOUS는 MANUSCRIPT_INPUT(id·title·subtitle·path) + threads다
+    expect(context).toMatchObject({ id: 'D0TEST01', title: '제목', subtitle: null, path: 'manuscript/v1.txt' });
     expect('manuscriptPath' in context).toBe(false);
     expect('meta' in context).toBe(false);
     expect(context.threads.map((t) => [t.id, t.state])).toEqual([
@@ -292,7 +292,7 @@ describe('buildPreviousContext', () => {
           comments: [{ author: 'tester', body: '의도한 전환입니다', createdAt: new Date(1000) }],
         }),
       ],
-      manuscript: { title: '제목', subtitle: null, path: 'manuscript/v1.txt' },
+      manuscript: { id: 'D0TEST01', title: '제목', subtitle: null, path: 'manuscript/v1.txt' },
       baseStartedAt: new Date(500),
     });
     // toEqual은 여분 키를 잡아낸다 — prism의 PREVIOUS는 전 object가 additionalProperties: false다.
@@ -312,7 +312,7 @@ describe('buildPreviousContext', () => {
   it('본문 없는 스레드는 빈 문자열로 선다 — 스키마의 body는 required string이다', () => {
     const context = buildPreviousContext({
       threads: [thread('t.1.0', 'open', { body: null })],
-      manuscript: { title: '제목', subtitle: null, path: 'manuscript/v1.txt' },
+      manuscript: { id: 'D0TEST01', title: '제목', subtitle: null, path: 'manuscript/v1.txt' },
       baseStartedAt: new Date(500),
     });
     expect(context.threads[0].body).toBe('');
@@ -329,7 +329,7 @@ describe('buildPreviousContext', () => {
           ],
         }),
       ],
-      manuscript: { title: '제목', subtitle: null, path: 'manuscript/v1.txt' },
+      manuscript: { id: 'D0TEST01', title: '제목', subtitle: null, path: 'manuscript/v1.txt' },
       baseStartedAt: new Date(500),
     });
     expect(context.threads[0].replies).toEqual([
@@ -349,7 +349,7 @@ describe('buildPreviousContext', () => {
           ],
         }),
       ],
-      manuscript: { title: '제목', subtitle: null, path: 'manuscript/v1.txt' },
+      manuscript: { id: 'D0TEST01', title: '제목', subtitle: null, path: 'manuscript/v1.txt' },
       baseStartedAt: new Date(500),
     });
     expect(context.threads[0].replies).toEqual([{ body: '작가의 반론', fresh: true }]);
@@ -358,7 +358,7 @@ describe('buildPreviousContext', () => {
   it('이슈 id는 있으면 회송하고 없으면 키 자체가 서지 않는다', () => {
     const context = buildPreviousContext({
       threads: [thread('t.1.0', 'open', { issueId: 'i.abc' }), thread('t.1.1', 'open'), thread('t.1.2', 'open', { issueId: '' })],
-      manuscript: { title: '제목', subtitle: null, path: 'manuscript/v1.txt' },
+      manuscript: { id: 'D0TEST01', title: '제목', subtitle: null, path: 'manuscript/v1.txt' },
       baseStartedAt: new Date(500),
     });
     expect(context.threads[0].issue).toBe('i.abc');
@@ -467,7 +467,7 @@ describe('startFeedbackSession', () => {
 
     const body = JSON.parse(spy.mock.calls.find(([url]) => String(url).endsWith('/workflows'))?.[1]?.body as string);
     expect(body.workflowId).toBe(inserts[2].row.prismWorkflowId);
-    expect(body.input).toEqual({ title: '제목', subtitle: '부제', path: 'manuscript/v1.txt' });
+    expect(body.input).toEqual({ id: 'D0TEST01', title: '제목', subtitle: '부제', path: 'manuscript/v1.txt' });
     // 시드는 start 바디가 아니라 선적재(PUT /seeds)로 실리고, start에는 매니페스트만 남는다(prism 스펙 §4)
     const seedsBody = JSON.parse(spy.mock.calls.find(([url]) => String(url).endsWith('/seeds'))?.[1]?.body as string) as {
       files: unknown[];
@@ -509,7 +509,7 @@ describe('startFeedbackSession', () => {
     expect(body.input.overrides).toEqual({ 'rephrase-medium': { provider: 'openai', model: 'gpt-5.6-luna', effort: 'low' } });
   });
 
-  it('제목·부제가 input 최상위에 평탄하게 실린다(prism MANUSCRIPT_INPUT)', async () => {
+  it('원고 id·제목·부제가 input 최상위에 평탄하게 실린다(prism MANUSCRIPT_INPUT)', async () => {
     const spy = route({});
     const { db } = createDbStub();
 
@@ -518,7 +518,7 @@ describe('startFeedbackSession', () => {
     const body = JSON.parse(spy.mock.calls.find(([url]) => String(url).endsWith('/workflows'))?.[1]?.body as string) as {
       input: Record<string, unknown>;
     };
-    expect(body.input).toMatchObject({ title: '제목', subtitle: '부제', path: 'manuscript/v1.txt' });
+    expect(body.input).toMatchObject({ id: 'D0TEST01', title: '제목', subtitle: '부제', path: 'manuscript/v1.txt' });
     expect('meta' in body.input).toBe(false);
     expect('manuscriptPath' in body.input).toBe(false);
   });
@@ -741,10 +741,10 @@ describe('startRereview 제목·부제', () => {
     expect(updates).toContainEqual({ table: FeedbackSessions, values: { title: '제목' } });
 
     const body = JSON.parse(spy.mock.calls.find(([url]) => String(url).endsWith('/workflows'))?.[1]?.body as string) as {
-      input: { title: string | null; subtitle: string | null; path: string; previous: Record<string, unknown> };
+      input: { id: string; title: string | null; subtitle: string | null; path: string; previous: Record<string, unknown> };
     };
-    expect(body.input).toMatchObject({ title: '제목', subtitle: '부제', path: 'manuscript/v2.txt' });
-    expect(body.input.previous).toMatchObject({ title: null, subtitle: null, path: 'manuscript/v1.txt' });
+    expect(body.input).toMatchObject({ id: 'D0TEST01', title: '제목', subtitle: '부제', path: 'manuscript/v2.txt' });
+    expect(body.input.previous).toMatchObject({ id: 'D0TEST01', title: null, subtitle: null, path: 'manuscript/v1.txt' });
   });
 
   it('본문·제목·부제가 전건 동일하면 버전을 재사용한다', async () => {
@@ -784,6 +784,6 @@ describe('startRereview 제목·부제', () => {
       input: { path: string; previous: Record<string, unknown> };
     };
     expect(body.input.path).toBe('manuscript/v2.txt');
-    expect(body.input.previous).toMatchObject({ title: '제목', subtitle: '부제', path: 'manuscript/v1.txt' });
+    expect(body.input.previous).toMatchObject({ id: 'D0TEST01', title: '제목', subtitle: '부제', path: 'manuscript/v1.txt' });
   });
 });

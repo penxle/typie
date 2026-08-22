@@ -28,7 +28,7 @@ describe('prism client', () => {
     await startWorkflow(env, {
       workflowId: 'ev-x',
       workflow: 'medium',
-      input: { title: '제목', subtitle: null, path: 'manuscript/v1.txt' },
+      input: { id: 'D0TEST01', title: '제목', subtitle: null, path: 'manuscript/v1.txt' },
       files: [{ path: 'manuscript/v1.txt', content: '본문' }],
     });
     expect(spy).toHaveBeenCalledTimes(2);
@@ -46,7 +46,7 @@ describe('prism client', () => {
       workflowId: 'ev-x',
       app: 'feedback',
       workflow: 'medium',
-      input: { title: '제목', subtitle: null, path: 'manuscript/v1.txt' },
+      input: { id: 'D0TEST01', title: '제목', subtitle: null, path: 'manuscript/v1.txt' },
       staged: [digest],
     });
   });

@@ -11,6 +11,7 @@
   import ThumbsUpIcon from '~icons/lucide/thumbs-up';
   import { graphql } from '$mearie';
   import { expand, fadeIn } from '../lib/motion.ts';
+  import PrismReviewDetail from './PrismReviewDetail.svelte';
   import type { ResultView, ReviewRound } from './round-view.ts';
 
   type Props = { round: ReviewRound; result: Exclude<ResultView, { kind: 'rejected' }> };
@@ -34,6 +35,7 @@
   let editing = $state(false);
   let note = $state('');
   let sending = $state(false);
+  let detailOpen = $state(false);
 
   const send = async (roundId: string, value: 'DOWN' | 'UP' | null, text: string | null) => {
     if (sending) {
@@ -102,6 +104,26 @@
     {result.issues}{#if result.kind === 'summary'}
       · {result.counts}{/if}
   </div>
+
+  {#if round.hasDetail}
+    <div>
+      <button
+        class={css({
+          marginTop: '10px',
+          fontSize: '12px',
+          fontWeight: 'semibold',
+          color: 'text.subtle',
+          _hover: { color: 'text.default' },
+        })}
+        onclick={() => (detailOpen = true)}
+        type="button"
+      >
+        총평 읽기
+      </button>
+    </div>
+
+    <PrismReviewDetail {round} bind:open={detailOpen} />
+  {/if}
 
   <div class={flex({ alignItems: 'center', gap: '6px', marginTop: '10px' })}>
     <span class={css({ flexGrow: '1', minWidth: '0', fontSize: '11px', color: 'text.faint' })}>이번 리뷰 어땠나요?</span>

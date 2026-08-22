@@ -1,7 +1,8 @@
 // 순수 — env·DB·네트워크 import 없음(node:test 직접 로드)
+import { anchorQuote } from '@typie/prism';
 import { z } from 'zod';
 import type { PrismReviewRoundState, PrismReviewTier, PrismWorkflowState } from '@typie/lib/enums';
-import type { PrismReviewTierName, ReviewOutcome } from '@typie/prism';
+import type { Anchor, PrismReviewTierName, ReviewIssue, ReviewOutcome } from '@typie/prism';
 import type { Dayjs } from 'dayjs';
 
 export const ENUM_TO_TIER: Record<PrismReviewTier, PrismReviewTierName> = { LOW: 'low', MEDIUM: 'medium', HIGH: 'high' };
@@ -46,6 +47,85 @@ export const summarizeOutcome = (outcome: ReviewOutcome | null): OutcomeSummary 
   };
 };
 
+export type IssueBrief = { index: number; trait: string };
+
+export type OutcomeDetail = {
+  understanding: string | null;
+  progress: string | null;
+  strengths: { quote: string; body: string | null }[];
+  verdicts: { trait: string; label: string | null; note: string | null }[];
+  elevations: { trait: string; quote: string | null; body: string }[];
+  patterns: { theme: string | null; body: string; issues: IssueBrief[] }[];
+  priorities: { body: string; issues: IssueBrief[] }[];
+};
+
+// 판정점의 작가 대면 번역 — 숫자는 성적표로 읽히므로 화면에 세우지 않는다.
+const VERDICT_LABELS: Record<number, string> = { 1: '아직', 2: '흔들림', 3: '자리 잡음', 4: '단단함' };
+
+// 참조는 이슈 id(현행)와 배열 번호(구 결과) 양쪽으로 온다 — 두 형태가 갈리는 자리가 여기뿐이라 여기서 해소한다.
+const briefsOfRefs = (refs: readonly (number | string)[], issues: ReviewIssue[]): IssueBrief[] => {
+  const seen = new Set<number>();
+
+  return refs.flatMap((ref) => {
+    const index = typeof ref === 'number' ? ref : issues.findIndex((issue) => issue.id === ref);
+    const issue = issues[index];
+    if (issue === undefined || seen.has(index)) return [];
+    seen.add(index);
+    return [{ index, trait: issue.trait }];
+  });
+};
+
+// 강점은 인용과 설명뿐이라 인용을 원문에서 못 찾으면 항목이 빈다 — 앵커가 들고 있는 머리·꼬리로 세운다.
+const strengthQuote = (content: string, strength: Anchor): string => {
+  const quote = anchorQuote(content, [strength]);
+  if (quote.length > 0) return quote;
+  return strength.head === strength.tail ? strength.head : `${strength.head} ⋯ ${strength.tail}`;
+};
+
+export const detailOutcome = (outcome: ReviewOutcome | null, content: string): OutcomeDetail | null => {
+  if (outcome === null || outcome.kind !== 'feedback') return null;
+
+  const { conclusion, issues } = outcome;
+
+  return {
+    understanding: conclusion.understanding,
+    progress: conclusion.progress ?? null,
+    strengths: (conclusion.strengths ?? []).map((strength) => ({ quote: strengthQuote(content, strength), body: strength.body })),
+    verdicts: (outcome.verdicts ?? []).map((verdict) => ({
+      trait: verdict.trait,
+      label: VERDICT_LABELS[verdict.point] ?? null,
+      note: verdict.note,
+    })),
+    elevations: (outcome.elevations ?? []).map((elevation) => ({
+      trait: elevation.trait,
+      quote: anchorQuote(content, elevation.anchors) || null,
+      body: elevation.body,
+    })),
+    patterns: conclusion.patterns.map((pattern) => ({
+      theme: pattern.theme,
+      body: pattern.body,
+      issues: briefsOfRefs(pattern.issues, issues),
+    })),
+    priorities: conclusion.priorities.map((priority) => ({ body: priority.body, issues: briefsOfRefs(priority.issues, issues) })),
+  };
+};
+
+export const hasDetail = (outcome: ReviewOutcome | null): boolean => {
+  if (outcome === null || outcome.kind !== 'feedback') return false;
+
+  const { conclusion } = outcome;
+
+  return (
+    (conclusion.understanding ?? '').trim().length > 0 ||
+    (conclusion.progress ?? '').trim().length > 0 ||
+    (conclusion.strengths?.length ?? 0) > 0 ||
+    (outcome.verdicts?.length ?? 0) > 0 ||
+    (outcome.elevations?.length ?? 0) > 0 ||
+    conclusion.patterns.length > 0 ||
+    conclusion.priorities.length > 0
+  );
+};
+
 export type Snapshot = { title: string | null; subtitle: string | null; content: string };
 
 export const manuscriptPath = (versionId: string): string => `manuscript/${versionId}.txt`;
@@ -53,7 +133,7 @@ export const manuscriptPath = (versionId: string): string => `manuscript/${versi
 export const confirmResult = (
   key: string,
   tier: PrismReviewTierName,
-  document: { title: string | null; subtitle: string | null; path: string },
+  document: { id: string; title: string | null; subtitle: string | null; path: string },
 ) => ({ decision: 'confirmed', key, tier, document }) as const;
 
 export const pickVersion = (latest: (Snapshot & { version: number }) | null, snap: Snapshot): { reuse: boolean; version: number } => {

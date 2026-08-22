@@ -86,6 +86,7 @@ export const startFeedbackSession = async (
       workflowId: rows.review.prismWorkflowId,
       workflow: rows.review.tier,
       input: {
+        id: input.refId,
         title: manuscript.title,
         subtitle: manuscript.subtitle,
         path: 'manuscript/v1.txt',
@@ -160,6 +161,7 @@ export const buildPreviousContext = (input: {
   // 모르므로 판별은 여기서 끝내고 표지만 넘긴다.
   baseStartedAt: Date;
 }): PreviousInput => ({
+  id: input.manuscript.id,
   title: input.manuscript.title,
   subtitle: input.manuscript.subtitle,
   path: input.manuscript.path,
@@ -312,7 +314,7 @@ export const startRereview = async (db: Db, env: Env, sessionId: string): Promis
         issueId: thread.issueId,
         comments: commentsOf.get(thread.id) ?? [],
       })),
-      manuscript: { title: previousVersion.title, subtitle: previousVersion.subtitle, path: previousManuscriptPath },
+      manuscript: { id: session.refId, title: previousVersion.title, subtitle: previousVersion.subtitle, path: previousManuscriptPath },
       baseStartedAt: base.startedAt,
     });
 
@@ -360,6 +362,7 @@ export const startRereview = async (db: Db, env: Env, sessionId: string): Promis
       workflow: tier,
       // sparse — 승계할 오버라이드가 없으면 키 자체를 싣지 않는다(startFeedbackSession과 같은 관례).
       input: {
+        id: session.refId,
         title: manuscript.title,
         subtitle: manuscript.subtitle,
         path: manuscriptPath,

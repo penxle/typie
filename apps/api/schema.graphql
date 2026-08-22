@@ -1086,6 +1086,38 @@ type PrismReviewConclusionSummary {
   verdictsCount: Int!
 }
 
+type PrismReviewDetail {
+  elevations: [PrismReviewElevation!]!
+  patterns: [PrismReviewPattern!]!
+  priorities: [PrismReviewPriority!]!
+  progress: String
+  strengths: [PrismReviewStrength!]!
+  understanding: String
+  verdicts: [PrismReviewVerdict!]!
+}
+
+type PrismReviewElevation {
+  body: String!
+  quote: String
+  trait: String!
+}
+
+type PrismReviewIssueBrief {
+  index: Int!
+  trait: String!
+}
+
+type PrismReviewPattern {
+  body: String!
+  issues: [PrismReviewIssueBrief!]!
+  theme: String
+}
+
+type PrismReviewPriority {
+  body: String!
+  issues: [PrismReviewIssueBrief!]!
+}
+
 type PrismReviewRejection {
   message: String!
 }
@@ -1093,8 +1125,10 @@ type PrismReviewRejection {
 type PrismReviewRound {
   conclusion: PrismReviewConclusionSummary
   createdAt: DateTime!
+  detail: PrismReviewDetail
   document: Document!
   documentId: ID!
+  hasDetail: Boolean!
   id: ID!
   issueCount: Int!
   ordinal: Int!
@@ -1115,10 +1149,21 @@ enum PrismReviewRoundState {
   RUNNING
 }
 
+type PrismReviewStrength {
+  body: String
+  quote: String!
+}
+
 enum PrismReviewTier {
   HIGH
   LOW
   MEDIUM
+}
+
+type PrismReviewVerdict {
+  label: String
+  note: String
+  trait: String!
 }
 
 type PrismSession {

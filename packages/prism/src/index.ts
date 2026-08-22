@@ -1,3 +1,4 @@
+export { anchorQuote } from './anchors.ts';
 export type { ProjectedDeltaFrame, ProjectedEventData, ProjectedEventFrame, ProjectedSource, ProjectedStreamFrame } from './projected.ts';
 export { ProjectedEventSchema, ProjectedWorkflowEventSchema } from './projected.ts';
 export * from './review.ts';

@@ -260,7 +260,12 @@ describe('tool-request 변형', () => {
       ev(3, 'tool.resolved', tool, {
         tool: 'confirm-review',
         ok: true,
-        data: { decision: 'confirmed', key: 'r1', tier: 'medium', document: { title: 't', subtitle: null, path: 'manuscript/r1.md' } },
+        data: {
+          decision: 'confirmed',
+          key: 'r1',
+          tier: 'medium',
+          document: { id: 'D0DOC1', title: 't', subtitle: null, path: 'manuscript/r1.md' },
+        },
       }),
     ]);
     t = applyFrame(t, ev(4, 'run.completed', run, {}));
