@@ -176,7 +176,7 @@ const confirmReview = async (ctx: PrismToolContext, input: unknown) => {
     throw err;
   }
 
-  return confirmResult(round.id, ENUM_TO_TIER[tier], { title: snap.title, subtitle: snap.subtitle, path });
+  return confirmResult(round.id, ENUM_TO_TIER[tier], { id: documentId, title: snap.title, subtitle: snap.subtitle, path });
 };
 
 export const reviewTools: Record<string, PrismToolHandler> = { 'confirm-review': confirmReview };

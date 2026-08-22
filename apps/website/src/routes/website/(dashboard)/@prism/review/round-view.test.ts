@@ -8,6 +8,7 @@ const makeRound = (over: Partial<ReviewRound> = {}): ReviewRound => ({
   tier: 'HIGH',
   ordinal: 1,
   issueCount: 0,
+  hasDetail: false,
   reaction: null,
   reactionNote: null,
   workflow: { id: 'row-1', prismWorkflowId: 'prism-1' },
@@ -115,7 +116,7 @@ describe('describeHeader', () => {
 
   it('헤더는 제목과 티어 라벨을 낸다', () => {
     const round = makeRound({ tier: 'MEDIUM', ordinal: 3 });
-    expect(describeHeader(round)).toEqual({ title: '「제목」', tier: '보통' });
+    expect(describeHeader(round)).toEqual({ title: '「제목」', tier: '일반 검토' });
   });
 });
 

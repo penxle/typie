@@ -43,6 +43,7 @@
             tier
             ordinal
             issueCount
+            hasDetail
             reaction
             reactionNote
 

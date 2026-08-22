@@ -66,7 +66,7 @@ export const ConfirmDecisionSchema = z.discriminatedUnion('decision', [
     decision: z.literal('confirmed'),
     key: z.string(),
     tier: z.enum(PRISM_REVIEW_TIERS),
-    document: z.object({ title: z.string().nullable(), subtitle: z.string().nullable(), path: z.string() }),
+    document: z.object({ id: z.string(), title: z.string().nullable(), subtitle: z.string().nullable(), path: z.string() }),
   }),
   z.object({ decision: z.literal('declined') }),
 ]);
