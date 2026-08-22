@@ -12,11 +12,12 @@
   import { graphql } from '$mearie';
   import { backoffDelay } from '../lib/backoff.ts';
   import { parseMarkdown } from '../lib/markdown.ts';
-  import { expand, fadeIn, fadeOut, rise } from '../lib/motion.ts';
+  import { expand, fadeIn, rise } from '../lib/motion.ts';
   import { PacedText } from '../lib/paced-text.svelte.ts';
   import PrismMarkdown from '../PrismMarkdown.svelte';
   import PrismToolCalls from '../PrismToolCalls.svelte';
   import PrismToolRequest from '../PrismToolRequest.svelte';
+  import PrismWaitRow from '../PrismWaitRow.svelte';
   import { buildPassage, elapsedLabel, runningLabel, spentLabel, tailLabel } from './passage-view.ts';
   import PrismReviewResult from './PrismReviewResult.svelte';
   import { describeHeader, describeResult, findRound, recheckMode } from './round-view.ts';
@@ -466,14 +467,7 @@
   });
   const expandClass = css({ display: '[flow-root]' });
   const narrationClass = css({ marginTop: '10px', fontSize: '14px', lineHeight: '[1.6]' });
-  const tailRowClass = flex({
-    alignItems: 'center',
-    gap: '8px',
-    minHeight: '[17px]',
-    marginTop: '10px',
-    fontSize: '12px',
-    color: 'text.faint',
-  });
+  const tailWrapClass = css({ marginTop: '10px' });
   const roundBoxClass = css({
     marginTop: '10px',
     paddingX: '10px',
@@ -525,9 +519,8 @@
     <div class={narrationClass}><PrismMarkdown blocks={live.blocks} plain={live.plain} /></div>
   {/if}
   {#if running && !awaiting && (!streaming || tail !== null)}
-    <div class={tailRowClass} in:fade={fadeIn} out:fade={fadeOut}>
-      <span class={ringClass}></span>
-      {#if tail !== null}<span in:fade={fadeIn}>{tail}</span>{/if}
+    <div class={tailWrapClass}>
+      <PrismWaitRow label={tail ?? '리뷰가 진행 중이에요'} text={tail} />
     </div>
   {/if}
 {/snippet}
@@ -666,9 +659,8 @@
 
   {#if running}
     {#if view.current === null && !awaiting && (!streaming || tail !== null)}
-      <div class={tailRowClass} in:fade={fadeIn} out:fade={fadeOut}>
-        <span class={ringClass}></span>
-        {#if tail !== null}<span in:fade={fadeIn}>{tail}</span>{/if}
+      <div class={tailWrapClass}>
+        <PrismWaitRow label={tail ?? '리뷰가 진행 중이에요'} text={tail} />
       </div>
     {/if}
     {#each view.stages.filter((stage) => stage.status !== 'pending') as stage (stage.key)}

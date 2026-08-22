@@ -3,7 +3,7 @@ import { ASK_USER_TOOL, AskQuestionsSchema } from '@typie/prism';
 import { and, eq, isNotNull, isNull } from 'drizzle-orm';
 import { db, PrismSessions, PrismWorkflows } from '#/db/index.ts';
 import { prism, PrismApiError } from '#/external/prism.ts';
-import { closeRun, linkWorkflow, settleWorkflow } from '#/utils/prism-workflows.ts';
+import { cancelActiveRun, closeRun, linkWorkflow, settleWorkflow } from '#/utils/prism-workflows.ts';
 import { isRunRunning, settleUpdate, workflowTargets } from '#/utils/prism-workflows-core.ts';
 import { defineCron } from '../types.ts';
 import { askBody, pushKey, subjectTitle } from './prism-core.ts';
@@ -97,7 +97,32 @@ const poll = async () => {
   }
 };
 
+const closeDeleted = async () => {
+  const sessions = await db
+    .select({ id: PrismSessions.id, prismAgentId: PrismSessions.prismAgentId, openRunSeq: PrismSessions.openRunSeq })
+    .from(PrismSessions)
+    .where(and(isNotNull(PrismSessions.openRunSeq), isNotNull(PrismSessions.deletedAt)));
+
+  for (const session of sessions) {
+    const openRunSeq = session.openRunSeq;
+    if (openRunSeq === null) continue;
+
+    try {
+      try {
+        await cancelActiveRun(session.prismAgentId);
+      } catch (err) {
+        if (!(err instanceof PrismApiError && err.status === 404)) throw err;
+      }
+
+      await closeRun(session.id, openRunSeq);
+    } catch (err) {
+      log.warn('deleted-session close failed for session {id}: {*}', { id: session.id, error: err });
+    }
+  }
+};
+
 export const PrismWorkflowsPollCron = defineCron('prism:workflows:poll', '* * * * *', async () => {
   await discover();
   await poll();
+  await closeDeleted();
 });

@@ -16,7 +16,7 @@ export class PrismApiError extends Error {
 
 export const PRISM_CONVERSATION = { app: 'assistant', agent: 'chat' } as const;
 
-export const newAgentId = (): string => `typie-${crypto.randomUUID()}`;
+export const newAgentId = (): string => `chat-${crypto.randomUUID()}`;
 
 export const activeRun = (runs: RunSummary[]): RunSummary | null => runs.findLast((run) => run.status === 'running') ?? null;
 

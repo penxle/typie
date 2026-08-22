@@ -17,7 +17,7 @@ import { prismCommands } from '#/utils/prism-catalog.ts';
 import { projectFrame } from '#/utils/prism-events.ts';
 import { routeSessionFrame } from '#/utils/prism-session-stream.ts';
 import { prismTools } from '#/utils/prism-tools.ts';
-import { cancelSessionWorkflows, closeRun, linkWorkflow, settleWorkflow, titleSession } from '#/utils/prism-workflows.ts';
+import { cancelActiveRun, cancelSessionWorkflows, closeRun, linkWorkflow, settleWorkflow, titleSession } from '#/utils/prism-workflows.ts';
 import { isRunningChildAgent } from '#/utils/prism-workflows-core.ts';
 import { builder } from '../builder.ts';
 import { PrismSession, PrismWorkflow, User } from '../objects.ts';
@@ -293,9 +293,7 @@ builder.mutationFields((t) => ({
       await assertPrismAccess({ userId: ctx.session.userId });
       const session = await ownedSession(input.sessionId, ctx.session.userId);
       await cancelSessionWorkflows(session.id);
-      const agent = await prism.getAgent(session.prismAgentId).catch(prismError);
-      const running = activeRun(agent.runs);
-      if (running) await prism.cancelAgentRun(session.prismAgentId, running.runSeq).catch(prismError);
+      await cancelActiveRun(session.prismAgentId).catch(prismError);
       return session;
     },
   }),
@@ -346,12 +344,31 @@ builder.mutationFields((t) => ({
     resolve: async (_, { input }, ctx) => {
       const session = await ownedSession(input.sessionId, ctx.session.userId);
       await cancelSessionWorkflows(session.id);
-      return db
+
+      let canceled = true;
+      try {
+        await cancelActiveRun(session.prismAgentId);
+      } catch (err) {
+        if (!(err instanceof PrismApiError && err.status === 404)) {
+          canceled = false;
+          log.warn('prism run cancel on delete failed: {sessionId} {*}', { sessionId: session.id, error: err });
+        }
+      }
+
+      const updated = await db
         .update(PrismSessions)
-        .set({ deletedAt: dayjs(), openRunSeq: null })
+        .set({ deletedAt: dayjs() })
         .where(eq(PrismSessions.id, input.sessionId))
         .returning()
         .then(firstOrThrow);
+
+      if (canceled && session.openRunSeq !== null) {
+        await closeRun(session.id, session.openRunSeq).catch((err) =>
+          log.warn('prism close-run on delete failed: {sessionId} {*}', { sessionId: session.id, error: err }),
+        );
+      }
+
+      return updated;
     },
   }),
 }));

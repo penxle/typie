@@ -2,7 +2,7 @@ import { logger } from '@typie/lib';
 import dayjs from 'dayjs';
 import { and, eq } from 'drizzle-orm';
 import { db, first, firstOrThrow, PrismSessions, PrismWorkflows } from '#/db/index.ts';
-import { prism } from '#/external/prism.ts';
+import { activeRun, prism } from '#/external/prism.ts';
 import { prismApps } from './prism-apps.ts';
 import { settleUpdate } from './prism-workflows-core.ts';
 import type { WorkflowState } from '@typie/prism';
@@ -75,6 +75,12 @@ export const closeRun = async (sessionId: string, runSeq: number): Promise<void>
     .update(PrismSessions)
     .set({ openRunSeq: null })
     .where(and(eq(PrismSessions.id, sessionId), eq(PrismSessions.openRunSeq, runSeq)));
+};
+
+export const cancelActiveRun = async (prismAgentId: string): Promise<void> => {
+  const agent = await prism.getAgent(prismAgentId);
+  const running = activeRun(agent.runs);
+  if (running) await prism.cancelAgentRun(prismAgentId, running.runSeq);
 };
 
 export const cancelSessionWorkflows = async (sessionId: string): Promise<void> => {
