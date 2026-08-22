@@ -4,7 +4,6 @@
   import { Icon } from '@typie/ui/components';
   import { tick, untrack } from 'svelte';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
-  import PyramidIcon from '~icons/lucide/pyramid';
   import { pop, rise } from './lib/motion.ts';
   import { PacedText } from './lib/paced-text.svelte.ts';
   import { foldToolCalls } from './lib/tool-calls.ts';
@@ -44,7 +43,13 @@
       : null;
 
   const dropped = (message: TranscriptMessage) =>
-    (message.role === 'tool-request' && message.workflowId !== undefined) || (message.role === 'tool' && !foldable(message));
+    (message.role === 'tool-request' && message.workflowId !== undefined) ||
+    (message.role === 'tool' && !foldable(message)) ||
+    (message.role === 'assistant' && message.text === null) ||
+    (message.role === 'tool-request' &&
+      !foldable(message) &&
+      toolCards[message.tool] === undefined &&
+      !(message.status === 'pending' && failedIds.has(message.toolCallId)));
 
   const entries = $derived(
     foldToolCalls(
@@ -312,10 +317,6 @@
             animation: 'pulse 1.6s ease-in-out infinite',
           })}
         ></div>
-      {:else if transcript.messages.length === 0 && !transcript.live && pending === null}
-        <div class={flex({ flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '10px', flexGrow: '1' })}>
-          <Icon style={css.raw({ color: 'border.default' })} icon={PyramidIcon} size={32} />
-        </div>
       {/if}
 
       {#each entries as entry (entry.key)}

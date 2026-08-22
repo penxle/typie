@@ -75,9 +75,9 @@ describe('describeResult', () => {
     expect(describeResult(round)).toBeNull();
   });
 
-  it('거절된 회차는 사유를 그대로 낸다', () => {
+  it('거절된 회차는 사유 없이 거절 표지만 낸다', () => {
     const round = makeRound({ rejection: { message: '거절 사유' } });
-    expect(describeResult(round)).toEqual({ kind: 'rejected', message: '거절 사유' });
+    expect(describeResult(round)).toEqual({ kind: 'rejected' });
   });
 
   it('결론이 있으면 요약을 만든다', () => {

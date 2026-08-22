@@ -153,7 +153,7 @@
 <div class={cardClass}>
   <div class={titleClass}>AI 리뷰를 시작할까요?</div>
 
-  <div class={labelClass}>원고</div>
+  <div class={labelClass}>대상 문서</div>
   {#if readonly}
     <div
       class={css(
@@ -166,7 +166,7 @@
       <span class={ellipsisClass}>{chosenTitle || (decided ? '제목 없음' : '—')}</span>
     </div>
   {:else if documents.length === 0}
-    <p class={css({ color: 'text.subtle', marginBottom: '10px' })}>열린 원고가 없어요 — 문서를 열고 다시 골라 주세요</p>
+    <p class={css({ color: 'text.subtle', marginBottom: '10px' })}>열린 문서가 없어요 — 문서를 열고 다시 골라 주세요</p>
   {:else}
     <Menu
       style={css.raw(optionStyle, { marginBottom: '12px', borderColor: 'border.subtle', _expanded: { borderColor: 'border.strong' } })}
@@ -207,7 +207,7 @@
     </Menu>
   {/if}
 
-  <div class={labelClass}>깊이</div>
+  <div class={labelClass}>검토 깊이</div>
   <div class={flex({ flexDirection: 'column', gap: '4px', marginBottom: readonly ? '0' : '12px' })}>
     {#each TIER_OPTIONS as opt (opt.tier)}
       {@const on = readonly ? decided && chosenTier === opt.tier : tier === opt.tier}

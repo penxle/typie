@@ -1,6 +1,9 @@
+import { backoffDelay } from './lib/backoff.ts';
 import { applyFrame, emptyTranscript } from './lib/conversation.ts';
 import type { ProjectedStreamFrame } from '@typie/prism';
 import type { Transcript } from './lib/conversation.ts';
+
+const SEED_RETRY_DELAYS = [2000, 5000, 15_000, 30_000];
 
 export type PrismChatDeps = {
   loadLog: (sessionId: string) => Promise<ProjectedStreamFrame[]>;
@@ -17,6 +20,40 @@ export const createPrismChat = (deps: PrismChatDeps) => {
   let seedCursor = $state(0);
   let pending = $state<string | null>(null);
   let loadGen = $state(0);
+  let revision = $state(0);
+
+  const retryWorkflowSeeds = async (gen: number, ids: string[]) => {
+    let remaining = ids;
+
+    for (let attempt = 1; remaining.length > 0; attempt++) {
+      const delay = backoffDelay(SEED_RETRY_DELAYS, attempt);
+      if (delay === null) return;
+
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      if (gen !== loadGen) return;
+
+      const results = await Promise.allSettled(remaining.map((workflowId) => deps.loadWorkflowLog(workflowId)));
+      if (gen !== loadGen) return;
+
+      const unresolved: string[] = [];
+
+      for (const [index, result] of results.entries()) {
+        if (result.status !== 'fulfilled') {
+          unresolved.push(remaining[index]);
+          continue;
+        }
+
+        let next = transcript;
+        for (const frame of result.value) {
+          next = applyFrame(next, frame);
+        }
+        transcript = next;
+        revision += 1;
+      }
+
+      remaining = unresolved;
+    }
+  };
 
   const load = async (id: string | null) => {
     if (id !== null && id === sessionId && error === null) {
@@ -65,6 +102,9 @@ export const createPrismChat = (deps: PrismChatDeps) => {
 
       transcript = next;
       seedCursor = next.cursor;
+
+      const unseeded = running.filter((_, index) => logs[index].status === 'rejected');
+      if (unseeded.length > 0) void retryWorkflowSeeds(gen, unseeded);
       if (next.messages.length > 0) {
         pending = null;
       }
@@ -102,6 +142,9 @@ export const createPrismChat = (deps: PrismChatDeps) => {
     },
     get generation() {
       return loadGen;
+    },
+    get revision() {
+      return revision;
     },
     load,
     async loadWorkflow(workflowId: string) {

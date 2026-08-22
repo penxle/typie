@@ -245,9 +245,8 @@
 
   let composer = $state<PrismComposer>();
   let draft = $state('');
-  const chipsVisible = $derived(
-    chat.transcript.messages.length === 0 && !chat.transcript.live && chat.pending === null && draft.length === 0,
-  );
+  const emptySession = $derived(chat.transcript.messages.length === 0 && !chat.transcript.live && chat.pending === null);
+  const chipsVisible = $derived(emptySession && draft.length === 0);
   const chipClass = css({
     display: 'flex',
     alignItems: 'center',
@@ -418,6 +417,7 @@
 
   $effect(() => {
     void chat.seedCursor;
+    void chat.revision;
     untrack(() => {
       subscribeCursor = chat.transcript.cursor;
       subscribeWorkflows = workflowCursors();
@@ -805,6 +805,21 @@
       {#if gate}
         <PrismGateCard reason={gate} />
       {:else}
+        {#if emptySession && !chat.loading}
+          <div
+            class={css({
+              position: 'absolute',
+              inset: '0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              pointerEvents: 'none',
+            })}
+          >
+            <Icon style={css.raw({ color: 'border.default' })} icon={PyramidIcon} size={32} />
+          </div>
+        {/if}
+
         {#if listOpen}
           <PrismSessionList
             currentId={selected.current}
@@ -856,12 +871,18 @@
         {/if}
 
         {#if !chat.loading}
-          {#if chipsVisible}
-            <div class={css({ paddingX: '12px', paddingBottom: '24px' })}>
+          {#if emptySession}
+            <div
+              class={css(
+                { paddingX: '12px', paddingBottom: '24px', transition: '[opacity 150ms ease]' },
+                chipsVisible ? {} : { opacity: '0', pointerEvents: 'none' },
+              )}
+              aria-hidden={!chipsVisible}
+            >
               <p class={css({ marginBottom: '6px', fontSize: '13px', fontWeight: 'semibold', color: 'text.faint' })}>제안</p>
               <div class={flex({ gap: '6px' })}>
                 {#each startChips as chip (chip.insert)}
-                  <button class={chipClass} onclick={() => onQuickSend(chip.insert)} type="button">
+                  <button class={chipClass} onclick={() => onQuickSend(chip.insert)} tabindex={chipsVisible ? 0 : -1} type="button">
                     <Icon icon={chip.icon} size={14} />
                     {chip.label}
                   </button>

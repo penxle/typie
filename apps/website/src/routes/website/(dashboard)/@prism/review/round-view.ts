@@ -5,8 +5,7 @@ import type { WorkflowStatus } from '../lib/conversation.ts';
 
 export type ReviewRound = DataOf<DashboardLayout_PrismReviewPassage_Query>['prismSession']['reviewRounds'][number];
 
-export type ResultView =
-  { kind: 'rejected'; message: string } | { kind: 'summary'; counts: string; issues: string } | { kind: 'issues'; issues: string };
+export type ResultView = { kind: 'rejected' } | { kind: 'summary'; counts: string; issues: string } | { kind: 'issues'; issues: string };
 
 export type RoundHeader = { title: string; tier: string };
 
@@ -46,7 +45,7 @@ export const describeResult = (round: ReviewRound): ResultView | null => {
   }
 
   if (round.rejection) {
-    return { kind: 'rejected', message: round.rejection.message };
+    return { kind: 'rejected' };
   }
 
   const issues = `본문 여백에 리뷰 ${round.issueCount}개를 남겼어요`;
