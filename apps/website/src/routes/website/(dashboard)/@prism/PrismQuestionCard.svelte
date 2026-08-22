@@ -8,7 +8,7 @@
   import { untrack } from 'svelte';
   import { fade } from 'svelte/transition';
   import { unwrapError } from '$lib/graphql/error';
-  import { fadeIn, shift } from './lib/motion.ts';
+  import { fadeIn, rise, shift } from './lib/motion.ts';
   import { answeredAll, buildAnswers, emptyDrafts, isAnswered, toggleChoice, toggleOther } from './lib/questions.ts';
   import type { AskAnswer } from '@typie/prism';
   import type { ToolCardProps } from './tools/index.ts';
@@ -250,7 +250,7 @@
     </div>
   </div>
 {:else if total > 0 && shown !== null}
-  <div class={flex({ flexDirection: 'column', gap: '10px' })} in:fade={fadeIn}>
+  <div class={flex({ flexDirection: 'column', gap: '10px' })} in:rise={{ block: true }}>
     {#each questions as q, index (index)}
       <div>
         <p class={questionClass}>{q.question}</p>

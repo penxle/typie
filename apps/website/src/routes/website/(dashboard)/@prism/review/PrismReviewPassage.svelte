@@ -4,7 +4,7 @@
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Button, Icon, Tooltip } from '@typie/ui/components';
-  import { untrack } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import { fade } from 'svelte/transition';
   import CheckIcon from '~icons/lucide/check';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
@@ -12,7 +12,7 @@
   import { graphql } from '$mearie';
   import { backoffDelay } from '../lib/backoff.ts';
   import { parseMarkdown } from '../lib/markdown.ts';
-  import { expand, fadeIn, rise } from '../lib/motion.ts';
+  import { expand, fadeIn, fadeOut, MOTION, rise, STAGGER } from '../lib/motion.ts';
   import { PacedText } from '../lib/paced-text.svelte.ts';
   import PrismMarkdown from '../PrismMarkdown.svelte';
   import PrismToolCalls from '../PrismToolCalls.svelte';
@@ -204,6 +204,15 @@
 
   const reduceMotion = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+  let firstPaint = $state(true);
+
+  $effect(() => {
+    void tick().then(() => (firstPaint = false));
+  });
+
+  const liveDelay = (index: number) => (firstPaint ? MOTION.quick + index * STAGGER : 0);
+  const settledDelay = (index: number) => (firstPaint ? MOTION.quick : 0) + index * STAGGER;
+
   let live = $state<PacedText | null>(null);
   let drains = $state<{ seq: number; stage: StageKey | null; round: number | null; paced: PacedText }[]>([]);
   let liveKey = '';
@@ -274,7 +283,10 @@
   });
 
   const HOLD_MS = 5000;
-  let heldStages = $state<StageKey[]>([]);
+  const remainingHold = (at: number) => Math.max(0, at + HOLD_MS - Date.now());
+
+  let heldStages = $state<{ key: StageKey; at: number }[]>([]);
+  const heldStageKeys = $derived(heldStages.map((entry) => entry.key));
   let prevCurrent: StageKey | null = null;
 
   $effect(() => {
@@ -286,7 +298,9 @@
 
     untrack(() => {
       const finished = prevCurrent;
-      if (finished !== null && !heldStages.includes(finished)) heldStages = [...heldStages, finished];
+      if (finished !== null && heldStages.every((entry) => entry.key !== finished)) {
+        heldStages = [...heldStages, { key: finished, at: Date.now() }];
+      }
       prevCurrent = currentStage;
     });
   });
@@ -298,15 +312,15 @@
 
     const busy = new Set(drains.map((entry) => entry.stage));
     const timers = heldStages
-      .filter((key) => !busy.has(key))
-      .map((key) => setTimeout(() => (heldStages = heldStages.filter((entry) => entry !== key)), HOLD_MS));
+      .filter((entry) => !busy.has(entry.key))
+      .map((entry) => setTimeout(() => (heldStages = heldStages.filter((held) => held.key !== entry.key)), remainingHold(entry.at)));
 
     return () => {
       for (const timer of timers) clearTimeout(timer);
     };
   });
 
-  let heldRounds = $state<{ key: string; stage: StageKey; round: number }[]>([]);
+  let heldRounds = $state<{ key: string; stage: StageKey; round: number; at: number }[]>([]);
   const heldRoundKeys = $derived(heldRounds.map((entry) => entry.key));
   let prevLatestRounds: Record<string, { key: string; round: number }> = {};
 
@@ -325,7 +339,7 @@
       for (const [stageKey, next] of Object.entries(latest)) {
         const prev = prevLatestRounds[stageKey];
         if (prev !== undefined && prev.key !== next.key && heldRounds.every((entry) => entry.key !== prev.key)) {
-          heldRounds = [...heldRounds, { key: prev.key, stage: stageKey as StageKey, round: prev.round }];
+          heldRounds = [...heldRounds, { key: prev.key, stage: stageKey as StageKey, round: prev.round, at: Date.now() }];
         }
         prevLatestRounds[stageKey] = next;
       }
@@ -340,7 +354,7 @@
     const busy = new Set(drains.filter((entry) => entry.round !== null).map((entry) => `${entry.stage}|${entry.round}`));
     const timers = heldRounds
       .filter((entry) => !busy.has(`${entry.stage}|${entry.round}`))
-      .map((entry) => setTimeout(() => (heldRounds = heldRounds.filter((held) => held.key !== entry.key)), HOLD_MS));
+      .map((entry) => setTimeout(() => (heldRounds = heldRounds.filter((held) => held.key !== entry.key)), remainingHold(entry.at)));
 
     return () => {
       for (const timer of timers) clearTimeout(timer);
@@ -348,15 +362,14 @@
   });
 
   const awaiting = $derived(requests.some((request) => request.status === 'pending'));
-  const streaming = $derived(message.trace.live?.last === 'text');
   const rawTail = $derived(running && !awaiting ? tailLabel({ live: message.trace.live, reconnecting, lateMs: now - lastBeat }) : null);
   let tail = $state<string | null>(null);
 
   $effect(() => {
     const next = rawTail;
-    tail = null;
 
     if (next === null) {
+      tail = null;
       return;
     }
 
@@ -455,9 +468,15 @@
     _motionReduce: { transition: '[none]' },
   });
   const chevronOpenStyle = css.raw({ transform: 'rotate(180deg)' });
+  const glyphSlotClass = css({ position: 'relative', size: '14px', flexShrink: '0' });
   const glyphBaseStyle = css.raw({
+    position: 'absolute',
+    top: '0',
+    right: '0',
+    bottom: '0',
+    left: '0',
+    margin: 'auto',
     size: '14px',
-    flexShrink: '0',
     borderRadius: 'full',
     display: 'inline-flex',
     alignItems: 'center',
@@ -472,7 +491,6 @@
   });
   const expandClass = css({ display: '[flow-root]' });
   const narrationClass = css({ marginTop: '10px', fontSize: '14px', lineHeight: '[1.6]' });
-  const tailWrapClass = css({ marginTop: '10px' });
   const roundBoxClass = css({
     marginTop: '10px',
     paddingX: '10px',
@@ -500,37 +518,51 @@
 </script>
 
 {#snippet stageGlyph(status: StageView['status'])}
-  {#if status === 'running'}
-    <span class={ringClass} in:fade={fadeIn}></span>
-  {:else if status === 'done'}
-    <span class={css(glyphBaseStyle, { backgroundColor: 'text.default', color: 'surface.default' })} in:fade={fadeIn}>
-      <Icon icon={CheckIcon} size={10} />
-    </span>
-  {:else if status === 'canceled'}
-    <span class={css(glyphBaseStyle, { backgroundColor: 'text.faint', color: 'surface.default', fontSize: '8px' })}>■</span>
-  {:else if status === 'failed'}
-    <span class={css(glyphBaseStyle, { backgroundColor: 'text.default', color: 'surface.default', fontSize: '10px', fontWeight: 'bold' })}>
-      !
-    </span>
-  {:else}
-    <span
-      class={css(glyphBaseStyle, { size: '12px', borderWidth: '[1.5px]', borderStyle: 'dashed', borderColor: 'border.default' })}
-    ></span>
-  {/if}
+  <span class={glyphSlotClass}>
+    {#if status === 'running'}
+      <span class={ringClass} in:fade={fadeIn} out:fade={fadeOut}></span>
+    {:else if status === 'done'}
+      <span class={css(glyphBaseStyle, { backgroundColor: 'text.default', color: 'surface.default' })} in:fade={fadeIn} out:fade={fadeOut}>
+        <Icon icon={CheckIcon} size={10} />
+      </span>
+    {:else if status === 'canceled'}
+      <span
+        class={css(glyphBaseStyle, { backgroundColor: 'text.faint', color: 'surface.default', fontSize: '8px' })}
+        in:fade={fadeIn}
+        out:fade={fadeOut}
+      >
+        ■
+      </span>
+    {:else if status === 'failed'}
+      <span
+        class={css(glyphBaseStyle, {
+          backgroundColor: 'text.default',
+          color: 'surface.default',
+          fontSize: '10px',
+          fontWeight: 'bold',
+        })}
+        in:fade={fadeIn}
+        out:fade={fadeOut}
+      >
+        !
+      </span>
+    {:else}
+      <span
+        class={css(glyphBaseStyle, { size: '12px', borderWidth: '[1.5px]', borderStyle: 'dashed', borderColor: 'border.default' })}
+        in:fade={fadeIn}
+        out:fade={fadeOut}
+      ></span>
+    {/if}
+  </span>
 {/snippet}
 
-{#snippet liveTail()}
+{#snippet liveNarration()}
   {#if live !== null && live.boundary > 0}
     <div class={narrationClass}><PrismMarkdown blocks={live.blocks} plain={live.plain} /></div>
   {/if}
-  {#if running && !awaiting && (!streaming || tail !== null)}
-    <div class={tailWrapClass}>
-      <PrismWaitRow label={tail ?? '리뷰가 진행 중이에요'} text={tail} />
-    </div>
-  {/if}
 {/snippet}
 
-{#snippet groups(list: PassageGroup[], latestSeq: number | null, liveKey: string | null = null)}
+{#snippet groups(list: PassageGroup[], latestSeq: number | null)}
   {#each list as group (group.key)}
     {#if group.kind === 'narration'}
       {@const groupDrain = drainOf(group.seq)}
@@ -542,12 +574,12 @@
     {:else if group.kind === 'tools'}
       <div class={css({ marginTop: '8px' })} in:rise><PrismToolCalls count={group.count} rows={group.rows} /></div>
     {:else if group.kind === 'question'}
-      <div class={css({ marginTop: '12px' })} in:rise>
+      <div class={css({ marginTop: '12px' })} in:rise={{ block: true }}>
         <PrismToolRequest {failedIds} message={group.request} {onRetry} {resolve} {transcript} />
       </div>
     {:else}
       {@const open = expanded[group.key] ?? (group.seq === latestSeq || heldRoundKeys.includes(group.key))}
-      <div class={roundBoxClass} in:rise>
+      <div class={roundBoxClass} in:rise={{ block: true }}>
         <button
           class={css(roundHeadStyle, { width: 'full' })}
           aria-expanded={open}
@@ -561,9 +593,6 @@
         {#if open}
           <div class={expandClass} transition:expand>
             {@render groups(group.groups, null)}
-            {#if group.key === liveKey}
-              {@render liveTail()}
-            {/if}
           </div>
         {/if}
       </div>
@@ -573,14 +602,7 @@
 
 {#snippet stageBody(stage: StageView)}
   {@const latestRound = stage.groups.findLast((group) => group.kind === 'round')?.seq ?? null}
-  {@const liveKey =
-    stage.status === 'running' && view.liveRound !== null
-      ? (stage.groups.findLast((group) => group.kind === 'round' && group.round === view.liveRound)?.key ?? null)
-      : null}
-  {@render groups(stage.groups, stage.status === 'running' ? latestRound : null, liveKey)}
-  {#if stage.status === 'running' && liveKey === null}
-    {@render liveTail()}
-  {/if}
+  {@render groups(stage.groups, stage.status === 'running' ? latestRound : null)}
 {/snippet}
 
 {#snippet stageLine(stage: StageView, toggleable: boolean, delay: number = 0)}
@@ -591,7 +613,7 @@
     disabled={!toggleable}
     onclick={() => (expanded[stage.key] = !open)}
     type="button"
-    in:rise={{ delay }}
+    in:rise|global={{ delay }}
   >
     {@render stageGlyph(stage.status)}
     <span
@@ -663,20 +685,19 @@
   {@render groups(view.prelude, null)}
 
   {#if running}
-    {#if view.current === null && !awaiting && (!streaming || tail !== null)}
-      <div class={tailWrapClass}>
-        <PrismWaitRow label={tail ?? '리뷰가 진행 중이에요'} text={tail} />
-      </div>
-    {/if}
-    {#each view.stages.filter((stage) => stage.status !== 'pending') as stage (stage.key)}
-      {@const showBody = stage.status === 'running' || heldStages.includes(stage.key)}
-      {@render stageLine(stage, !showBody && stage.groups.length > 0)}
+    {#each view.stages.filter((stage) => stage.status !== 'pending') as stage, index (stage.key)}
+      {@const showBody = stage.status === 'running' || heldStageKeys.includes(stage.key)}
+      {@render stageLine(stage, !showBody && stage.groups.length > 0, liveDelay(index))}
       {#if showBody}
         <div class={expandClass} out:expand>
           {@render stageBody(stage)}
         </div>
       {/if}
     {/each}
+    {@render liveNarration()}
+    {#if !awaiting}
+      <PrismWaitRow style={css.raw({ marginTop: '10px' })} label={tail ?? '리뷰가 진행 중이에요'} text={tail} />
+    {/if}
   {:else}
     {#if traceLoad === 'loading'}
       <div class={css(skeletonStyle, { width: '[55%]' })}></div>
@@ -688,8 +709,8 @@
       </div>
     {:else}
       {#each view.stages.filter((stage) => stage.status !== 'pending') as stage, index (stage.key)}
-        {@const held = heldStages.includes(stage.key)}
-        {@render stageLine(stage, !held && stage.groups.length > 0, index * 40)}
+        {@const held = heldStageKeys.includes(stage.key)}
+        {@render stageLine(stage, !held && stage.groups.length > 0, settledDelay(index))}
         {#if held}
           <div class={expandClass} out:expand>
             {@render stageBody(stage)}
@@ -709,7 +730,7 @@
       </div>
     {:else if round !== null && result !== null}
       {#if result.kind !== 'rejected'}
-        <div class={css({ marginTop: '12px' })} in:rise><PrismReviewResult {result} {round} /></div>
+        <div class={css({ marginTop: '12px' })} in:rise={{ block: true }}><PrismReviewResult {result} {round} /></div>
       {/if}
     {:else}
       <div class={css(skeletonStyle, { width: '[40%]' })}></div>

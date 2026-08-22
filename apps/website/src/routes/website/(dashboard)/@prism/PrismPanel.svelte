@@ -9,9 +9,9 @@
   import { Dialog, Toast } from '@typie/ui/notification';
   import { clamp } from '@typie/ui/utils';
   import { tick, untrack } from 'svelte';
-  import { fade } from 'svelte/transition';
   import ArchiveIcon from '~icons/lucide/archive';
   import ArchiveRestoreIcon from '~icons/lucide/archive-restore';
+  import CircleAlertIcon from '~icons/lucide/circle-alert';
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import HistoryIcon from '~icons/lucide/history';
   import PencilIcon from '~icons/lucide/pencil';
@@ -26,7 +26,7 @@
   import { AutoResolver } from './lib/auto-resolve.svelte.ts';
   import { backoffDelay } from './lib/backoff.ts';
   import { pendingRootRequests, runningWorkflows } from './lib/conversation.ts';
-  import { fadeIn, fadeOut } from './lib/motion.ts';
+  import { expand, swap } from './lib/motion.ts';
   import { sessionLabel } from './lib/session-groups.ts';
   import { createPrismChat } from './prism-chat.svelte';
   import { fetchSessionLog, fetchWorkflowLog, toFrame } from './prism-data';
@@ -35,6 +35,7 @@
   import PrismComposer from './PrismComposer.svelte';
   import PrismGateCard from './PrismGateCard.svelte';
   import PrismSessionList from './PrismSessionList.svelte';
+  import PrismSpinner from './PrismSpinner.svelte';
   import PrismTranscript from './PrismTranscript.svelte';
   import { startChips } from './start-chips.ts';
   import { clientResolvers } from './tools/index.ts';
@@ -368,6 +369,18 @@
     titleEditing = false;
   });
 
+  const calloutStyle = flex.raw({
+    alignItems: 'center',
+    gap: '8px',
+    paddingX: '12px',
+    paddingY: '10px',
+    borderWidth: '1px',
+    borderRadius: '10px',
+  });
+  const calloutNeutralStyle = css.raw({ borderColor: 'border.subtle', backgroundColor: 'surface.subtle' });
+  const calloutDangerStyle = css.raw({ borderColor: 'border.danger', backgroundColor: 'accent.danger.subtle' });
+  const calloutTextClass = css({ flexGrow: '1', minWidth: '0', fontSize: '12px', lineHeight: '[1.5]', color: 'text.subtle' });
+
   const headerButton = css.raw({
     display: 'flex',
     alignItems: 'center',
@@ -485,6 +498,20 @@
   });
 
   const disconnected = $derived(reconnecting || socketDownSettled);
+
+  const statusKind = $derived(chat.error ? 'error' : disconnected ? 'reconnecting' : reconnectFailed ? 'failed' : null);
+
+  let statusEl = $state<HTMLElement>();
+  let statusFrom = $state<number>();
+  let prevStatusKind: string | null | undefined;
+
+  $effect.pre(() => {
+    const next = statusKind;
+    if (prevStatusKind !== undefined && prevStatusKind !== null && next !== null && next !== prevStatusKind) {
+      statusFrom = statusEl?.offsetHeight;
+    }
+    prevStatusKind = next;
+  });
 
   createSubscription(
     graphql(`
@@ -865,23 +892,35 @@
           />
         {/key}
 
-        {#if chat.error}
-          <div class={flex({ alignItems: 'center', gap: '8px', paddingX: '14px', paddingBottom: '8px' })} in:fade={fadeIn}>
-            <span class={css({ fontSize: '11px', color: 'text.danger' })}>{chat.error}</span>
-            <Button onclick={() => void chat.load(selected.current)} size="sm" variant="secondary">다시 불러오기</Button>
-          </div>
-        {:else if disconnected}
-          <div
-            class={css({ paddingX: '14px', paddingBottom: '8px', fontSize: '11px', color: 'text.subtle' })}
-            in:fade={fadeIn}
-            out:fade={fadeOut}
-          >
-            다시 연결하는 중…
-          </div>
-        {:else if reconnectFailed}
-          <div class={flex({ alignItems: 'center', gap: '8px', paddingX: '14px', paddingBottom: '8px' })} in:fade={fadeIn}>
-            <span class={css({ fontSize: '11px', color: 'text.danger' })}>실시간 연결이 끊겼어요</span>
-            <Button onclick={resetReconnect} size="sm" variant="secondary">다시 연결</Button>
+        {#if statusKind !== null}
+          <div class={css({ paddingX: '12px', paddingBottom: '8px' })} transition:expand>
+            <div bind:this={statusEl}>
+              {#if statusKind === 'reconnecting'}
+                <div class={css(calloutStyle, calloutNeutralStyle)} in:swap={{ box: statusEl, from: statusFrom }}>
+                  <PrismSpinner label="다시 연결하는 중" />
+                  <span class={calloutTextClass}>다시 연결하는 중이에요</span>
+                </div>
+              {:else if statusKind === 'error'}
+                <div class={css(calloutStyle, calloutDangerStyle)} in:swap={{ box: statusEl, from: statusFrom }}>
+                  <Icon style={css.raw({ flexShrink: '0', color: 'text.danger' })} icon={CircleAlertIcon} size={14} />
+                  <span class={calloutTextClass}>{chat.error}</span>
+                  <Button
+                    style={css.raw({ flexShrink: '0' })}
+                    onclick={() => void chat.load(selected.current)}
+                    size="sm"
+                    variant="secondary"
+                  >
+                    다시 불러오기
+                  </Button>
+                </div>
+              {:else}
+                <div class={css(calloutStyle, calloutDangerStyle)} in:swap={{ box: statusEl, from: statusFrom }}>
+                  <Icon style={css.raw({ flexShrink: '0', color: 'text.danger' })} icon={CircleAlertIcon} size={14} />
+                  <span class={calloutTextClass}>실시간 연결이 끊겼어요</span>
+                  <Button style={css.raw({ flexShrink: '0' })} onclick={resetReconnect} size="sm" variant="secondary">다시 연결</Button>
+                </div>
+              {/if}
+            </div>
           </div>
         {/if}
 

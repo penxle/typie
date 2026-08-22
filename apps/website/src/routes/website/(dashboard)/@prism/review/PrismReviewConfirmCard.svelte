@@ -6,13 +6,12 @@
   import { Button, Icon, Menu, MenuItem } from '@typie/ui/components';
   import { Toast } from '@typie/ui/notification';
   import dayjs from 'dayjs';
-  import { fade } from 'svelte/transition';
   import CheckIcon from '~icons/lucide/check';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import ChevronUpIcon from '~icons/lucide/chevron-up';
   import { unwrapError } from '$lib/graphql/error';
   import { getOpenDocuments } from '$lib/prism/open-documents.svelte';
-  import { fadeIn } from '../lib/motion.ts';
+  import { swap } from '../lib/motion.ts';
   import { TIER_OPTIONS } from './tiers.ts';
   import type { ConfirmHint, PrismReviewTierName } from '@typie/prism';
   import type { ToolCardProps } from '../tools/index.ts';
@@ -42,6 +41,16 @@
   const tier = $derived<PrismReviewTierName | null>(pickedTier ?? hint.tier ?? null);
 
   const readonly = $derived(!open);
+
+  let cardEl = $state<HTMLElement>();
+  let heightFrom = $state<number>();
+  let prevOpen: boolean | undefined;
+
+  $effect.pre(() => {
+    const next = open;
+    if (prevOpen !== undefined && next !== prevOpen) heightFrom = cardEl?.offsetHeight;
+    prevOpen = next;
+  });
   const decidedAt = $derived(message.settledAt ?? null);
   const decided = $derived(parsedDecision.success && parsedDecision.data.decision === 'confirmed');
 
@@ -150,7 +159,7 @@
   const ellipsisClass = css({ flexGrow: '1', minWidth: '0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' });
 </script>
 
-<div class={cardClass}>
+<div bind:this={cardEl} class={cardClass}>
   <div class={titleClass}>AI 리뷰를 시작할까요?</div>
 
   <div class={labelClass}>대상 문서</div>
@@ -241,7 +250,7 @@
       </Button>
     </div>
   {:else}
-    <div class={tailClass} in:fade={fadeIn}>
+    <div class={tailClass} in:swap={{ box: cardEl, from: heightFrom }}>
       {#if message.status === 'resolved' && decision === 'confirmed'}
         <span>시작했어요</span>
       {:else if message.status === 'resolved' && decision === 'declined'}

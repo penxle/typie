@@ -2,16 +2,23 @@ import { quintOut } from 'svelte/easing';
 import { fade, fly, scale, slide } from 'svelte/transition';
 import type { TransitionConfig } from 'svelte/transition';
 
-export const MOTION = { quick: 100, state: 150, enter: 200, expand: 200 } as const;
+export const MOTION = { quick: 100, state: 150, enter: 200, expand: 200, block: 280 } as const;
+
+export const STAGGER = 40;
 
 export const reducedMotion = (): boolean => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 export const fadeIn = { duration: MOTION.state, easing: quintOut };
 export const fadeOut = { duration: MOTION.quick, easing: quintOut };
 
-export const rise = (node: Element, { skip = false, delay = 0 }: { skip?: boolean; delay?: number } = {}): TransitionConfig => {
+type RiseOptions = { skip?: boolean; delay?: number; block?: boolean };
+
+export const rise = (node: Element, { skip = false, delay = 0, block = false }: RiseOptions = {}): TransitionConfig => {
   if (skip) return { duration: 0 };
-  return reducedMotion() ? fade(node, { ...fadeIn, delay }) : fly(node, { y: 4, delay, duration: MOTION.enter, easing: quintOut });
+  const duration = block ? MOTION.block : MOTION.enter;
+  return reducedMotion()
+    ? fade(node, { duration, easing: quintOut, delay })
+    : fly(node, { y: block ? 10 : 4, delay, duration, easing: quintOut });
 };
 
 export const shift = (node: Element, { dir }: { dir: number }): TransitionConfig =>
@@ -28,5 +35,36 @@ export const expand = (node: Element): TransitionConfig => {
   const height = (node as HTMLElement).offsetHeight;
   const duration = Math.min(EXPAND_MAX, Math.max(MOTION.expand, height / EXPAND_SPEED));
   const base = slide(node, { duration, easing: quintOut });
-  return { ...base, css: (t, u) => `${base.css?.(t, u) ?? ''};opacity: ${t}` };
+  return { ...base, css: (t, u) => `${base.css?.(t, u) ?? ''};opacity: ${t};min-height: 0` };
+};
+
+const SWAP_LIFT = 6;
+
+export const swap = (node: Element, { box, from }: { box?: HTMLElement; from?: number }): TransitionConfig => {
+  const element = node as HTMLElement;
+  const reduce = reducedMotion();
+
+  let to = 0;
+  if (box !== undefined && from !== undefined) {
+    box.style.height = '';
+    to = box.offsetHeight;
+  }
+
+  const resizing = box !== undefined && from !== undefined && from !== to;
+
+  return {
+    duration: reduce ? 0 : MOTION.block,
+    easing: quintOut,
+    tick: (t, u) => {
+      const done = t === 1;
+
+      element.style.opacity = done ? '' : String(t);
+      if (!reduce) element.style.transform = done ? '' : `translateY(${SWAP_LIFT * u}px)`;
+
+      if (resizing && box !== undefined) {
+        box.style.overflow = done ? '' : 'hidden';
+        box.style.height = done ? '' : `${from + (to - from) * t}px`;
+      }
+    },
+  };
 };
