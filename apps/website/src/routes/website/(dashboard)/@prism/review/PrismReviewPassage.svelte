@@ -285,7 +285,7 @@
 
     untrack(() => {
       const finished = prevCurrent;
-      if (running && finished !== null && !heldStages.includes(finished)) heldStages = [...heldStages, finished];
+      if (finished !== null && !heldStages.includes(finished)) heldStages = [...heldStages, finished];
       prevCurrent = currentStage;
     });
   });
@@ -365,13 +365,15 @@
 
   let expanded = $state<Record<string, boolean>>({});
   let traceLoad = $state<'idle' | 'loading' | 'loaded' | 'failed'>('idle');
+  let traceAttempts = $state(0);
 
-  const loadProcess = async () => {
-    traceLoad = 'loading';
+  const loadProcess = async (background = false) => {
+    if (!background) traceLoad = 'loading';
 
     try {
       await loadTrace();
       traceLoad = 'loaded';
+      traceAttempts = 0;
     } catch {
       traceLoad = 'failed';
     }
@@ -385,20 +387,22 @@
     untrack(() => void loadProcess());
   });
 
-  let wasRunning = false;
-
   $effect(() => {
-    if (running) {
-      wasRunning = true;
+    if (traceLoad !== 'failed') {
       return;
     }
 
-    const current = view.current;
+    const next = traceAttempts + 1;
+    const delay = backoffDelay(RECHECK_DELAYS, next);
+    if (delay === null) {
+      return;
+    }
 
-    untrack(() => {
-      if (wasRunning && current !== null) expanded[current] = true;
-      wasRunning = false;
-    });
+    const id = setTimeout(() => {
+      traceAttempts = next;
+      void loadProcess(true);
+    }, delay);
+    return () => clearTimeout(id);
   });
 
   const traced = $derived(running || message.trace.steps.length > 0);
@@ -683,7 +687,13 @@
       </div>
     {:else}
       {#each view.stages.filter((stage) => stage.status !== 'pending') as stage, index (stage.key)}
-        {@render stageLine(stage, stage.groups.length > 0, index * 40)}
+        {@const held = heldStages.includes(stage.key)}
+        {@render stageLine(stage, !held && stage.groups.length > 0, index * 40)}
+        {#if held}
+          <div class={expandClass} out:expand>
+            {@render stageBody(stage)}
+          </div>
+        {/if}
       {/each}
     {/if}
 
@@ -697,9 +707,7 @@
         <Button onclick={retry} size="sm" variant="secondary">다시 시도</Button>
       </div>
     {:else if round !== null && result !== null}
-      {#if result.kind === 'rejected'}
-        <div class={narrationClass} in:rise><PrismMarkdown blocks={parseMarkdown(result.message)} /></div>
-      {:else}
+      {#if result.kind !== 'rejected'}
         <div class={css({ marginTop: '12px' })} in:rise><PrismReviewResult {result} {round} /></div>
       {/if}
     {:else}

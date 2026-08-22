@@ -232,4 +232,14 @@ const onRunTerminal = async (sessionId: string, runSeq: number): Promise<void> =
   await closePendingRounds(db, sessionId, runSeq);
 };
 
-export const reviewHooks: PrismAppHooks = { onWorkflowLinked, onWorkflowSettled, onRunTerminal };
+const resolveSession = async (ref: string | null): Promise<string | null> => {
+  if (ref === null) return null;
+  const round = await db
+    .select({ sessionId: PrismReviewRounds.sessionId })
+    .from(PrismReviewRounds)
+    .where(eq(PrismReviewRounds.id, ref))
+    .then(first);
+  return round?.sessionId ?? null;
+};
+
+export const reviewHooks: PrismAppHooks = { onWorkflowLinked, onWorkflowSettled, onRunTerminal, resolveSession };

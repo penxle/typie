@@ -3,13 +3,13 @@ import type { PrismReviewTierName } from '@typie/prism';
 export type StageKey = 'classify' | 'description' | 'interpretation' | 'rubric' | 'judgment' | 'stylistic' | 'delivery';
 
 export const STAGES: { key: StageKey; label: string }[] = [
-  { key: 'classify', label: '원고 가늠하기' },
-  { key: 'description', label: '작품 읽기' },
-  { key: 'interpretation', label: '작품 이해하기' },
+  { key: 'classify', label: '원고 확인하기' },
+  { key: 'description', label: '원고 읽기' },
+  { key: 'interpretation', label: '원고 이해하기' },
   { key: 'rubric', label: '기준 세우기' },
-  { key: 'judgment', label: '짚을 곳 찾기' },
+  { key: 'judgment', label: '내용 살피기' },
   { key: 'stylistic', label: '문장 살피기' },
-  { key: 'delivery', label: '전할 말 정리하기' },
+  { key: 'delivery', label: '결과 정리하기' },
 ];
 
 export const TIER_STAGES: Record<PrismReviewTierName, StageKey[]> = {

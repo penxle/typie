@@ -13,6 +13,7 @@ import { activeRun, newAgentId, prism, PrismApiError } from '#/external/prism.ts
 import { pumpSse } from '#/external/prism-stream.ts';
 import { assertPrismAccess } from '#/utils/prism-access.ts';
 import { parseAllowlist } from '#/utils/prism-access-core.ts';
+import { prismApps } from '#/utils/prism-apps.ts';
 import { prismCommands } from '#/utils/prism-catalog.ts';
 import { projectFrame } from '#/utils/prism-events.ts';
 import { routeSessionFrame } from '#/utils/prism-session-stream.ts';
@@ -165,9 +166,20 @@ builder.queryFields((t) => ({
       workflowId: t.arg.string(),
     },
     resolve: async (_, args, ctx) => {
-      const workflow = await db.select().from(PrismWorkflows).where(eq(PrismWorkflows.prismWorkflowId, args.workflowId)).then(first);
-      if (!workflow) throw new TypieError({ code: 'not_found', status: 404 });
-      await ownedSession(workflow.sessionId, ctx.session.userId);
+      let workflow = await db.select().from(PrismWorkflows).where(eq(PrismWorkflows.prismWorkflowId, args.workflowId)).then(first);
+
+      if (workflow) {
+        await ownedSession(workflow.sessionId, ctx.session.userId);
+      } else {
+        const state = await prism.getWorkflow(args.workflowId).catch(() => null);
+        const app = state?.workflow.app ?? null;
+        const resolve = app === null ? undefined : prismApps[app]?.resolveSession;
+        const sessionId = resolve === undefined || state === null ? null : await resolve(state.workflow.ref);
+        if (sessionId === null) throw new TypieError({ code: 'not_found', status: 404 });
+        await ownedSession(sessionId, ctx.session.userId);
+        workflow = await linkWorkflow(sessionId, args.workflowId);
+      }
+
       const { events } = await prism
         .readWorkflowEventsUntilSync(workflow.prismWorkflowId, 0, new AbortController().signal)
         .catch(prismError);
