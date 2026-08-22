@@ -11,7 +11,7 @@ export type WorkflowStatus = 'running' | 'completed' | 'failed' | 'canceled';
 
 export type TranscriptMessage =
   | { role: 'user'; key: string; text: string; at: number }
-  | { role: 'assistant'; key: string; text: string | null; toolCalls: { id: string; name: string }[]; at: number }
+  | { role: 'assistant'; key: string; text: string | null; toolCalls: { id: string; name: string }[]; at: number; streamed: boolean }
   | { role: 'tool'; key: string; name: string; phase: 'executed' | 'rejected'; ok: boolean | null; at: number }
   | {
       role: 'tool-request';
@@ -221,6 +221,8 @@ const applyEvent = (t: Transcript, event: ProjectedEventFrame): Transcript => {
     .with({ kind: 'turn.retried' }, () => ({ ...next, turn: 'active' as const, retrying: true, live: null }))
     .with({ kind: 'turn.completed' }, ({ data }) => {
       const toolCalls = ('toolCalls' in data ? data.toolCalls : []).map((call) => ({ id: call.id, name: call.name }));
+      const live = t.live;
+      const streamed = live !== null && !live.seeded && live.text.length > 0 && sealTurn(live, event.context) === null;
       const sealed = { ...next, turn: 'idle' as const, live: sealTurn(t.live, event.context), retrying: false };
       if (data.text === null && toolCalls.length === 0) return sealed;
       const message: TranscriptMessage = {
@@ -229,6 +231,7 @@ const applyEvent = (t: Transcript, event: ProjectedEventFrame): Transcript => {
         text: data.text,
         toolCalls,
         at: event.occurredAt,
+        streamed,
       };
       return { ...sealed, messages: [...t.messages, message] };
     })
