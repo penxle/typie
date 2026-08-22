@@ -219,6 +219,18 @@
   let liveTurns = 0;
 
   const drainOf = (seq: number) => drains.find((entry) => entry.seq === seq);
+  const draining = $derived(drains.some((entry) => !entry.paced.done));
+
+  // 배출이 끝나기 전에 뒤 그룹을 세우면 표시 순서가 역전되고, 자라는 서술이 그 그룹을 밀어낸다.
+  const gateGroups = (list: PassageGroup[]): PassageGroup[] => {
+    const index = list.findIndex((group) => {
+      if (group.kind !== 'narration') return false;
+      const drain = drainOf(group.seq);
+      return drain !== undefined && !drain.paced.done;
+    });
+
+    return index === -1 ? list : list.slice(0, index + 1);
+  };
 
   $effect.pre(() => {
     const turn = message.trace.live;
@@ -557,13 +569,13 @@
 {/snippet}
 
 {#snippet liveNarration()}
-  {#if live !== null && live.boundary > 0}
+  {#if live !== null && live.boundary > 0 && !draining}
     <div class={narrationClass}><PrismMarkdown blocks={live.blocks} plain={live.plain} /></div>
   {/if}
 {/snippet}
 
 {#snippet groups(list: PassageGroup[], latestSeq: number | null)}
-  {#each list as group (group.key)}
+  {#each gateGroups(list) as group (group.key)}
     {#if group.kind === 'narration'}
       {@const groupDrain = drainOf(group.seq)}
       {#if groupDrain !== undefined}
