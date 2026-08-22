@@ -184,7 +184,7 @@
     flexDirection: 'column',
     backgroundColor: 'surface.default',
     zIndex: '2',
-    animation: '[rise-in 160ms cubic-bezier(0.23, 1, 0.32, 1) both]',
+    animation: '[rise-in 200ms cubic-bezier(0.23, 1, 0.32, 1) both]',
     _motionReduce: { animation: 'none' },
   })}
   aria-label="대화 목록"

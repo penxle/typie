@@ -5,12 +5,11 @@
   import { autosize } from '@typie/ui/actions';
   import { Icon } from '@typie/ui/components';
   import { Toast } from '@typie/ui/notification';
-  import { fade } from 'svelte/transition';
   import ArrowUpIcon from '~icons/lucide/arrow-up';
   import ThumbsDownIcon from '~icons/lucide/thumbs-down';
   import ThumbsUpIcon from '~icons/lucide/thumbs-up';
   import { graphql } from '$mearie';
-  import { expand, fadeIn } from '../lib/motion.ts';
+  import { expand, swap } from '../lib/motion.ts';
   import PrismReviewDetail from './PrismReviewDetail.svelte';
   import type { ResultView, ReviewRound } from './round-view.ts';
 
@@ -36,6 +35,16 @@
   let note = $state('');
   let sending = $state(false);
   let detailOpen = $state(false);
+
+  let noteEl = $state<HTMLElement>();
+  let noteFrom = $state<number>();
+  let prevNoteMode: string | undefined;
+
+  $effect.pre(() => {
+    const mode = !editing && round.reactionNote ? 'saved' : 'draft';
+    if (prevNoteMode !== undefined && mode !== prevNoteMode) noteFrom = noteEl?.offsetHeight;
+    prevNoteMode = mode;
+  });
 
   const send = async (roundId: string, value: 'DOWN' | 'UP' | null, text: string | null) => {
     if (sending) {
@@ -150,95 +159,98 @@
   </div>
 
   {#if reaction !== null}
-    {#if round.reactionNote && !editing}
-      {@const saved = round.reactionNote}
-      <div class={flex({ alignItems: 'center', gap: '8px', marginTop: '10px' })} in:fade={fadeIn}>
-        <p
-          class={css({
-            flexGrow: '1',
-            minWidth: '0',
-            fontSize: '12px',
-            lineHeight: '[1.55]',
-            color: 'text.subtle',
-            whiteSpace: 'pre-wrap',
-          })}
-        >
-          {saved}
-        </p>
-        <button
-          class={css({
-            flexShrink: '0',
-            fontSize: '11px',
-            fontWeight: 'semibold',
-            color: 'text.subtle',
-            _hover: { color: 'text.default' },
-          })}
-          onclick={() => {
-            note = saved;
-            editing = true;
-          }}
-          type="button"
-        >
-          수정
-        </button>
+    <div class={css({ marginTop: '10px' })} transition:expand>
+      <div bind:this={noteEl}>
+        {#if round.reactionNote && !editing}
+          {@const saved = round.reactionNote}
+          <div class={flex({ alignItems: 'center', gap: '8px' })} in:swap={{ box: noteEl, from: noteFrom }}>
+            <p
+              class={css({
+                flexGrow: '1',
+                minWidth: '0',
+                fontSize: '12px',
+                lineHeight: '[1.55]',
+                color: 'text.subtle',
+                whiteSpace: 'pre-wrap',
+              })}
+            >
+              {saved}
+            </p>
+            <button
+              class={css({
+                flexShrink: '0',
+                fontSize: '11px',
+                fontWeight: 'semibold',
+                color: 'text.subtle',
+                _hover: { color: 'text.default' },
+              })}
+              onclick={() => {
+                note = saved;
+                editing = true;
+              }}
+              type="button"
+            >
+              수정
+            </button>
+          </div>
+        {:else}
+          <div
+            class={flex({
+              alignItems: 'flex-end',
+              gap: '6px',
+              paddingLeft: '10px',
+              paddingRight: '4px',
+              paddingY: '4px',
+              borderWidth: '1px',
+              borderColor: 'border.default',
+              borderRadius: '8px',
+              backgroundColor: 'surface.subtle',
+            })}
+            in:swap={{ box: noteEl, from: noteFrom }}
+          >
+            <textarea
+              class={css({
+                flexGrow: '1',
+                minWidth: '0',
+                maxHeight: '120px',
+                paddingY: '3px',
+                fontSize: '12px',
+                lineHeight: '[1.5]',
+                backgroundColor: 'transparent',
+                resize: 'none',
+                outline: 'none',
+                _placeholder: { color: 'text.faint' },
+              })}
+              onkeydown={(event) => {
+                if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+                  event.preventDefault();
+                  void saveNote();
+                }
+              }}
+              placeholder="몇 자 덧붙이기"
+              rows={1}
+              bind:value={note}
+              use:autosize={{ value: note }}></textarea>
+            <button
+              class={flex({
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: '0',
+                size: '22px',
+                borderRadius: 'full',
+                backgroundColor: 'surface.dark',
+                color: 'text.bright',
+              })}
+              aria-label="남기기"
+              disabled={sending}
+              onclick={() => void saveNote()}
+              type="button"
+            >
+              <Icon icon={ArrowUpIcon} size={10} />
+            </button>
+          </div>
+        {/if}
       </div>
-    {:else}
-      <div
-        class={flex({
-          alignItems: 'flex-end',
-          gap: '6px',
-          marginTop: '10px',
-          paddingLeft: '10px',
-          paddingRight: '4px',
-          paddingY: '4px',
-          borderWidth: '1px',
-          borderColor: 'border.default',
-          borderRadius: '8px',
-          backgroundColor: 'surface.subtle',
-        })}
-        transition:expand
-      >
-        <textarea
-          class={css({
-            flexGrow: '1',
-            minWidth: '0',
-            maxHeight: '120px',
-            paddingY: '3px',
-            fontSize: '12px',
-            lineHeight: '[1.5]',
-            backgroundColor: 'transparent',
-            resize: 'none',
-            outline: 'none',
-            _placeholder: { color: 'text.faint' },
-          })}
-          onkeydown={(event) => {
-            if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
-              event.preventDefault();
-              void saveNote();
-            }
-          }}
-          placeholder="몇 자 덧붙이기"
-          rows={1}
-          bind:value={note}
-          use:autosize={{ value: note }}></textarea>
-        <button
-          class={flex({
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: '0',
-            size: '22px',
-            borderRadius: 'full',
-            backgroundColor: 'surface.dark',
-            color: 'text.bright',
-          })}
-          aria-label="남기기"
-          disabled={sending}
-          onclick={() => void saveNote()}
-          type="button"
-        >
-          <Icon icon={ArrowUpIcon} size={10} />
-        </button>
-      </div>
-    {/if}
+    </div>
   {/if}
 </div>

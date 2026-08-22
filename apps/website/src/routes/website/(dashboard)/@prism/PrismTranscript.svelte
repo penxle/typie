@@ -4,6 +4,7 @@
   import { Icon } from '@typie/ui/components';
   import { tick, untrack } from 'svelte';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
+  import { pendingRootRequests, runningWorkflows } from './lib/conversation.ts';
   import { pop, rise } from './lib/motion.ts';
   import { PacedText } from './lib/paced-text.svelte.ts';
   import { foldToolCalls } from './lib/tool-calls.ts';
@@ -13,7 +14,7 @@
   import PrismToolRequest from './PrismToolRequest.svelte';
   import PrismWaitRow from './PrismWaitRow.svelte';
   import PrismWorkflow from './PrismWorkflow.svelte';
-  import { toolCallLabels, toolCards } from './tools/index.ts';
+  import { clientResolvers, toolCallLabels, toolCards } from './tools/index.ts';
   import type { Transcript, TranscriptMessage } from './lib/conversation.ts';
 
   type Props = {
@@ -103,6 +104,17 @@
 
   let container = $state<HTMLElement>();
   let follow = $state(true);
+  let chase = $state(false);
+
+  const chaseBottom = (element: HTMLElement) => {
+    if (reduceMotion) {
+      element.scrollTop = element.scrollHeight - element.clientHeight;
+      return;
+    }
+
+    chase = true;
+  };
+
   let live = $state<PacedText | null>(null);
   let drains = $state<{ key: string; paced: PacedText }[]>([]);
   let liveKey = '';
@@ -142,7 +154,7 @@
   const active = $derived(live !== null || drains.length > 0);
 
   $effect(() => {
-    if (!active) {
+    if (!active && !chase) {
       return;
     }
 
@@ -167,6 +179,9 @@
         const target = container.scrollHeight - container.clientHeight;
         const gap = target - container.scrollTop;
         if (gap > 0) container.scrollTop = gap < 1 ? target : container.scrollTop + gap * (1 - Math.exp(-dt / 120));
+        if (!active && gap < 1) chase = false;
+      } else if (!active) {
+        chase = false;
       }
 
       id = requestAnimationFrame(loop);
@@ -198,7 +213,7 @@
       return;
     }
 
-    void tick().then(() => element.scrollTo({ top: element.scrollHeight }));
+    void tick().then(() => chaseBottom(element));
   });
 
   let lastTop = 0;
@@ -235,7 +250,7 @@
     if (!scroller || !content) return;
     const observer = new ResizeObserver(() => {
       if (follow && !active) {
-        scroller.scrollTop = scroller.scrollHeight - scroller.clientHeight;
+        chaseBottom(scroller);
       }
       updateOverflow();
     });
@@ -248,7 +263,14 @@
 
   const RECONNECTING_WAIT = { label: '다시 연결하는 중', text: '다시 연결하는 중' };
 
+  const workflowActive = $derived(runningWorkflows(transcript).length > 0);
+  const awaitingUser = $derived(pendingRootRequests(transcript).some((request) => clientResolvers[request.tool] === undefined));
+
   const waitState = $derived.by<WaitState>(() => {
+    if (awaitingUser) {
+      return null;
+    }
+
     const turn = transcript.live;
 
     if (turn && live) {
@@ -260,7 +282,11 @@
       return { label: '응답을 기다리는 중', text: null };
     }
 
-    if (pending === null && transcript.turn !== 'active') {
+    if (workflowActive) {
+      return null;
+    }
+
+    if (pending === null && transcript.turn !== 'active' && transcript.run !== 'running') {
       return null;
     }
 
@@ -268,9 +294,9 @@
     if (late) return { label: '응답이 늦어지고 있어요', text: '응답이 늦어지고 있어요' };
 
     if (pending !== null && transcript.run !== 'running') return { label: '보내는 중', text: null };
-    if (transcript.turn === 'active') return { label: transcript.retrying ? '다시 시도하는 중' : '응답을 기다리는 중', text: null };
+    if (transcript.retrying) return { label: '다시 시도하는 중', text: null };
 
-    return null;
+    return { label: '응답을 기다리는 중', text: null };
   });
 
   const WAIT_DEBOUNCE_MS = 1000;
@@ -279,9 +305,9 @@
 
   $effect(() => {
     const next = rawWaitText;
-    waitText = null;
 
     if (next === null) {
+      waitText = null;
       return;
     }
 
@@ -327,7 +353,10 @@
 
       {#each entries as entry (entry.key)}
         {@const drain = drainOf(entry.key)}
-        <div class={entryClass} in:rise={{ skip: !settled || entry.role === 'user' || entry.role === 'assistant' }}>
+        <div
+          class={entryClass}
+          in:rise={{ skip: !settled || entry.role === 'user' || entry.role === 'assistant', block: entry.role !== 'tool-calls' }}
+        >
           {#if entry.role === 'tool-calls'}
             <PrismToolCalls count={entry.count} rows={entry.rows} />
           {:else if drain}

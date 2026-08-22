@@ -5,6 +5,7 @@
   import { Button, Icon, Modal } from '@typie/ui/components';
   import PyramidIcon from '~icons/lucide/pyramid';
   import { graphql } from '$mearie';
+  import { swap } from '../lib/motion.ts';
   import { SECTION_TITLES, sectionCaption, sectionNumber, visibleSections } from './detail-view.ts';
   import { describeHeader } from './round-view.ts';
   import type { SectionKey } from './detail-view.ts';
@@ -77,6 +78,16 @@
   const detail = $derived(query.data?.prismReviewRound.detail ?? null);
   const sections = $derived(detail === null ? [] : visibleSections(detail));
   const header = $derived(describeHeader(round));
+
+  let bodyEl = $state<HTMLElement>();
+  let bodyFrom = $state<number>();
+  let prevBodyMode: string | undefined;
+
+  $effect.pre(() => {
+    const mode = detail === null ? (query.error ? 'error' : 'loading') : 'detail';
+    if (prevBodyMode !== undefined && mode !== prevBodyMode) bodyFrom = bodyEl?.offsetHeight;
+    prevBodyMode = mode;
+  });
 
   const paragraphsOf = (text: string) =>
     text
@@ -172,140 +183,147 @@
     </div>
   </div>
 
-  {#if detail === null}
-    {#if query.error}
-      <div class={flex({ alignItems: 'center', gap: '8px', marginTop: '20px', fontSize: '12px', color: 'text.subtle' })}>
-        총평을 불러오지 못했어요
-        <Button onclick={() => query.refetch()} size="sm" variant="secondary">다시 시도</Button>
-      </div>
+  <div bind:this={bodyEl} class={flex({ direction: 'column' })}>
+    {#if detail === null}
+      {#if query.error}
+        <div
+          class={flex({ alignItems: 'center', gap: '8px', marginTop: '20px', fontSize: '12px', color: 'text.subtle' })}
+          in:swap={{ box: bodyEl, from: bodyFrom }}
+        >
+          총평을 불러오지 못했어요
+          <Button onclick={() => query.refetch()} size="sm" variant="secondary">다시 시도</Button>
+        </div>
+      {:else}
+        <div class={css(skeletonStyle, { width: '[60%]' })}></div>
+        <div class={css(skeletonStyle, { width: '[45%]' })}></div>
+      {/if}
     {:else}
-      <div class={css(skeletonStyle, { width: '[60%]' })}></div>
-      <div class={css(skeletonStyle, { width: '[45%]' })}></div>
-    {/if}
-  {:else}
-    {#if detail.understanding}
-      <div class={css({ marginTop: '28px', marginBottom: '14px', fontSize: '14px', fontWeight: 'bold' })}>작품을 이렇게 읽었어요</div>
-      {@render paragraphs(detail.understanding, proseClass)}
-    {/if}
+      <div class={flex({ direction: 'column' })} in:swap={{ box: bodyEl, from: bodyFrom }}>
+        {#if detail.understanding}
+          <div class={css({ marginTop: '28px', marginBottom: '14px', fontSize: '14px', fontWeight: 'bold' })}>작품을 이렇게 읽었어요</div>
+          {@render paragraphs(detail.understanding, proseClass)}
+        {/if}
 
-    {#if detail.progress}
-      {@render sectionHead('progress', 1)}
-      <div class={css({ marginTop: '16px' })}>
-        {@render paragraphs(detail.progress, proseClass)}
-      </div>
-    {/if}
+        {#if detail.progress}
+          {@render sectionHead('progress', 1)}
+          <div class={css({ marginTop: '16px' })}>
+            {@render paragraphs(detail.progress, proseClass)}
+          </div>
+        {/if}
 
-    {#if detail.strengths.length > 0}
-      {@render sectionHead('strengths', detail.strengths.length)}
-      <div class={listClass}>
-        {#each detail.strengths as strength, index (index)}
+        {#if detail.strengths.length > 0}
+          {@render sectionHead('strengths', detail.strengths.length)}
+          <div class={listClass}>
+            {#each detail.strengths as strength, index (index)}
+              <div>
+                <div class={quoteClass}>「{strength.quote}」</div>
+                {#if strength.body}
+                  {@render paragraphs(strength.body, noteClass)}
+                {/if}
+              </div>
+            {/each}
+          </div>
+        {/if}
+
+        {#if detail.verdicts.length > 0}
+          {@render sectionHead('verdicts', detail.verdicts.length)}
+          <div class={listClass}>
+            {#each detail.verdicts as verdict, index (index)}
+              <div>
+                <div class={flex({ alignItems: 'baseline', gap: '8px' })}>
+                  <span class={traitClass}>{verdict.trait}</span>
+                  {#if verdict.label}
+                    <span class={css({ fontSize: '11px', color: 'text.faint' })}>{verdict.label}</span>
+                  {/if}
+                </div>
+                {#if verdict.note}
+                  {@render paragraphs(verdict.note, noteClass)}
+                {/if}
+              </div>
+            {/each}
+          </div>
+        {/if}
+
+        {#if detail.elevations.length > 0}
+          {@render sectionHead('elevations', detail.elevations.length)}
+          <div class={listClass}>
+            {#each detail.elevations as elevation, index (index)}
+              <div>
+                <div class={traitClass}>{elevation.trait}</div>
+                {#if elevation.quote}
+                  <div class={quoteSpacedClass}>「{elevation.quote}」</div>
+                {/if}
+                {@render paragraphs(elevation.body, noteClass)}
+              </div>
+            {/each}
+          </div>
+        {/if}
+
+        {#if detail.patterns.length > 0}
+          {@render sectionHead('patterns', detail.patterns.length)}
+          <div class={listClass}>
+            {#each detail.patterns as pattern, index (index)}
+              <div>
+                {#if pattern.theme}
+                  <div class={traitClass}>{pattern.theme}</div>
+                {/if}
+                {@render paragraphs(pattern.body, noteClass)}
+                {@render chips(pattern.issues)}
+              </div>
+            {/each}
+          </div>
+        {/if}
+
+        {#if detail.priorities.length > 0}
+          {@render sectionHead('priorities', detail.priorities.length)}
+          <div class={listClass}>
+            {#each detail.priorities as priority, index (index)}
+              <div class={flex({ gap: '10px' })}>
+                <span
+                  class={flex({
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: '0',
+                    size: '20px',
+                    marginTop: '2px',
+                    borderWidth: '1px',
+                    borderColor: 'border.default',
+                    borderRadius: 'full',
+                    fontSize: '11px',
+                    fontWeight: 'bold',
+                    color: 'text.subtle',
+                  })}
+                >
+                  {index + 1}
+                </span>
+                <div class={css({ flexGrow: '1', minWidth: '0' })}>
+                  {@render paragraphs(priority.body, priorityBodyClass)}
+                  {@render chips(priority.issues)}
+                </div>
+              </div>
+            {/each}
+          </div>
+        {/if}
+
+        <div
+          class={flex({
+            alignItems: 'center',
+            gap: '9px',
+            marginTop: '44px',
+            paddingTop: '22px',
+            borderTopWidth: '1px',
+            borderColor: 'border.subtle',
+          })}
+        >
+          <span class={avatarClass}>
+            <Icon icon={PyramidIcon} size={16} />
+          </span>
           <div>
-            <div class={quoteClass}>「{strength.quote}」</div>
-            {#if strength.body}
-              {@render paragraphs(strength.body, noteClass)}
-            {/if}
+            <div class={css({ fontSize: '12px', fontWeight: 'semibold' })}>타이피 PRISM</div>
+            <div class={css({ fontSize: '11px', color: 'text.faint' })}>이 리뷰는 PRISM이 원고 전체를 읽고 작성했어요</div>
           </div>
-        {/each}
+        </div>
       </div>
     {/if}
-
-    {#if detail.verdicts.length > 0}
-      {@render sectionHead('verdicts', detail.verdicts.length)}
-      <div class={listClass}>
-        {#each detail.verdicts as verdict, index (index)}
-          <div>
-            <div class={flex({ alignItems: 'baseline', gap: '8px' })}>
-              <span class={traitClass}>{verdict.trait}</span>
-              {#if verdict.label}
-                <span class={css({ fontSize: '11px', color: 'text.faint' })}>{verdict.label}</span>
-              {/if}
-            </div>
-            {#if verdict.note}
-              {@render paragraphs(verdict.note, noteClass)}
-            {/if}
-          </div>
-        {/each}
-      </div>
-    {/if}
-
-    {#if detail.elevations.length > 0}
-      {@render sectionHead('elevations', detail.elevations.length)}
-      <div class={listClass}>
-        {#each detail.elevations as elevation, index (index)}
-          <div>
-            <div class={traitClass}>{elevation.trait}</div>
-            {#if elevation.quote}
-              <div class={quoteSpacedClass}>「{elevation.quote}」</div>
-            {/if}
-            {@render paragraphs(elevation.body, noteClass)}
-          </div>
-        {/each}
-      </div>
-    {/if}
-
-    {#if detail.patterns.length > 0}
-      {@render sectionHead('patterns', detail.patterns.length)}
-      <div class={listClass}>
-        {#each detail.patterns as pattern, index (index)}
-          <div>
-            {#if pattern.theme}
-              <div class={traitClass}>{pattern.theme}</div>
-            {/if}
-            {@render paragraphs(pattern.body, noteClass)}
-            {@render chips(pattern.issues)}
-          </div>
-        {/each}
-      </div>
-    {/if}
-
-    {#if detail.priorities.length > 0}
-      {@render sectionHead('priorities', detail.priorities.length)}
-      <div class={listClass}>
-        {#each detail.priorities as priority, index (index)}
-          <div class={flex({ gap: '10px' })}>
-            <span
-              class={flex({
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: '0',
-                size: '20px',
-                marginTop: '2px',
-                borderWidth: '1px',
-                borderColor: 'border.default',
-                borderRadius: 'full',
-                fontSize: '11px',
-                fontWeight: 'bold',
-                color: 'text.subtle',
-              })}
-            >
-              {index + 1}
-            </span>
-            <div class={css({ flexGrow: '1', minWidth: '0' })}>
-              {@render paragraphs(priority.body, priorityBodyClass)}
-              {@render chips(priority.issues)}
-            </div>
-          </div>
-        {/each}
-      </div>
-    {/if}
-
-    <div
-      class={flex({
-        alignItems: 'center',
-        gap: '9px',
-        marginTop: '44px',
-        paddingTop: '22px',
-        borderTopWidth: '1px',
-        borderColor: 'border.subtle',
-      })}
-    >
-      <span class={avatarClass}>
-        <Icon icon={PyramidIcon} size={16} />
-      </span>
-      <div>
-        <div class={css({ fontSize: '12px', fontWeight: 'semibold' })}>타이피 PRISM</div>
-        <div class={css({ fontSize: '11px', color: 'text.faint' })}>이 리뷰는 PRISM이 원고 전체를 읽고 작성했어요</div>
-      </div>
-    </div>
-  {/if}
+  </div>
 </Modal>
