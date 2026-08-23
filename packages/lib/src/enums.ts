@@ -296,6 +296,26 @@ export const PrismReviewTier = {
   HIGH: 'HIGH',
 } as const;
 
+export type PrismReviewPass = keyof typeof PrismReviewPass;
+export const PrismReviewPass = {
+  JUDGMENT: 'JUDGMENT',
+  STYLISTIC: 'STYLISTIC',
+} as const;
+
+export type PrismReviewThreadState = keyof typeof PrismReviewThreadState;
+export const PrismReviewThreadState = {
+  OPEN: 'OPEN',
+  CLOSED: 'CLOSED',
+  RESOLVED: 'RESOLVED',
+  WITHDRAWN: 'WITHDRAWN',
+} as const;
+
+export type PrismReviewCommentAuthor = keyof typeof PrismReviewCommentAuthor;
+export const PrismReviewCommentAuthor = {
+  USER: 'USER',
+  AI: 'AI',
+} as const;
+
 export type PrismReaction = keyof typeof PrismReaction;
 export const PrismReaction = {
   UP: 'UP',

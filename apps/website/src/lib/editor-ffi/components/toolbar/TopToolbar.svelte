@@ -29,6 +29,7 @@
   import ToolbarDropdownButton from './ToolbarDropdownButton.svelte';
   import ToolbarIcon from './ToolbarIcon.svelte';
   import ToolbarPanelTabButton from './ToolbarPanelTabButton.svelte';
+  import ToolbarPrismReviewButton from './ToolbarPrismReviewButton.svelte';
   import type { Fragment, Message } from '@typie/editor-ffi/browser';
   import type { SystemStyleObject } from '@typie/styled-system/types';
 
@@ -229,6 +230,8 @@
   </div>
 
   <div class={css({ flexGrow: '1' })}></div>
+
+  <ToolbarPrismReviewButton />
 
   <VerticalDivider style={css.raw({ height: '[80%]', marginX: '12px' })} />
 

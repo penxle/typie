@@ -56,6 +56,29 @@ impl ProseText {
         Some(start..end)
     }
 
+    /// JS·Dart 문자열은 UTF-16 코드 유닛으로 센다 — 이 투영을 문자열로 받아 오프셋을 되돌려주는
+    /// 바깥 세계의 축이 그것이다. 내부 매핑은 char 단위이므로 경계에서 한 번 옮긴다.
+    /// 서로게이트 쌍 한가운데를 가리키는 오프셋은 유효한 자리가 아니므로 None이다.
+    pub fn to_selection_utf16(&self, view: &DocView, range: Range<usize>) -> Option<Selection> {
+        let start = self.char_offset_from_utf16(range.start)?;
+        let end = self.char_offset_from_utf16(range.end)?;
+        self.to_selection(view, start..end)
+    }
+
+    fn char_offset_from_utf16(&self, target: usize) -> Option<usize> {
+        let mut units = 0usize;
+        for (chars, ch) in self.text.chars().enumerate() {
+            if units == target {
+                return Some(chars);
+            }
+            if units > target {
+                return None;
+            }
+            units += ch.len_utf16();
+        }
+        (units == target).then(|| self.text.chars().count())
+    }
+
     pub fn to_selection(&self, view: &DocView, range: Range<usize>) -> Option<Selection> {
         let collapsed = range.start == range.end;
         let flat = self.to_flat_range(range)?;
@@ -373,6 +396,68 @@ mod tests {
         let selection = prose.to_selection(&view, 1..10).expect("mapped selection");
         let resolved = selection.resolve(&view).expect("resolved");
         assert!(resolved.from().to_flat() < resolved.to().to_flat());
+    }
+
+    // 합성 문자(구분선 마커·경계 개행)를 포함하지 않는 prose 구간은 flat으로 옮겨도 글자가 그대로여야 한다.
+    // 기존 검사는 panic 없음과 부분수열만 봤다 — 좌표가 통째로 밀려도 둘 다 통과한다.
+    #[test]
+    fn annotated_text_only_ranges_round_trip_through_flat() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    p1: paragraph { text("가나다라") }
+                    hr: horizontal_rule
+                    e1: paragraph
+                    p2: paragraph { text("마바사아") }
+                    hr2: horizontal_rule
+                    p3: paragraph { text("자차카타") }
+                }
+            }
+            selection: (p1, 0)
+        };
+        let view = state.view();
+        let annotated = prose_annotated(&view);
+        let chars: Vec<char> = annotated.text().chars().collect();
+
+        for start in 0..chars.len() {
+            for end in (start + 1)..=chars.len() {
+                let piece: String = chars[start..end].iter().collect();
+                if piece.contains('\n') || piece.contains('*') {
+                    continue;
+                }
+                let flat = annotated
+                    .to_flat_range(start..end)
+                    .unwrap_or_else(|| panic!("no flat range for {start}..{end} ({piece:?})"));
+                assert_eq!(
+                    crate::flat_text(&view, flat),
+                    piece,
+                    "prose {start}..{end} mapped to wrong text"
+                );
+            }
+        }
+    }
+
+    // 바깥(JS·Dart)에서 오는 오프셋은 UTF-16 코드 유닛이다 — 경계에서 char로 옮겨야 한다.
+    // 옮기지 않으면 BMP 밖 문자 하나당 1씩 오른쪽으로 밀린다.
+    #[test]
+    fn utf16_offsets_map_to_the_same_text_as_char_offsets() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("😀😀😀지하 1층") } } }
+            selection: (p1, 0)
+        };
+        let view = state.view();
+        let annotated = prose_annotated(&view);
+
+        // JS가 "지하"에 대해 내는 값은 6..8이다(이모지 3개 × 2 코드 유닛)
+        let selection = annotated
+            .to_selection_utf16(&view, 6..8)
+            .expect("utf16 매핑");
+        let resolved = selection.resolve(&view).expect("resolved");
+        let flat = resolved.from().to_flat()..resolved.to().to_flat();
+        assert_eq!(crate::flat_text(&view, flat), "지하");
+
+        // 서로게이트 쌍 한가운데는 유효한 자리가 아니다
+        assert!(annotated.to_selection_utf16(&view, 1..8).is_none());
     }
 
     proptest::proptest! {

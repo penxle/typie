@@ -4,6 +4,8 @@
   import { flex } from '@typie/styled-system/patterns';
   import { Button, Icon, Modal } from '@typie/ui/components';
   import PyramidIcon from '~icons/lucide/pyramid';
+  import { goto } from '$app/navigation';
+  import { requestMarginJump } from '$lib/prism/margin-jump.svelte';
   import { graphql } from '$mearie';
   import { swap } from '../lib/motion.ts';
   import { SECTION_TITLES, sectionCaption, sectionNumber, visibleSections } from './detail-view.ts';
@@ -27,6 +29,11 @@
       query DashboardLayout_PrismReviewDetail_Query($roundId: ID!) {
         prismReviewRound(roundId: $roundId) {
           id
+
+          threads {
+            id
+            issueIndex
+          }
 
           detail {
             understanding
@@ -79,6 +86,16 @@
   const sections = $derived(detail === null ? [] : visibleSections(detail));
   const header = $derived(describeHeader(round));
 
+  // 여백은 지적을 스레드 id로 부른다 — 총평은 번호만 아니까 여기서 사상한다
+  const threads = $derived(query.data?.prismReviewRound.threads ?? []);
+  const threadIdOf = (index: number) => threads.find((thread) => thread.issueIndex === index)?.id ?? null;
+
+  const openMargin = async (itemId: string | null) => {
+    open = false;
+    requestMarginJump({ documentId: round.document.id, roundId: round.id, itemId });
+    await goto(`/${round.document.entity.slug}`);
+  };
+
   let bodyEl = $state<HTMLElement>();
   let bodyFrom = $state<number>();
   let prevBodyMode: string | undefined;
@@ -102,13 +119,13 @@
   const proseClass = css({ fontSize: '14px', lineHeight: '[1.75]' });
   const noteClass = css({ marginTop: '6px', fontSize: '13px', lineHeight: '[1.7]', color: 'text.subtle' });
   const quoteStyle = css.raw({ fontSize: '14px', lineHeight: '[1.8]', color: 'text.default' });
-  const quoteClass = css(quoteStyle);
+  const quoteClass = css(quoteStyle, { display: 'block', width: 'full', textAlign: 'left' });
   const quoteSpacedClass = css(quoteStyle, { marginTop: '6px' });
   const traitClass = css({ fontSize: '13px', fontWeight: 'semibold' });
   const listClass = flex({ direction: 'column', gap: '20px', marginTop: '16px' });
   const priorityBodyClass = css({ fontSize: '13px', lineHeight: '[1.7]', color: 'text.subtle' });
   const chipRowClass = flex({ wrap: 'wrap', gap: '4px', marginTop: '7px' });
-  // 번호는 여백이 서면 레일·카드가 쓸 번호와 같다 — 지금은 누를 곳이 없어 span으로 세운다.
+  // 번호는 여백의 레일·카드가 쓰는 번호와 같다
   const chipClass = flex({
     alignItems: 'baseline',
     gap: '5px',
@@ -118,6 +135,7 @@
     backgroundColor: 'accent.brand.subtle',
     fontSize: '11px',
     fontWeight: 'semibold',
+    textAlign: 'left',
     color: 'text.brand',
   });
   const avatarClass = flex({
@@ -150,10 +168,10 @@
   {#if issues.length > 0}
     <div class={chipRowClass}>
       {#each issues as issue (issue.index)}
-        <span class={chipClass}>
+        <button class={chipClass} onclick={() => void openMargin(threadIdOf(issue.index))} type="button">
           <span class={css({ fontWeight: 'bold', opacity: '75' })}>{issue.index + 1} ·</span>
           {issue.trait}
-        </span>
+        </button>
       {/each}
     </div>
   {/if}
@@ -216,7 +234,7 @@
           <div class={listClass}>
             {#each detail.strengths as strength, index (index)}
               <div>
-                <div class={quoteClass}>「{strength.quote}」</div>
+                <button class={quoteClass} onclick={() => void openMargin(`strength:${index}`)} type="button">「{strength.quote}」</button>
                 {#if strength.body}
                   {@render paragraphs(strength.body, noteClass)}
                 {/if}

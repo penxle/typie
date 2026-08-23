@@ -52,7 +52,7 @@ export type IssueBrief = { index: number; trait: string };
 export type OutcomeDetail = {
   understanding: string | null;
   progress: string | null;
-  strengths: { quote: string; body: string | null }[];
+  strengths: { quote: string; body: string | null; anchor: Anchor }[];
   verdicts: { trait: string; label: string | null; note: string | null }[];
   elevations: { trait: string; quote: string | null; body: string }[];
   patterns: { theme: string | null; body: string; issues: IssueBrief[] }[];
@@ -90,7 +90,11 @@ export const detailOutcome = (outcome: ReviewOutcome | null, content: string): O
   return {
     understanding: conclusion.understanding,
     progress: conclusion.progress ?? null,
-    strengths: (conclusion.strengths ?? []).map((strength) => ({ quote: strengthQuote(content, strength), body: strength.body })),
+    strengths: (conclusion.strengths ?? []).map((strength) => ({
+      quote: strengthQuote(content, strength),
+      body: strength.body,
+      anchor: { start: strength.start, end: strength.end, head: strength.head, tail: strength.tail },
+    })),
     verdicts: (outcome.verdicts ?? []).map((verdict) => ({
       trait: verdict.trait,
       label: VERDICT_LABELS[verdict.point] ?? null,
@@ -146,3 +150,28 @@ export const roundState = (round: { closedAt: Dayjs | null }, workflow: { state:
   if (workflow !== null) return workflow.state;
   return round.closedAt === null ? 'PENDING' : 'CANCELED';
 };
+
+export type ProjectedThread = {
+  issueIndex: number;
+  issueId: string | null;
+  trait: string;
+  pass: 'JUDGMENT' | 'STYLISTIC';
+  body: string | null;
+  anchors: Anchor[];
+};
+
+export const threadsFromResult = (outcome: ReviewOutcome | null): ProjectedThread[] => {
+  if (outcome === null || outcome.kind === 'rejected') return [];
+
+  return outcome.issues.map((issue, index) => ({
+    issueIndex: index,
+    issueId: issue.id ?? null,
+    trait: issue.trait,
+    pass: issue.pass === 'judgment' ? 'JUDGMENT' : 'STYLISTIC',
+    body: issue.body,
+    anchors: issue.anchors,
+  }));
+};
+
+// 인용은 저장하지 않는다 — 리뷰 시점 판본에서 조회 때마다 자른다
+export const threadQuote = (content: string, anchors: Anchor[]): string => anchorQuote(content, anchors);

@@ -48,7 +48,7 @@ export const describeResult = (round: ReviewRound): ResultView | null => {
     return { kind: 'rejected' };
   }
 
-  const issues = `본문 여백에 리뷰 ${round.issueCount}개를 남겼어요`;
+  const issues = `본문 여백에 피드백 ${round.issueCount}개를 남겼어요`;
 
   if (round.conclusion) {
     const { patternsCount, prioritiesCount, strengthsCount } = round.conclusion;

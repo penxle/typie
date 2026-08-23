@@ -12,7 +12,7 @@ const makeRound = (over: Partial<ReviewRound> = {}): ReviewRound => ({
   reaction: null,
   reactionNote: null,
   workflow: { id: 'row-1', prismWorkflowId: 'prism-1' },
-  document: { id: 'document-1', title: '제목' },
+  document: { id: 'document-1', title: '제목', entity: { id: 'entity-1', slug: 'slug-1' } },
   rejection: null,
   conclusion: null,
   ...over,
@@ -90,7 +90,7 @@ describe('describeResult', () => {
     expect(describeResult(round)).toEqual({
       kind: 'summary',
       counts: '패턴 3 · 우선순위 2 · 강점 1',
-      issues: '본문 여백에 리뷰 7개를 남겼어요',
+      issues: '본문 여백에 피드백 7개를 남겼어요',
     });
   });
 
@@ -104,13 +104,13 @@ describe('describeResult', () => {
 
   it('결론이 없으면 리뷰 개수만 낸다', () => {
     const round = makeRound({ issueCount: 4 });
-    expect(describeResult(round)).toEqual({ kind: 'issues', issues: '본문 여백에 리뷰 4개를 남겼어요' });
+    expect(describeResult(round)).toEqual({ kind: 'issues', issues: '본문 여백에 피드백 4개를 남겼어요' });
   });
 });
 
 describe('describeHeader', () => {
   it('제목이 비면 제목 없음으로 적는다', () => {
-    const round = makeRound({ document: { id: 'document-1', title: '' } });
+    const round = makeRound({ document: { id: 'document-1', title: '', entity: { id: 'entity-1', slug: 'slug-1' } } });
     expect(describeHeader(round).title).toBe('「제목 없음」');
   });
 

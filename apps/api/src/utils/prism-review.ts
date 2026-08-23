@@ -18,6 +18,7 @@ import { activeRun, prism } from '#/external/prism.ts';
 import { readMergedGraph } from './changeset.ts';
 import { assertDocumentPermission } from './permission.ts';
 import { ConfirmInputSchema, confirmResult, ENUM_TO_TIER, manuscriptPath, pickVersion } from './prism-review-core.ts';
+import { projectRoundThreads } from './prism-review-threads.ts';
 import { wasmThread } from './wasm-thread.ts';
 import type { PrismReviewTier } from '@typie/lib/enums';
 import type { ReviewOutcome, WorkflowState } from '@typie/prism';
@@ -206,9 +207,11 @@ const onWorkflowSettled = async (workflow: PrismWorkflowRow, view: WorkflowState
     .update(PrismReviewRounds)
     .set({ result: view.workflow.result === null ? null : (JSON.parse(view.workflow.result) as ReviewOutcome) })
     .where(eq(PrismReviewRounds.workflowId, workflow.id))
-    .returning({ documentId: PrismReviewRounds.documentId })
+    .returning({ id: PrismReviewRounds.id, documentId: PrismReviewRounds.documentId })
     .then(first);
   if (!round || view.workflow.status !== 'completed') return;
+
+  await projectRoundThreads(round.id);
 
   const document = await db.select({ title: Documents.title }).from(Documents).where(eq(Documents.id, round.documentId)).then(first);
   const session = await db

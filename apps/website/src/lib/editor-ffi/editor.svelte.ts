@@ -346,6 +346,9 @@ export class Editor {
   #appliedWaiters = new Set<AppliedWaiter>();
   // eslint-disable-next-line svelte/prefer-svelte-reactivity
   #publicationWaiters = new Set<PublicationWaiter>();
+  #freshRanges: TrackedRange[] = [];
+  #freshRangesFor: EditorSnapshot | undefined;
+
   #applied = $state.raw<EditorSnapshot>({
     revision: 0,
     cursor: undefined,
@@ -390,6 +393,7 @@ export class Editor {
   #nativeDragAdmissionRetainsFocus = false;
   #effectCleanup: (() => void) | null = null;
   #scrollIntoView: ((options: EditorScrollIntoViewOptions, request: EditorRequest | undefined) => Promise<void> | undefined) | null = null;
+  #viewportScrollObserver: (() => void) | null = null;
 
   #pointerStyle = $state<PointerStyle>('default');
   #lastPointerClient: { x: number; y: number } | null = null;
@@ -412,6 +416,11 @@ export class Editor {
 
   #aiFeedbackDecorationsInstalled = false;
   #aiFeedbackMembershipIds: string[] | null = null;
+
+  #prismReviewDecorationsInstalled = false;
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity
+  #prismReviewTones = new Map<string, 'issue' | 'strength'>();
+  #activePrismReviewIds: string[] = [];
 
   #commentDecorationsInstalled = false;
   // eslint-disable-next-line svelte/prefer-svelte-reactivity
@@ -479,6 +488,8 @@ export class Editor {
 
   aiFeedbacks = $state<AiFeedback[]>([]);
   activeAiFeedbackId = $state<string | null>(null);
+
+  prismReviewRangeIds = $state<string[]>([]);
 
   activeCommentId = $state<string | null>(null);
   commentClickHandler: ((id: string) => void) | null = null;
@@ -1022,6 +1033,11 @@ export class Editor {
       if (this.activeSpellcheckErrorId !== null && stale.has(this.activeSpellcheckErrorId)) {
         this.activeSpellcheckErrorId = null;
       }
+
+      if (this.prismReviewRangeIds.some((id) => stale.has(id))) {
+        this.prismReviewRangeIds = this.prismReviewRangeIds.filter((id) => !stale.has(id));
+        this.#activePrismReviewIds = this.#activePrismReviewIds.filter((id) => !stale.has(id));
+      }
     });
 
     this.#effectCleanup = $effect.root(() => {
@@ -1560,6 +1576,14 @@ export class Editor {
 
   scrollIntoView(options: EditorScrollIntoViewOptions): Promise<void> | undefined {
     return this.#scrollIntoView?.(options, this.#admission);
+  }
+
+  registerViewportScrollObserver(handler: (() => void) | null): void {
+    this.#viewportScrollObserver = handler;
+  }
+
+  notifyViewportScrolled(): void {
+    this.#viewportScrollObserver?.();
   }
 
   revealTrackedItem(id: string, behavior: EditorScrollBehavior = 'smooth'): Promise<void> | undefined {
@@ -2334,6 +2358,34 @@ export class Editor {
     });
   }
 
+  installPrismReviewDecorations(): void {
+    if (this.#prismReviewDecorationsInstalled) return;
+    this.#prismReviewDecorationsInstalled = true;
+
+    // 평시 그룹에는 데코레이션을 걸지 않는다 — 본문은 활성일 때만 물든다
+    this.enqueue({
+      type: 'tracked_range',
+      op: {
+        type: 'set_group_decoration',
+        group: 'prism-issue-active',
+        style: { background: 'ui.prism-issue-active', background_radius: 2, background_inset: 2, underline: undefined },
+        enabled: true,
+        z_index: 1,
+      },
+    });
+
+    this.enqueue({
+      type: 'tracked_range',
+      op: {
+        type: 'set_group_decoration',
+        group: 'prism-strength-active',
+        style: { background: 'ui.prism-strength-active', background_radius: 2, background_inset: 2, underline: undefined },
+        enabled: true,
+        z_index: 1,
+      },
+    });
+  }
+
   setSpellcheckErrors(
     items: {
       id: string;
@@ -2486,6 +2538,83 @@ export class Editor {
     this.enqueue({ type: 'tracked_range', op: { type: 'clear_group', group: 'ai-feedback-active' } });
     this.aiFeedbacks = [];
     this.activeAiFeedbackId = null;
+  }
+
+  setPrismReviewRanges(items: { id: string; selection: Selection; tone: 'issue' | 'strength' }[]): void {
+    if (this.terminal) return;
+
+    this.clearPrismReviewRanges();
+
+    const installed: string[] = [];
+
+    for (const item of items) {
+      // 해소되지 않는 selection은 tick에서 터져 에디터를 종료시킨다.
+      // freezeSelection이 그 판정(양 끝 resolve)을 큐를 거치지 않고 내주고, 그 결과가 곧 앵커다.
+      const frozen = this.freezeSelection(item.selection);
+      if (!frozen) continue;
+
+      const result = this.#tryEnqueue({
+        type: 'tracked_range',
+        // 코멘트와 같은 결의 앵커다 — 그 대목을 고치는 것은 피드백을 처리하는 중이지 무효화가 아니다.
+        // 맞춤법이 가리키는 것은 그 단어라 고치면 사라지는 것이 맞지만, 여기가 가리키는 것은 대목이다.
+        op: {
+          type: 'add_frozen',
+          id: item.id,
+          group: item.tone === 'issue' ? 'prism-issue' : 'prism-strength',
+          selection: frozen,
+          metadata: '',
+        },
+      });
+
+      if (result.type === 'failed') {
+        this.#reportError(result.error, `Failed to add prism review range: ${item.id}`);
+        continue;
+      }
+      if (result.type === 'ignored') continue;
+
+      this.#prismReviewTones.set(item.id, item.tone);
+      installed.push(item.id);
+    }
+
+    this.prismReviewRangeIds = installed;
+  }
+
+  // 스냅숏의 trackedRanges는 코어가 tracked_ranges 필드를 낼 때만 갈린다(materializeSnapshot) — 본문이
+  // 리플로우해도 그 필드는 안 서므로 rects가 옛 자리에 굳는다. 여백은 rects로 좌표를 잡으니 지금 것을 직접 읽는다.
+  freshTrackedRanges(): TrackedRange[] {
+    // 레지스트리는 tick에서만 갈리고 그때마다 #applied가 새 객체가 된다 — 한 판에 한 번만 마샬한다
+    if (this.#freshRangesFor !== this.#applied) {
+      this.#freshRanges = this.#invokeCore((core) => core.tracked_ranges());
+      this.#freshRangesFor = this.#applied;
+    }
+    return this.#freshRanges;
+  }
+
+  setActivePrismReviewRanges(ids: readonly string[]): void {
+    const next = [...ids];
+    if (sameIds(this.#activePrismReviewIds, next)) return;
+
+    const move = (id: string, active: boolean): boolean => {
+      const tone = this.#prismReviewTones.get(id);
+      if (tone === undefined) return false;
+      if (this.#applied.trackedRanges.every((range) => range.id !== id)) return false;
+      const base = tone === 'issue' ? 'prism-issue' : 'prism-strength';
+      this.enqueue({ type: 'tracked_range', op: { type: 'set_group', id, group: active ? `${base}-active` : base } });
+      return true;
+    };
+
+    for (const id of this.#activePrismReviewIds) move(id, false);
+    // 앉지 못한 id를 활성으로 기록하면 sameIds가 다음 시도를 막는다
+    this.#activePrismReviewIds = next.filter((id) => move(id, true));
+  }
+
+  clearPrismReviewRanges(): void {
+    for (const group of ['prism-issue', 'prism-issue-active', 'prism-strength', 'prism-strength-active']) {
+      this.enqueue({ type: 'tracked_range', op: { type: 'clear_group', group } });
+    }
+    this.#prismReviewTones.clear();
+    this.#activePrismReviewIds = [];
+    this.prismReviewRangeIds = [];
   }
 
   installCommentDecorations(): void {

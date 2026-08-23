@@ -4,7 +4,7 @@ import { TableCode } from './codes.ts';
 import * as E from './enums.ts';
 import { createDbId } from './id.ts';
 import { bytea, datetime } from './types.ts';
-import type { ReviewOutcome, RunUsage } from '@typie/prism';
+import type { Anchor, ReviewOutcome, RunUsage } from '@typie/prism';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import type { CouponCondition, PlanRules } from './json.ts';
 
@@ -790,6 +790,57 @@ export const PrismReviewRounds = pgTable(
       .default(sql`now()`),
   },
   (t) => [unique().on(t.documentId, t.round), index().on(t.sessionId)],
+);
+
+export const PrismReviewThreads = pgTable(
+  'prism_review_threads',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.PRISM_REVIEW_THREADS)),
+    documentId: text('document_id')
+      .notNull()
+      .references(() => Documents.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    // 태어난 회차 번호와 지금 앉은 회차 — 재리뷰가 스레드를 다음 회차로 옮기면 둘이 갈린다
+    bornRound: integer('born_round').notNull(),
+    roundId: text('round_id')
+      .notNull()
+      .references(() => PrismReviewRounds.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    issueIndex: integer('issue_index').notNull(),
+    issueId: text('issue_id'),
+    trait: text('trait').notNull(),
+    pass: E._PrismReviewPass('pass').notNull(),
+    body: text('body'),
+    anchors: jsonb('anchors').$type<Anchor[]>().notNull(),
+    state: E._PrismReviewThreadState('state').notNull().default('OPEN'),
+    stateChangedAt: datetime('state_changed_at'),
+    reaction: E._PrismReaction('reaction'),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [unique().on(t.documentId, t.bornRound, t.issueIndex), index().on(t.roundId)],
+);
+
+export const PrismReviewThreadComments = pgTable(
+  'prism_review_thread_comments',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.PRISM_REVIEW_THREAD_COMMENTS)),
+    threadId: text('thread_id')
+      .notNull()
+      .references(() => PrismReviewThreads.id, { onUpdate: 'cascade', onDelete: 'cascade' }),
+    author: E._PrismReviewCommentAuthor('author').notNull(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    body: text('body').notNull(),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [index().on(t.threadId, t.createdAt)],
 );
 
 export const Prompts = pgTable('prompts', {

@@ -55,6 +55,11 @@
             document {
               id
               title
+
+              entity {
+                id
+                slug
+              }
             }
 
             rejection {
@@ -295,10 +300,40 @@
   });
 
   const HOLD_MS = 5000;
-  const remainingHold = (at: number) => Math.max(0, at + HOLD_MS - Date.now());
 
-  let heldStages = $state<{ key: StageKey; at: number }[]>([]);
-  const heldStageKeys = $derived(heldStages.map((entry) => entry.key));
+  // 카운트다운은 배출이 끝난 시점부터 센다. 시작 시각을 반응 상태 밖에 두어야 무관한 갱신이 타이머를 되돌리지 않는다.
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- 반응하면 갱신이 타이머를 되돌린다
+  const holdSince = new Map<string, number>();
+
+  const holdTimers = (keys: string[], busy: (key: string) => boolean, release: (key: string) => void) => {
+    const timers: ReturnType<typeof setTimeout>[] = [];
+
+    for (const key of keys) {
+      if (busy(key)) {
+        holdSince.delete(key);
+        continue;
+      }
+
+      const since = holdSince.get(key) ?? Date.now();
+      holdSince.set(key, since);
+      timers.push(
+        setTimeout(
+          () => {
+            holdSince.delete(key);
+            release(key);
+          },
+          Math.max(0, since + HOLD_MS - Date.now()),
+        ),
+      );
+    }
+
+    return () => {
+      for (const timer of timers) clearTimeout(timer);
+    };
+  };
+
+  let heldStages = $state<StageKey[]>([]);
+  const heldStageKeys = $derived(heldStages);
   let prevCurrent: StageKey | null = null;
 
   $effect(() => {
@@ -310,9 +345,7 @@
 
     untrack(() => {
       const finished = prevCurrent;
-      if (finished !== null && heldStages.every((entry) => entry.key !== finished)) {
-        heldStages = [...heldStages, { key: finished, at: Date.now() }];
-      }
+      if (finished !== null && !heldStages.includes(finished)) heldStages = [...heldStages, finished];
       prevCurrent = currentStage;
     });
   });
@@ -323,38 +356,39 @@
     }
 
     const busy = new Set(drains.map((entry) => entry.stage));
-    const timers = heldStages
-      .filter((entry) => !busy.has(entry.key))
-      .map((entry) => setTimeout(() => (heldStages = heldStages.filter((held) => held.key !== entry.key)), remainingHold(entry.at)));
-
-    return () => {
-      for (const timer of timers) clearTimeout(timer);
-    };
+    return holdTimers(
+      heldStages,
+      (key) => busy.has(key as StageKey),
+      (key) => (heldStages = heldStages.filter((held) => held !== key)),
+    );
   });
 
-  let heldRounds = $state<{ key: string; stage: StageKey; round: number; at: number }[]>([]);
+  let heldRounds = $state<{ key: string; stage: StageKey; round: number }[]>([]);
   const heldRoundKeys = $derived(heldRounds.map((entry) => entry.key));
-  let prevLatestRounds: Record<string, { key: string; round: number }> = {};
+
+  // 진행 중인 회차를 기준으로 잡는다 — 최신 회차 기준이면 마지막 회차는 뒤이을 회차가 없어 영영 닫히지 않는다.
+  const liveRoundBox = $derived.by(() => {
+    if (!running || view.liveRound === null) return null;
+
+    for (const stage of view.stages) {
+      const box = stage.groups.findLast((group) => group.kind === 'round' && group.round === view.liveRound);
+      if (box !== undefined && box.kind === 'round') return { key: box.key, stage: stage.key, round: box.round };
+    }
+
+    return null;
+  });
+
+  let prevLiveRound: { key: string; stage: StageKey; round: number } | null = null;
 
   $effect(() => {
-    if (!running) {
-      return;
-    }
-
-    const latest: Record<string, { key: string; round: number }> = {};
-    for (const stage of view.stages) {
-      const box = stage.groups.findLast((group) => group.kind === 'round');
-      if (box !== undefined && box.kind === 'round') latest[stage.key] = { key: box.key, round: box.round };
-    }
+    const current = liveRoundBox;
 
     untrack(() => {
-      for (const [stageKey, next] of Object.entries(latest)) {
-        const prev = prevLatestRounds[stageKey];
-        if (prev !== undefined && prev.key !== next.key && heldRounds.every((entry) => entry.key !== prev.key)) {
-          heldRounds = [...heldRounds, { key: prev.key, stage: stageKey as StageKey, round: prev.round, at: Date.now() }];
-        }
-        prevLatestRounds[stageKey] = next;
+      const prev = prevLiveRound;
+      if (prev !== null && prev.key !== current?.key && heldRounds.every((entry) => entry.key !== prev.key)) {
+        heldRounds = [...heldRounds, prev];
       }
+      prevLiveRound = current;
     });
   });
 
@@ -364,13 +398,13 @@
     }
 
     const busy = new Set(drains.filter((entry) => entry.round !== null).map((entry) => `${entry.stage}|${entry.round}`));
-    const timers = heldRounds
-      .filter((entry) => !busy.has(`${entry.stage}|${entry.round}`))
-      .map((entry) => setTimeout(() => (heldRounds = heldRounds.filter((held) => held.key !== entry.key)), remainingHold(entry.at)));
+    const draining = new Set(heldRounds.filter((entry) => busy.has(`${entry.stage}|${entry.round}`)).map((entry) => entry.key));
 
-    return () => {
-      for (const timer of timers) clearTimeout(timer);
-    };
+    return holdTimers(
+      heldRounds.map((entry) => entry.key),
+      (key) => draining.has(key),
+      (key) => (heldRounds = heldRounds.filter((held) => held.key !== key)),
+    );
   });
 
   const awaiting = $derived(requests.some((request) => request.status === 'pending'));
@@ -568,13 +602,16 @@
   </span>
 {/snippet}
 
-{#snippet liveNarration()}
+{#snippet liveTail()}
   {#if live !== null && live.boundary > 0 && !draining}
     <div class={narrationClass}><PrismMarkdown blocks={live.blocks} plain={live.plain} /></div>
   {/if}
+  {#if !awaiting}
+    <PrismWaitRow style={css.raw({ marginTop: '10px' })} label={tail ?? '리뷰가 진행 중이에요'} text={tail} />
+  {/if}
 {/snippet}
 
-{#snippet groups(list: PassageGroup[], latestSeq: number | null)}
+{#snippet groups(list: PassageGroup[], liveKey: string | null)}
   {#each gateGroups(list) as group (group.key)}
     {#if group.kind === 'narration'}
       {@const groupDrain = drainOf(group.seq)}
@@ -590,7 +627,7 @@
         <PrismToolRequest {failedIds} message={group.request} {onRetry} {resolve} {transcript} />
       </div>
     {:else}
-      {@const open = expanded[group.key] ?? (group.seq === latestSeq || heldRoundKeys.includes(group.key))}
+      {@const open = expanded[group.key] ?? (group.key === liveKey || heldRoundKeys.includes(group.key))}
       <div class={roundBoxClass} in:rise={{ block: true }}>
         <button
           class={css(roundHeadStyle, { width: 'full' })}
@@ -605,6 +642,9 @@
         {#if open}
           <div class={expandClass} transition:expand>
             {@render groups(group.groups, null)}
+            {#if group.key === liveKey}
+              {@render liveTail()}
+            {/if}
           </div>
         {/if}
       </div>
@@ -613,8 +653,11 @@
 {/snippet}
 
 {#snippet stageBody(stage: StageView)}
-  {@const latestRound = stage.groups.findLast((group) => group.kind === 'round')?.seq ?? null}
-  {@render groups(stage.groups, stage.status === 'running' ? latestRound : null)}
+  {@const liveKey = stage.status === 'running' ? (liveRoundBox?.key ?? null) : null}
+  {@render groups(stage.groups, liveKey)}
+  {#if stage.status === 'running' && liveKey === null}
+    {@render liveTail()}
+  {/if}
 {/snippet}
 
 {#snippet stageLine(stage: StageView, toggleable: boolean, delay: number = 0)}
@@ -706,9 +749,8 @@
         </div>
       {/if}
     {/each}
-    {@render liveNarration()}
-    {#if !awaiting}
-      <PrismWaitRow style={css.raw({ marginTop: '10px' })} label={tail ?? '리뷰가 진행 중이에요'} text={tail} />
+    {#if view.current === null}
+      {@render liveTail()}
     {/if}
   {:else}
     {#if traceLoad === 'loading'}

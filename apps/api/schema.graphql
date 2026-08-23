@@ -85,6 +85,10 @@ input CheckSpellingDocumentV2Input {
   text: String!
 }
 
+input ClosePrismReviewThreadInput {
+  threadId: ID!
+}
+
 input CopyEntitiesInput {
   entityIds: [ID!]!
   lowerOrder: String
@@ -205,6 +209,10 @@ input DeleteNoteInput {
   noteId: ID!
 }
 
+input DeletePrismReviewThreadCommentInput {
+  commentId: ID!
+}
+
 input DeletePrismSessionInput {
   sessionId: ID!
 }
@@ -239,6 +247,7 @@ type Document implements IDocument {
   locked: Boolean!
   nullableTitle: String
   password: String
+  prismReviewRounds: [PrismReviewRound!]!
   protectContent: Boolean!
   reactionCount: Int!
   state: DocumentState
@@ -840,6 +849,7 @@ type Mutation {
   cancelSubscriptionCancellation: Subscription_!
   checkSpellingDocument(input: CheckSpellingDocumentInput!): [DocumentSpellingError!]!
   checkSpellingDocumentV2(input: CheckSpellingDocumentV2Input!): [DocumentSpellingErrorV2!]!
+  closePrismReviewThread(input: ClosePrismReviewThreadInput!): PrismReviewThread!
   copyEntities(input: CopyEntitiesInput!): [Entity!]!
   createDocument(input: CreateDocumentInput!): Document!
   createDocumentComment(input: CreateDocumentCommentInput!): DocumentCommentThread!
@@ -859,6 +869,7 @@ type Mutation {
   deleteEntityGoal(input: DeleteEntityGoalInput!): Entity!
   deleteFolder(input: DeleteFolderInput!): Folder!
   deleteNote(input: DeleteNoteInput!): Note!
+  deletePrismReviewThreadComment(input: DeletePrismReviewThreadCommentInput!): PrismReviewThread!
   deletePrismSession(input: DeletePrismSessionInput!): PrismSession!
   deleteSite(input: DeleteSiteInput!): Site!
   deleteTextReplacement(input: DeleteTextReplacementInput!): TextReplacementNode!
@@ -885,6 +896,7 @@ type Mutation {
   persistBlobAsImage(input: PersistBlobAsImageInput!): Image!
   purgeEntities(input: PurgeEntitiesInput!): Site!
   reactPrismReviewRound(input: ReactPrismReviewRoundInput!): PrismReviewRound!
+  reactPrismReviewThread(input: ReactPrismReviewThreadInput!): PrismReviewThread!
   recordSurvey(input: RecordSurveyInput!): User!
   recoverEntity(input: RecoverEntityInput!): Entity!
   redeemCreditCode(input: RedeemCreditCodeInput!): User!
@@ -892,6 +904,8 @@ type Mutation {
   removeNoteEntity(input: RemoveNoteEntityInput!): Note!
   renameFolder(input: RenameFolderInput!): Folder!
   renamePrismSession(input: RenamePrismSessionInput!): PrismSession!
+  reopenPrismReviewThread(input: ReopenPrismReviewThreadInput!): PrismReviewThread!
+  replyPrismReviewThread(input: ReplyPrismReviewThreadInput!): PrismReviewThread!
   reportDocument(input: ReportDocumentInput!): Boolean!
   resetPassword(input: ResetPasswordInput!): Boolean!
   resetPreferences: User!
@@ -931,6 +945,7 @@ type Mutation {
   updateNote(input: UpdateNoteInput!): Note!
   updatePassword(input: UpdatePasswordInput!): User!
   updatePreferences(input: UpdatePreferencesInput!): User!
+  updatePrismReviewThreadComment(input: UpdatePrismReviewThreadCommentInput!): PrismReviewThread!
   updateSite(input: UpdateSiteInput!): Site!
   updateSiteSlug(input: UpdateSiteSlugInput!): Site!
   updateTextReplacement(input: UpdateTextReplacementInput!): TextReplacementNode!
@@ -1076,6 +1091,18 @@ enum PrismReaction {
   UP
 }
 
+type PrismReviewAnchor {
+  end: Int!
+  head: String!
+  start: Int!
+  tail: String!
+}
+
+enum PrismReviewCommentAuthor {
+  AI
+  USER
+}
+
 type PrismReviewConclusionSummary {
   elevationsCount: Int!
   patternsCount: Int!
@@ -1105,6 +1132,11 @@ type PrismReviewElevation {
 type PrismReviewIssueBrief {
   index: Int!
   trait: String!
+}
+
+enum PrismReviewPass {
+  JUDGMENT
+  STYLISTIC
 }
 
 type PrismReviewPattern {
@@ -1137,6 +1169,7 @@ type PrismReviewRound {
   rejection: PrismReviewRejection
   round: Int!
   state: PrismReviewRoundState!
+  threads: [PrismReviewThread!]!
   tier: PrismReviewTier!
   workflow: PrismWorkflow
 }
@@ -1150,8 +1183,39 @@ enum PrismReviewRoundState {
 }
 
 type PrismReviewStrength {
+  anchor: PrismReviewAnchor!
   body: String
   quote: String!
+}
+
+type PrismReviewThread {
+  anchors: [PrismReviewAnchor!]!
+  body: String
+  comments: [PrismReviewThreadComment!]!
+  id: ID!
+  issueId: String
+  issueIndex: Int!
+  pass: PrismReviewPass!
+  quote: String!
+  reaction: PrismReaction
+  state: PrismReviewThreadState!
+  stateChangedAt: DateTime
+  trait: String!
+}
+
+type PrismReviewThreadComment {
+  author: PrismReviewCommentAuthor!
+  body: String!
+  createdAt: DateTime!
+  id: ID!
+  user: UserView!
+}
+
+enum PrismReviewThreadState {
+  CLOSED
+  OPEN
+  RESOLVED
+  WITHDRAWN
 }
 
 enum PrismReviewTier {
@@ -1243,6 +1307,11 @@ input ReactPrismReviewRoundInput {
   value: PrismReaction
 }
 
+input ReactPrismReviewThreadInput {
+  threadId: ID!
+  value: PrismReaction
+}
+
 input RecordSurveyInput {
   name: String!
   value: JSON!
@@ -1291,6 +1360,15 @@ input RenameFolderInput {
 input RenamePrismSessionInput {
   sessionId: ID!
   title: String!
+}
+
+input ReopenPrismReviewThreadInput {
+  threadId: ID!
+}
+
+input ReplyPrismReviewThreadInput {
+  body: String!
+  threadId: ID!
 }
 
 input ReportDocumentInput {
@@ -1467,6 +1545,7 @@ type Subscription {
   literaryAnalysisDocumentStream(mappings: [DocumentTextMappingInput!]!, text: String!): DocumentLiteraryAnalysisPayload!
   literaryAnalysisDocumentStreamV2(documentId: ID, text: String!): DocumentLiteraryAnalysisPayloadV2!
   noteUpdateStream(clientId: String!, siteId: ID!): NoteUpdateStreamPayload!
+  prismReviewStream(documentId: ID!): PrismReviewRound!
   prismSessionEvents(cursor: Int, sessionId: ID!, workflows: [PrismWorkflowCursorInput!]): JSON!
   siteUpdateStream(siteId: ID!): SiteUpdateStreamPayload!
   siteUsageUpdateStream(siteId: ID!): Site!
@@ -1643,6 +1722,11 @@ input UpdatePasswordInput {
 
 input UpdatePreferencesInput {
   value: JSON!
+}
+
+input UpdatePrismReviewThreadCommentInput {
+  body: String!
+  commentId: ID!
 }
 
 input UpdateSiteInput {

@@ -20,7 +20,7 @@
   import Maximize2Icon from '~icons/lucide/maximize-2';
   import XIcon from '~icons/lucide/x';
   import { BottomToolbar, Editor as EditorComponent, EditorFailureOverlay, TopToolbar } from '$lib/editor-ffi/components';
-  import { IS_MAC } from '$lib/editor-ffi/constants';
+  import { CONTINUOUS_VIEW_PADDING, IS_MAC } from '$lib/editor-ffi/constants';
   import { browserScaleFactor, Editor, getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { createAssetHydrator } from '$lib/editor-ffi/handlers/asset-hydration';
   import { registerLinkContextMenu } from '$lib/editor-ffi/handlers/link';
@@ -38,6 +38,8 @@
   import DocumentComments from './@document-comments/DocumentComments.svelte';
   import DocumentPanel from './@document-panel/DocumentPanel.svelte';
   import { setupDocumentPanelFocusReturn } from './@document-panel/focus-return.svelte';
+  import PrismMarginLayer from './@prism-review/PrismMarginLayer.svelte';
+  import PrismReviewMargin from './@prism-review/PrismReviewMargin.svelte';
   import DocumentFindReplace from './DocumentFindReplace.svelte';
   import DocumentTemplateModal from './DocumentTemplateModal.svelte';
   import { headerVerticalNavigation } from './header-vertical-navigation';
@@ -274,6 +276,19 @@
   const document = $derived(entity?.node.__typename === 'Document' ? entity.node : null);
   const documentId = $derived(document?.id ?? null);
   const isOwner = $derived(query.data.me.id === entity?.user.id || query.data.me.role === 'ADMIN');
+
+  let editorAreaWidth = $state(0);
+
+  // 판이 아직 없으면 컬럼이 들어갈 수 있는지 판정할 수 없다 — 폭을 모르는 동안은 팝오버로 선다
+  const marginBodyWidth = $derived.by(() => {
+    const editor = ctx.editor;
+    const layout = editor?.rootAttrs?.layout_mode;
+    if (!editor || !layout) return Infinity;
+    return layout.type === 'paginated'
+      ? (editor.pageSizes[0]?.width ?? 0) * editor.safeDisplayZoom()
+      : layout.max_width + CONTINUOUS_VIEW_PADDING * 2;
+  });
+
   const title = $derived(document?.title ?? '');
   const assets = $derived(document?.assets);
 
@@ -1170,250 +1185,273 @@
 
       <HorizontalDivider color="secondary" />
 
-      <TopToolbar />
+      <!-- 툴바의 회차 드롭다운도 같은 컨텍스트를 읽는다 — 에디터 영역 안쪽에 두면 앞선 형제인 툴바에서 영영 안 보인다 -->
+      <PrismReviewMargin
+        available={editorAreaWidth}
+        bodyWidth={marginBodyWidth}
+        {documentId}
+        entityId={entity?.id ?? null}
+        myId={query.data.me.id}
+      >
+        {#snippet children(insets)}
+          <TopToolbar />
 
-      <div class={flex({ position: 'relative', flexGrow: '1', overflowY: 'hidden' })}>
-        {#if document && documentId && entity}
-          <DocumentComments {documentId} entityId={entity.id} {isOwner} me$key={query.data.me} myId={query.data.me.id}>
-            <div class={flex({ position: 'relative', flexDirection: 'column', flexGrow: '1', overflowX: 'auto' })}>
-              <BottomToolbar
-                {fontFamilies}
-                onFontUploadClick={() => {
-                  if (query.data.me.entitled) {
-                    fontUploadModalOpen = true;
-                  } else {
-                    SubscribeModal.show('font_family_upload');
-                  }
-                }}
-                onSearchClick={toggleFindReplace}
-              />
-
-              <div
-                bind:this={ctx.editorAreaEl}
-                style:position={currentViewZenModeEnabled ? 'fixed' : 'relative'}
-                style:top={currentViewZenModeEnabled ? '0' : 'auto'}
-                style:left={currentViewZenModeEnabled ? '0' : 'auto'}
-                style:right={currentViewZenModeEnabled ? '0' : 'auto'}
-                style:bottom={currentViewZenModeEnabled ? '0' : 'auto'}
-                class={flex({
-                  position: 'relative',
-                  flexDirection: 'column',
-                  flexGrow: '1',
-                  overflowX: 'auto',
-                  overflowY: 'hidden',
-                  zIndex: !currentViewZenModeEnabled && app.preference.current.zenModeEnabled ? 'underEditor' : 'editor',
-                  backgroundColor: 'surface.default',
-                })}
-              >
-                {#if showEditLockedToast}
-                  <div
-                    class={flex({
-                      position: 'absolute',
-                      top: currentViewZenModeEnabled ? '60px' : ctx.editor?.rootAttrs?.layout_mode.type === 'paginated' ? '36px' : '12px',
-                      right: '12px',
-                      zIndex: 'sidebar',
-                      alignItems: 'center',
-                      gap: '10px',
-                      paddingX: '14px',
-                      paddingY: '10px',
-                      borderRadius: '6px',
-                      borderWidth: '1px',
-                      borderColor: 'border.default',
-                      backgroundColor: 'surface.default',
-                      boxShadow: 'small',
-                      fontSize: '13px',
-                      color: 'text.subtle',
-                    })}
-                    onpointerenter={() => {
-                      if (!lockedToastTimer) {
-                        return;
+          <div class={flex({ position: 'relative', flexGrow: '1', overflowY: 'hidden' })}>
+            {#if document && documentId && entity}
+              <DocumentComments {documentId} entityId={entity.id} {isOwner} me$key={query.data.me} myId={query.data.me.id}>
+                <div class={flex({ position: 'relative', flexDirection: 'column', flexGrow: '1', overflowX: 'auto' })}>
+                  <BottomToolbar
+                    {fontFamilies}
+                    onFontUploadClick={() => {
+                      if (query.data.me.entitled) {
+                        fontUploadModalOpen = true;
+                      } else {
+                        SubscribeModal.show('font_family_upload');
                       }
+                    }}
+                    onSearchClick={toggleFindReplace}
+                  />
 
-                      clearTimeout(lockedToastTimer);
-                      lockedToastTimer = null;
-                    }}
-                    onpointerleave={() => {
-                      lockedToastTimer = setTimeout(() => {
-                        showEditLockedToast = false;
-                      }, 5000);
-                    }}
-                    role="alert"
-                    transition:fly={{ y: -8, duration: 150 }}
+                  <div
+                    bind:this={ctx.editorAreaEl}
+                    style:position={currentViewZenModeEnabled ? 'fixed' : 'relative'}
+                    style:top={currentViewZenModeEnabled ? '0' : 'auto'}
+                    style:left={currentViewZenModeEnabled ? '0' : 'auto'}
+                    style:right={currentViewZenModeEnabled ? '0' : 'auto'}
+                    style:bottom={currentViewZenModeEnabled ? '0' : 'auto'}
+                    class={flex({
+                      position: 'relative',
+                      flexDirection: 'column',
+                      flexGrow: '1',
+                      overflowX: 'auto',
+                      overflowY: 'hidden',
+                      zIndex: !currentViewZenModeEnabled && app.preference.current.zenModeEnabled ? 'underEditor' : 'editor',
+                      backgroundColor: 'surface.default',
+                    })}
+                    bind:clientWidth={editorAreaWidth}
                   >
-                    <Icon style={css.raw({ flexShrink: '0' })} icon={LockIcon} size={14} />
-                    <span>편집이 잠겨있는 문서예요.</span>
-                    {#if query.data.me.id === entity.user.id}
-                      <button
-                        class={css({
-                          marginLeft: '4px',
-                          paddingX: '8px',
-                          paddingY: '4px',
-                          borderRadius: '4px',
-                          fontSize: '12px',
-                          fontWeight: 'medium',
-                          color: 'text.default',
-                          backgroundColor: 'surface.subtle',
-                          cursor: 'pointer',
-                          transition: 'common',
-                          _hover: { backgroundColor: 'surface.muted' },
+                    {#if showEditLockedToast}
+                      <div
+                        class={flex({
+                          position: 'absolute',
+                          top: currentViewZenModeEnabled
+                            ? '60px'
+                            : ctx.editor?.rootAttrs?.layout_mode.type === 'paginated'
+                              ? '36px'
+                              : '12px',
+                          right: '12px',
+                          zIndex: 'sidebar',
+                          alignItems: 'center',
+                          gap: '10px',
+                          paddingX: '14px',
+                          paddingY: '10px',
+                          borderRadius: '6px',
+                          borderWidth: '1px',
+                          borderColor: 'border.default',
+                          backgroundColor: 'surface.default',
+                          boxShadow: 'small',
+                          fontSize: '13px',
+                          color: 'text.subtle',
                         })}
-                        onclick={() => {
-                          toggleEditLock();
-                          showEditLockedToast = false;
-                          if (lockedToastTimer) clearTimeout(lockedToastTimer);
+                        onpointerenter={() => {
+                          if (!lockedToastTimer) {
+                            return;
+                          }
+
+                          clearTimeout(lockedToastTimer);
+                          lockedToastTimer = null;
                         }}
-                        type="button"
+                        onpointerleave={() => {
+                          lockedToastTimer = setTimeout(() => {
+                            showEditLockedToast = false;
+                          }, 5000);
+                        }}
+                        role="alert"
+                        transition:fly={{ y: -8, duration: 150 }}
                       >
-                        해제하기
-                      </button>
+                        <Icon style={css.raw({ flexShrink: '0' })} icon={LockIcon} size={14} />
+                        <span>편집이 잠겨있는 문서예요.</span>
+                        {#if query.data.me.id === entity.user.id}
+                          <button
+                            class={css({
+                              marginLeft: '4px',
+                              paddingX: '8px',
+                              paddingY: '4px',
+                              borderRadius: '4px',
+                              fontSize: '12px',
+                              fontWeight: 'medium',
+                              color: 'text.default',
+                              backgroundColor: 'surface.subtle',
+                              cursor: 'pointer',
+                              transition: 'common',
+                              _hover: { backgroundColor: 'surface.muted' },
+                            })}
+                            onclick={() => {
+                              toggleEditLock();
+                              showEditLockedToast = false;
+                              if (lockedToastTimer) clearTimeout(lockedToastTimer);
+                            }}
+                            type="button"
+                          >
+                            해제하기
+                          </button>
+                        {/if}
+                      </div>
+                    {/if}
+
+                    <div
+                      class={flex({
+                        flexDirection: 'column',
+                        flexGrow: '1',
+                        minHeight: '0',
+                        overflowY: 'hidden',
+                      })}
+                      inert={editorSurfaceFailed}
+                    >
+                      {#key ctx.editor}
+                        {@const editor = ctx.editor}
+                        <svelte:boundary onerror={(error) => handleEditorBoundaryError(editor, error)}>
+                          <EditorComponent
+                            active={focused}
+                            contentInsetLeft={insets.left}
+                            contentInsetRight={insets.right}
+                            document$key={document}
+                            onReady={handleEditorReady}
+                          >
+                            {#snippet header()}
+                              <div
+                                class={flex({
+                                  flexDirection: 'column',
+                                  alignItems: 'center',
+                                  paddingTop: '60px',
+                                  width: 'full',
+                                  ...(ctx.editor?.rootAttrs?.layout_mode.type === 'paginated' && { paddingBottom: '20px' }),
+                                })}
+                              >
+                                <div class={flex({ flexDirection: 'column', flexShrink: '0', width: 'full' })}>
+                                  <textarea
+                                    bind:this={titleEl}
+                                    class={css({ width: 'full', fontSize: '28px', fontWeight: 'bold', resize: 'none' })}
+                                    autocapitalize="off"
+                                    autocomplete="off"
+                                    maxlength={100}
+                                    onblur={() => {
+                                      titleFocused = false;
+                                      flushTitleUpdate();
+                                    }}
+                                    onfocus={() => {
+                                      clearBodySelectionForHeaderFocus();
+                                      titleFocused = true;
+                                      if (documentId) {
+                                        selectionsStore.current = {
+                                          ...selectionsStore.current,
+                                          [documentId]: { type: 'element', element: 'title', timestamp: dayjs().valueOf() },
+                                        };
+                                      }
+                                    }}
+                                    oninput={handleTitleChanged}
+                                    onkeydown={(e) => {
+                                      if (e.isComposing) {
+                                        return;
+                                      }
+
+                                      if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        subtitleEl?.focus();
+                                      }
+                                    }}
+                                    placeholder="제목을 입력하세요"
+                                    rows={1}
+                                    spellcheck="false"
+                                    bind:value={localTitle}
+                                    use:autosize
+                                    use:headerVerticalNavigation={{ down: () => subtitleEl?.focus() }}></textarea>
+
+                                  <textarea
+                                    bind:this={subtitleEl}
+                                    class={css({
+                                      marginTop: '4px',
+                                      width: 'full',
+                                      fontSize: '16px',
+                                      fontWeight: 'medium',
+                                      overflow: 'hidden',
+                                      resize: 'none',
+                                    })}
+                                    autocapitalize="off"
+                                    autocomplete="off"
+                                    maxlength={100}
+                                    onblur={() => {
+                                      subtitleFocused = false;
+                                      flushSubtitleUpdate();
+                                    }}
+                                    onfocus={() => {
+                                      clearBodySelectionForHeaderFocus();
+                                      subtitleFocused = true;
+                                      if (documentId) {
+                                        selectionsStore.current = {
+                                          ...selectionsStore.current,
+                                          [documentId]: { type: 'element', element: 'subtitle', timestamp: dayjs().valueOf() },
+                                        };
+                                      }
+                                    }}
+                                    oninput={handleSubtitleChanged}
+                                    onkeydown={(e) => {
+                                      if (e.isComposing) {
+                                        return;
+                                      }
+
+                                      if (!localSubtitle && e.key === 'Backspace') {
+                                        e.preventDefault();
+                                        titleEl?.focus();
+                                      }
+
+                                      if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) {
+                                        e.preventDefault();
+                                        enterDocumentFromHeader();
+                                      }
+                                    }}
+                                    placeholder="부제목을 입력하세요"
+                                    rows={1}
+                                    spellcheck="false"
+                                    bind:value={localSubtitle}
+                                    use:autosize
+                                    use:headerVerticalNavigation={{ up: () => titleEl?.focus(), down: enterDocumentFromHeader }}></textarea>
+
+                                  {#if ctx.editor?.rootAttrs?.layout_mode.type !== 'paginated'}
+                                    <HorizontalDivider style={css.raw({ marginTop: '10px' })} />
+                                  {/if}
+                                </div>
+                              </div>
+                            {/snippet}
+                            <CommentPopover />
+                            <PrismMarginLayer insetRight={insets.right} />
+                          </EditorComponent>
+                        </svelte:boundary>
+                      {/key}
+                    </div>
+                    {#if showFindReplace}
+                      <DocumentFindReplace bind:this={findReplaceComponent} onclose={() => (showFindReplace = false)} />
+                    {/if}
+                    {#if liveEditorFailed}
+                      <EditorFailureOverlay id={`document-editor-${pane.id}`} actionLabel="다시 불러오기" onAction={retryLiveEditor} />
+                    {:else if previewEditorRetry}
+                      <EditorFailureOverlay id={`document-preview-${pane.id}`} actionLabel="다시 불러오기" onAction={previewEditorRetry} />
                     {/if}
                   </div>
-                {/if}
-
-                <div
-                  class={flex({
-                    flexDirection: 'column',
-                    flexGrow: '1',
-                    minHeight: '0',
-                    overflowY: 'hidden',
-                  })}
-                  inert={editorSurfaceFailed}
-                >
-                  {#key ctx.editor}
-                    {@const editor = ctx.editor}
-                    <svelte:boundary onerror={(error) => handleEditorBoundaryError(editor, error)}>
-                      <EditorComponent active={focused} document$key={document} onReady={handleEditorReady}>
-                        {#snippet header()}
-                          <div
-                            class={flex({
-                              flexDirection: 'column',
-                              alignItems: 'center',
-                              paddingTop: '60px',
-                              width: 'full',
-                              ...(ctx.editor?.rootAttrs?.layout_mode.type === 'paginated' && { paddingBottom: '20px' }),
-                            })}
-                          >
-                            <div class={flex({ flexDirection: 'column', flexShrink: '0', width: 'full' })}>
-                              <textarea
-                                bind:this={titleEl}
-                                class={css({ width: 'full', fontSize: '28px', fontWeight: 'bold', resize: 'none' })}
-                                autocapitalize="off"
-                                autocomplete="off"
-                                maxlength={100}
-                                onblur={() => {
-                                  titleFocused = false;
-                                  flushTitleUpdate();
-                                }}
-                                onfocus={() => {
-                                  clearBodySelectionForHeaderFocus();
-                                  titleFocused = true;
-                                  if (documentId) {
-                                    selectionsStore.current = {
-                                      ...selectionsStore.current,
-                                      [documentId]: { type: 'element', element: 'title', timestamp: dayjs().valueOf() },
-                                    };
-                                  }
-                                }}
-                                oninput={handleTitleChanged}
-                                onkeydown={(e) => {
-                                  if (e.isComposing) {
-                                    return;
-                                  }
-
-                                  if (e.key === 'Enter') {
-                                    e.preventDefault();
-                                    subtitleEl?.focus();
-                                  }
-                                }}
-                                placeholder="제목을 입력하세요"
-                                rows={1}
-                                spellcheck="false"
-                                bind:value={localTitle}
-                                use:autosize
-                                use:headerVerticalNavigation={{ down: () => subtitleEl?.focus() }}></textarea>
-
-                              <textarea
-                                bind:this={subtitleEl}
-                                class={css({
-                                  marginTop: '4px',
-                                  width: 'full',
-                                  fontSize: '16px',
-                                  fontWeight: 'medium',
-                                  overflow: 'hidden',
-                                  resize: 'none',
-                                })}
-                                autocapitalize="off"
-                                autocomplete="off"
-                                maxlength={100}
-                                onblur={() => {
-                                  subtitleFocused = false;
-                                  flushSubtitleUpdate();
-                                }}
-                                onfocus={() => {
-                                  clearBodySelectionForHeaderFocus();
-                                  subtitleFocused = true;
-                                  if (documentId) {
-                                    selectionsStore.current = {
-                                      ...selectionsStore.current,
-                                      [documentId]: { type: 'element', element: 'subtitle', timestamp: dayjs().valueOf() },
-                                    };
-                                  }
-                                }}
-                                oninput={handleSubtitleChanged}
-                                onkeydown={(e) => {
-                                  if (e.isComposing) {
-                                    return;
-                                  }
-
-                                  if (!localSubtitle && e.key === 'Backspace') {
-                                    e.preventDefault();
-                                    titleEl?.focus();
-                                  }
-
-                                  if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) {
-                                    e.preventDefault();
-                                    enterDocumentFromHeader();
-                                  }
-                                }}
-                                placeholder="부제목을 입력하세요"
-                                rows={1}
-                                spellcheck="false"
-                                bind:value={localSubtitle}
-                                use:autosize
-                                use:headerVerticalNavigation={{ up: () => titleEl?.focus(), down: enterDocumentFromHeader }}></textarea>
-
-                              {#if ctx.editor?.rootAttrs?.layout_mode.type !== 'paginated'}
-                                <HorizontalDivider style={css.raw({ marginTop: '10px' })} />
-                              {/if}
-                            </div>
-                          </div>
-                        {/snippet}
-                        <CommentPopover />
-                      </EditorComponent>
-                    </svelte:boundary>
-                  {/key}
                 </div>
-                {#if showFindReplace}
-                  <DocumentFindReplace bind:this={findReplaceComponent} onclose={() => (showFindReplace = false)} />
-                {/if}
-                {#if liveEditorFailed}
-                  <EditorFailureOverlay id={`document-editor-${pane.id}`} actionLabel="다시 불러오기" onAction={retryLiveEditor} />
-                {:else if previewEditorRetry}
-                  <EditorFailureOverlay id={`document-preview-${pane.id}`} actionLabel="다시 불러오기" onAction={previewEditorRetry} />
-                {/if}
-              </div>
-            </div>
 
-            <DocumentPanel
-              document$key={document}
-              editor={ctx.editor}
-              onPreviewEditorFailed={handlePreviewEditorFailed}
-              onPreviewEditorRecovered={handlePreviewEditorRecovered}
-              user$key={query.data.me}
-            />
-          </DocumentComments>
-        {/if}
-      </div>
+                <DocumentPanel
+                  document$key={document}
+                  editor={ctx.editor}
+                  onPreviewEditorFailed={handlePreviewEditorFailed}
+                  onPreviewEditorRecovered={handlePreviewEditorRecovered}
+                  user$key={query.data.me}
+                />
+              </DocumentComments>
+            {/if}
+          </div>
+        {/snippet}
+      </PrismReviewMargin>
 
       {#if currentViewZenModeEnabled}
         <div

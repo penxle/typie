@@ -10,6 +10,7 @@ import {
   pickVersion,
   roundState,
   summarizeOutcome,
+  threadsFromResult,
 } from './prism-review-core.ts';
 import type { ReviewOutcome } from '@typie/prism';
 
@@ -114,7 +115,9 @@ test('detailOutcome: 총평 전문을 인용·낱말·해소된 참조로 사영
   const detail = detailOutcome(feedback, '가나다라마');
   assert.equal(detail?.understanding, '리드');
   assert.equal(detail?.progress, '나아진 점');
-  assert.deepEqual(detail?.strengths, [{ quote: '가나다라마', body: '강점 설명' }]);
+  assert.deepEqual(detail?.strengths, [
+    { quote: '가나다라마', body: '강점 설명', anchor: { start: 0, end: 5, head: '가나다', tail: '다라마' } },
+  ]);
   assert.deepEqual(detail?.verdicts, [
     { trait: '인물', label: '자리 잡음', note: '메모' },
     { trait: '구성', label: null, note: null },
@@ -135,7 +138,9 @@ test('detailOutcome: 총평 전문을 인용·낱말·해소된 참조로 사영
 
 test('detailOutcome: 강점 인용은 못 찾으면 머리·꼬리로 서고, 격상 인용은 없으면 빠진다', () => {
   const detail = detailOutcome({ ...feedback, elevations: [{ trait: '문체', body: '격상', anchors: [] }] }, '');
-  assert.deepEqual(detail?.strengths, [{ quote: '가나다 ⋯ 다라마', body: '강점 설명' }]);
+  assert.deepEqual(detail?.strengths, [
+    { quote: '가나다 ⋯ 다라마', body: '강점 설명', anchor: { start: 0, end: 5, head: '가나다', tail: '다라마' } },
+  ]);
   assert.deepEqual(detail?.elevations, [{ trait: '문체', quote: null, body: '격상' }]);
 });
 
@@ -181,4 +186,48 @@ test('hasDetail: 설 섹션이 하나라도 있어야 참이다', () => {
   assert.equal(hasDetail(feedback), true);
   assert.equal(hasDetail({ version: 1, kind: 'issues', issues: [] }), false);
   assert.equal(hasDetail(null), false);
+});
+
+test('threadsFromResult - 거부 회차와 빈 결과는 행이 없다', () => {
+  assert.deepEqual(threadsFromResult(null), []);
+  assert.deepEqual(threadsFromResult({ version: 1, kind: 'rejected', rejected: { category: 'diary', message: '거절', basis: null } }), []);
+});
+
+test('threadsFromResult - 이슈마다 번호와 계열을 붙인다', () => {
+  const outcome = {
+    version: 1,
+    kind: 'issues',
+    issues: [
+      {
+        id: 'i-1',
+        trait: '동어 반복',
+        pass: 'stylistic',
+        body: '본문 설명',
+        anchors: [{ start: 0, end: 3, head: '가나다', tail: '가나다' }],
+      },
+      { trait: '시점 흔들림', pass: 'judgment', body: null, anchors: [] },
+    ],
+  } satisfies ReviewOutcome;
+
+  const threads = threadsFromResult(outcome);
+
+  assert.equal(threads.length, 2);
+  assert.equal(threads[0].issueIndex, 0);
+  assert.equal(threads[0].issueId, 'i-1');
+  assert.equal(threads[0].pass, 'STYLISTIC');
+  assert.deepEqual(threads[0].anchors, [{ start: 0, end: 3, head: '가나다', tail: '가나다' }]);
+  assert.equal(threads[1].issueIndex, 1);
+  assert.equal(threads[1].issueId, null);
+  assert.equal(threads[1].pass, 'JUDGMENT');
+});
+
+test('threadsFromResult - feedback 결과도 같은 방식으로 편다', () => {
+  const outcome = {
+    version: 1,
+    kind: 'feedback',
+    issues: [{ trait: '군더더기', pass: 'stylistic', body: null, anchors: [] }],
+    conclusion: { understanding: null, patterns: [], priorities: [] },
+  } satisfies ReviewOutcome;
+
+  assert.equal(threadsFromResult(outcome).length, 1);
 });

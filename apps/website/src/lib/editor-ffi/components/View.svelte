@@ -50,13 +50,28 @@
     /** window 자체를 스크롤 컨테이너로 사용한다. 페이지당 에디터 1개를 전제한다 (window에 리스너를 부착). */
     useWindowScroll?: boolean;
     style?: SystemStyleObject;
+    /** 본문 좌우에 비워 둘 폭. 여백 레이어(프리즘 리뷰)가 레일·카드 컬럼을 놓는 자리다. */
+    contentInsetLeft?: number;
+    contentInsetRight?: number;
     onReady?: () => void;
     header?: Snippet;
     footer?: Snippet;
     children?: Snippet;
   };
 
-  let { document$key, active = true, viewer = false, useWindowScroll = false, style, onReady, header, footer, children }: Props = $props();
+  let {
+    document$key,
+    active = true,
+    viewer = false,
+    useWindowScroll = false,
+    style,
+    contentInsetLeft = 0,
+    contentInsetRight = 0,
+    onReady,
+    header,
+    footer,
+    children,
+  }: Props = $props();
 
   const ctx = getEditorContext();
   const theme = getThemeContext();
@@ -158,21 +173,28 @@
   const continuousMaxFrameWidth = $derived(
     layoutMode?.type === 'continuous' ? `${layoutMode.max_width + CONTINUOUS_VIEW_PADDING * 2}px` : undefined,
   );
+  // 헤더 폴백(판 없음)에서도 인셋은 래퍼 패딩으로 들어간다 — 상한도 그만큼 넓어야 안쪽 트랙이 그대로 남는다
+  const headerFallbackMaxWidth = $derived(
+    layoutMode?.type === 'continuous'
+      ? `${layoutMode.max_width + CONTINUOUS_VIEW_PADDING * 2 + contentInsetLeft + contentInsetRight}px`
+      : undefined,
+  );
   const bodyTrackWidth = $derived(pageWidth * displayZoom);
   const headerGeometry = $derived.by(() => {
     if (!layoutMode) return;
 
-    const [contentInsetLeft, contentInsetRight] =
+    // 페이지 제 여백과 프리즘 인셋은 다른 값이다 — 같은 이름으로 가리면 인셋이 헤더에 닿지 않고 여백이 두 번 빠진다
+    const [pageInsetLeft, pageInsetRight] =
       layoutMode.type === 'paginated'
         ? [layoutMode.page_margin_left, layoutMode.page_margin_right]
         : [CONTINUOUS_VIEW_PADDING, CONTINUOUS_VIEW_PADDING];
 
     return resolveHeaderGeometry({
-      viewportWidth: clientWidth ?? 0,
+      viewportWidth: Math.max(0, (clientWidth ?? 0) - contentInsetLeft - contentInsetRight),
       displayZoom,
       bodyTrackWidth,
-      contentInsetLeft,
-      contentInsetRight,
+      contentInsetLeft: pageInsetLeft,
+      contentInsetRight: pageInsetRight,
     });
   });
 
@@ -308,10 +330,12 @@
   >
     {#if ctx.editor && header}
       <div
-        style:width={headerGeometry ? `${headerGeometry.trackWidth}px` : '100%'}
+        style:width={headerGeometry ? `${headerGeometry.trackWidth + contentInsetLeft + contentInsetRight}px` : '100%'}
         style:min-width={headerGeometry ? undefined : editorMinWidth}
-        style:max-width={headerGeometry ? undefined : continuousMaxFrameWidth}
-        style:padding-inline={headerGeometry ? undefined : `${CONTINUOUS_VIEW_PADDING}px`}
+        style:max-width={headerGeometry ? undefined : headerFallbackMaxWidth}
+        style:padding-inline={headerGeometry
+          ? `${contentInsetLeft}px ${contentInsetRight}px`
+          : `${contentInsetLeft + CONTINUOUS_VIEW_PADDING}px ${contentInsetRight + CONTINUOUS_VIEW_PADDING}px`}
         class={css({ flexShrink: '0', marginX: 'auto' })}
       >
         <div
@@ -336,6 +360,8 @@
           bind:this={ctx.editor.extensionAreaEl}
           style:cursor
           style:min-width={editorMinWidth}
+          style:padding-left={`${contentInsetLeft}px`}
+          style:padding-right={`${contentInsetRight}px`}
           style:padding-bottom={viewer ? '0px' : `${ctx.scroll?.bottomPadding ?? 0}px`}
           class={css(
             {
