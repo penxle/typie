@@ -62,7 +62,7 @@
     const item = margin.items.find((candidate) => candidate.id === itemId);
     if (!item) return '';
     // 레일 막대와 룰러 마크는 같은 항목을 켜는 쌍둥이다 — 화면을 못 보는 사용자에게 같은 이름으로 읽혀야 한다
-    if (item.kind === 'strength') return `읽는 사람에게 잘 닿은 대목 ${item.number}`;
+    if (item.kind === 'strength') return `잘 닿은 대목 ${item.number}`;
     return `피드백 ${item.number}: ${item.thread?.trait ?? '피드백'}`;
   };
 </script>

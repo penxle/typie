@@ -15,7 +15,7 @@
   import type { Anchor } from '@typie/prism';
   import type { Snippet } from 'svelte';
   import type { MarginJump } from '$lib/prism/margin-jump.svelte';
-  import type { MarginActivationSource, MarginItem, MarginSegment } from './context.svelte.ts';
+  import type { MarginActivationSource, MarginItem, MarginPlacement, MarginSegment } from './context.svelte.ts';
   import type { MarginMode, RoundOption } from './margin-view.ts';
 
   // 인셋은 모드에 따라 정해지므로 자식에게 인자로 넘긴다 — DocumentEditor가 그대로 EditorComponent에 준다
@@ -42,7 +42,7 @@
     anchors: readonly Anchor[];
     tone: 'issue' | 'strength';
     rangeId: (at: number) => string;
-    item: Omit<MarginItem, 'anchored' | 'rangeIds'>;
+    item: Omit<MarginPlacement, 'rangeIds'>;
   };
 
   const ctx = getEditorContext();
@@ -232,8 +232,7 @@
 
   let activeId = $state<string | null>(null);
 
-  // raw는 재앵커링이 만든 목록, items는 거기에 "실제로 앉았는가"를 얹은 파생이다
-  let raw = $state.raw<Omit<MarginItem, 'anchored'>[]>([]);
+  let raw = $state.raw<MarginPlacement[]>([]);
   let ready = $state(false);
   // 지금 선 항목이 어느 회차의 것인지 — 회차를 갈아 끼운 직후엔 고른 회차와 어긋난다
   let builtRoundId = $state<string | null>(null);
@@ -267,8 +266,7 @@
           kind: 'issue' as const,
           number: thread.issueIndex + 1,
           callouts: describeThread(thread.issueIndex, patterns, priorities),
-          thread,
-          strength: null,
+          strengthIndex: null,
         },
       })),
       ...strengths.map((strength, index) => ({
@@ -280,8 +278,7 @@
           kind: 'strength' as const,
           number: index + 1,
           callouts: { pattern: null, priority: null },
-          thread: null,
-          strength: { index, quote: strength.quote, body: strength.body ?? null },
+          strengthIndex: index,
         },
       })),
     ];
@@ -329,7 +326,7 @@
     const alive = new Map(current.appliedSnapshot.trackedRanges.map((range) => [range.id, range]));
 
     const installs: Seat[] = [];
-    const nextRaw: Omit<MarginItem, 'anchored'>[] = [];
+    const nextRaw: MarginPlacement[] = [];
     for (const spec of specs) {
       const place = next.get(spec.item.id);
       if (place === undefined) {
@@ -361,13 +358,32 @@
   // `add`는 결과 이벤트가 없다 — 실제로 앉았는지는 적용된 스냅숏에 나타나는지로만 안다.
   // 편집으로 range가 떨어져 나가는 것도 같은 자리에서 잡힌다.
   const items = $derived.by(() => {
+    const threadById = new Map((round?.threads ?? []).map((thread) => [thread.id, thread]));
+    const strengths = round?.detail?.strengths ?? [];
+
+    const join = (place: MarginPlacement, anchored: boolean): MarginItem => {
+      const index = place.strengthIndex;
+      const found = index === null ? undefined : strengths[index];
+      return {
+        ...place,
+        anchored,
+        thread: threadById.get(place.id) ?? null,
+        strength: index === null || found === undefined ? null : { index, quote: found.quote, body: found.body ?? null },
+      };
+    };
+
     const current = editor;
-    if (!current) return raw.map((item) => ({ ...item, anchored: false }));
+    if (!current) return raw.map((place) => join(place, false));
     // 스냅숏 사본의 trackedRanges는 코어가 그 필드를 낼 때만 갈린다 — 문단을 지워 range가 빠져도
     // 사본에는 남아 자리 잃음이 다음 새로고침까지 드러나지 않는다. 판이 갈릴 때마다 지금 것을 받는다.
     void current.appliedSnapshot.revision;
-    const live = new Set(current.freshTrackedRanges().map((range) => range.id));
-    return raw.map((item) => ({ ...item, anchored: item.rangeIds.some((id) => live.has(id)) }));
+    const alive = new Set(current.freshTrackedRanges().map((range) => range.id));
+    return raw.map((place) =>
+      join(
+        place,
+        place.rangeIds.some((id) => alive.has(id)),
+      ),
+    );
   });
 
   $effect(() => {

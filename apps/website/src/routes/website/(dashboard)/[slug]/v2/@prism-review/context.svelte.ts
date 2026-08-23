@@ -17,13 +17,17 @@ export type MarginActivationSource = 'manuscript' | 'card' | 'jump';
 // 목록의 갈래 — 닫는다고 옮겨 가지 않는다. 'settled'로 옮겨 오는 유일한 경로는 재리뷰 사영이다.
 export type MarginSegment = 'open' | 'settled' | 'lost';
 
-export type MarginItem = {
+export type MarginPlacement = {
   id: string;
   kind: 'issue' | 'strength';
   number: number;
   rangeIds: string[];
-  anchored: boolean;
   callouts: ThreadCallouts;
+  strengthIndex: number | null;
+};
+
+export type MarginItem = MarginPlacement & {
+  anchored: boolean;
   thread: MarginThread | null;
   strength: MarginStrength | null;
 };

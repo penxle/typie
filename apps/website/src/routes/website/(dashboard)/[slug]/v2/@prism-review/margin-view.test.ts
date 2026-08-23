@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { COLUMN_GAP, COLUMN_WIDTH, describeThread, GUTTER, resolveMode, roundLabel } from './margin-view.ts';
+import { cardHeaderSlot, COLUMN_GAP, COLUMN_WIDTH, describeThread, GUTTER, resolveMode, roundLabel } from './margin-view.ts';
 
 describe('레이아웃 상수', () => {
   it('치수가 조용히 바뀌면 레일 자리와 컬럼 임계가 어긋난다', () => {
@@ -74,5 +74,45 @@ describe('describeThread', () => {
   it('theme이 빈 패턴은 콜아웃을 만들지 않는다', () => {
     const themeless = [{ theme: null, body: '', issues: [{ index: 0, trait: '동어 반복' }] }];
     expect(describeThread(0, themeless, []).pattern).toBeNull();
+  });
+});
+
+describe('cardHeaderSlot', () => {
+  const STATES = ['OPEN', 'CLOSED', 'RESOLVED', 'WITHDRAWN'] as const;
+
+  it('접힌 카드는 어떤 상태에서도 액션을 세우지 않는다', () => {
+    for (const state of STATES) {
+      expect(cardHeaderSlot(state, false, 2).action).toBeNull();
+    }
+  });
+
+  it('접힘에서 댓글은 있을 때만, 상태는 종결일 때만 선다', () => {
+    expect(cardHeaderSlot('OPEN', false, 0)).toEqual({ comments: false, state: false, action: null });
+    expect(cardHeaderSlot('OPEN', false, 2)).toEqual({ comments: true, state: false, action: null });
+    expect(cardHeaderSlot('CLOSED', false, 0)).toEqual({ comments: false, state: true, action: null });
+    expect(cardHeaderSlot('CLOSED', false, 2)).toEqual({ comments: true, state: true, action: null });
+    expect(cardHeaderSlot('RESOLVED', false, 3)).toEqual({ comments: true, state: true, action: null });
+    expect(cardHeaderSlot('WITHDRAWN', false, 0)).toEqual({ comments: false, state: true, action: null });
+  });
+
+  it('펼침에서는 댓글 수를 세우지 않는다', () => {
+    for (const state of STATES) {
+      expect(cardHeaderSlot(state, true, 5).comments).toBe(false);
+    }
+  });
+
+  it('되돌릴 수 있는 상태에만 액션이 서고, 그때는 라벨을 세우지 않는다', () => {
+    expect(cardHeaderSlot('OPEN', true, 0)).toEqual({ comments: false, state: false, action: 'close' });
+    expect(cardHeaderSlot('CLOSED', true, 0)).toEqual({ comments: false, state: false, action: 'reopen' });
+  });
+
+  it('재리뷰가 처분한 상태는 액션 없이 라벨만 선다', () => {
+    expect(cardHeaderSlot('RESOLVED', true, 0)).toEqual({ comments: false, state: true, action: null });
+    expect(cardHeaderSlot('WITHDRAWN', true, 0)).toEqual({ comments: false, state: true, action: null });
+  });
+
+  it('스레드가 없는 강점은 아무것도 세우지 않는다', () => {
+    expect(cardHeaderSlot(null, false, 0)).toEqual({ comments: false, state: false, action: null });
+    expect(cardHeaderSlot(null, true, 0)).toEqual({ comments: false, state: false, action: null });
   });
 });
