@@ -1,6 +1,8 @@
 export { anchorQuote } from './anchors.ts';
 export type { ProjectedDeltaFrame, ProjectedEventData, ProjectedEventFrame, ProjectedSource, ProjectedStreamFrame } from './projected.ts';
 export { ProjectedEventSchema, ProjectedWorkflowEventSchema } from './projected.ts';
+export type { ReanchorRange } from './reanchor.ts';
+export { reanchorAll } from './reanchor.ts';
 export * from './review.ts';
 export * from './tools.ts';
 export type {

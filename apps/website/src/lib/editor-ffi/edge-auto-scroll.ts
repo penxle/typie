@@ -11,6 +11,7 @@ type ClientPoint = {
 export class EditorEdgeAutoScroll {
   #dragScroll: ReturnType<typeof createDragScroll> | null = null;
   #viewport: ScrollViewport | null = null;
+  #editor: Editor | null = null;
   #onScroll: ((clientX: number, clientY: number) => void) | null = null;
 
   update(editor: Editor, pointer: ClientPoint, onScroll: (clientX: number, clientY: number) => void): void {
@@ -21,6 +22,7 @@ export class EditorEdgeAutoScroll {
     }
 
     if (this.#dragScroll && this.#viewport === viewport) {
+      this.#editor = editor;
       this.#onScroll = onScroll;
       this.#dragScroll.updatePointer(pointer.clientX, pointer.clientY);
       return;
@@ -28,12 +30,16 @@ export class EditorEdgeAutoScroll {
 
     this.stop();
     this.#viewport = viewport;
+    this.#editor = editor;
     this.#onScroll = onScroll;
     this.#dragScroll = createDragScroll(viewport, {
       axis: 'both',
       initialPointer: pointer,
       onScrollThrottleMs: EDGE_AUTO_SCROLL_THROTTLE_MS,
-      onScroll: (clientX, clientY) => this.#onScroll?.(clientX, clientY),
+      onScroll: (clientX, clientY) => {
+        this.#editor?.notifyViewportScrolled();
+        this.#onScroll?.(clientX, clientY);
+      },
     });
   }
 
@@ -41,6 +47,7 @@ export class EditorEdgeAutoScroll {
     this.#dragScroll?.destroy();
     this.#dragScroll = null;
     this.#viewport = null;
+    this.#editor = null;
     this.#onScroll = null;
   }
 }

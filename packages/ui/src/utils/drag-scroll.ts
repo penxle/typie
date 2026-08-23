@@ -41,6 +41,10 @@ const isTopAnchored = (style: CSSStyleDeclaration) => {
   return isInsetSet(style.top) || isInsetSet(style.insetBlockStart);
 };
 
+// 포인터를 받지 않는 오버레이는 상단 sticky 헤더가 아니다 — 그렇게 세면 뷰포트 전체를 덮는 장식 하나가
+// 스크롤 존의 위 경계를 바닥까지 끌어내려, 아래 가장자리에서 끄는데 위로 튀는 역전이 난다
+const isInteractive = (style: CSSStyleDeclaration) => style.pointerEvents !== 'none';
+
 const getViewportContainer = (target: EventTarget): HTMLElement | null => {
   if (isElementTarget(target)) {
     return target;
@@ -65,7 +69,7 @@ const collectStickyCandidates = (target: EventTarget): HTMLElement[] => {
 
   const candidates: HTMLElement[] = [];
   const rootStyle = window.getComputedStyle(container);
-  if ((rootStyle.position === 'sticky' || rootStyle.position === 'fixed') && isTopAnchored(rootStyle)) {
+  if ((rootStyle.position === 'sticky' || rootStyle.position === 'fixed') && isTopAnchored(rootStyle) && isInteractive(rootStyle)) {
     candidates.push(container);
   }
 
@@ -74,7 +78,7 @@ const collectStickyCandidates = (target: EventTarget): HTMLElement[] => {
   while (current) {
     if (current instanceof HTMLElement) {
       const style = window.getComputedStyle(current);
-      if ((style.position === 'sticky' || style.position === 'fixed') && isTopAnchored(style)) {
+      if ((style.position === 'sticky' || style.position === 'fixed') && isTopAnchored(style) && isInteractive(style)) {
         candidates.push(current);
       }
     }

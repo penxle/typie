@@ -1,7 +1,7 @@
 import { DocumentType, EntityState, PaymentInvoiceState, PaymentOutcome, SubscriptionState, UserRole, UserState } from '@typie/lib/enums';
 import { TypieError } from '@typie/lib/errors';
 import { bootstrapSchema } from '@typie/lib/validation';
-import { and, count, desc, eq, getTableColumns, ilike, inArray, ne, or, sql } from 'drizzle-orm';
+import { and, count, desc, eq, getTableColumns, ilike, inArray, notInArray, or, sql } from 'drizzle-orm';
 import { fetchBootstrap, putBootstrap } from '#/bootstrap.ts';
 import { redis } from '#/cache.ts';
 import {
@@ -24,7 +24,7 @@ import * as portone from '#/external/portone.ts';
 import { assertAdminPermission } from '#/utils/permission.ts';
 import { lockUserSubscriptionState } from '#/utils/subscription-lock.ts';
 import { retireReservation } from '#/utils/subscription-retire.ts';
-import { SYSTEM_USER_ID } from '#/utils/system-actor.ts';
+import { PRISM_USER_ID, SYSTEM_USER_ID } from '#/utils/system-actor.ts';
 import { builder } from '../builder.ts';
 import { Document, User } from '../objects.ts';
 
@@ -63,8 +63,8 @@ builder.queryFields((t) => ({
         conditions.push(or(ilike(Users.name, `%${args.search}%`), ilike(Users.email, `%${args.search}%`), eq(Users.id, args.search)));
       }
 
-      list$ = list$.where(and(ne(Users.id, SYSTEM_USER_ID), ...conditions));
-      count$ = count$.where(and(ne(Users.id, SYSTEM_USER_ID), ...conditions));
+      list$ = list$.where(and(notInArray(Users.id, [SYSTEM_USER_ID, PRISM_USER_ID]), ...conditions));
+      count$ = count$.where(and(notInArray(Users.id, [SYSTEM_USER_ID, PRISM_USER_ID]), ...conditions));
 
       list$ = list$.orderBy(desc(Users.createdAt)).limit(args.limit).offset(args.offset);
 

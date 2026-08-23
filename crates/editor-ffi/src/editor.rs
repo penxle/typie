@@ -977,7 +977,7 @@ impl Editor {
             let view = inner.editor.state().view();
             let prose = editor_state::prose(&view);
             Ok(prose
-                .to_selection(&view, (start as usize)..(end as usize))
+                .to_selection_utf16(&view, (start as usize)..(end as usize))
                 .into_ffi()?)
         })
     }
@@ -998,7 +998,7 @@ impl Editor {
             let view = inner.editor.state().view();
             let prose = editor_state::prose_annotated(&view);
             Ok(prose
-                .to_selection(&view, (start as usize)..(end as usize))
+                .to_selection_utf16(&view, (start as usize)..(end as usize))
                 .into_ffi()?)
         })
     }
@@ -3489,6 +3489,22 @@ mod tests {
     }
 
     #[test]
+    fn ffi_prose_to_selection_takes_utf16_offsets() {
+        // 호출처(JS·Dart)는 UTF-16 문자열 인덱스를 넘긴다 — 이모지 앞뒤로 축이 어긋나면 안 된다
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("😀😀😀지하 1층") } } }
+            selection: (p1, 0)
+        };
+        let editor = make_ffi_editor(initial);
+
+        // JS의 "지하" 인덱스는 6..8 (이모지 3개 × 2 코드 유닛)
+        let sel = editor.prose_to_selection(6, 8).expect("ok").expect("some");
+        assert_eq!(sel.head.offset - sel.anchor.offset, 2, "'지하' 두 글자");
+
+        let _ = p1;
+    }
+
+    #[test]
     fn ffi_prose_to_selection_empty_range_is_collapsed() {
         let (initial, p1) = state! {
             doc { root { p1: paragraph { text("hello") } } }
@@ -3535,33 +3551,32 @@ mod tests {
 
     #[test]
     fn ffi_prose_to_selection_handles_emoji_surrogate_pair() {
-        // "a😀b" — 3 codepoints, 6 UTF-8 bytes ('a'=1, '😀'=4, 'b'=1).
-        // Position.offset is a codepoint index (Text::len() == chars().count()), so
-        // the full range 0..3 spans 3 codepoints and the delta must be 3.
+        // 오프셋 단위는 **UTF-16 코드 유닛**이다 — 이 API에 값을 넘기는 쪽(JS·Dart)의 문자열 축이 그것이다.
+        // "a😀b" → 코드포인트 3, UTF-16 유닛 4('a'=1, '😀'=2, 'b'=1).
+        // Position.offset은 코드포인트 색인이므로 델타는 코드포인트로 센다.
         let (initial, p1) = state! {
             doc { root { p1: paragraph { text("a😀b") } } }
             selection: (p1, 0)
         };
         let editor = make_ffi_editor(initial);
 
-        let sel = editor.prose_to_selection(0, 3).expect("ok").expect("some");
+        // 문자열 전체 = UTF-16 0..4 → 코드포인트 3개
+        let sel = editor.prose_to_selection(0, 4).expect("ok").expect("some");
         assert_eq!(
             sel.anchor.node, sel.head.node,
             "single-block range must share nodeId"
         );
-        assert_eq!(
-            sel.head.offset - sel.anchor.offset,
-            3,
-            "offset unit is codepoints: 'a'(1) + '😀'(1) + 'b'(1) = 3"
-        );
+        assert_eq!(sel.head.offset - sel.anchor.offset, 3, "'a' + '😀' + 'b'");
 
-        // 0..2 covers "a" and "😀" — 2 codepoints
-        let sel2 = editor.prose_to_selection(0, 2).expect("ok").expect("some");
+        // "a😀" = UTF-16 0..3 → 코드포인트 2개
+        let sel2 = editor.prose_to_selection(0, 3).expect("ok").expect("some");
         assert_eq!(sel2.anchor.node, sel2.head.node);
-        assert_eq!(
-            sel2.head.offset - sel2.anchor.offset,
-            2,
-            "offset unit is codepoints: 'a'(1) + '😀'(1) = 2"
+        assert_eq!(sel2.head.offset - sel2.anchor.offset, 2, "'a' + '😀'");
+
+        // 서로게이트 쌍 한가운데(0..2)는 유효한 자리가 아니다
+        assert!(
+            editor.prose_to_selection(0, 2).expect("ok").is_none(),
+            "surrogate pair 중간은 매핑되지 않는다"
         );
 
         let _ = p1;

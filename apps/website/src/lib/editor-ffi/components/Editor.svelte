@@ -11,13 +11,27 @@
     viewer?: boolean;
     useWindowScroll?: boolean;
     style?: SystemStyleObject;
+    contentInsetLeft?: number;
+    contentInsetRight?: number;
     header?: Snippet;
     footer?: Snippet;
     children?: Snippet;
     onReady?: () => void;
   };
 
-  let { document$key, active = true, viewer = false, useWindowScroll = false, style, header, footer, children, onReady }: Props = $props();
+  let {
+    document$key,
+    active = true,
+    viewer = false,
+    useWindowScroll = false,
+    style,
+    contentInsetLeft = 0,
+    contentInsetRight = 0,
+    header,
+    footer,
+    children,
+    onReady,
+  }: Props = $props();
 </script>
 
 <div
@@ -31,7 +45,18 @@
     }),
   })}
 >
-  <View style={css.raw({ flex: '1' }, style)} {active} {document$key} {footer} {header} {onReady} {useWindowScroll} {viewer}>
+  <View
+    style={css.raw({ flex: '1' }, style)}
+    {active}
+    {contentInsetLeft}
+    {contentInsetRight}
+    {document$key}
+    {footer}
+    {header}
+    {onReady}
+    {useWindowScroll}
+    {viewer}
+  >
     {#if children}
       {@render children()}
     {/if}

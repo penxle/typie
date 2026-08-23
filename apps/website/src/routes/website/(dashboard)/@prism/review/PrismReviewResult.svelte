@@ -8,6 +8,8 @@
   import ArrowUpIcon from '~icons/lucide/arrow-up';
   import ThumbsDownIcon from '~icons/lucide/thumbs-down';
   import ThumbsUpIcon from '~icons/lucide/thumbs-up';
+  import { goto } from '$app/navigation';
+  import { requestMarginJump } from '$lib/prism/margin-jump.svelte';
   import { graphql } from '$mearie';
   import { expand, swap } from '../lib/motion.ts';
   import PrismReviewDetail from './PrismReviewDetail.svelte';
@@ -87,7 +89,20 @@
     }
   };
 
-  const lineClass = css({ fontSize: '[12.5px]', color: 'text.faint' });
+  const openMargin = async () => {
+    requestMarginJump({ documentId: round.document.id, roundId: round.id, itemId: null });
+    await goto(`/${round.document.entity.slug}`);
+  };
+
+  // 누를 수 있는 곳은 글자만큼이다 — 블록 폭을 그대로 쓰면 오른쪽 빈 자리까지 반응한다
+  const lineClass = css({
+    display: 'block',
+    width: '[fit-content]',
+    fontSize: '[12.5px]',
+    textAlign: 'left',
+    color: 'text.faint',
+    _hover: { color: 'text.subtle' },
+  });
 
   const thumbStyle = css.raw({
     display: 'inline-flex',
@@ -109,10 +124,10 @@
 </script>
 
 <div>
-  <div class={lineClass}>
+  <button class={lineClass} onclick={() => void openMargin()} type="button">
     {result.issues}{#if result.kind === 'summary'}
       · {result.counts}{/if}
-  </div>
+  </button>
 
   {#if round.hasDetail}
     <div>

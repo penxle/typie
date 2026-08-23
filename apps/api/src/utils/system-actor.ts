@@ -3,6 +3,7 @@ import { db, firstOrThrowWith, UserDevices, Users } from '#/db/index.ts';
 
 export const SYSTEM_USER_ID = 'U0SYSTEM000000000';
 export const SYSTEM_DEVICE_ID = 'UDEV0SYSTEM000000';
+export const PRISM_USER_ID = 'U0PRISM0000000000';
 
 export const ensureSystemActor = async (): Promise<void> => {
   const missing = new Error('system actor missing — run the seed migration first');

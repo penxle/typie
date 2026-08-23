@@ -111,9 +111,11 @@ export function setupEditorScroll(ctx: EditorContext): void {
     });
     ctx.scroll = scope;
     editor.registerScrollIntoView((options, request) => scope.scrollIntoView(options, request));
+    editor.registerViewportScrollObserver(() => scope.observeViewportScroll());
 
     return () => {
       editor.registerScrollIntoView(null);
+      editor.registerViewportScrollObserver(null);
       scope.destroy();
       if (ctx.scroll === scope) {
         ctx.scroll = undefined;

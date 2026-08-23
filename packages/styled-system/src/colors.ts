@@ -77,6 +77,34 @@ export const colors = defineTokens.colors({
     '950': { value: 'oklch(0.287 0.060 166)' }, // #003424
   },
 
+  emerald: {
+    '50': { value: 'oklch(0.965 0.025 152)' }, // #e8f9eb
+    '100': { value: 'oklch(0.905 0.072 152)' }, // #bdeec8
+    '200': { value: 'oklch(0.855 0.116 152)' }, // #93e6aa
+    '300': { value: 'oklch(0.795 0.174 152)' }, // #50db82
+    '400': { value: 'oklch(0.700 0.166 152)' }, // #32bb68
+    '500': { value: 'oklch(0.620 0.147 152)' }, // #299e58
+    '600': { value: 'oklch(0.560 0.133 152)' }, // #228a4b
+    '700': { value: 'oklch(0.490 0.116 152)' }, // #1b723e
+    '800': { value: 'oklch(0.420 0.100 152)' }, // #135c30
+    '900': { value: 'oklch(0.360 0.085 152)' }, // #0e4926
+    '950': { value: 'oklch(0.250 0.060 152)' }, // #042912
+  },
+
+  pink: {
+    '50': { value: 'oklch(0.965 0.025 330)' }, // #feeefc
+    '100': { value: 'oklch(0.905 0.072 330)' }, // #fccff7
+    '200': { value: 'oklch(0.855 0.116 330)' }, // #fbb4f4
+    '300': { value: 'oklch(0.795 0.174 330)' }, // #f98ff1
+    '400': { value: 'oklch(0.730 0.246 330)' }, // #f85def
+    '500': { value: 'oklch(0.665 0.273 330)' }, // #e832e0
+    '600': { value: 'oklch(0.600 0.246 330)' }, // #ca2bc4
+    '700': { value: 'oklch(0.530 0.218 330)' }, // #ab22a6
+    '800': { value: 'oklch(0.460 0.189 330)' }, // #8d1b88
+    '900': { value: 'oklch(0.395 0.162 330)' }, // #72146e
+    '950': { value: 'oklch(0.265 0.109 330)' }, // #40073e
+  },
+
   blue: {
     '50': { value: 'oklch(0.965 0.018 263)' }, // #edf4ff
     '100': { value: 'oklch(0.935 0.036 265)' }, // #deeaff
@@ -160,6 +188,34 @@ export const colors = defineTokens.colors({
       '800': { value: 'oklch(0.26 0.07 166)' }, // #002e1c
       '900': { value: 'oklch(0.21 0.05 166)' }, // #001f13
       '950': { value: 'oklch(0.17 0.04 168)' }, // #00150c
+    },
+
+    emerald: {
+      '50': { value: 'oklch(0.900 0.060 152)' }, // #c1eacb
+      '100': { value: 'oklch(0.830 0.110 152)' }, // #8fdca4
+      '200': { value: 'oklch(0.720 0.171 152)' }, // #34c26c
+      '300': { value: 'oklch(0.600 0.142 152)' }, // #279754
+      '400': { value: 'oklch(0.540 0.128 152)' }, // #208347
+      '500': { value: 'oklch(0.480 0.114 152)' }, // #1a6f3c
+      '600': { value: 'oklch(0.420 0.100 152)' }, // #135c30
+      '700': { value: 'oklch(0.360 0.085 152)' }, // #0e4926
+      '800': { value: 'oklch(0.300 0.071 152)' }, // #08381b
+      '900': { value: 'oklch(0.240 0.057 152)' }, // #042711
+      '950': { value: 'oklch(0.180 0.043 152)' }, // #021708
+    },
+
+    pink: {
+      '50': { value: 'oklch(0.90 0.06 330)' }, // #f6d0f1
+      '100': { value: 'oklch(0.83 0.11 330)' }, // #f0ade9
+      '200': { value: 'oklch(0.72 0.20 330)' }, // #e76edf
+      '300': { value: 'oklch(0.62 0.20 330)' }, // #c54ebe
+      '400': { value: 'oklch(0.55 0.18 330)' }, // #a840a2
+      '500': { value: 'oklch(0.48 0.16 330)' }, // #8c3287
+      '600': { value: 'oklch(0.42 0.14 330)' }, // #752870
+      '700': { value: 'oklch(0.36 0.12 330)' }, // #5e1f5a
+      '800': { value: 'oklch(0.30 0.10 330)' }, // #481645
+      '900': { value: 'oklch(0.24 0.08 330)' }, // #330d31
+      '950': { value: 'oklch(0.18 0.07 330)' }, // #210320
     },
 
     blue: {
@@ -309,6 +365,8 @@ export const semanticColors = defineSemanticTokens.colors({
   'text.success': { value: { base: '{colors.green.700}', _dark: '{colors.dark.green.300}' } },
   'text.link': { value: { base: '{colors.blue.600}', _dark: '{colors.dark.blue.400}' } },
   'text.brand': { value: { base: '{colors.brand.500}', _dark: '{colors.dark.brand.300}' } },
+  'text.emerald': { value: { base: '{colors.emerald.700}', _dark: '{colors.dark.emerald.50}' } },
+  'text.pink': { value: { base: '{colors.pink.700}', _dark: '{colors.dark.pink.50}' } },
 
   'surface.default': {
     value: {
@@ -463,6 +521,12 @@ export const semanticColors = defineSemanticTokens.colors({
   'accent.brand.hover': { value: { base: '{colors.brand.600}', _dark: '{colors.dark.brand.500}' } },
   'accent.brand.active': { value: { base: '{colors.brand.700}', _dark: '{colors.dark.brand.600}' } },
   'accent.brand.subtle': { value: { base: '{colors.brand.100}', _dark: '{colors.dark.brand.900}' } },
+  'accent.emerald.default': { value: { base: '{colors.emerald.500}', _dark: '{colors.dark.emerald.300}' } },
+  'accent.emerald.subtle': { value: { base: '{colors.emerald.100}', _dark: '{colors.dark.emerald.600}' } },
+  'accent.pink.default': { value: { base: '{colors.pink.500}', _dark: '{colors.dark.pink.300}' } },
+  'accent.pink.hover': { value: { base: '{colors.pink.600}', _dark: '{colors.dark.pink.200}' } },
+  'accent.pink.active': { value: { base: '{colors.pink.700}', _dark: '{colors.dark.pink.400}' } },
+  'accent.pink.subtle': { value: { base: '{colors.pink.100}', _dark: '{colors.dark.pink.600}' } },
   'accent.info.default': { value: { base: '{colors.blue.500}', _dark: '{colors.dark.blue.200}' } },
   'accent.info.subtle': { value: { base: '{colors.blue.50}', _dark: '{colors.dark.blue.900}' } },
   'accent.danger.default': { value: { base: '{colors.red.600}', _dark: '{colors.dark.red.400}' } },
@@ -539,6 +603,8 @@ export const semanticColors = defineSemanticTokens.colors({
   },
   'border.brand': { value: { base: '{colors.brand.600}', _dark: '{colors.dark.brand.400}' } },
   'border.danger': { value: { base: '{colors.red.600}', _dark: '{colors.dark.red.400}' } },
+  'border.emerald': { value: { base: '{colors.emerald.600}', _dark: '{colors.dark.emerald.300}' } },
+  'border.pink': { value: { base: '{colors.pink.600}', _dark: '{colors.dark.pink.300}' } },
 
   'shadow.default': { value: { base: '{colors.gray.950}', _dark: '{colors.dark.gray.950}' } },
 
