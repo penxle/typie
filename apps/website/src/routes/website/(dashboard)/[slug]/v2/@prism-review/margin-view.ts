@@ -15,6 +15,22 @@ export const resolveMode = (available: number, bodyWidth: number, current: Margi
   return available >= need + HYSTERESIS ? 'column' : 'popover';
 };
 
+// 카드 헤더 우측이 무엇을 세우는가. 접힘은 정적 요약이고 펼침은 액션이라는 규칙이 다섯 상태에 걸쳐 있어
+// 마크업 안 삼항으로 두면 읽히지 않는다.
+export type CardThreadState = 'OPEN' | 'CLOSED' | 'RESOLVED' | 'WITHDRAWN';
+
+export type CardHeaderSlot = { comments: boolean; state: boolean; action: 'close' | 'reopen' | null };
+
+export const cardHeaderSlot = (state: CardThreadState | null, expanded: boolean, commentCount: number): CardHeaderSlot => {
+  // 강점은 스레드가 없다 — 셀 댓글도 되돌릴 상태도 없다
+  if (state === null) return { comments: false, state: false, action: null };
+  if (!expanded) return { comments: commentCount > 0, state: state !== 'OPEN', action: null };
+  // 되돌릴 수 있는 두 상태에서는 액션만 세운다 — 액션의 존재가 곧 상태 표지라 라벨을 겹칠 이유가 없다
+  if (state === 'OPEN') return { comments: false, state: false, action: 'close' };
+  if (state === 'CLOSED') return { comments: false, state: false, action: 'reopen' };
+  return { comments: false, state: true, action: null };
+};
+
 export type RoundOption = { id: string; ordinal: number; tierLabel: string; issueCount: number; createdAt: string };
 
 export const roundLabel = (option: RoundOption): string => `${option.ordinal}회차 · ${option.tierLabel} · 피드백 ${option.issueCount}`;

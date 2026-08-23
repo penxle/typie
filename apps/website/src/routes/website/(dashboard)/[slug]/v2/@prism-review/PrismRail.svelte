@@ -66,7 +66,7 @@
 
   const labelOf = (rail: (typeof rails)[number]) => {
     const item = margin.items.find((candidate) => candidate.id === rail.itemId);
-    if (item?.kind === 'strength') return `읽는 사람에게 잘 닿은 대목 ${rail.number}`;
+    if (item?.kind === 'strength') return `잘 닿은 대목 ${rail.number}`;
     return `피드백 ${rail.number}: ${item?.thread?.trait ?? '피드백'}`;
   };
 </script>
