@@ -209,11 +209,6 @@
       },
     },
   });
-  const tocNumberRecipe = cva({
-    base: { flexShrink: '0', width: '14px', fontSize: '10px', fontWeight: 'bold' },
-    variants: { active: { true: { color: 'text.brand' }, false: { color: 'text.faint' } } },
-  });
-
   const avatarClass = flex({
     alignItems: 'center',
     justifyContent: 'center',
@@ -231,21 +226,31 @@
   const bodyNarrowClass = css({ paddingX: '24px', paddingY: '24px' });
 
   const sectionHeadClass = flex({ alignItems: 'baseline', gap: '9px', marginBottom: '14px' });
-  const sectionNumberClass = css({ fontSize: '11px', fontWeight: 'extrabold', color: 'text.faint' });
-  const sectionTitleClass = css({ fontSize: '15px', fontWeight: 'bold' });
-  const sectionCaptionClass = css({ fontSize: '11px', color: 'text.faint' });
-  const dividerClass = css({ height: '1px', marginTop: '28px', marginBottom: '22px', backgroundColor: 'border.subtle' });
+  const sectionTitleClass = css({ fontSize: '19px', fontWeight: 'bold' });
+  const sectionCaptionClass = css({ fontSize: '12px', color: 'text.faint' });
+  // 선은 그룹 경계에만 긋는다 — 절 사이는 여백이 가르고, 그룹 전환은 더 큰 쉼이어야 한다
+  const groupDividerClass = css({ height: '1px', marginTop: '40px', marginBottom: '32px', backgroundColor: 'border.subtle' });
+  // TOC의 그룹 라벨과 같은 시각 언어 — 목차에서 익힌 표지를 본문에서 재회한다
+  const groupHeadClass = css({
+    marginBottom: '20px',
+    fontSize: '12px',
+    fontWeight: 'extrabold',
+    letterSpacing: '[0.09em]',
+    color: 'text.faint',
+  });
+  const groupSectionsClass = flex({ direction: 'column', gap: '36px' });
 
-  const proseClass = css({ fontSize: '14px', lineHeight: '[1.8]' });
-  const noteStyle = css.raw({ marginTop: '6px', fontSize: '13px', lineHeight: '[1.75]', color: 'text.subtle' });
-  const noteClass = css(noteStyle);
+  // 전달 내용은 절과 무관하게 proseClass 하나다 — 결속 여백은 문단 클래스가 아니라 제목·인용 쪽에 둔다:
+  // 문단 클래스에 marginTop을 실으면 스니펫의 모든 문단에 새어 들어가 문단 간격이 절마다 달라진다
+  const proseClass = css({ fontSize: '15px', lineHeight: '[1.75]' });
+  const traitClass = css({ marginBottom: '6px', fontSize: '15px', fontWeight: 'bold' });
   // 인용면 아래는 제목 아래보다 벌린다 — 면이 끝나는 자리에 글이 붙으면 인용에 딸린 설명으로 읽히지 않는다
-  const noteAfterQuoteClass = css(noteStyle, { marginTop: '12px' });
-  const priorityBodyClass = css({ fontSize: '13px', lineHeight: '[1.75]', color: 'text.subtle' });
-  const traitClass = css({ fontSize: '13px', fontWeight: 'semibold' });
-  const listClass = flex({ direction: 'column', gap: '20px' });
+  const afterQuoteClass = css({ marginTop: '12px' });
+  // 항목 사이(32)는 항목 안 문단 사이(12+6=18)보다 뚜렷이 넓어야 한다 — 비슷하면 목록이 한 덩어리로 붙는다
+  const listClass = flex({ direction: 'column', gap: '32px' });
   // 원고에서 옮겨 온 글만 prose를 입는다 — 여백 카드가 세운 구분이라 총평도 따른다.
   // 인용의 표지도 카드에서 가져왔다(PrismCard.svelte:363-379) — 왼쪽 굵은 선과 옅은 면이 인용을 말하므로 낫표를 겹치지 않는다
+  // 인용은 근거지 주인공이 아니다 — 해설(본문 14px)보다 한 단 조용히 앉는다
   const quoteStyle = css.raw({
     paddingX: '12px',
     paddingY: '10px',
@@ -255,15 +260,17 @@
     backgroundColor: 'surface.subtle',
     fontFamily: 'prose',
     fontSize: '14px',
-    lineHeight: '[1.8]',
+    lineHeight: '[1.7]',
   });
   // 누를 수 있는 인용과 갈 곳이 없는 인용을 눈으로 가른다 — 격상은 여백에 앉지 않아 목적지가 없다
   const quoteLinkClass = css(quoteStyle, {
     display: 'block',
     width: 'full',
     borderColor: 'border.default',
+    color: 'text.subtle',
     textAlign: 'left',
-    _hover: { borderColor: 'border.brand', color: 'text.brand' },
+    transition: '[color 0.15s ease]',
+    _hover: { color: 'text.brand' },
   });
   const quoteStaticStyle = css.raw(quoteStyle, { borderColor: 'border.subtle', color: 'text.subtle' });
 
@@ -303,7 +310,7 @@
 </script>
 
 {#snippet paragraphs(text: string, className: string)}
-  <div class={flex({ direction: 'column', gap: '10px' })}>
+  <div class={flex({ direction: 'column', gap: '12px' })}>
     {#each paragraphsOf(text) as line, index (index)}
       <p class={className}>{line}</p>
     {/each}
@@ -347,7 +354,6 @@
         onclick={() => jumpTo(section.key)}
         type="button"
       >
-        <span class={css(tocNumberRecipe.raw({ active: section.key === activeKey }))}>{section.number}</span>
         {SECTION_TITLES[section.key]}
       </button>
     {/each}
@@ -356,7 +362,6 @@
 
 {#snippet sectionHead(section: Section)}
   <div class={sectionHeadClass}>
-    <span class={sectionNumberClass}>{section.number}</span>
     <span class={sectionTitleClass}>{SECTION_TITLES[section.key]}</span>
     {#if section.caption !== null}
       <span class={sectionCaptionClass}>{section.caption}</span>
@@ -421,80 +426,91 @@
             </nav>
           {/if}
 
-          {#each sections as section, index (section.key)}
-            {#if index > 0}
-              <div class={dividerClass}></div>
+          {#each groups as group, groupIndex (group.key)}
+            {#if groupIndex > 0}
+              <div class={groupDividerClass}></div>
             {/if}
 
-            <section bind:this={sectionEls[section.key]} aria-label={SECTION_TITLES[section.key]}>
-              {@render sectionHead(section)}
+            <div class={groupHeadClass}>{GROUP_TITLES[group.key]}</div>
+            <div class={groupSectionsClass}>
+              {#each group.sections as section (section.key)}
+                <section bind:this={sectionEls[section.key]} aria-label={SECTION_TITLES[section.key]}>
+                  {@render sectionHead(section)}
 
-              {#if section.key === 'understanding' && detail.understanding}
-                {@render paragraphs(detail.understanding, proseClass)}
-              {:else if section.key === 'verdicts'}
-                <div class={listClass}>
-                  {#each detail.verdicts as verdict, at (at)}
-                    <div>
-                      <div class={traitClass}>{verdict.trait}</div>
-                      {#if verdict.note}
-                        {@render paragraphs(verdict.note, noteClass)}
-                      {/if}
+                  {#if section.key === 'understanding' && detail.understanding}
+                    {@render paragraphs(detail.understanding, proseClass)}
+                  {:else if section.key === 'verdicts'}
+                    <div class={listClass}>
+                      {#each detail.verdicts as verdict, at (at)}
+                        <div>
+                          <div class={traitClass}>{verdict.trait}</div>
+                          {#if verdict.note}
+                            {@render paragraphs(verdict.note, proseClass)}
+                          {/if}
+                        </div>
+                      {/each}
                     </div>
-                  {/each}
-                </div>
-              {:else if section.key === 'progress' && detail.progress}
-                {@render paragraphs(detail.progress, proseClass)}
-              {:else if section.key === 'strengths'}
-                <div class={listClass}>
-                  {#each detail.strengths as strength, at (at)}
-                    <div>
-                      <button class={quoteLinkClass} onclick={() => void openMargin(`strength:${at}`)} type="button">
-                        {strength.quote}
-                      </button>
-                      {#if strength.body}
-                        {@render paragraphs(strength.body, noteAfterQuoteClass)}
-                      {/if}
+                  {:else if section.key === 'progress' && detail.progress}
+                    {@render paragraphs(detail.progress, proseClass)}
+                  {:else if section.key === 'strengths'}
+                    <div class={listClass}>
+                      {#each detail.strengths as strength, at (at)}
+                        <div>
+                          <button class={quoteLinkClass} onclick={() => void openMargin(`strength:${at}`)} type="button">
+                            {strength.quote}
+                          </button>
+                          {#if strength.body}
+                            <div class={afterQuoteClass}>
+                              {@render paragraphs(strength.body, proseClass)}
+                            </div>
+                          {/if}
+                        </div>
+                      {/each}
                     </div>
-                  {/each}
-                </div>
-              {:else if section.key === 'elevations'}
-                <div class={listClass}>
-                  {#each detail.elevations as elevation, at (at)}
-                    <div>
-                      <div class={traitClass}>{elevation.trait}</div>
-                      {#if elevation.quote}
-                        <div class={css(quoteStaticStyle, { marginTop: '8px' })}>{elevation.quote}</div>
-                      {/if}
-                      {@render paragraphs(elevation.body, elevation.quote ? noteAfterQuoteClass : noteClass)}
+                  {:else if section.key === 'elevations'}
+                    <div class={listClass}>
+                      {#each detail.elevations as elevation, at (at)}
+                        <div>
+                          <div class={traitClass}>{elevation.trait}</div>
+                          {#if elevation.quote}
+                            <div class={css(quoteStaticStyle)}>{elevation.quote}</div>
+                            <div class={afterQuoteClass}>
+                              {@render paragraphs(elevation.body, proseClass)}
+                            </div>
+                          {:else}
+                            {@render paragraphs(elevation.body, proseClass)}
+                          {/if}
+                        </div>
+                      {/each}
                     </div>
-                  {/each}
-                </div>
-              {:else if section.key === 'patterns'}
-                <div class={listClass}>
-                  {#each detail.patterns as pattern, at (at)}
-                    <div>
-                      {#if pattern.theme}
-                        <div class={traitClass}>{pattern.theme}</div>
-                      {/if}
-                      {@render paragraphs(pattern.body, noteClass)}
-                      {@render chips(pattern.issues)}
+                  {:else if section.key === 'patterns'}
+                    <div class={listClass}>
+                      {#each detail.patterns as pattern, at (at)}
+                        <div>
+                          {#if pattern.theme}
+                            <div class={traitClass}>{pattern.theme}</div>
+                          {/if}
+                          {@render paragraphs(pattern.body, proseClass)}
+                          {@render chips(pattern.issues)}
+                        </div>
+                      {/each}
                     </div>
-                  {/each}
-                </div>
-              {:else if section.key === 'priorities'}
-                <div class={listClass}>
-                  {#each detail.priorities as priority, at (at)}
-                    <div class={flex({ gap: '10px' })}>
-                      <span class={rankClass}>{at + 1}</span>
-                      <div class={css({ flexGrow: '1', minWidth: '0' })}>
-                        {@render paragraphs(priority.body, priorityBodyClass)}
-                        {@render chips(priority.issues)}
-                      </div>
+                  {:else if section.key === 'priorities'}
+                    <div class={listClass}>
+                      {#each detail.priorities as priority, at (at)}
+                        <div class={flex({ gap: '10px' })}>
+                          <span class={rankClass}>{at + 1}</span>
+                          <div class={css({ flexGrow: '1', minWidth: '0' })}>
+                            {@render paragraphs(priority.body, proseClass)}
+                            {@render chips(priority.issues)}
+                          </div>
+                        </div>
+                      {/each}
                     </div>
-                  {/each}
-                </div>
-              {/if}
-            </section>
+                  {/if}
+                </section>
+              {/each}
+            </div>
           {/each}
         {/if}
       </div>

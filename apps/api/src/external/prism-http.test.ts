@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import test from 'node:test';
+import { Agent as Http2Agent } from 'http2-wrapper';
 import { createPrismHttp } from './prism-http.ts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AddressInfo, Socket } from 'node:net';
@@ -101,6 +102,39 @@ test('열린 스트림이 같은 origin의 후속 요청을 막지 않는다', a
     const res = await http.request('/agents/typie-1/resume', { method: 'POST', body: { message: 'a', key: 'k1' } });
     assert.equal(res.status, 200);
     await stream.body.cancel();
+  } finally {
+    await server.close();
+  }
+});
+
+test('스트림 열기는 응답 헤더가 오지 않으면 열기 상한 안에 실패한다', async () => {
+  const server = await startServer((req) => void readBody(req));
+
+  try {
+    const http = createPrismHttp({ baseUrl: server.baseUrl, token: 't', streamOpenTimeout: 120 });
+    const startedAt = Date.now();
+    await assert.rejects(http.request('/agents/typie-1/events', { stream: true }), /stream open timed out/);
+    assert.ok(Date.now() - startedAt < 2000);
+  } finally {
+    await server.close();
+  }
+});
+
+test('스트림 열기 타임아웃은 h2 세션을 파기해 다음 시도가 새 연결을 쓰게 한다', async () => {
+  const server = await startServer((req) => void readBody(req));
+
+  try {
+    const agent = new Http2Agent();
+    let destroyed = 0;
+    const originalDestroy = agent.destroy.bind(agent);
+    agent.destroy = (reason?: Error) => {
+      destroyed += 1;
+      originalDestroy(reason);
+    };
+
+    const http = createPrismHttp({ baseUrl: server.baseUrl, token: 't', streamOpenTimeout: 120, http2Agent: agent });
+    await assert.rejects(http.request('/agents/typie-1/events', { stream: true }), /stream open timed out/);
+    assert.equal(destroyed, 1);
   } finally {
     await server.close();
   }

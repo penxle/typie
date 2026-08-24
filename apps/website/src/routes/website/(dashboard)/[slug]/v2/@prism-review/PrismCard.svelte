@@ -21,7 +21,7 @@
 
   // scrollable은 팝오버가 준 높이를 카드가 다 쓰고 넘치는 만큼을 제 안에서 접는다는 뜻이다.
   // 컬럼에서는 켜지 않는다 — 거기서는 카드가 제 높이를 다 차지하고 컬럼이 통째로 스크롤된다.
-  // onClose도 팝오버 전용이다 — 컬럼 카드는 닫히는 게 아니라 접히므로 닫기 버튼을 세우지 않는다
+  // onClose의 X는 팝오버에서는 카드를 닫고 컬럼에서는 펼친 카드를 접는다 — 접힌 카드에는 접을 것이 없어 펼쳤을 때만 선다
   type Props = { item: MarginItem; expanded: boolean; onToggle: () => void; onClose?: () => void; scrollable?: boolean };
   let { item, expanded, onToggle, onClose, scrollable = false }: Props = $props();
 
@@ -341,11 +341,11 @@
     {#if slot.action && thread}
       <button
         class={css(headerActionRecipe.raw({ flush: !onClose }))}
-        aria-label={slot.action === 'close' ? '피드백 닫기' : '다시 열기'}
+        aria-label={slot.action === 'close' ? '다음 회차부터 다시 짚지 않기' : '다음 회차부터 다시 짚기'}
         onclick={() => void run(() => (slot.action === 'close' ? margin.close(thread.id) : margin.reopen(thread.id)))}
         type="button"
         use:tooltip={{
-          message: slot.action === 'close' ? '다음 리뷰부터 다시 짚지 않도록 닫기' : '다시 열기',
+          message: slot.action === 'close' ? '다음 회차부터 다시 짚지 않기' : '다음 회차부터 다시 짚기',
           delay: 200,
           arrow: false,
         }}
@@ -354,8 +354,18 @@
       </button>
     {/if}
 
-    {#if onClose}
-      <button class={css(headerActionRecipe.raw({ flush: true }))} aria-label="닫기" onclick={onClose} type="button">
+    {#if onClose && expanded}
+      <button
+        class={css(headerActionRecipe.raw({ flush: true }))}
+        aria-label="닫기"
+        onclick={onClose}
+        type="button"
+        use:tooltip={{
+          message: '닫기',
+          delay: 200,
+          arrow: false,
+        }}
+      >
         <Icon icon={XIcon} size={16} />
       </button>
     {/if}

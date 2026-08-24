@@ -127,7 +127,7 @@
 
   {#if margin.selectedRoundId !== null}
     <div class={flex({ paddingX: '16px', paddingBottom: '16px' })}>
-      <Button onclick={hide} size="sm" variant="secondary">표시 숨기기</Button>
+      <Button onclick={hide} size="sm" variant="secondary">본문 표시 숨기기</Button>
     </div>
   {/if}
 </Modal>

@@ -1,10 +1,12 @@
 import { Readable } from 'node:stream';
 import got from 'got';
+import { Agent as Http2Agent } from 'http2-wrapper';
 import type { Method } from 'got';
 import type { PrismHttp } from './prism-core.ts';
 
 const TIMEOUT_MS = 10_000;
 const TOTAL_TIMEOUT_MS = 30_000;
+const STREAM_OPEN_TIMEOUT_MS = 15_000;
 const RETRY_LIMIT = 2;
 const BACKOFF_BASE_MS = 300;
 
@@ -13,14 +15,18 @@ export type PrismHttpOptions = {
   token: string;
   timeout?: number;
   totalTimeout?: number;
+  streamOpenTimeout?: number;
+  http2Agent?: Http2Agent;
   retryLimit?: number;
   onRetry?: (info: { method: string; path: string; attempt: number; error: Error }) => void;
 };
 
 export const createPrismHttp = (options: PrismHttpOptions): PrismHttp => {
+  const http2Agent = options.http2Agent ?? new Http2Agent();
   const client = got.extend({
     http2: true,
     throwHttpErrors: false,
+    agent: { http2: http2Agent },
     headers: { authorization: `Bearer ${options.token}` },
   });
 
@@ -31,9 +37,23 @@ export const createPrismHttp = (options: PrismHttpOptions): PrismHttp => {
 
       if (init?.stream) {
         const stream = client.stream(url, { method, headers: init.headers, json: init.body, signal: init.signal, retry: { limit: 0 } });
+        // 열기(응답 헤더 대기)에만 상한을 건다 — 본문은 SSE라 무기한이 계약이지만, 반쯤 죽은 연결 위의
+        // 열기 대기는 response도 error도 영영 오지 않아 소비자(펌프)의 유휴 감시까지 비켜간다.
         const response = await new Promise<{ statusCode: number }>((resolve, reject) => {
-          stream.once('response', resolve);
-          stream.once('error', reject);
+          const timer = setTimeout(() => {
+            // 열기가 응답 없이 시간을 넘긴 세션은 꼬였을 가능성이 높다 — 다음 시도가 재사용하지 않게 전부 파기한다.
+            http2Agent.destroy();
+            stream.destroy();
+            reject(new Error(`stream open timed out: ${method} ${path}`));
+          }, options.streamOpenTimeout ?? STREAM_OPEN_TIMEOUT_MS);
+          stream.once('response', (res: { statusCode: number }) => {
+            clearTimeout(timer);
+            resolve(res);
+          });
+          stream.once('error', (error: Error) => {
+            clearTimeout(timer);
+            reject(error);
+          });
         });
         const body = Readable.toWeb(stream) as ReadableStream<Uint8Array>;
         return { status: response.statusCode, json: () => new Response(body).json(), body };
