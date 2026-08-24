@@ -12,9 +12,9 @@
   import { detailOutline, GROUP_TITLES, SECTION_TITLES } from './detail-view.ts';
   import { describeHeader } from './round-view.ts';
   import type { Section, SectionKey } from './detail-view.ts';
-  import type { ReviewRound } from './round-view.ts';
+  import type { DetailRound } from './round-view.ts';
 
-  type Props = { round: ReviewRound; open: boolean };
+  type Props = { round: DetailRound; open: boolean };
 
   let { round, open = $bindable() }: Props = $props();
 
@@ -169,7 +169,15 @@
     borderBottomWidth: '1px',
     borderColor: 'border.subtle',
   });
-  const railTocClass = css({ flexGrow: '1', minHeight: '0', paddingX: '10px', paddingY: '16px', overflowY: 'auto' });
+  // 본문 스크롤러와 같은 이유로 불투명해야 한다 — 색은 레일 배경을 따른다
+  const railTocClass = css({
+    flexGrow: '1',
+    minHeight: '0',
+    paddingX: '10px',
+    paddingY: '16px',
+    backgroundColor: 'surface.subtle',
+    overflowY: 'auto',
+  });
 
   const groupTitleClass = css({
     marginTop: '14px',
@@ -216,7 +224,9 @@
     color: 'text.brand',
   });
 
-  const bodyClass = css({ flexGrow: '1', minWidth: '0', minHeight: '0', overflowY: 'auto' });
+  // 배경은 장식이 아니라 스크롤 경로다 — 투명 스크롤러는 컴포지터가 레이어로 승격하지 않아(LCD 텍스트 보존)
+  // 매 스크롤 프레임 모달 전체를 메인 스레드에서 재페인트하고, 래스터가 마감을 놓친 프레임에 모달이 통째로 빈다
+  const bodyClass = css({ flexGrow: '1', minWidth: '0', minHeight: '0', backgroundColor: 'surface.default', overflowY: 'auto' });
   const bodyInnerClass = css({ paddingX: '60px', paddingY: '32px' });
   const bodyNarrowClass = css({ paddingX: '24px', paddingY: '24px' });
 
@@ -226,15 +236,36 @@
   const sectionCaptionClass = css({ fontSize: '11px', color: 'text.faint' });
   const dividerClass = css({ height: '1px', marginTop: '28px', marginBottom: '22px', backgroundColor: 'border.subtle' });
 
-  const proseClass = css({ fontFamily: 'prose', fontSize: '14px', lineHeight: '[1.8]' });
-  const noteClass = css({ marginTop: '6px', fontFamily: 'prose', fontSize: '13px', lineHeight: '[1.75]', color: 'text.subtle' });
-  const priorityBodyClass = css({ fontFamily: 'prose', fontSize: '13px', lineHeight: '[1.75]', color: 'text.subtle' });
+  const proseClass = css({ fontSize: '14px', lineHeight: '[1.8]' });
+  const noteStyle = css.raw({ marginTop: '6px', fontSize: '13px', lineHeight: '[1.75]', color: 'text.subtle' });
+  const noteClass = css(noteStyle);
+  // 인용면 아래는 제목 아래보다 벌린다 — 면이 끝나는 자리에 글이 붙으면 인용에 딸린 설명으로 읽히지 않는다
+  const noteAfterQuoteClass = css(noteStyle, { marginTop: '12px' });
+  const priorityBodyClass = css({ fontSize: '13px', lineHeight: '[1.75]', color: 'text.subtle' });
   const traitClass = css({ fontSize: '13px', fontWeight: 'semibold' });
   const listClass = flex({ direction: 'column', gap: '20px' });
-  const quoteStyle = css.raw({ fontFamily: 'prose', fontSize: '14px', lineHeight: '[1.8]' });
+  // 원고에서 옮겨 온 글만 prose를 입는다 — 여백 카드가 세운 구분이라 총평도 따른다.
+  // 인용의 표지도 카드에서 가져왔다(PrismCard.svelte:363-379) — 왼쪽 굵은 선과 옅은 면이 인용을 말하므로 낫표를 겹치지 않는다
+  const quoteStyle = css.raw({
+    paddingX: '12px',
+    paddingY: '10px',
+    borderLeftWidth: '3px',
+    borderTopRightRadius: '4px',
+    borderBottomRightRadius: '4px',
+    backgroundColor: 'surface.subtle',
+    fontFamily: 'prose',
+    fontSize: '14px',
+    lineHeight: '[1.8]',
+  });
   // 누를 수 있는 인용과 갈 곳이 없는 인용을 눈으로 가른다 — 격상은 여백에 앉지 않아 목적지가 없다
-  const quoteLinkClass = css(quoteStyle, { display: 'block', width: 'full', textAlign: 'left', _hover: { color: 'text.brand' } });
-  const quoteStaticStyle = css.raw(quoteStyle, { color: 'text.subtle' });
+  const quoteLinkClass = css(quoteStyle, {
+    display: 'block',
+    width: 'full',
+    borderColor: 'border.default',
+    textAlign: 'left',
+    _hover: { borderColor: 'border.brand', color: 'text.brand' },
+  });
+  const quoteStaticStyle = css.raw(quoteStyle, { borderColor: 'border.subtle', color: 'text.subtle' });
 
   const chipRowClass = flex({ wrap: 'wrap', gap: '4px', marginTop: '8px' });
   // 번호는 여백의 레일·카드가 쓰는 번호와 같다
@@ -418,10 +449,10 @@
                   {#each detail.strengths as strength, at (at)}
                     <div>
                       <button class={quoteLinkClass} onclick={() => void openMargin(`strength:${at}`)} type="button">
-                        「{strength.quote}」
+                        {strength.quote}
                       </button>
                       {#if strength.body}
-                        {@render paragraphs(strength.body, noteClass)}
+                        {@render paragraphs(strength.body, noteAfterQuoteClass)}
                       {/if}
                     </div>
                   {/each}
@@ -432,9 +463,9 @@
                     <div>
                       <div class={traitClass}>{elevation.trait}</div>
                       {#if elevation.quote}
-                        <div class={css(quoteStaticStyle, { marginTop: '6px' })}>「{elevation.quote}」</div>
+                        <div class={css(quoteStaticStyle, { marginTop: '8px' })}>{elevation.quote}</div>
                       {/if}
-                      {@render paragraphs(elevation.body, noteClass)}
+                      {@render paragraphs(elevation.body, elevation.quote ? noteAfterQuoteClass : noteClass)}
                     </div>
                   {/each}
                 </div>

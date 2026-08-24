@@ -5,6 +5,15 @@ import type { DashboardLayout_PrismReviewPassage_Query } from '$mearie';
 
 export type ReviewRound = DataOf<DashboardLayout_PrismReviewPassage_Query>['prismSession']['reviewRounds'][number];
 
+// 총평 모달이 회차에서 실제로 읽는 폭 — 세션 밖(여백 컬럼)에서도 이 폭만 갖추면 모달을 세울 수 있다
+export type DetailRound = {
+  id: string;
+  tier: string;
+  ordinal: number;
+  issueCount: number;
+  document: { id: string; title: string; entity: { slug: string } };
+};
+
 export type ResultView = { kind: 'rejected' } | { kind: 'summary'; counts: string; issues: string } | { kind: 'issues'; issues: string };
 
 export type RoundHeader = { title: string; tier: string };
@@ -32,9 +41,9 @@ export const recheckMode = (round: ReviewRound | null, answered: boolean, status
   return status === 'completed' ? 'stale' : 'idle';
 };
 
-const documentTitle = (round: ReviewRound) => `「${round.document.title || '제목 없음'}」`;
+const documentTitle = (round: DetailRound) => `「${round.document.title || '제목 없음'}」`;
 
-export const describeHeader = (round: ReviewRound): RoundHeader => ({
+export const describeHeader = (round: DetailRound): RoundHeader => ({
   title: documentTitle(round),
   tier: TIER_OPTIONS.find((option) => option.tier === round.tier.toLowerCase())?.label ?? round.tier,
 });

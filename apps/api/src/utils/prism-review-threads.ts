@@ -84,7 +84,8 @@ export const clearRoundMemos = (scope: object): void => {
   commentCache.delete(scope);
 };
 
-export const projectRoundThreads = async (executor: Database | Transaction, roundId: string): Promise<void> => {
+// 발행은 호출자 몫이다 — settle 경로는 트랜잭션 안이라 여기서 발행하면 구독자의 재조회가 커밋 전 상태를 읽는다.
+export const projectRoundThreads = async (executor: Database | Transaction, roundId: string): Promise<{ documentId: string } | null> => {
   const round = await executor
     .select({
       id: PrismReviewRounds.id,
@@ -95,10 +96,10 @@ export const projectRoundThreads = async (executor: Database | Transaction, roun
     .from(PrismReviewRounds)
     .where(eq(PrismReviewRounds.id, roundId))
     .then(first);
-  if (!round) return;
+  if (!round) return null;
 
   const projected = threadsFromResult(round.result);
-  if (projected.length === 0) return;
+  if (projected.length === 0) return null;
 
   await executor
     .insert(PrismReviewThreads)
@@ -114,7 +115,7 @@ export const projectRoundThreads = async (executor: Database | Transaction, roun
       target: [PrismReviewThreads.documentId, PrismReviewThreads.bornRound, PrismReviewThreads.issueIndex],
     });
 
-  pubsub.publish('prism:review', round.documentId, { roundId: round.id });
+  return { documentId: round.documentId };
 };
 
 // 배포 전에 끝난 회차와 사영 중 죽은 회차를 첫 조회가 메운다. 멱등이라 여러 번 불러도 안전하다.
@@ -126,5 +127,6 @@ export const ensureRoundThreads = async (roundId: string): Promise<void> => {
     .then(firstOrThrow);
 
   if (existing.count > 0) return;
-  await projectRoundThreads(db, roundId);
+  const projected = await projectRoundThreads(db, roundId);
+  if (projected !== null) pubsub.publish('prism:review', projected.documentId, { roundId });
 };

@@ -1,6 +1,7 @@
 import { getContext, setContext } from 'svelte';
 import type { DataOf } from '@mearie/svelte';
 import type { DocumentPrismReviewMargin_Round_Query } from '$mearie';
+import type { DetailRound } from '../../../@prism/review/round-view.ts';
 import type { MarginMode, RoundOption, ThreadCallouts } from './margin-view.ts';
 
 type Round = DataOf<DocumentPrismReviewMargin_Round_Query>['prismReviewRound'];
@@ -35,6 +36,7 @@ export type MarginItem = MarginPlacement & {
 export type MarginController = {
   readonly rounds: RoundOption[];
   readonly selectedRoundId: string | null;
+  readonly detailRound: DetailRound | null;
   readonly items: MarginItem[];
   readonly segment: MarginSegment;
   readonly segmentCounts: Record<MarginSegment, number>;

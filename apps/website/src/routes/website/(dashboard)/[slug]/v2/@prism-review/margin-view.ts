@@ -31,9 +31,15 @@ export const cardHeaderSlot = (state: CardThreadState | null, expanded: boolean,
   return { comments: false, state: true, action: null };
 };
 
-export type RoundOption = { id: string; ordinal: number; tierLabel: string; issueCount: number; createdAt: string };
-
-export const roundLabel = (option: RoundOption): string => `${option.ordinal}회차 · ${option.tierLabel} · 피드백 ${option.issueCount}`;
+// sessionId는 리뷰를 진행한 대화 — 대화가 지워진 라운드는 null이다
+export type RoundOption = {
+  id: string;
+  ordinal: number;
+  tierLabel: string;
+  issueCount: number;
+  sessionId: string | null;
+  createdAt: string;
+};
 
 type IssueBrief = { index: number; trait: string };
 type Pattern = { theme: string | null; body: string; issues: readonly IssueBrief[] };

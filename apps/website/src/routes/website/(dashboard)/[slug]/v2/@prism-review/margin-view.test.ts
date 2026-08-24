@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cardHeaderSlot, COLUMN_GAP, COLUMN_WIDTH, describeThread, GUTTER, resolveMode, roundLabel } from './margin-view.ts';
+import { cardHeaderSlot, COLUMN_GAP, COLUMN_WIDTH, describeThread, GUTTER, resolveMode } from './margin-view.ts';
 
 describe('레이아웃 상수', () => {
   it('치수가 조용히 바뀌면 레일 자리와 컬럼 임계가 어긋난다', () => {
@@ -34,14 +34,6 @@ describe('resolveMode', () => {
   it('진입 문턱은 정확히 40이다', () => {
     expect(resolveMode(need + 40, body, 'popover')).toBe('column');
     expect(resolveMode(need + 39, body, 'popover')).toBe('popover');
-  });
-});
-
-describe('roundLabel', () => {
-  it('회차·깊이·피드백 수를 잇는다', () => {
-    expect(roundLabel({ id: 'r1', ordinal: 3, tierLabel: '심층 검토', issueCount: 9, createdAt: '2026-08-20' })).toBe(
-      '3회차 · 심층 검토 · 피드백 9',
-    );
   });
 });
 

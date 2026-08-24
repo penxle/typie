@@ -1,9 +1,10 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
-  import { SegmentButtons } from '@typie/ui/components';
+  import { Button, SegmentButtons } from '@typie/ui/components';
   import { untrack } from 'svelte';
   import { CONTINUOUS_VIEW_PADDING } from '$lib/editor-ffi/constants';
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
+  import PrismReviewDetail from '../../../@prism/review/PrismReviewDetail.svelte';
   import { getMarginContext } from './context.svelte.ts';
   import { COLUMN_GAP, COLUMN_WIDTH, GUTTER } from './margin-view.ts';
   import PrismCardColumn from './PrismCardColumn.svelte';
@@ -133,6 +134,14 @@
 
   const columnReserved = $derived(insetRight > 0);
 
+  let detailOpen = $state(false);
+
+  // 회차가 갈리면 이전 회차의 총평이 열린 채 남지 않는다 — 문이 사라졌다 돌아와도 닫힌 상태로 시작한다
+  $effect(() => {
+    void margin.selectedRoundId;
+    detailOpen = false;
+  });
+
   // 탭은 목록의 표지라 본문 밖 — 제목·부제목과 같은 높이에 선다. 컬럼은 본문 전체를 그대로 덮는다.
   const segmentItems = $derived([
     { label: `이번 회차 ${margin.segmentCounts.open}`, value: 'open' as const },
@@ -197,8 +206,18 @@
           style:top={`${-headerHeight}px`}
           style:height={`${headerHeight}px`}
           style:width={`${COLUMN_WIDTH}px`}
-          class={css({ position: 'absolute', display: 'flex', alignItems: 'flex-end', pointerEvents: 'auto' })}
+          class={css({
+            position: 'absolute',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'flex-end',
+            gap: '8px',
+            pointerEvents: 'auto',
+          })}
         >
+          {#if margin.detailRound !== null}
+            <Button style={css.raw({ width: 'full' })} onclick={() => (detailOpen = true)} size="sm" variant="secondary">총평 보기</Button>
+          {/if}
           <SegmentButtons
             style={css.raw({ width: 'full' })}
             items={segmentItems}
@@ -227,4 +246,8 @@
          변형 조상이 없으므로 position:fixed는 여기서도 뷰포트 기준 그대로다. -->
     <PrismOverviewRuler {marks} />
   </div>
+
+  {#if margin.detailRound !== null}
+    <PrismReviewDetail round={margin.detailRound} bind:open={detailOpen} />
+  {/if}
 {/if}

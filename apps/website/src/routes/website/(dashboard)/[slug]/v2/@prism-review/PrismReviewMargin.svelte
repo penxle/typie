@@ -15,6 +15,7 @@
   import type { Anchor } from '@typie/prism';
   import type { Snippet } from 'svelte';
   import type { MarginJump } from '$lib/prism/margin-jump.svelte';
+  import type { DetailRound } from '../../../@prism/review/round-view.ts';
   import type { MarginActivationSource, MarginItem, MarginPlacement, MarginSegment } from './context.svelte.ts';
   import type { MarginMode, RoundOption } from './margin-view.ts';
 
@@ -54,18 +55,22 @@
       query DocumentPrismReviewMargin_Rounds_Query($entityId: ID!) {
         entity(entityId: $entityId) {
           id
+          slug
 
           node {
             __typename
 
             ... on Document {
               id
+              title
 
               prismReviewRounds {
                 id
                 ordinal
                 tier
                 issueCount
+                hasDetail
+                sessionId
                 createdAt
               }
             }
@@ -85,6 +90,7 @@
       ordinal: round.ordinal,
       tierLabel: TIER_OPTIONS.find((option) => option.tier === round.tier.toLowerCase())?.label ?? '리뷰',
       issueCount: round.issueCount,
+      sessionId: round.sessionId ?? null,
       createdAt: round.createdAt,
     })),
   );
@@ -111,6 +117,21 @@
     const key = storageKey;
     if (key !== null) localStorage.setItem(key, roundId ?? 'none');
   };
+
+  // 총평이 없는 회차(hasDetail=false)는 열 문이 없어야 한다 — 세션 카드의 게이트와 같은 기준이다
+  const detailRound = $derived.by((): DetailRound | null => {
+    const entity = roundsQuery.data?.entity;
+    if (idle || entity === undefined || entity.node.__typename !== 'Document') return null;
+    const selected = entity.node.prismReviewRounds.find((round) => round.id === selectedRoundId);
+    if (selected === undefined || !selected.hasDetail) return null;
+    return {
+      id: selected.id,
+      tier: selected.tier,
+      ordinal: selected.ordinal,
+      issueCount: selected.issueCount,
+      document: { id: entity.node.id, title: entity.node.title, entity: { slug: entity.slug } },
+    };
+  });
 
   const detailQuery = createQuery(
     graphql(`
@@ -643,6 +664,9 @@
     },
     get selectedRoundId() {
       return selectedRoundId;
+    },
+    get detailRound() {
+      return detailRound;
     },
     get items() {
       return items;
