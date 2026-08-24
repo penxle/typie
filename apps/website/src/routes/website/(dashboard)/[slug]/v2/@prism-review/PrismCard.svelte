@@ -129,8 +129,8 @@
     },
     variants: {
       tone: {
-        active: { borderColor: 'border.pink', backgroundColor: 'surface.default', boxShadow: 'medium' },
-        activeStrength: { borderColor: 'border.emerald', backgroundColor: 'surface.default', boxShadow: 'medium' },
+        active: { borderColor: 'review.issue.default', backgroundColor: 'surface.default', boxShadow: 'medium' },
+        activeStrength: { borderColor: 'review.strength.default', backgroundColor: 'surface.default', boxShadow: 'medium' },
         open: { borderColor: 'border.default', backgroundColor: 'surface.default', boxShadow: 'small' },
         settled: { borderColor: 'border.subtle', backgroundColor: 'surface.subtle' },
         settledActive: { borderColor: 'border.subtle', backgroundColor: 'surface.subtle' },
@@ -160,15 +160,18 @@
     },
     variants: {
       tone: {
-        open: { backgroundColor: 'accent.pink.subtle', color: 'text.pink' },
-        strength: { backgroundColor: 'accent.emerald.subtle', color: 'text.emerald' },
+        open: { backgroundColor: 'review.issue.subtle', color: 'review.issue.default' },
+        strength: {
+          backgroundColor: 'review.strength.subtle',
+          color: 'review.strength.default',
+        },
         settled: { backgroundColor: 'surface.muted', color: 'text.faint' },
       },
       active: { true: {}, false: {} },
     },
     compoundVariants: [
-      { tone: 'open', active: true, css: { backgroundColor: 'accent.pink.default', color: 'text.bright' } },
-      { tone: 'strength', active: true, css: { backgroundColor: 'accent.emerald.default', color: 'text.bright' } },
+      { tone: 'open', active: true, css: { backgroundColor: 'review.issue.default', color: 'surface.default' } },
+      { tone: 'strength', active: true, css: { backgroundColor: 'review.strength.default', color: 'surface.default' } },
       { tone: 'settled', active: true, css: { backgroundColor: 'border.strong', color: 'text.bright' } },
     ],
   });

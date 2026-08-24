@@ -77,32 +77,32 @@ export const colors = defineTokens.colors({
     '950': { value: 'oklch(0.287 0.060 166)' }, // #003424
   },
 
-  emerald: {
-    '50': { value: 'oklch(0.965 0.025 152)' }, // #e8f9eb
-    '100': { value: 'oklch(0.905 0.072 152)' }, // #bdeec8
-    '200': { value: 'oklch(0.855 0.116 152)' }, // #93e6aa
-    '300': { value: 'oklch(0.795 0.174 152)' }, // #50db82
-    '400': { value: 'oklch(0.700 0.166 152)' }, // #32bb68
-    '500': { value: 'oklch(0.620 0.147 152)' }, // #299e58
-    '600': { value: 'oklch(0.560 0.133 152)' }, // #228a4b
-    '700': { value: 'oklch(0.490 0.116 152)' }, // #1b723e
-    '800': { value: 'oklch(0.420 0.100 152)' }, // #135c30
-    '900': { value: 'oklch(0.360 0.085 152)' }, // #0e4926
-    '950': { value: 'oklch(0.250 0.060 152)' }, // #042912
+  jade: {
+    '50': { value: 'oklch(0.9860 0.0136 158.3)' }, // #f3fdf7
+    '100': { value: 'oklch(0.9652 0.0312 158.3)' }, // #e3faec
+    '200': { value: 'oklch(0.9109 0.0494 158.3)' }, // #c7ecd5
+    '300': { value: 'oklch(0.8301 0.0845 158.3)' }, // #98d9b3
+    '400': { value: 'oklch(0.7181 0.1202 158.3)' }, // #59bb87
+    '500': { value: 'oklch(0.5865 0.1040 160.3)' }, // #398f67
+    '600': { value: 'oklch(0.5067 0.0877 160.3)' }, // #2f7454
+    '700': { value: 'oklch(0.4473 0.0780 162.3)' }, // #246247
+    '800': { value: 'oklch(0.3990 0.0650 162.3)' }, // #21523d
+    '900': { value: 'oklch(0.3404 0.0507 164.3)' }, // #1c4031
+    '950': { value: 'oklch(0.2870 0.0390 164.3)' }, // #163125
   },
 
-  pink: {
-    '50': { value: 'oklch(0.965 0.025 330)' }, // #feeefc
-    '100': { value: 'oklch(0.905 0.072 330)' }, // #fccff7
-    '200': { value: 'oklch(0.855 0.116 330)' }, // #fbb4f4
-    '300': { value: 'oklch(0.795 0.174 330)' }, // #f98ff1
-    '400': { value: 'oklch(0.730 0.246 330)' }, // #f85def
-    '500': { value: 'oklch(0.665 0.273 330)' }, // #e832e0
-    '600': { value: 'oklch(0.600 0.246 330)' }, // #ca2bc4
-    '700': { value: 'oklch(0.530 0.218 330)' }, // #ab22a6
-    '800': { value: 'oklch(0.460 0.189 330)' }, // #8d1b88
-    '900': { value: 'oklch(0.395 0.162 330)' }, // #72146e
-    '950': { value: 'oklch(0.265 0.109 330)' }, // #40073e
+  violet: {
+    '50': { value: 'oklch(0.9700 0.0157 294.8)' }, // #f5f3ff
+    '100': { value: 'oklch(0.9377 0.0325 292.8)' }, // #ebe7ff
+    '200': { value: 'oklch(0.8868 0.0591 289.8)' }, // #d8d4ff
+    '300': { value: 'oklch(0.8129 0.0993 287.8)' }, // #beb8ff
+    '400': { value: 'oklch(0.7205 0.1522 285.8)' }, // #9d94ff
+    '500': { value: 'oklch(0.6096 0.1807 284.8)' }, // #7b6de9
+    '600': { value: 'oklch(0.5122 0.1807 282.8)' }, // #5d50c9
+    '700': { value: 'oklch(0.4256 0.1673 280.8)' }, // #4439a6
+    '800': { value: 'oklch(0.3607 0.1405 278.8)' }, // #312d84
+    '900': { value: 'oklch(0.2958 0.1097 276.8)' }, // #212262
+    '950': { value: 'oklch(0.2200 0.0776 274.8)' }, // #11153e
   },
 
   blue: {
@@ -194,32 +194,32 @@ export const colors = defineTokens.colors({
       '950': { value: 'oklch(0.19 0.041 162)' }, // #00190e
     },
 
-    emerald: {
-      '50': { value: 'oklch(0.83 0.090 152)' }, // #9bd9ab
-      '100': { value: 'oklch(0.76 0.130 152)' }, // #6bc987
-      '200': { value: 'oklch(0.68 0.160 152)' }, // #32b364
-      '300': { value: 'oklch(0.60 0.157 152)' }, // #049a4e
-      '400': { value: 'oklch(0.55 0.144 152)' }, // #028844
-      '500': { value: 'oklch(0.48 0.126 152)' }, // #017137
-      '600': { value: 'oklch(0.41 0.107 152)' }, // #025a2b
-      '700': { value: 'oklch(0.35 0.092 152)' }, // #004721
-      '800': { value: 'oklch(0.29 0.076 152)' }, // #003617
-      '900': { value: 'oklch(0.24 0.063 152)' }, // #00270f
-      '950': { value: 'oklch(0.19 0.050 152)' }, // #001a08
+    jade: {
+      '50': { value: 'oklch(0.8300 0.0724 161.0)' }, // #9ed6b8
+      '100': { value: 'oklch(0.7545 0.0987 161.0)' }, // #73c39b
+      '200': { value: 'oklch(0.6753 0.0981 161.0)' }, // #5aaa83
+      '300': { value: 'oklch(0.5961 0.0862 161.0)' }, // #4c8f6e
+      '400': { value: 'oklch(0.5465 0.0790 161.0)' }, // #427f61
+      '500': { value: 'oklch(0.4772 0.0691 161.0)' }, // #366950
+      '600': { value: 'oklch(0.4079 0.0586 161.0)' }, // #2a543f
+      '700': { value: 'oklch(0.3485 0.0500 161.0)' }, // #204232
+      '800': { value: 'oklch(0.2890 0.0415 161.0)' }, // #163124
+      '900': { value: 'oklch(0.2395 0.0342 161.0)' }, // #0f241a
+      '950': { value: 'oklch(0.1900 0.0270 161.0)' }, // #081810
     },
 
-    pink: {
-      '50': { value: 'oklch(0.83 0.080 330)' }, // #e6b5e0
-      '100': { value: 'oklch(0.76 0.120 330)' }, // #dc95d5
-      '200': { value: 'oklch(0.68 0.190 330)' }, // #d665cf
-      '300': { value: 'oklch(0.60 0.210 330)' }, // #c142ba
-      '400': { value: 'oklch(0.55 0.210 330)' }, // #b030aa
-      '500': { value: 'oklch(0.48 0.190 330)' }, // #94228f
-      '600': { value: 'oklch(0.41 0.170 330)' }, // #791475
-      '700': { value: 'oklch(0.35 0.150 330)' }, // #62095e
-      '800': { value: 'oklch(0.29 0.120 330)' }, // #490847
-      '900': { value: 'oklch(0.24 0.100 330)' }, // #370435
-      '950': { value: 'oklch(0.19 0.080 330)' }, // #260224
+    violet: {
+      '50': { value: 'oklch(0.8300 0.0903 288.9)' }, // #c5beff
+      '100': { value: 'oklch(0.7599 0.1304 287.9)' }, // #ada3ff
+      '200': { value: 'oklch(0.6799 0.1541 286.9)' }, // #9387f1
+      '300': { value: 'oklch(0.5999 0.1719 285.9)' }, // #7a6be0
+      '400': { value: 'oklch(0.5499 0.1837 284.9)' }, // #6b5ad6
+      '500': { value: 'oklch(0.4800 0.1837 283.9)' }, // #5744bf
+      '600': { value: 'oklch(0.4100 0.1719 282.9)' }, // #4332a2
+      '700': { value: 'oklch(0.3500 0.1482 281.9)' }, // #332684
+      '800': { value: 'oklch(0.2900 0.1244 280.9)' }, // #251b66
+      '900': { value: 'oklch(0.2400 0.1007 279.9)' }, // #19144d
+      '950': { value: 'oklch(0.1900 0.0770 278.9)' }, // #0e0c35
     },
 
     blue: {
@@ -370,8 +370,6 @@ export const semanticColors = defineSemanticTokens.colors({
   'text.success': { value: { base: '{colors.green.700}', _dark: '{colors.dark.green.100}' } },
   'text.link': { value: { base: '{colors.blue.600}', _dark: '{colors.dark.blue.200}' } },
   'text.brand': { value: { base: '{colors.brand.500}', _dark: '{colors.dark.brand.100}' } },
-  'text.emerald': { value: { base: '{colors.emerald.700}', _dark: '{colors.dark.emerald.100}' } },
-  'text.pink': { value: { base: '{colors.pink.700}', _dark: '{colors.dark.pink.100}' } },
 
   'surface.default': {
     value: {
@@ -530,12 +528,6 @@ export const semanticColors = defineSemanticTokens.colors({
   // 알파는 광량을 표면에 맡기고 색기만 얹는다
   'accent.brand.subtle': { value: { base: '{colors.brand.100}', _dark: '{colors.dark.brand.300/30}' } },
   // 전 패밀리 공통 3규칙(브랜드와 동일): 채움 램프는 다크에서 반전(400→300→200), subtle 면은 선명한 300톤의 30% 알파
-  'accent.emerald.default': { value: { base: '{colors.emerald.500}', _dark: '{colors.dark.emerald.400}' } },
-  'accent.emerald.subtle': { value: { base: '{colors.emerald.100}', _dark: '{colors.dark.emerald.300/30}' } },
-  'accent.pink.default': { value: { base: '{colors.pink.500}', _dark: '{colors.dark.pink.400}' } },
-  'accent.pink.hover': { value: { base: '{colors.pink.600}', _dark: '{colors.dark.pink.300}' } },
-  'accent.pink.active': { value: { base: '{colors.pink.700}', _dark: '{colors.dark.pink.200}' } },
-  'accent.pink.subtle': { value: { base: '{colors.pink.100}', _dark: '{colors.dark.pink.300/30}' } },
   'accent.info.default': { value: { base: '{colors.blue.500}', _dark: '{colors.dark.blue.400}' } },
   'accent.info.subtle': { value: { base: '{colors.blue.50}', _dark: '{colors.dark.blue.300/30}' } },
   'accent.danger.default': { value: { base: '{colors.red.600}', _dark: '{colors.dark.red.400}' } },
@@ -546,6 +538,27 @@ export const semanticColors = defineSemanticTokens.colors({
   'accent.warning.subtle': { value: { base: '{colors.amber.50}', _dark: '{colors.dark.amber.300/30}' } },
   'accent.success.default': { value: { base: '{colors.green.700}', _dark: '{colors.dark.green.400}' } },
   'accent.success.subtle': { value: { base: '{colors.green.50}', _dark: '{colors.dark.green.300/30}' } },
+
+  'review.issue.default': { value: { base: '{colors.violet.500}', _dark: '{colors.dark.violet.100}' } },
+  'review.issue.subtle': {
+    value: {
+      base: 'color-mix(in oklch, {colors.violet.500} 16%, transparent)',
+      _dark: 'color-mix(in oklch, {colors.dark.violet.100} 16%, transparent)',
+    },
+  },
+  'review.issue.highlight': {
+    value: { base: 'color-mix(in oklch, {colors.violet.500} 35%, transparent)', _dark: '{colors.dark.violet.100}' },
+  },
+  'review.strength.default': { value: { base: '{colors.jade.500}', _dark: '{colors.dark.jade.100}' } },
+  'review.strength.subtle': {
+    value: {
+      base: 'color-mix(in oklch, {colors.jade.500} 16%, transparent)',
+      _dark: 'color-mix(in oklch, {colors.dark.jade.100} 16%, transparent)',
+    },
+  },
+  'review.strength.highlight': {
+    value: { base: 'color-mix(in oklch, {colors.jade.500} 35%, transparent)', _dark: '{colors.dark.jade.100}' },
+  },
 
   'border.default': {
     value: {
@@ -612,8 +625,6 @@ export const semanticColors = defineSemanticTokens.colors({
   },
   'border.brand': { value: { base: '{colors.brand.600}', _dark: '{colors.dark.brand.400}' } },
   'border.danger': { value: { base: '{colors.red.600}', _dark: '{colors.dark.red.400}' } },
-  'border.emerald': { value: { base: '{colors.emerald.600}', _dark: '{colors.dark.emerald.400}' } },
-  'border.pink': { value: { base: '{colors.pink.600}', _dark: '{colors.dark.pink.400}' } },
 
   'shadow.default': { value: { base: '{colors.gray.950}', _dark: '{colors.dark.gray.950}' } },
 

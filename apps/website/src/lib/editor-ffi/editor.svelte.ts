@@ -417,11 +417,6 @@ export class Editor {
   #aiFeedbackDecorationsInstalled = false;
   #aiFeedbackMembershipIds: string[] | null = null;
 
-  #prismReviewDecorationsInstalled = false;
-  // eslint-disable-next-line svelte/prefer-svelte-reactivity
-  #prismReviewTones = new Map<string, 'issue' | 'strength'>();
-  #activePrismReviewIds: string[] = [];
-
   #commentDecorationsInstalled = false;
   // eslint-disable-next-line svelte/prefer-svelte-reactivity
   #registeredCommentIds = new Set<string>();
@@ -488,8 +483,6 @@ export class Editor {
 
   aiFeedbacks = $state<AiFeedback[]>([]);
   activeAiFeedbackId = $state<string | null>(null);
-
-  prismReviewRangeIds = $state<string[]>([]);
 
   activeCommentId = $state<string | null>(null);
   commentClickHandler: ((id: string) => void) | null = null;
@@ -1032,11 +1025,6 @@ export class Editor {
       this.spellcheckErrors = this.spellcheckErrors.filter((e) => !stale.has(e.id));
       if (this.activeSpellcheckErrorId !== null && stale.has(this.activeSpellcheckErrorId)) {
         this.activeSpellcheckErrorId = null;
-      }
-
-      if (this.prismReviewRangeIds.some((id) => stale.has(id))) {
-        this.prismReviewRangeIds = this.prismReviewRangeIds.filter((id) => !stale.has(id));
-        this.#activePrismReviewIds = this.#activePrismReviewIds.filter((id) => !stale.has(id));
       }
     });
 
@@ -2358,34 +2346,6 @@ export class Editor {
     });
   }
 
-  installPrismReviewDecorations(): void {
-    if (this.#prismReviewDecorationsInstalled) return;
-    this.#prismReviewDecorationsInstalled = true;
-
-    // 평시 그룹에는 데코레이션을 걸지 않는다 — 본문은 활성일 때만 물든다
-    this.enqueue({
-      type: 'tracked_range',
-      op: {
-        type: 'set_group_decoration',
-        group: 'prism-issue-active',
-        style: { background: 'ui.prism-issue-active', background_radius: 2, background_inset: 2, underline: undefined },
-        enabled: true,
-        z_index: 1,
-      },
-    });
-
-    this.enqueue({
-      type: 'tracked_range',
-      op: {
-        type: 'set_group_decoration',
-        group: 'prism-strength-active',
-        style: { background: 'ui.prism-strength-active', background_radius: 2, background_inset: 2, underline: undefined },
-        enabled: true,
-        z_index: 1,
-      },
-    });
-  }
-
   setSpellcheckErrors(
     items: {
       id: string;
@@ -2545,8 +2505,6 @@ export class Editor {
 
     this.clearPrismReviewRanges();
 
-    const installed: string[] = [];
-
     for (const item of items) {
       // 해소되지 않는 selection은 tick에서 터져 에디터를 종료시킨다.
       // freezeSelection이 그 판정(양 끝 resolve)을 큐를 거치지 않고 내주고, 그 결과가 곧 앵커다.
@@ -2571,12 +2529,7 @@ export class Editor {
         continue;
       }
       if (result.type === 'ignored') continue;
-
-      this.#prismReviewTones.set(item.id, item.tone);
-      installed.push(item.id);
     }
-
-    this.prismReviewRangeIds = installed;
   }
 
   // 스냅숏의 trackedRanges는 코어가 tracked_ranges 필드를 낼 때만 갈린다(materializeSnapshot) — 본문이
@@ -2586,35 +2539,20 @@ export class Editor {
     if (this.#freshRangesFor !== this.#applied) {
       this.#freshRanges = this.#invokeCore((core) => core.tracked_ranges());
       this.#freshRangesFor = this.#applied;
+      // 이 snapshot이 게시된 뒤 다음 판이 먼저 적용되어도, 호스트는 그 캔버스와 짝인 지금 좌표를 써야 한다.
+      // snapshot 사본에만 남은 stale id는 undefined로 고정해 옛 rect로 되돌아가지 않게 한다.
+      // eslint-disable-next-line svelte/prefer-svelte-reactivity -- immutable snapshot cache installed into a WeakMap
+      const resolved = new Map<string, TrackedRange | undefined>(this.#applied.trackedRanges.map((range) => [range.id, undefined]));
+      for (const range of this.#freshRanges) resolved.set(range.id, range);
+      this.#resolvedTrackedRanges.set(this.#applied, resolved);
     }
     return this.#freshRanges;
   }
 
-  setActivePrismReviewRanges(ids: readonly string[]): void {
-    const next = [...ids];
-    if (sameIds(this.#activePrismReviewIds, next)) return;
-
-    const move = (id: string, active: boolean): boolean => {
-      const tone = this.#prismReviewTones.get(id);
-      if (tone === undefined) return false;
-      if (this.#applied.trackedRanges.every((range) => range.id !== id)) return false;
-      const base = tone === 'issue' ? 'prism-issue' : 'prism-strength';
-      this.enqueue({ type: 'tracked_range', op: { type: 'set_group', id, group: active ? `${base}-active` : base } });
-      return true;
-    };
-
-    for (const id of this.#activePrismReviewIds) move(id, false);
-    // 앉지 못한 id를 활성으로 기록하면 sameIds가 다음 시도를 막는다
-    this.#activePrismReviewIds = next.filter((id) => move(id, true));
-  }
-
   clearPrismReviewRanges(): void {
-    for (const group of ['prism-issue', 'prism-issue-active', 'prism-strength', 'prism-strength-active']) {
+    for (const group of ['prism-issue', 'prism-strength']) {
       this.enqueue({ type: 'tracked_range', op: { type: 'clear_group', group } });
     }
-    this.#prismReviewTones.clear();
-    this.#activePrismReviewIds = [];
-    this.prismReviewRangeIds = [];
   }
 
   installCommentDecorations(): void {
