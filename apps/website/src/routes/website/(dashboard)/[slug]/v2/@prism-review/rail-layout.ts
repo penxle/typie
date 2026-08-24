@@ -11,6 +11,9 @@ export type RailSpan = {
 
 export type PlacedRail = RailSpan & { lane: number; chipTop: number; chipLeft: number };
 
+export type RailHitBox = { left: number; top: number; right: number; bottom: number };
+export type RailHitTarget = PlacedRail & { hitBox: RailHitBox; hitPriority: number };
+
 export const RAIL_WIDTH = 3;
 export const RAIL_CHIP_SIZE = 16;
 export const RAIL_TEXT_GAP = 44;
@@ -30,9 +33,7 @@ export const maxRailLanes = (gutter: number): number =>
 // gap이 줄어드는 구간(거터 < 47)에서는 어느 쪽 셈이든 결과가 1레인으로 같다.
 export const railLeft = (lane: number, gutter: number, gap = RAIL_TEXT_GAP): number => gutter - gap - RAIL_WIDTH - lane * RAIL_LANE_STEP;
 
-type Box = { left: number; top: number; right: number; bottom: number };
-
-const intersects = (a: Box, b: Box) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+const intersects = (a: RailHitBox, b: RailHitBox) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
 
 export const layoutRails = (spans: readonly RailSpan[], gutter: number, gap = RAIL_TEXT_GAP): PlacedRail[] => {
   const lanes = maxRailLanes(gutter);
@@ -56,16 +57,16 @@ export const layoutRails = (spans: readonly RailSpan[], gutter: number, gap = RA
     rail.lane = lane;
   }
 
-  const bars: Box[] = rails.map((rail) => {
+  const bars: RailHitBox[] = rails.map((rail) => {
     const left = railLeft(rail.lane, gutter, gap);
     return { left, top: rail.top, right: left + RAIL_WIDTH, bottom: rail.top + rail.height };
   });
 
-  const chips: Box[] = [];
+  const chips: RailHitBox[] = [];
   for (const [index, rail] of rails.entries()) {
     const barX = railLeft(rail.lane, gutter, gap);
     const sides = [barX - RAIL_CHIP_SIZE - RAIL_CHIP_GAP, barX + RAIL_WIDTH + RAIL_CHIP_GAP];
-    let chosen: Box | null = null;
+    let chosen: RailHitBox | null = null;
 
     for (const left of sides) {
       if (left < 0) continue;
@@ -97,4 +98,25 @@ export const layoutRails = (spans: readonly RailSpan[], gutter: number, gap = RA
   }
 
   return rails;
+};
+
+export const layoutRailHitTargets = (spans: readonly RailSpan[], gutter: number, gap = RAIL_TEXT_GAP): RailHitTarget[] => {
+  const targets = layoutRails(spans, gutter, gap).map((rail) => {
+    const barLeft = railLeft(rail.lane, gutter, gap);
+    return {
+      ...rail,
+      hitBox: {
+        left: Math.min(barLeft, rail.chipLeft),
+        top: Math.min(rail.top, rail.chipTop),
+        right: Math.max(barLeft + RAIL_WIDTH, rail.chipLeft + RAIL_CHIP_SIZE),
+        bottom: Math.max(rail.top + rail.height, rail.chipTop + RAIL_CHIP_SIZE),
+      },
+    };
+  });
+  const area = (target: (typeof targets)[number]) =>
+    (target.hitBox.right - target.hitBox.left) * (target.hitBox.bottom - target.hitBox.top);
+  const ordered = targets.toSorted((a, b) => a.lane - b.lane || area(b) - area(a));
+  const priority = new Map(ordered.map((target, hitPriority) => [target, hitPriority]));
+
+  return targets.map((target) => ({ ...target, hitPriority: priority.get(target) ?? 0 }));
 };

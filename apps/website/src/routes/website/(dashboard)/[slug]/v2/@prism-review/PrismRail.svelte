@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { css, cva } from '@typie/styled-system/css';
+  import { css, cva, cx } from '@typie/styled-system/css';
   import { getMarginContext } from './context.svelte.ts';
   import { GUTTER } from './margin-view.ts';
-  import { layoutRails, RAIL_CHIP_SIZE, RAIL_TEXT_GAP, RAIL_WIDTH, railLeft } from './rail-layout.ts';
+  import { layoutRailHitTargets, RAIL_CHIP_SIZE, RAIL_TEXT_GAP, RAIL_WIDTH, railLeft } from './rail-layout.ts';
   import type { RailSpan } from './rail-layout.ts';
 
   // 거터는 실제로 비어 있는 폭, gap은 본문과의 이격이다 — 둘 다 좁아진 만큼만 받는다.
@@ -11,14 +11,15 @@
   let { spans, gutter = GUTTER, gap = RAIL_TEXT_GAP }: Props = $props();
 
   const margin = getMarginContext();
-  const rails = $derived(layoutRails(spans, gutter, gap));
+  const rails = $derived(layoutRailHitTargets(spans, gutter, gap));
 
   const barRecipe = cva({
     base: {
       position: 'absolute',
       borderRadius: 'full',
+      pointerEvents: 'auto',
       cursor: 'pointer',
-      transition: '[background-color 0.25s cubic-bezier(0.2, 0, 0, 1), left 0.25s cubic-bezier(0.2, 0, 0, 1)]',
+      transition: '[background-color 0.2s cubic-bezier(0.2, 0, 0, 1), opacity 0.2s cubic-bezier(0.2, 0, 0, 1)]',
     },
     variants: {
       tone: {
@@ -28,11 +29,13 @@
       },
       active: { true: {}, false: {} },
     },
-    // 막대·레일 칩·카드 칩은 같은 지적의 세 표지다 — 상태마다 셋이 정확히 같은 색이어야 한다
     compoundVariants: [
-      { tone: 'open', active: true, css: { backgroundColor: 'review.issue.default' } },
-      { tone: 'closed', active: true, css: { backgroundColor: 'border.strong' } },
-      { tone: 'strength', active: true, css: { backgroundColor: 'review.strength.default' } },
+      { tone: 'open', active: false, css: { _groupHover: { backgroundColor: 'review.issue.default', opacity: '80' } } },
+      { tone: 'closed', active: false, css: { _groupHover: { backgroundColor: 'border.strong', opacity: '80' } } },
+      { tone: 'strength', active: false, css: { _groupHover: { backgroundColor: 'review.strength.default', opacity: '80' } } },
+      { tone: 'open', active: true, css: { backgroundColor: 'review.issue.default', opacity: '100' } },
+      { tone: 'closed', active: true, css: { backgroundColor: 'border.strong', opacity: '100' } },
+      { tone: 'strength', active: true, css: { backgroundColor: 'review.strength.default', opacity: '100' } },
     ],
   });
 
@@ -43,10 +46,15 @@
       alignItems: 'center',
       justifyContent: 'center',
       borderRadius: '5px',
+      borderWidth: '1px',
+      borderStyle: 'solid',
+      borderColor: 'transparent',
       fontSize: '10px',
       fontWeight: 'bold',
+      pointerEvents: 'auto',
       cursor: 'pointer',
-      transition: '[background-color 0.25s cubic-bezier(0.2, 0, 0, 1), color 0.25s cubic-bezier(0.2, 0, 0, 1)]',
+      transition:
+        '[background-color 0.2s cubic-bezier(0.2, 0, 0, 1), border-color 0.2s cubic-bezier(0.2, 0, 0, 1), color 0.2s cubic-bezier(0.2, 0, 0, 1)]',
     },
     variants: {
       tone: {
@@ -59,11 +67,21 @@
       },
       active: { true: {}, false: {} },
     },
-    // 활성 반전도 계열을 따른다 — 표기 전체가 회색조인 닫힌 지적에서 칩만 브랜드로 뒤집히면 어긋난다
     compoundVariants: [
-      { tone: 'open', active: true, css: { backgroundColor: 'review.issue.default', color: 'surface.default' } },
-      { tone: 'closed', active: true, css: { backgroundColor: 'border.strong', color: 'text.bright' } },
-      { tone: 'strength', active: true, css: { backgroundColor: 'review.strength.default', color: 'surface.default' } },
+      { tone: 'open', active: false, css: { _groupHover: { borderColor: 'review.issue.default' } } },
+      { tone: 'closed', active: false, css: { _groupHover: { borderColor: 'border.strong' } } },
+      { tone: 'strength', active: false, css: { _groupHover: { borderColor: 'review.strength.default' } } },
+      {
+        tone: 'open',
+        active: true,
+        css: { backgroundColor: 'review.issue.default', borderColor: 'review.issue.default', color: 'surface.default' },
+      },
+      { tone: 'closed', active: true, css: { backgroundColor: 'border.strong', borderColor: 'border.strong', color: 'text.bright' } },
+      {
+        tone: 'strength',
+        active: true,
+        css: { backgroundColor: 'review.strength.default', borderColor: 'review.strength.default', color: 'surface.default' },
+      },
     ],
   });
 
@@ -74,31 +92,57 @@
   };
 </script>
 
-<!-- 레일은 켜기 전용이다 — 재클릭은 해제가 아니라 그 자리로 다시 데려간다. -->
+<!-- 숫자와 막대의 최소 사각형이 한 버튼이다. 시각 요소는 모든 투명 클릭 면보다 위에 서서 직접 클릭을 먼저 받는다. -->
 {#each rails as rail (rail.id)}
   {@const active = margin.activeId === rail.itemId}
+  {@const barLeft = railLeft(rail.lane, gutter, gap)}
+  {@const visualPriority = rails.length + rail.hitPriority + 1}
   <button
-    style:top={`${rail.top}px`}
-    style:height={`${rail.height}px`}
-    style:left={`${railLeft(rail.lane, gutter, gap)}px`}
-    style:width={`${RAIL_WIDTH}px`}
-    class={css(barRecipe.raw({ tone: rail.tone, active }))}
+    style:top={`${rail.hitBox.top}px`}
+    style:height={`${rail.hitBox.bottom - rail.hitBox.top}px`}
+    style:left={`${rail.hitBox.left}px`}
+    style:width={`${rail.hitBox.right - rail.hitBox.left}px`}
+    class={cx(
+      'group',
+      css({
+        position: 'absolute',
+        padding: '0',
+        borderWidth: '0',
+        backgroundColor: 'transparent',
+        pointerEvents: 'none',
+        cursor: 'pointer',
+      }),
+    )}
     aria-label={labelOf(rail)}
     data-prism-margin-activator
-    onclick={() => margin.activate(rail.itemId)}
-    type="button"
-  ></button>
-  <button
-    style:top={`${rail.chipTop}px`}
-    style:left={`${rail.chipLeft}px`}
-    style:width={`${RAIL_CHIP_SIZE}px`}
-    style:height={`${RAIL_CHIP_SIZE}px`}
-    class={css(chipRecipe.raw({ tone: rail.tone, active }))}
-    aria-label={labelOf(rail)}
-    data-prism-margin-activator
+    data-selected={active ? '' : undefined}
     onclick={() => margin.activate(rail.itemId)}
     type="button"
   >
-    {rail.number}
+    <span
+      style:z-index={rail.hitPriority}
+      class={css({ position: 'absolute', inset: '0', pointerEvents: 'auto', cursor: 'pointer' })}
+      aria-hidden="true"
+    ></span>
+    <span
+      style:top={`${rail.top - rail.hitBox.top}px`}
+      style:height={`${rail.height}px`}
+      style:left={`${barLeft - rail.hitBox.left}px`}
+      style:width={`${RAIL_WIDTH}px`}
+      style:z-index={visualPriority}
+      class={css(barRecipe.raw({ tone: rail.tone, active }))}
+      aria-hidden="true"
+    ></span>
+    <span
+      style:top={`${rail.chipTop - rail.hitBox.top}px`}
+      style:left={`${rail.chipLeft - rail.hitBox.left}px`}
+      style:width={`${RAIL_CHIP_SIZE}px`}
+      style:height={`${RAIL_CHIP_SIZE}px`}
+      style:z-index={visualPriority}
+      class={css(chipRecipe.raw({ tone: rail.tone, active }))}
+      aria-hidden="true"
+    >
+      {rail.number}
+    </span>
   </button>
 {/each}
