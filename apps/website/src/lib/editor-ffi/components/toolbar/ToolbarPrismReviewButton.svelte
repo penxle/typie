@@ -1,7 +1,7 @@
 <script lang="ts">
   import { DropdownMenu, DropdownMenuItem } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
-  import PyramidIcon from '~icons/lucide/pyramid';
+  import PrismIcon from '~icons/typie/prism';
   import { tryMarginContext } from '../../../../routes/website/(dashboard)/[slug]/v2/@prism-review/context.svelte';
   import { roundLabel } from '../../../../routes/website/(dashboard)/[slug]/v2/@prism-review/margin-view';
   import ToolbarDropdownButton from './ToolbarDropdownButton.svelte';
@@ -19,7 +19,7 @@
 {#if margin && margin.rounds.length > 0}
   <ToolbarDropdownButton active={selected !== null} label="리뷰" placement="bottom-end" size={toolbarSize}>
     {#snippet anchor()}
-      <ToolbarIcon icon={PyramidIcon} />
+      <ToolbarIcon icon={PrismIcon} />
     {/snippet}
 
     {#snippet floating({ close })}

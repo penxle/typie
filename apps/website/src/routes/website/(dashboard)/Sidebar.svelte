@@ -16,10 +16,10 @@
   import FolderPlusIcon from '~icons/lucide/folder-plus';
   import GripVerticalIcon from '~icons/lucide/grip-vertical';
   import HomeIcon from '~icons/lucide/home';
-  import PyramidIcon from '~icons/lucide/pyramid';
   import SearchIcon from '~icons/lucide/search';
   import SquarePenIcon from '~icons/lucide/square-pen';
   import StickyNoteIcon from '~icons/lucide/sticky-note';
+  import PrismIcon from '~icons/typie/prism';
   import { goto } from '$app/navigation';
   import { graphql } from '$mearie';
   import { getPaneGroup } from './[slug]/@pane/context.svelte';
@@ -575,7 +575,7 @@
           onclick={() => (app.preference.current.prismPanelOpen = !app.preference.current.prismPanelOpen)}
           type="button"
         >
-          <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={PyramidIcon} size={16} />
+          <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={PrismIcon} size={16} />
           <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.muted' })}>PRISM</span>
           <div class={flex({ alignItems: 'center', marginLeft: 'auto', color: 'text.faint', fontSize: '11px' })}>
             {#if navigator.platform.includes('Mac')}

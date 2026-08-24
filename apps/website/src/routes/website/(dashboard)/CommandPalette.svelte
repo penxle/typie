@@ -17,11 +17,11 @@
   import CornerDownLeftIcon from '~icons/lucide/corner-down-left';
   import FolderIcon from '~icons/lucide/folder';
   import Maximize2Icon from '~icons/lucide/maximize-2';
-  import PyramidIcon from '~icons/lucide/pyramid';
   import SearchIcon from '~icons/lucide/search';
   import SettingsIcon from '~icons/lucide/settings';
   import SquarePenIcon from '~icons/lucide/square-pen';
   import XIcon from '~icons/lucide/x';
+  import PrismIcon from '~icons/typie/prism';
   import { beforeNavigate, goto, pushState } from '$app/navigation';
   import { graphql } from '$mearie';
   import EntityIcon from './@context-menu/EntityIcon.svelte';
@@ -225,7 +225,7 @@
           {
             name: app.preference.current.prismPanelOpen ? 'AI 패널 닫기' : 'AI 패널 열기',
             aliases: ['ai', 'assistant'],
-            icon: PyramidIcon,
+            icon: PrismIcon,
             action: () => {
               app.preference.current.prismPanelOpen = !app.preference.current.prismPanelOpen;
             },

@@ -9,10 +9,10 @@
   import ArrowUpIcon from '~icons/lucide/arrow-up';
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import PencilIcon from '~icons/lucide/pencil';
-  import PyramidIcon from '~icons/lucide/pyramid';
   import ThumbsDownIcon from '~icons/lucide/thumbs-down';
   import ThumbsUpIcon from '~icons/lucide/thumbs-up';
   import Trash2Icon from '~icons/lucide/trash-2';
+  import PrismIcon from '~icons/typie/prism';
   import { Img } from '$lib/components';
   import { getMarginContext } from './context.svelte.ts';
   import { cardHeaderSlot } from './margin-view.ts';
@@ -428,7 +428,7 @@
                     color: 'text.faint',
                   })}
                 >
-                  <Icon icon={PyramidIcon} size={12} />
+                  <Icon icon={PrismIcon} size={12} />
                 </span>
               {:else}
                 <Img
