@@ -14,10 +14,7 @@
     "test:browser": "vitest run --config vitest.browser.config.ts"
   },
   "dependencies": {
-    "@hono/node-server": "^2.0.12",
-    "@sentry/sveltekit": "^10.69.0",
-    "cbor-x": "^1.6.5",
-    "lottie-web": "^5.13.0"
+    "@hono/node-server": "^2.0.12"
   },
   "devDependencies": {
     "@floating-ui/dom": "^1.8.0",
@@ -37,6 +34,7 @@
     "@pandacss/dev": "^1.12.0",
     "@pandacss/preset-base": "^1.12.0",
     "@portone/browser-sdk": "^0.1.9",
+    "@sentry/sveltekit": "^10.69.0",
     "@sveltejs/kit": "^2.70.2",
     "@sveltejs/vite-plugin-svelte": "^7.2.0",
     "@types/node": "^26.1.2",
@@ -50,6 +48,7 @@
     "@typie/tsconfig": "workspace:*",
     "@typie/ui": "workspace:*",
     "@vitest/browser-playwright": "4.1.10",
+    "cbor-x": "^1.6.5",
     "dayjs": "^1.11.21",
     "es-hangul": "^2.4.0",
     "fake-indexeddb": "^6.2.5",
@@ -61,6 +60,7 @@
     "jsdom": "^30.0.1",
     "ky": "^2.0.2",
     "lean-qr": "^2.7.2",
+    "lottie-web": "^5.13.0",
     "marked": "^18.0.7",
     "match-sorter": "^8.3.0",
     "mearie": "^0.1.8",
