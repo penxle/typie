@@ -62,6 +62,6 @@
   <p class={itemClass}>「{title}」의 목표</p>
   <p class={consequenceClass}>설정한 목표 글자 수가 사라져요.</p>
 {:else}
-  <p class={itemClass}>하루 목표</p>
-  <p class={consequenceClass}>설정한 하루 목표 글자 수가 사라져요.</p>
+  <p class={itemClass}>일일 목표</p>
+  <p class={consequenceClass}>설정한 일일 목표 글자 수가 사라져요.</p>
 {/if}

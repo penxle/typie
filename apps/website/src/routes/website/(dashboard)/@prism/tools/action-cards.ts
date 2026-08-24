@@ -23,12 +23,12 @@ export type ActionCard = {
 
 export const actionCards: Record<string, ActionCard | undefined> = {
   'delete-entities': {
-    title: '휴지통으로 보낼까요?',
+    title: '삭제할까요?',
     icon: TrashIcon,
     body: DeleteEntitiesBody,
-    confirmLabel: '휴지통으로 보내기',
+    confirmLabel: '삭제',
     action: 'danger',
-    doneLabel: '휴지통으로 보냈어요',
+    doneLabel: '삭제했어요',
   },
   'delete-note': {
     title: '노트를 지울까요?',

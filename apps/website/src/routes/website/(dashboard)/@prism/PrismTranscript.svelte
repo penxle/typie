@@ -17,7 +17,7 @@
   import PrismWaitRow from './PrismWaitRow.svelte';
   import PrismWorkflow from './PrismWorkflow.svelte';
   import { toolCallLabels, toolCards } from './tools/index.ts';
-  import type { ToolPolicy, Transcript, TranscriptMessage } from '@typie/prism';
+  import type { ToolPolicy, ToolRequestMessage, Transcript, TranscriptMessage } from '@typie/prism';
   import type { BlockNode } from './lib/markdown.ts';
 
   type Props = {
@@ -48,12 +48,15 @@
     onRetry,
   }: Props = $props();
 
+  // 카드는 작가의 승인을 받는 자리다 — 해소된 요청은 실제로 누가 해소했는지(resolvedBy)에 매이고, 아직 열린 요청만 지금 정책을
+  // 따른다. 서버가 해소한 것(자동 실행의 destructive 포함)은 다른 서버 도구와 같이 실행 줄로 접힌다. 펌프가 깨어나지 못해 남은
+  // 요청은 정책을 "중요한 일만 확인"으로 되돌리면 그 순간 카드로 돌아와 승인할 수 있다.
+  const cardOf = (message: ToolRequestMessage) =>
+    (message.resolvedBy ?? effectiveResolver(message.tool, policy)) === 'user' ? toolCards[message.tool] : undefined;
+
   const foldable = (message: TranscriptMessage) =>
     (message.role === 'tool' && message.phase === 'executed' && message.ok !== false) ||
-    (message.role === 'tool-request' &&
-      message.workflowId === undefined &&
-      toolCards[message.tool] === undefined &&
-      message.status !== 'pending');
+    (message.role === 'tool-request' && message.workflowId === undefined && cardOf(message) === undefined && message.status !== 'pending');
 
   const labelOf = (message: TranscriptMessage) =>
     message.role === 'tool' || message.role === 'tool-request'
@@ -66,7 +69,7 @@
     (message.role === 'assistant' && message.text === null) ||
     (message.role === 'tool-request' &&
       !foldable(message) &&
-      toolCards[message.tool] === undefined &&
+      cardOf(message) === undefined &&
       !(message.status === 'pending' && failedIds.has(message.toolCallId)));
 
   const entries = $derived(

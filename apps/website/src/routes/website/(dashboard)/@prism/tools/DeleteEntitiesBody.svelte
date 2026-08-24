@@ -76,5 +76,5 @@
     {/each}
   </div>
 
-  <p class={consequenceClass}>{hasFolder ? '폴더 안의 것도 함께 가요. ' : ''}휴지통에서 30일 안에 되살릴 수 있어요.</p>
+  <p class={consequenceClass}>{hasFolder ? '폴더 안의 것도 함께 삭제돼요. ' : ''}삭제 후 30일 동안 휴지통에 보관돼요.</p>
 {/if}

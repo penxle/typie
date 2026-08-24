@@ -13,7 +13,7 @@ import { pubsub } from '#/pubsub.ts';
 import { prismApps } from '#/utils/prism-apps.ts';
 import { projectFrame } from '#/utils/prism-events.ts';
 import { absentDelay, liveFieldKey, PARKED_KINDS, parseLogKey, planEvent, shouldStop } from '#/utils/prism-ingest-core.ts';
-import { serveTool } from '#/utils/prism-serve.ts';
+import { serveTool, toolResolverOf } from '#/utils/prism-serve.ts';
 import { closeRun, linkWorkflowFromEvent, titleSession } from '#/utils/prism-workflows.ts';
 import { ensureIngest, shutdown } from '../prism-queue.ts';
 import { pushCopy, pushKey } from './prism-core.ts';
@@ -362,7 +362,16 @@ const runPump = async (ctx: PumpContext): Promise<PumpOutcome> => {
     await clearLive([...fields]);
   };
 
-  const onEvent = async (event: EventFrame) => {
+  // 누가 해소했는지는 prism 이벤트에 없다 — 원장(prism_tool_calls.resolver)이 유일한 기록이라, 저장·발행 전에 여기서 굳힌다.
+  // 카드/실행 줄 판정이 현재 정책이 아니라 이 값에 매이도록【오너 2026-08-25】.
+  const withResolver = async (event: EventFrame): Promise<EventFrame> => {
+    if (target.kind !== 'agent' || event.kind !== 'tool.resolved' || !event.context?.toolCallId) return event;
+    const resolver = await toolResolverOf(target.sessionId, event.context.toolCallId);
+    return resolver === null ? event : { ...event, data: { ...event.data, resolvedBy: resolver.toLowerCase() } };
+  };
+
+  const onEvent = async (raw: EventFrame) => {
+    const event = await withResolver(raw);
     const plan = planEvent(parkedScope, event, cursor);
     if (PARKED_KINDS.has(event.kind)) parkedEvents.push({ kind: event.kind, context: event.context, data: event.data });
 

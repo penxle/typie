@@ -355,3 +355,9 @@ export const PrismToolPolicy = {
   STANDARD: 'STANDARD',
   FULL: 'FULL',
 } as const;
+
+export type PrismToolResolver = keyof typeof PrismToolResolver;
+export const PrismToolResolver = {
+  USER: 'USER',
+  SERVER: 'SERVER',
+} as const;
