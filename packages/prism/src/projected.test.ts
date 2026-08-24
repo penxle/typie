@@ -64,6 +64,79 @@ describe('tool data registry', () => {
     ).toThrow();
   });
 
+  it('delete-entities 요청은 ids를 보존하고, 형태 위반은 빈 목록으로 떨어진다', () => {
+    expect(
+      ProjectedEventSchema.parse({
+        kind: 'tool.requested',
+        data: { tool: 'delete-entities', data: { ids: ['E1', 'E2'], extra: 1 } },
+      }).data,
+    ).toEqual({ tool: 'delete-entities', data: { ids: ['E1', 'E2'] } });
+    expect(ProjectedEventSchema.parse({ kind: 'tool.requested', data: { tool: 'delete-entities', data: { ids: 'E1' } } }).data).toEqual({
+      tool: 'delete-entities',
+      data: { ids: [] },
+    });
+    expect(ProjectedEventSchema.parse({ kind: 'tool.requested', data: { tool: 'delete-entities', data: null } }).data).toEqual({
+      tool: 'delete-entities',
+      data: { ids: [] },
+    });
+  });
+
+  it('delete-entities 해소 결과는 성공 봉투와 실패 봉투를 모두 보존한다', () => {
+    expect(
+      ProjectedEventSchema.parse({ kind: 'tool.resolved', data: { tool: 'delete-entities', ok: true, data: { ok: true, count: 2 } } }).data,
+    ).toEqual({ tool: 'delete-entities', ok: true, data: { ok: true, count: 2 } });
+
+    const declined = { ok: false, code: 'declined', message: '작가가 이 행동을 하지 않기로 했어요' };
+    expect(ProjectedEventSchema.parse({ kind: 'tool.resolved', data: { tool: 'delete-entities', ok: true, data: declined } }).data).toEqual(
+      { tool: 'delete-entities', ok: true, data: declined },
+    );
+
+    expect(() =>
+      ProjectedEventSchema.parse({ kind: 'tool.resolved', data: { tool: 'delete-entities', ok: true, data: { ok: true } } }),
+    ).toThrow();
+  });
+
+  it('되돌리기 어려운 나머지 셋(delete-note·delete-goal·update-sharing)도 요청 data를 보존하고, 형태 위반은 빈 좌표로 떨어진다', () => {
+    const requested = (tool: string, data: unknown) => ProjectedEventSchema.parse({ kind: 'tool.requested', data: { tool, data } }).data;
+    expect(requested('delete-note', { noteId: 'N1', extra: 1 })).toEqual({ tool: 'delete-note', data: { noteId: 'N1' } });
+    expect(requested('delete-note', { noteId: 5 })).toEqual({ tool: 'delete-note', data: { noteId: '' } });
+    expect(requested('delete-goal', {})).toEqual({ tool: 'delete-goal', data: {} });
+    expect(requested('delete-goal', { id: 'E1' })).toEqual({ tool: 'delete-goal', data: { id: 'E1' } });
+    expect(requested('delete-goal', { id: 5 })).toEqual({ tool: 'delete-goal', data: { id: '' } });
+    expect(requested('update-sharing', { ids: ['D1', 'E2'], visibility: 'PUBLIC', recursive: true, extra: 1 })).toEqual({
+      tool: 'update-sharing',
+      data: { ids: ['D1', 'E2'], visibility: 'PUBLIC', recursive: true },
+    });
+    expect(requested('update-sharing', { ids: ['E1'], visibility: 'SECRET' })).toEqual({
+      tool: 'update-sharing',
+      data: { ids: [], visibility: null },
+    });
+  });
+
+  it('되돌리기 어려운 나머지 셋의 해소 결과는 성공 봉투와 실패 봉투를 모두 보존한다', () => {
+    const resolved = (tool: string, data: unknown) =>
+      ProjectedEventSchema.parse({ kind: 'tool.resolved', data: { tool, ok: true, data } }).data;
+    const declined = { ok: false, code: 'declined', message: '작가가 이 행동을 하지 않기로 했어요' };
+    expect(resolved('delete-note', { ok: true, noteId: 'N1' })).toEqual({
+      tool: 'delete-note',
+      ok: true,
+      data: { ok: true, noteId: 'N1' },
+    });
+    expect(resolved('delete-goal', { ok: true })).toEqual({ tool: 'delete-goal', ok: true, data: { ok: true } });
+    const change = { id: 'E1', kind: 'document', title: '바다', from: 'PRIVATE', to: 'UNLISTED' };
+    expect(resolved('update-sharing', { ok: true, count: 1, changes: [change] })).toEqual({
+      tool: 'update-sharing',
+      ok: true,
+      data: { ok: true, count: 1, changes: [change] },
+    });
+    expect(() => resolved('update-sharing', { ok: true, count: 1 })).toThrow();
+    for (const tool of ['delete-note', 'delete-goal', 'update-sharing']) {
+      expect(resolved(tool, declined)).toEqual({ tool, ok: true, data: declined });
+    }
+    expect(() => resolved('delete-note', { ok: true })).toThrow();
+    expect(() => resolved('update-sharing', { ok: true })).toThrow();
+  });
+
   it('등록 도구의 data 형태 위반은 던진다', () => {
     expect(() =>
       ProjectedEventSchema.parse({ kind: 'tool.requested', data: { tool: 'confirm-review', data: { tier: 'ultra' } } }),

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createQuery } from '@mearie/svelte';
+  import { NOTE_DEFAULT_COLOR } from '@typie/lib/catalogs';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Button, Icon, Modal } from '@typie/ui/components';
@@ -101,7 +102,7 @@
 
   let inputValue = $state('');
   let inputEl = $state<HTMLTextAreaElement>();
-  let selectedColor = $state('gray');
+  let selectedColor = $state<string>(NOTE_DEFAULT_COLOR);
   let createRequestId = 0;
   let activeCreateRequest = $state<{ id: number; siteId: string } | null>(null);
   const createInFlight = $derived(activeCreateRequest?.siteId === currentSiteId);
@@ -315,7 +316,7 @@
       if (activeCreateRequest?.id !== requestId || app.preference.current.currentSiteId !== siteId) return;
       if (inputValue === submittedContent && selectedColor === submittedColor && outcome.status === 'success') {
         inputValue = '';
-        selectedColor = 'gray';
+        selectedColor = NOTE_DEFAULT_COLOR;
       }
       if (outcome.status === 'success') {
         inputEl?.focus();

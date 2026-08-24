@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { pendingRootRequests, runningWorkflows } from '@typie/prism';
+  import { effectiveResolver, pendingRootRequests, runningWorkflows } from '@typie/prism';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Icon } from '@typie/ui/components';
@@ -16,8 +16,8 @@
   import PrismToolRequest from './PrismToolRequest.svelte';
   import PrismWaitRow from './PrismWaitRow.svelte';
   import PrismWorkflow from './PrismWorkflow.svelte';
-  import { clientResolvers, toolCallLabels, toolCards } from './tools/index.ts';
-  import type { Transcript, TranscriptMessage } from '@typie/prism';
+  import { toolCallLabels, toolCards } from './tools/index.ts';
+  import type { ToolPolicy, Transcript, TranscriptMessage } from '@typie/prism';
   import type { BlockNode } from './lib/markdown.ts';
 
   type Props = {
@@ -27,6 +27,7 @@
     sessionId: string | null;
     failedIds: ReadonlySet<string>;
     reconnecting: boolean;
+    policy: ToolPolicy;
     spinnerOwner?: 'panel' | 'row';
     waitSpinnerAnchor?: HTMLElement;
     onResolve: (agentId: string, toolCallId: string, input: unknown) => Promise<void>;
@@ -40,6 +41,7 @@
     sessionId,
     failedIds,
     reconnecting,
+    policy,
     spinnerOwner = 'row',
     waitSpinnerAnchor = $bindable(),
     onResolve,
@@ -347,7 +349,7 @@
   const RECONNECTING_WAIT = { label: '다시 연결하는 중', text: '다시 연결하는 중' };
 
   const workflowActive = $derived(runningWorkflows(transcript).length > 0);
-  const awaitingUser = $derived(pendingRootRequests(transcript).some((request) => clientResolvers[request.tool] === undefined));
+  const awaitingUser = $derived(pendingRootRequests(transcript).some((request) => effectiveResolver(request.tool, policy) === 'user'));
 
   const waitState = $derived.by<WaitState>(() => {
     if (awaitingUser) {

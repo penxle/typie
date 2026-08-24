@@ -1,7 +1,7 @@
 <script lang="ts">
   import { createFragment, createMutation, createSubscription } from '@mearie/svelte';
   import { TypieError } from '@typie/lib/errors';
-  import { pendingRootRequests, runningWorkflows } from '@typie/prism';
+  import { effectiveResolver, pendingRootRequests, runningWorkflows } from '@typie/prism';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { pointerCapture, tooltip } from '@typie/ui/actions';
@@ -42,7 +42,7 @@
   import { startChips } from './start-chips.ts';
   import { clientResolvers } from './tools/index.ts';
   import { workflowApps } from './workflows/index.ts';
-  import type { WorkflowMessage } from '@typie/prism';
+  import type { ToolPolicy, WorkflowMessage } from '@typie/prism';
   import type { DashboardLayout_PrismPanel_user$key } from '$mearie';
 
   type Props = {
@@ -65,6 +65,10 @@
         id
         preferences
 
+        sites {
+          id
+        }
+
         prismCommands {
           name
           description
@@ -76,6 +80,7 @@
           title
           archivedAt
           updatedAt
+          toolPolicy
         }
       }
     `),
@@ -136,6 +141,7 @@
             title
             archivedAt
             updatedAt
+            toolPolicy
           }
         }
       }
@@ -162,13 +168,30 @@
     `),
   );
 
+  const [updatePrismSessionToolPolicy] = createMutation(
+    graphql(`
+      mutation DashboardLayout_PrismPanel_UpdateToolPolicy_Mutation($input: UpdatePrismSessionToolPolicyInput!) {
+        updatePrismSessionToolPolicy(input: $input) {
+          id
+          toolPolicy
+        }
+      }
+    `),
+  );
+
   const selected = createPrismSessionState(user.data.id);
   const sessions = $derived(user.data.prismSessions);
+  const currentSession = $derived(sessions.find((session) => session.id === selected.current) ?? null);
+  const currentSiteId = $derived((user.data.sites.find((s) => s.id === app.preference.current.currentSiteId) ?? user.data.sites[0])?.id);
+
+  const pendingPolicy = $derived<ToolPolicy>(app.preference.current.prismToolPolicy ?? 'STANDARD');
 
   const chat = createPrismChat({
     load: fetchTranscript,
     send: async (sessionId, message) => {
-      const resp = await sendPrismMessage({ input: { sessionId: sessionId ?? undefined, message } });
+      const resp = await sendPrismMessage({
+        input: { sessionId: sessionId ?? undefined, message, siteId: currentSiteId, toolPolicy: sessionId ? undefined : pendingPolicy },
+      });
       return { sessionId: resp.sendPrismMessage.session.id, runSeq: resp.sendPrismMessage.runSeq };
     },
     cancel: async (sessionId) => {
@@ -178,7 +201,25 @@
 
   const openDocuments = getOpenDocuments();
 
-  const blocked = $derived(pendingRootRequests(chat.transcript).some((request) => clientResolvers[request.tool] === undefined));
+  const policy = $derived<ToolPolicy>(currentSession?.toolPolicy ?? pendingPolicy);
+  const blocked = $derived(pendingRootRequests(chat.transcript).some((request) => effectiveResolver(request.tool, policy) === 'user'));
+
+  const onPolicyChange = async (next: ToolPolicy) => {
+    const sessionId = chat.sessionId;
+    if (sessionId === null) {
+      app.preference.current.prismToolPolicy = next;
+      return;
+    }
+
+    try {
+      await updatePrismSessionToolPolicy(
+        { input: { sessionId, policy: next } },
+        { metadata: { cache: { optimisticResponse: { updatePrismSessionToolPolicy: { id: sessionId, toolPolicy: next } } } } },
+      );
+    } catch {
+      Toast.error('설정을 바꾸지 못했어요. 잠시 후 다시 시도해 주세요');
+    }
+  };
 
   const commands = $derived(
     user.data.prismCommands?.map((command) => ({
@@ -277,7 +318,6 @@
     _hover: { backgroundColor: 'interactive.hover' },
   });
   let listOpen = $state(false);
-  const currentSession = $derived(sessions.find((session) => session.id === selected.current) ?? null);
   const currentTitle = $derived(currentSession ? sessionLabel(currentSession) : '새 대화');
 
   let seenTitle: string | null = null;
@@ -944,6 +984,7 @@
               onResolve={resolveTool}
               onRetry={(toolCallId) => autoResolver.retry(toolCallId)}
               pending={chat.pending}
+              {policy}
               reconnecting={disconnected}
               sessionId={chat.sessionId}
               spinnerOwner={indicatorSpinnerOwner}
@@ -1013,6 +1054,7 @@
             disabled={false}
             {onSend}
             {onStop}
+            policy={{ current: policy, disabled: false, onChange: onPolicyChange }}
             running={chat.transcript.run === 'running'}
             status={composerStatus}
             bind:text={draft}

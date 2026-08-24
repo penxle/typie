@@ -2,11 +2,18 @@
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { autosize } from '@typie/ui/actions';
-  import { Icon } from '@typie/ui/components';
+  import { Icon, Menu, MenuItem } from '@typie/ui/components';
   import SendIcon from '~icons/lucide/arrow-up';
+  import BookOpenIcon from '~icons/lucide/book-open';
+  import CheckIcon from '~icons/lucide/check';
+  import ChevronDownIcon from '~icons/lucide/chevron-down';
+  import ShieldCheckIcon from '~icons/lucide/shield-check';
   import StopIcon from '~icons/lucide/square';
+  import ZapIcon from '~icons/lucide/zap';
   import { commandGate, commandsMatching } from './lib/commands.ts';
   import { swap } from './lib/motion.ts';
+  import type { ToolPolicy } from '@typie/prism';
+  import type { Component } from 'svelte';
   import type { PrismCommand } from './lib/commands.ts';
 
   type Props = {
@@ -15,12 +22,37 @@
     blocked: boolean;
     commands: PrismCommand[] | null;
     status: { text: string; stop: string | null } | null;
+    policy: { current: ToolPolicy; disabled: boolean; onChange: (policy: ToolPolicy) => void };
     onSend: (text: string) => Promise<void>;
     onStop: () => Promise<void>;
     text?: string;
   };
 
-  let { running, disabled, blocked, commands, status, onSend, onStop, text = $bindable('') }: Props = $props();
+  let { running, disabled, blocked, commands, status, policy, onSend, onStop, text = $bindable('') }: Props = $props();
+
+  const policyOptions: { value: ToolPolicy; label: string; description: string; icon: Component }[] = [
+    { value: 'READ_ONLY', label: '읽기 전용', description: '스페이스를 읽기만 하고 바꾸지 않아요.', icon: BookOpenIcon },
+    { value: 'STANDARD', label: '중요한 일만 확인', description: '지우거나 공개 범위를 바꿀 때만 먼저 물어봐요.', icon: ShieldCheckIcon },
+    { value: 'FULL', label: '자동 실행', description: '묻지 않고 바로 실행해요.', icon: ZapIcon },
+  ];
+  const currentPolicy = $derived(policyOptions.find((option) => option.value === policy.current) ?? policyOptions[1]);
+
+  const policyAnchorStyle = css.raw({
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    flexShrink: '0',
+    paddingX: '10px',
+    paddingY: '5px',
+    borderWidth: '1px',
+    borderColor: 'border.default',
+    borderRadius: '8px',
+    fontSize: '12px',
+    fontWeight: 'semibold',
+    color: 'text.subtle',
+    _hover: { backgroundColor: 'surface.muted', color: 'text.default' },
+    _disabled: { color: 'text.disabled!', backgroundColor: 'transparent!' },
+  });
 
   const popoverStyle = css.raw({
     position: 'absolute',
@@ -272,6 +304,27 @@
           use:autosize={{ value: text }}></textarea>
 
         <div class={flex({ alignItems: 'center', gap: '8px', minHeight: '28px' })}>
+          <Menu style={policyAnchorStyle} disabled={policy.disabled} offset={8} placement="top-start">
+            {#snippet button()}
+              <Icon style={css.raw({ color: 'text.subtle' })} icon={currentPolicy.icon} size={14} />
+              <span>{currentPolicy.label}</span>
+              <Icon icon={ChevronDownIcon} size={12} />
+            {/snippet}
+
+            {#each policyOptions as option (option.value)}
+              <MenuItem icon={option.icon} onclick={() => policy.onChange(option.value)}>
+                <div class={flex({ flexDirection: 'column', gap: '2px' })}>
+                  <span>{option.label}</span>
+                  <span class={css({ fontSize: '11px', fontWeight: 'medium', color: 'text.faint' })}>{option.description}</span>
+                </div>
+
+                {#if option.value === policy.current}
+                  <Icon style={css.raw({ marginLeft: 'auto', color: 'text.brand' })} icon={CheckIcon} size={14} />
+                {/if}
+              </MenuItem>
+            {/each}
+          </Menu>
+
           {#if commandError}
             <span
               class={css({

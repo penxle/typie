@@ -8,6 +8,7 @@
     "./dayjs": "./src/dayjs/index.ts",
     "./postcss": "./src/postcss/index.js",
     "./svelte": "./src/svelte/index.ts",
+    "./catalogs": "./src/catalogs.ts",
     "./const": "./src/const.ts",
     "./desktop": "./src/desktop.ts",
     "./enums": "./src/enums.ts",

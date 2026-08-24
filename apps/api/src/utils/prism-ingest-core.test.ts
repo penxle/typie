@@ -104,6 +104,34 @@ test('workflow 펌프의 질문 푸시 op 도 at 을 싣는다', () => {
   ]);
 });
 
+test('tool.requested: tier 보유 도구는 tool-serve op를 낸다 (agent·workflow 공통)', () => {
+  const event = ev(5, 'tool.requested', { ...call, toolCallId: 'tc-1' }, { tool: 'search-entities', data: { query: '해변' } });
+  assert.deepEqual(planEvent('agent', event, 0).ops, [
+    { op: 'tool-serve', toolCallId: 'tc-1', tool: 'search-entities', input: { query: '해변' }, agentId: 'chat-1', runSeq: 1 },
+  ]);
+  assert.deepEqual(planEvent('workflow', event, 0).ops, [
+    { op: 'tool-serve', toolCallId: 'tc-1', tool: 'search-entities', input: { query: '해변' }, agentId: 'chat-1', runSeq: null },
+  ]);
+});
+
+test('tool.requested: 인터랙티브·client·미등재 도구는 tool-serve를 내지 않는다', () => {
+  for (const tool of ['ask-user', 'confirm-review', 'list-open-documents', 'unknown-tool']) {
+    const event = ev(5, 'tool.requested', { ...call, toolCallId: 'tc-1' }, { tool, data: {} });
+    assert.equal(
+      planEvent('agent', event, 0).ops.some((op) => op.op === 'tool-serve'),
+      false,
+    );
+  }
+});
+
+test('destructive 도구도 tool-serve op는 난다 (실행 여부는 서브 시점 판정)', () => {
+  const event = ev(5, 'tool.requested', { ...call, toolCallId: 'tc-1' }, { tool: 'delete-entities', data: { ids: ['E1'] } });
+  assert.equal(
+    planEvent('agent', event, 0).ops.some((op) => op.op === 'tool-serve'),
+    true,
+  );
+});
+
 test('turn.completed는 라이브 봉인, 종결은 라이브 비움', () => {
   assert.deepEqual(planEvent('agent', ev(1, 'turn.completed', turn, { text: 't' }), 0), {
     advance: true,

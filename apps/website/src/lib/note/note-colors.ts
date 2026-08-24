@@ -1,3 +1,4 @@
+import { NOTE_COLORS } from '@typie/lib/catalogs';
 import { token } from '@typie/styled-system/tokens';
 
 export type NoteColorOption = {
@@ -6,14 +7,16 @@ export type NoteColorOption = {
   color: string;
 };
 
-export const noteColors: readonly NoteColorOption[] = [
-  { label: '그레이', value: 'gray', color: token('colors.palette.gray') },
-  { label: '레드', value: 'red', color: token('colors.palette.red') },
-  { label: '오렌지', value: 'orange', color: token('colors.palette.orange') },
-  { label: '옐로', value: 'yellow', color: token('colors.palette.yellow') },
-  { label: '그린', value: 'green', color: token('colors.palette.green') },
-  { label: '블루', value: 'blue', color: token('colors.palette.blue') },
-  { label: '퍼플', value: 'purple', color: token('colors.palette.purple') },
-];
+const noteColorStyles: Record<string, { label: string; color: string }> = {
+  gray: { label: '그레이', color: token('colors.palette.gray') },
+  red: { label: '레드', color: token('colors.palette.red') },
+  orange: { label: '오렌지', color: token('colors.palette.orange') },
+  yellow: { label: '옐로', color: token('colors.palette.yellow') },
+  green: { label: '그린', color: token('colors.palette.green') },
+  blue: { label: '블루', color: token('colors.palette.blue') },
+  purple: { label: '퍼플', color: token('colors.palette.purple') },
+};
+
+export const noteColors: readonly NoteColorOption[] = NOTE_COLORS.map((value) => ({ ...noteColorStyles[value], value }));
 
 export const getNoteColor = (value: string): string | undefined => noteColors.find((color) => color.value === value)?.color;

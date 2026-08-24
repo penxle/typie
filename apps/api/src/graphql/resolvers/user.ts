@@ -24,7 +24,7 @@ import { supportsPlanInterval } from '@typie/lib/plan';
 import { redeemCodeSchema, userSchema } from '@typie/lib/validation';
 import argon2 from 'argon2';
 import dayjs from 'dayjs';
-import { and, asc, desc, eq, getTableColumns, gt, gte, inArray, isNotNull, lt, lte, ne, sql, sum } from 'drizzle-orm';
+import { and, asc, desc, eq, getTableColumns, gt, inArray, isNotNull, lt, ne, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import qs from 'query-string';
 import { redis } from '#/cache.ts';
@@ -33,7 +33,6 @@ import {
   Coupons,
   CreditCodes,
   db,
-  DocumentCharacterCountChanges,
   Entities,
   first,
   firstOrThrow,
@@ -47,7 +46,6 @@ import {
   TableCode,
   UserBillingKeys,
   UserDevices,
-  UserGoals,
   UserInAppPurchases,
   UserMarketingConsents,
   UserPaymentCredits,
@@ -70,8 +68,6 @@ import * as portone from '#/external/portone.ts';
 import { evaluateCouponCondition } from '#/utils/coupon.ts';
 import { getDocumentFontFamilies } from '#/utils/document.ts';
 import { resolveUserEntitlement, selectRepresentativeSubscription } from '#/utils/entitlement.ts';
-import { getExcludedDeltasByDate } from '#/utils/excluded-stats.ts';
-import { getEffectiveTarget } from '#/utils/goal.ts';
 import { precheckIapEnroll } from '#/utils/iap-normalize.ts';
 import { opsAlert } from '#/utils/ops-alert.ts';
 import { assertActiveSubscription } from '#/utils/plan.ts';
@@ -80,6 +76,7 @@ import { enqueueSearchSyncForEntityIds } from '#/utils/search-index.ts';
 import { hasLiveYearlyBillingKeySubscription } from '#/utils/subscription-billing-key.ts';
 import { lockUserSubscriptionState } from '#/utils/subscription-lock.ts';
 import { getUserUsage } from '#/utils/user.ts';
+import { currentUserGoal, dailyCharacterChanges, dailyGoalHistory } from '#/utils/user-stats.ts';
 import { builder } from '../builder.ts';
 import {
   CharacterCountChange,
@@ -326,102 +323,22 @@ User.implement({
       type: UserGoal,
       nullable: true,
       resolve: async (self) => {
-        const row = await db
-          .select({ id: UserGoals.id, targetCharacterCount: UserGoals.targetCharacterCount })
-          .from(UserGoals)
-          .where(and(eq(UserGoals.userId, self.id), lte(UserGoals.effectiveAt, dayjs.kst().startOf('day'))))
-          .orderBy(desc(UserGoals.effectiveAt))
-          .limit(1)
-          .then(first);
-
-        return row && row.targetCharacterCount !== null ? row.id : null;
+        const row = await currentUserGoal(self.id);
+        return row?.id ?? null;
       },
     }),
 
     goalHistory: t.withAuth({ session: true }).field({
       type: [UserGoalHistory],
       resolve: async (self) => {
-        const startOfToday = dayjs.kst().startOf('day');
-        const startOfTomorrow = startOfToday.add(1, 'day');
-        const from = startOfTomorrow.subtract(365, 'days');
-
-        const goalRows = await db
-          .select({ targetCharacterCount: UserGoals.targetCharacterCount, effectiveAt: UserGoals.effectiveAt })
-          .from(UserGoals)
-          .where(and(eq(UserGoals.userId, self.id), lt(UserGoals.effectiveAt, startOfTomorrow)));
-
-        const documentDate = sql<string>`DATE(${DocumentCharacterCountChanges.bucket} AT TIME ZONE 'Asia/Seoul')`.mapWith(dayjs.kst);
-        const additionRows = await db
-          .select({ date: documentDate, additions: sum(DocumentCharacterCountChanges.additions).mapWith(Number) })
-          .from(DocumentCharacterCountChanges)
-          .where(
-            and(
-              eq(DocumentCharacterCountChanges.userId, self.id),
-              gte(DocumentCharacterCountChanges.bucket, from),
-              lt(DocumentCharacterCountChanges.bucket, startOfTomorrow),
-            ),
-          )
-          .groupBy(documentDate);
-
-        const additionsByDate = new Map(additionRows.map((row) => [row.date.format('YYYY-MM-DD'), row.additions]));
-
-        const excludedByDate = await getExcludedDeltasByDate({ userId: self.id, from, to: startOfTomorrow });
-
-        const result = [];
-        let cursor = from;
-        while (!cursor.isAfter(startOfToday)) {
-          const target = getEffectiveTarget(goalRows, cursor);
-          if (target !== null && target > 0) {
-            const key = cursor.format('YYYY-MM-DD');
-            const additions = (additionsByDate.get(key) ?? 0) - (excludedByDate.get(key)?.additions ?? 0);
-            result.push({ date: cursor, targetCharacterCount: target, additions, achieved: additions >= target });
-          }
-          cursor = cursor.add(1, 'day');
-        }
-
-        return result;
+        return await dailyGoalHistory(self.id);
       },
     }),
 
     characterCountChanges: t.field({
       type: [CharacterCountChange],
       resolve: async (self) => {
-        const startOfTomorrow = dayjs.kst().startOf('day').add(1, 'day');
-
-        const documentDate = sql<string>`DATE(${DocumentCharacterCountChanges.bucket} AT TIME ZONE 'Asia/Seoul')`.mapWith(dayjs.kst);
-
-        const excludedByDate = await getExcludedDeltasByDate({
-          userId: self.id,
-          from: startOfTomorrow.subtract(365, 'days'),
-          to: startOfTomorrow,
-        });
-
-        const rows = await db
-          .select({
-            date: documentDate,
-            additions: sum(DocumentCharacterCountChanges.additions).mapWith(Number),
-            deletions: sum(DocumentCharacterCountChanges.deletions).mapWith(Number),
-          })
-          .from(DocumentCharacterCountChanges)
-          .where(
-            and(
-              eq(DocumentCharacterCountChanges.userId, self.id),
-              gte(DocumentCharacterCountChanges.bucket, startOfTomorrow.subtract(365, 'days')),
-              lt(DocumentCharacterCountChanges.bucket, startOfTomorrow),
-            ),
-          )
-          .groupBy(documentDate)
-          .orderBy(documentDate);
-
-        return rows.map((row) => {
-          const excluded = excludedByDate.get(row.date.format('YYYY-MM-DD'));
-
-          return {
-            ...row,
-            additions: row.additions - (excluded?.additions ?? 0),
-            deletions: row.deletions - (excluded?.deletions ?? 0),
-          };
-        });
+        return await dailyCharacterChanges(self.id);
       },
     }),
 

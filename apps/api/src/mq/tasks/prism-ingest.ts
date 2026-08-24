@@ -1,6 +1,6 @@
 import { setTimeout as timeout } from 'node:timers/promises';
 import { logger } from '@typie/lib';
-import { applyDelta, parked, sealTurn } from '@typie/prism';
+import { applyDelta, effectiveResolver, parked, pendingServerRequests, sealTurn } from '@typie/prism';
 import { DelayedError } from 'bullmq';
 import dayjs from 'dayjs';
 import { and, asc, eq, inArray, ne } from 'drizzle-orm';
@@ -12,10 +12,11 @@ import { pubsub } from '#/pubsub.ts';
 import { prismApps } from '#/utils/prism-apps.ts';
 import { projectFrame } from '#/utils/prism-events.ts';
 import { absentDelay, liveFieldKey, PARKED_KINDS, parseLogKey, planEvent, shouldStop } from '#/utils/prism-ingest-core.ts';
+import { serveTool } from '#/utils/prism-serve.ts';
 import { closeRun, linkWorkflowFromEvent, titleSession } from '#/utils/prism-workflows.ts';
 import { ensureIngest, shutdown } from '../prism-queue.ts';
 import { askBody, pushKey, subjectTitle } from './prism-core.ts';
-import type { EventFrame, ParkedEvent, StreamFrame, TurnLive } from '@typie/prism';
+import type { EventFrame, ParkedEvent, ParkedOptions, StreamFrame, TurnLive } from '@typie/prism';
 import type { Job } from 'bullmq';
 import type { Transaction } from '#/db/index.ts';
 import type { ProjectedScope } from '#/utils/prism-events.ts';
@@ -70,8 +71,9 @@ const loadSettledWorkflows = async (sessionId: string): Promise<Set<string>> => 
   return new Set(rows.map((row) => row.prismWorkflowId));
 };
 
-export const agentParked = async (sessionId: string, events: ParkedEvent[]): Promise<boolean> =>
-  parked(events, 'agent') && parked(events, 'agent', { settledWorkflows: await loadSettledWorkflows(sessionId) });
+export const agentParked = async (sessionId: string, events: ParkedEvent[], resolverOf?: ParkedOptions['resolverOf']): Promise<boolean> =>
+  parked(events, 'agent', { resolverOf }) &&
+  parked(events, 'agent', { settledWorkflows: await loadSettledWorkflows(sessionId), resolverOf });
 
 const pushAsk = async (session: SessionRef, op: Extract<DomainOp, { op: 'ask-push' }>) => {
   const { PUSH_TTL_SECONDS, sendPushNotificationOnce } = await import('#/external/firebase.ts');
@@ -93,7 +95,7 @@ const applyAgentOp = async (tx: Transaction, session: SessionRef, op: DomainOp):
       await tx
         .insert(PrismRuns)
         .values({ sessionId: session.id, runSeq: op.runSeq, startedAt: dayjs(op.at) })
-        .onConflictDoNothing({ target: [PrismRuns.sessionId, PrismRuns.runSeq] });
+        .onConflictDoUpdate({ target: [PrismRuns.sessionId, PrismRuns.runSeq], set: { startedAt: dayjs(op.at) } });
       return null;
     }
 
@@ -125,6 +127,17 @@ const applyAgentOp = async (tx: Transaction, session: SessionRef, op: DomainOp):
     case 'ask-push': {
       await pushAsk(session, op);
       return null;
+    }
+
+    case 'tool-serve': {
+      const { toolCallId, tool, input, agentId, runSeq } = op;
+      return async () => {
+        try {
+          await serveTool({ sessionId: session.id, agentId, runSeq, toolCallId, tool, input });
+        } catch (err) {
+          throw new Error(`prism tool serve failed for ${toolCallId}`, { cause: err });
+        }
+      };
     }
 
     case 'workflow-settle': {
@@ -161,6 +174,17 @@ const applyWorkflowOp = async (
       return null;
     }
 
+    case 'tool-serve': {
+      const { toolCallId, tool, input, agentId, runSeq } = op;
+      return async () => {
+        try {
+          await serveTool({ sessionId: session.id, agentId, runSeq, toolCallId, tool, input });
+        } catch (err) {
+          throw new Error(`prism tool serve failed for ${toolCallId}`, { cause: err });
+        }
+      };
+    }
+
     default: {
       return null;
     }
@@ -180,6 +204,23 @@ const runPump = async (ctx: PumpContext): Promise<PumpOutcome> => {
   const parkedScope = target.kind;
   const live = new Map<string, TurnLive>();
   const parkedEvents = await loadParkedEvents(target);
+
+  const policyRow = await db
+    .select({ toolPolicy: PrismSessions.toolPolicy })
+    .from(PrismSessions)
+    .where(eq(PrismSessions.id, session.id))
+    .then(firstOrThrow);
+
+  for (const request of pendingServerRequests(parkedEvents, parkedScope, policyRow.toolPolicy)) {
+    await serveTool({
+      sessionId: session.id,
+      agentId: request.agentId,
+      runSeq: request.runSeq,
+      toolCallId: request.toolCallId,
+      tool: request.tool,
+      input: request.input,
+    });
+  }
 
   const requireWorkflow = (): typeof PrismWorkflows.$inferSelect => {
     if (ctx.workflow === null) throw new Error('prism workflow context missing');
@@ -220,8 +261,11 @@ const runPump = async (ctx: PumpContext): Promise<PumpOutcome> => {
     return ctx.workflow?.state === 'RUNNING';
   };
 
+  const resolverOf = (tool: string) => effectiveResolver(tool, policyRow.toolPolicy);
   const isParked = async (): Promise<boolean> =>
-    target.kind === 'agent' ? await agentParked(target.sessionId, parkedEvents) : parked(parkedEvents, parkedScope);
+    target.kind === 'agent'
+      ? await agentParked(target.sessionId, parkedEvents, resolverOf)
+      : parked(parkedEvents, parkedScope, { resolverOf });
 
   const stopNow = async (): Promise<boolean> => synced && shouldStop({ synced, open: await isOpen(), parked: await isParked() });
 

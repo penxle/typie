@@ -43,6 +43,7 @@ export type AppPreference = {
 
   currentSiteId?: string;
   trialReminderLastShownDate?: string;
+  prismToolPolicy?: 'READ_ONLY' | 'STANDARD' | 'FULL';
 };
 
 type AppState = {

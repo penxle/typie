@@ -1,9 +1,18 @@
 import * as Sentry from '@sentry/node';
 import { logger } from '@typie/lib';
-import { PrismReaction, PrismRunState, PrismToolPhase, PrismToolRequestStatus, PrismTurnState, PrismWorkflowState } from '@typie/lib/enums';
-import { TypieError } from '@typie/lib/errors';
+import {
+  EntityAvailability,
+  PrismReaction,
+  PrismRunState,
+  PrismToolPhase,
+  PrismToolPolicy,
+  PrismToolRequestStatus,
+  PrismTurnState,
+  PrismWorkflowState,
+} from '@typie/lib/enums';
+import { NotFoundError, TypieError } from '@typie/lib/errors';
 import { prismSchema } from '@typie/lib/validation';
-import { toGraphQL } from '@typie/prism';
+import { ApproveInputSchema, DECLINED_MESSAGE, serveVerdict, toGraphQL, TOOL_META, toolFailure } from '@typie/prism';
 import dayjs from 'dayjs';
 import { and, asc, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
 import { Repeater } from 'graphql-yoga';
@@ -11,8 +20,11 @@ import { nanoid } from 'nanoid';
 import { redis } from '#/cache.ts';
 import {
   db,
+  Documents,
+  Entities,
   first,
   firstOrThrow,
+  Folders,
   PrismRuns,
   PrismSessionEvents,
   PrismSessions,
@@ -25,16 +37,20 @@ import { env } from '#/env.ts';
 import { activeRun, newAgentId, prism, PrismApiError } from '#/external/prism.ts';
 import { ensureIngest } from '#/mq/prism-queue.ts';
 import { pubsub } from '#/pubsub.ts';
+import { assertSitePermission } from '#/utils/permission.ts';
 import { assertPrismAccess } from '#/utils/prism-access.ts';
 import { parseAllowlist } from '#/utils/prism-access-core.ts';
 import { prismCommands } from '#/utils/prism-catalog.ts';
 import { projectFrame } from '#/utils/prism-events.ts';
 import { createFrameGate, liveFieldKey, liveSnapshotFrames } from '#/utils/prism-ingest-core.ts';
+import { runSite, withToolLedger } from '#/utils/prism-serve.ts';
+import { ERROR_MESSAGE } from '#/utils/prism-tool-messages.ts';
 import { prismTools } from '#/utils/prism-tools.ts';
 import { materialize } from '#/utils/prism-transcript.ts';
 import { cancelActiveRun, cancelSessionWorkflows, closeRun } from '#/utils/prism-workflows.ts';
+import { entityRefFilter } from '#/utils/prism-workspace.ts';
 import { builder } from '../builder.ts';
-import { PrismSession, PrismWorkflow, User } from '../objects.ts';
+import { Entity, PrismSession, PrismWorkflow, User } from '../objects.ts';
 import type {
   ProjectedDeltaFrame,
   ProjectedStreamFrame,
@@ -309,6 +325,7 @@ PrismSession.implement({
   fields: (t) => ({
     id: t.exposeID('id'),
     title: t.exposeString('title', { nullable: true }),
+    toolPolicy: t.expose('toolPolicy', { type: PrismToolPolicy }),
     archivedAt: t.expose('archivedAt', { type: 'DateTime', nullable: true }),
     createdAt: t.expose('createdAt', { type: 'DateTime' }),
     updatedAt: t.expose('updatedAt', { type: 'DateTime' }),
@@ -369,6 +386,36 @@ builder.queryFields((t) => ({
     args: { sessionId: t.arg.id({ validate: validateDbId(TableCode.PRISM_SESSIONS) }) },
     resolve: (_, args, ctx) => ownedSession(args.sessionId, ctx.session.userId),
   }),
+
+  prismEntities: t.withAuth({ session: true }).field({
+    type: [Entity],
+    args: { ids: t.arg.idList() },
+    resolve: async (_, args, ctx) => {
+      const ids = [...new Set(args.ids)];
+      if (ids.length === 0) return [];
+
+      const rows = await db
+        .select({ entity: Entities })
+        .from(Entities)
+        .leftJoin(Documents, eq(Documents.entityId, Entities.id))
+        .leftJoin(Folders, eq(Folders.entityId, Entities.id))
+        .where(entityRefFilter(ids));
+      const entities = [...new Map(rows.map((row) => [row.entity.id, row.entity])).values()];
+
+      const privateSiteIds = [
+        ...new Set(entities.filter((entity) => entity.availability === EntityAvailability.PRIVATE).map((entity) => entity.siteId)),
+      ];
+      await Promise.all(
+        privateSiteIds.map((siteId) =>
+          assertSitePermission({ userId: ctx.session.userId, siteId }).catch(() => {
+            throw new NotFoundError();
+          }),
+        ),
+      );
+
+      return entities;
+    },
+  }),
 }));
 
 const SendPrismMessageResult = builder.simpleObject('SendPrismMessageResult', {
@@ -380,6 +427,8 @@ builder.mutationFields((t) => ({
     type: SendPrismMessageResult,
     input: {
       sessionId: t.input.id({ required: false, validate: validateDbId(TableCode.PRISM_SESSIONS) }),
+      siteId: t.input.id({ required: false, validate: validateDbId(TableCode.SITES) }),
+      toolPolicy: t.input.field({ type: PrismToolPolicy, required: false }),
       message: t.input.string(),
     },
     resolve: async (_, { input }, ctx) => {
@@ -387,6 +436,16 @@ builder.mutationFields((t) => ({
       const message = input.message.trim();
       if (message.length === 0) throw new TypieError({ code: 'empty_message', status: 400 });
       const key = nanoid();
+
+      const attachRunSite = async (sessionId: string, runSeq: number) => {
+        if (!input.siteId) return;
+        await assertSitePermission({ userId: ctx.session.userId, siteId: input.siteId });
+        await db
+          .insert(PrismRuns)
+          .values({ sessionId, runSeq, siteId: input.siteId, startedAt: dayjs() })
+          .onConflictDoUpdate({ target: [PrismRuns.sessionId, PrismRuns.runSeq], set: { siteId: input.siteId } });
+      };
+
       if (input.sessionId) {
         const session = await ownedSession(input.sessionId, ctx.session.userId);
         const { runSeq } = await prism.resumeAgent(session.prismAgentId, { message, key }).catch(prismError);
@@ -397,6 +456,7 @@ builder.mutationFields((t) => ({
           .where(eq(PrismSessions.id, session.id))
           .returning()
           .then(firstOrThrow);
+        await attachRunSite(session.id, runSeq);
         await ensureIngest({ kind: 'agent', sessionId: session.id });
         return { session: updated, runSeq };
       }
@@ -404,9 +464,15 @@ builder.mutationFields((t) => ({
       const { runSeq } = await prism.invokeAgent({ agentId, message, key, metadata: { userId: ctx.session.userId } }).catch(prismError);
       const session = await db
         .insert(PrismSessions)
-        .values({ userId: ctx.session.userId, prismAgentId: agentId, openRunSeq: runSeq })
+        .values({
+          userId: ctx.session.userId,
+          prismAgentId: agentId,
+          openRunSeq: runSeq,
+          ...(input.toolPolicy && { toolPolicy: input.toolPolicy }),
+        })
         .returning()
         .then(firstOrThrow);
+      await attachRunSite(session.id, runSeq);
       await ensureIngest({ kind: 'agent', sessionId: session.id });
       return { session, runSeq };
     },
@@ -451,15 +517,45 @@ builder.mutationFields((t) => ({
         throw new TypieError({ code: 'prism_tool_settled', status: 409 });
       }
 
-      const handler = prismTools[agent.pending.tool];
+      const tool = agent.pending.tool;
+      const meta = TOOL_META[tool];
+      if (meta?.resolver === 'server') throw new TypieError({ code: 'prism_tool_not_resolvable', status: 400 });
+
+      const handler = prismTools[tool];
       let result = input.input;
       if (handler) {
-        try {
-          result = await handler({ userId: ctx.session.userId, session, toolCallId: input.toolCallId, agent }, input.input);
-        } catch (err) {
-          if (err instanceof TypieError) throw err;
-          prismError(err);
+        const runSeq = agentId === session.prismAgentId ? (activeRun(agent.runs)?.runSeq ?? null) : null;
+        const siteId = await runSite(session, runSeq);
+        if (siteId === null) throw new TypieError({ code: 'site_not_found', status: 404 });
+        const context = { userId: ctx.session.userId, session, siteId, toolCallId: input.toolCallId, agent };
+
+        if (meta?.tier === 'destructive') {
+          if (serveVerdict(tool, session.toolPolicy) === 'deny') throw new TypieError({ code: 'prism_tool_policy', status: 403 });
+          const decision = ApproveInputSchema.safeParse(input.input);
+          if (!decision.success) throw new TypieError({ code: 'invalid_input', status: 400 });
+          if (decision.data.approve) {
+            const pendingData = agent.pending.data;
+            try {
+              result = await withToolLedger(session, { toolCallId: input.toolCallId, tool }, (tx) =>
+                handler({ ...context, executor: tx }, pendingData),
+              );
+            } catch (err) {
+              log.warn('prism tool handler failed: {tool} {*}', { tool, error: err });
+              result = toolFailure('error', ERROR_MESSAGE);
+            }
+          } else {
+            result = toolFailure('declined', DECLINED_MESSAGE);
+          }
+        } else {
+          try {
+            result = await handler({ ...context, executor: db }, input.input);
+          } catch (err) {
+            if (err instanceof TypieError) throw err;
+            prismError(err);
+          }
         }
+      } else if (meta?.tier === 'destructive') {
+        throw new TypieError({ code: 'prism_tool_not_resolvable', status: 400 });
       }
 
       await prism.resolveTool(agentId, input.toolCallId, result).catch(prismError);
@@ -529,6 +625,31 @@ builder.mutationFields((t) => ({
         .where(eq(PrismSessions.id, input.sessionId))
         .returning()
         .then(firstOrThrow);
+    },
+  }),
+
+  updatePrismSessionToolPolicy: t.withAuth({ session: true }).fieldWithInput({
+    type: PrismSession,
+    input: {
+      sessionId: t.input.id({ validate: validateDbId(TableCode.PRISM_SESSIONS) }),
+      policy: t.input.field({ type: PrismToolPolicy }),
+    },
+    resolve: async (_, { input }, ctx) => {
+      await assertPrismAccess({ userId: ctx.session.userId });
+      const session = await ownedSession(input.sessionId, ctx.session.userId);
+
+      const updated = await db
+        .update(PrismSessions)
+        .set({ toolPolicy: input.policy })
+        .where(eq(PrismSessions.id, session.id))
+        .returning()
+        .then(firstOrThrow);
+
+      await ensureIngest({ kind: 'agent', sessionId: session.id }).catch((err: unknown) => {
+        log.warn('prism ingest wake failed after policy change: {*}', { error: err });
+      });
+
+      return updated;
     },
   }),
 

@@ -5,6 +5,7 @@ import { and, asc, eq, inArray } from 'drizzle-orm';
 import { filter, pipe } from 'graphql-yoga';
 import { db, Entities, first, firstOrThrow, firstOrThrowWith, NoteEntities, Notes, Sites, TableCode, validateDbId } from '#/db/index.ts';
 import { NOTE_UPDATE_KINDS, pubsub } from '#/pubsub.ts';
+import { addNoteEntityCore, createNoteCore, deleteNoteCore, removeNoteEntityCore, updateNoteCore } from '#/utils/note-actions.ts';
 import { generateFractionalOrder } from '#/utils/order.ts';
 import { assertSitePermission } from '#/utils/permission.ts';
 import { assertActiveSubscription } from '#/utils/plan.ts';
@@ -148,7 +149,7 @@ builder.queryFields((t) => ({
       db
         .select()
         .from(Notes)
-        .where(and(eq(Notes.id, args.noteId), eq(Notes.userId, ctx.session.userId), eq(Notes.state, NoteState.ACTIVE)))
+        .where(and(eq(Notes.id, args.noteId), eq(Notes.userId, ctx.session.userId)))
         .then(firstOrThrowWith(new NotFoundError())),
   }),
 }));
@@ -193,59 +194,14 @@ builder.mutationFields((t) => ({
 
       const allEntityIds = [...new Set([...(input.entityId ? [input.entityId] : []), ...(input.entityIds ?? [])])];
 
-      if (allEntityIds.length > 0) {
-        const entities = await db
-          .select({ id: Entities.id })
-          .from(Entities)
-          .where(and(inArray(Entities.id, allEntityIds), eq(Entities.siteId, siteId), eq(Entities.state, EntityState.ACTIVE)));
-
-        if (entities.length !== allEntityIds.length) {
-          throw new NotFoundError();
-        }
-      }
-
-      // Get the first order for this user to place the new note at the front
-      const firstNote = await db
-        .select({ order: Notes.order })
-        .from(Notes)
-        .where(and(eq(Notes.userId, ctx.session.userId), eq(Notes.state, NoteState.ACTIVE)))
-        .orderBy(asc(Notes.order))
-        .limit(1)
-        .then(first);
-
-      const order = generateFractionalOrder({ lower: null, upper: firstNote?.order });
-
-      const note = await db.transaction(async (tx) => {
-        const note = await tx
-          .insert(Notes)
-          .values({
-            userId: ctx.session.userId,
-            siteId,
-            content: input.content,
-            color: input.color,
-            order,
-          })
-          .returning()
-          .then(firstOrThrow);
-
-        if (allEntityIds.length > 0) {
-          await tx.insert(NoteEntities).values(
-            allEntityIds.map((entityId) => ({
-              noteId: note.id,
-              entityId,
-            })),
-          );
-        }
-
-        return note;
+      return await createNoteCore(db, {
+        userId: ctx.session.userId,
+        siteId,
+        content: input.content,
+        color: input.color,
+        entityIds: allEntityIds,
+        clientId: input.clientId,
       });
-
-      pubsub.publish('note:update', siteId, {
-        kind: 'CREATED',
-        noteId: note.id,
-        originClientId: input.clientId ?? undefined,
-      });
-      return note;
     },
   }),
 
@@ -259,50 +215,16 @@ builder.mutationFields((t) => ({
       status: t.input.field({ type: NoteStatus, required: false }),
       clientId: t.input.string({ required: false }),
     },
-    resolve: async (_, { input }, ctx) => {
-      await assertActiveSubscription({ userId: ctx.session.userId });
-
-      const updated = await db.transaction(async (tx) => {
-        const note = await tx
-          .select()
-          .from(Notes)
-          .where(and(eq(Notes.id, input.noteId), eq(Notes.userId, ctx.session.userId), eq(Notes.state, NoteState.ACTIVE)))
-          .for('update')
-          .then(firstOrThrowWith(new NotFoundError()));
-
-        const updated = await tx
-          .update(Notes)
-          .set({
-            content: input.content ?? undefined,
-            color: input.color ?? undefined,
-            status: input.status ?? undefined,
-            updatedAt: dayjs(),
-          })
-          .where(eq(Notes.id, note.id))
-          .returning()
-          .then(firstOrThrow);
-
-        if (input.entityId) {
-          await tx
-            .select({ id: Entities.id })
-            .from(Entities)
-            .where(and(eq(Entities.id, input.entityId), eq(Entities.state, EntityState.ACTIVE), eq(Entities.siteId, note.siteId)))
-            .then(firstOrThrow);
-
-          await tx.delete(NoteEntities).where(eq(NoteEntities.noteId, note.id));
-          await tx.insert(NoteEntities).values({ noteId: note.id, entityId: input.entityId });
-        }
-
-        return updated;
-      });
-
-      pubsub.publish('note:update', updated.siteId, {
-        kind: 'UPDATED',
-        noteId: updated.id,
-        originClientId: input.clientId ?? undefined,
-      });
-      return updated;
-    },
+    resolve: async (_, { input }, ctx) =>
+      await updateNoteCore(db, {
+        userId: ctx.session.userId,
+        noteId: input.noteId,
+        content: input.content,
+        color: input.color,
+        status: input.status,
+        entityId: input.entityId,
+        clientId: input.clientId,
+      }),
   }),
 
   moveNote: t.withAuth({ session: true }).fieldWithInput({
@@ -347,21 +269,12 @@ builder.mutationFields((t) => ({
       noteId: t.input.id({ validate: validateDbId(TableCode.NOTES) }),
       clientId: t.input.string({ required: false }),
     },
-    resolve: async (_, { input }, ctx) => {
-      const deleted = await db
-        .update(Notes)
-        .set({ state: NoteState.DELETED, updatedAt: dayjs() })
-        .where(and(eq(Notes.id, input.noteId), eq(Notes.userId, ctx.session.userId), eq(Notes.state, NoteState.ACTIVE)))
-        .returning()
-        .then(firstOrThrowWith(new NotFoundError()));
-
-      pubsub.publish('note:update', deleted.siteId, {
-        kind: 'DELETED',
-        noteId: deleted.id,
-        originClientId: input.clientId ?? undefined,
-      });
-      return deleted;
-    },
+    resolve: async (_, { input }, ctx) =>
+      await deleteNoteCore(db, {
+        userId: ctx.session.userId,
+        noteId: input.noteId,
+        clientId: input.clientId,
+      }),
   }),
 
   addNoteEntity: t.withAuth({ session: true }).fieldWithInput({
@@ -371,30 +284,13 @@ builder.mutationFields((t) => ({
       entityId: t.input.id({ validate: validateDbId(TableCode.ENTITIES) }),
       clientId: t.input.string({ required: false }),
     },
-    resolve: async (_, { input }, ctx) => {
-      const note = await db
-        .select()
-        .from(Notes)
-        .where(and(eq(Notes.id, input.noteId), eq(Notes.userId, ctx.session.userId), eq(Notes.state, NoteState.ACTIVE)))
-        .then(firstOrThrowWith(new NotFoundError()));
-
-      await assertActiveSubscription({ userId: ctx.session.userId });
-
-      await db
-        .select({ id: Entities.id })
-        .from(Entities)
-        .where(and(eq(Entities.id, input.entityId), eq(Entities.state, EntityState.ACTIVE)))
-        .then(firstOrThrow);
-
-      await db.insert(NoteEntities).values({ noteId: note.id, entityId: input.entityId }).onConflictDoNothing();
-
-      pubsub.publish('note:update', note.siteId, {
-        kind: 'UPDATED',
-        noteId: note.id,
-        originClientId: input.clientId ?? undefined,
-      });
-      return note;
-    },
+    resolve: async (_, { input }, ctx) =>
+      await addNoteEntityCore(db, {
+        userId: ctx.session.userId,
+        noteId: input.noteId,
+        entityId: input.entityId,
+        clientId: input.clientId,
+      }),
   }),
 
   removeNoteEntity: t.withAuth({ session: true }).fieldWithInput({
@@ -404,24 +300,13 @@ builder.mutationFields((t) => ({
       entityId: t.input.id({ validate: validateDbId(TableCode.ENTITIES) }),
       clientId: t.input.string({ required: false }),
     },
-    resolve: async (_, { input }, ctx) => {
-      const note = await db
-        .select()
-        .from(Notes)
-        .where(and(eq(Notes.id, input.noteId), eq(Notes.userId, ctx.session.userId), eq(Notes.state, NoteState.ACTIVE)))
-        .then(firstOrThrowWith(new NotFoundError()));
-
-      await assertActiveSubscription({ userId: ctx.session.userId });
-
-      await db.delete(NoteEntities).where(and(eq(NoteEntities.noteId, note.id), eq(NoteEntities.entityId, input.entityId)));
-
-      pubsub.publish('note:update', note.siteId, {
-        kind: 'UPDATED',
-        noteId: note.id,
-        originClientId: input.clientId ?? undefined,
-      });
-      return note;
-    },
+    resolve: async (_, { input }, ctx) =>
+      await removeNoteEntityCore(db, {
+        userId: ctx.session.userId,
+        noteId: input.noteId,
+        entityId: input.entityId,
+        clientId: input.clientId,
+      }),
   }),
 }));
 

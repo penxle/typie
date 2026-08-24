@@ -1,5 +1,5 @@
 // 순수 — env·DB·네트워크 import 없음(node:test 직접 로드)
-import { AskQuestionsSchema, WorkflowUsageSchema } from '@typie/prism';
+import { AskQuestionsSchema, TOOL_META, WorkflowUsageSchema } from '@typie/prism';
 import { z } from 'zod';
 import type { PrismRunState, PrismWorkflowState } from '@typie/lib/enums';
 import type { AskQuestion, EventFrame, ParkedScope, ProjectedDeltaFrame, ProjectedStreamFrame, RunUsage, TurnLive } from '@typie/prism';
@@ -50,6 +50,7 @@ export type DomainOp =
   | { op: 'workflow-link'; descriptor: { prismWorkflowId: string; app: string; name: string; ref: string | null; startedAt: number } }
   | { op: 'titled'; title: string }
   | { op: 'ask-push'; toolCallId: string; questions: AskQuestion[]; at: number }
+  | { op: 'tool-serve'; toolCallId: string; tool: string; input: unknown; agentId: string; runSeq: number | null }
   | { op: 'workflow-settle'; state: PrismWorkflowState; result: unknown; usage: RunUsage | null; error: string | null; at: number };
 
 export type EventPlan = { advance: boolean; ops: DomainOp[]; sealTurn: boolean; clearLive: boolean };
@@ -75,6 +76,17 @@ const askPush = (event: EventFrame): DomainOp[] => {
   return parsed.success ? [{ op: 'ask-push', toolCallId, questions: parsed.data.questions, at: event.occurredAt }] : [];
 };
 
+const toolServe = (event: EventFrame, scope: ParkedScope): DomainOp[] => {
+  const context = event.context;
+  const toolCallId = context?.toolCallId;
+  const agentId = context?.agent?.id;
+  const tool = event.data.tool;
+  if (toolCallId === undefined || agentId === undefined || typeof tool !== 'string') return [];
+  if (TOOL_META[tool]?.tier === undefined) return [];
+  const runSeq = scope === 'agent' && typeof context?.run === 'number' ? context.run : null;
+  return [{ op: 'tool-serve', toolCallId, tool, input: event.data.data, agentId, runSeq }];
+};
+
 const agentOps = (event: EventFrame): DomainOp[] => {
   const context = event.context;
   if (context === null) return [];
@@ -92,7 +104,7 @@ const agentOps = (event: EventFrame): DomainOp[] => {
     return [{ op: 'workflow-link', descriptor: { prismWorkflowId: id, app, name, ref: ref ?? null, startedAt: event.occurredAt } }];
   }
   if (event.kind === 'assistant.titled' && typeof event.data.title === 'string') return [{ op: 'titled', title: event.data.title }];
-  if (event.kind === 'tool.requested') return askPush(event);
+  if (event.kind === 'tool.requested') return [...askPush(event), ...toolServe(event, 'agent')];
   return [];
 };
 
@@ -112,7 +124,7 @@ const workflowOps = (event: EventFrame): DomainOp[] => {
       },
     ];
   }
-  if (event.kind === 'tool.requested') return askPush(event);
+  if (event.kind === 'tool.requested') return [...askPush(event), ...toolServe(event, 'workflow')];
   return [];
 };
 

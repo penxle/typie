@@ -1,7 +1,14 @@
 import { getContext, setContext } from 'svelte';
 import { SvelteMap } from 'svelte/reactivity';
 
-export type OpenDocument = { id: string; title: string | null; subtitle: string | null; active: boolean; charCount: number };
+export type OpenDocument = {
+  id: string;
+  entityId: string;
+  title: string | null;
+  subtitle: string | null;
+  active: boolean;
+  charCount: number;
+};
 
 const key: unique symbol = Symbol('OpenDocuments');
 

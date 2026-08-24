@@ -702,6 +702,7 @@ export const PrismSessions = pgTable(
     prismAgentId: text('prism_agent_id').notNull().unique(),
     openRunSeq: integer('open_run_seq'),
     cursor: integer('cursor').notNull().default(0),
+    toolPolicy: E._PrismToolPolicy('tool_policy').notNull().default('STANDARD'),
     title: text('title'),
     archivedAt: datetime('archived_at'),
     deletedAt: datetime('deleted_at'),
@@ -713,6 +714,25 @@ export const PrismSessions = pgTable(
       .default(sql`now()`),
   },
   (t) => [index().on(t.userId, t.updatedAt)],
+);
+
+export const PrismToolCalls = pgTable(
+  'prism_tool_calls',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.PRISM_TOOL_CALLS)),
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => PrismSessions.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    toolCallId: text('tool_call_id').notNull(),
+    tool: text('tool').notNull(),
+    result: jsonb('result'),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [uniqueIndex().on(t.sessionId, t.toolCallId), index().on(t.sessionId)],
 );
 
 export const PrismWorkflows = pgTable(
@@ -798,6 +818,7 @@ export const PrismRuns = pgTable(
       .references(() => PrismSessions.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     runSeq: integer('run_seq').notNull(),
     state: E._PrismRunState('state').notNull().default('RUNNING'),
+    siteId: text('site_id').references(() => Sites.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     startedAt: datetime('started_at').notNull(),
     finishedAt: datetime('finished_at'),
     reaction: E._PrismReaction('reaction'),
