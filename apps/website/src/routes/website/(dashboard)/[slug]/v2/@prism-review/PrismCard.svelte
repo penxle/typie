@@ -401,14 +401,14 @@
       {#if item.callouts.pattern}
         <p class={calloutClass}>
           <span class={calloutLeadClass}>반복되는 습관</span>
-          · {item.callouts.pattern.theme} — 원고의 {item.callouts.pattern.count}곳에서 같은 습관이 보여요
+          · {item.callouts.pattern.theme}. 원고의 {item.callouts.pattern.count}곳에서 같은 습관이 보여요
         </p>
       {/if}
 
       {#if item.callouts.priority}
         <p class={calloutClass}>
           <span class={calloutLeadClass}>손보실 순서</span>
-          · {item.callouts.priority.total}가지 중 {item.callouts.priority.rank}번째 — {item.callouts.priority.body}
+          · {item.callouts.priority.total}가지 중 {item.callouts.priority.rank}번째. {item.callouts.priority.body}
         </p>
       {/if}
 

@@ -852,6 +852,9 @@ importers:
 
   packages/prism:
     dependencies:
+      ts-pattern:
+        specifier: ^5.9.0
+        version: 5.9.0
       zod:
         specifier: ^4.4.3
         version: 4.4.3

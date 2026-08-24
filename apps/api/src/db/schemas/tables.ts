@@ -4,7 +4,7 @@ import { TableCode } from './codes.ts';
 import * as E from './enums.ts';
 import { createDbId } from './id.ts';
 import { bytea, datetime } from './types.ts';
-import type { Anchor, ReviewOutcome, RunUsage } from '@typie/prism';
+import type { Anchor, Context, ReviewOutcome, RunUsage } from '@typie/prism';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import type { CouponCondition, PlanRules } from './json.ts';
 
@@ -701,6 +701,7 @@ export const PrismSessions = pgTable(
       .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     prismAgentId: text('prism_agent_id').notNull().unique(),
     openRunSeq: integer('open_run_seq'),
+    cursor: integer('cursor').notNull().default(0),
     title: text('title'),
     archivedAt: datetime('archived_at'),
     deletedAt: datetime('deleted_at'),
@@ -734,11 +735,78 @@ export const PrismWorkflows = pgTable(
     finishedAt: datetime('finished_at'),
     usage: jsonb('usage').$type<RunUsage>(),
     error: text('error'),
+    cursor: integer('cursor').notNull().default(0),
     createdAt: datetime('created_at')
       .notNull()
       .default(sql`now()`),
   },
   (t) => [index().on(t.sessionId), index().on(t.state)],
+);
+
+export const PrismSessionEvents = pgTable(
+  'prism_session_events',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.PRISM_SESSION_EVENTS)),
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => PrismSessions.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    seq: integer('seq').notNull(),
+    kind: text('kind').notNull(),
+    occurredAt: datetime('occurred_at').notNull(),
+    loggedAt: datetime('logged_at').notNull(),
+    context: jsonb('context').$type<Context | null>(),
+    data: jsonb('data').$type<Record<string, unknown>>().notNull(),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [unique().on(t.sessionId, t.seq)],
+);
+
+export const PrismWorkflowEvents = pgTable(
+  'prism_workflow_events',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.PRISM_WORKFLOW_EVENTS)),
+    workflowId: text('workflow_id')
+      .notNull()
+      .references(() => PrismWorkflows.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    seq: integer('seq').notNull(),
+    kind: text('kind').notNull(),
+    occurredAt: datetime('occurred_at').notNull(),
+    loggedAt: datetime('logged_at').notNull(),
+    context: jsonb('context').$type<Context | null>(),
+    data: jsonb('data').$type<Record<string, unknown>>().notNull(),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [unique().on(t.workflowId, t.seq)],
+);
+
+export const PrismRuns = pgTable(
+  'prism_runs',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.PRISM_RUNS)),
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => PrismSessions.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    runSeq: integer('run_seq').notNull(),
+    state: E._PrismRunState('state').notNull().default('RUNNING'),
+    startedAt: datetime('started_at').notNull(),
+    finishedAt: datetime('finished_at'),
+    reaction: E._PrismReaction('reaction'),
+    reactionNote: text('reaction_note'),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [unique().on(t.sessionId, t.runSeq)],
 );
 
 export const PrismReviewDocumentVersions = pgTable(

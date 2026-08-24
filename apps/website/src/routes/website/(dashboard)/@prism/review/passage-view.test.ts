@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { buildPassage, elapsedLabel, runningLabel, spentLabel, tailLabel, toolRowLabel } from './passage-view.ts';
-import type { ToolRequestMessage } from '../lib/conversation.ts';
-import type { TraceTool, WorkflowTrace } from '../lib/trace.ts';
+import type { ToolRequestMessage, TranscriptTool, WorkflowTranscript } from '@typie/prism';
 
-const tool = (seq: number, step: string, tool: string, extra: Partial<TraceTool> = {}): TraceTool => ({
+const tool = (seq: number, step: string, tool: string, extra: Partial<TranscriptTool> = {}): TranscriptTool => ({
   seq,
   step,
   tool,
@@ -28,7 +27,13 @@ const request = (seq: number, status: ToolRequestMessage['status'], settledAt?: 
   settledAt,
 });
 
-const trace = (partial: Partial<WorkflowTrace>): WorkflowTrace => ({ steps: [], turns: [], tools: [], live: null, ...partial });
+const transcript = (partial: Partial<WorkflowTranscript>): WorkflowTranscript => ({
+  steps: [],
+  turns: [],
+  tools: [],
+  live: null,
+  ...partial,
+});
 
 describe('toolRowLabel', () => {
   it('작가의 말로 바꾸고 실패·list는 버린다', () => {
@@ -93,7 +98,7 @@ describe('buildPassage', () => {
 
   it('단계 상태·요약·경과·묶음', () => {
     const view = buildPassage({
-      trace: trace({
+      transcript: transcript({
         steps,
         turns: [
           { seq: 4, step: 'classify-0', text: '리뷰할 수 있는 단편이에요', at: 15_000 },
@@ -138,7 +143,7 @@ describe('buildPassage', () => {
 
   it('연속 동일 행은 ×N으로 접힌다', () => {
     const view = buildPassage({
-      trace: trace({
+      transcript: transcript({
         steps,
         tools: [
           tool(5, 'description-0', 'read', { path: 'manuscript/a.md' }),
@@ -164,7 +169,7 @@ describe('buildPassage', () => {
 
   it('질문은 seq 자리에 서고 대기 구간은 경과에서 빠진다', () => {
     const view = buildPassage({
-      trace: trace({ steps, turns: [{ seq: 4, step: 'description-0', text: 'a', at: 30_000 }] }),
+      transcript: transcript({ steps, turns: [{ seq: 4, step: 'description-0', text: 'a', at: 30_000 }] }),
       status: 'running',
       tier: 'medium',
       requests: [request(5, 'resolved', 100_000)],
@@ -177,7 +182,7 @@ describe('buildPassage', () => {
 
   it('아직 답하지 않은 질문은 지금까지가 통째로 대기다', () => {
     const view = buildPassage({
-      trace: trace({ steps: [{ name: 'classify-0', seq: 1, startedAt: 0, completedAt: null }] }),
+      transcript: transcript({ steps: [{ name: 'classify-0', seq: 1, startedAt: 0, completedAt: null }] }),
       status: 'running',
       tier: 'low',
       requests: [request(2, 'pending')],
@@ -189,7 +194,7 @@ describe('buildPassage', () => {
 
   it('겹치는 대기 구간은 한 번만 깎는다', () => {
     const view = buildPassage({
-      trace: trace({ steps: [{ name: 'classify-0', seq: 1, startedAt: 0, completedAt: null }] }),
+      transcript: transcript({ steps: [{ name: 'classify-0', seq: 1, startedAt: 0, completedAt: null }] }),
       status: 'running',
       tier: 'low',
       requests: [request(2, 'resolved', 5000), request(3, 'resolved', 6000)],
@@ -201,7 +206,7 @@ describe('buildPassage', () => {
 
   it('requests는 워크플로 스코프여야 한다 — 루트 질문을 섞으면 경과가 잘못 깎인다', () => {
     const base = {
-      trace: trace({ steps: [{ name: 'classify-0', seq: 1, startedAt: 0, completedAt: null }] }),
+      transcript: transcript({ steps: [{ name: 'classify-0', seq: 1, startedAt: 0, completedAt: null }] }),
       status: 'running' as const,
       tier: 'low' as const,
       now: 10_000,
@@ -217,7 +222,7 @@ describe('buildPassage', () => {
 
   it('점검 라운드는 소구역으로 묶인다', () => {
     const view = buildPassage({
-      trace: trace({
+      transcript: transcript({
         steps: [
           { name: 'rubric-0', seq: 1, startedAt: 0, completedAt: 1000 },
           { name: 'audit-1', seq: 2, startedAt: 1000, completedAt: 2000 },
@@ -256,7 +261,7 @@ describe('buildPassage', () => {
 
   it('점검 스텝이 시작되면 항목이 없어도 소구역 상자가 서고 liveRound가 그 회차를 가리킨다', () => {
     const view = buildPassage({
-      trace: trace({
+      transcript: transcript({
         steps: [
           { name: 'rubric-0', seq: 1, startedAt: 0, completedAt: 1000 },
           { name: 'audit-1', seq: 2, startedAt: 1000, completedAt: null },
@@ -276,7 +281,7 @@ describe('buildPassage', () => {
 
   it('revise 스텝이 흐르는 동안은 liveRound가 없다', () => {
     const view = buildPassage({
-      trace: trace({
+      transcript: transcript({
         steps: [
           { name: 'audit-1', seq: 1, startedAt: 0, completedAt: 1000 },
           { name: 'rubric-revise-1-0', seq: 3, startedAt: 1000, completedAt: null },
@@ -297,7 +302,7 @@ describe('buildPassage', () => {
 
   it('같은 라운드가 끊겼다 이어져도 소구역 열쇠가 겹치지 않는다', () => {
     const view = buildPassage({
-      trace: trace({
+      transcript: transcript({
         steps: [
           { name: 'audit-1', seq: 1, startedAt: 0, completedAt: 1000 },
           { name: 'rubric-0', seq: 3, startedAt: 1000, completedAt: 2000 },
@@ -325,7 +330,7 @@ describe('buildPassage', () => {
 
   it('단계 없는 스텝의 발화는 직전 단계에 얹히고, 스텝 없는 발화는 버려진다', () => {
     const view = buildPassage({
-      trace: trace({
+      transcript: transcript({
         steps: [
           { name: 'manuscript', seq: 2, startedAt: 0, completedAt: 1000 },
           { name: 'delivery-0', seq: 3, startedAt: 1000, completedAt: 2000 },
@@ -358,7 +363,7 @@ describe('buildPassage', () => {
 
   it('첫 단계가 서기 전의 질문은 prelude에 선다', () => {
     const view = buildPassage({
-      trace: trace({ steps: [{ name: 'manuscript', seq: 2, startedAt: 0, completedAt: null }] }),
+      transcript: transcript({ steps: [{ name: 'manuscript', seq: 2, startedAt: 0, completedAt: null }] }),
       status: 'running',
       tier: 'medium',
       requests: [request(1, 'pending')],
@@ -372,7 +377,7 @@ describe('buildPassage', () => {
 
   it('티어에 없는 단계에서 온 질문은 현재 단계 아래에 선다', () => {
     const view = buildPassage({
-      trace: trace({
+      transcript: transcript({
         steps: [
           { name: 'classify-0', seq: 1, startedAt: 0, completedAt: 1000 },
           { name: 'description-0', seq: 2, startedAt: 1000, completedAt: 2000 },
@@ -392,7 +397,7 @@ describe('buildPassage', () => {
 
   it('현재 단계는 마지막 스텝이 정한다 — 앞 단계로 되돌아가면 그 단계가 현재다', () => {
     const view = buildPassage({
-      trace: trace({
+      transcript: transcript({
         steps: [
           { name: 'classify-0', seq: 1, startedAt: 0, completedAt: 1000 },
           { name: 'description-0', seq: 2, startedAt: 1000, completedAt: 2000 },
@@ -411,7 +416,7 @@ describe('buildPassage', () => {
 
   it('단계가 서기 전에 끊기면 첫 단계가 종결 상태를 든다', () => {
     const view = buildPassage({
-      trace: trace({ steps: [{ name: 'manuscript', seq: 1, startedAt: 0, completedAt: null }] }),
+      transcript: transcript({ steps: [{ name: 'manuscript', seq: 1, startedAt: 0, completedAt: null }] }),
       status: 'canceled',
       tier: 'low',
       requests: [],
@@ -424,13 +429,13 @@ describe('buildPassage', () => {
   });
 
   it('종결 뒤에는 now가 흘러도 경과가 얼어붙는다', () => {
-    const settled = trace({
+    const settled = transcript({
       steps,
       turns: [{ seq: 4, step: 'description-0', text: '읽는 중', at: 30_000 }],
       tools: [tool(5, 'description-0', 'read', { path: 'manuscript/a.md', at: 40_000 })],
     });
     const at = (now: number, finishedAt: number | null, requests: ToolRequestMessage[] = []) =>
-      buildPassage({ trace: settled, status: 'canceled', tier: 'medium', requests, now, finishedAt });
+      buildPassage({ transcript: settled, status: 'canceled', tier: 'medium', requests, now, finishedAt });
 
     const soon = at(200_000, null);
     const later = at(86_400_000, null);
@@ -448,7 +453,7 @@ describe('buildPassage', () => {
   });
 
   it('종결 상태는 현재 단계에 얹힌다', () => {
-    const args = { trace: trace({ steps }), tier: 'medium' as const, requests: [], now: 200_000, finishedAt: null };
+    const args = { transcript: transcript({ steps }), tier: 'medium' as const, requests: [], now: 200_000, finishedAt: null };
     const canceled = buildPassage({ ...args, status: 'canceled' });
     expect(canceled.stages.map((s) => s.status)).toEqual(['done', 'canceled', 'pending', 'pending', 'pending']);
     const failed = buildPassage({ ...args, status: 'failed' });

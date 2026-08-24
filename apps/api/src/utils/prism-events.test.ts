@@ -255,7 +255,7 @@ test('WORKFLOW: workflow.*·ask-user 요청/해소가 통과하고 sync·기타 
 
 test('WORKFLOW: step·turn.completed{text}·tool.executed{input}이 통과하고 델타는 workflowId를 싣는다', () => {
   const step = projectFrame(
-    { type: 'event', event: { seq: 5, kind: 'step.started', occurredAt: 10, context: { step: 'description-0' }, data: {} } },
+    { type: 'event', event: { seq: 5, kind: 'step.started', occurredAt: 10, loggedAt: 11, context: { step: 'description-0' }, data: {} } },
     { source: 'WORKFLOW', workflowId: 'w1' },
   );
   assert.deepEqual(step, {

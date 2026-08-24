@@ -13,6 +13,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "ts-pattern": "^5.9.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {

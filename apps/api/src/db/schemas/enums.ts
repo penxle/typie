@@ -31,6 +31,7 @@ export const _DocumentBundleKind = createPgEnum('_document_bundle_kind', E.Docum
 export const _DocumentHeadKind = createPgEnum('_document_head_kind', E.DocumentHeadKind);
 export const _PreorderPaymentState = createPgEnum('_preorder_payment_state', E.PreorderPaymentState);
 export const _PrismWorkflowState = createPgEnum('_prism_workflow_state', E.PrismWorkflowState);
+export const _PrismRunState = createPgEnum('_prism_run_state', E.PrismRunState);
 export const _PrismReviewTier = createPgEnum('_prism_review_tier', E.PrismReviewTier);
 export const _PrismReaction = createPgEnum('_prism_reaction', E.PrismReaction);
 export const _PrismReviewPass = createPgEnum('_prism_review_pass', E.PrismReviewPass);

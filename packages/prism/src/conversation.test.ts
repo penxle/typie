@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { applyFrame, emptyTranscript, pendingRootRequests, runningWorkflows } from './conversation.ts';
-import type { ProjectedEventData, ProjectedStreamFrame } from '@typie/prism';
+import type { ProjectedEventData, ProjectedStreamFrame } from './projected.ts';
 
 const agent = { id: 'typie-1', name: 'assistant' };
 const child = { id: 'agent_9', name: 'judgment-high' };
@@ -67,6 +67,13 @@ describe('applyFrame', () => {
     expect(reduce([ev(1, 'run.started', run, { message: '안녕', command: null })]).messages[0]).toMatchObject({
       role: 'user',
       text: '안녕',
+    });
+  });
+
+  it('user 메시지는 run 좌표를 싣는다', () => {
+    expect(reduce([ev(1, 'run.started', run, { message: 'a', command: null })]).messages[0]).toMatchObject({
+      role: 'user',
+      runSeq: run.run,
     });
   });
 
@@ -428,10 +435,10 @@ describe('workflow 변형', () => {
   });
 });
 
-describe('workflow trace', () => {
+describe('workflow transcript', () => {
   const childTurn = { agent: child, run: 1, turn: 1, attempt: 1 };
 
-  it('워크플로 step·turn·tool.executed 이벤트는 그 워크플로 메시지의 trace에 접히고 루트 메시지를 만들지 않는다', () => {
+  it('워크플로 step·turn·tool.executed 이벤트는 그 워크플로 메시지의 transcript에 접히고 루트 메시지를 만들지 않는다', () => {
     let t = reduce([ev(1, 'run.started', run, { message: '/리뷰' }), started(2)]);
     t = applyFrame(t, wf(1, 'step.started', { step: 'description-0' }, {}));
     t = applyFrame(t, wf(2, 'turn.completed', { ...childTurn, step: 'description-0' }, { text: '첫 구획을 읽었어요' }));
@@ -440,7 +447,7 @@ describe('workflow trace', () => {
       wf(3, 'tool.executed', { ...childTurn, toolCallId: 'c1' }, { tool: 'read', ok: true, input: { path: 'manuscript/a.md' } }),
     );
     const workflow = t.messages.find((m) => m.role === 'workflow');
-    expect(workflow?.role === 'workflow' ? workflow.trace : null).toMatchObject({
+    expect(workflow?.role === 'workflow' ? workflow.transcript : null).toMatchObject({
       steps: [{ name: 'description-0', completedAt: null }],
       turns: [{ text: '첫 구획을 읽었어요', step: 'description-0' }],
       tools: [{ tool: 'read', path: 'manuscript/a.md' }],
@@ -449,27 +456,27 @@ describe('workflow trace', () => {
     expect(workflow?.role === 'workflow' ? workflow.cursor : null).toBe(3);
   });
 
-  it('workflowId가 있는 델타는 그 워크플로의 trace.live로 가고 루트 live는 건드리지 않는다', () => {
+  it('workflowId가 있는 델타는 그 워크플로의 transcript.live로 가고 루트 live는 건드리지 않는다', () => {
     let t = reduce([ev(1, 'run.started', run, { message: '/리뷰' }), started(2)]);
     t = applyFrame(t, { type: 'delta', delta: { context: childTurn, channel: 'text', offset: 0, data: '첫', workflowId: 'workflow_1' } });
     const workflow = t.messages.find((m) => m.role === 'workflow');
-    expect(workflow?.role === 'workflow' ? workflow.trace.live?.text : null).toBe('첫');
+    expect(workflow?.role === 'workflow' ? workflow.transcript.live?.text : null).toBe('첫');
     expect(t.live).toBeNull();
     const next = applyFrame(t, {
       type: 'delta',
       delta: { context: childTurn, channel: 'text', offset: 1, data: ' 구획', workflowId: 'workflow_9' },
     });
     const after = next.messages.find((m) => m.role === 'workflow');
-    expect(after?.role === 'workflow' ? after.trace.live?.text : null).toBe('첫');
+    expect(after?.role === 'workflow' ? after.transcript.live?.text : null).toBe('첫');
     expect(next.live).toBeNull();
   });
 
-  it('워크플로 종결은 trace.live를 비운다', () => {
+  it('워크플로 종결은 transcript.live를 비운다', () => {
     let t = reduce([ev(1, 'run.started', run, { message: '/리뷰' }), started(2)]);
     t = applyFrame(t, { type: 'delta', delta: { context: childTurn, channel: 'text', offset: 0, data: '첫', workflowId: 'workflow_1' } });
     t = applyFrame(t, wf(5, 'workflow.canceled', {}, {}));
     const workflow = t.messages.find((m) => m.role === 'workflow');
-    expect(workflow?.role === 'workflow' ? workflow.trace.live : 'x').toBeNull();
+    expect(workflow?.role === 'workflow' ? workflow.transcript.live : 'x').toBeNull();
     expect(workflow).toMatchObject({ status: 'canceled', finishedAt: 2005 });
   });
 
@@ -488,10 +495,10 @@ describe('workflow trace', () => {
     t = replayed.reduce(applyFrame, t);
 
     const workflow = t.messages.find((m) => m.role === 'workflow');
-    const trace = workflow?.role === 'workflow' ? workflow.trace : null;
-    expect(trace?.steps).toHaveLength(1);
-    expect(trace?.turns).toHaveLength(1);
-    expect(trace?.tools.map((row) => row.tool)).toEqual(['read', 'grep']);
+    const transcript = workflow?.role === 'workflow' ? workflow.transcript : null;
+    expect(transcript?.steps).toHaveLength(1);
+    expect(transcript?.turns).toHaveLength(1);
+    expect(transcript?.tools.map((row) => row.tool)).toEqual(['read', 'grep']);
     expect(workflow?.role === 'workflow' ? workflow.cursor : null).toBe(4);
     expect(t.messages).toHaveLength(2);
   });

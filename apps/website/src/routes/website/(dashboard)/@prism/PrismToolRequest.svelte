@@ -1,10 +1,10 @@
 <script lang="ts">
+  import { runningWorkflows } from '@typie/prism';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Button } from '@typie/ui/components';
-  import { runningWorkflows } from './lib/conversation.ts';
   import { toolCards } from './tools/index.ts';
-  import type { ToolRequestMessage, Transcript } from './lib/conversation.ts';
+  import type { ToolRequestMessage, Transcript } from '@typie/prism';
 
   type Props = {
     message: ToolRequestMessage;

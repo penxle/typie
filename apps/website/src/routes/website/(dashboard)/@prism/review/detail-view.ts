@@ -1,6 +1,8 @@
-export type SectionKey = 'progress' | 'strengths' | 'verdicts' | 'elevations' | 'patterns' | 'priorities';
+export type SectionKey = 'understanding' | 'verdicts' | 'progress' | 'strengths' | 'elevations' | 'patterns' | 'priorities';
+export type GroupKey = 'reading' | 'strong' | 'work';
 
 export type DetailCounts = {
+  understanding?: string | null;
   progress?: string | null;
   strengths: readonly unknown[];
   verdicts: readonly unknown[];
@@ -9,39 +11,73 @@ export type DetailCounts = {
   priorities: readonly unknown[];
 };
 
+export type Section = { key: SectionKey; number: string; caption: string | null };
+export type Group = { key: GroupKey; sections: Section[] };
+
+export const GROUP_TITLES: Record<GroupKey, string> = {
+  reading: '작품 읽기',
+  strong: '잘된 곳',
+  work: '손볼 곳',
+};
+
 export const SECTION_TITLES: Record<SectionKey, string> = {
-  progress: '지난 리뷰에서 나아진 점',
-  strengths: '읽는 사람에게 잘 닿은 대목',
-  verdicts: '관점마다 어디까지 왔는지',
-  elevations: '한 걸음 더 가 볼 자리',
-  patterns: '반복해서 나타나는 습관',
+  understanding: '이렇게 읽었어요',
+  verdicts: '지금 서 있는 자리',
+  progress: '나아진 것',
+  strengths: '잘 닿은 대목',
+  elevations: '한 걸음 더',
+  patterns: '반복되는 습관',
   priorities: '손보실 순서',
 };
 
+// 목차와 본문이 같은 순서로 서는 근거는 이 배열 하나다
+const ORDER: readonly (readonly [GroupKey, SectionKey])[] = [
+  ['reading', 'understanding'],
+  ['reading', 'verdicts'],
+  ['reading', 'progress'],
+  ['strong', 'strengths'],
+  ['strong', 'elevations'],
+  ['work', 'patterns'],
+  ['work', 'priorities'],
+];
+
+// 산문 절은 셀 항목이 없어 캡션이 없다
 const CAPTIONS: Record<SectionKey, ((count: number) => string) | null> = {
+  understanding: null,
   progress: null,
-  strengths: (count) => `${count}곳 — 다음 원고에서도 믿고 쓰셔도 좋은 힘이에요`,
-  verdicts: (count) => `${count}가지 — 이 작품에서 특히 중요하게 본 관점들이에요`,
-  elevations: (count) => `${count}곳 — 고칠 곳이 아니라, 이미 잘 되고 있는 곳에서 해 볼 수 있는 제안이에요`,
-  patterns: (count) => `${count}가지 — 하나를 고치면 여러 곳이 함께 풀려요`,
-  priorities: (count) => `${count}가지 — 먼저 고치면 뒤가 쉬워지는 순서예요`,
+  verdicts: (count) => `관점 ${count}가지`,
+  strengths: (count) => `${count}곳`,
+  elevations: (count) => `${count}곳`,
+  patterns: (count) => `${count}가지`,
+  priorities: (count) => `${count}가지`,
 };
 
-export const visibleSections = (detail: DetailCounts): SectionKey[] => {
-  const standing: [SectionKey, boolean][] = [
-    ['progress', (detail.progress ?? '').trim().length > 0],
-    ['strengths', detail.strengths.length > 0],
-    ['verdicts', detail.verdicts.length > 0],
-    ['elevations', detail.elevations.length > 0],
-    ['patterns', detail.patterns.length > 0],
-    ['priorities', detail.priorities.length > 0],
-  ];
+const filled = (text: string | null | undefined) => ((text ?? '').trim().length > 0 ? 1 : 0);
 
-  return standing.filter(([, stands]) => stands).map(([key]) => key);
+const sizes = (detail: DetailCounts): Record<SectionKey, number> => ({
+  understanding: filled(detail.understanding),
+  progress: filled(detail.progress),
+  verdicts: detail.verdicts.length,
+  strengths: detail.strengths.length,
+  elevations: detail.elevations.length,
+  patterns: detail.patterns.length,
+  priorities: detail.priorities.length,
+});
+
+export const detailOutline = (detail: DetailCounts): Group[] => {
+  const size = sizes(detail);
+  const groups = new Map<GroupKey, Section[]>();
+  let seen = 0;
+
+  for (const [group, key] of ORDER) {
+    const count = size[key];
+    if (count === 0) continue;
+
+    seen += 1;
+    const sections = groups.get(group) ?? [];
+    sections.push({ key, number: String(seen).padStart(2, '0'), caption: CAPTIONS[key]?.(count) ?? null });
+    groups.set(group, sections);
+  }
+
+  return [...groups].map(([key, sections]) => ({ key, sections }));
 };
-
-// 번호는 보이는 절끼리 잇달아 센다 — 빈 절이 빠져도 01부터 구멍 없이 흐른다.
-export const sectionNumber = (sections: readonly SectionKey[], key: SectionKey): string =>
-  String(sections.indexOf(key) + 1).padStart(2, '0');
-
-export const sectionCaption = (key: SectionKey, count: number): string | null => CAPTIONS[key]?.(count) ?? null;

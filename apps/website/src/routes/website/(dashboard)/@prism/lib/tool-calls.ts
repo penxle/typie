@@ -1,4 +1,4 @@
-import type { TranscriptMessage } from './conversation.ts';
+import type { TranscriptMessage } from '@typie/prism';
 
 export type ToolRow = { label: string; count: number };
 

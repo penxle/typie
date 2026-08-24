@@ -1,16 +1,16 @@
 import { match, P } from 'ts-pattern';
 import { applyDelta, sealTurn, startTurn } from './delta.ts';
-import { applyTraceDelta, applyTraceEvent, emptyTrace } from './trace.ts';
-import type { ProjectedDeltaFrame, ProjectedEventData, ProjectedEventFrame, ProjectedStreamFrame } from '@typie/prism';
+import { applyWorkflowTranscriptDelta, applyWorkflowTranscriptEvent, emptyWorkflowTranscript } from './workflow-transcript.ts';
 import type { TurnLive } from './delta.ts';
-import type { WorkflowTrace } from './trace.ts';
+import type { ProjectedDeltaFrame, ProjectedEventData, ProjectedEventFrame, ProjectedStreamFrame } from './projected.ts';
+import type { WorkflowTranscript } from './workflow-transcript.ts';
 
 export type RunState = 'idle' | 'running' | 'failed' | 'canceled';
 export type ToolRequestStatus = 'pending' | 'resolved' | 'closed';
 export type WorkflowStatus = 'running' | 'completed' | 'failed' | 'canceled';
 
 export type TranscriptMessage =
-  | { role: 'user'; key: string; text: string; at: number }
+  | { role: 'user'; key: string; text: string; at: number; runSeq: number | null }
   | { role: 'assistant'; key: string; text: string | null; toolCalls: { id: string; name: string }[]; at: number; streamed: boolean }
   | { role: 'tool'; key: string; name: string; phase: 'executed' | 'rejected'; ok: boolean | null; at: number }
   | {
@@ -38,7 +38,7 @@ export type TranscriptMessage =
       finishedAt?: number;
       cursor: number;
       invocation?: string;
-      trace: WorkflowTrace;
+      transcript: WorkflowTranscript;
     }
   | { role: 'run-failed'; key: string; at: number };
 
@@ -129,7 +129,7 @@ const setWorkflowStatus = (messages: TranscriptMessage[], workflowId: string, st
 const settleWorkflow = (t: Transcript, workflowId: string, status: WorkflowStatus, at: number): Transcript => ({
   ...t,
   messages: setWorkflowStatus(closePendingRequests(t.messages, at, workflowId), workflowId, status).map((m) =>
-    m.role === 'workflow' && m.workflowId === workflowId ? { ...m, finishedAt: at, trace: { ...m.trace, live: null } } : m,
+    m.role === 'workflow' && m.workflowId === workflowId ? { ...m, finishedAt: at, transcript: { ...m.transcript, live: null } } : m,
   ),
 });
 
@@ -162,7 +162,9 @@ const applyWorkflowEvent = (t: Transcript, event: ProjectedEventFrame, workflowI
       .with({ kind: P.union('step.started', 'step.completed', 'turn.completed', 'tool.executed') }, () => ({
         ...t,
         messages: t.messages.map((m) =>
-          m.role === 'workflow' && m.workflowId === workflowId ? { ...m, trace: applyTraceEvent(m.trace, event) } : m,
+          m.role === 'workflow' && m.workflowId === workflowId
+            ? { ...m, transcript: applyWorkflowTranscriptEvent(m.transcript, event) }
+            : m,
         ),
       }))
       .with({ kind: 'tool.requested' }, ({ data }) => ({
@@ -187,7 +189,13 @@ const applyEvent = (t: Transcript, event: ProjectedEventFrame): Transcript => {
     .with({ kind: 'agent.created' }, () => next)
     .with({ kind: 'run.started' }, ({ data }) => {
       const text = data.command ? `/${data.command.name}${data.command.args === '' ? '' : ` ${data.command.args}`}` : data.message;
-      const message: TranscriptMessage = { role: 'user', key: `e${event.seq}`, text, at: event.occurredAt };
+      const message: TranscriptMessage = {
+        role: 'user',
+        key: `e${event.seq}`,
+        text,
+        at: event.occurredAt,
+        runSeq: event.context.run ?? null,
+      };
       return { ...next, run: 'running' as const, retrying: false, messages: [...t.messages, message] };
     })
     .with({ kind: 'run.completed' }, () => ({
@@ -261,7 +269,7 @@ const applyEvent = (t: Transcript, event: ProjectedEventFrame): Transcript => {
             startedAt: event.occurredAt,
             cursor: 0,
             invocation: event.context.invocation,
-            trace: emptyTrace(),
+            transcript: emptyWorkflowTranscript(),
           };
           return { ...next, messages: [...t.messages, message] };
         })
@@ -284,7 +292,9 @@ const applyEvent = (t: Transcript, event: ProjectedEventFrame): Transcript => {
 const applyWorkflowDelta = (t: Transcript, delta: ProjectedDeltaFrame): Transcript => ({
   ...t,
   messages: t.messages.map((m) =>
-    m.role === 'workflow' && m.workflowId === delta.workflowId ? { ...m, trace: applyTraceDelta(m.trace, delta) } : m,
+    m.role === 'workflow' && m.workflowId === delta.workflowId
+      ? { ...m, transcript: applyWorkflowTranscriptDelta(m.transcript, delta) }
+      : m,
   ),
 });
 

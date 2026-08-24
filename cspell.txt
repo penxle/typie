@@ -76,7 +76,10 @@ getenv
 glyf
 googleid
 graphqls
+hdel
 healthz
+hgetall
+hkeys
 hmget
 hset
 icns

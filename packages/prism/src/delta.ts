@@ -1,5 +1,6 @@
 import { match } from 'ts-pattern';
-import type { Context, ProjectedDeltaFrame, TurnContext } from '@typie/prism';
+import type { ProjectedDeltaFrame } from './projected.ts';
+import type { Context, TurnContext } from './wire.ts';
 
 export type TurnLive = {
   context: TurnContext;

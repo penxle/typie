@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createSseParser, parseStreamFrame, pumpSse, readUntilSync } from './prism-stream.ts';
+import { createSseParser, parseStreamFrame, pumpSse } from './prism-stream.ts';
 
 const enc = (chunks: string[], hang = false) =>
   new ReadableStream<Uint8Array>({
@@ -11,7 +11,7 @@ const enc = (chunks: string[], hang = false) =>
   });
 
 const ev = (seq: number, kind: string, data: object, context: object | null = {}) =>
-  `id: ${seq}\nevent: ${kind}\ndata: ${JSON.stringify({ seq, kind, occurredAt: 1000 + seq, context, data })}\n\n`;
+  `id: ${seq}\nevent: ${kind}\ndata: ${JSON.stringify({ seq, kind, occurredAt: 1000 + seq, loggedAt: 1000 + seq, context, data })}\n\n`;
 
 test('SSE 파서는 분절 청크를 이어 붙이고, event 없는 프레임(주석)은 버린다', () => {
   const parser = createSseParser();
@@ -38,6 +38,7 @@ test('parseStreamFrame은 프레임 4종을 판별하고, 깨진 프레임은 �
       seq: 2,
       kind: 'run.started',
       occurredAt: 5,
+      loggedAt: 5,
       context: { agent: { id: 'a', name: 'x' }, run: 1 },
       data: { message: '안녕' },
     }),
@@ -47,7 +48,7 @@ test('parseStreamFrame은 프레임 4종을 판별하고, 깨진 프레임은 �
   assert.throws(() => parseStreamFrame({ event: 'run.started', data: '{"kind":"run.started"}' }));
 });
 
-test('pumpSse: 프레임 순서 전달·closed, stopAtSync면 sync 뒤 멈춤', async () => {
+test('pumpSse: 프레임을 순서대로 전달하고 스트림이 닫히면 closed', async () => {
   const kinds: string[] = [];
   const outcome = await pumpSse({
     stream: enc([ev(1, 'run.started', { message: 'a' }, { agent: { id: 'a', name: 'x' }, run: 1 }), 'event: sync\ndata: {"seq":1}\n\n']),
@@ -59,18 +60,6 @@ test('pumpSse: 프레임 순서 전달·closed, stopAtSync면 sync 뒤 멈춤', 
   });
   assert.deepEqual(kinds, ['event', 'sync']);
   assert.equal(outcome, 'closed');
-
-  const early: string[] = [];
-  await pumpSse({
-    stream: enc(['event: sync\ndata: {"seq":0}\n\n', 'event: heartbeat\ndata: {}\n\n'], true),
-    onFrame: (f) => {
-      early.push(f.type);
-    },
-    idleMs: 1000,
-    signal: new AbortController().signal,
-    stopAtSync: true,
-  });
-  assert.deepEqual(early, ['sync']);
 });
 
 test('pumpSse: idleMs 무수신이면 idle, abort면 aborted', async () => {
@@ -83,24 +72,40 @@ test('pumpSse: idleMs 무수신이면 idle, abort면 aborted', async () => {
   assert.equal(await pending, 'aborted');
 });
 
-test('readUntilSync: sync까지의 이벤트와 high-water, sync 없이 끝나면 던진다', async () => {
-  const result = await readUntilSync(
-    enc(
-      [
-        ev(1, 'run.started', { message: 'a' }, { agent: { id: 'a', name: 'x' }, run: 1 }),
-        ev(2, 'run.completed', {}, { agent: { id: 'a', name: 'x' }, run: 1 }),
-        'event: sync\ndata: {"seq":2}\n\n',
-        'event: heartbeat\ndata: {}\n\n',
-      ],
-      true,
-    ),
-    new AbortController().signal,
-  );
-  assert.deepEqual(
-    result.events.map((e) => e.seq),
-    [1, 2],
-  );
-  assert.equal(result.sync, 2);
+test('pumpSse: 같은 signal로 반복 호출해도 abort 리스너가 누적되지 않는다', async () => {
+  const { signal } = new AbortController();
+  const added: unknown[] = [];
+  const removed: unknown[] = [];
+  const add = signal.addEventListener.bind(signal);
+  const remove = signal.removeEventListener.bind(signal);
+  signal.addEventListener = (...args: Parameters<AbortSignal['addEventListener']>) => {
+    if (args[0] === 'abort') added.push(args[1]);
+    add(...args);
+  };
+  signal.removeEventListener = (...args: Parameters<AbortSignal['removeEventListener']>) => {
+    if (args[0] === 'abort') removed.push(args[1]);
+    remove(...args);
+  };
 
-  await assert.rejects(readUntilSync(enc([]), new AbortController().signal), /ended without sync/);
+  let frames = 0;
+  for (let round = 0; round < 12; round += 1) {
+    const outcome = await pumpSse({
+      stream: enc(['event: sync\ndata: {"seq":0}\n\n']),
+      onFrame: () => {
+        frames += 1;
+      },
+      idleMs: 1000,
+      signal,
+    });
+    assert.equal(outcome, 'closed');
+  }
+
+  assert.equal(frames, 12);
+  assert.equal(added.length, 12);
+  assert.deepEqual(removed, added);
+
+  const pre = new AbortController();
+  pre.abort();
+  // eslint-disable-next-line @typescript-eslint/no-empty-function -- the listener bookkeeping is under test here, not the frames
+  assert.equal(await pumpSse({ stream: enc([], true), onFrame: () => {}, idleMs: 1000, signal: pre.signal }), 'aborted');
 });

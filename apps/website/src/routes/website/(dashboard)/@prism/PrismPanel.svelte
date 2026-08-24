@@ -1,6 +1,7 @@
 <script lang="ts">
   import { createFragment, createMutation, createSubscription } from '@mearie/svelte';
   import { TypieError } from '@typie/lib/errors';
+  import { pendingRootRequests, runningWorkflows } from '@typie/prism';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { pointerCapture } from '@typie/ui/actions';
@@ -25,11 +26,10 @@
   import { graphql } from '$mearie';
   import { AutoResolver } from './lib/auto-resolve.svelte.ts';
   import { backoffDelay } from './lib/backoff.ts';
-  import { pendingRootRequests, runningWorkflows } from './lib/conversation.ts';
   import { expand, swap } from './lib/motion.ts';
   import { sessionLabel } from './lib/session-groups.ts';
   import { createPrismChat } from './prism-chat.svelte';
-  import { fetchSessionLog, fetchWorkflowLog, toFrame } from './prism-data';
+  import { fetchTranscript, toFrame } from './prism-data';
   import { PRISM_PANEL_MAX, PRISM_PANEL_MIN } from './prism-panel.ts';
   import { createPrismSessionState } from './prism-session.svelte';
   import PrismComposer from './PrismComposer.svelte';
@@ -40,8 +40,8 @@
   import { startChips } from './start-chips.ts';
   import { clientResolvers } from './tools/index.ts';
   import { workflowApps } from './workflows/index.ts';
+  import type { WorkflowMessage } from '@typie/prism';
   import type { DashboardLayout_PrismPanel_user$key } from '$mearie';
-  import type { WorkflowMessage } from './lib/conversation.ts';
 
   type Props = {
     user$key: DashboardLayout_PrismPanel_user$key;
@@ -158,8 +158,7 @@
   const sessions = $derived(user.data.prismSessions);
 
   const chat = createPrismChat({
-    loadLog: fetchSessionLog,
-    loadWorkflowLog: fetchWorkflowLog,
+    load: fetchTranscript,
     send: async (sessionId, message) => {
       const resp = await sendPrismMessage({ input: { sessionId: sessionId ?? undefined, message } });
       return { sessionId: resp.sendPrismMessage.session.id, runSeq: resp.sendPrismMessage.runSeq };
@@ -430,7 +429,6 @@
 
   $effect(() => {
     void chat.seedCursor;
-    void chat.revision;
     untrack(() => {
       subscribeCursor = chat.transcript.cursor;
       subscribeWorkflows = workflowCursors();
@@ -882,7 +880,6 @@
           <PrismTranscript
             failedIds={autoResolver.failedIds}
             loading={chat.loading}
-            onLoadTrace={(workflowId) => chat.loadWorkflow(workflowId)}
             onResolve={resolveTool}
             onRetry={(toolCallId) => autoResolver.retry(toolCallId)}
             pending={chat.pending}

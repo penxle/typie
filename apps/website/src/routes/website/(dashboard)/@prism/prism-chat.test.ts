@@ -1,10 +1,10 @@
+import { applyFrame, emptyTranscript } from '@typie/prism';
 import { describe, expect, it, vi } from 'vitest';
 import { createPrismChat } from './prism-chat.svelte.ts';
-import type { ProjectedEventData, ProjectedStreamFrame } from '@typie/prism';
+import type { ProjectedEventData, ProjectedStreamFrame, Transcript } from '@typie/prism';
 import type { PrismChatDeps } from './prism-chat.svelte.ts';
 
 const agent = { id: 'typie-1', name: 'assistant' };
-const child = { id: 'agent_9', name: 'judgment-high' };
 
 const ev = (seq: number, kind: string, context: Record<string, unknown>, data: Record<string, unknown>): ProjectedStreamFrame => ({
   type: 'event',
@@ -17,24 +17,6 @@ const ev = (seq: number, kind: string, context: Record<string, unknown>, data: R
   },
 });
 
-const wf = (
-  seq: number,
-  kind: string,
-  context: Record<string, unknown>,
-  data: Record<string, unknown>,
-  workflowId: string,
-): ProjectedStreamFrame => ({
-  type: 'event',
-  event: {
-    seq,
-    occurredAt: 2000 + seq,
-    context: context as never,
-    source: 'WORKFLOW',
-    workflowId,
-    ...({ kind, data } as ProjectedEventData),
-  },
-});
-
 const invocation = (seq: number, id: string) => ({ agent, run: 1, turn: 1, attempt: 1, toolCallId: `c${seq}`, invocation: id });
 
 const startWorkflow = (seq: number, workflowId: string, id: string) =>
@@ -42,63 +24,70 @@ const startWorkflow = (seq: number, workflowId: string, id: string) =>
 
 const finishWorkflow = (seq: number, id: string) => ev(seq, 'invocation.completed', invocation(seq, id), {});
 
-const stepStarted = (seq: number, workflowId: string) => wf(seq, 'step.started', { agent: child, step: 'classify-0' }, {}, workflowId);
-
 const sessionLog = [startWorkflow(1, 'workflow_1', 'i1'), startWorkflow(2, 'workflow_2', 'i2'), finishWorkflow(3, 'i2')];
 
 const deps = (over: Partial<PrismChatDeps>): PrismChatDeps => ({
-  loadLog: vi.fn().mockResolvedValue(sessionLog),
-  loadWorkflowLog: vi.fn().mockResolvedValue([]),
+  load: vi.fn().mockResolvedValue(sessionLog.reduce((transcript, frame) => applyFrame(transcript, frame), emptyTranscript())),
   send: vi.fn(),
   cancel: vi.fn(),
   ...over,
 });
 
-const workflowOf = (chat: ReturnType<typeof createPrismChat>, workflowId: string) => {
-  const message = chat.transcript.messages.find((entry) => entry.role === 'workflow' && entry.workflowId === workflowId);
-  if (message === undefined || message.role !== 'workflow') throw new Error(`workflow ${workflowId} not seeded`);
-  return message;
-};
-
 describe('createPrismChat.load', () => {
-  it('세션 로그 뒤에 진행 중 워크플로의 로그만 읽어 같은 transcript에 적용한 뒤 loading을 푼다', async () => {
-    const loadWorkflowLog = vi.fn().mockImplementation((workflowId: string) => Promise.resolve([stepStarted(1, workflowId)]));
-    const chat = createPrismChat(deps({ loadWorkflowLog }));
+  it('transcript를 그대로 싣고 seedCursor를 transcript.cursor로 둔다', async () => {
+    const chat = createPrismChat(deps({}));
 
-    await chat.load('session_1');
+    await chat.load('PRSS1');
 
-    expect(loadWorkflowLog).toHaveBeenCalledTimes(1);
-    expect(loadWorkflowLog).toHaveBeenCalledWith('workflow_1');
-    expect(workflowOf(chat, 'workflow_1').trace.steps).toHaveLength(1);
-    expect(workflowOf(chat, 'workflow_1').cursor).toBe(1);
-    expect(workflowOf(chat, 'workflow_2').trace.steps).toHaveLength(0);
+    expect(chat.transcript.messages.map((message) => message.role)).toEqual(['workflow', 'workflow']);
+    expect(chat.seedCursor).toBe(3);
     expect(chat.loading).toBe(false);
     expect(chat.error).toBeNull();
   });
 
-  it('워크플로 로그 읽기가 실패해도 세션은 열리고 그 워크플로는 커서 0으로 남는다', async () => {
-    const chat = createPrismChat(deps({ loadWorkflowLog: vi.fn().mockRejectedValue(new Error('down')) }));
+  it('같은 세션 재호출은 no-op이고, 실패는 에러 문면을 세운다', async () => {
+    const load = vi.fn().mockRejectedValueOnce(new Error('x')).mockResolvedValue(emptyTranscript());
+    const chat = createPrismChat(deps({ load }));
 
-    await chat.load('session_1');
+    await chat.load('PRSS1');
+    expect(chat.error).toBe('대화를 불러오지 못했어요. 잠시 후 다시 시도해 주세요');
 
+    await chat.load('PRSS1');
     expect(chat.error).toBeNull();
-    expect(chat.loading).toBe(false);
-    expect(workflowOf(chat, 'workflow_1').cursor).toBe(0);
+    expect(load).toHaveBeenCalledTimes(2);
+
+    await chat.load('PRSS1');
+    expect(load).toHaveBeenCalledTimes(2);
   });
 
-  it('워크플로 로그를 기다리는 동안 세션이 바뀌면 그 결과는 버린다', async () => {
-    let release!: (frames: ProjectedStreamFrame[]) => void;
-    const pending = new Promise<ProjectedStreamFrame[]>((resolve) => (release = resolve));
-    const chat = createPrismChat(deps({ loadWorkflowLog: vi.fn().mockReturnValue(pending) }));
+  it('늦게 끝난 이전 로드는 무시된다', async () => {
+    let resolveFirst!: (transcript: Transcript) => void;
+    const load = vi
+      .fn()
+      .mockImplementationOnce(() => new Promise<Transcript>((resolve) => (resolveFirst = resolve)))
+      .mockResolvedValueOnce({ ...emptyTranscript(), cursor: 9 });
+    const chat = createPrismChat(deps({ load }));
 
-    const first = chat.load('session_1');
-    await Promise.resolve();
-    await Promise.resolve();
-    await chat.load(null);
-    release([stepStarted(1, 'workflow_1')]);
+    const first = chat.load('PRSS1');
+    await chat.load('PRSS2');
+    resolveFirst({ ...emptyTranscript(), cursor: 1 });
     await first;
 
-    expect(chat.sessionId).toBeNull();
-    expect(chat.transcript.messages).toHaveLength(0);
+    expect(chat.sessionId).toBe('PRSS2');
+    expect(chat.seedCursor).toBe(9);
+  });
+});
+
+describe('createPrismChat.receive', () => {
+  it('프레임을 리듀서에 적용하고 run.started에서 pending을 지운다', async () => {
+    const chat = createPrismChat(deps({ send: vi.fn().mockResolvedValue({ sessionId: 'PRSS1', runSeq: 1 }) }));
+
+    await chat.send('안녕');
+    expect(chat.pending).toBe('안녕');
+
+    chat.receive(ev(1, 'run.started', { agent, run: 1 }, { message: '안녕', command: null }));
+
+    expect(chat.pending).toBeNull();
+    expect(chat.transcript.messages[0]).toMatchObject({ role: 'user', text: '안녕' });
   });
 });
