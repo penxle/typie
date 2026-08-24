@@ -2,16 +2,18 @@ import { PRISM_SPINNER_HDR_HEADROOM_DEFAULT } from './internal/prism-spinner-hdr
 import { PRISM_SPINNER_CSS_SIZE } from './internal/prism-spinner-morph.ts';
 import type { PrismSpinnerAtlasConfiguration, PrismSpinnerPreRenderedHdrConfiguration } from './internal/prism-spinner-prerendered.ts';
 
-export const PRISM_SPINNER_DURATION_MS = 2300;
-export const PRISM_SPINNER_FRAME_COUNT = 138;
+export const PRISM_SPINNER_DURATION_MS = 2400;
+export const PRISM_SPINNER_FRAME_COUNT = 144;
+export const PRISM_SPINNER_ATLAS_DURATION_MS = 2300;
+export const PRISM_SPINNER_ATLAS_FRAME_COUNT = 138;
 const PRISM_SPINNER_ATLAS_COLUMNS = 12;
 const PRISM_SPINNER_ATLAS_ROWS = 12;
 
 type PrismSpinnerAssetSelection = {
-  apngUrl: string;
   atlas: PrismSpinnerAtlasConfiguration;
   dpr: 1 | 2 | 3;
   hdr: PrismSpinnerPreRenderedHdrConfiguration;
+  sdrUrl: string;
 };
 
 function nearestDpr(value: number): 1 | 2 | 3 {
@@ -32,18 +34,23 @@ export function resolvePrismSpinnerAssets(devicePixelRatio = globalThis.devicePi
     mode: 'auto',
   };
   return {
-    apngUrl: new URL(`../assets/spinner/prism-spinner@${dpr}x.apng`, import.meta.url).href,
     atlas: {
-      atlasUrl: new URL(`../assets/spinner/prism-spinner-atlas@${dpr}x.png`, import.meta.url).href,
+      atlasUrl: new URL(`../assets/spinner/prism-spinner-atlas-sdr@${dpr}x.png`, import.meta.url).href,
       columns: PRISM_SPINNER_ATLAS_COLUMNS,
       cssSize: PRISM_SPINNER_CSS_SIZE,
-      durationMs: PRISM_SPINNER_DURATION_MS,
-      frameCount: PRISM_SPINNER_FRAME_COUNT,
+      durationMs: PRISM_SPINNER_ATLAS_DURATION_MS,
+      frameCount: PRISM_SPINNER_ATLAS_FRAME_COUNT,
       framePixelSize: PRISM_SPINNER_CSS_SIZE * dpr,
-      hdr,
+      hdr: {
+        ...hdr,
+        assetUrl: new URL(`../assets/spinner/prism-spinner-atlas-hdr@${dpr}x.bin`, import.meta.url).href,
+        durationMs: PRISM_SPINNER_ATLAS_DURATION_MS,
+        frameCount: PRISM_SPINNER_ATLAS_FRAME_COUNT,
+      },
       rows: PRISM_SPINNER_ATLAS_ROWS,
     },
     dpr,
     hdr,
+    sdrUrl: new URL(`../assets/spinner/prism-spinner-sdr@${dpr}x.apng`, import.meta.url).href,
   };
 }
