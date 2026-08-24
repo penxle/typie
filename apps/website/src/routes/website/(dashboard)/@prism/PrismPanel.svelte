@@ -6,7 +6,7 @@
   import { flex } from '@typie/styled-system/patterns';
   import { pointerCapture } from '@typie/ui/actions';
   import { Button, Icon, Menu, MenuItem } from '@typie/ui/components';
-  import { getAppContext } from '@typie/ui/context';
+  import { getAppContext, getThemeContext } from '@typie/ui/context';
   import { Dialog, Toast } from '@typie/ui/notification';
   import { clamp } from '@typie/ui/utils';
   import { tick, untrack } from 'svelte';
@@ -24,6 +24,7 @@
   import { unwrapError } from '$lib/graphql/error';
   import { getOpenDocuments } from '$lib/prism/open-documents.svelte';
   import { takeSessionJump } from '$lib/prism/session-jump.svelte';
+  import PrismSpinner from '$lib/prism-ui/PrismSpinner.svelte';
   import { graphql } from '$mearie';
   import { AutoResolver } from './lib/auto-resolve.svelte.ts';
   import { backoffDelay } from './lib/backoff.ts';
@@ -35,8 +36,8 @@
   import { createPrismSessionState } from './prism-session.svelte';
   import PrismComposer from './PrismComposer.svelte';
   import PrismGateCard from './PrismGateCard.svelte';
+  import PrismPanelIndicator from './PrismPanelIndicator.svelte';
   import PrismSessionList from './PrismSessionList.svelte';
-  import PrismSpinner from './PrismSpinner.svelte';
   import PrismTranscript from './PrismTranscript.svelte';
   import { startChips } from './start-chips.ts';
   import { clientResolvers } from './tools/index.ts';
@@ -51,6 +52,12 @@
   let { user$key }: Props = $props();
 
   const app = getAppContext();
+  const theme = getThemeContext();
+
+  $effect(() => {
+    void theme.currentThemeVariant;
+    window.dispatchEvent(new Event('typie-prism-themechange'));
+  });
 
   const user = createFragment(
     graphql(`
@@ -247,6 +254,13 @@
   let composer = $state<PrismComposer>();
   let draft = $state('');
   const emptySession = $derived(chat.transcript.messages.length === 0 && !chat.transcript.live && chat.pending === null);
+  let indicatorDestination = $state<HTMLElement>();
+  let indicatorGeneration = chat.generation;
+  let indicatorPhase = $state<'answered' | 'failed' | 'hidden' | 'submitting' | 'welcome'>(
+    selected.current === null ? 'welcome' : 'hidden',
+  );
+  let indicatorSpinnerOwner = $state<'panel' | 'row'>('row');
+  let indicatorWaitSeen = $state(false);
   const chipsVisible = $derived(emptySession && draft.length === 0);
   const chipClass = css({
     display: 'flex',
@@ -267,6 +281,32 @@
   const currentTitle = $derived(currentSession ? sessionLabel(currentSession) : '새 대화');
 
   let seenTitle: string | null = null;
+
+  $effect.pre(() => {
+    const generation = chat.generation;
+    if (generation === indicatorGeneration) return;
+    indicatorGeneration = generation;
+    untrack(() => {
+      indicatorDestination = undefined;
+      indicatorPhase = selected.current === null ? 'welcome' : 'hidden';
+      indicatorSpinnerOwner = 'row';
+      indicatorWaitSeen = false;
+    });
+  });
+
+  $effect.pre(() => {
+    if (!app.preference.current.prismPanelOpen) indicatorSpinnerOwner = 'row';
+  });
+
+  $effect(() => {
+    const anchor = indicatorDestination;
+    if (indicatorPhase !== 'submitting') return;
+    if (anchor) {
+      indicatorWaitSeen = true;
+    } else if (indicatorWaitSeen) {
+      indicatorPhase = 'answered';
+    }
+  });
 
   $effect(() => {
     const title = chat.transcript.title;
@@ -552,6 +592,10 @@
 
   const onSend = async (text: string) => {
     const creating = chat.sessionId === null;
+    if (creating) {
+      indicatorWaitSeen = false;
+      indicatorPhase = 'submitting';
+    }
 
     try {
       const result = await chat.send(text);
@@ -573,6 +617,8 @@
       } else {
         Toast.error('메시지를 보내지 못했어요. 잠시 후 다시 시도해 주세요');
       }
+
+      if (creating) indicatorPhase = 'failed';
 
       throw err;
     }
@@ -856,19 +902,15 @@
       {#if gate}
         <PrismGateCard reason={gate} />
       {:else}
-        {#if emptySession && !chat.loading}
-          <div
-            class={css({
-              position: 'absolute',
-              inset: '0',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              pointerEvents: 'none',
-            })}
-          >
-            <Icon style={css.raw({ color: 'border.default' })} icon={PrismIcon} size={32} />
-          </div>
+        {#if app.preference.current.prismPanelOpen && indicatorPhase !== 'hidden'}
+          {#key chat.generation}
+            <PrismPanelIndicator
+              destination={indicatorDestination}
+              onSpinnerOwnerChange={(owner) => (indicatorSpinnerOwner = owner)}
+              phase={indicatorPhase}
+              themeVariant={theme.currentThemeVariant}
+            />
+          {/key}
         {/if}
 
         {#if listOpen}
@@ -896,7 +938,9 @@
             pending={chat.pending}
             reconnecting={disconnected}
             sessionId={chat.sessionId}
+            spinnerOwner={indicatorSpinnerOwner}
             transcript={chat.transcript}
+            bind:waitSpinnerAnchor={indicatorDestination}
           />
         {/key}
 

@@ -617,6 +617,12 @@ importers:
       '@typie/prism':
         specifier: workspace:*
         version: link:../../packages/prism
+      '@typie/prism-ui':
+        specifier: workspace:*
+        version: link:../../packages/prism-ui
+      '@typie/prism-ui-web':
+        specifier: workspace:*
+        version: link:../../crates/prism-ui-web
       '@typie/styled-system':
         specifier: workspace:*
         version: link:../../packages/styled-system

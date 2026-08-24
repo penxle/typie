@@ -12,6 +12,7 @@ import type { ConfigEnv, Plugin, UserConfig } from 'vite';
 
 const currentDir = fileURLToPath(new URL('.', import.meta.url));
 const editorPkgDir = path.resolve(currentDir, '../../crates/editor/pkg');
+const prismPkgDir = path.resolve(currentDir, '../../crates/prism-ui-web/pkg');
 
 const wasmReloadPlugin = (): Plugin => {
   let timer: ReturnType<typeof setTimeout>;
@@ -20,10 +21,10 @@ const wasmReloadPlugin = (): Plugin => {
   return {
     name: 'wasm-reload',
     configureServer(server) {
-      server.watcher.add([editorPkgDir]);
+      server.watcher.add([editorPkgDir, prismPkgDir]);
     },
     handleHotUpdate({ file, server }) {
-      if (!file.startsWith(editorPkgDir) || file.endsWith('.gitignore')) {
+      if ((!file.startsWith(editorPkgDir) && !file.startsWith(prismPkgDir)) || file.endsWith('.gitignore')) {
         return;
       }
 
@@ -66,7 +67,7 @@ export const createConfig = ({ mode }: Pick<ConfigEnv, 'mode'>) => ({
     wasmReloadPlugin(),
   ],
   optimizeDeps: {
-    exclude: ['@typie/editor-ffi'],
+    exclude: ['@typie/editor-ffi', '@typie/prism-ui', '@typie/prism-ui-web'],
   },
   ...(mode === 'test' && { resolve: { conditions: [...defaultClientConditions] } }),
   server: {
