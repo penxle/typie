@@ -3,7 +3,7 @@ import { logger } from '@typie/lib';
 import { applyDelta, parked, sealTurn } from '@typie/prism';
 import { DelayedError } from 'bullmq';
 import dayjs from 'dayjs';
-import { and, asc, eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray, ne } from 'drizzle-orm';
 import { redis } from '#/cache.ts';
 import { db, first, firstOrThrow, PrismRuns, PrismSessionEvents, PrismSessions, PrismWorkflowEvents, PrismWorkflows } from '#/db/index.ts';
 import { prism, PrismApiError } from '#/external/prism.ts';
@@ -60,6 +60,18 @@ export const loadParkedEvents = async (target: IngestTarget): Promise<ParkedEven
 
   return rows.map((row) => ({ kind: row.kind, context: row.context ?? null, data: row.data }));
 };
+
+const loadSettledWorkflows = async (sessionId: string): Promise<Set<string>> => {
+  const rows = await db
+    .select({ prismWorkflowId: PrismWorkflows.prismWorkflowId })
+    .from(PrismWorkflows)
+    .where(and(eq(PrismWorkflows.sessionId, sessionId), ne(PrismWorkflows.state, 'RUNNING')));
+
+  return new Set(rows.map((row) => row.prismWorkflowId));
+};
+
+export const agentParked = async (sessionId: string, events: ParkedEvent[]): Promise<boolean> =>
+  parked(events, 'agent') && parked(events, 'agent', { settledWorkflows: await loadSettledWorkflows(sessionId) });
 
 const pushAsk = async (session: SessionRef, op: Extract<DomainOp, { op: 'ask-push' }>) => {
   const { PUSH_TTL_SECONDS, sendPushNotificationOnce } = await import('#/external/firebase.ts');
@@ -208,8 +220,10 @@ const runPump = async (ctx: PumpContext): Promise<PumpOutcome> => {
     return ctx.workflow?.state === 'RUNNING';
   };
 
-  const stopNow = async (): Promise<boolean> =>
-    synced && shouldStop({ synced, open: await isOpen(), parked: parked(parkedEvents, parkedScope) });
+  const isParked = async (): Promise<boolean> =>
+    target.kind === 'agent' ? await agentParked(target.sessionId, parkedEvents) : parked(parkedEvents, parkedScope);
+
+  const stopNow = async (): Promise<boolean> => synced && shouldStop({ synced, open: await isOpen(), parked: await isParked() });
 
   const publish = (frame: StreamFrame) => {
     try {
