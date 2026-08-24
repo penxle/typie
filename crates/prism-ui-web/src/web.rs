@@ -116,6 +116,16 @@ impl PrismWebRenderer {
         std::mem::size_of::<FrameUniforms>()
     }
 
+    #[wasm_bindgen(js_name = whenSubmittedWorkDone)]
+    pub fn when_submitted_work_done(&self) -> js_sys::Promise {
+        js_sys::Promise::new(&mut |resolve, _reject| {
+            let resolve = resolve.clone();
+            self.renderer.queue().on_submitted_work_done(move || {
+                let _ = resolve.call0(&JsValue::UNDEFINED);
+            });
+        })
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn render(
         &mut self,

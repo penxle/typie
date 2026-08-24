@@ -63,7 +63,7 @@ import {
 } from '#/utils/entity.ts';
 import { getExcludedDeltasByDate } from '#/utils/excluded-stats.ts';
 import { generateFractionalOrder, generatePermalink, generateSlug, getKoreanAge } from '#/utils/index.ts';
-import { assertSitePermission } from '#/utils/permission.ts';
+import { assertDocumentPermission, assertSitePermission } from '#/utils/permission.ts';
 import { assertActiveSubscription, hasActiveSubscription } from '#/utils/plan.ts';
 import { wasm as wasmFfi } from '#/utils/wasm-ffi.ts';
 import { builder } from '../builder.ts';
@@ -733,6 +733,18 @@ builder.queryFields((t) => ({
       }
 
       return document;
+    },
+  }),
+
+  documentById: t.withAuth({ session: true }).field({
+    type: Document,
+    args: { documentId: t.arg.id({ validate: validateDbId(TableCode.DOCUMENTS) }) },
+    resolve: async (_, args, ctx) => {
+      await assertDocumentPermission({ userId: ctx.session.userId, documentId: args.documentId }).catch(() => {
+        throw new NotFoundError();
+      });
+
+      return await db.select().from(Documents).where(eq(Documents.id, args.documentId)).then(firstOrThrow);
     },
   }),
 }));

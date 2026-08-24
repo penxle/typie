@@ -341,6 +341,9 @@ function createUnavailablePrismObjectController(canvas: HTMLCanvasElement, optio
     whenReady() {
       return Promise.resolve('unavailable');
     },
+    whenFirstFramePresented() {
+      return Promise.resolve();
+    },
     get readiness() {
       return 'unavailable';
     },
@@ -782,6 +785,9 @@ export function mountPrismObject(canvas: HTMLCanvasElement, initialOptions: Pris
     },
     whenReady() {
       return surface.whenReady();
+    },
+    whenFirstFramePresented() {
+      return surface.whenFirstFramePresented();
     },
     get readiness() {
       return surface.readiness;

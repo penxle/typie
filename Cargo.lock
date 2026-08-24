@@ -2684,6 +2684,7 @@ name = "prism-ui-web"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
+ "js-sys",
  "prism-ui-renderer",
  "wasm-bindgen",
  "wasm-bindgen-futures",

@@ -1,15 +1,18 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
+  import { markdownCards } from './cards/index.ts';
+  import PrismBrokenCard from './cards/PrismBrokenCard.svelte';
   import PrismMarkdown from './PrismMarkdown.svelte';
   import type { BlockNode, InlineNode } from './lib/markdown.ts';
 
   type Props = {
     blocks: BlockNode[];
     plain?: number;
+    settled?: boolean;
   };
 
-  let { blocks, plain = Number.MAX_SAFE_INTEGER }: Props = $props();
+  let { blocks, plain = Number.MAX_SAFE_INTEGER, settled = true }: Props = $props();
 
   const wordFade = css({
     opacity: '0',
@@ -83,7 +86,7 @@
       >
         {#each block.items as item (item.key)}
           <li>
-            <PrismMarkdown blocks={item.blocks} {plain} />
+            <PrismMarkdown blocks={item.blocks} {plain} {settled} />
           </li>
         {/each}
       </svelte:element>
@@ -101,8 +104,17 @@
         })}><code>{block.text}</code></pre>
     {:else if block.kind === 'blockquote'}
       <blockquote class={css({ borderLeftWidth: '2px', borderColor: 'border.strong', paddingLeft: '10px', color: 'text.subtle' })}>
-        <PrismMarkdown blocks={block.children} {plain} />
+        <PrismMarkdown blocks={block.children} {plain} {settled} />
       </blockquote>
+    {:else if block.kind === 'card'}
+      {@const Card = Object.hasOwn(markdownCards, block.name) ? markdownCards[block.name] : undefined}
+      <div class={block.key >= plain ? wordFade : undefined}>
+        {#if Card}
+          <Card pending={block.pending} {settled} text={block.text} />
+        {:else}
+          <PrismBrokenCard />
+        {/if}
+      </div>
     {:else if block.kind === 'hr'}
       <hr class={css({ borderColor: 'border.subtle' })} />
     {/if}

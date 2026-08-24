@@ -3,6 +3,7 @@
 export type PrismWebRenderer = {
   frameUniformByteLength: number;
   free(): void;
+  whenSubmittedWorkDone(): Promise<void>;
   render(
     frameUniformBytes: Uint8Array,
     opticalPaths: Float32Array,
@@ -218,6 +219,9 @@ export function createDeferredPrismWgpuSurface(canvas: HTMLCanvasElement, create
   const readyCallbacks: ((error?: unknown) => void)[] = [];
   const unavailableCallbacks = new Set<(error: unknown) => void>();
   const { promise: ready, resolve: resolveReady } = Promise.withResolvers<'ready' | 'unavailable'>();
+  // eslint-disable-next-line @typescript-eslint/no-invalid-void-type -- unicorn/prefer-promise-with-resolvers와 충돌: 호출식 타입 인자의 void를 룰이 타입 위치로 보지 않는다
+  const { promise: firstFramePresented, resolve: resolveFirstFramePresented } = Promise.withResolvers<void>();
+  let firstFrameRequested = false;
   let unavailableError: unknown;
 
   function settleReadiness(state: 'ready' | 'unavailable', error?: unknown) {
@@ -236,6 +240,7 @@ export function createDeferredPrismWgpuSurface(canvas: HTMLCanvasElement, create
     renderer = null;
     if (readiness === 'loading') settleReadiness('unavailable', error);
     else readiness = 'unavailable';
+    resolveFirstFramePresented();
     for (const callback of unavailableCallbacks) callback(error);
     unavailableCallbacks.clear();
   }
@@ -273,6 +278,9 @@ export function createDeferredPrismWgpuSurface(canvas: HTMLCanvasElement, create
     },
     whenReady() {
       return ready;
+    },
+    whenFirstFramePresented() {
+      return firstFramePresented;
     },
     onReady(callback: (error?: unknown) => void) {
       if (readiness === 'ready') callback();
@@ -367,6 +375,13 @@ export function createDeferredPrismWgpuSurface(canvas: HTMLCanvasElement, create
             headroom,
           );
         }
+        if (!firstFrameRequested) {
+          firstFrameRequested = true;
+          void renderer.whenSubmittedWorkDone().then(() => {
+            if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => resolveFirstFramePresented());
+            else resolveFirstFramePresented();
+          });
+        }
       } catch (err) {
         console.warn('[Typie Prism] WebGPU frame failed.', err);
         markUnavailable(err);
@@ -377,6 +392,7 @@ export function createDeferredPrismWgpuSurface(canvas: HTMLCanvasElement, create
       disposed = true;
       renderer?.free();
       renderer = null;
+      resolveFirstFramePresented();
       unavailableCallbacks.clear();
       if (readiness === 'loading') {
         settleReadiness('unavailable', new Error('WebGPU renderer was disposed before it became ready.'));

@@ -590,6 +590,10 @@ impl PrismRenderer {
         &self.device
     }
 
+    pub fn queue(&self) -> &wgpu::Queue {
+        &self.queue
+    }
+
     fn ensure_targets(&mut self, material_size: RenderTargetSize, light_size: RenderTargetSize) {
         let unchanged = self.targets.as_ref().is_some_and(|targets| {
             targets.material_size == material_size && targets.light_size == light_size
