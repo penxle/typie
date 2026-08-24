@@ -47,7 +47,8 @@ imbl = "7"
 js-sys = "0.3"
 kurbo = "0.13"
 log = "0.4"
-naga = { version = "30", features = ["glsl-in", "wgsl-out"] }
+# Naga's GLSL frontend shares interpolation code gated by `wgsl-in`.
+naga = { version = "30", features = ["glsl-in", "wgsl-in", "wgsl-out"] }
 markup5ever_rcdom = "0.39"
 objc2 = "0.6"
 objc2-core-foundation = { version = "0.3", features = ["CFCGTypes"] }
