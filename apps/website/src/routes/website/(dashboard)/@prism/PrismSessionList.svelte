@@ -183,7 +183,7 @@
     inset: '0',
     flexDirection: 'column',
     backgroundColor: 'surface.default',
-    zIndex: '2',
+    zIndex: '3',
     animation: '[rise-in 200ms cubic-bezier(0.23, 1, 0.32, 1) both]',
     _motionReduce: { animation: 'none' },
   })}

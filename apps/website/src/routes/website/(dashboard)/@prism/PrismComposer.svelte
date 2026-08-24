@@ -27,6 +27,7 @@
     bottom: '[100%]',
     left: '12px',
     right: '12px',
+    zIndex: '2',
     marginBottom: '4px',
     borderWidth: '1px',
     borderColor: 'border.default',

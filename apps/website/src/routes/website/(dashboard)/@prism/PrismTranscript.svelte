@@ -498,6 +498,7 @@
         position: 'absolute',
         bottom: '12px',
         left: '[calc(50% - 14px)]',
+        zIndex: '2',
         size: '28px',
         borderRadius: 'full',
         backgroundColor: 'surface.dark',

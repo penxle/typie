@@ -445,7 +445,7 @@
     position: absolute;
     inset: 0;
     z-index: 1;
-    overflow: visible;
+    overflow: hidden;
     pointer-events: none;
   }
 
