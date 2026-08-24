@@ -902,17 +902,6 @@
       {#if gate}
         <PrismGateCard reason={gate} />
       {:else}
-        {#if app.preference.current.prismPanelOpen && indicatorPhase !== 'hidden'}
-          {#key chat.generation}
-            <PrismPanelIndicator
-              destination={indicatorDestination}
-              onSpinnerOwnerChange={(owner) => (indicatorSpinnerOwner = owner)}
-              phase={indicatorPhase}
-              themeVariant={theme.currentThemeVariant}
-            />
-          {/key}
-        {/if}
-
         {#if listOpen}
           <PrismSessionList
             currentId={selected.current}
@@ -929,55 +918,66 @@
           />
         {/if}
 
-        {#key chat.generation}
-          <PrismTranscript
-            failedIds={autoResolver.failedIds}
-            loading={chat.loading}
-            onResolve={resolveTool}
-            onRetry={(toolCallId) => autoResolver.retry(toolCallId)}
-            pending={chat.pending}
-            reconnecting={disconnected}
-            sessionId={chat.sessionId}
-            spinnerOwner={indicatorSpinnerOwner}
-            transcript={chat.transcript}
-            bind:waitSpinnerAnchor={indicatorDestination}
-          />
-        {/key}
+        <div class={flex({ position: 'relative', flexDirection: 'column', flexGrow: '1', minHeight: '0' })}>
+          {#if app.preference.current.prismPanelOpen && indicatorPhase !== 'hidden'}
+            {#key chat.generation}
+              <PrismPanelIndicator
+                destination={indicatorDestination}
+                onSpinnerOwnerChange={(owner) => (indicatorSpinnerOwner = owner)}
+                phase={indicatorPhase}
+                themeVariant={theme.currentThemeVariant}
+              />
+            {/key}
+          {/if}
 
-        {#if statusKind !== null}
-          <div class={css({ paddingX: '12px', paddingBottom: '8px' })} transition:expand>
-            <div bind:this={statusEl}>
-              {#if statusKind === 'reconnecting'}
-                <div class={css(calloutStyle, calloutNeutralStyle)} in:swap={{ box: statusEl, from: statusFrom }}>
-                  <PrismSpinner label="다시 연결하는 중" />
-                  <span class={calloutTextClass}>다시 연결하는 중이에요</span>
-                </div>
-              {:else if statusKind === 'error'}
-                <div class={css(calloutStyle, calloutDangerStyle)} in:swap={{ box: statusEl, from: statusFrom }}>
-                  <Icon style={css.raw({ flexShrink: '0', color: 'text.danger' })} icon={CircleAlertIcon} size={14} />
-                  <span class={calloutTextClass}>{chat.error}</span>
-                  <Button
-                    style={css.raw({ flexShrink: '0' })}
-                    onclick={() => void chat.load(selected.current)}
-                    size="sm"
-                    variant="secondary"
-                  >
-                    다시 불러오기
-                  </Button>
-                </div>
-              {:else}
-                <div class={css(calloutStyle, calloutDangerStyle)} in:swap={{ box: statusEl, from: statusFrom }}>
-                  <Icon style={css.raw({ flexShrink: '0', color: 'text.danger' })} icon={CircleAlertIcon} size={14} />
-                  <span class={calloutTextClass}>실시간 연결이 끊겼어요</span>
-                  <Button style={css.raw({ flexShrink: '0' })} onclick={resetReconnect} size="sm" variant="secondary">다시 연결</Button>
-                </div>
-              {/if}
+          {#key chat.generation}
+            <PrismTranscript
+              failedIds={autoResolver.failedIds}
+              loading={chat.loading}
+              onResolve={resolveTool}
+              onRetry={(toolCallId) => autoResolver.retry(toolCallId)}
+              pending={chat.pending}
+              reconnecting={disconnected}
+              sessionId={chat.sessionId}
+              spinnerOwner={indicatorSpinnerOwner}
+              transcript={chat.transcript}
+              bind:waitSpinnerAnchor={indicatorDestination}
+            />
+          {/key}
+
+          {#if statusKind !== null}
+            <div class={css({ paddingX: '12px', paddingBottom: '8px' })} transition:expand>
+              <div bind:this={statusEl} class={css({ position: 'relative', zIndex: '2' })}>
+                {#if statusKind === 'reconnecting'}
+                  <div class={css(calloutStyle, calloutNeutralStyle)} in:swap={{ box: statusEl, from: statusFrom }}>
+                    <PrismSpinner label="다시 연결하는 중" />
+                    <span class={calloutTextClass}>다시 연결하는 중이에요</span>
+                  </div>
+                {:else if statusKind === 'error'}
+                  <div class={css(calloutStyle, calloutDangerStyle)} in:swap={{ box: statusEl, from: statusFrom }}>
+                    <Icon style={css.raw({ flexShrink: '0', color: 'text.danger' })} icon={CircleAlertIcon} size={14} />
+                    <span class={calloutTextClass}>{chat.error}</span>
+                    <Button
+                      style={css.raw({ flexShrink: '0' })}
+                      onclick={() => void chat.load(selected.current)}
+                      size="sm"
+                      variant="secondary"
+                    >
+                      다시 불러오기
+                    </Button>
+                  </div>
+                {:else}
+                  <div class={css(calloutStyle, calloutDangerStyle)} in:swap={{ box: statusEl, from: statusFrom }}>
+                    <Icon style={css.raw({ flexShrink: '0', color: 'text.danger' })} icon={CircleAlertIcon} size={14} />
+                    <span class={calloutTextClass}>실시간 연결이 끊겼어요</span>
+                    <Button style={css.raw({ flexShrink: '0' })} onclick={resetReconnect} size="sm" variant="secondary">다시 연결</Button>
+                  </div>
+                {/if}
+              </div>
             </div>
-          </div>
-        {/if}
+          {/if}
 
-        {#if !chat.loading}
-          {#if emptySession}
+          {#if !chat.loading && emptySession}
             <div
               class={css(
                 { paddingX: '12px', paddingBottom: '24px', transition: '[opacity 150ms ease]' },
@@ -986,7 +986,7 @@
               aria-hidden={!chipsVisible}
             >
               <p class={css({ marginBottom: '6px', fontSize: '13px', fontWeight: 'semibold', color: 'text.faint' })}>제안</p>
-              <div class={flex({ gap: '6px' })}>
+              <div class={flex({ position: 'relative', zIndex: '2', gap: '6px' })}>
                 {#each startChips as chip (chip.insert)}
                   <button class={chipClass} onclick={() => onQuickSend(chip.insert)} tabindex={chipsVisible ? 0 : -1} type="button">
                     <Icon icon={chip.icon} size={14} />
@@ -996,7 +996,9 @@
               </div>
             </div>
           {/if}
+        </div>
 
+        {#if !chat.loading}
           <PrismComposer
             bind:this={composer}
             {blocked}
