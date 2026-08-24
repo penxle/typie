@@ -280,7 +280,6 @@ export const prismObjectDefaults = {
   sheenChroma: 0.9,
   visibility: 0.9,
   bevel: 0.07,
-  shadowStrength: 0.8,
   environmentLuminance: null,
   hdr: 'auto',
   hdrHeadroom: 1.25,
@@ -594,7 +593,6 @@ export function mountPrismObject(canvas: HTMLCanvasElement, initialOptions: Pris
       uniforms.setFloat('uBevel', options.bevel);
       uniforms.setVector4Array('uPrismPlanes[0]', prismPlanes.values);
       uniforms.setInteger('uPrismPlaneCount', prismPlanes.count);
-      uniforms.setFloat('uShadowStrength', options.shadowStrength);
       uniforms.setFloat('uLightRadius', options.lightRadius);
       uniforms.setFloat('uSourceSize', options.sourceSize);
       uniforms.setFloat('uSourceDivergence', options.sourceDivergence);

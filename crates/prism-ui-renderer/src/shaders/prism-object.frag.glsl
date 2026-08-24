@@ -25,7 +25,6 @@ uniform float uVisibility;
 uniform float uBevel;
 uniform vec4 uPrismPlanes[20];
 uniform int uPrismPlaneCount;
-uniform float uShadowStrength;
 uniform float uLightRadius;
 uniform float uSourceSize;
 uniform float uSourceDivergence;
@@ -1922,28 +1921,8 @@ void main() {
   }
 
   if (!hit) {
-    // The neutral floor shadow remains separate from the optical beam. The
-    // beam itself is traced through the closed prism below.
-    float denominator = rayDirection.y;
-    float shadowAlpha = 0.0;
-    if (denominator < -0.0001) {
-      float planeDistance = (-1.04 * renderPrismScale() - rayOrigin.y) / denominator;
-      if (planeDistance > 0.0) {
-        vec3 planePoint = rayOrigin + rayDirection * planeDistance;
-        float width = (0.66 + 0.10 * abs(sin(angle))) * renderPrismScale();
-        float depth = (0.20 + 0.035 * abs(cos(angle))) * renderPrismScale();
-        vec2 ellipse = vec2(
-          planePoint.x / width,
-          (planePoint.z + 0.03 * renderPrismScale()) / depth
-        );
-        float broad = exp(-dot(ellipse, ellipse) * 2.05);
-        float contact = exp(-dot(ellipse * vec2(1.15, 1.62), ellipse * vec2(1.15, 1.62)) * 2.8);
-        shadowAlpha = (broad * 0.075 + contact * 0.065) * uShadowStrength;
-      }
-    }
-
-    vec3 accumulatedPremultiplied = vec3(0.10, 0.11, 0.13) * shadowAlpha;
-    float accumulatedAlpha = shadowAlpha;
+    vec3 accumulatedPremultiplied = vec3(0.0);
+    float accumulatedAlpha = 0.0;
     vec3 accumulatedHdrRadiance = vec3(0.0);
     float lightEnergyScale = inversesqrt(float(max(uLightCount, 1)));
     for (int lightIndex = 0; lightIndex < MAX_LIGHTS; lightIndex += 1) {
