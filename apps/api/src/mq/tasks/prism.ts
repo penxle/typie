@@ -6,7 +6,7 @@ import { PrismApiError } from '#/external/prism.ts';
 import { cancelActiveRun, closeRun } from '#/utils/prism-workflows.ts';
 import { ensureIngest } from '../prism-queue.ts';
 import { defineCron } from '../types.ts';
-import { loadParkedEvents } from './prism-ingest.ts';
+import { agentParked, loadParkedEvents } from './prism-ingest.ts';
 
 const log = logger.getChild('prism-cron');
 
@@ -19,7 +19,7 @@ const sweepSessions = async () => {
   for (const session of sessions) {
     try {
       const target = { kind: 'agent' as const, sessionId: session.id };
-      if (parked(await loadParkedEvents(target), 'agent')) continue;
+      if (await agentParked(session.id, await loadParkedEvents(target))) continue;
       await ensureIngest(target);
     } catch (err) {
       log.warn('session sweep failed for {id}: {*}', { id: session.id, error: err });
