@@ -33,6 +33,7 @@ const defaultPaneGroupState: PaneGroupState = {
   focusedPaneId: null,
   panelExpandedByPaneId: {},
   panelTabByPaneId: {},
+  toolbarExpandedByPaneId: {},
 };
 
 type PaneGroupOptions = {
@@ -161,6 +162,8 @@ export const setupPaneGroup = (initialSiteId: string, options: PaneGroupOptions)
       // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
       delete context.state.current.panelTabByPaneId[paneId];
       // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+      delete context.state.current.toolbarExpandedByPaneId[paneId];
+      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
       delete findReplaceOpenByPaneId[paneId];
 
       syncUrl();
@@ -174,7 +177,7 @@ export const setupPaneGroup = (initialSiteId: string, options: PaneGroupOptions)
       context.state.current.focusedPaneId = newPaneId;
 
       if (paneId !== newPaneId) {
-        const { panelExpandedByPaneId, panelTabByPaneId } = context.state.current;
+        const { panelExpandedByPaneId, panelTabByPaneId, toolbarExpandedByPaneId } = context.state.current;
 
         if (Object.hasOwn(panelExpandedByPaneId, paneId)) {
           panelExpandedByPaneId[newPaneId] = panelExpandedByPaneId[paneId];
@@ -186,6 +189,12 @@ export const setupPaneGroup = (initialSiteId: string, options: PaneGroupOptions)
           panelTabByPaneId[newPaneId] = panelTabByPaneId[paneId];
           // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
           delete panelTabByPaneId[paneId];
+        }
+
+        if (Object.hasOwn(toolbarExpandedByPaneId, paneId)) {
+          toolbarExpandedByPaneId[newPaneId] = toolbarExpandedByPaneId[paneId];
+          // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+          delete toolbarExpandedByPaneId[paneId];
         }
       }
 

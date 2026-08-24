@@ -3,7 +3,10 @@
   import { flex } from '@typie/styled-system/patterns';
   import { getAppContext } from '@typie/ui/context';
   import { CONTINUOUS_MIN_WIDTH, CONTINUOUS_VIEW_PADDING } from '$lib/editor-ffi/constants';
+  import { otherToolbarKind, readPrimaryToolbar } from '../v2/toolbar-kind';
+  import { getPaneGroup } from './context.svelte';
   import type { DocumentLayoutMode } from '$lib/editor-ffi/page-layout';
+  import type { ToolbarKind } from '../v2/toolbar-kind';
   import type { Pane } from './types';
 
   const DEFAULT_CONTENT_WIDTH = 600;
@@ -13,15 +16,15 @@
   type Props = {
     pane: Pane;
     documentLayoutMode?: DocumentLayoutMode | null;
+    documentId?: string | null;
   };
 
-  let { pane, documentLayoutMode = null }: Props = $props();
+  let { pane, documentLayoutMode = null, documentId = null }: Props = $props();
 
   const app = getAppContext();
-  const toolbarSize = $derived(app.preference.current.toolbarStyle === 'compact' ? 'medium' : 'large');
-  const insertSize = $derived(toolbarSize === 'large' ? '48px' : '28px');
-  const panelTabWidth = $derived(toolbarSize === 'large' ? '48px' : '40px');
-  const panelTabHeight = $derived(toolbarSize === 'large' ? '37px' : '24px');
+  const paneGroup = getPaneGroup();
+  const primary = $derived((documentId === null ? null : readPrimaryToolbar(documentId)) ?? app.preference.current.defaultPrimaryToolbar);
+  const toolbarExpanded = $derived(paneGroup.state.current.toolbarExpandedByPaneId[pane.id] ?? false);
 
   const layoutMetrics = $derived.by(() => {
     if (!documentLayoutMode) {
@@ -138,6 +141,11 @@
       <div class={flex({ alignItems: 'center', gap: '4px' })}>
         <!-- Feedback button -->
         <div style:width="87px" style:height="22px" style:border-radius="4px" class={bar}></div>
+        <!-- Panel tabs -->
+        {#each { length: 7 }}
+          <div style:width="24px" style:height="24px" style:border-radius="4px" class={bar}></div>
+        {/each}
+        <div style:width="1px" style:height="12px" class={verticalDivider}></div>
         <!-- Menu button -->
         <div style:width="24px" style:height="24px" style:border-radius="4px" class={bar}></div>
         <!-- Lock button -->
@@ -151,83 +159,85 @@
 
     <div class={divider}></div>
 
-    <!-- TopToolbar: insert icons | panel tabs -->
-    <div
-      style:padding-left="16px"
-      style:padding-right="10px"
-      style:padding-top="6px"
-      style:padding-bottom="6px"
-      style:gap="4px"
-      class={toolbarRow}
-    >
-      <!-- Insert buttons (image, file, embed, hr, quote, callout, fold, table, list) -->
-      <div class={flex({ alignItems: 'center', gap: '4px', flexShrink: '0' })}>
-        {#each { length: 9 }}
-          <div style:width={insertSize} style:height={insertSize} class={bar}></div>
-        {/each}
-      </div>
-      <div style:flex-grow="1"></div>
-      <!-- Vertical divider (height 80%, marginX 12px) -->
-      <div style:width="1px" style:height="80%" style:margin-inline="12px" class={verticalDivider}></div>
-      <!-- Panel tabs: info, note, comments, spellcheck, ai, timeline, settings -->
-      <div class={flex({ alignItems: 'center', gap: '4px', flexShrink: '0' })}>
-        {#each { length: 7 }}
-          <div style:width={panelTabWidth} style:height={panelTabHeight} class={bar}></div>
-        {/each}
-      </div>
-    </div>
+    {#snippet toolbarItemsSkeleton(kind: ToolbarKind)}
+      {#if kind === 'insert'}
+        <!-- Insert buttons (image, file, embed, hr, quote, callout, fold, table, list) -->
+        <div class={flex({ alignItems: 'center', gap: '4px', flexShrink: '0' })}>
+          {#each { length: 9 }}
+            <div style:width="24px" style:height="24px" class={bar}></div>
+          {/each}
+        </div>
+      {:else}
+        <!-- Text color, bg color, font family, font weight, font size (gap 4px) -->
+        <div class={flex({ alignItems: 'center', gap: '4px', flexShrink: '0' })}>
+          <div style:width="46px" style:height="24px" class={bar}></div>
+          <div style:width="46px" style:height="24px" class={bar}></div>
+          <div style:width="120px" style:height="24px" class={bar}></div>
+          <div style:width="100px" style:height="24px" class={bar}></div>
+          <div style:width="50px" style:height="24px" class={bar}></div>
+        </div>
+        <div style:width="1px" style:height="12px" class={verticalDivider}></div>
+        <!-- Bold, Italic, Strikethrough, Underline (gap 4px) -->
+        <div class={flex({ alignItems: 'center', gap: '4px', flexShrink: '0' })}>
+          <div style:width="24px" style:height="24px" class={bar}></div>
+          <div style:width="24px" style:height="24px" class={bar}></div>
+          <div style:width="24px" style:height="24px" class={bar}></div>
+          <div style:width="24px" style:height="24px" class={bar}></div>
+        </div>
+        <div style:width="1px" style:height="12px" class={verticalDivider}></div>
+        <!-- Link, Ruby, Comment (gap 4px) -->
+        <div class={flex({ alignItems: 'center', gap: '4px', flexShrink: '0' })}>
+          <div style:width="24px" style:height="24px" class={bar}></div>
+          <div style:width="24px" style:height="24px" class={bar}></div>
+          <div style:width="24px" style:height="24px" class={bar}></div>
+        </div>
+        <div style:width="1px" style:height="12px" class={verticalDivider}></div>
+        <!-- Align, Line height, Letter spacing (gap 4px) -->
+        <div class={flex({ alignItems: 'center', gap: '4px', flexShrink: '0' })}>
+          <div style:width="24px" style:height="24px" class={bar}></div>
+          <div style:width="24px" style:height="24px" class={bar}></div>
+          <div style:width="24px" style:height="24px" class={bar}></div>
+        </div>
+        <div style:width="1px" style:height="12px" class={verticalDivider}></div>
+        <!-- Clear formatting -->
+        <div style:width="24px" style:height="24px" class={bar}></div>
+      {/if}
+    {/snippet}
 
-    <!-- BottomToolbar: undo/redo | colors/font | formatting | link/ruby | align | clear ... search -->
-    <div
-      style:padding-left="20px"
-      style:padding-right="12px"
-      style:padding-top="8px"
-      style:padding-bottom="8px"
-      style:gap="10px"
-      class={toolbarRow}
-    >
-      <!-- Undo / Redo (gap 4px) -->
-      <div class={flex({ alignItems: 'center', gap: '4px', flexShrink: '0' })}>
+    {#snippet toolbarRowSkeleton(kind: ToolbarKind, isPrimary: boolean)}
+      <div
+        style:padding-left="20px"
+        style:padding-right="12px"
+        style:padding-top="8px"
+        style:padding-bottom="8px"
+        style:gap="10px"
+        class={toolbarRow}
+      >
+        <!-- Leading button (expand toggle / swap) -->
         <div style:width="24px" style:height="24px" class={bar}></div>
-        <div style:width="24px" style:height="24px" class={bar}></div>
+        <div style:width="1px" style:height="12px" class={verticalDivider}></div>
+        {#if isPrimary}
+          <!-- Undo / Redo (gap 4px) -->
+          <div class={flex({ alignItems: 'center', gap: '4px', flexShrink: '0' })}>
+            <div style:width="24px" style:height="24px" class={bar}></div>
+            <div style:width="24px" style:height="24px" class={bar}></div>
+          </div>
+          <div style:width="1px" style:height="12px" class={verticalDivider}></div>
+        {/if}
+        {@render toolbarItemsSkeleton(kind)}
+        {#if isPrimary}
+          <div style:flex-grow="1"></div>
+          <!-- Search -->
+          <div style:width="24px" style:height="24px" class={bar}></div>
+        {/if}
       </div>
-      <div style:width="1px" style:height="12px" class={verticalDivider}></div>
-      <!-- Text color, bg color, font family, font weight, font size (gap 4px) -->
-      <div class={flex({ alignItems: 'center', gap: '4px', flexShrink: '0' })}>
-        <div style:width="46px" style:height="24px" class={bar}></div>
-        <div style:width="46px" style:height="24px" class={bar}></div>
-        <div style:width="120px" style:height="24px" class={bar}></div>
-        <div style:width="100px" style:height="24px" class={bar}></div>
-        <div style:width="50px" style:height="24px" class={bar}></div>
-      </div>
-      <div style:width="1px" style:height="12px" class={verticalDivider}></div>
-      <!-- Bold, Italic, Strikethrough, Underline (gap 4px) -->
-      <div class={flex({ alignItems: 'center', gap: '4px', flexShrink: '0' })}>
-        <div style:width="24px" style:height="24px" class={bar}></div>
-        <div style:width="24px" style:height="24px" class={bar}></div>
-        <div style:width="24px" style:height="24px" class={bar}></div>
-        <div style:width="24px" style:height="24px" class={bar}></div>
-      </div>
-      <div style:width="1px" style:height="12px" class={verticalDivider}></div>
-      <!-- Link, Ruby (gap 4px) -->
-      <div class={flex({ alignItems: 'center', gap: '4px', flexShrink: '0' })}>
-        <div style:width="24px" style:height="24px" class={bar}></div>
-        <div style:width="24px" style:height="24px" class={bar}></div>
-      </div>
-      <div style:width="1px" style:height="12px" class={verticalDivider}></div>
-      <!-- Align, Line height, Letter spacing (gap 4px) -->
-      <div class={flex({ alignItems: 'center', gap: '4px', flexShrink: '0' })}>
-        <div style:width="24px" style:height="24px" class={bar}></div>
-        <div style:width="24px" style:height="24px" class={bar}></div>
-        <div style:width="24px" style:height="24px" class={bar}></div>
-      </div>
-      <div style:width="1px" style:height="12px" class={verticalDivider}></div>
-      <!-- Clear formatting -->
-      <div style:width="24px" style:height="24px" class={bar}></div>
-      <div style:flex-grow="1"></div>
-      <!-- Search -->
-      <div style:width="24px" style:height="24px" class={bar}></div>
-    </div>
+    {/snippet}
+
+    {@render toolbarRowSkeleton(primary, true)}
+
+    {#if toolbarExpanded}
+      {@render toolbarRowSkeleton(otherToolbarKind(primary), false)}
+    {/if}
 
     <!-- Body: centered content with constrained width -->
     <div class={flex({ flexGrow: '1', overflow: 'hidden' })}>

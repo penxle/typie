@@ -2,19 +2,16 @@
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { DropdownMenu, DropdownMenuItem, Icon, VerticalDivider } from '@typie/ui/components';
-  import { getAppContext, getThemeContext } from '@typie/ui/context';
+  import { getThemeContext } from '@typie/ui/context';
   import BoldIcon from '~icons/lucide/bold';
   import ItalicIcon from '~icons/lucide/italic';
   import LinkIcon from '~icons/lucide/link';
   import MessageSquarePlusIcon from '~icons/lucide/message-square-plus';
   import MinusIcon from '~icons/lucide/minus';
-  import RedoIcon from '~icons/lucide/redo';
   import RemoveFormattingIcon from '~icons/lucide/remove-formatting';
-  import SearchIcon from '~icons/lucide/search';
   import SlashIcon from '~icons/lucide/slash';
   import StrikethroughIcon from '~icons/lucide/strikethrough';
   import UnderlineIcon from '~icons/lucide/underline';
-  import UndoIcon from '~icons/lucide/undo';
   import LetterSpacingIcon from '~icons/typie/letter-spacing';
   import LineHeightIcon from '~icons/typie/line-height';
   import RubyIcon from '~icons/typie/ruby';
@@ -31,22 +28,18 @@
   import ToolbarLink from './ToolbarLink.svelte';
   import ToolbarRuby from './ToolbarRuby.svelte';
   import type { Message, ModifierType, Tri } from '@typie/editor-ffi/browser';
-  import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { ThemeVariant } from '$lib/editor-ffi/theme';
 
   type Font = { id?: string | null; weight: number; subfamilyDisplayName?: string | null; state: string };
   type FontFamily = { id: string; familyName: string; displayName: string; state: string; fonts: readonly Font[] };
 
   type Props = {
-    style?: SystemStyleObject;
     fontFamilies?: readonly FontFamily[];
-    onSearchClick?: () => void;
     onFontUploadClick?: () => void;
   };
 
-  let { style, fontFamilies = [], onSearchClick, onFontUploadClick }: Props = $props();
+  let { fontFamilies = [], onFontUploadClick }: Props = $props();
 
-  const app = getAppContext();
   const theme = getThemeContext();
   const ctx = getEditorContext();
 
@@ -164,49 +157,13 @@
 </script>
 
 <div
-  class={css(
-    {
-      display: 'flex',
-      flexShrink: '0',
-      alignItems: 'center',
-      gap: '10px',
-      paddingLeft: '20px',
-      paddingRight: '12px',
-      paddingY: '8px',
-      overflowX: 'auto',
-      scrollbarWidth: '[thin]',
-      borderBottomWidth: '1px',
-      borderColor: 'border.subtle',
-      position: 'relative',
-      zIndex: app.preference.current.zenModeEnabled ? 'underEditor' : 'overEditor',
-      backgroundColor: 'surface.default',
-      opacity: editingDisabled ? '50' : '100',
-      pointerEvents: editingDisabled ? 'none' : 'auto',
-    },
-    style,
-  )}
-  role="toolbar"
-  tabindex="-1"
+  class={flex({
+    alignItems: 'center',
+    gap: '10px',
+    opacity: editingDisabled ? '50' : '100',
+    pointerEvents: editingDisabled ? 'none' : 'auto',
+  })}
 >
-  <div class={flex({ alignItems: 'center', gap: '4px' })}>
-    <ToolbarButton
-      style={css.raw({ borderRightRadius: '0' })}
-      icon={UndoIcon}
-      label="실행 취소"
-      onclick={() => enqueue({ type: 'history', op: { type: 'undo' } })}
-      size="small"
-    />
-
-    <ToolbarButton
-      style={css.raw({ borderLeftRadius: '0' })}
-      icon={RedoIcon}
-      label="다시 실행"
-      onclick={() => enqueue({ type: 'history', op: { type: 'redo' } })}
-      size="small"
-    />
-  </div>
-
-  <VerticalDivider style={css.raw({ height: '12px' })} />
   <div class={flex({ alignItems: 'center', gap: '4px' })}>
     <ToolbarDropdownButton
       chevron
@@ -214,7 +171,6 @@
       label={isTextColorMixed ? '글씨 색: 여러 색' : '글씨 색'}
       onEscape={() => ctx.editor?.focus()}
       placement="bottom-start"
-      size="small"
     >
       {#snippet anchor()}
         <div class={center({ size: '20px' })}>
@@ -260,7 +216,6 @@
       label={isTextBackgroundColorMixed ? '배경색: 여러 색' : '배경색'}
       onEscape={() => ctx.editor?.focus()}
       placement="bottom-start"
-      size="small"
     >
       {#snippet anchor()}
         {@const selectedValue = currentTextBackgroundColor}
@@ -321,7 +276,6 @@
       keys={['Mod', 'B']}
       label="굵게"
       onclick={() => toggleModifier('bold')}
-      size="small"
     />
 
     <ToolbarButton
@@ -331,7 +285,6 @@
       keys={['Mod', 'I']}
       label="기울임"
       onclick={() => toggleModifier('italic')}
-      size="small"
     />
 
     <ToolbarButton
@@ -341,7 +294,6 @@
       keys={['Mod', 'Shift', 'S']}
       label="취소선"
       onclick={() => toggleModifier('strikethrough')}
-      size="small"
     />
 
     <ToolbarButton
@@ -351,7 +303,6 @@
       keys={['Mod', 'U']}
       label="밑줄"
       onclick={() => toggleModifier('underline')}
-      size="small"
     />
   </div>
 
@@ -368,7 +319,6 @@
         ctx.linkEditorOpen = opened;
       }}
       opened={ctx.linkEditorOpen}
-      size="small"
     >
       {#snippet anchor()}
         <ToolbarIcon icon={LinkIcon} />
@@ -387,7 +337,6 @@
       onOpenChange={(opened) => {
         if (opened) extendSelectionToSpan('ruby');
       }}
-      size="small"
     >
       {#snippet anchor()}
         <ToolbarIcon icon={RubyIcon} />
@@ -404,14 +353,13 @@
       label="코멘트"
       onclick={() => ctx.editor?.requestCommentCompose?.()}
       onpointerdown={(e) => e.preventDefault()}
-      size="small"
     />
   </div>
 
   <VerticalDivider style={css.raw({ height: '12px' })} />
 
   <div class={flex({ alignItems: 'center', gap: '4px' })}>
-    <ToolbarDropdownButton disabled={alignmentDisabled} label="문단 정렬" onEscape={() => ctx.editor?.focus()} size="small">
+    <ToolbarDropdownButton disabled={alignmentDisabled} label="문단 정렬" onEscape={() => ctx.editor?.focus()}>
       {#snippet anchor()}
         <ToolbarIcon icon={values.textAlign.find((a) => a.value === currentTextAlign)?.icon ?? values.textAlign[0].icon} />
       {/snippet}
@@ -434,7 +382,7 @@
       {/snippet}
     </ToolbarDropdownButton>
 
-    <ToolbarDropdownButton disabled={lineHeightDisabled} label="문단 행간" onEscape={() => ctx.editor?.focus()} size="small">
+    <ToolbarDropdownButton disabled={lineHeightDisabled} label="문단 행간" onEscape={() => ctx.editor?.focus()}>
       {#snippet anchor()}
         <ToolbarIcon icon={LineHeightIcon} />
       {/snippet}
@@ -457,7 +405,7 @@
       {/snippet}
     </ToolbarDropdownButton>
 
-    <ToolbarDropdownButton disabled={textFormattingDisabled} label="문단 자간" onEscape={() => ctx.editor?.focus()} size="small">
+    <ToolbarDropdownButton disabled={textFormattingDisabled} label="문단 자간" onEscape={() => ctx.editor?.focus()}>
       {#snippet anchor()}
         <ToolbarIcon icon={LetterSpacingIcon} />
       {/snippet}
@@ -489,17 +437,5 @@
     keys={['Mod', '\\']}
     label="서식 지우기"
     onclick={() => enqueue({ type: 'modifier', op: { type: 'clear_all' } })}
-    size="small"
-  />
-
-  <div class={css({ flexGrow: '1' })}></div>
-
-  <ToolbarButton
-    icon={SearchIcon}
-    keys={['Mod', 'F']}
-    label="찾기 및 바꾸기"
-    onclick={() => onSearchClick?.()}
-    onpointerdown={(e) => e.preventDefault()}
-    size="small"
   />
 </div>

@@ -8,7 +8,6 @@
 
   type Props = {
     style?: SystemStyleObject;
-    size: 'large' | 'medium' | 'small';
     icon: Component;
     label: string;
     keys?: TooltipParameter['keys'];
@@ -18,112 +17,40 @@
     onpointerdown?: (e: PointerEvent) => void;
   };
 
-  let { style, size, icon, label, keys, active = false, disabled = false, onclick, onpointerdown }: Props = $props();
+  let { style, icon, label, keys, active = false, disabled = false, onclick, onpointerdown }: Props = $props();
 </script>
 
-{#if size === 'large'}
-  <button
-    class={css(
-      {
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        flexDirection: 'column',
-        gap: '4px',
-        borderRadius: '4px',
-        size: '48px',
-        color: 'text.subtle',
-        transition: 'common',
-        _enabled: {
-          _hover: { color: 'text.default', backgroundColor: 'surface.muted' },
-          _pressed: { color: 'text.brand', backgroundColor: 'surface.muted' },
-        },
-        _disabled: { opacity: '50' },
-        flexShrink: '0',
+<button
+  class={css(
+    {
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      borderRadius: '4px',
+      size: '24px',
+      color: 'text.subtle',
+      transition: 'common',
+      _enabled: {
+        _hover: { color: 'text.default', backgroundColor: 'surface.muted' },
+        _pressed: { color: 'text.brand', backgroundColor: 'surface.muted' },
       },
-      style,
-    )}
-    aria-pressed={active}
-    {disabled}
-    {onclick}
-    {onpointerdown}
-    type="button"
-    use:tooltip={{
-      message: undefined,
-      delay: 200,
-      arrow: false,
-    }}
-  >
-    <ToolbarIcon {icon} />
-    <span class={css({ fontSize: '11px', whiteSpace: 'nowrap' })}>{label}</span>
-  </button>
-{:else if size === 'medium'}
-  <button
-    class={css(
-      {
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderRadius: '4px',
-        size: '28px',
-        color: 'text.subtle',
-        transition: 'common',
-        _enabled: {
-          _hover: { color: 'text.default', backgroundColor: 'surface.muted' },
-          _pressed: { color: 'text.brand', backgroundColor: 'surface.muted' },
-        },
-        _disabled: { opacity: '50' },
-        flexShrink: '0',
-      },
-      style,
-    )}
-    aria-label={label}
-    aria-pressed={active}
-    {disabled}
-    {onclick}
-    {onpointerdown}
-    type="button"
-    use:tooltip={{
-      message: label,
-      keys,
-      delay: 200,
-      arrow: false,
-    }}
-  >
-    <ToolbarIcon {icon} />
-  </button>
-{:else if size === 'small'}
-  <button
-    class={css(
-      {
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderRadius: '4px',
-        size: '24px',
-        color: 'text.subtle',
-        _enabled: {
-          _hover: { color: 'text.default', backgroundColor: 'surface.muted' },
-          _pressed: { color: 'text.brand', backgroundColor: 'surface.muted' },
-        },
-        _disabled: { opacity: '50' },
-        flexShrink: '0',
-      },
-      style,
-    )}
-    aria-label={label}
-    aria-pressed={active}
-    {disabled}
-    {onclick}
-    {onpointerdown}
-    type="button"
-    use:tooltip={{
-      message: label,
-      keys,
-      delay: 1000,
-      arrow: false,
-    }}
-  >
-    <ToolbarIcon {icon} />
-  </button>
-{/if}
+      _disabled: { opacity: '50' },
+      flexShrink: '0',
+    },
+    style,
+  )}
+  aria-label={label}
+  aria-pressed={active}
+  {disabled}
+  {onclick}
+  {onpointerdown}
+  type="button"
+  use:tooltip={{
+    message: label,
+    keys,
+    delay: 1000,
+    arrow: false,
+  }}
+>
+  <ToolbarIcon {icon} />
+</button>

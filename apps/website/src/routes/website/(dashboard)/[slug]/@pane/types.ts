@@ -24,6 +24,7 @@ export type PaneGroupState = {
   focusedPaneId: string | null;
   panelExpandedByPaneId: Record<string, boolean>;
   panelTabByPaneId: Record<string, PanelTab>;
+  toolbarExpandedByPaneId: Record<string, boolean>;
 };
 
 export type DragItem = {

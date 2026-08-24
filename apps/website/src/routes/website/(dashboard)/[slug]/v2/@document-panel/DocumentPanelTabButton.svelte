@@ -1,15 +1,13 @@
 <script lang="ts">
-  import { css } from '@typie/styled-system/css';
   import { center } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
   import { Icon } from '@typie/ui/components';
-  import { getAppContext } from '@typie/ui/context';
   import mixpanel from 'mixpanel-browser';
-  import { getPane, getPaneGroup } from '../../../../routes/website/(dashboard)/[slug]/@pane/context.svelte';
-  import { getDocumentPanelFocusReturn } from '../../../../routes/website/(dashboard)/[slug]/v2/@document-panel/focus-return.svelte';
+  import { getPane, getPaneGroup } from '../../@pane/context.svelte';
+  import { getDocumentPanelFocusReturn } from './focus-return.svelte';
   import type { TooltipParameter } from '@typie/ui/actions';
   import type { Component } from 'svelte';
-  import type { PanelTab } from '../../../../routes/website/(dashboard)/[slug]/@pane/context.svelte';
+  import type { PanelTab } from '../../@pane/context.svelte';
 
   type Props = {
     tab: PanelTab;
@@ -20,31 +18,23 @@
 
   let { tab, label, icon, keys }: Props = $props();
 
-  const app = getAppContext();
-
   const paneId = getPane().id;
   const paneGroup = getPaneGroup();
   const focusReturn = getDocumentPanelFocusReturn();
 
   const isExpanded = $derived(paneGroup.state.current.panelExpandedByPaneId[paneId]);
   const isTab = $derived(paneGroup.state.current.panelTabByPaneId[paneId] === tab);
-
-  const toolbarSize = $derived(app.preference.current.toolbarStyle === 'compact' ? 'medium' : 'large');
 </script>
 
 <button
   class={center({
-    flexDirection: 'column',
-    gap: '4px',
+    size: '24px',
     flexShrink: '0',
     borderRadius: '4px',
-    width: toolbarSize === 'large' ? '48px' : '40px',
-    minHeight: '24px',
     color: 'text.faint',
     transition: 'common',
-    _hover: { backgroundColor: 'surface.subtle' },
-    _expanded: { backgroundColor: 'surface.muted!', color: 'text.default' },
-    _disabled: { opacity: '50' },
+    _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
+    _expanded: { color: 'text.default!', backgroundColor: 'surface.muted' },
   })}
   aria-expanded={isExpanded && isTab}
   onclick={() => {
@@ -81,16 +71,7 @@
   }}
   onpointerdown={(event) => event.preventDefault()}
   type="button"
-  use:tooltip={{
-    message: toolbarSize === 'medium' ? label : undefined,
-    keys: toolbarSize === 'medium' ? keys : undefined,
-    arrow: false,
-    delay: 1000,
-  }}
+  use:tooltip={{ message: label, keys }}
 >
-  <Icon style={css.raw({ color: 'text.faint' })} {icon} size={20} />
-
-  {#if toolbarSize === 'large'}
-    <span class={css({ fontSize: '11px', whiteSpace: 'nowrap' })}>{label}</span>
-  {/if}
+  <Icon {icon} size={16} />
 </button>

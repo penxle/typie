@@ -11,7 +11,7 @@ export type AppPreference = {
   prismPanelOpen: boolean;
   prismPanelWidth: number;
 
-  toolbarStyle: 'compact' | 'classic';
+  defaultPrimaryToolbar: 'insert' | 'format';
 
   trashHeight: number;
 
@@ -143,7 +143,7 @@ export const setupAppContext = (userId: string) => {
       prismPanelOpen: false,
       prismPanelWidth: 420,
 
-      toolbarStyle: 'compact',
+      defaultPrimaryToolbar: 'format',
 
       trashHeight: 300,
 

@@ -3,7 +3,7 @@
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { autosize, tooltip } from '@typie/ui/actions';
-  import { Helmet, HorizontalDivider, Icon, Menu } from '@typie/ui/components';
+  import { Helmet, HorizontalDivider, Icon, Menu, VerticalDivider } from '@typie/ui/components';
   import { getAppContext, getThemeContext } from '@typie/ui/context';
   import { Tip, Toast } from '@typie/ui/notification';
   import { LocalStore } from '@typie/ui/state';
@@ -12,14 +12,21 @@
   import { onDestroy, tick, untrack } from 'svelte';
   import { fly } from 'svelte/transition';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
+  import ClockFadingIcon from '~icons/lucide/clock-fading';
   import CrownIcon from '~icons/lucide/crown';
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import FolderIcon from '~icons/lucide/folder';
+  import InfoIcon from '~icons/lucide/info';
+  import LightbulbIcon from '~icons/lucide/lightbulb';
   import LockIcon from '~icons/lucide/lock';
   import LockOpenIcon from '~icons/lucide/lock-open';
   import Maximize2Icon from '~icons/lucide/maximize-2';
+  import MessageSquareTextIcon from '~icons/lucide/message-square-text';
+  import SettingsIcon from '~icons/lucide/settings';
+  import SpellCheckIcon from '~icons/lucide/spell-check';
+  import StickyNoteIcon from '~icons/lucide/sticky-note';
   import XIcon from '~icons/lucide/x';
-  import { BottomToolbar, Editor as EditorComponent, EditorFailureOverlay, TopToolbar } from '$lib/editor-ffi/components';
+  import { Editor as EditorComponent, EditorFailureOverlay } from '$lib/editor-ffi/components';
   import { CONTINUOUS_VIEW_PADDING, IS_MAC } from '$lib/editor-ffi/constants';
   import { browserScaleFactor, Editor, getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { createAssetHydrator } from '$lib/editor-ffi/handlers/asset-hydration';
@@ -37,11 +44,14 @@
   import CommentPopover from './@document-comments/CommentPopover.svelte';
   import DocumentComments from './@document-comments/DocumentComments.svelte';
   import DocumentPanel from './@document-panel/DocumentPanel.svelte';
+  import DocumentPanelTabButton from './@document-panel/DocumentPanelTabButton.svelte';
   import { setupDocumentPanelFocusReturn } from './@document-panel/focus-return.svelte';
   import PrismMarginLayer from './@prism-review/PrismMarginLayer.svelte';
+  import PrismReviewButton from './@prism-review/PrismReviewButton.svelte';
   import PrismReviewMargin from './@prism-review/PrismReviewMargin.svelte';
   import DocumentFindReplace from './DocumentFindReplace.svelte';
   import DocumentTemplateModal from './DocumentTemplateModal.svelte';
+  import DocumentToolbars from './DocumentToolbars.svelte';
   import { headerVerticalNavigation } from './header-vertical-navigation';
   import SpellcheckPopover from './SpellcheckPopover.svelte';
   import { GapBuffer } from './sync/gap-buffer';
@@ -1010,182 +1020,7 @@
 
   <div class={flex({ height: 'full', flex: '1', overflowX: 'auto' })}>
     <div class={flex({ flexDirection: 'column', flexGrow: '1', overflowX: 'auto' })}>
-      <div
-        class={flex({
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          gap: '6px',
-          flexShrink: '0',
-          paddingLeft: '24px',
-          paddingRight: '8px',
-          height: '36px',
-          backgroundColor: 'surface.default',
-          borderRadius: '4px',
-          userSelect: 'none',
-        })}
-        role="region"
-        use:dragPane={dragPaneProps}
-      >
-        <div class={flex({ alignItems: 'center', gap: '4px', overflowX: 'hidden' })}>
-          <Icon style={css.raw({ color: 'text.disabled' })} icon={FolderIcon} size={12} />
-
-          <div
-            class={css({
-              flex: 'none',
-              maxWidth: '160px',
-              fontSize: '12px',
-              color: 'text.disabled',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-            })}
-            title={siteName}
-          >
-            {siteName}
-          </div>
-          <Icon style={css.raw({ color: 'text.disabled' })} icon={ChevronRightIcon} size={12} />
-
-          {#each entity.ancestors as ancestor (ancestor.id)}
-            {#if ancestor.node.__typename === 'Folder'}
-              <div class={css({ flex: 'none', fontSize: '12px', color: 'text.disabled' })}>
-                {ancestor.node.name}
-              </div>
-              <Icon style={css.raw({ color: 'text.disabled' })} icon={ChevronRightIcon} size={12} />
-            {/if}
-          {/each}
-
-          <button
-            class={css({
-              fontSize: '12px',
-              fontWeight: 'medium',
-              color: 'text.subtle',
-              lineClamp: 1,
-              _hover: { color: 'text.default' },
-              transition: 'common',
-            })}
-            onclick={focusTitleFromHeader}
-            type="button"
-          >
-            {title || '(제목 없음)'}
-          </button>
-        </div>
-
-        <div class={flex({ alignItems: 'center', gap: '4px' })}>
-          {#if !entity.user.subscription}
-            <button
-              class={flex({
-                alignItems: 'center',
-                gap: '4px',
-                paddingX: '8px',
-                paddingY: '4px',
-                borderRadius: '4px',
-                borderWidth: '1px',
-                borderColor: 'border.brand',
-                fontSize: '11px',
-                fontWeight: 'semibold',
-                whiteSpace: 'nowrap',
-                color: 'text.brand',
-                backgroundColor: 'transparent',
-                cursor: 'pointer',
-                transition: 'common',
-                _hover: { backgroundColor: 'accent.brand.subtle' },
-              })}
-              onclick={() => SubscribeModal.show('document_header')}
-              type="button"
-            >
-              <Icon icon={CrownIcon} size={12} />
-              <span>업그레이드</span>
-            </button>
-          {/if}
-
-          {#if ctx.editor}
-            <SpellcheckPopover editor={ctx.editor} />
-          {/if}
-
-          {#if query.data.me.id === entity.user.id}
-            <Menu placement="bottom-end">
-              {#snippet button({ open })}
-                <button
-                  class={center({
-                    borderRadius: '4px',
-                    size: '24px',
-                    color: 'text.faint',
-                    transition: 'common',
-                    _hover: {
-                      color: 'text.subtle',
-                      backgroundColor: 'surface.muted',
-                    },
-                    _pressed: {
-                      color: 'text.subtle',
-                      backgroundColor: 'surface.muted',
-                    },
-                  })}
-                  aria-pressed={open}
-                  type="button"
-                >
-                  <Icon icon={EllipsisIcon} size={16} />
-                </button>
-              {/snippet}
-
-              <DocumentMenu {document} {entity} via="editor" />
-            </Menu>
-
-            {#if query.data.me.entitled}
-              <button
-                class={center({
-                  borderRadius: '4px',
-                  size: '24px',
-                  color: (ctx.editor?.readOnly ?? false) ? 'accent.brand.default' : 'text.faint',
-                  transition: 'common',
-                  _hover: {
-                    color: (ctx.editor?.readOnly ?? false) ? 'accent.brand.hover' : 'text.subtle',
-                    backgroundColor: 'surface.muted',
-                  },
-                })}
-                onclick={() => toggleEditLock()}
-                onpointerdown={(e) => e.preventDefault()}
-                type="button"
-                use:tooltip={{ message: (ctx.editor?.readOnly ?? false) ? '편집 잠금 해제' : '편집 잠금' }}
-              >
-                <Icon icon={(ctx.editor?.readOnly ?? false) ? LockIcon : LockOpenIcon} size={16} />
-              </button>
-            {/if}
-          {/if}
-
-          <button
-            class={center({
-              borderRadius: '4px',
-              size: '24px',
-              color: 'text.faint',
-              transition: 'common',
-              _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
-            })}
-            onclick={() => {
-              app.preference.current.zenModeEnabled = !app.preference.current.zenModeEnabled;
-              if (app.preference.current.zenModeEnabled) {
-                mixpanel.track('zen_mode_enabled', { via: 'document' });
-              } else {
-                mixpanel.track('zen_mode_disabled', { via: 'document' });
-              }
-            }}
-            onpointerdown={(e) => e.preventDefault()}
-            type="button"
-            use:tooltip={{
-              message: app.preference.current.zenModeEnabled ? '집중 모드 끄기' : '집중 모드 켜기',
-              keys: ['Mod', 'Shift', 'M'],
-            }}
-          >
-            <Icon icon={Maximize2Icon} size={16} />
-          </button>
-          <CloseButton>
-            <Icon icon={XIcon} size={16} />
-          </CloseButton>
-        </div>
-      </div>
-
-      <HorizontalDivider color="secondary" />
-
-      <!-- 툴바의 회차 드롭다운도 같은 컨텍스트를 읽는다 — 에디터 영역 안쪽에 두면 앞선 형제인 툴바에서 영영 안 보인다 -->
+      <!-- 헤더의 리뷰 버튼도 여백 컨텍스트를 읽는다 — 헤더까지 감싼다 -->
       <PrismReviewMargin
         available={editorAreaWidth}
         bodyWidth={marginBodyWidth}
@@ -1194,13 +1029,199 @@
         myId={query.data.me.id}
       >
         {#snippet children(insets)}
-          <TopToolbar />
+          <div
+            class={flex({
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: '6px',
+              flexShrink: '0',
+              paddingLeft: '24px',
+              paddingRight: '8px',
+              height: '36px',
+              backgroundColor: 'surface.default',
+              borderRadius: '4px',
+              userSelect: 'none',
+            })}
+            role="region"
+            use:dragPane={dragPaneProps}
+          >
+            <div class={flex({ alignItems: 'center', gap: '4px', overflowX: 'hidden' })}>
+              <Icon style={css.raw({ color: 'text.disabled' })} icon={FolderIcon} size={12} />
+
+              <div
+                class={css({
+                  flex: 'none',
+                  maxWidth: '160px',
+                  fontSize: '12px',
+                  color: 'text.disabled',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                })}
+                title={siteName}
+              >
+                {siteName}
+              </div>
+              <Icon style={css.raw({ color: 'text.disabled' })} icon={ChevronRightIcon} size={12} />
+
+              {#each entity.ancestors as ancestor (ancestor.id)}
+                {#if ancestor.node.__typename === 'Folder'}
+                  <div class={css({ flex: 'none', fontSize: '12px', color: 'text.disabled' })}>
+                    {ancestor.node.name}
+                  </div>
+                  <Icon style={css.raw({ color: 'text.disabled' })} icon={ChevronRightIcon} size={12} />
+                {/if}
+              {/each}
+
+              <button
+                class={css({
+                  fontSize: '12px',
+                  fontWeight: 'medium',
+                  color: 'text.subtle',
+                  lineClamp: 1,
+                  _hover: { color: 'text.default' },
+                  transition: 'common',
+                })}
+                onclick={focusTitleFromHeader}
+                type="button"
+              >
+                {title || '(제목 없음)'}
+              </button>
+            </div>
+
+            <div class={flex({ alignItems: 'center', gap: '4px' })}>
+              {#if !entity.user.subscription}
+                <button
+                  class={flex({
+                    alignItems: 'center',
+                    gap: '4px',
+                    paddingX: '8px',
+                    paddingY: '4px',
+                    borderRadius: '4px',
+                    borderWidth: '1px',
+                    borderColor: 'border.brand',
+                    fontSize: '11px',
+                    fontWeight: 'semibold',
+                    whiteSpace: 'nowrap',
+                    color: 'text.brand',
+                    backgroundColor: 'transparent',
+                    cursor: 'pointer',
+                    transition: 'common',
+                    _hover: { backgroundColor: 'accent.brand.subtle' },
+                  })}
+                  onclick={() => SubscribeModal.show('document_header')}
+                  type="button"
+                >
+                  <Icon icon={CrownIcon} size={12} />
+                  <span>업그레이드</span>
+                </button>
+              {/if}
+
+              {#if ctx.editor}
+                <SpellcheckPopover editor={ctx.editor} />
+              {/if}
+
+              <PrismReviewButton />
+
+              <DocumentPanelTabButton icon={InfoIcon} label="정보" tab="info" />
+              <DocumentPanelTabButton icon={StickyNoteIcon} label="노트" tab="note" />
+              <DocumentPanelTabButton icon={MessageSquareTextIcon} label="코멘트" tab="comment" />
+              <DocumentPanelTabButton icon={SpellCheckIcon} label="맞춤법" tab="spellcheck" />
+              <DocumentPanelTabButton icon={LightbulbIcon} label="AI 피드백" tab="ai" />
+              <DocumentPanelTabButton icon={ClockFadingIcon} label="타임라인" tab="timeline" />
+              <DocumentPanelTabButton icon={SettingsIcon} label="본문 설정" tab="settings" />
+
+              <VerticalDivider style={css.raw({ height: '12px' })} />
+
+              {#if query.data.me.id === entity.user.id}
+                <Menu placement="bottom-end">
+                  {#snippet button({ open })}
+                    <button
+                      class={center({
+                        borderRadius: '4px',
+                        size: '24px',
+                        color: 'text.faint',
+                        transition: 'common',
+                        _hover: {
+                          color: 'text.subtle',
+                          backgroundColor: 'surface.muted',
+                        },
+                        _pressed: {
+                          color: 'text.subtle',
+                          backgroundColor: 'surface.muted',
+                        },
+                      })}
+                      aria-pressed={open}
+                      type="button"
+                    >
+                      <Icon icon={EllipsisIcon} size={16} />
+                    </button>
+                  {/snippet}
+
+                  <DocumentMenu {document} {entity} via="editor" />
+                </Menu>
+
+                {#if query.data.me.entitled}
+                  <button
+                    class={center({
+                      borderRadius: '4px',
+                      size: '24px',
+                      color: (ctx.editor?.readOnly ?? false) ? 'accent.brand.default' : 'text.faint',
+                      transition: 'common',
+                      _hover: {
+                        color: (ctx.editor?.readOnly ?? false) ? 'accent.brand.hover' : 'text.subtle',
+                        backgroundColor: 'surface.muted',
+                      },
+                    })}
+                    onclick={() => toggleEditLock()}
+                    onpointerdown={(e) => e.preventDefault()}
+                    type="button"
+                    use:tooltip={{ message: (ctx.editor?.readOnly ?? false) ? '편집 잠금 해제' : '편집 잠금' }}
+                  >
+                    <Icon icon={(ctx.editor?.readOnly ?? false) ? LockIcon : LockOpenIcon} size={16} />
+                  </button>
+                {/if}
+              {/if}
+
+              <button
+                class={center({
+                  borderRadius: '4px',
+                  size: '24px',
+                  color: 'text.faint',
+                  transition: 'common',
+                  _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
+                })}
+                onclick={() => {
+                  app.preference.current.zenModeEnabled = !app.preference.current.zenModeEnabled;
+                  if (app.preference.current.zenModeEnabled) {
+                    mixpanel.track('zen_mode_enabled', { via: 'document' });
+                  } else {
+                    mixpanel.track('zen_mode_disabled', { via: 'document' });
+                  }
+                }}
+                onpointerdown={(e) => e.preventDefault()}
+                type="button"
+                use:tooltip={{
+                  message: app.preference.current.zenModeEnabled ? '집중 모드 끄기' : '집중 모드 켜기',
+                  keys: ['Mod', 'Shift', 'M'],
+                }}
+              >
+                <Icon icon={Maximize2Icon} size={16} />
+              </button>
+              <CloseButton>
+                <Icon icon={XIcon} size={16} />
+              </CloseButton>
+            </div>
+          </div>
+
+          <HorizontalDivider color="secondary" />
 
           <div class={flex({ position: 'relative', flexGrow: '1', overflowY: 'hidden' })}>
             {#if document && documentId && entity}
               <DocumentComments {documentId} entityId={entity.id} {isOwner} me$key={query.data.me} myId={query.data.me.id}>
                 <div class={flex({ position: 'relative', flexDirection: 'column', flexGrow: '1', overflowX: 'auto' })}>
-                  <BottomToolbar
+                  <DocumentToolbars
+                    {documentId}
                     {fontFamilies}
                     onFontUploadClick={() => {
                       if (query.data.me.entitled) {
