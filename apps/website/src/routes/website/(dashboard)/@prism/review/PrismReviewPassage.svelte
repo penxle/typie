@@ -515,6 +515,18 @@
     fontWeight: 'semibold',
     color: 'text.subtle',
   });
+  // 스테이지 접힘 행의 한 줄 요약과 같은 문법 — 점검 상자도 접혔을 때 마지막 서술의 첫 줄을 내보인다
+  const roundSummaryClass = css({
+    flexGrow: '1',
+    minWidth: '0',
+    fontSize: '11px',
+    fontWeight: 'normal',
+    color: 'text.faint',
+    textAlign: 'left',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  });
   const retryRowClass = flex({ alignItems: 'center', gap: '6px', marginTop: '10px', fontSize: '12px', color: 'text.subtle' });
   const skeletonStyle = css.raw({
     marginTop: '10px',
@@ -599,6 +611,9 @@
           type="button"
         >
           점검 {group.round}회째
+          {#if !open && group.summary !== null}
+            <span class={roundSummaryClass}>{group.summary}</span>
+          {/if}
           <span class={timeClass}>{spentLabel(group.elapsedMs)}</span>
           <Icon style={css.raw(chevronStyle, open ? chevronOpenStyle : {})} icon={ChevronDownIcon} size={10} />
         </button>

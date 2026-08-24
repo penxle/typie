@@ -247,7 +247,7 @@ describe('buildPassage', () => {
     expect(rubric?.rounds).toBe(2);
     expect(view.liveRound).toBe(2);
     expect(rubric?.groups.map((g) => g.kind)).toEqual(['narration', 'round', 'narration', 'round']);
-    expect(rubric?.groups[1]).toMatchObject({ kind: 'round', round: 1, groups: [{ kind: 'narration', text: '점검' }] });
+    expect(rubric?.groups[1]).toMatchObject({ kind: 'round', round: 1, summary: '점검', groups: [{ kind: 'narration', text: '점검' }] });
     expect(rubric?.groups[2]).toMatchObject({ kind: 'narration', text: '보완' });
     expect(view.stages.filter((s) => s.key !== 'rubric').map((s) => [s.key, s.rounds])).toEqual([
       ['classify', 0],
@@ -276,7 +276,9 @@ describe('buildPassage', () => {
 
     const rubric = view.stages.find((s) => s.key === 'rubric');
     expect(view.liveRound).toBe(1);
-    expect(rubric?.groups).toEqual([{ kind: 'round', key: 'rubric:round:1:0', seq: 2, round: 1, elapsedMs: 1000, groups: [] }]);
+    expect(rubric?.groups).toEqual([
+      { kind: 'round', key: 'rubric:round:1:0', seq: 2, round: 1, elapsedMs: 1000, summary: null, groups: [] },
+    ]);
   });
 
   it('revise 스텝이 흐르는 동안은 liveRound가 없다', () => {
