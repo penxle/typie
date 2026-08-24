@@ -4,7 +4,7 @@ import { PRISM_RENDER_SCALE_REFERENCE_SIZE, resolvePrismObjectPoseQuaternion } f
 type Vector2 = [number, number];
 type Vector3 = [number, number, number];
 type Quaternion = [number, number, number, number];
-type VelocitySample = { at: number; velocity: Vector3 };
+type RotationSample = { at: number; position: Vector3 };
 
 export type PrismPointerInteractionFrame = {
   angularVelocity: Vector3;
@@ -34,18 +34,21 @@ type Options = {
 
 const DRAG_THRESHOLD_PX = 3;
 const DRAG_RADIANS_PER_VIEWPORT = 1 / 0.38;
-const FLING_SAMPLE_WINDOW_MS = 90;
-const FULL_FLING_TRAVEL_RADIANS = 0.18;
-const ORIENTATION_SPRING = 1.4;
+const FLING_SAMPLE_WINDOW_MS = 100;
+const MIN_FLING_SPEED_TURNS = 0.05;
+const ORIENTATION_SETTLING_FREQUENCY = 0.65;
 const PRESS_SCALE_AMOUNT = 0.03;
 const PRESS_SCALE_SPRING = 180;
 const PRESS_SCALE_DAMPING = 26;
-const CLICK_SPIN_INCREMENT = 0.34;
-const MAX_CLICK_SPIN_SPEED = 1;
+const CLICK_SPIN_INCREMENT = 0.6;
+const CLICK_APPEARANCE_SATURATION_SPEED = 1;
 const CLICK_SPIN_HALF_LIFE_SECONDS = 1;
+const HDR_NEAR_MAX_SPEED_TURNS = 3;
+const MAX_ROTATION_SPEED_TURNS = 5;
 const HIT_SLOP_PX = 3;
 const INTEREST_REACH_PX = 56;
 const TAU = Math.PI * 2;
+const MAX_ROTATION_SPEED_RADIANS = MAX_ROTATION_SPEED_TURNS * TAU;
 
 const clamp = (value: number, minimum = 0, maximum = 1) => Math.max(minimum, Math.min(maximum, value));
 
@@ -79,11 +82,18 @@ const twoAxisValuatorRotation = (deltaX: number, deltaY: number, radiansPerPixel
   multiplyQuaternion(axisAngle([0, 1, 0], deltaX * radiansPerPixel), axisAngle([1, 0, 0], deltaY * radiansPerPixel));
 
 const angularVelocityFromQuaternion = (quaternion: Quaternion, elapsed: number): Vector3 => {
+  if (elapsed <= 0) return [0, 0, 0];
   const vectorLength = Math.hypot(quaternion[0], quaternion[1], quaternion[2]);
   if (vectorLength < 0.00001) return [0, 0, 0];
   const angle = 2 * Math.atan2(vectorLength, Math.abs(quaternion[3]));
-  const velocity = clamp(angle / elapsed, 0, 7.5);
+  const velocity = angle / elapsed;
   return [(quaternion[0] / vectorLength) * velocity, (quaternion[1] / vectorLength) * velocity, (quaternion[2] / vectorLength) * velocity];
+};
+
+const limitVectorMagnitude = (vector: Vector3, maximum: number): Vector3 => {
+  const magnitude = Math.hypot(...vector);
+  if (magnitude === 0 || magnitude <= maximum) return vector;
+  return vector.map((value) => value * (maximum / magnitude)) as Vector3;
 };
 
 const quaternionRotationVector = (quaternion: Quaternion): Vector3 => {
@@ -99,20 +109,47 @@ const quaternionRotationVector = (quaternion: Quaternion): Vector3 => {
   ];
 };
 
-const sampledFlingVelocity = (samples: readonly VelocitySample[], releasedAt: number): Vector3 => {
-  let totalWeight = 0;
-  const velocity: Vector3 = [0, 0, 0];
-  for (const sample of samples) {
-    const age = releasedAt - sample.at;
-    if (age < 0 || age > FLING_SAMPLE_WINDOW_MS) continue;
-    const weight = 0.15 + 0.85 * (1 - age / FLING_SAMPLE_WINDOW_MS);
-    velocity[0] += sample.velocity[0] * weight;
-    velocity[1] += sample.velocity[1] * weight;
-    velocity[2] += sample.velocity[2] * weight;
-    totalWeight += weight;
+const sampledFlingVelocity = (samples: readonly RotationSample[], releasedAt: number): Vector3 => {
+  const lastPosition = samples.at(-1)?.position ?? [0, 0, 0];
+  const recentSamples = [...samples, { at: releasedAt, position: lastPosition }].filter(
+    (sample) => sample.at >= releasedAt - FLING_SAMPLE_WINDOW_MS && sample.at <= releasedAt,
+  );
+  if (recentSamples.length < 2) return [0, 0, 0];
+
+  const meanTime = recentSamples.reduce((sum, sample) => sum + (sample.at - releasedAt) / 1000, 0) / recentSamples.length;
+  const meanPosition = recentSamples
+    .reduce<Vector3>((sum, sample) => [sum[0] + sample.position[0], sum[1] + sample.position[1], sum[2] + sample.position[2]], [0, 0, 0])
+    .map((value) => value / recentSamples.length) as Vector3;
+  let timeVariance = 0;
+  const covariance: Vector3 = [0, 0, 0];
+  for (const sample of recentSamples) {
+    const centeredTime = (sample.at - releasedAt) / 1000 - meanTime;
+    timeVariance += centeredTime * centeredTime;
+    covariance[0] += centeredTime * (sample.position[0] - meanPosition[0]);
+    covariance[1] += centeredTime * (sample.position[1] - meanPosition[1]);
+    covariance[2] += centeredTime * (sample.position[2] - meanPosition[2]);
   }
-  if (totalWeight === 0) return [0, 0, 0];
-  return velocity.map((value) => value / totalWeight) as Vector3;
+  if (timeVariance < 0.0000001) return [0, 0, 0];
+  const velocity = covariance.map((value) => value / timeVariance) as Vector3;
+  return Math.hypot(...velocity) < MIN_FLING_SPEED_TURNS * TAU ? [0, 0, 0] : velocity;
+};
+
+const limitInteractionSpeed = (baseSpeed: number, clickSpeed: number, angularVelocity: Vector3) => {
+  const addedVelocity: Vector3 = [angularVelocity[0] / TAU, clickSpeed + angularVelocity[1] / TAU, angularVelocity[2] / TAU];
+  const totalSpeed = Math.hypot(addedVelocity[0], baseSpeed + addedVelocity[1], addedVelocity[2]);
+  if (totalSpeed <= MAX_ROTATION_SPEED_TURNS) return { angularVelocity, clickSpeed };
+
+  const addedSpeedSquared = addedVelocity.reduce((sum, value) => sum + value * value, 0);
+  if (addedSpeedSquared === 0) return { angularVelocity: [0, 0, 0] as Vector3, clickSpeed: 0 };
+  const baseProjection = baseSpeed * addedVelocity[1];
+  const baseExcess = baseSpeed * baseSpeed - MAX_ROTATION_SPEED_TURNS * MAX_ROTATION_SPEED_TURNS;
+  const scale = clamp(
+    (-baseProjection + Math.sqrt(Math.max(0, baseProjection * baseProjection - addedSpeedSquared * baseExcess))) / addedSpeedSquared,
+  );
+  return {
+    angularVelocity: angularVelocity.map((value) => value * scale) as Vector3,
+    clickSpeed: clickSpeed * scale,
+  };
 };
 
 const convexHull = (points: readonly Vector2[]): Vector2[] => {
@@ -202,8 +239,8 @@ export function createPrismPointerInteraction(element: HTMLElement, options: Opt
   let lastDragPointerX = 0;
   let lastDragPointerY = 0;
   let lastPointerAt = 0;
-  let dragVelocitySamples: VelocitySample[] = [];
-  let dragTravelAngle = 0;
+  let dragRotationPosition: Vector3 = [0, 0, 0];
+  let dragRotationSamples: RotationSample[] = [];
   let phase = 0;
   let spinVelocity = baseSpeed;
   let clickSpinImpulse = 0;
@@ -243,8 +280,8 @@ export function createPrismPointerInteraction(element: HTMLElement, options: Opt
     pointerDown = false;
     pointerId = -1;
     dragging = false;
-    dragVelocitySamples = [];
-    dragTravelAngle = 0;
+    dragRotationPosition = [0, 0, 0];
+    dragRotationSamples = [];
     releaseCapture(capturedPointerId);
   };
 
@@ -258,26 +295,50 @@ export function createPrismPointerInteraction(element: HTMLElement, options: Opt
     if (!inputEnabled) return;
     updatePointer(event);
     if (!pointerDown || event.pointerId !== pointerId) return;
-    const now = performance.now();
     if (!dragging && Math.hypot(event.clientX - pressPointerX, event.clientY - pressPointerY) < DRAG_THRESHOLD_PX) return;
     if (!dragging) {
       dragging = true;
       spinVelocity = 0;
       clickSpinImpulse = 0;
-      lastPointerAt = now - 1000 / 60;
     }
-    const elapsed = Math.max((now - lastPointerAt) / 1000, 1 / 240);
     const rect = element.getBoundingClientRect();
     const radiansPerPixel = DRAG_RADIANS_PER_VIEWPORT / Math.max(Math.min(rect.width, rect.height), 1);
-    const deltaQuaternion = twoAxisValuatorRotation(event.clientX - lastDragPointerX, event.clientY - lastDragPointerY, radiansPerPixel);
-    interactionOrientation = normalizedQuaternion(multiplyQuaternion(deltaQuaternion, interactionOrientation));
-    interactionAngularVelocity = angularVelocityFromQuaternion(deltaQuaternion, elapsed);
-    dragTravelAngle += Math.hypot(...interactionAngularVelocity) * elapsed;
-    dragVelocitySamples.push({ at: now, velocity: interactionAngularVelocity });
-    dragVelocitySamples = dragVelocitySamples.filter((sample) => now - sample.at <= FLING_SAMPLE_WINDOW_MS);
-    lastDragPointerX = event.clientX;
-    lastDragPointerY = event.clientY;
-    lastPointerAt = now;
+    const coalescedEvents = event.getCoalescedEvents?.() ?? [];
+    const movementEvents = [...coalescedEvents];
+    const lastCoalescedEvent = movementEvents.at(-1);
+    if (
+      !lastCoalescedEvent ||
+      lastCoalescedEvent.timeStamp !== event.timeStamp ||
+      lastCoalescedEvent.clientX !== event.clientX ||
+      lastCoalescedEvent.clientY !== event.clientY
+    ) {
+      movementEvents.push(event);
+    }
+    for (const movementEvent of movementEvents) {
+      const at = Math.max(movementEvent.timeStamp, lastPointerAt);
+      const elapsed = (at - lastPointerAt) / 1000;
+      if (elapsed <= 0) continue;
+      const rawRotation = twoAxisValuatorRotation(
+        movementEvent.clientX - lastDragPointerX,
+        movementEvent.clientY - lastDragPointerY,
+        radiansPerPixel,
+      );
+      const rawRotationVector = quaternionRotationVector(rawRotation);
+      const limitedRotationVector = limitVectorMagnitude(rawRotationVector, MAX_ROTATION_SPEED_RADIANS * elapsed);
+      const rotationAngle = Math.hypot(...limitedRotationVector);
+      const deltaQuaternion =
+        rotationAngle > 0
+          ? axisAngle(limitedRotationVector.map((value) => value / rotationAngle) as Vector3, rotationAngle)
+          : ([0, 0, 0, 1] as Quaternion);
+      interactionOrientation = normalizedQuaternion(multiplyQuaternion(deltaQuaternion, interactionOrientation));
+      interactionAngularVelocity = angularVelocityFromQuaternion(deltaQuaternion, elapsed);
+      dragRotationPosition = dragRotationPosition.map((value, index) => value + (limitedRotationVector[index] ?? 0)) as Vector3;
+      dragRotationSamples.push({ at, position: [...dragRotationPosition] });
+      dragRotationSamples = dragRotationSamples.filter((sample) => at - sample.at <= FLING_SAMPLE_WINDOW_MS);
+      lastDragPointerX = movementEvent.clientX;
+      lastDragPointerY = movementEvent.clientY;
+      lastPointerAt = at;
+    }
     if (event.cancelable) event.preventDefault();
   };
 
@@ -300,9 +361,9 @@ export function createPrismPointerInteraction(element: HTMLElement, options: Opt
     pressPointerY = event.clientY;
     lastDragPointerX = event.clientX;
     lastDragPointerY = event.clientY;
-    lastPointerAt = performance.now();
-    dragVelocitySamples = [];
-    dragTravelAngle = 0;
+    lastPointerAt = event.timeStamp;
+    dragRotationPosition = [0, 0, 0];
+    dragRotationSamples = [{ at: event.timeStamp, position: [0, 0, 0] }];
     try {
       element.setPointerCapture(event.pointerId);
     } catch {
@@ -319,15 +380,13 @@ export function createPrismPointerInteraction(element: HTMLElement, options: Opt
     if (cancelled) {
       if (dragging) interactionAngularVelocity = [0, 0, 0];
     } else if (dragging) {
-      const flingVelocity = sampledFlingVelocity(dragVelocitySamples, performance.now());
-      const flingIntent = smootherstep(dragTravelAngle / FULL_FLING_TRAVEL_RADIANS);
-      interactionAngularVelocity = flingVelocity.map((value) => value * flingIntent) as Vector3;
+      interactionAngularVelocity = sampledFlingVelocity(dragRotationSamples, event.timeStamp);
     } else {
-      clickSpinImpulse = clamp(clickSpinImpulse + CLICK_SPIN_INCREMENT, 0, MAX_CLICK_SPIN_SPEED);
+      clickSpinImpulse = Math.min(clickSpinImpulse + CLICK_SPIN_INCREMENT, MAX_ROTATION_SPEED_TURNS);
     }
     dragging = false;
-    dragVelocitySamples = [];
-    dragTravelAngle = 0;
+    dragRotationPosition = [0, 0, 0];
+    dragRotationSamples = [];
   };
 
   const handlePointerCancel = (event: PointerEvent) => releasePointer(event, true);
@@ -358,7 +417,7 @@ export function createPrismPointerInteraction(element: HTMLElement, options: Opt
     },
     reset(kinematics: PrismPointerInteractionKinematics) {
       phase = kinematics.phase;
-      spinVelocity = kinematics.velocity;
+      spinVelocity = clamp(kinematics.velocity, -MAX_ROTATION_SPEED_TURNS, MAX_ROTATION_SPEED_TURNS);
       const baseOrientation = resolvePrismObjectPoseQuaternion(phase, 1, 1) as Quaternion;
       interactionOrientation = normalizedQuaternion(
         multiplyQuaternion([...kinematics.orientation] as Quaternion, conjugateQuaternion(baseOrientation)),
@@ -412,34 +471,39 @@ export function createPrismPointerInteraction(element: HTMLElement, options: Opt
       const pressedScale = smootherstep(pressScaleProgress);
 
       clickSpinImpulse *= Math.exp((-Math.LN2 / CLICK_SPIN_HALF_LIFE_SECONDS) * dt);
-      const clickSpinEnergy = clickSpinImpulse / MAX_CLICK_SPIN_SPEED;
       const targetSpinVelocity = baseSpeed * (1 - proximity * 0.4);
       if (!dragging) spinVelocity = damp(spinVelocity, targetSpinVelocity, 2.4, dt);
+
+      if (!dragging) {
+        const rotationError = quaternionRotationVector(interactionOrientation);
+        const spring = ORIENTATION_SETTLING_FREQUENCY * ORIENTATION_SETTLING_FREQUENCY;
+        const criticalDamping = 2 * ORIENTATION_SETTLING_FREQUENCY;
+        interactionAngularVelocity = interactionAngularVelocity.map(
+          (value, index) => value + (-(rotationError[index] ?? 0) * spring - value * criticalDamping) * dt,
+        ) as Vector3;
+      }
+
+      const limitedMotion = limitInteractionSpeed(dragging ? 0 : spinVelocity, dragging ? 0 : clickSpinImpulse, interactionAngularVelocity);
+      interactionAngularVelocity = limitedMotion.angularVelocity;
+      clickSpinImpulse = limitedMotion.clickSpeed;
       const velocity = dragging ? 0 : spinVelocity + clickSpinImpulse;
       phase += velocity * dt;
 
       if (!dragging) {
-        const rotationError = quaternionRotationVector(interactionOrientation);
-        interactionAngularVelocity = [
-          interactionAngularVelocity[0] - rotationError[0] * ORIENTATION_SPRING * dt,
-          interactionAngularVelocity[1] - rotationError[1] * ORIENTATION_SPRING * dt,
-          interactionAngularVelocity[2] - rotationError[2] * ORIENTATION_SPRING * dt,
-        ];
-        let relativeAngularSpeed = Math.hypot(...interactionAngularVelocity);
-        const restDamping = 0.62 + (1 - smootherstep(relativeAngularSpeed / 2.8)) * 1.65;
-        interactionAngularVelocity = interactionAngularVelocity.map((value) => value * Math.exp(-restDamping * dt)) as Vector3;
-        relativeAngularSpeed = Math.hypot(...interactionAngularVelocity);
+        const relativeAngularSpeed = Math.hypot(...interactionAngularVelocity);
         if (relativeAngularSpeed > 0.0001) {
           const axis = interactionAngularVelocity.map((value) => value / relativeAngularSpeed) as Vector3;
           interactionOrientation = normalizedQuaternion(
             multiplyQuaternion(axisAngle(axis, relativeAngularSpeed * dt), interactionOrientation),
           );
         }
-        if (Math.hypot(...rotationError) < 0.0005 && relativeAngularSpeed < 0.002) {
+        if (Math.hypot(...quaternionRotationVector(interactionOrientation)) < 0.0005 && relativeAngularSpeed < 0.002) {
           interactionOrientation = [0, 0, 0, 1];
           interactionAngularVelocity = [0, 0, 0];
         }
       }
+
+      const clickSpinEnergy = clamp(clickSpinImpulse / CLICK_APPEARANCE_SATURATION_SPEED);
 
       const targetTiltX = dragging ? tiltX : -attentionY * 0.19 + Math.sin(now / 1900) * 0.018;
       const targetTiltZ = dragging ? tiltZ : -attentionX * 0.18 + Math.sin(now / 2300 + 1.1) * 0.014;
@@ -470,7 +534,8 @@ export function createPrismPointerInteraction(element: HTMLElement, options: Opt
       currentPrismHull = convexHull(
         projectedVertices.map(([x, y]): Vector2 => [rect.left + rect.width * 0.5 + x - 16, rect.top + rect.height * 0.5 + y - 16]),
       );
-      const speedEnergy = clamp((finalSpeedTurns - baseSpeed) / MAX_CLICK_SPIN_SPEED);
+      const hdrSpeedProgress = Math.max(0, (finalSpeedTurns - baseSpeed) / (HDR_NEAR_MAX_SPEED_TURNS - baseSpeed));
+      const speedEnergy = 1 - Math.exp(-3 * hdrSpeedProgress);
       return {
         angularVelocity,
         dispersion: 1.25 + clickSpinEnergy * 0.22,
