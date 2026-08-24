@@ -28,7 +28,7 @@
   import { graphql } from '$mearie';
   import { AutoResolver } from './lib/auto-resolve.svelte.ts';
   import { backoffDelay } from './lib/backoff.ts';
-  import { expand, swap } from './lib/motion.ts';
+  import { expand, PRISM_VISIBILITY_MOTION, reducedMotion, swap } from './lib/motion.ts';
   import { hasUnread, sessionLabel } from './lib/session-groups.ts';
   import { createPrismChat } from './prism-chat.svelte';
   import { fetchTranscript, toFrame } from './prism-data';
@@ -501,15 +501,25 @@
     _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
     _active: { transform: 'scale(0.95)' },
   });
+  const PANEL_HIDDEN_SCRIM_OPACITY = 0.2;
+  const panelOpen = $derived(app.state.prismAccess && app.preference.current.prismPanelOpen);
+  const panelMotionDuration = reducedMotion() ? 0 : PRISM_VISIBILITY_MOTION.duration;
+  let panelEl = $state<HTMLElement>();
   let prevPanelOpen: boolean | null = null;
 
   $effect(() => {
-    const open = app.state.prismAccess && app.preference.current.prismPanelOpen;
+    const open = panelOpen;
     const transition = prevPanelOpen === false && open;
     prevPanelOpen = open;
-    if (transition) {
-      composer?.focus();
+
+    if (!open) {
+      untrack(() => {
+        const focused = document.activeElement;
+        if (focused instanceof HTMLElement && panelEl?.contains(focused)) focused.blur();
+      });
     }
+
+    if (transition) composer?.focus();
   });
 
   const markSeen = (sessionId: string) => {
@@ -745,29 +755,43 @@
 </script>
 
 {#if app.state.prismAccess}
-  <aside
-    style:--min-width={`${PRISM_PANEL_MIN}px`}
-    style:--width={`${width}px`}
-    style:--max-width={`${PRISM_PANEL_MAX}px`}
-    class={flex({
-      position: 'relative',
-      flexDirection: 'column',
+  <div
+    style:width={panelOpen ? `${width}px` : '0px'}
+    style:transition-duration={previewWidth === null ? `${panelMotionDuration}ms` : '0ms'}
+    style:transition-timing-function={PRISM_VISIBILITY_MOTION.easing}
+    class={css({
       flexShrink: '0',
       height: 'full',
-      minWidth: app.preference.current.prismPanelOpen ? 'var(--min-width)' : '0',
-      width: app.preference.current.prismPanelOpen ? 'var(--width)' : '0',
-      maxWidth: app.preference.current.prismPanelOpen ? 'var(--max-width)' : '0',
-      opacity: app.preference.current.prismPanelOpen ? '100' : '0',
-      transitionProperty: '[min-width, max-width, opacity]',
-      transitionDuration: '200ms',
-      transitionTimingFunction: 'ease',
-      willChange: 'min-width, max-width, opacity',
+      transitionProperty: '[width]',
+    })}
+    aria-hidden="true"
+  ></div>
+
+  <aside
+    bind:this={panelEl}
+    style:width={`${width}px`}
+    style:clip-path={panelOpen ? 'inset(0)' : 'inset(0 0 0 100%)'}
+    style:opacity={panelOpen ? 1 : 0}
+    style:pointer-events={panelOpen ? 'auto' : 'none'}
+    style:transform={panelOpen ? 'scale(1)' : `scale(${PRISM_VISIBILITY_MOTION.hiddenScale})`}
+    style:transition-duration={`${panelMotionDuration}ms`}
+    style:transition-timing-function={PRISM_VISIBILITY_MOTION.easing}
+    class={flex({
+      position: 'absolute',
+      top: '0',
+      right: '0',
+      bottom: '0',
+      flexDirection: 'column',
+      height: 'full',
       overflow: 'hidden',
       borderLeftWidth: '1px',
       borderColor: 'border.subtle',
       backgroundColor: 'surface.default',
+      transformOrigin: 'center',
+      transitionProperty: '[clip-path, opacity, transform]',
       zIndex: 'panel',
     })}
+    inert={!panelOpen}
   >
     <div
       class={css({
@@ -1101,5 +1125,19 @@
         {/if}
       {/if}
     </div>
+    <div
+      style:opacity={panelOpen ? 0 : PANEL_HIDDEN_SCRIM_OPACITY}
+      style:transition-duration={`${panelMotionDuration}ms`}
+      style:transition-timing-function={PRISM_VISIBILITY_MOTION.easing}
+      class={css({
+        position: 'absolute',
+        inset: '0',
+        zIndex: '5',
+        pointerEvents: 'none',
+        backgroundColor: 'black',
+        transitionProperty: '[opacity]',
+      })}
+      aria-hidden="true"
+    ></div>
   </aside>
 {/if}

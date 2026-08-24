@@ -3,6 +3,11 @@ import { fade, fly, scale, slide } from 'svelte/transition';
 import type { TransitionConfig } from 'svelte/transition';
 
 export const MOTION = { quick: 100, state: 150, enter: 200, expand: 200, block: 280 } as const;
+export const PRISM_VISIBILITY_MOTION = {
+  duration: 400,
+  hiddenScale: 0.94,
+  easing: 'cubic-bezier(0.32, 0.72, 0, 1)',
+} as const;
 
 export const reducedMotion = (): boolean => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
