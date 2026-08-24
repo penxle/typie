@@ -284,25 +284,62 @@
     },
   });
 
-  // 프로그레시브 블러 — 삼각 그라디언트 마스크(가운데만 검고 양끝 투명)를 씌운 블러층 둘을 겹친다:
-  // 넓고 옅은 층이 멀리서 스미기 시작하고, 좁고 진한 층이 선·글자 자리에서 정점을 만든다. 한 층의
-  // 균일 블러가 마스크로 뚝 나타나던 것과 달리, 블러 강도 자체가 바깥으로 갈수록 계단식으로 사그라든다.
-  // 선·글자보다 아래, 카드보다 위 — 부모 sticky 라인(zIndex 1)이 스태킹 컨텍스트라 -1이 그 사이에 선다
-  const edgeBlurBase = css.raw({
-    position: 'absolute',
-    insetX: '0',
-    zIndex: '[-1]',
-    // 버튼의 자식이라 그대로 두면 블러 퍼짐 전체가 히트 영역이 된다 — 클릭면은 행 본체만
-    pointerEvents: 'none',
-    backdropFilter: 'auto',
-    maskImage: '[linear-gradient(to bottom, transparent, black 50%, transparent)]',
+  const edgeLineSegClass = css({ flexGrow: '1', height: '1px', backgroundColor: 'border.default' });
+
+  // 서로 다른 radius의 층으로 세로 progressive blur를 근사한다. 범위는 원래보다 좁히고, 같은 요소를
+  // 계속 마운트한 채 0px에서 각 radius로 바꿔 어포던스의 opacity와 함께 보간한다.
+  const edgeBlurRecipe = cva({
+    base: {
+      position: 'absolute',
+      insetX: '0',
+      zIndex: '[-2]',
+      pointerEvents: 'none',
+      backdropFilter: 'auto',
+      transition: '[backdrop-filter 0.2s cubic-bezier(0.2, 0, 0, 1)]',
+    },
+    variants: {
+      layer: {
+        outermost: {
+          insetY: '-10px',
+          maskImage: '[linear-gradient(to bottom, transparent, black 42%, black 58%, transparent)]',
+        },
+        outer: {
+          insetY: '-6px',
+          maskImage: '[linear-gradient(to bottom, transparent, black 38%, black 62%, transparent)]',
+        },
+        inner: {
+          insetY: '-2px',
+          maskImage: '[linear-gradient(to bottom, transparent, black 34%, black 66%, transparent)]',
+        },
+        innermost: {
+          insetY: '2px',
+          maskImage: '[linear-gradient(to bottom, transparent, black 28%, black 72%, transparent)]',
+        },
+      },
+      shown: {
+        true: {},
+        false: { backdropBlur: '[0px]' },
+      },
+    },
+    compoundVariants: [
+      { layer: 'outermost', shown: true, css: { backdropBlur: '[0.5px]' } },
+      { layer: 'outer', shown: true, css: { backdropBlur: '1px' } },
+      { layer: 'inner', shown: true, css: { backdropBlur: '[1.5px]' } },
+      { layer: 'innermost', shown: true, css: { backdropBlur: '2px' } },
+    ],
   });
 
-  // 틴트 없이 흐리기만 한다 — 컬럼이 얹히는 바탕색을 가정하면 그 가정이 틀린 자리에서 띠가 드러난다
-  const edgeBlurOuterClass = css(edgeBlurBase, { insetY: '-36px', backdropBlur: '3px' });
-  const edgeBlurInnerClass = css(edgeBlurBase, { insetY: '-12px', backdropBlur: '8px' });
-
-  const edgeLineSegClass = css({ flexGrow: '1', height: '1px', backgroundColor: 'border.default' });
+  // tint는 blur층마다 중첩하지 않고 별도 한 층으로만 얹는다. 중앙의 surface 색이 복잡한 카드 경계를
+  // 정돈하되, alpha mask가 위아래를 완전 투명으로 보내 별도의 판이나 띠가 남지 않게 한다.
+  const edgeScrimClass = css({
+    position: 'absolute',
+    insetX: '0',
+    insetY: '-8px',
+    zIndex: '[-1]',
+    pointerEvents: 'none',
+    backgroundColor: 'surface.default/45',
+    maskImage: '[linear-gradient(to bottom, transparent, black 38%, black 62%, transparent)]',
+  });
 
   const edgeTextClass = css({
     display: 'inline-flex',
@@ -325,8 +362,11 @@
     <div bind:this={columnEl} class={css({ position: 'relative', flexGrow: '1' })}>
       <div class={css(edgeLineRecipe.raw({ edge: 'top' }))}>
         <button class={css(edgeRowRecipe.raw({ shown: hiddenAbove > 0 }))} onclick={() => jumpEdge('up')} type="button">
-          <div class={edgeBlurOuterClass}></div>
-          <div class={edgeBlurInnerClass}></div>
+          <div class={css(edgeBlurRecipe.raw({ layer: 'outermost', shown: hiddenAbove > 0 }))}></div>
+          <div class={css(edgeBlurRecipe.raw({ layer: 'outer', shown: hiddenAbove > 0 }))}></div>
+          <div class={css(edgeBlurRecipe.raw({ layer: 'inner', shown: hiddenAbove > 0 }))}></div>
+          <div class={css(edgeBlurRecipe.raw({ layer: 'innermost', shown: hiddenAbove > 0 }))}></div>
+          <div class={edgeScrimClass}></div>
           <span class={edgeLineSegClass}></span>
           <span class={edgeTextClass}>
             <Icon icon={ChevronUpIcon} size={10} />
@@ -355,8 +395,11 @@
 
       <div class={css(edgeLineRecipe.raw({ edge: 'bottom' }))}>
         <button class={css(edgeRowRecipe.raw({ shown: hiddenBelow > 0 }))} onclick={() => jumpEdge('down')} type="button">
-          <div class={edgeBlurOuterClass}></div>
-          <div class={edgeBlurInnerClass}></div>
+          <div class={css(edgeBlurRecipe.raw({ layer: 'outermost', shown: hiddenBelow > 0 }))}></div>
+          <div class={css(edgeBlurRecipe.raw({ layer: 'outer', shown: hiddenBelow > 0 }))}></div>
+          <div class={css(edgeBlurRecipe.raw({ layer: 'inner', shown: hiddenBelow > 0 }))}></div>
+          <div class={css(edgeBlurRecipe.raw({ layer: 'innermost', shown: hiddenBelow > 0 }))}></div>
+          <div class={edgeScrimClass}></div>
           <span class={edgeLineSegClass}></span>
           <span class={edgeTextClass}>
             <Icon icon={ChevronDownIcon} size={10} />
