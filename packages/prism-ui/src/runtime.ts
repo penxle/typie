@@ -20,7 +20,7 @@ import {
   spinnerPhaseToWorldPhase,
 } from './internal/prism-spinner-morph.ts';
 import { PrismSpinnerPreRenderedHdrPlayer, PrismSpinnerPreRenderedPlayer } from './internal/prism-spinner-prerendered.ts';
-import { PRISM_SPINNER_DURATION_MS, PRISM_SPINNER_FRAME_COUNT, resolvePrismSpinnerAssets } from './spinner-player.ts';
+import { PRISM_SPINNER_ATLAS_DURATION_MS, PRISM_SPINNER_ATLAS_FRAME_COUNT, resolvePrismSpinnerAssets } from './spinner-player.ts';
 import type { PrismIconMorphSample } from './internal/prism-icon-morph.ts';
 import type { PrismModeOwner, PrismModeReadiness } from './internal/prism-mode-route.ts';
 import type { PrismWebRenderer } from './internal/prism-wgpu-renderer.ts';
@@ -465,15 +465,15 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
 
     function currentAtlasWorldPhase(now = performance.now()): number {
       const frameIndex = atlasPlayer.frameIndexAt(now);
-      const framePhase = spinnerPhaseForFrameIndex(frameIndex, PRISM_SPINNER_FRAME_COUNT);
-      const unquantized = atlasWorldPhase + Math.max(now - atlasStartedAt, 0) / PRISM_SPINNER_DURATION_MS;
+      const framePhase = spinnerPhaseForFrameIndex(frameIndex, PRISM_SPINNER_ATLAS_FRAME_COUNT);
+      const unquantized = atlasWorldPhase + Math.max(now - atlasStartedAt, 0) / PRISM_SPINNER_ATLAS_DURATION_MS;
       const phaseWithinTurn = spinnerPhaseToWorldPhase(framePhase, 0);
       return phaseWithinTurn + Math.round(unquantized - phaseWithinTurn);
     }
 
     function handOffWebGpuToAtlas(now = performance.now()): void {
       if (!controller || atlasReadiness !== 'ready' || route.snapshot.owner !== 'webgpu') return;
-      const handoff = nextForwardSpinnerFrame(controller.rotationPhase, 0, PRISM_SPINNER_FRAME_COUNT);
+      const handoff = nextForwardSpinnerFrame(controller.rotationPhase, 0, PRISM_SPINNER_ATLAS_FRAME_COUNT);
       controller.setRotationPhase(handoff.worldPhase);
       controller.setMorphPoseQuaternion(null);
       controller.setActive(false);
@@ -482,7 +482,7 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
       atlasStartedAt = now;
       route.syncKinematics({
         phase: handoff.worldPhase,
-        velocity: 1000 / PRISM_SPINNER_DURATION_MS,
+        velocity: 1000 / PRISM_SPINNER_ATLAS_DURATION_MS,
       });
       route.syncState({ owner: 'atlas', spinnerProgress: 1 });
       setOwnerVisibility(svg, canvas, atlas, 'atlas');
@@ -494,7 +494,7 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
       const phase = currentAtlasWorldPhase(now);
       atlasPlayer.pause(now);
       controller.update({
-        period: PRISM_SPINNER_DURATION_MS / 1000,
+        period: PRISM_SPINNER_ATLAS_DURATION_MS / 1000,
         spinnerMorphProgress: 1,
       });
       controller.setMorphPoseQuaternion(null);
@@ -502,7 +502,7 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
       controller.setActive(true);
       route.syncKinematics({
         phase,
-        velocity: 1000 / PRISM_SPINNER_DURATION_MS,
+        velocity: 1000 / PRISM_SPINNER_ATLAS_DURATION_MS,
       });
       route.syncState({ owner: 'webgpu', spinnerProgress: 1 });
       setOwnerVisibility(svg, canvas, atlas, 'webgpu');
@@ -732,7 +732,7 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
         settledTarget = 'spinner';
       } else if (targetProgress === 1) {
         controller.update({
-          period: PRISM_SPINNER_DURATION_MS / 1000,
+          period: PRISM_SPINNER_ATLAS_DURATION_MS / 1000,
           spinnerMorphProgress: 1,
         });
         controller.setMorphPoseQuaternion(null);
@@ -771,9 +771,9 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
       const distance = Math.max(Math.abs(currentAction.targetProgress - currentAction.startProgress), 0.0001);
       const durationSeconds = actionDurationSeconds(currentAction, PRISM_ICON_DURATION_SECONDS * distance);
       const trajectory = createFixedPrismSpinnerTrajectory({
-        frameCount: PRISM_SPINNER_FRAME_COUNT,
+        frameCount: PRISM_SPINNER_ATLAS_FRAME_COUNT,
         prismVelocity: 1 / PRISM_PERIOD_SECONDS,
-        spinnerVelocity: 1000 / PRISM_SPINNER_DURATION_MS,
+        spinnerVelocity: 1000 / PRISM_SPINNER_ATLAS_DURATION_MS,
         startAngularVelocity: currentAction.startAngularVelocity,
         startOrientation: currentAction.startOrientation,
         startPhase: currentAction.startPhase,
@@ -1020,7 +1020,7 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
       atlasPlayer = null;
       atlasPromise = null;
       apngHdrPlayer.connect(assets.hdr);
-      const source = new URL(assets.apngUrl);
+      const source = new URL(assets.sdrUrl);
       source.searchParams.set('animation-run', String(generation));
       const loadedAt = new Promise<number>((resolve, reject) => {
         const cleanup = () => {
