@@ -168,6 +168,8 @@ PrismReviewRound.implement({
       },
     }),
     workflow: t.field({ type: PrismWorkflow, nullable: true, resolve: (self) => self.workflowId }),
+    // 세션이 지워진 라운드는 null이다 — 프론트는 이때 "대화 보기" 문을 세우지 않는다
+    sessionId: t.exposeID('sessionId', { nullable: true }),
     createdAt: t.expose('createdAt', { type: 'DateTime' }),
     rejection: t.field({ type: PrismReviewRejection, nullable: true, resolve: (self) => summarizeOutcome(self.result).rejection }),
     conclusion: t.field({

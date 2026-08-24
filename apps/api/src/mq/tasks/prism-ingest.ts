@@ -136,9 +136,12 @@ const applyWorkflowOp = async (
         .update(PrismWorkflows)
         .set(update)
         .where(and(eq(PrismWorkflows.id, workflow.id), eq(PrismWorkflows.state, 'RUNNING')));
-      await prismApps[workflow.app]?.onWorkflowSettled?.(tx, { ...workflow, ...update }, { ...update, result: op.result });
+      const settled = await prismApps[workflow.app]?.onWorkflowSettled?.(tx, { ...workflow, ...update }, { ...update, result: op.result });
       workflow.state = op.state;
-      return () => ensureIngest({ kind: 'agent', sessionId: session.id });
+      return async () => {
+        await settled?.();
+        await ensureIngest({ kind: 'agent', sessionId: session.id });
+      };
     }
 
     case 'ask-push': {

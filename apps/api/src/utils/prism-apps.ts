@@ -16,7 +16,8 @@ export type WorkflowOutcome = {
 
 export type PrismAppHooks = {
   onWorkflowLinked?(tx: Transaction, workflow: PrismWorkflowRow): Promise<void>;
-  onWorkflowSettled?(tx: Transaction, workflow: PrismWorkflowRow, outcome: WorkflowOutcome): Promise<void>;
+  // 반환한 콜백은 트랜잭션 커밋 뒤에 실행된다 — 커밋 전에 새어 나가면 안 되는 후처리(발행 등)를 싣는다
+  onWorkflowSettled?(tx: Transaction, workflow: PrismWorkflowRow, outcome: WorkflowOutcome): Promise<(() => Promise<void>) | null>;
   onRunTerminal?(executor: Database | Transaction, sessionId: string, runSeq: number): Promise<void>;
 };
 

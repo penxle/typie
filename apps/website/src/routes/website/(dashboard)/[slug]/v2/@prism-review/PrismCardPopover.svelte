@@ -182,7 +182,7 @@
     <!-- 전환은 안쪽에서 받는다 — 바깥 요소의 opacity는 앵커 이탈 숨김이 쓰고 있어,
          켜짐/꺼짐 페이드까지 같은 요소에 얹으면 두 기제가 같은 속성을 다툰다 -->
     <div class={css({ display: 'flex', flexDirection: 'column', minHeight: '0' })} in:fade={cardFade} out:fade={cardFade}>
-      <PrismCard expanded={true} item={active} onToggle={() => margin.activate(null)} scrollable />
+      <PrismCard expanded={true} item={active} onClose={() => margin.activate(null)} onToggle={() => margin.activate(null)} scrollable />
     </div>
   </div>
 {/if}

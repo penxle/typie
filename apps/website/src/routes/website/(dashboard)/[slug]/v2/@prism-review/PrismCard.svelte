@@ -12,6 +12,7 @@
   import ThumbsDownIcon from '~icons/lucide/thumbs-down';
   import ThumbsUpIcon from '~icons/lucide/thumbs-up';
   import Trash2Icon from '~icons/lucide/trash-2';
+  import XIcon from '~icons/lucide/x';
   import PrismIcon from '~icons/typie/prism';
   import { Img } from '$lib/components';
   import { getMarginContext } from './context.svelte.ts';
@@ -19,9 +20,10 @@
   import type { MarginComment, MarginItem } from './context.svelte.ts';
 
   // scrollable은 팝오버가 준 높이를 카드가 다 쓰고 넘치는 만큼을 제 안에서 접는다는 뜻이다.
-  // 컬럼에서는 켜지 않는다 — 거기서는 카드가 제 높이를 다 차지하고 컬럼이 통째로 스크롤된다
-  type Props = { item: MarginItem; expanded: boolean; onToggle: () => void; scrollable?: boolean };
-  let { item, expanded, onToggle, scrollable = false }: Props = $props();
+  // 컬럼에서는 켜지 않는다 — 거기서는 카드가 제 높이를 다 차지하고 컬럼이 통째로 스크롤된다.
+  // onClose도 팝오버 전용이다 — 컬럼 카드는 닫히는 게 아니라 접히므로 닫기 버튼을 세우지 않는다
+  type Props = { item: MarginItem; expanded: boolean; onToggle: () => void; onClose?: () => void; scrollable?: boolean };
+  let { item, expanded, onToggle, onClose, scrollable = false }: Props = $props();
 
   const margin = getMarginContext();
   const thread = $derived(item.thread);
@@ -260,20 +262,26 @@
 
   const calloutLeadClass = css({ fontWeight: 'bold', color: 'text.subtle' });
 
-  // 아이콘만 남긴 처분 버튼 — 음수 마진으로 24px 히트 영역을 쓰면서 헤더 높이는 칩 높이에 맞춘다
-  const headerActionClass = flex({
-    align: 'center',
-    justify: 'center',
-    flex: 'none',
-    size: '24px',
-    marginY: '-4px',
-    marginRight: '-4px',
-    borderRadius: '6px',
-    color: 'text.faint',
-    cursor: 'pointer',
-    transition: '[background-color 0.15s ease, color 0.15s ease]',
-    _hover: { backgroundColor: 'surface.muted', color: 'text.subtle' },
-    _disabled: { color: 'text.disabled', cursor: 'not-allowed' },
+  // 아이콘만 남긴 헤더 버튼 — 음수 마진으로 24px 히트 영역을 쓰면서 헤더 높이는 칩 높이에 맞춘다.
+  // 카드 패딩을 파고드는(flush) 것은 오른쪽 끝 버튼만이다 — 중간 버튼까지 파고들면 이웃 버튼과 붙는다
+  const headerActionRecipe = cva({
+    base: {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      flex: 'none',
+      size: '24px',
+      marginY: '-4px',
+      borderRadius: '6px',
+      color: 'text.faint',
+      cursor: 'pointer',
+      transition: '[background-color 0.15s ease, color 0.15s ease]',
+      _hover: { backgroundColor: 'surface.muted', color: 'text.subtle' },
+      _disabled: { color: 'text.disabled', cursor: 'not-allowed' },
+    },
+    variants: {
+      flush: { true: { marginRight: '-4px' }, false: {} },
+    },
   });
 
   // 접힌 카드는 어디를 눌러도 열린다 — 헤더 버튼이 접근성 조작면이고, 이 핸들러는 포인터 편의다.
@@ -332,7 +340,7 @@
 
     {#if slot.action && thread}
       <button
-        class={headerActionClass}
+        class={css(headerActionRecipe.raw({ flush: !onClose }))}
         aria-label={slot.action === 'close' ? '피드백 닫기' : '다시 열기'}
         onclick={() => void run(() => (slot.action === 'close' ? margin.close(thread.id) : margin.reopen(thread.id)))}
         type="button"
@@ -343,6 +351,12 @@
         }}
       >
         <Icon icon={slot.action === 'close' ? ArchiveIcon : ArchiveRestoreIcon} size={16} />
+      </button>
+    {/if}
+
+    {#if onClose}
+      <button class={css(headerActionRecipe.raw({ flush: true }))} aria-label="닫기" onclick={onClose} type="button">
+        <Icon icon={XIcon} size={16} />
       </button>
     {/if}
   </div>

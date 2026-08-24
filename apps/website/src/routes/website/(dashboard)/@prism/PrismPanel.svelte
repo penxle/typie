@@ -23,6 +23,7 @@
   import { cache, wsStatus } from '$lib/graphql';
   import { unwrapError } from '$lib/graphql/error';
   import { getOpenDocuments } from '$lib/prism/open-documents.svelte';
+  import { takeSessionJump } from '$lib/prism/session-jump.svelte';
   import { graphql } from '$mearie';
   import { AutoResolver } from './lib/auto-resolve.svelte.ts';
   import { backoffDelay } from './lib/backoff.ts';
@@ -366,6 +367,16 @@
   $effect(() => {
     void selected.current;
     titleEditing = false;
+  });
+
+  // 리뷰 모달의 "대화 보기" — 패널은 닫혀 있어도 늘 마운트되어 있으므로 여기서 요청을 가져간다
+  $effect(() => {
+    const sessionId = takeSessionJump();
+    if (sessionId === null) return;
+    untrack(() => {
+      selected.current = sessionId;
+      app.preference.current.prismPanelOpen = true;
+    });
   });
 
   const calloutStyle = flex.raw({

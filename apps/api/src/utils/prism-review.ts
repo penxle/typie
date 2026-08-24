@@ -17,6 +17,7 @@ import {
   validateDbId,
 } from '#/db/index.ts';
 import { activeRun, prism } from '#/external/prism.ts';
+import { pubsub } from '#/pubsub.ts';
 import { readMergedGraph } from './changeset.ts';
 import { assertDocumentPermission } from './permission.ts';
 import { ConfirmInputSchema, confirmResult, ENUM_TO_TIER, manuscriptPath, pickVersion } from './prism-review-core.ts';
@@ -204,7 +205,11 @@ const onWorkflowLinked = async (tx: Transaction, workflow: PrismWorkflowRow): Pr
     log.warn('review round already linked or not in this session: {ref} ({workflowId})', { ref: workflow.ref, workflowId: workflow.id });
 };
 
-const onWorkflowSettled = async (tx: Transaction, workflow: PrismWorkflowRow, outcome: WorkflowOutcome): Promise<void> => {
+const onWorkflowSettled = async (
+  tx: Transaction,
+  workflow: PrismWorkflowRow,
+  outcome: WorkflowOutcome,
+): Promise<(() => Promise<void>) | null> => {
   let result: ReviewOutcome | null = null;
   if (outcome.result !== null) {
     const parsed = ReviewOutcomeEnvelopeSchema.safeParse(outcome.result);
@@ -217,7 +222,7 @@ const onWorkflowSettled = async (tx: Transaction, workflow: PrismWorkflowRow, ou
         level: 'error',
         extra: { workflowId: workflow.prismWorkflowId, issues: parsed.error.issues },
       });
-      return;
+      return null;
     }
 
     result = parsed.data as ReviewOutcome;
@@ -229,9 +234,9 @@ const onWorkflowSettled = async (tx: Transaction, workflow: PrismWorkflowRow, ou
     .where(eq(PrismReviewRounds.workflowId, workflow.id))
     .returning({ id: PrismReviewRounds.id, documentId: PrismReviewRounds.documentId })
     .then(first);
-  if (!round || outcome.state !== 'COMPLETED') return;
+  if (!round || outcome.state !== 'COMPLETED') return null;
 
-  await projectRoundThreads(tx, round.id);
+  const projected = await projectRoundThreads(tx, round.id);
 
   const document = await tx.select({ title: Documents.title }).from(Documents).where(eq(Documents.id, round.documentId)).then(first);
   const session = await tx
@@ -240,17 +245,26 @@ const onWorkflowSettled = async (tx: Transaction, workflow: PrismWorkflowRow, ou
     .where(eq(PrismSessions.id, workflow.sessionId))
     .then(firstOrThrow);
 
+  // push는 트랜잭션 안에 남긴다 — 실패 시 settle 전체가 롤백돼 잡 재시도가 push까지 다시 태운다
   const { PUSH_TTL_SECONDS, sendPushNotificationOnce } = await import('#/external/firebase.ts');
-  if (Date.now() - outcome.finishedAt.valueOf() > PUSH_TTL_SECONDS * 1000) return;
+  if (Date.now() - outcome.finishedAt.valueOf() <= PUSH_TTL_SECONDS * 1000) {
+    const delivery = await sendPushNotificationOnce({
+      key: `prism:push:review-done:${workflow.prismWorkflowId}`,
+      userId: session.userId,
+      title: `리뷰가 끝났어요 — 「${document?.title || '제목 없음'}」`,
+      body: '결과가 정리돼 있어요.',
+    });
 
-  const delivery = await sendPushNotificationOnce({
-    key: `prism:push:review-done:${workflow.prismWorkflowId}`,
-    userId: session.userId,
-    title: `리뷰가 끝났어요 — 「${document?.title || '제목 없음'}」`,
-    body: '결과가 정리돼 있어요.',
-  });
+    if (delivery === 'failed') throw new Error(`prism review push failed for workflow ${workflow.prismWorkflowId}`);
+  }
 
-  if (delivery === 'failed') throw new Error(`prism review push failed for workflow ${workflow.prismWorkflowId}`);
+  if (projected === null) return null;
+
+  // 완료 발행은 커밋 뒤여야 한다 — 이벤트를 받은 클라이언트가 즉시 재조회하는데, 커밋 전이면
+  // result 없는 회차로 읽혀 목록에서 걸러지고, 다시 알려줄 이벤트가 없어 여백이 서지 못한다.
+  return async () => {
+    pubsub.publish('prism:review', projected.documentId, { roundId: round.id });
+  };
 };
 
 const onRunTerminal = async (executor: Database | Transaction, sessionId: string, runSeq: number): Promise<void> => {
