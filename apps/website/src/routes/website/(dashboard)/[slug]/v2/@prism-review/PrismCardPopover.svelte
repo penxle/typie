@@ -166,7 +166,7 @@
     class={css({
       display: 'flex',
       flexDirection: 'column',
-      zIndex: 'overEditor',
+      zIndex: 'menu',
       pointerEvents: 'auto',
       userSelect: 'text',
       WebkitUserSelect: 'text',
