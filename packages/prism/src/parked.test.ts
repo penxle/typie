@@ -35,6 +35,14 @@ describe('parked — agent', () => {
     expect(parked([...events, ev('invocation.failed', inv)], 'agent')).toBe(false);
   });
 
+  it('종결을 이미 아는 workflow 구동은 루트 로그에 터미널이 없어도 파킹이 아니다', () => {
+    const inv = { ...tool(root, 'c1'), invocation: 'inv_1' };
+    const events = [ev('run.started', run(root)), ev('invocation.started', inv, { target: { kind: 'workflow', id: 'wf_1' } })];
+    expect(parked(events, 'agent', { settledWorkflows: new Set(['wf_1']) })).toBe(false);
+    expect(parked(events, 'agent', { settledWorkflows: new Set(['wf_other']) })).toBe(true);
+    expect(parked(events, 'agent', { settledWorkflows: new Set() })).toBe(true);
+  });
+
   it('agent 대상 구동은 파킹 사유가 아니다', () => {
     const inv = { ...tool(root, 'c1'), invocation: 'inv_2' };
     expect(parked([ev('run.started', run(root)), ev('invocation.started', inv, { target: { kind: 'agent' } })], 'agent')).toBe(false);
