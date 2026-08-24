@@ -9,7 +9,7 @@ export type PrismIndicatorPath = Readonly<{
   arcHeight: number;
 }>;
 
-const easeOutTravel = (progress: number) => Math.sin((progress * Math.PI) / 2);
+const easeOutTravel = (progress: number) => 1 - (1 - progress) ** 3;
 
 const requirePoint = (point: PrismIndicatorPoint) => {
   if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) {

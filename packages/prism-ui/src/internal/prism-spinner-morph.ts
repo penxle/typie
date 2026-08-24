@@ -8,6 +8,7 @@ export const PRISM_SPINNER_GEOMETRY_SWAP_PROGRESS = 0.72;
 export const PRISM_SPINNER_SILHOUETTE_PHASE_TURNS = 0.25;
 export const PRISM_SPINNER_CSS_SIZE = 18;
 const PRISM_SPINNER_SWAP_SCALE = 1.11118849;
+const PRISM_SPINNER_SIZE_COMPLETION_PROGRESS = 5 / 11;
 
 type Vector3 = readonly [number, number, number];
 type Triangle = readonly [number, number, number];
@@ -897,7 +898,8 @@ export type PrismSpinnerMorphChannels = {
 
 export function resolvePrismSpinnerSizeProgress(progress: number): number {
   const normalized = clamp(progress || 0);
-  return normalized ** 3;
+  const windowProgress = clamp(normalized / PRISM_SPINNER_SIZE_COMPLETION_PROGRESS);
+  return 1 - (1 - windowProgress) ** 3;
 }
 
 export function resolvePrismSpinnerMorphChannels(progress: number, prismSize: number, spinnerSize: number): PrismSpinnerMorphChannels {
