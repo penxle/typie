@@ -20,6 +20,7 @@
   import { goto } from '$app/navigation';
   import { graphql } from '$mearie';
   import { getPaneGroup } from './[slug]/@pane/context.svelte';
+  import PrismBadgeDot from './@prism/PrismBadgeDot.svelte';
   import { SubscribeModal } from './@subscription/subscribe-modal.svelte';
   import TrialWidget from './@subscription/TrialWidget.svelte';
   import EntityTree from './@tree/EntityTree.svelte';
@@ -541,7 +542,12 @@
           onclick={() => (app.preference.current.prismPanelOpen = !app.preference.current.prismPanelOpen)}
           type="button"
         >
-          <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={PrismIcon} size={16} />
+          <span class={css({ position: 'relative', display: 'flex', flexShrink: '0' })}>
+            <Icon style={css.raw({ color: 'text.faint' })} icon={PrismIcon} size={16} />
+            {#if app.state.prismBadge}
+              <PrismBadgeDot />
+            {/if}
+          </span>
           <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.muted' })}>PRISM</span>
           <div class={flex({ alignItems: 'center', marginLeft: 'auto', color: 'text.faint', fontSize: '11px' })}>
             {#if navigator.platform.includes('Mac')}

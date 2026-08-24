@@ -12,6 +12,7 @@ import {
   shouldStop,
 } from './prism-ingest-core.ts';
 import type { EventFrame, ProjectedDeltaFrame, TurnLive } from '@typie/prism';
+import type { DomainOp } from './prism-ingest-core.ts';
 
 const agent = { id: 'chat-1', name: 'chat' };
 const ev = (seq: number, kind: string, context: EventFrame['context'], data: Record<string, unknown> = {}): EventFrame => ({
@@ -25,6 +26,8 @@ const ev = (seq: number, kind: string, context: EventFrame['context'], data: Rec
 const run = { agent, run: 1 };
 const turn = { ...run, turn: 1, attempt: 1 };
 const call = { ...turn, toolCallId: 'c1' };
+
+const askOps = (ops: DomainOp[]) => ops.filter((op): op is Extract<DomainOp, { op: 'ask-push' }> => op.op === 'ask-push');
 
 test('logKey는 왕복한다(BullMQ jobId 제약으로 구분자는 -)', () => {
   assert.equal(logKeyOf({ kind: 'agent', sessionId: 'PRSS1' }), 'agent-PRSS1');
@@ -63,12 +66,32 @@ test('agent 펌프의 도메인 op — run 시작·종결·링크·제목·질�
     [],
   );
   assert.deepEqual(planEvent('agent', ev(6, 'assistant.titled', call, { title: '제목' }), 5).ops, [{ op: 'titled', title: '제목' }]);
-  const questions = [{ question: 'q', hint: '', multi: false, options: [] }];
-  assert.deepEqual(planEvent('agent', ev(7, 'tool.requested', call, { tool: 'ask-user', data: { questions } }), 6).ops, [
-    { op: 'ask-push', toolCallId: 'c1', questions, at: 1007 },
+  const payload = { questions: [{ question: 'q', hint: '', multi: false, options: [] }] };
+  assert.deepEqual(planEvent('agent', ev(7, 'tool.requested', call, { tool: 'ask-user', data: payload }), 6).ops, [
+    { op: 'ask-push', toolCallId: 'c1', tool: 'ask-user', data: payload, at: 1007 },
   ]);
-  assert.deepEqual(planEvent('agent', ev(8, 'tool.requested', call, { tool: 'ask-user', data: { broken: true } }), 7).ops, []);
-  assert.deepEqual(planEvent('agent', ev(9, 'tool.requested', call, { tool: 'confirm-review', data: {} }), 8).ops, []);
+  assert.deepEqual(planEvent('agent', ev(8, 'tool.requested', call, { tool: 'ask-user', data: { broken: true } }), 7).ops, [
+    { op: 'ask-push', toolCallId: 'c1', tool: 'ask-user', data: { broken: true }, at: 1008 },
+  ]);
+  assert.deepEqual(planEvent('agent', ev(9, 'tool.requested', call, { tool: 'confirm-review', data: {} }), 8).ops, [
+    { op: 'ask-push', toolCallId: 'c1', tool: 'confirm-review', data: {}, at: 1009 },
+  ]);
+});
+
+test('askPush: ask-user 외의 도구도 op를 만든다', () => {
+  const ops = planEvent('agent', ev(9, 'tool.requested', { ...call, toolCallId: 'c9' }, { tool: 'confirm-review', data: {} }), 0).ops;
+  assert.ok(ops.some((op) => op.op === 'ask-push' && op.tool === 'confirm-review' && op.toolCallId === 'c9'));
+});
+
+test('askPush: toolCallId가 없으면 op가 없다', () => {
+  const ops = planEvent('agent', ev(9, 'tool.requested', turn, { tool: 'ask-user', data: {} }), 0).ops;
+  assert.ok(ops.every((op) => op.op !== 'ask-push'));
+});
+
+test('askPush: data는 원시 payload가 그대로 실린다', () => {
+  const payload = { questions: [{ question: '무엇을 볼까요?' }] };
+  const ops = planEvent('agent', ev(9, 'tool.requested', call, { tool: 'ask-user', data: payload }), 0).ops;
+  assert.deepEqual(askOps(ops)[0]?.data, payload);
 });
 
 test('agent 펌프는 workflow.* 를 무시하고, workflow 펌프는 run.*·invocation.*·titled를 무시한다', () => {
@@ -98,20 +121,22 @@ test('workflow 펌프의 정산 op — usage 사영과 reason', () => {
 });
 
 test('workflow 펌프의 질문 푸시 op 도 at 을 싣는다', () => {
-  const questions = [{ question: 'q', hint: '', multi: false, options: [] }];
-  assert.deepEqual(planEvent('workflow', ev(4, 'tool.requested', call, { tool: 'ask-user', data: { questions } }), 3).ops, [
-    { op: 'ask-push', toolCallId: 'c1', questions, at: 1004 },
+  const payload = { questions: [{ question: 'q', hint: '', multi: false, options: [] }] };
+  assert.deepEqual(planEvent('workflow', ev(4, 'tool.requested', call, { tool: 'ask-user', data: payload }), 3).ops, [
+    { op: 'ask-push', toolCallId: 'c1', tool: 'ask-user', data: payload, at: 1004 },
   ]);
 });
 
 test('tool.requested: tier 보유 도구는 tool-serve op를 낸다 (agent·workflow 공통)', () => {
   const event = ev(5, 'tool.requested', { ...call, toolCallId: 'tc-1' }, { tool: 'search-entities', data: { query: '해변' } });
-  assert.deepEqual(planEvent('agent', event, 0).ops, [
-    { op: 'tool-serve', toolCallId: 'tc-1', tool: 'search-entities', input: { query: '해변' }, agentId: 'chat-1', runSeq: 1 },
-  ]);
-  assert.deepEqual(planEvent('workflow', event, 0).ops, [
-    { op: 'tool-serve', toolCallId: 'tc-1', tool: 'search-entities', input: { query: '해변' }, agentId: 'chat-1', runSeq: null },
-  ]);
+  assert.deepEqual(
+    planEvent('agent', event, 0).ops.filter((op) => op.op === 'tool-serve'),
+    [{ op: 'tool-serve', toolCallId: 'tc-1', tool: 'search-entities', input: { query: '해변' }, agentId: 'chat-1', runSeq: 1 }],
+  );
+  assert.deepEqual(
+    planEvent('workflow', event, 0).ops.filter((op) => op.op === 'tool-serve'),
+    [{ op: 'tool-serve', toolCallId: 'tc-1', tool: 'search-entities', input: { query: '해변' }, agentId: 'chat-1', runSeq: null }],
+  );
 });
 
 test('tool.requested: 인터랙티브·client·미등재 도구는 tool-serve를 내지 않는다', () => {

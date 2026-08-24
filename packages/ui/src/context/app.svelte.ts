@@ -61,6 +61,7 @@ type AppState = {
   shortcutsOpen: boolean;
   prismAccess: boolean;
   sidebarPeek: boolean;
+  prismBadge: boolean;
 
   subscribed: boolean;
 
@@ -115,6 +116,7 @@ export const setupAppContext = (userId: string) => {
     shortcutsOpen: false,
     prismAccess: false,
     sidebarPeek: false,
+    prismBadge: false,
 
     subscribed: false,
 

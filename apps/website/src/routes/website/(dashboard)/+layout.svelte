@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createQuery, createSubscription } from '@mearie/svelte';
+  import { createMutation, createQuery, createSubscription } from '@mearie/svelte';
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { token } from '@typie/styled-system/tokens';
@@ -23,6 +23,8 @@
   import { fanOutResourceUpdate } from '$lib/editor-ffi/registry';
   import { hydrateQuery } from '$lib/graphql';
   import { setupOpenDocuments } from '$lib/prism/open-documents.svelte';
+  import { requestSessionJump } from '$lib/prism/session-jump.svelte';
+  import { acquirePushToken, pushPermission } from '$lib/push';
   import { isLegacyTrial, shouldShowOnboarding } from '$lib/subscription-logic';
   import { initWasm } from '$lib/wasm-ffi.svelte';
   import { graphql } from '$mearie';
@@ -142,6 +144,43 @@
     `),
     () => ({ siteId }),
   );
+
+  createSubscription(
+    graphql(`
+      subscription DashboardLayout_PrismBadgeStream {
+        prismBadgeStream {
+          id
+          awaitingUser
+          unseenReviewCount
+        }
+      }
+    `),
+  );
+
+  const [registerPushNotificationToken] = createMutation(
+    graphql(`
+      mutation DashboardLayout_RegisterPushToken_Mutation($input: RegisterPushNotificationTokenInput!) {
+        registerPushNotificationToken(input: $input)
+      }
+    `),
+  );
+
+  const refreshPushToken = async () => {
+    const token = await acquirePushToken();
+    if (token === null) {
+      return;
+    }
+
+    await registerPushNotificationToken({ input: { token } });
+  };
+
+  onMount(() => {
+    if (pushPermission() !== 'granted') {
+      return;
+    }
+
+    void refreshPushToken().catch(() => null);
+  });
 
   const paneGroup = setupPaneGroup(siteId, {
     userId,
@@ -339,6 +378,22 @@
     } else if (open.startsWith('preference/')) {
       pushState('', { shallowRoute: `/${open}` });
     }
+  });
+
+  $effect(() => {
+    const sessionId = page.url.searchParams.get('prism');
+
+    if (!sessionId) {
+      return;
+    }
+
+    untrack(() => {
+      requestSessionJump(sessionId);
+
+      const url = new URL(page.url);
+      url.searchParams.delete('prism');
+      replaceState(url, page.state);
+    });
   });
 
   onMount(() => {

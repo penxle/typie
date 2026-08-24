@@ -704,6 +704,8 @@ export const PrismSessions = pgTable(
     cursor: integer('cursor').notNull().default(0),
     toolPolicy: E._PrismToolPolicy('tool_policy').notNull().default('STANDARD'),
     title: text('title'),
+    awaitingUserAt: datetime('awaiting_user_at'),
+    seenAt: datetime('seen_at'),
     archivedAt: datetime('archived_at'),
     deletedAt: datetime('deleted_at'),
     createdAt: datetime('created_at')
@@ -753,6 +755,7 @@ export const PrismWorkflows = pgTable(
       .notNull()
       .default(sql`now()`),
     finishedAt: datetime('finished_at'),
+    awaitingUserAt: datetime('awaiting_user_at'),
     usage: jsonb('usage').$type<RunUsage>(),
     error: text('error'),
     cursor: integer('cursor').notNull().default(0),

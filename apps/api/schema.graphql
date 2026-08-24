@@ -798,6 +798,10 @@ input LoginWithEmailInput {
   password: String!
 }
 
+input MarkPrismSessionSeenInput {
+  sessionId: ID!
+}
+
 input MoveEntitiesInput {
   entityIds: [ID!]!
   lowerOrder: String
@@ -885,6 +889,7 @@ type Mutation {
   issueBlobUploadUrl(input: IssueBlobUploadUrlInput!): IssueBlobUploadUrlResult!
   issueReferralUrl: String!
   loginWithEmail(input: LoginWithEmailInput!): Boolean!
+  markPrismSessionSeen(input: MarkPrismSessionSeenInput!): PrismSession!
   moveEntities(input: MoveEntitiesInput!): [Entity!]!
   moveEntity(input: MoveEntityInput!): Entity!
   moveNote(input: MoveNoteInput!): Note!
@@ -1267,12 +1272,14 @@ enum PrismRunState {
 
 type PrismSession {
   archivedAt: DateTime
+  awaitingUser: Boolean!
   createdAt: DateTime!
   id: ID!
   reviewRounds: [PrismReviewRound!]!
   title: String
   toolPolicy: PrismToolPolicy!
   transcript: PrismTranscript!
+  unseenReviewCount: Int!
   updatedAt: DateTime!
 }
 
@@ -1698,6 +1705,7 @@ type Subscription {
   literaryAnalysisDocumentStream(mappings: [DocumentTextMappingInput!]!, text: String!): DocumentLiteraryAnalysisPayload!
   literaryAnalysisDocumentStreamV2(documentId: ID, text: String!): DocumentLiteraryAnalysisPayloadV2!
   noteUpdateStream(clientId: String!, siteId: ID!): NoteUpdateStreamPayload!
+  prismBadgeStream: PrismSession!
   prismReviewStream(documentId: ID!): PrismReviewRound!
   prismSessionEvents(cursor: Int, sessionId: ID!, workflows: [PrismWorkflowCursorInput!]): JSON!
   siteUpdateStream(siteId: ID!): SiteUpdateStreamPayload!

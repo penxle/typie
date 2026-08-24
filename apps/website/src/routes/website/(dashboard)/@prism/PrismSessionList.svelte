@@ -12,9 +12,16 @@
   import SearchIcon from '~icons/lucide/search';
   import TrashIcon from '~icons/lucide/trash-2';
   import XIcon from '~icons/lucide/x';
-  import { groupSessionsByRecency, matchesSessionQuery, sessionLabel } from './lib/session-groups.ts';
+  import { groupSessionsByRecency, hasUnread, matchesSessionQuery, sessionLabel } from './lib/session-groups.ts';
 
-  type Session = { id: string; title?: string | null; archivedAt?: string | null; updatedAt: string };
+  type Session = {
+    id: string;
+    title?: string | null;
+    archivedAt?: string | null;
+    updatedAt: string;
+    awaitingUser: boolean;
+    unseenReviewCount: number;
+  };
 
   type Props = {
     sessions: readonly Session[];
@@ -40,6 +47,7 @@
   let pendingEdit: Session | null = null;
 
   const labelOf = sessionLabel;
+  const unread = hasUnread;
 
   const searching = $derived(query.trim().length > 0);
   const matched = $derived(sessions.filter((session) => matchesSessionQuery(session.title, query)));
@@ -146,6 +154,8 @@
   });
 
   const rowTitle = css({ flexGrow: '1', minWidth: '0', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' });
+
+  const rowDot = css({ flexShrink: '0', size: '6px', borderRadius: 'full', backgroundColor: 'accent.danger.default' });
 
   const more = css({
     display: 'flex',
@@ -334,6 +344,10 @@
     {:else}
       <button class={rowButton} onclick={() => onSelect(session.id)} type="button">
         <span class={`title ${rowTitle}`}>{labelOf(session)}</span>
+        {#if unread(session)}
+          <span class={rowDot} aria-hidden="true"></span>
+          <span class={css({ srOnly: true })}>새 상태 변화 있음</span>
+        {/if}
         <TimeAgo
           style={css.raw({ flexShrink: '0', fontSize: '11px', color: 'text.faint' })}
           timestamp={dayjs(session.updatedAt).valueOf()}
