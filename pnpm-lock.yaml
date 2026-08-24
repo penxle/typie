@@ -7,6 +7,9 @@ settings:
 overrides:
   ioredis: ^5.11.1
 
+patchedDependencies:
+  '@mearie/core@0.8.1': cfb699f35b5b8753d3ccd535222bba55de7f71f523611369eac36a4b88c7c416
+
 importers:
 
   .:
@@ -553,7 +556,7 @@ importers:
         version: 1.2.5
       '@mearie/core':
         specifier: ^0.8.1
-        version: 0.8.1
+        version: 0.8.1(patch_hash=cfb699f35b5b8753d3ccd535222bba55de7f71f523611369eac36a4b88c7c416)
       '@mearie/svelte':
         specifier: ^0.5.1
         version: 0.5.1(svelte@5.56.8(@typescript-eslint/types@8.65.0))
@@ -11226,7 +11229,7 @@ snapshots:
       - jiti
       - magicast
 
-  '@mearie/core@0.8.1':
+  '@mearie/core@0.8.1(patch_hash=cfb699f35b5b8753d3ccd535222bba55de7f71f523611369eac36a4b88c7c416)':
     dependencies:
       '@mearie/shared': 0.5.0
 
@@ -11257,7 +11260,7 @@ snapshots:
 
   '@mearie/svelte@0.5.1(svelte@5.56.8(@typescript-eslint/types@8.65.0))':
     dependencies:
-      '@mearie/core': 0.8.1
+      '@mearie/core': 0.8.1(patch_hash=cfb699f35b5b8753d3ccd535222bba55de7f71f523611369eac36a4b88c7c416)
       svelte: 5.56.8(@typescript-eslint/types@8.65.0)
 
   '@mearie/vite@0.1.8(dotenv@17.4.2)(jiti@2.6.1)':

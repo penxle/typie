@@ -1,0 +1,98 @@
+diff --git a/dist/index.cjs b/dist/index.cjs
+index 6fedf56065632a992ed553618c1fdf2053716631..ff01a378ad057481427a71a49d7968446db789d0 100644
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -700,6 +700,7 @@ const inlineFragmentMatches$1 = (selection, typename) => selection.kind === "Inl
+ */
+ var CursorRegistry = class {
+ 	#index = /* @__PURE__ */ new Map();
++	#dependencies = /* @__PURE__ */ new Map();
+ 	add(depKey, entry) {
+ 		let set = this.#index.get(depKey);
+ 		if (!set) {
+@@ -707,21 +708,21 @@ var CursorRegistry = class {
+ 			this.#index.set(depKey, set);
+ 		}
+ 		set.add(entry);
++		this.#dependencies.set(entry, depKey);
+ 	}
+ 	get(depKey) {
+ 		return this.#index.get(depKey);
+ 	}
+ 	remove(depKey, entry) {
+ 		const set = this.#index.get(depKey);
+-		if (set) {
+-			set.delete(entry);
+-			if (set.size === 0) this.#index.delete(depKey);
+-		}
++		if (!set?.delete(entry)) return;
++		this.#dependencies.delete(entry);
++		if (set.size === 0) this.#index.delete(depKey);
+ 	}
+ 	removeAll(cursors) {
+-		for (const [depKey, set] of this.#index) {
+-			for (const cursor of cursors) if (set.has(cursor)) set.delete(cursor);
+-			if (set.size === 0) this.#index.delete(depKey);
++		for (const cursor of cursors) {
++			const depKey = this.#dependencies.get(cursor);
++			if (depKey !== void 0) this.remove(depKey, cursor);
+ 		}
+ 	}
+ 	forEachByPrefix(prefix, callback) {
+@@ -729,6 +730,7 @@ var CursorRegistry = class {
+ 	}
+ 	clear() {
+ 		this.#index.clear();
++		this.#dependencies.clear();
+ 	}
+ };
+ const typenameFieldKey = makeFieldKey({
+diff --git a/dist/index.mjs b/dist/index.mjs
+index b4d905973d41d65990fe70e1e999185bbb69049c..be7331225ad1076348c46266150913b54e0a09b2 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -699,6 +699,7 @@ const inlineFragmentMatches$1 = (selection, typename) => selection.kind === "Inl
+ */
+ var CursorRegistry = class {
+ 	#index = /* @__PURE__ */ new Map();
++	#dependencies = /* @__PURE__ */ new Map();
+ 	add(depKey, entry) {
+ 		let set = this.#index.get(depKey);
+ 		if (!set) {
+@@ -706,21 +707,21 @@ var CursorRegistry = class {
+ 			this.#index.set(depKey, set);
+ 		}
+ 		set.add(entry);
++		this.#dependencies.set(entry, depKey);
+ 	}
+ 	get(depKey) {
+ 		return this.#index.get(depKey);
+ 	}
+ 	remove(depKey, entry) {
+ 		const set = this.#index.get(depKey);
+-		if (set) {
+-			set.delete(entry);
+-			if (set.size === 0) this.#index.delete(depKey);
+-		}
++		if (!set?.delete(entry)) return;
++		this.#dependencies.delete(entry);
++		if (set.size === 0) this.#index.delete(depKey);
+ 	}
+ 	removeAll(cursors) {
+-		for (const [depKey, set] of this.#index) {
+-			for (const cursor of cursors) if (set.has(cursor)) set.delete(cursor);
+-			if (set.size === 0) this.#index.delete(depKey);
++		for (const cursor of cursors) {
++			const depKey = this.#dependencies.get(cursor);
++			if (depKey !== void 0) this.remove(depKey, cursor);
+ 		}
+ 	}
+ 	forEachByPrefix(prefix, callback) {
+@@ -728,6 +729,7 @@ var CursorRegistry = class {
+ 	}
+ 	clear() {
+ 		this.#index.clear();
++		this.#dependencies.clear();
+ 	}
+ };
+ const typenameFieldKey = makeFieldKey({
