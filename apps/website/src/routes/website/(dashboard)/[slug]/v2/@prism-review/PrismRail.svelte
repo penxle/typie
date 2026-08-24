@@ -22,17 +22,17 @@
     },
     variants: {
       tone: {
-        open: { backgroundColor: 'accent.pink.subtle' },
+        open: { backgroundColor: 'review.issue.subtle' },
         closed: { backgroundColor: 'surface.muted' },
-        strength: { backgroundColor: 'accent.emerald.subtle' },
+        strength: { backgroundColor: 'review.strength.subtle' },
       },
       active: { true: {}, false: {} },
     },
     // 막대·레일 칩·카드 칩은 같은 지적의 세 표지다 — 상태마다 셋이 정확히 같은 색이어야 한다
     compoundVariants: [
-      { tone: 'open', active: true, css: { backgroundColor: 'accent.pink.default' } },
+      { tone: 'open', active: true, css: { backgroundColor: 'review.issue.default' } },
       { tone: 'closed', active: true, css: { backgroundColor: 'border.strong' } },
-      { tone: 'strength', active: true, css: { backgroundColor: 'accent.emerald.default' } },
+      { tone: 'strength', active: true, css: { backgroundColor: 'review.strength.default' } },
     ],
   });
 
@@ -50,17 +50,20 @@
     },
     variants: {
       tone: {
-        open: { backgroundColor: 'accent.pink.subtle', color: 'text.pink' },
+        open: { backgroundColor: 'review.issue.subtle', color: 'review.issue.default' },
         closed: { backgroundColor: 'surface.muted', color: 'text.faint' },
-        strength: { backgroundColor: 'accent.emerald.subtle', color: 'text.emerald' },
+        strength: {
+          backgroundColor: 'review.strength.subtle',
+          color: 'review.strength.default',
+        },
       },
       active: { true: {}, false: {} },
     },
     // 활성 반전도 계열을 따른다 — 표기 전체가 회색조인 닫힌 지적에서 칩만 브랜드로 뒤집히면 어긋난다
     compoundVariants: [
-      { tone: 'open', active: true, css: { backgroundColor: 'accent.pink.default', color: 'text.bright' } },
+      { tone: 'open', active: true, css: { backgroundColor: 'review.issue.default', color: 'surface.default' } },
       { tone: 'closed', active: true, css: { backgroundColor: 'border.strong', color: 'text.bright' } },
-      { tone: 'strength', active: true, css: { backgroundColor: 'accent.emerald.default', color: 'text.bright' } },
+      { tone: 'strength', active: true, css: { backgroundColor: 'review.strength.default', color: 'surface.default' } },
     ],
   });
 

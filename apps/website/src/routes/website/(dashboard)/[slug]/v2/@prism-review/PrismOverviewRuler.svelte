@@ -50,9 +50,9 @@
     },
     variants: {
       tone: {
-        open: { backgroundColor: 'accent.pink.default' },
+        open: { backgroundColor: 'review.issue.default' },
         closed: { backgroundColor: 'border.strong' },
-        strength: { backgroundColor: 'accent.emerald.default' },
+        strength: { backgroundColor: 'review.strength.default' },
       },
       active: { true: { width: '10px', opacity: '100' }, false: { width: '6px', opacity: '55' } },
     },

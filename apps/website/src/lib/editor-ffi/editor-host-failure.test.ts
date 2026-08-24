@@ -1499,6 +1499,42 @@ describe('Editor guarded core invocation', () => {
     editor.destroy();
   });
 
+  it('retains freshly resolved tracked geometry for an older published snapshot', async () => {
+    const { editor, core } = await createEditor();
+    const stale = {
+      id: 'prism-issue:0',
+      anchor: { node: 'text', offset: 1, affinity: 'downstream' },
+      head: { node: 'text', offset: 4, affinity: 'downstream' },
+      rects: [{ page_idx: 0, rect: { x: 10, y: 20, width: 30, height: 10 } }],
+    } as TrackedRange;
+    const fresh = { ...stale, rects: [{ page_idx: 0, rect: { x: 10, y: 80, width: 30, height: 10 } }] };
+    core.tracked_ranges.mockReturnValueOnce([stale]).mockReturnValueOnce([fresh]);
+    core.tick
+      .mockReturnValueOnce({
+        revision: { value: 2 },
+        events: [{ type: 'state_changed', fields: ['tracked_ranges'] }],
+        request_outcomes: [],
+      })
+      .mockReturnValueOnce({
+        revision: { value: 3 },
+        events: [{ type: 'state_changed', fields: ['ime'] }],
+        request_outcomes: [],
+      });
+
+    editor.enqueue({ type: 'history', op: { type: 'undo' } });
+    frames.at(-1)?.(0);
+    const publishedCandidate = editor.appliedSnapshot;
+    expect(editor.freshTrackedRanges()).toEqual([fresh]);
+
+    editor.enqueue({ type: 'history', op: { type: 'undo' } });
+    frames.at(-1)?.(0);
+
+    expect(editor.appliedRevision).toBe(3);
+    expect(editor.trackedRangeForSnapshot(stale.id, publishedCandidate)).toEqual(fresh);
+
+    editor.destroy();
+  });
+
   it('does not make visual-host activation depend on the publication it installs', async () => {
     const { editor } = await createEditor();
     const tracked = createTrackedEffect(() => editor.activateVisualHost());

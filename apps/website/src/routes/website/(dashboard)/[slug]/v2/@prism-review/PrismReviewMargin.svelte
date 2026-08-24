@@ -11,6 +11,7 @@
   import { TIER_OPTIONS } from '../../../@prism/review/tiers.ts';
   import { setupMarginContext } from './context.svelte.ts';
   import { COLUMN_GAP, COLUMN_WIDTH, describeThread, GUTTER, resolveMode } from './margin-view.ts';
+  import PrismReviewHighlightLayer from './PrismReviewHighlightLayer.svelte';
   import type { Selection } from '@typie/editor-ffi/browser';
   import type { Anchor } from '@typie/prism';
   import type { Snippet } from 'svelte';
@@ -368,7 +369,6 @@
       nextRaw.push({ ...spec.item, rangeIds: place.rangeIds });
     }
 
-    current.installPrismReviewDecorations();
     current.setPrismReviewRanges(installs);
     placed = next;
     raw = nextRaw;
@@ -433,13 +433,6 @@
     if (raw.every((item) => item.rangeIds.length > 0)) return;
     lostRetry = setTimeout(() => untrack(() => buildItems(new Set(), true)), LOST_RETRY_IDLE);
   };
-
-  $effect(() => {
-    const current = editor;
-    if (!current) return;
-    const active = items.find((item) => item.id === activeId);
-    current.setActivePrismReviewRanges(active?.rangeIds ?? []);
-  });
 
   // 닫는다고 목록에서 빠지지 않는다 — 이번 회차의 피드백은 닫혀도 회색으로 제자리에 남는다.
   // 다른 갈래로 옮겨 가는 것은 재리뷰 사영(회차 경계)에서만 일어나며, 그 축(bornRound)은 다음 스코프다.
@@ -723,3 +716,4 @@
 </script>
 
 {@render children(insets)}
+<PrismReviewHighlightLayer />
