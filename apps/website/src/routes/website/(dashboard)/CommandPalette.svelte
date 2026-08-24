@@ -223,7 +223,7 @@
     ...(app.state.prismAccess
       ? [
           {
-            name: app.preference.current.prismPanelOpen ? 'AI 패널 닫기' : 'AI 패널 열기',
+            name: app.preference.current.prismPanelOpen ? 'PRISM 닫기' : 'PRISM 열기',
             aliases: ['ai', 'assistant'],
             icon: PrismIcon,
             action: () => {
