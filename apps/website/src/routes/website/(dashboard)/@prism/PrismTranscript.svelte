@@ -24,11 +24,24 @@
     sessionId: string | null;
     failedIds: ReadonlySet<string>;
     reconnecting: boolean;
+    spinnerOwner?: 'panel' | 'row';
+    waitSpinnerAnchor?: HTMLElement;
     onResolve: (agentId: string, toolCallId: string, input: unknown) => Promise<void>;
     onRetry: (toolCallId: string) => void;
   };
 
-  let { transcript, loading, pending, sessionId, failedIds, reconnecting, onResolve, onRetry }: Props = $props();
+  let {
+    transcript,
+    loading,
+    pending,
+    sessionId,
+    failedIds,
+    reconnecting,
+    spinnerOwner = 'row',
+    waitSpinnerAnchor = $bindable(),
+    onResolve,
+    onRetry,
+  }: Props = $props();
 
   const foldable = (message: TranscriptMessage) =>
     (message.role === 'tool' && message.phase === 'executed' && message.ok !== false) ||
@@ -419,7 +432,7 @@
       {/if}
 
       {#if waitState !== null}
-        <PrismWaitRow label={waitState.label} text={waitText} />
+        <PrismWaitRow label={waitState.label} {spinnerOwner} text={waitText} bind:spinnerAnchor={waitSpinnerAnchor} />
       {/if}
     </div>
   </div>
