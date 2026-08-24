@@ -17,7 +17,10 @@
   let element = $state<HTMLDivElement>();
 
   $effect(() => {
-    if (container && element && element.parentElement !== container) container.append(element);
+    const current = element;
+    if (!container || !current) return;
+    if (current.parentElement !== container) container.append(current);
+    return () => current.remove();
   });
 </script>
 
