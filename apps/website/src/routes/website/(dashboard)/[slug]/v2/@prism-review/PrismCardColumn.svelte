@@ -69,6 +69,17 @@
   let settleTimer: ReturnType<typeof setTimeout> | undefined;
   let previousActive: string | null = null;
 
+  const syncContentBottomOverflow = (cardExtent: number) => {
+    const editor = ctx.editor;
+    const scroll = ctx.scroll;
+    const area = editor?.extensionAreaEl;
+    const lastPage = editor?.pageEls[editor.pageSizes.length - 1];
+    if (!scroll || !area || !lastPage) return;
+
+    const contentBottom = lastPage.getBoundingClientRect().bottom - area.getBoundingClientRect().top;
+    scroll.setContentBottomOverflow(Math.max(0, cardExtent - contentBottom));
+  };
+
   // 성장 중간 높이로 재배치하면 이웃이 성장을 뒤쫓으며 늦게 밀린다 — 최종 높이를 미리 확정한다
   const predictHeight = (id: string, willExpand: boolean): number | null => {
     const el = cardEls[id];
@@ -94,6 +105,7 @@
     const result = layoutCards(entries, margin.activeId);
     tops = result.tops;
     spacer = result.spacer;
+    syncContentBottomOverflow(result.spacer);
 
     // 같은 커밋에서 전환을 켜면 top 0→N 이동 자체가 애니메이션되어 전 카드가 위에서 미끄러진다
     if (!animated && entries.length > 0) {
@@ -201,6 +213,11 @@
   });
 
   $effect(() => () => clearTimeout(settleTimer));
+
+  $effect(() => {
+    const scroll = ctx.scroll;
+    return () => scroll?.setContentBottomOverflow(0);
+  });
 
   // 원고 리플로우는 컨테이너로, 카드 성장은 카드 자신으로 감지한다.
   // 토글 창 안의 발화는 무시한다 — 성장 중간 높이로 재배치하면 확정된 목표가 흔들린다

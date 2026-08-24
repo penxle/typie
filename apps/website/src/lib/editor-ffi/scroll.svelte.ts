@@ -142,6 +142,7 @@ export class EditorScrollScope {
   readonly #editor: Editor;
   readonly #typewriterPreferences: () => TypewriterPreferences;
   readonly #viewportAnchor = new EditorViewportAnchorState();
+  #contentBottomOverflow = $state(0);
 
   visibleArea = $state<EditorVisibleArea>(DEFAULT_VISIBLE_AREA);
 
@@ -162,9 +163,11 @@ export class EditorScrollScope {
   bottomPaddingFor(snapshot: EditorSnapshot | undefined): number {
     const rect = selectionHeadRect(snapshot);
     const needsKeepVisiblePadding = rect !== null || this.#hasResolvedKeepVisibleTarget(snapshot);
-    const minimumPadding = needsKeepVisiblePadding
-      ? resolveKeepVisibleBottomPadding({ visibleArea: this.visibleArea })
-      : this.visibleArea.bottomInset;
+    const contentExtentPadding = this.#contentBottomOverflow + this.visibleArea.bottomInset;
+    const minimumPadding = Math.max(
+      contentExtentPadding,
+      needsKeepVisiblePadding ? resolveKeepVisibleBottomPadding({ visibleArea: this.visibleArea }) : 0,
+    );
     if (!rect) {
       return minimumPadding;
     }
@@ -560,6 +563,13 @@ export class EditorScrollScope {
         bottomInset,
       });
     });
+  }
+
+  setContentBottomOverflow(bottomOverflow: number): void {
+    const next = sanitizeInset(bottomOverflow);
+    if (this.#contentBottomOverflow === next) return;
+    this.#contentBottomOverflow = next;
+    this.#editor.requestPublication();
   }
 
   scrollIntoView(options: EditorScrollIntoViewOptions, admission?: EditorRequest): Promise<void> | undefined {
