@@ -89,6 +89,7 @@ export default defineConfig([
       'unicorn/prefer-global-this': 'off',
       'unicorn/prefer-https': 'off',
       'unicorn/prefer-includes-over-repeated-comparisons': 'off',
+      'unicorn/prefer-iterator-helpers': 'off',
       'unicorn/prefer-iterator-to-array': 'off',
       'unicorn/prefer-number-coercion': 'off',
       'unicorn/prefer-split-limit': 'off',
