@@ -109,38 +109,6 @@
           />
         {/snippet}
       </SettingsRow>
-
-      <SettingsDivider />
-
-      <SettingsRow>
-        {#snippet label()}
-          사이드바 자동 표시 방법
-        {/snippet}
-        {#snippet description()}
-          숨김 모드일 때 마우스 호버 또는 클릭으로 표시할 수 있어요.
-        {/snippet}
-        {#snippet value()}
-          <Select
-            items={[
-              { value: 'hover', label: '호버', description: '왼쪽 가장자리에 마우스를 올려 표시해요.' },
-              { value: 'click', label: '클릭', description: '왼쪽 가장자리의 힌트를 클릭해 표시해요.' },
-            ]}
-            onselect={async (value) => {
-              if (!SubscribeModal.gate('preferences_interface')) {
-                return;
-              }
-
-              mixpanel.track('change_sidebar_trigger', {
-                trigger: value,
-              });
-
-              app.preference.current.sidebarTrigger = value;
-              await updatePreferences({ input: { value: { sidebarTrigger: value } } });
-            }}
-            value={user.data.preferences.sidebarTrigger ?? 'hover'}
-          />
-        {/snippet}
-      </SettingsRow>
     </SettingsCard>
   </div>
 </div>

@@ -10,11 +10,8 @@
   import mixpanel from 'mixpanel-browser';
   import { untrack } from 'svelte';
   import BarChart3Icon from '~icons/lucide/bar-chart-3';
-  import ChevronsLeftIcon from '~icons/lucide/chevrons-left';
-  import ChevronsRightIcon from '~icons/lucide/chevrons-right';
   import CommandIcon from '~icons/lucide/command';
   import FolderPlusIcon from '~icons/lucide/folder-plus';
-  import GripVerticalIcon from '~icons/lucide/grip-vertical';
   import HomeIcon from '~icons/lucide/home';
   import SearchIcon from '~icons/lucide/search';
   import SquarePenIcon from '~icons/lucide/square-pen';
@@ -272,7 +269,7 @@
   let hideTimeout = $state<NodeJS.Timeout | null>(null);
   let hovered = $state(false);
 
-  type SidebarState = 'hidden' | 'peeking' | 'visible';
+  type SidebarState = 'hidden' | 'visible';
   let sidebarState = $state<SidebarState>('hidden');
 
   const transform = $derived.by(() => {
@@ -280,26 +277,13 @@
       return 'translateX(0)';
     }
 
-    switch (sidebarState) {
-      case 'hidden': {
-        return 'translateX(-100%)';
-      }
-      case 'peeking': {
-        return 'translateX(calc(-100% + 20px))';
-      }
-      case 'visible': {
-        return 'translateX(0)';
-      }
-      default: {
-        return 'translateX(-100%)';
-      }
-    }
+    return sidebarState === 'visible' ? 'translateX(0)' : 'translateX(-100%)';
   });
 
   $effect(() => {
     if (!app.preference.current.sidebarHidden) return;
 
-    if (!hovered && app.state.openMenuCount === 0) {
+    if (!hovered && !app.state.sidebarPeek && app.state.openMenuCount === 0) {
       untrack(() => {
         if (hideTimeout) {
           clearTimeout(hideTimeout);
@@ -322,6 +306,21 @@
     profileOpen = false;
   });
 
+  $effect(() => {
+    if (!app.state.sidebarPeek || !app.preference.current.sidebarHidden) {
+      return;
+    }
+
+    untrack(() => {
+      if (hideTimeout) {
+        clearTimeout(hideTimeout);
+        hideTimeout = null;
+      }
+
+      sidebarState = 'visible';
+    });
+  });
+
   const handleMouseEnter = () => {
     hovered = true;
 
@@ -330,7 +329,7 @@
       hideTimeout = null;
     }
 
-    if (app.preference.current.sidebarHidden && app.preference.current.sidebarTrigger === 'hover') {
+    if (app.preference.current.sidebarHidden) {
       sidebarState = 'visible';
     }
   };
@@ -339,6 +338,8 @@
     hovered = false;
 
     if (!app.preference.current.sidebarHidden) return;
+
+    if (app.state.sidebarPeek) return;
 
     if (app.state.openMenuCount > 0) return;
 
@@ -355,28 +356,21 @@
   };
 </script>
 
-{#if app.preference.current.sidebarTrigger === 'hover' && app.preference.current.sidebarHidden && sidebarState !== 'visible'}
+{#if app.preference.current.sidebarHidden && sidebarState === 'visible'}
+  <!-- 헤더 버튼과 사이드바 사이의 빈 구간 — 여기서 hover가 끊기면 사이드바가 닫혀버린다.
+       96px는 사이드바 세로 여백(100vh - clamp 높이)의 최댓값이다 -->
   <div
+    style:--width={`${newWidth}px`}
     class={css({
       position: 'fixed',
       top: '0',
-      bottom: '0',
       left: '0',
-      width: '40px',
-      height: '[clamp(min(480px,100vh), calc(100vh - 192px), 100vh)]',
-      marginBlock: 'auto',
-      zIndex: 'sidebar',
+      width: 'var(--width)',
+      height: '96px',
+      zIndex: 'widget',
     })}
-    onmouseenter={() => {
-      if (sidebarState === 'hidden') {
-        sidebarState = 'peeking';
-      }
-    }}
-    onmouseleave={() => {
-      if (sidebarState !== 'visible') {
-        sidebarState = 'hidden';
-      }
-    }}
+    onmouseenter={handleMouseEnter}
+    onmouseleave={handleMouseLeave}
     role="button"
     tabindex="-1"
   ></div>
@@ -432,7 +426,7 @@
       overflowX: 'hidden',
     })}
   >
-    <!-- 사이트 스위쳐 + 사이드바 토글 -->
+    <!-- 사이트 스위쳐 -->
     <div
       class={flex({
         alignItems: 'center',
@@ -443,34 +437,6 @@
       })}
     >
       <SpaceMenu user$key={user.data} bind:open={spaceMenuOpen} />
-
-      <button
-        class={center({
-          borderRadius: '6px',
-          size: '28px',
-          flexShrink: '0',
-          color: 'text.faint',
-          transition: 'common',
-          _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
-        })}
-        onclick={() => {
-          app.preference.current.sidebarHidden = !app.preference.current.sidebarHidden;
-          if (app.preference.current.sidebarHidden) {
-            sidebarState = 'visible';
-            hovered = false;
-            setTimeout(() => {
-              if (!hovered) {
-                sidebarState = 'hidden';
-              }
-            }, 300);
-          }
-          mixpanel.track('toggle_sidebar_auto_hide', { enabled: app.preference.current.sidebarHidden });
-        }}
-        type="button"
-        use:tooltip={{ message: app.preference.current.sidebarHidden ? '사이드바 고정' : '사이드바 자동 숨김' }}
-      >
-        <Icon icon={app.preference.current.sidebarHidden ? ChevronsRightIcon : ChevronsLeftIcon} size={14} />
-      </button>
     </div>
 
     <!-- 스페이스 네비게이션 -->
@@ -727,74 +693,6 @@
     <!-- 프로필 -->
     <Profile user$key={user.data} bind:open={profileOpen} />
   </div>
-
-  {#if app.preference.current.sidebarHidden}
-    {#if app.preference.current.sidebarTrigger === 'click'}
-      <button
-        class={center({
-          position: 'absolute',
-          top: '8px',
-          right: '-24px',
-          width: '24px',
-          height: '60px',
-          backgroundColor: 'surface.subtle',
-          borderWidth: '1px',
-          borderLeftWidth: '0',
-          borderColor: 'border.subtle',
-          borderTopRightRadius: '12px',
-          borderBottomRightRadius: '12px',
-          boxShadow: 'card',
-          color: 'text.faint',
-          cursor: 'pointer',
-          opacity: sidebarState === 'visible' ? '0' : '100',
-          transform: sidebarState === 'visible' ? 'translateX(-100%)' : 'translateX(0)',
-          transitionProperty: '[opacity, transform]',
-          transitionDuration: '300ms',
-          transitionDelay: '150ms',
-          transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)',
-          zIndex: '[-1]',
-        })}
-        aria-label="사이드바 열기"
-        onclick={() => {
-          if (sidebarState === 'hidden') {
-            sidebarState = 'visible';
-          }
-        }}
-        type="button"
-      >
-        <Icon icon={GripVerticalIcon} size={14} />
-      </button>
-    {:else if app.preference.current.sidebarTrigger === 'hover'}
-      <div
-        class={center({
-          position: 'absolute',
-          top: '8px',
-          right: '-24px',
-          width: '24px',
-          height: '60px',
-          backgroundColor: 'surface.subtle',
-          borderWidth: '1px',
-          borderLeftWidth: '0',
-          borderColor: 'border.subtle',
-          borderTopRightRadius: '12px',
-          borderBottomRightRadius: '12px',
-          boxShadow: 'card',
-          color: 'text.faint',
-          pointerEvents: 'none',
-          opacity: sidebarState === 'visible' ? '0' : '100',
-          transform: sidebarState === 'visible' ? 'translateX(-100%)' : 'translateX(0)',
-          transitionProperty: '[opacity, transform]',
-          transitionDuration: '300ms',
-          transitionDelay: '150ms',
-          transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)',
-          zIndex: '[-1]',
-        })}
-        aria-label="사이드바"
-      >
-        <Icon icon={GripVerticalIcon} size={14} />
-      </div>
-    {/if}
-  {/if}
 
   <div
     class={css({

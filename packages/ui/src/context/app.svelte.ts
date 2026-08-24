@@ -4,7 +4,6 @@ import { LocalStore, SessionStore } from '../state';
 export type AppPreference = {
   sidebarWidth: number;
   sidebarHidden: boolean;
-  sidebarTrigger: 'hover' | 'click';
   hasOpenedPanelOnce: boolean;
 
   panelWidth: number;
@@ -60,6 +59,7 @@ type AppState = {
   userGoalOpen: boolean;
   shortcutsOpen: boolean;
   prismAccess: boolean;
+  sidebarPeek: boolean;
 
   subscribed: boolean;
 
@@ -113,6 +113,7 @@ export const setupAppContext = (userId: string) => {
     userGoalOpen: false,
     shortcutsOpen: false,
     prismAccess: false,
+    sidebarPeek: false,
 
     subscribed: false,
 
@@ -135,7 +136,6 @@ export const setupAppContext = (userId: string) => {
     preference: new LocalStore<AppPreference>(`typie:pref:${userId}`, {
       sidebarWidth: 240,
       sidebarHidden: false,
-      sidebarTrigger: 'hover',
 
       hasOpenedPanelOnce: false,
       panelWidth: 250,

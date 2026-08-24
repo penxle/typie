@@ -890,7 +890,7 @@
 
       <button
         class={css(headerButton)}
-        aria-label="AI 패널 닫기"
+        aria-label="PRISM 닫기"
         onclick={() => (app.preference.current.prismPanelOpen = false)}
         type="button"
       >
