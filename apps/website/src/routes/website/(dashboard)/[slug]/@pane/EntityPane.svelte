@@ -84,6 +84,7 @@
   const focused = $derived(pane.id === paneGroup.state.current.focusedPaneId);
   const entity = $derived(query.data?.entity);
   const documentLayoutMode = $derived(entity?.node.__typename === 'Document' ? entity.node.layoutMode : null);
+  const documentId = $derived(entity?.node.__typename === 'Document' ? entity.node.id : null);
 
   $effect(() => {
     if (entity && entity.slug !== pane.slug) {
@@ -192,7 +193,7 @@
       })}
       out:fade={{ duration: 150 }}
     >
-      <PaneSkeleton {documentLayoutMode} {pane} />
+      <PaneSkeleton {documentId} {documentLayoutMode} {pane} />
     </div>
 
     {#if !app.preference.current.zenModeEnabled}

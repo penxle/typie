@@ -11,7 +11,6 @@
 
   type Props = {
     style?: SystemStyleObject;
-    size: 'large' | 'medium' | 'small';
     keys?: TooltipParameter['keys'];
     label: string;
     active?: boolean;
@@ -27,7 +26,6 @@
 
   let {
     style,
-    size,
     keys,
     label,
     active = false,
@@ -82,49 +80,17 @@
   };
 </script>
 
-{#if size === 'large'}
-  <button
-    class={css(
-      {
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        flexDirection: 'column',
-        gap: '4px',
-        borderRadius: '4px',
-        size: '48px',
-        color: active ? 'text.brand' : 'text.subtle',
-        transition: 'common',
-        _enabled: {
-          _hover: { color: 'text.brand' },
-          _expanded: { color: 'text.brand' },
-        },
-        _disabled: { opacity: '50' },
-        flexShrink: '0',
-      },
-      style,
-    )}
-    aria-expanded={opened}
-    aria-haspopup="menu"
-    {disabled}
-    onclick={open}
-    type="button"
-    use:anchorAction
-  >
-    {@render anchor({ open, opened })}
-    <span class={css({ fontSize: '11px' })}>{label}</span>
-  </button>
-{:else if size === 'medium'}
-  <button
-    class={css({
+<button
+  class={css(
+    {
       display: 'flex',
       justifyContent: 'center',
       alignItems: 'center',
       gap: '2px',
       borderRadius: '4px',
       paddingX: chevron ? '4px' : '0',
-      width: chevron ? 'fit' : '28px',
-      height: '28px',
+      width: chevron ? 'fit' : '24px',
+      height: '24px',
       textAlign: 'left',
       color: active ? 'text.brand' : 'text.subtle',
       transition: 'common',
@@ -134,78 +100,32 @@
       },
       _disabled: { opacity: '50' },
       flexShrink: '0',
-    })}
-    aria-expanded={opened}
-    aria-haspopup="menu"
-    aria-label={label}
-    {disabled}
-    onclick={open}
-    type="button"
-    use:anchorAction
-    use:tooltip={{ message: label, keys, delay: 200, arrow: false }}
-  >
-    {@render anchor({ open, opened })}
+    },
+    style,
+  )}
+  aria-expanded={opened}
+  aria-haspopup="menu"
+  aria-label={label}
+  {disabled}
+  onclick={open}
+  type="button"
+  use:anchorAction
+  use:tooltip={{ message: label, keys, delay: 1000, arrow: false }}
+>
+  {@render anchor({ open, opened })}
 
-    {#if chevron}
-      <Icon
-        style={css.raw({
-          color: 'text.faint',
-          transform: opened ? 'rotate(-180deg)' : 'rotate(0deg)',
-          transitionDuration: '150ms',
-        })}
-        icon={ChevronDownIcon}
-        size={16}
-      />
-    {/if}
-  </button>
-{:else if size === 'small'}
-  <button
-    class={css(
-      {
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        gap: '2px',
-        borderRadius: '4px',
-        paddingX: chevron ? '4px' : '0',
-        width: chevron ? 'fit' : '24px',
-        height: '24px',
-        textAlign: 'left',
-        color: active ? 'text.brand' : 'text.subtle',
-        transition: 'common',
-        _enabled: {
-          _hover: { color: 'text.brand' },
-          _expanded: { color: 'text.brand' },
-        },
-        _disabled: { opacity: '50' },
-        flexShrink: '0',
-      },
-      style,
-    )}
-    aria-expanded={opened}
-    aria-haspopup="menu"
-    aria-label={label}
-    {disabled}
-    onclick={open}
-    type="button"
-    use:anchorAction
-    use:tooltip={{ message: label, keys, delay: 1000, arrow: false }}
-  >
-    {@render anchor({ open, opened })}
-
-    {#if chevron}
-      <Icon
-        style={css.raw({
-          color: 'text.faint',
-          transform: opened ? 'rotate(-180deg)' : 'rotate(0deg)',
-          transitionDuration: '150ms',
-        })}
-        icon={ChevronDownIcon}
-        size={16}
-      />
-    {/if}
-  </button>
-{/if}
+  {#if chevron}
+    <Icon
+      style={css.raw({
+        color: 'text.faint',
+        transform: opened ? 'rotate(-180deg)' : 'rotate(0deg)',
+        transitionDuration: '150ms',
+      })}
+      icon={ChevronDownIcon}
+      size={16}
+    />
+  {/if}
+</button>
 
 {#if opened}
   <div

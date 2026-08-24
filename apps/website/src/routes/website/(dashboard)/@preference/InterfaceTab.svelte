@@ -82,30 +82,30 @@
 
       <SettingsRow>
         {#snippet label()}
-          툴바 스타일
+          새 문서의 기본 툴바
         {/snippet}
         {#snippet description()}
-          상단 툴바 스타일을 고를 수 있어요.
+          툴바를 아직 맞바꾸지 않은 문서에서 항상 보이는 툴바예요.
         {/snippet}
         {#snippet value()}
           <Select
             items={[
-              { value: 'compact', label: '컴팩트', description: '아이콘만 표시하는 간결한 스타일이에요.' },
-              { value: 'classic', label: '클래식', description: '아이콘과 텍스트를 함께 보여주는 스타일이에요.' },
+              { value: 'format', label: '서식', description: '글꼴·굵기·색 같은 서식 도구가 항상 보여요.' },
+              { value: 'insert', label: '삽입', description: '이미지·표·목록 같은 삽입 도구가 항상 보여요.' },
             ]}
             onselect={async (value) => {
               if (!SubscribeModal.gate('preferences_interface')) {
                 return;
               }
 
-              mixpanel.track('change_toolbar_style', {
-                style: value,
+              mixpanel.track('change_default_primary_toolbar', {
+                kind: value,
               });
 
-              app.preference.current.toolbarStyle = value;
-              await updatePreferences({ input: { value: { toolbarStyle: value } } });
+              app.preference.current.defaultPrimaryToolbar = value;
+              await updatePreferences({ input: { value: { defaultPrimaryToolbar: value } } });
             }}
-            value={user.data.preferences.toolbarStyle ?? 'compact'}
+            value={user.data.preferences.defaultPrimaryToolbar ?? 'format'}
           />
         {/snippet}
       </SettingsRow>
