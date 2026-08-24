@@ -220,7 +220,7 @@ describe('Prism panel indicator', () => {
     }
   });
 
-  test('uses the 3000 ms morph progress as the single travel clock', async () => {
+  test('finishes screen travel before the 2200 ms morph settles', async () => {
     const target = document.createElement('div');
     const props = reactiveProps({
       destination: destination() as HTMLElement | undefined,
@@ -235,7 +235,7 @@ describe('Prism panel indicator', () => {
       await tick();
       stepAnimationFrame();
       await tick();
-      expect(runtime.object.setTarget).toHaveBeenCalledWith('spinner', { totalDurationMs: 3000 });
+      expect(runtime.object.setTarget).toHaveBeenCalledWith('spinner', { totalDurationMs: 2200 });
 
       const actor = target.querySelector<HTMLElement>('[data-prism-indicator-actor]');
       runtime.emit({ journeyProgress: 0.25, owner: 'webgpu', requestedTarget: 'spinner', settledTarget: null });
@@ -245,7 +245,7 @@ describe('Prism panel indicator', () => {
 
       runtime.emit({ journeyProgress: 0.75 });
       expect(actor?.style.transform).not.toBe(quarterTransform);
-      expect(actor?.style.transform).not.toBe('translate3d(-160px, -220px, 0px)');
+      expect(actor?.style.transform).toBe('translate3d(-160px, -220px, 0px)');
 
       runtime.emit({ journeyProgress: 1, owner: 'atlas', settledTarget: 'spinner' });
       expect(actor?.style.transform).toBe('translate3d(-160px, -220px, 0px)');
@@ -369,13 +369,13 @@ describe('Prism panel indicator', () => {
 
       props.phase = 'failed';
       await tick();
-      expect(runtime.object.setTarget).toHaveBeenCalledWith('prism', { totalDurationMs: 1200 });
+      expect(runtime.object.setTarget).toHaveBeenCalledWith('prism', { totalDurationMs: 880 });
 
       runtime.emit({ journeyProgress: 0, requestedTarget: 'prism' });
       expect(actor?.style.transform).toBe(departureTransform);
       runtime.emit({ journeyProgress: 0.5 });
       expect(actor?.style.transform).not.toBe(departureTransform);
-      expect(actor?.style.transform).not.toBe('translate3d(0px, 0px, 0px)');
+      expect(actor?.style.transform).toBe('translate3d(0px, 0px, 0px)');
       runtime.emit({ journeyProgress: 1, settledTarget: 'prism' });
       expect(actor?.style.transform).toBe('translate3d(0px, 0px, 0px)');
     } finally {
@@ -412,7 +412,7 @@ describe('Prism panel indicator', () => {
       runtime.emit({ journeyProgress: 0, requestedTarget: 'prism', settledTarget: null });
       runtime.emit({ journeyProgress: 0.5 });
       expect(actor?.style.transform).not.toBe('translate3d(-160px, -220px, 0px)');
-      expect(actor?.style.transform).not.toBe('translate3d(0px, 0px, 0px)');
+      expect(actor?.style.transform).toBe('translate3d(0px, 0px, 0px)');
       runtime.emit({ journeyProgress: 1, settledTarget: 'prism' });
       expect(actor?.style.transform).toBe('translate3d(0px, 0px, 0px)');
     } finally {
@@ -441,7 +441,7 @@ describe('Prism panel indicator', () => {
       expect(target.querySelector<HTMLElement>('[data-prism-indicator-actor]')?.style.visibility).toBe('hidden');
 
       runtime.emit({ readiness: 'ready' });
-      expect(runtime.object.setTarget).not.toHaveBeenCalledWith('spinner', { totalDurationMs: 3000 });
+      expect(runtime.object.setTarget).not.toHaveBeenCalledWith('spinner', { totalDurationMs: 2200 });
 
       props.phase = 'failed';
       await tick();

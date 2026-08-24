@@ -10,7 +10,8 @@
   export type PrismIndicatorPhase = 'answered' | 'failed' | 'hidden' | 'submitting' | 'welcome';
   export type PrismSpinnerOwner = 'panel' | 'row';
 
-  const PRISM_TO_SPINNER_DURATION_MS = 3000;
+  const PRISM_TO_SPINNER_DURATION_MS = 2200;
+  const PRISM_TO_SPINNER_PRESENTATION_END_PROGRESS = 5 / 11;
 
   type Props = {
     destination?: HTMLElement;
@@ -172,6 +173,8 @@
     if (path) placeAt(samplePrismIndicatorPath(path, progress));
   };
 
+  const presentationProgress = (progress: number) => Math.min(progress / PRISM_TO_SPINNER_PRESENTATION_END_PROGRESS, 1);
+
   const fallbackToRow = () => {
     cancelAdmission();
     stopFollowing();
@@ -300,7 +303,7 @@
 
     if (mode === 'morphing') {
       const progress = Math.max(0, Math.min(1, snapshot.journeyProgress ?? 0));
-      startMorphReturn(progress === 0 ? undefined : PRISM_TO_SPINNER_DURATION_MS * progress, progress);
+      startMorphReturn(progress === 0 ? undefined : PRISM_TO_SPINNER_DURATION_MS * progress, presentationProgress(progress));
       return;
     }
     if (mode === 'arrived') {
@@ -343,14 +346,14 @@
           return;
         }
       }
-      placeAtProgress(progress);
+      placeAtProgress(presentationProgress(progress));
       if (progress === 1) arrive();
       return;
     }
 
     if (mode === 'returning') {
       const progress = next.settledTarget === 'prism' ? 1 : Math.max(0, Math.min(1, next.journeyProgress ?? 0));
-      placeAtProgress(returnStartProgress * (1 - progress));
+      placeAtProgress(returnStartProgress * (1 - presentationProgress(progress)));
       if (progress === 1) {
         placeAtProgress(0);
         mode = 'idle';
