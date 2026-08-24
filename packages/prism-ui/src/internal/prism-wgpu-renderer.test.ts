@@ -1,0 +1,45 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { createPrismFrameUniformWriter, FRAME_UNIFORM_BYTES } from './prism-wgpu-renderer.ts';
+
+test('frame uniform writer matches the Rust ABI', () => {
+  const writer = createPrismFrameUniformWriter();
+  writer.setVector2('uResolution', 480, 360);
+  writer.setInteger('uLightCount', 3);
+  writer.setVector4Array('uPrismPlanes[0]', new Float32Array([1, 2, 3, 4, 5, 6, 7, 8]));
+  writer.setInteger('uPrismPlaneCount', 5);
+  writer.setVector4('uTransitionGeometry', 0.1, 0.2, 0.3, 0.4);
+  writer.setFloat('uTransitionPrismScale', 0.625);
+  writer.setVector4('uSpinnerMorph', 0.5, 0.6, 0.7, 0.8);
+  writer.setVector4('uObjectPoseQuaternion', 0, 0.2, 0, 0.98);
+  writer.setFloat('uObjectPoseOverride', 1);
+  writer.setVector3('uMaterialSpectralNormalization', 1.1, 1.2, 1.3);
+  writer.setFloat('uEnvironmentLuminance', 0.42);
+  writer.setFloat('uEnvironmentLightMix', 0.31);
+  writer.setFloat('uRenderPrismScale', 0.78);
+  writer.setFloat('uScaledScatteringFalloff', 0.15);
+  writer.setVector4('uIconEdgeColor', 0.2, 0.3, 0.4, 1);
+  writer.setVector4('uObjectProjection', 4.2, 2.96, 1, 1);
+
+  const view = new DataView(writer.bytes.buffer);
+  assert.equal(writer.bytes.byteLength, FRAME_UNIFORM_BYTES);
+  assert.equal(view.getFloat32(0, true), 480);
+  assert.equal(view.getFloat32(4, true), 360);
+  assert.equal(view.getInt32(16, true), 3);
+  assert.equal(view.getFloat32(80, true), 1);
+  assert.equal(view.getFloat32(108, true), 8);
+  assert.equal(view.getInt32(400, true), 5);
+  assert.ok(Math.abs(view.getFloat32(480, true) - 0.1) < 0.000001);
+  assert.ok(Math.abs(view.getFloat32(524, true) - 0.625) < 0.000001);
+  assert.ok(Math.abs(view.getFloat32(528, true) - 0.5) < 0.000001);
+  assert.ok(Math.abs(view.getFloat32(580, true) - 0.2) < 0.000001);
+  assert.ok(Math.abs(view.getFloat32(616, true) - 1.3) < 0.000001);
+  assert.ok(Math.abs(view.getFloat32(624, true) - 0.42) < 0.000001);
+  assert.ok(Math.abs(view.getFloat32(628, true) - 0.31) < 0.000001);
+  assert.ok(Math.abs(view.getFloat32(632, true) - 0.78) < 0.000001);
+  assert.ok(Math.abs(view.getFloat32(636, true) - 0.15) < 0.000001);
+  assert.ok(Math.abs(view.getFloat32(640, true) - 0.2) < 0.000001);
+  assert.equal(view.getFloat32(652, true), 1);
+  assert.ok(Math.abs(view.getFloat32(656, true) - 4.2) < 0.000001);
+  assert.equal(view.getFloat32(668, true), 1);
+});

@@ -1,0 +1,3 @@
+pkg/**
+!pkg/**/
+!pkg/**/prism_ui_web.d.ts

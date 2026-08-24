@@ -11,6 +11,7 @@ android_logger = "0.15"
 base62 = "2"
 base64 = "0.23"
 bitcode = "0.6"
+bytemuck = { version = "1.24", features = ["derive"] }
 rapidhash = "4"
 bytecount = { version = "0.6", features = ["runtime-dispatch-simd"] }
 cfg-if = "1"
@@ -22,6 +23,7 @@ env_logger = "0.11"
 fancy-regex = "0.19"
 fontique = { version = "0.11", default-features = false }
 getrandom = { version = "0.4", features = ["wasm_js"] }
+glam = "0.30"
 csscolorparser = "0.8"
 cssparser = "0.37"
 ego-tree = "0.11"
@@ -45,6 +47,7 @@ imbl = "7"
 js-sys = "0.3"
 kurbo = "0.13"
 log = "0.4"
+naga = { version = "30", features = ["glsl-in", "wgsl-out"] }
 markup5ever_rcdom = "0.39"
 objc2 = "0.6"
 objc2-core-foundation = { version = "0.3", features = ["CFCGTypes"] }
@@ -58,6 +61,7 @@ parley = { version = "0.11", default-features = false, features = ["std"] }
 peniko = "0.6"
 phf = "0.14"
 phf_codegen = "0.14"
+prism-ui-renderer = { path = "crates/prism-ui-renderer" }
 proc-macro2 = "1"
 proptest = "1"
 quote = "1"

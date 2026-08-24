@@ -56,3 +56,38 @@ jobs:
           name: editor-wasm
           pattern: editor-wasm-{browser,server}
           delete-merged: true
+
+  build-prism-ui:
+    name: Build (Prism UI browser)
+    runs-on: arc-p-16x
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Cache Prism UI WASM artifact
+        id: prism-ui-wasm-cache
+        uses: actions/cache@v5
+        with:
+          path: crates/prism-ui-web/pkg/
+          key: prism-ui-wasm-${{ hashFiles('.github/workflows/build-wasm.yml', 'Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'crates/workspace-hack/Cargo.toml', 'crates/prism-ui-renderer/**', 'crates/prism-ui-web/**', 'crates/editor-bindgen/**') }}
+
+      - name: Setup Rust
+        if: steps.prism-ui-wasm-cache.outputs.cache-hit != 'true'
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          target: wasm32-unknown-unknown
+          cache-all-crates: 'true'
+          cache-workspace-crates: 'true'
+
+      - name: Build Prism UI WASM
+        if: steps.prism-ui-wasm-cache.outputs.cache-hit != 'true'
+        working-directory: crates/prism-ui-web
+        run: just wasm-browser
+
+      - name: Upload Prism UI WASM artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: prism-ui-wasm
+          path: crates/prism-ui-web/pkg/
