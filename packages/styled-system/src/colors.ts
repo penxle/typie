@@ -119,6 +119,8 @@ export const colors = defineTokens.colors({
     '950': { value: 'oklch(0.258 0.095 277)' }, // #1a1b50
   },
 
+  // 다크 스케일 공통 설계: 명도 램프는 전 패밀리 동일(0.83→0.19), 채도는 라이트보다 높게(어두운 배경에선
+  // 지각 채도가 떨어짐 — 헌트 효과), 색상은 저명도 표류 없이 고정. 전 단계 sRGB 색역 수치 검증됨(초과분은 최대 채도로 클램프).
   dark: {
     gray: {
       '50': { value: 'oklch(0.96 0.007 280)' }, // #f1f1f7
@@ -134,102 +136,104 @@ export const colors = defineTokens.colors({
       '950': { value: 'oklch(0.15 0.007 280)' }, // #0a0b0e
     },
 
+    // 다크 스케일은 라이트보다 채도를 더 싣는다 — 어두운 배경에선 지각 채도가 떨어져(헌트 효과) 같은 채도가 탁하게 읽힌다.
+    // 색상도 브랜드 보라(272~282)에 고정한다: 저명도에서 청색으로 흘리면 잉크빛이 된다. 전 단계 sRGB 색역 수치 검증됨.
     brand: {
-      '50': { value: 'oklch(0.82 0.065 282)' }, // #bdc0ee
-      '100': { value: 'oklch(0.75 0.080 280)' }, // #a3a9e0
-      '200': { value: 'oklch(0.67 0.095 278)' }, // #878fcf
-      '300': { value: 'oklch(0.58 0.110 276)' }, // #6974bb
-      '400': { value: 'oklch(0.50 0.115 274)' }, // #505ca4
-      '500': { value: 'oklch(0.43 0.115 273)' }, // #3c488e
-      '600': { value: 'oklch(0.37 0.100 272)' }, // #2e3a74
-      '700': { value: 'oklch(0.31 0.085 270)' }, // #202c5b
-      '800': { value: 'oklch(0.26 0.065 268)' }, // #172243
-      '900': { value: 'oklch(0.21 0.050 266)' }, // #0d172f
-      '950': { value: 'oklch(0.17 0.035 264)' }, // #080f1f
+      '50': { value: 'oklch(0.83 0.080 282)' }, // #bec2fb
+      '100': { value: 'oklch(0.76 0.110 281)' }, // #a5a9f6
+      '200': { value: 'oklch(0.68 0.130 280)' }, // #898ee7
+      '300': { value: 'oklch(0.60 0.145 279)' }, // #6f74d4
+      '400': { value: 'oklch(0.55 0.155 278)' }, // #5f64c9
+      '500': { value: 'oklch(0.48 0.155 277)' }, // #4b4fb2
+      '600': { value: 'oklch(0.41 0.145 276)' }, // #383c97
+      '700': { value: 'oklch(0.35 0.125 275)' }, // #2a2f7a
+      '800': { value: 'oklch(0.29 0.105 274)' }, // #1d235e
+      '900': { value: 'oklch(0.24 0.085 273)' }, // #131947
+      '950': { value: 'oklch(0.19 0.065 272)' }, // #0a1030
     },
 
     amber: {
-      '50': { value: 'oklch(0.82 0.08 65)' }, // #e9ba8d
-      '100': { value: 'oklch(0.75 0.10 65)' }, // #daa168
-      '200': { value: 'oklch(0.67 0.13 64)' }, // #cc8231
-      '300': { value: 'oklch(0.58 0.15 63)' }, // #b66100
-      '400': { value: 'oklch(0.50 0.16 62)' }, // #a04600
-      '500': { value: 'oklch(0.43 0.17 61)' }, // #8d2b00
-      '600': { value: 'oklch(0.37 0.15 60)' }, // #741f00
-      '700': { value: 'oklch(0.31 0.13 58)' }, // #5c1300
-      '800': { value: 'oklch(0.26 0.10 56)' }, // #450f00
-      '900': { value: 'oklch(0.21 0.07 54)' }, // #2f0b00
-      '950': { value: 'oklch(0.17 0.05 52)' }, // #1f0700
+      '50': { value: 'oklch(0.83 0.090 66)' }, // #f0bc88
+      '100': { value: 'oklch(0.76 0.110 65)' }, // #e1a263
+      '200': { value: 'oklch(0.68 0.140 64)' }, // #d38327
+      '300': { value: 'oklch(0.60 0.136 63)' }, // #b86b03
+      '400': { value: 'oklch(0.55 0.126 62)' }, // #a45e02
+      '500': { value: 'oklch(0.48 0.111 61)' }, // #894c01
+      '600': { value: 'oklch(0.41 0.096 60)' }, // #6f3b00
+      '700': { value: 'oklch(0.35 0.083 59)' }, // #592e00
+      '800': { value: 'oklch(0.29 0.069 58)' }, // #442100
+      '900': { value: 'oklch(0.24 0.058 57)' }, // #331700
+      '950': { value: 'oklch(0.19 0.046 56)' }, // #230d00
     },
 
     red: {
-      '50': { value: 'oklch(0.82 0.08 12)' }, // #f3afb6
-      '100': { value: 'oklch(0.75 0.10 12)' }, // #e6939d
-      '200': { value: 'oklch(0.67 0.13 12)' }, // #d87180
-      '300': { value: 'oklch(0.58 0.16 12)' }, // #c64961
-      '400': { value: 'oklch(0.50 0.17 12)' }, // #ae2749
-      '500': { value: 'oklch(0.43 0.18 12)' }, // #990035
-      '600': { value: 'oklch(0.37 0.17 12)' }, // #810027
-      '700': { value: 'oklch(0.31 0.15 12)' }, // #67001b
-      '800': { value: 'oklch(0.26 0.12 12)' }, // #4e0014
-      '900': { value: 'oklch(0.21 0.08 12)' }, // #34020e
-      '950': { value: 'oklch(0.17 0.06 12)' }, // #230208
+      '50': { value: 'oklch(0.83 0.090 12)' }, // #fcafb8
+      '100': { value: 'oklch(0.76 0.120 12)' }, // #f3909d
+      '200': { value: 'oklch(0.68 0.150 12)' }, // #e56c7f
+      '300': { value: 'oklch(0.60 0.180 12)' }, // #d54563
+      '400': { value: 'oklch(0.55 0.190 12)' }, // #c72c53
+      '500': { value: 'oklch(0.48 0.190 12)' }, // #ae0440
+      '600': { value: 'oklch(0.41 0.163 12)' }, // #8d0132
+      '700': { value: 'oklch(0.35 0.139 12)' }, // #710127
+      '800': { value: 'oklch(0.29 0.116 12)' }, // #56001b
+      '900': { value: 'oklch(0.24 0.096 12)' }, // #410013
+      '950': { value: 'oklch(0.19 0.076 12)' }, // #2d000a
     },
 
     green: {
-      '50': { value: 'oklch(0.82 0.10 162)' }, // #86d9b0
-      '100': { value: 'oklch(0.75 0.14 162)' }, // #45c992
-      '200': { value: 'oklch(0.67 0.16 162)' }, // #00b276
-      '300': { value: 'oklch(0.58 0.16 162)' }, // #00965c
-      '400': { value: 'oklch(0.50 0.15 162)' }, // #007c47
-      '500': { value: 'oklch(0.43 0.13 162)' }, // #006439
-      '600': { value: 'oklch(0.37 0.11 164)' }, // #00512f
-      '700': { value: 'oklch(0.31 0.09 164)' }, // #003e23
-      '800': { value: 'oklch(0.26 0.07 166)' }, // #002e1c
-      '900': { value: 'oklch(0.21 0.05 166)' }, // #001f13
-      '950': { value: 'oklch(0.17 0.04 168)' }, // #00150c
+      '50': { value: 'oklch(0.83 0.110 162)' }, // #81deb1
+      '100': { value: 'oklch(0.76 0.150 162)' }, // #3ace93
+      '200': { value: 'oklch(0.68 0.149 162)' }, // #01b47b
+      '300': { value: 'oklch(0.60 0.131 162)' }, // #039868
+      '400': { value: 'oklch(0.55 0.120 162)' }, // #03875b
+      '500': { value: 'oklch(0.48 0.105 162)' }, // #016f4b
+      '600': { value: 'oklch(0.41 0.089 162)' }, // #02593b
+      '700': { value: 'oklch(0.35 0.076 162)' }, // #01462e
+      '800': { value: 'oklch(0.29 0.063 162)' }, // #013521
+      '900': { value: 'oklch(0.24 0.052 162)' }, // #012717
+      '950': { value: 'oklch(0.19 0.041 162)' }, // #00190e
     },
 
     emerald: {
-      '50': { value: 'oklch(0.900 0.060 152)' }, // #c1eacb
-      '100': { value: 'oklch(0.830 0.110 152)' }, // #8fdca4
-      '200': { value: 'oklch(0.720 0.171 152)' }, // #34c26c
-      '300': { value: 'oklch(0.600 0.142 152)' }, // #279754
-      '400': { value: 'oklch(0.540 0.128 152)' }, // #208347
-      '500': { value: 'oklch(0.480 0.114 152)' }, // #1a6f3c
-      '600': { value: 'oklch(0.420 0.100 152)' }, // #135c30
-      '700': { value: 'oklch(0.360 0.085 152)' }, // #0e4926
-      '800': { value: 'oklch(0.300 0.071 152)' }, // #08381b
-      '900': { value: 'oklch(0.240 0.057 152)' }, // #042711
-      '950': { value: 'oklch(0.180 0.043 152)' }, // #021708
+      '50': { value: 'oklch(0.83 0.090 152)' }, // #9bd9ab
+      '100': { value: 'oklch(0.76 0.130 152)' }, // #6bc987
+      '200': { value: 'oklch(0.68 0.160 152)' }, // #32b364
+      '300': { value: 'oklch(0.60 0.157 152)' }, // #049a4e
+      '400': { value: 'oklch(0.55 0.144 152)' }, // #028844
+      '500': { value: 'oklch(0.48 0.126 152)' }, // #017137
+      '600': { value: 'oklch(0.41 0.107 152)' }, // #025a2b
+      '700': { value: 'oklch(0.35 0.092 152)' }, // #004721
+      '800': { value: 'oklch(0.29 0.076 152)' }, // #003617
+      '900': { value: 'oklch(0.24 0.063 152)' }, // #00270f
+      '950': { value: 'oklch(0.19 0.050 152)' }, // #001a08
     },
 
     pink: {
-      '50': { value: 'oklch(0.90 0.06 330)' }, // #f6d0f1
-      '100': { value: 'oklch(0.83 0.11 330)' }, // #f0ade9
-      '200': { value: 'oklch(0.72 0.20 330)' }, // #e76edf
-      '300': { value: 'oklch(0.62 0.20 330)' }, // #c54ebe
-      '400': { value: 'oklch(0.55 0.18 330)' }, // #a840a2
-      '500': { value: 'oklch(0.48 0.16 330)' }, // #8c3287
-      '600': { value: 'oklch(0.42 0.14 330)' }, // #752870
-      '700': { value: 'oklch(0.36 0.12 330)' }, // #5e1f5a
-      '800': { value: 'oklch(0.30 0.10 330)' }, // #481645
-      '900': { value: 'oklch(0.24 0.08 330)' }, // #330d31
-      '950': { value: 'oklch(0.18 0.07 330)' }, // #210320
+      '50': { value: 'oklch(0.83 0.080 330)' }, // #e6b5e0
+      '100': { value: 'oklch(0.76 0.120 330)' }, // #dc95d5
+      '200': { value: 'oklch(0.68 0.190 330)' }, // #d665cf
+      '300': { value: 'oklch(0.60 0.210 330)' }, // #c142ba
+      '400': { value: 'oklch(0.55 0.210 330)' }, // #b030aa
+      '500': { value: 'oklch(0.48 0.190 330)' }, // #94228f
+      '600': { value: 'oklch(0.41 0.170 330)' }, // #791475
+      '700': { value: 'oklch(0.35 0.150 330)' }, // #62095e
+      '800': { value: 'oklch(0.29 0.120 330)' }, // #490847
+      '900': { value: 'oklch(0.24 0.100 330)' }, // #370435
+      '950': { value: 'oklch(0.19 0.080 330)' }, // #260224
     },
 
     blue: {
-      '50': { value: 'oklch(0.82 0.08 272)' }, // #b2c2f9
-      '100': { value: 'oklch(0.75 0.10 272)' }, // #98aaee
-      '200': { value: 'oklch(0.67 0.13 272)' }, // #7a8fe5
-      '300': { value: 'oklch(0.58 0.16 272)' }, // #5b70d8
-      '400': { value: 'oklch(0.50 0.17 272)' }, // #4455c2
-      '500': { value: 'oklch(0.43 0.18 272)' }, // #323db0
-      '600': { value: 'oklch(0.37 0.17 272)' }, // #262d97
-      '700': { value: 'oklch(0.31 0.15 272)' }, // #1b1f7a
-      '800': { value: 'oklch(0.26 0.12 272)' }, // #14185c
-      '900': { value: 'oklch(0.21 0.08 272)' }, // #0d123c
-      '950': { value: 'oklch(0.17 0.06 272)' }, // #070b29
+      '50': { value: 'oklch(0.83 0.084 272)' }, // #b4c5ff
+      '100': { value: 'oklch(0.76 0.110 272)' }, // #99adf7
+      '200': { value: 'oklch(0.68 0.140 272)' }, // #7b91ee
+      '300': { value: 'oklch(0.60 0.170 272)' }, // #5f74e4
+      '400': { value: 'oklch(0.55 0.180 272)' }, // #5063d9
+      '500': { value: 'oklch(0.48 0.180 272)' }, // #3e4dc1
+      '600': { value: 'oklch(0.41 0.170 272)' }, // #2f39a4
+      '700': { value: 'oklch(0.35 0.150 272)' }, // #232b87
+      '800': { value: 'oklch(0.29 0.130 272)' }, // #191e6a
+      '900': { value: 'oklch(0.24 0.100 272)' }, // #11164d
+      '950': { value: 'oklch(0.19 0.080 272)' }, // #090d37
     },
   },
 });
@@ -361,12 +365,13 @@ export const semanticColors = defineSemanticTokens.colors({
       _darkEspresso: '#f4e8dc',
     },
   },
-  'text.danger': { value: { base: '{colors.red.500}', _dark: '{colors.dark.red.300}' } },
-  'text.success': { value: { base: '{colors.green.700}', _dark: '{colors.dark.green.300}' } },
-  'text.link': { value: { base: '{colors.blue.600}', _dark: '{colors.dark.blue.400}' } },
-  'text.brand': { value: { base: '{colors.brand.500}', _dark: '{colors.dark.brand.300}' } },
-  'text.emerald': { value: { base: '{colors.emerald.700}', _dark: '{colors.dark.emerald.50}' } },
-  'text.pink': { value: { base: '{colors.pink.700}', _dark: '{colors.dark.pink.50}' } },
+  // 다크의 유색 글자는 밝고 선명한 100 — 본문 속에 앉는 링크만 한 단 깊은 200
+  'text.danger': { value: { base: '{colors.red.500}', _dark: '{colors.dark.red.100}' } },
+  'text.success': { value: { base: '{colors.green.700}', _dark: '{colors.dark.green.100}' } },
+  'text.link': { value: { base: '{colors.blue.600}', _dark: '{colors.dark.blue.200}' } },
+  'text.brand': { value: { base: '{colors.brand.500}', _dark: '{colors.dark.brand.100}' } },
+  'text.emerald': { value: { base: '{colors.emerald.700}', _dark: '{colors.dark.emerald.100}' } },
+  'text.pink': { value: { base: '{colors.pink.700}', _dark: '{colors.dark.pink.100}' } },
 
   'surface.default': {
     value: {
@@ -517,26 +522,30 @@ export const semanticColors = defineSemanticTokens.colors({
     },
   },
 
+  // 다크의 인터랙션 램프는 라이트의 반전이다 — 어두운 바탕에서 강조는 밝아지는 방향이라, hover·active가 default보다 밝은 단계로 간다
   'accent.brand.default': { value: { base: '{colors.brand.500}', _dark: '{colors.dark.brand.400}' } },
-  'accent.brand.hover': { value: { base: '{colors.brand.600}', _dark: '{colors.dark.brand.500}' } },
-  'accent.brand.active': { value: { base: '{colors.brand.700}', _dark: '{colors.dark.brand.600}' } },
-  'accent.brand.subtle': { value: { base: '{colors.brand.100}', _dark: '{colors.dark.brand.900}' } },
-  'accent.emerald.default': { value: { base: '{colors.emerald.500}', _dark: '{colors.dark.emerald.300}' } },
-  'accent.emerald.subtle': { value: { base: '{colors.emerald.100}', _dark: '{colors.dark.emerald.600}' } },
-  'accent.pink.default': { value: { base: '{colors.pink.500}', _dark: '{colors.dark.pink.300}' } },
-  'accent.pink.hover': { value: { base: '{colors.pink.600}', _dark: '{colors.dark.pink.200}' } },
-  'accent.pink.active': { value: { base: '{colors.pink.700}', _dark: '{colors.dark.pink.400}' } },
-  'accent.pink.subtle': { value: { base: '{colors.pink.100}', _dark: '{colors.dark.pink.600}' } },
-  'accent.info.default': { value: { base: '{colors.blue.500}', _dark: '{colors.dark.blue.200}' } },
-  'accent.info.subtle': { value: { base: '{colors.blue.50}', _dark: '{colors.dark.blue.900}' } },
+  'accent.brand.hover': { value: { base: '{colors.brand.600}', _dark: '{colors.dark.brand.300}' } },
+  'accent.brand.active': { value: { base: '{colors.brand.700}', _dark: '{colors.dark.brand.200}' } },
+  // 다크의 subtle 면은 불투명 단계가 아니라 선명한 밝은 톤의 알파다 — 불투명 저명도는 탁하고, 불투명 고명도는 표면에서 눈부시다.
+  // 알파는 광량을 표면에 맡기고 색기만 얹는다
+  'accent.brand.subtle': { value: { base: '{colors.brand.100}', _dark: '{colors.dark.brand.300/30}' } },
+  // 전 패밀리 공통 3규칙(브랜드와 동일): 채움 램프는 다크에서 반전(400→300→200), subtle 면은 선명한 300톤의 30% 알파
+  'accent.emerald.default': { value: { base: '{colors.emerald.500}', _dark: '{colors.dark.emerald.400}' } },
+  'accent.emerald.subtle': { value: { base: '{colors.emerald.100}', _dark: '{colors.dark.emerald.300/30}' } },
+  'accent.pink.default': { value: { base: '{colors.pink.500}', _dark: '{colors.dark.pink.400}' } },
+  'accent.pink.hover': { value: { base: '{colors.pink.600}', _dark: '{colors.dark.pink.300}' } },
+  'accent.pink.active': { value: { base: '{colors.pink.700}', _dark: '{colors.dark.pink.200}' } },
+  'accent.pink.subtle': { value: { base: '{colors.pink.100}', _dark: '{colors.dark.pink.300/30}' } },
+  'accent.info.default': { value: { base: '{colors.blue.500}', _dark: '{colors.dark.blue.400}' } },
+  'accent.info.subtle': { value: { base: '{colors.blue.50}', _dark: '{colors.dark.blue.300/30}' } },
   'accent.danger.default': { value: { base: '{colors.red.600}', _dark: '{colors.dark.red.400}' } },
-  'accent.danger.hover': { value: { base: '{colors.red.500}', _dark: '{colors.dark.red.500}' } },
-  'accent.danger.active': { value: { base: '{colors.red.700}', _dark: '{colors.dark.red.600}' } },
-  'accent.danger.subtle': { value: { base: '{colors.red.50}', _dark: '{colors.dark.red.900}' } },
-  'accent.warning.default': { value: { base: '{colors.amber.600}', _dark: '{colors.dark.amber.300}' } },
-  'accent.warning.subtle': { value: { base: '{colors.amber.50}', _dark: '{colors.dark.amber.900}' } },
-  'accent.success.default': { value: { base: '{colors.green.700}', _dark: '{colors.dark.green.300}' } },
-  'accent.success.subtle': { value: { base: '{colors.green.50}', _dark: '{colors.dark.green.900}' } },
+  'accent.danger.hover': { value: { base: '{colors.red.700}', _dark: '{colors.dark.red.300}' } },
+  'accent.danger.active': { value: { base: '{colors.red.800}', _dark: '{colors.dark.red.200}' } },
+  'accent.danger.subtle': { value: { base: '{colors.red.50}', _dark: '{colors.dark.red.300/30}' } },
+  'accent.warning.default': { value: { base: '{colors.amber.600}', _dark: '{colors.dark.amber.400}' } },
+  'accent.warning.subtle': { value: { base: '{colors.amber.50}', _dark: '{colors.dark.amber.300/30}' } },
+  'accent.success.default': { value: { base: '{colors.green.700}', _dark: '{colors.dark.green.400}' } },
+  'accent.success.subtle': { value: { base: '{colors.green.50}', _dark: '{colors.dark.green.300/30}' } },
 
   'border.default': {
     value: {
@@ -603,8 +612,8 @@ export const semanticColors = defineSemanticTokens.colors({
   },
   'border.brand': { value: { base: '{colors.brand.600}', _dark: '{colors.dark.brand.400}' } },
   'border.danger': { value: { base: '{colors.red.600}', _dark: '{colors.dark.red.400}' } },
-  'border.emerald': { value: { base: '{colors.emerald.600}', _dark: '{colors.dark.emerald.300}' } },
-  'border.pink': { value: { base: '{colors.pink.600}', _dark: '{colors.dark.pink.300}' } },
+  'border.emerald': { value: { base: '{colors.emerald.600}', _dark: '{colors.dark.emerald.400}' } },
+  'border.pink': { value: { base: '{colors.pink.600}', _dark: '{colors.dark.pink.400}' } },
 
   'shadow.default': { value: { base: '{colors.gray.950}', _dark: '{colors.dark.gray.950}' } },
 
