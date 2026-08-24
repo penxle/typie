@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { collapseRows, foldToolCalls } from './tool-calls.ts';
-import type { TranscriptMessage } from './conversation.ts';
+import type { TranscriptMessage } from '@typie/prism';
 
 const tool = (key: string, name: string): TranscriptMessage => ({ role: 'tool', key, name, phase: 'executed', ok: true, at: 0 });
-const user = (key: string): TranscriptMessage => ({ role: 'user', key, text: 'a', at: 0 });
+const user = (key: string): TranscriptMessage => ({ role: 'user', key, text: 'a', at: 0, runSeq: null });
 
 const foldable = (message: TranscriptMessage) => message.role === 'tool';
 const labelOf = (message: TranscriptMessage) => (message.role === 'tool' && message.name !== 'skip' ? message.name : null);

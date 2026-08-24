@@ -33,7 +33,14 @@ describe('StreamFrameSchema', () => {
     });
     expect(frame).toEqual({
       type: 'event',
-      event: { seq: 2, kind: 'run.started', occurredAt: 5, context: { agent: { id: 'a', name: 'x' }, run: 1 }, data: { message: '안녕' } },
+      event: {
+        seq: 2,
+        kind: 'run.started',
+        occurredAt: 5,
+        loggedAt: 5,
+        context: { agent: { id: 'a', name: 'x' }, run: 1 },
+        data: { message: '안녕' },
+      },
     });
   });
 

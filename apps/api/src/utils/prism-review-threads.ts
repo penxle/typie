@@ -10,20 +10,9 @@ import {
 } from '#/db/index.ts';
 import { pubsub } from '#/pubsub.ts';
 import { threadsFromResult } from './prism-review-core.ts';
+import type { Database, Transaction } from '#/db/index.ts';
 
 type ThreadComment = typeof PrismReviewThreadComments.$inferSelect;
-
-const loadRound = async (roundId: string) =>
-  await db
-    .select({
-      id: PrismReviewRounds.id,
-      documentId: PrismReviewRounds.documentId,
-      round: PrismReviewRounds.round,
-      result: PrismReviewRounds.result,
-    })
-    .from(PrismReviewRounds)
-    .where(eq(PrismReviewRounds.id, roundId))
-    .then(first);
 
 // 회차의 리뷰 시점 원고 — 인용을 자를 때만 필요하다. 한 회차의 스레드가 전부 같은 판본을 쓰므로
 // 요청 안에서 한 번만 읽는다.
@@ -95,14 +84,23 @@ export const clearRoundMemos = (scope: object): void => {
   commentCache.delete(scope);
 };
 
-export const projectRoundThreads = async (roundId: string): Promise<void> => {
-  const round = await loadRound(roundId);
+export const projectRoundThreads = async (executor: Database | Transaction, roundId: string): Promise<void> => {
+  const round = await executor
+    .select({
+      id: PrismReviewRounds.id,
+      documentId: PrismReviewRounds.documentId,
+      round: PrismReviewRounds.round,
+      result: PrismReviewRounds.result,
+    })
+    .from(PrismReviewRounds)
+    .where(eq(PrismReviewRounds.id, roundId))
+    .then(first);
   if (!round) return;
 
   const projected = threadsFromResult(round.result);
   if (projected.length === 0) return;
 
-  await db
+  await executor
     .insert(PrismReviewThreads)
     .values(
       projected.map((thread) => ({
@@ -128,5 +126,5 @@ export const ensureRoundThreads = async (roundId: string): Promise<void> => {
     .then(firstOrThrow);
 
   if (existing.count > 0) return;
-  await projectRoundThreads(roundId);
+  await projectRoundThreads(db, roundId);
 };

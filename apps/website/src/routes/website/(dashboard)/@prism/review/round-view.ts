@@ -1,7 +1,7 @@
 import { TIER_OPTIONS } from './tiers.ts';
 import type { DataOf } from '@mearie/svelte';
+import type { WorkflowStatus } from '@typie/prism';
 import type { DashboardLayout_PrismReviewPassage_Query } from '$mearie';
-import type { WorkflowStatus } from '../lib/conversation.ts';
 
 export type ReviewRound = DataOf<DashboardLayout_PrismReviewPassage_Query>['prismSession']['reviewRounds'][number];
 

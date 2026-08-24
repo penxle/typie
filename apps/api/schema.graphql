@@ -897,6 +897,7 @@ type Mutation {
   purgeEntities(input: PurgeEntitiesInput!): Site!
   reactPrismReviewRound(input: ReactPrismReviewRoundInput!): PrismReviewRound!
   reactPrismReviewThread(input: ReactPrismReviewThreadInput!): PrismReviewThread!
+  reactPrismRun(input: ReactPrismRunInput!): PrismRun!
   recordSurvey(input: RecordSurveyInput!): User!
   recoverEntity(input: RecoverEntityInput!): Entity!
   redeemCreditCode(input: RedeemCreditCodeInput!): User!
@@ -1080,6 +1081,14 @@ enum PreorderPaymentState {
   PENDING
 }
 
+type PrismAssistantMessage {
+  at: DateTime!
+  key: String!
+  streamed: Boolean!
+  text: String
+  toolCalls: [PrismToolCallRef!]!
+}
+
 type PrismCommand {
   argumentHint: String
   description: String!
@@ -1225,9 +1234,33 @@ enum PrismReviewTier {
 }
 
 type PrismReviewVerdict {
-  label: String
   note: String
   trait: String!
+}
+
+type PrismRun {
+  finishedAt: DateTime
+  id: ID!
+  items: [PrismRunItem!]!
+  reaction: PrismReaction
+  reactionNote: String
+  runSeq: Int!
+  startedAt: DateTime!
+  state: PrismRunState!
+}
+
+type PrismRunFailure {
+  at: DateTime!
+  key: String!
+}
+
+union PrismRunItem = PrismAssistantMessage | PrismRunFailure | PrismToolCall | PrismToolRequest | PrismUserMessage | PrismWorkflowRef
+
+enum PrismRunState {
+  CANCELED
+  COMPLETED
+  FAILED
+  RUNNING
 }
 
 type PrismSession {
@@ -1236,7 +1269,90 @@ type PrismSession {
   id: ID!
   reviewRounds: [PrismReviewRound!]!
   title: String
+  transcript: PrismTranscript!
   updatedAt: DateTime!
+}
+
+type PrismToolCall {
+  at: DateTime!
+  key: String!
+  name: String!
+  ok: Boolean
+  phase: PrismToolPhase!
+}
+
+type PrismToolCallRef {
+  id: String!
+  name: String!
+}
+
+enum PrismToolPhase {
+  EXECUTED
+  REJECTED
+}
+
+type PrismToolRequest {
+  agentId: String!
+  at: DateTime!
+  data: JSON
+  key: String!
+  result: JSON
+  seq: Int!
+  settledAt: DateTime
+  status: PrismToolRequestStatus!
+  tool: String!
+  toolCallId: String!
+  workflowId: String
+}
+
+enum PrismToolRequestStatus {
+  CLOSED
+  PENDING
+  RESOLVED
+}
+
+type PrismTranscript {
+  agentId: String
+  cursor: Int!
+  retrying: Boolean!
+  runs: [PrismRun!]!
+  title: String
+  turn: PrismTurnState!
+}
+
+type PrismTranscriptStep {
+  completedAt: DateTime
+  name: String!
+  seq: Int!
+  startedAt: DateTime!
+}
+
+type PrismTranscriptTool {
+  at: DateTime!
+  ok: Boolean!
+  path: String
+  query: String
+  seq: Int!
+  step: String
+  tool: String!
+}
+
+type PrismTranscriptTurn {
+  at: DateTime!
+  seq: Int!
+  step: String
+  text: String!
+}
+
+enum PrismTurnState {
+  ACTIVE
+  IDLE
+}
+
+type PrismUserMessage {
+  at: DateTime!
+  key: String!
+  text: String!
 }
 
 type PrismWorkflow {
@@ -1254,11 +1370,31 @@ input PrismWorkflowCursorInput {
   workflowId: String!
 }
 
+type PrismWorkflowRef {
+  app: String!
+  cursor: Int!
+  finishedAt: DateTime
+  invocation: String
+  key: String!
+  name: String!
+  prismWorkflowId: String!
+  startedAt: DateTime!
+  status: PrismWorkflowState!
+  transcript: PrismWorkflowTranscript!
+  workflow: PrismWorkflow
+}
+
 enum PrismWorkflowState {
   CANCELED
   COMPLETED
   FAILED
   RUNNING
+}
+
+type PrismWorkflowTranscript {
+  steps: [PrismTranscriptStep!]!
+  tools: [PrismTranscriptTool!]!
+  turns: [PrismTranscriptTurn!]!
 }
 
 input PurgeEntitiesInput {
@@ -1288,8 +1424,6 @@ type Query {
   permalink(permalink: String!): Permalink!
   prismReviewRound(roundId: ID!): PrismReviewRound!
   prismSession(sessionId: ID!): PrismSession!
-  prismSessionLog(cursor: Int! = 0, sessionId: ID!): [JSON!]!
-  prismWorkflowLog(workflowId: String!): [JSON!]!
   randomName: String!
   redirect(from: String!, type: RedirectType!): Redirect
   search(ancestorEntityId: ID, query: String!, siteId: ID!): SearchResult!
@@ -1310,6 +1444,12 @@ input ReactPrismReviewRoundInput {
 input ReactPrismReviewThreadInput {
   threadId: ID!
   value: PrismReaction
+}
+
+input ReactPrismRunInput {
+  note: String
+  reaction: PrismReaction
+  runId: ID!
 }
 
 input RecordSurveyInput {

@@ -2,7 +2,7 @@
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { workflowApps } from './workflows/index.ts';
-  import type { ToolRequestMessage, Transcript, WorkflowMessage } from './lib/conversation.ts';
+  import type { ToolRequestMessage, Transcript, WorkflowMessage } from '@typie/prism';
 
   type Props = {
     message: WorkflowMessage;
@@ -12,10 +12,9 @@
     reconnecting: boolean;
     resolve: (agentId: string, toolCallId: string, input: unknown) => Promise<void>;
     onRetry: (toolCallId: string) => void;
-    loadTrace: (workflowId: string) => Promise<void>;
   };
 
-  let { message, sessionId, transcript, failedIds, reconnecting, resolve, onRetry, loadTrace }: Props = $props();
+  let { message, sessionId, transcript, failedIds, reconnecting, resolve, onRetry }: Props = $props();
 
   const app = $derived(workflowApps[message.app]);
   const requests = $derived(
@@ -38,17 +37,7 @@
 
 {#if app}
   {@const Block = app.block}
-  <Block
-    {failedIds}
-    loadTrace={() => loadTrace(message.workflowId)}
-    {message}
-    {onRetry}
-    {reconnecting}
-    {requests}
-    {resolve}
-    {sessionId}
-    {transcript}
-  />
+  <Block {failedIds} {message} {onRetry} {reconnecting} {requests} {resolve} {sessionId} {transcript} />
 {:else if message.status === 'running'}
   <div class={flex({ alignItems: 'center', gap: '6px', fontSize: '12px', color: 'text.subtle' })}>
     <div

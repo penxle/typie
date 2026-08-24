@@ -111,7 +111,7 @@ const feedback = {
   elevations: [{ trait: '문체', body: '격상 설명', anchors: [{ start: 0, end: 5, head: '', tail: '' }] }],
 } satisfies ReviewOutcome;
 
-test('detailOutcome: 총평 전문을 인용·낱말·해소된 참조로 사영한다', () => {
+test('detailOutcome: 총평 전문을 인용·해소된 참조로 사영한다', () => {
   const detail = detailOutcome(feedback, '가나다라마');
   assert.equal(detail?.understanding, '리드');
   assert.equal(detail?.progress, '나아진 점');
@@ -119,8 +119,8 @@ test('detailOutcome: 총평 전문을 인용·낱말·해소된 참조로 사영
     { quote: '가나다라마', body: '강점 설명', anchor: { start: 0, end: 5, head: '가나다', tail: '다라마' } },
   ]);
   assert.deepEqual(detail?.verdicts, [
-    { trait: '인물', label: '자리 잡음', note: '메모' },
-    { trait: '구성', label: null, note: null },
+    { trait: '인물', note: '메모' },
+    { trait: '구성', note: null },
   ]);
   assert.deepEqual(detail?.elevations, [{ trait: '문체', quote: '가나다라마', body: '격상 설명' }]);
   assert.deepEqual(detail?.patterns, [

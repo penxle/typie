@@ -66,7 +66,7 @@ const PrismReviewStrength = builder.simpleObject('PrismReviewStrength', {
 });
 
 const PrismReviewVerdict = builder.simpleObject('PrismReviewVerdict', {
-  fields: (t) => ({ trait: t.string(), label: t.string({ nullable: true }), note: t.string({ nullable: true }) }),
+  fields: (t) => ({ trait: t.string(), note: t.string({ nullable: true }) }),
 });
 
 const PrismReviewElevation = builder.simpleObject('PrismReviewElevation', {

@@ -78,15 +78,11 @@ test('getAgent는 runs·pending·invocations만 남기고, 형태가 어긋나�
   );
 });
 
-test('openAgentEvents는 Last-Event-ID 헤더로 커서를 싣고, readAgentEventsUntilSync는 sync까지 모은다', async () => {
-  const stream =
-    'id: 1\nevent: run.started\ndata: {"seq":1,"kind":"run.started","occurredAt":1,"loggedAt":1,"context":{"agent":{"id":"a","name":"x"},"run":1},"data":{"message":"m","key":null,"tag":null}}\n\nevent: sync\ndata: {"seq":1}\n\n';
-  const http = fakeHttp(() => ({ status: 200, stream }));
-  const result = await createPrismClient(http).readAgentEventsUntilSync('typie-x', 7, new AbortController().signal);
+test('openAgentEvents는 Last-Event-ID 헤더로 커서를 싣는다', async () => {
+  const http = fakeHttp(() => ({ status: 200, stream: 'event: sync\ndata: {"seq":1}\n\n' }));
+  await createPrismClient(http).openAgentEvents('typie-x', 7, new AbortController().signal);
   assert.equal(http.calls[0].path, '/agents/typie-x/events');
   assert.equal(http.calls[0].init?.headers?.['last-event-id'], '7');
-  assert.equal(result.sync, 1);
-  assert.equal(result.events[0].kind, 'run.started');
 });
 
 test('writeAgentFiles는 PUT /agents/:id/files에 files를 싣고 written을 돌려준다', async () => {

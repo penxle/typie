@@ -28,6 +28,7 @@ export const EventFrameSchema = z.object({
   seq: z.number(),
   kind: z.string(),
   occurredAt: z.number(),
+  loggedAt: z.number(),
   context: ContextSchema.nullable(),
   data: z.record(z.string(), z.unknown()),
 });

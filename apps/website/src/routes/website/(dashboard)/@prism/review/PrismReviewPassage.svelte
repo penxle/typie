@@ -23,13 +23,12 @@
   import { describeHeader, describeResult, findRound, recheckMode } from './round-view.ts';
   import { stagesFor, stepRound, stepStage } from './stages.ts';
   import { TIER_OPTIONS } from './tiers.ts';
-  import type { PrismReviewTierName } from '@typie/prism';
-  import type { WorkflowStatus } from '../lib/conversation.ts';
+  import type { PrismReviewTierName, WorkflowStatus } from '@typie/prism';
   import type { WorkflowBlockProps } from '../workflows/index.ts';
   import type { PassageGroup, PassageView, StageView } from './passage-view.ts';
   import type { StageKey } from './stages.ts';
 
-  let { message, sessionId, transcript, requests, failedIds, reconnecting, resolve, onRetry, loadTrace }: WorkflowBlockProps = $props();
+  let { message, sessionId, transcript, requests, failedIds, reconnecting, resolve, onRetry }: WorkflowBlockProps = $props();
 
   const query = createQuery(
     graphql(`
@@ -179,7 +178,7 @@
   });
 
   $effect.pre(() => {
-    void message.trace;
+    void message.transcript;
     lastBeat = Date.now();
   });
 
@@ -187,7 +186,7 @@
   const view = $derived<PassageView>(
     tier === null
       ? { prelude: [], stages: [], current: null, liveRound: null, elapsedMs: 0 }
-      : buildPassage({ trace: message.trace, status, tier, requests, now, finishedAt: message.finishedAt ?? null }),
+      : buildPassage({ transcript: message.transcript, status, tier, requests, now, finishedAt: message.finishedAt ?? null }),
   );
   const order = $derived(tier === null ? [] : stagesFor(tier));
   const reached = $derived(view.stages.filter((stage) => stage.status !== 'pending').length);
@@ -238,15 +237,15 @@
   };
 
   $effect.pre(() => {
-    const turn = message.trace.live;
+    const turn = message.transcript.live;
     const key = turn ? `${turn.context.agent.id}:${turn.context.run}:${turn.context.turn}:${turn.context.attempt}` : '';
 
     if (key !== liveKey) {
       untrack(() => {
         if (live !== null && key === '') {
-          const sealed = message.trace.turns.at(-1);
+          const sealed = message.transcript.turns.at(-1);
 
-          if (sealed !== undefined && message.trace.turns.length > liveTurns && live.boundary > 0) {
+          if (sealed !== undefined && message.transcript.turns.length > liveTurns && live.boundary > 0) {
             live.finalize(sealed.text);
             if (!live.done) {
               const stage = (sealed.step === null ? null : stepStage(sealed.step)) ?? view.current;
@@ -257,7 +256,7 @@
         }
 
         liveKey = key;
-        liveTurns = message.trace.turns.length;
+        liveTurns = message.transcript.turns.length;
         live = key === '' ? null : new PacedText({ instant: reduceMotion });
 
         if (live !== null && turn?.seeded) {
@@ -408,7 +407,9 @@
   });
 
   const awaiting = $derived(requests.some((request) => request.status === 'pending'));
-  const rawTail = $derived(running && !awaiting ? tailLabel({ live: message.trace.live, reconnecting, lateMs: now - lastBeat }) : null);
+  const rawTail = $derived(
+    running && !awaiting ? tailLabel({ live: message.transcript.live, reconnecting, lateMs: now - lastBeat }) : null,
+  );
   let tail = $state<string | null>(null);
 
   $effect(() => {
@@ -424,48 +425,8 @@
   });
 
   let expanded = $state<Record<string, boolean>>({});
-  let traceLoad = $state<'idle' | 'loading' | 'loaded' | 'failed'>('idle');
-  let traceAttempts = $state(0);
 
-  const loadProcess = async (background = false) => {
-    if (!background) traceLoad = 'loading';
-
-    try {
-      await loadTrace();
-      traceLoad = 'loaded';
-      traceAttempts = 0;
-    } catch {
-      traceLoad = 'failed';
-    }
-  };
-
-  $effect(() => {
-    if (running || traceLoad !== 'idle' || message.trace.steps.length > 0) {
-      return;
-    }
-
-    untrack(() => void loadProcess());
-  });
-
-  $effect(() => {
-    if (traceLoad !== 'failed') {
-      return;
-    }
-
-    const next = traceAttempts + 1;
-    const delay = backoffDelay(RECHECK_DELAYS, next);
-    if (delay === null) {
-      return;
-    }
-
-    const id = setTimeout(() => {
-      traceAttempts = next;
-      void loadProcess(true);
-    }, delay);
-    return () => clearTimeout(id);
-  });
-
-  const traced = $derived(running || message.trace.steps.length > 0);
+  const showProgress = $derived(running || message.transcript.steps.length > 0);
 
   const segmentTip = $derived.by(() => {
     const total = order.length;
@@ -711,7 +672,7 @@
       {#if tierLabel !== null}· {tierLabel}{/if}{#if round !== null && round.ordinal > 1}
         · {round.ordinal}회차{/if}
     </span>
-    {#if traced && order.length > 0}
+    {#if showProgress && order.length > 0}
       <div class={rightClass} in:fade={fadeIn}>
         <Tooltip message={segmentTip}>
           <span class={segmentsClass}>
@@ -753,25 +714,15 @@
       {@render liveTail()}
     {/if}
   {:else}
-    {#if traceLoad === 'loading'}
-      <div class={css(skeletonStyle, { width: '[55%]' })}></div>
-      <div class={css(skeletonStyle, { width: '[40%]' })}></div>
-    {:else if traceLoad === 'failed'}
-      <div class={retryRowClass} in:fade={fadeIn}>
-        리뷰 과정을 불러오지 못했어요
-        <Button onclick={() => void loadProcess()} size="sm" variant="secondary">다시 시도</Button>
-      </div>
-    {:else}
-      {#each view.stages.filter((stage) => stage.status !== 'pending') as stage, index (stage.key)}
-        {@const held = heldStageKeys.includes(stage.key)}
-        {@render stageLine(stage, !held && stage.groups.length > 0, settledDelay(index))}
-        {#if held}
-          <div class={expandClass} out:expand>
-            {@render stageBody(stage)}
-          </div>
-        {/if}
-      {/each}
-    {/if}
+    {#each view.stages.filter((stage) => stage.status !== 'pending') as stage, index (stage.key)}
+      {@const held = heldStageKeys.includes(stage.key)}
+      {@render stageLine(stage, !held && stage.groups.length > 0, settledDelay(index))}
+      {#if held}
+        <div class={expandClass} out:expand>
+          {@render stageBody(stage)}
+        </div>
+      {/if}
+    {/each}
 
     {#if status === 'canceled'}
       <p class={systemClass} in:rise>리뷰를 중단했어요. 다시 받으려면 /리뷰로 새로 시작해 주세요.</p>

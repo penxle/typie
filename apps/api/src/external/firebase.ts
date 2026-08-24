@@ -11,7 +11,7 @@ export const app = initializeApp({
 
 export const messaging = getMessaging(app);
 
-const PUSH_TTL_SECONDS = 7 * 24 * 60 * 60;
+export const PUSH_TTL_SECONDS = 7 * 24 * 60 * 60;
 
 type SendPushNotificationParams = { userId: string; title: string; body: string };
 export type PushDelivery = 'sent' | 'no-tokens' | 'failed';

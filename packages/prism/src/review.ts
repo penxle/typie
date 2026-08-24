@@ -70,3 +70,9 @@ export const ConfirmDecisionSchema = z.discriminatedUnion('decision', [
   }),
   z.object({ decision: z.literal('declined') }),
 ]);
+
+export const ReviewOutcomeEnvelopeSchema = z.discriminatedUnion('kind', [
+  z.looseObject({ version: z.literal(1), kind: z.literal('feedback') }),
+  z.looseObject({ version: z.literal(1), kind: z.literal('issues') }),
+  z.looseObject({ version: z.literal(1), kind: z.literal('rejected') }),
+]);

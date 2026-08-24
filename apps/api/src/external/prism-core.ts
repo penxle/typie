@@ -1,7 +1,6 @@
 import { AgentStateSchema, WorkflowStateSchema } from '@typie/prism';
 import { z } from 'zod';
-import { readUntilSync } from './prism-stream.ts';
-import type { AgentState, EventFrame, RunSummary, WorkflowState } from '@typie/prism';
+import type { AgentState, RunSummary, WorkflowState } from '@typie/prism';
 
 export class PrismApiError extends Error {
   readonly code: string;
@@ -128,15 +127,5 @@ export const createPrismClient = (http: PrismHttp) => {
     },
     openAgentEvents,
     openWorkflowEvents,
-    async readAgentEventsUntilSync(agentId: string, cursor: number, signal: AbortSignal): Promise<{ events: EventFrame[]; sync: number }> {
-      return readUntilSync(await openAgentEvents(agentId, cursor, signal), signal);
-    },
-    async readWorkflowEventsUntilSync(
-      workflowId: string,
-      cursor: number,
-      signal: AbortSignal,
-    ): Promise<{ events: EventFrame[]; sync: number }> {
-      return readUntilSync(await openWorkflowEvents(workflowId, cursor, signal), signal);
-    },
   };
 };

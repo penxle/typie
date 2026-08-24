@@ -1,44 +1,53 @@
 import * as Sentry from '@sentry/node';
 import { logger } from '@typie/lib';
-import { PrismWorkflowState } from '@typie/lib/enums';
+import { PrismReaction, PrismRunState, PrismToolPhase, PrismToolRequestStatus, PrismTurnState, PrismWorkflowState } from '@typie/lib/enums';
 import { TypieError } from '@typie/lib/errors';
 import { prismSchema } from '@typie/lib/validation';
+import { toGraphQL } from '@typie/prism';
 import dayjs from 'dayjs';
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
 import { Repeater } from 'graphql-yoga';
 import { nanoid } from 'nanoid';
-import { db, first, firstOrThrow, PrismSessions, PrismWorkflows, TableCode, validateDbId } from '#/db/index.ts';
+import { redis } from '#/cache.ts';
+import {
+  db,
+  first,
+  firstOrThrow,
+  PrismRuns,
+  PrismSessionEvents,
+  PrismSessions,
+  PrismWorkflowEvents,
+  PrismWorkflows,
+  TableCode,
+  validateDbId,
+} from '#/db/index.ts';
 import { env } from '#/env.ts';
 import { activeRun, newAgentId, prism, PrismApiError } from '#/external/prism.ts';
-import { pumpSse } from '#/external/prism-stream.ts';
+import { ensureIngest } from '#/mq/prism-queue.ts';
+import { pubsub } from '#/pubsub.ts';
 import { assertPrismAccess } from '#/utils/prism-access.ts';
 import { parseAllowlist } from '#/utils/prism-access-core.ts';
-import { prismApps } from '#/utils/prism-apps.ts';
 import { prismCommands } from '#/utils/prism-catalog.ts';
 import { projectFrame } from '#/utils/prism-events.ts';
-import { routeSessionFrame } from '#/utils/prism-session-stream.ts';
+import { createFrameGate, liveFieldKey, liveSnapshotFrames } from '#/utils/prism-ingest-core.ts';
 import { prismTools } from '#/utils/prism-tools.ts';
-import {
-  cancelActiveRun,
-  cancelSessionWorkflows,
-  closeRun,
-  linkWorkflow,
-  linkWorkflowFromEvent,
-  settleWorkflow,
-  titleSession,
-} from '#/utils/prism-workflows.ts';
-import { isRunningChildAgent } from '#/utils/prism-workflows-core.ts';
+import { materialize } from '#/utils/prism-transcript.ts';
+import { cancelActiveRun, cancelSessionWorkflows, closeRun } from '#/utils/prism-workflows.ts';
 import { builder } from '../builder.ts';
 import { PrismSession, PrismWorkflow, User } from '../objects.ts';
-import type { ProjectedStreamFrame, StreamFrame } from '@typie/prism';
-import type { PrismWorkflowRow } from '#/utils/prism-apps.ts';
-import type { ProjectedScope } from '#/utils/prism-events.ts';
+import type {
+  ProjectedDeltaFrame,
+  ProjectedStreamFrame,
+  RunItemsWire,
+  RunItemWire,
+  TranscriptWire,
+  TurnContext,
+  TurnLive,
+  WorkflowTranscriptWire,
+} from '@typie/prism';
+import type { StoredEvent } from '#/utils/prism-transcript.ts';
 
 const log = logger.getChild('prism');
-
-const IDLE_MS = 45_000;
-const RECONNECT_DELAY_MS = 1000;
-const ABSENT_MAX_DELAY_MS = 30_000;
 
 const PrismWorkflowCursorInput = builder.inputType('PrismWorkflowCursorInput', {
   fields: (t) => ({
@@ -84,6 +93,218 @@ const PrismCommand = builder.simpleObject('PrismCommand', {
   }),
 });
 
+type ItemOf<K extends RunItemWire['kind']> = Extract<RunItemWire, { kind: K }>;
+type PrismRunShape = RunItemsWire & { row: typeof PrismRuns.$inferSelect };
+type PrismTranscriptShape = Omit<TranscriptWire<PrismRunShape>, 'runs'> & { runs: PrismRunShape[] };
+
+const at = (value: string) => dayjs(value);
+const atOrNull = (value: string | null) => (value === null ? null : dayjs(value));
+
+const PrismToolCallRef = builder.simpleObject('PrismToolCallRef', { fields: (t) => ({ id: t.string(), name: t.string() }) });
+
+const PrismUserMessage = builder.objectRef<ItemOf<'user'>>('PrismUserMessage').implement({
+  fields: (t) => ({
+    key: t.exposeString('key'),
+    text: t.exposeString('text'),
+    at: t.field({ type: 'DateTime', resolve: (s) => at(s.at) }),
+  }),
+});
+
+const PrismAssistantMessage = builder.objectRef<ItemOf<'assistant'>>('PrismAssistantMessage').implement({
+  fields: (t) => ({
+    key: t.exposeString('key'),
+    text: t.exposeString('text', { nullable: true }),
+    toolCalls: t.field({ type: [PrismToolCallRef], resolve: (s) => s.toolCalls }),
+    at: t.field({ type: 'DateTime', resolve: (s) => at(s.at) }),
+    streamed: t.exposeBoolean('streamed'),
+  }),
+});
+
+const PrismToolCall = builder.objectRef<ItemOf<'tool'>>('PrismToolCall').implement({
+  fields: (t) => ({
+    key: t.exposeString('key'),
+    name: t.exposeString('name'),
+    phase: t.field({ type: PrismToolPhase, resolve: (s) => s.phase }),
+    ok: t.exposeBoolean('ok', { nullable: true }),
+    at: t.field({ type: 'DateTime', resolve: (s) => at(s.at) }),
+  }),
+});
+
+const PrismToolRequest = builder.objectRef<ItemOf<'toolRequest'>>('PrismToolRequest').implement({
+  fields: (t) => ({
+    key: t.exposeString('key'),
+    seq: t.exposeInt('seq'),
+    tool: t.exposeString('tool'),
+    toolCallId: t.exposeString('toolCallId'),
+    agentId: t.exposeString('agentId'),
+    workflowId: t.exposeString('workflowId', { nullable: true }),
+    data: t.field({ type: 'JSON', nullable: true, resolve: (s) => s.data }),
+    status: t.field({ type: PrismToolRequestStatus, resolve: (s) => s.status }),
+    result: t.field({ type: 'JSON', nullable: true, resolve: (s) => s.result }),
+    settledAt: t.field({ type: 'DateTime', nullable: true, resolve: (s) => atOrNull(s.settledAt) }),
+    at: t.field({ type: 'DateTime', resolve: (s) => at(s.at) }),
+  }),
+});
+
+const PrismTranscriptStep = builder.objectRef<WorkflowTranscriptWire['steps'][number]>('PrismTranscriptStep').implement({
+  fields: (t) => ({
+    name: t.exposeString('name'),
+    seq: t.exposeInt('seq'),
+    startedAt: t.field({ type: 'DateTime', resolve: (s) => at(s.startedAt) }),
+    completedAt: t.field({ type: 'DateTime', nullable: true, resolve: (s) => atOrNull(s.completedAt) }),
+  }),
+});
+
+const PrismTranscriptTurn = builder.objectRef<WorkflowTranscriptWire['turns'][number]>('PrismTranscriptTurn').implement({
+  fields: (t) => ({
+    seq: t.exposeInt('seq'),
+    step: t.exposeString('step', { nullable: true }),
+    text: t.exposeString('text'),
+    at: t.field({ type: 'DateTime', resolve: (s) => at(s.at) }),
+  }),
+});
+
+const PrismTranscriptTool = builder.objectRef<WorkflowTranscriptWire['tools'][number]>('PrismTranscriptTool').implement({
+  fields: (t) => ({
+    seq: t.exposeInt('seq'),
+    step: t.exposeString('step', { nullable: true }),
+    tool: t.exposeString('tool'),
+    ok: t.exposeBoolean('ok'),
+    path: t.exposeString('path', { nullable: true }),
+    query: t.exposeString('query', { nullable: true }),
+    at: t.field({ type: 'DateTime', resolve: (s) => at(s.at) }),
+  }),
+});
+
+const PrismWorkflowTranscript = builder.objectRef<WorkflowTranscriptWire>('PrismWorkflowTranscript').implement({
+  fields: (t) => ({
+    steps: t.field({ type: [PrismTranscriptStep], resolve: (s) => s.steps }),
+    turns: t.field({ type: [PrismTranscriptTurn], resolve: (s) => s.turns }),
+    tools: t.field({ type: [PrismTranscriptTool], resolve: (s) => s.tools }),
+  }),
+});
+
+const PrismWorkflowRef = builder.objectRef<ItemOf<'workflow'>>('PrismWorkflowRef').implement({
+  fields: (t) => ({
+    key: t.exposeString('key'),
+    prismWorkflowId: t.exposeString('prismWorkflowId'),
+    app: t.exposeString('app'),
+    name: t.exposeString('name'),
+    status: t.field({ type: PrismWorkflowState, resolve: (s) => s.status }),
+    startedAt: t.field({ type: 'DateTime', resolve: (s) => at(s.startedAt) }),
+    finishedAt: t.field({ type: 'DateTime', nullable: true, resolve: (s) => atOrNull(s.finishedAt) }),
+    cursor: t.exposeInt('cursor'),
+    invocation: t.exposeString('invocation', { nullable: true }),
+    transcript: t.field({ type: PrismWorkflowTranscript, resolve: (s) => s.transcript }),
+    workflow: t.field({
+      type: PrismWorkflow,
+      nullable: true,
+      resolve: (s) => db.select().from(PrismWorkflows).where(eq(PrismWorkflows.prismWorkflowId, s.prismWorkflowId)).then(first),
+    }),
+  }),
+});
+
+const PrismRunFailure = builder.objectRef<ItemOf<'runFailure'>>('PrismRunFailure').implement({
+  fields: (t) => ({
+    key: t.exposeString('key'),
+    at: t.field({ type: 'DateTime', resolve: (s) => at(s.at) }),
+  }),
+});
+
+const PrismRunItem = builder.unionType('PrismRunItem', {
+  types: [PrismUserMessage, PrismAssistantMessage, PrismToolCall, PrismToolRequest, PrismWorkflowRef, PrismRunFailure],
+  resolveType: (item: RunItemWire) =>
+    ({
+      user: PrismUserMessage,
+      assistant: PrismAssistantMessage,
+      tool: PrismToolCall,
+      toolRequest: PrismToolRequest,
+      workflow: PrismWorkflowRef,
+      runFailure: PrismRunFailure,
+    })[item.kind],
+});
+
+const PrismRun = builder.objectRef<PrismRunShape>('PrismRun').implement({
+  fields: (t) => ({
+    id: t.id({ resolve: (s) => s.row.id }),
+    runSeq: t.int({ resolve: (s) => s.row.runSeq }),
+    state: t.field({ type: PrismRunState, resolve: (s) => s.row.state }),
+    startedAt: t.field({ type: 'DateTime', resolve: (s) => s.row.startedAt }),
+    finishedAt: t.field({ type: 'DateTime', nullable: true, resolve: (s) => s.row.finishedAt }),
+    reaction: t.field({ type: PrismReaction, nullable: true, resolve: (s) => s.row.reaction }),
+    reactionNote: t.string({ nullable: true, resolve: (s) => s.row.reactionNote }),
+    items: t.field({ type: [PrismRunItem], resolve: (s) => s.items }),
+  }),
+});
+
+const PrismTranscript = builder.objectRef<PrismTranscriptShape>('PrismTranscript').implement({
+  fields: (t) => ({
+    cursor: t.exposeInt('cursor'),
+    title: t.exposeString('title', { nullable: true }),
+    agentId: t.exposeString('agentId', { nullable: true }),
+    turn: t.field({ type: PrismTurnState, resolve: (s) => s.turn }),
+    retrying: t.exposeBoolean('retrying'),
+    runs: t.field({ type: [PrismRun], resolve: (s) => s.runs }),
+  }),
+});
+
+const storedEvents = <
+  R extends { seq: number; kind: string; occurredAt: dayjs.Dayjs; loggedAt: dayjs.Dayjs; context: unknown; data: Record<string, unknown> },
+>(
+  rows: R[],
+): StoredEvent[] =>
+  rows.map((row) => ({
+    seq: row.seq,
+    kind: row.kind,
+    occurredAt: row.occurredAt.valueOf(),
+    loggedAt: row.loggedAt.valueOf(),
+    context: (row.context ?? null) as StoredEvent['context'],
+    data: row.data,
+  }));
+
+const loadTranscript = async ({ id: sessionId, cursor }: { id: string; cursor: number }): Promise<PrismTranscriptShape> => {
+  const [events, workflows, runs] = await Promise.all([
+    db.select().from(PrismSessionEvents).where(eq(PrismSessionEvents.sessionId, sessionId)).orderBy(asc(PrismSessionEvents.seq)),
+    db.select().from(PrismWorkflows).where(eq(PrismWorkflows.sessionId, sessionId)),
+    db.select().from(PrismRuns).where(eq(PrismRuns.sessionId, sessionId)),
+  ]);
+
+  const workflowEvents = new Map<string, StoredEvent[]>();
+  if (workflows.length > 0) {
+    const rows = await db
+      .select()
+      .from(PrismWorkflowEvents)
+      .where(
+        inArray(
+          PrismWorkflowEvents.workflowId,
+          workflows.map((workflow) => workflow.id),
+        ),
+      )
+      .orderBy(asc(PrismWorkflowEvents.seq));
+    const prismIdOf = new Map(workflows.map((workflow) => [workflow.id, workflow.prismWorkflowId]));
+    for (const row of rows) {
+      const prismWorkflowId = prismIdOf.get(row.workflowId);
+      if (prismWorkflowId === undefined) continue;
+      const bucket = workflowEvents.get(prismWorkflowId) ?? [];
+      bucket.push(...storedEvents([row]));
+      workflowEvents.set(prismWorkflowId, bucket);
+    }
+  }
+
+  const wire = toGraphQL(materialize(storedEvents(events), workflowEvents));
+  const rowOf = new Map(runs.map((run) => [run.runSeq, run]));
+  const shaped: PrismRunShape[] = [];
+  for (const run of wire.runs) {
+    const row = run.runSeq === null ? undefined : rowOf.get(run.runSeq);
+    if (row === undefined) {
+      log.warn('prism run row missing for transcript: {sessionId} run {runSeq}', { sessionId, runSeq: run.runSeq });
+      continue;
+    }
+    shaped.push({ ...run, row });
+  }
+  return { ...wire, cursor: Math.max(wire.cursor, cursor), runs: shaped };
+};
+
 PrismSession.implement({
   fields: (t) => ({
     id: t.exposeID('id'),
@@ -91,6 +312,8 @@ PrismSession.implement({
     archivedAt: t.expose('archivedAt', { type: 'DateTime', nullable: true }),
     createdAt: t.expose('createdAt', { type: 'DateTime' }),
     updatedAt: t.expose('updatedAt', { type: 'DateTime' }),
+
+    transcript: t.field({ type: PrismTranscript, resolve: (self) => loadTranscript(self) }),
   }),
 });
 
@@ -146,57 +369,6 @@ builder.queryFields((t) => ({
     args: { sessionId: t.arg.id({ validate: validateDbId(TableCode.PRISM_SESSIONS) }) },
     resolve: (_, args, ctx) => ownedSession(args.sessionId, ctx.session.userId),
   }),
-
-  prismSessionLog: t.withAuth({ session: true }).field({
-    type: ['JSON'],
-    args: {
-      sessionId: t.arg.id({ validate: validateDbId(TableCode.PRISM_SESSIONS) }),
-      cursor: t.arg.int({ defaultValue: 0 }),
-    },
-    resolve: async (_, args, ctx) => {
-      const session = await ownedSession(args.sessionId, ctx.session.userId);
-      const { events, sync } = await prism
-        .readAgentEventsUntilSync(session.prismAgentId, args.cursor, new AbortController().signal)
-        .catch(prismError);
-      const titled = events
-        .map((event) => routeSessionFrame({ type: 'event', event }))
-        .findLast((route): route is { kind: 'titled'; title: string } => route?.kind === 'titled');
-      if (titled && titled.title !== session.title) await titleSession(session.id, titled.title);
-      const projected = events
-        .map((event) => projectFrame({ type: 'event', event }, { source: 'SESSION' }))
-        .filter((frame) => frame !== null);
-      return [...projected, { type: 'sync', seq: sync } satisfies ProjectedStreamFrame];
-    },
-  }),
-
-  prismWorkflowLog: t.withAuth({ session: true }).field({
-    type: ['JSON'],
-    args: {
-      workflowId: t.arg.string(),
-    },
-    resolve: async (_, args, ctx) => {
-      let workflow = await db.select().from(PrismWorkflows).where(eq(PrismWorkflows.prismWorkflowId, args.workflowId)).then(first);
-
-      if (workflow) {
-        await ownedSession(workflow.sessionId, ctx.session.userId);
-      } else {
-        const state = await prism.getWorkflow(args.workflowId).catch(() => null);
-        const app = state?.workflow.app ?? null;
-        const resolve = app === null ? undefined : prismApps[app]?.resolveSession;
-        const sessionId = resolve === undefined || state === null ? null : await resolve(state.workflow.ref);
-        if (sessionId === null) throw new TypieError({ code: 'not_found', status: 404 });
-        await ownedSession(sessionId, ctx.session.userId);
-        workflow = await linkWorkflow(sessionId, args.workflowId);
-      }
-
-      const { events } = await prism
-        .readWorkflowEventsUntilSync(workflow.prismWorkflowId, 0, new AbortController().signal)
-        .catch(prismError);
-      return events
-        .map((event) => projectFrame({ type: 'event', event }, { source: 'WORKFLOW', workflowId: workflow.prismWorkflowId }))
-        .filter((frame): frame is ProjectedStreamFrame => frame !== null);
-    },
-  }),
 }));
 
 const SendPrismMessageResult = builder.simpleObject('SendPrismMessageResult', {
@@ -218,13 +390,14 @@ builder.mutationFields((t) => ({
       if (input.sessionId) {
         const session = await ownedSession(input.sessionId, ctx.session.userId);
         const { runSeq } = await prism.resumeAgent(session.prismAgentId, { message, key }).catch(prismError);
-        if (session.openRunSeq !== null && session.openRunSeq !== runSeq) await closeRun(session.id, session.openRunSeq);
+        if (session.openRunSeq !== null && session.openRunSeq !== runSeq) await closeRun(db, session.id, session.openRunSeq);
         const updated = await db
           .update(PrismSessions)
           .set({ updatedAt: dayjs(), openRunSeq: runSeq })
           .where(eq(PrismSessions.id, session.id))
           .returning()
           .then(firstOrThrow);
+        await ensureIngest({ kind: 'agent', sessionId: session.id });
         return { session: updated, runSeq };
       }
       const agentId = newAgentId();
@@ -234,6 +407,7 @@ builder.mutationFields((t) => ({
         .values({ userId: ctx.session.userId, prismAgentId: agentId, openRunSeq: runSeq })
         .returning()
         .then(firstOrThrow);
+      await ensureIngest({ kind: 'agent', sessionId: session.id });
       return { session, runSeq };
     },
   }),
@@ -251,31 +425,25 @@ builder.mutationFields((t) => ({
       const session = await ownedSession(input.sessionId, ctx.session.userId);
 
       let agentId = session.prismAgentId;
+      let childWorkflowId: string | null = null;
       if (input.agentId && input.agentId !== session.prismAgentId) {
-        const rows = await db
-          .select({ prismWorkflowId: PrismWorkflows.prismWorkflowId })
+        const child = await db
+          .select({ id: PrismWorkflows.id })
           .from(PrismWorkflows)
-          .where(and(eq(PrismWorkflows.sessionId, session.id), eq(PrismWorkflows.state, 'RUNNING')));
-
-        let allowed = false;
-        let looked = false;
-        let lookupError: unknown = null;
-        for (const row of rows) {
-          try {
-            const { invocations } = await prism.getWorkflow(row.prismWorkflowId);
-            looked = true;
-            if (isRunningChildAgent(invocations, input.agentId)) {
-              allowed = true;
-              break;
-            }
-          } catch (err) {
-            lookupError = err;
-            log.warn('workflow lookup failed for {id}: {*}', { id: row.prismWorkflowId, error: err });
-          }
-        }
-        if (!allowed && !looked && lookupError !== null) prismError(lookupError);
-        if (!allowed) throw new TypieError({ code: 'not_found', status: 404 });
+          .innerJoin(PrismWorkflowEvents, eq(PrismWorkflowEvents.workflowId, PrismWorkflows.id))
+          .where(
+            and(
+              eq(PrismWorkflows.sessionId, session.id),
+              eq(PrismWorkflows.state, 'RUNNING'),
+              eq(PrismWorkflowEvents.kind, 'invocation.started'),
+              sql`${PrismWorkflowEvents.data} -> 'target' ->> 'kind' = 'agent'`,
+              sql`${PrismWorkflowEvents.data} -> 'target' ->> 'id' = ${input.agentId}`,
+            ),
+          )
+          .then(first);
+        if (!child) throw new TypieError({ code: 'not_found', status: 404 });
         agentId = input.agentId;
+        childWorkflowId = child.id;
       }
 
       const agent = await prism.getAgent(agentId).catch(prismError);
@@ -298,12 +466,17 @@ builder.mutationFields((t) => ({
 
       const running = agentId === session.prismAgentId ? activeRun(agent.runs) : null;
 
-      return db
+      const updated = await db
         .update(PrismSessions)
         .set(running ? { updatedAt: dayjs(), openRunSeq: running.runSeq } : { updatedAt: dayjs() })
         .where(eq(PrismSessions.id, session.id))
         .returning()
         .then(firstOrThrow);
+
+      await ensureIngest({ kind: 'agent', sessionId: session.id });
+      if (childWorkflowId !== null) await ensureIngest({ kind: 'workflow', workflowId: childWorkflowId });
+
+      return updated;
     },
   }),
 
@@ -384,12 +557,37 @@ builder.mutationFields((t) => ({
         .then(firstOrThrow);
 
       if (canceled && session.openRunSeq !== null) {
-        await closeRun(session.id, session.openRunSeq).catch((err) =>
+        await closeRun(db, session.id, session.openRunSeq).catch((err) =>
           log.warn('prism close-run on delete failed: {sessionId} {*}', { sessionId: session.id, error: err }),
         );
       }
 
       return updated;
+    },
+  }),
+
+  reactPrismRun: t.withAuth({ session: true }).fieldWithInput({
+    type: PrismRun,
+    input: {
+      runId: t.input.id({ validate: validateDbId(TableCode.PRISM_RUNS) }),
+      reaction: t.input.field({ type: PrismReaction, required: false }),
+      note: t.input.string({ required: false }),
+    },
+    resolve: async (_, { input }, ctx) => {
+      const run = await db.select().from(PrismRuns).where(eq(PrismRuns.id, input.runId)).then(first);
+      if (!run) throw new TypieError({ code: 'not_found', status: 404 });
+      const session = await ownedSession(run.sessionId, ctx.session.userId);
+
+      const updated = await db
+        .update(PrismRuns)
+        .set({ reaction: input.reaction ?? null, reactionNote: input.reaction ? input.note?.trim() || null : null })
+        .where(eq(PrismRuns.id, run.id))
+        .returning()
+        .then(firstOrThrow);
+
+      const transcript = await loadTranscript(session);
+      const shaped = transcript.runs.find((r) => r.row.id === updated.id);
+      return shaped ?? { runSeq: updated.runSeq, items: [], row: updated };
     },
   }),
 }));
@@ -404,163 +602,131 @@ builder.subscriptionFields((t) => ({
     },
     subscribe: async (_, args, ctx) => {
       const session = await ownedSession(args.sessionId, ctx.session.userId);
+      await ensureIngest({ kind: 'agent', sessionId: session.id });
+
+      const cursor = args.cursor ?? 0;
       const workflowCursors = new Map((args.workflows ?? []).map((workflow) => [workflow.workflowId, workflow.cursor]));
+
       return new Repeater<ProjectedStreamFrame>(async (push, stop) => {
-        const controller = new AbortController();
-        void stop.then(() => controller.abort());
-        const attached = new Set<string>();
-        const pumps: Promise<void>[] = [];
+        let stopped = false;
+        void stop.then(() => {
+          stopped = true;
+        });
 
-        const pumpUpstream = async (opts: {
-          open: (cursor: number) => Promise<ReadableStream<Uint8Array>>;
-          scope: ProjectedScope;
-          cursor: number;
-          onFrame: (frame: StreamFrame) => Promise<void>;
-          isTerminal: () => boolean;
-        }) => {
-          let cursor = opts.cursor;
-          let absent = 0;
-          while (!controller.signal.aborted) {
-            let delay = RECONNECT_DELAY_MS;
-            try {
-              const stream = await opts.open(cursor);
-              absent = 0;
-              let seeding = false;
-              const seeded = new Set<string>();
-              const outcome = await pumpSse({
-                stream,
-                idleMs: IDLE_MS,
-                signal: controller.signal,
-                onFrame: async (frame) => {
-                  if (frame.type === 'event') {
-                    cursor = frame.event.seq;
-                    seeding = false;
-                  } else if (frame.type === 'sync') {
-                    seeding = true;
-                    seeded.clear();
-                  }
-                  await opts.onFrame(frame);
-                  let projected = projectFrame(frame, opts.scope);
-                  if (seeding && frame.type === 'delta' && projected?.type === 'delta') {
-                    const wire = frame.delta;
-                    const key = `${wire.context.agent.id}|${wire.channel}|${wire.channel === 'tool.input' ? (wire.tool.id ?? wire.tool.name) : ''}`;
-                    if (seeded.has(key)) {
-                      seeding = false;
-                    } else {
-                      seeded.add(key);
-                      projected = { ...projected, delta: { ...projected.delta, seed: true } };
-                    }
-                  }
-                  if (projected !== null) await push(projected);
-                },
-              });
-              if (outcome === 'aborted') return;
-              if (outcome === 'closed') {
-                if (opts.isTerminal()) return;
-                log.warn('prism stream closed before terminal, reconnecting: {source} {workflowId} (seq {cursor})', {
-                  source: opts.scope.source,
-                  workflowId: opts.scope.source === 'WORKFLOW' ? opts.scope.workflowId : null,
-                  cursor,
-                });
-              }
-            } catch (err) {
-              if (controller.signal.aborted) return;
-              if (!(err instanceof PrismApiError)) throw err;
-              if (err.status === 404) {
-                // 아직 없는 대상 — 할당 직후 죽은 구동의 로그를 재생하면 그 사이 기동 전 창을 본다(재실행이 기동한다).
-                // 영영 안 생기는 대상(재실행이 오지 않는 고아)에 붙어 초당 폴링이 되지 않도록 간격을 늘린다.
-                absent += 1;
-                delay = Math.min(RECONNECT_DELAY_MS * 2 ** (absent - 1), ABSENT_MAX_DELAY_MS);
-                log.warn('prism stream target not there yet: {source} {workflowId} (retry in {delay}ms)', {
-                  source: opts.scope.source,
-                  workflowId: opts.scope.source === 'WORKFLOW' ? opts.scope.workflowId : null,
-                  delay,
-                });
-              } else if (err.status >= 500) {
-                log.warn('prism stream reconnect after upstream failure: {code} ({status})', { code: err.code, status: err.status });
-              } else {
-                throw err;
-              }
-            }
-            await new Promise((resolve) => setTimeout(resolve, delay));
-          }
-        };
+        const live = pubsub.subscribe('prism:session', session.id);
+        void stop.then(() => live.return());
 
-        const attachWorkflow = (row: PrismWorkflowRow) => {
-          const workflowId = row.prismWorkflowId;
-          if (attached.has(workflowId)) return;
-          attached.add(workflowId);
-          let terminalSeen = false;
-          pumps.push(
-            pumpUpstream({
-              open: (cursor) => prism.openWorkflowEvents(workflowId, cursor, controller.signal),
-              scope: { source: 'WORKFLOW', workflowId },
-              cursor: workflowCursors.get(workflowId) ?? 0,
-              isTerminal: () => terminalSeen,
-              onFrame: async (frame) => {
-                if (routeSessionFrame(frame)?.kind === 'workflow-terminal') {
-                  terminalSeen = true;
-                  await prism
-                    .getWorkflow(workflowId)
-                    .then((state) => settleWorkflow(row, state))
-                    .catch((err) => log.error('prism workflow settle failed {workflowId} {*}', { workflowId, error: err }));
-                }
-              },
-            }).catch((err) => {
-              if (controller.signal.aborted) return;
-              log.error('prism workflow stream stopped: {workflowId} {*}', { workflowId, error: err });
-            }),
+        const gate = createFrameGate(cursor, workflowCursors);
+        const watermarks = new Map<string, { context: TurnContext; length: number }>();
+        const buffered: ProjectedStreamFrame[] = [];
+        let replaying = true;
+
+        const fieldKeyOf = (delta: ProjectedDeltaFrame) =>
+          liveFieldKey(
+            delta.workflowId === undefined ? { source: 'SESSION' } : { source: 'WORKFLOW', workflowId: delta.workflowId },
+            delta.context.agent.id,
           );
+
+        const turnOrder = (a: TurnContext, b: TurnContext): number =>
+          a.run === b.run ? (a.turn === b.turn ? a.attempt - b.attempt : a.turn - b.turn) : a.run - b.run;
+
+        const rewound = (delta: ProjectedDeltaFrame): boolean => {
+          if (delta.channel !== 'text') return false;
+          const key = fieldKeyOf(delta);
+          const mark = watermarks.get(key);
+          if (mark === undefined) return false;
+
+          const order = turnOrder(delta.context, mark.context);
+          if (order > 0) return false;
+          if (order < 0) return true;
+          if (delta.offset === 0) {
+            watermarks.set(key, { context: delta.context, length: delta.data.length });
+            return false;
+          }
+
+          return delta.offset < mark.length;
         };
+
+        const accept = (frame: ProjectedStreamFrame): boolean =>
+          frame.type === 'delta' && rewound(frame.delta) ? false : gate.accept(frame);
+
+        const drain = (async () => {
+          for await (const frame of live) {
+            if (replaying) buffered.push(frame);
+            else if (accept(frame)) await push(frame);
+          }
+        })().catch((err: unknown) => stop(toTypieError(err)));
 
         try {
-          const running = await db
+          const events = await db
             .select()
-            .from(PrismWorkflows)
-            .where(and(eq(PrismWorkflows.sessionId, session.id), eq(PrismWorkflows.state, 'RUNNING')));
-          for (const row of running) {
-            attachWorkflow(row);
+            .from(PrismSessionEvents)
+            .where(and(eq(PrismSessionEvents.sessionId, session.id), gt(PrismSessionEvents.seq, cursor)))
+            .orderBy(asc(PrismSessionEvents.seq));
+          const workflows = await db.select().from(PrismWorkflows).where(eq(PrismWorkflows.sessionId, session.id));
+          const workflowRows =
+            workflows.length === 0
+              ? []
+              : await db
+                  .select()
+                  .from(PrismWorkflowEvents)
+                  .where(
+                    inArray(
+                      PrismWorkflowEvents.workflowId,
+                      workflows.map((workflow) => workflow.id),
+                    ),
+                  )
+                  .orderBy(asc(PrismWorkflowEvents.seq));
+          const prismIdOf = new Map(workflows.map((workflow) => [workflow.id, workflow.prismWorkflowId]));
+
+          for (const event of storedEvents(events)) {
+            if (event.context === null) continue;
+            const frame = projectFrame({ type: 'event', event }, { source: 'SESSION' });
+            if (frame !== null && accept(frame)) await push(frame);
           }
 
-          await pumpUpstream({
-            open: (cursor) => prism.openAgentEvents(session.prismAgentId, cursor, controller.signal),
-            scope: { source: 'SESSION' },
-            cursor: args.cursor ?? 0,
-            isTerminal: () => false,
-            onFrame: async (frame) => {
-              const route = routeSessionFrame(frame);
-              if (route?.kind === 'workflow-started') {
-                try {
-                  const row = await linkWorkflowFromEvent(session.id, {
-                    prismWorkflowId: route.workflowId,
-                    app: route.app,
-                    name: route.name,
-                    ref: route.ref,
-                    startedAt: route.startedAt,
-                  });
-                  if (row.sessionId !== session.id) {
-                    log.warn('prism workflow belongs to another session: {workflowId}', { workflowId: route.workflowId });
-                    return;
-                  }
-                  attachWorkflow(row);
-                } catch (err) {
-                  log.warn('prism workflow attach failed: {workflowId} {*}', { workflowId: route.workflowId, error: err });
-                }
-              } else if (route?.kind === 'invocation-retried' && frame.type === 'event') {
-                log.warn('prism invocation retried, not reattaching (seq {seq})', { seq: frame.event.seq });
-              } else if (route?.kind === 'run-terminal') {
-                await closeRun(session.id, route.runSeq).catch((err) =>
-                  log.warn('prism close-run failed: {runSeq} {*}', { runSeq: route.runSeq, error: err }),
-                );
-              } else if (route?.kind === 'titled') {
-                await titleSession(session.id, route.title).catch((err) => log.warn('prism title failed: {*}', { error: err }));
-              }
-            },
-          });
-          await Promise.all(pumps);
+          for (const row of workflowRows) {
+            const workflowId = prismIdOf.get(row.workflowId);
+            if (workflowId === undefined || row.seq <= (workflowCursors.get(workflowId) ?? 0)) continue;
+            const [event] = storedEvents([row]);
+            if (event.context === null) continue;
+            const frame = projectFrame({ type: 'event', event }, { source: 'WORKFLOW', workflowId });
+            if (frame !== null && accept(frame)) await push(frame);
+          }
+
+          await push({ type: 'sync', seq: Math.max(cursor, session.cursor, events.at(-1)?.seq ?? 0) });
+
+          const snapshot = await redis.hgetall(`prism:live:${session.id}`);
+          const fields: Record<string, TurnLive> = {};
+          for (const [field, json] of Object.entries(snapshot)) {
+            try {
+              fields[field] = JSON.parse(json) as TurnLive;
+            } catch (err) {
+              log.warn('prism live snapshot field unparsable: {sessionId} {field} {*}', { sessionId: session.id, field, error: err });
+            }
+          }
+
+          for (const delta of liveSnapshotFrames(fields)) {
+            if (delta.channel === 'text') {
+              watermarks.set(fieldKeyOf(delta), { context: delta.context, length: delta.offset + delta.data.length });
+            }
+            await push({ type: 'delta', delta });
+          }
+
+          for (;;) {
+            const pending = [...buffered];
+            buffered.length = 0;
+            if (pending.length === 0) {
+              replaying = false;
+              break;
+            }
+            for (const frame of pending) if (accept(frame)) await push(frame);
+          }
+
+          await drain;
           stop();
         } catch (err) {
-          if (controller.signal.aborted) stop();
+          if (stopped) stop();
           else stop(toTypieError(err));
         }
       });

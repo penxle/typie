@@ -1,10 +1,10 @@
 <script lang="ts">
+  import { pendingRootRequests, runningWorkflows } from '@typie/prism';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Icon } from '@typie/ui/components';
   import { tick, untrack } from 'svelte';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
-  import { pendingRootRequests, runningWorkflows } from './lib/conversation.ts';
   import { pop, rise } from './lib/motion.ts';
   import { PacedText } from './lib/paced-text.svelte.ts';
   import { foldToolCalls } from './lib/tool-calls.ts';
@@ -15,7 +15,7 @@
   import PrismWaitRow from './PrismWaitRow.svelte';
   import PrismWorkflow from './PrismWorkflow.svelte';
   import { clientResolvers, toolCallLabels, toolCards } from './tools/index.ts';
-  import type { Transcript, TranscriptMessage } from './lib/conversation.ts';
+  import type { Transcript, TranscriptMessage } from '@typie/prism';
 
   type Props = {
     transcript: Transcript;
@@ -26,10 +26,9 @@
     reconnecting: boolean;
     onResolve: (agentId: string, toolCallId: string, input: unknown) => Promise<void>;
     onRetry: (toolCallId: string) => void;
-    onLoadTrace: (workflowId: string) => Promise<void>;
   };
 
-  let { transcript, loading, pending, sessionId, failedIds, reconnecting, onResolve, onRetry, onLoadTrace }: Props = $props();
+  let { transcript, loading, pending, sessionId, failedIds, reconnecting, onResolve, onRetry }: Props = $props();
 
   const foldable = (message: TranscriptMessage) =>
     (message.role === 'tool' && message.phase === 'executed' && message.ok !== false) ||
@@ -383,21 +382,10 @@
           {:else if entry.role === 'tool-request'}
             <PrismToolRequest {failedIds} message={entry} {onRetry} resolve={onResolve} {transcript} />
           {:else if entry.role === 'run-failed'}
-            <div class={css({ alignSelf: 'center', fontSize: '11px', color: 'text.danger' })}>
-              응답을 마치지 못했어요 — 다시 보내 주세요
-            </div>
+            <div class={css({ alignSelf: 'center', fontSize: '11px', color: 'text.danger' })}>응답을 마치지 못했어요. 다시 보내 주세요</div>
           {:else if entry.role === 'workflow'}
             {#if sessionId !== null}
-              <PrismWorkflow
-                {failedIds}
-                loadTrace={onLoadTrace}
-                message={entry}
-                {onRetry}
-                {reconnecting}
-                resolve={onResolve}
-                {sessionId}
-                {transcript}
-              />
+              <PrismWorkflow {failedIds} message={entry} {onRetry} {reconnecting} resolve={onResolve} {sessionId} {transcript} />
             {/if}
           {:else}
             <PrismMessage message={entry} />

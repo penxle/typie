@@ -1,6 +1,6 @@
 import { StreamFrameSchema } from '@typie/prism';
 import { createParser } from 'eventsource-parser';
-import type { EventFrame, StreamFrame } from '@typie/prism';
+import type { StreamFrame } from '@typie/prism';
 
 export type SseEvent = { event: string; data: string };
 
@@ -35,14 +35,19 @@ export const pumpSse = async (opts: {
   onFrame: (frame: StreamFrame) => void | Promise<void>;
   idleMs: number;
   signal: AbortSignal;
-  stopAtSync?: boolean;
 }): Promise<PumpOutcome> => {
   const reader = opts.stream.getReader();
   const decoder = new TextDecoder();
   const parser = createSseParser();
+  let onAbort: (() => void) | null = null;
   const aborted = new Promise<'aborted'>((resolve) => {
-    if (opts.signal.aborted) resolve('aborted');
-    else opts.signal.addEventListener('abort', () => resolve('aborted'), { once: true });
+    if (opts.signal.aborted) {
+      resolve('aborted');
+      return;
+    }
+
+    onAbort = () => resolve('aborted');
+    opts.signal.addEventListener('abort', onAbort, { once: true });
   });
 
   try {
@@ -57,36 +62,11 @@ export const pumpSse = async (opts: {
       if (outcome === 'idle' || outcome === 'aborted') return outcome;
       if (outcome.done) return 'closed';
       for (const event of parser.feed(decoder.decode(outcome.value, { stream: true }))) {
-        const frame = parseStreamFrame(event);
-        await opts.onFrame(frame);
-        if (opts.stopAtSync && frame.type === 'sync') return 'closed';
+        await opts.onFrame(parseStreamFrame(event));
       }
     }
   } finally {
+    if (onAbort !== null) opts.signal.removeEventListener('abort', onAbort);
     await reader.cancel().catch(() => null);
   }
-};
-
-export const readUntilSync = async (
-  stream: ReadableStream<Uint8Array>,
-  signal: AbortSignal,
-  idleMs = 45_000,
-): Promise<{ events: EventFrame[]; sync: number }> => {
-  const events: EventFrame[] = [];
-  let sync = -1;
-
-  const outcome = await pumpSse({
-    stream,
-    idleMs,
-    signal,
-    stopAtSync: true,
-    onFrame: (frame) => {
-      if (frame.type === 'event') events.push(frame.event);
-      else if (frame.type === 'sync') sync = frame.seq;
-    },
-  });
-
-  if (sync < 0) throw new Error(`event replay ended without sync: ${outcome}`);
-
-  return { events, sync };
 };

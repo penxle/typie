@@ -1,5 +1,7 @@
+import * as Sentry from '@sentry/node';
 import { logger } from '@typie/lib';
 import { TypieError } from '@typie/lib/errors';
+import { ReviewOutcomeEnvelopeSchema } from '@typie/prism';
 import dayjs from 'dayjs';
 import { and, desc, eq, isNull } from 'drizzle-orm';
 import {
@@ -21,9 +23,9 @@ import { ConfirmInputSchema, confirmResult, ENUM_TO_TIER, manuscriptPath, pickVe
 import { projectRoundThreads } from './prism-review-threads.ts';
 import { wasmThread } from './wasm-thread.ts';
 import type { PrismReviewTier } from '@typie/lib/enums';
-import type { ReviewOutcome, WorkflowState } from '@typie/prism';
+import type { ReviewOutcome } from '@typie/prism';
 import type { Database, Transaction } from '#/db/index.ts';
-import type { PrismAppHooks, PrismWorkflowRow } from './prism-apps.ts';
+import type { PrismAppHooks, PrismWorkflowRow, WorkflowOutcome } from './prism-apps.ts';
 import type { Snapshot } from './prism-review-core.ts';
 import type { PrismToolContext, PrismToolHandler } from './prism-tools.ts';
 
@@ -202,25 +204,45 @@ const onWorkflowLinked = async (tx: Transaction, workflow: PrismWorkflowRow): Pr
     log.warn('review round already linked or not in this session: {ref} ({workflowId})', { ref: workflow.ref, workflowId: workflow.id });
 };
 
-const onWorkflowSettled = async (workflow: PrismWorkflowRow, view: WorkflowState): Promise<void> => {
-  const round = await db
+const onWorkflowSettled = async (tx: Transaction, workflow: PrismWorkflowRow, outcome: WorkflowOutcome): Promise<void> => {
+  let result: ReviewOutcome | null = null;
+  if (outcome.result !== null) {
+    const parsed = ReviewOutcomeEnvelopeSchema.safeParse(outcome.result);
+    if (!parsed.success) {
+      log.error('review outcome rejected by envelope schema: {workflowId} {*}', {
+        workflowId: workflow.prismWorkflowId,
+        issues: parsed.error.issues,
+      });
+      Sentry.captureMessage(`prism review outcome malformed: ${workflow.prismWorkflowId}`, {
+        level: 'error',
+        extra: { workflowId: workflow.prismWorkflowId, issues: parsed.error.issues },
+      });
+      return;
+    }
+
+    result = parsed.data as ReviewOutcome;
+  }
+
+  const round = await tx
     .update(PrismReviewRounds)
-    .set({ result: view.workflow.result === null ? null : (JSON.parse(view.workflow.result) as ReviewOutcome) })
+    .set({ result })
     .where(eq(PrismReviewRounds.workflowId, workflow.id))
     .returning({ id: PrismReviewRounds.id, documentId: PrismReviewRounds.documentId })
     .then(first);
-  if (!round || view.workflow.status !== 'completed') return;
+  if (!round || outcome.state !== 'COMPLETED') return;
 
-  await projectRoundThreads(round.id);
+  await projectRoundThreads(tx, round.id);
 
-  const document = await db.select({ title: Documents.title }).from(Documents).where(eq(Documents.id, round.documentId)).then(first);
-  const session = await db
+  const document = await tx.select({ title: Documents.title }).from(Documents).where(eq(Documents.id, round.documentId)).then(first);
+  const session = await tx
     .select({ userId: PrismSessions.userId })
     .from(PrismSessions)
     .where(eq(PrismSessions.id, workflow.sessionId))
     .then(firstOrThrow);
 
-  const { sendPushNotificationOnce } = await import('#/external/firebase.ts');
+  const { PUSH_TTL_SECONDS, sendPushNotificationOnce } = await import('#/external/firebase.ts');
+  if (Date.now() - outcome.finishedAt.valueOf() > PUSH_TTL_SECONDS * 1000) return;
+
   const delivery = await sendPushNotificationOnce({
     key: `prism:push:review-done:${workflow.prismWorkflowId}`,
     userId: session.userId,
@@ -231,18 +253,8 @@ const onWorkflowSettled = async (workflow: PrismWorkflowRow, view: WorkflowState
   if (delivery === 'failed') throw new Error(`prism review push failed for workflow ${workflow.prismWorkflowId}`);
 };
 
-const onRunTerminal = async (sessionId: string, runSeq: number): Promise<void> => {
-  await closePendingRounds(db, sessionId, runSeq);
+const onRunTerminal = async (executor: Database | Transaction, sessionId: string, runSeq: number): Promise<void> => {
+  await closePendingRounds(executor, sessionId, runSeq);
 };
 
-const resolveSession = async (ref: string | null): Promise<string | null> => {
-  if (ref === null) return null;
-  const round = await db
-    .select({ sessionId: PrismReviewRounds.sessionId })
-    .from(PrismReviewRounds)
-    .where(eq(PrismReviewRounds.id, ref))
-    .then(first);
-  return round?.sessionId ?? null;
-};
-
-export const reviewHooks: PrismAppHooks = { onWorkflowLinked, onWorkflowSettled, onRunTerminal, resolveSession };
+export const reviewHooks: PrismAppHooks = { onWorkflowLinked, onWorkflowSettled, onRunTerminal };

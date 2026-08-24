@@ -1,3 +1,5 @@
+import './prism-worker.ts';
+
 import { queue } from './bullmq.ts';
 import { crons } from './tasks/index.ts';
 import type { JobsOptions } from 'bullmq';

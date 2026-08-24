@@ -1,11 +1,16 @@
+import { currentStep } from '@typie/prism';
 import { collapseRows } from '../lib/tool-calls.ts';
-import { currentStep } from '../lib/trace.ts';
 import { stagesFor, stepRound, stepStage } from './stages.ts';
-import type { PrismReviewTierName } from '@typie/prism';
-import type { ToolRequestMessage, WorkflowStatus } from '../lib/conversation.ts';
-import type { TurnLive } from '../lib/delta.ts';
+import type {
+  PrismReviewTierName,
+  ToolRequestMessage,
+  TranscriptStep,
+  TranscriptTool,
+  TurnLive,
+  WorkflowStatus,
+  WorkflowTranscript,
+} from '@typie/prism';
 import type { ToolRow } from '../lib/tool-calls.ts';
-import type { TraceStep, TraceTool, WorkflowTrace } from '../lib/trace.ts';
 import type { StageKey } from './stages.ts';
 
 export { type ToolRow } from '../lib/tool-calls.ts';
@@ -40,7 +45,7 @@ export type PassageView = {
 
 export const LATE_MS = 30_000;
 
-export const toolRowLabel = (tool: TraceTool): string | null => {
+export const toolRowLabel = (tool: TranscriptTool): string | null => {
   if (!tool.ok) return null;
   if (tool.tool === 'read') return tool.path?.startsWith('manuscript/') ? '원고를 읽었어요' : '메모를 읽었어요';
   if (tool.tool === 'grep') return '원고에서 찾아봤어요';
@@ -100,7 +105,7 @@ const waitSpans = (requests: ToolRequestMessage[]): Span[] => {
 
 type Item =
   | { kind: 'turn'; seq: number; step: string | null; text: string }
-  | { kind: 'tool'; seq: number; step: string | null; tool: TraceTool }
+  | { kind: 'tool'; seq: number; step: string | null; tool: TranscriptTool }
   | { kind: 'question'; seq: number; step: string | null; request: ToolRequestMessage };
 
 type RoundSpan = { from: number; to: number | null; seq: number; open: boolean };
@@ -114,7 +119,7 @@ type StepIndex = {
 
 const roundKey = (stage: StageKey, round: number): string => `${stage}|${round}`;
 
-const indexSteps = (steps: TraceStep[]): StepIndex => {
+const indexSteps = (steps: TranscriptStep[]): StepIndex => {
   const stageOf = new Map<string, StageKey | null>();
   const firstStart = new Map<StageKey, number>();
   const roundsOf = new Map<StageKey, Set<number>>();
@@ -151,11 +156,11 @@ const indexSteps = (steps: TraceStep[]): StepIndex => {
   return { stageOf, firstStart, roundsOf, roundSpans };
 };
 
-const lastKnownAt = (trace: WorkflowTrace): number => {
+const lastKnownAt = (transcript: WorkflowTranscript): number => {
   let latest = 0;
-  for (const step of trace.steps) latest = Math.max(latest, step.completedAt ?? step.startedAt);
-  for (const turn of trace.turns) latest = Math.max(latest, turn.at);
-  for (const tool of trace.tools) latest = Math.max(latest, tool.at);
+  for (const step of transcript.steps) latest = Math.max(latest, step.completedAt ?? step.startedAt);
+  for (const turn of transcript.turns) latest = Math.max(latest, turn.at);
+  for (const tool of transcript.tools) latest = Math.max(latest, tool.at);
   return latest;
 };
 
@@ -240,14 +245,14 @@ const buildGroups = (index: StepIndex, items: Item[], stage: StageKey, waits: Sp
 };
 
 export const buildPassage = ({
-  trace,
+  transcript,
   status,
   tier,
   requests,
   now,
   finishedAt,
 }: {
-  trace: WorkflowTrace;
+  transcript: WorkflowTranscript;
   status: WorkflowStatus;
   tier: PrismReviewTierName;
   requests: ToolRequestMessage[];
@@ -256,18 +261,18 @@ export const buildPassage = ({
 }): PassageView => {
   const order = stagesFor(tier);
   const waits = waitSpans(requests);
-  const index = indexSteps(trace.steps);
-  const endAt = status === 'running' ? now : (finishedAt ?? lastKnownAt(trace));
+  const index = indexSteps(transcript.steps);
+  const endAt = status === 'running' ? now : (finishedAt ?? lastKnownAt(transcript));
 
   const items: Item[] = [
-    ...trace.turns.map((turn): Item => ({ kind: 'turn', seq: turn.seq, step: turn.step, text: turn.text })),
-    ...trace.tools.map((tool): Item => ({ kind: 'tool', seq: tool.seq, step: tool.step, tool })),
+    ...transcript.turns.map((turn): Item => ({ kind: 'turn', seq: turn.seq, step: turn.step, text: turn.text })),
+    ...transcript.tools.map((tool): Item => ({ kind: 'tool', seq: tool.seq, step: tool.step, tool })),
     ...requests.map((request): Item => ({ kind: 'question', seq: request.seq, step: null, request })),
   ].toSorted((a, b) => a.seq - b.seq);
 
   let current: StageKey | null = null;
-  for (let i = trace.steps.length - 1; i >= 0; i -= 1) {
-    const stage = index.stageOf.get(trace.steps[i].name) ?? null;
+  for (let i = transcript.steps.length - 1; i >= 0; i -= 1) {
+    const stage = index.stageOf.get(transcript.steps[i].name) ?? null;
     if (stage !== null && order.some((entry) => entry.key === stage)) {
       current = stage;
       break;
@@ -286,8 +291,8 @@ export const buildPassage = ({
   };
 
   for (const item of items) {
-    while (cursor < trace.steps.length && trace.steps[cursor].seq < item.seq) {
-      priorStep = trace.steps[cursor].name;
+    while (cursor < transcript.steps.length && transcript.steps[cursor].seq < item.seq) {
+      priorStep = transcript.steps[cursor].name;
       cursor += 1;
     }
     if (item.kind === 'question') item.step = priorStep;
@@ -338,7 +343,7 @@ export const buildPassage = ({
     };
   });
 
-  const liveRound = status === 'running' ? roundOf(currentStep(trace)) : null;
+  const liveRound = status === 'running' ? roundOf(currentStep(transcript)) : null;
 
   if (liveRound !== null && current !== null) {
     const stage = stages.find((entry) => entry.key === current);
@@ -359,7 +364,7 @@ export const buildPassage = ({
     }
   }
 
-  const startedAt = trace.steps[0]?.startedAt ?? null;
+  const startedAt = transcript.steps[0]?.startedAt ?? null;
   const elapsedMs = startedAt === null ? 0 : Math.max(0, endAt - startedAt - overlap(waits, startedAt, endAt));
 
   return {

@@ -1,8 +1,8 @@
 import PrismQuestionCard from '../PrismQuestionCard.svelte';
 import PrismReviewConfirmCard from '../review/PrismReviewConfirmCard.svelte';
+import type { ToolRequestMessage } from '@typie/prism';
 import type { Component } from 'svelte';
 import type { OpenDocumentRegistry } from '$lib/prism/open-documents.svelte';
-import type { ToolRequestMessage } from '../lib/conversation.ts';
 
 export type ToolCardProps = {
   message: ToolRequestMessage;

@@ -2,7 +2,7 @@
   import { css } from '@typie/styled-system/css';
   import { parseMarkdown } from './lib/markdown.ts';
   import PrismMarkdown from './PrismMarkdown.svelte';
-  import type { TranscriptMessage } from './lib/conversation.ts';
+  import type { TranscriptMessage } from '@typie/prism';
 
   type Props = {
     message: TranscriptMessage;

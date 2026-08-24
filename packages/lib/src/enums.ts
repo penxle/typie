@@ -321,3 +321,30 @@ export const PrismReaction = {
   UP: 'UP',
   DOWN: 'DOWN',
 } as const;
+
+export type PrismRunState = keyof typeof PrismRunState;
+export const PrismRunState = {
+  RUNNING: 'RUNNING',
+  COMPLETED: 'COMPLETED',
+  FAILED: 'FAILED',
+  CANCELED: 'CANCELED',
+} as const;
+
+export type PrismTurnState = keyof typeof PrismTurnState;
+export const PrismTurnState = {
+  IDLE: 'IDLE',
+  ACTIVE: 'ACTIVE',
+} as const;
+
+export type PrismToolPhase = keyof typeof PrismToolPhase;
+export const PrismToolPhase = {
+  EXECUTED: 'EXECUTED',
+  REJECTED: 'REJECTED',
+} as const;
+
+export type PrismToolRequestStatus = keyof typeof PrismToolRequestStatus;
+export const PrismToolRequestStatus = {
+  PENDING: 'PENDING',
+  RESOLVED: 'RESOLVED',
+  CLOSED: 'CLOSED',
+} as const;

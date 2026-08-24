@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { applyDelta, sealTurn, startTurn } from './delta.ts';
-import type { TurnContext } from '@typie/prism';
+import type { TurnContext } from './wire.ts';
 
 const ctx: TurnContext = { agent: { id: 'a', name: 'assistant' }, run: 1, turn: 2, attempt: 1 };
 

@@ -53,14 +53,11 @@ export type OutcomeDetail = {
   understanding: string | null;
   progress: string | null;
   strengths: { quote: string; body: string | null; anchor: Anchor }[];
-  verdicts: { trait: string; label: string | null; note: string | null }[];
+  verdicts: { trait: string; note: string | null }[];
   elevations: { trait: string; quote: string | null; body: string }[];
   patterns: { theme: string | null; body: string; issues: IssueBrief[] }[];
   priorities: { body: string; issues: IssueBrief[] }[];
 };
-
-// 판정점의 작가 대면 번역 — 숫자는 성적표로 읽히므로 화면에 세우지 않는다.
-const VERDICT_LABELS: Record<number, string> = { 1: '아직', 2: '흔들림', 3: '자리 잡음', 4: '단단함' };
 
 // 참조는 이슈 id(현행)와 배열 번호(구 결과) 양쪽으로 온다 — 두 형태가 갈리는 자리가 여기뿐이라 여기서 해소한다.
 const briefsOfRefs = (refs: readonly (number | string)[], issues: ReviewIssue[]): IssueBrief[] => {
@@ -97,7 +94,6 @@ export const detailOutcome = (outcome: ReviewOutcome | null, content: string): O
     })),
     verdicts: (outcome.verdicts ?? []).map((verdict) => ({
       trait: verdict.trait,
-      label: VERDICT_LABELS[verdict.point] ?? null,
       note: verdict.note,
     })),
     elevations: (outcome.elevations ?? []).map((elevation) => ({

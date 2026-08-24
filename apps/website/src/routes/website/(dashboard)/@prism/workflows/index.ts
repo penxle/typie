@@ -1,7 +1,7 @@
 import { reviewComposerCopy } from '../review/composer.ts';
 import PrismReviewPassage from '../review/PrismReviewPassage.svelte';
+import type { ToolRequestMessage, Transcript, WorkflowMessage } from '@typie/prism';
 import type { Component } from 'svelte';
-import type { ToolRequestMessage, Transcript, WorkflowMessage } from '../lib/conversation.ts';
 
 export type WorkflowBlockProps = {
   message: WorkflowMessage;
@@ -12,7 +12,6 @@ export type WorkflowBlockProps = {
   reconnecting: boolean;
   resolve: (agentId: string, toolCallId: string, input: unknown) => Promise<void>;
   onRetry: (toolCallId: string) => void;
-  loadTrace: () => Promise<void>;
 };
 
 export type WorkflowComposerCopy = {
