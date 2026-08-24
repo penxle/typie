@@ -31,7 +31,7 @@
 <header
   class={css({
     position: 'relative',
-    zIndex: 'sidebar',
+    zIndex: app.preference.current.zenModeEnabled ? 'underEditor' : 'sidebar',
     display: 'flex',
     flexShrink: '0',
     alignItems: 'center',
