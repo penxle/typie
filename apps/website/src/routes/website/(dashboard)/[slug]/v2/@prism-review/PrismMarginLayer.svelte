@@ -216,7 +216,7 @@
           })}
         >
           {#if margin.detailRound !== null}
-            <Button style={css.raw({ width: 'full' })} onclick={() => (detailOpen = true)} size="sm" variant="secondary">총평 보기</Button>
+            <Button style={css.raw({ width: 'full' })} onclick={() => (detailOpen = true)} variant="secondary">총평 읽기</Button>
           {/if}
           <SegmentButtons
             style={css.raw({ width: 'full' })}

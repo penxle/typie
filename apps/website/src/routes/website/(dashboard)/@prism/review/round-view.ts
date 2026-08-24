@@ -14,7 +14,7 @@ export type DetailRound = {
   document: { id: string; title: string; entity: { slug: string } };
 };
 
-export type ResultView = { kind: 'rejected' } | { kind: 'summary'; counts: string; issues: string } | { kind: 'issues'; issues: string };
+export type ResultView = { kind: 'rejected' } | { kind: 'completed' };
 
 export type RoundHeader = { title: string; tier: string };
 
@@ -48,26 +48,11 @@ export const describeHeader = (round: DetailRound): RoundHeader => ({
   tier: TIER_OPTIONS.find((option) => option.tier === round.tier.toLowerCase())?.label ?? round.tier,
 });
 
+// 수치·문구의 조립은 결과 카드의 몫이다 — 여기는 결과가 설 수 있는가(완료·거절)만 가른다
 export const describeResult = (round: ReviewRound): ResultView | null => {
   if (round.state !== 'COMPLETED') {
     return null;
   }
 
-  if (round.rejection) {
-    return { kind: 'rejected' };
-  }
-
-  const issues = `본문 여백에 피드백 ${round.issueCount}개를 남겼어요`;
-
-  if (round.conclusion) {
-    const { patternsCount, prioritiesCount, strengthsCount } = round.conclusion;
-
-    return {
-      kind: 'summary',
-      counts: `패턴 ${patternsCount} · 우선순위 ${prioritiesCount}${strengthsCount > 0 ? ` · 강점 ${strengthsCount}` : ''}`,
-      issues,
-    };
-  }
-
-  return { kind: 'issues', issues };
+  return round.rejection ? { kind: 'rejected' } : { kind: 'completed' };
 };

@@ -3,9 +3,13 @@
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { autosize } from '@typie/ui/actions';
-  import { Icon } from '@typie/ui/components';
+  import { Button, Icon } from '@typie/ui/components';
   import { Toast } from '@typie/ui/notification';
   import ArrowUpIcon from '~icons/lucide/arrow-up';
+  import MessageSquareTextIcon from '~icons/lucide/message-square-text';
+  import RepeatIcon from '~icons/lucide/repeat';
+  import SparklesIcon from '~icons/lucide/sparkles';
+  import TargetIcon from '~icons/lucide/target';
   import ThumbsDownIcon from '~icons/lucide/thumbs-down';
   import ThumbsUpIcon from '~icons/lucide/thumbs-up';
   import { goto } from '$app/navigation';
@@ -13,11 +17,12 @@
   import { graphql } from '$mearie';
   import { expand, swap } from '../lib/motion.ts';
   import PrismReviewDetail from './PrismReviewDetail.svelte';
-  import type { ResultView, ReviewRound } from './round-view.ts';
+  import type { Component } from 'svelte';
+  import type { ReviewRound } from './round-view.ts';
 
-  type Props = { round: ReviewRound; result: Exclude<ResultView, { kind: 'rejected' }> };
+  type Props = { round: ReviewRound };
 
-  let { round, result }: Props = $props();
+  let { round }: Props = $props();
 
   const [reactPrismReviewRound] = createMutation(
     graphql(`
@@ -32,6 +37,20 @@
   );
 
   const reaction = $derived(round.reaction ?? null);
+  const conclusion = $derived(round.conclusion ?? null);
+
+  // 카드의 서사는 총평 서두에서 빌린다 — 재리뷰면 진전(progress)이 이번 회차의 이야기라 이해보다 앞선다.
+  // 첫 문단만 세운다: 전문은 총평 모달의 몫이고, 여기는 지나치지 않게 붙드는 맛보기다
+  const lead = $derived.by(() => {
+    const text = conclusion?.progress ?? conclusion?.understanding ?? null;
+    if (!text) return null;
+    return (
+      text
+        .split('\n')
+        .map((line) => line.trim())
+        .find((line) => line.length > 0) ?? null
+    );
+  });
 
   let editing = $state(false);
   let note = $state('');
@@ -94,14 +113,27 @@
     await goto(`/${round.document.entity.slug}`);
   };
 
-  // 누를 수 있는 곳은 글자만큼이다 — 블록 폭을 그대로 쓰면 오른쪽 빈 자리까지 반응한다
-  const lineClass = css({
-    display: 'block',
-    width: '[fit-content]',
-    fontSize: '[12.5px]',
-    textAlign: 'left',
-    color: 'text.faint',
-    _hover: { color: 'text.subtle' },
+  // 시작 확인 카드와 같은 카드 문법 — 카드 겉·13px 기준 서체·민제목·보더 서브행·간격까지 그대로 따른다
+  const cardClass = css({
+    borderWidth: '1px',
+    borderColor: 'border.default',
+    borderRadius: '10px',
+    padding: '14px',
+    fontSize: '13px',
+    backgroundColor: 'surface.default',
+    _dark: { backgroundColor: 'surface.subtle' },
+    boxShadow: 'small',
+  });
+  const titleClass = css({ fontSize: '13px', fontWeight: 'semibold', marginBottom: '10px' });
+  // 수치는 서브행 상자 안에 항목별 행으로 담는다 — 행마다 아이콘·라벨·값의 같은 구조를 반복한다
+  const countsBoxClass = flex({
+    flexDirection: 'column',
+    gap: '8px',
+    paddingX: '10px',
+    paddingY: '10px',
+    borderWidth: '1px',
+    borderColor: 'border.subtle',
+    borderRadius: '8px',
   });
 
   const thumbStyle = css.raw({
@@ -123,33 +155,49 @@
   });
 </script>
 
-<div>
-  <button class={lineClass} onclick={() => void openMargin()} type="button">
-    {result.issues}{#if result.kind === 'summary'}
-      · {result.counts}{/if}
-  </button>
+{#snippet statRow(icon: Component, label: string, count: number)}
+  <div class={flex({ alignItems: 'center', gap: '8px' })}>
+    <Icon style={css.raw({ color: 'text.faint' })} {icon} size={14} />
+    <span class={css({ color: 'text.subtle' })}>{label}</span>
+    <span class={css({ fontWeight: 'semibold' })}>{count}개</span>
+  </div>
+{/snippet}
 
-  {#if round.hasDetail}
-    <div>
-      <button
-        class={css({
-          marginTop: '10px',
-          fontSize: '12px',
-          fontWeight: 'semibold',
-          color: 'text.subtle',
-          _hover: { color: 'text.default' },
-        })}
-        onclick={() => (detailOpen = true)}
-        type="button"
-      >
-        총평 읽기
-      </button>
-    </div>
+<div class={cardClass}>
+  <div class={titleClass}>리뷰를 마쳤어요</div>
 
-    <PrismReviewDetail {round} bind:open={detailOpen} />
+  {#if lead !== null}
+    <p class={css({ marginBottom: '10px', lineHeight: '[1.65]', color: 'text.subtle', lineClamp: '4' })}>{lead}</p>
   {/if}
 
-  <div class={flex({ alignItems: 'center', gap: '6px', marginTop: '10px' })}>
+  <div class={countsBoxClass}>
+    {@render statRow(MessageSquareTextIcon, '피드백', round.issueCount)}
+    {#if conclusion !== null}
+      {#if conclusion.strengthsCount > 0}
+        {@render statRow(SparklesIcon, '강점', conclusion.strengthsCount)}
+      {/if}
+      {@render statRow(RepeatIcon, '패턴', conclusion.patternsCount)}
+      {@render statRow(TargetIcon, '우선순위', conclusion.prioritiesCount)}
+    {/if}
+  </div>
+
+  <div class={flex({ flexDirection: 'column', gap: '8px', marginTop: '12px' })}>
+    {#if round.hasDetail}
+      <Button style={css.raw({ width: 'full' })} onclick={() => (detailOpen = true)} size="sm" variant="secondary">총평 읽기</Button>
+    {/if}
+    <Button style={css.raw({ width: 'full' })} onclick={() => void openMargin()} size="sm" variant="secondary">본문에 표시하기</Button>
+  </div>
+
+  <div
+    class={flex({
+      alignItems: 'center',
+      gap: '6px',
+      marginTop: '12px',
+      paddingTop: '10px',
+      borderTopWidth: '1px',
+      borderColor: 'border.subtle',
+    })}
+  >
     <span class={css({ flexGrow: '1', minWidth: '0', fontSize: '11px', color: 'text.faint' })}>이번 리뷰 어땠나요?</span>
     <button
       class={css(thumbStyle, reaction === 'UP' ? thumbOnStyle : thumbOffStyle)}
@@ -269,3 +317,7 @@
     </div>
   {/if}
 </div>
+
+{#if round.hasDetail}
+  <PrismReviewDetail {round} bind:open={detailOpen} />
+{/if}
