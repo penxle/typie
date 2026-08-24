@@ -328,6 +328,7 @@
           <PrismCard
             expanded={margin.activeId === item.id}
             {item}
+            onClose={() => margin.activate(null, 'card')}
             onToggle={() => margin.activate(margin.activeId === item.id ? null : item.id, 'card')}
           />
         </div>
@@ -355,6 +356,7 @@
         <PrismCard
           expanded={margin.activeId === item.id}
           {item}
+          onClose={() => margin.activate(null, 'card')}
           onToggle={() => margin.activate(margin.activeId === item.id ? null : item.id, 'card')}
         />
       {/each}

@@ -12,7 +12,7 @@
   import { graphql } from '$mearie';
   import { backoffDelay } from '../lib/backoff.ts';
   import { parseMarkdown } from '../lib/markdown.ts';
-  import { expand, fadeIn, fadeOut, MOTION, rise, STAGGER } from '../lib/motion.ts';
+  import { expand, fadeIn, fadeOut, rise } from '../lib/motion.ts';
   import { PacedText } from '../lib/paced-text.svelte.ts';
   import PrismMarkdown from '../PrismMarkdown.svelte';
   import PrismToolCalls from '../PrismToolCalls.svelte';
@@ -215,9 +215,6 @@
   $effect(() => {
     void tick().then(() => (firstPaint = false));
   });
-
-  const liveDelay = (index: number) => (firstPaint ? MOTION.quick + index * STAGGER : 0);
-  const settledDelay = (index: number) => (firstPaint ? MOTION.quick : 0) + index * STAGGER;
 
   let live = $state<PacedText | null>(null);
   let drains = $state<{ seq: number; stage: StageKey | null; round: number | null; paced: PacedText }[]>([]);
@@ -610,7 +607,7 @@
           onclick={() => (expanded[group.key] = !open)}
           type="button"
         >
-          점검 {group.round}회째
+          <span class={css({ flex: 'none', whiteSpace: 'nowrap' })}>점검 {group.round}회째</span>
           {#if !open && group.summary !== null}
             <span class={roundSummaryClass}>{group.summary}</span>
           {/if}
@@ -638,7 +635,7 @@
   {/if}
 {/snippet}
 
-{#snippet stageLine(stage: StageView, toggleable: boolean, delay: number = 0)}
+{#snippet stageLine(stage: StageView, toggleable: boolean)}
   {@const open = expanded[stage.key] ?? false}
   <button
     class={css(stageRowStyle, { width: 'full', textAlign: 'left' })}
@@ -646,7 +643,7 @@
     disabled={!toggleable}
     onclick={() => (expanded[stage.key] = !open)}
     type="button"
-    in:rise|global={{ delay }}
+    in:rise|global={{ skip: firstPaint }}
   >
     {@render stageGlyph(stage.status)}
     <span
@@ -718,9 +715,9 @@
   {@render groups(view.prelude, null)}
 
   {#if running}
-    {#each view.stages.filter((stage) => stage.status !== 'pending') as stage, index (stage.key)}
+    {#each view.stages.filter((stage) => stage.status !== 'pending') as stage (stage.key)}
       {@const showBody = stage.status === 'running' || heldStageKeys.includes(stage.key)}
-      {@render stageLine(stage, !showBody && stage.groups.length > 0, liveDelay(index))}
+      {@render stageLine(stage, !showBody && stage.groups.length > 0)}
       {#if showBody}
         <div class={expandClass} out:expand>
           {@render stageBody(stage)}
@@ -731,9 +728,9 @@
       {@render liveTail()}
     {/if}
   {:else}
-    {#each view.stages.filter((stage) => stage.status !== 'pending') as stage, index (stage.key)}
+    {#each view.stages.filter((stage) => stage.status !== 'pending') as stage (stage.key)}
       {@const held = heldStageKeys.includes(stage.key)}
-      {@render stageLine(stage, !held && stage.groups.length > 0, settledDelay(index))}
+      {@render stageLine(stage, !held && stage.groups.length > 0)}
       {#if held}
         <div class={expandClass} out:expand>
           {@render stageBody(stage)}

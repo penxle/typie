@@ -4,8 +4,6 @@ import type { TransitionConfig } from 'svelte/transition';
 
 export const MOTION = { quick: 100, state: 150, enter: 200, expand: 200, block: 280 } as const;
 
-export const STAGGER = 40;
-
 export const reducedMotion = (): boolean => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 export const fadeIn = { duration: MOTION.state, easing: quintOut };

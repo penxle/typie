@@ -99,7 +99,8 @@
           backgroundColor: {
             _enabled: {
               base: 'surface.default',
-              _hover: 'surface.subtle',
+              // subtle이 아니라 muted다 — subtle 배경 카드 위에 앉은 버튼의 hover가 카드에 녹아 사라진다
+              _hover: 'surface.muted',
               _active: 'interactive.hover',
               _pressed: 'interactive.hover',
             },
@@ -128,9 +129,10 @@
           backgroundColor: {
             _enabled: {
               base: 'transparent',
-              _hover: 'surface.subtle',
-              _active: 'surface.muted',
-              _pressed: 'surface.muted',
+              // secondary와 같은 이유 — subtle 배경 카드 위에서 hover가 카드에 녹아 사라진다
+              _hover: 'surface.muted',
+              _active: 'interactive.hover',
+              _pressed: 'interactive.hover',
             },
             _disabled: 'transparent',
           },
