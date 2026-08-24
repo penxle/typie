@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { layoutRails, maxRailLanes, RAIL_CHIP_SIZE, RAIL_TEXT_GAP, RAIL_WIDTH, railLeft } from './rail-layout.ts';
+import { layoutRailHitTargets, layoutRails, maxRailLanes, RAIL_CHIP_SIZE, RAIL_TEXT_GAP, RAIL_WIDTH, railLeft } from './rail-layout.ts';
 import type { PlacedRail, RailSpan } from './rail-layout.ts';
 
 const span = (id: string, top: number, height: number): RailSpan => ({
@@ -99,5 +99,30 @@ describe('maxRailLanes', () => {
   it('셈이 0 이하로 떨어져도 한 레인은 남는다', () => {
     expect(maxRailLanes(64)).toBe(1);
     expect(maxRailLanes(0)).toBe(1);
+  });
+});
+
+describe('layoutRailHitTargets', () => {
+  it('숫자와 막대를 포함하는 가장 작은 사각형을 만든다', () => {
+    const [target] = layoutRailHitTargets([span('a:0', 10, 40)], 100);
+
+    expect(target.hitBox).toEqual({ left: 35, top: 10, right: 56, bottom: 50 });
+  });
+
+  it('같은 레인에서는 작은 클릭 범위에 더 높은 우선순위를 준다', () => {
+    const [large, small] = layoutRailHitTargets([span('large:0', 0, 80), span('small:0', 100, 20)], 100);
+
+    expect(small.lane).toBe(large.lane);
+    expect(small.hitPriority).toBeGreaterThan(large.hitPriority);
+  });
+
+  it('클릭 범위가 더 커도 바깥 레인에 놓인 것에 높은 우선순위를 준다', () => {
+    const [inner, outer] = layoutRailHitTargets([span('inner:0', 0, 20), span('outer:0', 5, 80)], 100);
+
+    expect(outer.lane).toBeGreaterThan(inner.lane);
+    expect((outer.hitBox.right - outer.hitBox.left) * (outer.hitBox.bottom - outer.hitBox.top)).toBeGreaterThan(
+      (inner.hitBox.right - inner.hitBox.left) * (inner.hitBox.bottom - inner.hitBox.top),
+    );
+    expect(outer.hitPriority).toBeGreaterThan(inner.hitPriority);
   });
 });
