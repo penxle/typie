@@ -23,11 +23,13 @@ amazonses
 androidx
 anifantakis
 aosp
+apng
 apollographql
 argb
 batang
 bbox
 bento
+bitangent
 bitnamilegacy
 blits
 blpop
@@ -69,8 +71,10 @@ ffprobe
 fira
 fntf
 fnts
+fract
 fstype
 futureor
+fwidth
 genai
 getenv
 glyf
@@ -79,6 +83,7 @@ graphqls
 hdel
 healthz
 hgetall
+highp
 hkeys
 hmget
 hset
@@ -91,8 +96,11 @@ imbl
 indexeddb
 initdb
 inlines
+inout
+inversesqrt
 inview
 ipaddr
+ivec
 jaccard
 kakao
 kakaokompassauth
@@ -118,6 +126,7 @@ lrange
 ltrim
 ltwh
 lucide
+luma
 luthor
 mearie
 mediump
@@ -211,6 +220,7 @@ shiki
 sindresorhus
 skia
 skiko
+slerp
 smembers
 squircle
 srandmember
@@ -220,6 +230,7 @@ sslmode
 stakater
 stibee
 talosctl
+texel
 tini
 tlsv
 tmpl
@@ -232,11 +243,13 @@ udids
 uikit
 unapply
 unclipped
+unconfigure
 unmigratable
 UNDISPATCHED
 uniffi
 unplugin
 unpushed
+unquantized
 unreact
 unreacted
 unresolve
@@ -254,6 +267,7 @@ virtiofs
 vite
 wbindgen
 webp
+wgpu
 wonka
 xact
 xadd

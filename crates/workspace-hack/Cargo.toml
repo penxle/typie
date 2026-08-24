@@ -8,13 +8,16 @@ publish = false
 ### BEGIN HAKARI SECTION
 [dependencies]
 bytemuck = { version = "1", default-features = false, features = ["derive", "extern_crate_alloc", "min_const_generics", "must_cast"] }
+hashbrown = { version = "0.17" }
 icu_locale_core = { version = "2", default-features = false, features = ["alloc", "serde", "zerovec"] }
 icu_provider = { version = "2", default-features = false, features = ["alloc", "baked", "deserialize_postcard_1", "sync"] }
 icu_segmenter = { version = "2", default-features = false, features = ["auto", "compiled_data", "serde"] }
 imbl = { version = "7", default-features = false, features = ["serde"] }
+indexmap = { version = "2" }
 js-sys = { version = "0.3" }
 litemap = { version = "0.8", default-features = false, features = ["serde"] }
 log = { version = "0.4", default-features = false, features = ["std"] }
+naga-types = { version = "30", default-features = false, features = ["std"] }
 once_cell = { version = "1", default-features = false, features = ["alloc"] }
 phf_shared = { version = "0.14", default-features = false, features = ["std"] }
 read-fonts = { version = "0.42" }
@@ -32,13 +35,16 @@ zerotrie = { version = "0.2", default-features = false, features = ["serde", "yo
 
 [build-dependencies]
 bytemuck = { version = "1", default-features = false, features = ["derive", "extern_crate_alloc", "min_const_generics", "must_cast"] }
+hashbrown = { version = "0.17" }
 icu_locale_core = { version = "2", default-features = false, features = ["alloc", "serde", "zerovec"] }
 icu_provider = { version = "2", default-features = false, features = ["alloc", "baked", "deserialize_postcard_1", "sync"] }
 icu_segmenter = { version = "2", default-features = false, features = ["auto", "compiled_data", "serde"] }
 imbl = { version = "7", default-features = false, features = ["serde"] }
+indexmap = { version = "2" }
 js-sys = { version = "0.3" }
 litemap = { version = "0.8", default-features = false, features = ["serde"] }
 log = { version = "0.4", default-features = false, features = ["std"] }
+naga-types = { version = "30", default-features = false, features = ["std"] }
 once_cell = { version = "1", default-features = false, features = ["alloc"] }
 phf_shared = { version = "0.14", default-features = false, features = ["std"] }
 read-fonts = { version = "0.42" }
@@ -58,10 +64,34 @@ zerotrie = { version = "0.2", default-features = false, features = ["serde", "yo
 
 [target.aarch64-apple-darwin.dependencies]
 bitflags = { version = "2", default-features = false, features = ["std"] }
+block2 = { version = "0.6" }
 libc = { version = "0.2" }
+naga = { version = "30", features = ["glsl-in", "msl-out", "wgsl-in", "wgsl-out"] }
+objc2 = { version = "0.6" }
+objc2-core-foundation = { version = "0.3" }
+objc2-foundation = { version = "0.3", default-features = false, features = ["NSArray", "NSBundle", "NSData", "NSDictionary", "NSEnumerator", "NSError", "NSGeometry", "NSKeyValueObserving", "NSNotification", "NSNull", "NSObjCRuntime", "NSObject", "NSProcessInfo", "NSRange", "NSString", "NSThread", "NSURL", "NSValue", "objc2-core-foundation", "std"] }
+objc2-metal = { version = "0.3" }
+once_cell = { version = "1", default-features = false, features = ["std"] }
+smallvec = { version = "1", default-features = false, features = ["union"] }
 
 [target.aarch64-apple-darwin.build-dependencies]
 bitflags = { version = "2", default-features = false, features = ["std"] }
+block2 = { version = "0.6" }
 libc = { version = "0.2" }
+naga = { version = "30", features = ["glsl-in", "msl-out", "wgsl-in", "wgsl-out"] }
+objc2 = { version = "0.6" }
+objc2-core-foundation = { version = "0.3" }
+objc2-foundation = { version = "0.3", default-features = false, features = ["NSArray", "NSBundle", "NSData", "NSDictionary", "NSEnumerator", "NSError", "NSGeometry", "NSKeyValueObserving", "NSNotification", "NSNull", "NSObjCRuntime", "NSObject", "NSProcessInfo", "NSRange", "NSString", "NSThread", "NSURL", "NSValue", "objc2-core-foundation", "std"] }
+objc2-metal = { version = "0.3" }
+once_cell = { version = "1", default-features = false, features = ["std"] }
+smallvec = { version = "1", default-features = false, features = ["union"] }
+
+[target.wasm32-unknown-unknown.dependencies]
+wasm-bindgen-futures = { version = "0.4" }
+web-sys = { version = "0.3", default-features = false, features = ["HtmlImageElement", "HtmlVideoElement", "ImageBitmap", "MediaQueryList", "Navigator", "NodeList", "VideoFrame", "WorkerGlobalScope", "WorkerNavigator"] }
+
+[target.wasm32-unknown-unknown.build-dependencies]
+wasm-bindgen-futures = { version = "0.4" }
+web-sys = { version = "0.3", default-features = false, features = ["HtmlImageElement", "HtmlVideoElement", "ImageBitmap", "MediaQueryList", "Navigator", "NodeList", "VideoFrame", "WorkerGlobalScope", "WorkerNavigator"] }
 
 ### END HAKARI SECTION

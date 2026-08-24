@@ -734,6 +734,8 @@ importers:
 
   crates/editor-ffi: {}
 
+  crates/prism-ui-web: {}
+
   packages/adapter-node:
     dependencies:
       '@hono/node-server':
@@ -874,6 +876,21 @@ importers:
       vitest:
         specifier: ^4.1.10
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@26.1.2)(@vitest/browser-playwright@4.1.10)(jsdom@30.0.1(@noble/hashes@2.2.0))(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.6.1)(tsx@4.23.5)(yaml@2.9.0))
+
+  packages/prism-ui:
+    devDependencies:
+      '@types/node':
+        specifier: ^26.1.2
+        version: 26.1.2
+      '@typie/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      '@webgpu/types':
+        specifier: ^0.1.72
+        version: 0.1.72
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
 
   packages/styled-system:
     dependencies:
@@ -4440,6 +4457,9 @@ packages:
 
   '@vue/shared@3.5.25':
     resolution: {integrity: sha512-AbOPdQQnAnzs58H2FrrDxYj/TJfmeS2jdfEEhgiKINy+bnOANmVizIEgq1r+C5zsbs6l1CCQxtcj71rwNQ4jWg==}
+
+  '@webgpu/types@0.1.72':
+    resolution: {integrity: sha512-0cF7RFM2edNoiIS1ODJp0/Gzv4/xSXhwoR0YCza+OWpJWtn4wmo9DvK91aLlH9+uUnwIriP7ZiC3WitmyhuzBw==}
 
   '@whatwg-node/disposablestack@0.0.6':
     resolution: {integrity: sha512-LOtTn+JgJvX8WfBVJtF08TGrdjuFzGJc4mkP8EdDI8ADbvO7kiexYep1o8dwnt0okb0jYclCDXF13xU7Ge4zSw==}
@@ -12817,6 +12837,8 @@ snapshots:
       '@vue/shared': 3.5.25
 
   '@vue/shared@3.5.25': {}
+
+  '@webgpu/types@0.1.72': {}
 
   '@whatwg-node/disposablestack@0.0.6':
     dependencies:

@@ -1,0 +1,6 @@
+{
+  "extends": ["@typie/tsconfig"],
+  "compilerOptions": {
+    "types": ["@types/node", "@webgpu/types"]
+  }
+}

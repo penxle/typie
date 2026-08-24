@@ -1,0 +1,20 @@
+{
+  "name": "@typie/prism-ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint:eslint": "eslint --max-warnings 0 .",
+    "lint:typecheck": "tsc",
+    "test": "node --test src/**/*.test.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.2",
+    "@typie/tsconfig": "workspace:*",
+    "@webgpu/types": "^0.1.72",
+    "typescript": "^6.0.3"
+  }
+}

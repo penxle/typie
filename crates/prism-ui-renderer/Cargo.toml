@@ -1,0 +1,17 @@
+[package]
+name = "prism-ui-renderer"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+rust-version = "1.87"
+version = "0.1.0"
+build = "build.rs"
+
+[dependencies]
+bytemuck.workspace = true
+glam.workspace = true
+thiserror.workspace = true
+wgpu.workspace = true
+workspace-hack = { version = "0.1", path = "../workspace-hack" }
+
+[build-dependencies]
+naga.workspace = true

@@ -1,0 +1,39 @@
+workspace_dir := justfile_directory() / "../.."
+target_dir := workspace_dir / "target"
+
+crate := "prism_ui_web"
+mode := "release"
+profile := if mode == "debug" { "dev-wasm-browser" } else { "release-wasm-browser" }
+bindgen := "cargo run --quiet -p editor-bindgen --features bin --bin"
+
+[private]
+default:
+    @just --list
+
+# Build client WASM (browser)
+wasm-browser: (ensure "wasm-opt")
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ "{{mode}}" != "release" ] && [ "{{mode}}" != "debug" ]; then
+      echo "mode must be release or debug" >&2
+      exit 2
+    fi
+    rustup target add wasm32-unknown-unknown
+    cargo build --manifest-path {{justfile_directory()}}/Cargo.toml \
+      --profile {{profile}} --target wasm32-unknown-unknown
+    rm -rf {{justfile_directory()}}/pkg/browser
+    mkdir -p {{justfile_directory()}}/pkg/browser
+    {{bindgen}} wasm-bindgen-cli -- --target module \
+      --out-dir {{justfile_directory()}}/pkg/browser \
+      {{target_dir}}/wasm32-unknown-unknown/{{profile}}/{{crate}}.wasm
+    {{bindgen}} editor-bindgen-js -- {{justfile_directory()}}/pkg/browser/{{crate}}
+    if [ "{{mode}}" = "release" ]; then
+      wasm-opt -Os --all-features \
+        -o {{justfile_directory()}}/pkg/browser/{{crate}}_bg.wasm \
+        {{justfile_directory()}}/pkg/browser/{{crate}}_bg.wasm
+    fi
+
+[private]
+ensure cmd *install:
+    #!/usr/bin/env bash
+    command -v {{cmd}} &> /dev/null || cargo install {{ if install == "" { cmd } else { install } }}

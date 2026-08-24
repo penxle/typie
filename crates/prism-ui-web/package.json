@@ -1,0 +1,16 @@
+{
+  "name": "@typie/prism-ui-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./browser": {
+      "types": "./pkg/browser/prism_ui_web.d.ts",
+      "default": "./pkg/browser/prism_ui_web.js"
+    },
+    "./browser/wasm": "./pkg/browser/prism_ui_web_bg.wasm"
+  },
+  "files": [
+    "pkg"
+  ]
+}

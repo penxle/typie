@@ -9,6 +9,7 @@ out/
 pkg/
 
 !crates/editor-ffi/pkg/
+!crates/prism-ui-web/pkg/
 
 .env.local
 kubeconfig
