@@ -40,7 +40,7 @@
   import PrismPushCard from './PrismPushCard.svelte';
   import PrismSessionList from './PrismSessionList.svelte';
   import PrismTranscript from './PrismTranscript.svelte';
-  import { startChips } from './start-chips.ts';
+  import { startChipsFor } from './start-chips.ts';
   import { clientResolvers } from './tools/index.ts';
   import { workflowApps } from './workflows/index.ts';
   import type { ToolPolicy, WorkflowMessage } from '@typie/prism';
@@ -698,7 +698,10 @@
     }
   };
 
-  const onQuickSend = (text: string) => onSend(text).catch(() => null);
+  const onChipInsert = (text: string) => {
+    draft = text;
+    composer?.focus();
+  };
 
   const cancelRun = async () => {
     try {
@@ -1068,9 +1071,9 @@
               aria-hidden={!chipsVisible}
             >
               <p class={css({ marginBottom: '6px', fontSize: '13px', fontWeight: 'semibold', color: 'text.faint' })}>제안</p>
-              <div class={flex({ position: 'relative', zIndex: '2', gap: '6px' })}>
-                {#each startChips as chip (chip.insert)}
-                  <button class={chipClass} onclick={() => onQuickSend(chip.insert)} tabindex={chipsVisible ? 0 : -1} type="button">
+              <div class={flex({ position: 'relative', zIndex: '2', flexWrap: 'wrap', gap: '6px' })}>
+                {#each startChipsFor(openDocuments.snapshot().documents.length > 0) as chip (chip.insert)}
+                  <button class={chipClass} onclick={() => onChipInsert(chip.insert)} tabindex={chipsVisible ? 0 : -1} type="button">
                     <Icon icon={chip.icon} size={14} />
                     {chip.label}
                   </button>
