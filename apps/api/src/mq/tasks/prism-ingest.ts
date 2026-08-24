@@ -1,11 +1,12 @@
 import { setTimeout as timeout } from 'node:timers/promises';
 import { logger } from '@typie/lib';
-import { applyDelta, effectiveResolver, parked, pendingServerRequests, sealTurn } from '@typie/prism';
+import { applyDelta, awaitingUser, effectiveResolver, parked, pendingServerRequests, sealTurn } from '@typie/prism';
 import { DelayedError } from 'bullmq';
 import dayjs from 'dayjs';
-import { and, asc, eq, inArray, ne } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNotNull, isNull, ne } from 'drizzle-orm';
 import { redis } from '#/cache.ts';
 import { db, first, firstOrThrow, PrismRuns, PrismSessionEvents, PrismSessions, PrismWorkflowEvents, PrismWorkflows } from '#/db/index.ts';
+import { env } from '#/env.ts';
 import { prism, PrismApiError } from '#/external/prism.ts';
 import { pumpSse } from '#/external/prism-stream.ts';
 import { pubsub } from '#/pubsub.ts';
@@ -15,8 +16,9 @@ import { absentDelay, liveFieldKey, PARKED_KINDS, parseLogKey, planEvent, should
 import { serveTool } from '#/utils/prism-serve.ts';
 import { closeRun, linkWorkflowFromEvent, titleSession } from '#/utils/prism-workflows.ts';
 import { ensureIngest, shutdown } from '../prism-queue.ts';
-import { askBody, pushKey, subjectTitle } from './prism-core.ts';
-import type { EventFrame, ParkedEvent, ParkedOptions, StreamFrame, TurnLive } from '@typie/prism';
+import { pushCopy, pushKey } from './prism-core.ts';
+import { shouldPushAsk } from './prism-push-gate.ts';
+import type { EventFrame, ParkedEvent, ParkedOptions, StreamFrame, ToolPolicy, TurnLive } from '@typie/prism';
 import type { Job } from 'bullmq';
 import type { Transaction } from '#/db/index.ts';
 import type { ProjectedScope } from '#/utils/prism-events.ts';
@@ -75,21 +77,31 @@ export const agentParked = async (sessionId: string, events: ParkedEvent[], reso
   parked(events, 'agent', { resolverOf }) &&
   parked(events, 'agent', { settledWorkflows: await loadSettledWorkflows(sessionId), resolverOf });
 
-const pushAsk = async (session: SessionRef, op: Extract<DomainOp, { op: 'ask-push' }>) => {
+const pushAsk = async (session: SessionRef, op: Extract<DomainOp, { op: 'ask-push' }>, policy: ToolPolicy) => {
+  if (!shouldPushAsk(op.tool, policy)) return;
+
   const { PUSH_TTL_SECONDS, sendPushNotificationOnce } = await import('#/external/firebase.ts');
   if (Date.now() - op.at > PUSH_TTL_SECONDS * 1000) return;
+
+  const { title, body } = pushCopy(op.tool, op.data, session.title);
 
   const delivery = await sendPushNotificationOnce({
     key: pushKey.ask(op.toolCallId),
     userId: session.userId,
-    title: `질문이 있어요 — ${subjectTitle(session.title)}`,
-    body: askBody(op.questions),
+    title,
+    body,
+    link: `${env.WEBSITE_URL}/initial?prism=${session.id}`,
   });
 
   if (delivery === 'failed') throw new Error(`prism ask push failed for ${op.toolCallId}`);
 };
 
-const applyAgentOp = async (tx: Transaction, session: SessionRef, op: DomainOp): Promise<(() => Promise<void>) | null> => {
+const applyAgentOp = async (
+  tx: Transaction,
+  session: SessionRef,
+  op: DomainOp,
+  policy: ToolPolicy,
+): Promise<(() => Promise<void>) | null> => {
   switch (op.op) {
     case 'run-started': {
       await tx
@@ -125,7 +137,7 @@ const applyAgentOp = async (tx: Transaction, session: SessionRef, op: DomainOp):
     }
 
     case 'ask-push': {
-      await pushAsk(session, op);
+      await pushAsk(session, op, policy);
       return null;
     }
 
@@ -151,6 +163,7 @@ const applyWorkflowOp = async (
   workflow: typeof PrismWorkflows.$inferSelect,
   session: SessionRef,
   op: DomainOp,
+  policy: ToolPolicy,
 ): Promise<(() => Promise<void>) | null> => {
   switch (op.op) {
     case 'workflow-settle': {
@@ -165,12 +178,13 @@ const applyWorkflowOp = async (
       workflow.state = op.state;
       return async () => {
         await settled?.();
+        pubsub.publish('prism:badge', session.userId, { sessionId: session.id });
         await ensureIngest({ kind: 'agent', sessionId: session.id });
       };
     }
 
     case 'ask-push': {
-      await pushAsk(session, op);
+      await pushAsk(session, op, policy);
       return null;
     }
 
@@ -247,6 +261,42 @@ const runPump = async (ctx: PumpContext): Promise<PumpOutcome> => {
   let absent = 0;
   let absentSince: number | null = null;
   let liveTtlAt = 0;
+  let awaitingWritten: boolean | null = null;
+
+  const writeAwaiting = async (waiting: boolean): Promise<void> => {
+    if (waiting === awaitingWritten) return;
+
+    const at = waiting ? dayjs() : null;
+    const rows =
+      target.kind === 'agent'
+        ? await db
+            .update(PrismSessions)
+            .set({ awaitingUserAt: at })
+            .where(
+              and(
+                eq(PrismSessions.id, target.sessionId),
+                waiting ? isNull(PrismSessions.awaitingUserAt) : isNotNull(PrismSessions.awaitingUserAt),
+              ),
+            )
+            .returning({ id: PrismSessions.id })
+        : await db
+            .update(PrismWorkflows)
+            .set({ awaitingUserAt: at })
+            .where(
+              and(
+                eq(PrismWorkflows.id, target.workflowId),
+                waiting ? isNull(PrismWorkflows.awaitingUserAt) : isNotNull(PrismWorkflows.awaitingUserAt),
+              ),
+            )
+            .returning({ id: PrismWorkflows.id });
+
+    awaitingWritten = waiting;
+    if (rows.length > 0) pubsub.publish('prism:badge', session.userId, { sessionId: session.id });
+  };
+
+  const syncAwaiting = async (): Promise<void> => {
+    await writeAwaiting(awaitingUser(parkedEvents, parkedScope, (tool) => effectiveResolver(tool, policyRow.toolPolicy)));
+  };
 
   const isOpen = async (): Promise<boolean> => {
     if (target.kind === 'agent') {
@@ -343,7 +393,9 @@ const runPump = async (ctx: PumpContext): Promise<PumpOutcome> => {
 
       for (const op of plan.ops) {
         const wake =
-          target.kind === 'agent' ? await applyAgentOp(tx, session, op) : await applyWorkflowOp(tx, requireWorkflow(), session, op);
+          target.kind === 'agent'
+            ? await applyAgentOp(tx, session, op, policyRow.toolPolicy)
+            : await applyWorkflowOp(tx, requireWorkflow(), session, op, policyRow.toolPolicy);
         if (wake !== null) after.push(wake);
       }
 
@@ -397,6 +449,8 @@ const runPump = async (ctx: PumpContext): Promise<PumpOutcome> => {
           if (frame.type === 'sync') synced = true;
           else await onEvent(frame.event);
 
+          await syncAwaiting();
+
           if (await stopNow()) throw new StopPump();
         },
       }).catch((err: unknown) => {
@@ -420,6 +474,7 @@ const runPump = async (ctx: PumpContext): Promise<PumpOutcome> => {
             .where(eq(PrismSessions.id, target.sessionId))
             .then(firstOrThrow);
           if (row.openRunSeq !== null) await closeRun(db, target.sessionId, row.openRunSeq);
+          await writeAwaiting(false);
           log.warn('prism agent absent, closing: {sessionId}', { sessionId: target.sessionId });
           return 'done';
         }
@@ -428,6 +483,7 @@ const runPump = async (ctx: PumpContext): Promise<PumpOutcome> => {
         absentSince ??= Date.now();
         const next = absentDelay(absent, Date.now() - absentSince);
         if (next === null) {
+          await writeAwaiting(false);
           log.warn('prism workflow still absent after grace, giving up: {workflowId}', { workflowId: target.workflowId });
           return 'done';
         }

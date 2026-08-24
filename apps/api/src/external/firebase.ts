@@ -13,10 +13,10 @@ export const messaging = getMessaging(app);
 
 export const PUSH_TTL_SECONDS = 7 * 24 * 60 * 60;
 
-type SendPushNotificationParams = { userId: string; title: string; body: string };
+type SendPushNotificationParams = { userId: string; title: string; body: string; link?: string };
 export type PushDelivery = 'sent' | 'no-tokens' | 'failed';
 
-export const sendPushNotification = async ({ userId, title, body }: SendPushNotificationParams): Promise<PushDelivery> => {
+export const sendPushNotification = async ({ userId, title, body, link }: SendPushNotificationParams): Promise<PushDelivery> => {
   const tokens = await db
     .select({ token: UserPushNotificationTokens.token })
     .from(UserPushNotificationTokens)
@@ -51,6 +51,7 @@ export const sendPushNotification = async ({ userId, title, body }: SendPushNoti
             defaultVibrateTimings: true,
           },
         },
+        ...(link?.startsWith('https://') && { webpush: { fcmOptions: { link } } }),
       });
 
       success = true;
@@ -69,10 +70,11 @@ export const sendPushNotificationOnce = async ({
   userId,
   title,
   body,
+  link,
 }: SendPushNotificationParams & { key: string }): Promise<PushDelivery> => {
   if ((await redis.get(key)) !== null) return 'sent';
 
-  const delivery = await sendPushNotification({ userId, title, body });
+  const delivery = await sendPushNotification({ userId, title, body, link });
   if (delivery !== 'failed') await redis.set(key, '1', 'EX', PUSH_TTL_SECONDS, 'NX');
 
   return delivery;

@@ -7,6 +7,7 @@
   import mixpanel from 'mixpanel-browser';
   import PanelLeftIcon from '~icons/lucide/panel-left';
   import PrismIcon from '~icons/typie/prism';
+  import PrismBadgeDot from './@prism/PrismBadgeDot.svelte';
 
   const app = getAppContext();
 
@@ -72,7 +73,12 @@
       type="button"
       use:tooltip={{ message: open ? 'PRISM 닫기' : 'PRISM 열기', keys: ['Mod', 'E'] }}
     >
-      <Icon style={css.raw({ flexShrink: '0', color: open ? 'text.default' : 'text.faint' })} icon={PrismIcon} size={14} />
+      <span class={css({ position: 'relative', display: 'flex', flexShrink: '0' })}>
+        <Icon style={css.raw({ color: open ? 'text.default' : 'text.faint' })} icon={PrismIcon} size={14} />
+        {#if app.state.prismBadge}
+          <PrismBadgeDot />
+        {/if}
+      </span>
       <span
         class={css({
           fontSize: '12px',

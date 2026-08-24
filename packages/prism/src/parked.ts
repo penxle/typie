@@ -67,6 +67,15 @@ export const parked = (events: ParkedEvent[], scope: ParkedScope, options: Parke
   return openRuns.size > 0 && [...openRuns].every((run) => waiting(run));
 };
 
+export const awaitingUser = (
+  events: ParkedEvent[],
+  scope: ParkedScope,
+  resolverOf: (tool: string) => ToolResolver = toolResolver,
+): boolean => {
+  const { openRuns, requests } = fold(events, scope);
+  return [...openRuns].some((run) => [...requests.values()].some((request) => request.run === run && resolverOf(request.tool) === 'user'));
+};
+
 export type PendingServerRequest = { toolCallId: string; tool: string; input: unknown; agentId: string; runSeq: number | null };
 
 export const pendingServerRequests = (events: ParkedEvent[], scope: ParkedScope, policy: ToolPolicy): PendingServerRequest[] => {

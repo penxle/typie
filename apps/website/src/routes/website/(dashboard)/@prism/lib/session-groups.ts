@@ -4,6 +4,9 @@ export type SessionGroup<T> = { key: string; label: string; sessions: T[] };
 
 export const sessionLabel = (session: { title?: string | null }): string => session.title ?? '새 대화';
 
+export const hasUnread = (session: { archivedAt?: string | null; awaitingUser: boolean; unseenReviewCount: number }): boolean =>
+  session.archivedAt == null && (session.awaitingUser || session.unseenReviewCount > 0);
+
 export const groupSessionsByRecency = <T extends { updatedAt: string }>(sessions: readonly T[], now = dayjs()): SessionGroup<T>[] => {
   const today = now.startOf('day');
   const yesterday = today.subtract(1, 'day');

@@ -14,10 +14,11 @@ import { NotFoundError, TypieError } from '@typie/lib/errors';
 import { prismSchema } from '@typie/lib/validation';
 import { ApproveInputSchema, DECLINED_MESSAGE, serveVerdict, toGraphQL, TOOL_META, toolFailure } from '@typie/prism';
 import dayjs from 'dayjs';
-import { and, asc, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { Repeater } from 'graphql-yoga';
 import { nanoid } from 'nanoid';
 import { redis } from '#/cache.ts';
+import { clearLoaders } from '#/context.ts';
 import {
   db,
   Documents,
@@ -25,6 +26,7 @@ import {
   first,
   firstOrThrow,
   Folders,
+  PrismReviewRounds,
   PrismRuns,
   PrismSessionEvents,
   PrismSessions,
@@ -330,6 +332,56 @@ PrismSession.implement({
     createdAt: t.expose('createdAt', { type: 'DateTime' }),
     updatedAt: t.expose('updatedAt', { type: 'DateTime' }),
 
+    awaitingUser: t.boolean({
+      resolve: async (self, _, ctx) => {
+        if (self.awaitingUserAt !== null) return true;
+
+        const loader = ctx.loader({
+          name: 'PrismSession.awaitingWorkflow',
+          nullable: true,
+          load: async (sessionIds: string[]) => {
+            return await db
+              .selectDistinct({ sessionId: PrismWorkflows.sessionId })
+              .from(PrismWorkflows)
+              .where(
+                and(
+                  inArray(PrismWorkflows.sessionId, sessionIds),
+                  eq(PrismWorkflows.state, 'RUNNING'),
+                  isNotNull(PrismWorkflows.awaitingUserAt),
+                ),
+              );
+          },
+          key: (row) => row?.sessionId,
+        });
+
+        return (await loader.load(self.id)) !== null;
+      },
+    }),
+
+    unseenReviewCount: t.int({
+      resolve: async (self, _, ctx) => {
+        const loader = ctx.loader({
+          name: 'PrismSession.completedReviewRounds',
+          many: true,
+          load: async (sessionIds: string[]) => {
+            return await db
+              .select({ sessionId: PrismReviewRounds.sessionId, finishedAt: PrismWorkflows.finishedAt })
+              .from(PrismReviewRounds)
+              .innerJoin(PrismWorkflows, eq(PrismWorkflows.id, PrismReviewRounds.workflowId))
+              .where(and(inArray(PrismReviewRounds.sessionId, sessionIds), eq(PrismWorkflows.state, 'COMPLETED')));
+          },
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+          key: ({ sessionId }) => sessionId!,
+        });
+
+        const rows = await loader.load(self.id);
+        const seenAt = self.seenAt;
+        if (seenAt === null) return rows.length;
+
+        return rows.filter((row) => row.finishedAt !== null && row.finishedAt.isAfter(seenAt)).length;
+      },
+    }),
+
     transcript: t.field({ type: PrismTranscript, resolve: (self) => loadTranscript(self) }),
   }),
 });
@@ -584,6 +636,7 @@ builder.mutationFields((t) => ({
       const session = await ownedSession(input.sessionId, ctx.session.userId);
       await cancelSessionWorkflows(session.id);
       await cancelActiveRun(session.prismAgentId).catch(prismError);
+      await ensureIngest({ kind: 'agent', sessionId: session.id });
       return session;
     },
   }),
@@ -687,6 +740,25 @@ builder.mutationFields((t) => ({
     },
   }),
 
+  markPrismSessionSeen: t.withAuth({ session: true }).fieldWithInput({
+    type: PrismSession,
+    input: { sessionId: t.input.id({ validate: validateDbId(TableCode.PRISM_SESSIONS) }) },
+    resolve: async (_, { input }, ctx) => {
+      const session = await ownedSession(input.sessionId, ctx.session.userId);
+
+      const updated = await db
+        .update(PrismSessions)
+        .set({ seenAt: dayjs() })
+        .where(eq(PrismSessions.id, session.id))
+        .returning()
+        .then(firstOrThrow);
+
+      pubsub.publish('prism:badge', ctx.session.userId, { sessionId: updated.id });
+
+      return updated;
+    },
+  }),
+
   reactPrismRun: t.withAuth({ session: true }).fieldWithInput({
     type: PrismRun,
     input: {
@@ -714,6 +786,16 @@ builder.mutationFields((t) => ({
 }));
 
 builder.subscriptionFields((t) => ({
+  prismBadgeStream: t.withAuth({ session: true }).field({
+    type: PrismSession,
+    subscribe: async (_, __, ctx) => pubsub.subscribe('prism:badge', ctx.session.userId),
+    resolve: (payload, _, ctx) => {
+      // 구독 ctx는 소켓 수명이다 — 로더를 비우지 않으면 두 번째 이벤트부터 첫 값이 굳는다
+      clearLoaders(ctx);
+      return payload.sessionId;
+    },
+  }),
+
   prismSessionEvents: t.withAuth({ session: true }).field({
     type: 'JSON',
     args: {

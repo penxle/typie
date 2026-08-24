@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parked, pendingServerRequests } from './parked.ts';
+import { awaitingUser, parked, pendingServerRequests } from './parked.ts';
 import { effectiveResolver } from './tools.ts';
 import type { ParkedEvent } from './parked.ts';
 import type { ToolPolicy } from './tools.ts';
@@ -130,5 +130,47 @@ describe('pendingServerRequests', () => {
     const events = [runStarted, request('t1', 'delete-entities')];
     expect(pendingServerRequests(events, 'agent', 'STANDARD')).toEqual([]);
     expect(pendingServerRequests(events, 'agent', 'FULL')).toHaveLength(1);
+  });
+});
+
+describe('awaitingUser', () => {
+  it('user 해소 요청이 미해소면 true, 해소되면 false', () => {
+    const events = [ev('run.started', run(root)), ev('tool.requested', tool(root, 'c1'), { tool: 'ask-user' })];
+    expect(awaitingUser(events, 'agent')).toBe(true);
+    expect(awaitingUser([...events, ev('tool.resolved', tool(root, 'c1'), { tool: 'ask-user' })], 'agent')).toBe(false);
+  });
+
+  it('워크플로 구동 중은 대기가 아니다 — parked와 갈리는 지점', () => {
+    const inv = { ...tool(root, 'c1'), invocation: 'inv_1' };
+    const events = [ev('run.started', run(root)), ev('invocation.started', inv, { target: { kind: 'workflow', id: 'wf_1' } })];
+    expect(parked(events, 'agent')).toBe(true);
+    expect(awaitingUser(events, 'agent')).toBe(false);
+  });
+
+  it('client 해소 요청은 대기가 아니고, 미등재 도구는 대기다', () => {
+    const base = [ev('run.started', run(root))];
+    expect(awaitingUser([...base, ev('tool.requested', tool(root, 'c1'), { tool: 'list-open-documents' })], 'agent')).toBe(false);
+    expect(awaitingUser([...base, ev('tool.requested', tool(root, 'c2'), { tool: 'unknown-thing' })], 'agent')).toBe(true);
+  });
+
+  it('run이 종결되면 그 run의 미해소 요청은 무시된다', () => {
+    const events = [
+      ev('run.started', run(root)),
+      ev('tool.requested', tool(root, 'c1'), { tool: 'ask-user' }),
+      ev('run.completed', run(root)),
+    ];
+    expect(awaitingUser(events, 'agent')).toBe(false);
+  });
+
+  it('workflow 스코프도 하나라도 대기면 true — parked의 every와 다르다', () => {
+    const events = [ev('run.started', run(child)), ev('tool.requested', tool(child, 'c1'), { tool: 'ask-user' })];
+    expect(awaitingUser(events, 'workflow')).toBe(true);
+  });
+
+  it('resolverOf 주입으로 정책 반영 판정을 쓴다', () => {
+    const events = [ev('run.started', run(root)), ev('tool.requested', tool(root, 'c1'), { tool: 'delete-entities' })];
+    const policy = (p: ToolPolicy) => (t: string) => effectiveResolver(t, p);
+    expect(awaitingUser(events, 'agent', policy('STANDARD'))).toBe(true);
+    expect(awaitingUser(events, 'agent', policy('FULL'))).toBe(false);
   });
 });

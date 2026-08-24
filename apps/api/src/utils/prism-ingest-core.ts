@@ -1,8 +1,8 @@
 // 순수 — env·DB·네트워크 import 없음(node:test 직접 로드)
-import { AskQuestionsSchema, TOOL_META, WorkflowUsageSchema } from '@typie/prism';
+import { TOOL_META, WorkflowUsageSchema } from '@typie/prism';
 import { z } from 'zod';
 import type { PrismRunState, PrismWorkflowState } from '@typie/lib/enums';
-import type { AskQuestion, EventFrame, ParkedScope, ProjectedDeltaFrame, ProjectedStreamFrame, RunUsage, TurnLive } from '@typie/prism';
+import type { EventFrame, ParkedScope, ProjectedDeltaFrame, ProjectedStreamFrame, RunUsage, TurnLive } from '@typie/prism';
 
 export type IngestTarget = { kind: 'agent'; sessionId: string } | { kind: 'workflow'; workflowId: string };
 
@@ -49,7 +49,7 @@ export type DomainOp =
   | { op: 'run-terminal'; runSeq: number; state: PrismRunState; at: number }
   | { op: 'workflow-link'; descriptor: { prismWorkflowId: string; app: string; name: string; ref: string | null; startedAt: number } }
   | { op: 'titled'; title: string }
-  | { op: 'ask-push'; toolCallId: string; questions: AskQuestion[]; at: number }
+  | { op: 'ask-push'; toolCallId: string; tool: string; data: unknown; at: number }
   | { op: 'tool-serve'; toolCallId: string; tool: string; input: unknown; agentId: string; runSeq: number | null }
   | { op: 'workflow-settle'; state: PrismWorkflowState; result: unknown; usage: RunUsage | null; error: string | null; at: number };
 
@@ -71,9 +71,10 @@ const usageOf = (raw: unknown): RunUsage | null => {
 
 const askPush = (event: EventFrame): DomainOp[] => {
   const toolCallId = event.context?.toolCallId;
-  if (toolCallId === undefined || event.data.tool !== 'ask-user') return [];
-  const parsed = AskQuestionsSchema.safeParse(event.data.data);
-  return parsed.success ? [{ op: 'ask-push', toolCallId, questions: parsed.data.questions, at: event.occurredAt }] : [];
+  if (toolCallId === undefined) return [];
+  const tool = event.data.tool;
+  if (typeof tool !== 'string') return [];
+  return [{ op: 'ask-push', toolCallId, tool, data: event.data.data, at: event.occurredAt }];
 };
 
 const toolServe = (event: EventFrame, scope: ParkedScope): DomainOp[] => {

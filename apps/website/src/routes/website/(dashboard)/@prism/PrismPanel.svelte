@@ -29,7 +29,7 @@
   import { AutoResolver } from './lib/auto-resolve.svelte.ts';
   import { backoffDelay } from './lib/backoff.ts';
   import { expand, swap } from './lib/motion.ts';
-  import { sessionLabel } from './lib/session-groups.ts';
+  import { hasUnread, sessionLabel } from './lib/session-groups.ts';
   import { createPrismChat } from './prism-chat.svelte';
   import { fetchTranscript, toFrame } from './prism-data';
   import { PRISM_PANEL_MAX, PRISM_PANEL_MIN } from './prism-panel.ts';
@@ -37,6 +37,7 @@
   import PrismComposer from './PrismComposer.svelte';
   import PrismGateCard from './PrismGateCard.svelte';
   import PrismPanelIndicator from './PrismPanelIndicator.svelte';
+  import PrismPushCard from './PrismPushCard.svelte';
   import PrismSessionList from './PrismSessionList.svelte';
   import PrismTranscript from './PrismTranscript.svelte';
   import { startChips } from './start-chips.ts';
@@ -81,11 +82,17 @@
           archivedAt
           updatedAt
           toolPolicy
+          awaitingUser
+          unseenReviewCount
         }
       }
     `),
     () => user$key,
   );
+
+  $effect(() => {
+    app.state.prismBadge = user.data.prismSessions.some((session) => hasUnread(session));
+  });
 
   const [archivePrismSession] = createMutation(
     graphql(`
@@ -125,6 +132,17 @@
       mutation DashboardLayout_PrismPanel_Delete_Mutation($input: DeletePrismSessionInput!) {
         deletePrismSession(input: $input) {
           id
+        }
+      }
+    `),
+  );
+
+  const [markPrismSessionSeen] = createMutation(
+    graphql(`
+      mutation DashboardLayout_PrismPanel_MarkSeen_Mutation($input: MarkPrismSessionSeenInput!) {
+        markPrismSessionSeen(input: $input) {
+          id
+          unseenReviewCount
         }
       }
     `),
@@ -494,13 +512,29 @@
     }
   });
 
+  const markSeen = (sessionId: string) => {
+    void markPrismSessionSeen({ input: { sessionId } }).catch(() => null);
+  };
+
   $effect(() => {
     if (!app.state.prismAccess || !app.preference.current.prismPanelOpen) {
       return;
     }
 
     const id = selected.current;
-    untrack(() => void chat.load(id));
+    untrack(() => {
+      void chat.load(id);
+      if (id !== null) markSeen(id);
+    });
+  });
+
+  $effect(() => {
+    const session = currentSession;
+    if (session === null || session.unseenReviewCount === 0 || !app.state.prismAccess || !app.preference.current.prismPanelOpen) {
+      return;
+    }
+
+    untrack(() => markSeen(session.id));
   });
 
   const RECONNECT_MS = [1000, 3000, 10_000, 30_000];
@@ -1045,6 +1079,8 @@
             </div>
           {/if}
         </div>
+
+        <PrismPushCard visible={app.state.prismBadge} />
 
         {#if !chat.loading}
           <PrismComposer

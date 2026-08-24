@@ -12,7 +12,7 @@ export { applyFrame, emptyTranscript, pendingRootRequests, runningWorkflows } fr
 export type { TurnLive } from './delta.ts';
 export { applyDelta, sealTurn, startTurn } from './delta.ts';
 export type { ParkedEvent, ParkedOptions, ParkedScope, PendingServerRequest } from './parked.ts';
-export { parked, pendingServerRequests } from './parked.ts';
+export { awaitingUser, parked, pendingServerRequests } from './parked.ts';
 export type { ProjectedDeltaFrame, ProjectedEventData, ProjectedEventFrame, ProjectedSource, ProjectedStreamFrame } from './projected.ts';
 export { ProjectedEventSchema, ProjectedWorkflowEventSchema } from './projected.ts';
 export type { ReanchorRange } from './reanchor.ts';
