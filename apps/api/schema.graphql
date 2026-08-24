@@ -1327,6 +1327,11 @@ enum PrismToolRequestStatus {
   RESOLVED
 }
 
+enum PrismToolResolver {
+  SERVER
+  USER
+}
+
 type PrismTranscript {
   agentId: String
   cursor: Int!

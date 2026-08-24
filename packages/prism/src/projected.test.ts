@@ -81,6 +81,22 @@ describe('tool data registry', () => {
     });
   });
 
+  it('해소 주체(resolvedBy)는 있으면 그대로 지나가고 없으면 키 자체가 없다 — 카드/실행 줄 판정이 현재 정책이 아니라 이 값에 매인다', () => {
+    const resolved = (data: Record<string, unknown>) => ProjectedEventSchema.parse({ kind: 'tool.resolved', data }).data;
+    expect(resolved({ tool: 'delete-entities', ok: true, data: { ok: true, count: 1 }, resolvedBy: 'server' })).toEqual({
+      tool: 'delete-entities',
+      ok: true,
+      resolvedBy: 'server',
+      data: { ok: true, count: 1 },
+    });
+    expect(resolved({ tool: 'delete-entities', ok: true, data: { ok: true, count: 1 }, resolvedBy: 'user' })).toHaveProperty(
+      'resolvedBy',
+      'user',
+    );
+    expect(resolved({ tool: 'delete-entities', ok: true, data: { ok: true, count: 1 } })).not.toHaveProperty('resolvedBy');
+    expect(() => resolved({ tool: 'delete-entities', ok: true, data: { ok: true, count: 1 }, resolvedBy: 'pump' })).toThrow();
+  });
+
   it('delete-entities 해소 결과는 성공 봉투와 실패 봉투를 모두 보존한다', () => {
     expect(
       ProjectedEventSchema.parse({ kind: 'tool.resolved', data: { tool: 'delete-entities', ok: true, data: { ok: true, count: 2 } } }).data,

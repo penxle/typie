@@ -7,6 +7,7 @@ import {
   PrismToolPhase,
   PrismToolPolicy,
   PrismToolRequestStatus,
+  PrismToolResolver,
   PrismTurnState,
   PrismWorkflowState,
 } from '@typie/lib/enums';
@@ -45,7 +46,7 @@ import { parseAllowlist } from '#/utils/prism-access-core.ts';
 import { prismCommands } from '#/utils/prism-catalog.ts';
 import { projectFrame } from '#/utils/prism-events.ts';
 import { createFrameGate, liveFieldKey, liveSnapshotFrames } from '#/utils/prism-ingest-core.ts';
-import { runSite, withToolLedger } from '#/utils/prism-serve.ts';
+import { recordToolResolution, runSite, withToolLedger } from '#/utils/prism-serve.ts';
 import { ERROR_MESSAGE } from '#/utils/prism-tool-messages.ts';
 import { prismTools } from '#/utils/prism-tools.ts';
 import { materialize } from '#/utils/prism-transcript.ts';
@@ -585,18 +586,18 @@ builder.mutationFields((t) => ({
           if (serveVerdict(tool, session.toolPolicy) === 'deny') throw new TypieError({ code: 'prism_tool_policy', status: 403 });
           const decision = ApproveInputSchema.safeParse(input.input);
           if (!decision.success) throw new TypieError({ code: 'invalid_input', status: 400 });
+          const call = { toolCallId: input.toolCallId, tool, resolver: PrismToolResolver.USER };
           if (decision.data.approve) {
             const pendingData = agent.pending.data;
             try {
-              result = await withToolLedger(session, { toolCallId: input.toolCallId, tool }, (tx) =>
-                handler({ ...context, executor: tx }, pendingData),
-              );
+              result = await withToolLedger(session, call, (tx) => handler({ ...context, executor: tx }, pendingData));
             } catch (err) {
               log.warn('prism tool handler failed: {tool} {*}', { tool, error: err });
               result = toolFailure('error', ERROR_MESSAGE);
             }
           } else {
             result = toolFailure('declined', DECLINED_MESSAGE);
+            await recordToolResolution(session, call, result);
           }
         } else {
           try {

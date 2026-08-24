@@ -24,6 +24,7 @@ export type TranscriptMessage =
       data: unknown;
       status: ToolRequestStatus;
       result?: unknown;
+      resolvedBy?: 'user' | 'server';
       settledAt?: number;
       at: number;
     }
@@ -112,7 +113,13 @@ const resolveRequest = (
 ): TranscriptMessage[] =>
   messages.map((m) =>
     m.role === 'tool-request' && m.status === 'pending' && m.workflowId === workflowId && m.toolCallId === toolCallId
-      ? { ...m, status: 'resolved' as const, result: data.data, settledAt: at }
+      ? {
+          ...m,
+          status: 'resolved' as const,
+          result: data.data,
+          ...(data.resolvedBy !== undefined && { resolvedBy: data.resolvedBy }),
+          settledAt: at,
+        }
       : m,
   );
 

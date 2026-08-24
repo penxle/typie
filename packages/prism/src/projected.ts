@@ -91,10 +91,10 @@ const ToolRequestedData = z
     return narrowed ? { tool, ...narrowed } : z.NEVER;
   });
 const ToolResolvedData = z
-  .object({ tool: z.string(), ok: z.boolean(), data: z.unknown() })
-  .transform(({ tool, ok, data }, ctx): { tool: string; ok: boolean; data?: unknown } => {
+  .object({ tool: z.string(), ok: z.boolean(), data: z.unknown(), resolvedBy: z.enum(['user', 'server']).optional() })
+  .transform(({ tool, ok, data, resolvedBy }, ctx): { tool: string; ok: boolean; data?: unknown; resolvedBy?: 'user' | 'server' } => {
     const narrowed = ok ? narrowData(TOOL_RESULT_DATA, tool, data, ctx) : {};
-    return narrowed ? { tool, ok, ...narrowed } : z.NEVER;
+    return narrowed ? { tool, ok, ...(resolvedBy !== undefined && { resolvedBy }), ...narrowed } : z.NEVER;
   });
 const InvocationStartedData = z.object({
   target: z.union([

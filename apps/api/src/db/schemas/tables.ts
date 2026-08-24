@@ -729,6 +729,7 @@ export const PrismToolCalls = pgTable(
       .references(() => PrismSessions.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     toolCallId: text('tool_call_id').notNull(),
     tool: text('tool').notNull(),
+    resolver: E._PrismToolResolver('resolver').notNull().default('SERVER'),
     result: jsonb('result'),
     createdAt: datetime('created_at')
       .notNull()
