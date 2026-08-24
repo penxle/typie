@@ -66,6 +66,8 @@
             }
 
             conclusion {
+              understanding
+              progress
               patternsCount
               prioritiesCount
               strengthsCount
@@ -735,7 +737,12 @@
       </div>
     {:else if round !== null && result !== null}
       {#if result.kind !== 'rejected'}
-        <div class={css({ marginTop: '12px' })} in:rise={{ block: true }}><PrismReviewResult {result} {round} /></div>
+        <div
+          class={css({ marginTop: '12px', paddingTop: '12px', borderTopWidth: '1px', borderColor: 'border.subtle' })}
+          in:rise={{ block: true }}
+        >
+          <PrismReviewResult {round} />
+        </div>
       {/if}
     {:else}
       <div class={css(skeletonStyle, { width: '[40%]' })}></div>

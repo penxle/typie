@@ -81,30 +81,14 @@ describe('describeResult', () => {
     expect(describeResult(round)).toEqual({ kind: 'rejected' });
   });
 
-  it('결론이 있으면 요약을 만든다', () => {
-    const round = makeRound({
-      issueCount: 7,
-      conclusion: conclusion({ patternsCount: 3, prioritiesCount: 2, strengthsCount: 1 }),
-    });
-
-    expect(describeResult(round)).toEqual({
-      kind: 'summary',
-      counts: '패턴 3 · 우선순위 2 · 강점 1',
-      issues: '본문 여백에 피드백 7개를 남겼어요',
-    });
+  it('거절이 아니면 완료 표지를 낸다', () => {
+    const round = makeRound({ issueCount: 7, conclusion: conclusion({ patternsCount: 3, prioritiesCount: 2, strengthsCount: 1 }) });
+    expect(describeResult(round)).toEqual({ kind: 'completed' });
   });
 
-  it('강점이 없으면 요약에서 강점을 뺀다', () => {
-    const round = makeRound({ conclusion: conclusion({ patternsCount: 1, prioritiesCount: 1 }) });
-    const view = describeResult(round);
-
-    expect(view?.kind).toBe('summary');
-    expect(view?.kind === 'summary' && view.counts).toBe('패턴 1 · 우선순위 1');
-  });
-
-  it('결론이 없으면 리뷰 개수만 낸다', () => {
+  it('결론이 없어도 완료면 완료 표지다', () => {
     const round = makeRound({ issueCount: 4 });
-    expect(describeResult(round)).toEqual({ kind: 'issues', issues: '본문 여백에 피드백 4개를 남겼어요' });
+    expect(describeResult(round)).toEqual({ kind: 'completed' });
   });
 });
 
