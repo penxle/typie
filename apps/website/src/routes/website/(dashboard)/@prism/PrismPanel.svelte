@@ -4,7 +4,7 @@
   import { pendingRootRequests, runningWorkflows } from '@typie/prism';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
-  import { pointerCapture } from '@typie/ui/actions';
+  import { pointerCapture, tooltip } from '@typie/ui/actions';
   import { Button, Icon, Menu, MenuItem } from '@typie/ui/components';
   import { getAppContext, getThemeContext } from '@typie/ui/context';
   import { Dialog, Toast } from '@typie/ui/notification';
@@ -700,7 +700,7 @@
         left: '0',
         width: '8px',
         cursor: 'col-resize',
-        zIndex: '1',
+        zIndex: '4',
         _hoverAfter: {
           content: '""',
           display: 'block',
@@ -797,8 +797,8 @@
             _hover: { backgroundColor: 'surface.muted' },
           })}
           onclick={() => (listOpen = !listOpen)}
-          title={currentTitle}
           type="button"
+          use:tooltip={{ message: currentTitle }}
         >
           {currentTitle}
         </button>
@@ -815,7 +815,11 @@
           placement="bottom-end"
         >
           {#snippet button({ open })}
-            <div class={css(headerButton, open ? { color: 'text.default', backgroundColor: 'surface.muted' } : {})} aria-label="대화 메뉴">
+            <div
+              class={css(headerButton, open ? { color: 'text.default', backgroundColor: 'surface.muted' } : {})}
+              aria-label="대화 메뉴"
+              use:tooltip={{ message: '대화 메뉴' }}
+            >
               <Icon icon={EllipsisIcon} size={16} />
             </div>
           {/snippet}
@@ -874,6 +878,7 @@
           composer?.focus();
         }}
         type="button"
+        use:tooltip={{ message: '새 대화' }}
       >
         <Icon icon={PlusIcon} size={16} />
       </button>
@@ -884,6 +889,7 @@
         aria-pressed={listOpen}
         onclick={() => (listOpen = !listOpen)}
         type="button"
+        use:tooltip={{ message: listOpen ? '대화 목록 닫기' : '대화 목록 열기' }}
       >
         <Icon icon={HistoryIcon} size={16} />
       </button>
@@ -893,6 +899,7 @@
         aria-label="PRISM 닫기"
         onclick={() => (app.preference.current.prismPanelOpen = false)}
         type="button"
+        use:tooltip={{ message: 'PRISM 닫기', keys: ['Mod', 'E'] }}
       >
         <Icon icon={XIcon} size={16} />
       </button>
