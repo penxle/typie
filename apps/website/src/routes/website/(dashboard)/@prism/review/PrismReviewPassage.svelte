@@ -576,7 +576,7 @@
 
 {#snippet liveTail()}
   {#if live !== null && live.boundary > 0 && !draining}
-    <div class={narrationClass}><PrismMarkdown blocks={live.blocks} plain={live.plain} /></div>
+    <div class={narrationClass}><PrismMarkdown blocks={live.blocks} plain={live.plain} settled={false} /></div>
   {/if}
   {#if !awaiting}
     <PrismWaitRow style={css.raw({ marginTop: '10px' })} label={tail ?? '리뷰가 진행 중이에요'} text={tail} />
@@ -588,7 +588,7 @@
     {#if group.kind === 'narration'}
       {@const groupDrain = drainOf(group.seq)}
       {#if groupDrain !== undefined}
-        <div class={narrationClass}><PrismMarkdown blocks={groupDrain.paced.blocks} plain={groupDrain.paced.plain} /></div>
+        <div class={narrationClass}><PrismMarkdown blocks={groupDrain.paced.blocks} plain={groupDrain.paced.plain} settled={false} /></div>
       {:else}
         <div class={narrationClass}><PrismMarkdown blocks={parseMarkdown(group.text)} /></div>
       {/if}

@@ -223,7 +223,6 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
     let interactionFrameId = 0;
     let pointerKinematicsCurrent = false;
     let presentationFrameId = 0;
-    let warmupFrameId = 0;
     let resolveWarmup: (() => void) | null = null;
     let transitionGeneration = 0;
     let readiness: PrismModeReadiness = 'loading';
@@ -309,10 +308,8 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
       transitionGeneration += 1;
       if (frameId) cancelAnimationFrame(frameId);
       if (presentationFrameId) cancelAnimationFrame(presentationFrameId);
-      if (warmupFrameId) cancelAnimationFrame(warmupFrameId);
       frameId = 0;
       presentationFrameId = 0;
-      warmupFrameId = 0;
       resolveWarmup?.();
       resolveWarmup = null;
       stopPointerInteraction();
@@ -600,20 +597,12 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
           canvas.style.setProperty('display', 'block');
           canvas.style.setProperty('visibility', 'hidden');
           controller?.setActive(true);
+          // rAF 틱은 프레젠트를 보장하지 않는다 — 콜드 로드의 셰이더 컴파일 동안 미프레젠트 서페이스가 노출되지 않도록 첫 프레임의 GPU 완료를 기다린다.
           await new Promise<void>((resolve) => {
-            let remaining = 2;
             resolveWarmup = resolve;
-            const step = () => {
-              warmupFrameId = 0;
-              if (destroyed || --remaining === 0) {
-                resolveWarmup = null;
-                resolve();
-                return;
-              }
-              warmupFrameId = requestAnimationFrame(step);
-            };
-            warmupFrameId = requestAnimationFrame(step);
+            void controller?.whenFirstFramePresented().then(() => resolve());
           });
+          resolveWarmup = null;
           if (destroyed) return null;
           controller?.setActive(false);
           canvas.style.removeProperty('visibility');
@@ -898,7 +887,6 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
         transitionGeneration += 1;
         if (frameId) cancelAnimationFrame(frameId);
         if (presentationFrameId) cancelAnimationFrame(presentationFrameId);
-        if (warmupFrameId) cancelAnimationFrame(warmupFrameId);
         if (interactionFrameId) cancelAnimationFrame(interactionFrameId);
         cancelAtlasPreload();
         resolveWarmup?.();

@@ -4,7 +4,9 @@
   import { flex } from '@typie/styled-system/patterns';
   import { Icon } from '@typie/ui/components';
   import { tick, untrack } from 'svelte';
+  import { SvelteMap } from 'svelte/reactivity';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
+  import { parseMarkdown } from './lib/markdown.ts';
   import { pop, rise } from './lib/motion.ts';
   import { PacedText } from './lib/paced-text.svelte.ts';
   import { foldToolCalls } from './lib/tool-calls.ts';
@@ -16,6 +18,7 @@
   import PrismWorkflow from './PrismWorkflow.svelte';
   import { clientResolvers, toolCallLabels, toolCards } from './tools/index.ts';
   import type { Transcript, TranscriptMessage } from '@typie/prism';
+  import type { BlockNode } from './lib/markdown.ts';
 
   type Props = {
     transcript: Transcript;
@@ -133,6 +136,7 @@
   let live = $state<PacedText | null>(null);
   let drains = $state<{ key: string; paced: PacedText }[]>([]);
   let liveKey = '';
+  const aliases = new SvelteMap<string, string>();
 
   $effect.pre(() => {
     const turn = transcript.live;
@@ -140,6 +144,17 @@
 
     if (key !== liveKey) {
       untrack(() => {
+        // 봉인 키(e{seq})는 스트리밍 중 예측할 수 없다 — 전환 시점에 별칭을 남겨 each 항목이 라이브→봉인을 한 항목으로 잇는다.
+        if (liveKey !== '' && (live?.boundary ?? 0) > 0) {
+          for (let i = transcript.messages.length - 1; i >= 0; i--) {
+            const message = transcript.messages[i];
+            if (message.role === 'assistant') {
+              if (message.text !== null && !aliases.has(message.key)) aliases.set(message.key, liveKey);
+              break;
+            }
+          }
+        }
+
         if (key === '') {
           const sealed = transcript.messages.at(-1);
           // 프레임이 뭉쳐 도착하면 live가 만들어지기 전에 턴이 닫힌다 — 실시간 여부는 모델이 기록한 streamed로 판정한다.
@@ -226,6 +241,43 @@
 
   const drainOf = (key: string) => drains.find((drain) => drain.key === key);
 
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- 봉인 텍스트는 키별 불변이라 비반응 메모로 충분하다
+  const parsed = new Map<string, BlockNode[]>();
+  const parsedBlocks = (key: string, text: string) => {
+    let blocks = parsed.get(key);
+    if (blocks === undefined) {
+      blocks = parseMarkdown(text);
+      parsed.set(key, blocks);
+    }
+    return blocks;
+  };
+
+  type RenderEntry = (typeof entries)[number];
+  type RenderItem =
+    | { kind: 'markdown'; key: string; blocks: BlockNode[]; plain: number; settled: boolean }
+    | { kind: 'entry'; key: string; entry: RenderEntry };
+
+  // assistant 마크다운은 라이브·드레인·봉인 세 국면을 같은 키의 같은 항목으로 잇는다 — 위치 이동 재마운트가 카드를 한 프레임 스켈레톤으로 되돌리지 않도록.
+  const rendered = $derived.by<RenderItem[]>(() => {
+    const items: RenderItem[] = gated.map((entry) => {
+      if (entry.role === 'assistant' && entry.text !== null) {
+        const drain = drainOf(entry.key);
+        const key = aliases.get(entry.key) ?? entry.key;
+        return drain
+          ? { kind: 'markdown', key, blocks: drain.paced.blocks, plain: drain.paced.plain, settled: false }
+          : { kind: 'markdown', key, blocks: parsedBlocks(entry.key, entry.text), plain: Number.MAX_SAFE_INTEGER, settled: true };
+      }
+
+      return { kind: 'entry', key: entry.key, entry };
+    });
+
+    if (live && !draining && transcript.live && live.boundary > 0) {
+      items.push({ kind: 'markdown', key: liveKey, blocks: live.blocks, plain: live.plain, settled: false });
+    }
+
+    return items;
+  });
+
   let prevPending: string | null = null;
 
   $effect.pre(() => {
@@ -299,6 +351,11 @@
 
   const waitState = $derived.by<WaitState>(() => {
     if (awaitingUser) {
+      return null;
+    }
+
+    // 드레인이 텍스트를 그리는 동안은 대기가 아니라 전달이다 — turn.completed와 run.completed 사이 창에서 스피너가 깜빡이지 않도록 (gated와 같은 원리).
+    if (draining) {
       return null;
     }
 
@@ -382,26 +439,28 @@
         ></div>
       {/if}
 
-      {#each gated as entry (entry.key)}
-        {@const drain = drainOf(entry.key)}
+      {#each rendered as item (item.key)}
         <div
           class={entryClass}
-          in:rise={{ skip: !settled || entry.role === 'user' || entry.role === 'assistant', block: entry.role !== 'tool-calls' }}
+          in:rise={{
+            skip: !settled || item.kind === 'markdown' || item.entry.role === 'user',
+            block: item.kind === 'markdown' || item.entry.role !== 'tool-calls',
+          }}
         >
-          {#if entry.role === 'tool-calls'}
-            <PrismToolCalls count={entry.count} rows={entry.rows} />
-          {:else if drain}
-            <PrismMarkdown blocks={drain.paced.blocks} plain={drain.paced.plain} />
-          {:else if entry.role === 'tool-request'}
-            <PrismToolRequest {failedIds} message={entry} {onRetry} resolve={onResolve} {transcript} />
-          {:else if entry.role === 'run-failed'}
+          {#if item.kind === 'markdown'}
+            <PrismMarkdown blocks={item.blocks} plain={item.plain} settled={item.settled} />
+          {:else if item.entry.role === 'tool-calls'}
+            <PrismToolCalls count={item.entry.count} rows={item.entry.rows} />
+          {:else if item.entry.role === 'tool-request'}
+            <PrismToolRequest {failedIds} message={item.entry} {onRetry} resolve={onResolve} {transcript} />
+          {:else if item.entry.role === 'run-failed'}
             <div class={css({ alignSelf: 'center', fontSize: '11px', color: 'text.danger' })}>응답을 마치지 못했어요. 다시 보내 주세요</div>
-          {:else if entry.role === 'workflow'}
+          {:else if item.entry.role === 'workflow'}
             {#if sessionId !== null}
-              <PrismWorkflow {failedIds} message={entry} {onRetry} {reconnecting} resolve={onResolve} {sessionId} {transcript} />
+              <PrismWorkflow {failedIds} message={item.entry} {onRetry} {reconnecting} resolve={onResolve} {sessionId} {transcript} />
             {/if}
           {:else}
-            <PrismMessage message={entry} />
+            <PrismMessage message={item.entry} />
           {/if}
         </div>
       {/each}
@@ -425,10 +484,6 @@
         >
           {pending}
         </div>
-      {/if}
-
-      {#if transcript.live && live && live.boundary > 0 && !draining}
-        <PrismMarkdown blocks={live.blocks} plain={live.plain} />
       {/if}
 
       {#if waitState !== null}

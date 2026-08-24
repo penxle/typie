@@ -16,6 +16,7 @@ export type BlockNode =
   | { kind: 'heading'; key: number; depth: number; children: InlineNode[] }
   | { kind: 'list'; key: number; ordered: boolean; startIndex: number; items: ListItemNode[] }
   | { kind: 'code'; key: number; lang: string | null; text: string }
+  | { kind: 'card'; key: number; name: string; text: string; pending: boolean }
   | { kind: 'blockquote'; key: number; children: BlockNode[] }
   | { kind: 'hr'; key: number };
 
@@ -75,6 +76,11 @@ const inlineNodes = (tokens: Token[], cursor: number): InlineNode[] => {
   return out;
 };
 
+const CARD_LANG = /^typie:([a-z-]+)$/;
+
+const closedFence = /\n {0,3}(`{3,}|~{3,})[ \t]*$/;
+const isFenceClosed = (raw: string): boolean => closedFence.test(raw.replace(/\s+$/, ''));
+
 const blockNodes = (tokens: Token[], cursor: number): BlockNode[] => {
   const out: BlockNode[] = [];
   for (const token of tokens) {
@@ -109,7 +115,13 @@ const blockNodes = (tokens: Token[], cursor: number): BlockNode[] => {
       }
       case 'code': {
         const code = token as Tokens.Code;
-        out.push({ kind: 'code', key: cursor, lang: code.lang || null, text: code.text });
+        const lang = code.lang || null;
+        const kind = lang !== null && code.raw.trimStart().startsWith('```') ? (CARD_LANG.exec(lang)?.[1] ?? null) : null;
+        if (kind === null) {
+          out.push({ kind: 'code', key: cursor, lang, text: code.text });
+        } else {
+          out.push({ kind: 'card', key: cursor, name: kind, text: code.text, pending: !isFenceClosed(code.raw) });
+        }
         break;
       }
       case 'blockquote': {
@@ -132,4 +144,32 @@ const blockNodes = (tokens: Token[], cursor: number): BlockNode[] => {
 export const parseMarkdown = (source: string): BlockNode[] => {
   if (source.length === 0) return [];
   return blockNodes(new Lexer({ gfm: true, breaks: true }).lex(source), 0);
+};
+
+const CARD_FENCE_OPENING = '```typie:';
+
+const inOpenCardFence = (head: string): boolean => {
+  let fence: 'card' | 'other' | null = null;
+  for (const line of head.split('\n')) {
+    if (fence === null) {
+      const opening = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
+      if (opening) fence = opening[1].startsWith('`') && CARD_LANG.test(opening[2].trim()) ? 'card' : 'other';
+    } else if (/^ {0,3}(`{3,}|~{3,})[ \t]*$/.test(line)) {
+      fence = null;
+    }
+  }
+  return fence === 'card';
+};
+
+export const clampStreamingTail = (text: string): string => {
+  const nl = text.lastIndexOf('\n');
+  const line = text.slice(nl + 1);
+  if (line.length === 0 || !line.startsWith('`')) return text;
+  const isPrefix =
+    line.length <= CARD_FENCE_OPENING.length
+      ? CARD_FENCE_OPENING.startsWith(line)
+      : line.startsWith(CARD_FENCE_OPENING) && /^[a-z-]*$/.test(line.slice(CARD_FENCE_OPENING.length));
+  if (!isPrefix) return text;
+  if (inOpenCardFence(text.slice(0, nl + 1))) return text;
+  return text.slice(0, Math.max(0, nl));
 };

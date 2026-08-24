@@ -1,4 +1,4 @@
-import { parseMarkdown } from './markdown.ts';
+import { clampStreamingTail, parseMarkdown } from './markdown.ts';
 import { Pacer } from './pacer.ts';
 import type { BlockNode } from './markdown.ts';
 
@@ -11,7 +11,7 @@ export class PacedText {
   plain = $state(0);
   finalized = $state(false);
 
-  blocks: BlockNode[] = $derived(parseMarkdown(this.text.slice(0, this.boundary)));
+  blocks: BlockNode[] = $derived(parseMarkdown(clampStreamingTail(this.text.slice(0, this.boundary))));
 
   constructor(opts?: { instant?: boolean }) {
     this.#pacer = new Pacer();

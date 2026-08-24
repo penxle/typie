@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseMarkdown } from './markdown.ts';
+import { clampStreamingTail, parseMarkdown } from './markdown.ts';
 import type { BlockNode, InlineNode } from './markdown.ts';
 
 const wordsOf = (nodes: InlineNode[]): string[] =>
@@ -65,5 +65,71 @@ describe('parseMarkdown', () => {
   it('미지원 토큰은 원문 그대로 평문 폴백한다', () => {
     const [table] = parseMarkdown('| a | b |\n| - | - |\n| 1 | 2 |');
     expect(table.kind).toBe('paragraph');
+  });
+
+  it('typie: lang 펜스는 카드 노드로 승격된다', () => {
+    const source = '앞 문장.\n\n```typie:document\n{"id": "D1"}\n```';
+    const blocks = parseMarkdown(source);
+    expect(blocks[1]).toMatchObject({ kind: 'card', name: 'document', text: '{"id": "D1"}', pending: false });
+    expect(blocks[1].key).toBe(source.indexOf('```'));
+  });
+
+  it('미폐쇄 typie: 펜스는 pending 카드다', () => {
+    expect(parseMarkdown('```typie:document\n{"id')[0]).toMatchObject({ kind: 'card', name: 'document', pending: true });
+    expect(parseMarkdown('```typie:document\n')[0]).toMatchObject({ kind: 'card', name: 'document', text: '', pending: true });
+  });
+
+  it('일반 lang 펜스는 카드로 승격되지 않는다', () => {
+    expect(parseMarkdown('```js\nconst a = 1\n```')[0]).toMatchObject({ kind: 'code', lang: 'js', text: 'const a = 1' });
+  });
+
+  it('카드 문법을 벗어난 변형은 코드 블록으로 남는다', () => {
+    expect(parseMarkdown('~~~typie:document\n{"id": "D1"}\n~~~')[0]).toMatchObject({ kind: 'code' });
+    expect(parseMarkdown('```typie:document meta\n{}\n```')[0]).toMatchObject({ kind: 'code' });
+    expect(parseMarkdown('```typie:Document\n{}\n```')[0]).toMatchObject({ kind: 'code' });
+    expect(parseMarkdown('```typie:\n{}\n```')[0]).toMatchObject({ kind: 'code' });
+  });
+});
+
+describe('clampStreamingTail', () => {
+  it('카드 펜스 열림줄의 접두인 꼬리줄을 제외한다', () => {
+    expect(clampStreamingTail('문장.\n\n``')).toBe('문장.\n');
+    expect(clampStreamingTail('문장.\n\n```typie:doc')).toBe('문장.\n');
+    expect(clampStreamingTail('```typie:document')).toBe('');
+  });
+
+  it('일반 펜스·문중 백틱·평문은 건드리지 않는다', () => {
+    expect(clampStreamingTail('```python')).toBe('```python');
+    expect(clampStreamingTail('앞에 `코드` 뒤')).toBe('앞에 `코드` 뒤');
+    expect(clampStreamingTail('문장 그대로')).toBe('문장 그대로');
+  });
+
+  it('열림줄이 개행으로 완성되면 더는 클램프하지 않는다', () => {
+    expect(clampStreamingTail('```typie:document\n')).toBe('```typie:document\n');
+  });
+
+  it('카드 닫힘줄이 미완이어도 pending 카드로 선다', () => {
+    const clamped = clampStreamingTail('```typie:document\n{"id": "D1"}\n``');
+    expect(parseMarkdown(clamped)[0]).toMatchObject({ kind: 'card', pending: true });
+  });
+
+  it('개행 없이 닫힌 카드 펜스는 클램프하지 않는다 — 완성 카드가 pending으로 후퇴하지 않는다', () => {
+    const text = '```typie:document\n{"id": "D1"}\n```';
+    expect(clampStreamingTail(text)).toBe(text);
+    expect(parseMarkdown(text)[0]).toMatchObject({ kind: 'card', pending: false });
+  });
+
+  it('열린 카드 펜스 안의 백틱 꼬리줄은 클램프하지 않는다', () => {
+    const text = '```typie:document\n{"id": "D1"}\n``';
+    expect(clampStreamingTail(text)).toBe(text);
+    expect(parseMarkdown(text)[0]).toMatchObject({ kind: 'card', pending: true });
+  });
+
+  it('카드가 닫힌 뒤의 백틱 꼬리줄은 다시 클램프한다', () => {
+    expect(clampStreamingTail('```typie:document\n{"id": "D1"}\n```\n\n``')).toBe('```typie:document\n{"id": "D1"}\n```\n');
+  });
+
+  it('틸드 펜스는 카드 펜스로 취급되지 않는다 — 열림 가드가 켜지지 않는다', () => {
+    expect(clampStreamingTail('~~~typie:document\n{"id": "D1"}\n``')).toBe('~~~typie:document\n{"id": "D1"}');
   });
 });

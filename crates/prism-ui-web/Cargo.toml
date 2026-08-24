@@ -10,6 +10,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 bytemuck.workspace = true
+js-sys.workspace = true
 prism-ui-renderer.workspace = true
 wasm-bindgen.workspace = true
 wasm-bindgen-futures.workspace = true

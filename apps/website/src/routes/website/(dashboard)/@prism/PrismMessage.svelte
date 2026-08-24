@@ -1,7 +1,5 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
-  import { parseMarkdown } from './lib/markdown.ts';
-  import PrismMarkdown from './PrismMarkdown.svelte';
   import type { TranscriptMessage } from '@typie/prism';
 
   type Props = {
@@ -9,8 +7,6 @@
   };
 
   let { message }: Props = $props();
-
-  const blocks = $derived(message.role === 'assistant' && message.text !== null ? parseMarkdown(message.text) : []);
 </script>
 
 {#if message.role === 'user'}
@@ -30,6 +26,4 @@
   >
     {message.text}
   </div>
-{:else if message.role === 'assistant' && message.text}
-  <PrismMarkdown {blocks} />
 {/if}

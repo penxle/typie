@@ -1412,6 +1412,7 @@ type Query {
   creditCode(code: String!): CreditCode!
   defaultPlanRule: PlanRule!
   document(slug: String!): Document!
+  documentById(documentId: ID!): Document!
   entities(entityIds: [ID!], slugs: [String!]): [Entity!]!
   entity(entityId: ID, slug: String): Entity!
   entityView(origin: String!, slug: String!): EntityView!
