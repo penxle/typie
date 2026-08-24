@@ -425,6 +425,29 @@ describe('Editor guarded core invocation', () => {
     editor.destroy();
   });
 
+  it('accepts a publication when iterator helper methods are unavailable', async () => {
+    const { editor } = await createEditor(createCore(), false);
+    const releaseHost = editor.activateVisualHost();
+    const requiredPages = new Set([0]);
+    editor.requestSurfacePages(requiredPages);
+    editor.attachSurface(0, document.createElement('canvas'), 100, 100);
+    const bundle = editor.publishIfReady(requiredPages);
+    if (!bundle) throw new Error('Expected a publishable bundle');
+
+    const iteratorProto = Object.getPrototypeOf(Object.getPrototypeOf(new Map().keys())) as { some?: unknown };
+    const originalSome = iteratorProto.some;
+    delete iteratorProto.some;
+    try {
+      expect(editor.acceptPublication(bundle)).toBe(true);
+    } finally {
+      iteratorProto.some = originalSome;
+    }
+
+    editor.completePresentation(bundle);
+    releaseHost();
+    editor.destroy();
+  });
+
   it.each([
     [
       'request admission',

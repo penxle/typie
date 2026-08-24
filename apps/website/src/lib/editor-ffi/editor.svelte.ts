@@ -1879,7 +1879,7 @@ export class Editor {
       !host ||
       this.#applied !== bundle.snapshot ||
       bundle.frames.size !== this.surfacePageRequirements.size ||
-      bundle.frames.keys().some((page) => !this.surfacePageRequirements.has(page))
+      [...bundle.frames.keys()].some((page) => !this.surfacePageRequirements.has(page))
     ) {
       return false;
     }
