@@ -17,9 +17,9 @@
   import HistoryIcon from '~icons/lucide/history';
   import PencilIcon from '~icons/lucide/pencil';
   import PlusIcon from '~icons/lucide/plus';
-  import PyramidIcon from '~icons/lucide/pyramid';
   import TrashIcon from '~icons/lucide/trash-2';
   import XIcon from '~icons/lucide/x';
+  import PrismIcon from '~icons/typie/prism';
   import { cache, wsStatus } from '$lib/graphql';
   import { unwrapError } from '$lib/graphql/error';
   import { getOpenDocuments } from '$lib/prism/open-documents.svelte';
@@ -685,7 +685,7 @@
         flexShrink: '0',
       })}
     >
-      <Icon style={css.raw({ color: 'text.subtle', flexShrink: '0' })} icon={PyramidIcon} size={16} />
+      <Icon style={css.raw({ color: 'text.subtle', flexShrink: '0' })} icon={PrismIcon} size={16} />
       <span class={css({ fontSize: '13px', fontWeight: 'semibold', letterSpacing: '[0.04em]' })}>PRISM</span>
 
       {#if titleEditing}
@@ -856,7 +856,7 @@
               pointerEvents: 'none',
             })}
           >
-            <Icon style={css.raw({ color: 'border.default' })} icon={PyramidIcon} size={32} />
+            <Icon style={css.raw({ color: 'border.default' })} icon={PrismIcon} size={32} />
           </div>
         {/if}
 

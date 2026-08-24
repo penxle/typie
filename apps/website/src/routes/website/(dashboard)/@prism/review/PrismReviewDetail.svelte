@@ -4,7 +4,7 @@
   import { flex } from '@typie/styled-system/patterns';
   import { Button, Icon, Modal } from '@typie/ui/components';
   import { MediaQuery } from 'svelte/reactivity';
-  import PyramidIcon from '~icons/lucide/pyramid';
+  import PrismIcon from '~icons/typie/prism';
   import { goto } from '$app/navigation';
   import { requestMarginJump } from '$lib/prism/margin-jump.svelte';
   import { graphql } from '$mearie';
@@ -295,7 +295,7 @@
 {#snippet speaker()}
   <div class={flex({ alignItems: 'center', gap: '9px' })}>
     <span class={avatarClass}>
-      <Icon icon={PyramidIcon} size={16} />
+      <Icon icon={PrismIcon} size={16} />
     </span>
     <div class={css({ fontSize: '13px', fontWeight: 'bold' })}>타이피 PRISM</div>
   </div>
