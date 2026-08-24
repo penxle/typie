@@ -348,3 +348,10 @@ export const PrismToolRequestStatus = {
   RESOLVED: 'RESOLVED',
   CLOSED: 'CLOSED',
 } as const;
+
+export type PrismToolPolicy = keyof typeof PrismToolPolicy;
+export const PrismToolPolicy = {
+  READ_ONLY: 'READ_ONLY',
+  STANDARD: 'STANDARD',
+  FULL: 'FULL',
+} as const;

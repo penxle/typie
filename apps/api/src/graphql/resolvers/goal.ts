@@ -1,10 +1,6 @@
-import { EntityState } from '@typie/lib/enums';
-import { TypieError } from '@typie/lib/errors';
 import dayjs from 'dayjs';
-import { and, eq } from 'drizzle-orm';
-import { db, Entities, EntityGoals, firstOrThrow, TableCode, UserGoals, validateDbId } from '#/db/index.ts';
-import { pubsub } from '#/pubsub.ts';
-import { assertSitePermission } from '#/utils/permission.ts';
+import { db, TableCode, validateDbId } from '#/db/index.ts';
+import { deleteEntityGoalCore, deleteUserGoalCore, upsertEntityGoalCore, upsertUserGoalCore } from '#/utils/goal-actions.ts';
 import { builder } from '../builder.ts';
 import { Entity, EntityGoal, User, UserGoal } from '../objects.ts';
 
@@ -36,29 +32,14 @@ builder.mutationFields((t) => ({
       dueAt: t.input.field({ type: 'DateTime', required: false }),
     },
     resolve: async (_, { input }, ctx) => {
-      if (input.targetCharacterCount <= 0) {
-        throw new TypieError({ code: 'invalid_target_character_count' });
-      }
-
-      const entity = await db
-        .select({ siteId: Entities.siteId })
-        .from(Entities)
-        .where(and(eq(Entities.id, input.entityId), eq(Entities.state, EntityState.ACTIVE)))
-        .then(firstOrThrow);
-
-      await assertSitePermission({ userId: ctx.session.userId, siteId: entity.siteId });
-
       const dueAt = input.dueAt ? dayjs.kst(input.dueAt).startOf('day') : null;
 
-      await db
-        .insert(EntityGoals)
-        .values({ entityId: input.entityId, targetCharacterCount: input.targetCharacterCount, dueAt })
-        .onConflictDoUpdate({
-          target: [EntityGoals.entityId],
-          set: { targetCharacterCount: input.targetCharacterCount, dueAt, updatedAt: dayjs() },
-        });
-
-      pubsub.publish('site:update', entity.siteId, { scope: 'entity', entityId: input.entityId });
+      await upsertEntityGoalCore(db, {
+        userId: ctx.session.userId,
+        entityId: input.entityId,
+        targetCharacterCount: input.targetCharacterCount,
+        dueAt,
+      });
 
       return input.entityId;
     },
@@ -70,17 +51,7 @@ builder.mutationFields((t) => ({
       entityId: t.input.id({ validate: validateDbId(TableCode.ENTITIES) }),
     },
     resolve: async (_, { input }, ctx) => {
-      const entity = await db
-        .select({ siteId: Entities.siteId })
-        .from(Entities)
-        .where(and(eq(Entities.id, input.entityId), eq(Entities.state, EntityState.ACTIVE)))
-        .then(firstOrThrow);
-
-      await assertSitePermission({ userId: ctx.session.userId, siteId: entity.siteId });
-
-      await db.delete(EntityGoals).where(eq(EntityGoals.entityId, input.entityId));
-
-      pubsub.publish('site:update', entity.siteId, { scope: 'entity', entityId: input.entityId });
+      await deleteEntityGoalCore(db, { userId: ctx.session.userId, entityId: input.entityId });
 
       return input.entityId;
     },
@@ -92,19 +63,7 @@ builder.mutationFields((t) => ({
       targetCharacterCount: t.input.int(),
     },
     resolve: async (_, { input }, ctx) => {
-      if (input.targetCharacterCount <= 0) {
-        throw new TypieError({ code: 'invalid_target_character_count' });
-      }
-
-      const today = dayjs.kst().startOf('day');
-
-      await db
-        .insert(UserGoals)
-        .values({ userId: ctx.session.userId, targetCharacterCount: input.targetCharacterCount, effectiveAt: today })
-        .onConflictDoUpdate({
-          target: [UserGoals.userId, UserGoals.effectiveAt],
-          set: { targetCharacterCount: input.targetCharacterCount },
-        });
+      await upsertUserGoalCore(db, { userId: ctx.session.userId, targetCharacterCount: input.targetCharacterCount });
 
       return ctx.session.userId;
     },
@@ -113,15 +72,7 @@ builder.mutationFields((t) => ({
   deleteUserGoal: t.withAuth({ session: true }).field({
     type: User,
     resolve: async (_, __, ctx) => {
-      const today = dayjs.kst().startOf('day');
-
-      await db
-        .insert(UserGoals)
-        .values({ userId: ctx.session.userId, targetCharacterCount: null, effectiveAt: today })
-        .onConflictDoUpdate({
-          target: [UserGoals.userId, UserGoals.effectiveAt],
-          set: { targetCharacterCount: null },
-        });
+      await deleteUserGoalCore(db, { userId: ctx.session.userId });
 
       return ctx.session.userId;
     },

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { parked } from './parked.ts';
+import { parked, pendingServerRequests } from './parked.ts';
+import { effectiveResolver } from './tools.ts';
 import type { ParkedEvent } from './parked.ts';
+import type { ToolPolicy } from './tools.ts';
 
 const root = { id: 'chat-1', name: 'chat' };
 const child = { id: 'agent_9', name: 'judgment' };
@@ -84,5 +86,49 @@ describe('parked — workflow', () => {
       ev('invocation.started', { step: 's', invocation: 'inv_3' }, { target: { kind: 'workflow' } }),
     ];
     expect(parked(events, 'workflow')).toBe(false);
+  });
+});
+
+const resolverOf = (policy: ToolPolicy) => (tool: string) => effectiveResolver(tool, policy);
+
+const requester = { id: 'agent-1', name: 'chat' };
+const request = (toolCallId: string, name: string, agent = requester): ParkedEvent =>
+  ev('tool.requested', tool(agent, toolCallId), { tool: name, data: { query: '해변' } });
+const runStarted = ev('run.started', run(requester));
+
+describe('parked with injected resolver', () => {
+  it('destructive 미해소는 STANDARD에서 파킹, FULL에서 비파킹', () => {
+    const events = [runStarted, request('t1', 'delete-entities')];
+    expect(parked(events, 'agent', { resolverOf: resolverOf('STANDARD') })).toBe(true);
+    expect(parked(events, 'agent', { resolverOf: resolverOf('FULL') })).toBe(false);
+  });
+
+  it('server 도구 미해소는 비파킹', () => {
+    expect(parked([runStarted, request('t1', 'search-entities')], 'agent', { resolverOf: resolverOf('STANDARD') })).toBe(false);
+  });
+});
+
+describe('pendingServerRequests', () => {
+  it('열린 run의 미해소 server 요청만 좌표째 나열한다', () => {
+    const events = [runStarted, request('t1', 'search-entities'), request('t2', 'ask-user')];
+    expect(pendingServerRequests(events, 'agent', 'STANDARD')).toEqual([
+      { toolCallId: 't1', tool: 'search-entities', input: { query: '해변' }, agentId: 'agent-1', runSeq: 1 },
+    ]);
+    expect(pendingServerRequests(events, 'workflow', 'STANDARD')).toEqual([
+      { toolCallId: 't1', tool: 'search-entities', input: { query: '해변' }, agentId: 'agent-1', runSeq: null },
+    ]);
+  });
+
+  it('해소·run 종결·닫힌 run은 제외한다', () => {
+    const resolved = ev('tool.resolved', tool(requester, 't1'));
+    expect(pendingServerRequests([runStarted, request('t1', 'search-entities'), resolved], 'agent', 'STANDARD')).toEqual([]);
+    const terminal = ev('run.completed', run(requester));
+    expect(pendingServerRequests([runStarted, request('t1', 'search-entities'), terminal], 'agent', 'STANDARD')).toEqual([]);
+  });
+
+  it('destructive는 FULL에서만 나열된다', () => {
+    const events = [runStarted, request('t1', 'delete-entities')];
+    expect(pendingServerRequests(events, 'agent', 'STANDARD')).toEqual([]);
+    expect(pendingServerRequests(events, 'agent', 'FULL')).toHaveLength(1);
   });
 });

@@ -6,15 +6,13 @@ import {
   DocumentViewBodyUnavailableReason,
   EntityAvailability,
   EntityState,
-  EntityType,
   EntityVisibility,
   FontFamilySource,
-  NoteState,
 } from '@typie/lib/enums';
 import { NotFoundError, TypieError } from '@typie/lib/errors';
 import dayjs from 'dayjs';
 import dedent from 'dedent';
-import { and, asc, count, desc, eq, gt, gte, inArray, isNull, lt, sql, sum } from 'drizzle-orm';
+import { and, count, desc, eq, gte, inArray, lt, sql, sum } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { match } from 'ts-pattern';
 import { redis } from '#/cache.ts';
@@ -22,7 +20,6 @@ import {
   db,
   decodeDbId,
   DocumentArchivedNodes,
-  DocumentBundles,
   DocumentCharacterCountChanges,
   DocumentHeadContributors,
   DocumentHeads,
@@ -37,11 +34,8 @@ import {
   firstOrThrow,
   firstOrThrowWith,
   Images,
-  NoteEntities,
-  Notes,
   TableCode,
   UserPersonalIdentities,
-  UserPreferences,
   Users,
   validateDbId,
 } from '#/db/index.ts';
@@ -52,19 +46,12 @@ import { enqueueJob } from '#/mq/index.ts';
 import { pubsub } from '#/pubsub.ts';
 import { appendBundle, getDurableHeads, readMergedGraph, setLiveHeads } from '#/utils/changeset.ts';
 import { getDocumentFontFamilies } from '#/utils/document.ts';
-import { isPrivateVisibilityOnlyInput } from '#/utils/documents-option-policy.ts';
-import {
-  buildFreshV2Content,
-  calculateBlobSizeFromAssetIds,
-  derivePlainRootFromPreset,
-  extractAssetIdsFromPlainDoc,
-  extractPlainDocLayoutMode,
-  insertFreshV2Content,
-} from '#/utils/entity.ts';
+import { extractAssetIdsFromPlainDoc, extractPlainDocLayoutMode } from '#/utils/entity.ts';
+import { createDocumentCore, duplicateDocumentCore, updateDocumentsOptionCore } from '#/utils/entity-actions.ts';
 import { getExcludedDeltasByDate } from '#/utils/excluded-stats.ts';
-import { generateFractionalOrder, generatePermalink, generateSlug, getKoreanAge } from '#/utils/index.ts';
+import { getKoreanAge } from '#/utils/index.ts';
 import { assertDocumentPermission, assertSitePermission } from '#/utils/permission.ts';
-import { assertActiveSubscription, hasActiveSubscription } from '#/utils/plan.ts';
+import { assertActiveSubscription } from '#/utils/plan.ts';
 import { wasm as wasmFfi } from '#/utils/wasm-ffi.ts';
 import { builder } from '../builder.ts';
 import {
@@ -87,7 +74,6 @@ import {
 import { resolveDocumentAssetsByIds } from './document-assets-by-ids.ts';
 import type { PlainDoc } from '@typie/editor-ffi/server';
 import type { Context, SessionContext } from '#/context.ts';
-import type { TemplatePreset } from '#/utils/entity.ts';
 
 const DocumentAsset = builder.loadableUnion('DocumentAsset', {
   types: [Image, File, Embed, DocumentArchivedNode],
@@ -764,120 +750,13 @@ builder.mutationFields((t) => ({
         throw new TypieError({ code: 'v2_required' });
       }
 
-      await assertSitePermission({
+      return await createDocumentCore(db, {
         userId: ctx.session.userId,
         siteId: input.siteId,
+        parentEntityId: input.parentEntityId ?? null,
+        lowerOrder: input.lowerOrder ?? null,
+        upperOrder: input.upperOrder ?? null,
       });
-
-      await assertActiveSubscription({ userId: ctx.session.userId });
-
-      let depth = 0;
-      if (input.parentEntityId) {
-        const parentEntity = await db
-          .select({ id: Entities.id, depth: Entities.depth })
-          .from(Entities)
-          .where(
-            and(
-              eq(Entities.siteId, input.siteId),
-              eq(Entities.id, input.parentEntityId),
-              eq(Entities.type, EntityType.FOLDER),
-              eq(Entities.state, EntityState.ACTIVE),
-            ),
-          )
-          .then(firstOrThrow);
-
-        depth = parentEntity.depth + 1;
-      }
-
-      let orderLower: string | null = input.lowerOrder ?? null;
-
-      if (!input.lowerOrder) {
-        const last = await db
-          .select({ order: Entities.order })
-          .from(Entities)
-          .where(
-            and(
-              eq(Entities.siteId, input.siteId),
-              input.parentEntityId ? eq(Entities.parentId, input.parentEntityId) : isNull(Entities.parentId),
-            ),
-          )
-          .orderBy(desc(Entities.order))
-          .limit(1)
-          .then(first);
-
-        orderLower = last?.order ?? null;
-      }
-
-      const preference = await db
-        .select({ value: UserPreferences.value })
-        .from(UserPreferences)
-        .where(eq(UserPreferences.userId, ctx.session.userId))
-        .then(first);
-
-      const preset = (preference?.value as Record<string, unknown> | undefined)?.template as TemplatePreset | undefined;
-
-      const document = await db.transaction(async (tx) => {
-        const entity = await tx
-          .insert(Entities)
-          .values({
-            userId: ctx.session.userId,
-            siteId: input.siteId,
-            parentId: input.parentEntityId,
-            slug: generateSlug(),
-            permalink: generatePermalink(),
-            type: EntityType.DOCUMENT,
-            icon: 'file',
-            order: generateFractionalOrder({ lower: orderLower, upper: input.upperOrder ?? null }),
-            depth,
-          })
-          .returning({ id: Entities.id })
-          .then(firstOrThrow);
-
-        const document = await tx
-          .insert(Documents)
-          .values({
-            entityId: entity.id,
-            title: null,
-          })
-          .returning()
-          .then(firstOrThrow);
-
-        const { root, modifiers } = derivePlainRootFromPreset(preset);
-        await wasmFfi.use(async (host) => {
-          const plain = host.default_doc_with_preset(root, modifiers);
-          const graph = host.to_graph(plain);
-          const heads = host.heads(graph);
-          const text = host.extract_text(plain);
-          const { imageIds, fileIds } = extractAssetIdsFromPlainDoc(plain);
-          const blobSize = await calculateBlobSizeFromAssetIds(imageIds, fileIds);
-          const characterCount = host.count_characters(text);
-
-          await tx.insert(DocumentBundles).values({ documentId: document.id, seq: 1, payload: graph });
-          await tx.insert(DocumentStates).values({
-            documentId: document.id,
-            json: plain,
-            text,
-            characterCount,
-            blobSize,
-            heads,
-            lastBundleSeq: 1,
-          });
-        });
-
-        return document;
-      });
-
-      if (input.parentEntityId) {
-        pubsub.publish('site:update', input.siteId, { scope: 'entity', entityId: input.parentEntityId });
-      } else {
-        pubsub.publish('site:update', input.siteId, { scope: 'site' });
-      }
-
-      pubsub.publish('user:usage:update', ctx.session.userId, null);
-
-      await enqueueJob('search:index:document', document.id);
-
-      return document;
     },
   }),
 
@@ -924,145 +803,7 @@ builder.mutationFields((t) => ({
     input: {
       documentId: t.input.id({ validate: validateDbId(TableCode.DOCUMENTS) }),
     },
-    resolve: async (_, { input }, ctx) => {
-      const entity = await db
-        .select({
-          id: Entities.id,
-          siteId: Entities.siteId,
-          parentEntityId: Entities.parentId,
-          order: Entities.order,
-          depth: Entities.depth,
-          icon: Entities.icon,
-          iconColor: Entities.iconColor,
-        })
-        .from(Entities)
-        .innerJoin(Documents, eq(Entities.id, Documents.entityId))
-        .where(eq(Documents.id, input.documentId))
-        .then(firstOrThrow);
-
-      await assertSitePermission({
-        userId: ctx.session.userId,
-        siteId: entity.siteId,
-      });
-
-      const nextEntity = await db
-        .select({ order: Entities.order })
-        .from(Entities)
-        .where(
-          and(
-            eq(Entities.siteId, entity.siteId),
-            entity.parentEntityId ? eq(Entities.parentId, entity.parentEntityId) : isNull(Entities.parentId),
-            gt(Entities.order, entity.order),
-          ),
-        )
-        .orderBy(asc(Entities.order))
-        .limit(1)
-        .then(first);
-
-      const document = await db
-        .select({
-          title: Documents.title,
-          subtitle: Documents.subtitle,
-        })
-        .from(Documents)
-        .where(eq(Documents.id, input.documentId))
-        .then(firstOrThrow);
-
-      await assertActiveSubscription({ userId: ctx.session.userId });
-
-      // TODO: anchors
-
-      const noteRows = await db
-        .select({
-          content: Notes.content,
-          color: Notes.color,
-          status: Notes.status,
-        })
-        .from(NoteEntities)
-        .innerJoin(Notes, eq(NoteEntities.noteId, Notes.id))
-        .where(and(eq(NoteEntities.entityId, entity.id), eq(Notes.state, NoteState.ACTIVE)));
-
-      const v2Content = await buildFreshV2Content(input.documentId);
-      if (!v2Content) {
-        throw new TypieError({ code: 'document_projection_degraded', message: '문서를 복사할 수 없는 상태예요.', status: 409 });
-      }
-
-      const title = `(사본) ${document.title ?? '(제목 없음)'}`;
-
-      const newDocument = await db.transaction(async (tx) => {
-        const newEntity = await tx
-          .insert(Entities)
-          .values({
-            userId: ctx.session.userId,
-            siteId: entity.siteId,
-            parentId: entity.parentEntityId,
-            slug: generateSlug(),
-            permalink: generatePermalink(),
-            type: EntityType.DOCUMENT,
-            order: generateFractionalOrder({ lower: entity.order, upper: nextEntity?.order }),
-            depth: entity.depth,
-            icon: entity.icon,
-            iconColor: entity.iconColor,
-          })
-          .returning({ id: Entities.id })
-          .then(firstOrThrow);
-
-        const newDocument = await tx
-          .insert(Documents)
-          .values({
-            entityId: newEntity.id,
-            title,
-            subtitle: document.subtitle,
-          })
-          .returning()
-          .then(firstOrThrow);
-
-        // TODO: anchors
-
-        await insertFreshV2Content(tx, newDocument.id, v2Content);
-
-        if (noteRows.length > 0) {
-          let prevOrder: string | null = null;
-
-          for (const row of noteRows) {
-            const order = generateFractionalOrder({ lower: prevOrder, upper: null });
-
-            const newNote = await tx
-              .insert(Notes)
-              .values({
-                userId: ctx.session.userId,
-                siteId: entity.siteId,
-                content: row.content,
-                color: row.color,
-                status: row.status,
-                order,
-              })
-              .returning({ id: Notes.id })
-              .then(firstOrThrow);
-
-            await tx.insert(NoteEntities).values({
-              noteId: newNote.id,
-              entityId: newEntity.id,
-            });
-
-            prevOrder = order;
-          }
-        }
-
-        return newDocument;
-      });
-
-      if (entity.parentEntityId) {
-        pubsub.publish('site:update', entity.siteId, { scope: 'entity', entityId: entity.parentEntityId });
-      } else {
-        pubsub.publish('site:update', entity.siteId, { scope: 'site' });
-      }
-      pubsub.publish('user:usage:update', ctx.session.userId, null);
-
-      await enqueueJob('search:index:document', newDocument.id);
-
-      return newDocument;
-    },
+    resolve: async (_, { input }, ctx) => await duplicateDocumentCore(db, { userId: ctx.session.userId, documentId: input.documentId }),
   }),
 
   updateDocument: t.withAuth({ session: true }).fieldWithInput({
@@ -1156,84 +897,18 @@ builder.mutationFields((t) => ({
       allowReaction: t.input.boolean({ required: false }),
       protectContent: t.input.boolean({ required: false }),
     },
-    resolve: async (_, { input }, ctx) => {
-      const documents = await db
-        .select({
-          id: Documents.id,
-          siteId: Entities.siteId,
-          entityId: Entities.id,
-          parentId: Entities.parentId,
-        })
-        .from(Documents)
-        .innerJoin(Entities, eq(Documents.entityId, Entities.id))
-        .where(and(eq(Entities.state, EntityState.ACTIVE), inArray(Documents.id, input.documentIds)));
-
-      if (documents.length === 0) {
-        throw new TypieError({ code: 'invalid_argument' });
-      }
-
-      const siteId = documents[0].siteId;
-
-      await assertSitePermission({
+    resolve: async (_, { input }, ctx) =>
+      await updateDocumentsOptionCore(db, {
         userId: ctx.session.userId,
-        siteId,
-      });
-
-      if (documents.some((doc) => doc.siteId !== siteId)) {
-        throw new TypieError({ code: 'site_mismatch' });
-      }
-
-      if (!isPrivateVisibilityOnlyInput(input) && !(await hasActiveSubscription({ userId: ctx.session.userId }))) {
-        throw new TypieError({ code: 'subscription_required', status: 403 });
-      }
-
-      await db.transaction(async (tx) => {
-        if (input.availability || input.visibility) {
-          await tx
-            .update(Entities)
-            .set({
-              availability: input.availability ?? undefined,
-              visibility: input.visibility ?? undefined,
-            })
-            .where(
-              inArray(
-                Entities.id,
-                documents.map((doc) => doc.entityId),
-              ),
-            );
-        }
-
-        if (
-          input.contentRating ||
-          typeof input.allowReaction === 'boolean' ||
-          typeof input.protectContent === 'boolean' ||
-          input.password !== undefined ||
-          input.thumbnailId !== undefined
-        ) {
-          await tx
-            .update(Documents)
-            .set({
-              contentRating: input.contentRating ?? undefined,
-              allowReaction: input.allowReaction ?? undefined,
-              protectContent: input.protectContent ?? undefined,
-              password: input.password,
-              thumbnailId: input.thumbnailId,
-            })
-            .where(
-              inArray(
-                Documents.id,
-                documents.map((doc) => doc.id),
-              ),
-            );
-        }
-      });
-
-      for (const doc of documents) {
-        pubsub.publish('site:update', siteId, { scope: 'entity', entityId: doc.entityId });
-      }
-
-      return documents.map((doc) => doc.id);
-    },
+        documentIds: input.documentIds,
+        availability: input.availability,
+        visibility: input.visibility,
+        password: input.password,
+        thumbnailId: input.thumbnailId,
+        contentRating: input.contentRating,
+        allowReaction: input.allowReaction,
+        protectContent: input.protectContent,
+      }),
   }),
 
   revertDocument: t.withAuth({ session: true }).fieldWithInput({

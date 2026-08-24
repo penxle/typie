@@ -947,6 +947,7 @@ type Mutation {
   updatePassword(input: UpdatePasswordInput!): User!
   updatePreferences(input: UpdatePreferencesInput!): User!
   updatePrismReviewThreadComment(input: UpdatePrismReviewThreadCommentInput!): PrismReviewThread!
+  updatePrismSessionToolPolicy(input: UpdatePrismSessionToolPolicyInput!): PrismSession!
   updateSite(input: UpdateSiteInput!): Site!
   updateSiteSlug(input: UpdateSiteSlugInput!): Site!
   updateTextReplacement(input: UpdateTextReplacementInput!): TextReplacementNode!
@@ -1270,6 +1271,7 @@ type PrismSession {
   id: ID!
   reviewRounds: [PrismReviewRound!]!
   title: String
+  toolPolicy: PrismToolPolicy!
   transcript: PrismTranscript!
   updatedAt: DateTime!
 }
@@ -1290,6 +1292,12 @@ type PrismToolCallRef {
 enum PrismToolPhase {
   EXECUTED
   REJECTED
+}
+
+enum PrismToolPolicy {
+  FULL
+  READ_ONLY
+  STANDARD
 }
 
 type PrismToolRequest {
@@ -1424,6 +1432,7 @@ type Query {
   note(noteId: ID!): Note!
   notes(entityId: ID, siteId: ID, status: NoteStatus): [Note!]!
   permalink(permalink: String!): Permalink!
+  prismEntities(ids: [ID!]!): [Entity!]!
   prismReviewRound(roundId: ID!): PrismReviewRound!
   prismSession(sessionId: ID!): PrismSession!
   randomName: String!
@@ -1591,6 +1600,8 @@ input SendPasswordResetEmailInput {
 input SendPrismMessageInput {
   message: String!
   sessionId: ID
+  siteId: ID
+  toolPolicy: PrismToolPolicy
 }
 
 type SendPrismMessageResult {
@@ -1869,6 +1880,11 @@ input UpdatePreferencesInput {
 input UpdatePrismReviewThreadCommentInput {
   body: String!
   commentId: ID!
+}
+
+input UpdatePrismSessionToolPolicyInput {
+  policy: PrismToolPolicy!
+  sessionId: ID!
 }
 
 input UpdateSiteInput {

@@ -2,7 +2,6 @@ import { EntityAvailability, EntityState, EntityType, EntityVisibility, NoteStat
 import { NotFoundError, TypieError } from '@typie/lib/errors';
 import dayjs from 'dayjs';
 import { and, asc, count, desc, eq, gt, inArray, isNull, lt, ne, sql } from 'drizzle-orm';
-import { alias } from 'drizzle-orm/pg-core';
 import escape from 'escape-string-regexp';
 import { match } from 'ts-pattern';
 import {
@@ -26,6 +25,7 @@ import {
 import { env } from '#/env.ts';
 import { enqueueJob } from '#/mq/index.ts';
 import { pubsub } from '#/pubsub.ts';
+import { deleteEntitiesCore, moveEntitiesCore, recoverEntityCore, updateEntityIconCore } from '#/utils/entity-actions.ts';
 import { buildDailyHistory } from '#/utils/goal.ts';
 import { buildFreshV2Content, copyEntityRecursive, generateFractionalOrder } from '#/utils/index.ts';
 import { assertSitePermission } from '#/utils/permission.ts';
@@ -796,35 +796,13 @@ builder.mutationFields((t) => ({
       icon: t.input.string(),
       iconColor: t.input.string(),
     },
-    resolve: async (_, { input }, ctx) => {
-      const entity = await db
-        .select({ id: Entities.id, siteId: Entities.siteId, parentId: Entities.parentId })
-        .from(Entities)
-        .where(and(eq(Entities.id, input.entityId), eq(Entities.state, EntityState.ACTIVE)))
-        .then(firstOrThrow);
-
-      await assertSitePermission({
+    resolve: async (_, { input }, ctx) =>
+      await updateEntityIconCore(db, {
         userId: ctx.session.userId,
-        siteId: entity.siteId,
-      });
-
-      await assertActiveSubscription({ userId: ctx.session.userId });
-
-      const updatedEntity = await db
-        .update(Entities)
-        .set({ icon: input.icon, iconColor: input.iconColor })
-        .where(eq(Entities.id, input.entityId))
-        .returning()
-        .then(firstOrThrow);
-
-      if (entity.parentId) {
-        pubsub.publish('site:update', entity.siteId, { scope: 'entity', entityId: entity.parentId });
-      } else {
-        pubsub.publish('site:update', entity.siteId, { scope: 'site' });
-      }
-
-      return updatedEntity;
-    },
+        entityId: input.entityId,
+        icon: input.icon,
+        iconColor: input.iconColor,
+      }),
   }),
 
   updateEntitiesIcon: t.withAuth({ session: true }).fieldWithInput({
@@ -913,274 +891,21 @@ builder.mutationFields((t) => ({
       upperOrder: t.input.string({ required: false }),
       targetSiteId: t.input.id({ validate: validateDbId(TableCode.SITES), required: false }),
     },
-    resolve: async (_, { input }, ctx) => {
-      const entities = await db.execute<{ id: string; site_id: string; depth: number; parent_id: string | null }>(sql`
-        WITH RECURSIVE descendants AS (
-          SELECT ${Entities.id}
-          FROM ${Entities}
-          WHERE ${inArray(Entities.parentId, input.entityIds)}
-          UNION ALL
-          SELECT ${Entities.id}
-          FROM ${Entities}
-          JOIN descendants ON ${Entities.parentId} = descendants.id
-        )
-        SELECT ${Entities.id}, ${Entities.siteId}, ${Entities.depth}, ${Entities.parentId}
-        FROM ${Entities}
-        WHERE ${inArray(Entities.id, input.entityIds)}
-        AND ${eq(Entities.state, EntityState.ACTIVE)}
-        AND ${Entities.id} NOT IN (SELECT id FROM descendants)
-        ORDER BY ${Entities.order} ASC
-      `);
-
-      if (entities.length === 0) {
-        return [];
-      }
-
-      const siteId = entities[0].site_id;
-
-      await assertSitePermission({
+    resolve: async (_, { input }, ctx) =>
+      await moveEntitiesCore(db, {
         userId: ctx.session.userId,
-        siteId,
-      });
-
-      await assertActiveSubscription({ userId: ctx.session.userId });
-
-      if (entities.some((entity) => entity.site_id !== siteId)) {
-        throw new TypieError({ code: 'site_mismatch' });
-      }
-
-      const isCrossSite = !!(input.targetSiteId && input.targetSiteId !== siteId);
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      const targetSiteId = isCrossSite ? input.targetSiteId! : siteId;
-
-      if (isCrossSite) {
-        await assertSitePermission({
-          userId: ctx.session.userId,
-          siteId: targetSiteId,
-        });
-      }
-
-      const targetParentId: string | null = input.parentEntityId ?? null;
-      let targetDepth = 0;
-
-      if (targetParentId) {
-        const parentEntity = await db
-          .select({ depth: Entities.depth, siteId: Entities.siteId })
-          .from(Entities)
-          .where(and(eq(Entities.id, targetParentId), eq(Entities.state, EntityState.ACTIVE)))
-          .then(firstOrThrowWith(new NotFoundError()));
-
-        if (parentEntity.siteId !== targetSiteId) {
-          throw new TypieError({ code: 'site_mismatch' });
-        }
-
-        if (input.entityIds.includes(targetParentId)) {
-          throw new TypieError({ code: 'circular_reference' });
-        }
-
-        if (!isCrossSite) {
-          const [hasCycle] = await db.execute<{ exists: boolean }>(
-            sql`
-              WITH RECURSIVE sq AS (
-                SELECT ${Entities.id}, ${Entities.parentId}
-                FROM ${Entities}
-                WHERE ${eq(Entities.id, targetParentId)}
-                UNION ALL
-                SELECT ${Entities.id}, ${Entities.parentId}
-                FROM ${Entities}
-                JOIN sq ON ${Entities.id} = sq.parent_id
-              )
-              SELECT EXISTS (
-                SELECT 1 FROM sq WHERE ${inArray(sql`id`, input.entityIds)}
-              ) as exists
-            `,
-          );
-
-          if (hasCycle.exists) {
-            throw new TypieError({ code: 'circular_reference' });
-          }
-        }
-
-        targetDepth = parentEntity.depth + 1;
-      }
-
-      return await db.transaction(async (tx) => {
-        const movedEntities: (typeof Entities.$inferSelect | string)[] = [];
-        let lastOrder = input.lowerOrder ?? null;
-
-        for (const entity of entities) {
-          const depthDelta = targetDepth - entity.depth;
-
-          const order = generateFractionalOrder({
-            lower: lastOrder,
-            upper: input.upperOrder ?? null,
-          });
-
-          const movedEntity = await tx
-            .update(Entities)
-            .set({
-              ...(isCrossSite && { siteId: targetSiteId }),
-              parentId: targetParentId,
-              depth: targetDepth,
-              order,
-            })
-            .where(eq(Entities.id, entity.id))
-            .returning()
-            .then(firstOrThrow);
-
-          movedEntities.push(movedEntity);
-          lastOrder = order;
-
-          // 자손 업데이트 (depth 변경 또는 cross-site siteId 변경)
-          if (depthDelta !== 0 || isCrossSite) {
-            movedEntities.push(
-              ...(await tx
-                .execute<{ id: string }>(
-                  sql`
-                    WITH RECURSIVE sq AS (
-                      SELECT ${Entities.id}
-                      FROM ${Entities}
-                      WHERE ${eq(Entities.parentId, entity.id)}
-                      UNION ALL
-                      SELECT ${Entities.id}
-                      FROM ${Entities}
-                      JOIN sq ON ${Entities.parentId} = sq.id
-                    )
-                    UPDATE ${Entities}
-                    SET ${sql.raw(
-                      [isCrossSite ? `site_id = '${targetSiteId}'` : null, depthDelta === 0 ? null : `depth = depth + ${depthDelta}`]
-                        .filter(Boolean)
-                        .join(', '),
-                    )}
-                    WHERE id IN (SELECT id FROM sq)
-                    RETURNING ${Entities.id}
-                  `,
-                )
-                .then((result) => result.map(({ id }) => id))),
-            );
-          }
-        }
-
-        // 대상 pubsub
-        if (targetParentId) {
-          pubsub.publish('site:update', targetSiteId, { scope: 'entity', entityId: targetParentId });
-        } else {
-          pubsub.publish('site:update', targetSiteId, { scope: 'site' });
-        }
-
-        // 소스 pubsub (소스와 대상이 다르거나, 소스 위치가 달라진 경우)
-        const sourceParentIds = new Set(
-          entities.map((entity) => entity.parent_id).filter((id): id is string => id !== null && id !== targetParentId),
-        );
-        for (const parentId of sourceParentIds) {
-          pubsub.publish('site:update', siteId, { scope: 'entity', entityId: parentId });
-          movedEntities.push(parentId);
-        }
-
-        const hasRootSourceEntity = entities.some((entity) => entity.parent_id === null);
-        if (hasRootSourceEntity && (targetParentId || isCrossSite)) {
-          pubsub.publish('site:update', siteId, { scope: 'site' });
-        }
-
-        for (const entity of entities) {
-          pubsub.publish('site:update', targetSiteId, { scope: 'entity', entityId: entity.id });
-        }
-
-        return movedEntities;
-      });
-    },
+        entityIds: input.entityIds,
+        parentEntityId: input.parentEntityId ?? null,
+        lowerOrder: input.lowerOrder ?? null,
+        upperOrder: input.upperOrder ?? null,
+        targetSiteId: input.targetSiteId ?? null,
+      }),
   }),
 
   deleteEntities: t.withAuth({ session: true }).fieldWithInput({
     type: [Entity],
     input: { entityIds: t.input.idList({ validate: { items: validateDbId(TableCode.ENTITIES) } }) },
-    resolve: async (_, { input }, ctx) => {
-      const entities = await db.execute<{ id: string; site_id: string; parent_id: string | null }>(sql`
-        WITH RECURSIVE sq AS (
-          SELECT ${Entities.id}, ${Entities.parentId}, ${Entities.siteId}
-          FROM ${Entities}
-          WHERE ${inArray(Entities.id, input.entityIds)}
-          UNION ALL
-          SELECT ${Entities.id}, ${Entities.parentId}, ${Entities.siteId}
-          FROM ${Entities}
-          JOIN sq ON ${Entities.parentId} = sq.id
-        )
-        SELECT id, site_id, parent_id
-        FROM sq
-      `);
-
-      if (entities.length === 0) {
-        return [];
-      }
-
-      const siteId = entities[0].site_id;
-
-      await assertSitePermission({
-        userId: ctx.session.userId,
-        siteId,
-      });
-
-      if (entities.some((entity) => entity.site_id !== siteId)) {
-        throw new TypieError({ code: 'site_mismatch' });
-      }
-
-      const deletedEntities = await db.transaction(async (tx) => {
-        const deletedEntities = await tx
-          .update(Entities)
-          .set({
-            state: EntityState.DELETED,
-            deletedAt: dayjs(),
-          })
-          .where(
-            inArray(
-              Entities.id,
-              entities.map(({ id }) => id),
-            ),
-          )
-          .returning();
-
-        const deletedEntityIds = deletedEntities.map(({ id }) => id);
-
-        await tx.execute(sql`
-          UPDATE ${Notes}
-          SET state = ${NoteState.DELETED_CASCADED}, updated_at = NOW()
-          WHERE ${Notes.id} IN (
-            SELECT ${NoteEntities.noteId}
-            FROM ${NoteEntities}
-            WHERE ${inArray(NoteEntities.entityId, deletedEntityIds)}
-          )
-          AND ${eq(Notes.state, NoteState.ACTIVE)}
-          AND NOT EXISTS (
-            SELECT 1
-            FROM ${NoteEntities} ne2
-            INNER JOIN ${Entities} e ON e.id = ne2.entity_id
-            WHERE ne2.note_id = ${Notes.id}
-            AND ${eq(sql`e.state`, EntityState.ACTIVE)}
-          )
-        `);
-
-        const inputEntityIdSet = new Set(input.entityIds);
-        const directEntities = entities.filter((e) => inputEntityIdSet.has(e.id));
-        const parentIds = new Set(directEntities.map((e) => e.parent_id).filter((id): id is string => id !== null));
-        for (const parentId of parentIds) {
-          pubsub.publish('site:update', siteId, { scope: 'entity', entityId: parentId });
-        }
-        if (directEntities.some((e) => e.parent_id === null)) {
-          pubsub.publish('site:update', siteId, { scope: 'site' });
-        }
-        pubsub.publish('user:usage:update', ctx.session.userId, null);
-
-        for (const entity of deletedEntities) {
-          pubsub.publish('site:update', siteId, { scope: 'entity', entityId: entity.id });
-        }
-
-        return deletedEntities;
-      });
-
-      await enqueueSearchSyncForEntityIds(deletedEntities.map(({ id }) => id));
-
-      return deletedEntities;
-    },
+    resolve: async (_, { input }, ctx) => await deleteEntitiesCore(db, { userId: ctx.session.userId, entityIds: input.entityIds }),
   }),
 
   copyEntities: t.withAuth({ session: true }).fieldWithInput({
@@ -1362,118 +1087,7 @@ builder.mutationFields((t) => ({
   recoverEntity: t.withAuth({ session: true }).fieldWithInput({
     type: Entity,
     input: { entityId: t.input.id({ validate: validateDbId(TableCode.ENTITIES) }) },
-    resolve: async (_, { input }, ctx) => {
-      const ParentEntities = alias(Entities, 'parent_entities');
-
-      const entity = await db
-        .select({
-          id: Entities.id,
-          siteId: Entities.siteId,
-          order: Entities.order,
-          depth: Entities.depth,
-          parentEntity: {
-            id: ParentEntities.id,
-            state: ParentEntities.state,
-            depth: ParentEntities.depth,
-          },
-        })
-        .from(Entities)
-        .leftJoin(ParentEntities, eq(Entities.parentId, ParentEntities.id))
-        .where(and(eq(Entities.id, input.entityId), eq(Entities.state, EntityState.DELETED)))
-        .then(firstOrThrow);
-
-      await assertSitePermission({
-        userId: ctx.session.userId,
-        siteId: entity.siteId,
-      });
-
-      await assertActiveSubscription({ userId: ctx.session.userId });
-
-      const hasParent = entity.parentEntity?.id !== null && entity.parentEntity?.id !== undefined;
-      const isParentActive = hasParent && entity.parentEntity?.state === EntityState.ACTIVE;
-      const shouldReattachToRoot = hasParent && !isParentActive;
-
-      const rootLastChildOrder = shouldReattachToRoot
-        ? await db
-            .select({ order: Entities.order })
-            .from(Entities)
-            .where(and(eq(Entities.siteId, entity.siteId), eq(Entities.state, EntityState.ACTIVE), isNull(Entities.parentId)))
-            .orderBy(desc(Entities.order))
-            .limit(1)
-            .then(first)
-            .then((result) => result?.order ?? null)
-        : null;
-
-      const depthDelta = isParentActive
-        ? // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-          entity.parentEntity!.depth + 1 - entity.depth
-        : shouldReattachToRoot
-          ? -entity.depth
-          : 0;
-
-      const { recoveredEntity, recoveredEntityIds } = await db.transaction(async (tx) => {
-        if (shouldReattachToRoot) {
-          await tx
-            .update(Entities)
-            .set({
-              parentId: null,
-              order: generateFractionalOrder({ lower: rootLastChildOrder, upper: null }),
-            })
-            .where(eq(Entities.id, entity.id));
-        }
-
-        const recoveredEntities = await tx.execute<{ id: string; type: EntityType }>(
-          sql`
-            WITH RECURSIVE sq AS (
-              SELECT ${Entities.id}
-              FROM ${Entities}
-              WHERE ${eq(Entities.id, entity.id)}
-              UNION ALL
-              SELECT ${Entities.id}
-              FROM ${Entities}
-              JOIN sq ON ${Entities.parentId} = sq.id
-            )
-            UPDATE ${Entities}
-            SET state = ${EntityState.ACTIVE},
-            deleted_at = null,
-            depth = depth + ${depthDelta}
-            WHERE id IN (SELECT id FROM sq) AND ${gt(Entities.deletedAt, dayjs().subtract(30, 'days'))}
-            RETURNING ${Entities.id}, ${Entities.type}
-          `,
-        );
-
-        const recoveredEntityIds = recoveredEntities.map(({ id }) => id);
-        if (recoveredEntityIds.length > 0) {
-          await tx
-            .update(Notes)
-            .set({ state: NoteState.ACTIVE, updatedAt: dayjs() })
-            .where(
-              and(
-                eq(Notes.state, NoteState.DELETED_CASCADED),
-                inArray(
-                  Notes.id,
-                  db.select({ noteId: NoteEntities.noteId }).from(NoteEntities).where(inArray(NoteEntities.entityId, recoveredEntityIds)),
-                ),
-              ),
-            );
-        }
-
-        const recoveredEntity = await tx.select().from(Entities).where(eq(Entities.id, entity.id)).then(firstOrThrow);
-
-        if (isParentActive && entity.parentEntity?.id) {
-          pubsub.publish('site:update', entity.siteId, { scope: 'entity', entityId: entity.parentEntity.id });
-        } else {
-          pubsub.publish('site:update', entity.siteId, { scope: 'site' });
-        }
-        pubsub.publish('user:usage:update', ctx.session.userId, null);
-
-        return { recoveredEntity, recoveredEntityIds };
-      });
-
-      await enqueueSearchSyncForEntityIds(recoveredEntityIds);
-
-      return recoveredEntity;
-    },
+    resolve: async (_, { input }, ctx) => await recoverEntityCore(db, { userId: ctx.session.userId, entityId: input.entityId }),
   }),
 
   purgeEntities: t.withAuth({ session: true }).fieldWithInput({

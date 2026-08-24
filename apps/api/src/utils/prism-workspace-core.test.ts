@@ -1,0 +1,257 @@
+import '@typie/lib/dayjs';
+
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { ENTITY_ICON_COLORS, ENTITY_ICON_NAMES } from '@typie/lib/catalogs';
+import dayjs from 'dayjs';
+import {
+  COMMENT_PAGE_SIZE,
+  CreateDocumentInput,
+  CreateFolderInput,
+  CreateNoteInput,
+  DeleteEntitiesInput,
+  DeleteGoalInput,
+  DeleteNoteInput,
+  DOCUMENT_WINDOW_DEFAULT,
+  DOCUMENT_WINDOW_MAX,
+  DuplicateDocumentInput,
+  entityRefKind,
+  entityUrl,
+  kstDate,
+  kstDueDate,
+  ListEntitiesInput,
+  MoveEntitiesInput,
+  NoteLinkInput,
+  notePreview,
+  pageOf,
+  ReadCommentsInput,
+  ReadDocumentInput,
+  ReadNoteInput,
+  ReadSharingInput,
+  RecoverEntityInput,
+  RenameFolderInput,
+  SearchEntitiesInput,
+  SetGoalInput,
+  snippetOf,
+  TRASH_PAGE_SIZE,
+  UpdateIconInput,
+  UpdateNoteInput,
+  UpdateSharingInput,
+  validIcon,
+  windowOf,
+  withinDays,
+} from './prism-workspace-core.ts';
+
+test('입력 미러: 유효·불능', () => {
+  assert.deepEqual(SearchEntitiesInput.parse({ query: '해변' }), { query: '해변' });
+  assert.equal(SearchEntitiesInput.safeParse({ query: '' }).success, false);
+  assert.deepEqual(ListEntitiesInput.parse({}), {});
+  assert.equal(ReadDocumentInput.safeParse({}).success, false);
+  assert.deepEqual(ReadDocumentInput.parse({ documentId: 'D1' }), { documentId: 'D1', offset: 0, length: DOCUMENT_WINDOW_DEFAULT });
+  assert.deepEqual(ReadDocumentInput.parse({ documentId: 'D1', offset: 2000, length: 5000 }), {
+    documentId: 'D1',
+    offset: 2000,
+    length: 5000,
+  });
+  assert.equal(ReadDocumentInput.safeParse({ documentId: 'D1', offset: -1 }).success, false);
+  assert.equal(ReadDocumentInput.safeParse({ documentId: 'D1', length: 0 }).success, false);
+  assert.equal(ReadDocumentInput.safeParse({ documentId: 'D1', length: DOCUMENT_WINDOW_MAX + 1 }).success, false);
+  assert.equal(ReadDocumentInput.safeParse({ documentId: 'D1', offset: 1.5 }).success, false);
+});
+
+test('windowOf: 코드 포인트 단위로 자르고, 끝을 넘는 offset은 빈 내용에 범위만 남긴다', () => {
+  assert.deepEqual(windowOf('가나다라마', 0, 2), { content: '가나', range: { offset: 0, end: 2, total: 5 } });
+  assert.deepEqual(windowOf('가나다라마', 3, 10), { content: '라마', range: { offset: 3, end: 5, total: 5 } });
+  assert.deepEqual(windowOf('가나다라마', 5, 2), { content: '', range: { offset: 5, end: 5, total: 5 } });
+  assert.deepEqual(windowOf('가나다라마', 9, 2), { content: '', range: { offset: 9, end: 5, total: 5 } });
+  assert.deepEqual(windowOf('a😀b', 1, 1), { content: '😀', range: { offset: 1, end: 2, total: 3 } });
+  assert.deepEqual(windowOf('', 0, 1), { content: '', range: { offset: 0, end: 0, total: 0 } });
+});
+
+test('입력 미러: create-folder', () => {
+  assert.deepEqual(CreateFolderInput.parse({ name: '초고' }), { name: '초고' });
+  assert.deepEqual(CreateFolderInput.parse({ name: '초고', parentFolderId: 'FLDR0' }), { name: '초고', parentFolderId: 'FLDR0' });
+  assert.equal(CreateFolderInput.safeParse({ name: '' }).success, false);
+  assert.equal(CreateFolderInput.safeParse({ name: '가'.repeat(101) }).success, false);
+  assert.equal(CreateFolderInput.safeParse({}).success, false);
+});
+
+test('입력 미러: delete-entities', () => {
+  assert.deepEqual(DeleteEntitiesInput.parse({ ids: ['E1', 'E2'] }), { ids: ['E1', 'E2'] });
+  assert.equal(DeleteEntitiesInput.safeParse({ ids: [] }).success, false);
+  assert.equal(DeleteEntitiesInput.safeParse({ ids: Array.from({ length: 51 }, (_, i) => `E${i}`) }).success, false);
+  assert.equal(DeleteEntitiesInput.safeParse({}).success, false);
+});
+
+test('snippetOf: 하이라이트 태그 제거·200자 절단', () => {
+  assert.equal(snippetOf('<em>해변</em>의 아침'), '해변의 아침');
+  assert.equal(snippetOf(undefined), null);
+  assert.equal(snippetOf('가'.repeat(300))?.length, 200);
+});
+
+test('withinDays: 오늘 포함 최근 N일 달력 창 — 활동일 slice가 아니다', () => {
+  const rows = ['2026-07-01', '2026-08-23', '2026-08-24'].map((d) => ({ date: dayjs.kst(d) }));
+  const now = dayjs.kst('2026-08-24');
+  assert.deepEqual(
+    withinDays(rows, 2, now).map((r) => kstDate(r.date)),
+    ['2026-08-23', '2026-08-24'],
+  );
+  assert.deepEqual(
+    withinDays(rows, 30, now).map((r) => kstDate(r.date)),
+    ['2026-08-23', '2026-08-24'],
+  );
+});
+
+test('kstDate: KST 달력일 문자열', () => {
+  assert.equal(kstDate(dayjs.kst('2026-08-24')), '2026-08-24');
+});
+
+test('notePreview: 200자 절단·개행 이후 낙거', () => {
+  assert.equal(notePreview('첫 줄\n둘째 줄'), '첫 줄');
+  assert.equal(notePreview('가'.repeat(300)).length, 200);
+  assert.equal(notePreview(''), '');
+});
+
+test('pageOf: 상한까지만 담고 더 있으면 truncated로 알린다 — 휴지통 50·댓글 30', () => {
+  assert.equal(TRASH_PAGE_SIZE, 50);
+  assert.equal(COMMENT_PAGE_SIZE, 30);
+
+  const rows = Array.from({ length: 51 }, (_, i) => `E${i}`);
+
+  assert.deepEqual(pageOf(rows.slice(0, 3), TRASH_PAGE_SIZE), { items: ['E0', 'E1', 'E2'], truncated: false });
+  assert.equal(pageOf(rows.slice(0, 50), TRASH_PAGE_SIZE).truncated, false);
+
+  const trash = pageOf(rows, TRASH_PAGE_SIZE);
+  assert.equal(trash.items.length, 50);
+  assert.equal(trash.items.at(-1), 'E49');
+  assert.equal(trash.truncated, true);
+
+  assert.equal(pageOf(rows.slice(0, 30), COMMENT_PAGE_SIZE).truncated, false);
+
+  const comments = pageOf(rows.slice(0, 31), COMMENT_PAGE_SIZE);
+  assert.equal(comments.items.length, 30);
+  assert.equal(comments.items.at(-1), 'E29');
+  assert.equal(comments.truncated, true);
+});
+
+test('입력 미러: read-note·read-sharing·read-comments', () => {
+  assert.deepEqual(ReadNoteInput.parse({ noteId: 'NOTE0' }), { noteId: 'NOTE0' });
+  assert.equal(ReadNoteInput.safeParse({}).success, false);
+
+  assert.deepEqual(ReadSharingInput.parse({ ids: ['E1'] }), { ids: ['E1'] });
+  assert.equal(ReadSharingInput.safeParse({ ids: [] }).success, false);
+  assert.equal(ReadSharingInput.safeParse({ ids: Array.from({ length: 21 }, (_, i) => `E${i}`) }).success, false);
+
+  assert.deepEqual(ReadCommentsInput.parse({ documentId: 'DOC0' }), { documentId: 'DOC0', resolved: false });
+  assert.deepEqual(ReadCommentsInput.parse({ documentId: 'DOC0', resolved: true }), { documentId: 'DOC0', resolved: true });
+  assert.equal(ReadCommentsInput.safeParse({ documentId: 'DOC0', resolved: '아니오' }).success, false);
+});
+
+test('entityUrl: 와일드카드 서브도메인을 걷어낸 사용자 사이트 주소', () => {
+  assert.equal(entityUrl('https://*.typie.me', 'abc'), 'https://typie.me/abc');
+});
+
+test('입력 미러: entity·document 계열', () => {
+  assert.deepEqual(CreateDocumentInput.parse({}), {});
+  assert.deepEqual(CreateDocumentInput.parse({ folderId: 'FLDR0' }), { folderId: 'FLDR0' });
+
+  assert.deepEqual(RenameFolderInput.parse({ folderId: 'FLDR0', name: '초고' }), { folderId: 'FLDR0', name: '초고' });
+  assert.equal(RenameFolderInput.safeParse({ folderId: 'FLDR0', name: '' }).success, false);
+  assert.equal(RenameFolderInput.safeParse({ folderId: 'FLDR0', name: '가'.repeat(101) }).success, false);
+  assert.equal(RenameFolderInput.safeParse({ name: '초고' }).success, false);
+
+  assert.deepEqual(MoveEntitiesInput.parse({ ids: ['E1'] }), { ids: ['E1'] });
+  assert.equal(MoveEntitiesInput.safeParse({ ids: [] }).success, false);
+  assert.equal(MoveEntitiesInput.safeParse({ ids: Array.from({ length: 51 }, (_, i) => `E${i}`) }).success, false);
+
+  assert.deepEqual(DuplicateDocumentInput.parse({ documentId: 'DOC0' }), { documentId: 'DOC0' });
+  assert.equal(DuplicateDocumentInput.safeParse({}).success, false);
+
+  assert.deepEqual(UpdateIconInput.parse({ id: 'E1', icon: 'star', iconColor: 'red' }), {
+    id: 'E1',
+    icon: 'star',
+    iconColor: 'red',
+  });
+  assert.equal(UpdateIconInput.safeParse({ id: 'E1', icon: 'star' }).success, false);
+
+  assert.deepEqual(RecoverEntityInput.parse({ id: 'E1' }), { id: 'E1' });
+  assert.equal(RecoverEntityInput.safeParse({}).success, false);
+});
+
+test('validIcon: 카탈로그 밖 이름·색 거절', () => {
+  assert.equal(validIcon(ENTITY_ICON_NAMES[0], ENTITY_ICON_COLORS[0]), true);
+  assert.equal(validIcon('not-an-icon', ENTITY_ICON_COLORS[0]), false);
+  assert.equal(validIcon(ENTITY_ICON_NAMES[0], 'not-a-color'), false);
+});
+
+test('입력 미러: note 계열', () => {
+  assert.deepEqual(CreateNoteInput.parse({ content: '메모' }), { content: '메모' });
+  assert.deepEqual(CreateNoteInput.parse({ content: '메모', color: 'red' }), { content: '메모', color: 'red' });
+  assert.equal(CreateNoteInput.safeParse({ content: '' }).success, false);
+
+  assert.deepEqual(UpdateNoteInput.parse({ noteId: 'NOTE0' }), { noteId: 'NOTE0' });
+  assert.deepEqual(UpdateNoteInput.parse({ noteId: 'NOTE0', status: 'RESOLVED' }), { noteId: 'NOTE0', status: 'RESOLVED' });
+  assert.equal(UpdateNoteInput.safeParse({ noteId: 'NOTE0', content: '' }).success, false);
+  assert.equal(UpdateNoteInput.safeParse({ noteId: 'NOTE0', status: 'DONE' }).success, false);
+
+  assert.deepEqual(NoteLinkInput.parse({ noteId: 'NOTE0', id: 'E1' }), { noteId: 'NOTE0', id: 'E1' });
+  assert.equal(NoteLinkInput.safeParse({ noteId: 'NOTE0' }).success, false);
+
+  assert.deepEqual(DeleteNoteInput.parse({ noteId: 'NOTE0' }), { noteId: 'NOTE0' });
+  assert.equal(DeleteNoteInput.safeParse({}).success, false);
+});
+
+test('입력 미러: goal 계열 — dueAt은 YYYY-MM-DD만', () => {
+  assert.deepEqual(SetGoalInput.parse({ targetCharacterCount: 1000 }), { targetCharacterCount: 1000 });
+  assert.deepEqual(SetGoalInput.parse({ targetCharacterCount: 1000, id: 'E1', dueAt: '2026-08-24' }), {
+    targetCharacterCount: 1000,
+    id: 'E1',
+    dueAt: '2026-08-24',
+  });
+  assert.equal(SetGoalInput.safeParse({ targetCharacterCount: 0 }).success, false);
+  assert.equal(SetGoalInput.safeParse({ targetCharacterCount: 1.5 }).success, false);
+  assert.equal(SetGoalInput.safeParse({ targetCharacterCount: 1000, dueAt: '2026-08-24T00:00:00Z' }).success, false);
+  assert.equal(SetGoalInput.safeParse({ targetCharacterCount: 1000, dueAt: '2026/08/24' }).success, false);
+
+  assert.deepEqual(DeleteGoalInput.parse({}), {});
+  assert.deepEqual(DeleteGoalInput.parse({ id: 'E1' }), { id: 'E1' });
+});
+
+test('kstDueDate: 달력에 없는 날짜는 무음 롤오버 대신 null', () => {
+  assert.equal(kstDueDate('2026-08-24')?.format('YYYY-MM-DD'), '2026-08-24');
+  assert.equal(kstDueDate('2024-02-29')?.format('YYYY-MM-DD'), '2024-02-29');
+  assert.equal(kstDueDate('2026-02-31'), null);
+  assert.equal(kstDueDate('2026-02-29'), null);
+  assert.equal(kstDueDate('2026-04-31'), null);
+  assert.equal(kstDueDate('2026-13-01'), null);
+  assert.equal(kstDueDate('2026-00-10'), null);
+});
+
+test('kstDueDate: KST 자정을 가리킨다', () => {
+  const due = kstDueDate('2026-08-24');
+  assert.equal(due?.toISOString(), '2026-08-23T15:00:00.000Z');
+});
+
+test('입력 미러: update-sharing', () => {
+  assert.deepEqual(UpdateSharingInput.parse({ ids: ['E1'], visibility: 'PRIVATE' }), {
+    ids: ['E1'],
+    visibility: 'PRIVATE',
+  });
+  assert.deepEqual(UpdateSharingInput.parse({ ids: ['E1'], visibility: 'PUBLIC', recursive: true }), {
+    ids: ['E1'],
+    visibility: 'PUBLIC',
+    recursive: true,
+  });
+  assert.equal(UpdateSharingInput.safeParse({ ids: [], visibility: 'PUBLIC' }).success, false);
+  assert.equal(UpdateSharingInput.safeParse({ ids: Array.from({ length: 21 }, (_, i) => `E${i}`), visibility: 'PUBLIC' }).success, false);
+  assert.equal(UpdateSharingInput.safeParse({ ids: ['E1'], visibility: 'SECRET' }).success, false);
+});
+
+test('entityRefKind: TableCode 접두로 entity·document·folder를 가르고 그 밖은 null', () => {
+  assert.equal(entityRefKind('E0ABCDEFGHIJ'), 'entity');
+  assert.equal(entityRefKind('D0ABCDEFGHIJKLMN'), 'document');
+  assert.equal(entityRefKind('F0ABCDEFGHIJ'), 'folder');
+  assert.equal(entityRefKind('N0ABCDEFGHIJKLMN'), null);
+  assert.equal(entityRefKind('EG0ABCDEFGHIJ'), null);
+  assert.equal(entityRefKind(''), null);
+});

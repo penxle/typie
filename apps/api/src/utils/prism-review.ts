@@ -6,7 +6,6 @@ import dayjs from 'dayjs';
 import { and, desc, eq, isNull } from 'drizzle-orm';
 import {
   db,
-  dbr,
   Documents,
   first,
   firstOrThrow,
@@ -18,42 +17,18 @@ import {
 } from '#/db/index.ts';
 import { activeRun, prism } from '#/external/prism.ts';
 import { pubsub } from '#/pubsub.ts';
-import { readMergedGraph } from './changeset.ts';
 import { assertDocumentPermission } from './permission.ts';
+import { snapshotManuscript } from './prism-manuscript.ts';
 import { ConfirmInputSchema, confirmResult, ENUM_TO_TIER, manuscriptPath, pickVersion } from './prism-review-core.ts';
 import { projectRoundThreads } from './prism-review-threads.ts';
-import { wasmThread } from './wasm-thread.ts';
 import type { PrismReviewTier } from '@typie/lib/enums';
 import type { ReviewOutcome } from '@typie/prism';
 import type { Database, Transaction } from '#/db/index.ts';
 import type { PrismAppHooks, PrismWorkflowRow, WorkflowOutcome } from './prism-apps.ts';
-import type { Snapshot } from './prism-review-core.ts';
+import type { Manuscript } from './prism-manuscript.ts';
 import type { PrismToolContext, PrismToolHandler } from './prism-tools.ts';
 
 const log = logger.getChild('prism-review');
-
-type Manuscript = Snapshot & { characterCount: number };
-
-const snapshotManuscript = async (documentId: string): Promise<Manuscript> => {
-  const head = await dbr
-    .select({ title: Documents.title, subtitle: Documents.subtitle })
-    .from(Documents)
-    .where(eq(Documents.id, documentId))
-    .then(first);
-  if (!head) throw new TypieError({ code: 'not_found', status: 404 });
-
-  const graph = await readMergedGraph(documentId);
-  if (graph.length === 0) throw new TypieError({ code: 'prism_manuscript_empty', status: 400 });
-
-  const extracted = await wasmThread.extractProse(graph).catch(() => {
-    throw new TypieError({ code: 'prism_extract_failed', status: 502 });
-  });
-
-  const content = extracted.result.text;
-  if (content === null || content.trim().length === 0) throw new TypieError({ code: 'prism_manuscript_empty', status: 400 });
-
-  return { title: head.title, subtitle: head.subtitle, content, characterCount: extracted.result.characterCount };
-};
 
 const upsertDocumentVersion = async (tx: Transaction, documentId: string, snap: Manuscript): Promise<{ id: string } | null> => {
   const latest = await tx

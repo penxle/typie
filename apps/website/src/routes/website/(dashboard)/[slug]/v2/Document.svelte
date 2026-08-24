@@ -101,6 +101,7 @@
     const paneKey = `${pane.id}:${node.id}`;
     openDocuments.upsert(paneKey, {
       id: node.id,
+      entityId: entity.id,
       title: node.nullableTitle ?? null,
       subtitle: node.subtitle ?? null,
       active: focused,

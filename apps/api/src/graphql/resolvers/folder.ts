@@ -1,11 +1,11 @@
 import { EntityState, EntityType, EntityVisibility } from '@typie/lib/enums';
 import { TypieError } from '@typie/lib/errors';
 import dayjs from 'dayjs';
-import { and, desc, eq, getTableColumns, inArray, isNull, sql } from 'drizzle-orm';
-import { db, Documents, DocumentStates, Entities, first, firstOrThrow, Folders, TableCode, validateDbId } from '#/db/index.ts';
+import { and, eq, getTableColumns, inArray, sql } from 'drizzle-orm';
+import { db, Documents, DocumentStates, Entities, firstOrThrow, Folders, TableCode, validateDbId } from '#/db/index.ts';
 import { enqueueJob } from '#/mq/index.ts';
 import { pubsub } from '#/pubsub.ts';
-import { generateFractionalOrder, generatePermalink, generateSlug } from '#/utils/index.ts';
+import { createFolderCore, renameFolderCore, updateFolderOptionCore } from '#/utils/entity-actions.ts';
 import { assertSitePermission } from '#/utils/permission.ts';
 import { assertActiveSubscription } from '#/utils/plan.ts';
 import { builder } from '../builder.ts';
@@ -233,90 +233,15 @@ builder.mutationFields((t) => ({
       lowerOrder: t.input.string({ required: false }),
       upperOrder: t.input.string({ required: false }),
     },
-    resolve: async (_, { input }, ctx) => {
-      await assertSitePermission({
+    resolve: async (_, { input }, ctx) =>
+      await createFolderCore(db, {
         userId: ctx.session.userId,
         siteId: input.siteId,
-      });
-
-      await assertActiveSubscription({ userId: ctx.session.userId });
-
-      let depth = 0;
-      if (input.parentEntityId) {
-        const parentEntity = await db
-          .select({ id: Entities.id, depth: Entities.depth })
-          .from(Entities)
-          .where(
-            and(
-              eq(Entities.siteId, input.siteId),
-              eq(Entities.id, input.parentEntityId),
-              eq(Entities.type, EntityType.FOLDER),
-              eq(Entities.state, EntityState.ACTIVE),
-            ),
-          )
-          .then(firstOrThrow);
-
-        depth = parentEntity.depth + 1;
-      }
-
-      let orderLower: string | null = input.lowerOrder ?? null;
-
-      if (!input.lowerOrder) {
-        const last = await db
-          .select({ order: Entities.order })
-          .from(Entities)
-          .where(
-            and(
-              eq(Entities.siteId, input.siteId),
-              input.parentEntityId ? eq(Entities.parentId, input.parentEntityId) : isNull(Entities.parentId),
-            ),
-          )
-          .orderBy(desc(Entities.order))
-          .limit(1)
-          .then(first);
-
-        orderLower = last?.order ?? null;
-      }
-
-      const folder = await db.transaction(async (tx) => {
-        const entity = await tx
-          .insert(Entities)
-          .values({
-            userId: ctx.session.userId,
-            siteId: input.siteId,
-            parentId: input.parentEntityId,
-            slug: generateSlug(),
-            permalink: generatePermalink(),
-            type: EntityType.FOLDER,
-            icon: 'folder',
-            order: generateFractionalOrder({ lower: orderLower, upper: input.upperOrder ?? null }),
-            depth,
-          })
-          .returning({ id: Entities.id })
-          .then(firstOrThrow);
-
-        const folder = await tx
-          .insert(Folders)
-          .values({
-            entityId: entity.id,
-            name: input.name,
-          })
-          .returning()
-          .then(firstOrThrow);
-
-        return folder;
-      });
-
-      if (input.parentEntityId) {
-        pubsub.publish('site:update', input.siteId, { scope: 'entity', entityId: input.parentEntityId });
-      } else {
-        pubsub.publish('site:update', input.siteId, { scope: 'site' });
-      }
-
-      await enqueueJob('search:index:folder', folder.id);
-
-      return folder;
-    },
+        parentEntityId: input.parentEntityId ?? null,
+        name: input.name,
+        lowerOrder: input.lowerOrder ?? null,
+        upperOrder: input.upperOrder ?? null,
+      }),
   }),
 
   renameFolder: t.withAuth({ session: true }).fieldWithInput({
@@ -325,38 +250,8 @@ builder.mutationFields((t) => ({
       folderId: t.input.id({ validate: validateDbId(TableCode.FOLDERS) }),
       name: t.input.string(),
     },
-    resolve: async (_, { input }, ctx) => {
-      const folder = await db
-        .select({ siteId: Entities.siteId, parentId: Entities.parentId })
-        .from(Folders)
-        .innerJoin(Entities, eq(Folders.entityId, Entities.id))
-        .where(eq(Folders.id, input.folderId))
-        .then(firstOrThrow);
-
-      await assertSitePermission({
-        userId: ctx.session.userId,
-        siteId: folder.siteId,
-      });
-
-      await assertActiveSubscription({ userId: ctx.session.userId });
-
-      const renamedFolder = await db
-        .update(Folders)
-        .set({ name: input.name })
-        .where(eq(Folders.id, input.folderId))
-        .returning()
-        .then(firstOrThrow);
-
-      if (folder.parentId) {
-        pubsub.publish('site:update', folder.siteId, { scope: 'entity', entityId: folder.parentId });
-      } else {
-        pubsub.publish('site:update', folder.siteId, { scope: 'site' });
-      }
-
-      await enqueueJob('search:index:folder', input.folderId);
-
-      return renamedFolder;
-    },
+    resolve: async (_, { input }, ctx) =>
+      await renameFolderCore(db, { userId: ctx.session.userId, folderId: input.folderId, name: input.name }),
   }),
 
   deleteFolder: t.withAuth({ session: true }).fieldWithInput({
@@ -450,51 +345,14 @@ builder.mutationFields((t) => ({
       thumbnailId: t.input.id({ required: false, validate: validateDbId(TableCode.IMAGES) }),
       recursive: t.input.boolean({ required: false, defaultValue: false }),
     },
-    resolve: async (_, { input }, ctx) => {
-      const { folder, siteId } = await db
-        .select({ folder: Folders, siteId: Entities.siteId })
-        .from(Folders)
-        .innerJoin(Entities, eq(Folders.entityId, Entities.id))
-        .where(and(eq(Folders.id, input.folderId)))
-        .then(firstOrThrow);
-
-      await assertSitePermission({
+    resolve: async (_, { input }, ctx) =>
+      await updateFolderOptionCore(db, {
         userId: ctx.session.userId,
-        siteId,
-      });
-
-      await assertActiveSubscription({ userId: ctx.session.userId });
-
-      await db.transaction(async (tx) => {
-        await tx.update(Entities).set({ visibility: input.visibility }).where(eq(Entities.id, folder.entityId));
-
-        if (input.thumbnailId !== undefined) {
-          await tx.update(Folders).set({ thumbnailId: input.thumbnailId }).where(eq(Folders.id, input.folderId));
-        }
-
-        if (input.recursive) {
-          const descendantEntityIds = await tx
-            .execute<{ id: string }>(
-              sql`
-                WITH RECURSIVE sq AS (
-                  SELECT ${Entities.id} FROM ${Entities} WHERE ${eq(Entities.parentId, folder.entityId)}
-                  UNION ALL
-                  SELECT ${Entities.id} FROM ${Entities}
-                  JOIN sq ON ${Entities.parentId} = sq.id
-                )
-                SELECT id FROM sq;
-              `,
-            )
-            .then((rows) => rows.map(({ id }) => id));
-
-          if (descendantEntityIds.length > 0) {
-            await tx.update(Entities).set({ visibility: input.visibility }).where(inArray(Entities.id, descendantEntityIds));
-          }
-        }
-      });
-
-      return folder.id;
-    },
+        folderId: input.folderId,
+        visibility: input.visibility,
+        thumbnailId: input.thumbnailId,
+        recursive: input.recursive ?? false,
+      }),
   }),
 
   updateFoldersOption: t.withAuth({ session: true }).fieldWithInput({
