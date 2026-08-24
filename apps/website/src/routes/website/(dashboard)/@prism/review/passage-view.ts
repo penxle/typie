@@ -19,7 +19,7 @@ export type PassageGroup =
   | { kind: 'narration'; key: string; seq: number; text: string }
   | { kind: 'tools'; key: string; seq: number; count: number; rows: ToolRow[] }
   | { kind: 'question'; key: string; seq: number; request: ToolRequestMessage }
-  | { kind: 'round'; key: string; seq: number; round: number; elapsedMs: number; groups: PassageGroup[] };
+  | { kind: 'round'; key: string; seq: number; round: number; elapsedMs: number; summary: string | null; groups: PassageGroup[] };
 
 export type StageStatus = 'pending' | 'running' | 'done' | 'canceled' | 'failed';
 
@@ -217,6 +217,7 @@ const buildGroups = (index: StepIndex, items: Item[], stage: StageKey, waits: Sp
       seq: span?.seq ?? 0,
       round: currentRound,
       elapsedMs: Math.max(0, to - from - overlap(waits, from, to)),
+      summary: roundItems.findLast((item) => item.kind === 'turn')?.text.split('\n')[0] ?? null,
       groups: groupItems(roundItems, key),
     });
     containers += 1;
@@ -359,6 +360,7 @@ export const buildPassage = ({
         seq: span?.seq ?? 0,
         round: liveRound,
         elapsedMs: Math.max(0, endAt - from - overlap(waits, from, endAt)),
+        summary: null,
         groups: [],
       });
     }
