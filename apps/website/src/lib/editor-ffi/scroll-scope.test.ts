@@ -150,6 +150,30 @@ describe('EditorScrollScope', () => {
     targetBottom: 520,
   };
 
+  it('lets external content extend the bottom padding without changing the visible area', () => {
+    const snapshot = trackedSnapshot('unused', {
+      page_idx: 0,
+      rect: { x: 0, y: 0, width: 1, height: 20 },
+    });
+    const { requestPublication, scope } = setup(snapshot);
+
+    scope.setBottomInset(40);
+    requestPublication.mockClear();
+    scope.setContentBottomOverflow(180);
+
+    expect(scope.bottomPaddingFor(snapshot)).toBe(220);
+    expect(scope.visibleArea.bottomInset).toBe(40);
+    expect(requestPublication).toHaveBeenCalledOnce();
+
+    scope.setContentBottomOverflow(180);
+
+    expect(requestPublication).toHaveBeenCalledOnce();
+
+    scope.setContentBottomOverflow(0);
+
+    expect(scope.bottomPaddingFor(snapshot)).toBe(40);
+  });
+
   it('uses typewriter reveal for a collapsed current selection caret', () => {
     const rect = { page_idx: 0, rect: { x: 0, y: 500, width: 1, height: 20 } };
     const snapshot = selectionSnapshot(true, rect);
