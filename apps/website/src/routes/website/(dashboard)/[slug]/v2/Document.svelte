@@ -26,6 +26,8 @@
         entity(slug: $slug) {
           id
           slug
+          icon
+          iconColor
 
           node {
             __typename
@@ -100,10 +102,13 @@
 
     const paneKey = `${pane.id}:${node.id}`;
     openDocuments.upsert(paneKey, {
-      id: node.id,
+      kind: 'document',
+      documentId: node.id,
       entityId: entity.id,
       title: node.nullableTitle ?? null,
       subtitle: node.subtitle ?? null,
+      icon: entity.icon,
+      iconColor: entity.iconColor,
       active: focused,
       charCount: ctx.editor?.characterCounts.docWithWhitespace || node.characterCount,
     });

@@ -14,13 +14,29 @@ const SharingTargetsData = z
 
 const CountResultData = z.union([z.object({ ok: z.literal(true), count: z.number().int().nonnegative() }), ToolFailureSchema]);
 const VISIBILITY = z.enum(['PUBLIC', 'UNLISTED', 'PRIVATE']);
-const SharingChange = z.object({
-  id: z.string(),
-  kind: z.enum(['document', 'folder']),
-  title: z.string().nullable(),
-  from: VISIBILITY,
-  to: VISIBILITY,
-});
+const SharingChange = z.union([
+  z.object({
+    kind: z.literal('document'),
+    documentId: z.string(),
+    entityId: z.string(),
+    title: z.string().nullable(),
+    subtitle: z.string().nullable(),
+    icon: z.string(),
+    iconColor: z.string(),
+    from: VISIBILITY,
+    to: VISIBILITY,
+  }),
+  z.object({
+    kind: z.literal('folder'),
+    folderId: z.string(),
+    entityId: z.string(),
+    name: z.string(),
+    icon: z.string(),
+    iconColor: z.string(),
+    from: VISIBILITY,
+    to: VISIBILITY,
+  }),
+]);
 const SharingResultData = z.union([
   z.object({ ok: z.literal(true), count: z.number().int().nonnegative(), changes: z.array(SharingChange) }),
   ToolFailureSchema,

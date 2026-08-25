@@ -30,7 +30,10 @@
   const SnapshotSchema = z.object({
     ok: z.literal(true),
     changes: z.array(
-      z.object({ id: z.string(), kind: z.enum(['document', 'folder']), title: z.string().nullable(), from: Visibility, to: Visibility }),
+      z.union([
+        z.object({ kind: z.literal('document'), title: z.string().nullable(), from: Visibility, to: Visibility }),
+        z.object({ kind: z.literal('folder'), name: z.string(), from: Visibility, to: Visibility }),
+      ]),
     ),
   });
 
@@ -43,7 +46,13 @@
 
   const snapshot = $derived(SnapshotSchema.safeParse(result));
   const snapshotTargets = $derived<Target[] | null>(
-    snapshot.success ? snapshot.data.changes.map((change) => ({ kind: change.kind, name: change.title, visibility: change.from })) : null,
+    snapshot.success
+      ? snapshot.data.changes.map((change) => ({
+          kind: change.kind,
+          name: change.kind === 'folder' ? change.name : change.title,
+          visibility: change.from,
+        }))
+      : null,
   );
 
   const query = createQuery(
